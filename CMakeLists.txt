@@ -824,6 +824,10 @@ if(XPG_BUILD_TESTS)
     # le fil d'ecriture, l'analyse IA en arriere-plan) : xpg_app.
     xpg_add_test_executable(hmi_incident_test tests/hmi_incident_test.cpp)
     xpg_target_link_libraries(hmi_incident_test PRIVATE xpg_app)
+    # 1.24.1 : supprimer plusieurs d'un coup cote application - les volets de l'automate (variables, tables d'animation,
+    # DDT, taches, modules, unites et sections, blocs DFB) sur le projet d'essai, les listes de l'Assistant IA (xpg_app).
+    xpg_add_test_executable(api_plusieurs_test tests/api_plusieurs_test.cpp)
+    xpg_target_link_libraries(api_plusieurs_test PRIVATE xpg_app)
     # 1.21.0 : la decouverte reseau sans intrusion - la confirmation, la cadence, la lecture seule, la fiche
     # (confirme, annonce, suppose), la comparaison avec le projet, le journal ; un faux reseau, un faux temps.
     xpg_add_test_executable(hmi_discovery_test tests/hmi_discovery_test.cpp)
@@ -1020,6 +1024,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME aiincidents COMMAND ai_incident_answers_test)          # 1.20.0 : l'Assistant IA diagnostique les incidents
     xpg_add_test(NAME hmirelations COMMAND hmi_relations_test)               # 1.19.0 : le graphe des relations, la verification globale
     xpg_add_test(NAME hmiincident COMMAND hmi_incident_test)                 # 1.20.0 : les incidents (essais A a G)
+    xpg_add_test(NAME apiplusieurs COMMAND api_plusieurs_test ${XPG_FIXTURE})   # 1.24.1 : supprimer plusieurs (automate, Assistant IA)
     xpg_add_test(NAME hmidiscovery COMMAND hmi_discovery_test)               # 1.21.0 : la decouverte reseau sans intrusion
     xpg_add_test(NAME coreprocess COMMAND core_process_test)                 # 1.21.0 : un programme a part, borne
     xpg_add_test(NAME echanges COMMAND echanges_test ${CMAKE_CURRENT_SOURCE_DIR}/bac/Armoire_Gaz ${CMAKE_CURRENT_SOURCE_DIR}/libs)   # 1.12.30 : .xihm, .xapi

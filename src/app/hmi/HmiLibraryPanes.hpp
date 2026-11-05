@@ -14,6 +14,8 @@
 //  Nouvel espace..., Renommer l'espace... - sont chacun UNE commande (Ctrl+Z) ; les
 //  fenetres (le fichier a choisir, le diff de la mise a jour) viennent de l'ecran
 //  (Hosts), les gestes eux-memes sont ici (pour les boutons, les scripts, les essais).
+//  1.24.1 : plusieurs bibliotheques (ou espaces vides) choisies se delient (se
+//  retirent) d'un coup : << Delier les 3 >>, Suppr, le clic droit ; un seul Ctrl+Z.
 // =============================================================================
 #pragma once
 
@@ -56,6 +58,13 @@ public:
     void selectLibrary(const std::string& name);
     [[nodiscard]] std::string selectedNamespace() const;
     void selectNamespace(const std::string& ns);
+    // 1.24.1 : PLUSIEURS D'UN COUP. Les bibliotheques et les espaces choisis (Ctrl+clic, Maj+clic) ; les delier (les
+    // retirer) tous en un seul Ctrl+Z, sans question (comme une seule) ; le compte rendu dit ceux qui restent et pourquoi
+    // (un espace qui range encore quelque chose). Mettre a jour, Localiser, Renommer : une a la fois.
+    [[nodiscard]] std::vector<std::string> selectedLibraries() const;
+    [[nodiscard]] std::vector<std::string> selectedNamespaces() const;
+    void unlinkMany(const std::vector<std::string>& names);
+    void removeNamespaces(const std::vector<std::string>& spaces);
 
     [[nodiscard]] ui::TableView&    libraries() noexcept { return *libraries_; }
     [[nodiscard]] ui::TableView&    spaces() noexcept { return *spaces_; }

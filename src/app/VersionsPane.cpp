@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>   // 1.24.1 : le nom du fichier d'une version (V0005.txt)
 
 namespace app {
 
@@ -596,6 +597,12 @@ void VersionsPane::rebuildTable() {
         const auto* v = store_.find(n);
         if (!v) return cs;
         if (c == 0) cs.bold = true;
+        // 1.24.1 : la liste des fichiers de la version (versions/V0005.txt) - Ouvrir dans l'explorateur, Copier le chemin.
+        if (c == 0 && !folder_.empty()) {
+            char leaf[32];
+            std::snprintf(leaf, sizeof leaf, "versions/V%04d.txt", n);
+            cs.path = folder_ + "/" + leaf;
+        }
         if (c == 2) {
             // Lot API 6 : ce que la version a fait du projet - Terminer (FINISH), Livrer (LOCK).
             cs.badge = std::string(ver::stateLabel(v->state))

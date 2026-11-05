@@ -24,6 +24,10 @@
 //  (un fichier WAV ou MP3 du disque, ou lache sur la liste), Retirer de Mes sons
 //  (Suppr ; un natif se garde), Copier le nom. Le clic droit propose les memes
 //  gestes, plus Ouvrir dans l'explorateur (un de Mes sons) et Aller a la ressource.
+//  1.24.1 : plusieurs sons choisis (Ctrl+clic, Maj+clic) se retirent d'un coup
+//  (<< Retirer les 3 >>, Suppr, le clic droit) : les natifs se gardent, le compte
+//  rendu le dit ; un seul Ctrl+Z les rend (un seul retire aussi). Ecouter,
+//  Importer, Copier, Ouvrir dans l'explorateur : un a la fois.
 // =============================================================================
 #pragma once
 
@@ -75,7 +79,11 @@ public:
     hmi::Id importSound(const std::string& soundId, std::string* why = nullptr);
     hmi::Id importSelected(std::string* why = nullptr) { return importSound(selectedId(), why); }
     bool addFile(const std::string& path, std::string* why = nullptr);
+    // 1.24.1 : les sons choisis (Ctrl+clic, Maj+clic) ; plusieurs : Retirer les retire tous de Mes sons d'un coup (un
+    // natif se garde, le compte rendu le dit) ; un seul Ctrl+Z les rend (un seul aussi).
     bool removeSelected(std::string* why = nullptr);
+    [[nodiscard]] std::vector<std::string> selectedIds() const;
+    bool selectIds(const std::vector<std::string>& ids);
     void setCategoryOpen(const std::string& category, bool open);
     [[nodiscard]] bool categoryOpen(const std::string& category) const;
     void setSearch(const std::string& text);
@@ -110,6 +118,7 @@ private:
     void say(std::string text, bool error = false);
     bool fail(std::string text, std::string* why);
     [[nodiscard]] const hmi::soundlib::Sound* byId(const std::string& id) const;
+    bool removeOne(const hmi::soundlib::Sound& s, std::string* why);   // 1.24.1 : une commande (Ctrl+Z le rend)
 
     hmi::DocumentPtr                  doc_;
     Apply                             apply_;

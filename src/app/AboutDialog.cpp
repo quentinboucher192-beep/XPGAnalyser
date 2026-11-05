@@ -4,6 +4,7 @@
 #include "../core/Process.hpp"     // 1.21.0 : le dossier du programme (repli)
 #include "../ui/DialogFrame.hpp"   // 1.21.0 : la fenetre se deplace et s'agrandit (1.12.21)
 #include "../ui/widgets/DataViews.hpp"   // 1.21.0 : l'arbre des fichiers
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le menu d'un dossier (Ouvrir dans l'explorateur, Aller a)
 
 #include "App.hpp"
 #include "ArbreTailles.hpp"   // 1.21.0 : le poids des fichiers (le parcours, sans ecran)
@@ -37,6 +38,8 @@
 namespace app {
 
     namespace {
+
+        constexpr int kAboutPathId = 900;   // 1.24.1 : Ouvrir dans l'explorateur, Aller a, Copier le chemin (900..902)
 
         // __DATE__ ("Oct  2 2026") -> "02/10/2026", comme la pastille de l'accueil.
         std::string buildDate() {
@@ -603,8 +606,14 @@ namespace app {
                 head.heading = true;
                 head.label = model_->text(n);
                 items.push_back(std::move(head));
-                items.push_back({"Ouvrir le dossier", "", "", ui::Icon::FolderOpen, true, false, 1});
-                items.push_back({"Copier le chemin", "", "", ui::Icon::Copy, true, false, 2});
+                // 1.24.1 : comme partout ou un chemin se montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
+                // (ui::paths) ; sans l'ecran du projet pour les faire : les deux entrees d'avant.
+                if (auto pathItems = ui::paths::menuItems(model_->chemin(n), kAboutPathId); !pathItems.empty()) {
+                    for (auto& it : pathItems) items.push_back(std::move(it));
+                } else {
+                    items.push_back({"Ouvrir le dossier", "", "", ui::Icon::FolderOpen, true, false, 1});
+                    items.push_back({"Copier le chemin", "", "", ui::Icon::Copy, true, false, 2});
+                }
                 menu_->setItems(std::move(items));
                 menu_->openAtSurface(at);   // `at` est dans la surface (Widget.hpp)
             });
@@ -643,6 +652,10 @@ namespace app {
             menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>("dialog.about.menu")));
             links_ += menu_->itemChosen->connect([this](int a) {
                 if (!model_) return;
+                if (ui::paths::owns(a, kAboutPathId)) {   // 1.24.1
+                    if (const std::string no = ui::paths::run(a, kAboutPathId, model_->chemin(menuNode_)); !no.empty()) dire(no, true);
+                    return;
+                }
                 if (a == 1) ouvrir(menuNode_);
                 if (a == 2) {
                     ui::setClipboardText(model_->chemin(menuNode_));

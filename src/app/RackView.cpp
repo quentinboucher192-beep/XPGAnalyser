@@ -62,6 +62,7 @@ void RackView::setHardware(std::shared_ptr<const Project> project) {
     project_ = std::move(project);
     scroll_ = {};
     selectedRack_ = -1;
+    extra_.clear();
     dirtyGeometry_ = true;
     invalidateLayout();
 }
@@ -169,7 +170,8 @@ void RackView::drawModule(const PaintContext& ctx, const SlotBox& s) const {
     const auto& c = ctx.theme.color;
     const auto& m = *s.module;
     const auto accent = colorFor(m.kind, c);
-    const bool selected = s.rack == selectedRack_ && s.slot == selectedSlot_;
+    const bool selected = (s.rack == selectedRack_ && s.slot == selectedSlot_)
+                       || std::find(extra_.begin(), extra_.end(), Place{s.rack, s.slot}) != extra_.end();   // 1.24.1
 
     ctx.r.fillRect(s.rect, selected ? c.selectionBg : c.panelBg);
     ctx.r.strokeRect(s.rect, selected ? c.accent : c.borderStrong, selected ? 2.f : 1.f);
@@ -354,10 +356,39 @@ EventResult RackView::onEvent(const InputEvent& ev) {
         grabFocus();
         for (const auto& s : slots_)
             if (s.rect.contains(d->pos)) {
+                // 1.24.1 : Ctrl+clic (Maj+clic) sur un module - l'ajouter aux modules choisis, ou l'en retirer.
+                if ((d->mods.ctrl || d->mods.shift) && s.module && selectedRack_ >= 0 && d->button == MouseButton::Left) {
+                    const Place here{s.rack, s.slot};
+                    if (here == Place{static_cast<std::uint16_t>(selectedRack_), static_cast<std::int16_t>(selectedSlot_)}) {
+                        if (!extra_.empty()) {   // le choisi s'en va : le suivant le remplace
+                            selectedRack_ = extra_.front().first;
+                            selectedSlot_ = extra_.front().second;
+                            extra_.erase(extra_.begin());
+                        }
+                    } else if (const auto at = std::find(extra_.begin(), extra_.end(), here); at != extra_.end()) {
+                        extra_.erase(at);
+                    } else {
+                        extra_.push_back(here);
+                    }
+                    invalidate();
+                    chosenChanged->emit();
+                    return EventResult::Consumed;
+                }
+                // Un clic droit dans le choix le garde (le menu porte sur tous).
+                const bool inChoice = std::find(extra_.begin(), extra_.end(), Place{s.rack, s.slot}) != extra_.end()
+                                   || (s.rack == selectedRack_ && s.slot == selectedSlot_);
+                if (d->button == MouseButton::Right && inChoice) {
+                    if (s.module) contextRequested->emit(toSurface(d->pos));
+                    return EventResult::Consumed;
+                }
+                const bool had = !extra_.empty();
+                extra_.clear();
                 selectedRack_ = s.rack;
                 selectedSlot_ = s.slot;
                 invalidate();
+                if (had) chosenChanged->emit();
                 if (s.module) moduleSelected->emit(s.rack, s.slot);
+                if (s.module && d->button == MouseButton::Right) contextRequested->emit(toSurface(d->pos));   // 1.24.1
                 return EventResult::Consumed;
             }
         return EventResult::Consumed;
@@ -365,6 +396,7 @@ EventResult RackView::onEvent(const InputEvent& ev) {
 
     if (const auto* k = std::get_if<KeyDown>(&ev); k && focused()) {
         if (k->mods.ctrl && k->key == Key::Space) { setZoom(1.f); return EventResult::Consumed; }
+        if (k->key == Key::Delete && k->mods.none() && selectedRack_ >= 0) { deleteRequested->emit(); return EventResult::Consumed; }   // 1.24.1
         if (k->key == Key::Down)  { scroll_.y += 40.f; dirtyGeometry_ = true; invalidate(); return EventResult::Consumed; }
         if (k->key == Key::Up)    { scroll_.y = std::max(0.f, scroll_.y - 40.f); dirtyGeometry_ = true; invalidate(); return EventResult::Consumed; }
     }
@@ -380,7 +412,33 @@ void RackView::setUsage(std::vector<Usage> usage) {
 void RackView::select(std::uint16_t rack, std::int16_t slot) {
     selectedRack_ = rack;
     selectedSlot_ = slot;
+    extra_.clear();   // 1.24.1 : choisir par programme revient a un seul module
     invalidate();
+}
+
+// 1.24.1 : les modules choisis (Ctrl+clic), rack par rack, emplacement par emplacement.
+std::vector<RackView::Place> RackView::chosenModules() const {
+    std::vector<Place> out;
+    if (selectedRack_ >= 0) out.emplace_back(static_cast<std::uint16_t>(selectedRack_), static_cast<std::int16_t>(selectedSlot_));
+    for (const auto& p : extra_)
+        if (std::find(out.begin(), out.end(), p) == out.end()) out.push_back(p);
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+void RackView::setChosen(std::vector<Place> modules) {
+    extra_.clear();
+    if (modules.empty()) {
+        selectedRack_ = -1;
+        selectedSlot_ = -32768;
+    } else {
+        selectedRack_ = modules.front().first;
+        selectedSlot_ = modules.front().second;
+        for (std::size_t i = 1; i < modules.size(); ++i)
+            if (modules[i] != modules.front() && std::find(extra_.begin(), extra_.end(), modules[i]) == extra_.end()) extra_.push_back(modules[i]);
+    }
+    invalidate();
+    chosenChanged->emit();
 }
 
 bool RackView::slotRect(std::uint16_t rack, std::int16_t slot, gfx::Rect& out) const {

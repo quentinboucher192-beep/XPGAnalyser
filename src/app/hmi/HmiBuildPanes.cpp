@@ -653,6 +653,9 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     diag->setColumns({{"Code", 80.f}, {"Gravit\xC3\xA9", 140.f}, {"Message", 520.f}, {"\xC3\x89l\xC3\xA9ment", 320.f}, {"Fichier", 200.f},
                       {"Ligne", 60.f}, {"Col.", 50.f}, {"\xC3\x89tape", 110.f}, {"Suggestion", 300.f}});
     diag->setSelectionMode(ui::SelectionMode::Single);
+    // 1.24.1 : la colonne Fichier (le document source, ihm/vues/0003-Vue.vue : relatif au projet) - Ouvrir dans
+    // l'explorateur, Aller a, Copier le chemin (ui::paths).
+    diag->setPathColumn(4);
     diagTable_ = diag.get();
     tabs->addTab({"Sorties", ui::Icon::Document, false, false}, std::move(out));
     tabs->addTab({"Console", ui::Icon::Code, false, false}, std::move(console));

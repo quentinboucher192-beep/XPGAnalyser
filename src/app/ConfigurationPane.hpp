@@ -8,6 +8,8 @@
 //   * Racks et modules  les racks dessines (RackView) avec, par module, les voies
 //                       que le programme emploie (« 14/16 ») ; le module choisi a
 //                       droite ; Rack, Module, Remplacer, Supprimer, Importer le .XHW ;
+//                       1.24.1 : Ctrl+clic choisit plusieurs modules, Supprimer (Suppr,
+//                       le clic droit) les retire d'un coup, un seul Ctrl+Z ;
 //   * Voies et adresses chaque %I / %Q / %IW / %QW du code face au module de son
 //                       emplacement (project/IoCheck) : sans module, dans le mauvais
 //                       sens, voie en trop - et que faire ;
@@ -30,7 +32,7 @@
 #include <string_view>
 #include <vector>
 
-namespace ui { class TableView; class PropertyGrid; class TabControl; }
+namespace ui { class TableView; class PropertyGrid; class TabControl; class PopupMenu; }
 
 namespace app {
 
@@ -85,6 +87,9 @@ private:
     void setWindow(std::size_t zone, domain::MemoryWindow window);
     void updateHint();
     [[nodiscard]] const domain::Module* moduleAt(std::uint16_t rack, std::int16_t slot) const;
+    // 1.24.1 : plusieurs modules choisis (Ctrl+clic dans les racks) - les supprimer d'un coup ; le clic droit.
+    void removeModules(const std::vector<std::pair<std::uint16_t, std::int16_t>>& places);
+    void openModuleMenu(gfx::Point surface);
 
     ApiPaneHosts                          hosts_;
     ApiFrame*                             frame_{nullptr};
@@ -92,6 +97,7 @@ private:
     ui::PropertyGrid*                     props_{nullptr};
     ui::PropertyGrid*                     processor_{nullptr};
     RackView*                             rackView_{nullptr};
+    ui::PopupMenu*                        moduleMenu_{nullptr};   // 1.24.1 : le clic droit sur un module
     ui::TableView*                        channels_{nullptr};
     ui::TableView*                        network_{nullptr};
     MemoryMapView*                        memoryView_{nullptr};

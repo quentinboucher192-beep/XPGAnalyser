@@ -371,6 +371,19 @@ ConfigurationPane::ConfigurationPane(std::string id) : ui::Widget(std::move(id))
         slot_ = s;
         refreshProperties();
     });
+    // 1.24.1 : plusieurs modules choisis (Ctrl+clic) - le clic droit et Suppr les suppriment d'un coup.
+    links_ += rackView_->chosenChanged->connect([this] {
+        if (rackView_->selectedRack() >= 0) {
+            rack_ = rackView_->selectedRack();
+            slot_ = rackView_->selectedSlot();
+        }
+        refreshProperties();
+        updateHint();
+    });
+    links_ += rackView_->contextRequested->connect([this](gfx::Point at) { openModuleMenu(at); });
+    links_ += rackView_->deleteRequested->connect([this] {
+        if (frame_ && frame_->tools().isEnabled(ARemove)) runAction(ARemove);
+    });
     tabs_->addTab(ui::TabControl::Tab{"Racks et modules", ui::Icon::Rack, false, false}, std::move(rack));
 
     auto channels = std::make_unique<ui::TableView>(this->id() + ".voies");
@@ -481,8 +494,11 @@ void ConfigurationPane::attach(ApiFrame& frame) {
     };
     t.setEnabledWhen(AAddRack, editable);
     t.setEnabledWhen(AAddModule, editable);
-    t.setEnabledWhen(AReplace, moduleChosen);
-    t.setEnabledWhen(ARemove, moduleChosen);
+    // 1.24.1 : plusieurs modules choisis (Ctrl+clic) - Supprimer les retire tous (un seul Ctrl+Z ; le processeur et
+    // l'alimentation restent, le compte rendu le dit) ; Remplacer : un a la fois.
+    t.setEnabledWhen(AReplace, [this, moduleChosen] { return moduleChosen() && rackView_->chosenModules().size() <= 1; });
+    t.setEnabledWhen(ARemove, [this, moduleChosen, editable] { return moduleChosen() || (editable() && rackView_->chosenModules().size() > 1); });
+    t.setLabelWhen(ARemove, [this] { return several::label("Supprimer", rackView_->chosenModules().size()); });
     t.setEnabledWhen(AImportXhw, editable);
     t.setEnabledWhen(ABounds, editable);
     t.setEnabledWhen(AWholeZone, [this, editable] { return editable() && zone_ < zones_.size() && zones_[zone_].bounded; });
@@ -500,6 +516,80 @@ void ConfigurationPane::showTab(int tab) {
     if (tab >= 0 && tab < TCount) tabs_->setCurrentIndex(static_cast<std::size_t>(tab));
     refreshProperties();
     updateHint();
+}
+
+// 1.24.1 : SUPPRIMER PLUSIEURS MODULES D'UN COUP - sans question (comme un seul), un seul Ctrl+Z les remet ; le
+// processeur et l'alimentation restent (comme seuls, ils ne se suppriment pas), le compte rendu le dit.
+void ConfigurationPane::removeModules(const std::vector<std::pair<std::uint16_t, std::int16_t>>& places) {
+    if (places.empty() || !hosts_.apply) return;
+    several::Batch b;
+    b.noun = "module";
+    b.nouns = "modules";
+    for (const auto& [r, s] : places) {
+        const auto* m = moduleAt(r, s);
+        b.names.push_back((m ? m->reference : std::string("?")) + " (rack " + std::to_string(r) + ", " + (s < 0 ? std::string("alim.") : std::to_string(s)) + ")");
+    }
+    b.remove = [this, places](std::size_t k, std::string* why) {
+        auto doc = hosts_.project ? hosts_.project() : nullptr;
+        const auto [r, s] = places[k];
+        const auto* m = moduleAt(r, s);
+        std::string no = !doc ? std::string("le projet ne se modifie pas")
+                       : !m ? std::string("introuvable")
+                       : m->isCpu || (r == 0 && s == 0) ? std::string("le processeur reste")
+                       : s < 0 ? std::string("l'alimentation reste")
+                       : std::string{};
+        if (!no.empty()) {
+            if (why) *why = no;
+            return false;
+        }
+        hosts_.apply(std::make_unique<project::RemoveModuleCommand>(doc, r, s));
+        return true;
+    };
+    b.after = [this] {
+        slot_ = -32768;
+        rack_ = -1;
+        refreshProperties();
+    };
+    b.report = [this](const std::string& text, bool) { if (hosts_.status) hosts_.status(text); };
+    b.alive = rackView_->chosenChanged;
+    several::run(std::move(b));
+}
+
+// 1.24.1 : le clic droit sur un module (ou sur les modules choisis) - Remplacer (un a la fois), Supprimer (les N).
+void ConfigurationPane::openModuleMenu(gfx::Point surface) {
+    if (!frame_) return;
+    auto& t = frame_->tools();
+    if (!moduleMenu_) {
+        moduleMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".menuModules")));
+        links_ += moduleMenu_->itemChosen->connect([this](int a) {
+            if (frame_ && (a == AReplace || a == ARemove) && frame_->tools().isEnabled(a)) runAction(a);
+        });
+    }
+    const auto chosen = rackView_->chosenModules();
+    std::vector<ui::PopupMenu::Item> items;
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    if (const auto* m = chosen.size() == 1 ? moduleAt(chosen.front().first, chosen.front().second) : nullptr) head.label = m->reference;
+    else head.label = std::to_string(chosen.size()) + " modules";
+    items.push_back(std::move(head));
+    ui::PopupMenu::Item rep;
+    rep.label = "Remplacer\xE2\x80\xA6";
+    rep.icon = ui::Icon::Refresh;
+    rep.id = AReplace;
+    rep.enabled = t.isEnabled(AReplace);
+    rep.disabledReason = rep.enabled ? std::string{} : chosen.size() > 1 ? std::string("un \xC3\xA0 la fois") : std::string("le processeur et l'alimentation restent");
+    items.push_back(std::move(rep));
+    ui::PopupMenu::Item del;
+    del.label = several::label("Supprimer", chosen.size());
+    del.icon = ui::Icon::Delete;
+    del.shortcut = "Suppr";
+    del.id = ARemove;
+    del.enabled = t.isEnabled(ARemove);
+    del.disabledReason = del.enabled ? std::string{} : std::string("le processeur et l'alimentation restent");
+    items.push_back(std::move(del));
+    moduleMenu_->setItems(std::move(items));
+    moduleMenu_->setBounds(bounds());
+    moduleMenu_->openAtSurface(surface);
 }
 
 const domain::Module* ConfigurationPane::moduleAt(std::uint16_t rack, std::int16_t slot) const {
@@ -612,6 +702,10 @@ void ConfigurationPane::runAction(int action) {
             return;
         }
         case ARemove:
+            if (const auto chosen = rackView_->chosenModules(); doc && hosts_.apply && chosen.size() > 1) {
+                removeModules(chosen);   // 1.24.1 : plusieurs d'un coup
+                return;
+            }
             if (doc && rack_ >= 0) {
                 hosts_.apply(std::make_unique<project::RemoveModuleCommand>(doc, static_cast<std::uint16_t>(rack_), static_cast<std::int16_t>(slot_)));
                 slot_ = -32768;

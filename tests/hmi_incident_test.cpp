@@ -17,6 +17,7 @@
 #include "../src/app/ai/AiIncident.hpp"
 #include "../src/app/hmi/HmiIncidentHost.hpp"
 #include "../src/app/hmi/HmiIncidentsPane.hpp"   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
+#include "../src/ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le dossier d'un incident (ui::paths)
 #include "../src/core/AtomicFile.hpp"
 #include "../src/hmi/HmiIncident.hpp"
 #include "../src/hmi/HmiRelations.hpp"
@@ -26,6 +27,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>      // 1.24.1 : HMI_INCIDENT_LIM
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -1560,7 +1562,123 @@ void incidentPlayer() {
     }
 }
 
+// ---- 1.24.1 : plusieurs incidents d'un coup ; le dossier d'un incident comme partout (Ouvrir dans l'explorateur) ----
+//  Le client (05/11) : << partout pouvoir supprimer plusieurs d'un coup >>. Ctrl+clic, Maj+clic choisissent plusieurs
+//  incidents ; Supprimer les supprime tous apres UNE question qui le dit definitif (pas de Ctrl+Z) ; un valide reste ;
+//  le clic droit d'un incident : Ouvrir dans l'explorateur, Aller a, Copier le chemin (ui::paths). HMI_INCIDENT_LIM=1 : seul.
+void plusieursIncidents1241() {
+    std::printf("1.24.1 : plusieurs incidents d'un coup, leur dossier comme partout\n");
+    const fs::path proj = tempRoot("plusieurs");
+    const Project p = station();
+    {
+        app::IncidentHost h;
+        h.setProjectFolder(proj.string());
+        check(h.drain(3000), "L l'hote pret");
+        st::Store* store = h.storeForTests();
+        std::vector<std::string> names;
+        const char* const ats[] = {"2026-11-05 08:00:00.000", "2026-11-05 08:10:00.000", "2026-11-05 08:20:00.000", "2026-11-05 08:30:00.000"};
+        const char* const alarms[] = {"Niveau_Haut", "Defaut_Pompe_1", "Pression_Basse_Pompe_2", "Niveau_Tres_Haut"};
+        for (int i = 0; i < 4 && store; ++i) {
+            inc::SnapshotInput in;
+            in.project = &p;
+            in.trigger.kind = inc::EventKind::Appear;
+            in.trigger.name = alarms[i];
+            in.trigger.at = ats[i];
+            in.openView = "Vue_Station";
+            in.projectName = p.config.name;
+            in.projectVersion = p.config.version;
+            in.id = st::newId();
+            in.createdAt = ats[i];
+            const inc::Snapshot s = inc::snapshot(in);
+            std::string folder, why;
+            check(store->create(s, {}, st::initialAnalysis(s, s.createdAt), folder, &why), std::string("L l'incident ") + alarms[i] + " " + why);
+            names.push_back(fs::path(folder).filename().string());
+        }
+        struct Question {
+            int         asked{0};
+            bool        yes{true};
+            std::string title, text;
+        } q;
+        app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string&, std::function<void()> yes) {
+            ++q.asked;
+            q.title = title;
+            q.text = text;
+            if (q.yes && yes) yes();
+        });
+        auto doc = std::make_shared<hmi::Document>();
+        app::HmiIncidentsPane pane("hmi.incidents.l", doc, &h);
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        check(h.drain(3000), "L la relecture");
+        (void)pane.poll();
+        pane.layout();
+        check(pane.pendingCount() == 4 && pane.rowCount() == 4 && names.size() == 4, "L quatre incidents, quatre lignes (" + std::to_string(pane.rowCount()) + ")");
+        if (names.size() == 4 && pane.rowCount() == 4) {
+            // Ctrl+clic : la ligne choisie et deux autres ; Maj+clic choisirait une plage.
+            pane.clearChoice();
+            check(pane.chosenIncidents().size() == 1, "L un seul choisi au depart");
+            pane.toggleRowChoice(1);
+            pane.toggleRowChoice(3);
+            check(pane.chosenIncidents().size() == 3, "L Ctrl+clic : trois choisis (" + std::to_string(pane.chosenIncidents().size()) + ")");
+            pane.toggleRowChoice(3);
+            check(pane.chosenIncidents().size() == 2, "L Ctrl+clic de nouveau : l'un en sort");
+            pane.toggleRowChoice(3);
+            const int del = pane.tools().actionByTip("Supprimer");
+            const int consult = pane.tools().actionByTip("Consulter");
+            check(pane.tools().labelOf(del) == "Supprimer les 3" && pane.tools().isEnabled(del), "L le bouton : Supprimer les 3 (" + pane.tools().labelOf(del) + ")");
+            check(consult > 0 && !pane.tools().isEnabled(consult), "L Consulter gris\xC3\xA9 (un \xC3\xA0 la fois)");
+            // Supprimer : UNE question, definitive ; puis les trois partent.
+            q = Question{};
+            q.yes = false;
+            pane.askRemove();
+            check(q.asked == 1 && has(q.title, "Supprimer les 3 incidents") && has(q.text, "d\xC3\xA9" "finitif") && !has(q.text, "Un seul Ctrl+Z"),
+                  "L une seule question, qui le dit d\xC3\xA9" "finitif (" + q.title + " / " + q.text + ")");
+            check(h.drain(3000) && ((void)pane.poll(), pane.pendingCount() == 4), "L non : rien ne part");
+            q.yes = true;
+            pane.askRemove();
+            check(h.drain(3000) && pane.poll(), "L la relecture apr\xC3\xA8s la suppression");
+            check(pane.pendingCount() == 1, "L oui : les trois partent, un reste (" + std::to_string(pane.pendingCount()) + ")");
+            check(has(pane.lastMessage(), "3 incidents supprim") && !has(pane.lastMessage(), "Ctrl+Z"), "L le compte rendu, sans Ctrl+Z : " + pane.lastMessage());
+            check(pane.chosenIncidents().size() == 1, "L apr\xC3\xA8s : un seul choisi");
+            // Le clic droit d'un incident : son dossier comme partout (avec l'application).
+            const auto saved = ui::paths::provider();
+            std::vector<std::string> revealed;
+            ui::paths::Provider pr;
+            pr.reveal = [&](const std::string& path) { revealed.push_back(path); return std::string{}; };
+            pr.goTo = [](const std::string&, const std::string&, bool) { return std::string{}; };
+            ui::paths::setProvider(pr);
+            auto* list = pane.findById("hmi.incidents.l.attente");
+            if (list) {
+                const auto b = list->bounds();
+                list->dispatch(ui::MouseDown{{b.x + 60.f, b.y + 40.f}, ui::MouseButton::Right, 1, {}});
+            }
+            auto* menu = dynamic_cast<ui::PopupMenu*>(pane.findById("hmi.incidents.l.menu"));
+            const ui::PopupMenu::Item* open = nullptr;
+            if (menu)
+                for (const auto& it : menu->items())
+                    if (it.label == "Ouvrir dans l'explorateur") open = &it;
+            bool oldEntry = false;
+            if (menu)
+                for (const auto& it : menu->items()) oldEntry = oldEntry || it.label == "Ouvrir le dossier";
+            check(list && menu && open && open->enabled && !oldEntry, "L le clic droit d'un incident : Ouvrir dans l'explorateur (plus son Ouvrir le dossier)");
+            if (menu && open) menu->itemChosen->emit(open->id);
+            check(!revealed.empty() && pane.selected() && revealed.back() == pane.selected()->folder, "L Ouvrir dans l'explorateur : le dossier de l'incident");
+            ui::paths::setProvider(saved);
+        }
+        app::several::setConfirmHost({});
+        h.shutdown();
+    }
+    std::error_code ec;
+    fs::remove_all(proj, ec);
+}
+
 int main() {
+    // 1.24.1 : HMI_INCIDENT_LIM=1 - plusieurs incidents d'un coup, seul.
+    if (const char* only = std::getenv("HMI_INCIDENT_LIM"); only && *only == '1') {
+        plusieursIncidents1241();
+        std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
+        return g_failures == 0 ? 0 : 1;
+    }
     detection();
     dependencies();
     storage();
@@ -1572,6 +1690,7 @@ int main() {
     incidentPlayer();  // 1.21.0 : la video lue comme un enregistrement, le zoom de l'image
     burstHost();       // 1.21.0 : une alarme qui bat - 300 000 reapparitions, un seul incident
     burstGuards();     // 1.21.0 : regroupement 0, anti-rebond, plafond horaire, quota disque, reglages
+    plusieursIncidents1241();   // 1.24.1 : plusieurs incidents d'un coup (definitif), leur dossier comme partout
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

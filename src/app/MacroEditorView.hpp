@@ -44,7 +44,7 @@
 #include <utility>
 #include <vector>
 
-namespace ui { class MultiLineText; class TableView; class PropertyGrid; class ToggleButton; class Button; }
+namespace ui { class MultiLineText; class TableView; class PropertyGrid; class ToggleButton; class Button; class PopupMenu; }
 
 namespace app {
 
@@ -196,6 +196,10 @@ private:
     gfx::Rect                         codeTitle_{}, trialTitleRect_{}, sideRect_{};
     bool                              syncing_{false};
     core::ConnectionScope             links_;
+    // 1.24.1 : le titre du code (<< Nom.mac . libs/Macros >>) est le fichier de la macro - son clic droit propose Ouvrir
+    // dans l'explorateur, Aller a, Copier le chemin (ui::paths) ; le menu est un enfant de la vue.
+    ui::PopupMenu*                    pathMenu_{nullptr};
+    std::string                       pathMenuFile_;
 };
 
 } // namespace app

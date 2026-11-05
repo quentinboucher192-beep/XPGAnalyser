@@ -94,9 +94,11 @@ namespace ui {
     //  - "champ N" des scripts compte toujours les memes champs).
     class BrowseButton final : public Button {
     public:
+        // 1.24.1 : le champ devient un champ de chemin (InputText::setPathField) : son clic droit propose Ouvrir
+        // dans l'explorateur, Aller a et Copier le chemin ; un nom seul s'y lit dans le dossier de `start`.
         BrowseButton(InputText& target, PathBrowse spec, std::string id = {}, std::string text = {});
 
-        void setSpec(PathBrowse spec) { spec_ = std::move(spec); }
+        void setSpec(PathBrowse spec);
         [[nodiscard]] const PathBrowse& spec() const noexcept { return spec_; }
         [[nodiscard]] InputText& target() const noexcept { return *target_; }
         // Le libelle du champ : le titre de l'explorateur, l'infobulle, et ce que

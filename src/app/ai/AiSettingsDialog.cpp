@@ -13,6 +13,7 @@
 #include "../../ui/DialogFrame.hpp"
 #include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le dossier de l'Assistant, un chemin (Ouvrir dans l'explorateur)
 
 #include <algorithm>
 #include <cmath>
@@ -284,12 +285,23 @@ protected:
         ctx.r.drawText({x, panel_.bottom() - 38.f}, elide(ctx.r, folder, kSmall, footerW_), kSmall, c.textMuted);
     }
 
+    // 1.24.1 : le dossier de l'Assistant (le pied de la fenetre) est un chemin - son clic droit propose Ouvrir dans
+    // l'explorateur, Aller a, Copier le chemin (ui::paths), comme partout.
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right && !root().empty()) {
+            const gfx::Rect footer{panel_.x + 20.f, panel_.bottom() - 40.f, footerW_, ui::lineHeight(kSmall) + 4.f};
+            if (footer.contains(m->pos) && pathMenu_.open(*this, root(), m->pos, {}, "Dossier de l'Assistant")) return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
 private:
     AiSettingsDialog&  d_;
     gfx::Rect          panel_{};
     gfx::Rect          resultAt_{};
     std::vector<Label> labels_, notes_;
     float              footerW_{0.f};
+    ui::paths::PathMenu pathMenu_;   // 1.24.1
 };
 
 AiSettingsDialog::AiSettingsDialog(AiPanel& panel) : menu::WidgetMenu("dialog.ai.parametres"), panel_(panel) {}

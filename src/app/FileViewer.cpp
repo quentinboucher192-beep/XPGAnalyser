@@ -15,6 +15,7 @@
 #include "../ui/Shapes.hpp"
 #include "../ui/Theme.hpp"
 #include "../ui/Zoom.hpp"
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : l'en-tete, un chemin (Ouvrir dans l'explorateur, Aller a)
 
 #include <algorithm>
 #include <atomic>
@@ -1371,6 +1372,25 @@ void FileViewPane::onPaint(const ui::PaintContext& ctx) {
 
 ui::EventResult FileViewPane::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos)) grabFocus();
+    // 1.24.1 : le clic droit sur l'en-tete (le nom, le chemin du fichier montre) - Ouvrir dans l'explorateur, Aller a,
+    // Copier le chemin (ui::paths), comme partout ou un chemin se montre.
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right && bounds().contains(m->pos)
+        && m->pos.y < bounds().y + 72.f && !viewer_.source().path.empty()) {
+        pathMenuFile_ = viewer_.source().path;
+        auto items = ui::paths::menuItems(pathMenuFile_, ui::paths::PathMenu::kFirstId);
+        if (!items.empty()) {
+            auto* menu = static_cast<ui::PopupMenu*>(pathMenu_);
+            if (!menu) {
+                menu = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".chemin")));
+                pathMenu_ = menu;
+                menu->itemChosen->connect([this](int a) { (void)ui::paths::run(a, ui::paths::PathMenu::kFirstId, pathMenuFile_); }).release();
+            }
+            menu->setItems(std::move(items));
+            menu->setBounds(bounds());
+            menu->openInWindow(m->pos);
+            return ui::EventResult::Consumed;
+        }
+    }
     if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
     if (viewer_.event(ev, bounds())) {
         invalidate();

@@ -3155,6 +3155,33 @@ std::string run(int id, int firstId, const std::string& path, const std::string&
         default: return {};
     }
 }
+
+// 1.24.1 : le menu d'un chemin montre hors d'un tableau, d'une grille ou d'un champ (un libelle).
+bool PathMenu::open(Widget& host, std::string path, gfx::Point at, std::string base, std::string heading) {
+    auto items = menuItems(path, kFirstId, base);
+    if (items.empty()) return false;
+    path_ = std::move(path);
+    base_ = std::move(base);
+    if (!heading.empty()) {
+        PopupMenu::Item head;
+        head.heading = true;
+        head.label = std::move(heading);
+        items.insert(items.begin(), std::move(head));
+    }
+    if (!menu_) {
+        menu_ = &static_cast<PopupMenu&>(host.addChild(std::make_unique<PopupMenu>(host.id() + ".chemin")));
+        // Le menu est l'enfant de `host`, qui garde ce PathMenu : ils partent ensemble.
+        menu_->itemChosen->connect([this](int id) {
+            said_ = run(id, kFirstId, path_, base_);
+            if (!said_.empty() && refused) refused(said_);
+        }).release();
+    }
+    said_.clear();
+    menu_->setItems(std::move(items));
+    menu_->setBounds(host.bounds());
+    menu_->openInWindow(at);
+    return true;
+}
 } // namespace paths
 
 PropertyGrid::PropertyGrid(std::string id) : Widget(std::move(id)) {

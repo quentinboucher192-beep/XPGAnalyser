@@ -180,10 +180,13 @@ template <class T>
 // (faux : refusee comme seule, `why` dit pourquoi) ; `after` ; enfin `report` : << 3 alarmes supprimees : A, B, C ;
 // 1 refusee : D (pourquoi) - un seul Ctrl+Z les rend >>. `alive` : un signal du volet - parti avant la reponse, rien.
 struct Batch {
-    std::string verb{"Supprimer"};               // ou "Retirer"
+    std::string verb{"Supprimer"};               // ou "Retirer", "D\xC3\xA9lier"
     std::string noun, nouns;                     // "alarme", "alarmes"
     bool        feminine{false};
     bool        ask{false};
+    // 1.24.1 : CE QUI PART DU DISQUE SANS RETOUR (des incidents, des fichiers de l'Assistant IA) : la question le dit
+    // (<< definitif : pas de Ctrl+Z >>), le compte rendu ne promet pas de Ctrl+Z. Le groupe de commandes reste (vide).
+    bool        final{false};
     std::string warning;
     std::vector<std::string> names;
     std::function<bool(std::size_t, std::string*)> remove;

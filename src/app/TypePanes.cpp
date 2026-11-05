@@ -632,6 +632,7 @@ void DerivedTypesPane::attach(ApiFrame& frame) {
     });
     t.setEnabledWhen(AUpdate, [this] { return outdated_ > 0; });
     t.setEnabledWhen(AVariables, [this] { return selectedInfo() != nullptr; });
+    t.bindListKeys(*table_, {ADelete, 0, 0});   // 1.24.1 : Suppr, comme les autres volets a liste
     links_ += t.triggered->connect([this](int a) { runAction(a); });
     updateHint();
 }
@@ -1534,7 +1535,7 @@ DfbPane::DfbPane(std::string id) : ui::Widget(std::move(id)) {
     // Lot recherche : les filtres des colonnes (la table les applique) - ils
     // choisissent des blocs ; leurs dossiers et leurs variables les suivent.
     table_->setColumnFiltersEnabled(true);
-    table_->setSelectionMode(ui::SelectionMode::Single);
+    table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs blocs a supprimer d'un coup
     links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) {
         if (syncing_) return;
         refreshDetails();
@@ -1603,17 +1604,64 @@ void DfbPane::attach(ApiFrame& frame) {
         const auto* row = selectedRow();
         return row && row->kind == Row::Block && row->info < infos_.size();
     };
+    // 1.24.1 : plusieurs blocs choisis (Ctrl+clic, Maj+clic) - Supprimer les retire tous (une question si l'un emporte
+    // quelque chose, un seul Ctrl+Z) ; Renommer, Ouvrir le code, Creer une instance : un a la fois.
+    const auto one = [this] { return chosenBlocks().size() <= 1; };
     t.setEnabledWhen(AAddBlock, editable);
-    t.setEnabledWhen(ARename, [editable, blockRow] { return editable() && blockRow(); });
-    t.setEnabledWhen(ADelete, [editable, blockRow] { return editable() && blockRow(); });
+    t.setEnabledWhen(ARename, [editable, blockRow, one] { return editable() && blockRow() && one(); });
+    t.setEnabledWhen(ADelete, [this, editable, blockRow] { return editable() && (blockRow() || chosenBlocks().size() > 1); });
+    t.setLabelWhen(ADelete, [this] { return several::label("Supprimer", chosenBlocks().size()); });
     // Un bloc sans section garde le bouton : la barre d'etat dit alors pourquoi
     // rien ne s'ouvre (un bouton grise ne le dirait pas).
-    t.setEnabledWhen(AOpenCode, chosen);
+    t.setEnabledWhen(AOpenCode, [chosen, one] { return chosen() && one(); });
     t.setEnabledWhen(AUpdate, [this] { return outdated_ > 0; });
-    t.setEnabledWhen(AInstance, [editable, chosen] { return editable() && chosen(); });
+    t.setEnabledWhen(AInstance, [editable, chosen, one] { return editable() && chosen() && one(); });
+    t.bindListKeys(*table_, {ADelete, 0, 0});   // 1.24.1 : Suppr
+    tools_ = &t;
+    // 1.24.1 : le clic droit - Supprimer (les N), et ce qui ne vaut que pour un bloc, grise (<< un a la fois >>).
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto blocks = chosenBlocks();
+        if (blocks.empty() || !tools_) return items;
+        const auto add = [&](int action, std::string label, ui::Icon icon, std::string key = {}) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.icon = icon;
+            it.id = action;
+            it.shortcut = std::move(key);
+            it.enabled = tools_->isEnabled(action);
+            it.disabledReason = it.enabled ? std::string{} : blocks.size() > 1 ? std::string("un \xC3\xA0 la fois") : std::string("pas ici");
+            items.push_back(std::move(it));
+        };
+        add(AOpenCode, "Ouvrir le code", ui::Icon::Code);
+        add(ARename, "Renommer\xE2\x80\xA6", ui::Icon::Rename);
+        add(AInstance, "Cr\xC3\xA9" "er une instance\xE2\x80\xA6", ui::Icon::Plus);
+        add(ADelete, several::label("Supprimer", blocks.size()), ui::Icon::Delete, "Suppr");
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int a) {
+        if ((a == AOpenCode || a == ARename || a == AInstance || a == ADelete) && tools_) (void)tools_->trigger(a);
+    });
     links_ += t.triggered->connect([this](int a) { runAction(a); });
     frame.setHint("La fl\xC3\xA8" "che d'un bloc d\xC3\xA9plie ses entr\xC3\xA9" "es, sorties, variables et sections, puis chaque variable ses membres. "
                   "Double-clic sur un bloc : son code ; sur une instance : la variable, o\xC3\xB9 elle est \xC3\xA9" "crite et lue.");
+}
+
+std::vector<std::size_t> DfbPane::chosenBlocks() const {
+    std::vector<std::size_t> out;
+    auto rows = table_->selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    for (const auto r : rows)
+        if (r < rows_.size() && rows_[r].kind == Row::Block && rows_[r].info < infos_.size()
+            && std::find(out.begin(), out.end(), rows_[r].info) == out.end())
+            out.push_back(rows_[r].info);
+    return out;
+}
+
+std::vector<std::string> DfbPane::chosenBlockNames() const {
+    std::vector<std::string> out;
+    for (const auto i : chosenBlocks()) out.push_back(infos_[i].name);
+    return out;
 }
 
 const DfbPane::Row* DfbPane::selectedRow() const {
@@ -2103,9 +2151,18 @@ void DfbPane::runAction(int action) {
                        });
             return;
         }
-        case ADelete:
+        case ADelete: {
+            // 1.24.1 : PLUSIEURS BLOCS D'UN COUP (apiDeleteMany, TaskPanes.hpp) - un bloc qui a des instances reste
+            // (comme seul), le compte rendu le dit ; un seul Ctrl+Z.
+            if (const auto blocks = chosenBlocks(); blocks.size() > 1) {
+                std::vector<ApiDoomed> doomed;
+                for (const auto i : blocks) doomed.push_back({domain::EntityKind::Pou, infos_[i].pou, infos_[i].name});
+                apiDeleteMany(hosts_, std::move(doomed), "bloc", "blocs", false, table_->selectionChanged);
+                return;
+            }
             if (s < infos_.size() && hosts_.remove && blockRow) hosts_.remove(domain::EntityKind::Pou, infos_[s].pou);
             return;
+        }
         case AOpenCode:
             openCode(false);
             return;
@@ -2511,13 +2568,42 @@ void UnitsPane::attach(ApiFrame& frame) {
         const auto* row = selectedRow();
         return row && (row->kind == Row::Unit || row->kind == Row::Section || row->kind == Row::Variable);
     };
+    // 1.24.1 : plusieurs unites, sections ou variables choisies (Ctrl+clic, Maj+clic) - Supprimer les retire toutes (une
+    // question si l'une emporte quelque chose, un seul Ctrl+Z) ; Renommer, Ouvrir le code, Voir dans l'ordre : une a la fois.
+    const auto one = [this] { return chosenDeletable().size() <= 1; };
     t.setEnabledWhen(AAddUnit, editable);
     t.setEnabledWhen(AAddSection, [this, editable] { return editable() && selectedRow() != nullptr; });
     t.setEnabledWhen(AAddVariable, [this, editable] { return editable() && selectedRow() != nullptr; });
-    t.setEnabledWhen(ARename, [editable, named] { return editable() && named(); });
-    t.setEnabledWhen(ADelete, [editable, named] { return editable() && named(); });
-    t.setEnabledWhen(AOpenCode, [this] { return selectedRow() != nullptr; });
-    t.setEnabledWhen(AOrder, [this] { return selectedRow() != nullptr; });
+    t.setEnabledWhen(ARename, [editable, named, one] { return editable() && named() && one(); });
+    t.setEnabledWhen(ADelete, [this, editable, named] { return editable() && (named() || chosenDeletable().size() > 1); });
+    t.setLabelWhen(ADelete, [this] { return several::label("Supprimer", chosenDeletable().size()); });
+    t.setEnabledWhen(AOpenCode, [this, one] { return selectedRow() != nullptr && one(); });
+    t.setEnabledWhen(AOrder, [this, one] { return selectedRow() != nullptr && one(); });
+    t.bindListKeys(*table_, {ADelete, 0, 0});   // 1.24.1 : Suppr
+    tools_ = &t;
+    // 1.24.1 : le clic droit - Supprimer (les N), et ce qui ne vaut que pour une ligne, grise (<< une a la fois >>).
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto chosen = chosenDeletable();
+        if (chosen.empty() || !tools_) return items;
+        const auto add = [&](int action, std::string label, ui::Icon icon, std::string key = {}) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.icon = icon;
+            it.id = action;
+            it.shortcut = std::move(key);
+            it.enabled = tools_->isEnabled(action);
+            it.disabledReason = it.enabled ? std::string{} : chosen.size() > 1 ? several::kOneAtATime : std::string("pas ici");
+            items.push_back(std::move(it));
+        };
+        add(AOpenCode, "Ouvrir le code", ui::Icon::Code);
+        add(ARename, "Renommer\xE2\x80\xA6", ui::Icon::Rename);
+        add(ADelete, several::label("Supprimer", chosen.size()), ui::Icon::Delete, "Suppr");
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int a) {
+        if ((a == AOpenCode || a == ARename || a == ADelete) && tools_) (void)tools_->trigger(a);
+    });
     t.setEnabledWhen(ACompare, [this] { return !selectedSections().empty(); });
     t.setEnabledWhen(AExport, [this] { return static_cast<bool>(hosts_.request); });
     t.setEnabledWhen(AIcon, [this, editable] {
@@ -2533,6 +2619,25 @@ void UnitsPane::attach(ApiFrame& frame) {
 const UnitsPane::Row* UnitsPane::selectedRow() const {
     const auto sel = table_->selectedModelRows();
     return sel.empty() || sel.front() >= rows_.size() ? nullptr : &rows_[sel.front()];
+}
+
+// 1.24.1 : les lignes choisies qui se suppriment (une unite, une section, une variable ; pas un titre de groupe ni un
+// membre), dans l'ordre de la liste, sans double.
+std::vector<std::size_t> UnitsPane::chosenDeletable() const {
+    std::vector<std::size_t> out;
+    auto rows = table_->selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    for (const auto r : rows)
+        if (r < rows_.size() && (rows_[r].kind == Row::Unit || rows_[r].kind == Row::Section || rows_[r].kind == Row::Variable)
+            && std::find(out.begin(), out.end(), static_cast<std::size_t>(r)) == out.end())
+            out.push_back(static_cast<std::size_t>(r));
+    return out;
+}
+
+std::vector<std::string> UnitsPane::chosenNames() const {
+    std::vector<std::string> out;
+    for (const auto r : chosenDeletable()) out.push_back(model_->cellText(static_cast<RowIndex>(r), 0));
+    return out;
 }
 
 std::vector<domain::Index> UnitsPane::selectedSections() const {
@@ -3345,12 +3450,44 @@ void UnitsPane::runAction(int action) {
                        });
             return;
         }
-        case ADelete:
+        case ADelete: {
+            // 1.24.1 : PLUSIEURS D'UN COUP (apiDeleteMany, TaskPanes.hpp) - les variables, puis les sections, puis les
+            // unites (une section dont l'unite part aussi part avec elle) ; un seul Ctrl+Z ; le compte rendu dit le reste.
+            if (const auto chosen = chosenDeletable(); chosen.size() > 1) {
+                std::vector<ApiDoomed> doomed;
+                std::vector<domain::Index> units;
+                for (const auto r : chosen)
+                    if (rows_[r].kind == Row::Unit) units.push_back(rows_[r].pou);
+                int kinds = 0;
+                bool sawUnit = false, sawSection = false, sawVariable = false;
+                for (const auto r : chosen) {
+                    const auto& x = rows_[r];
+                    const std::string name = model_->cellText(static_cast<RowIndex>(r), 0);
+                    if (x.kind == Row::Unit) {
+                        doomed.push_back({domain::EntityKind::Pou, x.pou, name});
+                        sawUnit = true;
+                    } else if (x.kind == Row::Section) {
+                        if (std::find(units.begin(), units.end(), x.pou) != units.end()) continue;   // part avec son unite
+                        doomed.push_back({domain::EntityKind::Section, x.section, name});
+                        sawSection = true;
+                    } else {
+                        if (std::find(units.begin(), units.end(), x.pou) != units.end()) continue;
+                        doomed.push_back({domain::EntityKind::Variable, x.variable, name});
+                        sawVariable = true;
+                    }
+                }
+                kinds = static_cast<int>(sawUnit) + static_cast<int>(sawSection) + static_cast<int>(sawVariable);
+                const bool same = kinds <= 1;
+                const std::string noun = !same ? "\xC3\xA9l\xC3\xA9ment" : sawUnit ? "unit\xC3\xA9" : sawSection ? "section" : "variable";
+                apiDeleteMany(hosts_, std::move(doomed), noun, noun + "s", same, table_->selectionChanged);
+                return;
+            }
             if (!row || !hosts_.remove || !named) return;
             if (row->kind == Row::Unit) hosts_.remove(domain::EntityKind::Pou, row->pou);
             else if (row->isVariable()) hosts_.remove(domain::EntityKind::Variable, row->variable);
             else hosts_.remove(domain::EntityKind::Section, row->section);
             return;
+        }
         case AOpenCode: {
             if (!row || !p || !hosts_.request) return;
             domain::Index section = row->isSection() ? row->section : domain::kNoIndex;

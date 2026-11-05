@@ -203,6 +203,12 @@ public:
     void cancelRename();
     [[nodiscard]] bool renaming() const noexcept { return renameIndex_ >= 0; }
     void askDelete(int index);                     // la confirmation, puis supprimer
+    // 1.24.1 : PLUSIEURS CONVERSATIONS D'UN COUP - Ctrl+clic ajoute une conversation au choix (ou l'en retire), un clic
+    // simple revient a une seule ; Suppr, le clic droit << Supprimer les 3... >> : UNE confirmation, qui le dit
+    // definitif (leurs fichiers quittent le dossier de l'Assistant), puis toutes. Renommer : une a la fois.
+    void toggleChosen(int index);
+    [[nodiscard]] std::vector<int> chosenConversations() const;   // les rangs, dans l'ordre de la liste
+    void askDeleteChosen();
     bool send();                                   // le texte de la saisie
     bool sendText(const std::string& text);        // une suggestion, une seance
     void stop();
@@ -386,6 +392,7 @@ private:
     int                    hoverRow_{-1};
     int                    renameIndex_{-1};
     int                    menuRow_{-1};
+    std::vector<std::string> chosenIds_;           // 1.24.1 : les conversations choisies a plusieurs (Ctrl+clic), par id
     std::uint64_t          seen_{0};         // la revision de la seance deja montree
     std::string            lastStatus_;
     std::string            appliedKey_;      // l'etat reel des propositions appliquees deja montre

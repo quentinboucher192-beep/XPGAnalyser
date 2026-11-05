@@ -8,6 +8,9 @@
 //     cyclique ou periodique, la periode, le chien de garde : modifiables dans
 //     le tableau ou dans les proprietes, chaque changement est une commande.
 //     Dessous, ce que la tache executee, dans l'ordre, en poids de lignes.
+//     1.24.1 : plusieurs taches choisies (Ctrl+clic, Maj+clic) se suppriment
+//     d'un coup (<< Supprimer les 2 >>, Suppr, le clic droit ; un seul Ctrl+Z) ;
+//     MAST et une tache qui execute encore quelque chose restent, c'est dit.
 //   * ORDRE D'EXECUTION - les entrees de MAST (une section, ou une unite de
 //     programme qui tourne en bloc) : glisser une ligne, Monter, Descendre,
 //     Deplacer vers un rang ; « Verifier l'ordre » marque les lectures faites
@@ -36,6 +39,7 @@ namespace app {
 
 class ApiFrame;
 class ApiFilterBar;      // lot API 8 : la recherche (ApiListKit.hpp)
+class HmiToolStrip;      // 1.24.1 : la barre du cadre (HmiPanels.hpp)
 
 // Lot API 5 : une variable de l'automate que l'IHM lit - par quelle variable
 // IHM (liee a la meme adresse) ou directement, et a combien d'endroits.
@@ -65,6 +69,19 @@ struct ApiPaneHosts {
     std::function<std::shared_ptr<const project::SharedLibrary>()>   library;
 };
 
+// 1.24.1 : SUPPRIMER PLUSIEURS ELEMENTS DE L'AUTOMATE D'UN COUP (des sections, des unites, des blocs DFB, des variables
+// d'une unite) - le geste commun des volets a liste (app::several, HmiPanels.hpp) : UNE question si l'un emporte quelque
+// chose avec lui (comme un seul : << Part aussi... >>), puis chaque genre du plus grand rang au plus petit (un retrait ne
+// decale pas ceux qui restent a faire : les variables, puis les sections, puis les unites et les blocs), UN seul Ctrl+Z ;
+// un element refuse seul l'est aussi parmi d'autres, le compte rendu (hosts.status) dit lequel et pourquoi.
+struct ApiDoomed {
+    domain::EntityKind kind{domain::EntityKind::Variable};
+    domain::Index      index{domain::kNoIndex};
+    std::string        name;
+};
+void apiDeleteMany(const ApiPaneHosts& hosts, std::vector<ApiDoomed> doomed, const std::string& noun, const std::string& nouns, bool feminine,
+                   std::weak_ptr<const void> alive);
+
 // ================================================================ Taches ====
 class TasksPane final : public ui::Widget {
 public:
@@ -82,6 +99,9 @@ public:
     // les taches qui gardent quelque chose, et les entrees montrees de la tache choisie.
     [[nodiscard]] ApiFilterBar& filters() noexcept { return *filters_; }
     [[nodiscard]] std::size_t shownEntries() const noexcept { return shownEntries_; }
+    // 1.24.1 : les lignes choisies qui sont des taches (pas une a creer, en gris), dans l'ordre de la liste ; plusieurs :
+    // Supprimer (le bouton, Suppr, le clic droit) les retire toutes d'un coup, un seul Ctrl+Z.
+    [[nodiscard]] std::vector<std::size_t> chosenTasks() const;
 
 protected:
     void onLayout() override;
@@ -105,6 +125,7 @@ private:
 
     ApiPaneHosts                  hosts_;
     ApiFrame*                     frame_{nullptr};
+    HmiToolStrip*                 tools_{nullptr};     // 1.24.1 : la barre du cadre (Supprimer les N)
     ui::TableView*                table_{nullptr};
     ui::PropertyGrid*             props_{nullptr};
     Weights*                      weights_{nullptr};

@@ -11,6 +11,7 @@
 #include "../../ui/widgets/SearchField.hpp"
 
 #include <algorithm>
+#include <filesystem>   // 1.24.1 : le fichier d'un de Mes sons est-il la (Retirer)
 
 namespace app {
 
@@ -130,16 +131,19 @@ HmiSoundLibraryPane::HmiSoundLibraryPane(std::string id, hmi::DocumentPtr doc, A
                "Ajouter \xC3\xA0 Mes sons");
     tools->add(ActRemove, HmiGlyph::Delete, "Retirer le son choisi de Mes sons (Suppr) - un son natif se garde", "Retirer");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(ActPlay, [this] { return selectedSound() != nullptr; });
-    tools_->setEnabledWhen(ActImport, [this] { return selectedSound() != nullptr; });
-    tools_->setEnabledWhen(ActRemove, [this] { const auto* s = selectedSound(); return s && s->mine(); });
+    // 1.24.1 : plusieurs sons choisis - Retirer les retire tous de Mes sons (les natifs se gardent, le compte rendu le
+    // dit ; un seul Ctrl+Z les rend) ; Ecouter, Importer : un a la fois.
+    tools_->setEnabledWhen(ActPlay, [this] { return selectedSound() != nullptr && selectedIds().size() <= 1; });
+    tools_->setEnabledWhen(ActImport, [this] { return selectedSound() != nullptr && selectedIds().size() <= 1; });
+    tools_->setEnabledWhen(ActRemove, [this] { const auto* s = selectedSound(); return (s && s->mine()) || selectedIds().size() > 1; });
+    tools_->setLabelWhen(ActRemove, [this] { return several::label("Retirer", selectedIds().size()); });
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Chercher un son\xE2\x80\xA6",
         "Chaque mot est cherch\xC3\xA9 dans le nom du son, sa cat\xC3\xA9gorie, sa description et ses mots-cl\xC3\xA9s (sir\xC3\xA8ne, "
         "acquittement, porte...), sans casse ni accents.")));
     auto table = std::make_unique<ui::TableView>(base + ".table");
     table->setColumns({{"Son", 260.f}, {"Dur\xC3\xA9" "e", 70.f}, {"Dans le projet", 170.f}, {"Description", 420.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs sons a retirer d'un coup
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     tools_->bindListKeys(*table_, {ActRemove, 0, 0});
     detail_ = &static_cast<HmiSoundDetail&>(addChild(std::make_unique<HmiSoundDetail>(base + ".detail")));
@@ -375,15 +379,122 @@ bool HmiSoundLibraryPane::addFile(const std::string& path, std::string* why) {
     return true;
 }
 
+namespace {
+// 1.24.1 : RETIRER UN SON DE MES SONS, CTRL+Z LE REND. La commande garde son contenu : l'annuler le rend a Mes sons sous
+// son nom (le nom pris entretemps par un autre contenu : "nom (2).wav", la regle de Mes sons). Plusieurs retires d'un
+// coup font un groupe : un seul Ctrl+Z les rend.
+class MySoundRemoveCommand final : public core::ICommand {
+public:
+    MySoundRemoveCommand(sl::Sound sound, std::function<void()> refresh) : sound_(std::move(sound)), refresh_(std::move(refresh)) {}
+    core::Status execute() override {
+        std::string why;
+        if (!sl::removeUserSound(sound_, &why)) return core::fail(core::ErrorCode::FileUnreadable, why);
+        if (refresh_) refresh_();
+        return core::ok();
+    }
+    core::Status undo() override {
+        const auto slash = sound_.file.find_last_of("/\\");
+        const std::string name = slash == std::string::npos ? sound_.file : sound_.file.substr(slash + 1);
+        std::string stored, why;
+        if (!sound_.data || !sl::addUserSound(name, *sound_.data, &stored, nullptr, &why))
+            return core::fail(core::ErrorCode::FileUnreadable, "rendre " + sound_.label + " : " + (why.empty() ? std::string("contenu perdu") : why));
+        // Son fichier, pour le refaire (Ctrl+Y).
+        if (slash != std::string::npos) sound_.file = sound_.file.substr(0, slash + 1) + stored;
+        if (refresh_) refresh_();
+        return core::ok();
+    }
+    [[nodiscard]] std::string label() const override { return "Retirer " + sound_.label + " de Mes sons"; }
+
+private:
+    sl::Sound             sound_;
+    std::function<void()> refresh_;
+};
+} // namespace
+
+std::vector<std::string> HmiSoundLibraryPane::selectedIds() const {
+    std::vector<std::string> out;
+    auto rows = table_->selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    for (const auto r : rows)
+        if (r < lines_.size() && lines_[r].sound >= 0 && static_cast<std::size_t>(lines_[r].sound) < sounds_.size())
+            out.push_back(sounds_[static_cast<std::size_t>(lines_[r].sound)].id);
+    return out;
+}
+
+bool HmiSoundLibraryPane::selectIds(const std::vector<std::string>& ids) {
+    syncMine();
+    std::vector<ui::RowIndex> rows;
+    for (std::size_t i = 0; i < lines_.size(); ++i)
+        if (lines_[i].sound >= 0 && std::find(ids.begin(), ids.end(), sounds_[static_cast<std::size_t>(lines_[i].sound)].id) != ids.end())
+            rows.push_back(static_cast<ui::RowIndex>(i));
+    table_->selectModelRows(rows);
+    showDetail();
+    return rows.size() == ids.size();
+}
+
+// 1.24.1 : PLUSIEURS D'UN COUP - les sons choisis ; un natif se garde (le compte rendu le dit), les tiens partent ; un
+// seul Ctrl+Z les rend (comme un seul, sans question : le contenu est garde par la commande).
 bool HmiSoundLibraryPane::removeSelected(std::string* why) {
+    const auto ids = selectedIds();
+    if (ids.size() > 1) {
+        several::Batch b;
+        b.verb = "Retirer";
+        b.noun = "son";
+        b.nouns = "sons";
+        for (const auto& id : ids) {
+            const sl::Sound* s = byId(id);
+            b.names.push_back(s ? s->label : id);
+        }
+        b.remove = [this, ids](std::size_t i, std::string* no) {
+            const sl::Sound* s = byId(ids[i]);
+            if (!s) {
+                if (no) *no = "introuvable";
+                return false;
+            }
+            if (!s->mine()) {
+                if (no) *no = "son natif : il se garde";
+                return false;
+            }
+            return removeOne(*s, no);
+        };
+        b.after = [this] { refresh(); };
+        b.report = [this](const std::string& text, bool warning) {
+            say(text + " (les projets qui les ont import\xC3\xA9s gardent leur ressource)", warning);
+        };
+        b.alive = table_->selectionChanged;
+        several::run(std::move(b));
+        return true;
+    }
     const sl::Sound* s = selectedSound();
     if (!s) return fail("Choisis un de tes sons.", why);
     if (!s->mine()) return fail(s->label + " est un son natif : il se garde (seuls Mes sons se retirent).", why);
     const std::string label = s->label;
     std::string error;
-    if (!sl::removeUserSound(*s, &error)) return fail(error, why);
+    if (!removeOne(*s, &error)) return fail(error, why);
     refresh();
-    say(label + " retir\xC3\xA9 de Mes sons (les projets qui l'ont import\xC3\xA9 gardent leur ressource).");
+    say(label + " retir\xC3\xA9 de Mes sons (les projets qui l'ont import\xC3\xA9 gardent leur ressource ; Ctrl+Z le rend).");
+    return true;
+}
+
+// Un de Mes sons, par une commande (Ctrl+Z le rend) ; sans pile (un essai sans hote) : tout de suite.
+bool HmiSoundLibraryPane::removeOne(const sl::Sound& s, std::string* why) {
+    const std::weak_ptr<const void> alive = table_->selectionChanged;
+    auto cmd = std::make_unique<MySoundRemoveCommand>(s, [this, alive] {
+        if (!alive.expired()) refresh();
+    });
+    std::error_code ec;
+    if (!std::filesystem::exists(std::filesystem::path(std::u8string(s.file.begin(), s.file.end())), ec)) {
+        if (why) *why = "fichier introuvable : " + s.file;
+        return false;
+    }
+    if (apply_) {
+        apply_(std::move(cmd));
+        return true;
+    }
+    if (const auto st = cmd->execute(); !st) {
+        if (why) *why = st.error().context.empty() ? st.error().message() : st.error().context;
+        return false;
+    }
     return true;
 }
 
@@ -420,30 +531,48 @@ std::vector<ui::PopupMenu::Item> HmiSoundLibraryPane::contextItems() const {
         it.separator = true;
         items.push_back(it);
     };
-    if (s) {
+    // 1.24.1 : plusieurs sons choisis - Retirer les N ; le reste, un a la fois.
+    const auto chosen = selectedIds();
+    const bool many = chosen.size() > 1;
+    if (many) {
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        std::size_t mine = 0;
+        for (const auto& id : chosen)
+            if (const auto* x = byId(id); x && x->mine()) ++mine;
+        head.label = std::to_string(chosen.size()) + " sons";
+        head.shortcut = std::to_string(mine) + " \xC3\xA0 toi";
+        items.push_back(std::move(head));
+    } else if (s) {
         ui::PopupMenu::Item head;
         head.heading = true;
         head.label = s->label;
         head.shortcut = s->mine() ? "un de tes sons" : "son natif";
         items.push_back(std::move(head));
     }
-    const std::string none = "choisis un son";
-    add(ActPlay, "\xC3\x89" "couter", "Espace", ui::Icon::Play, s != nullptr, none);
-    add(ActImport, r ? "D\xC3\xA9j\xC3\xA0 dans le projet (" + r->name + ")" : std::string("Importer dans le projet"), "Entr\xC3\xA9" "e",
-        ui::Icon::Import, s != nullptr && !r, r ? "le m\xC3\xAAme son est d\xC3\xA9j\xC3\xA0 une ressource" : none);
-    add(ActGoTo, "Aller \xC3\xA0 la ressource", {}, ui::Icon::GoTo, r != nullptr && static_cast<bool>(hosts_.openResource),
-        r ? std::string("indisponible ici") : std::string("pas encore dans le projet"));
-    add(ActCopy, "Copier le nom", "Ctrl+C", ui::Icon::Copy, s != nullptr, none);
+    const std::string none = many ? several::kOneAtATime : std::string("choisis un son");
+    add(ActPlay, "\xC3\x89" "couter", "Espace", ui::Icon::Play, s != nullptr && !many, none);
+    add(ActImport, r && !many ? "D\xC3\xA9j\xC3\xA0 dans le projet (" + r->name + ")" : std::string("Importer dans le projet"), "Entr\xC3\xA9" "e",
+        ui::Icon::Import, s != nullptr && !r && !many, r && !many ? std::string("le m\xC3\xAAme son est d\xC3\xA9j\xC3\xA0 une ressource") : none);
+    add(ActGoTo, "Aller \xC3\xA0 la ressource", {}, ui::Icon::GoTo, r != nullptr && !many && static_cast<bool>(hosts_.openResource),
+        many ? none : r ? std::string("indisponible ici") : std::string("pas encore dans le projet"));
+    add(ActCopy, "Copier le nom", "Ctrl+C", ui::Icon::Copy, s != nullptr && !many, none);
     sep();
     add(ActAdd, "Ajouter un fichier \xC3\xA0 Mes sons\xE2\x80\xA6", {}, ui::Icon::Plus, true);
-    add(ActReveal, "Ouvrir dans l'explorateur", {}, ui::Icon::Open, s && s->mine(),
-        s ? std::string("un son natif n'est pas un fichier : il est fabriqu\xC3\xA9 par le logiciel") : none);
-    add(ActRemove, "Retirer de Mes sons", "Suppr", ui::Icon::Delete, s && s->mine(), s ? std::string("un son natif se garde") : none);
+    add(ActReveal, "Ouvrir dans l'explorateur", {}, ui::Icon::Open, s && s->mine() && !many,
+        many ? none : s ? std::string("un son natif n'est pas un fichier : il est fabriqu\xC3\xA9 par le logiciel") : none);
+    add(ActRemove, many ? several::label("Retirer", chosen.size()) + " de Mes sons" : std::string("Retirer de Mes sons"), "Suppr", ui::Icon::Delete,
+        many || (s && s->mine()), s ? std::string("un son natif se garde") : none);
     return items;
 }
 
 void HmiSoundLibraryPane::runAction(int action) {
     const sl::Sound* s = selectedSound();
+    // 1.24.1 : plusieurs sons choisis - Ecouter, Importer, Copier, Ouvrir, Aller a : un a la fois (Espace, Entree aussi).
+    if (selectedIds().size() > 1 && (action == ActPlay || action == ActImport || action == ActCopy || action == ActReveal || action == ActGoTo)) {
+        say("Plusieurs sons choisis : " + several::kOneAtATime + ".", true);
+        return;
+    }
     switch (action) {
         case ActPlay: (void)togglePlay(); break;
         case ActImport: (void)importSelected(); break;

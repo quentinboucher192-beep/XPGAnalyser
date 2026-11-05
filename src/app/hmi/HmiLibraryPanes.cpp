@@ -51,12 +51,18 @@ HmiLibrariesPane::HmiLibrariesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(AReload, HmiGlyph::Refresh, "Relire les biblioth\xC3\xA8ques sur le disque (un fichier a chang\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9)", "Relire");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     const auto hasLibrary = [this] { return !focusSpaces_ && !selectedLibrary().empty(); };
-    tools_->setEnabledWhen(AUpdate, hasLibrary);
-    tools_->setEnabledWhen(ALocate, hasLibrary);
+    // 1.24.1 : plusieurs bibliotheques (ou espaces) choisies - Delier (Retirer) les fait toutes d'un coup, un seul Ctrl+Z ;
+    // Mettre a jour, Localiser, Renommer : une a la fois.
+    const auto oneLibrary = [this, hasLibrary] { return hasLibrary() && selectedLibraries().size() <= 1; };
+    tools_->setEnabledWhen(AUpdate, oneLibrary);
+    tools_->setEnabledWhen(ALocate, oneLibrary);
     tools_->setEnabledWhen(AUnlink, hasLibrary);
-    tools_->setEnabledWhen(ARenameSpace, [this] { return focusSpaces_ && !selectedNamespace().empty(); });
+    tools_->setLabelWhen(AUnlink, [this] { return several::label("D\xC3\xA9lier", focusSpaces_ ? 0 : selectedLibraries().size()); });
+    tools_->setEnabledWhen(ARenameSpace, [this] { return focusSpaces_ && !selectedNamespace().empty() && selectedNamespaces().size() <= 1; });
+    tools_->setLabelWhen(ARemoveSpace, [this] { return several::label("Retirer", focusSpaces_ ? selectedNamespaces().size() : 0); });
     tools_->setEnabledWhen(ARemoveSpace, [this] {
         if (!focusSpaces_) return false;
+        if (selectedNamespaces().size() > 1) return true;   // 1.24.1 : un espace qui range encore quelque chose reste (dit)
         const std::string ns = selectedNamespace();
         for (const auto& s : hmi::names::projectSpaces(doc_->project))
             if (hmikit::same(s.ns, ns)) return s.total() == 0;
@@ -69,7 +75,7 @@ HmiLibrariesPane::HmiLibrariesPane(std::string id, hmi::DocumentPtr doc, Apply a
         auto table = std::make_unique<ui::TableView>(base + ".libs");
         // 1.13.0 (correctifs F2) : "1.0.0 (trouvee 1.1.0)" et "plus recente disponible" tiennent (avant : 110 et 150 px, coupes).
         table->setColumns({{"Biblioth\xC3\xA8que", 140.f}, {"Version", 190.f}, {"\xC3\x89tat", 200.f}, {"Chemin", 220.f}, {"Contenu", 190.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs bibliotheques a delier d'un coup
         libraries_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         librariesPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
     }
@@ -79,7 +85,7 @@ HmiLibrariesPane::HmiLibrariesPane(std::string id, hmi::DocumentPtr doc, Apply a
         table->setColumns({{"Espace", 180.f}, {"Types", 70.f, 40.f, true, true, true, ui::Align::End},
                            {"Fonctions", 80.f, 40.f, true, true, true, ui::Align::End},
                            {"Scripts", 70.f, 40.f, true, true, true, ui::Align::End}, {"Remarque", 260.f}});
-        table->setSelectionMode(ui::SelectionMode::Single);
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs espaces vides a retirer d'un coup
         spaces_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         spacesPanel_ = &static_cast<HmiTitledPanel&>(addChild(std::move(panel)));
     }
@@ -103,13 +109,68 @@ HmiLibrariesPane::HmiLibrariesPane(std::string id, hmi::DocumentPtr doc, Apply a
                 }
                 break;
             case ALocate: if (!lib.empty() && hosts_.askLocate) hosts_.askLocate(lib); break;
-            case AUnlink: if (!lib.empty()) { std::string why; if (!unlink(lib, &why)) say(why, true); } break;
+            case AUnlink:
+                if (selectedLibraries().size() > 1) { unlinkMany(selectedLibraries()); break; }   // 1.24.1
+                if (!lib.empty()) { std::string why; if (!unlink(lib, &why)) say(why, true); }
+                break;
             case AReload: reload(); break;
             case ANewSpace: if (hosts_.askNewNamespace) hosts_.askNewNamespace(); break;
             case ARenameSpace: if (!ns.empty() && hosts_.askRenameNamespace) hosts_.askRenameNamespace(ns); break;
-            case ARemoveSpace: if (!ns.empty()) { std::string why; if (!removeNamespace(ns, &why)) say(why, true); } break;
+            case ARemoveSpace:
+                if (selectedNamespaces().size() > 1) { removeNamespaces(selectedNamespaces()); break; }   // 1.24.1
+                if (!ns.empty()) { std::string why; if (!removeNamespace(ns, &why)) say(why, true); }
+                break;
             default: break;
         }
+    });
+    // 1.24.1 : Suppr dans une liste (Delier, Retirer) et le clic droit - les gestes de la barre, ceux d'une seule ligne
+    // grises (<< une a la fois >>) ; le chemin d'une bibliotheque suit (Ouvrir dans l'explorateur, Aller a).
+    tools_->bindListKeys(*spaces_, {ARemoveSpace, 0, 0});
+    tools_->bindListKeys(*libraries_, {AUnlink, 0, 0});   // la derniere liee : celle que la barre rend au clic
+    libraries_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto libs = selectedLibraries();
+        if (libs.empty()) return items;
+        const bool one = libs.size() == 1;
+        const auto add = [&](int action, std::string label, ui::Icon icon, bool enabled, std::string key = {}) {
+            ui::PopupMenu::Item it;
+            it.label = std::move(label);
+            it.icon = icon;
+            it.id = action;
+            it.shortcut = std::move(key);
+            it.enabled = enabled;
+            it.disabledReason = enabled ? std::string{} : several::kOneAtATime;
+            items.push_back(std::move(it));
+        };
+        add(AUpdate, "Mettre \xC3\xA0 jour\xE2\x80\xA6", ui::Icon::Refresh, one);
+        add(ALocate, "Localiser\xE2\x80\xA6", ui::Icon::Search, one);
+        add(AUnlink, several::label("D\xC3\xA9lier", libs.size()), ui::Icon::Delete, true, "Suppr");
+        return items;
+    });
+    links_ += libraries_->contextAction->connect([this](int a) {
+        if (a == AUpdate || a == ALocate || a == AUnlink) (void)tools_->trigger(a);
+    });
+    spaces_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto spaces = selectedNamespaces();
+        if (spaces.empty()) return items;
+        ui::PopupMenu::Item ren;
+        ren.label = "Renommer\xE2\x80\xA6";
+        ren.icon = ui::Icon::Rename;
+        ren.id = ARenameSpace;
+        ren.enabled = spaces.size() == 1;
+        ren.disabledReason = ren.enabled ? std::string{} : several::kOneAtATime;
+        items.push_back(std::move(ren));
+        ui::PopupMenu::Item rm;
+        rm.label = several::label("Retirer", spaces.size());
+        rm.icon = ui::Icon::Delete;
+        rm.id = ARemoveSpace;
+        rm.shortcut = "Suppr";
+        items.push_back(std::move(rm));
+        return items;
+    });
+    links_ += spaces_->contextAction->connect([this](int a) {
+        if (a == ARenameSpace || a == ARemoveSpace) (void)tools_->trigger(a);
     });
     links_ += libraries_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& rows) {
         if (!rows.empty()) focusSpaces_ = false;
@@ -203,6 +264,8 @@ void HmiLibrariesPane::refresh() {
             }
             return cs;
         }));
+    // 1.24.1 : la colonne Chemin (relative : au dossier du projet) - Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+    libraries_->setPathColumn(3, projectFolder());
     spaceNames_.clear();
     std::vector<std::vector<std::string>> srows;
     for (const auto& s : hmi::names::projectSpaces(p)) {
@@ -358,6 +421,49 @@ bool HmiLibrariesPane::unlink(const std::string& name, std::string* why) {
         if (w) *w = "aucune biblioth\xC3\xA8que " + name;
         return false;
     }, why, name + " d\xC3\xA9li\xC3\xA9" "e");
+}
+
+// 1.24.1 : les bibliotheques et les espaces choisis (Ctrl+clic, Maj+clic), dans l'ordre des listes.
+std::vector<std::string> HmiLibrariesPane::selectedLibraries() const { return several::chosen(*libraries_, libraryNames_); }
+std::vector<std::string> HmiLibrariesPane::selectedNamespaces() const { return several::chosen(*spaces_, spaceNames_); }
+
+// 1.24.1 : DELIER PLUSIEURS BIBLIOTHEQUES D'UN COUP - sans question (comme une seule), un seul Ctrl+Z les relie toutes ;
+// le compte rendu dit celles qui restent et pourquoi.
+void HmiLibrariesPane::unlinkMany(const std::vector<std::string>& names) {
+    if (names.empty()) return;
+    several::Batch b;
+    b.verb = "D\xC3\xA9lier";
+    b.noun = "biblioth\xC3\xA8que";
+    b.nouns = "biblioth\xC3\xA8ques";
+    b.feminine = true;
+    b.names = names;
+    b.remove = [this, names](std::size_t i, std::string* why) { return unlink(names[i], why); };
+    b.after = [this] { refresh(); };
+    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+    b.alive = tools_->triggered;
+    several::run(std::move(b));
+}
+
+// 1.24.1 : RETIRER PLUSIEURS ESPACES VIDES D'UN COUP - un espace qui range encore quelque chose reste (comme seul).
+void HmiLibrariesPane::removeNamespaces(const std::vector<std::string>& spaces) {
+    if (spaces.empty()) return;
+    several::Batch b;
+    b.verb = "Retirer";
+    b.noun = "espace";
+    b.nouns = "espaces";
+    b.names = spaces;
+    b.remove = [this, spaces](std::size_t i, std::string* why) {
+        for (const auto& s : hmi::names::projectSpaces(doc_->project))
+            if (hmikit::same(s.ns, spaces[i]) && s.total() > 0) {
+                if (why) *why = "range encore " + std::to_string(s.total()) + " \xC3\xA9l\xC3\xA9ment(s)";
+                return false;
+            }
+        return removeNamespace(spaces[i], why);
+    };
+    b.after = [this] { refresh(); };
+    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+    b.alive = tools_->triggered;
+    several::run(std::move(b));
 }
 
 bool HmiLibrariesPane::relocate(const std::string& name, const std::string& file, std::string* why) {

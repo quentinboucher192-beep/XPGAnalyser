@@ -1010,6 +1010,67 @@ private:
     bool                  first_{true};
 };
 
+// 1.24.1 : SUPPRIMER UN ENREGISTREMENT, C'EST LE METTRE DANS LA CORBEILLE DU PROJET (ihm/corbeille) - et Ctrl+Z l'en
+// ressort, a sa place et sous son nom (avant : sans retour). Plusieurs supprimes d'un coup font un groupe : un seul
+// Ctrl+Z les rend tous. Un fichier du meme nom revenu entretemps a sa place : Ctrl+Z le dit et laisse la corbeille.
+// Sans corbeille (un projet jamais enregistre) : effacer comme avant, et Ctrl+Z ne peut rien rendre.
+class RecordingTrashCommand final : public core::ICommand {
+public:
+    RecordingTrashCommand(std::string file, std::string trash, std::string name, std::function<void()> refresh)
+        : file_(std::move(file)), trash_(std::move(trash)), name_(std::move(name)), refresh_(std::move(refresh)) {}
+    core::Status execute() override {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path from = recPath(file_);
+        if (!fs::is_regular_file(from, ec)) return core::fail(core::ErrorCode::FileUnreadable, "enregistrement introuvable : " + name_);
+        if (trash_.empty()) {
+            fs::remove(from, ec);
+            if (ec) return core::fail(core::ErrorCode::FileUnreadable, "suppression impossible : " + ec.message());
+        } else {
+            const auto utf8 = [](const fs::path& p) {
+                const auto s = p.u8string();
+                return std::string(s.begin(), s.end());
+            };
+            fs::create_directories(recPath(trash_), ec);
+            fs::path target = recPath(trash_) / from.filename();
+            for (int n = 2; fs::exists(target, ec) && n < 10000; ++n)   // deja un du meme nom dans la corbeille
+                target = recPath(trash_) / recPath(utf8(from.stem()) + " (" + std::to_string(n) + ")" + utf8(from.extension()));
+            fs::rename(from, target, ec);
+            if (ec) {   // un autre volume : copier puis effacer
+                ec.clear();
+                fs::copy_file(from, target, fs::copy_options::overwrite_existing, ec);
+                if (!ec) fs::remove(from, ec);
+                if (ec) return core::fail(core::ErrorCode::FileUnreadable, "suppression impossible : " + ec.message());
+            }
+            trashed_ = utf8(target);
+        }
+        if (refresh_) refresh_();
+        return core::ok();
+    }
+    core::Status undo() override {
+        namespace fs = std::filesystem;
+        if (trashed_.empty()) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : il a \xC3\xA9t\xC3\xA9 effac\xC3\xA9 (pas de corbeille)");
+        std::error_code ec;
+        const fs::path back = recPath(file_);
+        if (fs::exists(back, ec)) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : un fichier du m\xC3\xAAme nom est revenu \xC3\xA0 sa place");
+        fs::rename(recPath(trashed_), back, ec);
+        if (ec) {
+            ec.clear();
+            fs::copy_file(recPath(trashed_), back, ec);
+            if (!ec) fs::remove(recPath(trashed_), ec);
+            if (ec) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : " + ec.message());
+        }
+        trashed_.clear();
+        if (refresh_) refresh_();
+        return core::ok();
+    }
+    [[nodiscard]] std::string label() const override { return "Supprimer l'enregistrement " + name_; }
+
+private:
+    std::string           file_, trash_, name_, trashed_;
+    std::function<void()> refresh_;
+};
+
 // 1.14.0 (captures finales) : LE DETAIL D'UN ENREGISTREMENT - la grille, la colonne des noms a la largeur du plus long
 // (avant : 45 % de la place, les valeurs coupees : "par Op...", le projet), et dessous, quand elle ne tient pas
 // dans sa case, LA DESCRIPTION ENTIERE, repliee (une grille ne passe pas a la ligne).
@@ -1108,12 +1169,17 @@ HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply
                                          "Un double-clic sur la ligne aussi.", "Rejouer");
     tools->add(RcRename, HmiGlyph::Text, "Renommer : les actions, le Lecteur et les scripts qui le citent suivent (Ctrl+Z les rend)", "Renommer");
     tools->add(RcPassword, HmiGlyph::Key, "Mot de passe : prot\xC3\xA9ger, changer ou retirer (l'actuel est demand\xC3\xA9)", "Mot de passe\xE2\x80\xA6");
-    tools->add(RcDelete, HmiGlyph::Delete, "Supprimer : l'enregistrement va dans la corbeille du projet (ihm/corbeille)", "Supprimer");
+    tools->add(RcDelete, HmiGlyph::Delete, "Supprimer : l'enregistrement va dans la corbeille du projet (ihm/corbeille) ; Ctrl+Z l'en ressort. "
+                                           "Plusieurs choisis (Ctrl+clic, Maj+clic) : tous d'un coup, un seul Ctrl+Z", "Supprimer");
     tools->separator();
     tools->add(RcFolder, HmiGlyph::Link, "Ouvrir le dossier des enregistrements dans l'explorateur", "Ouvrir le dossier");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    for (const int a : {RcExport, RcReplay, RcRename, RcPassword, RcDelete})
+    // 1.24.1 : plusieurs enregistrements choisis - Supprimer les met tous a la corbeille (un Ctrl+Z) ; Exporter, Rejouer,
+    // Renommer, Mot de passe : un a la fois.
+    for (const int a : {RcExport, RcReplay, RcRename, RcPassword})
         tools_->setEnabledWhen(a, [this] { return selectedItem() != nullptr; });
+    tools_->setEnabledWhen(RcDelete, [this] { return !selectedNames().empty(); });
+    tools_->setLabelWhen(RcDelete, [this] { return several::label("Supprimer", selectedNames().size()); });
     tools_->setEnabledWhen(RcImport, [this] { return !folder().empty(); });
     tools_->setEnabledWhen(RcFolder, [this] { return !folder().empty(); });
 
@@ -1125,10 +1191,16 @@ HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply
     table->setColumns({{"Nom", 180.f}, {"Dur\xC3\xA9" "e", 70.f, 50.f, true, true, true, ui::Align::End}, {"Vue de d\xC3\xA9part", 126.f},
                        {"Enregistr\xC3\xA9 le", 140.f}, {"O\xC3\xB9", 92.f}, {"Par", 170.f},
                        {"Taille", 72.f, 50.f, true, true, true, ui::Align::End}, {"Prot\xC3\xA9g\xC3\xA9", 84.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
+    table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs enregistrements a supprimer d'un coup
     table->setEnterActivates(true);
     table_ = &static_cast<ui::TableView&>(split->addPane(std::move(table), 0.64f, 320.f));
     tools_->bindListKeys(*table_, {RcDelete});
+    // 1.24.1 : le clic droit - les gestes de la barre (ceux d'un seul grises : << un a la fois >>), puis le chemin du
+    // fichier (Ouvrir dans l'explorateur, Aller a, Copier le chemin) que le tableau ajoute.
+    table_->setExtraContextItems([this] { return contextItems(); });
+    links_ += table_->contextAction->connect([this](int a) {
+        if (a >= RcImport && a <= RcFolder) (void)tools_->trigger(a);
+    });
     auto box = std::make_unique<RecordingDetail>(base + ".detail");
     detail_ = box->grid;
     detailBox_ = &split->addPane(std::move(box), 0.36f, 240.f);
@@ -1145,6 +1217,10 @@ HmiRecordingsPane::HmiRecordingsPane(std::string id, hmi::DocumentPtr doc, Apply
             case RcRename: if (it && hosts_.rename) hosts_.rename(name); break;
             case RcPassword: if (it && hosts_.password) hosts_.password(name); break;
             case RcDelete:
+                if (selectedNames().size() > 1) {   // 1.24.1 : plusieurs - une question, la corbeille, un Ctrl+Z
+                    removeChosen();
+                    break;
+                }
                 if (!it) break;
                 if (hosts_.remove) hosts_.remove(name);
                 else (void)removeSelected();
@@ -1410,22 +1486,121 @@ bool HmiRecordingsPane::setDescription(const std::string& text, std::string* why
     return false;
 }
 
+// 1.24.1 : un enregistrement vers la corbeille du projet, par une commande (Ctrl+Z l'en ressort) ; faux et `why` sinon.
+bool HmiRecordingsPane::removeNamed(const std::string& name, std::string* why) {
+    const hmi::rec::Item* it = nullptr;
+    for (const auto& i : items_)
+        if (i.name == name) it = &i;
+    if (!it) {
+        if (why) *why = "introuvable";
+        return false;
+    }
+    const std::string pf = hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder;
+    const std::string trash = pf.empty() ? std::string{} : pf + "/ihm/corbeille";
+    // Le volet parti (un Ctrl+Z bien plus tard) : la commande ne le rafraichit plus.
+    const std::weak_ptr<const void> alive = table_->selectionChanged;
+    auto cmd = std::make_unique<RecordingTrashCommand>(it->path, trash, name, [this, alive] {
+        if (alive.expired()) return;
+        scanned_.clear();
+        refresh();
+    });
+    if (apply_) {
+        // La pile execute la commande ; un refus (le fichier parti entretemps) la laisse hors de la pile.
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(recPath(it->path), ec)) {
+            if (why) *why = "enregistrement introuvable : " + name;
+            return false;
+        }
+        apply_(std::move(cmd));
+        return true;
+    }
+    if (const auto st = cmd->execute(); !st) {
+        if (why) *why = st.error().context.empty() ? st.error().message() : st.error().context;
+        return false;
+    }
+    return true;
+}
+
 bool HmiRecordingsPane::removeSelected(std::string* why) {
     const auto* it = selectedItem();
     std::string reason = "aucun enregistrement choisi";
     const std::string pf = hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder;
-    const std::string trash = pf.empty() ? std::string{} : pf + "/ihm/corbeille";
     if (it) {
         const std::string name = it->name;
-        if (hmi::rec::removeFile(folder(), name, trash, &reason)) {
+        if (removeNamed(name, &reason)) {
             refresh();
-            say("Supprim\xC3\xA9 : " + name + (trash.empty() ? std::string{} : " (dans la corbeille du projet)"));
+            say("Supprim\xC3\xA9 : " + name + (pf.empty() ? std::string{} : " (dans la corbeille du projet ; Ctrl+Z le rend)"));
             return true;
         }
     }
     say("Supprimer : " + reason, true);
     if (why) *why = reason;
     return false;
+}
+
+std::vector<std::string> HmiRecordingsPane::selectedNames() const {
+    std::vector<std::string> out;
+    if (!table_) return out;
+    std::vector<std::string> order;
+    for (const auto& it : items_) order.push_back(it.name);
+    return several::chosen(*table_, order);
+}
+
+bool HmiRecordingsPane::selectNames(const std::vector<std::string>& names) {
+    std::vector<ui::RowIndex> rows;
+    for (std::size_t i = 0; i < items_.size(); ++i)
+        if (std::find(names.begin(), names.end(), items_[i].name) != names.end()) rows.push_back(static_cast<ui::RowIndex>(i));
+    table_->selectModelRows(rows);
+    showDetail();
+    return rows.size() == names.size();
+}
+
+// 1.24.1 : SUPPRIMER PLUSIEURS ENREGISTREMENTS D'UN COUP - une question (l'ecran la pose, comme pour un seul), puis la
+// corbeille du projet, un seul Ctrl+Z les rend ; le compte rendu dit ceux qui restent et pourquoi.
+void HmiRecordingsPane::removeChosen() {
+    const auto names = selectedNames();
+    if (names.empty()) return;
+    several::Batch b;
+    b.noun = "enregistrement";
+    b.nouns = "enregistrements";
+    b.ask = static_cast<bool>(hosts_.remove);
+    const std::string pf = hosts_.projectFolder ? hosts_.projectFolder() : doc_->savedFolder;
+    b.warning = pf.empty() ? std::string("Le projet n'est pas enregistr\xC3\xA9 : ils sont effac\xC3\xA9s.")
+                           : std::string("Ils vont dans la corbeille du projet (ihm/corbeille). Ce qui les cite (une action, le Lecteur) sera "
+                                         "signal\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer.");
+    b.names = names;
+    b.remove = [this, names](std::size_t i, std::string* why) { return removeNamed(names[i], why); };
+    b.after = [this] { refresh(); };
+    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
+    b.alive = table_->selectionChanged;
+    several::run(std::move(b));
+}
+
+std::vector<ui::PopupMenu::Item> HmiRecordingsPane::contextItems() const {
+    std::vector<ui::PopupMenu::Item> items;
+    const auto names = selectedNames();
+    if (names.empty()) return items;
+    const bool one = names.size() == 1;
+    const auto add = [&](int action, std::string label, ui::Icon icon, bool enabled, std::string why = {}, std::string key = {}) {
+        ui::PopupMenu::Item it;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.id = action;
+        it.shortcut = std::move(key);
+        it.enabled = enabled;
+        it.disabledReason = enabled ? std::string{} : std::move(why);
+        items.push_back(std::move(it));
+    };
+    ui::PopupMenu::Item head;
+    head.heading = true;
+    head.label = one ? names.front() : std::to_string(names.size()) + " enregistrements";
+    items.push_back(std::move(head));
+    add(RcReplay, "Rejouer", ui::Icon::Play, one, several::kOneAtATime, "Entr\xC3\xA9" "e");
+    add(RcExport, "Exporter\xE2\x80\xA6", ui::Icon::Export, one, several::kOneAtATime);
+    add(RcRename, "Renommer\xE2\x80\xA6", ui::Icon::Rename, one, several::kOneAtATime);
+    add(RcPassword, "Mot de passe\xE2\x80\xA6", ui::Icon::Lock, one, several::kOneAtATime);
+    add(RcDelete, several::label("Supprimer", names.size()) + "\xE2\x80\xA6", ui::Icon::Delete, true, {}, "Suppr");
+    return items;
 }
 
 void HmiRecordingsPane::replaySelected() {

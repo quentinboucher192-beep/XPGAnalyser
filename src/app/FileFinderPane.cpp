@@ -11,6 +11,7 @@
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
 #include "../ui/widgets/PathBrowse.hpp"
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : les entrees de chemin du tableau (ui::paths::active)
 
 #include <algorithm>
 #include <cctype>
@@ -137,6 +138,9 @@ public:
         if (row >= pane_.rows_.size()) return s;
         if (col == FileFinderPane::ColDir || (col == FileFinderPane::ColVersion && hit(row).version.empty())) s.fgTone = ui::Tone::Muted;
         if (col == FileFinderPane::ColName) s.icon = finder::openable(hit(row).key) ? ui::Icon::Project : ui::Icon::Document;
+        // 1.24.1 : le fichier de la ligne (une entree d'un .zip : le .zip) - le clic droit propose Ouvrir dans
+        // l'explorateur, Aller a, Copier le chemin, comme partout (ui::paths).
+        if (col == FileFinderPane::ColName) s.path = hit(row).archive.empty() ? hit(row).path : hit(row).archive;
         return s;
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t col) const override {
@@ -495,6 +499,10 @@ FileFinderPane::FileFinderPane(std::string id, finder::Search& search) : ui::Wid
         items.push_back(ui::cmd::heading(h->name, finder::typeText(*h)));
         static const ui::Icon kIcons[] = {ui::Icon::Open, ui::Icon::Folder, ui::Icon::Copy, ui::Icon::Import, ui::Icon::History};
         for (int i = 0; i < 5; ++i) {
+            // 1.24.1 : avec l'application, le tableau ajoute Ouvrir dans l'explorateur, Aller a et Copier le chemin
+            // (ui::paths, comme partout) : Ouvrir le dossier et Copier le chemin du volet n'y sont pas repetes (la barre
+            // garde ses boutons).
+            if (ui::paths::active() && (static_cast<Act>(i) == Act::Reveal || static_cast<Act>(i) == Act::CopyPath)) continue;
             const auto g = gesture(static_cast<Act>(i));
             ui::PopupMenu::Item it;
             it.label = g.label;
@@ -985,6 +993,8 @@ std::vector<std::string> FileFinderPane::contextLabels() const {
     if (!h) return out;
     out.push_back(h->name);
     for (int i = 0; i < 5; ++i) {
+        // 1.24.1 : comme le menu - avec l'application, ces deux-la sont les entrees de chemin du tableau.
+        if (ui::paths::active() && (static_cast<Act>(i) == Act::Reveal || static_cast<Act>(i) == Act::CopyPath)) continue;
         const auto g = gesture(static_cast<Act>(i));
         out.push_back(g.label + (g.enabled ? std::string{} : " (gris\xC3\xA9 : " + g.why + ")"));
     }

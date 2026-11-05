@@ -8,6 +8,7 @@
 #include "../../ui/Icons.hpp"
 #include "../../ui/Shapes.hpp"      // 1.21.0 : les triangles du lecteur (comme la barre de relecture)
 #include "../../ui/TextSearch.hpp"   // 1.20.2 : les alarmes pliees (dossiers, tri)
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le dossier d'un incident (Ouvrir dans l'explorateur, Aller a)
 
 #include <algorithm>
 #include <array>
@@ -849,6 +850,21 @@ protected:
             const int row = rowAt(d->pos);
             if (row < 0) return ui::EventResult::Consumed;
             const bool group = rows[static_cast<std::size_t>(row)].group;
+            // 1.24.1 : Ctrl+clic ajoute la ligne au choix (ou l'en retire), Maj+clic choisit jusqu'a elle ; un clic droit
+            // dans le choix le garde (le menu porte sur tous) ; un clic simple revient a un seul.
+            if (d->button == ui::MouseButton::Left && d->mods.ctrl) {
+                pane_.toggleRowChoice(static_cast<std::size_t>(row));
+                return ui::EventResult::Consumed;
+            }
+            if (d->button == ui::MouseButton::Left && d->mods.shift) {
+                pane_.extendChoiceTo(static_cast<std::size_t>(row));
+                return ui::EventResult::Consumed;
+            }
+            if (d->button == ui::MouseButton::Right && pane_.chosenIncidents().size() > 1 && pane_.rowChosen(tab_, row)) {
+                pane_.openContextMenu(toSurface(d->pos));
+                return ui::EventResult::Consumed;
+            }
+            pane_.clearChoice();
             pane_.selectRow(tab_, row);
             if (d->button == ui::MouseButton::Right) {
                 pane_.openContextMenu(toSurface(d->pos));
@@ -901,6 +917,7 @@ protected:
                 default: break;
             }
             if (to >= -1) {
+                pane_.clearChoice();   // 1.24.1 : les fleches reviennent a un seul
                 pane_.selectRow(tab_, std::max(0, to));
                 return ui::EventResult::Consumed;
             }
@@ -962,7 +979,7 @@ private:
         const auto& c = th.color;
         const auto b = bounds();
         const gfx::Rect r{b.x, b.y + static_cast<float>(i) * kRowH, b.w, kRowH};
-        const bool sel = pane_.row_[tab_] == i;
+        const bool sel = pane_.row_[tab_] == i || pane_.rowChosen(tab_, i);   // 1.24.1 : les lignes choisies a plusieurs aussi
         if (sel) ctx.r.fillRect(r, c.selectionBg);
         else if (hover_ == i) ctx.r.fillRect(r, th.brand.hover);
         ctx.r.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, c.border, 1.f);
@@ -1037,7 +1054,7 @@ private:
         const auto& c = th.color;
         const auto b = bounds();
         const gfx::Rect r{b.x, b.y + static_cast<float>(i) * kRowH, b.w, kRowH};
-        const bool sel = pane_.row_[tab_] == i;
+        const bool sel = pane_.row_[tab_] == i || pane_.rowChosen(tab_, i);   // 1.24.1 : les lignes choisies a plusieurs aussi
         if (sel) ctx.r.fillRect(r, c.selectionBg);
         else if (hover_ == i) ctx.r.fillRect(r, th.brand.hover);
         ctx.r.line({r.x, r.bottom() - 0.5f}, {r.right(), r.bottom() - 0.5f}, c.border, 1.f);
@@ -2448,6 +2465,7 @@ private:
 namespace {
 enum Tool : int { TRefresh = 1, TConsult, TFull, TChain, TComment, TAnalyze, TValidate, TDelete, TFolder, TSettings, TOnOff /* 1.20.2 */ };
 enum MenuItem : int { MConsult = 1, MFull, MChain, MComment, MAnalyze, MValidate, MDelete, MFolder, MVerify, MToggle /* 1.20.2 */ };
+constexpr int kIncidentPathId = 900;   // 1.24.1 : Ouvrir dans l'explorateur, Aller a, Copier le chemin (900..902)
 } // namespace
 
 HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, IncidentHost* host)
@@ -2491,13 +2509,20 @@ HmiIncidentsPane::HmiIncidentsPane(std::string id, hmi::DocumentPtr doc, Inciden
                "Arr\xC3\xAAter les incidents");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(TOnOff, [this] { return host_ != nullptr; });
+    // 1.24.1 : plusieurs incidents choisis (Ctrl+clic, Maj+clic) - Supprimer les supprime tous (une question : definitif) ;
+    // le reste : un a la fois.
     for (const int a : {TConsult, TFull, TChain, TComment, TAnalyze})
-        tools_->setEnabledWhen(a, [this] { return selected() != nullptr; });
-    for (const int a : {TValidate, TDelete})
-        tools_->setEnabledWhen(a, [this] {
-            const auto* it = selected();
-            return it && it->state == st::State::Pending;
-        });
+        tools_->setEnabledWhen(a, [this] { return selected() != nullptr && chosenIncidents().size() <= 1; });
+    tools_->setEnabledWhen(TValidate, [this] {
+        const auto* it = selected();
+        return it && it->state == st::State::Pending && chosenIncidents().size() <= 1;
+    });
+    tools_->setEnabledWhen(TDelete, [this] {
+        for (const auto* it : chosenIncidents())
+            if (it->state == st::State::Pending) return true;
+        return false;
+    });
+    tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", chosenIncidents().size()); });
     tools_->setEnabledWhen(TRefresh, [this] { return host_ != nullptr; });
     tools_->setEnabledWhen(TSettings, [this] { return host_ != nullptr; });
 
@@ -3100,12 +3125,125 @@ void HmiIncidentsPane::askValidate() {
 }
 
 void HmiIncidentsPane::askRemove() {
+    if (chosenIncidents().size() > 1) {   // 1.24.1 : plusieurs - une question (definitif), puis tous
+        removeChosen();
+        return;
+    }
     const auto* it = selected();
     if (!it) return;
     std::string why;
     if (it->state != st::State::Pending) say("Un incident valid\xC3\xA9 ne se supprime pas d'ici.", true);
     else if (hosts_.remove) hosts_.remove(it->folder, it->name);
     else if (!removeSelected(&why)) say(why, true);
+}
+
+// ---- 1.24.1 : plusieurs incidents d'un coup ----
+std::vector<std::string> HmiIncidentsPane::rowNames(int tab, std::size_t row) const {
+    std::vector<std::string> out;
+    const Row* r = rowAt(tab, row);
+    if (!r) return out;
+    if (r->group) {
+        for (const int m : r->members)
+            if (const auto* x = itemAt(tab, m)) out.push_back(x->name);
+    } else if (const auto* x = itemAt(tab, r->item)) {
+        out.push_back(x->name);
+    }
+    return out;
+}
+
+bool HmiIncidentsPane::rowChosen(int tab, int row) const {
+    if (tab < 0 || tab > 1 || marks_[tab].empty() || row < 0) return false;
+    const auto names = rowNames(tab, static_cast<std::size_t>(row));
+    if (names.empty()) return false;
+    for (const auto& n : names)
+        if (std::find(marks_[tab].begin(), marks_[tab].end(), n) == marks_[tab].end()) return false;
+    return true;
+}
+
+std::vector<const st::Item*> HmiIncidentsPane::chosenIncidents() const {
+    std::vector<const st::Item*> out;
+    const int t = validatedTab_ ? 1 : 0;
+    if (marks_[t].empty()) {
+        if (const auto* it = selected()) out.push_back(it);
+        return out;
+    }
+    if (const auto* v = items_[t])
+        for (const auto& it : *v)
+            if (std::find(marks_[t].begin(), marks_[t].end(), it.name) != marks_[t].end()) out.push_back(&it);
+    return out;
+}
+
+void HmiIncidentsPane::toggleRowChoice(std::size_t row) {
+    const int t = validatedTab_ ? 1 : 0;
+    auto& marks = marks_[t];
+    if (marks.empty() && row_[t] >= 0)   // le premier Ctrl+clic : la ligne choisie entre dans le choix
+        for (auto& n : rowNames(t, static_cast<std::size_t>(row_[t]))) marks.push_back(std::move(n));
+    const auto names = rowNames(t, row);
+    if (names.empty()) return;
+    const bool all = rowChosen(t, static_cast<int>(row));
+    for (const auto& n : names) {
+        const auto at = std::find(marks.begin(), marks.end(), n);
+        if (all && at != marks.end()) marks.erase(at);
+        else if (!all && at == marks.end()) marks.push_back(n);
+    }
+    if (!all) selectRow(t, static_cast<int>(row));   // la fiche suit la derniere ligne ajoutee
+    updateStatus();
+    invalidate();
+    if (lists_[t]) lists_[t]->invalidate();
+}
+
+void HmiIncidentsPane::extendChoiceTo(std::size_t row) {
+    const int t = validatedTab_ ? 1 : 0;
+    const std::size_t from = row_[t] >= 0 ? static_cast<std::size_t>(row_[t]) : 0;
+    marks_[t].clear();
+    for (std::size_t r = std::min(from, row); r <= std::max(from, row) && r < rows_[t].size(); ++r)
+        for (auto& n : rowNames(t, r))
+            if (std::find(marks_[t].begin(), marks_[t].end(), n) == marks_[t].end()) marks_[t].push_back(std::move(n));
+    updateStatus();
+    invalidate();
+    if (lists_[t]) lists_[t]->invalidate();
+}
+
+void HmiIncidentsPane::clearChoice() {
+    const int t = validatedTab_ ? 1 : 0;
+    if (marks_[t].empty()) return;
+    marks_[t].clear();
+    invalidate();
+    if (lists_[t]) lists_[t]->invalidate();
+}
+
+// SUPPRIMER PLUSIEURS INCIDENTS : une question qui le dit definitif (leurs dossiers sont effaces, Ctrl+Z ne les rend pas),
+// puis chacun par la surveillance (en arriere-plan, comme un seul) ; un incident valide reste, le compte rendu le dit.
+void HmiIncidentsPane::removeChosen() {
+    const auto chosen = chosenIncidents();
+    if (chosen.empty()) return;
+    several::Batch b;
+    b.noun = "incident";
+    b.nouns = "incidents";
+    b.ask = true;
+    b.final = true;
+    b.warning = "Leurs dossiers sont effac\xC3\xA9s de ce PC (la capture, la vid\xC3\xA9o, la fiche, les commentaires).";
+    std::vector<std::pair<std::string, bool>> doomed;   // le dossier, valide
+    for (const auto* it : chosen) {
+        b.names.push_back(it->name);
+        doomed.emplace_back(it->folder, it->state != st::State::Pending);
+    }
+    b.remove = [this, doomed](std::size_t i, std::string* why) {
+        if (!host_) {
+            if (why) *why = "la surveillance des incidents n'est pas branch\xC3\xA9" "e ici";
+            return false;
+        }
+        if (doomed[i].second) {
+            if (why) *why = "valid\xC3\xA9 : il ne se supprime pas d'ici";
+            return false;
+        }
+        host_->remove(doomed[i].first);
+        return true;
+    };
+    b.after = [this] { clearChoice(); };
+    b.report = [this](const std::string& text, bool warning) { say(text + ".", warning); };
+    b.alive = tools_->triggered;
+    several::run(std::move(b));
 }
 
 void HmiIncidentsPane::openSelectedFolder() {
@@ -3181,6 +3319,12 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
         menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".menu")));
         links_ += menu_->itemChosen->connect([this](int action) {
             std::string why;
+            // 1.24.1 : Ouvrir dans l'explorateur, Aller a, Copier le chemin - le dossier de l'incident (ui::paths).
+            if (ui::paths::owns(action, kIncidentPathId)) {
+                const std::string path = menuPath_;   // une copie : le geste peut refaire la liste
+                if (const std::string no = ui::paths::run(action, kIncidentPathId, path); !no.empty()) say(no, true);
+                return;
+            }
             switch (action) {
                 case MConsult: consult(); break;
                 case MFull: showFullAnalysis(); break;
@@ -3222,6 +3366,34 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
         return e;
     };
     std::vector<ui::PopupMenu::Item> items;
+    // 1.24.1 : PLUSIEURS INCIDENTS CHOISIS - Supprimer les N (une question : definitif) ; le reste, un a la fois.
+    if (const auto chosen = chosenIncidents(); chosen.size() > 1) {
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        head.label = incidentsWord(chosen.size());
+        std::size_t waiting = 0;
+        for (const auto* x : chosen) waiting += x->state == st::State::Pending ? 1u : 0u;
+        head.shortcut = std::to_string(waiting) + " en attente";
+        items.push_back(std::move(head));
+        const std::string one = "un \xC3\xA0 la fois";
+        for (const auto& [label, id] : std::vector<std::pair<std::string, int>>{{"Consulter", MConsult},
+                                                                               {"Voir l'analyse compl\xC3\xA8te", MFull},
+                                                                               {"Explorer les d\xC3\xA9pendances", MChain},
+                                                                               {"Ajouter un commentaire\xE2\x80\xA6", MComment},
+                                                                               {"Demander une nouvelle analyse", MAnalyze},
+                                                                               {"Valider\xE2\x80\xA6", MValidate}})
+            items.push_back(entry(label, id, {}, false, one));
+        ui::PopupMenu::Item sep;
+        sep.separator = true;
+        items.push_back(sep);
+        items.push_back(entry(several::label("Supprimer", chosen.size()) + "\xE2\x80\xA6", MDelete, "Suppr", waiting > 0,
+                              "un incident valid\xC3\xA9 ne se supprime pas d'ici"));
+        menuPath_.clear();
+        menu_->setItems(std::move(items));
+        menu_->setBounds(bounds());
+        menu_->openAtSurface(surface);
+        return;
+    }
     if (row && row->group) {
         ui::PopupMenu::Item folder;
         folder.heading = true;
@@ -3254,7 +3426,13 @@ void HmiIncidentsPane::openContextMenu(gfx::Point surface) {
     items.push_back(entry("Valider\xE2\x80\xA6", MValidate, {}, pending, "d\xC3\xA9j\xC3\xA0 valid\xC3\xA9"));
     items.push_back(entry("Supprimer\xE2\x80\xA6", MDelete, "Suppr", pending, "un incident valid\xC3\xA9 ne se supprime pas d'ici"));
     items.push_back(rule);
-    items.push_back(entry("Ouvrir le dossier", MFolder));
+    // 1.24.1 : le dossier de l'incident, comme partout ou un chemin se montre - Ouvrir dans l'explorateur, Aller a,
+    // Copier le chemin (ui::paths) ; sans l'application (les essais) : Ouvrir le dossier, comme avant.
+    menuPath_ = it->folder;
+    if (auto pathItems = ui::paths::menuItems(menuPath_, kIncidentPathId); !pathItems.empty())
+        for (auto& p : pathItems) items.push_back(std::move(p));
+    else
+        items.push_back(entry("Ouvrir le dossier", MFolder));
     items.push_back(entry("V\xC3\xA9rifier l'int\xC3\xA9grit\xC3\xA9", MVerify));
     menu_->setItems(std::move(items));
     menu_->setBounds(bounds());

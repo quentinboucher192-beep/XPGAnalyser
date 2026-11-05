@@ -8,10 +8,12 @@
 #include "../project/Macro.hpp"
 #include "../project/MacroSession.hpp"
 #include "../project/MacroSpecWriter.hpp"
+#include "../project/SharedLibrary.hpp"          // 1.24.1 : le fichier de la macro (le clic droit sur son titre)
 #include "../sim/Interpreter.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : Ouvrir dans l'explorateur, Aller a, Copier le chemin
 #include "../xls/MacroXls.hpp"
 
 #include <algorithm>
@@ -952,6 +954,23 @@ void MacroEditorView::onPaint(const ui::PaintContext& ctx) {
 }
 
 ui::EventResult MacroEditorView::onEvent(const ui::InputEvent& ev) {
+    // 1.24.1 : le clic droit sur le titre du code (le fichier de la macro) - Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+    if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right && codeTitle_.contains(m->pos) && !name_.empty()) {
+        const std::string root = hosts_.libsRoot.empty() ? project::SharedLibrary::defaultRoot() : hosts_.libsRoot;
+        pathMenuFile_ = project::SharedLibrary(root).macrosFolder() + "/" + name_ + ".mac";
+        auto items = ui::paths::menuItems(pathMenuFile_, ui::paths::PathMenu::kFirstId);
+        if (items.empty()) return ui::EventResult::Ignored;
+        if (!pathMenu_) {
+            pathMenu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(id() + ".chemin")));
+            links_ += pathMenu_->itemChosen->connect([this](int a) {
+                (void)ui::paths::run(a, ui::paths::PathMenu::kFirstId, pathMenuFile_);   // le fournisseur dit lui-meme un refus
+            });
+        }
+        pathMenu_->setItems(std::move(items));
+        pathMenu_->setBounds(bounds());
+        pathMenu_->openInWindow(m->pos);
+        return ui::EventResult::Consumed;
+    }
     const auto* k = std::get_if<ui::KeyDown>(&ev);
     if (!k || !visible()) return ui::EventResult::Ignored;
     if (k->key == ui::Key::F5 && k->mods.none()) { tryRun(); return ui::EventResult::Consumed; }
