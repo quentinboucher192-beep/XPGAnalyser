@@ -415,6 +415,60 @@ int main(int argc, char** argv) {
     DiagnosticsTableModel diags(project, res->report);
     std::printf("\ndiagnostics rows: %zu\n", diags.rowCount());
 
+    // ---- 1.24.0 : supprimer plusieurs noeuds de l'automate d'un coup ---------
+    //  Deux sections d'une unite et une variable : << Supprimer les 3 elements... >>,
+    //  tout part (du plus grand rang au plus petit : rien ne se decale), un seul
+    //  Ctrl+Z rend tout, a sa place.
+    std::printf("\n1.24.0 : supprimer plusieurs noeuds de l'automate\n");
+    {
+        auto doc = std::make_shared<domain::Project>(*project);
+        ProjectTreeModel apiTree(doc);
+        std::vector<ui::NodeId> picked;
+        const auto units = ProjectTreeModel::pack(NK::UnitsFolder, 0);
+        for (std::size_t u = 0; u < apiTree.childCount(units) && picked.empty(); ++u) {
+            const auto unit = apiTree.childAt(units, u);
+            std::vector<ui::NodeId> secs;
+            for (std::size_t k = 0; k < apiTree.childCount(unit); ++k)
+                if (ProjectTreeModel::kindOf(apiTree.childAt(unit, k)) == NK::Section) secs.push_back(apiTree.childAt(unit, k));
+            if (secs.size() >= 2) picked = {secs[0], secs[1]};
+        }
+        const auto elementary = ProjectTreeModel::pack(NK::ElementaryFolder, 0);
+        if (apiTree.childCount(elementary) > 0) picked.push_back(apiTree.childAt(elementary, apiTree.childCount(elementary) / 2));
+        check(picked.size() == 3, "deux sections d'une unite et une variable elementaire");
+        if (picked.size() == 3) {
+            const auto plan = apiTree.deletionOf(picked);
+            check(plan.label() == "Supprimer les 3 \xC3\xA9l\xC3\xA9ments\xE2\x80\xA6", "melangees : " + plan.label());
+            check(apiTree.deletionOf({picked[0], picked[1]}).label() == "Supprimer les 2 sections\xE2\x80\xA6", "du meme genre : les 2 sections");
+            const auto nameOf = [&](domain::SymbolId id) { return std::string(doc->strings.text(id)); };
+            const std::string s0 = nameOf(doc->sections[ProjectTreeModel::indexOf(picked[0])].name);
+            const std::string s1 = nameOf(doc->sections[ProjectTreeModel::indexOf(picked[1])].name);
+            const std::string v0 = nameOf(doc->variables[apiTree.variableOf(picked[2])].name);
+            const auto sections = doc->sections.size(), variables = doc->variables.size();
+            // Un nom de section peut revenir d'une unite a l'autre (Init) : on compte.
+            const auto count = [&](const auto& list, const std::string& name) {
+                return std::count_if(list.begin(), list.end(), [&](const auto& x) { return nameOf(x.name) == name; });
+            };
+            const auto n0 = count(doc->sections, s0), n1 = count(doc->sections, s1), nv = count(doc->variables, v0);
+            core::CommandStack stack;
+            core::CommandGroupScope::registerStack(&stack);
+            TreeDeletionHosts hosts;
+            hosts.api = doc;
+            hosts.apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+            const auto r = performTreeDeletion(plan, hosts);
+            check(r.done == 3 && r.failed.empty(), "3 elements partis");
+            check(doc->sections.size() == sections - 2 && count(doc->sections, s0) == n0 - 1 && count(doc->sections, s1) == n1 - 1, "les 2 sections sont parties : " + s0 + ", " + s1);
+            check(doc->variables.size() == variables - 1 && count(doc->variables, v0) == nv - 1, "la variable est partie : " + v0);
+            (void)stack.undo();
+            check(doc->sections.size() == sections && doc->variables.size() == variables && count(doc->sections, s0) == n0
+                      && count(doc->sections, s1) == n1 && count(doc->variables, v0) == nv && !stack.canUndo(),
+                  "un seul Ctrl+Z rend tout");
+            check(nameOf(doc->sections[ProjectTreeModel::indexOf(picked[0])].name) == s0
+                      && nameOf(doc->variables[apiTree.variableOf(picked[2])].name) == v0,
+                  "... chacun a sa place");
+            core::CommandGroupScope::registerStack(nullptr);
+        }
+    }
+
     if (failures) {
         std::printf("\nviewmodel_test: %d echec(s)\n", failures);
         return 1;

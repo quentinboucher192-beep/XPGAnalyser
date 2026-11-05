@@ -180,6 +180,10 @@ struct CellStyle {
     bool              checkInCell{false};
     // 1.20.2 : l'infobulle de CETTE case (TableView), au survol ; vide : celle de la ligne (rowTooltip).
     std::string       tip{};
+    // 1.24.0 : CETTE CASE DESIGNE UN FICHIER OU UN DOSSIER (TableView) - son clic droit propose Ouvrir dans
+    // l'explorateur, Aller a, Copier le chemin (PropertyGridHooks.hpp, ui::paths). Un chemin absolu, relatif (au
+    // dossier du projet), "ressource:Nom", "externe:Nom". Vide : pas un chemin (TableView::setPathColumn : le texte).
+    std::string       path{};
 };
 
 // ============================================================== ListView ====
@@ -728,6 +732,13 @@ public:
     // nouvelles lignes, Tout choisir (les scripts le choisissent par libelle).
     [[nodiscard]] PopupMenu* contextMenu() const noexcept { return context_; }
     void openContextMenu(gfx::Point at);
+    // 1.24.0 : LE TEXTE DE CETTE COLONNE EST UN CHEMIN (un fichier, un dossier) - le clic droit d'une ligne
+    // propose Ouvrir dans l'explorateur, Aller a, Copier le chemin (ui::paths). `base` : le dossier d'un relatif (vide :
+    // le projet) ; "ressource:", "externe:" : le texte est le nom de cet element. Une case : CellStyle::path.
+    void setPathColumn(std::size_t column, std::string base = {});
+    // Le chemin d'une ligne du modele : sa case `column` si c'en est un, sinon la premiere case chemin de la
+    // ligne ; vide : aucun. `base` : sa base.
+    [[nodiscard]] std::string pathOfRow(RowIndex modelRow, int column, std::string* base = nullptr) const;
     // 1.11.14 : DES ENTREES EN PLUS, en tete de ce menu (la Console : aller a la source,
     // filtrer sur cette source...). Leurs id (1000 et plus) reviennent par contextAction.
     void setExtraContextItems(std::function<std::vector<PopupMenu::Item>()> provider) { extraContext_ = std::move(provider); }
@@ -935,6 +946,10 @@ private:
     bool                         memoryRestoring_{false}; // une relecture n'ecrit rien
     std::shared_ptr<void>        memoryToken_;            // inscrite aupres de FilterMemory (un autre projet : relire)
     // ---- fin Lot API 8 ----
+    // ---- 1.24.0 : les chemins (ui::paths) ----
+    std::vector<std::pair<std::size_t, std::string>> pathColumns_;   // (colonne, base)
+    RowIndex                     contextRow_{kNoRow};     // la ligne du modele du dernier clic droit
+    std::string                  menuPath_, menuPathBase_;   // le chemin du menu ouvert
 };
 
 // ========================================================== PropertyGrid ====
@@ -1036,6 +1051,10 @@ public:
         bool                      exprCell{false};
         std::uint8_t              exprExpect{0};
         bool                      exprWhole{false};
+        // 1.24.0 : LA VALEUR DESIGNE UN FICHIER OU UN DOSSIER - le clic droit de la ligne propose Ouvrir dans
+        // l'explorateur, Aller a, Copier le chemin (PropertyGridHooks.hpp, ui::paths). Le chemin (souvent la valeur
+        // elle-meme) : absolu, relatif au dossier du projet, "ressource:Nom", "externe:Nom". Vide : pas un chemin.
+        std::string               path{};
     };
     // Le dernier choix d'une liste typeIn.
     static constexpr std::string_view kTypeInLabel = "Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$\xE2\x80\xA6";
@@ -1197,6 +1216,7 @@ private:
     std::optional<std::string> resumeText_;    // le texte a remettre dans le prochain champ ouvert
     void noteCommit(const std::string& category, const std::string& name, const std::string& sent, bool ok);
     [[nodiscard]] bool rejectedRow(const Category& c, const Property& p) const noexcept;
+    std::string            menuPath_;          // 1.24.0 : le chemin de la ligne du menu ouvert (Property::path)
 };
 
 // 1.11.3 : la couleur d'un carre de legende (le meme partout : la grille, la liste

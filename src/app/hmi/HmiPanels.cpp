@@ -4588,6 +4588,17 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
         }
         p.value = prop.value;
         p.type = info ? info->type : PG::ValueType::Text;
+        // 1.24.0 : UNE VALEUR QUI DESIGNE UN FICHIER - l'image, la video, l'affiche, la police, le document cites (une
+        // ressource), le fichier externe d'un Tableau ou d'une Courbe, le dossier d'un Explorateur de fichiers : son clic
+        // droit propose Ouvrir dans l'explorateur, Aller a, Copier le chemin (ui::paths). Pas une formule, pas un repere.
+        if (!many && prop.expr.empty() && !prop.value.empty() && prop.value.find('$') == std::string::npos) {
+            if (hmi::citesResource(prop.key) && !(prop.key == "font" && (prop.value == "Sans" || prop.value == "Mono")))
+                p.path = "ressource:" + prop.value;
+            else if (prop.key == "source" && (o->kind == hmi::Kind::Table || o->kind == hmi::Kind::Trend))
+                p.path = "externe:" + prop.value;
+            else if (prop.key == "folder" && o->kind == hmi::Kind::FileExplorer)
+                p.path = prop.value;
+        }
         // 1.12.10 (lot F) : une borne, un seuil laisses vides - en gris, ce que l'objet en fera : « 10 (de Pression_Ligne) »,
         // « 0 (mise a l'echelle de Debit) », « 100 (par defaut) ». Min et Max acceptent aussi un nom de variable sans =.
         if (project && !many && prop.expr.empty() && hmi::ranges::takesName(o->kind, prop.key)) {

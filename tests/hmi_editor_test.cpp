@@ -45791,7 +45791,297 @@ void deballagesTypes1161() {
     check(types.memberRowOf("Purge[0]") >= 0, "ce qui est d\xC3\xA9pli\xC3\xA9 se garde d'un type \xC3\xA0 l'autre");
 }
 
+// ============================================================ 1.24.0 ======
+//  LE CLIENT (05/11) : << partout pouvoir supprimer plusieurs d'un coup (a appliquer aussi dans l'explorateur
+//  d'application le panneau de gauche) >>. L'arbre du projet : 3 vues et 2 scripts choisis (Ctrl+clic), une seule
+//  entree << Supprimer les 5 elements... >>, une question qui les nomme, tout part, un seul Ctrl+Z rend tout ; ce qui
+//  ne se supprime pas (un style fourni, un dossier) reste, avec sa raison ; Suppr vise toute la selection.
+void arbreSupprimerPlusieurs1240() {
+    std::printf("== 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup ==\n");
+    using NK = app::ProjectTreeModel::NodeKind;
+    using TM = app::ProjectTreeModel;
+    using W = app::TreeDeletion::What;
+    Bench b;
+    core::CommandGroupScope::registerStack(&b.stack);
+    auto& p = b.doc->project;
+    // Trois vues (celle du banc, la vue de demarrage, et deux autres), deux scripts generaux, un style a soi.
+    std::vector<Id> views{b.view};
+    for (const char* n : {"Pompes", "Vannes"}) {
+        View v = makeView(p, n);
+        views.push_back(v.id);
+        p.views.push_back(v);
+    }
+    p.config.startView = b.view;
+    for (const char* n : {"Init", "Remise_A_Zero"}) {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = n;
+        sc.body = "(* " + std::string(n) + " *)\n";
+        p.programs.scripts.push_back(sc);
+    }
+    hmi::Style mine = hmi::styles::duplicate(p, *hmi::styles::builtin("ISA-101"), "Mon style");
+    p.styles.push_back(mine);
+    b.doc->changed->emit(kNoId);
+    auto plc = std::make_shared<domain::Project>();
+    auto model = std::make_shared<app::ProjectTreeModel>(plc);
+    model->setHmi(b.doc);
+    // Les noeuds, et le chemin pour y arriver (a deplier) : un parcours borne (ni Natives, ni membres).
+    std::map<ui::NodeId, ui::NodeId> parentOf;
+    const std::function<ui::NodeId(ui::NodeId, NK, const std::string&, int)> find = [&](ui::NodeId at, NK kind, const std::string& name,
+                                                                                        int depth) -> ui::NodeId {
+        if (depth > 6) return ui::kInvalidNode;
+        for (std::size_t i = 0; i < model->childCount(at); ++i) {
+            const auto c = model->childAt(at, i);
+            const auto k = TM::kindOf(c);
+            if (TM::isNativesKind(k) || k == NK::VersionsFolder || k == NK::SimFolder) continue;
+            parentOf[c] = at;
+            if (k == kind && (name.empty() || model->text(c).rfind(name, 0) == 0)) return c;
+            if (const auto f = find(c, kind, name, depth + 1); f != ui::kInvalidNode) return f;
+        }
+        return ui::kInvalidNode;
+    };
+    std::vector<ui::NodeId> viewNodes, scriptNodes;
+    for (const char* n : {"Vue_Test", "Pompes", "Vannes"}) viewNodes.push_back(find(model->root(), NK::HmiView, n, 0));
+    for (const char* n : {"Init", "Remise_A_Zero"}) scriptNodes.push_back(find(model->root(), NK::HmiGeneralScript, n, 0));
+    const ui::NodeId builtinStyle = find(model->root(), NK::HmiStyleItem, "Clair", 0);
+    const ui::NodeId viewsFolder = find(model->root(), NK::HmiViews, "", 0);
+    bool all = builtinStyle != ui::kInvalidNode && viewsFolder != ui::kInvalidNode;
+    for (const auto n : viewNodes) all = all && n != ui::kInvalidNode;
+    for (const auto n : scriptNodes) all = all && n != ui::kInvalidNode;
+    check(all, "l'arbre : les 3 vues, les 2 scripts, un style fourni, le dossier Vues");
+    if (!all) {
+        core::CommandGroupScope::registerStack(nullptr);
+        return;
+    }
+    // ---- le choix : Ctrl+clic sur les 5 lignes de l'arbre (l'arbre du projet en choisit plusieurs) ----
+    ui::TreeView tv("arbre1240");
+    tv.setBounds({0, 0, 420, 2400});
+    tv.setSelectionMode(ui::SelectionMode::Extended);
+    tv.setModel(model);
+    std::vector<ui::NodeId> picked = viewNodes;
+    picked.insert(picked.end(), scriptNodes.begin(), scriptNodes.end());
+    for (const auto n : picked)
+        for (auto up = parentOf.count(n) ? parentOf[n] : ui::kInvalidNode; up != ui::kInvalidNode && up != model->root();
+             up = parentOf.count(up) ? parentOf[up] : ui::kInvalidNode)
+            tv.expand(up);
+    tv.layout();
+    bool clicked = true;
+    for (std::size_t i = 0; i < picked.size(); ++i) {
+        gfx::Rect r;
+        clicked = clicked && tv.rowRect(picked[i], r);
+        if (!clicked) break;
+        tv.dispatch(ui::MouseDown{{r.x + r.w * 0.6f, r.y + r.h * 0.5f}, ui::MouseButton::Left, 1, ui::KeyMods{i > 0, false, false, false}});
+        tv.dispatch(ui::MouseUp{{r.x + r.w * 0.6f, r.y + r.h * 0.5f}, ui::MouseButton::Left, {}});
+    }
+    check(clicked && tv.selection().size() == 5, "Ctrl+clic : les 5 lignes choisies (" + std::to_string(tv.selection().size()) + ")");
+    // ---- le menu : une entree pour les cinq, melangees ----
+    auto plan = model->deletionOf(tv.selection());
+    same_text(plan.label(), "Supprimer les 5 \xC3\xA9l\xC3\xA9ments\xE2\x80\xA6", "melangees : << Supprimer les 5 elements... >>");
+    same_text(plan.title(), "Supprimer les 5 \xC3\xA9l\xC3\xA9ments ?", "la question");
+    const std::string said = plan.message();
+    check(said.find("Vue_Test") != std::string::npos && said.find("Pompes") != std::string::npos && said.find("Init") != std::string::npos
+              && said.find("Un seul Ctrl+Z") != std::string::npos,
+          "la question nomme ce qui part et dit qu'un seul Ctrl+Z rend tout");
+    check(plan.kept.empty() && plan.undoable(), "rien ne reste ; tout revient par Ctrl+Z");
+    same_text(model->deletionOf(viewNodes).label(), "Supprimer les 3 vues\xE2\x80\xA6", "du meme genre : << Supprimer les 3 vues... >>");
+    // Ce qui ne se supprime pas reste, avec sa raison (le style fourni, le dossier Vues) ; un raccourci ne compte pas deux fois.
+    {
+        auto mixed = viewNodes;
+        mixed.push_back(builtinStyle);
+        mixed.push_back(viewsFolder);
+        mixed.push_back(viewNodes.front());
+        const auto withKept = model->deletionOf(mixed);
+        check(withKept.items.size() == 3 && withKept.kept.size() == 2, "3 vues partent ; le style fourni et le dossier restent");
+        check(withKept.message().find("Ne partent pas") != std::string::npos && withKept.message().find("fourni") != std::string::npos,
+              "la question dit ce qui ne part pas, et pourquoi");
+        const auto none = model->deletionOf({builtinStyle, viewsFolder});
+        check(none.empty() && none.nothingWhy().find("rien \xC3\xA0 supprimer") != std::string::npos, "rien de supprimable : l'entree grisee dit pourquoi");
+    }
+    // ---- Suppr sur l'arbre : le noeud courant, dans la selection (l'ecran vise alors toute la selection) ----
+    {
+        ui::NodeId asked = ui::kInvalidNode;
+        auto link = tv.deleteRequested->connect([&](ui::NodeId n) { asked = n; });
+        tv.takeFocus();
+        tv.dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(asked != ui::kInvalidNode && std::find(tv.selection().begin(), tv.selection().end(), asked) != tv.selection().end()
+                  && tv.selection().size() == 5,
+              "Suppr : le noeud courant est dans la selection, qui reste entiere");
+    }
+    // ---- tout part, en un seul pas ----
+    app::TreeDeletionHosts hosts;
+    hosts.hmi = b.doc;
+    hosts.apply = [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); };
+    const std::string before = b.stack.undoLabel();
+    const auto result = app::performTreeDeletion(plan, hosts);
+    check(result.done == 5 && result.failed.empty(), "5 elements partis, aucun refus");
+    check(p.views.size() == 0 && p.programs.scripts.empty(), "les 3 vues et les 2 scripts sont partis");
+    check(p.config.startView == kNoId, "la vue de demarrage partie : plus de vue de demarrage");
+    same_text(b.stack.undoLabel(), "Supprimer les 5 \xC3\xA9l\xC3\xA9ments", "l'historique : un seul pas, << Supprimer les 5 elements >>");
+    (void)b.stack.undo();
+    check(p.views.size() == 3 && p.programs.scripts.size() == 2 && p.config.startView == b.view, "un seul Ctrl+Z rend tout (et la vue de demarrage)");
+    same_text(b.stack.undoLabel(), before, "... et l'historique revient a ce qu'il etait");
+    // Le style a soi et un dossier de liste : ils partent aussi, ensemble.
+    {
+        std::string why;
+        (void)b.stack.push(hmi::changeProject(b.doc, "dossier", [&](hmi::Project& pr) { (void)hmi::fold::addFolder(pr, hmi::fold::List::Views, "Atelier", &why); }));
+        model->hmiChanged();
+        const ui::NodeId folder = find(model->root(), NK::HmiListFolder, "Atelier", 0);
+        const ui::NodeId style = find(model->root(), NK::HmiStyleItem, "Mon style", 0);
+        const auto two = model->deletionOf({folder, style});
+        check(two.items.size() == 2 && two.items[0].what == W::HmiFolder && two.items[1].what == W::HmiStyle, "un dossier, un style a soi");
+        const auto r2 = app::performTreeDeletion(two, hosts);
+        check(r2.done == 2 && !p.styleByName("Mon style") && hmi::fold::allFolders(p, hmi::fold::List::Views).empty(), "les deux partent");
+        (void)b.stack.undo();
+        check(p.styleByName("Mon style") && !hmi::fold::allFolders(p, hmi::fold::List::Views).empty(), "un Ctrl+Z les rend");
+    }
+    core::CommandGroupScope::registerStack(nullptr);
+}
+
+// 1.24.0 : LE CLIENT (05/11) - << a chaque fois qu'il y a un chemin vers un fichier / dossier je veux pouvoir faire clic
+// droit -> 'ouvrir dans l'explorateur' ou 'aller a' >>. Une case marquee chemin (PropertyGrid::Property::path), une
+// colonne d'un tableau (TableView::setPathColumn) : les entrees, grisees si le fichier n'existe pas ; le fournisseur
+// (installe une fois par l'application, ici celui de l'essai : aucun vrai explorateur) recoit le chemin resolu.
+void cheminsMenu1240() {
+    std::printf("== 1.24.0 : les chemins - Ouvrir dans l'explorateur, Aller a ==\n");
+    namespace fs = std::filesystem;
+    using PG = ui::PropertyGrid;
+    const fs::path dir = fs::temp_directory_path() / "hmi_chemins_1240";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    {
+        std::ofstream f(dir / "essai.txt");
+        f << "essai\n";
+    }
+    const std::string base = dir.generic_string();
+    {
+        ui::PlatformServices s;   // un presse-papiers d'essai (Copier le chemin)
+        s.measureWidth = [](std::string_view t, gfx::FontId) { return 8.f * static_cast<float>(t.size()); };
+        s.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+        s.clipboardGet = [] { return essaiPressePapiers(); };
+        s.clipboardSet = [](std::string_view t) { essaiPressePapiers() = std::string(t); };
+        ui::installPlatformServices(std::move(s));
+    }
+    const auto saved = ui::paths::provider();
+    std::vector<std::string> revealed, went;
+    ui::paths::Provider pr;
+    pr.resolve = [&](const std::string& path) { return fs::path(path).is_absolute() ? path : base + "/" + path; };   // le "dossier du projet"
+    pr.reveal = [&](const std::string& resolved) { revealed.push_back(resolved); return std::string{}; };
+    pr.goTo = [&](const std::string&, const std::string& resolved, bool dry) {
+        if (!fs::exists(resolved)) return std::string("\xC2\xAB essai \xC2\xBB n'existe pas");
+        if (!dry) went.push_back(resolved);
+        return std::string{};
+    };
+    ui::paths::setProvider(pr);
+    // ---- la grille : une case chemin, une case dont le fichier manque, une case ordinaire ----
+    PG grid("chemins1240");
+    grid.setBounds({0, 0, 640, 400});
+    PG::Category cat;
+    cat.name = "Fichiers";
+    PG::Property here;
+    here.name = "Fichier";
+    here.value = "essai.txt";
+    here.path = here.value;
+    PG::Property gone = here;
+    gone.name = "Absent";
+    gone.value = gone.path = "absent.txt";
+    PG::Property plain;
+    plain.name = "Commentaire";
+    plain.value = "rien";
+    cat.properties = {here, gone, plain};
+    grid.setCategories({cat});
+    grid.layout();
+    const auto rightClick = [&](const char* name) -> ui::PopupMenu* {
+        if (auto* open = dynamic_cast<ui::PopupMenu*>(grid.findById(ui::exprfield::menuId(grid))); open && open->isOpen()) open->close();
+        gfx::Rect cell;
+        if (!grid.valueRect(name, cell)) return nullptr;
+        const gfx::Point at{cell.x + cell.w * 0.5f, cell.y + cell.h * 0.5f};
+        grid.dispatch(ui::MouseDown{at, ui::MouseButton::Right, 1, {}});
+        grid.dispatch(ui::MouseUp{at, ui::MouseButton::Right, {}});
+        return dynamic_cast<ui::PopupMenu*>(grid.findById(ui::exprfield::menuId(grid)));
+    };
+    {
+        auto* menu = rightClick("Fichier");
+        const auto* open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+        const auto* go = menu ? findItem(menu->items(), "Aller \xC3\xA0") : nullptr;
+        const auto* copy = menu ? findItem(menu->items(), "Copier le chemin") : nullptr;
+        check(open && go && copy && open->enabled && go->enabled && copy->enabled,
+              "une case chemin : Ouvrir dans l'explorateur, Aller a, Copier le chemin");
+        // Les ids, avant de rouvrir le menu (ses entrees sont refaites).
+        const int openId = open ? open->id : -1, goId = go ? go->id : -1, copyId = copy ? copy->id : -1;
+        if (menu && open) menu->itemChosen->emit(openId);
+        check(revealed.size() == 1 && revealed.back() == base + "/essai.txt", "Ouvrir dans l'explorateur : le fournisseur recoit le chemin resolu");
+        if (auto* again = rightClick("Fichier"); again && go) again->itemChosen->emit(goId);
+        check(went.size() == 1 && went.back() == base + "/essai.txt", "Aller a : le fournisseur recoit le chemin resolu");
+        if (auto* again = rightClick("Fichier"); again && copy) again->itemChosen->emit(copyId);
+        same_text(ui::clipboardText(), base + "/essai.txt", "Copier le chemin : le chemin entier");
+    }
+    {
+        auto* menu = rightClick("Absent");
+        const auto* open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+        const auto* go = menu ? findItem(menu->items(), "Aller \xC3\xA0") : nullptr;
+        check(open && !open->enabled && open->disabledReason.find("absent.txt") != std::string::npos
+                  && open->disabledReason.find("n'existe pas") != std::string::npos,
+              "un fichier qui n'existe pas : Ouvrir grise, << absent.txt >> n'existe pas");
+        check(go && !go->enabled, "... et Aller a grise");
+    }
+    {
+        auto* menu = rightClick("Commentaire");
+        check(menu && !findItem(menu->items(), "Ouvrir dans l'explorateur"), "une case ordinaire : pas d'entree de chemin");
+    }
+    // ---- un tableau : la colonne Chemin (relative au dossier donne) ----
+    {
+        struct Rows final : ui::ITableModel {
+            [[nodiscard]] std::size_t rowCount() const override { return 2; }
+            [[nodiscard]] std::size_t columnCount() const override { return 2; }
+            [[nodiscard]] std::string headerText(std::size_t c) const override { return c ? "Chemin" : "Nom"; }
+            [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+                return c == 0 ? (r ? "B" : "A") : (r ? "absent.txt" : "essai.txt");
+            }
+            [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
+        };
+        ui::TableView table("chemins1240.table");
+        table.setBounds({0, 0, 500, 300});
+        table.setColumns({{"Nom", 150.f}, {"Chemin", 300.f}});
+        table.setModel(std::make_shared<Rows>());
+        table.setPathColumn(1, base);
+        table.layout();
+        gfx::Rect cell;
+        check(table.cellRect(0, 0, cell), "le tableau : la ligne A");
+        // Un clic droit sur le NOM de la ligne : la case chemin de la ligne compte.
+        table.dispatch(ui::MouseDown{{cell.x + 10.f, cell.y + cell.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        auto* menu = table.contextMenu();
+        const auto* open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+        check(open && open->enabled && menu && findItem(menu->items(), "Aller \xC3\xA0") && findItem(menu->items(), "Copier"),
+              "une ligne du tableau : ses entrees de chemin, et Copier toujours la");
+        revealed.clear();
+        if (menu && open) menu->itemChosen->emit(open->id);
+        check(revealed.size() == 1 && revealed.back() == base + "/essai.txt", "le tableau : le fournisseur recoit le chemin de la colonne, resolu");
+        if (menu) menu->close();
+        check(table.cellRect(1, 1, cell), "le tableau : la ligne B");
+        table.dispatch(ui::MouseDown{{cell.x + 10.f, cell.y + cell.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+        open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+        check(open && !open->enabled, "la ligne B (absent.txt) : Ouvrir grise");
+    }
+    // ---- sans fournisseur : aucune entree ----
+    ui::paths::setProvider({});
+    {
+        auto* menu = rightClick("Fichier");
+        check(menu && !findItem(menu->items(), "Ouvrir dans l'explorateur"), "sans fournisseur (pas d'application) : pas d'entree");
+    }
+    ui::paths::setProvider(saved);
+    fs::remove_all(dir, ec);
+    check(!fs::exists(dir), "le fichier de l'essai est efface");
+}
+
 int main(int argc, char** argv) {
+    // 1.24.0 : HMI_TEST_ARB=1 - supprimer plusieurs noeuds de l'arbre, les chemins (Ouvrir dans l'explorateur, Aller a).
+    if (const char* only = std::getenv("HMI_TEST_ARB"); only && *only == '1') {
+        arbreSupprimerPlusieurs1240();
+        cheminsMenu1240();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.23.0 : HMI_TEST_STY=1 - les essais de l'onglet Styles, seuls.
     if (const char* only = std::getenv("HMI_TEST_STY"); only && *only == '1') {
         lot12_conception();
@@ -46319,6 +46609,8 @@ int main(int argc, char** argv) {
     paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
     couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
+    arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
+    cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

@@ -1458,10 +1458,13 @@ void HmiActionsPanel::rebuildGrid() {
                                          {"0.25", "0.5", "1", "2", "4", "8"},
                                          commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
                                          "\xC3\x97" "0,25 \xC3\xA0 \xC3\x97" "8."));
-        if (o == Operation::RecordingExport)
+        if (o == Operation::RecordingExport) {
             op.properties.push_back(prop("Vers le dossier", a.value, PG::ValueType::Text, {},
                                          commitWith([](Action& n, std::string_view v) { n.value = std::string(v); return true; }),
                                          "Un dossier (D:\\Exports) : une copie du .xrec, prot\xC3\xA9g\xC3\xA9" "e s'il l'est."));
+            // 1.24.0 : un dossier ecrit tel quel (ni trou, ni repere) - Ouvrir dans l'explorateur, Aller a.
+            if (a.value.find_first_of("{$") == std::string::npos) op.properties.back().path = a.value;
+        }
     }
     if (a.operation == Operation::Increment || a.operation == Operation::Decrement)
         op.properties.push_back(prop("Pas", a.value.empty() ? std::string("1") : a.value, PG::ValueType::Text, {},

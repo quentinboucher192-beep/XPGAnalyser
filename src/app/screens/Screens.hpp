@@ -735,6 +735,16 @@ private:
     bool treeCommandKey(const ui::KeyDown& k);         // 1.12.18 : Ctrl+D, Ctrl+C, Maj+F12 sur le noeud courant
     void showTreeEmptyMenu(gfx::Point at);             // 1.12.18 : le clic droit sous les lignes, sur le rail
     void showHistoryMenu(int row, gfx::Point at);      // 1.12.18 (planche 21) : une action du tiroir Historique
+    // 1.24.0 : SUPPRIMER PLUSIEURS NOEUDS D'UN COUP (le clic droit sur la selection, Suppr) - une question qui
+    // nomme ce qui part et ce qui reste, puis un seul Ctrl+Z (ProjectTreeModel::deletionOf, performTreeDeletion).
+    void askTreeDelete(std::vector<ui::NodeId> nodes);
+    void runTreeDeletion(const TreeDeletion& plan);
+    // 1.24.0 : LES CHEMINS (ui::paths) - Ouvrir dans l'explorateur, Aller a : le fournisseur de l'ecran, et la regle
+    // d'Aller a (un element du projet : son noeud ou son volet ; sinon l'apercu d'un fichier, la recherche dans un
+    // dossier). `dry` : seulement dire si c'est possible ("" : oui ; sinon pourquoi).
+    void installPathLinks();
+    std::string goToPath(const std::string& path, const std::string& resolved, bool dry);
+    [[nodiscard]] std::string resolvePath(const std::string& path) const;
     std::vector<std::function<void()>> contextCalls_;  // les actions des entrees (ActionCall + rang)
     // Lot 7 : l'infobulle d'un noeud, relue tant qu'elle est ouverte - la valeur
     // d'une variable en simulation, l'etat et le cycle de API > Simulation ;

@@ -3533,6 +3533,8 @@ void AiMemoryDialog::syncWidgets() {
     if (storage_) {
         storage_->where->setText(location());
         storage_->open->setEnabled(!measure_.root.empty());
+        // 1.24.0 : l'Emplacement (sous IA/) est un chemin - Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+        if (!measure_.root.empty()) storage_->table->setPathColumn(1, measure_.root);
     }
     if (cleaning_) {
         for (auto& [p, box] : cleaning_->cache) {

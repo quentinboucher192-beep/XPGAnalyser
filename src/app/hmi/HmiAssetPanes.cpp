@@ -342,6 +342,7 @@ void HmiResourcesPane::refresh() {
         ui::CellStyle s;
         s.icon = iconOf(r.kind());
         if (!r.data) s.iconTone = ui::Tone::Error;
+        s.path = "ressource:" + r.name;   // 1.24.0 : son fichier (Ouvrir dans l'explorateur, Aller a)
         ui::CellStyle last;
         if (!r.data || r.detail.find("ERREUR") != std::string::npos) last.fgTone = ui::Tone::Error;
         looks[r.id] = {s, last};
@@ -756,6 +757,7 @@ void HmiFilesPane::refresh() {
                         std::string(hmi::externalStatusLabel(st.status)), usedBy});
         ui::CellStyle s;
         s.icon = db ? ui::Icon::Library : ui::Icon::Document;
+        if (!db) s.path = "externe:" + f.name;   // 1.24.0 : son fichier (Ouvrir dans l'explorateur, Aller a)
         styles.push_back(s);
         ui::CellStyle state;
         switch (st.status) {
@@ -1152,6 +1154,7 @@ void HmiRecordingsPane::refresh() {
         ui::CellStyle st;
         st.icon = ui::Icon::Play;
         if (!it.problem.empty()) st.iconTone = ui::Tone::Error;
+        st.path = it.path;   // 1.24.0 : son fichier .xrec (Ouvrir dans l'explorateur, Aller a)
         styles.push_back(st);
         ui::CellStyle lock;                    // le cadenas d'un enregistrement protege
         if (h.locked()) lock.icon = ui::Icon::Lock;
@@ -1217,6 +1220,7 @@ void HmiRecordingsPane::showDetail() {
     {
         const auto slash = it->path.find_last_of("/\\");
         ro("Fichier", slash == std::string::npos ? it->path : it->path.substr(slash + 1));
+        c.properties.back().path = it->path;   // 1.24.0 : Ouvrir dans l'explorateur, Aller a
     }
     const std::string path = it->path;
     c.properties.push_back(hmikit::prop("Description", h.description, PG::ValueType::Text,
@@ -1486,6 +1490,7 @@ void HmiRecordingSettingsPane::refresh() {
                                     "Vide : le dossier natif ressources/enregistrements du projet (Ressources \xE2\x80\xBA Enregistrements). "
                                     "Un chemin relatif part du dossier du projet. Au poste d'exploitation : le m\xC3\xAAme dossier, sur le PC du poste."));
     where.properties.push_back(prop("Chemin", dir.empty() ? std::string("(le projet n'est pas encore enregistr\xC3\xA9)") : dir, PG::ValueType::ReadOnly));
+    where.properties.back().path = dir;   // 1.24.0 : le dossier des enregistrements (Ouvrir dans l'explorateur, Aller a)
     where.properties.push_back(prop("Taille du dossier au plus (Mo)", std::to_string(r.maxFolderMb), PG::ValueType::Integer, commit("taille"),
                                     "Au-del\xC3\xA0, \xC3\xA0 la fin d'un enregistrement, les plus anciens sont retir\xC3\xA9s (le journal le dit). "
                                     "2048 : 2 Go."));

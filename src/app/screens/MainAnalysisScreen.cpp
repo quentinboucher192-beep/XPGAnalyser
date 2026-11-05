@@ -60,6 +60,7 @@
 #include "../hmi/HmiSimulation.hpp"   // 1.10 : la pastille IHM de la barre du haut
 #include "../hmi/HmiBuildPanes.hpp"   // 1.11.14 : le panneau du bas (Sorties, Console, Diagnostics)
 #include "../FileFinderPane.hpp"          // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.0 : ui::paths (le fournisseur, retire a la sortie)
 
 #include <algorithm>
 #include <cctype>
@@ -3424,6 +3425,7 @@ void MainAnalysisScreen::onEnter() {
     }
     entered_ = true;
     installCodeEditorHooks();   // 1.12.2 : F12, Ctrl+T, la barre d'etat des editeurs de code
+    installPathLinks();         // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a (FinderWorkspace.cpp)
     // OnEnter runs every time this screen comes back to the top of the stack -
     // including when a modal dialog closes. bindProject tears down every open
     // tab, so an unconditional call here meant that cancelling a dialog closed
@@ -3655,6 +3657,7 @@ void MainAnalysisScreen::onExit() {
     saveWorkspace();    // ratios may have been dragged since the last toggle
     links_.clear();     // every callback above dies here: no dangling `this`
     removeCodeEditorHooks();   // 1.12.2 : idem pour les editeurs de code
+    ui::paths::setProvider({});   // 1.24.0 : idem pour les chemins (plus de `this` dans le fournisseur)
     entered_ = false;
 }
 
