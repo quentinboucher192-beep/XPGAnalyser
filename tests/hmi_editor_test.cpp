@@ -9117,7 +9117,13 @@ void lot12_conception() {
     const Id bouton3 = b.place(Kind::Button, 600, 300);
     ed.canvas().setSelection({bouton});
     ed.layout();
-    check(!hasProperty(ed.properties(), "Style nomm\xC3\xA9"), "sans style au projet : pas de case Style nomm\xC3\xA9");
+    // 1.23.0 : la case Style nomme est toujours la - les styles fournis (ISA-101, Sombre d'origine, Clair, Contraste eleve).
+    {
+        const auto builtinChoices = choicesOf(ed.properties(), "Style nomm\xC3\xA9");
+        check(hasProperty(ed.properties(), "Style nomm\xC3\xA9") && builtinChoices.size() == 5 && builtinChoices[0].empty()
+                  && builtinChoices[1] == "ISA-101",
+              "sans style au projet : la case Style nomm\xC3\xA9 propose les 4 styles fournis");
+    }
     check(commitIn(ed.properties(), "Remplissage", "#2F6FD6") && b.v().object(bouton)->text("fill") == "#2F6FD6", "le bouton : bleu");
     bool asked = false;
     ed.setStyleAsker([&] { asked = true; });
@@ -9139,7 +9145,8 @@ void lot12_conception() {
     ed.canvas().setSelection({bouton3});
     ed.layout();
     const auto styleChoices = choicesOf(ed.properties(), "Style nomm\xC3\xA9");
-    check(styleChoices.size() == 2 && styleChoices[0].empty() && styleChoices[1] == styleName, "la case Style nomm\xC3\xA9 : aucun, " + styleName);
+    check(styleChoices.size() == 6 && styleChoices[0].empty() && styleChoices[1] == styleName && styleChoices[2] == "ISA-101",
+          "la case Style nomm\xC3\xA9 : aucun, " + styleName + ", puis les 4 styles fournis");
     check(commitIn(ed.properties(), "Style nomm\xC3\xA9", styleName) && b.v().object(bouton3)->text("namedStyle") == styleName
               && b.v().object(bouton3)->text("fill") == "#2F6FD6",
           "choisi dans l'inspecteur : le troisi\xC3\xA8me bouton le cite, bleu");
@@ -29180,8 +29187,9 @@ void inspecteur_range_1104() {
         const auto* look = k3Cat(cats, "Apparence");
         std::vector<std::string> lk;
         if (look) for (const auto& pr : look->properties) lk.push_back(k3Plain(pr.name));
-        same_text(k3Join(lk), "Visible, Opacit\xC3\xA9 (%), Clignotement, Contour, \xC3\x89paisseur du contour, Taille du texte, Couleur du texte",
-                  "Apparence : visible, opacit\xC3\xA9, clignotement, puis les couleurs et le texte");
+        // 1.23.0 : Style nomme, toujours (les styles fournis), apres le clignotement.
+        same_text(k3Join(lk), "Visible, Opacit\xC3\xA9 (%), Clignotement, Style nomm\xC3\xA9, Contour, \xC3\x89paisseur du contour, Taille du texte, Couleur du texte",
+                  "Apparence : visible, opacit\xC3\xA9, clignotement, le style nomm\xC3\xA9, puis les couleurs et le texte");
     }
     // Une vanne d'avant la 1.10.4 : sa variable (Variable API) est gardee, montree juste apres Valeur.
     {
