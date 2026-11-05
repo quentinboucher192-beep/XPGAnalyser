@@ -66,6 +66,10 @@ public:
     [[nodiscard]] std::size_t svgRasterized() const noexcept { return svgRasterized_; }
     // Une ligne de texte ecrite avec une police ressource, blanche.
     [[nodiscard]] Image fontText(gfx::IRenderer&, const hmi::Resource& font, std::string_view text, float pixelHeight);
+    // 1.26.0 (l'editeur de polices) : UNE POLICE DU PROJET EN COURS D'EDITION - tant qu'elle n'est ni enregistree ni
+    // abandonnee, les textes qui la citent (par le nom de sa ressource) se dessinent avec `data` ; nul : fin.
+    static void setLiveFont(const std::string& resourceName, hmi::BlobPtr data);
+    [[nodiscard]] static hmi::BlobPtr liveFont(const std::string& resourceName);
     // L'enveloppe d'un son (apercu), calculee une fois par contenu.
     [[nodiscard]] const std::vector<float>& envelope(const hmi::Resource&, int buckets);
     // Lot 16 : UN GIF ANIME, toutes ses images (une texture chacune) et leurs

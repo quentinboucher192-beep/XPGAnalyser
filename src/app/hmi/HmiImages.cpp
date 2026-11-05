@@ -1,5 +1,7 @@
 #include "HmiImages.hpp"
 
+#include <map>
+
 #include <cmath>
 
 #include "../../hmi/HmiAssets.hpp"
@@ -296,8 +298,34 @@ HmiImageCache::Image HmiImageCache::svg(gfx::IRenderer& r, const hmi::Resource& 
     return e.image;
 }
 
-HmiImageCache::Image HmiImageCache::fontText(gfx::IRenderer& r, const hmi::Resource& font, std::string_view text,
+namespace {
+std::map<std::string, hmi::BlobPtr>& liveFonts() {
+    static std::map<std::string, hmi::BlobPtr> m;
+    return m;
+}
+} // namespace
+
+void HmiImageCache::setLiveFont(const std::string& resourceName, hmi::BlobPtr data) {
+    if (data) liveFonts()[resourceName] = std::move(data);
+    else liveFonts().erase(resourceName);
+}
+
+hmi::BlobPtr HmiImageCache::liveFont(const std::string& resourceName) {
+    const auto it = liveFonts().find(resourceName);
+    return it == liveFonts().end() ? nullptr : it->second;
+}
+
+HmiImageCache::Image HmiImageCache::fontText(gfx::IRenderer& r, const hmi::Resource& stored, std::string_view text,
                                              float pixelHeight) {
+    // 1.26.0 : une police en cours d'edition se dessine telle qu'elle est dans l'editeur.
+    hmi::Resource live;
+    const hmi::Resource* pick = &stored;
+    if (const auto l = liveFont(stored.name); l && stored.kind() == hmi::MediaKind::Font) {
+        live = stored;
+        live.data = l;
+        pick = &live;
+    }
+    const hmi::Resource& font = *pick;
     if (!font.data || font.kind() != hmi::MediaKind::Font || text.empty()) return {};
     adopt(r);
     purge(r);

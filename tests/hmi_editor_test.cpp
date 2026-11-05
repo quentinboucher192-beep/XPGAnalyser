@@ -78,6 +78,8 @@
 #include "../src/app/hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../src/app/hmi/HmiSoundLibraryPane.hpp"   // 1.24.0 : la bibliotheque de sons
 #include "../src/app/hmi/HmiReportLayoutPane.hpp"   // 1.25.0 : la mise en page des rapports
+#include "../src/app/hmi/HmiFontEditorPane.hpp"     // 1.26.0 : l'editeur de polices
+#include "../src/app/hmi/HmiImages.hpp"
 #include "../src/hmi/HmiReportLayout.hpp"
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
@@ -47124,7 +47126,210 @@ void supprimerPlusieurs1241() {
     app::several::setConfirmHost({});
 }
 
+// =============================================================================
+//  1.26.0 : L'EDITEUR DE POLICES (le client : << pouvoir editer des TTF en live sur le logiciel, en creer, en dupliquer
+//  a partir de >>). Nouvelle police, dessiner (rectangle, ellipse, plume, ajouter un point), deplacer (fleches, glisser a
+//  la souris : un seul Ctrl+Z), les reglages (chasse, approches, famille et noms reserves), les composes (decomposer),
+//  copier un glyphe d'une autre police, retablir l'original, la grille (chercher, Modifies), l'apercu en direct, les vues
+//  qui suivent, enregistrer dans le projet et dans Mes polices, exporter, dupliquer et ouvrir une fournie (une copie).
+// =============================================================================
+void editeurPolices1260(const std::string& fixtures) {
+    std::printf("[1.26.0 : l'editeur de polices]\n");
+    namespace fs = std::filesystem;
+    namespace tt = hmi::ttf;
+    using Ed = app::HmiFontEditorPane;
+    std::string why;
+    const fs::path dir = fs::path(fixtures).parent_path().parent_path().parent_path() / "resources" / "polices";
+    const auto blob = [](const fs::path& f) {
+        std::ifstream in(f, std::ios::binary);
+        return std::make_shared<const hmi::Bytes>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    };
+    Ed::Source carlito{"Carlito", "Sans empattement", blob(dir / "Carlito-Regular.ttf"), {}, kNoId, true};
+    Ed::Source dejavu{"DejaVu Sans", "Sans empattement", blob(dir / "DejaVuSans.ttf"), {}, kNoId, true};
+    check(carlito.data && carlito.data->size() > 100000 && dejavu.data && dejavu.data->size() > 100000, "les polices fournies se lisent (resources/polices)");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    const auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    std::error_code ec;
+    const fs::path mine = fs::temp_directory_path() / "xpg_mes_polices_1260";
+    fs::remove_all(mine, ec);
+    fs::create_directories(mine, ec);
+    Ed ed("fonts", doc, apply);
+    Ed::Hosts hosts;
+    hosts.sources = [&] { return std::vector<Ed::Source>{carlito, dejavu}; };
+    std::vector<std::string> savedMine;
+    hosts.saveMine = [&](const std::string& file, const hmi::Bytes& bytes, const std::string& replace, std::string* stored, std::string*) {
+        const fs::path to = replace.empty() ? mine / file : fs::path(replace);
+        std::ofstream(to, std::ios::binary).write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        savedMine.push_back(to.filename().string());
+        if (stored) *stored = to.string();
+        return true;
+    };
+    ed.setHosts(hosts);
+    ed.setBounds({0, 0, 1500, 900});
+    ed.layout();
+    check(!ed.hasFont() && !ed.modified(), "rien d'ouvert");
+
+    // ---- une nouvelle police
+    check(ed.newFont() && ed.hasFont() && ed.font().family == "Ma police" && ed.glyph() == tt::glyphOf(ed.font(), 'a') && !ed.modified(),
+          "+ Nouvelle police : Ma police, le glyphe a choisi");
+    check(ed.shownGlyphs().size() == ed.font().glyphs.size(), "la grille : tous les glyphes");
+    const auto contoursOf = [&](std::uint32_t code) { return ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), code))].contours.size(); };
+    check(ed.addShape(Ed::Tool::Rectangle, 50, 0, 450, 500) && contoursOf('a') == 1 && ed.modified() && ed.canUndo(), "un rectangle dans a");
+    check(ed.title().find("Ma police") != std::string::npos && ed.title().find("\xE2\x97\x8F") != std::string::npos, "le titre dit : modifiee");
+    check(ed.undo() && contoursOf('a') == 0 && !ed.modified(), "Ctrl+Z : le rectangle part, plus rien a enregistrer");
+    check(ed.redo() && contoursOf('a') == 1 && ed.modified(), "Ctrl+Y : il revient");
+    check(ed.addShape(Ed::Tool::Ellipse, 150, 100, 350, 400) && contoursOf('a') == 2, "une ellipse dans a");
+
+    // ---- la plume : trois points, puis un clic sur le premier ferme
+    check(ed.selectCode('b') && ed.glyph() == tt::glyphOf(ed.font(), 'b'), "le glyphe b");
+    ed.setTool(Ed::Tool::Pen);
+    check(ed.penClick(100, 0, false, 10) && ed.penContour() == 0 && ed.penClick(100, 700, false, 10) && ed.penClick(400, 350, true, 10)
+              && ed.penClick(400, 0, false, 10),
+          "la plume : quatre points (un hors de la courbe)");
+    check(ed.penClick(102, 3, false, 10) && ed.penContour() == -1 && contoursOf('b') == 1
+              && ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))].contours[0].points.size() == 4,
+          "un clic sur le premier point ferme le contour");
+    ed.setTool(Ed::Tool::Select);
+    // Ajouter un point sur le trait (de (100,700) a (400,0) en passant par le controle) : la forme ne change pas.
+    {
+        const auto& g = ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))];
+        const auto before = tt::raster(g.contours, 0.2, 0, 160, 120, 200);
+        check(ed.insertPointNear(100, 350, 20) && ed.chosen().size() == 1, "ajouter un point sur le trait : choisi");
+        const auto& g2 = ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))];
+        const auto after = tt::raster(g2.contours, 0.2, 0, 160, 120, 200);
+        long diff = 0, area = 0;
+        for (std::size_t i = 0; i < before.size(); ++i) {
+            diff += std::abs(before[i] - after[i]);
+            area += before[i];
+        }
+        check(g2.contours[0].points.size() == 5 && diff < area / 50, "la forme ne change pas");
+    }
+    // ---- deplacer : les fleches, puis la souris (un glissement = un Ctrl+Z)
+    ed.choose({{0, 0}});
+    check(ed.moveChosen(10, 0) && ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))].contours[0].points[0].x == 110,
+          "fleche droite : le point avance de 10");
+    check(ed.setField("x", "120") && ed.setField("y", "-5")
+              && ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))].contours[0].points[0].y == -5,
+          "le point choisi : x et y tapes");
+    check(!ed.setField("x", "beaucoup", &why) && why.find("entier") != std::string::npos, "un x illisible : refuse");
+    {
+        const std::size_t steps = [&] { std::size_t n = 0; while (ed.canUndo()) { (void)ed.undo(); ++n; } for (std::size_t k = 0; k < n; ++k) (void)ed.redo(); return n; }();
+        const auto& p = ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))].contours[0].points[0];
+        const gfx::Point at = ed.canvas().toScreen(p.x, p.y);
+        ed.choose({});
+        ed.dispatch(ui::MouseDown{at, ui::MouseButton::Left, 1, {}});
+        ed.dispatch(ui::MouseMove{{at.x + 10, at.y - 10}, {10, -10}, {}});
+        ed.dispatch(ui::MouseMove{{at.x + 30, at.y - 20}, {20, -10}, {}});
+        ed.dispatch(ui::MouseUp{{at.x + 30, at.y - 20}, ui::MouseButton::Left, {}});
+        const auto& q = ed.font().glyphs[static_cast<std::size_t>(tt::glyphOf(ed.font(), 'b'))].contours[0].points[0];
+        const double s = ed.canvas().scale();
+        check(std::abs(q.x - (120 + static_cast<int>(std::lround(30 / s)))) <= 1 && std::abs(q.y - (-5 + static_cast<int>(std::lround(20 / s)))) <= 1,
+              "glisser le point a la souris : il suit");
+        std::size_t after = 0;
+        while (ed.canUndo()) {
+            (void)ed.undo();
+            ++after;
+        }
+        check(after == steps + 1, "le glissement : un seul geste a defaire");
+        for (std::size_t k = 0; k < after; ++k) (void)ed.redo();
+    }
+    // ---- les reglages
+    check(ed.selectCode('a') && ed.setField("chasse", "600") && tt::advanceOf(ed.font(), ed.glyph()) == 600, "la chasse de a : 600");
+    check(ed.setField("approche_gauche", "80") && tt::bounds(ed.font(), ed.glyph()).xMin == 80 && tt::advanceOf(ed.font(), ed.glyph()) == 630,
+          "l'approche gauche : le dessin glisse, la chasse suit");
+    check(ed.setField("approche_droite", "20") && tt::advanceOf(ed.font(), ed.glyph()) == tt::bounds(ed.font(), ed.glyph()).xMax + 20, "l'approche droite");
+    check(ed.setField("famille", "Pupitre") && ed.font().family == "Pupitre" && ed.setField("capitales", "720") && ed.font().capHeight == 720,
+          "la famille, la hauteur des capitales");
+    check(!ed.setField("descendante", "50", &why), "une descendante positive : refusee");
+    // ---- la grille : chercher, Modifies
+    ed.setSearch("\xC3\xA9");
+    check(ed.shownGlyphs().size() == 1 && ed.shownGlyphs()[0] == tt::glyphOf(ed.font(), 0xE9), "chercher e accent aigu : un glyphe");
+    ed.setSearch("U+0062");
+    check(ed.shownGlyphs().size() == 1 && ed.shownGlyphs()[0] == tt::glyphOf(ed.font(), 'b'), "chercher U+0062 : b");
+    ed.setSearch("");
+    ed.setFilter(Ed::FilterModified);
+    check(ed.shownGlyphs().size() == 2, "Modifies : a et b");
+    ed.setFilter(Ed::FilterDigits);
+    check(ed.shownGlyphs().size() == 10, "0-9 : dix chiffres");
+    check(ed.glyph() == tt::glyphOf(ed.font(), '0'), "le glyphe choisi n'est plus montre : le premier de la grille");
+    ed.setFilter(Ed::FilterAll);
+    // ---- l'apercu en direct : le fichier de la police telle qu'elle est
+    {
+        const auto bytes = ed.liveBytes(true);
+        hmi::FontMetrics m;
+        hmi::Rgba img;
+        check(bytes && hmi::fontMetrics(*bytes, {'a'}, m) && m.family == "Pupitre" && std::lround(m.widths[0] * 1000.0 / 1000.0) == tt::advanceOf(ed.font(), tt::glyphOf(ed.font(), 'a')),
+              "l'apercu : un vrai .ttf (sa famille, la chasse de a)");
+        check(hmi::renderFontText(*bytes, "ab", 40.f, img) && img.width > 10, "l'apercu se dessine");
+    }
+    // ---- enregistrer dans le projet ; les vues suivent ; remplacer
+    check(ed.saveProject() && doc->project.assets.resources.size() == 1 && doc->project.assets.resources[0].kind() == hmi::MediaKind::Font
+              && !ed.modified() && stack.undoLabel() == "Ajouter la police Pupitre",
+          "Enregistrer dans le projet : une ressource police (Ctrl+Z la retire)");
+    const std::string resName = doc->project.assets.resources[0].name;
+    check(ed.selectCode('a') && ed.addShape(Ed::Tool::Rectangle, 0, 0, 100, 100) && ed.modified() && app::HmiImageCache::liveFont(resName) != nullptr,
+          "modifiee : les vues la dessinent telle qu'ici (en direct)");
+    ed.setLive(false);
+    check(app::HmiImageCache::liveFont(resName) == nullptr, "les vues suivent : decoche, elles dessinent l'enregistree");
+    ed.setLive(true);
+    check(ed.saveProject() && doc->project.assets.resources.size() == 1 && app::HmiImageCache::liveFont(resName) == nullptr
+              && stack.undoLabel() == "Modifier la police Pupitre",
+          "Enregistrer de nouveau : la ressource remplacee, plus de direct");
+    {
+        tt::Font back;
+        check(tt::read(*doc->project.assets.resources[0].data, back) && back.family == "Pupitre"
+                  && back.glyphs[static_cast<std::size_t>(tt::glyphOf(back, 'a'))].contours.size() == 3,
+              "la ressource : la police avec ses trois contours dans a");
+    }
+    // ---- Mes polices, exporter
+    check(ed.saveMine() && savedMine.size() == 1 && savedMine[0] == "Pupitre.ttf" && !ed.userFile().empty(), "Enregistrer dans Mes polices : Pupitre.ttf");
+    const fs::path exported = mine / "export.ttf";
+    {
+        tt::Font back;
+        hmi::Bytes bytes;
+        check(ed.exportTo(exported.string()), "Exporter en .ttf");
+        std::ifstream in(exported, std::ios::binary);
+        bytes.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        check(tt::read(bytes, back) && back.family == "Pupitre", "le fichier exporte se relit");
+    }
+    // ---- dupliquer a partir d'une fournie : les noms reserves
+    check(ed.duplicateFrom(carlito) && ed.font().family == "Ma police" && ed.originText() == "Copie de Carlito" && !ed.modified(),
+          "Dupliquer a partir de Carlito : Ma police");
+    check(!ed.setField("famille", "Carlito Pro", &why) && why.find("Carlito") != std::string::npos && ed.font().family == "Ma police",
+          "un nom reserve par la licence : refuse");
+    check(ed.setField("famille", "Ma police Station") && ed.font().family == "Ma police Station", "un autre nom : accepte");
+    check(!ed.newFont(&why) && why.find("Enregistre ou abandonne") != std::string::npos, "des modifications non enregistrees : on ne quitte pas sans le dire");
+    // Un compose : decomposer, defaire.
+    check(ed.selectCode(0xE9) && ed.font().glyphs[static_cast<std::size_t>(ed.glyph())].composite(), "e accent aigu : un compose");
+    check(ed.decompose() && !ed.font().glyphs[static_cast<std::size_t>(ed.glyph())].composite() && ed.undo()
+              && ed.font().glyphs[static_cast<std::size_t>(ed.glyph())].composite(),
+          "Decomposer, puis Ctrl+Z");
+    // Copier le glyphe d'une autre police, retablir l'original.
+    check(ed.selectCode('g') && ed.copyGlyphFrom(dejavu) && ed.glyphModified(ed.glyph()), "Copier le glyphe g de DejaVu Sans");
+    check(ed.revertGlyph() && !ed.glyphModified(ed.glyph()), "Retablir l'original");
+    {
+        const auto theme = ui::Theme::dark();
+        Recorder rec;
+        ed.render(ui::PaintContext{rec, theme, {0, 0, 1500, 900}, 0.0, nullptr});
+        check(rec.wrote("Ligne de base 0") && rec.wrote("Capitales") && rec.wrote("Chasse") && rec.wrote("GLYPHES") && rec.wrote("APER"),
+              "le volet se dessine : les lignes de la police, la grille, l'apercu");
+    }
+    check(ed.dispatch(ui::KeyDown{ui::Key::Z, ui::KeyMods{true, false, false}, false}) == ui::EventResult::Consumed, "Ctrl+Z dans le volet : l'editeur");
+    ed.discard();
+    check(!ed.modified() && ed.font().family == "Ma police", "Abandonner : la copie telle qu'a l'ouverture");
+    // Ouvrir une fournie : une copie (elle ne change pas).
+    check(ed.openFont(dejavu) && ed.font().family != "DejaVu Sans" && ed.originText() == "Copie de DejaVu Sans", "ouvrir une fournie : on modifie une copie");
+    fs::remove_all(mine, ec);
+}
+
 int main(int argc, char** argv) {
+    // 1.26.0 : HMI_TEST_POL=1 - l'editeur de polices, seul.
+    if (const char* only = std::getenv("HMI_TEST_POL"); only && *only == '1') {
+        editeurPolices1260(argc > 2 ? argv[2] : "");
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
     if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
         rapportsSonsImages1250();
@@ -47681,6 +47886,7 @@ int main(int argc, char** argv) {
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
     bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
     rapportsSonsImages1250();               // 1.25.0 : la mise en page des rapports, les sons et les images de la bibliotheque
+    if (argc > 2) editeurPolices1260(argv[2]);   // 1.26.0 : l'editeur de polices
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)
