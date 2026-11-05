@@ -73,8 +73,14 @@
 #include "../../project/DeleteCommands.hpp"
 #include "../../project/SharedLibrary.hpp"
 
+#include "../../hmi/HmiRecording.hpp"          // 1.24.0 : le dossier des enregistrements (Ouvrir dans l'explorateur)
+#include "../../hmi/HmiVersions.hpp"           // 1.24.0 : supprimer plusieurs versions
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.0 : ui::paths (les chemins)
+
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -150,6 +156,18 @@ KindWords kindWords(NK k) {
     default:                   return {"", ""};
     }
 }
+// 1.24.0 : le fichier de `dir` dont le nom commence par `head` ("0003-" : le fichier d'une vue) ; vide : aucun.
+std::string fileStartingWith(const std::string& dir, const std::string& head) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    for (fs::directory_iterator it(fs::path(std::u8string(dir.begin(), dir.end())), ec), end; !ec && it != end; it.increment(ec)) {
+        const auto u8 = it->path().filename().u8string();
+        const std::string name(u8.begin(), u8.end());
+        if (name.rfind(head, 0) == 0) return dir + "/" + name;
+    }
+    return {};
+}
+
 std::string roleWord(const std::string& role) {
     if (role == "popup") return "popup";
     if (role == "symbole") return "symbole";
@@ -381,6 +399,73 @@ void MainAnalysisScreen::showHistoryMenu(int row, gfx::Point at) {
     contextMenu_->openAt(at, {surface.w, surface.h});
 }
 
+// 1.24.0 : SUPPRIMER PLUSIEURS NOEUDS D'UN COUP - une question (ce qui part, quelques noms puis +N ;
+// ce qui reste et pourquoi ; ce que Ctrl+Z rend), puis tout en un seul Ctrl+Z.
+void MainAnalysisScreen::askTreeDelete(std::vector<NodeId> nodes) {
+    if (!treeModel_) return;
+    auto plan = treeModel_->deletionOf(nodes, app_.document() != nullptr);
+    if (plan.empty()) {
+        if (status_) status_->setTransientMessage("Supprimer : " + plan.nothingWhy(), 6.0, StatusBar::Severity::Warning);
+        return;
+    }
+    const std::string title = plan.title(), message = plan.message();
+    app_.menus().ShowDialog(std::make_unique<MessageDialog>(title, message, MessageDialog::Icon::Question, "Supprimer"),
+                            [this, plan = std::move(plan)](const menu::DialogResult& r) {
+                                if (r.accepted()) runTreeDeletion(plan);
+                            });
+}
+
+void MainAnalysisScreen::runTreeDeletion(const TreeDeletion& plan) {
+    TreeDeletionHosts hosts;
+    hosts.hmi = app_.hmi();
+    hosts.api = app_.document();
+    hosts.apply = [this](core::CommandPtr c) { app_.apply(std::move(c)); };
+    hosts.applyHmi = [this](core::CommandPtr c) { app_.apply(std::move(c), false); };
+    hosts.deleteMacro = [](const std::string& name, std::string* why) {
+        project::SharedLibrary lib(project::SharedLibrary::defaultRoot());
+        (void)lib.scan();
+        if (auto st = lib.deleteMacro(name); !st) {
+            if (why) *why = st.error().message();
+            return false;
+        }
+        return true;
+    };
+    const std::string folder = app_.projectFolder();
+    hosts.deleteVersion = [folder](int number, std::string* why) {
+        auto store = hmi::ver::open(folder);
+        if (!store) {
+            if (why) *why = "pas de versions ici";
+            return false;
+        }
+        if (auto st = hmi::ver::remove(*store, number); !st) {
+            if (why) *why = st.error().context.empty() ? st.error().message() : st.error().context;
+            return false;
+        }
+        return true;
+    };
+    const auto result = performTreeDeletion(plan, hosts);
+    bool macros = false, versions = false;
+    for (const auto& it : plan.items) {
+        macros = macros || it.what == TreeDeletion::What::Macro;
+        versions = versions || it.what == TreeDeletion::What::Version;
+    }
+    if (macros) {
+        if (auto* pane = macrosPane(); pane && pane->step() != 0) pane->closeRun();
+        macrosChanged();
+    }
+    if (versions) refreshVersions();
+    if (!status_) return;
+    std::string said = std::to_string(result.done) + (result.done > 1 ? " \xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s" : " \xC3\xA9l\xC3\xA9ment supprim\xC3\xA9");
+    if (plan.undoable() && result.done) said += result.done > 1 ? " (un seul Ctrl+Z les rend)" : " (Ctrl+Z le rend)";
+    if (!result.failed.empty()) {
+        said += ". Restent : ";
+        for (std::size_t i = 0; i < result.failed.size() && i < 3; ++i)
+            said += (i ? " ; " : "") + result.failed[i].name + " (" + result.failed[i].why + ")";
+        if (result.failed.size() > 3) said += " +" + std::to_string(result.failed.size() - 3);
+    }
+    status_->setTransientMessage(said + ".", 8.0, result.failed.empty() ? StatusBar::Severity::Success : StatusBar::Severity::Warning);
+}
+
 void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu::Item>& items, TreeKeys& keys) {
     contextCalls_.clear();
     items.clear();
@@ -415,15 +500,26 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         };
     };
     // Renommer (F2) et Supprimer (Suppr) : les touches font la meme chose.
+    // 1.24.0 : plusieurs noeuds choisis (multi, pose avant le switch) - Renommer est grise (un a la fois) ;
+    // le Supprimer d'un noeud laisse la place a UNE entree pour toute la selection, apres le switch.
+    bool multi = false, removeOffered = false;
     const auto addRename = [&](std::string label, std::function<void()> fn, std::string why = {}) {
+        if (multi && why.empty()) why = "un \xC3\xA0 la fois";
         if (why.empty()) keys.rename = fn;
         else keys.renameWhy = why;
         m.add(std::move(label), Icon::Rename, std::move(fn), "F2", std::move(why));
     };
-    const auto addRemove = [&](std::string label, std::function<void()> fn, std::string why = {}) {
+    const auto addRemoveNow = [&](std::string label, std::function<void()> fn, std::string why = {}) {
         if (why.empty()) keys.remove = fn;
         else keys.removeWhy = why;
         m.add(std::move(label), Icon::Delete, std::move(fn), "Suppr", std::move(why));
+    };
+    const auto addRemove = [&](std::string label, std::function<void()> fn, std::string why = {}) {
+        if (multi) {
+            removeOffered = true;
+            return;
+        }
+        addRemoveNow(std::move(label), std::move(fn), std::move(why));
     };
     const auto rename = [this](std::string what, std::string name) {
         return [this, what, name] { askRename(what, name); };
@@ -865,6 +961,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     // 1.12.18 (planche 19) : Epingler vient APRES les entrees du noeud (avant Supprimer), plus avant Ouvrir.
     const std::size_t start = items.size();
     const bool several = picked.size() > 1;
+    multi = several;
     const std::string oneAtATime = several ? std::string("une \xC3\xA0 la fois") : std::string{};
     // Ouvrir dans une fenetre : l'onglet de la ligne, detache (comme le bouton au survol).
     const auto inWindow = [&] { m.add("Ouvrir dans une fen\xC3\xAAtre", Icon::Window, [this, node] { treeHoverAction(node, 1); }); };
@@ -1825,10 +1922,8 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         }, {}, several ? oneAtATime : name.empty() ? "variable introuvable" : "");
         m.separator();
         addRename("Renommer" + kDots, rename("ihm-variable", name), several ? oneAtATime : name.empty() ? "variable introuvable" : "");
-        if (ids.size() > 1)
-            addRemove("Supprimer les " + std::to_string(ids.size()) + kDots, [this, ids] { askHmiDeleteVariables(ids); });
-        else
-            addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteVariable(id); });
+        // 1.24.0 : plusieurs choisies - l'entree commune a toute la selection (apres le switch).
+        addRemove("Supprimer" + kDots, [this, id] { askHmiDeleteVariable(id); });
         break;
     }
     case NK::HmiUsedVariable: {
@@ -2232,6 +2327,25 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     }
 
     // =====================================================================================
+    //  1.24.0 : PLUSIEURS NOEUDS CHOISIS - UNE ENTREE POUR TOUS (le client, 05/11). << Supprimer les
+    //  5 elements... >> (<< les 3 vues >> s'ils sont du meme genre), meme melanges (des vues et des
+    //  scripts, des sections et des variables) ; Suppr fait la meme chose. Une question nomme ce qui
+    //  part et ce qui reste (un style fourni, un dossier...), puis un seul Ctrl+Z rend tout.
+    // =====================================================================================
+    if (several && treeModel_) {
+        const auto plan = treeModel_->deletionOf(picked, document != nullptr);
+        if (!plan.empty() || removeOffered) {
+            m.separator();
+            if (!plan.empty()) {
+                addRemoveNow(plan.label(), [this, picked] { askTreeDelete(picked); });
+                if (!plan.kept.empty()) items.back().note = std::to_string(plan.kept.size()) + " ne part pas : la question dit pourquoi";
+            } else {
+                addRemoveNow("Supprimer" + kDots, {}, plan.nothingWhy());
+            }
+        }
+    }
+
+    // =====================================================================================
     //  1.12.18 (planche 19) : CE QUE TOUT NOEUD PARTAGE - la touche de chaque geste dans la
     //  colonne de droite (Entree ouvre, Ctrl+D, Ctrl+C, Maj+F12), un raccourci (Epingles,
     //  Recents) qui s'affiche dans l'arbre, Epingler avant Supprimer.
@@ -2279,6 +2393,70 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
                 if (!items[i].separator && !items[i].heading && items[i].shortcut == "Suppr") { at = i; break; }
             if (at == items.size()) m.trim();
             items.insert(items.begin() + static_cast<std::ptrdiff_t>(std::min(at, items.size())), std::move(pin));
+        }
+    }
+
+    // =====================================================================================
+    //  1.24.0 : UN NOEUD QUI EST UN FICHIER OU UN DOSSIER (le projet, une vue enregistree, une
+    //  macro, une bibliotheque reliee, les dossiers des ressources, de l'historique, des
+    //  enregistrements, des incidents) - Ouvrir dans l'explorateur, Copier le chemin (ui::paths),
+    //  avant Epingler et Supprimer. Pas Aller a : le noeud est deja la. Apres les touches : Ctrl+C
+    //  garde son sens (le nom), il ne copie pas le chemin.
+    // =====================================================================================
+    if (!several && treeModel_) {
+        std::string path;
+        const std::string folder = app_.projectFolder();
+        const auto under = [&](const char* sub) { return folder.empty() ? std::string{} : folder + "/ihm/" + sub; };
+        switch (kind) {
+        case NK::Root: path = folder; break;
+        case NK::HmiResources: path = under("ressources"); break;
+        case NK::HmiHistory: path = under("historique"); break;
+        case NK::HmiView:
+            if (hmiDoc && !folder.empty())
+                if (const auto* v = hmiDoc->project.view(static_cast<hmi::Id>(treeModel_->hmiViewOf(node)))) {
+                    char head[16];
+                    std::snprintf(head, sizeof head, "%04u-", static_cast<unsigned>(v->id));
+                    path = fileStartingWith(folder + "/ihm/vues", head);
+                }
+            break;
+        case NK::HmiRecordings:
+            if (hmiDoc && !folder.empty()) path = hmi::rec::folderOf(hmiDoc->project.recording, folder);
+            break;
+        case NK::HmiIncidents:
+            if (!folder.empty()) path = folder + "/" + std::string(hmi::rec::kNativeFolder) + "/en attente";
+            break;
+        case NK::HmiLibraryNode:
+            if (hmiDoc && index < hmiDoc->project.libraries.size()) path = hmiDoc->project.libraries[index].path;
+            break;
+        case NK::Macro:
+            if (const std::string name = treeModel_->text(node); !name.empty())
+                path = project::SharedLibrary(project::SharedLibrary::defaultRoot()).macrosFolder() + "/" + name + ".mac";
+            break;
+        default: break;
+        }
+        std::vector<Item> more;
+        for (auto& it : path.empty() ? std::vector<Item>{} : ui::paths::menuItems(path, 0)) {
+            const int id = it.id;
+            // Aller a : le noeud est deja la. Le projet a deja << Ouvrir le dossier du projet >>.
+            if (id == ui::paths::kGoTo || (kind == NK::Root && id == ui::paths::kReveal)) continue;
+            it.id = -1;
+            if (it.enabled) {
+                contextCalls_.push_back([path, id] { (void)ui::paths::run(id, 0, path); });   // le fournisseur dit un refus
+                it.id = ActionCall + static_cast<int>(contextCalls_.size() - 1);
+            }
+            more.push_back(std::move(it));
+        }
+        if (!more.empty()) {
+            std::size_t at = items.size();
+            for (std::size_t i = start; i < items.size() && at == items.size(); ++i)
+                if (!items[i].separator && !items[i].heading
+                    && (items[i].shortcut == "Suppr" || items[i].label == "\xC3\x89pingler" || items[i].label == "D\xC3\xA9s\xC3\xA9pingler"))
+                    at = i;
+            Item rule;
+            rule.separator = true;
+            if (at < items.size()) more.push_back(rule);
+            else if (!items.empty() && !items.back().separator && !items.back().heading) more.insert(more.begin(), rule);
+            items.insert(items.begin() + static_cast<std::ptrdiff_t>(at), std::make_move_iterator(more.begin()), std::make_move_iterator(more.end()));
         }
     }
 

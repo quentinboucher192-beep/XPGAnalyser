@@ -281,9 +281,13 @@ void HmiLibrariesPane::rebuildProperties() {
     c.properties.push_back(prop("Plancher demand\xC3\xA9", (l->compat.empty() ? l->version : l->compat) + " (m\xC3\xAAme majeur, mineur sup\xC3\xA9rieur ou \xC3\xA9gal)",
                                 PG::ValueType::ReadOnly));
     c.properties.push_back(prop("Chemin", l->path, PG::ValueType::ReadOnly));
+    c.properties.back().path = l->path;   // 1.24.0 : Ouvrir dans l'explorateur, Aller a (relatif : au projet)
     if (ld) {
         c.properties.push_back(prop("\xC3\x89tat", std::string(hmi::biblio::stateLabel(ld->state)) + " \xC2\xB7 " + ld->message, PG::ValueType::ReadOnly));
-        if (!ld->foundPath.empty()) c.properties.push_back(prop("Fichier trouv\xC3\xA9", ld->foundPath, PG::ValueType::ReadOnly));
+        if (!ld->foundPath.empty()) {
+            c.properties.push_back(prop("Fichier trouv\xC3\xA9", ld->foundPath, PG::ValueType::ReadOnly));
+            c.properties.back().path = ld->foundPath;   // 1.24.0
+        }
         if (!ld->foundVersion.empty()) c.properties.push_back(prop("Version trouv\xC3\xA9" "e", ld->foundVersion, PG::ValueType::ReadOnly));
         if (ld->fromCache)
             c.properties.push_back(prop("Contenu", "l'interface seule (le cache du projet) : le code ne tourne pas", PG::ValueType::ReadOnly));

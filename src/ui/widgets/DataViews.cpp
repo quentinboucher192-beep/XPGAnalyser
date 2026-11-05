@@ -19,6 +19,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cmath>
+#include <filesystem>      // 1.24.0 : un chemin montre existe-t-il (Ouvrir dans l'explorateur) ?
 #include <string_view>
 #include <unordered_map>   // 1.11 (R111) : keepExpanded apparie les categories par nom
 
@@ -1409,6 +1410,10 @@ std::string TableView::liveTooltip(gfx::Point mouse) const {
 }
 
 // ============================================================= TableView ====
+namespace {
+constexpr int kTablePathId = 900;   // 1.24.0 : Ouvrir dans l'explorateur, Aller a, Copier le chemin (900..902)
+} // namespace
+
 TableView::TableView(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
     setPadding({0.f, 0.f, 0.f, 0.f});
@@ -1420,6 +1425,11 @@ TableView::TableView(std::string id) : Widget(std::move(id)) {
     contextLinks_ += context_->dismissed->connect([this] { grabFocus(); });
     contextLinks_ += context_->itemChosen->connect([this](int action) {
         grabFocus();
+        if (paths::owns(action, kTablePathId)) {   // 1.24.0 : Ouvrir dans l'explorateur, Aller a, Copier le chemin
+            const std::string path = menuPath_, base = menuPathBase_;   // des copies : le volet peut refaire la table
+            (void)paths::run(action, kTablePathId, path, base);
+            return;
+        }
         switch (action) {
             case 1: (void)copySelection(true); break;
             case 2: (void)copySelection(false); break;
@@ -1577,15 +1587,57 @@ const TableView::Mark* TableView::markOf(RowIndex row, int column, MarkKind kind
     return nullptr;
 }
 
+void TableView::setPathColumn(std::size_t column, std::string base) {
+    for (auto& [c, b] : pathColumns_)
+        if (c == column) {
+            b = std::move(base);
+            return;
+        }
+    pathColumns_.emplace_back(column, std::move(base));
+}
+
+std::string TableView::pathOfRow(RowIndex modelRow, int column, std::string* base) const {
+    if (base) base->clear();
+    if (!model_ || modelRow >= model_->rowCount()) return {};
+    const auto cellPath = [&](std::size_t c) -> std::string {
+        if (c >= model_->columnCount()) return {};
+        if (auto st = model_->cellStyle(modelRow, c); !st.path.empty()) return st.path;
+        for (const auto& [pc, pb] : pathColumns_)
+            if (pc == c) {
+                std::string text = model_->cellText(modelRow, c);
+                if (text.empty()) return {};
+                // Une base qui finit par ':' (ressource:, externe:) : le texte est le NOM de l'element.
+                if (!pb.empty() && pb.back() == ':') return pb + text;
+                if (base) *base = pb;
+                return text;
+            }
+        return {};
+    };
+    if (column >= 0)
+        if (auto p = cellPath(static_cast<std::size_t>(column)); !p.empty()) return p;
+    for (std::size_t c = 0; c < columns_.size(); ++c) {
+        if (!columns_[c].visible || static_cast<int>(c) == column) continue;
+        if (auto p = cellPath(c); !p.empty()) return p;
+    }
+    return {};
+}
+
 void TableView::openContextMenu(gfx::Point at) {
     if (!context_) return;
     const bool any = !selection_.empty();
     const bool paste = pasteEnabled();
     std::vector<PopupMenu::Item> items;
+    // 1.24.0 : la ligne cliquee designe un fichier ou un dossier - Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+    menuPath_ =contextRow_ == kNoRow ? std::string{} : pathOfRow(contextRow_, lastClickColumn_, &menuPathBase_);
+    auto pathItems = paths::menuItems(menuPath_, kTablePathId, menuPathBase_);
     // 1.11.14 : les entrees du proprietaire d'abord (la Console : aller a la source...).
     if (extraContext_) {
         items = extraContext_();
         if (!items.empty() && extraOnly_) {   // 1.12.18 : le menu du proprietaire, seul
+            if (!pathItems.empty()) {
+                items.push_back({{}, {}, {}, Icon::None, true, true, -1});
+                for (auto& it : pathItems) items.push_back(std::move(it));
+            }
             context_->setItems(std::move(items));
             gfx::Size surface{bounds().right() + 400.f, bounds().bottom() + 400.f};
             if (surface_.w > 0.f) surface = surface_;
@@ -1593,6 +1645,10 @@ void TableView::openContextMenu(gfx::Point at) {
             return;
         }
         if (!items.empty()) items.push_back({{}, {}, {}, Icon::None, true, true, -1});
+    }
+    if (!pathItems.empty()) {
+        for (auto& it : pathItems) items.push_back(std::move(it));
+        items.push_back({{}, {}, {}, Icon::None, true, true, -1});
     }
     items.push_back({"Copier", "Ctrl+C", any ? std::string{} : std::string("aucune ligne choisie"), Icon::None, any, false, 1});
     items.push_back({"Copier sans les titres", "Ctrl+Maj+C", any ? std::string{} : std::string("aucune ligne choisie"), Icon::None, any, false, 2});
@@ -2350,9 +2406,11 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                     return EventResult::Consumed;
                 }
             }
+            contextRow_ = kNoRow;   // 1.24.0 : la ligne du clic droit (son chemin)
             if (d->pos.y >= area.y + headerH) {
                 const int vi = static_cast<int>((d->pos.y - area.y - headerH + scrollY_) / rowH);
                 lastClickColumn_ = columnAtX(d->pos.x);
+                if (vi >= 0 && vi < static_cast<int>(view_.size())) contextRow_ = view_[static_cast<std::size_t>(vi)];
                 if (vi >= 0 && vi < static_cast<int>(view_.size()) && selectionMode_ != SelectionMode::None) {
                     const RowIndex row = view_[static_cast<std::size_t>(vi)];
                     if (std::find(selection_.begin(), selection_.end(), row) == selection_.end()) {
@@ -3017,6 +3075,88 @@ void setNameHook(NameHook hook) { nameSlot() = std::move(hook); }
 const NameHook& nameHook() { return nameSlot(); }
 } // namespace propertygrid
 
+// ---- 1.24.0 : les chemins (PropertyGridHooks.hpp) : Ouvrir dans l'explorateur, Aller a, Copier le chemin ----
+namespace paths {
+namespace {
+Provider& providerSlot() {
+    static Provider p;
+    return p;
+}
+bool hasScheme(const std::string& path) { return path.rfind("ressource:", 0) == 0 || path.rfind("externe:", 0) == 0; }
+// Le nom montre dans une raison : la fin du chemin (un dossier qui finit par / : son nom).
+std::string shortName(std::string path) {
+    while (path.size() > 1 && (path.back() == '/' || path.back() == '\\')) path.pop_back();
+    if (const auto c = path.find(':'); hasScheme(path) && c != std::string::npos) return path.substr(c + 1);
+    const auto slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+} // namespace
+
+void setProvider(Provider provider) { providerSlot() = std::move(provider); }
+const Provider& provider() { return providerSlot(); }
+bool active() { return static_cast<bool>(providerSlot().reveal) || static_cast<bool>(providerSlot().goTo); }
+
+std::string resolve(const std::string& path, const std::string& base) {
+    if (path.empty()) return {};
+    std::string full = path;
+    if (!base.empty() && !hasScheme(path)) {
+        const std::filesystem::path p(std::u8string(path.begin(), path.end()));
+        if (p.is_relative()) {
+            const auto joined = (std::filesystem::path(std::u8string(base.begin(), base.end())) / p).lexically_normal().u8string();
+            full.assign(joined.begin(), joined.end());
+        }
+    }
+    const auto& pr = providerSlot();
+    return pr.resolve ? pr.resolve(full) : full;
+}
+
+std::vector<PopupMenu::Item> menuItems(const std::string& path, int firstId, const std::string& base) {
+    std::vector<PopupMenu::Item> items;
+    if (path.empty() || !active()) return items;
+    const auto& pr = providerSlot();
+    const std::string resolved = resolve(path, base);
+    std::error_code ec;
+    const bool exists = !resolved.empty() && std::filesystem::exists(std::filesystem::path(std::u8string(resolved.begin(), resolved.end())), ec);
+    const std::string name = shortName(resolved.empty() ? path : resolved);
+    const std::string missing = resolved.empty() ? std::string("pas de fichier sur le disque (le projet n'est pas encore enregistr\xC3\xA9)")
+                                                 : "\xC2\xAB " + name + " \xC2\xBB n'existe pas";
+    const auto entry = [&](std::string label, int id, Icon icon, std::string why) {
+        PopupMenu::Item it;
+        it.label = std::move(label);
+        it.icon = icon;
+        it.id = firstId + id;
+        it.enabled = why.empty();
+        it.disabledReason = std::move(why);
+        return it;
+    };
+    items.push_back(entry("Ouvrir dans l'explorateur", kReveal, Icon::FolderOpen,
+                          !pr.reveal ? std::string("pas d'explorateur ici") : exists ? std::string{} : missing));
+    std::string goWhy = pr.goTo ? pr.goTo(path, resolved, true) : std::string("pas d'endroit o\xC3\xB9 aller ici");
+    items.push_back(entry("Aller \xC3\xA0", kGoTo, Icon::GoTo, std::move(goWhy)));
+    items.push_back(entry("Copier le chemin", kCopy, Icon::Copy, resolved.empty() ? missing : std::string{}));
+    return items;
+}
+
+std::string run(int id, int firstId, const std::string& path, const std::string& base) {
+    if (!owns(id, firstId)) return {};
+    const auto& pr = providerSlot();
+    const std::string resolved = resolve(path, base);
+    switch (id - firstId) {
+        case kReveal:
+            if (!pr.reveal) return "pas d'explorateur ici";
+            return pr.reveal(resolved);
+        case kGoTo:
+            if (!pr.goTo) return "pas d'endroit o\xC3\xB9 aller ici";
+            return pr.goTo(path, resolved, false);
+        case kCopy:
+            if (resolved.empty()) return "pas de fichier sur le disque";
+            setClipboardText(resolved);
+            return {};
+        default: return {};
+    }
+}
+} // namespace paths
+
 PropertyGrid::PropertyGrid(std::string id) : Widget(std::move(id)) {
     setFocusPolicy(true);
     setPadding({2.f, 2.f, 2.f, 2.f});
@@ -3656,6 +3796,7 @@ enum RowMenu : int {
     kRowRemoveExpr = 1, kRowEditExpr = 2, kRowCopy = 3, kRowDefault = 4, kRowExprPage = 5, kRowChooseFn = 6,
     kRowPaste = 7, kRowDefinition = 8, kRowUsages = 9, kRowEdit = 10, kRowToggle = 11, kRowRevert = 12,
     kRowExpandAll = 20, kRowCollapseAll = 21, kRowChoice = 100, kRowCategoryAction = 500,
+    kRowPath = 900,   // 1.24.0 : Ouvrir dans l'explorateur, Aller a, Copier le chemin (900..902)
 };
 void removeExpression(PropertyGrid& grid, const PropertyGrid::Property& p);   // plus bas (le X de la ligne)
 bool identStart(char ch) { return std::isalpha(static_cast<unsigned char>(ch)) || ch == '_'; }
@@ -3722,6 +3863,7 @@ void PropertyGrid::openRowMenu(std::size_t row, gfx::Point at) {
     menuProperty_.clear();
     menuName_.clear();
     menuChoices_.clear();
+    menuPath_.clear();
     const auto entry = [](std::string label, int id, std::string key = {}, bool enabled = true, std::string why = {}) {
         PopupMenu::Item it;
         it.label = std::move(label);
@@ -3848,6 +3990,12 @@ void PropertyGrid::openRowMenu(std::size_t row, gfx::Point at) {
             items.push_back(rule());
             items.push_back(entry(p.revertTip.empty() ? std::string("Revenir \xC3\xA0 la valeur d'origine") : p.revertTip, kRowRevert));
         }
+        // 1.24.0 : la valeur designe un fichier ou un dossier - Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+        menuPath_ = p.path;
+        if (auto more = paths::menuItems(p.path, kRowPath); !more.empty()) {
+            items.push_back(rule());
+            for (auto& it : more) items.push_back(std::move(it));
+        }
     }
     menu->setItems(std::move(items));
     menu->setBounds(bounds());
@@ -3859,6 +4007,11 @@ void PropertyGrid::openRowMenu(std::size_t row, gfx::Point at) {
 }
 
 void PropertyGrid::rowMenuChosen(int action) {
+    if (paths::owns(action, kRowPath)) {   // 1.24.0 : une copie - le geste peut refaire la grille
+        const std::string path = menuPath_;
+        (void)paths::run(action, kRowPath, path);
+        return;
+    }
     if (action == kRowExpandAll || action == kRowCollapseAll) {
         setAllExpanded(categories_, action == kRowExpandAll);
         rebuildRows();

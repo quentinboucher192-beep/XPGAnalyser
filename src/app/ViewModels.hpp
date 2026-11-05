@@ -20,6 +20,7 @@
 #include "../ui/widgets/DataViews.hpp"
 #include "../domain/ExecutionOrder.hpp"
 #include "../project/MemberTree.hpp"
+#include "../core/Command.hpp"   // 1.24.0 : supprimer plusieurs noeuds (une commande)
 
 #include <cstdint>
 #include <functional>
@@ -564,6 +565,13 @@ namespace app {
         // Le numero de version derriere un noeud VersionItem (0 : le travail en cours) ; -1 sinon.
         [[nodiscard]] int versionOf(ui::NodeId) const;
 
+        // 1.24.0 : SUPPRIMER PLUSIEURS NOEUDS D'UN COUP (le client, 05/11 : << partout pouvoir supprimer
+        // plusieurs d'un coup, aussi dans l'explorateur d'application >>). Ce qui partirait de ces noeuds
+        // (un raccourci d'Epingles ou de Recents vise sa cible ; un meme element n'y est qu'une fois) et ce
+        // qui resterait, avec la raison (un style fourni, un dossier, une tache qui execute encore une
+        // section...). `apiEditable` faux : l'automate ne se modifie pas (un export lu tel quel).
+        [[nodiscard]] struct TreeDeletion deletionOf(const std::vector<ui::NodeId>& nodes, bool apiEditable = true) const;
+
         // ---- Lot API 8 : Centre de simulation ----
         //  Avec l'IHM, la racine porte API, IHM, Simulation, Versions ; le dossier
         //  Simulation porte Vue d'ensemble, Automate, IHM, Equipements, Debogage,
@@ -864,6 +872,62 @@ namespace app {
         std::shared_ptr<const HmiBuildMarks>     buildMarks_;   // 1.11.13 : les etats du build de l'IHM
         void buildMark(ui::NodeId, ui::CellStyle&) const;
     };
+
+    // ---- 1.24.0 : SUPPRIMER PLUSIEURS NOEUDS DE L'ARBRE D'UN COUP ----------------------
+    //  ProjectTreeModel::deletionOf dit ce qui part et ce qui reste ; performTreeDeletion le fait,
+    //  en UNE commande (core::CommandGroupScope : un seul Ctrl+Z rend tout). Les macros (la
+    //  corbeille des macros) et les versions (versions/) ne sont pas dans le projet : elles ne
+    //  reviennent pas par Ctrl+Z, la confirmation le dit.
+    struct TreeDeletion {
+        enum class What : std::uint8_t {
+            HmiView, HmiScript, HmiFunction, HmiVariable, HmiType, HmiAlarm, HmiRecipe, HmiUser, HmiGroup,
+            HmiStyle, HmiSemantic, HmiFolder, ApiEntity, AnimationTable, Task, Macro, Version,
+        };
+        struct Item {
+            What          what{What::HmiView};
+            std::string   name;                 // ce que la confirmation montre
+            std::string   one, many;            // son genre : "vue" / "vues"
+            std::uint64_t id{0};                // IHM : l'identifiant ; Version : son numero
+            int           entity{-1};           // ApiEntity : le domain::EntityKind ; HmiFolder : la liste (hmi::fold::List)
+            std::size_t   index{0};             // ApiEntity, AnimationTable, Task : le rang dans l'automate
+            std::string   path;                 // HmiFolder : son chemin ; Macro : son nom
+        };
+        struct Kept { std::string name, why; };
+        std::vector<Item> items;                // ce qui part
+        std::vector<Kept> kept;                 // ce qui reste, et pourquoi
+
+        [[nodiscard]] bool empty() const noexcept { return items.empty(); }
+        // Tout revient par Ctrl+Z (ni macro, ni version).
+        [[nodiscard]] bool undoable() const noexcept;
+        // "les 5 elements", "les 3 vues" (tous du meme genre) ; un seul : son genre et son nom.
+        [[nodiscard]] std::string what() const;
+        // L'entree du menu : << Supprimer les 5 elements... >>.
+        [[nodiscard]] std::string label() const;
+        // La confirmation : son titre (<< Supprimer les 5 elements ? >>) et son texte (les noms, quelques-uns
+        // puis "+N" ; ce qui ne part pas et pourquoi ; ce que Ctrl+Z rend).
+        [[nodiscard]] std::string title() const;
+        [[nodiscard]] std::string message() const;
+        // Pourquoi rien ne part (aucun element supprimable) ; vide s'il y a quelque chose.
+        [[nodiscard]] std::string nothingWhy() const;
+    };
+
+    struct TreeDeletionHosts {
+        std::shared_ptr<hmi::Document>                              hmi;     // nul : pas d'IHM
+        std::shared_ptr<domain::Project>                            api;     // nul : l'automate ne se modifie pas
+        std::function<void(core::CommandPtr)>                       apply;   // pousse (et execute) une commande
+        std::function<void(core::CommandPtr)>                       applyHmi;   // celle de l'IHM (vide : apply)
+        std::function<bool(const std::string& macro, std::string* why)> deleteMacro;    // vers la corbeille des macros
+        std::function<bool(int version, std::string* why)>          deleteVersion;      // ne s'annule pas
+    };
+    struct TreeDeletionResult {
+        std::size_t                     done{0};      // elements partis
+        std::vector<TreeDeletion::Kept> failed;       // refuses au moment de les supprimer
+    };
+    // Tout ce que `plan` designe, dans un ordre qui ne decale rien : l'IHM en une commande ; puis
+    // dans l'automate les variables, les sections, les unites et les DFB, les types derives, les
+    // tables d'animation, les taches (chacun du plus grand rang au plus petit : un retrait ne
+    // deplace pas ceux qui restent a faire) ; puis les macros et les versions.
+    TreeDeletionResult performTreeDeletion(const TreeDeletion& plan, const TreeDeletionHosts& hosts);
 
     // --------------------------------------------- library explorer (TreeView) ---
     //   Libraries

@@ -30,6 +30,8 @@
 
 #include "../domain/ExecutionOrder.hpp"
 #include "../project/IoCheck.hpp"
+#include "../project/ApiCommands.hpp"      // 1.24.0 : supprimer plusieurs noeuds (tables, taches)
+#include "../project/DeleteCommands.hpp"   // 1.24.0 : ... (sections, variables, DDT, DFB, unites)
 
 #include "../ui/Icons.hpp"
 
@@ -5100,6 +5102,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         project.properties.push_back({ "Export\xC3\xA9 le", p.header.exportedAt, VT::ReadOnly, {}, {}, nullptr });
         project.properties.push_back({ "Version de la DTD", p.header.dtdVersion, VT::ReadOnly, {}, {}, nullptr });
         project.properties.push_back({ "Fichier source", p.header.sourceFile, VT::ReadOnly, {}, {}, nullptr });
+        project.properties.back().path = p.header.sourceFile;   // 1.24.0 : Ouvrir dans l'explorateur, Aller a
         cats.push_back(std::move(project));
 
         Category controller{ "Processeur", {}, {}, true };
@@ -5300,6 +5303,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         target.properties.push_back(row("CPU", p.hardware.cpuReference));
         target.properties.push_back(row("OS version", p.hardware.cpuFirmware));
         target.properties.push_back(row("Source", p.header.sourceFile));
+        target.properties.back().path = p.header.sourceFile;   // 1.24.0
         cats.push_back(std::move(target));
 
         if (!p.partialDataNotices.empty()) {
@@ -5424,6 +5428,500 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         const auto& lib = project_->libraries[n - 1000];
         return std::string(project_->strings.text(lib.name)) + "  v" + lib.version
             + "  x" + std::to_string(lib.usageCount);
+    }
+
+    // ============================================================ 1.24.0 ====
+    //  SUPPRIMER PLUSIEURS NOEUDS DE L'ARBRE D'UN COUP (le client, 05/11 : << partout pouvoir
+    //  supprimer plusieurs d'un coup, a appliquer aussi dans l'explorateur d'application >>).
+    //  deletionOf trie les noeuds choisis : ce qui part (avec son nom et son genre), ce qui reste et
+    //  pourquoi. performTreeDeletion fait tout dans un seul groupe de commandes (un seul Ctrl+Z).
+    namespace {
+        const std::string kDel3 = "\xE2\x80\xA6";
+        // Le genre d'une vue selon son role, au singulier ou au pluriel.
+        std::string viewWord(const std::string& role, bool many) {
+            if (role == "popup") return many ? "popups" : "popup";
+            if (role == "symbole") return many ? "symboles" : "symbole";
+            if (role == "modele") return many ? "mod\xC3\xA8les" : "mod\xC3\xA8le";
+            if (role == "entete") return many ? "en-t\xC3\xAAtes" : "en-t\xC3\xAAte";
+            if (role == "pied") return many ? "pieds de page" : "pied de page";
+            return many ? "vues" : "vue";
+        }
+        // Le nom d'un noeud, sans la signature d'une fonction, la taille d'une vue ni un commentaire.
+        std::string bareNodeName(std::string text) {
+            for (const char* cut : {"(", " [", " //", "  "})
+                if (const auto at = text.find(cut); at != std::string::npos && at > 0) text.erase(at);
+            return text;
+        }
+        bool sameNoCase(std::string_view a, std::string_view b) {
+            if (a.size() != b.size()) return false;
+            for (std::size_t i = 0; i < a.size(); ++i)
+                if (std::tolower(static_cast<unsigned char>(a[i])) != std::tolower(static_cast<unsigned char>(b[i]))) return false;
+            return true;
+        }
+        // Quelques noms, puis "+N".
+        std::string fewNames(const std::vector<std::string>& names, std::size_t shown, const char* sep = ", ") {
+            std::string out;
+            for (std::size_t i = 0; i < names.size() && i < shown; ++i) out += (i ? sep : "") + names[i];
+            if (names.size() > shown) out += " +" + std::to_string(names.size() - shown);
+            return out;
+        }
+        std::string quotedName(const std::string& name) { return "\xC2\xAB " + name + " \xC2\xBB"; }
+    } // namespace
+
+    TreeDeletion ProjectTreeModel::deletionOf(const std::vector<ui::NodeId>& nodes, bool apiEditable) const {
+        using W = TreeDeletion::What;
+        using NK = NodeKind;
+        TreeDeletion out;
+        std::vector<std::string> seen;                     // "genre:cle" : un element une seule fois
+        const auto add = [&](TreeDeletion::Item it, const std::string& key) {
+            const std::string k = std::to_string(static_cast<int>(it.what)) + ":" + key;
+            if (std::find(seen.begin(), seen.end(), k) != seen.end()) return;
+            seen.push_back(k);
+            out.items.push_back(std::move(it));
+        };
+        const auto keep = [&](std::string name, std::string why) {
+            for (const auto& k : out.kept)
+                if (k.name == name && k.why == why) return;
+            out.kept.push_back({std::move(name), std::move(why)});
+        };
+        const auto item = [](W what, std::string name, std::string one, std::string many) {
+            TreeDeletion::Item it;
+            it.what = what;
+            it.name = std::move(name);
+            it.one = std::move(one);
+            it.many = std::move(many);
+            return it;
+        };
+        const hmi::Project* hp = hmi_ ? &hmi_->project : nullptr;
+        const domain::Project* ap = project_.get();
+        const auto atext = [&](domain::SymbolId id) { return ap ? std::string(ap->strings.text(id)) : std::string{}; };
+        const std::string noApi = "enregistre d'abord le projet en dossier";
+        for (const ui::NodeId raw : nodes) {
+            const ui::NodeId target = shortcutTarget(raw);
+            const ui::NodeId n = target != ui::kInvalidNode ? target : raw;
+            const auto k = kindOf(n);
+            const auto i = indexOf(n);
+            const std::string shown = bareNodeName(text(n));
+            const auto hmiId = [&] { return static_cast<hmi::Id>(hmiIdOf(n)); };
+            // ---- l'IHM ----
+            if (k == NK::HmiView) {
+                const auto* v = hp ? hp->view(static_cast<hmi::Id>(hmiViewOf(n))) : nullptr;
+                if (!v) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiView, v->name, viewWord(v->role, false), viewWord(v->role, true));
+                it.id = v->id;
+                add(std::move(it), std::to_string(v->id));
+            } else if (k == NK::HmiGeneralScript) {
+                const auto* sc = hp ? hp->script(hmiId()) : nullptr;
+                if (!sc) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiScript, sc->name, "script", "scripts");
+                it.id = sc->id;
+                add(std::move(it), std::to_string(sc->id));
+            } else if (k == NK::HmiFunction) {
+                const auto* f = hp ? hp->function(hmiId()) : nullptr;
+                if (!f) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiFunction, f->name, "fonction IHM", "fonctions IHM");
+                it.id = f->id;
+                add(std::move(it), std::to_string(f->id));
+            } else if (k == NK::HmiVariable) {
+                const auto* v = hp ? hp->variableById(hmiId()) : nullptr;
+                if (!v) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiVariable, v->name, "variable IHM", "variables IHM");
+                it.id = v->id;
+                add(std::move(it), std::to_string(v->id));
+            } else if (k == NK::HmiTypeNode) {
+                const auto* t = hp ? hp->hmiType(hmiId()) : nullptr;
+                if (!t) { keep(shown, "introuvable"); continue; }
+                if (const auto users = hmi::types::usersOf(*hp, hmi::fullName(*t)); !users.empty()) {
+                    keep(t->name, "employ\xC3\xA9 par " + fewNames(users, 2));
+                    continue;
+                }
+                auto it = item(W::HmiType, t->name, "type IHM", "types IHM");
+                it.id = t->id;
+                add(std::move(it), std::to_string(t->id));
+            } else if (k == NK::HmiAlarm) {
+                const auto* a = hp ? hp->alarm(hmiId()) : nullptr;
+                if (!a) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiAlarm, a->name, "alarme", "alarmes");
+                it.id = a->id;
+                add(std::move(it), std::to_string(a->id));
+            } else if (k == NK::HmiRecipe) {
+                const auto* r = hp ? hp->recipe(hmiId()) : nullptr;
+                if (!r) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiRecipe, r->name, "recette", "recettes");
+                it.id = r->id;
+                add(std::move(it), std::to_string(r->id));
+            } else if (k == NK::HmiUser) {
+                const auto* u = hp ? hp->user(hmiId()) : nullptr;
+                if (!u) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiUser, u->login, "utilisateur", "utilisateurs");
+                it.id = u->id;
+                add(std::move(it), std::to_string(u->id));
+            } else if (k == NK::HmiUserGroup) {
+                const auto* g = hp ? hp->group(hmiId()) : nullptr;
+                if (!g) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiGroup, g->name, "groupe", "groupes");
+                it.id = g->id;
+                add(std::move(it), std::to_string(g->id));
+            } else if (k == NK::HmiStyleItem) {
+                if (!hp) continue;
+                const auto all = hmi::styles::all(*hp);
+                if (i >= all.size()) { keep(shown, "introuvable"); continue; }
+                const auto* st = all[i];
+                if (st->builtin) {
+                    keep(st->name, "fourni : il ne se supprime pas (Dupliquer \xC3\xA0 partir de" + kDel3 + ")");
+                    continue;
+                }
+                auto it = item(W::HmiStyle, st->name, "style", "styles");
+                it.id = st->id;
+                add(std::move(it), std::to_string(st->id));
+            } else if (k == NK::HmiSemanticItem) {
+                if (!hp) continue;
+                const auto all = hmi::semantic::all(*hp);
+                if (i >= all.size()) { keep(shown, "introuvable"); continue; }
+                const auto* c = all[i];
+                if (c->builtin) {
+                    keep("@" + c->name, "fournie : elle ne se supprime pas (Dupliquer \xC3\xA0 partir de" + kDel3 + ")");
+                    continue;
+                }
+                auto it = item(W::HmiSemantic, "@" + c->name, "couleur s\xC3\xA9mantique", "couleurs s\xC3\xA9mantiques");
+                it.id = c->id;
+                add(std::move(it), std::to_string(c->id));
+            } else if (k == NK::HmiListFolder) {
+                int list = -1;
+                std::string folder;
+                if (!hmiListFolderOf(n, list, folder) || folder.empty()) { keep(shown, "introuvable"); continue; }
+                auto it = item(W::HmiFolder, folder, "dossier", "dossiers");
+                it.entity = list;
+                it.path = folder;
+                add(std::move(it), std::to_string(list) + "/" + folder);
+            } else if (isNativesKind(k)) {
+                keep(shown, "natif : verrouill\xC3\xA9");
+            } else if (k == NK::HmiLibraryNode) {
+                keep(shown, "une biblioth\xC3\xA8que se d\xC3\xA9lie seule (D\xC3\xA9lier)");
+            // ---- l'automate ----
+            } else if (k == NK::Section || k == NK::DfbSection || k == NK::Subroutine) {
+                const domain::Index s = k == NK::Subroutine ? subroutineOf(n) : i;
+                if (!ap || s >= ap->sections.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->sections[s].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                auto it = item(W::ApiEntity, name, "section", "sections");
+                it.entity = static_cast<int>(domain::EntityKind::Section);
+                it.index = s;
+                add(std::move(it), "s" + std::to_string(s));
+            } else if (k == NK::ListVariable || k == NK::DerivedField || k == NK::DfbVariable) {
+                const domain::Index v = variableOf(n);
+                if (!ap || v >= ap->variables.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->variables[v].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                auto it = item(W::ApiEntity, name, "variable", "variables");
+                it.entity = static_cast<int>(domain::EntityKind::Variable);
+                it.index = v;
+                add(std::move(it), "v" + std::to_string(v));
+            } else if (k == NK::DerivedType) {
+                if (!ap || i >= ap->derivedTypes.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->derivedTypes[i].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                if (const auto user = project::firstUserOfDerivedType(*ap, i); !user.empty()) {
+                    keep(name, "utilis\xC3\xA9 par " + user);
+                    continue;
+                }
+                auto it = item(W::ApiEntity, name, "type d\xC3\xA9riv\xC3\xA9", "types d\xC3\xA9riv\xC3\xA9s");
+                it.entity = static_cast<int>(domain::EntityKind::DerivedType);
+                it.index = i;
+                add(std::move(it), "t" + std::to_string(i));
+            } else if (k == NK::DfbType || k == NK::ProgramUnit) {
+                if (!ap || i >= ap->pous.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->pous[i].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                if (const auto user = project::firstInstanceOfBlock(*ap, i); !user.empty()) {
+                    keep(name, "utilis\xC3\xA9 par " + user);
+                    continue;
+                }
+                auto it = k == NK::DfbType ? item(W::ApiEntity, name, "bloc DFB", "blocs DFB")
+                                           : item(W::ApiEntity, name, "unit\xC3\xA9", "unit\xC3\xA9s");
+                it.entity = static_cast<int>(domain::EntityKind::Pou);
+                it.index = i;
+                add(std::move(it), "p" + std::to_string(i));
+            } else if (k == NK::AnimationTable) {
+                if (!ap || i >= ap->animationTables.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->animationTables[i].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                auto it = item(W::AnimationTable, name, "table d'animation", "tables d'animation");
+                it.index = i;
+                add(std::move(it), std::to_string(i));
+            } else if (k == NK::Task) {
+                if (!ap || i >= ap->tasks.size()) { keep(shown, "introuvable"); continue; }
+                const std::string name = atext(ap->tasks[i].name);
+                if (!apiEditable) { keep(name, noApi); continue; }
+                if (name == "MAST") { keep(name, "MAST ne se supprime pas"); continue; }
+                auto it = item(W::Task, name, "t\xC3\xA2" "che", "t\xC3\xA2" "ches");
+                it.index = i;
+                add(std::move(it), std::to_string(i));
+            } else if (k == NK::Macro) {
+                const std::string name = text(n);
+                if (name.empty()) continue;
+                auto it = item(W::Macro, name, "macro", "macros");
+                it.path = name;
+                add(std::move(it), name);
+            } else if (k == NK::MacroSubFolder) {
+                keep(shown, "un dossier de macros se supprime seul");
+            } else if (k == NK::VersionItem) {
+                const int number = versionOf(n);
+                if (number < 0) continue;
+                if (number == 0) { keep(shown, "le travail en cours ne se supprime pas"); continue; }
+                auto it = item(W::Version, "V" + std::to_string(number), "version", "versions");
+                it.id = static_cast<std::uint64_t>(number);
+                add(std::move(it), std::to_string(number));
+            } else if (!shown.empty()) {
+                keep(shown, "ne se supprime pas d'ici");
+            }
+        }
+        // Un groupe d'utilisateurs part vide : ses membres partent avec lui, ou il reste.
+        // Une tache part vide : ses sections et ses unites partent avec elle, ou elle reste.
+        const auto planned = [&](W what, std::uint64_t id, int entity = -1) {
+            return std::any_of(out.items.begin(), out.items.end(), [&](const TreeDeletion::Item& it) {
+                return it.what == what && (what == W::ApiEntity ? it.entity == entity && it.index == id : it.id == id);
+            });
+        };
+        std::vector<TreeDeletion::Item> going;
+        std::vector<TreeDeletion::Kept>  staying;
+        for (const auto& it : out.items) {
+            std::string why;
+            if (it.what == W::HmiGroup && hp) {
+                std::size_t members = 0;
+                for (const auto& u : hp->security.users)
+                    if (u.group == it.id && !planned(W::HmiUser, u.id)) ++members;
+                if (members) why = std::to_string(members) + " utilisateur(s) dedans : change d'abord leur groupe";
+            } else if (it.what == W::Task && ap && it.index < ap->tasks.size()) {
+                const auto task = ap->tasks[it.index].name;
+                const auto pouPlanned = [&](domain::Index pou) { return planned(W::ApiEntity, pou, static_cast<int>(domain::EntityKind::Pou)); };
+                for (domain::Index s = 0; s < ap->sections.size() && why.empty(); ++s) {
+                    if (ap->sections[s].task != task || planned(W::ApiEntity, s, static_cast<int>(domain::EntityKind::Section))) continue;
+                    bool inPlannedPou = false;
+                    for (domain::Index p = 0; p < ap->pous.size() && !inPlannedPou; ++p)
+                        inPlannedPou = pouPlanned(p) && std::find(ap->pous[p].sections.begin(), ap->pous[p].sections.end(), s) != ap->pous[p].sections.end();
+                    if (!inPlannedPou) why = "ex\xC3\xA9" "cute encore " + atext(ap->sections[s].name);
+                }
+                for (domain::Index p = 0; p < ap->pous.size() && why.empty(); ++p)
+                    if (ap->pous[p].kind == domain::PouKind::ProgramUnit && ap->pous[p].task == task && !pouPlanned(p))
+                        why = "ex\xC3\xA9" "cute encore l'unit\xC3\xA9 " + atext(ap->pous[p].name);
+            }
+            if (why.empty()) going.push_back(it);
+            else staying.push_back({it.name, why});
+        }
+        out.items = std::move(going);
+        for (auto& k : staying) out.kept.push_back(std::move(k));
+        return out;
+    }
+
+    bool TreeDeletion::undoable() const noexcept {
+        return std::none_of(items.begin(), items.end(), [](const Item& it) { return it.what == What::Macro || it.what == What::Version; });
+    }
+
+    std::string TreeDeletion::what() const {
+        if (items.empty()) return {};
+        if (items.size() == 1) return quotedName(items.front().name) + " (" + items.front().one + ")";
+        bool same = true;
+        for (const auto& it : items) same = same && it.many == items.front().many;
+        return "les " + std::to_string(items.size()) + " " + (same ? items.front().many : std::string("\xC3\xA9l\xC3\xA9ments"));
+    }
+
+    std::string TreeDeletion::label() const { return items.empty() ? "Supprimer" + kDel3 : "Supprimer " + what() + kDel3; }
+
+    std::string TreeDeletion::title() const { return items.empty() ? std::string("Supprimer") : "Supprimer " + what() + " ?"; }
+
+    std::string TreeDeletion::message() const {
+        std::vector<std::string> names;
+        for (const auto& it : items) names.push_back(it.name);
+        std::string s = (items.size() > 1 ? "Partent : " : "Part : ") + fewNames(names, 6) + ".";
+        if (!kept.empty()) {
+            std::vector<std::string> left;
+            for (const auto& k : kept) left.push_back(k.name + " (" + k.why + ")");
+            s += std::string(kept.size() > 1 ? "\nNe partent pas : " : "\nNe part pas : ") + fewNames(left, 4, " ; ") + ".";
+        }
+        bool project = false, macros = false, versions = false;
+        for (const auto& it : items) {
+            if (it.what == What::Macro) macros = true;
+            else if (it.what == What::Version) versions = true;
+            else project = true;
+        }
+        std::vector<std::string> outside;
+        if (macros) outside.push_back("les macros vont dans leur corbeille (Restaurer les remet)");
+        if (versions) outside.push_back("une version supprim\xC3\xA9" "e ne revient pas");
+        if (project) {
+            s += items.size() > 1 ? "\nUn seul Ctrl+Z les rend" : "\nCtrl+Z le rend";
+            if (!outside.empty()) s += " ; " + fewNames(outside, 2, " ; ");
+        } else if (!outside.empty()) {
+            s += "\n" + fewNames(outside, 2, " ; ");
+        }
+        return s + ".";
+    }
+
+    std::string TreeDeletion::nothingWhy() const {
+        if (!items.empty()) return {};
+        if (kept.empty()) return "rien \xC3\xA0 supprimer ici";
+        if (kept.size() == 1) return kept.front().name + " : " + kept.front().why;
+        return "rien \xC3\xA0 supprimer : " + kept.front().name + " (" + kept.front().why + ") +" + std::to_string(kept.size() - 1);
+    }
+
+    TreeDeletionResult performTreeDeletion(const TreeDeletion& plan, const TreeDeletionHosts& hosts) {
+        using W = TreeDeletion::What;
+        TreeDeletionResult r;
+        if (plan.items.empty()) return r;
+        core::CommandGroupScope group("Supprimer " + plan.what());
+        const auto fail = [&](const TreeDeletion::Item& it, std::string why) { r.failed.push_back({it.name, std::move(why)}); };
+        const auto inHmi = [](W w) { return w != W::ApiEntity && w != W::AnimationTable && w != W::Task && w != W::Macro && w != W::Version; };
+        // ---- 1. l'IHM : une seule commande ----
+        std::vector<const TreeDeletion::Item*> hmiItems;
+        for (const auto& it : plan.items)
+            if (inHmi(it.what)) hmiItems.push_back(&it);
+        const auto& applyHmi = hosts.applyHmi ? hosts.applyHmi : hosts.apply;
+        if (!hmiItems.empty() && (!hosts.hmi || !applyHmi)) {
+            for (const auto* it : hmiItems) fail(*it, "pas d'IHM ouverte");
+        } else if (!hmiItems.empty()) {
+            std::size_t gone = 0;
+            std::vector<TreeDeletion::Kept> refused;
+            auto cmd = hmi::changeProject(hosts.hmi, "Supprimer " + plan.what(), [&](hmi::Project& p) {
+                const auto missing = [&](const TreeDeletion::Item& it) { refused.push_back({it.name, "introuvable"}); };
+                std::vector<const TreeDeletion::Item*> groups, folders;   // apres le reste
+                for (const auto* it : hmiItems) {
+                    const auto id = static_cast<hmi::Id>(it->id);
+                    const auto erased = [&](auto& list) {
+                        const auto before = list.size();
+                        std::erase_if(list, [&](const auto& x) { return x.id == id; });
+                        if (list.size() == before) missing(*it);
+                        else ++gone;
+                    };
+                    switch (it->what) {
+                    case W::HmiView:
+                        if (!p.view(id)) { missing(*it); break; }
+                        // Un symbole emporte ses popups (comme hmiDeleteViewCommand).
+                        std::erase_if(p.views, [&](const hmi::View& v) { return v.id == id || (v.ownerSymbol != hmi::kNoId && v.ownerSymbol == id); });
+                        ++gone;
+                        break;
+                    case W::HmiScript:   erased(p.programs.scripts); break;
+                    case W::HmiFunction: erased(p.programs.functions); break;
+                    case W::HmiVariable: erased(p.programs.variables); break;
+                    case W::HmiAlarm:    erased(p.alarms); break;
+                    case W::HmiRecipe:   erased(p.recipes); break;
+                    case W::HmiType: {
+                        const auto* t = p.hmiType(id);
+                        if (!t) { missing(*it); break; }
+                        if (const auto users = hmi::types::usersOf(p, hmi::fullName(*t)); !users.empty()) {
+                            refused.push_back({it->name, "employ\xC3\xA9 par " + fewNames(users, 2)});
+                            break;
+                        }
+                        erased(p.programs.types);
+                        break;
+                    }
+                    case W::HmiUser: {
+                        const auto* u = p.user(id);
+                        if (!u) { missing(*it); break; }
+                        if (sameNoCase(p.security.startUser, u->login)) p.security.startUser.clear();
+                        erased(p.security.users);
+                        break;
+                    }
+                    case W::HmiStyle: {
+                        const auto* st = p.style(id);
+                        if (!st) { missing(*it); break; }
+                        (void)hmi::styles::forget(p, std::string(st->name));   // les objets gardent leurs valeurs
+                        ++gone;
+                        break;
+                    }
+                    case W::HmiSemantic: {
+                        std::string name;
+                        for (const auto& c : p.semanticColors)
+                            if (c.id == id) name = c.name;
+                        if (name.empty()) { missing(*it); break; }
+                        (void)hmi::semantic::forget(p, name);                  // ce qui la cite garde sa couleur
+                        erased(p.semanticColors);
+                        break;
+                    }
+                    case W::HmiGroup:  groups.push_back(it); break;
+                    case W::HmiFolder: folders.push_back(it); break;
+                    default: break;
+                    }
+                }
+                // Un groupe apres les utilisateurs : il part vide, ou il reste.
+                for (const auto* it : groups) {
+                    const auto id = static_cast<hmi::Id>(it->id);
+                    if (!p.group(id)) { missing(*it); continue; }
+                    std::size_t members = 0;
+                    for (const auto& u : p.security.users) members += u.group == id;
+                    if (members) {
+                        refused.push_back({it->name, std::to_string(members) + " utilisateur(s) dedans"});
+                        continue;
+                    }
+                    std::erase_if(p.security.groups, [&](const hmi::UserGroup& g) { return g.id == id; });
+                    ++gone;
+                }
+                // Les dossiers : le plus profond d'abord (ce qu'il range remonte d'un cran).
+                std::stable_sort(folders.begin(), folders.end(), [](const auto* a, const auto* b) { return a->path.size() > b->path.size(); });
+                for (const auto* it : folders) {
+                    if (hmi::fold::removeFolder(p, static_cast<hmi::fold::List>(it->entity), it->path)) ++gone;
+                    else missing(*it);
+                }
+                // La vue de demarrage partie : la premiere restante la remplace.
+                if (p.config.startView != hmi::kNoId && !p.view(p.config.startView))
+                    p.config.startView = p.views.empty() ? hmi::kNoId : p.views.front().id;
+            });
+            if (cmd) {
+                applyHmi(std::move(cmd));
+                r.done += gone;
+            }
+            for (auto& k : refused) r.failed.push_back(std::move(k));
+        }
+        // ---- 2. l'automate : chaque genre du plus grand rang au plus petit ----
+        const auto apiOf = [&](W what, int entity) {
+            std::vector<const TreeDeletion::Item*> list;
+            for (const auto& it : plan.items)
+                if (it.what == what && (what != W::ApiEntity || it.entity == entity)) list.push_back(&it);
+            std::stable_sort(list.begin(), list.end(), [](const auto* a, const auto* b) { return a->index > b->index; });
+            return list;
+        };
+        const auto api = hosts.api;
+        for (const auto entity : {domain::EntityKind::Variable, domain::EntityKind::Section, domain::EntityKind::Pou, domain::EntityKind::DerivedType})
+            for (const auto* it : apiOf(W::ApiEntity, static_cast<int>(entity))) {
+                if (!api || !hosts.apply) { fail(*it, "enregistre d'abord le projet en dossier"); continue; }
+                auto cmd = std::make_unique<project::RemoveEntityCommand>(api, entity, static_cast<domain::Index>(it->index));
+                if (const auto no = cmd->refusalReason(); !no) {
+                    fail(*it, no.error().context.empty() ? no.error().message() : no.error().context);
+                    continue;
+                }
+                hosts.apply(std::move(cmd));
+                ++r.done;
+            }
+        for (const auto* it : apiOf(W::AnimationTable, -1)) {
+            if (!api || !hosts.apply || it->index >= api->animationTables.size()) { fail(*it, "introuvable"); continue; }
+            hosts.apply(std::make_unique<project::RemoveAnimationTableCommand>(api, it->index));
+            ++r.done;
+        }
+        for (const auto* it : apiOf(W::Task, -1)) {
+            if (!api || !hosts.apply || it->index >= api->tasks.size()) { fail(*it, "introuvable"); continue; }
+            const auto task = api->tasks[it->index].name;
+            std::string why;
+            for (const auto& s : api->sections)
+                if (why.empty() && s.task == task) why = "ex\xC3\xA9" "cute encore " + std::string(api->strings.text(s.name));
+            for (const auto& pou : api->pous)
+                if (why.empty() && pou.kind == domain::PouKind::ProgramUnit && pou.task == task)
+                    why = "ex\xC3\xA9" "cute encore l'unit\xC3\xA9 " + std::string(api->strings.text(pou.name));
+            if (!why.empty()) { fail(*it, why); continue; }
+            hosts.apply(std::make_unique<project::RemoveTaskCommand>(api, it->index));
+            ++r.done;
+        }
+        (void)group.close();
+        // ---- 3. hors du projet : les macros (leur corbeille), les versions ----
+        for (const auto& it : plan.items) {
+            std::string why;
+            if (it.what == W::Macro) {
+                if (hosts.deleteMacro && hosts.deleteMacro(it.path, &why)) ++r.done;
+                else fail(it, why.empty() ? std::string("refus\xC3\xA9" "e") : why);
+            } else if (it.what == W::Version) {
+                if (hosts.deleteVersion && hosts.deleteVersion(static_cast<int>(it.id), &why)) ++r.done;
+                else fail(it, why.empty() ? std::string("refus\xC3\xA9" "e") : why);
+            }
+        }
+        return r;
     }
 
 } // namespace app

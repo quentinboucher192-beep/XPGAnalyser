@@ -21,6 +21,12 @@
 #include "../FileFinder.hpp"
 #include "../FileFinderPane.hpp"
 #include "../hmi/HmiAssetPanes.hpp"
+#include "../hmi/HmiIncidentsPane.hpp"            // 1.24.0 : Aller a un dossier d'incident
+#include "../Dossiers.hpp"                        // 1.24.0 : ouvrir un dossier (Ouvrir dans l'explorateur)
+#include "../FileViewer.hpp"                      // 1.24.0 : Aller a un fichier : l'apercu
+#include "../../hmi/HmiAssets.hpp"                // 1.24.0 : le chemin d'un fichier externe
+#include "../../hmi/HmiRecording.hpp"             // 1.24.0 : le dossier des enregistrements
+#include "../../ui/widgets/PropertyGridHooks.hpp" // 1.24.0 : ui::paths (le fournisseur)
 #include "../../menu/MenuManager.hpp"
 #include "../../project/SharedLibrary.hpp"
 #include "../../ui/Layout.hpp"
@@ -28,6 +34,8 @@
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 
+#include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -245,6 +253,194 @@ ui::EventResult FileFinderScreen::HandleEvent(const ui::InputEvent& ev) {
 void FileFinderScreen::Update(const menu::FrameContext& f) {
     menu::WidgetMenu::Update(f);
     if (pane_) pane_->poll();
+}
+
+// ============================================================ 1.24.0 ====
+//  LES CHEMINS (le client, 05/11 : << a chaque fois qu'il y a un chemin vers un fichier / dossier je veux
+//  pouvoir faire clic droit -> 'ouvrir dans l'explorateur' ou 'aller a' >>). Les widgets (une case de la
+//  grille, une colonne d'un tableau) proposent les entrees ; l'ecran du projet est leur fournisseur
+//  (ui::paths::Provider) :
+//    - resoudre : un relatif part du dossier du projet ; "ressource:Nom" est le fichier de la ressource
+//      (ihm/ressources/0012-Nom), "externe:Nom" celui du fichier externe ;
+//    - Ouvrir dans l'explorateur : un fichier y est choisi, un dossier ouvert ;
+//    - ALLER A, LA REGLE : un element du projet se montre dans l'application - le projet lui-meme, une vue
+//      (son fichier ihm/vues/0003-...) et les dossiers Ressources, Historique, Enregistrements, Incidents :
+//      leur noeud de l'arbre, revele et choisi ; une ressource, un fichier externe, un enregistrement (.xrec),
+//      un dossier d'incident : leur volet, sur eux. Sinon un fichier s'ouvre dans l'apercu de fichiers de
+//      l'application, un dossier dans Chercher des fichiers (sur ce dossier) ; ce qui n'existe pas : grise.
+namespace {
+namespace fs = std::filesystem;
+fs::path u8path(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+std::string u8text(const fs::path& p) {
+    const auto u = p.generic_u8string();
+    return std::string(u.begin(), u.end());
+}
+std::string normalized(const std::string& s) {
+    std::string out = u8text(u8path(s).lexically_normal());
+    while (out.size() > 1 && out.back() == '/') out.pop_back();
+    return out;
+}
+// `path` sous `root` : la suite ("ihm/vues/0003-A.vue") ; "" : `root` lui-meme ; faux : ailleurs.
+bool under(const std::string& root, const std::string& path, std::string& rest) {
+    if (root.empty()) return false;
+    const std::string r = normalized(root), p = normalized(path);
+    if (p == r) {
+        rest.clear();
+        return true;
+    }
+    if (p.size() <= r.size() + 1 || p.compare(0, r.size(), r) != 0 || p[r.size()] != '/') return false;
+    rest = p.substr(r.size() + 1);
+    return true;
+}
+// "0012-logo.png" : 12 ; 0 : pas un nom range par identifiant.
+std::uint64_t leadingId(const std::string& name) {
+    std::uint64_t id = 0;
+    std::size_t i = 0;
+    while (i < name.size() && std::isdigit(static_cast<unsigned char>(name[i]))) id = id * 10 + static_cast<std::uint64_t>(name[i++] - '0');
+    return i > 0 && i < name.size() && name[i] == '-' ? id : 0;
+}
+std::string shown(const std::string& path) {
+    const auto slash = normalized(path).find_last_of('/');
+    return slash == std::string::npos ? path : normalized(path).substr(slash + 1);
+}
+} // namespace
+
+std::string MainAnalysisScreen::resolvePath(const std::string& path) const {
+    if (path.empty()) return {};
+    const std::string folder = app_.projectFolder();
+    const auto doc = app_.hmi();
+    if (path.rfind("ressource:", 0) == 0) {
+        const auto* r = doc ? doc->project.resourceByName(path.substr(10)) : nullptr;
+        if (!r || folder.empty()) return {};
+        char head[16];
+        std::snprintf(head, sizeof head, "%04u-", static_cast<unsigned>(r->id));
+        std::error_code ec;
+        const std::string dir = folder + "/ihm/ressources";
+        for (fs::directory_iterator it(u8path(dir), ec), end; !ec && it != end; it.increment(ec)) {
+            const std::string name = u8text(it->path().filename());
+            if (name.rfind(head, 0) == 0) return dir + "/" + name;
+        }
+        return {};
+    }
+    if (path.rfind("externe:", 0) == 0) {
+        const auto* f = doc ? doc->project.externalByName(path.substr(8)) : nullptr;
+        return f ? hmi::resolveExternalPath(*f, folder) : std::string{};
+    }
+    const fs::path p = u8path(path);
+    if (p.is_absolute() || folder.empty()) return path;
+    return u8text((u8path(folder) / p).lexically_normal());
+}
+
+std::string MainAnalysisScreen::goToPath(const std::string& path, const std::string& resolved, bool dry) {
+    using NK = ProjectTreeModel::NodeKind;
+    const auto doc = app_.hmi();
+    const std::string folder = app_.projectFolder();
+    // Un noeud de l'arbre : revele (ses parents deplies) et choisi ; `open` : son volet aussi.
+    const auto node = [&](ui::NodeId n, bool open) -> std::string {
+        if (!explorer_ || !treeModel_ || n == ui::kInvalidNode) return "pas dans l'arbre du projet";
+        if (dry) return {};
+        if (revealTreeNode(n)) explorer_->setCurrentNode(n);
+        if (open) openHmiNode(n);
+        return {};
+    };
+    const auto resource = [&](const hmi::Resource* r) -> std::string {
+        if (!r) return "cette ressource n'est plus dans le projet";
+        if (dry) return {};
+        const auto id = r->id;
+        openHmiPane("ressources");
+        if (auto* pane = dynamic_cast<HmiResourcesPane*>(hmiTab("ressources"))) pane->selectResource(id);
+        return {};
+    };
+    const auto external = [&](const hmi::ExternalFile* f) -> std::string {
+        if (!f) return "ce fichier externe n'est plus dans le projet";
+        if (dry) return {};
+        const auto id = f->id;
+        openHmiPane("fichiers");
+        if (auto* pane = dynamic_cast<HmiFilesPane*>(hmiTab("fichiers"))) pane->selectFile(id);
+        return {};
+    };
+    // ---- un element du projet, nomme ----
+    if (path.rfind("ressource:", 0) == 0) return resource(doc ? doc->project.resourceByName(path.substr(10)) : nullptr);
+    if (path.rfind("externe:", 0) == 0) return external(doc ? doc->project.externalByName(path.substr(8)) : nullptr);
+    if (resolved.empty()) return "pas de fichier sur le disque (le projet n'est pas encore enregistr\xC3\xA9)";
+    // ---- un element du projet, par son chemin ----
+    std::string rest;
+    if (under(folder, resolved, rest)) {
+        if (rest.empty()) return node(treeModel_ ? treeModel_->root() : ui::kInvalidNode, false);   // le projet lui-meme
+        if (doc) {
+            std::string sub;
+            // Les enregistrements et les incidents (sous ihm/ressources/enregistrements, ou leur dossier choisi).
+            const std::string records = hmi::rec::folderOf(doc->project.recording, folder);
+            if (under(records, resolved, sub)) {
+                if (sub.empty()) return node(ProjectTreeModel::pack(NK::HmiRecordings, 0), true);
+                if (sub == "en attente" || sub == "valides") return node(ProjectTreeModel::pack(NK::HmiIncidents, 0), true);
+                if (sub.rfind("en attente/", 0) == 0 || sub.rfind("valides/", 0) == 0) {
+                    if (dry) return {};
+                    openHmiPane("incidents");
+                    const std::string incident = sub.substr(sub.find('/') + 1);
+                    if (auto* pane = dynamic_cast<HmiIncidentsPane*>(hmiTab("incidents"))) (void)pane->select(incident.substr(0, incident.find('/')));
+                    return {};
+                }
+                if (sub.find('/') == std::string::npos && sub.size() > 5 && sub.ends_with(".xrec")) {
+                    if (dry) return {};
+                    openHmiPane("enregistrements");
+                    if (auto* pane = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements")))
+                        for (const auto& it : pane->items())
+                            if (normalized(it.path) == normalized(resolved)) (void)pane->select(it.name);
+                    return {};
+                }
+            }
+            if (rest == "ihm/ressources") return node(ProjectTreeModel::pack(NK::HmiResources, 0), true);
+            if (rest == "ihm/historique") return node(ProjectTreeModel::pack(NK::HmiHistory, 0), true);
+            if (rest.rfind("ihm/ressources/", 0) == 0 && rest.find('/', 15) == std::string::npos)
+                if (const auto id = leadingId(rest.substr(15)))
+                    return resource(doc->project.resource(static_cast<hmi::Id>(id)));
+            if (rest.rfind("ihm/vues/", 0) == 0 && rest.find('/', 9) == std::string::npos)
+                if (const auto id = leadingId(rest.substr(9)); id && treeModel_)
+                    return node(treeModel_->hmiViewNode(id), false);
+        }
+    }
+    // ---- un fichier externe du projet (ou qu'il soit) ----
+    if (doc)
+        for (const auto& f : doc->project.assets.files)
+            if (f.kind != hmi::ExternalKind::Database && normalized(hmi::resolveExternalPath(f, folder)) == normalized(resolved))
+                return external(&f);
+    // ---- ailleurs : l'apercu d'un fichier, la recherche dans un dossier ----
+    std::error_code ec;
+    const fs::path p = u8path(resolved);
+    if (!fs::exists(p, ec)) return "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
+    if (fs::is_directory(p, ec)) {
+        if (dry) return {};
+        openFileFinder();
+        if (auto* pane = fileFinder()) {
+            pane->setWhere(finder::Where::Folder, resolved);
+            pane->start();
+        }
+        return {};
+    }
+    if (dry) return {};
+    return showPreviewWindow(app_.detachedWindows(), fileview::fromPath(resolved), true) ? std::string{}
+                                                                                       : std::string("la fen\xC3\xAAtre d'aper\xC3\xA7u ne s'ouvre pas ici");
+}
+
+void MainAnalysisScreen::installPathLinks() {
+    ui::paths::Provider p;
+    p.resolve = [this](const std::string& path) { return resolvePath(path); };
+    p.reveal = [this](const std::string& resolved) {
+        std::error_code ec;
+        std::string why;
+        if (resolved.empty() || !fs::exists(u8path(resolved), ec)) why = "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
+        else if (fs::is_directory(u8path(resolved), ec)) why = dossiers::ouvrirDansLeSysteme(resolved);   // un dossier : ouvert
+        else why = finder::revealInExplorer(resolved);                                                  // un fichier : choisi
+        if (!why.empty() && status_) status_->setTransientMessage("Ouvrir dans l'explorateur : " + why, 6.0, ui::StatusBar::Severity::Warning);
+        return why;
+    };
+    p.goTo = [this](const std::string& path, const std::string& resolved, bool dry) {
+        const std::string why = goToPath(path, resolved, dry);
+        if (!dry && !why.empty() && status_) status_->setTransientMessage("Aller \xC3\xA0 : " + why, 6.0, ui::StatusBar::Severity::Warning);
+        return why;
+    };
+    ui::paths::setProvider(std::move(p));
 }
 
 } // namespace app

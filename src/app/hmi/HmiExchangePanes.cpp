@@ -241,6 +241,7 @@ void HmiHistoryPane::rebuildProperties() {
     disk.properties.push_back(prop("Dossier", "ihm/historique/", PG::ValueType::ReadOnly, {},
                                    "alarmes.csv, evenements.csv, systeme.csv, mesures.csv : \xC3\xA9" "crits \xC3\xA0 chaque "
                                    "enregistrement du projet, relus \xC3\xA0 l'ouverture."));
+    disk.properties.back().path = "ihm/historique";   // 1.24.0 : Ouvrir dans l'explorateur, Aller a
     disk.properties.push_back(prop("Alarmes termin\xC3\xA9" "es ", std::to_string(h.alarms.size()), PG::ValueType::ReadOnly));
     disk.properties.push_back(prop("\xC3\x89v\xC3\xA9nements ", std::to_string(h.events.size()), PG::ValueType::ReadOnly));
     disk.properties.push_back(prop("Lignes syst\xC3\xA8me", std::to_string(h.system.size()), PG::ValueType::ReadOnly));

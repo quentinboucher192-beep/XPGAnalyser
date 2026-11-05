@@ -2973,6 +2973,7 @@ void HmiVariablesPane::rebuildProperties() {
         const std::string file = retainFile();
         c.properties.push_back(prop("Fichier", file.empty() ? std::string("projet jamais enregistr\xC3\xA9") : file, PG::ValueType::ReadOnly, {}, {},
                                     "Le stockage du poste (et sa copie .bak) : \xC3\xA9" "crit d'un bloc, hors des versions du projet."));
+        c.properties.back().path = file;   // 1.24.0 : Ouvrir dans l'explorateur, Aller a
         cats.push_back(std::move(c));
     }
     if (composite && v->bound()) {
