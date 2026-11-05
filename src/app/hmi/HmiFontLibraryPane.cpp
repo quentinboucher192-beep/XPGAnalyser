@@ -231,7 +231,11 @@ public:
         const Row* r = rowOf(key);
         if (!r) return;
         const float h = bounds().h;
-        if (r->y < scroll_) scroll_ = r->y;
+        // En remontant : l'en-tete de son dossier (juste au-dessus) se voit aussi.
+        float top = r->y;
+        for (std::size_t i = 1; i < rows_.size(); ++i)
+            if (&rows_[i] == r && rows_[i - 1].kind != Kind::Family && rows_[i - 1].kind != Kind::Project) top = rows_[i - 1].y;
+        if (top < scroll_) scroll_ = top;
         else if (h > 0 && r->y + r->h > scroll_ + h) scroll_ = r->y + r->h - h;
         clampScroll();
     }

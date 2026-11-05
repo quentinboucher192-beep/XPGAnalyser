@@ -1402,19 +1402,23 @@ std::size_t HmiEditor::giveFont(const std::vector<hmi::Id>& objects, const std::
     std::string name = resource;
     bool imported = false;
     std::size_t done = 0;
-    const bool changed = canvas_->edit("Police " + shown, [&](hmi::Project& pr, hmi::View& vv) {
+    // Une commande du PROJET (la ressource et la vue) : celle d'une vue (canvas_->edit) ne garde pas les ressources.
+    auto cmd = hmi::changeProject(doc_, "Police " + shown, [&](hmi::Project& pr) {
         if (lib) {
             const auto made = hmi::fontlib::importFont(pr, *lib);
             name = made.name;
             imported = !made.reused;
         }
-        if (name.empty()) return;
+        auto* vv = pr.view(viewId_);
+        if (name.empty() || !vv) return;
         for (const Id id : targets)
-            if (auto* o = vv.object(id)) {
+            if (auto* o = vv->object(id)) {
                 o->set("font", name);
                 ++done;
             }
     });
+    const bool changed = cmd != nullptr;
+    if (cmd) apply_(std::move(cmd));
     if (!changed) {
         statusBar_->setTransientMessage(std::to_string(targets.size()) + " objet(s) avaient d\xC3\xA9j\xC3\xA0 la police " + shown + ".", 6.0,
                                         ui::StatusBar::Severity::Info);

@@ -47320,8 +47320,12 @@ void polices1260() {
             {
                 Recorder rec;
                 fonts->render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
-                check(rec.wrote("DU PROJET") && rec.wrote("2 objets") && rec.wrote("BIBLIOTH\xC3\x88QUE") && rec.wrote("Glisse une police sur un objet"),
-                      "le sous-onglet : DU PROJET (o\xC3\xB9 elle sert : 2 objets), BIBLIOTH\xC3\x88QUE, le mode d'emploi");
+                check(fonts->selectProjectFont("JetBrainsMono-Regular.ttf"), "choisir la police du projet (la liste remonte, son en-t\xC3\xAAte se voit)");
+                fonts->render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+                std::string missing;
+                for (const char* t : {"DU PROJET", "2 objets", "BIBLIOTH\xC3\x88QUE", "Glisse une police sur un objet"})
+                    if (!rec.wrote(t)) missing += std::string(" [") + t + "]";
+                check(missing.empty(), "le sous-onglet : DU PROJET (o\xC3\xB9 elle sert : 2 objets), BIBLIOTH\xC3\x88QUE, le mode d'emploi" + missing);
             }
             (void)b.stack.undo();
             check(b.v().object(btn)->text("font") == "Sans" && b.doc->project.assets.resources.empty(), "un seul Ctrl+Z pour les deux et l'import");
