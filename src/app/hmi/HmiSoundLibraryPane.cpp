@@ -125,6 +125,11 @@ HmiSoundLibraryPane::HmiSoundLibraryPane(std::string id, hmi::DocumentPtr doc, A
                "Importer dans le projet (Entr\xC3\xA9" "e) : le son devient une ressource, \xC3\xA0 choisir dans une alarme, l'action Jouer un "
                "son ou un script (Ctrl+Z la retire)",
                "Importer dans le projet");
+    // 1.25.0 : dans la palette de l'editeur de vues seulement (setCompact) - le son choisi, joue au clic de l'objet choisi.
+    tools->add(ActAttach, HmiGlyph::Button,
+               "Jouer au clic de l'objet choisi : le son est import\xC3\xA9 s'il ne l'est pas, puis l'objet choisi dans la vue le "
+               "joue quand on clique dessus (une action Jouer un son ; Ctrl+Z la retire)",
+               "Au clic");
     tools->separator();
     tools->add(ActAdd, HmiGlyph::Plus, "Ajouter un fichier WAV ou MP3 \xC3\xA0 Mes sons (gard\xC3\xA9s hors du projet, pour tous tes projets)",
                "Ajouter \xC3\xA0 Mes sons");
@@ -133,6 +138,12 @@ HmiSoundLibraryPane::HmiSoundLibraryPane(std::string id, hmi::DocumentPtr doc, A
     tools_->setEnabledWhen(ActPlay, [this] { return selectedSound() != nullptr; });
     tools_->setEnabledWhen(ActImport, [this] { return selectedSound() != nullptr; });
     tools_->setEnabledWhen(ActRemove, [this] { const auto* s = selectedSound(); return s && s->mine(); });
+    tools_->setVisibleWhen(ActAttach, [this] { return compact_; });
+    tools_->setEnabledWhen(ActAttach, [this] {
+        if (!selectedSound() || !hosts_.chosenObjects) return false;
+        const auto chosen = hosts_.chosenObjects();
+        return chosen.first != kNoId && !chosen.second.empty();
+    });
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Chercher un son\xE2\x80\xA6",
         "Chaque mot est cherch\xC3\xA9 dans le nom du son, sa cat\xC3\xA9gorie, sa description et ses mots-cl\xC3\xA9s (sir\xC3\xA8ne, "
@@ -249,6 +260,13 @@ void HmiSoundLibraryPane::rebuild() {
     std::vector<int> expanders;
     std::vector<bool> inProject;
     for (const auto& l : lines_) {
+        if (l.header && compact_) {   // 1.25.0 : la palette - le dossier et son nombre
+            rows.push_back({l.category + "  (" + std::to_string(l.count) + ")", {}, {}});
+            kinds.push_back(0);
+            expanders.push_back(searching ? 1 : closed_.count(l.category) ? 0 : 1);
+            inProject.push_back(false);
+            continue;
+        }
         if (l.header) {
             rows.push_back({l.category + "  (" + std::to_string(l.count) + ")", {}, {},
                             l.category == sl::kMine && l.count == 0 ? std::string("Ajoute un fichier WAV ou MP3 (+), ou l\xC3\xA2" "che-le ici")
@@ -260,12 +278,15 @@ void HmiSoundLibraryPane::rebuild() {
         }
         const auto& s = sounds_[static_cast<std::size_t>(l.sound)];
         const hmi::Resource* r = sl::importedAs(p, s);
-        rows.push_back({s.label, sl::durationText(s.seconds), r ? "\xE2\x9C\x93 " + r->name : std::string("\xE2\x80\x94"), s.description});
+        if (compact_) rows.push_back({s.label, sl::durationText(s.seconds), r ? std::string("\xE2\x9C\x93") : std::string{}});   // 1.25.0
+        else rows.push_back({s.label, sl::durationText(s.seconds), r ? "\xE2\x9C\x93 " + r->name : std::string("\xE2\x80\x94"), s.description});
         kinds.push_back(s.mine() ? 2 : 1);
         expanders.push_back(-1);
         inProject.push_back(r != nullptr);
     }
-    model_ = std::make_shared<Rows>(std::vector<std::string>{"Son", "Dur\xC3\xA9" "e", "Dans le projet", "Description"}, std::move(rows),
+    auto heads = compact_ ? std::vector<std::string>{"Son", "Dur\xC3\xA9" "e", "Projet"}
+                          : std::vector<std::string>{"Son", "Dur\xC3\xA9" "e", "Dans le projet", "Description"};
+    model_ = std::make_shared<Rows>(std::move(heads), std::move(rows),
                                     [kinds, expanders, inProject](ui::RowIndex r, std::size_t c) {
                                         ui::CellStyle st;
                                         if (r >= kinds.size()) return st;
@@ -304,6 +325,11 @@ void HmiSoundLibraryPane::rebuild() {
     showDetail();
     std::size_t mine = 0;
     for (const auto& s : sounds_) mine += s.mine() ? 1u : 0u;
+    if (compact_)   // 1.25.0 : la palette - le mode d'emploi, court
+        status_->setMessage(std::to_string(sl::builtIn().size() + mine) + " sons \xC2\xB7 Espace : \xC3\xA9" "couter \xC2\xB7 Entr\xC3\xA9" "e : importer"
+                                " \xC2\xB7 Au clic : l'objet choisi le joue",
+                            ui::StatusBar::Severity::Info);
+    else
     status_->setMessage(std::to_string(sl::builtIn().size()) + " sons natifs, " + std::to_string(mine)
                             + " \xC3\xA0 toi \xC2\xB7 Espace : \xC3\xA9" "couter \xC2\xB7 Entr\xC3\xA9" "e : importer dans le projet",
                         ui::StatusBar::Severity::Info);
@@ -434,6 +460,15 @@ std::vector<ui::PopupMenu::Item> HmiSoundLibraryPane::contextItems() const {
     add(ActGoTo, "Aller \xC3\xA0 la ressource", {}, ui::Icon::GoTo, r != nullptr && static_cast<bool>(hosts_.openResource),
         r ? std::string("indisponible ici") : std::string("pas encore dans le projet"));
     add(ActCopy, "Copier le nom", "Ctrl+C", ui::Icon::Copy, s != nullptr, none);
+    if (compact_) {   // 1.25.0 : la palette de l'editeur de vues
+        bool any = false;
+        if (hosts_.chosenObjects) {
+            const auto chosen = hosts_.chosenObjects();
+            any = chosen.first != kNoId && !chosen.second.empty();
+        }
+        add(ActAttach, "Jouer au clic de l'objet choisi", {}, ui::Icon::Play, s != nullptr && any,
+            s ? std::string("choisis d'abord un objet dans la vue") : none);
+    }
     sep();
     add(ActAdd, "Ajouter un fichier \xC3\xA0 Mes sons\xE2\x80\xA6", {}, ui::Icon::Plus, true);
     add(ActReveal, "Ouvrir dans l'explorateur", {}, ui::Icon::Open, s && s->mine(),
@@ -477,12 +512,77 @@ void HmiSoundLibraryPane::runAction(int action) {
             if (s)
                 if (const hmi::Resource* r = sl::importedAs(doc_->project, *s); r && hosts_.openResource) hosts_.openResource(r->id);
             break;
+        case ActAttach: (void)attachToChosen(); break;   // 1.25.0
         default: break;
     }
 }
 
+void HmiSoundLibraryPane::setCompact(bool on) {
+    if (compact_ == on) return;
+    compact_ = on;
+    search_->setVisibility(on ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+    detail_->setVisibility(on ? ui::Visibility::Collapsed : ui::Visibility::Visible);   // il joue quand meme (Ecouter)
+    if (on) table_->setColumns({{"Son", 200.f}, {"Dur\xC3\xA9" "e", 60.f}, {"Projet", 52.f}});
+    else table_->setColumns({{"Son", 260.f}, {"Dur\xC3\xA9" "e", 70.f}, {"Dans le projet", 170.f}, {"Description", 420.f}});
+    rebuild();
+    invalidateLayout();
+}
+
+std::size_t HmiSoundLibraryPane::attachToChosen(std::string* why) {
+    syncMine();
+    const sl::Sound* s = selectedSound();
+    if (!s) {
+        (void)fail("Choisis un son.", why);
+        return 0;
+    }
+    if (!hosts_.chosenObjects) {
+        (void)fail("Ici, pas de vue : ouvre une vue dans l'\xC3\xA9" "diteur.", why);
+        return 0;
+    }
+    const auto [view, objects] = hosts_.chosenObjects();
+    if (view == kNoId || objects.empty()) {
+        (void)fail("Choisis d'abord un objet dans la vue : il jouera ce son quand on clique dessus.", why);
+        return 0;
+    }
+    const sl::Sound copy = *s;
+    std::size_t done = 0;
+    std::string resource;
+    auto cmd = hmi::changeProject(doc_, "Jouer le son " + copy.label + " au clic", [&](hmi::Project& p) {
+        if (const hmi::Resource* r = sl::importedAs(p, copy)) resource = r->name;
+        else resource = sl::importSound(p, copy).name;
+        auto* v = p.view(view);
+        if (!v) return;
+        for (const Id id : objects)
+            if (auto* o = v->object(id)) {
+                hmi::Action a;
+                a.trigger = hmi::Trigger::Click;
+                a.operation = hmi::Operation::PlaySound;
+                a.target = resource;
+                o->actions.push_back(std::move(a));
+                ++done;
+            }
+    });
+    if (!cmd || done == 0) {
+        (void)fail("Rien \xC3\xA0 faire : l'objet choisi n'est plus dans la vue.", why);
+        return 0;
+    }
+    apply_(std::move(cmd));
+    refresh();
+    (void)select(copy.id);
+    say(copy.label + " : " + (done == 1 ? std::string("l'objet choisi le joue") : std::to_string(done) + " objets le jouent")
+        + " quand on clique dessus (la ressource " + resource + " ; Ctrl+Z l'annule).");
+    return done;
+}
+
 void HmiSoundLibraryPane::onLayout() {
     const auto b = bounds();
+    if (compact_) {   // 1.25.0 : la palette - la barre, la liste, le mode d'emploi
+        const float bar = 34.f, statusH = 24.f;
+        tools_->setBounds({b.x, b.y, b.w, bar});
+        status_->setBounds({b.x, b.y + b.h - statusH, b.w, statusH});
+        table_->setBounds({b.x, b.y + bar, b.w, std::max(0.f, b.h - bar - statusH)});
+        return;
+    }
     const float bar = 38.f, statusH = 24.f;
     const float searchW = std::clamp(b.w * 0.28f, 180.f, 320.f);
     tools_->setBounds({b.x, b.y, std::max(0.f, b.w - searchW - 12.f), bar});

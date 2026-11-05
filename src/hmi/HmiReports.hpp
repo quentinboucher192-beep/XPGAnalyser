@@ -56,12 +56,26 @@ struct Production {
     ProductionFigures figures;
 };
 
+// 1.25.0 : la courbe d'une mesure sur la periode (les courbes des mesures d'une mise en page).
+struct Curve {
+    std::string name, unit;
+    std::vector<std::pair<double, double>> points;             // (instant, valeur), dans l'ordre ; 400 au plus
+    double lo{0}, hi{0};
+};
+
 struct Content {
     std::string title;                                         // "Rapport journalier - Armoire_Gaz"
     std::string subtitle;                                      // "du 2026-09-24 06:00 au 2026-09-25 06:00 - ecrit le ..."
     std::vector<std::pair<std::string, std::string>> summary;  // la synthese : libelle, valeur
     std::vector<int> byPriority;                               // les apparitions par priorite (1..4)
     std::vector<ExportTable> sections;                         // alarmes, frequentes, mesures, production, evenements
+    // 1.25.0 (la mise en page) : la cle de chaque section (alarmes, frequentes, mesures, production, evenements), les
+    // courbes des mesures, la periode, et les trous des titres et des pieds ({Titre}, {Rapport}, {Site}, {Debut}...).
+    std::vector<std::string> keys;
+    std::vector<Curve> curves;
+    double from{0}, to{0};
+    bool alarms{true};                                         // le rapport recueille les alarmes (le graphique en depend)
+    std::vector<std::pair<std::string, std::string>> fields;
 };
 
 // Le rapport de la periode [from, to[.
@@ -70,7 +84,8 @@ struct Content {
 
 // Le fichier : un PDF (A4 portrait : la synthese, un graphique des alarmes
 // par priorite, puis chaque section) ou un classeur Excel (une feuille par
-// section, la synthese d'abord).
+// section, la synthese d'abord). 1.25.0 : c'est la mise en page << Standard >> ;
+// une autre mise en page : hmi/HmiReportLayout.hpp (render avec le projet et la mise en page).
 [[nodiscard]] Bytes render(const Content&, ExportFormat);
 [[nodiscard]] Bytes renderPdf(const Content&);
 [[nodiscard]] Bytes renderXlsx(const Content&);

@@ -166,6 +166,28 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.25.0 : la mise en page des rapports ; Generer maintenant (la fenetre) ; les sons et les images de la bibliotheque
+        note("1.25.0", "Configuration", Kind::New,
+         "LA MISE EN PAGE DES RAPPORTS : Configuration \xE2\x80\xBA Rapports, l'onglet Mise en page. La page (A4, A3, A5, Lettre ; "
+         "portrait ou paysage ; les marges), l'en-t\xC3\xAAte (le logo, le titre et le sous-titre \xC3\xA0 trous {Rapport} {Site} {Debut}..., "
+         "la couleur d'accent, @Nom compris), le pied (gauche, centre, droite ; les cases de visa), les parties coch\xC3\xA9" "es et leur "
+         "ordre (glisse-les ; nouveau : les courbes des mesures), les tableaux, le texte. L'APER\xC3\x87U suit chaque r\xC3\xA9glage, avec des "
+         "donn\xC3\xA9" "es d'exemple ou la derni\xC3\xA8re p\xC3\xA9riode ; Ctrl+Z d\xC3\xA9" "fait ; Enregistrer la garde dans le projet. Trois fournies "
+         "(Standard, Compacte, Synth\xC3\xA8se seule) ; les tiennes en dupliquant. Chaque rapport a la sienne (sa case, sa colonne).",
+         "mise-en-page-rapports", ""),
+        note("1.25.0", "Configuration", Kind::New,
+         "G\xC3\x89N\xC3\x89RER LE RAPPORT MAINTENANT : une fen\xC3\xAAtre - la p\xC3\xA9riode (la derni\xC3\xA8re, en cours, ou choisie : du ... au ...), "
+         "le format, LA MISE EN PAGE (celle du rapport propos\xC3\xA9" "e d'abord), ouvrir le fichier, l'envoyer ou non aux destinataires, "
+         "et l'aper\xC3\xA7u de la page 1 qui suit la mise en page choisie. G\xC3\xA9n\xC3\xA9rer : dans exports/ ; Ailleurs... : o\xC3\xB9 l'\xC3\xA9" "crire. "
+         "L'onglet \xC3\x89" "crits : le clic droit d'un fichier propose Ouvrir dans l'explorateur et Aller \xC3\xA0.",
+         "rapports", ""),
+        note("1.25.0", "Vues", Kind::New,
+         "LES SONS ET LES IMAGES DE LA BIBLIOTH\xC3\x88QUE : dans l'arbre, Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de sons [N] et Biblioth\xC3\xA8que "
+         "d'images [N] disent combien ils en ont et SE D\xC3\x89PLIENT (Mes sons, Alarmes [7]... ; Mes images, puis les cat\xC3\xA9gories du "
+         "sous-onglet Images, chacune avec son nombre). Dans l'\xC3\xA9" "diteur de vues, la BIBLIOTH\xC3\x88QUE a un sous-onglet SONS : les "
+         "dossiers et leur nombre, \xC3\x89" "couter, Importer, + (Mes sons), la recherche ; \xC2\xAB Au clic \xC2\xBB : l'objet choisi joue le son "
+         "quand on clique dessus (un seul Ctrl+Z).",
+         "bibliotheque-sons", ""),
         // 1.24.0 : la bibliotheque de sons ; supprimer plusieurs d'un coup ; les chemins (Ouvrir dans l'explorateur, Aller a)
         note("1.24.0", "Vues", Kind::New,
          "LA BIBLIOTH\xC3\x88QUE DE SONS : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de sons. 22 SONS NATIFS fabriqu\xC3\xA9s par le logiciel "

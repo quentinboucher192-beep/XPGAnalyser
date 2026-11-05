@@ -2115,7 +2115,45 @@ struct Report {
     bool        events{false};          // les evenements (connexions, recettes, ecritures...)
     std::string recipients;             // des destinataires des notifications (leurs noms) : en piece jointe
     bool        enabled{true};
+    std::string layout;                 // 1.25.0 : sa mise en page (son nom) ; vide : celle par defaut du projet
     bool operator==(const Report&) const = default;
+};
+
+// ------------------------------------------- 1.25.0 : la mise en page des rapports ---
+//  LE CLIENT (05/11, maquette validee) : << configurer la mise en page du fichier
+//  genere, avec apercu et sauvegarde des mises en page, et quand on exporte on
+//  puisse choisir la mise en page >>. Une mise en page dit la page (format,
+//  orientation, marges), l'en-tete (logo, titre et sous-titre a trous {Rapport}
+//  {Site} {Debut}..., couleur d'accent), le pied (gauche, centre, droite ; les
+//  cases de visa), les parties et leur ordre, les tableaux et le texte. Trois sont
+//  fournies (verrouillees : hmi/HmiReportLayout.hpp) ; celles du projet se font en
+//  dupliquant. Chaque rapport a la sienne ; le moteur l'applique a chaque ecriture.
+struct ReportLayoutPart {
+    std::string key;                    // synthese, graphique, alarmes, frequentes, mesures, courbes, production, evenements
+    bool        on{true};
+    bool operator==(const ReportLayoutPart&) const = default;
+};
+struct ReportLayout {
+    Id          id{kNoId};
+    std::string name;                   // "Exploitation_Gaz"
+    std::string paper{"A4"};            // A4, A3, A5, Lettre
+    bool        landscape{false};
+    double      marginTop{14}, marginBottom{14}, marginLeft{14}, marginRight{14};   // en mm
+    std::string logo;                   // une image des ressources (son nom) ; vide : aucun
+    bool        logoRight{false};
+    std::string title{"{Titre}"};
+    std::string subtitle{"{SousTitre}"};
+    std::string accent{"#3373D9"};      // #RRGGBB ou @Nom (une couleur semantique)
+    std::string footLeft{"IHM Studio - {Titre}"}, footCenter, footRight{"Page {Page} / {Pages}"};
+    bool        visa{false};            // les cases de visa, en fin de rapport
+    std::string visaLabels{"\xC3\x89tabli par; V\xC3\xA9rifi\xC3\xA9 par"};
+    std::vector<ReportLayoutPart> parts;   // l'ordre et ce qui s'imprime ; vide : l'ordre par defaut, tout coche sauf les courbes
+    double      tableSize{8.5};         // pt
+    bool        zebra{true};            // les lignes alternees
+    bool        repeatHeader{true};     // l'en-tete d'un tableau repete a chaque page
+    std::string font{"Helvetica"};      // Helvetica, Times, Courier
+    double      titleSize{16}, bodySize{9};
+    bool operator==(const ReportLayout&) const = default;
 };
 
 // ------------------------------------------------ lot 14 : acces web ---
@@ -2315,6 +2353,8 @@ struct Project {
     RecordingSettings recording;             // 1.14.0 (M4) : Configuration > Enregistrements
     Notifications     notify;                // lot 14 : courriels et SMS des alarmes
     std::vector<Report> reports;             // lot 14 : les rapports periodiques
+    std::vector<ReportLayout> reportLayouts; // 1.25.0 : les mises en page du projet (les fournies n'y sont pas)
+    std::string reportLayoutDefault;         // 1.25.0 : celle d'un nouveau rapport (et d'un rapport sans la sienne) ; vide : Standard
     WebAccess         web;                   // lot 14 : l'acces par navigateur
     std::vector<Equipment> equipments;       // lot 15 : les equipements du reseau
     std::vector<SimPort>   simPorts;         // lot 17 : les ports du PC simule (le reseau simule)
@@ -2384,6 +2424,7 @@ struct Project {
     [[nodiscard]] Report*             report(Id) noexcept;               // lot 14
     [[nodiscard]] const Report*       report(Id) const noexcept;
     [[nodiscard]] const Report*       reportByName(std::string_view) const noexcept;   // sans casse
+    [[nodiscard]] const ReportLayout* reportLayoutByName(std::string_view) const noexcept;   // 1.25.0 : du projet, sans casse
     [[nodiscard]] const NotifyRecipient* recipientByName(std::string_view) const noexcept;   // sans casse
     [[nodiscard]] Equipment*          equipment(Id) noexcept;            // lot 15
     [[nodiscard]] const Equipment*    equipment(Id) const noexcept;

@@ -429,7 +429,9 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                     // 1.14.0 (M4) : les enregistrements
         || k == NK::HmiIncidents                                                       // 1.20.0 : les incidents
         || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem   // 1.23.1 : Styles deplie
-        || k == NK::HmiSoundLibrary;                                                   // 1.24.0 : la bibliotheque de sons
+        || k == NK::HmiSoundLibrary                                                    // 1.24.0 : la bibliotheque de sons
+        || k == NK::HmiSoundGroup || k == NK::HmiSoundItem                             // 1.25.0 : ses dossiers, ses sons
+        || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem;   // 1.25.0 : la bibliotheque d'images
 }
 
 ui::Widget* MainAnalysisScreen::hmiTab(const std::string& key) const {
@@ -698,6 +700,39 @@ void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
     app_.events().publish(HmiTabsCheck{});
 }
 
+// 1.25.0 : Ressources > Bibliotheque d'images - les images du sous-onglet Images de la BIBLIOTHEQUE de l'editeur de vues.
+// L'editeur ouvert (celui au premier plan, sinon un autre), sinon la vue de demarrage (ou la premiere) ; son sous-onglet
+// Images, le dossier deplie, l'image montree et choisie.
+void MainAnalysisScreen::openHmiImageLibrary(const std::string& folder, const std::string& imageId) {
+    auto doc = app_.hmi();
+    if (!doc || !centre_) return;
+    HmiEditor* editor = nullptr;
+    if (centre_->tabCount() > 0) editor = dynamic_cast<HmiEditor*>(centre_->page(centre_->currentIndex()));
+    for (std::size_t i = 0; !editor && i < centre_->tabCount(); ++i) editor = dynamic_cast<HmiEditor*>(centre_->page(i));
+    if (!editor) {
+        hmi::Id view = doc->project.config.startView;
+        if (!doc->project.view(view))
+            if (const auto views = hmi::viewsInFolder(doc->project, hmi::ViewFolder::Views); !views.empty()) view = views.front()->id;
+        if (!doc->project.view(view)) {
+            if (status_) status_->setTransientMessage("La biblioth\xC3\xA8que d'images s'ouvre dans l'\xC3\xA9" "diteur de vues : cr\xC3\xA9" "e d'abord une vue.", 6.0);
+            return;
+        }
+        openHmiView(view);
+        editor = dynamic_cast<HmiEditor*>(hmiTab("vue:" + std::to_string(view)));
+        if (!editor) return;
+    } else {
+        for (std::size_t i = 0; i < centre_->tabCount(); ++i)
+            if (centre_->page(i) == editor) centre_->setCurrentIndex(i);
+    }
+    auto& palette = editor->palette();
+    palette.setMode(HmiPalette::Mode::Images);
+    if (!folder.empty()) palette.setImageCategoryOpen(folder, true);
+    if (!imageId.empty()) {
+        palette.revealImage(imageId);
+        palette.setCurrentImage(imageId);
+    }
+}
+
 void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
     if (!treeModel_ || !app_.hmi()) return;
     switch (ProjectTreeModel::kindOf(n)) {
@@ -738,6 +773,19 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiRecordingSettings: openHmiPane("config-enregistrements"); break;
         case NK::HmiIncidents:     openHmiPane("incidents"); break;                 // 1.20.0
         case NK::HmiSoundLibrary:  openHmiPane("sons"); break;                      // 1.24.0
+        case NK::HmiImageLibrary:                                                    // 1.25.0 : la bibliotheque d'images -
+        case NK::HmiImageGroup:                                                      // le sous-onglet Images de l'editeur de
+        case NK::HmiImageItem:                                                       // vues, le dossier deplie, l'image montree
+            openHmiImageLibrary(ProjectTreeModel::imageFolderOf(n), ProjectTreeModel::imageIdOf(n));
+            break;
+        case NK::HmiSoundGroup:                                                      // 1.25.0 : le dossier, deplie
+        case NK::HmiSoundItem:                                                       // 1.25.0 : le son, choisi
+            openHmiPane("sons");
+            if (auto* pane = dynamic_cast<HmiSoundLibraryPane*>(hmiTab("sons"))) {
+                if (const auto folder = ProjectTreeModel::soundFolderOf(n); !folder.empty()) pane->setCategoryOpen(folder, true);
+                if (const auto id = ProjectTreeModel::soundIdOf(n); !id.empty()) (void)pane->select(id);
+            }
+            break;
         case NK::HmiComm:          openHmiPane("communication"); break;   // lot 14
         case NK::HmiStation:       openHmiPane("poste"); break;
         case NK::HmiNotify:        openHmiPane("notifications"); break;
@@ -2001,6 +2049,19 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
             if (ok) app_.notify().report(out);
             return ok;
         };
+        // 1.25.0 : Generer le rapport maintenant - la periode, le format, la mise en page, l'envoi choisis.
+        hosts.writeWith = [this](hmi::Id report, const hmi::ReportOptions& options, std::string* where) {
+            if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); sim && sim->runtime().running())
+                return sim->runtime().writeReport(report, sim->runtime().now(), options, where);
+            auto current_doc = app_.hmi();
+            if (!current_doc) return false;
+            hmi::ReportOutput out;
+            const bool ok = HmiReportsPane::writeOffline(current_doc->project, current_doc->history, report, options,
+                                                         [this](const hmi::ExportRequest& rq, std::string* w) { return writeHmiExport(rq, w); }, where, &out);
+            if (ok && !out.recipients.empty()) app_.notify().report(out);
+            return ok;
+        };
+        hosts.openFile = [](const std::string& path) { return dossiers::ouvrirDansLeSysteme(path); };
         hosts.next = [this](hmi::Id report) {
             if (auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation")); sim && sim->runtime().running())
                 return sim->runtime().nextReportText(report);
@@ -4330,6 +4391,7 @@ std::string placeOfNode(NK kind) {
         case NK::HmiRecordingSettings: return "config-enregistrements";
         case NK::HmiIncidents:     return "incidents";                // 1.20.0
         case NK::HmiSoundLibrary:  return "sons";                     // 1.24.0
+        case NK::HmiSoundGroup: case NK::HmiSoundItem: return "sons";   // 1.25.0
         case NK::HmiComm:          return "communication";   // lot 14
         case NK::HmiStation:       return "poste";
         case NK::HmiNotify:        return "notifications";

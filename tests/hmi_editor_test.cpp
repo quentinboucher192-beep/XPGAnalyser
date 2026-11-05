@@ -75,6 +75,8 @@
 #include "../src/core/SemanticColors.hpp"
 #include "../src/app/hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../src/app/hmi/HmiSoundLibraryPane.hpp"   // 1.24.0 : la bibliotheque de sons
+#include "../src/app/hmi/HmiReportLayoutPane.hpp"   // 1.25.0 : la mise en page des rapports
+#include "../src/hmi/HmiReportLayout.hpp"
 #include "../src/hmi/HmiUnits.hpp"
 #include "../src/app/hmi/HmiSymbolPopupsPane.hpp"   // 1.11.10 : les popups d'un symbole
 #include "../src/app/hmi/HmiHelpPane.hpp"
@@ -13239,19 +13241,24 @@ void lot_api8_exports_ou() {
         };
         const int now = reports.tools().actionByTip("G\xC3\xA9n\xC3\xA9rer maintenant");
         const int last = reports.tools().actionByTip("La derni\xC3\xA8re p\xC3\xA9riode");
+        // 1.25.0 : les deux boutons ouvrent la fenetre << Generer le rapport maintenant >> ; son Ailleurs... demande ou.
         reports.tools().triggered->emit(now);
-        check(now >= 0 && askedWhat == "le rapport Rapport_journalier (PDF)" && askedFilter == "Documents PDF|*.pdf" && generated.empty() && pending,
-              "G\xC3\xA9n\xC3\xA9rer maintenant : o\xC3\xB9 l'\xC3\xA9" "crire se demande d'abord (le rapport, PDF)");
+        check(now >= 0 && reports.sheet().isOpen() && reports.sheet().period() == app::HmiReportGenerateSheet::Current && generated.empty() && !pending,
+              "G\xC3\xA9n\xC3\xA9rer maintenant\xE2\x80\xA6 : la fen\xC3\xAAtre s'ouvre (la p\xC3\xA9riode en cours), rien n'est \xC3\xA9" "crit");
+        check(reports.sheet().generateElsewhere() && askedWhat == "le rapport Rapport_journalier (PDF)" && askedFilter == "Documents PDF|*.pdf"
+                  && generated.empty() && pending && !reports.sheet().isOpen(),
+              "Ailleurs\xE2\x80\xA6 : o\xC3\xB9 l'\xC3\xA9" "crire se demande (le rapport, PDF)");
         if (pending) pending();
         check(generated.size() == 1 && generated[0].second, "Exporter : la p\xC3\xA9riode en cours s'\xC3\xA9" "crit");
         pending = nullptr;
         reports.tools().triggered->emit(last);
-        check(last >= 0 && pending && generated.size() == 1, "Derni\xC3\xA8re p\xC3\xA9riode : la question aussi");
-        if (pending) pending();
-        check(generated.size() == 2 && !generated[1].second, "... puis la derni\xC3\xA8re p\xC3\xA9riode compl\xC3\xA8te");
+        check(last >= 0 && reports.sheet().isOpen() && reports.sheet().period() == app::HmiReportGenerateSheet::Last && generated.size() == 1,
+              "Derni\xC3\xA8re p\xC3\xA9riode\xE2\x80\xA6 : la fen\xC3\xAAtre, sur la derni\xC3\xA8re p\xC3\xA9riode");
+        check(reports.sheet().generate() && generated.size() == 2 && !generated[1].second && !pending,
+              "G\xC3\xA9n\xC3\xA9rer : la derni\xC3\xA8re p\xC3\xA9riode compl\xC3\xA8te, dans exports/ (sans question)");
         hook = nullptr;
         reports.tools().triggered->emit(now);
-        check(generated.size() == 3, "personne pour demander (sans l'\xC3\xA9" "cran) : \xC3\xA9" "crit tout de suite, comme avant");
+        check(reports.sheet().generateElsewhere() && generated.size() == 3, "personne pour demander (sans l'\xC3\xA9" "cran) : \xC3\xA9" "crit tout de suite, comme avant");
         hook = saved;
     }
 
@@ -43538,11 +43545,13 @@ void enregistrements1140() {
         }
         // 1.20.0 : Ressources a deux enfants - Enregistrements, puis Incidents (les dossiers d'incident en attente).
         // 1.24.0 : et la Bibliotheque de sons, troisieme.
-        check(res != ui::kInvalidNode && tree.childCount(res) == 3 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
+        // 1.25.0 : et la Bibliotheque d'images, quatrieme.
+        check(res != ui::kInvalidNode && tree.childCount(res) == 4 && app::ProjectTreeModel::kindOf(tree.childAt(res, 0)) == NK::HmiRecordings
                   && app::ProjectTreeModel::kindOf(tree.childAt(res, 1)) == NK::HmiIncidents
-                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 2)) == NK::HmiSoundLibrary,
-              "Ressources \xE2\x80\xBA Enregistrements, Incidents et Biblioth\xC3\xA8que de sons dans l'arbre");
-        if (res != ui::kInvalidNode && tree.childCount(res) == 3) {
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 2)) == NK::HmiSoundLibrary
+                  && app::ProjectTreeModel::kindOf(tree.childAt(res, 3)) == NK::HmiImageLibrary,
+              "Ressources \xE2\x80\xBA Enregistrements, Incidents, Biblioth\xC3\xA8que de sons et d'images dans l'arbre");
+        if (res != ui::kInvalidNode && tree.childCount(res) == 4) {
             same_text(tree.text(tree.childAt(res, 0)) + "  [" + tree.counterOf(tree.childAt(res, 0)) + "]", "Enregistrements  [1]", "... avec son compte");
             same_text(tree.text(tree.childAt(res, 1)) + "  [" + tree.counterOf(tree.childAt(res, 1)) + "]", "Incidents  [0]",
                       "1.20.0 : ... et Incidents, ceux en attente (aucun)");
@@ -46531,7 +46540,259 @@ void supprimerPlusieurs1240() {
     app::several::setConfirmHost({});
 }
 
+// 1.25.0 : LA MISE EN PAGE DES RAPPORTS (l'onglet, le brouillon, l'apercu, la fenetre Generer maintenant), LES SONS ET LES
+// IMAGES DE LA BIBLIOTHEQUE (l'arbre deplie, le sous-onglet Sons de l'editeur de vues), le menu des chemins des Ecrits.
+// HMI_TEST_RAP=1 : ces essais seuls.
+void rapportsSonsImages1250() {
+    std::printf("[1.25.0 : la mise en page des rapports, les sons et les images]\n");
+    namespace fs = std::filesystem;
+    namespace rp = hmi::report;
+    std::string why;
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    const auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    doc->project.config.name = "Usine_Test";
+    hmi::NotifyRecipient chef;
+    chef.name = "Chef";
+    doc->project.notify.recipients.push_back(chef);
+    std::error_code ec;
+    const fs::path work = fs::temp_directory_path() / "xpg_rapports_1250";
+    fs::remove_all(work, ec);
+    fs::create_directories(work / "exports", ec);
+    std::vector<hmi::ReportOptions> asked;
+    std::vector<hmi::ExportRequest> written;
+    std::vector<std::string> opened;
+    app::HmiReportsPane reports("reports", doc, apply);
+    app::HmiReportsPane::Hosts rh;
+    rh.writeWith = [&](hmi::Id id, const hmi::ReportOptions& o, std::string* where) {
+        asked.push_back(o);
+        return app::HmiReportsPane::writeOffline(doc->project, doc->history, id, o,
+                                                 [&](const hmi::ExportRequest& rq, std::string* w) {
+                                                     written.push_back(rq);
+                                                     std::ofstream(work / "exports" / rq.fileName, std::ios::binary)
+                                                         .write(reinterpret_cast<const char*>(rq.data->data()), static_cast<std::streamsize>(rq.data->size()));
+                                                     if (w) *w = "exports/" + rq.fileName;
+                                                     return true;
+                                                 },
+                                                 where);
+    };
+    rh.openFile = [&](const std::string& path) {
+        opened.push_back(path);
+        return std::string{};
+    };
+    rh.projectFolder = [&] { return work.string(); };
+    reports.setHosts(rh);
+    reports.setBounds({0, 0, 1600, 900});
+    reports.layout();
+    check(reports.addReport() && reports.setReportField("Rapport_journalier", "destinataires", "Chef"), "un rapport, son destinataire");
+    const std::string name = "Rapport_journalier";
+    auto& L = reports.layouts();
+
+    // ---- l'onglet Mise en page : les fournies, verrouillees
+    check(reports.tabs().tabCount() == 3, "trois onglets : Rapports, \xC3\x89" "crits, Mise en page");
+    reports.showLayouts();
+    reports.layout();
+    check(reports.tabs().currentIndex() == 2 && !reports.properties().visible(), "l'onglet Mise en page prend toute la largeur");
+    const auto listed = L.listedLayouts();
+    check(listed.size() == 3 && listed[0] == "Standard" && L.selectedLayout() == "Standard" && L.locked(), "trois fournies ; Standard choisie, verrouill\xC3\xA9" "e");
+    check(!L.setField("format", "A3", &why) && why.find("fournie") != std::string::npos, "une fournie ne se r\xC3\xA8gle pas : Dupliquer \xC3\xA0 partir de\xE2\x80\xA6");
+    check(L.preview().pageCount() >= 2 && L.previewSample(), "l'aper\xC3\xA7u : des donn\xC3\xA9" "es d'exemple, plusieurs pages");
+    {
+        const auto texts = L.preview().shownTexts();
+        bool title = false;
+        for (const auto& t : texts) title = title || t.find("Rapport journalier") != std::string::npos;
+        check(title, "l'aper\xC3\xA7u montre le titre du rapport");
+        const auto theme = ui::Theme::dark();
+        Recorder rec;
+        L.preview().render(ui::PaintContext{rec, theme, {0, 0, 2000, 1000}, 0.0, nullptr});
+        check(rec.wrote("Synth\xC3\xA8se") && L.preview().pageRect().w > 100, "l'aper\xC3\xA7u se dessine (la page, la synth\xC3\xA8se)");
+    }
+
+    // ---- une du projet : le brouillon, l'apercu, Ctrl+Z, Enregistrer
+    check(L.newLayout() && doc->project.reportLayouts.size() == 1 && L.selectedLayout() == "Mise_en_page" && !L.locked(),
+          "+ Nouvelle : Mise_en_page, une copie de Standard, choisie");
+    check(L.setField("format", "A3") && L.setField("orientation", "Paysage") && L.modified() && doc->project.reportLayouts[0].paper == "A4"
+              && L.current().paper == "A3" && std::fabs(L.preview().document()->width - 1190.55) < 0.1,
+          "A3 paysage : le brouillon et l'aper\xC3\xA7u changent, le projet pas encore");
+    check(L.statusText().find("modifi\xC3\xA9" "e (non enregistr\xC3\xA9" "e)") != std::string::npos, "le bas : modifi\xC3\xA9" "e (non enregistr\xC3\xA9" "e)");
+    check(!L.setField("marge_haut", "1", &why) && why.find("de 3") != std::string::npos, "une marge de 1 mm : refus\xC3\xA9" "e (de 3 \xC3\xA0 60)");
+    check(L.setField("marge_gauche", "20 mm") && L.current().marginLeft == 20, "une marge : 20 mm (l'unit\xC3\xA9 tap\xC3\xA9" "e se lit)");
+    check(L.setPart("courbes", true) && L.movePart("mesures", 0) && rp::partsOf(L.current())[0].key == "mesures"
+              && L.parts().model()->cellText(0, 0) == "Mesures (min, moyenne, max)",
+          "les parties : les courbes coch\xC3\xA9" "es, les mesures en t\xC3\xAA" "te");
+    {
+        std::size_t polylines = 0;
+        for (const auto& pg : L.preview().document()->pages)
+            for (const auto& o : pg) polylines += o.kind == rp::DrawOp::Kind::Polyline ? 1u : 0u;
+        check(polylines == 3, "l'aper\xC3\xA7u : les trois courbes des mesures");
+    }
+    check(L.undoDraft() && rp::partsOf(L.current())[0].key == "synthese" && L.redoDraft() && rp::partsOf(L.current())[0].key == "mesures",
+          "le brouillon : d\xC3\xA9" "faire, refaire");
+    check(L.dispatch(ui::KeyDown{ui::Key::Z, ui::KeyMods{true, false, false}, false}) == ui::EventResult::Consumed && rp::partsOf(L.current())[0].key == "synthese",
+          "Ctrl+Z dans l'onglet : le brouillon d'abord");
+    check(L.save() && !L.modified() && doc->project.reportLayouts[0].paper == "A3" && doc->project.reportLayouts[0].landscape
+              && stack.undoLabel() == "Enregistrer la mise en page Mise_en_page",
+          "Enregistrer la mise en page : dans le projet, une commande");
+    (void)stack.undo();
+    check(doc->project.reportLayouts[0].paper == "A4", "Ctrl+Z (le projet) : la mise en page enregistr\xC3\xA9" "e redevient comme avant");
+    (void)stack.redo();
+    check(L.setField("titre", "Autre titre") && L.modified(), "un titre chang\xC3\xA9");
+    L.cancel();
+    check(!L.modified() && L.current().title == "{Titre}", "Annuler les modifications : l'enregistr\xC3\xA9" "e revient");
+
+    // ---- le rapport prend la sienne ; renommer, celle par defaut, dupliquer, supprimer plusieurs
+    check(reports.setReportField(name, "mise_en_page", "Mise_en_page") && doc->project.reports[0].layout == "Mise_en_page"
+              && cellOf(reports.reports(), name, 3) == "Mise_en_page",
+          "le rapport : sa mise en page (la colonne la dit)");
+    check(!reports.setReportField(name, "mise_en_page", "Inconnue", &why) && why.find("inconnue") != std::string::npos, "une mise en page inconnue : refus\xC3\xA9" "e");
+    check(L.selectLayout("Mise_en_page") && L.setField("nom", "Exploitation") && L.save() && doc->project.reports[0].layout == "Exploitation"
+              && doc->project.reportLayouts[0].name == "Exploitation",
+          "renomm\xC3\xA9" "e puis enregistr\xC3\xA9" "e : le rapport suit");
+    check(L.duplicateLayout("Compacte") && doc->project.reportLayouts.size() == 2 && doc->project.reportLayouts[1].name == "Compacte_projet"
+              && doc->project.reportLayouts[1].landscape,
+          "Dupliquer \xC3\xA0 partir de Compacte : Compacte_projet, \xC3\xA0 toi");
+    check(L.duplicateItems().size() == 1 + 3 + 1 + 2, "le menu Dupliquer : les fournies, puis celles du projet");
+    check(L.setDefaultLayout("Compacte_projet") && doc->project.reportLayoutDefault == "Compacte_projet", "Compacte_projet : par d\xC3\xA9" "faut");
+    check(!L.removeLayout("Standard", &why) && why.find("fournie") != std::string::npos, "Standard ne se supprime pas");
+    {
+        std::vector<ui::RowIndex> rows;
+        for (std::size_t r = 0; r < L.list().model()->rowCount(); ++r) {
+            const auto t = L.list().model()->cellText(static_cast<ui::RowIndex>(r), 0);
+            if (t.rfind("Exploitation", 0) == 0 || t.rfind("Compacte_projet", 0) == 0) rows.push_back(static_cast<ui::RowIndex>(r));
+        }
+        L.list().selectModelRows(rows);
+        check(rows.size() == 2 && L.tools().labelOf(app::HmiReportLayoutPane::ActRemove) == "Supprimer les 2", "deux choisies : \xC2\xAB Supprimer les 2 \xC2\xBB");
+        L.tools().triggered->emit(app::HmiReportLayoutPane::ActRemove);
+        check(doc->project.reportLayouts.empty() && doc->project.reports[0].layout.empty() && doc->project.reportLayoutDefault.empty(),
+              "supprim\xC3\xA9" "es d'un coup : le rapport et la mise en page par d\xC3\xA9" "faut reviennent \xC3\xA0 Standard");
+        (void)stack.undo();
+        check(doc->project.reportLayouts.size() == 2 && doc->project.reports[0].layout == "Exploitation" && doc->project.reportLayoutDefault == "Compacte_projet",
+              "un seul Ctrl+Z les rend toutes, et ce qui les citait");
+    }
+    L.setPreviewSample(false);
+    check(!L.previewSample() && L.preview().pageCount() >= 1, "l'aper\xC3\xA7u sur la derni\xC3\xA8re p\xC3\xA9riode (l'historique du projet)");
+    L.setPreviewSample(true);
+
+    // ---- Generer le rapport maintenant : la fenetre
+    reports.openGenerate(name, false);
+    auto& sh = reports.sheet();
+    check(sh.isOpen() && sh.period() == app::HmiReportGenerateSheet::Last && sh.layout() == "Exploitation" && sh.layoutChoices().front() == "Exploitation"
+              && sh.send() && sh.openAfter(),
+          "la fen\xC3\xAAtre : la derni\xC3\xA8re p\xC3\xA9riode, la mise en page du rapport propos\xC3\xA9" "e d'abord, l'envoyer, l'ouvrir");
+    check(sh.periodText(app::HmiReportGenerateSheet::Last).rfind("La derni\xC3\xA8re (", 0) == 0, "la p\xC3\xA9riode dite : La derni\xC3\xA8re (du \xE2\x86\x92 au)");
+    check(sh.setLayout("Compacte") && std::fabs(sh.preview().document()->width - 841.89) < 0.1, "une autre mise en page : l'aper\xC3\xA7u la suit (paysage)");
+    sh.setFormat("Excel");
+    sh.setSend(false);
+    check(!sh.setRange("hier", "demain", &why) && sh.setRange("2026-11-01 00:00", "2026-11-02 00:00") && sh.period() == app::HmiReportGenerateSheet::Chosen
+              && sh.fileHint().find("rapport_Rapport_journalier_2026-11-02_0000.xlsx") != std::string::npos,
+          "une p\xC3\xA9riode choisie ; le fichier dit dans exports/");
+    std::string where;
+    check(sh.generate(&where) && !sh.isOpen() && !asked.empty() && asked.back().format == "Excel" && asked.back().layout == "Compacte" && !asked.back().send
+              && rp::stampOf(asked.back().from) == "2026-11-01 00:00" && written.back().fileName == "rapport_Rapport_journalier_2026-11-02_0000.xlsx",
+          "G\xC3\xA9n\xC3\xA9rer : le format, la mise en page, la p\xC3\xA9riode choisis ; sans l'envoyer");
+    check(opened.size() == 1 && opened[0].find("rapport_Rapport_journalier_2026-11-02_0000.xlsx") != std::string::npos && reports.tabs().currentIndex() == 1,
+          "puis le fichier s'ouvre ; l'onglet \xC3\x89" "crits le montre");
+    {
+        std::string base;
+        const auto path = reports.written().pathOfRow(0, 0, &base);
+        check(path.rfind("exports/rapport_", 0) == 0, "\xC3\x89" "crits : la colonne Fichier est un chemin (Ouvrir dans l'explorateur, Aller \xC3\xA0)");
+    }
+    reports.openGenerate(name, true);
+    check(sh.isOpen() && sh.dispatch(ui::KeyDown{ui::Key::Escape, {}, false}) == ui::EventResult::Consumed && !sh.isOpen(), "\xC3\x89" "chap : rien");
+    reports.openGenerate(name, true);
+    sh.layoutBox().setSelectedIndex(static_cast<int>(sh.layoutChoices().size()));
+    sh.layoutBox().selectionChanged->emit(static_cast<int>(sh.layoutChoices().size()));
+    check(!sh.isOpen() && reports.tabs().currentIndex() == 2, "\xC2\xAB Modifier les mises en page\xE2\x80\xA6 \xC2\xBB : l'onglet Mise en page");
+    fs::remove_all(work, ec);
+
+    // ---- le sous-onglet Sons de la BIBLIOTHEQUE de l'editeur de vues
+    {
+        namespace sl = hmi::soundlib;
+        Bench b;
+        auto& pal = b.editor->palette();
+        auto* sounds = pal.soundsPane();
+        gfx::Rect imgTab, sonTab, varTab;
+        (void)pal.modeRect(app::HmiPalette::Mode::Images, imgTab);
+        (void)pal.modeRect(app::HmiPalette::Mode::Variables, varTab);
+        check(sounds && sounds->compact() && pal.modeRect(app::HmiPalette::Mode::Sounds, sonTab) && imgTab.x < sonTab.x && sonTab.x < varTab.x,
+              "les onglets : Objets | Images | Sons | Variables");
+        pal.dispatch(ui::MouseDown{{sonTab.x + sonTab.w / 2, sonTab.y + sonTab.h / 2}, ui::MouseButton::Left, 1, {}});
+        b.editor->layout();
+        check(pal.mode() == app::HmiPalette::Mode::Sounds && sounds && sounds->visible(), "un clic sur Sons l'ouvre");
+        if (sounds) {
+            const auto cats = sounds->shownCategories();
+            bool alarmRow = false;
+            for (std::size_t r = 0; r < sounds->table().model()->rowCount(); ++r)
+                alarmRow = alarmRow || sounds->table().model()->cellText(static_cast<ui::RowIndex>(r), 0) == "Alarmes  (7)";
+            check(cats.size() == 5 && cats[0].first == "Mes sons" && cats[1].first == "Alarmes" && cats[1].second == 7 && alarmRow,
+                  "les dossiers et leur nombre : Mes sons, Alarmes (7)...");
+            check(sounds->table().model()->columnCount() == 3, "en \xC3\xA9troit : Son, Dur\xC3\xA9" "e, Projet");
+            pal.setFilter("sir\xC3\xA8ne");
+            check(sounds->shownIds().size() == 2, "la recherche de la biblioth\xC3\xA8que cherche les sons (sir\xC3\xA8ne : 2)");
+            pal.setFilter("");
+            check(!sounds->tools().isEnabled(app::HmiSoundLibraryPane::ActAttach), "Au clic : gris\xC3\xA9 sans objet choisi");
+            check(sounds->attachToChosen(&why) == 0 && why.find("objet") != std::string::npos, "sans objet choisi : il le dit");
+            const Id btn = b.place(Kind::Button, 200, 200);
+            check(sounds->select("alarme-haute") && sounds->tools().isEnabled(app::HmiSoundLibraryPane::ActAttach) && sounds->attachToChosen() == 1,
+                  "un bouton choisi : Au clic");
+            const auto* o = b.v().object(btn);
+            const auto* r2 = b.doc->project.resourceByName("alarme-haute.wav");
+            check(o && !o->actions.empty() && o->actions.back().operation == Operation::PlaySound && o->actions.back().target == "alarme-haute.wav" && r2,
+                  "le bouton joue l'alarme haute au clic (la ressource import\xC3\xA9" "e)");
+            (void)b.stack.undo();
+            const auto* o2 = b.v().object(btn);
+            check(o2 && o2->actions.empty() && !b.doc->project.resourceByName("alarme-haute.wav"), "un seul Ctrl+Z : l'action et la ressource partent");
+        }
+    }
+
+    // ---- l'arbre : Ressources > Bibliotheque de sons, Bibliotheque d'images, deplies, avec leur nombre
+    {
+        namespace sl = hmi::soundlib;
+        namespace il = hmi::imagelib;
+        using NK = app::ProjectTreeModel::NodeKind;
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        tree.setHmi(doc);
+        ui::NodeId hmiNode = ui::kInvalidNode, res = ui::kInvalidNode;
+        for (std::size_t i = 0; i < tree.childCount(tree.root()); ++i)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
+        for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i)
+            if (app::ProjectTreeModel::kindOf(tree.childAt(hmiNode, i)) == NK::HmiResources) res = tree.childAt(hmiNode, i);
+        if (res != ui::kInvalidNode && tree.childCount(res) == 4) {
+            const auto sounds = tree.childAt(res, 2), images = tree.childAt(res, 3);
+            const std::size_t nSounds = sl::builtIn().size() + sl::userSounds().size();
+            const std::size_t nImages = il::builtIn().size() + il::userImages().size();
+            same_text(tree.text(sounds) + "  [" + tree.counterOf(sounds) + "]", "Biblioth\xC3\xA8que de sons  [" + std::to_string(nSounds) + "]",
+                      "Biblioth\xC3\xA8que de sons : son nombre");
+            same_text(tree.text(images) + "  [" + tree.counterOf(images) + "]", "Biblioth\xC3\xA8que d'images  [" + std::to_string(nImages) + "]",
+                      "Biblioth\xC3\xA8que d'images : son nombre");
+            check(tree.childCount(sounds) == 5 && tree.text(tree.childAt(sounds, 1)) == "Alarmes" && tree.counterOf(tree.childAt(sounds, 1)) == "7"
+                      && tree.childCount(tree.childAt(sounds, 1)) == 7,
+                  "les sons d\xC3\xA9pli\xC3\xA9s : Mes sons, Alarmes [7] et ses 7 sons");
+            const auto alarm = tree.childAt(tree.childAt(sounds, 1), 0);
+            check(app::ProjectTreeModel::kindOf(alarm) == NK::HmiSoundItem && !app::ProjectTreeModel::soundIdOf(alarm).empty()
+                      && app::ProjectTreeModel::soundFolderOf(alarm) == "Alarmes" && tree.style(alarm).icon == ui::Icon::Lock,
+                  "un son natif : son identifiant, son dossier, un cadenas");
+            check(tree.childCount(images) == il::builtInCategories().size() + 1 && tree.text(tree.childAt(images, 0)) == "Mes images"
+                      && tree.childCount(tree.childAt(images, 1)) > 0,
+                  "les images d\xC3\xA9pli\xC3\xA9" "es : Mes images, puis les dossiers du sous-onglet Images");
+            const auto img = tree.childAt(tree.childAt(images, 1), 0);
+            check(app::ProjectTreeModel::kindOf(img) == NK::HmiImageItem && il::findBuiltIn(app::ProjectTreeModel::imageIdOf(img)) != nullptr
+                      && app::ProjectTreeModel::imageFolderOf(img) == il::builtInCategories().front(),
+                  "une image : celle du sous-onglet Images (son identifiant, son dossier)");
+        } else {
+            check(false, "Ressources a quatre enfants");
+        }
+    }
+}
+
 int main(int argc, char** argv) {
+    // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
+    if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
+        rapportsSonsImages1250();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.24.0 : HMI_TEST_ARB=1 - supprimer plusieurs noeuds de l'arbre, les chemins (Ouvrir dans l'explorateur, Aller a).
     if (const char* only = std::getenv("HMI_TEST_ARB"); only && *only == '1') {
         arbreSupprimerPlusieurs1240();
@@ -47074,6 +47335,7 @@ int main(int argc, char** argv) {
     couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
     bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
+    rapportsSonsImages1250();               // 1.25.0 : la mise en page des rapports, les sons et les images de la bibliotheque
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)

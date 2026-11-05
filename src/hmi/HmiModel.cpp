@@ -2846,6 +2846,10 @@ const Report* Project::reportByName(std::string_view name) const noexcept {
     for (const auto& r : reports) if (iequals(r.name, name)) return &r;
     return nullptr;
 }
+const ReportLayout* Project::reportLayoutByName(std::string_view name) const noexcept {
+    for (const auto& l : reportLayouts) if (iequals(l.name, name)) return &l;
+    return nullptr;
+}
 const NotifyRecipient* Project::recipientByName(std::string_view name) const noexcept {
     for (const auto& r : notify.recipients) if (iequals(r.name, name)) return &r;
     return nullptr;

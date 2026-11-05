@@ -279,6 +279,17 @@ struct SimSlaveCommand {
 };
 
 // ---- lot 14 : un rapport periodique ecrit (l'ecran l'envoie en piece jointe) -----
+// 1.25.0 : GENERER MAINTENANT, CE QU'ON A CHOISI (la fenetre << Generer le rapport maintenant >>) : la periode (la
+// derniere complete, celle en cours, ou une choisie : [from, to[), le format et la mise en page (vides : ceux du
+// rapport), l'envoi aux destinataires du rapport (faux : le fichier seul).
+struct ReportOptions {
+    bool        current{false};
+    double      from{0}, to{0};       // une periode choisie si to > from
+    std::string format;               // "PDF", "Excel" ; vide : celui du rapport
+    std::string layout;               // une mise en page ; vide : celle du rapport
+    bool        send{true};
+};
+
 struct ReportOutput {
     Id                           report{kNoId};
     std::string                  name, title, from, to;   // la periode, "2026-09-24 06:00"
@@ -1066,6 +1077,7 @@ public:
     // jusqu'a maintenant (`current`), ou la derniere complete. Vrai : ecrit
     // (`where` : le fichier) ; faux : pourquoi. Et quand part le prochain.
     bool writeReport(Id report, double now, bool current, std::string* where = nullptr);
+    bool writeReport(Id report, double now, const ReportOptions& options, std::string* where = nullptr);   // 1.25.0
     [[nodiscard]] std::string nextReportText(Id report) const;
     // Le simulateur est-il relie (sans liaison Modbus) ?
     [[nodiscard]] bool simulatorAttached() const noexcept;

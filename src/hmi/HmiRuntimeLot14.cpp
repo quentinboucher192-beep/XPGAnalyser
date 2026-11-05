@@ -6,6 +6,7 @@
 #include "HmiComm.hpp"
 #include "HmiPublicVars.hpp"
 #include "HmiReports.hpp"
+#include "HmiReportLayout.hpp"   // 1.25.0 : la mise en page
 
 #include <algorithm>
 #include <cctype>
@@ -394,6 +395,13 @@ void Runtime::reportsCycle(double now) {
 }
 
 bool Runtime::writeReport(Id id, double now, bool current, std::string* where) {
+    ReportOptions o;
+    o.current = current;
+    return writeReport(id, now, o, where);
+}
+
+bool Runtime::writeReport(Id id, double now, const ReportOptions& options, std::string* where) {
+    const bool current = options.current;
     const auto fail = [&](std::string why) {
         if (where) *where = why;
         return false;
@@ -402,8 +410,12 @@ bool Runtime::writeReport(Id id, double now, bool current, std::string* where) {
     if (!r) return fail("rapport introuvable");
     now_ = std::max(now_, now);
     const double wall = wallEpochOf(startWallMs_, startNow_, settings_.clockOffset, now_);
-    const double to = current ? wall + 1.0 : report::lastDue(*r, wall);   // maintenant : ce qui vient d'arriver compris
-    const double from = current ? report::periodStart(*r, report::nextDue(*r, wall)) : report::periodStart(*r, to);
+    double to = current ? wall + 1.0 : report::lastDue(*r, wall);   // maintenant : ce qui vient d'arriver compris
+    double from = current ? report::periodStart(*r, report::nextDue(*r, wall)) : report::periodStart(*r, to);
+    if (options.to > options.from) {   // 1.25.0 : une periode choisie
+        from = options.from;
+        to = options.to;
+    }
     // L'historique et les alarmes en cours (pas encore dans l'historique).
     History local;
     const History& h = history_ ? *history_ : local;
@@ -437,14 +449,18 @@ bool Runtime::writeReport(Id id, double now, bool current, std::string* where) {
         if (o) figures.push_back({v->name + "/" + o->name + (st.arguments.empty() ? std::string{} : " (" + st.arguments.substr(1) + ")"), st.figures});
     }
     const auto content = report::build(*project_, *source, *r, from, to, figures, dateStampOf(now_));
-    const auto format = r->format == "Excel" ? ExportFormat::Excel : ExportFormat::Pdf;
+    const std::string& formatName = options.format.empty() ? r->format : options.format;
+    const auto format = formatName == "Excel" ? ExportFormat::Excel : ExportFormat::Pdf;
+    // 1.25.0 : la mise en page - celle choisie, sinon celle du rapport (sinon celle par defaut du projet).
+    const ReportLayout* chosenLayout = options.layout.empty() ? nullptr : report::findLayout(*project_, options.layout);
+    const ReportLayout& layout = chosenLayout ? *chosenLayout : report::layoutOf(*project_, *r);
     ExportRequest rq;
     rq.fileName = report::fileName(*r, to, format);
     rq.format = std::string(exportFormatLabel(format));
     rq.source = "rapport:" + r->name;
     rq.rows = 0;
     for (const auto& t : content.sections) rq.rows += t.rows.size();
-    rq.data = std::make_shared<const Bytes>(report::render(content, format));
+    rq.data = std::make_shared<const Bytes>(report::render(*project_, content, format, layout));
     rq.origin = "Rapport " + r->name;
     std::string path;
     const bool ok = hooks_.exportFile && hooks_.exportFile(rq, &path);
@@ -465,7 +481,7 @@ bool Runtime::writeReport(Id id, double now, bool current, std::string* where) {
         out.path = path;
         out.format = rq.format;
         out.data = rq.data;
-        out.recipients = r->recipients;
+        out.recipients = options.send ? r->recipients : std::string{};   // 1.25.0 : le fichier seul, sans l'envoyer
         hooks_.reportWritten(out);
     }
     if (where) *where = path;

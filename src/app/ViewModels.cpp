@@ -11,6 +11,8 @@
 #include "../hmi/HmiSymbols.hpp"     // 1.10 (chantier O) : le symbole d'une instance (ses operateurs)
 #include "../hmi/HmiSemanticColors.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../hmi/HmiStyles.hpp"           // 1.23.1 : IHM > Styles > Styles (les fournis compris)
+#include "../hmi/HmiSoundLibrary.hpp"     // 1.25.0 : Ressources > Bibliotheque de sons, depliee
+#include "../hmi/HmiAssets.hpp"           // 1.25.0 : Ressources > Bibliotheque d'images, depliee (hmi::imagelib)
 #include "../ui/widgets/ColorPalette.hpp"   // 1.23.1 : la teinte d'une couleur semantique
 #include "../hmi/HmiFolders.hpp"      // lot 21 : les listes rangees en dossiers
 
@@ -391,6 +393,77 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return e;
         }
         std::string countTag(std::size_t n) { return "  [" + std::to_string(n) + "]"; }
+
+        // 1.25.0 : les dossiers de la bibliotheque de sons (Mes sons, puis les natifs) et leurs sons - Mes sons relus
+        // seulement quand ils ont change (hmi::soundlib::userRevision) ou que leur dossier a change.
+        struct SoundTreeCache {
+            std::uint64_t                     revision{~std::uint64_t{0}};
+            std::string                       folder;
+            std::vector<hmi::soundlib::Sound> mine;
+        };
+        const std::vector<hmi::soundlib::Sound>& mySounds() {
+            static SoundTreeCache cache;
+            const auto rev = hmi::soundlib::userRevision();
+            const auto& folder = hmi::soundlib::userFolder();
+            if (cache.revision != rev || cache.folder != folder) {
+                cache.mine = hmi::soundlib::userSounds();
+                cache.revision = rev;
+                cache.folder = folder;
+            }
+            return cache.mine;
+        }
+        // 1.25.0 : la bibliotheque d'images (hmi::imagelib, le sous-onglet Images de l'editeur de vues) - Mes images
+        // relues seulement quand elles ont change.
+        struct ImageTreeCache {
+            std::uint64_t                    revision{~std::uint64_t{0}};
+            std::string                      folder;
+            std::vector<hmi::imagelib::Image> mine;
+        };
+        const std::vector<hmi::imagelib::Image>& myImages() {
+            static ImageTreeCache cache;
+            const auto rev = hmi::imagelib::userRevision();
+            const auto& folder = hmi::imagelib::userFolder();
+            if (cache.revision != rev || cache.folder != folder) {
+                cache.mine = hmi::imagelib::userImages();
+                cache.revision = rev;
+                cache.folder = folder;
+            }
+            return cache.mine;
+        }
+        std::vector<std::string> imageFolders() {
+            std::vector<std::string> out{std::string(hmi::imagelib::kMine)};
+            for (const auto& c : hmi::imagelib::builtInCategories()) out.push_back(c);
+            return out;
+        }
+        std::vector<const hmi::imagelib::Image*> imagesOfFolder(std::size_t folder) {
+            std::vector<const hmi::imagelib::Image*> out;
+            if (folder == 0) {
+                for (const auto& i : myImages()) out.push_back(&i);
+                return out;
+            }
+            const auto folders = imageFolders();
+            if (folder >= folders.size()) return out;
+            for (const auto& i : hmi::imagelib::builtIn())
+                if (i.category == folders[folder]) out.push_back(&i);
+            return out;
+        }
+        std::vector<std::string> soundFolders() {
+            std::vector<std::string> out{std::string(hmi::soundlib::kMine)};
+            for (const auto& c : hmi::soundlib::builtInCategories()) out.push_back(c);
+            return out;
+        }
+        std::vector<const hmi::soundlib::Sound*> soundsOfFolder(std::size_t folder) {
+            std::vector<const hmi::soundlib::Sound*> out;
+            if (folder == 0) {
+                for (const auto& s : mySounds()) out.push_back(&s);
+                return out;
+            }
+            const auto folders = soundFolders();
+            if (folder >= folders.size()) return out;
+            for (const auto& s : hmi::soundlib::builtIn())
+                if (s.category == folders[folder]) out.push_back(&s);
+            return out;
+        }
         // Lot 8 : le role des vues d'un dossier de Modeles (0 ecrans modeles, 1 en-tetes, 2 pieds).
         std::string_view templateRoleOf(std::uint64_t k) { return k == 0 ? "modele" : k == 1 ? "entete" : "pied"; }
         // L'objet d'une surcharge : les 20 bits hauts du sous-index.
@@ -764,6 +837,47 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         std::vector<hmitree::OutlineGroup> groups;
     };
 
+    // 1.25.0 : la bibliotheque de sons depliee.
+    std::string ProjectTreeModel::soundFolderOf(ui::NodeId n) {
+        const auto k = kindOf(n);
+        if (k != NodeKind::HmiSoundGroup && k != NodeKind::HmiSoundItem) return {};
+        const auto folders = soundFolders();
+        const auto i = static_cast<std::size_t>(indexOf(n));
+        return i < folders.size() ? folders[i] : std::string{};
+    }
+
+    std::string ProjectTreeModel::soundIdOf(ui::NodeId n) {
+        if (kindOf(n) != NodeKind::HmiSoundItem) return {};
+        const auto sounds = soundsOfFolder(static_cast<std::size_t>(indexOf(n)));
+        const auto at = static_cast<std::size_t>(subOf(n));
+        return at < sounds.size() ? sounds[at]->id : std::string{};
+    }
+
+    ui::NodeId ProjectTreeModel::soundNode(std::string_view soundId) {
+        const auto folders = soundFolders();
+        for (std::size_t f = 0; f < folders.size(); ++f) {
+            const auto sounds = soundsOfFolder(f);
+            for (std::size_t k = 0; k < sounds.size() && k <= 0xFFFF; ++k)
+                if (sounds[k]->id == soundId) return pack(NodeKind::HmiSoundItem, static_cast<Index>(f), static_cast<Index>(k));
+        }
+        return ui::kInvalidNode;
+    }
+
+    std::string ProjectTreeModel::imageFolderOf(ui::NodeId n) {
+        const auto k = kindOf(n);
+        if (k != NodeKind::HmiImageGroup && k != NodeKind::HmiImageItem) return {};
+        const auto folders = imageFolders();
+        const auto i = static_cast<std::size_t>(indexOf(n));
+        return i < folders.size() ? folders[i] : std::string{};
+    }
+
+    std::string ProjectTreeModel::imageIdOf(ui::NodeId n) {
+        if (kindOf(n) != NodeKind::HmiImageItem) return {};
+        const auto images = imagesOfFolder(static_cast<std::size_t>(indexOf(n)));
+        const auto at = static_cast<std::size_t>(subOf(n));
+        return at < images.size() ? images[at]->id : std::string{};
+    }
+
     std::size_t ProjectTreeModel::childCount(ui::NodeId n) const {
         // ---- Lot API 8 : l'arbre du projet (les resultats du filtre, a la fin du dossier de leur domaine) ----
         if (kindOf(n) == NodeKind::FilterHit) return 0;
@@ -903,7 +1017,11 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiSymbolsFolder:
             return hmi_ ? hmilists::childrenOf(hmi_->project, hmi::fold::List::Symbols, {}).size() : 0;   // lot 21 : ses dossiers
         case NodeKind::HmiConfig:           return hmi_ ? 12 : 0;  // lot 13 : + Langues, Unites et formats ; lot 14 : + Communication, Poste, Notifications, Rapports, Acces web ; 1.13.0 : + Unites de mesure ; 1.14.0 : + Enregistrements ; 1.22.9 : - Unites de mesure (un onglet d Unites et formats)
-        case NodeKind::HmiResources:        return hmi_ ? 3 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents ; 1.24.0 : Sons
+        case NodeKind::HmiResources:        return hmi_ ? 4 : 0;   // 1.14.0 (M4) : Enregistrements ; 1.20.0 : Incidents ; 1.24.0 : Sons ; 1.25.0 : Images
+        case NodeKind::HmiImageLibrary:     return hmi_ ? imageFolders().size() : 0;     // 1.25.0 : ses dossiers
+        case NodeKind::HmiImageGroup:       return hmi_ ? imagesOfFolder(i).size() : 0;   // 1.25.0 : ses images
+        case NodeKind::HmiSoundLibrary:     return hmi_ ? soundFolders().size() : 0;    // 1.25.0 : ses dossiers
+        case NodeKind::HmiSoundGroup:       return hmi_ ? soundsOfFolder(i).size() : 0;  // 1.25.0 : ses sons
         case NodeKind::HmiStyles:           return hmi_ ? 2 : 0;   // 1.23.1 : Styles, Couleurs semantiques
         case NodeKind::HmiStyleGroup:
             if (!hmi_) return 0;
@@ -1398,11 +1516,22 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return k < std::size(sub) ? pack(sub[k], 0) : ui::kInvalidNode;
         }
         case NodeKind::HmiResources:   // 1.14.0 (M4) : le dossier natif des enregistrements ; 1.20.0 : les incidents
-            if (!hmi_ || k > 2) return ui::kInvalidNode;
+            if (!hmi_ || k > 3) return ui::kInvalidNode;
             if (k == 2) return pack(NodeKind::HmiSoundLibrary, 0);   // 1.24.0 : la bibliotheque de sons
+            if (k == 3) return pack(NodeKind::HmiImageLibrary, 0);   // 1.25.0 : la bibliotheque d'images
             return pack(k == 0 ? NodeKind::HmiRecordings : NodeKind::HmiIncidents, 0);
         case NodeKind::HmiStyles:      // 1.23.1 : Styles, Couleurs semantiques
             return hmi_ && k < 2 ? pack(NodeKind::HmiStyleGroup, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::HmiImageLibrary:   // 1.25.0 : Mes images, puis les dossiers de la bibliotheque
+            return hmi_ && k < imageFolders().size() ? pack(NodeKind::HmiImageGroup, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::HmiImageGroup:     // 1.25.0 : les images du dossier
+            return hmi_ && k < imagesOfFolder(i).size() && k <= 0xFFFF ? pack(NodeKind::HmiImageItem, i, static_cast<Index>(k))
+                                                                      : ui::kInvalidNode;
+        case NodeKind::HmiSoundLibrary:   // 1.25.0 : Mes sons, Alarmes, Notifications, Interface, Procede
+            return hmi_ && k < soundFolders().size() ? pack(NodeKind::HmiSoundGroup, static_cast<Index>(k)) : ui::kInvalidNode;
+        case NodeKind::HmiSoundGroup:     // 1.25.0 : les sons du dossier
+            return hmi_ && k < soundsOfFolder(i).size() && k <= 0xFFFF ? pack(NodeKind::HmiSoundItem, i, static_cast<Index>(k))
+                                                                      : ui::kInvalidNode;
         case NodeKind::HmiStyleGroup: {
             if (!hmi_) return ui::kInvalidNode;
             const std::size_t count = i == 0 ? hmi::styles::all(hmi_->project).size() : hmi::semantic::all(hmi_->project).size();
@@ -2019,7 +2148,9 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
                 || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                           // 1.14.0 (M4)
                 || k == NK::HmiIncidents                                                             // 1.20.0
                 || k == NK::HmiStyleGroup || k == NK::HmiStyleItem || k == NK::HmiSemanticItem       // 1.23.1
-                || k == NK::HmiSoundLibrary;                                                         // 1.24.0
+                || k == NK::HmiSoundLibrary                                                          // 1.24.0
+                || k == NK::HmiSoundGroup || k == NK::HmiSoundItem                                   // 1.25.0
+                || k == NK::HmiImageLibrary || k == NK::HmiImageGroup || k == NK::HmiImageItem;      // 1.25.0
         }
     } // namespace
 
@@ -2699,7 +2830,34 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiRecordings:    return "Enregistrements  [" + std::to_string(recordingsCount()) + "]";   // 1.14.0 (M4)
         case NodeKind::HmiRecordingSettings: return "Enregistrements";
         case NodeKind::HmiIncidents:     return "Incidents  [" + std::to_string(incidentsCount()) + "]";   // 1.20.0 : en attente
-        case NodeKind::HmiSoundLibrary:  return "Biblioth\xC3\xA8que de sons";                                      // 1.24.0
+        case NodeKind::HmiSoundLibrary: {                                                                            // 1.24.0
+            std::size_t n = 0;                                                                                       // 1.25.0 : combien
+            for (std::size_t f = 0; hmi_ && f < soundFolders().size(); ++f) n += soundsOfFolder(f).size();
+            return "Biblioth\xC3\xA8que de sons" + countTag(n);
+        }
+        case NodeKind::HmiImageLibrary: {                                                                            // 1.25.0
+            std::size_t n = 0;
+            for (std::size_t f = 0; hmi_ && f < imageFolders().size(); ++f) n += imagesOfFolder(f).size();
+            return "Biblioth\xC3\xA8que d'images" + countTag(n);
+        }
+        case NodeKind::HmiImageGroup: {                                                                              // 1.25.0
+            const auto folders = imageFolders();
+            return i < folders.size() ? folders[i] + countTag(imagesOfFolder(i).size()) : std::string{};
+        }
+        case NodeKind::HmiImageItem: {                                                                               // 1.25.0
+            const auto images = imagesOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            return at < images.size() ? images[at]->label : std::string{};
+        }
+        case NodeKind::HmiSoundGroup: {                                                                              // 1.25.0
+            const auto folders = soundFolders();
+            return i < folders.size() ? folders[i] + countTag(soundsOfFolder(i).size()) : std::string{};
+        }
+        case NodeKind::HmiSoundItem: {                                                                               // 1.25.0
+            const auto sounds = soundsOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            return at < sounds.size() ? sounds[at]->label : std::string{};
+        }
         case NodeKind::HmiMeasureUnits:  return "Unit\xC3\xA9s de mesure  [" + std::to_string(hmi_ ? hmi::units::Catalog(hmi_->project.config).units().size() : 0u) + "]";   // 1.13.0 (lot J6b)
         case NodeKind::HmiComm:                                                                                      // lot 14 ; lot 15 : les equipements
             return "\xC3\x89quipements  [" + std::to_string(hmi_ ? hmi_->project.equipments.size() + (hmi_->project.comm.modbus() ? 1u : 0u) : 0u) + "]";
@@ -3857,6 +4015,33 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.icon = ui::Icon::Play;
             break;
         case NodeKind::HmiSoundLibrary:  s.icon = ui::Icon::Play; s.iconTone = ui::Tone::Accent; break;   // 1.24.0 : les sons
+        case NodeKind::HmiImageLibrary:  s.icon = ui::Icon::Image; s.iconTone = ui::Tone::Accent; break;     // 1.25.0 : les images
+        case NodeKind::HmiImageGroup:    s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;   // 1.25.0
+        case NodeKind::HmiImageItem: {                                                                        // 1.25.0
+            // Un cadenas pour une image de la bibliotheque, une personne pour une des tiennes ; son format et sa taille.
+            const auto images = imagesOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            if (at < images.size()) {
+                const bool mine = images[at]->mine();
+                s.icon = mine ? ui::Icon::User : ui::Icon::Lock;
+                s.iconTone = mine ? ui::Tone::Accent : ui::Tone::Muted;
+                s.hint = images[at]->format + "  \xC2\xB7 " + hmi::imagelib::sizeText(*images[at]);
+            }
+            break;
+        }
+        case NodeKind::HmiSoundGroup:    s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;   // 1.25.0
+        case NodeKind::HmiSoundItem: {                                                                        // 1.25.0
+            // Un cadenas pour un son natif (fabrique par le logiciel), une personne pour un des tiens ; sa duree apres le nom.
+            const auto sounds = soundsOfFolder(i);
+            const auto at = static_cast<std::size_t>(subOf(n));
+            if (at < sounds.size()) {
+                const bool mine = sounds[at]->mine();
+                s.icon = mine ? ui::Icon::User : ui::Icon::Lock;
+                s.iconTone = mine ? ui::Tone::Accent : ui::Tone::Muted;
+                s.hint = hmi::soundlib::durationText(sounds[at]->seconds) + (mine ? std::string{} : std::string("  \xC2\xB7 natif"));
+            }
+            break;
+        }
         case NodeKind::HmiIncidents:                                               // 1.20.0 : ambre, des incidents en attente
             s.icon = ui::Icon::Analyze;
             if (incidentsCount() > 0) s.iconTone = ui::Tone::Warning;

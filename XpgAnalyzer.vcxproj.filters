@@ -1429,6 +1429,9 @@
     <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiReportLayoutPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiScanDialog.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1691,6 +1694,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRelations.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiReportLayout.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRoles.cpp">
@@ -3097,6 +3103,9 @@
     <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiReportLayoutPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiScanDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3350,6 +3359,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRelations.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiReportLayout.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiRoles.hpp">

@@ -54,13 +54,25 @@ class HmiSoundDetail;
 class HmiSoundLibraryPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
-    enum Action : int { ActPlay = 1, ActImport, ActAdd, ActRemove, ActCopy, ActReveal, ActGoTo };
+    enum Action : int { ActPlay = 1, ActImport, ActAdd, ActRemove, ActCopy, ActReveal, ActGoTo, ActAttach };
 
     struct Hosts {
         std::function<void(hmi::Id resource)>                   openResource;   // Aller a la ressource
         std::function<std::string(const std::string& path)>      reveal;         // l'Explorateur ; "" : fait
         std::function<void()>                                    askFile;        // + : choisir un fichier
+        // 1.25.0 (la palette de l'editeur de vues) : la vue ouverte et ses objets choisis - << Jouer au clic >>.
+        std::function<std::pair<hmi::Id, std::vector<hmi::Id>>()> chosenObjects;
     };
+
+    // 1.25.0 : LE SOUS-ONGLET SONS de la BIBLIOTHEQUE de l'editeur de vues (le client : << ajouter un sous-onglet sons >>).
+    // Le meme volet, en etroit : la liste seule (Son, Duree, un \xE2\x9C\x93 s'il est dans le projet), ses dossiers et leur
+    // nombre ; pas de champ de recherche (celui de la bibliotheque le pilote, setSearch) ni de fiche (Ecouter joue quand
+    // meme) ; en bas, le son choisi ou le mode d'emploi. En plus : << Jouer au clic de l'objet choisi >> (ActAttach).
+    void setCompact(bool on);
+    [[nodiscard]] bool compact() const noexcept { return compact_; }
+    // Le son choisi, joue au clic des objets choisis de la vue : importe s'il ne l'est pas, puis une action << Jouer un
+    // son >> au clic de chacun - UNE commande (Ctrl+Z). Rend le nombre d'objets ; 0 et `why` sinon.
+    std::size_t attachToChosen(std::string* why = nullptr);
 
     HmiSoundLibraryPane(std::string id, hmi::DocumentPtr doc, Apply apply);
     ~HmiSoundLibraryPane() override;
@@ -126,6 +138,7 @@ private:
     std::set<std::string>             closed_;            // les dossiers replies
     std::string                       query_;
     bool                              refreshing_{false};
+    bool                              compact_{false};      // 1.25.0 : dans la palette de l'editeur de vues
     std::string                       message_;
     core::ConnectionScope             links_;
 };

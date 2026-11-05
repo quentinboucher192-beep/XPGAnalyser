@@ -1558,7 +1558,23 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
         index += "rapport" + fieldInt("id", r.id) + field("nom", r.name) + field("titre", r.title) + field("periode", r.period)
                + field("heure", r.time) + fieldInt("jour_semaine", r.weekday) + fieldInt("jour_mois", r.monthDay) + field("format", r.format)
                + fieldBool("alarmes", r.alarms) + field("mesures", r.measures) + fieldBool("production", r.production)
-               + fieldBool("evenements", r.events) + field("destinataires", r.recipients) + fieldBool("actif", r.enabled) + "\n";
+               + fieldBool("evenements", r.events) + field("destinataires", r.recipients) + fieldBool("actif", r.enabled)
+               + (r.layout.empty() ? std::string{} : field("mise_en_page", r.layout)) + "\n";
+    // 1.25.0 : les mises en page des rapports (celles du projet ; les fournies ne s'ecrivent pas), puis celle par defaut.
+    for (const auto& l : p.reportLayouts) {
+        std::string parts;
+        for (const auto& part : l.parts) parts += (parts.empty() ? "" : ",") + std::string(part.on ? "" : "-") + part.key;
+        index += "mise_en_page" + fieldInt("id", l.id) + field("nom", l.name) + field("format", l.paper) + fieldBool("paysage", l.landscape)
+               + fieldBare("marge_haut", formatNumber(l.marginTop)) + fieldBare("marge_bas", formatNumber(l.marginBottom))
+               + fieldBare("marge_gauche", formatNumber(l.marginLeft)) + fieldBare("marge_droite", formatNumber(l.marginRight))
+               + field("logo", l.logo) + fieldBool("logo_droite", l.logoRight) + field("titre", l.title) + field("sous_titre", l.subtitle)
+               + field("accent", l.accent) + field("pied_gauche", l.footLeft) + field("pied_centre", l.footCenter)
+               + field("pied_droite", l.footRight) + fieldBool("visa", l.visa) + field("visas", l.visaLabels) + field("parties", parts)
+               + fieldBare("taille_tableaux", formatNumber(l.tableSize)) + fieldBool("lignes_alternees", l.zebra)
+               + fieldBool("entete_repete", l.repeatHeader) + field("police", l.font) + fieldBare("taille_titre", formatNumber(l.titleSize))
+               + fieldBare("taille_corps", formatNumber(l.bodySize)) + "\n";
+    }
+    if (!p.reportLayoutDefault.empty()) index += "mise_en_page_defaut" + field("nom", p.reportLayoutDefault) + "\n";
     // Lot 15 : les equipements du reseau.
     for (const auto& e : p.equipments) {
         index += "equipement" + fieldInt("id", e.id) + field("nom", e.name) + fieldBare("type", equipmentTypeKey(e.type))
@@ -2278,7 +2294,55 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
             rp.events = toBool(r.get("evenements"), false);
             rp.recipients = toStr(r.get("destinataires"));
             rp.enabled = toBool(r.get("actif"), true);
+            rp.layout = toStr(r.get("mise_en_page"));                     // 1.25.0
             if (rp.id != kNoId && !rp.name.empty()) p.reports.push_back(std::move(rp));
+        } else if (r.word == "mise_en_page") {                            // 1.25.0 : une mise en page des rapports
+            ReportLayout l;
+            const ReportLayout def{};
+            l.id = static_cast<Id>(toInt(r.get("id"), 0));
+            l.name = toStr(r.get("nom"));
+            l.paper = r.get("format") ? toStr(r.get("format")) : def.paper;
+            l.landscape = toBool(r.get("paysage"), false);
+            const auto num = [&](const char* key, double fallback) {
+                double v = fallback;
+                if (const auto* t = r.get(key); t && parseNumber(*t, v) && std::isfinite(v)) return v;
+                return fallback;
+            };
+            l.marginTop = num("marge_haut", def.marginTop);
+            l.marginBottom = num("marge_bas", def.marginBottom);
+            l.marginLeft = num("marge_gauche", def.marginLeft);
+            l.marginRight = num("marge_droite", def.marginRight);
+            l.logo = toStr(r.get("logo"));
+            l.logoRight = toBool(r.get("logo_droite"), false);
+            l.title = r.get("titre") ? toStr(r.get("titre")) : def.title;
+            l.subtitle = r.get("sous_titre") ? toStr(r.get("sous_titre")) : def.subtitle;
+            l.accent = r.get("accent") ? toStr(r.get("accent")) : def.accent;
+            l.footLeft = r.get("pied_gauche") ? toStr(r.get("pied_gauche")) : def.footLeft;
+            l.footCenter = r.get("pied_centre") ? toStr(r.get("pied_centre")) : def.footCenter;
+            l.footRight = r.get("pied_droite") ? toStr(r.get("pied_droite")) : def.footRight;
+            l.visa = toBool(r.get("visa"), false);
+            l.visaLabels = r.get("visas") ? toStr(r.get("visas")) : def.visaLabels;
+            for (std::string_view rest = toStr(r.get("parties")); !rest.empty();) {
+                const auto comma = rest.find(',');
+                std::string_view one = rest.substr(0, comma);
+                rest = comma == std::string_view::npos ? std::string_view{} : rest.substr(comma + 1);
+                ReportLayoutPart part;
+                if (!one.empty() && one.front() == '-') {
+                    part.on = false;
+                    one.remove_prefix(1);
+                }
+                part.key = std::string(one);
+                if (!part.key.empty()) l.parts.push_back(std::move(part));
+            }
+            l.tableSize = num("taille_tableaux", def.tableSize);
+            l.zebra = toBool(r.get("lignes_alternees"), true);
+            l.repeatHeader = toBool(r.get("entete_repete"), true);
+            l.font = r.get("police") ? toStr(r.get("police")) : def.font;
+            l.titleSize = num("taille_titre", def.titleSize);
+            l.bodySize = num("taille_corps", def.bodySize);
+            if (l.id != kNoId && !l.name.empty()) p.reportLayouts.push_back(std::move(l));
+        } else if (r.word == "mise_en_page_defaut") {                     // 1.25.0
+            p.reportLayoutDefault = toStr(r.get("nom"));
         } else if (r.word == "web") {                                     // lot 14
             auto& w = p.web;
             const WebAccess def{};
@@ -2674,6 +2738,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     for (const auto& sc : p.semanticColors) highest = std::max(highest, sc.id);   // 1.23.1
     for (const auto& sc : p.scenarios) highest = std::max(highest, sc.id);   // lot 13
     for (const auto& rp : p.reports) highest = std::max(highest, rp.id);     // lot 14
+    for (const auto& l : p.reportLayouts) highest = std::max(highest, l.id);   // 1.25.0
     for (const auto& e : p.equipments) highest = std::max(highest, e.id);    // lot 15
     for (const auto& g : p.security.groups)
         if (g.id < 0xFFFFFE00u) highest = std::max(highest, g.id);      // hors groupes par defaut

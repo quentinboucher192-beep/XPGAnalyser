@@ -332,7 +332,7 @@ Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes e
 - **Copier le chemin**.
 Un chemin qui n'existe pas (encore) : les entrées sont grisées, et la raison est dite.
 ### Où
-L'inspecteur (une image, une vidéo, une affiche, une police, un document cités ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de l'Explorateur de fichiers), les tableaux Ressources, Fichiers externes et Enregistrements, la fiche d'un enregistrement, la configuration des enregistrements, l'historique, les bibliothèques reliées, le fichier de stockage d'une variable rémanente, le fichier source de l'automate, l'action Exporter un enregistrement, le Stockage PC de la mémoire de l'IA, et dans l'arbre : une vue enregistrée, une macro, une bibliothèque reliée, les dossiers Ressources, Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le chemin).
+L'inspecteur (une image, une vidéo, une affiche, une police, un document cités ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de l'Explorateur de fichiers), les tableaux Ressources, Fichiers externes et Enregistrements, la fiche d'un enregistrement, la configuration des enregistrements, l'historique, les bibliothèques reliées, le fichier de stockage d'une variable rémanente, le fichier source de l'automate, l'action Exporter un enregistrement, le Stockage PC de la mémoire de l'IA, les rapports déjà écrits (Rapports › Écrits, 1.25.0), et dans l'arbre : une vue enregistrée, une macro, une bibliothèque reliée, les dossiers Ressources, Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le chemin).
 
 == historique | Annuler, rétablir, l'historique
 : Une seule pile pour tout le projet, l'IHM comme l'automate : Ctrl+Z et Ctrl+Y marchent partout, et annuler montre l'endroit. L'Historique (Ctrl+H) liste chaque action avec son endroit et son heure ; un double clic revient à cet état.
@@ -829,6 +829,7 @@ L'onglet **Images** de la bibliothèque, entre **Objets** et **Variables**, rang
 - **La taille des vignettes** : petites, moyennes, ou grandes avec leur nom (les trois carrés).
 - **Mes images** : le bouton **+** (un fichier PNG, SVG, JPEG... du disque), un fichier lâché sur l'onglet, ou **Ressources › Ma bibliothèque** (l'image choisie du projet) y ajoutent une image. Elles sont gardées hors du projet, dans le dossier de tes réglages (à côté de tes thèmes), et se posent dans tous tes projets ; clic droit › **Retirer de Mes images**. C'est la même liste dans tous les éditeurs de vues ouverts : une image ajoutée ou retirée s'y voit aussitôt.
 > L'infobulle d'une image dit son nom, sa catégorie et sa taille d'origine ; le bas de l'onglet les rappelle pour l'image survolée (ou choisie) - une image que la recherche cache n'y reste pas.
+> 1.25.0 : dans l'arbre du projet, **Ressources › Bibliothèque d'images [N]** déplie les mêmes images (Mes images, puis chaque catégorie avec son nombre) ; un clic sur une image ouvre l'éditeur de vues sur l'onglet Images, l'image montrée et choisie.
 ### Quelques composants
 - **Texte** : statique, dynamique (textes à trous `{Variable}`), formaté, sur plusieurs lignes (retour à la ligne automatique).
 - **Bouton** : son texte, ses couleurs et surtout ses **actions** (onglet Actions).
@@ -10271,10 +10272,43 @@ Les heures sont celles du poste (un jour de changement d'heure dure 23 ou 25 heu
 - **la production** : les compteurs de production (bons, rebuts, total, cadence, TRS) ;
 - **les événements** (au choix) : connexions, recettes, écritures...
 ### Le fichier
-`exports/rapport_<nom>_<date>_<heure>.pdf` (ou `.xlsx`) : le PDF en A4 (la synthèse, un graphique, les tableaux, l'en-tête répété à chaque page), le classeur avec une feuille par partie. **Destinataires** : des destinataires des notifications (leurs noms) - le rapport part en pièce jointe par le relais SMTP.
+`exports/rapport_<nom>_<date>_<heure>.pdf` (ou `.xlsx`) : le PDF selon sa **mise en page** (voir « La mise en page des rapports » : la page, l'en-tête, le pied, les parties et leur ordre), le classeur avec une feuille par partie. **Destinataires** : des destinataires des notifications (leurs noms) - le rapport part en pièce jointe par le relais SMTP. L'onglet **Écrits** liste les rapports déjà dans exports/ ; le clic droit d'un fichier propose **Ouvrir dans l'explorateur**, **Aller à** et **Copier le chemin**.
 ### Générer maintenant
-**Générer maintenant** : la période en cours, jusqu'à maintenant ; **Dernière période** : la dernière complète. Si la simulation IHM tourne, le rapport prend ses compteurs de production ; sinon l'historique seul. Les deux demandent où l'écrire : exports/ du projet proposé, sous son nom habituel (**Exporter** : comme avant), le bouton … pour un autre dossier ou un autre nom. Les rapports programmés, à l'heure dite, vont seuls dans exports/, sans question.
+**Générer maintenant…** (la période en cours) et **Dernière période…** (la dernière complète) ouvrent la fenêtre **Générer le rapport maintenant** :
+- **Période** : la dernière (« 04/11 06:00 → 05/11 06:00 »), en cours, ou **Choisir…** : du … au … (`2026-11-01 06:00`) ;
+- **Format** : PDF ou Excel ;
+- **Mise en page** : celle du rapport proposée d'abord, puis celles du projet et les fournies ; **Modifier les mises en page…** ouvre l'onglet Mise en page ;
+- **Après l'écriture** : **Ouvrir le fichier** ; **L'envoyer aux destinataires du rapport** (décoché : le fichier seul) ;
+- à droite, l'**aperçu** de la page 1 (◀ ▶ : les autres), qui suit la mise en page choisie ; en bas, le nom du fichier dans exports/.
+**Générer** l'écrit dans exports/ ; **Ailleurs…** demande où (un autre dossier ou un autre nom) ; Échap ou **Annuler** : rien. Si la simulation IHM tourne, le rapport prend ses compteurs de production ; sinon l'historique seul. Les rapports programmés, à l'heure dite, vont seuls dans exports/, avec leur mise en page, sans question.
 > `SYS.ReportLast` : le dernier rapport écrit.
+
+== mise-en-page-rapports | La mise en page des rapports
+: L'onglet Mise en page de Configuration › Rapports : la page, l'en-tête, le pied de page, les parties et leur ordre, les tableaux et le texte des rapports - avec l'aperçu en direct, des mises en page enregistrées dans le projet, et le choix de la mise en page à chaque export.
+@depuis 1.25.0
+@mots mise en page, mise en page du rapport, format de page, A4, A3, paysage, portrait, marges, logo, en-tête, pied de page, cases de visa, Établi par, Vérifié par, couleur d'accent, courbes des mesures, aperçu du rapport, Standard, Compacte, Synthèse seule
+@lieux rapports
+@voir rapports, couleurs-semantiques, ressources
+### Les mises en page
+À gauche, la liste : **les fournies** (un cadenas) - **Standard** (celle d'avant, A4 portrait), **Compacte** (A4 paysage, petits caractères, avec les courbes), **Synthèse seule** (la synthèse et le graphique, des cases de visa) - puis **celles du projet** (une personne).
+- **Nouvelle** : une copie de Standard, à régler ; **Dupliquer à partir de…** : une copie de n'importe laquelle (une fournie ne se règle pas : on la duplique) ;
+- **Par défaut** (l'étoile ★) : celle d'un nouveau rapport, et d'un rapport sans la sienne ;
+- **Supprimer** (Suppr) : plusieurs d'un coup (Ctrl+clic, Maj+clic), un seul Ctrl+Z ; les rapports qui l'employaient prennent celle par défaut ; une fournie se garde.
+Sous la liste : les rapports qui l'emploient.
+### Les réglages
+| Partie | Ce qui se règle |
+| Page | le format (A4, A3, A5, Lettre US), l'orientation (portrait, paysage), les quatre marges (3 à 60 mm) |
+| En-tête | le logo (une image des ressources, à gauche ou à droite ; en grand sur la première page, en petit ensuite), le titre et le sous-titre à trous, la couleur d'accent (#RRGGBB ou @Nom, une couleur sémantique) |
+| Pied de page | à gauche, au centre, à droite (à trous) ; les cases de visa (Établi par ; Vérifié par…) en fin de rapport |
+| Contenu | les parties à imprimer et leur ordre (coche ; glisse une ligne, ou Alt+↑ ↓) |
+| Tableaux | la taille, les lignes alternées, l'en-tête répété à chaque page |
+| Texte | la police (Helvetica, Times, Courier), la taille du titre et du corps |
+Les trous : `{Titre}` (le titre du rapport), `{SousTitre}`, `{Rapport}` (« Rapport journalier »), `{Nom}`, `{Periode}`, `{Site}` et `{Projet}` (le projet), `{Debut}`, `{Fin}`, `{Date}`, `{Heure}` (quand il est écrit), `{Page}`, `{Pages}`.
+Les parties : la synthèse, le graphique des alarmes par priorité, les alarmes de la période, les plus fréquentes, les mesures (minimum, moyenne, maximum), **les courbes des mesures** (une courbe par mesure sur la période, PDF seulement), la production, les événements. Une partie s'imprime si la mise en page la coche **et** si le rapport la recueille (ses cases Alarmes, Production, Événements ; ses mesures). En Excel : une feuille par tableau coché, dans l'ordre (la synthèse en tête si cochée).
+### Le brouillon, l'aperçu, Enregistrer
+Chaque réglage change **l'aperçu** tout de suite (à droite : la page telle que le PDF l'écrira, page par page, avec un zoom) ; **Données d'exemple** (une journée inventée) ou **Dernière période** (l'historique du projet, pour un rapport qui l'emploie). Le bas dit « modifiée (non enregistrée) » et qui l'emploie ; **Ctrl+Z** défait le dernier réglage. **Enregistrer la mise en page** (Ctrl+S) la garde dans le projet - Ctrl+Z ensuite la rend comme avant ; **Annuler les modifications** revient à l'enregistrée. Les rapports qui l'emploient la prennent à leur prochaine écriture.
+### Le rapport, l'export
+Chaque rapport a **sa mise en page** (sa case **Mise en page** à droite, sa colonne dans la liste) : celle des écritures automatiques, à l'heure dite. À l'export (**Générer maintenant…**), la fenêtre en propose une autre, avec l'aperçu de la page 1.
 
 == securite | Utilisateurs et sécurité
 : Les utilisateurs se rangent en groupes ; un groupe a des rôles, un rôle des permissions ; un objet peut exiger un niveau d'accès ou une autorisation par expression.
@@ -10625,6 +10659,10 @@ Plus une alarme est grave, plus son son est rapide et insistant (l'esprit de l'I
 - **Ouvrir dans l'explorateur** (clic droit) : le fichier d'un de tes sons.
 ### Choisir un son natif directement
 Là où un son se choisit dans une liste - le **son d'une priorité d'alarme** (Configuration › Alarmes, Sons et mise de côté) et l'action **Jouer un son** - la liste propose, après les sons du projet, ceux de la bibliothèque : « Bibliothèque › Alarmes › Alarme critique ». Le choisir **l'importe et le règle** d'un seul geste (un seul Ctrl+Z pour une alarme).
+### Dans l'arbre et dans l'éditeur de vues
+@nouveau 1.25.0
+- Dans l'arbre du projet, **Bibliothèque de sons [N]** dit combien de sons elle a, et **se déplie** : Mes sons, Alarmes, Notifications, Interface, Procédé, chacun avec son nombre, puis leurs sons (un cadenas, une personne ; la durée). Un clic ouvre la bibliothèque sur le dossier ou le son.
+- Dans l'éditeur de vues, la **BIBLIOTHÈQUE** a un sous-onglet **Sons**, entre Images et Variables : les mêmes dossiers dépliables et leur nombre, **Écouter** (Espace), **Importer** (Entrée), **+** (Mes sons) ; le champ de recherche de la bibliothèque cherche aussi les sons. **Au clic** : l'objet choisi dans la vue joue le son quand on clique dessus (le son est importé s'il ne l'est pas, une action « Jouer un son » s'ajoute ; un seul Ctrl+Z).
 
 == actions-ressources | Actions sur les ressources
 : Quatre opérations d'action touchent aux ressources et au poste : demander une ressource à l'opérateur, lier un tableau à une base, jouer un son, ouvrir le menu Paramètres système.

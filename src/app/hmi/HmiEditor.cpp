@@ -1,3 +1,4 @@
+#include "HmiSoundLibraryPane.hpp"   // 1.25.0 : le sous-onglet Sons de la bibliotheque
 #include "HmiEditor.hpp"
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les valeurs imposees par un style (le carre O)
 #include "../../sim/ValueText.hpp"   // 1.12.19 : la lecture commune d'un nombre
@@ -406,6 +407,14 @@ HmiEditor::HmiEditor(std::string widgetId, hmi::DocumentPtr doc, Id view, Apply 
         search->setPlaceholder("Rechercher un composant...");
         paletteSearch_ = &static_cast<ui::InputText&>(panel->addRow(std::move(search), 32.f));
         palette_ = &static_cast<HmiPalette&>(panel->setBody(std::make_unique<HmiPalette>(base + ".palette")));
+        // 1.25.0 : le sous-onglet Sons - la bibliotheque de sons en etroit ; << Au clic >> vise les objets choisis de la vue.
+        auto sounds = std::make_unique<HmiSoundLibraryPane>(base + ".sounds", doc_, [this](core::CommandPtr c) { apply_(std::move(c)); });
+        HmiSoundLibraryPane::Hosts soundHosts;
+        soundHosts.chosenObjects = [this] {
+            return std::pair<hmi::Id, std::vector<hmi::Id>>{viewId_, canvas_ ? canvas_->selection() : std::vector<hmi::Id>{}};
+        };
+        sounds->setHosts(std::move(soundHosts));
+        palette_->setSoundsPane(std::move(sounds));
         right->addPane(std::move(panel), 0.42f, 120.f);
     }
     split->addPane(std::move(right), 0.26f, 200.f);

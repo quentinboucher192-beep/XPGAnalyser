@@ -83,6 +83,8 @@
 #include "../src/hmi/HmiNet.hpp"
 #include "../src/hmi/HmiNotify.hpp"
 #include "../src/hmi/HmiReports.hpp"
+#include "../src/hmi/HmiReportLayout.hpp"   // 1.25.0 : la mise en page des rapports
+#include "../src/hmi/HmiSemanticColors.hpp" // 1.25.0 : la couleur d'accent @Nom
 #include "../src/hmi/HmiWeb.hpp"
 #include "../src/hmi/HmiNet.hpp"
 #include "../src/hmi/HmiSystemMenu.hpp"
@@ -12583,6 +12585,372 @@ void notificationsLot14() {
 //  Lot 14 D : les rapports periodiques - l'heure, les periodes, le contenu,
 //  le PDF et le classeur, le moteur qui les ecrit a leur heure.
 // =============================================================================
+// 1.25.0 : LA MISE EN PAGE DES RAPPORTS (le client, maquette validee le 05/11) - les fournies, celles du projet, les trous,
+// la page calculee (l'apercu et le PDF la partagent), l'ordre des parties, les courbes, les cases de visa, le logo, les
+// polices, Excel, l'enregistrement, le moteur qui ecrit avec la mise en page du rapport (ou celle choisie).
+void miseEnPage1250() {
+    std::printf("[1.25.0 : la mise en page des rapports]\n");
+    namespace rp = hmi::report;
+    const auto opsText = [](const rp::PageDoc& d, std::size_t page) {
+        std::string all;
+        if (page >= d.pages.size()) return all;
+        for (const auto& o : d.pages[page])
+            if (o.kind == rp::DrawOp::Kind::Text) all += rp::fromWinAnsi(o.text) + "\n";
+        return all;
+    };
+    const auto countKind = [](const rp::PageDoc& d, rp::DrawOp::Kind k) {
+        std::size_t n = 0;
+        for (const auto& pg : d.pages)
+            for (const auto& o : pg) n += o.kind == k ? 1u : 0u;
+        return n;
+    };
+    const auto allText = [&](const rp::PageDoc& d) {
+        std::string t;
+        for (std::size_t i = 0; i < d.pages.size(); ++i) t += opsText(d, i);
+        return t;
+    };
+
+    // ---- les fournies, les formats
+    const auto& builtIn = rp::builtInLayouts();
+    check(builtIn.size() == 3 && builtIn[0].name == "Standard" && builtIn[1].name == "Compacte" && builtIn[2].name == "Synth\xC3\xA8se seule",
+          "trois mises en page fournies : Standard, Compacte, Synth\xC3\xA8se seule");
+    check(rp::isBuiltIn("standard") && rp::builtInLayout("COMPACTE") && !rp::isBuiltIn("Exploitation"), "fournies : sans casse");
+    {
+        const auto [w, h] = rp::pageSize(builtIn[0]);
+        ReportLayout a3 = builtIn[0];
+        a3.paper = "A3";
+        a3.landscape = true;
+        const auto [w3, h3] = rp::pageSize(a3);
+        check(std::fabs(w - 595.28) < 0.1 && std::fabs(h - 841.89) < 0.1 && std::fabs(w3 - 1190.55) < 0.1 && std::fabs(h3 - 841.89) < 0.1,
+              "A4 portrait : 595 x 842 points ; A3 paysage : 1191 x 842");
+        same(rp::pageText(a3), "A3 paysage", "le libell\xC3\xA9 de la page");
+        check(rp::papers().size() == 4 && rp::paperInfo("lettre") && !rp::paperInfo("B5"), "quatre formats : A4, A3, A5, Lettre");
+    }
+    {
+        const auto parts = rp::partsOf(builtIn[0]);
+        bool order = parts.size() == 8 && parts[0].key == "synthese" && parts[5].key == "courbes" && parts[7].key == "evenements";
+        for (const auto& part : parts) order = order && (part.on == (part.key != "courbes"));
+        check(order, "Standard : les huit parties dans l'ordre, toutes coch\xC3\xA9" "es sauf les courbes");
+        ReportLayout odd;
+        odd.parts = {{"mesures", true}, {"inconnue", true}, {"mesures", false}, {"synthese", false}};
+        const auto p2 = rp::partsOf(odd);
+        check(p2.size() == 8 && p2[0].key == "mesures" && p2[0].on && p2[1].key == "synthese" && !p2[1].on && p2[2].key == "graphique" && !p2[2].on,
+              "l'ordre d'une mise en page : une cl\xC3\xA9 inconnue part, un double aussi, les manquantes viennent en fin, d\xC3\xA9" "coch\xC3\xA9" "es");
+        const auto& sum = rp::partsOf(builtIn[2]);
+        check(std::count_if(sum.begin(), sum.end(), [](const ReportLayoutPart& x) { return x.on; }) == 2 && builtIn[2].visa,
+              "Synth\xC3\xA8se seule : la synth\xC3\xA8se et le graphique, les cases de visa");
+    }
+
+    // ---- les trous
+    {
+        const std::vector<std::pair<std::string, std::string>> f{{"Rapport", "Rapport journalier"}, {"Site", "Usine"}, {"Page", "2"}};
+        same(rp::expand("{Rapport} \xE2\x80\x93 {site} ({Page}/{Pages}) {", f), "Rapport journalier \xE2\x80\x93 Usine (2/{Pages}) {",
+             "les trous : remplac\xC3\xA9s sans casse ; un trou inconnu reste, une accolade seule aussi");
+        check(rp::fieldNames().size() == 14, "14 trous");
+    }
+
+    // ---- celles du projet
+    Project p;
+    p.config.name = "Usine_Test";
+    check(rp::defaultLayoutName(p) == "Standard", "sans rien : Standard par d\xC3\xA9" "faut");
+    ReportLayout mine = rp::duplicate(p, builtIn[0], "Exploitation");
+    check(mine.id != kNoId && mine.name == "Exploitation" && mine.parts.size() == 8, "dupliquer Standard : un identifiant, ses parties \xC3\xA9" "crites");
+    p.reportLayouts.push_back(mine);
+    same(rp::uniqueName(p, "Exploitation"), "Exploitation (2)", "un nom pris : (2)");
+    same(rp::uniqueName(p, "standard"), "standard (2)", "le nom d'une fournie : pris aussi");
+    check(rp::problems(p, mine).empty(), "Exploitation : rien ne va de travers");
+    {
+        ReportLayout bad = mine;
+        bad.id = p.allocate();
+        bad.name = "Compacte";
+        bad.marginLeft = 1;
+        bad.titleSize = 50;
+        bad.font = "Arial";
+        bad.accent = "bleu";
+        bad.logo = "absent.png";
+        for (auto& part : bad.parts) part.on = false;
+        const auto pb = rp::problems(p, bad);
+        std::string all;
+        for (const auto& x : pb) all += x + " | ";
+        check(pb.size() == 7 && all.find("fournie") != std::string::npos && all.find("marges") != std::string::npos
+                  && all.find("titre") != std::string::npos && all.find("police") != std::string::npos && all.find("accent") != std::string::npos
+                  && all.find("logo") != std::string::npos && all.find("aucune partie") != std::string::npos,
+              "ce qui ne va pas : un nom de fournie, une marge, une taille, une police, une couleur, un logo, aucune partie (" + all + ")");
+        bad.name = "exploitation";
+        check(!rp::problems(p, bad).empty() && rp::problems(p, bad).front().find("existe") != std::string::npos, "un nom pris (sans casse)");
+    }
+    {
+        ReportLayout c = mine;
+        c.accent = "#112233";
+        check(rp::accentOf(p, c) == 0x112233, "la couleur d'accent : #112233");
+        const auto& sem = hmi::semantic::builtins();
+        if (!sem.empty()) {
+            c.accent = "@" + sem.front().name;
+            std::uint8_t r = 0, g = 0, b = 0, a = 0;
+            (void)natives::parseColor(hmi::semantic::resolve(p, c.accent), r, g, b, a);
+            check(rp::accentOf(p, c) == ((static_cast<std::uint32_t>(r) << 16) | (static_cast<std::uint32_t>(g) << 8) | b) && rp::problems(p, c).empty(),
+                  "la couleur d'accent : une couleur s\xC3\xA9mantique (@" + sem.front().name + ")");
+        }
+        c.accent = "illisible";
+        check(rp::accentOf(p, c) == 0x3373D9, "illisible : le bleu de Standard");
+    }
+    Report daily;
+    daily.id = p.allocate();
+    daily.name = "Journalier";
+    daily.events = true;
+    p.reports.push_back(daily);
+    Report other = daily;
+    other.id = p.allocate();
+    other.name = "Mensuel";
+    other.layout = "Exploitation";
+    p.reports.push_back(other);
+    check(&rp::layoutOf(p, p.reports[0]) == rp::builtInLayout("Standard") && rp::layoutOf(p, p.reports[1]).name == "Exploitation",
+          "la mise en page d'un rapport : la sienne, sinon celle par d\xC3\xA9" "faut");
+    p.reportLayoutDefault = "Compacte";
+    check(rp::layoutOf(p, p.reports[0]).name == "Compacte" && rp::usersOf(p, "Compacte") == std::vector<std::string>{"Journalier"}
+              && rp::usersOf(p, "exploitation") == std::vector<std::string>{"Mensuel"},
+          "celle par d\xC3\xA9" "faut du projet : Compacte ; qui emploie quoi");
+    p.reports[0].layout = "Disparue";
+    check(rp::layoutOf(p, p.reports[0]).name == "Compacte", "une mise en page inconnue : celle par d\xC3\xA9" "faut");
+    p.reports[0].layout.clear();
+    {
+        Project q = p;
+        q.reportLayoutDefault = "Exploitation";
+        q.reportLayouts[0].name = "Exploitation_2";
+        check(rp::renameReferences(q, "exploitation", "Exploitation_2") == 1 && q.reports[1].layout == "Exploitation_2"
+                  && q.reportLayoutDefault == "Exploitation_2",
+              "renommer : le rapport qui la cite et la mise en page par d\xC3\xA9" "faut suivent");
+        check(rp::forget(q, "Exploitation_2") == 1 && q.reports[1].layout.empty() && q.reportLayoutDefault.empty(),
+              "la retirer : le rapport revient \xC3\xA0 celle par d\xC3\xA9" "faut, qui redevient Standard");
+    }
+
+    // ---- le contenu, la page calculee
+    const auto sample = rp::sample(p);
+    check(sample.curves.size() == 3 && sample.keys.size() == 5 && sample.keys.front() == "alarmes" && sample.keys.back() == "evenements"
+              && !sample.fields.empty() && sample.byPriority[0] == 2,
+          "les donn\xC3\xA9" "es d'exemple : 3 courbes, 5 tableaux, 2 alarmes critiques");
+    check(sample.curves[0].points.size() == 144 && sample.curves[0].lo < sample.curves[0].hi, "la courbe de Pression : 144 points");
+    check(rp::expand("{Site} {Debut} {Fin}", sample.fields) == "Usine_Test 2026-11-04 06:00 2026-11-05 06:00", "les trous du contenu : le site, la p\xC3\xA9riode");
+    const auto std1 = rp::paginate(p, sample, builtIn[0]);
+    const std::string first = opsText(std1, 0);
+    check(std1.pages.size() >= 2 && std::fabs(std1.width - 595.28) < 0.1 && first.find("Rapport journalier \xE2\x80\x94 Usine_Test") != std::string::npos
+              && first.find("Synth\xC3\xA8se") != std::string::npos && first.find("Alarmes par priorit\xC3\xA9") != std::string::npos,
+          "Standard : le titre, la synth\xC3\xA8se, le graphique en page 1 (" + std::to_string(std1.pages.size()) + " pages)");
+    const std::string last = opsText(std1, std1.pages.size() - 1);
+    check(last.find("Page " + std::to_string(std1.pages.size()) + " / " + std::to_string(std1.pages.size())) != std::string::npos
+              && last.find("IHM Studio - Rapport journalier") != std::string::npos,
+          "le pied de chaque page : IHM Studio - le titre, Page n / N");
+    check(allText(std1).find("Courbes des mesures") == std::string::npos && countKind(std1, rp::DrawOp::Kind::Polyline) == 0,
+          "Standard : pas de courbes");
+    {
+        ReportLayout order = mine;
+        order.parts = {{"mesures", true}, {"synthese", true}, {"graphique", false}, {"alarmes", false}, {"frequentes", false},
+                       {"courbes", true}, {"production", false}, {"evenements", false}};
+        order.title = "{Rapport} \xE2\x80\x93 {Site}";
+        order.subtitle = "du {Debut} au {Fin}";
+        order.footLeft = "{Projet} \xC2\xB7 document interne";
+        order.footCenter = "Page {Page}/{Pages}";
+        order.footRight = "\xC3\x89" "crit le {Date} \xC3\xA0 {Heure}";
+        const auto d = rp::paginate(p, sample, order);
+        const std::string t = allText(d);
+        const auto mes = t.find("\nMesures\n"), syn = t.find("Synth\xC3\xA8se\n");
+        check(mes != std::string::npos && syn != std::string::npos && mes < syn && t.find("Alarmes par priorit") == std::string::npos
+                  && t.find("Alarmes les plus") == std::string::npos && t.find("\xC3\x89v\xC3\xA9nements\n") == std::string::npos,
+              "l'ordre et les parties : les mesures avant la synth\xC3\xA8se ; le graphique, les alarmes, les \xC3\xA9v\xC3\xA9nements d\xC3\xA9" "coch\xC3\xA9s : absents");
+        check(countKind(d, rp::DrawOp::Kind::Polyline) == 3 && t.find("Pression (bar)") != std::string::npos,
+              "les courbes des mesures : une par mesure, son unit\xC3\xA9");
+        check(t.find("Rapport journalier \xE2\x80\x93 Usine_Test") != std::string::npos && t.find("du 2026-11-04 06:00 au 2026-11-05 06:00") != std::string::npos
+                  && t.find("Usine_Test \xC2\xB7 document interne") != std::string::npos && t.find("Page 1/") != std::string::npos
+                  && t.find("\xC3\x89" "crit le 2026-11-05 \xC3\xA0 06:00") != std::string::npos,
+              "le titre, le sous-titre et le pied \xC3\xA0 trous");
+        const auto pdf = rp::toPdf(d);
+        const std::string pt(pdf.begin(), pdf.end());
+        check(pt.rfind("%PDF-1.4", 0) == 0 && pt.find("/Count " + std::to_string(d.pages.size()) + " ") != std::string::npos
+                  && pt.find("(Pression \\(bar\\))") != std::string::npos,
+              "le PDF : autant de pages que l'aper\xC3\xA7u, les m\xC3\xAAmes textes");
+    }
+    {
+        // Le format, l'orientation, la police, les cases de visa.
+        ReportLayout big = mine;
+        big.paper = "A3";
+        big.landscape = true;
+        big.font = "Courier";
+        big.visa = true;
+        big.visaLabels = "\xC3\x89tabli par; V\xC3\xA9rifi\xC3\xA9 par; Approuv\xC3\xA9 par";
+        const auto d = rp::paginate(p, sample, big);
+        const auto pdf = rp::toPdf(d);
+        const std::string pt(pdf.begin(), pdf.end());
+        check(pt.find("/MediaBox [0 0 1190.55 841.89]") != std::string::npos && pt.find("/BaseFont /Courier ") != std::string::npos
+                  && pt.find("/BaseFont /Courier-Bold ") != std::string::npos,
+              "A3 paysage en Courier : la page et les polices du PDF");
+        const std::string t = allText(d);
+        check(countKind(d, rp::DrawOp::Kind::Stroke) >= 3 && t.find("\xC3\x89tabli par :") != std::string::npos && t.find("Approuv\xC3\xA9 par :") != std::string::npos,
+              "trois cases de visa, en fin de rapport");
+        ReportLayout times = mine;
+        times.font = "Times";
+        const auto tp = rp::renderPdf(p, sample, times);
+        check(std::string(tp.begin(), tp.end()).find("/BaseFont /Times-Roman ") != std::string::npos, "Times : Times-Roman et Times-Bold");
+    }
+    {
+        // Les tableaux : sans lignes alternees ; sans en-tete repete.
+        ReportLayout plain = mine;
+        plain.zebra = false;
+        const auto zebra = rp::paginate(p, sample, mine), none = rp::paginate(p, sample, plain);
+        const auto fills = [](const rp::PageDoc& d, std::uint32_t color) {
+            std::size_t n = 0;
+            for (const auto& pg : d.pages)
+                for (const auto& o : pg) n += o.kind == rp::DrawOp::Kind::Fill && o.color == color ? 1u : 0u;
+            return n;
+        };
+        check(fills(zebra, 0xF5F7FA) > 0 && fills(none, 0xF5F7FA) == 0 && fills(none, 0xF2F4F8) == 0, "les lignes altern\xC3\xA9" "es se d\xC3\xA9" "cochent");
+        rp::Content many = sample;
+        for (std::size_t i = 0; i < many.keys.size(); ++i)
+            if (many.keys[i] == "alarmes")
+                for (int k = 0; k < 120; ++k) many.sections[i].rows.push_back(many.sections[i].rows.front());
+        ReportLayout once = mine;
+        once.repeatHeader = false;
+        const auto a = rp::paginate(p, many, mine), b = rp::paginate(p, many, once);
+        const auto headers = [](const rp::PageDoc& d) {
+            std::size_t n = 0;
+            for (const auto& pg : d.pages)
+                for (const auto& o : pg) n += o.kind == rp::DrawOp::Kind::Text && rp::fromWinAnsi(o.text) == "Apparue" ? 1u : 0u;
+            return n;
+        };
+        check(a.pages.size() >= 3 && headers(a) >= 2 && headers(b) == 1 && allText(b).find("Alarmes (suite)") != std::string::npos,
+              "l'en-t\xC3\xAAte d'un tableau : r\xC3\xA9p\xC3\xA9t\xC3\xA9 \xC3\xA0 chaque page, ou une fois (le titre dit \xC2\xAB (suite) \xC2\xBB)");
+    }
+    {
+        // Le logo : une image des ressources (un BMP de 2 x 2), sur la premiere page en grand, puis en petit.
+        hmi::Bytes bmp(70, 0);
+        const auto put32 = [&](std::size_t at, std::uint32_t v) {
+            for (int k = 0; k < 4; ++k) bmp[at + static_cast<std::size_t>(k)] = static_cast<std::uint8_t>(v >> (8 * k));
+        };
+        bmp[0] = 'B';
+        bmp[1] = 'M';
+        put32(2, 70);
+        put32(10, 54);
+        put32(14, 40);
+        put32(18, 2);
+        put32(22, 2);
+        bmp[26] = 1;
+        bmp[28] = 24;
+        put32(34, 16);
+        for (std::size_t i = 54; i < 70; ++i) bmp[i] = 0x80;
+        Resource logo;
+        logo.id = p.allocate();
+        logo.name = "logo_essai.bmp";
+        logo.format = "BMP";
+        logo.data = std::make_shared<const hmi::Bytes>(bmp);
+        p.assets.resources.push_back(logo);
+        ReportLayout withLogo = mine;
+        withLogo.logo = "logo_essai.bmp";
+        check(rp::problems(p, withLogo).empty(), "le logo : une image des ressources");
+        const auto d = rp::paginate(p, sample, withLogo);
+        const auto pdf = rp::toPdf(d);
+        const std::string pt(pdf.begin(), pdf.end());
+        check(d.images.size() == 1 && d.images[0].width == 2 && countKind(d, rp::DrawOp::Kind::Image) == d.pages.size()
+                  && pt.find("/Subtype /Image /Width 2 /Height 2") != std::string::npos && pt.find("/Im0 Do") != std::string::npos,
+              "le logo : sur chaque page, une image du PDF");
+        withLogo.logoRight = true;
+        const auto r = rp::paginate(p, sample, withLogo);
+        double x = 0;
+        for (const auto& o : r.pages[0])
+            if (o.kind == rp::DrawOp::Kind::Image) x = o.x;
+        check(x > r.width / 2, "le logo \xC3\xA0 droite");
+    }
+    {
+        // Excel : la synthese et les tableaux coches, dans l'ordre de la mise en page.
+        ReportLayout xl = mine;
+        xl.parts = {{"mesures", true}, {"alarmes", true}, {"synthese", false}};
+        const auto x = rp::renderXlsx(sample, xl);
+        const std::string t(x.begin(), x.end());
+        const auto m = t.find("<sheet name=\"Mesures\""), a = t.find("<sheet name=\"Alarmes\"");
+        check(m != std::string::npos && a != std::string::npos && m < a && t.find("<sheet name=\"Synth\xC3\xA8se\"") == std::string::npos
+                  && t.find("xl/worksheets/sheet3.xml") == std::string::npos,
+              "Excel : les mesures puis les alarmes, sans la synth\xC3\xA8se d\xC3\xA9" "coch\xC3\xA9" "e (2 feuilles)");
+        const auto st = rp::renderXlsx(sample, builtIn[0]);
+        check(std::string(st.begin(), st.end()).find("xl/worksheets/sheet6.xml") != std::string::npos, "Excel en Standard : six feuilles, comme avant");
+    }
+
+    // ---- l'enregistrement
+    {
+        Project q = p;
+        q.reportLayouts[0].paper = "A5";
+        q.reportLayouts[0].landscape = true;
+        q.reportLayouts[0].marginTop = 12.5;
+        q.reportLayouts[0].logo = "logo_essai.bmp";
+        q.reportLayouts[0].footCenter = "Page {Page}/{Pages}";
+        q.reportLayouts[0].parts = {{"courbes", true}, {"synthese", false}, {"mesures", true}};
+        q.reportLayouts[0].visa = true;
+        q.reportLayouts[0].font = "Times";
+        q.reportLayouts[0].tableSize = 7;
+        q.reportLayouts[0].zebra = false;
+        const auto files = serializeProject(q);
+        const FileReader reader = [&](const std::string& path, std::string& content) {
+            for (const auto& f : files)
+                if (f.path == path) { content.assign(f.data->begin(), f.data->end()); return true; }
+            return false;
+        };
+        auto back = parseProject(reader);
+        check(back && back->reportLayouts == q.reportLayouts && back->reportLayoutDefault == "Compacte" && back->reports.size() == 2
+                  && back->reports[1].layout == "Exploitation" && back->reports[0].layout.empty(),
+              "enregistr\xC3\xA9" "e puis relue : la mise en page, celle par d\xC3\xA9" "faut, celle de chaque rapport");
+        check(back && back->nextId >= q.nextId, "relu : les identifiants continuent apr\xC3\xA8s la mise en page");
+    }
+
+    // ---- le moteur : Generer maintenant, avec la mise en page du rapport, ou celle choisie ; sans l'envoyer
+    {
+        Project q;
+        q.config.name = "Usine_Test";
+        View v = makeView(q, "Vue");
+        q.views.push_back(v);
+        q.config.startView = q.views.front().id;
+        ReportLayout courier = rp::duplicate(q, builtIn[0], "Courrier");
+        courier.font = "Courier";
+        q.reportLayouts.push_back(courier);
+        Report rpt;
+        rpt.id = q.allocate();
+        rpt.name = "Journalier";
+        rpt.recipients = "Chef";
+        rpt.layout = "Courrier";
+        q.reports.push_back(rpt);
+        Runtime rt;
+        History live;
+        rt.setHistory(&live);
+        std::vector<ExportRequest> written;
+        std::vector<ReportOutput> outputs;
+        Runtime::Hooks hooks;
+        hooks.exportFile = [&](const ExportRequest& rq, std::string* where) {
+            written.push_back(rq);
+            if (where) *where = "exports/" + rq.fileName;
+            return true;
+        };
+        hooks.reportWritten = [&](const ReportOutput& o) { outputs.push_back(o); };
+        rt.setHooks(hooks);
+        rt.bind(&q, nullptr);
+        rt.start(0.0);
+        std::string where;
+        check(rt.writeReport(rpt.id, 1.0, true, &where) && !written.empty(), "G\xC3\xA9n\xC3\xA9rer maintenant : \xC3\xA9" "crit");
+        const auto text = [](const ExportRequest& rq) { return std::string(rq.data->begin(), rq.data->end()); };
+        check(!written.empty() && text(written.back()).find("/BaseFont /Courier ") != std::string::npos && !outputs.empty()
+                  && outputs.back().recipients == "Chef",
+              "la mise en page du rapport (Courrier) ; les destinataires");
+        ReportOptions o;
+        o.layout = "Compacte";
+        o.format = "PDF";
+        o.send = false;
+        o.from = rp::epochOf("2026-11-01 00:00:00");
+        o.to = rp::epochOf("2026-11-02 00:00:00");
+        check(rt.writeReport(rpt.id, 2.0, o, &where), "G\xC3\xA9n\xC3\xA9rer avec ce qu'on a choisi : \xC3\xA9" "crit");
+        check(text(written.back()).find("/BaseFont /Helvetica ") != std::string::npos && text(written.back()).find("/MediaBox [0 0 841.89 595.28]") != std::string::npos
+                  && outputs.back().recipients.empty() && outputs.back().from == "2026-11-01 00:00" && outputs.back().to == "2026-11-02 00:00"
+                  && written.back().fileName == "rapport_Journalier_2026-11-02_0000.pdf",
+              "Compacte (A4 paysage, Helvetica), la p\xC3\xA9riode choisie, sans l'envoyer");
+        o.format = "Excel";
+        check(rt.writeReport(rpt.id, 3.0, o, &where) && written.back().fileName.find(".xlsx") != std::string::npos, "le format choisi : Excel");
+    }
+}
+
 void rapportsLot14() {
     std::printf("lot 14 : les rapports p\xC3\xA9riodiques\n");
     namespace rp = hmi::report;
@@ -32988,6 +33356,7 @@ int main(int argc, char** argv) {
     calculatriceMessage1141();        // 1.14.1 (captures, seconde passe) : le message de la calculatrice cede au calcul
     unites1141();                   // 1.14.1 (lot N5) : convertir des unites (le calcul, l'objet Convertisseur)
     explorateur1141();                // 1.14.1 (lot N5) : l'explorateur de fichiers (dossier, zip, zip hostile)
+    miseEnPage1250();                 // 1.25.0 : la mise en page des rapports
     if (argc > 1) simulateurModbusLot14(argv[1]);
     if (argc > 1) simulateur(argv[1]);
     if (argc > 1) dossierRouvert(argv[1]);

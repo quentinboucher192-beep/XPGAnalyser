@@ -899,6 +899,7 @@ private:
     void onHmiChanged(std::uint64_t viewId);  // une commande IHM vient de passer
     void forgetHmiTab(std::size_t tabIndex);  // cet onglet va etre ferme
     void askNewHmiView(const std::string& role = "vue");   // le dialogue "Nouvelle vue" (lot 8 : et son role)
+    void openHmiImageLibrary(const std::string& folder, const std::string& imageId);   // 1.25.0 : Ressources > Bibliotheque d'images
     void openHmiViewsFolder(int folder);      // lot 8 : le volet Vues sur un dossier (Modeles, Vues, Popups...)
     void askDeleteHmiView(std::uint64_t viewId);
     void askHmiSymbol(std::uint64_t viewId);  // lot 10 : "Creer un symbole" (le nom, les parametres)

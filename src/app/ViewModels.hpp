@@ -379,6 +379,15 @@ namespace app {
             // 1.24.0 : Ressources > Bibliotheque de sons (les sons natifs et Mes sons), le troisieme enfant de Ressources.
             // A LA FIN, toujours.
             HmiSoundLibrary,
+            // 1.25.0 : la bibliotheque de sons SE DEPLIE (le client : << je ne vois pas la quantite des sons, faire le
+            // deballage >>) - HmiSoundGroup un dossier (index : 0 Mes sons, puis les natifs : Alarmes, Notifications,
+            // Interface, Procede), HmiSoundItem un son (index : son dossier ; sub : son rang dedans). A LA FIN, toujours.
+            HmiSoundGroup, HmiSoundItem,
+            // 1.25.0 : Ressources > Bibliotheque d'images (le client : << ajouter bibliotheques d'images aussi dans le
+            // deballage de Ressources, ca utilise les images du sous-onglet Images de l'editeur de vues >>), le quatrieme
+            // enfant de Ressources : HmiImageLibrary, HmiImageGroup un dossier (index : 0 Mes images, puis ceux de la
+            // bibliotheque), HmiImageItem une image (index : son dossier ; sub : son rang). A LA FIN, toujours.
+            HmiImageLibrary, HmiImageGroup, HmiImageItem,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -486,6 +495,14 @@ namespace app {
         // 0 (hmi::kNoId) pour tout le reste.
         [[nodiscard]] std::uint64_t hmiViewOf(ui::NodeId) const;
         [[nodiscard]] static ui::NodeId hmiFolderNode() { return pack(NodeKind::HmiFolder, 0); }
+        // 1.25.0 : la bibliotheque de sons depliee - le dossier d'un HmiSoundGroup ou d'un HmiSoundItem ("Alarmes"), et
+        // l'identifiant du son d'un HmiSoundItem ("alarme-haute", "mes/Mon bip.wav") ; "" sinon.
+        [[nodiscard]] static std::string soundFolderOf(ui::NodeId);
+        [[nodiscard]] static std::string soundIdOf(ui::NodeId);
+        [[nodiscard]] static ui::NodeId  soundNode(std::string_view soundId);   // le noeud d'un son ; kInvalidNode : inconnu
+        // 1.25.0 : la bibliotheque d'images depliee (les images du sous-onglet Images de l'editeur de vues).
+        [[nodiscard]] static std::string imageFolderOf(ui::NodeId);
+        [[nodiscard]] static std::string imageIdOf(ui::NodeId);
         // Lot 10 : le dossier API (avec l'IHM ; sans elle, la racine en tient lieu).
         [[nodiscard]] static ui::NodeId apiFolderNode() { return pack(NodeKind::ApiFolder, 0); }
         [[nodiscard]] ui::NodeId hmiViewNode(std::uint64_t viewId) const;

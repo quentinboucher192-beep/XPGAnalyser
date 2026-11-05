@@ -389,6 +389,8 @@ struct HmiKeyInfo {
 [[nodiscard]] bool hmiPaletteWordMatch(hmi::Kind kind, std::string_view text);
 // 1.14.0 (captures finales) : ce que montre, en gris, le Mot de passe vide de l'Enregistreur (avant : "{variable}").
 inline constexpr const char* kNoPasswordInvite = "aucun (en clair)";
+class HmiSoundLibraryPane;   // 1.25.0 : le sous-onglet Sons (HmiSoundLibraryPane.hpp)
+
 class HmiPalette final : public ui::Widget {
 public:
     explicit HmiPalette(std::string id = {});
@@ -431,7 +433,11 @@ public:
     // un afficheur, un texte, le bouton d'une popup d'equipement.
     // 1.14.1 (lot N6) : Images, l'onglet de la bibliotheque d'images (en dernier : les rangs restent ; il se montre
     // entre Objets et Variables).
-    enum class Mode : std::uint8_t { Objects, Variables, Images };
+    // 1.25.0 : Sons (le client : << ajouter un sous-onglet sons >>), en dernier aussi ; il se montre entre Images et
+    // Variables. Le volet de la bibliotheque de sons en etroit (HmiSoundLibraryPane::setCompact), pose par l'editeur.
+    enum class Mode : std::uint8_t { Objects, Variables, Images, Sounds };
+    void setSoundsPane(std::unique_ptr<HmiSoundLibraryPane> pane);
+    [[nodiscard]] HmiSoundLibraryPane* soundsPane() noexcept { return sounds_; }
     void setMode(Mode m);
     [[nodiscard]] Mode mode() const noexcept { return mode_; }
     void setVariables(std::vector<hmi::design::VarInfo> vars) { variables_ = std::move(vars); invalidate(); }
@@ -507,6 +513,8 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent&) override;
 private:
     HmiApiVarsView*                            apiTree_{nullptr};     // R1111-6
+    HmiSoundLibraryPane*                       sounds_{nullptr};      // 1.25.0 : le sous-onglet Sons
+    std::string                                rawFilter_;            // 1.25.0 : la recherche telle que tapee (les sons)
     std::shared_ptr<const hmi::apivars::Model> apiModel_;
     std::optional<hmi::design::VarInfo>        treeChoice_;           // la variable choisie dans l'arbre (l'aide en bas)
     core::ConnectionScope                      treeLinks_;
