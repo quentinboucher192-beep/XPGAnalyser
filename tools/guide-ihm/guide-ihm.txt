@@ -319,7 +319,13 @@ Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes e
 - Une ligne qui ne se supprime pas seule ne se supprime pas non plus parmi d'autres : un type encore employé (sauf par un autre type retiré avec lui), un style ou une couleur fournis, un groupe qui a des comptes, la langue du projet. Le compte rendu dit lesquelles restent, et pourquoi.
 - **Renommer**, **Dupliquer** et ce qui ne vaut que pour une ligne sont grisés : « une à la fois ».
 - Les volets concernés : variables et leurs dossiers, types et leurs membres, fonctions, scripts, vues, alarmes, recettes (éléments, jeux), utilisateurs, groupes, rôles, ressources, fichiers externes, styles, couleurs sémantiques, formats des variables, langues, unités de mesure, rapports, destinataires, essais et leurs pas, équipements, écrans du poste, actions et raccourcis d'un objet, popups d'un symbole, méthodes, opérateurs, valeurs d'énumération, cas de test ; côté automate, les variables, les tables d'animation et les DDT.
-! Les enregistrements, les incidents et les listes de l'Assistant IA se suppriment sur le disque, avec leur propre confirmation et sans Ctrl+Z : une ligne à la fois.
+### Sur le disque, côté automate, Mes sons
+@nouveau 1.25.0
+- **Les enregistrements** : plusieurs d'un coup ; ils vont dans la corbeille du projet (`ihm/corbeille`), et **un seul Ctrl+Z** les rend (un seul enregistrement aussi).
+- **Les bibliothèques reliées** : **Délier les N**, un seul Ctrl+Z.
+- **Côté automate** : les tâches (MAST et une tâche qui a encore des sections restent), les modules des racks (le processeur et l'alimentation restent), les unités et leurs sections, les blocs DFB ; une question quand d'autres éléments partent avec eux ; un seul Ctrl+Z. Suppr marche aussi dans les DDT.
+- **Mes sons** (la bibliothèque de sons) : plusieurs d'un coup ; un son natif reste, le compte rendu le dit ; un seul Ctrl+Z les rend.
+- **Les incidents** et **les listes de l'Assistant IA** (Apprentissage, Mémoire, Souvenirs, les conversations du panneau) : plusieurs d'un coup, mais **sans Ctrl+Z** (ils n'ont pas de corbeille) - la question le dit.
 
 == chemins | Les chemins de fichiers : ouvrir dans l'explorateur, aller à
 : Partout où un chemin de fichier ou de dossier s'affiche, le clic droit propose Ouvrir dans l'explorateur, Aller à (l'élément dans le logiciel) et Copier le chemin.
@@ -331,6 +337,12 @@ Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes e
 - **Aller à** : l'élément **dans le logiciel** - le projet, une vue, les dossiers Ressources, Historique, Enregistrements et Incidents : leur nœud dans l'arbre (et leur volet) ; une ressource, un fichier externe, un enregistrement, un dossier d'incident : leur volet, sur eux ; ailleurs, un fichier s'ouvre dans l'aperçu des fichiers, un dossier dans **Chercher des fichiers**.
 - **Copier le chemin**.
 Un chemin qui n'existe pas (encore) : les entrées sont grisées, et la raison est dite.
+### Les champs et les libellés
+@nouveau 1.25.0
+- **Un champ de chemin** (avec son bouton « … ») : son clic droit garde Couper, Copier, Coller, Tout choisir, et ajoute les trois entrées - Exporter vers…, Paramètres › Dossiers, Nouveau projet, Nouvelle IHM, Nouvelle machine, Dupliquer, Archives, Versions, Importer, Chercher des fichiers, les champs de fichier des formulaires de macros.
+- **Une ligne ou un libellé** qui montre un chemin : les dossiers de Paramètres › Dossiers, le pied des paramètres de l'Assistant IA et des clés API, le titre du code d'une macro, la source de l'import en cours, la ligne Fichier de l'import de l'IHM, l'en-tête de l'aperçu des fichiers.
+- **Des tableaux de plus** : Bibliothèques reliées (Chemin), Générer › Diagnostics (Fichier), Versions, Rapports › Écrits, l'Assistant IA (Mémoire, Souvenirs, Apprentissage).
+- **Chercher des fichiers**, **Incidents** et **À propos** proposent les mêmes entrées que partout.
 ### Où
 L'inspecteur (une image, une vidéo, une affiche, une police, un document cités ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de l'Explorateur de fichiers), les tableaux Ressources, Fichiers externes et Enregistrements, la fiche d'un enregistrement, la configuration des enregistrements, l'historique, les bibliothèques reliées, le fichier de stockage d'une variable rémanente, le fichier source de l'automate, l'action Exporter un enregistrement, le Stockage PC de la mémoire de l'IA, les rapports déjà écrits (Rapports › Écrits, 1.25.0), et dans l'arbre : une vue enregistrée, une macro, une bibliothèque reliée, les dossiers Ressources, Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le chemin).
 

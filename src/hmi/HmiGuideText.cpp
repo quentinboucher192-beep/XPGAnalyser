@@ -649,9 +649,22 @@ const std::vector<Topic>& topics() {
                          "m\xC3\xA9thodes, op\xC3\xA9rateurs, valeurs d'\xC3\xA9num\xC3\xA9ration, cas de "
                          "test ; c\xC3\xB4t\xC3\xA9 automate, les variables, les tables d'animation et les "
                          "DDT.", {}},
-             {K::Warning, "Les enregistrements, les incidents et les listes de l'Assistant IA se suppriment "
-                         "sur le disque, avec leur propre confirmation et sans Ctrl+Z : une ligne \xC3\xA0 "
-                         "la fois.", {}},
+             {K::Heading, "Sur le disque, c\xC3\xB4t\xC3\xA9 automate, Mes sons", {}},
+             {K::Bullet, "**Les enregistrements** : plusieurs d'un coup ; ils vont dans la corbeille du "
+                         "projet (`ihm/corbeille`), et **un seul Ctrl+Z** les rend (un seul enregistrement "
+                         "aussi).", {}, "1.25.0"},
+             {K::Bullet, "**Les biblioth\xC3\xA8ques reli\xC3\xA9" "es** : **D\xC3\xA9lier les N**, un seul "
+                         "Ctrl+Z.", {}},
+             {K::Bullet, "**C\xC3\xB4t\xC3\xA9 automate** : les t\xC3\xA2" "ches (MAST et une "
+                         "t\xC3\xA2" "che qui a encore des sections restent), les modules des racks (le "
+                         "processeur et l'alimentation restent), les unit\xC3\xA9s et leurs sections, les "
+                         "blocs DFB ; une question quand d'autres \xC3\xA9l\xC3\xA9ments partent avec eux ; "
+                         "un seul Ctrl+Z. Suppr marche aussi dans les DDT.", {}},
+             {K::Bullet, "**Mes sons** (la biblioth\xC3\xA8que de sons) : plusieurs d'un coup ; un son natif "
+                         "reste, le compte rendu le dit ; un seul Ctrl+Z les rend.", {}},
+             {K::Bullet, "**Les incidents** et **les listes de l'Assistant IA** (Apprentissage, "
+                         "M\xC3\xA9moire, Souvenirs, les conversations du panneau) : plusieurs d'un coup, "
+                         "mais **sans Ctrl+Z** (ils n'ont pas de corbeille) - la question le dit.", {}},
          },
          {"historique", "dossiers", "aller-a"},
          {"supprimer plusieurs", "s\xC3\xA9lection multiple", "Ctrl+clic", "Maj+clic", "Supprimer les N \xC3\xA9l\xC3\xA9ments", "Suppr", "plusieurs d'un coup"},
@@ -678,6 +691,24 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Copier le chemin**.", {}},
              {K::Paragraph, "Un chemin qui n'existe pas (encore) : les entr\xC3\xA9" "es sont "
                          "gris\xC3\xA9" "es, et la raison est dite.", {}},
+             {K::Heading, "Les champs et les libell\xC3\xA9s", {}},
+             {K::Bullet, "**Un champ de chemin** (avec son bouton \xC2\xAB \xE2\x80\xA6 \xC2\xBB) : son clic "
+                         "droit garde Couper, Copier, Coller, Tout choisir, et ajoute les trois "
+                         "entr\xC3\xA9" "es - Exporter vers\xE2\x80\xA6, Param\xC3\xA8tres \xE2\x80\xBA "
+                         "Dossiers, Nouveau projet, Nouvelle IHM, Nouvelle machine, Dupliquer, Archives, "
+                         "Versions, Importer, Chercher des fichiers, les champs de fichier des formulaires "
+                         "de macros.", {}, "1.25.0"},
+             {K::Bullet, "**Une ligne ou un libell\xC3\xA9** qui montre un chemin : les dossiers de "
+                         "Param\xC3\xA8tres \xE2\x80\xBA Dossiers, le pied des param\xC3\xA8tres de "
+                         "l'Assistant IA et des cl\xC3\xA9s API, le titre du code d'une macro, la source de "
+                         "l'import en cours, la ligne Fichier de l'import de l'IHM, l'en-t\xC3\xAAte de "
+                         "l'aper\xC3\xA7u des fichiers.", {}},
+             {K::Bullet, "**Des tableaux de plus** : Biblioth\xC3\xA8ques reli\xC3\xA9" "es (Chemin), "
+                         "G\xC3\xA9n\xC3\xA9rer \xE2\x80\xBA Diagnostics (Fichier), Versions, Rapports "
+                         "\xE2\x80\xBA \xC3\x89" "crits, l'Assistant IA (M\xC3\xA9moire, Souvenirs, "
+                         "Apprentissage).", {}},
+             {K::Bullet, "**Chercher des fichiers**, **Incidents** et **\xC3\x80 propos** proposent les "
+                         "m\xC3\xAAmes entr\xC3\xA9" "es que partout.", {}},
              {K::Heading, "O\xC3\xB9", {}},
              {K::Paragraph, "L'inspecteur (une image, une vid\xC3\xA9o, une affiche, une police, un document "
                          "cit\xC3\xA9s ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de "
@@ -686,10 +717,11 @@ const std::vector<Topic>& topics() {
                          "enregistrements, l'historique, les biblioth\xC3\xA8ques reli\xC3\xA9" "es, le "
                          "fichier de stockage d'une variable r\xC3\xA9manente, le fichier source de "
                          "l'automate, l'action Exporter un enregistrement, le Stockage PC de la "
-                         "m\xC3\xA9moire de l'IA, et dans l'arbre : une vue enregistr\xC3\xA9" "e, une "
-                         "macro, une biblioth\xC3\xA8que reli\xC3\xA9" "e, les dossiers Ressources, "
-                         "Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le "
-                         "chemin).", {}},
+                         "m\xC3\xA9moire de l'IA, les rapports d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crits (Rapports "
+                         "\xE2\x80\xBA \xC3\x89" "crits, 1.25.0), et dans l'arbre : une vue "
+                         "enregistr\xC3\xA9" "e, une macro, une biblioth\xC3\xA8que reli\xC3\xA9" "e, les "
+                         "dossiers Ressources, Historique, Enregistrements et Incidents (Ouvrir dans "
+                         "l'explorateur et Copier le chemin).", {}},
          },
          {"aller-a", "chercher-fichiers", "ressources", "fichiers"},
          {"chemin", "fichier", "dossier", "Ouvrir dans l'explorateur", "Aller \xC3\xA0", "Copier le chemin", "explorateur Windows"},
@@ -1826,6 +1858,11 @@ const std::vector<Topic>& topics() {
              {K::Tip, "L'infobulle d'une image dit son nom, sa cat\xC3\xA9gorie et sa taille d'origine ; "
                          "le bas de l'onglet les rappelle pour l'image survol\xC3\xA9" "e (ou choisie) - une "
                          "image que la recherche cache n'y reste pas.", {}, "1.14.1"},
+             {K::Tip, "1.25.0 : dans l'arbre du projet, **Ressources \xE2\x80\xBA Biblioth\xC3\xA8que "
+                         "d'images [N]** d\xC3\xA9plie les m\xC3\xAAmes images (Mes images, puis chaque "
+                         "cat\xC3\xA9gorie avec son nombre) ; un clic sur une image ouvre "
+                         "l'\xC3\xA9" "diteur de vues sur l'onglet Images, l'image montr\xC3\xA9" "e et "
+                         "choisie.", {}, "1.14.1"},
              {K::Heading, "Quelques composants", {}},
              {K::Bullet, "**Texte** : statique, dynamique (textes \xC3\xA0 trous `{Variable}`), "
                          "format\xC3\xA9, sur plusieurs lignes (retour \xC3\xA0 la ligne automatique).", {}},
@@ -22186,20 +22223,37 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**les \xC3\xA9v\xC3\xA9nements** (au choix) : connexions, recettes, "
                          "\xC3\xA9" "critures...", {}},
              {K::Heading, "Le fichier", {}},
-             {K::Paragraph, "`exports/rapport_<nom>_<date>_<heure>.pdf` (ou `.xlsx`) : le PDF en A4 (la "
-                         "synth\xC3\xA8se, un graphique, les tableaux, l'en-t\xC3\xAAte "
-                         "r\xC3\xA9p\xC3\xA9t\xC3\xA9 \xC3\xA0 chaque page), le classeur avec une feuille "
-                         "par partie. **Destinataires** : des destinataires des notifications (leurs noms) - "
-                         "le rapport part en pi\xC3\xA8" "ce jointe par le relais SMTP.", {}},
+             {K::Paragraph, "`exports/rapport_<nom>_<date>_<heure>.pdf` (ou `.xlsx`) : le PDF selon sa **mise "
+                         "en page** (voir \xC2\xAB La mise en page des rapports \xC2\xBB : la page, "
+                         "l'en-t\xC3\xAAte, le pied, les parties et leur ordre), le classeur avec une "
+                         "feuille par partie. **Destinataires** : des destinataires des notifications (leurs "
+                         "noms) - le rapport part en pi\xC3\xA8" "ce jointe par le relais SMTP. L'onglet "
+                         "**\xC3\x89" "crits** liste les rapports d\xC3\xA9j\xC3\xA0 dans exports/ ; le clic "
+                         "droit d'un fichier propose **Ouvrir dans l'explorateur**, **Aller \xC3\xA0** et "
+                         "**Copier le chemin**.", {}},
              {K::Heading, "G\xC3\xA9n\xC3\xA9rer maintenant", {}},
-             {K::Paragraph, "**G\xC3\xA9n\xC3\xA9rer maintenant** : la p\xC3\xA9riode en cours, jusqu'\xC3\xA0 "
-                         "maintenant ; **Derni\xC3\xA8re p\xC3\xA9riode** : la derni\xC3\xA8re "
-                         "compl\xC3\xA8te. Si la simulation IHM tourne, le rapport prend ses compteurs de "
-                         "production ; sinon l'historique seul. Les deux demandent o\xC3\xB9 "
-                         "l'\xC3\xA9" "crire : exports/ du projet propos\xC3\xA9, sous son nom habituel "
-                         "(**Exporter** : comme avant), le bouton \xE2\x80\xA6 pour un autre dossier ou un "
-                         "autre nom. Les rapports programm\xC3\xA9s, \xC3\xA0 l'heure dite, vont seuls dans "
-                         "exports/, sans question.", {}},
+             {K::Paragraph, "**G\xC3\xA9n\xC3\xA9rer maintenant\xE2\x80\xA6** (la p\xC3\xA9riode en cours) et "
+                         "**Derni\xC3\xA8re p\xC3\xA9riode\xE2\x80\xA6** (la derni\xC3\xA8re "
+                         "compl\xC3\xA8te) ouvrent la fen\xC3\xAAtre **G\xC3\xA9n\xC3\xA9rer le rapport "
+                         "maintenant** :", {}},
+             {K::Bullet, "**P\xC3\xA9riode** : la derni\xC3\xA8re (\xC2\xAB 04/11 06:00 \xE2\x86\x92 05/11 "
+                         "06:00 \xC2\xBB), en cours, ou **Choisir\xE2\x80\xA6** : du \xE2\x80\xA6 au "
+                         "\xE2\x80\xA6 (`2026-11-01 06:00`) ;", {}},
+             {K::Bullet, "**Format** : PDF ou Excel ;", {}},
+             {K::Bullet, "**Mise en page** : celle du rapport propos\xC3\xA9" "e d'abord, puis celles du "
+                         "projet et les fournies ; **Modifier les mises en page\xE2\x80\xA6** ouvre l'onglet "
+                         "Mise en page ;", {}},
+             {K::Bullet, "**Apr\xC3\xA8s l'\xC3\xA9" "criture** : **Ouvrir le fichier** ; **L'envoyer aux "
+                         "destinataires du rapport** (d\xC3\xA9" "coch\xC3\xA9 : le fichier seul) ;", {}},
+             {K::Bullet, "\xC3\xA0 droite, l'**aper\xC3\xA7u** de la page 1 (\xE2\x97\x80 \xE2\x96\xB6 : les "
+                         "autres), qui suit la mise en page choisie ; en bas, le nom du fichier dans "
+                         "exports/.", {}},
+             {K::Paragraph, "**G\xC3\xA9n\xC3\xA9rer** l'\xC3\xA9" "crit dans exports/ ; "
+                         "**Ailleurs\xE2\x80\xA6** demande o\xC3\xB9 (un autre dossier ou un autre nom) ; "
+                         "\xC3\x89" "chap ou **Annuler** : rien. Si la simulation IHM tourne, le rapport "
+                         "prend ses compteurs de production ; sinon l'historique seul. Les rapports "
+                         "programm\xC3\xA9s, \xC3\xA0 l'heure dite, vont seuls dans exports/, avec leur mise "
+                         "en page, sans question.", {}},
              {K::Tip, "`SYS.ReportLast` : le dernier rapport \xC3\xA9" "crit.", {}},
          },
          {"notifications", "historiques", "alarmes", "production"},
@@ -22210,6 +22264,77 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Superviser / mise-en-page-rapports
+        {"mise-en-page-rapports", "La mise en page des rapports", "Superviser",
+         "L'onglet Mise en page de Configuration \xE2\x80\xBA Rapports : la page, l'en-t\xC3\xAAte, le pied "
+         "de page, les parties et leur ordre, les tableaux et le texte des rapports - avec l'aper\xC3\xA7u "
+         "en direct, des mises en page enregistr\xC3\xA9" "es dans le projet, et le choix de la mise en page "
+         "\xC3\xA0 chaque export.",
+         {
+             {K::Heading, "Les mises en page", {}},
+             {K::Paragraph, "\xC3\x80 gauche, la liste : **les fournies** (un cadenas) - **Standard** (celle "
+                         "d'avant, A4 portrait), **Compacte** (A4 paysage, petits caract\xC3\xA8res, avec "
+                         "les courbes), **Synth\xC3\xA8se seule** (la synth\xC3\xA8se et le graphique, des "
+                         "cases de visa) - puis **celles du projet** (une personne).", {}},
+             {K::Bullet, "**Nouvelle** : une copie de Standard, \xC3\xA0 r\xC3\xA9gler ; **Dupliquer "
+                         "\xC3\xA0 partir de\xE2\x80\xA6** : une copie de n'importe laquelle (une fournie ne "
+                         "se r\xC3\xA8gle pas : on la duplique) ;", {}},
+             {K::Bullet, "**Par d\xC3\xA9" "faut** (l'\xC3\xA9toile \xE2\x98\x85) : celle d'un nouveau "
+                         "rapport, et d'un rapport sans la sienne ;", {}},
+             {K::Bullet, "**Supprimer** (Suppr) : plusieurs d'un coup (Ctrl+clic, Maj+clic), un seul Ctrl+Z "
+                         "; les rapports qui l'employaient prennent celle par d\xC3\xA9" "faut ; une fournie "
+                         "se garde.", {}},
+             {K::Paragraph, "Sous la liste : les rapports qui l'emploient.", {}},
+             {K::Heading, "Les r\xC3\xA9glages", {}},
+             {K::Table, "Partie\tCe qui se r\xC3\xA8gle\nPage\tle format (A4, A3, A5, Lettre US), "
+                         "l'orientation (portrait, paysage), les quatre marges (3 \xC3\xA0 60 "
+                         "mm)\nEn-t\xC3\xAAte\tle logo (une image des ressources, \xC3\xA0 gauche ou "
+                         "\xC3\xA0 droite ; en grand sur la premi\xC3\xA8re page, en petit ensuite), le "
+                         "titre et le sous-titre \xC3\xA0 trous, la couleur d'accent (#RRGGBB ou @Nom, une "
+                         "couleur s\xC3\xA9mantique)\nPied de page\t\xC3\xA0 gauche, au centre, \xC3\xA0 "
+                         "droite (\xC3\xA0 trous) ; les cases de visa (\xC3\x89tabli par ; "
+                         "V\xC3\xA9rifi\xC3\xA9 par\xE2\x80\xA6) en fin de rapport\nContenu\tles parties "
+                         "\xC3\xA0 imprimer et leur ordre (coche ; glisse une ligne, ou Alt+\xE2\x86\x91 "
+                         "\xE2\x86\x93)\nTableaux\tla taille, les lignes altern\xC3\xA9" "es, "
+                         "l'en-t\xC3\xAAte r\xC3\xA9p\xC3\xA9t\xC3\xA9 \xC3\xA0 chaque page\nTexte\tla "
+                         "police (Helvetica, Times, Courier), la taille du titre et du corps", {}},
+             {K::Paragraph, "Les trous : `{Titre}` (le titre du rapport), `{SousTitre}`, `{Rapport}` (\xC2\xAB "
+                         "Rapport journalier \xC2\xBB), `{Nom}`, `{Periode}`, `{Site}` et `{Projet}` (le "
+                         "projet), `{Debut}`, `{Fin}`, `{Date}`, `{Heure}` (quand il est \xC3\xA9" "crit), "
+                         "`{Page}`, `{Pages}`. Les parties : la synth\xC3\xA8se, le graphique des alarmes "
+                         "par priorit\xC3\xA9, les alarmes de la p\xC3\xA9riode, les plus fr\xC3\xA9quentes, "
+                         "les mesures (minimum, moyenne, maximum), **les courbes des mesures** (une courbe "
+                         "par mesure sur la p\xC3\xA9riode, PDF seulement), la production, les "
+                         "\xC3\xA9v\xC3\xA9nements. Une partie s'imprime si la mise en page la coche **et** "
+                         "si le rapport la recueille (ses cases Alarmes, Production, "
+                         "\xC3\x89v\xC3\xA9nements ; ses mesures). En Excel : une feuille par tableau "
+                         "coch\xC3\xA9, dans l'ordre (la synth\xC3\xA8se en t\xC3\xAAte si coch\xC3\xA9" "e).", {}},
+             {K::Heading, "Le brouillon, l'aper\xC3\xA7u, Enregistrer", {}},
+             {K::Paragraph, "Chaque r\xC3\xA9glage change **l'aper\xC3\xA7u** tout de suite (\xC3\xA0 droite : "
+                         "la page telle que le PDF l'\xC3\xA9" "crira, page par page, avec un zoom) ; "
+                         "**Donn\xC3\xA9" "es d'exemple** (une journ\xC3\xA9" "e invent\xC3\xA9" "e) ou "
+                         "**Derni\xC3\xA8re p\xC3\xA9riode** (l'historique du projet, pour un rapport qui "
+                         "l'emploie). Le bas dit \xC2\xAB modifi\xC3\xA9" "e (non enregistr\xC3\xA9" "e) "
+                         "\xC2\xBB et qui l'emploie ; **Ctrl+Z** d\xC3\xA9" "fait le dernier r\xC3\xA9glage. "
+                         "**Enregistrer la mise en page** (Ctrl+S) la garde dans le projet - Ctrl+Z ensuite "
+                         "la rend comme avant ; **Annuler les modifications** revient \xC3\xA0 "
+                         "l'enregistr\xC3\xA9" "e. Les rapports qui l'emploient la prennent \xC3\xA0 leur "
+                         "prochaine \xC3\xA9" "criture.", {}},
+             {K::Heading, "Le rapport, l'export", {}},
+             {K::Paragraph, "Chaque rapport a **sa mise en page** (sa case **Mise en page** \xC3\xA0 droite, sa "
+                         "colonne dans la liste) : celle des \xC3\xA9" "critures automatiques, \xC3\xA0 "
+                         "l'heure dite. \xC3\x80 l'export (**G\xC3\xA9n\xC3\xA9rer "
+                         "maintenant\xE2\x80\xA6**), la fen\xC3\xAAtre en propose une autre, avec "
+                         "l'aper\xC3\xA7u de la page 1.", {}},
+         },
+         {"rapports", "couleurs-semantiques", "ressources"},
+         {"mise en page", "mise en page du rapport", "format de page", "A4", "A3", "paysage", "portrait", "marges", "logo", "en-t\xC3\xAAte", "pied de page", "cases de visa", "\xC3\x89tabli par", "V\xC3\xA9rifi\xC3\xA9 par", "couleur d'accent", "courbes des mesures", "aper\xC3\xA7u du rapport", "Standard", "Compacte", "Synth\xC3\xA8se seule"},
+         {"rapports"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.25.0"},
         // ---- Superviser / securite
         {"securite", "Utilisateurs et s\xC3\xA9" "curit\xC3\xA9", "Superviser",
          "Les utilisateurs se rangent en groupes ; un groupe a des r\xC3\xB4les, un r\xC3\xB4le des "
@@ -22877,6 +23002,19 @@ const std::vector<Topic>& topics() {
                          "les sons du projet, ceux de la biblioth\xC3\xA8que : \xC2\xAB Biblioth\xC3\xA8que "
                          "\xE2\x80\xBA Alarmes \xE2\x80\xBA Alarme critique \xC2\xBB. Le choisir **l'importe "
                          "et le r\xC3\xA8gle** d'un seul geste (un seul Ctrl+Z pour une alarme).", {}},
+             {K::Heading, "Dans l'arbre et dans l'\xC3\xA9" "diteur de vues", {}},
+             {K::Bullet, "Dans l'arbre du projet, **Biblioth\xC3\xA8que de sons [N]** dit combien de sons "
+                         "elle a, et **se d\xC3\xA9plie** : Mes sons, Alarmes, Notifications, Interface, "
+                         "Proc\xC3\xA9" "d\xC3\xA9, chacun avec son nombre, puis leurs sons (un cadenas, une "
+                         "personne ; la dur\xC3\xA9" "e). Un clic ouvre la biblioth\xC3\xA8que sur le "
+                         "dossier ou le son.", {}, "1.25.0"},
+             {K::Bullet, "Dans l'\xC3\xA9" "diteur de vues, la **BIBLIOTH\xC3\x88QUE** a un sous-onglet "
+                         "**Sons**, entre Images et Variables : les m\xC3\xAAmes dossiers d\xC3\xA9pliables "
+                         "et leur nombre, **\xC3\x89" "couter** (Espace), **Importer** (Entr\xC3\xA9" "e), "
+                         "**+** (Mes sons) ; le champ de recherche de la biblioth\xC3\xA8que cherche aussi "
+                         "les sons. **Au clic** : l'objet choisi dans la vue joue le son quand on clique "
+                         "dessus (le son est import\xC3\xA9 s'il ne l'est pas, une action \xC2\xAB Jouer un "
+                         "son \xC2\xBB s'ajoute ; un seul Ctrl+Z).", {}},
          },
          {"ressources", "alarmes", "actions-ressources", "objet-coupe-son"},
          {"biblioth\xC3\xA8que de sons", "sons natifs", "Mes sons", "son natif", "\xC3\xA9" "couter", "importer un son", "alarme sonore", "sir\xC3\xA8ne", "klaxon", "carillon", "bip"},

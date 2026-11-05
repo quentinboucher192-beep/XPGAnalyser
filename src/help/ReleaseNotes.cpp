@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.24.0", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.25.0", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.24.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 15 h 54"},
     {"1.23.1", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 12 h 06"},
     {"1.23.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 10 h 14"},
     {"1.22.9", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 22 h 30"},
@@ -188,6 +189,20 @@ const std::vector<Note>& table() {
          "dossiers et leur nombre, \xC3\x89" "couter, Importer, + (Mes sons), la recherche ; \xC2\xAB Au clic \xC2\xBB : l'objet choisi joue le son "
          "quand on clique dessus (un seul Ctrl+Z).",
          "bibliotheque-sons", ""),
+        note("1.25.0", "Projet", Kind::New,
+         "SUPPRIMER PLUSIEURS, LA SUITE : les enregistrements (ils vont dans la corbeille du projet : un seul Ctrl+Z les rend), "
+         "les biblioth\xC3\xA8ques reli\xC3\xA9" "es (D\xC3\xA9lier les N), c\xC3\xB4t\xC3\xA9 automate les t\xC3\xA2" "ches, les modules des racks, les unit\xC3\xA9s et "
+         "leurs sections, les blocs DFB (un seul Ctrl+Z), Mes sons (un son natif reste) ; les incidents et les listes de "
+         "l'Assistant IA aussi, avec une question qui dit que c'est d\xC3\xA9" "finitif. Corrig\xC3\xA9 : plusieurs tables d'animation "
+         "choisies n'en gardaient qu'une.",
+         "supprimer-plusieurs", ""),
+        note("1.25.0", "Projet", Kind::New,
+         "LES CHEMINS DANS LES CHAMPS ET LES LIBELL\xC3\x89S : un champ de chemin avec son bouton \xC2\xAB ... \xC2\xBB (Exporter vers..., "
+         "Param\xC3\xA8tres \xE2\x80\xBA Dossiers, Nouveau projet, Dupliquer, Archives, Versions, Importer, Chercher des fichiers...), une ligne "
+         "qui montre un chemin et des tableaux de plus (Biblioth\xC3\xA8ques reli\xC3\xA9" "es, Diagnostics, Versions, Rapports \xE2\x80\xBA \xC3\x89" "crits, "
+         "l'Assistant IA) : le clic droit propose Ouvrir dans l'explorateur, Aller \xC3\xA0, Copier le chemin. Chercher des fichiers, "
+         "Incidents et \xC3\x80 propos proposent les m\xC3\xAAmes.",
+         "chemins", ""),
         // 1.24.0 : la bibliotheque de sons ; supprimer plusieurs d'un coup ; les chemins (Ouvrir dans l'explorateur, Aller a)
         note("1.24.0", "Vues", Kind::New,
          "LA BIBLIOTH\xC3\x88QUE DE SONS : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de sons. 22 SONS NATIFS fabriqu\xC3\xA9s par le logiciel "
