@@ -6,7 +6,7 @@
 #include "HmiPopupParams.hpp"
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : la cle du type d'une declaration
 #include "HmiZones.hpp"
-#include "HmiStyles.hpp"           // 1.23.0 : les styles par type d'objet (adopt, a la lecture)
+#include "HmiStyles.hpp"           // 1.23.0 : les styles par type d'objet (les cibles par type)
 
 #include <algorithm>
 #include <cctype>
@@ -2689,8 +2689,6 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     // 1.13.0 (lot J8) : les bibliotheques reliees, depuis le cache de leur interface (sans disque ici ; load() les
     // cherche ensuite sur le disque, a cote du projet).
     biblio::useCache(p);
-    // 1.23.0 : un projet d'avant - les objets qui citent un style recoivent leur etat (ce qui differe du style est brise).
-    (void)styles::adopt(p);
     return p;
 }
 

@@ -900,7 +900,7 @@ bool HmiEditor::openLegendMenu(const std::string& grid, const std::string& categ
                         styleItems.push_back({"Briser : garder la valeur actuelle", shown(styleValue), {}, ui::Icon::None, true, false, 401});
                         styleItems.push_back({"Ouvrir le style \xC2\xAB " + by->name + " \xC2\xBB", "IHM \xE2\x80\xBA Styles", {}, ui::Icon::None,
                                               static_cast<bool>(openStyle_), false, 402});
-                    } else if (const auto broken = st::brokenKeys(*o);
+                    } else if (const auto broken = st::overriddenKeys(doc_->project, *o);   // brisee, ou d'office
                                std::find(broken.begin(), broken.end(), p->key) != broken.end()) {
                         if (const hmi::Style* cited = st::find(doc_->project, st::citedStyle(*o)))
                             for (const auto& pr : st::valuesFor(doc_->project, *cited, *o))
@@ -1646,7 +1646,7 @@ void HmiEditor::markStyleValues(const hmi::View& v, std::vector<ui::PropertyGrid
     const hmi::Style* style = cited.empty() ? nullptr : st::find(doc_->project, cited);
     if (!style) return;
     const auto imposed = st::imposedKeys(doc_->project, *o);
-    const auto broken = st::brokenKeys(*o);
+    const auto broken = st::overriddenKeys(doc_->project, *o);   // brisees par un geste, ou d'office (une valeur differente)
     std::map<std::string, std::string, std::less<>> styleValues;
     for (const auto& pr : st::valuesFor(doc_->project, *style, *o)) styleValues.emplace(pr.key, pr.value);
     const std::string quoted = "\xC2\xAB " + style->name + " \xC2\xBB";

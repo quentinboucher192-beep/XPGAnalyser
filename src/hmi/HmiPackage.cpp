@@ -918,7 +918,8 @@ Plan plan(const Project& dst, const Package& pkg) {
         it.name = st.name;
         const Style* ours = dst.styleByName(st.name);
         if (!ours) { it.state = State::Missing; it.choice = Choice::Add; it.detail = "absent du projet"; }
-        else if (ours->props == st.props) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9"; }
+        // 1.23.0 : les valeurs par type d'objet comptent aussi.
+        else if (ours->props == st.props && ours->targets == st.targets) { it.state = State::Same; it.choice = Choice::KeepOurs; it.detail = "identique, gard\xC3\xA9"; }
         else {
             it.state = State::Different;
             it.choice = Choice::KeepOurs;
