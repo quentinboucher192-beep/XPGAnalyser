@@ -598,6 +598,8 @@ if(XPG_BUILD_TESTS)
     # ---- 1.23.0 : les styles par type d'objet (hmi::styles : fournis, imposer, briser, propager, relire) ----
     xpg_add_test_executable(styles_types_test tests/styles_types_test.cpp)
     xpg_target_link_libraries(styles_types_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(semantic_colors_test tests/semantic_colors_test.cpp)
+    xpg_target_link_libraries(semantic_colors_test PRIVATE xpg_hmi)
     # ---- 1.11.13 : la generation incrementale de l'IHM (cache, dependances, etats, artefacts) ----
     xpg_add_test_executable(hmi_build_test tests/hmi_build_test.cpp src/app/hmi/HmiBuild.cpp)
     xpg_target_link_libraries(hmi_build_test PRIVATE xpg_hmi xpg_import)
@@ -936,6 +938,7 @@ if(XPG_BUILD_TESTS)
     # pris a cote de XPG_FIXTURE : un MAST.XPG designe ailleurs n'a pas son ihm/.
     xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
     xpg_add_test(NAME stylestypes  COMMAND styles_types_test)   # 1.23.0 : les styles par type d'objet
+    xpg_add_test(NAME semanticcolors  COMMAND semantic_colors_test)   # 1.23.1 : les couleurs semantiques (@Nom)
     xpg_add_test(NAME hmieditor    COMMAND hmi_editor_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)
     xpg_add_test(NAME hmicheckexpr COMMAND hmicheck_expr_test)               # ---- Lot API 8 : les expressions impossibles ----
     xpg_add_test(NAME hmibuild     COMMAND hmi_build_test)                   # ---- 1.11.13 : la generation incrementale ----

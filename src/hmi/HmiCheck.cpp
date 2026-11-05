@@ -2,6 +2,7 @@
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiStyles.hpp"          // 1.23.0 : les styles fournis, les styles par type
+#include "HmiSemanticColors.hpp"  // 1.23.1 : les couleurs semantiques (@Nom)
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
@@ -1386,6 +1387,13 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
         if (styles::builtin(st.name))
             addItem(out, S::Warning, "Style", st.name, "porte le nom d'un style fourni : il le cache (renomme-le)", st.id);
     }
+    // ---- 1.23.1 : les couleurs semantiques (illisible, le nom d'une fournie, en double) et les citations d'une inconnue
+    for (const auto& c : p.semanticColors)
+        for (const auto& why : semantic::problems(p, c)) addItem(out, S::Warning, "Couleur", "@" + c.name, why, c.id);
+    for (const auto& cite : semantic::unknownReferences(p))
+        addItem(out, S::Warning, "Couleur", cite.key.empty() ? "@" + cite.name : cite.key,
+                cite.where + " cite @" + cite.name + " : couleur s\xC3\xA9mantique inconnue (IHM > Styles > Couleurs s\xC3\xA9mantiques)",
+                kNoId, cite.view, cite.object);
     // ---- recettes
     std::set<std::string> recipeNames;
     for (const auto& r : p.recipes) {

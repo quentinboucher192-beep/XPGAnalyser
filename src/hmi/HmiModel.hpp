@@ -1661,6 +1661,20 @@ struct Style {
     bool operator==(const Style&) const = default;
 };
 
+// 1.23.1 : UNE COULEUR SEMANTIQUE (globale) : un nom (Alarme, Marche, Fond) et sa couleur, utilisable partout comme une
+// constante : une case couleur la cite par << @Nom >>, une formule aussi ('@Alarme'). Fournies (builtin : verrouillees,
+// jamais ecrites dans le projet) ou du projet. Le moteur : HmiSemanticColors.hpp ; le registre lu au dessin :
+// core/SemanticColors.hpp.
+struct SemanticColor {
+    Id          id{kNoId};
+    std::string name;
+    std::string value;          // #RRGGBB ou #RRGGBBAA
+    std::string description;
+    std::string folder{};
+    bool        builtin{false};
+    bool operator==(const SemanticColor&) const = default;
+};
+
 // ------------------------------------------------------------ lot 13 : essais ---
 //  UN ESSAI DE RECEPTION : des pas rejoues sur l'IHM en marche - ouvrir une
 //  vue, cliquer, saisir, ecrire une valeur, attendre, verifier, se connecter,
@@ -2292,6 +2306,7 @@ struct Project {
     Security          security{Security::defaults()};
     HistorySettings   history;
     std::vector<Style> styles;               // lot 12 : les styles nommes
+    std::vector<SemanticColor> semanticColors;   // 1.23.1 : les couleurs semantiques du projet (@Nom)
     std::vector<TestScenario> scenarios;     // lot 13 : les essais de reception
     Languages         languages;             // lot 13 : les langues et les traductions
     std::vector<VariableDisplay> displays;   // lot 13 : les unites et les formats des variables

@@ -18,6 +18,7 @@
 //  displayRgb, la meme regle, appelee par le dessin en marche.
 // =============================================================================
 #include "HmiDisplay.hpp"
+#include "core/SemanticColors.hpp"   // 1.23.1 : une couleur semantique (@Nom) se lit comme sa couleur
 #include "HmiMarkers.hpp"   // 1.12.5 : un chemin sans ses reperes
 #include "HmiRanges.hpp"    // 1.12.10 (lot F) : la variable dont un objet prend la plage
 #include "HmiUnits.hpp"     // 1.13.0 (lot J6b) : l'unite physique, unite d'affichage par defaut
@@ -95,6 +96,10 @@ struct Rgb {
 };
 
 bool parseColor(std::string_view s, Rgb& out) {
+    if (core::semantic::isReference(s)) {   // 1.23.1 : << @Alarme >> : sa couleur
+        const std::string resolved = core::semantic::resolve(s);
+        return !core::semantic::isReference(resolved) && parseColor(resolved, out);
+    }
     const std::string t = trim(s);
     if ((t.size() != 7 && t.size() != 9) || t[0] != '#') return false;
     for (std::size_t i = 1; i < t.size(); ++i)

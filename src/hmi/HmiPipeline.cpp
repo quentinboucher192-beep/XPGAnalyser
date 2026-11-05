@@ -194,7 +194,7 @@ Records recordsOf(const Project& p) {
             out.alarmSettings += doc;
         else if (w == "securite" || w == "role" || w == "groupe" || w == "utilisateur") out.security += doc;
         else if (w == "historique" || w == "rapport") out.history += doc;
-        else if (w == "style" || w == "style_prop") out.styles += doc;
+        else if (w == "style" || w == "style_prop" || w == "couleur_semantique") out.styles += doc;   // 1.23.1 : les couleurs semantiques
         else if (w == "langues" || w == "langue" || w == "traduction") out.languages += doc;
         else if (w == "affichage") out.displays += doc;
         else if (w == "communication" || w == "adresse_modbus") out.exchange += doc;

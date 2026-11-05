@@ -40,6 +40,7 @@
 #include "../BackgroundTasks.hpp"      // Lot API 8 : bandeau haut (la cloche)
 #include "../../hmi/HmiBuildState.hpp"  // 1.11 (chantier T3, C4) : les icones compilable / generable
 #include "../../hmi/HmiDecl.hpp"   // 1.11.18 (refonte, lot 3) : les declarations du modele
+#include "../../hmi/HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques publiees pour le dessin
 #include "../hmi/HmiDesignPanes.hpp"
 #include "../hmi/HmiLibraryPanes.hpp"   // 1.13.0 (lot J8) : IHM > Espaces et bibliotheques
 #include "../hmi/HmiEditHistoryDialog.hpp"   // 1.12.26 : la fenetre Historique des objets
@@ -602,6 +603,7 @@ void MainAnalysisScreen::bindHmi() {
         if (treeModel_) treeModel_->setHmiBuildMarks(nullptr);
         if (hmiBuild_) hmiBuild_->analyseNow();
         if (!doc) return;
+        hmi::semantic::publish(doc->project);   // 1.23.1 : les couleurs semantiques de cette IHM (@Nom), lues au dessin
         hmiLinks_ += doc->changed->connect([this](hmi::Id v) { onHmiChanged(v); });
         hmiLinks_ += app_.events().subscribe<HmiTabsCheck>([this](const HmiTabsCheck&) {
             auto current = app_.hmi();
@@ -666,6 +668,8 @@ void MainAnalysisScreen::bindHmi() {
 }
 
 void MainAnalysisScreen::onHmiChanged(std::uint64_t viewId) {
+    // 1.23.1 : une couleur semantique changee (ou un Ctrl+Z) : le dessin lit la nouvelle.
+    if (auto d = app_.hmi()) hmi::semantic::publish(d->project);
     // La structure (vues ajoutees, retirees, reordonnees) : l'arbre refait ses
     // lignes. Le contenu d'une vue ne change que des libelles, relus au dessin.
     if (viewId == hmi::kNoId && treeModel_) treeModel_->hmiChanged();

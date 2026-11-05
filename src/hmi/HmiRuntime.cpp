@@ -1,5 +1,6 @@
 #include "HmiRuntime.hpp"
 #include "HmiStyles.hpp"   // 1.23.1 : le Style nomme en fx, applique en marche
+#include "HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques publiees
 #include "../sim/ValueText.hpp"   // 1.12.19 : les mots d'un booleen, la lecture d'un nombre, partout les memes
 #include "../core/Edition.hpp"   // 1.12.2 : IHM Studio n'a pas d'automate
 #include "HmiNatives.hpp"   // 1.12.0 : couleurs, aleatoire, enumerations natives
@@ -2063,6 +2064,7 @@ void Runtime::bind(const Project* project, sim::Environment* plc) {
     // copie, le projet donne est celui que la relecture rend en quittant (HmiRuntimeRecord.cpp).
     if (replayBind(project)) return;
     project_ = project;
+    if (project_) semantic::publish(*project_);   // 1.23.1 : ses couleurs semantiques (@Nom), lues au dessin
 }
 
 // 1.20.2 : LE PROJET CHANGE D'UN COUP - une relecture rejoue le projet de son moment, puis rend le projet en marche. Ce que

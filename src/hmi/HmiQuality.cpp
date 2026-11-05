@@ -1,4 +1,5 @@
 #include "HmiQuality.hpp"
+#include "core/SemanticColors.hpp"   // 1.23.1 : une couleur semantique (@Nom) se lit comme sa couleur
 #include "HmiRoles.hpp"   // 1.12.6 (lot C) : les noms sans les $ de leurs reperes
 
 #include "HmiControls.hpp"
@@ -158,6 +159,10 @@ double widthOf(std::uint32_t cp) {
 
 // ================================================================== couleurs ===
 std::optional<std::uint32_t> parseRgb(std::string_view text) {
+    if (core::semantic::isReference(text)) {   // 1.23.1 : << @Alarme >>
+        const std::string resolved = core::semantic::resolve(text);
+        return core::semantic::isReference(resolved) ? std::nullopt : parseRgb(resolved);
+    }
     const std::string t = trim(text);
     if (t.size() < 4 || t[0] != '#') return std::nullopt;
     const std::string_view hex = std::string_view(t).substr(1);

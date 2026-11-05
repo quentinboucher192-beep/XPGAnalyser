@@ -264,6 +264,8 @@ std::vector<std::string> splitListRaw(std::string_view text, char sep) {
 bool colorOk(std::string_view text) noexcept {
     const std::string_view s = trimView(text);
     if (s.empty() || s == "transparent" || s == "aucun") return true;
+    // 1.23.1 : << @Alarme >> : une couleur semantique (une inconnue : Generer le dit, HmiCheck).
+    if (s.size() > 1 && s.front() == '@') return trimView(s.substr(1)).find_first_of("'\",;:=") == std::string_view::npos;
     std::string_view h = s;
     if (h.front() == '#') h.remove_prefix(1);
     else if (h.size() > 3 && h.substr(0, 3) == "16#") h.remove_prefix(3);

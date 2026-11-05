@@ -1432,6 +1432,12 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                 index += "style_prop" + fieldInt("style", st.id) + field("type", t.type) + fieldBare("cle", pr.key)
                        + field("valeur", pr.value) + "\n";
     }
+    // 1.23.1 : les couleurs semantiques du projet (@Nom) ; les fournies ne s'ecrivent pas. Un lecteur d'avant ignore la ligne
+    // (une case qui cite << @Nom >> s'y dessine alors comme une couleur illisible).
+    for (const auto& c : p.semanticColors)
+        index += "couleur_semantique" + fieldInt("id", c.id) + field("nom", c.name) + field("valeur", c.value)
+               + (c.description.empty() ? std::string{} : field("description", c.description))
+               + (c.folder.empty() ? std::string{} : field("dossier", c.folder)) + "\n";
     // Lot 13 : les langues (la premiere : celle du projet) et les traductions -
     // seulement si le projet en a (un projet en une langue n'ecrit rien).
     {
@@ -2609,6 +2615,18 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 styles::targetFor(*st, type).props.push_back({key, toStr(r.get("valeur")), {}});
             else
                 st->props.push_back({key, toStr(r.get("valeur")), {}});
+        } else if (r.word == "couleur_semantique") {
+            SemanticColor c;                                            // 1.23.1
+            c.id = static_cast<Id>(toInt(r.get("id"), 0));
+            c.name = toStr(r.get("nom"));
+            c.value = toStr(r.get("valeur"));
+            c.description = toStr(r.get("description"));
+            c.folder = toStr(r.get("dossier"));
+            if (c.name.empty()) {
+                if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : couleur s\xC3\xA9mantique sans nom");
+                continue;
+            }
+            p.semanticColors.push_back(std::move(c));
         } else if (r.word == "fin") {
             sawEnd = true;
         } else if (report) {
@@ -2653,6 +2671,7 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     }
     for (const auto& u : p.security.users) highest = std::max(highest, u.id);
     for (const auto& st : p.styles) highest = std::max(highest, st.id);      // lot 12
+    for (const auto& sc : p.semanticColors) highest = std::max(highest, sc.id);   // 1.23.1
     for (const auto& sc : p.scenarios) highest = std::max(highest, sc.id);   // lot 13
     for (const auto& rp : p.reports) highest = std::max(highest, rp.id);     // lot 14
     for (const auto& e : p.equipments) highest = std::max(highest, e.id);    // lot 15

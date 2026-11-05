@@ -1,4 +1,5 @@
 #include "ColorPalette.hpp"
+#include "core/SemanticColors.hpp"   // 1.23.1 : une couleur semantique (@Nom) se lit comme sa couleur
 
 #include "../Icons.hpp"
 
@@ -149,6 +150,15 @@ std::string partAt(const ColorPalette& p, gfx::Point pt) {
 } // namespace
 
 bool parseHexColor(std::string_view v, gfx::Color& out) noexcept {
+    // 1.23.1 : << @Alarme >> : la couleur semantique publiee (une inconnue : illisible).
+    if (!v.empty() && v.front() == '@') {
+        try {
+            const std::string resolved = core::semantic::resolve(v);
+            return !resolved.empty() && resolved.front() == '#' && parseHexColor(resolved, out);
+        } catch (...) {
+            return false;
+        }
+    }
     if ((v.size() != 7 && v.size() != 9) || v[0] != '#') return false;
     auto nibble = [](char ch, unsigned& x) {
         if (ch >= '0' && ch <= '9') { x = static_cast<unsigned>(ch - '0'); return true; }

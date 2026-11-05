@@ -8,6 +8,7 @@
 #include "HmiExport.hpp"
 #include "HmiNames.hpp"     // 1.13.0 : renommer dans un paquet a espaces, par identite (renameItemInCode)
 #include "HmiOverload.hpp"   // 1.11.20 : une fonction se reconnait a son nom ET a sa forme (les surcharges)
+#include "HmiSemanticColors.hpp"   // 1.23.1 : les couleurs semantiques citees partent avec les vues
 #include "HmiScript.hpp"    // 1.13.0 : forEachCode, renameFunctionEverywhere (le paquet a espaces)
 #include "HmiStore.hpp"
 #include "HmiSymbols.hpp"
@@ -430,6 +431,16 @@ Package collect(const Project& p, const std::vector<Id>& chosen) {
             for (const auto& o : v.objects)
                 if (const auto* cite = o.find("namedStyle"); cite && upper(cite->value) == upper(st.name)) used = true;
         if (used) c.styles.push_back(st);
+    }
+    // 1.23.1 : les couleurs semantiques du projet que citent ces vues et ces styles (et celles qu'elles citent, jusqu'au
+    // point fixe) ; les fournies sont dans tout projet.
+    for (std::size_t guard = 0; guard < 8; ++guard) {
+        const std::size_t before = c.semanticColors.size();
+        for (const auto& sc : p.semanticColors) {
+            const bool have = std::any_of(c.semanticColors.begin(), c.semanticColors.end(), [&](const SemanticColor& x) { return x.id == sc.id; });
+            if (!have && semantic::users(c, sc.name) > 0) c.semanticColors.push_back(sc);
+        }
+        if (c.semanticColors.size() == before) break;
     }
     // Les variables IHM et les fonctions qu'elles lisent, ecrivent, appellent.
     design::FindOptions opt;
@@ -1212,6 +1223,19 @@ ImportResult importInto(Project& dst, const Package& pkg, const Plan& pl) {
         copy.id = dst.allocate();
         dst.styles.push_back(std::move(copy));
         res.added.push_back("style " + st.name);
+    }
+    // 1.23.1 : les couleurs semantiques du paquet : ajoutees si le projet n'en a pas de ce nom ; sinon celle du projet est
+    // gardee (dite si sa couleur differe).
+    for (const auto& sc : src.semanticColors) {
+        if (const SemanticColor* ours = semantic::find(dst, sc.name)) {
+            if (ours->value != sc.value) res.kept.push_back("couleur @" + ours->name + " (celle du projet)");
+            continue;
+        }
+        SemanticColor copy = sc;
+        copy.id = dst.allocate();
+        copy.builtin = false;
+        dst.semanticColors.push_back(std::move(copy));
+        res.added.push_back("couleur @" + sc.name);
     }
     // 1.11.2 : apres un renommage, un type, une fonction, un script se retrouvent par leur nouveau nom.
     const auto itemOf = [&](ItemKind k, const std::string& name) -> const Item* {

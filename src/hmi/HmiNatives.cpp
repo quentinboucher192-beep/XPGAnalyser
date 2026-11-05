@@ -1,4 +1,5 @@
 #include "HmiNatives.hpp"
+#include "core/SemanticColors.hpp"   // 1.23.1 : une couleur semantique (@Nom) se lit comme sa couleur
 #include "HmiTypeRegistry.hpp"
 #include "../sim/DialectLib.hpp"   // 1.12.16 : les natives que le dialecte sert
 
@@ -420,6 +421,15 @@ bool isOwnFunction(std::string_view name) noexcept {
 
 bool parseColor(std::string_view t, std::uint8_t& r, std::uint8_t& g, std::uint8_t& b, std::uint8_t& a) noexcept {
     t = trimmed(t);
+    // 1.23.1 : ECLAIRCIR('@Alarme', 20) : la couleur semantique.
+    if (!t.empty() && t.front() == '@') {
+        try {
+            const std::string resolved = core::semantic::resolve(t);
+            return !resolved.empty() && resolved.front() != '@' && parseColor(resolved, r, g, b, a);
+        } catch (...) {
+            return false;
+        }
+    }
     if (!t.empty() && t.front() == '#') t.remove_prefix(1);
     else if (t.size() > 3 && t.substr(0, 3) == "16#") t.remove_prefix(3);
     if (t.size() != 6 && t.size() != 8) return false;

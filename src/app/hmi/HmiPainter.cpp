@@ -2,6 +2,7 @@
 #include "../../hmi/HmiWidgets.hpp"
 #include "../../hmi/HmiForms.hpp"
 #include "HmiPainter.hpp"
+#include "core/SemanticColors.hpp"   // 1.23.1 : une couleur semantique (@Nom) se lit comme sa couleur
 #include "HmiParamPanes.hpp"   // 1.9 : le repere des copies modifiees
 #include "HmiPaintKit.hpp"
 #include "HmiIcons.hpp"
@@ -60,6 +61,13 @@ bool HmiPropertySource::flag(const Object& o, std::string_view key, bool fallbac
 bool tryParseColor(std::string_view t, gfx::Color& out) {
     while (!t.empty() && std::isspace(static_cast<unsigned char>(t.front()))) t.remove_prefix(1);
     while (!t.empty() && std::isspace(static_cast<unsigned char>(t.back()))) t.remove_suffix(1);
+    // 1.23.1 : << @Alarme >> : la couleur semantique (une inconnue : rien, comme une couleur illisible).
+    std::string resolved;
+    if (core::semantic::isReference(t)) {
+        resolved = core::semantic::resolve(t);
+        if (core::semantic::isReference(resolved)) return false;
+        return tryParseColor(resolved, out);
+    }
     if (t.empty() || t == "transparent" || t == "aucun") return false;
     if (t.front() == '#') t.remove_prefix(1);
     else if (t.size() > 3 && (t.substr(0, 3) == "16#")) t.remove_prefix(3);
