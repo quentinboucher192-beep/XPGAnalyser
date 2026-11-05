@@ -5,6 +5,7 @@
 #include "HmiIcons.hpp"
 #include "HmiPaneKit.hpp"            // 1.14.0 (M4) : prop, tf, yes (les enregistrements)
 #include "HmiSound.hpp"
+#include "../../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : un son du projet dans Mes sons
 #include "../../hmi/HmiMedia.hpp"
 #include "../../hmi/HmiStore.hpp"
 #include "../../ui/Shapes.hpp"
@@ -218,9 +219,11 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools->add(RFolder, HmiGlyph::Plus, "Nouveau dossier de ressources (sans effet sur les noms) : glisse des ressources dessus", "Dossier");
     tools->add(RPlay, HmiGlyph::Play, "\xC3\x89" "couter le son (encore une fois : l'arr\xC3\xAAter)", "\xC3\x89" "couter");
     // 1.14.1 (lot N6) : l'image choisie rejoint Mes images (la bibliotheque d'images de l'editeur de vues).
+    // 1.24.0 : un son choisi rejoint Mes sons (Ressources > Bibliotheque de sons), de la meme facon.
     tools->add(RLibrary, HmiGlyph::Image,
-               "Ajouter \xC3\xA0 ma biblioth\xC3\xA8que d'images : une copie de l'image choisie rejoint Mes images (l'onglet Images "
-               "de la biblioth\xC3\xA8que, dans l'\xC3\xA9" "diteur de vues), gard\xC3\xA9" "e hors du projet pour la poser ailleurs",
+               "Ajouter \xC3\xA0 ma biblioth\xC3\xA8que : une copie de l'image choisie rejoint Mes images (l'onglet Images "
+               "de la biblioth\xC3\xA8que, dans l'\xC3\xA9" "diteur de vues) ; un son, Mes sons (Ressources \xE2\x80\xBA Biblioth\xC3\xA8que "
+               "de sons) - gard\xC3\xA9" "s hors du projet pour servir ailleurs",
                "Ma biblioth\xC3\xA8que");
     tools->separator();
     tools->add(RUnused, HmiGlyph::Search, "Montrer seulement les ressources inutilis\xC3\xA9" "es", "Inutilis\xC3\xA9" "es");
@@ -241,7 +244,7 @@ HmiResourcesPane::HmiResourcesPane(std::string id, hmi::DocumentPtr doc, Apply a
     tools_->setEnabledWhen(RPurge, [this] { return !hmi::unusedResources(doc_->project).empty(); });
     tools_->setEnabledWhen(RLibrary, [this] {          // 1.14.1 (lot N6)
         const auto* r = doc_->project.resource(selectedResource());
-        return r && r->kind() == MediaKind::Image && r->data;
+        return r && (r->kind() == MediaKind::Image || r->kind() == MediaKind::Sound) && r->data;   // 1.24.0 : un son aussi
     });
 
     auto kind = std::make_unique<ui::DropDown>(base + ".kind");
@@ -511,8 +514,21 @@ bool HmiResourcesPane::togglePlay() {
 }
 
 // 1.14.1 (lot N6) : une copie de l'image dans Mes images (hors du projet : rien a annuler ici).
+// 1.24.0 : un son : dans Mes sons (la bibliotheque de sons).
 bool HmiResourcesPane::addToImageLibrary(Id id, std::string* why) {
     const auto* r = doc_->project.resource(id);
+    if (r && r->kind() == MediaKind::Sound && r->data) {
+        std::string stored, error;
+        bool existed = false;
+        if (!hmi::soundlib::addUserSound(r->name, *r->data, &stored, &existed, &error)) {
+            if (why) *why = error;
+            say("Ma biblioth\xC3\xA8que de sons : " + error, true);
+            return false;
+        }
+        say(existed ? "D\xC3\xA9j\xC3\xA0 dans Mes sons : " + stored
+                    : "Ajout\xC3\xA9 \xC3\xA0 Mes sons : " + stored + " (Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de sons, pour tous tes projets)");
+        return true;
+    }
     const auto fail = [&](std::string m) {
         if (why) *why = m;
         say("Ma biblioth\xC3\xA8que d'images : " + m, true);

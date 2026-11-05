@@ -38740,6 +38740,15 @@ void bibliothequeSons1240() {
     std::string why;
     (void)pane.select("clic");
     check(!pane.removeSelected(&why) && why.find("natif") != std::string::npos, "un son natif ne se retire pas");
+    // Ressources > Ma bibliotheque : un son du projet rejoint Mes sons.
+    {
+        const hmi::Id sid = pane.importSound("succes");
+        app::HmiResourcesPane res("res1240", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        const auto before = sl::userSounds().size();
+        check(sid != hmi::kNoId && res.addToImageLibrary(sid) && sl::userSounds().size() == before + 1 && sl::userSounds().front().label == "succes",
+              "Ressources \xE2\x80\xBA Ma biblioth\xC3\xA8que : le son du projet rejoint Mes sons");
+        (void)b.stack.undo();
+    }
     // Le son d'une priorite d'alarme : un son natif se choisit dans la liste, il est importe avec le reglage (un Ctrl+Z).
     {
         app::HmiAlarmsPane alarms("al1240", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
