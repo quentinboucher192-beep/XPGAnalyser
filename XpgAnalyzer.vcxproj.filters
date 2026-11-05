@@ -1504,6 +1504,9 @@
     <ClCompile Include="src\core\SingleInstance.cpp">
       <Filter>core</Filter>
     </ClCompile>
+    <ClCompile Include="src\core\Trash.cpp">
+      <Filter>core</Filter>
+    </ClCompile>
     <ClCompile Include="src\help\CenterIndex.cpp">
       <Filter>help</Filter>
     </ClCompile>
@@ -3167,6 +3170,9 @@
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="src\core\SingleInstance.hpp">
+      <Filter>core</Filter>
+    </ClInclude>
+    <ClInclude Include="src\core\Trash.hpp">
       <Filter>core</Filter>
     </ClInclude>
     <ClInclude Include="src\help\CenterIndex.hpp">

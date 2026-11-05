@@ -294,6 +294,8 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         // 1.21.2 : les notifications de l'Assistant - relues sur le fil du journal (l'interface n'attend pas le disque),
         // ecrites au plus une fois par seconde sur ce meme fil.
         app::ai::notifs::open(app::ai::notificationsFile());
+        // 1.25.1 : la corbeille de l'IA (IA/corbeille) - ce qui y est depuis plus de 7 jours part pour de bon.
+        (void)app::ai::memory::purgeTrash();
     }
     // ---- fin Lot API 8 ----
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);

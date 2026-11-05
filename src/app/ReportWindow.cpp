@@ -7,6 +7,7 @@
 #include "Capture.hpp"
 #include "CrashDialogs.hpp"
 #include "Settings.hpp"
+#include "screens/Screens.hpp"   // 1.25.1 : installBasicPathLinks (le chemin du rapport : Ouvrir dans l'explorateur)
 #include "../core/CrashGuard.hpp"
 #include "../core/Edition.hpp"
 #include "../hmi/HmiMedia.hpp"
@@ -179,6 +180,9 @@ int run(const Args& args) {
     services.clipboardSet = [](std::string_view text) { SDL_SetClipboardText(std::string(text).c_str()); };
     services.surfaceSize = [r = renderer.get()] { return r->surfaceSize(); };
     ui::installPlatformServices(std::move(services));
+    // 1.25.1 : le clic droit sur le chemin du rapport (et du minidump) - Ouvrir dans l'explorateur, Copier le chemin ; Aller
+    // a : pas d'apercu dans cette petite fenetre (l'entree grisee le dit). La vue dit elle-meme un refus.
+    installBasicPathLinks(nullptr, {});
 
     menu::MenuManager menus{menu::MenuFactory{}};
     auto screen = std::make_unique<ui::CrashReportScreen>(std::move(setup));

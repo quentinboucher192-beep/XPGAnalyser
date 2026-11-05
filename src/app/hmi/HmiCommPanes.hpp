@@ -307,6 +307,14 @@ public:
     bool deleteEquipment(const std::string& name, const std::vector<std::string>& drop = {}, bool dropTwin = true, std::string* why = nullptr);
     // Le dialogue (les variables a cocher) ; sans dialogue (les tests) : rien.
     bool askDeleteEquipment(const std::string& name);
+    // 1.25.1 : PLUSIEURS EQUIPEMENTS D'UN COUP, LE MEME CHOIX QUE POUR UN SEUL (<< corrige les limites restantes >> : avant,
+    // leurs variables restaient toujours, deliees). UNE question : leurs variables IHM - les garder (deliees) ou les
+    // supprimer aussi ; leurs esclaves simules - partent avec eux (coche) ou restent, seulement simules. Le choix vaut
+    // pour tous ; un seul Ctrl+Z rend tout. Sans dialogue (les essais) : la question commune (several), variables gardees.
+    void askDeleteEquipments(const std::vector<std::string>& names);
+    // Le geste, sans question : `dropVariables` - toutes leurs variables IHM partent aussi ; `dropTwins` - leurs esclaves
+    // simules aussi. Rend le compte rendu (<< 3 equipements supprimes : ... - un seul Ctrl+Z les rend >>).
+    std::string deleteEquipments(const std::vector<std::string>& names, bool dropVariables, bool dropTwins);
     // Glisse sur un port : changer son adresse (une libre du reseau du port,
     // `address` vide) ou garder la sienne (le port recoit une adresse de plus,
     // dans son reseau - droits d'administrateur).

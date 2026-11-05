@@ -625,6 +625,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\Perf.cpp" />
     <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
+    <ClCompile Include="src\core\Trash.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
     <ClCompile Include="src\help\CenterPages.cpp" />
     <ClCompile Include="src\help\CenterSources.cpp" />
@@ -1186,6 +1187,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\Perf.hpp" />
     <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
+    <ClInclude Include="src\core\Trash.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />
     <ClInclude Include="src\help\CenterPages.hpp" />
     <ClInclude Include="src\help\CenterSources.hpp" />

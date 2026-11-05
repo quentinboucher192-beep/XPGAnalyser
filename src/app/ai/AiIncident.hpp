@@ -185,6 +185,14 @@ public:
                   std::string* why = nullptr);
     // Supprimer un incident EN ATTENTE (un valide ne se supprime pas d'ici).
     bool remove(const std::string& folder, std::string* why = nullptr);
+    // 1.25.1 : LA CORBEILLE DES INCIDENTS (<< corrige les limites restantes >> : un Ctrl+Z les rend). Supprimer depuis le
+    // volet deplace le dossier dans en attente/.corbeille/<date>~<nom> (le point : aucune liste ne la lit - ni le volet,
+    // ni le compte, ni l'historique d'une alarme que l'IA recoit). restore le remet a sa place (refuse si un dossier du
+    // meme nom y est revenu). recover() purge ce qui y est depuis plus de 7 jours.
+    [[nodiscard]] std::string trashFolder() const;
+    [[nodiscard]] std::string trashSlot(const std::string& folder) const;   // ou trash() le mettra
+    bool trash(const std::string& folder, const std::string& slot, std::string* why = nullptr);
+    bool restore(const std::string& slot, const std::string& folder, std::string* why = nullptr);
 
     // La lecture.
     [[nodiscard]] std::vector<Item> list(State) const;
@@ -198,6 +206,7 @@ public:
 
     // Au demarrage : les ".partiel" (termines s'ils sont lisibles, sinon gardes en ".incomplet"), les copies de
     // validation interrompues, l'original reste apres une validation finie. Les lignes disent ce qui a ete fait.
+    // 1.25.1 : et la corbeille purgee (plus de 7 jours).
     std::vector<std::string> recover();
 
     // Les essais : une ecriture qui echoue (le disque plein) ; vrai : ce chemin echoue.

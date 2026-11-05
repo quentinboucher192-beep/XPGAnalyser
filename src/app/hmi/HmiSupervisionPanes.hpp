@@ -51,6 +51,8 @@
 
 namespace app {
 
+namespace fileview { struct Source; }   // 1.25.1 : l'apercu d'un fichier de l'archive (FileView.hpp)
+
 class HmiGeneratedAlarmsTable;   // 1.9 : HmiObjectAlarmPanes.hpp
 
 // ================================================================= alarmes ===
@@ -428,8 +430,20 @@ public:
         std::function<void()> exportArchive, importArchive;
         std::function<void(const hmi::Issue&)> openIssue;
         std::function<bool(const hmi::ExportRequest&, std::string*)> writeFile;     // lot 13 : le dossier
+        // 1.25.1 : Aller a un fichier de l'archive - son apercu (la fenetre d'apercu des fichiers) ; "" ou la raison.
+        std::function<std::string(const fileview::Source&)> preview;
     };
     void setHosts(Hosts h) { hosts_ = std::move(h); }
+    // 1.25.1 : LES CHEMINS DANS L'ARCHIVE (Fichiers de l'archive, << corrige les limites restantes >>) - le clic droit
+    // d'une ligne : Ouvrir dans l'explorateur (le .xihm / .zip lui-meme, choisi), Aller a (l'apercu de ce fichier, lu dans
+    // l'archive), Copier le chemin (<< archive.xihm/ihm/vues/1.json >>). Grisees avec la raison (l'archive n'est plus la).
+    enum : int { kEntryReveal = 1700, kEntryGoTo, kEntryCopy };
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> entryMenu(std::size_t row) const;
+    // Le geste (les memes ids) ; "" : fait, sinon la raison (dite dans la barre).
+    std::string entryAction(std::size_t row, int action);
+    // Le chemin montre et copie d'une ligne (<< C:\...\a.xihm/ihm/vues/1.json >>) ; vide : pas de ligne.
+    [[nodiscard]] std::string entryPath(std::size_t row) const;
+    [[nodiscard]] ui::TableView& filesTable() noexcept { return *files_; }
     [[nodiscard]] HmiToolStrip&   tools() noexcept { return *tools_; }
     [[nodiscard]] ui::TabControl& tabs() noexcept { return *tabs_; }
     [[nodiscard]] const std::string& lastMessage() const noexcept { return message_; }

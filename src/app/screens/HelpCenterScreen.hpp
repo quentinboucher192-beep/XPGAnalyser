@@ -26,6 +26,7 @@
 #include "../../help/CenterView.hpp"
 #include "../../help/HelpSession.hpp"
 #include "../../help/ProblemReport.hpp"
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : le chemin du dernier zip (Ouvrir dans l'explorateur, Aller a)
 
 #include <filesystem>
 #include <memory>
@@ -103,6 +104,12 @@ private:
     void refreshTrails();
     std::filesystem::path    lastZip_;
     std::filesystem::path    captureFile_;      // tranche 8 : la capture jointe (F12 de Signaler)
+    // 1.25.1 : LE CHEMIN DU SIGNALEMENT - le clic droit sur la page Signaler (son apercu, << Dernier zip >>) et sur ses
+    // boutons propose Ouvrir dans l'explorateur, Aller a, Copier le chemin : le dernier zip, sinon le dossier signalements.
+    bool                     reportShown_{false};
+    ui::paths::PathMenu      reportPath_, reportPanelPath_;   // l'apercu, les boutons (un menu par hote)
+    [[nodiscard]] std::string reportPathNow() const;
+    bool openReportPathMenu(ui::Widget& host, gfx::Point at);
 
     // Tranche 8 : la page, son en-tete a part (aide generale) et sa hauteur.
     ui::DockLayout*          pageDock_{nullptr};

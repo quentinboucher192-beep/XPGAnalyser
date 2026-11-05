@@ -80,6 +80,12 @@ inline constexpr int kReveal = 0, kGoTo = 1, kCopy = 2;
 // Son geste ; "" : fait ; sinon la raison (a dire dans la barre d'etat).
 std::string run(int id, int firstId, const std::string& path, const std::string& base = {});
 
+// 1.25.1 : LE CHEMIN DANS UN TEXTE (un message de la barre d'etat : << Rapport ecrit : exports/x.pdf >>, << Archive
+// ecrite : C:\Projets\a.xihm (12 fichiers) >>). Le plus long morceau du texte qui designe un fichier ou un dossier
+// present sur le disque (resolu comme partout : un relatif depuis le projet) ; sinon un chemin absolu ecrit apres
+// << : >> (meme absent : ses entrees diront pourquoi) ; vide : aucun. Un mot sans / ni \ ni extension n'est pas un chemin.
+[[nodiscard]] std::string findIn(std::string_view text);
+
 // 1.24.1 : UN CHEMIN MONTRE HORS D'UN TABLEAU, D'UNE GRILLE OU D'UN CHAMP (un libelle, une ligne dessinee, le pied
 // d'une fenetre) : le widget qui le montre garde un PathMenu et l'ouvre a son clic droit. Le menu (les trois
 // entrees, une ligne de titre au besoin) est cree au premier usage, enfant du widget : il vit et meurt avec lui.

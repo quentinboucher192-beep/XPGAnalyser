@@ -18,6 +18,7 @@
 #include "../../hmi/HmiVersionState.hpp"
 #include "../hmi/HmiAskDialog.hpp"
 #include "../../hmi/HmiCommands.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : une version supprimee revient par Ctrl+Z
 #include "../../project/EditCommands.hpp"
 
 #include <algorithm>
@@ -513,20 +514,44 @@ void MainAnalysisScreen::askDeleteVersion(int number) {
     HmiAskDialog::Spec spec;
     spec.id = "dialog.versionDelete";
     spec.title = "Supprimer " + v->label();
+    // 1.25.1 : dans versions/corbeille (hmi::ver::trash) - Ctrl+Z la rend, a son numero.
     spec.text = "La version " + v->label() + " (" + whenText(v->date) + ") est retir\xC3\xA9" "e de la liste. Ce qu'elle partage avec les autres "
-                "versions reste ; ce qui n'appartenait qu'\xC3\xA0 elle est effac\xC3\xA9 de versions/. Cela ne s'annule pas.";
+                "versions reste ; ce qui n'appartenait qu'\xC3\xA0 elle va dans versions/corbeille : Ctrl+Z la rend (la corbeille se vide de "
+                "ce qui y est depuis plus de 7 jours).";
     spec.confirm = "Supprimer V" + std::to_string(number);
     spec.danger = true;
     app_.menus().ShowDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [this, folder, number](const menu::DialogResult& r) {
         if (!r.accepted()) return;
-        auto store2 = ver::open(folder);
-        if (!store2) return;
-        if (auto st = ver::remove(*store2, number); !st) {
-            if (status_) status_->setTransientMessage("Supprimer V" + std::to_string(number) + " : " + st.error().context, 8.0, StatusBar::Severity::Warning);
-            return;
-        }
-        refreshVersions();
-        if (status_) status_->setTransientMessage("V" + std::to_string(number) + " supprim\xC3\xA9" "e", 6.0, StatusBar::Severity::Success);
+        auto trashed = std::make_shared<std::optional<ver::Trashed>>();
+        auto said = std::make_shared<std::string>();
+        const std::weak_ptr<bool> alive = hookGuard_;
+        auto cmd = std::make_unique<core::trash::LambdaCommand>(
+            "Supprimer la version V" + std::to_string(number),
+            [folder, number, trashed, said]() -> core::Status {
+                auto store2 = ver::open(folder);
+                if (!store2) return core::fail(core::ErrorCode::FileNotFound, "pas de versions ici");
+                auto t = ver::trash(*store2, number);
+                if (!t) {
+                    *said = t.error().context.empty() ? t.error().message() : t.error().context;
+                    return core::fail(t.error().code, *said);
+                }
+                *trashed = std::move(*t);
+                return core::ok();
+            },
+            [folder, trashed]() -> core::Status {
+                auto store2 = ver::open(folder);
+                if (!store2 || !trashed->has_value()) return core::fail(core::ErrorCode::FileNotFound, "la version n'est plus dans la corbeille");
+                return ver::untrash(*store2, **trashed);
+            },
+            [this, alive] {
+                if (!alive.expired()) refreshVersions();
+            });
+        app_.apply(std::move(cmd));
+        if (!status_) return;
+        if (!said->empty()) status_->setTransientMessage("Supprimer V" + std::to_string(number) + " : " + *said, 8.0, StatusBar::Severity::Warning);
+        else if (trashed->has_value())
+            status_->setTransientMessage("V" + std::to_string(number) + " supprim\xC3\xA9" "e (dans versions/corbeille ; Ctrl+Z la rend)", 6.0,
+                                         StatusBar::Severity::Success);
     });
 }
 

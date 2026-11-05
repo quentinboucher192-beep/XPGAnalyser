@@ -24,6 +24,7 @@
 
 #include "AiJson.hpp"
 #include "AiOperations.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille de l'IA (supprimer une conversation : Ctrl+Z la rend)
 
 #include <cstdint>
 #include <ctime>
@@ -211,6 +212,9 @@ void setClock(std::function<std::time_t()> clock);
 bool saveConversation(const Conversation&, std::string* why = nullptr);
 // Le fichier de la conversation et les copies de ses pieces jointes.
 bool deleteConversationFiles(const Conversation&);
+// 1.25.1 : LES MEMES, DANS LA CORBEILLE DE L'IA (IA/corbeille) - supprimer une conversation depuis le panneau. `moved` :
+// d'ou et ou (Ctrl+Z : core::trash::takeBackAll). Faux : un fichier n'a pas pu partir (les autres sont partis).
+bool trashConversationFiles(const Conversation&, std::vector<core::trash::Moved>* moved = nullptr);
 [[nodiscard]] Settings loadSettings(bool* found = nullptr);
 bool saveSettings(const Settings&, std::string* why = nullptr);
 // Une ligne d'activite (type : conversation, fichier, suppression...).

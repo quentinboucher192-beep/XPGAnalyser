@@ -648,24 +648,8 @@ HmiCommPane::HmiCommPane(std::string id, hmi::DocumentPtr doc, Apply apply)
                         if (r < equipRows_.size() && !equipRows_[r].slave && equipRows_[r].equipment != kPlcKey
                             && std::find(names.begin(), names.end(), equipRows_[r].equipment) == names.end())
                             names.push_back(equipRows_[r].equipment);
-                if (names.size() > 1) {
-                    several::Batch b;
-                    b.noun = "\xC3\xA9quipement";
-                    b.nouns = "\xC3\xA9quipements";
-                    b.ask = true;
-                    b.names = names;
-                    std::size_t vars = 0, twins = 0;
-                    for (const auto& n : names)
-                        if (const auto* e = doc_->project.equipmentByName(n)) {
-                            vars += hmi::equip::boundVariables(doc_->project, *e).size();
-                            twins += e->twin && !e->simulated ? 1 : 0;
-                        }
-                    if (vars) b.warning = "Leurs " + std::to_string(vars) + " variable(s) IHM restent, d\xC3\xA9li\xC3\xA9" "es (des variables IHM locales).";
-                    if (twins) b.warning += (b.warning.empty() ? "" : " ") + std::to_string(twins) + " esclave(s) simul\xC3\xA9(s) partent avec eux.";
-                    b.remove = [this, names](std::size_t i, std::string* why) { return deleteEquipment(names[i], {}, true, why); };
-                    b.report = [this](const std::string& text, bool warning) { say(text, warning); };
-                    b.alive = tools_->triggered;
-                    several::run(std::move(b));
+                if (names.size() > 1) {   // 1.25.1 : le meme choix que pour un seul (leurs variables, leurs esclaves simules)
+                    askDeleteEquipments(names);
                     break;
                 }
                 if (!equipment_.empty() && equipment_ != kPlcKey && !askDeleteEquipment(equipment_) && !hosts_.ask) (void)deleteEquipment(equipment_);

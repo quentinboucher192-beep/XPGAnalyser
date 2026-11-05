@@ -19,6 +19,7 @@
 #include "../src/app/hmi/HmiIncidentsPane.hpp"   // 1.20.2 : le volet (dossiers par alarme, recherche, criticite, tri)
 #include "../src/ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le dossier d'un incident (ui::paths)
 #include "../src/core/AtomicFile.hpp"
+#include "../src/core/Trash.hpp"   // 1.25.1 : la corbeille des incidents
 #include "../src/hmi/HmiIncident.hpp"
 #include "../src/hmi/HmiRelations.hpp"
 #include "../src/hmi/HmiVideo.hpp"
@@ -1564,7 +1565,8 @@ void incidentPlayer() {
 
 // ---- 1.24.1 : plusieurs incidents d'un coup ; le dossier d'un incident comme partout (Ouvrir dans l'explorateur) ----
 //  Le client (05/11) : << partout pouvoir supprimer plusieurs d'un coup >>. Ctrl+clic, Maj+clic choisissent plusieurs
-//  incidents ; Supprimer les supprime tous apres UNE question qui le dit definitif (pas de Ctrl+Z) ; un valide reste ;
+//  incidents ; Supprimer les supprime tous apres UNE question ; un valide reste (1.25.1 : dans la corbeille des incidents,
+//  en attente/.corbeille - UN Ctrl+Z les rend ; avant : definitif) ;
 //  le clic droit d'un incident : Ouvrir dans l'explorateur, Aller a, Copier le chemin (ui::paths). HMI_INCIDENT_LIM=1 : seul.
 void plusieursIncidents1241() {
     std::printf("1.24.1 : plusieurs incidents d'un coup, leur dossier comme partout\n");
@@ -1627,19 +1629,44 @@ void plusieursIncidents1241() {
             const int consult = pane.tools().actionByTip("Consulter");
             check(pane.tools().labelOf(del) == "Supprimer les 3" && pane.tools().isEnabled(del), "L le bouton : Supprimer les 3 (" + pane.tools().labelOf(del) + ")");
             check(consult > 0 && !pane.tools().isEnabled(consult), "L Consulter gris\xC3\xA9 (un \xC3\xA0 la fois)");
-            // Supprimer : UNE question, definitive ; puis les trois partent.
+            // Supprimer : UNE question ; puis les trois partent dans la corbeille des incidents (1.25.1 : un Ctrl+Z les rend).
+            core::CommandStack stack;
+            core::CommandGroupScope::registerStack(&stack);
             q = Question{};
             q.yes = false;
             pane.askRemove();
-            check(q.asked == 1 && has(q.title, "Supprimer les 3 incidents") && has(q.text, "d\xC3\xA9" "finitif") && !has(q.text, "Un seul Ctrl+Z"),
-                  "L une seule question, qui le dit d\xC3\xA9" "finitif (" + q.title + " / " + q.text + ")");
+            check(q.asked == 1 && has(q.title, "Supprimer les 3 incidents") && has(q.text, "corbeille") && has(q.text, "Un seul Ctrl+Z")
+                      && !has(q.text, "d\xC3\xA9" "finitif"),
+                  "L une seule question : la corbeille, un seul Ctrl+Z (plus << d\xC3\xA9" "finitif >>) (" + q.title + " / " + q.text + ")");
             check(h.drain(3000) && ((void)pane.poll(), pane.pendingCount() == 4), "L non : rien ne part");
             q.yes = true;
             pane.askRemove();
             check(h.drain(3000) && pane.poll(), "L la relecture apr\xC3\xA8s la suppression");
             check(pane.pendingCount() == 1, "L oui : les trois partent, un reste (" + std::to_string(pane.pendingCount()) + ")");
-            check(has(pane.lastMessage(), "3 incidents supprim") && !has(pane.lastMessage(), "Ctrl+Z"), "L le compte rendu, sans Ctrl+Z : " + pane.lastMessage());
+            check(has(pane.lastMessage(), "3 incidents supprim") && has(pane.lastMessage(), "un seul Ctrl+Z"), "L le compte rendu : " + pane.lastMessage());
             check(pane.chosenIncidents().size() == 1, "L apr\xC3\xA8s : un seul choisi");
+            // 1.25.1 : la corbeille - cachee de la liste et du compte, purgee apres 7 jours ; UN Ctrl+Z les rend.
+            const fs::path bin = store ? fs::path(store->trashFolder()) : fs::path{};
+            std::size_t inBin = 0;
+            for (const auto& e : core::trash::list(bin.string())) inBin += fs::is_directory(fs::path(e)) ? 1 : 0;
+            check(store && inBin == 3 && store->pendingCount() == 1 && store->list(st::State::Pending).size() == 1,
+                  "L les trois dans en attente/.corbeille, que la liste et le compte ne lisent pas (" + std::to_string(inBin) + ")");
+            check(stack.done().size() == 1 && stack.undo() && h.drain(3000) && ((void)pane.poll(), true) && pane.pendingCount() == 4,
+                  "L UN Ctrl+Z : les trois reviennent (" + std::to_string(pane.pendingCount()) + ")");
+            check(stack.redo() && h.drain(3000) && ((void)pane.poll(), true) && pane.pendingCount() == 1, "L Ctrl+Y : de nouveau dans la corbeille");
+            check(stack.undo() && h.drain(3000) && ((void)pane.poll(), true) && pane.pendingCount() == 4, "L Ctrl+Z encore");
+            // Un seul (sans la question de l'ecran) : la corbeille aussi, Ctrl+Z le rend.
+            check(pane.select(names[0]) && pane.removeSelected() && h.drain(3000) && ((void)pane.poll(), true) && pane.pendingCount() == 3, "L un seul : dans la corbeille");
+            check(has(pane.lastMessage(), "corbeille") && stack.undo() && h.drain(3000) && ((void)pane.poll(), true) && pane.pendingCount() == 4, "L Ctrl+Z le rend");
+            // La purge : un incident dans la corbeille depuis plus de 7 jours part au demarrage suivant (recover).
+            if (store) {
+                const fs::path old = bin / "20200101-000000~vieil-incident";
+                fs::create_directories(old / "capture");
+                bool said = false;
+                for (const auto& n : store->recover()) said = said || has(n, "plus de 7 jours");
+                check(!fs::exists(old) && said, "L la purge au d\xC3\xA9marrage : plus de 7 jours, parti (et dit)");
+            }
+            core::CommandGroupScope::registerStack(nullptr);
             // Le clic droit d'un incident : son dossier comme partout (avec l'application).
             const auto saved = ui::paths::provider();
             std::vector<std::string> revealed;
@@ -1690,7 +1717,7 @@ int main() {
     incidentPlayer();  // 1.21.0 : la video lue comme un enregistrement, le zoom de l'image
     burstHost();       // 1.21.0 : une alarme qui bat - 300 000 reapparitions, un seul incident
     burstGuards();     // 1.21.0 : regroupement 0, anti-rebond, plafond horaire, quota disque, reglages
-    plusieursIncidents1241();   // 1.24.1 : plusieurs incidents d'un coup (definitif), leur dossier comme partout
+    plusieursIncidents1241();   // 1.24.1 : plusieurs incidents d'un coup (1.25.1 : la corbeille, Ctrl+Z), leur dossier comme partout
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

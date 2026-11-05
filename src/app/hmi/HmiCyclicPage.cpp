@@ -173,20 +173,58 @@ HmiCyclicPage::HmiCyclicPage(std::string id, HmiModbusToolPane& tool) : ui::Widg
     lower_->setBoxColumn(0);
     requests_->setColumns(requestColumns(0.f));
     set_.name = "Sans nom";
+    // 1.25.1 : plusieurs requetes choisies (Ctrl+clic, Maj+clic) - le clic droit les supprime d'un coup.
+    requests_->setSelectionMode(ui::SelectionMode::Extended);
+    requests_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto ids = chosen();
+        if (ids.empty()) return items;
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        head.label = ids.size() > 1 ? std::to_string(ids.size()) + " requ\xC3\xAAtes" : "R" + std::to_string(ids.front());
+        items.push_back(std::move(head));
+        ui::PopupMenu::Item del;
+        del.id = MRemoveChosen;
+        del.label = several::label("Supprimer", ids.size()) + (ids.size() > 1 ? "\xE2\x80\xA6" : "");
+        del.icon = ui::Icon::Delete;
+        del.shortcut = "Suppr";
+        items.push_back(std::move(del));
+        return items;
+    });
+    links_ += requests_->contextAction->connect([this](int action) {
+        if (action == MRemoveChosen) askRemoveChosen();
+    });
 
     links_ += requests_->boxClicked->connect([this](ui::RowIndex row, int) {
         if (row < rows_.size()) (void)setActive(rows_[row].id, !rows_[row].read.active);
         else requests_->rowClicked->emit(row);       // la ligne "+ Ajouter..." commence dans la colonne des cases
     });
-    links_ += requests_->rowClicked->connect([this](ui::RowIndex row) {
-        if (row < rows_.size()) (void)select(rows_[row].id);
-        else if (row == rows_.size()) {               // la ligne "+ Ajouter une requete..."
+    // 1.25.1 : un Ctrl+clic, un Maj+clic choisissent plusieurs requetes - la requete reglee a droite suit le clic, sans
+    // defaire le choix (select() le ramenerait a une seule).
+    const auto follow = [this](int id) {
+        if (id == selected_) return;
+        selected_ = id;
+        refreshLower();
+        tool_.rebuildProperties();
+    };
+    links_ += requests_->rowClicked->connect([this, follow](ui::RowIndex row) {
+        if (row < rows_.size()) {
+            const auto sel = requests_->selectedModelRows();
+            if (sel.size() > 1 && std::find(sel.begin(), sel.end(), row) != sel.end()) follow(rows_[row].id);
+            else (void)select(rows_[row].id);
+        } else if (row == rows_.size()) {             // la ligne "+ Ajouter une requete..."
             gfx::Rect rr;
             const gfx::Point at = requests_->rowRect(row, rr) ? gfx::Point{rr.x + 40, rr.y + rr.h} : gfx::Point{bounds().x + 40, bounds().y + 80};
             openAddMenu(at);
         }
     });
-    links_ += requests_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
+    links_ += requests_->selectionChanged->connect([this, follow](const std::vector<ui::RowIndex>& sel) {
+        if (sel.size() > 1) {   // plusieurs : la requete reglee reste si elle en est, sinon la premiere
+            bool in = false;
+            for (const auto r : sel) in = in || (r < rows_.size() && rows_[r].id == selected_);
+            if (!in && sel.front() < rows_.size()) follow(rows_[sel.front()].id);
+            return;
+        }
         if (!sel.empty() && sel.front() < rows_.size() && rows_[sel.front()].id != selected_) (void)select(rows_[sel.front()].id);
     });
     links_ += lower_->boxClicked->connect([this](ui::RowIndex row, int) {
@@ -542,6 +580,65 @@ bool HmiCyclicPage::remove(int id) {
     changed(true);
     select(selected_);
     say(name + " retir\xC3\xA9" "e (Ctrl+Z la remet).");
+    return true;
+}
+
+// ---- 1.25.1 : plusieurs requetes d'un coup ----
+std::vector<int> HmiCyclicPage::chosen() const {
+    std::vector<int> order;
+    for (const auto& r : rows_) order.push_back(r.id);
+    auto ids = several::chosen(*requests_, order);
+    if (ids.empty() && selected_ && row(selected_)) ids.push_back(selected_);
+    return ids;
+}
+
+bool HmiCyclicPage::choose(const std::vector<int>& ids) {
+    std::vector<ui::RowIndex> picked;
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (std::find(ids.begin(), ids.end(), rows_[i].id) != ids.end()) picked.push_back(static_cast<ui::RowIndex>(i));
+    if (picked.empty()) return false;
+    selected_ = rows_[picked.front()].id;
+    requests_->selectModelRows(picked, false);
+    refreshLower();
+    tool_.rebuildProperties();
+    return picked.size() == ids.size();
+}
+
+void HmiCyclicPage::askRemoveChosen() {
+    const auto ids = chosen();
+    if (ids.empty()) return;
+    if (ids.size() == 1) {
+        (void)remove(ids.front());
+        return;
+    }
+    std::vector<std::string> names;
+    for (const int id : ids) names.push_back("R" + std::to_string(id));
+    const std::weak_ptr<const void> alive = requests_->selectionChanged;
+    several::confirm("Supprimer les " + std::to_string(ids.size()) + " requ\xC3\xAAtes ?",
+                     "Les " + std::to_string(ids.size()) + " requ\xC3\xAAtes " + several::names(names) + " quittent la liste de lecture. "
+                     "Un seul Ctrl+Z (la liste ayant le clavier) les remet ; le jeu enregistr\xC3\xA9 dans le projet ne change qu'\xC3\xA0 "
+                     "Enregistrer le jeu.",
+                     several::label("Supprimer", ids.size()), [this, alive, ids] {
+                         if (!alive.expired()) (void)removeMany(ids);
+                     });
+}
+
+bool HmiCyclicPage::removeMany(const std::vector<int>& ids) {
+    std::vector<std::string> gone;
+    std::size_t first = rows_.size();
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (std::find(ids.begin(), ids.end(), rows_[i].id) != ids.end()) {
+            first = std::min(first, i);
+            gone.push_back("R" + std::to_string(rows_[i].id));
+        }
+    if (gone.empty()) return false;
+    remember();   // UN pas : un seul Ctrl+Z les remet toutes
+    std::erase_if(rows_, [&](const Row& r) { return std::find(ids.begin(), ids.end(), r.id) != ids.end(); });
+    selected_ = rows_.empty() ? 0 : rows_[std::min(first, rows_.size() - 1)].id;
+    changed(true);
+    select(selected_);
+    say(std::to_string(gone.size()) + (gone.size() > 1 ? " requ\xC3\xAAtes retir\xC3\xA9" "es : " : " requ\xC3\xAAte retir\xC3\xA9" "e : ")
+        + several::names(gone) + (gone.size() > 1 ? " - un seul Ctrl+Z les remet." : " - Ctrl+Z la remet."));
     return true;
 }
 
@@ -990,10 +1087,19 @@ void HmiCyclicPage::refreshRequests() {
         requests_->setColumns(requestColumns(width));
         was = width;
     }
+    // 1.25.1 : plusieurs requetes choisies le restent (avant : chaque rafraichissement ne gardait que la requete choisie).
+    const auto keep = chosen();
     requests_->setContent({"", "R", "Nom", "Cible", "Fonction", "Adresse", "Nb", "Format", "P\xC3\xA9riode", "\xC3\x89tat", "Lectures"},
                           std::move(cells), std::move(styles), std::move(tips));
-    for (std::size_t i = 0; i < rows_.size(); ++i)
-        if (rows_[i].id == selected_) requests_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    if (keep.size() > 1 && std::find(keep.begin(), keep.end(), selected_) != keep.end()) {
+        std::vector<ui::RowIndex> picked;
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+            if (std::find(keep.begin(), keep.end(), rows_[i].id) != keep.end()) picked.push_back(static_cast<ui::RowIndex>(i));
+        requests_->selectModelRows(picked, false);
+    } else {
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+            if (rows_[i].id == selected_) requests_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    }
     // La hauteur du tableau suit le nombre de requetes (sinon : celle de la liste vide, 4 lignes).
     if (laidRows_ != rows_.size() && bounds().h > 0) {
         laidRows_ = rows_.size();
@@ -1353,7 +1459,13 @@ void HmiCyclicPage::tick(double time, bool force) {
 bool HmiCyclicPage::key(const ui::KeyDown& k) {
     if (overlay_) return false;
     if (k.key == ui::Key::Insert && k.mods.none()) return addNew() != 0;
-    if (k.key == ui::Key::Delete && k.mods.none() && selected_) return remove(selected_);
+    if (k.key == ui::Key::Delete && k.mods.none() && selected_) {   // 1.25.1 : plusieurs choisies - une question, puis toutes
+        if (chosen().size() > 1) {
+            askRemoveChosen();
+            return true;
+        }
+        return remove(selected_);
+    }
     if (k.mods.ctrl && !k.mods.shift && k.key == ui::Key::S) return saveSet();
     if (k.mods.ctrl && !k.mods.shift && k.key == ui::Key::Z) return undoList();
     if (k.mods.ctrl && (k.key == ui::Key::Y || (k.mods.shift && k.key == ui::Key::Z))) return redoList();

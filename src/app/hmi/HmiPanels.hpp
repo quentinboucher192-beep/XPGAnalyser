@@ -184,9 +184,8 @@ struct Batch {
     std::string noun, nouns;                     // "alarme", "alarmes"
     bool        feminine{false};
     bool        ask{false};
-    // 1.24.1 : CE QUI PART DU DISQUE SANS RETOUR (des incidents, des fichiers de l'Assistant IA) : la question le dit
-    // (<< definitif : pas de Ctrl+Z >>), le compte rendu ne promet pas de Ctrl+Z. Le groupe de commandes reste (vide).
-    bool        final{false};
+    // (1.25.1 : plus de << definitif >> - les incidents et les listes de l'Assistant IA, qui partaient du disque sans
+    // retour en 1.24.1, ont maintenant leur corbeille : tout ce qui se supprime a plusieurs revient par un seul Ctrl+Z.)
     std::string warning;
     std::vector<std::string> names;
     std::function<bool(std::size_t, std::string*)> remove;

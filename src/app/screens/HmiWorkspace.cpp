@@ -2273,6 +2273,11 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.openIssue = [this](const hmi::Issue& i) { openHmiIssue(i); };
         // Lot 13 : le dossier de l'IHM va dans exports/, comme les exports.
         hosts.writeFile = [this](const hmi::ExportRequest& rq, std::string* where) { return writeHmiExport(rq, where); };
+        // 1.25.1 : Aller a un fichier de l'archive - son apercu, lu dans l'archive (rien d'extrait).
+        hosts.preview = [this](const fileview::Source& s) {
+            return showPreviewWindow(app_.detachedWindows(), s, true) ? std::string{}
+                                                                      : std::string("la fen\xC3\xAAtre d'aper\xC3\xA7u ne s'ouvre pas ici");
+        };
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Exporter / Importer";

@@ -3,6 +3,7 @@
 // =============================================================================
 #include "HmiVersions.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : chaque application, sa moitie
+#include "../core/Trash.hpp"     // 1.25.1 : la corbeille des versions
 
 #include "HmiCrypto.hpp"
 #include "HmiExport.hpp"
@@ -279,6 +280,8 @@ std::vector<FileEntry> scan(const std::string& projectFolder) {
 core::Result<Store> open(const std::string& projectFolder) {
     Store s;
     s.folder = projectFolder;
+    // 1.25.1 : la corbeille des versions - ce qui y est depuis plus de 7 jours part pour de bon.
+    if (!projectFolder.empty()) (void)core::trash::purge(trashFolder(projectFolder));
     std::string text;
     if (!readAll(versionsDir(projectFolder) / "index.txt", text)) return s;
     std::size_t lineNo = 0;
@@ -443,6 +446,89 @@ core::Status remove(Store& s, int number) {
         std::error_code ec3;
         if (fs::is_empty(p.parent_path(), ec3)) fs::remove(p.parent_path(), ec3);
     }
+    return core::ok();
+}
+
+// ---- 1.25.1 : la corbeille des versions (supprimer depuis l'arbre, Ctrl+Z la rend) ----
+namespace {
+std::string utf8Of(const fs::path& p) {
+    const auto u = p.u8string();
+    return std::string(u.begin(), u.end());
+}
+fs::path pathOfUtf8(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+} // namespace
+
+std::string trashFolder(const std::string& projectFolder) { return utf8Of(versionsDir(projectFolder) / "corbeille"); }
+
+core::Result<Trashed> trash(Store& s, int number) {
+    const auto it = std::find_if(s.versions.begin(), s.versions.end(), [&](const Version& v) { return v.number == number; });
+    if (it == s.versions.end()) return core::fail(core::ErrorCode::InvalidArgument, "pas de version V" + std::to_string(number));
+    Trashed out;
+    out.version = *it;
+    std::set<std::string> mine;
+    if (auto files = filesOf(s, number))
+        for (const auto& f : *files) mine.insert(f.hash);
+    char name[32];
+    std::snprintf(name, sizeof name, "V%04d", number);
+    const fs::path slot = pathOfUtf8(trashFolder(s.folder) + "/" + core::trash::stamp() + "~" + name);
+    std::error_code ec;
+    fs::create_directories(slot, ec);
+    if (ec) return core::fail(core::ErrorCode::FileUnreadable, "corbeille impossible : " + utf8Of(slot) + " (" + ec.message() + ")");
+    std::string why;
+    const fs::path manifest = manifestPath(s.folder, number);
+    if (fs::exists(manifest, ec) && !core::trash::move(utf8Of(manifest), utf8Of(slot / manifest.filename()), &why))
+        return core::fail(core::ErrorCode::FileUnreadable, "corbeille impossible : " + why);
+    s.versions.erase(it);
+    if (auto st = saveIndex(s); !st) return core::Err<core::Error>(st.error());
+    // Ses objets que plus aucune version ne cite : dans la corbeille, au meme endroit (objets/xx/yyyy).
+    std::set<std::string> kept;
+    for (const auto& v : s.versions)
+        if (auto files = filesOf(s, v.number))
+            for (const auto& f : *files) kept.insert(f.hash);
+    for (const auto& h : mine) {
+        if (kept.count(h) || h.size() < 3) continue;
+        const fs::path obj = objectPath(s.folder, h);
+        if (!fs::exists(obj, ec)) continue;
+        if (core::trash::move(utf8Of(obj), utf8Of(slot / "objets" / h.substr(0, 2) / h.substr(2)), &why)) {
+            std::error_code e2;
+            if (fs::is_empty(obj.parent_path(), e2)) fs::remove(obj.parent_path(), e2);
+        }
+    }
+    out.folder = utf8Of(slot);
+    return out;
+}
+
+core::Status untrash(Store& s, const Trashed& t) {
+    if (s.find(t.version.number))
+        return core::fail(core::ErrorCode::DuplicateSymbol,
+                          "une autre version V" + std::to_string(t.version.number) + " a \xC3\xA9t\xC3\xA9 cr\xC3\xA9\xC3\xA9" "e depuis");
+    const fs::path slot = pathOfUtf8(t.folder);
+    std::error_code ec;
+    if (!fs::is_directory(slot, ec))
+        return core::fail(core::ErrorCode::FileNotFound, "V" + std::to_string(t.version.number) + " n'est plus dans la corbeille");
+    std::string why;
+    // Les objets d'abord (une version sans ses objets ne se lirait pas), puis le manifeste, puis l'index.
+    std::vector<fs::path> objects;
+    for (fs::recursive_directory_iterator it(slot / "objets", ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code e2;
+        if (it->is_regular_file(e2)) objects.push_back(it->path());
+    }
+    for (const auto& o : objects) {
+        const std::string h = utf8Of(o.parent_path().filename()) + utf8Of(o.filename());
+        const fs::path back = objectPath(s.folder, h);
+        std::error_code e2;
+        if (fs::exists(back, e2)) continue;   // revenu entretemps (une version nouvelle qui le cite)
+        if (!core::trash::move(utf8Of(o), utf8Of(back), &why))
+            return core::fail(core::ErrorCode::FileUnreadable, "rendre V" + std::to_string(t.version.number) + " : " + why);
+    }
+    ec.clear();
+    const fs::path manifest = manifestPath(s.folder, t.version.number);
+    if (fs::exists(slot / manifest.filename(), ec) && !core::trash::move(utf8Of(slot / manifest.filename()), utf8Of(manifest), &why))
+        return core::fail(core::ErrorCode::FileUnreadable, "rendre V" + std::to_string(t.version.number) + " : " + why);
+    s.versions.push_back(t.version);
+    std::sort(s.versions.begin(), s.versions.end(), [](const Version& a, const Version& b) { return a.number < b.number; });
+    if (auto st = saveIndex(s); !st) return st;
+    fs::remove_all(slot, ec);
     return core::ok();
 }
 

@@ -443,4 +443,38 @@ void MainAnalysisScreen::installPathLinks() {
     ui::paths::setProvider(std::move(p));
 }
 
+// 1.25.1 : LE FOURNISSEUR HORS DE L'ECRAN DU PROJET (l'accueil, le centre d'aide, la fenetre du rapport de plantage) -
+// celui de l'ecran du projet n'y est pas (il part a son onExit). Ouvrir dans l'explorateur : comme partout ; Aller a :
+// `goTo` d'abord (l'accueil : ouvrir un projet de la liste), sinon l'apercu d'un fichier ; un dossier : la raison.
+void installBasicPathLinks(App* app, std::function<void(const std::string&)> say, PathGoTo goTo) {
+    ui::paths::Provider p;
+    p.reveal = [say](const std::string& resolved) {
+        std::error_code ec;
+        std::string why;
+        if (resolved.empty() || !fs::exists(u8path(resolved), ec)) why = "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
+        else if (fs::is_directory(u8path(resolved), ec)) why = dossiers::ouvrirDansLeSysteme(resolved);
+        else why = finder::revealInExplorer(resolved);
+        if (!why.empty() && say) say("Ouvrir dans l'explorateur : " + why);
+        return why;
+    };
+    p.goTo = [app, say, goTo](const std::string& path, const std::string& resolved, bool dry) -> std::string {
+        std::string why;
+        if (auto handled = goTo ? goTo(path, resolved, dry) : std::optional<std::string>{}) {
+            why = std::move(*handled);
+        } else {
+            std::error_code ec;
+            const fs::path at = u8path(resolved);
+            if (resolved.empty() || !fs::exists(at, ec)) why = "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
+            else if (fs::is_directory(at, ec)) why = "un dossier : Ouvrir dans l'explorateur le montre";
+            else if (!app) why = "pas d'aper\xC3\xA7u dans cette fen\xC3\xAAtre : Ouvrir dans l'explorateur le montre";
+            else if (dry) return {};
+            else if (!showPreviewWindow(app->detachedWindows(), fileview::fromPath(resolved), true))
+                why = "la fen\xC3\xAAtre d'aper\xC3\xA7u ne s'ouvre pas ici";
+        }
+        if (!dry && !why.empty() && say) say("Aller \xC3\xA0 : " + why);
+        return why;
+    };
+    ui::paths::setProvider(std::move(p));
+}
+
 } // namespace app

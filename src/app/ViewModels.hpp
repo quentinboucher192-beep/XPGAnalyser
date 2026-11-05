@@ -893,8 +893,8 @@ namespace app {
     // ---- 1.24.0 : SUPPRIMER PLUSIEURS NOEUDS DE L'ARBRE D'UN COUP ----------------------
     //  ProjectTreeModel::deletionOf dit ce qui part et ce qui reste ; performTreeDeletion le fait,
     //  en UNE commande (core::CommandGroupScope : un seul Ctrl+Z rend tout). Les macros (la
-    //  corbeille des macros) et les versions (versions/) ne sont pas dans le projet : elles ne
-    //  reviennent pas par Ctrl+Z, la confirmation le dit.
+    //  corbeille des macros) et les versions (versions/) ne sont pas dans le projet ; 1.25.1 : elles
+    //  vont dans leur corbeille par une commande du meme groupe - le meme Ctrl+Z les en ressort.
     struct TreeDeletion {
         enum class What : std::uint8_t {
             HmiView, HmiScript, HmiFunction, HmiVariable, HmiType, HmiAlarm, HmiRecipe, HmiUser, HmiGroup,
@@ -914,7 +914,7 @@ namespace app {
         std::vector<Kept> kept;                 // ce qui reste, et pourquoi
 
         [[nodiscard]] bool empty() const noexcept { return items.empty(); }
-        // Tout revient par Ctrl+Z (ni macro, ni version).
+        // Tout revient par Ctrl+Z (1.25.1 : les macros et les versions aussi).
         [[nodiscard]] bool undoable() const noexcept;
         // "les 5 elements", "les 3 vues" (tous du meme genre) ; un seul : son genre et son nom.
         [[nodiscard]] std::string what() const;
@@ -934,7 +934,11 @@ namespace app {
         std::function<void(core::CommandPtr)>                       apply;   // pousse (et execute) une commande
         std::function<void(core::CommandPtr)>                       applyHmi;   // celle de l'IHM (vide : apply)
         std::function<bool(const std::string& macro, std::string* why)> deleteMacro;    // vers la corbeille des macros
-        std::function<bool(int version, std::string* why)>          deleteVersion;      // ne s'annule pas
+        std::function<bool(int version, std::string* why)>          deleteVersion;      // 1.25.1 : vers versions/corbeille
+        // 1.25.1 : Ctrl+Z - la macro, la version reviennent de leur corbeille ; puis le volet se refait.
+        std::function<bool(const std::string& macro, std::string* why)> restoreMacro;
+        std::function<bool(int version, std::string* why)>          restoreVersion;
+        std::function<void()>                                       afterMacros, afterVersions;
     };
     struct TreeDeletionResult {
         std::size_t                     done{0};      // elements partis

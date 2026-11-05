@@ -309,6 +309,8 @@ private:
     std::string                           connection_;   // 1.15.0 : l'etat de l'IA (le fournisseur des parametres)
     ai::memory::Ram                       ram_;
     ai::memory::Registry                  registry_;
+    // 1.25.1 : ce qui vient de partir dans la corbeille de l'IA - une commande (un seul Ctrl+Z le rend).
+    void undoableTrash(std::shared_ptr<std::vector<core::trash::Moved>> moved, const std::string& label);
     std::vector<ai::memory::Conversation> conversations_;
     std::vector<ai::memory::AttachmentFolder> attachments_;
     std::vector<ai::memory::Activity>     activity_;

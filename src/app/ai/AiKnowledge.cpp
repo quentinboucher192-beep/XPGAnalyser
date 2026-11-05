@@ -546,18 +546,19 @@ bool Registry::setActive(std::string_view id, bool on, std::string* why) {
     return false;
 }
 
-bool Registry::remove(std::string_view id, std::string* why) {
+bool Registry::remove(std::string_view id, std::string* why, std::vector<core::trash::Moved>* moved) {
     for (auto it = items_.begin(); it != items_.end(); ++it) {
         if (it->id != id) continue;
         if (it->builtIn) {
             if (why) *why = "int\xC3\xA9gr\xC3\xA9" "e au logiciel : elle se d\xC3\xA9sactive, elle ne se supprime pas";
             return false;
         }
+        // 1.25.1 : son fichier dans la corbeille de l'IA (Ctrl+Z l'en ressort) ; un fichier deja parti : rien a deplacer.
         std::error_code ec;
-        fs::remove(dossiers::cheminDe(it->file), ec);
-        if (ec) {
-            if (why) *why = ec.message();
-            return false;
+        if (fs::exists(dossiers::cheminDe(it->file), ec)) {
+            std::string trashed;
+            if (!core::trash::put(it->file, trashDir(), trashed, why)) return false;
+            if (moved) moved->push_back({it->file, trashed});
         }
         const std::string name = it->name, gone = it->id;
         items_.erase(it);
@@ -577,7 +578,7 @@ bool Registry::remove(std::string_view id, std::string* why) {
     return false;
 }
 
-std::size_t Registry::removeProject(std::string_view project) {
+std::size_t Registry::removeProject(std::string_view project, std::vector<core::trash::Moved>* moved) {
     if (project.empty()) return 0;
     std::size_t n = 0;
     for (auto it = items_.begin(); it != items_.end();) {
@@ -586,7 +587,16 @@ std::size_t Registry::removeProject(std::string_view project) {
             continue;
         }
         std::error_code ec;
-        fs::remove(dossiers::cheminDe(it->file), ec);
+        if (moved) {   // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z)
+            std::string trashed;
+            if (fs::exists(dossiers::cheminDe(it->file), ec) && !core::trash::put(it->file, trashDir(), trashed)) {
+                ++it;
+                continue;
+            }
+            if (!trashed.empty()) moved->push_back({it->file, trashed});
+        } else {
+            fs::remove(dossiers::cheminDe(it->file), ec);
+        }
         if (ec) {
             ++it;
             continue;

@@ -32,11 +32,14 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace ui {
+
+namespace paths { class PathMenu; }   // 1.25.1 : le clic droit sur le chemin du rapport (PropertyGridHooks.hpp)
 
 namespace crashreport {
 
@@ -77,6 +80,7 @@ class CrashReportView final : public Widget {
 public:
     // framed : un dialogue dans la fenetre de l'appli (deplacable) ; sinon toute la fenetre.
     CrashReportView(CrashReportSetup setup, bool framed);
+    ~CrashReportView() override;
 
     // A chaque image : le compteur du blocage, l'animation, la note qui s'efface, la
     // fermeture d'office apres une reprise.
@@ -96,6 +100,13 @@ public:
     [[nodiscard]] Button* button(std::string_view id) const;      // les essais
     [[nodiscard]] const std::vector<Button*>& buttons() const noexcept { return buttons_; }
     [[nodiscard]] gfx::Rect panel() const noexcept { return panel_; }
+    // 1.25.1 : LES CHEMINS MONTRES (<< corrige les limites restantes >>) - la ligne du rapport (0), celle de son dossier
+    // (1), celle du minidump a cote (2, Windows : quand il existe) ; leur clic droit propose Ouvrir dans l'explorateur,
+    // Aller a, Copier le chemin (ui::paths ; sans fournisseur, rien). Vide : pas dessinee. `pathOf` : le chemin d'une ligne.
+    [[nodiscard]] gfx::Rect pathRow(int which) const noexcept { return which >= 0 && which < 3 ? rows_[which] : gfx::Rect{}; }
+    [[nodiscard]] std::string pathOf(int which) const;
+    [[nodiscard]] const std::string& dumpPath() const noexcept { return dump_; }
+    [[nodiscard]] paths::PathMenu* pathMenu() const noexcept { return pathMenu_.get(); }
 
 protected:
     void        onLayout() override;
@@ -119,6 +130,11 @@ private:
     double               now_{0}, start_{-1}, noteAt_{-1}, endAt_{-1};
     double               recoveredAfter_{0};
     bool                 recovered_{false}, gone_{false}, closed_{false};
+    gfx::Rect            rows_[3]{};             // 1.25.1 : le rapport, son dossier, le minidump
+    std::string          dump_;                  // le minidump a cote du rapport (vide : pas encore, ou aucun)
+    double               dumpCheckedAt_{-100};
+    std::unique_ptr<paths::PathMenu> pathMenu_;
+    void                 findDump();
 };
 
 // Au lancement suivant : le dialogue, dans la fenetre principale.

@@ -9,6 +9,7 @@
 #include "hmi/HmiImages.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../ui/widgets/Containers.hpp"
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : le chemin d'un fichier depose (Ouvrir dans l'explorateur)
 
 #include <algorithm>
 #include <cctype>
@@ -141,11 +142,35 @@ public:
     [[nodiscard]] std::vector<Row>& rows() noexcept { return rows_; }
     [[nodiscard]] const std::vector<Row>& rows() const noexcept { return rows_; }
 
+    // 1.25.1 : le menu du chemin d'une ligne (DropFilesDialog::openPathMenu).
+    bool openPathMenu(const std::string& name, gfx::Point at) {
+        const std::string path = d_.pathOf(name);
+        return !path.empty() && pathMenu_.open(*this, path, at, {}, name);
+    }
+
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext& ctx) override;
+    // 1.25.1 : le clic droit d'une ligne - le chemin du fichier montre, s'il est sur le disque.
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right && bounds().contains(d->pos)) {
+            const float y = d->pos.y - bounds().y;
+            for (const auto& r : rows_) {
+                if (y < r.y || y >= r.y + r.h) continue;
+                std::string name;
+                if (r.kind == Row::Kind::File && r.index < d_.plan_->files.size()) name = d_.plan_->files[r.index].name;
+                else if (r.kind == Row::Kind::Section && r.workbook < d_.plan_->workbooks.size()) name = d_.plan_->workbooks[r.workbook].name;
+                else if (r.kind == Row::Kind::Section && r.workbook == npos && !d_.plan_->programs.empty() && r.title.rfind("Programme", 0) == 0)
+                    name = std::filesystem::path(d_.plan_->programs.front()).filename().string();
+                if (!name.empty() && openPathMenu(name, d->pos)) return ui::EventResult::Consumed;
+                break;
+            }
+        }
+        return ui::EventResult::Ignored;
+    }
 
 private:
+    ui::paths::PathMenu pathMenu_;   // 1.25.1
     void measure(float w);
     [[nodiscard]] df::Action& action(const Row& r) { return d_.plan_->workbooks[r.workbook].actions[r.index]; }
     [[nodiscard]] const df::Action& action(const Row& r) const { return d_.plan_->workbooks[r.workbook].actions[r.index]; }
@@ -578,6 +603,24 @@ DropFilesDialog::DropFilesDialog(std::shared_ptr<df::Plan> plan)
 }
 
 DropFilesDialog::~DropFilesDialog() = default;
+
+std::string DropFilesDialog::pathOf(const std::string& shownName) const {
+    std::string path;
+    for (const auto& f : plan_->files)
+        if (f.name == shownName) path = f.path;
+    for (const auto& w : plan_->workbooks)
+        if (path.empty() && w.name == shownName) path = w.path;
+    for (const auto* list : {&plan_->programs, &plan_->hardware})
+        for (const auto& p : *list)
+            if (path.empty() && std::filesystem::path(p).filename().string() == shownName) path = p;
+    if (path.empty()) return {};
+    std::error_code ec;
+    return std::filesystem::is_regular_file(std::filesystem::path(std::u8string(path.begin(), path.end())), ec) ? path : std::string{};
+}
+
+bool DropFilesDialog::openPathMenu(const std::string& shownName, gfx::Point at) {
+    return content_ && content_->openPathMenu(shownName, at);
+}
 
 menu::MenuTraits DropFilesDialog::traits() const {
     menu::MenuTraits t;

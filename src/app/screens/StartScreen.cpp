@@ -33,6 +33,7 @@
 #include "../Dossiers.hpp"
 #include "../../core/Version.hpp"
 #include "../StartPage.hpp"
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : les chemins des cartes (Ouvrir dans l'explorateur, Aller a)
 #include "../hmi/HmiStationLaunch.hpp"     // lot 15 : le poste au demarrage du PC
 #include "../../hmi/HmiVersionState.hpp"
 #include "../../core/CodeStats.hpp"   // 1.11.7 : les lignes de code de l'application   // la ligne de version : "V48 en cours"
@@ -57,6 +58,9 @@ namespace app {
 using namespace ui;
 
 namespace {
+
+// 1.25.1 : les ids des trois entrees du chemin d'une carte (sous ceux de la page : 100 et plus).
+constexpr int kCardPathFirst = 40;
 
 namespace fs = std::filesystem;
 
@@ -448,6 +452,16 @@ core::Status StartupScreen::buildUi() {
         page_->addChild(std::move(popup));
         uiLinks_ += grid.contextRequested->connect([this](int, gfx::Point at) { showCardMenu(at); });
         uiLinks_ += cardMenu_->itemChosen->connect([this](int id) {
+            // 1.25.1 : Ouvrir dans l'explorateur, Aller a (ouvrir ce projet), Copier le chemin - le fournisseur dit un refus.
+            if (ui::paths::owns(id, kCardPathFirst)) {
+                if (const auto* e = page_->selected()) {
+                    const std::string path = e->path;
+                    (void)ui::paths::run(id, kCardPathFirst, path);
+                    if (id == kCardPathFirst + ui::paths::kCopy)
+                        page_->status().setTransientMessage("Chemin copi\xC3\xA9 : " + path, 6.0, StatusBar::Severity::Success);
+                }
+                return;
+            }
             switch (id) {
                 case 1: openSelected(); break;
                 case 2: {
@@ -503,11 +517,35 @@ void StartupScreen::onEnter() {
         for (const auto& m : messages) text += (text.empty() ? std::string{} : std::string(" ")) + m;
         page_->status().setMessage(text, StatusBar::Severity::Warning);
     }
+    // 1.25.1 : LES CHEMINS DE L'ACCUEIL (les cartes des projets recents, la barre d'etat) - le fournisseur de l'ecran du
+    // projet n'est pas la. Aller a un projet de la liste : l'ouvrir ; un autre fichier : son apercu.
+    installBasicPathLinks(
+        &app_, [this](const std::string& why) { page_->status().setTransientMessage(why, 6.0, StatusBar::Severity::Warning); },
+        [this](const std::string& path, const std::string& resolved, bool dry) -> std::optional<std::string> {
+            const auto same = [](std::string a, std::string b) {
+                for (auto* s : {&a, &b}) {
+                    std::replace(s->begin(), s->end(), '\\', '/');
+                    while (s->size() > 1 && s->back() == '/') s->pop_back();
+                    for (auto& c : *s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                }
+                return a == b;
+            };
+            for (const auto& e : page_->entries()) {
+                if (!same(e.path, path) && !same(e.path, resolved)) continue;
+                if (e.missing) return std::string("introuvable sur le disque");
+                if (dry) return std::string{};
+                const std::string chosen = e.path;
+                if (selectProject(chosen)) openSelected();
+                return std::string{};
+            }
+            return std::nullopt;
+        });
 }
 
 void StartupScreen::onExit() {
     busLinks_.clear();
     pendingDrops_.clear();
+    ui::paths::setProvider({});   // 1.25.1 : plus de `this` dans le fournisseur
 }
 
 void StartupScreen::Update(const menu::FrameContext& fc) {
@@ -1229,6 +1267,9 @@ void StartupScreen::showCardMenu(gfx::Point at) {
     // 1.12.27 : a cote du projet en cours, pour copier de l'un a l'autre.
     add(6, "Ouvrir dans une nouvelle fen\xC3\xAAtre", ui::Icon::Window, {}, gone, "\xC3\xA0 c\xC3\xB4t\xC3\xA9 de celui-ci");
     add(2, "Ouvrir le dossier", ui::Icon::FolderOpen, {}, gone);
+    // 1.25.1 : le chemin du projet, comme partout - Ouvrir dans l'explorateur, Aller a (l'ouvrir), Copier le chemin
+    // (grisees avec la raison : introuvable sur le disque).
+    for (auto& it : ui::paths::menuItems(e->path, kCardPathFirst)) items.push_back(std::move(it));
     add(3, "Renommer\xE2\x80\xA6", ui::Icon::Rename, "F2",
         !e->isFolder ? std::string("un export garde le nom de son fichier") : !gone.empty() ? gone
         : e->state == project::State::Lock ? std::string("LOCK : personne ne le modifie") : std::string{});

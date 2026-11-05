@@ -98,6 +98,17 @@ struct Store {
 [[nodiscard]] core::Status update(Store&, int number, const std::string& name, State, const std::string& comment);
 // Retire la version, puis les objets que plus aucune version ne cite.
 [[nodiscard]] core::Status remove(Store&, int number);
+// 1.25.1 : SUPPRIMER SANS PERDRE (<< corrige les limites restantes >> : une version supprimee depuis l'arbre revient
+// par Ctrl+Z). La version quitte l'index ; son manifeste et les objets que plus aucune version ne cite vont dans
+// versions/corbeille/<date>~V0005/ (core/Trash.hpp). untrash la remet, a son numero (refuse si ce numero a ete repris).
+// La corbeille se purge a l'ouverture du magasin : ce qui y est depuis plus de 7 jours part pour de bon.
+struct Trashed {
+    Version     version;
+    std::string folder;     // son dossier dans la corbeille (UTF-8)
+};
+[[nodiscard]] std::string            trashFolder(const std::string& projectFolder);   // versions/corbeille (UTF-8)
+[[nodiscard]] core::Result<Trashed>  trash(Store&, int number);
+[[nodiscard]] core::Status           untrash(Store&, const Trashed&);
 // Le disque differe-t-il de la derniere version (hors dates d'enregistrement) ?
 [[nodiscard]] bool         changedSinceLast(const Store&);
 // Remet le projet (sur le disque) dans l'etat de la version ; rend la version

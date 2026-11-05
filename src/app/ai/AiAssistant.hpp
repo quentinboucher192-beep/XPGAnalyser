@@ -133,7 +133,12 @@ public:
     void               newConversation();
     bool               select(std::string_view id);
     bool               rename(std::string_view id, std::string title);
-    bool               remove(std::string_view id);
+    // 1.25.1 : la conversation et ses pieces jointes vont dans la corbeille de l'IA (IA/corbeille) ; `moved` : d'ou et ou,
+    // `removed` : la conversation telle qu'elle etait - restoreConversation la remet (Ctrl+Z).
+    bool               remove(std::string_view id, std::vector<core::trash::Moved>* moved = nullptr, Conversation* removed = nullptr);
+    // 1.25.1 : remettre une conversation supprimee (ses fichiers deja rendus) : a sa place dans la liste (la plus recente
+    // d'abord). Faux : une conversation de ce nom est deja la.
+    bool               restoreConversation(Conversation c);
     [[nodiscard]] int  indexOf(std::string_view id) const noexcept;
 
     // ---- envoyer, arreter ---------------------------------------------------------------

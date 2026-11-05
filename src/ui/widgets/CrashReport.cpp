@@ -4,6 +4,7 @@
 #include "CrashReport.hpp"
 
 #include "../DialogFrame.hpp"
+#include "PropertyGridHooks.hpp"   // 1.25.1 : le chemin du rapport (Ouvrir dans l'explorateur, Aller a)
 #include "../../menu/MenuManager.hpp"
 #include "../Icons.hpp"
 #include "../Theme.hpp"
@@ -12,6 +13,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>   // 1.25.1 : le minidump a cote du rapport
 
 namespace ui {
 
@@ -295,6 +297,29 @@ CrashReportView::CrashReportView(CrashReportSetup setup, bool framed)
             break;
     }
     if (primary_) right_.push_back(primary_);
+    findDump();   // 1.25.1 : au lancement suivant, le minidump est deja la
+}
+
+CrashReportView::~CrashReportView() = default;
+
+// 1.25.1 : le minidump (Windows) : a cote du rapport, meme nom, .dmp - ecrit APRES l'ouverture de la fenetre d'un plantage
+// (sous Wine, plus de 10 s) : tick() le cherche encore de temps en temps.
+void CrashReportView::findDump() {
+    if (!dump_.empty() || setup_.path.empty()) return;
+    std::string dmp = setup_.path;
+    if (const auto dot = dmp.find_last_of('.'); dot != std::string::npos && dmp.find_first_of("/\\", dot) == std::string::npos) dmp.resize(dot);
+    dmp += ".dmp";
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(std::filesystem::path(std::u8string(dmp.begin(), dmp.end())), ec)) dump_ = std::move(dmp);
+}
+
+std::string CrashReportView::pathOf(int which) const {
+    switch (which) {
+        case 0: return setup_.path;
+        case 1: return folderOf(setup_.path);
+        case 2: return dump_;
+        default: return {};
+    }
 }
 
 Button* CrashReportView::add(std::string text, std::string id, Button::Style style, std::function<void()> act) {
@@ -359,6 +384,10 @@ std::string CrashReportView::subline() const {
 void CrashReportView::tick(double now) {
     now_ = now;
     if (start_ < 0) start_ = now;
+    if (dump_.empty() && now - dumpCheckedAt_ > 2.0) {   // 1.25.1 : le minidump, une fois ecrit
+        dumpCheckedAt_ = now;
+        findDump();
+    }
     if (noteAt_ >= 0 && now - noteAt_ > kNoteSeconds) {
         note_.clear();
         noteAt_ = -1;
@@ -544,12 +573,23 @@ void CrashReportView::onPaint(const PaintContext& ctx) {
     y += 10.f;
 
     heading("LE RAPPORT");
+    for (auto& row : rows_) row = {};
     if (y + lh * 2 <= bottom) {
         drawIcon(r, Icon::Document, {x, y + 1.f, 16.f, 16.f}, c.textMuted);
         r.drawText({x + 22.f, y}, setup_.path.empty() ? std::string("(pas de rapport)") : fileName(setup_.path), f.uiBold, c.text);
+        if (!setup_.path.empty()) rows_[0] = {x, y, w, lh};
         y += lh;
         const auto folder = folderOf(setup_.path);
+        const float folderTop = y;
         if (!folder.empty()) paragraph(folder, f.caption, c.textMuted, 22.f);
+        if (!folder.empty() && y > folderTop) rows_[1] = {x, folderTop, w, y - folderTop};
+        // 1.25.1 : le minidump, quand il est la (Windows) - son nom, et le meme clic droit.
+        if (!dump_.empty() && y + lh <= bottom) {
+            drawIcon(r, Icon::Document, {x, y + 1.f, 16.f, 16.f}, c.textMuted);
+            r.drawText({x + 22.f, y}, "Minidump : " + fileName(dump_), f.ui, c.text);
+            rows_[2] = {x, y, w, lh};
+            y += lh;
+        }
     }
     paragraph("Il contient la version, le syst\xC3\xA8me, la pile d'appels et l'historique interne"
               " (les noms des documents ouverts, jamais leurs donn\xC3\xA9" "es).", f.caption, c.textMuted);
@@ -566,6 +606,21 @@ void CrashReportView::onPaint(const PaintContext& ctx) {
 }
 
 EventResult CrashReportView::onEvent(const InputEvent& e) {
+    // 1.25.1 : le clic droit sur le chemin du rapport, de son dossier, du minidump - Ouvrir dans l'explorateur, Aller a,
+    // Copier le chemin (ui::paths ; l'hote installe le fournisseur, sinon rien ne s'ouvre).
+    if (const auto* d = std::get_if<MouseDown>(&e); d && d->button == MouseButton::Right)
+        for (int i = 0; i < 3; ++i) {
+            if (rows_[i].w <= 0.f || !rows_[i].contains(d->pos)) continue;
+            const std::string path = pathOf(i);
+            if (path.empty()) break;
+            if (!pathMenu_) {
+                pathMenu_ = std::make_unique<paths::PathMenu>();
+                pathMenu_->refused = [this](const std::string& why) { say(why); };
+            }
+            const std::string heading = i == 1 ? std::string("Le dossier des rapports") : fileName(path);
+            if (pathMenu_->open(*this, path, d->pos, {}, heading)) return EventResult::Consumed;
+            break;
+        }
     if (const auto* k = std::get_if<KeyDown>(&e)) {
         if (k->key == Key::Escape && k->mods.none()) {
             // Echap : fermer la fenetre (pendant un blocage : attendre, l'appli continue).

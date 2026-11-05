@@ -33,6 +33,7 @@
 #pragma once
 
 #include "AiMemoryJson.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille de l'IA (IA/corbeille)
 
 #include <array>
 #include <cstdint>
@@ -216,9 +217,12 @@ struct PersistentLine {
 CleanResult deletePersistent(const std::vector<Persistent>& what, bool confirmed);
 
 // Une conversation (son fichier) ; ses pieces jointes restent (elles se suppriment a part).
-bool deleteConversation(std::string_view id, std::string* why = nullptr);
-// Un dossier de pieces-jointes/<id>/ et ce qu'il porte.
-bool deleteAttachmentFolder(std::string_view id, std::string* why = nullptr);
+// 1.25.1 : le fichier va dans la corbeille de l'IA (IA/corbeille) ; `moved` recoit d'ou et ou (Ctrl+Z : takeBackAll).
+bool deleteConversation(std::string_view id, std::string* why = nullptr, std::vector<core::trash::Moved>* moved = nullptr);
+// Un dossier de pieces-jointes/<id>/ et ce qu'il porte (1.25.1 : dans la corbeille, comme une conversation).
+bool deleteAttachmentFolder(std::string_view id, std::string* why = nullptr, std::vector<core::trash::Moved>* moved = nullptr);
+// 1.25.1 : au demarrage - ce qui est dans la corbeille de l'IA depuis plus de 7 jours part pour de bon. Rend combien.
+std::size_t purgeTrash();
 
 // ------------------------------------------------------------------ la recherche ---
 struct Knowledge;   // AiKnowledge.hpp

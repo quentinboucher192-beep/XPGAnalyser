@@ -209,6 +209,66 @@ bool HmiCyclicPage::saveSet(const std::string& name, std::string* why) {
     return true;
 }
 
+// ---- 1.25.1 : supprimer des jeux du projet (plusieurs d'un coup) ----
+bool HmiCyclicPage::deleteSets(const std::vector<std::string>& names, std::string* why) {
+    const hmi::Project* p = tool_.hosts_.project ? tool_.hosts_.project() : nullptr;
+    hmi::DocumentPtr doc = tool_.hosts_.document ? tool_.hosts_.document() : nullptr;
+    if (!p || !doc || !tool_.hosts_.apply) {
+        if (why) *why = "pas de projet IHM ouvert";
+        say("Supprimer des jeux : pas de projet IHM ouvert.", true);
+        return false;
+    }
+    std::vector<std::string> gone, missing;
+    for (const auto& n : names) {
+        const bool there = std::any_of(p->modbusSets.begin(), p->modbusSets.end(), [&](const hmi::ModbusReadSet& s) { return s.name == n; });
+        (there ? gone : missing).push_back(n);
+    }
+    if (gone.empty()) {
+        if (why) *why = "aucun de ces jeux dans le projet";
+        say("Supprimer des jeux : aucun de ces jeux dans le projet.", true);
+        return false;
+    }
+    const std::string label = gone.size() > 1 ? "Supprimer " + std::to_string(gone.size()) + " jeux de lecture"
+                                              : "Supprimer le jeu de lecture \xC2\xAB " + gone.front() + " \xC2\xBB";
+    auto cmd = hmi::changeProject(doc, label, [gone](hmi::Project& x) {
+        std::erase_if(x.modbusSets, [&](const hmi::ModbusReadSet& s) { return std::find(gone.begin(), gone.end(), s.name) != gone.end(); });
+        if (std::find(gone.begin(), gone.end(), x.modbusSetLast) != gone.end()) x.modbusSetLast.clear();
+    });
+    if (cmd) tool_.hosts_.apply(std::move(cmd));
+    std::string said = std::to_string(gone.size()) + (gone.size() > 1 ? " jeux supprim\xC3\xA9s : " : " jeu supprim\xC3\xA9 : ") + several::names(gone);
+    if (!missing.empty()) said += " ; d\xC3\xA9j\xC3\xA0 partis : " + several::names(missing);
+    // Le jeu de travail ouvert reste ouvert : il redevient a enregistrer.
+    if (std::find(gone.begin(), gone.end(), set_.name) != gone.end()) said += " ; le jeu ouvert reste dans la liste (Enregistrer le remet)";
+    say(said + (gone.size() > 1 ? " - un seul Ctrl+Z les rend." : " - Ctrl+Z le rend."));
+    refreshHeads();
+    tool_.rebuildProperties();
+    return true;
+}
+
+void HmiCyclicPage::askDeleteSets(const std::vector<std::string>& names) {
+    if (names.empty()) return;
+    const std::weak_ptr<const void> alive = requests_->selectionChanged;
+    const std::size_t n = names.size();
+    several::confirm(n > 1 ? "Supprimer les " + std::to_string(n) + " jeux de lecture ?" : std::string("Supprimer le jeu de lecture ?"),
+                     (n > 1 ? "Les " + std::to_string(n) + " jeux " : std::string("Le jeu ")) + several::names(names)
+                         + (n > 1 ? " quittent le projet. Un seul Ctrl+Z les rend." : " quitte le projet. Ctrl+Z le rend."),
+                     several::label("Supprimer", n), [this, alive, names] {
+                         if (!alive.expired()) (void)deleteSets(names);
+                     });
+}
+
+void HmiCyclicPage::openDeleteSetsDialog() {
+    const hmi::Project* p = tool_.hosts_.project ? tool_.hosts_.project() : nullptr;
+    std::vector<HmiCyclicSetsDialog::Set> sets;
+    if (p)
+        for (const auto& s : p->modbusSets)
+            sets.push_back({s.name, std::to_string(s.reads.size()) + (s.reads.size() > 1 ? " requ\xC3\xAAtes" : " requ\xC3\xAAte") + ", "
+                                        + std::to_string(s.periodMs) + " ms" + (s.name == set_.name ? " \xC2\xB7 ouvert" : "")});
+    auto dlg = std::make_unique<HmiCyclicSetsDialog>(id() + ".deleteSets", std::move(sets));
+    dlg->deleted = [this](const std::vector<std::string>& names) { askDeleteSets(names); };
+    showOverlay(std::move(dlg));
+}
+
 bool HmiCyclicPage::openSet(const std::string& name, std::string* why) {
     const hmi::Project* p = tool_.hosts_.project ? tool_.hosts_.project() : nullptr;
     const hmi::ModbusReadSet* found = nullptr;
@@ -891,6 +951,15 @@ void HmiCyclicPage::openSetsMenu(gfx::Point at) {
     items.push_back(menuItem(MSave, "Enregistrer le jeu", "dans le projet IHM (il suit ses versions)", "Ctrl+S", GSave));
     items.push_back(menuItem(MSaveAs, "Enregistrer sous\xE2\x80\xA6", "un autre nom", {}, GSave));
     items.push_back(menuItem(MNewSet, "Nouveau jeu vide", {}, {}, GPlus));
+    // 1.25.1 : supprimer des jeux du projet, plusieurs d'un coup (une liste, une question, un seul Ctrl+Z).
+    {
+        auto del = menuItem(MDeleteSets, "Supprimer des jeux\xE2\x80\xA6", "plusieurs d'un coup ; Ctrl+Z les rend", {}, GDelete);
+        if (names.empty()) {
+            del.enabled = false;
+            del.why = "aucun jeu enregistr\xC3\xA9";
+        }
+        items.push_back(std::move(del));
+    }
     items.push_back(sep);
     items.push_back(menuItem(MExportSet, "Exporter le jeu (CSV)\xE2\x80\xA6", "pour un autre poste ou une autre affaire", {}, GExport));
     items.push_back(menuItem(MImportSet, "Importer un jeu (CSV)\xE2\x80\xA6",
@@ -905,6 +974,7 @@ void HmiCyclicPage::openSetsMenu(gfx::Point at) {
             case MSave: (void)saveSet(); break;
             case MSaveAs: openSaveAs(); break;
             case MNewSet: newSet(); break;
+            case MDeleteSets: openDeleteSetsDialog(); break;
             case MExportSet:
                 // Ou l'ecrire : le dialogue des exports de l'IHM (sans ecran : dans exports/).
                 if (!askExportTarget("le jeu de lecture (CSV)", "Fichiers CSV|*.csv", [this] { (void)exportSet(); })) (void)exportSet();
