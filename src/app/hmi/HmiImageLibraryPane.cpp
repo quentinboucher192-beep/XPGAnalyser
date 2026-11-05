@@ -244,11 +244,25 @@ protected:
         const float maxW = std::max(40.f, b.w - 32.f);
         ctx.r.drawText({b.x + 16, y}, image_.label, ctx.theme.font.uiBold, c.text);
         y += ctx.r.lineHeight(ctx.theme.font.uiBold) + 4.f;
-        const std::string facts = image_.category + "  \xC2\xB7  " + dims(image_) + "  \xC2\xB7  " + image_.format + "  \xC2\xB7  "
-                                + (image_.mine() ? "une de tes images" : "image native");
-        for (const auto& l : wrapped(ctx.r, facts, ctx.theme.font.smallUi, maxW)) {
-            ctx.r.drawText({b.x + 16, y}, l, ctx.theme.font.smallUi, c.textMuted);
-            y += ctx.r.lineHeight(ctx.theme.font.smallUi) + 2.f;
+        // Coupee entre ses parties seulement (<< image native >> reste entier).
+        {
+            const std::string parts[4] = {image_.category, dims(image_), image_.format, image_.mine() ? "une de tes images" : "image native"};
+            std::string line;
+            const auto flush = [&] {
+                ctx.r.drawText({b.x + 16, y}, line, ctx.theme.font.smallUi, c.textMuted);
+                y += ctx.r.lineHeight(ctx.theme.font.smallUi) + 2.f;
+                line.clear();
+            };
+            for (const auto& part : parts) {
+                const std::string candidate = line.empty() ? part : line + "  \xC2\xB7  " + part;
+                if (!line.empty() && ctx.r.measure(candidate, ctx.theme.font.smallUi).width > maxW) {
+                    flush();
+                    line = part;
+                } else {
+                    line = candidate;
+                }
+            }
+            if (!line.empty()) flush();
         }
         y += 6.f;
         // Ce qu'elle est : ses mots-cles (une native), son fichier (une des tiennes).
