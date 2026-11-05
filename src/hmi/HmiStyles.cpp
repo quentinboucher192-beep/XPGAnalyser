@@ -406,6 +406,9 @@ bool imposes(const Project& p, const Object& o, std::string_view key, const Styl
     if (std::find(broken.begin(), broken.end(), key) != broken.end()) return false;
     for (const auto& pr : valuesFor(p, *s, o))
         if (pr.key == key) {
+            // Une valeur qui differe de celle du style est celle de l'objet (brisee d'office : un projet d'avant la 1.23.0,
+            // une ecriture hors de l'inspecteur) - le style ne l'impose pas.
+            if (valueOf(p, o, key).value_or(std::string{}) != pr.value) return false;
             if (by) *by = s;
             if (value) *value = pr.value;
             return true;
@@ -413,14 +416,23 @@ bool imposes(const Project& p, const Object& o, std::string_view key, const Styl
     return false;
 }
 
+std::vector<std::string> overriddenKeys(const Project& p, const Object& o) {
+    std::vector<std::string> out;
+    const std::string name = citedStyle(o);
+    const Style* s = name.empty() ? nullptr : find(p, name);
+    if (!s) return out;
+    for (const auto& pr : valuesFor(p, *s, o))
+        if (!drivenByExpression(o, pr.key) && !imposes(p, o, pr.key)) out.push_back(pr.key);
+    return out;
+}
+
 std::vector<std::string> imposedKeys(const Project& p, const Object& o) {
     std::vector<std::string> out;
     const std::string name = citedStyle(o);
     const Style* s = name.empty() ? nullptr : find(p, name);
     if (!s) return out;
-    const auto broken = brokenKeys(o);
     for (const auto& pr : valuesFor(p, *s, o))
-        if (!drivenByExpression(o, pr.key) && std::find(broken.begin(), broken.end(), pr.key) == broken.end()) out.push_back(pr.key);
+        if (imposes(p, o, pr.key)) out.push_back(pr.key);
     return out;
 }
 
@@ -459,14 +471,14 @@ bool breakKey(const Project& p, Object& o, std::string_view key, bool keepCurren
 }
 
 bool restoreKey(const Project& p, Object& o, std::string_view key) {
+    // Brisee : dans la liste, ou d'office (sa valeur differe de celle du style) ; une expression garde la main.
+    if (drivenByExpression(o, key) || imposes(p, o, key)) return false;
     auto broken = brokenKeys(o);
-    const auto it = std::find(broken.begin(), broken.end(), key);
-    if (it == broken.end()) return false;
     const Style* s = find(p, citedStyle(o));
     if (!s) return false;
     for (const auto& pr : valuesFor(p, *s, o))
         if (pr.key == key) {
-            broken.erase(it);
+            std::erase(broken, std::string(key));
             writeBroken(o, broken);
             auto was = readWas(o);
             if (const auto now = valueOf(p, o, key); now && !was.count(pr.key)) {
@@ -499,7 +511,7 @@ bool edited(const Project& p, Object& o, std::string_view key) {
 
 std::size_t restoreAll(const Project& p, Object& o) {
     std::size_t n = 0;
-    for (const auto& k : brokenKeys(o)) n += restoreKey(p, o, k) ? 1u : 0u;
+    for (const auto& k : overriddenKeys(p, o)) n += restoreKey(p, o, k) ? 1u : 0u;
     return n;
 }
 

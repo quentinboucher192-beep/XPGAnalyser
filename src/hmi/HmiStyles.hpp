@@ -96,11 +96,15 @@ StyleTarget& targetFor(Style&, std::string_view type);
 // L'objet pilote-t-il la cle par une expression (le style ne l'impose alors pas) ?
 [[nodiscard]] bool drivenByExpression(const Object&, std::string_view key);
 
-// La cle est-elle IMPOSEE par le style que l'objet cite ? `by` : ce style ; `value` : la valeur imposee.
+// La cle est-elle IMPOSEE par le style que l'objet cite (portee, pas brisee, sans expression, et la valeur de l'objet est
+// celle du style) ? `by` : ce style ; `value` : la valeur imposee.
 [[nodiscard]] bool imposes(const Project&, const Object&, std::string_view key, const Style** by = nullptr,
                            std::string* value = nullptr);
 // Les cles imposees a l'objet (dans l'ordre du style).
 [[nodiscard]] std::vector<std::string> imposedKeys(const Project&, const Object&);
+// Les cles BRISEES : le style les porte, l'objet a la sienne (brisee par un geste, ou d'office : sa valeur differe de
+// celle du style - un projet d'avant la 1.23.0, une ecriture hors de l'inspecteur) ; une expression n'y est pas.
+[[nodiscard]] std::vector<std::string> overriddenKeys(const Project&, const Object&);
 
 // ---- les gestes (sur l'objet ; l'appelant en fait une commande) ---------------------------------------------------------
 // APPLIQUER : chaque cle que le style porte pour l'objet (et qu'une expression ne pilote pas) prend la valeur du style ;
@@ -131,6 +135,8 @@ std::size_t propagate(Project&, const Style& before, const Style& after);
 std::size_t forget(Project&, std::string_view name);
 // UN PROJET D'AVANT LA 1.23.0 : un objet qui cite un style sans etat - une valeur qui differe de celle du style devient
 // brisee (elle reste la sienne), les autres sont imposees (styleWas : leur valeur d'objet neuf). Rend le nombre d'objets.
+// Pas appele a la lecture (un projet relu reste identique au fichier) : imposes() traite deja une valeur differente comme
+// brisee ; adopt() ecrit cet etat (pour Briser : reprendre la valeur d'un objet neuf).
 std::size_t adopt(Project&);
 
 // ---- faire un style ------------------------------------------------------------------------------------------------------
