@@ -38056,37 +38056,413 @@ void apercuStyles11227() {
     styles.selectStyle(sid);
     const auto* st = b.doc->project.style(sid);
     if (!st) { check(false, "le style Alerte"); return; }
-    const auto objs = app::HmiStylesPane::previewObjects(*st);
-    check(objs.size() == 5 && objs[0].kind == Kind::Button && objs[0].text("fill") == "#C0392B" && objs[0].text("textColor") == "#FFEE00"
-              && objs[0].text("namedStyle") == "Alerte",
+    // 1.23.0 : l'apercu montre UN type a la fois (la liste Type :) - le style l'a fait (styles::previewObject).
+    const auto& proj = b.doc->project;
+    const auto btn = app::HmiStylesPane::previewItems(proj, *st, "Button");
+    check(btn.size() == 1 && btn[0].object.kind == Kind::Button && btn[0].object.text("fill") == "#C0392B"
+              && btn[0].object.text("textColor") == "#FFEE00" && btn[0].object.text("namedStyle") == "Alerte",
           "l'aper\xC3\xA7u : un bouton fait par le style (remplissage, texte ; il le cite)");
-    check(objs.size() == 5 && objs[1].kind == Kind::Text && objs[1].text("fill") == "#C0392B" && objs[2].kind == Kind::Rectangle
-              && objs[2].text("fill") == "#C0392B",
+    const auto txt = app::HmiStylesPane::previewItems(proj, *st, "Text");
+    const auto rct = app::HmiStylesPane::previewItems(proj, *st, "Rectangle");
+    check(txt.size() == 1 && txt[0].object.kind == Kind::Text && txt[0].object.text("fill") == "#C0392B" && rct.size() == 1
+              && rct[0].object.kind == Kind::Rectangle && rct[0].object.text("fill") == "#C0392B",
           "un texte et un rectangle, au remplissage du style");
-    check(objs.size() == 5 && objs[3].kind == Kind::Indicator && objs[3].text("colorOn") == "#FF7700" && objs[3].text("value") == "TRUE"
-              && objs[4].text("value") == "FALSE",
+    const auto voy = app::HmiStylesPane::previewItems(proj, *st, "Indicator");
+    check(voy.size() == 2 && voy[0].object.kind == Kind::Indicator && voy[0].object.text("colorOn") == "#FF7700"
+              && voy[0].object.text("value") == "TRUE" && voy[1].object.text("value") == "FALSE" && voy[0].caption == "en marche",
           "un voyant allum\xC3\xA9 (la couleur du style) et un \xC3\xA9teint");
     const auto pb = styles.preview().bounds(), gb = styles.properties().bounds();
-    check(pb.h > 60 && pb.y + pb.h <= gb.y && std::abs(pb.x - gb.x) < 1.f && std::abs(pb.w - gb.w) < 1.f,
-          "l'aper\xC3\xA7u : au-dessus de la fiche, de sa largeur");
+    check(pb.h > 60 && pb.y >= gb.y + gb.h && std::abs(pb.x - gb.x) < 1.f && std::abs(pb.w - gb.w) < 1.f,
+          "l'aper\xC3\xA7u : sous la fiche, de sa largeur");
     Colors rec;
     const auto theme = ui::Theme::dark();
     std::vector<ui::Widget*> overlays;
     const ui::PaintContext ctx{rec, theme, {0, 0, 1400, 700}, 0.0, &overlays};
+    styles.setPreviewType("Button");
     styles.preview().render(ctx);
-    check(rec.filled(gfx::Color::rgb(0xC0392B)) && rec.filled(gfx::Color::rgb(0xFF7700)),
-          "dessin\xC3\xA9 par le painter : le rouge du style, l'orange du voyant allum\xC3\xA9");
+    check(rec.filled(gfx::Color::rgb(0xC0392B)), "dessin\xC3\xA9 par le painter : le rouge du style (un bouton)");
     check(rec.wrote("Alerte"), "l'en-t\xC3\xAAte de l'aper\xC3\xA7u : le nom du style");
+    rec.fills.clear();
+    styles.setPreviewType("Indicator");
+    styles.preview().render(ctx);
+    check(styles.previewType() == "Indicator" && rec.filled(gfx::Color::rgb(0xFF7700)), "le type Voyant : l'orange du voyant allum\xC3\xA9");
     const auto m = styles.table().model();
     bool swatch = false;
     for (std::size_t r = 0; m && r < m->rowCount(); ++r)
-        swatch = swatch || (m->cellText(r, 0) == "Alerte" && m->cellStyle(r, 0).customIcon == static_cast<int>(sid));
-    check(swatch, "la liste : la pastille du style (sa premi\xC3\xA8re case)");
+        swatch = swatch || (m->cellText(r, 0) == "Alerte" && m->cellStyle(r, 2).customIcon == static_cast<int>(sid));
+    check(swatch, "la liste : la pastille du style (sa colonne Couleurs)");
     styles.table().selectModelRows({});
     rec.texts.clear();
     rec.fills.clear();
     styles.preview().render(ctx);
     check(rec.wrote("choisis un style") && !rec.filled(gfx::Color::rgb(0xFF7700)), "sans style choisi : l'aper\xC3\xA7u invite \xC3\xA0 en choisir un");
+}
+
+// 1.23.0 : L'ONGLET IHM > STYLES REFAIT (la maquette validee du 05/11) - les styles fournis verrouilles (un cadenas),
+// Dupliquer a partir de, les types d'objets du style (bibliotheque et symboles du projet), les proprietes imposees
+// (n'importe laquelle, la case de l'inspecteur), l'apercu par type et ses etats. HMI_TEST_STY=1 : les essais des styles.
+void stylesParType1230() {
+    std::printf("== 1.23.0 : l'onglet Styles par type d'objet (fournis, dupliquer, types, propri\xC3\xA9t\xC3\xA9s, aper\xC3\xA7u) ==\n");
+    namespace st = hmi::styles;
+    using PGT = ui::PropertyGrid::ValueType;
+    struct Colors final : gfx::IRenderer {   // retient les couleurs posees et les textes
+        std::vector<gfx::Color> fills;
+        std::vector<std::string> texts;
+        void beginFrame(gfx::Color) override {}
+        void endFrame() override {}
+        void pushClip(const gfx::Rect&) override {}
+        void popClip() override {}
+        void fillRect(const gfx::Rect&, gfx::Color c) override { fills.push_back(c); }
+        void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+        void fillRoundedRect(const gfx::Rect&, gfx::Color c, float) override { fills.push_back(c); }
+        void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+        void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+        void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+        void fillTriangles(const gfx::Vertex* v, std::size_t n) override {
+            for (std::size_t i = 0; i < n; ++i) fills.push_back(v[i].color);
+        }
+        gfx::TextMetrics measure(std::string_view t, gfx::FontId) const override { return {8.f * static_cast<float>(t.size()), 16.f, 12.f, 4.f}; }
+        float lineHeight(gfx::FontId) const override { return 16.f; }
+        gfx::Size surfaceSize() const override { return {1600.f, 900.f}; }
+        float dpiScale() const override { return 1.f; }
+        std::size_t fitCharacters(std::string_view t, gfx::FontId, float w) const override {
+            return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w) / 8.f));
+        }
+        bool filled(gfx::Color c) const {
+            for (const auto& f : fills) if (f.r == c.r && f.g == c.g && f.b == c.b && f.a > 0) return true;
+            return false;
+        }
+        bool wrote(std::string_view part) const {
+            for (const auto& t : texts) if (t.find(part) != std::string::npos) return true;
+            return false;
+        }
+        void clear() { fills.clear(); texts.clear(); }
+    };
+    Bench b;
+    auto& p = b.doc->project;
+    // Un symbole du projet (un parametre Couleur, un corps bleu nuit), deux pompes et une instance du symbole.
+    {
+        View sym = makeView(p, "Sym_Moteur");
+        sym.role = "symbole";
+        sym.width = 60;
+        sym.height = 40;
+        ViewParam couleur;
+        couleur.name = "Couleur";
+        couleur.defaultValue = "#123456";
+        couleur.description = "la couleur du corps";
+        sym.params.push_back(couleur);
+        Object corps = hmi::makeObject(Kind::Rectangle, p.allocate(), "Corps", 0, 0, sym.activeLayer);
+        corps.setNumber("w", 60);
+        corps.setNumber("h", 40);
+        corps.set("fill", "#123456");
+        sym.objects.push_back(corps);
+        p.views.push_back(sym);
+    }
+    const auto add = [&](Kind k, const char* name, double x) {
+        Object o = hmi::makeObject(k, p.allocate(), name, x, 100, b.v().activeLayer);
+        const Id id = o.id;
+        b.v().objects.push_back(std::move(o));
+        return id;
+    };
+    const Id pompe1 = add(Kind::Pump, "P1", 100);
+    const Id pompe2 = add(Kind::Pump, "P2", 300);
+    const Id moteur = add(Kind::SymbolInstance, "M1", 500);
+    b.v().object(moteur)->set("symbol", "Sym_Moteur");
+    const auto obj = [&](Id id) -> Object& { return *b.v().object(id); };
+
+    app::HmiStylesPane styles("sty1230", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+    styles.search().setText("");
+    styles.setBounds({0, 0, 1400, 760});
+    styles.layout();
+    Colors rec;
+    const auto theme = ui::Theme::dark();
+    std::vector<ui::Widget*> overlays;
+    const ui::PaintContext ctx{rec, theme, {0, 0, 1400, 760}, 0.0, &overlays};
+    const auto paint = [&] {
+        rec.clear();
+        styles.layout();
+        styles.render(ctx);
+    };
+
+    // ---- 1. la liste : les FOURNIS (cadenas, pastille), puis ceux DU PROJET
+    const auto fm = styles.builtinTable().model();
+    check(fm && fm->rowCount() == 4 && fm->cellText(0, 0) == "ISA-101" && fm->cellText(1, 0) == "Sombre (d'origine)" && fm->cellText(2, 0) == "Clair"
+              && fm->cellText(3, 0) == "Contraste \xC3\xA9lev\xC3\xA9",
+          "1.23.0 : les quatre styles fournis, en t\xC3\xAAte (ISA-101, Sombre, Clair, Contraste \xC3\xA9lev\xC3\xA9)");
+    bool locks = fm != nullptr, swatches = fm != nullptr;
+    for (std::size_t r = 0; fm && r < fm->rowCount(); ++r) {
+        locks = locks && fm->cellStyle(r, 0).icon == ui::Icon::Lock;
+        swatches = swatches && fm->cellStyle(r, 2).customIcon == static_cast<int>(r + 1);
+    }
+    check(locks && swatches && fm && fm->headerText(0).find("verrouill") != std::string::npos,
+          "chacun son cadenas et sa pastille de couleurs ; la colonne dit \xC2\xAB Fournis \xE2\x80\x94 verrouill\xC3\xA9s \xC2\xBB");
+    check(styles.table().model() && styles.table().model()->rowCount() == 0 && styles.shownStyles() == 4 && !styles.currentStyle(),
+          "aucun style du projet : la liste du projet est vide, rien n'est choisi");
+    paint();
+    check(rec.wrote("STYLES") && rec.wrote("TYPES D'OBJETS DU STYLE") && rec.wrote("Choisis un style"),
+          "les titres des colonnes ; sans style choisi, la colonne des types le dit");
+
+    // ---- 2. un style fourni choisi : tout en lecture seule, le bandeau
+    check(styles.selectBuiltin("isa-101") && styles.currentStyle() && styles.currentStyle()->name == "ISA-101" && styles.locked()
+              && styles.selectedStyle() == kNoId,
+          "ISA-101 choisi (sans casse) : un style fourni, verrouill\xC3\xA9");
+    check(styles.lockedBanner().find("verrouill") != std::string::npos && styles.lockedBanner().find("Dupliquer \xC3\xA0 partir de") != std::string::npos,
+          "le bandeau : \xC2\xAB Style fourni : verrouill\xC3\xA9. Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 pour le modifier \xC2\xBB");
+    paint();
+    check(rec.wrote("Style fourni : verrouill"), "... dessin\xC3\xA9 au-dessus de la fiche");
+    check(!styles.tools().isEnabled(app::HmiStylesPane::ActRemove) && styles.tools().isEnabled(app::HmiStylesPane::ActDuplicate)
+              && !styles.addTypeButton().enabled() && !styles.removeTypeButton().enabled() && !styles.addPropertyButton().enabled(),
+          "fourni : Retirer gris\xC3\xA9, Dupliquer \xC3\xA0 partir de actif, ni type ni propri\xC3\xA9t\xC3\xA9 \xC3\xA0 ajouter ou retirer");
+    const auto isaTypes = styles.shownTypes();
+    check(isaTypes.size() == st::builtin("ISA-101")->targets.size() && !isaTypes.empty() && isaTypes.front() == "Button"
+              && std::find(isaTypes.begin(), isaTypes.end(), "Pump") != isaTypes.end() && styles.selectedType() == "Button",
+          "la colonne des types : ceux d'ISA-101 (Bouton d'abord, Pompe...), le premier choisi");
+    styles.selectType("Pump");
+    const std::string colorOnName = app::HmiStylesPane::propertyName("Pump", "colorOn");
+    {
+        const auto cats = styles.properties().categories();
+        const ui::PropertyGrid::Property* on = nullptr;
+        const ui::PropertyGrid::Property* nom = nullptr;
+        for (const auto& c : cats)
+            for (const auto& pr : c.properties) {
+                if (pr.key == "colorOn") on = &pr;
+                if (pr.name == "Nom") nom = &pr;
+            }
+        check(cats.size() == 2 && cats[1].name.find("Pompe") != std::string::npos && on && on->value == "#4D4D4D" && on->type == PGT::Color
+                  && !on->commit && on->locked && nom && !nom->commit && nom->locked,
+              "Pompe d'ISA-101 : ses propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es (une case couleur), toutes en lecture seule, un cadenas");
+    }
+    std::string why;
+    check(!styles.setTypeValue(kNoId, "Pump", "colorOn", "#000000", &why) && !why.empty() && !styles.addType("Gauge", &why)
+              && why.find("fourni") != std::string::npos && st::builtin("ISA-101")->targets[0].props[0].value == "#D4D4D4",
+          "fourni : ni valeur ni type ne se changent (" + why + ")");
+    styles.tools().triggered->emit(app::HmiStylesPane::ActRename);
+    check(styles.message().find("fourni ne se renomme pas") != std::string::npos, "Renommer un style fourni : refus\xC3\xA9, dit pourquoi");
+
+    // ---- 3. Dupliquer a partir de : une copie du projet, modifiable (une commande)
+    const std::size_t undoBefore = b.stack.done().size();
+    styles.tools().triggered->emit(app::HmiStylesPane::ActDuplicate);
+    check(p.styles.size() == 1 && styles.selectedStyle() == p.styles[0].id && !styles.locked() && styles.lockedBanner().empty()
+              && p.styles[0].name == "ISA-101 (copie)" && !p.styles[0].builtin && p.styles[0].targets == st::builtin("ISA-101")->targets
+              && b.stack.done().size() == undoBefore + 1,
+          "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 sur ISA-101 : \xC2\xAB ISA-101 (copie) \xC2\xBB, ses types et valeurs, choisie, modifiable (une commande)");
+    const Id mine = p.styles.empty() ? kNoId : p.styles[0].id;
+    check(styles.tools().isEnabled(app::HmiStylesPane::ActRemove) && styles.addTypeButton().enabled(), "la copie : Retirer et + Ajouter un type actifs");
+    check(!styles.renameStyle(mine, "Contraste \xC3\xA9lev\xC3\xA9", &why) && why.find("fourni") != std::string::npos,
+          "renommer la copie du nom d'un style fourni : refus\xC3\xA9 (" + why + ")");
+    check(styles.renameStyle(mine, "Mon ISA-101") && p.styles[0].name == "Mon ISA-101", "renomm\xC3\xA9" "e Mon ISA-101");
+    check(st::builtin("ISA-101")->name == "ISA-101" && styles.builtinTable().model()->rowCount() == 4, "le style fourni reste ISA-101, verrouill\xC3\xA9");
+    const Id clair = styles.addStyle("Clair");
+    check(clair != kNoId && p.style(clair) && p.style(clair)->name == "Clair 2" && p.style(clair)->targets.empty(),
+          "Nouveau style \xC2\xAB Clair \xC2\xBB : le nom d'un fourni est pris - Clair 2, vide");
+    (void)b.stack.undo();
+    check(p.styles.size() == 1, "Ctrl+Z : Clair 2 s'en va");
+
+    // ---- 4. les objets qui le citent ; la recherche
+    for (const Id id : {pompe1, pompe2, moteur}) (void)st::apply(p, obj(id), *p.styleByName("Mon ISA-101"));
+    obj(pompe2).set("colorOn", "#00FF00");      // la seconde pompe change sa couleur elle-meme
+    styles.refresh();
+    styles.selectStyle(mine);
+    const auto pm = styles.table().model();
+    bool counted = false;
+    for (std::size_t r = 0; pm && r < pm->rowCount(); ++r)
+        counted = counted || (pm->cellText(r, 0) == "Mon ISA-101" && pm->cellText(r, 1) == "3" && pm->cellStyle(r, 2).customIcon == static_cast<int>(mine));
+    check(counted && fm && styles.builtinTable().model()->cellText(0, 1) == "0", "la liste : 3 objets citent Mon ISA-101 (sa pastille), aucun ISA-101");
+    check(obj(pompe1).text("colorOn") == "#4D4D4D" && obj(pompe1).text("namedStyle") == "Mon ISA-101", "les pompes ont pris le style (gris ISA-101)");
+    styles.search().setText("#D32F2F");
+    check(styles.shownStyles() == 2 && styles.builtinTable().model()->rowCount() == 1, "chercher #D32F2F (une valeur) : ISA-101 et sa copie");
+    styles.search().setText("ventilateur");
+    check(styles.shownStyles() == 5, "chercher \xC2\xAB ventilateur \xC2\xBB (un type) : les cinq styles le visent");
+    styles.search().setText("Sym_Moteur");
+    check(styles.shownStyles() == 0, "chercher Sym_Moteur : aucun style ne le vise encore");
+    styles.search().setText("");
+    check(styles.shownStyles() == 5 && styles.selectedStyle() == mine, "la recherche effac\xC3\xA9" "e : les cinq, Mon ISA-101 toujours choisi");
+
+    // ---- 5. une valeur changee : UNE commande, les objets suivent (sauf celui qui l'avait changee)
+    styles.selectType("Pump");
+    check(styles.selectedType() == "Pump" && styles.previewType() == "Pump", "Pompe choisie : l'aper\xC3\xA7u la suit");
+    const std::size_t before5 = b.stack.done().size();
+    check(commitIn(styles.properties(), colorOnName, "#112233") && b.stack.done().size() == before5 + 1, colorOnName + " = #112233 dans la fiche : une commande");
+    const auto broken2 = st::brokenKeys(obj(pompe2));
+    check(obj(pompe1).text("colorOn") == "#112233" && obj(pompe2).text("colorOn") == "#00FF00"
+              && std::find(broken2.begin(), broken2.end(), "colorOn") != broken2.end(),
+          "P1 suit ; P2 garde son vert (chang\xC3\xA9 par elle-m\xC3\xAAme : la cl\xC3\xA9 est bris\xC3\xA9" "e)");
+    check(styles.message().find("1 objet(s) suivent") != std::string::npos && styles.message().find("bris\xC3\xA9" "e") != std::string::npos,
+          "le volet dit : 1 objet suit, 1 garde la sienne (" + styles.message() + ")");
+    check(styles.selectedProperty() == "colorOn", "la propri\xC3\xA9t\xC3\xA9 chang\xC3\xA9" "e est la propri\xC3\xA9t\xC3\xA9 choisie");
+    (void)b.stack.undo();
+    const auto* t = st::target(*p.styleByName("Mon ISA-101"), "Pump");
+    check(obj(pompe1).text("colorOn") == "#4D4D4D" && t && t->props[0].value == "#4D4D4D", "Ctrl+Z : le style et P1 reviennent ensemble");
+    (void)b.stack.redo();
+    check(obj(pompe1).text("colorOn") == "#112233", "Ctrl+Y : de nouveau #112233");
+    check(!styles.setTypeValue(mine, "Pump", "colorOn", "bleu", &why) && why.find("couleur") != std::string::npos, "une couleur illisible : refus\xC3\xA9" "e (" + why + ")");
+    check(!styles.setTypeValue(mine, "Pump", "strokeWidth", "large", &why) && !why.empty() && !st::target(*p.style(mine), "Pump")->props.empty()
+              && std::none_of(st::target(*p.style(mine), "Pump")->props.begin(), st::target(*p.style(mine), "Pump")->props.end(),
+                              [](const Prop& x) { return x.key == "strokeWidth"; }),
+          "un nombre illisible : refus\xC3\xA9, rien d'ajout\xC3\xA9");
+    check(!styles.setTypeValue(mine, "Pump", "labelPosition", "gauche", &why) && why.find("dessous") != std::string::npos,
+          "une liste : un de ses choix seulement (" + why + ")");
+
+    // ---- 6. + Ajouter une propriete... (n'importe laquelle du type), - Retirer la propriete
+    const auto pchoices = styles.propertyChoices();
+    const auto hasChoice = [](const std::vector<app::HmiStyleChooser::Entry>& es, std::string_view v) {
+        return std::any_of(es.begin(), es.end(), [&](const app::HmiStyleChooser::Entry& e) { return e.value == v; });
+    };
+    check(hasChoice(pchoices, "labelPosition") && hasChoice(pchoices, "fontSize") && !hasChoice(pchoices, "colorOn") && !hasChoice(pchoices, "namedStyle"),
+          "Pompe : les propri\xC3\xA9t\xC3\xA9s qu'elle n'impose pas encore (Place du libell\xC3\xA9, taille...), pas celles qu'elle a");
+    styles.openPropertyChooser();
+    check(styles.chooser().isOpen() && styles.chooser().title().find("PROPRI") != std::string::npos
+              && styles.chooser().highlighted() == styles.chooser().shownValues().front(),
+          "+ Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6 : le choix s'ouvre, sa premi\xC3\xA8re ligne en surbrillance");
+    styles.chooser().setSearch("libell");
+    const auto found = styles.chooser().shownValues();
+    check(std::find(found.begin(), found.end(), "labelPosition") != found.end() && found.size() < pchoices.size(),
+          "chercher \xC2\xAB libell \xC2\xBB : la Place du libell\xC3\xA9 (et moins de lignes)");
+    const std::size_t before6 = b.stack.done().size();
+    check(styles.chooser().choose("labelPosition") && !styles.chooser().isOpen() && b.stack.done().size() == before6 + 1
+              && styles.selectedProperty() == "labelPosition",
+          "choisie : ajout\xC3\xA9" "e (une commande), le choix se ferme, elle est la propri\xC3\xA9t\xC3\xA9 choisie");
+    {
+        const ui::PropertyGrid::Property* lp = nullptr;
+        for (const auto& c : styles.properties().categories())
+            for (const auto& pr : c.properties)
+                if (pr.key == "labelPosition") lp = &pr;
+        check(lp && lp->type == PGT::Enum && lp->value == "dessous" && lp->enumValues.size() == 3 && lp->commit,
+              "dans la fiche : une liste (dessous, dessus, aucun), la valeur d'un objet neuf");
+    }
+    check(styles.setTypeValue(mine, "Pump", "labelPosition", "dessus") && obj(pompe1).text("labelPosition") == "dessus"
+              && obj(pompe2).text("labelPosition") == "dessus",
+          "Place du libell\xC3\xA9 = dessus : les deux pompes suivent");
+    check(styles.addProperty("animate") && styles.setTypeValue(mine, "Pump", "animate", "non")
+              && st::target(*p.style(mine), "Pump")->props.back().value == "FALSE" && obj(pompe1).text("animate") == "FALSE",
+          "une bascule : \xC2\xAB non \xC2\xBB devient FALSE, impos\xC3\xA9" "e");
+    // Le clic sur une ligne de la fiche la choisit ; - Retirer la propriete la retire.
+    gfx::Rect row{};
+    const std::string lpName = app::HmiStylesPane::propertyName("Pump", "labelPosition");
+    paint();
+    (void)styles.properties().revealValue(lpName);
+    paint();
+    check(styles.properties().valueRect(lpName, row), "la ligne de la Place du libell\xC3\xA9, \xC3\xA0 l'\xC3\xA9" "cran");
+    const gfx::Point onName{styles.properties().bounds().x + 12.f, row.y + row.h / 2.f};
+    styles.properties().dispatch(ui::MouseDown{onName, ui::MouseButton::Left, 1, {}});
+    styles.properties().dispatch(ui::MouseUp{onName, ui::MouseButton::Left, {}});
+    check(styles.selectedProperty() == "labelPosition" && styles.removePropertyButton().enabled(), "un clic sur sa ligne : choisie, - Retirer la propri\xC3\xA9t\xC3\xA9 actif");
+    styles.selectProperty("animate");
+    styles.removePropertyButton().clicked->emit();
+    check(std::none_of(st::target(*p.style(mine), "Pump")->props.begin(), st::target(*p.style(mine), "Pump")->props.end(),
+                       [](const Prop& x) { return x.key == "animate"; })
+              && obj(pompe1).text("animate") == "FALSE" && styles.selectedProperty().empty(),
+          "- Retirer la propri\xC3\xA9t\xC3\xA9 : le style ne l'impose plus, les pompes gardent leur valeur");
+
+    // ---- 7. + Ajouter un type... : BIBLIOTHEQUE puis MES SYMBOLES ; un type deja la n'est pas repropose
+    const auto tchoices = styles.typeChoices();
+    std::size_t lastLib = 0, firstSym = tchoices.size();
+    for (std::size_t i = 0; i < tchoices.size(); ++i) {
+        if (st::isSymbolType(tchoices[i].value)) firstSym = std::min(firstSym, i);
+        else lastLib = i;
+    }
+    check(hasChoice(tchoices, "Gauge") && hasChoice(tchoices, "symbole:Sym_Moteur") && !hasChoice(tchoices, "Pump") && !hasChoice(tchoices, "Button")
+              && lastLib < firstSym,
+          "les types \xC3\xA0 ajouter : la biblioth\xC3\xA8que (Jauge...), puis mes symboles (Sym_Moteur) ; pas Pompe ni Bouton (d\xC3\xA9j\xC3\xA0 l\xC3\xA0)");
+    styles.addTypeButton().clicked->emit();
+    const auto lines = styles.chooser().shownLines();
+    check(styles.chooser().isOpen() && styles.chooser().title() == "AJOUTER UN TYPE" && !lines.empty() && lines.front() == "# BIBLIOTH\xC3\x88QUE"
+              && std::find(lines.begin(), lines.end(), "# MES SYMBOLES") != lines.end()
+              && std::find(lines.begin(), lines.end(), "\xE2\x97\x86 Sym_Moteur") != lines.end(),
+          "+ Ajouter un type\xE2\x80\xA6 : BIBLIOTH\xC3\x88QUE, puis MES SYMBOLES (\xE2\x97\x86 Sym_Moteur)");
+    styles.chooser().setSearch("sym_mot");
+    check(styles.chooser().shownValues() == std::vector<std::string>{"symbole:Sym_Moteur"} && styles.chooser().highlighted() == "symbole:Sym_Moteur",
+          "chercher \xC2\xAB sym_mot \xC2\xBB : le symbole seul, en surbrillance");
+    styles.chooser().dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+    check(styles.selectedType() == "symbole:Sym_Moteur" && st::target(*p.style(mine), "symbole:Sym_Moteur")
+              && styles.chooser().isOpen() && styles.chooser().title().find("Sym_Moteur") != std::string::npos,
+          "Entr\xC3\xA9" "e : le symbole ajout\xC3\xA9 et choisi ; le choix des propri\xC3\xA9t\xC3\xA9s s'ouvre aussit\xC3\xB4t");
+    const auto symLines = styles.chooser().shownLines();
+    check(std::find(symLines.begin(), symLines.end(), "# PARAM\xC3\x88TRES DU SYMBOLE") != symLines.end()
+              && hasChoice(styles.propertyChoices(), "param:Couleur"),
+          "ses propri\xC3\xA9t\xC3\xA9s : celles d'une instance, puis les param\xC3\xA8tres du symbole (Couleur)");
+    check(styles.chooser().choose("param:Couleur") && st::target(*p.style(mine), "symbole:Sym_Moteur")->props.size() == 1
+              && st::target(*p.style(mine), "symbole:Sym_Moteur")->props[0].value == "#123456",
+          "param:Couleur impos\xC3\xA9 (sa valeur par d\xC3\xA9" "faut)");
+    check(styles.setTypeValue(mine, "symbole:Sym_Moteur", "param:Couleur", "#ABCDEF")
+              && st::valueOf(p, obj(moteur), "param:Couleur").value_or("") == "#ABCDEF",
+          "Couleur = #ABCDEF : l'instance M1 (qui cite le style) la prend dans ses arguments");
+    styles.search().setText("Sym_Moteur");
+    check(styles.shownStyles() == 1, "chercher Sym_Moteur : Mon ISA-101 le vise maintenant");
+    styles.search().setText("");
+    // La colonne des types : le symbole (utilisateur), le nombre de proprietes.
+    {
+        const auto tm = styles.typesTable().model();
+        bool symRow = false;
+        for (std::size_t r = 0; tm && r < tm->rowCount(); ++r)
+            symRow = symRow || (tm->cellText(r, 0).find("Sym_Moteur") != std::string::npos && tm->cellText(r, 0).find("(utilisateur)") != std::string::npos
+                                && tm->cellText(r, 1) == "1 propri\xC3\xA9t\xC3\xA9");
+        check(symRow && styles.shownTypes().back() == "symbole:Sym_Moteur", "la colonne : \xE2\x97\x86 Symbole Sym_Moteur (utilisateur), 1 propri\xC3\xA9t\xC3\xA9");
+    }
+    // Echap : le choix se ferme sans rien ajouter ; un clic ailleurs aussi.
+    styles.openTypeChooser();
+    const std::size_t nTargets = p.style(mine)->targets.size();
+    styles.chooser().dispatch(ui::KeyDown{ui::Key::Escape, {}, false});
+    check(!styles.chooser().isOpen() && p.style(mine)->targets.size() == nTargets, "Echap : le choix se ferme, rien d'ajout\xC3\xA9");
+    styles.openTypeChooser();
+    styles.dispatch(ui::MouseDown{{5.f, 700.f}, ui::MouseButton::Left, 1, {}});
+    check(!styles.chooser().isOpen() && p.style(mine)->targets.size() == nTargets, "un clic ailleurs : ferm\xC3\xA9, rien d'ajout\xC3\xA9");
+    // - Retirer le type choisi
+    styles.selectType("Tank");
+    const std::size_t before7 = b.stack.done().size();
+    styles.removeTypeButton().clicked->emit();
+    const auto afterTypes = styles.shownTypes();
+    check(std::find(afterTypes.begin(), afterTypes.end(), "Tank") == afterTypes.end() && !st::target(*p.style(mine), "Tank")
+              && b.stack.done().size() == before7 + 1 && styles.selectedType() == afterTypes.front(),
+          "- Retirer le type choisi (Cuve) : il quitte le style (une commande), le premier type est choisi");
+    (void)b.stack.undo();
+    check(st::target(*p.style(mine), "Tank") != nullptr, "Ctrl+Z : la Cuve revient");
+
+    // ---- 8. l'apercu : la liste Type :, les etats, un symbole dessine
+    const auto ptypes = styles.previewTypeChoices();
+    check(!ptypes.empty() && ptypes.front() == "Button" && std::find(ptypes.begin(), ptypes.end(), "Gauge") != ptypes.end()
+              && std::find(ptypes.begin(), ptypes.end(), "symbole:Sym_Moteur") < std::find(ptypes.begin(), ptypes.end(), "Gauge"),
+          "Type : ceux du style en t\xC3\xAAte (Bouton... Sym_Moteur), puis toute la biblioth\xC3\xA8que (Jauge)");
+    check(!styles.previewTypes().items().empty() && styles.previewTypes().items().front().label.rfind("\xE2\x9C\x93 ", 0) == 0,
+          "la liste : une coche devant les types du style");
+    const auto pumps = app::HmiStylesPane::previewItems(p, *p.style(mine), "Pump");
+    check(pumps.size() == 3 && pumps[0].caption == "en marche" && pumps[0].object.text("value") == "TRUE" && pumps[1].object.text("value") == "FALSE"
+              && pumps[2].object.text("fault") == "TRUE" && pumps[2].caption == "en d\xC3\xA9" "faut" && pumps[0].object.text("colorOn") == "#112233"
+              && pumps[1].object.box().x > pumps[0].object.box().x,
+          "une pompe : trois exemplaires c\xC3\xB4te \xC3\xA0 c\xC3\xB4te - en marche, \xC3\xA0 l'arr\xC3\xAAt, en d\xC3\xA9" "faut");
+    check(app::HmiStylesPane::previewItems(p, *p.style(mine), "Gauge").size() == 1 && app::HmiStylesPane::previewItems(p, *p.style(mine), "Inconnu").empty(),
+          "une jauge : un seul exemplaire ; un type inconnu : rien");
+    styles.setPreviewType("Pump");
+    rec.clear();
+    styles.preview().render(ctx);
+    check(rec.filled(gfx::Color::rgb(0x112233)) && rec.filled(gfx::Color::rgb(0xF5F5F5)) && rec.filled(gfx::Color::rgb(0xD32F2F))
+              && rec.wrote("en marche") && rec.wrote("en d\xC3\xA9" "faut"),
+          "dessin\xC3\xA9" "es par le painter : la couleur en marche, \xC3\xA0 l'arr\xC3\xAAt, en d\xC3\xA9" "faut, et leurs l\xC3\xA9gendes");
+    styles.setPreviewType("symbole:Sym_Moteur");
+    rec.clear();
+    styles.preview().render(ctx);
+    check(styles.previewType() == "symbole:Sym_Moteur" && rec.filled(gfx::Color::rgb(0x123456)), "un symbole utilisateur : dessin\xC3\xA9 (le corps bleu nuit de Sym_Moteur)");
+    styles.selectType("Valve");
+    check(styles.previewType() == "Valve", "choisir Vanne dans la colonne des types : l'aper\xC3\xA7u la montre");
+    styles.selectBuiltin("Clair");
+    styles.setPreviewType("Button");
+    rec.clear();
+    styles.preview().render(ctx);
+    check(styles.locked() && rec.filled(gfx::Color::rgb(0x1F5F99)), "un style fourni s'aper\xC3\xA7oit aussi (le bouton bleu de Clair)");
+
+    // ---- 9. le clavier des listes ; Retirer le style
+    styles.selectBuiltin("Clair");
+    styles.builtinTable().takeFocus();
+    styles.builtinTable().dispatch(ui::KeyDown{ui::Key::D, ui::KeyMods{true, false, false, false}, false});
+    check(p.styleByName("Clair (copie)") != nullptr && styles.currentStyle() && styles.currentStyle()->name == "Clair (copie)",
+          "Ctrl+D sur Clair (fourni) : \xC2\xAB Clair (copie) \xC2\xBB, choisie");
+    styles.selectStyle(mine);
+    const std::size_t users = st::users(p, "Mon ISA-101");
+    check(users == 3 && styles.removeStyle(mine) && st::users(p, "Mon ISA-101") == 0 && obj(pompe1).text("colorOn") == "#112233"
+              && obj(pompe1).text("namedStyle").empty(),
+          "Retirer Mon ISA-101 : les objets gardent leurs valeurs et ne le citent plus");
+    (void)b.stack.undo();
+    check(st::users(p, "Mon ISA-101") == 3, "Ctrl+Z : il revient, cit\xC3\xA9 par ses trois objets");
 }
 
 // 1.12.28 : « j'aimerais combiner le didacticiel de l'ihm avec l'aide F1 ». Le catalogue des parcours
@@ -44548,6 +44924,14 @@ void deballagesTypes1161() {
 }
 
 int main(int argc, char** argv) {
+    // 1.23.0 : HMI_TEST_STY=1 - les essais de l'onglet Styles, seuls.
+    if (const char* only = std::getenv("HMI_TEST_STY"); only && *only == '1') {
+        lot12_conception();
+        apercuStyles11227();
+        stylesParType1230();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.20.2 : HMI_TEST_INC=1 - la case Incidents des alarmes et des groupes, seule.
     if (const char* only = std::getenv("HMI_TEST_INC"); only && *only == '1') {
         incidentsAlarmes1202();
@@ -45058,6 +45442,7 @@ int main(int argc, char** argv) {
     v1219_inspecteur();                     // 1.12.19 : nombres, durees, formules de l'inspecteur
     touchesListes11227();                   // 1.12.27 : Suppr et Ctrl+D dans les listes
     apercuStyles11227();                    // 1.12.27 : l'apercu des styles
+    stylesParType1230();                    // 1.23.0 : l'onglet Styles par type d'objet
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

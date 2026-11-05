@@ -4,11 +4,15 @@
 #include "HmiPainter.hpp"
 #include "HmiSimMarks.hpp"                 // 1.12.27 : fitText (l'apercu des styles)
 #include "../../hmi/HmiExpr.hpp"
+#include "../../hmi/HmiStyles.hpp"         // 1.23.0 : les styles par type d'objet
 #include "../../hmi/HmiSymbols.hpp"
+#include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Containers.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <map>
+#include <set>
 
 namespace app {
 
@@ -16,6 +20,7 @@ using hmi::Id;
 using hmi::kNoId;
 
 using PG = ui::PropertyGrid;
+namespace styles = hmi::styles;
 
 namespace {
 
@@ -40,6 +45,30 @@ private:
     std::vector<ui::CellStyle> styles_;
 };
 
+// 1.23.0 : une table dont chaque case a son style et chaque ligne son infobulle (les styles fournis, les types).
+class CellRows final : public ui::ITableModel {
+public:
+    CellRows(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows,
+             std::vector<std::vector<ui::CellStyle>> styles, std::vector<std::string> tips)
+        : headers_(std::move(headers)), rows_(std::move(rows)), styles_(std::move(styles)), tips_(std::move(tips)) {}
+    [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return headers_.size(); }
+    [[nodiscard]] std::string headerText(std::size_t c) const override { return c < headers_.size() ? headers_[c] : std::string{}; }
+    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
+        return r < rows_.size() && c < rows_[r].size() ? rows_[r][c] : std::string{};
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
+        return r < styles_.size() && c < styles_[r].size() ? styles_[r][c] : ui::CellStyle{};
+    }
+    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override { return r < tips_.size() ? tips_[r] : std::string{}; }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return cellText(a, c) < cellText(b, c); }
+private:
+    std::vector<std::string> headers_;
+    std::vector<std::vector<std::string>> rows_;
+    std::vector<std::vector<ui::CellStyle>> styles_;
+    std::vector<std::string> tips_;
+};
+
 PG::Property prop(std::string name, std::string value, PG::ValueType type, std::function<bool(std::string_view)> commit,
                   std::string help = {}, std::vector<std::string> choices = {}) {
     PG::Property p;
@@ -51,23 +80,6 @@ PG::Property prop(std::string name, std::string value, PG::ValueType type, std::
     p.enumValues = std::move(choices);
     return p;
 }
-
-// Les proprietes d'un style : leur libelle, leur genre de case.
-struct StyleKey { const char* key; const char* label; PG::ValueType type; };
-const StyleKey kStyleKeys[] = {
-    {"fill", "Remplissage", PG::ValueType::Color},
-    {"stroke", "Contour", PG::ValueType::Color},
-    {"strokeWidth", "\xC3\x89paisseur du contour", PG::ValueType::Integer},
-    {"radius", "Rayon des coins", PG::ValueType::Integer},
-    {"opacity", "Opacit\xC3\xA9 (%)", PG::ValueType::Integer},
-    {"textColor", "Couleur du texte", PG::ValueType::Color},
-    {"font", "Police", PG::ValueType::Enum},
-    {"fontSize", "Taille du texte", PG::ValueType::Integer},
-    {"align", "Alignement", PG::ValueType::Enum},
-    {"colorOn", "Couleur allum\xC3\xA9", PG::ValueType::Color},
-    {"colorOff", "Couleur \xC3\xA9teint", PG::ValueType::Color},
-    {"background", "Fond", PG::ValueType::Color},
-};
 
 hmi::Style* styleById(hmi::Project& p, Id id) {
     for (auto& s : p.styles) if (s.id == id) return &s;
@@ -81,15 +93,18 @@ std::string trimmed(std::string_view s) {
     return std::string(s.substr(a, b - a));
 }
 
-enum : int { SNew = 1, SDup, SDel, SFolder };
-
-// 1.12.27 : l'apercu d'un style - cinq objets poses sur 420 x 60.
-constexpr double kPreviewW = 420, kPreviewH = 60;
-
-std::string styleValue(const hmi::Style& s, std::string_view key) {
-    for (const auto& prop : s.props) if (prop.key == key) return prop.value;
-    return {};
+std::string upperAscii(std::string_view s) {
+    std::string out(s);
+    for (auto& c : out) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return out;
 }
+
+// Les libelles de la partie << Style >> de la fiche : une propriete imposee ne les prend pas (la ligne choisie se
+// retrouve par son nom).
+constexpr const char* kName = "Nom";
+constexpr const char* kDescription = "Description";
+constexpr const char* kUsers = "Objets qui le citent";
+constexpr const char* kProblems = "\xC3\x80 v\xC3\xA9rifier";
 
 // Le fond d'une vue du projet (la premiere qui n'est pas un symbole) : la ou le style servira.
 gfx::Color viewBackground(const hmi::Project& p) {
@@ -102,124 +117,774 @@ gfx::Color viewBackground(const hmi::Project& p) {
     return bg;
 }
 
-class StylePreview final : public ui::Widget {
-public:
-    StylePreview(std::string id, hmi::DocumentPtr doc, std::function<Id()> selected)
-        : ui::Widget(std::move(id)), doc_(std::move(doc)), selected_(std::move(selected)) {}
-protected:
-    void onPaint(const ui::PaintContext& ctx) override {
-        const auto b = bounds();
-        const auto& c = ctx.theme.color;
-        const auto font = ctx.theme.font.smallUi;
-        ctx.r.fillRect(b, c.headerBg);
-        const hmi::Style* s = doc_->project.style(selected_());
-        const std::string head = s ? "Aper\xC3\xA7u : " + s->name : std::string("Aper\xC3\xA7u : choisis un style dans la liste");
-        ctx.r.drawText({b.x + 8, b.y + 5}, simmark::fitText(ctx.r, head, font, b.w - 16), font, c.textMuted);
-        const gfx::Rect well{b.x + 8, b.y + 24, std::max(0.f, b.w - 16), std::max(0.f, b.h - 30)};
-        ctx.r.fillRect(well, viewBackground(doc_->project));
-        ctx.r.strokeRect(well, c.border, 1);
-        if (!s || well.w < 20 || well.h < 20) return;
-        hmi::View v;
-        v.width = static_cast<int>(kPreviewW);
-        v.height = static_cast<int>(kPreviewH);
-        hmi::Layer layer;
-        layer.id = 1;
-        v.layers.push_back(layer);
-        const float z = std::min(1.25f, static_cast<float>(std::min((well.w - 12) / kPreviewW, (well.h - 8) / kPreviewH)));
-        const HmiViewport vp{static_cast<float>(well.x + (well.w - kPreviewW * z) / 2), static_cast<float>(well.y + (well.h - kPreviewH * z) / 2), z};
-        const HmiPropertySource src;
-        ctx.r.pushClip(well);
-        for (const auto& o : HmiStylesPane::previewObjects(*s)) paintHmiObject(ctx.r, v, o, vp, src, ctx.theme, {});
-        ctx.r.popClip();
-    }
-private:
-    hmi::DocumentPtr    doc_;
-    std::function<Id()> selected_;
-};
+// Une encre lisible sur un fond (les legendes de l'apercu).
+gfx::Color inkOn(gfx::Color bg) {
+    const float lum = 0.299f * static_cast<float>(bg.r) + 0.587f * static_cast<float>(bg.g) + 0.114f * static_cast<float>(bg.b);
+    return lum > 140.f ? gfx::Color::rgb(0x202326) : gfx::Color::rgb(0xE6E9EE);
+}
 
-} // namespace
-
-std::vector<hmi::Object> HmiStylesPane::previewObjects(const hmi::Style& s) {
-    struct Spec { hmi::Kind kind; double x, y, w, h; const char* value; };
-    static const Spec kSpecs[] = {
-        {hmi::Kind::Button, 0, 8, 132, 44, nullptr},
-        {hmi::Kind::Text, 142, 14, 112, 32, nullptr},
-        {hmi::Kind::Rectangle, 264, 8, 70, 44, nullptr},
-        {hmi::Kind::Indicator, 346, 14, 32, 32, "TRUE"},    // allume
-        {hmi::Kind::Indicator, 388, 14, 32, 32, "FALSE"},   // eteint
+// 1.23.0 : LA PASTILLE D'UN STYLE - les couleurs qui le disent (remplissage, allume, defaut, eteint, contour, texte...),
+// la premiere valeur de chaque cle dans l'ordre du style ; trois au plus, sans doublon.
+std::vector<gfx::Color> swatchOf(const hmi::Style& s) {
+    static const char* const kKeys[] = {"fill", "background", "colorOn", "colorFault", "colorOff", "stroke", "textColor",
+                                        "fillColor", "fluidColor"};
+    std::vector<gfx::Color> out;
+    const auto first = [&](const char* key, gfx::Color& c) {
+        for (const auto& pr : s.props)
+            if (pr.key == key && tryParseColor(pr.value, c)) return true;
+        for (const auto& t : s.targets)
+            for (const auto& pr : t.props)
+                if (pr.key == key && tryParseColor(pr.value, c)) return true;
+        return false;
     };
-    std::vector<hmi::Object> out;
-    Id id = 1;
-    for (const auto& sp : kSpecs) {
-        ++id;
-        auto o = hmi::makeObject(sp.kind, id, "apercu" + std::to_string(id), sp.x, sp.y, 1);
-        o.setNumber("w", sp.w);
-        o.setNumber("h", sp.h);
-        if (sp.kind == hmi::Kind::Text) o.set("text", "Texte 12,5");
-        hmi::design::applyStyle(o, s);
-        if (sp.value) o.set("value", sp.value);
-        out.push_back(std::move(o));
+    for (const char* k : kKeys) {
+        if (out.size() >= 3) break;
+        gfx::Color c{};
+        if (!first(k, c) || c.a == 0) continue;
+        if (std::none_of(out.begin(), out.end(), [&](gfx::Color o) { return o.r == c.r && o.g == c.g && o.b == c.b; })) out.push_back(c);
     }
     return out;
 }
 
+void paintSwatch(gfx::IRenderer& r, const std::vector<gfx::Color>& colors, const gfx::Rect& box, gfx::Color ink) {
+    const float side = box.h;
+    if (colors.empty()) {
+        r.strokeRect({box.x, box.y, side, side}, ink.withAlpha(90), 1.f);
+        return;
+    }
+    for (std::size_t i = 0; i < colors.size(); ++i) {
+        const gfx::Rect sq{box.x + static_cast<float>(i) * (side + 3.f), box.y, side, side};
+        r.fillRoundedRect(sq, colors[i], 3.f);
+        r.strokeRect(sq, ink.withAlpha(110), 1.f);
+    }
+}
+
+// Le genre d'un type (un symbole : l'instance de symbole) ; nul : inconnu, ou tous les objets.
+std::optional<hmi::Kind> kindOfType(std::string_view type) {
+    if (styles::isSymbolType(type)) return hmi::Kind::SymbolInstance;
+    return hmi::kindFromKey(type);
+}
+
+// Le parametre d'un symbole vise par "param:<Nom>" (nul : pas un parametre, ou inconnu).
+const hmi::ViewParam* paramOf(const hmi::Project& p, std::string_view type, std::string_view key) {
+    if (key.substr(0, styles::kParamPrefix.size()) != styles::kParamPrefix || !styles::isSymbolType(type)) return nullptr;
+    const hmi::View* sym = p.viewByName(styles::symbolName(type));
+    if (!sym) return nullptr;
+    const std::string want = upperAscii(key.substr(styles::kParamPrefix.size()));
+    for (const auto& prm : sym->params)
+        if (upperAscii(prm.name) == want) return &prm;
+    return nullptr;
+}
+
+// 1.23.0 : LA CASE D'UNE PROPRIETE IMPOSEE, celle de l'inspecteur (hmiKeyInfo) : couleur, nombre, bascule, liste, texte ;
+// un parametre de symbole : d'apres son type (BOOL : une bascule ; un nombre ; sinon du texte).
+struct KeyKind {
+    PG::ValueType            type{PG::ValueType::Text};
+    std::vector<std::string> choices;
+    std::string              help;
+};
+KeyKind keyKindOf(const hmi::Project& p, std::string_view type, std::string_view key) {
+    KeyKind k;
+    if (const hmi::ViewParam* prm = paramOf(p, type, key)) {
+        const std::string t = upperAscii(prm->type);
+        static const std::set<std::string> numbers = {"SINT", "INT", "DINT", "LINT", "USINT", "UINT", "UDINT", "ULINT",
+                                                      "BYTE", "WORD", "DWORD", "LWORD", "REAL", "LREAL"};
+        if (t == "BOOL") k.type = PG::ValueType::Boolean;
+        else if (numbers.count(t)) k.type = PG::ValueType::Real;
+        k.help = prm->description;
+        return k;
+    }
+    if (const HmiKeyInfo* info = hmiKeyInfo(key)) {
+        k.type = info->type;
+        if (k.type == PG::ValueType::ReadOnly || k.type == PG::ValueType::Address) k.type = PG::ValueType::Text;
+        k.choices = info->choices;
+        k.help = info->help ? info->help : "";
+    }
+    return k;
+}
+
+// Une valeur tapee pour une propriete imposee, mise au propre (une bascule : TRUE / FALSE) ; faux : refusee (`why`).
+bool cleanValue(const KeyKind& k, std::string_view key, std::string& value, std::string& why) {
+    switch (k.type) {
+        case PG::ValueType::Integer:
+        case PG::ValueType::Real: {
+            double n = 0;
+            if (value.empty() || !hmi::parseNumber(value, n)) { why = "un nombre"; return false; }
+            const bool positive = key == "strokeWidth" || key == "radius" || key == "opacity" || key == "fontSize";
+            if (positive && n < 0) { why = "un nombre positif"; return false; }
+            return true;
+        }
+        case PG::ValueType::Boolean: {
+            const std::string u = upperAscii(value);
+            if (u == "TRUE" || u == "1" || u == "VRAI" || u == "OUI") value = "TRUE";
+            else if (u == "FALSE" || u == "0" || u == "FAUX" || u == "NON") value = "FALSE";
+            else { why = "TRUE ou FALSE"; return false; }
+            return true;
+        }
+        case PG::ValueType::Color: {
+            gfx::Color c{};
+            if (!value.empty() && !tryParseColor(value, c)) { why = "une couleur #RRGGBB (vide : transparent)"; return false; }
+            return true;
+        }
+        case PG::ValueType::Enum: {
+            if (k.choices.empty() || std::find(k.choices.begin(), k.choices.end(), value) != k.choices.end()) return true;
+            why = "un des choix :";
+            for (std::size_t i = 0; i < k.choices.size(); ++i) why += (i ? ", " : " ") + k.choices[i];
+            return false;
+        }
+        default:
+            return true;
+    }
+}
+
+// La valeur d'une propriete qu'on ajoute : celle d'un objet neuf ; vide, selon sa case (une couleur grise, 0, FALSE,
+// le premier choix).
+std::string startValue(const KeyKind& k, const std::string& fresh) {
+    if (!fresh.empty()) return fresh;
+    switch (k.type) {
+        case PG::ValueType::Color: return "#808080";
+        case PG::ValueType::Integer:
+        case PG::ValueType::Real: return "0";
+        case PG::ValueType::Boolean: return "FALSE";
+        case PG::ValueType::Enum: return k.choices.empty() ? std::string{} : k.choices.front();
+        default: return {};
+    }
+}
+
+// Le libelle d'un type dans les listes : un symbole porte son losange.
+std::string typeName(std::string_view type) {
+    return styles::isSymbolType(type) ? "\xE2\x97\x86 " + styles::typeLabel(type) : styles::typeLabel(type);
+}
+
+// Les proprietes que le style porte pour un type ("*" : tous les objets).
+const std::vector<hmi::Prop>* propsOf(const hmi::Style& s, std::string_view type) {
+    if (type == styles::kAnyType) return &s.props;
+    const hmi::StyleTarget* t = styles::target(s, type);
+    return t ? &t->props : nullptr;
+}
+
+// Les objets qui citent un style, et leur valeur pour une cle (avant / apres un changement : ceux qui suivent).
+std::map<Id, std::string> citedValues(const hmi::Project& p, std::string_view styleName, std::string_view key) {
+    std::map<Id, std::string> out;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects)
+            if (const std::string c = styles::citedStyle(o); !c.empty() && upperAscii(c) == upperAscii(styleName))
+                out[o.id] = styles::valueOf(p, o, key).value_or(std::string{});
+    return out;
+}
+std::set<Id> brokenOn(const hmi::Project& p, std::string_view styleName, std::string_view key) {
+    std::set<Id> out;
+    for (const auto& v : p.views)
+        for (const auto& o : v.objects)
+            if (const std::string c = styles::citedStyle(o); !c.empty() && upperAscii(c) == upperAscii(styleName)) {
+                const auto broken = styles::brokenKeys(o);
+                if (std::find(broken.begin(), broken.end(), key) != broken.end()) out.insert(o.id);
+            }
+    return out;
+}
+
+// 1.23.0 : LA LISTE DES PROPRIETES IMPOSEES - la grille de l'inspecteur, plus une ligne CHOISIE (le clic sur une ligne :
+// - Retirer la propriete la vise), soulignee d'un trait d'accent ; Suppr la retire, Inser en ajoute une.
+class StylePropertyGrid final : public ui::PropertyGrid {
+public:
+    explicit StylePropertyGrid(std::string id) : ui::PropertyGrid(std::move(id)) {}
+    std::function<void(gfx::Point)> picked;
+    std::function<std::string()>    chosenName;
+    std::function<bool()>           removeChosen;
+    std::function<bool()>           addOne;
+protected:
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && bounds().contains(d->pos) && picked)
+            picked(d->pos);
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && focused() && !editing() && k->mods.none()) {
+            if (k->key == ui::Key::Delete && removeChosen && removeChosen()) return ui::EventResult::Consumed;
+            if (k->key == ui::Key::Insert && addOne && addOne()) return ui::EventResult::Consumed;
+        }
+        return ui::PropertyGrid::onEvent(ev);
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        ui::PropertyGrid::onPaint(ctx);
+        const std::string name = chosenName ? chosenName() : std::string{};
+        gfx::Rect r{};
+        if (name.empty() || !valueRect(name, r)) return;
+        const auto b = bounds();
+        ctx.r.fillRect({b.x, r.y, b.w, r.h}, ctx.theme.color.accent.withAlpha(34));
+        ctx.r.fillRect({b.x, r.y, 3.f, r.h}, ctx.theme.color.accent);
+    }
+};
+
+// 1.12.27, 1.23.0 : L'APERCU - << APERCU  Type : [liste]  tout type de la bibliotheque ou un de tes symboles >>, puis le
+// type choisi fait par le style (en ses etats), dessine par le vrai painter sur le fond d'une vue du projet.
+class StylePreview final : public ui::Widget {
+public:
+    StylePreview(std::string id, hmi::DocumentPtr doc, const HmiStylesPane& pane)
+        : ui::Widget(std::move(id)), doc_(std::move(doc)), pane_(pane) {}
+    static constexpr float kBar = 32.f;
+    void setList(ui::DropDown* list) noexcept { list_ = list; }
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        if (list_) list_->setBounds({b.x + 116.f, b.y + 3.f, std::min(240.f, std::max(80.f, b.w - 124.f)), kBar - 6.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto b = bounds();
+        const auto& c = ctx.theme.color;
+        const auto font = ctx.theme.font.smallUi;
+        ctx.r.fillRect(b, c.panelBg);
+        ctx.r.fillRect({b.x, b.y, b.w, kBar}, c.headerBg);
+        ctx.r.fillRect({b.x, b.y, b.w, 1.f}, c.border);
+        ctx.r.drawText({b.x + 8.f, b.y + 9.f}, "APER\xC3\x87U", font, c.textMuted);
+        ctx.r.drawText({b.x + 70.f, b.y + 9.f}, "Type :", font, c.text);
+        const float hintX = b.x + 116.f + std::min(240.f, std::max(80.f, b.w - 124.f)) + 10.f;
+        if (b.right() - hintX > 60.f)
+            ctx.r.drawText({hintX, b.y + 9.f},
+                           simmark::fitText(ctx.r, "tout type de la biblioth\xC3\xA8que ou un de tes symboles", font, b.right() - hintX - 8.f),
+                           font, c.textMuted);
+        const gfx::Rect well{b.x + 8.f, b.y + kBar + 6.f, std::max(0.f, b.w - 16.f), std::max(0.f, b.h - kBar - 12.f)};
+        const gfx::Color bg = viewBackground(doc_->project);
+        const gfx::Color ink = inkOn(bg);
+        ctx.r.fillRect(well, bg);
+        ctx.r.strokeRect(well, c.border, 1.f);
+        const hmi::Style* s = pane_.currentStyle();
+        if (!s) {
+            ctx.r.drawText({well.x + 10.f, well.y + 8.f}, "Aper\xC3\xA7u : choisis un style dans la liste.", font, ink);
+            return;
+        }
+        const std::string type = pane_.previewType();
+        ctx.r.drawText({well.x + 8.f, well.y + 6.f},
+                       simmark::fitText(ctx.r, s->name + " \xC2\xB7 " + styles::typeLabel(type), font, well.w - 16.f), font, ink.withAlpha(200));
+        const auto items = HmiStylesPane::previewItems(doc_->project, *s, type);
+        if (items.empty() || well.w < 40.f || well.h < 40.f) {
+            ctx.r.drawText({well.x + 10.f, well.y + 28.f}, "Ce type ne se dessine pas ici.", font, ink);
+            return;
+        }
+        double W = 0, H = 0;
+        for (const auto& it : items) {
+            const auto box = it.object.box();
+            W = std::max(W, box.x + box.w);
+            H = std::max(H, box.y + box.h);
+        }
+        const bool captions = items.size() > 1;
+        const float top = 26.f, bottom = captions ? 24.f : 8.f;
+        const float z = std::min(1.5f, static_cast<float>(std::min((well.w - 24.f) / std::max(1.0, W), (well.h - top - bottom) / std::max(1.0, H))));
+        if (z <= 0.f) return;
+        hmi::View v;
+        v.width = static_cast<int>(W);
+        v.height = static_cast<int>(H);
+        hmi::Layer layer;
+        layer.id = 1;
+        v.layers.push_back(layer);
+        const float ox = well.x + (well.w - static_cast<float>(W) * z) / 2.f;
+        const float oy = well.y + top + (well.h - top - bottom - static_cast<float>(H) * z) / 2.f;
+        const HmiViewport vp{ox, oy, z};
+        const HmiPropertySource src;
+        HmiPaintOptions opt;
+        opt.editor = false;            // l'objet tel qu'en marche, fige (pas de cadre d'edition)
+        opt.project = &doc_->project;  // une instance de symbole se resout dans le projet
+        ctx.r.pushClip(well);
+        for (const auto& it : items) {
+            paintHmiObject(ctx.r, v, it.object, vp, src, ctx.theme, opt);
+            if (!captions) continue;
+            const auto box = it.object.box();
+            const float cx = ox + static_cast<float>(box.x + box.w / 2) * z;
+            const float w = ctx.r.measure(it.caption, font).width;
+            ctx.r.drawText({cx - w / 2.f, oy + static_cast<float>(box.y + box.h) * z + 6.f}, it.caption, font, ink);
+        }
+        ctx.r.popClip();
+    }
+private:
+    hmi::DocumentPtr     doc_;
+    const HmiStylesPane& pane_;
+    ui::DropDown*        list_{nullptr};
+};
+
+// Le choix avec recherche : ses mesures.
+constexpr float kChooserTitle = 26.f, kChooserField = 30.f, kChooserRow = 24.f;
+constexpr int kChooserRows = 12;
+
+} // namespace
+
+// ===================================================== 1.23.0 : le choix avec recherche ===
+HmiStyleChooser::HmiStyleChooser(std::string id) : ui::Widget(std::move(id)) {
+    auto f = std::make_unique<ui::InputText>(this->id() + ".search");
+    f->setPlaceholder("Rechercher\xE2\x80\xA6");
+    field_ = &static_cast<ui::InputText&>(addChild(std::move(f)));
+    setVisibility(ui::Visibility::Hidden);
+    links_ += field_->textChanged->connect([this](const std::string&) {
+        filter();
+        invalidate();
+    });
+    links_ += field_->editingDone->connect([this](const std::string&) { (void)chooseHighlighted(); });
+    // Echap (le champ rend la main), ou la main donnee ailleurs : la liste se ferme.
+    links_ += field_->focusLost->connect([this] {
+        if (open_) close();
+    });
+}
+
+void HmiStyleChooser::open(std::string title, std::vector<Entry> entries, gfx::Rect anchor, gfx::Rect area) {
+    title_ = std::move(title);
+    entries_ = std::move(entries);
+    area_ = area;
+    open_ = true;
+    setVisibility(ui::Visibility::Visible);
+    field_->setText({});
+    filter();
+    std::set<std::string> groups;
+    for (const auto& e : entries_) groups.insert(e.group);
+    const int lines = std::clamp(static_cast<int>(entries_.size() + groups.size()), 3, kChooserRows);
+    const float w = std::min(area.w, std::max(anchor.w, 280.f));
+    const float h = std::min(area.h, kChooserTitle + kChooserField + 8.f + kChooserRow * static_cast<float>(lines) + 6.f);
+    const float x = std::clamp(anchor.x, area.x, std::max(area.x, area.right() - w));
+    float y = anchor.bottom() + 2.f;
+    if (y + h > area.bottom()) y = anchor.y - 2.f - h >= area.y ? anchor.y - 2.f - h : std::max(area.y, area.bottom() - h);
+    setBounds({x, y, w, h});
+    layout();
+    reveal(hot_);
+    field_->takeFocus();
+    invalidate();
+}
+
+void HmiStyleChooser::close() {
+    if (!open_) return;
+    open_ = false;
+    setVisibility(ui::Visibility::Hidden);
+    invalidate();
+}
+
+void HmiStyleChooser::setSearch(const std::string& text) { field_->setText(text); }   // textChanged -> filter()
+
+const std::string& HmiStyleChooser::searchText() const { return field_->text(); }
+
+void HmiStyleChooser::filter() {
+    const std::string keep = highlighted();
+    lines_.clear();
+    const ui::SearchQuery q(field_ ? field_->text() : std::string{});
+    std::string group;
+    bool first = true;
+    for (std::size_t i = 0; i < entries_.size(); ++i) {
+        const auto& e = entries_[i];
+        if (!q.empty() && !q.matches({std::string_view(e.label), std::string_view(e.value), std::string_view(e.detail), std::string_view(e.group)}))
+            continue;
+        if (first || e.group != group) {
+            if (!e.group.empty()) lines_.push_back({true, i});
+            group = e.group;
+            first = false;
+        }
+        lines_.push_back({false, i});
+    }
+    hot_ = -1;
+    for (std::size_t k = 0; k < lines_.size() && hot_ < 0; ++k)
+        if (!lines_[k].group && !keep.empty() && entries_[lines_[k].entry].value == keep) hot_ = static_cast<int>(k);
+    for (std::size_t k = 0; k < lines_.size() && hot_ < 0; ++k)
+        if (!lines_[k].group) hot_ = static_cast<int>(k);
+    scroll_ = 0.f;
+    reveal(hot_);
+}
+
+std::vector<std::string> HmiStyleChooser::shownLines() const {
+    std::vector<std::string> out;
+    for (const auto& l : lines_) out.push_back(l.group ? "# " + entries_[l.entry].group : entries_[l.entry].label);
+    return out;
+}
+
+std::vector<std::string> HmiStyleChooser::shownValues() const {
+    std::vector<std::string> out;
+    for (const auto& l : lines_)
+        if (!l.group) out.push_back(entries_[l.entry].value);
+    return out;
+}
+
+std::string HmiStyleChooser::highlighted() const {
+    if (hot_ < 0 || static_cast<std::size_t>(hot_) >= lines_.size() || lines_[static_cast<std::size_t>(hot_)].group) return {};
+    return entries_[lines_[static_cast<std::size_t>(hot_)].entry].value;
+}
+
+void HmiStyleChooser::moveHighlight(int delta) {
+    if (lines_.empty()) return;
+    int k = hot_ < 0 ? (delta > 0 ? -1 : static_cast<int>(lines_.size())) : hot_;
+    const int step = delta > 0 ? 1 : -1;
+    for (int n = std::abs(delta); n > 0; --n) {
+        int next = k + step;
+        while (next >= 0 && next < static_cast<int>(lines_.size()) && lines_[static_cast<std::size_t>(next)].group) next += step;
+        if (next < 0 || next >= static_cast<int>(lines_.size())) break;
+        k = next;
+    }
+    if (k >= 0 && k < static_cast<int>(lines_.size()) && !lines_[static_cast<std::size_t>(k)].group) hot_ = k;
+    reveal(hot_);
+    invalidate();
+}
+
+bool HmiStyleChooser::choose(std::string_view value) {
+    for (std::size_t k = 0; k < lines_.size(); ++k)
+        if (!lines_[k].group && entries_[lines_[k].entry].value == value) {
+            hot_ = static_cast<int>(k);
+            return chooseHighlighted();
+        }
+    return false;
+}
+
+bool HmiStyleChooser::chooseHighlighted() {
+    const std::string value = highlighted();
+    if (value.empty() || !open_) return false;
+    close();                   // d'abord : le volet peut en rouvrir une (le type ajoute : ses proprietes)
+    chosen->emit(value);
+    return true;
+}
+
+gfx::Rect HmiStyleChooser::listRect() const {
+    const auto b = bounds();
+    const float top = kChooserTitle + kChooserField + 6.f;
+    return {b.x + 1.f, b.y + top, std::max(0.f, b.w - 2.f), std::max(0.f, b.h - top - 4.f)};
+}
+
+int HmiStyleChooser::lineAt(gfx::Point p) const {
+    const auto list = listRect();
+    if (!list.contains(p)) return -1;
+    const int k = static_cast<int>((p.y - list.y + scroll_) / kChooserRow);
+    return k >= 0 && k < static_cast<int>(lines_.size()) ? k : -1;
+}
+
+void HmiStyleChooser::reveal(int line) {
+    if (line < 0) return;
+    const auto list = listRect();
+    const float top = static_cast<float>(line) * kChooserRow;
+    if (top < scroll_) scroll_ = top;
+    else if (list.h > 0.f && top + kChooserRow > scroll_ + list.h) scroll_ = top + kChooserRow - list.h;
+}
+
+bool HmiStyleChooser::rowRect(std::string_view value, gfx::Rect& out) const {
+    const auto list = listRect();
+    for (std::size_t k = 0; k < lines_.size(); ++k)
+        if (!lines_[k].group && entries_[lines_[k].entry].value == value) {
+            out = {list.x, list.y + static_cast<float>(k) * kChooserRow - scroll_, list.w, kChooserRow};
+            return out.y >= list.y - 0.5f && out.bottom() <= list.bottom() + 0.5f;
+        }
+    return false;
+}
+
+gfx::Rect HmiStyleChooser::eventBounds() const { return open_ ? area_ : bounds(); }
+
+void HmiStyleChooser::onLayout() {
+    const auto b = bounds();
+    field_->setBounds({b.x + 8.f, b.y + kChooserTitle, std::max(0.f, b.w - 16.f), kChooserField - 4.f});
+}
+
+void HmiStyleChooser::onPaint(const ui::PaintContext& ctx) {
+    if (!open_) return;
+    const auto b = bounds();
+    const auto& c = ctx.theme.color;
+    ctx.r.fillRect({b.x + 3.f, b.y + 4.f, b.w, b.h}, gfx::Color{0, 0, 0, 90});
+    ctx.r.fillRoundedRect(b, c.headerBg, 6.f);
+    ctx.r.strokeRect(b, c.borderStrong, 1.f);
+    ctx.r.drawText({b.x + 10.f, b.y + 6.f}, title_, ctx.theme.font.smallUi, c.textMuted);
+    const auto list = listRect();
+    ctx.r.fillRect({b.x + 1.f, list.y - 2.f, b.w - 2.f, 1.f}, c.border);
+    if (lines_.empty()) {
+        ctx.r.drawText({list.x + 10.f, list.y + 6.f}, "Rien ne correspond.", ctx.theme.font.smallUi, c.textMuted);
+        return;
+    }
+    ctx.r.pushClip(list);
+    const float textDy = (kChooserRow - ctx.r.lineHeight(ctx.theme.font.ui)) / 2.f;
+    for (std::size_t k = 0; k < lines_.size(); ++k) {
+        const float y = list.y + static_cast<float>(k) * kChooserRow - scroll_;
+        if (y + kChooserRow < list.y || y > list.bottom()) continue;
+        const auto& e = entries_[lines_[k].entry];
+        if (lines_[k].group) {
+            ctx.r.drawText({list.x + 10.f, y + 6.f}, e.group, ctx.theme.font.smallUi, c.textMuted);
+            continue;
+        }
+        const bool hot = static_cast<int>(k) == hot_;
+        if (hot) ctx.r.fillRect({list.x, y, list.w, kChooserRow}, c.selectionBg);
+        const gfx::Color ink = hot ? c.selectionText : c.text;
+        float detailW = 0.f;
+        if (!e.detail.empty()) {
+            const std::string d = simmark::fitText(ctx.r, e.detail, ctx.theme.font.smallUi, list.w * 0.4f);
+            detailW = ctx.r.measure(d, ctx.theme.font.smallUi).width;
+            ctx.r.drawText({list.right() - 10.f - detailW, y + 6.f}, d, ctx.theme.font.smallUi, hot ? ink : c.textMuted);
+        }
+        ctx.r.drawText({list.x + 14.f, y + textDy}, simmark::fitText(ctx.r, e.label, ctx.theme.font.ui, list.w - 34.f - detailW),
+                       ctx.theme.font.ui, ink);
+    }
+    ctx.r.popClip();
+    // Plus de lignes que de place : la position, a droite.
+    const float total = static_cast<float>(lines_.size()) * kChooserRow;
+    if (total > list.h + 0.5f && list.h > 0.f) {
+        const float th = std::max(16.f, list.h * list.h / total);
+        const float ty = list.y + (list.h - th) * (scroll_ / std::max(1.f, total - list.h));
+        ctx.r.fillRoundedRect({list.right() - 5.f, ty, 3.f, th}, c.scrollbar, 1.5f);
+    }
+}
+
+ui::EventResult HmiStyleChooser::onEvent(const ui::InputEvent& ev) {
+    if (!open_) return ui::EventResult::Ignored;
+    const auto b = bounds();
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+        if (!b.contains(d->pos)) {         // un clic ailleurs : la liste se ferme, rien d'autre
+            close();
+            return ui::EventResult::Consumed;
+        }
+        if (const int at = lineAt(d->pos); at >= 0 && !lines_[static_cast<std::size_t>(at)].group) {
+            hot_ = at;
+            (void)chooseHighlighted();
+        }
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+        if (!b.contains(m->pos)) return ui::EventResult::Ignored;
+        if (const int at = lineAt(m->pos); at >= 0 && at != hot_ && !lines_[static_cast<std::size_t>(at)].group) {
+            hot_ = at;
+            invalidate();
+        }
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* u = std::get_if<ui::MouseUp>(&ev)) return b.contains(u->pos) ? ui::EventResult::Consumed : ui::EventResult::Ignored;
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        if (!b.contains(w->pos)) return ui::EventResult::Ignored;
+        const auto list = listRect();
+        const float most = std::max(0.f, static_cast<float>(lines_.size()) * kChooserRow - list.h);
+        scroll_ = std::clamp(scroll_ - w->dy * kChooserRow * 3.f, 0.f, most);
+        invalidate();
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+        switch (k->key) {
+            case ui::Key::Down: moveHighlight(1); return ui::EventResult::Consumed;
+            case ui::Key::Up: moveHighlight(-1); return ui::EventResult::Consumed;
+            case ui::Key::PageDown: moveHighlight(kChooserRows - 1); return ui::EventResult::Consumed;
+            case ui::Key::PageUp: moveHighlight(-(kChooserRows - 1)); return ui::EventResult::Consumed;
+            case ui::Key::Return: (void)chooseHighlighted(); return ui::EventResult::Consumed;
+            case ui::Key::Escape: close(); return ui::EventResult::Consumed;
+            default: break;
+        }
+    }
+    return ui::EventResult::Ignored;
+}
+
 // =================================================================== styles ===
+std::string HmiStylesPane::propertyName(std::string_view type, std::string_view key) {
+    if (key.substr(0, styles::kParamPrefix.size()) == styles::kParamPrefix) return styles::propertyLabel(key);
+    if (hmiKeyInfo(key)) {
+        if (const auto kind = kindOfType(type)) return hmiPropertyLabel(*kind, key);
+        return hmiKeyInfo(key)->label;
+    }
+    return styles::propertyLabel(key);
+}
+
+std::vector<HmiStylesPane::PreviewItem> HmiStylesPane::previewItems(const hmi::Project& p, const hmi::Style& s, std::string_view type) {
+    std::vector<PreviewItem> out;
+    const auto kind = kindOfType(type);
+    if (!kind) return out;
+    hmi::Object base = styles::previewObject(p, s, type, 1);
+    if (base.props.empty()) return out;
+    base.layer = 1;
+    // Un equipement a etats : sa valeur est une bascule, et il a ses couleurs d'etat (ou un defaut).
+    const hmi::Object fresh = hmi::makeObject(*kind, 1, {}, 0, 0, kNoId);
+    const hmi::Prop* value = fresh.find("value");
+    const bool boolish = value && (value->value == "TRUE" || value->value == "FALSE");
+    const bool states = boolish && ((fresh.find("colorOn") && fresh.find("colorOff")) || fresh.find("fault"));
+    const bool faults = states && fresh.find("fault") != nullptr;
+    if (!states) {
+        out.push_back({std::move(base), {}});
+    } else {
+        hmi::Object on = base, off = base;
+        on.set("value", "TRUE");
+        off.set("value", "FALSE");
+        out.push_back({std::move(on), "en marche"});
+        out.push_back({std::move(off), "\xC3\xA0 l'arr\xC3\xAAt"});
+        if (faults) {
+            hmi::Object bad = base;
+            bad.set("value", "FALSE");
+            bad.set("fault", "TRUE");
+            out.push_back({std::move(bad), "en d\xC3\xA9" "faut"});
+        }
+    }
+    const double w = std::max(1.0, out.front().object.number("w", 60));
+    const double gap = std::max(24.0, w * 0.4);
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        out[i].object.id = static_cast<Id>(i + 1);
+        out[i].object.setNumber("x", static_cast<double>(i) * (w + gap));
+        out[i].object.setNumber("y", 0);
+    }
+    return out;
+}
+
 HmiStylesPane::HmiStylesPane(std::string id, hmi::DocumentPtr doc, Apply apply)
     : ui::Widget(std::move(id)), doc_(std::move(doc)), apply_(std::move(apply)) {
     const std::string base = this->id();
     auto tools = std::make_unique<HmiToolStrip>(base + ".tools");
-    tools->add(SNew, HmiGlyph::Plus, "Nouveau style (fond sombre, texte blanc) : \xC3\xA0 r\xC3\xA9gler dans sa fiche", "Nouveau");
-    tools->add(SDup, HmiGlyph::Duplicate, "Dupliquer le style", "Dupliquer");
-    tools->add(SDel, HmiGlyph::Delete, "Supprimer le style (les objets gardent leurs valeurs et ne le citent plus), ou le dossier "
-                                       "choisi (ses styles remontent d'un cran) - Ctrl+Z le rend",
-               "Supprimer");
-    tools->add(SFolder, HmiGlyph::Plus, "Nouveau dossier (sans effet sur les noms) : glisse des styles dessus pour les y ranger", "Dossier");
+    tools->add(ActNew, HmiGlyph::Plus, "Nouveau style du projet (vide) : ajoute-lui des types d'objets et ce qu'il leur impose", "Nouveau");
+    tools->add(ActDuplicate, HmiGlyph::Duplicate,
+               "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 : une copie modifiable du style choisi, m\xC3\xAAme fourni (verrouill\xC3\xA9) - "
+               "son nom se tape tout de suite",
+               "Dupliquer \xC3\xA0 partir de\xE2\x80\xA6");
+    tools->add(ActRename, HmiGlyph::Text, "Renommer le style (les objets qui le citent suivent) - un style fourni ne se renomme pas", "Renommer");
+    tools->add(ActRemove, HmiGlyph::Delete, "Retirer le style (les objets gardent leurs valeurs et ne le citent plus), ou le dossier "
+                                            "choisi (ses styles remontent d'un cran) - Ctrl+Z le rend ; un style fourni ne se retire pas",
+               "Retirer");
+    tools->add(ActFolder, HmiGlyph::Plus, "Nouveau dossier (sans effet sur les noms) : glisse des styles dessus pour les y ranger", "Dossier");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
-    tools_->setEnabledWhen(SDup, [this] { return selectedStyle() != kNoId; });
-    tools_->setEnabledWhen(SDel, [this] { return selectedStyle() != kNoId || !folders_->selectedFolder().empty(); });
+    tools_->setEnabledWhen(ActDuplicate, [this] { return currentStyle() != nullptr; });
+    tools_->setEnabledWhen(ActRename, [this] { return currentStyle() != nullptr; });
+    tools_->setEnabledWhen(ActRemove, [this] { return selectedStyle() != kNoId || (builtin_.empty() && !folders_->selectedFolder().empty()); });
     // Lot API 8 : chercher un style - la recherche de toute l'application.
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
-        base + ".search", "Rechercher : style, description, valeur, dossier\xE2\x80\xA6",
-        "Chaque mot est cherch\xC3\xA9 dans le nom du style, sa description, ses valeurs (fill #1B2028...) et son dossier - tous "
-        "les mots (ET), sans casse ni accents ; \"une phrase\" entre guillemets ; -mot : l'exclure.")));
+        base + ".search", "Chercher un style, un type, une valeur\xE2\x80\xA6",
+        "Chaque mot est cherch\xC3\xA9 dans le nom du style, sa description, ses types d'objets (Pompe, Symbole Sym_Moteur...), "
+        "ses propri\xC3\xA9t\xC3\xA9s et leurs valeurs (colorOn #4D4D4D...) et son dossier - tous les mots (ET), sans casse ni accents ; "
+        "\"une phrase\" entre guillemets ; -mot : l'exclure.")));
+    // 1.23.0 : les styles fournis, verrouilles (un cadenas), au-dessus de ceux du projet.
+    auto fixed = std::make_unique<ui::TableView>(base + ".builtins");
+    fixed->setColumns({{"Fournis \xE2\x80\x94 verrouill\xC3\xA9s", 160.f}, {"Objets", 56.f, 40.f, true, true, true, ui::Align::End},
+                       {"Couleurs", 66.f, 40.f, true, false}});
+    fixed->setSelectionMode(ui::SelectionMode::Single);
+    builtins_ = &static_cast<ui::TableView&>(addChild(std::move(fixed)));
     auto table = std::make_unique<ui::TableView>(base + ".table");
-    table->setColumns({{"Style", 220.f}, {"Objets", 90.f, 50.f, true, true, true, ui::Align::End}, {"Valeurs", 330.f},
-                       {"Description", 300.f}});
+    table->setColumns({{"Du projet", 160.f}, {"Objets", 56.f, 40.f, true, true, true, ui::Align::End}, {"Couleurs", 66.f, 40.f, true, false}});
     table->setSelectionMode(ui::SelectionMode::Single);
     table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
-    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre
+    // 1.12.27 : Suppr, Ctrl+D, Inser dans la liste - comme les boutons de la barre. Les fournis : Ctrl+D, Inser.
+    tools_->bindListKeys(*builtins_, {0, ActDuplicate, ActNew, 0, 0, 0});
     tools_->bindListKeys(*table_);
-    // 1.12.27 : chaque style a sa pastille dans la liste (remplissage, contour, texte).
-    table_->setIconPainter([this](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color ink) {
-        const hmi::Style* s = doc_->project.style(static_cast<Id>(icon));
-        if (!s) return;
-        gfx::Color fill{0, 0, 0, 0}, stroke = ink.withAlpha(120), text{0, 0, 0, 0};
-        if (!tryParseColor(styleValue(*s, "fill"), fill)) (void)tryParseColor(styleValue(*s, "background"), fill);
-        (void)tryParseColor(styleValue(*s, "stroke"), stroke);
-        r.fillRoundedRect(box, fill.a ? fill : viewBackground(doc_->project), 3);
-        r.strokeRect(box, stroke, 1);
-        if (tryParseColor(styleValue(*s, "textColor"), text))
-            r.fillRect({box.x + 3, box.y + box.h / 2 - 1, std::max(0.f, box.w - 6), 2}, text);
-        gfx::Color on{};
-        if (tryParseColor(styleValue(*s, "colorOn"), on)) r.fillRoundedRect({box.x + box.w - 6, box.y + 2, 4, 4}, on, 2);
+    // La pastille de chaque style (ses couleurs) ; les fournis par leur rang, ceux du projet par leur identifiant.
+    builtins_->setIconPainter([](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color ink) {
+        const auto& all = styles::builtins();
+        if (icon >= 1 && static_cast<std::size_t>(icon) <= all.size()) paintSwatch(r, swatchOf(all[static_cast<std::size_t>(icon) - 1]), box, ink);
     });
-    preview_ = &addChild(std::make_unique<StylePreview>(base + ".preview", doc_, [this] { return selectedStyle(); }));
-    grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::make_unique<ui::PropertyGrid>(base + ".grid")));
+    table_->setIconPainter([this](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color ink) {
+        if (const hmi::Style* s = doc_->project.style(static_cast<Id>(icon))) paintSwatch(r, swatchOf(*s), box, ink);
+    });
+    // 1.23.0 : les types d'objets du style choisi.
+    auto types = std::make_unique<ui::TableView>(base + ".types");
+    types->setColumns({{"Type", 170.f}, {"Propri\xC3\xA9t\xC3\xA9s", 90.f, 50.f, true, true, true, ui::Align::End}});
+    types->setSelectionMode(ui::SelectionMode::Single);
+    types->setIconPainter([](gfx::IRenderer& r, int icon, const gfx::Rect& box, gfx::Color ink) {
+        if (icon > 0) drawHmiGlyph(r, static_cast<HmiGlyph>(icon - 1), box, ink);
+    });
+    types_ = &static_cast<ui::TableView&>(addChild(std::move(types)));
+    const auto button = [this, &base](const char* key, const char* text, const char* tip) {
+        auto b = std::make_unique<ui::Button>(text, base + "." + key);
+        b->setStyle(ui::Button::Style::Flat);
+        b->setTooltip(tip);
+        return &static_cast<ui::Button&>(addChild(std::move(b)));
+    };
+    addType_ = button("addType", "+ Ajouter un type\xE2\x80\xA6",
+                      "Un genre de la biblioth\xC3\xA8que ou un de tes symboles : le style imposera des propri\xC3\xA9t\xC3\xA9s \xC3\xA0 ses objets (Inser)");
+    removeType_ = button("removeType", "\xE2\x88\x92 Retirer le type choisi",
+                         "Le style ne vise plus ce type : ses objets gardent leurs valeurs (Suppr ; Ctrl+Z le rend)");
+    // 1.23.0 : les proprietes imposees au type choisi (et, en tete, le nom et la description du style).
+    auto grid = std::make_unique<StylePropertyGrid>(base + ".grid");
+    StylePropertyGrid* sg = grid.get();
+    grid_ = &static_cast<ui::PropertyGrid&>(addChild(std::move(grid)));
+    addProp_ = button("addProperty", "+ Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6",
+                      "N'importe quelle propri\xC3\xA9t\xC3\xA9 du type (couleur, taille, texte, liste, param\xC3\xA8tre du symbole...), "
+                      "avec la valeur d'un objet neuf (Inser)");
+    removeProp_ = button("removeProperty", "\xE2\x88\x92 Retirer la propri\xC3\xA9t\xC3\xA9",
+                         "Le style ne l'impose plus : les objets gardent leur valeur (Suppr ; Ctrl+Z la rend)");
+    // 1.12.27, 1.23.0 : l'apercu, et sa liste Type : (tout type de la bibliotheque ou un symbole).
+    auto pv = std::make_unique<StylePreview>(base + ".preview", doc_, *this);
+    StylePreview* spv = pv.get();
+    preview_ = &addChild(std::move(pv));
+    previewTypes_ = &static_cast<ui::DropDown&>(preview_->addChild(std::make_unique<ui::DropDown>(base + ".previewType")));
+    spv->setList(previewTypes_);
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
-    // Lot 21 : les styles ranges en dossiers ; glisser une ou plusieurs lignes.
+    chooser_ = &static_cast<HmiStyleChooser&>(addChild(std::make_unique<HmiStyleChooser>(base + ".chooser")));   // le dernier : au-dessus
+    // Lot 21 : les styles ranges en dossiers ; glisser une ou plusieurs lignes. 1.23.0 : le nom se change dans sa case.
     folders_ = std::make_unique<HmiFolderTable>(*table_, doc_, apply_);
+    folders_->setItemEditing([](Id, std::size_t c) { return c == 0; }, [this](Id style, std::size_t c, const std::string& text) {
+        std::string why;
+        return c == 0 && renameStyle(style, text, &why);
+    });
     links_ += folders_->message->connect([this](const std::string& text) { say(text); });
     links_ += folders_->relayout->connect([this] { refresh(); });
 
     links_ += tools_->triggered->connect([this](int a) {
         const Id sel = selectedStyle();
-        if (a == SNew) selectStyle(addStyle());
-        else if (a == SDup && sel != kNoId) selectStyle(duplicateStyle(sel));
-        else if (a == SDel && sel != kNoId) (void)removeStyle(sel);
-        else if (a == SDel) { if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f); }
-        else if (a == SFolder) (void)folders_->newFolder();
+        if (a == ActNew) {
+            const Id made = addStyle();
+            selectStyle(made);
+            beginRename(made);
+        } else if (a == ActDuplicate) {
+            if (const hmi::Style* s = currentStyle()) {
+                const Id made = duplicateFrom(s->name);
+                selectStyle(made);
+                beginRename(made);
+            }
+        } else if (a == ActRename) {
+            if (locked()) say("Un style fourni ne se renomme pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait une copie \xC3\xA0 toi.", true);
+            else if (sel != kNoId) beginRename(sel);
+        } else if (a == ActRemove && sel != kNoId) {
+            (void)removeStyle(sel);
+        } else if (a == ActRemove && builtin_.empty()) {
+            if (const auto f = folders_->selectedFolder(); !f.empty()) (void)folders_->deleteFolder(f);
+        } else if (a == ActFolder) {
+            (void)folders_->newFolder();
+        }
     });
-    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { rebuildProperties(); });
+    // Le choix : un style fourni OU un style du projet.
+    links_ += builtins_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
+        const auto rows = builtins_->selectedModelRows();
+        builtin_ = !rows.empty() && rows.front() < builtinRows_.size() ? builtinRows_[rows.front()] : std::string{};
+        if (!builtin_.empty()) table_->selectModelRows({}, false);
+        styleChanged();
+    });
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
+        if (!table_->selectedModelRows().empty() && !builtin_.empty()) {
+            builtin_.clear();
+            builtins_->selectModelRows({}, false);
+        }
+        styleChanged();
+    });
+    links_ += types_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
+        const auto rows = types_->selectedModelRows();
+        if (rows.empty() || rows.front() >= typeRows_.size()) return;
+        selectType(typeRows_[rows.front()]);
+    });
+    types_->setKeyHandler([this](const ui::KeyDown& k) {
+        if (!k.mods.none()) return false;
+        if (k.key == ui::Key::Delete && removeType_->enabled()) return removeType(type_);
+        if (k.key == ui::Key::Insert && addType_->enabled()) {
+            openTypeChooser();
+            return true;
+        }
+        return false;
+    });
+    links_ += addType_->clicked->connect([this] { openTypeChooser(); });
+    links_ += removeType_->clicked->connect([this] { (void)removeType(type_); });
+    links_ += addProp_->clicked->connect([this] { openPropertyChooser(); });
+    links_ += removeProp_->clicked->connect([this] { (void)removeProperty(prop_); });
+    sg->picked = [this](gfx::Point at) {
+        const hmi::Style* s = currentStyle();
+        const auto* props = s ? propsOf(*s, type_) : nullptr;
+        if (!props) return;
+        for (const auto& pr : *props) {
+            gfx::Rect r{};
+            if (grid_->valueRect(propertyName(type_, pr.key), r) && at.y >= r.y && at.y < r.y + r.h) {
+                selectProperty(pr.key);
+                return;
+            }
+        }
+    };
+    sg->chosenName = [this] { return prop_.empty() ? std::string{} : propertyName(type_, prop_); };
+    sg->removeChosen = [this] { return removeProp_->enabled() && removeProperty(prop_); };
+    sg->addOne = [this] {
+        if (!addProp_->enabled()) return false;
+        openPropertyChooser();
+        return true;
+    };
+    links_ += chooser_->chosen->connect([this](const std::string& value) {
+        if (chooserFor_ == 1) {
+            if (addType(value)) openPropertyChooser();     // un type sans propriete n'impose rien : la premiere, tout de suite
+        } else if (chooserFor_ == 2) {
+            (void)addProperty(value);
+        }
+    });
+    links_ += previewTypes_->selectionChanged->connect([this](int i) {
+        const auto* item = i >= 0 ? previewTypes_->selectedItem() : nullptr;
+        if (item && item->value != previewType_) {
+            previewType_ = item->value;
+            preview_->invalidate();
+        }
+    });
     links_ += grid_->propertyRejected->connect([this](const std::string& name, const std::string& value) {
         if (message_.empty()) say(name + " : \xC2\xAB " + value + " \xC2\xBB refus\xC3\xA9", true);
     });
@@ -236,146 +901,469 @@ void HmiStylesPane::say(std::string text, bool error) {
     status_->setMessage(message_, error ? ui::StatusBar::Severity::Warning : ui::StatusBar::Severity::Success);
 }
 
-Id HmiStylesPane::selectedStyle() const { return folders_ ? folders_->selectedItem() : kNoId; }
+Id HmiStylesPane::selectedStyle() const { return builtin_.empty() && folders_ ? folders_->selectedItem() : kNoId; }
+
+const hmi::Style* HmiStylesPane::currentStyle() const {
+    if (!builtin_.empty()) return styles::builtin(builtin_);
+    const Id id = selectedStyle();
+    return id != kNoId ? doc_->project.style(id) : nullptr;
+}
+
+bool HmiStylesPane::locked() const {
+    const hmi::Style* s = currentStyle();
+    return s && s->builtin;
+}
+
+std::string HmiStylesPane::lockedBanner() const {
+    return locked() ? "Style fourni : verrouill\xC3\xA9. \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB pour le modifier." : std::string{};
+}
+
+const hmi::Style* HmiStylesPane::editable(std::string* why) const {
+    const hmi::Style* s = currentStyle();
+    std::string e;
+    if (!s) e = "choisis d'abord un style dans la liste";
+    else if (s->builtin) e = "un style fourni ne se modifie pas : \xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait une copie \xC3\xA0 toi";
+    if (!e.empty()) {
+        if (why) *why = e;
+        return nullptr;
+    }
+    return s;
+}
 
 void HmiStylesPane::selectStyle(Id id) {
     // Lot API 8 : un style demande (cree, duplique) que la recherche cache : elle s'efface.
-    if (id != kNoId && !search_->text().empty() && folders_->rowOfItem(id) < 0)
-        for (const auto& st : doc_->project.styles)
-            if (st.id == id) {
-                search_->setText("");       // -> refresh()
-                break;
-            }
+    if (id != kNoId && !search_->text().empty() && folders_->rowOfItem(id) < 0 && doc_->project.style(id))
+        search_->setText("");       // -> refresh()
+    builtin_.clear();
+    builtins_->selectModelRows({}, false);
+    table_->selectModelRows({}, false);
     folders_->selectItem(id);
+    styleChanged();
+}
+
+bool HmiStylesPane::selectBuiltin(std::string_view name) {
+    const hmi::Style* s = styles::builtin(name);
+    if (!s) return false;
+    if (std::find(builtinRows_.begin(), builtinRows_.end(), s->name) == builtinRows_.end() && !search_->text().empty())
+        search_->setText("");       // -> refresh()
+    builtin_ = s->name;
+    table_->selectModelRows({}, false);
+    for (std::size_t i = 0; i < builtinRows_.size(); ++i)
+        if (builtinRows_[i] == builtin_) builtins_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    styleChanged();
+    return true;
+}
+
+void HmiStylesPane::selectType(const std::string& type) {
+    type_ = type;
+    prop_.clear();
+    if (type != styles::kAnyType && styles::knownType(doc_->project, type)) previewType_ = type;
+    for (std::size_t i = 0; i < typeRows_.size(); ++i)
+        if (typeRows_[i] == type_) types_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
     rebuildProperties();
+    rebuildPreviewTypes();
+    updateButtons();
+    invalidate();
+}
+
+void HmiStylesPane::selectProperty(const std::string& key) {
+    prop_ = key;
+    updateButtons();
+    grid_->invalidate();
+}
+
+bool HmiStylesPane::matchesSearch(const hmi::Style& st) const {
+    const ui::SearchQuery& query = search_->query();
+    if (query.empty()) return true;
+    std::vector<std::string> texts{st.name, st.description, st.folder};
+    const auto addProps = [&](std::string_view type, const std::vector<hmi::Prop>& props) {
+        texts.push_back(std::string(type) + " " + styles::typeLabel(type));
+        for (const auto& pr : props) texts.push_back(pr.key + " " + propertyName(type, pr.key) + " " + pr.value);
+    };
+    if (!st.props.empty()) addProps(styles::kAnyType, st.props);
+    for (const auto& t : st.targets) addProps(t.type, t.props);
+    return query.matches(texts);
+}
+
+void HmiStylesPane::rebuildBuiltins() {
+    const auto& p = doc_->project;
+    builtinRows_.clear();
+    std::vector<std::vector<std::string>> rows;
+    std::vector<std::vector<ui::CellStyle>> cells;
+    std::vector<std::string> tips;
+    const auto& all = styles::builtins();
+    for (std::size_t i = 0; i < all.size(); ++i) {
+        const auto& s = all[i];
+        if (!matchesSearch(s)) continue;
+        builtinRows_.push_back(s.name);
+        const bool hidden = p.styleByName(s.name) != nullptr;
+        rows.push_back({s.name, std::to_string(styles::users(p, s.name)), {}});
+        ui::CellStyle name;
+        name.icon = ui::Icon::Lock;
+        name.iconTone = ui::Tone::Muted;
+        if (hidden) name.fgTone = ui::Tone::Muted;
+        ui::CellStyle swatch;
+        swatch.customIcon = static_cast<int>(i + 1);
+        cells.push_back({name, {}, swatch});
+        tips.push_back(s.name + " (style fourni, verrouill\xC3\xA9) : " + s.description
+                       + (hidden ? "\nUn style du projet porte ce nom : c'est lui que les objets citent." : std::string{})
+                       + "\n\xC2\xAB Dupliquer \xC3\xA0 partir de\xE2\x80\xA6 \xC2\xBB en fait une copie modifiable.");
+    }
+    builtins_->setModel(std::make_shared<CellRows>(
+        std::vector<std::string>{"Fournis \xE2\x80\x94 verrouill\xC3\xA9s", "Objets", "Couleurs"}, std::move(rows), std::move(cells), std::move(tips)));
+    for (std::size_t i = 0; i < builtinRows_.size(); ++i)
+        if (builtinRows_[i] == builtin_) builtins_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
 }
 
 void HmiStylesPane::refresh() {
     const auto& p = doc_->project;
+    // Un nom en cours de frappe (Nouveau, Dupliquer) : la liste va etre refaite, sa ligne peut changer de rang - la case
+    // se ferme sans rien ecrire (sinon elle renommerait plus tard le style de ce rang). Pendant sa propre ecriture, elle
+    // est deja fermee.
+    if (table_->cellEditing()) table_->finishCellEdit(false, {});
+    rebuildBuiltins();
     std::vector<Id> shown;
-    // Lot API 8 : la recherche - le nom, la description, les valeurs, le dossier.
-    const ui::SearchQuery& query = search_->query();
-    for (const auto& st : p.styles) {
-        if (!query.empty()) {
-            std::vector<std::string> texts{st.name, st.description, st.folder};
-            for (const auto& prop : st.props) texts.push_back(prop.key + " " + prop.value);
-            if (!query.matches(texts)) continue;
-        }
-        shown.push_back(st.id);
-    }
-    shown_ = shown.size();
+    // Lot API 8 : la recherche - le nom, la description, les types, les valeurs, le dossier.
+    for (const auto& st : p.styles)
+        if (matchesSearch(st)) shown.push_back(st.id);
+    shown_ = shown.size() + builtinRows_.size();
     table_->setHighlight(search_->text());
-    search_->setCount(shown.size(), p.styles.size());
-    folders_->rebuild(hmi::fold::List::Styles, shown, {"Style", "Objets", "Valeurs", "Description"},
+    builtins_->setHighlight(search_->text());
+    search_->setCount(shown_, p.styles.size() + styles::builtins().size());
+    folders_->rebuild(hmi::fold::List::Styles, shown, {"Du projet", "Objets", "Couleurs"},
                       [&p](Id id) -> std::vector<std::string> {
                           const auto* s = p.style(id);
                           if (!s) return {};
-                          std::string values;
-                          for (const auto& prop : s->props) values += (values.empty() ? "" : ", ") + prop.key + " " + prop.value;
-                          return {s->name, std::to_string(hmi::design::styleUsers(p, s->name)), values, s->description};
+                          return {s->name, std::to_string(styles::users(p, s->name)), {}};
                       },
                       [](Id id, std::size_t col) {
                           ui::CellStyle cs;
                           // 1.12.27 : la pastille du style (son identifiant ; la table la fait dessiner)
-                          if (col == 0) cs.customIcon = id > 0 && id < 0x7FFFFFFFu ? static_cast<int>(id) : 0;
-                          if (col == 0 && cs.customIcon == 0) cs.icon = ui::Icon::Settings;
+                          if (col == 2) cs.customIcon = id > 0 && id < 0x7FFFFFFFu ? static_cast<int>(id) : 0;
                           return cs;
                       });
     if (message_.empty())
-        status_->setMessage(std::to_string(p.styles.size()) + " style(s). Un objet cite un style par sa propri\xC3\xA9t\xC3\xA9 "
-                            "\xC2\xAB Style nomm\xC3\xA9 \xC2\xBB (Apparence) ; l'\xC3\xA9" "diteur en cr\xC3\xA9" "e un depuis un objet.");
+        status_->setMessage(std::to_string(p.styles.size()) + " style(s) du projet, " + std::to_string(styles::builtins().size())
+                            + " fournis. Un objet cite un style par sa propri\xC3\xA9t\xC3\xA9 \xC2\xAB Style nomm\xC3\xA9 \xC2\xBB ; le style "
+                              "impose ses propri\xC3\xA9t\xC3\xA9s aux objets de ses types.");
+    styleKey_.clear();          // le style a pu changer sous le meme nom : ses types sont relus (le type choisi reste)
+    styleChanged();
+}
+
+void HmiStylesPane::styleChanged() {
+    const hmi::Style* s = currentStyle();
+    const std::string key = !s ? std::string{} : s->builtin ? "fourni:" + s->name : "projet:" + std::to_string(s->id);
+    const bool other = !styleKey_.empty() && key != styleKey_;
+    styleKey_ = key.empty() ? std::string("-") : key;
+    // Le type choisi reste s'il est encore au style ; sinon (un autre style) le premier.
+    std::vector<std::string> types;
+    if (s) {
+        for (const auto& t : s->targets) types.push_back(t.type);
+        if (!s->props.empty()) types.emplace_back(styles::kAnyType);
+    }
+    if (other || std::find(types.begin(), types.end(), type_) == types.end()) {
+        type_ = types.empty() ? std::string{} : types.front();
+        prop_.clear();
+        if (s) {
+            std::string first;
+            for (const auto& t : types)
+                if (t != styles::kAnyType && styles::knownType(doc_->project, t)) {
+                    first = t;
+                    break;
+                }
+            if (!first.empty()) previewType_ = first;
+        }
+    }
+    if (s && !prop_.empty()) {
+        const auto* props = propsOf(*s, type_);
+        if (!props || std::none_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == prop_; })) prop_.clear();
+    }
+    if (previewType_.empty() || !styles::knownType(doc_->project, previewType_) || previewType_ == styles::kAnyType) previewType_ = "Button";
+    rebuildTypes();
     rebuildProperties();
+    rebuildPreviewTypes();
+    updateButtons();
+    if (preview_) preview_->invalidate();
     invalidate();
 }
 
+void HmiStylesPane::rebuildTypes() {
+    typeRows_.clear();
+    std::vector<std::vector<std::string>> rows;
+    std::vector<std::vector<ui::CellStyle>> cells;
+    std::vector<std::string> tips;
+    const auto& p = doc_->project;
+    const hmi::Style* s = currentStyle();
+    const auto add = [&](const std::string& type, std::size_t count) {
+        typeRows_.push_back(type);
+        const bool known = styles::knownType(p, type);
+        std::string label = typeName(type);
+        if (styles::isSymbolType(type)) label += " (utilisateur)";
+        rows.push_back({label, std::to_string(count) + (count > 1 ? " propri\xC3\xA9t\xC3\xA9s" : " propri\xC3\xA9t\xC3\xA9")});
+        ui::CellStyle name;
+        if (const auto kind = kindOfType(type)) name.customIcon = static_cast<int>(styles::isSymbolType(type) ? HmiGlyph::Symbol : glyphFor(*kind)) + 1;
+        else name.icon = ui::Icon::Settings;
+        if (!known) name.fgTone = ui::Tone::Warning;
+        ui::CellStyle n;
+        n.fgTone = ui::Tone::Muted;
+        cells.push_back({name, n});
+        tips.push_back(type == styles::kAnyType
+                           ? std::string("Tous les objets (un style d'avant la 1.23.0) : ces propri\xC3\xA9t\xC3\xA9s valent pour tout objet qui les a ; "
+                                         "celles d'un type passent avant.")
+                       : !known ? styles::typeLabel(type) + " : type inconnu (symbole supprim\xC3\xA9 ?) - il n'impose plus rien."
+                                : "Les " + styles::typeLabel(type) + " qui citent le style prennent ces " + std::to_string(count) + " valeur(s).");
+    };
+    if (s) {
+        for (const auto& t : s->targets) add(t.type, t.props.size());
+        if (!s->props.empty()) add(std::string(styles::kAnyType), s->props.size());
+    }
+    types_->setModel(std::make_shared<CellRows>(std::vector<std::string>{"Type", "Propri\xC3\xA9t\xC3\xA9s"}, std::move(rows), std::move(cells),
+                                                std::move(tips)));
+    for (std::size_t i = 0; i < typeRows_.size(); ++i)
+        if (typeRows_[i] == type_) types_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+}
+
 void HmiStylesPane::rebuildProperties() {
-    if (preview_) preview_->invalidate();   // 1.12.27 : l'apercu suit le style choisi
-    const Id sel = selectedStyle();
-    const hmi::Style* s = sel != kNoId ? styleById(doc_->project, sel) : nullptr;
+    grid_->invalidate();
+    const hmi::Style* s = currentStyle();
     if (!s) {
         grid_->clearProperties();
         return;
     }
-    const auto commitWith = [this, sel](std::string key) {
-        return [this, sel, key](std::string_view v) { return setStyleField(sel, key, std::string(v)); };
-    };
+    const auto& p = doc_->project;
+    const bool fixed = s->builtin;
+    const Id sid = s->id;
     std::vector<PG::Category> cats;
     PG::Category head;
-    head.name = "Style";
-    head.properties.push_back(prop("Nom", s->name, PG::ValueType::Text, commitWith("nom"),
-                                   "Unique. Renomm\xC3\xA9, les objets qui le citent suivent."));
-    head.properties.push_back(prop("Description", s->description, PG::ValueType::Text, commitWith("description")));
-    head.properties.push_back(prop("Objets qui le citent", std::to_string(hmi::design::styleUsers(doc_->project, s->name)),
-                                   PG::ValueType::ReadOnly, {}));
-    cats.push_back(std::move(head));
-    PG::Category look;
-    look.name = "Apparence (vide : le style ne la porte pas)";
-    for (const auto& k : kStyleKeys) {
-        std::string value;
-        for (const auto& prop : s->props) if (prop.key == k.key) value = prop.value;
-        std::vector<std::string> choices;
-        if (std::string_view(k.key) == "font") choices = {"", "Sans", "Mono"};
-        if (std::string_view(k.key) == "align") choices = {"", "gauche", "centre", "droite"};
-        look.properties.push_back(prop(k.label, value, k.type, commitWith(k.key),
-                                       "Chang\xC3\xA9" "e : les objets qui citent le style la prennent, sauf ceux qui l'avaient chang\xC3\xA9" "e "
-                                       "eux-m\xC3\xAAmes.",
-                                       std::move(choices)));
+    head.name = fixed ? "Style fourni (verrouill\xC3\xA9)" : "Style";
+    {
+        auto name = prop(kName, s->name, PG::ValueType::Text,
+                         fixed ? std::function<bool(std::string_view)>{} : [this, sid](std::string_view v) { return renameStyle(sid, std::string(v)); },
+                         "Unique, jamais celui d'un style fourni. Renomm\xC3\xA9, les objets qui le citent suivent.");
+        name.locked = fixed;
+        head.properties.push_back(std::move(name));
+        auto desc = prop(kDescription, s->description, PG::ValueType::Text,
+                         fixed ? std::function<bool(std::string_view)>{}
+                               : [this, sid](std::string_view v) { return setStyleField(sid, "description", std::string(v)); });
+        desc.locked = fixed;
+        head.properties.push_back(std::move(desc));
+        head.properties.push_back(prop(kUsers, std::to_string(styles::users(p, s->name)), PG::ValueType::ReadOnly, {}));
+        const auto issues = styles::problems(p, *s);
+        if (!issues.empty()) {
+            std::string all;
+            for (const auto& i : issues) all += (all.empty() ? "" : " ; ") + i;
+            auto pb = prop(kProblems, all, PG::ValueType::ReadOnly, {});
+            pb.valueTone = ui::Tone::Warning;
+            head.properties.push_back(std::move(pb));
+        }
     }
-    cats.push_back(std::move(look));
+    cats.push_back(std::move(head));
+    if (!type_.empty()) {
+        PG::Category look;
+        look.name = "Propri\xC3\xA9t\xC3\xA9s impos\xC3\xA9" "es \xE2\x80\x94 " + styles::typeLabel(type_);
+        const auto* props = propsOf(*s, type_);
+        std::set<std::string> taken{kName, kDescription, kUsers, kProblems};
+        const std::string type = type_;
+        for (const auto& pr : props ? *props : std::vector<hmi::Prop>{}) {
+            const KeyKind k = keyKindOf(p, type, pr.key);
+            std::string label = propertyName(type, pr.key);
+            if (!taken.insert(label).second) label += " (" + pr.key + ")";
+            const std::string key = pr.key;
+            auto one = prop(label, pr.value, k.type,
+                            fixed ? std::function<bool(std::string_view)>{}
+                                  : [this, sid, type, key](std::string_view v) {
+                                        prop_ = key;
+                                        return setTypeValue(sid, type, key, std::string(v));
+                                    },
+                            (k.help.empty() ? std::string{} : k.help + "\n")
+                                + "Impos\xC3\xA9" "e aux " + styles::typeLabel(type) + " qui citent le style ; chang\xC3\xA9" "e, ils la prennent, "
+                                  "sauf ceux qui l'avaient chang\xC3\xA9" "e eux-m\xC3\xAAmes.",
+                            k.choices);
+            one.key = key;
+            one.locked = fixed;
+            look.properties.push_back(std::move(one));
+        }
+        cats.push_back(std::move(look));
+    }
     grid_->setCategories(std::move(cats));
+}
+
+std::vector<std::string> HmiStylesPane::previewTypeChoices() const {
+    std::vector<std::string> out;
+    const auto& p = doc_->project;
+    if (const hmi::Style* s = currentStyle())
+        for (const auto& t : s->targets)
+            if (styles::knownType(p, t.type) && std::find(out.begin(), out.end(), t.type) == out.end()) out.push_back(t.type);
+    for (auto& t : styles::availableTypes(p))
+        if (std::find(out.begin(), out.end(), t) == out.end()) out.push_back(std::move(t));
+    return out;
+}
+
+void HmiStylesPane::rebuildPreviewTypes() {
+    if (!previewTypes_) return;
+    const hmi::Style* s = currentStyle();
+    std::vector<ui::DropDown::Item> items;
+    int at = -1;
+    for (const auto& t : previewTypeChoices()) {
+        const bool mine = s && styles::target(*s, t);
+        if (t == previewType_) at = static_cast<int>(items.size());
+        items.push_back({(mine ? std::string("\xE2\x9C\x93 ") : std::string{}) + typeName(t), t});
+    }
+    previewTypes_->setItems(std::move(items));
+    previewTypes_->setSelectedIndex(at);
+    if (preview_) preview_->invalidate();
+}
+
+void HmiStylesPane::setPreviewType(const std::string& type) {
+    if (!styles::knownType(doc_->project, type) || type == styles::kAnyType) return;
+    previewType_ = type;
+    rebuildPreviewTypes();
+}
+
+void HmiStylesPane::updateButtons() {
+    const bool can = editable(nullptr) != nullptr;
+    addType_->setEnabled(can);
+    removeType_->setEnabled(can && !type_.empty());
+    addProp_->setEnabled(can && !type_.empty() && styles::knownType(doc_->project, type_));
+    removeProp_->setEnabled(can && !type_.empty() && !prop_.empty());
+}
+
+void HmiStylesPane::beginRename(Id style) {
+    if (const int row = folders_->rowOfItem(style); row >= 0) (void)table_->beginCellEdit(static_cast<ui::RowIndex>(row), 0);
+}
+
+std::vector<HmiStyleChooser::Entry> HmiStylesPane::typeChoices() const {
+    std::vector<HmiStyleChooser::Entry> out;
+    const hmi::Style* s = currentStyle();
+    if (!s) return out;
+    for (const auto& t : styles::availableTypes(doc_->project)) {
+        if (styles::target(*s, t)) continue;     // deja au style
+        if (styles::isSymbolType(t)) out.push_back({t, "\xE2\x97\x86 " + styles::symbolName(t), "MES SYMBOLES", {}});
+        else out.push_back({t, styles::typeLabel(t), "BIBLIOTH\xC3\x88QUE", {}});
+    }
+    // Les symboles apres la bibliotheque (availableTypes les rend deja ainsi : on le garantit).
+    std::stable_partition(out.begin(), out.end(), [](const HmiStyleChooser::Entry& e) { return !styles::isSymbolType(e.value); });
+    return out;
+}
+
+std::vector<HmiStyleChooser::Entry> HmiStylesPane::propertyChoices() const {
+    std::vector<HmiStyleChooser::Entry> out;
+    const hmi::Style* s = currentStyle();
+    if (!s || type_.empty()) return out;
+    const auto* props = propsOf(*s, type_);
+    for (const auto& c : styles::propertiesOf(doc_->project, type_)) {
+        if (props && std::any_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == c.key; })) continue;
+        const bool param = c.key.substr(0, styles::kParamPrefix.size()) == styles::kParamPrefix;
+        out.push_back({c.key, propertyName(type_, c.key), param ? "PARAM\xC3\x88TRES DU SYMBOLE" : "PROPRI\xC3\x89T\xC3\x89S", c.defaultValue});
+    }
+    std::stable_partition(out.begin(), out.end(), [](const HmiStyleChooser::Entry& e) {
+        return e.value.substr(0, styles::kParamPrefix.size()) != styles::kParamPrefix;
+    });
+    return out;
+}
+
+void HmiStylesPane::openTypeChooser() {
+    std::string why;
+    if (!editable(&why)) {
+        say(why, true);
+        return;
+    }
+    auto entries = typeChoices();
+    if (entries.empty()) {
+        say("Le style vise d\xC3\xA9j\xC3\xA0 tous les types.", true);
+        return;
+    }
+    chooserFor_ = 1;
+    const auto b = bounds();
+    chooser_->open("AJOUTER UN TYPE", std::move(entries), addType_->bounds(), {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)});
+}
+
+void HmiStylesPane::openPropertyChooser() {
+    std::string why;
+    if (!editable(&why)) {
+        say(why, true);
+        return;
+    }
+    if (type_.empty() || !styles::knownType(doc_->project, type_)) {
+        say("Choisis d'abord un type d'objet du style (ou ajoute-en un).", true);
+        return;
+    }
+    auto entries = propertyChoices();
+    if (entries.empty()) {
+        say(styles::typeLabel(type_) + " : le style impose d\xC3\xA9j\xC3\xA0 toutes ses propri\xC3\xA9t\xC3\xA9s.", true);
+        return;
+    }
+    chooserFor_ = 2;
+    const auto b = bounds();
+    chooser_->open("AJOUTER UNE PROPRI\xC3\x89T\xC3\x89 \xE2\x80\x94 " + styles::typeLabel(type_), std::move(entries), addProp_->bounds(),
+                   {b.x, b.y, b.w, std::max(0.f, b.h - 24.f)});
 }
 
 Id HmiStylesPane::addStyle(const std::string& name) {
     Id made = kNoId;
+    std::string madeName;
     auto cmd = hmi::changeProject(doc_, "Nouveau style", [&](hmi::Project& p) {
         hmi::Style s;
         s.id = p.allocate();
-        s.name = hmi::uniqueStyleName(p, name.empty() ? std::string("Style") : name);
-        s.props = {{"fill", "#1B2028", ""}, {"stroke", "#3A4556", ""}, {"textColor", "#FFFFFF", ""}, {"fontSize", "16", ""}};
+        s.name = styles::uniqueName(p, trimmed(name));
         made = s.id;
+        madeName = s.name;
         p.styles.push_back(std::move(s));
     });
     if (cmd) apply_(std::move(cmd));
     refresh();
-    say("Style cr\xC3\xA9\xC3\xA9 : \xC3\xA0 r\xC3\xA9gler dans sa fiche ; un objet le cite par \xC2\xAB Style nomm\xC3\xA9 \xC2\xBB.");
+    say("Style " + madeName + " cr\xC3\xA9\xC3\xA9 : ajoute-lui un type d'objet (+ Ajouter un type\xE2\x80\xA6) et ce qu'il lui impose ; "
+        "un objet le cite par \xC2\xAB Style nomm\xC3\xA9 \xC2\xBB.");
+    return made;
+}
+
+Id HmiStylesPane::duplicateFrom(const std::string& name, const std::string& newName) {
+    const hmi::Style* src = styles::find(doc_->project, name);
+    if (!src) {
+        say("Style introuvable : " + name, true);
+        return kNoId;
+    }
+    const hmi::Style from = *src;
+    Id made = kNoId;
+    std::string madeName;
+    auto cmd = hmi::changeProject(doc_, "Dupliquer \xC3\xA0 partir de " + from.name, [&](hmi::Project& p) {
+        hmi::Style s = styles::duplicate(p, from, trimmed(newName));
+        made = s.id;
+        madeName = s.name;
+        p.styles.push_back(std::move(s));
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    say("\xC2\xAB " + madeName + " \xC2\xBB : une copie modifiable de \xC2\xAB " + from.name + " \xC2\xBB" + (from.builtin ? " (style fourni)" : "")
+        + " - renomme-la, puis r\xC3\xA8gle ses types et leurs propri\xC3\xA9t\xC3\xA9s (Ctrl+Z la retire).");
     return made;
 }
 
 Id HmiStylesPane::duplicateStyle(Id style) {
-    Id made = kNoId;
-    auto cmd = hmi::changeProject(doc_, "Dupliquer le style", [&](hmi::Project& p) {
-        const hmi::Style* src = styleById(p, style);
-        if (!src) return;
-        hmi::Style s = *src;
-        s.id = p.allocate();
-        s.name = hmi::uniqueStyleName(p, src->name + "_copie");
-        made = s.id;
-        p.styles.push_back(std::move(s));
-    });
-    if (cmd) apply_(std::move(cmd));
-    refresh();
-    return made;
+    const hmi::Style* s = doc_->project.style(style);
+    return s ? duplicateFrom(s->name) : kNoId;
 }
 
 bool HmiStylesPane::removeStyle(Id style) {
     std::string name;
     std::size_t freed = 0;
-    auto cmd = hmi::changeProject(doc_, "Supprimer le style", [&](hmi::Project& p) {
+    auto cmd = hmi::changeProject(doc_, "Retirer le style", [&](hmi::Project& p) {
         const hmi::Style* s = styleById(p, style);
         if (!s) return;
         name = s->name;
-        freed = hmi::design::forgetStyle(p, name);
+        freed = styles::forget(p, name);
     });
     if (!cmd) return false;
     apply_(std::move(cmd));
     refresh();
-    say("Style " + name + " supprim\xC3\xA9 : " + std::to_string(freed) + " objet(s) gardent leurs valeurs (Ctrl+Z le rend).");
+    say("Style " + name + " retir\xC3\xA9 : " + std::to_string(freed) + " objet(s) gardent leurs valeurs (Ctrl+Z le rend).");
     return true;
 }
 
+bool HmiStylesPane::renameStyle(Id style, const std::string& name, std::string* why) { return setStyleField(style, "nom", name, why); }
+
 bool HmiStylesPane::setStyleField(Id style, const std::string& key, const std::string& raw, std::string* why) {
     const std::string value = trimmed(raw);
-    std::string error;
     std::size_t followed = 0;
     std::string shownName;
     const auto fail = [&](std::string e) {
@@ -383,56 +1371,301 @@ bool HmiStylesPane::setStyleField(Id style, const std::string& key, const std::s
         say(e, true);
         return false;
     };
-    const hmi::Style* current = styleById(doc_->project, style);
-    if (!current) return fail("style introuvable");
+    const hmi::Style* current = doc_->project.style(style);
+    if (!current) return fail(style == kNoId && locked() ? std::string("un style fourni ne se modifie pas") : std::string("style introuvable"));
     if (key == "nom") {
         if (value.empty()) return fail("un style a un nom");
-        const auto* other = doc_->project.styleByName(value);
-        if (other && other->id != style) return fail("'" + value + "' existe d\xC3\xA9j\xC3\xA0");
+        if (styles::builtin(value)) return fail("\xC2\xAB " + value + " \xC2\xBB est le nom d'un style fourni : choisis-en un autre");
+        if (!styles::nameFree(doc_->project, value, style)) return fail("'" + value + "' existe d\xC3\xA9j\xC3\xA0");
     } else if (key != "description") {
-        const bool numeric = key == "strokeWidth" || key == "radius" || key == "opacity" || key == "fontSize";
-        double n = 0;
-        if (numeric && !value.empty() && (!hmi::parseNumber(value, n) || n < 0)) return fail(key + " : un nombre positif");
+        // Une propriete : celle du type choisi (ce style etant le style choisi), sinon du premier type qui la porte, sinon
+        // de tous les objets.
+        std::string type;
+        if (style == selectedStyle() && !type_.empty()) type = type_;
+        for (const auto& t : current->targets)
+            if (type.empty() && std::any_of(t.props.begin(), t.props.end(), [&](const hmi::Prop& pr) { return pr.key == key; })) type = t.type;
+        if (type.empty()) type = std::string(styles::kAnyType);
+        if (!value.empty()) return setTypeValue(style, type, key, value, why);
+        const auto* props = propsOf(*current, type);
+        if (!props || std::none_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == key; })) return true;
+        return dropKey(style, type, key, why);
     }
     auto cmd = hmi::changeProject(doc_, "Style : " + key, [&](hmi::Project& p) {
         hmi::Style* s = styleById(p, style);
         if (!s) return;
         const hmi::Style before = *s;
         if (key == "nom") s->name = value;
-        else if (key == "description") s->description = value;
-        else {
-            auto it = std::find_if(s->props.begin(), s->props.end(), [&](const hmi::Prop& x) { return x.key == key; });
-            if (value.empty()) {
-                if (it != s->props.end()) s->props.erase(it);
-            } else if (it != s->props.end()) {
-                it->value = value;
-            } else {
-                s->props.push_back({key, value, ""});
-            }
-        }
+        else s->description = value;
         const hmi::Style after = *s;
         shownName = after.name;
-        followed = hmi::design::propagateStyle(p, before, after);
+        followed = styles::propagate(p, before, after);
     });
     if (cmd) apply_(std::move(cmd));
     refresh();
-    say(shownName + " : " + key + (value.empty() ? std::string(" retir\xC3\xA9") : " = " + value) + " \xE2\x80\x94 "
-        + std::to_string(followed) + " objet(s) suivent (Ctrl+Z pour revenir).");
+    if (key == "nom") say("Style renomm\xC3\xA9 " + shownName + " : " + std::to_string(followed) + " objet(s) le citent sous ce nom (Ctrl+Z pour revenir).");
+    else say(shownName + " : description chang\xC3\xA9" "e (Ctrl+Z pour revenir).");
+    return true;
+}
+
+bool HmiStylesPane::setTypeValue(Id style, const std::string& type, const std::string& key, const std::string& raw, std::string* why) {
+    std::string value = trimmed(raw);
+    const auto fail = [&](std::string e) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    };
+    const hmi::Style* current = doc_->project.style(style);
+    if (!current) return fail(styles::builtin(builtin_) ? std::string("un style fourni ne se modifie pas") : std::string("style introuvable"));
+    if (type != styles::kAnyType && !styles::knownType(doc_->project, type)) return fail(styles::typeLabel(type) + " : type inconnu");
+    const KeyKind k = keyKindOf(doc_->project, type, key);
+    const std::string label = propertyName(type, key);
+    std::string bad;
+    if (!cleanValue(k, key, value, bad)) return fail(label + " : " + bad);
+    const std::string name = current->name;
+    std::size_t followed = 0, kept = 0;
+    auto cmd = hmi::changeProject(doc_, "Style " + name + " : " + label, [&](hmi::Project& p) {
+        hmi::Style* s = styleById(p, style);
+        if (!s) return;
+        const hmi::Style before = *s;
+        auto& props = type == styles::kAnyType ? s->props : styles::targetFor(*s, type).props;
+        const auto it = std::find_if(props.begin(), props.end(), [&](const hmi::Prop& x) { return x.key == key; });
+        if (it != props.end()) it->value = value;
+        else props.push_back({key, value, ""});
+        const hmi::Style after = *s;
+        const auto was = citedValues(p, name, key);
+        const auto brokenBefore = brokenOn(p, name, key);
+        (void)styles::propagate(p, before, after);
+        const auto now = citedValues(p, name, key);
+        for (const auto& [id, v] : now)
+            if (const auto w = was.find(id); w != was.end() && w->second != v) ++followed;
+        for (const Id id : brokenOn(p, name, key)) kept += brokenBefore.count(id) ? 0u : 1u;
+    });
+    prop_ = key;
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    say(name + " \xC2\xB7 " + styles::typeLabel(type) + " : " + label + " = " + (value.empty() ? std::string("(vide)") : value) + " \xE2\x80\x94 "
+        + std::to_string(followed) + " objet(s) suivent"
+        + (kept ? " ; " + std::to_string(kept) + " l'avai(en)t chang\xC3\xA9" "e : elle reste la leur (bris\xC3\xA9" "e)" : std::string{})
+        + " (Ctrl+Z pour revenir).");
+    return true;
+}
+
+bool HmiStylesPane::addType(const std::string& type, std::string* why) {
+    const auto fail = [&](std::string e) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    };
+    std::string e;
+    const hmi::Style* s = editable(&e);
+    if (!s) return fail(e);
+    if (type == styles::kAnyType || !styles::knownType(doc_->project, type)) return fail(styles::typeLabel(type) + " : pas un type qu'on peut viser");
+    if (styles::target(*s, type)) return fail(styles::typeLabel(type) + " : d\xC3\xA9j\xC3\xA0 au style");
+    const Id sid = s->id;
+    auto cmd = hmi::changeProject(doc_, "Style " + s->name + " : ajouter " + styles::typeLabel(type), [&](hmi::Project& p) {
+        if (hmi::Style* st = styleById(p, sid)) (void)styles::targetFor(*st, type);
+    });
+    if (!cmd) return fail("rien n'a chang\xC3\xA9");
+    apply_(std::move(cmd));
+    type_ = type;
+    prop_.clear();
+    previewType_ = type;
+    refresh();
+    say(styles::typeLabel(type) + " ajout\xC3\xA9 au style : choisis les propri\xC3\xA9t\xC3\xA9s qu'il lui impose (+ Ajouter une propri\xC3\xA9t\xC3\xA9\xE2\x80\xA6) - "
+        "un type sans propri\xC3\xA9t\xC3\xA9 n'impose rien (il n'est pas enregistr\xC3\xA9).");
+    return true;
+}
+
+bool HmiStylesPane::removeType(const std::string& type, std::string* why) {
+    const auto fail = [&](std::string e) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    };
+    std::string e;
+    const hmi::Style* s = editable(&e);
+    if (!s) return fail(e);
+    if (type.empty() || !propsOf(*s, type) || (type == styles::kAnyType && s->props.empty())) return fail("choisis un type du style");
+    const Id sid = s->id;
+    std::size_t kept = 0;
+    auto cmd = hmi::changeProject(doc_, "Style " + s->name + " : retirer " + styles::typeLabel(type), [&](hmi::Project& p) {
+        hmi::Style* st = styleById(p, sid);
+        if (!st) return;
+        const hmi::Style before = *st;
+        if (type == styles::kAnyType) st->props.clear();
+        else std::erase_if(st->targets, [&](const hmi::StyleTarget& t) { return t.type == type; });
+        const hmi::Style after = *st;
+        (void)styles::propagate(p, before, after);
+        // Les objets de ce type qui citent le style : ils gardent leurs valeurs (plus imposees).
+        for (const auto& v : p.views)
+            for (const auto& o : v.objects)
+                if (upperAscii(styles::citedStyle(o)) == upperAscii(after.name) && (type == styles::kAnyType || styles::typeOf(o) == type)) ++kept;
+    });
+    if (!cmd) return fail("rien n'a chang\xC3\xA9");
+    apply_(std::move(cmd));
+    const std::string gone = type;
+    type_.clear();
+    prop_.clear();
+    refresh();
+    say(styles::typeLabel(gone) + " retir\xC3\xA9 du style : " + std::to_string(kept) + " objet(s) gardent leurs valeurs (Ctrl+Z le rend).");
+    return true;
+}
+
+bool HmiStylesPane::addProperty(const std::string& key, std::string* why) {
+    const auto fail = [&](std::string e) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    };
+    std::string e;
+    const hmi::Style* s = editable(&e);
+    if (!s) return fail(e);
+    if (type_.empty() || !styles::knownType(doc_->project, type_)) return fail("choisis d'abord un type d'objet du style");
+    const auto choices = styles::propertiesOf(doc_->project, type_);
+    const auto c = std::find_if(choices.begin(), choices.end(), [&](const styles::PropChoice& pc) { return pc.key == key; });
+    if (c == choices.end()) return fail(styles::typeLabel(type_) + " n'a pas de propri\xC3\xA9t\xC3\xA9 " + key);
+    if (const auto* props = propsOf(*s, type_); props && std::any_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == key; }))
+        return fail(propertyName(type_, key) + " : d\xC3\xA9j\xC3\xA0 impos\xC3\xA9" "e");
+    const KeyKind k = keyKindOf(doc_->project, type_, key);
+    const std::string value = startValue(k, c->defaultValue);
+    const std::string type = type_;
+    const Id sid = s->id;
+    const std::string name = s->name;
+    std::size_t followed = 0;
+    auto cmd = hmi::changeProject(doc_, "Style " + name + " : imposer " + propertyName(type, key), [&](hmi::Project& p) {
+        hmi::Style* st = styleById(p, sid);
+        if (!st) return;
+        const hmi::Style before = *st;
+        auto& props = type == styles::kAnyType ? st->props : styles::targetFor(*st, type).props;
+        props.push_back({key, value, ""});
+        const hmi::Style after = *st;
+        const auto was = citedValues(p, name, key);
+        (void)styles::propagate(p, before, after);
+        for (const auto& [id, v] : citedValues(p, name, key))
+            if (const auto w = was.find(id); w != was.end() && w->second != v) ++followed;
+    });
+    if (!cmd) return fail("rien n'a chang\xC3\xA9");
+    apply_(std::move(cmd));
+    prop_ = key;
+    refresh();
+    say(propertyName(type, key) + " impos\xC3\xA9" "e aux " + styles::typeLabel(type) + " : " + (value.empty() ? std::string("(vide)") : value)
+        + " \xE2\x80\x94 " + std::to_string(followed) + " objet(s) suivent. Change sa valeur dans la liste (Ctrl+Z la retire).");
+    return true;
+}
+
+bool HmiStylesPane::removeProperty(const std::string& key, std::string* why) {
+    std::string e;
+    const hmi::Style* s = editable(&e);
+    if (!s) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    }
+    return dropKey(s->id, type_, key, why);
+}
+
+bool HmiStylesPane::dropKey(Id style, const std::string& type, const std::string& key, std::string* why) {
+    const auto fail = [&](std::string e) {
+        if (why) *why = e;
+        say(e, true);
+        return false;
+    };
+    const hmi::Style* s = doc_->project.style(style);
+    if (!s) return fail("style introuvable");
+    const auto* props = propsOf(*s, type);
+    if (key.empty() || !props || std::none_of(props->begin(), props->end(), [&](const hmi::Prop& pr) { return pr.key == key; }))
+        return fail("choisis une propri\xC3\xA9t\xC3\xA9 impos\xC3\xA9" "e (un clic sur sa ligne)");
+    auto cmd = hmi::changeProject(doc_, "Style " + s->name + " : ne plus imposer " + propertyName(type, key), [&](hmi::Project& p) {
+        hmi::Style* st = styleById(p, style);
+        if (!st) return;
+        const hmi::Style before = *st;
+        auto& list = type == styles::kAnyType ? st->props : styles::targetFor(*st, type).props;
+        std::erase_if(list, [&](const hmi::Prop& pr) { return pr.key == key; });
+        const hmi::Style after = *st;
+        (void)styles::propagate(p, before, after);
+    });
+    if (!cmd) return fail("rien n'a chang\xC3\xA9");
+    apply_(std::move(cmd));
+    if (prop_ == key) prop_.clear();
+    refresh();
+    say(propertyName(type, key) + " : le style ne l'impose plus aux " + styles::typeLabel(type) + " - les objets gardent leur valeur (Ctrl+Z pour revenir).");
     return true;
 }
 
 void HmiStylesPane::onLayout() {
     const auto b = bounds();
-    tools_->setBounds({b.x, b.y, b.w, 38});
-    status_->setBounds({b.x, b.y + b.h - 24, b.w, 24});
-    const float gridW = std::min(420.f, b.w * 0.4f);
-    // Lot API 8 : la recherche sous la barre (au-dessus de la table), comme celle des alarmes.
-    search_->setBounds({b.x + 8, b.y + 42, std::max(0.f, std::min(560.f, b.w - gridW - 20)), 28});
-    table_->setBounds({b.x, b.y + 76, b.w - gridW - 4, std::max(0.f, b.h - 100)});
-    // 1.12.27 : l'apercu du style au-dessus de sa fiche
-    const float previewH = std::min(116.f, std::max(0.f, (b.h - 62) * 0.4f));
-    preview_->setBounds({b.x + b.w - gridW, b.y + 38, gridW, previewH});
-    grid_->setBounds({b.x + b.w - gridW, b.y + 42 + previewH, gridW, std::max(0.f, b.h - 66 - previewH)});
+    const float bar = 38.f, statusH = 24.f, head = 26.f, pad = 8.f;
+    const float searchW = std::clamp(b.w * 0.3f, 180.f, 340.f);
+    tools_->setBounds({b.x, b.y, std::max(0.f, b.w - searchW - 12.f), bar});
+    search_->setBounds({b.x + b.w - searchW - 8.f, b.y + 5.f, searchW, 28.f});
+    status_->setBounds({b.x, b.y + b.h - statusH, b.w, statusH});
+    const float top = b.y + bar, bottom = b.y + b.h - statusH;
+    const float h = std::max(0.f, bottom - top);
+    const float w1 = std::clamp(b.w * 0.24f, 220.f, 320.f);
+    const float w2 = std::clamp(b.w * 0.22f, 200.f, 300.f);
+    colStyles_ = {b.x, top, w1, h};
+    colTypes_ = {b.x + w1, top, w2, h};
+    colProps_ = {b.x + w1 + w2, top, std::max(0.f, b.w - w1 - w2), h};
+    // Les styles : les fournis (toutes leurs lignes), puis ceux du projet.
+    const float fixedH = std::min(h * 0.45f, 28.f + 24.f * static_cast<float>(std::max<std::size_t>(1, builtinRows_.size())) + 2.f);
+    builtins_->setBounds({colStyles_.x, top + head, w1 - 1.f, fixedH});
+    table_->setBounds({colStyles_.x, top + head + fixedH + 4.f, w1 - 1.f, std::max(0.f, h - head - fixedH - 4.f)});
+    // Les types : la liste, puis ses deux boutons.
+    const float btn = 30.f;
+    const float typesH = std::max(0.f, h - head - 2.f * (btn + pad) - pad);
+    types_->setBounds({colTypes_.x, top + head, w2 - 1.f, typesH});
+    addType_->setBounds({colTypes_.x + pad, top + head + typesH + pad, w2 - 2.f * pad - 1.f, btn});
+    removeType_->setBounds({colTypes_.x + pad, top + head + typesH + 2.f * pad + btn, w2 - 2.f * pad - 1.f, btn});
+    // Les proprietes : le bandeau d'un style fourni, la fiche, ses deux boutons ; dessous, l'apercu.
+    const float bannerH = locked() ? 34.f : 0.f;
+    banner_ = {colProps_.x + pad, top + head + 4.f, std::max(0.f, colProps_.w - 2.f * pad), bannerH > 0.f ? bannerH - 8.f : 0.f};
+    const float previewH = std::clamp(h * 0.42f, 150.f, 300.f);
+    const float gridTop = top + head + bannerH;
+    const float gridH = std::max(0.f, h - head - bannerH - previewH - btn - 2.f * pad);
+    grid_->setBounds({colProps_.x, gridTop, colProps_.w, gridH});
+    const float half = std::max(0.f, (colProps_.w - 3.f * pad) / 2.f);
+    addProp_->setBounds({colProps_.x + pad, gridTop + gridH + pad, std::min(260.f, half), btn});
+    removeProp_->setBounds({colProps_.x + 2.f * pad + std::min(260.f, half), gridTop + gridH + pad, std::min(260.f, half), btn});
+    preview_->setBounds({colProps_.x, bottom - previewH, colProps_.w, previewH});
+}
+
+void HmiStylesPane::onPaint(const ui::PaintContext& ctx) {
+    const auto& c = ctx.theme.color;
+    const auto font = ctx.theme.font.smallUi;
+    ctx.r.fillRect(bounds(), c.panelBg);
+    const float head = 26.f;
+    const auto heading = [&](const gfx::Rect& col, const std::string& left, const std::string& right) {
+        const gfx::Rect strip{col.x, col.y, col.w, head};
+        ctx.r.fillRect(strip, c.headerBg);
+        ctx.r.fillRect({strip.x, strip.bottom() - 1.f, strip.w, 1.f}, c.border);
+        float rightW = 0.f;
+        if (!right.empty()) {
+            const std::string r = simmark::fitText(ctx.r, right, font, col.w * 0.45f);
+            rightW = ctx.r.measure(r, font).width;
+            ctx.r.drawText({col.right() - 10.f - rightW, col.y + 6.f}, r, font, c.textMuted);
+        }
+        ctx.r.drawText({col.x + 10.f, col.y + 6.f}, simmark::fitText(ctx.r, left, font, col.w - rightW - 28.f), font, c.textMuted);
+    };
+    heading(colStyles_, "STYLES", std::to_string(shown_));
+    heading(colTypes_, "TYPES D'OBJETS DU STYLE", std::to_string(typeRows_.size()));
+    heading(colProps_, type_.empty() ? std::string("PROPRI\xC3\x89T\xC3\x89S IMPOS\xC3\x89" "ES")
+                                     : "PROPRI\xC3\x89T\xC3\x89S IMPOS\xC3\x89" "ES \xE2\x80\x94 " + styles::typeLabel(type_),
+            "n'importe quelle propri\xC3\xA9t\xC3\xA9 du type");
+    // Les colonnes : un trait entre elles.
+    ctx.r.fillRect({colTypes_.x - 1.f, colTypes_.y, 1.f, colTypes_.h}, c.border);
+    ctx.r.fillRect({colProps_.x - 1.f, colProps_.y, 1.f, colProps_.h}, c.border);
+    // Un style fourni : le bandeau.
+    if (const std::string text = lockedBanner(); !text.empty() && banner_.h > 0.f) {
+        ctx.r.fillRoundedRect(banner_, c.accent.withAlpha(40), 4.f);
+        ctx.r.strokeRect(banner_, c.accent.withAlpha(120), 1.f);
+        ui::drawIcon(ctx.r, ui::Icon::Lock, {banner_.x + 8.f, banner_.y + (banner_.h - 14.f) / 2.f, 14.f, 14.f}, c.text);
+        ctx.r.drawText({banner_.x + 30.f, banner_.y + (banner_.h - ctx.r.lineHeight(font)) / 2.f},
+                       simmark::fitText(ctx.r, text, font, banner_.w - 40.f), font, c.text);
+    }
+    // Sans style choisi : ce qu'il faut faire, dans la colonne des types.
+    if (!currentStyle() && colTypes_.w > 40.f)
+        ctx.r.drawText({colTypes_.x + 10.f, colTypes_.y + head + 34.f},
+                       simmark::fitText(ctx.r, "Choisis un style \xC3\xA0 gauche.", font, colTypes_.w - 20.f), font, c.textMuted);
 }
 
 // ===================================================== rechercher / remplacer ===

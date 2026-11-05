@@ -599,6 +599,8 @@ std::string freeName(const Project& p, std::string wanted) {
 }
 } // namespace
 
+std::string uniqueName(const Project& p, std::string wanted) { return freeName(p, std::move(wanted)); }
+
 Style fromObject(Project& p, const Object& o, const std::string& name) {
     Style s;
     s.id = p.allocate();

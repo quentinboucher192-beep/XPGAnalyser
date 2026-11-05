@@ -141,6 +141,9 @@ std::size_t adopt(Project&);
 [[nodiscard]] Style duplicate(Project&, const Style&, const std::string& name = {});
 // Un style du projet ne peut pas porter le nom d'un style fourni (il le cacherait) : vrai si `name` est libre.
 [[nodiscard]] bool nameFree(const Project&, std::string_view name, Id except = kNoId);
+// Un nom libre (nameFree) pour un style du projet : `wanted`, sinon "wanted 2", "wanted 3"... ; vide : "Style".
+// (1.23.0 : le Nouveau style de l'onglet Styles - jamais le nom d'un style fourni.)
+[[nodiscard]] std::string uniqueName(const Project&, std::string wanted);
 
 // ---- verifier ----------------------------------------------------------------------------------------------------------
 // Ce qui ne va pas dans un style : un type inconnu (un symbole supprime), une propriete que le type n'a pas, une valeur

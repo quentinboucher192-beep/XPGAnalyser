@@ -301,6 +301,17 @@ private:
 [[nodiscard]] std::string hmiPaletteFamily(hmi::Kind kind);
 // 1.12.26 : le libelle d'une propriete d'un objet, celui de l'inspecteur (la fenetre Historique).
 [[nodiscard]] std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key);
+// 1.23.0 : UNE PROPRIETE D'OBJET TELLE QUE L'INSPECTEUR LA MONTRE - son libelle, son genre de case (couleur, nombre,
+// bascule, liste, texte), ses choix, son aide : la table de l'inspecteur. Nul : une cle qu'il ne connait pas (un
+// parametre de symbole param:<Nom>...). L'onglet Styles s'en sert pour editer une propriete imposee comme l'inspecteur.
+struct HmiKeyInfo {
+    const char*                 key;
+    const char*                 label;
+    ui::PropertyGrid::ValueType type;
+    std::vector<std::string>    choices;
+    const char*                 help;
+};
+[[nodiscard]] const HmiKeyInfo* hmiKeyInfo(std::string_view key);
 // 1.14.0 (captures finales) : les mots-cles d'un genre pour la recherche de la bibliotheque (ceux de son sujet d'aide,
 // @mots, et les siens), et s'ils trouvent `text` (le debut d'un mot, sans casse ni accents).
 [[nodiscard]] std::vector<std::string_view> hmiPaletteWords(hmi::Kind kind);

@@ -2663,7 +2663,7 @@ namespace {
 
 using PG = ui::PropertyGrid;
 
-struct KeyInfo { const char* key; const char* label; PG::ValueType type; std::vector<std::string> choices; const char* help; };
+using KeyInfo = HmiKeyInfo;   // 1.23.0 : la table, exposee (hmiKeyInfo : l'onglet Styles)
 
 const std::vector<KeyInfo>& keyInfos() {
     static const std::vector<KeyInfo> k = {
@@ -3610,6 +3610,8 @@ std::string hmiPropertyLabel(hmi::Kind kind, std::string_view key) {
     if (const auto* k = infoOf(key)) return k->label;
     return std::string(key);
 }
+
+const HmiKeyInfo* hmiKeyInfo(std::string_view key) { return infoOf(key); }
 
 bool hmiPropertyInfo(std::string_view key, std::string& label, std::string& help) {
     const auto* k = infoOf(key);
