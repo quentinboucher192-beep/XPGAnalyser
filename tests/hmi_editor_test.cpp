@@ -19931,7 +19931,7 @@ void centreAide111() {
     check(ix.duplicates().empty(), "centre : aucune cle en double");
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
-    check(ix.count(hc::Chapter::Hmi) == 247, "centre : L'IHM a les 247 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions ; 1.23.1 : couleurs-semantiques ; 1.24.0 : bibliotheque-sons)");
+    check(ix.count(hc::Chapter::Hmi) == 248, "centre : L'IHM a les 248 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions ; 1.23.1 : couleurs-semantiques ; 1.24.0 : bibliotheque-sons ; 1.25.0 : mise-en-page-rapports)");
     check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 96, "centre : 11 expressions, 96 notes (1.25.0)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
@@ -20925,7 +20925,7 @@ void glyphesWindows1112() {
           "glyphes : ▶ ▸ ▾ ★ ☆ ● ← → ↑ ↓ ✓ ✕ sont dessines par l'atlas ; › ‹ • sont sous Windows ; ⭐ et 中 ne passent pas");
 
     const std::set<std::string> langues{"src/hmi/HmiLanguages.cpp"};
-    const std::set<std::string> octets{"src/export/ProgramBookPdf.cpp", "src/hmi/HmiReports.cpp", "src/hmi/HmiDossier.cpp",
+    const std::set<std::string> octets{"src/export/ProgramBookPdf.cpp", "src/hmi/HmiReportLayout.cpp", "src/hmi/HmiDossier.cpp",
                                        "src/hmi/HmiExport.cpp"};
     std::set<std::string> languesVues, octetsVus;
     std::vector<std::string> fautes;
