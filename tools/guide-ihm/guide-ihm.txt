@@ -301,6 +301,32 @@ Un dossier est un **rangement**, sans effet sur les noms - comme les filtres de 
 Chaque geste est **une commande** : Ctrl+Z le défait d'un coup, l'historique le montre (« Ranger 3 vues dans Ligne 1 »).
 ! Les dossiers s'enregistrent avec le projet (format 19) : un outil plus ancien refuse de l'ouvrir plutôt que de les perdre.
 
+== supprimer-plusieurs | Supprimer plusieurs éléments d'un coup
+: Choisis plusieurs éléments (Ctrl+clic, Maj+clic) dans l'arbre du projet ou dans une liste, puis Supprimer (Suppr, ou le clic droit) : une seule question, un seul Ctrl+Z pour tout rendre.
+@depuis 1.24.0
+@mots supprimer plusieurs, sélection multiple, Ctrl+clic, Maj+clic, Supprimer les N éléments, Suppr, plusieurs d'un coup
+@voir historique, dossiers, aller-a
+### Dans l'arbre du projet
+- Choisis les éléments avec **Ctrl+clic** (un par un) ou **Maj+clic** (une suite) - même de genres différents : des vues et des scripts, des variables et des alarmes.
+- Le clic droit sur l'un d'eux propose **Supprimer les 5 éléments…** (ou « Supprimer les 3 vues… » s'ils sont tous du même genre) ; la touche **Suppr** fait pareil.
+- Une seule question : quelques noms puis « +N », ce qui **ne part pas** et pourquoi (un élément fourni, un dossier natif, un type encore employé, une tâche qui exécute encore une section…), et ce que Ctrl+Z rendra.
+- Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Les macros (elles vont dans leur corbeille) et les versions ne reviennent pas par Ctrl+Z ; la question le dit.
+- Ce qui ne vaut que pour un élément (Renommer…) est grisé « un à la fois ».
+Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes et pieds, symboles (avec leurs popups), scripts, fonctions, types (s'ils ne sont plus employés), variables, alarmes, recettes, utilisateurs, groupes (vides), tes styles et tes couleurs sémantiques, les dossiers des listes ; côté automate, les sections, sous-routines, variables, DDT, DFB, unités, tables d'animation et tâches.
+
+== chemins | Les chemins de fichiers : ouvrir dans l'explorateur, aller à
+: Partout où un chemin de fichier ou de dossier s'affiche, le clic droit propose Ouvrir dans l'explorateur, Aller à (l'élément dans le logiciel) et Copier le chemin.
+@depuis 1.24.0
+@mots chemin, fichier, dossier, Ouvrir dans l'explorateur, Aller à, Copier le chemin, explorateur Windows
+@voir aller-a, chercher-fichiers, ressources, fichiers
+### Les trois entrées
+- **Ouvrir dans l'explorateur** : l'Explorateur de Windows, le fichier choisi (un dossier : ouvert). Un chemin relatif part du dossier du projet.
+- **Aller à** : l'élément **dans le logiciel** - le projet, une vue, les dossiers Ressources, Historique, Enregistrements et Incidents : leur nœud dans l'arbre (et leur volet) ; une ressource, un fichier externe, un enregistrement, un dossier d'incident : leur volet, sur eux ; ailleurs, un fichier s'ouvre dans l'aperçu des fichiers, un dossier dans **Chercher des fichiers**.
+- **Copier le chemin**.
+Un chemin qui n'existe pas (encore) : les entrées sont grisées, et la raison est dite.
+### Où
+L'inspecteur (une image, une vidéo, une affiche, une police, un document cités ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de l'Explorateur de fichiers), les tableaux Ressources, Fichiers externes et Enregistrements, la fiche d'un enregistrement, la configuration des enregistrements, l'historique, les bibliothèques reliées, le fichier de stockage d'une variable rémanente, le fichier source de l'automate, l'action Exporter un enregistrement, le Stockage PC de la mémoire de l'IA, et dans l'arbre : une vue enregistrée, une macro, une bibliothèque reliée, les dossiers Ressources, Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le chemin).
+
 == historique | Annuler, rétablir, l'historique
 : Une seule pile pour tout le projet, l'IHM comme l'automate : Ctrl+Z et Ctrl+Y marchent partout, et annuler montre l'endroit. L'Historique (Ctrl+H) liste chaque action avec son endroit et son heure ; un double clic revient à cet état.
 @mots Historique, historique, Annuler, annuler, Rétablir, rétablir, Ctrl+Z, Ctrl+Y, Ctrl+H, État actuel, état actuel, Revenir à cet état, Aller à l'endroit seulement, Enregistré, Projet ouvert, annulées, garde-fou, Quitter sans enregistrer, Enregistrer et quitter
