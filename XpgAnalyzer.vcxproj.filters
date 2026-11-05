@@ -1393,6 +1393,9 @@
     <ClCompile Include="src\app\hmi\HmiFunctionTestsPage.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiImageLibraryPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiIncidentHost.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -3062,6 +3065,9 @@
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiFunctionTestsPage.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiImageLibraryPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\app\hmi\HmiIncidentHost.hpp">

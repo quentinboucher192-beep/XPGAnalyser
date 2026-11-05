@@ -77,6 +77,8 @@
 #include "../src/core/SemanticColors.hpp"
 #include "../src/app/hmi/HmiSemanticPane.hpp"   // 1.23.1 : IHM > Styles > Couleurs semantiques
 #include "../src/app/hmi/HmiSoundLibraryPane.hpp"   // 1.24.0 : la bibliotheque de sons
+#include "../src/app/hmi/HmiImageLibraryPane.hpp"   // 1.25.1 : le volet de la bibliotheque d'images
+#include "../src/app/Capture.hpp"                   // 1.25.1 : un PNG pour Mes images (encodePng)
 #include "../src/app/hmi/HmiReportLayoutPane.hpp"   // 1.25.0 : la mise en page des rapports
 #include "../src/hmi/HmiReportLayout.hpp"
 #include "../src/hmi/HmiUnits.hpp"
@@ -46853,6 +46855,266 @@ void rapportsSonsImages1250() {
     }
 }
 
+// 1.25.1 : IHM > RESSOURCES > BIBLIOTHEQUE D'IMAGES - LE VOLET (le client, le 05/11, en montrant celui des sons : << fais
+// un menu comme ca pour bibliotheques d'images aussi >>). Les dossiers et leur nombre, la vignette devant le nom, la fiche
+// (le grand apercu et son fond), la recherche (celle du sous-onglet Images), importer dans le projet (puis Ctrl+Z), Mes
+// images (un fichier lache, retirer plusieurs d'un coup, un seul Ctrl+Z), l'arbre qui l'ouvre sur la bonne image.
+// HMI_TEST_RAP=1 : avec la mise en page des rapports, les sons et les images.
+void bibliothequeImages1251() {
+    std::printf("== 1.25.1 : le volet de la bibliotheque d'images ==\n");
+    namespace il = hmi::imagelib;
+    namespace fs = std::filesystem;
+    using P = app::HmiImageLibraryPane;
+    using TM = app::ProjectTreeModel;
+    using NK = TM::NodeKind;
+    std::error_code ec;
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const fs::path dir = fs::temp_directory_path() / ("xpg_mes_images_1251_" + stamp);
+    const fs::path disk = fs::temp_directory_path() / ("xpg_images_disque_1251_" + stamp);
+    fs::remove_all(dir, ec);
+    fs::create_directories(disk, ec);
+    const std::string keptFolder = il::userFolder();
+    il::setUserFolder(dir.generic_string());
+    {
+        Bench b;
+        core::CommandGroupScope::registerStack(&b.stack);   // plusieurs d'un coup : un seul Ctrl+Z
+        P pane("img1251", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        const auto& natives = il::builtIn();
+        const auto& cats = il::builtInCategories();
+        const il::Image* up = il::findBuiltIn("fleche-haut");
+        const il::Image* danger = il::findBuiltIn("danger-general");
+        check(up && danger && up->ink && !danger->ink && !cats.empty(), "fleche-haut (monochrome), danger-general (en couleurs)");
+        if (!up || !danger || cats.empty()) {
+            core::CommandGroupScope::registerStack(nullptr);
+            il::setUserFolder(keptFolder);
+            return;
+        }
+        std::size_t first = 0;
+        for (const auto& i : natives) first += i.category == cats.front() ? 1u : 0u;
+        // La ligne d'une image (son nom), -1 : aucune.
+        const auto rowOf = [&](const std::string& label) {
+            const auto m = pane.table().model();
+            for (std::size_t r = 0; m && r < m->rowCount(); ++r)
+                if (m->cellText(static_cast<ui::RowIndex>(r), 0) == label) return static_cast<int>(r);
+            return -1;
+        };
+        const auto cell = [&](const std::string& label, std::size_t col) {
+            const int r = rowOf(label);
+            return r < 0 ? std::string("(absente)") : pane.table().model()->cellText(static_cast<ui::RowIndex>(r), col);
+        };
+
+        // ---- le volet se construit : Mes images (vide) en tete, puis les dossiers de la bibliotheque et leur nombre ----
+        auto shown = pane.shownCategories();
+        check(shown.size() == cats.size() + 1 && shown[0].first == "Mes images" && shown[0].second == 0 && shown[1].first == cats.front()
+                  && shown[1].second == first,
+              "les dossiers : Mes images (vide) en t\xC3\xAAte, puis " + cats.front() + " (" + std::to_string(first) + ")...");
+        check(pane.shownIds().size() == natives.size() && pane.selectedId() == natives.front().id,
+              "toutes les images natives (" + std::to_string(natives.size()) + "), la premi\xC3\xA8re choisie");
+        const auto model = pane.table().model();
+        check(model && model->columnCount() == 5 && model->headerText(0) == "Image" && model->headerText(1) == "Taille (px)"
+                  && model->headerText(2) == "Format" && model->headerText(3) == "Dans le projet",
+              "les colonnes : Image, Taille (px), Format, Dans le projet, Mots-cl\xC3\xA9s");
+        check(model && model->cellText(0, 0) == "Mes images  (0)" && model->cellText(0, 4).find("PNG, JPG, SVG") != std::string::npos
+                  && model->cellText(1, 0) == cats.front() + "  (" + std::to_string(first) + ")",
+              "les titres des dossiers et leur nombre ; Mes images, vide, dit comment l'emplir");
+        same_text(cell(up->label, 1), "64 \xC3\x97 64", "la taille de fleche-haut");
+        check(cell(up->label, 2) == "SVG" && cell(up->label, 3) == "\xE2\x80\x94" && cell(up->label, 4) == up->words,
+              "son format, \xE2\x80\x94 (pas dans le projet), ses mots-cl\xC3\xA9s");
+        if (const int r = rowOf(up->label); r >= 0) {
+            const auto st = model->cellStyle(static_cast<ui::RowIndex>(r), 0);
+            check(st.customIcon > 0 && st.indent >= 30.f && st.iconTone == ui::Tone::Muted, "devant le nom : sa vignette, et le cadenas (une native)");
+        }
+        check(pane.statusText().rfind(std::to_string(natives.size()) + " images natives, 0 \xC3\xA0 toi", 0) == 0
+                  && pane.statusText().find("Entr\xC3\xA9" "e : importer dans le projet") != std::string::npos,
+              "la barre d'\xC3\xA9tat : " + pane.statusText());
+
+        // ---- le dessin : les vignettes, la fiche (le grand apercu, ses trois fonds, ce qu'elle dit) ----
+        {
+            Recorder rec;
+            const auto theme = ui::Theme::dark();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.0, nullptr});
+            std::size_t small = 0, big = 0;
+            for (const auto& d : rec.drawn) {
+                small += d.dst.w <= 16.5f && d.dst.h <= 16.5f ? 1u : 0u;
+                big += d.dst.w >= 150.f ? 1u : 0u;
+            }
+            check(small >= 10 && big == 1, "les vignettes devant les noms (" + std::to_string(small) + ") et le grand apercu de l'image choisie");
+            check(rec.wrote("Damier") && rec.wrote("Clair") && rec.wrote("Sombre") && rec.wrote("image native") && rec.wrote("Mots-cl\xC3\xA9s : ")
+                      && rec.wrote("Dans le projet : pas encore") && rec.wrote("Poids : "),
+                  "la fiche : les trois fonds, << ... image native >>, les mots-cl\xC3\xA9s, Dans le projet, le poids");
+            gfx::Rect light;
+            check(pane.backdrop() == P::Backdrop::Checker && pane.backdropRect(P::Backdrop::Light, light), "le fond du grand apercu : un damier par d\xC3\xA9" "faut");
+            (void)pane.dispatch(ui::MouseDown{{light.x + light.w / 2, light.y + light.h / 2}, ui::MouseButton::Left, 1, {}});
+            check(pane.backdrop() == P::Backdrop::Light, "un clic sur Clair : un fond clair");
+            pane.setBackdrop(P::Backdrop::Checker);
+        }
+
+        // ---- la recherche : celle du sous-onglet Images de l'editeur de vues ----
+        pane.setSearch("vanne");
+        std::vector<std::string> expect;
+        for (const auto& i : natives)
+            if (il::matches(i, "vanne")) expect.push_back(i.id);
+        check(!expect.empty() && pane.shownIds() == expect, "chercher vanne : les " + std::to_string(expect.size()) + " images qui la nomment");
+        {
+            auto& pal = b.editor->palette();
+            pal.setFilter("vanne");
+            const auto secs = pal.imageSections();
+            shown = pane.shownCategories();
+            bool same = secs.size() == shown.size() && !secs.empty();
+            for (std::size_t k = 0; same && k < secs.size(); ++k) same = secs[k].category == shown[k].first && secs[k].count == shown[k].second;
+            check(same, "... dans les m\xC3\xAAmes dossiers, avec les m\xC3\xAAmes nombres que le sous-onglet Images");
+            pal.setFilter("");
+        }
+        pane.setSearch("xyzzy");
+        check(pane.shownIds().empty() && pane.shownCategories().empty(), "rien ne r\xC3\xA9pond : la liste est vide");
+        pane.setSearch("");
+        // Replier un dossier ; choisir une de ses images le rouvre.
+        pane.setCategoryOpen(up->category, false);
+        auto ids = pane.shownIds();
+        check(std::find(ids.begin(), ids.end(), up->id) == ids.end() && pane.shownCategories().size() == cats.size() + 1,
+              "replier " + up->category + " : ses images se cachent, le dossier reste");
+        check(pane.select(up->id) && pane.categoryOpen(up->category) && pane.selectedId() == up->id, "choisir fleche-haut rouvre son dossier");
+
+        // ---- Importer dans le projet : une ressource ; deux fois : la meme ; Ctrl+Z la retire ----
+        const std::string name = il::resourceName(*up, pane.importInk(*up));
+        const Id rid = pane.importSelected();
+        const hmi::Resource* r = b.doc->project.resource(rid);
+        check(r && r->name == name && r->kind() == hmi::MediaKind::Image, "Importer : la ressource " + name);
+        check(pane.message().find(name) != std::string::npos, "le message dit la ressource : " + pane.message());
+        same_text(cell(up->label, 3), "\xE2\x9C\x93 " + name, "Dans le projet : \xE2\x9C\x93 et le nom de la ressource");
+        check(pane.importSelected() == rid && b.doc->project.assets.resources.size() == 1 && pane.message().find("d\xC3\xA9j\xC3\xA0") != std::string::npos,
+              "deux fois : la m\xC3\xAAme ressource");
+        {
+            const auto items = pane.contextItems();
+            check(std::any_of(items.begin(), items.end(), [](const ui::PopupMenu::Item& it) { return it.id == P::ActImport && !it.enabled; }),
+                  "import\xC3\xA9" "e : Importer gris\xC3\xA9 (d\xC3\xA9j\xC3\xA0 dans le projet)");
+        }
+        check(b.stack.undo() && b.doc->project.assets.resources.empty(), "Ctrl+Z : la ressource part");
+        same_text(cell(up->label, 3), "\xE2\x80\x94", "la colonne le suit");
+        // Une autre couleur deja importee (le sous-onglet Images, en rouge) : Dans le projet la montre, Importer la reutilise.
+        {
+            const auto red = il::importImage(b.doc->project, *up, 0xD93A2B);
+            b.doc->changed->emit(kNoId);
+            same_text(cell(up->label, 3), "\xE2\x9C\x93 fleche-haut-rouge.svg", "fleche-haut d\xC3\xA9j\xC3\xA0 import\xC3\xA9" "e en rouge : la colonne le dit");
+            check(pane.importSelected() == red.id && b.doc->project.assets.resources.size() == 1, "Importer la r\xC3\xA9utilise");
+            b.doc->project.assets.resources.clear();
+            b.doc->changed->emit(kNoId);
+        }
+        // L'encre de l'import : Auto, sur le fond de la vue de demarrage ; une image en couleurs garde les siennes.
+        {
+            const std::string bg = b.v().background;
+            b.doc->project.config.startView = b.view;
+            b.v().background = "#FFFFFF";
+            check(pane.importInk(*up) == il::kDarkInk && pane.importInk(*danger) == il::kInk, "Auto : sombre sur une vue claire ; les couleurs d'un panneau restent");
+            b.v().background = "#20242B";
+            check(pane.importInk(*up) == il::kInk, "... claire sur une vue sombre");
+            b.v().background = bg;
+        }
+
+        // ---- Mes images : un fichier lache sur le volet, + ; retirer (plusieurs d'un coup, un seul Ctrl+Z) ----
+        const auto write = [&](const fs::path& p, const std::string& text) {
+            std::ofstream f(p, std::ios::binary);
+            f << text;
+        };
+        const fs::path logo = disk / "logo1251.svg", plan = disk / "plan1251.svg", photo = disk / "photo1251.png";
+        write(logo, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"80\"><rect width=\"120\" height=\"80\" fill=\"#C03020\"/></svg>");
+        write(plan, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40\" height=\"40\"><circle cx=\"20\" cy=\"20\" r=\"18\" fill=\"#2060C0\"/></svg>");
+        {
+            std::vector<std::uint8_t> rgba(32u * 16u * 4u, 200), png;
+            check(app::encodePng(rgba, 32, 16, png), "un PNG de 32 x 16");
+            std::ofstream f(photo, std::ios::binary);
+            f.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
+        }
+        (void)pane.dispatch(ui::FileDropped{logo.string(), {100, 200}});
+        check(pane.shownCategories().front().second == 1 && pane.selectedId() == "mes/logo1251.svg" && pane.selectedImage() && pane.selectedImage()->mine(),
+              "un fichier l\xC3\xA2" "ch\xC3\xA9 sur le volet : il rejoint Mes images, choisi");
+        same_text(cell("logo1251", 1), "120 \xC3\x97 80", "sa taille");
+        if (const int row = rowOf("logo1251"); row >= 0)
+            check(pane.table().model()->cellStyle(static_cast<ui::RowIndex>(row), 0).iconTone == ui::Tone::Accent, "une des tiennes : la personne (pas le cadenas)");
+        check(pane.tools().isEnabled(P::ActRemove), "une des tiennes : Retirer actif");
+        std::string why;
+        check(pane.addFile(photo.string(), &why) && pane.selectedId() == "mes/photo1251.png" && cell("photo1251", 2) == "PNG"
+                  && cell("photo1251", 1) == "32 \xC3\x97 16",
+              "+ : un PNG rejoint Mes images (PNG, 32 \xC3\x97 16) " + why);
+        check(pane.addFile(plan.string(), &why) && pane.shownCategories().front().second == 3, "et un autre SVG : Mes images (3)");
+        check(pane.statusText().find(", 3 \xC3\xA0 toi") != std::string::npos, "la barre d'\xC3\xA9tat compte les tiennes");
+        check(pane.selectIds({"mes/logo1251.svg", "mes/plan1251.svg", up->id}) && pane.selectedIds().size() == 3, "choisir 2 des miennes et une native");
+        same_text(pane.tools().labelOf(P::ActRemove), "Retirer les 3", "le bouton dit combien");
+        check(pane.tools().isEnabled(P::ActRemove) && !pane.tools().isEnabled(P::ActImport), "Retirer actif ; Importer gris\xC3\xA9 (une \xC3\xA0 la fois)");
+        pane.runAction(P::ActRemove);
+        check(il::userImages().size() == 1 && pane.shownCategories().front().second == 1 && il::userImages().front().label == "photo1251",
+              "les 2 des miennes partent ; la photo reste");
+        check(pane.message().find("2 images retir") != std::string::npos && pane.message().find("1 refus") != std::string::npos
+                  && pane.message().find("native") != std::string::npos,
+              "le compte rendu (la native refus\xC3\xA9" "e) : " + pane.message());
+        check(b.stack.undo() && il::userImages().size() == 3, "UN Ctrl+Z les rend \xC3\xA0 Mes images");
+        check(pane.shownCategories().front().second == 3, "la liste les montre (relue)");
+        check(pane.select("mes/plan1251.svg") && pane.removeSelected() && il::userImages().size() == 2 && b.stack.undo() && il::userImages().size() == 3,
+              "une seule : retir\xC3\xA9" "e, Ctrl+Z la rend");
+        (void)pane.select(up->id);
+        check(!pane.removeSelected(&why) && why.find("native") != std::string::npos, "une image native ne se retire pas");
+        {
+            (void)pane.select("mes/photo1251.png");
+            const auto items = pane.contextItems();
+            const auto has = [&](int id, bool enabled) {
+                return std::any_of(items.begin(), items.end(), [&](const ui::PopupMenu::Item& it) { return it.id == id && it.enabled == enabled; });
+            };
+            check(!items.empty() && items.front().heading && items.front().shortcut == "une de tes images" && has(P::ActReveal, true)
+                      && has(P::ActRemove, true) && has(P::ActImport, true) && has(P::ActEditor, false),
+                  "le clic droit d'une des tiennes : l'explorateur, Retirer, Importer ; l'\xC3\xA9" "diteur gris\xC3\xA9 (pas d'h\xC3\xB4te ici)");
+        }
+        // Mes images change ailleurs (la palette, Ressources > Ma bibliotheque) : le volet relit la liste a son dessin.
+        {
+            const std::string text = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><rect width=\"10\" height=\"10\"/></svg>";
+            check(il::addUserImage("ailleurs1251.svg", hmi::Bytes(text.begin(), text.end()), nullptr, nullptr, &why), "une image ajout\xC3\xA9" "e ailleurs " + why);
+            Recorder rec;
+            const auto theme = ui::Theme::dark();
+            pane.render(ui::PaintContext{rec, theme, {0, 0, 1400, 800}, 0.0, nullptr});
+            check(pane.shownCategories().front().second == 4 && pane.statusText().find(", 4 \xC3\xA0 toi") != std::string::npos,
+                  "le volet la montre \xC3\xA0 son dessin suivant (Mes images (4))");
+        }
+
+        // ---- l'arbre : Ressources > Bibliotheque d'images, un dossier, une image - le volet s'ouvre dessus ----
+        {
+            auto plc = std::make_shared<domain::Project>();
+            TM tree(plc);
+            tree.setHmi(b.doc);
+            ui::NodeId hmiNode = ui::kInvalidNode, res = ui::kInvalidNode, images = ui::kInvalidNode;
+            for (std::size_t i = 0; i < tree.childCount(tree.root()); ++i)
+                if (TM::kindOf(tree.childAt(tree.root(), i)) == NK::HmiFolder) hmiNode = tree.childAt(tree.root(), i);
+            for (std::size_t i = 0; hmiNode != ui::kInvalidNode && i < tree.childCount(hmiNode); ++i)
+                if (TM::kindOf(tree.childAt(hmiNode, i)) == NK::HmiResources) res = tree.childAt(hmiNode, i);
+            for (std::size_t i = 0; res != ui::kInvalidNode && i < tree.childCount(res); ++i)
+                if (TM::kindOf(tree.childAt(res, i)) == NK::HmiImageLibrary) images = tree.childAt(res, i);
+            check(images != ui::kInvalidNode && tree.childCount(images) == cats.size() + 1, "Ressources \xE2\x80\xBA Biblioth\xC3\xA8que d'images, ses dossiers");
+            if (images != ui::kInvalidNode && tree.childCount(images) > 2) {
+                const auto group = tree.childAt(images, 2);
+                const auto item = tree.childAt(group, 1);
+                const std::string folder = TM::imageFolderOf(group), id = TM::imageIdOf(item);
+                pane.setSearch("xyzzy");
+                pane.setCategoryOpen(folder, false);
+                check(!id.empty() && pane.reveal(TM::imageFolderOf(item), id) && pane.selectedId() == id && pane.categoryOpen(folder)
+                          && pane.shownIds().size() > 3,
+                      "une image de l'arbre (cach\xC3\xA9" "e par une recherche, dans un dossier repli\xC3\xA9) : le volet la choisit (" + id + ")");
+                check(pane.reveal(folder, "") && pane.selectedImage() && pane.selectedImage()->category == folder
+                          && pane.selectedId() == TM::imageIdOf(tree.childAt(group, 0)),
+                      "un dossier de l'arbre : sa premi\xC3\xA8re image");
+                const auto mine = tree.childAt(images, 0);
+                check(tree.childCount(mine) == 4 && pane.reveal(TM::imageFolderOf(tree.childAt(mine, 1)), TM::imageIdOf(tree.childAt(mine, 1)))
+                          && pane.selectedId() == TM::imageIdOf(tree.childAt(mine, 1)) && pane.selectedId().rfind("mes/", 0) == 0,
+                      "une de Mes images dans l'arbre : la m\xC3\xAAme dans le volet");
+                check(pane.reveal({}, {}) && pane.selectedId() == TM::imageIdOf(tree.childAt(mine, 1)), "la biblioth\xC3\xA8que seule : rien ne bouge");
+            }
+        }
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    il::setUserFolder(keptFolder);
+    fs::remove_all(dir, ec);
+    fs::remove_all(disk, ec);
+}
+
 // =====================================================================================================================
 //  1.24.1 : LES LIMITES DE LA 1.24.0 (le client : << corrige les limites principales >>). HMI_TEST_LIM=1 : ces essais seuls.
 //  (Les aides lim1241::Paths et lim1241::rightClickRow sont pres du presse-papiers d'essai.)
@@ -47128,6 +47390,7 @@ int main(int argc, char** argv) {
     // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
     if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
         rapportsSonsImages1250();
+        bibliothequeImages1251();           // 1.25.1 : le volet de la bibliotheque d'images
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -47681,6 +47944,7 @@ int main(int argc, char** argv) {
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
     bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
     rapportsSonsImages1250();               // 1.25.0 : la mise en page des rapports, les sons et les images de la bibliotheque
+    bibliothequeImages1251();               // 1.25.1 : le volet de la bibliotheque d'images
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)

@@ -588,6 +588,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiLanguageCompare.cpp" />
     <ClCompile Include="src\app\hmi\HmiLibraryPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiFunctionTestsPage.cpp" />
+    <ClCompile Include="src\app\hmi\HmiImageLibraryPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiIncidentHost.cpp" />
     <ClCompile Include="src\app\hmi\HmiIncidentsPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiTestRuns.cpp" />
@@ -1151,6 +1152,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiLanguageCompare.hpp" />
     <ClInclude Include="src\app\hmi\HmiLibraryPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiFunctionTestsPage.hpp" />
+    <ClInclude Include="src\app\hmi\HmiImageLibraryPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiIncidentHost.hpp" />
     <ClInclude Include="src\app\hmi\HmiIncidentsPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiTestRuns.hpp" />
