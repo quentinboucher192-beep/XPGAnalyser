@@ -598,6 +598,107 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Demarrer / supprimer-plusieurs
+        {"supprimer-plusieurs", "Supprimer plusieurs \xC3\xA9l\xC3\xA9ments d'un coup", "D\xC3\xA9marrer",
+         "Choisis plusieurs \xC3\xA9l\xC3\xA9ments (Ctrl+clic, Maj+clic) dans l'arbre du projet ou dans une "
+         "liste, puis Supprimer (Suppr, ou le clic droit) : une seule question, un seul Ctrl+Z pour tout "
+         "rendre.",
+         {
+             {K::Heading, "Dans l'arbre du projet", {}},
+             {K::Bullet, "Choisis les \xC3\xA9l\xC3\xA9ments avec **Ctrl+clic** (un par un) ou **Maj+clic** "
+                         "(une suite) - m\xC3\xAAme de genres diff\xC3\xA9rents : des vues et des scripts, "
+                         "des variables et des alarmes.", {}},
+             {K::Bullet, "Le clic droit sur l'un d'eux propose **Supprimer les 5 "
+                         "\xC3\xA9l\xC3\xA9ments\xE2\x80\xA6** (ou \xC2\xAB Supprimer les 3 vues\xE2\x80\xA6 "
+                         "\xC2\xBB s'ils sont tous du m\xC3\xAAme genre) ; la touche **Suppr** fait pareil.", {}},
+             {K::Bullet, "Une seule question : quelques noms puis \xC2\xAB +N \xC2\xBB, ce qui **ne part "
+                         "pas** et pourquoi (un \xC3\xA9l\xC3\xA9ment fourni, un dossier natif, un type "
+                         "encore employ\xC3\xA9, une t\xC3\xA2" "che qui ex\xC3\xA9" "cute encore une "
+                         "section\xE2\x80\xA6), et ce que Ctrl+Z rendra.", {}},
+             {K::Bullet, "Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Les macros "
+                         "(elles vont dans leur corbeille) et les versions ne reviennent pas par Ctrl+Z ; la "
+                         "question le dit.", {}},
+             {K::Bullet, "Ce qui ne vaut que pour un \xC3\xA9l\xC3\xA9ment (Renommer\xE2\x80\xA6) est "
+                         "gris\xC3\xA9 \xC2\xAB un \xC3\xA0 la fois \xC2\xBB.", {}},
+             {K::Paragraph, "Se suppriment \xC3\xA0 plusieurs : c\xC3\xB4t\xC3\xA9 IHM, les vues, popups, "
+                         "mod\xC3\xA8les, en-t\xC3\xAAtes et pieds, symboles (avec leurs popups), scripts, "
+                         "fonctions, types (s'ils ne sont plus employ\xC3\xA9s), variables, alarmes, "
+                         "recettes, utilisateurs, groupes (vides), tes styles et tes couleurs "
+                         "s\xC3\xA9mantiques, les dossiers des listes ; c\xC3\xB4t\xC3\xA9 automate, les "
+                         "sections, sous-routines, variables, DDT, DFB, unit\xC3\xA9s, tables d'animation et "
+                         "t\xC3\xA2" "ches.", {}},
+             {K::Heading, "Dans les listes des volets", {}},
+             {K::Bullet, "Dans **Variables**, **Types** et tous les volets \xC3\xA0 liste, choisis plusieurs "
+                         "lignes (**Ctrl+clic**, **Maj+clic**) : le bouton dit **Supprimer les 5**, et "
+                         "**Suppr** ou le clic droit font pareil.", {}},
+             {K::Bullet, "Une **seule question** si la suppression d'une ligne en pose une (avec les noms, "
+                         "et celles qui servent encore) ; puis tout part en une commande : **un seul "
+                         "Ctrl+Z** les rend toutes.", {}},
+             {K::Bullet, "Une ligne qui ne se supprime pas seule ne se supprime pas non plus parmi d'autres "
+                         ": un type encore employ\xC3\xA9 (sauf par un autre type retir\xC3\xA9 avec lui), "
+                         "un style ou une couleur fournis, un groupe qui a des comptes, la langue du projet. "
+                         "Le compte rendu dit lesquelles restent, et pourquoi.", {}},
+             {K::Bullet, "**Renommer**, **Dupliquer** et ce qui ne vaut que pour une ligne sont "
+                         "gris\xC3\xA9s : \xC2\xAB une \xC3\xA0 la fois \xC2\xBB.", {}},
+             {K::Bullet, "Les volets concern\xC3\xA9s : variables et leurs dossiers, types et leurs membres, "
+                         "fonctions, scripts, vues, alarmes, recettes (\xC3\xA9l\xC3\xA9ments, jeux), "
+                         "utilisateurs, groupes, r\xC3\xB4les, ressources, fichiers externes, styles, "
+                         "couleurs s\xC3\xA9mantiques, formats des variables, langues, unit\xC3\xA9s de "
+                         "mesure, rapports, destinataires, essais et leurs pas, \xC3\xA9quipements, "
+                         "\xC3\xA9" "crans du poste, actions et raccourcis d'un objet, popups d'un symbole, "
+                         "m\xC3\xA9thodes, op\xC3\xA9rateurs, valeurs d'\xC3\xA9num\xC3\xA9ration, cas de "
+                         "test ; c\xC3\xB4t\xC3\xA9 automate, les variables, les tables d'animation et les "
+                         "DDT.", {}},
+             {K::Warning, "Les enregistrements, les incidents et les listes de l'Assistant IA se suppriment "
+                         "sur le disque, avec leur propre confirmation et sans Ctrl+Z : une ligne \xC3\xA0 "
+                         "la fois.", {}},
+         },
+         {"historique", "dossiers", "aller-a"},
+         {"supprimer plusieurs", "s\xC3\xA9lection multiple", "Ctrl+clic", "Maj+clic", "Supprimer les N \xC3\xA9l\xC3\xA9ments", "Suppr", "plusieurs d'un coup"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.24.0"},
+        // ---- Demarrer / chemins
+        {"chemins", "Les chemins de fichiers : ouvrir dans l'explorateur, aller \xC3\xA0", "D\xC3\xA9marrer",
+         "Partout o\xC3\xB9 un chemin de fichier ou de dossier s'affiche, le clic droit propose Ouvrir dans "
+         "l'explorateur, Aller \xC3\xA0 (l'\xC3\xA9l\xC3\xA9ment dans le logiciel) et Copier le chemin.",
+         {
+             {K::Heading, "Les trois entr\xC3\xA9" "es", {}},
+             {K::Bullet, "**Ouvrir dans l'explorateur** : l'Explorateur de Windows, le fichier choisi (un "
+                         "dossier : ouvert). Un chemin relatif part du dossier du projet.", {}},
+             {K::Bullet, "**Aller \xC3\xA0** : l'\xC3\xA9l\xC3\xA9ment **dans le logiciel** - le projet, une "
+                         "vue, les dossiers Ressources, Historique, Enregistrements et Incidents : leur "
+                         "n\xC5\x93ud dans l'arbre (et leur volet) ; une ressource, un fichier externe, un "
+                         "enregistrement, un dossier d'incident : leur volet, sur eux ; ailleurs, un fichier "
+                         "s'ouvre dans l'aper\xC3\xA7u des fichiers, un dossier dans **Chercher des "
+                         "fichiers**.", {}},
+             {K::Bullet, "**Copier le chemin**.", {}},
+             {K::Paragraph, "Un chemin qui n'existe pas (encore) : les entr\xC3\xA9" "es sont "
+                         "gris\xC3\xA9" "es, et la raison est dite.", {}},
+             {K::Heading, "O\xC3\xB9", {}},
+             {K::Paragraph, "L'inspecteur (une image, une vid\xC3\xA9o, une affiche, une police, un document "
+                         "cit\xC3\xA9s ; le fichier externe d'un Tableau ou d'une Courbe ; le dossier de "
+                         "l'Explorateur de fichiers), les tableaux Ressources, Fichiers externes et "
+                         "Enregistrements, la fiche d'un enregistrement, la configuration des "
+                         "enregistrements, l'historique, les biblioth\xC3\xA8ques reli\xC3\xA9" "es, le "
+                         "fichier de stockage d'une variable r\xC3\xA9manente, le fichier source de "
+                         "l'automate, l'action Exporter un enregistrement, le Stockage PC de la "
+                         "m\xC3\xA9moire de l'IA, et dans l'arbre : une vue enregistr\xC3\xA9" "e, une "
+                         "macro, une biblioth\xC3\xA8que reli\xC3\xA9" "e, les dossiers Ressources, "
+                         "Historique, Enregistrements et Incidents (Ouvrir dans l'explorateur et Copier le "
+                         "chemin).", {}},
+         },
+         {"aller-a", "chercher-fichiers", "ressources", "fichiers"},
+         {"chemin", "fichier", "dossier", "Ouvrir dans l'explorateur", "Aller \xC3\xA0", "Copier le chemin", "explorateur Windows"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.24.0"},
         // ---- Demarrer / historique
         {"historique", "Annuler, r\xC3\xA9tablir, l'historique", "D\xC3\xA9marrer",
          "Une seule pile pour tout le projet, l'IHM comme l'automate : Ctrl+Z et Ctrl+Y marchent partout, et "
@@ -22721,6 +22822,70 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Ressources et donnees / bibliotheque-sons
+        {"bibliotheque-sons", "La biblioth\xC3\xA8que de sons", "Ressources et donn\xC3\xA9" "es",
+         "Des sons pr\xC3\xAAts \xC3\xA0 servir (alarmes, notifications, interface, "
+         "proc\xC3\xA9" "d\xC3\xA9), fabriqu\xC3\xA9s par le logiciel, et Mes sons, gard\xC3\xA9s pour tous "
+         "tes projets : les \xC3\xA9" "couter, les importer dans le projet, les choisir pour une alarme ou "
+         "l'action Jouer un son.",
+         {
+             {K::Heading, "Les sons natifs", {}},
+             {K::Paragraph, "IHM \xE2\x80\xBA Ressources \xE2\x80\xBA **Biblioth\xC3\xA8que de sons** : 22 sons "
+                         "**fabriqu\xC3\xA9s par le logiciel** (rien \xC3\xA0 t\xC3\xA9l\xC3\xA9" "charger, "
+                         "rien \xC3\xA0 licencier, le m\xC3\xAAme son partout), rang\xC3\xA9s en dossiers "
+                         "d\xC3\xA9pliables, chacun avec un cadenas :", {}},
+             {K::Table, "Dossier\tLes sons\nAlarmes\tAlarme critique (une sir\xC3\xA8ne \xC3\xA0 deux "
+                         "tons), Alarme haute priorit\xC3\xA9 (deux salves de trois bips rapides), Alarme "
+                         "priorit\xC3\xA9 moyenne, Alarme basse priorit\xC3\xA9, Sir\xC3\xA8ne montante, "
+                         "Klaxon, Bip continu\nNotifications\tNotification, Information, Succ\xC3\xA8s, "
+                         "Erreur, Avertissement, Acquittement\nInterface\tClic, Bip court, Bip double, "
+                         "Touche, Refus\nProc\xC3\xA9" "d\xC3\xA9\tD\xC3\xA9marrage, Arr\xC3\xAAt, Cycle "
+                         "termin\xC3\xA9, Carillon", {}},
+             {K::Paragraph, "Plus une alarme est grave, plus son son est rapide et insistant (l'esprit de "
+                         "l'ISA-18.2).", {}},
+             {K::Heading, "\xC3\x89" "couter, importer", {}},
+             {K::Bullet, "Choisis un son : sa fiche \xC3\xA0 droite dit \xC3\xA0 quoi il sert, sa "
+                         "dur\xC3\xA9" "e, et montre sa forme d'onde.", {}},
+             {K::Bullet, "**\xC3\x89" "couter** (Espace, ou un double-clic) ; encore une fois : "
+                         "l'arr\xC3\xAAter.", {}},
+             {K::Bullet, "**Importer dans le projet** (Entr\xC3\xA9" "e) : le son devient une **ressource** "
+                         "(`alarme-haute.wav`), \xC3\xA0 choisir ensuite partout o\xC3\xB9 un son se "
+                         "choisit. Le m\xC3\xAAme son d\xC3\xA9j\xC3\xA0 dans le projet est "
+                         "r\xC3\xA9utilis\xC3\xA9 ; la colonne **Dans le projet** dit sa ressource. Ctrl+Z "
+                         "retire l'import.", {}},
+             {K::Bullet, "**Chercher un son** : chaque mot est cherch\xC3\xA9 dans le nom, le dossier, la "
+                         "description et les mots-cl\xC3\xA9s (sir\xC3\xA8ne, porte, "
+                         "acquittement\xE2\x80\xA6), sans casse ni accents ; les dossiers qui trouvent "
+                         "s'ouvrent.", {}},
+             {K::Bullet, "Le clic droit propose les m\xC3\xAAmes gestes, plus **Aller \xC3\xA0 la "
+                         "ressource** (un son d\xC3\xA9j\xC3\xA0 import\xC3\xA9) et **Copier le nom**.", {}},
+             {K::Heading, "Mes sons", {}},
+             {K::Bullet, "**Ajouter \xC3\xA0 Mes sons** (le bouton +), ou **l\xC3\xA2" "che un fichier** WAV "
+                         "ou MP3 sur la liste : il rejoint le dossier **Mes sons**, en t\xC3\xAAte, avec une "
+                         "personne. Mes sons sont gard\xC3\xA9s **hors du projet**, dans tes r\xC3\xA9glages "
+                         "(\xC3\xA0 c\xC3\xB4t\xC3\xA9 de Mes images) : ils te suivent d'un projet \xC3\xA0 "
+                         "l'autre.", {}},
+             {K::Bullet, "Le m\xC3\xAAme contenu d\xC3\xA9j\xC3\xA0 dans Mes sons n'est pas copi\xC3\xA9 "
+                         "deux fois ; un autre contenu sous le m\xC3\xAAme nom devient `nom (2).wav`.", {}},
+             {K::Bullet, "**Retirer** (Suppr) enl\xC3\xA8ve un de tes sons de Mes sons ; les projets qui "
+                         "l'ont import\xC3\xA9 gardent leur ressource. Un son natif ne se retire pas.", {}},
+             {K::Bullet, "**Ouvrir dans l'explorateur** (clic droit) : le fichier d'un de tes sons.", {}},
+             {K::Heading, "Choisir un son natif directement", {}},
+             {K::Paragraph, "L\xC3\xA0 o\xC3\xB9 un son se choisit dans une liste - le **son d'une "
+                         "priorit\xC3\xA9 d'alarme** (Configuration \xE2\x80\xBA Alarmes, Sons et mise de "
+                         "c\xC3\xB4t\xC3\xA9) et l'action **Jouer un son** - la liste propose, apr\xC3\xA8s "
+                         "les sons du projet, ceux de la biblioth\xC3\xA8que : \xC2\xAB Biblioth\xC3\xA8que "
+                         "\xE2\x80\xBA Alarmes \xE2\x80\xBA Alarme critique \xC2\xBB. Le choisir **l'importe "
+                         "et le r\xC3\xA8gle** d'un seul geste (un seul Ctrl+Z pour une alarme).", {}},
+         },
+         {"ressources", "alarmes", "actions-ressources", "objet-coupe-son"},
+         {"biblioth\xC3\xA8que de sons", "sons natifs", "Mes sons", "son natif", "\xC3\xA9" "couter", "importer un son", "alarme sonore", "sir\xC3\xA8ne", "klaxon", "carillon", "bip"},
+         {"sons"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.24.0"},
         // ---- Ressources et donnees / actions-ressources
         {"actions-ressources", "Actions sur les ressources", "Ressources et donn\xC3\xA9" "es",
          "Quatre op\xC3\xA9rations d'action touchent aux ressources et au poste : demander une ressource "

@@ -313,6 +313,13 @@ Chaque geste est **une commande** : Ctrl+Z le défait d'un coup, l'historique le
 - Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Les macros (elles vont dans leur corbeille) et les versions ne reviennent pas par Ctrl+Z ; la question le dit.
 - Ce qui ne vaut que pour un élément (Renommer…) est grisé « un à la fois ».
 Se suppriment à plusieurs : côté IHM, les vues, popups, modèles, en-têtes et pieds, symboles (avec leurs popups), scripts, fonctions, types (s'ils ne sont plus employés), variables, alarmes, recettes, utilisateurs, groupes (vides), tes styles et tes couleurs sémantiques, les dossiers des listes ; côté automate, les sections, sous-routines, variables, DDT, DFB, unités, tables d'animation et tâches.
+### Dans les listes des volets
+- Dans **Variables**, **Types** et tous les volets à liste, choisis plusieurs lignes (**Ctrl+clic**, **Maj+clic**) : le bouton dit **Supprimer les 5**, et **Suppr** ou le clic droit font pareil.
+- Une **seule question** si la suppression d'une ligne en pose une (avec les noms, et celles qui servent encore) ; puis tout part en une commande : **un seul Ctrl+Z** les rend toutes.
+- Une ligne qui ne se supprime pas seule ne se supprime pas non plus parmi d'autres : un type encore employé (sauf par un autre type retiré avec lui), un style ou une couleur fournis, un groupe qui a des comptes, la langue du projet. Le compte rendu dit lesquelles restent, et pourquoi.
+- **Renommer**, **Dupliquer** et ce qui ne vaut que pour une ligne sont grisés : « une à la fois ».
+- Les volets concernés : variables et leurs dossiers, types et leurs membres, fonctions, scripts, vues, alarmes, recettes (éléments, jeux), utilisateurs, groupes, rôles, ressources, fichiers externes, styles, couleurs sémantiques, formats des variables, langues, unités de mesure, rapports, destinataires, essais et leurs pas, équipements, écrans du poste, actions et raccourcis d'un objet, popups d'un symbole, méthodes, opérateurs, valeurs d'énumération, cas de test ; côté automate, les variables, les tables d'animation et les DDT.
+! Les enregistrements, les incidents et les listes de l'Assistant IA se suppriment sur le disque, avec leur propre confirmation et sans Ctrl+Z : une ligne à la fois.
 
 == chemins | Les chemins de fichiers : ouvrir dans l'explorateur, aller à
 : Partout où un chemin de fichier ou de dossier s'affiche, le clic droit propose Ouvrir dans l'explorateur, Aller à (l'élément dans le logiciel) et Copier le chemin.

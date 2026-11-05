@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.23.1", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.24.0", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.23.1", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 12 h 06"},
     {"1.23.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 10 h 14"},
     {"1.22.9", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 22 h 30"},
     {"1.22.8", "02/11/2026", "livr\xC3\xA9" "e le 02/11 \xC3\xA0 21 h 01"},
@@ -174,6 +175,12 @@ const std::vector<Note>& table() {
          "gard\xC3\xA9s hors du projet pour tous tes projets (le bouton +, ou un fichier l\xC3\xA2" "ch\xC3\xA9). Le son d'une priorit\xC3\xA9 d'alarme et "
          "l'action Jouer un son proposent aussi \xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA \xE2\x80\xA6 \xC2\xBB : le choisir l'importe et le r\xC3\xA8gle d'un geste.",
          "bibliotheque-sons", ""),
+        note("1.24.0", "Projet", Kind::New,
+         "SUPPRIMER PLUSIEURS LIGNES D'UN COUP, PARTOUT : dans Variables, Types et tous les volets \xC3\xA0 liste, choisis "
+         "plusieurs lignes (Ctrl+clic, Maj+clic) puis Supprimer - le bouton, Suppr ou le clic droit disent \xC2\xAB Supprimer les "
+         "5 \xC2\xBB. Une seule question si la suppression d'une ligne en pose une, un seul Ctrl+Z les rend toutes. Une ligne "
+         "encore employ\xC3\xA9" "e ou fournie reste, et le compte rendu dit pourquoi ; Renommer, Dupliquer se grisent (une \xC3\xA0 la fois).",
+         "supprimer-plusieurs", ""),
         note("1.24.0", "Projet", Kind::New,
          "SUPPRIMER PLUSIEURS \xC3\x89L\xC3\x89MENTS D'UN COUP DANS L'ARBRE : choisis-les (Ctrl+clic, Maj+clic - m\xC3\xAAme des vues et des "
          "scripts m\xC3\xA9lang\xC3\xA9s, c\xC3\xB4t\xC3\xA9 IHM comme c\xC3\xB4t\xC3\xA9 automate), puis clic droit \xC2\xAB Supprimer les N \xC3\xA9l\xC3\xA9ments\xE2\x80\xA6 \xC2\xBB ou Suppr. Une seule "
