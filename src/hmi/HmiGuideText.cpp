@@ -615,9 +615,9 @@ const std::vector<Topic>& topics() {
                          "pas** et pourquoi (un \xC3\xA9l\xC3\xA9ment fourni, un dossier natif, un type "
                          "encore employ\xC3\xA9, une t\xC3\xA2" "che qui ex\xC3\xA9" "cute encore une "
                          "section\xE2\x80\xA6), et ce que Ctrl+Z rendra.", {}},
-             {K::Bullet, "Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Les macros "
-                         "(elles vont dans leur corbeille) et les versions ne reviennent pas par Ctrl+Z ; la "
-                         "question le dit.", {}},
+             {K::Bullet, "Tout part en **une seule commande** : un seul **Ctrl+Z** rend tout. Depuis la "
+                         "1.26.0, les macros et les versions aussi (elles passent par leur corbeille, voir "
+                         "\xC2\xAB La Corbeille \xC2\xBB).", {}},
              {K::Bullet, "Ce qui ne vaut que pour un \xC3\xA9l\xC3\xA9ment (Renommer\xE2\x80\xA6) est "
                          "gris\xC3\xA9 \xC2\xAB un \xC3\xA0 la fois \xC2\xBB.", {}},
              {K::Paragraph, "Se suppriment \xC3\xA0 plusieurs : c\xC3\xB4t\xC3\xA9 IHM, les vues, popups, "
@@ -663,8 +663,15 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "**Mes sons** (la biblioth\xC3\xA8que de sons) : plusieurs d'un coup ; un son natif "
                          "reste, le compte rendu le dit ; un seul Ctrl+Z les rend.", {}},
              {K::Bullet, "**Les incidents** et **les listes de l'Assistant IA** (Apprentissage, "
-                         "M\xC3\xA9moire, Souvenirs, les conversations du panneau) : plusieurs d'un coup, "
-                         "mais **sans Ctrl+Z** (ils n'ont pas de corbeille) - la question le dit.", {}},
+                         "M\xC3\xA9moire, Souvenirs, les conversations du panneau) : plusieurs d'un coup ; "
+                         "depuis la 1.26.0 ils vont dans la **Corbeille** et **un seul Ctrl+Z** les rend.", {}},
+             {K::Heading, "L'outil Modbus, les \xC3\xA9quipements", {}},
+             {K::Bullet, "**L'outil Modbus** : plusieurs requ\xC3\xAAtes de la lecture cyclique d'un coup "
+                         "(Ctrl+clic, Maj+clic, Suppr) ; **Supprimer des jeux\xE2\x80\xA6** en coche "
+                         "plusieurs. Une question, un Ctrl+Z.", {}, "1.26.0"},
+             {K::Bullet, "**Plusieurs \xC3\xA9quipements** : le m\xC3\xAAme choix que pour un seul - garder "
+                         "leurs variables IHM ou les supprimer aussi, leurs esclaves simul\xC3\xA9s - une "
+                         "question, un Ctrl+Z.", {}},
          },
          {"historique", "dossiers", "aller-a"},
          {"supprimer plusieurs", "s\xC3\xA9lection multiple", "Ctrl+clic", "Maj+clic", "Supprimer les N \xC3\xA9l\xC3\xA9ments", "Suppr", "plusieurs d'un coup"},
@@ -22297,14 +22304,17 @@ const std::vector<Topic>& topics() {
                          "\xC3\xA0 imprimer et leur ordre (coche ; glisse une ligne, ou Alt+\xE2\x86\x91 "
                          "\xE2\x86\x93)\nTableaux\tla taille, les lignes altern\xC3\xA9" "es, "
                          "l'en-t\xC3\xAAte r\xC3\xA9p\xC3\xA9t\xC3\xA9 \xC3\xA0 chaque page\nTexte\tla "
-                         "police (Helvetica, Times, Courier), la taille du titre et du corps", {}},
+                         "police (Helvetica, Times, Courier, ou une police TrueType des ressources du projet "
+                         ": elle est int\xC3\xA9gr\xC3\xA9" "e au PDF), la taille du titre et du corps ; les "
+                         "titres en couleur d'accent, ou en noir (Standard)", {}},
              {K::Paragraph, "Les trous : `{Titre}` (le titre du rapport), `{SousTitre}`, `{Rapport}` (\xC2\xAB "
                          "Rapport journalier \xC2\xBB), `{Nom}`, `{Periode}`, `{Site}` et `{Projet}` (le "
                          "projet), `{Debut}`, `{Fin}`, `{Date}`, `{Heure}` (quand il est \xC3\xA9" "crit), "
                          "`{Page}`, `{Pages}`. Les parties : la synth\xC3\xA8se, le graphique des alarmes "
                          "par priorit\xC3\xA9, les alarmes de la p\xC3\xA9riode, les plus fr\xC3\xA9quentes, "
                          "les mesures (minimum, moyenne, maximum), **les courbes des mesures** (une courbe "
-                         "par mesure sur la p\xC3\xA9riode, PDF seulement), la production, les "
+                         "par mesure sur la p\xC3\xA9riode ; en Excel, la feuille \xC2\xAB Courbes des "
+                         "mesures \xC2\xBB : l'heure et une colonne par mesure), la production, les "
                          "\xC3\xA9v\xC3\xA9nements. Une partie s'imprime si la mise en page la coche **et** "
                          "si le rapport la recueille (ses cases Alarmes, Production, "
                          "\xC3\x89v\xC3\xA9nements ; ses mesures). En Excel : une feuille par tableau "
@@ -23024,6 +23034,206 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.24.0"},
+        // ---- Ressources et donnees / bibliotheque-images
+        {"bibliotheque-images", "La biblioth\xC3\xA8que d'images", "Ressources et donn\xC3\xA9" "es",
+         "Plus de 300 images pr\xC3\xAAtes \xC3\xA0 poser et Mes images, dans un volet comme celui des sons "
+         ": les dossiers et leur nombre, la recherche, l'aper\xC3\xA7u, importer dans le projet.",
+         {
+             {K::Paragraph, "IHM \xE2\x80\xBA Ressources \xE2\x80\xBA **Biblioth\xC3\xA8que d'images** (un clic "
+                         "dans l'arbre, sur un dossier ou une image) ouvre son volet, le jumeau de celui des "
+                         "sons :", {}},
+             {K::Bullet, "la liste, rang\xC3\xA9" "e en **dossiers** avec leur nombre - **Mes images** "
+                         "d'abord, puis les cat\xC3\xA9gories (Fl\xC3\xA8" "ches et navigation, Interface, "
+                         "S\xC3\xA9" "curit\xC3\xA9 et signalisation, Industrie et process\xE2\x80\xA6) ; "
+                         "devant chaque nom, une vignette, un cadenas (native) ou une personne (une des "
+                         "tiennes) ; les colonnes Taille, Format, **Dans le projet** (la ressource qui l'a "
+                         "d\xC3\xA9j\xC3\xA0) et Mots-cl\xC3\xA9s ;", {}},
+             {K::Bullet, "**Chercher une image\xE2\x80\xA6** : la m\xC3\xAAme recherche que le sous-onglet "
+                         "Images de l'\xC3\xA9" "diteur de vues ;", {}},
+             {K::Bullet, "\xC3\xA0 droite, le **grand aper\xC3\xA7u**, sur un fond en damier, clair ou "
+                         "sombre, et sa fiche ;", {}},
+             {K::Bullet, "**Importer dans le projet** (Entr\xC3\xA9" "e ; Ctrl+Z la retire) ; un dessin "
+                         "d'une seule couleur prend celle qui se voit sur le fond de la vue de "
+                         "d\xC3\xA9marrage ;", {}},
+             {K::Bullet, "**Ajouter \xC3\xA0 Mes images\xE2\x80\xA6** (ou l\xC3\xA2" "che un fichier sur le "
+                         "volet), **Retirer** (Suppr ; plusieurs d'un coup, un seul Ctrl+Z ; une image "
+                         "native se garde) ;", {}},
+             {K::Bullet, "**Ouvrir dans l'\xC3\xA9" "diteur de vues** (ou un double-clic) : le sous-onglet "
+                         "Images de la biblioth\xC3\xA8que, l'image montr\xC3\xA9" "e.", {}},
+         },
+         {"objets", "ressources", "bibliotheque-sons"},
+         {"biblioth\xC3\xA8que d'images", "images natives", "Mes images", "importer une image", "pictogramme", "ic\xC3\xB4ne", "aper\xC3\xA7u d'une image"},
+         {"images"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.26.0"},
+        // ---- Ressources et donnees / bibliotheque-polices
+        {"bibliotheque-polices", "La biblioth\xC3\xA8que de polices, la police partout", "Ressources et donn\xC3\xA9" "es",
+         "Seize polices libres livr\xC3\xA9" "es avec le logiciel, Mes polices pour tous tes projets, leur "
+         "aper\xC3\xA7u ; une police se choisit partout : les objets, les styles, la police par "
+         "d\xC3\xA9" "faut de l'IHM.",
+         {
+             {K::Heading, "Les polices fournies", {}},
+             {K::Paragraph, "IHM \xE2\x80\xBA Ressources \xE2\x80\xBA **Biblioth\xC3\xA8que de polices** : "
+                         "seize fichiers TrueType **libres** (licence SIL Open Font License ou celle de "
+                         "DejaVu, livr\xC3\xA9" "es avec elles), neuf familles rang\xC3\xA9" "es en trois "
+                         "dossiers, chacune avec un cadenas :", {}},
+             {K::Table, "Dossier\tLes familles\nSans empattement\tLiberation Sans (les chasses d'Arial : un "
+                         "texte \xC3\xA9" "crit en Arial garde sa place), DejaVu Sans (tr\xC3\xA8s "
+                         "compl\xC3\xA8te : accents, grec, cyrillique, symboles), Carlito (les chasses de "
+                         "Calibri)\nAvec empattement\tLiberation Serif (celles de Times New Roman), DejaVu "
+                         "Serif, Caladea (celles de Cambria)\nChasse fixe\tLiberation Mono (celles de "
+                         "Courier New), DejaVu Sans Mono, JetBrains Mono (les chiffres et les valeurs bien "
+                         "align\xC3\xA9s)", {}},
+             {K::Paragraph, "Chaque police est **\xC3\xA9" "crite dans elle-m\xC3\xAAme**, avec ton texte "
+                         "d'aper\xC3\xA7u et ta taille. \xC3\x80 droite, l'aper\xC3\xA7u : toutes les "
+                         "tailles, la police sur le fond d'une vue, ses glyphes, son fichier, sa licence, "
+                         "o\xC3\xB9 le projet l'emploie.", {}},
+             {K::Bullet, "**Importer dans le projet** (Entr\xC3\xA9" "e) : la police devient une "
+                         "**ressource** ; le m\xC3\xAAme contenu d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est "
+                         "r\xC3\xA9utilis\xC3\xA9. Ctrl+Z retire l'import.", {}},
+             {K::Bullet, "**Mes polices** : tes TTF et OTF (le bouton **Ajouter \xC3\xA0 Mes "
+                         "polices\xE2\x80\xA6**, ou l\xC3\xA2" "che un fichier sur la liste), gard\xC3\xA9s "
+                         "hors du projet : ils te suivent d'un projet \xC3\xA0 l'autre. Les polices que tu "
+                         "cr\xC3\xA9" "es dans l'\xC3\xA9" "diteur de polices y vont.", {}},
+             {K::Bullet, "**Nouvelle police**, **Dupliquer \xC3\xA0 partir de\xE2\x80\xA6** et **Modifier** "
+                         "ouvrent l'**\xC3\xA9" "diteur de polices**.", {}},
+             {K::Warning, "Une OTF \xC3\xA0 contours CFF s'emploie, mais ne se modifie pas dans "
+                         "l'\xC3\xA9" "diteur (il lit les TrueType).", {}},
+             {K::Heading, "La police partout", {}},
+             {K::Bullet, "Dans l'\xC3\xA9" "diteur de vues, la **BIBLIOTH\xC3\x88QUE** a un sous-onglet "
+                         "**Polices** (Objets | Images | Sons | **Polices** | Variables) : celles du projet "
+                         "(et combien d'objets les emploient), puis toute la biblioth\xC3\xA8que. **Glisse "
+                         "une police sur un objet** : il la prend (import\xC3\xA9" "e si besoin, un seul "
+                         "Ctrl+Z) ; un double-clic : la s\xC3\xA9lection.", {}},
+             {K::Bullet, "La case **Police** de chaque objet propose : **Police par d\xC3\xA9" "faut**, "
+                         "**Police des valeurs**, les polices du projet, puis la biblioth\xC3\xA8que "
+                         "(\xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement \xE2\x80\xBA Carlito "
+                         "\xC2\xBB) : la choisir l'importe et la r\xC3\xA8gle d'un geste.", {}},
+             {K::Bullet, "Les **styles** ont leur police, de la m\xC3\xAAme fa\xC3\xA7on.", {}},
+             {K::Bullet, "Le **th\xC3\xA8me** : Configuration \xE2\x80\xBA Affichage, **Police par "
+                         "d\xC3\xA9" "faut** et **Police des valeurs**. Tout objet sur \xC2\xAB Police par "
+                         "d\xC3\xA9" "faut \xC2\xBB la prend : la changer change toute l'IHM. Les objets de "
+                         "la biblioth\xC3\xA8que (boutons, voyants, afficheurs\xE2\x80\xA6) arrivent sur "
+                         "\xC2\xAB Police par d\xC3\xA9" "faut \xC2\xBB. Vides : les polices de l'IHM, comme "
+                         "avant.", {}},
+         },
+         {"editeur-polices", "ressources", "styles-nommes", "objets"},
+         {"police", "polices", "TTF", "OTF", "TrueType", "biblioth\xC3\xA8que de polices", "Mes polices", "police par d\xC3\xA9" "faut", "police des valeurs", "Liberation", "DejaVu", "Carlito", "Caladea", "JetBrains Mono", "Arial", "Calibri", "Times", "Courier", "Cambria", "aper\xC3\xA7u d'une police"},
+         {"polices"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.26.0"},
+        // ---- Ressources et donnees / editeur-polices
+        {"editeur-polices", "L'\xC3\xA9" "diteur de polices", "Ressources et donn\xC3\xA9" "es",
+         "Cr\xC3\xA9" "er une police, en dupliquer une \xC3\xA0 partir d'une autre, la modifier glyphe par "
+         "glyphe, point par point, avec l'aper\xC3\xA7u en direct ; l'enregistrer dans Mes polices ou dans "
+         "le projet, l'exporter en .ttf.",
+         {
+             {K::Heading, "Ouvrir", {}},
+             {K::Bullet, "**Nouvelle police** : les lettres, les chiffres, les signes, les "
+                         "accentu\xC3\xA9" "es et l'euro, vides, \xC3\xA0 dessiner.", {}},
+             {K::Bullet, "**Dupliquer \xC3\xA0 partir de\xE2\x80\xA6** : une copie de n'importe quelle "
+                         "TrueType - fournie, de Mes polices, du projet - sous un autre nom.", {}},
+             {K::Bullet, "**Modifier** (depuis la biblioth\xC3\xA8que de polices) : une de Mes polices ou "
+                         "une police du projet se modifie telle quelle ; une police **fournie** ne change "
+                         "pas : on en modifie une copie.", {}},
+             {K::Warning, "La licence d'une police copi\xC3\xA9" "e suit la copie, et une copie ne porte pas "
+                         "les **noms r\xC3\xA9serv\xC3\xA9s** par cette licence (Liberation, Carlito ; "
+                         "Bitstream et Vera pour DejaVu\xE2\x80\xA6) ni le nom de sa source : "
+                         "l'\xC3\xA9" "diteur les refuse et dit pourquoi.", {}},
+             {K::Heading, "Les glyphes", {}},
+             {K::Paragraph, "\xC3\x80 gauche, la grille : chaque glyphe dessin\xC3\xA9, son code. **Chercher** "
+                         ": un caract\xC3\xA8re (\xC3\xA9), plusieurs, ou un code (U+00E9). Les filtres : "
+                         "Tout, **Modifi\xC3\xA9s** (un point orange), A\xE2\x80\x93Z, a\xE2\x80\x93z, "
+                         "0\xE2\x80\x93" "9, Accents, Symboles.", {}},
+             {K::Heading, "Le dessin", {}},
+             {K::Bullet, "Les points **sur la courbe** sont des carr\xC3\xA9s, ceux **hors de la courbe** "
+                         "(ils attirent le trait) des ronds ; les lignes de la police (ascendante, "
+                         "capitales, hauteur d'x, ligne de base, descendante), la **chasse** et les "
+                         "approches sont trac\xC3\xA9" "es.", {}},
+             {K::Bullet, "**Choisir** (V) : un clic, Maj+clic, ou un cadre ; **glisser** ; les "
+                         "**fl\xC3\xA8" "ches** (1 unit\xC3\xA9, Maj : 10) ; **Suppr** ; un **double-clic** "
+                         "sur un point : sur / hors de la courbe ; sur le trait : un point de plus.", {}},
+             {K::Bullet, "**La plume** (P) : un clic, un point (Alt+clic : hors de la courbe) ; un clic sur "
+                         "le premier point, Entr\xC3\xA9" "e ou \xC3\x89" "chap ferme le contour.", {}},
+             {K::Bullet, "**Ajouter un point** (A) : sur le trait, sans changer la forme. **Rectangle** (R), "
+                         "**Ellipse** (E) : glisser.", {}},
+             {K::Bullet, "La **chasse** se glisse aussi : le carr\xC3\xA9 en bas de sa ligne. La molette : "
+                         "le zoom ; le bouton du milieu : d\xC3\xA9placer la vue ; **Ajust\xC3\xA9** : tout "
+                         "voir.", {}},
+             {K::Bullet, "Un **compos\xC3\xA9** (\xC3\xA9 = e + l'accent) se montre sans ses points : "
+                         "modifier \xC2\xAB e \xC2\xBB change \xC2\xAB \xC3\xA9 \xC2\xBB ; "
+                         "**D\xC3\xA9" "composer** en fait un glyphe \xC3\xA0 dessiner ici.", {}},
+             {K::Bullet, "**Copier le glyphe de\xE2\x80\xA6** : le m\xC3\xAAme caract\xC3\xA8re d'une autre "
+                         "police, mis \xC3\xA0 l'\xC3\xA9" "chelle. **R\xC3\xA9tablir l'original** : le "
+                         "glyphe tel qu'\xC3\xA0 l'ouverture.", {}},
+             {K::Heading, "Les r\xC3\xA9glages, \xC3\xA0 droite", {}},
+             {K::Paragraph, "Le glyphe (sa chasse, ses approches gauche et droite), le point choisi (x, y, sur "
+                         "ou hors de la courbe), la police (famille, style, version, hauteurs, interligne), "
+                         "son origine et sa licence.", {}},
+             {K::Heading, "En direct, annuler, enregistrer", {}},
+             {K::Bullet, "L'**aper\xC3\xA7u en direct**, en bas, se refait \xC3\xA0 chaque geste, avec ton "
+                         "texte, en trois tailles. Une police du projet ouverte ici : **les vues la "
+                         "dessinent telle qu'ici** tant qu'elle n'est ni enregistr\xC3\xA9" "e ni "
+                         "abandonn\xC3\xA9" "e (\xC2\xAB Les vues suivent \xC2\xBB).", {}},
+             {K::Bullet, "**Ctrl+Z**, **Ctrl+Y** d\xC3\xA9" "font et refont chaque geste (un glissement : un "
+                         "geste).", {}},
+             {K::Bullet, "**Enregistrer (Mes polices)** (Ctrl+S) ; **Enregistrer dans le projet** : sa "
+                         "ressource police est ajout\xC3\xA9" "e ou remplac\xC3\xA9" "e, les objets qui "
+                         "l'emploient suivent (Ctrl+Z dans le projet la rend) ; **Exporter en "
+                         ".ttf\xE2\x80\xA6** : un fichier que Windows installe ; **Abandonner** revient "
+                         "\xC3\xA0 l'enregistr\xC3\xA9" "e.", {}},
+         },
+         {"bibliotheque-polices", "ressources"},
+         {"\xC3\xA9" "diteur de polices", "cr\xC3\xA9" "er une police", "dupliquer une police", "modifier une police", "glyphe", "contour", "point sur la courbe", "point de contr\xC3\xB4le", "plume", "chasse", "approche", "hauteur des capitales", "hauteur d'x", "ligne de base", "compos\xC3\xA9", "d\xC3\xA9" "composer", "exporter TTF"},
+         {"police"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.26.0"},
+        // ---- Ressources et donnees / corbeille
+        {"corbeille", "La Corbeille", "Ressources et donn\xC3\xA9" "es",
+         "Ce qui a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9 sur le disque (enregistrements, incidents, versions, "
+         "macros, l'Assistant IA), rang\xC3\xA9 par genre, o\xC3\xB9 l'on cherche ; Restaurer, Supprimer "
+         "d\xC3\xA9" "finitivement, Vider.",
+         {
+             {K::Heading, "L'ouvrir", {}},
+             {K::Bullet, "Dans l'arbre du projet, **Corbeille [N]** (apr\xC3\xA8s Versions) : un clic "
+                         "l'ouvre ; le clic droit propose aussi **Vider la corbeille\xE2\x80\xA6**. Ou le "
+                         "menu **Projet \xE2\x80\xBA Corbeille\xE2\x80\xA6**.", {}},
+             {K::Heading, "Ce qu'elle montre", {}},
+             {K::Paragraph, "Un dossier par genre, avec son nombre : **Enregistrements**, **Incidents**, "
+                         "**Versions**, **Macros**, **Conversations IA**, **Pi\xC3\xA8" "ces jointes IA**, "
+                         "**Connaissances et souvenirs IA**. Les colonnes : Nom, Supprim\xC3\xA9 le, Origine "
+                         "(un chemin : le clic droit l'ouvre dans l'explorateur), Taille.", {}},
+             {K::Bullet, "**Chercher dans la corbeille\xE2\x80\xA6** : chaque mot commence un mot du nom, du "
+                         "genre ou de l'origine, sans casse ni accents.", {}},
+             {K::Bullet, "**Restaurer** (Entr\xC3\xA9" "e) remet les \xC3\xA9l\xC3\xA9ments choisis \xC3\xA0 "
+                         "leur place, sans question ; **un seul Ctrl+Z** les renvoie dans la corbeille. Un "
+                         "fichier du m\xC3\xAAme nom revenu entre-temps : la restauration est "
+                         "refus\xC3\xA9" "e, et dit pourquoi.", {}},
+             {K::Bullet, "**Supprimer d\xC3\xA9" "finitivement** (Suppr) et **Vider la corbeille** demandent "
+                         "confirmation : on ne revient pas en arri\xC3\xA8re.", {}},
+             {K::Bullet, "Les \xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s il y a plus de 7 jours partent "
+                         "\xC3\xA0 l'ouverture suivante (du projet, ou de l'application pour l'Assistant IA) "
+                         "; les macros restent jusqu'\xC3\xA0 Supprimer d\xC3\xA9" "finitivement.", {}},
+             {K::Warning, "Les vues, les objets, les variables et le reste du projet supprim\xC3\xA9s se "
+                         "rendent par **Ctrl+Z** (l'historique) : ils ne sont pas dans la Corbeille.", {}},
+         },
+         {"supprimer-plusieurs", "historique", "versions", "chemins"},
+         {"corbeille", "restaurer", "supprimer d\xC3\xA9" "finitivement", "vider la corbeille", "\xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s", "r\xC3\xA9" "cup\xC3\xA9rer", "purge"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.26.0"},
         // ---- Ressources et donnees / actions-ressources
         {"actions-ressources", "Actions sur les ressources", "Ressources et donn\xC3\xA9" "es",
          "Quatre op\xC3\xA9rations d'action touchent aux ressources et au poste : demander une ressource "

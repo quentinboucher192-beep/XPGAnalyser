@@ -1186,6 +1186,10 @@ constexpr TopicPlace kTopicPlaces[] = {
     // 1.24.0 : supprimer plusieurs d'un coup (des vues choisies dans l'arbre), les chemins de fichiers (les tableaux
     // des Ressources), la bibliotheque de sons (IHM > Ressources > Bibliotheque de sons ; son lieu << sons >> n'a pas de ligne).
     {"supprimer-plusieurs", "arbre:IHM/Vues"}, {"chemins", "arbre:IHM/Ressources"}, {"bibliotheque-sons", "arbre:IHM/Ressources"},
+    // 1.26.0 : la bibliotheque d'images, la bibliotheque de polices et l'editeur de polices (IHM > Ressources ; leurs lieux
+    // << images >>, << polices >>, << police >> n'ont pas de ligne), la Corbeille (a la racine du projet, apres Versions).
+    {"bibliotheque-images", "arbre:IHM/Ressources"}, {"bibliotheque-polices", "arbre:IHM/Ressources"},
+    {"editeur-polices", "arbre:IHM/Ressources"}, {"corbeille", "arbre:IHM"},
     // 1.12.30 : le zoom d'une page (un tableau), les regles de l'editeur de vues, les langues cote a cote
     // (Configuration > Langues, son bouton Cote a cote).
     {"zoom", "arbre:IHM/Programmation/Variables IHM"}, {"regles-guides", "arbre:IHM/Vues"},
