@@ -40,6 +40,8 @@
 //      n'est pas reentraine, ces souvenirs sont relus et envoyes avec les demandes ;
 //    - MEMOIRE : les informations persistantes par categorie, la recherche,
 //      supprimer une conversation, une memoire, une categorie entiere ;
+//      1.24.1 : plusieurs lignes choisies (Ctrl+clic) se suppriment d'un coup,
+//      ici comme dans Apprentissage et Souvenirs (une confirmation : definitif) ;
 //    - STOCKAGE PC : la repartition (tableau et anneau), le total, l'espace libre,
 //      l'emplacement (copiable), Ouvrir le dossier, les fichiers, le dernier nettoyage ;
 //    - NETTOYAGE : Vider le cache (le detail avant), puis la zone rouge des donnees
@@ -219,6 +221,16 @@ public:
     void setActivityFilter(std::string type);           // "" : tous
     [[nodiscard]] std::size_t activityRowCount() const;
 
+    // ---- 1.24.1 : PLUSIEURS D'UN COUP ---------------------------------------------------------
+    //  Les listes Apprentissage (les connaissances), Memoire (conversations, memoires, pieces jointes) et Souvenirs
+    //  choisissent plusieurs lignes (Ctrl+clic, Maj+clic) ; Supprimer (<< Supprimer les 3... >>) les supprime toutes
+    //  apres UNE confirmation, qui nomme les premieres et dit que c'est definitif (leurs fichiers quittent ce PC : rien
+    //  ne les rend) ; ce qui ne part pas (integree au logiciel, un projet a oublier un par un) reste, le message le dit.
+    //  Consulter, Modifier, Activer... : une a la fois.
+    enum class List : std::uint8_t { Learning, Memory, Souvenirs };
+    [[nodiscard]] std::vector<std::string> chosenKeys(List l) const;   // les cles des lignes choisies, dans l'ordre
+    bool selectKeys(List l, const std::vector<std::string>& keys);     // les essais, les scripts
+
     // ---- la confirmation, le message -----------------------------------------------------------
     [[nodiscard]] bool confirming() const noexcept { return confirm_.kind != Confirm::None; }
     [[nodiscard]] const std::string& confirmText() const noexcept { return confirm_.text; }
@@ -256,7 +268,7 @@ private:
     friend class SouvenirsPage;
 
     enum class Confirm : std::uint8_t { None, DeleteKnowledge, DeleteMemory, DeleteCategory, ClearCache, DeletePersistent, ImportLearning,
-                                        DeleteSouvenir, RestoreBackup };
+                                        DeleteSouvenir, RestoreBackup, DeleteMany /* 1.24.1 */ };
     struct Pending {
         Confirm     kind{Confirm::None};
         std::string text;
@@ -276,6 +288,16 @@ private:
     bool doDeletePersistent();
     bool doDeleteSouvenir();
     bool doRestoreBackup();
+    // 1.24.1 : plusieurs lignes d'une liste - la confirmation, puis chacune (doomed_ : ce que la confirmation nomme).
+    bool askDeleteMany(List l, bool now);
+    bool doDeleteMany();
+    struct Doomed {
+        List        list{List::Memory};
+        std::string key, name;
+    };
+    std::vector<Doomed>                   doomed_;
+    std::string                           doomedNoun_, doomedNouns_;
+    bool                                  doomedFeminine_{true};
     void rebuildSouvenirs();
     void connectSouvenirs();
     [[nodiscard]] ui::TableView* souvenirsTable() const;

@@ -21,6 +21,11 @@
 //  qui est au catalogue (le parcours est le meme), on montre ce qui est coche ;
 //  le nombre trouve est a droite de chaque extension et dans sa puce. Le choix
 //  (les extensions, ou chercher, les options) est garde dans les reglages.
+//
+//  1.24.1 : LE CLIC DROIT D'UN RESULTAT propose, comme partout ou un chemin se
+//  montre, Ouvrir dans l'explorateur, Aller a et Copier le chemin (ui::paths) ;
+//  ses propres Ouvrir le dossier et Copier le chemin restent des boutons. Le
+//  champ du dossier ou chercher (son bouton ...) a les memes entrees.
 // =============================================================================
 #pragma once
 

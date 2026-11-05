@@ -21,6 +21,7 @@
 #include "AiSettingsDialog.hpp"
 #include "../hmi/HmiAskDialog.hpp"
 #include "../hmi/HmiPainter.hpp"
+#include "../hmi/HmiPanels.hpp"   // 1.24.1 : app::several (plusieurs conversations d'un coup : les noms, le compte rendu)
 #include "../../hmi/HmiEdit.hpp"
 #include "../../ui/FileKinds.hpp"
 #include "../../ui/Icons.hpp"
@@ -1068,6 +1069,74 @@ void AiPanel::askDelete(int index) {
     });
 }
 
+// ---- 1.24.1 : plusieurs conversations d'un coup ----
+void AiPanel::toggleChosen(int index) {
+    const auto& list = assistant_->conversations();
+    if (index < 0 || index >= static_cast<int>(list.size())) return;
+    if (chosenIds_.empty())   // le premier Ctrl+clic : la conversation ouverte entre dans le choix
+        if (const int cur = assistant_->currentIndex(); cur >= 0 && cur < static_cast<int>(list.size())) chosenIds_.push_back(list[static_cast<std::size_t>(cur)].id);
+    const std::string id = list[static_cast<std::size_t>(index)].id;
+    if (const auto at = std::find(chosenIds_.begin(), chosenIds_.end(), id); at != chosenIds_.end()) chosenIds_.erase(at);
+    else chosenIds_.push_back(id);
+    invalidate();
+}
+
+std::vector<int> AiPanel::chosenConversations() const {
+    std::vector<int> out;
+    const auto& list = assistant_->conversations();
+    for (std::size_t i = 0; i < list.size(); ++i)
+        if (std::find(chosenIds_.begin(), chosenIds_.end(), list[i].id) != chosenIds_.end()) out.push_back(static_cast<int>(i));
+    if (out.empty())
+        if (const int cur = assistant_->currentIndex(); cur >= 0 && cur < static_cast<int>(list.size())) out.push_back(cur);
+    return out;
+}
+
+void AiPanel::askDeleteChosen() {
+    const auto rows = chosenConversations();
+    if (rows.size() <= 1) {
+        if (!rows.empty()) askDelete(rows.front());
+        return;
+    }
+    const auto& list = assistant_->conversations();
+    std::vector<std::string> ids, titles;
+    for (const int r : rows) {
+        ids.push_back(list[static_cast<std::size_t>(r)].id);
+        titles.push_back(list[static_cast<std::size_t>(r)].title);
+    }
+    const auto run = [this, ids, titles] {
+        std::vector<std::string> gone;
+        std::vector<std::pair<std::string, std::string>> refused;
+        for (std::size_t i = 0; i < ids.size(); ++i) {
+            if (assistant_->remove(ids[i])) gone.push_back(titles[i]);
+            else refused.emplace_back(titles[i], "introuvable");
+        }
+        chosenIds_.clear();
+        several::Batch b;
+        b.noun = "conversation";
+        b.nouns = "conversations";
+        b.feminine = true;
+        b.final = true;
+        say(several::summary(b, gone, refused) + ".");
+        chat_->rebuild();
+        invalidateLayout();
+    };
+    if (!ui_.showDialog) {   // sans hote (un essai) : on supprime
+        run();
+        return;
+    }
+    HmiAskDialog::Spec spec;
+    spec.id = "dialog.ai.supprimer";
+    spec.title = "Supprimer les " + std::to_string(ids.size()) + " conversations";
+    spec.text = "Supprimer les " + std::to_string(ids.size()) + " conversations " + several::names(titles)
+                + " et leurs messages ?\nC'est d\xC3\xA9" "finitif : elles quittent le dossier de l'Assistant, rien ne les rend. Le projet n'est pas touch\xC3\xA9.";
+    spec.confirm = several::label("Supprimer", ids.size());
+    spec.danger = true;
+    spec.width = 520.f;
+    ui_.showDialog(std::make_unique<HmiAskDialog>(std::move(spec)), [run](const menu::DialogResult& r) {
+        if (r.accepted()) run();
+    });
+}
+
 void AiPanel::setConversationsOpen(bool open) {
     listOpen_ = open;
     invalidateLayout();
@@ -1078,6 +1147,33 @@ void AiPanel::openRowMenu(int index, gfx::Point at) {
     if (index < 0 || index >= static_cast<int>(list.size())) return;
     menuRow_ = index;
     std::vector<ui::PopupMenu::Item> items;
+    // 1.24.1 : plusieurs conversations choisies - Supprimer les N ; Ouvrir, Renommer : une a la fois.
+    if (const auto chosen = chosenConversations(); chosen.size() > 1) {
+        ui::PopupMenu::Item head;
+        head.heading = true;
+        head.label = std::to_string(chosen.size()) + " conversations";
+        items.push_back(head);
+        for (const auto& [label, id] : std::vector<std::pair<std::string, int>>{{"Ouvrir", kMenuOpen}, {"Renommer\xE2\x80\xA6", kMenuRename}}) {
+            ui::PopupMenu::Item it;
+            it.label = label;
+            it.id = id;
+            it.enabled = false;
+            it.disabledReason = several::kOneAtATime;
+            items.push_back(it);
+        }
+        ui::PopupMenu::Item sep;
+        sep.separator = true;
+        items.push_back(sep);
+        ui::PopupMenu::Item del;
+        del.label = several::label("Supprimer", chosen.size()) + "\xE2\x80\xA6";
+        del.icon = ui::Icon::Delete;
+        del.shortcut = "Suppr";
+        del.id = kMenuDelete;
+        items.push_back(del);
+        menu_->setItems(std::move(items));
+        menu_->openAtSurface(toSurface(at));
+        return;
+    }
     ui::PopupMenu::Item head;
     head.heading = true;
     head.label = list[static_cast<std::size_t>(index)].title;
@@ -1118,7 +1214,10 @@ void AiPanel::menuChosen(int id) {
     switch (id) {
         case kMenuOpen: (void)selectConversation(row); break;
         case kMenuRename: startRename(row); break;
-        case kMenuDelete: askDelete(row); break;
+        case kMenuDelete:
+            if (chosenConversations().size() > 1) askDeleteChosen();   // 1.24.1 : plusieurs d'un coup
+            else askDelete(row);
+            break;
         case kMenuNew: newConversation(); break;
         default: break;
     }
@@ -2548,7 +2647,9 @@ void AiPanel::onPaint(const ui::PaintContext& ctx) {
         for (std::size_t i = 0; i < list.size() && i < rows_.size(); ++i) {
             const auto r = rows_[i];
             if (r.h <= 0.f) continue;
-            const bool sel = static_cast<int>(i) == a.currentIndex();
+            // 1.24.1 : les conversations choisies a plusieurs (Ctrl+clic) se voient comme la choisie
+            const bool sel = static_cast<int>(i) == a.currentIndex()
+                          || std::find(chosenIds_.begin(), chosenIds_.end(), list[i].id) != chosenIds_.end();
             if (sel) ctx.r.fillRect(r, c.selectionBg);
             else if (static_cast<int>(i) == hoverRow_) ctx.r.fillRect(r, ctx.theme.brand.hover);
             if (sel) ctx.r.fillRect({r.x + 1.f, r.y, 3.f, r.h}, c.accent);
@@ -2717,6 +2818,18 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
         const int row = rowAt(d->pos);
         if (row >= 0) {
             takeFocus();
+            // 1.24.1 : Ctrl+clic ajoute la conversation au choix (ou l'en retire) ; un clic droit dans le choix le garde.
+            const auto chosen = chosenConversations();
+            const bool inChoice = std::find(chosen.begin(), chosen.end(), row) != chosen.end();
+            if (d->button == ui::MouseButton::Left && d->mods.ctrl && d->clickCount < 2) {
+                toggleChosen(row);
+                return ui::EventResult::Consumed;
+            }
+            if (d->button == ui::MouseButton::Right && chosen.size() > 1 && inChoice) {
+                openRowMenu(row, d->pos);
+                return ui::EventResult::Consumed;
+            }
+            chosenIds_.clear();
             if (d->button == ui::MouseButton::Right) {
                 (void)selectConversation(row);
                 openRowMenu(row, d->pos);
@@ -2750,7 +2863,7 @@ ui::EventResult AiPanel::onEvent(const ui::InputEvent& ev) {
         if (focused() && !notifsShown_ && !missionsShown_) {
             const int cur = assistant_->currentIndex();
             if (k->key == ui::Key::F2 && cur >= 0) { startRename(cur); return ui::EventResult::Consumed; }
-            if (k->key == ui::Key::Delete && cur >= 0) { askDelete(cur); return ui::EventResult::Consumed; }
+            if (k->key == ui::Key::Delete && cur >= 0) { askDeleteChosen(); return ui::EventResult::Consumed; }   // 1.24.1 : une ou plusieurs
             if (k->key == ui::Key::Up && cur > 0) { (void)selectConversation(cur - 1); return ui::EventResult::Consumed; }
             if (k->key == ui::Key::Down && cur + 1 < static_cast<int>(assistant_->conversations().size())) {
                 (void)selectConversation(cur + 1);

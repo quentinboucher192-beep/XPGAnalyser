@@ -566,9 +566,13 @@ bool AnimationTablesPane::selectTable(std::size_t index) {
     if (!p || index >= p->animationTables.size()) return false;
     const bool changed = index != table_;
     table_ = index;
-    syncing_ = true;
-    tables_->selectModelRows({static_cast<RowIndex>(index)}, false);
-    syncing_ = false;
+    // 1.24.1 : un choix de plusieurs tables qui la contient reste (Ctrl+clic, Maj+clic : Supprimer les N) - avant, il
+    // revenait a la seule premiere des le second Ctrl+clic, et Supprimer les N ne s'offrait jamais.
+    if (const auto sel = tables_->selectedModelRows(); std::find(sel.begin(), sel.end(), static_cast<RowIndex>(index)) == sel.end()) {
+        syncing_ = true;
+        tables_->selectModelRows({static_cast<RowIndex>(index)}, false);
+        syncing_ = false;
+    }
     if (changed) {
         rebuildRows();
         syncing_ = true;

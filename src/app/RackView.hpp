@@ -24,6 +24,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace app {
@@ -51,6 +52,16 @@ public:
     [[nodiscard]] bool slotRect(std::uint16_t rack, std::int16_t slot, gfx::Rect& out) const;
     [[nodiscard]] int selectedRack() const noexcept { return selectedRack_; }
     [[nodiscard]] int selectedSlot() const noexcept { return selectedSlot_; }
+    // 1.24.1 : PLUSIEURS MODULES CHOISIS, pour les supprimer d'un coup. Ctrl+clic (ou Maj+clic) sur un module l'ajoute
+    // (ou le retire) ; un clic simple revient a un seul. Les modules choisis (le choisi compris, une alimentation aussi),
+    // rack par rack, emplacement par emplacement ; `setChosen` les choisit (les essais, les scripts).
+    using Place = std::pair<std::uint16_t, std::int16_t>;
+    [[nodiscard]] std::vector<Place> chosenModules() const;
+    void setChosen(std::vector<Place> modules);
+    const core::SignalPtr<> chosenChanged = core::Signal<>::create();
+    // 1.24.1 : le clic droit sur un module (le point, dans la surface : un menu s'y ouvre) et la touche Suppr.
+    const core::SignalPtr<gfx::Point> contextRequested = core::Signal<gfx::Point>::create();
+    const core::SignalPtr<> deleteRequested = core::Signal<>::create();
 
     [[nodiscard]] ui::SizeHint sizeHint() const override;
 
@@ -80,6 +91,7 @@ private:
     float                zoom_{1.f};
     int                  selectedRack_{-1};
     int                  selectedSlot_{-32768};
+    std::vector<Place>   extra_;          // 1.24.1 : les autres modules choisis (Ctrl+clic)
     bool                 dirtyGeometry_{true};
     std::vector<Usage>   usage_;
 };

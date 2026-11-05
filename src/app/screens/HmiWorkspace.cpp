@@ -3150,8 +3150,8 @@ void MainAnalysisScreen::askHmiRecordingPassword(const std::string& name) {
 void MainAnalysisScreen::askHmiRecordingDelete(const std::string& name) {
     app_.menus().ShowDialog(
         std::make_unique<MessageDialog>("Supprimer l'enregistrement ?",
-                                        "\xC2\xAB " + name + " \xC2\xBB va dans la corbeille du projet (ihm/corbeille) : il s'y retrouve tant "
-                                        "qu'elle n'est pas vid\xC3\xA9" "e. Ce qui le cite (une action, le Lecteur) sera signal\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer.",
+                                        "\xC2\xAB " + name + " \xC2\xBB va dans la corbeille du projet (ihm/corbeille) : Ctrl+Z l'en ressort. "
+                                        "Ce qui le cite (une action, le Lecteur) sera signal\xC3\xA9 par G\xC3\xA9n\xC3\xA9rer.",
                                         MessageDialog::Icon::Question, "Supprimer"),
         [this, name](const menu::DialogResult& r) {
             auto* current = dynamic_cast<HmiRecordingsPane*>(hmiTab("enregistrements"));

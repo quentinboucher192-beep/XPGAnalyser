@@ -10,6 +10,7 @@
 
 #include "../domain/ExecutionOrder.hpp"
 #include "../project/ApiCommands.hpp"
+#include "../project/DeleteCommands.hpp"   // 1.24.1 : supprimer plusieurs elements de l'automate d'un coup
 #include "../project/EditCommands.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/DataViews.hpp"
@@ -51,7 +52,58 @@ std::string lower(std::string_view s) {
     return out;
 }
 
+// 1.24.1 : l'ordre des retraits - les variables, les sections, les unites et les blocs, les types (comme l'arbre).
+int deletionRank(domain::EntityKind k) {
+    switch (k) {
+        case domain::EntityKind::Variable:    return 0;
+        case domain::EntityKind::Section:     return 1;
+        case domain::EntityKind::Pou:         return 2;
+        case domain::EntityKind::DerivedType: return 3;
+        default:                              return 4;
+    }
+}
+
 } // namespace
+
+// ============================================================ 1.24.1 ====
+//  SUPPRIMER PLUSIEURS ELEMENTS DE L'AUTOMATE D'UN COUP (TaskPanes.hpp).
+void apiDeleteMany(const ApiPaneHosts& hosts, std::vector<ApiDoomed> doomed, const std::string& noun, const std::string& nouns, bool feminine,
+                   std::weak_ptr<const void> alive) {
+    auto doc = hosts.project ? hosts.project() : nullptr;
+    if (!doc || !hosts.apply || doomed.empty()) return;
+    // Un retrait ne decale pas ceux qui restent a faire : chaque genre du plus grand rang au plus petit.
+    std::stable_sort(doomed.begin(), doomed.end(), [](const ApiDoomed& a, const ApiDoomed& b) {
+        const int ra = deletionRank(a.kind), rb = deletionRank(b.kind);
+        return ra != rb ? ra < rb : a.index > b.index;
+    });
+    doomed.erase(std::unique(doomed.begin(), doomed.end(), [](const ApiDoomed& a, const ApiDoomed& b) { return a.kind == b.kind && a.index == b.index; }),
+                 doomed.end());
+    several::Batch b;
+    b.noun = noun;
+    b.nouns = nouns;
+    b.feminine = feminine;
+    std::vector<std::string> damage;
+    for (const auto& d : doomed) {
+        b.names.push_back(d.name);
+        for (auto& line : project::RemoveEntityCommand(doc, d.kind, d.index).collateralDamage()) damage.push_back(std::move(line));
+    }
+    b.ask = !damage.empty();
+    if (b.ask) b.warning = "Part aussi : " + several::names(damage, 4) + ".";
+    b.remove = [hosts, doomed](std::size_t k, std::string* why) {
+        auto target = hosts.project ? hosts.project() : nullptr;
+        if (!target || !hosts.apply) return false;
+        const project::RemoveEntityCommand probe(target, doomed[k].kind, doomed[k].index);
+        if (const auto no = probe.refusalReason(); !no) {
+            if (why) *why = no.error().context.empty() ? no.error().message() : no.error().context;
+            return false;
+        }
+        hosts.apply(std::make_unique<project::RemoveEntityCommand>(target, doomed[k].kind, doomed[k].index));
+        return true;
+    };
+    b.report = [hosts](const std::string& text, bool) { if (hosts.status) hosts.status(text); };
+    b.alive = std::move(alive);
+    several::run(std::move(b));
+}
 
 // =================================================================== Taches ====
 class TasksPane::Model final : public ui::ITableModel {
@@ -228,7 +280,7 @@ TasksPane::TasksPane(std::string id) : ui::Widget(std::move(id)) {
         }
         table_->setColumns(std::move(cols));
     }
-    table_->setSelectionMode(ui::SelectionMode::Single);
+    table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs taches a supprimer d'un coup
     links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
         if (syncing_ || rows.empty()) return;
         current_ = static_cast<std::size_t>(rows.front());
@@ -308,11 +360,44 @@ void TasksPane::attach(ApiFrame& frame) {
     });
     t.setEnabledWhen(AAddAux, editable);
     t.setEnabledWhen(ARemove, [this, editable] {
-        if (!editable() || current_ >= rows_.size() || rows_[current_].task == kNpos) return false;
+        if (!editable()) return false;
+        if (chosenTasks().size() > 1) return true;   // 1.24.1 : celles qui ne partent pas restent, le compte rendu le dit
+        if (current_ >= rows_.size() || rows_[current_].task == kNpos) return false;
         return rows_[current_].name != "MAST" && rows_[current_].sections == 0 && rows_[current_].units == 0;
+    });
+    t.setLabelWhen(ARemove, [this] { return several::label("Supprimer", chosenTasks().size()); });
+    tools_ = &t;
+    t.bindListKeys(*table_, {ARemove, 0, 0});   // 1.24.1 : Suppr
+    // 1.24.1 : le clic droit - Supprimer (les N) ; une tache qui ne part pas le dit.
+    table_->setExtraContextItems([this] {
+        std::vector<ui::PopupMenu::Item> items;
+        const auto chosen = chosenTasks();
+        if (chosen.empty()) return items;
+        ui::PopupMenu::Item del;
+        del.label = several::label("Supprimer", chosen.size());
+        del.icon = ui::Icon::Delete;
+        del.shortcut = "Suppr";
+        del.id = ARemove;
+        del.enabled = tools_ && tools_->isEnabled(ARemove);
+        del.disabledReason = del.enabled ? std::string{} : std::string("vide seulement, et pas MAST");
+        items.push_back(std::move(del));
+        return items;
+    });
+    links_ += table_->contextAction->connect([this](int a) {
+        if (a == ARemove && tools_) (void)tools_->trigger(a);
     });
     links_ += t.triggered->connect([this](int a) { runAction(a); });
     frame.setHint("Les t\xC3\xA2" "ches viennent de config/tasks.txt ; une modification passe par l'historique (Ctrl+Z).");
+}
+
+std::vector<std::size_t> TasksPane::chosenTasks() const {
+    std::vector<std::size_t> out;
+    auto rows = table_->selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    for (const auto r : rows)
+        if (r < rows_.size() && rows_[r].task != kNpos && std::find(out.begin(), out.end(), static_cast<std::size_t>(r)) == out.end())
+            out.push_back(static_cast<std::size_t>(r));
+    return out;
 }
 
 std::string TasksPane::currentTaskName() const {
@@ -504,10 +589,45 @@ void TasksPane::runAction(int action) {
             selectTask(name);
             return;
         }
-        case ARemove:
+        case ARemove: {
+            // 1.24.1 : PLUSIEURS TACHES D'UN COUP - de la plus haute a la plus basse (les rangs restent justes), un seul
+            // Ctrl+Z ; MAST et une tache qui execute encore quelque chose restent (comme seules), le compte rendu le dit.
+            const auto chosen = chosenTasks();
+            if (doc && hosts_.apply && chosen.size() > 1) {
+                std::vector<std::size_t> rows = chosen;
+                std::sort(rows.begin(), rows.end(), [this](std::size_t a, std::size_t b) { return rows_[a].task > rows_[b].task; });
+                several::Batch b;
+                b.noun = "t\xC3\xA2" "che";
+                b.nouns = "t\xC3\xA2" "ches";
+                b.feminine = true;
+                std::vector<std::size_t> tasks;
+                std::vector<std::string> why;
+                for (const auto r : rows) {
+                    b.names.push_back(rows_[r].name);
+                    tasks.push_back(rows_[r].task);
+                    why.push_back(rows_[r].name == "MAST" ? std::string("la t\xC3\xA2" "che ma\xC3\xAEtre")
+                                  : rows_[r].sections || rows_[r].units
+                                      ? "ex\xC3\xA9" "cute encore " + std::to_string(rows_[r].sections + rows_[r].units) + " entr\xC3\xA9" "e(s)"
+                                      : std::string{});
+                }
+                b.remove = [this, tasks, why](std::size_t k, std::string* no) {
+                    auto target = hosts_.project ? hosts_.project() : nullptr;
+                    if (!why[k].empty() || !target || tasks[k] >= target->tasks.size()) {
+                        if (no) *no = why[k].empty() ? std::string("introuvable") : why[k];
+                        return false;
+                    }
+                    hosts_.apply(std::make_unique<project::RemoveTaskCommand>(target, tasks[k]));
+                    return true;
+                };
+                b.report = [this](const std::string& text, bool) { if (hosts_.status) hosts_.status(text); };
+                b.alive = table_->selectionChanged;
+                several::run(std::move(b));
+                return;
+            }
             if (doc && current_ < rows_.size() && rows_[current_].task < doc->tasks.size())
                 hosts_.apply(std::make_unique<project::RemoveTaskCommand>(doc, rows_[current_].task));
             return;
+        }
         case AOrder: if (hosts_.request) hosts_.request("ordre"); return;
         case ASimulation: if (hosts_.request) hosts_.request("simulation"); return;
         default: return;

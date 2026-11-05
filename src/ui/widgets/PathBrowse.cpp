@@ -176,6 +176,14 @@ namespace ui {
             return asFolder(folder);
         }
 
+        // 1.24.1 : le dossier ou se lit un nom seul tape dans le champ (le menu du chemin) : celui de `start`
+        // (lui-meme, ou celui du fichier propose) ; "" : aucun.
+        std::string startFolderOf(const PathBrowse& spec) {
+            if (spec.start.empty()) return {};
+            const fs::path base = pathOf(cleanPath(spec.start));
+            return utf8Of(isDir(base) || !base.has_extension() ? base : base.parent_path());
+        }
+
         std::string defaultTitle(BrowseMode mode) {
             switch (mode) {
                 case BrowseMode::SaveFile: return "Enregistrer sous";
@@ -273,6 +281,12 @@ namespace ui {
           target_(&target), spec_(std::move(spec)), alive_(std::make_shared<char>('\0')) {
         setTooltip(defaultTooltip(spec_.mode, {}));
         links_ += clicked->connect([this] { (void)browse(); });
+        target.setPathField(true, startFolderOf(spec_));   // 1.24.1 : son clic droit - Ouvrir dans l'explorateur, Aller a
+    }
+
+    void BrowseButton::setSpec(PathBrowse spec) {
+        spec_ = std::move(spec);
+        if (target_) target_->setPathField(true, startFolderOf(spec_));
     }
 
     void BrowseButton::setFieldLabel(std::string label) {

@@ -4,6 +4,7 @@
 // =============================================================================
 #include "HmiImportDialog.hpp"
 #include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le champ Fichier, un chemin (Ouvrir dans l'explorateur)
 
 #include "../../menu/MenuManager.hpp"
 
@@ -273,12 +274,19 @@ protected:
             invalidate();
             return ui::EventResult::Consumed;
         }
+        // 1.24.1 : le champ Fichier est un chemin - son clic droit propose Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Right && !d_.spec_->path.empty()) {
+            const float browseW = browse ? browse->bounds().w + 8.f : 0.f;
+            const gfx::Rect field{panel.x + 80.f, panel.y + 36.f + 12.f, panel.w - 94.f - browseW, 24.f};
+            if (field.contains(d->pos) && pathMenu_.open(*this, d_.spec_->path, d->pos)) return ui::EventResult::Consumed;
+        }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && panel.contains(d->pos)) return ui::EventResult::Consumed;
         return ui::EventResult::Ignored;
     }
 
 private:
     HmiImportDialog& d_;
+    ui::paths::PathMenu pathMenu_;   // 1.24.1
 };
 
 HmiImportDialog::HmiImportDialog(Spec spec, Loader loader)

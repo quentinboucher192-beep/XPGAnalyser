@@ -167,6 +167,9 @@ private:
 // « Ouvrir le code » : la section choisie ; un bloc a une section l'ouvre ; a
 // plusieurs, un menu les propose sous le bouton (ou sous la ligne, au
 // double-clic) ; sans section, la barre d'etat le dit.
+// 1.24.1 : plusieurs blocs choisis (Ctrl+clic, Maj+clic) se suppriment d'un coup
+// (<< Supprimer les 3 >>, Suppr, le clic droit ; une question si l'un emporte
+// quelque chose ; un seul Ctrl+Z) ; un bloc qui a des instances reste, c'est dit.
 class DfbBlockView;
 
 class DfbPane final : public ui::Widget {
@@ -200,6 +203,10 @@ public:
     [[nodiscard]] std::size_t rowCount() const noexcept { return rows_.size(); }
     // Le menu des sections de « Ouvrir le code » (tests, scripts : choisir "<section>").
     [[nodiscard]] ui::PopupMenu* sectionMenu() const noexcept { return menu_; }
+    // 1.24.1 : les blocs des lignes de bloc choisies (Ctrl+clic, Maj+clic ; leurs rangs dans la liste des blocs, sans
+    // double) ; plusieurs : Supprimer (le bouton, Suppr, le clic droit) les retire tous d'un coup, un seul Ctrl+Z.
+    [[nodiscard]] std::vector<std::size_t> chosenBlocks() const;
+    [[nodiscard]] std::vector<std::string> chosenBlockNames() const;
 
 protected:
     void onLayout() override;
@@ -245,6 +252,7 @@ private:
 
     ApiPaneHosts                  hosts_;
     ApiFrame*                     frame_{nullptr};
+    HmiToolStrip*                 tools_{nullptr};     // 1.24.1 : la barre du cadre (le clic droit en reprend les gestes)
     ui::TableView*                table_{nullptr};
     ui::TableView*                instances_{nullptr};
     DfbBlockView*                 block_{nullptr};
@@ -278,6 +286,8 @@ private:
 // le nom que la simulation connait). Coller sur le titre d'un groupe cree les
 // variables nouvelles avec la portee du groupe (une colonne Portee collee
 // l'emporte) ; « + Variable » aussi. Ailleurs, rien ne change.
+// 1.24.1 : plusieurs unites, sections ou variables choisies se suppriment d'un
+// coup (<< Supprimer les 3 >>, Suppr, le clic droit ; un seul Ctrl+Z).
 class UnitsPane final : public ui::Widget {
 public:
     // 1.8.0 : Comparer (les sections choisies), Exporter (le programme lisible), Icone.
@@ -309,6 +319,10 @@ public:
     // L'etat retenu, meme sous un parent replie ; un groupe qui n'existe pas : faux.
     [[nodiscard]] bool isExpanded(std::string_view key) const;
     [[nodiscard]] std::size_t rowCount() const noexcept { return rows_.size(); }
+    // 1.24.1 : les lignes choisies qui se suppriment (unites, sections, variables ; pas un titre ni un membre) et leurs
+    // noms ; plusieurs : Supprimer (le bouton, Suppr, le clic droit) les retire toutes d'un coup, un seul Ctrl+Z.
+    [[nodiscard]] std::vector<std::size_t> chosenDeletable() const;
+    [[nodiscard]] std::vector<std::string> chosenNames() const;
 
 protected:
     void onLayout() override;
@@ -347,6 +361,7 @@ private:
 
     ApiPaneHosts                  hosts_;
     ApiFrame*                     frame_{nullptr};
+    HmiToolStrip*                 tools_{nullptr};     // 1.24.1 : la barre du cadre (le clic droit en reprend les gestes)
     ui::TableView*                table_{nullptr};
     ui::PropertyGrid*             props_{nullptr};
     std::shared_ptr<Model>        model_;

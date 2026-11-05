@@ -7,6 +7,7 @@
 #include "../menu/MenuManager.hpp"
 #include "../ui/Icons.hpp"
 #include "../ui/widgets/Controls.hpp"
+#include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le fichier importe, un chemin (Ouvrir dans l'explorateur)
 
 #include <algorithm>
 #include <cmath>
@@ -145,10 +146,20 @@ protected:
         ctx.r.drawText({x, y}, n1, kSmall, c.textMuted);
         if (n1.size() < note.size()) ctx.r.drawText({x, y + 17.f}, note.substr(n1.size() + 1), kSmall, c.textMuted);
     }
+    // 1.24.1 : la ligne du fichier importe (sous le titre) est un chemin - son clic droit propose Ouvrir dans l'explorateur,
+    // Aller a, Copier le chemin (ui::paths), comme partout.
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Right) {
+            const gfx::Rect line{panel_.x + 16.f, panel_.y + 36.f + 6.f, panel_.w - 32.f, 22.f};
+            if (line.contains(m->pos) && pathMenu_.open(*this, d_.job_->source(), m->pos)) return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
 
 private:
     ImportJobDialog& d_;
     gfx::Rect panel_{};
+    ui::paths::PathMenu pathMenu_;   // 1.24.1
 };
 
 ImportJobDialog::ImportJobDialog(std::shared_ptr<ImportJob> job, std::string where)

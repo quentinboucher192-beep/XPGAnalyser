@@ -578,6 +578,7 @@ void MacroFormView::buildControls(Row& row) {
             auto in = std::make_unique<macroui::FileInput>(base);
             row.file = &static_cast<macroui::FileInput&>(addChild(std::move(in)));
             row.input = row.file;
+            row.file->setPathField(true);   // 1.24.1 : son clic droit - Ouvrir dans l'explorateur, Aller a, Copier le chemin
             const bool output = spec.kind == FieldKind::OutputFile;
             row.links += row.file->fileChosen->connect([this, r](const std::string& path) { emitChange(*r, path, true); });
             row.links += row.file->textChanged->connect([this, r](const std::string& t) { emitChange(*r, t, false); });

@@ -7,9 +7,12 @@
 //  se changent), Dossier... (l'explorateur de l'appli ou du systeme, comme
 //  partout) et Ouvrir (l'Explorateur de Windows) ; dessous, d'ou il vient.
 //  Un champ laisse tel quel ne change rien ; un champ vide revient au defaut.
+//  1.24.1 : le clic droit sur un chemin (le champ, ou le texte des dossiers qui
+//  s'ouvrent seulement) : Ouvrir dans l'explorateur, Aller a, Copier le chemin.
 // =============================================================================
 #include "Screens.hpp"
 #include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
+#include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : un chemin montre - Ouvrir dans l'explorateur, Aller a
 #include "../../core/Edition.hpp"   // 1.12.20 : le nom de l'application (API Studio, IHM Studio)
 
 #include "../App.hpp"
@@ -85,6 +88,14 @@ public:
         return h;
     }
 protected:
+    // 1.24.1 : un chemin montre (les dossiers qui s'ouvrent seulement) - son clic droit propose Ouvrir dans l'explorateur,
+    // Aller a, Copier le chemin (ui::paths), comme partout.
+    EventResult onEvent(const InputEvent& ev) override {
+        if (const auto* d = std::get_if<MouseDown>(&ev); d && d->button == MouseButton::Right && kind_ == Kind::Path && bounds().contains(d->pos)
+            && text_ != "-" && pathMenu_.open(*this, text_, d->pos))
+            return EventResult::Consumed;
+        return EventResult::Ignored;
+    }
     void onPaint(const PaintContext& ctx) override {
         const auto r = contentRect();
         const gfx::FontId f = kind_ == Kind::Name ? ctx.theme.font.uiBold
@@ -114,6 +125,7 @@ private:
     std::string text_;
     Kind        kind_;
     float       width_;
+    ui::paths::PathMenu pathMenu_;   // 1.24.1
 };
 
 // Un trait entre les dossiers qui se changent et ceux qui s'ouvrent seulement.

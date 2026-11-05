@@ -2,6 +2,7 @@
 //  ui/widgets/Controls.cpp
 // =============================================================================
 #include "Controls.hpp"
+#include "PropertyGridHooks.hpp"   // 1.24.1 : un champ de chemin - Ouvrir dans l'explorateur, Aller a, Copier le chemin
 #include "../../core/Perf.hpp"   // 1.22.2 : le dessin du code se mesure (l'onglet Performances)
 
 #include <algorithm>
@@ -11,6 +12,9 @@
 
 namespace ui {
     namespace {
+
+        // 1.24.1 : les entrees du chemin d'un champ de chemin (900..902), apres celles de l'edition (1..5).
+        constexpr int kPathMenuId = 900;
 
         // sizeHint() runs outside a paint pass and has no Theme to consult. These must
         // match ui::Theme::Fonts; they are the only duplication of that fact, and both
@@ -364,6 +368,16 @@ namespace ui {
                 items.push_back(entry("Choisir une fonction\xE2\x80\xA6", 5, "Ctrl+I", true, {}));
             }
         }
+        // 1.24.1 : un champ de chemin - ses entrees sous celles de l'edition (grisees, avec la raison, s'il n'existe pas).
+        if (pathField_ && !masked_) {
+            auto pathItems = paths::menuItems(pathText(), kPathMenuId, pathBase_);
+            if (!pathItems.empty()) {
+                PopupMenu::Item rule;
+                rule.separator = true;
+                items.push_back(rule);
+                for (auto& it : pathItems) items.push_back(std::move(it));
+            }
+        }
         menu_->setItems(std::move(items));
         menu_->setBounds(bounds());
         gfx::Size surface = surfaceSize();
@@ -373,9 +387,22 @@ namespace ui {
         else menu_->openAt(at, surface);
     }
 
+    std::string InputText::pathText() const {
+        if (!pathField_) return {};
+        std::size_t a = 0, b = text_.size();
+        while (a < b && (std::isspace(static_cast<unsigned char>(text_[a])) || text_[a] == '"')) ++a;
+        while (b > a && (std::isspace(static_cast<unsigned char>(text_[b - 1])) || text_[b - 1] == '"')) --b;
+        return text_.substr(a, b - a);
+    }
+
     void InputText::runMenuEntry(int id) {
         menuOpen_ = false;
         if (!focused()) grabFocus();
+        if (paths::owns(id, kPathMenuId)) {   // 1.24.1 : Ouvrir dans l'explorateur, Aller a, Copier le chemin
+            (void)paths::run(id, kPathMenuId, pathText(), pathBase_);   // le fournisseur dit lui-meme un refus
+            invalidate();
+            return;
+        }
         switch (id) {
         case 1:
             if (readOnly_ || masked_ || caret_ == selAnchor_) break;

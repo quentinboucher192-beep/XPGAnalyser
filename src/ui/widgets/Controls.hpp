@@ -139,6 +139,16 @@ namespace ui {
         //  l'inspecteur, les fenetres, la recherche, les filtres. Le texte tape reste (bug 5).
         void openContextMenu(gfx::Point at, bool fromKeyboard = false);
         [[nodiscard]] PopupMenu* contextMenu() const noexcept { return menu_; }
+        // 1.24.1 : UN CHAMP DE CHEMIN (un fichier, un dossier ; BrowseButton le pose sur son champ) - le menu du
+        // clic droit ajoute, sous les entrees d'edition, Ouvrir dans l'explorateur, Aller a et Copier le chemin
+        // (ui::paths, PropertyGridHooks.hpp) pour le texte du champ (sans blancs ni guillemets autour), grisees
+        // avec leur raison quand il n'existe pas. `base` : le dossier ou se lit un nom seul. Sans fournisseur
+        // (les essais qui n'en posent pas) ou champ vide : rien de plus.
+        void setPathField(bool on, std::string base = {}) { pathField_ = on; pathBase_ = std::move(base); }
+        [[nodiscard]] bool pathField() const noexcept { return pathField_; }
+        [[nodiscard]] const std::string& pathBase() const noexcept { return pathBase_; }
+        // Le chemin que le menu prend : le texte sans blancs ni guillemets autour ("" : pas un champ de chemin).
+        [[nodiscard]] std::string pathText() const;
         [[nodiscard]] std::size_t selectionStart() const noexcept { return std::min(caret_, selAnchor_); }
         [[nodiscard]] std::size_t selectionEnd() const noexcept { return std::max(caret_, selAnchor_); }
 
@@ -197,6 +207,8 @@ namespace ui {
         PopupMenu*              menu_{ nullptr };
         bool                    menuOpen_{ false };
         void                    runMenuEntry(int id);
+        bool                    pathField_{ false };      // 1.24.1 : un champ de chemin (son menu)
+        std::string             pathBase_;
     };
 
     // -------------------------------------------------------- MultiLineText ---

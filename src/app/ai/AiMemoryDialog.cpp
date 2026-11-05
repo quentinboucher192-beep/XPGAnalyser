@@ -14,6 +14,7 @@
 #include "AiStore.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../Dossiers.hpp"
+#include "../hmi/HmiPanels.hpp"   // 1.24.1 : app::several (plusieurs d'un coup : les noms, le compte rendu)
 #include "../../core/Edition.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
@@ -652,6 +653,7 @@ public:
         table = &makeTable(*this, base + "liste", model,
                            {col("Nom", 250.f), col("Cat\xC3\xA9gorie", 210.f), col("Source", 135.f), col("Projet", 150.f), col("Ajout\xC3\xA9" "e", 105.f),
                             col("Mise \xC3\xA0 jour", 110.f), col("Taille estim\xC3\xA9" "e", 125.f, ui::Align::End), col("\xC3\x89tat", 100.f)});
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs connaissances a supprimer d'un coup
         view = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Consulter", base + "consulter")));
         edit = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Modifier", base + "modifier")));
         toggle = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("D\xC3\xA9sactiver", base + "basculer")));
@@ -2210,6 +2212,7 @@ public:
         search->setPlaceholder("Rechercher : titres, messages, connaissances, pi\xC3\xA8" "ces jointes");
         model = std::make_shared<Rows>();
         table = &makeTable(*this, base + "liste", model, {});
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs lignes a supprimer d'un coup
         removeOne = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", base + "supprimer")));
         removeOne->setStyle(ui::Button::Style::Danger);
         removeOne->setIcon(ui::Icon::Delete);
@@ -2662,6 +2665,7 @@ public:
         model->headers = {"Souvenir", "Port\xC3\xA9" "e", "Statut", "Projet", "Modifi\xC3\xA9"};
         table = &makeTable(*this, base + "liste", model,
                            {col("Souvenir", 230.f), col("Port\xC3\xA9" "e", 105.f), col("Statut", 120.f), col("Projet", 115.f), col("Modifi\xC3\xA9", 90.f)});
+        table->setSelectionMode(ui::SelectionMode::Extended);   // 1.24.1 : plusieurs souvenirs a supprimer d'un coup
         const auto button = [&](const char* text, const std::string& id) {
             return &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(text, base + id)));
         };
@@ -3240,6 +3244,7 @@ void AiMemoryDialog::rebuildTables() {
             row.styles.resize(8);
             row.styles[0].icon = k->builtIn ? ui::Icon::Library : ui::Icon::Document;
             row.styles[0].iconTone = ui::Tone::Muted;
+            row.styles[0].path = k->file;   // 1.24.1 : une ajoutee - son fichier (Ouvrir dans l'explorateur, Aller a)
             row.styles[7] = toneStyle(here == mem::Here::Active ? ui::Tone::Ok : here == mem::Here::Inactive ? ui::Tone::Muted : ui::Tone::Warning);
             row.tip = k->description;
             m.rows.push_back(std::move(row));
@@ -3268,6 +3273,7 @@ void AiMemoryDialog::rebuildTables() {
                 row.styles.resize(6);
                 row.styles[0].icon = k.builtIn ? ui::Icon::Library : ui::Icon::Document;
                 row.styles[0].iconTone = ui::Tone::Muted;
+                row.styles[0].path = k.file;   // 1.24.1 : une ajoutee - son fichier (Ouvrir dans l'explorateur, Aller a)
                 row.styles[4] = toneStyle(here == mem::Here::Active ? ui::Tone::Ok : here == mem::Here::Inactive ? ui::Tone::Muted : ui::Tone::Warning);
                 row.tip = k.description;
                 m.rows.push_back(std::move(row));
@@ -3287,6 +3293,7 @@ void AiMemoryDialog::rebuildTables() {
                     row.styles.resize(7);
                     row.styles[0].icon = ui::Icon::Comment;
                     row.styles[0].iconTone = ui::Tone::Muted;
+                    row.styles[0].path = c.file;   // 1.24.1 : son fichier - Ouvrir dans l'explorateur, Aller a, Copier le chemin
                     // 1.14.2 (captures) : le titre en entier d'abord (la case le coupe), le fichier ensuite
                     row.tip = c.title + "\n" + (c.readable ? c.file : c.file + " : " + c.why);
                     m.rows.push_back(std::move(row));
@@ -3350,6 +3357,7 @@ void AiMemoryDialog::rebuildTables() {
                     row.styles[0].icon = ui::Icon::Document;
                     row.styles[0].iconTone = ui::Tone::Muted;
                     if (a.conversation.empty()) row.styles[4] = toneStyle(ui::Tone::Warning);
+                    row.styles[1].path = a.folder;   // 1.24.1 : son dossier - Ouvrir dans l'explorateur, Aller a, Copier le chemin
                     row.tip = (a.names.empty() ? std::string("(vide)") : a.names) + "\n" + a.folder;
                     m.rows.push_back(std::move(row));
                 }
@@ -3493,6 +3501,17 @@ void AiMemoryDialog::syncWidgets() {
         p.toggle->setText(k && !k->active ? "Activer" : "D\xC3\xA9sactiver");
         p.remove->setEnabled(k && !k->builtIn);
         p.remove->setTooltip(k && k->builtIn ? "Int\xC3\xA9gr\xC3\xA9" "e au logiciel : elle se d\xC3\xA9sactive, elle ne se supprime pas." : std::string{});
+        // 1.24.1 : plusieurs connaissances choisies - Supprimer les N ; Consulter, Modifier, Desactiver : une a la fois.
+        const std::size_t many = chosenKeys(List::Learning).size();
+        p.remove->setText(several::label("Supprimer", many) + "\xE2\x80\xA6");
+        if (many > 1) {
+            p.remove->setEnabled(true);
+            p.remove->setTooltip("Les connaissances int\xC3\xA9gr\xC3\xA9" "es au logiciel restent (elles se d\xC3\xA9sactivent).");
+            for (auto* b : {p.view, p.edit, p.toggle}) {
+                b->setEnabled(false);
+                b->setTooltip(several::kOneAtATime);
+            }
+        }
         learning_->invalidateLayout();
     }
     if (memory_) {
@@ -3517,6 +3536,11 @@ void AiMemoryDialog::syncWidgets() {
             canOne = k && !k->builtIn;
         } else if (key.rfind("a:", 0) == 0) {
             one = "Supprimer la pi\xC3\xA8" "ce jointe\xE2\x80\xA6";
+            canOne = true;
+        }
+        // 1.24.1 : plusieurs lignes choisies - Supprimer les N (un projet, une connaissance du logiciel restent : dit).
+        if (const std::size_t many = chosenKeys(List::Memory).size(); many > 1) {
+            one = several::label("Supprimer", many) + "\xE2\x80\xA6";
             canOne = true;
         }
         p.removeOne->setText(one);
@@ -3704,6 +3728,7 @@ bool AiMemoryDialog::toggleSelected() {
 }
 
 bool AiMemoryDialog::deleteSelected(bool now) {
+    if (chosenKeys(List::Learning).size() > 1) return askDeleteMany(List::Learning, now);   // 1.24.1
     const auto* k = selectedKnowledge();
     if (!k) return false;
     if (k->builtIn) {
@@ -3874,6 +3899,7 @@ std::string AiMemoryDialog::memoryKeyAt(std::size_t modelRow) const {
 }
 
 bool AiMemoryDialog::deleteMemorySelection(bool now) {
+    if (chosenKeys(List::Memory).size() > 1) return askDeleteMany(List::Memory, now);   // 1.24.1
     std::string key = selectedMemory_;
     if (key.empty()) {
         say("Choisis d'abord une ligne.", true);
@@ -4191,6 +4217,7 @@ bool AiMemoryDialog::confirmYes() {
         case Confirm::ImportLearning: ok = hub_ && hub_->doImport(); break;
         case Confirm::DeleteSouvenir: ok = doDeleteSouvenir(); break;
         case Confirm::RestoreBackup: ok = doRestoreBackup(); break;
+        case Confirm::DeleteMany: ok = doDeleteMany(); break;   // 1.24.1
         case Confirm::None: break;
     }
     syncWidgets();
@@ -4314,6 +4341,7 @@ void AiMemoryDialog::rebuildSouvenirs() {
         row.styles[0].icon = k->pinned ? ui::Icon::Pin : k->conflicted() ? ui::Icon::Warning : k->provisional() ? ui::Icon::Assistant : ui::Icon::Document;
         row.styles[0].iconTone = k->conflicted() ? ui::Tone::Error : k->provisional() ? ui::Tone::Info : ui::Tone::Muted;
         row.styles[2] = toneStyle(k->conflicted() ? ui::Tone::Error : k->status == "confirme" ? ui::Tone::Ok : k->status == "provisoire" ? ui::Tone::Info : ui::Tone::Warning);
+        row.styles[0].path = k->file;   // 1.24.1 : son fichier (Ouvrir dans l'explorateur, Aller a, Copier le chemin)
         row.tip = k->name + "\n" + k->provenance() + "\n" + (k->content.size() > 300 ? k->content.substr(0, 300) + kDots : k->content);
         m.rows.push_back(std::move(row));
     }
@@ -4377,6 +4405,17 @@ void AiMemoryDialog::syncSouvenirs() {
     p.reject->setEnabled(any);
     p.reject->setTooltip("Refuser la proposition de l'Assistant : elle est supprim\xC3\xA9" "e.");
     p.remove->setEnabled(any);
+    // 1.24.1 : plusieurs souvenirs choisis - Supprimer les N (toujours montre) ; le reste : un a la fois.
+    const std::size_t many = chosenKeys(List::Souvenirs).size();
+    p.remove->setText(several::label("Supprimer", many) + "\xE2\x80\xA6");
+    if (many > 1 && !p.editorOn) {
+        vis(p.remove, true);
+        vis(p.reject, false);
+        for (auto* b : {p.confirm, p.hypothesis, p.pin, p.keep, p.associate, p.edit}) {
+            b->setEnabled(false);
+            b->setTooltip(several::kOneAtATime);
+        }
+    }
     p.restore->setEnabled(!backups_.empty());
     p.backup->setEnabled(!measure_.root.empty());
     souvenirs_->invalidateLayout();
@@ -4555,6 +4594,7 @@ void AiMemoryDialog::closeSouvenirEdit() {
 bool AiMemoryDialog::souvenirEditing() const noexcept { return souvenirs_ && souvenirs_->editorOn; }
 
 bool AiMemoryDialog::deleteSelectedSouvenir(bool now) {
+    if (chosenKeys(List::Souvenirs).size() > 1) return askDeleteMany(List::Souvenirs, now);   // 1.24.1
     const auto* k = selectedSouvenir();
     if (!k) return false;
     if (now) return doDeleteSouvenir();
@@ -4577,6 +4617,139 @@ bool AiMemoryDialog::doDeleteSouvenir() {
     refresh();
     say("Souvenir supprim\xC3\xA9 : " + name + ".");
     return true;
+}
+
+// ============================================================ 1.24.1 ====
+//  PLUSIEURS D'UN COUP (les listes Apprentissage, Memoire, Souvenirs).
+std::vector<std::string> AiMemoryDialog::chosenKeys(List l) const {
+    ui::TableView* t = nullptr;
+    const Rows* m = nullptr;
+    if (l == List::Learning && learning_) t = learning_->table, m = learning_->model.get();
+    if (l == List::Memory && memory_) t = memory_->table, m = memory_->model.get();
+    if (l == List::Souvenirs && souvenirs_) t = souvenirs_->table, m = souvenirs_->model.get();
+    std::vector<std::string> out;
+    if (!t || !m) return out;
+    auto rows = t->selectedModelRows();
+    std::sort(rows.begin(), rows.end());
+    for (const auto r : rows)
+        if (r < m->rows.size() && !m->rows[r].key.empty() && std::find(out.begin(), out.end(), m->rows[r].key) == out.end())
+            out.push_back(m->rows[r].key);
+    return out;
+}
+
+bool AiMemoryDialog::selectKeys(List l, const std::vector<std::string>& keys) {
+    ui::TableView* t = nullptr;
+    const Rows* m = nullptr;
+    if (l == List::Learning && learning_) t = learning_->table, m = learning_->model.get();
+    if (l == List::Memory && memory_) t = memory_->table, m = memory_->model.get();
+    if (l == List::Souvenirs && souvenirs_) t = souvenirs_->table, m = souvenirs_->model.get();
+    if (!t || !m) return false;
+    std::vector<ui::RowIndex> rows;
+    for (std::size_t i = 0; i < m->rows.size(); ++i)
+        if (std::find(keys.begin(), keys.end(), m->rows[i].key) != keys.end()) rows.push_back(static_cast<ui::RowIndex>(i));
+    t->selectModelRows(rows);   // la ligne du haut devient celle des gestes (selectionChanged)
+    return rows.size() == keys.size();
+}
+
+// La confirmation : les premiers noms, ce qui reste et pourquoi, << definitif >>. `now` : sans elle (les essais).
+bool AiMemoryDialog::askDeleteMany(List l, bool now) {
+    const auto keys = chosenKeys(l);
+    const Rows* m = l == List::Learning ? (learning_ ? learning_->model.get() : nullptr)
+                  : l == List::Memory   ? (memory_ ? memory_->model.get() : nullptr)
+                                        : (souvenirs_ ? souvenirs_->model.get() : nullptr);
+    if (keys.empty() || !m) return false;
+    doomed_.clear();
+    std::vector<std::string> names, kept;
+    std::vector<std::string> conversations;   // un message choisi : sa conversation (une fois)
+    for (const auto& key : keys) {
+        std::string name;
+        for (const auto& r : m->rows)
+            if (r.key == key) name = r.cells.empty() ? key : r.cells.front();
+        std::string bare = key;
+        if (const auto hash = bare.find('#'); hash != std::string::npos) bare.erase(hash);
+        std::string why;
+        if (l != List::Memory || bare.rfind("k:", 0) == 0) {
+            const auto* k = registry_.find(l == List::Memory ? bare.substr(2) : bare);
+            if (!k) why = "introuvable";
+            else if (k->builtIn) why = "int\xC3\xA9gr\xC3\xA9" "e au logiciel : elle se d\xC3\xA9sactive";
+        } else if (bare.rfind("p:", 0) == 0) {
+            why = "un projet s'oublie un par un";
+        } else if (bare.rfind("m:", 0) == 0) {
+            std::string id = bare.substr(2);
+            id = id.substr(0, id.rfind(':'));
+            if (std::find(conversations.begin(), conversations.end(), id) != conversations.end()) continue;
+            conversations.push_back(id);
+            bare = "c:" + id;
+            for (const auto& c : conversations_)
+                if (c.id == id) name = c.title;
+        } else if (bare.rfind("c:", 0) == 0) {
+            if (std::find(conversations.begin(), conversations.end(), bare.substr(2)) != conversations.end()) continue;
+            conversations.push_back(bare.substr(2));
+        }
+        if (!why.empty()) {
+            kept.push_back(name + " (" + why + ")");
+            continue;
+        }
+        doomed_.push_back({l, bare, name});
+        names.push_back(name);
+    }
+    // Le genre de ce qui part : celui de la liste (la categorie de Memoire).
+    doomedFeminine_ = true;
+    if (l == List::Souvenirs) doomedNoun_ = "souvenir", doomedNouns_ = "souvenirs", doomedFeminine_ = false;
+    else if (l == List::Learning) doomedNoun_ = "connaissance", doomedNouns_ = "connaissances";
+    else if (memCat_ == MemCat::Conversations || memCat_ == MemCat::Messages) doomedNoun_ = "conversation", doomedNouns_ = "conversations";
+    else if (memCat_ == MemCat::Attachments) doomedNoun_ = "pi\xC3\xA8" "ce jointe", doomedNouns_ = "pi\xC3\xA8" "ces jointes";
+    else if (memCat_ == MemCat::Knowledge || memCat_ == MemCat::Preferences) doomedNoun_ = "m\xC3\xA9moire", doomedNouns_ = "m\xC3\xA9moires";
+    else doomedNoun_ = "\xC3\xA9l\xC3\xA9ment", doomedNouns_ = "\xC3\xA9l\xC3\xA9ments", doomedFeminine_ = false;
+    if (doomed_.empty()) {
+        say("Rien \xC3\xA0 supprimer : " + several::names(kept, 3) + ".", true);
+        return false;
+    }
+    if (now) return doDeleteMany();
+    const std::size_t n = doomed_.size();
+    std::string text = "Supprimer " + (n > 1 ? "les " + std::to_string(n) + " " + doomedNouns_ : (doomedFeminine_ ? "la " : "le ") + doomedNoun_)
+                     + " " + several::names(names, 4) + " ? C'est d\xC3\xA9" "finitif : " + (n > 1 ? "leurs fichiers sont effac\xC3\xA9s" : "son fichier est effac\xC3\xA9")
+                     + " de ce PC, rien ne pourra \xC3\xAAtre r\xC3\xA9" "cup\xC3\xA9r\xC3\xA9.";
+    if (!kept.empty()) text += " Reste" + std::string(kept.size() > 1 ? "nt" : "") + " : " + several::names(kept, 3) + ".";
+    ask(Confirm::DeleteMany, std::move(text), "Oui, " + several::label("supprimer", n));
+    return true;
+}
+
+bool AiMemoryDialog::doDeleteMany() {
+    const auto doomed = doomed_;
+    doomed_.clear();
+    std::vector<std::string> gone;
+    std::vector<std::pair<std::string, std::string>> refused;
+    for (const auto& d : doomed) {
+        std::string why;
+        bool ok = false;
+        if (d.list != List::Memory || d.key.rfind("k:", 0) == 0) {
+            const std::string id = d.list == List::Memory ? d.key.substr(2) : d.key;
+            const auto* k = registry_.find(id);
+            if (!k) why = "introuvable";
+            else if (k->builtIn) why = "int\xC3\xA9gr\xC3\xA9" "e au logiciel";
+            else ok = registry_.remove(id, &why);
+        } else if (d.key.rfind("c:", 0) == 0) {
+            ok = mem::deleteConversation(d.key.substr(2), &why);
+        } else if (d.key.rfind("a:", 0) == 0) {
+            ok = mem::deleteAttachmentFolder(d.key.substr(2), &why);
+        } else {
+            why = "pas ici";
+        }
+        if (ok) gone.push_back(d.name);
+        else refused.emplace_back(d.name, why);
+    }
+    selectedKnowledge_.clear();
+    selectedMemory_.clear();
+    selectedSouvenir_.clear();
+    refresh();
+    several::Batch b;
+    b.noun = doomedNoun_;
+    b.nouns = doomedNouns_;
+    b.feminine = doomedFeminine_;
+    b.final = true;
+    say(several::summary(b, gone, refused) + ".", !refused.empty());
+    return !gone.empty();
 }
 
 bool AiMemoryDialog::backupNow() {

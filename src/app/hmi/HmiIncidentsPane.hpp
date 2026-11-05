@@ -34,6 +34,13 @@
 //  (commentaire, validation, suppression, reglages) sont a l'ecran (Hosts) ;
 //  sans hote, les methodes publiques font le geste directement (les essais).
 //
+//  1.24.1 : PLUSIEURS D'UN COUP. Ctrl+clic, Maj+clic choisissent plusieurs
+//  incidents (un dossier d'alarme : les siens) ; << Supprimer les 3 >>, Suppr ou le
+//  clic droit les suppriment apres UNE question qui le dit definitif (leurs
+//  dossiers sont effaces : pas de Ctrl+Z) ; un valide reste, c'est dit. Le clic
+//  droit d'un incident propose son dossier comme partout : Ouvrir dans
+//  l'explorateur, Aller a, Copier le chemin (ui::paths).
+//
 //  Rien de lourd au dessin : la fiche se met en page quand l'incident, la
 //  largeur ou un depli change ; les images se decodent une fois, hors du fil
 //  de l'interface ; les textures se font sur lui.
@@ -273,6 +280,19 @@ public:
     void askComment();
     void askValidate();
     void askRemove();
+
+    // ---- 1.24.1 : PLUSIEURS INCIDENTS D'UN COUP ----
+    //  Ctrl+clic ajoute une ligne au choix ou l'en retire (un dossier d'alarme : ses incidents retenus) ; Maj+clic choisit
+    //  de la ligne choisie jusqu'a celle-ci ; un clic simple, les fleches reviennent a un seul. Les incidents choisis de
+    //  l'onglet ouvert (un seul : celui des gestes). Plusieurs : Supprimer (le bouton << Supprimer les 3 >>, Suppr, le clic
+    //  droit) les supprime tous apres UNE question qui le dit DEFINITIF - leurs dossiers sont effaces, pas de Ctrl+Z ; un
+    //  incident valide reste, le compte rendu le dit. Ce qui ne vaut que pour un incident (consulter, commenter, valider...)
+    //  est grise : << un a la fois >>.
+    [[nodiscard]] std::vector<const ai::incidents::Item*> chosenIncidents() const;
+    void toggleRowChoice(std::size_t row);
+    void extendChoiceTo(std::size_t row);
+    void clearChoice();
+    void removeChosen();
     void openSelectedFolder();
     // Verifier les empreintes de l'incident choisi (lecture directe) : les lignes du resultat.
     std::vector<std::string> verifySelected();
@@ -328,6 +348,9 @@ private:
     [[nodiscard]] const Row* rowAt(int tab, std::size_t row) const;
     void openContextMenu(gfx::Point surface);
     [[nodiscard]] std::string author() const;
+    // 1.24.1 : les noms des incidents d'une ligne (un dossier : ses incidents retenus) ; une ligne est-elle dans le choix ?
+    [[nodiscard]] std::vector<std::string> rowNames(int tab, std::size_t row) const;
+    [[nodiscard]] bool rowChosen(int tab, int row) const;
     // Une analyse demandee d'ici qui attend encore (l'hote en a une en cours ou en file) ; sinon elle se redemande.
     [[nodiscard]] bool analysisWaiting(const std::string& name) const;
 
@@ -352,6 +375,8 @@ private:
     bool                                  validatedTab_{false};
     int                                   row_[2]{-1, -1};   // 1.20.2 : la ligne AFFICHEE choisie (rows_)
     std::string                           chosen_[2];        // le nom choisi dans chaque onglet (suit les relectures)
+    std::vector<std::string>              marks_[2];         // 1.24.1 : les incidents choisis a plusieurs (Ctrl+clic), par nom
+    std::string                           menuPath_;         // 1.24.1 : le dossier de l'incident du menu (ses entrees de chemin)
     std::vector<Row>                      rows_[2];          // 1.20.2 : les lignes affichees de chaque onglet
     std::set<std::string>                 openGroups_[2];    // 1.20.2 : les dossiers deplies (par cle d'alarme), la seance
     std::size_t                           shown_[2]{0, 0};   // 1.20.2 : les incidents retenus par la recherche et le filtre

@@ -146,7 +146,9 @@ struct RecordingExportChoice {
 //  cadenas), le detail (l'ecran a 40 % de la duree, lu dans l'en-tete ; les comptes, la description qui se modifie),
 //  et Importer..., Exporter..., Rejouer, Renommer (les actions et les scripts qui le citent suivent), Mot de passe...,
 //  Supprimer (vers la corbeille du projet), Ouvrir le dossier. Un double-clic rejoue. Ce sont des fichiers, pas le
-//  projet : rien ne passe par Ctrl+Z, sauf Renommer (le fichier et ce qui le cite, d'un seul pas).
+//  projet : seuls Renommer (le fichier et ce qui le cite, d'un seul pas) et, 1.24.1, Supprimer (la corbeille du projet :
+//  Ctrl+Z l'en ressort) passent par Ctrl+Z. 1.24.1 : plusieurs choisis (Ctrl+clic, Maj+clic) se suppriment d'un coup
+//  (<< Supprimer les 3 >>, Suppr, le clic droit ; une question ; un seul Ctrl+Z les rend).
 class HmiRecordingsPane final : public ui::Widget {
 public:
     using Apply = std::function<void(core::CommandPtr)>;
@@ -167,8 +169,16 @@ public:
     bool renameTo(const std::string& name, std::string* why = nullptr);
     bool setPassword(const std::string& current, const std::string& fresh, std::string* why = nullptr);
     bool setDescription(const std::string& text, std::string* why = nullptr);
+    // 1.24.1 : vers la corbeille du projet, par une commande : Ctrl+Z l'en ressort (avant : sans retour).
     bool removeSelected(std::string* why = nullptr);
     void replaySelected();
+    // 1.24.1 : PLUSIEURS D'UN COUP. Les enregistrements choisis (Ctrl+clic, Maj+clic), dans l'ordre de la liste ; les
+    // choisir par leurs noms (les essais) ; les supprimer tous (une question quand l'ecran en pose une, la corbeille, UN
+    // Ctrl+Z, le compte rendu) ; le clic droit (ce qui ne vaut que pour un : << une a la fois >>).
+    [[nodiscard]] std::vector<std::string> selectedNames() const;
+    bool selectNames(const std::vector<std::string>& names);
+    void removeChosen();
+    [[nodiscard]] std::vector<ui::PopupMenu::Item> contextItems() const;
 
     struct Hosts {
         std::function<std::string()>                       projectFolder;
@@ -195,6 +205,7 @@ private:
     void say(std::string text, bool warning = false);
     void showDetail();
     [[nodiscard]] const hmi::rec::Item* selectedItem() const;
+    bool removeNamed(const std::string& name, std::string* why);   // 1.24.1 : la corbeille, une commande
     hmi::DocumentPtr               doc_;
     Apply                          apply_;
     Hosts                          hosts_;

@@ -64,6 +64,8 @@
 #include "../src/app/hmi/HmiEditor.hpp"
 #include "../src/ui/Commands.hpp"
 #include "../src/ui/widgets/PropertyGridHooks.hpp"
+#include "../src/ui/widgets/PathBrowse.hpp"   // 1.24.1 : le bouton ... fait un champ de chemin (cheminsChamps1241)
+#include "../src/hmi/HmiNames.hpp"            // 1.24.1 : les espaces de noms (supprimerPlusieurs1241)
 #include "../src/app/hmi/HmiDuplicateDialog.hpp"   // 1.10.2 (chantier D)
 #include <set>
 #include "../src/app/hmi/HmiFunctionPanes.hpp"
@@ -11995,6 +11997,40 @@ int ligneDeVue(const ui::TableView& t, int modelRow) {
     return -1;
 }
 }
+
+// 1.24.1 : les aides des essais des limites corrigees (cheminsChamps1241, supprimerPlusieurs1241, Chercher des fichiers).
+namespace lim1241 {
+// Un fournisseur de chemins d'essai : le "dossier du projet" est `base` ; Ouvrir dans l'explorateur et Aller a notent.
+struct Paths {
+    ui::paths::Provider      saved;
+    std::vector<std::string> revealed, went;
+    explicit Paths(const std::string& base) : saved(ui::paths::provider()) {
+        installerPressePapiers();   // Copier le chemin
+        ui::paths::Provider pr;
+        pr.resolve = [base](const std::string& path) { return std::filesystem::path(path).is_absolute() ? path : base + "/" + path; };
+        pr.reveal = [this](const std::string& resolved) { revealed.push_back(resolved); return std::string{}; };
+        pr.goTo = [this](const std::string&, const std::string& resolved, bool dry) {
+            if (!std::filesystem::exists(resolved)) return std::string("introuvable");
+            if (!dry) went.push_back(resolved);
+            return std::string{};
+        };
+        ui::paths::setProvider(pr);
+    }
+    ~Paths() { ui::paths::setProvider(saved); }
+    Paths(const Paths&) = delete;
+    Paths& operator=(const Paths&) = delete;
+};
+// La ligne du modele `row` d'un tableau, clic droit sur sa premiere case : le menu du tableau.
+ui::PopupMenu* rightClickRow(ui::TableView& t, ui::RowIndex row) {
+    if (auto* open = t.contextMenu(); open && open->isOpen()) open->close();
+    t.layout();
+    const int i = ligneDeVue(t, static_cast<int>(row));
+    gfx::Rect cell;
+    if (i < 0 || !t.cellRect(static_cast<std::size_t>(i), 0, cell)) return nullptr;
+    t.dispatch(ui::MouseDown{{cell.x + 10.f, cell.y + cell.h * 0.5f}, ui::MouseButton::Right, 1, {}});
+    return t.contextMenu();
+}
+} // namespace lim1241
 
 void lot20_copier_coller_excel() {
     std::printf("lot 20 : copier, coller avec Excel (tableaux et vues), un seul Ctrl+Z par collage\n");
@@ -44378,6 +44414,31 @@ void chercheur1140() {
             check(menu && findItem(menu->columnItems(0), "Ouvrir avec API Studio") && findItem(menu->columnItems(0), "Ouvrir le dossier"),
                   "le menu du tableau porte les gestes");
             if (menu) const_cast<ui::PopupMenu*>(menu)->close();
+            // 1.24.1 : AVEC L'APPLICATION (un fournisseur de chemins), le clic droit d'un resultat propose Ouvrir dans
+            // l'explorateur, Aller a, Copier le chemin, comme partout ; Ouvrir le dossier et Copier le chemin du volet n'y
+            // sont plus repetes (ils restent des boutons).
+            {
+                const auto savedPaths = ui::paths::provider();
+                std::vector<std::string> shownPaths;
+                ui::paths::Provider pr;
+                pr.reveal = [&](const std::string& p) { shownPaths.push_back(p); return std::string{}; };
+                pr.goTo = [](const std::string&, const std::string&, bool) { return std::string{}; };
+                ui::paths::setProvider(pr);
+                const auto labels2 = pane.contextLabels();
+                check(labels2.size() == 4 && std::find(labels2.begin(), labels2.end(), "Ouvrir le dossier") == labels2.end()
+                          && std::find(labels2.begin(), labels2.end(), "Copier le chemin") == labels2.end(),
+                      "1.24.1 : avec l'application, Ouvrir le dossier et Copier le chemin du volet ne sont plus r\xC3\xA9p\xC3\xA9t\xC3\xA9s");
+                const auto sel = pane.table().selectedModelRows();
+                auto* m2 = sel.empty() ? nullptr : lim1241::rightClickRow(pane.table(), sel.front());
+                const auto* o2 = m2 ? findItem(m2->items(), "Ouvrir dans l'explorateur") : nullptr;
+                check(o2 && o2->enabled && findItem(m2->items(), "Aller \xC3\xA0") && findItem(m2->items(), "Copier le chemin")
+                          && findItem(m2->items(), "Ouvrir avec API Studio") && !findItem(m2->items(), "Ouvrir le dossier"),
+                      "1.24.1 : le clic droit d'un r\xC3\xA9sultat - Ouvrir dans l'explorateur, Aller \xC3\xA0, Copier le chemin, comme partout");
+                if (m2 && o2) m2->itemChosen->emit(o2->id);
+                check(!shownPaths.empty() && shownPaths.back() == pathOf({"Exports", "MAST.XPG"}), "1.24.1 : Ouvrir dans l'explorateur : le fichier du r\xC3\xA9sultat");
+                if (m2) m2->close();
+                ui::paths::setProvider(savedPaths);
+            }
         }
         // la page dessinee
         {
@@ -46788,10 +46849,288 @@ void rapportsSonsImages1250() {
     }
 }
 
+// =====================================================================================================================
+//  1.24.1 : LES LIMITES DE LA 1.24.0 (le client : << corrige les limites principales >>). HMI_TEST_LIM=1 : ces essais seuls.
+//  (Les aides lim1241::Paths et lim1241::rightClickRow sont pres du presse-papiers d'essai.)
+// =====================================================================================================================
+
+// LES CHEMINS DANS LES CHAMPS ET LES LIBELLES - un champ de chemin (son bouton ... le marque) : son clic droit garde les
+// entrees d'edition et ajoute Ouvrir dans l'explorateur, Aller a, Copier le chemin (grisees avec la raison quand il
+// n'existe pas ; un nom seul se lit dans le dossier de depart) ; un libelle (ui::paths::PathMenu) ; les bibliotheques
+// reliees (la colonne Chemin) ; Chercher des fichiers n'y repete plus ses propres entrees (dans son essai).
+void cheminsChamps1241() {
+    std::printf("== 1.24.1 : les chemins dans les champs (bouton ...) et les libelles ==\n");
+    namespace fs = std::filesystem;
+    const fs::path dir = fs::temp_directory_path() / "hmi_chemins_1241";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir / "exports", ec);
+    { std::ofstream f(dir / "exports" / "rapport.pdf"); f << "%PDF\n"; }
+    const std::string base = dir.generic_string();
+    lim1241::Paths paths(base);
+    // ---- un champ de chemin : son bouton ... le marque ----
+    ui::InputText field("lim1241.champ");
+    field.setBounds({10, 10, 400, 28});
+    ui::BrowseButton browse(field, ui::saveFile("Documents PDF|*.pdf", (dir / "exports").generic_string()), "lim1241.parcourir");
+    check(field.pathField() && field.pathBase() == (dir / "exports").generic_string(), "le bouton ... fait du champ un champ de chemin (son dossier de d\xC3\xA9part)");
+    field.setText(" \"rapport.pdf\" ");
+    same_text(field.pathText(), "rapport.pdf", "le chemin du champ : sans blancs ni guillemets");
+    field.openContextMenu({20, 20});
+    auto* menu = field.contextMenu();
+    const auto* open = menu ? findItem(menu->items(), "Ouvrir dans l'explorateur") : nullptr;
+    const auto* go = menu ? findItem(menu->items(), "Aller \xC3\xA0") : nullptr;
+    const auto* copy = menu ? findItem(menu->items(), "Copier le chemin") : nullptr;
+    check(menu && findItem(menu->items(), "Couper") && findItem(menu->items(), "Coller") && findItem(menu->items(), "Tout choisir"),
+          "le clic droit garde les entr\xC3\xA9" "es d'\xC3\xA9" "dition (Couper, Coller, Tout choisir)");
+    check(open && go && copy && open->enabled && go->enabled && copy->enabled, "... et ajoute Ouvrir dans l'explorateur, Aller \xC3\xA0, Copier le chemin");
+    if (menu && open) menu->itemChosen->emit(open->id);
+    check(!paths.revealed.empty() && paths.revealed.back() == base + "/exports/rapport.pdf",
+          "Ouvrir dans l'explorateur : un nom seul se lit dans le dossier de d\xC3\xA9part (" + (paths.revealed.empty() ? std::string("rien") : paths.revealed.back()) + ")");
+    field.openContextMenu({20, 20});
+    if (const auto* c = findItem(field.contextMenu()->items(), "Copier le chemin")) field.contextMenu()->itemChosen->emit(c->id);
+    same_text(ui::clipboardText(), base + "/exports/rapport.pdf", "Copier le chemin : le chemin entier");
+    field.setText((dir / "absent.pdf").generic_string());
+    field.openContextMenu({20, 20});
+    open = findItem(field.contextMenu()->items(), "Ouvrir dans l'explorateur");
+    check(open && !open->enabled && open->disabledReason.find("absent.pdf") != std::string::npos && open->disabledReason.find("n'existe pas") != std::string::npos,
+          "un fichier qui n'existe pas : gris\xC3\xA9, avec la raison (" + (open ? open->disabledReason : std::string("?")) + ")");
+    field.setText({});
+    field.openContextMenu({20, 20});
+    check(!findItem(field.contextMenu()->items(), "Ouvrir dans l'explorateur") && findItem(field.contextMenu()->items(), "Coller"),
+          "un champ vide : les seules entr\xC3\xA9" "es d'\xC3\xA9" "dition");
+    // Un champ ordinaire : rien de plus.
+    ui::InputText plain("lim1241.ordinaire");
+    plain.setBounds({10, 50, 300, 28});
+    plain.setText(base + "/exports/rapport.pdf");
+    plain.openContextMenu({20, 60});
+    check(plain.contextMenu() && !findItem(plain.contextMenu()->items(), "Ouvrir dans l'explorateur"), "un champ qui n'est pas de chemin : rien de plus");
+    // ---- un libelle (PathMenu) ----
+    {
+        ui::Widget label("lim1241.libelle");
+        label.setBounds({0, 0, 300, 24});
+        ui::paths::PathMenu pm;
+        check(pm.open(label, base + "/exports", {10, 10}, {}, "Dossier des exports") && pm.menu() && pm.menu()->isOpen(), "un libelle : son menu s'ouvre");
+        const auto& items = pm.menu()->items();
+        check(!items.empty() && items.front().heading && items.front().label == "Dossier des exports" && findItem(items, "Aller \xC3\xA0"),
+              "... sa ligne de titre, puis les trois entr\xC3\xA9" "es");
+        if (const auto* c = findItem(items, "Ouvrir dans l'explorateur")) pm.menu()->itemChosen->emit(c->id);
+        check(!paths.revealed.empty() && paths.revealed.back() == base + "/exports" && pm.said().empty(), "Ouvrir dans l'explorateur : le dossier");
+        check(!pm.open(label, {}, {10, 10}), "pas de chemin : rien ne s'ouvre");
+    }
+    // ---- les bibliotheques reliees : la colonne Chemin ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        app::setHmiProjectFolder(base);
+        hmi::Library l;
+        l.name = "Gaz";
+        l.version = "1.0.0";
+        l.path = "exports/rapport.pdf";   // un fichier qui existe (le chemin compte, pas son contenu)
+        doc->project.libraries.push_back(l);
+        app::HmiLibrariesPane pane("lim1241.bib", doc, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        auto* m = lim1241::rightClickRow(pane.libraries(), 0);
+        const auto* o = m ? findItem(m->items(), "Ouvrir dans l'explorateur") : nullptr;
+        check(o && o->enabled, "Biblioth\xC3\xA8ques reli\xC3\xA9" "es : le clic droit d'une ligne - Ouvrir dans l'explorateur (son chemin)");
+        if (m && o) m->itemChosen->emit(o->id);
+        check(!paths.revealed.empty() && paths.revealed.back() == base + "/exports/rapport.pdf", "... le chemin relatif au projet, r\xC3\xA9solu");
+        app::setHmiProjectFolder({});
+    }
+    fs::remove_all(dir, ec);
+}
+
+// SUPPRIMER PLUSIEURS D'UN COUP, LA OU C'ETAIT UNE LIGNE A LA FOIS - les enregistrements (la corbeille du projet, un
+// Ctrl+Z les en ressort), Mes sons (les natifs refuses, un Ctrl+Z les rend), les bibliotheques reliees et les espaces
+// vides (un Ctrl+Z) ; la question unique, le compte rendu, le clic droit, les gestes d'une seule ligne grises.
+void supprimerPlusieurs1241() {
+    std::printf("== 1.24.1 : supprimer plusieurs d'un coup (enregistrements, Mes sons, biblioth\xC3\xA8ques) ==\n");
+    namespace fs = std::filesystem;
+    struct Question {
+        int         asked{0};
+        bool        yes{true};
+        std::string title, text, button;
+    } q;
+    app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string& button, std::function<void()> yes) {
+        ++q.asked;
+        q.title = title;
+        q.text = text;
+        q.button = button;
+        if (q.yes && yes) yes();
+    });
+    const std::string oneAtATime = "une \xC3\xA0 la fois";
+    const auto has = [](const std::string& text, const std::string& part) { return text.find(part) != std::string::npos; };
+    std::error_code ec;
+    // ---- ENREGISTREMENTS ----
+    {
+        const fs::path dir = fs::temp_directory_path() / "hmi_enregistrements_1241";
+        fs::remove_all(dir, ec);
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        app::HmiRecordingsPane rp("lim1241.rec", doc, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        rp.setBounds({0, 0, 1400, 800});
+        app::HmiRecordingsPane::Hosts h;
+        h.projectFolder = [dir] { return dir.generic_string(); };
+        bool askedOne = false;
+        h.remove = [&](const std::string&) { askedOne = true; };   // l'ecran pose sa question pour un seul
+        rp.setHosts(h);
+        const fs::path folder = fs::path(rp.folder());
+        fs::create_directories(folder, ec);
+        for (const char* n : {"Nuit", "Jour", "Essai", "Demo"}) {
+            std::ofstream f(folder / (std::string(n) + ".xrec"), std::ios::binary);
+            f << "pas un vrai enregistrement " << n;
+        }
+        rp.refresh();
+        rp.layout();
+        check(rp.rowCount() == 4, "Enregistrements : 4 fichiers (" + std::to_string(rp.rowCount()) + ")");
+        const int del = rp.tools().actionByTip("Supprimer");
+        const int ren = rp.tools().actionByTip("Renommer");
+        check(rp.selectNames({"Nuit", "Jour", "Demo"}) && rp.selectedNames().size() == 3, "Ctrl+clic : 3 enregistrements choisis");
+        same_text(rp.tools().labelOf(del), "Supprimer les 3", "le bouton dit combien");
+        check(rp.tools().isEnabled(del) && !rp.tools().isEnabled(ren), "Supprimer actif ; Renommer gris\xC3\xA9");
+        const auto items = rp.contextItems();
+        const auto* delItem = findItem(items, "Supprimer les 3\xE2\x80\xA6");
+        const auto* renItem = findItem(items, "Renommer\xE2\x80\xA6");
+        check(delItem && delItem->enabled && renItem && !renItem->enabled && renItem->disabledReason == oneAtATime,
+              "le clic droit : Supprimer les 3\xE2\x80\xA6 ; Renommer gris\xC3\xA9 (une \xC3\xA0 la fois)");
+        q = Question{};
+        rp.table().takeFocus();
+        (void)rp.table().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(q.asked == 1 && q.title == "Supprimer les 3 enregistrements ?" && has(q.text, "Nuit") && has(q.text, "corbeille") && has(q.text, "Un seul Ctrl+Z"),
+              "Suppr : une seule question (" + q.title + " / " + q.text + ")");
+        check(!askedOne, "... pas la question d'un seul");
+        check(rp.rowCount() == 1 && fs::exists(folder / "Essai.xrec") && fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec")
+                  && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"),
+              "les 3 partent dans la corbeille du projet ; Essai reste");
+        check(has(rp.lastMessage(), "3 enregistrements supprim") && has(rp.lastMessage(), "un seul Ctrl+Z"), "le compte rendu : " + rp.lastMessage());
+        check(stack.undo() && fs::exists(folder / "Nuit.xrec") && fs::exists(folder / "Jour.xrec") && fs::exists(folder / "Demo.xrec")
+                  && !fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec"),
+              "UN Ctrl+Z les ressort de la corbeille, \xC3\xA0 leur place");
+        rp.refresh();
+        check(rp.rowCount() == 4, "les 4 de nouveau dans la liste");
+        check(stack.redo() && !fs::exists(folder / "Jour.xrec"), "Ctrl+Y les remet \xC3\xA0 la corbeille");
+        check(static_cast<bool>(stack.undo()), "et Ctrl+Z de nouveau");
+        // Un seul : sans hote de question, la corbeille, et Ctrl+Z le rend (nouveau).
+        rp.refresh();
+        app::HmiRecordingsPane::Hosts h2;
+        h2.projectFolder = [dir] { return dir.generic_string(); };
+        rp.setHosts(h2);
+        check(rp.select("Essai") && rp.removeSelected() && !fs::exists(folder / "Essai.xrec"), "un seul : dans la corbeille");
+        check(stack.undo() && fs::exists(folder / "Essai.xrec"), "Ctrl+Z le rend (un seul aussi)");
+        // Un fichier revenu a sa place entretemps : Ctrl+Z le dit, la corbeille garde le sien.
+        check(rp.select("Demo") && rp.removeSelected(), "Demo \xC3\xA0 la corbeille");
+        { std::ofstream f(folder / "Demo.xrec"); f << "un autre"; }
+        check(!stack.undo() && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"), "un fichier du m\xC3\xAAme nom revenu : Ctrl+Z ne l'\xC3\xA9" "crase pas");
+        core::CommandGroupScope::registerStack(nullptr);
+        fs::remove_all(dir, ec);
+    }
+    // ---- MES SONS ----
+    {
+        namespace sl = hmi::soundlib;
+        using P = app::HmiSoundLibraryPane;
+        const fs::path dir = fs::temp_directory_path() / "hmi_mes_sons_1241";
+        fs::remove_all(dir, ec);
+        sl::setUserFolder(dir.generic_string());
+        Bench b;
+        core::CommandGroupScope::registerStack(&b.stack);
+        P pane("lim1241.sons", b.doc, [&](core::CommandPtr c) { (void)b.stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        std::string why;
+        for (const char* n : {"un.wav", "deux.wav", "trois.wav"}) {
+            const auto& d = *sl::findBuiltIn(std::string(n) == "un.wav" ? "carillon" : std::string(n) == "deux.wav" ? "clic" : "succes")->data;
+            check(sl::addUserSound(n, d, nullptr, nullptr, &why), std::string("Mes sons : ") + n);
+        }
+        pane.refresh();
+        check(pane.shownCategories().front().second == 3, "Mes sons : 3");
+        check(pane.selectIds({"mes/un.wav", "mes/trois.wav", "alarme-haute"}) && pane.selectedIds().size() == 3, "choisir 2 des miens et un natif");
+        same_text(pane.tools().labelOf(P::ActRemove), "Retirer les 3", "le bouton dit combien");
+        check(pane.tools().isEnabled(P::ActRemove) && !pane.tools().isEnabled(P::ActPlay) && !pane.tools().isEnabled(P::ActImport),
+              "Retirer actif ; \xC3\x89" "couter, Importer gris\xC3\xA9s");
+        {
+            const auto items = pane.contextItems();
+            const auto* rm = findItem(items, "Retirer les 3 de Mes sons");
+            const auto* play = findItem(items, "\xC3\x89" "couter");
+            check(rm && rm->enabled && play && !play->enabled && play->disabledReason == oneAtATime, "le clic droit : Retirer les 3 ; \xC3\x89" "couter : une \xC3\xA0 la fois");
+        }
+        q = Question{};
+        pane.runAction(P::ActRemove);
+        check(q.asked == 0, "pas de question (comme un seul : Ctrl+Z le rend)");
+        check(pane.shownCategories().front().second == 1 && sl::userSounds().size() == 1 && sl::userSounds().front().label == "deux",
+              "les 2 des miens partent ; deux reste");
+        check(has(pane.message(), "2 sons retir") && has(pane.message(), "1 refus") && has(pane.message(), "natif"), "le compte rendu (le natif refus\xC3\xA9) : " + pane.message());
+        check(b.stack.undo() && sl::userSounds().size() == 3, "UN Ctrl+Z les rend \xC3\xA0 Mes sons");
+        pane.refresh();
+        check(pane.shownCategories().front().second == 3, "la liste les montre");
+        check(pane.select("mes/deux.wav") && pane.removeSelected() && sl::userSounds().size() == 2 && b.stack.undo() && sl::userSounds().size() == 3,
+              "un seul : retir\xC3\xA9, Ctrl+Z le rend");
+        core::CommandGroupScope::registerStack(nullptr);
+        sl::setUserFolder("");
+        fs::remove_all(dir, ec);
+    }
+    // ---- BIBLIOTHEQUES RELIEES ET ESPACES ----
+    {
+        auto doc = std::make_shared<Document>();
+        core::CommandStack stack;
+        core::CommandGroupScope::registerStack(&stack);
+        for (const char* n : {"Gaz", "Eau", "Air"}) {
+            hmi::Library l;
+            l.name = n;
+            l.version = "1.0.0";
+            l.path = std::string("libs/") + n + ".xpgbib";
+            doc->project.libraries.push_back(l);
+        }
+        app::HmiLibrariesPane pane("lim1241.libs", doc, [&](core::CommandPtr c) { (void)stack.push(std::move(c)); });
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        using L = app::HmiLibrariesPane;
+        pane.libraries().selectModelRows({0, 2});
+        check(pane.selectedLibraries() == std::vector<std::string>{"Gaz", "Air"}, "Biblioth\xC3\xA8ques : 2 choisies");
+        same_text(pane.tools().labelOf(L::AUnlink), "D\xC3\xA9lier les 2", "le bouton dit combien");
+        check(pane.tools().isEnabled(L::AUnlink) && !pane.tools().isEnabled(L::AUpdate) && !pane.tools().isEnabled(L::ALocate),
+              "D\xC3\xA9lier actif ; Mettre \xC3\xA0 jour, Localiser gris\xC3\xA9s");
+        auto* m = lim1241::rightClickRow(pane.libraries(), 0);
+        const auto* un = m ? findItem(m->items(), "D\xC3\xA9lier les 2") : nullptr;
+        const auto* up = m ? findItem(m->items(), "Mettre \xC3\xA0 jour\xE2\x80\xA6") : nullptr;
+        check(un && un->enabled && up && !up->enabled && up->disabledReason == oneAtATime, "le clic droit : D\xC3\xA9lier les 2 ; Mettre \xC3\xA0 jour : une \xC3\xA0 la fois");
+        if (m) m->close();
+        pane.libraries().takeFocus();
+        (void)pane.libraries().dispatch(ui::KeyDown{ui::Key::Delete, {}, false});
+        check(doc->project.libraries.size() == 1 && doc->project.libraries[0].name == "Eau", "Suppr : les 2 d\xC3\xA9li\xC3\xA9" "es, Eau reste");
+        check(has(pane.message(), "2 biblioth\xC3\xA8ques d\xC3\xA9li\xC3\xA9" "es") && has(pane.message(), "un seul Ctrl+Z"), "le compte rendu : " + pane.message());
+        check(stack.undo() && doc->project.libraries.size() == 3, "UN Ctrl+Z les relie toutes");
+        // Les espaces vides : un qui range quelque chose reste.
+        std::string why;
+        check(pane.addNamespace("Vide1", &why) && pane.addNamespace("Vide2", &why), "deux espaces vides");
+        doc->project.programs.functions.push_back(makeFunction(doc->project, "Calcul", "REAL", "Calcul := 1.0;"));
+        doc->project.programs.functions.back().ns = "Plein";
+        pane.refresh();
+        std::vector<ui::RowIndex> rows;
+        for (std::size_t i = 0; i < pane.spaces().model()->rowCount(); ++i) rows.push_back(static_cast<ui::RowIndex>(i));
+        pane.spaces().selectModelRows(rows);
+        check(pane.selectedNamespaces().size() == 3, "3 espaces choisis (dont Plein)");
+        (void)pane.tools().trigger(L::ARemoveSpace);
+        const auto spaces = hmi::names::projectSpaces(doc->project);
+        check(spaces.size() == 1 && spaces[0].ns == "Plein" && has(pane.message(), "2 espaces retir") && has(pane.message(), "Plein"),
+              "les 2 vides partent, Plein reste (dit) : " + pane.message());
+        check(stack.undo() && hmi::names::projectSpaces(doc->project).size() == 3, "UN Ctrl+Z les rend");
+        core::CommandGroupScope::registerStack(nullptr);
+    }
+    app::several::setConfirmHost({});
+}
+
 int main(int argc, char** argv) {
     // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
     if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
         rapportsSonsImages1250();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.24.1 : HMI_TEST_LIM=1 - les limites de la 1.24.0 corrigees (les chemins des champs, supprimer plusieurs), seules.
+    if (const char* only = std::getenv("HMI_TEST_LIM"); only && *only == '1') {
+        cheminsChamps1241();
+        supprimerPlusieurs1241();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -47341,6 +47680,8 @@ int main(int argc, char** argv) {
     arbreSupprimerPlusieurs1240();          // 1.24.0 : l'arbre du projet - supprimer plusieurs noeuds d'un coup (un seul Ctrl+Z)
     cheminsMenu1240();                      // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a, Copier le chemin
     supprimerPlusieurs1240();               // 1.24.0 : supprimer plusieurs lignes d'un coup (variables, types, alarmes...)
+    cheminsChamps1241();                    // 1.24.1 : les chemins des champs (bouton ...) et des libelles
+    supprimerPlusieurs1241();               // 1.24.1 : enregistrements, Mes sons, bibliotheques - plusieurs d'un coup
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

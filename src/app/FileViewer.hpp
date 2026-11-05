@@ -127,6 +127,10 @@ protected:
 
 private:
     FileViewer viewer_;
+    // 1.24.1 : l'en-tete montre le fichier (son nom, son chemin) - son clic droit propose Ouvrir dans l'explorateur, Aller
+    // a, Copier le chemin (ui::paths) ; le menu est un enfant du volet.
+    ui::Widget* pathMenu_{nullptr};
+    std::string pathMenuFile_;
 };
 
 // ---- l'Explorateur de fichiers de l'IHM en marche : l'apercu dans l'objet ----

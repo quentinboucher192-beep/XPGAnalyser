@@ -38,6 +38,9 @@ inline constexpr std::string_view kExpressionPageItem = "La page des expressions
 //  'aller a' >>). Une case de la grille (PropertyGrid::Property::path), une case ou une
 //  colonne d'un tableau (CellStyle::path, TableView::setPathColumn), un noeud de l'arbre :
 //  leur clic droit propose Ouvrir dans l'explorateur, Aller a, Copier le chemin.
+//  1.24.1 : aussi un CHAMP de chemin (InputText::setPathField ; le bouton ... d'un champ le
+//  pose : ses entrees s'ajoutent a celles de l'edition) et un LIBELLE ou une ligne dessinee
+//  qui montre un chemin (PathMenu, plus bas).
 //
 //  Le widget ne connait pas l'application : elle installe UNE FOIS le fournisseur (l'ecran du
 //  projet) - resoudre un chemin, ouvrir l'Explorateur, aller a l'element. Sans fournisseur (les
@@ -76,5 +79,29 @@ inline constexpr int kReveal = 0, kGoTo = 1, kCopy = 2;
 [[nodiscard]] inline bool owns(int id, int firstId) noexcept { return id >= firstId && id <= firstId + kCopy; }
 // Son geste ; "" : fait ; sinon la raison (a dire dans la barre d'etat).
 std::string run(int id, int firstId, const std::string& path, const std::string& base = {});
+
+// 1.24.1 : UN CHEMIN MONTRE HORS D'UN TABLEAU, D'UNE GRILLE OU D'UN CHAMP (un libelle, une ligne dessinee, le pied
+// d'une fenetre) : le widget qui le montre garde un PathMenu et l'ouvre a son clic droit. Le menu (les trois
+// entrees, une ligne de titre au besoin) est cree au premier usage, enfant du widget : il vit et meurt avec lui.
+// Le champ de chemin (InputText::setPathField) et les tableaux ont deja le leur.
+class PathMenu {
+public:
+    PathMenu() = default;
+    PathMenu(const PathMenu&) = delete;
+    PathMenu& operator=(const PathMenu&) = delete;
+    // Ouvre le menu a `at` (le repere de `host`). `heading` : une ligne en tete (le nom de ce qui est montre).
+    // Faux : pas de fournisseur ou pas de chemin - rien ne s'ouvre.
+    bool open(Widget& host, std::string path, gfx::Point at, std::string base = {}, std::string heading = {});
+    [[nodiscard]] PopupMenu* menu() const noexcept { return menu_; }
+    // Ce que la derniere entree choisie a dit : "" (fait), sinon la raison. `refused` la recoit aussi (une barre d'etat).
+    [[nodiscard]] const std::string& said() const noexcept { return said_; }
+    std::function<void(const std::string&)> refused;
+    // Les ids des entrees (firstId + kReveal...).
+    static constexpr int kFirstId = 900;
+
+private:
+    PopupMenu*  menu_{nullptr};
+    std::string path_, base_, said_;
+};
 
 } // namespace ui::paths
