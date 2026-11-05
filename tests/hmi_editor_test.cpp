@@ -47137,8 +47137,7 @@ void supprimerPlusieurs1241() {
     app::several::setConfirmHost({});
 }
 
-// ======================================================================}
-
+// =============================================================================
 //  1.26.0 : L'EDITEUR DE POLICES (le client : << pouvoir editer des TTF en live sur le logiciel, en creer, en dupliquer
 //  a partir de >>). Nouvelle police, dessiner (rectangle, ellipse, plume, ajouter un point), deplacer (fleches, glisser a
 //  la souris : un seul Ctrl+Z), les reglages (chasse, approches, famille et noms reserves), les composes (decomposer),
@@ -47333,7 +47332,8 @@ void editeurPolices1260(const std::string& fixtures) {
     // Ouvrir une fournie : une copie (elle ne change pas).
     check(ed.openFont(dejavu) && ed.font().family != "DejaVu Sans" && ed.originText() == "Copie de DejaVu Sans", "ouvrir une fournie : on modifie une copie");
     fs::remove_all(mine, ec);
-=======
+}
+
 // =====================================================================================================================
 //  1.25.1 : LES LIMITES RESTANTES DE LA 1.25.0 (le client : << corrige les limites restantes >>). HMI_TEST_RES=1 : ces
 //  essais seuls. La corbeille commune (core/Trash), celle des versions, les macros et les versions de l'arbre qui
