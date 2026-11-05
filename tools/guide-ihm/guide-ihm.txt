@@ -1549,8 +1549,8 @@ Renommer renomme aussi ce qui le cite dans le fichier : les instances d'un symbo
 > Pour des vues entières, avec leurs écrans modèles et leurs popups : voir « Exporter et importer des vues ». Pour toute l'IHM d'un coup : IHM › Exporter / Importer.
 
 == styles-nommes | Les styles nommés
-: Une apparence (couleurs, contour, police, taille, rayon) sous un nom ; les objets qui le citent suivent ses changements.
-@mots style nommé, namedStyle, Créer un style
+: Une apparence sous un nom, pour des types d'objets choisis (boutons, pompes, tes symboles…) : ses valeurs s'imposent aux objets qui le citent (le carré O), chacune se brise à part ; des styles fournis (ISA-101…).
+@mots style nommé, namedStyle, Créer un style, ISA-101, style fourni, Dupliquer à partir de, carré O, briser, valeur imposée, O Style, Tout rétablir
 @lieux styles
 @voir editeur, proprietes, concevoir-vite, dossiers
 @capture PNG_326_styles_nommes.png | IHM › Styles : les styles, combien d'objets les citent, la fiche du style choisi.
@@ -1558,9 +1558,21 @@ Renommer renomme aussi ce qui le cite dans le fichier : les instances d'un symbo
 ### Créer un style
 Choisis un objet bien réglé, puis **Créer un style** (barre d'outils de l'éditeur) : son apparence devient un style nommé (IHM › Styles), et les objets choisis le citent. **Nouveau** dans IHM › Styles en crée un à régler soi-même.
 ### Appliquer un style
-Dans l'inspecteur, catégorie **Apparence**, la propriété **Style nommé** : choisir un style copie ses valeurs dans l'objet et le lui fait citer (une commande). Vide : l'objet ne le cite plus et garde ses valeurs.
+Dans l'inspecteur, catégorie **Apparence**, la propriété **Style nommé** : choisir un style (du projet, ou un style fourni) **impose** ses valeurs à l'objet et le lui fait citer (une commande). Vide : l'objet ne le cite plus et garde ses valeurs.
+@nouveau 1.23.0
+### Les valeurs imposées : le carré O (1.23.0)
+- Une valeur qui vient du style porte **O** dans son carré, au lieu de C. Son infobulle dit le style et la valeur d'avant le style.
+- Sous **Style nommé**, la ligne **Valeurs du style** dit combien de valeurs le style impose et combien sont brisées ; son bouton **…** ouvre le style (IHM › Styles), sa flèche **Tout rétablir** remet toutes les valeurs brisées.
+- Le filtre **O Style**, dans la barre « Montrer » de l'onglet Propriétés, ne garde que les valeurs imposées (avec son nombre).
+- Une propriété pilotée par une formule (fx) n'est jamais imposée : la formule garde la main (une animation reste une animation).
+### Briser une valeur (1.23.0)
+Une valeur imposée se **brise** une propriété à la fois, par le menu de son carré O :
+- **Briser : reprendre l'ancienne valeur** : la propriété reprend sa valeur d'avant le style (le menu la montre) ;
+- **Briser : garder la valeur actuelle** : elle garde la valeur du style, mais ne la suit plus ;
+- **Ouvrir le style « … »** : IHM › Styles, ce style choisi.
+Taper une autre valeur sur une case O la brise aussi (la saisie est gardée). Une valeur brisée redevient **C**, porte l'étiquette **BRISÉE**, et sa flèche au bout de la ligne (ou le menu de son carré : **Rétablir la valeur du style**) la remet. Chaque geste se reprend par Ctrl+Z.
 ### Changer un style
-Dans IHM › Styles, changer une valeur change **tous les objets qui citent le style** - sauf ceux qui avaient changé cette valeur eux-mêmes : leur choix est gardé. Renommé, le style reste cité sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).
+Dans IHM › Styles, changer une valeur change **tous les objets qui citent le style** - sauf les valeurs **brisées** : elles restent celles de l'objet (1.23.0 : une valeur qu'un objet avait changée lui-même devient brisée, gardée). Renommé, le style reste cité sous son nouveau nom. Chaque changement est une commande (Ctrl+Z).
 @nouveau 1.12.27
 ### Voir un style
 Au-dessus de la fiche, l'**aperçu** montre le style choisi sur un bouton, un texte, un rectangle et un voyant (allumé, éteint), sur le fond d'une vue du projet : chaque changement s'y voit tout de suite. Dans la liste, chaque style a sa pastille (remplissage, contour, couleur du texte, couleur allumé).
