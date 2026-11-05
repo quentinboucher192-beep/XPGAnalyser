@@ -1,6 +1,7 @@
 #include "HmiCheck.hpp"
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
+#include "HmiStyles.hpp"          // 1.23.0 : les styles fournis, les styles par type
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
@@ -1378,6 +1379,12 @@ void checkSupervision(const Project& p, const NameExists& plc, std::vector<Issue
         if (std::find(cats.begin(), cats.end(), a.category) == cats.end())
             addItem(out, S::Warning, "Alarme", a.name, "cat\xC3\xA9gorie inconnue : " + a.category, a.id);
         if (a.delayMs < 0) addItem(out, S::Error, "Alarme", a.name, "temporisation n\xC3\xA9gative", a.id);
+    }
+    // ---- 1.23.0 : les styles (un type inconnu, une propriete que le type n'a pas, le nom d'un style fourni)
+    for (const auto& st : p.styles) {
+        for (const auto& why : styles::problems(p, st)) addItem(out, S::Warning, "Style", st.name, why, st.id);
+        if (styles::builtin(st.name))
+            addItem(out, S::Warning, "Style", st.name, "porte le nom d'un style fourni : il le cache (renomme-le)", st.id);
     }
     // ---- recettes
     std::set<std::string> recipeNames;
@@ -3794,7 +3801,7 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                                                      + std::to_string(pages) + " (l'objet ne se verra jamais)");
             }
             // Un style nomme inconnu.
-            if (const auto* st = o.find("namedStyle"); st && !roles::nameOf(st->value).empty() && !p.styleByName(roles::nameOf(st->value)))
+            if (const auto* st = o.find("namedStyle"); st && !roles::nameOf(st->value).empty() && !styles::find(p, roles::nameOf(st->value)))
                 issue(S::Warning, "namedStyle", "style '" + roles::nameOf(st->value) + "' introuvable (IHM > Styles)");
             switch (o.kind) {
                 case Kind::NavBar: {

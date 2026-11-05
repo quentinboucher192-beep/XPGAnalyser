@@ -1,4 +1,5 @@
 #include "HmiDesign.hpp"
+#include "HmiStyles.hpp"   // 1.23.0 : les styles par type d'objet
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'automate dans les modeles de pages
 
 #include "HmiEdit.hpp"
@@ -453,64 +454,17 @@ Style styleFromObject(Project& p, const Object& o, const std::string& name) {
 }
 
 void applyStyle(Object& o, const Style& s) {
-    for (const auto& prop : s.props)
-        if (auto* mine = o.find(prop.key)) mine->value = prop.value;   // une expression garde la main
-    o.set("namedStyle", s.name);
+    // 1.23.0 : le moteur des styles par type (HmiStyles) - les valeurs imposees, la valeur d'avant retenue, l'etat ; sans
+    // projet ici : les parametres d'un symbole (param:Nom) ne s'appliquent que par styles::apply.
+    static const Project none;
+    (void)styles::apply(none, o, s);
 }
 
-std::size_t propagateStyle(Project& p, const Style& before, const Style& after) {
-    const auto valueIn = [](const Style& s, const std::string& key) -> const Prop* {
-        for (const auto& prop : s.props) if (prop.key == key) return &prop;
-        return nullptr;
-    };
-    std::size_t changed = 0;
-    const std::string was = upperCopy(before.name);
-    for (auto& v : p.views)
-        for (auto& o : v.objects) {
-            auto* cite = o.find("namedStyle");
-            if (!cite || upperCopy(cite->value) != was) continue;
-            bool touched = false;
-            for (const auto& prop : after.props) {
-                auto* mine = o.find(prop.key);
-                if (!mine) continue;
-                const Prop* old = valueIn(before, prop.key);
-                // Une valeur que l'objet a changee lui-meme reste la sienne.
-                if (old && mine->value != old->value) continue;
-                if (mine->value != prop.value) {
-                    mine->value = prop.value;
-                    touched = true;
-                }
-            }
-            if (cite->value != after.name) {
-                cite->value = after.name;
-                touched = true;
-            }
-            changed += touched;
-        }
-    return changed;
-}
+std::size_t propagateStyle(Project& p, const Style& before, const Style& after) { return styles::propagate(p, before, after); }
 
-std::size_t styleUsers(const Project& p, std::string_view name) {
-    std::size_t n = 0;
-    const std::string wanted = upperCopy(name);
-    for (const auto& v : p.views)
-        for (const auto& o : v.objects)
-            if (const auto* cite = o.find("namedStyle"); cite && !cite->value.empty() && upperCopy(cite->value) == wanted) ++n;
-    return n;
-}
+std::size_t styleUsers(const Project& p, std::string_view name) { return styles::users(p, name); }
 
-std::size_t forgetStyle(Project& p, std::string_view name) {
-    std::size_t n = 0;
-    const std::string wanted = upperCopy(name);
-    for (auto& v : p.views)
-        for (auto& o : v.objects)
-            if (auto* cite = o.find("namedStyle"); cite && upperCopy(cite->value) == wanted) {
-                cite->value.clear();
-                ++n;
-            }
-    std::erase_if(p.styles, [&](const Style& s) { return upperCopy(s.name) == wanted; });
-    return n;
-}
+std::size_t forgetStyle(Project& p, std::string_view name) { return styles::forget(p, name); }
 
 // ======================================================== modeles de vues ===
 const std::vector<ViewTemplate>& viewTemplates() {

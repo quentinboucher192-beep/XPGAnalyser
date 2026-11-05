@@ -1640,12 +1640,24 @@ struct HistorySettings {
 //  le cite par sa propriete "namedStyle" ; appliquer le style y copie ses
 //  valeurs. Changer le style change les objets qui le citent - sauf une valeur
 //  que l'objet a changee lui-meme (elle differe de l'ancienne valeur du style).
+// 1.23.0 : UN STYLE VISE DES TYPES D'OBJETS (le client : << ne pas gerer que les boutons >>). Pour chaque type - un genre
+// de la bibliotheque (la cle de kKindInfos : "Button", "Pump"...) ou un symbole du projet ("symbole:Sym_Moteur") - les
+// proprietes qu'il impose et leur valeur ; n'importe quelle propriete du type (une couleur, une taille, un texte, un
+// parametre du symbole : "param:Nom"). `props` ci-dessous reste la cible << tous les objets >> (les styles d'avant).
+// Le moteur (appliquer, briser une valeur imposee, propager) : HmiStyles.hpp.
+struct StyleTarget {
+    std::string       type;
+    std::vector<Prop> props;
+    bool operator==(const StyleTarget&) const = default;
+};
 struct Style {
     Id                id{kNoId};
     std::string       name;
-    std::vector<Prop> props;
+    std::vector<Prop> props;       // pour tous les objets (le type "*")
     std::string       description;
     std::string       folder{};    // lot 21 : son dossier dans la liste des styles
+    std::vector<StyleTarget> targets{};   // 1.23.0 : par type d'objet
+    bool              builtin{false};     // 1.23.0 : un style fourni (verrouille, jamais ecrit dans le projet)
     bool operator==(const Style&) const = default;
 };
 

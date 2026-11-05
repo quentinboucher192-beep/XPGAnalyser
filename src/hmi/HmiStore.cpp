@@ -6,6 +6,7 @@
 #include "HmiPopupParams.hpp"
 #include "HmiTypeRegistry.hpp"     // 1.11.19 (refonte, lot 6) : la cle du type d'une declaration
 #include "HmiZones.hpp"
+#include "HmiStyles.hpp"           // 1.23.0 : les styles par type d'objet (adopt, a la lecture)
 
 #include <algorithm>
 #include <cctype>
@@ -1424,6 +1425,12 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
                + (st.folder.empty() ? std::string{} : field("dossier", st.folder)) + "\n";   // lot 21
         for (const auto& pr : st.props)
             index += "style_prop" + fieldInt("style", st.id) + fieldBare("cle", pr.key) + field("valeur", pr.value) + "\n";
+        // 1.23.0 : par type d'objet ("Button", "symbole:Sym_Moteur") - un lecteur d'avant ignore le champ type (la valeur
+        // vaut alors pour tous les objets : un aspect proche, rien de perdu a la relecture par la 1.23).
+        for (const auto& t : st.targets)
+            for (const auto& pr : t.props)
+                index += "style_prop" + fieldInt("style", st.id) + field("type", t.type) + fieldBare("cle", pr.key)
+                       + field("valeur", pr.value) + "\n";
     }
     // Lot 13 : les langues (la premiere : celle du projet) et les traductions -
     // seulement si le projet en a (un projet en une langue n'ecrit rien).
@@ -2597,7 +2604,11 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
                 if (report) report->warnings.push_back("ihm.txt ligne " + std::to_string(lineNo) + " : propri\xC3\xA9t\xC3\xA9 de style sans style");
                 continue;
             }
-            st->props.push_back({key, toStr(r.get("valeur")), {}});
+            // 1.23.0 : le type vise (vide ou "*" : tous les objets, les styles d'avant).
+            if (const std::string type = toStr(r.get("type")); !type.empty() && type != "*")
+                styles::targetFor(*st, type).props.push_back({key, toStr(r.get("valeur")), {}});
+            else
+                st->props.push_back({key, toStr(r.get("valeur")), {}});
         } else if (r.word == "fin") {
             sawEnd = true;
         } else if (report) {
@@ -2678,6 +2689,8 @@ core::Result<Project> parseProject(const FileReader& read, LoadReport* report) {
     // 1.13.0 (lot J8) : les bibliotheques reliees, depuis le cache de leur interface (sans disque ici ; load() les
     // cherche ensuite sur le disque, a cote du projet).
     biblio::useCache(p);
+    // 1.23.0 : un projet d'avant - les objets qui citent un style recoivent leur etat (ce qui differe du style est brise).
+    (void)styles::adopt(p);
     return p;
 }
 
