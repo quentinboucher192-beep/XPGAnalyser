@@ -73,7 +73,19 @@ inline void setRoot(std::string root) { detail::rootRef() = std::move(root); }
 // 1.21.2 : le journal des notifications de l'Assistant (AiNotifications.hpp) - l'onglet Notifications du panneau.
 [[nodiscard]] inline std::string notificationsFile() { return detail::join(root(), "notifications.json"); }
 // 1.25.1 : la corbeille (supprimer une conversation, une piece jointe, une connaissance, un souvenir : Ctrl+Z la rend).
+// Rangee comme IA/ : corbeille/conversations, corbeille/pieces-jointes, corbeille/connaissances - la Corbeille du projet
+// sait ainsi d'ou vient chaque element (et ou le rendre).
 [[nodiscard]] inline std::string trashDir() { return detail::join(root(), "corbeille"); }
+// Le dossier de la corbeille d'un element de IA/ : celui de son dossier (IA/conversations/x.json -> corbeille/conversations).
+[[nodiscard]] inline std::string trashFor(std::string_view originalUtf8) {
+    std::string s(originalUtf8);
+    while (!s.empty() && (s.back() == '/' || s.back() == '\\')) s.pop_back();
+    const auto cut = s.find_last_of("/\\");
+    const std::string parent = cut == std::string::npos ? std::string{} : s.substr(0, cut);
+    const auto cut2 = parent.find_last_of("/\\");
+    const std::string sub = cut2 == std::string::npos ? parent : parent.substr(cut2 + 1);
+    return sub.empty() ? trashDir() : detail::join(trashDir(), sub);
+}
 
 // Les six categories du cache, dans l'ordre ou le centre de memoire les montre.
 struct CacheCategory {

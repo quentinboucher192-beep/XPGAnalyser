@@ -482,7 +482,7 @@ bool trashConversationFiles(const Conversation& c, std::vector<core::trash::Move
     const auto away = [&](const fs::path& p) {
         if (!fs::exists(p, ec)) return;
         std::string trashed;
-        if (!core::trash::put(utf8(p), trashDir(), trashed)) {
+        if (!core::trash::put(utf8(p), trashFor(utf8(p)), trashed)) {
             ok = false;
             return;
         }

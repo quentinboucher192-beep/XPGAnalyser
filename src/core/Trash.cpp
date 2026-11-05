@@ -199,7 +199,9 @@ bool putAll(std::vector<Moved>& moved, const std::string& dirUtf8, std::string* 
     bool all = true;
     for (auto& m : moved) {
         std::string w, at;
-        if (put(m.original, dirUtf8, at, &w)) {
+        // La corbeille d'ou il revenait (une corbeille rangee en sous-dossiers les garde) ; sinon `dirUtf8`.
+        const std::string dir = m.trashed.empty() ? dirUtf8 : U(P(m.trashed).parent_path());
+        if (put(m.original, dir, at, &w)) {
             m.trashed = at;
             continue;
         }

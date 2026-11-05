@@ -3426,6 +3426,7 @@ void MainAnalysisScreen::onEnter() {
     entered_ = true;
     installCodeEditorHooks();   // 1.12.2 : F12, Ctrl+T, la barre d'etat des editeurs de code
     installPathLinks();         // 1.24.0 : un chemin montre - Ouvrir dans l'explorateur, Aller a (FinderWorkspace.cpp)
+    registerTrashSources();     // 1.25.1 : la Corbeille - le projet, l'Assistant IA, les macros (TrashWorkspace.cpp)
     // OnEnter runs every time this screen comes back to the top of the stack -
     // including when a modal dialog closes. bindProject tears down every open
     // tab, so an unconditional call here meant that cancelling a dialog closed

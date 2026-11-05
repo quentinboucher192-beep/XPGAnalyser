@@ -557,7 +557,7 @@ bool Registry::remove(std::string_view id, std::string* why, std::vector<core::t
         std::error_code ec;
         if (fs::exists(dossiers::cheminDe(it->file), ec)) {
             std::string trashed;
-            if (!core::trash::put(it->file, trashDir(), trashed, why)) return false;
+            if (!core::trash::put(it->file, trashFor(it->file), trashed, why)) return false;
             if (moved) moved->push_back({it->file, trashed});
         }
         const std::string name = it->name, gone = it->id;
@@ -589,7 +589,7 @@ std::size_t Registry::removeProject(std::string_view project, std::vector<core::
         std::error_code ec;
         if (moved) {   // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z)
             std::string trashed;
-            if (fs::exists(dossiers::cheminDe(it->file), ec) && !core::trash::put(it->file, trashDir(), trashed)) {
+            if (fs::exists(dossiers::cheminDe(it->file), ec) && !core::trash::put(it->file, trashFor(it->file), trashed)) {
                 ++it;
                 continue;
             }

@@ -56,7 +56,8 @@ struct Moved {
 };
 // Tout rendre (Ctrl+Z) : ce qui ne revient pas est dit dans `why` (les autres reviennent quand meme). Faux : un au moins.
 bool takeBackAll(const std::vector<Moved>& moved, std::string* why = nullptr);
-// Tout remettre dans la corbeille `dirUtf8` (Ctrl+Y) ; `moved` suit (les nouveaux `trashed`).
+// Tout remettre dans la corbeille (Ctrl+Y) : chacun dans celle d'ou il venait (`dirUtf8` s'il n'en venait d'aucune) ;
+// `moved` suit (les nouveaux `trashed`).
 bool putAll(std::vector<Moved>& moved, const std::string& dirUtf8, std::string* why = nullptr);
 
 // ---- une commande faite de deux gestes (un Ctrl+Z pour ce qui n'est pas dans le projet) ----

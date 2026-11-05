@@ -1148,7 +1148,12 @@ public:
     // 1.12.30 : l'archive .xihm du projet entier vient d'etre ecrite (app/ProjectExchange) :
     // son rapport dans IHM > Exporter / Importer, si l'onglet est ouvert.
     void showHmiArchiveReport(const hmi::ArchiveReport& report, const std::string& path);
+    // 1.25.1 : LA CORBEILLE (Projet > Corbeille..., le noeud << Corbeille [N] >> de l'arbre) - le volet ; les corbeilles du
+    // projet, de l'Assistant IA et des macros s'y inscrivent (TrashWorkspace.cpp), a chaque retour sur l'ecran.
+    void openTrash();
+    void registerTrashSources();
 private:
+    std::string trashFolder_;   // 1.25.1 : le projet dont la corbeille est inscrite (et purgee, une fois par projet)
     void askHmiLogin(std::string login);
     // Le lot 6 (HmiRuntimeDialogs.cpp) : ce que l'IHM en marche demande a
     // l'ecran - un jeu de recette a ajouter, modifier, supprimer ou relire

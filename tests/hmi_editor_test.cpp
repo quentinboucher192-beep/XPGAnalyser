@@ -635,7 +635,8 @@ void arbre_ihm() {
     // API porte les dix dossiers de l'automate, avec leurs NodeId d'avant.
     // Lot 21 : et les versions du projet, a cote.
     // Lot API 8 : et le Centre de simulation, entre l'IHM et les versions.
-    check(tree.childCount(root) == 4, "avec l'IHM : quatre dossiers au m\xC3\xAAme niveau, API, IHM, Simulation et Versions");
+    // 1.25.1 : et la Corbeille, apres les versions (cinq dossiers).
+    check(tree.childCount(root) == 5, "avec l'IHM : cinq dossiers au m\xC3\xAAme niveau, API, IHM, Simulation, Versions et Corbeille");
     const auto api = tree.childAt(root, 0);
     same_text(tree.text(api), "API", "le dossier API d'abord");
     check(api == app::ProjectTreeModel::apiFolderNode() && tree.style(api).icon == ui::Icon::Cpu, "... son ic\xC3\xB4ne : l'automate");
@@ -659,7 +660,10 @@ void arbre_ihm() {
     }
     check(tree.childAt(api, 2) == app::ProjectTreeModel::pack(NK::TypesFolder, 0) && tree.childAt(api, 5) == app::ProjectTreeModel::pack(NK::ExecOrderFolder, 0),
           "... avec leurs identifiants d'avant (ce qui \xC3\xA9tait d\xC3\xA9pli\xC3\xA9 le reste)");
-    check(tree.childAt(api, 11) == ui::kInvalidNode && tree.childAt(root, 4) == ui::kInvalidNode, "rien au-del\xC3\xA0");
+    // 1.25.1 : la Corbeille, cinquieme, puis rien.
+    check(tree.childAt(api, 11) == ui::kInvalidNode && tree.childAt(root, 4) == app::ProjectTreeModel::trashFolderNode()
+              && tree.childAt(root, 5) == ui::kInvalidNode,
+          "la Corbeille en dernier, rien au-del\xC3\xA0");
     // Lot API 8 : LE CENTRE DE SIMULATION - un dossier a la racine, entre l'IHM
     // et les versions : Vue d'ensemble, Automate (l'ancien API > Simulation, le
     // meme noeud), IHM (l'ancien IHM > Simulation), Equipements, Debogage,
@@ -762,7 +766,7 @@ void arbre_ihm() {
                   && tree.style(api).pill == "5 \xC3\xA0 mettre \xC3\xA0 jour" && !tree.setLibraryUpdates(5, 0),
               "les mises \xC3\xA0 jour de biblioth\xC3\xA8que : Types d\xC3\xA9riv\xC3\xA9s (5), le titre API");
         (void)tree.setLibraryUpdates(0, 0);
-        check(tree.setScope(3) && tree.childCount(root) == 1 && tree.childAt(root, 0) == ihm && tree.setScope(0) && tree.childCount(root) == 4,
+        check(tree.setScope(3) && tree.childCount(root) == 1 && tree.childAt(root, 0) == ihm && tree.setScope(0) && tree.childCount(root) == 5,   // 1.25.1 : + la Corbeille
               "la port\xC3\xA9" "e du rail : IHM seulement, puis tout");
     }
 
@@ -11999,7 +12003,14 @@ int ligneDeVue(const ui::TableView& t, int modelRow) {
 }
 
 // 1.24.1 : les aides des essais des limites corrigees (cheminsChamps1241, supprimerPlusieurs1241, Chercher des fichiers).
+#include "../src/core/Trash.hpp"   // 1.25.1 : la corbeille commune (<date>~<nom>)
 namespace lim1241 {
+// 1.25.1 : un element de la corbeille `bin` sous son nom d'origine (la corbeille commune le prefixe de sa date).
+bool inBin(const std::filesystem::path& bin, const std::string& name) {
+    for (const auto& e : core::trash::list(bin.generic_string()))
+        if (core::trash::originalName(std::filesystem::path(e).filename().string()) == name) return true;
+    return false;
+}
 // Un fournisseur de chemins d'essai : le "dossier du projet" est `base` ; Ouvrir dans l'explorateur et Aller a notent.
 struct Paths {
     ui::paths::Provider      saved;
@@ -43519,7 +43530,7 @@ void enregistrements1140() {
     }
     check(rp.importPath((out / "Essai renomme.xrec").string()) && rp.rowCount() == 2 && fs::exists(recDir / "Essai renomme (2).xrec"),
           "Importer : un nom libre (Essai renomme (2))");
-    check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && fs::exists(dir / "ihm" / "corbeille" / "Essai renomme (2).xrec"),
+    check(rp.select("Essai renomme (2)") && rp.removeSelected() && rp.rowCount() == 1 && lim1241::inBin(dir / "ihm" / "corbeille", "Essai renomme (2).xrec"),
           "Supprimer : dans la corbeille du projet");
     // ---- Configuration > Enregistrements
     app::HmiRecordingSettingsPane cp("m4.settings", doc, apply);
@@ -47000,12 +47011,12 @@ void supprimerPlusieurs1241() {
         check(q.asked == 1 && q.title == "Supprimer les 3 enregistrements ?" && has(q.text, "Nuit") && has(q.text, "corbeille") && has(q.text, "Un seul Ctrl+Z"),
               "Suppr : une seule question (" + q.title + " / " + q.text + ")");
         check(!askedOne, "... pas la question d'un seul");
-        check(rp.rowCount() == 1 && fs::exists(folder / "Essai.xrec") && fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec")
-                  && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"),
+        check(rp.rowCount() == 1 && fs::exists(folder / "Essai.xrec") && lim1241::inBin(dir / "ihm" / "corbeille", "Nuit.xrec")
+                  && lim1241::inBin(dir / "ihm" / "corbeille", "Demo.xrec"),
               "les 3 partent dans la corbeille du projet ; Essai reste");
         check(has(rp.lastMessage(), "3 enregistrements supprim") && has(rp.lastMessage(), "un seul Ctrl+Z"), "le compte rendu : " + rp.lastMessage());
         check(stack.undo() && fs::exists(folder / "Nuit.xrec") && fs::exists(folder / "Jour.xrec") && fs::exists(folder / "Demo.xrec")
-                  && !fs::exists(dir / "ihm" / "corbeille" / "Nuit.xrec"),
+                  && !lim1241::inBin(dir / "ihm" / "corbeille", "Nuit.xrec"),
               "UN Ctrl+Z les ressort de la corbeille, \xC3\xA0 leur place");
         rp.refresh();
         check(rp.rowCount() == 4, "les 4 de nouveau dans la liste");
@@ -47021,7 +47032,7 @@ void supprimerPlusieurs1241() {
         // Un fichier revenu a sa place entretemps : Ctrl+Z le dit, la corbeille garde le sien.
         check(rp.select("Demo") && rp.removeSelected(), "Demo \xC3\xA0 la corbeille");
         { std::ofstream f(folder / "Demo.xrec"); f << "un autre"; }
-        check(!stack.undo() && fs::exists(dir / "ihm" / "corbeille" / "Demo.xrec"), "un fichier du m\xC3\xAAme nom revenu : Ctrl+Z ne l'\xC3\xA9" "crase pas");
+        check(!stack.undo() && lim1241::inBin(dir / "ihm" / "corbeille", "Demo.xrec"), "un fichier du m\xC3\xAAme nom revenu : Ctrl+Z ne l'\xC3\xA9" "crase pas");
         core::CommandGroupScope::registerStack(nullptr);
         fs::remove_all(dir, ec);
     }
@@ -47588,6 +47599,209 @@ void supprimerRestants1251() {
     app::several::setConfirmHost({});
 }
 
+// =====================================================================================================================
+//  1.25.1 : LA CORBEILLE, BIEN RANGEE, OU L'ON CHERCHE (le client : << fait une corbeille bien rangee avec recherche
+//  possible >>). HMI_TEST_COR=1 : cet essai seul. Les corbeilles du projet (enregistrements, incidents, versions), de
+//  l'Assistant IA et des macros, inscrites (app/Corbeille.hpp) ; le volet (hmi/HmiCorbeillePane) : un dossier par genre
+//  et son nombre, la recherche, Restaurer (un seul Ctrl+Z), Supprimer definitivement, Vider, la purge ; le noeud de
+//  l'arbre ; le dessin a 1400 x 800.
+// =====================================================================================================================
+#include "../src/app/Corbeille.hpp"
+#include "../src/app/hmi/HmiCorbeillePane.hpp"
+#include "../src/app/ai/AiPaths.hpp"
+
+void corbeillePanneau1251() {
+    std::printf("== 1.25.1 : la Corbeille (le volet, la recherche, Restaurer, Supprimer d\xC3\xA9" "finitivement, Vider) ==\n");
+    namespace fs = std::filesystem;
+    namespace cb = app::corbeille;
+    namespace tr = core::trash;
+    using res1251::utf8;
+    const fs::path dir = fs::temp_directory_path() / "hmi_corbeille_volet_1251";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    const fs::path proj = dir / "Station";
+    const fs::path rec = proj / "ihm" / "ressources" / "enregistrements";
+    const std::string recBin = utf8(proj / "ihm" / "corbeille");
+    std::string at, why;
+    // ---- les corbeilles, remplies comme le font les volets ----
+    for (const char* n : {"Nuit.xrec", "Essai pompe.xrec", "Jour.xrec"}) {
+        res1251::write(rec / n, std::string("enregistrement ") + n);
+        if (std::string(n) != "Jour.xrec") check(tr::put(utf8(rec / n), recBin, at, &why), std::string("enregistrement dans la corbeille : ") + n);
+    }
+    res1251::write(rec / "en attente" / "2026-11-05_08-00_Niveau_Haut" / "incident.json", "{}");
+    check(tr::put(utf8(rec / "en attente" / "2026-11-05_08-00_Niveau_Haut"), utf8(rec / "en attente" / ".corbeille"), at, &why), "un incident");
+    res1251::write(proj / "donnees" / "a.txt", "un");
+    auto store = hmi::ver::open(utf8(proj));
+    (void)hmi::ver::create(*store, "Essais usine", hmi::ver::State::Draft, "", "essai", "2026-11-05 10:00");
+    res1251::write(proj / "donnees" / "a.txt", "deux");
+    auto v2 = hmi::ver::create(*store, "Mise en service", hmi::ver::State::Draft, "", "essai", "2026-11-05 11:00");
+    check(v2 && hmi::ver::trash(*store, v2->number), "une version");
+    const fs::path ia = dir / "IA";
+    app::ai::setRoot(utf8(ia));
+    res1251::write(ia / "conversations" / "c1.json", "{\"format\": 1, \"id\": \"c1\", \"titre\": \"R\xC3\xA9glage de la mise en service\"}");
+    res1251::write(ia / "connaissances" / "k1.json", "{\"id\": \"k1\", \"nom\": \"Pompe_Doseuse\", \"contenu\": \"x\"}");
+    check(tr::put(utf8(ia / "conversations" / "c1.json"), app::ai::trashFor(utf8(ia / "conversations" / "c1.json")), at, &why)
+              && tr::put(utf8(ia / "connaissances" / "k1.json"), app::ai::trashFor(utf8(ia / "connaissances" / "k1.json")), at, &why),
+          "une conversation et une connaissance de l'IA");
+    const std::string libRoot = utf8(dir / "libs");
+    {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        check(lib.createMacro("Importer_Cartes", "(* Importer_Cartes *)\n") && lib.deleteMacro("Importer_Cartes"), "une macro dans sa corbeille");
+    }
+    const auto saved = cb::sources();
+    const std::string savedRoot = app::ai::root();
+    auto* savedStack = core::CommandGroupScope::stack();
+    cb::registerSource("projet", cb::projectSource(utf8(proj), [rec] { return utf8(rec); }));
+    cb::registerSource("ia", cb::aiSource());
+    cb::registerSource("macros", cb::macroSource(libRoot));
+    check(cb::entries().size() == 7 && cb::count() == 7, "7 \xC3\xA9l\xC3\xA9ments dans les corbeilles inscrites (" + std::to_string(cb::entries().size()) + ")");
+    // ---- le volet ----
+    core::CommandStack stack;
+    core::CommandGroupScope::registerStack(&stack);
+    struct Question {
+        int         asked{0};
+        bool        yes{true};
+        std::string title, text;
+    } q;
+    app::several::setConfirmHost([&q](const std::string& title, const std::string& text, const std::string&, std::function<void()> yes) {
+        ++q.asked;
+        q.title = title;
+        q.text = text;
+        if (q.yes && yes) yes();
+    });
+    lim1241::Paths paths(utf8(proj));
+    app::HmiCorbeillePane pane("cor1251");
+    pane.setBounds({0, 0, 1400, 800});
+    pane.layout();
+    const auto groups = pane.shownGroups();
+    const std::vector<std::pair<std::string, std::size_t>> want{{"Enregistrements", 2}, {"Incidents", 1}, {"Versions", 1}, {"Macros", 1},
+                                                                {"Conversations IA", 1}, {"Connaissances et souvenirs IA", 1}};
+    check(groups == want, "un dossier par genre, et son nombre (" + std::to_string(groups.size()) + " dossiers)");
+    const auto names = pane.shownNames();
+    const auto shows = [&](const std::string& n) { return std::find(names.begin(), names.end(), n) != names.end(); };
+    check(shows("Nuit") && shows("Essai pompe") && shows("2026-11-05_08-00_Niveau_Haut") && shows("V2 \xC2\xB7 Mise en service") && shows("Importer_Cartes")
+              && shows("R\xC3\xA9glage de la mise en service") && shows("Pompe_Doseuse"),
+          "leurs noms : celui de l'enregistrement, de l'incident, la version, la macro, le titre de la conversation, le nom de la connaissance");
+    same_text(pane.summary(), "7 \xC3\xA9l\xC3\xA9ments, " + cb::sizeText([&] {
+                  std::uint64_t b = 0;
+                  for (const auto& e : cb::entries()) b += e.bytes;
+                  return b;
+              }()),
+              "la ligne d'\xC3\xA9tat : le nombre et la taille");
+    check(pane.status().message() == pane.summary(), "... dans la barre d'\xC3\xA9tat");
+    // ---- la recherche : chaque mot commence un mot du nom, du genre ou de l'origine, sans casse ni accents ----
+    pane.setSearch("pompe");
+    check(pane.shownNames() == std::vector<std::string>{"Essai pompe", "Pompe_Doseuse"}, "<< pompe >> : un enregistrement et une connaissance");
+    pane.setSearch("INCIDENT");
+    check(pane.shownNames() == std::vector<std::string>{"2026-11-05_08-00_Niveau_Haut"}, "<< INCIDENT >> : le genre (sans casse)");
+    pane.setSearch("mise serv");
+    check(pane.shownNames() == std::vector<std::string>{"V2 \xC2\xB7 Mise en service", "R\xC3\xA9glage de la mise en service"},
+          "deux mots, chacun au d\xC3\xA9" "but d'un mot : la version et la conversation");
+    pane.setSearch("ompe");
+    check(pane.shownNames().empty(), "<< ompe >> ne commence aucun mot : rien");
+    pane.setSearch("enregistrements nuit");
+    check(pane.shownNames() == std::vector<std::string>{"Nuit"}, "le genre et le nom ensemble");
+    pane.setSearch("REGLAGE");   // sans l'accent, en capitales
+    check(pane.shownNames() == std::vector<std::string>{"R\xC3\xA9glage de la mise en service"}, "<< REGLAGE >> trouve << R\xC3\xA9glage... >> (sans accent ni casse)");
+    pane.setSearch("pi\xC3\xA8" "ces");   // le genre Pieces jointes IA : aucune ici
+    check(pane.shownGroups().empty(), "rien qui commence par << pi\xC3\xA8" "ces >> ici : aucun dossier");
+    pane.setSearch("");
+    // ---- replier, deplier ----
+    pane.setKindOpen(cb::Kind::Recording, false);
+    check(!pane.kindOpen(cb::Kind::Recording) && pane.shownNames().size() == 5 && pane.shownGroups().front().second == 2,
+          "Enregistrements repli\xC3\xA9 : son nombre reste, ses lignes se cachent");
+    pane.setKindOpen(cb::Kind::Recording, true);
+    // ---- la colonne Origine : un chemin (le dossier ou il reviendra) ----
+    {
+        const auto picked = pane.choose({"Nuit"}) ? pane.chosen() : std::vector<cb::Entry>{};
+        check(picked.size() == 1 && picked.front().origin == utf8(rec / "Nuit.xrec") && picked.front().originFolder() == utf8(rec),
+              "Nuit reviendra dans le dossier des enregistrements");
+        auto* m = lim1241::rightClickRow(pane.table(), 1);
+        const auto* open = m ? findItem(m->items(), "Ouvrir dans l'explorateur") : nullptr;
+        const auto* restoreItem = m ? findItem(m->items(), "Restaurer") : nullptr;
+        check(m && open && open->enabled && restoreItem && findItem(m->items(), "Supprimer d\xC3\xA9" "finitivement\xE2\x80\xA6"),
+              "le clic droit : Restaurer, Supprimer d\xC3\xA9" "finitivement, et le chemin de l'origine");
+        if (m) m->close();
+    }
+    // ---- dessine a 1400 x 800 ----
+    {
+        Recorder r;
+        const auto theme = ui::Theme::dark();
+        const ui::PaintContext ctx{r, theme, {0, 0, 1400, 800}, 0.0, nullptr};
+        pane.layout();
+        pane.render(ctx);
+        check(r.wrote("Enregistrements  (2)") && r.wrote("Connaissances et souvenirs IA  (1)") && r.wrote("Supprim\xC3\xA9 le") && r.wrote("Origine")
+                  && r.wrote("Nuit") && r.wrote("7 jours") && r.wrote("7 \xC3\xA9l\xC3\xA9ments"),
+              "dessin\xC3\xA9 : les dossiers, les colonnes, les \xC3\xA9l\xC3\xA9ments, la purge, la ligne d'\xC3\xA9tat");
+    }
+    // ---- Restaurer plusieurs : a leur place ; un seul Ctrl+Z les remet dans la corbeille ----
+    check(pane.choose({"Nuit", "R\xC3\xA9glage de la mise en service", "V2 \xC2\xB7 Mise en service", "Importer_Cartes"}) && pane.chosen().size() == 4, "4 choisis");
+    check(pane.restoreChosen() == 4, "Restaurer les 4");
+    const auto macroThere = [&] {
+        project::SharedLibrary lib(libRoot);
+        (void)lib.scan();
+        for (const auto& it : lib.items())
+            if (it.kind == project::LibraryItemKind::Macro && it.name == "Importer_Cartes") return true;
+        return false;
+    };
+    check(fs::exists(rec / "Nuit.xrec") && fs::exists(ia / "conversations" / "c1.json") && hmi::ver::open(utf8(proj))->versions.size() == 2 && macroThere(),
+          "chacun \xC3\xA0 sa place : l'enregistrement, la conversation, la version, la macro");
+    check(pane.all().size() == 3 && pane.message().find("4 \xC3\xA9l\xC3\xA9ments restaur") != std::string::npos
+              && pane.message().find("un seul Ctrl+Z") != std::string::npos,
+          "la corbeille en garde 3 ; le compte rendu : " + pane.message());
+    check(stack.done().size() == 1 && stack.undo(), "UN Ctrl+Z");
+    check(!fs::exists(rec / "Nuit.xrec") && !fs::exists(ia / "conversations" / "c1.json") && hmi::ver::open(utf8(proj))->versions.size() == 1 && !macroThere(),
+          "... les remet tous dans la corbeille");
+    pane.refresh();
+    check(pane.all().size() == 7, "le volet les montre de nouveau (7)");
+    check(stack.redo() && fs::exists(rec / "Nuit.xrec") && macroThere(), "Ctrl+Y : restaur\xC3\xA9s de nouveau");
+    check(stack.undo() && !fs::exists(rec / "Nuit.xrec"), "Ctrl+Z encore");
+    pane.refresh();
+    // Un nom revenu entretemps : refuse, dit.
+    res1251::write(rec / "Nuit.xrec", "un autre");
+    check(pane.choose({"Nuit"}) && pane.restoreChosen() == 0 && pane.message().find("refus") != std::string::npos, "un fichier du m\xC3\xAAme nom revenu : refus\xC3\xA9 (" + pane.message() + ")");
+    fs::remove(rec / "Nuit.xrec", ec);
+    // ---- Supprimer definitivement : une question, sans retour ----
+    q = Question{};
+    check(pane.choose({"Essai pompe", "Pompe_Doseuse"}), "2 choisis");
+    pane.runAction(app::HmiCorbeillePane::APurge);
+    check(q.asked == 1 && q.title == "Supprimer d\xC3\xA9" "finitivement les 2 \xC3\xA9l\xC3\xA9ments ?" && q.text.find("pour de bon") != std::string::npos,
+          "une question : " + q.title);
+    check(pane.all().size() == 5 && !tr::list(utf8(ia / "corbeille" / "connaissances")).size(), "les 2 partis pour de bon");
+    // ---- la purge : plus de 7 jours (a l'ouverture suivante) ; la macro reste ----
+    {
+        const fs::path old = fs::path(recBin) / "20200101-000000~Vieux.xrec";
+        res1251::write(old, "vieux");
+        cb::touch();
+        check(cb::purgeOld("projet") == 1 && !fs::exists(old), "purgeOld : l'enregistrement de 2020 part");
+        check(cb::purgeOld("macros", cb::kKeepDays, static_cast<std::int64_t>(std::time(nullptr)) + 30 * 86400) == 0,
+              "une macro ne part pas toute seule (meme dans 30 jours)");
+        check(app::HmiCorbeillePane::purgeNote().find("7 jours") != std::string::npos, "le volet le dit : " + app::HmiCorbeillePane::purgeNote());
+    }
+    // ---- Vider : une question ----
+    q = Question{};
+    pane.refresh();
+    pane.runAction(app::HmiCorbeillePane::AEmpty);
+    check(q.asked == 1 && q.title == "Vider la corbeille ?" && pane.all().empty() && pane.summary() == "La corbeille est vide",
+          "Vider : une question, puis plus rien (" + pane.summary() + ")");
+    // ---- le noeud de l'arbre ----
+    {
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel model(plc);
+        model.setTrashCount(4);
+        same_text(model.text(app::ProjectTreeModel::trashFolderNode()), "Corbeille  [4]", "l'arbre : << Corbeille  [4] >>");
+        model.setTrashCount(0);
+        same_text(model.text(app::ProjectTreeModel::trashFolderNode()), "Corbeille", "vide : << Corbeille >>");
+    }
+    core::CommandGroupScope::registerStack(savedStack);
+    app::several::setConfirmHost({});
+    for (const auto& k : cb::sources())
+        if (std::find(saved.begin(), saved.end(), k) == saved.end()) cb::unregisterSource(k);
+    app::ai::setRoot(savedRoot);
+    fs::remove_all(dir, ec);
+}
+
 int main(int argc, char** argv) {
     // 1.25.0 : HMI_TEST_RAP=1 - la mise en page des rapports, les sons et les images de la bibliotheque, seuls.
     if (const char* only = std::getenv("HMI_TEST_RAP"); only && *only == '1') {
@@ -47602,6 +47816,12 @@ int main(int argc, char** argv) {
         arbreMacrosVersions1251();
         cheminsRestants1251();
         supprimerRestants1251();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.25.1 : HMI_TEST_COR=1 - la Corbeille (bien rangee, ou l'on cherche), seule.
+    if (const char* only = std::getenv("HMI_TEST_COR"); only && *only == '1') {
+        corbeillePanneau1251();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -48164,6 +48384,7 @@ int main(int argc, char** argv) {
     arbreMacrosVersions1251();              // 1.25.1 : l'arbre - les macros et les versions reviennent par Ctrl+Z
     cheminsRestants1251();                  // 1.25.1 : le chemin d'un message, les fichiers d'une archive
     supprimerRestants1251();                // 1.25.1 : l'outil Modbus (requetes, jeux), plusieurs equipements
+    corbeillePanneau1251();                 // 1.25.1 : la Corbeille (par genre, la recherche, Restaurer, Vider)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

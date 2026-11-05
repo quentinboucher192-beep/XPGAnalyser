@@ -442,8 +442,8 @@ void aiMemory() {
     check(d.registry().all().size() == before - 3 && has(d.message(), "3 connaissances supprim") && has(d.message(), "un seul Ctrl+Z"),
           "les trois partent ; le message : " + d.message());
     // 1.25.1 : la corbeille de l'IA (cachee de l'Assistant), puis UN Ctrl+Z.
-    check(core::trash::list(app::ai::trashDir()).size() == 3 && !fs::exists(fs::path(app::ai::knowledgeDir()) / "corbeille"),
-          "leurs fichiers dans IA/corbeille (" + std::to_string(core::trash::list(app::ai::trashDir()).size()) + ")");
+    check(core::trash::list(app::ai::trashDir() + "/connaissances").size() == 3 && !fs::exists(fs::path(app::ai::knowledgeDir()) / "corbeille"),
+          "leurs fichiers dans IA/corbeille/connaissances (" + std::to_string(core::trash::list(app::ai::trashDir() + "/connaissances").size()) + ")");
     {
         mem::Registry fresh;
         fresh.load();
@@ -457,9 +457,9 @@ void aiMemory() {
           "pour la suite : elles repartent");
     // La purge au demarrage : plus de 7 jours.
     {
-        const fs::path old = fs::path(app::ai::trashDir()) / "20200101-000000~vieux.json";
+        const fs::path old = fs::path(app::ai::trashDir()) / "connaissances" / "20200101-000000~vieux.json";
         { std::ofstream f(old); f << "{}"; }
-        check(mem::purgeTrash() == 1 && !fs::exists(old) && core::trash::list(app::ai::trashDir()).size() == 3,
+        check(mem::purgeTrash() == 1 && !fs::exists(old) && core::trash::list(app::ai::trashDir() + "/connaissances").size() == 3,
               "la purge au d\xC3\xA9marrage : ce qui a plus de 7 jours part, le reste attend");
     }
     // La Memoire (la categorie des memoires) : une ajoutee et une du logiciel - celle-ci reste, c'est dit.
@@ -549,7 +549,7 @@ void aiPanelConversations() {
         check(has(panel.lastStatus(), "2 conversations supprim") && has(panel.lastStatus(), "un seul Ctrl+Z"), "le compte rendu : " + panel.lastStatus());
         check(panel.chosenConversations().size() == 1, "apr\xC3\xA8s : une seule choisie");
         // 1.25.1 : leurs fichiers dans la corbeille de l'IA, que l'Assistant ne relit pas ; UN Ctrl+Z les rend.
-        check(!core::trash::list(app::ai::trashDir()).empty() && app::ai::loadConversations().size() == onDisk - 2,
+        check(!core::trash::list(app::ai::trashDir() + "/conversations").empty() && app::ai::loadConversations().size() == onDisk - 2,
               "leurs fichiers dans IA/corbeille ; relues du disque : " + std::to_string(app::ai::loadConversations().size()));
         check(undo.done().size() == 1 && undo.undo() && panel.assistant().conversations().size() == before && app::ai::loadConversations().size() == onDisk,
               "UN Ctrl+Z : les deux reviennent (le panneau et le disque)");

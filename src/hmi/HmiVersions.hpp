@@ -109,6 +109,8 @@ struct Trashed {
 [[nodiscard]] std::string            trashFolder(const std::string& projectFolder);   // versions/corbeille (UTF-8)
 [[nodiscard]] core::Result<Trashed>  trash(Store&, int number);
 [[nodiscard]] core::Status           untrash(Store&, const Trashed&);
+// Ce qu'un dossier de la corbeille porte (sa ligne de l'index, version.txt) : la Corbeille du projet le rend ainsi.
+[[nodiscard]] core::Result<Trashed>  readTrashed(const std::string& slotFolder);
 // Le disque differe-t-il de la derniere version (hors dates d'enregistrement) ?
 [[nodiscard]] bool         changedSinceLast(const Store&);
 // Remet le projet (sur le disque) dans l'etat de la version ; rend la version

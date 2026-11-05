@@ -277,6 +277,31 @@ std::vector<FileEntry> scan(const std::string& projectFolder) {
 }
 
 // ---- le magasin ----------------------------------------------------------------------
+// Une version, la ligne de l'index (1.25.1 : aussi version.txt dans la corbeille) ; et le retour.
+static std::string versionLine(const Version& v) {
+    return "version n=" + std::to_string(v.number) + " nom=" + quote(v.name) + " etat=" + std::string(stateKey(v.state))
+         + " date=" + quote(v.date) + " auteur=" + quote(v.author) + " base=" + std::to_string(v.base)
+         + " fichiers=" + std::to_string(v.fileCount) + " octets=" + std::to_string(v.bytes)
+         + " nouveaux=" + std::to_string(v.newBytes) + " empreinte=" + quote(v.fingerprint)
+         + " depuis=" + quote(v.since) + " commentaire=" + quote(v.comment);
+}
+static Version versionOf(const Record& r) {
+    Version v;
+    v.number = static_cast<int>(fieldNum(r, "n"));
+    v.name = field(r, "nom");
+    v.state = stateFromKey(field(r, "etat"));
+    v.date = field(r, "date");
+    v.author = field(r, "auteur");
+    v.base = static_cast<int>(fieldNum(r, "base"));
+    v.fileCount = static_cast<std::size_t>(fieldNum(r, "fichiers"));
+    v.bytes = static_cast<std::uint64_t>(fieldNum(r, "octets"));
+    v.newBytes = static_cast<std::uint64_t>(fieldNum(r, "nouveaux"));
+    v.fingerprint = field(r, "empreinte");
+    v.since = field(r, "depuis");
+    v.comment = field(r, "commentaire");
+    return v;
+}
+
 core::Result<Store> open(const std::string& projectFolder) {
     Store s;
     s.folder = projectFolder;
@@ -296,19 +321,7 @@ core::Result<Store> open(const std::string& projectFolder) {
             s.autoMode = autoFromKey(field(r, "auto"));
             if (const auto k = fieldNum(r, "garder_auto"); k > 0) s.keepAuto = static_cast<int>(k);
         } else if (r.word == "version") {
-            Version v;
-            v.number = static_cast<int>(fieldNum(r, "n"));
-            v.name = field(r, "nom");
-            v.state = stateFromKey(field(r, "etat"));
-            v.date = field(r, "date");
-            v.author = field(r, "auteur");
-            v.base = static_cast<int>(fieldNum(r, "base"));
-            v.fileCount = static_cast<std::size_t>(fieldNum(r, "fichiers"));
-            v.bytes = static_cast<std::uint64_t>(fieldNum(r, "octets"));
-            v.newBytes = static_cast<std::uint64_t>(fieldNum(r, "nouveaux"));
-            v.fingerprint = field(r, "empreinte");
-            v.since = field(r, "depuis");
-            v.comment = field(r, "commentaire");
+            Version v = versionOf(r);
             if (v.number > 0) s.versions.push_back(std::move(v));
         }
     }
@@ -320,13 +333,7 @@ core::Status saveIndex(const Store& s) {
     std::string text = "# IHM Studio - les versions du projet. Les fichiers de chacune : V0001.txt... ;\n"
                        "# leur contenu, une fois par empreinte : objets/.\n";
     text += "reglages auto=" + std::string(autoKey(s.autoMode)) + " garder_auto=" + std::to_string(s.keepAuto) + "\n";
-    for (const auto& v : s.versions) {
-        text += "version n=" + std::to_string(v.number) + " nom=" + quote(v.name) + " etat=" + std::string(stateKey(v.state))
-              + " date=" + quote(v.date) + " auteur=" + quote(v.author) + " base=" + std::to_string(v.base)
-              + " fichiers=" + std::to_string(v.fileCount) + " octets=" + std::to_string(v.bytes)
-              + " nouveaux=" + std::to_string(v.newBytes) + " empreinte=" + quote(v.fingerprint)
-              + " depuis=" + quote(v.since) + " commentaire=" + quote(v.comment) + "\n";
-    }
+    for (const auto& v : s.versions) text += versionLine(v) + "\n";
     return writeAll(versionsDir(s.folder) / "index.txt", text);
 }
 
@@ -478,6 +485,8 @@ core::Result<Trashed> trash(Store& s, int number) {
     const fs::path manifest = manifestPath(s.folder, number);
     if (fs::exists(manifest, ec) && !core::trash::move(utf8Of(manifest), utf8Of(slot / manifest.filename()), &why))
         return core::fail(core::ErrorCode::FileUnreadable, "corbeille impossible : " + why);
+    // 1.25.1 : sa ligne de l'index, a cote (la Corbeille du projet la rend sans la commande qui l'a mise la).
+    if (auto st = writeAll(slot / "version.txt", versionLine(out.version) + "\n"); !st) return core::Err<core::Error>(st.error());
     s.versions.erase(it);
     if (auto st = saveIndex(s); !st) return core::Err<core::Error>(st.error());
     // Ses objets que plus aucune version ne cite : dans la corbeille, au meme endroit (objets/xx/yyyy).
@@ -496,6 +505,22 @@ core::Result<Trashed> trash(Store& s, int number) {
     }
     out.folder = utf8Of(slot);
     return out;
+}
+
+core::Result<Trashed> readTrashed(const std::string& slotFolder) {
+    std::string text;
+    if (!readAll(pathOfUtf8(slotFolder) / "version.txt", text))
+        return core::fail(core::ErrorCode::FileNotFound, "version.txt absent : " + slotFolder);
+    for (const auto& line : splitLines(text)) {
+        Record r;
+        std::string error;
+        if (line.empty() || !parseRecord(line, r, error) || r.word != "version") continue;
+        Trashed t;
+        t.version = versionOf(r);
+        t.folder = slotFolder;
+        if (t.version.number > 0) return t;
+    }
+    return core::fail(core::ErrorCode::XmlMalformed, "version.txt illisible : " + slotFolder);
 }
 
 core::Status untrash(Store& s, const Trashed& t) {

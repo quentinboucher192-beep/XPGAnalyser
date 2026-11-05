@@ -856,7 +856,8 @@ if(XPG_BUILD_TESTS)
                    src/app/DispositionPreview.cpp    # 1.12.3 : Projet > Disposition (1.12.4 : son apercu)
                    src/app/FileFinder.cpp src/app/FileFinderPane.cpp    # 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
                    src/app/FileView.cpp src/app/FileViewer.cpp src/app/FilePreview.cpp   # 1.21.0 : l'apercu de tous les fichiers
-                   src/app/PerfPane.cpp)   # 1.22.2 : l'onglet Performances du panneau du bas (hmi/HmiBuildPanes.cpp)
+                   src/app/PerfPane.cpp    # 1.22.2 : l'onglet Performances du panneau du bas (hmi/HmiBuildPanes.cpp)
+                   src/app/Corbeille.cpp)  # 1.25.1 : la Corbeille (son volet, hmi/HmiCorbeillePane.cpp)
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre
     # d'aide (help::center, news, notes, keys, f1, report, Tutorial) : xpg_help,
     # comme l'appli et la construction des essais (outils/hmitests).

@@ -52,6 +52,7 @@
 #include "../hmi/HmiAssetPanes.hpp"
 #include "../hmi/HmiIncidentsPane.hpp"              // 1.20.0 : Ressources > Incidents
 #include "../hmi/HmiSoundLibraryPane.hpp"           // 1.24.0 : Ressources > Bibliotheque de sons
+#include "../hmi/HmiCorbeillePane.hpp"              // 1.25.1 : la Corbeille
 #include "../FileFinder.hpp"                         // 1.24.0 : revealInExplorer (Mes sons dans l explorateur)
 #include "../Dossiers.hpp"                    // 1.14.0 (M4) : ouvrir le dossier des enregistrements
 #include "../hmi/HmiResourceFilter.hpp"          // 1.12.12 (lot H) : le filtre des dialogues de ressources
@@ -424,6 +425,7 @@ bool MainAnalysisScreen::isHmiNode(ui::NodeId n) {
         || (k >= NK::HmiCodeGroup && k <= NK::HmiSymbolOverloads)         // 1.11.21 : le contenu d'un code, les surcharges
         || k == NK::HmiObjectFamily || k == NK::HmiObjectParam || k == NK::HmiObjectMarker
         || k == NK::VersionsFolder || k == NK::VersionItem                            // lot 21 : les versions
+        || k == NK::TrashFolder                                                        // 1.25.1 : la Corbeille
         || ProjectTreeModel::isNativesKind(k)                                          // 1.12.0 : les natives
         || k == NK::HmiLibrariesFolder || k == NK::HmiLibraryNode                      // 1.13.0 (lot J8) : les bibliotheques
         || k == NK::HmiRecordings || k == NK::HmiRecordingSettings                     // 1.14.0 (M4) : les enregistrements
@@ -811,6 +813,7 @@ void MainAnalysisScreen::openHmiNode(ui::NodeId n) {
         case NK::HmiHistory:       openHmiPane("historiques"); break;
         // Lot 21 : les versions (a la racine, a cote de API et IHM).
         case NK::VersionsFolder:   openVersions(); break;
+        case NK::TrashFolder:      openTrash(); break;   // 1.25.1
         case NK::VersionItem:      openVersions(treeModel_->versionOf(n)); break;
 
         // ---- lot 5 : ce qui se deballe ouvre la ou ca se modifie ---------------
@@ -2265,6 +2268,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         page = std::move(pane);
         title = "IHM \xC2\xB7 Historiques";
         icon = Icon::Document;
+    } else if (key == "corbeille") {
+        // 1.25.1 : la Corbeille (le client : << fait une corbeille bien rangee avec recherche possible >>).
+        registerTrashSources();
+        page = std::make_unique<HmiCorbeillePane>("hmi.corbeille");
+        title = "Corbeille";
+        icon = Icon::Delete;
     } else if (key == "echange") {
         auto pane = std::make_unique<HmiExchangePane>("hmi.exchange", doc, apply, plcNames(app_.project()), app_.projectFolder());
         HmiExchangePane::Hosts hosts;

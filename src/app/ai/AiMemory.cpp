@@ -767,7 +767,7 @@ bool deleteConversation(std::string_view id, std::string* why, std::vector<core:
         }
         // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z l'en ressort), plus effacee.
         std::string trashed;
-        if (!core::trash::put(utf8Of(f), trashDir(), trashed, why)) return false;
+        if (!core::trash::put(utf8Of(f), trashFor(utf8Of(f)), trashed, why)) return false;
         if (moved) moved->push_back({utf8Of(f), trashed});
         (void)appendActivity("suppression", "Conversation supprim\xC3\xA9" "e : " + c.title + " (" + std::to_string(c.messages.size())
                                                 + (c.messages.size() > 1 ? " messages)" : " message)"));
@@ -794,13 +794,18 @@ bool deleteAttachmentFolder(std::string_view id, std::string* why, std::vector<c
         for (fs::directory_iterator c(f, ec), end; !ec && c != end; c.increment(ec)) names += (names.empty() ? "" : ", ") + utf8Of(c->path().filename());
     const Usage u = usageOf(f);
     std::string trashed;   // 1.25.1 : dans la corbeille de l'IA (Ctrl+Z l'en ressort)
-    if (!core::trash::put(utf8Of(f), trashDir(), trashed, why)) return false;
+    if (!core::trash::put(utf8Of(f), trashFor(utf8Of(f)), trashed, why)) return false;
     if (moved) moved->push_back({utf8Of(f), trashed});
     (void)appendActivity("suppression", "Pi\xC3\xA8" "ce jointe supprim\xC3\xA9" "e : " + (names.empty() ? std::string(id) : names) + " (" + sizeText(u.bytes) + ")");
     return true;
 }
 
-std::size_t purgeTrash() { return root().empty() ? 0 : core::trash::purge(trashDir()); }
+std::size_t purgeTrash() {
+    if (root().empty()) return 0;
+    std::size_t n = core::trash::purge(trashDir());
+    for (const char* sub : {"conversations", "pieces-jointes", "connaissances"}) n += core::trash::purge(trashDir() + "/" + sub);
+    return n;
+}
 
 // ------------------------------------------------------------------ la recherche ---
 std::vector<Hit> search(std::string_view query, const std::vector<Conversation>& conversations, const std::vector<Knowledge>& knowledge) {

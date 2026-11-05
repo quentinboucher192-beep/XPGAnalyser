@@ -59,6 +59,7 @@
 #include "../hmi/HmiLibraryPanes.hpp"      // 1.13.0 (lot J8) : Delier une bibliotheque
 #include "../Dossiers.hpp"                 // 1.12.18 : Ouvrir le dossier du projet
 #include "../HistoryPanel.hpp"             // 1.12.18 (planche 21) : le menu d'une action de l'historique
+#include "../hmi/HmiCorbeillePane.hpp"     // 1.25.1 : le noeud Corbeille (Vider la corbeille...)
 #include "../MacrosPane.hpp"               // 1.12.18 (planche 21) : le meme menu de macro que le volet
 #include "../../core/Command.hpp"          // 1.12.18 : CommandGroupScope (Supprimer les N...)
 #include "../hmi/HmiSimulation.hpp"   // 1.12.18 : les lignes de la Simulation depliee
@@ -2177,6 +2178,18 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     // =====================================================================================
     //  LES VERSIONS
     // =====================================================================================
+    // 1.25.1 : LA CORBEILLE - l'ouvrir (son volet : par genre, la recherche, Restaurer), la vider (une question).
+    case NK::TrashFolder: {
+        m.add("Ouvrir la corbeille", Icon::Open, [this] { openTrash(); });
+        const bool empty = treeModel_ && treeModel_->trashCount() == 0;
+        m.add("Vider la corbeille" + kDots, Icon::Delete,
+              [this] {
+                  openTrash();
+                  if (auto* pane = dynamic_cast<HmiCorbeillePane*>(hmiTab("corbeille"))) pane->askEmpty();
+              },
+              {}, empty ? "la corbeille est vide" : "");
+        break;
+    }
     case NK::VersionsFolder:
         m.add("Ouvrir", Icon::Open, [this] { openVersions(); });
         m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",

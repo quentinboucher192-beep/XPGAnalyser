@@ -388,6 +388,10 @@ namespace app {
             // enfant de Ressources : HmiImageLibrary, HmiImageGroup un dossier (index : 0 Mes images, puis ceux de la
             // bibliotheque), HmiImageItem une image (index : son dossier ; sub : son rang). A LA FIN, toujours.
             HmiImageLibrary, HmiImageGroup, HmiImageItem,
+            // 1.25.1 : LA CORBEILLE (le client : << fait une corbeille bien rangee avec recherche possible >>) - a la
+            // racine, apres Versions : << Corbeille  [N] >> ; un clic ouvre le volet Corbeille (app/Corbeille.hpp,
+            // hmi/HmiCorbeillePane). A LA FIN, toujours.
+            TrashFolder,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -468,6 +472,10 @@ namespace app {
         // Macros. `folders` : tous les chemins ("A", "A/B"), parents d'abord ;
         // `macros` : (nom, dossier) dans l'ordre d'affichage.
         void setMacroTree(std::vector<std::string> folders, std::vector<std::pair<std::string, std::string>> macros);
+        // 1.25.1 : ce que garde la corbeille (le noeud << Corbeille  [N] >> ; l'ecran le tient a jour).
+        void setTrashCount(std::size_t n) noexcept { trashCount_ = n; }
+        [[nodiscard]] std::size_t trashCount() const noexcept { return trashCount_; }
+        [[nodiscard]] static ui::NodeId trashFolderNode() { return pack(NodeKind::TrashFolder, 0); }
         // Le chemin d'un dossier de macros ("" pour le dossier Macros lui-meme) ;
         // faux si le noeud n'est pas un dossier de macros.
         [[nodiscard]] bool macroFolderOf(ui::NodeId, std::string& path) const;
@@ -878,6 +886,7 @@ namespace app {
         mutable std::vector<UsedVariable> used_;
         std::vector<VersionRow>           versions_;
         mutable bool                      usedDirty_{true};
+        std::size_t                       trashCount_{0};   // 1.25.1 : la corbeille
         core::ConnectionScope             hmiLinks_;
         // Lot API 4 : les nombres de Configuration (adresses du code, ports,
         // variables situees en %MW), comptes une fois par modele : le compte

@@ -761,9 +761,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         // API, Simulation, Versions ; IHM Studio : IHM, Simulation, Versions.
         const std::vector<ProjectTreeModel::NodeKind>& rootDomainList(bool hmiDoc) {
             using NK = ProjectTreeModel::NodeKind;
-            static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
-            static const std::vector<NK> api{NK::ApiFolder, NK::SimFolder, NK::VersionsFolder};
-            static const std::vector<NK> ihm{NK::HmiFolder, NK::SimFolder, NK::VersionsFolder};
+            // 1.25.1 : la Corbeille, apres Versions (ce que le projet et l'application ont supprime).
+            static const std::vector<NK> both{NK::ApiFolder, NK::HmiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
+            static const std::vector<NK> api{NK::ApiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
+            static const std::vector<NK> ihm{NK::HmiFolder, NK::SimFolder, NK::VersionsFolder, NK::TrashFolder};
             static const std::vector<NK> legacy{};
             switch (core::edition()) {
             case core::Edition::Api: return api;
@@ -925,6 +926,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         }
         case NodeKind::VersionsFolder:      return versions_.size();
         case NodeKind::VersionItem:         return 0;
+        case NodeKind::TrashFolder:         return 0;   // 1.25.1 : son volet montre ce qu'elle garde
         // Lot API 7 : + Simulation, Statistiques ; lot API 8 : Simulation part dans son dossier.
         case NodeKind::ApiFolder:           return 11;
         // ---- Lot API 8 : Centre de simulation ----
@@ -2247,6 +2249,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return indexOf(n) < filterHits_.size() && filterHits_[indexOf(n)].hmi ? std::uint8_t{2} : std::uint8_t{1};
         case NodeKind::ToolRow: return indexOf(n) == 1 ? std::uint8_t{2} : std::uint8_t{1};
         case NodeKind::VersionsFolder: case NodeKind::VersionItem: case NodeKind::VersionsMore: return 4;
+        case NodeKind::TrashFolder: return 4;   // 1.25.1 : comme Versions (le projet entier)
         default: break;
         }
         if (isSimNode(n)) return 3;
@@ -2718,6 +2721,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::HmiFolder:        return "IHM";
         // Lot 21 : les versions.
         case NodeKind::VersionsFolder:   return "Versions";
+        case NodeKind::TrashFolder:      return trashCount_ ? "Corbeille  [" + std::to_string(trashCount_) + "]" : std::string("Corbeille");   // 1.25.1
         case NodeKind::VersionItem:      return i < versions_.size() ? versions_[i].label : std::string{};
         case NodeKind::HmiListFolder:    return hmiListFolderText(n);     // lot 21 : un dossier d'une liste
         case NodeKind::HmiConfig:        return "Configuration";
@@ -4001,6 +4005,12 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.bold = true;
             s.icon = ui::Icon::History;
             if (versions_.size() > 1) s.badge = std::to_string(versions_.size() - 1);
+            break;
+        // 1.25.1 : la Corbeille.
+        case NodeKind::TrashFolder:
+            s.bold = true;
+            s.icon = ui::Icon::Delete;
+            s.iconTone = trashCount_ ? ui::Tone::Warning : ui::Tone::Muted;
             break;
         case NodeKind::HmiListFolder:    s.bold = true; s.icon = ui::Icon::Folder; s.iconTone = ui::Tone::Warning; break;
         case NodeKind::VersionItem:

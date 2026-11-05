@@ -547,6 +547,9 @@
     <ClCompile Include="src\app\hmi\HmiSoundLibraryPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCorbeillePane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDisplayPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -748,6 +751,9 @@
     <ClCompile Include="src\app\Brand.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\Corbeille.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\Capture.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -929,6 +935,9 @@
       <Filter>app\screens</Filter>
     </ClCompile>
     <ClCompile Include="src\app\screens\StartScreen.cpp">
+      <Filter>app\screens</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\screens\TrashWorkspace.cpp">
       <Filter>app\screens</Filter>
     </ClCompile>
     <ClCompile Include="src\project\MastImport.cpp">
@@ -2362,6 +2371,9 @@
     <ClInclude Include="src\app\hmi\HmiSoundLibraryPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCorbeillePane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDisplayPanes.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -2516,6 +2528,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\Brand.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Corbeille.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\Capture.hpp">

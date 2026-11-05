@@ -1,4 +1,5 @@
 #include "HmiAssetPanes.hpp"
+#include "../../core/Trash.hpp"   // 1.25.1 : la corbeille commune (<date>~<nom>)
 
 #include "../FileViewer.hpp"        // 1.21.0 : l'apercu de tous les fichiers
 
@@ -1027,22 +1028,11 @@ public:
             fs::remove(from, ec);
             if (ec) return core::fail(core::ErrorCode::FileUnreadable, "suppression impossible : " + ec.message());
         } else {
-            const auto utf8 = [](const fs::path& p) {
-                const auto s = p.u8string();
-                return std::string(s.begin(), s.end());
-            };
-            fs::create_directories(recPath(trash_), ec);
-            fs::path target = recPath(trash_) / from.filename();
-            for (int n = 2; fs::exists(target, ec) && n < 10000; ++n)   // deja un du meme nom dans la corbeille
-                target = recPath(trash_) / recPath(utf8(from.stem()) + " (" + std::to_string(n) + ")" + utf8(from.extension()));
-            fs::rename(from, target, ec);
-            if (ec) {   // un autre volume : copier puis effacer
-                ec.clear();
-                fs::copy_file(from, target, fs::copy_options::overwrite_existing, ec);
-                if (!ec) fs::remove(from, ec);
-                if (ec) return core::fail(core::ErrorCode::FileUnreadable, "suppression impossible : " + ec.message());
-            }
-            trashed_ = utf8(target);
+            // 1.25.1 : la corbeille commune (core/Trash : <date>~<nom>) - la Corbeille du projet la montre, la date dit
+            // quand il est parti (la purge des plus de 7 jours, a l'ouverture suivante du projet).
+            std::string why;
+            if (!core::trash::put(file_, trash_, trashed_, &why))
+                return core::fail(core::ErrorCode::FileUnreadable, "suppression impossible : " + why);
         }
         if (refresh_) refresh_();
         return core::ok();
@@ -1053,13 +1043,8 @@ public:
         std::error_code ec;
         const fs::path back = recPath(file_);
         if (fs::exists(back, ec)) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : un fichier du m\xC3\xAAme nom est revenu \xC3\xA0 sa place");
-        fs::rename(recPath(trashed_), back, ec);
-        if (ec) {
-            ec.clear();
-            fs::copy_file(recPath(trashed_), back, ec);
-            if (!ec) fs::remove(recPath(trashed_), ec);
-            if (ec) return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : " + ec.message());
-        }
+        if (std::string why; !core::trash::takeBack(trashed_, file_, &why))
+            return core::fail(core::ErrorCode::FileUnreadable, "rendre " + name_ + " : " + why);
         trashed_.clear();
         if (refresh_) refresh_();
         return core::ok();
