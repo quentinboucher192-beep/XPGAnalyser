@@ -1363,6 +1363,9 @@
     <ClCompile Include="src\app\hmi\HmiDeployPane.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDeployService.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDocPainter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -3109,6 +3112,9 @@
     <ClInclude Include="src\app\hmi\HmiDeployPane.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDeployService.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3677,6 +3683,9 @@
       <Filter>deploy</Filter>
     </ClInclude>
     <ClInclude Include="src\deploy\Pairing.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Paths.hpp">
       <Filter>deploy</Filter>
     </ClInclude>
     <ClInclude Include="src\deploy\Protocol.hpp">

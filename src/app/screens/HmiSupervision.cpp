@@ -10,6 +10,7 @@
 #include "../ProjectExchange.hpp"   // 1.12.30 : Exporter = l'archive .xihm du projet entier
 
 #include "../App.hpp"
+#include "../hmi/HmiDeployPane.hpp"     // 1.28.0
 #include "../hmi/HmiDisplayPanes.hpp"
 #include "../hmi/HmiUnitPanes.hpp"       // 1.22.9 : Unites et formats, une page a onglets
 #include "../hmi/HmiCommPanes.hpp"     // lot 14
@@ -231,6 +232,44 @@ void MainAnalysisScreen::askHmiStationPassword() {
             }
             std::string why;
             if (!pane->setExitPassword(v[0], &why)) status_->setTransientMessage("Mot de passe de sortie refus\xC3\xA9 : " + why, 8.0);
+        });
+}
+
+// 1.28.0 : Deploiement reseau - une machine par son adresse (une autre sous-reseau, une diffusion bloquee).
+void MainAnalysisScreen::askDeployAddress() {
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Adresse", "", "192.168.1.20, ou le nom de la machine", false, {}});
+    fields.push_back({"Port", "47861", "celui de l'agent (47861 au d\xC3\xA9part)", false, {}});
+    app_.menus().ShowDialog(
+        std::make_unique<FormDialog>("dialog.deployAddress", "Ajouter un PC de maintenance",
+            "L'adresse d'un PC o\xC3\xB9 l'agent tourne (XPG-Deployment-Agent --servir). Il se pr\xC3\xA9sente ; tu l'appaires "
+            "ensuite avec le code qu'il affiche.",
+            std::move(fields), "Ajouter"),
+        [this](const menu::DialogResult& res) {
+            auto* pane = dynamic_cast<HmiDeployPane*>(hmiTab("deploiement"));
+            if (!res.accepted() || !pane) return;
+            const auto v = FormDialog::split(res.payload);
+            if (v.empty()) return;
+            const int port = v.size() > 1 && !v[1].empty() ? std::atoi(v[1].c_str()) : 47861;
+            (void)pane->addAddress(v[0], port);
+        });
+}
+
+// 1.28.0 : Deploiement reseau - le code a 6 chiffres que l'agent affiche (--appairer).
+void MainAnalysisScreen::askDeployCode(const std::string& machineId, const std::string& machineName) {
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Code", "", "6 chiffres, valable 5 minutes", false, {}});
+    app_.menus().ShowDialog(
+        std::make_unique<FormDialog>("dialog.deployCode", "Appairer " + machineName,
+            "Sur " + machineName + ", lance XPG-Deployment-Agent --appairer : il affiche un code \xC3\xA0 6 chiffres. Tape-le ici. "
+            "Le code ne passe pas sur le r\xC3\xA9seau : les deux machines prouvent qu'elles le connaissent. Trois codes faux "
+            "l'effacent.",
+            std::move(fields), "Appairer"),
+        [this, machineId](const menu::DialogResult& res) {
+            auto* pane = dynamic_cast<HmiDeployPane*>(hmiTab("deploiement"));
+            if (!res.accepted() || !pane) return;
+            const auto v = FormDialog::split(res.payload);
+            if (!v.empty()) (void)pane->pairWith(machineId, v[0]);
         });
 }
 

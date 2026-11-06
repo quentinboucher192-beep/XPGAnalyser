@@ -106,6 +106,10 @@
 #include <optional>
 #include "../../hmi/HmiTypeForms.hpp"                // 1.12.2 : la forme d'un type (Liste, Vecteur, MAP, Tuple...)
 #include "../hmi/HmiStationPanes.hpp"               // lot 14 : le poste d'exploitation
+#include "../hmi/HmiDeployPane.hpp"                 // 1.28.0 : le deploiement reseau
+#include "../hmi/HmiDeployService.hpp"
+#include "../hmi/HmiStationLaunch.hpp"
+#include "../Settings.hpp"
 #include "../hmi/HmiNotifyPanes.hpp"                // lot 14 : les notifications
 #include "../hmi/HmiReportPanes.hpp"                // lot 14 : les rapports
 #include "../hmi/HmiBuild.hpp"                      // 1.11.13 : la generation incrementale
@@ -2168,10 +2172,28 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.tryStation = [this] { app_.enterStation(); };
         hosts.finished = [this](std::string* why) { return app_.projectFinished(why); };   // lot 15
         hosts.askPassword = [this] { askHmiStationPassword(); };
+        hosts.deploy = [this] { openHmiPane("deploiement"); };   // 1.28.0
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Poste d'exploitation";
         icon = Icon::Station;
+    } else if (key == "deploiement") {
+        // 1.28.0 : IHM > Deploiement reseau - le package signe, les PC de maintenance, l'appairage (docs/DEPLOIEMENT.md).
+        // Les cles de ce PC et les machines appairees : dans le dossier partage de l'utilisateur (Deploiement/).
+        const auto dir = std::filesystem::path(Settings::sharedFolder()) / "Deploiement";
+        const auto u8 = dir.u8string();
+        auto pane = std::make_unique<HmiDeployPane>("hmi.deploy", makeDeployBackend(std::string(u8.begin(), u8.end()),
+                                                                                    [] { return station::currentExecutable(); }));
+        HmiDeployPane::Hosts hosts;
+        hosts.projectFolder = [this] { return app_.projectFolder(); };
+        hosts.finished = [this](std::string* why) { return app_.projectFinished(why); };
+        hosts.askAddress = [this] { askDeployAddress(); };
+        hosts.askCode = [this](const HmiDeployPane::Machine& m) { askDeployCode(m.id, m.name); };
+        hosts.help = [this](const std::string& topic) { openHmiHelp(topic); };
+        pane->setHosts(std::move(hosts));
+        page = std::move(pane);
+        title = "IHM \xC2\xB7 D\xC3\xA9ploiement r\xC3\xA9seau";
+        icon = Icon::Globe;
     } else if (key == "rechercher") {
         // Lot 12 : rechercher / remplacer, avec l'apercu.
         auto pane = std::make_unique<HmiFindPane>("hmi.find", doc, apply);

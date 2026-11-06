@@ -1143,6 +1143,8 @@ private:
     void askHmiDeleteRecipe(std::uint64_t recipeId);
     void askHmiPassword(std::uint64_t userId);
     void askHmiStationPassword();                    // lot 14 : le mot de passe de sortie du poste
+    void askDeployAddress();                         // 1.28.0 : Deploiement reseau - ajouter une machine par adresse
+    void askDeployCode(const std::string& machineId, const std::string& machineName);   // 1.28.0 : le code d'appairage
     void askHmiSmtpPassword();                       // lot 14 : le mot de passe du relais SMTP
     void askHmiDeleteUser(std::uint64_t userId);
     void askHmiDeleteGroup(std::uint64_t groupId);

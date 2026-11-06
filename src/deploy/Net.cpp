@@ -197,7 +197,7 @@ std::string errorText(int e) {
         case WSAECONNRESET:   return "connexion coup\xC3\xA9" "e par l'autre bout";
         case WSAECONNABORTED: return "connexion interrompue";
         case WSAEADDRINUSE:   return "port d\xC3\xA9j\xC3\xA0 pris par un autre programme";
-        case WSAEACCES:       return "acc\xC3\xA8s refus\xC3\xA9 (port r\xC3\xA9serv\xC3\xA9 ou d\xC3\xA9j\xC3\xA0 pris)";
+        case WSAEACCES:       return "port d\xC3\xA9j\xC3\xA0 pris par un autre programme, ou r\xC3\xA9serv\xC3\xA9 par Windows (acc\xC3\xA8s refus\xC3\xA9)";
         case WSAENETDOWN:     return "r\xC3\xA9seau hors service";
         case WSAEADDRNOTAVAIL: return "adresse indisponible sur ce PC";
         default:              return "erreur r\xC3\xA9seau " + std::to_string(e);

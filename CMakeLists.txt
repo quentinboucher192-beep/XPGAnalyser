@@ -685,6 +685,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(deploy_crypto_test tests/deploy_crypto_test.cpp)  # 1.28.0 : libsodium et mbedTLS integres
     xpg_target_link_libraries(deploy_crypto_test PRIVATE xpg_deploy)
+    xpg_add_test_executable(deploy_ui_test tests/deploy_ui_test.cpp)          # 1.28.0 : le volet Deploiement reseau et un vrai agent
+    xpg_target_link_libraries(deploy_ui_test PRIVATE xpg_app)
     xpg_add_test_executable(deploy_net_test tests/deploy_net_test.cpp)        # 1.28.0 : le reseau du deploiement (TLS 1.3, appairage, agent, decouverte)
     xpg_target_link_libraries(deploy_net_test PRIVATE xpg_deploy)
     xpg_add_test_executable(deploy_package_test tests/deploy_package_test.cpp)  # 1.28.0 : le paquet .xpgdeploy et la cle d'editeur
@@ -1029,6 +1031,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hmiobjets    COMMAND hmi_objets_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)                  # 1.27.0 : les types de l'IHM et les natives des objets
     xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
+    xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME deploynet    COMMAND deploy_net_test)                  # 1.28.0 : l'agent et le client sur la boucle locale (vraies sockets, vrai TLS)
     xpg_add_test(NAME deploypackage COMMAND deploy_package_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.28.0 : le paquet signe, ses refus, la cle d'editeur
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----

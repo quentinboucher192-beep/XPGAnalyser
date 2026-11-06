@@ -3,6 +3,8 @@
 // =============================================================================
 #include "Journal.hpp"
 
+#include "Paths.hpp"
+
 #include <algorithm>
 #include <ctime>
 #include <filesystem>
@@ -36,13 +38,13 @@ std::string clean(std::string_view s) {
 
 Journal::Journal(std::string agentDir) : dir_(std::move(agentDir)) {}
 
-std::string Journal::directory() const { return dir_ + "/journal"; }
+std::string Journal::directory() const { return joinPath(dir_, "journal"); }
 
 std::string Journal::todayPath() const {
     const std::tm tm = localNow();
     char name[32];
     std::strftime(name, sizeof name, "%Y-%m-%d.log", &tm);
-    return directory() + "/" + name;
+    return joinPath(directory(), name);
 }
 
 void Journal::write(std::string_view opId, std::string_view op, std::string_view detail) {
@@ -70,7 +72,7 @@ std::vector<std::string> Journal::tail(std::size_t count) const {
     std::sort(files.begin(), files.end());   // AAAA-MM-JJ : l'ordre des noms est celui des jours
     std::vector<std::string> out;
     for (auto f = files.rbegin(); f != files.rend() && out.size() < count; ++f) {
-        std::ifstream in(P(directory() + "/" + *f), std::ios::binary);
+        std::ifstream in(P(joinPath(directory(), *f)), std::ios::binary);
         std::vector<std::string> lines;
         std::string line;
         while (std::getline(in, line)) {

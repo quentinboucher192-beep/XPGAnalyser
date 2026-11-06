@@ -3,6 +3,7 @@
 // =============================================================================
 #include "TlsIdentity.hpp"
 
+#include "Paths.hpp"
 #include "Tls.hpp"
 
 #include <mbedtls/ecp.h>
@@ -155,8 +156,8 @@ bool TlsIdentity::loadOrCreate(const std::string& dir, const std::string& baseNa
                                const std::string& commonName, TlsIdentity& out, std::string* why) {
     namespace fs = std::filesystem;
     if (!crypto::init()) return fail(why, "le hasard du syst\xC3\xA8me est indisponible (libsodium)");
-    const std::string certPath = dir + "/" + baseName + ".cer";
-    const std::string keyPath = dir + "/" + baseName + ".cle";
+    const std::string certPath = joinPath(dir, baseName + ".cer");
+    const std::string keyPath = joinPath(dir, baseName + ".cle");
     std::error_code ec;
     const bool haveCert = fs::exists(P(certPath), ec);
     const bool haveKey = fs::exists(P(keyPath), ec);
@@ -174,8 +175,8 @@ bool TlsIdentity::loadOrCreate(const std::string& dir, const std::string& baseNa
         const std::string advice = " : efface " + certPath + " et " + keyPath
                                    + " pour en cr\xC3\xA9" "er une nouvelle (les PC appair\xC3\xA9s devront l'\xC3\xAA" "tre de nouveau)";
         if (!haveCert || !haveKey)
-            return fail(why, "l'identit\xC3\xA9 TLS de ce PC est incompl\xC3\xA8te (" + std::string(haveCert ? "cl\xC3\xA9" : "certificat")
-                                 + " absent)" + advice);
+            return fail(why, "l'identit\xC3\xA9 TLS de ce PC est incompl\xC3\xA8te (" + std::string(haveCert ? "cl\xC3\xA9 absente" : "certificat absent")
+                                 + ")" + advice);
         crypto::Bytes sealed;
         std::string w;
         if (!crypto::readFile(certPath, id.cert_, &w, 64 * 1024) || !crypto::readFile(keyPath, sealed, &w, 64 * 1024))

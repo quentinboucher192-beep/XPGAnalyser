@@ -25,6 +25,7 @@
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Journal.hpp"
 #include "../deploy/Pairing.hpp"
+#include "../deploy/Paths.hpp"
 #include "../deploy/Protocol.hpp"
 
 #include <mbedtls/build_info.h>
@@ -178,7 +179,7 @@ int pair(const std::string& dir) {
     say("Valable jusqu'\xC3\xA0 " + localTime(cs.expiresAt, "%H:%M:%S") + " (5 minutes), une seule fois, 3 essais au plus.");
     say("Tape-le dans IHM Studio > D\xC3\xA9ploiement r\xC3\xA9seau > Appairer, sur le PC de d\xC3\xA9veloppement.");
     deploy::crypto::Bytes cert;
-    if (deploy::crypto::readFile(dir + "/identite.cer", cert, nullptr, 64 * 1024)) {
+    if (deploy::crypto::readFile(deploy::joinPath(dir, "identite.cer"), cert, nullptr, 64 * 1024)) {
         const auto fp = deploy::crypto::sha256(cert.data(), cert.size());
         say("V\xC3\xA9rifie que le Studio affiche bien cette machine : " + deploy::machineIdOf(fp) + ", empreinte "
             + deploy::crypto::fingerprintText(fp, 4));
@@ -192,7 +193,7 @@ int pair(const std::string& dir) {
 int state(const std::string& dir) {
     say("XPG-Deployment-Agent " + std::string(deploy::kAgentVersion) + " - dossier : " + dir);
     deploy::crypto::Bytes cert;
-    if (deploy::crypto::readFile(dir + "/identite.cer", cert, nullptr, 64 * 1024)) {
+    if (deploy::crypto::readFile(deploy::joinPath(dir, "identite.cer"), cert, nullptr, 64 * 1024)) {
         const auto fp = deploy::crypto::sha256(cert.data(), cert.size());
         say("Identit\xC3\xA9 : " + deploy::machineIdOf(fp) + ", empreinte " + deploy::crypto::fingerprintText(fp, 0));
     } else {

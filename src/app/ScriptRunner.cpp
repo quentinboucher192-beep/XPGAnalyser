@@ -45,6 +45,7 @@
 #include "hmi/HmiDebugPane.hpp"            // 1.13.0 (lot J2) : ihm-debogage, ihm-point-arret...
 #include "hmi/HmiScriptPanes.hpp"         // 1.11.16 : ihm-curseur
 #include "hmi/HmiCycleStages.hpp"         // 1.27.0 : cycle-ajouter, cycle-glisser
+#include "hmi/HmiDeployPane.hpp"          // 1.28.0 : deploiement ...
 #include "hmi/HmiFunctionPanes.hpp"       // 1.11.17 : volet-message (le volet des fonctions)
 #include "hmi/HmiOperatorPanes.hpp"       // 1.11.17 : volet-message (le volet des operateurs)
 #include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
@@ -5981,6 +5982,54 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   natives-inserer                Inserer dans le script (le dernier onglet de code)
     //   natives-copier | natives-precedente
     //   natives-attendre "texte"       la barre d'etat du volet dit ce texte (Insere : ...)
+    // 1.28.0 : IHM > Deploiement reseau (le volet montre). Chaque geste part sur le fil du volet ; la commande attend
+    // sa fin (jusqu'a 30 s) et echoue si le volet dit une erreur. Le message s'ecrit dans la sortie ([script] ...).
+    //   deploiement rechercher | ajouter ADRESSE [PORT] | choisir MACHINE | appairer MACHINE CODE | etat | journal
+    //   | oublier | package       (MACHINE : son identifiant M-XXXX, son nom ou son adresse ; CODE : ${CODE} par exemple)
+    if (cmd == "deploiement") {
+        HmiDeployPane* pane = nullptr;
+        if (auto* root0 = top()) walk(*root0, [&](ui::Widget& x) {
+            if (auto* p = dynamic_cast<HmiDeployPane*>(&x); !pane && p && shown(*p)) pane = p;
+        });
+        if (!pane) {
+            if (retries_ < 30) return Step::Retry;
+            fail("deploiement : le volet D\xC3\xA9ploiement r\xC3\xA9seau n'est pas montr\xC3\xA9");
+            return Step::Next;
+        }
+        const std::string what = arg(1);
+        if (retries_ == 0) {
+            pane->poll();
+            bool started = false;
+            if (what == "rechercher") started = pane->discover();
+            else if (what == "ajouter") started = pane->addAddress(arg(2), arg(3).empty() ? 47861 : std::atoi(arg(3).c_str()));
+            else if (what == "choisir") {
+                if (!pane->select(arg(2))) fail("deploiement choisir : pas de machine " + arg(2));
+                return Step::Yield;
+            } else if (what == "appairer") started = pane->pairWith(arg(2), arg(3));
+            else if (what == "etat") started = pane->askStatus();
+            else if (what == "journal") started = pane->askLogs();
+            else if (what == "oublier") started = pane->forget();
+            else if (what == "package") started = pane->createPackage();
+            else {
+                fail("deploiement " + what + " ? (rechercher, ajouter, choisir, appairer, etat, journal, oublier, package)");
+                return Step::Next;
+            }
+            if (!started) {
+                fail("deploiement " + what + " : " + pane->message());
+                return Step::Next;
+            }
+            return Step::Retry;
+        }
+        pane->poll();
+        if (pane->busy()) {
+            if (retries_ < 1800) return Step::Retry;
+            fail("deploiement " + what + " : pas fini apr\xC3\xA8s 30 s");
+            return Step::Next;
+        }
+        std::printf("[script] deploiement %s : %s\n", what.c_str(), pane->message().c_str());
+        if (pane->lastError()) fail("deploiement " + what + " : " + pane->message());
+        return Step::Yield;
+    }
     // 1.27.0 : la section Execution des scripts d'une vue (l'onglet courant : les scripts de la vue).
     //   cycle-ajouter               un clic sur + Script de cycle (un nouveau script, apres l'etape 4, choisi)
     //   cycle-glisser N [tenir]     la pastille du script choisi tiree sous l'etape N (1..9) ; tenir : la souris

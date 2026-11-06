@@ -21,6 +21,7 @@
 #include "Journal.hpp"
 #include "Net.hpp"
 #include "Pairing.hpp"
+#include "Paths.hpp"
 #include "Tls.hpp"
 
 #include <algorithm>
@@ -126,7 +127,7 @@ struct Agent::Impl {
         v.set("paired", static_cast<std::int64_t>(studios ? studios->size() : 0));
         v.set("fingerprint", identity.fingerprintHex());
         const std::string text = core::json::write(v, true) + "\n";
-        (void)crypto::writePrivateFile(cfg.dir + "/etat.json", crypto::Bytes(text.begin(), text.end()), nullptr);
+        (void)crypto::writePrivateFile(joinPath(cfg.dir, "etat.json"), crypto::Bytes(text.begin(), text.end()), nullptr);
     }
 
     // ---------------------------------------------------------------- reponses --
@@ -187,7 +188,6 @@ struct Agent::Impl {
             log(r.id, r.op, "refus\xC3\xA9 : d\xC3\xA9j\xC3\xA0 un essai sur cette connexion " + who(c));
             return fail(r, c.proto, protocol::err::kPairing, "un seul essai d'appairage par connexion : reconnecte-toi pour r\xC3\xA9" "essayer");
         }
-        c.pairTried = true;
         pairing::CodeState cs;
         {
             std::lock_guard<std::mutex> lock(pairMutex);
@@ -212,7 +212,8 @@ struct Agent::Impl {
                 log(r.id, r.op, "refus\xC3\xA9 : " + w);
                 return fail(r, c.proto, protocol::err::kInternal, w);
             }
-            ++cs.attempts;   // compte des maintenant : un essai abandonne est un essai
+            c.pairTried = true;   // un code en cours : c'est un essai (sans code, rien n'est consomme)
+            ++cs.attempts;        // compte des maintenant : un essai abandonne est un essai
             if (!pairing::saveCode(cfg.dir, cs, &w)) {
                 log(r.id, r.op, "refus\xC3\xA9 : " + w);
                 return fail(r, c.proto, protocol::err::kInternal, w);
@@ -622,10 +623,10 @@ std::string systemDescription() {
 
 bool readAgentState(const std::string& dir, core::json::Value& out, std::string* why) {
     crypto::Bytes raw;
-    if (!crypto::readFile(dir + "/etat.json", raw, why, 1024 * 1024)) return false;
+    if (!crypto::readFile(joinPath(dir, "etat.json"), raw, why, 1024 * 1024)) return false;
     std::string err;
     if (!core::json::parse(std::string_view(reinterpret_cast<const char*>(raw.data()), raw.size()), out, &err) || !out.isObject()) {
-        if (why) *why = dir + "/etat.json illisible (" + err + ")";
+        if (why) *why = joinPath(dir, "etat.json") + " illisible (" + err + ")";
         return false;
     }
     return true;

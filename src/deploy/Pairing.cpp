@@ -3,6 +3,7 @@
 // =============================================================================
 #include "Pairing.hpp"
 
+#include "Paths.hpp"
 #include "Protocol.hpp"
 
 #include <sodium.h>
@@ -223,7 +224,7 @@ bool AgentPairing::finish(const core::json::Value& pairFinish, std::string* why)
 }
 
 // ===================================================================== code ===
-std::string codePath(const std::string& agentDir) { return agentDir + "/appairage.code"; }
+std::string codePath(const std::string& agentDir) { return joinPath(agentDir, "appairage.code"); }
 
 bool saveCode(const std::string& agentDir, const CodeState& s, std::string* why) {
     core::json::Value v = core::json::Value::object();
@@ -276,7 +277,7 @@ void eraseCode(const std::string& agentDir) {
 // =============================================================== StudioStore ===
 StudioStore::StudioStore(std::string agentDir) : dir_(std::move(agentDir)) {}
 
-std::string StudioStore::path() const { return dir_ + "/appaires.json"; }
+std::string StudioStore::path() const { return joinPath(dir_, "appaires.json"); }
 
 bool StudioStore::load(std::string* why) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -370,7 +371,7 @@ std::filesystem::path P2(const std::string& utf8) { return std::filesystem::path
 // ============================================================== MachineStore ===
 MachineStore::MachineStore(std::string dir) : dir_(std::move(dir)) {}
 
-std::string MachineStore::path() const { return dir_ + "/machines-appairees.json"; }
+std::string MachineStore::path() const { return joinPath(dir_, "machines-appairees.json"); }
 
 bool MachineStore::load(std::string* why) {
     std::lock_guard<std::mutex> lock(mutex_);
