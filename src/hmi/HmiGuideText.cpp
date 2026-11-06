@@ -25463,6 +25463,83 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.28.0"},
+        // ---- Tester et livrer  Livrer et exploiter / licence
+        {"licence", "La licence de ce PC : l'activer, ce qu'elle ouvre", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
+         "Une licence sign\xC3\xA9" "e par l'\xC3\xA9" "diteur dit quelles fonctionnalit\xC3\xA9s sont "
+         "ouvertes sur ce PC. Elle se v\xC3\xA9rifie **hors ligne**, au lancement puis une fois par heure. "
+         "Elle s'active **par fichier** : tu envoies la demande d'activation de ce PC \xC3\xA0 "
+         "l'\xC3\xA9" "diteur, il te renvoie ta licence. Une licence qui prend fin ne ferme jamais ton "
+         "projet.",
+         {
+             {K::Heading, "Ouvrir la fen\xC3\xAAtre Licence", {}},
+             {K::Paragraph, "**Aide \xE2\x80\xBA Licence\xE2\x80\xA6**, ou un clic sur la pastille **Licence** "
+                         "de la barre d'\xC3\xA9tat (en bas \xC3\xA0 droite). En t\xC3\xAAte, "
+                         "l'\xC3\xA9" "dition, le statut, le client, la licence, les PC autoris\xC3\xA9s et "
+                         "li\xC3\xA9s, la date de fin, le num\xC3\xA9ro du registre ; dessous, la phrase de "
+                         "l'\xC3\xA9tat. Six onglets :", {}},
+             {K::Bullet, "**Ma licence** : ce que dit la licence sign\xC3\xA9" "e de ce PC (son identifiant, "
+                         "son type, sa dur\xC3\xA9" "e, sa gr\xC3\xA2" "ce, la liste de r\xC3\xA9vocation) ;", {}},
+             {K::Bullet, "**Mes appareils** : les PC li\xC3\xA9s \xC3\xA0 la licence, sous le nom que chacun "
+                         "s'est donn\xC3\xA9, avec l'empreinte de sa cl\xC3\xA9 ; \xC2\xAB ce PC \xC2\xBB "
+                         "est marqu\xC3\xA9 ;", {}},
+             {K::Bullet, "**Fonctionnalit\xC3\xA9s** : chacune, ouverte ou \xC2\xAB pas dans ta licence "
+                         "\xC2\xBB, ses limites, et **o\xC3\xB9 elle est dans le programme** ;", {}},
+             {K::Bullet, "**\xC3\x89" "ditions** : ce qu'ouvre chaque \xC3\xA9" "dition ; la tienne est "
+                         "marqu\xC3\xA9" "e ;", {}},
+             {K::Bullet, "**Historique** : les imports, les demandes, les changements d'\xC3\xA9tat ;", {}},
+             {K::Bullet, "**Param\xC3\xA8tres** : le dossier des licences de ce PC, son empreinte, le "
+                         "registre et la liste de r\xC3\xA9vocation en vigueur.", {}},
+             {K::Heading, "Activer une licence (par fichier)", {}},
+             {K::Step, "**Demander une activation\xE2\x80\xA6** : donne un nom \xC3\xA0 ce PC (facultatif) "
+                         "et, si tu l'as, le num\xC3\xA9ro de la licence ; un fichier `.xpgreq` est "
+                         "\xC3\xA9" "crit. Il porte la **cl\xC3\xA9 publique** de ce PC "
+                         "(cr\xC3\xA9\xC3\xA9" "e ici la premi\xC3\xA8re fois, prot\xC3\xA9g\xC3\xA9" "e par "
+                         "Windows) et le nom que tu as donn\xC3\xA9 : rien de son mat\xC3\xA9riel, ni nom "
+                         "r\xC3\xA9seau, ni adresse, ni num\xC3\xA9ro de s\xC3\xA9rie.", "1"},
+             {K::Step, "Envoie ce fichier \xC3\xA0 l'\xC3\xA9" "diteur. Il te renvoie un fichier `.xpglic`.", "2"},
+             {K::Step, "**Activer par fichier de licence\xE2\x80\xA6** : choisis-le. La licence n'est "
+                         "install\xC3\xA9" "e que si elle vaut **pour ce PC, maintenant** : sign\xC3\xA9" "e "
+                         "par l'\xC3\xA9" "diteur, li\xC3\xA9" "e \xC3\xA0 ce PC, ni "
+                         "r\xC3\xA9voqu\xC3\xA9" "e, ni finie, l'horloge en ordre. Sinon rien ne change, et "
+                         "la raison est dite.", "3"},
+             {K::Tip, "Transmets les fichiers tels quels (en pi\xC3\xA8" "ce jointe) : un fichier "
+                         "modifi\xC3\xA9, m\xC3\xAAme d'un retour \xC3\xA0 la ligne, est refus\xC3\xA9.", {}},
+             {K::Heading, "Les \xC3\xA9tats", {}},
+             {K::Table, "\xC3\x89tat\tCe qui est ouvert\nValide\tles fonctionnalit\xC3\xA9s de la "
+                         "licence\nGr\xC3\xA2" "ce\tla licence a pris fin : ses fonctionnalit\xC3\xA9s "
+                         "restent ouvertes quelques jours, le temps d'importer le "
+                         "renouvellement\nExpir\xC3\xA9" "e, R\xC3\xA9voqu\xC3\xA9" "e, Invalide, Autre PC, "
+                         "Absente, Horloge recul\xC3\xA9" "e\tl'\xC3\xA9" "dition sans licence du registre "
+                         "(FREE) ; la phrase dit pourquoi et quoi faire\nNon activ\xC3\xA9" "es\tce "
+                         "programme n'a pas encore la cl\xC3\xA9 de l'\xC3\xA9" "diteur : **tout est ouvert**", {}},
+             {K::Heading, "Une entr\xC3\xA9" "e \xC2\xAB pas dans ta licence \xC2\xBB", {}},
+             {K::Paragraph, "Elle garde sa place. Un clic ouvre la fen\xC3\xAAtre **Pas dans ta licence** : ce "
+                         "qui manque, l'\xC3\xA9tat de ta licence, et **Licence\xE2\x80\xA6** pour la voir. "
+                         "Les points d'entr\xC3\xA9" "e verrouillables sont list\xC3\xA9s dans l'onglet "
+                         "**Fonctionnalit\xC3\xA9s**, colonne \xC2\xAB Dans le programme \xC2\xBB.", {}},
+             {K::Tip, "**Jamais de perte de travail** : Ouvrir, Enregistrer, Enregistrer sous, Exporter "
+                         "le projet, Fermer et Quitter ne sont jamais verrouill\xC3\xA9s. Une licence qui "
+                         "prend fin pendant le travail ne ferme rien : seules les entr\xC3\xA9" "es des "
+                         "fonctionnalit\xC3\xA9s se ferment, \xC3\xA0 la v\xC3\xA9rification suivante ; une "
+                         "demande d\xC3\xA9j\xC3\xA0 partie (une g\xC3\xA9n\xC3\xA9ration IA\xE2\x80\xA6) va "
+                         "\xC3\xA0 son terme.", {}},
+             {K::Tip, "Le **poste d'exploitation** n'est jamais arr\xC3\xAAt\xC3\xA9 par la licence du PC "
+                         ": un atelier ne s'arr\xC3\xAAte pas pour une licence.", {}},
+             {K::Heading, "Ce qui viendra avec un service en ligne", {}},
+             {K::Paragraph, "L'activation en ligne (une cl\xC3\xA9 tap\xC3\xA9" "e, sans \xC3\xA9" "change de "
+                         "fichiers), les licences flottantes, la d\xC3\xA9sactivation d'un PC et son "
+                         "transfert en direct attendent le service de licences, qui reste \xC3\xA0 "
+                         "h\xC3\xA9" "berger. D'ici l\xC3\xA0, pour ajouter un PC \xC3\xA0 ta licence ou en "
+                         "retirer un, \xC3\xA9" "cris \xC3\xA0 l'\xC3\xA9" "diteur.", {}},
+         },
+         {"deploiement-reseau", "nouveautes-1-9"},
+         {"licence", "licences", "activer", "activation", "demande d'activation", ".xpglic", ".xpgreq", "\xC3\xA9" "dition", "FREE", "PERSONAL", "PROFESSIONAL", "ENTERPRISE", "EVALUATION", "fonctionnalit\xC3\xA9", "pas dans ta licence", "cadenas", "gr\xC3\xA2" "ce", "expir\xC3\xA9" "e", "r\xC3\xA9voqu\xC3\xA9" "e", "registre", "r\xC3\xA9vocation", "empreinte", "cl\xC3\xA9 de l'\xC3\xA9" "diteur", "non activ\xC3\xA9" "es"},
+         {"dialog.licence"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.30.0"},
         // ---- Tester et livrer  Livrer et exploiter / acces-web
         {"acces-web", "L'acc\xC3\xA8s par navigateur (tablette, autre PC)", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Le serveur web int\xC3\xA9gr\xC3\xA9 montre la vue en marche dans un navigateur - une tablette "

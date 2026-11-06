@@ -35,6 +35,7 @@
 #include "screens/Screens.hpp"
 #include "../project/BlockLibrary.hpp"
 #include "AboutDialog.hpp"                    // 1.10 (R2) : A propos d'XPGAnalyser
+#include "Licence.hpp"                        // 1.30.0 : les licences
 #include "Fenetres.hpp"                       // 1.12.27 : plusieurs fenetres d'IHM Studio
 #include "GlisserDehors.hpp"                  // 1.12.27 : glisser des objets vers une autre fenetre
 #include "../project/GrafcetEdit.hpp"
@@ -494,6 +495,9 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // Lot 15 : la reprise - le verrou de cette session, et une session d'avant
     // arretee brutalement (le PC eteint, le logiciel plante).
     a->recovery_.start((std::filesystem::path(Settings::defaultPath()).parent_path() / "reprise").string());
+    // 1.30.0 : les licences de ce PC (src/licensing) - verifiees hors ligne ; sans cle d'editeur dans le
+    // programme : << non activees >>, tout est ouvert.
+    licence::start();
     // La periode de la sauvegarde de reprise (2 min ; un reglage pour les essais).
     if (const int period = a->settings_.getInt("recovery.autosaveSeconds", 120); period >= 5)
         a->recovery_.setAutosavePeriod(period);
@@ -1609,6 +1613,20 @@ void App::registerActions() {
     actions_.add(Action{"nav.back", "Retour", help::keys::bindingOf("nav.back"),
                         [this] { return menus_->depth() > 1; }, {}, nullptr,
                         [this] { menus_->PreviousMenu(); }});
+    // 1.30.0 : la fenetre Licence (Aide > Licence..., la pastille de la barre d'etat).
+    actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
+    // 1.30.0 : LES ACTIONS D'UNE FONCTIONNALITE (licence::gates) passent par le controle : fermee, la fenetre
+    // << Pas dans ta licence >> ; ouverte, l'action comme avant. Elles restent actives (un clic dit pourquoi).
+    for (const auto& g : licence::gates()) {
+        if (g.where != licence::Where::Action) continue;
+        const auto* a = actions_.find(g.key);
+        if (!a || !a->invoke) continue;
+        Action wrapped = *a;
+        wrapped.invoke = [this, feature = std::string(g.feature), inner = a->invoke] {
+            if (licence::gate(*this, feature)) inner();
+        };
+        actions_.replace(std::move(wrapped));
+    }
 }
 
 void App::openPath(std::string path) {
@@ -3328,6 +3346,7 @@ void App::frame(double dt) {
     //     modifications non enregistrees gardees toutes les 2 minutes (a part).
     lap.to(XPG_PARTIE("enregistrement-auto"));
     recovery_.tick(dt);
+    licence::tick();   // 1.30.0 : une revaluation par heure (une licence peut prendre fin pendant le travail)
     if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
         (void)recovery_.autosave([this](const std::string& folder, std::string* reason) {

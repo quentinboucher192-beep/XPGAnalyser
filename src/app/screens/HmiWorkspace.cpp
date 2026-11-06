@@ -33,6 +33,7 @@
 //  touche.
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0 : les verrous des fonctionnalites
 #include "../ProjectExchange.hpp"   // 1.12.30 : les archives (IHM > Exporter / Importer)
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - sans automate
 
@@ -1298,6 +1299,8 @@ void MainAnalysisScreen::openHmiStylesAt(bool colors, const std::string& name) {
 }
 
 void MainAnalysisScreen::openHmiPane(const std::string& key) {
+    // 1.30.0 : un volet d'une fonctionnalite (licence::gates) - fermee : la fenetre << Pas dans ta licence >>.
+    if (!licence::gate(app_, licence::Where::HmiPane, key)) return;
     // 1.14.0 (lot M5) : Chercher des fichiers (Rouvrir le dernier ferme : "hmi:chercher") - sans IHM aussi.
     if (key == "chercher") {
         openFileFinder();
@@ -2169,7 +2172,7 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         HmiStationPane::Hosts hosts;
         hosts.projectFolder = [this] { return app_.projectFolder(); };
         hosts.displays = [this] { return app_.displayCount(); };
-        hosts.tryStation = [this] { app_.enterStation(); };
+        hosts.tryStation = [this] { if (licence::gate(app_, licence::Where::Gesture, "poste.essayer")) app_.enterStation(); };   // 1.30.0
         hosts.finished = [this](std::string* why) { return app_.projectFinished(why); };   // lot 15
         hosts.askPassword = [this] { askHmiStationPassword(); };
         hosts.deploy = [this] { openHmiPane("deploiement"); };   // 1.28.0

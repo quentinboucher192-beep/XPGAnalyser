@@ -11736,6 +11736,38 @@ Une machine dont le certificat a changé est refusée : « ce n'est plus la mêm
 ### Ce que l'agent refuse
 Toute commande d'un PC non appairé (sauf se présenter et s'appairer), une commande rejouée, une version de protocole inconnue. Il ne lance aucune commande reçue du réseau et n'utilise jamais Internet.
 
+== licence | La licence de ce PC : l'activer, ce qu'elle ouvre
+: Une licence signée par l'éditeur dit quelles fonctionnalités sont ouvertes sur ce PC. Elle se vérifie **hors ligne**, au lancement puis une fois par heure. Elle s'active **par fichier** : tu envoies la demande d'activation de ce PC à l'éditeur, il te renvoie ta licence. Une licence qui prend fin ne ferme jamais ton projet.
+@depuis 1.30.0
+@mots licence, licences, activer, activation, demande d'activation, .xpglic, .xpgreq, édition, FREE, PERSONAL, PROFESSIONAL, ENTERPRISE, EVALUATION, fonctionnalité, pas dans ta licence, cadenas, grâce, expirée, révoquée, registre, révocation, empreinte, clé de l'éditeur, non activées
+@lieux dialog.licence
+@voir deploiement-reseau, nouveautes-1-9
+### Ouvrir la fenêtre Licence
+**Aide › Licence…**, ou un clic sur la pastille **Licence** de la barre d'état (en bas à droite). En tête, l'édition, le statut, le client, la licence, les PC autorisés et liés, la date de fin, le numéro du registre ; dessous, la phrase de l'état. Six onglets :
+- **Ma licence** : ce que dit la licence signée de ce PC (son identifiant, son type, sa durée, sa grâce, la liste de révocation) ;
+- **Mes appareils** : les PC liés à la licence, sous le nom que chacun s'est donné, avec l'empreinte de sa clé ; « ce PC » est marqué ;
+- **Fonctionnalités** : chacune, ouverte ou « pas dans ta licence », ses limites, et **où elle est dans le programme** ;
+- **Éditions** : ce qu'ouvre chaque édition ; la tienne est marquée ;
+- **Historique** : les imports, les demandes, les changements d'état ;
+- **Paramètres** : le dossier des licences de ce PC, son empreinte, le registre et la liste de révocation en vigueur.
+### Activer une licence (par fichier)
+1. **Demander une activation…** : donne un nom à ce PC (facultatif) et, si tu l'as, le numéro de la licence ; un fichier `.xpgreq` est écrit. Il porte la **clé publique** de ce PC (créée ici la première fois, protégée par Windows) et le nom que tu as donné : rien de son matériel, ni nom réseau, ni adresse, ni numéro de série.
+2. Envoie ce fichier à l'éditeur. Il te renvoie un fichier `.xpglic`.
+3. **Activer par fichier de licence…** : choisis-le. La licence n'est installée que si elle vaut **pour ce PC, maintenant** : signée par l'éditeur, liée à ce PC, ni révoquée, ni finie, l'horloge en ordre. Sinon rien ne change, et la raison est dite.
+> Transmets les fichiers tels quels (en pièce jointe) : un fichier modifié, même d'un retour à la ligne, est refusé.
+### Les états
+| État | Ce qui est ouvert |
+| Valide | les fonctionnalités de la licence |
+| Grâce | la licence a pris fin : ses fonctionnalités restent ouvertes quelques jours, le temps d'importer le renouvellement |
+| Expirée, Révoquée, Invalide, Autre PC, Absente, Horloge reculée | l'édition sans licence du registre (FREE) ; la phrase dit pourquoi et quoi faire |
+| Non activées | ce programme n'a pas encore la clé de l'éditeur : **tout est ouvert** |
+### Une entrée « pas dans ta licence »
+Elle garde sa place. Un clic ouvre la fenêtre **Pas dans ta licence** : ce qui manque, l'état de ta licence, et **Licence…** pour la voir. Les points d'entrée verrouillables sont listés dans l'onglet **Fonctionnalités**, colonne « Dans le programme ».
+> **Jamais de perte de travail** : Ouvrir, Enregistrer, Enregistrer sous, Exporter le projet, Fermer et Quitter ne sont jamais verrouillés. Une licence qui prend fin pendant le travail ne ferme rien : seules les entrées des fonctionnalités se ferment, à la vérification suivante ; une demande déjà partie (une génération IA…) va à son terme.
+> Le **poste d'exploitation** n'est jamais arrêté par la licence du PC : un atelier ne s'arrête pas pour une licence.
+### Ce qui viendra avec un service en ligne
+L'activation en ligne (une clé tapée, sans échange de fichiers), les licences flottantes, la désactivation d'un PC et son transfert en direct attendent le service de licences, qui reste à héberger. D'ici là, pour ajouter un PC à ta licence ou en retirer un, écris à l'éditeur.
+
 == acces-web | L'accès par navigateur (tablette, autre PC)
 : Le serveur web intégré montre la vue en marche dans un navigateur - une tablette dans l'atelier, le PC du bureau : l'image se rafraîchit, et si on le permet, un clic sur l'image est un clic sur la vue. Les comptes sont ceux de l'IHM ; lecture seule par défaut.
 @mots accès web, navigateur, tablette, serveur web, http, 8080, lecture seule, commande, session, SYS.WebClients

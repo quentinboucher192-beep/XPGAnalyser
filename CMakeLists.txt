@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.29.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.30.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -21,6 +21,13 @@ option(XPG_SANS_NPCAP         "Build the Modbus spy without network capture" OFF
 if(XPG_SANS_NPCAP)
     add_compile_definitions(XPG_SANS_NPCAP)
 endif()
+# 1.30.0 : la cle d'ESSAI des licences (src/licensing/TestPublisherKey.hpp) compilee dans xpg_licensing, donc
+# dans tout ce qui le lie - pour les captures et les essais avec des licences signees par la cle d'essai. La
+# macro XPG_LICENCES_CLE_ESSAI n'est definie QUE pour xpg_licensing (PRIVATE : seul licensing/Store.cpp la lit,
+# aucun en-tete public n'en depend) : basculer l'option ne recompile que xpg_licensing, puis refait les liens.
+# UNE CONSTRUCTION AVEC CETTE OPTION N'EST JAMAIS LIVREE : le controle du paquet (package_mingw.py,
+# package.ps1) trouve la marque de la cle d'essai et s'arrete.
+option(XPG_LICENCES_CLE_ESSAI "Compiler la cle d'ESSAI des licences (captures, essais ; jamais livre)" OFF)
 
 if(MSVC)
     add_compile_options(/W4 /permissive- /utf-8 /Zc:__cplusplus /Zc:preprocessor)
@@ -163,6 +170,11 @@ endif()
 xpg_sources(LICENSING_SOURCES licensing)
 add_library(xpg_licensing STATIC ${LICENSING_SOURCES})
 target_link_libraries(xpg_licensing PUBLIC xpg_core xpg_deploy)
+# 1.30.0 : les vraies cles (src/licensing/PublisherKey.hpp) toujours ; la cle d'essai seulement avec l'option.
+if(XPG_LICENCES_CLE_ESSAI)
+    target_compile_definitions(xpg_licensing PRIVATE XPG_LICENCES_CLE_ESSAI=1)
+    message(WARNING "XPG_LICENCES_CLE_ESSAI : la cle d'ESSAI des licences est compilee - cette construction n'est PAS livrable")
+endif()
 # XPG-License-Admin : l'outil de l'EDITEUR (sa cle, signer registres, licences, revocations). JAMAIS LIVRE :
 # pas dans cross_mingw.sh, pas dans l'installateur ; outils/mingw/package_mingw.py arrete la construction s'il le trouve.
 add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp)
@@ -254,6 +266,9 @@ endif()
 xpg_sources(APP_SOURCES app)
 add_library(xpg_app OBJECT ${APP_SOURCES})
 target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi xpg_deploy)   # 1.28.0 : + le deploiement
+# 1.30.0 : les licences (app/Licence*, l'ecran Licence et les verrous des entrees). xpg_licensing lie lui-meme
+# xpg_deploy et xpg_core (PUBLIC) : CMake les remet apres lui sur la ligne de lien (l'ordre des .a de MinGW).
+target_link_libraries(xpg_app PUBLIC xpg_licensing)
 # 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de l'export SVG (app/SvgRenderer) :
 # il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
 target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
@@ -958,13 +973,20 @@ if(XPG_BUILD_TESTS)
     endif()
     xpg_add_test(NAME crashtrail COMMAND crashtrail_test)
     # 1.30.0 (prepare en 1.29.0) : les licences hors ligne - formats, refus, etats, l'outil Admin en
-    # sous-processus de bout en bout, le controle du paquet (package_mingw.py --controler).
+    # sous-processus de bout en bout, le controle du paquet (package_mingw.py --controler). 1.30.0 : les
+    # licences non activees, les vues de l'ecran, l'historique, les deux fichiers de cles ; la bibliotheque
+    # (3e argument) est cherchee : la marque de la cle d'essai n'y est que si XPG_LICENCES_CLE_ESSAI.
     xpg_add_test_executable(licensing_test tests/licensing_test.cpp src/license_admin/Admin.cpp)
     xpg_target_link_libraries(licensing_test PRIVATE xpg_licensing)
     if(TARGET licensing_test)
         add_dependencies(licensing_test xpg_license_admin)
     endif()
-    xpg_add_test(NAME licensing COMMAND licensing_test $<TARGET_FILE:xpg_license_admin> ${CMAKE_CURRENT_SOURCE_DIR})
+    xpg_add_test(NAME licensing COMMAND licensing_test $<TARGET_FILE:xpg_license_admin> ${CMAKE_CURRENT_SOURCE_DIR} $<TARGET_FILE:xpg_licensing>)
+    # 1.30.0 : l'ecran Licence et les verrous des entrees (app/Licence*), sans ecran, avec une cle d'editeur
+    # d'essai creee pour l'occasion (Admin.cpp) ; il lit tests/fixtures/licences/registre-exemple.json.
+    xpg_add_test_executable(licence_ui_test tests/licence_ui_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licence_ui_test PRIVATE xpg_app xpg_licensing)
+    xpg_add_test(NAME licenceui COMMAND licence_ui_test ${CMAKE_SOURCE_DIR})
     # 1.22.2 : ce qui consomme (core/Perf : les portees, l'image, les fenetres de 10 s et 60 s, les saccades, le
     # rapport) et l'onglet Performances (app/PerfPane), dessine sans ecran.
     xpg_add_test_executable(perf_test tests/perf_test.cpp src/app/PerfPane.cpp)

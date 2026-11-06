@@ -10,6 +10,22 @@
 //      etat.bin              l'etat protege (DPAPI machine) : l'heure la plus
 //                            tardive deja vue, les numeros les plus hauts vus du
 //                            registre et des revocations
+//      historique.jsonl      1.30.0 : ce qui s'est passe (une ligne JSON par
+//                            evenement : import accepte ou refuse et sa raison,
+//                            demande d'activation ecrite, changement d'etat
+//                            constate) ; 500 lignes au plus, les plus anciennes
+//                            partent ; une ligne illisible est ignoree
+//  Un dossier ou ce compte ne peut pas ecrire (un second compte Windows, sans
+//  l'installation pour tous les comptes) : l'evaluation marche quand meme (elle
+//  ne fait que lire), et `detail` le dit ; l'import et la demande le refusent
+//  avec la raison.
+//
+//  1.30.0 - LES LICENCES PAS ENCORE ACTIVEES : un programme compile sans aucune
+//  cle de l'editeur (PublisherKey.hpp vide, et pas de cle d'essai) ne peut rien
+//  verifier. Son etat est NotConfigured : TOUT est ouvert (un programme livre
+//  sans cle ne bloque jamais personne), l'import est refuse avec une phrase
+//  claire, la demande d'activation marche (elle ne depend pas de l'editeur), et
+//  rien n'est ecrit dans le dossier par l'evaluation.
 //
 //  L'EVALUATION (evaluate), dans l'ordre, au premier ecart :
 //    registre    signe par une cle de l'editeur, pas plus ancien que le plus
@@ -38,6 +54,7 @@
 #include "Documents.hpp"
 #include "SignedFile.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -56,6 +73,7 @@ enum class LicenseStatus : std::uint8_t {
     OtherDevice,       // Autre PC : la licence n'est pas liee a la cle de ce PC
     Absent,            // Absente : aucune licence
     ClockRolledBack,   // Horloge reculee
+    NotConfigured,     // 1.30.0 - Non activees : ce programme ne contient aucune cle de l'editeur ; TOUT est ouvert
 };
 // "valid", "grace"... (stable : pour un journal, un essai).
 [[nodiscard]] const char* statusKey(LicenseStatus) noexcept;
@@ -63,6 +81,12 @@ enum class LicenseStatus : std::uint8_t {
 [[nodiscard]] std::string statusLabel(LicenseStatus);
 // Les fonctionnalites de la licence sont-elles ouvertes dans cet etat ?
 [[nodiscard]] constexpr bool licenseFeaturesApply(LicenseStatus s) noexcept { return s == LicenseStatus::Valid || s == LicenseStatus::Grace; }
+// 1.30.0 : TOUTES les fonctionnalites sont-elles ouvertes (les licences ne sont pas actives) ?
+[[nodiscard]] constexpr bool allFeaturesOpen(LicenseStatus s) noexcept { return s == LicenseStatus::NotConfigured; }
+// 1.30.0 : un etat sans anomalie (Valide, Grace, Absente, Non activees) - pour l'historique.
+[[nodiscard]] constexpr bool statusIsNormal(LicenseStatus s) noexcept {
+    return s == LicenseStatus::Valid || s == LicenseStatus::Grace || s == LicenseStatus::Absent || s == LicenseStatus::NotConfigured;
+}
 
 // Une cle de l'editeur que ce programme croit.
 struct TrustedKey {
@@ -71,8 +95,20 @@ struct TrustedKey {
     crypto::PublicKey key{};
     bool              test{false};
 };
-// Les cles compilees (PublisherKey.hpp).
+// Les cles compilees : les VRAIES (PublisherKey.hpp), plus la cle d'ESSAI
+// (TestPublisherKey.hpp) seulement si la macro XPG_LICENCES_CLE_ESSAI est definie
+// (l'option CMake du meme nom). Vide : les licences ne sont pas actives (NotConfigured).
 [[nodiscard]] std::vector<TrustedKey> compiledPublisherKeys();
+// La cle d'essai est-elle compilee dans ce programme (XPG_LICENCES_CLE_ESSAI) ?
+[[nodiscard]] bool testKeyCompiled() noexcept;
+
+// 1.30.0 : un evenement de l'historique de ce PC (historique.jsonl).
+struct HistoryEvent {
+    std::int64_t at{0};    // l'heure (secondes UTC)
+    std::string  kind;     // "import", "demande", "etat"
+    bool         ok{false};   // import accepte, demande ecrite ; etat : sans anomalie (statusIsNormal)
+    std::string  text;     // une phrase (en francais) : ce qui a ete importe, la raison du refus...
+};
 
 // Tout ce qu'il faut pour afficher l'etat de la licence (l'ecran Licence, la barre d'etat).
 struct LicenseState {
@@ -98,6 +134,7 @@ struct LicenseState {
     std::string   registryProblem;        // vide : le registre est en ordre
     Seconds       evaluatedAt{0};
 
+    // Ouverte ? (NotConfigured : toujours vrai, rien n'est verrouille.)
     [[nodiscard]] bool hasFeature(std::string_view id) const noexcept;
     [[nodiscard]] std::optional<std::int64_t> limit(std::string_view feature, std::string_view name) const noexcept;
     // "2027-03-31" ; vide : pas de fin.
@@ -106,7 +143,8 @@ struct LicenseState {
 
 struct StoreOptions {
     std::string                    folder;              // le dossier des licences de ce PC (UTF-8)
-    std::vector<TrustedKey>        trustedKeys;         // vide : compiledPublisherKeys()
+    std::vector<TrustedKey>        trustedKeys;         // vide : compiledPublisherKeys() (si compiledKeys)
+    bool                           compiledKeys{true};  // faux : seulement trustedKeys (les essais : << un programme sans cle >>)
     std::string                    bundledRegistry;     // facultatif : le registre livre avec le programme (.xpgreg)
     std::function<Seconds()>       clock;               // vide : systemNow() (les essais avancent l'heure)
     Seconds                        clockTolerance{kDay};   // le recul de l'horloge tolere
@@ -132,8 +170,24 @@ public:
     static constexpr const char* kRegistryFile = "registre.xpgreg";
     static constexpr const char* kRevocationsFile = "revocations.xpgrev";
     static constexpr const char* kStateFile = "etat.bin";
+    static constexpr const char* kHistoryFile = "historique.jsonl";
+    static constexpr std::size_t kHistoryMaxLines = 500;
 
     [[nodiscard]] const std::string& folder() const noexcept { return opt_.folder; }
+    // 1.30.0 : une cle de l'editeur au moins ? Faux : NotConfigured (tout est ouvert).
+    [[nodiscard]] bool configured() const noexcept { return !opt_.trustedKeys.empty(); }
+
+    // 1.30.0 : ce que la derniere evaluation a lu (l'ecran Licence ; aucun fichier relu) :
+    // le registre en vigueur, la licence installee lisible (signee, meme finie, revoquee
+    // ou d'un autre PC), la cle publique de ce PC (64 hexadecimaux ; vide : pas encore creee).
+    [[nodiscard]] const std::optional<Registry>& registry() const noexcept { return registry_; }
+    [[nodiscard]] const std::optional<License>& license() const noexcept { return license_; }
+    [[nodiscard]] const std::string& deviceKeyHex() const noexcept { return deviceKeyHex_; }
+
+    // 1.30.0 : l'historique de ce PC, le plus recent d'abord (`limit` <= 0 : tout). Lu dans le fichier.
+    [[nodiscard]] std::vector<HistoryEvent> history(int limit = 0) const;
+    // Ajouter un evenement (`statusKey` : l'etat, pour un evenement "etat"). Faux : `why`.
+    bool addHistory(const HistoryEvent& e, std::string_view statusKey, std::string* why);
 
     // Lire, verifier, dire. Met a jour l'heure la plus tardive vue (etat.bin).
     [[nodiscard]] LicenseState evaluate();
@@ -164,8 +218,22 @@ private:
     [[nodiscard]] const TrustedKey* trusted(std::string_view keyId) const noexcept;
     bool verifyTrusted(const SignedBlock& b, std::string* why) const;
     LicenseState judge(const Loaded& in, Seconds now) const;
+    ImportReport importChecked(std::string_view bytes);
+    bool writeRequestFile(const std::string& path, const std::string& deviceName, const std::string& licenseId, const std::string& software,
+                          std::string* why);
+    ImportReport finishImport(ImportReport rep);
+    std::string noteState(const LicenseState& s);
+    [[nodiscard]] std::string lastLoggedStatus() const;
+    [[nodiscard]] std::string notWritable(const std::string& why) const;
 
-    StoreOptions opt_;
+    StoreOptions            opt_;
+    std::optional<Registry> registry_;
+    std::optional<License>  license_;
+    std::string             deviceKeyHex_;
+    std::string             lastStatus_;        // le dernier etat note dans l'historique (statusKey)
+    bool                    deferState_{false}; // pendant un import : l'evenement d'etat vient apres celui de l'import
+    std::optional<HistoryEvent> pendingState_;
+    std::string             pendingStatus_;
 };
 
 } // namespace licensing

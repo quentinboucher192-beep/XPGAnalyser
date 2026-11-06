@@ -2,6 +2,7 @@
 //  app/ai/AiAssistant.cpp - voir AiAssistant.hpp
 // =============================================================================
 #include "AiAssistant.hpp"
+#include "../Licence.hpp"   // 1.30.0 : ai_assistant, ai_generation
 #include "AiLearning.hpp"       // 1.17.0 : les mesures de l'IA integree
 #include "AiLearningFile.hpp"   // 1.17.0 : ce que l'installateur a depose
 
@@ -828,6 +829,8 @@ bool Assistant::send(std::string text, std::string* why) {
         return false;
     };
     if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    // 1.30.0 : la licence (ai_assistant) - une demande deja partie va a son terme ; c'est la suivante qui est refusee.
+    if (auto locked = licence::lockedText("ai_assistant"); !locked.empty()) return fail(std::move(locked));
     if (generating()) return fail("Une r\xC3\xA9ponse est en cours d'\xC3\xA9" "criture : attends-la, ou arr\xC3\xAAte-la.");
     if (processing()) return fail("Les pi\xC3\xA8" "ces jointes sont en cours de traitement.");
     if (text.empty() && pending_.empty()) return fail("Rien \xC3\xA0 envoyer.");
@@ -5155,6 +5158,7 @@ bool Assistant::createMission(std::string request, std::string* why) {
     };
     if (request.empty()) return fail("D\xC3\xA9" "cris ce que la mission doit construire.");
     if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    if (auto locked = licence::lockedText("ai_generation"); !locked.empty()) return fail(std::move(locked));   // 1.30.0 : la licence
     if (!live())
         return fail("Une mission travaille avec une IA connect\xC3\xA9" "e (Anthropic, ou un service compatible OpenAI) : choisis-la dans les "
                     "Param\xC3\xA8tres de l'Assistant IA.");
@@ -5454,6 +5458,7 @@ bool Assistant::createMissionWith(std::string request, int message, std::string*
     };
     if (request.empty()) return fail("D\xC3\xA9" "cris ce que la mission doit construire.");
     if (!settings_.enabled) return fail("L'Assistant est d\xC3\xA9sactiv\xC3\xA9 (Param\xC3\xA8tres de l'Assistant IA).");
+    if (auto locked = licence::lockedText("ai_generation"); !locked.empty()) return fail(std::move(locked));   // 1.30.0 : la licence
     if (!live())
         return fail("Une mission travaille avec une IA connect\xC3\xA9" "e (Anthropic, ou un service compatible OpenAI) : choisis-la dans les "
                     "Param\xC3\xA8tres de l'Assistant IA.");

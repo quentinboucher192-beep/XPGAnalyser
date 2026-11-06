@@ -1,0 +1,544 @@
+// =============================================================================
+//  app/LicenceWindow.cpp - 1.30.0 : LA FENETRE LICENCE (le License Manager du
+//  client, maquette << XPG License Manager (client) >>)
+// -----------------------------------------------------------------------------
+//  En tete : l'edition, le statut, le client, la licence ; les PC autorises et
+//  lies, la fin, le registre ; la phrase de l'etat. Six onglets :
+//    Ma licence       ce que dit la licence signee de ce PC ;
+//    Mes appareils    les PC lies (le nom donne par le client, l'empreinte de sa
+//                     cle : rien de son materiel) ; << ce PC >> ;
+//    Fonctionnalites  chacune (le registre), ouverte ou fermee, ses limites, et
+//                     ou elle est dans le programme (licence::gates) ;
+//    Editions         ce qu'ouvre chaque edition (le registre) ; la tienne ;
+//    Historique       les imports, les demandes, les changements d'etat ;
+//    Parametres       le dossier, l'empreinte de ce PC, les numeros du registre
+//                     et de la liste de revocation, la cle de l'editeur.
+//  En bas : Activer par fichier de licence..., Demander une activation...,
+//  Ouvrir le dossier, Fermer. Sans service en ligne (version 1) : ni activation
+//  en ligne, ni desactivation, ni transfert en direct - la fenetre le dit.
+// =============================================================================
+#include "Licence.hpp"
+
+#include "App.hpp"
+#include "Dossiers.hpp"
+#include "Settings.hpp"
+#include "hmi/HmiPaneKit.hpp"
+#include "screens/Screens.hpp"
+
+#include "../core/Edition.hpp"
+#include "../core/Version.hpp"
+#include "../licensing/Licensing.hpp"
+#include "../menu/MenuManager.hpp"
+#include "../ui/DialogFrame.hpp"
+#include "../ui/widgets/Containers.hpp"
+#include "../ui/widgets/Controls.hpp"
+#include "../ui/widgets/DataViews.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace app {
+
+namespace {
+
+constexpr gfx::FontId kTitle{17};
+constexpr gfx::FontId kSmall{14};
+constexpr gfx::FontId kValue{17};
+using PG = ui::PropertyGrid;
+using hmikit::Rows;
+
+std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w) {
+    if (w <= 8.f) return {};
+    if (r.measure(s, f).width <= w) return s;
+    std::string t = s;
+    while (!t.empty() && r.measure(t + "\xE2\x80\xA6", f).width > w) {
+        t.pop_back();
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+    }
+    return t + "\xE2\x80\xA6";
+}
+
+std::string typeLabel(licensing::LicenseType t) {
+    switch (t) {
+        case licensing::LicenseType::Perpetual: return "perp\xC3\xA9tuelle";
+        case licensing::LicenseType::Temporary: return "temporaire";
+        case licensing::LicenseType::Evaluation: return "\xC3\xA9valuation";
+        case licensing::LicenseType::Floating: return "flottante (pas en version 1)";
+    }
+    return {};
+}
+
+std::string dateOf(licensing::Seconds s) { return s ? licensing::isoDate(s) : std::string(); }
+
+std::string whenOf(std::int64_t at) {
+    if (at <= 0) return {};
+    const std::string t = licensing::isoTime(static_cast<licensing::Seconds>(at));   // "2026-11-06T09:41:00Z"
+    return t.size() >= 16 ? t.substr(0, 10) + " " + t.substr(11, 5) : t;
+}
+
+PG::Property prop(std::string name, std::string value, std::string description = {}) {
+    PG::Property p;
+    p.name = std::move(name);
+    p.value = std::move(value);
+    p.type = PG::ValueType::ReadOnly;
+    p.description = std::move(description);
+    return p;
+}
+
+menu::MenuTraits dialogTraits() {
+    menu::MenuTraits t;
+    t.kind = menu::MenuKind::Dialog;
+    t.rendersBelow = true;
+    t.updatesBelow = true;
+    t.blocksInput = true;
+    t.dimsBelow = true;
+    return t;
+}
+
+class LicenceWindow;
+
+class LicenceBody final : public ui::Widget {
+public:
+    LicenceBody(LicenceWindow& owner, App& app, int tab);
+    void reload();
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+    ui::EventResult onEvent(const ui::InputEvent& ev) override;
+
+private:
+    void askImport();
+    void doImport(const std::string& path);
+    void askRequest();
+    void say(std::string text, int tone) {
+        flash_ = std::move(text);
+        flashTone_ = tone;
+        invalidate();
+    }
+
+    LicenceWindow&    owner_;
+    App&              app_;
+    ui::TabControl*   tabs_{nullptr};
+    ui::PropertyGrid* mine_{nullptr};
+    ui::TableView*    devices_{nullptr};
+    ui::TableView*    features_{nullptr};
+    ui::TableView*    editions_{nullptr};
+    ui::TableView*    history_{nullptr};
+    ui::PropertyGrid* params_{nullptr};
+    ui::Button*       import_{nullptr};
+    ui::Button*       request_{nullptr};
+    ui::Button*       folder_{nullptr};
+    ui::Button*       close_{nullptr};
+    std::shared_ptr<ui::ITableModel> devicesModel_, featuresModel_, editionsModel_, historyModel_;
+    licensing::LicenseState state_;
+    std::string       flash_;
+    int               flashTone_{0};
+    gfx::Rect         panel_{}, closeBox_{};
+    float             headerY_{0}, messageY_{0};
+    core::ConnectionScope links_;
+};
+
+class LicenceWindow final : public menu::WidgetMenu {
+public:
+    LicenceWindow(App& app, int tab) : menu::WidgetMenu("dialog.licence"), app_(app), tab_(tab) {}
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return "Licence"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer();
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void fermer() {
+        if (done_) return;
+        done_ = true;
+        manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+    }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<LicenceBody>(*this, app_, tab_));
+        return core::ok();
+    }
+
+private:
+    App& app_;
+    int  tab_{0};
+    bool done_{false};
+};
+
+LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("dialog.licence.body"), owner_(owner), app_(app) {
+    auto tabs = std::make_unique<ui::TabControl>("dialog.licence.onglets");
+    auto mine = std::make_unique<ui::PropertyGrid>("dialog.licence.ma-licence");
+    mine_ = mine.get();
+    auto devices = std::make_unique<ui::TableView>("dialog.licence.appareils");
+    devices->setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
+    devices_ = devices.get();
+    auto features = std::make_unique<ui::TableView>("dialog.licence.fonctionnalites");
+    features->setColumns({{"Fonctionnalit\xC3\xA9", 220.f}, {"Identifiant", 170.f}, {"Logiciel", 110.f}, {"\xC3\x89tat", 150.f},
+                          {"Limites", 160.f}, {"Dans le programme", 380.f}});
+    features_ = features.get();
+    auto editions = std::make_unique<ui::TableView>("dialog.licence.editions");
+    editions_ = editions.get();
+    auto history = std::make_unique<ui::TableView>("dialog.licence.historique");
+    history->setColumns({{"Quand (UTC)", 150.f}, {"Quoi", 120.f}, {"R\xC3\xA9sultat", 90.f}, {"D\xC3\xA9tail", 620.f}});
+    history_ = history.get();
+    auto params = std::make_unique<ui::PropertyGrid>("dialog.licence.parametres");
+    params_ = params.get();
+    tabs->addTab({"Ma licence", ui::Icon::Lock}, std::move(mine));
+    tabs->addTab({"Mes appareils", ui::Icon::Screen}, std::move(devices));
+    tabs->addTab({"Fonctionnalit\xC3\xA9s", ui::Icon::Ok}, std::move(features));
+    tabs->addTab({"\xC3\x89" "ditions", ui::Icon::Layers}, std::move(editions));
+    tabs->addTab({"Historique", ui::Icon::History}, std::move(history));
+    tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
+    tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
+    import_->setStyle(ui::Button::Style::Primary);
+    request_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Demander une activation\xE2\x80\xA6", "dialog.licence.demander")));
+    folder_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir le dossier des licences", "dialog.licence.dossier")));
+    close_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.licence.fermer")));
+    links_ += import_->clicked->connect([this] { askImport(); });
+    links_ += request_->clicked->connect([this] { askRequest(); });
+    links_ += folder_->clicked->connect([this] {
+        const std::string f = licensing::getLicenseFolder();
+        std::error_code ec;
+        std::filesystem::create_directories(std::filesystem::path(std::u8string(f.begin(), f.end())), ec);
+        if (auto why = dossiers::ouvrirDansLeSysteme(f); !why.empty()) say("Le dossier ne s'ouvre pas : " + why, 3);
+    });
+    links_ += close_->clicked->connect([this] { owner_.fermer(); });
+    reload();
+    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, 5)));
+}
+
+void LicenceBody::reload() {
+    licence::refresh();
+    state_ = licensing::getLicenseState();
+    const auto& st = state_;
+    const bool configured = licensing::isConfigured();
+    const auto reg = licensing::getRegistry();
+
+    // ---- Ma licence ----
+    {
+        std::vector<PG::Category> cats;
+        PG::Category c;
+        c.name = "Ma licence";
+        c.properties.push_back(prop("\xC3\x89tat", licensing::statusLabel(st.status), st.message));
+        if (!st.licensedEdition.empty() || !st.edition.empty())
+            c.properties.push_back(prop("\xC3\x89" "dition", st.licensedEdition.empty() ? st.edition : st.licensedEdition,
+                                        "L'\xC3\xA9" "dition de la licence ; sans licence valide, c'est l'\xC3\xA9" "dition sans licence du registre qui s'applique : "
+                                            + (st.editionLabel.empty() ? st.edition : st.editionLabel)));
+        if (!st.customer.empty()) c.properties.push_back(prop("Propri\xC3\xA9taire", st.customer));
+        if (!st.licenseId.empty()) c.properties.push_back(prop("Identifiant", st.licenseId));
+        if (!st.licenseId.empty()) c.properties.push_back(prop("Type", typeLabel(st.type)));
+        if (st.issuedAt)
+            c.properties.push_back(prop("Valable", "du " + dateOf(st.issuedAt) + (st.expiresAt ? " au " + dateOf(st.expiresAt) : std::string(" (sans fin)"))));
+        if (st.graceEndsAt) c.properties.push_back(prop("Gr\xC3\xA2" "ce jusqu'au", dateOf(st.graceEndsAt),
+                                                        "Apr\xC3\xA8s la fin, les fonctionnalit\xC3\xA9s restent ouvertes ces jours-l\xC3\xA0, le temps d'importer le renouvellement."));
+        if (!st.licenseId.empty())
+            c.properties.push_back(prop("PC", std::to_string(st.boundDevices) + " li\xC3\xA9(s) sur " + std::to_string(st.maxDevices) + " autoris\xC3\xA9(s)"));
+        c.properties.push_back(prop("Signature", configured ? std::string("v\xC3\xA9rifi\xC3\xA9" "e hors ligne avec la cl\xC3\xA9 de l'\xC3\xA9" "diteur compil\xC3\xA9" "e dans ce programme")
+                                                            : std::string("ce programme n'a pas encore la cl\xC3\xA9 de l'\xC3\xA9" "diteur")));
+        c.properties.push_back(prop("R\xC3\xA9vocations", st.revocationNumber ? "liste n\xC2\xB0 " + std::to_string(st.revocationNumber) : std::string("aucune liste")));
+        if (!st.detail.empty()) c.properties.push_back(prop("D\xC3\xA9tail", st.detail));
+        cats.push_back(std::move(c));
+        PG::Category a;
+        a.name = "Activer une licence";
+        a.properties.push_back(prop("Par fichier", "Activer par fichier de licence\xE2\x80\xA6 (le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur)",
+                                    "Le fichier contient la licence sign\xC3\xA9" "e, le registre et, s'il y en a une, la liste de r\xC3\xA9vocation. Elle "
+                                    "n'est install\xC3\xA9" "e que si elle vaut pour ce PC, maintenant."));
+        a.properties.push_back(prop("La demande", "Demander une activation\xE2\x80\xA6 (un .xpgreq \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur)",
+                                    "Elle porte la cl\xC3\xA9 publique de ce PC et le nom que tu lui donnes ; rien de son mat\xC3\xA9riel."));
+        a.properties.push_back(prop("En ligne", "pas encore (le service de licences reste \xC3\xA0 h\xC3\xA9" "berger)",
+                                    "L'activation en ligne, les licences flottantes, la d\xC3\xA9sactivation et le transfert en direct attendent "
+                                    "le service de licences."));
+        cats.push_back(std::move(a));
+        mine_->setCategories(std::move(cats));
+    }
+
+    // ---- Mes appareils ----
+    {
+        std::vector<std::vector<std::string>> rows;
+        for (const auto& d : licensing::getLicensedDevices())
+            rows.push_back({d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.activatedAt.size() >= 10 ? d.activatedAt.substr(0, 10) : d.activatedAt,
+                            d.thisPc ? "ce PC" : ""});
+        devicesModel_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte de sa cl\xC3\xA9", "Activ\xC3\xA9 le", ""}, std::move(rows));
+        devices_->setModel(devicesModel_);
+    }
+
+    // ---- Fonctionnalites ----
+    {
+        std::vector<std::vector<std::string>> rows;
+        std::vector<bool> open;
+        if (reg)
+            for (const auto& f : reg->features) {
+                if (f.retired) continue;
+                const bool on = licence::allows(f.id);
+                std::string limits;
+                for (const auto& [lid, llabel] : f.limits)
+                    if (const auto v = licensing::getFeatureLimit(f.id, lid))
+                        limits += (limits.empty() ? "" : ", ") + (llabel.empty() ? lid : llabel) + " : " + std::to_string(*v);
+                std::string where;
+                for (const auto& g : licence::gates())
+                    if (f.id == g.feature) where += (where.empty() ? "" : " ; ") + std::string(g.label);
+                rows.push_back({f.label.empty() ? f.id : f.label, f.id, f.product,
+                                on ? std::string("ouverte") : std::string("pas dans ta licence"), limits,
+                                where.empty() ? std::string("(pas encore reli\xC3\xA9" "e \xC3\xA0 une entr\xC3\xA9" "e)") : where});
+                open.push_back(on);
+            }
+        featuresModel_ = std::make_shared<Rows>(
+            std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Identifiant", "Logiciel", "\xC3\x89tat", "Limites", "Dans le programme"}, std::move(rows),
+            [open](ui::RowIndex r, std::size_t c) {
+                ui::CellStyle s;
+                if (c == 1) s.monospace = true;
+                if (c == 3 && r < open.size()) {
+                    s.icon = open[r] ? ui::Icon::Ok : ui::Icon::Lock;
+                    s.iconTone = open[r] ? ui::Tone::Ok : ui::Tone::Warning;
+                    s.fgTone = open[r] ? ui::Tone::Ok : ui::Tone::Warning;
+                }
+                return s;
+            });
+        features_->setModel(featuresModel_);
+    }
+
+    // ---- Editions (ce qu'ouvre chacune) ----
+    {
+        std::vector<std::string> headers{"Fonctionnalit\xC3\xA9"};
+        std::vector<ui::TableView::Column> cols{{"Fonctionnalit\xC3\xA9", 200.f}};
+        std::vector<std::vector<std::string>> rows;
+        std::size_t mineCol = 0;
+        if (reg) {
+            for (const auto& e : reg->editions) {
+                const bool isMine = !st.licensedEdition.empty() ? e.id == st.licensedEdition : e.id == st.edition;
+                std::string h = (e.label.empty() ? e.id : e.label) + (isMine ? " (la tienne)" : "");
+                headers.push_back(h);
+                cols.push_back({h, 150.f});
+                if (isMine) mineCol = headers.size() - 1;
+            }
+            {
+                std::vector<std::string> line{"PC \xC2\xB7 dur\xC3\xA9" "e"};
+                for (const auto& e : reg->editions)
+                    line.push_back(std::to_string(e.maxDevices) + " PC \xC2\xB7 " + (e.durationDays > 0 ? std::to_string(e.durationDays) + " j" : std::string("sans fin")));
+                rows.push_back(std::move(line));
+            }
+            for (const auto& f : reg->features) {
+                if (f.retired) continue;
+                std::vector<std::string> line{f.label.empty() ? f.id : f.label};
+                for (const auto& e : reg->editions)
+                    line.push_back(std::find(e.features.begin(), e.features.end(), f.id) != e.features.end() ? "\xE2\x9C\x93" : "\xE2\x80\x94");
+                rows.push_back(std::move(line));
+            }
+        }
+        editions_->setColumns(cols);
+        editionsModel_ = std::make_shared<Rows>(std::move(headers), std::move(rows), [mineCol](ui::RowIndex r, std::size_t c) {
+            ui::CellStyle s;
+            if (r == 0) s.bold = true;
+            if (c > 0 && c == mineCol) s.bold = true;
+            return s;
+        });
+        editions_->setModel(editionsModel_);
+    }
+
+    // ---- Historique ----
+    {
+        std::vector<std::vector<std::string>> rows;
+        for (const auto& h : licensing::getHistory(200))
+            rows.push_back({whenOf(h.at), h.kind, h.ok ? "fait" : "refus\xC3\xA9", h.text});
+        historyModel_ = std::make_shared<Rows>(std::vector<std::string>{"Quand (UTC)", "Quoi", "R\xC3\xA9sultat", "D\xC3\xA9tail"}, std::move(rows));
+        history_->setModel(historyModel_);
+    }
+
+    // ---- Parametres ----
+    {
+        std::vector<PG::Category> cats;
+        PG::Category c;
+        c.name = "Ce PC";
+        c.properties.push_back(prop("Dossier des licences", licensing::getLicenseFolder(),
+                                    "La cl\xC3\xA9 de ce PC (prot\xC3\xA9g\xC3\xA9" "e par Windows), la licence, le registre, la liste de r\xC3\xA9vocation, "
+                                    "l'historique. Copi\xC3\xA9 sur un autre PC, il ne sert \xC3\xA0 rien."));
+        const std::string fp = licensing::thisDeviceFingerprint();
+        c.properties.push_back(prop("Empreinte de ce PC", fp.empty() ? std::string("pas encore cr\xC3\xA9\xC3\xA9" "e (elle l'est \xC3\xA0 la premi\xC3\xA8re demande)") : fp,
+                                    "L'empreinte de la cl\xC3\xA9 publique de ce PC : jamais son nom r\xC3\xA9seau, son adresse ou son num\xC3\xA9ro de s\xC3\xA9rie."));
+        cats.push_back(std::move(c));
+        PG::Category d;
+        d.name = "Les documents sign\xC3\xA9s";
+        d.properties.push_back(prop("Registre", reg ? "n\xC2\xB0 " + std::to_string(reg->number) + (reg->issuedAt.empty() ? std::string{} : " du " + reg->issuedAt.substr(0, 10))
+                                                    : std::string("aucun"),
+                                    "Les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s, sign\xC3\xA9s par l'\xC3\xA9" "diteur. Un registre plus ancien que le "
+                                    "dernier vu est refus\xC3\xA9."));
+        d.properties.push_back(prop("Sans licence", reg && !reg->unlicensedEdition.empty() ? "l'\xC3\xA9" "dition " + reg->unlicensedEdition : std::string("-")));
+        d.properties.push_back(prop("R\xC3\xA9vocations", st.revocationNumber ? "liste n\xC2\xB0 " + std::to_string(st.revocationNumber) : std::string("aucune")));
+        d.properties.push_back(prop("Cl\xC3\xA9 de l'\xC3\xA9" "diteur", configured ? std::string("pr\xC3\xA9sente dans ce programme") : std::string("absente : licences non activ\xC3\xA9" "es, tout est ouvert")));
+        if (!st.registryProblem.empty()) d.properties.push_back(prop("Registre : probl\xC3\xA8me", st.registryProblem));
+        cats.push_back(std::move(d));
+        PG::Category p;
+        p.name = "Ce programme";
+        p.properties.push_back(prop("Programme", core::productName() + " " + XPG_ANALYZER_VERSION));
+        p.properties.push_back(prop("V\xC3\xA9rification", "hors ligne, \xC3\xA0 chaque lancement puis une fois par heure",
+                                    "L'heure de ce PC est contr\xC3\xB4l\xC3\xA9" "e : un retour en arri\xC3\xA8re de plus de 24 h est d\xC3\xA9tect\xC3\xA9."));
+        cats.push_back(std::move(p));
+        params_->setCategories(std::move(cats));
+    }
+    import_->setEnabled(configured);
+    import_->setTooltip(configured ? std::string("Le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur")
+                                   : std::string("Ce programme ne peut pas encore v\xC3\xA9rifier une licence : il n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur"));
+    invalidate();
+}
+
+void LicenceBody::askImport() {
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Fichier", "", "C:\\Users\\moi\\Downloads\\XPG-2026-00042.xpglic", false, {}});
+    app_.menus().ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.licenceImport", "Activer par fichier de licence",
+                                                            "Le fichier .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur (pi\xC3\xA8" "ce jointe, tel quel). La licence n'est "
+                                                            "install\xC3\xA9" "e que si elle vaut pour ce PC, maintenant ; sinon rien ne change et la raison est dite.",
+                                                            std::move(fields), "Activer"),
+                               0, ui::openFile("Licences XPG (.xpglic)|*.xpglic|Tous les fichiers|*.*", {}, "Activer par fichier de licence")),
+        [this](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            const auto v = FormDialog::split(r.payload);
+            if (!v.empty() && !v[0].empty()) doImport(v[0]);
+        });
+}
+
+void LicenceBody::doImport(const std::string& path) {
+    const auto report = licensing::importLicenseFile(path);
+    licence::refresh();
+    std::string text;
+    for (const auto& l : report.lines) text += "\xE2\x80\xA2 " + l + "\n";
+    if (!report.ok) text += (text.empty() ? "" : "\n") + report.why;
+    else text += (text.empty() ? "" : "\n") + report.state.message;
+    say(report.ok ? (report.licenseInstalled ? "Licence install\xC3\xA9" "e : " + report.state.message : std::string("Import fait : ") + report.state.message)
+                  : "Refus\xC3\xA9 : " + report.why,
+        report.ok ? 1 : 3);
+    reload();
+    app_.menus().ShowDialog(std::make_unique<MessageDialog>(report.ok ? "Licence import\xC3\xA9" "e" : "Licence refus\xC3\xA9" "e", std::move(text),
+                                                            report.ok ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning),
+                            nullptr);
+}
+
+void LicenceBody::askRequest() {
+    const auto shared = std::filesystem::path(std::u8string(Settings::sharedFolder().begin(), Settings::sharedFolder().end())) / "Licences";
+    const auto u8 = (shared / "demande-activation.xpgreq").u8string();
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"Nom de ce PC", "", "Poste bureau d'\xC3\xA9tudes (le nom que tu lui donnes ; facultatif)", false, {}});
+    fields.push_back({"Licence demand\xC3\xA9" "e", state_.licenseId, "XPG-2026-00042 (facultatif)", false, {}});
+    fields.push_back({"Enregistrer sous", std::string(u8.begin(), u8.end()), "", false, {}});
+    app_.menus().ShowDialog(
+        FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.licenceRequest", "Demander une activation",
+                                                            "La demande porte la cl\xC3\xA9 publique de ce PC (cr\xC3\xA9\xC3\xA9" "e ici la premi\xC3\xA8re fois, "
+                                                            "prot\xC3\xA9g\xC3\xA9" "e par Windows), le nom que tu lui donnes et le logiciel ; elle est sign\xC3\xA9" "e par ce "
+                                                            "PC. Rien de son mat\xC3\xA9riel. Envoie le fichier \xC3\xA0 l'\xC3\xA9" "diteur : il te renvoie ta licence.",
+                                                            std::move(fields), "Cr\xC3\xA9" "er la demande"),
+                               2, ui::saveFile("Demandes d'activation (.xpgreq)|*.xpgreq", std::string(u8.begin(), u8.end()), "Demander une activation")),
+        [this](const menu::DialogResult& r) {
+            if (!r.accepted()) return;
+            const auto v = FormDialog::split(r.payload);
+            if (v.size() < 3 || v[2].empty()) return;
+            std::error_code ec;
+            std::filesystem::create_directories(std::filesystem::path(std::u8string(v[2].begin(), v[2].end())).parent_path(), ec);
+            std::string why;
+            const std::string software = core::productName() + " " + XPG_ANALYZER_VERSION;
+            if (licensing::writeActivationRequest(v[2], v[0], v[1], software, &why)) {
+                say("Demande \xC3\xA9" "crite : " + v[2] + " - envoie-la \xC3\xA0 l'\xC3\xA9" "diteur", 1);
+                reload();
+            } else {
+                say("La demande n'a pas pu \xC3\xAAtre \xC3\xA9" "crite : " + why, 3);
+            }
+        });
+}
+
+void LicenceBody::onLayout() {
+    const auto r = bounds();
+    const float w = std::min(1180.f, std::max(640.f, r.w - 40.f));
+    const float h = std::min(820.f, std::max(480.f, r.h - 40.f));
+    panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+    closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
+    ui::dialogframe::keep(*this, closeBox_);
+    const float x = panel_.x + 16.f, W = panel_.w - 32.f;
+    headerY_ = panel_.y + 52.f;
+    messageY_ = headerY_ + 2.f * 44.f + 6.f;
+    const float tabsY = messageY_ + 34.f;
+    const float bottom = panel_.bottom() - 52.f;
+    tabs_->setBounds({x, tabsY, W, std::max(60.f, bottom - tabsY - 6.f)});
+    float bx = x;
+    for (auto* b : {import_, request_, folder_}) {
+        const float bw = std::max(110.f, b->sizeHint().preferred.w);
+        b->setBounds({bx, panel_.bottom() - 44.f, bw, 32.f});
+        bx += bw + 8.f;
+    }
+    const float cw = std::max(110.f, close_->sizeHint().preferred.w);
+    close_->setBounds({panel_.right() - 16.f - cw, panel_.bottom() - 44.f, cw, 32.f});
+}
+
+void LicenceBody::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    r.fillRect(panel_, c.panelBg);
+    r.strokeRect(panel_, c.borderStrong, 1.f);
+    r.fillRect({panel_.x, panel_.y, panel_.w, 42.f}, c.headerBg);
+    r.drawText({panel_.x + 16.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f},
+               fit(r, "Licence \xE2\x80\x94 " + core::productName(), kTitle, panel_.w - 70.f), kTitle, c.text);
+    r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+    r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+
+    // L'en-tete : deux lignes de quatre cases.
+    const auto& st = state_;
+    const bool hasLicence = !st.licenseId.empty();
+    const std::string edition = !st.licensedEdition.empty() ? st.licensedEdition : (st.edition.empty() ? std::string("\xE2\x80\x94") : st.edition);
+    struct Cell { const char* label; std::string value; bool status; };
+    const Cell cells[8] = {
+        {"\xC3\x89" "dition", edition, false},
+        {"Statut", licensing::statusLabel(st.status), true},
+        {"Client", hasLicence && !st.customer.empty() ? st.customer : std::string("\xE2\x80\x94"), false},
+        {"Licence", hasLicence ? st.licenseId : std::string("\xE2\x80\x94"), false},
+        {"PC autoris\xC3\xA9s", hasLicence ? std::to_string(st.maxDevices) : std::string("\xE2\x80\x94"), false},
+        {"PC li\xC3\xA9s", hasLicence ? std::to_string(st.boundDevices) + " (" + std::to_string(std::max(0, st.maxDevices - st.boundDevices)) + " libres)"
+                                      : std::string("\xE2\x80\x94"), false},
+        {"Expire le", hasLicence ? (st.expiresAt ? st.expirationDate() : std::string("jamais")) : std::string("\xE2\x80\x94"), false},
+        {"Registre", st.registryNumber ? "n\xC2\xB0 " + std::to_string(st.registryNumber) : std::string("aucun"), false},
+    };
+    const float x = panel_.x + 16.f, W = panel_.w - 32.f, cw = W / 4.f;
+    using S = licensing::LicenseStatus;
+    const gfx::Color good = ctx.theme.tone(ui::Tone::Ok, c.text), warn = ctx.theme.tone(ui::Tone::Warning, c.text),
+                     bad = ctx.theme.tone(ui::Tone::Error, c.text);
+    const gfx::Color statusColor = st.status == S::Valid ? good
+                                 : (st.status == S::Grace || st.status == S::Absent) ? warn
+                                 : st.status == S::NotConfigured ? c.textMuted : bad;
+    for (int i = 0; i < 8; ++i) {
+        const float cx = x + cw * static_cast<float>(i % 4);
+        const float cy = headerY_ + 44.f * static_cast<float>(i / 4);
+        r.drawText({cx, cy}, cells[i].label, kSmall, c.textMuted);
+        r.drawText({cx, cy + r.lineHeight(kSmall) + 1.f}, fit(r, cells[i].value, kValue, cw - 12.f), kValue, cells[i].status ? statusColor : c.text);
+    }
+    // La phrase de l'etat (ou le dernier geste).
+    const std::string line = flash_.empty() ? st.message : flash_;
+    const int tone = flash_.empty() ? (st.status == S::Valid ? 1 : st.status == S::NotConfigured ? 0 : (st.status == S::Grace || st.status == S::Absent) ? 2 : 3)
+                                    : flashTone_;
+    const gfx::Color lineColor = tone == 1 ? good : tone == 2 ? warn : tone == 3 ? bad : c.text;
+    const gfx::Rect band{x, messageY_, W, 28.f};
+    r.fillRect(band, c.headerBg);
+    r.fillRect({band.x, band.y, 3.f, band.h}, lineColor);
+    r.drawText({band.x + 10.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, line, kSmall, band.w - 16.f), kSmall, c.text);
+}
+
+ui::EventResult LicenceBody::onEvent(const ui::InputEvent& ev) {
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+        owner_.fermer();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
+}
+
+} // namespace
+
+void showLicenceWindow(App& app, int tab) {
+    app.menus().ShowDialog(std::make_unique<LicenceWindow>(app, tab), nullptr);
+}
+
+} // namespace app

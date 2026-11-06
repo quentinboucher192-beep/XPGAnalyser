@@ -1,4 +1,8 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
+#include "Licence.hpp"                 // 1.30.0
+#include "../licensing/Licensing.hpp"   // 1.30.0
+#include "../core/Edition.hpp"           // 1.30.0 : le nom de l'application (licence-demande)
+#include "../core/Version.hpp"           // 1.30.0
 #include "ScriptRunner.hpp"
 #include "ProjectExchange.hpp"   // 1.12.30 : attendre-echanges
 #include "tutorial/TutorialApp.hpp"
@@ -6047,6 +6051,35 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         std::printf("[script] deploiement %s : %s\n", what.c_str(), pane->message().c_str());
         if (pane->lastError()) fail("deploiement " + what + " : " + pane->message());
+        return Step::Yield;
+    }
+    // 1.30.0 : LES LICENCES. Le message s'ecrit dans la sortie ([script] licence ...).
+    //   licence [ONGLET]            la fenetre Licence (0 Ma licence ... 5 Parametres)
+    //   licence-importer FICHIER    importer un .xpglic (comme Activer par fichier de licence), puis l'etat
+    //   licence-demande NOM FICHIER ecrire la demande d'activation de ce PC
+    //   licence-etat                l'etat (edition, statut, la phrase)
+    if (cmd == "licence") {
+        showLicenceWindow(app_, arg(1).empty() ? 0 : std::atoi(arg(1).c_str()));
+        return Step::Yield;
+    }
+    if (cmd == "licence-importer") {
+        const auto report = licensing::importLicenseFile(arg(1));
+        licence::refresh();
+        std::printf("[script] licence-importer : %s%s\n", report.ok ? "accept\xC3\xA9 - " : "refus\xC3\xA9 - ",
+                    (report.ok ? report.state.message : report.why).c_str());
+        for (const auto& l : report.lines) std::printf("[script]   %s\n", l.c_str());
+        return Step::Yield;
+    }
+    if (cmd == "licence-demande") {
+        std::string why;
+        const bool ok = licensing::writeActivationRequest(arg(2), arg(1), {}, core::productName() + " " + XPG_ANALYZER_VERSION, &why);
+        std::printf("[script] licence-demande : %s\n", ok ? ("\xC3\xA9" "crite : " + arg(2)).c_str() : why.c_str());
+        if (!ok) fail("licence-demande : " + why);
+        return Step::Yield;
+    }
+    if (cmd == "licence-etat") {
+        const auto st = licensing::getLicenseState();
+        std::printf("[script] licence-etat : %s / %s / %s\n", licensing::statusLabel(st.status).c_str(), st.edition.c_str(), st.message.c_str());
         return Step::Yield;
     }
     // 1.27.0 : la section Execution des scripts d'une vue (l'onglet courant : les scripts de la vue).

@@ -15,6 +15,7 @@
 //    - Deposer un fichier... : l'explorateur, puis la question du depot.
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 
 #include "../ApiListKit.hpp"
@@ -206,6 +207,8 @@ bool MainAnalysisScreen::topBarLot8Action(std::string_view id) {
             return true;
         }
         auto* sim = dynamic_cast<HmiSimulationPane*>(hmiTab("simulation"));
+        // 1.30.0 : demarrer l'IHM (hmi_runtime) ; l'arreter : toujours.
+        if (id != "hmi.stop" && !(sim && sim->hmiRunning()) && !licence::gate(app_, licence::Where::Gesture, "hmi.start")) return true;
         if (const auto tab = hmiTabs_.find("simulation"); !sim && tab != hmiTabs_.end())
             sim = dynamic_cast<HmiSimulationPane*>(tab->second);   // detache dans sa fenetre
         if (!sim) {

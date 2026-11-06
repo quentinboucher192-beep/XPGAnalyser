@@ -5,6 +5,7 @@
 
 #include "KeyFile.hpp"
 #include "PublisherKey.hpp"
+#include "TestPublisherKey.hpp"   // vide sans XPG_LICENCES_CLE_ESSAI (l'option CMake) : la cle d'essai n'entre pas
 
 #include "../core/Json.hpp"
 #include "../deploy/Paths.hpp"
@@ -37,6 +38,48 @@ bool writeAll(const std::string& path, std::string_view text, std::string* why) 
 }
 
 std::string plural(long long n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
+
+std::string baseName(const std::string& path) {
+    const auto cut = path.find_last_of("/\\");
+    return cut == std::string::npos ? path : path.substr(cut + 1);
+}
+
+// Une note de plus dans `detail` (une seule fois).
+void addDetail(LicenseState& s, const std::string& note) {
+    if (note.empty() || s.detail.find(note) != std::string::npos) return;
+    s.detail = s.detail.empty() ? note : s.detail + " ; " + note;
+}
+
+constexpr const char* kNotConfiguredMessage =
+    "Les licences ne sont pas encore actives dans ce programme : il ne contient pas encore la cl\xC3\xA9 de l'\xC3\xA9" "diteur. "
+    "Toutes les fonctionnalit\xC3\xA9s sont ouvertes.";
+constexpr const char* kNotConfiguredImport =
+    "Ce programme ne peut pas encore v\xC3\xA9rifier une licence : il ne contient pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur ; mets-le \xC3\xA0 jour.";
+
+// ---- l'historique (historique.jsonl) : les lignes lisibles, dans l'ordre du fichier ----
+std::vector<core::json::Value> readHistoryLines(const std::string& path, std::vector<std::string>* raw) {
+    std::vector<core::json::Value> out;
+    if (!fileExists(path)) return out;
+    crypto::Bytes bytes;
+    std::string why;
+    if (!crypto::readFile(path, bytes, &why, 8u * 1024u * 1024u)) return out;
+    const std::string text(bytes.begin(), bytes.end());
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        std::size_t end = text.find('\n', pos);
+        if (end == std::string::npos) end = text.size();
+        std::string line = text.substr(pos, end - pos);
+        pos = end + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        core::json::Value v;
+        if (line.empty() || !core::json::parse(line, v) || !v.isObject() || v.str("kind").empty()) continue;   // illisible : ignoree
+        Seconds t = 0;
+        if (!parseIsoTime(v.str("at"), t)) continue;
+        out.push_back(std::move(v));
+        if (raw) raw->push_back(std::move(line));
+    }
+    return out;
+}
 
 // ---- l'etat protege (etat.bin) ----
 struct State {
@@ -97,6 +140,7 @@ const char* statusKey(LicenseStatus s) noexcept {
         case LicenseStatus::OtherDevice: return "other-device";
         case LicenseStatus::Absent: return "absent";
         case LicenseStatus::ClockRolledBack: return "clock-rolled-back";
+        case LicenseStatus::NotConfigured: return "non-configuree";
     }
     return "?";
 }
@@ -111,11 +155,13 @@ std::string statusLabel(LicenseStatus s) {
         case LicenseStatus::OtherDevice: return "Autre PC";
         case LicenseStatus::Absent: return "Absente";
         case LicenseStatus::ClockRolledBack: return "Horloge recul\xC3\xA9" "e";
+        case LicenseStatus::NotConfigured: return "Non activ\xC3\xA9" "es";
     }
     return "?";
 }
 
 bool LicenseState::hasFeature(std::string_view id) const noexcept {
+    if (allFeaturesOpen(status)) return true;   // les licences ne sont pas actives : rien n'est verrouille
     return std::any_of(features.begin(), features.end(), [&](const FeatureGrant& g) { return g.id == id; });
 }
 
@@ -129,15 +175,27 @@ std::optional<std::int64_t> LicenseState::limit(std::string_view feature, std::s
 
 std::vector<TrustedKey> compiledPublisherKeys() {
     std::vector<TrustedKey> out;
-    for (const auto& k : publisher::kKeys) {
+    const auto add = [&](const publisher::KeyEntry& k) {
         TrustedKey t;
         std::copy(std::begin(k.key), std::end(k.key), t.key.begin());
         t.id = keyIdOf(t.key);
         t.name = k.name;
         t.test = k.test;
         out.push_back(std::move(t));
-    }
+    };
+    for (const auto& k : publisher::kKeys) add(k);
+#ifdef XPG_LICENCES_CLE_ESSAI
+    for (const auto& k : publisher::kTestKeys) add(k);   // la cle d'ESSAI : une construction de captures, jamais livree
+#endif
     return out;
+}
+
+bool testKeyCompiled() noexcept {
+#ifdef XPG_LICENCES_CLE_ESSAI
+    return true;
+#else
+    return false;
+#endif
 }
 
 // ======================================================================= le magasin ==
@@ -162,7 +220,7 @@ struct LicenseStore::Loaded {
 };
 
 LicenseStore::LicenseStore(StoreOptions options) : opt_(std::move(options)) {
-    if (opt_.trustedKeys.empty()) opt_.trustedKeys = compiledPublisherKeys();
+    if (opt_.trustedKeys.empty() && opt_.compiledKeys) opt_.trustedKeys = compiledPublisherKeys();
     if (opt_.clockTolerance < 0) opt_.clockTolerance = 0;
 }
 
@@ -217,10 +275,35 @@ bool readStoredBlock(const std::string& path, DocKind kind, SignedBlock& out, st
 
 } // namespace
 
+std::string LicenseStore::notWritable(const std::string& why) const {
+    return "ce compte ne peut pas \xC3\xA9" "crire dans le dossier des licences de ce PC (" + opt_.folder + ") : " + why
+           + " ; une installation pour tous les comptes donne ce droit \xC3\xA0 chaque compte";
+}
+
 LicenseState LicenseStore::evaluate() {
     const Seconds t = now();
-    Loaded in;
     const std::string dir = opt_.folder;
+    if (!configured()) {
+        // Aucune cle de l'editeur : rien ne peut etre verifie, tout est ouvert ; rien n'est ecrit.
+        LicenseState s;
+        s.status = LicenseStatus::NotConfigured;
+        s.evaluatedAt = t;
+        s.message = kNotConfiguredMessage;
+        s.detail = "aucune cl\xC3\xA9 de l'\xC3\xA9" "diteur n'est compil\xC3\xA9" "e dans ce programme (src/licensing/PublisherKey.hpp est vide)";
+        registry_.reset();
+        license_.reset();
+        deviceKeyHex_.clear();
+        const std::string kp = deploy::joinPath(dir, kDeviceKeyFile);
+        if (fileExists(kp)) {
+            std::string why;
+            if (auto key = SigningKey::load(kp, deviceKeySpec(), &why)) {
+                deviceKeyHex_ = key->publicKeyHex();
+                s.deviceFingerprint = key->fingerprint();
+            }
+        }
+        return s;
+    }
+    Loaded in;
     const std::string statePath = deploy::joinPath(dir, kStateFile);
     in.state = readState(statePath, &in.stateNote);
     const State before = in.state;
@@ -320,20 +403,94 @@ LicenseState LicenseStore::evaluate() {
     }
 
     LicenseState s = judge(in, t);
+    // Ce que l'ecran Licence montre sans relire de fichier.
+    registry_ = in.hasRegistry ? std::optional<Registry>(in.registry) : std::nullopt;
+    license_ = in.licenseRead ? std::optional<License>(in.license) : std::nullopt;
+    deviceKeyHex_ = in.deviceKeyHex;
 
     // ---- l'heure la plus tardive vue, et les numeros : gardes s'ils avancent (jamais en arriere).
     State after = in.state;
     if (s.status != LicenseStatus::ClockRolledBack) after.latestSeen = std::max(after.latestSeen, t);
     const bool changed = !before.found || after.registryMax != before.registryMax || after.revocationsMax != before.revocationsMax
                          || after.latestSeen >= before.latestSeen + 60;
+    std::string unwritten;   // ce qui ne s'ecrit pas (un dossier ou ce compte n'ecrit pas) : dit une fois
     if (changed) {
         std::error_code ec;
         std::filesystem::create_directories(P(dir), ec);
         std::string w;
-        if (!writeState(statePath, after, &w) && s.detail.empty()) s.detail = "l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 ne s'\xC3\xA9" "crit pas : " + w;
+        if (!writeState(statePath, after, &w)) unwritten = "l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 ne s'\xC3\xA9" "crit pas (" + w + ")";
     }
     if (!in.stateNote.empty() && s.detail.empty()) s.detail = in.stateNote;
+    if (const std::string w = noteState(s); !w.empty()) unwritten += (unwritten.empty() ? "" : ", ") + w;
+    if (!unwritten.empty()) addDetail(s, notWritable(unwritten));
     return s;
+}
+
+// ==================================================================== l'historique ==
+std::vector<HistoryEvent> LicenseStore::history(int limit) const {
+    std::vector<HistoryEvent> out;
+    const auto lines = readHistoryLines(deploy::joinPath(opt_.folder, kHistoryFile), nullptr);
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
+        if (limit > 0 && static_cast<int>(out.size()) >= limit) break;
+        HistoryEvent e;
+        (void)parseIsoTime(it->str("at"), e.at);
+        e.kind = it->str("kind");
+        e.ok = it->flag("ok");
+        e.text = it->str("text");
+        out.push_back(std::move(e));
+    }
+    return out;
+}
+
+bool LicenseStore::addHistory(const HistoryEvent& e, std::string_view statusKey, std::string* why) {
+    const std::string path = deploy::joinPath(opt_.folder, kHistoryFile);
+    std::vector<std::string> raw;
+    (void)readHistoryLines(path, &raw);   // les lignes illisibles ne sont pas recopiees
+    core::json::Value v = core::json::Value::object();
+    v.set("at", isoTime(e.at));
+    v.set("kind", e.kind);
+    v.set("ok", e.ok);
+    if (!statusKey.empty()) v.set("status", std::string(statusKey));
+    v.set("text", e.text);
+    raw.push_back(core::json::write(v, false));
+    if (raw.size() > kHistoryMaxLines) raw.erase(raw.begin(), raw.begin() + static_cast<std::ptrdiff_t>(raw.size() - kHistoryMaxLines));
+    std::string text;
+    for (const auto& l : raw) text += l + "\n";
+    return writeAll(path, text, why);
+}
+
+std::string LicenseStore::lastLoggedStatus() const {
+    const auto lines = readHistoryLines(deploy::joinPath(opt_.folder, kHistoryFile), nullptr);
+    for (auto it = lines.rbegin(); it != lines.rend(); ++it)
+        if (it->str("kind") == "etat") return it->str("status");
+    return {};
+}
+
+// Un changement d'etat constate (de Valide a Grace...) : une ligne "etat" dans l'historique. Le
+// dernier etat note est relu dans le fichier (un autre programme de ce PC a pu le noter deja).
+// Rend ce qui ne s'est pas ecrit (vide : rien a dire).
+std::string LicenseStore::noteState(const LicenseState& s) {
+    const std::string key = statusKey(s.status);
+    if (key == lastStatus_) return {};
+    lastStatus_ = key;
+    const std::string prev = lastLoggedStatus();
+    if (prev == key) return {};
+    std::string prevLabel;
+    for (int i = 0; i <= static_cast<int>(LicenseStatus::NotConfigured); ++i)
+        if (prev == statusKey(static_cast<LicenseStatus>(i))) prevLabel = statusLabel(static_cast<LicenseStatus>(i));
+    HistoryEvent e;
+    e.at = s.evaluatedAt;
+    e.kind = "etat";
+    e.ok = statusIsNormal(s.status);
+    e.text = (prevLabel.empty() ? std::string() : prevLabel + " \xE2\x86\x92 ") + statusLabel(s.status) + " : " + s.message;
+    if (deferState_) {
+        pendingState_ = e;
+        pendingStatus_ = key;
+        return {};
+    }
+    std::string w;
+    if (!addHistory(e, key, &w)) return "l'historique ne s'\xC3\xA9" "crit pas (" + w + ")";
+    return {};
 }
 
 LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
@@ -476,15 +633,53 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
 ImportReport LicenseStore::importFile(const std::string& path) {
     std::string bytes, why;
     if (!readAll(path, bytes, &why)) {
+        deferState_ = true;
         ImportReport r;
-        r.why = why;
+        r.why = "Ce fichier ne se lit pas : " + why + ".";
         r.state = evaluate();
-        return r;
+        deferState_ = false;
+        return finishImport(std::move(r));
     }
     return importBytes(bytes);
 }
 
 ImportReport LicenseStore::importBytes(std::string_view bytes) {
+    deferState_ = true;
+    ImportReport r;
+    if (!configured()) {
+        r.why = kNotConfiguredImport;
+        r.state = evaluate();
+    } else {
+        r = importChecked(bytes);
+    }
+    deferState_ = false;
+    return finishImport(std::move(r));
+}
+
+// L'import dans l'historique (accepte : ce qui a ete installe ; refuse : la raison), puis le
+// changement d'etat qu'il a amene.
+ImportReport LicenseStore::finishImport(ImportReport rep) {
+    HistoryEvent e;
+    e.at = now();
+    e.kind = "import";
+    e.ok = rep.ok;
+    if (rep.ok) {
+        for (const auto& l : rep.lines) e.text += (e.text.empty() ? "" : " ") + l;
+        if (e.text.empty()) e.text = "Import : rien de nouveau.";
+    } else {
+        e.text = "Refus\xC3\xA9 : " + rep.why;
+    }
+    std::string w;
+    bool written = addHistory(e, "", &w);
+    if (pendingState_) {
+        written = addHistory(*pendingState_, pendingStatus_, written ? &w : nullptr) && written;
+        pendingState_.reset();
+    }
+    if (!written) addDetail(rep.state, notWritable("l'historique ne s'\xC3\xA9" "crit pas (" + w + ")"));
+    return rep;
+}
+
+ImportReport LicenseStore::importChecked(std::string_view bytes) {
     ImportReport rep;
     const auto refuse = [&](const std::string& text) {
         rep.ok = false;
@@ -624,9 +819,10 @@ ImportReport LicenseStore::importBytes(std::string_view bytes) {
     // Tout est accepte : on ecrit (chaque fichier remplace en une fois).
     std::error_code ec;
     std::filesystem::create_directories(P(dir), ec);
-    if (writeReg && !writeAll(deploy::joinPath(dir, kRegistryFile), writeBlock(*regB), &why)) return refuse("Le registre ne s'\xC3\xA9" "crit pas : " + why + ".");
-    if (writeRev && !writeAll(deploy::joinPath(dir, kRevocationsFile), writeBlock(*revB), &why)) return refuse("La liste de r\xC3\xA9vocation ne s'\xC3\xA9" "crit pas : " + why + ".");
-    if (writeLic && !writeAll(deploy::joinPath(dir, kLicenseFile), writeBlock(*licB), &why)) return refuse("La licence ne s'\xC3\xA9" "crit pas : " + why + ".");
+    if (writeReg && !writeAll(deploy::joinPath(dir, kRegistryFile), writeBlock(*regB), &why)) return refuse("Le registre ne s'\xC3\xA9" "crit pas : " + notWritable(why) + ".");
+    if (writeRev && !writeAll(deploy::joinPath(dir, kRevocationsFile), writeBlock(*revB), &why))
+        return refuse("La liste de r\xC3\xA9vocation ne s'\xC3\xA9" "crit pas : " + notWritable(why) + ".");
+    if (writeLic && !writeAll(deploy::joinPath(dir, kLicenseFile), writeBlock(*licB), &why)) return refuse("La licence ne s'\xC3\xA9" "crit pas : " + notWritable(why) + ".");
     if (writeReg) st.registryMax = std::max(st.registryMax, reg.number);
     if (writeRev) st.revocationsMax = std::max(st.revocationsMax, rev.number);
     if (writeReg || writeRev) (void)writeState(statePath, st, &why);
@@ -646,6 +842,25 @@ bool LicenseStore::deviceKey(std::string& hex, std::string* why) {
 
 bool LicenseStore::writeActivationRequest(const std::string& path, const std::string& deviceName, const std::string& licenseId,
                                           const std::string& software, std::string* why) {
+    std::string w;
+    const bool ok = writeRequestFile(path, deviceName, licenseId, software, &w);
+    HistoryEvent e;
+    e.at = now();
+    e.kind = "demande";
+    e.ok = ok;
+    std::string what = baseName(path);
+    if (!deviceName.empty()) what += ", PC \xC2\xAB " + deviceName + " \xC2\xBB";
+    if (!licenseId.empty()) what += ", licence " + licenseId;
+    e.text = ok ? "Demande d'activation \xC3\xA9" "crite (" + what + ") : \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur."
+                : "Demande d'activation non \xC3\xA9" "crite (" + what + ") : " + w;
+    std::string hw;
+    (void)addHistory(e, "", &hw);   // un dossier ou ce compte n'ecrit pas : la demande l'a deja dit
+    if (!ok && why) *why = w;
+    return ok;
+}
+
+bool LicenseStore::writeRequestFile(const std::string& path, const std::string& deviceName, const std::string& licenseId,
+                                    const std::string& software, std::string* why) {
     auto key = SigningKey::loadOrCreate(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), "", why);
     if (!key) return false;
     ActivationRequest q;

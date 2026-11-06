@@ -12,6 +12,7 @@
 //  les moins utiles s'effacent (les raccourcis d'abord).
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0
 #include "../../core/Edition.hpp"   // 1.12.0 : la bande d'etat de chaque application
 #include "../hmi/HmiSimulation.hpp"   // 1.12.0 : l'etat de la simulation de l'IHM (IHM Studio)
 
@@ -183,6 +184,9 @@ struct MainAnalysisScreen::StatusStripState {
     StatusChip*    theme{nullptr};
     StatusChip*    save{nullptr};
     StatusChip*    keys{nullptr};
+    StatusChip*    licence{nullptr};    // 1.30.0 : la licence de ce PC (un clic : la fenetre Licence)
+    std::string    licenceText;
+    double         licenceAt{-1e9};
     PopupMenu*     menu{nullptr};
     int            menuKind{0};         // 0 : ferme ; 1 : le journal ; 2 : le zoom ; 3 : les themes
     std::vector<std::string> journalTargets;    // la cible de chaque ligne du menu du journal
@@ -350,10 +354,15 @@ void MainAnalysisScreen::buildStatusStrip(OverlayHost& host) {
     st.save->setOnClick([this] {
         if (app_.project() && app_.commands().isModified()) (void)app_.actions().trigger("project.save", app_.commands());
     });
+    // 1.30.0 : la licence - l'edition et la fin, ou << Licences non activees >> ; un clic ouvre la fenetre Licence.
+    st.licence = &chip("analysis.status.licence", 35);
+    st.licence->setIcon(Icon::Lock);
+    st.licence->setOnClick([this] { showLicenceWindow(app_); });
+    st.licence->setShown(false);
     st.keys = &chip("analysis.status.keys", 10);
     st.keys->setMuted(true);
     if (st.quiet)
-        for (auto* c : {st.when, st.selection, st.errors, st.warnings, st.sim, st.target, st.zoom, st.theme, st.save, st.keys})
+        for (auto* c : {st.when, st.selection, st.errors, st.warnings, st.sim, st.target, st.zoom, st.theme, st.save, st.keys, st.licence})
             c->setQuiet(true);
     status_->addIndicator(std::move(strip), StatusBar::Slot::Right);
 
@@ -394,6 +403,19 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
     auto& st = *strip_;
     const auto project = app_.project();
     const auto tip = [&st](StatusChip* c, std::string text) { if (!st.quiet) c->setTooltip(std::move(text)); };
+
+    // 1.30.0 : la licence (la pastille ; l'etat se revalue une fois par heure, ou apres un import).
+    if (st.licence && now - st.licenceAt >= 1.0) {
+        st.licenceAt = now;
+        const auto b = licence::badge();
+        if (b.text != st.licenceText) {
+            st.licenceText = b.text;
+            st.licence->setText(b.text);
+            st.licence->setShown(!b.text.empty());
+            st.licence->setTone(b.tone == 1 ? Tone::Ok : b.tone == 2 ? Tone::Warning : b.tone == 3 ? Tone::Error : Tone::None);
+            tip(st.licence, b.tip);
+        }
+    }
 
     // Le dernier message : son heure et le chevron du journal.
     if (!st.journal.entries().empty()) st.when->setText(st.journal.entries().front().time.substr(0, 5));

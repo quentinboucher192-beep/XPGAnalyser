@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.29.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.30.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.29.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 19 h 06"},
     {"1.28.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 14 h 28"},
     {"1.27.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 11 h 31"},
     {"1.26.1", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 09 h 25"},
@@ -172,6 +173,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.30.0 : les licences - la fenetre Licence, l'activation par fichier, les entrees verrouillees
+        note("1.30.0", "Projet", Kind::New,
+         "LA FEN\xC3\x8ATRE LICENCE : Aide \xE2\x80\xBA Licence\xE2\x80\xA6, ou la pastille Licence de la barre d'\xC3\xA9tat. L'\xC3\xA9" "dition, le statut, le client, les PC, "
+         "la fin ; six onglets : Ma licence, Mes appareils, Fonctionnalit\xC3\xA9s (ouvertes ou non, leurs limites, o\xC3\xB9 elles sont dans le "
+         "programme), \xC3\x89" "ditions, Historique, Param\xC3\xA8tres. La licence est sign\xC3\xA9" "e par l'\xC3\xA9" "diteur et v\xC3\xA9rifi\xC3\xA9" "e hors ligne, au lancement "
+         "puis une fois par heure.",
+         "licence", ""),
+        note("1.30.0", "Projet", Kind::New,
+         "L'ACTIVATION PAR FICHIER : Demander une activation\xE2\x80\xA6 \xC3\xA9" "crit un fichier .xpgreq (la cl\xC3\xA9 publique de ce PC et le nom que tu "
+         "lui donnes, rien de son mat\xC3\xA9riel) ; l'\xC3\xA9" "diteur te renvoie un .xpglic ; Activer par fichier de licence\xE2\x80\xA6 l'installe s'il vaut "
+         "pour ce PC, maintenant - sinon rien ne change et la raison est dite.",
+         "licence", ""),
+        note("1.30.0", "Projet", Kind::New,
+         "LES ENTR\xC3\x89" "ES \xC2\xAB PAS DANS TA LICENCE \xC2\xBB : une fonctionnalit\xC3\xA9 ferm\xC3\xA9" "e garde sa place ; un clic dit pourquoi, et Licence\xE2\x80\xA6 l'explique. "
+         "Ouvrir, Enregistrer, Exporter le projet, Fermer et Quitter ne sont jamais verrouill\xC3\xA9s, et une licence qui prend fin ne ferme "
+         "rien. Tant que ce programme n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur, les licences sont \xC2\xAB non activ\xC3\xA9" "es \xC2\xBB : tout est ouvert.",
+         "licence", ""),
         // 1.29.0 : le deploiement reseau, etape 2 - deployer, revenir, l'agent avec la session
         note("1.29.0", "Projet", Kind::New,
          "D\xC3\x89PLOYER LE POSTE D'EXPLOITATION : D\xC3\xA9ploiement r\xC3\xA9seau \xE2\x80\xBA D\xC3\xA9ployer, sur une machine appair\xC3\xA9" "e. Le package du projet FINISH "

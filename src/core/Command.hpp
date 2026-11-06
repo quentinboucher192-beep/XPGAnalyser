@@ -347,6 +347,8 @@ struct Action {
 class ActionRegistry {
 public:
     void add(Action a) { actions_.emplace(a.id, std::move(a)); }
+    // 1.30.0 : remplacer une action deja inscrite (les licences enveloppent celles d'une fonctionnalite).
+    void replace(Action a) { actions_.insert_or_assign(a.id, std::move(a)); }
     [[nodiscard]] const Action* find(ActionId id) const {
         auto it = actions_.find(id);
         return it == actions_.end() ? nullptr : &it->second;

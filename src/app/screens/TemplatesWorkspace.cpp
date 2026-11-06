@@ -16,6 +16,7 @@
 //  (HmiImportDialog), puis tout en une commande.
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0
 
 #include "../App.hpp"
 #include "../Settings.hpp"
@@ -374,6 +375,7 @@ void MainAnalysisScreen::askHmiSaveTemplate(std::uint64_t viewId) {
 void MainAnalysisScreen::askHmiExportViews(std::uint64_t selectedView) {
     auto doc = app_.hmi();
     if (!doc || doc->project.views.empty()) return;
+    if (!licence::gate(app_, licence::Where::Gesture, "vues.exporter")) return;   // 1.30.0 (le projet, lui, s'exporte toujours)
     HmiAskDialog::Spec spec;
     spec.id = "dialog.hmiExportViews";
     spec.title = "Exporter les vues";
@@ -447,6 +449,7 @@ void MainAnalysisScreen::askHmiExportViews(std::uint64_t selectedView) {
 void MainAnalysisScreen::askHmiImportViews(const std::string& path) {
     auto doc = app_.hmi();
     if (!doc) return;
+    if (path.empty() && !licence::gate(app_, licence::Where::Gesture, "vues.importer")) return;   // 1.30.0
     if (path.empty()) {
         // Le fichier : les paquets du dossier exports/ du projet sont proposes.
         std::string found;

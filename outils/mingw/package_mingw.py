@@ -16,6 +16,9 @@
 #       passees par /D : API-IHM-Studio-Setup-<version>.exe a la racine du projet ;
 #    4. dist/SHA256SUMS.txt.
 #  Le runtime C++ est lie dans l'exe (-static) : pas de DLL du runtime a livrer.
+#  1.30.0 : licences\registre.xpgreg, le registre des licences signe, s'il est dans
+#  ressources-licences/ (sinon rien, et la sortie le dit) ; le controle du paquet
+#  (--controler) verifie qu'il est signe par une cle de PublisherKey.hpp.
 #
 #    python3 outils/mingw/package_mingw.py --iscc /chemin/ISCC.exe
 #        [--exe build-mingw/XpgAnalyzer.exe] [--sdl third_party/SDL3/lib/x64/SDL3.dll]
@@ -112,6 +115,10 @@ SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi
 #   - une cle privee : un bloc PEM << PRIVATE KEY >> suivi de son contenu (l'en-tete seul est une
 #     chaine de mbedTLS, dans les exe : ce n'est pas une cle), un fichier de cle (*.cle, cle_editeur.bin) ;
 #   - un jeton GitHub (ghp_..., github_pat_...).
+# 1.30.0 : le registre livre (licences\registre.xpgreg, s'il y est) doit etre signe par une cle que les
+# programmes croient (src/licensing/PublisherKey.hpp) - jamais par la cle d'essai.
+# Le MEME controle est dans outils/lib/package.ps1 (Test-XpgLivraison) : memes chaines, memes motifs
+# (ecrits sans \b, pour que .NET et Python les lisent pareil), memes noms. Changer l'un, c'est changer l'autre.
 ADMIN_CHAINES = (
     (b"XPG-License-Admin", "le nom de l'outil Admin des licences"),
     (b"XPG License Manager Admin", "le nom de l'outil Admin des licences"),
@@ -120,14 +127,46 @@ ADMIN_CHAINES = (
 )
 ADMIN_MOTIFS = (
     (re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}"), "une cle privee (bloc PEM)"),
-    (re.compile(rb"\bgh[pousr]_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{50,}"), "un jeton GitHub"),
+    (re.compile(rb"(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{50,}"), "un jeton GitHub"),
 )
 ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*")
 
 
+REGISTRE_LIVRE = os.path.join("licences", "registre.xpgreg")   # 1.30.0 : le registre des editions livre
+
+
+def cles_compilees(nom):
+    """Les identifiants des cles d'un fichier ecrit par exporter-cle (src/licensing/<nom>)."""
+    chemin = os.path.join(ROOT, "src", "licensing", nom)
+    if not os.path.isfile(chemin):
+        return set()
+    with open(chemin, encoding="ascii", errors="replace") as f:
+        return set(re.findall(r'\{"(xpg-[0-9a-f]{16})",', f.read()))
+
+
+def controle_registre(dossier):
+    """Le registre livre : signe par une cle des programmes (PublisherKey.hpp), jamais par la cle d'essai."""
+    chemin = os.path.join(dossier, REGISTRE_LIVRE)
+    if not os.path.isfile(chemin):
+        return []
+    with open(chemin, "rb") as f:
+        data = f.read()
+    m = re.match(rb"XPG-LICENSING 1 registre ([0-9]+)\n", data)
+    cles = re.findall(rb"\nSIGNATURE ed25519 (xpg-[0-9a-f]{16}) [0-9a-f]{128}\n", data)
+    if not m or len(cles) != 1:
+        return [(REGISTRE_LIVRE, "le registre livre n'est pas un registre signe (un seul bloc XPG-LICENSING registre)")]
+    cle = cles[0].decode("ascii")
+    if cle in cles_compilees("TestPublisherKey.hpp"):
+        return [(REGISTRE_LIVRE, f"le registre livre est signe par la cle d'ESSAI ({cle}) : signe-le avec la vraie cle")]
+    if cle not in cles_compilees("PublisherKey.hpp"):
+        return [(REGISTRE_LIVRE, f"le registre livre est signe par la cle {cle}, que src/licensing/PublisherKey.hpp ne contient pas : "
+                                 "les programmes ne pourraient pas le verifier")]
+    return []
+
+
 def controle_livraison(dossier):
     """Les ecarts trouves dans le dossier a livrer : [(chemin relatif, ce qui est trouve)] ; vide : rien."""
-    ecarts = []
+    ecarts = controle_registre(dossier)
     motifs = [(c, quoi) for c, quoi in ADMIN_CHAINES] + [(c.decode("ascii").encode("utf-16-le"), quoi) for c, quoi in ADMIN_CHAINES]
     for base, _dirs, files in os.walk(dossier):
         for name in sorted(files):
@@ -300,6 +339,15 @@ def main():
                f"anciens_dossiers = {ini('Installateur', 'anciens_dossiers')}")
     lic = os.path.join(st, "licences")
     os.makedirs(lic)
+    # 1.30.0 : le registre des editions et fonctionnalites, signe par l'editeur avec sa vraie cle (docs/LICENCES.md) :
+    # installe dans {app}\licences\registre.xpgreg, les programmes l'adoptent s'il est plus recent que celui du PC.
+    registre = os.path.join(ROOT, "ressources-licences", "registre.xpgreg")
+    if os.path.isfile(registre):
+        shutil.copy2(registre, os.path.join(st, REGISTRE_LIVRE))
+        print("registre des licences : ressources-licences/registre.xpgreg -> licences\\registre.xpgreg")
+    else:
+        print("registre des licences : ressources-licences/registre.xpgreg absent - aucun registre livre "
+              "(il sera signe par l'editeur avec sa vraie cle)")
     shutil.copy2(os.path.join(ROOT, "third_party", "SDL3", "LICENSE.txt"), os.path.join(lic, "SDL3-LICENSE.txt"))
     # 1.28.0 : mbedTLS (Apache-2.0) et libsodium (ISC), dans les exe (le deploiement reseau).
     shutil.copy2(os.path.join(ROOT, "third_party", "mbedtls", "LICENSE"), os.path.join(lic, "mbedtls-LICENSE.txt"))

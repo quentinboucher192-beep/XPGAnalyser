@@ -13,6 +13,7 @@
 //  blocs, l'ordre, les variables et les tables d'animation suivent (lots 3 a 5).
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio ne prepare pas d'automate
 #include "../SectionComparePane.hpp"   // 1.8.0 : le comparateur de sections
 #include "../../project/ProjectIcon.hpp"
@@ -273,6 +274,7 @@ ui::Widget* MainAnalysisScreen::apiPaneContent(const std::string& key, bool open
 // ------------------------------------------------------- les onglets ----
 void MainAnalysisScreen::openApiPane(const std::string& key) {
     if (!centre_) return;
+    if (!licence::gate(app_, licence::Where::ApiPane, key)) return;   // 1.30.0 : un onglet d'une fonctionnalite
     if (auto* page = apiTab(key)) {
         // Lot 7 : en onglet (devant), ou dans sa fenetre detachee (devant) -
         // jamais un deuxieme volet pour le meme onglet.
@@ -619,7 +621,7 @@ void MainAnalysisScreen::onApiRequest(const std::string& key) {
     } else if (key == "didacticiel" || key.rfind("didacticiel:", 0) == 0) {
         openApiTutorial(key.size() > 12 ? key.substr(12) : std::string{});      // lot API 7
     } else if (key == "bibliotheque") {
-        openMacros("MettreAJourBibliotheque", /*launch=*/true);
+        if (licence::gate(app_, licence::Where::ApiPane, "bibliotheque")) openMacros("MettreAJourBibliotheque", /*launch=*/true);   // 1.30.0
     } else if (key == "import-xhw") {
         importHardwareIntoProject();   // lot API 4 : dans le projet ouvert, en une commande
     } else if (key == "macros") {

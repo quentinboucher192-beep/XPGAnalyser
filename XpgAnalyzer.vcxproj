@@ -572,6 +572,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileViewer.cpp" />
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
+    <ClCompile Include="src\app\Licence.cpp" />
+    <ClCompile Include="src\app\LicenceWindow.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\PerfPane.cpp" />
     <ClCompile Include="src\app\ProjectExchange.cpp" />
@@ -1173,6 +1175,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileView.hpp" />
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
+    <ClInclude Include="src\app\Licence.hpp" />
+    <ClInclude Include="src\app\LicenceWindow.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\PerfPane.hpp" />
     <ClInclude Include="src\app\ProjectExchange.hpp" />
@@ -1395,8 +1399,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\licensing\KeyFile.hpp" />
     <ClInclude Include="src\licensing\Licensing.hpp" />
     <ClInclude Include="src\licensing\PublisherKey.hpp" />
+    <ClInclude Include="src\licensing\PublisherKeyEntry.hpp" />
     <ClInclude Include="src\licensing\SignedFile.hpp" />
     <ClInclude Include="src\licensing\Store.hpp" />
+    <ClInclude Include="src\licensing\TestPublisherKey.hpp" />
     <ClInclude Include="src\licensing\Time.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -32,6 +32,7 @@
 
 namespace license_admin {
 
+namespace crypto = deploy::crypto;
 using licensing::Seconds;
 using licensing::SigningKey;
 
@@ -52,15 +53,48 @@ inline constexpr const char* kPublisherKeyFile = "cle-editeur-licences.cle";
 [[nodiscard]] std::unique_ptr<SigningKey> createPublisherKey(const std::string& folder, const std::string& name, bool test, std::string* why);
 [[nodiscard]] std::unique_ptr<SigningKey> loadPublisherKey(const std::string& folder, std::string* why);
 
-// Le fichier src/licensing/PublisherKey.hpp pour cette cle.
+// ---- les cles publiques en C++ (exporter-cle) ----------------------------------------
+//  src/licensing/PublisherKey.hpp      les VRAIES cles (kKeys) ; vide : aucune cle, les
+//                                      licences ne sont pas actives (NotConfigured) ;
+//  src/licensing/TestPublisherKey.hpp  les cles d'ESSAI (kTestKeys), compilees seulement
+//                                      avec l'option CMake XPG_LICENCES_CLE_ESSAI.
+//  Une cle d'essai ne va jamais dans PublisherKey.hpp, une vraie jamais dans
+//  TestPublisherKey.hpp. Plusieurs cles (une rotation) : `keep` garde celles du fichier.
+inline constexpr const char* kPublisherHeaderName = "PublisherKey.hpp";
+inline constexpr const char* kTestPublisherHeaderName = "TestPublisherKey.hpp";
+
+struct ExportedKey {
+    std::string       id;      // keyIdOf(key)
+    std::string       name;
+    bool              test{false};
+    crypto::PublicKey key{};
+};
+[[nodiscard]] ExportedKey exportedKeyOf(const SigningKey& key);
+
+// Le C++ d'une liste de cles, toutes du genre du fichier (`test`).
+[[nodiscard]] std::string publisherKeyHeader(const std::vector<ExportedKey>& keys, bool test, Seconds now);
+// Le fichier pour cette seule cle (PublisherKey.hpp ; une cle d'essai : TestPublisherKey.hpp).
 [[nodiscard]] std::string publisherKeyHeader(const SigningKey& key, Seconds now);
+// Relire un fichier ecrit par publisherKeyHeader : ses cles et son genre (`test`). Chaque
+// identifiant est verifie (celui de sa cle). Faux : `why`.
+bool readPublisherKeyHeader(std::string_view text, std::vector<ExportedKey>& keys, bool& test, std::string* why);
+
+// exporter-cle : le texte a ecrire dans `outName` (le nom du fichier de sortie, pour le
+// controle du genre). `empty` : le fichier SANS cle (`key` ignore) ; sinon `key` est ajoutee,
+// aux cles deja dans `existing` (le fichier actuel) si `keep`, seule sinon. `summary` : ce qui
+// est ecrit, et les cles qui en sortent. Faux : `why`.
+bool exportPublisherKeys(const SigningKey* key, std::string_view existing, const std::string& outName, bool keep, bool empty, Seconds now,
+                         std::string& out, std::string* why, std::string* summary);
 
 // Signer un registre ecrit a la main (JSON : number, unlicensed_edition,
 // features, editions ; format, version et issued_at sont ajoutes s'ils manquent).
 // `out` : le fichier .xpgreg. Faux : `why`.
 bool signRegistry(const SigningKey& key, std::string_view inputJson, Seconds now, std::string& out, std::string* why);
 // Signer une liste de revocation (JSON : number, revoked[] ; revoked_at manquant : maintenant).
-bool signRevocations(const SigningKey& key, std::string_view inputJson, Seconds now, std::string& out, std::string* why);
+// `records` (facultatif) : une ligne du registre des activations par licence ou PC revoque.
+struct ActivationRecord;
+bool signRevocations(const SigningKey& key, std::string_view inputJson, Seconds now, std::string& out, std::string* why,
+                     std::vector<ActivationRecord>* records = nullptr);
 
 struct LicenseInputs {
     std::string              params;        // le JSON des parametres (license_id, customer, edition...)
@@ -71,11 +105,64 @@ struct LicenseInputs {
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
 // `summary` : ce qui a ete signe, en une ligne par fait.
-bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, std::string& out, std::string* why, std::string* summary);
+// `records` (facultatif) : une ligne du registre des activations par PC lie.
+bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, std::string& out, std::string* why, std::string* summary,
+                 std::vector<ActivationRecord>* records = nullptr);
 
 // Lire un fichier signe et dire ce qu'il contient, et si chaque signature est
 // bonne (celle de `key` pour licence, registre, revocations ; celle du PC pour une
 // demande). Faux : un bloc est refuse.
 bool describeFile(std::string_view bytes, const SigningKey* key, std::string& text);
+
+// ---- 1.30.0 : LE REGISTRE DES ACTIVATIONS ------------------------------------------------------------
+//  Sans service en ligne, l'editeur ne connait que les PC qui lui envoient une demande d'activation.
+//  L'outil tient, dans le dossier de la cle (--dossier), activations.jsonl : une ligne JSON par
+//  evenement, AJOUTEE A LA FIN (le fichier n'est jamais reecrit) :
+//    "licence"     a chaque signer-licence, une ligne par PC lie (et "extension" quand --licence
+//                  etendait une licence existante) ;
+//    "demande"     enregistrer-demande : une demande recue, pas encore signee ;
+//    "revocation"  a chaque signer-revocations, une ligne par licence (ou PC) revoque.
+//  Rien du materiel : la demande n'en porte pas ; l'Admin ne voit que ce que les clients lui envoient.
+//  Voir CHAQUE LANCEMENT du logiciel demandera le service de licences en ligne (docs/LICENCES.md, par. 12).
+inline constexpr const char* kActivationsFile = "activations.jsonl";
+[[nodiscard]] std::string activationsPath(const std::string& folder);
+
+struct ActivationRecord {
+    std::string kind;           // "licence", "demande", "revocation"
+    Seconds     at{0};          // l'heure de l'enregistrement
+    std::string licenseId, customer, edition, type;   // type : "perpetual", "temporary"...
+    Seconds     expiresAt{0};   // 0 : sans fin
+    std::string deviceKey;      // la cle publique du PC (64 hexadecimaux) ; vide : toute la licence (une revocation)
+    std::string deviceName;     // le nom donne au PC par le client
+    std::string fingerprint;    // l'empreinte courte et lisible de sa cle
+    std::string software;       // le logiciel et sa version, tels que la demande les porte ("IHM Studio 1.30.0")
+    Seconds     requestedAt{0}; // la date de la demande (0 : inconnue - un PC garde d'une licence etendue)
+    Seconds     activatedAt{0};
+    Seconds     signedAt{0};
+    bool        extension{false};
+    Seconds     revokedAt{0};
+    std::string reason;
+};
+
+// Une demande d'activation recue (verifiee : signee par la cle du PC qu'elle porte) -> sa ligne "demande".
+bool requestRecord(std::string_view requestBytes, Seconds now, ActivationRecord& out, std::string* why);
+// Ajouter des lignes a la fin de activations.jsonl (le dossier est cree s'il le faut). Faux : `why`.
+bool appendActivations(const std::string& folder, const std::vector<ActivationRecord>& records, std::string* why);
+// Relire le registre (les lignes illisibles sont comptees dans `skipped` et ignorees). Absent : vide, vrai.
+bool readActivations(const std::string& folder, std::vector<ActivationRecord>& out, int* skipped, std::string* why);
+
+// Un PC connu : le dernier etat de chacun (par cle de PC), a la date `now`.
+struct KnownDevice {
+    std::string deviceKey, name, fingerprint, customer, licenseId, edition, software;
+    Seconds     requestedAt{0}, activatedAt{0}, expiresAt{0}, revokedAt{0};
+    std::string state;          // "demande", "active", "revoque", "expire"
+};
+[[nodiscard]] std::vector<KnownDevice> knownDevices(const std::vector<ActivationRecord>& records, Seconds now);
+// Garder ceux d'une licence (`licenseId`, exact) et d'un client (`customer` : contenu, sans tenir compte de la casse).
+[[nodiscard]] std::vector<KnownDevice> filterDevices(const std::vector<KnownDevice>& all, const std::string& licenseId, const std::string& customer);
+// Le tableau (un PC par ligne, puis les totaux : PC, licences, clients) ; le meme en CSV (UTF-8 avec BOM,
+// separateur ; et CRLF : pour Excel).
+[[nodiscard]] std::string devicesTable(const std::vector<KnownDevice>& devices);
+[[nodiscard]] std::string devicesCsv(const std::vector<KnownDevice>& devices);
 
 } // namespace license_admin

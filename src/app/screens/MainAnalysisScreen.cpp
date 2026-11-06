@@ -18,6 +18,7 @@
 //    entry. A workspace the user arranged should survive closing the program.
 // =============================================================================
 #include "Screens.hpp"
+#include "../Licence.hpp"   // 1.30.0
 #include "../../ui/Commands.hpp"
 #include "../../ui/widgets/ExprField.hpp"
 #include "../Disposition.hpp"
@@ -1962,6 +1963,8 @@ void MainAnalysisScreen::refreshDocumentList() {
 // de l'IHM a les memes quatre boutons, et ils doivent faire la meme chose.)
 void MainAnalysisScreen::runSimulationTransport(std::string_view id) {
     using State = SimulationHost::State;
+    // 1.30.0 : simuler l'automate (api_simulation) ; arreter, mettre en pause : toujours.
+    if ((id == "sim.run" || id == "sim.step") && !licence::gate(app_, licence::Where::Gesture, id)) return;
     auto& sim = app_.simulation();
     // 1.10 : l'IHM seule - la memoire de l'automate simule, preparee sans cycle
     // (l'API reste arretee) : l'IHM y lit et y ecrit.

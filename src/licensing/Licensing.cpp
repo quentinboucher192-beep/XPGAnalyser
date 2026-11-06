@@ -3,6 +3,9 @@
 // =============================================================================
 #include "Licensing.hpp"
 
+#include "KeyFile.hpp"
+
+#include <algorithm>
 #include <memory>
 #include <mutex>
 
@@ -14,11 +17,68 @@ struct Module {
     std::mutex                    mutex;
     std::unique_ptr<LicenseStore> store;
     LicenseState                  state;
+    // 1.30.0 : l'ecran Licence (gardes a chaque evaluation : les lectures ne touchent aucun fichier)
+    std::optional<RegistryView> registry;
+    std::vector<DeviceView>     devices;
+    std::vector<HistoryEvent>   history;
 };
 
 Module& module() {
     static Module m;
     return m;
+}
+
+RegistryView viewOf(const Registry& r) {
+    RegistryView v;
+    v.number = r.number;
+    v.issuedAt = isoTime(r.issuedAt);
+    v.unlicensedEdition = r.unlicensedEdition;
+    for (const auto& f : r.features) {
+        RegistryFeatureView fv;
+        fv.id = f.id;
+        fv.product = f.product;
+        fv.label = f.label;
+        fv.retired = f.retired;
+        for (const auto& l : f.limits) fv.limits.emplace_back(l.id, l.label);
+        v.features.push_back(std::move(fv));
+    }
+    for (const auto& e : r.editions) {
+        RegistryEditionView ev;
+        ev.id = e.id;
+        ev.label = e.label;
+        ev.type = licenseTypeKey(e.type);
+        ev.maxDevices = e.maxDevices;
+        ev.durationDays = e.durationDays;
+        ev.graceDays = e.offlineGraceDays;
+        ev.retired = e.retired;
+        for (const auto& g : e.features) ev.features.push_back(g.id);
+        std::sort(ev.features.begin(), ev.features.end());
+        v.editions.push_back(std::move(ev));
+    }
+    return v;
+}
+
+// Apres chaque evaluation (sous le verrou) : le registre, les PC lies, l'historique.
+void capture(Module& m) {
+    m.registry.reset();
+    m.devices.clear();
+    m.history.clear();
+    if (!m.store) return;
+    if (m.store->registry()) m.registry = viewOf(*m.store->registry());
+    if (const auto& l = m.store->license()) {
+        for (const auto& d : l->devices) {
+            DeviceView dv;
+            dv.name = d.name;
+            crypto::Bytes raw;
+            crypto::PublicKey pub{};
+            if (crypto::unhex(d.key, raw, 32)) std::copy(raw.begin(), raw.end(), pub.begin());
+            dv.fingerprint = publicKeyFingerprint(pub);
+            dv.activatedAt = isoTime(d.activatedAt);
+            dv.thisPc = !m.store->deviceKeyHex().empty() && d.key == m.store->deviceKeyHex();
+            m.devices.push_back(std::move(dv));
+        }
+    }
+    m.history = m.store->history(static_cast<int>(LicenseStore::kHistoryMaxLines));
 }
 
 } // namespace
@@ -30,6 +90,7 @@ LicenseState initialize(StoreOptions options) {
     std::lock_guard<std::mutex> lock(m.mutex);
     m.store = std::move(store);
     m.state = s;
+    capture(m);
     return s;
 }
 
@@ -38,6 +99,7 @@ LicenseState refresh() {
     std::lock_guard<std::mutex> lock(m.mutex);
     if (!m.store) return m.state;
     m.state = m.store->evaluate();
+    capture(m);
     return m.state;
 }
 
@@ -101,6 +163,7 @@ LicenseState getLicenseState() {
 std::string lockedMessage(std::string_view featureId) {
     const LicenseState s = getLicenseState();
     std::string text = "Cette fonctionnalit\xC3\xA9 (" + std::string(featureId) + ") ";
+    if (allFeaturesOpen(s.status)) return text + "est ouverte : les licences ne sont pas encore actives dans ce programme.";
     if (licenseFeaturesApply(s.status))
         text += "n'est pas incluse dans ta licence " + (s.editionLabel.empty() ? s.edition : s.editionLabel) + ".";
     else if (s.edition.empty())
@@ -121,6 +184,7 @@ ImportReport importLicenseFile(const std::string& path) {
     }
     ImportReport r = m.store->importFile(path);
     m.state = r.state;
+    capture(m);
     return r;
 }
 
@@ -134,7 +198,46 @@ bool writeActivationRequest(const std::string& path, const std::string& deviceNa
     }
     const bool ok = m.store->writeActivationRequest(path, deviceName, licenseId, software, why);
     if (ok) m.state = m.store->evaluate();   // l'empreinte de la cle, creee a l'instant
+    capture(m);                              // l'historique : la demande
     return ok;
+}
+
+bool isConfigured() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (m.store) return m.store->configured();
+    return !compiledPublisherKeys().empty();
+}
+
+std::optional<RegistryView> getRegistry() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    return m.registry;
+}
+
+std::vector<DeviceView> getLicensedDevices() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    return m.devices;
+}
+
+std::vector<HistoryEvent> getHistory(int limit) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (limit <= 0 || static_cast<std::size_t>(limit) >= m.history.size()) return m.history;
+    return std::vector<HistoryEvent>(m.history.begin(), m.history.begin() + limit);
+}
+
+std::string getLicenseFolder() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    return m.store ? m.store->folder() : LicenseStore::defaultFolder();
+}
+
+std::string thisDeviceFingerprint() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    return m.state.deviceFingerprint;
 }
 
 void resetForTests() {
@@ -142,6 +245,7 @@ void resetForTests() {
     std::lock_guard<std::mutex> lock(m.mutex);
     m.store.reset();
     m.state = LicenseState{};
+    capture(m);
 }
 
 } // namespace licensing

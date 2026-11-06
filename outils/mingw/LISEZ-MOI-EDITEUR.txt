@@ -1,0 +1,161 @@
+XPG License Admin {VERSION} - l'outil de l'ÉDITEUR pour les licences
+=====================================================================
+
+Ce dossier est À TOI SEUL (l'éditeur). Il ne va JAMAIS chez un client : ni dans
+l'installateur, ni dans un zip portable, ni sur un partage réseau. Avec cet outil et
+ta clé, on fabrique des licences : garde-les pour toi.
+
+Ce qu'il y a dans ce dossier :
+  XPG-License-Admin.exe     l'outil (en console ; Windows 10 ou 11, 64 bits)
+  registre.json             le registre d'exemple : les éditions (FREE, PERSONAL,
+                            PROFESSIONAL, ENTERPRISE, EVALUATION, CUSTOM) et les
+                            21 fonctionnalités de la maquette - à adapter, puis à signer
+  parametres-exemple.json   les paramètres d'une licence - à copier pour chaque client
+  LISEZ-MOI-EDITEUR.txt     ce fichier
+
+Toutes les commandes se tapent dans une invite de commandes ouverte DANS ce dossier :
+dans l'Explorateur, clic droit dans le dossier > « Ouvrir dans le Terminal » (ou tape
+cmd dans la barre d'adresse, puis Entrée). L'aide de l'outil : XPG-License-Admin.exe aide
+
+
+=============================================================================
+UNE SEULE FOIS : LA CLÉ DE L'ÉDITEUR (sur TON PC, sous TON compte Windows)
+=============================================================================
+
+1. Crée la clé :
+
+     XPG-License-Admin.exe creer-cle --nom "Éditeur XPG"
+
+   Elle est rangée dans %LOCALAPPDATA%\XPG\LicenseAdmin\cle-editeur-licences.cle ;
+   sa partie secrète est protégée par Windows (DPAPI) pour TON compte. L'outil
+   refuse d'écraser une clé qui existe déjà. Pour la revoir :
+
+     XPG-License-Admin.exe cle
+
+   (N'utilise pas --essai : c'est une clé d'essai, qu'aucun programme livré ne
+   reconnaît.)
+
+2. Garde une copie de secours CHIFFRÉE et HORS LIGNE du fichier de la clé
+   (cle-editeur-licences.cle), par exemple sur une clé USB chiffrée (BitLocker To Go)
+   rangée à part. SANS CETTE CLÉ, PLUS AUCUNE LICENCE NE PEUT ÊTRE SIGNÉE NI
+   RENOUVELÉE : il faudrait livrer une nouvelle version des programmes avec une
+   nouvelle clé, et refaire toutes les licences.
+
+   À savoir, honnêtement : la protection DPAPI lie ce fichier à ton compte Windows.
+   La copie se relit sous ton compte, sur ce PC ; sur un PC réinstallé ou neuf, elle
+   ne se relit que si ton compte Windows revient avec ses clés DPAPI (une sauvegarde
+   complète de Windows, ou un compte de domaine). Garde donc AUSSI une sauvegarde
+   complète de ce PC (image système). Une sauvegarde de la clé protégée par un mot
+   de passe n'existe pas encore dans cette version de l'outil.
+
+3. Exporte la clé PUBLIQUE (elle vérifie les licences ; elle ne permet pas d'en signer) :
+
+     XPG-License-Admin.exe exporter-cle --sortie PublisherKey.hpp
+
+4. Le registre des éditions et des fonctionnalités :
+   - ouvre registre.json avec le Bloc-notes ; change si besoin les éditions (leurs
+     fonctionnalités, leur nombre de PC « max_devices », leur durée « duration_days »,
+     leur grâce « offline_grace_days ») et les fonctionnalités ;
+   - mets dans « number » un numéro PLUS GRAND que celui du registre précédent
+     (318 dans l'exemple) : à chaque nouvelle publication, augmente-le ; un PC
+     refuse un registre plus ancien que celui qu'il a déjà vu ;
+   - signe-le :
+
+     XPG-License-Admin.exe signer-registre --entree registre.json --sortie registre.xpgreg
+
+5. Envoie à l'agent de développement UNIQUEMENT ces deux fichiers :
+
+     PublisherKey.hpp     la clé publique
+     registre.xpgreg      le registre signé
+
+   JAMAIS le fichier de la clé (cle-editeur-licences.cle), jamais ce dossier entier,
+   jamais ton dossier %LOCALAPPDATA%\XPG\LicenseAdmin.
+   La version suivante des programmes contiendra la clé publique et le registre : les
+   licences y seront actives. Avant elle, les programmes n'ont pas de clé : rien n'y
+   est verrouillé (« Licences non activées »), et ils ne peuvent pas encore importer
+   une licence.
+
+
+=============================================================================
+POUR CHAQUE CLIENT
+=============================================================================
+
+1. Le client t'envoie la demande d'activation de son PC (un fichier .xpgreq) : dans
+   le programme, License Manager > Demander une activation. Elle porte la clé de son
+   PC (rien de son matériel) et le nom qu'il a donné à son PC.
+
+2. Copie parametres-exemple.json en un fichier pour ce client (par exemple
+   client-abc.json) et remplis-le :
+     license_id          l'identifiant de la licence (XPG-2026-00042...)
+     customer            le nom du client
+     edition             l'édition (une de registre.json)
+   et, si tu veux changer ce que dit l'édition : type (perpetual, temporary,
+   evaluation), max_devices, duration_days ou expires_at, offline_grace_days,
+   features. Un paramètre inconnu est refusé.
+
+3. Signe la licence :
+
+     XPG-License-Admin.exe signer-licence --parametres client-abc.json --demande PC.xpgreq --registre registre.xpgreg --sortie client-abc.xpglic
+
+   Pour la relire : XPG-License-Admin.exe verifier client-abc.xpglic
+
+4. Envoie client-abc.xpglic au client, EN PIÈCE JOINTE, tel quel (un fichier retouché
+   ou dont les fins de ligne ont changé est refusé). Il l'importe : License Manager >
+   Activer par fichier de licence. Le fichier contient la licence et le registre :
+   un seul fichier à importer.
+
+Un PC de plus sur la même licence (dans la limite de max_devices) :
+
+     XPG-License-Admin.exe signer-licence --parametres client-abc.json --licence client-abc.xpglic --demande NOUVEAU-PC.xpgreq --registre registre.xpgreg --sortie client-abc-2.xpglic
+
+   Les PC déjà liés gardent leur licence ; envoie le nouveau fichier au nouveau PC.
+
+Retirer une licence (fin de contrat, PC transféré) : écris la liste des révocations
+(voir docs\LICENCES.md, § 6), signe-la avec signer-revocations, et joins-la aux
+licences suivantes (--revocations revocations.xpgrev).
+
+
+=============================================================================
+QUI A LE LOGICIEL : LE REGISTRE DES ACTIVATIONS
+=============================================================================
+
+L'outil note chaque PC qu'il voit dans activations.jsonl, à côté de ta clé
+(%LOCALAPPDATA%\XPG\LicenseAdmin) : une ligne ajoutée à la fin à chaque signer-licence
+(une par PC lié), à chaque signer-revocations, et à chaque demande que tu enregistres.
+Le fichier n'est jamais réécrit.
+
+Une demande reçue, que tu ne signes pas tout de suite :
+
+     XPG-License-Admin.exe enregistrer-demande PC.xpgreq
+
+La liste de tous les PC connus, un par ligne (leur dernier état) :
+
+     XPG-License-Admin.exe liste
+     XPG-License-Admin.exe liste --client "abc"          (les clients dont le nom contient abc)
+     XPG-License-Admin.exe liste --licence XPG-2026-00042
+     XPG-License-Admin.exe liste --csv pc.csv            (le même tableau pour Excel)
+
+Pour chaque PC : son nom (celui que le client lui a donné), l'empreinte de sa clé,
+le client, la licence, l'édition, le logiciel et sa version, la date de la demande,
+de l'activation, de la fin, et l'état (demande, activé, révoqué, expiré à la date du
+jour) ; en bas, les totaux (PC, licences, clients).
+
+Ce que tu NE vois PAS : rien du matériel des PC (la demande n'en porte pas), et aucun
+PC qui ne t'a jamais envoyé de demande. Voir CHAQUE LANCEMENT du logiciel (même sans
+activation) demandera le service de licences en ligne : à chaque lancement, le
+logiciel enverrait l'identifiant de sa licence, l'empreinte de la clé du PC, sa
+version et la date - jamais le matériel - et il faudra en informer clairement les
+utilisateurs (RGPD : une mention dans les conditions d'utilisation). C'est prévu avec
+l'hébergement du service ; ce n'est pas fait dans cette version.
+
+
+=============================================================================
+À SAVOIR
+=============================================================================
+
+- Code de sortie : 0 fait, 1 refusé (la raison est écrite), 2 mauvais usage.
+- --dossier D : un autre dossier pour la clé (par défaut %LOCALAPPDATA%\XPG\LicenseAdmin).
+- Changer de clé (une rotation) : crée la nouvelle clé dans un autre dossier, puis
+  exporter-cle --sortie PublisherKey.hpp --garder --dossier NOUVEAU-DOSSIER : le fichier
+  garde l'ancienne clé et ajoute la nouvelle ; les programmes reconnaissent les deux.
+- Tout est décrit dans docs\LICENCES.md (dans les sources du programme).

@@ -12,6 +12,11 @@
 #      les DLL dont l'exe a besoin (repair.bat et verify s'en servent) ;
 #   6. l'installateur (build_installer.ps1) : XPGAnalyser-Setup-<version>.exe a la racine
 #      du dossier, et son empreinte dans dist\SHA256SUMS.txt.
+#  1.30.0 : licences\registre.xpgreg (le registre des licences signe par l'editeur) s'il est dans
+#  ressources-licences\ ; puis LE CONTROLE DU PAQUET (Test-XpgLivraison), le meme que
+#  outils/mingw/package_mingw.py : rien de l'outil Admin des licences, aucune cle privee, aucun
+#  jeton, pas la cle d'essai, un registre signe par une cle de PublisherKey.hpp - un seul ecart
+#  arrete la construction.
 #
 #  /exe:<fichier> /sdl:<SDL3.dll> /pdfium:<pdfium.dll> /chaine:mingw : empaqueter un exe deja
 #  compile ailleurs (c'est ainsi qu'a ete fait l'installateur livre avec la
@@ -63,6 +68,80 @@ function Copy-XpgArbre {
         $n++
     }
     return $n
+}
+
+# ---- 1.30.0 : LE CONTROLE DU PAQUET -----------------------------------------------------------------
+#  Le MEME que outils/mingw/package_mingw.py (controle_livraison) : memes chaines (en ASCII et en UTF-16 :
+#  les chaines larges des exe), memes motifs, memes noms, meme controle du registre livre. Changer l'un,
+#  c'est changer l'autre (docs\LICENCES.md). Les octets sont lus en Latin-1 (un caractere par octet) : les
+#  chaines se cherchent en ordinal, les motifs avec Regex (sensibles a la casse, comme en Python).
+$script:XpgAdminChaines = @(
+    @('XPG-License-Admin', "le nom de l'outil Admin des licences"),
+    @('XPG License Manager Admin', "le nom de l'outil Admin des licences"),
+    @('XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER', "la marque de l'outil Admin des licences"),
+    @('XPG-CLE-ESSAI-LICENCES', "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)")
+)
+$script:XpgAdminMotifs = @(
+    @('-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}', 'une cle privee (bloc PEM)'),
+    @('(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{50,}', 'un jeton GitHub')
+)
+$script:XpgAdminNoms = @('*.cle', 'cle_editeur.bin', 'cle-editeur-licences*', '*license*admin*', '*licence*admin*', '*license_admin*')
+
+function Get-XpgClesCompilees {
+    # Les identifiants des cles d'un fichier ecrit par exporter-cle (src\licensing\<Nom>).
+    param([string] $Racine, [string] $Nom)
+    $chemin = Join-Path $Racine "src\licensing\$Nom"
+    if (-not (Test-Path -LiteralPath $chemin -PathType Leaf)) { return @() }
+    $t = [System.IO.File]::ReadAllText($chemin)
+    return @([regex]::Matches($t, '\{"(xpg-[0-9a-f]{16})",') | ForEach-Object { $_.Groups[1].Value })
+}
+
+function Test-XpgLivraison {
+    # Les ecarts trouves dans le dossier a livrer : des chaines « chemin relatif : ce qui est trouve » ; vide : rien.
+    param([string] $Dossier, [string] $Racine)
+    $ecarts = New-Object System.Collections.ArrayList
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $base = (Get-Item -LiteralPath $Dossier).FullName.TrimEnd('\', '/')
+    # Le registre livre : signe par une cle des programmes (PublisherKey.hpp), jamais par la cle d'essai.
+    $reg = Join-Path $base 'licences\registre.xpgreg'
+    if (Test-Path -LiteralPath $reg -PathType Leaf) {
+        $t = $latin1.GetString([System.IO.File]::ReadAllBytes($reg))
+        $cles = @([regex]::Matches($t, '\nSIGNATURE ed25519 (xpg-[0-9a-f]{16}) [0-9a-f]{128}\n') | ForEach-Object { $_.Groups[1].Value })
+        if (-not [regex]::IsMatch($t, '\AXPG-LICENSING 1 registre ([0-9]+)\n') -or $cles.Count -ne 1) {
+            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre n'est pas un registre signe (un seul bloc XPG-LICENSING registre)")
+        } elseif (@(Get-XpgClesCompilees -Racine $Racine -Nom 'TestPublisherKey.hpp') -contains $cles[0]) {
+            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre est signe par la cle d'ESSAI ($($cles[0])) : signe-le avec la vraie cle")
+        } elseif (-not (@(Get-XpgClesCompilees -Racine $Racine -Nom 'PublisherKey.hpp') -contains $cles[0])) {
+            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre est signe par la cle $($cles[0]), que src/licensing/PublisherKey.hpp ne contient pas : les programmes ne pourraient pas le verifier")
+        }
+    }
+    # Les chaines : en ASCII, et en UTF-16 (petit-boutiste, comme Python « utf-16-le »).
+    $chaines = New-Object System.Collections.ArrayList
+    foreach ($c in $script:XpgAdminChaines) { [void]$chaines.Add(@($c[0], $c[1])) }
+    foreach ($c in $script:XpgAdminChaines) { [void]$chaines.Add(@($latin1.GetString([System.Text.Encoding]::Unicode.GetBytes($c[0])), $c[1])) }
+    # (une boucle, pas un pipeline : ForEach-Object deroulerait chaque paire)
+    $motifs = New-Object System.Collections.ArrayList
+    foreach ($m in $script:XpgAdminMotifs) {
+        [void]$motifs.Add(@([System.Text.RegularExpressions.Regex]::new($m[0], [System.Text.RegularExpressions.RegexOptions]::CultureInvariant), $m[1]))
+    }
+    foreach ($f in Get-ChildItem -LiteralPath $base -Recurse -File -Force | Sort-Object FullName) {
+        $rel = $f.FullName.Substring($base.Length + 1)
+        $compact = $f.Name.ToLowerInvariant().Replace(' ', '-')
+        foreach ($n in $script:XpgAdminNoms) {
+            if (($compact -like $n) -or ($compact.Replace('-', '_') -like $n.Replace('-', '_'))) {
+                [void]$ecarts.Add("$rel : un fichier de l'outil Admin ou une cle (nom $($f.Name))")
+                break
+            }
+        }
+        $texte = $latin1.GetString([System.IO.File]::ReadAllBytes($f.FullName))
+        foreach ($c in $chaines) {
+            if ($texte.IndexOf($c[0], [System.StringComparison]::Ordinal) -ge 0) { [void]$ecarts.Add("$rel : $($c[1])"); break }
+        }
+        foreach ($m in $motifs) {
+            if ($m[0].IsMatch($texte)) { [void]$ecarts.Add("$rel : $($m[1])") }
+        }
+    }
+    return @($ecarts)
 }
 
 function Get-XpgDllImportees {
@@ -219,6 +298,15 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
     # Les licences des bibliotheques tierces.
     $lic = Join-Path $st 'licences'
     New-Item -ItemType Directory -Path $lic -Force | Out-Null
+    # 1.30.0 : le registre des editions et fonctionnalites, signe par l'editeur avec sa vraie cle (docs\LICENCES.md) :
+    # installe dans {app}\licences\registre.xpgreg ; les programmes l'adoptent s'il est plus recent que celui du PC.
+    $registre = Join-Path $racine 'ressources-licences\registre.xpgreg'
+    if (Test-Path -LiteralPath $registre -PathType Leaf) {
+        Copy-Item -LiteralPath $registre -Destination (Join-Path $lic 'registre.xpgreg') -Force
+        Write-XpgLog -Niveau INFO -Message 'Registre des licences : ressources-licences\registre.xpgreg -> licences\registre.xpgreg'
+    } else {
+        Write-XpgLog -Niveau INFO -Message 'Registre des licences : ressources-licences\registre.xpgreg absent - aucun registre livré (il sera signé par l''éditeur avec sa vraie clé).'
+    }
     Copy-Item -LiteralPath (Join-Path $racine 'third_party\SDL3\LICENSE.txt') -Destination (Join-Path $lic 'SDL3-LICENSE.txt') -Force
     foreach ($f in Get-ChildItem -LiteralPath (Join-Path $racine 'third_party') -Filter '*.LICENSE' -File) { Copy-Item -LiteralPath $f.FullName -Destination $lic -Force }
     # 1.12.30 : les licences de PDFium et de sa construction (le dossier LICENSES a cote de pdfium.dll).
@@ -236,6 +324,16 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
         Write-XpgTexte -Chemin (Join-Path $st 'LISEZ-MOI.txt') -Texte (($t -replace "`r?`n", "`n") -replace "`n", "`r`n")
     }
     Complete-XpgEtape -Statut OK -Detail ("exe, SDL3.dll, pdfium.dll, {0} DLL du runtime, {1} ressource(s), {2} fichier(s) de bibliothèque, 6 scripts de maintenance" -f $runtime.Count, $nRes, $nLibs)
+
+    # ---- 1.30.0 : le controle du paquet (le meme que package_mingw.py) ------------------------------
+    Start-XpgEtape 'Le contrôle du paquet (rien de l''outil Admin des licences)' | Out-Null
+    $ecarts = @(Test-XpgLivraison -Dossier $st -Racine $racine)
+    if ($ecarts.Count -gt 0) {
+        foreach ($e in $ecarts) { Write-XpgLog -Niveau ERREUR -Message $e }
+        Stop-Xpg -Code 1 -Message ("CONTROLE DU PAQUET : construction arrêtée, {0} écart(s) dans {1} :`r`n  {2}" -f $ecarts.Count, $st, ($ecarts -join "`r`n  ")) `
+                 -Conseil 'L''outil Admin des licences, sa clé et une clé d''essai ne se livrent jamais (docs\LICENCES.md).'
+    }
+    Complete-XpgEtape -Statut OK -Detail "$st - rien de l'outil Admin, aucune clé privée, aucun jeton"
 
     # ---- le manifeste ------------------------------------------------------------------------
     Start-XpgEtape 'Le manifeste (tailles et SHA-256)' | Out-Null

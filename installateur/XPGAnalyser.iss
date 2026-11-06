@@ -115,6 +115,20 @@
 ;   - les animations suivent le réglage de Windows « Afficher les animations dans Windows »
 ;     (SPI_GETCLIENTAREAANIMATION) ; /ANIMATIONS=oui|non le force.
 ;
+;  1.30.0 - les licences (docs\LICENCES.md) :
+;   - pour tous les comptes : le dossier des licences de ce PC, %ProgramData%\XPG\Licences (celui que
+;     les programmes lisent : licensing::LicenseStore::defaultFolder), est créé, et le groupe
+;     Utilisateurs (S-1-5-32-545, quel que soit son nom dans la langue de Windows) y a le droit Modifier,
+;     hérité : chaque compte peut y importer une licence et écrire la demande d'activation de ce PC
+;     (icacls, caché ; le journal le dit). Pour toi seul : rien - le programme le crée au premier besoin
+;     (ce compte en est alors le propriétaire ; un autre compte le lit, sans pouvoir y importer) ;
+;   - la désinstallation ne l'efface PAS : les licences de ce PC survivent à une réinstallation (le
+;     journal de la désinstallation le dit) ;
+;   - le registre des licences signé par l'éditeur, s'il est dans le dossier à livrer
+;     (licences\registre.xpgreg, copié par package_mingw.py ou package.ps1 depuis
+;     ressources-licences\registre.xpgreg), s'installe avec le reste dans {app}\licences\ : les
+;     programmes l'adoptent s'il est plus récent que celui du PC.
+;
 ;  Sans surveillance : API-IHM-Studio-Setup-<v>.exe /VERYSILENT /SUPPRESSMSGBOXES
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
@@ -410,7 +424,8 @@ Name: "reserve"; Description: "Garder une copie de secours pour Réparer (enviro
 
 [Files]
 ; Le programme et tout ce dont il a besoin (préparé par outils\package.bat dans dist\staging). 1.14.0 : les
-; deux exe a part - seul celui du profil s'installe.
+; deux exe a part - seul celui du profil s'installe. 1.30.0 : licences\registre.xpgreg (le registre des
+; licences signé par l'éditeur) s'il est dans le staging - il n'y est pas tant que l'éditeur ne l'a pas signé.
 Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm},\{#ExeAgent}"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Staging}\{#Exe}"; DestDir: "{app}"; Components: api; Flags: ignoreversion
 Source: "{#Staging}\{#ExeIhm}"; DestDir: "{app}"; Components: ihm poste; Flags: ignoreversion
@@ -642,6 +657,13 @@ end;
 function DossierReserve(Param: String): String;
 begin
   Result := DossierEtat('') + '\Reserve\{#Version}';
+end;
+
+// 1.30.0 : le dossier des licences de ce PC (licensing::LicenseStore::defaultFolder : %ProgramData%\XPG\Licences),
+// le même pour tous les comptes - et pour une installation pour toi seul (le programme le crée alors lui-même).
+function DossierLicences(Param: String): String;
+begin
+  Result := ExpandConstant('{commonappdata}\XPG\Licences');
 end;
 
 // 1.14.0 : le dossier du programme proposé (DefaultDirName) - pour tous les comptes, Program Files ; pour toi
@@ -1672,7 +1694,10 @@ begin
   if ProfilChoisi = pPoste then Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell), poste.cmd')
   else Ajoute(L, '  ├─ ' + Colonne('maintenance\', 32) + 'les scripts, lib\ (PowerShell)');
   Ajoute(L, '  ├─ ' + Colonne('resources\', 32) + 'le catalogue des automates');
-  Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, PDFium, miniz, stb, nanosvg, minimp3');
+  if FileExists(App + '\licences\registre.xpgreg') then   // 1.30.0
+    Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, PDFium, miniz, stb, nanosvg, minimp3 ; le registre des licences')
+  else
+    Ajoute(L, '  └─ ' + Colonne('licences\', 32) + 'SDL3, PDFium, miniz, stb, nanosvg, minimp3');
   Ajoute(L, '');
   if IsAdminInstallMode then Ajoute(L, 'TES DONNÉES   Documents\{#Cle} de chaque compte (ici : ' + Don + ')')
   else Ajoute(L, 'TES DONNÉES   ' + Don);
@@ -1774,6 +1799,13 @@ begin
     else
       Ajoute(L, '  └─ ' + Colonne('le pare-feu', 32) + 'pas de règle (pour toi seul) : Windows demandera');
   end;
+  // 1.30.0 : les licences de ce PC
+  Ajoute(L, '');
+  Ajoute(L, 'LES LICENCES   ' + DossierLicences(''));
+  if IsAdminInstallMode then
+    Ajoute(L, '  └─ ' + Colonne('pour tous les comptes', 32) + 'chacun peut y importer une licence ; gardé à la désinstallation')
+  else
+    Ajoute(L, '  └─ ' + Colonne('pour toi seul', 32) + 'le programme le crée au premier besoin ; gardé à la désinstallation');
   Result := L;
 end;
 
@@ -5775,6 +5807,40 @@ begin
   end;
 end;
 
+// 1.30.0 : les licences de ce PC (docs\LICENCES.md). Le dossier est celui que les programmes lisent
+// (licensing::LicenseStore::defaultFolder : %ProgramData%\XPG\Licences). Pour tous les comptes : il est créé
+// et le groupe Utilisateurs (S-1-5-32-545 : le SID, pas le nom, qui change avec la langue de Windows) y a
+// le droit Modifier, hérité par ce qui y sera écrit - chaque compte peut importer une licence et écrire la
+// demande d'activation de ce PC. Pour toi seul : rien (pas de droits sur ProgramData) - le programme le crée
+// au premier besoin. La désinstallation ne l'efface pas : les licences de ce PC survivent à une réinstallation.
+procedure LicencesRegler;
+var Dossier: String;
+    Code: Integer;
+begin
+  Dossier := DossierLicences('');
+  if FileExists(ExpandConstant('{app}\licences\registre.xpgreg')) then
+    JournalNote(jInfo, 'licences-registre', 'Le registre des licences signé par l''éditeur est livré : licences\registre.xpgreg')
+  else
+    JournalNote(jInfo, 'licences-registre', 'Aucun registre des licences n''est livré avec cette version');
+  if not IsAdminInstallMode then begin
+    JournalNote(jInfo, 'licences', 'Les licences de ce PC : ' + Dossier + ', créé par le programme au premier besoin (installation pour toi seul : les autres comptes le liront sans y importer)');
+    Exit;
+  end;
+  if not ForceDirectories(Dossier) then begin
+    Log('Licences : ForceDirectories(' + Dossier + ') a échoué');
+    JournalNote(jAttention, 'licences', 'Le dossier des licences ' + Dossier + ' ne se crée pas : le programme le créera au premier besoin');
+    Exit;
+  end;
+  Code := -1;
+  if not Exec(ExpandConstant('{sys}\icacls.exe'), '"' + Dossier + '" /grant *S-1-5-32-545:(OI)(CI)M', '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
+  Log('icacls "' + Dossier + '" /grant *S-1-5-32-545:(OI)(CI)M : code ' + IntToStr(Code));
+  if Code = 0 then
+    JournalNote(jFait, 'licences', 'Le dossier des licences de ce PC : ' + Dossier + ' (chaque compte peut y importer une licence ; il est gardé à la désinstallation)')
+  else
+    JournalNote(jAttention, 'licences', 'Le dossier des licences ' + Dossier + ' est créé, mais le droit Modifier des Utilisateurs n''a pas pu être posé (icacls, code ' +
+                IntToStr(Code) + ') : seul un administrateur pourra y importer une licence');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
     Sources2, Lot8, Migrer, Setup, Blocs: String;
@@ -5804,6 +5870,7 @@ begin
     PosteRegler;
     ParefeuRegler;
     AgentRegler;   // 1.29.0
+    LicencesRegler;   // 1.30.0
   except
     Log('Détails : ' + GetExceptionMessage);
   end;
@@ -5945,6 +6012,7 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var Code: Integer;
     Choix, V: String;
     Demarre: Boolean;
+    LigneJournal: TArrayOfString;
 begin
   if CurUninstallStep <> usUninstall then Exit;
   // 1.14.0 : notre règle du pare-feu (les copies de secours : [UninstallDelete] ; la clé Run : uninsdeletevalue)
@@ -5962,6 +6030,13 @@ begin
   if FileExists(ExpandConstant('{app}\maintenance\lib\installer_etape.ps1')) then
     EtapePowerShell(ExpandConstant('{app}\maintenance\lib\installer_etape.ps1'),
       '/etape:desinstallation /dossier:"' + ExpandConstant('{app}') + '" /supprimer-donnees:' + Choix, Code, Demarre);
+  // 1.30.0 : le dossier des licences de ce PC reste (une reinstallation les retrouve) - le journal le dit.
+  if DirExists(DossierLicences('')) then begin
+    Log('Licences : ' + DossierLicences('') + ' est gardé (les licences de ce PC survivent à une réinstallation)');
+    SetArrayLength(LigneJournal, 1);
+    LigneJournal[0] := GetDateTimeString('hh:nn:ss', '-', ':') + ' [INFO] Les licences de ce PC sont gardées : ' + DossierLicences('') + ' (une réinstallation les retrouve)';
+    SaveStringsToUTF8File(JournalInstallation, LigneJournal, True);
+  end;
   if not Demarre then begin
     // Sans PowerShell (strategie de groupe) : l'etat de la maintenance part quand meme ; tes
     // donnees restent (la Corbeille demande PowerShell), et on te le dit si tu voulais les supprimer.

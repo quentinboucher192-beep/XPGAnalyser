@@ -31,6 +31,21 @@
 //  les lectures (isFeatureEnabled...) ne lisent aucun fichier : elles lisent le
 //  dernier etat, sous un verrou (on peut les appeler de n'importe quel fil).
 //  Avant initialize() : Absente, aucune fonctionnalite ouverte.
+//
+//  1.30.0 - LES LICENCES PAS ENCORE ACTIVEES : un programme compile sans aucune
+//  cle de l'editeur (src/licensing/PublisherKey.hpp vide, sans l'option CMake
+//  XPG_LICENCES_CLE_ESSAI) est dans l'etat NotConfigured << Non activees >> :
+//  isFeatureEnabled rend TOUJOURS vrai (rien n'est verrouille : un programme
+//  livre sans cle ne bloque jamais personne), getEdition rend "", la phrase le
+//  dit ; importLicenseFile est refuse (il n'y a rien pour verifier) ;
+//  writeActivationRequest marche (une demande ne depend pas de l'editeur).
+//  isConfigured() le dit.
+//
+//  1.30.0 - L'ECRAN LICENCE : getRegistry (le registre en vigueur),
+//  getLicensedDevices (les PC lies dans la licence installee), getHistory
+//  (historique.jsonl), getLicenseFolder, thisDeviceFingerprint. Comme le reste :
+//  sous verrou, sans relire de fichier (ce que la derniere evaluation a lu ;
+//  l'historique est relu a chaque initialize, refresh, import et demande).
 // =============================================================================
 #pragma once
 
@@ -40,6 +55,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace licensing {
 
@@ -75,6 +92,54 @@ LicenseState refresh();
 // Ecrire la demande d'activation de ce PC (voir LicenseStore::writeActivationRequest).
 bool writeActivationRequest(const std::string& path, const std::string& deviceName, const std::string& licenseId,
                             const std::string& software, std::string* why);
+
+// ---- 1.30.0 : les licences sont-elles actives dans ce programme ? ----
+// Faux : aucune cle de l'editeur (NotConfigured, tout est ouvert). Avant initialize() :
+// selon les cles compilees.
+[[nodiscard]] bool isConfigured();
+
+// ---- 1.30.0 : ce qu'il faut a l'ecran Licence ----
+// Le registre en vigueur (les fonctionnalites et les editions) ; rien : pas de registre
+// accepte (absent, refuse, ou licences non activees). Les dates : "AAAA-MM-JJTHH:MM:SSZ".
+struct RegistryFeatureView {
+    std::string id, product, label;
+    bool        retired{false};
+    std::vector<std::pair<std::string, std::string>> limits;   // id, libelle
+};
+struct RegistryEditionView {
+    std::string              id, label, type;   // type : "perpetual", "temporary", "evaluation", "floating"
+    int                      maxDevices{0};
+    int                      durationDays{0};   // 0 : sans fin
+    int                      graceDays{0};
+    std::vector<std::string> features;          // les identifiants, tries
+    bool                     retired{false};    // retiree : plus accordee par l'Admin
+};
+struct RegistryView {
+    std::uint64_t                    number{0};
+    std::string                      issuedAt, unlicensedEdition;
+    std::vector<RegistryFeatureView> features;
+    std::vector<RegistryEditionView> editions;
+};
+[[nodiscard]] std::optional<RegistryView> getRegistry();
+
+// Les PC lies dans la licence installee (vide : pas de licence lisible - absente, abimee,
+// signee par une cle inconnue). Une licence finie, revoquee ou d'un autre PC les donne aussi.
+struct DeviceView {
+    std::string name;          // le nom donne par le client (vide : sans nom)
+    std::string fingerprint;   // l'empreinte de sa cle, lisible et courte : 4F:9A:12:34:...:AB:CD:EF:01 (au milieu, une ellipse U+2026)
+    std::string activatedAt;   // "AAAA-MM-JJTHH:MM:SSZ"
+    bool        thisPc{false};
+};
+[[nodiscard]] std::vector<DeviceView> getLicensedDevices();
+
+// L'historique de ce PC (historique.jsonl : imports, demandes, changements d'etat), le plus
+// recent d'abord ; `limit` <= 0 : tout (500 au plus). Voir HistoryEvent (Store.hpp).
+[[nodiscard]] std::vector<HistoryEvent> getHistory(int limit);
+// Le dossier des licences de ce PC (avant initialize() : LicenseStore::defaultFolder()).
+[[nodiscard]] std::string getLicenseFolder();
+// L'empreinte de la cle de ce PC, lisible (comme DeviceView::fingerprint) ; vide : pas encore
+// creee (elle l'est avec la premiere demande d'activation).
+[[nodiscard]] std::string thisDeviceFingerprint();
 
 // Pour les essais : oublier la configuration (retour a << avant initialize() >>).
 void resetForTests();
