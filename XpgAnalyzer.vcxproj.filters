@@ -4,6 +4,12 @@
     <Filter Include="deploy">
       <UniqueIdentifier>{A0000009-0000-0000-0000-000000000000}</UniqueIdentifier>
     </Filter>
+    <Filter Include="licensing">
+      <UniqueIdentifier>{f2b2a112-118a-4398-abdc-644c46f471f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="license_admin">
+      <UniqueIdentifier>{7818e3b5-0239-4531-8d18-381bef9801c1}</UniqueIdentifier>
+    </Filter>
     <Filter Include="core">
       <UniqueIdentifier>{A0000000-0000-0000-0000-000000000000}</UniqueIdentifier>
     </Filter>

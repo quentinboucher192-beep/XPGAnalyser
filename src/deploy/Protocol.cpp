@@ -23,8 +23,13 @@ bool integer(const core::json::Value& v, std::int64_t& out) {
 } // namespace
 
 const std::vector<int>& acceptedVersions() {
-    static const std::vector<int> v{1};
+    static const std::vector<int> v{1, 2};
     return v;
+}
+
+bool isDeployOp(std::string_view op) {
+    return op == kPrepare || op == kSendChunk || op == kVerifyPackage || op == kInstall || op == kStop || op == kStart || op == kRollback
+           || op == kListApps || op == kGetHistory;
 }
 
 std::int64_t nowMs() {

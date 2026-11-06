@@ -1,0 +1,9 @@
+{
+  "number": 1,
+  "revoked": [
+    {
+      "license_id": "XPG-ESSAI-0001",
+      "reason": "Essai de révocation"
+    }
+  ]
+}

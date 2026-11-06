@@ -1,0 +1,9 @@
+{
+  "license_id": "XPG-ESSAI-0001",
+  "customer": "Client d'essai",
+  "edition": "PROFESSIONAL",
+  "type": "temporary",
+  "max_devices": 2,
+  "duration_days": 365,
+  "offline_grace_days": 14
+}

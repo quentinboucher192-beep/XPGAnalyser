@@ -516,10 +516,10 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // 1.29.0 : le poste relance par l'agent de deploiement apres un arret demande (une nouvelle version, ou le retour a la
     // precedente) : l'etat garde par celui qui s'est ferme reprend, sans question - l'arret etait voulu.
     if (!a->options_.station.empty() && !a->stationRestore_) {
-        if (const char* f = std::getenv("XPG_REPRISE_FICHIER"); f && *f) {
+        if (const auto f = Recovery::agentFile(a->options_.station, "XPG_REPRISE_FICHIER", "reprise-poste.txt"); !f.empty()) {
             namespace fs = std::filesystem;
             std::error_code ec;
-            const fs::path handover(std::u8string(f, f + std::strlen(f)));
+            const fs::path handover(std::u8string(f.begin(), f.end()));
             if (fs::is_regular_file(handover, ec)) {
                 std::string text;
                 {

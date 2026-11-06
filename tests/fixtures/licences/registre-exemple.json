@@ -1,0 +1,397 @@
+{
+  "number": 318,
+  "unlicensed_edition": "FREE",
+  "features": [
+    {
+      "id": "api_editor",
+      "product": "API Studio",
+      "label": "Éditeur"
+    },
+    {
+      "id": "api_compiler",
+      "product": "API Studio",
+      "label": "Compilation"
+    },
+    {
+      "id": "api_simulation",
+      "product": "API Studio",
+      "label": "Simulation"
+    },
+    {
+      "id": "api_debugger",
+      "product": "API Studio",
+      "label": "Débogueur"
+    },
+    {
+      "id": "api_library",
+      "product": "API Studio",
+      "label": "Bibliothèques"
+    },
+    {
+      "id": "api_export",
+      "product": "API Studio",
+      "label": "Exports"
+    },
+    {
+      "id": "hmi_editor",
+      "product": "IHM Studio",
+      "label": "Éditeur de vues",
+      "limits": [
+        {
+          "id": "max_views",
+          "label": "Vues au plus"
+        }
+      ]
+    },
+    {
+      "id": "hmi_runtime",
+      "product": "IHM Studio",
+      "label": "Simulation / poste"
+    },
+    {
+      "id": "hmi_widgets",
+      "product": "IHM Studio",
+      "label": "Objets avancés"
+    },
+    {
+      "id": "hmi_animations",
+      "product": "IHM Studio",
+      "label": "Animations"
+    },
+    {
+      "id": "hmi_scripts",
+      "product": "IHM Studio",
+      "label": "Scripts"
+    },
+    {
+      "id": "hmi_export",
+      "product": "IHM Studio",
+      "label": "Exports"
+    },
+    {
+      "id": "ai_assistant",
+      "product": "IA",
+      "label": "Assistant"
+    },
+    {
+      "id": "ai_generation",
+      "product": "IA",
+      "label": "Génération",
+      "limits": [
+        {
+          "id": "requests_per_day",
+          "label": "Générations par jour"
+        }
+      ]
+    },
+    {
+      "id": "ai_learning",
+      "product": "IA",
+      "label": "Apprentissage"
+    },
+    {
+      "id": "ai_advanced_models",
+      "product": "IA",
+      "label": "Modèles avancés"
+    },
+    {
+      "id": "advanced_import",
+      "product": "Autres",
+      "label": "Imports avancés"
+    },
+    {
+      "id": "advanced_export",
+      "product": "Autres",
+      "label": "Exports avancés"
+    },
+    {
+      "id": "professional_tools",
+      "product": "Autres",
+      "label": "Outils pro"
+    },
+    {
+      "id": "floating_licenses",
+      "product": "Autres",
+      "label": "Licences flottantes"
+    },
+    {
+      "id": "multi_user",
+      "product": "Autres",
+      "label": "Multi-utilisateur"
+    }
+  ],
+  "editions": [
+    {
+      "id": "FREE",
+      "label": "FREE",
+      "type": "perpetual",
+      "max_devices": 1,
+      "duration_days": 0,
+      "offline_grace_days": 0,
+      "features": [
+        {
+          "id": "api_editor"
+        },
+        {
+          "id": "api_simulation"
+        },
+        {
+          "id": "hmi_editor"
+        },
+        {
+          "id": "hmi_runtime"
+        }
+      ]
+    },
+    {
+      "id": "PERSONAL",
+      "label": "PERSONAL",
+      "type": "temporary",
+      "max_devices": 2,
+      "duration_days": 365,
+      "offline_grace_days": 14,
+      "features": [
+        {
+          "id": "api_editor"
+        },
+        {
+          "id": "api_compiler"
+        },
+        {
+          "id": "api_simulation"
+        },
+        {
+          "id": "api_debugger"
+        },
+        {
+          "id": "api_library"
+        },
+        {
+          "id": "hmi_editor"
+        },
+        {
+          "id": "hmi_runtime"
+        },
+        {
+          "id": "hmi_widgets"
+        },
+        {
+          "id": "hmi_scripts"
+        },
+        {
+          "id": "ai_assistant"
+        }
+      ]
+    },
+    {
+      "id": "PROFESSIONAL",
+      "label": "PROFESSIONAL",
+      "type": "temporary",
+      "max_devices": 5,
+      "duration_days": 365,
+      "offline_grace_days": 14,
+      "features": [
+        {
+          "id": "api_editor"
+        },
+        {
+          "id": "api_compiler"
+        },
+        {
+          "id": "api_simulation"
+        },
+        {
+          "id": "api_debugger"
+        },
+        {
+          "id": "api_library"
+        },
+        {
+          "id": "api_export"
+        },
+        {
+          "id": "hmi_editor"
+        },
+        {
+          "id": "hmi_runtime"
+        },
+        {
+          "id": "hmi_widgets"
+        },
+        {
+          "id": "hmi_animations"
+        },
+        {
+          "id": "hmi_scripts"
+        },
+        {
+          "id": "hmi_export"
+        },
+        {
+          "id": "ai_assistant"
+        },
+        {
+          "id": "ai_generation"
+        },
+        {
+          "id": "ai_learning"
+        },
+        {
+          "id": "advanced_import"
+        },
+        {
+          "id": "advanced_export"
+        },
+        {
+          "id": "professional_tools"
+        }
+      ]
+    },
+    {
+      "id": "ENTERPRISE",
+      "label": "ENTERPRISE",
+      "type": "temporary",
+      "max_devices": 20,
+      "duration_days": 365,
+      "offline_grace_days": 14,
+      "features": [
+        {
+          "id": "api_editor"
+        },
+        {
+          "id": "api_compiler"
+        },
+        {
+          "id": "api_simulation"
+        },
+        {
+          "id": "api_debugger"
+        },
+        {
+          "id": "api_library"
+        },
+        {
+          "id": "api_export"
+        },
+        {
+          "id": "hmi_editor"
+        },
+        {
+          "id": "hmi_runtime"
+        },
+        {
+          "id": "hmi_widgets"
+        },
+        {
+          "id": "hmi_animations"
+        },
+        {
+          "id": "hmi_scripts"
+        },
+        {
+          "id": "hmi_export"
+        },
+        {
+          "id": "ai_assistant"
+        },
+        {
+          "id": "ai_generation"
+        },
+        {
+          "id": "ai_learning"
+        },
+        {
+          "id": "ai_advanced_models"
+        },
+        {
+          "id": "advanced_import"
+        },
+        {
+          "id": "advanced_export"
+        },
+        {
+          "id": "professional_tools"
+        },
+        {
+          "id": "floating_licenses"
+        },
+        {
+          "id": "multi_user"
+        }
+      ]
+    },
+    {
+      "id": "EVALUATION",
+      "label": "EVALUATION",
+      "type": "evaluation",
+      "max_devices": 1,
+      "duration_days": 30,
+      "offline_grace_days": 0,
+      "features": [
+        {
+          "id": "api_editor"
+        },
+        {
+          "id": "api_compiler"
+        },
+        {
+          "id": "api_simulation"
+        },
+        {
+          "id": "api_debugger"
+        },
+        {
+          "id": "api_library"
+        },
+        {
+          "id": "api_export"
+        },
+        {
+          "id": "hmi_editor"
+        },
+        {
+          "id": "hmi_runtime"
+        },
+        {
+          "id": "hmi_widgets"
+        },
+        {
+          "id": "hmi_animations"
+        },
+        {
+          "id": "hmi_scripts"
+        },
+        {
+          "id": "hmi_export"
+        },
+        {
+          "id": "ai_assistant"
+        },
+        {
+          "id": "ai_generation"
+        },
+        {
+          "id": "ai_learning"
+        },
+        {
+          "id": "advanced_import"
+        },
+        {
+          "id": "advanced_export"
+        },
+        {
+          "id": "professional_tools"
+        }
+      ]
+    },
+    {
+      "id": "CUSTOM",
+      "label": "CUSTOM",
+      "type": "temporary",
+      "max_devices": 1,
+      "duration_days": 365,
+      "offline_grace_days": 14,
+      "features": []
+    }
+  ]
+}

@@ -397,7 +397,7 @@ void StationScreen::watchStopRequest(double now) {
             (void)app_.recovery().saveStationState(state);
             // La version suivante (ou la precedente, au retour) la reprend au demarrage, sans question : l'agent lui
             // passe le meme fichier (XPG_REPRISE_FICHIER).
-            if (const char* f = std::getenv("XPG_REPRISE_FICHIER"); f && *f) {
+            if (const auto f = Recovery::agentFile(app_.projectFolder(), "XPG_REPRISE_FICHIER", "reprise-poste.txt"); !f.empty()) {
                 if (Recovery::writeFile(f, state))
                     pane_->runtime().log("Syst\xC3\xA8me", "Poste d'exploitation", "\xC3\x89tat gard\xC3\xA9 pour la version suivante");
             }
@@ -409,7 +409,7 @@ void StationScreen::watchStopRequest(double now) {
     if (stopFile_.empty()) {
         if (stopCheck_ < 0) {
             stopCheck_ = now;
-            if (const char* f = std::getenv("XPG_ARRET_FICHIER"); f && *f) stopFile_ = f;
+            stopFile_ = Recovery::agentFile(app_.projectFolder(), "XPG_ARRET_FICHIER", "arret.json");
         }
         if (stopFile_.empty()) return;
     }

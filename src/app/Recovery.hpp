@@ -88,6 +88,10 @@ public:
     // 1.29.0 : ecrire un fichier entier puis le renommer (la reprise passee d'une version du poste a la suivante,
     // XPG_REPRISE_FICHIER). Chemin en UTF-8.
     static bool writeFile(const std::string& path, const std::string& text);
+    // 1.29.0 : un fichier d'echange avec l'agent de deploiement - la variable d'environnement `env` si l'agent a lance
+    // le poste ; sinon (le poste lance par la session, la cle Run) deduit du dossier du poste quand c'est une version
+    // installee par l'agent (<agent>/Applications/<application>/versions/<version>) : <agent>/<name>. Vide : aucun.
+    [[nodiscard]] static std::string agentFile(const std::string& stationFolder, const char* env, const char* name);
 
     // Le processus de ce numero tourne-t-il ? (Windows : OpenProcess ; ailleurs : kill 0).
     [[nodiscard]] static bool processAlive(long pid);

@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.28.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.29.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.28.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 14 h 28"},
     {"1.27.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 11 h 31"},
     {"1.26.1", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 09 h 25"},
     {"1.26.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 22 h 20"},
@@ -171,6 +172,24 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.29.0 : le deploiement reseau, etape 2 - deployer, revenir, l'agent avec la session
+        note("1.29.0", "Projet", Kind::New,
+         "D\xC3\x89PLOYER LE POSTE D'EXPLOITATION : D\xC3\xA9ploiement r\xC3\xA9seau \xE2\x80\xBA D\xC3\xA9ployer, sur une machine appair\xC3\xA9" "e. Le package du projet FINISH "
+         "est cr\xC3\xA9\xC3\xA9, envoy\xC3\xA9 par blocs (une coupure reprend o\xC3\xB9 elle en \xC3\xA9tait), v\xC3\xA9rifi\xC3\xA9 par l'agent (signature, empreinte de "
+         "chaque fichier) puis install\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la version en place. Le poste en marche affiche un bandeau, garde son \xC3\xA9tat "
+         "et se ferme ; la nouvelle version d\xC3\xA9marre. Si elle ne tient pas, l'agent revient seul \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente. La "
+         "progression se voit en direct ; Annuler arr\xC3\xAAte l'envoi.",
+         "deploiement-reseau", ""),
+        note("1.29.0", "Projet", Kind::New,
+         "REVENIR EN ARRI\xC3\x88RE, LES APPLICATIONS, L'HISTORIQUE : Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente remet la version gard\xC3\xA9" "e sur la machine. "
+         "L'onglet Applications montre, pour la machine choisie, la version active, celles gard\xC3\xA9" "es et le poste ; Historique, "
+         "chaque d\xC3\xA9ploiement (quand, depuis quel PC, quelle version, son r\xC3\xA9sultat).",
+         "deploiement-reseau", ""),
+        note("1.29.0", "Configuration", Kind::New,
+         "L'AGENT AVEC LA SESSION : \xC3\xA0 l'installation du profil Poste d'exploitation, la case \xC2\xAB Recevoir les d\xC3\xA9ploiements \xC2\xBB "
+         "fait d\xC3\xA9marrer l'agent avec la session de l'op\xC3\xA9rateur (il y lance le poste) et pose ses deux r\xC3\xA8gles du pare-feu "
+         "(TCP 47861, UDP 47862 ; r\xC3\xA9seaux domaine et priv\xC3\xA9, pas public). Une mise \xC3\xA0 jour arr\xC3\xAAte l'agent le temps de la copie.",
+         "deploiement-reseau", ""),
         // 1.28.0 : le deploiement reseau, etape 1 - le paquet signe, l'agent du PC de maintenance, la recherche, l'appairage
         note("1.28.0", "Projet", Kind::New,
          "LE D\xC3\x89PLOIEMENT R\xC3\x89SEAU, PREMI\xC3\x88RE \xC3\x89TAPE : Configuration \xE2\x80\xBA Poste d'exploitation, outil D\xC3\xA9ploiement r\xC3\xA9seau. "

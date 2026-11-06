@@ -74,13 +74,18 @@ bool fail(std::string* why, std::string text) {
     return false;
 }
 
+// Non bloquante, et jamais heritee par un programme lance (1.29.0 : le poste lance par
+// l'agent ne doit pas garder la socket d'ecoute ouverte).
 void setNonBlocking(Native s) {
 #if defined(_WIN32)
     u_long on = 1;
     (void)ioctlsocket(s, FIONBIO, &on);
+    (void)SetHandleInformation(reinterpret_cast<HANDLE>(s), HANDLE_FLAG_INHERIT, 0);
 #else
     const int flags = fcntl(s, F_GETFL, 0);
     if (flags >= 0) (void)fcntl(s, F_SETFL, flags | O_NONBLOCK);
+    const int fd = fcntl(s, F_GETFD, 0);
+    if (fd >= 0) (void)fcntl(s, F_SETFD, fd | FD_CLOEXEC);
 #endif
 }
 

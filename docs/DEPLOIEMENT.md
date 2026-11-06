@@ -94,8 +94,11 @@ Un intermédiaire qui présente ses propres certificats obtient un `G` différen
 XPG-Deployment-Agent --servir [--dossier D] [--port 47861] [--port-decouverte 47862]
 XPG-Deployment-Agent --etat [--dossier D]        ce que fait l'agent (sans réseau)
 XPG-Deployment-Agent --appairer [--dossier D]    un code à 6 chiffres
-XPG-Deployment-Agent --version
+XPG-Deployment-Agent --demarrer-avec-session oui|non   (1.29.0) l'agent démarre avec la session de l'opérateur
+XPG-Deployment-Agent --version                    « XPG-Deployment-Agent 1.1.0 (protocoles 1 et 2, …) » en 1.29.0
 ```
+
+`--demarrer-avec-session oui` écrit la valeur `Run` « XPG Deployment Agent » de **ton** compte (HKCU ; Linux : un `.desktop` dans `~/.config/autostart`) - sauf si l'installateur l'a déjà posée pour tous les comptes (HKLM, lue dans les vues 64 et 32 bits) : alors il retire la sienne et le dit (deux agents au démarrage : le second trouverait le port pris). Lancé ainsi, sans terminal, l'agent cache sa console. `--etat` dit s'il démarre avec la session, et où.
 
 Son dossier (par défaut `C:\ProgramData\XPG\Agent` sous Windows) : `identite.cer` et `identite.cle` (la clé protégée pour la machine), `appaires.json` (les PC appairés), `appairage.code` (le code en cours, protégé), `etat.json` (écrit toutes les 5 s pendant qu'il tourne), `journal\AAAA-MM-JJ.log` (une ligne par opération). Ctrl+C l'arrête proprement. Il ne lance **aucune** commande reçue du réseau ; il n'utilise jamais Internet.
 
@@ -120,4 +123,50 @@ En 1.29.0, l'agent est un programme sans fenêtre **démarré avec la session de
 - **LIST_APPS** : les applications installées, leurs versions, la version active, si le poste tourne.
 - **GET_HISTORY** : l'historique des déploiements.
 - L'agent ne lance qu'**IHM-Studio.exe**, posé à côté de lui, avec `--ihm "<dossier de la version>"` : jamais une commande reçue du réseau.
+
+### 9.1 La version 2 du protocole
+
+L'agent 1.1.0 (IHM Studio 1.29.0) accepte les versions **1 et 2** ; IHM Studio 1.29.0 offre 1 et 2, la plus haute commune est choisie (`IDENTIFY`). Un Studio 1.28 (version 1) garde IDENTIFY, l'appairage, STATUS (qui liste maintenant les applications), GET_LOGS et UNPAIR ; les nouvelles commandes lui sont refusées (code `proto`, « mets à jour IHM Studio pour déployer sur ce PC »). Un agent 1.28 face à un Studio 1.29 : Déployer dit « l'agent … ne sait pas encore installer : mets-le à jour ».
+
+| Commande | Arguments | Réponse |
+|---|---|---|
+| `PREPARE` | `application, version, size, sha256, contentSize` | `transfer, offset, chunkSize, diskFree, installed, version` - place exigée : le reste du paquet + son contenu + 64 Mio |
+| `SEND_CHUNK` | l'en-tête porte `"chunk":{transfer, offset, size, sha256}` ; les données de la trame sont les octets bruts (1 Mio au plus, pas du JSON) | `received, complete` |
+| `VERIFY_PACKAGE` | `transfer` | `application, version, files, bytes, publisher` (le nom et la version doivent être ceux de PREPARE) |
+| `INSTALL` | `transfer, autostart?, application?` | `version, label, previous, already, removed` |
+| `STOP` | `raison?, delai?, force?` | `wasRunning, pid, forced, waitedMs` |
+| `START` | `application?, version?, check?, autostart?` | `pid, version, rolledBack…` |
+| `ROLLBACK` | `application?, version?, delai?, force?, start?` | `from, to, restarted, pid` |
+| `LIST_APPS` | - | `apps:[…], station:{…}, program` |
+| `GET_HISTORY` | `limit?` | `entries:[…]` |
+
+Une réponse d'erreur de la version 2 peut porter des données (le détail d'un retour automatique). Les codes nouveaux : `place`, `transfert`, `bloc-abime`, `paquet-abime`, `paquet-refuse`, `installation`, `application-inconnue`, `version-absente`, `occupe`, `programme-absent`, `arret-delai`, `demarrage` ; côté Studio seulement : `annule`, `paquet-local`.
+
+**Déployer** (`deploy::Client::deploy`) enchaîne : la vérification locale du paquet, la connexion épinglée, PREPARE, SEND_CHUNK (une coupure : reconnexion et reprise là où l'agent en est, 3 fois au plus ; un envoi annulé ou coupé reprend au déploiement suivant, même après un redémarrage de l'agent), VERIFY_PACKAGE, INSTALL, STOP (si un poste tourne), START (le poste doit tenir 8 s). L'annulation compte jusqu'au début d'INSTALL ; ensuite, Déployer va au bout.
+
+### 9.2 Les fichiers de l'agent (1.29.0)
+
+```
+incoming\<sha256>.part | .json            la réception en cours (la reprise survit au redémarrage de l'agent)
+Applications\<application>\active.json    {"format":"xpg-application-active","version":1,"application","active","previous","activatedAt","autostart"}
+Applications\<application>\versions\<id>\       le contenu de app\ ; le lanceur réécrit pour ce PC (.cmd ; .sh sous Linux)
+Applications\<application>\versions\<id>.json   la fiche de la version (paquet, SHA-256, date, PC d'origine, éditeur)
+historique.jsonl   poste.json   arret.json   reprise-poste.txt   poste-sortie.log (Linux)
+```
+
+`<id>` est la version du paquet (« V3 ») ; le même nom avec un autre contenu devient « V3-2 », « V3-3 » : rien n'est jamais écrasé. Une version identique déjà installée n'est ni renvoyée ni réextraite. Trois versions sont gardées ; l'active, la précédente et celle du poste en marche ne sont jamais effacées.
+
+### 9.3 Le poste et l'agent
+
+L'agent lance le poste avec deux variables d'environnement :
+
+- `XPG_ARRET_FICHIER=<dossier de l'agent>\arret.json` (absent au lancement). Pour l'arrêt, l'agent y écrit d'un coup `{"raison": "<phrase>", "delai": 60}`. Le poste affiche un bandeau orange (« Mise à jour du poste (raison) : il se ferme dans N s ; son état est gardé. »), écrit son état et quitte normalement à la fin du délai. L'agent attend `delai` + 30 s ; le poste encore là : échec `arret-delai`, sans le tuer - sauf `force` : il est terminé, et le journal le dit.
+- `XPG_REPRISE_FICHIER=<dossier de l'agent>
+eprise-poste.txt`. À l'arrêt, le poste y écrit son état (vue, variables IHM, alarmes en cours) ; au lancement suivant (la nouvelle version, ou la précédente au retour), il le reprend **sans question** - l'arrêt était voulu - puis l'efface. L'agent ne l'efface jamais entre l'arrêt d'une version et le lancement de la suivante ; seulement s'il a plus de 10 minutes au moment d'un lancement.
+
+Un poste lancé par la **session** (la valeur `Run` « XPG Poste d'exploitation ») n'a pas ces variables : quand son dossier est une version installée par l'agent (`<agent>\Applications\<application>\versions\<version>`), il les déduit (`<agent>\arret.json`, `<agent>\reprise-poste.txt`). L'agent le retrouve au démarrage (`poste.json` : pid et heure de création ; ou la liste des processus) et peut donc l'arrêter proprement lui aussi.
+
+### 9.4 L'installateur (1.29.0)
+
+Profil **Poste d'exploitation**, case **Recevoir les déploiements** (décochée au départ) : la valeur `Run` « XPG Deployment Agent » (`"<programme>\XPG-Deployment-Agent.exe" --servir`, HKLM pour une installation pour tous les comptes) ; pour tous les comptes seulement, deux règles entrantes du pare-feu limitées au programme de l'agent - TCP 47861 et UDP 47862, profils **domaine et privé** (pas public) ; l'agent démarre à la fin de l'installation, dans le compte de l'opérateur. Une mise à jour l'arrête (`taskkill`) le temps de la copie. Décochée, ou à la désinstallation : la valeur et les règles posées par l'installateur partent.
 

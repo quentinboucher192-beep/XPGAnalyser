@@ -784,14 +784,17 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\deploy\Agent.cpp" />
     <ClCompile Include="src\deploy\Client.cpp" />
     <ClCompile Include="src\deploy\Crypto.cpp" />
+    <ClCompile Include="src\deploy\Deployer.cpp" />
     <ClCompile Include="src\deploy\DevKey.cpp" />
     <ClCompile Include="src\deploy\Discovery.cpp" />
     <ClCompile Include="src\deploy\Frame.cpp" />
+    <ClCompile Include="src\deploy\Install.cpp" />
     <ClCompile Include="src\deploy\Journal.cpp" />
     <ClCompile Include="src\deploy\Net.cpp" />
     <ClCompile Include="src\deploy\Package.cpp" />
     <ClCompile Include="src\deploy\Pairing.cpp" />
     <ClCompile Include="src\deploy\Protocol.cpp" />
+    <ClCompile Include="src\deploy\Station.cpp" />
     <ClCompile Include="src\deploy\Tls.cpp" />
     <ClCompile Include="src\deploy\TlsIdentity.cpp" />
   </ItemGroup>
@@ -1373,17 +1376,28 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\Agent.hpp" />
     <ClInclude Include="src\deploy\Client.hpp" />
     <ClInclude Include="src\deploy\Crypto.hpp" />
+    <ClInclude Include="src\deploy\Deployer.hpp" />
     <ClInclude Include="src\deploy\DevKey.hpp" />
     <ClInclude Include="src\deploy\Discovery.hpp" />
     <ClInclude Include="src\deploy\Frame.hpp" />
+    <ClInclude Include="src\deploy\Install.hpp" />
     <ClInclude Include="src\deploy\Journal.hpp" />
     <ClInclude Include="src\deploy\Net.hpp" />
     <ClInclude Include="src\deploy\Package.hpp" />
     <ClInclude Include="src\deploy\Pairing.hpp" />
     <ClInclude Include="src\deploy\Paths.hpp" />
     <ClInclude Include="src\deploy\Protocol.hpp" />
+    <ClInclude Include="src\deploy\Station.hpp" />
     <ClInclude Include="src\deploy\Tls.hpp" />
     <ClInclude Include="src\deploy\TlsIdentity.hpp" />
+    <ClInclude Include="src\license_admin\Admin.hpp" />
+    <ClInclude Include="src\licensing\Documents.hpp" />
+    <ClInclude Include="src\licensing\KeyFile.hpp" />
+    <ClInclude Include="src\licensing\Licensing.hpp" />
+    <ClInclude Include="src\licensing\PublisherKey.hpp" />
+    <ClInclude Include="src\licensing\SignedFile.hpp" />
+    <ClInclude Include="src\licensing\Store.hpp" />
+    <ClInclude Include="src\licensing\Time.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

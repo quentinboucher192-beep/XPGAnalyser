@@ -10,11 +10,16 @@
 //      termine en 100 a 200 ms) ;
 //    - les commandes : IDENTIFY, PAIR_START, PAIR_FINISH (un pair inconnu ne
 //      peut rien d'autre), STATUS, GET_LOGS, UNPAIR ; chaque operation fait une
-//      ligne du journal (deploy/Journal).
+//      ligne du journal (deploy/Journal) ;
+//    - 1.29.0, la version 2 du protocole (un PC appaire seulement) : PREPARE,
+//      SEND_CHUNK, VERIFY_PACKAGE, INSTALL, STOP, START, ROLLBACK, LIST_APPS,
+//      GET_HISTORY - le travail est dans deploy/Deployer.
 //  L'agent ne lance AUCUNE commande recue du reseau et n'utilise jamais Internet.
 //
 //  Son dossier : identite.cer / identite.cle (protegee, la machine),
-//  appaires.json, appairage.code (protege), etat.json, journal/AAAA-MM-JJ.log.
+//  appaires.json, appairage.code (protege), etat.json, journal/AAAA-MM-JJ.log ;
+//  1.29.0 : incoming/, Applications/, historique.jsonl, poste.json, arret.json,
+//  reprise-poste.txt (deploy/Install.hpp).
 // =============================================================================
 #pragma once
 
@@ -23,12 +28,14 @@
 
 #include "../core/Json.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
 namespace deploy {
 
-inline constexpr const char* kAgentVersion = "1.0.0";
+// 1.1.0 (IHM Studio 1.29.0) : la version 2 du protocole (l'envoi, l'installation, le poste).
+inline constexpr const char* kAgentVersion = "1.1.0";
 
 struct AgentConfig {
     std::string dir;                                   // son dossier (cree s'il manque)
@@ -42,6 +49,12 @@ struct AgentConfig {
     int idleTimeoutMs{120000};                         // une connexion muette si longtemps : fermee
     int ioTimeoutMs{15000};                            // le reste d'une trame, une reponse
     int stateIntervalMs{5000};                         // etat.json
+    // 1.29.0 : l'installation et le poste (deploy/Deployer).
+    std::string runtimeProgram;                        // le programme du poste ; vide : IHM-Studio(.exe) a cote de l'agent
+    int keepVersions{3};                               // les versions gardees par application
+    int startCheckMs{8000};                            // le poste doit tenir ce temps apres START
+    int stopGraceMs{30000};                            // STOP attend le delai donne au poste, plus ceci
+    std::int64_t simulatedFreeBytes{-1};               // ESSAIS SEULEMENT : la place libre simulee (-1 : la vraie)
 };
 
 class Agent {
@@ -65,6 +78,8 @@ public:
     [[nodiscard]] std::string machineName() const;
     [[nodiscard]] std::string machineId() const;
     [[nodiscard]] int activeConnections() const;
+    // 1.29.0 : le programme du poste que l'agent lance (IHM-Studio.exe a cote de lui).
+    [[nodiscard]] std::string runtimeProgram() const;
 
 private:
     struct Impl;

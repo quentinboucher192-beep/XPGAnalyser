@@ -257,6 +257,30 @@ struct PackageReport {
 // Verifier le paquet `path` (les quatre etapes, dans l'ordre).
 [[nodiscard]] PackageReport verifyPackage(const std::string& path, const PackageVerifyOptions&);
 
+// ---- extraire (1.29.0 : INSTALL, sur le PC de maintenance) ---------------------------
+struct PackageExtractOptions {
+    std::vector<crypto::PublicKey> approvedKeys;   // les cles d'editeur des PC appaires
+    PackageLimits     limits;
+    PackageProgressFn progress;                    // facultatif (la verification, puis l'ecriture)
+};
+
+struct PackageExtractResult {
+    bool          ok{false};
+    std::string   error;          // la phrase a montrer (vide si ok)
+    PackageReport report;         // la verification (verifyPackage)
+    std::size_t   files{0};       // les fichiers ecrits
+    std::uint64_t bytes{0};
+};
+// Verifie le paquet (verifyPackage : les quatre etapes, l'editeur doit etre
+// approuve), puis ecrit le contenu de app/ dans `destination` (app/ihm/ihm.txt ->
+// <destination>/ihm/ihm.txt). `destination` ne doit pas exister : tout est ecrit
+// dans un dossier voisin (<destination>.extraction), puis renomme d'un coup.
+// Chaque fichier est re-hache pendant l'ecriture et compare au manifeste (le
+// paquet ne peut pas changer entre la verification et l'extraction) ; chaque
+// chemin final est controle sous le dossier (jamais au-dehors). Une erreur n'en
+// laisse rien.
+[[nodiscard]] PackageExtractResult extractPackage(const std::string& path, const std::string& destination, const PackageExtractOptions&);
+
 // "4 Gio", "12,5 Mio", "830 octets" (les messages).
 [[nodiscard]] std::string packageSizeText(std::uint64_t bytes);
 

@@ -25378,6 +25378,8 @@ const std::vector<Topic>& topics() {
                          "minutes, une seule fois ;", {}},
              {K::Bullet, "`XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, "
                          "les PC appair\xC3\xA9s.", {}},
+             {K::Bullet, "`XPG-Deployment-Agent.exe --demarrer-avec-session oui` : l'agent d\xC3\xA9marrera "
+                         "avec ta session (sans l'installateur ; `non` l'enl\xC3\xA8ve).", {}},
              {K::Paragraph, "Sans les r\xC3\xA8gles de l'installateur, au premier `--servir`, Windows peut "
                          "demander d'autoriser l'agent sur le r\xC3\xA9seau (R\xC3\xA9seau priv\xC3\xA9).", {}},
              {K::Heading, "Trouver et appairer une machine", {}},
@@ -25425,6 +25427,12 @@ const std::vector<Topic>& topics() {
                          "gard\xC3\xA9" "e sur la machine : le poste en marche est pr\xC3\xA9venu et "
                          "ferm\xC3\xA9, la pr\xC3\xA9" "c\xC3\xA9" "dente redevient l'active et "
                          "d\xC3\xA9marre. Celle d'avant reste gard\xC3\xA9" "e.", {}},
+             {K::Tip, "Trois versions sont gard\xC3\xA9" "es par application. Le m\xC3\xAAme "
+                         "num\xC3\xA9ro de version avec un autre contenu (le projet a chang\xC3\xA9 sans "
+                         "nouvelle version) s'installe \xC3\xA0 c\xC3\xB4t\xC3\xA9, sous \xC2\xAB V3-2 "
+                         "\xC2\xBB : rien n'est \xC3\xA9" "cras\xC3\xA9. Un poste lanc\xC3\xA9 par la "
+                         "session (sans l'agent) est retrouv\xC3\xA9 et pr\xC3\xA9venu de la m\xC3\xAAme "
+                         "fa\xC3\xA7on.", {}},
              {K::Heading, "Applications et Historique", {}},
              {K::Bullet, "**Applications** : pour la machine choisie, chaque application "
                          "install\xC3\xA9" "e, sa version active, celles gard\xC3\xA9" "es, le poste (en "

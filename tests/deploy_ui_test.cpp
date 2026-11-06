@@ -7,6 +7,10 @@
 //  adresse (127.0.0.1), un code faux refuse, le bon code (deploy::createCode, comme
 //  --appairer) -> appairee ; Rechercher la retrouve ; Etat, Journal ; Creer un
 //  package (le projet FINISH) puis le relire ; un projet DEV refuse ; Oublier.
+//  1.29.0 (Linux) : Deployer (la progression vue a l'ecran), le poste lance par
+//  l'agent (un petit programme d'essai qui fait comme le poste : il attend la
+//  demande d'arret, ecrit son etat et quitte), Applications, Historique, un second
+//  Deployer (le poste prevenu, son etat garde), Revenir a la precedente.
 //  De vraies sockets, de vraies poignees de main : rien n'est simule.
 // =============================================================================
 #include "../src/app/hmi/HmiDeployPane.hpp"
@@ -18,6 +22,8 @@
 
 #include <chrono>
 #include <cstdio>
+#include <sstream>
+#include <thread>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -47,6 +53,35 @@ void writeFile(const fs::path& p, const std::string& text) {
     std::ofstream(p, std::ios::binary) << text;
 }
 
+std::string readAll(const fs::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    std::stringstream ss;
+    ss << in.rdbuf();
+    return ss.str();
+}
+
+// Un geste qui part, puis son attente en regardant la progression (comme l'ecran, image apres image).
+struct Watched {
+    bool sawText{false};
+    double maxFraction{-1};
+    bool finished{false};
+};
+Watched watch(app::HmiDeployPane& pane, double seconds) {
+    Watched w;
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(static_cast<int>(seconds * 1000));
+    while (std::chrono::steady_clock::now() < end) {
+        pane.poll();
+        if (!pane.busy()) {
+            w.finished = true;
+            return w;
+        }
+        if (!pane.progressText().empty()) w.sawText = true;
+        w.maxFraction = std::max(w.maxFraction, pane.progressFraction());
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return w;
+}
+
 void makeProject(const fs::path& root, const std::string& state) {
     writeFile(root / "project.xpgproj", "# API Studio project. Safe to read; edit with care.\nformatVersion = 1\nname = Essai_Poste\n"
                                         "version = 0.0.1\nstate = " + state + "\ncreated = 2026-11-06 10:00\nmodified = 2026-11-06 10:00\n"
@@ -73,6 +108,20 @@ int main() {
     cfg.port = 0;
     cfg.discoveryPort = 0;
     cfg.machineName = "PC-ESSAI";
+#ifndef _WIN32
+    // 1.29.0 : le poste d'essai (un script : il note comment il est lance, attend la demande d'arret, garde son etat).
+    const fs::path fakeStation = base / "poste-essai.sh";
+    writeFile(fakeStation, "#!/bin/sh\n"
+                           "echo \"$@\" >> \"" + U(base / "poste-lancements.txt") + "\"\n"
+                           "if [ -f \"$XPG_REPRISE_FICHIER\" ]; then echo reprise >> \"" + U(base / "poste-lancements.txt") + "\"; rm -f \"$XPG_REPRISE_FICHIER\"; fi\n"
+                           "while [ ! -f \"$XPG_ARRET_FICHIER\" ]; do sleep 0.1; done\n"
+                           "echo \"etat du poste d'essai\" > \"$XPG_REPRISE_FICHIER\"\n"
+                           "exit 0\n");
+    fs::permissions(fakeStation, fs::perms::owner_all, fs::perm_options::replace, ec);
+    cfg.runtimeProgram = U(fakeStation);
+    cfg.startCheckMs = 1500;
+    cfg.stopGraceMs = 5000;
+#endif
     deploy::Agent agent(cfg);
     std::string why;
     check(agent.start(&why), "l'agent demarre [" + why + "]");
@@ -154,6 +203,58 @@ int main() {
     folder = U(dev);
     check(!pane.createPackage() && has(pane.message(), "FINISH"), "un projet DEV : refuse tout de suite [" + pane.message() + "]");
     folder = U(project);
+
+#ifndef _WIN32
+    // 1.29.0 : Deployer (sans demarrer avec la session : l'essai ne touche pas a la session de l'utilisateur).
+    {
+        app::HmiDeployPane::DeployOptions o;
+        o.autostart = false;
+        o.stopDelay = 1;
+        check(pane.select(id) && pane.deploy(o), "Deployer : parti");
+        const auto w = watch(pane, 120);
+        check(w.finished, "Deployer : fini en moins de 2 minutes");
+        check(w.sawText, "Deployer : la progression s'est vue a l'ecran");
+        check(!pane.lastError() && has(pane.message(), "Essai_Poste") && has(pane.message(), "le poste tourne"),
+              "Deployer : installe, le poste tourne [" + pane.message() + "]");
+        check(pane.progressText().empty(), "la progression s'efface a la fin");
+        check(pane.appRows().size() == 1 && pane.appRows()[0][0] == "Essai_Poste" && has(pane.appRows()[0][3], "en marche"),
+              "Applications (apres Deployer) : Essai_Poste, le poste en marche");
+        const std::string launches = readAll(base / "poste-lancements.txt");
+        check(has(launches, "--ihm") && has(launches, "Applications"), "le poste lance avec --ihm sur la version installee : " + launches);
+        check(fs::exists(agentDir / "Applications" / "Essai_Poste" / "active.json"), "active.json ecrit");
+    }
+    check(pane.askHistory() && pane.waitIdle(30), "Historique");
+    {
+        bool install = false;
+        for (const auto& r : pane.historyRows()) install = install || (r.size() == 5 && has(r[4], "Installation") && r[2] == "Essai_Poste");
+        check(!pane.lastError() && install, "Historique : l'installation y est [" + pane.message() + "]");
+    }
+    // Le projet change (sans nouvelle version) : un second Deployer, le poste en marche prevenu, son etat garde.
+    writeFile(project / "donnees" / "consignes.csv", "nom;valeur\nP1;4\n");
+    {
+        app::HmiDeployPane::DeployOptions o;
+        o.autostart = false;
+        o.stopDelay = 1;
+        check(pane.deploy(o), "second Deployer : parti");
+        const auto w = watch(pane, 120);
+        check(w.finished && !pane.lastError() && has(pane.message(), "l'ancien poste s'est ferm"),
+              "second Deployer : l'ancien poste prevenu s'est ferme [" + pane.message() + "]");
+        check(pane.appRows().size() == 1 && !has(pane.appRows()[0][2], "aucune"), "Applications : la version d'avant est gardee : "
+              + (pane.appRows().empty() ? std::string("-") : pane.appRows()[0][2]));
+        check(has(readAll(base / "poste-lancements.txt"), "reprise"), "la nouvelle version a repris l'etat garde par l'ancienne");
+    }
+    // Revenir a la precedente.
+    check(pane.rollback() && pane.waitIdle(90), "Revenir a la precedente");
+    check(!pane.lastError() && has(pane.message(), "Revenu"), "Revenir : fait [" + pane.message() + "]");
+    check(pane.askApps() && pane.waitIdle(30) && !pane.lastError(), "Applications");
+    // Un projet DEV : refuse tout de suite.
+    folder = U(dev);
+    check(!pane.deploy() && has(pane.message(), "FINISH"), "Deployer un projet DEV : refuse tout de suite [" + pane.message() + "]");
+    folder = U(project);
+    // Le poste d'essai s'arrete (la demande d'arret, comme l'agent la pose).
+    writeFile(agentDir / "arret.json", "{\"raison\": \"fin de l'essai\", \"delai\": 0}");
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+#endif
 
     // Oublier : elle l'oublie aussi.
     check(pane.select(id) && pane.forget() && pane.waitIdle(30), "Oublier");

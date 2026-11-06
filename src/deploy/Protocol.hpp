@@ -17,6 +17,26 @@
 //
 //  Les commandes en 1.28 : IDENTIFY, PAIR_START, PAIR_FINISH, STATUS, GET_LOGS,
 //  UNPAIR. Un pair non appaire ne peut faire que IDENTIFY et PAIR_*.
+//
+//  1.29.0 : LA VERSION 2 DU PROTOCOLE. L'agent accepte 1 et 2 ; IHM Studio 1.29
+//  offre 1 et 2. La version 2 ajoute l'envoi, l'installation et le poste :
+//    PREPARE         {application, version, size, sha256, contentSize}
+//                    -> {transfer, offset, chunkSize, diskFree, installed}
+//    SEND_CHUNK      l'en-tete porte "chunk":{transfer, offset, size, sha256} et
+//                    les donnees de la trame sont les octets du bloc (1 Mio au
+//                    plus, PAS du JSON) -> {received, complete}
+//    VERIFY_PACKAGE  {transfer} -> {application, version, files, bytes, publisher}
+//    INSTALL         {transfer, autostart?} -> {version, label, previous, already, removed}
+//    STOP            {raison?, delai?, force?} -> {wasRunning, pid, forced, waitedMs}
+//    START           {application?, version?, check?, autostart?} -> {pid, version, rolledBack...}
+//    ROLLBACK        {application?, version?, delai?, force?} -> {from, to, restarted, pid}
+//    LIST_APPS       {} -> {apps:[...], station:{...}}
+//    GET_HISTORY     {limit?} -> {entries:[...]}
+//  Une reponse d'erreur de la version 2 peut porter des donnees (le detail : le
+//  retour automatique d'un START manque). Sous la version 1 (IHM Studio 1.28),
+//  ces commandes sont refusees (code "proto") avec une phrase qui dit de mettre
+//  a jour IHM Studio ; IDENTIFY, l'appairage, STATUS (qui liste aussi les
+//  applications), GET_LOGS et UNPAIR restent les memes.
 // =============================================================================
 #pragma once
 
@@ -47,6 +67,22 @@ inline constexpr std::string_view kPairFinish = "PAIR_FINISH";
 inline constexpr std::string_view kStatus = "STATUS";
 inline constexpr std::string_view kGetLogs = "GET_LOGS";
 inline constexpr std::string_view kUnpair = "UNPAIR";
+// 1.29.0 (version 2 du protocole).
+inline constexpr std::string_view kPrepare = "PREPARE";
+inline constexpr std::string_view kSendChunk = "SEND_CHUNK";
+inline constexpr std::string_view kVerifyPackage = "VERIFY_PACKAGE";
+inline constexpr std::string_view kInstall = "INSTALL";
+inline constexpr std::string_view kStop = "STOP";
+inline constexpr std::string_view kStart = "START";
+inline constexpr std::string_view kRollback = "ROLLBACK";
+inline constexpr std::string_view kListApps = "LIST_APPS";
+inline constexpr std::string_view kGetHistory = "GET_HISTORY";
+// La version qui porte ces commandes.
+inline constexpr int kDeployProto = 2;
+// La taille d'un bloc de SEND_CHUNK (le dernier peut etre plus court).
+inline constexpr std::uint32_t kChunkSize = 1024u * 1024u;
+// Vrai : `op` est une commande de la version 2.
+[[nodiscard]] bool isDeployOp(std::string_view op);
 
 // Les codes d'erreur ("error" d'une reponse ; Client::Outcome::error).
 namespace err {
@@ -64,10 +100,25 @@ inline constexpr std::string_view kNoCode = "pas-de-code";              // aucun
 inline constexpr std::string_view kWrongCode = "code-faux";             // ou quelqu'un s'interpose
 inline constexpr std::string_view kPairing = "appairage";               // ordre ou essai deja fait
 inline constexpr std::string_view kInternal = "interne";
+// 1.29.0 : l'envoi, l'installation, le poste.
+inline constexpr std::string_view kNoSpace = "place";                   // pas assez de place sur le disque
+inline constexpr std::string_view kTransfer = "transfert";              // envoi inconnu, bloc hors d'ordre, taille differente
+inline constexpr std::string_view kBadChunk = "bloc-abime";             // le SHA-256 d'un bloc ne correspond pas
+inline constexpr std::string_view kBadPackage = "paquet-abime";         // le SHA-256 du paquet entier ne correspond pas
+inline constexpr std::string_view kPackageRefused = "paquet-refuse";    // la verification du paquet (signature, editeur, chemins, contenu)
+inline constexpr std::string_view kInstallFailed = "installation";      // extraction ou ecriture impossible
+inline constexpr std::string_view kUnknownApp = "application-inconnue";
+inline constexpr std::string_view kNoVersion = "version-absente";       // pas cette version, pas de version precedente
+inline constexpr std::string_view kBusy = "occupe";                     // une autre operation, un autre poste en marche
+inline constexpr std::string_view kNoRuntime = "programme-absent";      // le programme du poste n'est pas a cote de l'agent
+inline constexpr std::string_view kStopTimeout = "arret-delai";         // le poste n'a pas quitte dans le delai
+inline constexpr std::string_view kStartFailed = "demarrage";           // le poste n'a pas tenu : retour a la precedente
 // Cote Studio seulement (jamais envoyes par l'agent).
 inline constexpr std::string_view kNetwork = "reseau";                  // connexion, TLS, delai
 inline constexpr std::string_view kPinMismatch = "empreinte";           // ce n'est plus la meme machine
 inline constexpr std::string_view kBadReply = "reponse";                // reponse illisible
+inline constexpr std::string_view kCancelled = "annule";                // l'utilisateur a annule
+inline constexpr std::string_view kLocalPackage = "paquet-local";       // le paquet a envoyer ne se lit pas ou est refuse ici
 } // namespace err
 
 // Les millisecondes depuis 1970 (UTC).

@@ -519,7 +519,8 @@ Aucune feuille de route n'est publiée dans ce dépôt.
 | [docs/IHM-STUDIO.md](docs/IHM-STUDIO.md) | Référence fonctionnelle d'IHM Studio |
 | [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md) | Assistant IA : fournisseurs, données, opérations, mémoire, limites |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture technique |
-| [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md) | Déploiement réseau (1.28.0) : le paquet signé, le protocole, l'appairage, l'agent |
+| [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md) | Déploiement réseau (1.28.0, 1.29.0) : le paquet signé, le protocole, l'appairage, l'agent, l'envoi, l'installation, le poste lancé et arrêté, le retour en arrière |
+| [docs/LICENCES.md](docs/LICENCES.md) | Licences (socle préparé en 1.29.0 pour la 1.30.0, branché nulle part) : documents signés, éditions, activation par fichier, l'outil Admin jamais livré |
 | [docs/FORMATS.md](docs/FORMATS.md) | Formats, données, emplacements, migrations |
 | [docs/TESTS.md](docs/TESTS.md) | Essais et qualité |
 | [docs/GUIDE-COMPILATION.md](docs/GUIDE-COMPILATION.md) | Compilation Linux, MinGW, Windows ; installateur ; outils |

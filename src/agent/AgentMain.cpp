@@ -4,6 +4,9 @@
 //    XPG-Deployment-Agent --servir [--dossier D] [--port 47861] [--port-decouverte 47862]
 //    XPG-Deployment-Agent --etat [--dossier D]        ce que fait l'agent (sans reseau)
 //    XPG-Deployment-Agent --appairer [--dossier D]    un code a 6 chiffres (5 minutes)
+//    XPG-Deployment-Agent --demarrer-avec-session oui|non
+//                         1.29.0 : l'agent demarre avec la session de l'operateur
+//                         (HKCU\...\Run << XPG Deployment Agent >> ; Linux : un .desktop)
 //    XPG-Deployment-Agent --version
 //  Une console, sans SDL ni editeur : tout le travail est dans deploy/Agent. Les
 //  messages sont en francais (UTF-8 ; la console Windows est mise en UTF-8).
@@ -27,6 +30,7 @@
 #include "../deploy/Pairing.hpp"
 #include "../deploy/Paths.hpp"
 #include "../deploy/Protocol.hpp"
+#include "../deploy/Station.hpp"
 
 #include <mbedtls/build_info.h>
 #include <sodium.h>
@@ -119,6 +123,8 @@ void usage() {
         + ", d\xC3\xA9" "couverte UDP " + std::to_string(deploy::protocol::kDiscoveryPort) + ") jusqu'\xC3\xA0 Ctrl+C\n"
           "  --etat              ce que fait l'agent (sans r\xC3\xA9seau)\n"
           "  --appairer          affiche un code \xC3\xA0 6 chiffres \xC3\xA0 taper dans IHM Studio (5 minutes, 3 essais)\n"
+          "  --demarrer-avec-session oui|non\n"
+          "                      l'agent d\xC3\xA9marre (ou plus) avec la session de l'op\xC3\xA9rateur\n"
           "  --version           la version\n"
           "\n"
           "  --dossier D         le dossier de l'agent (par d\xC3\xA9" "faut : " + deploy::defaultAgentDir() + ")\n"
@@ -126,7 +132,8 @@ void usage() {
           "  --port-decouverte N le port UDP de la d\xC3\xA9" "couverte (par d\xC3\xA9" "faut " + std::to_string(deploy::protocol::kDiscoveryPort)
         + ")\n"
           "\n"
-          "L'agent n'ex\xC3\xA9" "cute aucune commande re\xC3\xA7ue du r\xC3\xA9seau et n'utilise jamais Internet.");
+          "L'agent n'ex\xC3\xA9" "cute aucune commande re\xC3\xA7ue du r\xC3\xA9seau et n'utilise jamais Internet : il ne lance que le poste\n"
+          "d'exploitation (IHM-Studio, pos\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de lui) sur une version install\xC3\xA9" "e.");
 }
 
 bool parsePort(const std::string& text, int& out) {
@@ -151,6 +158,7 @@ int serve(const deploy::AgentConfig& cfg) {
     say("XPG-Deployment-Agent " + cfg.version + " - " + agent.machineName() + " (" + agent.machineId() + ")");
     say("Empreinte : " + deploy::crypto::fingerprintText(agent.identity().fingerprint(), 0));
     say("Dossier : " + cfg.dir);
+    say("Poste : " + agent.runtimeProgram() + " (le seul programme que l'agent lance)");
     say("\xC3\x89" "coute TCP " + std::to_string(agent.port()) + ", d\xC3\xA9" "couverte UDP " + std::to_string(agent.discoveryPort())
         + ". Ctrl+C pour arr\xC3\xAAter.");
 #if defined(_WIN32)
@@ -187,6 +195,20 @@ int pair(const std::string& dir) {
         say("(l'identit\xC3\xA9 de cette machine sera cr\xC3\xA9\xC3\xA9" "e au premier lancement de --servir)");
     }
     deploy::Journal(dir).write("", "APPAIRER", "code cr\xC3\xA9\xC3\xA9, valable jusqu'\xC3\xA0 " + localTime(cs.expiresAt, "%H:%M:%S"));
+    return 0;
+}
+
+// --demarrer-avec-session oui|non
+int session(bool on) {
+    const std::string exe = deploy::station::currentExecutable();
+    std::string where, why, note;
+    if (!deploy::station::setAgentAutostart(on, exe, &where, &why, &note)) {
+        complain("XPG-Deployment-Agent : " + why);
+        return 2;
+    }
+    if (!note.empty()) say(std::string(1, static_cast<char>(note[0] >= 'a' && note[0] <= 'z' ? note[0] - 'a' + 'A' : note[0])) + note.substr(1));
+    else if (on) say("L'agent d\xC3\xA9marrera avec ta session (" + where + ") : " + exe + " --servir");
+    else say("L'agent ne d\xC3\xA9marre plus avec ta session (" + where + " retir\xC3\xA9" "e).");
     return 0;
 }
 
@@ -239,6 +261,26 @@ int state(const std::string& dir) {
         case deploy::pairing::CodeLoad::Exhausted: say("Code d'appairage : \xC3\xA9puis\xC3\xA9 (3 essais manqu\xC3\xA9s)"); break;
         case deploy::pairing::CodeLoad::Error: say("Code d'appairage : illisible (" + why + ")"); break;
     }
+    // 1.29.0 : le demarrage avec la session, le poste, les applications.
+    const auto self = deploy::station::readAutostart(true);
+    say(self.present ? "D\xC3\xA9marre avec la session : oui (" + self.where + ")" : std::string("D\xC3\xA9marre avec la session : non"));
+    if (st.isObject() && st.at("station").isObject()) {
+        const auto& p = st.at("station");
+        say(p.flag("running") ? "Poste : " + p.str("application") + " " + p.str("version") + " (pid " + std::to_string(p.integer("pid")) + ")"
+                                    + (p.flag("adopted") ? ", lanc\xC3\xA9 par la session" : "")
+                              : std::string("Poste : aucun en marche"));
+        if (!st.str("runtimeProgram").empty()) say("Programme du poste : " + st.str("runtimeProgram"));
+    }
+    const auto poste = deploy::station::readAutostart(false);
+    say(poste.present ? "Le poste d\xC3\xA9marre avec la session : " + deploy::station::folderOfCommand(poste.command)
+                      : std::string("Le poste ne d\xC3\xA9marre pas avec la session"));
+    if (st.isObject()) {
+        const auto& apps = st.at("apps").items();
+        say("Applications install\xC3\xA9" "es : " + std::to_string(apps.size()));
+        for (const auto& a : apps)
+            say("  " + a.str("name") + "  active : " + (a.str("version").empty() ? std::string("aucune") : a.str("version")) + "  ("
+                + std::to_string(a.integer("versions")) + " version(s))" + (a.flag("running") ? "  en marche" : ""));
+    }
     say("Journal : " + deploy::Journal(dir).todayPath());
     return 0;
 }
@@ -250,7 +292,7 @@ int main(int argc, char** argv) {
     SetConsoleOutputCP(CP_UTF8);
 #endif
     const auto args = arguments(argc, argv);
-    std::string command;
+    std::string command, sessionValue;
     deploy::AgentConfig cfg;
     cfg.dir = deploy::defaultAgentDir();
     for (std::size_t i = 0; i < args.size(); ++i) {
@@ -262,6 +304,17 @@ int main(int argc, char** argv) {
                 return 1;
             }
             command = a;
+        } else if (a == "--demarrer-avec-session" && hasValue) {
+            if (!command.empty() && command != a) {
+                complain("XPG-Deployment-Agent : une seule commande \xC3\xA0 la fois (" + command + " et " + a + ")");
+                return 1;
+            }
+            command = a;
+            sessionValue = args[++i];
+            if (sessionValue != "oui" && sessionValue != "non") {
+                complain("XPG-Deployment-Agent : --demarrer-avec-session attend oui ou non (" + sessionValue + ")");
+                return 1;
+            }
         } else if (a == "--dossier" && hasValue) {
             cfg.dir = args[++i];
         } else if (a == "--port" && hasValue) {
@@ -283,11 +336,21 @@ int main(int argc, char** argv) {
         complain("XPG-Deployment-Agent : le hasard du syst\xC3\xA8me est indisponible");
         return 2;
     }
+    if (command == "--demarrer-avec-session") return session(sessionValue == "oui");
     if (command == "--version") {
-        say("XPG-Deployment-Agent " + std::string(deploy::kAgentVersion) + " (protocole 1, TLS 1.3 : mbedTLS " MBEDTLS_VERSION_STRING
+        say("XPG-Deployment-Agent " + std::string(deploy::kAgentVersion) + " (protocoles 1 et 2, TLS 1.3 : mbedTLS " MBEDTLS_VERSION_STRING
             ", libsodium " + std::string(sodium_version_string()) + ")");
         return 0;
     }
+#if defined(_WIN32)
+    // 1.29.0 : lance par la session (la cle Run, l'installateur), l'agent a sa propre console : on la cache (il travaille
+    // sans fenetre ; son journal dit tout). Lance d'un terminal (la console est partagee), elle reste.
+    if (command == "--servir") {
+        DWORD ids[4];
+        if (GetConsoleProcessList(ids, 4) == 1)
+            if (HWND w = GetConsoleWindow()) ShowWindow(w, SW_HIDE);
+    }
+#endif
     if (command == "--servir") return serve(cfg);
     if (command == "--appairer") return pair(cfg.dir);
     if (command == "--etat") return state(cfg.dir);

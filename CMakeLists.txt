@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.28.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.29.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -145,7 +145,7 @@ xpg_sources(DEPLOY_SOURCES deploy)
 add_library(xpg_deploy STATIC ${DEPLOY_SOURCES})
 target_link_libraries(xpg_deploy PUBLIC xpg_core xpg_xls xpg_mbedtls xpg_sodium)
 if(WIN32)
-    target_link_libraries(xpg_deploy PUBLIC crypt32 ws2_32 iphlpapi)
+    target_link_libraries(xpg_deploy PUBLIC crypt32 ws2_32 iphlpapi shell32 advapi32)   # 1.29.0 : + le poste (CommandLineToArgvW, la cle Run)
 endif()
 # 1.28.0 : XPG-Deployment-Agent, l'agent du PC de maintenance (une console : ni SDL ni editeur, xpg_deploy seulement).
 add_executable(xpg_deploy_agent src/agent/AgentMain.cpp)
@@ -155,6 +155,23 @@ if(WIN32)
     target_link_libraries(xpg_deploy_agent PRIVATE shell32 advapi32)
     if(MINGW)
         target_link_options(xpg_deploy_agent PRIVATE -mconsole)   # la chaine MinGW met -mwindows partout : ici une console
+    endif()
+endif()
+
+# --- 1.30.0 (prepare en 1.29.0) : licensing - les licences verifiees hors ligne (sans interface, sans
+#     service en ligne) ; ne depend que de core/ et de deploy/Crypto (xpg_deploy : la crypto). docs/LICENCES.md
+xpg_sources(LICENSING_SOURCES licensing)
+add_library(xpg_licensing STATIC ${LICENSING_SOURCES})
+target_link_libraries(xpg_licensing PUBLIC xpg_core xpg_deploy)
+# XPG-License-Admin : l'outil de l'EDITEUR (sa cle, signer registres, licences, revocations). JAMAIS LIVRE :
+# pas dans cross_mingw.sh, pas dans l'installateur ; outils/mingw/package_mingw.py arrete la construction s'il le trouve.
+add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp)
+target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
+set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
+if(WIN32)
+    target_link_libraries(xpg_license_admin PRIVATE shell32)
+    if(MINGW)
+        target_link_options(xpg_license_admin PRIVATE -mconsole)   # une console (la chaine MinGW met -mwindows partout)
     endif()
 endif()
 
@@ -691,6 +708,12 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(deploy_net_test PRIVATE xpg_deploy)
     xpg_add_test_executable(deploy_package_test tests/deploy_package_test.cpp)  # 1.28.0 : le paquet .xpgdeploy et la cle d'editeur
     xpg_target_link_libraries(deploy_package_test PRIVATE xpg_deploy)
+    xpg_add_test_executable(deploy_install_test tests/deploy_install_test.cpp)  # 1.29.0 : l'envoi, l'installation, le poste (un vrai agent, un faux poste)
+    xpg_target_link_libraries(deploy_install_test PRIVATE xpg_deploy)
+    xpg_add_test_executable(deploy_fake_station tests/deploy_fake_station.cpp)  # 1.29.0 : le faux << poste >> que l'agent lance dans deployinstall
+    if(TARGET deploy_install_test AND TARGET deploy_fake_station)
+        add_dependencies(deploy_install_test deploy_fake_station)
+    endif()
     xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
@@ -934,6 +957,14 @@ if(XPG_BUILD_TESTS)
         xpg_target_link_options(crashtrail_test PRIVATE -rdynamic)
     endif()
     xpg_add_test(NAME crashtrail COMMAND crashtrail_test)
+    # 1.30.0 (prepare en 1.29.0) : les licences hors ligne - formats, refus, etats, l'outil Admin en
+    # sous-processus de bout en bout, le controle du paquet (package_mingw.py --controler).
+    xpg_add_test_executable(licensing_test tests/licensing_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licensing_test PRIVATE xpg_licensing)
+    if(TARGET licensing_test)
+        add_dependencies(licensing_test xpg_license_admin)
+    endif()
+    xpg_add_test(NAME licensing COMMAND licensing_test $<TARGET_FILE:xpg_license_admin> ${CMAKE_CURRENT_SOURCE_DIR})
     # 1.22.2 : ce qui consomme (core/Perf : les portees, l'image, les fenetres de 10 s et 60 s, les saccades, le
     # rapport) et l'onglet Performances (app/PerfPane), dessine sans ecran.
     xpg_add_test_executable(perf_test tests/perf_test.cpp src/app/PerfPane.cpp)
@@ -1034,6 +1065,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME deploynet    COMMAND deploy_net_test)                  # 1.28.0 : l'agent et le client sur la boucle locale (vraies sockets, vrai TLS)
     xpg_add_test(NAME deploypackage COMMAND deploy_package_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.28.0 : le paquet signe, ses refus, la cle d'editeur
+    xpg_add_test(NAME deployinstall COMMAND deploy_install_test)            # 1.29.0 : envoi par blocs et reprise, installation, poste lance/arrete, retour en arriere
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----

@@ -1164,4 +1164,127 @@ PackageReport verifyPackage(const std::string& path, const PackageVerifyOptions&
     return r;
 }
 
+// ============================================================================== extraire ==
+namespace {
+
+// `child` est-il sous `root` (les deux normalises, lexicalement) ?
+bool inside(const fs::path& root, const fs::path& child) {
+    const fs::path r = root.lexically_normal(), c = child.lexically_normal();
+    auto ri = r.begin(), ci = c.begin();
+    for (; ri != r.end() && !ri->empty(); ++ri, ++ci) {
+        if (ci == c.end() || *ri != *ci) return false;
+    }
+    return ci != c.end();
+}
+
+} // namespace
+
+PackageExtractResult extractPackage(const std::string& path, const std::string& destination, const PackageExtractOptions& opt) {
+    PackageExtractResult r;
+    const auto failWith = [&r](std::string text) {
+        r.ok = false;
+        r.error = std::move(text);
+        return r;
+    };
+    // 1. La verification complete, l'editeur doit etre approuve.
+    PackageVerifyOptions vo;
+    vo.approvedKeys = opt.approvedKeys;
+    vo.limits = opt.limits;
+    vo.progress = opt.progress;
+    r.report = verifyPackage(path, vo);
+    if (!r.report.ok()) return failWith(r.report.reason);
+    const PackageManifest& m = r.report.manifest;
+
+    // 2. Le dossier : il ne doit pas exister ; le dossier temporaire voisin est refait.
+    const fs::path dest = P(destination);
+    std::error_code ec;
+    if (fs::exists(dest, ec)) return failWith("le dossier " + cite(destination) + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9.");
+    const fs::path tmp = P(destination + ".extraction");
+    fs::remove_all(tmp, ec);
+    ec.clear();
+    fs::create_directories(tmp, ec);
+    if (ec) return failWith("impossible de cr\xC3\xA9" "er " + cite(U(tmp)) + " (" + ec.message() + ").");
+    const auto abandon = [&](std::string text) {
+        std::error_code e2;
+        fs::remove_all(tmp, e2);
+        return failWith(std::move(text));
+    };
+
+    // 3. Le zip relu ; chaque fichier du manifeste ecrit et re-hache.
+    ZipReader z;
+    z.file.size = static_cast<std::uint64_t>(fs::file_size(P(path), ec));
+    if (ec) return abandon("le paquet " + cite(path) + " a disparu.");
+    z.file.in.open(P(path), std::ios::binary);
+    z.zip.m_pRead = zipRead;
+    z.zip.m_pIO_opaque = &z.file;
+    if (!z.file.in || !mz_zip_reader_init(&z.zip, z.file.size, 0)) return abandon("le paquet ne se relit pas (" + zipError(z.zip) + ").");
+    z.open = true;
+    PackageProgress progress;
+    progress.filesTotal = m.files.size();
+    progress.bytesTotal = m.totalSize;
+    std::vector<char> buf(64 * 1024);
+    for (const auto& f : m.files) {
+        // Le chemin a deja passe safePackagePath (verifyPackage) : on le controle encore sous le dossier.
+        if (!safePackagePath(f.path, nullptr, opt.limits.maxPathLength)) return abandon("chemin dangereux : " + cite(f.path) + ".");
+        const std::string rel = f.path.substr(kPackageAppPrefix.size());
+        const fs::path target = tmp / P(rel);
+        if (!inside(tmp, target)) return abandon("le chemin " + cite(f.path) + " sortirait du dossier d'installation.");
+        const int index = mz_zip_reader_locate_file(&z.zip, f.path.c_str(), nullptr, MZ_ZIP_FLAG_CASE_SENSITIVE);
+        if (index < 0) return abandon(cite(f.path) + " manque dans le paquet.");
+        fs::create_directories(target.parent_path(), ec);
+        if (ec) return abandon("impossible de cr\xC3\xA9" "er " + cite(U(target.parent_path())) + " (" + ec.message() + ").");
+        if (fs::is_symlink(target.parent_path(), ec)) return abandon("un lien symbolique dans le dossier d'installation : " + cite(rel) + ".");
+        std::ofstream out(target, std::ios::binary | std::ios::trunc);
+        if (!out) return abandon("impossible d'\xC3\xA9" "crire " + cite(U(target)) + ".");
+        mz_zip_reader_extract_iter_state* it = mz_zip_reader_extract_iter_new(&z.zip, static_cast<mz_uint>(index), 0);
+        if (!it) return abandon(cite(f.path) + " ne se lit pas (" + zipError(z.zip) + ").");
+        Hasher hash;
+        std::uint64_t done = 0;
+        bool tooLong = false, writeFailed = false, cancelled = false;
+        progress.current = f.path;
+        while (true) {
+            const std::size_t got = mz_zip_reader_extract_iter_read(it, buf.data(), buf.size());
+            if (got == 0) break;
+            done += got;
+            if (done > f.size) {
+                tooLong = true;
+                break;
+            }
+            hash.add(buf.data(), got);
+            out.write(buf.data(), static_cast<std::streamsize>(got));
+            if (!out) {
+                writeFailed = true;
+                break;
+            }
+            progress.bytesDone += got;
+            if (opt.progress && !opt.progress(progress)) {
+                cancelled = true;
+                break;
+            }
+        }
+        const bool intact = mz_zip_reader_extract_iter_free(it) != 0;
+        out.close();
+        if (cancelled) return abandon("installation interrompue.");
+        if (writeFailed || !out) return abandon("\xC3\xA9" "criture impossible : " + cite(U(target)) + " (disque plein ?).");
+        if (tooLong || done != f.size || !intact) return abandon(cite(f.path) + " est ab\xC3\xAEm\xC3\xA9 dans le zip.");
+        if (hash.hex() != f.sha256)
+            return abandon("le contenu de " + cite(f.path) + " a chang\xC3\xA9 depuis la v\xC3\xA9rification (SHA-256) : installation refus\xC3\xA9" "e.");
+        ++progress.filesDone;
+        ++r.files;
+        r.bytes += done;
+    }
+    // Un lanceur .sh : executable.
+    if (endsWith(m.launcher, ".sh")) {
+        fs::permissions(tmp / P(m.launcher.substr(kPackageAppPrefix.size())),
+                        fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+        ec.clear();
+    }
+
+    // 4. Le dossier temporaire renomme d'un coup.
+    fs::rename(tmp, dest, ec);
+    if (ec) return abandon("impossible de renommer " + cite(U(tmp)) + " en " + cite(destination) + " (" + ec.message() + ").");
+    r.ok = true;
+    return r;
+}
+
 } // namespace deploy

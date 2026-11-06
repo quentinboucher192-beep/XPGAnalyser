@@ -16,6 +16,7 @@
 
 #include "Agent.hpp"
 
+#include "Deployer.hpp"
 #include "Discovery.hpp"
 #include "Frame.hpp"
 #include "Journal.hpp"
@@ -82,6 +83,7 @@ struct Agent::Impl {
     std::string id;
     std::unique_ptr<Journal> journal;
     std::unique_ptr<pairing::StudioStore> studios;
+    std::unique_ptr<Deployer> deployer;   // 1.29.0 : l'envoi, l'installation, le poste
     protocol::ResponseCache cache;
     std::mutex pairMutex;   // le fichier du code
 
@@ -126,6 +128,11 @@ struct Agent::Impl {
         v.set("connections", active.load());
         v.set("paired", static_cast<std::int64_t>(studios ? studios->size() : 0));
         v.set("fingerprint", identity.fingerprintHex());
+        if (deployer) {
+            v.set("station", deployer->stationState());
+            v.set("apps", deployer->appsSummary());
+            v.set("runtimeProgram", deployer->runtimeProgram());
+        }
         const std::string text = core::json::write(v, true) + "\n";
         (void)crypto::writePrivateFile(joinPath(cfg.dir, "etat.json"), crypto::Bytes(text.begin(), text.end()), nullptr);
     }
@@ -136,6 +143,10 @@ struct Agent::Impl {
     }
     Response ok(const protocol::Request& r, int proto, const core::json::Value& data) {
         return {protocol::okHeader(r.op, r.id, r.seq, proto), core::json::write(data, false)};
+    }
+    // Version 2 : une reponse d'erreur peut porter des donnees (le detail).
+    Response failData(const protocol::Request& r, int proto, std::string_view code, const std::string& message, const core::json::Value& data) {
+        return {protocol::errorHeader(r.op, r.id, r.seq, code, message, proto), core::json::write(data, false)};
     }
 
     void log(const std::string& opId, std::string_view op, const std::string& detail) { journal->write(opId, op, detail); }
@@ -162,12 +173,13 @@ struct Agent::Impl {
         c.studioName = args.str("machine").substr(0, 128);
         const int v = protocol::chooseVersion(protocol::acceptedVersions(), theirs);
         if (v == 0) {
-            std::string list;
+            std::string list, mine;
             for (const int t : theirs) list += (list.empty() ? "" : ", ") + std::to_string(t);
+            for (const int t : protocol::acceptedVersions()) mine += (mine.empty() ? "" : ", ") + std::to_string(t);
             log(r.id, r.op, "refus\xC3\xA9 : aucune version commune (Studio : " + list + ") " + who(c));
             return fail(r, 1, protocol::err::kIncompatible,
-                        "aucune version de protocole commune : l'agent parle la version 1, IHM Studio la (les) version(s) " + list
-                            + " - mets \xC3\xA0 jour l'un des deux");
+                        "aucune version de protocole commune : l'agent (" + cfg.version + ") parle les versions " + mine
+                            + ", IHM Studio la (les) version(s) " + list + " - mets \xC3\xA0 jour l'un des deux");
         }
         c.proto = v;
         core::json::Value d = core::json::Value::object();
@@ -280,7 +292,7 @@ struct Agent::Impl {
         const auto sp = fs::space(P(cfg.dir), ec);
         d.set("diskFree", ec ? std::int64_t(-1) : static_cast<std::int64_t>(sp.available));
         d.set("pairedCount", static_cast<std::int64_t>(studios->size()));
-        d.set("apps", core::json::Value::array());   // 1.29.0 : les applications installees
+        d.set("apps", deployer->appsSummary());   // 1.29.0 : les applications installees (nom, version active, en marche)
         log(r.id, r.op, "ok " + who(c));
         return ok(r, c.proto, d);
     }
@@ -308,10 +320,41 @@ struct Agent::Impl {
         return ok(r, c.proto, d);
     }
 
-    Response dispatch(Conn& c, const protocol::Request& r, const core::json::Value& args) {
+    // 1.29.0 : les commandes de la version 2 (deploy/Deployer).
+    Response deployOp(Conn& c, const protocol::Request& r, const core::json::Value& args, std::string_view bytes) {
+        if (c.proto < protocol::kDeployProto) {
+            log(r.id, r.op, "refus\xC3\xA9 : version 1 du protocole " + who(c));
+            return fail(r, c.proto, protocol::err::kBadVersion,
+                        r.op + " demande la version " + std::to_string(protocol::kDeployProto)
+                            + " du protocole (IHM Studio 1.29.0 ou plus r\xC3\xA9" "cent) ; cette connexion parle la version "
+                            + std::to_string(c.proto) + " : mets \xC3\xA0 jour IHM Studio pour d\xC3\xA9ployer sur ce PC");
+        }
+        Peer peer;
+        peer.fingerprint = c.peerHex;
+        peer.address = c.address;
+        pairing::PairedStudio ps;
+        peer.name = studios->find(c.peerHex, ps) ? ps.name : c.studioName;
+        OpResult res;
+        if (r.op == protocol::kPrepare) res = deployer->prepare(peer, args);
+        else if (r.op == protocol::kSendChunk) res = deployer->sendChunk(peer, args, bytes);
+        else if (r.op == protocol::kVerifyPackage) res = deployer->verify(peer, args);
+        else if (r.op == protocol::kInstall) res = deployer->install(peer, args);
+        else if (r.op == protocol::kStop) res = deployer->stop(peer, args);
+        else if (r.op == protocol::kStart) res = deployer->startStation(peer, args);
+        else if (r.op == protocol::kRollback) res = deployer->rollback(peer, args);
+        else if (r.op == protocol::kListApps) res = deployer->listApps(peer, args);
+        else res = deployer->history(peer, args);
+        // Un bloc ne fait pas une ligne du journal : seulement le dernier, ou un refus.
+        if (r.op != protocol::kSendChunk || !res.ok || res.data.flag("complete"))
+            log(r.id, r.op, (res.ok ? "ok " : "refus\xC3\xA9 : ") + res.journal + " " + who(c));
+        if (!res.ok) return failData(r, c.proto, res.code, res.message, res.data);
+        return ok(r, c.proto, res.data);
+    }
+
+    Response dispatch(Conn& c, const protocol::Request& r, const core::json::Value& args, std::string_view bytes) {
         if (r.op == protocol::kPairStart) return pairStart(c, r, args);
         if (r.op == protocol::kPairFinish) return pairFinish(c, r, args);
-        const bool known = r.op == protocol::kStatus || r.op == protocol::kGetLogs || r.op == protocol::kUnpair;
+        const bool known = r.op == protocol::kStatus || r.op == protocol::kGetLogs || r.op == protocol::kUnpair || protocol::isDeployOp(r.op);
         if (!known) {
             log(r.id, r.op, "refus\xC3\xA9 : op\xC3\xA9ration inconnue " + who(c));
             return fail(r, c.proto, protocol::err::kUnknownOp, "op\xC3\xA9ration inconnue de cet agent : " + r.op);
@@ -323,7 +366,8 @@ struct Agent::Impl {
         }
         if (r.op == protocol::kStatus) return status(c, r);
         if (r.op == protocol::kGetLogs) return logs(c, r, args);
-        return unpair(c, r);
+        if (r.op == protocol::kUnpair) return unpair(c, r);
+        return deployOp(c, r, args, bytes);
     }
 
     bool send(Conn& c, const Response& resp) {
@@ -404,12 +448,17 @@ struct Agent::Impl {
                 }
             }
             core::json::Value args;
-            if (!f.data.empty() && (!core::json::parse(f.data, args, &msg) || !args.isObject())) {
+            std::string_view bytes;
+            if (r.op == protocol::kSendChunk) {
+                // SEND_CHUNK : les arguments dans l'en-tete ("chunk"), les octets du bloc dans les donnees.
+                args = f.header.at("chunk");
+                bytes = f.data;
+            } else if (!f.data.empty() && (!core::json::parse(f.data, args, &msg) || !args.isObject())) {
                 if (!send(c, fail(r, c.proto ? c.proto : 1, protocol::err::kBadArgs, "donn\xC3\xA9" "es illisibles (" + msg + ")"))) break;
                 continue;
             }
-            if (args.isNull()) args = core::json::Value::object();
-            const Response resp = r.op == protocol::kIdentify ? identify(c, r, args) : dispatch(c, r, args);
+            if (!args.isObject()) args = core::json::Value::object();
+            const Response resp = r.op == protocol::kIdentify ? identify(c, r, args) : dispatch(c, r, args, bytes);
             if (r.op != protocol::kIdentify) cache.put(c.peerHex, r.id, Frame{resp.header, resp.data});
             if (!send(c, resp)) break;
         }
@@ -510,6 +559,14 @@ bool Agent::start(std::string* why) {
     d.id = d.identity.machineId();
     d.studios = std::make_unique<pairing::StudioStore>(d.cfg.dir);
     if (!d.studios->load(&w)) return failWith(w);
+    DeployerConfig dc;
+    dc.dir = d.cfg.dir;
+    dc.runtimeProgram = d.cfg.runtimeProgram;
+    dc.keepVersions = d.cfg.keepVersions;
+    dc.startCheckMs = d.cfg.startCheckMs;
+    dc.stopGraceMs = d.cfg.stopGraceMs;
+    dc.simulatedFreeBytes = d.cfg.simulatedFreeBytes;
+    d.deployer = std::make_unique<Deployer>(dc, *d.studios, *d.journal, d.stopping);
     // Les ports : tous deux libres, sinon aucun n'ecoute.
     if (!d.listener.listen(d.cfg.bindAddress, d.cfg.port, &w)) {
         d.journal->write("", "DEMARRAGE", "refus\xC3\xA9 : " + w);
@@ -526,13 +583,16 @@ bool Agent::start(std::string* why) {
         d.udpPort = d.udp.localPort();
     }
     d.stopping = false;
+    d.deployer->start();   // les installations coupees, le poste lance avant un redemarrage
     d.startedAtMs = protocol::nowMs();
     d.startedAt = Clock::now();
     d.isRunning = true;
     d.writeState(true);
     d.journal->write("", "DEMARRAGE", d.name + " " + d.id + " version " + d.cfg.version + " TCP " + std::to_string(d.tcpPort)
                                            + (d.udpPort >= 0 ? " UDP " + std::to_string(d.udpPort) : std::string(" sans d\xC3\xA9" "couverte"))
-                                           + " empreinte " + crypto::fingerprintText(d.identity.fingerprint(), 0));
+                                           + " empreinte " + crypto::fingerprintText(d.identity.fingerprint(), 0)
+                                           + " poste " + d.deployer->runtimeProgram()
+                                           + (d.cfg.simulatedFreeBytes >= 0 ? " (ESSAI : place libre simul\xC3\xA9" "e " + std::to_string(d.cfg.simulatedFreeBytes) + " octets)" : std::string()));
     d.acceptThread = std::thread([&d] { d.acceptLoop(); });
     if (d.udpPort >= 0) d.udpThread = std::thread([&d] { d.udpLoop(); });
     d.stateThread = std::thread([&d] { d.stateLoop(); });
@@ -565,6 +625,7 @@ const TlsIdentity& Agent::identity() const { return d_->identity; }
 std::string Agent::machineName() const { return d_->name; }
 std::string Agent::machineId() const { return d_->id; }
 int Agent::activeConnections() const { return d_->active.load(); }
+std::string Agent::runtimeProgram() const { return d_->deployer ? d_->deployer->runtimeProgram() : std::string(); }
 
 // =================================================================== divers ===
 std::string defaultAgentDir() {

@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -121,6 +122,20 @@ std::string Recovery::readFile(const std::string& path) {
     std::stringstream ss;
     ss << in.rdbuf();
     return ss.str();
+}
+
+std::string Recovery::agentFile(const std::string& stationFolder, const char* env, const char* name) {
+    if (const char* v = std::getenv(env); v && *v) return v;
+    if (stationFolder.empty()) return {};
+    std::error_code ec;
+    fs::path p = fs::weakly_canonical(fs::path(std::u8string(stationFolder.begin(), stationFolder.end())), ec);
+    if (ec) p = fs::path(std::u8string(stationFolder.begin(), stationFolder.end()));
+    if (!p.has_filename()) p = p.parent_path();
+    const fs::path versions = p.parent_path();
+    const fs::path applications = versions.parent_path().parent_path();
+    if (versions.filename() != "versions" || applications.filename() != "Applications") return {};
+    const auto u8 = (applications.parent_path() / name).u8string();
+    return std::string(u8.begin(), u8.end());
 }
 
 bool Recovery::writeFile(const std::string& path, const std::string& text) {

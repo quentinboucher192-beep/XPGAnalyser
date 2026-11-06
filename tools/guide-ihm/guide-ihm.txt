@@ -11705,6 +11705,7 @@ L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). 
 - `XPG-Deployment-Agent.exe --servir` : il écoute (TCP 47861 ; UDP 47862 pour la recherche) ; Ctrl+C l'arrête ;
 - `XPG-Deployment-Agent.exe --appairer` : un code à 6 chiffres, valable 5 minutes, une seule fois ;
 - `XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, les PC appairés.
+- `XPG-Deployment-Agent.exe --demarrer-avec-session oui` : l'agent démarrera avec ta session (sans l'installateur ; `non` l'enlève).
 Sans les règles de l'installateur, au premier `--servir`, Windows peut demander d'autoriser l'agent sur le réseau (Réseau privé).
 ### Trouver et appairer une machine
 1. **Rechercher** : les agents du réseau local répondent. Une machine qui répond n'est qu'une adresse : elle est « Découverte ».
@@ -11723,6 +11724,7 @@ Choisis une machine **appairée**, puis **Déployer** (le projet FINISH, enregis
 Le résultat est dans la barre d'état, l'onglet **Historique** et le journal de l'agent.
 ### Revenir à la précédente
 **Revenir à la précédente** remet la version gardée sur la machine : le poste en marche est prévenu et fermé, la précédente redevient l'active et démarre. Celle d'avant reste gardée.
+> Trois versions sont gardées par application. Le même numéro de version avec un autre contenu (le projet a changé sans nouvelle version) s'installe à côté, sous « V3-2 » : rien n'est écrasé. Un poste lancé par la session (sans l'agent) est retrouvé et prévenu de la même façon.
 ### Applications et Historique
 - **Applications** : pour la machine choisie, chaque application installée, sa version active, celles gardées, le poste (en marche ou non), s'il démarre avec la session.
 - **Historique** : chaque déploiement et chaque retour - quand, depuis quel PC, quelle version, le résultat (installé, refusé et pourquoi, revenu à la précédente).

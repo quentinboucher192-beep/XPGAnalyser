@@ -102,6 +102,63 @@ SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi
           "ucrtbase", "crypt32", "dbghelp", "hid", "cfgmgr32", "dinput8", "xinput1_4", "powrprof", "comctl32"}
 
 
+# 1.30.0 (prepare en 1.29.0) : LE CONTROLE DU PAQUET - rien de l'outil Admin des licences ne part chez
+# un client (docs/LICENCES.md). Un seul ecart arrete la construction. On cherche, dans chaque fichier du
+# dossier a livrer (les octets, en ASCII et en UTF-16 : les chaines larges des exe) :
+#   - le nom de l'outil Admin (XPG-License-Admin, et les noms de fichier qui le rappellent) ;
+#   - sa marque (src/license_admin/Admin.hpp : kAdminMarker), qui est dans l'exe et dans le fichier
+#     de la cle de l'editeur ;
+#   - la marque d'une cle d'ESSAI (kTestKeyMarker) : un programme qui l'embarque n'est pas livrable ;
+#   - une cle privee : un bloc PEM << PRIVATE KEY >> suivi de son contenu (l'en-tete seul est une
+#     chaine de mbedTLS, dans les exe : ce n'est pas une cle), un fichier de cle (*.cle, cle_editeur.bin) ;
+#   - un jeton GitHub (ghp_..., github_pat_...).
+ADMIN_CHAINES = (
+    (b"XPG-License-Admin", "le nom de l'outil Admin des licences"),
+    (b"XPG License Manager Admin", "le nom de l'outil Admin des licences"),
+    (b"XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER", "la marque de l'outil Admin des licences"),
+    (b"XPG-CLE-ESSAI-LICENCES", "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)"),
+)
+ADMIN_MOTIFS = (
+    (re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}"), "une cle privee (bloc PEM)"),
+    (re.compile(rb"\bgh[pousr]_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{50,}"), "un jeton GitHub"),
+)
+ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*")
+
+
+def controle_livraison(dossier):
+    """Les ecarts trouves dans le dossier a livrer : [(chemin relatif, ce qui est trouve)] ; vide : rien."""
+    ecarts = []
+    motifs = [(c, quoi) for c, quoi in ADMIN_CHAINES] + [(c.decode("ascii").encode("utf-16-le"), quoi) for c, quoi in ADMIN_CHAINES]
+    for base, _dirs, files in os.walk(dossier):
+        for name in sorted(files):
+            full = os.path.join(base, name)
+            rel = os.path.relpath(full, dossier)
+            compact = name.lower().replace(" ", "-")
+            for n in ADMIN_NOMS:
+                if fnmatch.fnmatch(compact, n) or fnmatch.fnmatch(compact.replace("-", "_"), n.replace("-", "_")):
+                    ecarts.append((rel, "un fichier de l'outil Admin ou une cle (nom " + name + ")"))
+                    break
+            with open(full, "rb") as f:
+                data = f.read()
+            for c, quoi in motifs:
+                if c in data:
+                    ecarts.append((rel, quoi))
+                    break
+            for m, quoi in ADMIN_MOTIFS:
+                if m.search(data):
+                    ecarts.append((rel, quoi))
+    return ecarts
+
+
+def controler_ou_arreter(dossier):
+    ecarts = controle_livraison(dossier)
+    if ecarts:
+        lignes = "\n".join(f"  {rel} : {quoi}" for rel, quoi in ecarts)
+        sys.exit(f"CONTROLE DU PAQUET : construction arretee, {len(ecarts)} ecart(s) dans {dossier}\n{lignes}\n"
+                 "L'outil Admin des licences, sa cle et une cle d'essai ne se livrent jamais (docs/LICENCES.md).")
+    print(f"controle du paquet : {dossier} - rien de l'outil Admin, aucune cle privee, aucun jeton")
+
+
 def winpath(path):
     return subprocess.run(["winepath", "-w", path], capture_output=True, text=True, check=True).stdout.strip()
 
@@ -149,6 +206,7 @@ def portables(st, sortie, version, editions):
         m["fichiers"].sort(key=lambda x: x["chemin"].lower())
         with open(os.path.join(travail, "manifeste.json"), "w", encoding="utf-8", newline="") as f:
             f.write(json.dumps(m, ensure_ascii=False, indent=4).replace("\n", "\r\n"))
+        controler_ou_arreter(travail)   # 1.30.0 : rien de l'outil Admin des licences
         archive = os.path.join(sortie, nom + "-portable.zip")
         if os.path.exists(archive):
             os.remove(archive)
@@ -173,7 +231,12 @@ def main():
     ap.add_argument("--pdfium", default=os.path.join(ROOT, "third_party", "pdfium", "win-x64", "pdfium.dll"))
     ap.add_argument("--iscc", default="")
     ap.add_argument("--sans-installateur", action="store_true")
+    # 1.30.0 : le controle du paquet seul, sur un dossier (les essais : tests/licensing_test.cpp).
+    ap.add_argument("--controler", default="", help="un dossier : le controle du paquet seulement")
     a = ap.parse_args()
+    if a.controler:
+        controler_ou_arreter(a.controler)
+        return
 
     produit = ini("Produit", "nom")
     cle = ini("Produit", "cle", "XPGAnalyser")             # 1.12.20 : le nom d'origine (registre, dossiers)
@@ -261,6 +324,8 @@ def main():
     with open(os.path.join(ROOT, "installateur", "LISEZ-MOI.txt"), encoding="utf-8-sig") as f:
         write_text(os.path.join(st, "LISEZ-MOI.txt"), f.read().replace("{VERSION}", version))
     print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
+
+    controler_ou_arreter(st)   # 1.30.0 : rien de l'outil Admin des licences
 
     # ---- 2. le manifeste ----
     dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom)))

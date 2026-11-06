@@ -80,6 +80,35 @@ std::string fileSafe(std::string s) {
 }
 
 // L'etat partage des gestes (un seul fil de travail l'emploie a la fois ; identity() le lit depuis l'ecran).
+// 1.29.0 : une operation de l'historique, en francais.
+std::string opName(const std::string& op) {
+    if (op == "INSTALL") return "Installation";
+    if (op == "START") return "Lancement";
+    if (op == "STOP") return "Arr\xC3\xAAt";
+    if (op == "ROLLBACK") return "Retour";
+    if (op == "VERIFY_PACKAGE") return "V\xC3\xA9rification";
+    return op;
+}
+
+// 1.29.0 : les lignes de l'onglet Applications (Application, Version active, Versions gardees, Poste, Avec la session).
+std::vector<std::vector<std::string>> appRows(const deploy::AppList& list) {
+    std::vector<std::vector<std::string>> rows;
+    for (const auto& a : list.apps) {
+        std::string kept;
+        for (const auto& v : a.versions) {
+            if (v.id == a.version) continue;
+            if (!kept.empty()) kept += ", ";
+            kept += v.id;
+        }
+        std::string station = "arr\xC3\xAAt\xC3\xA9";
+        if (a.running) station = "en marche" + (a.runningVersion.empty() ? std::string{} : " (" + a.runningVersion + ")");
+        std::string active = a.version.empty() ? std::string("aucune") : a.version;
+        if (!a.activeLabel.empty() && a.activeLabel != a.version) active += " (" + a.activeLabel + ")";
+        rows.push_back({a.name, active, kept.empty() ? std::string("aucune") : kept, station, a.autostart ? "oui" : "non"});
+    }
+    return rows;
+}
+
 // Un package cree (Creer un package, Deployer).
 struct Built {
     std::string path, application, version, summary, sha256;
@@ -404,6 +433,136 @@ HmiDeployPane::Backend makeDeployBackend(std::string folder, std::function<std::
                             + st->key->fingerprint());
         r.package = built.path;
         return r;
+    };
+    // 1.29.0 : Deployer - le package du projet, puis deploy::Client::deploy (l'envoi par blocs, la verification par
+    // l'agent, l'installation, le poste arrete puis lance) ; la progression dite a l'ecran a chaque etape et bloc.
+    b.deploy = [st](const Machine& m, const std::string& projectFolder, const HmiDeployPane::DeployOptions& opt,
+                    const HmiDeployPane::Progress& progress) {
+        std::string why;
+        if (!st->ensure(&why)) return st->fail("D\xC3\xA9ployer : " + why);
+        deploy::PairedMachine pm;
+        if (!st->pairedOf(m, pm)) return st->fail("D\xC3\xA9ployer : " + m.name + " n'est pas appair\xC3\xA9" "e");
+        if (progress && !progress("Cr\xC3\xA9" "ation du package", -1)) return st->fail("D\xC3\xA9ployer : annul\xC3\xA9 (rien n'est parti)");
+        Built built;
+        if (!st->package(projectFolder, built, &why)) return st->fail("D\xC3\xA9ployer : le package : " + why);
+        deploy::DeployOptions o;
+        o.autostart = opt.autostart;
+        o.stopDelaySeconds = std::clamp(opt.stopDelay, 0, 600);
+        o.force = opt.force;
+        auto c = st->client();
+        const std::string name = m.name;
+        const auto r = c.deploy(pm, built.path, o, [&](deploy::DeployStep step, std::uint64_t done, std::uint64_t total) {
+            std::string text = deploy::deployStepName(step) + " - " + name;
+            double fraction = -1;
+            if (total > 0) {
+                fraction = static_cast<double>(done) / static_cast<double>(total);
+                text += " : " + deploy::packageSizeText(done) + " sur " + deploy::packageSizeText(total);
+            }
+            return progress ? progress(text, fraction) : true;
+        });
+        Result res;
+        std::vector<std::pair<std::string, std::string>> details;
+        details.push_back({"Package", built.path});
+        details.push_back({"Application", r.application.empty() ? built.application : r.application});
+        details.push_back({"Version envoy\xC3\xA9" "e", r.label.empty() ? built.version : r.label});
+        if (!r.version.empty()) details.push_back({"Install\xC3\xA9" "e sous", r.version});
+        details.push_back({"Version d'avant", r.previousVersion.empty() ? std::string("aucune") : r.previousVersion});
+        for (const auto& s : r.steps)
+            details.push_back({deploy::deployStepName(s.step),
+                               (s.skipped ? std::string("sans objet") : s.ok ? std::string("fait") : std::string("\xC3\xA9" "chec"))
+                                   + (s.message.empty() ? std::string{} : " - " + s.message)});
+        if (r.cancelled) {
+            res = st->fail("D\xC3\xA9ployer sur " + name + " : annul\xC3\xA9 - rien n'est install\xC3\xA9 ; l'envoi reprendra o\xC3\xB9 il en \xC3\xA9tait ("
+                           + deploy::packageSizeText(r.resumedFrom + r.bytesSent) + " sur " + deploy::packageSizeText(r.packageBytes) + ")");
+        } else if (!r.outcome) {
+            st->states[pm.fingerprint] = r.outcome.error == "reseau" ? std::string("Injoignable") : std::string("Appair\xC3\xA9" "e \xC2\xB7 en ligne");
+            res = st->fail("D\xC3\xA9ployer sur " + name + " : " + r.outcome.message);
+        } else {
+            st->states[pm.fingerprint] = "Appair\xC3\xA9" "e \xC2\xB7 en ligne";
+            std::string text = "D\xC3\xA9ploy\xC3\xA9 sur " + name + " : " + r.application + " " + r.version;
+            if (r.alreadyInstalled) text += " (d\xC3\xA9j\xC3\xA0 install\xC3\xA9" "e, identique : rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9)";
+            else {
+                text += ", " + deploy::packageSizeText(r.bytesSent) + " envoy\xC3\xA9s";
+                if (r.resumedFrom > 0) text += " (repris \xC3\xA0 " + deploy::packageSizeText(r.resumedFrom) + ")";
+            }
+            if (r.stationWasRunning) text += r.stationForced ? " ; l'ancien poste arr\xC3\xAAt\xC3\xA9 de force" : " ; l'ancien poste s'est ferm\xC3\xA9";
+            if (r.rolledBack) text += " ; la nouvelle version n'a pas tenu : retour \xC3\xA0 " + r.rolledBackTo;
+            else if (r.started) text += " ; le poste tourne";
+            res = r.rolledBack ? st->fail(text) : st->done(text);
+        }
+        res.hasDetails = true;
+        res.details = std::move(details);
+        // Les applications de la machine, a jour (sans faire echouer le geste si elle ne repond plus).
+        if (!r.cancelled) {
+            deploy::AppList list;
+            auto c2 = st->client();
+            if (c2.listApps(pm, list)) {
+                res.hasApps = true;
+                res.apps = appRows(list);
+            }
+        }
+        return res;
+    };
+
+    // 1.29.0 : Revenir a la precedente (la version gardee sur la machine).
+    b.rollback = [st](const Machine& m, const HmiDeployPane::Progress& progress) {
+        std::string why;
+        if (!st->ensure(&why)) return st->fail("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : " + why);
+        deploy::PairedMachine pm;
+        if (!st->pairedOf(m, pm)) return st->fail("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : " + m.name + " n'est pas appair\xC3\xA9" "e");
+        if (progress) (void)progress("Retour \xC3\xA0 la version pr\xC3\xA9" "c\xC3\xA9" "dente - " + m.name, -1);
+        auto c = st->client();
+        deploy::RollbackResult rb;
+        const auto o = c.rollback(pm, rb);
+        if (!o) return st->fail("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente sur " + m.name + " : " + o.message);
+        std::string text = "Revenu \xC3\xA0 " + rb.application + " " + rb.to + " sur " + m.name + " (depuis " + rb.from + ")";
+        if (rb.wasRunning) text += rb.restarted ? " ; le poste a \xC3\xA9t\xC3\xA9 relanc\xC3\xA9" : " ; le poste a \xC3\xA9t\xC3\xA9 ferm\xC3\xA9";
+        else if (rb.running) text += " ; le poste tourne";
+        Result res = st->done(text);
+        deploy::AppList list;
+        auto c2 = st->client();
+        if (c2.listApps(pm, list)) {
+            res.hasApps = true;
+            res.apps = appRows(list);
+        }
+        return res;
+    };
+
+    b.apps = [st](const Machine& m) {
+        std::string why;
+        if (!st->ensure(&why)) return st->fail("Applications : " + why);
+        deploy::PairedMachine pm;
+        if (!st->pairedOf(m, pm)) return st->fail("Applications : " + m.name + " n'est pas appair\xC3\xA9" "e");
+        auto c = st->client();
+        deploy::AppList list;
+        const auto o = c.listApps(pm, list);
+        if (!o) return st->fail("Applications de " + m.name + " : " + o.message);
+        Result res = st->done("Applications de " + m.name + " : " + std::to_string(list.apps.size())
+                              + (list.station.running ? " ; le poste tourne (" + list.station.application + " " + list.station.version + ")"
+                                                      : std::string(" ; aucun poste en marche")));
+        res.hasApps = true;
+        res.apps = appRows(list);
+        return res;
+    };
+
+    b.history = [st](const Machine& m) {
+        std::string why;
+        if (!st->ensure(&why)) return st->fail("Historique : " + why);
+        deploy::PairedMachine pm;
+        if (!st->pairedOf(m, pm)) return st->fail("Historique : " + m.name + " n'est pas appair\xC3\xA9" "e");
+        auto c = st->client();
+        std::vector<deploy::HistoryEntry> h;
+        const auto o = c.history(pm, 200, h);
+        if (!o) return st->fail("Historique de " + m.name + " : " + o.message);
+        std::stable_sort(h.begin(), h.end(), [](const deploy::HistoryEntry& a, const deploy::HistoryEntry& b2) { return a.at > b2.at; });
+        Result res = st->done("Historique de " + m.name + " : " + std::to_string(h.size()) + " op\xC3\xA9ration(s)");
+        res.hasHistory = true;
+        for (const auto& e : h) {
+            const std::string what = opName(e.op) + (e.ok ? std::string(" - ") : std::string(" - \xC3\xA9" "chec : ")) + (e.message.empty() ? e.result : e.message);
+            res.history.push_back({clock(e.at), e.from.empty() ? e.address : e.from, e.application,
+                                   e.version.empty() ? e.label : e.version, what});
+        }
+        return res;
     };
     return b;
 }

@@ -304,11 +304,13 @@ void endToEnd(const std::string& base) {
     check(c.stream().protocolName() == "TLSv1.3", "TLS 1.3 n\xC3\xA9goci\xC3\xA9 (" + c.stream().protocolName() + ", " + c.stream().cipherName() + ")");
     AgentInfo info;
     o = c.identify(info);
-    check(o.ok && info.proto == 1 && info.machine == "PC-ESSAI" && info.id == agent->machineId() && info.version == "1.0.0" && !info.paired,
-          "IDENTIFY : version 1, PC-ESSAI, " + info.id + " [" + o.message + "]");
+    // 1.29.0 : la version 2 du protocole (l'agent accepte 1 et 2), l'agent 1.1.0.
+    check(o.ok && info.proto == 2 && info.protos == std::vector<int>{1, 2} && info.machine == "PC-ESSAI" && info.id == agent->machineId()
+              && info.version == kAgentVersion && !info.paired,
+          "IDENTIFY : version 2, PC-ESSAI, " + info.id + " [" + o.message + "]");
     {
         Client old(me, "PC-DEV", keyHex);
-        old.setOfferedVersions({2, 3});
+        old.setOfferedVersions({3, 4});
         AgentInfo i2;
         o = old.connect("127.0.0.1", port, 5000);
         Outcome o2 = old.identify(i2);
@@ -436,7 +438,7 @@ void endToEnd(const std::string& base) {
 
     // ---- appaire : STATUS, GET_LOGS ----
     o = c.status(st);
-    check(o.ok && st.machine == "PC-ESSAI" && st.id == agent->machineId() && st.version == "1.0.0" && !st.system.empty() && st.uptimeS >= 0
+    check(o.ok && st.machine == "PC-ESSAI" && st.id == agent->machineId() && st.version == kAgentVersion && !st.system.empty() && st.uptimeS >= 0
               && st.diskFree > 0 && st.pairedCount == 1 && st.apps.empty() && st.startedAt > 0,
           "STATUS : " + st.machine + ", " + st.system + ", " + std::to_string(st.diskFree / (1024 * 1024)) + " Mio libres [" + o.message + "]");
     {
@@ -472,25 +474,25 @@ void endToEnd(const std::string& base) {
     {
         const std::string id = "op-0000beef";
         Frame r1, r2, r3;
-        o = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs()), "{}", r1);
+        o = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs(), c.proto()), "{}", r1);
         check(o.ok && r1.header.flag("ok") && !r1.header.flag("replay"), "STATUS (identifiant " + id + ")");
         pause(1100);   // un STATUS refait aurait un autre << uptimeS >>
-        o = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs()), "{}", r2);
+        o = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs(), c.proto()), "{}", r2);
         check(o.ok && r2.header.flag("ok") && r2.header.flag("replay") && r2.data == r1.data,
               "m\xC3\xAAme identifiant : la m\xC3\xAAme r\xC3\xA9ponse, sans rien refaire");
         Client k(me, "PC-DEV", keyHex);
         AgentInfo i3;
         (void)k.connect(m, 5000);
         (void)k.identify(i3);
-        o = k.exchange(protocol::requestHeader("STATUS", id, k.nextSeq(), protocol::nowMs()), "{}", r3);
+        o = k.exchange(protocol::requestHeader("STATUS", id, k.nextSeq(), protocol::nowMs(), k.proto()), "{}", r3);
         check(o.ok && r3.header.flag("replay") && r3.data == r1.data, "m\xC3\xAAme identifiant sur une autre connexion : la m\xC3\xAAme r\xC3\xA9ponse");
         std::vector<std::string> all;
         (void)c.logs(1000, all);
         check(countLinesWith(all, id) == 1, "l'op\xC3\xA9ration rejou\xC3\xA9" "e n'est pas refaite (une ligne au journal)");
         Frame r4, r5;
-        o = c.exchange(protocol::requestHeader("STATUS", protocol::newOperationId(), 1, protocol::nowMs()), "{}", r4);
+        o = c.exchange(protocol::requestHeader("STATUS", protocol::newOperationId(), 1, protocol::nowMs(), c.proto()), "{}", r4);
         check(o.ok && !r4.header.flag("ok") && r4.header.str("error") == "rejeu", "seq qui recule : refus\xC3\xA9 [" + r4.header.str("message") + "]");
-        o = c.exchange(protocol::requestHeader("STATUS", protocol::newOperationId(), c.nextSeq(), protocol::nowMs() - 10 * 60 * 1000), "{}", r5);
+        o = c.exchange(protocol::requestHeader("STATUS", protocol::newOperationId(), c.nextSeq(), protocol::nowMs() - 10 * 60 * 1000, c.proto()), "{}", r5);
         check(o.ok && !r5.header.flag("ok") && r5.header.str("error") == "horloge", "ts trop vieux : refus\xC3\xA9 [" + r5.header.str("message") + "]");
         o = c.status(st);
         check(o.ok, "la connexion sert encore apr\xC3\xA8s ces refus");
@@ -559,7 +561,7 @@ void endToEnd(const std::string& base) {
         if (!found.empty()) {
             const auto& f = found.front();
             check(f.address == "127.0.0.1" && f.port == port && f.fingerprint == agentFp && f.machine == "PC-ESSAI" && f.id == agent->machineId()
-                      && f.version == "1.0.0" && f.protos == std::vector<int>{1},
+                      && f.version == kAgentVersion && f.protos == std::vector<int>{1, 2},
                   "HERE : adresse, port, empreinte, nom, identifiant, version, protocoles");
         }
         opt.broadcast = true;
