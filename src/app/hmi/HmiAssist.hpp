@@ -62,6 +62,7 @@ enum class Context : std::uint8_t {
     EquipmentName,// IHM_ESCLAVE_SIMULE('  IHM_EQUIPEMENT_OK('  : les equipements (1.9)
     LogLevel,     // IHM_LOG(|  NIVEAU_LOG#|  : les niveaux (1.11.14)
     SoundChannel, // IHM_SON_VOLUME('  IHM_SON_CANAL_MUET('  : les canaux du son (1.14.0)
+    ColorName,    // '@  ou @ : les couleurs semantiques (1.26.1 : << comment acceder aux couleurs semantiques ? >>)
 };
 
 struct Where {
@@ -83,6 +84,7 @@ enum class Kind : std::uint8_t {
     Api,                                     // 1.11.1 (API-V) : API, la racine des variables de l'automate
     ApiUnit,                                 // 1.11.1 (API-V) : API.<Unite> (une unite de programme)
     LogLevel,                                // 1.11.14 : un niveau de IHM_LOG (INFO, ERROR...)
+    Color,                                   // 1.26.1 : une couleur semantique ('@Alarme')
 };
 
 // ---- 1.11.2 (API-V, decision 161) : ce qu'est une proposition, et d'ou elle vient --

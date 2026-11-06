@@ -1333,6 +1333,9 @@
     <ClCompile Include="src\app\hmi\HmiBuildPanes.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiChoiceItems.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiConsole.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1781,6 +1784,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiRuntimeTable.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiTrash.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiTrueType.cpp">
@@ -3043,6 +3049,9 @@
     <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiChoiceItems.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiConsole.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3437,6 +3446,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTable.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiTrash.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiTrueType.hpp">

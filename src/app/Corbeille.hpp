@@ -21,6 +21,14 @@
 //  incidents, ses versions). Les macros restent jusqu'a Supprimer
 //  definitivement (leur corbeille d'avant la 1.25.1 n'avait pas de purge).
 //
+//  1.26.1 : LE PROJET IHM AUSSI - le client : << la corbeille ne fonctionne pas
+//  je supprime des choses ca n'apparait pas dedans (j'ai supprime une ressource,
+//  et une vue) >>. Ce qu'on supprime du projet IHM (vues, ressources, scripts,
+//  variables, types, alarmes, recettes, styles, fichiers externes) est garde
+//  DANS le projet (hmi/HmiTrash.hpp) : la source "ihm" (hmiSource) le montre ici,
+//  le rend au projet (Restaurer), l'en retire pour de bon. Ctrl+Z d'une
+//  suppression le reprend de la corbeille, comme avant.
+//
 //  Les chemins sont en UTF-8.
 // =============================================================================
 #pragma once
@@ -29,17 +37,26 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+namespace hmi {
+class Document;
+}
+
 namespace app::corbeille {
 
 inline constexpr int kKeepDays = core::trash::kKeepDays;
 
-// Les genres, dans l'ordre du volet (un dossier chacun).
-enum class Kind : std::uint8_t { Recording, Incident, Version, Macro, AiConversation, AiAttachment, AiKnowledge, Count };
+// Les genres, dans l'ordre du volet (un dossier chacun). 1.26.1 : ceux du projet IHM d'abord (hmi::bin::Kind, dans
+// le meme ordre).
+enum class Kind : std::uint8_t {
+    View, Resource, External, Script, Function, Variable, HmiType, Alarm, Recipe, Style,
+    Recording, Incident, Version, Macro, AiConversation, AiAttachment, AiKnowledge, Count
+};
 inline constexpr std::size_t kKindCount = static_cast<std::size_t>(Kind::Count);
 // "Enregistrement" / "Enregistrements", "Conversation IA" / "Conversations IA"...
 [[nodiscard]] std::string kindLabel(Kind, bool plural = false);
@@ -54,6 +71,9 @@ struct Entry {
     std::int64_t  deletedAt{0};   // secondes depuis 1970 (temps universel) ; 0 : inconnue
     std::uint64_t bytes{0};
     bool          autoPurge{true};   // part apres kKeepDays (une macro, un element sans date : non)
+    // 1.26.1 : un fichier ou un dossier (Ouvrir dans l'explorateur) ; faux : un element du projet IHM, garde dans le
+    // projet lui-meme (`origin` : "IHM > Vues > Pompes", sa liste et son dossier).
+    bool          onDisk{true};
     [[nodiscard]] std::string key() const { return source + "|" + trashed; }
     [[nodiscard]] std::string originFolder() const;   // le dossier ou il reviendra (la colonne Origine)
 };
@@ -65,6 +85,9 @@ struct Source {
     std::function<bool(Entry&, std::string* why)>       retrash;   // Ctrl+Z d'une restauration : de nouveau dedans (`trashed` suit)
     std::function<bool(const Entry&, std::string* why)> purge;     // pour de bon
     std::function<void()>                               changed;   // apres un geste : les volets du magasin se refont
+    // 1.26.1 : change quand sa corbeille change sans geste d'ici (une suppression dans le projet IHM) - revision() le
+    // suit : le volet et << Corbeille [N] >> se relisent tout de suite. Vide : seuls les gestes comptent.
+    std::function<std::uint64_t()>                      stamp;
 };
 void registerSource(const std::string& key, Source source);
 void unregisterSource(const std::string& key);
@@ -81,7 +104,9 @@ void touch();
 
 // LES GESTES. Restaurer : chacun a sa place (refuse : `refused` dit pourquoi), puis UNE commande sur la pile de
 // l'application (un seul Ctrl+Z les remet dans la corbeille). Supprimer : pour de bon. Rendent combien.
-std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::string, std::string>>* refused = nullptr);
+// `restored` : ceux qui sont revenus, tels que leur source les a rendus (1.26.1 : un nom deja pris, "Vue -> Vue_2").
+std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::string, std::string>>* refused = nullptr,
+                    std::vector<Entry>* restored = nullptr);
 std::size_t purge(const std::vector<Entry>& items, std::vector<std::pair<std::string, std::string>>* refused = nullptr);
 // Ce qui est la depuis plus de `days` jours (et qui part tout seul : autoPurge), dans une source ("" : toutes).
 std::size_t purgeOld(const std::string& sourceKey = {}, int days = kKeepDays, std::int64_t now = 0);
@@ -103,5 +128,11 @@ std::size_t purgeOld(const std::string& sourceKey = {}, int days = kKeepDays, st
 [[nodiscard]] Source aiSource();
 // Les macros de la bibliotheque (libs/Macros/_corbeille).
 [[nodiscard]] Source macroSource(std::string libraryRoot);
+// 1.26.1 : le projet IHM ouvert (`doc` : le document ; nul, aucun). Sa corbeille est dans le projet (Project::trash) :
+// Restaurer le remet dans le projet (un nom pris : le premier libre), Supprimer definitivement l'en retire, du disque
+// aussi (`folder` : le dossier du projet ; vide, pas encore enregistre). A la premiere lecture d'un document (son
+// ouverture), ce qui y est depuis plus de kKeepDays jours part pour de bon.
+inline constexpr const char* kHmiSource = "ihm";
+[[nodiscard]] Source hmiSource(std::function<std::shared_ptr<hmi::Document>()> doc, std::function<std::string()> folder);
 
 } // namespace app::corbeille

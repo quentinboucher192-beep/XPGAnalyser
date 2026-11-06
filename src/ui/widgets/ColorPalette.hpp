@@ -143,7 +143,9 @@ protected:
     void        onFocusChanged(bool gained) override;
 
 private:
-    struct Cell { gfx::Rect r; std::string color; };
+    // 1.26.1 : `named` - une couleur semantique, une pastille ET son nom (<< o Alarme >>) : on la reconnait.
+    struct Cell { gfx::Rect r; std::string color; bool named{false}; };
+    [[nodiscard]] float semanticHeight() const;              // 1.26.1 : la bande des couleurs semantiques (0 : aucune)
     [[nodiscard]] std::vector<Cell> cells() const;           // toutes les pastilles, a leur place
     [[nodiscard]] float     sectionY(int section) const;    // 0 nuancier, 1 projet, 2 recentes, 3 transparent
     [[nodiscard]] gfx::Point rightColumn() const;           // le coin du choix personnalise
@@ -166,7 +168,7 @@ private:
     std::string              origin_;         // la valeur a l'ouverture (l'apercu Avant)
     std::string              draft_;          // le code montre dans le champ
     std::vector<std::string> project_;
-    std::vector<std::string> semantic_;       // 1.23.1 : les couleurs semantiques publiees (<< @Nom >>), 20 au plus
+    std::vector<std::string> semantic_;       // 1.23.1 : les couleurs semantiques publiees (<< @Nom >>) ; 1.26.1 : 48 au plus
     std::string              title_, subject_;
     std::string              picked_;         // la derniere couleur prise a la pipette (le bas le dit)
     bool                     open_{false};

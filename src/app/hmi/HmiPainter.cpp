@@ -1885,6 +1885,9 @@ void paintSymbolInstance(const Ctx& c) {
 
 void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, const HmiViewport& vp,
                     const HmiPropertySource& src, const ui::Theme& theme, const HmiPaintOptions& opt) {
+    // 1.26.1 : le texte d'une IHM garde la police d'origine, quelle que soit celle choisie pour le logiciel : la meme
+    // vue se dessine pareil sur chaque poste.
+    const gfx::StockFaceScope stockFace(r);
     // 1.12.7 (lot E, § 2.3) : dans l'editeur, un objet a joker se dessine deplie, comme il demarrera
     // (Cuves[*].Niveau : une barre par cuve d'un ARRAY ; une LIST : selon sa valeur initiale). En marche, la
     // vue composee du moteur l'est deja.
@@ -2356,6 +2359,7 @@ void paintHmiObject(gfx::IRenderer& r, const hmi::View& view, const Object& o, c
 
 void paintHmiView(gfx::IRenderer& r, const hmi::View& view, const HmiViewport& vp, const HmiPropertySource& src,
                   const ui::Theme& theme, const HmiPaintOptions& opt) {
+    const gfx::StockFaceScope stockFace(r);   // 1.26.1 : la police d'origine (paintHmiObject)
     gfx::Color own;
     const gfx::Color bg = fade(tryParseColor(view.background, own) ? own : hmiSeenColor(gfx::Color::rgb(0x20242B), opt.display),
                                std::clamp(opt.alpha, 0.f, 1.f));

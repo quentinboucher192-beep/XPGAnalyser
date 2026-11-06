@@ -85,6 +85,10 @@ public:
     void releaseImage(gfx::TextureId id) override { r_.releaseImage(id); }
     void drawImage(gfx::TextureId id, const gfx::Rect& dst, float angleDeg, bool flipH, bool flipV, gfx::Color tint) override;
     [[nodiscard]] bool readPixels(std::vector<std::uint8_t>& rgba, int& w, int& h) override { return r_.readPixels(rgba, w, h); }
+    // 1.26.1 : la police d'origine (le texte d'une IHM zoomee), les atlas refaits - ceux du renderer de dessous.
+    void useStockFace(bool on) override { r_.useStockFace(on); }
+    [[nodiscard]] bool usingStockFace() const override { return r_.usingStockFace(); }
+    void resetFonts() override { r_.resetFonts(); }
     [[nodiscard]] bool beginOffscreen(int w, int h, gfx::Color clear) override;
     [[nodiscard]] bool endOffscreen(std::vector<std::uint8_t>& rgba, int& w, int& h) override;
 

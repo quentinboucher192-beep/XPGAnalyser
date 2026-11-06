@@ -4,6 +4,7 @@
 #include "HmiPanels.hpp"
 #include "../../core/Command.hpp"   // 1.24.0 : CommandGroupScope (supprimer plusieurs d'un coup)
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les styles fournis dans la liste Style nomme
+#include "HmiChoiceItems.hpp"          // 1.26.1 : les listes Police et Style nomme (sections, apercus, recherche)
 #include "../../hmi/HmiNotify.hpp"   // 1.14.0 (relecture M4b) : maskSecret (le mot de passe de l'Enregistreur)
 #include "../../hmi/HmiRoles.hpp"   // 1.12.6 (lot B) : le role de chaque propriete
 #include "../../hmi/HmiNatives.hpp"   // 1.12.1 : les enumerations natives des proprietes
@@ -4764,6 +4765,9 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.enumValues.clear();
                 for (const auto& ch : hmi::fontlib::fieldChoices(*project)) p.enumValues.push_back(ch.label);
                 if (prop.expr.empty()) p.value = hmi::fontlib::fieldLabel(*project, prop.value);
+                // 1.26.1 : la liste riche - sections, une ligne par famille ecrite dans sa police, ses styles en pastilles,
+                // la recherche (<< si y'en a bcp on pourrait vite s'y perdre >>).
+                p.choices = hmiFontChoiceItems(*project);
             } else if (hmi::citesResource(prop.key)) {
                 p.type = PG::ValueType::Enum;
                 p.enumValues = prop.key == "font" ? std::vector<std::string>{"Sans", "Mono"} : std::vector<std::string>{""};
@@ -4880,6 +4884,7 @@ std::vector<ui::PropertyGrid::Category> hmiPropertyCategories(const hmi::View& v
                 p.type = PG::ValueType::Enum;
                 p.enumValues = {""};
                 for (const auto* st : hmi::styles::all(*project)) p.enumValues.push_back(st->name);
+                p.choices = hmiStyleChoiceItems(*project, many ? nullptr : o);   // 1.26.1 : sections, apercus, recherche
             } else if (prop.key == "group" && (o->kind == hmi::Kind::History || hmi::kindIsAlarmView(o->kind) || o->kind == hmi::Kind::Marquee)
                        && project) {   // 1.12.12 (lot H) : le texte defilant des alarmes en cours
                 p.type = PG::ValueType::Enum;

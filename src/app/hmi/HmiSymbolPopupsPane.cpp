@@ -226,7 +226,7 @@ bool HmiSymbolPopupsPane::deletePopup(Id id) {
     const auto* v = doc_->project.view(id);
     if (!v || v->ownerSymbol != symbol_) return false;
     const std::string name = v->name;
-    auto cmd = hmi::changeProject(doc_, "Supprimer la popup " + name, [&](hmi::Project& p) {
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer la popup " + name, [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         std::erase_if(p.views, [&](const hmi::View& x) { return x.id == id; });
     });
     if (cmd) apply_(std::move(cmd));

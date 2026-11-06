@@ -836,9 +836,37 @@ namespace ui {
     };
 
     // -------------------------------------------------------------- DropDown ---
+    // ---------------------------------------------------------------------------
+    //  1.26.1 : LES LISTES LONGUES. Le client (06/11), devant la liste Police (vingt
+    //  lignes << Bibliotheque > Sans empattement > Liberation Sans Gras >>) et Style
+    //  nomme : << faire quelque chose de mieux si y'en a bcp on pourrait vite s'y
+    //  perdre >>. La liste ouverte sait maintenant :
+    //   * des SECTIONS (Item::group) : un titre, ce qu'il contient en dessous - un clic
+    //     sur le titre la replie ou la deplie ;
+    //   * UNE LIGNE PAR FAMILLE (Item::row, Item::variant) : les choix d'une meme ligne
+    //     (Normal, Gras, Italique) y sont des pastilles a droite - un clic sur la ligne
+    //     prend le choix principal, sur une pastille ce choix-la (fleches gauche/droite
+    //     au clavier) ;
+    //   * un APERCU (Item::paint) : le libelle dessine par l'appelant (une police dans
+    //     sa police, un style avec ses couleurs) ; une NOTE grise a droite (3 objets) ;
+    //   * CHERCHER : au-dela de kSearchFrom choix (ou setSearchable), un champ en tete
+    //     de la liste - on tape, la liste se reduit a ce qui correspond (sans casse ni
+    //     accents, chaque mot ; ui::SearchQuery) ; Echap vide le champ, puis ferme.
+    //  Une liste courte sans section ni ligne a pastilles reste exactement celle d'avant.
+    // ---------------------------------------------------------------------------
     class DropDown : public Widget {
     public:
-        struct Item { std::string label; std::string value; gfx::TextureId icon{}; bool enabled{ true }; };
+        struct Item {
+            std::string label; std::string value; gfx::TextureId icon{}; bool enabled{ true };
+            std::string group{};      // 1.26.1 : le titre de sa section (les choix d'une section se suivent)
+            std::string row{};        // non vide : les choix consecutifs de meme `row` font une ligne...
+            std::string variant{};    // ... ou celui-ci est une pastille (<< Gras >>) ; vide : le choix de la ligne
+            std::string note{};       // a droite, en gris
+            std::string keywords{};   // la recherche y cherche aussi
+            // Dessine `text` (le libelle, ou la famille d'une ligne a pastilles) dans `r` ; nul : dans la police de l'interface.
+            std::function<void(const PaintContext&, gfx::Rect r, gfx::Color ink, std::string_view text)> paint{};
+        };
+        static constexpr std::size_t kSearchFrom = 12;
 
         explicit DropDown(std::string id = {});
         void setItems(std::vector<Item> items);
@@ -861,6 +889,22 @@ namespace ui {
         [[nodiscard]] gfx::Rect popupRect() const;
         [[nodiscard]] bool      isOpen() const noexcept { return popupOpen_; }
 
+        // 1.26.1 : la recherche en tete de la liste - d'office au-dela de kSearchFrom choix ; true : toujours.
+        void setSearchable(bool on) { searchable_ = on; rebuildLines(); }
+        [[nodiscard]] bool searchShown() const;
+        void setSearch(std::string text);                       // ce qui est tape (tests, scripts)
+        [[nodiscard]] const std::string& search() const noexcept { return search_; }
+        // Les lignes montrees (tests, scripts) : un titre de section (item < 0, son titre), ou une ligne (le choix
+        // principal, et ses pastilles).
+        struct Line { std::string header; int item{ -1 }; std::vector<int> variants{}; int count{ 0 }; bool collapsed{ false }; };
+        [[nodiscard]] const std::vector<Line>& lines() const noexcept { return lines_; }
+        void toggleSection(const std::string& group);
+        // Choisir ce choix comme d'un clic dans la liste ouverte (elle se ferme) - scripts, tests.
+        void pick(int item) { choose(item); }
+        // Ou est dessinee la ligne `line`, et la pastille `variant` (rang dans Line::variants) ; vide : pas montree.
+        [[nodiscard]] gfx::Rect lineRect(int line) const;
+        [[nodiscard]] gfx::Rect chipRect(int line, int variant) const;
+
         const core::SignalPtr<int> selectionChanged = core::Signal<int>::create();
 
     protected:
@@ -878,8 +922,23 @@ namespace ui {
         void                scrollTo(int row);
         void                moveHighlight(int delta);
         [[nodiscard]] gfx::Rect scrollbarRect() const;
+        // 1.26.1 : les lignes (sections, familles), refaites a chaque changement des choix ou de la recherche.
+        void rebuildLines();
+        [[nodiscard]] bool  rich() const noexcept { return rich_; }
+        [[nodiscard]] float searchHeight() const;
+        [[nodiscard]] gfx::Rect listRect() const;           // la partie qui defile (sous la recherche)
+        [[nodiscard]] int   lineOfItem(int item) const;
+        [[nodiscard]] bool  selectable(int line) const;
+        [[nodiscard]] int   chipAt(int line, gfx::Point global) const;
+        void                choose(int item);
 
         std::vector<Item> items_;
+        std::vector<Line> lines_;
+        std::vector<std::string> collapsed_;       // les sections repliees (leur titre)
+        std::string       search_;
+        bool              searchable_{ false }, rich_{ false };
+        int               chip_{ -1 };              // la pastille surlignee (rang) de la ligne surlignee ; -1 : la ligne
+        int               fullLines_{ 0 };          // les lignes sans recherche (la liste garde sa hauteur pendant qu'on tape)
         int               selected_{ -1 };
         int               highlighted_{ -1 };      // where the keyboard or pointer is
         int               maxVisibleRows_{ 12 };

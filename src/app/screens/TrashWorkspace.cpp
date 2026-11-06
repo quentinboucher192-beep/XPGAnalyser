@@ -7,6 +7,9 @@
 //  des macros ; il ouvre le volet (le noeud << Corbeille [N] >> de l'arbre,
 //  Projet > Corbeille...) et tient le compte de l'arbre a jour. A l'ouverture d'un
 //  projet, sa corbeille se purge (plus de 7 jours).
+//  1.26.1 : et celle du projet IHM ouvert (ce qu'on en supprime : vues,
+//  ressources, scripts... - hmi/HmiTrash.hpp), inscrite meme avant le premier
+//  Enregistrer ; elle suit le document ouvert, et se purge a son ouverture.
 // =============================================================================
 #include "Screens.hpp"
 
@@ -56,6 +59,10 @@ void MainAnalysisScreen::registerTrashSources() {
         if (!alive.expired()) macrosChanged();
     };
     corbeille::registerSource("macros", std::move(macros));
+    // 1.26.1 : le projet IHM ouvert (le document du moment, relu a chaque fois : un autre projet ouvert le remplace).
+    corbeille::registerSource(corbeille::kHmiSource, corbeille::hmiSource(
+        [this, alive]() -> std::shared_ptr<hmi::Document> { return alive.expired() ? nullptr : app_.hmi(); },
+        [this, alive]() -> std::string { return alive.expired() ? std::string{} : app_.projectFolder(); }));
 }
 
 void MainAnalysisScreen::openTrash() {

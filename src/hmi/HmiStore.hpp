@@ -8,6 +8,7 @@
 //        ihm/vues/0003-Synoptique.vue une vue : calques, objets, scripts
 //        ihm/ressources/0012-logo.png le fichier d'une ressource, tel qu'importe
 //        ihm/corbeille/               ce que l'index ne designe plus (vue, ressource)
+//        ihm/supprimes/               1.26.1 : la corbeille du projet (ce que l'utilisateur a supprime)
 //
 //  Un diff se lit, deux personnes travaillent sur deux vues sans conflit, et un
 //  fichier se relit a la main quand il le faut.
@@ -141,6 +142,15 @@ inline constexpr int kFormatVersion = 33;   // 5 : lot 6 (roles des vues, herita
 [[nodiscard]] core::Status  save(const Project&, const std::string& projectFolder);
 [[nodiscard]] core::Result<Project> load(const std::string& projectFolder,
                                          LoadReport* report = nullptr);
+
+// ---- 1.26.1 : LA CORBEILLE DU PROJET SUR LE DISQUE ----
+//  save() ecrit Project::trash dans ihm/supprimes/ (corbeille.txt, et un dossier par element : son petit projet) ;
+//  load() la relit. Hors de ihm.txt et de serializeProject : ni l'export, ni les paquets, ni la copie d'un
+//  enregistrement ne l'emportent, et une IHM Studio d'avant ouvre le projet sans la toucher.
+inline constexpr std::string_view kTrashFolder = "supprimes";
+// Supprimer definitivement l'element `item` de la corbeille enregistree (sa ligne, son dossier), tout de suite :
+// sans attendre le prochain Enregistrer. Absent : rien a faire.
+core::Status forgetSaved(const std::string& projectFolder, Id item);
 
 // LE PROJET EN FICHIERS, SANS DISQUE : ce que save() ecrit (chemins relatifs a
 // ihm/ : "ihm.txt" en tete, "vues/...", "scripts/...", "ressources/..."), et

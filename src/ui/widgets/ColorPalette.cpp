@@ -37,8 +37,7 @@ constexpr float kFootH = 46.f;
 constexpr float kButtonH = 28.f;
 constexpr float kWidth = kPad + kLeftW + kColGap + kRightW + kPad;  // 514
 constexpr float kHeight = kHeadH + kPad + kBodyH + kPad + kFootH;    // 388
-constexpr float kSemanticH = kLabel + kSwatch + kPad;                  // 1.23.1 : la bande des couleurs semantiques
-constexpr std::size_t kSemanticMax = 20;
+constexpr std::size_t kSemanticMax = 48;   // 1.26.1 : leur nom ecrit, sur plusieurs lignes (1.23.1 : 20 carres sans nom)
 constexpr float kLoupeCells = 11.f;                                  // la loupe : 11 x 11 pixels
 constexpr float kLoupeZoom = 9.f;
 constexpr gfx::FontId kFont{16};
@@ -334,7 +333,7 @@ float ColorPalette::sectionY(int section) const {
 
 gfx::Rect ColorPalette::popupRect() const {
     const auto b = bounds();
-    const float h = kHeight + (semantic_.empty() ? 0.f : kSemanticH);   // 1.23.1
+    const float h = kHeight + semanticHeight();   // 1.23.1
     float x = b.x;
     float y = b.bottom() + 2.f;
     const auto surface = surfaceSize();
@@ -362,11 +361,34 @@ std::vector<ColorPalette::Cell> ColorPalette::cells() const {
     }
     if (!project_.empty()) rowOf(sectionY(1) + kLabel, project_);
     if (!recent().empty()) rowOf(sectionY(2) + kLabel, recent());
-    // 1.23.1 : les couleurs semantiques, sur toute la largeur, sous le choix.
-    const float sy = kHeadH + kPad + kBodyH + kPad + kLabel;
-    for (std::size_t i = 0; i < semantic_.size() && i < kSemanticMax; ++i)
-        out.push_back({{p.x + kPad + static_cast<float>(i) * (kSwatch + kGap), p.y + sy, kSwatch, kSwatch}, semantic_[i]});
+    // 1.23.1 : les couleurs semantiques, sur toute la largeur, sous le choix. 1.26.1 : chacune avec son nom
+    // (<< o Alarme >>), sur autant de lignes qu'il faut.
+    float sx = p.x + kPad, sy = p.y + kHeadH + kPad + kBodyH + kPad + kLabel;
+    for (std::size_t i = 0; i < semantic_.size() && i < kSemanticMax; ++i) {
+        const float w = kSwatch + 5.f + measureWidth(std::string_view(semantic_[i]).substr(1), kSmall) + 8.f;
+        if (sx + w > p.x + kWidth - kPad && sx > p.x + kPad) {
+            sx = p.x + kPad;
+            sy += kSwatch + kGap;
+        }
+        out.push_back({{sx, sy, w, kSwatch}, semantic_[i], true});
+        sx += w + kGap;
+    }
     return out;
+}
+
+float ColorPalette::semanticHeight() const {
+    if (semantic_.empty()) return 0.f;
+    float sx = kPad;
+    int rows = 1;
+    for (std::size_t i = 0; i < semantic_.size() && i < kSemanticMax; ++i) {
+        const float w = kSwatch + 5.f + measureWidth(std::string_view(semantic_[i]).substr(1), kSmall) + 8.f;
+        if (sx + w > kWidth - kPad && sx > kPad) {
+            sx = kPad;
+            ++rows;
+        }
+        sx += w + kGap;
+    }
+    return kLabel + static_cast<float>(rows) * (kSwatch + kGap) + kPad;
 }
 
 gfx::Rect ColorPalette::transparentRect() const {
@@ -974,11 +996,26 @@ void ColorPalette::paintBody(const PaintContext& ctx) {
     if (!recent().empty()) label(p.x + kPad, p.y + sectionY(2), "R\xC3\xA9" "centes");
     if (!semantic_.empty()) {   // 1.23.1
         ctx.r.fillRect({p.x + 1.f, p.y + kHeadH + kPad + kBodyH + kPad * 0.5f, p.w - 2.f, 1.f}, c.border);
-        label(p.x + kPad, p.y + kHeadH + kPad + kBodyH + kPad, "Couleurs s\xC3\xA9mantiques (@Nom, IHM \xE2\x80\xBA Styles)");
+        label(p.x + kPad, p.y + kHeadH + kPad + kBodyH + kPad,
+              "Couleurs s\xC3\xA9mantiques - un clic : \xC2\xAB @Nom \xC2\xBB ; dans une formule : '@Nom' (IHM \xE2\x80\xBA Styles)");
     }
     for (const auto& cell : cells()) {
         gfx::Color col;
         if (!parseHexColor(cell.color, col)) continue;
+        if (cell.named) {
+            // 1.26.1 : << o Alarme >> - la pastille, puis le nom ; la choisie (ou survolee) encadree.
+            const bool current = cell.color == value_;
+            const bool over = cell.color == hover_;
+            if (current || over) ctx.r.fillRoundedRect(cell.r, current ? c.selectionBg : c.rowAltBg, 3.f);
+            const gfx::Rect sw{cell.r.x, cell.r.y, kSwatch, kSwatch};
+            if (col.a < 255) checker(ctx.r, sw);
+            ctx.r.fillRect(sw, col);
+            ctx.r.strokeRect(sw, c.border, 1.f);
+            ctx.r.drawText({sw.right() + 5.f, cell.r.y + (kSwatch - ctx.r.lineHeight(kSmall)) * 0.5f}, std::string_view(cell.color).substr(1), kSmall,
+                           current ? c.selectionText : c.text);
+            if (current || over) ctx.r.strokeRect(cell.r, current ? c.accent : c.accentHover, 1.f);
+            continue;
+        }
         if (col.a < 255) checker(ctx.r, cell.r);
         ctx.r.fillRect(cell.r, col);
         const bool current = sameColor(cell.color, value_);

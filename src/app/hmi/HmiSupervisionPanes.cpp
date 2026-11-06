@@ -787,7 +787,7 @@ bool HmiAlarmsPane::deleteAlarm(Id id) {
     if (!a) return false;
     const std::string name = a->name;
     const auto uses = actionUses(doc_->project, hmi::Operation::AckAlarm, name);
-    auto cmd = hmi::changeProject(doc_, "Supprimer " + name, [&](hmi::Project& pr) {
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer " + name, [&](hmi::Project& pr) {   // 1.26.1 : la corbeille
         auto& v = pr.alarms;
         v.erase(std::remove_if(v.begin(), v.end(), [&](const hmi::AlarmDef& x) { return x.id == id; }), v.end());
     });
@@ -1490,7 +1490,7 @@ bool HmiRecipesPane::deleteRecipe(Id id) {
     if (!r) return false;
     const std::string name = r->name;
     const auto uses = actionUses(doc_->project, hmi::Operation::LoadRecipe, name);
-    auto cmd = hmi::changeProject(doc_, "Supprimer " + name, [&](hmi::Project& pr) {
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer " + name, [&](hmi::Project& pr) {   // 1.26.1 : la corbeille
         auto& v = pr.recipes;
         v.erase(std::remove_if(v.begin(), v.end(), [&](const hmi::Recipe& x) { return x.id == id; }), v.end());
     });

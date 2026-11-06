@@ -622,28 +622,86 @@ std::string themeFontName(const Project& p, bool values) {
 
 std::vector<Choice> fieldChoices(const Project& p, bool theme) {
     std::vector<Choice> out;
+    const std::string kTheme = "Th\xC3\xA8me";
     if (theme) {
-        out.push_back({"Celle de l'IHM", "", "", ""});
+        Choice c{"Celle de l'IHM", "", "", ""};
+        c.shortLabel = c.label;
+        out.push_back(std::move(c));
     } else {
         const std::string def = themeFontName(p, false), val = themeFontName(p, true);
-        out.push_back({"Police par d\xC3\xA9" "faut (" + (def.empty() ? std::string(kIhmFont) : def) + ")", "Sans", "", ""});
-        out.push_back({"Police des valeurs (" + (val.empty() ? std::string("chasse fixe de l'IHM") : val) + ")", "Mono", "", ""});
+        Choice d{"Police par d\xC3\xA9" "faut (" + (def.empty() ? std::string(kIhmFont) : def) + ")", "Sans", "", ""};
+        Choice m{"Police des valeurs (" + (val.empty() ? std::string("chasse fixe de l'IHM") : val) + ")", "Mono", "", ""};
+        for (Choice* c : {&d, &m}) {
+            c->section = kTheme;
+            c->shortLabel = c->label;
+            if (const Resource* r = resolve(p, c->value)) { c->data = r->data; c->format = r->format; }
+        }
+        out.push_back(std::move(d));
+        out.push_back(std::move(m));
     }
-    // Les polices du projet, par leur famille ; deux qui se confondent : leur nom de fichier.
+    // Les polices du projet, par leur famille ; deux qui se confondent : leur nom de fichier. 1.26.1 : rangees par
+    // famille (une ligne, ses styles en pastilles), avec ce qui les emploie.
     const auto fonts = projectFonts(p);
     std::vector<std::string> labels;
     for (const auto* r : fonts) labels.push_back(r->data ? displayName(*r->data) : std::string{});
+    std::vector<Choice> mine;
     for (std::size_t i = 0; i < fonts.size(); ++i) {
         std::string label = labels[i];
         const bool twin = std::count(labels.begin(), labels.end(), label) > 1;
         if (label.empty() || twin || label == "Sans" || label == "Mono") label = fonts[i]->name;
-        out.push_back({label, fonts[i]->name, "", "Du projet"});
+        Choice c{label, fonts[i]->name, "", "Du projet"};
+        c.section = "Du projet";
+        c.shortLabel = label;
+        c.data = fonts[i]->data;
+        c.format = fonts[i]->format;
+        std::string family;
+        if (!twin && fonts[i]->data && readable(*fonts[i]->data, &family) && !family.empty()) {
+            c.family = family;
+            const std::string& shown = labels[i];
+            c.style = shown.size() > family.size() + 1 && shown.compare(0, family.size() + 1, family + " ") == 0
+                          ? shown.substr(family.size() + 1) : std::string("Normal");
+        }
+        if (const Usage u = usageOf(p, fonts[i]->name); u.any()) c.note = usageText(u);
+        mine.push_back(std::move(c));
     }
+    // Une famille ensemble (dans l'ordre ou elle apparait), Normal d'abord.
+    const auto styleRank = [](const std::string& st) { return st == "Normal" ? 0 : st == "Gras" ? 1 : st == "Italique" ? 2 : 3; };
+    std::vector<std::string> order;
+    for (const auto& c : mine)
+        if (std::find(order.begin(), order.end(), c.family) == order.end()) order.push_back(c.family);
+    std::stable_sort(mine.begin(), mine.end(), [&](const Choice& x, const Choice& y) {
+        const auto ix = std::find(order.begin(), order.end(), x.family) - order.begin();
+        const auto iy = std::find(order.begin(), order.end(), y.family) - order.begin();
+        if (ix != iy) return ix < iy;
+        if (x.family.empty()) return false;
+        return styleRank(x.style) < styleRank(y.style);
+    });
+    for (auto& c : mine) out.push_back(std::move(c));
     // La bibliotheque : Mes polices, puis les fournies, pas encore dans le projet.
+    const auto library = [&](const Font& f) {
+        Choice c{choiceLabel(f), "", f.id, "Biblioth\xC3\xA8que"};
+        c.section = f.mine() ? std::string(kMine) : "Biblioth\xC3\xA8que \xE2\x80\xBA " + f.category;
+        c.family = f.label;
+        c.style = f.style.empty() ? std::string("Normal") : f.style;
+        c.shortLabel = f.mine() ? stemExt(leafOf(f.file)).first : f.fullName();
+        c.data = f.data;
+        c.format = f.format;
+        return c;
+    };
     for (const auto& f : userFonts())
-        if (!importedAs(p, f)) out.push_back({choiceLabel(f), "", f.id, "Biblioth\xC3\xA8que"});
+        if (!importedAs(p, f)) out.push_back(library(f));
     for (const auto& f : builtIn())
-        if (!importedAs(p, f)) out.push_back({choiceLabel(f), "", f.id, "Biblioth\xC3\xA8que"});
+        if (!importedAs(p, f)) out.push_back(library(f));
+    // Deux choix d'une meme section avec la meme famille ET le meme style (deux copies d'une police) : chacun sa ligne.
+    std::vector<bool> alone(out.size(), false);
+    for (std::size_t i = 0; i < out.size(); ++i) {
+        if (out[i].family.empty()) continue;
+        for (std::size_t j = i + 1; j < out.size(); ++j)
+            if (out[j].section == out[i].section && out[j].family == out[i].family && out[j].style == out[i].style)
+                alone[i] = alone[j] = true;
+    }
+    for (std::size_t i = 0; i < out.size(); ++i)
+        if (alone[i]) out[i].family.clear();
     return out;
 }
 
@@ -666,14 +724,99 @@ std::optional<Choice> fromLabel(const Project& p, std::string_view label, bool t
 }
 
 // ================================================================== la police partout ===
+namespace {
+// 1.26.1 : le nom lisible d'une police ("carlito gras") et sa famille ("carlito"), plies - lus une fois par contenu.
+struct FoldedNames { std::string full, family; };
+FoldedNames foldedNamesOf(const BlobPtr& data) {
+    static std::mutex m;
+    static std::map<const Bytes*, std::pair<std::size_t, FoldedNames>> cache;
+    if (!data) return {};
+    std::lock_guard<std::mutex> lock(m);
+    if (const auto it = cache.find(data.get()); it != cache.end() && it->second.first == data->size()) return it->second.second;
+    FoldedNames n;
+    std::string family;
+    if (readable(*data, &family)) {
+        n.full = guide::fold(displayName(*data));
+        n.family = guide::fold(family);
+    }
+    if (cache.size() > 512) cache.clear();
+    cache[data.get()] = {data->size(), n};
+    return n;
+}
+bool startsWithFolded(const std::string& folded, std::string_view prefix) {
+    const std::string p = guide::fold(prefix);
+    return !p.empty() && folded.compare(0, p.size(), p) == 0;
+}
+} // namespace
+
 const Resource* resolve(const Assets& a, const Config* cfg, std::string_view value) {
     std::string_view name = value;
-    if (name.empty() || name == "Sans") name = cfg ? std::string_view(cfg->defaultFont) : std::string_view{};
-    else if (name == "Mono") name = cfg ? std::string_view(cfg->valueFont) : std::string_view{};
+    // 1.26.1 (LA POLICE EN FORMULE) : une formule ecrit souvent ce qu'elle lit dans la liste - << Police par defaut >>,
+    // << Police des valeurs (JetBrains Mono) >> - et non Sans, Mono.
+    const std::string folded = guide::fold(value);
+    if (name.empty() || name == "Sans" || startsWithFolded(folded, "Police par d\xC3\xA9" "faut"))
+        name = cfg ? std::string_view(cfg->defaultFont) : std::string_view{};
+    else if (name == "Mono" || startsWithFolded(folded, "Police des valeurs"))
+        name = cfg ? std::string_view(cfg->valueFont) : std::string_view{};
     if (name.empty()) return nullptr;
     for (const auto& r : a.resources)
         if (r.name == name) return r.kind() == MediaKind::Font && r.data ? &r : nullptr;
-    return nullptr;
+    // 1.26.1 : sinon, sans casse ni accents - le nom de la ressource, ou sans son extension (<< Carlito-Bold >>), ou le nom
+    // de la police (<< Carlito Gras >>), ou sa famille (<< Carlito >> : son style Normal d'abord).
+    const std::string want = guide::fold(name);
+    const Resource* byFamily = nullptr;
+    bool familyRegular = false;
+    for (const auto& r : a.resources) {
+        if (r.kind() != MediaKind::Font || !r.data) continue;
+        const std::string rn = guide::fold(r.name);
+        if (rn == want || guide::fold(stemExt(r.name).first) == want) return &r;
+        const FoldedNames n = foldedNamesOf(r.data);
+        if (!n.full.empty() && n.full == want) return &r;
+        if (!n.family.empty() && n.family == want) {
+            const bool regular = n.full == n.family;
+            if (!byFamily || (regular && !familyRegular)) { byFamily = &r; familyRegular = regular; }
+        }
+    }
+    return byFamily;
+}
+
+std::vector<std::string> quotedNames(std::string_view e) {
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i < e.size(); ++i) {
+        const char q = e[i];
+        if (q != '\'' && q != '"') continue;
+        std::string lit;
+        std::size_t j = i + 1;
+        for (; j < e.size(); ++j) {
+            if (e[j] == '$' && j + 1 < e.size()) { lit += e[++j]; continue; }   // $' $$ : le caractere lui-meme
+            if (e[j] == q) break;
+            lit += e[j];
+        }
+        if (j >= e.size()) break;
+        std::size_t b = 0, f = lit.size();
+        while (b < f && lit[b] == ' ') ++b;
+        while (f > b && lit[f - 1] == ' ') --f;
+        std::string name = lit.substr(b, f - b);
+        if (!name.empty() && std::find(out.begin(), out.end(), name) == out.end()) out.push_back(std::move(name));
+        i = j;
+    }
+    return out;
+}
+
+std::string formulaFontProblem(const Project& p, std::string_view name) {
+    if (resolve(p, name)) return {};
+    const std::string folded = guide::fold(name);
+    if (name == "Sans" || name == "Mono" || startsWithFolded(folded, "Police par d\xC3\xA9" "faut") || startsWithFolded(folded, "Police des valeurs"))
+        return {};   // une police du theme pas choisie : celle de l'IHM, comme une case sans formule
+    // Dans la bibliotheque, pas dans le projet : le poste n'aura que les polices du projet.
+    for (const auto& fam : families())
+        for (const auto& f : fam.fonts)
+            if (guide::fold(f.fullName()) == folded || guide::fold(f.label) == folded || guide::fold(resourceName(f)) == folded
+                || guide::fold(choiceLabel(f)) == folded)
+                return "'" + std::string(name) + "' est dans la biblioth\xC3\xA8que de polices, pas dans le projet : importe-la "
+                       "(IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de polices) - sinon le poste prend la police par d\xC3\xA9" "faut";
+    return "'" + std::string(name) + "' : aucune police du projet ne porte ce nom (ni sa ressource, ni sa famille) - le poste prendra la "
+           "police par d\xC3\xA9" "faut";
 }
 
 const Resource* resolve(const Project& p, std::string_view value) { return resolve(p.assets, &p.config, value); }

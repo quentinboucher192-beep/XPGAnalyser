@@ -4618,7 +4618,8 @@ core::CommandPtr commandFor(const hmi::DocumentPtr& doc, const Proposal& p, std:
     // 1.19.0 : UNE commande pour tout le plan (la vue neuve et ses objets, les autres vues, les variables, les types, les
     // outils) : Ctrl+Z reprend tout, Ctrl+Y le refait. Une unite qui echoue : le projet est remis tel qu'il etait.
     std::string failed;
-    core::CommandPtr cmd = hmi::changeProject(doc, commandLabel(p), [&](hmi::Project& pr) {
+    // 1.26.1 : ce que la proposition retire du projet (une suppression confirmee) entre dans sa corbeille.
+    core::CommandPtr cmd = hmi::deleteFromProject(doc, commandLabel(p), [&](hmi::Project& pr) {
         if (!applyStaged(pr, p, env, &failed, skipped) && failed.empty()) failed = "La proposition ne s'applique pas.";
     });
     if (!failed.empty()) {
@@ -4651,7 +4652,7 @@ core::CommandPtr commandSetting(const hmi::DocumentPtr& doc, const Proposal& p, 
         if (why) *why = "Pas de projet IHM ouvert.";
         return nullptr;
     }
-    core::CommandPtr cmd = hmi::changeProject(doc, commandLabel(p), [after](hmi::Project& pr) { pr = *after; });
+    core::CommandPtr cmd = hmi::deleteFromProject(doc, commandLabel(p), [after](hmi::Project& pr) { pr = *after; });   // 1.26.1
     if (!cmd && why) *why = "La proposition ne change rien au projet.";
     return cmd;
 }

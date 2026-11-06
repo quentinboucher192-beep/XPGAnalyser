@@ -11,16 +11,16 @@ Suite logicielle de bureau, écrite en C++20 avec une interface maison sur SDL3,
 - **API Studio** lit les exports d'échange de Control Expert (`.XPG`, `.XHW`), range le programme dans un dossier de projet modifiable, l'analyse, le simule et régénère des fichiers à réimporter dans Control Expert ;
 - **IHM Studio** conçoit, vérifie, simule et exploite une interface homme-machine (vues, alarmes, recettes, utilisateurs, équipements Modbus TCP), avec un **Assistant IA** qui propose des modifications vérifiées avant application.
 
-Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.26.0**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
+Ce document est le point d'entrée de la documentation. Il décrit le code présent dans ce dépôt (**version 1.26.1**) et cite les fichiers qui justifient ses affirmations. Les détails sont dans [`docs/`](#documentation).
 
 | | |
 |---|---|
-| Version | 1.26.0 (`src/core/Version.hpp`, `CMakeLists.txt`, `outils/config.ini`) |
+| Version | 1.26.1 (`src/core/Version.hpp`, `CMakeLists.txt`, `outils/config.ini`) |
 | Applications | `API-Studio.exe` et `IHM-Studio.exe`, deux exécutables construits à partir des mêmes sources |
 | Langage | C++20 ; environ 647 000 lignes dans `src/` (1 115 fichiers `.cpp`/`.hpp`/`.h`) et 147 000 dans `tests/` |
 | Plates-formes livrées | Windows 10 (1809) et 11, x64 ; construction et essais automatiques sous Linux ([détail](#plates-formes)) |
 | Format des projets IHM | 33 (`hmi::kFormatVersion`) |
-| Essais | 135 suites CTest, toutes réussies sous Linux pour la 1.26.0 ([détail](#tests)) |
+| Essais | 135 suites CTest, toutes réussies sous Linux pour la 1.26.1 ([détail](#tests)) |
 
 ## Sommaire
 
@@ -333,7 +333,7 @@ Options lues par `src/main.cpp` :
 | Option | Effet |
 |---|---|
 | `<fichier>` | Ouvre le projet, l'archive ou l'export donné (transmis à l'instance déjà ouverte s'il y en a une). |
-| `--version` | Écrit le nom et la version (`API Studio 1.26.0` ou `IHM Studio 1.26.0`) et s'arrête. |
+| `--version` | Écrit le nom et la version (`API Studio 1.26.1` ou `IHM Studio 1.26.1`) et s'arrête. |
 | `--cli <fichier.XPG> [autres]` | API Studio : analyse sans fenêtre ; code 0 sans constat d'erreur, 1 sinon, 2 si la lecture échoue. |
 | `--poste <dossier>` ou `--ihm <dossier>` | IHM Studio : ouvre le projet en poste d'exploitation. |
 | `--enregistrer`, `--rejouer`, `--arreter-enregistrement`, `--quitter-relecture` (+ `--duree`, `--vitesse`, `--mot-de-passe`, `--jeter`) | IHM Studio : pilote les enregistrements d'une IHM en marche ([détail](docs/IHM-STUDIO.md#enregistrements)). |
@@ -395,7 +395,7 @@ rem Sous Windows, avec MSVC : build\Release\API-Studio.exe et IHM-Studio.exe
 outils\build.bat
 ```
 
-Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). La version de `resources/windows/xpg_analyzer.rc` est alignée sur les trois autres depuis la 1.22.0 (elle était restée à 1.12.0) ; `build.bat` la vérifie ([détail](docs/GUIDE-COMPILATION.md#version)). Aucune compilation MSVC n'a été faite dans les sessions de la 1.22.0 à la 1.26.0.
+Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). La version de `resources/windows/xpg_analyzer.rc` est alignée sur les trois autres depuis la 1.22.0 (elle était restée à 1.12.0) ; `build.bat` la vérifie ([détail](docs/GUIDE-COMPILATION.md#version)). Aucune compilation MSVC n'a été faite dans les sessions de la 1.22.0 à la 1.26.1.
 
 ### Installateur et versions portables
 
@@ -465,7 +465,7 @@ Un modèle servi sur le PC (Ollama, LM Studio) reçoit les mêmes données sans 
 - **aucun modèle n'est entraîné ni réentraîné** : l'« apprentissage » est une mémoire locale (connaissances, modèles métier et vocabulaire de l'IA intégrée, modèles de fichiers, souvenirs) relue et jointe aux demandes ;
 - la clé API n'est jamais écrite en clair ; sous Linux elle n'est gardée que pour la séance ;
 - `http://` n'est accepté que vers le poste lui-même, ou vers une adresse privée pour un service compatible OpenAI sans clé ;
-- limites : qualité dépendante du modèle, essais automatiques faits avec un faux fournisseur (aucun essai avec une vraie IA rapporté pour les 1.22.0 à 1.26.0), bac à sable non isolé du réseau sous Windows, C/C++ jamais exécutés, PDF scannés et `.xls` non lus.
+- limites : qualité dépendante du modèle, essais automatiques faits avec un faux fournisseur (aucun essai avec une vraie IA rapporté pour les 1.22.0 à 1.26.1), bac à sable non isolé du réseau sous Windows, C/C++ jamais exécutés, PDF scannés et `.xls` non lus.
 
 ---
 
@@ -485,7 +485,7 @@ Détail : [docs/TESTS.md](docs/TESTS.md).
 
 - **119 suites CTest** dans ce commit : 118 essais C++ enregistrés par `xpg_add_test` (certains exécutables servent à deux essais) et l'essai Python `vcxproj`. Répartition : Assistant IA (21), IHM (37), automate (33), socle et application (27), outillage (1). Vingt-deux autres suites sont déclarées mais sautées car leur source n'est pas dans le dépôt.
 - Les essais n'ouvrent pas de fenêtre ; réseau et IA sont remplacés par des faux injectables.
-- **Plates-formes réellement essayées** : Linux (CTest, 135 suites réussies pour la 1.26.0) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** (`--version`, `--cli` sur le projet d'essai, installation silencieuse, bac à sable).
+- **Plates-formes réellement essayées** : Linux (CTest, 135 suites réussies pour la 1.26.1) ; les exécutables Windows ont été vérifiés **sous Wine, pas sur un vrai Windows** (`--version`, `--cli` sur le projet d'essai, installation silencieuse, bac à sable).
 - `build.sh` et `runtests.sh` sont historiques (le premier se déclare « plus tenu à jour ») : la référence est CMake/CTest.
 - Des essais réussis ne prouvent pas l'absence de défauts ; l'interface graphique réelle, les services d'IA réels, Windows hors Wine et les automates physiques ne sont pas couverts par les essais automatiques.
 

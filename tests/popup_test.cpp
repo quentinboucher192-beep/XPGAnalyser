@@ -508,6 +508,106 @@ int main() {
         assert(bad.size() == 1 && bad[0] == "Fermer tout : 5 onglets" && "un compte dans la colonne des touches se voit");
     }
 
+    // --- 1.26.1 : LES LISTES LONGUES (DropDown) - sections, familles et pastilles, recherche ---------------------------
+    //  << faire quelque chose de mieux si y'en a bcp on pourrait vite s'y perdre >> : la liste Police (vingt lignes
+    //  << Bibliotheque > Sans empattement > Liberation Sans Gras >>) et Style nomme.
+    {
+        // Une liste simple : une ligne par choix, comme avant (ni recherche, ni titres).
+        DropDown plain("plain");
+        plain.setItems({{"Gauche", "g"}, {"Centre", "c"}, {"Droite", "d"}});
+        plain.setBounds({100.f, 100.f, 160.f, 24.f});
+        assert(plain.lines().size() == 3 && plain.lines()[1].item == 1 && plain.lines()[1].header.empty());
+        assert(!plain.searchShown() && "trois choix : pas de recherche");
+        assert(plain.popupRect().h == 3.f * 24.f + 2.f && "la meme hauteur qu'avant");
+
+        // Une liste riche : des sections, une ligne par famille, ses styles en pastilles.
+        const auto item = [](std::string label, std::string value, std::string group, std::string row = {}, std::string variant = {}) {
+            DropDown::Item it;
+            it.label = std::move(label);
+            it.value = std::move(value);
+            it.group = std::move(group);
+            it.row = std::move(row);
+            it.variant = std::move(variant);
+            return it;
+        };
+        std::vector<DropDown::Item> fonts{
+            item("Police par d\xC3\xA9" "faut (Carlito)", "Sans", "Th\xC3\xA8me"),
+            item("Carlito", "carlito", "Sans empattement", "Carlito", "Normal"),
+            item("Carlito Gras", "carlito-b", "Sans empattement", "Carlito", "Gras"),
+            item("Carlito Italique", "carlito-i", "Sans empattement", "Carlito", "Italique"),
+            item("Liberation Sans", "lib", "Sans empattement", "Liberation Sans", "Normal"),
+            item("Liberation Sans Gras", "lib-b", "Sans empattement", "Liberation Sans", "Gras"),
+            item("JetBrains Mono", "jb", "Chasse fixe", "JetBrains Mono", "Normal"),
+        };
+        DropDown drop("fonts");
+        drop.setItems(fonts);
+        drop.setBounds({100.f, 100.f, 220.f, 24.f});
+        const auto& lines = drop.lines();
+        assert(lines.size() == 7 && "3 titres, 4 lignes (7 choix)");
+        assert(lines[0].item < 0 && lines[0].header == "Th\xC3\xA8me" && lines[0].count == 1);
+        assert(lines[2].item < 0 && lines[2].count == 2 && "Sans empattement : 2 familles");
+        assert(lines[3].item == 1 && lines[3].variants.size() == 3 && "Carlito : Normal, Gras, Italique en pastilles");
+        assert(lines[4].item == 4 && lines[4].variants.size() == 2);
+        assert(lines[6].item == 6 && lines[6].variants.empty() && "un seul style : pas de pastille");
+        assert(!drop.searchShown() && "7 choix : pas de recherche");
+
+        // Ouverte : un clic sur la pastille Gras de Carlito prend Carlito Gras, et ferme.
+        drop.setSelectedIndex(0);
+        drop.dispatch(MouseDown{{150.f, 110.f}, MouseButton::Left, 1, {}});
+        assert(drop.isOpen());
+        const auto chip = drop.chipRect(3, 1);
+        assert(!chip.empty() && "la pastille Gras est dessinee");
+        drop.dispatch(MouseDown{{chip.x + chip.w * 0.5f, chip.y + chip.h * 0.5f}, MouseButton::Left, 1, {}});
+        assert(!drop.isOpen() && drop.selectedIndex() == 2 && drop.selectedItem()->value == "carlito-b");
+        // Un clic sur la ligne (hors des pastilles) : son premier style.
+        drop.dispatch(MouseDown{{150.f, 110.f}, MouseButton::Left, 1, {}});
+        {
+            const auto row = drop.lineRect(4);
+            assert(!row.empty());
+            drop.dispatch(MouseDown{{row.x + 20.f, row.y + row.h * 0.5f}, MouseButton::Left, 1, {}});
+            assert(!drop.isOpen() && drop.selectedIndex() == 4 && "Liberation Sans (Normal)");
+        }
+        // Au clavier : fleche droite vers la pastille Gras, Entree.
+        drop.dispatch(MouseDown{{150.f, 110.f}, MouseButton::Left, 1, {}});
+        drop.dispatch(KeyDown{Key::Right, {}, false});
+        drop.dispatch(KeyDown{Key::Right, {}, false});
+        drop.dispatch(KeyDown{Key::Return, {}, false});
+        assert(drop.selectedIndex() == 5 && "Liberation Sans Gras, au clavier");
+        // Un titre se replie (un clic), ses lignes partent ; il se deplie.
+        drop.dispatch(MouseDown{{150.f, 110.f}, MouseButton::Left, 1, {}});
+        drop.toggleSection("Th\xC3\xA8me");
+        assert(drop.lines().size() == 6 && drop.lines()[0].collapsed && "Theme replie");
+        drop.toggleSection("Th\xC3\xA8me");
+        assert(drop.lines().size() == 7);
+        drop.dispatch(KeyDown{Key::Escape, {}, false});
+        assert(!drop.isOpen());
+
+        // LA RECHERCHE : au-dela de 12 choix, un champ en tete ; on tape, la liste se reduit (sans casse ni accents).
+        for (int i = 0; i < 8; ++i) fonts.push_back(item("Police " + std::to_string(i), "p" + std::to_string(i), "Mes polices"));
+        drop.setItems(fonts);
+        assert(drop.searchShown() && "15 choix : la recherche");
+        const float tall = drop.popupRect().h;
+        drop.dispatch(MouseDown{{150.f, 110.f}, MouseButton::Left, 1, {}});
+        drop.dispatch(TextInput{"lib"});
+        assert(drop.search() == "lib");
+        int rows = 0;
+        for (const auto& l : drop.lines()) rows += l.item >= 0 ? 1 : 0;
+        assert(rows == 1 && drop.lines().size() == 2 && "Liberation Sans seule, sous son titre");
+        assert(drop.popupRect().h == tall && "la liste garde sa hauteur pendant qu'on tape");
+        drop.dispatch(KeyDown{Key::Backspace, {}, false});
+        drop.dispatch(KeyDown{Key::Backspace, {}, false});
+        drop.dispatch(KeyDown{Key::Backspace, {}, false});
+        drop.dispatch(TextInput{"\xC3\xA9" "pais"});   // << epais >> ne trouve rien
+        assert(drop.lines().empty());
+        drop.dispatch(KeyDown{Key::Escape, {}, false});
+        assert(drop.isOpen() && drop.search().empty() && drop.lines().size() == 16 && "Echap vide d'abord la recherche (4 titres, 12 lignes)");
+        drop.setSearch("gras");
+        assert(drop.lines().size() == 3 && "Gras : Carlito et Liberation Sans, sous leur titre");
+        drop.dispatch(KeyDown{Key::Return, {}, false});
+        assert(!drop.isOpen() && drop.selectedIndex() == 1 && "Entree : la premiere ligne trouvee (Carlito)");
+        assert(drop.search().empty() && "fermee : la recherche est oubliee");
+    }
+
     std::printf("popup_test: ok\n");
     return 0;
 }

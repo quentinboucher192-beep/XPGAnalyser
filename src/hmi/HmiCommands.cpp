@@ -1,4 +1,5 @@
 #include "HmiCommands.hpp"
+#include "HmiTrash.hpp"            // 1.26.1 : la corbeille du projet
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : les commandes du document, dans le journal interne
 
 #include <algorithm>
@@ -124,6 +125,18 @@ ProjectCommand::ProjectCommand(DocumentPtr doc, Project before, Project after, s
     before.views.clear();
     after.views.clear();
     before.nextId = after.nextId = 0;      // le compteur ne compte pas : il ne recule jamais
+    // 1.26.1 : la corbeille, en difference (ce qui y entre, ce qui en sort) - hors de l'instantane.
+    {
+        std::unordered_map<Id, const TrashItem*> was, is;
+        for (const auto& t : before.trash) was.emplace(t.id, &t);
+        for (const auto& t : after.trash) is.emplace(t.id, &t);
+        for (const auto& t : after.trash)
+            if (!was.count(t.id)) trashIn_.push_back(t);
+        for (const auto& t : before.trash)
+            if (!is.count(t.id)) trashOut_.push_back(t);
+    }
+    before.trash.clear();
+    after.trash.clear();
     if (!(before == after)) {
         shellBefore_ = std::move(before);
         shellAfter_ = std::move(after);
@@ -134,9 +147,22 @@ core::Status ProjectCommand::put(bool after) {
     std::vector<View> views;
     if (!rebuild(views_, after, doc_->project.views, views)) return incoherent("la liste des vues");
     const Id next = std::max(doc_->project.nextId, nextId_);   // jamais de reutilisation
+    // 1.26.1 : la corbeille courante, a laquelle la commande ajoute ou retire les siens (l'instantane ne l'a pas).
+    std::vector<TrashItem> trash = std::move(doc_->project.trash);
+    const auto& out = after ? trashOut_ : trashIn_;
+    const auto& in = after ? trashIn_ : trashOut_;
+    std::erase_if(trash, [&](const TrashItem& t) {
+        return std::any_of(out.begin(), out.end(), [&](const TrashItem& o) { return o.id == t.id; });
+    });
+    for (const auto& t : in)
+        if (std::none_of(trash.begin(), trash.end(), [&](const TrashItem& x) { return x.id == t.id; })) {
+            const auto at = std::upper_bound(trash.begin(), trash.end(), t.id, [](Id id, const TrashItem& x) { return id < x.id; });
+            trash.insert(at, t);   // par identifiant croissant : l'ordre ou ils sont entres
+        }
     if (shellAfter_) doc_->project = after ? *shellAfter_ : *shellBefore_;
     doc_->project.views  = std::move(views);
     doc_->project.nextId = next;
+    doc_->project.trash  = std::move(trash);
     doc_->touched(kNoId);
     return core::ok();
 }
@@ -150,7 +176,8 @@ bool ProjectCommand::mergeableWith(const core::ICommand& other) const {
     // Seulement ce qui ne touche pas aux vues : une saisie dans un script.
     return o && o->doc_ == doc_ && o->mergeKey_ == mergeKey_ && views_.before.empty() && views_.after.empty()
         && o->views_.before.empty() && o->views_.after.empty() && views_.orderBefore == views_.orderAfter
-        && o->views_.orderBefore == o->views_.orderAfter;
+        && o->views_.orderBefore == o->views_.orderAfter
+        && trashIn_.empty() && trashOut_.empty() && o->trashIn_.empty() && o->trashOut_.empty();   // 1.26.1
 }
 
 void ProjectCommand::mergeFrom(const core::ICommand& other) {
@@ -179,11 +206,23 @@ core::CommandPtr changeView(const DocumentPtr& doc, Id view, std::string label, 
                                          std::move(mergeKey));
 }
 
-core::CommandPtr changeProject(const DocumentPtr& doc, std::string label, const ProjectChange& fn, std::string mergeKey) {
+namespace {
+// 1.26.1 : ce que la commande fait de la corbeille du projet - rien (changeProject), y mettre ce qui part
+// (deleteFromProject), ce que la fonction en a fait (restoreFromTrash).
+enum class TrashMode : std::uint8_t { Keep, Capture, Edit };
+
+core::CommandPtr makeProjectCommand(const DocumentPtr& doc, std::string label, const ProjectChange& fn, std::string mergeKey,
+                                    TrashMode mode, std::size_t* trashed = nullptr) {
     if (!doc) return nullptr;
     Project before = doc->project;
     Project after = before;
     fn(after);
+    // 1.26.1 : la corbeille ne change que par ses gestes (un projet remplace en entier la laisse telle qu'elle est).
+    if (mode != TrashMode::Edit) after.trash = before.trash;
+    if (mode == TrashMode::Capture) {
+        const std::size_t n = bin::capture(before, after);
+        if (trashed) *trashed = n;
+    }
     // 1.11.18 (lot 3) : une declaration copiee (une vue, un script, une fonction dupliques, un
     // paquet importe) recoit un identifiant neuf : chacune garde le sien, unique.
     uniqueDeclarationIds(after);
@@ -193,6 +232,33 @@ core::CommandPtr changeProject(const DocumentPtr& doc, std::string label, const 
     if (after == before) return nullptr;
     XPG_TRACE(Document, "changeProject : %s", label.c_str());   // 1.10.2 (CR)
     return std::make_unique<ProjectCommand>(doc, std::move(before), std::move(after), std::move(label), std::move(mergeKey));
+}
+} // namespace
+
+core::CommandPtr changeProject(const DocumentPtr& doc, std::string label, const ProjectChange& fn, std::string mergeKey) {
+    return makeProjectCommand(doc, std::move(label), fn, std::move(mergeKey), TrashMode::Keep);
+}
+
+core::CommandPtr deleteFromProject(const DocumentPtr& doc, std::string label, const ProjectChange& fn, std::size_t* trashed) {
+    if (trashed) *trashed = 0;
+    return makeProjectCommand(doc, std::move(label), fn, {}, TrashMode::Capture, trashed);
+}
+
+core::CommandPtr restoreFromTrash(const DocumentPtr& doc, Id item, std::string* shown, std::string* why) {
+    if (!doc) {
+        if (why) *why = "pas de projet IHM ouvert";
+        return nullptr;
+    }
+    const auto* t = bin::find(doc->project, item);
+    if (!t) {
+        if (why) *why = "il n'est plus dans la corbeille";
+        return nullptr;
+    }
+    const std::string name = t->name;
+    bool ok = false;
+    auto cmd = makeProjectCommand(doc, "Restaurer " + name, [&](Project& p) { ok = bin::restore(p, item, shown, why); }, {},
+                                  TrashMode::Edit);
+    return ok ? std::move(cmd) : nullptr;
 }
 
 } // namespace hmi

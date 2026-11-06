@@ -130,10 +130,17 @@ public:
     [[nodiscard]] std::size_t storedViews() const noexcept {
         return views_.before.size() + views_.after.size();
     }
+    // 1.26.1 : ce que la commande met dans la corbeille du projet (une suppression) et ce qu'elle en sort (une
+    // restauration).
+    [[nodiscard]] const std::vector<TrashItem>& trashed() const noexcept { return trashIn_; }
+    [[nodiscard]] const std::vector<TrashItem>& untrashed() const noexcept { return trashOut_; }
 private:
     core::Status put(bool after);
     DocumentPtr     doc_;
     ListDelta<View> views_;
+    // 1.26.1 : LA CORBEILLE EN DIFFERENCE, PAS DANS L'INSTANTANE - ce que la commande y met (trashIn_) et en sort
+    // (trashOut_). Supprimer definitivement la vide sans commande : annuler une autre commande ne la remplit pas.
+    std::vector<TrashItem> trashIn_, trashOut_;
     // TOUT LE RESTE DU PROJET (configuration, ressources, fichiers externes,
     // scripts generaux, variables, et ce que les lots suivants ajoutent) : le
     // projet sans ses vues, garde en entier et seulement quand il change. Un
@@ -152,7 +159,20 @@ using ProjectChange = std::function<void(Project&)>;
 
 [[nodiscard]] core::CommandPtr changeView(const DocumentPtr&, Id view, std::string label,
                                           const ViewChange&, std::string mergeKey = {});
+// 1.26.1 : changeProject ne touche jamais la corbeille du projet (Project::trash) - une fonction qui remplace le
+// projet entier (une proposition de l'IA, un paquet) la laisse telle qu'elle est.
 [[nodiscard]] core::CommandPtr changeProject(const DocumentPtr&, std::string label, const ProjectChange&,
                                              std::string mergeKey = {});
+
+// 1.26.1 : SUPPRIMER, C'EST METTRE A LA CORBEILLE. Comme changeProject ; ce que la fonction retire du projet (une vue
+// et les popups de son symbole, une ressource et ses octets, un fichier externe, un script general, une fonction,
+// une variable, un type IHM, une alarme, une recette, un style) entre dans sa corbeille (hmi/HmiTrash.hpp), dans
+// la meme commande : Ctrl+Z l'en ressort et rend l'element, Ctrl+Y l'y remet. `trashed` : combien y sont entres.
+[[nodiscard]] core::CommandPtr deleteFromProject(const DocumentPtr&, std::string label, const ProjectChange&,
+                                                 std::size_t* trashed = nullptr);
+// Restaurer l'element `item` de la corbeille (bin::restore) : une commande (nulle : introuvable, illisible - `why`).
+// `shown` : son nom, "Vue_Accueil -> Vue_Accueil_2" s'il a fallu le renommer.
+[[nodiscard]] core::CommandPtr restoreFromTrash(const DocumentPtr&, Id item, std::string* shown = nullptr,
+                                                std::string* why = nullptr);
 
 } // namespace hmi

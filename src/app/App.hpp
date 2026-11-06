@@ -138,6 +138,11 @@ public:
     void setTheme(std::string_view name);
     // Lot API 6 : Affichage > Theme... - la galerie des neuf themes.
     void showThemeGallery();
+    // 1.26.1 : LA POLICE DU LOGICIEL (<< fait la police du logiciel >>) - une police de la bibliotheque (son id : une
+    // fournie, une de Mes polices) ; "" : celle d'origine. Appliquee tout de suite (les menus, les arbres, les tableaux ;
+    // pas les IHM) et retenue (view.uiFont).
+    void setUiFont(const std::string& id);
+    [[nodiscard]] const std::string& uiFont() const noexcept { return uiFont_; }
     // 1.14.2 (Assistant IA, chantier IA2) : la fenetre "Memoire et apprentissage de l'IA" (action ia.memoire).
     void showAiMemory();
     // Une session rejouee (--script) : ce qui s'ouvre de soi-meme pour un
@@ -399,6 +404,7 @@ private:
     SDL_Window*                                window_{nullptr};   // owned; freed in ~App
     std::unique_ptr<gfx::IRenderer>            renderer_;
     ui::Theme                                  theme_{ui::Theme::light()};
+    std::string                                uiFont_;   // 1.26.1 : la police du logiciel (un id ; vide : celle d'origine)
 
     Settings                                   settings_;
     core::EventBus                             bus_;

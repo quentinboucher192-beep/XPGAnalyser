@@ -4,14 +4,14 @@
 //  UN VOLET, DEUX USAGES.
 //    - IHM > Programmation generale : les scripts generaux (ST executes ; C et
 //      C++ edites et verifies) avec leur declencheur - au demarrage, cyclique,
-//      sur changement d'une expression, ou seulement appele -, et les
-//      variables IHM.
+//      sur changement d'une expression, ou seulement appele - ; les variables
+//      IHM ont leur onglet a cote (1.26.1 : plus de doublon sous les scripts).
 //    - IHM > Vues > une vue > Scripts : OnOpen, OnCycle, OnClose de cette vue.
 //
 //    +-------------------- outils ---------------------+
 //    | Scripts (tableau)      | editeur (colore, lignes)|
 //    | Proprietes du script   |                         |
-//    | Variables IHM          | Diagnostics (ligne)     |
+//    |                        | Diagnostics (ligne)     |
 //    +-------------------- etat -----------------------+
 //
 //  LA SAISIE EST UNE COMMANDE, fusionnee tant qu'on tape dans le meme script :

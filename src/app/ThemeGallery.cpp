@@ -29,6 +29,7 @@ const gfx::FontId kSmall{13};
 const gfx::FontId kLabel{15};
 const gfx::FontId kTitle{20};
 const gfx::FontId kHead{15};
+const std::string kFontLabel = "Police du logiciel";   // 1.26.1
 
 // La famille des themes de l'utilisateur, en tete de la galerie.
 const std::string kMine = "Mes th\xC3\xA8mes";
@@ -134,6 +135,7 @@ public:
     std::string              family;     // "" : toutes ; kMine : les tiens
     std::string              search;
     std::vector<ui::Button*> bottom;     // Revenir, Garder
+    ui::DropDown*            fontBox{nullptr};   // 1.26.1 : la police du logiciel, en bas a gauche
     std::vector<ui::Button*> actions;    // les gestes
     ui::InputText*           searchField{nullptr};
     ui::Button*              fix{nullptr};
@@ -267,6 +269,13 @@ protected:
             (*it)->setBounds({bx, bottomY, bw, 32.f});
             bx -= 10.f;
         }
+        // 1.26.1 : << Police du logiciel [liste] >>, a gauche de Revenir / Garder.
+        if (fontBox) {
+            const float lw = ui::measureWidth(kFontLabel, kLabel) + 10.f;
+            const float fw = std::max(120.f, std::min(300.f, bx - x0 - lw - 10.f));
+            fontBox->setBounds({x0 + lw, bottomY + 1.f, fw, 30.f});
+            fontLabelAt_ = {x0, bottomY + 1.f + (30.f - 18.f) * 0.5f};
+        }
         const float actionY = bottomY - 44.f;
         float ax = x0;
         for (auto* a : actions) {
@@ -307,6 +316,7 @@ protected:
         auto& r = ctx.r;
         r.fillRect({panel_.x - 1.f, panel_.y, 1.f, panel_.h}, c.borderStrong);
         r.fillRect(panel_, c.panelBg);
+        if (fontBox) r.drawText(fontLabelAt_, kFontLabel, kLabel, c.text);
         const std::string title = "Th\xC3\xA8mes";
         r.drawText({panel_.x + 18.f, panel_.y + 12.f}, title, kTitle, c.text);
         r.drawText({panel_.x + 18.6f, panel_.y + 12.f}, title, kTitle, c.text);
@@ -560,6 +570,7 @@ private:
     std::string pendingReveal_;
     gfx::Rect panel_{}, list_{};
     float     scroll_{0.f}, contentH_{0.f}, messageY_{0.f};
+    gfx::Point fontLabelAt_{};   // 1.26.1 : << Police du logiciel >>
     ui::EdgeScrollBar sbar_;   // 1.11.4
     int       hover_{-1}, pressed_{-1};
     int       hoverPart_{0}, pressedPart_{0};    // 1 : Creer a partir de celui-ci ; 2 : Exporter
@@ -580,6 +591,7 @@ ThemeGalleryDialog::ThemeGalleryDialog(Hosts hosts)
     : menu::WidgetMenu("dialog.theme"), hosts_(std::move(hosts)), alive_(std::make_shared<char>('t')) {
     original_ = hosts_.current ? hosts_.current() : std::string("Light");
     shown_ = original_;
+    originalFont_ = hosts_.uiFont ? hosts_.uiFont() : std::string{};
 }
 
 ThemeGalleryDialog::~ThemeGalleryDialog() = default;
@@ -643,6 +655,28 @@ core::Status ThemeGalleryDialog::buildUi() {
         body_->askDone = nullptr;
         root().invalidateLayout();
     });
+    // 1.26.1 : LA POLICE DU LOGICIEL - choisie, elle s'applique tout de suite (les menus, les arbres, les tableaux) ;
+    // les IHM gardent leurs polices.
+    if (hosts_.uiFonts && hosts_.uiFont && hosts_.setUiFont) {
+        auto box = std::make_unique<ui::DropDown>("dialog.theme.uiFont");
+        box->setTooltip("La police des menus, des arbres, des tableaux et des fen\xC3\xAAtres. Les IHM gardent la leur : une vue "
+                        "se dessine pareil sur tous les postes.");
+        fontBox_ = box.get();
+        body->fontBox = &static_cast<ui::DropDown&>(body->addChild(std::move(box)));
+        auto items = hosts_.uiFonts();
+        const std::string current = hosts_.uiFont();
+        int at = 0;
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].value == current) at = static_cast<int>(i);
+        fontBox_->setItems(std::move(items));
+        fontBox_->setSelectedIndex(at);
+        links_ += fontBox_->selectionChanged->connect([this](int) {
+            if (const auto* it = fontBox_->selectedItem(); it && hosts_.setUiFont) {
+                hosts_.setUiFont(it->value);
+                relabel();
+            }
+        });
+    }
     back_ = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("", "dialog.theme.back")));
     keep_ = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("", "dialog.theme.keep")));
     keep_->setStyle(ui::Button::Style::Primary);
@@ -703,6 +737,19 @@ bool ThemeGalleryDialog::choose(const std::string& name) {
     if (body_) body_->deletePending.clear();
     relabel();
     return true;
+}
+
+bool ThemeGalleryDialog::chooseUiFont(const std::string& idOrLabel) {
+    if (!fontBox_) return false;
+    const std::string want = ui::Theme::fold(idOrLabel);
+    const auto& items = fontBox_->items();
+    for (std::size_t i = 0; i < items.size(); ++i)
+        if (items[i].value == idOrLabel || ui::Theme::fold(items[i].label) == want || (want.empty() && items[i].value.empty())) {
+            if (fontBox_->selectedIndex() == static_cast<int>(i)) return true;
+            fontBox_->setSelectedIndex(static_cast<int>(i));
+            return true;
+        }
+    return false;
 }
 
 bool ThemeGalleryDialog::setFamily(const std::string& family) {
@@ -1066,6 +1113,8 @@ void ThemeGalleryDialog::finish(bool keep) {
     if (done_) return;
     done_ = true;
     if (!keep && hosts_.apply && hosts_.current && hosts_.current() != original_) hosts_.apply(original_);
+    // 1.26.1 : Revenir remet aussi la police du logiciel d'avant.
+    if (!keep && hosts_.setUiFont && hosts_.uiFont && hosts_.uiFont() != originalFont_) hosts_.setUiFont(originalFont_);
     manager().CloseDialog(menu::DialogResult{keep ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel,
                                              hosts_.current ? hosts_.current() : std::string{}});
 }

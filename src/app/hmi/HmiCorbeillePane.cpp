@@ -23,6 +23,16 @@ constexpr int kKinds = static_cast<int>(cb::kKindCount);
 // Les pictogrammes des genres (ceux de l'arbre et des volets).
 ui::Icon kindIcon(cb::Kind k) {
     switch (k) {
+        case cb::Kind::View: return ui::Icon::Screen;          // 1.26.1 : le projet IHM (les icones de l'arbre)
+        case cb::Kind::Resource: return ui::Icon::Image;
+        case cb::Kind::External: return ui::Icon::Document;
+        case cb::Kind::Script: return ui::Icon::Code;
+        case cb::Kind::Function: return ui::Icon::FunctionBlock;
+        case cb::Kind::Variable: return ui::Icon::Variable;
+        case cb::Kind::HmiType: return ui::Icon::DerivedType;
+        case cb::Kind::Alarm: return ui::Icon::Warning;
+        case cb::Kind::Recipe: return ui::Icon::Document;
+        case cb::Kind::Style: return ui::Icon::Layers;
         case cb::Kind::Recording: return ui::Icon::Play;
         case cb::Kind::Incident: return ui::Icon::Warning;
         case cb::Kind::Version: return ui::Icon::History;
@@ -57,7 +67,10 @@ HmiCorbeillePane::HmiCorbeillePane(std::string id) : ui::Widget(std::move(id)) {
     tools_->setEnabledWhen(ARestore, [this] { return !chosen().empty(); });
     tools_->setEnabledWhen(APurge, [this] { return !chosen().empty(); });
     tools_->setEnabledWhen(AEmpty, [this] { return !entries_.empty(); });
-    tools_->setEnabledWhen(AReveal, [this] { return chosen().size() == 1; });
+    tools_->setEnabledWhen(AReveal, [this] {   // 1.26.1 : un element du projet IHM est dans le projet, pas sur le disque
+        const auto picked = chosen();
+        return picked.size() == 1 && picked.front().onDisk;
+    });
     tools_->setLabelWhen(ARestore, [this] { return several::label("Restaurer", chosen().size()); });
     search_ = &static_cast<ui::SearchField&>(addChild(std::make_unique<ui::SearchField>(
         base + ".search", "Chercher dans la corbeille\xE2\x80\xA6",
@@ -235,13 +248,19 @@ std::size_t HmiCorbeillePane::restoreChosen() {
     const auto items = chosen();
     if (items.empty()) return 0;
     std::vector<std::pair<std::string, std::string>> refused;
-    const std::size_t n = cb::restore(items, &refused);
+    std::vector<cb::Entry> back;
+    const std::size_t n = cb::restore(items, &refused, &back);
     refresh();
+    // Leurs noms tels que rendus (1.26.1 : un nom deja pris dans le projet IHM - "Vue_Accueil -> Vue_Accueil_2").
     std::vector<std::string> names;
-    for (const auto& e : items)
-        if (std::none_of(refused.begin(), refused.end(), [&](const auto& r) { return r.first == e.name; })) names.push_back(e.name);
+    bool renamed = false;
+    for (const auto& e : back) {
+        names.push_back(e.name);
+        renamed = renamed || std::none_of(items.begin(), items.end(), [&](const cb::Entry& i) { return i.name == e.name; });
+    }
     std::string text = n ? std::to_string(n) + (n > 1 ? " \xC3\xA9l\xC3\xA9ments restaur\xC3\xA9s : " : " \xC3\xA9l\xC3\xA9ment restaur\xC3\xA9 : ") + several::names(names)
                          : std::string("Rien de restaur\xC3\xA9");
+    if (renamed) text += " (un nom d\xC3\xA9j\xC3\xA0 pris : renomm\xC3\xA9)";
     if (!refused.empty()) text += " ; " + std::to_string(refused.size()) + " refus\xC3\xA9" + (refused.size() > 1 ? "s" : "") + " : " + several::refusals(refused);
     if (n) text += n > 1 ? " - un seul Ctrl+Z les remet dans la corbeille" : " - Ctrl+Z le remet dans la corbeille";
     say(text + ".", !refused.empty());
@@ -319,7 +338,9 @@ std::vector<ui::PopupMenu::Item> HmiCorbeillePane::contextItems() const {
     items.push_back(std::move(head));
     add(ARestore, several::label("Restaurer", picked.size()), ui::Icon::Undo, true, {}, "Entr\xC3\xA9" "e");
     add(APurge, "Supprimer d\xC3\xA9" "finitivement\xE2\x80\xA6", ui::Icon::Delete, true, {}, "Suppr");
-    add(AReveal, "Ouvrir dans l'explorateur (dans la corbeille)", ui::Icon::FolderOpen, picked.size() == 1, several::kOneAtATime);
+    const bool inProject = picked.size() == 1 && !picked.front().onDisk;   // 1.26.1 : garde dans le projet IHM
+    add(AReveal, "Ouvrir dans l'explorateur (dans la corbeille)", ui::Icon::FolderOpen, picked.size() == 1 && !inProject,
+        inProject ? std::string("dans le projet IHM lui-m\xC3\xAAme (Restaurer le remet \xC3\xA0 sa place)") : std::string(several::kOneAtATime));
     return items;
 }
 
@@ -335,7 +356,7 @@ void HmiCorbeillePane::runAction(int action) {
             break;
         case AReveal: {
             const auto picked = chosen();
-            if (picked.size() != 1) break;
+            if (picked.size() != 1 || !picked.front().onDisk) break;
             const std::string why = ui::paths::run(ui::paths::PathMenu::kFirstId + ui::paths::kReveal, ui::paths::PathMenu::kFirstId, picked.front().trashed);
             if (!why.empty()) say("Ouvrir dans l'explorateur : " + why, true);
             break;

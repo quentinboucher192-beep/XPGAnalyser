@@ -395,12 +395,8 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                "L'en-t\xC3\xAAte du projet, dans la langue du script (lecture seule) : ses types, ses rappels, ses fonctions et ses "
                "variables, comme un script C ou C++ les emploie - Copier le met dans le presse-papiers",
                "En-t\xC3\xAAte du projet");
-    if (general()) {
-        tools->separator();
-        tools->add(TAddVar, HmiGlyph::Plus, "Nouvelle variable IHM", "Variable");
-        tools->add(TEditVar, HmiGlyph::Text, "Modifier la variable IHM", "Modifier");
-        tools->add(TDeleteVar, HmiGlyph::Delete, "Supprimer la variable IHM", "Supprimer");
-    }
+    // 1.26.1 : plus de boutons Variable / Modifier / Supprimer ici - les variables IHM ont leur onglet (Variables IHM),
+    // a cote de celui-ci ; deux endroits pour la meme liste, on s'y perdait.
     // Lot 16 : la Programmation generale range ses scripts dans le premier onglet.
     std::unique_ptr<ScriptsPage> page = general() ? std::make_unique<ScriptsPage>(base + ".page") : nullptr;
     ui::Widget& host = page ? static_cast<ui::Widget&>(*page) : static_cast<ui::Widget&>(*this);
@@ -412,8 +408,6 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", folders_ ? folders_->selectedCount() : 0); });
     tools_->setEnabledWhen(TClear, [this] { return selectedScript() != kNoId; });
     tools_->setEnabledWhen(TCompile, oneScript);     // 1.11.17 : rien a compiler
-    tools_->setEnabledWhen(TEditVar, [this] { return selectedVariable() != kNoId; });
-    tools_->setEnabledWhen(TDeleteVar, [this] { return selectedVariable() != kNoId; });
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
     tools_->setVisibleWhen(THeader, [this] {                            // 1.12.20 (lot C) : un script C ou C++
         const auto* sc = current();
@@ -442,7 +436,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         table->setSelectionMode(ui::SelectionMode::Single);
         scripts_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
         tools_->bindListKeys(*scripts_, {TDelete});   // 1.12.27 : Suppr (comme le bouton)
-        left->addPane(std::move(panel), general() ? 0.42f : 0.40f, 100.f);
+        left->addPane(std::move(panel), general() ? 0.60f : 0.40f, 100.f);
         // Lot 21 : les scripts generaux ranges en dossiers (glisser une ou plusieurs lignes).
         if (general()) folders_ = std::make_unique<HmiFolderTable>(*scripts_, doc_, apply_);
     }
@@ -453,7 +447,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         grid->setFieldAssist(assist::gridAssist(assist::sourcesFor(doc_)));
         grid->setNameColumnRatio(0.42f);
         props_ = &static_cast<ui::PropertyGrid&>(panel->setBody(std::move(grid)));
-        left->addPane(std::move(panel), general() ? 0.28f : 0.60f, 90.f);
+        left->addPane(std::move(panel), general() ? 0.40f : 0.60f, 90.f);
     }
     {
         auto table = std::make_unique<ui::TableView>(base + ".variables");
@@ -462,16 +456,11 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         table->setColumns({{"Nom", 150.f}, {"Type", 110.f}, {"Initiale", 80.f}, {"\xC3\x89quipement", 130.f}, {"Adresse", 90.f},
                            {"Acc\xC3\xA8s", 110.f}, {"Description", 220.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
-        if (general()) {
-            auto panel = std::make_unique<HmiTitledPanel>(base + ".varsPanel", "VARIABLES IHM");
-            variables_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
-            left->addPane(std::move(panel), 0.30f, 80.f);
-        } else {
-            // Les scripts d'une vue n'ont pas de variables a eux : le tableau
-            // existe (le code est le meme), cache.
-            table->setVisibility(ui::Visibility::Collapsed);
-            variables_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
-        }
+        // Les scripts d'une vue n'ont pas de variables a eux ; 1.26.1 : les scripts generaux ne les montrent plus non plus
+        // (la partie VARIABLES IHM du bas faisait doublon avec l'onglet Variables IHM). Le tableau existe (le code est le
+        // meme), cache.
+        table->setVisibility(ui::Visibility::Collapsed);
+        variables_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     }
     split->addPane(std::move(left), 0.42f, 260.f);
 
@@ -1633,7 +1622,7 @@ bool HmiScriptsPane::deleteScript(Id id) {
     const std::string name = sc->name;
     core::CommandPtr cmd;
     if (general()) {
-        cmd = hmi::changeProject(doc_, "Supprimer " + name, [&](hmi::Project& p) {
+        cmd = hmi::deleteFromProject(doc_, "Supprimer " + name, [&](hmi::Project& p) {   // 1.26.1 : la corbeille
             auto& v = p.programs.scripts;
             v.erase(std::remove_if(v.begin(), v.end(), [&](const Script& s) { return s.id == id; }), v.end());
         });
@@ -1808,7 +1797,7 @@ bool HmiScriptsPane::deleteVariable(Id id) {
     std::string name;
     for (const auto& v : doc_->project.programs.variables) if (v.id == id) name = v.name;
     if (name.empty()) return false;
-    auto cmd = hmi::changeProject(doc_, "Supprimer la variable " + name, [&](hmi::Project& p) {
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer la variable " + name, [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         auto& v = p.programs.variables;
         v.erase(std::remove_if(v.begin(), v.end(), [&](const hmi::Variable& x) { return x.id == id; }), v.end());
     });

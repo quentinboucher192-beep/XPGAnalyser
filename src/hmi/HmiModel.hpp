@@ -2338,6 +2338,25 @@ inline constexpr Id kLibraryIdBase = 0x40000000u;
 // Un nom d'espace : des identifiants separes par des points (Gaz, Gaz.Ligne).
 [[nodiscard]] bool isNamespaceName(std::string_view) noexcept;
 
+// ---- 1.26.1 : LA CORBEILLE DU PROJET (hmi/HmiTrash.hpp) -----------------------------------
+//  Le client : << la corbeille ne fonctionne pas je supprime des choses ca n'apparait pas dedans >>. Ce que
+//  l'utilisateur supprime du projet (une vue et les popups de son symbole, une ressource et ses octets, un
+//  script, une variable...) y entre, DANS le projet : la commande de la suppression l'y met (Ctrl+Z l'en
+//  ressort), l'enregistrement le garde (ihm/supprimes/), Restaurer le rend. `content` : un petit projet qui
+//  n'a que ce qui est parti (partage entre les copies du projet, jamais modifie) ; nul : illisible (`note`).
+struct Project;
+struct TrashItem {
+    Id            id{kNoId};          // le sien (du compteur du projet)
+    std::string   kind;               // "vue", "ressource", "script"... (hmi::bin::kindKey)
+    std::string   name;               // ce qu'on montre (le nom de l'element)
+    std::string   origin;             // d'ou il vient : "IHM > Vues > Pompes" (la liste et son dossier)
+    std::int64_t  deletedAt{0};       // secondes depuis 1970 (temps universel)
+    std::uint64_t bytes{0};           // sa taille enregistree (une ressource : ses octets)
+    std::shared_ptr<const Project> content{};
+    std::string   note{};             // illisible : pourquoi (un format plus recent...)
+    bool operator==(const TrashItem&) const;   // le contenu compare par valeur (HmiTrash.cpp)
+};
+
 struct Project {
     Config            config;
     std::vector<View> views;
@@ -2378,6 +2397,9 @@ struct Project {
     // libraryCache (biblio::resolve, a l'ouverture). Vide : aucune (un projet d'avant).
     std::vector<Library> libraries{};
     LibraryCache         libraryCache{};
+    // 1.26.1 : la corbeille du projet (TrashItem, hmi/HmiTrash.hpp), par identifiant croissant. Hors du fichier
+    // ihm.txt : save() l'ecrit dans ihm/supprimes/ (une IHM Studio d'avant l'ignore sans rien perdre).
+    std::vector<TrashItem> trash{};
     Id                nextId{1};
 
     [[nodiscard]] Id           allocate() noexcept { return nextId++; }

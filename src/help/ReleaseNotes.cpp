@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.26.0", "05/11/2026", "\xC3\xA0 venir"},
+    {"1.26.1", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.26.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 22 h 20"},
     {"1.25.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 18 h 07"},
     {"1.24.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 15 h 54"},
     {"1.23.1", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 12 h 06"},
@@ -168,6 +169,44 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.26.1 : les listes longues (Police, Style nomme) ; la police en formule ; la police du logiciel ; les couleurs
+        // semantiques faciles a trouver ; la Corbeille du projet ; Scripts generaux sans la partie Variables IHM
+        note("1.26.1", "Projet", Kind::New,
+         "LA CORBEILLE RE\xC3\x87OIT CE QU'ON SUPPRIME DU PROJET IHM : vues (un symbole avec ses popups), ressources (images, "
+         "sons, polices, vid\xC3\xA9os, avec leurs octets), fichiers externes, scripts g\xC3\xA9n\xC3\xA9raux, fonctions, "
+         "variables et types IHM, alarmes, recettes, styles. Restaurer les remet dans leur liste et leur dossier (un nom repris "
+         "entre-temps : le premier libre, Vue_Accueil_2) ; Ctrl+Z d'une suppression les reprend, Ctrl+Y les y remet. "
+         "Enregistr\xC3\xA9" "e avec le projet (ihm/supprimes/) ; Corbeille [N] se met \xC3\xA0 jour d\xC3\xA8s la suppression.",
+         "corbeille", ""),
+        note("1.26.1", "Vues", Kind::New,
+         "LES LISTES LONGUES, RANG\xC3\x89" "ES : la case Police (objets, styles, th\xC3\xA8me) a des sections qui se replient "
+         "(Th\xC3\xA8me, Du projet, Mes polices, Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement...), UNE LIGNE PAR FAMILLE "
+         "\xC3\xA9" "crite dans sa police, ses styles en pastilles (Normal, Gras, Italique : un clic), ce qui l'emploie ; "
+         "au-del\xC3\xA0 de douze choix, Chercher... en t\xC3\xAA" "te de la liste (\xC2\xAB gras \xC2\xBB, \xC2\xAB mono \xC2\xBB). "
+         "La case Style nomm\xC3\xA9 aussi : (aucun), Du projet par dossier, Fournis, chacun avec son aper\xC3\xA7u et ses objets. "
+         "Toutes les listes de plus de douze choix ont la recherche.",
+         "bibliotheque-polices", ""),
+        note("1.26.1", "Vues", Kind::New,
+         "LA POLICE EN FORMULE (fx) : =SEL(Defaut_P1, 'Carlito Gras', 'Police par d\xC3\xA9" "faut'). Le nom rendu se trouve "
+         "sans casse ni accents : la ressource (avec ou sans .ttf), le nom de la police, sa famille, \xC2\xAB Police par "
+         "d\xC3\xA9" "faut \xC2\xBB, \xC2\xAB Police des valeurs \xC2\xBB. G\xC3\xA9n\xC3\xA9rer v\xC3\xA9rifie chaque nom "
+         "\xC3\xA9" "crit : une police de la biblioth\xC3\xA8que pas import\xC3\xA9" "e, un nom inconnu.",
+         "bibliotheque-polices", ""),
+        note("1.26.1", "Configuration", Kind::New,
+         "LA POLICE DU LOGICIEL : Affichage \xE2\x80\xBA Th\xC3\xA8me..., en bas, Police du logiciel - celle des menus, des "
+         "arbres, des tableaux : d'origine, ou une police de la biblioth\xC3\xA8que (chacune \xC3\xA9" "crite dans sa police). "
+         "Tout de suite ; Garder la retient, Revenir remet l'ancienne. Les IHM gardent leurs polices (une vue se dessine pareil "
+         "sur tous les postes).",
+         "bibliotheque-polices", ""),
+        note("1.26.1", "Vues", Kind::New,
+         "LES COULEURS S\xC3\x89MANTIQUES ET LES CONSTANTES, \xC3\x80 PORT\xC3\x89" "E DE MAIN : tape @ dans une formule ou un "
+         "script, la liste propose @Alarme, @Marche... avec leur couleur (le choix s'\xC3\xA9" "crit '@Alarme') et les "
+         "constantes (de la vue, des scripts g\xC3\xA9n\xC3\xA9raux : Init.MAX_P), avec leur type ; la palette montre les "
+         "couleurs avec leur nom ; Choisir la valeur : l'onglet Constante liste les constantes globales (couleurs "
+         "s\xC3\xA9mantiques, constantes des scripts g\xC3\xA9n\xC3\xA9raux), Symbole / vue celles de la vue, filtr\xC3\xA9" "es "
+         "sur le type attendu. Et Scripts g\xC3\xA9n\xC3\xA9raux n'a plus la partie Variables IHM en bas (son onglet est \xC3\xA0 "
+         "c\xC3\xB4t\xC3\xA9).",
+         "couleurs-semantiques", ""),
         // 1.26.0 : les polices (la bibliotheque, la police partout, l'editeur de polices) ; la Corbeille ; la bibliotheque d'images ; les limites
         note("1.26.0", "Vues", Kind::New,
          "LA BIBLIOTH\xC3\x88QUE DE POLICES : IHM \xE2\x80\xBA Ressources \xE2\x80\xBA Biblioth\xC3\xA8que de polices. "

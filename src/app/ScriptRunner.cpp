@@ -1012,6 +1012,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // ---- Lot API 8 : themes ----
     //   theme "Nom"                      un theme integre (43) ou un des tiens, par sa cle ou son libelle
     //   theme-galerie ["Nom"]            ouvre Affichage > Theme... (la galerie) ; ouverte : choisit la carte "Nom" (lot API 6)
+    //   theme-police "DejaVu Serif"     1.26.1 : la police du logiciel (galerie ouverte : son libelle ; sinon son id ; "" : d'origine)
     //   theme-famille "Clairs"           la galerie ne montre qu'une famille ("Tous", "A toi", "Sombres"...)
     //   theme-chercher "nord"            le champ de recherche de la galerie
     //   theme-nouveau "Nom" ["base"]     un theme a toi, copie de "base" (defaut : le theme applique), applique
@@ -1150,6 +1151,17 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             || cmd == "theme-nom" || cmd == "theme-auteur" || cmd == "theme-annuler-dernier") {
             fail(cmd + " : l'editeur de theme n'est pas ouvert (theme-editer \"Nom\" d'abord)");
             return Step::Next;
+        }
+        if (cmd == "theme-police") {
+            // 1.26.1 : theme-police "DejaVu Serif" - la police du logiciel (son libelle ou son id ; "" : d'origine), dans la
+            // galerie ouverte ; sans galerie : par son id, directement.
+            if (gallery) {
+                if (!gallery->chooseUiFont(arg(1))) fail("theme-police : police inconnue " + arg(1));
+            } else {
+                app_.setUiFont(arg(1));
+                if (app_.uiFont() != arg(1)) fail("theme-police : police inconnue " + arg(1));
+            }
+            return Step::Yield;
         }
         if (cmd == "theme-galerie") {
             // Lot API 6 : theme-galerie "Nom" choisit une carte de la galerie ouverte.
@@ -2422,6 +2434,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             if (found != 1) index = -1;
         }
         if (index < 0) { fail("pas dans la liste : " + arg(1)); return Step::Next; }
+        // 1.26.1 : une liste riche (des titres, une ligne par famille et ses pastilles, la recherche) - les fleches n'y
+        // comptent plus les choix un par un : le choix, comme d'un clic.
+        if (open->lines().size() != open->items().size() || open->searchShown()) {
+            open->pick(index);
+            return Step::Yield;
+        }
         send(ui::KeyDown{Key::Home, {}, false});
         for (int i = 0; i < index; ++i) send(ui::KeyDown{Key::Down, {}, false});
         send(ui::KeyDown{Key::Return, {}, false});

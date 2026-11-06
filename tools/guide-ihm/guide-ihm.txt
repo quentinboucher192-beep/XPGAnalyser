@@ -1659,7 +1659,7 @@ IHM › **Styles** se déplie : **Styles** (ceux du projet, puis les fournis) et
 == couleurs-semantiques | Les couleurs sémantiques
 : Des couleurs globales sous un nom (Alarme, Marche, Fond…), utilisables partout comme des constantes : une case couleur écrit @Alarme, une formule '@Alarme' ; changer la couleur change tout ce qui la cite. Douze fournies (ISA-101), et les tiennes.
 @depuis 1.23.1
-@mots couleur sémantique, couleurs sémantiques, @Nom, @Alarme, @Marche, @Fond, constante de couleur, couleur globale, palette, charte
+@mots couleur sémantique, couleurs sémantiques, @Nom, @Alarme, @Marche, @Fond, constante de couleur, couleur globale, palette, charte, couleur dans un script, couleur dans une formule, accéder aux couleurs
 @lieux styles
 @voir styles-nommes, proprietes, verifier
 ### Citer une couleur
@@ -1669,6 +1669,11 @@ Une case couleur (remplissage, contour, texte, couleur allumé…) peut contenir
 - **Le fond d'une vue** et les **zones** d'un bargraphe ou d'un cadran (`0-60 = @Marche; 60-100 = @Alarme`) aussi.
 - Un **script** peut écrire `'@Alarme'` dans une propriété : elle se dessine dans la couleur (mais Renommer, Retirer et Générer ne lisent pas les scripts).
 - Une couleur peut en citer une autre (`@Eau froide` vaut `@Eau`).
+@nouveau 1.26.1
+### Les trouver sans les connaître par cœur
+- **Tape `@`** dans une formule (une case en fx) ou dans un script : la liste propose les couleurs sémantiques, celles du projet puis les fournies, chacune avec sa couleur et sa description. Le choix s'écrit **`'@Alarme'`**, entre apostrophes (un texte constant). Dans un texte déjà ouvert (`'@Al`), le nom se complète ; « Alarme critique » aussi (le nom peut avoir des espaces).
+- **La palette** d'une case couleur les montre **avec leur nom** (« ● Alarme », « ● Marche »…), sur autant de lignes qu'il faut ; le survol dit aussi leur code.
+@nouveau -
 ### Les couleurs fournies
 Douze couleurs **fournies**, verrouillées (un cadenas), suivent l'ISA-101 - le gris pour le normal, la couleur pour l'anomalie :
 | Nom | Couleur | Pour |
@@ -8220,10 +8225,10 @@ Dans Configuration › Unités et formats, la case Unité d'une ligne vide montr
 : Les scripts ST s'exécutent dans la simulation : au démarrage, cycliquement, sur changement, ou quand on les appelle ; une vue a ses scripts OnOpen, OnCycle et OnClose.
 @lieux scripts, scripts-vue
 @voir variables-locales, fonctions, reference, aide-saisie, verifier, dossiers, parametres-popups, erreurs-scripts, fonctions-internes, map-iterateurs, dialecte-ihm, operateurs, deboguer-scripts
-@capture PNG_067_programmation_generale_scripts_st.png | La programmation générale : scripts, propriétés, variables IHM et l'éditeur.
+@capture PNG_067_programmation_generale_scripts_st.png | La programmation générale : les scripts, leurs propriétés et l'éditeur (les variables IHM ont leur onglet, Variables IHM).
 @capture PNG_069_scripts_de_vue_erreur_ligne.png | Les scripts d'une vue : une erreur marquée à sa ligne.
 ### Les scripts généraux
-Programmation générale › **Scripts** : **ST**, **C** ou **C++**. Le dialogue demande le nom, le déclencheur, la période ou l'expression surveillée, et une description.
+Programmation générale › **Scripts** : **ST**, **C** ou **C++**. Le dialogue demande le nom, le déclencheur, la période ou l'expression surveillée, et une description. Les variables IHM ne sont plus listées sous les scripts : elles ont leur onglet, **Variables IHM**, à côté (1.26.1).
 | Déclencheur | Le script s'exécute |
 | Démarrage | au lancement de l'IHM |
 | Cyclique | toutes les N millisecondes (période propre à chaque script) |
@@ -10697,7 +10702,7 @@ IHM › Ressources › **Bibliothèque d'images** (un clic dans l'arbre, sur un 
 == bibliotheque-polices | La bibliothèque de polices, la police partout
 : Seize polices libres livrées avec le logiciel, Mes polices pour tous tes projets, leur aperçu ; une police se choisit partout : les objets, les styles, la police par défaut de l'IHM.
 @depuis 1.26.0
-@mots police, polices, TTF, OTF, TrueType, bibliothèque de polices, Mes polices, police par défaut, police des valeurs, Liberation, DejaVu, Carlito, Caladea, JetBrains Mono, Arial, Calibri, Times, Courier, Cambria, aperçu d'une police
+@mots police, polices, TTF, OTF, TrueType, bibliothèque de polices, Mes polices, police par défaut, police des valeurs, Liberation, DejaVu, Carlito, Caladea, JetBrains Mono, Arial, Calibri, Times, Courier, Cambria, aperçu d'une police, police du logiciel, police de l'interface, police des menus, police en formule, police fx, choisir une police, liste des polices
 @lieux polices
 @voir editeur-polices, ressources, styles-nommes, objets
 ### Les polices fournies
@@ -10713,9 +10718,27 @@ Chaque police est **écrite dans elle-même**, avec ton texte d'aperçu et ta ta
 ! Une OTF à contours CFF s'emploie, mais ne se modifie pas dans l'éditeur (il lit les TrueType).
 ### La police partout
 - Dans l'éditeur de vues, la **BIBLIOTHÈQUE** a un sous-onglet **Polices** (Objets | Images | Sons | **Polices** | Variables) : celles du projet (et combien d'objets les emploient), puis toute la bibliothèque. **Glisse une police sur un objet** : il la prend (importée si besoin, un seul Ctrl+Z) ; un double-clic : la sélection.
-- La case **Police** de chaque objet propose : **Police par défaut**, **Police des valeurs**, les polices du projet, puis la bibliothèque (« Bibliothèque › Sans empattement › Carlito ») : la choisir l'importe et la règle d'un geste.
+- La case **Police** de chaque objet propose : **Police par défaut**, **Police des valeurs**, les polices du projet, puis la bibliothèque : en choisir une l'importe et la règle d'un geste.
+@nouveau 1.26.1
+- **La liste de la case Police** est rangée pour ne pas s'y perdre : des **sections** (Thème, Du projet, Mes polices, Bibliothèque › Sans empattement…) qu'un clic sur leur titre replie, **une ligne par famille écrite dans sa police**, ses styles en **pastilles** à droite (Normal, Gras, Italique : un clic sur la pastille prend ce style, un clic sur la ligne le style Normal ; au clavier, les flèches gauche et droite), et ce qui emploie chaque police du projet (« 3 objets »). Au-delà de douze choix, **Chercher…** en tête de la liste : tape « gras », « mono », « carl » - la liste se réduit, Échap vide la recherche.
+- La même liste pour la case **Style nommé** : (aucun), les styles **du projet** (par dossier), puis les **fournis**, chacun avec son **aperçu** (son remplissage, son contour, « Aa » dans sa couleur de texte) et ses objets.
+@nouveau -
 - Les **styles** ont leur police, de la même façon.
 - Le **thème** : Configuration › Affichage, **Police par défaut** et **Police des valeurs**. Tout objet sur « Police par défaut » la prend : la changer change toute l'IHM. Les objets de la bibliothèque (boutons, voyants, afficheurs…) arrivent sur « Police par défaut ». Vides : les polices de l'IHM, comme avant.
+@nouveau 1.26.1
+### La police en formule (fx)
+La case **Police** d'un objet accepte une **formule**, comme les couleurs : `=SEL(Defaut_P1, 'Carlito Gras', 'Police par défaut')`. Le nom qu'elle rend est cherché sans casse ni accents :
+| Ce que la formule écrit | La police dessinée |
+| `'Police par défaut'`, `'Sans'` (ou rien) | la police par défaut du thème |
+| `'Police des valeurs'`, `'Mono'` | la police des valeurs |
+| `'Carlito-Bold.ttf'`, `'carlito-bold'` | la ressource de ce nom (avec ou sans extension) |
+| `'Carlito Gras'` | la police du projet qui porte ce nom |
+| `'Carlito'` | la famille : son style Normal d'abord |
+- **Générer** vérifie chaque nom écrit entre apostrophes : une police de la **bibliothèque pas encore importée** (le poste n'aura que les polices du projet), ou un nom qu'aucune police du projet ne porte, est signalé. Un nom calculé (`Nom_Police`) ne se vérifie qu'en marche.
+- Un nom inconnu en marche : la police par défaut, comme une case vide.
+### La police du logiciel
+Affichage › **Thème…**, en bas : **Police du logiciel**. Celle des menus, des arbres, des tableaux et des fenêtres : **D'origine**, ou une police de la bibliothèque (les fournies, Mes polices), chacune écrite dans sa police. Elle s'applique **tout de suite** ; **Garder** la retient pour les prochains lancements, **Revenir** remet celle d'avant.
+! Les **IHM gardent leurs polices** : une vue se dessine pareil sur tous les postes, quelle que soit la police du logiciel.
 
 == editeur-polices | L'éditeur de polices
 : Créer une police, en dupliquer une à partir d'une autre, la modifier glyphe par glyphe, point par point, avec l'aperçu en direct ; l'enregistrer dans Mes polices ou dans le projet, l'exporter en .ttf.
@@ -10746,19 +10769,22 @@ Le glyphe (sa chasse, ses approches gauche et droite), le point choisi (x, y, su
 - **Enregistrer (Mes polices)** (Ctrl+S) ; **Enregistrer dans le projet** : sa ressource police est ajoutée ou remplacée, les objets qui l'emploient suivent (Ctrl+Z dans le projet la rend) ; **Exporter en .ttf…** : un fichier que Windows installe ; **Abandonner** revient à l'enregistrée.
 
 == corbeille | La Corbeille
-: Ce qui a été supprimé sur le disque (enregistrements, incidents, versions, macros, l'Assistant IA), rangé par genre, où l'on cherche ; Restaurer, Supprimer définitivement, Vider.
+: Ce qui a été supprimé - du projet IHM (vues, ressources, scripts, variables…) et sur le disque (enregistrements, incidents, versions, macros, l'Assistant IA) -, rangé par genre, où l'on cherche ; Restaurer, Supprimer définitivement, Vider.
 @depuis 1.26.0
-@mots corbeille, restaurer, supprimer définitivement, vider la corbeille, éléments supprimés, récupérer, purge
+@mots corbeille, restaurer, supprimer définitivement, vider la corbeille, éléments supprimés, récupérer, purge, vue supprimée, ressource supprimée, récupérer une vue
 @voir supprimer-plusieurs, historique, versions, chemins
 ### L'ouvrir
 - Dans l'arbre du projet, **Corbeille [N]** (après Versions) : un clic l'ouvre ; le clic droit propose aussi **Vider la corbeille…**. Ou le menu **Projet › Corbeille…**.
 ### Ce qu'elle montre
-Un dossier par genre, avec son nombre : **Enregistrements**, **Incidents**, **Versions**, **Macros**, **Conversations IA**, **Pièces jointes IA**, **Connaissances et souvenirs IA**. Les colonnes : Nom, Supprimé le, Origine (un chemin : le clic droit l'ouvre dans l'explorateur), Taille.
+Un dossier par genre, avec son nombre : d'abord ce qui vient du projet IHM - **Vues**, **Ressources**, **Fichiers externes**, **Scripts généraux**, **Fonctions IHM**, **Variables IHM**, **Types IHM**, **Alarmes**, **Recettes**, **Styles** -, puis **Enregistrements**, **Incidents**, **Versions**, **Macros**, **Conversations IA**, **Pièces jointes IA**, **Connaissances et souvenirs IA**. Les colonnes : Nom, Supprimé le, Origine (un chemin : le clic droit l'ouvre dans l'explorateur), Taille.
 - **Chercher dans la corbeille…** : chaque mot commence un mot du nom, du genre ou de l'origine, sans casse ni accents.
 - **Restaurer** (Entrée) remet les éléments choisis à leur place, sans question ; **un seul Ctrl+Z** les renvoie dans la corbeille. Un fichier du même nom revenu entre-temps : la restauration est refusée, et dit pourquoi.
 - **Supprimer définitivement** (Suppr) et **Vider la corbeille** demandent confirmation : on ne revient pas en arrière.
 - Les éléments supprimés il y a plus de 7 jours partent à l'ouverture suivante (du projet, ou de l'application pour l'Assistant IA) ; les macros restent jusqu'à Supprimer définitivement.
-! Les vues, les objets, les variables et le reste du projet supprimés se rendent par **Ctrl+Z** (l'historique) : ils ne sont pas dans la Corbeille.
+@nouveau 1.26.1
+- **Ce qu'on supprime du projet IHM** (une vue et ses objets, un symbole et ses popups, une ressource et ses octets, un fichier externe, un script, une fonction, une variable, un type, une alarme, une recette, un style) y entre tout de suite, même avant d'enregistrer ; **Ctrl+Z** de la suppression l'en ressort, Ctrl+Y l'y remet. **Restaurer** le remet dans sa liste et dans son dossier ; un nom repris entre-temps : le premier libre (Vue_Accueil_2), et la Corbeille le dit.
+- La Corbeille du projet s'enregistre avec lui (le dossier `ihm/supprimes/`) et se retrouve à la réouverture ; une version plus ancienne d'IHM Studio ouvre toujours le projet.
+! Les **objets d'une vue** supprimés se rendent par Ctrl+Z (l'historique) : ils ne vont pas dans la Corbeille. De même les scripts et fonctions propres à une vue, les utilisateurs, les couleurs sémantiques, les équipements.
 
 == actions-ressources | Actions sur les ressources
 : Quatre opérations d'action touchent aux ressources et au poste : demander une ressource à l'opérateur, lier un tableau à une base, jouer un son, ouvrir le menu Paramètres système.

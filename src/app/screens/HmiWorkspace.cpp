@@ -3106,7 +3106,8 @@ void MainAnalysisScreen::askDeleteHmiView(std::uint64_t viewId) {
     if (n == 0)      message += " (vide) est retir\xC3\xA9" "e";
     else if (n == 1) message += " et son objet sont retir\xC3\xA9s";
     else             message += " et ses " + std::to_string(n) + " objets sont retir\xC3\xA9s";
-    message += " du projet IHM. Ctrl+Z la rend ; enregistr\xC3\xA9" "e, son fichier part dans ihm/corbeille.";
+    // 1.26.1 : elle va dans la Corbeille du projet (Projet > Corbeille) - Restaurer, ou Ctrl+Z, la rend.
+    message += " du projet IHM. Elle va dans la Corbeille (Projet \xE2\x80\xBA Corbeille) : Restaurer, ou Ctrl+Z, la rend.";
     // Lot 10 : un symbole pose ailleurs.
     if (hmi::isSymbolView(*view))
         if (const auto uses = hmi::instancesOf(doc->project, view->name).size(); uses > 0)
@@ -3846,7 +3847,7 @@ void MainAnalysisScreen::askHmiDeleteScript(std::uint64_t scriptId) {
     std::string message = "Le script \xC2\xAB " + sc->name + " \xC2\xBB (" + std::string(hmi::scriptLangKey(sc->lang)) + ") est retir\xC3\xA9 du projet IHM.";
     if (!callers.empty())
         message += " Il est appel\xC3\xA9 par " + joinFew(callers) + " : ces appels \xC3\xA9" "choueront et Compiler les signalera.";
-    message += " Ctrl+Z le rend ; enregistr\xC3\xA9, son fichier part dans ihm/corbeille.";
+    message += " Il va dans la Corbeille (Projet \xE2\x80\xBA Corbeille) : Restaurer, ou Ctrl+Z, le rend.";   // 1.26.1
     app_.menus().ShowDialog(
         std::make_unique<MessageDialog>("Supprimer le script ?", message, MessageDialog::Icon::Question, "Supprimer"),
         [this, scriptId](const menu::DialogResult& r) {
@@ -4470,7 +4471,7 @@ void MainAnalysisScreen::askHmiDeleteFunction(std::uint64_t functionId) {
     std::string message = "La fonction \xC2\xAB " + hmi::functionSignature(*f) + " \xC2\xBB est retir\xC3\xA9" "e du projet IHM.";
     if (!callers.empty())
         message += " Elle est appel\xC3\xA9" "e par " + joinFew(callers) + " : ces appels \xC3\xA9" "choueront et Compiler les signalera.";
-    message += " Ctrl+Z la rend ; enregistr\xC3\xA9, son fichier part dans ihm/corbeille.";
+    message += " Elle va dans la Corbeille (Projet \xE2\x80\xBA Corbeille) : Restaurer, ou Ctrl+Z, la rend.";   // 1.26.1
     app_.menus().ShowDialog(
         std::make_unique<MessageDialog>("Supprimer la fonction ?", message, MessageDialog::Icon::Question, "Supprimer"),
         [this, functionId](const menu::DialogResult& r) {

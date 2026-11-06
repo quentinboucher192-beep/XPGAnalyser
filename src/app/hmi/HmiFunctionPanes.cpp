@@ -1401,7 +1401,8 @@ bool HmiFunctionsPane::deleteFunction(Id id) {
     const auto* f = fnOf(doc_->project, id);
     if (!f) return false;
     const std::string name = f->name;
-    auto cmd = hmi::changeProject(doc_, "Supprimer la fonction " + name, [&](hmi::Project& p) {
+    // 1.26.1 : une fonction du projet va dans sa corbeille (celle d'un symbole part avec Ctrl+Z seulement).
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer la fonction " + name, [&](hmi::Project& p) {
         if (!listOf(p)) return;
         auto& list = *listOf(p);
         list.erase(std::remove_if(list.begin(), list.end(), [&](const hmi::HmiFunction& g) { return g.id == id; }), list.end());

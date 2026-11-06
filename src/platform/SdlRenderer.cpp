@@ -50,6 +50,14 @@ namespace gfx {
         // chaque appel sur une machine qui n'a aucune police.
         std::map<int, FontAtlas>    faces;
         std::map<int, SDL_Texture*> textures;
+        // 1.26.1 : la police d'origine (le texte d'une IHM) ; ses atlas ont leur cle (la taille + kStockKey) quand la
+        // police du logiciel a ete changee - sinon les memes.
+        bool                        stock{false};
+        static constexpr int        kStockKey = 1 << 20;
+        [[nodiscard]] int keyOf(FontId font) const {
+            const int px = std::max(1, static_cast<int>(font.v));
+            return stock && !uiFontOverride().empty() ? px + kStockKey : px;
+        }
         // Les images (createImage) : un numero, jamais reutilise - ni par ce
         // renderer, ni par un autre (voir g_nextImage).
         std::map<std::uint32_t, SDL_Texture*> images;
@@ -155,22 +163,23 @@ namespace gfx {
     // chaque appel de drawText, soit plusieurs milliers de fois par seconde.
     FontAtlas* SdlRenderer::Impl::faceFor(FontId font) {
         const int px = std::max(1, static_cast<int>(font.v));
-        if (auto at = faces.find(px); at != faces.end())
+        const int key = keyOf(font);
+        if (auto at = faces.find(key); at != faces.end())
             return at->second.ready() ? &at->second : nullptr;
 
+        // 1.26.1 : la police choisie pour le logiciel d'abord (uiFontCandidates) ; la police d'origine pour une IHM.
         FontAtlas atlas;
-        for (const auto& chemin : defaultUiFontCandidates())
+        for (const auto& chemin : key == px ? uiFontCandidates() : defaultUiFontCandidates())
             if (atlas.load(chemin, static_cast<float>(px))) break;
 
-        auto& stocke = faces.emplace(px, std::move(atlas)).first->second;
+        auto& stocke = faces.emplace(key, std::move(atlas)).first->second;
         return stocke.ready() ? &stocke : nullptr;
     }
 
     void SdlRenderer::Impl::uploadIfDirty(FontId font, FontAtlas& face) {
         if (!face.dirty()) return;
-        const int px = std::max(1, static_cast<int>(font.v));
 
-        SDL_Texture*& tex = textures[px];
+        SDL_Texture*& tex = textures[keyOf(font)];
         if (!tex) {
             tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ABGR8888,
                                     SDL_TEXTUREACCESS_STATIC,
@@ -194,8 +203,19 @@ namespace gfx {
     }
 
     SDL_Texture* SdlRenderer::Impl::atlasTexture(FontId font) {
-        const auto at = textures.find(std::max(1, static_cast<int>(font.v)));
+        const auto at = textures.find(keyOf(font));
         return at == textures.end() ? nullptr : at->second;
+    }
+
+    // 1.26.1 : la police d'origine le temps d'un dessin (le texte d'une IHM), et les atlas refaits (la police du
+    // logiciel a change).
+    void SdlRenderer::useStockFace(bool on) { impl_->stock = on; }
+    bool SdlRenderer::usingStockFace() const { return impl_->stock; }
+    void SdlRenderer::resetFonts() {
+        for (auto& [k, t] : impl_->textures)
+            if (t) SDL_DestroyTexture(t);
+        impl_->textures.clear();
+        impl_->faces.clear();
     }
 
     // --------------------------------------------------------------- drawing ---

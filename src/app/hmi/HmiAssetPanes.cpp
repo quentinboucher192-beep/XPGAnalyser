@@ -496,7 +496,8 @@ bool HmiResourcesPane::deleteResource(Id sel) {
     if (!r) return false;
     const std::string name = r->name;
     const auto uses = hmi::citations(doc_->project, name).size();
-    auto cmd = hmi::changeProject(doc_, "Supprimer " + name, [&](hmi::Project& p) {
+    // 1.26.1 : dans la corbeille du projet, ses octets avec elle.
+    auto cmd = hmi::deleteFromProject(doc_, "Supprimer " + name, [&](hmi::Project& p) {
         auto& v = p.assets.resources;
         v.erase(std::remove_if(v.begin(), v.end(), [&](const hmi::Resource& x) { return x.id == sel; }), v.end());
     });
@@ -511,7 +512,7 @@ std::size_t HmiResourcesPane::removeUnused() {
     std::vector<Id> gone;
     for (const auto* r : hmi::unusedResources(doc_->project)) gone.push_back(r->id);
     if (gone.empty()) return 0;
-    auto cmd = hmi::changeProject(doc_, "Retirer les ressources inutilis\xC3\xA9" "es", [&](hmi::Project& p) {
+    auto cmd = hmi::deleteFromProject(doc_, "Retirer les ressources inutilis\xC3\xA9" "es", [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         auto& v = p.assets.resources;
         v.erase(std::remove_if(v.begin(), v.end(),
                                [&](const hmi::Resource& x) { return std::find(gone.begin(), gone.end(), x.id) != gone.end(); }),
@@ -925,7 +926,7 @@ bool HmiFilesPane::removeFile(Id sel) {
     const auto* f = doc_->project.externalFile(sel);
     if (!f) return false;
     const std::string name = f->name;
-    auto cmd = hmi::changeProject(doc_, "Retirer " + name, [&](hmi::Project& p) {
+    auto cmd = hmi::deleteFromProject(doc_, "Retirer " + name, [&](hmi::Project& p) {   // 1.26.1 : le lien, dans la corbeille
         auto& v = p.assets.files;
         v.erase(std::remove_if(v.begin(), v.end(), [&](const hmi::ExternalFile& x) { return x.id == sel; }), v.end());
     });

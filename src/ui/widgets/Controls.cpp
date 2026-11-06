@@ -2,6 +2,7 @@
 //  ui/widgets/Controls.cpp
 // =============================================================================
 #include "Controls.hpp"
+#include "../TextSearch.hpp"   // 1.26.1 : la recherche des listes longues
 #include "PropertyGridHooks.hpp"   // 1.24.1 : un champ de chemin - Ouvrir dans l'explorateur, Aller a, Copier le chemin
 #include "../../core/Perf.hpp"   // 1.22.2 : le dessin du code se mesure (l'onglet Performances)
 
@@ -1279,6 +1280,11 @@ namespace ui {
         if (completeAfterDot_ && prefix.size() < 2) {
             const auto start = offsetOf(caret_) - prefix.size();
             if (start > 1 && buffer_[start - 1] == '#' && identChar(buffer_[start - 2])) { fillCompletion(false); return; }
+        }
+        // 1.26.1 : "@" et la premiere lettre - les couleurs semantiques ('@Alarme').
+        if (completeAfterDot_ && prefix.size() < 2) {
+            const auto start = offsetOf(caret_) - prefix.size();
+            if (start > 0 && buffer_[start - 1] == '@') { fillCompletion(false); return; }
         }
         // Two characters before offering anything: one character matches half the
         // dictionary and the list becomes noise that hides the code behind it.
@@ -3097,6 +3103,7 @@ namespace ui {
     void DropDown::setItems(std::vector<Item> items) {
         items_ = std::move(items);
         if (selected_ >= static_cast<int>(items_.size())) selected_ = items_.empty() ? -1 : 0;
+        rebuildLines();
         invalidate();
     }
 
@@ -3110,6 +3117,132 @@ namespace ui {
     const DropDown::Item* DropDown::selectedItem() const {
         return (selected_ >= 0 && selected_ < static_cast<int>(items_.size())) ? &items_[static_cast<std::size_t>(selected_)]
             : nullptr;
+    }
+
+    // ---------------------------------------------------------------------------
+    //  1.26.1 : LES LIGNES. Une liste simple : une ligne par choix (la ligne i est le
+    //  choix i, comme avant). Une liste riche : les titres de section, puis une ligne
+    //  par `row` (ses pastilles), filtrees par la recherche.
+    // ---------------------------------------------------------------------------
+    bool DropDown::searchShown() const { return searchable_ || items_.size() > kSearchFrom; }
+
+    void DropDown::setSearch(std::string text) {
+        search_ = std::move(text);
+        rebuildLines();
+        highlighted_ = -1;
+        chip_ = -1;
+        for (int i = 0; i < static_cast<int>(lines_.size()); ++i)
+            if (selectable(i)) { highlighted_ = i; break; }
+        // Rien tape : la ligne du choix actuel, comme a l'ouverture.
+        if (search_.empty() && selected_ >= 0) highlighted_ = lineOfItem(selected_);
+        scroll_ = 0.f;
+        if (search_.empty()) scrollTo(highlighted_);
+        invalidate();
+    }
+
+    void DropDown::toggleSection(const std::string& group) {
+        const auto it = std::find(collapsed_.begin(), collapsed_.end(), group);
+        if (it == collapsed_.end()) collapsed_.push_back(group);
+        else collapsed_.erase(it);
+        rebuildLines();
+        scroll_ = std::clamp(scroll_, 0.f, maxScroll());
+        invalidate();
+    }
+
+    void DropDown::rebuildLines() {
+        lines_.clear();
+        rich_ = false;
+        for (const auto& it : items_)
+            if (!it.group.empty() || !it.row.empty() || it.paint || !it.note.empty()) { rich_ = true; break; }
+
+        // Les rangees : les choix consecutifs de meme `row` (dans la meme section), sinon un choix seul.
+        struct Run { std::size_t from, to; };
+        std::vector<Run> runs;
+        for (std::size_t i = 0; i < items_.size();) {
+            std::size_t j = i + 1;
+            if (!items_[i].row.empty())
+                while (j < items_.size() && items_[j].row == items_[i].row && items_[j].group == items_[i].group) ++j;
+            runs.push_back({ i, j });
+            i = j;
+        }
+        const SearchQuery query(searchShown() ? std::string_view(search_) : std::string_view{});
+        const auto keep = [&](const Run& r) {
+            if (query.empty()) return true;
+            for (std::size_t k = r.from; k < r.to; ++k) {
+                const auto& it = items_[k];
+                if (query.matches({ it.label, it.group, it.note, it.keywords, it.variant, it.row })) return true;
+            }
+            return false;
+        };
+        const auto lineOf = [&](const Run& r) {
+            Line l;
+            l.item = static_cast<int>(r.from);
+            if (r.to - r.from > 1)
+                for (std::size_t k = r.from; k < r.to; ++k)
+                    if (!items_[k].variant.empty()) l.variants.push_back(static_cast<int>(k));
+            return l;
+        };
+        // Sans recherche : combien de lignes en tout (la hauteur de la liste ne bouge pas pendant qu'on tape).
+        {
+            int n = 0;
+            std::string group;
+            bool first = true;
+            for (const auto& r : runs) {
+                const auto& g = items_[r.from].group;
+                if (!g.empty() && (first || g != group)) ++n;
+                first = false;
+                group = g;
+                ++n;
+            }
+            fullLines_ = n;
+        }
+        for (std::size_t r = 0; r < runs.size();) {
+            const std::string& g = items_[runs[r].from].group;
+            std::size_t end = r + 1;
+            while (end < runs.size() && items_[runs[end].from].group == g) ++end;
+            std::vector<Line> rows;
+            for (std::size_t k = r; k < end; ++k)
+                if (keep(runs[k])) rows.push_back(lineOf(runs[k]));
+            if (!rows.empty()) {
+                bool folded = false;
+                if (!g.empty()) {
+                    Line h;
+                    h.header = g;
+                    h.count = static_cast<int>(rows.size());
+                    folded = query.empty() && std::find(collapsed_.begin(), collapsed_.end(), g) != collapsed_.end();
+                    h.collapsed = folded;
+                    lines_.push_back(std::move(h));
+                }
+                if (!folded)
+                    for (auto& l : rows) lines_.push_back(std::move(l));
+            }
+            r = end;
+        }
+        if (highlighted_ >= static_cast<int>(lines_.size())) highlighted_ = -1;
+    }
+
+    int DropDown::lineOfItem(int item) const {
+        if (item < 0) return -1;
+        for (int i = 0; i < static_cast<int>(lines_.size()); ++i) {
+            const auto& l = lines_[static_cast<std::size_t>(i)];
+            if (l.item == item || std::find(l.variants.begin(), l.variants.end(), item) != l.variants.end()) return i;
+        }
+        return -1;
+    }
+
+    bool DropDown::selectable(int line) const {
+        if (line < 0 || line >= static_cast<int>(lines_.size())) return false;
+        const int item = lines_[static_cast<std::size_t>(line)].item;
+        return item >= 0 && items_[static_cast<std::size_t>(item)].enabled;
+    }
+
+    void DropDown::choose(int item) {
+        if (item >= 0 && item < static_cast<int>(items_.size()) && items_[static_cast<std::size_t>(item)].enabled) {
+            closePopup();
+            setSelectedIndex(item);
+            return;
+        }
+        closePopup();
     }
 
     // ---------------------------------------------------------------------------
@@ -3138,6 +3271,8 @@ namespace ui {
     namespace {
         constexpr float kListPadding = 1.f;
         constexpr float kScrollbarWidth = 8.f;
+        constexpr float kSectionIndent = 12.f;   // 1.26.1 : les lignes d'une section, sous son titre
+        constexpr float kChipGap = 4.f;
     }
 
     void DropDown::setMaxVisibleRows(int rows) {
@@ -3145,8 +3280,10 @@ namespace ui {
         invalidate();
     }
 
+    float DropDown::searchHeight() const { return searchShown() ? rowHeight_ + 6.f : 0.f; }
+
     int DropDown::visibleRows() const {
-        const int total = static_cast<int>(items_.size());
+        const int total = searchShown() ? std::max(fullLines_, 1) : static_cast<int>(lines_.size());
         if (total == 0) return 0;
 
         int cap = std::min(total, maxVisibleRows_);
@@ -3158,7 +3295,7 @@ namespace ui {
             const auto  b = bounds();
             const float below = surface.h - b.bottom() - 4.f;
             const float above = b.y - 4.f;
-            const float room = std::max(below, above);
+            const float room = std::max(below, above) - searchHeight();
             const int   fits = static_cast<int>((room - 2.f * kListPadding) / rowHeight_);
             cap = std::max(1, std::min(cap, fits));
         }
@@ -3166,14 +3303,14 @@ namespace ui {
     }
 
     float DropDown::maxScroll() const {
-        const float content = rowHeight_ * static_cast<float>(items_.size());
+        const float content = rowHeight_ * static_cast<float>(lines_.size());
         const float shown = rowHeight_ * static_cast<float>(visibleRows());
         return std::max(0.f, content - shown);
     }
 
     gfx::Rect DropDown::popupRect() const {
         const auto  b = bounds();
-        const float height = rowHeight_ * static_cast<float>(visibleRows()) + 2.f * kListPadding;
+        const float height = searchHeight() + rowHeight_ * static_cast<float>(visibleRows()) + 2.f * kListPadding;
 
         float y = b.bottom();
         flipped_ = false;
@@ -3189,10 +3326,33 @@ namespace ui {
         // 1.13.0 (correctifs F2) : la liste au moins aussi large que son plus long choix ("Taper un nom ou un repere
         // $...$..." d'une liste Espace de noms etait coupe en plein mot) : le texte (6 px de marge a gauche, autant a
         // droite), le cadre et la barre si elle defile. Au bord de la fenetre, elle se decale vers la gauche (plus bas).
+        // 1.26.1 : une ligne riche compte aussi sa note, ses pastilles, le retrait de sa section.
         {
             float widest = 0.f;
-            for (const auto& it : items_) widest = std::max(widest, measureWidth(it.label, gfx::FontId{ 16 }));
-            const bool scrolls = static_cast<int>(items_.size()) > visibleRows();
+            if (!rich_) {
+                for (const auto& it : items_) widest = std::max(widest, measureWidth(it.label, gfx::FontId{ 16 }));
+            } else {
+                for (const auto& it : items_) {
+                    float line = measureWidth(it.label, gfx::FontId{ 16 }) * (it.paint ? 1.2f : 1.f);
+                    if (!it.group.empty()) line += kSectionIndent;
+                    if (!it.note.empty()) line += 14.f + measureWidth(it.note, gfx::FontId{ 13 });
+                    widest = std::max(widest, line);
+                }
+                // Les pastilles d'une ligne, en plus de son libelle.
+                for (const auto& l : lines_) {
+                    if (l.item < 0 || l.variants.empty()) continue;
+                    const auto& it = items_[static_cast<std::size_t>(l.item)];
+                    float line = measureWidth(it.row.empty() ? it.label : it.row, gfx::FontId{ 16 }) * (it.paint ? 1.2f : 1.f) + 16.f;
+                    if (!it.group.empty()) line += kSectionIndent;
+                    for (const int v : l.variants)
+                        line += measureWidth(items_[static_cast<std::size_t>(v)].variant, gfx::FontId{ 13 }) + 12.f + kChipGap;
+                    widest = std::max(widest, line);
+                }
+                for (const auto& l : lines_)
+                    if (l.item < 0) widest = std::max(widest, measureWidth(l.header, gfx::FontId{ 13 }) + 60.f);
+                widest = std::max(widest, 220.f);
+            }
+            const bool scrolls = static_cast<int>(searchShown() ? fullLines_ : static_cast<int>(lines_.size())) > visibleRows();
             w = std::max(w, widest + 12.f + 2.f * kListPadding + (scrolls ? kScrollbarWidth : 0.f));
         }
         if (const auto surface = surfaceSize(); surface.w > 0.f) {
@@ -3202,10 +3362,16 @@ namespace ui {
         return { x, y, w, height };
     }
 
-    gfx::Rect DropDown::scrollbarRect() const {
+    gfx::Rect DropDown::listRect() const {
         const auto popup = popupRect();
-        return { popup.right() - kScrollbarWidth - kListPadding, popup.y + kListPadding,
-                kScrollbarWidth, popup.h - 2.f * kListPadding };
+        const float top = searchHeight();
+        return { popup.x + kListPadding, popup.y + kListPadding + top, popup.w - 2.f * kListPadding,
+                 popup.h - 2.f * kListPadding - top };
+    }
+
+    gfx::Rect DropDown::scrollbarRect() const {
+        const auto list = listRect();
+        return { list.right() - kScrollbarWidth, list.y, kScrollbarWidth, list.h };
     }
 
     gfx::Rect DropDown::eventBounds() const {
@@ -3221,19 +3387,30 @@ namespace ui {
 
     void DropDown::openPopup() {
         popupOpen_ = true;
-        highlighted_ = selected_;
-        scrollTo(selected_);          // open showing what is currently chosen
+        search_.clear();
+        // La section du choix actuel est depliee : on voit ce qui est pris.
+        if (const auto* it = selectedItem(); it && !it->group.empty())
+            collapsed_.erase(std::remove(collapsed_.begin(), collapsed_.end(), it->group), collapsed_.end());
+        rebuildLines();
+        highlighted_ = lineOfItem(selected_);
+        chip_ = -1;
+        scroll_ = 0.f;
+        scrollTo(highlighted_);          // open showing what is currently chosen
+        // Une liste riche : son titre de section au-dessus, s'il tient.
+        if (rich_ && highlighted_ > 0 && lines_[static_cast<std::size_t>(highlighted_ - 1)].item < 0) scrollTo(highlighted_ - 1);
         invalidate();
     }
 
     void DropDown::closePopup() {
         popupOpen_ = false;
         highlighted_ = -1;
+        chip_ = -1;
+        if (!search_.empty()) { search_.clear(); rebuildLines(); }
         invalidate();
     }
 
     void DropDown::scrollTo(int row) {
-        if (row < 0 || items_.empty()) { scroll_ = 0.f; return; }
+        if (row < 0 || lines_.empty()) { if (row < 0) scroll_ = std::clamp(scroll_, 0.f, maxScroll()); return; }
         const float top = rowHeight_ * static_cast<float>(row);
         const float bottom = top + rowHeight_;
         const float window = rowHeight_ * static_cast<float>(visibleRows());
@@ -3243,20 +3420,59 @@ namespace ui {
     }
 
     int DropDown::rowAt(gfx::Point global) const {
-        const auto popup = popupRect();
-        if (!popup.contains(global)) return -1;
-        const int i = static_cast<int>((global.y - popup.y - kListPadding + scroll_) / rowHeight_);
-        return (i >= 0 && i < static_cast<int>(items_.size())) ? i : -1;
+        const auto list = listRect();
+        if (!list.contains(global)) return -1;
+        const int i = static_cast<int>((global.y - list.y + scroll_) / rowHeight_);
+        return (i >= 0 && i < static_cast<int>(lines_.size())) ? i : -1;
+    }
+
+    gfx::Rect DropDown::lineRect(int line) const {
+        if (!popupOpen_ || line < 0 || line >= static_cast<int>(lines_.size())) return {};
+        const auto list = listRect();
+        const bool scrolls = maxScroll() > 0.f;
+        const gfx::Rect r{ list.x, list.y + static_cast<float>(line) * rowHeight_ - scroll_,
+                           list.w - (scrolls ? kScrollbarWidth : 0.f), rowHeight_ };
+        if (r.bottom() <= list.y || r.y >= list.bottom()) return {};
+        return r;
+    }
+
+    gfx::Rect DropDown::chipRect(int line, int variant) const {
+        const auto row = lineRect(line);
+        if (row.w <= 0.f) return {};
+        const auto& l = lines_[static_cast<std::size_t>(line)];
+        if (variant < 0 || variant >= static_cast<int>(l.variants.size())) return {};
+        // De droite a gauche : la derniere pastille au bord.
+        float right = row.right() - 6.f;
+        for (int k = static_cast<int>(l.variants.size()) - 1; k >= 0; --k) {
+            const float w = measureWidth(items_[static_cast<std::size_t>(l.variants[static_cast<std::size_t>(k)])].variant, gfx::FontId{ 13 }) + 12.f;
+            const gfx::Rect chip{ right - w, row.y + 4.f, w, row.h - 8.f };
+            if (k == variant) return chip;
+            right -= w + kChipGap;
+        }
+        return {};
+    }
+
+    int DropDown::chipAt(int line, gfx::Point global) const {
+        if (line < 0 || line >= static_cast<int>(lines_.size())) return -1;
+        const auto& l = lines_[static_cast<std::size_t>(line)];
+        for (int k = 0; k < static_cast<int>(l.variants.size()); ++k)
+            if (chipRect(line, k).contains(global)) return k;
+        return -1;
     }
 
     void DropDown::moveHighlight(int delta) {
-        if (items_.empty()) return;
-        const int n = static_cast<int>(items_.size());
-        int i = highlighted_ < 0 ? selected_ : highlighted_;
+        if (lines_.empty()) return;
+        const int n = static_cast<int>(lines_.size());
+        int i = highlighted_ < 0 ? lineOfItem(selected_) : highlighted_;
         for (int step = 0; step < n; ++step) {
             i = (i < 0) ? (delta > 0 ? 0 : n - 1) : (i + delta + n) % n;
-            if (items_[static_cast<std::size_t>(i)].enabled) {
+            if (selectable(i)) {
                 highlighted_ = i;
+                chip_ = -1;
+                // Sur la ligne du choix actuel : sa pastille.
+                const auto& l = lines_[static_cast<std::size_t>(i)];
+                for (int k = 0; k < static_cast<int>(l.variants.size()); ++k)
+                    if (l.variants[static_cast<std::size_t>(k)] == selected_) chip_ = k;
                 scrollTo(i);
                 invalidate();
                 return;
@@ -3302,30 +3518,109 @@ namespace ui {
         ctx.r.fillRect({ popup.x + 2.f, popup.y + 2.f, popup.w, popup.h }, gfx::Color{ 0, 0, 0, 90 });
         ctx.r.fillRect(popup, c.panelBg);
         ctx.r.strokeRect(popup, c.borderStrong, 1.f);
+        const float lh = ctx.r.lineHeight(ctx.theme.font.ui);
+        const float lhSmall = ctx.r.lineHeight(ctx.theme.font.smallUi);
+
+        // 1.26.1 : LA RECHERCHE, en tete - ce qui est tape (ou l'invite), le curseur, combien correspondent.
+        if (searchShown()) {
+            const gfx::Rect box{ popup.x + 4.f, popup.y + 4.f, popup.w - 8.f, rowHeight_ - 2.f };
+            ctx.r.fillRect(box, c.inputBg);
+            ctx.r.strokeRect(box, c.accent, 1.f);
+            // Une loupe dessinee : un cercle et son manche.
+            const float mx = box.x + 11.f, my = box.y + box.h * 0.5f - 1.f;
+            for (int k = 0; k < 12; ++k) {
+                const float a0 = 6.2831853f * static_cast<float>(k) / 12.f, a1 = 6.2831853f * static_cast<float>(k + 1) / 12.f;
+                ctx.r.line({ mx + 4.5f * std::cos(a0), my + 4.5f * std::sin(a0) }, { mx + 4.5f * std::cos(a1), my + 4.5f * std::sin(a1) },
+                    c.textMuted, 1.4f);
+            }
+            ctx.r.line({ mx + 3.2f, my + 3.2f }, { mx + 6.5f, my + 6.5f }, c.textMuted, 1.6f);
+            const float tx = box.x + 22.f, ty = box.y + (box.h - lh) * 0.5f;
+            if (search_.empty()) {
+                ctx.r.drawText({ tx, ty }, "Chercher\xE2\x80\xA6", ctx.theme.font.ui, c.textMuted);
+                ctx.r.line({ tx, box.y + 4.f }, { tx, box.bottom() - 4.f }, c.text, 1.f);
+            } else {
+                ctx.r.drawText({ tx, ty }, search_, ctx.theme.font.ui, c.text);
+                const float cx = tx + measureWidth(search_, ctx.theme.font.ui) + 1.f;
+                ctx.r.line({ cx, box.y + 4.f }, { cx, box.bottom() - 4.f }, c.text, 1.f);
+                int shown = 0;
+                for (const auto& l : lines_) shown += l.item >= 0 ? 1 : 0;
+                const std::string count = shown == 0 ? std::string("aucun") : std::to_string(shown);
+                ctx.r.drawText({ box.right() - 8.f - measureWidth(count, ctx.theme.font.smallUi), box.y + (box.h - lhSmall) * 0.5f },
+                    count, ctx.theme.font.smallUi, c.textMuted);
+            }
+        }
 
         // Rows are clipped to the list, so a partially scrolled row is cut rather
         // than drawn over the frame.
-        const gfx::Rect view{ popup.x + kListPadding, popup.y + kListPadding,
-                             popup.w - 2.f * kListPadding - (scrolls ? kScrollbarWidth : 0.f),
-                             popup.h - 2.f * kListPadding };
+        const gfx::Rect list = listRect();
+        const gfx::Rect view{ list.x, list.y, list.w - (scrolls ? kScrollbarWidth : 0.f), list.h };
         ctx.r.pushClip(view);
 
+        if (lines_.empty())
+            ctx.r.drawText({ view.x + 8.f, view.y + (rowHeight_ - lh) * 0.5f }, "Aucun choix ne correspond \xC3\xA0 \xC2\xAB " + search_ + " \xC2\xBB",
+                ctx.theme.font.ui, c.textMuted);
+
         const int first = static_cast<int>(scroll_ / rowHeight_);
-        const int last = std::min(static_cast<int>(items_.size()),
-            first + visibleRows() + 1);
-        const float lh = ctx.r.lineHeight(ctx.theme.font.ui);
+        const int last = std::min(static_cast<int>(lines_.size()), first + visibleRows() + 1);
 
         for (int i = std::max(0, first); i < last; ++i) {
-            const auto  u = static_cast<std::size_t>(i);
-            const gfx::Rect row{ view.x, view.y + static_cast<float>(i) * rowHeight_ - scroll_,
-                                view.w, rowHeight_ };
-            if (i == highlighted_ && items_[u].enabled) ctx.r.fillRect(row, c.selectionBg);
-            else if (i == selected_)                    ctx.r.fillRect(row, c.rowAltBg);
+            const auto& line = lines_[static_cast<std::size_t>(i)];
+            const gfx::Rect row{ view.x, view.y + static_cast<float>(i) * rowHeight_ - scroll_, view.w, rowHeight_ };
+            if (line.item < 0) {
+                // UN TITRE DE SECTION : son chevron (deplie, replie), le titre, combien.
+                if (i > 0) ctx.r.line({ row.x + 4.f, row.y + 0.5f }, { row.right() - 4.f, row.y + 0.5f }, c.border, 1.f);
+                if (i == highlighted_) ctx.r.fillRect(row, c.rowAltBg);
+                const float cx = row.x + 9.f, cy = row.y + row.h * 0.5f;
+                if (line.collapsed) {
+                    ctx.r.line({ cx - 1.5f, cy - 4.f }, { cx + 2.5f, cy }, c.textMuted, 1.5f);
+                    ctx.r.line({ cx + 2.5f, cy }, { cx - 1.5f, cy + 4.f }, c.textMuted, 1.5f);
+                } else {
+                    ctx.r.line({ cx - 4.f, cy - 1.5f }, { cx, cy + 2.5f }, c.textMuted, 1.5f);
+                    ctx.r.line({ cx, cy + 2.5f }, { cx + 4.f, cy - 1.5f }, c.textMuted, 1.5f);
+                }
+                const std::string title = line.header + "  \xC2\xB7  " + std::to_string(line.count);
+                ctx.r.drawText({ row.x + 18.f, row.y + (rowHeight_ - lhSmall) * 0.5f }, title, ctx.theme.font.smallUi, c.textMuted);
+                continue;
+            }
+            const auto  u = static_cast<std::size_t>(line.item);
+            const auto& it = items_[u];
+            const bool  current = line.item == selected_
+                || std::find(line.variants.begin(), line.variants.end(), selected_) != line.variants.end();
+            if (i == highlighted_ && it.enabled && chip_ < 0) ctx.r.fillRect(row, c.selectionBg);
+            else if (i == highlighted_ && it.enabled)        ctx.r.fillRect(row, c.rowAltBg);
+            else if (current)                               ctx.r.fillRect(row, c.rowAltBg);
+            const bool  inverted = i == highlighted_ && it.enabled && chip_ < 0;
+            const gfx::Color ink = !it.enabled ? c.textDisabled : (inverted ? c.selectionText : c.text);
 
-            ctx.r.drawText({ row.x + 6.f, row.y + (rowHeight_ - lh) * 0.5f }, items_[u].label,
-                ctx.theme.font.ui,
-                !items_[u].enabled ? c.textDisabled
-                : (i == highlighted_ ? c.selectionText : c.text));
+            // A droite : les pastilles, puis la note.
+            float right = row.right() - 6.f;
+            for (int k = static_cast<int>(line.variants.size()) - 1; k >= 0; --k) {
+                const int v = line.variants[static_cast<std::size_t>(k)];
+                const auto chip = chipRect(i, k);
+                if (chip.w <= 0.f) continue;
+                const bool on = v == selected_;
+                const bool hot = i == highlighted_ && chip_ == k;
+                ctx.r.fillRoundedRect(chip, on ? c.accent : (hot ? c.selectionBg : c.inputBg), 3.f);
+                if (!on) ctx.r.strokeRect(chip, hot ? c.accent : c.border, 1.f);
+                const auto& text = items_[static_cast<std::size_t>(v)].variant;
+                ctx.r.drawText({ chip.x + 6.f, chip.y + (chip.h - lhSmall) * 0.5f }, text, ctx.theme.font.smallUi,
+                    on ? c.textInverted : (hot ? c.selectionText : c.text));
+                right = chip.x - kChipGap;
+            }
+            if (!it.note.empty()) {
+                const float w = measureWidth(it.note, ctx.theme.font.smallUi);
+                right -= w + 4.f;
+                ctx.r.drawText({ right, row.y + (rowHeight_ - lhSmall) * 0.5f }, it.note, ctx.theme.font.smallUi,
+                    inverted ? c.selectionText : c.textMuted);
+                right -= 8.f;
+            }
+            const float indent = it.group.empty() ? 6.f : 6.f + kSectionIndent;
+            const std::string& shown = (line.variants.empty() || it.row.empty()) ? it.label : it.row;
+            const gfx::Rect text{ row.x + indent, row.y, std::max(0.f, right - row.x - indent), rowHeight_ };
+            ctx.r.pushClip(text);
+            if (it.paint) it.paint(ctx, text, ink, shown);
+            else ctx.r.drawText({ text.x, row.y + (rowHeight_ - lh) * 0.5f }, shown, ctx.theme.font.ui, ink);
+            ctx.r.popClip();
         }
         ctx.r.popClip();
 
@@ -3334,7 +3629,7 @@ namespace ui {
         // on screen to say the twelve rows are not all of them.
         const auto bar = scrollbarRect();
         ctx.r.fillRect(bar, c.panelBg);
-        const float content = rowHeight_ * static_cast<float>(items_.size());
+        const float content = rowHeight_ * static_cast<float>(lines_.size());
         const float fraction = (content > 0.f) ? (bar.h / content) * bar.h : bar.h;
         const float thumbH = std::max(18.f, fraction);
         const float travel = bar.h - thumbH;
@@ -3358,7 +3653,7 @@ namespace ui {
             if (maxScroll() > 0.f) {
                 ScrollAxis a;
                 a.track = scrollbarRect();
-                a.content = rowHeight_ * static_cast<float>(items_.size());
+                a.content = rowHeight_ * static_cast<float>(lines_.size());
                 a.viewport = rowHeight_ * static_cast<float>(visibleRows());
                 a.minThumb = 18.f;
                 float off = scroll_;
@@ -3370,8 +3665,9 @@ namespace ui {
             }
             if (const auto* m = std::get_if<MouseMove>(&ev)) {
                 const int i = rowAt(m->pos);
-                const int next = (i >= 0 && items_[static_cast<std::size_t>(i)].enabled) ? i : -1;
-                if (next != highlighted_) { highlighted_ = next; invalidate(); }
+                const int next = selectable(i) ? i : (i >= 0 && lines_[static_cast<std::size_t>(i)].item < 0 ? i : -1);
+                const int chip = next >= 0 ? chipAt(next, m->pos) : -1;
+                if (next != highlighted_ || chip != chip_) { highlighted_ = next; chip_ = chip; invalidate(); }
                 return EventResult::Consumed;
             }
             if (std::get_if<MouseUp>(&ev)) return EventResult::Consumed;
@@ -3384,32 +3680,99 @@ namespace ui {
                     invalidate();
                     return EventResult::Consumed;
                 }
+                // 1.26.1 : un clic dans le champ de recherche le garde (rien a faire : il a deja le clavier).
+                if (searchShown()) {
+                    const auto popup = popupRect();
+                    if (gfx::Rect{ popup.x, popup.y, popup.w, searchHeight() }.contains(d->pos)) return EventResult::Consumed;
+                }
                 const int i = rowAt(d->pos);
                 if (i >= 0) {
-                    if (items_[static_cast<std::size_t>(i)].enabled) {
-                        setSelectedIndex(i);
-                        closePopup();
+                    const auto& line = lines_[static_cast<std::size_t>(i)];
+                    if (line.item < 0) {           // un titre : replier, deplier
+                        toggleSection(line.header);
+                        highlighted_ = std::min(i, static_cast<int>(lines_.size()) - 1);
+                        return EventResult::Consumed;
                     }
+                    if (const int k = chipAt(i, d->pos); k >= 0) {
+                        choose(line.variants[static_cast<std::size_t>(k)]);
+                        return EventResult::Consumed;
+                    }
+                    if (items_[static_cast<std::size_t>(line.item)].enabled) choose(line.item);
                     return EventResult::Consumed;   // a disabled row eats its click
                 }
+                if (popupRect().contains(d->pos)) return EventResult::Consumed;
                 // Anywhere else dismisses, and the click goes no further: the first
                 // click closes the list, the second does whatever it was aimed at.
                 closePopup();
                 return EventResult::Consumed;
             }
+            // 1.26.1 : on tape, la liste se reduit (une liste qui cherche).
+            if (const auto* t = std::get_if<TextInput>(&ev)) {
+                if (searchShown() && !t->utf8.empty() && static_cast<unsigned char>(t->utf8[0]) >= 0x20) setSearch(search_ + t->utf8);
+                return EventResult::Consumed;
+            }
             if (const auto* k = std::get_if<KeyDown>(&ev)) {
                 switch (k->key) {
-                case Key::Escape: closePopup();      return EventResult::Consumed;
+                case Key::Escape:
+                    if (!search_.empty()) { setSearch({}); return EventResult::Consumed; }
+                    closePopup();
+                    return EventResult::Consumed;
+                case Key::Backspace:
+                    if (!search_.empty()) {
+                        std::string s = search_;
+                        std::size_t cut = s.size() - 1;
+                        while (cut > 0 && (static_cast<unsigned char>(s[cut]) & 0xC0) == 0x80) --cut;
+                        s.erase(cut);
+                        setSearch(std::move(s));
+                    }
+                    return EventResult::Consumed;
                 case Key::Down:   moveHighlight(1);  return EventResult::Consumed;
                 case Key::Up:     moveHighlight(-1); return EventResult::Consumed;
-                case Key::Home:   highlighted_ = 0; scrollTo(0); invalidate();
+                case Key::Left:
+                case Key::Right:
+                    // Les pastilles de la ligne surlignee (Normal, Gras...) ; -1 : la ligne elle-meme.
+                    if (highlighted_ >= 0 && selectable(highlighted_)) {
+                        const int n = static_cast<int>(lines_[static_cast<std::size_t>(highlighted_)].variants.size());
+                        if (n > 0) {
+                            chip_ = k->key == Key::Right ? std::min(chip_ + 1, n - 1) : std::max(chip_ - 1, -1);
+                            invalidate();
+                        }
+                    } else if (highlighted_ >= 0 && lines_[static_cast<std::size_t>(highlighted_)].item < 0) {
+                        // Un titre : droite deplie, gauche replie.
+                        const auto& h = lines_[static_cast<std::size_t>(highlighted_)];
+                        if (h.collapsed == (k->key == Key::Right)) toggleSection(h.header);
+                    }
                     return EventResult::Consumed;
-                case Key::End:    highlighted_ = static_cast<int>(items_.size()) - 1;
-                    scrollTo(highlighted_); invalidate();
+                case Key::Home:
+                case Key::End: {
+                    // La premiere (la derniere) ligne qui se choisit.
+                    const int n = static_cast<int>(lines_.size());
+                    for (int step = 0; step < n; ++step) {
+                        const int i = k->key == Key::Home ? step : n - 1 - step;
+                        if (!selectable(i)) continue;
+                        highlighted_ = i;
+                        chip_ = -1;
+                        scrollTo(i);
+                        invalidate();
+                        break;
+                    }
                     return EventResult::Consumed;
+                }
                 case Key::Space:
+                    // Une liste qui cherche : l'espace s'ecrit (TextInput) - Entree choisit.
+                    if (searchShown()) return EventResult::Consumed;
+                    [[fallthrough]];
                 case Key::Return:
-                    if (highlighted_ >= 0) setSelectedIndex(highlighted_);
+                    if (highlighted_ >= 0 && lines_[static_cast<std::size_t>(highlighted_)].item < 0) {
+                        toggleSection(lines_[static_cast<std::size_t>(highlighted_)].header);
+                        return EventResult::Consumed;
+                    }
+                    if (selectable(highlighted_)) {
+                        const auto& line = lines_[static_cast<std::size_t>(highlighted_)];
+                        choose(chip_ >= 0 && chip_ < static_cast<int>(line.variants.size()) ? line.variants[static_cast<std::size_t>(chip_)]
+                                                                                              : line.item);
+                        return EventResult::Consumed;
+                    }
                     closePopup();
                     return EventResult::Consumed;
                 default:

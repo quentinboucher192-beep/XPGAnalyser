@@ -146,6 +146,15 @@ struct Choice {
     std::string value;          // ce qui s'ecrit : "Sans", "Mono", une ressource, "" (theme : celle de l'IHM)
     std::string libraryId;      // non vide : une police de la bibliotheque, importee en la choisissant (value vide)
     std::string group;          // "", "Du projet", "Biblioth\xC3\xA8que"
+    // 1.26.1 : LA LISTE RICHE (<< si y'en a bcp on pourrait vite s'y perdre >>) - sa section, sa famille (une ligne) et son
+    // style (une pastille de la ligne), une note (ou elle sert), et la police elle-meme (la ligne s'ecrit dans sa police).
+    std::string section{};      // "Th\xC3\xA8me", "Du projet", "Mes polices", "Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement"
+    std::string family{};       // "Carlito" ; vide : une ligne a elle seule
+    std::string style{};        // "Normal", "Gras"... (avec une famille)
+    std::string shortLabel{};   // ce que la ligne montre : "Carlito Gras" (label : la valeur complete de la case)
+    std::string note{};         // "3 objets"
+    BlobPtr     data{};
+    std::string format{};
 };
 [[nodiscard]] std::vector<Choice> fieldChoices(const Project&, bool theme = false);
 // L'etiquette d'une valeur ; une valeur inconnue (une ressource absente) : telle quelle.
@@ -159,6 +168,12 @@ struct Choice {
 // theme, "Mono" : la police des valeurs, un nom : cette ressource ; nul : les polices de l'IHM (comme avant).
 [[nodiscard]] const Resource* resolve(const Assets&, const Config*, std::string_view value);
 [[nodiscard]] const Resource* resolve(const Project&, std::string_view value);
+// 1.26.1 (LA POLICE EN FORMULE, fx) : resolve accepte aussi, sans casse ni accents, << Police par defaut >> et << Police
+// des valeurs >> (les etiquettes de la liste), le nom de la ressource sans son extension, le nom de la police (<< Carlito
+// Gras >>) ou sa famille (<< Carlito >> : son style Normal). Les noms ecrits entre apostrophes dans une formule ('Carlito
+// Gras') - ce que Generer verifie ; et ce qui ne va pas avec l'un d'eux (vide : il se trouve).
+[[nodiscard]] std::vector<std::string> quotedNames(std::string_view expression);
+[[nodiscard]] std::string formulaFontProblem(const Project&, std::string_view name);
 
 // OU UNE POLICE DU PROJET SERT : les objets qui l'affichent (cites, ou sur Sans / Mono quand elle est celle du theme),
 // les styles qui l'imposent, le theme.

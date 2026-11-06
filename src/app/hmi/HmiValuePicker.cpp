@@ -11,6 +11,7 @@
 #include "../../domain/ProjectModel.hpp"
 #include "../../hmi/HmiModel.hpp"
 #include "../../hmi/HmiPublicVars.hpp"
+#include "../../hmi/HmiSemanticColors.hpp"   // 1.26.1 : les couleurs semantiques (l'onglet Constante)
 #include "../../hmi/HmiRuntime.hpp"
 #include "../../hmi/HmiTypes.hpp"
 #include "../../menu/MenuManager.hpp"
@@ -33,6 +34,7 @@ constexpr gfx::FontId kMono{14};
 constexpr gfx::FontId kTitle{17};
 constexpr float       kRow = 26.f;
 constexpr char        kSep = '\x1F';
+constexpr std::string_view kColorType = "COULEUR";   // 1.26.1 : le type montre d'une couleur semantique
 
 unsigned char uc(char c) { return static_cast<unsigned char>(c); }
 
@@ -77,6 +79,7 @@ struct Node {
     std::string      label, path, type, detail;
     Style            zone{Style::Hmi};
     bool             group{false};      // une zone ou un dossier : pas une valeur
+    bool             literal{false};    // 1.26.1 : une valeur ecrite telle quelle, sans fx (<< @Alarme >>)
     int              parent{-1};
     std::vector<int> children;
 };
@@ -254,9 +257,50 @@ std::vector<Node> buildCatalog(const hmi::Project* hp, const hmi::View* view, co
             }
         }
     }
+    // ---- 1.26.1 : LES CONSTANTES GLOBALES (l'onglet Constante) - les couleurs semantiques (<< @Alarme >>, sans fx), les
+    //  constantes publiques des scripts generaux (Init.MAX, en fx), celles des autres vues (Vue.Nom) ----
+    if (hp) {
+        const int g = group(Style::Constant, "Constantes globales");
+        const auto colors = hmi::semantic::all(*hp);
+        if (!colors.empty()) {
+            const int f = folder(g, Style::Constant, "Couleurs s\xC3\xA9mantiques", "@Nom, sans fx");
+            for (const auto* c : colors) {
+                const int at = leaf(f, Style::Constant, "@" + c->name, "@" + c->name, std::string(kColorType),
+                                    c->value + (c->builtin ? " \xC2\xB7 fournie" : " \xC2\xB7 du projet")
+                                        + (c->description.empty() ? std::string{} : " \xC2\xB7 " + c->description));
+                n[static_cast<std::size_t>(at)].literal = true;
+            }
+        }
+        int scripts = -1;
+        for (const auto& sc : hp->programs.scripts)
+            for (const auto& d : sc.decls) {
+                if (d.kind != hmi::DeclKind::Constant || d.visibility != hmi::Visibility::Public) continue;
+                if (scripts < 0) scripts = folder(g, Style::Constant, "Constantes des scripts g\xC3\xA9n\xC3\xA9raux", "publiques : Script.Nom");
+                leaf(scripts, Style::Constant, sc.name + "." + d.name, sc.name + "." + d.name, d.type,
+                     (d.computed ? std::string("calcul\xC3\xA9" "e au d\xC3\xA9marrage") : "= " + d.value)
+                         + (d.description.empty() ? std::string{} : " \xC2\xB7 " + d.description));
+            }
+        int others = -1;
+        for (const auto& v : hp->views) {
+            if (view && v.id == view->id) continue;
+            for (const auto& d : v.constants) {
+                if (d.visibility != hmi::Visibility::Public) continue;
+                if (others < 0) others = folder(g, Style::Constant, "Constantes des autres vues", "publiques : Vue.Nom");
+                leaf(others, Style::Constant, v.name + "." + d.name, v.name + "." + d.name, d.type,
+                     (d.computed ? std::string("calcul\xC3\xA9" "e") : "= " + d.value) + (d.description.empty() ? std::string{} : " \xC2\xB7 " + d.description));
+            }
+        }
+    }
     // ---- le symbole ou la vue : ses parametres, ses variables publiques ----
     if (view) {
         const int g = group(Style::Local, zoneLong(Style::Local));
+        // 1.26.1 : les constantes de la vue (ou de la popup), par leur nom.
+        if (!view->constants.empty()) {
+            const int f = folder(g, Style::Local, "Constantes de " + view->name, "constantes de la vue");
+            for (const auto& d : view->constants)
+                leaf(f, Style::Local, d.name, d.name, d.type,
+                     (d.computed ? std::string("calcul\xC3\xA9" "e") : "= " + d.value) + (d.description.empty() ? std::string{} : " \xC2\xB7 " + d.description));
+        }
         if (!view->params.empty()) {
             const int f = folder(g, Style::Local, "Param\xC3\xA8tres de " + view->name, "param\xC3\xA8tres");
             for (const auto& prm : view->params)
@@ -466,17 +510,23 @@ protected:
         r.fillRect(tree_, c.windowBg);
         r.strokeRect(tree_, c.border, 1.f);
         rowRects_.clear();
+        rowsArea_ = tree_;
+        // 1.26.1 : l'onglet Constante - ses valeurs (TRUE, FALSE, une enumeration) en haut, puis l'arbre des constantes
+        // globales (couleurs semantiques, constantes des scripts generaux et des autres vues).
         if (source_ == Style::Constant) {
-            paintConstant(ctx);
-        } else {
-            r.pushClip(tree_);
+            const float used = paintConstant(ctx);
+            rowsArea_ = {tree_.x, used, tree_.w, std::max(0.f, tree_.bottom() - used)};
+            if (!rows_.empty()) r.fillRect({tree_.x + 1.f, used - 4.f, tree_.w - 2.f, 1.f}, c.border);
+        }
+        if (source_ != Style::Constant || !rows_.empty()) {
+            r.pushClip(rowsArea_);
             const std::size_t first = static_cast<std::size_t>(std::max(0.f, scroll_ / kRow));
             for (std::size_t k = first; k < rows_.size(); ++k) {
-                const float y = tree_.y + static_cast<float>(k) * kRow - scroll_;
-                if (y > tree_.bottom()) break;
+                const float y = rowsArea_.y + static_cast<float>(k) * kRow - scroll_;
+                if (y > rowsArea_.bottom()) break;
                 const auto& row = rows_[k];
                 const Node& nd = nodes_[static_cast<std::size_t>(row.node)];
-                const gfx::Rect rr{tree_.x + 1.f, y, tree_.w - 2.f, kRow};
+                const gfx::Rect rr{rowsArea_.x + 1.f, y, rowsArea_.w - 2.f, kRow};
                 rowRects_.push_back({rr, row.node});
                 if (row.node == sel_) r.fillRect(rr, c.selectionBg);
                 else if (static_cast<int>(k) == hover_) r.fillRect(rr, c.rowAltBg);
@@ -517,13 +567,13 @@ protected:
                 }
             }
             if (rows_.empty())
-                r.drawText({tree_.x + 14.f, tree_.y + 12.f},
+                r.drawText({rowsArea_.x + 14.f, rowsArea_.y + 12.f},
                            typeFilter_ ? "Rien de ce type ici : \xC2\xAB Tout montrer \xC2\xBB, ou tape un nom dans R\xC3\xA9sultat (il se cr\xC3\xA9" "e)."
                                        : "Rien ne correspond \xC3\xA0 la recherche.",
                            kSmall, c.textMuted);
             r.popClip();
             // 1.11.4 : la barre se tire.
-            sbar_.paint(ctx, tree_, static_cast<float>(rows_.size()) * kRow, tree_.h, scroll_);
+            sbar_.paint(ctx, rowsArea_, static_cast<float>(rows_.size()) * kRow, rowsArea_.h, scroll_);
         }
         // ---- le detail ----
         paintDetail(ctx);
@@ -725,7 +775,7 @@ private:
             if (source_ != Style::Empty && zone != source_) continue;
             if (!nd.group) {
                 ++total_;
-                const bool okType = !typeFilter_ || valuekind::compatible(spec_.expected, nd.type);
+                const bool okType = !typeFilter_ || fitsType(nd);
                 const bool okText = q.empty() || lower(nd.path).find(q) != std::string::npos;
                 matches_[i] = okType && okText;
                 if (matches_[i]) ++shown_;
@@ -830,8 +880,9 @@ private:
             return;
         }
         if (!nd || nd->group) return;
-        if (how == Use::Replace) setResult(nd->path, true);
-        else if (how == Use::Insert) setResult(cur + (cur.empty() || cur.back() == ' ' || cur.back() == '(' ? "" : " ") + nd->path, true);
+        if (how == Use::Replace) setResult(nd->path, !nd->literal);   // 1.26.1 : << @Alarme >> s'ecrit sans fx
+        else if (how == Use::Insert)   // 1.26.1 : << @Alarme >> dans une formule : '@Alarme'
+            setResult(cur + (cur.empty() || cur.back() == ' ' || cur.back() == '(' ? "" : " ") + (nd->literal ? "'" + nd->path + "'" : nd->path), true);
         else if (how == Use::Convert) {
             valuekind::Result one = valuekind::classify(env_, nd->path, true, spec_.expected);
             for (const auto& dg : one.diags)
@@ -856,7 +907,7 @@ private:
             y += 20.f;
         };
         const Node* nd = sel_ >= 0 ? &nodes_[static_cast<std::size_t>(sel_)] : nullptr;
-        if (source_ == Style::Constant) {
+        if (source_ == Style::Constant && (!nd || nd->group)) {   // 1.26.1 : une constante choisie a son detail
             r.drawText({x, y}, "Constante", kBody, c.text);
             y += 26.f;
             r.drawText({x, y}, fit(r, "Une valeur fixe, convertie en " + valuekind::expectedLabel(spec_.expected) + ".", kSmall, w), kSmall, c.textMuted);
@@ -882,7 +933,7 @@ private:
         line("Type", nd->type);
         line("D\xC3\xA9tail", nd->detail);
         y += 6.f;
-        const bool ok = valuekind::compatible(spec_.expected, nd->type);
+        const bool ok = fitsType(*nd);
         const std::string verdict = ok ? "\xE2\x9C\x93 Convient \xC3\xA0 " + valuekind::expectedLabel(spec_.expected) + "."
                                        : nd->type + " ne convient pas \xC3\xA0 " + valuekind::expectedLabel(spec_.expected) + ".";
         r.drawText({x, y}, fit(r, verdict, kSmall, w), kSmall, ok ? ui::legendColor(Style::Hmi, ctx.theme.isDark()) : c.error);
@@ -903,7 +954,7 @@ private:
         if (!ok) button("Convertir pour " + valuekind::expectedLabel(spec_.expected), Use::Convert, false);
     }
 
-    void paintConstant(const ui::PaintContext& ctx) {
+    float paintConstant(const ui::PaintContext& ctx) {
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         constRects_.clear();
@@ -940,9 +991,20 @@ private:
             constRects_.push_back({b, {v, isFx}});
             cx += bw + 6.f;
         }
+        return values.empty() ? y + 8.f : y + 36.f;   // 1.26.1 : sous les valeurs, l'arbre des constantes
     }
 
-    [[nodiscard]] float maxScroll() const { return std::max(0.f, static_cast<float>(rows_.size()) * kRow - tree_.h); }
+    [[nodiscard]] float maxScroll() const { return std::max(0.f, static_cast<float>(rows_.size()) * kRow - rowsArea_.h); }
+
+    // 1.26.1 : une couleur semantique convient a une case couleur (ou sans type attendu) ; le reste : valuekind::compatible.
+    [[nodiscard]] bool fitsType(const Node& nd) const {
+        if (nd.type == kColorType) {
+            std::string e;
+            for (const char ch : spec_.expected) if (ch != ' ') e += static_cast<char>(std::toupper(uc(ch)));
+            return e.empty() || e == "ANY" || e == "COULEUR";
+        }
+        return valuekind::compatible(spec_.expected, nd.type);
+    }
 
     HmiValuePicker&      owner_;
     const Spec&          spec_;
@@ -967,6 +1029,7 @@ private:
     ui::Button*          cancel_{nullptr};
     ui::Button*          ok_{nullptr};
     gfx::Rect            panel_{}, tree_{}, detail_{}, close_{}, typeBox_{}, allLink_{}, fxBox_{}, legendBox_{}, repBox_{}, force_{};
+    gfx::Rect            rowsArea_{};   // 1.26.1 : ou les lignes de l'arbre se dessinent (l'onglet Constante : sous ses valeurs)
     float                resultTop_{0.f}, bottom_{0.f}, scroll_{0.f};
     ui::PaintedScrollBar sbar_;   // 1.11.4
     std::vector<std::pair<gfx::Rect, Style>>                                        chips_;

@@ -6018,17 +6018,23 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s += std::string(kept.size() > 1 ? "\nNe partent pas : " : "\nNe part pas : ") + fewNames(left, 4, " ; ") + ".";
         }
         // 1.25.1 : les macros et les versions vont dans leur corbeille - le meme Ctrl+Z les en ressort.
-        bool macros = false, versions = false;
+        bool macros = false, versions = false, binned = false;
         for (const auto& it : items) {
             if (it.what == What::Macro) macros = true;
             else if (it.what == What::Version) versions = true;
+            // 1.26.1 : une vue, un script, une fonction, une variable, un type, une alarme, une recette, un style du
+            // projet IHM vont dans la Corbeille (Restaurer les rend aussi).
+            else if (it.what == What::HmiView || it.what == What::HmiScript || it.what == What::HmiFunction || it.what == What::HmiVariable
+                     || it.what == What::HmiType || it.what == What::HmiAlarm || it.what == What::HmiRecipe || it.what == What::HmiStyle)
+                binned = true;
         }
         if (items.empty()) return s + ".";
         s += items.size() > 1 ? "\nUn seul Ctrl+Z les rend" : "\nCtrl+Z le rend";
         std::vector<std::string> outside;
+        if (binned) outside.push_back("ce qui part de l'IHM va dans la Corbeille");
         if (macros) outside.push_back("les macros vont dans leur corbeille");
         if (versions) outside.push_back("les versions dans versions/corbeille");
-        if (!outside.empty()) s += " (" + fewNames(outside, 2, ", ") + ")";
+        if (!outside.empty()) s += " (" + fewNames(outside, 3, ", ") + ")";
         return s + ".";
     }
 
@@ -6056,7 +6062,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         } else if (!hmiItems.empty()) {
             std::size_t gone = 0;
             std::vector<TreeDeletion::Kept> refused;
-            auto cmd = hmi::changeProject(hosts.hmi, "Supprimer " + plan.what(), [&](hmi::Project& p) {
+            // 1.26.1 : ce qui part du projet IHM entre dans sa corbeille (la meme commande : Ctrl+Z l'en ressort).
+            auto cmd = hmi::deleteFromProject(hosts.hmi, "Supprimer " + plan.what(), [&](hmi::Project& p) {
                 const auto missing = [&](const TreeDeletion::Item& it) { refused.push_back({it.name, "introuvable"}); };
                 std::vector<const TreeDeletion::Item*> groups, folders;   // apres le reste
                 for (const auto* it : hmiItems) {

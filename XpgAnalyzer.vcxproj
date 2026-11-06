@@ -568,6 +568,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiApiVarsPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiBuild.cpp" />
     <ClCompile Include="src\app\hmi\HmiBuildPanes.cpp" />
+    <ClCompile Include="src\app\hmi\HmiChoiceItems.cpp" />
     <ClCompile Include="src\app\hmi\HmiConsole.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicPageSets.cpp" />
@@ -718,6 +719,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRecording.cpp" />
     <ClCompile Include="src\hmi\HmiRelations.cpp" />
     <ClCompile Include="src\hmi\HmiReportLayout.cpp" />
+    <ClCompile Include="src\hmi\HmiTrash.cpp" />
     <ClCompile Include="src\hmi\HmiTrueType.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
     <ClCompile Include="src\hmi\HmiTypeForms.cpp" />
@@ -1144,6 +1146,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiApiVarsPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuild.hpp" />
     <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp" />
+    <ClInclude Include="src\app\hmi\HmiChoiceItems.hpp" />
     <ClInclude Include="src\app\hmi\HmiConsole.hpp" />
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiDebugPane.hpp" />
@@ -1276,6 +1279,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiStandalone.hpp" />
     <ClInclude Include="src\hmi\HmiSymbolArgCheck.hpp" />
     <ClInclude Include="src\hmi\HmiTable.hpp" />
+    <ClInclude Include="src\hmi\HmiTrash.hpp" />
     <ClInclude Include="src\hmi\HmiTrueType.hpp" />
     <ClInclude Include="src\hmi\HmiTutorialDeduce.hpp" />
     <ClInclude Include="src\hmi\HmiTypeForms.hpp" />

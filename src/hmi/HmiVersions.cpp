@@ -249,7 +249,8 @@ bool included(std::string_view p) {
             // ne touche pas au programme d'un dossier de la 1.11, API Studio pas a ihm/.
             const bool ihm = startsWith(p, "ihm/");
             if (!startsWith(p, "donnees/") && (ihm ? !core::hasIhm() : !core::hasApi())) return false;
-            return !startsWith(p, "ihm/historique/") && !startsWith(p, "ihm/corbeille/");
+            // 1.26.1 : ni la corbeille du projet (ihm/supprimes/) : revenir a une version ne la vide pas.
+            return !startsWith(p, "ihm/historique/") && !startsWith(p, "ihm/corbeille/") && !startsWith(p, "ihm/supprimes/");
         }
     return false;
 }
@@ -264,7 +265,8 @@ std::vector<FileEntry> scan(const std::string& projectFolder) {
         std::error_code ec2;
         const std::string rel = fs::relative(it->path(), root, ec2).generic_string();
         if (it->is_directory(ec2)) {
-            if (rel == "versions" || rel == "exports" || rel == ".xpg" || rel == "ihm/historique" || rel == "ihm/corbeille") it.disable_recursion_pending();   // 1.11.13 : .xpg (le build)
+            if (rel == "versions" || rel == "exports" || rel == ".xpg" || rel == "ihm/historique" || rel == "ihm/corbeille" || rel == "ihm/supprimes")
+                it.disable_recursion_pending();   // 1.11.13 : .xpg (le build) ; 1.26.1 : la corbeille du projet
             continue;
         }
         if (!it->is_regular_file(ec2) || !included(rel)) continue;

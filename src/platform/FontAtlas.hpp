@@ -133,4 +133,10 @@ private:
 [[nodiscard]] std::vector<std::string> defaultUiFontCandidates();
 [[nodiscard]] std::vector<std::string> defaultMonoFontCandidates();
 
+// 1.26.1 : LA POLICE DU LOGICIEL, choisie par l'utilisateur (Reglages > Theme) : un fichier TrueType ; vide : celle
+// d'origine. uiFontCandidates : elle d'abord, puis celles d'origine (un fichier illisible n'empeche rien).
+void setUiFontOverride(std::string path);
+[[nodiscard]] const std::string& uiFontOverride();
+[[nodiscard]] std::vector<std::string> uiFontCandidates();
+
 } // namespace gfx

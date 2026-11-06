@@ -1,4 +1,5 @@
 #include "HmiPanes.hpp"
+#include "HmiChoiceItems.hpp"   // 1.26.1 : les listes Police (sections, familles, apercus, recherche)
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas de variables du programme
 #include "../../hmi/HmiMigrate.hpp"   // 1.11.18 (lot 5) : des blocs VAR a migrer ?
 #include "../../hmi/HmiDuplicate.hpp"   // 1.10.4 : "Remplacer..." ; 1.11 (REP) : le constat d'un repere qui n'est pas une variable
@@ -562,7 +563,9 @@ void HmiConfigPane::rebuild() {
                         std::move(labels));
         };
         shown.properties.push_back(fontProp("Police par d\xC3\xA9" "faut", false));
+        shown.properties.back().choices = hmiFontChoiceItems(p, true);   // 1.26.1 : la liste riche
         shown.properties.push_back(fontProp("Police des valeurs", true));
+        shown.properties.back().choices = hmiFontChoiceItems(p, true);
     }
     cats.push_back(std::move(shown));
 
@@ -1064,7 +1067,8 @@ core::CommandPtr hmiNewViewCommand(const hmi::DocumentPtr& doc, std::string name
 core::CommandPtr hmiDeleteViewCommand(const hmi::DocumentPtr& doc, Id view) {
     if (!doc || !doc->project.view(view)) return nullptr;
     const std::string name = doc->project.view(view)->name;
-    return hmi::changeProject(doc, "Supprimer la vue " + name, [&](hmi::Project& p) {
+    // 1.26.1 : dans la corbeille du projet (avec les popups de son symbole) - Ctrl+Z l'en ressort.
+    return hmi::deleteFromProject(doc, "Supprimer la vue " + name, [&](hmi::Project& p) {
         // 1.21.0 : un symbole emporte ses popups (View::ownerSymbol) - elles n'existent pas sans lui (avant : elles restaient,
         // orphelines, avec des objets qui lisent les parametres d'un symbole disparu).
         std::erase_if(p.views, [&](const hmi::View& v) { return v.id == view || (v.ownerSymbol != kNoId && v.ownerSymbol == view); });

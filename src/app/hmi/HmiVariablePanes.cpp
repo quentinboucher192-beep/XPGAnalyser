@@ -2540,7 +2540,7 @@ bool HmiVariablesPane::deleteVariable(Id id) {
     const auto* v = doc_->project.variableById(id);
     if (!v) return false;
     const std::string name = v->name;
-    apply(hmi::changeProject(doc_, "Supprimer la variable " + name, [&](hmi::Project& p) {
+    apply(hmi::deleteFromProject(doc_, "Supprimer la variable " + name, [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         auto& all = p.programs.variables;
         all.erase(std::remove_if(all.begin(), all.end(), [&](const hmi::Variable& x) { return x.id == id; }), all.end());
     }));
@@ -2650,7 +2650,7 @@ std::size_t HmiVariablesPane::deleteMany(const std::vector<Id>& variables, const
     if (ids.empty() && folders.size() == 1) return deleteFolder(folders.front()) ? 1 : 0;
     const std::size_t count = ids.size() + folders.size();
     // UNE commande : un seul Ctrl+Z rend tout (les variables, puis les dossiers et ce qu'ils rangeaient).
-    apply(hmi::changeProject(doc_, "Supprimer " + std::to_string(count) + " lignes des variables IHM", [&](hmi::Project& p) {
+    apply(hmi::deleteFromProject(doc_, "Supprimer " + std::to_string(count) + " lignes des variables IHM", [&](hmi::Project& p) {   // 1.26.1
         auto& all = p.programs.variables;
         all.erase(std::remove_if(all.begin(), all.end(), [&](const hmi::Variable& x) { return std::find(ids.begin(), ids.end(), x.id) != ids.end(); }),
                   all.end());
@@ -4753,7 +4753,7 @@ bool HmiTypesPane::deleteType(Id id, std::string* why) {
         return fail(why, t->name + " est employ\xC3\xA9 par " + list + (users.size() > 4 ? "..." : ""));
     }
     const std::string name = t->name;
-    apply_(hmi::changeProject(doc_, "Supprimer le type " + name, [&](hmi::Project& p) {
+    apply_(hmi::deleteFromProject(doc_, "Supprimer le type " + name, [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         auto& all = p.programs.types;
         all.erase(std::remove_if(all.begin(), all.end(), [&](const hmi::HmiType& x) { return x.id == id; }), all.end());
     }));

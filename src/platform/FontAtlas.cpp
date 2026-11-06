@@ -577,6 +577,23 @@ std::vector<std::string> defaultUiFontCandidates() {
     };
 }
 
+namespace {
+std::string& uiOverrideRef() {
+    static std::string path;
+    return path;
+}
+} // namespace
+
+void setUiFontOverride(std::string path) { uiOverrideRef() = std::move(path); }
+
+const std::string& uiFontOverride() { return uiOverrideRef(); }
+
+std::vector<std::string> uiFontCandidates() {
+    auto out = defaultUiFontCandidates();
+    if (!uiOverrideRef().empty()) out.insert(out.begin(), uiOverrideRef());
+    return out;
+}
+
 std::vector<std::string> defaultMonoFontCandidates() {
     return {
         "resources/fonts/JetBrainsMono-Regular.ttf",

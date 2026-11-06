@@ -44,6 +44,7 @@
 #include "../src/app/DispositionPreview.hpp"   // 1.12.4 : l'apercu
 #include "../src/app/hmi/HmiApiVarsPane.hpp"     // 1.11.1 (API-V)
 #include "../src/app/hmi/HmiAssist.hpp"
+#include "../src/app/hmi/HmiChoiceItems.hpp"   // 1.26.1 : les listes riches (Police, Style nomme)
 #include "../src/app/hmi/HmiValueKind.hpp"           // 1.11.3 : le carre de legende
 #include "../src/app/hmi/HmiValuePicker.hpp"
 #include "../src/app/hmi/HmiActionDialogs.hpp"     // 1.11.9 : l'operation en arbre, le script, Maths
@@ -1479,8 +1480,12 @@ void volet_programmation() {
     pane.setBounds({0, 0, 1400, 800});
     pane.layout();
     check(pane.general(), "le volet de la Programmation g\xC3\xA9n\xC3\xA9rale");
-    for (const char* tip : {"Nouveau script ST", "Nouveau script C (", "Nouveau script C++", "Compiler", "Nouvelle variable IHM"})
+    for (const char* tip : {"Nouveau script ST", "Nouveau script C (", "Nouveau script C++", "Compiler"})
         check(pane.tools().actionByTip(tip) >= 0, std::string("outil : ") + tip);
+    // 1.26.1 : << virer la partie 'Variables IHM' ici dans scripts generaux >> - ni ses boutons, ni son tableau (les variables
+    // IHM ont leur onglet, a cote).
+    check(pane.tools().actionByTip("Nouvelle variable IHM") < 0 && !pane.variableTable().visible(),
+          "Scripts g\xC3\xA9n\xC3\xA9raux : plus de partie Variables IHM (ni boutons, ni tableau)");
 
     Script spec;
     spec.name = "Init";
@@ -19519,17 +19524,17 @@ void centreAide111() {
     // 1.12.5 : 38 ; 1.12.6 : 39. 1.12.18 : 51 ; 1.12.19 : 52 ; 1.12.20 : 53 ; 1.12.21 : 54 ; 1.12.22 : 55 ; 1.12.23 : 56 ; 1.12.24 : 57 ; 1.12.25 : 58 ; 1.12.26 : 59 ; 1.12.27 : 60 ; 1.12.28 : 61 ; 1.12.29 : 62 ; 1.12.30 : 63 ; 1.12.31 : 64 ; 1.13.0 : 65 ; 1.13.1 : 66 ; 1.14.0 : 67 ; 1.14.1 : 68 ; 1.14.2 : 69 ; 1.15.0 : 70 ; 1.16.0 : 71 ; 1.16.1 : 72 ; 1.17.0 : 73 ; 1.18.0 : 74.
     // 1.21.1 : 80 (la 1.21.1 en tete, un rang de plus pour les autres). 1.21.2 : 81. 1.21.3 : 82.
     const auto& rel = hn::releases();
-    check(rel.size() == 97 && rel.front().version == "1.26.0" && rel[1].version == "1.25.0" && rel[2].version == "1.24.0" && rel[3].version == "1.23.1" && rel[4].version == "1.23.0" && rel[5].version == "1.22.9" && rel[6].version == "1.22.8" && rel[7].version == "1.22.7" && rel[8].version == "1.22.6" && rel[9].version == "1.22.5" && rel[10].version == "1.22.4" && rel[11].version == "1.22.3" && rel[12].version == "1.22.2" && rel[13].version == "1.22.1" && rel[14].version == "1.22.0" && rel[15].version == "1.21.3" && rel[16].version == "1.21.2" && rel[17].version == "1.21.1" && rel[18].version == "1.21.0" && rel[19].version == "1.20.2" && rel[20].version == "1.20.1" && rel[21].version == "1.20.0" && rel[22].version == "1.19.0" && rel[23].version == "1.18.0" && rel[24].version == "1.17.0" && rel[25].version == "1.16.1" && rel[26].version == "1.16.0" && rel[27].version == "1.15.0" && rel[28].version == "1.14.2" && rel[29].version == "1.14.1" && rel[30].version == "1.14.0" && rel[31].version == "1.13.1" && rel[32].version == "1.13.0" && rel[33].version == "1.12.31" && rel[34].version == "1.12.30" && rel[35].version == "1.12.29" && rel[36].version == "1.12.28" && rel[37].version == "1.12.27" && rel[38].version == "1.12.26" && rel[39].version == "1.12.25" && rel[40].version == "1.12.24" && rel[41].version == "1.12.23" && rel[42].version == "1.12.22" && rel[43].version == "1.12.21" && rel[44].version == "1.12.20" && rel[45].version == "1.12.19" && rel[46].version == "1.12.18" && rel[47].version == "1.12.17" && rel[48].version == "1.12.16" && rel[49].version == "1.12.15" && rel[50].version == "1.12.14" && rel[51].version == "1.12.13" && rel[52].version == "1.12.12" && rel[53].version == "1.12.11" && rel[54].version == "1.12.10" && rel[55].version == "1.12.9" && rel[56].version == "1.12.8" && rel[57].version == "1.12.7" && rel[58].version == "1.12.6" && rel[59].version == "1.12.5" && rel[60].version == "1.12.4" && rel[61].version == "1.12.3" && rel[62].version == "1.12.2" && rel[63].version == "1.12.1"
-              && rel[64].version == "1.12.0" && rel[65].version == "1.11.24" && rel[66].version == "1.11.23"
-              && rel[67].version == "1.11.22" && rel[68].version == "1.11.21" && rel[69].version == "1.11.20" && rel[70].version == "1.11.19"
-              && rel[71].version == "1.11.18" && rel[72].version == "1.11.17"
-              && rel[73].version == "1.11.16" && rel[74].version == "1.11.15"
-              && rel[75].version == "1.11.14" && rel[76].version == "1.11.13" && rel[77].version == "1.11.12"
-              && rel[78].version == "1.11.11" && rel[79].version == "1.11.10"
-              && rel[80].version == "1.11.9" && rel[81].version == "1.11.8"
-              && rel[82].version == "1.11.7" && rel[83].version == "1.11.6" && rel[84].version == "1.11.5"
-              && rel[85].version == "1.11.4" && rel[86].version == "1.11.3" && rel[87].version == "1.11.2"
-              && rel[88].version == "1.11.1" && rel[89].version == "1.11" && rel[90].version == "1.10.4",
+    check(rel.size() == 98 && rel.front().version == "1.26.1" && rel[1].version == "1.26.0" && rel[2].version == "1.25.0" && rel[3].version == "1.24.0" && rel[4].version == "1.23.1" && rel[5].version == "1.23.0" && rel[6].version == "1.22.9" && rel[7].version == "1.22.8" && rel[8].version == "1.22.7" && rel[9].version == "1.22.6" && rel[10].version == "1.22.5" && rel[11].version == "1.22.4" && rel[12].version == "1.22.3" && rel[13].version == "1.22.2" && rel[14].version == "1.22.1" && rel[15].version == "1.22.0" && rel[16].version == "1.21.3" && rel[17].version == "1.21.2" && rel[18].version == "1.21.1" && rel[19].version == "1.21.0" && rel[20].version == "1.20.2" && rel[21].version == "1.20.1" && rel[22].version == "1.20.0" && rel[23].version == "1.19.0" && rel[24].version == "1.18.0" && rel[25].version == "1.17.0" && rel[26].version == "1.16.1" && rel[27].version == "1.16.0" && rel[28].version == "1.15.0" && rel[29].version == "1.14.2" && rel[30].version == "1.14.1" && rel[31].version == "1.14.0" && rel[32].version == "1.13.1" && rel[33].version == "1.13.0" && rel[34].version == "1.12.31" && rel[35].version == "1.12.30" && rel[36].version == "1.12.29" && rel[37].version == "1.12.28" && rel[38].version == "1.12.27" && rel[39].version == "1.12.26" && rel[40].version == "1.12.25" && rel[41].version == "1.12.24" && rel[42].version == "1.12.23" && rel[43].version == "1.12.22" && rel[44].version == "1.12.21" && rel[45].version == "1.12.20" && rel[46].version == "1.12.19" && rel[47].version == "1.12.18" && rel[48].version == "1.12.17" && rel[49].version == "1.12.16" && rel[50].version == "1.12.15" && rel[51].version == "1.12.14" && rel[52].version == "1.12.13" && rel[53].version == "1.12.12" && rel[54].version == "1.12.11" && rel[55].version == "1.12.10" && rel[56].version == "1.12.9" && rel[57].version == "1.12.8" && rel[58].version == "1.12.7" && rel[59].version == "1.12.6" && rel[60].version == "1.12.5" && rel[61].version == "1.12.4" && rel[62].version == "1.12.3" && rel[63].version == "1.12.2" && rel[64].version == "1.12.1"
+              && rel[65].version == "1.12.0" && rel[66].version == "1.11.24" && rel[67].version == "1.11.23"
+              && rel[68].version == "1.11.22" && rel[69].version == "1.11.21" && rel[70].version == "1.11.20" && rel[71].version == "1.11.19"
+              && rel[72].version == "1.11.18" && rel[73].version == "1.11.17"
+              && rel[74].version == "1.11.16" && rel[75].version == "1.11.15"
+              && rel[76].version == "1.11.14" && rel[77].version == "1.11.13" && rel[78].version == "1.11.12"
+              && rel[79].version == "1.11.11" && rel[80].version == "1.11.10"
+              && rel[81].version == "1.11.9" && rel[82].version == "1.11.8"
+              && rel[83].version == "1.11.7" && rel[84].version == "1.11.6" && rel[85].version == "1.11.5"
+              && rel[86].version == "1.11.4" && rel[87].version == "1.11.3" && rel[88].version == "1.11.2"
+              && rel[89].version == "1.11.1" && rel[90].version == "1.11" && rel[91].version == "1.10.4",
           "notes : 72 versions, la 1.16.1 en tete, la 1.16.0, la 1.15.0, la 1.14.2, la 1.14.1, la 1.14.0 (lots M1, M2, M3, M4, M5), la 1.13.1 (lots K1, K2, K3, K4), la 1.13.0, la 1.12.31, la 1.12.30, la 1.12.29, la 1.12.28, la 1.12.27, la 1.12.26, la 1.12.25, la 1.12.24, la 1.12.23, la 1.12.22, la 1.12.21, la 1.12.20, la 1.12.19, la 1.12.18, la 1.12.17, la 1.12.16, la 1.12.15, la 1.12.14, la 1.12.13, la 1.12.12, la 1.12.11, la 1.12.10, la 1.12.9, la 1.12.8, la 1.12.7, la 1.12.6, la 1.12.5, la 1.12.4, la 1.12.3, la 1.12.2, la 1.12.1, la 1.12.0, puis la 1.11.24 \xC3\xA0 la 1.11, et la 1.10.4");
     // 1.11.2 (T2, tranches 41, 42 et 44 ; decisions 187, 201 et 216) : 23 lignes en 8 domaines, dont 2 cartes de la fenetre Nouveautes.
     // Tranche 46 (SYM, decision 240) : + Dupliquer dans un symbole (C) et la section Parametres du symbole (N) : 25 lignes.
@@ -19801,7 +19806,7 @@ void centreAide111() {
         // 1.11.4 : 161 (+ 4, la geometrie en marche, les reperes des parametres, Variables liees, les barres).
         // 1.11.5 : 165 (+ 4, les esclaves en arbre, Variables IHM / API, le forcage IHM, les bornes au clavier).
         // 1.11.6 : 169 (+ 4, sur la vue actuelle, le clic droit, le forcage par type et bornes, Expressions en arbre).
-        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 625,   // 1.26.0 : + 6 (les polices, l'editeur de polices, la corbeille, la bibliotheque d'images, les limites). 1.25.0 : + 5 (la mise en page des rapports, les sons et les images, les limites). 1.24.0 : + 4 (la bibliotheque de sons, supprimer plusieurs dans les listes et l arbre, les chemins). 1.23.1 : + 4 (les couleurs semantiques, le style en formule, Styles deplie, la page Styles). 1.23.0 : + 2 (les styles par type d objet). 1.22.9 : + 1 (Unites et formats et Unites de mesure en une page). 1.22.8 : + 3 (les modeles de vues, les unites creees par l IA, la confirmation qui defile). 1.22.7 : + 2 (la suppression qui modifie ses references, Retour et Corriger rapidement). 1.22.6 : + 7 (l apercu de toutes les vues, l activite et les couts en direct, la mission depuis la conversation, les jetons). 1.22.5 : + 3 (l avis du logiciel, la correction, le processus). 1.22.4 : + 5 (l'apercu des erreurs, la ligne choisie, les cercles, les guillemets, la regle 20). 1.22.3 : + 1 (le .XPG joint lu pour les missions). 1.22.2 : + 5 (les parametres des popups, les saccades des missions, l onglet Performances, deplier les propositions, forcer la fin). 1.22.1 : + 4 (sans blocage, les etapes, les corrections, les dossiers). 1.22.0 : + 6 (les missions IA persistantes). 1.21.3 : + 2 (une grande demande n'est plus coupee ; la longueur d'une reponse). 1.21.2 : + 2 (les notifications de l'Assistant ; un modele de fichier dans la conversation). 1.21.1 : + 1 (toutes les feuilles d'un classeur joint). 1.21.0 : + 14 (supprimer avec l'Assistant ; le bac a sable ; l'agent ; la decouverte reseau ; les popups d'un symbole supprime ; la memoire persistante ; le contexte de la discussion ; les classeurs joints reconnus ; les modeles de fichiers ; le lecteur des incidents ; l'alarme qui bat ; le plantage des videos d'incident ; A propos et ses fichiers ; l'apercu de tous les fichiers). 1.20.2 : + 7 (le plan en cours en haut ; les blocs de code copiables ; un dossier par alarme, la recherche, le tri ; arreter les incidents ; la case Incidents des alarmes et des groupes ; les enregistrements fideles ; les images nettes). 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
+        check(hn::of("1.10").size() == 22 && hn::of("1.9").size() == 13 && hn::all().size() == 630,   // 1.26.1 : + 5 (la police du logiciel, la police en fx, les listes longues, la corbeille du projet). 1.26.0 : + 6 (les polices, l'editeur de polices, la corbeille, la bibliotheque d'images, les limites). 1.25.0 : + 5 (la mise en page des rapports, les sons et les images, les limites). 1.24.0 : + 4 (la bibliotheque de sons, supprimer plusieurs dans les listes et l arbre, les chemins). 1.23.1 : + 4 (les couleurs semantiques, le style en formule, Styles deplie, la page Styles). 1.23.0 : + 2 (les styles par type d objet). 1.22.9 : + 1 (Unites et formats et Unites de mesure en une page). 1.22.8 : + 3 (les modeles de vues, les unites creees par l IA, la confirmation qui defile). 1.22.7 : + 2 (la suppression qui modifie ses references, Retour et Corriger rapidement). 1.22.6 : + 7 (l apercu de toutes les vues, l activite et les couts en direct, la mission depuis la conversation, les jetons). 1.22.5 : + 3 (l avis du logiciel, la correction, le processus). 1.22.4 : + 5 (l'apercu des erreurs, la ligne choisie, les cercles, les guillemets, la regle 20). 1.22.3 : + 1 (le .XPG joint lu pour les missions). 1.22.2 : + 5 (les parametres des popups, les saccades des missions, l onglet Performances, deplier les propositions, forcer la fin). 1.22.1 : + 4 (sans blocage, les etapes, les corrections, les dossiers). 1.22.0 : + 6 (les missions IA persistantes). 1.21.3 : + 2 (une grande demande n'est plus coupee ; la longueur d'une reponse). 1.21.2 : + 2 (les notifications de l'Assistant ; un modele de fichier dans la conversation). 1.21.1 : + 1 (toutes les feuilles d'un classeur joint). 1.21.0 : + 14 (supprimer avec l'Assistant ; le bac a sable ; l'agent ; la decouverte reseau ; les popups d'un symbole supprime ; la memoire persistante ; le contexte de la discussion ; les classeurs joints reconnus ; les modeles de fichiers ; le lecteur des incidents ; l'alarme qui bat ; le plantage des videos d'incident ; A propos et ses fichiers ; l'apercu de tous les fichiers). 1.20.2 : + 7 (le plan en cours en haut ; les blocs de code copiables ; un dossier par alarme, la recherche, le tri ; arreter les incidents ; la case Incidents des alarmes et des groupes ; les enregistrements fideles ; les images nettes). 1.20.1 : + 2 (Appliquer et Previsualiser en fond ; le texte exact a la demande). 1.20.0 : + 8 (le dossier d'incident sans geste ; ce a quoi l'alarme est reliee ; l'analyse IA en arriere-plan ; immuable puis valide ; le volet et l'assistant de diagnostic ; adresser un membre ; les textes joints decoupes ; les grosses propositions sans geler). 1.19.0 : + 7 (une installation complete et modifier l'existant ; le plan d'action ; verifie puis applique d'un bloc ; reutiliser ; le compte rendu reel ; les relations ; verifier le projet). 1.18.0 : + 7 (les outils du projet ; equipements et adresses ; scripts, fonctions, alarmes, ressources, dossiers ; l'IA integree comprend les outils ; le gestionnaire des cles API ; l'etape IA de l'installateur ; la fleche d'un membre deplie). 1.17.0 : + 5 (le tableau de bord ; corriger a la main ; a lui apprendre, essayer une phrase ; l'apprentissage dans un fichier ; l'installateur relie l'IA). 1.16.1 : + 10 (vus aux essais sous Windows ; la previsualisation se zoome ; les deballages des types IHM ; l'IA integree lit les phrases ; les modeles metier ; l'IA integree d'abord ; avertir des reponses ; plus de refus par megarde ; appliquer malgre les erreurs ; le repere associe). 1.16.0 : + 11 (l'IA integree : comprendre, les questions ; les services compatibles OpenAI, la limite en direct, le budget, les petits modeles ; les nouvelles operations : creer une vue, des variables et des types, l'automate, dupliquer avec reperes, les formules). 1.15.0 : + 8 (l'Assistant IA branche sur une vraie IA : le fournisseur, ce que l'IA sait de ses propositions, les erreurs dites et reessayees, la cle protegee ; le registre des genres, le contexte, les nouvelles operations, tout verifie avant l'apercu). 1.14.2 : + 6 (l'Assistant IA : le panneau, la previsualisation, les conversations gardees ; la memoire de l'IA : la fenetre, les connaissances, vider le cache). 1.14.1 : + 14 (N5 : l'onglet Convertir, le Convertisseur d'unites, l'Explorateur de fichiers ; N1 : les vannes et les registres a fins de course ; N2 : le pointeur, le separateur lache dehors ; N3 : les sons rejoues, le bouton Sons ; N4 : la Calculatrice ; N6 : la bibliotheque d'images, Mes images ; captures finales : la note de la relecture lisible, une valeur affichee telle quelle) ; 1.14.0 : + 14 (M1 : la colonne Utilisations ; M2 : que veux-tu installer et les options, les copies de secours ; M3 : le Coupe-son, le Melangeur de volume, les canaux du son, couper par script, action ou variable ; M4 : enregistrer, rejouer, Ressources > Enregistrements, objets actions et natives, une autre application ; M5 : chercher les fichiers sur le PC, les fichiers trouves) ; 1.13.1 : + 11 (K1 : les constantes globales en formule, l'aide dans les reperes ; K3 : le code brut, ses clics droits ; K4 : les types dans leurs onglets, un type dans son onglet ; K2 : figer, les curseurs, le zoom, l'export de la zone, le trace) ; 1.13.0 : + 10 (page web retiree ; J1 les objets ; J5 LEVER et WAIT_UNTIL ; J3 JSON et regex ; J4 les tests ; J7 les generiques ; J6 les unites ; J8 espaces et bibliotheques ; J2 le debogueur) ; 1.12.31 : + 7 ; 1.12.30 : + 8 ; 1.12.29 : + 3 ; 1.12.28 : + 6 ; 1.12.27 : + 8 ; 1.12.26 : + 6 ; 1.12.25 : + 3 ; 1.12.24 : + 6 ; 1.12.23 : + 1 ; 1.12.22 : + 1 ; 1.12.21 : + 2 ; 1.12.20 : + 7 ; 1.12.19 : + 13 ; 1.12.18 : + 7 ; 1.12.17 : + 6 ; 1.12.16 : + 7 ; 1.12.15 : + 2 ; 1.12.14 : + 5 ; 1.12.13 : + 8 ; 1.12.12 : + 8 ; 1.12.11 : + 4 ; 1.12.10 : + 6 ; 1.12.9 : + 6 ; 1.12.8 : + 5 ; 1.12.7 : + 10 ; 1.12.6 : + 5 ; 1.12.5 : + 7 ; 1.12.4 : + 4 ; 1.12.3 : + 7 ; 1.12.2 : + 5 ; 1.12.1 : + 4 ; 1.12.0 : + 7 ; 1.11.24 : + 3 ; 1.11.23 : + 4 ; 1.11.22 : + 5 ; 1.11.10 : + 6 ; 1.11.11 : + 2 ; 1.11.12 : + 1 ; 1.11.13 : + 5 ; 1.11.14 : + 3 ; 1.11.15 : + 3 ; 1.11.16 : + 5 ; 1.11.17 : + 5 ; 1.11.18 : + 8 ; 1.11.19 : + 5 ; 1.11.20 : + 3 ; 1.11.21 : + 4
               "notes : 1.10.0 a 22 lignes (19 cartes, 3 corrections), 1.9.0 en a 13 (12, 1), 169 en tout ("
                   + std::to_string(hn::all().size()) + ")");
         const auto step = [](std::string_view id) {
@@ -19949,7 +19954,7 @@ void centreAide111() {
     // Integration 1.11 (I111) : la 1.10.4 ajoute objet-vanne-3-voies (La bibliotheque d'objets) : 206.
     // 1.11.1 (T2, decision 107) : Programmer gagne variables-api (API. : les variables de l'automate) : 207.
     check(ix.count(hc::Chapter::Hmi) == 252, "centre : L'IHM a les 252 sujets des chapitres du guide hors Demarrer et l'automate (1.11.1 : variables-api ; 1.11.2 : paquets-symboles ; 1.11.23 : raccourcis-vue ; 1.12.16 : constantes-fonctions-vue ; 1.12.19 : rappels ; 1.12.24 : les registres, le reglage PID ; 1.12.27 : les nouveautes, sans les raccourcis ; 1.12.30 : le variateur de vitesse, la visionneuse de documents, regles-guides, langues-cote, archive-projet, page-web ; 1.13.0 lot J4 : tests-fonctions ; 1.13.0 lot J3 : donnees-scripts ; 1.13.0 lot J1 : objets-types ; 1.13.0 lot J6 : unites-mesure ; 1.13.0 lot J8 : biblio-espaces ; 1.14.0 lot M4 : enregistrements, objet-enregistreur, objet-lecteur-enregistrements ; 1.14.0 lot M3 : objet-coupe-son, objet-melangeur-de-volume ; 1.14.1 lot N4 : objet-calculatrice ; 1.14.1 lot N5 : objet-convertisseur-unites, objet-explorateur-fichiers ; 1.15.0 : assistant-ia-registre ; 1.16.0 : assistant-ia-integree ; 1.19.0 : assistant-ia-plan ; 1.20.0 : incidents ; 1.22.0 : assistant-ia-missions ; 1.23.1 : couleurs-semantiques ; 1.24.0 : bibliotheque-sons ; 1.25.0 : mise-en-page-rapports ; 1.26.0 : bibliotheque-images, bibliotheque-polices, editeur-polices, corbeille)");
-    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 97, "centre : 11 expressions, 97 notes (1.26.0)");
+    check(ix.count(hc::Chapter::Expressions) == 11 && ix.count(hc::Chapter::Notes) == 98, "centre : 11 expressions, 98 notes (1.26.1)");
     // Tranche 3 : les 11 types de T3 (hmi::exprguide::all(), depot-o), passes par in.expressions ; les
     // cles de la liste de secours sont les siennes (enumeration, pas enum).
     {
@@ -20011,10 +20016,10 @@ void centreAide111() {
         check(o, "page Raccourcis : Ctrl+Maj+O dessine en trois touches, repere 1.11");
 
         const auto n110 = hc::notesPage("1.10");
-        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 97
+        check(n110.version == "1.10.0" && n110.rows == 22 && n110.sections.size() == 7 && n110.versions.size() == 98
                   && !n110.summary.empty() && !n110.date.empty(),
               "page Notes : 1.10 -> 1.10.0, 22 lignes en 7 domaines, sa date et son resume");
-        check(hc::notesPage("").version == "1.26.0" && hc::notesPage("9.9").version == "1.26.0",   // 1.26.0 : la plus recente
+        check(hc::notesPage("").version == "1.26.1" && hc::notesPage("9.9").version == "1.26.1",   // 1.26.1 : la plus recente
               "page Notes : sans version (ou inconnue), la plus recente");
         const auto simu = hc::notesPage("1.10.0", "Simulation");
         check(simu.sections.size() == 1 && simu.rows == 4 && simu.domains.size() == 7,
@@ -20408,7 +20413,7 @@ void centreAide111() {
         // Les notes de version n'ont pas de tutoriel : ni la carte "Regarder le tutoriel" (hasTutorial, que
         // lit HelpCenterScreen::showTopic), ni la pastille dans l'arbre. Les autres pages speciales gardent
         // les leurs (T1 ecrit les tutoriels des raccourcis et de Signaler).
-        bool notesSans = ix.count(hc::Chapter::Notes) == 97;   // 1.11.3 a 1.26.0 : une version de plus
+        bool notesSans = ix.count(hc::Chapter::Notes) == 98;   // 1.11.3 a 1.26.1 : une version de plus
         for (const auto* t : ix.ofChapter(hc::Chapter::Notes)) notesSans = notesSans && !hc::hasTutorial(*t);
         const auto* raccourcis = ix.find("page-raccourcis");
         const auto* signaler = ix.find("page-signaler");
@@ -48279,6 +48284,328 @@ void corbeillePanneau1251() {
     fs::remove_all(dir, ec);
 }
 
+// =====================================================================================================================
+//  1.26.1 : LA CORBEILLE DU PROJET IHM - le client : << la corbeille ne fonctionne pas je supprime des choses ca
+//  n'apparait pas dedans (j'ai supprime une ressource, et une vue) >>. Une vue supprimee (ses objets avec elle), un
+//  symbole (sa popup avec lui), une ressource (ses octets) entrent dans la corbeille du projet (hmi/HmiTrash.hpp) ;
+//  Ctrl+Z de la suppression les en ressort ; Restaurer les rend (un nom pris : le premier libre, et dit) ; enregistrer
+//  et rouvrir la garde (ihm/supprimes/) ; la purge de plus de 7 jours ; les autres genres ; le volet. Un objet d'une vue
+//  n'y entre pas. HMI_TEST_CPR=1 : ces essais seuls.
+// =====================================================================================================================
+void corbeilleProjet1261() {
+    std::printf("== 1.26.1 : la Corbeille du projet IHM (vues, ressources, scripts, variables...) ==\n");
+    namespace fs = std::filesystem;
+    namespace cb = app::corbeille;
+    const fs::path dir = fs::temp_directory_path() / "hmi_corbeille_projet_1261";
+    std::error_code ec;
+    fs::remove_all(dir, ec);
+    fs::create_directories(dir, ec);
+    const std::string folder = dir.string();
+    auto doc = std::make_shared<Document>();
+    auto* savedStack = core::CommandGroupScope::stack();
+    auto stack = std::make_unique<core::CommandStack>();
+    core::CommandGroupScope::registerStack(stack.get());
+    const auto push = [&](core::CommandPtr c) { return c && static_cast<bool>(stack->push(std::move(c))); };
+    // ---- le projet : une vue de 3 objets, un symbole et sa popup, une ressource ----
+    View accueil = makeView(doc->project, "Vue_Accueil");
+    for (int i = 0; i < 3; ++i) (void)edit::add(doc->project, accueil, Kind::Text, 10 + 60 * i, 10);
+    const Id accueilId = accueil.id;
+    doc->project.views.push_back(accueil);
+    View pompe = makeView(doc->project, "Pompe");
+    pompe.role = "symbole";
+    const Id pompeId = pompe.id;
+    doc->project.views.push_back(pompe);
+    View reglages = makeView(doc->project, "Pompe_Reglages");
+    reglages.role = "popup";
+    reglages.ownerSymbol = pompeId;
+    const Id reglagesId = reglages.id;
+    doc->project.views.push_back(reglages);
+    Bytes png(5000);
+    for (std::size_t i = 0; i < png.size(); ++i) png[i] = static_cast<std::uint8_t>((i * 7 + 3) & 0xFF);
+    Resource logo;
+    logo.id = doc->project.allocate();
+    logo.name = "logo.png";
+    logo.format = "PNG";
+    logo.bytes = png.size();
+    logo.data = std::make_shared<const Bytes>(png);
+    const Id logoId = logo.id;
+    doc->project.assets.resources.push_back(logo);
+    check(static_cast<bool>(hmi::save(doc->project, folder)), "le projet enregistr\xC3\xA9 (sa ressource dans ihm/ressources/)");
+    // Les fichiers d'un dossier (recursif) dont le nom finit par `tail` : leur taille.
+    const auto filesEnding = [](const fs::path& root, const std::string& tail) {
+        std::vector<std::uintmax_t> out;
+        std::error_code e2;
+        for (fs::recursive_directory_iterator it(root, e2), end; !e2 && it != end; it.increment(e2)) {
+            const std::string n = it->path().filename().string();
+            if (it->is_regular_file() && n.size() >= tail.size() && n.compare(n.size() - tail.size(), tail.size(), tail) == 0)
+                out.push_back(it->file_size());
+        }
+        return out;
+    };
+    check(filesEnding(dir / "ihm" / "ressources", "logo.png").size() == 1, "logo.png dans ihm/ressources/");
+    // ---- la source de la Corbeille : le document de l'essai ----
+    const auto savedSources = cb::sources();
+    cb::registerSource(cb::kHmiSource, cb::hmiSource([&] { return doc; }, [&] { return folder; }));
+    const auto inBin = [&](const std::string& name) -> std::optional<cb::Entry> {
+        for (auto& e : cb::entries())
+            if (e.source == cb::kHmiSource && e.name == name) return e;
+        return std::nullopt;
+    };
+    const auto ihmCount = [&] {
+        std::size_t n = 0;
+        for (const auto& e : cb::entries()) n += e.source == cb::kHmiSource;
+        return n;
+    };
+    check(ihmCount() == 0 && doc->project.trash.empty(), "au d\xC3\xA9part : la corbeille du projet est vide");
+    // ---- 1. supprimer une vue : elle est dans la Corbeille (genre Vue), << Corbeille [N] >> suit tout de suite ----
+    const std::size_t before = cb::count();
+    check(push(app::hmiDeleteViewCommand(doc, accueilId)) && !doc->project.view(accueilId), "la vue Vue_Accueil supprim\xC3\xA9" "e");
+    auto e = inBin("Vue_Accueil");
+    check(e && e->kind == cb::Kind::View && !e->onDisk && e->origin == "IHM \xE2\x80\xBA Vues" && e->originFolder() == e->origin && e->deletedAt > 0
+              && e->bytes > 0,
+          "dans la Corbeille : genre Vue, origine << IHM > Vues >>, dat\xC3\xA9" "e, sa taille");
+    check(cb::count() == before + 1, "le compte de l'arbre suit tout de suite (" + std::to_string(cb::count()) + ")");
+    same_text(cb::kindLabel(cb::Kind::View, true), "Vues", "le dossier du volet : Vues");
+    check(cb::matches(*e, "accueil") && cb::matches(*e, "vue ihm"), "la recherche la trouve (son nom, son genre, son origine)");
+    // ---- 2. Ctrl+Z de la suppression : la vue revient et quitte la Corbeille ; Ctrl+Y : de nouveau dedans ----
+    check(stack->undo() && doc->project.view(accueilId) && doc->project.view(accueilId)->objects.size() == 3 && !inBin("Vue_Accueil")
+              && doc->project.trash.empty(),
+          "Ctrl+Z : la vue revient (ses 3 objets), la Corbeille ne l'a plus");
+    check(stack->redo() && !doc->project.view(accueilId) && inBin("Vue_Accueil"), "Ctrl+Y : supprim\xC3\xA9" "e de nouveau, dans la Corbeille");
+    // ---- 3. Restaurer depuis la Corbeille : la vue revient avec ses objets ; UN Ctrl+Z la remet dedans ----
+    e = inBin("Vue_Accueil");
+    check(e && cb::restore({*e}) == 1 && doc->project.view(accueilId) && doc->project.view(accueilId)->objects.size() == 3 && !inBin("Vue_Accueil"),
+          "Restaurer : la vue revient \xC3\xA0 sa place, avec ses 3 objets");
+    check(stack->undo() && !doc->project.view(accueilId) && inBin("Vue_Accueil"), "Ctrl+Z de la restauration : de nouveau dans la Corbeille");
+    check(stack->redo() && doc->project.view(accueilId) && !inBin("Vue_Accueil"), "Ctrl+Y : restaur\xC3\xA9" "e de nouveau");
+    // Un objet d'une vue n'y entre pas (Ctrl+Z suffit).
+    {
+        const auto n = doc->project.trash.size();
+        check(push(changeView(doc, accueilId, "Supprimer un objet", [](Project&, View& v) { v.objects.pop_back(); }))
+                  && doc->project.view(accueilId)->objects.size() == 2 && doc->project.trash.size() == n,
+              "un objet supprim\xC3\xA9 dans une vue : pas dans la Corbeille");
+        check(stack->undo() && doc->project.view(accueilId)->objects.size() == 3, "(Ctrl+Z le rend)");
+    }
+    // ---- 4. Restaurer quand le nom est pris entretemps : renommee, et dit ----
+    check(push(app::hmiDeleteViewCommand(doc, accueilId)), "Vue_Accueil supprim\xC3\xA9" "e encore");
+    check(push(changeProject(doc, "Nouvelle vue", [](Project& p) { p.views.push_back(makeView(p, "Vue_Accueil")); })), "une autre Vue_Accueil cr\xC3\xA9\xC3\xA9" "e");
+    {
+        std::vector<std::pair<std::string, std::string>> refused;
+        std::vector<cb::Entry> back;
+        e = inBin("Vue_Accueil");
+        check(e && cb::restore({*e}, &refused, &back) == 1 && refused.empty() && back.size() == 1
+                  && back.front().name == "Vue_Accueil \xE2\x86\x92 Vue_Accueil_2",
+              "un nom pris : << Vue_Accueil -> Vue_Accueil_2 >> (" + (back.empty() ? std::string("-") : back.front().name) + ")");
+        const auto* again = doc->project.viewByName("Vue_Accueil_2");
+        check(again && again->objects.size() == 3 && doc->project.viewByName("Vue_Accueil"), "les deux vues sont l\xC3\xA0, la rendue avec ses objets");
+    }
+    // ---- 5. un symbole emporte sa popup : un seul element ; restaure, elle le suit ----
+    check(push(app::hmiDeleteViewCommand(doc, pompeId)) && !doc->project.view(pompeId) && !doc->project.view(reglagesId), "le symbole Pompe et sa popup partent");
+    e = inBin("Pompe");
+    check(e && e->origin == "IHM \xE2\x80\xBA Symboles" && !inBin("Pompe_Reglages"), "un seul \xC3\xA9l\xC3\xA9ment : le symbole (sa popup avec lui)");
+    check(e && cb::restore({*e}) == 1 && doc->project.view(pompeId) && doc->project.view(reglagesId)
+              && doc->project.view(reglagesId)->ownerSymbol == pompeId,
+          "restaur\xC3\xA9 : le symbole et sa popup, toujours la sienne");
+    // ---- 6. une ressource, par son volet : ses octets dans la Corbeille ----
+    {
+        app::HmiResourcesPane pane("res1261", doc, [&](core::CommandPtr c) { (void)push(std::move(c)); });
+        pane.setBounds({0, 0, 1200, 700});
+        pane.layout();
+        check(pane.deleteResource(logoId) && !doc->project.resource(logoId), "Supprimer la ressource logo.png (le volet Ressources)");
+    }
+    e = inBin("logo.png");
+    check(e && e->kind == cb::Kind::Resource && e->origin == "IHM \xE2\x80\xBA Ressources" && e->bytes >= png.size(),
+          "dans la Corbeille : genre Ressource, sa taille (" + (e ? cb::sizeText(e->bytes) : std::string("-")) + ")");
+    // ---- 7. les autres genres : un geste, un element chacun ----
+    check(push(changeProject(doc, "Ajouter", [](Project& p) {
+              Script sc;
+              sc.id = p.allocate();
+              sc.name = "Init";
+              sc.event = "Demarrage";
+              sc.body = "x := 1;";
+              p.programs.scripts.push_back(sc);
+              Variable v;
+              v.id = p.allocate();
+              v.name = "Compteur";
+              p.programs.variables.push_back(v);
+              HmiType t;
+              t.id = p.allocate();
+              t.name = "T_Moteur";
+              p.programs.types.push_back(t);
+              AlarmDef a;
+              a.id = p.allocate();
+              a.name = "Niveau_Haut";
+              p.alarms.push_back(a);
+              Recipe r;
+              r.id = p.allocate();
+              r.name = "Lavage";
+              p.recipes.push_back(r);
+              Style s;
+              s.id = p.allocate();
+              s.name = "Titre_Rouge";
+              p.styles.push_back(s);
+              ExternalFile f;
+              f.id = p.allocate();
+              f.name = "Consignes";
+              f.path = "consignes.csv";
+              p.assets.files.push_back(f);
+              HmiFunction fn;
+              fn.id = p.allocate();
+              fn.name = "Moyenne";
+              fn.returnType = "REAL";
+              p.programs.functions.push_back(fn);
+          })),
+          "un script, une variable, un type, une alarme, une recette, un style, un fichier externe, une fonction");
+    const std::size_t trashBefore = doc->project.trash.size();
+    std::size_t trashed = 0;
+    check(push(deleteFromProject(doc, "Supprimer 8 \xC3\xA9l\xC3\xA9ments", [](Project& p) {
+              const auto named = [](const char* n) { return [n](const auto& x) { return x.name == n; }; };
+              std::erase_if(p.programs.scripts, named("Init"));
+              std::erase_if(p.programs.variables, named("Compteur"));
+              std::erase_if(p.programs.types, named("T_Moteur"));
+              std::erase_if(p.alarms, named("Niveau_Haut"));
+              std::erase_if(p.recipes, named("Lavage"));
+              std::erase_if(p.styles, named("Titre_Rouge"));
+              std::erase_if(p.assets.files, named("Consignes"));
+              std::erase_if(p.programs.functions, named("Moyenne"));
+          }, &trashed)) && trashed == 8 && doc->project.trash.size() == trashBefore + 8,
+          "UNE suppression, 8 \xC3\xA9l\xC3\xA9ments dans la Corbeille (" + std::to_string(trashed) + ")");
+    {
+        const std::vector<std::pair<std::string, cb::Kind>> want{{"Init", cb::Kind::Script},        {"Compteur", cb::Kind::Variable},
+                                                                 {"T_Moteur", cb::Kind::HmiType},   {"Niveau_Haut", cb::Kind::Alarm},
+                                                                 {"Lavage", cb::Kind::Recipe},      {"Titre_Rouge", cb::Kind::Style},
+                                                                 {"Consignes", cb::Kind::External}, {"Moyenne", cb::Kind::Function}};
+        bool all = true;
+        std::vector<cb::Entry> eight;
+        for (const auto& [name, kind] : want) {
+            const auto it = inBin(name);
+            all = all && it && it->kind == kind;
+            if (it) eight.push_back(*it);
+        }
+        check(all, "chacun sous son genre (Scripts g\xC3\xA9n\xC3\xA9raux, Variables IHM, Types IHM, Alarmes, Recettes, Styles, Fichiers externes, Fonctions IHM)");
+        check(cb::restore(eight) == 8 && doc->project.generalScript("Init") && doc->project.variable("Compteur") && doc->project.hmiTypeByName("T_Moteur")
+                  && doc->project.alarmByName("Niveau_Haut") && doc->project.recipeByName("Lavage") && doc->project.styleByName("Titre_Rouge")
+                  && doc->project.externalByName("Consignes") && doc->project.functionByName("Moyenne") && doc->project.trash.size() == trashBefore,
+              "Restaurer les 8 : chacun revient dans sa liste");
+        check(stack->undo() && !doc->project.generalScript("Init") && !doc->project.styleByName("Titre_Rouge") && doc->project.trash.size() == trashBefore + 8,
+              "UN Ctrl+Z les remet tous dans la Corbeille");
+        check(stack->undo() && doc->project.generalScript("Init") && doc->project.trash.size() == trashBefore,
+              "Ctrl+Z de la suppression : revenus, et hors de la Corbeille");
+        check(stack->redo() && doc->project.trash.size() == trashBefore + 8, "Ctrl+Y : de nouveau dans la Corbeille");
+    }
+    // L'arbre du projet (supprimer des noeuds) : la meme Corbeille, et la question le dit.
+    {
+        check(push(changeProject(doc, "Ajouter", [](Project& p) {
+                  Variable v;
+                  v.id = p.allocate();
+                  v.name = "Par_Arbre";
+                  p.programs.variables.push_back(v);
+              })),
+              "une variable Par_Arbre");
+        app::TreeDeletion plan;
+        app::TreeDeletion::Item it;
+        it.what = app::TreeDeletion::What::HmiVariable;
+        it.name = "Par_Arbre";
+        it.one = "variable IHM";
+        it.many = "variables IHM";
+        it.id = doc->project.variable("Par_Arbre") ? doc->project.variable("Par_Arbre")->id : 0;
+        plan.items.push_back(it);
+        app::TreeDeletionHosts hosts;
+        hosts.hmi = doc;
+        hosts.apply = [&](core::CommandPtr c) { (void)push(std::move(c)); };
+        const auto done = app::performTreeDeletion(plan, hosts);
+        const auto got = inBin("Par_Arbre");
+        check(done.done == 1 && !doc->project.variable("Par_Arbre") && got && got->kind == cb::Kind::Variable && got->origin == "IHM \xE2\x80\xBA Variables IHM",
+              "l'arbre du projet : la variable supprim\xC3\xA9" "e est dans la Corbeille (Variables IHM)");
+        check(plan.message().find("Corbeille") != std::string::npos, "la question le dit : " + plan.message());
+        check(stack->undo() && doc->project.variable("Par_Arbre") && !inBin("Par_Arbre"), "Ctrl+Z : la variable revient, hors de la Corbeille");
+    }
+    // ---- 8. le volet : un dossier par genre, ceux du projet IHM d'abord ----
+    {
+        const auto* other = doc->project.viewByName("Vue_Accueil");
+        check(other && push(app::hmiDeleteViewCommand(doc, other->id)) && inBin("Vue_Accueil"), "l'autre Vue_Accueil supprim\xC3\xA9" "e : dans la Corbeille");
+        app::HmiCorbeillePane pane("cor1261");
+        pane.setBounds({0, 0, 1400, 800});
+        pane.layout();
+        const auto groups = pane.shownGroups();
+        check(!groups.empty() && groups.front().first == "Vues" && groups.front().second == 1, "le volet : << Vues (1) >> en t\xC3\xAAte");
+        const bool resources = std::any_of(groups.begin(), groups.end(), [](const auto& g) { return g.first == "Ressources" && g.second == 1; });
+        check(resources, "et << Ressources (1) >>");
+        check(pane.choose({"logo.png"}) && pane.chosen().size() == 1 && !pane.chosen().front().onDisk && !pane.tools().isEnabled(app::HmiCorbeillePane::AReveal),
+              "Ouvrir dans l'explorateur : pas pour un \xC3\xA9l\xC3\xA9ment du projet (il est dans le projet lui-m\xC3\xAAme)");
+    }
+    // ---- 9. enregistrer, rouvrir : la corbeille est gardee (ihm/supprimes/), les octets identiques ----
+    const std::size_t kept = doc->project.trash.size();
+    check(static_cast<bool>(hmi::save(doc->project, folder)), "enregistrer le projet");
+    {
+        bool ok = false;
+        std::ifstream in(dir / "ihm" / "supprimes" / "corbeille.txt", std::ios::binary);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        ok = ss.str().find("nom=\"logo.png\"") != std::string::npos && ss.str().find("genre=vue") != std::string::npos;
+        std::ifstream idx(dir / "ihm" / "ihm.txt", std::ios::binary);
+        std::stringstream si;
+        si << idx.rdbuf();
+        check(ok && si.str().find("supprimes") == std::string::npos && si.str().find("supprime=") == std::string::npos,
+              "ihm/supprimes/corbeille.txt la d\xC3\xA9" "crit ; ihm.txt n'en dit rien (une version d'avant ouvre le projet sans la perdre)");
+        const auto moved = filesEnding(dir / "ihm" / "supprimes", "logo.png");
+        check(filesEnding(dir / "ihm" / "ressources", "logo.png").empty() && filesEnding(dir / "ihm" / "corbeille", "logo.png").empty()
+                  && moved.size() == 1 && moved.front() == png.size(),
+              "le fichier de logo.png est pass\xC3\xA9 de ihm/ressources/ \xC3\xA0 ihm/supprimes/ (d'un renommage, sans copie)");
+    }
+    auto loaded = hmi::load(folder);
+    check(loaded && loaded->trash.size() == kept, "rouvert : la Corbeille a ses " + std::to_string(kept) + " \xC3\xA9l\xC3\xA9ments");
+    if (loaded) {
+        bool same = true;
+        for (std::size_t i = 0; i < kept && i < loaded->trash.size(); ++i)
+            same = same && loaded->trash[i].id == doc->project.trash[i].id && loaded->trash[i].name == doc->project.trash[i].name
+                && loaded->trash[i].kind == doc->project.trash[i].kind && loaded->trash[i].deletedAt == doc->project.trash[i].deletedAt
+                && loaded->trash[i].content;
+        check(same && loaded->nextId >= doc->project.nextId, "les m\xC3\xAAmes (identifiant, nom, genre, date, contenu) ; le compteur au-dessus");
+        // Le projet rouvert, sur une pile neuve : restaurer la ressource rend ses octets, a l'identique.
+        auto reopened = std::make_shared<Document>();
+        reopened->project = std::move(*loaded);
+        doc = reopened;
+        stack = std::make_unique<core::CommandStack>();
+        core::CommandGroupScope::registerStack(stack.get());
+        e = inBin("logo.png");
+        const auto* r = (e && cb::restore({*e}) == 1) ? doc->project.resourceByName("logo.png") : nullptr;
+        check(r && r->data && *r->data == png && r->id == logoId, "restaur\xC3\xA9" "e apr\xC3\xA8s r\xC3\xA9ouverture : logo.png, ses 5000 octets identiques");
+        e = inBin("Init");
+        check(e && cb::restore({*e}) == 1 && doc->project.generalScript("Init") && doc->project.generalScript("Init")->body.find("x := 1;") != std::string::npos,
+              "le script Init aussi, son code avec lui");
+        check(stack->undo() && stack->undo() && inBin("logo.png") && inBin("Init"), "deux Ctrl+Z : les deux dans la Corbeille de nouveau");
+    }
+    // ---- 10. la purge : plus de 7 jours, a l'ouverture (et sur le disque) ; Supprimer definitivement ----
+    {
+        const auto now = static_cast<std::int64_t>(std::time(nullptr));
+        for (auto& t : doc->project.trash)
+            if (t.name == "Lavage") t.deletedAt = now - 8 * 86400;
+        cb::touch();
+        check(cb::purgeOld(cb::kHmiSource, cb::kKeepDays, now) == 1 && !inBin("Lavage") && inBin("Compteur"),
+              "purgeOld : la recette supprim\xC3\xA9" "e il y a 8 jours part ; celles d'aujourd'hui restent");
+        std::ifstream in(dir / "ihm" / "supprimes" / "corbeille.txt", std::ios::binary);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        check(ss.str().find("Lavage") == std::string::npos && ss.str().find("Compteur") != std::string::npos,
+              "et du disque tout de suite (sans attendre d'enregistrer)");
+        e = inBin("Compteur");
+        check(e && cb::purge({*e}) == 1 && !inBin("Compteur"), "Supprimer d\xC3\xA9" "finitivement : parti");
+        // A l'ouverture d'un projet : sa corbeille purgee a la premiere lecture.
+        auto old = std::make_shared<Document>();
+        old->project = doc->project;
+        for (auto& t : old->project.trash) t.deletedAt = now - 30 * 86400;
+        const auto had = old->project.trash.size();
+        doc = old;
+        check(had > 0 && ihmCount() == 0 && doc->project.trash.empty(), "un projet ouvert : ce qui y est depuis plus de 7 jours part tout seul");
+    }
+    cb::unregisterSource(cb::kHmiSource);
+    for (const auto& k : cb::sources())
+        if (std::find(savedSources.begin(), savedSources.end(), k) == savedSources.end()) cb::unregisterSource(k);
+    core::CommandGroupScope::registerStack(savedStack);
+    fs::remove_all(dir, ec);
+}
+
 
 // =====================================================================================================================
 //  1.26.0 : LA BIBLIOTHEQUE DE POLICES ET LA POLICE PARTOUT (l'editeur) - le volet (une ligne par famille, ecrite dans sa
@@ -48591,6 +48918,107 @@ void polices1260() {
     fl::setUserFolder({});
 }
 
+// 1.26.1 : << comment acceder aux couleurs semantiques dans les scripts/proprietes ?? >> et << ajouter tous les @ qui
+// correspondent avec les constantes de vues/scripts qui ont le meme type ; dans Constante les constantes globales
+// (couleurs semantiques, constantes globales de programmation generale) ; dans Symbole/vue les constantes de vue >>.
+// Et les listes riches de l'inspecteur (Police, Style nomme).
+void couleursConstantes1261() {
+    std::printf("== 1.26.1 : @ et les constantes (aide a la saisie, selecteur de valeur), les listes riches ==\n");
+    auto doc = std::make_shared<Document>();
+    View v = makeView(doc->project, "Vue_Station");
+    Declaration seuil;
+    seuil.id = doc->project.allocate();
+    seuil.kind = DeclKind::Constant;
+    seuil.name = "SEUIL";
+    seuil.type = "INT";
+    seuil.value = "12";
+    v.constants.push_back(seuil);
+    const Id vid = v.id;
+    doc->project.views.push_back(v);
+    Script init;
+    init.id = doc->project.allocate();
+    init.name = "Init";
+    init.lang = ScriptLang::ST;
+    init.event = "Demarrage";
+    Declaration maxp;
+    maxp.id = doc->project.allocate();
+    maxp.kind = DeclKind::Constant;
+    maxp.name = "MAX_P";
+    maxp.type = "REAL";
+    maxp.value = "4.5";
+    maxp.visibility = Visibility::Public;
+    init.decls.push_back(maxp);
+    doc->project.programs.scripts.push_back(init);
+    const Project& p = doc->project;
+    const auto has = [](const std::vector<app::assist::Item>& items, const std::string& text) -> const app::assist::Item* {
+        for (const auto& it : items)
+            if (it.text == text) return &it;
+        return nullptr;
+    };
+    // ---- @ dans du code : les couleurs semantiques (ecrites '@Alarme') et les constantes
+    auto items = app::assist::suggest(p, nullptr, "x := @", "", true);
+    const auto* alarme = has(items, "@Alarme");
+    check(alarme && alarme->insert == "'@Alarme'" && alarme->detail.rfind("STRING", 0) == 0 && alarme->detail.find("#F57C00") != std::string::npos,
+          "@ : @Alarme, s'ecrit '@Alarme', son type et sa couleur dans le detail");
+    const auto* mx = has(items, "Init.MAX_P");
+    check(mx && mx->insert == "Init.MAX_P" && mx->detail.rfind("REAL", 0) == 0 && mx->extend == 1,
+          "@ : la constante publique d'un script general (Init.MAX_P, REAL), le @ remplace");
+    items = app::assist::suggest(p, nullptr, "x := @", "Ala", true);
+    check(has(items, "@Alarme") && has(items, "@Alarme critique") && !has(items, "@Marche"), "@Ala : les couleurs qui commencent ainsi");
+    // ---- dans une chaine ouverte : '@Al -> le nom se complete, sans apostrophes de plus
+    items = app::assist::suggest(p, nullptr, "x := SEL(b, '@", "Al", true);
+    alarme = has(items, "@Alarme");
+    check(alarme && alarme->insert.empty() && !has(items, "Init.MAX_P"), "'@Al : les couleurs seules, le nom se complete dans la chaine");
+    // ---- le selecteur de valeur : Constante (les globales), Symbole / vue (les constantes de la vue), par type
+    using S = ui::PropertyGrid::LegendStyle;
+    menu::MenuManager mm{menu::MenuFactory{}};
+    const auto open = [&](const std::string& expected) -> app::HmiValuePicker* {
+        app::HmiValuePicker::Spec spec;
+        spec.field = "Couleur";
+        spec.expected = expected;
+        spec.doc = doc;
+        spec.view = vid;
+        mm.ShowDialog(std::make_unique<app::HmiValuePicker>(spec), [](const menu::DialogResult&) {});
+        mm.applyPending();
+        return dynamic_cast<app::HmiValuePicker*>(mm.top());
+    };
+    auto* pk = open("COULEUR");
+    check(pk != nullptr, "le selecteur s'ouvre (une case couleur)");
+    if (!pk) return;
+    pk->setSource(S::Constant);
+    auto paths = pk->shownPaths();
+    const auto shown = [&](const std::string& path) { return std::find(paths.begin(), paths.end(), path) != paths.end(); };
+    check(shown("@Alarme") && shown("@Marche") && !shown("Init.MAX_P"), "Constante, une case couleur : les couleurs semantiques (pas MAX_P, un REAL)");
+    check(pk->pick("@Alarme") && pk->result() == "@Alarme" && !pk->resultFx(), "@Alarme va dans Resultat sans fx");
+    pk->finish(false);
+    mm.applyPending();
+    pk = open("REAL");
+    if (!pk) return;
+    pk->setSource(S::Constant);
+    paths = pk->shownPaths();
+    check(shown("Init.MAX_P") && !shown("@Alarme"), "Constante, une case REAL : MAX_P (du script Init), pas les couleurs");
+    check(pk->pick("Init.MAX_P") && pk->result() == "Init.MAX_P" && pk->resultFx(), "Init.MAX_P va dans Resultat en fx");
+    pk->setSource(S::Local);
+    pk->setTypeFilter(false);
+    pk->setSearch("SEUIL");
+    paths = pk->shownPaths();
+    check(shown("SEUIL"), "Symbole / vue : la constante SEUIL de la vue");
+    pk->finish(false);
+    mm.applyPending();
+    // ---- les listes riches de l'inspecteur : Police (sections, familles, styles) et Style nomme
+    const auto fonts = app::hmiFontChoiceItems(p);
+    bool themeSection = false, libRow = false;
+    for (const auto& it : fonts) {
+        themeSection = themeSection || it.group == "Th\xC3\xA8me";
+        libRow = libRow || (it.row == "Liberation Sans" && it.variant == "Gras" && it.label == "Liberation Sans Gras");
+    }
+    check(!fonts.empty() && themeSection && (libRow || hmi::fontlib::builtIn().empty()),
+          "Police : la section Theme, Liberation Sans Gras en pastille de sa famille");
+    const auto styles = app::hmiStyleChoiceItems(p, nullptr);
+    check(styles.size() > 1 && styles[0].label == "(aucun)" && styles[0].value.empty() && styles[1].group.rfind("Fournis", 0) == 0 && styles[1].paint,
+          "Style nomme : (aucun), puis les fournis avec leur apercu");
+}
+
 int main(int argc, char** argv) {
     // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
     if (argc > 3) gFonts1260 = fs1260::path(argv[3]);
@@ -48616,6 +49044,12 @@ int main(int argc, char** argv) {
         arbreMacrosVersions1251();
         cheminsRestants1251();
         supprimerRestants1251();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
+    // 1.26.1 : HMI_TEST_CPR=1 - la Corbeille du projet IHM (vues, ressources... supprimees, Restaurer, la purge), seule.
+    if (const char* only = std::getenv("HMI_TEST_CPR"); only && *only == '1') {
+        corbeilleProjet1261();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
         return failures == 0 ? 0 : 1;
     }
@@ -49171,6 +49605,7 @@ int main(int argc, char** argv) {
     stylesParType1230();                    // 1.23.0 : l'onglet Styles par type d'objet
     arbreStyles1231();                      // 1.23.1 : IHM > Styles deplie (styles, couleurs semantiques, cadenas et personne)
     paletteSemantique1231();                // 1.23.1 : la palette propose les couleurs semantiques (@Nom)
+    couleursConstantes1261();               // 1.26.1 : @ et les constantes (aide a la saisie, selecteur), les listes riches
     couleursSemantiques1231();              // 1.23.1 : IHM > Styles > Couleurs semantiques (la liste, la fiche, les gestes)
     menusStyles1231();                      // 1.23.1 : les menus du clic droit des Styles, les dossiers des choix
     bibliothequeSons1240();                 // 1.24.0 : la bibliotheque de sons (natifs, Mes sons, importer)
@@ -49188,6 +49623,7 @@ int main(int argc, char** argv) {
     cheminsRestants1251();                  // 1.25.1 : le chemin d'un message, les fichiers d'une archive
     supprimerRestants1251();                // 1.25.1 : l'outil Modbus (requetes, jeux), plusieurs equipements
     corbeillePanneau1251();                 // 1.25.1 : la Corbeille (par genre, la recherche, Restaurer, Vider)
+    corbeilleProjet1261();                  // 1.26.1 : la Corbeille du projet IHM (vues, ressources... supprimees)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

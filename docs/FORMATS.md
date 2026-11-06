@@ -131,6 +131,7 @@ Règles d'écriture :
 | Historique de la séance (annuler/rétablir, Ctrl+H) | en mémoire | `src/core/Command.hpp` |
 | Historique des modifications des objets IHM (100 entrées par objet, signées) | `ihm/historique-edition/<id>.txt` | `src/hmi/HmiEditHistory.hpp` |
 | Corbeille de l'IHM (vues et ressources retirées de l'index) | `ihm/corbeille/` | `src/hmi/HmiStore.hpp` |
+| Corbeille du projet IHM (1.26.1 : ce que l'utilisateur supprime — vues, ressources et leurs octets, scripts, fonctions, variables, types, alarmes, recettes, styles, fichiers externes ; montrée par Projet › Corbeille, purgée après 7 jours) | `ihm/supprimes/corbeille.txt` (une ligne `element` par élément, `fin`) et `ihm/supprimes/NNNN/` (le contenu : un petit projet, `ihm.txt`, `vues/`, `ressources/`…) ; hors de `ihm.txt` (format inchangé), hors des versions | `src/hmi/HmiTrash.hpp`, `src/hmi/HmiStore.hpp` |
 | Journaux d'exploitation de l'IHM (alarmes, mesures, audit) | `ihm/historique/` | moteur `src/hmi/HmiRuntime*` |
 
 ---

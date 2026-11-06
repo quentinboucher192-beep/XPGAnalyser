@@ -48,6 +48,8 @@
 #include "../hmi/HmiAssets.hpp"   // 1.14.1 (lot N6) : le dossier de Mes images (la bibliotheque d'images)
 #include "../hmi/HmiSoundLibrary.hpp"   // 1.24.0 : le dossier de Mes sons (la bibliotheque de sons)
 #include "../hmi/HmiFontLibrary.hpp"    // 1.26.0 : le dossier de Mes polices, celui des polices fournies
+#include "hmi/HmiImages.hpp"             // 1.26.1 : la police du logiciel, chaque choix ecrit dans sa police
+#include "../platform/FontAtlas.hpp"     // 1.26.1 : gfx::setUiFontOverride
 #include "ai/AiPaths.hpp"           // 1.14.2 (Assistant IA) : le dossier IA/ de l'utilisateur
 #include "ai/AiMemoryDialog.hpp"    // 1.14.2 (Assistant IA, IA2) : Memoire et apprentissage de l'IA
 #include "ai/AiAssistant.hpp"       // 1.20.0 : l'IA choisie analyse les incidents
@@ -166,6 +168,57 @@ std::optional<ui::InputEvent> translate(const SDL_Event& e);
 namespace app {
 
 namespace {
+// 1.26.1 : LA POLICE DU LOGICIEL - le fichier d'une police de la bibliotheque (une fournie, une de Mes polices) ; vide :
+// celle d'origine (un id inconnu, un fichier disparu aussi).
+std::string uiFontFileOf(const std::string& id) {
+    if (id.empty()) return {};
+    const hmi::fontlib::Font* f = hmi::fontlib::findFont(id);
+    if (!f || f->file.empty()) return {};
+    std::error_code ec;
+    const auto path = std::filesystem::u8path(f->file);
+    return std::filesystem::is_regular_file(path, ec) ? f->file : std::string{};
+}
+
+// Les choix de la galerie des themes : << D'origine >>, puis les polices de la bibliotheque, rangees par dossier, une
+// ligne par famille (ses styles en pastilles), chacune ecrite dans sa police.
+std::vector<ui::DropDown::Item> uiFontChoices() {
+    std::vector<ui::DropDown::Item> out;
+    ui::DropDown::Item stock;
+    stock.label = "D'origine";
+    stock.value = "";
+    stock.keywords = "origine defaut normale";
+    out.push_back(std::move(stock));
+    for (const auto& fam : hmi::fontlib::families())
+        for (const auto& f : fam.fonts) {
+            ui::DropDown::Item it;
+            it.label = f.fullName();
+            it.value = f.id;
+            it.group = fam.mine() ? std::string(hmi::fontlib::kMine) : fam.category;
+            it.row = fam.fonts.size() > 1 ? fam.label : std::string{};
+            it.variant = fam.fonts.size() > 1 ? (f.style.empty() ? std::string("Normal") : f.style) : std::string{};
+            it.keywords = f.words + " " + f.description;
+            const hmi::BlobPtr data = f.data;
+            const std::string format = f.format;
+            it.paint = [data, format](const ui::PaintContext& ctx, gfx::Rect r, gfx::Color ink, std::string_view text) {
+                const float px = std::max(10.f, std::min(17.f, r.h * 0.66f));
+                if (data && !text.empty()) {
+                    hmi::Resource res;
+                    res.format = format.empty() ? std::string("TTF") : format;
+                    res.data = data;
+                    const auto img = HmiImageCache::instance().fontText(ctx.r, res, text, px);
+                    if (img.valid()) {
+                        const float h = static_cast<float>(img.height);
+                        ctx.r.drawImage(img.tex, {r.x, r.y + (r.h - h) * 0.5f, static_cast<float>(img.width), h}, 0.f, false, false, ink);
+                        return;
+                    }
+                }
+                ctx.r.drawText({r.x, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f}, text, ctx.theme.font.ui, ink);
+            };
+            out.push_back(std::move(it));
+        }
+    return out;
+}
+
 // LOT 19 : LES LIBELLES DE L'AUTOMATE, EN FRANCAIS DANS L'HISTORIQUE. Les
 // commandes du programme se nomment en anglais ("add variable 'X'") : les
 // tests les lisent ainsi, on ne les change pas ; l'historique les traduit.
@@ -314,6 +367,9 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         (void)app::ai::memory::purgeTrash();
     }
     // ---- fin Lot API 8 ----
+    // 1.26.1 : la police du logiciel retenue - avant le premier dessin (le renderer la prend a sa premiere taille).
+    a->uiFont_ = a->settings_.getString("view.uiFont", "");
+    gfx::setUiFontOverride(uiFontFileOf(a->uiFont_));
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);
     a->setTheme(a->options_.themeName);
     if (auto r = a->initPlatform(a->options_); !r) return core::Err<core::Error>(r.error());
@@ -2585,6 +2641,15 @@ void App::goHome() {
         });
 }
 
+void App::setUiFont(const std::string& id) {
+    const std::string file = uiFontFileOf(id);
+    uiFont_ = file.empty() ? std::string{} : id;
+    gfx::setUiFontOverride(file);
+    settings_.set("view.uiFont", uiFont_);
+    if (renderer_) renderer_->resetFonts();      // les atlas refaits a la prochaine trame, dans la nouvelle police
+    bus_.publish(ThemeChanged{theme_.name});     // les mises en page se refont (les largeurs des textes changent)
+}
+
 void App::setTheme(std::string_view name) {
     // Le repli est le CLAIR, comme le defaut. Un nom inconnu - un fichier de
     // preferences d'une version precedente, une faute de frappe - doit ramener
@@ -2673,6 +2738,11 @@ void App::showThemeGallery() {
     };
     h.folder = [] { return ui::UserThemes::folder(); };
     // ---- fin Lot API 8 ----
+    // 1.26.1 : la police du logiciel - celle d'origine, puis les polices de la bibliotheque (fournies, Mes polices),
+    // une ligne par famille ecrite dans sa police, ses styles en pastilles.
+    h.uiFont = [this] { return uiFont_; };
+    h.setUiFont = [this](const std::string& id) { setUiFont(id); };
+    h.uiFonts = [] { return uiFontChoices(); };
     menus_->ShowDialog(std::make_unique<ThemeGalleryDialog>(std::move(h)), [this](const menu::DialogResult& r) {
         // Garder : la preference est deja posee par setTheme ; on l'ecrit tout de suite.
         if (r.accepted()) settings_.save();

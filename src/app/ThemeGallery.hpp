@@ -27,6 +27,7 @@
 #include "../core/Signal.hpp"
 #include "../menu/IMenu.hpp"
 #include "../ui/Theme.hpp"
+#include "../ui/widgets/Controls.hpp"   // 1.26.1 : la liste des polices du logiciel (ui::DropDown)
 
 #include <functional>
 #include <memory>
@@ -45,6 +46,13 @@ public:
         // ---- Lot API 8 : themes ----
         std::function<void(const ui::Theme&)>   preview;   // un theme pas encore enregistre (l'editeur), sans le retenir
         std::function<std::string()>            folder;    // ou s'ouvre l'explorateur (Exporter, Importer)
+        // ---- 1.26.1 : LA POLICE DU LOGICIEL (<< fait la police du logiciel >>) ----
+        // Celle des menus, des arbres, des tableaux - pas celle des IHM (leurs vues gardent leurs polices). Les choix
+        // (value : l'id de la police ; "" : celle d'origine), l'actuelle, et l'appliquer tout de suite (Garder la retient,
+        // Revenir remet celle d'avant). Nuls : pas de case.
+        std::function<std::vector<ui::DropDown::Item>()> uiFonts;
+        std::function<std::string()>                     uiFont;
+        std::function<void(const std::string&)>          setUiFont;
     };
 
     explicit ThemeGalleryDialog(Hosts hosts);
@@ -73,6 +81,9 @@ public:
     // Modifier : un des tiens s'ouvre dans l'editeur ; un integre est d'abord
     // duplique sous `copyName` (vide : "<libelle> (perso)").
     bool edit(const std::string& name, const std::string& copyName = {});
+    // 1.26.1 : la police du logiciel par son id ou son libelle ("" ou << D'origine >> : celle d'origine) - scripts, tests.
+    bool chooseUiFont(const std::string& idOrLabel);
+    [[nodiscard]] std::string uiFont() const { return hosts_.uiFont ? hosts_.uiFont() : std::string{}; }
     [[nodiscard]] const std::string& message() const noexcept { return message_; }
     [[nodiscard]] bool               messageIsError() const noexcept { return messageError_; }
 
@@ -107,6 +118,8 @@ private:
 
     Hosts                 hosts_;
     std::string           original_;
+    std::string           originalFont_;          // 1.26.1 : la police du logiciel a l'ouverture (Revenir)
+    ui::DropDown*         fontBox_{nullptr};
     std::string           shown_;
     ui::Button*           back_{nullptr};
     ui::Button*           keep_{nullptr};

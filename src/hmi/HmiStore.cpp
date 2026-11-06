@@ -1686,6 +1686,157 @@ std::vector<ProjectFile> serializeProject(const Project& p) {
     return files;
 }
 
+// ---- 1.26.1 : LA CORBEILLE DU PROJET SUR LE DISQUE (ihm/supprimes/) ----
+//  supprimes/corbeille.txt : une ligne par element (son identifiant, son genre, son nom, d'ou il vient, quand il est
+//  parti, sa taille, son dossier), "fin" en dernier ; supprimes/0812/ : son contenu, un petit projet (ihm.txt, vues/,
+//  ressources/...) ecrit par serializeProject et relu par parseProject - le meme format que le projet, ses montees de
+//  version comprises. Hors de ihm.txt : une IHM Studio d'avant ne le lit pas, et ne l'efface pas non plus.
+namespace {
+
+constexpr const char* kTrashIndex = "corbeille.txt";
+
+std::string trashSub(Id id) {
+    char buf[24];
+    std::snprintf(buf, sizeof buf, "%04llu", static_cast<unsigned long long>(id));
+    return buf;
+}
+
+// `written` : les fichiers du projet que cet enregistrement vient d'ecrire (une ressource partie qui n'y est plus :
+// son fichier passe dans la corbeille d'un renommage, sans copie).
+core::Status saveTrash(const Project& p, const fs::path& root, const std::set<std::string>& written) {
+    const fs::path dir = root / std::string(kTrashFolder);
+    std::error_code ec;
+    if (p.trash.empty()) {   // vide (tout restaure, ou supprime pour de bon) : rien ne reste
+        if (fs::exists(dir, ec)) fs::remove_all(dir, ec);
+        return core::ok();
+    }
+    std::set<std::string> kept;
+    std::string index = "# IHM Studio - corbeille du projet IHM (format 1)\n";
+    for (const auto& t : p.trash) {
+        const std::string sub = trashSub(t.id);
+        kept.insert(sub);
+        if (t.content)
+            for (const auto& f : serializeProject(*t.content)) {
+                if (!f.data) continue;
+                const fs::path target = dir / sub / f.path;
+                const bool heavy = f.path.rfind("ressources/", 0) == 0 || f.path.rfind("modeles/", 0) == 0;
+                if (heavy && !fs::exists(target, ec) && !written.count(f.path)) {
+                    const fs::path was = root / f.path;   // le fichier qu'elle avait dans le projet
+                    std::error_code e2;
+                    if (fs::is_regular_file(was, e2) && sameContent(was, *f.data)) {
+                        fs::create_directories(target.parent_path(), e2);
+                        fs::rename(was, target, e2);
+                        if (!e2) continue;
+                    }
+                }
+                if (sameContent(target, *f.data)) continue;   // deja la : un element de la corbeille ne change pas
+                if (auto st = writeBytes(target, *f.data); !st) return st;
+            }
+        index += "element" + fieldInt("id", static_cast<long long>(t.id)) + fieldBare("genre", t.kind.empty() ? "-" : t.kind)
+               + field("nom", t.name) + field("origine", t.origin) + fieldInt("supprime", static_cast<long long>(t.deletedAt))
+               + fieldInt("octets", static_cast<long long>(t.bytes)) + field("dossier", sub)
+               + (t.note.empty() ? std::string{} : field("note", t.note)) + "\n";
+    }
+    index += "fin\n";
+    if (auto st = writeAtomically(dir / kTrashIndex, index); !st) return st;
+    // Ce que l'index ne cite plus (restaure, supprime pour de bon) part.
+    for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+        std::error_code e2;
+        if (it->is_directory(e2) && !kept.count(it->path().filename().string())) fs::remove_all(it->path(), e2);
+    }
+    return core::ok();
+}
+
+void loadTrash(Project& p, const fs::path& root, LoadReport* report) {
+    const fs::path dir = root / std::string(kTrashFolder);
+    bool ok = false;
+    const std::string index = readAll(dir / kTrashIndex, ok);
+    if (!ok) return;   // un projet d'avant, ou une corbeille vide
+    std::size_t pos = 0, lineNo = 0;
+    while (pos < index.size()) {
+        const std::size_t eol = index.find('\n', pos);
+        std::string_view line(index.data() + pos, (eol == std::string::npos ? index.size() : eol) - pos);
+        pos = eol == std::string::npos ? index.size() : eol + 1;
+        ++lineNo;
+        if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+        if (line.empty() || line.front() == '#') continue;
+        Record r;
+        std::string error;
+        if (!parseRecord(line, r, error)) {
+            if (report) report->warnings.push_back("corbeille du projet, ligne " + std::to_string(lineNo) + " : " + error);
+            continue;
+        }
+        if (r.word != "element") continue;   // "fin", ou un mot d'une version plus recente
+        TrashItem t;
+        t.id = static_cast<Id>(toInt(r.get("id"), 0));
+        if (t.id == kNoId) continue;
+        t.kind = toStr(r.get("genre"));
+        t.name = toStr(r.get("nom"));
+        t.origin = toStr(r.get("origine"));
+        t.deletedAt = toInt(r.get("supprime"), 0);
+        t.bytes = static_cast<std::uint64_t>(std::max(0LL, toInt(r.get("octets"), 0)));
+        t.note = toStr(r.get("note"));
+        std::string sub = toStr(r.get("dossier"));
+        if (sub.empty() || sub.find("..") != std::string::npos || sub.find_first_of("/\\") != std::string::npos) sub = trashSub(t.id);
+        const fs::path at = dir / sub;
+        auto content = parseProject([&at](const std::string& path, std::string& text) {
+            bool got = false;
+            text = readAll(at / path, got);
+            return got;
+        });
+        if (content) {
+            p.nextId = std::max(p.nextId, content->nextId);   // ses identifiants ne reviennent jamais
+            p.nextId = std::max(p.nextId, t.id + 1);
+            t.content = std::make_shared<const Project>(std::move(*content));
+            t.note.clear();
+        } else {
+            // Illisible (un format plus recent, un fichier coupe) : il reste dans la corbeille, et sur le disque.
+            p.nextId = std::max(p.nextId, t.id + 1);
+            t.note = "illisible : " + (content.error().context.empty() ? content.error().message() : content.error().context);
+            if (report) report->warnings.push_back("corbeille du projet : " + t.name + " " + t.note);
+        }
+        p.trash.push_back(std::move(t));
+    }
+    std::stable_sort(p.trash.begin(), p.trash.end(), [](const TrashItem& a, const TrashItem& b) { return a.id < b.id; });
+}
+
+} // namespace
+
+core::Status forgetSaved(const std::string& projectFolder, Id item) {
+    if (projectFolder.empty() || item == kNoId) return core::ok();
+    const fs::path dir = fs::path(projectFolder) / "ihm" / std::string(kTrashFolder);
+    bool ok = false;
+    const std::string index = readAll(dir / kTrashIndex, ok);
+    if (!ok) return core::ok();
+    std::string kept;
+    bool any = false, removed = false;
+    std::size_t pos = 0;
+    while (pos < index.size()) {
+        const std::size_t eol = index.find('\n', pos);
+        const std::string line = index.substr(pos, (eol == std::string::npos ? index.size() : eol) - pos);
+        pos = eol == std::string::npos ? index.size() : eol + 1;
+        Record r;
+        std::string error;
+        if (!line.empty() && line.front() != '#' && parseRecord(line, r, error) && r.word == "element") {
+            if (static_cast<Id>(toInt(r.get("id"), 0)) == item) {
+                removed = true;
+                continue;
+            }
+            any = true;
+        }
+        kept += line + "\n";
+    }
+    std::error_code ec;
+    if (!any) {
+        fs::remove_all(dir, ec);
+        return core::ok();
+    }
+    if (removed)
+        if (auto st = writeAtomically(dir / kTrashIndex, kept); !st) return st;
+    fs::remove_all(dir / trashSub(item), ec);
+    return core::ok();
+}
+
 core::Status save(const Project& project, const std::string& projectFolder) {
     const fs::path root = fs::path(projectFolder) / "ihm";
     const fs::path views = root / "vues";
@@ -1715,6 +1866,8 @@ core::Status save(const Project& project, const std::string& projectFolder) {
     }
     if (!index) return core::fail(core::ErrorCode::InvalidArgument, "index IHM absent");
     if (auto st = writeAtomically(root / kIndexFile, std::string(index->data->begin(), index->data->end())); !st) return st;
+    // 1.26.1 : la corbeille du projet (ihm/supprimes/), avant que ce que l'index ne cite plus parte.
+    if (auto st = saveTrash(p, root, written); !st) return st;
 
     // Ce que l'index ne designe plus part a la corbeille, jamais a la poubelle.
     for (const char* sub : {"vues", "scripts", "ressources", "fonctions", "modeles"}) {
@@ -2790,6 +2943,7 @@ core::Result<Project> load(const std::string& projectFolder, LoadReport* report)
         content = readAll(root / path, ok);
         return ok;
     }, report);
+    if (p) loadTrash(*p, root, report);   // 1.26.1 : la corbeille du projet (ihm/supprimes/)
     // 1.13.0 (lot J8) : chaque bibliotheque reliee, cherchee (relatif au projet, dossiers partages, absolu), lue et
     // comparee a la version demandee - toujours re-resolue a l'ouverture (le cache ne sert que si le fichier manque).
     if (p) biblio::resolve(*p, projectFolder);

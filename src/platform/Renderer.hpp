@@ -114,6 +114,26 @@ public:
         (void)rgba; w = h = 0;
         return false;
     }
+    //  1.26.1 : LA POLICE DU LOGICIEL se choisit (Reglages > Theme, gfx::setUiFontOverride). Ce qui ne doit pas la
+    //  suivre - le texte d'une IHM, sa police << Sans >> : la meme sur chaque poste - se dessine avec la police
+    //  d'origine : useStockFace(true) le temps de le dessiner (StockFaceScope). resetFonts : la police du logiciel a
+    //  change, les atlas se refont au prochain texte.
+    virtual void useStockFace(bool on) { (void)on; }
+    [[nodiscard]] virtual bool usingStockFace() const { return false; }
+    virtual void resetFonts() {}
+};
+
+// Le temps d'une portee : la police d'origine (voir IRenderer::useStockFace).
+class StockFaceScope {
+public:
+    explicit StockFaceScope(IRenderer& r) : r_(r), was_(r.usingStockFace()) { r_.useStockFace(true); }
+    ~StockFaceScope() { r_.useStockFace(was_); }
+    StockFaceScope(const StockFaceScope&) = delete;
+    StockFaceScope& operator=(const StockFaceScope&) = delete;
+
+private:
+    IRenderer& r_;
+    bool       was_;
 };
 
 // --- SDL3 backend ----------------------------------------------------------
@@ -148,6 +168,9 @@ public:
     [[nodiscard]] TextureId createImage(const std::uint8_t*, int, int) override;
     void releaseImage(TextureId) override;
     void drawImage(TextureId, const Rect&, float, bool, bool, Color) override;
+    void useStockFace(bool on) override;
+    [[nodiscard]] bool usingStockFace() const override;
+    void resetFonts() override;
 
 private:
     struct Impl;                          // SDL_Renderer*, glyph atlas, clip stack

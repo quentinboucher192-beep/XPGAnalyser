@@ -1,4 +1,5 @@
 #include "HmiDesignPanes.hpp"
+#include "HmiChoiceItems.hpp"   // 1.26.1 : la liste Police riche
 
 #include "HmiIcons.hpp"
 #include "HmiPainter.hpp"
@@ -1548,6 +1549,7 @@ void HmiStylesPane::rebuildProperties() {
                 one.enumValues.clear();
                 for (const auto& ch : hmi::fontlib::fieldChoices(p)) one.enumValues.push_back(ch.label);
                 one.value = hmi::fontlib::fieldLabel(p, pr.value);
+                one.choices = hmiFontChoiceItems(p);   // 1.26.1 : la liste riche (sections, familles, recherche)
             }
             look.properties.push_back(std::move(one));
         }
@@ -2024,7 +2026,7 @@ Id HmiStylesPane::duplicateStyle(Id style) {
 bool HmiStylesPane::removeStyle(Id style) {
     std::string name;
     std::size_t freed = 0;
-    auto cmd = hmi::changeProject(doc_, "Retirer le style", [&](hmi::Project& p) {
+    auto cmd = hmi::deleteFromProject(doc_, "Retirer le style", [&](hmi::Project& p) {   // 1.26.1 : la corbeille
         const hmi::Style* s = styleById(p, style);
         if (!s) return;
         name = s->name;

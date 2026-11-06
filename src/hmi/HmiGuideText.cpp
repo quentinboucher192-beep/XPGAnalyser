@@ -3631,6 +3631,16 @@ const std::vector<Topic>& topics() {
                          "elle se dessine dans la couleur (mais Renommer, Retirer et G\xC3\xA9n\xC3\xA9rer "
                          "ne lisent pas les scripts).", {}},
              {K::Bullet, "Une couleur peut en citer une autre (`@Eau froide` vaut `@Eau`).", {}},
+             {K::Heading, "Les trouver sans les conna\xC3\xAEtre par c\xC5\x93ur", {}, "1.26.1"},
+             {K::Bullet, "**Tape `@`** dans une formule (une case en fx) ou dans un script : la liste "
+                         "propose les couleurs s\xC3\xA9mantiques, celles du projet puis les fournies, "
+                         "chacune avec sa couleur et sa description. Le choix s'\xC3\xA9" "crit "
+                         "**`'@Alarme'`**, entre apostrophes (un texte constant). Dans un texte "
+                         "d\xC3\xA9j\xC3\xA0 ouvert (`'@Al`), le nom se compl\xC3\xA8te ; \xC2\xAB Alarme "
+                         "critique \xC2\xBB aussi (le nom peut avoir des espaces).", {}, "1.26.1"},
+             {K::Bullet, "**La palette** d'une case couleur les montre **avec leur nom** (\xC2\xAB "
+                         "\xE2\x97\x8F Alarme \xC2\xBB, \xC2\xAB \xE2\x97\x8F Marche \xC2\xBB\xE2\x80\xA6), "
+                         "sur autant de lignes qu'il faut ; le survol dit aussi leur code.", {}, "1.26.1"},
              {K::Heading, "Les couleurs fournies", {}},
              {K::Paragraph, "Douze couleurs **fournies**, verrouill\xC3\xA9" "es (un cadenas), suivent "
                          "l'ISA-101 - le gris pour le normal, la couleur pour l'anomalie :", {}},
@@ -3678,7 +3688,7 @@ const std::vector<Topic>& topics() {
                          "case y est une couleur illisible.", {}},
          },
          {"styles-nommes", "proprietes", "verifier"},
-         {"couleur s\xC3\xA9mantique", "couleurs s\xC3\xA9mantiques", "@Nom", "@Alarme", "@Marche", "@Fond", "constante de couleur", "couleur globale", "palette", "charte"},
+         {"couleur s\xC3\xA9mantique", "couleurs s\xC3\xA9mantiques", "@Nom", "@Alarme", "@Marche", "@Fond", "constante de couleur", "couleur globale", "palette", "charte", "couleur dans un script", "couleur dans une formule", "acc\xC3\xA9" "der aux couleurs"},
          {"styles"},
          {},
          "",
@@ -19209,7 +19219,9 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Les scripts g\xC3\xA9n\xC3\xA9raux", {}},
              {K::Paragraph, "Programmation g\xC3\xA9n\xC3\xA9rale \xE2\x80\xBA **Scripts** : **ST**, **C** ou "
                          "**C++**. Le dialogue demande le nom, le d\xC3\xA9" "clencheur, la p\xC3\xA9riode "
-                         "ou l'expression surveill\xC3\xA9" "e, et une description.", {}},
+                         "ou l'expression surveill\xC3\xA9" "e, et une description. Les variables IHM ne "
+                         "sont plus list\xC3\xA9" "es sous les scripts : elles ont leur onglet, **Variables "
+                         "IHM**, \xC3\xA0 c\xC3\xB4t\xC3\xA9 (1.26.1).", {}},
              {K::Table, "D\xC3\xA9" "clencheur\tLe script s'ex\xC3\xA9" "cute\nD\xC3\xA9marrage\tau "
                          "lancement de l'IHM\nCyclique\ttoutes les N millisecondes (p\xC3\xA9riode propre "
                          "\xC3\xA0 chaque script)\nSur changement\tquand l'expression surveill\xC3\xA9" "e "
@@ -19396,7 +19408,7 @@ const std::vector<Topic>& topics() {
          {"variables-locales", "fonctions", "reference", "aide-saisie", "verifier", "dossiers", "parametres-popups", "erreurs-scripts", "fonctions-internes", "map-iterateurs", "dialecte-ihm", "operateurs", "deboguer-scripts"},
          {},
          {"scripts", "scripts-vue"},
-         {{"PNG_067_programmation_generale_scripts_st.png", "La programmation g\xC3\xA9n\xC3\xA9rale : scripts, propri\xC3\xA9t\xC3\xA9s, variables IHM et l'\xC3\xA9" "diteur."}, {"PNG_069_scripts_de_vue_erreur_ligne.png", "Les scripts d'une vue : une erreur marqu\xC3\xA9" "e \xC3\xA0 sa ligne."}},
+         {{"PNG_067_programmation_generale_scripts_st.png", "La programmation g\xC3\xA9n\xC3\xA9rale : les scripts, leurs propri\xC3\xA9t\xC3\xA9s et l'\xC3\xA9" "diteur (les variables IHM ont leur onglet, Variables IHM)."}, {"PNG_069_scripts_de_vue_erreur_ligne.png", "Les scripts d'une vue : une erreur marqu\xC3\xA9" "e \xC3\xA0 sa ligne."}},
          "",
          {},
          "",
@@ -23109,9 +23121,22 @@ const std::vector<Topic>& topics() {
                          "une police sur un objet** : il la prend (import\xC3\xA9" "e si besoin, un seul "
                          "Ctrl+Z) ; un double-clic : la s\xC3\xA9lection.", {}},
              {K::Bullet, "La case **Police** de chaque objet propose : **Police par d\xC3\xA9" "faut**, "
-                         "**Police des valeurs**, les polices du projet, puis la biblioth\xC3\xA8que "
-                         "(\xC2\xAB Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement \xE2\x80\xBA Carlito "
-                         "\xC2\xBB) : la choisir l'importe et la r\xC3\xA8gle d'un geste.", {}},
+                         "**Police des valeurs**, les polices du projet, puis la biblioth\xC3\xA8que : en "
+                         "choisir une l'importe et la r\xC3\xA8gle d'un geste.", {}},
+             {K::Bullet, "**La liste de la case Police** est rang\xC3\xA9" "e pour ne pas s'y perdre : des "
+                         "**sections** (Th\xC3\xA8me, Du projet, Mes polices, Biblioth\xC3\xA8que "
+                         "\xE2\x80\xBA Sans empattement\xE2\x80\xA6) qu'un clic sur leur titre replie, **une "
+                         "ligne par famille \xC3\xA9" "crite dans sa police**, ses styles en **pastilles** "
+                         "\xC3\xA0 droite (Normal, Gras, Italique : un clic sur la pastille prend ce style, "
+                         "un clic sur la ligne le style Normal ; au clavier, les fl\xC3\xA8" "ches gauche et "
+                         "droite), et ce qui emploie chaque police du projet (\xC2\xAB 3 objets \xC2\xBB). "
+                         "Au-del\xC3\xA0 de douze choix, **Chercher\xE2\x80\xA6** en t\xC3\xAAte de la liste "
+                         ": tape \xC2\xAB gras \xC2\xBB, \xC2\xAB mono \xC2\xBB, \xC2\xAB carl \xC2\xBB - la "
+                         "liste se r\xC3\xA9" "duit, \xC3\x89" "chap vide la recherche.", {}, "1.26.1"},
+             {K::Bullet, "La m\xC3\xAAme liste pour la case **Style nomm\xC3\xA9** : (aucun), les styles "
+                         "**du projet** (par dossier), puis les **fournis**, chacun avec son "
+                         "**aper\xC3\xA7u** (son remplissage, son contour, \xC2\xAB Aa \xC2\xBB dans sa "
+                         "couleur de texte) et ses objets.", {}},
              {K::Bullet, "Les **styles** ont leur police, de la m\xC3\xAAme fa\xC3\xA7on.", {}},
              {K::Bullet, "Le **th\xC3\xA8me** : Configuration \xE2\x80\xBA Affichage, **Police par "
                          "d\xC3\xA9" "faut** et **Police des valeurs**. Tout objet sur \xC2\xAB Police par "
@@ -23119,9 +23144,34 @@ const std::vector<Topic>& topics() {
                          "la biblioth\xC3\xA8que (boutons, voyants, afficheurs\xE2\x80\xA6) arrivent sur "
                          "\xC2\xAB Police par d\xC3\xA9" "faut \xC2\xBB. Vides : les polices de l'IHM, comme "
                          "avant.", {}},
+             {K::Heading, "La police en formule (fx)", {}, "1.26.1"},
+             {K::Paragraph, "La case **Police** d'un objet accepte une **formule**, comme les couleurs : "
+                         "`=SEL(Defaut_P1, 'Carlito Gras', 'Police par d\xC3\xA9" "faut')`. Le nom qu'elle "
+                         "rend est cherch\xC3\xA9 sans casse ni accents :", {}, "1.26.1"},
+             {K::Table, "Ce que la formule \xC3\xA9" "crit\tLa police dessin\xC3\xA9" "e\n`'Police par "
+                         "d\xC3\xA9" "faut'`, `'Sans'` (ou rien)\tla police par d\xC3\xA9" "faut du "
+                         "th\xC3\xA8me\n`'Police des valeurs'`, `'Mono'`\tla police des "
+                         "valeurs\n`'Carlito-Bold.ttf'`, `'carlito-bold'`\tla ressource de ce nom (avec ou "
+                         "sans extension)\n`'Carlito Gras'`\tla police du projet qui porte ce "
+                         "nom\n`'Carlito'`\tla famille : son style Normal d'abord", {}, "1.26.1"},
+             {K::Bullet, "**G\xC3\xA9n\xC3\xA9rer** v\xC3\xA9rifie chaque nom \xC3\xA9" "crit entre "
+                         "apostrophes : une police de la **biblioth\xC3\xA8que pas encore "
+                         "import\xC3\xA9" "e** (le poste n'aura que les polices du projet), ou un nom "
+                         "qu'aucune police du projet ne porte, est signal\xC3\xA9. Un nom calcul\xC3\xA9 "
+                         "(`Nom_Police`) ne se v\xC3\xA9rifie qu'en marche.", {}, "1.26.1"},
+             {K::Bullet, "Un nom inconnu en marche : la police par d\xC3\xA9" "faut, comme une case vide.", {}, "1.26.1"},
+             {K::Heading, "La police du logiciel", {}},
+             {K::Paragraph, "Affichage \xE2\x80\xBA **Th\xC3\xA8me\xE2\x80\xA6**, en bas : **Police du "
+                         "logiciel**. Celle des menus, des arbres, des tableaux et des fen\xC3\xAAtres : "
+                         "**D'origine**, ou une police de la biblioth\xC3\xA8que (les fournies, Mes "
+                         "polices), chacune \xC3\xA9" "crite dans sa police. Elle s'applique **tout de "
+                         "suite** ; **Garder** la retient pour les prochains lancements, **Revenir** remet "
+                         "celle d'avant.", {}},
+             {K::Warning, "Les **IHM gardent leurs polices** : une vue se dessine pareil sur tous les postes, "
+                         "quelle que soit la police du logiciel.", {}},
          },
          {"editeur-polices", "ressources", "styles-nommes", "objets"},
-         {"police", "polices", "TTF", "OTF", "TrueType", "biblioth\xC3\xA8que de polices", "Mes polices", "police par d\xC3\xA9" "faut", "police des valeurs", "Liberation", "DejaVu", "Carlito", "Caladea", "JetBrains Mono", "Arial", "Calibri", "Times", "Courier", "Cambria", "aper\xC3\xA7u d'une police"},
+         {"police", "polices", "TTF", "OTF", "TrueType", "biblioth\xC3\xA8que de polices", "Mes polices", "police par d\xC3\xA9" "faut", "police des valeurs", "Liberation", "DejaVu", "Carlito", "Caladea", "JetBrains Mono", "Arial", "Calibri", "Times", "Courier", "Cambria", "aper\xC3\xA7u d'une police", "police du logiciel", "police de l'interface", "police des menus", "police en formule", "police fx", "choisir une police", "liste des polices"},
          {"polices"},
          {},
          "",
@@ -23199,8 +23249,9 @@ const std::vector<Topic>& topics() {
          {}, "1.26.0"},
         // ---- Ressources et donnees / corbeille
         {"corbeille", "La Corbeille", "Ressources et donn\xC3\xA9" "es",
-         "Ce qui a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9 sur le disque (enregistrements, incidents, versions, "
-         "macros, l'Assistant IA), rang\xC3\xA9 par genre, o\xC3\xB9 l'on cherche ; Restaurer, Supprimer "
+         "Ce qui a \xC3\xA9t\xC3\xA9 supprim\xC3\xA9 - du projet IHM (vues, ressources, scripts, "
+         "variables\xE2\x80\xA6) et sur le disque (enregistrements, incidents, versions, macros, l'Assistant "
+         "IA) -, rang\xC3\xA9 par genre, o\xC3\xB9 l'on cherche ; Restaurer, Supprimer "
          "d\xC3\xA9" "finitivement, Vider.",
          {
              {K::Heading, "L'ouvrir", {}},
@@ -23208,7 +23259,10 @@ const std::vector<Topic>& topics() {
                          "l'ouvre ; le clic droit propose aussi **Vider la corbeille\xE2\x80\xA6**. Ou le "
                          "menu **Projet \xE2\x80\xBA Corbeille\xE2\x80\xA6**.", {}},
              {K::Heading, "Ce qu'elle montre", {}},
-             {K::Paragraph, "Un dossier par genre, avec son nombre : **Enregistrements**, **Incidents**, "
+             {K::Paragraph, "Un dossier par genre, avec son nombre : d'abord ce qui vient du projet IHM - "
+                         "**Vues**, **Ressources**, **Fichiers externes**, **Scripts "
+                         "g\xC3\xA9n\xC3\xA9raux**, **Fonctions IHM**, **Variables IHM**, **Types IHM**, "
+                         "**Alarmes**, **Recettes**, **Styles** -, puis **Enregistrements**, **Incidents**, "
                          "**Versions**, **Macros**, **Conversations IA**, **Pi\xC3\xA8" "ces jointes IA**, "
                          "**Connaissances et souvenirs IA**. Les colonnes : Nom, Supprim\xC3\xA9 le, Origine "
                          "(un chemin : le clic droit l'ouvre dans l'explorateur), Taille.", {}},
@@ -23223,11 +23277,22 @@ const std::vector<Topic>& topics() {
              {K::Bullet, "Les \xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s il y a plus de 7 jours partent "
                          "\xC3\xA0 l'ouverture suivante (du projet, ou de l'application pour l'Assistant IA) "
                          "; les macros restent jusqu'\xC3\xA0 Supprimer d\xC3\xA9" "finitivement.", {}},
-             {K::Warning, "Les vues, les objets, les variables et le reste du projet supprim\xC3\xA9s se "
-                         "rendent par **Ctrl+Z** (l'historique) : ils ne sont pas dans la Corbeille.", {}},
+             {K::Bullet, "**Ce qu'on supprime du projet IHM** (une vue et ses objets, un symbole et ses "
+                         "popups, une ressource et ses octets, un fichier externe, un script, une fonction, "
+                         "une variable, un type, une alarme, une recette, un style) y entre tout de suite, "
+                         "m\xC3\xAAme avant d'enregistrer ; **Ctrl+Z** de la suppression l'en ressort, "
+                         "Ctrl+Y l'y remet. **Restaurer** le remet dans sa liste et dans son dossier ; un "
+                         "nom repris entre-temps : le premier libre (Vue_Accueil_2), et la Corbeille le dit.", {}, "1.26.1"},
+             {K::Bullet, "La Corbeille du projet s'enregistre avec lui (le dossier `ihm/supprimes/`) et se "
+                         "retrouve \xC3\xA0 la r\xC3\xA9ouverture ; une version plus ancienne d'IHM Studio "
+                         "ouvre toujours le projet.", {}},
+             {K::Warning, "Les **objets d'une vue** supprim\xC3\xA9s se rendent par Ctrl+Z (l'historique) : "
+                         "ils ne vont pas dans la Corbeille. De m\xC3\xAAme les scripts et fonctions propres "
+                         "\xC3\xA0 une vue, les utilisateurs, les couleurs s\xC3\xA9mantiques, les "
+                         "\xC3\xA9quipements.", {}},
          },
          {"supprimer-plusieurs", "historique", "versions", "chemins"},
-         {"corbeille", "restaurer", "supprimer d\xC3\xA9" "finitivement", "vider la corbeille", "\xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s", "r\xC3\xA9" "cup\xC3\xA9rer", "purge"},
+         {"corbeille", "restaurer", "supprimer d\xC3\xA9" "finitivement", "vider la corbeille", "\xC3\xA9l\xC3\xA9ments supprim\xC3\xA9s", "r\xC3\xA9" "cup\xC3\xA9rer", "purge", "vue supprim\xC3\xA9" "e", "ressource supprim\xC3\xA9" "e", "r\xC3\xA9" "cup\xC3\xA9rer une vue"},
          {},
          {},
          "",

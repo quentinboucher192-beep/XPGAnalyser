@@ -4,7 +4,10 @@
 #include "Corbeille.hpp"
 
 #include "ai/AiPaths.hpp"                 // IA/corbeille (des fonctions en ligne : rien a lier)
+#include "../hmi/HmiCommands.hpp"         // 1.26.1 : le projet IHM ouvert (sa corbeille, ses commandes)
 #include "../hmi/HmiGuide.hpp"            // guide::fold : sans casse ni accents
+#include "../hmi/HmiStore.hpp"            // 1.26.1 : forgetSaved (supprimer pour de bon, sur le disque aussi)
+#include "../hmi/HmiTrash.hpp"            // 1.26.1 : la corbeille du projet IHM
 #include "../hmi/HmiRecording.hpp"        // le dossier des enregistrements (et des incidents)
 #include "../hmi/HmiVersions.hpp"         // versions/corbeille
 #include "../project/SharedLibrary.hpp"   // libs/Macros/_corbeille
@@ -163,6 +166,16 @@ constexpr std::string_view kPending = "en attente";   // app/ai/AiIncident.hpp :
 
 std::string kindLabel(Kind k, bool plural) {
     switch (k) {
+        case Kind::View: return plural ? "Vues" : "Vue";
+        case Kind::Resource: return plural ? "Ressources" : "Ressource";
+        case Kind::External: return plural ? "Fichiers externes" : "Fichier externe";
+        case Kind::Script: return plural ? "Scripts g\xC3\xA9n\xC3\xA9raux" : "Script g\xC3\xA9n\xC3\xA9ral";
+        case Kind::Function: return plural ? "Fonctions IHM" : "Fonction IHM";
+        case Kind::Variable: return plural ? "Variables IHM" : "Variable IHM";
+        case Kind::HmiType: return plural ? "Types IHM" : "Type IHM";
+        case Kind::Alarm: return plural ? "Alarmes" : "Alarme";
+        case Kind::Recipe: return plural ? "Recettes" : "Recette";
+        case Kind::Style: return plural ? "Styles" : "Style";
         case Kind::Recording: return plural ? "Enregistrements" : "Enregistrement";
         case Kind::Incident: return plural ? "Incidents" : "Incident";
         case Kind::Version: return plural ? "Versions" : "Version";
@@ -176,7 +189,7 @@ std::string kindLabel(Kind k, bool plural) {
 }
 
 std::string Entry::originFolder() const {
-    if (kind == Kind::Version) return origin;   // versions/ lui-meme
+    if (kind == Kind::Version || !onDisk) return origin;   // versions/ lui-meme ; 1.26.1 : la liste du projet IHM
     const fs::path p = P(origin);
     return p.has_parent_path() ? U(p.parent_path()) : origin;
 }
@@ -209,7 +222,13 @@ std::vector<Entry> entries() {
     return out;
 }
 
-std::uint64_t revision() { return revisionRef(); }
+std::uint64_t revision() {
+    // 1.26.1 : et ce que les sources disent d'elles-memes (une suppression dans le projet IHM, sans geste d'ici).
+    std::uint64_t r = revisionRef();
+    for (const auto& [key, src] : registry())
+        if (src.stamp) r = r * 1099511628211ull ^ src.stamp();
+    return r;
+}
 void touch() { ++revisionRef(); }
 
 std::size_t count() {
@@ -217,15 +236,16 @@ std::size_t count() {
     static std::size_t n = 0;
     static auto at = std::chrono::steady_clock::time_point{};
     const auto now = std::chrono::steady_clock::now();
-    if (seen != revisionRef() || now - at > std::chrono::seconds(2)) {
-        seen = revisionRef();
+    if (const auto rev = revision(); seen != rev || now - at > std::chrono::seconds(2)) {
+        seen = rev;
         at = now;
         n = entries().size();
     }
     return n;
 }
 
-std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::string, std::string>>* refused) {
+std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::string, std::string>>* refused,
+                    std::vector<Entry>* restored) {
     auto done = std::make_shared<std::vector<Entry>>();
     std::vector<std::string> touched;
     for (const auto& item : items) {
@@ -258,7 +278,9 @@ std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::
             },
             [done]() -> core::Status {   // Ctrl+Z : de nouveau dans la corbeille
                 std::string said;
-                for (auto& e : *done) {
+                // 1.26.1 : a rebours (le dernier rendu repart le premier) - le projet IHM rejoue ses commandes en ordre.
+                for (auto back = done->rbegin(); back != done->rend(); ++back) {
+                    auto& e = *back;
                     const auto it = registry().find(e.source);
                     std::string why;
                     if (it == registry().end() || !it->second.retrash || !it->second.retrash(e, &why))
@@ -271,6 +293,7 @@ std::size_t restore(const std::vector<Entry>& items, std::vector<std::pair<std::
         (void)core::trash::apply(std::move(cmd));
     }
     changedAll(touched);
+    if (restored) *restored = *done;
     return done->size();
 }
 
@@ -553,6 +576,152 @@ Source macroSource(std::string libraryRoot) {
     s.purge = [root, status](const Entry& e, std::string* why) {
         project::SharedLibrary lib(root);
         return status(lib.purgeMacro(e.handle), why);
+    };
+    return s;
+}
+
+// ================================================================ 1.26.1 : le projet IHM ==
+namespace {
+
+static_assert(static_cast<int>(Kind::View) == static_cast<int>(hmi::bin::Kind::View)
+                  && static_cast<int>(Kind::Style) == static_cast<int>(hmi::bin::Kind::Style),
+              "les genres du projet IHM, dans le meme ordre");
+
+Kind kindOfItem(const hmi::TrashItem& t) {
+    if (const auto k = hmi::bin::kindOf(t.kind)) return static_cast<Kind>(static_cast<int>(*k));
+    return Kind::View;   // un genre d'une version plus recente : avec les vues
+}
+
+// Les restaurations faites, par leur jeton (Entry::handle) : Ctrl+Y rejoue la meme commande, Ctrl+Z l'annule - le
+// projet revient exactement ou il etait (le nom donne, les identifiants). Gardees ici : le volet reinscrit la source.
+std::map<std::string, std::shared_ptr<core::ICommand>>& restoredCommands() {
+    static std::map<std::string, std::shared_ptr<core::ICommand>> m;
+    return m;
+}
+std::uint64_t& restoredSerial() {
+    static std::uint64_t n = 0;
+    return n;
+}
+// Le document dont la corbeille a ete purgee (une fois, a la premiere lecture : son ouverture).
+std::weak_ptr<hmi::Document>& purgedDoc() {
+    static std::weak_ptr<hmi::Document> d;
+    return d;
+}
+
+std::uint64_t mixed(std::uint64_t x) {   // splitmix64 : deux ensembles differents, deux empreintes differentes
+    x += 0x9E3779B97F4A7C15ull;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+    return x ^ (x >> 31);
+}
+
+std::string statusText(const core::Status& st) {
+    if (st) return {};
+    return st.error().context.empty() ? st.error().message() : st.error().context;
+}
+
+} // namespace
+
+Source hmiSource(std::function<std::shared_ptr<hmi::Document>()> docOf, std::function<std::string()> folderOf) {
+    const auto doc = [docOf]() -> std::shared_ptr<hmi::Document> { return docOf ? docOf() : nullptr; };
+    const auto folder = [folderOf]() -> std::string { return folderOf ? folderOf() : std::string{}; };
+    Source s;
+    s.list = [doc, folder] {
+        std::vector<Entry> out;
+        const auto d = doc();
+        if (!d) return out;
+        // A l'ouverture du projet : ce qui y est depuis plus de kKeepDays jours part pour de bon (comme le reste).
+        if (purgedDoc().lock() != d) {
+            purgedDoc() = d;
+            for (const auto id : hmi::bin::older(d->project, kKeepDays)) {
+                (void)hmi::bin::forget(d->project, id);
+                (void)hmi::forgetSaved(folder(), id);
+            }
+        }
+        for (const auto& t : d->project.trash) {
+            Entry e;
+            e.kind = kindOfItem(t);
+            e.name = t.name;
+            e.origin = t.origin;
+            e.trashed = "ihm:" + std::to_string(t.id);
+            e.handle = std::to_string(t.id);
+            e.deletedAt = t.deletedAt;
+            e.bytes = t.bytes;
+            e.onDisk = false;
+            out.push_back(std::move(e));
+        }
+        return out;
+    };
+    s.restore = [doc](Entry& e, std::string* why) {
+        const auto d = doc();
+        if (!d) {
+            if (why) *why = "le projet IHM n'est pas ouvert";
+            return false;
+        }
+        if (const auto c = restoredCommands().find(e.handle); c != restoredCommands().end()) {   // Ctrl+Y
+            if (const auto* pc = dynamic_cast<const hmi::ProjectCommand*>(c->second.get()))
+                for (const auto& t : pc->untrashed())
+                    if (!hmi::bin::find(d->project, t.id)) {
+                        if (why) *why = "supprim\xC3\xA9 d\xC3\xA9" "finitivement entre-temps";
+                        return false;
+                    }
+            if (const auto st = c->second->execute(); !st) {
+                if (why) *why = statusText(st);
+                return false;
+            }
+            e.trashed.clear();
+            return true;
+        }
+        const auto id = static_cast<hmi::Id>(std::strtoull(e.handle.c_str(), nullptr, 10));
+        std::string shown;
+        auto cmd = hmi::restoreFromTrash(d, id, &shown, why);
+        if (!cmd) return false;
+        if (const auto st = cmd->execute(); !st) {
+            if (why) *why = statusText(st);
+            return false;
+        }
+        const std::string token = "r" + std::to_string(++restoredSerial());
+        restoredCommands()[token] = std::shared_ptr<core::ICommand>(std::move(cmd));
+        e.handle = token;
+        if (!shown.empty()) e.name = shown;   // "Vue_Accueil -> Vue_Accueil_2" : un nom deja pris
+        e.trashed.clear();
+        return true;
+    };
+    s.retrash = [](Entry& e, std::string* why) {   // Ctrl+Z d'une restauration
+        const auto c = restoredCommands().find(e.handle);
+        if (c == restoredCommands().end()) {
+            if (why) *why = "sa restauration est introuvable";
+            return false;
+        }
+        if (const auto st = c->second->undo(); !st) {
+            if (why) *why = statusText(st);
+            return false;
+        }
+        if (const auto* pc = dynamic_cast<const hmi::ProjectCommand*>(c->second.get()); pc && !pc->untrashed().empty())
+            e.trashed = "ihm:" + std::to_string(pc->untrashed().front().id);
+        return true;
+    };
+    s.purge = [doc, folder](const Entry& e, std::string* why) {
+        const auto d = doc();
+        if (!d) {
+            if (why) *why = "le projet IHM n'est pas ouvert";
+            return false;
+        }
+        const auto id = static_cast<hmi::Id>(std::strtoull(e.handle.c_str(), nullptr, 10));
+        if (!hmi::bin::forget(d->project, id)) {
+            if (why) *why = "il n'est plus dans la corbeille";
+            return false;
+        }
+        // Sur le disque aussi, tout de suite : sans retour, meme sans enregistrer.
+        if (const auto st = hmi::forgetSaved(folder(), id); !st && why) *why = statusText(st);
+        return true;
+    };
+    s.stamp = [doc]() -> std::uint64_t {
+        const auto d = doc();
+        if (!d) return 0;
+        std::uint64_t h = mixed(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(d.get())) ^ d->project.trash.size());
+        for (const auto& t : d->project.trash) h += mixed(t.id);
+        return h;
     };
     return s;
 }

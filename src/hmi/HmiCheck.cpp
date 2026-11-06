@@ -2,6 +2,7 @@
 #include "../core/Edition.hpp"   // 1.12.0 : IHM Studio - pas d'espace API.
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiStyles.hpp"          // 1.23.0 : les styles fournis, les styles par type
+#include "HmiFontLibrary.hpp"     // 1.26.1 : la police en formule
 #include "HmiSemanticColors.hpp"  // 1.23.1 : les couleurs semantiques (@Nom)
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
@@ -3819,6 +3820,17 @@ void checkLot12(const Project& p, const NameExists& plc, std::vector<Issue>& out
                     issue(S::Info, "namedStyle", "style choisi par une formule sans nom de style \xC3\xA9" "crit ('ISA-101') : il ne se v\xC3\xA9rifie qu'en marche");
                 for (const auto& n : names)
                     if (!styles::find(p, n)) issue(S::Warning, "namedStyle", "la formule du style nomm\xC3\xA9 cite '" + n + "' : style introuvable (IHM > Styles)");
+            }
+            // 1.26.1 : LA POLICE EN FORMULE (fx : =SEL(Defaut_P1, 'Carlito Gras', 'Police par defaut')) - chaque nom
+            // ecrit doit etre une police du projet (sa ressource, son nom, sa famille) ; une police de la bibliotheque pas
+            // importee ne sera pas sur le poste. Sans nom ecrit : verifie en marche seulement.
+            if (const auto* font = o.find("font"); font && !font->expr.empty()) {
+                const auto names = fontlib::quotedNames(font->expr);
+                if (names.empty())
+                    issue(S::Info, "font", "police choisie par une formule sans nom de police \xC3\xA9" "crit ('Carlito Gras') : elle ne se v\xC3\xA9rifie qu'en marche "
+                                           "(un nom inconnu : la police par d\xC3\xA9" "faut)");
+                for (const auto& n : names)
+                    if (const auto why = fontlib::formulaFontProblem(p, n); !why.empty()) issue(S::Warning, "font", "la formule de la police cite " + why);
             }
             switch (o.kind) {
                 case Kind::NavBar: {

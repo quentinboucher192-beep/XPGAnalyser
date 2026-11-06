@@ -1,4 +1,5 @@
 #include "HmiAssist.hpp"
+#include "../../hmi/HmiSemanticColors.hpp"   // 1.26.1 : les couleurs semantiques dans l'aide a la saisie
 #include "../../hmi/HmiRoles.hpp"       // 1.12.14 : le decoupeur (bornes, items d'un tuple)
 #include "../../hmi/HmiTypeForms.hpp"   // 1.12.14 : ce qui mene au type attendu
 #include "../../sim/DialectLib.hpp"   // 1.12.7 : les templates (NUMERIC_LIMITS<T>, NUMBERS), les natives
@@ -1610,6 +1611,12 @@ Where locate(std::string_view before, bool templateText) {
     }
     if (inString) {
         w.context = Context::Text;
+        // 1.26.1 : '@... - une couleur semantique ('@Alarme', '@Alarme critique').
+        if (const auto text = before.substr(quote + 1); !text.empty() && text.front() == '@') {
+            w.context = Context::ColorName;
+            w.from = quote + 1;
+            return w;
+        }
         if (parens.empty()) return w;
         const auto callee = calleeAt(before, parens.back().at);
         const auto argument = parens.back().commas;
@@ -1644,6 +1651,12 @@ Where locate(std::string_view before, bool templateText) {
             w.from = b;
             return w;
         }
+    }
+    // 1.26.1 : @ tape dans du code - une couleur semantique ; le choix s'ecrit entre apostrophes ('@Alarme').
+    if (!before.empty() && before.back() == '@' && (before.size() == 1 || !identChar(before[before.size() - 2]))) {
+        w.context = Context::ColorName;
+        w.from = before.size() - 1;
+        return w;
     }
     memberOrCode(Context::Code, 0);
     return w;
@@ -2156,6 +2169,59 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
             for (const auto& r : hp.assets.resources)
                 if (r.kind() == hmi::MediaKind::Sound) named(r.name, r.format + (r.detail.empty() ? "" : "  \xC2\xB7  " + r.detail), Kind::Sound);
             break;
+        case Context::ColorName: {
+            // 1.26.1 : les couleurs semantiques (celles du projet, puis les fournies) - << @Alarme >> et sa couleur. Hors
+            // d'une chaine (@ tape dans le code), le choix s'ecrit '@Alarme' (un texte constant, comme dans une formule).
+            const bool quoted = where.from > 0 && before[where.from - 1] == '\'';
+            const std::string typed = lower(std::string(before.substr(where.from)) + std::string(prefix));
+            int i = 0;
+            for (const auto* c : hmi::semantic::all(hp)) {
+                const std::string name = "@" + c->name;
+                const int r = matchRank(name, typed);
+                if (r < 0) continue;
+                Item it;
+                it.text = name;
+                it.detail = "STRING  \xC2\xB7  " + c->value + "  \xC2\xB7  couleur s\xC3\xA9mantique " + (c->builtin ? "fournie" : "du projet")
+                            + (c->description.empty() ? std::string{} : "  \xC2\xB7  " + c->description);
+                it.kind = Kind::Color;
+                it.rank = r * 100 + i++;
+                it.extend = before.size() - where.from;
+                if (!quoted) it.insert = "'" + name + "'";
+                push(std::move(it));
+            }
+            // 1.26.1 : << tous les @ ... avec les constantes de vues/scripts qui ont le meme type >> - hors d'une chaine,
+            // @ propose aussi les constantes : celles de la vue editee (par leur nom), les publiques des scripts generaux
+            // (Script.Nom) et des autres vues (Vue.Nom). Leur type en tete du detail : la case range par type.
+            if (!quoted) {
+                const std::string want = typed.size() > 1 ? typed.substr(1) : std::string{};
+                const auto constant = [&](const std::string& shown, const hmi::Declaration& d, const std::string& from) {
+                    const int r = want.empty() ? 0 : matchRank(shown, want);
+                    if (r < 0) return;
+                    Item it;
+                    it.text = shown;
+                    it.detail = (d.type.empty() ? std::string("ANY") : d.type) + "  \xC2\xB7  "
+                                + (d.computed ? std::string("calcul\xC3\xA9" "e") : "= " + d.value) + "  \xC2\xB7  constante " + from;
+                    it.kind = Kind::Color;
+                    it.rank = 1000 + r * 100 + i++;
+                    it.extend = before.size() - where.from;
+                    it.insert = shown;
+                    push(std::move(it));
+                };
+                const hmi::View* here = hmiparams::assistView(hp);
+                if (here)
+                    for (const auto& d : here->constants) constant(d.name, d, "de la vue " + here->name);
+                for (const auto& sc : hp.programs.scripts)
+                    for (const auto& d : sc.decls)
+                        if (d.kind == hmi::DeclKind::Constant && d.visibility == hmi::Visibility::Public)
+                            constant(sc.name + "." + d.name, d, "du script " + sc.name);
+                for (const auto& v : hp.views) {
+                    if (here && v.id == here->id) continue;
+                    for (const auto& d : v.constants)
+                        if (d.visibility == hmi::Visibility::Public) constant(v.name + "." + d.name, d, "de la vue " + v.name);
+                }
+            }
+            break;
+        }
         case Context::SoundChannel:      // 1.14.0 : les canaux du son, dans l'ordre du melangeur
             for (const auto& c : hmi::kSoundChannels) named(std::string(c.key), "canal du son  \xC2\xB7  " + std::string(c.help), Kind::Sound);
             break;
@@ -2818,6 +2884,7 @@ void classify(Item& it, const hmi::Project& hp, const domain::Project* plc, cons
         case Kind::Api:           set(Nature::Root, Origin::Plc); break;
         case Kind::ApiUnit:       set(Nature::Unit, Origin::Plc); break;
         case Kind::LogLevel:      set(Nature::EnumValue, Origin::Hmi); break;      // 1.11.14
+        case Kind::Color:         set(Nature::Constant, Origin::Hmi); break;       // 1.26.1 : '@Alarme' 
     }
 }
 } // namespace
@@ -3092,6 +3159,7 @@ ui::Icon iconOf(Kind k) noexcept {
         case Kind::Api:              return ui::Icon::Cpu;          // 1.11.1 (API-V) : l'automate
         case Kind::ApiUnit:          return ui::Icon::Program;      // 1.11.1 (API-V) : une unite de programme
         case Kind::LogLevel:         return ui::Icon::Constant;     // 1.11.14 : un niveau de IHM_LOG
+        case Kind::Color:            return ui::Icon::Constant;     // 1.26.1 : une couleur semantique
     }
     return ui::Icon::None;
 }
@@ -3831,6 +3899,7 @@ ui::InputText::Assist fieldAssist(Sources src, bool templateText) {
         };
         // 1.13.1 : un $ qui ouvre un repere ouvre aussi la liste (ses reperes, ce qu'on peut y mettre).
         if (prefix.empty() && !literal && where.context != Context::Member && where.context != Context::Placeholder
+            && where.context != Context::ColorName   // 1.26.1 : @ ouvre la liste des couleurs semantiques
             && !(um.opening && !head.empty() && head.back() == '$')) {
             from = start;
             action();
@@ -3988,6 +4057,10 @@ static ui::InputText::Assist typedAssist(ui::InputText::Assist base, Sources src
             if (expect == Expect::Color) {
                 if (hp)
                     for (const auto& c : projectColors(*hp, 8)) offer(c, "couleur  \xC2\xB7  dans le projet");
+                // 1.26.1 : les couleurs semantiques (@Alarme), tapees ou non.
+                if (hp)
+                    for (const auto* c : hmi::semantic::all(*hp))
+                        offer("@" + c->name, c->value + "  \xC2\xB7  couleur s\xC3\xA9mantique " + (c->builtin ? "fournie" : "du projet"));
                 for (const auto& nc : kNamedColors) {
                     if (!typed.empty() && !startsWithNoCase(nc.name, typed) && !startsWithNoCase(nc.hex, typed)) continue;
                     ui::InputText::Suggestion sg;

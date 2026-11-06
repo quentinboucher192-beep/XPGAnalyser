@@ -33293,6 +33293,55 @@ void polices1260() {
                   && fl::fieldLabel(p, "Carlito-Regular.ttf", true) == "Carlito",
               "les cases du th\xC3\xA8me : Celle de l'IHM (vide), puis les polices du projet");
     }
+    // ---- 1.26.1 : LA POLICE EN FORMULE (fx) - ce qu'une formule ecrit se retrouve, sans casse ni accents
+    {
+        const Resource* car = p.resourceByName("Carlito-Regular.ttf");
+        const Resource* mono = p.resourceByName(b.name);
+        check(car && mono && fl::resolve(p, "carlito-regular.TTF") == car && fl::resolve(p, "Carlito-Regular") == car
+                  && fl::resolve(p, "Carlito") == car && fl::resolve(p, "CARLITO") == car && fl::resolve(p, "JetBrains Mono") == mono,
+              "fx : le nom de la ressource (sans casse, sans extension), le nom de la police, sa famille");
+        check(fl::resolve(p, "Police par d\xC3\xA9" "faut") == car && fl::resolve(p, "police par defaut (Carlito)") == car
+                  && fl::resolve(p, "Police des valeurs (JetBrains Mono)") == mono && fl::resolve(p, "Inconnue") == nullptr
+                  && fl::resolve(p, "Liberation Serif") == nullptr,
+              "fx : << Police par defaut >>, << Police des valeurs >> (les etiquettes de la liste) ; une inconnue, une de la bibliotheque : rien");
+        const auto names = fl::quotedNames("=SEL(Defaut_P1, 'Carlito', \"Police par d\xC3\xA9" "faut\") + ' Carlito '");
+        check(names.size() == 2 && names[0] == "Carlito" && names[1] == "Police par d\xC3\xA9" "faut", "quotedNames : les noms ecrits, une fois, sans blancs");
+        check(fl::formulaFontProblem(p, "Carlito").empty() && fl::formulaFontProblem(p, "Mono").empty()
+                  && fl::formulaFontProblem(p, "Police des valeurs").empty(),
+              "Generer : une police du projet, une police du theme - rien a dire");
+        const std::string lib = fl::formulaFontProblem(p, "Liberation Serif"), none = fl::formulaFontProblem(p, "Inconnue");
+        check(lib.find("biblioth\xC3\xA8que de polices, pas dans le projet") != std::string::npos && none.find("aucune police du projet") != std::string::npos,
+              "Generer : une police de la bibliotheque pas importee, une inconnue [" + lib + "] [" + none + "]");
+        // Generer, sur un objet : la Police en fx.
+        Project q = p;
+        View w = makeView(q, "Fx");
+        const Id t = edit::add(q, w, Kind::Text, 10, 10);
+        w.object(t)->setExpr("font", "SEL(TRUE, 'Liberation Serif', 'Carlito')");
+        const Id u = edit::add(q, w, Kind::Text, 10, 60);
+        w.object(u)->setExpr("font", "Nom_Police");
+        q.views.push_back(w);
+        const auto issues = hmi::generate(q, [](std::string_view) { return false; });
+        const auto said = [&](const std::string& what) {
+            return std::any_of(issues.begin(), issues.end(), [&](const hmi::Issue& i) { return i.message.find(what) != std::string::npos; });
+        };
+        check(said("la formule de la police cite 'Liberation Serif'") && !said("cite 'Carlito'") && said("police choisie par une formule sans nom"),
+              "Generer : la Police en fx - le nom pas importe, l'information d'un nom calcule");
+        // La liste riche : sections, familles, styles.
+        const auto rich = fl::fieldChoices(p);
+        const fl::Choice* projCarlito = nullptr;
+        const fl::Choice* libBold = nullptr;
+        for (const auto& c : rich) {
+            if (c.value == "Carlito-Regular.ttf") projCarlito = &c;
+            if (c.libraryId == "liberation-sans-gras") libBold = &c;
+        }
+        check(rich[0].section == "Th\xC3\xA8me" && rich[0].data && rich[0].data == car->data && projCarlito && projCarlito->section == "Du projet"
+                  && projCarlito->family == "Carlito" && projCarlito->style == "Normal" && projCarlito->note.find("objet") != std::string::npos,
+              "la liste riche : le theme (ecrit dans sa police), Du projet (famille, style, ce qui l'emploie)");
+        check(libBold && libBold->section == "Biblioth\xC3\xA8que \xE2\x80\xBA Sans empattement" && libBold->family == "Liberation Sans"
+                  && libBold->style == "Gras" && libBold->shortLabel == "Liberation Sans Gras" && libBold->data,
+              "la liste riche : la bibliotheque par dossier, une famille, ses styles");
+    }
+
     // ---- ou elles servent ; les citations et le renommage suivent le theme et les styles
     const auto uc = fl::usageOf(p, "Carlito-Regular.ttf");
     const auto uj = fl::usageOf(p, b.name);

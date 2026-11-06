@@ -1055,6 +1055,10 @@ public:
         // l'explorateur, Aller a, Copier le chemin (PropertyGridHooks.hpp, ui::paths). Le chemin (souvent la valeur
         // elle-meme) : absolu, relatif au dossier du projet, "ressource:Nom", "externe:Nom". Vide : pas un chemin.
         std::string               path{};
+        // 1.26.1 : LES CHOIX RICHES d'une liste (Enum) - des sections, une ligne par famille et ses pastilles (Normal,
+        // Gras), un apercu, une note, la recherche (ui::DropDown) ; leur `value` est ce que la case ecrit. Non vide : la
+        // liste ouverte les montre au lieu de enumValues (qui reste la liste des valeurs : l'aide a la saisie, les essais).
+        std::vector<DropDown::Item> choices{};
     };
     // Le dernier choix d'une liste typeIn.
     static constexpr std::string_view kTypeInLabel = "Taper un nom ou un rep\xC3\xA8re $\xE2\x80\xA6$\xE2\x80\xA6";

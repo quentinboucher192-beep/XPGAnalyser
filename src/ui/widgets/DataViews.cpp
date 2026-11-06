@@ -3589,9 +3589,16 @@ void PropertyGrid::beginEdit(std::size_t row) {
         auto list = std::make_unique<DropDown>(id() + ".edit");
         std::vector<DropDown::Item> items;
         int current = -1;
-        for (std::size_t i = 0; i < p.enumValues.size(); ++i) {
-            items.push_back({p.enumValues[i].empty() ? std::string("(aucun)") : p.enumValues[i], p.enumValues[i]});
-            if (p.enumValues[i] == p.value) current = static_cast<int>(i);
+        if (!p.choices.empty()) {
+            // 1.26.1 : les choix riches (sections, familles, apercus, recherche).
+            items = p.choices;
+            for (std::size_t i = 0; i < items.size(); ++i)
+                if (current < 0 && (items[i].value == p.value || items[i].label == p.value)) current = static_cast<int>(i);
+        } else {
+            for (std::size_t i = 0; i < p.enumValues.size(); ++i) {
+                items.push_back({p.enumValues[i].empty() ? std::string("(aucun)") : p.enumValues[i], p.enumValues[i]});
+                if (p.enumValues[i] == p.value) current = static_cast<int>(i);
+            }
         }
         // 1.12.7 (lot D) : une liste qui accepte aussi un nom tape - le dernier choix ouvre le champ.
         if (p.typeIn) items.push_back({std::string(kTypeInLabel), std::string(kTypeInValue)});
@@ -4050,7 +4057,7 @@ void PropertyGrid::openRowMenu(std::size_t row, gfx::Point at) {
             items.push_back(entry(std::string(exprfield::kDefault), kRowDefault, {}, editable, readOnly));
             if (propertygrid::expressionPageHook())   // 1.11 (integration I111, lien 5)
                 items.push_back(entry(std::string(propertygrid::kExpressionPageItem), kRowExprPage));
-        } else if (p.type == ValueType::Enum && !p.enumValues.empty() && p.enumValues.size() <= 24) {
+        } else if (p.type == ValueType::Enum && !p.enumValues.empty() && p.enumValues.size() <= 24 && p.choices.empty()) {
             // Une liste (le Calque, un alignement) : ses choix, le pris marque d'un point.
             menuChoices_ = p.enumValues;
             for (std::size_t k = 0; k < p.enumValues.size(); ++k) {
