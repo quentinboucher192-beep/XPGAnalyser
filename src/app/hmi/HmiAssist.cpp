@@ -2148,7 +2148,9 @@ static std::vector<Item> suggestItems(const hmi::Project& hp, const domain::Proj
                 if (r < 0) continue;
                 Item it;
                 it.text = std::string(t);
-                it.detail = "type \xC3\xA9l\xC3\xA9mentaire";
+                // 1.27.0 : Object, Font, Texture, Sound, Style - les types de l'IHM (une poignee), pas des scalaires.
+                const bool ihm = t == "Object" || t == "Font" || t == "Texture" || t == "Sound" || t == "Style";
+                it.detail = ihm ? "type de l'IHM" : "type \xC3\xA9l\xC3\xA9mentaire";
                 it.kind = Kind::Type;
                 it.rank = r;
                 it.insert = std::string(t) + ";";

@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.26.1", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.27.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.26.1", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 09 h 25"},
     {"1.26.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 22 h 20"},
     {"1.25.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 18 h 07"},
     {"1.24.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 15 h 54"},
@@ -169,6 +170,40 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.27.0 : les types de l'IHM dans les scripts ; les natives des objets et des ressources ; @Alarme ; la section
+        // Execution du cycle de vue
+        note("1.27.0", "Scripts", Kind::New,
+         "LES OBJETS ET LES RESSOURCES DANS LES SCRIPTS : cinq types, Object (un objet d'une vue), Font, Texture, Sound et "
+         "Style (un style nomm\xC3\xA9), en variable, en param\xC3\xA8tre, en retour de fonction, dans une LIST OF Object, par un "
+         "POINTER TO Font ou un REF_TO. Une valeur d\xC3\xA9signe la chose sans la copier ; NULL tant qu'elle ne d\xC3\xA9signe rien. "
+         "Leurs attributs se lisent et s'\xC3\xA9" "crivent : titre^.Text, o.X, bip^.Duration, f.Family, s.Users. Le s\xC3\xA9lecteur de "
+         "type les range dans \xC2\xAB Types de l'IHM \xC2\xBB ; l'aide \xC3\xA0 la saisie propose leurs attributs apr\xC3\xA8s o. ou p^. ; Natives a "
+         "une \xC3\xA9tag\xC3\xA8re \xC2\xAB Types de l'IHM \xC2\xBB avec leurs fiches.",
+         "objets-scripts", ""),
+        note("1.27.0", "Natives", Kind::New,
+         "38 FONCTIONS SUR LES OBJETS (Natives \xE2\x80\xBA Objets) : les trouver (GetObject, ObjectsOf('Pompe_*'), ObjectsIn, "
+         "ObjectsOfKind), les modifier (EditObject, CopyObjectTo(source, cible, {}) : tout sauf le nom, ResetObject), les "
+         "placer (MoveObject, MoveBy, ResizeObject, PlaceObject), les aligner et les r\xC3\xA9partir (AlignTop... AlignCenter, "
+         "JustifyH, JustifyV, SameWidth, SameSize, ArrangeGrid), les montrer (ShowIf, HideIf, EnableIf, BlinkIf, Show, "
+         "Hide), les ranger (BringToFront, SendToBack, SetLayer). Chacune prend un objet, une liste ({Pompe_1, Pompe_2}) "
+         "ou un nom ; elle agit sur la vue montr\xC3\xA9" "e, comme Vue.Objet.X := 120, jamais sur le projet. This : l'objet de "
+         "l'action.",
+         "objets-scripts", ""),
+        note("1.27.0", "Natives", Kind::New,
+         "16 FONCTIONS SUR LES RESSOURCES (Natives \xE2\x80\xBA Ressources) : GetResource, GetFont, GetTexture, GetSound, GetStyle "
+         "(NULL si rien ne porte ce nom), les listes Fonts, Textures('Pictos/*'), Sounds, Styles ; TextWidth (la largeur "
+         "d'un texte dans une police), HasGlyph ; Play et Stop ; ApplyStyle, StyleValue ; Color(@Alarme). @Alarme s'\xC3\xA9" "crit "
+         "seul dans un script, comme une constante. G\xC3\xA9n\xC3\xA9rer pr\xC3\xA9vient d'un nom \xC3\xA9" "crit qui n'existe pas (GetSound('Bip cour')) ; "
+         "une formule (fx) peut lire (ObjectsOf('Pompe_*').Count) mais pas agir.",
+         "objets-scripts", ""),
+        note("1.27.0", "Scripts", Kind::New,
+         "LES SCRIPTS D'UNE VUE, CHACUN \xC3\x80 SON MOMENT : l'OnCycle se d\xC3\xA9" "balle (une vue a plusieurs scripts de cycle, "
+         "chacun son nom). La section Ex\xC3\xA9" "cution montre les dix \xC3\xA9tapes du cycle de la vue (lecture des \xC3\xA9quipements, "
+         "entr\xC3\xA9" "es, minuteries, scripts g\xC3\xA9n\xC3\xA9raux, d\xC3\xA9" "clencheurs, alarmes, courbes, formules, dessin, "
+         "\xC3\xA9" "critures) avec leur dur\xC3\xA9" "e mesur\xC3\xA9" "e en simulation. On y glisse chaque script pour qu'il tourne "
+         "juste apr\xC3\xA8s l'\xC3\xA9tape voulue, chaque cycle ou 1 cycle sur N, ou seulement quand une formule est vraie ; "
+         "Ctrl+Z d\xC3\xA9" "fait. Un projet existant garde son OnCycle \xC3\xA0 sa place (entre 4 et 5).",
+         "cycle-vue", ""),
         // 1.26.1 : les listes longues (Police, Style nomme) ; la police en formule ; la police du logiciel ; les couleurs
         // semantiques faciles a trouver ; la Corbeille du projet ; Scripts generaux sans la partie Variables IHM
         note("1.26.1", "Projet", Kind::New,

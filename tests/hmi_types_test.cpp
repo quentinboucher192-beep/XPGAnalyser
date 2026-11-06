@@ -159,7 +159,8 @@ void usages() {
     // 1.12.1 : + CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME.
     // 1.13.0 (lot J3) : + ANY (une valeur JSON / dynamique : VAR, locale, parametre d'un code ; composable LIST OF ANY).
     check(asSet(r.names(tr::UseDeclaration)) == asSet({"BOOL", "INT", "DINT", "UINT", "UDINT", "SINT", "USINT", "REAL", "LREAL", "WORD", "DWORD",
-                                                       "BYTE", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME", "ANY"}),
+                                                       "BYTE", "TIME", "STRING", "CHAR", "WSTRING", "DATE", "TIME_OF_DAY", "DATE_AND_TIME", "ANY",
+                                                       "Object", "Font", "Texture", "Sound", "Style"}),   // 1.27.0 : les types de l'IHM
           "declaration : les types de kLocalTypes - " + joined(r.names(tr::UseDeclaration)));
     // richLocalType acceptait aussi LINT et ULINT (sans les proposer)
     check(r.resolve("LINT", tr::UseDeclaration).ok && r.resolve("ulint", tr::UseDeclaration).ok
@@ -190,7 +191,7 @@ void usages() {
     // l'ordre : celui de la norme, le meme partout
     const auto all = r.names(tr::UseAll, false);
     check(joined(all) == "BOOL SINT INT DINT LINT USINT UINT UDINT ULINT BYTE WORD DWORD LWORD REAL LREAL STRING TIME CHAR WSTRING DATE TIME_OF_DAY "
-                         "DATE_AND_TIME ANY Aucun CALLBACK () CALLBACK () : BOOL CALLBACK (x : REAL) : BOOL CALLBACK (x : REAL) : REAL "
+                         "DATE_AND_TIME ANY Object Font Texture Sound Style Aucun CALLBACK () CALLBACK () : BOOL CALLBACK (x : REAL) : BOOL CALLBACK (x : REAL) : REAL "
                          "CALLBACK (a : REAL; b : REAL) : BOOL CALLBACK (texte : STRING)",     // 1.12.19 : les formes de rappel toutes faites
           "l'ordre du registre : " + joined(all));
     // chaque type de base : sa cle, sa categorie, sa provenance, sa phrase
@@ -258,7 +259,8 @@ void registre() {
     // les listes : la base proposee, puis les types du projet
     const auto decl = r->names(tr::UseDeclaration);
     // 1.13.0 (lot J3) : + ANY, apres les types de base (index 19), avant les types du projet.
-    check(decl.size() == 22 && decl[19] == "ANY" && decl[20] == "T_Four" && decl[21] == "E_Mode", "declaration : la base, ANY, puis T_Four et E_Mode - " + joined(decl));
+    // 1.27.0 : + les 5 types de l'IHM (Object, Font, Texture, Sound, Style), apres ANY.
+    check(decl.size() == 27 && decl[19] == "ANY" && decl[20] == "Object" && decl[24] == "Style" && decl[25] == "T_Four" && decl[26] == "E_Mode", "declaration : la base, ANY, puis T_Four et E_Mode - " + joined(decl));
     const auto prm = r->names(tr::UseParameter);
     check(prm.size() == 16 && prm[12] == "T_Four" && prm[14] == "T_ANA" && prm[15] == "T_ARMOIRE",
           "parametre : la base, ANY, les types IHM, puis les DDT - " + joined(prm));

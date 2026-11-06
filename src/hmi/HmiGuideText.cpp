@@ -19540,7 +19540,7 @@ const std::vector<Topic>& topics() {
          },
          {"scripts", "simulation", "performances", "deboguer-scripts", "actions", "alarmes"},
          {"OnCycle", "script de cycle", "scripts de cycle", "cycle de la vue", "Ex\xC3\xA9" "cution", "\xC3\xA9tapes du cycle", "Moment", "Rang dans l'\xC3\xA9tape", "Fr\xC3\xA9quence", "1 cycle sur N", "Condition", "Dur\xC3\xA9" "e mesur\xC3\xA9" "e", "Script de cycle", "d\xC3\xA9" "baller", "glisser un script", "apr\xC3\xA8s les formules", "avant le dessin"},
-         {},
+         {"scripts-vue", "vues"},
          {},
          "",
          {},
@@ -20299,6 +20299,18 @@ const std::vector<Topic>& topics() {
                          "16 px entre chaque *)\ntitre^.Text := CONCAT('Pompes : ', "
                          "INT_TO_STRING(pompes.Count));\nIF Defaut_Gaz AND bip <> NULL THEN Play(bip^); "
                          "END_IF;\nVoyant_Gaz.Fill := @Alarme;", "ST"},
+             {K::Code, "/* les memes noms, l'API de la cible (edites et verifies, pas executes en "
+                         "simulation) */\nObjectList pompes = ObjectsOf(\"Pompe_*\");\nObject *titre = "
+                         "GetObject(\"Titre_Accueil\");\nSound *bip = GetSound(\"Bip court\");\nchar "
+                         "texte[64];\nHideIf(pompes, !Mode_Auto);\nAlignTop(pompes);\nJustifyH(pompes, "
+                         "16);\nsnprintf(texte, sizeof texte, \"Pompes : %d\", pompes.Count);\ntitre->Text = "
+                         "texte;\nif (Defaut_Gaz && bip != NULL) Play(bip);\nVoyant_Gaz.Fill = \"@Alarme\";", "C"},
+             {K::Code, "auto pompes = ObjectsOf(\"Pompe_*\");                 // "
+                         "std::vector<Object*>\nObject* titre = GetObject(\"Titre_Accueil\");\nSound* bip = "
+                         "GetSound(\"Bip court\");\nHideIf(pompes, "
+                         "!Mode_Auto);\nAlignTop(pompes);\nJustifyH(pompes, 16);\ntitre->Text = \"Pompes : "
+                         "\" + std::to_string(pompes.size());\nif (Defaut_Gaz && bip) "
+                         "Play(*bip);\nVoyant_Gaz.Fill = \"@Alarme\";", "C++"},
              {K::Heading, "O\xC3\xB9 \xC3\xA7" "a agit", {}},
              {K::Paragraph, "Sur la **vue montr\xC3\xA9" "e** (la simulation, le poste), exactement comme "
                          "`Vue.Objet.X := 120` : la propri\xC3\xA9t\xC3\xA9 est fig\xC3\xA9" "e \xC3\xA0 "

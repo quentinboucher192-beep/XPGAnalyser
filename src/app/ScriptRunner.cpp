@@ -44,6 +44,7 @@
 #include "hmi/HmiSimulation.hpp"
 #include "hmi/HmiDebugPane.hpp"            // 1.13.0 (lot J2) : ihm-debogage, ihm-point-arret...
 #include "hmi/HmiScriptPanes.hpp"         // 1.11.16 : ihm-curseur
+#include "hmi/HmiCycleStages.hpp"         // 1.27.0 : cycle-ajouter, cycle-glisser
 #include "hmi/HmiFunctionPanes.hpp"       // 1.11.17 : volet-message (le volet des fonctions)
 #include "hmi/HmiOperatorPanes.hpp"       // 1.11.17 : volet-message (le volet des operateurs)
 #include "hmi/HmiSimVarTree.hpp"         // 1.11.5 : les variables en arbre
@@ -5980,6 +5981,32 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   natives-inserer                Inserer dans le script (le dernier onglet de code)
     //   natives-copier | natives-precedente
     //   natives-attendre "texte"       la barre d'etat du volet dit ce texte (Insere : ...)
+    // 1.27.0 : la section Execution des scripts d'une vue (l'onglet courant : les scripts de la vue).
+    //   cycle-ajouter               un clic sur + Script de cycle (un nouveau script, apres l'etape 4, choisi)
+    //   cycle-glisser N [tenir]     la pastille du script choisi tiree sous l'etape N (1..9) ; tenir : la souris
+    //                               reste appuyee (la ligne pointillee se voit a la capture), lachee au geste suivant
+    if (cmd == "cycle-ajouter" || cmd == "cycle-glisser") {
+        auto* pane = dynamic_cast<HmiScriptsPane*>(currentPage());
+        auto* stages = pane ? pane->cycleStages() : nullptr;
+        auto* add = pane ? pane->cycleAdd() : nullptr;
+        if (!stages || !add || !shown(*stages)) {
+            if (retries_ < 30) return Step::Retry;
+            fail(cmd + " : l'onglet courant n'est pas les scripts d'une vue");
+            return Step::Next;
+        }
+        if (cmd == "cycle-ajouter") {
+            click(add->toSurface(centre(add->buttonRect())), MouseButton::Left, 1, {});
+            return Step::Yield;
+        }
+        gfx::Rect chip{}, slot{};
+        if (!stages->chipRect(pane->selectedScript(), chip) || !stages->slotRect(static_cast<int>(num(1)), slot)) {
+            if (retries_ < 30) return Step::Retry;
+            fail("cycle-glisser : pas de pastille choisie, ou pas d'\xC3\xA9tape " + arg(1));
+            return Step::Next;
+        }
+        drag(stages->toSurface(centre(chip)), stages->toSurface(centre(slot)), {}, !has("tenir"));
+        return Step::Yield;
+    }
     if (cmd == "natives") {
         auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
         if (!screen || !screen->openNative(arg(1))) fail("natives : fiche inconnue : " + arg(1));

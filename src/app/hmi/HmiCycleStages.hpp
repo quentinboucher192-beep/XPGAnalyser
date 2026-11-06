@@ -113,7 +113,7 @@ private:
         std::size_t rank{0};
     };
     void relayout();
-    [[nodiscard]] Geometry build(bool withDrop) const;   // la place de chaque chose (la ligne pointillee, ou non)
+    [[nodiscard]] Geometry build() const;      // la place de chaque chose (la ligne pointillee comprise)
     void aim(gfx::Point at);                   // le depot vise sous la souris
     bool finishDrag(gfx::Point at);            // vrai : depose
     [[nodiscard]] float contentTop() const noexcept;

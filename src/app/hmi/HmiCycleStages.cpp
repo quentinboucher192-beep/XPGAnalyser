@@ -105,17 +105,17 @@ void HmiCycleStages::onLayout() {
 }
 
 void HmiCycleStages::relayout() {
-    geo_ = build(true);
+    geo_ = build();
     // Le contenu a raccourci : le defilement revient dans ses bornes.
     const float maxScroll = std::max(0.f, geo_.height - bounds().h);
     if (scrollY_ > maxScroll) {
         scrollY_ = maxScroll;
-        geo_ = build(true);
+        geo_ = build();
     }
     invalidate();
 }
 
-HmiCycleStages::Geometry HmiCycleStages::build(bool withDrop) const {
+HmiCycleStages::Geometry HmiCycleStages::build() const {
     const auto b = bounds();
     Geometry g;
     float y = contentTop();
@@ -129,7 +129,7 @@ HmiCycleStages::Geometry HmiCycleStages::build(bool withDrop) const {
         std::vector<const Chip*> here;
         for (const auto& c : chips_)
             if (c.moment == n && !(drag_.active && c.id == drag_.script && c.id != hmi::kNoId)) here.push_back(&c);
-        const bool dropHere = withDrop && drag_.active && drop_.moment == n;
+        const bool dropHere = drag_.active && drop_.moment == n;
         if (!here.empty() || dropHere) y += 2.f;
         for (std::size_t i = 0; i <= here.size(); ++i) {
             if (dropHere && drop_.rank == i) {
@@ -150,24 +150,27 @@ HmiCycleStages::Geometry HmiCycleStages::build(bool withDrop) const {
 }
 
 void HmiCycleStages::aim(gfx::Point at) {
-    drop_ = {};
-    if (bounds().contains(at)) {
-        // Le depot se vise sur la section sans la ligne pointillee : elle ne fait pas sauter la cible.
-        const Geometry base = build(false);
-        int moment = vc::kLastMoment;
-        for (int m = vc::kFirstMoment; m <= vc::kLastMoment; ++m) {
-            const auto& next = base.steps[static_cast<std::size_t>(m + 1)];
-            if (at.y < next.y + next.h * 0.5f) {
-                moment = m;
-                break;
-            }
-        }
-        std::size_t rank = 0;
-        for (const auto& [id, r] : base.chips)
-            for (const auto& c : chips_)
-                if (c.id == id && c.moment == moment && r.y + r.h * 0.5f < at.y) ++rank;
-        drop_ = {moment, rank};
+    if (!bounds().contains(at)) {
+        drop_ = {};
+        relayout();
+        return;
     }
+    // Sur la ligne pointillee : la cible reste. Ailleurs, elle se vise sur la section telle qu'elle est dessinee (la
+    // pastille tiree n'y est plus) : inserer la ligne au-dessus de la souris pousse le reste dessous, la cible tient.
+    if (geo_.drop.w > 0.f && geo_.drop.contains(at)) return;
+    int moment = vc::kLastMoment;
+    for (int m = vc::kFirstMoment; m <= vc::kLastMoment; ++m) {
+        const auto& next = geo_.steps[static_cast<std::size_t>(m + 1)];
+        if (at.y < next.y + next.h * 0.5f) {
+            moment = m;
+            break;
+        }
+    }
+    std::size_t rank = 0;
+    for (const auto& [id, r] : geo_.chips)
+        for (const auto& c : chips_)
+            if (c.id == id && c.moment == moment && r.y + r.h * 0.5f < at.y) ++rank;
+    drop_ = {moment, rank};
     relayout();
 }
 
@@ -205,11 +208,13 @@ bool HmiCycleStages::externalDragAt(hmi::Id script, const std::string& label, gf
         return false;
     }
     if (bounds().contains(at)) {
+        const bool entering = !drag_.active;
         drag_.active = true;
         drag_.external = true;
         drag_.script = script;
         drag_.label = label;
         drag_.at = at;
+        if (entering) relayout();        // sa pastille quitte sa place avant qu'on vise
         aim(at);
     } else if (drag_.active && drag_.external) {
         cancelDrag();
@@ -251,6 +256,7 @@ ui::EventResult HmiCycleStages::onEvent(const ui::InputEvent& ev) {
             drag_.label = it != chips_.end() ? it->name : std::string{};
             pressed_ = hmi::kNoId;
             captureMouse();
+            relayout();                  // la pastille quitte sa place avant qu'on vise
         }
         if (drag_.active && !drag_.external) {
             drag_.at = m->pos;

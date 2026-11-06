@@ -8395,6 +8395,7 @@ f << heure << ';' << Niveau << ';' << Debit << '\n';
 : L'OnCycle se déballe : une vue a plusieurs scripts de cycle, chacun à son moment exact dans le cycle de la vue. La section Exécution montre les dix étapes du cycle, dans l'ordre où le moteur les fait, avec leur durée mesurée en simulation ; tu y glisses chaque script.
 @depuis 1.27.0
 @mots OnCycle, script de cycle, scripts de cycle, cycle de la vue, Exécution, étapes du cycle, Moment, Rang dans l'étape, Fréquence, 1 cycle sur N, Condition, Durée mesurée, Script de cycle, déballer, glisser un script, après les formules, avant le dessin
+@lieux scripts-vue, vues
 @voir scripts, simulation, performances, deboguer-scripts, actions, alarmes
 ### Les dix étapes du cycle d'une vue
 Une vue ouverte en simulation fait, à chaque cycle de l'IHM (sa période : Configuration › Projet, 100 ms par défaut), ces dix étapes, dans cet ordre. La section **Exécution** (au milieu de l'onglet Scripts de la vue) les montre, chacune avec sa ligne et sa **durée mesurée** à la dernière simulation ; en haut, le total du cycle sur sa période.
@@ -8900,6 +8901,31 @@ JustifyH(pompes, 16);                          (* 16 px entre chaque *)
 titre^.Text := CONCAT('Pompes : ', INT_TO_STRING(pompes.Count));
 IF Defaut_Gaz AND bip <> NULL THEN Play(bip^); END_IF;
 Voyant_Gaz.Fill := @Alarme;
+```
+```C
+/* les memes noms, l'API de la cible (edites et verifies, pas executes en simulation) */
+ObjectList pompes = ObjectsOf("Pompe_*");
+Object *titre = GetObject("Titre_Accueil");
+Sound *bip = GetSound("Bip court");
+char texte[64];
+HideIf(pompes, !Mode_Auto);
+AlignTop(pompes);
+JustifyH(pompes, 16);
+snprintf(texte, sizeof texte, "Pompes : %d", pompes.Count);
+titre->Text = texte;
+if (Defaut_Gaz && bip != NULL) Play(bip);
+Voyant_Gaz.Fill = "@Alarme";
+```
+```C++
+auto pompes = ObjectsOf("Pompe_*");                 // std::vector<Object*>
+Object* titre = GetObject("Titre_Accueil");
+Sound* bip = GetSound("Bip court");
+HideIf(pompes, !Mode_Auto);
+AlignTop(pompes);
+JustifyH(pompes, 16);
+titre->Text = "Pompes : " + std::to_string(pompes.size());
+if (Defaut_Gaz && bip) Play(*bip);
+Voyant_Gaz.Fill = "@Alarme";
 ```
 ### Où ça agit
 Sur la **vue montrée** (la simulation, le poste), exactement comme `Vue.Objet.X := 120` : la propriété est figée à cette valeur jusqu'au redémarrage de l'IHM ou jusqu'à `ResetObject`. Le projet ne change jamais. Un objet piloté par une formule garde sa formule tant qu'on ne l'écrit pas.
