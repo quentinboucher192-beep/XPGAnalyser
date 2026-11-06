@@ -85,6 +85,17 @@ std::vector<Tok> lex(std::string_view s) {
         }
         Tok t;
         t.at = i;
+        // 1.27.0 : @Alarme - une couleur semantique ecrite comme une constante : le texte '@Alarme' (accents compris).
+        if (c == '@' && i + 1 < n && (identStart(s[i + 1]) || static_cast<unsigned char>(s[i + 1]) >= 0x80)) {
+            std::size_t j = i + 1;
+            while (j < n && (identChar(s[j]) || static_cast<unsigned char>(s[j]) >= 0x80)) ++j;
+            t.k = Tok::K::Str;
+            t.text = "'" + std::string(s.substr(i, j - i)) + "'";
+            t.len = j - i;
+            out.push_back(std::move(t));
+            i = j;
+            continue;
+        }
         if (c == '\'' || c == '"') {
             std::size_t j = i + 1;
             while (j < n && s[j] != c && s[j] != '\n') j += (s[j] == '$' && j + 1 < n) ? 2 : 1;
@@ -1399,6 +1410,7 @@ private:
             const auto r = pub::resolve(*p, dotted, borrowed ? &*borrowed : pv);
             using W = pub::Resolved::What;
             if (r.what == W::Unknown) { reportTok(i, cut, S::Error, r.error); return {}; }
+            if (r.what == W::Incomplete && r.object && !write) return {};   // 1.27.0 : Vue.Objet seul - un Object (une poignee)
             if (r.what == W::Incomplete) {
                 reportTok(i, cut, S::Error, dotted + " : chemin incomplet (" + std::string(pub::isSysRoot(root.text) ? "SYS.Variable" : "Vue.Objet.Propri\xC3\xA9t\xC3\xA9")
                                                 + ")");
@@ -1458,6 +1470,8 @@ private:
             for (const auto& f : internal_) fn = fn || up(f.name) == R;
             if (fn) return {};
         }
+        // 1.27.0 : un objet de la vue du script par son nom court (Pompe_1, Pompe_1.Fill) - le moteur le cherche dans sa vue.
+        if (sc_.view && sc_.view->objectByName(root.text)) return {};
         // L'automate : ses membres et ses indices constants.
         if (sc_.plcKnown && sc_.plcKnown(root.text)) return plcPath(i, j, segs);
         if (!sc_.plcKnown) return {};           // l'automate n'est pas connu : rien a dire
@@ -1634,8 +1648,8 @@ private:
         bool named = false, any = false;
         std::size_t argStart = k;
         for (; !atEnd(k); ++k) {
-            if (isOp(k, "(") || isOp(k, "[")) ++depth;
-            else if (isOp(k, ")") || isOp(k, "]")) {
+            if (isOp(k, "(") || isOp(k, "[") || isOp(k, "{")) ++depth;   // 1.27.0 : {a, b} (une liste) compte pour un
+            else if (isOp(k, ")") || isOp(k, "]") || isOp(k, "}")) {
                 if (--depth == 0) break;
             } else if (isOp(k, ",") && depth == 1) {
                 ++n;
@@ -1706,6 +1720,11 @@ private:
             const bool anyResult = std::any_of(fs.begin(), fs.end(), [](const HmiFunction* f) { return !f->returnType.empty(); });
             if (!statement && !anyResult)
                 reportTok(i, i + 1, S::Error, name.text + " ne rend pas de valeur : appelle-la seule sur sa ligne (" + name.text + "(...);)");
+        } else if (const auto* nf = natives::function(name.text); nf && (nf->category == "objets" || nf->category == "ressources")) {
+            // 1.27.0 : les fonctions des objets et des ressources (le moteur les execute ; une fonction du projet du meme
+            // nom, vue juste avant, passe devant). Leurs arguments : le catalogue des natives.
+            found = true;
+            if (int mn = 0, mx = 0; natives::arity(U, mn, mx)) arity(mn, mx);
         } else if (local(name.text) || (sc_.project && sc_.project->variable(name.text)) || (sc_.plcKnown && sc_.plcKnown(name.text))
                    || !sc_.plcKnown) {
             found = true;      // une instance de bloc (TON, un bloc de l'automate) ; l'automate inconnu : rien a dire
@@ -1750,8 +1769,8 @@ private:
         std::size_t from = open + 1;
         int depth = 0;
         for (std::size_t k = open + 1; k < close && !atEnd(k); ++k) {
-            if (isOp(k, "(") || isOp(k, "[")) ++depth;
-            else if (isOp(k, ")") || isOp(k, "]")) --depth;
+            if (isOp(k, "(") || isOp(k, "[") || isOp(k, "{")) ++depth;   // 1.27.0 : {a, b} (une liste) compte pour un
+            else if (isOp(k, ")") || isOp(k, "]") || isOp(k, "}")) --depth;
             else if (depth == 0 && isOp(k, ",")) {
                 out.emplace_back(from, k);
                 from = k + 1;
@@ -2077,8 +2096,8 @@ private:
         std::size_t from = i + 2;
         int depth = 0;
         for (std::size_t k = from; k < close && !atEnd(k); ++k) {
-            if (isOp(k, "(") || isOp(k, "[")) ++depth;
-            else if (isOp(k, ")") || isOp(k, "]")) --depth;
+            if (isOp(k, "(") || isOp(k, "[") || isOp(k, "{")) ++depth;   // 1.27.0 : {a, b} (une liste) compte pour un
+            else if (isOp(k, ")") || isOp(k, "]") || isOp(k, "}")) --depth;
             else if (depth == 0 && isOp(k, ",")) {
                 args.emplace_back(from, k);
                 from = k + 1;
@@ -2293,8 +2312,8 @@ private:
     [[nodiscard]] std::size_t statementEnd(std::size_t k) const {
         int depth = 0;
         for (; !atEnd(k); ++k) {
-            if (isOp(k, "(") || isOp(k, "[")) ++depth;
-            else if (isOp(k, ")") || isOp(k, "]")) depth = std::max(0, depth - 1);
+            if (isOp(k, "(") || isOp(k, "[") || isOp(k, "{")) ++depth;   // 1.27.0 : {a, b} (une liste) compte pour un
+            else if (isOp(k, ")") || isOp(k, "]") || isOp(k, "}")) depth = std::max(0, depth - 1);
             else if (depth == 0 && isOp(k, ";")) return k;
             else if (depth == 0 && toks_[k].k == Tok::K::Ident) {
                 const std::string U = up(toks_[k].text);
@@ -2321,8 +2340,8 @@ private:
     [[nodiscard]] std::size_t findWord(std::size_t k, std::initializer_list<const char*> words) const {
         int depth = 0;
         for (; !atEnd(k); ++k) {
-            if (isOp(k, "(") || isOp(k, "[")) ++depth;
-            else if (isOp(k, ")") || isOp(k, "]")) depth = std::max(0, depth - 1);
+            if (isOp(k, "(") || isOp(k, "[") || isOp(k, "{")) ++depth;   // 1.27.0 : {a, b} (une liste) compte pour un
+            else if (isOp(k, ")") || isOp(k, "]") || isOp(k, "}")) depth = std::max(0, depth - 1);
             else if (depth == 0) {
                 for (const char* w : words) if (isWord(k, w)) return k;
                 if (isOp(k, ";")) return k;

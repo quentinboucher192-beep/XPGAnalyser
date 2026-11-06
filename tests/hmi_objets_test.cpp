@@ -407,6 +407,32 @@ void ailleurs() {
         const auto* e = reg.byName("Texture");
         check(e && e->category == typereg::Category::Ihm, "le registre : Texture est un type de l'IHM");
     }
+    // Compiler comme le build (l'automate connu : un nom inconnu n'est pas a lui) - vu sous Wine : << fonction
+    // inconnue : ObjectsOf >> bloquait la simulation, alors que le moteur les connaissait.
+    {
+        Bench b("R := 'x';");
+        Project p = b.p;
+        p.programs.scripts.front().body =
+            "AlignTop(ObjectsOf('Vue_A.Pompe_*'));\n"
+            "JustifyH(ObjectsOf('Vue_A.Pompe_*'), 24);\n"
+            "MoveBy(ObjectsOf('Vue_A.Pompe_*'), 0, -80);\n"
+            "EditObject(Vue_A.Titre.Text, CONCAT('Pompes : ', INT_TO_STRING(ObjectsOf('Vue_A.Pompe_*').Count)));\n"
+            "HideIf({Vue_A.Pompe_1, Vue_A.Pompe_2}, NOT Mode_Auto);\n"
+            "N := TextWidth(GetFont('Carlito'), 'Pompe', 12.0);\n"
+            "Play(GetSound('Bip court'));\n"
+            "R := Color(@Alarme);";
+        p.views.front().scripts.push_back(Script{});
+        auto& vs = p.views.front().scripts.back();
+        vs.id = p.allocate();
+        vs.event = "OnOpen";
+        vs.body = "VAR\n  L : LIST OF Object;\n  o : POINTER TO Object;\nEND_VAR\nL := ObjectsOf('Pompe_*');\nAlignTop(L);\n"
+                  "o := GetObject('Titre');\nIF o <> NULL THEN o^.Text := 'Pompes'; END_IF;\nShowIf(Pompe_1, Mode_Auto);\nBringToFront(Pompe_2);";
+        const auto issues = compileWith(p, [](std::string_view) { return false; });
+        std::string errors;
+        for (const auto& i : issues)
+            if (i.severity == Issue::Severity::Error) errors += " | " + i.message;
+        check(errors.empty(), "Compiler (comme le build) accepte les fonctions des objets et des ressources" + errors);
+    }
     {
         const auto diags = checkScript(ScriptLang::ST, "VAR\n  p : POINTER TO Object;\n  L : LIST OF Texture;\n  s : Sound;\nEND_VAR\nAlignTop(L);");
         std::string errors;
