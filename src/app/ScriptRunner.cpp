@@ -5985,7 +5985,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // 1.28.0 : IHM > Deploiement reseau (le volet montre). Chaque geste part sur le fil du volet ; la commande attend
     // sa fin (jusqu'a 30 s) et echoue si le volet dit une erreur. Le message s'ecrit dans la sortie ([script] ...).
     //   deploiement rechercher | ajouter ADRESSE [PORT] | choisir MACHINE | appairer MACHINE CODE | etat | journal
-    //   | oublier | package       (MACHINE : son identifiant M-XXXX, son nom ou son adresse ; CODE : ${CODE} par exemple)
+    //   | oublier | package | attendre (un geste parti d'un bouton ou d'un dialogue)
+    //   (MACHINE : son identifiant M-XXXX, son nom ou son adresse ; CODE : ${CODE} par exemple)
     if (cmd == "deploiement") {
         HmiDeployPane* pane = nullptr;
         if (auto* root0 = top()) walk(*root0, [&](ui::Widget& x) {
@@ -6000,7 +6001,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (retries_ == 0) {
             pane->poll();
             bool started = false;
-            if (what == "rechercher") started = pane->discover();
+            if (what == "attendre") started = true;     // un geste parti d'un bouton ou d'un dialogue : attendre sa fin
+            else if (what == "rechercher") started = pane->discover();
             else if (what == "ajouter") started = pane->addAddress(arg(2), arg(3).empty() ? 47861 : std::atoi(arg(3).c_str()));
             else if (what == "choisir") {
                 if (!pane->select(arg(2))) fail("deploiement choisir : pas de machine " + arg(2));
@@ -6011,7 +6013,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             else if (what == "oublier") started = pane->forget();
             else if (what == "package") started = pane->createPackage();
             else {
-                fail("deploiement " + what + " ? (rechercher, ajouter, choisir, appairer, etat, journal, oublier, package)");
+                fail("deploiement " + what + " ? (rechercher, ajouter, choisir, appairer, etat, journal, oublier, package, attendre)");
                 return Step::Next;
             }
             if (!started) {

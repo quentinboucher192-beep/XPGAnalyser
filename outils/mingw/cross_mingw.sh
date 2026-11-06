@@ -7,7 +7,8 @@
 #
 #    outils/mingw/cross_mingw.sh            -> build-mingw/API-Studio.exe,
 #                                              build-mingw/IHM-Studio.exe (+ SDL3.dll ;
-#                                              1.12.30 : + pdfium.dll, s'il est dans third_party/pdfium)
+#                                              1.12.30 : + pdfium.dll, s'il est dans third_party/pdfium ;
+#                                              1.28.0 : + XPG-Deployment-Agent.exe, l'agent du PC de maintenance)
 #    JOBS=2 outils/mingw/cross_mingw.sh     -> moins de compilations a la fois
 #
 #  Le runtime C++ est lie dans l'exe (-static) : a cote, seulement SDL3.dll.
@@ -35,7 +36,7 @@ cmake -S . -B "$OUT" -G Ninja \
     -DXPG_BUILD_TESTS=OFF \
     -DSDL3_DIR="$ROOT/outils/mingw" \
     -DSDL3_MINGW_IMPLIB="$IMPLIB"
-ninja -C "$OUT" -j "$JOBS" xpg_api xpg_ihm
+ninja -C "$OUT" -j "$JOBS" xpg_api xpg_ihm xpg_deploy_agent
 cp -f third_party/SDL3/lib/x64/SDL3.dll "$OUT/SDL3.dll"
 # 1.12.30 : PDFium, le moteur PDF de la visionneuse de documents (charge a la demande) : a cote des exe.
 if [ -f third_party/pdfium/win-x64/pdfium.dll ]; then
@@ -48,7 +49,7 @@ rm -f "$OUT/XpgAnalyzer-API.exe" "$OUT/XpgAnalyzer-IHM.exe"     # 1.12.0 a 1.12.
 # 1.21.0 : une copie AVEC les symboles, a part (jamais livree : package_mingw.py prend les exe de $OUT seulement) - une
 # pile de plantage (IHM-Studio.exe+0x...) se lit alors directement avec x86_64-w64-mingw32-addr2line / nm.
 mkdir -p "$OUT/symboles"
-for exe in API-Studio IHM-Studio; do
+for exe in API-Studio IHM-Studio XPG-Deployment-Agent; do
     cp -f "$OUT/$exe.exe" "$OUT/symboles/$exe.exe"
     x86_64-w64-mingw32-strip "$OUT/$exe.exe"
     echo "fait : $OUT/$exe.exe"

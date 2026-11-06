@@ -87,8 +87,8 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools->add(CAutoOff, HmiGlyph::Stop, "Ne plus d\xC3\xA9marrer le poste avec la session", "Ne plus d\xC3\xA9marrer");
     tools->separator();
     tools->add(CDeploy, HmiGlyph::Export,
-               "1.28.0 : envoyer ce poste sur un PC de maintenance du r\xC3\xA9seau - le package sign\xC3\xA9, l'appairage, l'agent "
-               "(IHM \xE2\x80\xBA D\xC3\xA9ploiement r\xC3\xA9seau)",
+               "D\xC3\xA9ploiement r\xC3\xA9seau : envoyer ce poste sur un PC de maintenance du r\xC3\xA9seau - le package sign\xC3\xA9, "
+               "l'appairage, l'agent",
                "D\xC3\xA9ploiement r\xC3\xA9seau");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(CTry, [this] { return static_cast<bool>(hosts_.tryStation); });
