@@ -14,7 +14,7 @@ Retour au [README](../README.md). Voir aussi [DEPLOIEMENT.md](DEPLOIEMENT.md) (l
 |---|---|---|
 | Bibliothèque | 1.29.0 : `src/licensing/` (`xpg_licensing`) : formats, registre, licence, révocations, identité du PC, demande d'activation, import, vérification hors ligne, états, l'API de la maquette. **1.30.0** : l'état **Non activées** (aucune clé de l'éditeur : tout est ouvert, § 8 bis), ce que lit l'écran Licence (le registre, les PC liés, l'historique, le dossier, l'empreinte de ce PC, § 9), l'historique de ce PC (`historique.jsonl`), un dossier non inscriptible qui ne bloque rien | — |
 | Clés de l'éditeur | **1.30.0** : deux fichiers (§ 11 bis) — `PublisherKey.hpp`, les **vraies** clés, **vide** aujourd'hui ; `TestPublisherKey.hpp`, la clé d'**essai**, compilée **seulement** avec l'option CMake `XPG_LICENCES_CLE_ESSAI` (OFF par défaut) | **la vraie clé**, à créer sur ton PC (§ 11) ; d'ici là, les programmes livrés sont « Non activées » |
-| Outil Admin | `src/license_admin/` : `XPG-License-Admin` en console (clé de l'éditeur, `exporter-cle` vide ou à plusieurs clés, signer registre / licence / révocations, vérifier). **1.30.0** : le **registre des activations** (`activations.jsonl`, `enregistrer-demande`, `liste`, `--csv`) ; **livré à part à l'éditeur** (`outils/mingw/admin_editeur.sh` : `XPG-License-Admin-<version>-EDITEUR.zip`, avec son LISEZ-MOI pas à pas) | l'interface graphique de l'Admin (maquette : tableau de bord, clients, boutique…), la vérification du poste Admin par défi signé, la publication dans le dépôt GitHub, une sauvegarde de la clé protégée par un mot de passe |
+| Outil Admin | `src/license_admin/` : `XPG-License-Admin` en console (clé de l'éditeur, `exporter-cle` vide ou à plusieurs clés, signer registre / licence / révocations, vérifier). **1.30.0** : le **registre des activations** (`activations.jsonl`, `enregistrer-demande`, `liste`, `--csv`) ; **livré à part à l'éditeur** (`outils/mingw/admin_editeur.sh` : `XPG-License-Admin-<version>-EDITEUR.zip`, avec son LISEZ-MOI pas à pas). **1.31.0** : l'**archive** du poste et la **synchro avec un dépôt GitHub privé** (§ 11 quater : licences et registre des activations chiffrés, un commit par envoi, fusion entre postes, code de secours) | l'interface graphique de l'Admin (maquette : tableau de bord, clients, boutique…), la vérification du poste Admin par défi signé, une sauvegarde de la clé protégée par un mot de passe ; la synchro n'a **pas** été essayée contre le vrai GitHub (§ 11 quater) |
 | Interface | **1.30.0** : les Studios lient `xpg_licensing` (l'écran Licence et les verrous des entrées : `src/app/Licence*`) | — |
 | Installateur | **1.30.0** : `%ProgramData%\XPG\Licences` créé pour tous les comptes, avec le droit Modifier des Utilisateurs ; gardé à la désinstallation ; le registre livré (`licences\registre.xpgreg`) s'il est dans le dossier à livrer ; le contrôle du paquet dans `package_mingw.py` **et** `package.ps1` (§ 13) | le registre réel, signé par toi (`ressources-licences/registre.xpgreg`) |
 | En ligne | le format le prévoit (`type: floating`, champ `service`) ; une licence qui les emploie est **refusée** avec une phrase qui le dit | l'activation en ligne, les licences flottantes, la désactivation et le transfert en ligne, l'heure signée, **voir chaque lancement du logiciel** (§ 12) |
@@ -315,6 +315,39 @@ Par défaut `DOSSIER` = `dist-editeur/` à la racine ; la version vient de `outi
 
 Cet outil n'est **jamais** copié par `cross_mingw.sh` ni `package_mingw.py` ; le contrôle du paquet le refuserait (son nom, sa marque, même renommé).
 
+### 11 quater. La source centrale : un dépôt GitHub privé (1.31.0)
+
+`src/license_admin/GitHubSync.{hpp,cpp}`, dans l'outil de l'éditeur **seulement** (jamais dans les Studios). Rien ne change chez les clients : l'activation reste par fichier, vérifiée hors ligne ; un dépôt **privé** ne se lit pas sans jeton, et aucun jeton n'est jamais livré.
+
+**L'archive du poste** (`<dossier de la clé>/archive/`) : `registre/registre.xpgreg`, `revocations/revocations.xpgrev`, `licences/<ID>.xpglic` — le dernier de chacun (le plus grand numéro ; pour une licence, la plus récente). `signer-registre`, `signer-revocations` et `signer-licence` y rangent ce qu'ils signent ; `archiver FICHIER...` y range les fichiers signés avant la 1.31.0 (signature vérifiée par la clé du poste ou une clé compilée ; une demande est refusée). Le registre des activations reste `activations.jsonl`.
+
+**Sur le poste**, à côté de la clé : `github.json` (dépôt, branche, dossier dans le dépôt, adresse de l'API) ; `jeton-github.cle` (le jeton, DPAPI pour ce compte ; jamais écrit dans un message ni un journal) ; `cle-synchro.cle` (32 octets tirés sur ce poste, DPAPI). Le **code de secours** (`XPGS1-` puis 11 groupes de 5, base32 de Crockford, la clé et 2 octets de contrôle ; minuscules, O/0 et I/L/1 tolérés) redonne la clé de synchro sur un autre poste ; une **autre** clé déjà là n'est jamais remplacée.
+
+**Dans le dépôt** (sous `--racine` si elle est donnée) :
+
+| Fichier | En clair ? |
+|---|---|
+| `registre/registre.xpgreg`, `revocations/revocations.xpgrev` | oui : signés, aucun client nommé |
+| `licences/<ID>.xpglic.chiffre`, `activations/activations.jsonl.chiffre` | **non** : XChaCha20-Poly1305 (libsodium), une clé tirée de la clé de synchro (`crypto_kdf`), le **chemin** lié au chiffré (un fichier déplacé ne se déchiffre plus) |
+| `index.xpgsync` | la liste des fichiers : genre, empreinte SHA-256 du contenu **en clair**, numéro ou date, identifiant de licence, nombre de lignes, l'identifiant Git du fichier publié ; authentifiée (BLAKE2b avec une autre clé tirée de la clé de synchro) |
+| `LISEZ-MOI.md` | ce qu'est ce dépôt (écrit une fois) |
+
+Jamais : la clé de l'éditeur, le jeton, la clé ou le code de synchro. Les messages de commit : des comptes et des identifiants de licence, jamais un nom de client.
+
+**Une synchro** (`github-synchroniser`) :
+1. lire le dépôt : `GET /repos/{dépôt}` (un dépôt **public** est refusé), la branche (`git/ref/heads`), son commit, l'arbre (`git/trees?recursive=1`), l'index ; un index d'une autre clé de synchro, ou dont le code d'authentification est faux, arrête tout ;
+2. **recevoir** : pour chaque fichier de l'index, refusé s'il a été changé hors de l'outil (son identifiant Git n'est plus celui que l'index a noté), s'il ne se déchiffre pas, si son empreinte n'est pas celle de l'index, ou si sa signature n'est pas d'une clé de confiance (quand le poste en a une) ; sinon pris s'il est plus récent (numéro, puis date de signature) ; à égalité avec un contenu différent : le poste garde le sien, et le dit ; le registre des activations : les lignes qui manquent sont **ajoutées à la fin** (jamais réécrit), et `liste` classe les événements par leur heure ;
+3. **envoyer** ce que le dépôt n'a pas (ou qu'il a refusé) : les blobs, un arbre (sur celui du dépôt : les autres fichiers restent), **un commit**, puis la branche avancée **sans forcer** ; si un autre poste a publié entre-temps (422), relire, fusionner, recommencer (4 essais) ; le registre des activations n'est envoyé que si le poste a des lignes que le dépôt n'a pas (jamais d'aller-retour sans fin) ;
+4. un dépôt **vide** : son premier commit est le `LISEZ-MOI.md` (`PUT /contents`), puis l'envoi.
+
+`--recevoir-seulement` (un poste neuf) ; `github-etat` dit ce qui serait reçu et envoyé sans rien changer. Les réponses refusées sont dites en français : jeton refusé (401), droits ou limite de requêtes (403), dépôt introuvable ou invisible pour ce jeton (404), branche absente (avec la branche par défaut du dépôt).
+
+**Le transport** : celui de l'Assistant IA (`app/ai/AiHttp.cpp`, compilé dans l'outil) — WinHTTP sous Windows (les proxys et certificats du poste), libcurl chargée à la demande sous Linux ; 1.31.0 : PATCH et PUT (libcurl : `CURLOPT_CUSTOMREQUEST`). L'outil est en console : il attend la réponse.
+
+**Le jeton** : un jeton à grain fin (`github_pat_…`) qui ne voit **que** ce dépôt, avec **Contents : Read and write** ; le pas à pas est dans `LISEZ-MOI-EDITEUR.txt`.
+
+**Essayé** : `github_sync_test` (§ 14) contre un faux GitHub dans le processus ; l'outil lui-même, en console, contre `outils/licences/faux_github.py` (un faux GitHub local : l'API Git Data et Contents, de vrais identifiants Git, un envoi concurrent simulé), par libcurl sous Linux et par WinHTTP sous Wine. **Pas essayé contre le vrai GitHub** (aucun jeton ici, et aucun ne doit l'être) : la première synchro réelle est la tienne ; `github-etat` la prépare sans rien écrire.
+
 ## 12. Ce qui est prévu pour plus tard, et pourquoi il faut un service hébergé
 
 Le format prévoit `type: "floating"` et `service` ; rien ne prétend les faire : une telle licence est lue puis refusée, avec la phrase qui le dit.
@@ -371,5 +404,17 @@ Vérifié : ISCC 6.4.1 (sous Wine, `/O-` : le script compile, sans rien produire
 - **1.30.0** : l'écran Licence (le registre de la maquette par `getRegistry`, une fonctionnalité et sa limite, deux éditions ; les PC liés, un seul `thisPc`, son empreinte = `thisDeviceFingerprint` ; la licence d'autres PC : Autre PC, ses PC listés, aucun n'est ce PC ; sans licence : aucun) ; l'historique (les 6 premiers événements d'un PC, Valide → Grâce et Grâce → Expirée constatés par `refresh`, un refresh sans changement n'ajoute rien ; 600 ajouts → 500 lignes, les plus anciennes parties ; des lignes illisibles ignorées puis non recopiées ; une ligne d'une version plus récente lue) ; un dossier non inscriptible (l'évaluation marche, `detail` le dit une fois) ;
 - **1.30.0** : le registre des activations en sous-processus (deux licences pour deux PC, une extension, une révocation d'un PC, une demande enregistrée seule, une demande modifiée refusée ; 6 lignes, les premières jamais réécrites, pas le nom réseau ; l'état de chaque PC — activé, expiré, révoqué, demande — ; le tableau et ses totaux ; `--client`, `--licence` ; le CSV : BOM, `;`, CRLF, un champ entre guillemets ; une ligne abîmée ignorée et dite) ;
 - **1.30.0** : la bibliothèque `xpg_licensing` construite sans l'option : ni la marque ni l'identifiant de la clé d'essai, rien de l'outil Admin.
+
+`github_sync_test <racine du dépôt>` (ctest `githubsync`, **1.31.0**) : un faux GitHub dans le processus (le transport injecté : aucun réseau), deux postes Admin (deux dossiers).
+- les briques : le code de secours (aller-retour, minuscules et O pour 0 tolérés, une faute de frappe refusée), l'identifiant de la clé, chiffrer et déchiffrer (rien en clair ; déplacé, autre clé, abîmé : refusé), les lignes manquantes, les noms (dépôt, branche, dossier) ;
+- l'archive : rangé, déjà là, une demande refusée, sans clé de confiance refusé ;
+- sans configuration : refusé, avec la commande à taper ; le jeton se relit et n'est pas en clair dans son fichier ; une seconde clé de synchro refusée ;
+- poste 1, dépôt vide : `github-etat` (3 fichiers à envoyer, rien d'écrit), puis le premier envoi (LISEZ-MOI, puis un commit : index, registre en clair et identique, licence et activations chiffrées) ; **aucun nom de client ni de PC en clair, jamais le jeton** (ni dans un fichier ni dans un corps de requête) ; le message du commit : l'identifiant, pas le client ; resynchroniser : déjà à jour, aucun commit ;
+- poste 2 : un code faux refusé, le bon redonne la clé ; recevoir seulement, sans clé d'éditeur (3 fichiers, octet pour octet, `liste` juste) ; puis il signe une licence et publie ; le poste 1 reçoit ; ensuite plus rien, ni d'un côté ni de l'autre ;
+- un envoi concurrent : la branche refuse une fois, l'outil relit, recommence et le dit ; le fichier de l'autre poste est gardé ; la révocation arrive au poste 2 (le PC révoqué) ;
+- les refus : un mauvais jeton (dit, jamais écrit), un dépôt public, une autre clé de synchro (rien écrit), une licence chiffrée modifiée sur le dépôt (refusée ; le reste reçu ; le poste 1 la republie ; le poste neuf la reçoit alors), un index modifié (tout arrêté) ;
+- `liste` : le même état de chaque PC quel que soit l'ordre des lignes.
+
+**64** contrôles sous Linux.
 
 Sous Linux : **239** contrôles (1.29.0 : 154). Sous Wine (exe MinGW) en 1.29.0 : 142 contrôles, le contrôle du paquet sauté ; en 1.30.0, `licensing_test` n'a pas été refait sous Wine (`build-mingw` est configuré sans les essais) — l'outil Admin MinGW, lui, a été essayé sous Wine (§ 11 ter : `--version`, `creer-cle --essai`, `cle`, `exporter-cle` vers les deux fichiers, `--garder`, `--vide`, `signer-registre`, `verifier`).

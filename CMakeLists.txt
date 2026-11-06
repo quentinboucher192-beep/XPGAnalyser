@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.30.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.31.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -177,11 +177,18 @@ if(XPG_LICENCES_CLE_ESSAI)
 endif()
 # XPG-License-Admin : l'outil de l'EDITEUR (sa cle, signer registres, licences, revocations). JAMAIS LIVRE :
 # pas dans cross_mingw.sh, pas dans l'installateur ; outils/mingw/package_mingw.py arrete la construction s'il le trouve.
-add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp)
+# 1.31.0 : la synchro avec un depot GitHub PRIVE (license_admin/GitHubSync) passe par le transport HTTPS du
+# systeme, celui de l'Assistant IA (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous
+# Windows, libcurl chargee a la demande ailleurs.
+add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp
+                                 src/app/ai/AiHttp.cpp)
 target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
+if(NOT WIN32)
+    target_link_libraries(xpg_license_admin PRIVATE ${CMAKE_DL_LIBS})
+endif()
 if(WIN32)
-    target_link_libraries(xpg_license_admin PRIVATE shell32)
+    target_link_libraries(xpg_license_admin PRIVATE shell32 winhttp)
     if(MINGW)
         target_link_options(xpg_license_admin PRIVATE -mconsole)   # une console (la chaine MinGW met -mwindows partout)
     endif()
@@ -987,6 +994,19 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(licence_ui_test tests/licence_ui_test.cpp src/license_admin/Admin.cpp)
     xpg_target_link_libraries(licence_ui_test PRIVATE xpg_app xpg_licensing)
     xpg_add_test(NAME licenceui COMMAND licence_ui_test ${CMAKE_SOURCE_DIR})
+    # 1.31.0 : la synchro des licences avec un depot GitHub PRIVE (license_admin/GitHubSync), contre un FAUX
+    # GitHub dans le processus (le transport injecte d'app/ai/AiHttp : aucun reseau) ; deux postes Admin, un
+    # envoi concurrent, les refus (jeton, depot public, autre cle de synchro, fichiers modifies hors de l'outil).
+    xpg_add_test_executable(github_sync_test tests/github_sync_test.cpp src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp
+                            src/app/ai/AiHttp.cpp)
+    xpg_target_link_libraries(github_sync_test PRIVATE xpg_licensing)
+    if(TARGET github_sync_test AND NOT WIN32)
+        target_link_libraries(github_sync_test PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+    if(TARGET github_sync_test AND WIN32)
+        target_link_libraries(github_sync_test PRIVATE winhttp)
+    endif()
+    xpg_add_test(NAME githubsync COMMAND github_sync_test ${CMAKE_SOURCE_DIR})
     # 1.22.2 : ce qui consomme (core/Perf : les portees, l'image, les fenetres de 10 s et 60 s, les saccades, le
     # rapport) et l'onglet Performances (app/PerfPane), dessine sans ecran.
     xpg_add_test_executable(perf_test tests/perf_test.cpp src/app/PerfPane.cpp)

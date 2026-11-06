@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.30.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.31.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.30.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 21 h 49"},
     {"1.29.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 19 h 06"},
     {"1.28.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 14 h 28"},
     {"1.27.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 11 h 31"},
@@ -173,6 +174,12 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.31.0 : la synchro des licences avec un depot GitHub prive (l'outil de l'editeur)
+        note("1.31.0", "Projet", Kind::New,
+         "LES LICENCES ONT UNE SOURCE CENTRALE : l'\xC3\xA9" "diteur garde chaque licence sign\xC3\xA9" "e, le registre et la liste de r\xC3\xA9vocation dans "
+         "un d\xC3\xA9p\xC3\xB4t priv\xC3\xA9, chiffr\xC3\xA9s (ton nom et tes PC n'y sont jamais en clair). Une licence perdue peut te \xC3\xAAtre renvoy\xC3\xA9" "e \xC3\xA0 "
+         "l'identique. Rien ne change dans ce programme : l'activation reste par fichier, v\xC3\xA9rifi\xC3\xA9" "e hors ligne.",
+         "licence", ""),
         // 1.30.0 : les licences - la fenetre Licence, l'activation par fichier, les entrees verrouillees
         note("1.30.0", "Projet", Kind::New,
          "LA FEN\xC3\x8ATRE LICENCE : Aide \xE2\x80\xBA Licence\xE2\x80\xA6, ou la pastille Licence de la barre d'\xC3\xA9tat. L'\xC3\xA9" "dition, le statut, le client, les PC, "

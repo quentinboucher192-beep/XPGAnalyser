@@ -20,18 +20,29 @@
 //    XPG-License-Admin verifier FICHIER [--dossier D]
 //    XPG-License-Admin enregistrer-demande FICHIER.xpgreq [--dossier D]       (1.30.0)
 //    XPG-License-Admin liste [--licence ID] [--client TEXTE] [--csv F.csv] [--dossier D]   (1.30.0)
+//  1.31.0 : LA SYNCHRO AVEC UN DEPOT GITHUB PRIVE (GitHubSync.hpp) et l'ARCHIVE du poste (chaque fichier signe
+//  y est range ; signer-* --publier : synchronise juste apres) :
+//    XPG-License-Admin archiver FICHIER... [--dossier D]
+//    XPG-License-Admin github-config --depot PROPRIETAIRE/NOM [--branche main] [--racine DOSSIER] [--code-secours CODE]
+//    XPG-License-Admin github-jeton [--variable NOM] | github-jeton --effacer
+//    XPG-License-Admin github-etat [--hors-ligne]
+//    XPG-License-Admin github-synchroniser [--recevoir-seulement]
+//    XPG-License-Admin github-code-secours --afficher
 //  1.30.0 : le registre des activations (activations.jsonl, dans le dossier de la cle) : signer-licence,
 //  signer-revocations et enregistrer-demande y ajoutent leurs lignes ; liste montre tous les PC connus.
 //    XPG-License-Admin --version
 //  Code de sortie : 0 fait ; 1 refuse (la raison est ecrite) ; 2 mauvais usage.
 // =============================================================================
 #include "Admin.hpp"
+#include "GitHubSync.hpp"
 
 #include "../deploy/Crypto.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <map>
 #include <string>
 #include <vector>
@@ -42,6 +53,9 @@
 #endif
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <termios.h>
+#include <unistd.h>
 #endif
 
 namespace {
@@ -49,7 +63,7 @@ namespace {
 namespace crypto = deploy::crypto;
 using namespace license_admin;
 
-constexpr const char* kToolVersion = "1.0.0";
+constexpr const char* kToolVersion = "1.1.0";   // 1.31.0 : la synchro GitHub, l'archive
 
 void say(const std::string& text) {
     std::fwrite(text.data(), 1, text.size(), stdout);
@@ -80,6 +94,17 @@ std::string usage() {
            "  liste [--licence ID] [--client TEXTE] [--csv F.csv]\n"
            "                                                 tous les PC connus (un par ligne, leur dernier \xC3\xA9tat), les totaux ;\n"
            "                                                 --csv : le m\xC3\xAAme tableau pour Excel (UTF-8, s\xC3\xA9parateur ;)\n"
+           "\nL'archive et la synchro GitHub (un d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 ; les licences et le registre des activations y sont chiffr\xC3\xA9s) :\n"
+           "  archiver FICHIER...                            range des fichiers sign\xC3\xA9s (registre, r\xC3\xA9vocations, licences) dans l'archive ;\n"
+           "                                                 signer-* le fait tout seul (--publier : synchronise juste apr\xC3\xA8s)\n"
+           "  github-config --depot PROPRIETAIRE/NOM [--branche main] [--racine DOSSIER]\n"
+           "                                                 le d\xC3\xA9p\xC3\xB4t ; la premi\xC3\xA8re fois, cr\xC3\xA9" "e la cl\xC3\xA9 de synchro et montre son CODE DE SECOURS\n"
+           "  github-config --depot ... --code-secours XPGS1-...   un autre poste (ou apr\xC3\xA8s une panne) : redonne la cl\xC3\xA9 de synchro\n"
+           "  github-jeton [--variable NOM]                  enregistre le jeton GitHub (tap\xC3\xA9 sans \xC3\xA9" "cho, ou lu dans la variable NOM),\n"
+           "                                                 prot\xC3\xA9g\xC3\xA9 pour ce compte Windows ; --effacer le retire\n"
+           "  github-etat [--hors-ligne]                     la configuration, puis ce qui serait re\xC3\xA7u et envoy\xC3\xA9 (sans rien changer)\n"
+           "  github-synchroniser [--recevoir-seulement]     re\xC3\xA7oit ce que le d\xC3\xA9p\xC3\xB4t a de plus r\xC3\xA9" "cent, puis publie le reste (un commit)\n"
+           "  github-code-secours --afficher                 remontre le code de secours de la cl\xC3\xA9 de synchro\n"
            "  --version\n\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
            "Le registre des activations (activations.jsonl) : chaque licence sign\xC3\xA9" "e, chaque demande enregistr\xC3\xA9" "e, chaque r\xC3\xA9vocation ;\n"
@@ -97,6 +122,36 @@ bool readText(const std::string& path, std::string& out, std::string& why) {
 bool writeText(const std::string& path, const std::string& text, std::string& why) {
     crypto::Bytes bytes(text.begin(), text.end());
     return crypto::writePrivateFile(path, bytes, &why);
+}
+
+// Une ligne tapee sans echo (le jeton) ; lue telle quelle si l'entree n'est pas une console (un tube).
+std::string readSecretLine() {
+    std::string line;
+#ifdef _WIN32
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode = 0;
+    const bool console = h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode);
+    if (console) SetConsoleMode(h, mode & ~static_cast<DWORD>(ENABLE_ECHO_INPUT));
+    std::getline(std::cin, line);
+    if (console) {
+        SetConsoleMode(h, mode);
+        std::fputs("\n", stderr);
+    }
+#else
+    termios old{};
+    const bool tty = isatty(STDIN_FILENO) && tcgetattr(STDIN_FILENO, &old) == 0;
+    if (tty) {
+        termios quiet = old;
+        quiet.c_lflag &= ~static_cast<tcflag_t>(ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &quiet);
+    }
+    std::getline(std::cin, line);
+    if (tty) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &old);
+        std::fputs("\n", stderr);
+    }
+#endif
+    return line;
 }
 
 struct Args {
@@ -126,7 +181,8 @@ int run(const std::vector<std::string>& argv) {
     }
     Args a;
     a.command = argv[0];
-    static const std::vector<std::string> kFlags = {"--essai", "--garder", "--vide"};
+    static const std::vector<std::string> kFlags = {"--essai",     "--garder",    "--vide",  "--publier", "--effacer", "--hors-ligne",
+                                                    "--recevoir-seulement", "--afficher"};
     for (std::size_t i = 1; i < argv.size(); ++i) {
         const std::string& x = argv[i];
         if (x.rfind("--", 0) == 0) {
@@ -174,6 +230,40 @@ int run(const std::vector<std::string>& argv) {
         say("Cl\xC3\xA9 de l'\xC3\xA9" "diteur : " + key.name() + "\n  identifiant " + key.keyId() + "\n  empreinte   " + key.fingerprint(0) + "\n  fichier     " + key.path()
             + "\n  protection  " + (crypto::protectedHere() ? "DPAPI (ce compte Windows)" : "fichier lisible par son seul propri\xC3\xA9taire (pas de DPAPI ici)") + "\n"
             + (key.test() ? "  !!! CL\xC3\x89 D'ESSAI : jamais pour des licences de clients ; un programme qui l'embarque n'est pas livrable !!!\n" : ""));
+    };
+
+    // 1.31.0 : ranger un fichier signe dans l'archive du poste (un echec ne defait pas la signature : il est dit).
+    const auto archive = [&](const std::string& bytes, const SigningKey& key) {
+        std::string what, w;
+        if (github::archiveSigned(folder, bytes, github::trustedKeys(&key), &what, &w))
+            say("Archive : " + what + " (" + github::archiveFolder(folder) + ")\n");
+        else
+            complain("ATTENTION : le fichier n'a pas \xC3\xA9t\xC3\xA9 rang\xC3\xA9 dans l'archive (" + w + ") ; le fichier sign\xC3\xA9 est bien \xC3\xA9" "crit.");
+    };
+    const auto syncReport = [&](const SigningKey* key, bool receiveOnly, bool dryRun) -> int {
+        github::SyncOptions o;
+        o.receiveOnly = receiveOnly;
+        o.dryRun = dryRun;
+        o.now = licensing::systemNow();
+        o.tool = std::string("XPG-License-Admin ") + kToolVersion;
+        const auto r = github::synchronize(folder, key, o);
+        std::string text = r.text();
+        if (r.ok) {
+            say(text);
+        } else {
+            if (!text.empty() && text.back() == '\n') text.pop_back();
+            complain(text);
+        }
+        return r.ok ? 0 : 1;
+    };
+    // Apres une signature : synchroniser (--publier), ou le rappeler si la synchro est configuree.
+    const auto afterSigning = [&](const SigningKey& key) -> int {
+        if (a.flag("--publier")) {
+            say("\nSynchro GitHub (--publier) :\n");
+            return syncReport(&key, false, false);
+        }
+        if (github::configured(folder)) say("\xC3\x80 publier dans le d\xC3\xA9p\xC3\xB4t GitHub : XPG-License-Admin github-synchroniser\n");
+        return 0;
     };
 
     if (a.command == "creer-cle") {
@@ -241,7 +331,8 @@ int run(const std::vector<std::string>& argv) {
         (void)describeFile(out, key.get(), text);
         say("Sign\xC3\xA9 : " + a.one("--sortie") + "\n" + text);
         noteActivations(records);
-        return 0;
+        archive(out, *key);
+        return afterSigning(*key);
     }
     if (a.command == "signer-licence") {
         if (!need("--parametres") || !need("--registre") || !need("--sortie")) return 2;
@@ -272,7 +363,8 @@ int run(const std::vector<std::string>& argv) {
         }
         say("Sign\xC3\xA9" "e : " + a.one("--sortie") + "\n" + summary + (key->test() ? "!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI !!!\n" : ""));
         noteActivations(records);
-        return 0;
+        archive(out, *key);
+        return afterSigning(*key);
     }
     if (a.command == "enregistrer-demande") {
         if (a.positional.empty()) {
@@ -297,6 +389,13 @@ int run(const std::vector<std::string>& argv) {
             return 1;
         }
         say("Registre des activations : " + activationsPath(folder) + "\n");
+        if (a.flag("--publier")) {
+            std::string kw;
+            auto key = loadPublisherKey(folder, &kw);
+            say("\nSynchro GitHub (--publier) :\n");
+            return syncReport(key.get(), false, false);
+        }
+        if (github::configured(folder)) say("\xC3\x80 publier dans le d\xC3\xA9p\xC3\xB4t GitHub : XPG-License-Admin github-synchroniser\n");
         return 0;
     }
     if (a.command == "liste") {
@@ -320,6 +419,162 @@ int run(const std::vector<std::string>& argv) {
             say("CSV \xC3\xA9" "crit : " + a.one("--csv") + "\n");
         }
         return 0;
+    }
+    if (a.command == "archiver") {
+        if (a.positional.empty()) {
+            complain("archiver : quels fichiers sign\xC3\xA9s (registre, r\xC3\xA9vocations, licences) ?\n\n" + usage());
+            return 2;
+        }
+        auto key = keyOrFail();
+        if (!key) return 1;
+        int refused = 0;
+        for (const auto& path : a.positional) {
+            std::string bytes, what, w;
+            if (!readText(path, bytes, w) || !github::archiveSigned(folder, bytes, github::trustedKeys(key.get()), &what, &w)) {
+                complain("Refus\xC3\xA9 (" + path + ") : " + w);
+                ++refused;
+                continue;
+            }
+            say(path + " : " + what + "\n");
+        }
+        say("Archive : " + github::archiveFolder(folder) + "\n");
+        if (refused == 0 && github::configured(folder)) say("\xC3\x80 publier dans le d\xC3\xA9p\xC3\xB4t GitHub : XPG-License-Admin github-synchroniser\n");
+        return refused ? 1 : 0;
+    }
+    if (a.command == "github-config") {
+        github::Config c;
+        const bool had = github::configured(folder);
+        if (had && !github::readConfig(folder, c, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        if (a.one("--depot").empty() && !had) {
+            complain("github-config : l'option --depot PROPRIETAIRE/NOM manque\n\n" + usage());
+            return 2;
+        }
+        if (!a.one("--depot").empty()) c.repo = a.one("--depot");
+        if (!a.one("--branche").empty()) c.branch = a.one("--branche");
+        if (a.options.count("--racine")) c.root = a.one("--racine");
+        if (!a.one("--api").empty()) c.api = a.one("--api");
+        if (!github::writeConfig(folder, c, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Synchro GitHub : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + (c.root.empty() ? std::string() : ", dossier " + c.root)
+            + (c.api == github::kDefaultApi ? std::string() : ", API " + c.api) + "\n  (" + github::configPath(folder) + ")\n");
+        github::SyncKey sk{};
+        if (!a.one("--code-secours").empty()) {
+            if (!github::restoreSyncKey(folder, a.one("--code-secours"), sk, &why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Cl\xC3\xA9 de synchro redonn\xC3\xA9" "e par le code de secours : " + github::syncKeyId(sk) + "\n");
+        } else if (github::hasSyncKey(folder)) {
+            if (!github::loadSyncKey(folder, sk, &why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Cl\xC3\xA9 de synchro d\xC3\xA9j\xC3\xA0 sur ce poste : " + github::syncKeyId(sk) + "\n");
+        } else {
+            if (!github::createSyncKey(folder, sk, &why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Cl\xC3\xA9 de synchro cr\xC3\xA9\xC3\xA9" "e : " + github::syncKeyId(sk) + "\n\n"
+                "  !!! NOTE CE CODE DE SECOURS, hors de ce PC (gestionnaire de mots de passe, papier au coffre) !!!\n\n"
+                "      " + github::recoveryCode(sk) + "\n\n"
+                "  Sans lui, apr\xC3\xA8s une panne de ce PC, les licences et le registre des activations du d\xC3\xA9p\xC3\xB4t restent illisibles.\n"
+                "  Ne le mets jamais dans le d\xC3\xA9p\xC3\xB4t, ni dans un courriel. github-code-secours --afficher le remontre.\n");
+        }
+        crypto::wipe(sk);
+        if (!github::hasToken(folder)) say("Ensuite : XPG-License-Admin github-jeton (le jeton GitHub de ce d\xC3\xA9p\xC3\xB4t).\n");
+        else say("Ensuite : XPG-License-Admin github-etat, puis github-synchroniser.\n");
+        return 0;
+    }
+    if (a.command == "github-jeton") {
+        if (a.flag("--effacer")) {
+            if (!github::eraseToken(folder, &why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Jeton GitHub retir\xC3\xA9 de ce poste. (Pense aussi \xC3\xA0 le r\xC3\xA9voquer sur GitHub : Settings > Developer settings.)\n");
+            return 0;
+        }
+        std::string token;
+        if (!a.one("--variable").empty()) {
+            const char* v = std::getenv(a.one("--variable").c_str());
+            if (!v || !*v) {
+                complain("Refus\xC3\xA9 : la variable " + a.one("--variable") + " est vide ou absente");
+                return 1;
+            }
+            token = v;
+        } else {
+            complain("Colle le jeton GitHub puis Entr\xC3\xA9" "e (il ne s'affiche pas) : ");
+            token = readSecretLine();
+        }
+        while (!token.empty() && (token.back() == '\r' || token.back() == '\n' || token.back() == ' ')) token.pop_back();
+        while (!token.empty() && token.front() == ' ') token.erase(0, 1);
+        const std::string kind = github::tokenKind(token);
+        const bool ok = github::saveToken(folder, token, &why);
+        std::fill(token.begin(), token.end(), '\0');
+        if (!ok) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Jeton GitHub enregistr\xC3\xA9" + (kind.empty() ? std::string() : " (" + kind + ")") + ", prot\xC3\xA9g\xC3\xA9 pour ce compte "
+            + (crypto::protectedHere() ? "Windows (DPAPI)" : "(fichier lisible par son seul propri\xC3\xA9taire)") + ".\n"
+            + (kind.empty() ? "Attention : ce jeton n'a pas une forme connue (github_pat_..., ghp_...).\n" : "")
+            + "Ensuite : XPG-License-Admin github-etat\n");
+        return 0;
+    }
+    if (a.command == "github-code-secours") {
+        github::SyncKey sk{};
+        if (!github::loadSyncKey(folder, sk, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        if (!a.flag("--afficher")) {
+            say("Cl\xC3\xA9 de synchro : " + github::syncKeyId(sk) + "\nLe code de secours ne s'affiche qu'avec --afficher (personne derri\xC3\xA8re toi ?).\n");
+            crypto::wipe(sk);
+            return 0;
+        }
+        say("Cl\xC3\xA9 de synchro " + github::syncKeyId(sk) + "\nCode de secours :\n\n      " + github::recoveryCode(sk) + "\n\n"
+            "Garde-le hors de ce PC ; ne le mets jamais dans le d\xC3\xA9p\xC3\xB4t.\n");
+        crypto::wipe(sk);
+        return 0;
+    }
+    if (a.command == "github-etat") {
+        github::Config c;
+        if (!github::readConfig(folder, c, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Synchro GitHub : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + (c.root.empty() ? std::string() : ", dossier " + c.root)
+            + (c.api == github::kDefaultApi ? std::string() : ", API " + c.api) + "\n");
+        std::string w;
+        std::string token;
+        const bool tokenOk = github::loadToken(folder, token, &w);
+        const std::string kind = tokenOk ? github::tokenKind(token) : std::string();
+        std::fill(token.begin(), token.end(), '\0');
+        say(std::string("  jeton           ") + (tokenOk ? "enregistr\xC3\xA9" + (kind.empty() ? std::string() : " (" + kind + ")") : "non : " + w) + "\n");
+        github::SyncKey sk{};
+        const bool skOk = github::loadSyncKey(folder, sk, &w);
+        say(std::string("  cl\xC3\xA9 de synchro  ") + (skOk ? github::syncKeyId(sk) : "non : " + w) + "\n");
+        crypto::wipe(sk);
+        std::string kw;
+        auto key = loadPublisherKey(folder, &kw);
+        say(std::string("  cl\xC3\xA9 d'\xC3\xA9" "diteur   ") + (key ? key->keyId() + " (les signatures re\xC3\xA7ues sont v\xC3\xA9rifi\xC3\xA9" "es)" : "aucune sur ce poste (les signatures re\xC3\xA7ues ne sont v\xC3\xA9rifi\xC3\xA9" "es que par les cl\xC3\xA9s compil\xC3\xA9" "es)") + "\n");
+        say("  archive         " + github::archiveFolder(folder) + "\n");
+        if (a.flag("--hors-ligne") || !tokenOk || !skOk) return tokenOk && skOk ? 0 : 1;
+        say("\nCe que ferait github-synchroniser (rien n'est chang\xC3\xA9) :\n");
+        return syncReport(key.get(), false, true);
+    }
+    if (a.command == "github-synchroniser") {
+        std::string kw;
+        auto key = loadPublisherKey(folder, &kw);
+        if (!key && !a.flag("--recevoir-seulement"))
+            say("(Pas de cl\xC3\xA9 d'\xC3\xA9" "diteur sur ce poste : les signatures re\xC3\xA7ues ne sont v\xC3\xA9rifi\xC3\xA9" "es que par les cl\xC3\xA9s compil\xC3\xA9" "es dans l'outil.)\n");
+        return syncReport(key.get(), a.flag("--recevoir-seulement"), false);
     }
     if (a.command == "verifier") {
         if (a.positional.empty()) {

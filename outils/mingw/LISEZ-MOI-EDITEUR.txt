@@ -151,6 +151,84 @@ l'hébergement du service ; ce n'est pas fait dans cette version.
 
 
 =============================================================================
+LA SOURCE CENTRALE : TON DÉPÔT GITHUB PRIVÉ (1.31.0)
+=============================================================================
+
+L'outil range chaque fichier qu'il signe dans son ARCHIVE (archive\, à côté de ta clé),
+et peut la synchroniser avec un dépôt GitHub PRIVÉ : le registre, la liste de
+révocation, chaque licence et le registre des activations. Un autre PC Admin (ou ce
+PC après une panne) les y retrouve.
+
+Ce qui part sur GitHub : le registre et les révocations (signés, en clair : aucun
+client n'y est nommé) ; les licences et le registre des activations CHIFFRÉS avec ta
+clé de synchro (ni GitHub ni qui volerait le jeton ne peut lire les noms des clients
+ou de leurs PC) ; un index authentifié et un LISEZ-MOI.
+Ce qui n'y va JAMAIS : ta clé de l'éditeur, le jeton GitHub, le code de secours.
+
+Une seule fois :
+
+1. Sur github.com : crée un dépôt PRIVÉ, réservé aux licences (par exemple
+   licences-xpg ; coche « Private »). L'outil refuse un dépôt public.
+
+2. Crée un jeton qui ne voit QUE ce dépôt : github.com > ta photo > Settings >
+   Developer settings > Personal access tokens > Fine-grained tokens > Generate new
+   token. Repository access : « Only select repositories », ce dépôt. Permissions :
+   Repository permissions > Contents : « Read and write » (rien d'autre). Choisis une
+   date d'expiration (par exemple un an) et note-la. Copie le jeton (github_pat_...).
+
+3. Configure l'outil (TON-COMPTE : ton nom sur GitHub) :
+
+     XPG-License-Admin.exe github-config --depot TON-COMPTE/licences-xpg
+
+   La première fois, il crée la CLÉ DE SYNCHRO et affiche son CODE DE SECOURS
+   (XPGS1-....). NOTE-LE HORS DE CE PC : gestionnaire de mots de passe, ou papier au
+   coffre. Sans lui, après une panne de ce PC, les licences et le registre des
+   activations du dépôt restent illisibles. Ne le mets jamais dans le dépôt ni dans un
+   courriel. github-code-secours --afficher le remontre.
+
+4. Enregistre le jeton (il ne s'affiche pas quand tu le colles ; puis Entrée) :
+
+     XPG-License-Admin.exe github-jeton
+
+   Il est protégé pour ton compte Windows (DPAPI). Expiré ou révoqué : refais
+   github-jeton. Pour le retirer de ce PC : github-jeton --effacer.
+
+5. Range dans l'archive les fichiers signés AVANT cette version (un par un) :
+
+     XPG-License-Admin.exe archiver registre.xpgreg
+     XPG-License-Admin.exe archiver client-abc.xpglic
+
+   (tous les .xpglic d'un dossier : for %f in (*.xpglic) do XPG-License-Admin.exe archiver "%f")
+
+6. Regarde ce qui partirait, sans rien changer, puis publie :
+
+     XPG-License-Admin.exe github-etat
+     XPG-License-Admin.exe github-synchroniser
+
+Ensuite, à chaque signature, ajoute --publier (signer-licence ... --publier,
+signer-revocations ... --publier, enregistrer-demande ... --publier) : le fichier est
+rangé dans l'archive et publié dans la foulée. Sans --publier, l'outil te rappelle de
+lancer github-synchroniser.
+
+Un autre PC Admin, ou ce PC réinstallé après une panne :
+
+     XPG-License-Admin.exe github-config --depot TON-COMPTE/licences-xpg --code-secours XPGS1-...
+     XPG-License-Admin.exe github-jeton
+     XPG-License-Admin.exe github-synchroniser --recevoir-seulement
+
+   Il reçoit l'archive et le registre des activations (liste marche aussitôt). Pour
+   SIGNER sur ce PC, il lui faut aussi ta clé de l'éditeur (ta copie de secours) ; sans
+   elle, une nouvelle clé (et une version des programmes qui la connaît).
+
+Comment ça se passe : un envoi = un commit. Si un autre PC a publié entre-temps,
+l'outil relit le dépôt, fusionne et recommence. Le plus grand numéro de registre ou
+de liste de révocation gagne ; pour une licence, la plus récente ; le registre des
+activations garde les lignes des deux côtés. Un fichier changé sur GitHub hors de
+l'outil est refusé (et republié par un PC qui a le bon). Ne modifie pas le dépôt à la
+main.
+
+
+=============================================================================
 À SAVOIR
 =============================================================================
 
@@ -159,4 +237,6 @@ l'hébergement du service ; ce n'est pas fait dans cette version.
 - Changer de clé (une rotation) : crée la nouvelle clé dans un autre dossier, puis
   exporter-cle --sortie PublisherKey.hpp --garder --dossier NOUVEAU-DOSSIER : le fichier
   garde l'ancienne clé et ajoute la nouvelle ; les programmes reconnaissent les deux.
+- --dossier D vaut aussi pour la synchro : github.json, le jeton, la clé de synchro et
+  archive\ sont dans le dossier de la clé.
 - Tout est décrit dans docs\LICENCES.md (dans les sources du programme).

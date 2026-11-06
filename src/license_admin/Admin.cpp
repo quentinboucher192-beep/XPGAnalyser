@@ -899,10 +899,17 @@ bool readActivations(const std::string& folder, std::vector<ActivationRecord>& o
 }
 
 std::vector<KnownDevice> knownDevices(const std::vector<ActivationRecord>& records, Seconds now) {
-    // Les evenements dans l'ordre du fichier : le dernier etat de chaque PC (par sa cle).
+    // Les evenements dans l'ordre de leur heure (1.31.0 : apres une synchro, les lignes d'un autre poste
+    // arrivent a la fin du fichier, plus anciennes ou non ; a la meme heure, l'ordre du fichier) : le
+    // dernier etat de chaque PC (par sa cle).
+    std::vector<const ActivationRecord*> ordered;
+    ordered.reserve(records.size());
+    for (const auto& r : records) ordered.push_back(&r);
+    std::stable_sort(ordered.begin(), ordered.end(), [](const ActivationRecord* x, const ActivationRecord* y) { return x->at < y->at; });
     std::map<std::string, KnownDevice> byKey;
     std::map<std::string, bool> licensed, revoked;
-    for (const auto& a : records) {
+    for (const ActivationRecord* rec : ordered) {
+        const ActivationRecord& a = *rec;
         if (a.kind == "revocation") {
             for (auto& [k, d] : byKey)
                 if (licensed[k] && d.licenseId == a.licenseId && (a.deviceKey.empty() || a.deviceKey == k)) {

@@ -80,6 +80,7 @@ enum : int {
     kOptWriteFunction = 20011,
     kOptPostFields = 10015,
     kOptUserAgent = 10018,
+    kOptCustomRequest = 10036,   // 1.31.0 : PATCH, PUT (l'outil de l'editeur et GitHub)
     kOptHttpHeader = 10023,
     kOptHeaderData = 10029,
     kOptNoProgress = 43,
@@ -286,6 +287,8 @@ public:
             lib.setopt(h, kOptPost, 1L);
             lib.setopt(h, kOptPostFieldSizeLarge, static_cast<std::int64_t>(req.body.size()));
             lib.setopt(h, kOptPostFields, req.body.data());
+            // 1.31.0 : une autre methode avec un corps (PATCH, PUT) : le corps part comme un POST, sous son nom.
+            if (req.method != "POST") lib.setopt(h, kOptCustomRequest, req.method.c_str());
         }
         lib.setopt(h, kOptWriteFunction, static_cast<WriteFn>(&curlOnData));
         lib.setopt(h, kOptWriteData, static_cast<void*>(&ctx));

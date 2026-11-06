@@ -56,7 +56,7 @@ bool parseUrl(std::string_view text, Url& out, std::string* why = nullptr);
 bool parseUrl(std::string_view text, Url& out, std::string* why, bool allowPrivateHttp);
 
 struct HttpRequest {
-    std::string method{"POST"};           // "POST" | "GET"
+    std::string method{"POST"};           // "POST" | "GET" ; 1.31.0 : aussi "PATCH", "PUT" (avec un corps)
     std::string url;
     HttpHeaders headers;                  // en plus : rien (pas d'Expect, pas de compression)
     std::string body;
