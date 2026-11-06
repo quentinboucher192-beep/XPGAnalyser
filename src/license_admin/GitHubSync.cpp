@@ -23,6 +23,8 @@
 #include <fstream>
 #include <map>
 #include <set>
+#include <thread>
+#include <chrono>
 
 namespace license_admin::github {
 
@@ -322,9 +324,6 @@ bool loadToken(const std::string& folder, std::string& token, std::string* why) 
 bool eraseToken(const std::string& folder, std::string* why) {
     std::error_code ec;
     if (!hasToken(folder)) return true;
-    // Le fichier est d'abord recouvert, puis supprime.
-    crypto::Bytes zeros(512, 0);
-    (void)crypto::writePrivateFile(tokenPath(folder), zeros, nullptr);
     if (!fs::remove(P(tokenPath(folder)), ec) || ec) {
         if (why) *why = "impossible de supprimer " + tokenPath(folder);
         return false;
@@ -454,16 +453,33 @@ bool parseRecoveryCode(std::string_view code, SyncKey& out, std::string* why) {
     return true;
 }
 
-bool restoreSyncKey(const std::string& folder, std::string_view code, SyncKey& out, std::string* why) {
+bool restoreSyncKey(const std::string& folder, std::string_view code, SyncKey& out, std::string* why, bool replace, std::string* kept) {
     if (!parseRecoveryCode(code, out, why)) return false;
     if (hasSyncKey(folder)) {
         SyncKey current{};
-        if (!loadSyncKey(folder, current, why)) return false;
-        const bool same = sodium_memcmp(current.data(), out.data(), out.size()) == 0;
+        std::string w;
+        const bool readable = loadSyncKey(folder, current, &w);
+        const bool same = readable && sodium_memcmp(current.data(), out.data(), out.size()) == 0;
+        const std::string currentId = readable ? syncKeyId(current) : std::string("illisible");
         sodium_memzero(current.data(), current.size());
         if (same) return true;
-        if (why) *why = "une AUTRE cl\xC3\xA9 de synchro est d\xC3\xA9j\xC3\xA0 sur ce poste (" + syncKeyPath(folder) + ") : rien n'est remplac\xC3\xA9";
-        return false;
+        if (!replace) {
+            if (why)
+                *why = "une AUTRE cl\xC3\xA9 de synchro (" + currentId + ") est d\xC3\xA9j\xC3\xA0 sur ce poste : rien n'est remplac\xC3\xA9. Pour mettre celle du code \xC3\xA0 sa place "
+                       "(l'ancienne est gard\xC3\xA9" "e \xC3\xA0 c\xC3\xB4t\xC3\xA9) : ajoute --remplacer";
+            return false;
+        }
+        std::string stamp = licensing::isoTime(licensing::systemNow());
+        for (auto& c : stamp)
+            if (c == ':') c = '-';
+        const std::string old = syncKeyPath(folder) + ".ancienne-" + stamp;
+        std::error_code ec;
+        fs::rename(P(syncKeyPath(folder)), P(old), ec);
+        if (ec) {
+            if (why) *why = "impossible de mettre de c\xC3\xB4t\xC3\xA9 l'ancienne cl\xC3\xA9 de synchro (" + ec.message() + ") : rien n'est remplac\xC3\xA9";
+            return false;
+        }
+        if (kept) *kept = old;
     }
     return storeSyncKey(folder, out, why);
 }
@@ -536,7 +552,10 @@ std::string archiveFolder(const std::string& folder) { return deploy::joinPath(f
 
 std::string safeName(std::string_view id) {
     std::string out;
-    for (char c : id) out += (std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-') ? c : '_';
+    for (char c : id) {
+        const bool ok = std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-';
+        out += !ok || (c == '.' && !out.empty() && out.back() == '.') ? '_' : c;   // jamais ".." dans un chemin
+    }
     while (!out.empty() && out.front() == '.') out.erase(0, 1);
     if (out.empty()) out = "licence";
     return out.substr(0, 120);
@@ -617,7 +636,8 @@ bool describeSigned(std::string_view bytes, const std::vector<crypto::PublicKey>
         e.kind = "revocations";
         e.number = r.number;
         e.date = r.issuedAt;
-        e.path = "revocations/revocations.xpgrev";
+        e.encrypted = true;   // une raison en texte libre peut nommer un client
+        e.path = "revocations/revocations.xpgrev.chiffre";
     }
     e.sha256 = crypto::sha256Hex(bytes);
     return true;
@@ -855,7 +875,13 @@ public:
                 return "le jeton n'a pas le droit de " + what
                        + " (il lui faut, sur ce seul d\xC3\xA9p\xC3\xB4t : Contents en lecture et \xC3\xA9" "criture)" + m;
             case 404:
-                return "d\xC3\xA9p\xC3\xB4t " + config_.repo + " introuvable, ou le jeton ne le voit pas (un jeton \xC3\xA0 grain fin doit nommer ce d\xC3\xA9p\xC3\xB4t)" + m;
+                return "introuvable sur GitHub pour " + what + " : le d\xC3\xA9p\xC3\xB4t " + config_.repo
+                       + " n'existe pas, ou le jeton ne le voit pas (un jeton \xC3\xA0 grain fin doit nommer ce d\xC3\xA9p\xC3\xB4t)" + m;
+            case 301:
+            case 302:
+            case 307:
+            case 308:
+                return "GitHub renvoie ailleurs pour " + what + " : le d\xC3\xA9p\xC3\xB4t a \xC3\xA9t\xC3\xA9 renomm\xC3\xA9 ou transf\xC3\xA9r\xC3\xA9 ; mets son nouveau nom (github-config --depot PROPRIETAIRE/NOM)" + m;
             default:
                 return "GitHub a r\xC3\xA9pondu " + std::to_string(r.status) + " pour " + what + m;
         }
@@ -895,6 +921,21 @@ bool getBlob(Api& api, const std::string& sha, std::string& out, std::string* wh
     return true;
 }
 
+// Un chemin relatif sans "." ni ".." ni segment vide.
+bool safeRelPath(std::string_view p) {
+    if (p.empty() || p.front() == '/' || p.back() == '/' || p.find('\\') != std::string_view::npos) return false;
+    std::size_t pos = 0;
+    while (pos <= p.size()) {
+        std::size_t end = p.find('/', pos);
+        if (end == std::string_view::npos) end = p.size();
+        const auto seg = p.substr(pos, end - pos);
+        if (seg.empty() || seg == "." || seg == "..") return false;
+        pos = end + 1;
+    }
+    return true;
+}
+bool knownKind(const std::string& k) { return k == "registre" || k == "revocations" || k == "licence" || k == "activations"; }
+
 // L'index : "XPG-INDEX 1 <cle> <code>\n" puis le JSON. Faux : `why` ; `foreignKey` : l'index vient d'une autre cle.
 bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& foreignKey, std::string* why) {
     foreignKey = false;
@@ -921,7 +962,7 @@ bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& for
         foreignKey = true;
         if (why)
             *why = "ce d\xC3\xA9p\xC3\xB4t a \xC3\xA9t\xC3\xA9 publi\xC3\xA9 avec une AUTRE cl\xC3\xA9 de synchro (" + parts[2] + ") que celle de ce poste (" + syncKeyId(key)
-                   + ") : redonne-lui la bonne avec github-config --code-secours CODE (le code not\xC3\xA9 au premier github-config)";
+                   + ") : redonne-lui la bonne avec github-config --code-secours CODE --remplacer (le code not\xC3\xA9 au premier github-config)";
         return false;
     }
     const std::string mac = indexMac(key, body);
@@ -949,9 +990,8 @@ bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& for
             e.licenseId = f.str("licence");
             e.lines = static_cast<int>(f.integer("lignes"));
             e.blob = f.str("blob");
-            const bool known = e.kind == "registre" || e.kind == "revocations" || e.kind == "licence" || e.kind == "activations";
-            if (!known || e.path.empty() || e.path.find("..") != std::string::npos || e.sha256.size() != 64) continue;
-            out.index.push_back(std::move(e));
+            if (!safeRelPath(e.path) || e.sha256.size() != 64) continue;
+            out.index.push_back(std::move(e));   // un genre inconnu (une version plus recente) : garde tel quel, jamais traite
         }
     out.hasIndex = true;
     return true;
@@ -987,7 +1027,7 @@ std::string readmeText(const Config& c) {
            "Ce d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 est tenu par l'outil de l'\xC3\xA9" "diteur (`XPG-License-Admin github-synchroniser`). "
            "Ne le modifie pas \xC3\xA0 la main : l'outil refuse un fichier chang\xC3\xA9 hors de lui.\n\n"
            "- `registre/registre.xpgreg` : les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s, sign\xC3\xA9" "es (en clair).\n"
-           "- `revocations/revocations.xpgrev` : la liste de r\xC3\xA9vocation, sign\xC3\xA9" "e (en clair).\n"
+           "- `revocations/revocations.xpgrev.chiffre` : la liste de r\xC3\xA9vocation, sign\xC3\xA9" "e, **chiffr\xC3\xA9" "e** (une raison peut nommer un client).\n"
            "- `licences/*.xpglic.chiffre` : chaque licence sign\xC3\xA9" "e, **chiffr\xC3\xA9" "e** (elle nomme le client et ses PC).\n"
            "- `activations/activations.jsonl.chiffre` : le registre des activations, **chiffr\xC3\xA9**.\n"
            "- `index.xpgsync` : la liste des fichiers et leurs empreintes, authentifi\xC3\xA9" "e.\n\n"
@@ -1071,7 +1111,13 @@ bool readRemote(Api& api, const SyncKey& key, Remote& out, bool& foreignKey, std
 std::string SyncReport::text() const {
     std::string t;
     if (!remoteInfo.empty()) t += "D\xC3\xA9p\xC3\xB4t : " + remoteInfo + "\n";
-    if (!ok) return t + "Refus\xC3\xA9 : " + why + "\n";
+    if (!ok) {
+        if (!received.empty()) {
+            t += "Re\xC3\xA7u (d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit sur ce poste) :\n";
+            for (const auto& r : received) t += "  - " + r + "\n";
+        }
+        return t + "Refus\xC3\xA9 : " + why + "\n";
+    }
     if (initialized) t += "Le d\xC3\xA9p\xC3\xB4t \xC3\xA9tait vide : son premier commit (LISEZ-MOI.md) est fait.\n";
     if (!received.empty()) {
         t += preview ? "\xC3\x80 recevoir :\n" : "Re\xC3\xA7u :\n";
@@ -1113,7 +1159,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
     rep.preview = opt.dryRun;
     for (int attempt = 0; attempt < 4; ++attempt) {
         rep.attempts = attempt + 1;
-        rep.received.clear();
+        if (opt.dryRun) rep.received.clear();   // sinon : ce qui a ete recu a un essai precedent est ecrit, et reste dit
         rep.sent.clear();
         rep.warnings.clear();
         if (raced) rep.warnings.push_back("un autre poste a publi\xC3\xA9 pendant l'envoi : l'outil a relu le d\xC3\xA9p\xC3\xB4t, fusionn\xC3\xA9, puis recommenc\xC3\xA9");
@@ -1134,10 +1180,12 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
             return nullptr;
         };
         std::set<std::string> keepLocal;   // les conflits : la version du poste reste, et n'est pas envoyee
-        std::set<std::string> rejected;    // refuses : l'entree de l'index reste telle quelle
+        std::set<std::string> rejected;    // refuses : l'entree de l'index reste telle quelle, le poste republie la sienne
+        std::set<std::string> untrusted;   // signes par une cle que ce poste ne connait pas : ni recus, ni ecrases par plus ancien
         std::string remoteActivations;     // le registre des activations du depot, dechiffre (s'il a ete lu)
         bool remoteActivationsRead = false;
         for (const auto& e : remote.index) {
+            if (!knownKind(e.kind)) continue;   // d'une version plus recente de l'outil : laisse tel quel
             const Entry* l = findLocal(e.path);
             const auto blob = remote.blobs.find(under(config, e.path));
             if (blob == remote.blobs.end()) {
@@ -1197,8 +1245,8 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
                 continue;
             }
             if (!trusted.empty() && !verified) {
-                rep.warnings.push_back(e.path + " refus\xC3\xA9 : sa signature n'est pas celle d'une cl\xC3\xA9 d'\xC3\xA9" "diteur de confiance");
-                rejected.insert(e.path);
+                rep.warnings.push_back(describeEntry(got) + " pas re\xC3\xA7u : sign\xC3\xA9 par une cl\xC3\xA9 d'\xC3\xA9" "diteur que ce poste ne conna\xC3\xAEt pas (une autre cl\xC3\xA9 ? exporter-cle --garder)");
+                untrusted.insert(e.path);
                 continue;
             }
             if (l) {
@@ -1213,7 +1261,10 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
             if (writeLocal && !writeFileAt(localPathOf(folder, got), plain, &rep.why)) return rep;
             rep.received.push_back(describeEntry(got) + (trusted.empty() ? " (signature non v\xC3\xA9rifi\xC3\xA9" "e : pas de cl\xC3\xA9 d'\xC3\xA9" "diteur sur ce poste)" : ""));
         }
-        if (writeLocal) local = localEntries(folder, localWarnings);
+        if (writeLocal) {
+            localWarnings.clear();
+            local = localEntries(folder, localWarnings);
+        }
         for (const auto& w : localWarnings) rep.warnings.push_back(w);
 
         // ---- envoyer : ce que le depot n'a pas ----
@@ -1223,6 +1274,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
             const Entry* r = nullptr;
             for (const auto& e : remote.index)
                 if (e.path == l.path) r = &e;
+            if (r && untrusted.count(l.path) && newer(l, *r) <= 0) continue;   // jamais un plus ancien par-dessus
             if (r && r->sha256 == l.sha256 && !rejected.count(l.path)) continue;
             if (r && l.kind == "activations" && !rejected.count(l.path)) {
                 // Envoyer seulement si le poste a des lignes que le depot n'a pas (l'ordre seul ne compte pas).
@@ -1256,12 +1308,18 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
             body.set("content", base64Of(readmeText(config)));
             body.set("branch", config.branch);
             const Reply r = api.call("PUT", "/contents/" + under(config, kReadmeName), core::json::write(body, false));
-            if (r.status != 201 && r.status != 200) {
+            const bool someoneElse = r.status == 409 || r.status == 422;   // un autre poste vient de le creer
+            if (r.status != 201 && r.status != 200 && !someoneElse) {
                 rep.why = api.explain(r, "cr\xC3\xA9" "er le premier fichier du d\xC3\xA9p\xC3\xB4t vide")
                           + " ; tu peux aussi cr\xC3\xA9" "er le d\xC3\xA9p\xC3\xB4t sur GitHub avec \xC2\xAB Add a README file \xC2\xBB coch\xC3\xA9";
                 return rep;
             }
-            rep.initialized = true;
+            rep.initialized = !someoneElse;
+            // GitHub peut mettre un instant a montrer la branche neuve : jusqu'a 10 s.
+            for (int i = 0; i < 10; ++i) {
+                if (api.call("GET", "/git/ref/heads/" + config.branch).status == 200) break;
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            }
             continue;   // relire : le depot a maintenant sa branche
         }
 
@@ -1354,9 +1412,17 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
             return rep;
         }
         if (r.status == 422 || r.status == 409) {
-            // Un autre poste a publie entre-temps : relire, fusionner, recommencer.
-            raced = true;
-            continue;
+            // Un autre poste a publie entre-temps (la tete de la branche a change) : relire, fusionner, recommencer.
+            // Sinon (une branche protegee, une regle du depot) : le dire, avec le message de GitHub.
+            const Reply now = api.call("GET", "/git/ref/heads/" + config.branch);
+            const Value* o = now.json.find("object");
+            const std::string head = now.status == 200 && o ? o->str("sha") : std::string();
+            if (!head.empty() && head != remote.head) {
+                raced = true;
+                continue;
+            }
+            rep.why = api.explain(r, "avancer la branche " + config.branch) + " ; la branche est-elle prot\xC3\xA9g\xC3\xA9" "e (Settings > Branches, Rules) ?";
+            return rep;
         }
         rep.why = api.explain(r, "avancer la branche " + config.branch);
         return rep;

@@ -23,7 +23,7 @@
 //  1.31.0 : LA SYNCHRO AVEC UN DEPOT GITHUB PRIVE (GitHubSync.hpp) et l'ARCHIVE du poste (chaque fichier signe
 //  y est range ; signer-* --publier : synchronise juste apres) :
 //    XPG-License-Admin archiver FICHIER... [--dossier D]
-//    XPG-License-Admin github-config --depot PROPRIETAIRE/NOM [--branche main] [--racine DOSSIER] [--code-secours CODE]
+//    XPG-License-Admin github-config --depot PROPRIETAIRE/NOM [--branche main] [--racine DOSSIER] [--code-secours CODE [--remplacer]]
 //    XPG-License-Admin github-jeton [--variable NOM] | github-jeton --effacer
 //    XPG-License-Admin github-etat [--hors-ligne]
 //    XPG-License-Admin github-synchroniser [--recevoir-seulement]
@@ -31,7 +31,8 @@
 //  1.30.0 : le registre des activations (activations.jsonl, dans le dossier de la cle) : signer-licence,
 //  signer-revocations et enregistrer-demande y ajoutent leurs lignes ; liste montre tous les PC connus.
 //    XPG-License-Admin --version
-//  Code de sortie : 0 fait ; 1 refuse (la raison est ecrite) ; 2 mauvais usage.
+//  Code de sortie : 0 fait ; 1 refuse (la raison est ecrite) ; 2 mauvais usage ; 3 signe et range, mais la synchro
+//  (--publier) a echoue (1.31.0 : ne pas signer de nouveau, relancer github-synchroniser).
 // =============================================================================
 #include "Admin.hpp"
 #include "GitHubSync.hpp"
@@ -99,7 +100,9 @@ std::string usage() {
            "                                                 signer-* le fait tout seul (--publier : synchronise juste apr\xC3\xA8s)\n"
            "  github-config --depot PROPRIETAIRE/NOM [--branche main] [--racine DOSSIER]\n"
            "                                                 le d\xC3\xA9p\xC3\xB4t ; la premi\xC3\xA8re fois, cr\xC3\xA9" "e la cl\xC3\xA9 de synchro et montre son CODE DE SECOURS\n"
-           "  github-config --depot ... --code-secours XPGS1-...   un autre poste (ou apr\xC3\xA8s une panne) : redonne la cl\xC3\xA9 de synchro\n"
+           "  github-config --depot ... --code-secours XPGS1-... [--remplacer]\n"
+           "                                                 un autre poste (ou apr\xC3\xA8s une panne) : redonne la cl\xC3\xA9 de synchro ;\n"
+           "                                                 --remplacer : une autre cl\xC3\xA9 d\xC3\xA9j\xC3\xA0 l\xC3\xA0 est mise de c\xC3\xB4t\xC3\xA9 (jamais effac\xC3\xA9" "e)\n"
            "  github-jeton [--variable NOM]                  enregistre le jeton GitHub (tap\xC3\xA9 sans \xC3\xA9" "cho, ou lu dans la variable NOM),\n"
            "                                                 prot\xC3\xA9g\xC3\xA9 pour ce compte Windows ; --effacer le retire\n"
            "  github-etat [--hors-ligne]                     la configuration, puis ce qui serait re\xC3\xA7u et envoy\xC3\xA9 (sans rien changer)\n"
@@ -109,7 +112,7 @@ std::string usage() {
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
            "Le registre des activations (activations.jsonl) : chaque licence sign\xC3\xA9" "e, chaque demande enregistr\xC3\xA9" "e, chaque r\xC3\xA9vocation ;\n"
            "seulement ce que les clients t'envoient (rien de leur mat\xC3\xA9riel). Voir chaque lancement demandera le service en ligne.\n"
-           "Code de sortie : 0 fait, 1 refus\xC3\xA9, 2 mauvais usage.\n";
+           "Code de sortie : 0 fait, 1 refus\xC3\xA9, 2 mauvais usage, 3 sign\xC3\xA9 et rang\xC3\xA9 mais pas publi\xC3\xA9 (relance github-synchroniser).\n";
 }
 
 bool readText(const std::string& path, std::string& out, std::string& why) {
@@ -182,7 +185,7 @@ int run(const std::vector<std::string>& argv) {
     Args a;
     a.command = argv[0];
     static const std::vector<std::string> kFlags = {"--essai",     "--garder",    "--vide",  "--publier", "--effacer", "--hors-ligne",
-                                                    "--recevoir-seulement", "--afficher"};
+                                                    "--recevoir-seulement", "--afficher", "--remplacer"};
     for (std::size_t i = 1; i < argv.size(); ++i) {
         const std::string& x = argv[i];
         if (x.rfind("--", 0) == 0) {
@@ -260,7 +263,9 @@ int run(const std::vector<std::string>& argv) {
     const auto afterSigning = [&](const SigningKey& key) -> int {
         if (a.flag("--publier")) {
             say("\nSynchro GitHub (--publier) :\n");
-            return syncReport(&key, false, false);
+            if (syncReport(&key, false, false) == 0) return 0;
+            complain("Le fichier est sign\xC3\xA9 et rang\xC3\xA9 dans l'archive ; seule la publication a \xC3\xA9" "chou\xC3\xA9 : ne signe pas de nouveau, relance github-synchroniser.");
+            return 3;
         }
         if (github::configured(folder)) say("\xC3\x80 publier dans le d\xC3\xA9p\xC3\xB4t GitHub : XPG-License-Admin github-synchroniser\n");
         return 0;
@@ -393,7 +398,9 @@ int run(const std::vector<std::string>& argv) {
             std::string kw;
             auto key = loadPublisherKey(folder, &kw);
             say("\nSynchro GitHub (--publier) :\n");
-            return syncReport(key.get(), false, false);
+            if (syncReport(key.get(), false, false) == 0) return 0;
+            complain("La demande est not\xC3\xA9" "e ; seule la publication a \xC3\xA9" "chou\xC3\xA9 : relance github-synchroniser.");
+            return 3;
         }
         if (github::configured(folder)) say("\xC3\x80 publier dans le d\xC3\xA9p\xC3\xB4t GitHub : XPG-License-Admin github-synchroniser\n");
         return 0;
@@ -456,19 +463,24 @@ int run(const std::vector<std::string>& argv) {
         if (!a.one("--branche").empty()) c.branch = a.one("--branche");
         if (a.options.count("--racine")) c.root = a.one("--racine");
         if (!a.one("--api").empty()) c.api = a.one("--api");
+        github::SyncKey sk{};
+        std::string restored, kept;
+        if (!a.one("--code-secours").empty()) {   // d'abord la cle : un code refuse ne change rien
+            if (!github::restoreSyncKey(folder, a.one("--code-secours"), sk, &why, a.flag("--remplacer"), &kept)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            restored = "Cl\xC3\xA9 de synchro redonn\xC3\xA9" "e par le code de secours : " + github::syncKeyId(sk) + "\n"
+                       + (kept.empty() ? std::string() : "  (l'ancienne est gard\xC3\xA9" "e \xC3\xA0 c\xC3\xB4t\xC3\xA9 : " + kept + ")\n");
+        }
         if (!github::writeConfig(folder, c, &why)) {
             complain("Refus\xC3\xA9 : " + why);
             return 1;
         }
         say("Synchro GitHub : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + (c.root.empty() ? std::string() : ", dossier " + c.root)
             + (c.api == github::kDefaultApi ? std::string() : ", API " + c.api) + "\n  (" + github::configPath(folder) + ")\n");
-        github::SyncKey sk{};
-        if (!a.one("--code-secours").empty()) {
-            if (!github::restoreSyncKey(folder, a.one("--code-secours"), sk, &why)) {
-                complain("Refus\xC3\xA9 : " + why);
-                return 1;
-            }
-            say("Cl\xC3\xA9 de synchro redonn\xC3\xA9" "e par le code de secours : " + github::syncKeyId(sk) + "\n");
+        if (!restored.empty()) {
+            say(restored);
         } else if (github::hasSyncKey(folder)) {
             if (!github::loadSyncKey(folder, sk, &why)) {
                 complain("Refus\xC3\xA9 : " + why);
@@ -480,7 +492,9 @@ int run(const std::vector<std::string>& argv) {
                 complain("Refus\xC3\xA9 : " + why);
                 return 1;
             }
-            say("Cl\xC3\xA9 de synchro cr\xC3\xA9\xC3\xA9" "e : " + github::syncKeyId(sk) + "\n\n"
+            say("Cl\xC3\xA9 de synchro cr\xC3\xA9\xC3\xA9" "e : " + github::syncKeyId(sk) + "\n"
+                "  (Ce d\xC3\xA9p\xC3\xB4t a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 synchronis\xC3\xA9 par un autre PC ? Il te faut SON code de secours :\n"
+                "   github-config --depot " + c.repo + " --code-secours XPGS1-... --remplacer)\n\n"
                 "  !!! NOTE CE CODE DE SECOURS, hors de ce PC (gestionnaire de mots de passe, papier au coffre) !!!\n\n"
                 "      " + github::recoveryCode(sk) + "\n\n"
                 "  Sans lui, apr\xC3\xA8s une panne de ce PC, les licences et le registre des activations du d\xC3\xA9p\xC3\xB4t restent illisibles.\n"

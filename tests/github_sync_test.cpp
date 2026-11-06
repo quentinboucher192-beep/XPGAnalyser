@@ -71,6 +71,7 @@ struct FakeGitHub {
     std::string branch{"main"};
     bool        isPrivate{true};
     bool        raceOnce{false};
+    bool        protect{false};   // une branche protegee : PATCH refuse, la tete ne bouge pas
     std::map<std::string, std::string> blobs;                                  // sha -> contenu
     std::map<std::string, std::map<std::string, std::string>> trees;           // sha -> chemin -> sha du blob
     struct Commit {
@@ -264,6 +265,7 @@ struct FakeGitHub {
         if (req.method == "PATCH" && path.rfind("/git/refs/heads/", 0) == 0) {
             const std::string b = path.substr(16);
             if (!refs.count(b)) return msg(422, "Reference does not exist");
+            if (protect) return msg(422, "Protected branch update failed for refs/heads/" + b + ".");
             if (raceOnce) {
                 raceOnce = false;
                 commitDirect("concurrent.txt", "un autre poste\n", "commit concurrent");
@@ -414,7 +416,8 @@ int main(int argc, char** argv) {
         check(gh::validRepo("editeur/licences-xpg") && !gh::validRepo("editeur") && !gh::validRepo("a/b/c") && !gh::validRepo("x/..")
                   && gh::validBranch("main") && !gh::validBranch("a..b") && gh::validRoot("licences/xpg") && !gh::validRoot("../x"),
               "les noms : depot, branche, dossier");
-        check(gh::safeName("XPG-2026/00042 ..") == "XPG-2026_00042_..", "le nom de fichier d'une licence : " + gh::safeName("XPG-2026/00042 .."));
+        check(gh::safeName("XPG-2026/00042 ..") == "XPG-2026_00042_._" && gh::safeName("XPG-2026..7") == "XPG-2026._7",
+              "le nom de fichier d'une licence, jamais \"..\" : " + gh::safeName("XPG-2026/00042 .."));
     }
 
     // ---- les deux postes : la cle de l'editeur, le registre, deux PC, une licence ----
@@ -554,7 +557,7 @@ int main(int argc, char** argv) {
     {
         std::string rev;
         std::vector<adm::ActivationRecord> recR;
-        check(adm::signRevocations(*key, "{\"number\": 1, \"revoked\": [{\"license_id\": \"XPG-GH-0002\", \"reason\": \"Essai\"}]}", now, rev, &why, &recR),
+        check(adm::signRevocations(*key, "{\"number\": 1, \"revoked\": [{\"license_id\": \"XPG-GH-0002\", \"reason\": \"Resiliation Verrerie Fictive\"}]}", now, rev, &why, &recR),
               "une liste de revocation signee");
         check(gh::archiveSigned(U(pc1), rev, trusted, &what, &why) && adm::appendActivations(U(pc1), recR, &why), "rangee");
         fake.raceOnce = true;
@@ -563,7 +566,8 @@ int main(int argc, char** argv) {
         for (const auto& w : r.warnings) warned = warned || has(w, "autre poste");
         check(r.ok && r.attempts == 2 && warned && !r.commit.empty(), "la branche refuse une fois : l'outil relit, recommence, et le dit\n" + r.text());
         const auto files = fake.headFiles();
-        check(files.count("concurrent.txt") && files.count("revocations/revocations.xpgrev"), "le fichier de l'autre poste est garde, la revocation publiee");
+        check(files.count("concurrent.txt") && files.count("revocations/revocations.xpgrev.chiffre"), "le fichier de l'autre poste est garde, la revocation publiee (chiffree)");
+        check(!anyBlobHas("Verrerie Fictive") && !anyBlobHas("Resiliation"), "la raison de la revocation n'est pas en clair dans le depot");
         const auto r2 = sync(pc2, nullptr, true);
         std::vector<adm::ActivationRecord> rec;
         int skipped = 0;
@@ -594,7 +598,52 @@ int main(int argc, char** argv) {
         (void)gh::createSyncKey(U(pc4), k4, &why);
         const std::size_t commits = fake.commitCount();
         r = sync(pc4, nullptr);
-        check(!r.ok && has(r.why, "AUTRE cl") && fake.commitCount() == commits, "une autre cle de synchro : refusee, rien n'est ecrit (" + r.why + ")");
+        check(!r.ok && has(r.why, "AUTRE cl") && has(r.why, "--remplacer") && fake.commitCount() == commits,
+              "une autre cle de synchro : refusee, rien n'est ecrit, et dit quoi faire (" + r.why + ")");
+        {
+            gh::SyncKey back{};
+            std::string kept;
+            check(!gh::restoreSyncKey(U(pc4), gh::recoveryCode(k1), back, &why) && has(why, "--remplacer"), "le code d'un autre depot sans --remplacer : refuse");
+            check(gh::restoreSyncKey(U(pc4), gh::recoveryCode(k1), back, &why, true, &kept) && back == k1 && fs::exists(fs::path(std::u8string(kept.begin(), kept.end()))),
+                  "avec --remplacer : la cle du code, l'ancienne gardee a cote");
+            r = sync(pc4, nullptr, true);
+            check(r.ok && !r.received.empty(), "puis le poste recoit le depot\n" + r.text());
+        }
+        // Une branche protegee : la tete ne bouge pas, ce n'est pas un autre poste ; dit, sans recommencer.
+        {
+            adm::ActivationRecord pending;
+            pending.kind = "demande";
+            pending.at = lic::systemNow();
+            pending.licenseId = "XPG-GH-0003";
+            (void)adm::appendActivations(U(pc1), {pending}, &why);
+            fake.protect = true;
+            r = sync(pc1, key.get());
+            check(!r.ok && r.attempts == 1 && has(r.why, "prot") && has(r.why, "Protected branch"), "une branche protegee : refusee au premier essai, le message de GitHub dit\n" + r.text());
+            fake.protect = false;
+            r = sync(pc1, key.get());
+            check(r.ok && !r.commit.empty(), "la protection levee : publie");
+        }
+        // Un poste qui ne connait pas la cle qui a signe : il ne recoit pas, et n'ecrase pas par plus ancien (pas d'aller-retour).
+        {
+            const fs::path pc6 = base / "admin-6";
+            auto key6 = adm::createPublisherKey(U(pc6), "essai autre cle", true, &why);
+            setup(pc6, fake.token, &why);
+            gh::SyncKey k6{};
+            (void)gh::restoreSyncKey(U(pc6), gh::recoveryCode(k1), k6, &why);
+            std::string reg317, regJson = readFile(repo / "tests" / "fixtures" / "licences" / "registre-exemple.json");
+            regJson.replace(regJson.find("318"), 3, "317");
+            check(key6 && adm::signRegistry(*key6, regJson, now, reg317, &why) && gh::archiveSigned(U(pc6), reg317, gh::trustedKeys(key6.get()), &what, &why),
+                  "le poste 6 : une autre cle d'editeur, un registre n 317 a lui");
+            const std::size_t before = fake.commitCount();
+            r = sync(pc6, key6.get());
+            bool noted = false;
+            for (const auto& w : r.warnings) noted = noted || has(w, "pas re");
+            check(r.ok && noted && fake.commitCount() == before && fake.headFiles()["registre/registre.xpgreg"] == reg,
+                  "signe par une cle inconnue : pas recu, et son registre plus ancien n'est pas publie par-dessus\n" + r.text());
+            const auto again = sync(pc6, key6.get());
+            const auto other = sync(pc1, key.get());
+            check(again.ok && other.ok && other.upToDate && fake.commitCount() == before, "puis aucun commit, d'un cote ni de l'autre");
+        }
 
         // Un fichier chiffre modifie dans le depot : un poste neuf ne le recoit pas, recoit le reste.
         auto files = fake.headFiles();

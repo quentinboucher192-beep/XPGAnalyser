@@ -159,10 +159,11 @@ et peut la synchroniser avec un dépôt GitHub PRIVÉ : le registre, la liste de
 révocation, chaque licence et le registre des activations. Un autre PC Admin (ou ce
 PC après une panne) les y retrouve.
 
-Ce qui part sur GitHub : le registre et les révocations (signés, en clair : aucun
-client n'y est nommé) ; les licences et le registre des activations CHIFFRÉS avec ta
+Ce qui part sur GitHub : le registre (signé, en clair : aucun client n'y est nommé) ;
+la liste de révocation, les licences et le registre des activations CHIFFRÉS avec ta
 clé de synchro (ni GitHub ni qui volerait le jeton ne peut lire les noms des clients
-ou de leurs PC) ; un index authentifié et un LISEZ-MOI.
+ou de leurs PC) ; un index authentifié et un LISEZ-MOI. Les identifiants de licence
+(XPG-2026-00042) restent lisibles : n'y mets pas le nom du client.
 Ce qui n'y va JAMAIS : ta clé de l'éditeur, le jeton GitHub, le code de secours.
 
 Une seule fois :
@@ -214,6 +215,8 @@ Un autre PC Admin, ou ce PC réinstallé après une panne :
 
      XPG-License-Admin.exe github-config --depot TON-COMPTE/licences-xpg --code-secours XPGS1-...
      XPG-License-Admin.exe github-jeton
+   (Si ce PC a déjà sa propre clé de synchro, l'outil le dit : ajoute --remplacer ;
+   l'ancienne est gardée à côté, jamais effacée.)
      XPG-License-Admin.exe github-synchroniser --recevoir-seulement
 
    Il reçoit l'archive et le registre des activations (liste marche aussitôt). Pour
@@ -232,7 +235,9 @@ main.
 À SAVOIR
 =============================================================================
 
-- Code de sortie : 0 fait, 1 refusé (la raison est écrite), 2 mauvais usage.
+- Code de sortie : 0 fait, 1 refusé (la raison est écrite), 2 mauvais usage,
+  3 signé et rangé mais pas publié (--publier) : ne signe pas de nouveau, relance
+  github-synchroniser.
 - --dossier D : un autre dossier pour la clé (par défaut %LOCALAPPDATA%\XPG\LicenseAdmin).
 - Changer de clé (une rotation) : crée la nouvelle clé dans un autre dossier, puis
   exporter-cle --sortie PublisherKey.hpp --garder --dossier NOUVEAU-DOSSIER : le fichier

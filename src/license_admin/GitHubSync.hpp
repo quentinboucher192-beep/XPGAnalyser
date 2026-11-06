@@ -11,11 +11,11 @@
 //  synchro. Ils restent sur le poste, proteges par DPAPI (le compte Windows).
 //
 //  CE QUI Y EST CHIFFRE : tout ce qui nomme un client ou un PC - les licences
-//  (.xpglic : le client, ses PC) et le registre des activations - chiffre avec
-//  la CLE DE SYNCHRO (XChaCha20-Poly1305, libsodium) ; le chemin du fichier est
-//  lie au chiffre (un fichier deplace ne se dechiffre plus). En clair : le
-//  registre et la liste de revocation (signes, sans donnee de client), l'index
-//  et un LISEZ-MOI.
+//  (.xpglic : le client, ses PC), la liste de revocation (sa raison est un texte
+//  libre) et le registre des activations - chiffre avec la CLE DE SYNCHRO
+//  (XChaCha20-Poly1305, libsodium) ; le chemin du fichier est lie au chiffre (un
+//  fichier deplace ne se dechiffre plus). En clair : le registre (signe, sans
+//  donnee de client), l'index et un LISEZ-MOI.
 //
 //  LA CLE DE SYNCHRO : 32 octets tires sur ce poste (github-config), gardes par
 //  DPAPI ; un CODE DE SECOURS (XPGS1-..., 55 caracteres et un controle) la
@@ -103,8 +103,10 @@ bool loadSyncKey(const std::string& folder, SyncKey& out, std::string* why);
 [[nodiscard]] std::string recoveryCode(const SyncKey& key);
 // Relire un code (tirets, espaces, minuscules, O/0 et I/L/1 toleres). Faux : `why`.
 bool parseRecoveryCode(std::string_view code, SyncKey& out, std::string* why);
-// Le code redonne la cle sur ce poste. Une AUTRE cle deja la : refuse (rien n'est remplace).
-bool restoreSyncKey(const std::string& folder, std::string_view code, SyncKey& out, std::string* why);
+// Le code redonne la cle sur ce poste. Une AUTRE cle deja la : refuse (rien n'est remplace), sauf `replace` :
+// l'ancienne est alors gardee a cote (cle-synchro.cle.ancienne-<date>), jamais effacee ; `kept` dit ou.
+bool restoreSyncKey(const std::string& folder, std::string_view code, SyncKey& out, std::string* why, bool replace = false,
+                    std::string* kept = nullptr);
 
 // ---- chiffrer un fichier pour le depot ----
 //  "XPG-CHIFFRE 1 <id de la cle>\n" puis le base64 (nonce 24 octets + chiffre) en lignes de 76.

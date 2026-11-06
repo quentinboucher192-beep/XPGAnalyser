@@ -1395,6 +1395,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\Tls.hpp" />
     <ClInclude Include="src\deploy\TlsIdentity.hpp" />
     <ClInclude Include="src\license_admin\Admin.hpp" />
+    <ClInclude Include="src\license_admin\GitHubSync.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\KeyFile.hpp" />
     <ClInclude Include="src\licensing\Licensing.hpp" />

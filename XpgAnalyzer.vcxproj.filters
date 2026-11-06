@@ -3715,5 +3715,8 @@
     <ClInclude Include="src\licensing\TestPublisherKey.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\GitHubSync.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
