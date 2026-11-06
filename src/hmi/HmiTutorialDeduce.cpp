@@ -1222,6 +1222,8 @@ constexpr TopicPlace kTopicPlaces[] = {
     {"parametres-systeme", "arbre:Simulation/IHM"}, {"page-simulation", "arbre:Simulation/IHM"},
     {"menu-connexion", "arbre:IHM/Configuration/Utilisateurs"}, {"actions-ressources", "arbre:IHM/Ressources"},
     {"verifier", "arbre:IHM"}, {"performances", "arbre:Simulation/IHM"}, {"reprise", "arbre:IHM"},
+    // 1.30.0 : la licence de ce PC (Aide > Licence..., la pastille de la barre d'etat) - la racine du projet.
+    {"licence", "arbre:IHM"},
     {"etats-projet", "arbre:IHM"}, {"echange", "arbre:IHM"}, {"dossier", "arbre:IHM/Fichiers externes"},
     // 1.12.30 : les echanges de projets (Projet > Exporter en archive) - la racine du projet, comme
     // l'etat du projet (son clic droit les a aussi).

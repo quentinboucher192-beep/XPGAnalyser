@@ -81,7 +81,8 @@ POUR CHAQUE CLIENT
 =============================================================================
 
 1. Le client t'envoie la demande d'activation de son PC (un fichier .xpgreq) : dans
-   le programme, License Manager > Demander une activation. Elle porte la clé de son
+   IHM Studio ou API Studio : Aide > Licence... (ou la pastille Licence en bas),
+   Demander une activation... Elle porte la clé de son
    PC (rien de son matériel) et le nom qu'il a donné à son PC.
 
 2. Copie parametres-exemple.json en un fichier pour ce client (par exemple
@@ -100,8 +101,8 @@ POUR CHAQUE CLIENT
    Pour la relire : XPG-License-Admin.exe verifier client-abc.xpglic
 
 4. Envoie client-abc.xpglic au client, EN PIÈCE JOINTE, tel quel (un fichier retouché
-   ou dont les fins de ligne ont changé est refusé). Il l'importe : License Manager >
-   Activer par fichier de licence. Le fichier contient la licence et le registre :
+   ou dont les fins de ligne ont changé est refusé). Il l'importe : Aide > Licence... >
+   Activer par fichier de licence... Le fichier contient la licence et le registre :
    un seul fichier à importer.
 
 Un PC de plus sur la même licence (dans la limite de max_devices) :
