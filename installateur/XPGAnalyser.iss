@@ -119,7 +119,7 @@
 ;    [/CURRENTUSER | /ALLUSERS] [/DIR="..."] [/DONNEES="D:\Mes données"]
 ;    [/MIGRER=oui|non] [/DESINSTALLERLOT8=oui|non] [/LOG="fichier"]
 ;    [/PROFIL=deux|api|ihm|poste] [/POSTE="D:\Projets\Armoire"] [/POSTEAUTO=oui|non] [/POSTERELANCE=oui|non]
-;    [/TASKS="..." | /MERGETASKS="..."] - les cases : bureauapi, bureauihm, bureauposte, barre, xihm,
+;    [/TASKS="..." | /MERGETASKS="..."] - les cases (1.29.0 : agent) : bureauapi, bureauihm, bureauposte, barre, xihm,
 ;    xapi, xpg, parefeu, reserve (« !reserve » : sans copie de secours)
 ;  (voir docs\GUIDE-INSTALLATION.md). Avec l'assistant : /COMPOSITION=non (1.12.29) si sa fenêtre
 ;  se dessine mal sur un PC (le double tampon de Windows est alors enlevé ; 1.12.30 : il n'est plus
@@ -868,7 +868,7 @@ begin
   try
     if T <> '' then begin
       S := '';
-      Toutes := 'bureauapi,bureauihm,bureauposte,barre,xihm,xapi,xpg,parefeu,reserve';
+      Toutes := 'bureauapi,bureauihm,bureauposte,barre,xihm,xapi,xpg,parefeu,agent,reserve';
       while Toutes <> '' do begin
         P := Pos(',', Toutes);
         if P = 0 then P := Length(Toutes) + 1;
@@ -5114,12 +5114,23 @@ begin
   if (PagePoste <> nil) and (CurPageID = PagePoste.ID) then begin
     D := RemoveBackslashUnlessRoot(Trim(PagePoste.Values[0]));
     if D = '' then begin MsgBox('Choisis le dossier du projet que le poste ouvre.', mbError, MB_OK); Result := False; Exit; end;
-    if not DirExists(D) then begin MsgBox('Ce dossier n''existe pas : ' + D, mbError, MB_OK); Result := False; Exit; end;
-    Essai := PosteProbleme(D);
-    if (Essai <> '') and (MsgBox('Attention : ' + Essai + '.' + #13#10 + #13#10 + 'Le poste ne s''ouvrira pas sur ce projet tel qu''il est. Le garder quand même ?',
-                                 mbConfirmation, MB_YESNO) = IDNO) then begin
-      Result := False;
-      Exit;
+    // 1.29.0 : en silencieux, aucune boîte ne doit bloquer (/SUPPRESSMSGBOXES ne retient que les boîtes « supprimables ») :
+    // le dossier peut ne pas exister encore - l'agent de déploiement y installera le projet ; le journal le dit.
+    if not DirExists(D) then begin
+      if WizardSilent then
+        Log('Poste d''exploitation : ce dossier n''existe pas (encore) : ' + D + ' - gardé (le projet peut être déployé ensuite)')
+      else begin
+        MsgBox('Ce dossier n''existe pas : ' + D, mbError, MB_OK);
+        Result := False;
+        Exit;
+      end;
+    end else begin
+      Essai := PosteProbleme(D);
+      if (Essai <> '') and (SuppressibleMsgBox('Attention : ' + Essai + '.' + #13#10 + #13#10 + 'Le poste ne s''ouvrira pas sur ce projet tel qu''il est. Le garder quand même ?',
+                                               mbConfirmation, MB_YESNO, IDYES) = IDNO) then begin
+        Result := False;
+        Exit;
+      end;
     end;
     PosteDossierChoisi := D;
     PosteAutoChoisi := CasePosteAuto.Checked;
