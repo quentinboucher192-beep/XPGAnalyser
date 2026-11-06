@@ -20,11 +20,13 @@
 
 #include "../third_party/miniz.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -235,7 +237,9 @@ int main(int argc, char** argv) {
     check(c::init(), "libsodium pret");
     const fs::path fixtures = argc > 1 ? fs::path(argv[1]) : fs::path();
     std::error_code ec;
-    const fs::path base = fs::temp_directory_path(ec) / ("xpg-deploy-package-" + c::randomDigits(8));
+    // Un accent dans le chemin : les chemins UTF-8 (Windows : path(u8string)).
+    const std::string leaf = "xpg-d\xC3\xA9ploiement-" + c::randomDigits(8);
+    const fs::path base = fs::temp_directory_path(ec) / fs::path(std::u8string(leaf.begin(), leaf.end()));
     fs::remove_all(base, ec);
     fs::create_directories(base, ec);
     const fs::path project = base / "Essai_Deploiement";
@@ -258,6 +262,7 @@ int main(int argc, char** argv) {
     {
         const std::string onDisk = readFile(base / "cleA" / "cle_editeur.bin");
         check(has(onDisk, "publique=" + keyA->publicKeyHex()) && has(onDisk, "nom=Poste essai A"), "cle A : le fichier porte la cle publique et le nom");
+        check(has(onDisk, c::protectedHere() ? "protection=dpapi" : "protection=fichier"), "cle A : la protection de ce systeme (DPAPI sous Windows)");
         auto again = deploy::DevKey::loadOrCreate(U(base / "cleA"), &why);
         check(again && !again->created() && again->publicKey() == keyA->publicKey() && again->name() == "Poste essai A",
               "cle A relue : la meme, avec son nom [" + why + "]");

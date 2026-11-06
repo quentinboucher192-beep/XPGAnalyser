@@ -781,6 +781,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiSandbox.cpp" />
     <ClCompile Include="src\app\ai\AiWorkbook.cpp" />
     <ClCompile Include="src\deploy\Agent.cpp" />
+    <ClCompile Include="src\deploy\Client.cpp" />
     <ClCompile Include="src\deploy\Crypto.cpp" />
     <ClCompile Include="src\deploy\DevKey.cpp" />
     <ClCompile Include="src\deploy\Discovery.cpp" />

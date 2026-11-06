@@ -1936,6 +1936,9 @@
     <ClCompile Include="src\deploy\Agent.cpp">
       <Filter>deploy</Filter>
     </ClCompile>
+    <ClCompile Include="src\deploy\Client.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
     <ClCompile Include="src\deploy\Discovery.cpp">
       <Filter>deploy</Filter>
     </ClCompile>
