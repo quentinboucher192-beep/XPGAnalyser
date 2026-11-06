@@ -25325,6 +25325,89 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Tester et livrer  Livrer et exploiter / deploiement-reseau
+        {"deploiement-reseau", "Le d\xC3\xA9ploiement r\xC3\xA9seau : envoyer le poste sur un PC de maintenance", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
+         "Le poste d'exploitation d'un projet (le projet FINISH et son lanceur) part du PC de "
+         "d\xC3\xA9veloppement vers un PC de maintenance du r\xC3\xA9seau. Sur ce PC, un agent l'attend : "
+         "**XPG-Deployment-Agent**. Les deux machines ne se croient qu'une fois **appair\xC3\xA9" "es** (un "
+         "code \xC3\xA0 6 chiffres) ; tout passe en TLS 1.3, certificats des deux c\xC3\xB4t\xC3\xA9s ; le "
+         "paquet est sign\xC3\xA9.",
+         {
+             {K::Heading, "Ce qui est fait dans la 1.28.0, et ce qui vient ensuite", {}},
+             {K::Bullet, "**Fait** : le paquet sign\xC3\xA9 (Cr\xC3\xA9" "er un package), l'agent du PC de "
+                         "maintenance (il \xC3\xA9" "coute, r\xC3\xA9pond, se laisse appairer, tient son "
+                         "journal), la recherche des machines, l'appairage, l'\xC3\xA9tat et le journal "
+                         "d'une machine.", {}},
+             {K::Bullet, "**Ensuite (1.29.0)** : l'envoi du paquet \xC3\xA0 la machine, son installation "
+                         "(les versions c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, le retour en arri\xC3\xA8re), le "
+                         "lancement du poste sur la machine ; l'agent en service Windows, les r\xC3\xA8gles "
+                         "du pare-feu. D'ici l\xC3\xA0, le paquet se copie \xC3\xA0 la main.", {}},
+             {K::Heading, "Ouvrir le volet", {}},
+             {K::Paragraph, "Configuration \xE2\x80\xBA **Poste d'exploitation**, outil **D\xC3\xA9ploiement "
+                         "r\xC3\xA9seau** ; ou Aller \xC3\xA0 (Ctrl+K) : \xC2\xAB D\xC3\xA9ploiement "
+                         "r\xC3\xA9seau \xC2\xBB.", {}},
+             {K::Heading, "Cr\xC3\xA9" "er un package", {}},
+             {K::Paragraph, "**Cr\xC3\xA9" "er un package** \xC3\xA9" "crit `<projet>-<version>.xpgdeploy` dans "
+                         "le dossier `exports` du projet. Il faut un projet **FINISH** (comme pour le "
+                         "poste). Dedans :", {}},
+             {K::Bullet, "les fichiers du projet que lit le poste (pas les versions, ni les exports, ni la "
+                         "corbeille) et le lanceur `lancer-poste.cmd` ;", {}},
+             {K::Bullet, "`manifest.json` : le nom, la version, chaque fichier avec sa taille et son "
+                         "empreinte SHA-256 ;", {}},
+             {K::Bullet, "`manifest.sig` : la signature Ed25519 du manifeste par **ta cl\xC3\xA9 "
+                         "d'\xC3\xA9" "diteur**.", {}},
+             {K::Paragraph, "Ta cl\xC3\xA9 d'\xC3\xA9" "diteur est cr\xC3\xA9\xC3\xA9" "e sur ton PC la "
+                         "premi\xC3\xA8re fois ; sa partie secr\xC3\xA8te reste sur ce PC, "
+                         "prot\xC3\xA9g\xC3\xA9" "e par Windows (DPAPI). Son empreinte est \xC3\xA0 droite "
+                         "du volet (Ce PC).", {}},
+             {K::Heading, "Sur le PC de maintenance", {}},
+             {K::Paragraph, "L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). En "
+                         "1.28.0, il se lance \xC3\xA0 la main, dans une console :", {}},
+             {K::Code, "XPG-Deployment-Agent.exe --servir       il \xC3\xA9" "coute (TCP 47861, UDP 47862 "
+                         "pour la recherche)\nXPG-Deployment-Agent.exe --appairer     un code \xC3\xA0 6 "
+                         "chiffres, valable 5 minutes\nXPG-Deployment-Agent.exe --etat         ce qu'il "
+                         "fait, son empreinte, les PC appair\xC3\xA9s", {}},
+             {K::Paragraph, "Au premier `--servir`, Windows peut demander d'autoriser l'agent sur le "
+                         "r\xC3\xA9seau (R\xC3\xA9seau priv\xC3\xA9).", {}},
+             {K::Heading, "Trouver et appairer une machine", {}},
+             {K::Step, "**Rechercher** : les agents du r\xC3\xA9seau local r\xC3\xA9pondent. Une machine "
+                         "qui r\xC3\xA9pond n'est qu'une adresse : elle est \xC2\xAB D\xC3\xA9" "couverte "
+                         "\xC2\xBB.", "1"},
+             {K::Step, "**Ajouter par adresse** si la recherche ne la trouve pas (un autre "
+                         "sous-r\xC3\xA9seau).", "2"},
+             {K::Step, "Sur le PC de maintenance, `--appairer` affiche le code ; ici, **Appairer** et "
+                         "tape-le. Le code n'est jamais envoy\xC3\xA9 : les deux machines prouvent qu'elles "
+                         "le connaissent, li\xC3\xA9" "es \xC3\xA0 leurs certificats (un "
+                         "interm\xC3\xA9" "diaire ferait \xC3\xA9" "chouer l'appairage). Trois essais faux "
+                         "effacent le code.", "3"},
+             {K::Step, "La machine devient \xC2\xAB Appair\xC3\xA9" "e \xC2\xBB : son empreinte est "
+                         "gard\xC3\xA9" "e ici, la tienne l\xC3\xA0-bas, avec ta cl\xC3\xA9 "
+                         "d'\xC3\xA9" "diteur.", "4"},
+             {K::Paragraph, "Compare l'empreinte affich\xC3\xA9" "e ici avec celle de `--etat` sur la machine : "
+                         "c'est la m\xC3\xAAme.", {}},
+             {K::Heading, "\xC3\x89tat, Journal, Oublier", {}},
+             {K::Bullet, "**\xC3\x89tat** : le nom, la version de l'agent, le syst\xC3\xA8me, depuis quand "
+                         "il tourne, la place libre, les PC appair\xC3\xA9s.", {}},
+             {K::Bullet, "**Journal** : les derni\xC3\xA8res op\xC3\xA9rations de l'agent (une ligne "
+                         "chacune).", {}},
+             {K::Bullet, "**Oublier** : ce PC ne croit plus la machine, et lui demande de l'oublier aussi.", {}},
+             {K::Paragraph, "Une machine dont le certificat a chang\xC3\xA9 est refus\xC3\xA9" "e : \xC2\xAB ce "
+                         "n'est plus la m\xC3\xAAme machine, ou quelqu'un s'interpose \xC2\xBB. Oublie-la, "
+                         "puis appaire-la de nouveau si c'est voulu.", {}},
+             {K::Heading, "Ce que l'agent refuse", {}},
+             {K::Paragraph, "Toute commande d'un PC non appair\xC3\xA9 (sauf se pr\xC3\xA9senter et "
+                         "s'appairer), une commande rejou\xC3\xA9" "e, une version de protocole inconnue. Il "
+                         "ne lance aucune commande re\xC3\xA7ue du r\xC3\xA9seau et n'utilise jamais "
+                         "Internet.", {}},
+         },
+         {"poste-exploitation", "etats-projet", "communication"},
+         {"d\xC3\xA9ploiement", "d\xC3\xA9ployer", "package", ".xpgdeploy", "PC de maintenance", "agent", "XPG-Deployment-Agent", "appairer", "appairage", "code \xC3\xA0 6 chiffres", "empreinte", "certificat", "TLS", "cl\xC3\xA9 d'\xC3\xA9" "diteur", "signature", "d\xC3\xA9" "couverte", "47861", "47862"},
+         {"poste"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.28.0"},
         // ---- Tester et livrer  Livrer et exploiter / acces-web
         {"acces-web", "L'acc\xC3\xA8s par navigateur (tablette, autre PC)", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Le serveur web int\xC3\xA9gr\xC3\xA9 montre la vue en marche dans un navigateur - une tablette "

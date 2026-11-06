@@ -484,7 +484,6 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiSecret.cpp" />
     <ClCompile Include="src\app\ai\AiSse.cpp" />
     <ClCompile Include="src\app\ai\AiDemo.cpp" />
-    <ClCompile Include="src\app\ai\AiJson.cpp" />
     <ClCompile Include="src\app\ai\AiOperations.cpp" />
     <ClCompile Include="src\app\ai\AiPrompt.cpp" />
     <ClCompile Include="src\app\ai\AiRegistry.cpp" />
@@ -642,6 +641,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\CallTrail.cpp" />
     <ClCompile Include="src\core\CrashGuard.cpp" />
     <ClCompile Include="src\core\Edition.cpp" />
+    <ClCompile Include="src\core\Json.cpp" />
     <ClCompile Include="src\core\Perf.cpp" />
     <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
@@ -1217,6 +1217,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\CodeStats.hpp" />
     <ClInclude Include="src\core\CrashGuard.hpp" />
     <ClInclude Include="src\core\Edition.hpp" />
+    <ClInclude Include="src\core\Json.hpp" />
     <ClInclude Include="src\core\Perf.hpp" />
     <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />

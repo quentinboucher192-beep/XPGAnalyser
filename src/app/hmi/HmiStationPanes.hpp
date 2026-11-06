@@ -80,6 +80,8 @@ public:
         // Lot 15 : le projet est-il FINISH (sinon : why dit son etat) - le
         // demarrage avec le PC l'exige.
         std::function<bool(std::string*)> finished;
+        // 1.28.0 : IHM > Deploiement reseau (envoyer ce poste sur un PC de maintenance).
+        std::function<void()> deploy;
     };
     void setHosts(Hosts h);
 

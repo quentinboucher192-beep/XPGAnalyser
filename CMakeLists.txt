@@ -675,6 +675,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(deploy_crypto_test tests/deploy_crypto_test.cpp)  # 1.28.0 : libsodium et mbedTLS integres
     xpg_target_link_libraries(deploy_crypto_test PRIVATE xpg_deploy)
+    xpg_add_test_executable(deploy_package_test tests/deploy_package_test.cpp)  # 1.28.0 : le paquet .xpgdeploy et la cle d'editeur
+    xpg_target_link_libraries(deploy_package_test PRIVATE xpg_deploy)
     xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
@@ -1015,6 +1017,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hmiobjets    COMMAND hmi_objets_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)                  # 1.27.0 : les types de l'IHM et les natives des objets
     xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
+    xpg_add_test(NAME deploypackage COMMAND deploy_package_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.28.0 : le paquet signe, ses refus, la cle d'editeur
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----

@@ -163,6 +163,10 @@
 #ifndef ExeIhm
   #define ExeIhm "IHM-Studio.exe"
 #endif
+; 1.28.0 : l'agent de deploiement reseau (installe avec IHM Studio et le poste ; il ne tourne que lance a la main).
+#ifndef ExeAgent
+  #define ExeAgent "XPG-Deployment-Agent.exe"
+#endif
 ; 1.12.30 : les archives d'un projet (un seul fichier, tout compris) et leur type (Software\Classes).
 #define ProgIdIhm "APIIHMStudio.xihm"
 #define ProgIdApi "APIIHMStudio.xapi"
@@ -402,16 +406,18 @@ Name: "reserve"; Description: "Garder une copie de secours pour Réparer (enviro
 [Files]
 ; Le programme et tout ce dont il a besoin (préparé par outils\package.bat dans dist\staging). 1.14.0 : les
 ; deux exe a part - seul celui du profil s'installe.
-Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm}"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm},\{#ExeAgent}"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Staging}\{#Exe}"; DestDir: "{app}"; Components: api; Flags: ignoreversion
 Source: "{#Staging}\{#ExeIhm}"; DestDir: "{app}"; Components: ihm poste; Flags: ignoreversion
+Source: "{#Staging}\{#ExeAgent}"; DestDir: "{app}"; Components: ihm poste; Flags: ignoreversion
 ; 1.14.0 : le lanceur du poste d'exploitation (« Le relancer s'il se ferme »)
 Source: "poste.cmd"; DestDir: "{app}\maintenance"; Components: poste; Flags: ignoreversion
 ; La réserve de réparation : les mêmes fichiers (Inno Setup ne les stocke qu'une fois). 1.14.0 : si elle est
 ; demandée (la case « Garder une copie de secours pour Réparer »), sans l'exe que le profil n'a pas.
-Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm}"; DestDir: "{code:DossierReserve}"; Tasks: reserve; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Staging}\*"; Excludes: "\{#Exe},\{#ExeIhm},\{#ExeAgent}"; DestDir: "{code:DossierReserve}"; Tasks: reserve; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Staging}\{#Exe}"; DestDir: "{code:DossierReserve}"; Components: api; Tasks: reserve; Flags: ignoreversion
 Source: "{#Staging}\{#ExeIhm}"; DestDir: "{code:DossierReserve}"; Components: ihm poste; Tasks: reserve; Flags: ignoreversion
+Source: "{#Staging}\{#ExeAgent}"; DestDir: "{code:DossierReserve}"; Components: ihm poste; Tasks: reserve; Flags: ignoreversion
 ; Les étapes PowerShell, pour la sauvegarde AVANT la copie (le programme n'est pas encore là).
 Source: "{#Staging}\maintenance\lib\*"; DestDir: "{tmp}\xpg\lib"; Flags: dontcopy
 Source: "{#Staging}\maintenance\config.ini"; DestDir: "{tmp}\xpg"; Flags: dontcopy
@@ -447,9 +453,11 @@ Type: filesandordirs; Name: "{app}\web"
 ; ses raccourcis (menu Demarrer, Bureau), le poste et son lanceur (les associations et la cle Run : [Code]).
 Type: files; Name: "{app}\{#Exe}"; Components: not api
 Type: files; Name: "{app}\{#ExeIhm}"; Components: not (ihm or poste)
+Type: files; Name: "{app}\{#ExeAgent}"; Components: not (ihm or poste)
 Type: files; Name: "{app}\maintenance\poste.cmd"; Components: not poste
 Type: files; Name: "{code:DossierReserve}\{#Exe}"; Components: not api
 Type: files; Name: "{code:DossierReserve}\{#ExeIhm}"; Components: not (ihm or poste)
+Type: files; Name: "{code:DossierReserve}\{#ExeAgent}"; Components: not (ihm or poste)
 Type: files; Name: "{autoprograms}\{#Nom}\{#NomApi}.lnk"; Components: not api
 Type: files; Name: "{autoprograms}\{#Nom}\{#NomIhm}.lnk"; Components: not ihm
 Type: files; Name: "{autoprograms}\{#Nom}\{#RacPoste}.lnk"; Components: not poste

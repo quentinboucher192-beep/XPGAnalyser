@@ -24,7 +24,7 @@ using PG = ui::PropertyGrid;
 
 namespace {
 
-enum : int { CTry = 1, CAdd, CRemove, CPassword, CLauncher, CAutoOn, CAutoOff };
+enum : int { CTry = 1, CAdd, CRemove, CPassword, CLauncher, CAutoOn, CAutoOff, CDeploy };
 
 constexpr int kMaxDisplay = 9;
 
@@ -85,6 +85,11 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
                "Linux : ~/.config/autostart)",
                "D\xC3\xA9marrer avec la session");
     tools->add(CAutoOff, HmiGlyph::Stop, "Ne plus d\xC3\xA9marrer le poste avec la session", "Ne plus d\xC3\xA9marrer");
+    tools->separator();
+    tools->add(CDeploy, HmiGlyph::Export,
+               "1.28.0 : envoyer ce poste sur un PC de maintenance du r\xC3\xA9seau - le package sign\xC3\xA9, l'appairage, l'agent "
+               "(IHM \xE2\x80\xBA D\xC3\xA9ploiement r\xC3\xA9seau)",
+               "D\xC3\xA9ploiement r\xC3\xA9seau");
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
     tools_->setEnabledWhen(CTry, [this] { return static_cast<bool>(hosts_.tryStation); });
     tools_->setEnabledWhen(CRemove, [this] {   // 1.24.0 : plusieurs ecrans - un secondaire suffit
@@ -98,6 +103,7 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setEnabledWhen(CLauncher, [this] { return !folder().empty(); });
     tools_->setEnabledWhen(CAutoOn, [this] { return !folder().empty() && !autostart(); });
     tools_->setEnabledWhen(CAutoOff, [this] { return autostart(); });
+    tools_->setEnabledWhen(CDeploy, [this] { return static_cast<bool>(hosts_.deploy); });
 
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
     auto screens = std::make_unique<ui::TableView>(base + ".screens");
@@ -140,6 +146,9 @@ HmiStationPane::HmiStationPane(std::string id, hmi::DocumentPtr doc, Apply apply
                 break;
             case CLauncher: (void)writeLauncher(); break;
             case CAutoOn: case CAutoOff: (void)setAutostart(a == CAutoOn); break;
+            case CDeploy:
+                if (hosts_.deploy) hosts_.deploy();
+                break;
             default: break;
         }
     });

@@ -1,13 +1,13 @@
 // =============================================================================
 //  app/ai/AiJson.cpp - voir AiJson.hpp
 // =============================================================================
-#include "AiJson.hpp"
+#include "Json.hpp"
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
-namespace app::ai::json {
+namespace core::json {
 
 namespace {
 const std::string kEmpty;
@@ -377,4 +377,4 @@ void addMembers(Value& object, const Value& extra) {
         if (!object.has(k)) object.members().emplace_back(k, v);
 }
 
-} // namespace app::ai::json
+} // namespace core::json

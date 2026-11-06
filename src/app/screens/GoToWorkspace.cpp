@@ -154,6 +154,7 @@ const PaneEntry kPanes[] = {
     {"rapports", "IHM \xE2\x80\xBA Rapports", -1},
     {"web", "IHM \xE2\x80\xBA Acc\xC3\xA8s web", -1},
     {"poste", "IHM \xE2\x80\xBA Poste d'exploitation", -1},
+    {"deploiement", "IHM \xE2\x80\xBA D\xC3\xA9ploiement r\xC3\xA9seau", -1},     // 1.28.0
     {"rechercher", "IHM \xE2\x80\xBA Rechercher / remplacer", -1},
     {"echange", "IHM \xE2\x80\xBA Exporter / Importer", -1},
     {"versions", "IHM \xE2\x80\xBA Versions", -1},

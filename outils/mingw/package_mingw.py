@@ -96,6 +96,7 @@ def imported_dlls(exe):
 
 
 # 1.15.0 : winhttp (l'Assistant IA : HTTPS par Windows) ; crypt32 (DPAPI, la cle API protegee) y etait deja.
+AGENT = "XPG-Deployment-Agent.exe"     # 1.28.0 : l'agent de deploiement reseau (src/agent/)
 SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi32", "comdlg32", "ws2_32", "iphlpapi", "winhttp",
           "winmm", "imm32", "setupapi", "version", "dwmapi", "uxtheme", "shlwapi", "bcrypt", "winspool", "uuid", "msvcrt",
           "ucrtbase", "crypt32", "dbghelp", "hid", "cfgmgr32", "dinput8", "xinput1_4", "powrprof", "comctl32"}
@@ -118,6 +119,8 @@ def portables(st, sortie, version, editions):
             shutil.rmtree(travail)
         shutil.copytree(st, travail)
         os.remove(os.path.join(travail, autre))
+        if exe != editions[-1][1] and os.path.exists(os.path.join(travail, AGENT)):
+            os.remove(os.path.join(travail, AGENT))     # 1.28.0 : l'agent, dans le portable d'IHM Studio seulement
         cfg = os.path.join(travail, "maintenance", "config.ini")
         with open(cfg, encoding="utf-8-sig") as f:
             texte = f.read()
@@ -162,6 +165,8 @@ def main():
     # 1.12.0 : deux applications - API Studio (--exe) et IHM Studio (--exe-ihm).
     ap.add_argument("--exe", default=os.path.join(ROOT, "build-mingw", "API-Studio.exe"))
     ap.add_argument("--exe-ihm", default=os.path.join(ROOT, "build-mingw", "IHM-Studio.exe"))
+    # 1.28.0 : l'agent de deploiement (installe avec IHM Studio et le poste ; dans le portable d'IHM Studio seulement).
+    ap.add_argument("--agent", default=os.path.join(ROOT, "build-mingw", AGENT))
     ap.add_argument("--portables", default="", help="un dossier : un zip portable par application")
     ap.add_argument("--sdl", default=os.path.join(ROOT, "third_party", "SDL3", "lib", "x64", "SDL3.dll"))
     # 1.12.30 : PDFium (outils/pdfium/obtenir_pdfium.py le pose la).
@@ -186,6 +191,9 @@ def main():
     os.makedirs(st)
     shutil.copy2(a.exe, os.path.join(st, exe_nom))
     shutil.copy2(a.exe_ihm, os.path.join(st, exe_ihm_nom))
+    if not os.path.isfile(a.agent):
+        sys.exit(f"{a.agent} manque : l'agent de deploiement (outils/mingw/cross_mingw.sh le construit)")
+    shutil.copy2(a.agent, os.path.join(st, AGENT))
     shutil.copy2(a.sdl, os.path.join(st, "SDL3.dll"))
     # 1.12.30 : le moteur PDF de la visionneuse de documents. L'exe ne l'importe pas (il le charge a la demande) :
     # le manifeste ne le demande pas, il est livre quand meme, a cote des exe, avec ses licences.
@@ -230,6 +238,9 @@ def main():
     lic = os.path.join(st, "licences")
     os.makedirs(lic)
     shutil.copy2(os.path.join(ROOT, "third_party", "SDL3", "LICENSE.txt"), os.path.join(lic, "SDL3-LICENSE.txt"))
+    # 1.28.0 : mbedTLS (Apache-2.0) et libsodium (ISC), dans les exe (le deploiement reseau).
+    shutil.copy2(os.path.join(ROOT, "third_party", "mbedtls", "LICENSE"), os.path.join(lic, "mbedtls-LICENSE.txt"))
+    shutil.copy2(os.path.join(ROOT, "third_party", "libsodium", "LICENSE"), os.path.join(lic, "libsodium-LICENSE.txt"))
     # 1.12.30 : les licences de PDFium et de sa construction (BSD-3-Clause, Apache-2.0, MIT...).
     lic_pdfium = os.path.join(os.path.dirname(a.pdfium), "LICENSES")
     if os.path.isdir(lic_pdfium):
@@ -252,7 +263,8 @@ def main():
     print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
 
     # ---- 2. le manifeste ----
-    dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom))), key=str.lower)
+    dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom)))
+                  | set(imported_dlls(os.path.join(st, AGENT))), key=str.lower)
     a_livrer = [d for d in dlls if re.sub(r"\.dll$", "", d.lower()) not in SYSTEM and not d.lower().startswith("api-ms-win-")]
     for d in a_livrer:
         if not os.path.exists(os.path.join(st, d)):
@@ -295,6 +307,7 @@ def main():
         "AppGuid": ini("Produit", "app_id").strip("{}"),
         "Exe": exe_nom,
         "ExeIhm": exe_ihm_nom,
+        "ExeAgent": AGENT,
         "Description": ini("Produit", "description"),
         "UrlSupport": ini("Produit", "url_support"),
         "Staging": winpath(st),
