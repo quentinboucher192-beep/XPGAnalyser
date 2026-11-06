@@ -588,6 +588,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiDebugPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiDebugSession.cpp" />
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp" />
+    <ClCompile Include="src\app\hmi\HmiDeployPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiDocPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiRecordPainter.cpp" />
     <ClCompile Include="src\app\hmi\HmiDuplicateDialog.cpp" />
@@ -779,7 +780,18 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiProjectAnswers.cpp" />
     <ClCompile Include="src\app\ai\AiSandbox.cpp" />
     <ClCompile Include="src\app\ai\AiWorkbook.cpp" />
+    <ClCompile Include="src\deploy\Agent.cpp" />
     <ClCompile Include="src\deploy\Crypto.cpp" />
+    <ClCompile Include="src\deploy\DevKey.cpp" />
+    <ClCompile Include="src\deploy\Discovery.cpp" />
+    <ClCompile Include="src\deploy\Frame.cpp" />
+    <ClCompile Include="src\deploy\Journal.cpp" />
+    <ClCompile Include="src\deploy\Net.cpp" />
+    <ClCompile Include="src\deploy\Package.cpp" />
+    <ClCompile Include="src\deploy\Pairing.cpp" />
+    <ClCompile Include="src\deploy\Protocol.cpp" />
+    <ClCompile Include="src\deploy\Tls.cpp" />
+    <ClCompile Include="src\deploy\TlsIdentity.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1169,6 +1181,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiDebugPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDebugSession.hpp" />
     <ClInclude Include="src\app\hmi\HmiDeclGrid.hpp" />
+    <ClInclude Include="src\app\hmi\HmiDeployPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiEditHistoryDialog.hpp" />
     <ClInclude Include="src\app\hmi\HmiEnumPanes.hpp" />
@@ -1354,7 +1367,19 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiProjectAnswers.hpp" />
     <ClInclude Include="src\app\ai\AiSandbox.hpp" />
     <ClInclude Include="src\app\ai\AiWorkbook.hpp" />
+    <ClInclude Include="src\deploy\Agent.hpp" />
+    <ClInclude Include="src\deploy\Client.hpp" />
     <ClInclude Include="src\deploy\Crypto.hpp" />
+    <ClInclude Include="src\deploy\DevKey.hpp" />
+    <ClInclude Include="src\deploy\Discovery.hpp" />
+    <ClInclude Include="src\deploy\Frame.hpp" />
+    <ClInclude Include="src\deploy\Journal.hpp" />
+    <ClInclude Include="src\deploy\Net.hpp" />
+    <ClInclude Include="src\deploy\Package.hpp" />
+    <ClInclude Include="src\deploy\Pairing.hpp" />
+    <ClInclude Include="src\deploy\Protocol.hpp" />
+    <ClInclude Include="src\deploy\Tls.hpp" />
+    <ClInclude Include="src\deploy\TlsIdentity.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

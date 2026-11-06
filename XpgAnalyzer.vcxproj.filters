@@ -1360,6 +1360,9 @@
     <ClCompile Include="src\app\hmi\HmiDeclGrid.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiDeployPane.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiDocPainter.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1929,6 +1932,27 @@
     </ClCompile>
     <ClCompile Include="src\app\ai\AiWorkbook.cpp">
       <Filter>app\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Agent.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Discovery.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Frame.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Journal.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Package.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Pairing.cpp">
+      <Filter>deploy</Filter>
+    </ClCompile>
+    <ClCompile Include="src\deploy\Protocol.cpp">
+      <Filter>deploy</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -3079,6 +3103,9 @@
     <ClInclude Include="src\app\hmi\HmiDeclGrid.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiDeployPane.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiDuplicateDialog.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3630,6 +3657,27 @@
     </ClInclude>
     <ClInclude Include="src\app\ai\AiWorkbook.hpp">
       <Filter>app\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Agent.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Client.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Discovery.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Frame.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Journal.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Pairing.hpp">
+      <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\deploy\Protocol.hpp">
+      <Filter>deploy</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
