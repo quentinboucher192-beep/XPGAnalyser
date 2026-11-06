@@ -25363,10 +25363,12 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Sur le PC de maintenance", {}},
              {K::Paragraph, "L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). En "
                          "1.28.0, il se lance \xC3\xA0 la main, dans une console :", {}},
-             {K::Code, "XPG-Deployment-Agent.exe --servir       il \xC3\xA9" "coute (TCP 47861, UDP 47862 "
-                         "pour la recherche)\nXPG-Deployment-Agent.exe --appairer     un code \xC3\xA0 6 "
-                         "chiffres, valable 5 minutes\nXPG-Deployment-Agent.exe --etat         ce qu'il "
-                         "fait, son empreinte, les PC appair\xC3\xA9s", {}},
+             {K::Bullet, "`XPG-Deployment-Agent.exe --servir` : il \xC3\xA9" "coute (TCP 47861 ; UDP 47862 "
+                         "pour la recherche) ; Ctrl+C l'arr\xC3\xAAte ;", {}},
+             {K::Bullet, "`XPG-Deployment-Agent.exe --appairer` : un code \xC3\xA0 6 chiffres, valable 5 "
+                         "minutes, une seule fois ;", {}},
+             {K::Bullet, "`XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, "
+                         "les PC appair\xC3\xA9s.", {}},
              {K::Paragraph, "Au premier `--servir`, Windows peut demander d'autoriser l'agent sur le "
                          "r\xC3\xA9seau (R\xC3\xA9seau priv\xC3\xA9).", {}},
              {K::Heading, "Trouver et appairer une machine", {}},

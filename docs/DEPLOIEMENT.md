@@ -66,11 +66,11 @@ app/...            le poste : les fichiers du projet utiles au poste, et le lanc
 
 **TLS 1.3 seulement**, certificats des deux côtés. Chaque machine a son certificat (ECDSA P-256, auto-signé, créé au premier lancement ; la clé privée sous DPAPI : la machine pour l'agent, l'utilisateur pour le Studio). Le certificat n'est pas jugé par une autorité : **son empreinte SHA-256 est épinglée** à l'appairage. Un pair inconnu ne peut faire que IDENTIFY et l'appairage.
 
-**Les trames** : une longueur totale sur 4 octets (gros-boutiste ; 2 Mio au plus en 1.28), la longueur de l'en-tête sur 4 octets, l'en-tête JSON, puis les données. L'en-tête d'une demande : `{"proto":1,"op":"STATUS","id":"<identifiant d'opération>","seq":7,"ts":<ms depuis 1970>}` ; d'une réponse : `{"proto":1,"op":"STATUS","re":"<id>","seq":7,"ok":true}` ou `"ok":false,"error":"<code>","message":"<phrase>"`.
+**Les trames** : une longueur sur 4 octets (gros-boutiste ; elle compte tout ce qui suit : 4 + en-tête + données ; 2 Mio au plus en 1.28), la longueur de l'en-tête sur 4 octets, l'en-tête JSON, puis les données. L'en-tête d'une demande : `{"proto":1,"op":"STATUS","id":"<identifiant d'opération>","seq":7,"ts":<ms depuis 1970>}` ; d'une réponse : `{"proto":1,"op":"STATUS","re":"<id>","seq":7,"ok":true}` ou `"ok":false,"error":"<code>","message":"<phrase>"`.
 
-**Contre le rejeu** : `seq` croît strictement sur une connexion ; `ts` à moins de 5 minutes de l'horloge de l'agent ; un identifiant d'opération déjà vu rend la même réponse sans rien refaire.
+**Contre le rejeu** : `seq` croît strictement sur une connexion ; `ts` à moins de 5 minutes de l'horloge de l'agent ; un identifiant d'opération déjà vu (pour ce même pair) rend la même réponse sans rien refaire (`"replay":true`) ; un identifiant réemployé pour une autre opération est refusé (`rejeu`). Le cache garde les 512 dernières réponses, en mémoire.
 
-**Les commandes en 1.28** : `IDENTIFY` (les versions de protocole acceptées, le nom de la machine, son identifiant, la version de l'agent ; une version commune est choisie, sinon « incompatible » — jamais forcé), `PAIR_START` / `PAIR_FINISH`, `STATUS`, `GET_LOGS`, `UNPAIR`. Toute autre commande : refusée (`op-inconnue`).
+**Les commandes en 1.28** : `IDENTIFY` (les versions de protocole acceptées, le nom de la machine, son identifiant, la version de l'agent ; une version commune est choisie, sinon « incompatible » — jamais forcé), `PAIR_START` / `PAIR_FINISH`, `STATUS`, `GET_LOGS`, `UNPAIR`. Toute autre commande : refusée (`op-inconnue`). `IDENTIFY` vient d'abord, sinon `identifier-d-abord`. Les codes d'erreur de l'agent : `incompatible`, `op-inconnue`, `non-appaire`, `identifier-d-abord`, `en-tete`, `proto`, `rejeu`, `horloge`, `trame-trop-grosse`, `arguments`, `pas-de-code`, `code-faux`, `appairage`, `interne` ; ceux du Studio : `reseau`, `empreinte`, `reponse`. L'agent accepte 8 connexions à la fois ; la neuvième est fermée avant la poignée de main.
 
 **La découverte** (UDP) : le Studio envoie `{"xpgd":1,"op":"DISCOVER","nonce":"…"}` en diffusion (et en direct aux adresses qu'on lui donne) ; chaque agent répond `{"xpgd":1,"op":"HERE","nonce":"…","machine":"PC-ATELIER-1","id":"M-7F21","version":"1.0.0","protos":[1],"port":47861,"fp":"<empreinte>"}`. Une réponse ne prouve rien : c'est une adresse, rien de plus, tant que la machine n'est pas appairée.
 
@@ -83,7 +83,7 @@ Six chiffres se devinent hors ligne si on les envoie, même hachés. Le code n'e
 1. `G = ristretto255_from_hash(SHA-512("XPG-PAIR-v1" ‖ code ‖ sid ‖ empreinte Studio ‖ empreinte agent))`, `sid` : 16 octets tirés par le Studio ;
 2. le Studio tire `ys`, envoie `Ys = ys·G` (`PAIR_START`, avec son nom et sa clé d'éditeur) ; l'agent tire `ya`, renvoie `Ya = ya·G` et sa confirmation ;
 3. chacun calcule `K = y·Y(autre)`, puis la clé de session `ISK = SHA-512("XPG-PAIR-ISK" ‖ K ‖ Ys ‖ Ya ‖ sid)` ; chacun prouve la connaître (HMAC-SHA-256 sur toute la conversation, l'agent d'abord) ;
-4. réussi : l'agent garde l'empreinte du Studio, son nom et sa clé d'éditeur ; le Studio garde l'empreinte de l'agent, son nom, son identifiant et son adresse. Le code est consommé.
+4. `PAIR_FINISH` porte la confirmation du Studio (ou un abandon, si celle de l'agent est fausse). Réussi : l'agent garde l'empreinte du Studio, son nom et sa clé d'éditeur ; le Studio garde l'empreinte de l'agent, son nom, son identifiant et son adresse. Le code est consommé. Un essai est compté à `PAIR_START`, s'il y a un code en cours.
 
 Un intermédiaire qui présente ses propres certificats obtient un `G` différent de chaque côté : l'échange échoue, et il n'apprend rien qui lui permette de deviner le code hors ligne. Il n'a droit qu'à un essai par connexion, et le code s'efface après 3 échecs.
 
@@ -96,7 +96,7 @@ XPG-Deployment-Agent --appairer [--dossier D]    un code à 6 chiffres
 XPG-Deployment-Agent --version
 ```
 
-Son dossier (par défaut `C:\ProgramData\XPG\Agent` sous Windows) : son identité (protégée), les PC appairés, le code d'appairage en cours (protégé), `etat.json` (écrit toutes les 5 s pendant qu'il tourne), `journal\AAAA-MM-JJ.log` (une ligne par opération). Il ne lance **aucune** commande reçue du réseau ; il n'utilise jamais Internet.
+Son dossier (par défaut `C:\ProgramData\XPG\Agent` sous Windows) : `identite.cer` et `identite.cle` (la clé protégée pour la machine), `appaires.json` (les PC appairés), `appairage.code` (le code en cours, protégé), `etat.json` (écrit toutes les 5 s pendant qu'il tourne), `journal\AAAA-MM-JJ.log` (une ligne par opération). Ctrl+C l'arrête proprement. Il ne lance **aucune** commande reçue du réseau ; il n'utilise jamais Internet.
 
 ## 7. Ce qui n'est pas simulé
 

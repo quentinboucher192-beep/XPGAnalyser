@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.27.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.28.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -875,7 +875,7 @@ if(XPG_BUILD_TESTS)
     # les simultanees, l'historique, comparer, l'equipement commun, les scripts, la communication ; rien d'invente.
     # Sans xpg_app : ses seules sources (les dossiers d'incident se lisent sans ecran).
     xpg_add_test_executable(ai_incident_answers_test tests/ai_incident_answers_test.cpp src/app/ai/AiIncidentAnswers.cpp
-                            src/app/ai/AiIncident.cpp src/app/ai/AiJson.cpp)
+                            src/app/ai/AiIncident.cpp)   # 1.28.0 : son JSON est dans core (core/Json.cpp, xpg_core)
     xpg_target_link_libraries(ai_incident_answers_test PRIVATE xpg_hmi)
     # 1.21.0 : lancer un programme a part, borne (le temps, la memoire, la sortie), sans reseau quand le systeme le
     # permet : le bac a sable de l'IA. L'essai se relance lui-meme comme enfant.
@@ -925,7 +925,7 @@ if(XPG_BUILD_TESTS)
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre
     # d'aide (help::center, news, notes, keys, f1, report, Tutorial) : xpg_help,
     # comme l'appli et la construction des essais (outils/hmitests).
-    xpg_target_link_libraries(hmi_editor_test PRIVATE xpg_hmi xpg_ui xpg_help)
+    xpg_target_link_libraries(hmi_editor_test PRIVATE xpg_hmi xpg_ui xpg_help xpg_deploy)   # 1.28.0 : + le volet Deploiement reseau
     # 1.10.2 (CR) : l'historique interne (core/CallTrail), le rapport de plantage et le
     # chien de garde (core/CrashGuard) - le plantage et le blocage se jouent dans un fils.
     xpg_add_test_executable(crashtrail_test tests/crashtrail_test.cpp)

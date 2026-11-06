@@ -11701,11 +11701,9 @@ Configuration › **Poste d'exploitation**, outil **Déploiement réseau** ; ou 
 Ta clé d'éditeur est créée sur ton PC la première fois ; sa partie secrète reste sur ce PC, protégée par Windows (DPAPI). Son empreinte est à droite du volet (Ce PC).
 ### Sur le PC de maintenance
 L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). En 1.28.0, il se lance à la main, dans une console :
-```
-XPG-Deployment-Agent.exe --servir       il écoute (TCP 47861, UDP 47862 pour la recherche)
-XPG-Deployment-Agent.exe --appairer     un code à 6 chiffres, valable 5 minutes
-XPG-Deployment-Agent.exe --etat         ce qu'il fait, son empreinte, les PC appairés
-```
+- `XPG-Deployment-Agent.exe --servir` : il écoute (TCP 47861 ; UDP 47862 pour la recherche) ; Ctrl+C l'arrête ;
+- `XPG-Deployment-Agent.exe --appairer` : un code à 6 chiffres, valable 5 minutes, une seule fois ;
+- `XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, les PC appairés.
 Au premier `--servir`, Windows peut demander d'autoriser l'agent sur le réseau (Réseau privé).
 ### Trouver et appairer une machine
 1. **Rechercher** : les agents du réseau local répondent. Une machine qui répond n'est qu'une adresse : elle est « Découverte ».

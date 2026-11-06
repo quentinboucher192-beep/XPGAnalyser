@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.27.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.28.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.27.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 11 h 31"},
     {"1.26.1", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 09 h 25"},
     {"1.26.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 22 h 20"},
     {"1.25.0", "05/11/2026", "livr\xC3\xA9" "e le 05/11 \xC3\xA0 18 h 07"},
@@ -170,6 +171,27 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.28.0 : le deploiement reseau, etape 1 - le paquet signe, l'agent du PC de maintenance, la recherche, l'appairage
+        note("1.28.0", "Projet", Kind::New,
+         "LE D\xC3\x89PLOIEMENT R\xC3\x89SEAU, PREMI\xC3\x88RE \xC3\x89TAPE : Configuration \xE2\x80\xBA Poste d'exploitation, outil D\xC3\xA9ploiement r\xC3\xA9seau. "
+         "Rechercher trouve les PC de maintenance du r\xC3\xA9seau (leur agent r\xC3\xA9pond), Ajouter par adresse les autres ; Appairer : le "
+         "code \xC3\xA0 6 chiffres affich\xC3\xA9 par l'agent, jamais envoy\xC3\xA9 (un \xC3\xA9" "change de cl\xC3\xA9s li\xC3\xA9 aux deux certificats : un "
+         "interm\xC3\xA9" "diaire fait \xC3\xA9" "chouer l'appairage) ; ensuite \xC3\x89tat et Journal de la machine. Tout passe en TLS 1.3, "
+         "certificats des deux c\xC3\xB4t\xC3\xA9s, \xC3\xA9pingl\xC3\xA9s. L'envoi et l'installation du poste viennent \xC3\xA0 l'\xC3\xA9tape suivante.",
+         "deploiement-reseau", ""),
+        note("1.28.0", "Projet", Kind::New,
+         "LE PACKAGE DE D\xC3\x89PLOIEMENT (.xpgdeploy) : Cr\xC3\xA9" "er un package met le poste d'exploitation d'un projet FINISH (les fichiers "
+         "que lit le poste et son lanceur) dans un seul fichier, avec son manifeste (chaque fichier, sa taille, son SHA-256) sign\xC3\xA9 "
+         "Ed25519 par ta cl\xC3\xA9 d'\xC3\xA9" "diteur - cr\xC3\xA9\xC3\xA9" "e sur ce PC, sa partie secr\xC3\xA8te prot\xC3\xA9g\xC3\xA9" "e par Windows (DPAPI). Un "
+         "fichier chang\xC3\xA9, en plus ou en moins, un chemin dangereux, une signature fausse : le paquet est refus\xC3\xA9, avec la raison.",
+         "deploiement-reseau", ""),
+        note("1.28.0", "Configuration", Kind::New,
+         "L'AGENT DU PC DE MAINTENANCE : XPG-Deployment-Agent.exe, install\xC3\xA9 avec IHM Studio et le profil Poste d'exploitation. "
+         "--servir l'\xC3\xA9" "coute (TCP 47861, UDP 47862 pour la recherche ; un port pris : il le dit et n'\xC3\xA9" "coute pas), --appairer "
+         "affiche un code (5 minutes, une fois, 3 essais), --etat dit ce qu'il fait. Il refuse tout PC non appair\xC3\xA9, toute commande "
+         "rejou\xC3\xA9" "e, ne lance aucune commande re\xC3\xA7ue du r\xC3\xA9seau et n'utilise jamais Internet. mbedTLS 3.6.2 et libsodium 1.0.20 "
+         "sont int\xC3\xA9gr\xC3\xA9s (licences dans le dossier licences).",
+         "deploiement-reseau", ""),
         // 1.27.0 : les types de l'IHM dans les scripts ; les natives des objets et des ressources ; @Alarme ; la section
         // Execution du cycle de vue
         note("1.27.0", "Scripts", Kind::New,

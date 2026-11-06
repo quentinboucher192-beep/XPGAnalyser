@@ -9,7 +9,7 @@
 //
 //    TlsIdentity me;   // une fois : TlsIdentity::loadOrCreate(dossierStudio, "studio", false, "XPG-Studio " + nom, me, &why)
 //    MachineStore store(dossierStudio); store.load(&why);
-//    auto found = discovery::discover({});                         // les agents du reseau (1,5 s)
+//    auto found = Client::discover();                              // les agents du reseau (1,5 s)
 //
 //    Client c(me, nomDuPC, cleEditeurHex);
 //    Outcome o = c.connect(adresse, port, 5000);                  // nouvelle machine : sans epingle
@@ -77,6 +77,13 @@ public:
     // publique d'editeur Ed25519 (64 chiffres hexadecimaux, deploy/DevKey) donnee a l'appairage.
     Client(TlsIdentity me, std::string studioName, std::string publisherKeyHex);
     ~Client();
+
+    // Les agents du reseau (bloquant : options.waitMs, 1,5 s par defaut). Une machine deja appairee
+    // se reconnait a son empreinte (Found::fingerprint == PairedMachine::fingerprint) : si son adresse
+    // a change, MachineStore::upsert avec la nouvelle (l'empreinte reste verifiee a chaque connexion).
+    static std::vector<discovery::Found> discover(const discovery::Options& options = {}, std::string* why = nullptr) {
+        return discovery::discover(options, why);
+    }
     Client(const Client&) = delete;
     Client& operator=(const Client&) = delete;
 
