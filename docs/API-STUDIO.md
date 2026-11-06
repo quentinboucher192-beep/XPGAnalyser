@@ -1,6 +1,6 @@
 # API Studio
 
-Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, édition `core::Edition::Api`), version 1.28.0. Chaque section indique où se trouve la fonctionnalité dans le logiciel, comment elle fonctionne, et le code qui l'implémente. Le mode d'emploi pas à pas est dans l'aide F1 de l'application. Retour au [README](../README.md).
+Référence fonctionnelle d'**API Studio** (exécutable `API-Studio.exe`, édition `core::Edition::Api`), version 1.29.0. Chaque section indique où se trouve la fonctionnalité dans le logiciel, comment elle fonctionne, et le code qui l'implémente. Le mode d'emploi pas à pas est dans l'aide F1 de l'application. Retour au [README](../README.md).
 
 ## Sommaire
 
