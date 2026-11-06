@@ -18,7 +18,7 @@ namespace {
 using namespace hmikit;
 using PG = ui::PropertyGrid;
 
-enum : int { CPackage = 1, CDiscover, CAdd, CPair, CStatus, CLogs, CForget };
+enum : int { CPackage = 1, CDiscover, CAdd, CPair, CStatus, CLogs, CForget, CDeploy, CRollback, CApps, CHistory, CCancel };
 
 bool sameText(const std::string& a, const std::string& b) { return lower(a) == lower(b); }
 
@@ -31,6 +31,15 @@ HmiDeployPane::HmiDeployPane(std::string id, Backend backend) : ui::Widget(std::
                "Cr\xC3\xA9" "er un package de d\xC3\xA9ploiement : le poste d'exploitation du projet (FINISH) et son lanceur, dans un "
                "fichier .xpgdeploy sign\xC3\xA9 par ta cl\xC3\xA9 d'\xC3\xA9" "diteur",
                "Cr\xC3\xA9" "er un package");
+    tools->add(CDeploy, HmiGlyph::Play,
+               "D\xC3\xA9ployer le projet sur la machine choisie : le package est cr\xC3\xA9\xC3\xA9, envoy\xC3\xA9 (une coupure reprend o\xC3\xB9 "
+               "elle en \xC3\xA9tait), v\xC3\xA9rifi\xC3\xA9 par l'agent, install\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la version en place ; le poste en "
+               "marche est pr\xC3\xA9venu puis ferm\xC3\xA9, la nouvelle version lanc\xC3\xA9" "e - si elle ne tient pas, l'agent revient \xC3\xA0 "
+               "la pr\xC3\xA9" "c\xC3\xA9" "dente",
+               "D\xC3\xA9ployer");
+    tools->add(CRollback, HmiGlyph::Undo, "Revenir \xC3\xA0 la version pr\xC3\xA9" "c\xC3\xA9" "dente sur la machine choisie (elle est gard\xC3\xA9" "e l\xC3\xA0-bas)",
+               "Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente");
+    tools->add(CCancel, HmiGlyph::Stop, "Annuler l'envoi en cours (il reprendra o\xC3\xB9 il en \xC3\xA9tait au prochain D\xC3\xA9ployer)", "Annuler");
     tools->separator();
     tools->add(CDiscover, HmiGlyph::Search,
                "Rechercher les PC de maintenance du r\xC3\xA9seau local (leur agent r\xC3\xA9pond ; une r\xC3\xA9ponse ne prouve rien tant "
@@ -43,6 +52,9 @@ HmiDeployPane::HmiDeployPane(std::string id, Backend backend) : ui::Widget(std::
                "les deux machines gardent alors l'empreinte du certificat de l'autre",
                "Appairer");
     tools->add(CStatus, HmiGlyph::Refresh, "L'\xC3\xA9tat de la machine choisie (une machine appair\xC3\xA9" "e)", "\xC3\x89tat");
+    tools->add(CApps, HmiGlyph::View, "Les applications install\xC3\xA9" "es sur la machine choisie : la version active, celles gard\xC3\xA9" "es, le poste",
+               "Applications");
+    tools->add(CHistory, HmiGlyph::Compare, "L'historique des d\xC3\xA9ploiements sur la machine choisie", "Historique");
     tools->add(CLogs, HmiGlyph::History, "Le journal de l'agent de la machine choisie (une machine appair\xC3\xA9" "e)", "Journal");
     tools->add(CForget, HmiGlyph::Delete,
                "Oublier la machine choisie : ce PC ne la croit plus, et lui demande de l'oublier aussi si elle r\xC3\xA9pond",
@@ -55,6 +67,13 @@ HmiDeployPane::HmiDeployPane(std::string id, Backend backend) : ui::Widget(std::
     tools_->setEnabledWhen(CStatus, pairedChosen);
     tools_->setEnabledWhen(CLogs, pairedChosen);
     tools_->setEnabledWhen(CForget, chosen);
+    tools_->setEnabledWhen(CDeploy, [this, pairedChosen] {
+        return pairedChosen() && static_cast<bool>(backend_.deploy) && hosts_.projectFolder && !hosts_.projectFolder().empty();
+    });
+    tools_->setEnabledWhen(CRollback, pairedChosen);
+    tools_->setEnabledWhen(CApps, pairedChosen);
+    tools_->setEnabledWhen(CHistory, pairedChosen);
+    tools_->setEnabledWhen(CCancel, [this] { return busy(); });
 
     auto tabs = std::make_unique<ui::TabControl>(base + ".tabs");
     auto table = std::make_unique<ui::TableView>(base + ".machines");
@@ -66,6 +85,15 @@ HmiDeployPane::HmiDeployPane(std::string id, Backend backend) : ui::Widget(std::
     logs_ = logs.get();
     tabs->addTab({"Machines", ui::Icon::Station}, std::move(table));
     tabs->addTab({"Journal de la machine", ui::Icon::Document}, std::move(logs));
+    auto apps = std::make_unique<ui::TableView>(base + ".applications");
+    apps->setColumns({{"Application", 200.f}, {"Version active", 130.f}, {"Versions gard\xC3\xA9" "es", 200.f}, {"Poste", 160.f},
+                      {"Avec la session", 130.f}});
+    auto history = std::make_unique<ui::TableView>(base + ".historique");
+    history->setColumns({{"Quand", 140.f}, {"Depuis", 150.f}, {"Application", 180.f}, {"Version", 100.f}, {"R\xC3\xA9sultat", 520.f}});
+    apps_ = apps.get();
+    history_ = history.get();
+    tabs->addTab({"Applications", ui::Icon::Station}, std::move(apps));
+    tabs->addTab({"Historique", ui::Icon::Document}, std::move(history));
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     grid_ = &static_cast<PG&>(addChild(std::make_unique<PG>(base + ".grid")));
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(base + ".status")));
@@ -86,6 +114,17 @@ HmiDeployPane::HmiDeployPane(std::string id, Backend backend) : ui::Widget(std::
             case CStatus: (void)askStatus(); break;
             case CLogs: (void)askLogs(); break;
             case CForget: (void)forget(); break;
+            case CDeploy:
+                if (const auto* m = selected(); m && hosts_.confirmDeploy) hosts_.confirmDeploy(*m);
+                else (void)deploy();
+                break;
+            case CRollback:
+                if (const auto* m = selected(); m && hosts_.confirmRollback) hosts_.confirmRollback(*m);
+                else (void)rollback();
+                break;
+            case CApps: (void)askApps(); break;
+            case CHistory: (void)askHistory(); break;
+            case CCancel: cancel(); break;
             default: break;
         }
     });
@@ -139,6 +178,9 @@ void HmiDeployPane::worker() {
         std::lock_guard<std::mutex> lock(mutex_);
         done_.push_back(std::move(r));
         --pending_;
+        progressText_.clear();
+        progressFraction_ = -1;
+        cancel_ = false;
     }
 }
 
@@ -208,6 +250,21 @@ void HmiDeployPane::apply(Result r) {
         tabs_->setCurrentIndex(1);
     }
     if (!r.package.empty()) lastPackage_ = r.package;
+    if (r.hasApps) {
+        appRows_ = std::move(r.apps);
+        appsModel_ = std::make_shared<Rows>(std::vector<std::string>{"Application", "Version active", "Versions gard\xC3\xA9" "es", "Poste",
+                                                                     "Avec la session"},
+                                            appRows_);
+        apps_->setModel(appsModel_);
+        tabs_->setCurrentIndex(2);
+    }
+    if (r.hasHistory) {
+        historyRows_ = std::move(r.history);
+        historyModel_ = std::make_shared<Rows>(std::vector<std::string>{"Quand", "Depuis", "Application", "Version", "R\xC3\xA9sultat"},
+                                               historyRows_);
+        history_->setModel(historyModel_);
+        tabs_->setCurrentIndex(3);
+    }
     if (backend_.identity) identity_ = backend_.identity();
     rebuildProperties();
     if (!r.message.empty()) say(r.message, r.error);
@@ -299,6 +356,82 @@ bool HmiDeployPane::createPackage() {
     }
     if (!backend_.createPackage) return start("Cr\xC3\xA9" "er un package", {});
     return start("Cr\xC3\xA9" "er le package de d\xC3\xA9ploiement", [b = backend_.createPackage, folder] { return b(folder); });
+}
+
+HmiDeployPane::Progress HmiDeployPane::progressSink() {
+    return [this](const std::string& step, double fraction) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        progressText_ = step;
+        progressFraction_ = fraction;
+        return !cancel_;
+    };
+}
+
+std::string HmiDeployPane::progressText() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return progressText_;
+}
+
+double HmiDeployPane::progressFraction() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return progressFraction_;
+}
+
+void HmiDeployPane::cancel() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (pending_ > 0) cancel_ = true;
+}
+
+bool HmiDeployPane::deploy(const DeployOptions& options) {
+    const Machine* m = selected();
+    if (!m || !m->paired) {
+        say("D\xC3\xA9ployer : choisis une machine appair\xC3\xA9" "e", true);
+        return false;
+    }
+    const std::string folder = hosts_.projectFolder ? hosts_.projectFolder() : std::string{};
+    if (folder.empty()) {
+        say("D\xC3\xA9ployer : enregistre d'abord le projet", true);
+        return false;
+    }
+    std::string why;
+    if (hosts_.finished && !hosts_.finished(&why)) {
+        say("D\xC3\xA9ployer : le projet doit \xC3\xAAtre FINISH (" + why + ")", true);
+        return false;
+    }
+    if (!backend_.deploy) return start("D\xC3\xA9ployer", {});
+    return start("D\xC3\xA9ployer sur " + m->name,
+                 [b = backend_.deploy, copy = *m, folder, options, sink = progressSink()] { return b(copy, folder, options, sink); });
+}
+
+bool HmiDeployPane::rollback() {
+    const Machine* m = selected();
+    if (!m || !m->paired) {
+        say("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : choisis une machine appair\xC3\xA9" "e", true);
+        return false;
+    }
+    if (!backend_.rollback) return start("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente", {});
+    return start("Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente sur " + m->name,
+                 [b = backend_.rollback, copy = *m, sink = progressSink()] { return b(copy, sink); });
+}
+
+bool HmiDeployPane::askApps() {
+    const Machine* m = selected();
+    if (!m || !m->paired) {
+        say("Applications : choisis une machine appair\xC3\xA9" "e", true);
+        return false;
+    }
+    if (!backend_.apps) return start("Applications", {});
+    return start("Applications de " + m->name, [b = backend_.apps, copy = *m] { return b(copy); });
+}
+
+bool HmiDeployPane::askHistory() {
+    const Machine* m = selected();
+    if (!m || !m->paired) {
+        say("Historique : choisis une machine appair\xC3\xA9" "e", true);
+        return false;
+    }
+    if (!backend_.history) return start("Historique", {});
+    return start("Historique de " + m->name, [b = backend_.history, copy = *m] { return b(copy); });
 }
 
 bool HmiDeployPane::select(const std::string& key) {
@@ -395,7 +528,21 @@ void HmiDeployPane::onLayout() {
 void HmiDeployPane::onPaint(const ui::PaintContext& ctx) {
     ctx.r.fillRect(bounds(), ctx.theme.color.panelBg);
     poll();
-    if (busy()) invalidate();
+    if (busy()) {
+        // 1.29.0 : la progression du geste en cours, dans la barre d'etat.
+        const auto text = progressText();
+        const double f = progressFraction();
+        if (!text.empty()) {
+            const std::string line = f >= 0 ? text + " (" + std::to_string(static_cast<int>(f * 100.0 + 0.5)) + " %)" : text;
+            if (line != shownProgress_) {
+                shownProgress_ = line;
+                status_->setTransientMessage(line, 30.0);
+            }
+        }
+        invalidate();
+    } else {
+        shownProgress_.clear();
+    }
 }
 
 } // namespace app

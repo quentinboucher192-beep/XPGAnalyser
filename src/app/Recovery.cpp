@@ -123,6 +123,13 @@ std::string Recovery::readFile(const std::string& path) {
     return ss.str();
 }
 
+bool Recovery::writeFile(const std::string& path, const std::string& text) {
+    std::error_code ec;
+    const fs::path file(std::u8string(path.begin(), path.end()));
+    fs::create_directories(file.parent_path(), ec);
+    return writeAtomic(file, text);
+}
+
 void Recovery::start(const std::string& folder) {
     stop();
     folder_ = folder;

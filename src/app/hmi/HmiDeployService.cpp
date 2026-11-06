@@ -80,6 +80,12 @@ std::string fileSafe(std::string s) {
 }
 
 // L'etat partage des gestes (un seul fil de travail l'emploie a la fois ; identity() le lit depuis l'ecran).
+// Un package cree (Creer un package, Deployer).
+struct Built {
+    std::string path, application, version, summary, sha256;
+    std::uint64_t bytes{0};
+};
+
 struct State {
     std::string folder;
     std::function<std::string()> program;
@@ -185,6 +191,42 @@ struct State {
         for (const auto& [fp, f] : found)
             if (f.id == m.id) return fp;
         return {};
+    }
+
+    // Le package du projet (FINISH), ecrit dans exports/ puis relu comme le fera l'agent : signature, chemins, chaque
+    // empreinte. Faux : `why`.
+    bool package(const std::string& projectFolder, Built& out, std::string* why) {
+        deploy::ProjectInfo info;
+        if (!deploy::readProjectInfo(projectFolder, info, why)) return false;
+        deploy::PackageBuildOptions o;
+        o.projectFolder = projectFolder;
+        const std::string exe = program ? program() : std::string{};
+        o.launcherName = station::launcherName(true);
+        o.launcherText = station::launcherText(exe.empty() ? std::string("IHM-Studio.exe") : exe, info.name, true);
+        const std::string version = info.lastVersion.empty() ? info.version : info.lastVersion;
+        const auto file = P(projectFolder) / "exports" / P(fileSafe(info.name) + "-" + fileSafe(version) + ".xpgdeploy");
+        std::error_code ec;
+        std::filesystem::create_directories(file.parent_path(), ec);
+        o.outputPath = U(file);
+        const auto built = deploy::buildPackage(o, *key);
+        if (!built.ok) {
+            if (why) *why = built.error;
+            return false;
+        }
+        deploy::PackageVerifyOptions v;
+        v.approvedKeys.push_back(key->publicKey());
+        const auto report = deploy::verifyPackage(built.path, v);
+        if (!report.ok()) {
+            if (why) *why = "cr\xC3\xA9\xC3\xA9 mais refus\xC3\xA9 \xC3\xA0 la relecture : " + report.reason;
+            return false;
+        }
+        out.path = built.path;
+        out.application = built.manifest.application;
+        out.version = built.manifest.appVersion;
+        out.bytes = built.packageBytes;
+        out.sha256 = built.sha256;
+        out.summary = std::to_string(built.manifest.files.size()) + " fichiers, " + deploy::packageSizeText(built.packageBytes);
+        return true;
     }
 
     deploy::Client client() { return deploy::Client(me, deploy::DevKey::computerName(), key->publicKeyHex()); }
@@ -356,30 +398,11 @@ HmiDeployPane::Backend makeDeployBackend(std::string folder, std::function<std::
     b.createPackage = [st](const std::string& projectFolder) {
         std::string why;
         if (!st->ensure(&why)) return st->fail("Cr\xC3\xA9" "er un package : " + why);
-        deploy::ProjectInfo info;
-        if (!deploy::readProjectInfo(projectFolder, info, &why)) return st->fail("Cr\xC3\xA9" "er un package : " + why);
-        deploy::PackageBuildOptions o;
-        o.projectFolder = projectFolder;
-        const std::string exe = st->program ? st->program() : std::string{};
-        o.launcherName = station::launcherName(true);
-        o.launcherText = station::launcherText(exe.empty() ? std::string("IHM-Studio.exe") : exe, info.name, true);
-        const std::string version = info.lastVersion.empty() ? info.version : info.lastVersion;
-        const auto out = P(projectFolder) / "exports" / P(fileSafe(info.name) + "-" + fileSafe(version) + ".xpgdeploy");
-        std::error_code ec;
-        std::filesystem::create_directories(out.parent_path(), ec);
-        o.outputPath = U(out);
-        const auto built = deploy::buildPackage(o, *st->key);
-        if (!built.ok) return st->fail("Cr\xC3\xA9" "er un package : " + built.error);
-        // Le relire comme le fera l'agent : signature, chemins, chaque empreinte.
-        deploy::PackageVerifyOptions v;
-        v.approvedKeys.push_back(st->key->publicKey());
-        const auto report = deploy::verifyPackage(built.path, v);
-        if (!report.ok()) return st->fail("Cr\xC3\xA9" "er un package : cr\xC3\xA9\xC3\xA9 mais refus\xC3\xA9 \xC3\xA0 la relecture : " + report.reason);
-        Result r = st->done("Package cr\xC3\xA9\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9 : " + built.path + " - "
-                            + std::to_string(built.manifest.files.size()) + " fichiers, " + deploy::packageSizeText(built.packageBytes)
-                            + ", sign\xC3\xA9 par ta cl\xC3\xA9 " + st->key->fingerprint());
+        Built built;
+        if (!st->package(projectFolder, built, &why)) return st->fail("Cr\xC3\xA9" "er un package : " + why);
+        Result r = st->done("Package cr\xC3\xA9\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9 : " + built.path + " - " + built.summary + ", sign\xC3\xA9 par ta cl\xC3\xA9 "
+                            + st->key->fingerprint());
         r.package = built.path;
-        r.hasDetails = false;
         return r;
     };
     return b;

@@ -18,10 +18,13 @@
 #include "../../hmi/HmiStore.hpp"
 #include "../../ui/Layout.hpp"
 #include "../../ui/Theme.hpp"
+#include "../../core/Json.hpp"           // 1.29.0 : la demande d'arret de l'agent
 
 #include <algorithm>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -374,11 +377,76 @@ void StationScreen::Render(gfx::IRenderer& r, const menu::FrameContext& fc) {
     WidgetMenu::Render(r, fc);
     now_ = fc.totalSeconds;
     paintSecondaries(fc.totalSeconds);
+    watchStopRequest(fc.totalSeconds);     // 1.29.0 : l'agent de deploiement demande l'arret
+    paintStopBanner(r, fc);
     // Lot 15 : l'etat de la marche, garde toutes les 10 s pour la reprise.
     if (pane_ && pane_->runtime().running() && fc.totalSeconds - lastSnapshot_ >= 10.0) {
         lastSnapshot_ = fc.totalSeconds;
         (void)app_.recovery().saveStationState(pane_->runtime().stateSnapshot());
     }
+}
+
+// 1.29.0 : l'arret demande par l'agent de deploiement (voir StationScreen.hpp).
+void StationScreen::watchStopRequest(double now) {
+    if (stopDone_) return;
+    if (stopAt_ >= 0) {
+        if (now < stopAt_) return;
+        stopDone_ = true;
+        if (pane_ && pane_->runtime().running()) {
+            const std::string state = pane_->runtime().stateSnapshot();
+            (void)app_.recovery().saveStationState(state);
+            // La version suivante (ou la precedente, au retour) la reprend au demarrage, sans question : l'agent lui
+            // passe le meme fichier (XPG_REPRISE_FICHIER).
+            if (const char* f = std::getenv("XPG_REPRISE_FICHIER"); f && *f) {
+                if (Recovery::writeFile(f, state))
+                    pane_->runtime().log("Syst\xC3\xA8me", "Poste d'exploitation", "\xC3\x89tat gard\xC3\xA9 pour la version suivante");
+            }
+        }
+        if (pane_) pane_->runtime().log("Syst\xC3\xA8me", "Poste d'exploitation", "Ferm\xC3\xA9 \xC3\xA0 la demande de l'agent de d\xC3\xA9ploiement");
+        app_.requestQuit();
+        return;
+    }
+    if (stopFile_.empty()) {
+        if (stopCheck_ < 0) {
+            stopCheck_ = now;
+            if (const char* f = std::getenv("XPG_ARRET_FICHIER"); f && *f) stopFile_ = f;
+        }
+        if (stopFile_.empty()) return;
+    }
+    if (now - stopCheck_ < 1.0) return;
+    stopCheck_ = now;
+    std::error_code ec;
+    const std::filesystem::path path(std::u8string(stopFile_.begin(), stopFile_.end()));
+    if (!std::filesystem::is_regular_file(path, ec)) return;
+    std::ifstream in(path, std::ios::binary);
+    std::stringstream text;
+    text << in.rdbuf();
+    core::json::Value v;
+    std::string reason = "mise \xC3\xA0 jour";
+    double delay = 60;
+    if (core::json::parse(text.str(), v)) {
+        if (const auto* r = v.find("raison"); r && r->isString() && !r->asString().empty()) reason = r->asString();
+        if (const auto* d = v.find("delai"); d && d->isNumber()) delay = d->asNumber();
+    }
+    delay = std::clamp(delay, 0.0, 600.0);
+    stopReason_ = reason;
+    stopAt_ = now + delay;
+    if (pane_)
+        pane_->runtime().log("Syst\xC3\xA8me", "Poste d'exploitation",
+                             "Arr\xC3\xAAt demand\xC3\xA9 par l'agent de d\xC3\xA9ploiement (" + reason + ") : fermeture dans "
+                                 + std::to_string(static_cast<int>(delay)) + " s");
+}
+
+void StationScreen::paintStopBanner(gfx::IRenderer& r, const menu::FrameContext& fc) {
+    if (stopAt_ < 0 || stopDone_) return;
+    const int left = std::max(0, static_cast<int>(stopAt_ - fc.totalSeconds + 0.999));
+    const ui::Theme& theme = fc.theme ? *fc.theme : ui::Theme::dark();
+    const float w = static_cast<float>(fc.surface.w);
+    const float h = std::max(44.f, r.lineHeight(theme.font.ui) + 20.f);
+    r.fillRect({0.f, 0.f, w, h}, gfx::Color::rgb(0xB45309));
+    const std::string text = "Mise \xC3\xA0 jour du poste (" + stopReason_ + ") : il se ferme dans " + std::to_string(left)
+                           + " s ; son \xC3\xA9tat est gard\xC3\xA9.";
+    r.drawText({16.f, (h - r.lineHeight(theme.font.ui)) * 0.5f}, text, theme.font.ui, gfx::Color::rgb(0xFFFFFF));
 }
 
 ui::EventResult StationScreen::HandleEvent(const ui::InputEvent& e) {

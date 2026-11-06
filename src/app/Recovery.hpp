@@ -85,6 +85,9 @@ public:
     // En poste : l'etat de la marche (le texte de hmi::Runtime::stateSnapshot).
     bool saveStationState(const std::string& text);
     [[nodiscard]] static std::string readFile(const std::string& path);
+    // 1.29.0 : ecrire un fichier entier puis le renommer (la reprise passee d'une version du poste a la suivante,
+    // XPG_REPRISE_FICHIER). Chemin en UTF-8.
+    static bool writeFile(const std::string& path, const std::string& text);
 
     // Le processus de ce numero tourne-t-il ? (Windows : OpenProcess ; ailleurs : kill 0).
     [[nodiscard]] static bool processAlive(long pid);

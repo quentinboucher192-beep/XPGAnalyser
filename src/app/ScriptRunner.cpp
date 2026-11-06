@@ -5986,7 +5986,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // sa fin (jusqu'a 30 s) et echoue si le volet dit une erreur. Le message s'ecrit dans la sortie ([script] ...).
     //   deploiement rechercher | ajouter ADRESSE [PORT] | choisir MACHINE | appairer MACHINE CODE | etat | journal
     //   | oublier | package | attendre (un geste parti d'un bouton ou d'un dialogue)
+    //   1.29.0 : | deployer [sans-session] [delai N] [forcer] | retour | applications | historique | annuler
     //   (MACHINE : son identifiant M-XXXX, son nom ou son adresse ; CODE : ${CODE} par exemple)
+    //   deployer et retour attendent jusqu'a 2 minutes (le poste prevenu, ferme, la nouvelle version qui tient).
     if (cmd == "deploiement") {
         HmiDeployPane* pane = nullptr;
         if (auto* root0 = top()) walk(*root0, [&](ui::Widget& x) {
@@ -6012,8 +6014,22 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             else if (what == "journal") started = pane->askLogs();
             else if (what == "oublier") started = pane->forget();
             else if (what == "package") started = pane->createPackage();
-            else {
-                fail("deploiement " + what + " ? (rechercher, ajouter, choisir, appairer, etat, journal, oublier, package, attendre)");
+            else if (what == "deployer") {
+                HmiDeployPane::DeployOptions o;
+                o.autostart = !has("sans-session");
+                o.force = has("forcer");
+                for (int i = 2; !arg(i).empty(); ++i)
+                    if (arg(i) == "delai" && !arg(i + 1).empty()) o.stopDelay = std::atoi(arg(i + 1).c_str());
+                started = pane->deploy(o);
+            } else if (what == "retour") started = pane->rollback();
+            else if (what == "applications") started = pane->askApps();
+            else if (what == "historique") started = pane->askHistory();
+            else if (what == "annuler") {
+                pane->cancel();
+                return Step::Yield;
+            } else {
+                fail("deploiement " + what + " ? (rechercher, ajouter, choisir, appairer, etat, journal, oublier, package, deployer, retour, "
+                     "applications, historique, annuler, attendre)");
                 return Step::Next;
             }
             if (!started) {
@@ -6024,8 +6040,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         pane->poll();
         if (pane->busy()) {
-            if (retries_ < 1800) return Step::Retry;
-            fail("deploiement " + what + " : pas fini apr\xC3\xA8s 30 s");
+            const bool longOne = what == "deployer" || what == "retour" || what == "attendre";
+            if (retries_ < (longOne ? 7200 : 1800)) return Step::Retry;
+            fail("deploiement " + what + " : pas fini apr\xC3\xA8s " + (longOne ? std::string("2 min") : std::string("30 s")));
             return Step::Next;
         }
         std::printf("[script] deploiement %s : %s\n", what.c_str(), pane->message().c_str());

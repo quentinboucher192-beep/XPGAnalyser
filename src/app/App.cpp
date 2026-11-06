@@ -69,8 +69,10 @@
 
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <initializer_list>
 #include <map>                  // ---- Lot API 8 : les filtres retenus d'une session rejouee ----
 #include <system_error>
@@ -509,6 +511,29 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
             }
         } else {
             a->offerRecovery();
+        }
+    }
+    // 1.29.0 : le poste relance par l'agent de deploiement apres un arret demande (une nouvelle version, ou le retour a la
+    // precedente) : l'etat garde par celui qui s'est ferme reprend, sans question - l'arret etait voulu.
+    if (!a->options_.station.empty() && !a->stationRestore_) {
+        if (const char* f = std::getenv("XPG_REPRISE_FICHIER"); f && *f) {
+            namespace fs = std::filesystem;
+            std::error_code ec;
+            const fs::path handover(std::u8string(f, f + std::strlen(f)));
+            if (fs::is_regular_file(handover, ec)) {
+                std::string text;
+                {
+                    std::ifstream in(handover, std::ios::binary);
+                    std::ostringstream all;
+                    all << in.rdbuf();
+                    text = all.str();
+                }
+                fs::remove(handover, ec);
+                if (!text.empty()) {
+                    a->stationRestore_ = std::move(text);
+                    a->stationRestoreAsk_ = false;
+                }
+            }
         }
     }
     // Lot 14 : --ihm <dossier> - le poste d'exploitation, des que le projet est ouvert.

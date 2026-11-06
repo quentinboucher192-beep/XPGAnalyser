@@ -65,7 +65,20 @@ public:
         bool        hasLogs{false};
         std::vector<std::string> logs;                                   // Journal : les lignes
         std::string package;                                             // le paquet cree (son chemin)
+        // 1.29.0 : les applications de la machine choisie, son historique (des lignes de tableau).
+        bool        hasApps{false};
+        std::vector<std::vector<std::string>> apps;                      // Application, Version active, Gardees, Poste, Avec la session
+        bool        hasHistory{false};
+        std::vector<std::vector<std::string>> history;                   // Quand, Depuis, Application, Version, Resultat
     };
+    // 1.29.0 : les reglages d'un deploiement.
+    struct DeployOptions {
+        bool autostart{true};          // le poste demarre avec la session du PC de maintenance
+        int  stopDelay{60};            // le poste en marche est prevenu, puis se ferme apres ce delai (s)
+        bool force{false};             // un poste qui ne se ferme pas est arrete quand meme
+    };
+    // La progression d'un geste long (le fil de travail l'ecrit, l'ecran la lit) : une phrase, une part de 0 a 1 (< 0 : sans part).
+    using Progress = std::function<bool(const std::string& step, double fraction)>;   // faux : annuler
     // Ce que le volet demande ; chaque fonction tourne sur le fil de travail (bloquante, avec ses delais).
     struct Backend {
         std::function<Result()> machines;                                              // les appairees (sans reseau)
@@ -77,6 +90,12 @@ public:
         std::function<Result(const Machine&)> forget;                                  // Oublier
         std::function<Result(const std::string& projectFolder)> createPackage;         // Creer un package
         std::function<std::vector<std::pair<std::string, std::string>>()> identity;    // ce PC, la cle d'editeur
+        // 1.29.0 : deployer le projet (le package cree puis envoye, installe, lance), revenir a la version precedente,
+        // les applications et l'historique de la machine.
+        std::function<Result(const Machine&, const std::string& projectFolder, const DeployOptions&, const Progress&)> deploy;
+        std::function<Result(const Machine&, const Progress&)> rollback;
+        std::function<Result(const Machine&)> apps;
+        std::function<Result(const Machine&)> history;
     };
     // Ce que l'ecran fournit (les dialogues, le projet).
     struct Hosts {
@@ -85,6 +104,8 @@ public:
         std::function<void()> askAddress;                                // Ajouter par adresse... (puis addAddress)
         std::function<void(const Machine&)> askCode;                     // Appairer... (puis pairWith)
         std::function<void()> confirmPackage;                            // Creer un package... (puis createPackage)
+        std::function<void(const Machine&)> confirmDeploy;               // 1.29.0 : Deployer... (puis deploy)
+        std::function<void(const Machine&)> confirmRollback;             // 1.29.0 : Revenir a la precedente... (puis rollback)
         std::function<void(const std::string&)> help;                    // F1
     };
 
@@ -102,6 +123,18 @@ public:
     bool askLogs();
     bool forget();
     bool createPackage();
+    // 1.29.0 : deployer le projet sur la machine choisie (appairee), revenir a la version precedente, ses applications,
+    // son historique, annuler le geste en cours (l'envoi s'arrete au bloc suivant ; il reprendra la ou il en etait).
+    bool deploy(const DeployOptions& options);
+    bool deploy() { return deploy(DeployOptions{}); }
+    bool rollback();
+    bool askApps();
+    bool askHistory();
+    void cancel();
+    [[nodiscard]] std::string progressText() const;
+    [[nodiscard]] double progressFraction() const;
+    [[nodiscard]] const std::vector<std::vector<std::string>>& appRows() const noexcept { return appRows_; }
+    [[nodiscard]] const std::vector<std::vector<std::string>>& historyRows() const noexcept { return historyRows_; }
     // Choisir une machine (par son identifiant, son nom ou son adresse).
     bool select(const std::string& machine);
     [[nodiscard]] const Machine* selected() const;
@@ -141,9 +174,18 @@ private:
     ui::TabControl* tabs_{nullptr};
     ui::TableView*  table_{nullptr};
     ui::TableView*  logs_{nullptr};
+    ui::TableView*  apps_{nullptr};       // 1.29.0
+    ui::TableView*  history_{nullptr};    // 1.29.0
     ui::PropertyGrid* grid_{nullptr};
     ui::StatusBar*  status_{nullptr};
-    std::shared_ptr<ui::ITableModel> tableModel_, logsModel_;
+    std::shared_ptr<ui::ITableModel> tableModel_, logsModel_, appsModel_, historyModel_;
+    std::vector<std::vector<std::string>> appRows_, historyRows_;
+    // 1.29.0 : la progression du geste en cours (ecrite par le fil de travail) et l'annulation.
+    std::string progressText_;
+    double      progressFraction_{-1};
+    bool        cancel_{false};
+    [[nodiscard]] Progress progressSink();
+    std::string shownProgress_;       // la derniere ligne de progression montree
 
     std::vector<Machine> machines_;
     std::vector<std::pair<std::string, std::string>> details_;   // l'Etat de la machine choisie

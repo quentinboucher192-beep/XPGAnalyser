@@ -101,6 +101,16 @@ private:
     std::vector<std::pair<int, std::string>> captures_;      // (ecran, fichier) demandees
     std::map<std::string, std::string>      captureDone_;    // fichier -> "" ou pourquoi
     core::ConnectionScope                   links_;
+    // 1.29.0 : L'ARRET DEMANDE PAR L'AGENT DE DEPLOIEMENT. L'agent lance le poste avec XPG_ARRET_FICHIER=<chemin> ;
+    // pour l'arreter (une mise a jour), il y ecrit {"raison": "...", "delai": 60}. Le poste le lit (chaque seconde),
+    // le dit en haut de l'ecran avec le decompte, l'ecrit au journal, garde son etat (la reprise), puis se ferme.
+    void watchStopRequest(double now);
+    void paintStopBanner(gfx::IRenderer& r, const menu::FrameContext& fc);
+    std::string stopFile_;            // vide : pas lance par l'agent
+    double      stopCheck_{-1};
+    double      stopAt_{-1};          // l'heure de la fermeture (fc.totalSeconds) ; < 0 : rien de demande
+    std::string stopReason_;
+    bool        stopDone_{false};
 };
 
 } // namespace app

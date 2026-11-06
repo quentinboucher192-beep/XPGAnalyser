@@ -11,8 +11,9 @@ Retour au [README](../README.md).
 | Version | Contenu |
 |---|---|
 | **1.28.0** | mbedTLS et libsodium intégrés ; le paquet `.xpgdeploy` (manifeste SHA-256, signature Ed25519, vérification) et IHM Studio › Créer un package de déploiement ; l'agent `XPG-Deployment-Agent` en console (TLS 1.3 des deux côtés, IDENTIFY, STATUS, GET_LOGS, journal, `--etat`) ; la découverte UDP, l'ajout par IP, l'appairage par code à 6 chiffres ; la fenêtre Déploiement réseau d'IHM Studio (machines, appairage, état, journal). |
-| 1.29.0 | L'envoi par blocs avec reprise, VERIFY_PACKAGE, l'installation (versions côte à côte, `active.json`, retour en arrière), le lanceur écrit sur le PC cible, démarrer avec la session, l'arrêt demandé au poste ; le service Windows, le profil d'installation « PC de maintenance », les règles de pare-feu. |
-| ensuite | Les licences (Admin, License Manager, éditions, fonctionnalités, licences Runtime) ; l'onglet Déploiement réseau rejoint le License Manager Client. |
+| 1.29.0 | L'envoi par blocs avec reprise, VERIFY_PACKAGE, l'installation (versions côte à côte, `active.json`, retour en arrière), le lanceur écrit sur le PC cible, le lancement et l'arrêt du poste ; l'agent démarré avec la session de l'opérateur (voir § 8), les règles de pare-feu à l'installation ; dans le Studio : Déployer, la progression, l'historique, le retour en arrière. |
+| 1.30.0 | Les licences, sans service en ligne : l'Admin qui signe, le License Manager, les éditions et fonctionnalités, l'activation par fichier ; les licences Runtime vérifiées par l'agent. |
+| ensuite | L'activation en ligne et les licences flottantes (il faut héberger le service de licences) ; l'onglet Déploiement réseau rejoint le License Manager Client. |
 
 ## 2. Les programmes et les modules
 
@@ -101,3 +102,22 @@ Son dossier (par défaut `C:\ProgramData\XPG\Agent` sous Windows) : `identite.ce
 ## 7. Ce qui n'est pas simulé
 
 Les essais passent par de vraies sockets (TCP et UDP sur la boucle locale) et de vraies poignées de main TLS. Les essais sur deux PC de ton réseau restent à faire par toi : ils ne sont annoncés que lorsqu'ils ont eu lieu.
+
+## 8. Pourquoi l'agent tourne dans la session de l'opérateur (1.29.0)
+
+La maquette en faisait un **service Windows**. Un service tourne dans la « session 0 » de Windows, isolée : il ne peut ouvrir **aucune fenêtre** sur le bureau de l'opérateur. Il ne pourrait donc ni lancer le poste d'exploitation (une application plein écran), ni lui demander de s'arrêter proprement.
+
+En 1.29.0, l'agent est un programme sans fenêtre **démarré avec la session de l'opérateur** (la clé `Run` de l'utilisateur, comme le poste lui-même) : il lance le poste dans cette session, et lui parle par un canal local. Le pare-feu reçoit ses deux règles à l'installation (profils Domaine et Privé). Un vrai service, s'il le faut plus tard, devra être doublé d'un petit programme dans la session, qui lance le poste pour lui.
+
+## 9. L'envoi et l'installation (1.29.0)
+
+- **PREPARE** : le nom, la version, la taille et le SHA-256 du paquet ; l'agent vérifie la place libre et répond où reprendre (0, ou les octets déjà reçus d'un envoi coupé).
+- **SEND_CHUNK** : des blocs de 1 Mio, chacun avec son SHA-256 ; l'agent les écrit dans `incoming\`. Une coupure reprend au dernier bloc reçu.
+- **VERIFY_PACKAGE** : le SHA-256 du paquet entier, puis la vérification complète du § 3 avec les clés d'éditeur des PC appairés.
+- **INSTALL** : le contenu de `app\` est extrait dans `Applications\<application>\versions\<version>\` ; le lanceur est réécrit pour le programme de ce PC ; `active.json` est remplacé en une seule opération. Rien de l'ancienne version n'est écrasé ; trois versions sont gardées (réglable).
+- **STOP** / **START** : l'arrêt est demandé au poste en marche (il prévient l'opérateur et enregistre son état), puis la nouvelle version est lancée ; si elle ne tient pas quelques secondes, l'agent revient à la précédente.
+- **ROLLBACK** : revenir à la version précédente.
+- **LIST_APPS** : les applications installées, leurs versions, la version active, si le poste tourne.
+- **GET_HISTORY** : l'historique des déploiements.
+- L'agent ne lance qu'**IHM-Studio.exe**, posé à côté de lui, avec `--ihm "<dossier de la version>"` : jamais une commande reçue du réseau.
+

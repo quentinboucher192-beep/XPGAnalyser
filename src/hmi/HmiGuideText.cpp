@@ -25328,20 +25328,23 @@ const std::vector<Topic>& topics() {
         // ---- Tester et livrer  Livrer et exploiter / deploiement-reseau
         {"deploiement-reseau", "Le d\xC3\xA9ploiement r\xC3\xA9seau : envoyer le poste sur un PC de maintenance", "Tester et livrer \xE2\x80\xBA Livrer et exploiter",
          "Le poste d'exploitation d'un projet (le projet FINISH et son lanceur) part du PC de "
-         "d\xC3\xA9veloppement vers un PC de maintenance du r\xC3\xA9seau. Sur ce PC, un agent l'attend : "
-         "**XPG-Deployment-Agent**. Les deux machines ne se croient qu'une fois **appair\xC3\xA9" "es** (un "
-         "code \xC3\xA0 6 chiffres) ; tout passe en TLS 1.3, certificats des deux c\xC3\xB4t\xC3\xA9s ; le "
-         "paquet est sign\xC3\xA9.",
+         "d\xC3\xA9veloppement vers un PC de maintenance du r\xC3\xA9seau, s'y installe et y d\xC3\xA9marre. "
+         "Sur ce PC, un agent l'attend : **XPG-Deployment-Agent**. Les deux machines ne se croient qu'une "
+         "fois **appair\xC3\xA9" "es** (un code \xC3\xA0 6 chiffres) ; tout passe en TLS 1.3, certificats "
+         "des deux c\xC3\xB4t\xC3\xA9s ; le paquet est sign\xC3\xA9.",
          {
-             {K::Heading, "Ce qui est fait dans la 1.28.0, et ce qui vient ensuite", {}},
-             {K::Bullet, "**Fait** : le paquet sign\xC3\xA9 (Cr\xC3\xA9" "er un package), l'agent du PC de "
+             {K::Heading, "Ce qui est fait, et ce qui vient ensuite", {}},
+             {K::Bullet, "**1.28.0** : le paquet sign\xC3\xA9 (Cr\xC3\xA9" "er un package), l'agent du PC de "
                          "maintenance (il \xC3\xA9" "coute, r\xC3\xA9pond, se laisse appairer, tient son "
                          "journal), la recherche des machines, l'appairage, l'\xC3\xA9tat et le journal "
                          "d'une machine.", {}},
-             {K::Bullet, "**Ensuite (1.29.0)** : l'envoi du paquet \xC3\xA0 la machine, son installation "
-                         "(les versions c\xC3\xB4te \xC3\xA0 c\xC3\xB4te, le retour en arri\xC3\xA8re), le "
-                         "lancement du poste sur la machine ; l'agent en service Windows, les r\xC3\xA8gles "
-                         "du pare-feu. D'ici l\xC3\xA0, le paquet se copie \xC3\xA0 la main.", {}},
+             {K::Bullet, "**1.29.0** : **D\xC3\xA9ployer** (l'envoi par blocs, la v\xC3\xA9rification, "
+                         "l'installation \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la version en place, le poste "
+                         "arr\xC3\xAAt\xC3\xA9 proprement puis relanc\xC3\xA9), **Revenir \xC3\xA0 la "
+                         "pr\xC3\xA9" "c\xC3\xA9" "dente**, les onglets **Applications** et **Historique** ; "
+                         "l'agent qui d\xC3\xA9marre avec la session de l'op\xC3\xA9rateur et ses "
+                         "r\xC3\xA8gles du pare-feu, pos\xC3\xA9s par l'installateur.", {}},
+             {K::Bullet, "**Ensuite (1.30.0)** : les licences, v\xC3\xA9rifi\xC3\xA9" "es aussi par l'agent.", {}},
              {K::Heading, "Ouvrir le volet", {}},
              {K::Paragraph, "Configuration \xE2\x80\xBA **Poste d'exploitation**, outil **D\xC3\xA9ploiement "
                          "r\xC3\xA9seau** ; ou Aller \xC3\xA0 (Ctrl+K) : \xC2\xAB D\xC3\xA9ploiement "
@@ -25361,16 +25364,22 @@ const std::vector<Topic>& topics() {
                          "prot\xC3\xA9g\xC3\xA9" "e par Windows (DPAPI). Son empreinte est \xC3\xA0 droite "
                          "du volet (Ce PC).", {}},
              {K::Heading, "Sur le PC de maintenance", {}},
-             {K::Paragraph, "L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). En "
-                         "1.28.0, il se lance \xC3\xA0 la main, dans une console :", {}},
+             {K::Paragraph, "L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). "
+                         "\xC3\x80 l'installation du profil **Poste d'exploitation**, coche **Recevoir les "
+                         "d\xC3\xA9ploiements** : l'agent d\xC3\xA9marre avec la session de "
+                         "l'op\xC3\xA9rateur (sans fen\xC3\xAAtre ; c'est lui qui lance le poste dans cette "
+                         "session), et, pour une installation pour tous les comptes, ses deux r\xC3\xA8gles "
+                         "du pare-feu sont pos\xC3\xA9" "es (TCP 47861, UDP 47862 ; r\xC3\xA9seaux domaine "
+                         "et priv\xC3\xA9, pas public). Sans cette case, il se lance \xC3\xA0 la main, dans "
+                         "une console :", {}},
              {K::Bullet, "`XPG-Deployment-Agent.exe --servir` : il \xC3\xA9" "coute (TCP 47861 ; UDP 47862 "
                          "pour la recherche) ; Ctrl+C l'arr\xC3\xAAte ;", {}},
              {K::Bullet, "`XPG-Deployment-Agent.exe --appairer` : un code \xC3\xA0 6 chiffres, valable 5 "
                          "minutes, une seule fois ;", {}},
              {K::Bullet, "`XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, "
                          "les PC appair\xC3\xA9s.", {}},
-             {K::Paragraph, "Au premier `--servir`, Windows peut demander d'autoriser l'agent sur le "
-                         "r\xC3\xA9seau (R\xC3\xA9seau priv\xC3\xA9).", {}},
+             {K::Paragraph, "Sans les r\xC3\xA8gles de l'installateur, au premier `--servir`, Windows peut "
+                         "demander d'autoriser l'agent sur le r\xC3\xA9seau (R\xC3\xA9seau priv\xC3\xA9).", {}},
              {K::Heading, "Trouver et appairer une machine", {}},
              {K::Step, "**Rechercher** : les agents du r\xC3\xA9seau local r\xC3\xA9pondent. Une machine "
                          "qui r\xC3\xA9pond n'est qu'une adresse : elle est \xC2\xAB D\xC3\xA9" "couverte "
@@ -25387,6 +25396,42 @@ const std::vector<Topic>& topics() {
                          "d'\xC3\xA9" "diteur.", "4"},
              {K::Paragraph, "Compare l'empreinte affich\xC3\xA9" "e ici avec celle de `--etat` sur la machine : "
                          "c'est la m\xC3\xAAme.", {}},
+             {K::Heading, "D\xC3\xA9ployer", {}},
+             {K::Paragraph, "Choisis une machine **appair\xC3\xA9" "e**, puis **D\xC3\xA9ployer** (le projet "
+                         "FINISH, enregistr\xC3\xA9). Les r\xC3\xA9glages : d\xC3\xA9marrer le poste **avec "
+                         "la session** (oui au d\xC3\xA9part), le **d\xC3\xA9lai** laiss\xC3\xA9 au poste en "
+                         "marche avant de se fermer (60 s), et ce qui se passe s'il ne se ferme pas "
+                         "(attendre, ou l'arr\xC3\xAAter quand m\xC3\xAAme). Ensuite, la barre d'\xC3\xA9tat "
+                         "suit chaque \xC3\xA9tape :", {}},
+             {K::Step, "le package est cr\xC3\xA9\xC3\xA9 et sign\xC3\xA9 (comme Cr\xC3\xA9" "er un "
+                         "package) ;", "1"},
+             {K::Step, "il part par blocs ; une coupure, ou **Annuler** : le prochain **D\xC3\xA9ployer** "
+                         "reprend o\xC3\xB9 il en \xC3\xA9tait ;", "2"},
+             {K::Step, "l'agent le v\xC3\xA9rifie (la signature de ta cl\xC3\xA9 d'\xC3\xA9" "diteur, "
+                         "l'empreinte de chaque fichier, les chemins) - un paquet faux est refus\xC3\xA9, "
+                         "rien n'est install\xC3\xA9 ;", "3"},
+             {K::Step, "il l'installe **\xC3\xA0 c\xC3\xB4t\xC3\xA9** de la version en place (un dossier "
+                         "par version), avec son lanceur ;", "4"},
+             {K::Step, "le poste en marche affiche un bandeau orange \xC2\xAB Mise \xC3\xA0 jour du poste "
+                         ": il se ferme dans N s ; son \xC3\xA9tat est gard\xC3\xA9 \xC2\xBB, garde son "
+                         "\xC3\xA9tat et se ferme ;", "5"},
+             {K::Step, "la nouvelle version d\xC3\xA9marre ; si elle ne tient pas (elle se ferme au "
+                         "d\xC3\xA9marrage), l'agent **revient seul** \xC3\xA0 la "
+                         "pr\xC3\xA9" "c\xC3\xA9" "dente et le dit.", "6"},
+             {K::Paragraph, "Le r\xC3\xA9sultat est dans la barre d'\xC3\xA9tat, l'onglet **Historique** et le "
+                         "journal de l'agent.", {}},
+             {K::Heading, "Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente", {}},
+             {K::Paragraph, "**Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente** remet la version "
+                         "gard\xC3\xA9" "e sur la machine : le poste en marche est pr\xC3\xA9venu et "
+                         "ferm\xC3\xA9, la pr\xC3\xA9" "c\xC3\xA9" "dente redevient l'active et "
+                         "d\xC3\xA9marre. Celle d'avant reste gard\xC3\xA9" "e.", {}},
+             {K::Heading, "Applications et Historique", {}},
+             {K::Bullet, "**Applications** : pour la machine choisie, chaque application "
+                         "install\xC3\xA9" "e, sa version active, celles gard\xC3\xA9" "es, le poste (en "
+                         "marche ou non), s'il d\xC3\xA9marre avec la session.", {}},
+             {K::Bullet, "**Historique** : chaque d\xC3\xA9ploiement et chaque retour - quand, depuis quel "
+                         "PC, quelle version, le r\xC3\xA9sultat (install\xC3\xA9, refus\xC3\xA9 et "
+                         "pourquoi, revenu \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente).", {}},
              {K::Heading, "\xC3\x89tat, Journal, Oublier", {}},
              {K::Bullet, "**\xC3\x89tat** : le nom, la version de l'agent, le syst\xC3\xA8me, depuis quand "
                          "il tourne, la place libre, les PC appair\xC3\xA9s.", {}},
@@ -25403,7 +25448,7 @@ const std::vector<Topic>& topics() {
                          "Internet.", {}},
          },
          {"poste-exploitation", "etats-projet", "communication"},
-         {"d\xC3\xA9ploiement", "d\xC3\xA9ployer", "package", ".xpgdeploy", "PC de maintenance", "agent", "XPG-Deployment-Agent", "appairer", "appairage", "code \xC3\xA0 6 chiffres", "empreinte", "certificat", "TLS", "cl\xC3\xA9 d'\xC3\xA9" "diteur", "signature", "d\xC3\xA9" "couverte", "47861", "47862"},
+         {"d\xC3\xA9ploiement", "d\xC3\xA9ployer", "package", ".xpgdeploy", "PC de maintenance", "agent", "XPG-Deployment-Agent", "appairer", "appairage", "code \xC3\xA0 6 chiffres", "empreinte", "certificat", "TLS", "cl\xC3\xA9 d'\xC3\xA9" "diteur", "signature", "d\xC3\xA9" "couverte", "47861", "47862", "revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente", "retour en arri\xC3\xA8re", "historique", "applications", "pare-feu", "d\xC3\xA9marrer avec la session"},
          {"poste"},
          {},
          "",

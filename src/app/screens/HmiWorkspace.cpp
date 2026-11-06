@@ -2189,6 +2189,8 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.finished = [this](std::string* why) { return app_.projectFinished(why); };
         hosts.askAddress = [this] { askDeployAddress(); };
         hosts.askCode = [this](const HmiDeployPane::Machine& m) { askDeployCode(m.id, m.name); };
+        hosts.confirmDeploy = [this](const HmiDeployPane::Machine& m) { askDeployConfirm(m.id, m.name); };     // 1.29.0
+        hosts.confirmRollback = [this](const HmiDeployPane::Machine& m) { askRollbackConfirm(m.id, m.name); };
         hosts.help = [this](const std::string& topic) { openHmiHelp(topic); };
         pane->setHosts(std::move(hosts));
         page = std::move(pane);

@@ -274,6 +274,8 @@
 #define RacPoste "Poste d'exploitation"
 ; (dans le [Code], entre apostrophes : l'apostrophe doublée)
 #define ValeurRunPosteP StringChange(ValeurRunPoste, "'", "''")
+; 1.29.0 : l'agent de déploiement à l'ouverture de la session (le PC de maintenance reçoit le poste du Studio)
+#define ValeurRunAgent "XPG Deployment Agent"
 #define RacPosteP StringChange(RacPoste, "'", "''")
 
 [Setup]
@@ -400,6 +402,9 @@ Name: "xapi"; Description: "Ouvrir les .xapi (un projet API) avec {#NomApi}"; Gr
 Name: "xpg"; Description: "« Ouvrir avec {#NomApi} » dans le clic droit des .XPG (Control Expert reste leur programme)"; GroupDescription: "{cm:Fichiers}"; Components: api
 ; 1.14.0 : pour tous les comptes seulement (il faut etre administrateur) ; sinon grisee (CurPageChanged)
 Name: "parefeu"; Description: "{cm:Parefeu}"; GroupDescription: "{cm:Windows}"; Components: ihm poste; Flags: unchecked
+; 1.29.0 : le PC de maintenance reçoit le poste d'exploitation déployé par le Studio (docs\DEPLOIEMENT.md) : l'agent
+; démarre avec la session ; ses deux règles du pare-feu (domaine, privé) pour une installation pour tous les comptes
+Name: "agent"; Description: "Recevoir les déploiements d'{#NomIhm} : l'agent de déploiement démarre avec la session (et ses règles du pare-feu, réseaux domaine et privé)"; GroupDescription: "{cm:Windows}"; Components: poste; Flags: unchecked
 ; 1.14.0 : la reserve (de quoi reparer sans l'installateur)
 Name: "reserve"; Description: "Garder une copie de secours pour Réparer (environ {#ReserveMo} Mo) : sans elle, Réparer te demandera l'installateur"; GroupDescription: "{cm:Reparer}"
 
@@ -523,6 +528,8 @@ Root: HKA; Subkey: "Software\Classes\{#ProgIdXpg}\shell\open\command"; ValueType
 ; pose elle-même (IHM Studio > Configuration > Poste d'exploitation la voit, et « Ne plus démarrer » la
 ; retire) ; pour tous les comptes : celle de HKLM. Décochée (ou un autre profil), la nôtre est retirée ([Code]).
 Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#ValeurRunPoste}"; ValueData: "{code:PosteCommande}"; Flags: uninsdeletevalue; Components: poste; Check: PosteAuto
+; 1.29.0 : l'agent de déploiement, dans la session de l'opérateur (il y lance le poste) ; sans fenêtre
+Root: HKA; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#ValeurRunAgent}"; ValueData: """{app}\{#ExeAgent}"" --servir"; Flags: uninsdeletevalue; Components: poste; Tasks: agent
 
 [Run]
 ; 1.14.0 : ce que le profil a installé (IHM Studio seul : coché)
@@ -530,6 +537,8 @@ Filename: "{app}\{#Exe}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags
 Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked; Components: ihm and api
 Filename: "{app}\{#ExeIhm}"; Description: "{cm:LancerIhm}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent; Components: ihm and not api
 Filename: "{app}\{#ExeIhm}"; Parameters: "--poste ""{code:PosteDossier}"""; Description: "{cm:LancerPoste}"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent unchecked; Components: poste
+; 1.29.0 : l'agent démarre tout de suite (dans le compte de l'opérateur, pas celui de l'administrateur), sans attendre la session suivante
+Filename: "{app}\{#ExeAgent}"; Parameters: "--servir"; WorkingDir: "{app}"; Flags: nowait runasoriginaluser runhidden; Components: poste; Tasks: agent
 
 [UninstallDelete]
 Type: files; Name: "{app}\installation.ini"
@@ -747,6 +756,9 @@ const
   pPoste = 3;
   // le pare-feu : le nom de notre règle (retirée à la désinstallation, ou quand la case est décochée)
   RegleParefeu = '{#NomIhm} ({#Nom})';
+  // 1.29.0 : celles de l'agent de déploiement (le PC de maintenance)
+  RegleAgentTcp = 'XPG Deployment Agent ({#Nom})';
+  RegleAgentUdp = 'XPG Deployment Agent - découverte ({#Nom})';
   SPI_GETCLIENTAREAANIMATION = $1042;
 
 var
@@ -1752,6 +1764,15 @@ begin
       Ajoute(L, '  │  ' + Colonne('', 33) + 'fermé 3 fois de suite en moins d''une minute : il s''arrête');
     end else Ajoute(L, '  ├─ ' + Colonne('s''il se ferme', 32) + 'pas relancé (case décochée)');
     Ajoute(L, '  └─ ' + Colonne('pour en sortir', 32) + 'Ctrl+Alt+Q (le mot de passe de sortie du projet)');
+  end;
+  // 1.29.0 : l'agent de déploiement (ce PC reçoit le poste déployé par le Studio)
+  if WizardIsComponentSelected('poste') and WizardIsTaskSelected('agent') then begin
+    Ajoute(L, '');
+    Ajoute(L, 'LES DÉPLOIEMENTS       {#ExeAgent} --servir, à l''ouverture de la session');
+    if IsAdminInstallMode then
+      Ajoute(L, '  └─ ' + Colonne('le pare-feu', 32) + 'TCP 47861 et UDP 47862, réseaux domaine et privé')
+    else
+      Ajoute(L, '  └─ ' + Colonne('le pare-feu', 32) + 'pas de règle (pour toi seul) : Windows demandera');
   end;
   Result := L;
 end;
@@ -5524,8 +5545,15 @@ end;
 
 // 1.12.28 : pendant la sauvegarde, l'animation de la copie et une phrase (MontrerPreparation).
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var Code: Integer;
 begin
   MontrerPreparation(True);
+  // 1.29.0 : l'agent de déploiement n'a pas de fenêtre (le gestionnaire de redémarrage ne sait pas le fermer) ;
+  // en marche, il garde son exe : on l'arrête (il redémarre à la fin, ou à la session suivante).
+  if FileExists(ExpandConstant('{app}\{#ExeAgent}')) then begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM {#ExeAgent} /F', '', SW_HIDE, ewWaitUntilTerminated, Code);
+    Log('Agent de déploiement arrêté avant la copie (taskkill : code ' + IntToStr(Code) + ')');
+  end;
   try
     Result := PreparerCopie;
   finally
@@ -5693,6 +5721,49 @@ begin
   end;
 end;
 
+// 1.29.0 : l'agent de déploiement - la valeur Run (posée par [Registry]) vérifiée, ses deux règles du pare-feu
+// (TCP 47861, UDP 47862 : réseaux domaine et privé, pas public) ; décochée : les nôtres partent.
+procedure AgentRegler;
+var V, Exe: String;
+    Ok: Boolean;
+begin
+  Exe := ExpandConstant('{app}\{#ExeAgent}');
+  if WizardIsComponentSelected('poste') and WizardIsTaskSelected('agent') then begin
+    if RegQueryStringValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunAgent}', V) then
+      JournalNote(jFait, 'agent', 'L''agent de déploiement démarre avec la session : ce PC reçoit le poste déployé par {#NomIhm}')
+    else
+      JournalNote(jAttention, 'agent', 'L''agent de déploiement : la valeur de la clé Run n''est pas là (voir le journal)');
+    if not IsAdminInstallMode then begin
+      JournalNote(jAttention, 'agent-parefeu', 'Pare-feu de l''agent : pas de règle pour une installation pour toi seul (il faut être administrateur) ; Windows demandera');
+      Exit;
+    end;
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentTcp + '"');
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentUdp + '"');
+    Ok := (Netsh('advfirewall firewall add rule name="' + RegleAgentTcp + '" dir=in action=allow program="' + Exe +
+                 '" protocol=TCP localport=47861 enable=yes profile=domain,private description="Les déploiements d''{#NomIhm} (TLS 1.3, machines appairées)"') = 0)
+          and (Netsh('advfirewall firewall add rule name="' + RegleAgentUdp + '" dir=in action=allow program="' + Exe +
+                     '" protocol=UDP localport=47862 enable=yes profile=domain,private description="La découverte des PC de maintenance par {#NomIhm}"') = 0);
+    if Ok then begin
+      RegWriteStringValue(HKA, 'Software\{#Cle}', 'ParefeuAgent', 'oui');
+      JournalNote(jFait, 'agent-parefeu', 'Pare-feu : l''agent reçoit les déploiements (TCP 47861) et la découverte (UDP 47862), réseaux domaine et privé');
+    end else
+      JournalNote(jAttention, 'agent-parefeu', 'Pare-feu de l''agent : une règle n''a pas pu être posée (netsh) ; voir le journal');
+    Exit;
+  end;
+  // décochée (ou pas de poste) : notre valeur Run et nos règles partent
+  if RegQueryStringValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunAgent}', V)
+     and (Pos(Lowercase(ExpandConstant('{app}')), Lowercase(V)) > 0) then begin
+    RegDeleteValue(HKA, 'Software\Microsoft\Windows\CurrentVersion\Run', '{#ValeurRunAgent}');
+    JournalNote(jFait, 'agent-moins', 'L''agent de déploiement ne démarre plus avec la session');
+  end;
+  if IsAdminInstallMode and RegQueryStringValue(HKA, 'Software\{#Cle}', 'ParefeuAgent', V) and (V = 'oui') then begin
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentTcp + '"');
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentUdp + '"');
+    RegDeleteValue(HKA, 'Software\{#Cle}', 'ParefeuAgent');
+    JournalNote(jFait, 'agent-parefeu', 'Pare-feu : nos règles pour l''agent de déploiement sont retirées');
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
     Sources2, Lot8, Migrer, Setup, Blocs: String;
@@ -5721,6 +5792,7 @@ begin
     // 1.14.0 : le poste d'exploitation (la clé Run), le pare-feu
     PosteRegler;
     ParefeuRegler;
+    AgentRegler;   // 1.29.0
   except
     Log('Détails : ' + GetExceptionMessage);
   end;
@@ -5867,6 +5939,11 @@ begin
   // 1.14.0 : notre règle du pare-feu (les copies de secours : [UninstallDelete] ; la clé Run : uninsdeletevalue)
   if IsAdminInstallMode and RegQueryStringValue(HKA, 'Software\{#Cle}', 'Parefeu', V) and (V = 'oui') then
     Netsh('advfirewall firewall delete rule name="' + RegleParefeu + '"');
+  // 1.29.0 : celles de l'agent de déploiement
+  if IsAdminInstallMode and RegQueryStringValue(HKA, 'Software\{#Cle}', 'ParefeuAgent', V) and (V = 'oui') then begin
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentTcp + '"');
+    Netsh('advfirewall firewall delete rule name="' + RegleAgentUdp + '"');
+  end;
   JournalInstallation := DossierEtat('') + '\Journaux\desinstallation_' + Horodatage + '.log';
   ForceDirectories(ExtractFileDir(JournalInstallation));
   if SupprimerDonnees then Choix := 'oui' else Choix := 'non';

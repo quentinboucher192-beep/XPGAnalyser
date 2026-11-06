@@ -11,6 +11,8 @@
 
 #include "../App.hpp"
 #include "../hmi/HmiDeployPane.hpp"     // 1.28.0
+
+#include <algorithm>
 #include "../hmi/HmiDisplayPanes.hpp"
 #include "../hmi/HmiUnitPanes.hpp"       // 1.22.9 : Unites et formats, une page a onglets
 #include "../hmi/HmiCommPanes.hpp"     // lot 14
@@ -270,6 +272,46 @@ void MainAnalysisScreen::askDeployCode(const std::string& machineId, const std::
             if (!res.accepted() || !pane) return;
             const auto v = FormDialog::split(res.payload);
             if (!v.empty()) (void)pane->pairWith(machineId, v[0]);
+        });
+}
+
+// 1.29.0 : Deploiement reseau - deployer le projet sur la machine choisie (les reglages, puis l'envoi).
+void MainAnalysisScreen::askDeployConfirm(const std::string& machineId, const std::string& machineName) {
+    std::vector<FormDialog::Field> fields;
+    fields.push_back({"D\xC3\xA9marrer avec la session", "Oui", "", false, {"Oui", "Non"}});
+    fields.push_back({"D\xC3\xA9lai avant fermeture (s)", "60", "le poste en marche pr\xC3\xA9vient l'op\xC3\xA9rateur, puis se ferme (0 \xC3\xA0 600)",
+                      false, {}});
+    fields.push_back({"Si le poste ne se ferme pas", "Attendre", "", false, {"Attendre", "L'arr\xC3\xAAter quand m\xC3\xAAme"}});
+    app_.menus().ShowDialog(
+        std::make_unique<FormDialog>("dialog.deployConfirm", "D\xC3\xA9ployer sur " + machineName,
+            "Le projet est empaquet\xC3\xA9 et sign\xC3\xA9, envoy\xC3\xA9 \xC3\xA0 " + machineName + " (une coupure reprend o\xC3\xB9 elle en \xC3\xA9tait), "
+            "v\xC3\xA9rifi\xC3\xA9 par l'agent puis install\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de la version en place. Le poste en marche affiche un "
+            "bandeau, garde son \xC3\xA9tat et se ferme ; la nouvelle version d\xC3\xA9marre. Si elle ne tient pas, l'agent revient seul "
+            "\xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente.",
+            std::move(fields), "D\xC3\xA9ployer"),
+        [this, machineId](const menu::DialogResult& res) {
+            auto* pane = dynamic_cast<HmiDeployPane*>(hmiTab("deploiement"));
+            if (!res.accepted() || !pane) return;
+            const auto v = FormDialog::split(res.payload);
+            HmiDeployPane::DeployOptions o;
+            if (!v.empty()) o.autostart = v[0] != "Non";
+            if (v.size() > 1 && !v[1].empty()) o.stopDelay = std::clamp(std::atoi(v[1].c_str()), 0, 600);
+            if (v.size() > 2) o.force = v[2] != "Attendre";
+            if (pane->select(machineId)) (void)pane->deploy(o);
+        });
+}
+
+// 1.29.0 : Deploiement reseau - revenir a la version precedente (gardee sur la machine).
+void MainAnalysisScreen::askRollbackConfirm(const std::string& machineId, const std::string& machineName) {
+    app_.menus().ShowDialog(
+        std::make_unique<FormDialog>("dialog.rollbackConfirm", "Revenir \xC3\xA0 la version pr\xC3\xA9" "c\xC3\xA9" "dente",
+            "Sur " + machineName + ", le poste en marche est pr\xC3\xA9venu puis ferm\xC3\xA9 ; la version gard\xC3\xA9" "e redevient "
+            "l'active et d\xC3\xA9marre. Celle d'aujourd'hui reste gard\xC3\xA9" "e : tu pourras y revenir en la red\xC3\xA9ployant.",
+            std::vector<FormDialog::Field>{}, "Revenir"),
+        [this, machineId](const menu::DialogResult& res) {
+            auto* pane = dynamic_cast<HmiDeployPane*>(hmiTab("deploiement"));
+            if (!res.accepted() || !pane) return;
+            if (pane->select(machineId)) (void)pane->rollback();
         });
 }
 

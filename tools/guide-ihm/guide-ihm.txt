@@ -11683,14 +11683,15 @@ Le poste garde son état toutes les 10 s ; relancé après un arrêt brutal, il 
 > 1.9 : **Ctrl+Alt+S** ouvre la page Simulation de Paramètres système (permission Administrer) ; la fiche du poste a les cases **Page Simulation** et, dans Configuration › Équipements, **Repérer les lectures simulées** (voir « La page Simulation » et « Les lectures simulées et leurs repères »).
 
 == deploiement-reseau | Le déploiement réseau : envoyer le poste sur un PC de maintenance
-: Le poste d'exploitation d'un projet (le projet FINISH et son lanceur) part du PC de développement vers un PC de maintenance du réseau. Sur ce PC, un agent l'attend : **XPG-Deployment-Agent**. Les deux machines ne se croient qu'une fois **appairées** (un code à 6 chiffres) ; tout passe en TLS 1.3, certificats des deux côtés ; le paquet est signé.
+: Le poste d'exploitation d'un projet (le projet FINISH et son lanceur) part du PC de développement vers un PC de maintenance du réseau, s'y installe et y démarre. Sur ce PC, un agent l'attend : **XPG-Deployment-Agent**. Les deux machines ne se croient qu'une fois **appairées** (un code à 6 chiffres) ; tout passe en TLS 1.3, certificats des deux côtés ; le paquet est signé.
 @depuis 1.28.0
-@mots déploiement, déployer, package, .xpgdeploy, PC de maintenance, agent, XPG-Deployment-Agent, appairer, appairage, code à 6 chiffres, empreinte, certificat, TLS, clé d'éditeur, signature, découverte, 47861, 47862
+@mots déploiement, déployer, package, .xpgdeploy, PC de maintenance, agent, XPG-Deployment-Agent, appairer, appairage, code à 6 chiffres, empreinte, certificat, TLS, clé d'éditeur, signature, découverte, 47861, 47862, revenir à la précédente, retour en arrière, historique, applications, pare-feu, démarrer avec la session
 @lieux poste
 @voir poste-exploitation, etats-projet, communication
-### Ce qui est fait dans la 1.28.0, et ce qui vient ensuite
-- **Fait** : le paquet signé (Créer un package), l'agent du PC de maintenance (il écoute, répond, se laisse appairer, tient son journal), la recherche des machines, l'appairage, l'état et le journal d'une machine.
-- **Ensuite (1.29.0)** : l'envoi du paquet à la machine, son installation (les versions côte à côte, le retour en arrière), le lancement du poste sur la machine ; l'agent en service Windows, les règles du pare-feu. D'ici là, le paquet se copie à la main.
+### Ce qui est fait, et ce qui vient ensuite
+- **1.28.0** : le paquet signé (Créer un package), l'agent du PC de maintenance (il écoute, répond, se laisse appairer, tient son journal), la recherche des machines, l'appairage, l'état et le journal d'une machine.
+- **1.29.0** : **Déployer** (l'envoi par blocs, la vérification, l'installation à côté de la version en place, le poste arrêté proprement puis relancé), **Revenir à la précédente**, les onglets **Applications** et **Historique** ; l'agent qui démarre avec la session de l'opérateur et ses règles du pare-feu, posés par l'installateur.
+- **Ensuite (1.30.0)** : les licences, vérifiées aussi par l'agent.
 ### Ouvrir le volet
 Configuration › **Poste d'exploitation**, outil **Déploiement réseau** ; ou Aller à (Ctrl+K) : « Déploiement réseau ».
 ### Créer un package
@@ -11700,17 +11701,31 @@ Configuration › **Poste d'exploitation**, outil **Déploiement réseau** ; ou 
 - `manifest.sig` : la signature Ed25519 du manifeste par **ta clé d'éditeur**.
 Ta clé d'éditeur est créée sur ton PC la première fois ; sa partie secrète reste sur ce PC, protégée par Windows (DPAPI). Son empreinte est à droite du volet (Ce PC).
 ### Sur le PC de maintenance
-L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). En 1.28.0, il se lance à la main, dans une console :
+L'agent s'installe avec IHM Studio (profil Poste d'exploitation ou IHM Studio). À l'installation du profil **Poste d'exploitation**, coche **Recevoir les déploiements** : l'agent démarre avec la session de l'opérateur (sans fenêtre ; c'est lui qui lance le poste dans cette session), et, pour une installation pour tous les comptes, ses deux règles du pare-feu sont posées (TCP 47861, UDP 47862 ; réseaux domaine et privé, pas public). Sans cette case, il se lance à la main, dans une console :
 - `XPG-Deployment-Agent.exe --servir` : il écoute (TCP 47861 ; UDP 47862 pour la recherche) ; Ctrl+C l'arrête ;
 - `XPG-Deployment-Agent.exe --appairer` : un code à 6 chiffres, valable 5 minutes, une seule fois ;
 - `XPG-Deployment-Agent.exe --etat` : ce qu'il fait, l'empreinte de son certificat, les PC appairés.
-Au premier `--servir`, Windows peut demander d'autoriser l'agent sur le réseau (Réseau privé).
+Sans les règles de l'installateur, au premier `--servir`, Windows peut demander d'autoriser l'agent sur le réseau (Réseau privé).
 ### Trouver et appairer une machine
 1. **Rechercher** : les agents du réseau local répondent. Une machine qui répond n'est qu'une adresse : elle est « Découverte ».
 2. **Ajouter par adresse** si la recherche ne la trouve pas (un autre sous-réseau).
 3. Sur le PC de maintenance, `--appairer` affiche le code ; ici, **Appairer** et tape-le. Le code n'est jamais envoyé : les deux machines prouvent qu'elles le connaissent, liées à leurs certificats (un intermédiaire ferait échouer l'appairage). Trois essais faux effacent le code.
 4. La machine devient « Appairée » : son empreinte est gardée ici, la tienne là-bas, avec ta clé d'éditeur.
 Compare l'empreinte affichée ici avec celle de `--etat` sur la machine : c'est la même.
+### Déployer
+Choisis une machine **appairée**, puis **Déployer** (le projet FINISH, enregistré). Les réglages : démarrer le poste **avec la session** (oui au départ), le **délai** laissé au poste en marche avant de se fermer (60 s), et ce qui se passe s'il ne se ferme pas (attendre, ou l'arrêter quand même). Ensuite, la barre d'état suit chaque étape :
+1. le package est créé et signé (comme Créer un package) ;
+2. il part par blocs ; une coupure, ou **Annuler** : le prochain **Déployer** reprend où il en était ;
+3. l'agent le vérifie (la signature de ta clé d'éditeur, l'empreinte de chaque fichier, les chemins) - un paquet faux est refusé, rien n'est installé ;
+4. il l'installe **à côté** de la version en place (un dossier par version), avec son lanceur ;
+5. le poste en marche affiche un bandeau orange « Mise à jour du poste : il se ferme dans N s ; son état est gardé », garde son état et se ferme ;
+6. la nouvelle version démarre ; si elle ne tient pas (elle se ferme au démarrage), l'agent **revient seul** à la précédente et le dit.
+Le résultat est dans la barre d'état, l'onglet **Historique** et le journal de l'agent.
+### Revenir à la précédente
+**Revenir à la précédente** remet la version gardée sur la machine : le poste en marche est prévenu et fermé, la précédente redevient l'active et démarre. Celle d'avant reste gardée.
+### Applications et Historique
+- **Applications** : pour la machine choisie, chaque application installée, sa version active, celles gardées, le poste (en marche ou non), s'il démarre avec la session.
+- **Historique** : chaque déploiement et chaque retour - quand, depuis quel PC, quelle version, le résultat (installé, refusé et pourquoi, revenu à la précédente).
 ### État, Journal, Oublier
 - **État** : le nom, la version de l'agent, le système, depuis quand il tourne, la place libre, les PC appairés.
 - **Journal** : les dernières opérations de l'agent (une ligne chacune).
