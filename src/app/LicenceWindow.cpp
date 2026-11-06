@@ -423,7 +423,8 @@ void LicenceBody::doImport(const std::string& path) {
 }
 
 void LicenceBody::askRequest() {
-    const auto shared = std::filesystem::path(std::u8string(Settings::sharedFolder().begin(), Settings::sharedFolder().end())) / "Licences";
+    const std::string sharedFolder = Settings::sharedFolder();   // une seule chaine (begin et end de la meme)
+    const auto shared = std::filesystem::path(std::u8string(sharedFolder.begin(), sharedFolder.end())) / "Licences";
     const auto u8 = (shared / "demande-activation.xpgreq").u8string();
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Nom de ce PC", "", "Poste bureau d'\xC3\xA9tudes (le nom que tu lui donnes ; facultatif)", false, {}});
