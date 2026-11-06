@@ -1,0 +1,10 @@
+libsodium 1.0.20, licence ISC (LICENSE) - Ed25519 (les signatures des paquets de deploiement), SHA-256, ristretto255
+(l'appairage par code a 6 chiffres, 1.28.0).
+
+Source : https://github.com/jedisct1/libsodium/releases/download/1.0.20-RELEASE/libsodium-1.0.20.tar.gz
+SHA-256 de l'archive : ebb65ef6ca439333c2bb41a0c1990587288da07f6c7fd07cb3a18cc18d30ce19
+
+Garde : src/libsodium/ (*.c, *.h) et LICENSE. Retires : les Makefile, les fichiers assembleur (*.S), les essais, les
+autres constructions. include/sodium/version.h est ecrit depuis version.h.in (1.0.20, bibliotheque 26.2). Compile par
+CMakeLists.txt (cible xpg_sodium) sans autotools, les reglages repris de son build.zig, en version portable : aucune
+instruction propre a un processeur (ni AVX, ni SSE, ni assembleur) - suffisant pour signer et verifier des manifestes.

@@ -15,14 +15,16 @@
 #
 #  Les dossiers suivent ceux de CMakeLists.txt (bibliotheques xpg_core, xpg_xls,
 #  xpg_import, xpg_ui, xpg_help, xpg_hmi, l'application) : a tenir ensemble.
-#  third_party/miniz.c est nomme a part (CMake l'ajoute s'il est la).
+#  third_party/miniz.c est nomme a part (CMake l'ajoute s'il est la) ; 1.28.0 : mbedTLS et libsodium aussi, par motifs
+#  (third_party/mbedtls/library/*.c, third_party/libsodium/src/libsodium/**/*.c). src/agent/ (l'agent de deploiement)
+#  est un autre executable : pas dans ce projet.
 # =============================================================================
 import pathlib
 import re
 import sys
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
-DOSSIERS = ["core", "xls", "domain", "import", "export", "project", "sim", "ui", "menu", "help", "hmi", "app"]
+DOSSIERS = ["core", "xls", "domain", "import", "export", "project", "sim", "ui", "menu", "help", "hmi", "deploy", "app"]
 
 
 def attendus():

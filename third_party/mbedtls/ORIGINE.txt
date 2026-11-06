@@ -1,0 +1,10 @@
+Mbed TLS 3.6.2 (branche LTS), licence Apache-2.0 ou GPL-2.0-or-later (LICENSE) - le TLS 1.3 du deploiement reseau
+(1.28.0 : l'agent et le Studio, certificats des deux cotes).
+
+Source : https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+SHA-256 de l'archive : 8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
+
+Gardes : include/ et library/ (*.c, *.h) tels quels, et LICENSE. Retires : les essais, les programmes, la documentation,
+3rdparty/ (Everest, p256-m : hors de la configuration par defaut), les scripts de generation (les fichiers generes sont
+dans library/). Configuration : include/mbedtls/mbedtls_config.h, celle livree (non modifiee). Compile par
+CMakeLists.txt (cible xpg_mbedtls), sans ses avertissements.

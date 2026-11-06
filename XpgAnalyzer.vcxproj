@@ -74,7 +74,7 @@
       <WarningLevel>Level4</WarningLevel>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <AdditionalOptions>/utf-8 /Zc:__cplusplus /Zc:preprocessor %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party;$(SDL3_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)src;$(ProjectDir)third_party;$(ProjectDir)third_party\mbedtls\include;$(ProjectDir)third_party\libsodium\src\libsodium\include;$(SDL3_DIR)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!--
         NOMINMAX and WIN32_LEAN_AND_MEAN stop <windows.h> from defining min/max
         and dragging in rpcndr.h (which defines `small`). platform/Geometry.hpp
@@ -86,7 +86,7 @@
         fois, et aucun .obj compile avec un ancien en-tete (HmiModel.hpp)
         ne reste. Au prochain lot, 22 : la meme chose.
       -->
-      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;XPG_WITH_SDL=1;XPG_HAVE_MINIZ=1;XPG_EDITION=25;XPG_EDITION_$(XpgEdition)=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;_CRT_SECURE_NO_WARNINGS;XPG_WITH_SDL=1;XPG_HAVE_MINIZ=1;SODIUM_STATIC=1;XPG_EDITION=25;XPG_EDITION_$(XpgEdition)=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <!-- 1.12.0 : les textes de la version (resources\windows\xpg_analyzer.rc) de chaque application. -->
     <ResourceCompile>
@@ -95,7 +95,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(SDL3_DIR)\lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>SDL3.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;mf.lib;winhttp.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL3.lib;mfplat.lib;mfreadwrite.lib;mfuuid.lib;mf.lib;winhttp.lib;crypt32.lib;bcrypt.lib;ws2_32.lib;advapi32.lib;iphlpapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <!-- 1.8.0 : page de code UTF-8, chemins longs, versions de Windows (voir le fichier). -->
     <Manifest>
@@ -387,6 +387,18 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\xls\miniz_impl.cpp" />
     <ClCompile Include="third_party\miniz.c">
       <WarningLevel>TurnOffAllWarnings</WarningLevel>
+    </ClCompile>
+    <!-- 1.28.0 : mbedTLS et libsodium (third_party, ORIGINE.txt) : un dossier d'objets chacun (des noms se repetent) -->
+    <ClCompile Include="third_party\mbedtls\library\*.c">
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <AdditionalIncludeDirectories>$(ProjectDir)third_party\mbedtls\library;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ObjectFileName>$(IntDir)mbedtls\</ObjectFileName>
+    </ClCompile>
+    <ClCompile Include="third_party\libsodium\src\libsodium\**\*.c">
+      <WarningLevel>TurnOffAllWarnings</WarningLevel>
+      <AdditionalIncludeDirectories>$(ProjectDir)third_party\libsodium\src\libsodium\include\sodium;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>CONFIGURED=1;NATIVE_LITTLE_ENDIAN=1;HAVE_INTTYPES_H=1;HAVE_STDINT_H=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)sodium\%(RecursiveDir)</ObjectFileName>
     </ClCompile>
     <ClCompile Include="src\xls\Workbook.cpp" />
     <ClCompile Include="src\xls\XlsmSource.cpp" />
@@ -767,6 +779,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ai\AiProjectAnswers.cpp" />
     <ClCompile Include="src\app\ai\AiSandbox.cpp" />
     <ClCompile Include="src\app\ai\AiWorkbook.cpp" />
+    <ClCompile Include="src\deploy\Crypto.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="docs\ARCHITECTURE.md" />
@@ -1340,6 +1353,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ai\AiProjectAnswers.hpp" />
     <ClInclude Include="src\app\ai\AiSandbox.hpp" />
     <ClInclude Include="src\app\ai\AiWorkbook.hpp" />
+    <ClInclude Include="src\deploy\Crypto.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

@@ -29,7 +29,7 @@ if(MSVC)
         add_compile_options(/WX)
     endif()
 else()
-    add_compile_options(-Wall -Wextra -Wshadow -Wnon-virtual-dtor)
+    add_compile_options(-Wall -Wextra -Wshadow $<$<COMPILE_LANGUAGE:CXX>:-Wnon-virtual-dtor>)
     if(XPG_WARNINGS_AS_ERRORS)
         add_compile_options(-Werror)
     endif()
@@ -107,6 +107,45 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz.c")
     # compresses). XPG_HAVE_MINIZ le dit a qui s'en sert (export/DocKit.cpp).
     target_compile_definitions(xpg_xls PUBLIC XPG_HAVE_MINIZ=1)
     target_include_directories(xpg_xls PUBLIC third_party)
+endif()
+
+# --- 1.28.0 : le deploiement reseau. mbedTLS (le TLS 1.3, certificats des deux cotes) et libsodium (Ed25519, SHA-256,
+#     ristretto255 pour l'appairage) : leurs sources reduites dans third_party/ (ORIGINE.txt), compilees ici sans leurs
+#     avertissements. libsodium sans autotools : les reglages de son build.zig, en version portable (ni AVX ni asm).
+file(GLOB XPG_MBEDTLS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mbedtls/library/*.c")
+add_library(xpg_mbedtls STATIC ${XPG_MBEDTLS_SOURCES})
+target_include_directories(xpg_mbedtls PUBLIC third_party/mbedtls/include PRIVATE third_party/mbedtls/library)
+target_compile_options(xpg_mbedtls PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+if(WIN32)
+    target_link_libraries(xpg_mbedtls PUBLIC bcrypt ws2_32)
+endif()
+file(GLOB_RECURSE XPG_SODIUM_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsodium/src/libsodium/*.c")
+add_library(xpg_sodium STATIC ${XPG_SODIUM_SOURCES})
+target_include_directories(xpg_sodium PUBLIC third_party/libsodium/src/libsodium/include
+                                      PRIVATE third_party/libsodium/src/libsodium/include/sodium)
+target_compile_definitions(xpg_sodium PUBLIC SODIUM_STATIC=1
+                                      PRIVATE CONFIGURED=1 NATIVE_LITTLE_ENDIAN=1 HAVE_INTTYPES_H=1 HAVE_STDINT_H=1)
+target_compile_options(xpg_sodium PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+if(NOT MSVC)
+    target_compile_definitions(xpg_sodium PRIVATE HAVE_TI_MODE=1 HAVE_ATOMIC_OPS=1 HAVE_C11_MEMORY_FENCES=1
+                                                  HAVE_GCC_MEMORY_FENCES=1 HAVE_RAISE=1 HAVE_SYS_PARAM_H=1)
+endif()
+if(UNIX)
+    target_compile_definitions(xpg_sodium PRIVATE _GNU_SOURCE=1 TLS=_Thread_local HAVE_CLOCK_GETTIME=1 HAVE_GETPID=1
+        HAVE_MADVISE=1 HAVE_MLOCK=1 HAVE_MMAP=1 HAVE_MPROTECT=1 HAVE_NANOSLEEP=1 HAVE_POSIX_MEMALIGN=1 HAVE_PTHREAD=1
+        HAVE_SYSCONF=1 HAVE_SYS_MMAN_H=1 HAVE_SYS_RANDOM_H=1 HAVE_WEAK_SYMBOLS=1)
+    target_link_libraries(xpg_sodium PUBLIC Threads::Threads)
+endif()
+if(WIN32)
+    target_link_libraries(xpg_sodium PUBLIC advapi32)
+endif()
+
+# --- 1.28.0 : deploy - le deploiement reseau (le paquet signe, le protocole, l'appairage, l'agent), sans interface.
+xpg_sources(DEPLOY_SOURCES deploy)
+add_library(xpg_deploy STATIC ${DEPLOY_SOURCES})
+target_link_libraries(xpg_deploy PUBLIC xpg_core xpg_xls xpg_mbedtls xpg_sodium)
+if(WIN32)
+    target_link_libraries(xpg_deploy PUBLIC crypt32 ws2_32 iphlpapi)
 endif()
 
 # --- domain, import, export, project: the model and everything that reads or
@@ -187,7 +226,7 @@ endif()
 #  icone). xpg_analyzer construit les deux.
 xpg_sources(APP_SOURCES app)
 add_library(xpg_app OBJECT ${APP_SOURCES})
-target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi)
+target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi xpg_deploy)   # 1.28.0 : + le deploiement
 # 1.12.30 : FontAtlas (sans SDL) mesure aussi les textes de l'export SVG (app/SvgRenderer) :
 # il est dans xpg_app avec ou sans ecran (avant : avec SDL seulement, pour SdlRenderer).
 target_sources(xpg_app PRIVATE src/platform/FontAtlas.cpp)
@@ -634,6 +673,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_objets_test tests/hmi_objets_test.cpp)        # 1.27.0 : les types de l'IHM (Object, Font...) et leurs natives
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(deploy_crypto_test tests/deploy_crypto_test.cpp)  # 1.28.0 : libsodium et mbedTLS integres
+    xpg_target_link_libraries(deploy_crypto_test PRIVATE xpg_deploy)
     xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
@@ -973,6 +1014,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
     xpg_add_test(NAME hmiobjets    COMMAND hmi_objets_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)                  # 1.27.0 : les types de l'IHM et les natives des objets
+    xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----
