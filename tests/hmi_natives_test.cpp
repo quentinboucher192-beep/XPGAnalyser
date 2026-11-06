@@ -113,6 +113,21 @@ struct Bench {
         var("Mot", "WORD", "16#00F0");
         var("Tab", "ARRAY[1..5] OF INT", "");
         View v = makeView(p, "Vue_Essai");
+        // 1.27.0 : trois rectangles et un calque, pour les natives des objets (AlignTop, MoveObject, SetLayer...).
+        const Id layer = v.layers.empty() ? kNoId : v.layers.front().id;
+        const auto rect = [&](const char* n, double x, double y, double w, double h) {
+            Object o = makeObject(Kind::Rectangle, p.allocate(), n, x, y, layer);
+            o.setNumber("w", w);
+            o.setNumber("h", h);
+            v.objects.push_back(std::move(o));
+        };
+        rect("Pompe_1", 10, 20, 50, 30);
+        rect("Pompe_2", 100, 60, 50, 40);
+        rect("Pompe_3", 200, 10, 60, 30);
+        Layer process;
+        process.id = p.allocate();
+        process.name = "Process";
+        v.layers.push_back(process);
         p.views.push_back(v);
         p.config.startView = p.views.back().id;
         Script s;
@@ -314,7 +329,11 @@ void litteraux() {
 
 void typesDuRegistre() {
     std::printf("-- les types : le registre et le catalogue\n");
-    const auto cards = nt::typeCards();
+    auto cards = nt::typeCards();
+    // 1.27.0 : les 5 types de l'IHM ont aussi leur fiche ; ici, les types de base.
+    const auto ihm = std::count_if(cards.begin(), cards.end(), [](const nt::TypeCard& c) { return c.category == "Types de l'IHM"; });
+    check(ihm == 5, "les 5 types de l'IHM ont leur fiche (" + std::to_string(ihm) + ")");
+    cards.erase(std::remove_if(cards.begin(), cards.end(), [](const nt::TypeCard& c) { return c.category == "Types de l'IHM"; }), cards.end());
     check(cards.size() == 22, "22 types de base : les 17 de la 1.12.0, CHAR, WSTRING, DATE, TIME_OF_DAY, DATE_AND_TIME (" + std::to_string(cards.size()) + ")");
     for (const auto& c : cards) {
         check(!c.minText.empty() && !c.maxText.empty(), c.name + " : MIN et MAX (" + c.minText + " / " + c.maxText + ")");
@@ -606,7 +625,7 @@ void rangement1217() {
     check(homeBad == 0, "homeOf : le dossier qui la garde");
     check(mixed == 0, "un dossier a sous-dossiers ne garde aucune fonction (" + std::to_string(mixed) + ")");
     check(empty == 0, "aucun dossier vide");
-    check(nt::shelves().front().folders.size() == 10, "dix themes (1.13.0 : Donnees - JSON et expressions regulieres)");
+    check(nt::shelves().front().folders.size() == 12, "douze themes (1.13.0 : Donnees - JSON et expressions regulieres ; 1.27.0 : Objets, Ressources)");
     check(nt::shelves().front().total == nt::functions().size() + nt::conversions().size(), "Fonctions : toutes, X_TO_Y compris");
     std::size_t over = 0;
     for (const auto& s : nt::shelves())
@@ -630,7 +649,7 @@ void rangement1217() {
     // Les types
     std::size_t types = 0;
     for (const auto& s : nt::typeShelves()) types += s.entries.size();
-    check(nt::typeShelves().size() == 5 && types == 42, "les types : 5 dossiers, 42 fiches (" + std::to_string(types) + ")");   // 1.13.0 : + T_Erreur
+    check(nt::typeShelves().size() == 6 && types == 47, "les types : 6 dossiers, 47 fiches (" + std::to_string(types) + ")");   // 1.13.0 : + T_Erreur ; 1.27.0 : + les 5 types de l'IHM
     check(nt::typeShelves()[2].entries.size() == 7 && nt::typeGuides().size() == 7, "Conteneurs : 7, chacun sa fiche");
     for (const auto& g : nt::typeGuides()) {
         check(!g.lead.empty() && !g.declare.empty() && !g.access.empty() && !g.lives.empty() && !g.cpp.empty() && nt::shelf(g.shelf),

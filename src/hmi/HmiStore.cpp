@@ -558,7 +558,12 @@ std::string serializeView(const View& v) {
     for (const auto& o : v.objects) s += serializeObjectLines(o);
     for (const auto& sc : v.scripts)
         s += "script" + fieldInt("id", sc.id) + field("nom", sc.name) + fieldBare("langage", scriptLangKey(sc.lang))
-           + fieldBare("evenement", sc.event.empty() ? "-" : sc.event) + field("corps", sc.body) + "\n"
+           + fieldBare("evenement", sc.event.empty() ? "-" : sc.event) + field("corps", sc.body)
+           // 1.27.0 : le moment d'un script de cycle, sa frequence, sa condition - seulement s'ils changent (un projet
+           // d'avant s'ecrit a l'identique ; une version d'avant les ignore : le script tourne apres l'etape 4).
+           + (sc.stage != 4 ? fieldInt("moment", sc.stage) : std::string{})
+           + (sc.everyCycles != 1 ? fieldInt("frequence", sc.everyCycles) : std::string{})
+           + (sc.when.empty() ? std::string{} : field("condition", sc.when)) + "\n"
            + serializeDeclarations(sc.decls);                                     // 1.11.18 (lot 3)
     // Les actions, apres tous les objets : chacune designe le sien (0 = la vue).
     for (const auto& a : v.actions) s += serializeAction(kNoId, a);
@@ -838,6 +843,9 @@ core::Result<View> parseView(std::string_view text, LoadReport* report) {
             sc.event = toStr(r.get("evenement"));
             if (sc.event == "-") sc.event.clear();
             sc.body = toStr(r.get("corps"));
+            sc.stage = static_cast<int>(std::clamp<long long>(toInt(r.get("moment"), 4), 1, 9));             // 1.27.0
+            sc.everyCycles = static_cast<int>(std::clamp<long long>(toInt(r.get("frequence"), 1), 1, 1000));  // 1.27.0
+            sc.when = toStr(r.get("condition"));                                                              // 1.27.0
             v.scripts.push_back(std::move(sc));
             holder = &v.scripts.back().decls;
         } else if (r.word == "action") {

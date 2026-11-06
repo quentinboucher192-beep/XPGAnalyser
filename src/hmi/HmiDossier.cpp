@@ -1,4 +1,5 @@
 #include "HmiDossier.hpp"
+#include "HmiViewCycle.hpp"     // 1.27.0 : le moment d'un script de cycle
 #include "HmiPopupParams.hpp"
 #include "HmiTypes.hpp"
 #include "HmiDisplay.hpp"
@@ -101,6 +102,8 @@ std::string roleName(std::string_view role) {
 
 std::string eventName(const Script& s) {
     std::string e = std::string(eventLabel(s.event));
+    // 1.27.0 : un script de cycle a son moment (l'OnCycle d'avant s'ecrit comme avant).
+    if (viewcycle::isCycleScript(s) && viewcycle::customized(s)) return e + ", " + viewcycle::summary(s);
     if (s.event == "Cyclique" || s.event == "OnCycle") e += " (" + std::to_string(s.periodMs) + " ms)";
     if (s.event == "Changement" && !s.watch.empty()) e += " : " + s.watch;
     if (s.detached) e += ", d\xC3\xA9tach\xC3\xA9 (en arri\xC3\xA8re-plan)";                        // 1.12.26

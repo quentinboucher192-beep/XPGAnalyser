@@ -165,6 +165,9 @@ struct TypeCard {
     std::vector<std::string> literals, notes, uses;
 };
 [[nodiscard]] std::vector<TypeCard>   typeCards();
+// 1.27.0 : les attributs d'un type de l'IHM (Object, Font, Texture, Sound, Style) - sa fiche et l'aide a la saisie.
+struct HandleMember { std::string_view name, type, text; bool readOnly{false}; };
+[[nodiscard]] const std::vector<HandleMember>& handleMembers(std::string_view type);
 [[nodiscard]] std::optional<TypeCard> typeCard(std::string_view name);
 
 // ------------------------------------------------------------------------ l'arbre ---
@@ -211,8 +214,8 @@ struct Shelf {
 // L'en-tete C++ d'une fonction ("<numeric>"), une etiquette de sa fiche ; vide : aucun.
 [[nodiscard]] std::string_view cppHeader(const Function&) noexcept;
 
-// Les types en cinq dossiers : Nombres et bits, Textes durees et dates (avec STRING[n]),
-// Conteneurs, References, Generiques.
+// Les types en six dossiers : Nombres et bits, Textes durees et dates (avec STRING[n]),
+// Conteneurs, References, Generiques ; 1.27.0 : Types de l'IHM (Object, Font, Texture, Sound, Style).
 struct TypeEntry {
     enum class Kind : std::uint8_t { Base, Constructed, Generic };
     Kind        kind{Kind::Base};

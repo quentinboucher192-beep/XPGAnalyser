@@ -121,6 +121,23 @@ public:
     void report(sim::Diagnostic d) override {
         if (message_.empty()) message_ = d.message;
     }
+    // 1.27.0 : les types de l'IHM - une expression trouve un objet, une ressource, et lit (GetObject, ObjectsOf, Color...) ;
+    // elle n'agit pas (AlignTop, ShowIf, Play : dans un script).
+    bool handleOf(std::string_view name, std::string& type, std::string& path) override {
+        if (scope_ && (scope_->value(name) || scope_->object(name))) return false;
+        return plc_.handleOf(scope_ ? scope_->resolve(name) : std::string(name), type, path);
+    }
+    bool handleTarget(std::string_view type, std::string_view text, std::string& path, std::string& why) override {
+        return plc_.handleTarget(type, text, path, why);
+    }
+    bool isHandleNative(std::string_view u) override { return plc_.isHandleNative(u); }
+    bool handleNative(std::string_view u, const std::vector<HandleArg>& args, HandleResult& out, std::string& why) override {
+        if (!sim::handleNativeReads(u)) {
+            why = std::string(u) + " agit sur les objets : une expression (fx) ne fait que lire (\xC3\xA9" "cris-la dans un script)";
+            return false;
+        }
+        return plc_.handleNative(u, args, out, why);
+    }
     // 1.12.26 : une expression lit un fichier, une ressource du projet (RESOURCE_READ('aide.txt'), FILE_EXISTS(...)) ;
     // elle n'en ecrit, n'en copie, n'en supprime aucun.
     bool fileOp(std::string_view op, const std::vector<std::string>& args, FileResult& out, std::string& why) override {

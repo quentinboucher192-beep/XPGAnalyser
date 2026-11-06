@@ -62,6 +62,7 @@
 #include "HmiCalculator.hpp"           // 1.14.1 (N4) : la calculatrice
 #include "HmiRecording.hpp"            // 1.14.0 (M4) : les enregistrements
 #include "HmiUnits.hpp"                // 1.14.1 (lot N5) : le Convertisseur d'unites (le calcul de EN)
+#include "HmiViewCycle.hpp"            // 1.27.0 : le cycle de la vue, deballe (les scripts de cycle a leur moment)
 
 #include <cstdint>
 #include <deque>
@@ -1613,6 +1614,30 @@ public:
     [[nodiscard]] std::size_t        overrideCount() const noexcept;
     [[nodiscard]] const std::string* overrideOf(Id view, Id object, std::string_view key) const;
 
+    // ---- 1.27.0 : LES TYPES DE L'IHM dans les scripts (HmiRuntimeObjects.cpp) --------------------------------------
+    //  Object, Font, Texture, Sound, Style : une poignee designe un objet d'une vue ("Vue_Accueil.Pompe_1") ou une
+    //  ressource ("@Sound:Bip court", sim::resourcePath). Ses membres se lisent ici (ceux d'un objet s'ecrivent aussi :
+    //  la propriete est figee, comme une affectation), et les natives des objets (GetObject, AlignTop, ShowIf...) et des
+    //  ressources (GetSound, Play, TextWidth...) agissent sur la vue MONTREE, jamais sur le projet.
+    //  Un nom court (Pompe_1) se cherche dans la vue du code qui tourne (un script de vue, une action), sinon dans la
+    //  vue montree.
+    bool handleOf(std::string_view name, std::string& type, std::string& path);
+    bool handleTarget(std::string_view type, std::string_view text, std::string& path, std::string& why);
+    [[nodiscard]] bool isHandleNative(std::string_view upperName) const;
+    bool handleNative(std::string_view upperName, const std::vector<sim::Environment::HandleArg>& args,
+                      sim::Environment::HandleResult& out, std::string& why);
+    // Un membre d'une poignee qui n'est pas une variable publique : Vue.Obj.Kind, .View, .Style, .Parent ; un attribut
+    // d'une ressource (@Font:Carlito Gras.Family). Faux : pas a moi.
+    bool handleMemberRead(std::string_view path, sim::Value& out);
+    // ... et s'ecrire : 1 ecrit, 0 refuse (`why`), -1 pas a moi.
+    int  handleMemberWrite(std::string_view path, const sim::Value& value, std::string* why);
+    // Vue.Obj.Children, @Style:X.Users : une LIST OF Object neuve ; nul : pas a moi.
+    sim::ObjRef handleList(std::string_view path);
+    // "Pompe_1.Fill" -> "Vue_Accueil.Pompe_1.Fill" (un objet de la vue du code, sinon de la vue montree) ; vide : non.
+    [[nodiscard]] std::string shortObjectPath(std::string_view path) const;
+    // Les noms des natives des types de l'IHM, en majuscules.
+    [[nodiscard]] static const std::vector<std::string_view>& handleNativeNames();
+
     // ---- lot 13 : la securite renforcee (HmiRuntimeLot13.cpp) --------------------------
     //  LE JOURNAL D'AUDIT (Configuration > Historiques > Journal d'audit) : chaque
     //  variable ecrite par un geste de l'operateur (un clic, un choix, une
@@ -1689,6 +1714,22 @@ public:
     [[nodiscard]] const PerfStats& perf() const noexcept { return perf_; }
     void resetPerf();
     void notePerf(double evaluateMs, double paintMs, std::size_t expressions, std::size_t objects);
+    // ---- 1.27.0 : LE CYCLE DE LA VUE, DEBALLE (HmiViewCycle.hpp) ----------------------------------------------
+    //  Les scripts de cycle d'une vue (OnCycle) s'executent apres l'etape de leur moment (Script::stage), 1 cycle sur
+    //  N (everyCycles), si leur condition (when) est vraie ; dans un meme moment, dans leur ordre dans la vue. Apres
+    //  1, 2, 3 : dans tick(), juste apres ces etapes, au tick ou le cycle est du ; apres 4 a 7 : dans cycle() ; apres
+    //  4 et 5, vue par vue (la vue, puis chaque popup), autour de ses declencheurs - l'OnCycle d'avant est apres 4.
+    //  APRES 8 ET 9 : un ecran qui dessine la vue le dit (setScreenStages), et appelle afterFormulas une fois les
+    //  formules de la vue calculees, avant de la dessiner (vrai : un script a tourne - l'ecran recalcule la vue, ce
+    //  qu'il a change se dessine dans ce cycle), puis afterDrawing le dessin fait. Ce qu'il n'a pas appele part au
+    //  debut du tick suivant, avant l'etape 1. Sans ecran (les essais), 8 et 9 suivent 7.
+    void setScreenStages(bool on) noexcept { screenStages_ = on; }
+    [[nodiscard]] bool screenStages() const noexcept { return screenStages_; }
+    bool afterFormulas(double now);
+    void afterDrawing(double now);
+    // La mesure du dernier cycle mesure : chaque etape (1 a 7 : le moteur ; 8 et 9 : l'ecran, par notePerf ; < 0 : pas
+    // mesuree), les ecritures (10), la vue montree. Les scripts de cycle : perf().scripts (leur derniere duree).
+    [[nodiscard]] viewcycle::Timing cycleTiming() const;
     // ---- 1.12.17 : les performances dans le temps, les lenteurs (HmiPerfHistory.hpp) ----------
     //  Une mesure par seconde (repart a chaque lancement ; Remettre a zero aussi) ; les
     //  lenteurs, les 500 dernieres, gardees d'une marche a l'autre jusqu'a Vider (ou la fin du
@@ -1805,7 +1846,14 @@ private:
     sim::Value* ihmSlot(std::string_view name);      // lot 15 : la case d'une variable IHM (nulle : aucune)
     void openView(Id view, double now, bool popup);
     void closeView(Id view, double now);
-    void runViewScript(const View&, std::string_view event, double now);
+    // 1.27.0 : `moment` > 0 - les scripts de cycle (OnCycle) de ce moment seulement, a leur tour (1 cycle sur N) et si
+    // leur condition est vraie ; 0 : tous les scripts de l'evenement (OnOpen, OnClose).
+    // Rend le nombre de scripts lances.
+    std::size_t runViewScript(const View&, std::string_view event, double now, int moment = 0);
+    std::size_t runCycleMoment(int moment, double now);        // 1.27.0 : les vues montrees (la vue, puis les popups)
+    [[nodiscard]] bool cycleTurn(Id view, const Script&, const std::string& source);   // 1.27.0 : 1 sur N, la condition
+    [[nodiscard]] bool cycleMomentUsed(int moment) const;      // 1.27.0 : une vue montree a un script de cycle a ce moment
+    void flushDrawMoments(double now);                         // 1.27.0 : apres 8 puis apres 9, ce qui reste a faire
     bool runScript(const Script&, const std::string& source, double now, std::string* error);
     bool runScriptHere(const Script&, const std::string& source, double now, std::string* error);   // 1.12.26 : sur ce fil
     bool runStatements(const std::string& code, const std::string& source, double now, std::string* error,
@@ -2031,6 +2079,25 @@ private:
     void applyOverrides(View& composed, const View& original, const View* only = nullptr) const;
     [[nodiscard]] bool viewOpen(Id view) const;
     std::map<std::pair<Id, Id>, std::map<std::string, std::string>> overrides_;   // (vue, objet) -> cle -> valeur
+    // 1.27.0 : la vue et l'objet du code qui tourne (un script de vue, une action d'objet : This) - les noms courts des
+    // natives des objets s'y cherchent ; kNoId : la vue montree.
+    Id                       handleView_{kNoId}, handleThis_{kNoId};
+    double                   orderSeq_{0};                              // BringToFront... : l'ordre des gestes
+    std::map<std::string, double> soundStarts_;                         // Sound.Playing : quand chaque son est parti
+    struct HandleScope {
+        Runtime& rt;
+        Id       view, self;
+        HandleScope(Runtime& r, Id v, Id o) : rt(r), view(r.handleView_), self(r.handleThis_) {
+            r.handleView_ = v;
+            r.handleThis_ = o;
+        }
+        ~HandleScope() {
+            rt.handleView_ = view;
+            rt.handleThis_ = self;
+        }
+        HandleScope(const HandleScope&) = delete;
+        HandleScope& operator=(const HandleScope&) = delete;
+    };
     // 1.12.6 (lot B, § 2.7) : UN GESTE A COTE D'UNE FORMULE - un onglet choisi, un panneau replie, un
     // defilement, sur une propriete pilotee par une formule et sans variable liee : la valeur du geste
     // vaut tant que la formule garde la valeur qu'elle avait au geste ; quand elle change, la formule
@@ -2521,6 +2588,18 @@ private:
     std::vector<SlowFrame>                          slowStack_;         // ce qui tourne, l'un dans l'autre
     std::vector<SlowPart>                           cycleParts_;        // les postes du cycle en cours
     bool                                            inCycle_{false};
+    // ---- 1.27.0 : le cycle de la vue, deballe ----
+    bool                                            screenStages_{false};   // un ecran fait 8 et 9 (afterFormulas, afterDrawing)
+    int                                             drawPending_{0};        // 1 : apres 8 a faire ; 2 : apres 9 a faire
+    std::uint64_t                                   viewCycle_{0};          // le numero du cycle de la vue (les frequences)
+    struct EveryState {
+        std::uint64_t last{0};       // le dernier cycle ou le script s'est presente
+        std::uint64_t count{0};      // ses presentations d'affilee (1 cycle sur N : count % N == 0)
+    };
+    std::map<std::pair<Id, Id>, EveryState>         every_;                 // (vue, script)
+    std::set<Id>                                    whenWarned_;            // une condition illisible : dite une fois
+    viewcycle::Timing                               timing_, timingNow_;    // le dernier cycle mesure ; celui en cours
+    std::size_t                                     writesAtCycle_{0};      // perf_.writes au debut du cycle
     double                                          exchangeSampled_{-1};
     std::map<std::string, std::uint64_t>            exchangeRequests_;  // par equipement : ses requetes deja vues
     std::string                                     gestureVerb_;       // "Clic sur", "Saisie de"...

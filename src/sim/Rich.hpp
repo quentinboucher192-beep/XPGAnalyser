@@ -60,7 +60,8 @@ using TypeRef = std::shared_ptr<const TypeDesc>;
 struct TypeDesc {
     enum class Kind : std::uint8_t { Scalar, Array, Struct, Map, Ref, Pointer, Iterator, List, Tuple,
                                      Callback, /* 1.12.19 : members = parametres, element = retour (nul : aucun) */
-                                     Any /* 1.13.0 : une valeur JSON / dynamique - voir anyType() */ };
+                                     Any /* 1.13.0 : une valeur JSON / dynamique - voir anyType() */,
+                                     Handle /* 1.27.0 : un objet ou une ressource de l'IHM - voir handleType() */ };
     Kind        kind{Kind::Scalar};
     Type        scalar{Type::Unknown};                              // Scalar
     std::vector<std::pair<std::int64_t, std::int64_t>> bounds;      // Array : [bas, haut] par dimension
@@ -106,6 +107,19 @@ inline constexpr std::int64_t kRingMax = 100000;
 // Reserve au dialecte IHM (hmiDialect), jamais au ST de l'automate, comme LIST / MAP. Pas de place Modbus
 // (dynamic() est vrai) : en memoire de script / de l'IHM seulement.
 [[nodiscard]] TypeRef anyType();
+// 1.27.0 : LES TYPES DE L'IHM - Object (un objet d'une vue), Font, Texture, Sound, Style (une ressource du projet).
+// Une valeur de ces types est une POIGNEE : elle designe la chose, elle ne la copie pas. `name` : le type ("Object"...) ;
+// l'Obj porte `bound` (faux : NULL) et `targetName`, le chemin que l'environnement connait : "Vue_Accueil.Pompe_1" pour
+// un objet, "@Font:Carlito Gras" pour une ressource (prefixe @, le type, deux-points, le nom). Ses membres se lisent et
+// s'ecrivent dans l'environnement : h.Fill est "<chemin>.Fill". Un type du projet du meme nom passe avant (resolve).
+// Reserves au dialecte IHM ; jamais dans une memoire d'equipement (dynamic() est vrai).
+[[nodiscard]] TypeRef handleType(std::string_view name);
+// "OBJECT", "font"... : le nom du type de l'IHM ("Object", "Font", "Texture", "Sound", "Style") ; vide : ce n'en est pas un.
+[[nodiscard]] std::string handleTypeName(std::string_view name);
+// Le chemin d'une ressource : "@Font:Carlito Gras" ; et l'inverse (faux : pas un chemin de ressource).
+[[nodiscard]] std::string resourcePath(std::string_view type, std::string_view name);
+bool splitResourcePath(std::string_view path, std::string& type, std::string& name);
+
 // Meme forme : memes dimensions et bornes, meme element, meme structure (par son nom).
 [[nodiscard]] bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept;
 
@@ -134,6 +148,10 @@ struct Obj {
     std::shared_ptr<const void> lambda;
     std::string                 lambdaWhere;          // « Script_Tri, ligne 12 » (l'affichage, la Console)
 };
+
+// 1.27.0 : le nom d'une poignee a montrer (et a donner a une fonction qui attend un STRING) : le nom de la ressource,
+// le chemin de l'objet ; "NULL" si elle ne designe rien.
+[[nodiscard]] std::string handleText(const Obj& o);
 
 // Un objet neuf de ce type, a sa valeur par defaut (une structure doit etre resolue).
 [[nodiscard]] ObjRef makeObj(const TypeRef& type);

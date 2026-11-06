@@ -18,6 +18,15 @@
 #include <unordered_map>
 
 namespace sim {
+
+bool handleNativeReads(std::string_view u) noexcept {
+    static constexpr std::string_view kReading[] = {"GETOBJECT", "OBJECTSOF", "OBJECTSIN", "OBJECTSOFKIND", "OBJECTPROP",
+                                                    "GETRESOURCE", "GETFONT", "GETTEXTURE", "GETSOUND", "GETSTYLE", "FONTS",
+                                                    "TEXTURES", "SOUNDS", "STYLES", "TEXTWIDTH", "HASGLYPH", "STYLEVALUE", "COLOR"};
+    for (const auto n : kReading)
+        if (n == u) return true;
+    return false;
+}
 namespace {
 
 // ============================================================== lexer ========
@@ -355,6 +364,22 @@ public:
                 }
                 if (c == '&') {                                 // 1.12.1 : & s'ecrit pour AND (la fiche le disait)
                     out.push_back(Token{Tok::Keyword, "AND", "&", startLine, {}});
+                    ++pos_;
+                    continue;
+                }
+                // 1.27.0 : @Alarme - une couleur semantique, ecrite comme une constante : le texte '@Alarme' (le moteur
+                // la lit comme partout ou une couleur s'ecrit). Les lettres accentuees comptent.
+                if (c == '@' && pos_ + 1 < src_.size()
+                    && (identChar(src_[pos_ + 1]) || static_cast<unsigned char>(src_[pos_ + 1]) >= 0x80)) {
+                    const auto begin = pos_++;
+                    while (pos_ < src_.size() && (identChar(src_[pos_]) || static_cast<unsigned char>(src_[pos_]) >= 0x80)) ++pos_;
+                    const std::string body(src_.substr(begin, pos_ - begin));
+                    out.push_back(Token{Tok::StringLiteral, "", body, startLine, Value::text(body)});
+                    continue;
+                }
+                // 1.27.0 : { a, b } - une liste ecrite (CopyObjectTo(A, B, {A.Width, A.Height}) ; {} : vide).
+                if (c == '{' || c == '}') {
+                    out.push_back(Token{Tok::Punct, std::string(1, c), std::string(1, c), startLine, {}});
                     ++pos_;
                     continue;
                 }
@@ -1459,6 +1484,21 @@ private:
             }
             if (!accept(")")) return error("expected ')'");
             return inner;
+        }
+        // 1.27.0 (dialecte IHM) : {a, b, c} - une liste, comme [a, b, c] ; {} : vide.
+        if (dialect_ && atPunct("{")) {
+            auto node = std::make_shared<Expr>();
+            node->kind = Expr::Kind::Collection;
+            node->line = advance().line;
+            if (!atPunct("}"))
+                for (;;) {
+                    auto item = expression();
+                    if (!item) return item;
+                    node->more.push_back(*item);
+                    if (!accept(",")) break;
+                }
+            if (!accept("}")) return error("expected '}' at the end of the list {a, b}");
+            return node;
         }
         // 1.12.2 (dialecte IHM) : [a, b, c] (une liste, un tableau), ['a' := 1, 'b' := 2] (une MAP),
         // [] (vide).
@@ -3777,6 +3817,7 @@ private:
             case TypeDesc::Kind::Scalar:
             case TypeDesc::Kind::Iterator:
             case TypeDesc::Kind::Any:             // 1.13.0 : une valeur JSON / dynamique, deja resolue
+            case TypeDesc::Kind::Handle:          // 1.27.0 : un type de l'IHM
                 return t;
             case TypeDesc::Kind::Struct: {
                 if (!t->members.empty()) return t;
@@ -3808,8 +3849,15 @@ private:
                 }
                 if (const auto it = structs_.find(key); it != structs_.end()) return it->second;
                 std::vector<std::pair<std::string, std::string>> members;
-                if (!env_.structMembers(t->name, members) || members.empty())
+                if (!env_.structMembers(t->name, members) || members.empty()) {
+                    // 1.27.0 : Object, Font, Texture, Sound, Style - les types de l'IHM (un type du projet du meme nom passe avant).
+                    if (dialect_)
+                        if (TypeRef h = handleType(t->name)) {
+                            structs_[key] = h;
+                            return h;
+                        }
                     return dialectError("type inconnu : " + t->name);
+                }
                 // 1.10 (decision 15) : une enumeration repond par ses valeurs ("#n") :
                 // une variable de ce type est un DINT qui garde le nom de son type.
                 if (isEnumeration(members)) {
@@ -4211,6 +4259,22 @@ private:
         if (into.type->kind == TypeDesc::Kind::Any) return storeIntoAny(into, v, why);
         // 1.12.19 : un rappel recoit aussi le nom d'une fonction en texte ('Carre') - la maquette (decision 6).
         if (!v.o && into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
+        // 1.27.0 : un nom vers une poignee ('Pompe_1', 'Carlito Gras'), ou vers la cible d'un pointeur de ce type
+        // (gras : POINTER TO Font := Titre.Font : la propriete se lit en texte).
+        if (!v.o && into.type->kind == TypeDesc::Kind::Handle) return bindHandle(into.type->name, v.v, into, why);
+        if (!v.o && (into.type->kind == TypeDesc::Kind::Pointer || into.type->kind == TypeDesc::Kind::Ref))
+            if (const std::string ht = handleTypeOf(into.type->element); !ht.empty()) return bindHandle(ht, v.v, into, why);
+        // ... et une poignee vers une case simple : son nom (un STRING), ou si elle designe quelque chose (un BOOL).
+        if (v.o && into.type->kind == TypeDesc::Kind::Scalar)
+            if (const std::string name = handleNameOf(v.o); !name.empty() || isHandleObj(v.o)) {
+                if (into.type->scalar == Type::Bool) into.value.assignFrom(Value::boolean(v.o->bound));
+                else if (into.type->scalar == Type::String) into.value.assignFrom(Value::text(name));
+                else {
+                    if (why) *why = "un " + v.o->type->text() + " ne va pas dans un " + into.type->text();
+                    return false;
+                }
+                return true;
+            }
         if (!v.o) {
             if (into.type->kind == TypeDesc::Kind::Scalar) {
                 into.value.assignFrom(v.v);
@@ -4222,6 +4286,34 @@ private:
         if (&into == v.o.get()) return true;
         // 1.12.19 : un rappel recoit une fonction (son nom, une LAMBDA, un autre rappel) ou NULL.
         if (into.type->kind == TypeDesc::Kind::Callback) return storeCallback(into, v, why);
+        // 1.27.0 : une poignee recoit NULL, une poignee du meme type, un pointeur (une reference) qui en vise une ; un
+        // pointeur vers un type de l'IHM recoit une poignee (GetObject rend un pointeur, ObjectsOf une liste).
+        if (into.type->kind == TypeDesc::Kind::Handle) {
+            if (isNullObj(v.o)) {
+                into.bound = false;
+                into.targetName.clear();
+                return true;
+            }
+            if (isIndirect(v.o) && v.o->type->element && handleTypeOf(v.o->type->element) == into.type->name) {
+                if (v.o->bound && v.o->targetName.empty()) {
+                    if (auto t = v.o->target.lock()) return store(into, RV{{}, t}, why);
+                }
+                into.bound = v.o->bound;
+                into.targetName = v.o->targetName;
+                return true;
+            }
+        }
+        if ((into.type->kind == TypeDesc::Kind::Pointer || into.type->kind == TypeDesc::Kind::Ref) && isHandleObj(v.o)) {
+            const std::string ht = handleTypeOf(into.type->element);
+            if (ht.empty() || ht != v.o->type->name) {
+                if (why) *why = "un " + v.o->type->text() + " ne va pas dans un " + into.type->text();
+                return false;
+            }
+            into.bound = v.o->bound;
+            into.target.reset();
+            into.targetName = v.o->targetName;
+            return true;
+        }
         // NULL dans une reference ou un pointeur.
         if (v.o->type && v.o->type->kind == TypeDesc::Kind::Pointer && !v.o->type->element
             && (into.type->kind == TypeDesc::Kind::Ref || into.type->kind == TypeDesc::Kind::Pointer)) {
@@ -4511,6 +4603,11 @@ private:
         // Une structure ou un tableau de l'environnement : sa copie.
         auto obj = materialize(p.name);
         if (obj) return RV{{}, *obj};
+        if (dialect_) {                                  // 1.27.0 : un objet d'une vue, une ressource (titre^, bip^)
+            std::string ht, hp;
+            if (env_.handleOf(p.name, ht, hp))
+                if (auto h = newHandle(ht, hp)) return RV{{}, h};
+        }
         return dialectError("'" + p.name + "' is not declared");
     }
 
@@ -4605,6 +4702,12 @@ private:
             return false;
         }
         if (p.obj) return store(*p.obj, v, why);
+        // 1.27.0 : une poignee (ou un pointeur vers une) ecrite dans l'environnement - Titre.Font := gras : son nom.
+        if (v.o && (isHandleObj(v.o) || !handleNameOf(v.o).empty())) {
+            if (env_.write(p.name, Value::text(handleNameOf(v.o)))) return true;
+            if (why) *why = "'" + p.name + "' cannot be written";
+            return false;
+        }
         if (!v.o) {
             if (env_.write(p.name, v.v)) return true;
             if (why) *why = "'" + p.name + "' cannot be written";
@@ -4719,6 +4822,11 @@ private:
                         return Place{nullptr, t->name + "." + e.name, false, false};
                     }
                     p = *t;
+                }
+                // 1.27.0 : un membre d'un objet ou d'une ressource de l'IHM - dans l'environnement (<chemin>.Fill).
+                if (isHandleObj(p.obj)) {
+                    if (!p.obj->bound) return dialectError(p.obj->type->name + " NULL : il ne d\xC3\xA9signe rien ('" + e.name + "' ne se lit pas)");
+                    return Place{nullptr, p.obj->targetName + "." + e.name, p.constant, false};
                 }
                 // 1.13.0 : un membre (.Count, .First...) sur une valeur ANY ouvre sa boite JSON (un objet, un tableau).
                 if (p.obj->type && p.obj->type->kind == TypeDesc::Kind::Any) {
@@ -4919,6 +5027,9 @@ private:
     core::Result<Value> scalarOf(const RV& r, const Expr& e) {
         if (!r.o) return r.v;
         (void)e;
+        // 1.27.0 : un objet ou une ressource de l'IHM (ou un pointeur vers l'un d'eux) la ou un texte est attendu
+        // (IHM_SON(bip), IHM_LOG(p)) : son nom - les fonctions d'avant les prennent ainsi.
+        if (const std::string name = handleNameOf(r.o); !name.empty()) return Value::text(name);
         return dialectError("un " + (r.o->type ? r.o->type->text() : std::string("objet"))
                             + " est employ\xC3\xA9 l\xC3\xA0 o\xC3\xB9 une valeur simple est attendue");
     }
@@ -5030,6 +5141,12 @@ private:
                 // 1.12.19 : le nom d'une fonction, sans parentheses : un rappel vers elle (f := Est_Valide).
                 if (e.kind == Expr::Kind::Reference || e.kind == Expr::Kind::Member)
                     if (auto cb = functionValue(*name)) return RV{{}, cb};
+                // 1.27.0 : le nom d'un objet (Pompe_1 dans sa vue, Vue_A.Pompe_1) : une poignee Object.
+                if (dialect_) {
+                    std::string ht, hp;
+                    if (env_.handleOf(*name, ht, hp))
+                        if (auto h = newHandle(ht, hp)) return RV{{}, h};
+                }
                 return dialectError("'" + *name + "' is not declared");
             }
         }
@@ -5236,6 +5353,14 @@ private:
                 else equal = isCallbackObj(a.o) && isCallbackObj(b.o) && deepEquals(*a.o, *b.o);
                 return RV{Value::boolean(op == "=" ? equal : !equal), nullptr};
             }
+            // 1.27.0 : une poignee comparee a NULL, a une poignee, a un pointeur : la meme chose designee.
+            if (a.o && b.o && (isHandleObj(a.o) || isHandleObj(b.o))) {
+                const auto sided = [](const ObjRef& o) { return isHandleObj(o) || isIndirect(o); };
+                const bool aNull = sided(a.o) && !a.o->bound, bNull = sided(b.o) && !b.o->bound;
+                if (aNull || bNull) equal = aNull && bNull;
+                else equal = sided(a.o) && sided(b.o) && !a.o->targetName.empty() && upperOf(a.o->targetName) == upperOf(b.o->targetName);
+                return RV{Value::boolean(op == "=" ? equal : !equal), nullptr};
+            }
             if (a.o && b.o) {
                 const bool aNull = isIndirect(a.o) && !a.o->bound;
                 const bool bNull = isIndirect(b.o) && !b.o->bound;
@@ -5263,6 +5388,180 @@ private:
         std::map<std::string, TypeRef>   bindings;
     };
     static bool isCallbackObj(const ObjRef& o) { return o && o->type && o->type->kind == TypeDesc::Kind::Callback; }
+    // ==== 1.27.0 : LES TYPES DE L'IHM (Object, Font, Texture, Sound, Style) =========================================
+    static bool isHandleObj(const ObjRef& o) { return o && o->type && o->type->kind == TypeDesc::Kind::Handle; }
+    static ObjRef newHandle(const std::string& type, const std::string& path) {
+        TypeRef ht = handleType(type);
+        if (!ht) return nullptr;
+        auto h = makeObj(ht);
+        h->bound = !path.empty();
+        h->targetName = path;
+        return h;
+    }
+    // Le type de l'IHM que vise un type ecrit : Object, POINTER TO Font, REF_TO Sound (sa cible) ; vide : aucun. Un
+    // type du projet du meme nom passe avant (structMembers).
+    std::string handleTypeOf(const TypeRef& t) {
+        if (!t) return {};
+        if (t->kind == TypeDesc::Kind::Handle) return t->name;
+        if (t->kind == TypeDesc::Kind::Struct && t->members.empty()) {
+            std::string n = handleTypeName(t->name);
+            if (n.empty()) return {};
+            std::vector<std::pair<std::string, std::string>> members;
+            if (env_.structMembers(t->name, members) && !members.empty()) return {};
+            return n;
+        }
+        return {};
+    }
+    // Le nom d'une poignee, ou d'un pointeur (une reference) qui en vise une ; vide : ni l'un ni l'autre.
+    std::string handleNameOf(const ObjRef& o) {
+        if (isHandleObj(o)) return o->bound ? handleText(*o) : std::string{};
+        if (isIndirect(o) && o->bound && !o->targetName.empty() && !handleTypeOf(o->type->element).empty()) {
+            Obj tmp;
+            tmp.bound = true;
+            tmp.targetName = o->targetName;
+            return handleText(tmp);
+        }
+        return {};
+    }
+    // Les poignees que donne une valeur : une poignee, un pointeur (une reference) vers une poignee ou un chemin, une
+    // liste (un tableau) de tout cela ; NULL donne un chemin vide. Faux : autre chose.
+    bool collectHandles(const ObjRef& o, Environment::HandleArg& a, int depth = 0) {
+        if (!o || !o->type || depth > 8) return false;
+        if (isHandleObj(o)) {
+            a.handles.emplace_back(o->type->name, o->bound ? o->targetName : std::string{});
+            return true;
+        }
+        if (isIndirect(o)) {
+            std::string ht = handleTypeOf(o->type->element);
+            if (o->bound && !o->targetName.empty()) {
+                a.handles.emplace_back(ht.empty() ? std::string("Object") : ht, o->targetName);
+                return true;
+            }
+            if (o->bound)
+                if (auto target = o->target.lock()) return collectHandles(target, a, depth + 1);
+            a.handles.emplace_back(ht.empty() ? std::string("Object") : ht, std::string{});
+            return true;
+        }
+        if (o->type->kind == TypeDesc::Kind::List || o->type->kind == TypeDesc::Kind::Array) {
+            a.isList = true;
+            for (const auto& item : o->items)
+                if (!collectHandles(item, a, depth + 1)) return false;
+            return true;
+        }
+        return false;
+    }
+    // L'APPEL D'UNE NATIVE DES TYPES DE L'IHM : chaque argument lu (sa valeur, ses poignees, le chemin qu'il nomme, une
+    // liste ecrite {A.Width, A.Height}), puis l'environnement la fait.
+    core::Result<RV> handleCall(const std::string& u, const Expr& e) {
+        if (!e.outputs.empty()) return dialectError(u + " : pas de sortie nomm\xC3\xA9" "e (=>)");
+        std::vector<Environment::HandleArg> args;
+        args.reserve(e.arguments.size());
+        for (const auto& [pname, ex] : e.arguments) {
+            (void)pname;
+            if (!ex) continue;
+            Environment::HandleArg a;
+            if (ex->kind == Expr::Kind::Collection && ex->op.empty()) {
+                a.isList = true;
+                for (const auto& item : ex->more) {
+                    if (!item) continue;
+                    if (item->kind == Expr::Kind::Member || item->kind == Expr::Kind::Deref) {
+                        const QuietSide quiet(*this);
+                        auto pl = locate(*item, false);
+                        if (pl && !pl->obj) {
+                            a.members.push_back(pl->name);
+                            continue;
+                        }
+                    }
+                    auto v = rich(*item);
+                    if (!v) return v;
+                    if (!v->o) {
+                        a.members.push_back(v->v.type() == Type::String ? v->v.asString() : v->v.display());
+                        continue;
+                    }
+                    if (!collectHandles(v->o, a))
+                        return dialectError(u + " : un " + v->o->type->text() + " dans la liste n'est ni un objet, ni un nom de propri\xC3\xA9t\xC3\xA9");
+                }
+                args.push_back(std::move(a));
+                continue;
+            }
+            if (ex->kind == Expr::Kind::Reference || ex->kind == Expr::Kind::Member || ex->kind == Expr::Kind::Deref
+                || ex->kind == Expr::Kind::Index) {
+                const QuietSide quiet(*this);
+                auto pl = locate(*ex, false);
+                if (pl && !pl->obj) a.place = pl->name;
+            }
+            core::Result<RV> v = [&] {
+                if (a.place.empty()) return rich(*ex);
+                const QuietSide quiet(*this);
+                return rich(*ex);
+            }();
+            if (!v) {
+                if (!a.place.empty()) {                   // un chemin qui ne se lit pas : la native dira pourquoi
+                    args.push_back(std::move(a));
+                    continue;
+                }
+                return v;
+            }
+            if (!v->o) {
+                a.value = v->v;
+                a.isValue = true;
+            } else if (!collectHandles(v->o, a)) {
+                return dialectError(u + " : un " + v->o->type->text() + " n'est ni un objet, ni une ressource, ni une liste d'objets");
+            }
+            args.push_back(std::move(a));
+        }
+        Environment::HandleResult out;
+        std::string why;
+        if (!env_.handleNative(u, args, out, why)) return dialectError(why.empty() ? u + " a \xC3\xA9" "chou\xC3\xA9" : why);
+        using K = Environment::HandleResult::Kind;
+        const std::string first = out.paths.empty() ? std::string{} : out.paths.front();
+        switch (out.kind) {
+            case K::Value: return RV{out.value, nullptr};
+            case K::Handle: {
+                auto h = newHandle(out.type, first);
+                if (!h) return dialectError(u + " : type inconnu " + out.type);
+                return RV{{}, h};
+            }
+            case K::Pointer: {
+                auto pt = std::make_shared<TypeDesc>();
+                pt->kind = TypeDesc::Kind::Pointer;
+                pt->element = handleType(out.type);
+                auto o = makeObj(pt);
+                o->bound = !first.empty();
+                o->targetName = first;
+                return RV{{}, o};
+            }
+            case K::List: {
+                auto o = makeObj(listType(handleType(out.type)));
+                for (const auto& path : out.paths)
+                    if (auto h = newHandle(out.type, path)) o->items.push_back(h);
+                return RV{{}, o};
+            }
+        }
+        return RV{out.value, nullptr};
+    }
+    // Un texte vers une poignee (ou la cible d'un pointeur) de ce type : l'environnement la trouve.
+    bool bindHandle(const std::string& type, const Value& v, Obj& into, std::string* why) {
+        if (v.type() != Type::String) {
+            if (why) *why = "un " + std::string(toString(v.type())) + " ne va pas dans un " + type + " (un nom entre apostrophes, ou NULL)";
+            return false;
+        }
+        if (v.asString().empty()) {
+            into.bound = false;
+            into.target.reset();
+            into.targetName.clear();
+            return true;
+        }
+        std::string path, w;
+        if (!env_.handleTarget(type, v.asString(), path, w)) {
+            if (why) *why = w;
+            return false;
+        }
+        into.bound = true;
+        into.target.reset();
+        into.targetName = path;
+        return true;
+    }
     static bool isNullObj(const ObjRef& o) {
         return o && o->type && o->type->kind == TypeDesc::Kind::Pointer && !o->type->element && !o->bound;
     }
@@ -5706,6 +6005,7 @@ private:
                     if (src.debugId && f) env_.debugFunction(*f, src.debugId);   // 1.13.0 (le debogueur IHM)
                     return callDeclared(*f, e, true);
                 }
+            if (dialect_ && env_.isHandleNative(u)) return handleCall(u, e);       // 1.27.0 : les natives des types de l'IHM
             if (auto mine = natives1220(callee, e)) return std::move(*mine);          // 1.12.20 : les dernieres natives a rappel
             if (auto mine = natives1219(callee, e)) return std::move(*mine);          // 1.12.19 : les natives a rappel
             if (auto mine = natives1127(callee, e)) return std::move(*mine);          // 1.12.7
@@ -5723,6 +6023,9 @@ private:
                 }
                 auto arg = rich(*e.arguments[0].second);
                 if (!arg) return arg;
+                if (u == "TO_STRING" && arg->o)                      // 1.27.0 : TO_STRING(p) - son nom
+                    if (const std::string name = handleNameOf(arg->o); !name.empty() || isHandleObj(arg->o))
+                        return RV{Value::text(name.empty() ? std::string("NULL") : name), nullptr};
                 if (arg->o) {
                     std::string owner;
                     if (auto f = projectOperator(u, typeNameOf(*arg), {}, &owner))

@@ -901,6 +901,15 @@ struct Script {
     //  avant). Son nom complet devient Gaz.Horloge (IHM_APPELER('Gaz.Horloge')) ; dans son espace, il nomme ses
     //  voisins sans prefixe. Un script de vue n'en a pas. Place en DERNIER (les initialisations positionnelles).
     std::string ns{};
+    // 1.27.0 : LE MOMENT D'UN SCRIPT DE CYCLE (un script de vue OnCycle ; HmiViewCycle.hpp). Une vue a plusieurs
+    //  scripts de cycle, chacun a son moment : apres l'etape `stage` du cycle de la vue (1..9 ; 4 : apres les scripts
+    //  generaux cycliques, avant les declencheurs des objets - la place de l'OnCycle d'avant). `everyCycles` : 1 cycle
+    //  sur N (1 : chaque cycle). `when` : une condition (une formule, sans le = de tete) - le script ne tourne que
+    //  quand elle est vraie ; vide : toujours. Ecrits seulement s'ils changent (un projet d'avant s'ecrit a
+    //  l'identique). Places en DERNIER (les initialisations positionnelles).
+    int         stage{4};
+    int         everyCycles{1};
+    std::string when{};
     bool operator==(const Script&) const = default;
 };
 inline constexpr std::string_view kViewEvents[] = {"OnOpen", "OnCycle", "OnClose"};

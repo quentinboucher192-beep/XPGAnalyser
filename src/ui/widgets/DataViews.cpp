@@ -2546,6 +2546,17 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         if (!dragActive_ && std::hypot(m->pos.x - dragOrigin_.x, m->pos.y - dragOrigin_.y) > 6.f) dragActive_ = true;
         if (dragActive_) {
             dragPos_ = m->pos;
+            // 1.27.0 : un glisser qui peut sortir - la table tient la souris et dit ou elle est ; dehors, rien a deposer ici.
+            if (dragOutside_) {
+                if (!holdsMouse()) captureMouse();
+                rowDragAt->emit(dragRows_, m->pos, false);
+                if (!bounds().contains(m->pos)) {
+                    dropValid_ = false;
+                    dropTo_ = kNoRow;
+                    invalidate();
+                    return EventResult::Consumed;
+                }
+            }
             // Lot 21 : pres du haut ou du bas, la table defile (une longue liste).
             const float bodyTop = area.y + headerH;           // (le bandeau du collage compris)
             const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowH - (area.h - headerH));
@@ -2580,13 +2591,18 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             return EventResult::Consumed;
         }
     }
-    if (std::get_if<MouseUp>(&ev) && dragArmed_) {
+    if (const auto* up = std::get_if<MouseUp>(&ev); up && dragArmed_) {
         const bool was = dragActive_;
         const bool drop = dragActive_ && dropValid_;
         const RowIndex from = dragFrom_, to = dropTo_;
         const auto where = dropWhere_;
         const auto rows = dragRows_;
         dragArmed_ = dragActive_ = dropValid_ = false;
+        // 1.27.0 : un glisser qui pouvait sortir - lache, il le dit (dehors : l'autre volet depose) ; la souris est rendue.
+        if (dragOutside_ && was) {
+            if (holdsMouse()) releaseMouse();
+            rowDragAt->emit(rows, up->pos, true);
+        }
         // Lot 21 : un clic (sans glisser) sur une selection de plusieurs la reduit a la ligne.
         if (!was && deferSelect_) {
             selection_.assign(1, deferRow_);

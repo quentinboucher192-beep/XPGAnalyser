@@ -49019,10 +49019,308 @@ void couleursConstantes1261() {
           "Style nomme : (aucun), puis les fournis avec leur apercu");
 }
 
+// =============================================================================
+//  1.27.0 : LE CYCLE DE LA VUE, DEBALLE - << dans les scripts de vue, faire en sorte de pouvoir choisir exactement a
+//  quel moment les executer dans un cycle de vue, donc lister les etapes du dessin de la vue dans une section execution
+//  et pouvoir glisser deposer les scripts pour les executer exactement quand on le souhaite / du coup pouvoir deballer
+//  le onCycle ici avec les etapes et les scripts >>. La liste deballe l'OnCycle ; la section Execution montre les 10
+//  etapes et les scripts sous l'etape qu'ils suivent ; on les y glisse (de la section, de la liste, ou le bouton
+//  + Script de cycle) ; le Moment, le Rang, la Frequence, la Condition dans les proprietes ; Ctrl+Z ; le disque.
+// =============================================================================
+namespace cycle1270 {
+// Un evenement de souris comme l'ecran le donne : au widget qui tient la souris s'il y en a un, sinon a l'arbre.
+void send(ui::Widget& root, const ui::InputEvent& ev) {
+    if (!ui::Widget::routeCapturedMouse(root, ev)) (void)root.dispatch(ev);
+}
+gfx::Point centre(const gfx::Rect& r) { return {r.x + r.w * 0.5f, r.y + r.h * 0.5f}; }
+std::string valueIn(const ui::PropertyGrid& grid, const std::string& name) {
+    for (const auto& c : grid.categories())
+        for (const auto& p : c.properties)
+            if (p.name == name) return p.value;
+    return "?";
+}
+const Script* scriptNamed(const Document& doc, Id view, const std::string& name) {
+    if (const auto* v = doc.project.view(view))
+        for (const auto& s : v->scripts)
+            if (s.name == name) return &s;
+    return nullptr;
+}
+} // namespace cycle1270
+
+void cycleVue1270() {
+    using namespace cycle1270;
+    namespace vc = hmi::viewcycle;
+    std::printf("== 1.27.0 : le cycle de la vue, deballe (la section Execution, glisser-deposer, Moment, Frequence, Condition) ==\n");
+    auto doc = std::make_shared<Document>();
+    core::CommandStack stack;
+    auto apply = [&](core::CommandPtr c) { (void)stack.push(std::move(c)); };
+    View v = makeView(doc->project, "Vue_Accueil");
+    for (const char* n : {"Mode_Auto", "Marche"}) {
+        Variable var;
+        var.id = doc->project.allocate();
+        var.name = n;
+        var.type = "BOOL";
+        doc->project.programs.variables.push_back(var);
+    }
+    // Un projet d'avant : un OnOpen, un OnCycle (sans moment : apres 4).
+    Script open;
+    open.id = doc->project.allocate();
+    open.name = "Vue_Accueil_OnOpen";
+    open.event = "OnOpen";
+    open.body = "Marche := FALSE;\n";
+    v.scripts.push_back(open);
+    Script legacy;
+    legacy.id = doc->project.allocate();
+    legacy.name = "Vue_Accueil_OnCycle";
+    legacy.event = "OnCycle";
+    legacy.body = "Marche := Mode_Auto;\n";
+    v.scripts.push_back(legacy);
+    const Id vid = v.id, legacyId = legacy.id;
+    doc->project.views.push_back(v);
+    // L'ancien OnCycle s'ecrit comme avant (rien de neuf sur le disque).
+    const std::string before = hmi::serializeView(doc->project.views[0]);
+    check(before.find("moment=") == std::string::npos && before.find("frequence=") == std::string::npos
+              && before.find("condition=") == std::string::npos,
+          "1.27.0 : un projet d'avant s'ecrit sans moment, frequence ni condition (a l'identique)");
+    {
+        const auto back = hmi::parseView(before);
+        check(back.has_value() && hmi::serializeView(back.value()) == before && back.value().scripts[1].stage == 4,
+              "1.27.0 : relu puis reecrit : le meme texte, l'OnCycle apres 4");
+    }
+
+    app::HmiScriptsPane pane("cycle1270", doc, apply, vid);
+    std::optional<app::HmiScriptsPane::CycleMeasures> measures;
+    pane.setMeasuresSource([&] { return measures; });
+    pane.setBounds({0, 0, 1500, 860});
+    pane.layout();
+    auto* stages = pane.cycleStages();
+    check(stages != nullptr && pane.cycleAdd() != nullptr, "1.27.0 : la section Ex\xC3\xA9" "cution et le bouton + Script de cycle");
+    if (!stages || !pane.cycleAdd()) return;
+    stages->layout();
+
+    // ---- la section Execution : les 10 etapes, dans l'ordre du moteur
+    {
+        const char* titles[] = {"Lecture des \xC3\xA9quipements", "Entr\xC3\xA9" "es", "Minuteries", "Scripts g\xC3\xA9n\xC3\xA9raux cycliques",
+                                "D\xC3\xA9" "clencheurs des objets", "Alarmes", "Courbes, archives, compteurs", "Formules des objets (fx)",
+                                "Dessin de la vue", "\xC3\x89" "critures envoy\xC3\xA9" "es"};
+        bool ok = stages->stepCount() == 10;
+        float lastY = -1.f;
+        for (int n = 1; n <= 10; ++n) {
+            gfx::Rect r;
+            ok = ok && stages->stepTitle(n) == titles[n - 1] && stages->stepRect(n, r) && r.y > lastY;
+            lastY = r.y;
+        }
+        check(ok, "1.27.0 : la section Ex\xC3\xA9" "cution montre les 10 \xC3\xA9tapes, de Lecture des \xC3\xA9quipements \xC3\xA0 \xC3\x89" "critures envoy\xC3\xA9" "es");
+        same_text(stages->stepTime(1), "\xE2\x80\x94", "1.27.0 : rien de mesur\xC3\xA9 (pas de simulation) : \xE2\x80\x94");
+        check(stages->footerText().find("OnOpen avant le 1er cycle") != std::string::npos, "1.27.0 : le pied - le cycle suivant reprend en 1");
+    }
+    // ---- la liste : l'OnCycle deballe, son script a son moment ; le script sous l'etape 4
+    {
+        const auto& m = *pane.scriptTable().model();
+        check(m.rowCount() == 4 && m.cellText(0, 0) == "OnOpen (ouverture)" && m.cellText(1, 0) == "OnCycle (chaque cycle)"
+                  && m.cellText(2, 0) == "Vue_Accueil_OnCycle" && m.cellText(3, 0) == "OnClose (fermeture)",
+              "1.27.0 : la liste - OnOpen, OnCycle d\xC3\xA9" "ball\xC3\xA9 (son script), OnClose");
+        same_text(m.cellStyle(2, 0).badge, "apr\xC3\xA8s 4", "1.27.0 : l'OnCycle d'avant : apr\xC3\xA8s 4");
+        check(m.cellStyle(1, 0).badge.find("d\xC3\xA9" "ball\xC3\xA9 : 1 script") == 0 && m.cellStyle(1, 0).expander == 1,
+              "1.27.0 : le titre de l'OnCycle : d\xC3\xA9" "ball\xC3\xA9 (" + m.cellStyle(1, 0).badge + ")");
+        gfx::Rect chip, s4, s5;
+        check(stages->chipRect(legacyId, chip) && stages->stepRect(4, s4) && stages->stepRect(5, s5) && chip.y >= s4.bottom()
+                  && chip.bottom() <= s5.y,
+              "1.27.0 : sa pastille est sous l'\xC3\xA9tape 4, avant la 5 (entre 4 et 5, comme avant)");
+    }
+    // ---- + Script de cycle (un clic) : un nouveau script, choisi ; Ctrl+Z le retire
+    const auto button = centre(pane.cycleAdd()->buttonRect());
+    send(pane, ui::MouseDown{button, ui::MouseButton::Left, 1, {}});
+    send(pane, ui::MouseUp{button, ui::MouseButton::Left, {}});
+    const Script* made = scriptNamed(*doc, vid, "Cycle");
+    check(made && made->event == "OnCycle" && made->stage == 4 && pane.selectedScript() == made->id,
+          "1.27.0 : + Script de cycle : Cycle, apr\xC3\xA8s 4, choisi");
+    const Id cyc = made ? made->id : kNoId;
+    check(!pane.editor().readOnly() && pane.scriptTable().model()->rowCount() == 5, "1.27.0 : il s'\xC3\xA9" "dite ; la liste a une ligne de plus");
+    same_text(valueIn(pane.properties(), "Moment"), "Apr\xC3\xA8s l'\xC3\xA9tape 4 : Scripts g\xC3\xA9n\xC3\xA9raux cycliques",
+              "1.27.0 : ses propri\xC3\xA9t\xC3\xA9s : le Moment");
+    same_text(valueIn(pane.properties(), "Rang dans l'\xC3\xA9tape"), "2 sur 2", "1.27.0 : le Rang dans l'\xC3\xA9tape (2 sur 2)");
+    same_text(valueIn(pane.properties(), "Fr\xC3\xA9quence"), "Chaque cycle", "1.27.0 : la Fr\xC3\xA9quence");
+    check(valueIn(pane.properties(), "Dur\xC3\xA9" "e mesur\xC3\xA9" "e").rfind("\xE2\x80\x94", 0) == 0, "1.27.0 : la Dur\xC3\xA9" "e mesur\xC3\xA9" "e : \xE2\x80\x94");
+
+    // ---- glisser sa pastille apres 8 : la ligne pointillee dit ou et ce que ca change ; Ctrl+Z le remet
+    {
+        stages->layout();
+        gfx::Rect chip, slot8;
+        check(stages->chipRect(cyc, chip) && stages->slotRect(8, slot8), "1.27.0 : sa pastille, et la place apr\xC3\xA8s 8");
+        const auto from = centre(chip);
+        send(pane, ui::MouseDown{from, ui::MouseButton::Left, 1, {}});
+        send(pane, ui::MouseMove{{from.x + 8.f, from.y + 8.f}, {8.f, 8.f}, {}});
+        stages->slotRect(8, slot8);
+        const auto to = centre(slot8);
+        send(pane, ui::MouseMove{to, {0.f, 0.f}, {}});
+        check(stages->dragging() && stages->dropMoment() == 8, "1.27.0 : tir\xC3\xA9" "e entre 8 et 9 : le d\xC3\xA9p\xC3\xB4t vise apr\xC3\xA8s 8");
+        check(stages->dropText().find("apr\xC3\xA8s 8 Formules, avant 9 Dessin") != std::string::npos
+                  && stages->dropText().find("tes modifications d'objets seront dessin\xC3\xA9" "es dans ce cycle") != std::string::npos,
+              "1.27.0 : la ligne pointill\xC3\xA9" "e : " + stages->dropText());
+        send(pane, ui::MouseUp{to, ui::MouseButton::Left, {}});
+        const Script* sc = doc->project.script(cyc);
+        check(!stages->dragging() && sc && sc->stage == 8, "1.27.0 : d\xC3\xA9pos\xC3\xA9" "e : le script tourne apr\xC3\xA8s 8");
+        gfx::Rect c2, s8, s9;
+        stages->layout();
+        check(stages->chipRect(cyc, c2) && stages->stepRect(8, s8) && stages->stepRect(9, s9) && c2.y >= s8.bottom() && c2.bottom() <= s9.y,
+              "1.27.0 : sa pastille est sous l'\xC3\xA9tape 8");
+        same_text(pane.scriptTable().model()->cellStyle(3, 0).badge, "apr\xC3\xA8s 8", "1.27.0 : la liste suit (apr\xC3\xA8s 8, apr\xC3\xA8s l'ancien OnCycle)");
+        check(pane.lastMessage().find("dessin\xC3\xA9" "es dans ce cycle") != std::string::npos, "1.27.0 : le message dit ce que \xC3\xA7" "a change");
+        (void)stack.undo();
+        check(doc->project.script(cyc) && doc->project.script(cyc)->stage == 4, "1.27.0 : Ctrl+Z - il revient apr\xC3\xA8s 4");
+        (void)stack.redo();
+        check(doc->project.script(cyc) && doc->project.script(cyc)->stage == 8, "1.27.0 : Ctrl+Y - apr\xC3\xA8s 8");
+        // Lachee hors de la section : rien ne change.
+        stages->layout();
+        if (stages->chipRect(cyc, chip)) {
+            const auto f2 = centre(chip);
+            send(pane, ui::MouseDown{f2, ui::MouseButton::Left, 1, {}});
+            send(pane, ui::MouseMove{{f2.x + 9.f, f2.y}, {9.f, 0.f}, {}});
+            send(pane, ui::MouseMove{{1490.f, 400.f}, {0.f, 0.f}, {}});
+            send(pane, ui::MouseUp{{1490.f, 400.f}, ui::MouseButton::Left, {}});
+        }
+        check(!stages->dragging() && doc->project.script(cyc)->stage == 8, "1.27.0 : l\xC3\xA2" "ch\xC3\xA9" "e hors de la section : rien ne change");
+    }
+    // ---- le menu Moment (le clavier) ; le Rang ; Ctrl+Z
+    {
+        pane.selectScript(cyc);
+        check(commitIn(pane.properties(), "Moment", vc::momentChoices()[0]) && doc->project.script(cyc)->stage == 1,
+              "1.27.0 : le menu Moment : apr\xC3\xA8s l'\xC3\xA9tape 1");
+        (void)stack.undo();
+        check(doc->project.script(cyc)->stage == 8, "1.27.0 : Ctrl+Z - apr\xC3\xA8s 8");
+        pane.selectScript(cyc);
+        check(commitIn(pane.properties(), "Moment", vc::momentChoices()[3]) && doc->project.script(cyc)->stage == 4,
+              "1.27.0 : le menu Moment : apr\xC3\xA8s 4 (avec l'ancien OnCycle)");
+        same_text(valueIn(pane.properties(), "Rang dans l'\xC3\xA9tape"), "2 sur 2", "1.27.0 : le dernier de l'\xC3\xA9tape 4");
+        check(commitIn(pane.properties(), "Rang dans l'\xC3\xA9tape", "1 sur 2") && vc::rankOf(*doc->project.view(vid), cyc).first == 1,
+              "1.27.0 : le Rang : 1 sur 2 - il tourne avant l'ancien OnCycle");
+        check(!commitIn(pane.properties(), "Moment", "Apr\xC3\xA8s l'\xC3\xA9tape 12"), "1.27.0 : un moment inconnu est refus\xC3\xA9");
+    }
+    // ---- la Frequence, la Condition (une formule) ; refus ; Ctrl+Z
+    {
+        pane.selectScript(cyc);
+        check(commitIn(pane.properties(), "Fr\xC3\xA9quence", "1 cycle sur 5") && doc->project.script(cyc)->everyCycles == 5,
+              "1.27.0 : la Fr\xC3\xA9quence : 1 cycle sur 5");
+        check(!commitIn(pane.properties(), "Fr\xC3\xA9quence", "souvent"), "1.27.0 : une fr\xC3\xA9quence illisible est refus\xC3\xA9" "e");
+        check(commitIn(pane.properties(), "Condition", "=Mode_Auto") && doc->project.script(cyc)->when == "Mode_Auto",
+              "1.27.0 : la Condition =Mode_Auto (gard\xC3\xA9" "e sans le =)");
+        same_text(valueIn(pane.properties(), "Condition"), "=Mode_Auto", "1.27.0 : la case montre =Mode_Auto");
+        check(!commitIn(pane.properties(), "Condition", "=Mode_Auto +") && doc->project.script(cyc)->when == "Mode_Auto",
+              "1.27.0 : une condition illisible est refus\xC3\xA9" "e (la bonne reste)");
+        check(vc::badge(*doc->project.script(cyc)) == "apr\xC3\xA8s 4 \xC2\xB7 1/5 \xC2\xB7 si"
+                  && cellOf(pane.scriptTable(), "Cycle", 1) == "ST",
+              "1.27.0 : la liste : apr\xC3\xA8s 4 \xC2\xB7 1/5 \xC2\xB7 si");
+        (void)stack.undo();
+        check(doc->project.script(cyc)->when.empty() && doc->project.script(cyc)->everyCycles == 5, "1.27.0 : Ctrl+Z - sans condition");
+        (void)stack.redo();
+        // Le nom : libre parmi les scripts de la vue.
+        check(commitIn(pane.properties(), "Nom", "Mise_En_Page") && doc->project.script(cyc)->name == "Mise_En_Page",
+              "1.27.0 : le Nom d'un script de cycle : Mise_En_Page");
+        check(!commitIn(pane.properties(), "Nom", "Vue_Accueil_OnCycle") && !commitIn(pane.properties(), "Nom", "a b"),
+              "1.27.0 : un nom pris, ou illisible, est refus\xC3\xA9");
+    }
+    // ---- glisser une ligne de la liste sur la section : apres 2
+    {
+        pane.layout();
+        const auto& t = pane.scriptTable();
+        std::size_t row = 0;
+        for (std::size_t i = 0; i < t.visibleRowCount(); ++i)
+            if (t.model()->cellText(t.viewRow(i), 0) == "Mise_En_Page") row = i;
+        gfx::Rect rr, slot2;
+        check(t.rowRect(row, rr) && stages->slotRect(2, slot2), "1.27.0 : sa ligne dans la liste, la place apr\xC3\xA8s 2");
+        const auto from = centre(rr);
+        send(pane, ui::MouseDown{from, ui::MouseButton::Left, 1, {}});
+        send(pane, ui::MouseMove{{from.x + 10.f, from.y + 2.f}, {10.f, 2.f}, {}});
+        const auto to = centre(slot2);
+        send(pane, ui::MouseMove{to, {0.f, 0.f}, {}});
+        check(stages->dragging() && stages->dropMoment() == 2, "1.27.0 : une ligne de la liste tir\xC3\xA9" "e sur la section : la ligne pointill\xC3\xA9" "e apr\xC3\xA8s 2");
+        send(pane, ui::MouseUp{to, ui::MouseButton::Left, {}});
+        check(!stages->dragging() && doc->project.script(cyc)->stage == 2, "1.27.0 : l\xC3\xA2" "ch\xC3\xA9" "e : apr\xC3\xA8s 2");
+        (void)stack.undo();
+        check(doc->project.script(cyc)->stage == 4, "1.27.0 : Ctrl+Z - apr\xC3\xA8s 4");
+    }
+    // ---- le bouton + Script de cycle glisse a l'etape voulue : un nouveau script apres 6
+    {
+        stages->layout();
+        gfx::Rect slot6;
+        check(stages->slotRect(6, slot6), "1.27.0 : la place apr\xC3\xA8s 6");
+        const std::size_t count = doc->project.view(vid)->scripts.size();
+        send(pane, ui::MouseDown{button, ui::MouseButton::Left, 1, {}});
+        send(pane, ui::MouseMove{{button.x + 12.f, button.y}, {12.f, 0.f}, {}});
+        const auto to = centre(slot6);
+        send(pane, ui::MouseMove{to, {0.f, 0.f}, {}});
+        check(stages->dragging() && stages->dropMoment() == 6, "1.27.0 : + Script de cycle tir\xC3\xA9 sur la section : apr\xC3\xA8s 6");
+        send(pane, ui::MouseUp{to, ui::MouseButton::Left, {}});
+        const auto* v6 = doc->project.view(vid);
+        const auto at6 = vc::atMoment(*v6, 6);
+        check(v6->scripts.size() == count + 1 && at6.size() == 1 && pane.selectedScript() == at6.front()->id,
+              "1.27.0 : d\xC3\xA9pos\xC3\xA9 : un nouveau script de cycle apr\xC3\xA8s 6, choisi");
+        (void)stack.undo();
+        check(doc->project.view(vid)->scripts.size() == count, "1.27.0 : Ctrl+Z le retire");
+    }
+    // ---- la mesure : la derniere simulation
+    {
+        hmi::viewcycle::Timing t;
+        t.cycle = 42;
+        t.periodMs = 100;
+        t.view = vid;
+        for (auto& ms : t.stepMs) ms = -1.0;
+        t.stepMs[1] = 0.4;
+        t.stepMs[4] = 0.9;
+        t.stepMs[8] = 0.7;
+        t.writes = 3;
+        app::HmiScriptsPane::CycleMeasures m;
+        m.timing = t;
+        m.scriptMs[cyc] = 0.21;
+        measures = m;
+        check(pane.refreshMeasures(true), "1.27.0 : la mesure relue");
+        same_text(stages->stepTime(1), "0,40 ms", "1.27.0 : la dur\xC3\xA9" "e mesur\xC3\xA9" "e d'une \xC3\xA9tape (0,40 ms)");
+        same_text(stages->stepTime(10), "3 \xC3\xA9" "critures", "1.27.0 : l'\xC3\xA9tape 10 compte les \xC3\xA9" "critures du cycle");
+        check(stages->totalText() == "simulation : 2,2 ms sur 100 ms", "1.27.0 : le total (les \xC3\xA9tapes et ses scripts de cycle) : " + stages->totalText());
+        pane.selectScript(cyc);
+        same_text(valueIn(pane.properties(), "Dur\xC3\xA9" "e mesur\xC3\xA9" "e"), "0,21 ms (derni\xC3\xA8re simulation)",
+                  "1.27.0 : la Dur\xC3\xA9" "e mesur\xC3\xA9" "e du script");
+        check(!pane.refreshMeasures(), "1.27.0 : relue deux fois par seconde au plus");
+    }
+    // ---- le disque : relu a l'identique ; Compiler la condition
+    {
+        namespace fs = std::filesystem;
+        const auto dir = fs::temp_directory_path() / "xpg_hmi_cycle1270";
+        std::error_code ec;
+        fs::remove_all(dir, ec);
+        fs::create_directories(dir, ec);
+        check(static_cast<bool>(hmi::save(doc->project, dir.string())), "1.27.0 : le projet s'\xC3\xA9" "crit");
+        const auto back = hmi::load(dir.string());
+        check(back.has_value() && back.value().view(vid) && back.value().view(vid)->scripts == doc->project.view(vid)->scripts,
+              "1.27.0 : relu : les scripts de cycle, leur moment, leur rang, leur fr\xC3\xA9quence, leur condition");
+        fs::remove_all(dir, ec);
+        const auto issues = hmi::compileWith(doc->project, [](std::string_view) { return false; }, {});
+        check(std::none_of(issues.begin(), issues.end(), [](const Issue& i) { return i.message.find("condition") != std::string::npos; }),
+              "1.27.0 : Compiler : la condition =Mode_Auto se lit");
+    }
+    // ---- Supprimer un script de cycle (l'outil s'appelle Supprimer) ; Ctrl+Z le rend
+    {
+        pane.selectScript(cyc);
+        const int del = pane.tools().actionByTip("Vider le script");
+        check(del >= 0, "1.27.0 : l'outil Vider / Supprimer");
+        if (del >= 0) pane.tools().triggered->emit(del);
+        check(doc->project.script(cyc) == nullptr && pane.lastMessage().rfind("Supprim\xC3\xA9", 0) == 0, "1.27.0 : un script de cycle se supprime");
+        (void)stack.undo();
+        check(doc->project.script(cyc) != nullptr, "1.27.0 : Ctrl+Z le rend");
+    }
+}
+
 int main(int argc, char** argv) {
     // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
     if (argc > 3) gFonts1260 = fs1260::path(argv[3]);
     else if (argc > 1) gFonts1260 = fs1260::path(argv[1]).parent_path().parent_path().parent_path() / "resources" / "polices";
+    // 1.27.0 : HMI_TEST_CYC=1 - le cycle de la vue, deballe (la section Execution, glisser-deposer, Moment), seul.
+    if (const char* only = std::getenv("HMI_TEST_CYC"); only && *only == '1') {
+        cycleVue1270();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     // 1.26.0 : HMI_TEST_POL=1 - les polices (la bibliotheque, la police partout, l'editeur de polices), seules.
     if (const char* only = std::getenv("HMI_TEST_POL"); only && *only == '1') {
         polices1260();
@@ -49624,6 +49922,7 @@ int main(int argc, char** argv) {
     supprimerRestants1251();                // 1.25.1 : l'outil Modbus (requetes, jeux), plusieurs equipements
     corbeillePanneau1251();                 // 1.25.1 : la Corbeille (par genre, la recherche, Restaurer, Vider)
     corbeilleProjet1261();                  // 1.26.1 : la Corbeille du projet IHM (vues, ressources... supprimees)
+    cycleVue1270();                         // 1.27.0 : le cycle de la vue, deballe (Execution, glisser-deposer, Moment)
     pourquoiSimulation11227();              // 1.12.27 : Pourquoi ? dans la vue en marche
     fenetres11227();                        // 1.12.27 : plusieurs fenetres (presence, copier/coller entre projets)
     didacticielAide11228();                 // 1.12.28 : le didacticiel dans l'aide F1 (Demarrer > Le didacticiel)

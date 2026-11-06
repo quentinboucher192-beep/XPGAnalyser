@@ -57,8 +57,54 @@ std::string TypeDesc::text() const {
             return s;
         }
         case Kind::Any: return "ANY";             // 1.13.0 : une valeur JSON / dynamique
+        case Kind::Handle: return name;           // 1.27.0 : Object, Font, Texture, Sound, Style
     }
     return "?";
+}
+
+// ---- 1.27.0 : les types de l'IHM -------------------------------------------------------
+namespace {
+constexpr std::string_view kHandleNames[] = {"Object", "Font", "Texture", "Sound", "Style"};
+}
+std::string handleTypeName(std::string_view name) {
+    const std::string u = upperOf(name);
+    for (const auto n : kHandleNames)
+        if (upperOf(n) == u) return std::string(n);
+    return {};
+}
+TypeRef handleType(std::string_view name) {
+    static const std::vector<TypeRef> types = [] {
+        std::vector<TypeRef> out;
+        for (const auto n : kHandleNames) {
+            auto d = std::make_shared<TypeDesc>();
+            d->kind = TypeDesc::Kind::Handle;
+            d->name = std::string(n);
+            out.push_back(d);
+        }
+        return out;
+    }();
+    const std::string n = handleTypeName(name);
+    for (const auto& t : types)
+        if (t->name == n) return t;
+    return nullptr;
+}
+std::string resourcePath(std::string_view type, std::string_view name) {
+    return "@" + std::string(type) + ":" + std::string(name);
+}
+bool splitResourcePath(std::string_view path, std::string& type, std::string& name) {
+    if (path.size() < 3 || path.front() != '@') return false;
+    const auto colon = path.find(':');
+    if (colon == std::string_view::npos || colon < 2) return false;
+    type = handleTypeName(path.substr(1, colon - 1));
+    if (type.empty() || type == "Object") return false;
+    name = std::string(path.substr(colon + 1));
+    return true;
+}
+std::string handleText(const Obj& o) {
+    if (!o.bound) return "NULL";
+    std::string type, name;
+    if (splitResourcePath(o.targetName, type, name)) return name;
+    return o.targetName;
 }
 
 TypeRef anyType() {
@@ -118,6 +164,7 @@ bool TypeDesc::dynamic() const noexcept {
         case Kind::Map:
         case Kind::List:
         case Kind::Any:                        // 1.13.0 : une valeur JSON vit dans la memoire de l'IHM (pas de place Modbus)
+        case Kind::Handle:                     // 1.27.0 : une poignee designe un objet ou une ressource de l'IHM
         case Kind::Callback: return true;      // 1.12.19 : un rappel vit dans la memoire de l'IHM
         case Kind::Array: return element && element->dynamic();
         case Kind::Struct:
@@ -231,6 +278,7 @@ bool sameType(const TypeDesc& a, const TypeDesc& b) noexcept {
             return true;
         case TypeDesc::Kind::Callback: return callbackFits(a, b);      // 1.12.19 : la meme signature
         case TypeDesc::Kind::Any: return true;                         // 1.13.0 : toute valeur dynamique en vaut une autre
+        case TypeDesc::Kind::Handle: return a.name == b.name;           // 1.27.0 : le meme type de l'IHM
     }
     return false;
 }
@@ -406,6 +454,9 @@ bool deepEquals(const Obj& a, const Obj& b) {
             if (!a.bound) return true;
             if (!a.targetName.empty() || !b.targetName.empty()) return upperOf(a.targetName) == upperOf(b.targetName);
             return !a.target.owner_before(b.target) && !b.target.owner_before(a.target) && a.target.lock() == b.target.lock();
+        case TypeDesc::Kind::Handle:                         // 1.27.0 : la meme chose designee
+            if (a.bound != b.bound) return false;
+            return !a.bound || upperOf(a.targetName) == upperOf(b.targetName);
         case TypeDesc::Kind::Callback:                       // 1.12.19 : la meme fonction (une LAMBDA : la meme)
             if (a.bound != b.bound) return false;
             if (!a.bound) return true;
@@ -477,6 +528,10 @@ std::string display(const Obj& o) {
         case TypeDesc::Kind::Any:                            // 1.13.0 : une valeur JSON (sa charge, ou null / absent)
             if (o.items.empty()) return o.bound ? "null" : "(absent)";
             return o.items.front() ? display(*o.items.front()) : std::string("null");
+        case TypeDesc::Kind::Handle:                         // 1.27.0 : Object Vue_Accueil.Pompe_1, Font 'Carlito Gras'
+            if (!o.bound) return "NULL";
+            if (o.type->name == "Object") return o.targetName;
+            return o.type->name + " '" + handleText(o) + "'";
     }
     return "?";
 }

@@ -17,9 +17,12 @@
 #include "../../hmi/HmiScriptCheck.hpp"   // 1.10 : les erreurs des scripts, a leur place
 #include "../../hmi/HmiTypes.hpp"
 #include "../../hmi/HmiSymbols.hpp"       // 1.12.19 : hmi::typedInitial (la regle des cases)
+#include "../../hmi/HmiViewCycle.hpp"     // 1.27.0 : les scripts de cycle, a leur moment
 #include "../../ui/Theme.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <map>
 #include <cctype>
 #include <set>
@@ -59,7 +62,14 @@ public:
         return style_ ? style_(r, c) : ui::CellStyle{};
     }
     [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return cellText(a, c) < cellText(b, c); }
+    // 1.27.0 : les lignes qu'on peut deposer, et ou (les scripts de cycle d'une vue, entre eux).
+    using CanDrop = std::function<bool(const std::vector<ui::RowIndex>&, ui::RowIndex, ui::TreeView::DropWhere)>;
+    void setCanDrop(CanDrop f) { canDrop_ = std::move(f); }
+    [[nodiscard]] bool canDropRows(const std::vector<ui::RowIndex>& from, ui::RowIndex to, ui::TreeView::DropWhere where) const override {
+        return canDrop_ && canDrop_(from, to, where);
+    }
 private:
+    CanDrop canDrop_;
     std::vector<std::string> headers_;
     std::vector<std::vector<std::string>> rows_;
     Style style_;
@@ -103,6 +113,20 @@ protected:
         children()[0]->setBounds({b.x, b.y, b.w, 38.f});
         children()[1]->setBounds({b.x, b.y + 38.f, b.w, std::max(0.f, b.h - 62.f)});
         children()[2]->setBounds({b.x, b.y + b.h - 24.f, b.w, 24.f});
+    }
+};
+
+// 1.27.0 : la liste des scripts d'une vue et, dessous, le bouton + Script de cycle (et sa phrase).
+class CycleListBox final : public ui::Widget {
+public:
+    explicit CycleListBox(std::string id) : ui::Widget(std::move(id)) {}
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        if (children().size() < 2) return;
+        const float h = HmiCycleAdd::kHeight;
+        children()[0]->setBounds({b.x, b.y, b.w, std::max(0.f, b.h - h)});
+        children()[1]->setBounds({b.x, b.bottom() - h, b.w, h});
     }
 };
 
@@ -210,6 +234,10 @@ std::string eventFromLabel(const std::string& label) {
 // 1.10 : la colonne Script des resultats - un script general : son nom ; un
 // script de vue : la vue et l'evenement (Vue_Pompes . OnOpen).
 std::string scriptWhere(const Script& sc, const hmi::View* v) {
+    // 1.27.0 : un script de cycle nomme, regle ou parmi plusieurs : son nom (Vue_Accueil . Mise_En_Page).
+    if (v && hmi::viewcycle::isCycleScript(sc) && !hmi::viewcycle::defaultName(sc, v->name)
+        && (hmi::viewcycle::customized(sc) || hmi::viewcycle::cycleScripts(*v).size() > 1))
+        return v->name + " \xC2\xB7 " + sc.name;
     return v ? v->name + " \xC2\xB7 " + sc.event : sc.name;
 }
 // ... et pour un constat de Compiler (une fonction IHM, une action).
@@ -331,6 +359,7 @@ std::string HmiScriptsPane::buildKey() const {
 }
 
 void HmiScriptsPane::refreshBuildState() {
+    (void)refreshMeasures();              // 1.27.0 : la mesure de la derniere simulation (deux fois par seconde au plus)
     if (!hosts_.buildState || !tools_) return;
     const auto key = buildKey();
     const auto st = key.empty() ? std::pair<std::string, std::string>{"\xE2\x80\x94", "Aucun script choisi."} : hosts_.buildState(key);
@@ -359,7 +388,8 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
                    "un seul Ctrl+Z",
                    "Importer\xE2\x80\xA6");
     } else {
-        tools->add(TClear, HmiGlyph::Delete, "Vider le script de cet \xC3\xA9v\xC3\xA9nement (Ctrl+Z le rend)", "Vider");
+        tools->add(TClear, HmiGlyph::Delete,
+                   "Vider le script de cet \xC3\xA9v\xC3\xA9nement ; un script de cycle se supprime (Ctrl+Z le rend)", "Vider");
         // 1.11.3 : les scripts d'une vue (popup, symbole, modele, en-tete, pied) voyagent (.xpgst).
         tools->add(TExport, HmiGlyph::Export,
                    "Exporter les scripts de cette vue (OnOpen, OnCycle, OnClose) dans un fichier .xpgst, lisible et modifiable dans "
@@ -407,6 +437,8 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     tools_->setEnabledWhen(TDelete, [this] { return selectedScript() != kNoId || (folders_ && !folders_->selectedFolder().empty()); });
     tools_->setLabelWhen(TDelete, [this] { return several::label("Supprimer", folders_ ? folders_->selectedCount() : 0); });
     tools_->setEnabledWhen(TClear, [this] { return selectedScript() != kNoId; });
+    // 1.27.0 : un script de cycle se supprime (la vue en garde d'autres) ; OnOpen, OnClose se vident.
+    tools_->setLabelWhen(TClear, [this] { return cycleRow(selectedRow_) ? std::string("Supprimer") : std::string("Vider"); });
     tools_->setEnabledWhen(TCompile, oneScript);     // 1.11.17 : rien a compiler
     tools_->setVisibleWhen(TFix, [this] { return fixRow() >= 0; });     // 1.10 (I2) : seulement s'il y a a corriger
     tools_->setVisibleWhen(THeader, [this] {                            // 1.12.20 (lot C) : un script C ou C++
@@ -431,12 +463,22 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
             table->setColumns({{"Nom", 220.f}, {"Langage", 80.f}, {"D\xC3\xA9" "clencheur", 130.f}, {"D\xC3\xA9tail", 230.f},   // lot 21 : Nom plus large (dossiers)
                                {"Lignes", 84.f, 40.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 120.f}});
         else
-            table->setColumns({{"\xC3\x89v\xC3\xA9nement", 210.f}, {"Langage", 100.f},
-                               {"Lignes", 84.f, 40.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 120.f}});
+            table->setColumns({{"\xC3\x89v\xC3\xA9nement / script", 250.f}, {"Langage", 76.f},
+                               {"Lignes", 70.f, 40.f, true, true, true, ui::Align::End}, {"\xC3\x89tat", 110.f}});
         table->setSelectionMode(ui::SelectionMode::Single);
-        scripts_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        if (general()) {
+            scripts_ = &static_cast<ui::TableView&>(panel->setBody(std::move(table)));
+        } else {
+            // 1.27.0 : une ligne de script de cycle se glisse - entre les autres (son rang), ou sur la section Execution.
+            table->setRowDragEnabled(true);
+            table->setRowDragOutside(true);
+            auto box = std::make_unique<CycleListBox>(base + ".cycleList");
+            scripts_ = &static_cast<ui::TableView&>(box->addChild(std::move(table)));
+            cycleAdd_ = &static_cast<HmiCycleAdd&>(box->addChild(std::make_unique<HmiCycleAdd>(base + ".cycleAdd")));
+            panel->setBody(std::move(box));
+        }
         tools_->bindListKeys(*scripts_, {TDelete});   // 1.12.27 : Suppr (comme le bouton)
-        left->addPane(std::move(panel), general() ? 0.60f : 0.40f, 100.f);
+        left->addPane(std::move(panel), general() ? 0.60f : 0.45f, 100.f);
         // Lot 21 : les scripts generaux ranges en dossiers (glisser une ou plusieurs lignes).
         if (general()) folders_ = std::make_unique<HmiFolderTable>(*scripts_, doc_, apply_);
     }
@@ -447,7 +489,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         grid->setFieldAssist(assist::gridAssist(assist::sourcesFor(doc_)));
         grid->setNameColumnRatio(0.42f);
         props_ = &static_cast<ui::PropertyGrid&>(panel->setBody(std::move(grid)));
-        left->addPane(std::move(panel), general() ? 0.40f : 0.60f, 90.f);
+        left->addPane(std::move(panel), general() ? 0.40f : 0.55f, 90.f);
     }
     {
         auto table = std::make_unique<ui::TableView>(base + ".variables");
@@ -462,7 +504,15 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         table->setVisibility(ui::Visibility::Collapsed);
         variables_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
     }
-    split->addPane(std::move(left), 0.42f, 260.f);
+    split->addPane(std::move(left), general() ? 0.42f : 0.33f, 260.f);
+    // 1.27.0 : LA SECTION EXECUTION (une vue) - les 10 etapes du cycle de la vue, ses scripts de cycle sous l'etape qu'ils
+    // suivent ; on les y glisse.
+    if (!general()) {
+        auto panel = std::make_unique<HmiTitledPanel>(base + ".stagesPanel", "EX\xC3\x89" "CUTION");
+        stages_ = &static_cast<HmiCycleStages&>(panel->setBody(std::make_unique<HmiCycleStages>(base + ".stages")));
+        stagesPanel_ = panel.get();
+        split->addPane(std::move(panel), 0.27f, 230.f);
+    }
 
     auto right = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, base + ".right");
     {
@@ -489,7 +539,7 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         // (Diagnostics, l'etape Saisie ; HmiLive.hpp), soulignees dans le code.
         right->addPane(std::move(panel), 1.f, 120.f);
     }
-    split->addPane(std::move(right), 0.58f, 300.f);
+    split->addPane(std::move(right), general() ? 0.58f : 0.40f, 300.f);
     split_ = &static_cast<ui::Splitter&>(host.addChild(std::move(split)));
     status_ = &static_cast<ui::StatusBar&>(host.addChild(std::make_unique<ui::StatusBar>(base + ".status")));
     if (page) {
@@ -633,7 +683,8 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
         margin_.edited();                  // 1.13.0 (lot J2) : les points d'arret suivent leurs lignes
         const Id sel = selectedScript();
         if (sel) (void)setBody(sel, text);
-        else if (!general() && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) < eventOrder_.size()) {
+        else if (!general() && selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) < eventOrder_.size()
+                 && static_cast<std::size_t>(selectedRow_) < rowKinds_.size() && rowKinds_[static_cast<std::size_t>(selectedRow_)] == RowKind::Event) {
             // Un evenement sans script : la premiere frappe le cree (ST).
             const std::string event = eventOrder_[static_cast<std::size_t>(selectedRow_)];
             const auto* v = doc_->project.view(view_);
@@ -674,6 +725,52 @@ HmiScriptsPane::HmiScriptsPane(std::string id, hmi::DocumentPtr doc, Apply apply
     });
     links_ += codeTabs_->useRequested->connect([this](const std::string& name, int k) { (void)goToNextUse(name, k); });   // 1.12.18
     links_ += codeTabs_->migrateRequested->connect([this] { (void)migrateCurrent(); });
+    // ---- 1.27.0 : le cycle de la vue, deballe ----
+    if (stages_) {
+        links_ += stages_->chipClicked->connect([this](Id id) { selectScript(id); });
+        links_ += stages_->dropped->connect([this](Id id, int moment, std::size_t rank) {
+            if (id == kNoId) (void)addCycleScript(moment, rank);
+            else (void)moveCycleScript(id, moment, rank);
+        });
+    }
+    if (cycleAdd_) {
+        links_ += cycleAdd_->clicked->connect([this] { (void)addCycleScript(); });
+        cycleAdd_->startDrag = [this] {
+            if (stages_) stages_->beginExternalDrag(kNoId, "Nouveau script de cycle");
+        };
+    }
+    if (!general()) {
+        // Une ligne de script de cycle tiree hors de la liste : la section Execution la recoit.
+        links_ += scripts_->rowDragAt->connect([this](const std::vector<ui::RowIndex>& rows, gfx::Point at, bool released) {
+            if (!stages_ || rows.size() != 1 || rows.front() >= scriptOrder_.size() || !cycleRow(static_cast<int>(rows.front()))) return;
+            const Id id = scriptOrder_[rows.front()];
+            const auto* sc = doc_->project.script(id);
+            (void)stages_->externalDragAt(id, sc ? sc->name : std::string{}, at, released);
+        });
+        // ... ou lachee entre deux scripts de cycle de la liste : le moment et le rang du script vise.
+        links_ += scripts_->rowsDropped->connect([this](const std::vector<ui::RowIndex>& rows, ui::RowIndex to, ui::TableView::DropWhere where) {
+            if (rows.size() != 1 || rows.front() >= scriptOrder_.size() || to >= scriptOrder_.size()) return;
+            if (!cycleRow(static_cast<int>(rows.front())) || !cycleRow(static_cast<int>(to))) return;
+            const auto* v = doc_->project.view(view_);
+            const auto* target = doc_->project.script(scriptOrder_[to]);
+            if (!v || !target) return;
+            const Id moved = scriptOrder_[rows.front()];
+            const int moment = hmi::viewcycle::momentOf(*target);
+            std::size_t rank = 0;
+            for (const auto* other : hmi::viewcycle::atMoment(*v, moment)) {
+                if (other->id == moved) continue;
+                if (other->id == target->id) break;
+                ++rank;
+            }
+            if (where == ui::TableView::DropWhere::After) ++rank;
+            (void)moveCycleScript(moved, moment, rank);
+        });
+        links_ += scripts_->expanderClicked->connect([this](ui::RowIndex row) {
+            if (row >= rowKinds_.size() || rowKinds_[row] != RowKind::CycleGroup) return;
+            cycleFolded_ = !cycleFolded_;
+            refresh();
+        });
+    }
     links_ += doc_->changed->connect([this](Id) { refresh(); });
     refresh();
     if (!scriptOrder_.empty() && !folders_) hmiSelectModelRow(*scripts_, 0);
@@ -736,11 +833,15 @@ std::string HmiScriptsPane::showHeader() {
 void HmiScriptsPane::refresh() {
     const Id keepScript = selectedScript();
     const std::string keepEvent = selectedEvent();
+    const RowKind keepKind = selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) < rowKinds_.size()
+                                 ? rowKinds_[static_cast<std::size_t>(selectedRow_)] : RowKind::Event;
     const Id keepVar = selectedVariable();
     std::vector<std::vector<std::string>> rows;
     std::vector<std::string> states;
+    std::vector<ui::CellStyle> firstStyles;      // 1.27.0 : la premiere case de chaque ligne d'une vue (retrait, pastille)
     scriptOrder_.clear();
     eventOrder_.clear();
+    rowKinds_.clear();
     if (general()) {
         // Lot 21 : la liste rangee en dossiers - ses cases, script par script.
         std::map<Id, std::vector<std::string>> cells;
@@ -765,16 +866,65 @@ void HmiScriptsPane::refresh() {
                               return s;
                           });
     } else {
+        const auto* v = doc_->project.view(view_);
+        const auto stateFor = [&](const Script& sc) {
+            return stateOf(guardedDiagnostics([&] { return allDiagnostics(doc_->project, sc, v); }, 1, sc.name));
+        };
         for (const auto ev : hmi::kViewEvents) {
+            // 1.27.0 : L'ONCYCLE DEBALLE - son titre, puis un script de cycle par ligne, dans l'ordre ou ils tournent.
+            const auto cycles = ev == hmi::viewcycle::kCycleEvent && v ? hmi::viewcycle::cycleScripts(*v) : std::vector<const Script*>{};
+            if (!cycles.empty()) {
+                std::size_t lines = 0;
+                std::vector<std::string> childStates;
+                std::string worst = "OK";
+                for (const auto* sc : cycles) {
+                    lines += lineCount(sc->body);
+                    childStates.push_back(stateFor(*sc));
+                    const auto& st = childStates.back();
+                    if (st != "OK" && (worst == "OK" || (st.find("erreur") != std::string::npos && worst.find("erreur") == std::string::npos)))
+                        worst = st;
+                }
+                eventOrder_.emplace_back(ev);
+                scriptOrder_.push_back(kNoId);
+                rowKinds_.push_back(RowKind::CycleGroup);
+                states.push_back(worst);
+                rows.push_back({std::string(hmi::eventLabel(ev)), std::string{}, std::to_string(lines), worst});
+                ui::CellStyle g;
+                g.expander = cycleFolded_ ? 0 : 1;
+                g.badge = "d\xC3\xA9" "ball\xC3\xA9 : " + std::to_string(cycles.size()) + (cycles.size() > 1 ? " scripts" : " script");
+                g.tip = "OnCycle d\xC3\xA9" "ball\xC3\xA9 : " + std::to_string(cycles.size())
+                      + (cycles.size() > 1 ? " scripts de cycle, chacun \xC3\xA0 son moment" : " script de cycle, \xC3\xA0 son moment")
+                      + " (la section Ex\xC3\xA9" "cution les montre sous l'\xC3\xA9tape qu'ils suivent)";
+                firstStyles.push_back(std::move(g));
+                if (cycleFolded_) continue;
+                for (std::size_t i = 0; i < cycles.size(); ++i) {
+                    const Script* sc = cycles[i];
+                    eventOrder_.emplace_back(ev);
+                    scriptOrder_.push_back(sc->id);
+                    rowKinds_.push_back(RowKind::CycleScript);
+                    states.push_back(childStates[i]);
+                    rows.push_back({sc->name, std::string(hmi::scriptLangKey(sc->lang)), std::to_string(lineCount(sc->body)), childStates[i]});
+                    ui::CellStyle c;
+                    c.indent = 18.f;
+                    c.badge = hmi::viewcycle::badge(*sc);
+                    c.badgeTone = ui::Tone::Accent;
+                    c.tip = sc->name + " : " + hmi::viewcycle::summary(*sc) + " - glisse-le sur la section Ex\xC3\xA9" "cution, "
+                            "\xC3\xA0 l'\xC3\xA9tape voulue, ou entre deux scripts de cette liste";
+                    firstStyles.push_back(std::move(c));
+                }
+                continue;
+            }
             const Script* found = nullptr;
             for (const auto* sc : list()) if (sc->event == ev) { found = sc; break; }
             eventOrder_.emplace_back(ev);
             scriptOrder_.push_back(found ? found->id : kNoId);
-            states.push_back(found ? stateOf(guardedDiagnostics([&] { return allDiagnostics(doc_->project, *found, doc_->project.view(view_)); },
-                                                                1, found->name))
-                                   : std::string("(vide)"));
+            rowKinds_.push_back(RowKind::Event);
+            states.push_back(found ? stateFor(*found) : std::string("(vide)"));
             rows.push_back({std::string(hmi::eventLabel(ev)), found ? std::string(hmi::scriptLangKey(found->lang)) : std::string("-"),
                             found ? std::to_string(lineCount(found->body)) : std::string("0"), states.back()});
+            ui::CellStyle e;
+            e.icon = ui::Icon::Code;
+            firstStyles.push_back(std::move(e));
         }
     }
     const std::size_t stateCol = general() ? 5 : 3;
@@ -782,15 +932,23 @@ void HmiScriptsPane::refresh() {
     scriptModel_ = std::make_shared<Rows>(
         general() ? std::vector<std::string>{"Nom", "Langage", "D\xC3\xA9" "clencheur", "D\xC3\xA9tail", "Lignes", "\xC3\x89tat"}
                   : std::vector<std::string>{"\xC3\x89v\xC3\xA9nement", "Langage", "Lignes", "\xC3\x89tat"},
-        std::move(rows), [states, stateCol, this](ui::RowIndex r, std::size_t c) {
+        std::move(rows), [states, stateCol, firstStyles, this](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
-            if (c == 0) s.icon = ui::Icon::Code;
+            if (c == 0) s = r < firstStyles.size() ? firstStyles[r] : ui::CellStyle{};   // 1.27.0 : l'OnCycle deballe
             if (c == stateCol && r < states.size())
                 s.fgTone = states[r] == "OK" ? ui::Tone::Ok : states[r] == "(vide)" ? ui::Tone::Muted
                          : states[r].find("erreur") != std::string::npos ? ui::Tone::Error : ui::Tone::Warning;
             (void)this;
             return s;
         });
+    // 1.27.0 : une ligne de script de cycle se depose avant ou apres un autre script de cycle (son moment, son rang).
+    {
+        const auto kinds = rowKinds_;
+        static_cast<Rows&>(*scriptModel_).setCanDrop([kinds](const std::vector<ui::RowIndex>& from, ui::RowIndex to, ui::TreeView::DropWhere where) {
+            const auto isCycle = [&](ui::RowIndex r) { return r < kinds.size() && kinds[r] == RowKind::CycleScript; };
+            return from.size() == 1 && isCycle(from.front()) && isCycle(to) && where != ui::TreeView::DropWhere::Into;
+        });
+    }
     scripts_->setModel(scriptModel_);
     }
 
@@ -844,8 +1002,25 @@ void HmiScriptsPane::refresh() {
     if (general()) {
         (void)keepScript;              // lot 21 : la table rangee en dossiers garde sa selection
     } else {
-        for (std::size_t i = 0; i < eventOrder_.size(); ++i)
-            if (eventOrder_[i] == keepEvent) { hmiSelectModelRow(*scripts_, i); selectedRow_ = static_cast<int>(i); }
+        // 1.27.0 : le meme script (un script de cycle a pu changer de rang) ; sinon le meme evenement - l'OnCycle qui vient
+        // d'avoir son premier script (la frappe l'a cree) : ce script ; le titre de l'OnCycle deballe : lui.
+        int pick = -1;
+        if (keepScript != kNoId)
+            for (std::size_t i = 0; i < scriptOrder_.size() && pick < 0; ++i)
+                if (scriptOrder_[i] == keepScript) pick = static_cast<int>(i);
+        if (pick < 0)
+            for (std::size_t i = 0; i < eventOrder_.size(); ++i) {
+                if (eventOrder_[i] != keepEvent) continue;
+                if (pick < 0) pick = static_cast<int>(i);
+                if (keepKind == RowKind::Event && rowKinds_[i] == RowKind::CycleScript) {
+                    pick = static_cast<int>(i);
+                    break;
+                }
+            }
+        if (pick >= 0) {
+            hmiSelectModelRow(*scripts_, static_cast<std::size_t>(pick));
+            selectedRow_ = pick;
+        }
     }
     if (keepVar) selectVariable(keepVar);
     showSelected();
@@ -853,9 +1028,89 @@ void HmiScriptsPane::refresh() {
     (void)st;
     std::string msg = general() ? std::to_string(doc_->project.programs.scripts.size()) + " script(s) g\xC3\xA9n\xC3\xA9raux, "
                                       + std::to_string(doc_->project.programs.variables.size()) + " variable(s) IHM"
-                                : std::string("OnOpen \xC3\xA0 l'ouverture de la vue, OnCycle \xC3\xA0 chaque cycle IHM, OnClose \xC3\xA0 sa fermeture");
+                                : std::string("Glisse un script de cycle entre deux \xC3\xA9tapes : il s'ex\xC3\xA9" "cutera exactement l\xC3\xA0, \xC3\xA0 chaque "
+                                              "cycle de la vue (ou 1 cycle sur N). OnOpen \xC3\xA0 l'ouverture, OnClose \xC3\xA0 la fermeture ; un "
+                                              "projet existant garde son OnCycle entre 4 et 5 \xE2\x80\x94 rien ne change sans toi.");
     status_->setMessage(msg);
+    refreshStages();                      // 1.27.0 : la section Execution suit
     invalidate();
+}
+
+// ---- 1.27.0 : LE CYCLE DE LA VUE, DEBALLE ----------------------------------------------------------------------------
+bool HmiScriptsPane::cycleRow(int row) const {
+    return row >= 0 && static_cast<std::size_t>(row) < rowKinds_.size() && rowKinds_[static_cast<std::size_t>(row)] == RowKind::CycleScript;
+}
+
+std::string HmiScriptsPane::measuredText(Id id) const {
+    const auto it = measures_.scriptMs.find(id);
+    if (it == measures_.scriptMs.end()) return "\xE2\x80\x94 (pas encore mesur\xC3\xA9" "e : lance la simulation)";
+    return hmi::viewcycle::msText(it->second) + " (derni\xC3\xA8re simulation)";
+}
+
+void HmiScriptsPane::refreshStages() {
+    if (!stages_) return;
+    const auto* v = doc_->project.view(view_);
+    std::vector<HmiCycleStages::Chip> chips;
+    if (v)
+        for (const auto* sc : hmi::viewcycle::cycleScripts(*v)) {
+            HmiCycleStages::Chip c;
+            c.id = sc->id;
+            c.name = sc->name;
+            c.lang = std::string(hmi::scriptLangKey(sc->lang));
+            c.moment = hmi::viewcycle::momentOf(*sc);
+            std::string note;
+            if (const auto it = measures_.scriptMs.find(sc->id); it != measures_.scriptMs.end()) note = hmi::viewcycle::msText(it->second);
+            if (hmi::viewcycle::everyOf(*sc) > 1) note += (note.empty() ? "" : " \xC2\xB7 ") + hmi::viewcycle::everyLabel(hmi::viewcycle::everyOf(*sc));
+            if (const auto cond = hmi::viewcycle::plainCondition(sc->when); !cond.empty()) note += (note.empty() ? "" : " \xC2\xB7 ") + std::string("si =") + cond;
+            c.note = std::move(note);
+            c.tip = hmi::viewcycle::summary(*sc) + "\nDur\xC3\xA9" "e mesur\xC3\xA9" "e : " + measuredText(sc->id);
+            chips.push_back(std::move(c));
+        }
+    double scriptsMs = 0;
+    for (const auto& c : chips)
+        if (const auto it = measures_.scriptMs.find(c.id); it != measures_.scriptMs.end()) scriptsMs += it->second;
+    stages_->setChips(std::move(chips));
+    stages_->setTiming(measures_.timing);
+    stages_->setScriptsMs(scriptsMs);
+    stages_->setSelected(selectedScript());
+    if (stagesPanel_ && v) {
+        std::string title = "EX\xC3\x89" "CUTION \xC2\xB7 CYCLE DE " + v->name + "  \xC2\xB7  " + stages_->totalText();
+        if (measures_.timing.measured() && measures_.timing.view != view_)
+            if (const auto* shown = doc_->project.view(measures_.timing.view)) title += " (vue montr\xC3\xA9" "e : " + shown->name + ")";
+        stagesPanel_->setTitle(std::move(title));
+    }
+}
+
+bool HmiScriptsPane::refreshMeasures(bool force) {
+    if (general() || !stages_) return false;
+    const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (!force && measuredAt_ >= 0 && now - measuredAt_ < 0.5) return false;
+    measuredAt_ = now;
+    std::optional<CycleMeasures> m;
+    if (measuresSource_) {
+        m = measuresSource_();
+    } else if (const hmi::Runtime* rt = HmiDebugSession::instance().runtime()) {
+        CycleMeasures cm;
+        cm.timing = rt->cycleTiming();
+        if (cm.timing.measured()) {
+            if (const auto* v = doc_->project.view(view_))
+                for (const auto& sc : v->scripts)
+                    if (hmi::viewcycle::isCycleScript(sc))
+                        if (const auto it = rt->perf().scripts.find(sc.id); it != rt->perf().scripts.end() && it->second.time.count > 0)
+                            cm.scriptMs[sc.id] = it->second.time.last;
+            m = std::move(cm);
+        }
+    }
+    // Rien de mesure (pas de simulation) : la derniere mesure reste - << derniere simulation >>.
+    if (!m) return false;
+    if (!force && m->timing.cycle == measuredCycle_ && m->scriptMs == measures_.scriptMs) return false;
+    measures_ = std::move(*m);
+    measuredCycle_ = measures_.timing.cycle;
+    refreshStages();
+    // La Duree mesuree du script choisi (pas pendant qu'une case est en cours de saisie).
+    if (const auto* sc = current(); sc && hmi::viewcycle::isCycleScript(*sc) && !props_->activeField() && !props_->activePalette())
+        rebuildProperties();
+    return true;
 }
 
 void HmiScriptsPane::showSelected() {
@@ -871,13 +1126,21 @@ void HmiScriptsPane::showSelected() {
     shownId_ = sc ? sc->id : hmi::kNoId;
     margin_.reset();                       // 1.13.0 (lot J2) : les points de ce script, la frappe repart d'ici
     editor_->setLanguage(languageOf(sc ? sc->lang : ScriptLang::ST));
-    const bool editable = sc || !selectedEvent().empty();
+    // 1.27.0 : le titre de l'OnCycle deballe ne s'edite pas (un script de cycle, si) ; un evenement vide, oui (la frappe le cree).
+    const bool group = selectedRow_ >= 0 && static_cast<std::size_t>(selectedRow_) < rowKinds_.size()
+                    && rowKinds_[static_cast<std::size_t>(selectedRow_)] == RowKind::CycleGroup;
+    const bool editable = sc || (!selectedEvent().empty() && !group);
     editor_->setReadOnly(!editable);
     syncing_ = false;
     std::string title = "\xC3\x89" "DITEUR";
-    if (sc) title += "  \xC2\xB7  " + sc->name + "  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang)) + "  \xC2\xB7  "
+    if (sc && !general() && hmi::viewcycle::isCycleScript(*sc))   // 1.27.0 : son moment
+        title += "  \xC2\xB7  " + sc->name + "  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang)) + "  \xC2\xB7  "
+               + hmi::viewcycle::summary(*sc) + ", avant l'\xC3\xA9tape " + std::to_string(hmi::viewcycle::momentOf(*sc) + 1);
+    else if (sc) title += "  \xC2\xB7  " + sc->name + "  \xC2\xB7  " + std::string(hmi::scriptLangKey(sc->lang)) + "  \xC2\xB7  "
                    + std::string(hmi::eventLabel(sc->event));
+    else if (group) title += "  \xC2\xB7  OnCycle : choisis un script de cycle (ou + Script de cycle)";
     else if (!selectedEvent().empty()) title += "  \xC2\xB7  " + selectedEvent() + " (vide : taper pour le cr\xC3\xA9" "er)";
+    if (stages_) stages_->setSelected(sc ? sc->id : kNoId);
     editorPanel_->setTitle(title);
     rebuildProperties();
     updateDiagnostics();
@@ -992,9 +1255,15 @@ void HmiScriptsPane::rebuildProperties() {
         p.description = std::move(help);
         return p;
     };
-    if (general())
+    const bool cycle = !general() && hmi::viewcycle::isCycleScript(*sc);   // 1.27.0 : un script de cycle de la vue
+    if (general() || cycle)
         c.properties.push_back(prop("Nom", sc->name, PG::ValueType::Text, {},
-                                    [this, id](std::string_view v) { return renameScript(id, std::string(v)); }));
+                                    [this, id](std::string_view v) {
+                                        std::string why;
+                                        const bool ok = renameScript(id, std::string(v), &why);
+                                        if (!ok && !why.empty()) ui::PropertyGrid::refuse(why);
+                                        return ok;
+                                    }));
     c.properties.push_back(prop("Langage", std::string(hmi::scriptLangKey(sc->lang)), PG::ValueType::Enum, {"ST", "C", "C++"},
                                 [this, id](std::string_view v) {
                                     const auto l = hmi::scriptLangFromKey(v);
@@ -1061,6 +1330,78 @@ void HmiScriptsPane::rebuildProperties() {
         }
     } else {
         c.properties.push_back(prop("\xC3\x89v\xC3\xA9nement", sc->event, PG::ValueType::ReadOnly, {}, nullptr));
+    }
+    // 1.27.0 : LE MOMENT D'UN SCRIPT DE CYCLE - apres quelle etape, son rang, 1 cycle sur N, sa condition, sa duree.
+    if (cycle) {
+        namespace vc = hmi::viewcycle;
+        const auto* v = doc_->project.view(view_);
+        const int moment = vc::momentOf(*sc);
+        const auto choices = vc::momentChoices();
+        c.properties.push_back(prop("Moment", choices[static_cast<std::size_t>(moment - vc::kFirstMoment)], PG::ValueType::Enum, choices,
+                                    [this, id](std::string_view v) {
+                                        const int m = vc::momentFromText(v);
+                                        if (m <= 0) {
+                                            ui::PropertyGrid::refuse("un moment : apr\xC3\xA8s l'\xC3\xA9tape 1 \xC3\xA0 9");
+                                            return false;
+                                        }
+                                        const auto* s2 = doc_->project.script(id);
+                                        if (s2 && vc::momentOf(*s2) == m) return true;
+                                        return moveCycleScript(id, m, kLastRank);
+                                    },
+                                    "Apr\xC3\xA8s quelle \xC3\xA9tape du cycle de la vue il s'ex\xC3\xA9" "cute (la section Ex\xC3\xA9" "cution les montre "
+                                    "toutes, dans l'ordre o\xC3\xB9 le moteur les fait). Glisser sa pastille fait la m\xC3\xAA" "me chose \xC3\xA0 la souris."));
+        if (v) {
+            const auto [rank, count] = vc::rankOf(*v, id);
+            std::vector<std::string> ranks;
+            for (int k = 1; k <= count; ++k) ranks.push_back(std::to_string(k) + " sur " + std::to_string(count));
+            c.properties.push_back(prop("Rang dans l'\xC3\xA9tape", std::to_string(rank) + " sur " + std::to_string(count),
+                                        count > 1 ? PG::ValueType::Enum : PG::ValueType::ReadOnly, ranks,
+                                        count > 1 ? std::function<bool(std::string_view)>([this, id, moment](std::string_view t) {
+                                            const int k = std::atoi(std::string(t).c_str());
+                                            if (k < 1) return false;
+                                            const auto* vv = doc_->project.view(view_);
+                                            if (vv && vc::rankOf(*vv, id).first == k) return true;
+                                            return moveCycleScript(id, moment, static_cast<std::size_t>(k - 1));
+                                        }) : std::function<bool(std::string_view)>{},
+                                        "Dans une m\xC3\xAA" "me \xC3\xA9tape, les scripts tournent dans leur rang (1 : le premier)."));
+        }
+        {
+            auto every = prop("Fr\xC3\xA9quence", vc::everyLabel(vc::everyOf(*sc)), PG::ValueType::Enum, vc::everyChoices(),
+                              [this, id](std::string_view t) {
+                                  const int n = vc::everyFromText(t);
+                                  if (n <= 0) {
+                                      ui::PropertyGrid::refuse("une fr\xC3\xA9quence : Chaque cycle, ou 1 cycle sur N (N de 2 \xC3\xA0 1000)");
+                                      return false;
+                                  }
+                                  return setCycleEvery(id, n);
+                              },
+                              "Chaque cycle, ou 1 cycle sur N : il tourne au premier cycle de la vue, puis tous les N cycles "
+                              "(la vue rouverte, il repart).");
+            every.typeIn = true;
+            c.properties.push_back(std::move(every));
+        }
+        {
+            const std::string cond = vc::plainCondition(sc->when);
+            auto when = prop("Condition", cond.empty() ? std::string{} : "=" + cond, PG::ValueType::Text, {},
+                             [this, id](std::string_view t) {
+                                 std::string why;
+                                 const bool ok = setCycleCondition(id, std::string(t), &why);
+                                 if (!ok && !why.empty()) ui::PropertyGrid::refuse(why);
+                                 return ok;
+                             },
+                             "Une formule (fx) : le script ne tourne que quand elle est vraie \xE2\x80\x94 sans IF autour de son code. "
+                             "Vide : \xC3\xA0 chaque fois. Compiler la v\xC3\xA9rifie.");
+            when.placeholder = "(toujours)";
+            ui::PropertyGrid::Legend fx;
+            fx.style = ui::PropertyGrid::LegendStyle::Formula;
+            fx.text = "fx";
+            fx.tip = "Une formule bool\xC3\xA9" "enne de la vue";
+            fx.expected = "BOOL";
+            when.legend = fx;
+            c.properties.push_back(std::move(when));
+        }
+        c.properties.push_back(prop("Dur\xC3\xA9" "e mesur\xC3\xA9" "e", measuredText(id), PG::ValueType::ReadOnly, {}, nullptr,
+                                    "Sa derni\xC3\xA8re ex\xC3\xA9" "cution en simulation (l'\xC3\xA9" "cran de la simulation de l'\xC3\xA9" "diteur)."));
     }
     c.properties.push_back(prop("Lignes", std::to_string(lineCount(sc->body)), PG::ValueType::ReadOnly, {}, nullptr));
     cats.push_back(std::move(c));
@@ -1389,16 +1730,30 @@ void HmiScriptsPane::selectScript(Id id) {
             showSelected();
             return;
         }
+    // 1.27.0 : un script de cycle cache sous l'OnCycle replie : la liste se deplie.
+    if (cycleFolded_ && id != kNoId)
+        if (const auto* sc = doc_->project.script(id); sc && hmi::viewcycle::isCycleScript(*sc) && doc_->project.viewOfScript(id) == view_) {
+            cycleFolded_ = false;
+            refresh();
+            selectScript(id);
+        }
 }
 
 void HmiScriptsPane::selectEvent(std::string_view event) {
-    for (std::size_t i = 0; i < eventOrder_.size(); ++i)
-        if (eventOrder_[i] == event) {
-            hmiSelectModelRow(*scripts_, i);
-            selectedRow_ = static_cast<int>(i);
-            showSelected();
-            return;
+    // 1.27.0 : l'OnCycle deballe - son premier script de cycle (sinon la ligne de l'evenement).
+    int pick = -1;
+    for (std::size_t i = 0; i < eventOrder_.size(); ++i) {
+        if (eventOrder_[i] != event) continue;
+        if (pick < 0) pick = static_cast<int>(i);
+        if (i < rowKinds_.size() && rowKinds_[i] == RowKind::CycleScript) {
+            pick = static_cast<int>(i);
+            break;
         }
+    }
+    if (pick < 0) return;
+    hmiSelectModelRow(*scripts_, static_cast<std::size_t>(pick));
+    selectedRow_ = pick;
+    showSelected();
 }
 
 void HmiScriptsPane::goTo(Id script, int line) {
@@ -1579,7 +1934,34 @@ Id HmiScriptsPane::duplicateScript(Id id, std::string* why) {
 
 bool HmiScriptsPane::renameScript(Id id, const std::string& name, std::string* why) {
     const auto* sc = doc_->project.script(id);
-    if (!sc || !general()) return false;
+    if (!sc) return false;
+    if (!general()) {
+        // 1.27.0 : un script de la vue (un script de cycle) - un nom libre parmi les scripts de la vue.
+        const auto* v = doc_->project.view(view_);
+        if (!v || doc_->project.viewOfScript(id) != view_) return false;
+        if (sc->name == name) return true;
+        if (!hmi::isIdentifier(name)) {
+            if (why) *why = nameProblem(name);
+            say("Renommage refus\xC3\xA9 : " + nameProblem(name), true);
+            return false;
+        }
+        for (const auto& other : v->scripts)
+            if (other.id != id && upperOf(other.name) == upperOf(name)) {
+                if (why) *why = "un script de " + v->name + " s'appelle d\xC3\xA9j\xC3\xA0 " + name;
+                say("Renommage refus\xC3\xA9 : un script de " + v->name + " s'appelle d\xC3\xA9j\xC3\xA0 " + name, true);
+                return false;
+            }
+        const std::string old = sc->name;
+        auto cmd = hmi::changeView(doc_, view_, "Renommer le script " + old, [&](hmi::Project&, hmi::View& vv) {
+            for (auto& s2 : vv.scripts)
+                if (s2.id == id) s2.name = name;
+        });
+        if (cmd) apply_(std::move(cmd));
+        refresh();
+        selectScript(id);
+        say(old + " renomm\xC3\xA9 en " + name + " (Ctrl+Z le rend)");
+        return true;
+    }
     if (!hmi::isIdentifier(name)) { if (why) *why = "nom invalide"; say("Renommage refus\xC3\xA9 : nom invalide", true); return false; }
     // 1.13.0 : libre dans SON espace (Gaz.Horloge et Util.Horloge sont deux scripts).
     const std::string full = hmi::qualifiedName(sc->ns, name);
@@ -1627,14 +2009,117 @@ bool HmiScriptsPane::deleteScript(Id id) {
             v.erase(std::remove_if(v.begin(), v.end(), [&](const Script& s) { return s.id == id; }), v.end());
         });
     } else {
-        cmd = hmi::changeView(doc_, view_, "Vider " + name, [&](hmi::Project&, hmi::View& vv) {
+        // 1.27.0 : un script de cycle se supprime (sa vue peut en avoir d'autres).
+        const bool cycle = hmi::viewcycle::isCycleScript(*sc);
+        cmd = hmi::changeView(doc_, view_, (cycle ? "Supprimer " : "Vider ") + name, [&](hmi::Project&, hmi::View& vv) {
             vv.scripts.erase(std::remove_if(vv.scripts.begin(), vv.scripts.end(), [&](const Script& s) { return s.id == id; }),
                              vv.scripts.end());
         });
     }
+    const bool removed = general() || hmi::viewcycle::isCycleScript(*sc);
     if (cmd) apply_(std::move(cmd));
     refresh();
-    say((general() ? "Supprim\xC3\xA9 : " : "Vid\xC3\xA9 : ") + name + " - Ctrl+Z le rend");
+    say((removed ? "Supprim\xC3\xA9 : " : "Vid\xC3\xA9 : ") + name + " - Ctrl+Z le rend");
+    return true;
+}
+
+// ---- 1.27.0 : les scripts de cycle d'une vue ----
+Id HmiScriptsPane::addCycleScript(int moment, std::size_t rank, std::string* why) {
+    namespace vc = hmi::viewcycle;
+    const auto* v = general() ? nullptr : doc_->project.view(view_);
+    if (!v) {
+        if (why) *why = "seule une vue a des scripts de cycle";
+        return kNoId;
+    }
+    if (moment <= 0) {
+        const auto* sc = current();
+        moment = sc && vc::isCycleScript(*sc) ? vc::momentOf(*sc) : vc::kLegacyMoment;
+    }
+    moment = std::clamp(moment, vc::kFirstMoment, vc::kLastMoment);
+    const std::string name = vc::freeName(*v, "Cycle");
+    Id made = kNoId;
+    auto cmd = hmi::changeView(doc_, view_, "Nouveau script de cycle " + name, [&](hmi::Project& p, hmi::View& vv) {
+        Script sc;
+        sc.id = p.allocate();
+        sc.name = name;
+        sc.lang = ScriptLang::ST;
+        sc.event = std::string(vc::kCycleEvent);
+        sc.stage = moment;
+        sc.body = "(* " + name + " *)\n";
+        made = sc.id;
+        vv.scripts.push_back(std::move(sc));
+        (void)vc::move(vv, made, moment, rank);
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    selectScript(made);
+    say("Script de cycle cr\xC3\xA9\xC3\xA9 : " + name + ", " + vc::momentLabel(moment) + " - renomme-le dans ses propri\xC3\xA9t\xC3\xA9s (Ctrl+Z le retire)");
+    return made;
+}
+
+bool HmiScriptsPane::moveCycleScript(Id id, int moment, std::size_t rank) {
+    namespace vc = hmi::viewcycle;
+    const auto* v = general() ? nullptr : doc_->project.view(view_);
+    const auto* sc = doc_->project.script(id);
+    if (!v || !sc || !vc::isCycleScript(*sc) || doc_->project.viewOfScript(id) != view_) return false;
+    moment = std::clamp(moment, vc::kFirstMoment, vc::kLastMoment);
+    hmi::View trial = *v;
+    if (!vc::move(trial, id, moment, rank)) return false;     // la meme place : rien ne change
+    const std::string name = sc->name;
+    auto cmd = hmi::changeView(doc_, view_, "Moment de " + name + " : " + vc::momentLabel(moment), [&](hmi::Project&, hmi::View& vv) {
+        (void)vc::move(vv, id, moment, rank);
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    selectScript(id);
+    const auto* nv = doc_->project.view(view_);
+    const auto [r, n] = nv ? vc::rankOf(*nv, id) : std::pair<int, int>{0, 0};
+    say(name + " : " + vc::momentLabel(moment) + (n > 1 ? ", rang " + std::to_string(r) + " sur " + std::to_string(n) : std::string{})
+        + " \xE2\x80\x94 " + std::string(vc::step(moment).after) + " (Ctrl+Z le remet)");
+    return true;
+}
+
+bool HmiScriptsPane::setCycleEvery(Id id, int every) {
+    namespace vc = hmi::viewcycle;
+    const auto* sc = doc_->project.script(id);
+    if (general() || !sc || !vc::isCycleScript(*sc) || doc_->project.viewOfScript(id) != view_) return false;
+    every = std::clamp(every, 1, vc::kMaxEvery);
+    if (vc::everyOf(*sc) == every) return true;
+    const std::string name = sc->name;
+    auto cmd = hmi::changeView(doc_, view_, "Fr\xC3\xA9quence de " + name + " : " + vc::everyLabel(every), [&](hmi::Project&, hmi::View& vv) {
+        for (auto& s2 : vv.scripts)
+            if (s2.id == id) s2.everyCycles = every;
+    });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    say(name + " : " + vc::everyLabel(every) + " (Ctrl+Z le remet)");
+    return true;
+}
+
+bool HmiScriptsPane::setCycleCondition(Id id, const std::string& text, std::string* why) {
+    namespace vc = hmi::viewcycle;
+    const auto* sc = doc_->project.script(id);
+    if (general() || !sc || !vc::isCycleScript(*sc) || doc_->project.viewOfScript(id) != view_) return false;
+    const std::string cond = vc::plainCondition(text);
+    if (!cond.empty()) {
+        const auto e = hmi::Expression::compile(cond);
+        if (!e.valid()) {
+            if (why) *why = "condition illisible : " + e.error();
+            say("Condition refus\xC3\xA9" "e : " + e.error(), true);
+            return false;
+        }
+    }
+    if (vc::plainCondition(sc->when) == cond) return true;
+    const std::string name = sc->name;
+    auto cmd = hmi::changeView(doc_, view_, cond.empty() ? "Sans condition : " + name : "Condition de " + name + " : =" + cond,
+                               [&](hmi::Project&, hmi::View& vv) {
+                                   for (auto& s2 : vv.scripts)
+                                       if (s2.id == id) s2.when = cond;
+                               });
+    if (cmd) apply_(std::move(cmd));
+    refresh();
+    say(cond.empty() ? name + " tourne sans condition (Ctrl+Z la remet)"
+                     : name + " ne tourne que si =" + cond + " est vraie (Ctrl+Z l'annule)");
     return true;
 }
 

@@ -14,7 +14,14 @@
 //      Titre := 'Vanne';
 //      (*# script evenement=OnCycle langage=ST *)
 //      ...
+//      (*# script evenement=OnCycle langage=ST nom=Mise_En_Page moment=8 frequence=5 condition=Mode_Auto *)
+//      ...
 //      (*# fin *)
+//
+//  1.27.0 : UNE VUE A PLUSIEURS SCRIPTS DE CYCLE, chacun a son moment (HmiViewCycle.hpp) : nom, moment (apres
+//  l'etape 1 a 9), frequence (1 cycle sur N) et condition, ecrits seulement quand ils changent - l'OnCycle d'avant
+//  s'ecrit comme avant, et une version d'avant lit le fichier (elle ignore ce qu'elle ne connait pas). A l'import, un
+//  script de cycle nomme retrouve celui du meme nom dans la vue ; sans nom, le premier script de cycle.
 //
 //  Un operateur :
 //      (*# operateur op="+" gauche=T_VECTEUR droite=REAL resultat=T_VECTEUR description="..." *)
@@ -50,6 +57,11 @@ struct Entry {
     // un script de vue
     std::string event;                 // OnOpen, OnCycle, OnClose
     ScriptLang  lang{ScriptLang::ST};
+    // 1.27.0 : un script de cycle - son nom (vide : celui de l'OnCycle d'avant), son moment, sa frequence, sa condition
+    std::string name{};
+    int         stage{4};
+    int         everyCycles{1};
+    std::string when{};
     // un operateur
     HmiOperator op{};
     std::string body;

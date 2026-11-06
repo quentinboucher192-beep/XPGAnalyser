@@ -683,6 +683,13 @@ public:
         core::Signal<const std::vector<RowIndex>&, RowIndex, DropWhere>::create();
     [[nodiscard]] const std::vector<RowIndex>& draggedRows() const noexcept { return dragRows_; }
     [[nodiscard]] DropWhere dropWhere() const noexcept { return dropWhere_; }
+    // 1.27.0 : GLISSER UNE LIGNE HORS DE LA TABLE - un autre volet la recoit (un script de cycle d'une vue, lache sur
+    // l'etape voulue). Actif (setRowDragOutside) : pendant le glisser, la table tient la souris et dit ou elle est
+    // (rowDragAt : les lignes tirees, la position, relachee ou non), dedans comme dehors ; dehors, rien ne se depose
+    // dans la table. Inactif (le defaut) : rien ne change.
+    void setRowDragOutside(bool on) noexcept { dragOutside_ = on; }
+    const core::SignalPtr<const std::vector<RowIndex>&, gfx::Point, bool> rowDragAt =
+        core::Signal<const std::vector<RowIndex>&, gfx::Point, bool>::create();
     // Lot 21 : les icones que la table ne connait pas (CellStyle::customIcon,
     // Column::headerIcon) : l'hote les dessine.
     using IconPainter = std::function<void(gfx::IRenderer&, int icon, const gfx::Rect& box, gfx::Color color)>;
@@ -857,6 +864,7 @@ private:
     bool         revealPending_{false};
     // Lot 16 : le glisser d'une ligne.
     bool         rowDrag_{false}, dragArmed_{false}, dragActive_{false};
+    bool         dragOutside_{false};      // 1.27.0 : le glisser peut sortir de la table (rowDragAt)
     RowIndex     dragFrom_{0}, dropTo_{0};
     bool         dropValid_{false};
     std::vector<RowIndex> dragRows_;     // lot 21 : les lignes trainees (du modele, ordre de la vue)

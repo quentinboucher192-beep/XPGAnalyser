@@ -146,6 +146,12 @@ std::string literalOf(const std::string& text) {
 // constante (sinon le lien la reprendrait) ; le reste, une valeur statique
 // (et l'expression tombe).
 void putOverride(Object& o, const std::string& key, std::string value, double dy) {
+    // 1.27.0 : SetLayer, un calque ecrit (Objet.Layer := 'Process') - le calque de l'objet change.
+    if (key == "@layer") {
+        double id = 0;
+        if (parseNumber(value, id)) o.layer = static_cast<Id>(id);
+        return;
+    }
     double y = 0;
     if (key == "y" && dy != 0 && parseNumber(value, y)) value = formatNumber(y + dy);
     const bool linked = key == "value" && !autoValueSource(o).empty();
@@ -210,6 +216,20 @@ void Runtime::applyOverrides(View& c, const View& v, const View* only) const {
     if (const View* f = footerOf(*project_, v)) from(f->id, static_cast<double>(v.height - f->height));
     from(v.id, 0);
     if (const auto it = backgrounds_.find(v.id); it != backgrounds_.end()) c.background = it->second;
+    // 1.27.0 : BringToFront, SendToBack, BringForward - l'ordre de dessin (la cle "@order" ; sans elle, sa place).
+    if (std::any_of(c.objects.begin(), c.objects.end(), [](const Object& o) { return o.find("@order") != nullptr; })) {
+        std::vector<std::pair<double, std::size_t>> keys;
+        for (std::size_t i = 0; i < c.objects.size(); ++i) {
+            double k = static_cast<double>(i);
+            if (const Prop* p = c.objects[i].find("@order")) (void)parseNumber(p->value, k);
+            keys.emplace_back(k, i);
+        }
+        std::stable_sort(keys.begin(), keys.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        std::vector<Object> sorted;
+        sorted.reserve(c.objects.size());
+        for (const auto& [k, i] : keys) sorted.push_back(std::move(c.objects[i]));
+        c.objects = std::move(sorted);
+    }
 }
 
 bool Runtime::viewOpen(Id view) const {

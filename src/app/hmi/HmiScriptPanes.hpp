@@ -7,6 +7,10 @@
 //      sur changement d'une expression, ou seulement appele - ; les variables
 //      IHM ont leur onglet a cote (1.26.1 : plus de doublon sous les scripts).
 //    - IHM > Vues > une vue > Scripts : OnOpen, OnCycle, OnClose de cette vue.
+//      1.27.0 : L'ONCYCLE SE DEBALLE - plusieurs scripts de cycle, chacun a son moment
+//      dans le cycle de la vue (hmi/HmiViewCycle.hpp) ; la section Execution (au milieu,
+//      HmiCycleStages.hpp) montre les 10 etapes du cycle et, sous chacune, les scripts
+//      qui tournent apres elle - on les y glisse, ou on choisit leur Moment.
 //
 //    +-------------------- outils ---------------------+
 //    | Scripts (tableau)      | editeur (colore, lignes)|
@@ -24,6 +28,7 @@
 #include "../../hmi/HmiPipeline.hpp"   // 1.11.13 : les commandes du build
 
 #include "HmiAssist.hpp"
+#include "HmiCycleStages.hpp"              // 1.27.0 : la section Execution (le cycle de la vue, deballe)
 #include "HmiDebugSession.hpp"             // 1.13.0 (lot J2) : la marge des points d'arret
 #include "HmiDeclGrid.hpp"             // 1.11.18 (refonte, lot 5) : les onglets Constantes, Variables
 #include "HmiPanels.hpp"
@@ -40,6 +45,7 @@
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -236,6 +242,32 @@ public:
     // fenetre de son calcul ouverte a la ligne `line`. Faux : inconnue, ou pas calculee.
     bool editCalculation(const std::string& name, int line);
 
+    // ---- 1.27.0 : LE CYCLE DE LA VUE, DEBALLE (une vue seulement ; HmiViewCycle.hpp) ----
+    //  La liste montre OnOpen, OnCycle deballe (un script de cycle par ligne, son moment), OnClose ; la section
+    //  Execution, les 10 etapes et les scripts sous l'etape qu'ils suivent. Chaque changement est une commande (Ctrl+Z).
+    [[nodiscard]] HmiCycleStages* cycleStages() noexcept { return stages_; }
+    [[nodiscard]] HmiCycleAdd*    cycleAdd() noexcept { return cycleAdd_; }
+    static constexpr std::size_t kLastRank = static_cast<std::size_t>(-1);
+    // Un nouveau script de cycle (ST, un nom libre), apres l'etape `moment` (0 : celle du script de cycle choisi, sinon
+    // 4), au rang `rank` de ce moment (kLastRank : le dernier). Il est choisi. kNoId et `why` : refuse.
+    hmi::Id addCycleScript(int moment = 0, std::size_t rank = kLastRank, std::string* why = nullptr);
+    // Le deplacer : apres l'etape `moment` (1..9), au rang `rank` (0 : le premier ; kLastRank : le dernier). Faux : rien
+    // ne change (ou pas un script de cycle de la vue).
+    bool moveCycleScript(hmi::Id, int moment, std::size_t rank = kLastRank);
+    bool setCycleEvery(hmi::Id, int every);                                                   // 1 cycle sur N (1 : chaque)
+    bool setCycleCondition(hmi::Id, const std::string& condition, std::string* why = nullptr);   // "" : toujours
+    // LA MESURE : la derniere simulation (la simulation de l'editeur, par HmiDebugSession) ; les essais en donnent une.
+    struct CycleMeasures {
+        hmi::viewcycle::Timing      timing;
+        std::map<hmi::Id, double>   scriptMs;   // la derniere duree de chaque script mesure
+    };
+    void setMeasuresSource(std::function<std::optional<CycleMeasures>()> source) { measuresSource_ = std::move(source); }
+    // Relire la mesure (l'ecran l'appelle a chaque image, par refreshBuildState ; deux fois par seconde au plus). Vrai :
+    // elle a change.
+    bool refreshMeasures(bool force = false);
+    // La duree mesuree d'un script (<< 0,21 ms (derniere simulation) >>) ; un tiret : pas mesure.
+    [[nodiscard]] std::string measuredText(hmi::Id) const;
+
     [[nodiscard]] HmiToolStrip&      tools() noexcept { return *tools_; }
     [[nodiscard]] const std::string& buildStateText() const noexcept { return buildStateText_; }   // 1.11.13
     [[nodiscard]] ui::MultiLineText& editor() noexcept { return *editor_; }
@@ -269,6 +301,8 @@ private:
     void say(std::string text, bool warning = false);
     [[nodiscard]] const hmi::Script* current() const;
     [[nodiscard]] std::vector<const hmi::Script*> list() const;
+    void refreshStages();                // 1.27.0 : la section Execution suit la vue (ses scripts de cycle, la mesure)
+    [[nodiscard]] bool cycleRow(int row) const;   // 1.27.0 : la ligne d'un script de cycle
 
     hmi::DocumentPtr  doc_;
     Apply             apply_;
@@ -296,6 +330,18 @@ private:
     std::vector<hmi::Id>     scriptOrder_;     // vue : un par evenement (kNoId si vide) ; general : les scripts montres
     std::unique_ptr<HmiFolderTable> folders_;  // lot 21 : general - la liste rangee en dossiers
     std::vector<std::string> eventOrder_;
+    // 1.27.0 : ce qu'est chaque ligne d'une vue - un evenement (OnOpen, OnClose, OnCycle sans script), le titre de
+    // l'OnCycle deballe, un script de cycle.
+    enum class RowKind : std::uint8_t { Event, CycleGroup, CycleScript };
+    std::vector<RowKind>     rowKinds_;
+    bool                     cycleFolded_{false};         // le titre OnCycle replie (ses scripts caches dans la liste)
+    HmiCycleStages*          stages_{nullptr};
+    HmiCycleAdd*             cycleAdd_{nullptr};
+    HmiTitledPanel*          stagesPanel_{nullptr};
+    std::function<std::optional<CycleMeasures>()> measuresSource_;
+    CycleMeasures            measures_{};
+    std::uint64_t            measuredCycle_{0};
+    double                   measuredAt_{-1.0};           // l'heure du poste de la derniere relecture (s)
     std::vector<hmi::Id>     variableOrder_;
     std::vector<hmi::ScriptDiagnostic> diagnostics_;
     // 1.10 : les lignes du tableau du bas - le script montre (suit la frappe). 1.11.17 :

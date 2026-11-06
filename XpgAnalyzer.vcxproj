@@ -570,6 +570,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiBuildPanes.cpp" />
     <ClCompile Include="src\app\hmi\HmiChoiceItems.cpp" />
     <ClCompile Include="src\app\hmi\HmiConsole.cpp" />
+    <ClCompile Include="src\app\hmi\HmiCycleStages.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicPageSets.cpp" />
     <ClCompile Include="src\app\hmi\HmiCyclicWidgets.cpp" />
@@ -719,6 +720,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiRecording.cpp" />
     <ClCompile Include="src\hmi\HmiRelations.cpp" />
     <ClCompile Include="src\hmi\HmiReportLayout.cpp" />
+    <ClCompile Include="src\hmi\HmiRuntimeObjects.cpp" />
     <ClCompile Include="src\hmi\HmiTrash.cpp" />
     <ClCompile Include="src\hmi\HmiTrueType.cpp" />
     <ClCompile Include="src\hmi\HmiTutorialDeduce.cpp" />
@@ -727,6 +729,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\hmi\HmiUnits.cpp" />
     <ClCompile Include="src\hmi\HmiVarMotion.cpp" />
     <ClCompile Include="src\hmi\HmiVertices.cpp" />
+    <ClCompile Include="src\hmi\HmiViewCycle.cpp" />
     <ClCompile Include="src\hmi\HmiViewPaths.cpp" />
     <ClCompile Include="src\project\ActivationConditions.cpp" />
     <ClCompile Include="src\project\ApiArchive.cpp" />
@@ -1148,6 +1151,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiBuildPanes.hpp" />
     <ClInclude Include="src\app\hmi\HmiChoiceItems.hpp" />
     <ClInclude Include="src\app\hmi\HmiConsole.hpp" />
+    <ClInclude Include="src\app\hmi\HmiCycleStages.hpp" />
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp" />
     <ClInclude Include="src\app\hmi\HmiDebugPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiDebugSession.hpp" />
@@ -1287,6 +1291,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\hmi\HmiUnits.hpp" />
     <ClInclude Include="src\hmi\HmiVarMotion.hpp" />
     <ClInclude Include="src\hmi\HmiVertices.hpp" />
+    <ClInclude Include="src\hmi\HmiViewCycle.hpp" />
     <ClInclude Include="src\hmi\HmiViewPaths.hpp" />
     <ClInclude Include="src\platform\AtlasSymbols.hpp" />
     <ClInclude Include="src\platform\KeyTranslate.hpp" />

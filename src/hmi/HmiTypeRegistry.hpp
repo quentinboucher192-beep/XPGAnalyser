@@ -69,13 +69,14 @@ enum class Category : std::uint8_t {
     PlcType,        // les DDT du programme de l'automate
     Reference,      // REF_TO, POINTER TO (construits)
     Callback,       // 1.12.19 : CALLBACK (x : REAL) : BOOL (construits)
+    Ihm,            // 1.27.0 : Object, Font, Texture, Sound, Style (les types de l'IHM)
     Generic,        // ANY
     Void,           // Aucun (le retour d'une procedure)
 };
 inline constexpr Category kCategories[] = {Category::Elementary, Category::TextTime,    Category::Collection,
                                            Category::Structure,  Category::Enumeration, Category::PlcType,
-                                           Category::Reference,  Category::Callback,    Category::Generic,
-                                           Category::Void};
+                                           Category::Reference,  Category::Callback,    Category::Ihm,
+                                           Category::Generic,    Category::Void};
 [[nodiscard]] std::string_view categoryLabel(Category) noexcept;   // "\xC3\x89l\xC3\xA9mentaires", "Structures IHM"...
 
 // ---- les usages (des drapeaux) -----------------------------------------------------

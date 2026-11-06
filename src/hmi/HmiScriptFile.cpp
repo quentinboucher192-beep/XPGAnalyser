@@ -4,6 +4,7 @@
 #include "HmiScriptFile.hpp"
 
 #include "HmiOperators.hpp"
+#include "HmiViewCycle.hpp"     // 1.27.0 : les scripts de cycle, a leur moment
 #include "../core/Version.hpp"
 
 #include <algorithm>
@@ -125,6 +126,25 @@ const Script* scriptOf(const View& v, std::string_view event) {
     return nullptr;
 }
 
+// 1.27.0 : le script de la vue que vise une entree - un script de cycle nomme : celui du meme nom ; sinon le premier
+// de l'evenement (comme avant).
+const Script* scriptFor(const View& v, const Entry& e) {
+    if (sameName(e.event, viewcycle::kCycleEvent) && !e.name.empty()) {
+        for (const auto& s : v.scripts)
+            if (viewcycle::isCycleScript(s) && sameName(s.name, e.name)) return &s;
+        return nullptr;
+    }
+    return scriptOf(v, e.event);
+}
+
+// 1.27.0 : le moment, la frequence et la condition d'une entree et d'un script sont les memes.
+bool sameTiming(const Script& s, const Entry& e) {
+    return !sameName(s.event, viewcycle::kCycleEvent)
+        || (viewcycle::momentOf(s) == std::clamp(e.stage, viewcycle::kFirstMoment, viewcycle::kLastMoment)
+            && viewcycle::everyOf(s) == std::clamp(e.everyCycles, 1, viewcycle::kMaxEvery)
+            && viewcycle::plainCondition(s.when) == viewcycle::plainCondition(e.when));
+}
+
 bool sameSignature(const HmiOperator& a, const HmiOperator& b) {
     return a.op == b.op && sameName(a.left, b.left) && sameName(a.right, b.right) && (a.op != "TO" || sameName(a.result, b.result));
 }
@@ -151,14 +171,25 @@ File fromView(const View& v, std::string_view onlyEvent) {
     f.role = v.role;
     for (const auto ev : kViewEvents) {
         if (!onlyEvent.empty() && !sameName(ev, onlyEvent)) continue;
-        const Script* s = scriptOf(v, ev);
-        if (!s || normalBody(s->body).empty()) continue;
-        Entry e;
-        e.event = std::string(ev);
-        e.lang = s->lang;
-        e.body = s->body;
-        e.decls = s->decls;                                 // 1.11.18 (lot 3)
-        f.entries.push_back(std::move(e));
+        // 1.27.0 : tous les scripts de cycle, dans l'ordre ou ils tournent (un seul pour OnOpen et OnClose).
+        std::vector<const Script*> list;
+        if (sameName(ev, viewcycle::kCycleEvent)) list = viewcycle::cycleScripts(v);
+        else if (const Script* s = scriptOf(v, ev)) list.push_back(s);
+        for (const Script* s : list) {
+            if (normalBody(s->body).empty()) continue;
+            Entry e;
+            e.event = std::string(ev);
+            e.lang = s->lang;
+            e.body = s->body;
+            e.decls = s->decls;                                 // 1.11.18 (lot 3)
+            if (viewcycle::isCycleScript(*s)) {                 // 1.27.0 : son nom s'il le distingue (l'OnCycle d'avant, seul : aucun)
+                if (!viewcycle::defaultName(*s, v.name) && (viewcycle::customized(*s) || list.size() > 1)) e.name = s->name;
+                e.stage = viewcycle::momentOf(*s);
+                e.everyCycles = viewcycle::everyOf(*s);
+                e.when = viewcycle::plainCondition(s->when);
+            }
+            f.entries.push_back(std::move(e));
+        }
     }
     return f;
 }
@@ -200,7 +231,13 @@ std::string write(const File& f) {
             if (!e.op.description.empty()) out += " description=" + quote(e.op.description);
             out += " *)\n";
         } else {
-            out += "(*# script evenement=" + e.event + " langage=" + std::string(scriptLangKey(e.lang)) + " *)\n";
+            out += "(*# script evenement=" + e.event + " langage=" + std::string(scriptLangKey(e.lang));
+            // 1.27.0 : un script de cycle - seulement ce qui change de l'OnCycle d'avant.
+            if (!e.name.empty()) out += " nom=" + quote(e.name);
+            if (e.stage != viewcycle::kLegacyMoment) out += " moment=" + std::to_string(e.stage);
+            if (e.everyCycles != 1) out += " frequence=" + std::to_string(e.everyCycles);
+            if (!e.when.empty()) out += " condition=" + quote(e.when);
+            out += " *)\n";
         }
         for (const auto& d : e.decls) {                     // 1.11.18 (lot 3, decision D4)
             out += "(*# declaration genre=" + std::string(declKindKey(d.kind)) + " nom=" + quote(d.name) + " type=" + quote(d.type);
@@ -314,6 +351,17 @@ bool read(std::string_view text, File& out, std::string* why) {
                 if (!l) return fail("Langage inconnu : " + lang + where + ".");
                 e.lang = *l;
             }
+            // 1.27.0 : un script de cycle - son nom, son moment, sa frequence, sa condition.
+            e.name = at(kv, "nom");
+            if (const std::string& m = at(kv, "moment"); !m.empty()) {
+                const int n = std::atoi(m.c_str());
+                if (n < viewcycle::kFirstMoment || n > viewcycle::kLastMoment)
+                    return fail("Moment inconnu : \xC2\xAB " + m + " \xC2\xBB" + where + " (apr\xC3\xA8s l'\xC3\xA9tape 1 \xC3\xA0 9).");
+                e.stage = n;
+            }
+            if (const std::string& fq = at(kv, "frequence"); !fq.empty())
+                e.everyCycles = std::clamp(std::atoi(fq.c_str()), 1, viewcycle::kMaxEvery);
+            e.when = viewcycle::plainCondition(at(kv, "condition"));
             out.entries.push_back(std::move(e));
             open = &out.entries.back();
             continue;
@@ -392,9 +440,10 @@ std::string_view stateLabel(State s) noexcept {
 std::vector<State> compareView(const File& f, const View& v) {
     std::vector<State> out;
     for (const auto& e : f.entries) {
-        const Script* s = scriptOf(v, e.event);
+        const Script* s = scriptFor(v, e);                  // 1.27.0 : un script de cycle, par son nom
         if (!s || normalBody(s->body).empty()) out.push_back(State::New);
-        else if (normalBody(s->body) == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls)) out.push_back(State::Same);
+        else if (normalBody(s->body) == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls) && sameTiming(*s, e))
+            out.push_back(State::Same);
         else out.push_back(State::Different);
     }
     return out;
@@ -418,12 +467,15 @@ std::string describe(const File& f, std::size_t index, State st, const View* vie
     const auto& e = f.entries[index];
     const std::size_t n = lineCount(e.body);
     std::string head = f.genre == Genre::Operators ? operatorSignature(e.op) : e.event;
+    if (f.genre != Genre::Operators && !e.name.empty()) head += " " + e.name;                // 1.27.0 : un script de cycle nomme
+    if (f.genre != Genre::Operators && sameName(e.event, viewcycle::kCycleEvent) && e.stage != viewcycle::kLegacyMoment)
+        head += " (" + viewcycle::momentLabel(e.stage) + ")";
     std::string out = head + " \xC2\xB7 " + std::to_string(n) + " ligne" + (n > 1 ? "s" : "");
     if (st == State::New) return out + " \xC2\xB7 nouveau";
     if (st == State::Same) return out + " \xC2\xB7 identique (rien ne change)";
     std::size_t ours = 0;
     if (view)
-        if (const Script* s = scriptOf(*view, e.event)) ours = lineCount(s->body);
+        if (const Script* s = scriptFor(*view, e)) ours = lineCount(s->body);
     return out + " \xC2\xB7 diff\xC3\xA9rent" + (view ? " de l'actuel (" + std::to_string(ours) + " ligne" + (ours > 1 ? "s" : "") + ")" : std::string{});
 }
 
@@ -437,22 +489,36 @@ std::size_t applyToView(Project& p, View& v, const File& f, const std::vector<bo
             e.event = knownEvent(plainEvent, ev) ? ev : std::string("OnOpen");
         }
         Script* s = nullptr;
-        for (auto& sc : v.scripts)
-            if (sameName(sc.event, e.event)) s = &sc;
+        if (sameName(e.event, viewcycle::kCycleEvent) && !e.name.empty()) {      // 1.27.0 : un script de cycle, par son nom
+            for (auto& sc : v.scripts)
+                if (viewcycle::isCycleScript(sc) && sameName(sc.name, e.name)) s = &sc;
+        } else {
+            for (auto& sc : v.scripts)
+                if (sameName(sc.event, e.event)) s = &sc;
+        }
+        const bool cycle = sameName(e.event, viewcycle::kCycleEvent);
+        const auto timing = [&](Script& sc) {                                     // 1.27.0 : son moment, sa frequence, sa condition
+            if (!cycle) return;
+            sc.stage = std::clamp(e.stage, viewcycle::kFirstMoment, viewcycle::kLastMoment);
+            sc.everyCycles = std::clamp(e.everyCycles, 1, viewcycle::kMaxEvery);
+            sc.when = viewcycle::plainCondition(e.when);
+        };
         if (!s) {
             Script made;
             made.id = p.allocate();
-            made.name = v.name + "." + e.event;
+            made.name = !e.name.empty() ? viewcycle::freeName(v, e.name) : v.name + "." + e.event;
             made.lang = e.lang;
             made.event = e.event;
             made.body = e.body + "\n";
             made.decls = e.decls;                           // 1.11.18 (lot 3) : leurs identifiants donnes par la commande
+            timing(made);
             v.scripts.push_back(std::move(made));
             ++changed;
             continue;
         }
         const std::string ours = normalBody(s->body);
-        if (ours == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls)) continue;
+        if (ours == normalBody(e.body) && s->lang == e.lang && sameDeclarations(s->decls, e.decls) && sameTiming(*s, e)) continue;
+        timing(*s);
         if (mode == Mode::Append && !ours.empty()) {
             s->body = ours + "\n\n(* ---- import\xC3\xA9 de " + (f.source.empty() ? std::string("un fichier") : f.source) + " ---- *)\n" + e.body + "\n";
             // 1.11.18 (lot 3) : ses declarations, sauf celles dont le script a deja le nom.

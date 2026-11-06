@@ -36,6 +36,16 @@ struct ShelfDef { const char* key; const char* title; const char* summary; bool 
 // L'ordre est celui de l'arbre : un dossier suit son parent (la cle avant le dernier '/').
 const ShelfDef kShelves[] = {
     {"", "Fonctions", "Toutes les fonctions du langage de l'IHM, rang\xC3\xA9" "es par ce qu'on veut faire.", false},
+    // 1.27.0 : les types de l'IHM - les objets d'une vue et les ressources, en tete.
+    {"objets", "Objets (Object)", "Trouver les objets d'une vue, les modifier, les copier, les placer, les aligner, les montrer ou les cacher.", false},
+    {"objets/trouver", "Trouver", "Un objet par son nom (un pointeur), une liste par un motif, un genre, une zone.", false},
+    {"objets/modifier", "Modifier, copier", "\xC3\x89" "crire une propri\xC3\xA9t\xC3\xA9, en copier d'un objet \xC3\xA0 l'autre, rendre les valeurs de conception.", false},
+    {"objets/position", "Position, taille", "Placer, d\xC3\xA9" "caler, dimensionner un objet ou une liste.", false},
+    {"objets/aligner", "Aligner (une liste)", "Le haut, le bas, la gauche, la droite, les centres d'une liste d'objets, sur l'un d'eux ou sur la liste.", false},
+    {"objets/repartir", "R\xC3\xA9partir, \xC3\xA9galiser", "Des \xC3\xA9" "carts \xC3\xA9gaux, une m\xC3\xAAme taille, une grille.", false},
+    {"objets/visibilite", "Visibilit\xC3\xA9, \xC3\xA9tat", "Montrer, cacher, activer, faire clignoter : selon une condition, ou tout de suite.", false},
+    {"objets/ordre", "Ordre, calques", "Devant, derri\xC3\xA8re, un cran plus haut ; un autre calque.", false},
+    {"ressources", "Ressources (Font, Texture, Sound, Style)", "Une police, une image, un son, un style nomm\xC3\xA9 : les trouver, les mesurer, les jouer, les appliquer ; une couleur s\xC3\xA9mantique.", false},
     {"nombres", "Nombres", "Calculer, borner, interpoler, les entiers et leurs bornes, le hasard, les bits.", false},
     {"nombres/calcul", "Calcul", "Valeur absolue, racines, puissances, logarithmes, arrondis, reste.", false},
     {"nombres/trigo", "Trigonom\xC3\xA9trie", "Sinus, cosinus, tangente, leurs inverses, ATAN2, HYPOT (en radians).", false},
@@ -96,6 +106,15 @@ const ShelfDef kShelves[] = {
 struct Rule { const char* category; const char* shelf; std::vector<std::string_view> names; };
 const std::vector<Rule>& rules() {
     static const std::vector<Rule> r = {
+        // 1.27.0 : les types de l'IHM
+        {"objets", "objets/trouver", {"GetObject", "ObjectsOf", "ObjectsIn", "ObjectsOfKind"}},
+        {"objets", "objets/modifier", {"EditObject", "CopyObjectTo", "ResetObject", "ObjectProp"}},
+        {"objets", "objets/position", {"MoveObject", "MoveBy", "ResizeObject", "ResizeBy", "PlaceObject"}},
+        {"objets", "objets/aligner", {"AlignTop", "AlignBottom", "AlignLeft", "AlignRight", "AlignCenterH", "AlignCenterV", "AlignCenter"}},
+        {"objets", "objets/repartir", {"JustifyH", "JustifyV", "SameWidth", "SameHeight", "SameSize", "ArrangeGrid"}},
+        {"objets", "objets/visibilite", {"ShowIf", "HideIf", "EnableIf", "BlinkIf", "Show", "Hide", "Enable", "Disable"}},
+        {"objets", "objets/ordre", {}},
+        {"ressources", "ressources", {}},
         {"math", "nombres/interpoler", {"LERP"}},
         {"math", "nombres/trigo", {"SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "ATAN2", "HYPOT"}},
         {"math", "nombres/calcul", {}},
@@ -303,15 +322,19 @@ const std::vector<TypeGuide>& guides() {
 }
 
 std::vector<TypeShelf> buildTypeShelves() {
-    std::vector<TypeShelf> out(5);
+    std::vector<TypeShelf> out(6);
     out[0] = {"nombres-bits", "Nombres et bits", "Les bool\xC3\xA9" "ens, les entiers sign\xC3\xA9s et non sign\xC3\xA9s, les mots, les r\xC3\xA9" "els.", {}};
     out[1] = {"textes-dates", "Textes, dur\xC3\xA9" "es et dates", "Les textes, les caract\xC3\xA8res, les dur\xC3\xA9" "es, les dates et les heures.", {}};
     out[2] = {"conteneurs", "Conteneurs", "Plusieurs valeurs dans une variable : lequel choisir, et comment s'en servir.", {}};
     out[3] = {"references", "R\xC3\xA9" "f\xC3\xA9rences", "D\xC3\xA9signer une variable, parcourir une MAP pas \xC3\xA0 pas.", {}};
     out[4] = {"generiques", "G\xC3\xA9n\xC3\xA9riques", "ANY, ANY_NUM\xE2\x80\xA6 : ce qu'une signature accepte. Ils ne se d\xC3\xA9" "clarent pas.", {}};
+    // 1.27.0 : les types de l'IHM (Object, Font, Texture, Sound, Style).
+    out[5] = {"ihm", "Types de l'IHM", "Object, Font, Texture, Sound, Style : un objet d'une vue, une ressource du projet, d\xC3\xA9" "sign\xC3\xA9s sans \xC3\xAAtre copi\xC3\xA9s ; leurs attributs et leurs fonctions (Objets, Ressources).", {}};
     const auto& base = tree().types;
-    for (std::size_t i = 0; i < base.size(); ++i)
-        out[base[i].category.rfind("Textes", 0) == 0 ? 1 : 0].entries.push_back({TypeEntry::Kind::Base, i, base[i].name});
+    for (std::size_t i = 0; i < base.size(); ++i) {
+        const std::size_t shelf = base[i].category == "Types de l'IHM" ? 5 : base[i].category.rfind("Textes", 0) == 0 ? 1 : 0;
+        out[shelf].entries.push_back({TypeEntry::Kind::Base, i, base[i].name});
+    }
     const auto place = [](std::string_view name) -> int {
         if (name == "STRING[n]") return 1;
         if (name == "REF_TO" || name == "POINTER TO" || name == "MAP_ITERATOR") return 3;

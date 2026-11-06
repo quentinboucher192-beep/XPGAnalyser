@@ -1048,7 +1048,8 @@ bool richLocalType(std::string_view type, const std::function<bool(std::string_v
         return isNamespaceName(t) && knownType && knownType(t);
     }
     for (const char c : u) if (!identChar(c)) return false;
-    return knownType && knownType(type);
+    if (knownType && knownType(type)) return true;
+    return !sim::handleTypeName(u).empty();     // 1.27.0 : Object, Font, Texture, Sound, Style
 }
 
 namespace {

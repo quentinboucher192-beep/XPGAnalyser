@@ -293,7 +293,12 @@ std::string declarationsCanon(const std::vector<Declaration>& decls) {
 }
 std::string scriptText(const Script& s) {
     return "langage=" + std::string(scriptLangKey(s.lang)) + " evenement=" + s.event + " periode=" + std::to_string(s.periodMs) + " surveille=" + s.watch
-         + (s.detached ? " detache=1" : "") + "\n" + s.body + declarationsCanon(s.decls);                  // 1.12.26 : detache
+         + (s.detached ? " detache=1" : "")                                                                // 1.12.26 : detache
+         // 1.27.0 : le moment d'un script de cycle, sa frequence, sa condition (seulement s'ils changent : les empreintes d'avant)
+         + (s.stage != 4 ? " moment=" + std::to_string(s.stage) : std::string{})
+         + (s.everyCycles != 1 ? " frequence=" + std::to_string(s.everyCycles) : std::string{})
+         + (s.when.empty() ? std::string{} : " condition=" + s.when)
+         + "\n" + s.body + declarationsCanon(s.decls);
 }
 std::string functionCanon(const HmiFunction& f) {
     return "retour=" + f.returnType + " virtuelle=" + std::string(f.isVirtual ? "1" : "0") + "\n" + f.body + declarationsCanon(f.decls);

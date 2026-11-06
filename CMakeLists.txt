@@ -592,6 +592,9 @@ if(XPG_BUILD_TESTS)
     # et clavier, sans ecran - on verifie le document ET la pile d'annulation.
     xpg_add_test_executable(hmi_test tests/hmi_test.cpp)
     xpg_target_link_libraries(hmi_test PRIVATE xpg_hmi)
+    # ---- 1.27.0 : le cycle d'une vue, deballe (les scripts de cycle a leur moment, 1 cycle sur N, la condition) ----
+    xpg_add_test_executable(hmi_cycle_test tests/hmi_cycle_test.cpp)
+    xpg_target_link_libraries(hmi_cycle_test PRIVATE xpg_hmi)
     # ---- Lot API 8 : les expressions impossibles (Compiler, Generer) ----
     xpg_add_test_executable(hmicheck_expr_test tests/hmicheck_expr_test.cpp)
     xpg_target_link_libraries(hmicheck_expr_test PRIVATE xpg_hmi)
@@ -629,6 +632,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_reperes_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_natives_test tests/hmi_natives_test.cpp)      # 1.12.0 : les natives de l'IHM, chaque exemple execute
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(hmi_objets_test tests/hmi_objets_test.cpp)        # 1.27.0 : les types de l'IHM (Object, Font...) et leurs natives
+    xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(erreurs_test tests/erreurs_test.cpp)              # 1.13.0 : LEVER, RELEVER, CATCH e, codes E_*, WAIT_UNTIL
     xpg_target_link_libraries(erreurs_test PRIVATE xpg_hmi)
     xpg_add_test_executable(generiques_test tests/generiques_test.cpp)        # 1.13.0 : les fonctions generiques (TEMPLATE <T>)
@@ -948,6 +953,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm
                                         ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)   # 1.26.0 : les polices fournies
     xpg_add_test(NAME stylestypes  COMMAND styles_types_test)   # 1.23.0 : les styles par type d'objet
+    xpg_add_test(NAME hmicycle     COMMAND hmi_cycle_test)      # 1.27.0 : le cycle d'une vue, deballe
     xpg_add_test(NAME semanticcolors  COMMAND semantic_colors_test)   # 1.23.1 : les couleurs semantiques (@Nom)
     xpg_add_test(NAME soundlibrary  COMMAND sound_library_test)   # 1.24.0 : la bibliotheque de sons (natifs, Mes sons)
     xpg_add_test(NAME truetype      COMMAND truetype_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)   # 1.26.0 : les polices TrueType
@@ -966,6 +972,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmitypes     COMMAND hmi_types_test)                   # ---- 1.11.19 : le registre des types (lot 6) ----
     xpg_add_test(NAME hmireperes   COMMAND hmi_reperes_test)                 # ---- 1.11.24 : les reperes dans les symboles ----
     xpg_add_test(NAME hminatives   COMMAND hmi_natives_test)                 # ---- 1.12.0 : les natives de l'IHM ----
+    xpg_add_test(NAME hmiobjets    COMMAND hmi_objets_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)                  # 1.27.0 : les types de l'IHM et les natives des objets
     xpg_add_test(NAME erreurs      COMMAND erreurs_test)                     # ---- 1.13.0 : LEVER, RELEVER, WAIT_UNTIL ----
     xpg_add_test(NAME generiques   COMMAND generiques_test)                  # ---- 1.13.0 : les fonctions generiques (TEMPLATE) ----
     xpg_add_test(NAME testsunitaires COMMAND tests_unitaires_test)           # ---- 1.13.0 (lot J4) : les tests unitaires des fonctions ----

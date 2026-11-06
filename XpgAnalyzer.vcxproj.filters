@@ -1339,6 +1339,9 @@
     <ClCompile Include="src\app\hmi\HmiConsole.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\hmi\HmiCycleStages.cpp">
+      <Filter>app\hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\hmi\HmiCyclicPage.cpp">
       <Filter>app\hmi</Filter>
     </ClCompile>
@@ -1756,6 +1759,9 @@
     <ClCompile Include="src\hmi\HmiRuntimeFiles.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
+    <ClCompile Include="src\hmi\HmiRuntimeObjects.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
     <ClCompile Include="src\hmi\HmiScriptTask.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
@@ -1808,6 +1814,9 @@
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiVertices.cpp">
+      <Filter>hmi</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hmi\HmiViewCycle.cpp">
       <Filter>hmi</Filter>
     </ClCompile>
     <ClCompile Include="src\hmi\HmiViewPaths.cpp">
@@ -3055,6 +3064,9 @@
     <ClInclude Include="src\app\hmi\HmiConsole.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\hmi\HmiCycleStages.hpp">
+      <Filter>app\hmi</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\hmi\HmiCyclicPage.hpp">
       <Filter>app\hmi</Filter>
     </ClInclude>
@@ -3470,6 +3482,9 @@
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiVertices.hpp">
+      <Filter>hmi</Filter>
+    </ClInclude>
+    <ClInclude Include="src\hmi\HmiViewCycle.hpp">
       <Filter>hmi</Filter>
     </ClInclude>
     <ClInclude Include="src\hmi\HmiViewPaths.hpp">

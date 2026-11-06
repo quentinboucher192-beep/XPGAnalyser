@@ -316,6 +316,10 @@ struct Writer {
                 if (o.items.empty() || !o.items.front()) { out += "null"; return true; }
                 return write(*o.items.front(), level);
             }
+            case TypeDesc::Kind::Handle:                // 1.27.0 : un objet ou une ressource de l'IHM, par son nom
+                if (!o.bound) { out += "null"; return true; }
+                quote(handleText(o));
+                return true;
             case TypeDesc::Kind::List:
             case TypeDesc::Kind::Array: {
                 if (o.items.empty()) { out += "[]"; return true; }

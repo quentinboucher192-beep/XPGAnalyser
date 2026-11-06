@@ -385,7 +385,8 @@ private:
         r.key = e->key;
         r.category = e->category;
         r.entry = e;
-        r.rich = r.rich || e->category == Category::Callback;       // 1.12.20 : un type rappel nomme : un objet de l'IHM
+        r.rich = r.rich || e->category == Category::Callback || e->category == Category::Ihm;   // 1.12.20, 1.27.0 : un objet de l'IHM
+        r.dynamic = r.dynamic || e->category == Category::Ihm;       // 1.27.0 : une poignee n'a pas de place Modbus
         r.ok = e->usable(use);
         if (!r.ok) r.why = e->name + " ne convient pas \xC3\xA0 " + useText(use);
         // 1.12.20 (lot G) : une structure generique s'emploie avec ses types (T_Mesure<REAL>).
@@ -648,6 +649,7 @@ std::string_view categoryLabel(Category c) noexcept {
         case Category::PlcType: return "DDT de l'API";
         case Category::Reference: return "R\xC3\xA9" "f\xC3\xA9rences";
         case Category::Callback: return "Rappels";                 // 1.12.19
+        case Category::Ihm: return "Types de l'IHM";               // 1.27.0
         case Category::Generic: return "G\xC3\xA9n\xC3\xA9riques";
         case Category::Void: return "Sans valeur";
     }
@@ -683,6 +685,28 @@ Registry::Registry() {
     any.uses = UseDeclaration | UseParameter | UseReturn;
     any.proposed = UseDeclaration | UseParameter | UseReturn;
     entries_.push_back(std::move(any));
+    // 1.27.0 : LES TYPES DE L'IHM - une poignee vers un objet d'une vue ou une ressource du projet (sim::handleType).
+    // Dans un code seulement (une declaration, un retour) : pas de place Modbus, pas un parametre de popup.
+    struct IhmType { const char* name; const char* doc; };
+    static const IhmType kIhmTypes[] = {
+        {"Object", "Un objet d'une vue (bouton, voyant, tableau\xE2\x80\xA6) : Vue_Accueil.Pompe_1, ou Pompe_1 dans sa vue. Ses propri\xC3\xA9t\xC3\xA9s "
+                   "se lisent et s'\xC3\xA9" "crivent (o.Fill, o.X) ; GetObject, ObjectsOf, AlignTop, ShowIf\xE2\x80\xA6"},
+        {"Font", "Une police du projet : GetFont('Carlito Gras'). Name, Family, Style, Glyphs ; TextWidth, HasGlyph."},
+        {"Texture", "Une image du projet : GetTexture('logo.png'). Name, Width, Height, Format ; Image_1.Image := t."},
+        {"Sound", "Un son du projet ou de la biblioth\xC3\xA8que : GetSound('Bip court'). Name, Duration, Playing, Volume ; Play, Stop."},
+        {"Style", "Un style nomm\xC3\xA9 : GetStyle('Alarme'). Name, Folder, Builtin, Users ; ApplyStyle, StyleValue."},
+    };
+    for (const auto& h : kIhmTypes) {
+        Entry e;
+        e.key = std::string("ihmtype:") + h.name;
+        e.name = h.name;
+        e.category = Category::Ihm;
+        e.provenance = "IHM Studio";
+        e.doc = h.doc;
+        e.uses = UseDeclaration | UseReturn;
+        e.proposed = UseDeclaration | UseReturn;
+        entries_.push_back(std::move(e));
+    }
     Entry none;
     none.key = "void";
     none.name = "Aucun";

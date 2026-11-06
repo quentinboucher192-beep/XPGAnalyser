@@ -19252,10 +19252,19 @@ const std::vector<Topic>& topics() {
              {K::Code, "// En-t\xC3\xAAte du projet Armoire_Gaz (lecture seule)\nusing T_Filtre = "
                          "std::function<BOOL(REAL)>;\nstruct T_Lot {\n    STRING Nom;\n    REAL "
                          "Poids;\n};\nBOOL Est_Valide(REAL x);\nextern REAL Niveau;", "C++"},
-             {K::Heading, "Les scripts de vue", {}},
+             {K::Heading, "Les scripts de vue", {}, "1.27.0"},
              {K::Paragraph, "Sous une vue, **Scripts** : OnOpen (\xC3\xA0 l'ouverture), OnCycle (\xC3\xA0 "
-                         "chaque cycle IHM), OnClose (\xC3\xA0 la fermeture). Taper dans un "
-                         "\xC3\xA9v\xC3\xA9nement vide cr\xC3\xA9" "e son script.", {}},
+                         "chaque cycle de la vue), OnClose (\xC3\xA0 la fermeture). Taper dans un "
+                         "\xC3\xA9v\xC3\xA9nement vide cr\xC3\xA9" "e son script. L'**OnCycle se "
+                         "d\xC3\xA9" "balle** : une vue a plusieurs **scripts de cycle**, chacun \xC3\xA0 "
+                         "son moment dans le cycle de la vue - apr\xC3\xA8s la lecture des "
+                         "\xC3\xA9quipements, apr\xC3\xA8s les alarmes, apr\xC3\xA8s les formules des "
+                         "objets, juste avant le dessin\xE2\x80\xA6 -, 1 cycle sur N, ou seulement quand une "
+                         "formule est vraie. Au milieu, la section **Ex\xC3\xA9" "cution** montre les dix "
+                         "\xC3\xA9tapes du cycle, dans l'ordre o\xC3\xB9 le moteur les fait, et sous chacune "
+                         "les scripts qui tournent apr\xC3\xA8s elle : tu les y glisses. Un projet existant "
+                         "garde son OnCycle entre 4 et 5, comme avant. Voir \xC2\xAB Le cycle d'une vue : "
+                         "chaque script \xC3\xA0 son moment \xC2\xBB.", {}, "1.27.0"},
              {K::Heading, "L'\xC3\xA9" "diteur", {}},
              {K::Paragraph, "Coloration, repli, num\xC3\xA9ros de ligne, diagnostics en direct (ligne, "
                          "gravit\xC3\xA9, message en fran\xC3\xA7" "ais), ligne fautive marqu\xC3\xA9" "e ; "
@@ -19405,7 +19414,7 @@ const std::vector<Topic>& topics() {
                          "pendant la frappe : voir \xC2\xAB Les erreurs des scripts, \xC3\xA0 leur place "
                          "\xC2\xBB.", {}, "1.10"},
          },
-         {"variables-locales", "fonctions", "reference", "aide-saisie", "verifier", "dossiers", "parametres-popups", "erreurs-scripts", "fonctions-internes", "map-iterateurs", "dialecte-ihm", "operateurs", "deboguer-scripts"},
+         {"cycle-vue", "variables-locales", "fonctions", "reference", "aide-saisie", "verifier", "dossiers", "parametres-popups", "erreurs-scripts", "fonctions-internes", "map-iterateurs", "dialecte-ihm", "operateurs", "deboguer-scripts"},
          {},
          {"scripts", "scripts-vue"},
          {{"PNG_067_programmation_generale_scripts_st.png", "La programmation g\xC3\xA9n\xC3\xA9rale : les scripts, leurs propri\xC3\xA9t\xC3\xA9s et l'\xC3\xA9" "diteur (les variables IHM ont leur onglet, Variables IHM)."}, {"PNG_069_scripts_de_vue_erreur_ligne.png", "Les scripts d'une vue : une erreur marqu\xC3\xA9" "e \xC3\xA0 sa ligne."}},
@@ -19413,6 +19422,130 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}},
+        // ---- Programmer  Scripts et fonctions / cycle-vue
+        {"cycle-vue", "Le cycle d'une vue : chaque script \xC3\xA0 son moment", "Programmer \xE2\x80\xBA Scripts et fonctions",
+         "L'OnCycle se d\xC3\xA9" "balle : une vue a plusieurs scripts de cycle, chacun \xC3\xA0 son moment "
+         "exact dans le cycle de la vue. La section Ex\xC3\xA9" "cution montre les dix \xC3\xA9tapes du "
+         "cycle, dans l'ordre o\xC3\xB9 le moteur les fait, avec leur dur\xC3\xA9" "e mesur\xC3\xA9" "e en "
+         "simulation ; tu y glisses chaque script.",
+         {
+             {K::Heading, "Les dix \xC3\xA9tapes du cycle d'une vue", {}},
+             {K::Paragraph, "Une vue ouverte en simulation fait, \xC3\xA0 chaque cycle de l'IHM (sa "
+                         "p\xC3\xA9riode : Configuration \xE2\x80\xBA Projet, 100 ms par d\xC3\xA9" "faut), "
+                         "ces dix \xC3\xA9tapes, dans cet ordre. La section **Ex\xC3\xA9" "cution** (au "
+                         "milieu de l'onglet Scripts de la vue) les montre, chacune avec sa ligne et sa "
+                         "**dur\xC3\xA9" "e mesur\xC3\xA9" "e** \xC3\xA0 la derni\xC3\xA8re simulation ; en "
+                         "haut, le total du cycle sur sa p\xC3\xA9riode.", {}},
+             {K::Table, "\xC3\x89tape\tCe que le moteur fait\n1 Lecture des \xC3\xA9quipements\tIl relit la "
+                         "table des variables li\xC3\xA9" "es (une liaison ajout\xC3\xA9" "e compte tout de "
+                         "suite) et suit les variables des alarmes. Les valeurs arrivent par la "
+                         "t\xC3\xA2" "che de communication de chaque \xC3\xA9quipement, \xC3\xA0 sa "
+                         "p\xC3\xA9riode : un script lit toujours la derni\xC3\xA8re valeur re\xC3\xA7ue, et "
+                         "sa qualit\xC3\xA9.\n2 Entr\xC3\xA9" "es\tLes gestes tenus : l'appui long "
+                         "arriv\xC3\xA9 \xC3\xA0 sa dur\xC3\xA9" "e, les touches tenues et "
+                         "r\xC3\xA9p\xC3\xA9t\xC3\xA9" "es, le bouton \xC3\xA0 confirmation maintenu. Un "
+                         "clic, une touche, un gliss\xC3\xA9 partent d\xC3\xA8s qu'ils arrivent, entre deux "
+                         "cycles.\n3 Minuteries\tIHM_APRES et IHM_CHAQUE arriv\xC3\xA9s \xC3\xA0 leur heure, "
+                         "IHM_SUR_CHANGEMENT, la tranche des scripts d\xC3\xA9tach\xC3\xA9s, les actions "
+                         "Minuterie.\n4 Scripts g\xC3\xA9n\xC3\xA9raux cycliques\tLes scripts "
+                         "g\xC3\xA9n\xC3\xA9raux Cyclique arriv\xC3\xA9s \xC3\xA0 leur p\xC3\xA9riode et Sur "
+                         "changement ; juste avant eux, les m\xC3\xA9" "dias (GIF, vid\xC3\xA9os, documents, "
+                         "calculatrices).\n5 D\xC3\xA9" "clencheurs des objets\tLes actions Front montant, "
+                         "Front descendant et Sur changement de la vue et de ses objets. Vue par vue : la "
+                         "vue, puis chaque popup ouverte.\n6 Alarmes\tLes conditions des alarmes "
+                         "(apparition, disparition, d\xC3\xA9lai), leurs sons r\xC3\xA9p\xC3\xA9t\xC3\xA9s, "
+                         "la fin des mises de c\xC3\xB4t\xC3\xA9.\n7 Courbes, archives, compteurs\tLes "
+                         "\xC3\xA9" "chantillons des courbes et des archives, les compteurs horaires, la "
+                         "production, les r\xC3\xA9glages PID, les rapports \xC3\xA0 leur heure.\n8 Formules "
+                         "des objets (fx)\tL'\xC3\xA9" "cran de la simulation calcule les formules des "
+                         "objets de la vue montr\xC3\xA9" "e (couleurs, textes, visibilit\xC3\xA9, styles "
+                         "calcul\xC3\xA9s).\n9 Dessin de la vue\tL'\xC3\xA9" "cran dessine la vue : le fond, "
+                         "les calques, les objets, les popups.\n10 \xC3\x89" "critures "
+                         "envoy\xC3\xA9" "es\tUne \xC3\xA9" "criture part d\xC3\xA8s qu'un script ou une "
+                         "action la fait ; pour un \xC3\xA9quipement, elle est remise \xC3\xA0 sa liaison, "
+                         "que la t\xC3\xA2" "che de communication envoie \xC3\xA0 son prochain passage, "
+                         "avant ses lectures. La section compte les \xC3\xA9" "critures du cycle.", {}},
+             {K::Paragraph, "OnOpen tourne avant le premier cycle de la vue, OnClose apr\xC3\xA8s le dernier ; "
+                         "le cycle suivant reprend en 1.", {}},
+             {K::Heading, "Chaque script \xC3\xA0 son moment", {}},
+             {K::Paragraph, "Sous l'OnCycle (la liste **Scripts de la vue** le **d\xC3\xA9" "balle** : un "
+                         "script de cycle par ligne, son moment \xC3\xA0 c\xC3\xB4t\xC3\xA9), chaque script "
+                         "de cycle tourne **apr\xC3\xA8s une \xC3\xA9tape** de 1 \xC3\xA0 9 ; plusieurs "
+                         "scripts apr\xC3\xA8s la m\xC3\xAAme \xC3\xA9tape tournent dans leur **rang** (1 : "
+                         "le premier).", {}},
+             {K::Bullet, "**Glisse sa pastille** dans la section Ex\xC3\xA9" "cution, entre deux "
+                         "\xC3\xA9tapes : une ligne pointill\xC3\xA9" "e dit o\xC3\xB9 il va tourner et ce "
+                         "que \xC3\xA7" "a change (\xC2\xAB D\xC3\xA9poser ici : apr\xC3\xA8s 8 Formules, "
+                         "avant 9 Dessin \xE2\x80\x94 tes modifications d'objets seront dessin\xC3\xA9" "es "
+                         "dans ce cycle \xC2\xBB). Une ligne de la liste se glisse aussi sur la section, ou "
+                         "entre deux scripts de cycle de la liste (elle prend le moment et le rang du "
+                         "voisin).", {}},
+             {K::Bullet, "**+ Script de cycle** (sous la liste) cr\xC3\xA9" "e un script de cycle "
+                         "apr\xC3\xA8s l'\xC3\xA9tape du script choisi (sinon apr\xC3\xA8s 4) ; **glisse le "
+                         "bouton** sur la section pour le cr\xC3\xA9" "er directement \xC3\xA0 "
+                         "l'\xC3\xA9tape voulue. Renomme-le dans ses propri\xC3\xA9t\xC3\xA9s (**Nom**).", {}},
+             {K::Bullet, "Dans ses **propri\xC3\xA9t\xC3\xA9s** : **Moment** (le m\xC3\xAAme choix, au "
+                         "clavier), **Rang dans l'\xC3\xA9tape**, **Fr\xC3\xA9quence**, **Condition**, "
+                         "**Dur\xC3\xA9" "e mesur\xC3\xA9" "e** (sa derni\xC3\xA8re ex\xC3\xA9" "cution en "
+                         "simulation).", {}},
+             {K::Bullet, "Chaque changement est une modification du projet : **Ctrl+Z** le d\xC3\xA9" "fait. "
+                         "Supprimer (l'outil de la barre) retire un script de cycle.", {}},
+             {K::Table, "Plac\xC3\xA9 apr\xC3\xA8s\tIl voit\n1 Lecture\tles variables li\xC3\xA9" "es, "
+                         "avant les gestes et les minuteries du cycle\n3 Minuteries\tce que IHM_APRES, "
+                         "IHM_CHAQUE viennent de faire\n4 Scripts g\xC3\xA9n\xC3\xA9raux\tcomme l'OnCycle "
+                         "d'avant : apr\xC3\xA8s les scripts g\xC3\xA9n\xC3\xA9raux, avant les "
+                         "d\xC3\xA9" "clencheurs\n6 Alarmes\tles alarmes de ce cycle (apparues, "
+                         "disparues)\n8 Formules\tles formules calcul\xC3\xA9" "es ; ce qu'il change est "
+                         "dessin\xC3\xA9 dans ce cycle\n9 Dessin\tle dessin fait ; ce qu'il change se voit "
+                         "au cycle suivant", {}},
+             {K::Tip, "Un projet existant ne change pas : son OnCycle est un script de cycle apr\xC3\xA8s "
+                         "4, chaque cycle, sans condition - exactement l\xC3\xA0 o\xC3\xB9 il tournait. Rien "
+                         "n'est \xC3\xA9" "crit de plus dans le projet tant que tu ne changes pas son moment.", {}},
+             {K::Heading, "Fr\xC3\xA9quence et condition", {}},
+             {K::Bullet, "**Fr\xC3\xA9quence** : chaque cycle, ou **1 cycle sur N** (2 \xC3\xA0 1000) : le "
+                         "script tourne au premier cycle de la vue, puis tous les N cycles ; la vue "
+                         "rouverte, il repart.", {}},
+             {K::Bullet, "**Condition** : une formule (fx), par exemple `=Mode_Auto` ; le script ne tourne "
+                         "que quand elle est vraie - sans IF autour de son code. Elle se lit comme une "
+                         "formule de la vue (ses param\xC3\xA8tres, ses objets) ; **Compiler** la "
+                         "v\xC3\xA9rifie (une condition illisible, un nom inconnu sont des erreurs). En "
+                         "marche, une condition qui ne se lit pas emp\xC3\xAA" "che le script de tourner, et "
+                         "le journal le dit une fois.", {}},
+             {K::Bullet, "Les deux se combinent : 1 cycle sur 5, si la condition est vraie \xC3\xA0 ce "
+                         "moment-l\xC3\xA0.", {}},
+             {K::Heading, "Ce qui est exact, et ce qui ne l'est pas", {}},
+             {K::Bullet, "Apr\xC3\xA8s 1, 2 et 3 : dans le m\xC3\xAAme passage du moteur, juste apr\xC3\xA8s "
+                         "ces \xC3\xA9tapes, au passage o\xC3\xB9 le cycle est d\xC3\xBB.", {}},
+             {K::Bullet, "Apr\xC3\xA8s 4 et apr\xC3\xA8s 5 : vue par vue (la vue, puis chaque popup), juste "
+                         "avant ou juste apr\xC3\xA8s ses d\xC3\xA9" "clencheurs.", {}},
+             {K::Bullet, "Apr\xC3\xA8s 8 : entre le calcul des formules et le dessin ; s'il a tourn\xC3\xA9, "
+                         "l'\xC3\xA9" "cran recalcule la vue avant de la dessiner. **Sans \xC3\xA9" "cran** "
+                         "(un essai, une IHM qui ne dessine pas), 8 et 9 n'existent pas : ces scripts "
+                         "tournent juste apr\xC3\xA8s 7.", {}},
+             {K::Bullet, "Apr\xC3\xA8s 9 : une fois le dessin fait, au d\xC3\xA9" "but du passage suivant, "
+                         "toujours avant l'\xC3\xA9tape 1 du cycle suivant.", {}},
+             {K::Bullet, "10 n'est pas une \xC3\xA9tape \xC3\xA0 part : chaque \xC3\xA9" "criture part quand "
+                         "elle est faite (rien ne se place apr\xC3\xA8s 10). Les **lectures** des "
+                         "\xC3\xA9quipements suivent la p\xC3\xA9riode de leur liaison, pas celle du cycle "
+                         "de la vue.", {}},
+             {K::Bullet, "Les dur\xC3\xA9" "es sont celles du poste qui simule (Simulation \xE2\x80\xBA IHM) "
+                         ": elles changent d'un PC \xC3\xA0 l'autre. La section les relit deux fois par "
+                         "seconde ; la simulation arr\xC3\xAAt\xC3\xA9" "e, elle garde les derni\xC3\xA8res.", {}},
+             {K::Heading, "Le fichier .xpgst et le dossier", {}},
+             {K::Paragraph, "Exporter\xE2\x80\xA6 \xC3\xA9" "crit chaque script de cycle avec son nom, son "
+                         "moment, sa fr\xC3\xA9quence et sa condition (`(*# script evenement=OnCycle "
+                         "langage=ST nom=Mise_En_Page moment=8 *)`) ; l'OnCycle d'avant s'\xC3\xA9" "crit "
+                         "comme avant. Importer\xE2\x80\xA6 retrouve un script de cycle par son nom. Le "
+                         "dossier du projet (Documenter) dit le moment des scripts r\xC3\xA9gl\xC3\xA9s.", {}},
+         },
+         {"scripts", "simulation", "performances", "deboguer-scripts", "actions", "alarmes"},
+         {"OnCycle", "script de cycle", "scripts de cycle", "cycle de la vue", "Ex\xC3\xA9" "cution", "\xC3\xA9tapes du cycle", "Moment", "Rang dans l'\xC3\xA9tape", "Fr\xC3\xA9quence", "1 cycle sur N", "Condition", "Dur\xC3\xA9" "e mesur\xC3\xA9" "e", "Script de cycle", "d\xC3\xA9" "baller", "glisser un script", "apr\xC3\xA8s les formules", "avant le dessin"},
+         {},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.27.0"},
         // ---- Programmer  Scripts et fonctions / erreurs-scripts
         {"erreurs-scripts", "Les erreurs des scripts, \xC3\xA0 leur place", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Compiler et G\xC3\xA9n\xC3\xA9rer lisent chaque script ST du projet comme il tournera : un nom qui "
@@ -20133,6 +20266,110 @@ const std::vector<Topic>& topics() {
          {},
          "",
          {}, "1.10"},
+        // ---- Programmer  Scripts et fonctions / objets-scripts
+        {"objets-scripts", "Les objets et les ressources dans les scripts : Object, Font, Texture, Sound, Style", "Programmer \xE2\x80\xBA Scripts et fonctions",
+         "Un script d\xC3\xA9signe un objet d'une vue (`Object`), une police (`Font`), une image "
+         "(`Texture`), un son (`Sound`) ou un style nomm\xC3\xA9 (`Style`) comme n'importe quelle valeur : "
+         "en variable, en param\xC3\xA8tre, dans une liste, par un pointeur. 38 fonctions agissent sur les "
+         "objets (les trouver, les modifier, les placer, les aligner, les montrer ou les cacher) et 16 sur "
+         "les ressources.",
+         {
+             {K::Heading, "Les cinq types de l'IHM", {}},
+             {K::Paragraph, "Une valeur de ces types est une **poign\xC3\xA9" "e** : elle d\xC3\xA9signe la "
+                         "chose, elle ne la copie pas. Deux poign\xC3\xA9" "es du m\xC3\xAAme objet sont "
+                         "\xC3\xA9gales ; une poign\xC3\xA9" "e neuve vaut **NULL**.", {}},
+             {K::Table, "Type\tCe qu'il d\xC3\xA9signe\tSes attributs\nObject\tun objet d'une vue : "
+                         "`Vue_Accueil.Pompe_1`, ou `Pompe_1` dans sa vue\tName, Kind, View (lecture) ; X, "
+                         "Y, Width, Height, Visible, Enabled, Text, Fill, Stroke, Font, Image, Opacity, "
+                         "Blink, Layer, Style ; Parent, Children, Pressed, Focused, Shown (lecture) ; toute "
+                         "autre propri\xC3\xA9t\xC3\xA9 par son nom\nFont\tune police du projet\tName, "
+                         "Family, Style, Glyphs, Format\nTexture\tune image des ressources\tName, Width, "
+                         "Height, Format\nSound\tun son des ressources ou de la biblioth\xC3\xA8que de "
+                         "sons\tName, Duration, Playing, Volume\nStyle\tun style nomm\xC3\xA9 (du projet ou "
+                         "fourni)\tName, Folder, Builtin, Description, Users", {}},
+             {K::Paragraph, "Ils s'emploient partout o\xC3\xB9 va un type : `o : Object`, `L : LIST OF Object`, "
+                         "`p : POINTER TO Font`, `r : REF_TO Object`, `MAP[STRING] OF Texture`, un "
+                         "param\xC3\xA8tre, un retour de fonction. Ils vivent dans la m\xC3\xA9moire de "
+                         "l'IHM : pas dans une variable IHM li\xC3\xA9" "e \xC3\xA0 un \xC3\xA9quipement.", {}},
+             {K::Code, "VAR\n    pompes : LIST OF Object;\n    titre  : POINTER TO Object := "
+                         "GetObject('Titre_Accueil');\n    bip    : POINTER TO Sound := GetSound('Bip "
+                         "court');\nEND_VAR\npompes := ObjectsOf('Pompe_*');                (* ou "
+                         "'type:Voyant', 'calque:Process', 'Vue_A.*' *)\nHideIf(pompes, NOT "
+                         "Mode_Auto);\nAlignTop(pompes);\nJustifyH(pompes, 16);                          (* "
+                         "16 px entre chaque *)\ntitre^.Text := CONCAT('Pompes : ', "
+                         "INT_TO_STRING(pompes.Count));\nIF Defaut_Gaz AND bip <> NULL THEN Play(bip^); "
+                         "END_IF;\nVoyant_Gaz.Fill := @Alarme;", "ST"},
+             {K::Heading, "O\xC3\xB9 \xC3\xA7" "a agit", {}},
+             {K::Paragraph, "Sur la **vue montr\xC3\xA9" "e** (la simulation, le poste), exactement comme "
+                         "`Vue.Objet.X := 120` : la propri\xC3\xA9t\xC3\xA9 est fig\xC3\xA9" "e \xC3\xA0 "
+                         "cette valeur jusqu'au red\xC3\xA9marrage de l'IHM ou jusqu'\xC3\xA0 `ResetObject`. "
+                         "Le projet ne change jamais. Un objet pilot\xC3\xA9 par une formule garde sa "
+                         "formule tant qu'on ne l'\xC3\xA9" "crit pas.", {}},
+             {K::Bullet, "Un **nom court** (`Pompe_1`) se cherche dans la vue du script de vue (ou de "
+                         "l'action) qui tourne, sinon dans la vue montr\xC3\xA9" "e ; `Vue_B.Cadre` vise une "
+                         "autre vue.", {}},
+             {K::Bullet, "**This** : dans une action d'objet, l'objet lui-m\xC3\xAAme. `MoveObject(X, Y)` "
+                         "sans objet d\xC3\xA9place l'objet de l'action.", {}},
+             {K::Bullet, "Une **fonction du projet** du m\xC3\xAAme nom (une fonction `Show` \xC3\xA0 toi) "
+                         "passe avant la native.", {}},
+             {K::Heading, "Les fonctions sur les objets (Natives \xE2\x80\xBA Objets)", {}},
+             {K::Table, "Geste\tFonctions\nTrouver\tGetObject(nom) : POINTER TO Object (NULL s'il n'existe "
+                         "pas) ; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF "
+                         "Object\nModifier, copier\tEditObject(Obj.Prop, valeur) ; CopyObjectTo(source, "
+                         "cible, {Source.Width, \xE2\x80\xA6}) - {} : tout sauf le nom ; ResetObject(obj) ; "
+                         "ObjectProp(obj, 'cl\xC3\xA9')\nPosition, taille\tMoveObject(obj, X, Y), MoveBy, "
+                         "ResizeObject(obj, W, H), ResizeBy, PlaceObject(obj, X, Y, W, "
+                         "H)\nAligner\tAlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, "
+                         "AlignCenterV, AlignCenter (liste [, r\xC3\xA9" "f\xC3\xA9rence]) - sans "
+                         "r\xC3\xA9" "f\xC3\xA9rence : sur la liste "
+                         "elle-m\xC3\xAAme\nR\xC3\xA9partir\tJustifyH, JustifyV (liste [, \xC3\xA9" "cart]) "
+                         "- sans \xC3\xA9" "cart : des \xC3\xA9" "carts \xC3\xA9gaux ; SameWidth, "
+                         "SameHeight, SameSize (liste [, r\xC3\xA9" "f\xC3\xA9rence]) ; ArrangeGrid(liste, "
+                         "colonnes [, \xC3\xA9" "cart])\nVisibilit\xC3\xA9, \xC3\xA9tat\tShowIf, HideIf, "
+                         "EnableIf, BlinkIf (obj ou liste, condition) - elles rendent la condition ; Show, "
+                         "Hide, Enable, Disable\nOrdre, calques\tBringToFront, SendToBack, BringForward ; "
+                         "SetLayer(obj, 'calque')", {}},
+             {K::Paragraph, "Chaque fonction prend un objet, une liste d'objets (`ObjectsOf(...)`, `[Pompe_1, "
+                         "Pompe_2]`, une variable `LIST OF Object`) ou un nom entre apostrophes.", {}},
+             {K::Heading, "Les fonctions sur les ressources (Natives \xE2\x80\xBA Ressources)", {}},
+             {K::Bullet, "**GetResource(nom)**, **GetFont**, **GetTexture**, **GetSound**, **GetStyle** : un "
+                         "pointeur, NULL si rien ne porte ce nom. **Fonts(motif)**, "
+                         "**Textures('Pictos/*')**, **Sounds**, **Styles** : les listes.", {}},
+             {K::Bullet, "**TextWidth(police, texte, taille)** : la largeur d'un texte en pixels ; "
+                         "**HasGlyph(police, '\xC3\xA9')** : la police dessine-t-elle ce caract\xC3\xA8re.", {}},
+             {K::Bullet, "**Play(son)**, **Stop(son)** : jouer (sur le canal Scripts, comme IHM_SON), "
+                         "arr\xC3\xAAter. **ApplyStyle(obj, style)**, **StyleValue(style, 'fill')**.", {}},
+             {K::Bullet, "**Color('@Alarme')** : la couleur `#RRGGBB` d'une couleur s\xC3\xA9mantique.", {}},
+             {K::Heading, "Les couleurs s\xC3\xA9mantiques, \xC3\xA9" "crites comme des constantes", {}},
+             {K::Paragraph, "Dans un script, `@Alarme` s'\xC3\xA9" "crit seul, comme une constante : c'est le "
+                         "texte `'@Alarme'`, que le moteur lit au dessin (la couleur suit le th\xC3\xA8me). "
+                         "`Color(@Alarme)` en donne la valeur `#RRGGBB`. Un nom avec une espace "
+                         "s'\xC3\xA9" "crit entre apostrophes : `'@Alarme critique'`.", {}},
+             {K::Heading, "Ce qui est v\xC3\xA9rifi\xC3\xA9", {}},
+             {K::Bullet, "**Compiler** conna\xC3\xAEt les cinq types (le s\xC3\xA9lecteur de type des "
+                         "d\xC3\xA9" "clarations les range dans \xC2\xAB Types de l'IHM \xC2\xBB).", {}},
+             {K::Bullet, "**G\xC3\xA9n\xC3\xA9rer** pr\xC3\xA9vient d'un nom \xC3\xA9" "crit qui n'existe "
+                         "pas : `GetSound('Bip cour')`, `GetObject('Pompe_9')` dans un script de vue (dans "
+                         "un script g\xC3\xA9n\xC3\xA9ral, l'objet se cherche dans la vue montr\xC3\xA9" "e "
+                         ": v\xC3\xA9rifi\xC3\xA9 en marche).", {}},
+             {K::Bullet, "Une **expression (fx)** peut lire (`ObjectsOf('Pompe_*').Count`, `Color(@Alarme)`) "
+                         "mais pas agir : AlignTop, ShowIf, Play se font dans un script ou une action.", {}},
+             {K::Bullet, "L'**aide \xC3\xA0 la saisie** propose, apr\xC3\xA8s `o.` ou `p^.`, les attributs "
+                         "du type, tri\xC3\xA9s, avec leur type.", {}},
+             {K::Heading, "Dans un script C ou C++", {}},
+             {K::Paragraph, "Les m\xC3\xAAmes noms (l'API de la cible) : `Object* titre = "
+                         "GetObject(\"Titre_Accueil\");`. Comme tout script C et C++, ils sont "
+                         "\xC3\xA9" "dit\xC3\xA9s et v\xC3\xA9rifi\xC3\xA9s, pas ex\xC3\xA9" "cut\xC3\xA9s "
+                         "en simulation.", {}},
+         },
+         {"scripts", "cycle-vue", "couleurs-semantiques", "styles-nommes", "ressources", "bibliotheque-polices"},
+         {"Object", "Font", "Texture", "Sound", "Style", "This", "GetObject", "ObjectsOf", "ObjectsIn", "ObjectsOfKind", "EditObject", "CopyObjectTo", "ResetObject", "ObjectProp", "MoveObject", "MoveBy", "ResizeObject", "ResizeBy", "PlaceObject", "AlignTop", "AlignBottom", "AlignLeft", "AlignRight", "AlignCenterH", "AlignCenterV", "AlignCenter", "JustifyH", "JustifyV", "SameWidth", "SameHeight", "SameSize", "ArrangeGrid", "ShowIf", "HideIf", "EnableIf", "BlinkIf", "Show", "Hide", "Enable", "Disable", "BringToFront", "SendToBack", "BringForward", "SetLayer", "GetResource", "GetFont", "GetTexture", "GetSound", "GetStyle", "Fonts", "Textures", "Sounds", "Styles", "TextWidth", "HasGlyph", "Play", "Stop", "ApplyStyle", "StyleValue", "Color"},
+         {"scripts", "fonctions"},
+         {},
+         "",
+         {},
+         "",
+         {}, "1.27.0"},
         // ---- Programmer  Scripts et fonctions / donnees-scripts
         {"donnees-scripts", "JSON et expressions r\xC3\xA9guli\xC3\xA8res dans les scripts", "Programmer \xE2\x80\xBA Scripts et fonctions",
          "Tes scripts lisent et \xC3\xA9" "crivent du JSON, et fouillent un texte au motif, directement "

@@ -8224,7 +8224,7 @@ Dans Configuration › Unités et formats, la case Unité d'une ligne vide montr
 == scripts | Scripts généraux et scripts de vue
 : Les scripts ST s'exécutent dans la simulation : au démarrage, cycliquement, sur changement, ou quand on les appelle ; une vue a ses scripts OnOpen, OnCycle et OnClose.
 @lieux scripts, scripts-vue
-@voir variables-locales, fonctions, reference, aide-saisie, verifier, dossiers, parametres-popups, erreurs-scripts, fonctions-internes, map-iterateurs, dialecte-ihm, operateurs, deboguer-scripts
+@voir cycle-vue, variables-locales, fonctions, reference, aide-saisie, verifier, dossiers, parametres-popups, erreurs-scripts, fonctions-internes, map-iterateurs, dialecte-ihm, operateurs, deboguer-scripts
 @capture PNG_067_programmation_generale_scripts_st.png | La programmation générale : les scripts, leurs propriétés et l'éditeur (les variables IHM ont leur onglet, Variables IHM).
 @capture PNG_069_scripts_de_vue_erreur_ligne.png | Les scripts d'une vue : une erreur marquée à sa ligne.
 ### Les scripts généraux
@@ -8274,8 +8274,10 @@ struct T_Lot {
 BOOL Est_Valide(REAL x);
 extern REAL Niveau;
 ```
+@nouveau 1.27.0
 ### Les scripts de vue
-Sous une vue, **Scripts** : OnOpen (à l'ouverture), OnCycle (à chaque cycle IHM), OnClose (à la fermeture). Taper dans un événement vide crée son script.
+Sous une vue, **Scripts** : OnOpen (à l'ouverture), OnCycle (à chaque cycle de la vue), OnClose (à la fermeture). Taper dans un événement vide crée son script.
+L'**OnCycle se déballe** : une vue a plusieurs **scripts de cycle**, chacun à son moment dans le cycle de la vue - après la lecture des équipements, après les alarmes, après les formules des objets, juste avant le dessin… -, 1 cycle sur N, ou seulement quand une formule est vraie. Au milieu, la section **Exécution** montre les dix étapes du cycle, dans l'ordre où le moteur les fait, et sous chacune les scripts qui tournent après elle : tu les y glisses. Un projet existant garde son OnCycle entre 4 et 5, comme avant. Voir « Le cycle d'une vue : chaque script à son moment ».
 ### L'éditeur
 Coloration, repli, numéros de ligne, diagnostics en direct (ligne, gravité, message en français), ligne fautive marquée ; un clic sur un diagnostic mène à sa ligne. Une saisie continue est une seule annulation.
 @nouveau 1.13.0
@@ -8388,6 +8390,53 @@ f << heure << ';' << Niveau << ';' << Debit << '\n';
 - Un script déclare ses **fonctions internes** (FUNCTION ... END_FUNCTION), passe ses paramètres par valeur, par **référence** ou par **pointeur**, emploie des tableaux à N dimensions, des **MAP** parcourues par FOR EACH et des **énumérations** : voir « Les fonctions internes d'un script », « MAP et itérateurs : FOR EACH », « Le ST de l'IHM et celui de l'automate ».
 - `TO_xxx(x)` et `a + b` sur un type IHM ou une instance de symbole appellent le script de l'**opérateur** : voir « Les opérateurs des symboles et des types IHM ».
 - Compiler (F7) et l'éditeur disent les erreurs à leur ligne, pendant la frappe : voir « Les erreurs des scripts, à leur place ».
+
+== cycle-vue | Le cycle d'une vue : chaque script à son moment
+: L'OnCycle se déballe : une vue a plusieurs scripts de cycle, chacun à son moment exact dans le cycle de la vue. La section Exécution montre les dix étapes du cycle, dans l'ordre où le moteur les fait, avec leur durée mesurée en simulation ; tu y glisses chaque script.
+@depuis 1.27.0
+@mots OnCycle, script de cycle, scripts de cycle, cycle de la vue, Exécution, étapes du cycle, Moment, Rang dans l'étape, Fréquence, 1 cycle sur N, Condition, Durée mesurée, Script de cycle, déballer, glisser un script, après les formules, avant le dessin
+@voir scripts, simulation, performances, deboguer-scripts, actions, alarmes
+### Les dix étapes du cycle d'une vue
+Une vue ouverte en simulation fait, à chaque cycle de l'IHM (sa période : Configuration › Projet, 100 ms par défaut), ces dix étapes, dans cet ordre. La section **Exécution** (au milieu de l'onglet Scripts de la vue) les montre, chacune avec sa ligne et sa **durée mesurée** à la dernière simulation ; en haut, le total du cycle sur sa période.
+| Étape | Ce que le moteur fait |
+| 1 Lecture des équipements | Il relit la table des variables liées (une liaison ajoutée compte tout de suite) et suit les variables des alarmes. Les valeurs arrivent par la tâche de communication de chaque équipement, à sa période : un script lit toujours la dernière valeur reçue, et sa qualité. |
+| 2 Entrées | Les gestes tenus : l'appui long arrivé à sa durée, les touches tenues et répétées, le bouton à confirmation maintenu. Un clic, une touche, un glissé partent dès qu'ils arrivent, entre deux cycles. |
+| 3 Minuteries | IHM_APRES et IHM_CHAQUE arrivés à leur heure, IHM_SUR_CHANGEMENT, la tranche des scripts détachés, les actions Minuterie. |
+| 4 Scripts généraux cycliques | Les scripts généraux Cyclique arrivés à leur période et Sur changement ; juste avant eux, les médias (GIF, vidéos, documents, calculatrices). |
+| 5 Déclencheurs des objets | Les actions Front montant, Front descendant et Sur changement de la vue et de ses objets. Vue par vue : la vue, puis chaque popup ouverte. |
+| 6 Alarmes | Les conditions des alarmes (apparition, disparition, délai), leurs sons répétés, la fin des mises de côté. |
+| 7 Courbes, archives, compteurs | Les échantillons des courbes et des archives, les compteurs horaires, la production, les réglages PID, les rapports à leur heure. |
+| 8 Formules des objets (fx) | L'écran de la simulation calcule les formules des objets de la vue montrée (couleurs, textes, visibilité, styles calculés). |
+| 9 Dessin de la vue | L'écran dessine la vue : le fond, les calques, les objets, les popups. |
+| 10 Écritures envoyées | Une écriture part dès qu'un script ou une action la fait ; pour un équipement, elle est remise à sa liaison, que la tâche de communication envoie à son prochain passage, avant ses lectures. La section compte les écritures du cycle. |
+OnOpen tourne avant le premier cycle de la vue, OnClose après le dernier ; le cycle suivant reprend en 1.
+### Chaque script à son moment
+Sous l'OnCycle (la liste **Scripts de la vue** le **déballe** : un script de cycle par ligne, son moment à côté), chaque script de cycle tourne **après une étape** de 1 à 9 ; plusieurs scripts après la même étape tournent dans leur **rang** (1 : le premier).
+- **Glisse sa pastille** dans la section Exécution, entre deux étapes : une ligne pointillée dit où il va tourner et ce que ça change (« Déposer ici : après 8 Formules, avant 9 Dessin — tes modifications d'objets seront dessinées dans ce cycle »). Une ligne de la liste se glisse aussi sur la section, ou entre deux scripts de cycle de la liste (elle prend le moment et le rang du voisin).
+- **+ Script de cycle** (sous la liste) crée un script de cycle après l'étape du script choisi (sinon après 4) ; **glisse le bouton** sur la section pour le créer directement à l'étape voulue. Renomme-le dans ses propriétés (**Nom**).
+- Dans ses **propriétés** : **Moment** (le même choix, au clavier), **Rang dans l'étape**, **Fréquence**, **Condition**, **Durée mesurée** (sa dernière exécution en simulation).
+- Chaque changement est une modification du projet : **Ctrl+Z** le défait. Supprimer (l'outil de la barre) retire un script de cycle.
+| Placé après | Il voit |
+| 1 Lecture | les variables liées, avant les gestes et les minuteries du cycle |
+| 3 Minuteries | ce que IHM_APRES, IHM_CHAQUE viennent de faire |
+| 4 Scripts généraux | comme l'OnCycle d'avant : après les scripts généraux, avant les déclencheurs |
+| 6 Alarmes | les alarmes de ce cycle (apparues, disparues) |
+| 8 Formules | les formules calculées ; ce qu'il change est dessiné dans ce cycle |
+| 9 Dessin | le dessin fait ; ce qu'il change se voit au cycle suivant |
+> Un projet existant ne change pas : son OnCycle est un script de cycle après 4, chaque cycle, sans condition - exactement là où il tournait. Rien n'est écrit de plus dans le projet tant que tu ne changes pas son moment.
+### Fréquence et condition
+- **Fréquence** : chaque cycle, ou **1 cycle sur N** (2 à 1000) : le script tourne au premier cycle de la vue, puis tous les N cycles ; la vue rouverte, il repart.
+- **Condition** : une formule (fx), par exemple `=Mode_Auto` ; le script ne tourne que quand elle est vraie - sans IF autour de son code. Elle se lit comme une formule de la vue (ses paramètres, ses objets) ; **Compiler** la vérifie (une condition illisible, un nom inconnu sont des erreurs). En marche, une condition qui ne se lit pas empêche le script de tourner, et le journal le dit une fois.
+- Les deux se combinent : 1 cycle sur 5, si la condition est vraie à ce moment-là.
+### Ce qui est exact, et ce qui ne l'est pas
+- Après 1, 2 et 3 : dans le même passage du moteur, juste après ces étapes, au passage où le cycle est dû.
+- Après 4 et après 5 : vue par vue (la vue, puis chaque popup), juste avant ou juste après ses déclencheurs.
+- Après 8 : entre le calcul des formules et le dessin ; s'il a tourné, l'écran recalcule la vue avant de la dessiner. **Sans écran** (un essai, une IHM qui ne dessine pas), 8 et 9 n'existent pas : ces scripts tournent juste après 7.
+- Après 9 : une fois le dessin fait, au début du passage suivant, toujours avant l'étape 1 du cycle suivant.
+- 10 n'est pas une étape à part : chaque écriture part quand elle est faite (rien ne se place après 10). Les **lectures** des équipements suivent la période de leur liaison, pas celle du cycle de la vue.
+- Les durées sont celles du poste qui simule (Simulation › IHM) : elles changent d'un PC à l'autre. La section les relit deux fois par seconde ; la simulation arrêtée, elle garde les dernières.
+### Le fichier .xpgst et le dossier
+Exporter… écrit chaque script de cycle avec son nom, son moment, sa fréquence et sa condition (`(*# script evenement=OnCycle langage=ST nom=Mise_En_Page moment=8 *)`) ; l'OnCycle d'avant s'écrit comme avant. Importer… retrouve un script de cycle par son nom. Le dossier du projet (Documenter) dit le moment des scripts réglés.
 
 == erreurs-scripts | Les erreurs des scripts, à leur place
 : Compiler et Générer lisent chaque script ST du projet comme il tournera : un nom qui n'existe pas, un membre inconnu, une fonction inconnue ou le mauvais nombre d'arguments, une écriture interdite, un type qui ne convient pas. Chaque faute a sa ligne et sa colonne ; l'éditeur de scripts les montre pendant que tu tapes, sans attendre Compiler.
@@ -8822,6 +8871,65 @@ borner(&debit, 120.0f);
 - **Variable disparue** : un pointeur vers la variable locale d'une fonction terminée ne vise plus rien ; `p^` le dit (« pointeur vers une variable disparue »), au lieu de lire n'importe quoi.
 - **Membres et cases** : `p^.Debit`, `p^[3]`, et pour une référence `r.Debit` (suivie toute seule).
 > Pas d'arithmétique de pointeurs : pour parcourir un tableau, prends ses cases (`t[i]`) ou FOR EACH.
+
+== objets-scripts | Les objets et les ressources dans les scripts : Object, Font, Texture, Sound, Style
+: Un script désigne un objet d'une vue (`Object`), une police (`Font`), une image (`Texture`), un son (`Sound`) ou un style nommé (`Style`) comme n'importe quelle valeur : en variable, en paramètre, dans une liste, par un pointeur. 38 fonctions agissent sur les objets (les trouver, les modifier, les placer, les aligner, les montrer ou les cacher) et 16 sur les ressources.
+@depuis 1.27.0
+@mots Object, Font, Texture, Sound, Style, This, GetObject, ObjectsOf, ObjectsIn, ObjectsOfKind, EditObject, CopyObjectTo, ResetObject, ObjectProp, MoveObject, MoveBy, ResizeObject, ResizeBy, PlaceObject, AlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, AlignCenterV, AlignCenter, JustifyH, JustifyV, SameWidth, SameHeight, SameSize, ArrangeGrid, ShowIf, HideIf, EnableIf, BlinkIf, Show, Hide, Enable, Disable, BringToFront, SendToBack, BringForward, SetLayer, GetResource, GetFont, GetTexture, GetSound, GetStyle, Fonts, Textures, Sounds, Styles, TextWidth, HasGlyph, Play, Stop, ApplyStyle, StyleValue, Color
+@lieux scripts, fonctions
+@voir scripts, cycle-vue, couleurs-semantiques, styles-nommes, ressources, bibliotheque-polices
+### Les cinq types de l'IHM
+Une valeur de ces types est une **poignée** : elle désigne la chose, elle ne la copie pas. Deux poignées du même objet sont égales ; une poignée neuve vaut **NULL**.
+| Type | Ce qu'il désigne | Ses attributs |
+| Object | un objet d'une vue : `Vue_Accueil.Pompe_1`, ou `Pompe_1` dans sa vue | Name, Kind, View (lecture) ; X, Y, Width, Height, Visible, Enabled, Text, Fill, Stroke, Font, Image, Opacity, Blink, Layer, Style ; Parent, Children, Pressed, Focused, Shown (lecture) ; toute autre propriété par son nom |
+| Font | une police du projet | Name, Family, Style, Glyphs, Format |
+| Texture | une image des ressources | Name, Width, Height, Format |
+| Sound | un son des ressources ou de la bibliothèque de sons | Name, Duration, Playing, Volume |
+| Style | un style nommé (du projet ou fourni) | Name, Folder, Builtin, Description, Users |
+Ils s'emploient partout où va un type : `o : Object`, `L : LIST OF Object`, `p : POINTER TO Font`, `r : REF_TO Object`, `MAP[STRING] OF Texture`, un paramètre, un retour de fonction. Ils vivent dans la mémoire de l'IHM : pas dans une variable IHM liée à un équipement.
+```ST
+VAR
+    pompes : LIST OF Object;
+    titre  : POINTER TO Object := GetObject('Titre_Accueil');
+    bip    : POINTER TO Sound := GetSound('Bip court');
+END_VAR
+pompes := ObjectsOf('Pompe_*');                (* ou 'type:Voyant', 'calque:Process', 'Vue_A.*' *)
+HideIf(pompes, NOT Mode_Auto);
+AlignTop(pompes);
+JustifyH(pompes, 16);                          (* 16 px entre chaque *)
+titre^.Text := CONCAT('Pompes : ', INT_TO_STRING(pompes.Count));
+IF Defaut_Gaz AND bip <> NULL THEN Play(bip^); END_IF;
+Voyant_Gaz.Fill := @Alarme;
+```
+### Où ça agit
+Sur la **vue montrée** (la simulation, le poste), exactement comme `Vue.Objet.X := 120` : la propriété est figée à cette valeur jusqu'au redémarrage de l'IHM ou jusqu'à `ResetObject`. Le projet ne change jamais. Un objet piloté par une formule garde sa formule tant qu'on ne l'écrit pas.
+- Un **nom court** (`Pompe_1`) se cherche dans la vue du script de vue (ou de l'action) qui tourne, sinon dans la vue montrée ; `Vue_B.Cadre` vise une autre vue.
+- **This** : dans une action d'objet, l'objet lui-même. `MoveObject(X, Y)` sans objet déplace l'objet de l'action.
+- Une **fonction du projet** du même nom (une fonction `Show` à toi) passe avant la native.
+### Les fonctions sur les objets (Natives › Objets)
+| Geste | Fonctions |
+| Trouver | GetObject(nom) : POINTER TO Object (NULL s'il n'existe pas) ; ObjectsOf(motif), ObjectsIn(X, Y, W, H), ObjectsOfKind('Voyant') : LIST OF Object |
+| Modifier, copier | EditObject(Obj.Prop, valeur) ; CopyObjectTo(source, cible, {Source.Width, …}) - {} : tout sauf le nom ; ResetObject(obj) ; ObjectProp(obj, 'clé') |
+| Position, taille | MoveObject(obj, X, Y), MoveBy, ResizeObject(obj, W, H), ResizeBy, PlaceObject(obj, X, Y, W, H) |
+| Aligner | AlignTop, AlignBottom, AlignLeft, AlignRight, AlignCenterH, AlignCenterV, AlignCenter (liste [, référence]) - sans référence : sur la liste elle-même |
+| Répartir | JustifyH, JustifyV (liste [, écart]) - sans écart : des écarts égaux ; SameWidth, SameHeight, SameSize (liste [, référence]) ; ArrangeGrid(liste, colonnes [, écart]) |
+| Visibilité, état | ShowIf, HideIf, EnableIf, BlinkIf (obj ou liste, condition) - elles rendent la condition ; Show, Hide, Enable, Disable |
+| Ordre, calques | BringToFront, SendToBack, BringForward ; SetLayer(obj, 'calque') |
+Chaque fonction prend un objet, une liste d'objets (`ObjectsOf(...)`, `[Pompe_1, Pompe_2]`, une variable `LIST OF Object`) ou un nom entre apostrophes.
+### Les fonctions sur les ressources (Natives › Ressources)
+- **GetResource(nom)**, **GetFont**, **GetTexture**, **GetSound**, **GetStyle** : un pointeur, NULL si rien ne porte ce nom. **Fonts(motif)**, **Textures('Pictos/*')**, **Sounds**, **Styles** : les listes.
+- **TextWidth(police, texte, taille)** : la largeur d'un texte en pixels ; **HasGlyph(police, 'é')** : la police dessine-t-elle ce caractère.
+- **Play(son)**, **Stop(son)** : jouer (sur le canal Scripts, comme IHM_SON), arrêter. **ApplyStyle(obj, style)**, **StyleValue(style, 'fill')**.
+- **Color('@Alarme')** : la couleur `#RRGGBB` d'une couleur sémantique.
+### Les couleurs sémantiques, écrites comme des constantes
+Dans un script, `@Alarme` s'écrit seul, comme une constante : c'est le texte `'@Alarme'`, que le moteur lit au dessin (la couleur suit le thème). `Color(@Alarme)` en donne la valeur `#RRGGBB`. Un nom avec une espace s'écrit entre apostrophes : `'@Alarme critique'`.
+### Ce qui est vérifié
+- **Compiler** connaît les cinq types (le sélecteur de type des déclarations les range dans « Types de l'IHM »).
+- **Générer** prévient d'un nom écrit qui n'existe pas : `GetSound('Bip cour')`, `GetObject('Pompe_9')` dans un script de vue (dans un script général, l'objet se cherche dans la vue montrée : vérifié en marche).
+- Une **expression (fx)** peut lire (`ObjectsOf('Pompe_*').Count`, `Color(@Alarme)`) mais pas agir : AlignTop, ShowIf, Play se font dans un script ou une action.
+- L'**aide à la saisie** propose, après `o.` ou `p^.`, les attributs du type, triés, avec leur type.
+### Dans un script C ou C++
+Les mêmes noms (l'API de la cible) : `Object* titre = GetObject("Titre_Accueil");`. Comme tout script C et C++, ils sont édités et vérifiés, pas exécutés en simulation.
 
 == donnees-scripts | JSON et expressions régulières dans les scripts
 : Tes scripts lisent et écrivent du JSON, et fouillent un texte au motif, directement — tout en local, sans réseau. Un fichier ou une ressource JSON se lit en une valeur **ANY** (`JSON_LIRE`), s'interroge par clé et par indice ; une trame texte se découpe au motif (`REGEX_`).

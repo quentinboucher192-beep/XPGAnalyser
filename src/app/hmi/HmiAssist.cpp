@@ -1243,6 +1243,22 @@ bool dialectMembers(const Scope& sc, const domain::Project* plc, const std::stri
     if (setRingMembers(type, needle, push)) return true;
     std::string k, v;
     if (mapTypes(type, k, v)) return true;             // une MAP : m[cle], MAP_... ; pas de membres
+    // 1.27.0 : un type de l'IHM (Object, Font, Texture, Sound, Style ; ou un pointeur vers l'un d'eux) : ses attributs,
+    // tries, avec leur type - sauf un type du projet du meme nom.
+    if (const auto& members = hmi::natives::handleMembers(trimmed(type)); !members.empty() && !sc.hp->hmiTypeByName(trimmed(type))) {
+        int i = 0;
+        for (const auto& m : members) {
+            const int r = matchRank(std::string(m.name), needle);
+            if (r < 0) continue;
+            Item it;
+            it.text = std::string(m.name);
+            it.detail = std::string(m.type) + (m.readOnly ? kDot + "lecture" : std::string{}) + kDot + std::string(m.text);
+            it.kind = Kind::Member;
+            it.rank = r * 100 + i++;
+            push(std::move(it));
+        }
+        return true;
+    }
     (void)typeMembers(*sc.hp, plc, type, needle, push);
     return true;
 }

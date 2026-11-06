@@ -620,10 +620,94 @@ bool call(std::string_view name, const std::vector<sim::Value>& args, sim::Value
 }
 
 // ----------------------------------------------------------------------- les types ---
+// 1.27.0 : les attributs des types de l'IHM - la fiche du type et l'aide a la saisie (o., p^.).
+const std::vector<HandleMember>& handleMembers(std::string_view type) {
+    static const std::vector<HandleMember> object = {
+        {"Name", "STRING", "son nom", true},
+        {"Kind", "STRING", "son genre : 'Bouton', 'Voyant'\xE2\x80\xA6", true},
+        {"View", "STRING", "sa vue", true},
+        {"X", "REAL", "sa gauche, en pixels de la vue", false},
+        {"Y", "REAL", "son haut", false},
+        {"Width", "REAL", "sa largeur", false},
+        {"Height", "REAL", "sa hauteur", false},
+        {"Visible", "BOOL", "montr\xC3\xA9", false},
+        {"Enabled", "BOOL", "actif : il re\xC3\xA7oit les clics", false},
+        {"Text", "STRING", "son texte (s'il en a un)", false},
+        {"Fill", "STRING", "sa couleur de fond : '#RRGGBB' ou @Alarme", false},
+        {"Stroke", "STRING", "sa couleur de contour", false},
+        {"Font", "STRING", "sa police (un POINTER TO Font s'y \xC3\xA9" "crit)", false},
+        {"Image", "STRING", "son image (un POINTER TO Texture s'y \xC3\xA9" "crit)", false},
+        {"Opacity", "REAL", "son opacit\xC3\xA9, en %", false},
+        {"Blink", "BOOL", "il clignote", false},
+        {"Layer", "STRING", "son calque (l'\xC3\xA9" "crire le change de calque)", false},
+        {"Style", "STRING", "son style nomm\xC3\xA9 (l'\xC3\xA9" "crire l'applique)", false},
+        {"Parent", "STRING", "le groupe qui le tient ('' : la vue)", true},
+        {"Children", "LIST OF Object", "ce qu'il tient (un groupe, un conteneur)", true},
+        {"Pressed", "BOOL", "la souris l'enfonce", true},
+        {"Focused", "BOOL", "il a le clavier", true},
+        {"Shown", "BOOL", "il est \xC3\xA0 l'\xC3\xA9" "cran", true},
+    };
+    static const std::vector<HandleMember> font = {
+        {"Name", "STRING", "la ressource ('Carlito-Bold.ttf')", true}, {"Family", "STRING", "sa famille ('Carlito')", true},
+        {"Style", "STRING", "son style ('Gras', 'Italique')", true}, {"Glyphs", "DINT", "le nombre de ses dessins", true},
+        {"Format", "STRING", "'TTF', 'OTF'", true},
+    };
+    static const std::vector<HandleMember> texture = {
+        {"Name", "STRING", "l'image", true}, {"Width", "DINT", "sa largeur en pixels", true}, {"Height", "DINT", "sa hauteur en pixels", true},
+        {"Format", "STRING", "'PNG', 'SVG', 'JPEG'\xE2\x80\xA6", true},
+    };
+    static const std::vector<HandleMember> sound = {
+        {"Name", "STRING", "le son", true}, {"Duration", "REAL", "sa dur\xC3\xA9" "e, en secondes", true},
+        {"Playing", "BOOL", "il joue (depuis Play, le temps de sa dur\xC3\xA9" "e)", true}, {"Volume", "REAL", "le volume du canal Scripts, de 0 \xC3\xA0 1", true},
+    };
+    static const std::vector<HandleMember> style = {
+        {"Name", "STRING", "'ISA-101', 'Alarme'", true}, {"Folder", "STRING", "son dossier", true}, {"Builtin", "BOOL", "un style fourni (verrouill\xC3\xA9)", true},
+        {"Description", "STRING", "ce qu'il est", true}, {"Users", "LIST OF Object", "les objets des vues montr\xC3\xA9" "es qui le citent", true},
+    };
+    static const std::vector<HandleMember> none;
+    const auto same = [](std::string_view a, std::string_view b) {
+        if (a.size() != b.size()) return false;
+        for (std::size_t i = 0; i < a.size(); ++i)
+            if (std::toupper(static_cast<unsigned char>(a[i])) != std::toupper(static_cast<unsigned char>(b[i]))) return false;
+        return true;
+    };
+    if (same(type, "Object")) return object;
+    if (same(type, "Font")) return font;
+    if (same(type, "Texture")) return texture;
+    if (same(type, "Sound")) return sound;
+    if (same(type, "Style")) return style;
+    return none;
+}
+
 std::vector<TypeCard> typeCards() {
     std::vector<TypeCard> out;
     const auto& reg = typereg::baseRegistry();
     for (const auto& e : reg.entries()) {
+        // 1.27.0 : les types de l'IHM - une poignee, ses attributs.
+        if (e.category == typereg::Category::Ihm) {
+            TypeCard t;
+            t.name = e.name;
+            t.category = std::string(typereg::categoryLabel(e.category));
+            t.summary = e.doc;
+            t.minText = "NULL (il ne d\xC3\xA9signe rien)";
+            t.maxText = e.name == "Object" ? "un objet d'une vue" : "une ressource du projet";
+            t.size = "une poign\xC3\xA9" "e : elle d\xC3\xA9signe, elle ne copie pas";
+            t.modbus = "aucune (en m\xC3\xA9moire de l'IHM)";
+            t.cType = e.name + "*";
+            t.cppType = e.name + "*";
+            t.defaultValue = "NULL";
+            t.literals = {e.name == "Object" ? std::string("p : POINTER TO Object := GetObject('Pompe_1');") : "x : POINTER TO " + e.name + " := Get" + e.name + "('\xE2\x80\xA6');",
+                          "L : LIST OF " + e.name + ";", "r : REF_TO " + e.name + ";"};
+            for (const auto& a : handleMembers(e.name))
+                t.notes.push_back(std::string(a.name) + " : " + std::string(a.type) + " \xE2\x80\x94 " + std::string(a.text) + (a.readOnly ? " (lecture)" : ""));
+            if (e.name == "Object") t.notes.emplace_back("toute autre propri\xC3\xA9t\xC3\xA9, par son nom public (Min, Zones\xE2\x80\xA6) ou ObjectProp(o, 'cl\xC3\xA9')");
+            static const std::pair<unsigned, const char*> kUses[] = {
+                {typereg::UseDeclaration, "d\xC3\xA9" "claration (locale, constante)"}, {typereg::UseReturn, "retour de fonction"}};
+            for (const auto& [bit, label] : kUses)
+                if (e.uses & bit) t.uses.emplace_back(label);
+            out.push_back(std::move(t));
+            continue;
+        }
         if (e.category != typereg::Category::Elementary && e.category != typereg::Category::TextTime) continue;
         TypeCard t;
         t.name = e.name;

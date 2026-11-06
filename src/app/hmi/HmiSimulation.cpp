@@ -3887,6 +3887,9 @@ HmiSimulationPane::HmiSimulationPane(std::string id, hmi::DocumentPtr doc, HmiSi
     runtime_.setHooks(std::move(hooks));
     // 1.13.0 (lot J2) : le debogueur des scripts IHM (la simulation de l'editeur ; le poste ne s'arrete jamais).
     runtime_.setDebugger(true);
+    // 1.27.0 : le cycle de la vue - cet ecran calcule les formules (8) et dessine (9) : les scripts de cycle places apres 8
+    // tournent entre les deux (afterFormulas, plus bas), ceux apres 9 au debut de l'image suivante (le tick).
+    runtime_.setScreenStages(true);
     HmiDebugSession::instance().bindProject(doc_);
     HmiDebugSession::instance().setRuntime(&runtime_);
 
@@ -5730,6 +5733,15 @@ void HmiSimulationPane::refreshPane() {
     const std::size_t before = values_.size();
     const auto evalStart = std::chrono::steady_clock::now();
     auto layers = layers_.build(runtime_, shownProject(), now_, &values_);
+    // 1.27.0 : APRES 8 - les formules de la vue sont calculees, rien n'est encore dessine : les scripts de cycle places
+    // apres 8 tournent ; s'ils ont tourne, la vue se recalcule (ce qu'ils ont change se dessine dans ce cycle). Leur
+    // temps et ce second calcul ne comptent pas dans la mesure des formules (8).
+    double afterFormulasMs = 0;
+    {
+        const auto f0 = std::chrono::steady_clock::now();
+        if (runtime_.afterFormulas(now_)) layers = layers_.build(runtime_, shownProject(), now_, &values_);
+        afterFormulasMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - f0).count();
+    }
     // 1.12.18 : Ajouter aux expressions - les chemins ajoutes, sous « Ajoutees ».
     for (const auto& path : addedExprs_) {
         hmi::LiveValue lv;
@@ -5753,7 +5765,8 @@ void HmiSimulationPane::refreshPane() {
     // Lot 13 : l'evaluation des expressions, et le dessin d'avant (mesure par le canevas).
     const bool painted = canvas_->paintCount() != paintSeen_;
     paintSeen_ = canvas_->paintCount();
-    runtime_.notePerf(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - evalStart).count(),
+    runtime_.notePerf(std::max(0.0, std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - evalStart).count()
+                                        - afterFormulasMs),
                       painted ? canvas_->lastPaintMs() : -1.0, values_.size(), canvas_->lastPaintObjects());
     // 1.10.2 (defaut du client, 11 h 53 : « la croix ne ferme pas la popup et tout
     // reste fige ») : seule une NAVIGATION (deux vues qui glissent) fait attendre les

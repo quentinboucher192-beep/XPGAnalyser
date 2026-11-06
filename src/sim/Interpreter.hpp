@@ -361,7 +361,54 @@ public:
         why = "pas d'attente ici (WAIT attend dans un script de l'IHM, pas dans une expression)";
         return false;
     }
+
+    // ---- 1.27.0 : LES TYPES DE L'IHM (Object, Font, Texture, Sound, Style - voir sim::handleType) ----
+    // Un nom ecrit qui n'est pas une variable designe-t-il un objet d'une vue (Pompe_1 dans sa vue, Vue_A.Pompe_1) ?
+    // Vrai : `type` ("Object") et `path`, son chemin complet ("Vue_A.Pompe_1"). Par defaut : non.
+    virtual bool handleOf(std::string_view name, std::string& type, std::string& path) {
+        (void)name; (void)type; (void)path;
+        return false;
+    }
+    // Un texte vers une poignee de ce type : 'Pompe_1' (un objet), 'Carlito Gras' (une police), 'logo.png'... Vrai et
+    // `path` ; faux et `why` (en francais : << aucune police 'X' dans le projet >>).
+    virtual bool handleTarget(std::string_view type, std::string_view text, std::string& path, std::string& why) {
+        (void)type; (void)text; (void)path;
+        why = "pas d'objets ni de ressources ici (les types de l'IHM vivent dans un script de l'IHM)";
+        return false;
+    }
+    // Les natives des types de l'IHM (GetObject, AlignTop, GetSound, Play...) : leur nom en majuscules.
+    [[nodiscard]] virtual bool isHandleNative(std::string_view upperName) { (void)upperName; return false; }
+    // Un argument d'une de ces natives, tel que le dialecte l'a lu :
+    //  - `value` : sa valeur simple (un nombre, un texte, un BOOL) ; `isValue` vrai ;
+    //  - `handles` : les poignees qu'il donne (une poignee, une liste de poignees, un pointeur vers un chemin) - le
+    //    type et le chemin de chacune ;
+    //  - `place` : le chemin de l'environnement qu'il nomme (Tableau_1.Width), s'il en nomme un ;
+    //  - `members` : une liste ecrite {Tableau_1.Width, Tableau_1.Height} ou ['Width'] - les chemins ou les textes.
+    struct HandleArg {
+        Value                                            value;
+        bool                                             isValue{false};
+        std::vector<std::pair<std::string, std::string>> handles;
+        std::string                                      place;
+        std::vector<std::string>                         members;
+        bool                                             isList{false};    // une liste ecrite (members)
+    };
+    // Ce qu'elle rend : rien (un BOOL vrai), une valeur, une poignee, un pointeur vers une poignee, une liste.
+    struct HandleResult {
+        enum class Kind : std::uint8_t { Value, Handle, Pointer, List } kind{Kind::Value};
+        Value                    value{Value::boolean(true)};
+        std::string              type;      // Handle, Pointer, List : le type de l'IHM ("Object")
+        std::vector<std::string> paths;     // Handle, Pointer : un chemin (vide : NULL) ; List : chacun
+    };
+    virtual bool handleNative(std::string_view upperName, const std::vector<HandleArg>& args, HandleResult& out, std::string& why) {
+        (void)upperName; (void)args; (void)out;
+        why = "pas d'objets ni de ressources ici";
+        return false;
+    }
 };
+
+// 1.27.0 : les natives des types de l'IHM qui ne font que LIRE (GetObject, ObjectsOf, Color...) : une expression (fx) les
+// appelle ; les autres (AlignTop, ShowIf, Play...) agissent, dans un script ou une action seulement. Nom en majuscules.
+[[nodiscard]] bool handleNativeReads(std::string_view upperName) noexcept;
 
 class Expression;   // lot API 8 : une expression seule (plus bas)
 

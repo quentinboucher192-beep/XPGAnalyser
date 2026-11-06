@@ -507,6 +507,12 @@ public:
             if (rt_.recordOn_) rt_.noteRead(upper(r), r, rec::KeyKind::Plc);
             return true;
         }
+        // 1.27.0 : un membre d'objet que les variables publiques n'ont pas (Kind, View, Parent), un attribut de ressource
+        // (@Font:Carlito Gras.Family) ; Pompe_1.Fill - un objet de la vue du code, par son nom court.
+        if (r.find('.') != std::string::npos) {
+            if (rt_.handleMemberRead(r, out)) return true;
+            if (const std::string full = rt_.shortObjectPath(r); !full.empty()) return read(full, out);
+        }
         // 1.11.14 : INFO, ERROR... - les niveaux de IHM_LOG, en dernier : une vraie
         // variable du meme nom passe avant.
         if (const auto level = logLevelByName(n); level && n.find('.') == std::string_view::npos) {
@@ -618,6 +624,16 @@ public:
         // popup ; une variable systeme, en lecture seule, est refusee.
         if (r.find('.') != std::string::npos) {
             std::string why;
+            // 1.27.0 : Objet.Enabled, .Layer, .Style ; un attribut de ressource (refuse : il se lit seulement).
+            if (const int h = rt_.handleMemberWrite(r, v, &why); h >= 0) {
+                if (h == 1) return true;
+                rt_.publicWhy_ = why;
+                diagnostics.push_back({sim::Diagnostic::Severity::Error, why, 0, {}});
+                return false;
+            }
+            // 1.27.0 : Pompe_1.Fill - un objet de la vue du code, par son nom court (une variable du meme nom passe avant).
+            if (const std::string full = rt_.shortObjectPath(r); !full.empty() && !(rt_.plc_ && rt_.plc_->exists(plcOf(r))))
+                return write(full, v);
             const int written = rt_.publicWrite(r, v, &why);
             if (written == 1) return true;
             if (written == 0) {
@@ -667,7 +683,35 @@ public:
                     && types::propertyValue(it->second, std::string_view(r).substr(dot + 1), probe))
                     return true;
         }
-        return (r.find('.') != std::string::npos && rt_.publicExists(r)) || (rt_.plc_ && rt_.plc_->exists(plcOf(r)));
+        if ((r.find('.') != std::string::npos && rt_.publicExists(r)) || (rt_.plc_ && rt_.plc_->exists(plcOf(r)))) return true;
+        // 1.27.0 : Pompe_1.Fill - un objet de la vue du code, par son nom court.
+        if (r.find('.') != std::string::npos)
+            if (const std::string full = rt_.shortObjectPath(r); !full.empty()) return rt_.publicExists(full);
+        return false;
+    }
+    // ---- 1.27.0 : les types de l'IHM (HmiRuntimeObjects.cpp) ----
+    bool handleOf(std::string_view n, std::string& type, std::string& path) override {
+        if (!frames.empty() && frames.back()->count(upper(n)) != 0) return false;     // une locale du meme nom
+        if (aliases && (aliases->value(n) || aliases->object(n))) return false;       // un parametre de la vue
+        const std::string r = resolved(n);
+        return rt_.handleOf(r.empty() ? std::string(n) : r, type, path);
+    }
+    bool handleTarget(std::string_view type, std::string_view text, std::string& path, std::string& why) override {
+        return rt_.handleTarget(type, text, path, why);
+    }
+    bool isHandleNative(std::string_view u) override { return rt_.isHandleNative(u); }
+    bool handleNative(std::string_view u, const std::vector<HandleArg>& args, HandleResult& out, std::string& why) override {
+        // Une expression (fx) lit, elle n'agit pas ; une relecture ne commande rien.
+        const bool reading = sim::handleNativeReads(u);
+        if (!reading && rt_.readOnly_ > 0) {
+            why = std::string(u) + " agit sur les objets : une expression (fx) ou une fonction appel\xC3\xA9" "e par elle ne fait que lire";
+            return false;
+        }
+        if (!reading && rt_.replayOn_) {
+            out = HandleResult{};
+            return true;
+        }
+        return rt_.handleNative(u, args, out, why);
     }
     std::string lastCallError() override { return lastCallRaw; }
     bool lastCallRaised(std::string& code, std::string& message, std::string& origin) override {
@@ -971,6 +1015,9 @@ public:
             std::string rest;
             if (auto o = rt_.qualifiedRoot(r, &rest); o && rest.empty() && o->type && o->type->kind != sim::TypeDesc::Kind::Scalar) return o;
         }
+        // 1.27.0 : Vue.Objet.Children, @Style:Alarme.Users - une LIST OF Object neuve.
+        if (const std::string ur = upper(r); ur.ends_with(".CHILDREN") || ur.ends_with(".USERS"))
+            if (auto l = rt_.handleList(r)) return l;
         if (rt_.rich_.empty()) return nullptr;
         const auto it = rt_.rich_.find(upper(r.empty() ? std::string(n) : r));
         return it == rt_.rich_.end() ? nullptr : it->second;
@@ -3612,28 +3659,163 @@ void Runtime::computeAtOpen(Id id) {
         }
 }
 
-void Runtime::runViewScript(const View& v, std::string_view event, double now) {
+std::size_t Runtime::runViewScript(const View& v, std::string_view event, double now, int moment) {
     AliasGuard guard(env_->aliases, scopePtr(v.id));
+    HandleScope handles(*this, v.id, kNoId);        // 1.27.0 : ses noms courts d'objets (Pompe_1) se cherchent dans la vue
     // Lot API 8 : un script de vue part avec la vue (ouverture, fermeture, cycle),
     // pas d'un geste : IHM_EXPORTER n'y demande pas ou enregistrer.
     struct ExportAskOff { int& n; int was; ~ExportAskOff() { n = was; } } exportAsk{exportAsk_, exportAsk_};
     exportAsk_ = 0;
     // 1.13.0 (le debogueur) : les scripts de cet evenement, copies d'abord - l'un d'eux peut s'arreter au milieu
     // (la suite attend), et la vue (une vue composee du moteur) ne doit pas pendre apres la pause.
+    // 1.27.0 : la vue s'ouvre - les frequences de ses scripts de cycle repartent (1 cycle sur N : il tourne au premier).
+    if (event == "OnOpen")
+        for (auto it = every_.lower_bound({v.id, kNoId}); it != every_.end() && it->first.first == v.id;) it = every_.erase(it);
+    // 1.27.0 : plusieurs scripts de cycle, ou un script regle : le journal les distingue par leur nom.
+    std::size_t cycles = 0;
+    if (moment > 0)
+        for (const auto& sc : v.scripts) cycles += viewcycle::isCycleScript(sc);
     std::vector<std::pair<Script, std::string>> todo;
     for (const auto& sc : v.scripts) {
         if (sc.event != event) continue;
+        if (moment > 0 && viewcycle::momentOf(sc) != moment) continue;     // 1.27.0 : les scripts de cycle de ce moment
         // Un script emprunte (lot 6) : "Vue_Production.OnOpen (Modele_Conduite)".
         std::string source = v.name + "." + std::string(event);
+        const View* ov = nullptr;
         if (project_)
-            if (const Id owner = project_->viewOfScript(sc.id); owner != kNoId && owner != v.id)
-                if (const auto* ov = project_->view(owner)) source += " (" + ov->name + ")";
+            if (const Id owner = project_->viewOfScript(sc.id); owner != kNoId && owner != v.id) ov = project_->view(owner);
+        // 1.27.0 : un script de cycle nomme, regle ou parmi plusieurs : "Vue_Accueil.OnCycle.Mise_En_Page" (l'OnCycle
+        // d'avant, seul et a sa place, reste "Vue_Accueil.OnCycle").
+        if (moment > 0 && !viewcycle::defaultName(sc, ov ? ov->name : v.name) && (viewcycle::customized(sc) || cycles > 1))
+            source += "." + sc.name;
+        if (ov) source += " (" + ov->name + ")";
         todo.emplace_back(sc, std::move(source));
     }
+    // 1.27.0 : sa vue par son identifiant - un script peut s'arreter (le debogueur), et la vue composee changer pendant ce temps.
+    const Id vid = v.id;
+    std::size_t ran = 0;
     for (const auto& [sc, source] : todo) {
-        if (taskStopped()) return;
+        if (taskStopped()) return ran;
+        // 1.27.0 : 1 cycle sur N, la condition - lue juste avant lui (le script d'avant, au meme moment, a pu la changer).
+        if (moment > 0 && !cycleTurn(vid, sc, source)) continue;
         (void)runScript(sc, source, now, nullptr);
+        ++ran;
     }
+    return ran;
+}
+
+// ---- 1.27.0 : LE CYCLE DE LA VUE, DEBALLE (HmiViewCycle.hpp) --------------------------------------------------------
+namespace {
+// Un chronometre d'etape : le temps du poste, sans celui d'une pause du debogueur.
+struct StepWatch {
+    const std::int64_t&                   paused;
+    std::chrono::steady_clock::time_point t0;
+    std::int64_t                          p0;
+    explicit StepWatch(const std::int64_t& p) : paused(p), t0(std::chrono::steady_clock::now()), p0(p) {}
+    double lap() {
+        const auto t = std::chrono::steady_clock::now();
+        const double ms = std::chrono::duration<double, std::milli>(t - t0).count() - static_cast<double>(paused - p0) / 1e6;
+        t0 = t;
+        p0 = paused;
+        return std::max(0.0, ms);
+    }
+};
+} // namespace
+
+bool Runtime::cycleTurn(Id view, const Script& sc, const std::string& source) {
+    const int every = viewcycle::everyOf(sc);
+    const std::string cond = viewcycle::plainCondition(sc.when);
+    if (every == 1 && cond.empty()) return true;                     // l'OnCycle d'avant : chaque cycle, sans condition
+    if (every > 1) {
+        auto& st = every_[{view, sc.id}];
+        if (st.last + 1 != viewCycle_) st.count = 0;                 // la vue vient de s'ouvrir (ou le script de revenir) : il repart
+        st.last = viewCycle_;
+        const bool turn = st.count % static_cast<std::uint64_t>(every) == 0;
+        ++st.count;
+        if (!turn) return false;
+    }
+    if (cond.empty()) return true;
+    auto it = expressions_.find(cond);
+    if (it == expressions_.end()) it = expressions_.emplace(cond, Expression::compile(cond)).first;
+    std::string why;
+    if (it->second.valid()) {
+        if (auto value = it->second.evaluate(*env_, viewScope(view))) {
+            whenWarned_.erase(sc.id);
+            return value->isTruthy();
+        } else {
+            why = value.error().message();
+        }
+    } else {
+        why = it->second.error();
+    }
+    // Une condition qui ne se lit pas : le script ne tourne pas, et le journal le dit (une fois, jusqu'a ce qu'elle se lise).
+    if (whenWarned_.insert(sc.id).second)
+        log("Erreur", source, "condition =" + cond + " : " + why + " (le script ne tourne pas)");
+    return false;
+}
+
+bool Runtime::cycleMomentUsed(int moment) const {
+    std::vector<Id> shown{current_};
+    shown.insert(shown.end(), popups_.begin(), popups_.end());
+    for (const Id id : shown)
+        if (const View* v = viewOf(id))
+            for (const auto& sc : v->scripts)
+                if (viewcycle::isCycleScript(sc) && viewcycle::momentOf(sc) == moment) return true;
+    return false;
+}
+
+std::size_t Runtime::runCycleMoment(int moment, double now) {
+    if (!project_ || !cycleMomentUsed(moment)) return 0;
+    // Des scripts de cycle : ils comptent dans le cycle (ses postes, le contexte du debogueur), ou qu'ils tournent.
+    const bool was = inCycle_;
+    inCycle_ = true;
+    std::size_t ran = 0;
+    std::vector<Id> shown{current_};
+    shown.insert(shown.end(), popups_.begin(), popups_.end());
+    for (const Id id : shown) {
+        if (taskStopped()) break;
+        // Une vue fermee entre-temps (un script a navigue) : ses scripts ne tournent plus.
+        if (id != current_ && std::find(popups_.begin(), popups_.end(), id) == popups_.end()) continue;
+        if (const View* v = viewOf(id)) ran += runViewScript(*v, viewcycle::kCycleEvent, now, moment);
+    }
+    inCycle_ = was;
+    return ran;
+}
+
+bool Runtime::afterFormulas(double now) {
+    if (!(drawPending_ & 1) || !running_ || !project_ || replayOn_ || paused_) return false;
+    drawPending_ &= ~1;
+    if (!cycleMomentUsed(8)) return false;
+    now_ = std::max(now_, now);
+    std::size_t ran = 0;
+    if (unitWanted()) (void)debugUnit("Cycle de la vue", [this, now, &ran] { ran = runCycleMoment(8, now); });
+    else ran = runCycleMoment(8, now);
+    if (perf_.writes >= writesAtCycle_) timing_.writes = perf_.writes - writesAtCycle_;
+    return ran > 0;
+}
+
+void Runtime::afterDrawing(double now) {
+    if (!drawPending_ || !running_ || !project_ || replayOn_ || paused_) return;
+    now_ = std::max(now_, now);
+    if (unitWanted()) (void)debugUnit("Cycle de la vue", [this, now] { flushDrawMoments(now); });
+    else flushDrawMoments(now);
+}
+
+void Runtime::flushDrawMoments(double now) {
+    const int pending = drawPending_;
+    drawPending_ = 0;
+    if (pending & 1) (void)runCycleMoment(8, now);
+    if (taskStopped()) return;
+    if (pending & 2) (void)runCycleMoment(9, now);
+    if (perf_.writes >= writesAtCycle_) timing_.writes = perf_.writes - writesAtCycle_;
+}
+
+viewcycle::Timing Runtime::cycleTiming() const {
+    viewcycle::Timing t = timing_;
+    // 8 et 9 : ce que l'ecran a mesure (notePerf) - le calcul des formules de la vue montree, son dessin.
+    t.stepMs[8] = screenStages_ && perf_.evaluate.count ? perf_.evaluate.last : -1.0;
+    t.stepMs[9] = screenStages_ && perf_.paint.count ? perf_.paint.last : -1.0;
+    return t;
 }
 
 namespace {
@@ -3665,6 +3847,7 @@ std::string_view permissionFor(Operation op) {
 
 void Runtime::fire(const View& v, const Object* o, const Action& a, double now, bool byUser) {
     if (taskStopped()) return;                   // 1.13.0 : la simulation s'arrete pendant une pause : plus rien ne part
+    HandleScope handles(*this, v.id, o ? o->id : kNoId);   // 1.27.0 : This (l'objet de l'action), les noms courts de sa vue
     // 1.11 (REP) : les $ d'un repere sont transparents ($V[2]$.Cmd ecrit V[2].Cmd) ;
     // la valeur, la condition et l'expression surveillee passent par Expression::compile.
     const auto targetMode = operationWritesVariable(a.operation) ? markers::Mode::Expression : markers::Mode::Text;   // comme dup::fields
@@ -4613,6 +4796,14 @@ void Runtime::start(double now) {
     usual_.clear();
     slowStack_.clear();
     cycleParts_.clear();
+    // 1.27.0 : le cycle de la vue repart (les frequences, les conditions dites, la mesure).
+    drawPending_ = 0;
+    viewCycle_ = 0;
+    every_.clear();
+    whenWarned_.clear();
+    timing_ = viewcycle::Timing{};
+    timingNow_ = viewcycle::Timing{};
+    writesAtCycle_ = 0;
     exchangeRequests_.clear();
     exchangeSampled_ = -1;
     startWallMs_ = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -5332,6 +5523,7 @@ void Runtime::cycle(double now) {
         lapPaused = pausedNs_;
         return std::max(0.0, ms);
     };
+    StepWatch step(pausedNs_);          // 1.27.0 : chaque etape du cycle de la vue, mesuree (sans ses scripts de cycle)
     gifsCycle(now);                     // lot 16 : les GIF animes (conditions, fin de lecture)
     mediasCycle(now);                   // 1.12.12 (lot H) : les videos, les textes defilants, les codes QR
     docsCycle(now);                     // 1.12.30 : les visionneuses de documents (document, page)
@@ -5373,17 +5565,27 @@ void Runtime::cycle(double now) {
             }
         }
     }
-    // La vue et ses popups : OnCycle, puis fronts et changements.
+    timingNow_.stepMs[4] = step.lap();  // 1.27.0 : 4 - les medias, puis les scripts generaux
+    // La vue et ses popups : OnCycle, puis fronts et changements. 1.27.0 : les scripts de cycle apres 4 (l'OnCycle
+    // d'avant), les declencheurs (5), les scripts de cycle apres 5 - vue par vue.
     std::vector<Id> shown{current_};
     shown.insert(shown.end(), popups_.begin(), popups_.end());
+    const bool after5 = cycleMomentUsed(5);
+    timingNow_.stepMs[5] = 0;
     for (const Id id : shown) {
         if (taskStopped()) return;
         const auto* v = viewOf(id);
         if (!v) continue;
-        runViewScript(*v, "OnCycle", now);
+        runViewScript(*v, viewcycle::kCycleEvent, now, viewcycle::kLegacyMoment);
         if ((v = viewOf(id)) == nullptr) continue;
         if (id != current_ && std::find(popups_.begin(), popups_.end(), id) == popups_.end()) continue;
+        (void)step.lap();
         watchTriggers(*v, now, true);
+        timingNow_.stepMs[5] += step.lap();
+        if (!after5 || taskStopped()) continue;
+        if ((v = viewOf(id)) == nullptr) continue;
+        if (id != current_ && std::find(popups_.begin(), popups_.end(), id) == popups_.end()) continue;
+        runViewScript(*v, viewcycle::kCycleEvent, now, 5);
     }
     if (taskStopped()) return;
     {
@@ -5391,9 +5593,15 @@ void Runtime::cycle(double now) {
         for (const auto& part : cycleParts_) nowScripted += part.ms;
         rest += std::max(0.0, lap() - (nowScripted - scripted));     // les scripts ont deja leur ligne
     }
+    (void)step.lap();
     evaluateAlarms(now);
     alarmsCycle(now);        // lot 11 : la fin des mises de cote, les sons repetes
+    timingNow_.stepMs[6] = step.lap();
     cyclePost("alarmes", "Alarmes (" + std::to_string(project_->alarms.size()) + " conditions)", lap());
+    // 1.27.0 : les scripts de cycle apres 6 (leur temps : leur propre poste, pas celui des courbes).
+    if (runCycleMoment(6, now) > 0) (void)lap();
+    if (taskStopped()) return;
+    (void)step.lap();
     sampleTrends(now);
     sampleCharts(now);       // lot 11 : chronogrammes, courbes XY, histogrammes
     sampleArchive(now);
@@ -5404,7 +5612,23 @@ void Runtime::cycle(double now) {
     pidCycle(now);           // 1.12.24 : les Reglages PID
     editorsCycle();          // lot 11 : les valeurs de l'installation, pour les editeurs de recette
     reportsCycle(now);       // lot 14 : les rapports periodiques a leur heure
+    timingNow_.stepMs[7] = step.lap();
     cyclePost("reste", "Le reste (compteurs, horloges, m\xC3\xA9" "dias, rapports)", rest + lap());
+    // 1.27.0 : les scripts de cycle apres 7 ; apres 8 et 9 - un ecran les lance (afterFormulas, afterDrawing), sinon
+    // ils suivent 7 (sans ecran : ni formules a calculer, ni dessin).
+    (void)runCycleMoment(7, now);
+    if (taskStopped()) return;
+    if (screenStages_) {
+        drawPending_ = 3;
+    } else {
+        (void)runCycleMoment(8, now);
+        if (taskStopped()) return;
+        (void)runCycleMoment(9, now);
+        if (taskStopped()) return;
+    }
+    // La mesure du cycle : publiee (l'editeur la montre) ; les ecritures de ce cycle jusqu'ici.
+    timingNow_.writes = perf_.writes >= writesAtCycle_ ? perf_.writes - writesAtCycle_ : perf_.writes;
+    timing_ = timingNow_;
     ++cycles_;               // lot 9 : SYS.CycleCount
 }
 
@@ -5432,10 +5656,36 @@ void Runtime::tick(double now) {
     jokerViews_.clear();                                     // 1.12.7 (lot E) : et ses jokers
     linkViews_.clear();                                      // 1.12.11 (lot G) : et ses liaisons Equipement
     rangeViews_.clear();                                     // 1.12.10 (lot F) : et ses plages
+    // 1.27.0 : ce que l'ecran n'a pas lance du cycle d'avant (apres 8, apres 9) part avant le cycle suivant.
+    if (drawPending_) {
+        flushDrawMoments(now);
+        if (taskStopped() || paused_) return;
+    }
+    // 1.27.0 : LE CYCLE DE LA VUE COMMENCE-T-IL A CE TICK ? (le meme calcul que plus bas : rien ne le change entre les
+    // deux). Oui : ses etapes 1 a 3 sont mesurees, et ses scripts de cycle apres 1, 2, 3 tournent juste apres elles.
+    const double period = std::max(10, project_->config.cycleMs) / 1000.0;
+    const bool due = lastCycle_ < 0 || now - lastCycle_ >= period - 1e-9;
+    StepWatch step(pausedNs_);
+    if (due) {
+        ++viewCycle_;
+        timingNow_ = viewcycle::Timing{};
+        timingNow_.cycle = viewCycle_;
+        timingNow_.periodMs = period * 1000.0;
+        timingNow_.view = current_;
+        for (auto& ms : timingNow_.stepMs) ms = -1.0;
+        writesAtCycle_ = perf_.writes;
+        cycleParts_.clear();            // les postes du cycle : ses scripts de cycle apres 1, 2, 3 en font partie
+    }
     refreshBound();                     // lot 15 : les variables liees a un equipement
     now_ = std::max(now_, now);
     followWatched(now, false);          // 1.9 : les variables des alarmes, suivies en permanence
     slaveWatch(now);                    // 1.9 : les bascules vers les esclaves simules
+    if (due) {
+        timingNow_.stepMs[1] = step.lap();
+        (void)runCycleMoment(1, now);
+        if (taskStopped()) return;
+        (void)step.lap();
+    }
     if (animation_ && now - animation_->start >= std::max(1, animation_->spec.durationMs) / 1000.0) animation_.reset();
     // 1.12.6 (lot B) : une formule qui change reprend la main sur le geste fait a cote d'elle.
     if (!gestureFormulas_.empty()) releaseGestures();
@@ -5465,6 +5715,12 @@ void Runtime::tick(double now) {
         }
     }
     if (taskStopped()) return;                // 1.13.0 : arrete pendant une pause : la suite ne part pas
+    if (due) {
+        timingNow_.stepMs[2] = step.lap();
+        (void)runCycleMoment(2, now);
+        if (taskStopped()) return;
+        (void)step.lap();
+    }
     if (!timers_.empty()) timersTick(now);   // 1.12.19 : IHM_APRES, IHM_CHAQUE
     if (!watches_.empty()) watchesTick();    // 1.12.20 : IHM_SUR_CHANGEMENT
     // 1.12.26 : les scripts detaches (leur reveil, leur tranche). 1.13.0 : par le fil de l'IHM seulement (dans une tache
@@ -5476,13 +5732,16 @@ void Runtime::tick(double now) {
     for (const Id id : shown)
         if (const auto* v = viewOf(id)) watchTriggers(*v, now, false);
     if (taskStopped()) return;
-    const double period = std::max(10, project_->config.cycleMs) / 1000.0;
-    if (lastCycle_ < 0 || now - lastCycle_ >= period - 1e-9) {
+    if (due) {
+        timingNow_.stepMs[3] = step.lap();
+        (void)runCycleMoment(3, now);
+        if (taskStopped()) return;
+    }
+    if (due) {
         lastCycle_ = now;
         // Lot 13 : le travail du cycle, mesure ; plus long que la periode : un depassement.
         const auto t0 = std::chrono::steady_clock::now();
         const std::int64_t paused0 = pausedNs_;          // 1.13.0 : sans le temps d'une pause du debogueur
-        cycleParts_.clear();
         inCycle_ = true;
         cycle(now);
         inCycle_ = false;
@@ -6032,6 +6291,11 @@ bool Runtime::permitted(std::string_view permission) const {
 }
 
 bool Runtime::objectAllowed(const Object& o, std::string* why) {
+    // 1.27.0 : desactive par un script (Disable, EnableIf, Objet.Enabled := FALSE).
+    if (const Prop* d = o.find("@disabled"); d && d->value == "TRUE") {
+        if (why) *why = o.name + " : d\xC3\xA9sactiv\xC3\xA9 par un script (Enable, EnableIf ou Enabled := TRUE le r\xC3\xA9tablit)";
+        return false;
+    }
     if (!project_ || !project_->security.enabled) return true;
     const int needed = static_cast<int>(o.number("access", 0));
     if (needed > level()) {

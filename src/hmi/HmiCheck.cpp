@@ -3,10 +3,12 @@
 #include "HmiKeys.hpp"            // 1.11.23 : les raccourcis
 #include "HmiStyles.hpp"          // 1.23.0 : les styles fournis, les styles par type
 #include "HmiFontLibrary.hpp"     // 1.26.1 : la police en formule
+#include "HmiSoundLibrary.hpp"    // 1.27.0 : GetSound('Bip court')
 #include "HmiSemanticColors.hpp"  // 1.23.1 : les couleurs semantiques (@Nom)
 #include "HmiOverload.hpp"   // 1.11.20 : les surcharges
 #include "HmiActionKinds.hpp"   // 1.11.7 : Maths, le clavier virtuel
 #include <cmath>
+#include <regex>
 #include <filesystem>   // 1.14.1 (lot N5) : la source d'un explorateur de fichiers
 #include "HmiPopupParams.hpp"
 #include "HmiObjectAlarms.hpp"
@@ -19,6 +21,7 @@
 #include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"         // 1.12.7 : les valeurs calculees au demarrage, les constantes qualifiees
 #include "HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice (ses choix, sa taille minimale)
+#include "HmiViewCycle.hpp"    // 1.27.0 : les scripts de cycle d'une vue (leur condition, leur nom)
 
 #include "HmiEdit.hpp"
 #include "HmiExpr.hpp"
@@ -1156,9 +1159,13 @@ void checkPrograms(const Project& p, const NameExists& plc, std::vector<Issue>& 
     };
     for (const auto& v : p.views) {
         viewMembers(v);
+        std::set<std::string> cycleNames;      // 1.27.0 : les scripts de cycle d'une vue se distinguent par leur nom
         for (const auto& sc : v.scripts) {
             if (std::find(std::begin(kViewEvents), std::end(kViewEvents), sc.event) == std::end(kViewEvents))
                 add(out, S::Error, "Script", v.id, kNoId, sc.name, "\xC3\xA9v\xC3\xA9nement de vue inconnu : " + sc.event, sc.id);
+            if (viewcycle::isCycleScript(sc) && !sc.name.empty() && !cycleNames.insert(upperText(sc.name)).second)
+                add(out, S::Warning, "Script", v.id, kNoId, sc.name,
+                    "deux scripts de cycle s'appellent " + sc.name + " : renomme l'un d'eux (le journal et l'export les confondraient)", sc.id);
             names(sc, v.id);
         }
         checkActions(p, plc, v, nullptr, v.actions, out);
@@ -4447,6 +4454,71 @@ bool codeWrites(const std::string& lowerBody, const std::string& var) {
 
 } // namespace
 
+// 1.27.0 : LES NOMS ECRITS DES TYPES DE L'IHM - GetSound('Bip court'), GetObject('Pompe_1')... dans les scripts et les
+// fonctions (et les valeurs initiales de leurs declarations) : une ressource, un style, un objet qui n'existe pas renvoie
+// NULL en marche. Un nom calcule ne se verifie qu'en marche.
+void checkHandleNames(const Project& p, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    static const std::regex call(R"((GetObject|GetFont|GetTexture|GetSound|GetStyle|GetResource)\s*\(\s*'([^']*)')", std::regex::icase);
+    const auto sameName = [](const Resource& r, const std::string& n) {
+        if (pub::same(r.name, n)) return true;
+        const auto dot = r.name.rfind('.');
+        return dot != std::string::npos && pub::same(std::string_view(r.name).substr(0, dot), n);
+    };
+    const auto resource = [&](MediaKind k, const std::string& n) {
+        for (const auto& r : p.assets.resources)
+            if (r.kind() == k && sameName(r, n)) return true;
+        return false;
+    };
+    const auto nativeSound = [](const std::string& n) {
+        for (const auto& s : soundlib::builtIn())
+            if (pub::same(s.label, n) || pub::same(s.id, n)) return true;
+        return false;
+    };
+    const auto problem = [&](const std::string& fn, const std::string& n, const View* view) -> std::string {
+        std::string u = fn;
+        for (auto& c : u) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (u == "GETOBJECT") {
+            const auto dot = n.find('.');
+            if (dot != std::string::npos)
+                if (const View* v = pub::viewNamed(p, std::string_view(n).substr(0, dot)))
+                    return v->objectByName(std::string_view(n).substr(dot + 1)) ? std::string{} : "aucun objet '" + n.substr(dot + 1) + "' dans " + v->name;
+            if (!view) return {};                    // un script general : la vue montree en marche
+            return view->objectByName(n) ? std::string{} : "aucun objet '" + n + "' dans " + view->name;
+        }
+        if (u == "GETFONT") return fontlib::resolve(p, n) ? std::string{} : "aucune police '" + n + "' dans le projet";
+        if (u == "GETTEXTURE") return resource(MediaKind::Image, n) ? std::string{} : "aucune image '" + n + "' dans les ressources";
+        if (u == "GETSOUND") return resource(MediaKind::Sound, n) || nativeSound(n) ? std::string{} : "aucun son '" + n + "' (ressources, biblioth\xC3\xA8que de sons)";
+        if (u == "GETSTYLE") return styles::find(p, n) ? std::string{} : "aucun style nomm\xC3\xA9 '" + n + "'";
+        if (resource(MediaKind::Font, n) || resource(MediaKind::Image, n) || resource(MediaKind::Sound, n) || nativeSound(n) || styles::find(p, n)) return {};
+        return "aucune ressource '" + n + "' (police, image, son ou style)";
+    };
+    const auto scan = [&](const std::string& code, const View* view, const std::string& where, Id viewId, Id script) {
+        for (auto it = std::sregex_iterator(code.begin(), code.end(), call); it != std::sregex_iterator(); ++it) {
+            const std::string fn = (*it)[1].str(), name = (*it)[2].str();
+            if (name.empty()) continue;
+            if (const std::string why = problem(fn, name, view); !why.empty()) {
+                const int line = 1 + static_cast<int>(std::count(code.begin(), code.begin() + it->position(), '\n'));
+                add(out, S::Warning, "Scripts", viewId, kNoId, {}, where + " : " + fn + "('" + name + "') rendra NULL - " + why, script, line);
+            }
+        }
+    };
+    const auto withDecls = [](const std::string& body, const std::vector<Declaration>& decls) {
+        std::string all = body;
+        for (const auto& d : decls)
+            if (!d.value.empty()) all += "\n(* " + d.name + " *) " + d.value;
+        return all;
+    };
+    for (const auto& s : p.programs.scripts)
+        if (s.lang == ScriptLang::ST) scan(withDecls(s.body, s.decls), nullptr, "script " + s.name, kNoId, s.id);
+    for (const auto& f : p.programs.functions) scan(withDecls(f.body, f.decls), nullptr, "fonction " + f.name, kNoId, f.id);
+    for (const auto& v : p.views) {
+        for (const auto& s : v.scripts)
+            if (s.lang == ScriptLang::ST) scan(withDecls(s.body, s.decls), &v, v.name + "." + s.event + (s.name.empty() ? "" : " (" + s.name + ")"), v.id, s.id);
+        for (const auto& f : v.functions) scan(withDecls(f.body, f.decls), &v, v.name + "." + f.name, v.id, f.id);
+    }
+}
+
 void checkLot13(const Project& p, std::vector<Issue>& out) {
     using S = Issue::Severity;
     const auto& sec = p.security;
@@ -4933,6 +5005,11 @@ struct ExprWalker {
         using W = exprcheck::Want;
         for (const auto& v : p.views) {
             const bool anim = animOn(v.id), act = actOn(v.id);   // 1.11.13 : le filtre
+            // 1.27.0 : la condition d'un script de cycle - une formule de la vue (ses parametres, ses objets), booleenne.
+            for (const auto& sc : v.scripts)
+                if (viewcycle::isCycleScript(sc) && (!focus || focus->scripts.count(sc.id)))
+                    if (const std::string cond = viewcycle::plainCondition(sc.when); !cond.empty())
+                        expr(Where{&v, kNoId, "Script", sc.name, kNoId, sc.id}, cond, W::Bool, "condition =");
             if (!anim && !act) continue;
             for (const auto& o : v.objects) {
                 if (!anim) { if (!o.actions.empty()) actions(v, &o, o.actions); continue; }
@@ -5810,6 +5887,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkLot12(p, plcHasName, out);     // lot 12
     checkDrawing11212(p, plcHasName, out);   // 1.12.12 (lot H) : les sommets, Points depuis, le plan a zones
     checkLot13(p, out);                 // lot 13 : la signature, la politique
+    checkHandleNames(p, out);           // 1.27.0 : GetSound('...'), GetObject('...') - les noms ecrits
     checkLanguages(p, out);             // lot 13 : les langues
     checkDisplay(p, plcHasName, out);   // lot 13 : les unites, l'affichage
     for (auto& i : ranges::check(p, plcHasName)) out.push_back(std::move(i));   // 1.12.10 (lot F) : les plages et les seuils
@@ -5960,6 +6038,13 @@ std::vector<Issue> compileFocused(const Project& p, const CompileFocus* f) {
                 add(out, severityOf(d.severity), "Script", v.id, kNoId, sc.name, d.message, sc.id, d.line);
                 out.back().declaration = decl;
             }
+            // 1.27.0 : la condition d'un script de cycle (une formule) - elle se lit ; le reste (ses noms, son type) :
+            // l'analyse des expressions (ExprWalker).
+            if (viewcycle::isCycleScript(sc))
+                if (const std::string cond = viewcycle::plainCondition(sc.when); !cond.empty()) {
+                    const auto e = Expression::compile(cond);
+                    if (!e.valid()) add(out, S::Error, "Script", v.id, kNoId, sc.name, "condition =" + cond + " : " + e.error(), sc.id);
+                }
         }
         // Lot 8 : le titre a trous d'une popup, la valeur par defaut des
         // parametres, les bornes d'un champ de saisie.
