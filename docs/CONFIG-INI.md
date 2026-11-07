@@ -25,7 +25,7 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 | `editeur` | API IHM Studio | L'éditeur de la fiche « Applications installées ». |
 | `cle` | XPGAnalyser | Le nom d'origine, celui de la clé du registre (`Software\XPGAnalyser`) et des dossiers techniques. **Ne pas le changer** : c'est par lui qu'une mise à jour retrouve l'installation et ses réglages. |
 | `fichier` | API-IHM-Studio | Le début du nom des fichiers livrés : `API-IHM-Studio-Setup-<version>.exe`. |
-| `version` | 1.33.0 | Doit être la même que dans `CMakeLists.txt`, `src\core\Version.hpp` et `resources\windows\xpg_analyzer.rc` ; `build.bat` et `package.bat` le vérifient (voir la remarque sur le `.rc` dans [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md#version)). |
+| `version` | 1.34.0 | Doit être la même que dans `CMakeLists.txt`, `src\core\Version.hpp` et `resources\windows\xpg_analyzer.rc` ; `build.bat` et `package.bat` le vérifient (voir la remarque sur le `.rc` dans [GUIDE-COMPILATION.md](GUIDE-COMPILATION.md#version)). |
 | `app_id` | {68A57092-…} | L'identité de l'installation pour Windows. **Ne jamais la changer** : c'est elle qui fait d'une nouvelle version une mise à jour. |
 | `exe` | API-Studio.exe | L'exécutable d'API Studio installé. |
 | `exe_ihm` | IHM-Studio.exe | L'exécutable d'IHM Studio installé. |

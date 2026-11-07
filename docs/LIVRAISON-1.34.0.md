@@ -63,8 +63,44 @@ Le pas à pas complet est dans [PASSERELLE-GITHUB.md](PASSERELLE-GITHUB.md) (joi
 - **Tout ce que tu signes est publié seul** quand la passerelle est réglée : une licence, un PC ajouté ou retiré, une révocation, un registre. La publication ne bloque jamais la fenêtre ; un échec est dit, et les fichiers restent dans l'archive comme avant.
 - **La console** a les mêmes gestes : `passerelle-config`, `passerelle-jeton-demandes`, `passerelle-verifier`, `passerelle-publier-config`, `passerelle-demandes`, `passerelle-publier-licence`, `passerelle-refuser`, `kit-studios`.
 
-@ESSAIS@
+## 4. Les essais
+
+- **Linux : @NSUITES@ suites sur @NSUITES@ réussies** (`ctest`, sur la version livrée). Six sont nouvelles :
+  - `evaluation` (@N_EVAL@ contrôles) : le premier lancement, les jours qui restent, la fin, l'horloge reculée, une copie effacée qui ne relance rien, une licence qui passe avant ;
+  - `passerelle` (@N_GW@) : les formats, le sceau (pour un PC, pour l'éditeur, pas pour un autre), le masque du jeton, les caractères de contrôle refusés ;
+  - `fauxpasserelle` (@N_FAUX@) : le faux GitHub local qui sert aux essais sous Wine ;
+  - `passerelle_studios` (@N_STUDIO@) : envoyer, une seule demande par PC, annuler, la licence installée seule, un refus, des états faux, plus anciens, d'un autre poste ou rejoués, hors ligne, la limite de GitHub, deux Studios sur le même PC, et le jeton qui ne sort jamais ;
+  - `adminpasserelle` (@N_ADMIN@) : régler, vérifier, publier, relever, accepter (un PC, puis une licence partagée), refuser, révoquer, retirer un PC, et les attaques de la relecture (une demande rejouée, une issue modifiée, une avalanche de demandes, une demande d'ajout à vérifier) ;
+  - `adminguidemandes` (@N_PAGE@) : la page Demandes en ligne.
+- **Une relecture de sécurité** du code de la passerelle, faite après coup, a trouvé un problème grave, trois moyens et cinq mineurs. Ils sont tous corrigés, et chacun a son essai :
+  - **le grave** : une ancienne demande remise en ligne aurait fait publier « reçue » par-dessus une licence pas encore récupérée ;
+  - **les moyens** : une demande modifiée après coup, une avalanche de fausses demandes, l'identifiant de licence et la liste de révocation en clair ;
+  - **les mineurs** : des caractères de contrôle dans la console, une licence acceptée mais pas installée qui n'était pas réessayée, des numéros qui repartaient à 1 après un nettoyage du dépôt, deux Studios sur le même PC, l'arrêt du fil de fond.
+- **Sous Wine, avec les programmes Windows (WinHTTP), contre le faux GitHub local** (journal joint : `essai-passerelle-wine.txt`) :
+  - **ton outil** (la console, avec une clé d'essai) : régler la passerelle, vérifier, publier la configuration, relever, signer, publier, refuser ;
+  - **un IHM Studio compilé avec la clé d'essai** (une copie jamais livrée) :
+    - au premier lancement : « Évaluation : il te reste 30 jours » ;
+    - il envoie sa demande, puis, relancé après ton acceptation, sa licence est **Valide**, sans aucun fichier ;
+    - un deuxième PC annule sa demande ; un troisième est refusé et voit ta raison ;
+  - **ce qui est public** : aucun nom de client, contact, message, nom de PC ni jeton dans le dépôt, dans les issues ou dans le journal du serveur ;
+  - **l'installation par-dessus la 1.33.0** : elle passe, ta clé d'API est gardée, les programmes installés sont ceux construits (1.34.0), et rien de l'outil de l'éditeur n'est installé ;
+  - **la synchro privée de l'archive (1.31)** : @CLI@ ;
+  - captures jointes : `captures-1.34.0.zip`.
+
 
 @INSTALLER@
 
-@LIMITES@
+## 6. Limites
+
+- **Rien n'a été essayé sur un vrai Windows ni contre le vrai GitHub** : seulement sous Linux, et sous Wine contre un faux GitHub local. Les premiers essais réels seront les tiens (§ 1).
+- **Les Studios livrés n'ont pas encore ta clé** : tant que tu ne m'as pas donné les trois fichiers (§ 1, étape 5), ni l'évaluation ni la passerelle ne s'appliquent chez tes clients.
+- **Les licences flottantes** (N postes en même temps) ne sont **pas faites**. GitHub ne convient pas à un compteur partagé : un seul jeton pour tous, des limites de débit, aucune façon sûre de compter les postes ouverts. Il faudra un vrai service en ligne.
+- **Le jeton des demandes est lisible par qui cherche.** Il ne permet que les issues de la passerelle, et ton outil se garde des abus connus (§ 4). Mais quelqu'un pourrait :
+  - ouvrir de fausses demandes, que tu ignores ;
+  - le faire révoquer par GitHub en le publiant en clair. Il te faudrait alors en créer un autre et republier la configuration.
+- **Une demande « ajouter ce PC à ma licence » n'est pas une preuve** : vérifie auprès de ton client (l'outil te le demande).
+- **L'évaluation est comptée sur le PC** : quelqu'un qui efface toutes ses traces (plusieurs copies, dont une dans le registre de Windows) peut la recommencer.
+- **Délai** : GitHub sert les fichiers publics avec un cache d'environ 5 minutes. Une licence acceptée peut mettre quelques minutes à être vue.
+- **La liste de révocation scellée** est la liste entière : un PC révoqué y lit aussi les autres révocations (identifiants, raisons). Une liste par licence demanderait de changer le format.
+- **L'ancien `revocations.xpgrev` public**, si tu en avais publié un pendant tes essais, reste dans l'historique git du dépôt. L'outil efface le fichier, pas son historique.
+- **La console** `signer-licence` ne demande pas la confirmation d'une demande d'ajout à une licence ; seule l'application la demande, et la console l'affiche dans sa liste.
