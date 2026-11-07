@@ -41,7 +41,10 @@ namespace crypto = deploy::crypto;
 // 1.34.0 : la passerelle GitHub (licensing/Gateway.hpp) - Gateway << passerelle >> (sa configuration, signee par
 // l'editeur), DeviceStatus << poste >> (l'etat d'un PC, signe par l'editeur), Cancel << annulation >> (un PC
 // annule sa demande en ligne, signe par le PC). Jamais dans un fichier importe (licence, registre...).
-enum class DocKind : std::uint8_t { License, Registry, Revocations, Request, Gateway, DeviceStatus, Cancel };
+// 1.35.0 : le service des licences (licensing/Service.hpp) - ServiceCert << service >> (le certificat de la cle du
+// service, signe par l'editeur), et, signes par le SERVICE : Activation << activation >>, Lease << jeton >> (une licence
+// flottante), Time << heure >>, Trial << decouverte >>.
+enum class DocKind : std::uint8_t { License, Registry, Revocations, Request, Gateway, DeviceStatus, Cancel, ServiceCert, Activation, Lease, Time, Trial };
 
 // "licence", "registre", "revocations", "demande" (le mot de l'en-tete).
 [[nodiscard]] const char* docKindKey(DocKind) noexcept;

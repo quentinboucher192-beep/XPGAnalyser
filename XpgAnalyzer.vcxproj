@@ -1410,6 +1410,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\licensing\Licensing.hpp" />
     <ClInclude Include="src\licensing\PublisherKey.hpp" />
     <ClInclude Include="src\licensing\PublisherKeyEntry.hpp" />
+    <ClInclude Include="src\licensing\Service.hpp" />
+    <ClInclude Include="src\licensing\ServiceAddress.hpp" />
     <ClInclude Include="src\licensing\SignedFile.hpp" />
     <ClInclude Include="src\licensing\Store.hpp" />
     <ClInclude Include="src\licensing\TestPublisherKey.hpp" />

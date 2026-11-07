@@ -184,6 +184,12 @@ endif()
 if(XPG_PASSERELLE_BRANCHE)
     target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_BRANCHE="${XPG_PASSERELLE_BRANCHE}")
 endif()
+# 1.35.0 : le service des licences (licensing/Service.hpp, docs/SERVICE-LICENCES.md) ; son adresse est dans
+# src/licensing/ServiceAddress.hpp, cette option (non vide) la remplace a la construction.
+set(XPG_SERVICE_URL "" CACHE STRING "Remplace l'adresse de src/licensing/ServiceAddress.hpp (https://... ; vide : celle de l'en-tete)")
+if(XPG_SERVICE_URL)
+    target_compile_definitions(xpg_licensing PRIVATE XPG_SERVICE_URL="${XPG_SERVICE_URL}")
+endif()
 # 1.30.0 : les vraies cles (src/licensing/PublisherKey.hpp) toujours ; la cle d'essai seulement avec l'option.
 if(XPG_LICENCES_CLE_ESSAI)
     target_compile_definitions(xpg_licensing PRIVATE XPG_LICENCES_CLE_ESSAI=1)
@@ -1073,6 +1079,10 @@ if(XPG_BUILD_TESTS)
         target_link_libraries(licensing_gateway_test PRIVATE winhttp)
     endif()
     xpg_add_test(NAME passerelle COMMAND licensing_gateway_test)
+    # 1.35.0 : les formats partages du service des licences (licensing/Service), sans reseau
+    xpg_add_test_executable(licensing_service_test tests/licensing_service_test.cpp)
+    xpg_target_link_libraries(licensing_service_test PRIVATE xpg_licensing)
+    xpg_add_test(NAME service COMMAND licensing_service_test)
     # 1.33.0 : l'application de l'editeur - le Workspace (sans ecran), puis ses pages dessinees a blanc.
     xpg_add_test_executable(admin_workspace_test tests/admin_workspace_test.cpp)
     xpg_target_link_libraries(admin_workspace_test PRIVATE xpg_admin_core)

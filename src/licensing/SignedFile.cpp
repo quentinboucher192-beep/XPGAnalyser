@@ -15,7 +15,7 @@ constexpr std::string_view kContext = "XPG-LICENSING-1\n";
 
 bool kindFromKey(std::string_view key, DocKind& out) noexcept {
     for (DocKind k : {DocKind::License, DocKind::Registry, DocKind::Revocations, DocKind::Request, DocKind::Gateway, DocKind::DeviceStatus,
-                       DocKind::Cancel})
+                       DocKind::Cancel, DocKind::ServiceCert, DocKind::Activation, DocKind::Lease, DocKind::Time, DocKind::Trial})
         if (key == docKindKey(k)) {
             out = k;
             return true;
@@ -48,6 +48,11 @@ const char* docKindKey(DocKind k) noexcept {
         case DocKind::Gateway: return "passerelle";
         case DocKind::DeviceStatus: return "poste";
         case DocKind::Cancel: return "annulation";
+        case DocKind::ServiceCert: return "service";
+        case DocKind::Activation: return "activation";
+        case DocKind::Lease: return "jeton";
+        case DocKind::Time: return "heure";
+        case DocKind::Trial: return "decouverte";
     }
     return "?";
 }
@@ -61,6 +66,11 @@ std::string docKindLabel(DocKind k) {
         case DocKind::Gateway: return "la configuration de la passerelle";
         case DocKind::DeviceStatus: return "l'\xC3\xA9tat du PC";
         case DocKind::Cancel: return "l'annulation de la demande";
+        case DocKind::ServiceCert: return "le certificat du service";
+        case DocKind::Activation: return "l'activation";
+        case DocKind::Lease: return "le jeton de la licence flottante";
+        case DocKind::Time: return "l'heure du service";
+        case DocKind::Trial: return "la D\xC3\xA9" "couverte";
     }
     return "le document";
 }
@@ -74,6 +84,11 @@ std::size_t docKindMaxBytes(DocKind k) noexcept {
         case DocKind::Gateway: return 16u * 1024u;
         case DocKind::DeviceStatus: return 512u * 1024u;   // la licence scellee dedans
         case DocKind::Cancel: return 4u * 1024u;
+        case DocKind::ServiceCert: return 4u * 1024u;
+        case DocKind::Activation: return 4u * 1024u;
+        case DocKind::Lease: return 2u * 1024u;
+        case DocKind::Time: return 1024u;
+        case DocKind::Trial: return 2u * 1024u;
     }
     return 0;
 }

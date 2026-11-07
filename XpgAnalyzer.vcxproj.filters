@@ -3736,6 +3736,12 @@
     <ClInclude Include="src\licensing\PublisherKeyEntry.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
+    <ClInclude Include="src\licensing\Service.hpp">
+      <Filter>licensing</Filter>
+    </ClInclude>
+    <ClInclude Include="src\licensing\ServiceAddress.hpp">
+      <Filter>licensing</Filter>
+    </ClInclude>
     <ClInclude Include="src\licensing\TestPublisherKey.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
