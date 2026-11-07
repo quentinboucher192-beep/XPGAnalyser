@@ -77,7 +77,7 @@ app/...            le poste : les fichiers du projet utiles au poste, et le lanc
 
 ## 5. L'appairage
 
-Sur le PC de maintenance, `XPG-Deployment-Agent --appairer` affiche un **code à 6 chiffres**, valable 5 minutes, utilisable une fois, 3 essais au plus. Le développeur le tape dans le Studio.
+Sur le PC de maintenance, `XPG-Deployment-Agent --appairer` affiche un **code à 6 chiffres**, valable 5 minutes, utilisable une fois, 3 essais au plus. Le développeur le tape dans le Studio. 1.32.0 : lance-le **dans la session de l'opérateur**, sans « Exécuter en tant qu'administrateur » : le dossier de l'agent est celui du compte qui le lance ; lancé sous un autre compte, le code irait dans le profil de ce compte et l'appairage échouerait.
 
 Six chiffres se devinent hors ligne si on les envoie, même hachés. Le code n'est donc jamais transmis : les deux machines font un **échange de clés authentifié par mot de passe (CPace sur ristretto255, libsodium)**, lié aux deux certificats de la connexion TLS :
 
@@ -105,7 +105,7 @@ Son dossier (par défaut **`%LOCALAPPDATA%\XPG\Agent`** sous Windows depuis la 1
 ### 6.1 La sécurité de l'agent (1.32.0)
 
 Une relecture de sécurité a trouvé qu'un **utilisateur local sans droits** pouvait prendre la main sur l'agent : son dossier sous `C:\ProgramData` héritait des droits de ProgramData (tout compte peut y créer des fichiers), et ses secrets étaient protégés pour la **machine** (tout programme du PC peut les ouvrir). Depuis la 1.32.0 :
-- **Le dossier est dans le profil de l'opérateur** (`%LOCALAPPDATA%\XPG\Agent` ; l'agent tourne dans sa session), avec, à chaque démarrage, un accès **réservé** à SYSTEM, aux Administrateurs et à ce compte (héritage du parent coupé ; sous Linux : 0700). La clé d'identité et le code d'appairage sont protégés pour **ce compte**.
+- **Le dossier est dans le profil de l'opérateur** (`%LOCALAPPDATA%\XPG\Agent` ; l'agent tourne dans sa session), avec, à chaque démarrage, un accès **réservé** à SYSTEM, aux Administrateurs et à ce compte (héritage du parent coupé ; sous Linux : 0700). La clé d'identité et le code d'appairage sont protégés pour **ce compte**. L'ancien dossier (`C:\ProgramData\XPG\Agent`) n'est jamais repris par le compte système (une installation déployée par SCCM ou Intune) : il l'est par l'agent de la session de l'opérateur. S'il a dû être recopié (pas déplacé), sa clé y est effacée ; si elle ne peut pas l'être, l'agent le dit.
 - **La reprise du dossier de la 1.29/1.31**, une fois : si `C:\ProgramData\XPG\Agent` existe, n'est pas un lien et appartient à ce compte, aux Administrateurs ou au système, il est déplacé (sinon recopié, avec une note dans l'ancien) ; ce qui y appartenait à un autre compte (ou était un lien) est effacé et dit ; les secrets sont reprotégés pour ce compte. S'il appartient à quelqu'un d'autre, il n'est **pas** repris : l'agent repart d'un dossier neuf et le dit (réappairer les PC d'IHM Studio). L'entrée du poste qui démarre avec la session est refaite si elle désignait l'ancien dossier.
 - **Les fichiers temporaires** ont un nom imprévisible et sont créés en exclusivité (`crypto::replaceFile`) : un fichier ou un lien posé d'avance fait échouer l'écriture au lieu d'être suivi. Un dossier `.extraction` laissé là est effacé sans suivre les liens, sinon l'installation s'arrête ; aucun lien ni jonction n'est suivi sur le chemin d'une installation, d'un nettoyage ou d'un effacement de version.
 - **`arret.json`** est toujours celui du dossier de l'agent : le chemin écrit dans `poste.json` n'est plus jamais relu.
