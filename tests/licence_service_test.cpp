@@ -455,7 +455,7 @@ int main(int argc, char** argv) {
         const auto card = app::licence::startCard();
         // 1.36.0 : avec un service, la demande en ligne d'abord
         check(has(card.title, "D\xC3\xA9" "couverte : il te reste 30 jours") && card.button == "Demander ma licence\xE2\x80\xA6" && card.tab == app::licence::kTabRequest &&
-                  has(card.text, "Demande ta licence"),
+                  has(card.text, "demande-la"),
               "l'encart de l'accueil : " + card.title + " / " + card.button);
         const auto r = keep(ls::trial());
         const auto rec = record();

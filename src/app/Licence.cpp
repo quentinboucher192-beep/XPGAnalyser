@@ -373,11 +373,10 @@ Card startCard() {
             // 1.36.0 : la demande en ligne d'abord (ou celle qui attend)
             if (onlineRequests()) {
                 if (const auto pr = pendingRequest(); pr.pending) {
-                    c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, ta licence s'installe "
-                             "d'elle-m\xC3\xAAme.";
+                    c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : ta licence s'installera d\xC3\xA8s qu'il l'accepte.";
                     c.button = "Voir ma demande";
                 } else {
-                    c.text = "Ensuite, sans licence, aucun projet ne s'ouvre. Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : elle s'installe d\xC3\xA8s qu'il l'accepte.";
+                    c.text = "Ensuite, sans licence, aucun projet ne s'ouvre : demande-la \xC3\xA0 l'\xC3\xA9" "diteur.";
                     c.button = "Demander ma licence\xE2\x80\xA6";
                 }
                 c.tab = kTabRequest;
@@ -397,12 +396,12 @@ Card startCard() {
                 if (const auto pr = pendingRequest(); pr.pending) {
                     c.title = "Demande envoy\xC3\xA9" "e : en attente de l'\xC3\xA9" "diteur";
                     c.text = "Demande n\xC2\xB0 " + std::to_string(pr.number) + " du " + service::dateText(pr.sentAt) +
-                             ". D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme ; en attendant, aucun projet ne s'ouvre.";
+                             " : ta licence s'installera d\xC3\xA8s qu'il l'accepte.";
                     c.tone = 2;
                     c.button = "Voir ma demande";
                 } else {
-                    c.text = std::string(st.evaluationOver ? "Ta D\xC3\xA9" "couverte est finie. " : "") +
-                             "Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, elle s'installe d'elle-m\xC3\xAAme.";
+                    c.text = st.evaluationOver ? std::string("Ta D\xC3\xA9" "couverte est finie : demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur.")
+                                               : std::string("Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : elle s'installe d\xC3\xA8s qu'il l'accepte.");
                     c.button = "Demander ma licence\xE2\x80\xA6";
                 }
                 c.tab = kTabRequest;
@@ -457,7 +456,7 @@ Card startCard() {
             // 1.36.0 : une licence finie, revoquee, refusee... : une nouvelle demande en ligne (ou celle qui attend)
             if (onlineRequests()) {
                 const auto pr = pendingRequest();
-                if (pr.pending) c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme.";
+                if (pr.pending) c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : ta licence s'installera d\xC3\xA8s qu'il l'accepte.";
                 c.button = pr.pending ? "Voir ma demande" : "Demander ma licence\xE2\x80\xA6";
                 c.tab = kTabRequest;
             }

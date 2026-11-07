@@ -557,6 +557,13 @@ const lic::TrustedKey* findKey(const std::vector<lic::TrustedKey>& keys, std::st
     return nullptr;
 }
 
+// 1.36.0 : la cle de l'editeur qui a signe le certificat de CE service (celle qu'il emploie) ; nul : inconnue.
+const lic::TrustedKey* certSigner(const Conn& c, const std::vector<lic::TrustedKey>& keys) {
+    std::vector<lic::SignedBlock> blocks;
+    if (c.cert.empty() || !lic::readBlocks(c.cert, blocks, nullptr) || blocks.empty()) return nullptr;
+    return findKey(keys, blocks[0].keyId);
+}
+
 // Un seul bloc de ce genre, signe par une cle de l'editeur que ce programme croit.
 bool verifyPublisherBlock(std::string_view bytes, lic::DocKind kind, lic::SignedBlock& out, std::string& why) {
     const auto keys = lic::trustedPublisherKeys();
@@ -1697,7 +1704,7 @@ Result sendRequest(const RequestForm& form0) {
     q.customer = f.customer;
     q.contact = f.contact;
     q.message = f.message;
-    const std::string sealed = lgw::sealFor(key->key, lgw::writeOnlineRequest(q));
+    std::string sealed = lgw::sealFor(key->key, lgw::writeOnlineRequest(q));
     if (sealed.empty()) {
         res.message = "La demande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
         return res;
@@ -1705,6 +1712,16 @@ Result sendRequest(const RequestForm& form0) {
     Conn c;
     Record rec;
     if (!begin(res, c, rec, "ta demande n'est pas partie")) return res;
+    // 1.36.0 : scellee pour la cle de l'editeur qui a certifie CE service (celle qu'il emploie et qu'il lit) : une copie
+    // d'essai croit aussi la vraie cle ; un programme livre n'en a qu'une (la meme).
+    if (const lic::TrustedKey* signer = certSigner(c, keys); signer && signer != key) {
+        key = signer;
+        sealed = lgw::sealFor(key->key, lgw::writeOnlineRequest(q));
+        if (sealed.empty()) {
+            res.message = "La demande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
+            return res;
+        }
+    }
     // Relu juste avant l'envoi : une demande partie entre-temps depuis l'autre Studio (le meme dossier) est vue.
     if (pending(rec)) {
         res.pendingAfter = true;

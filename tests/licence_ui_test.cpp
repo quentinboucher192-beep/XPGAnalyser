@@ -432,7 +432,7 @@ int main(int argc, char** argv) {
             const auto pr = app::licence::pendingRequest();
             card = app::licence::startCard();
             check(pr.pending && pr.number == 12 && has(pr.state, "attente"), "la demande qui attend : relue (" + pr.state + ")");
-            check(has(card.title, "Demande envoy") && has(card.text, "n\xC2\xB0 12") && has(card.text, "aucun projet ne s'ouvre") && card.button == "Voir ma demande" &&
+            check(has(card.title, "Demande envoy") && has(card.text, "n\xC2\xB0 12") && has(card.text, "s'installera") && card.button == "Voir ma demande" &&
                       card.tab == app::licence::kTabRequest && card.tone == 2,
                   "l'encart : la demande en attente, << Voir ma demande >> (" + card.title + " / " + card.text + ")");
             std::string refus;
