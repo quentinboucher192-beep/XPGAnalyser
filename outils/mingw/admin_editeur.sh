@@ -1,7 +1,8 @@
 #!/bin/bash
 # =============================================================================
 #  outils/mingw/admin_editeur.sh - 1.30.0 : l'outil de l'EDITEUR pour les licences
-#  (XPG-License-Admin.exe), construit avec MinGW et emballe A PART
+#  (XPG-License-Admin.exe), construit avec MinGW et emballe A PART ; 1.33.0 : et son
+#  application (XPG-License-Manager-Admin.exe, ses fenetres ; SDL3.dll a cote)
 # -----------------------------------------------------------------------------
 #  JAMAIS LIVRE A UN CLIENT : ni cross_mingw.sh ni package_mingw.py ne le copient
 #  (le controle du paquet arrete la construction s'il trouve son nom ou sa marque
@@ -9,7 +10,8 @@
 #  seul, hors de dist/ :
 #
 #    outils/mingw/admin_editeur.sh [DOSSIER]
-#      -> DOSSIER/editeur-<version>/      XPG-License-Admin.exe
+#      -> DOSSIER/editeur-<version>/      XPG-License-Manager-Admin.exe (1.33.0 : l'application) et SDL3.dll
+#                                         XPG-License-Admin.exe (la console : les scripts)
 #                                         LISEZ-MOI-EDITEUR.txt (CRLF : le pas a pas)
 #                                         registre.json (= tests/fixtures/licences/registre-exemple.json)
 #                                         parametres-exemple.json
@@ -20,7 +22,7 @@
 #    JOBS=2               les compilations a la fois
 #    XPG_NINJA_LOCK=...   un verrou (flock) partage avec d'autres constructions
 #
-#  Seule la cible xpg_license_admin est construite (ninja ... xpg_license_admin).
+#  Seules les cibles de l'editeur sont construites (ninja ... xpg_license_admin xpg_license_manager_admin).
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -45,9 +47,9 @@ fi
 
 # ---- 1. construire l'outil (cette cible seulement) ----
 if [ -n "${XPG_NINJA_LOCK:-}" ]; then
-    flock "$XPG_NINJA_LOCK" ninja -C "$OUT" -j "$JOBS" xpg_license_admin
+    flock "$XPG_NINJA_LOCK" ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin
 else
-    ninja -C "$OUT" -j "$JOBS" xpg_license_admin
+    ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin
 fi
 EXE="$OUT/XPG-License-Admin.exe"
 [ -f "$EXE" ] || { echo "$EXE manque apres la construction" >&2; exit 1; }
@@ -56,6 +58,12 @@ if x86_64-w64-mingw32-objdump -p "$EXE" | grep -q "Subsystem.*(Windows GUI)"; th
     echo "$EXE n'est pas un programme en console (-mconsole manque)" >&2
     exit 1
 fi
+# 1.33.0 : l'application (une fenetre : sous-systeme Windows GUI), elle aussi marquee.
+APP="$OUT/XPG-License-Manager-Admin.exe"
+[ -f "$APP" ] || { echo "$APP manque apres la construction" >&2; exit 1; }
+grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$APP" || { echo "$APP ne porte pas la marque de l'outil Admin : ce n'est pas lui" >&2; exit 1; }
+x86_64-w64-mingw32-objdump -p "$APP" | grep -q "Subsystem.*(Windows GUI)" || { echo "$APP n'est pas une application a fenetre" >&2; exit 1; }
+[ -f "$OUT/SDL3.dll" ] || { echo "$OUT/SDL3.dll manque (l'application en a besoin)" >&2; exit 1; }
 
 # ---- 2. le dossier de l'editeur ----
 NOM="editeur-$VERSION"
@@ -63,6 +71,8 @@ DEST="$SORTIE/$NOM"
 rm -rf "$DEST"
 mkdir -p "$DEST"
 cp -f "$EXE" "$DEST/XPG-License-Admin.exe"
+cp -f "$APP" "$DEST/XPG-License-Manager-Admin.exe"
+cp -f "$OUT/SDL3.dll" "$DEST/SDL3.dll"
 cp -f tests/fixtures/licences/registre-exemple.json "$DEST/registre.json"
 cp -f tests/fixtures/licences/parametres-exemple.json "$DEST/parametres-exemple.json"
 # Le pas a pas : UTF-8 avec BOM, fins de ligne CRLF (le Bloc-notes), la version mise.

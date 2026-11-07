@@ -132,6 +132,7 @@ SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi
 ADMIN_CHAINES = (
     (b"XPG-License-Admin", "le nom de l'outil Admin des licences"),
     (b"XPG License Manager Admin", "le nom de l'outil Admin des licences"),
+    (b"XPG-License-Manager-Admin", "le nom de l'application Admin des licences (1.33.0)"),
     (b"XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER", "la marque de l'outil Admin des licences"),
     (b"XPG-CLE-ESSAI-LICENCES", "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)"),
     (b"XPG-SAUVEGARDE-CLE", "une sauvegarde de la cle de l'editeur (1.32.0)"),

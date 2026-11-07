@@ -83,6 +83,7 @@ function Copy-XpgArbre {
 $script:XpgAdminChaines = @(
     @('XPG-License-Admin', "le nom de l'outil Admin des licences"),
     @('XPG License Manager Admin', "le nom de l'outil Admin des licences"),
+    @('XPG-License-Manager-Admin', "le nom de l'application Admin des licences (1.33.0)"),
     @('XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER', "la marque de l'outil Admin des licences"),
     @('XPG-CLE-ESSAI-LICENCES', "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)"),
     @('XPG-SAUVEGARDE-CLE', "une sauvegarde de la cle de l'editeur (1.32.0)"),

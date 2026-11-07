@@ -175,6 +175,12 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.33.0 : l'application de l'editeur (XPG License Manager Admin : ses fenetres ; cote editeur seulement)
+        note("1.33.0", "Projet", Kind::New,
+         "L'\xC3\x89" "DITEUR SIGNE TES LICENCES DANS UNE APPLICATION : son outil a maintenant des fen\xC3\xAAtres (tableau de bord, clients, "
+         "licences avec un assistant, activations, r\xC3\xA9vocations, synchronisation GitHub). Rien ne change dans ce programme : "
+         "l'activation reste par fichier, v\xC3\xA9rifi\xC3\xA9" "e hors ligne.",
+         "licence", ""),
         // 1.32.0 : la securite partout (quatre relectures du code, leurs corrections) et la liste des limites
         note("1.32.0", "Scripts", Kind::Changed,
          "LES FICHIERS DES SCRIPTS RESTENT DANS LE PROJET : une native de fichier ne lit et n'\xC3\xA9" "crit que dans donnees/ et exports/ "

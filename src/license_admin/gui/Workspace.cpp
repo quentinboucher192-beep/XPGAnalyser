@@ -133,6 +133,9 @@ std::string dateTimeFr(Seconds t) {
 
 // --------------------------------------------------------------------------------------------------- Workspace
 Workspace::Workspace(std::string folder) : folder_(folder.empty() ? defaultKeyFolder() : std::move(folder)) {
+    // La marque de l'outil Admin dans l'executable : le controle du paquet la cherche (jamais livre a un client).
+    static const char* volatile mark = kAdminMarker;
+    (void)mark;
     (void)crypto::init();
     reload();
 }
