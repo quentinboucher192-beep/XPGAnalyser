@@ -115,6 +115,7 @@ int main() {
         gw::StatusContent content;
         content.message = "Bienvenue";
         content.license = "XPG-LICENSING 1 licence 2\n{}SIGNATURE ...\n";
+        content.revocations = "XPG-LICENSING 1 revocations 2\n{}SIGNATURE ...\n";
         gw::DeviceStatus s;
         s.device = gw::deviceId(pc->publicKey());
         s.number = 7;
@@ -133,7 +134,7 @@ int main() {
         std::string plain;
         gw::StatusContent rc;
         check(gw::openWith(*pc, r.sealed, plain, &why) && gw::parseStatusContent(plain, rc, &why) && rc.message == "Bienvenue" &&
-                  rc.license == content.license,
+                  rc.license == content.license && rc.revocations == content.revocations,
               "le PC lit son contenu");
         for (gw::State st : {gw::State::Received, gw::State::Accepted, gw::State::Refused, gw::State::Cancelled, gw::State::Updated,
                              gw::State::Revoked, gw::State::Removed}) {
@@ -175,6 +176,26 @@ int main() {
               "l'editeur l'ouvre : " + why);
         check(!gw::openWith(*other, b.sealed, plain, &why), "personne d'autre ne l'ouvre");
         check(!gw::parseIssueBody("Une issue ordinaire\nbonjour\n", b, &why), "une issue ordinaire n'est pas une demande");
+        // 1.34.0 (relecture) : une ligne chacun, sans caractere de controle (la console de l'editeur les affiche)
+        for (const std::string& bad : {std::string("Client\nlicence demand\xC3\xA9" "e XPG-1"), std::string("Client \x1b[2J"),
+                                      std::string("Client \xC2\x9B" "31m"), std::string("Client \xFF")}) {
+            gw::OnlineRequest x = q;
+            x.customer = bad;
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "un client avec un caractere de controle est refuse");
+        }
+        {
+            gw::OnlineRequest x = q;
+            x.message = "ligne 1\rligne 2";
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "un message sur deux lignes est refuse");
+            x = q;
+            x.customer = "   ";
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "un client vide est refuse");
+            x = q;
+            x.customer = "Soci\xC3\xA9t\xC3\xA9 d'essai \xE2\x80\x94 atelier \xF0\x9F\x94\xA7";
+            check(gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "des accents, un tiret long, un symbole : acceptes");
+        }
+        check(!gw::parseIssueBody(std::string(gw::kIssueMagic) + "\nposte " + id + "\ncle zzzzzzzzzzzzzzzzzzzz\nAAAA\n", b, &why),
+              "un identifiant de cle mal ecrit est refuse");
 
         gw::Cancel c;
         c.device = id;

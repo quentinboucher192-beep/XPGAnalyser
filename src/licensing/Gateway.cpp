@@ -26,6 +26,26 @@ bool nameChar(char c) noexcept {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
 }
 
+// Une ligne de texte : UTF-8 valide, aucun caractere de controle (ni fin de ligne, ni echappement de terminal).
+bool plainLine(std::string_view s) noexcept {
+    for (std::size_t i = 0; i < s.size();) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c < 0x20 || c == 0x7F) return false;
+        if (c < 0x80) {
+            ++i;
+            continue;
+        }
+        const std::size_t n = (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2 : (c & 0xF8) == 0xF0 ? 3 : 0;
+        if (n == 0 || c < 0xC2 || c > 0xF4 || i + n >= s.size()) return false;
+        for (std::size_t k = 1; k <= n; ++k)
+            if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return false;
+        // les caracteres de controle C1 (U+0080 a U+009F : C2 80 a C2 9F), dont l'echappement CSI
+        if (c == 0xC2 && static_cast<unsigned char>(s[i + 1]) < 0xA0) return false;
+        i += n + 1;
+    }
+    return true;
+}
+
 bool isHex(std::string_view s) noexcept {
     return std::all_of(s.begin(), s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 }
@@ -279,15 +299,17 @@ std::string writeStatusContent(const StatusContent& c) {
     v.set("version", 1);
     if (!c.message.empty()) v.set("message", c.message);
     if (!c.license.empty()) v.set("licence", c.license);
+    if (!c.revocations.empty()) v.set("revocations", c.revocations);
     return json::write(v, false);
 }
 
 bool parseStatusContent(std::string_view text, StatusContent& out, std::string* why) {
     constexpr std::string_view what = "le contenu scell\xC3\xA9";
     json::Value v;
-    if (!readObject(text, v, {"version", "message", "licence"}, what, why)) return false;
+    if (!readObject(text, v, {"version", "message", "licence", "revocations"}, what, why)) return false;
     StatusContent c;
-    if (!readString(v, "message", c.message, false, 2000, what, why) || !readString(v, "licence", c.license, false, 300u * 1024u, what, why))
+    if (!readString(v, "message", c.message, false, 2000, what, why) || !readString(v, "licence", c.license, false, 300u * 1024u, what, why) ||
+        !readString(v, "revocations", c.revocations, false, 8u * 1024u * 1024u, what, why))
         return false;
     out = std::move(c);
     return true;
@@ -312,6 +334,9 @@ bool parseOnlineRequest(std::string_view text, OnlineRequest& out, std::string* 
     if (!readString(v, "demande", r.request, true, 32u * 1024u, what, why) || !readString(v, "client", r.customer, true, 200, what, why) ||
         !readString(v, "contact", r.contact, false, 200, what, why) || !readString(v, "message", r.message, false, 2000, what, why))
         return false;
+    if (!plainLine(r.customer) || !plainLine(r.contact) || !plainLine(r.message))
+        return fail(why, std::string(what) + " : le client, le contact ou le message porte un caract\xC3\xA8re de contr\xC3\xB4le");
+    if (r.customer.find_first_not_of(' ') == std::string::npos) return fail(why, std::string(what) + " : le client est vide");
     out = std::move(r);
     return true;
 }
@@ -345,7 +370,8 @@ bool parseIssueBody(std::string_view body, IssueBody& out, std::string* why) {
     std::string magic, poste, cle;
     if (!line(magic) || magic != kIssueMagic) return fail(why, "ce n'est pas une demande en ligne XPG");
     if (!line(poste) || poste.rfind("poste ", 0) != 0 || !isDeviceId(poste.substr(6))) return fail(why, "la demande en ligne : la ligne du poste est illisible");
-    if (!line(cle) || cle.rfind("cle ", 0) != 0 || cle.size() != 24) return fail(why, "la demande en ligne : la ligne de la cl\xC3\xA9 est illisible");
+    if (!line(cle) || cle.rfind("cle ", 0) != 0 || cle.size() != 24 || cle.compare(4, 4, "xpg-") != 0 || !isHex(std::string_view(cle).substr(8)))
+        return fail(why, "la demande en ligne : la ligne de la cl\xC3\xA9 est illisible");
     IssueBody b;
     b.device = poste.substr(6);
     b.keyId = cle.substr(4);

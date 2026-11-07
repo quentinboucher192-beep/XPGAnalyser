@@ -121,7 +121,8 @@ struct DeviceStatus {
     Seconds       issuedAt{0};
     State         state{State::Received};
     std::string   requestNonce;       // la demande a laquelle il repond ("" : aucune)
-    std::string   licenseId;          // la licence concernee ("" : aucune)
+    std::string   licenseId;          // la licence concernee ("" : aucune) ; 1.34.0 (relecture) : l'editeur ne l'ecrit PLUS
+                                      // en clair (le depot est public) - elle est dans la licence scellee
     std::string   sealed;             // le contenu (StatusContent), scelle pour la cle du PC (base64) ; peut etre vide
 };
 [[nodiscard]] std::string writeDeviceStatus(const DeviceStatus& s);
@@ -130,6 +131,9 @@ bool parseDeviceStatus(std::string_view json, DeviceStatus& out, std::string* wh
 struct StatusContent {
     std::string message;              // la raison d'un refus, un mot de l'editeur (texte libre, court)
     std::string license;              // le fichier de licence (.xpglic : ses blocs signes, tel quel) ; vide : aucun
+    // 1.34.0 (relecture) : la liste de revocation (.xpgrev, signee, telle quelle) - scellee pour le PC concerne, pas
+    // publiee en clair dans le depot public (ses raisons sont du texte libre) ; vide : aucune
+    std::string revocations;
 };
 [[nodiscard]] std::string writeStatusContent(const StatusContent& c);
 bool parseStatusContent(std::string_view json, StatusContent& out, std::string* why);
@@ -140,6 +144,8 @@ bool parseStatusContent(std::string_view json, StatusContent& out, std::string* 
 //              cle <identifiant de la cle de l'editeur pour laquelle c'est scelle>\n
 //              <le sceau, base64 en lignes de 76>\n
 //  Le sceau contient OnlineRequest (JSON).
+// Le client, le contact et le message : une ligne chacun, UTF-8 valide, sans caractere de controle (sinon la
+// demande est refusee : ils s'affichent dans la console de l'editeur).
 struct OnlineRequest {
     int         version{1};
     std::string request;              // la demande d'activation (.xpgreq : son bloc signe par le PC, tel quel)
