@@ -37,6 +37,16 @@
 //  d'environnement (les essais, un script). Elle n'est jamais affichee ni ecrite.
 //  1.30.0 : le registre des activations (activations.jsonl, dans le dossier de la cle) : signer-licence,
 //  signer-revocations et enregistrer-demande y ajoutent leurs lignes ; liste montre tous les PC connus.
+//  1.34.0 : LA PASSERELLE GITHUB DES LICENCES (un depot PUBLIC ; Passerelle.hpp, licensing/Gateway.hpp) - les
+//  demandes des clients arrivent en issues, les licences repartent seules a leurs PC :
+//    XPG-License-Admin passerelle-config --depot PROPRIETAIRE/NOM [--branche main] [--api URL --raw URL]
+//    XPG-License-Admin passerelle-jeton-demandes [--variable NOM] | passerelle-jeton-demandes --effacer
+//    XPG-License-Admin passerelle-verifier
+//    XPG-License-Admin passerelle-publier-config
+//    XPG-License-Admin passerelle-demandes [--toutes]
+//    XPG-License-Admin passerelle-publier-licence --licence F.xpglic
+//    XPG-License-Admin passerelle-refuser --poste ID --raison TEXTE
+//    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
 //  Code de sortie : 0 fait ; 1 refuse (la raison est ecrite) ; 2 mauvais usage ; 3 signe et range, mais la synchro
 //  (--publier) a echoue (1.31.0 : ne pas signer de nouveau, relancer github-synchroniser).
@@ -44,6 +54,7 @@
 #include "Admin.hpp"
 #include "GitHubSync.hpp"
 #include "KeyBackup.hpp"
+#include "Passerelle.hpp"
 
 #include "../core/SystemOpen.hpp"
 #include "../deploy/Crypto.hpp"
@@ -73,7 +84,7 @@ namespace {
 namespace crypto = deploy::crypto;
 using namespace license_admin;
 
-constexpr const char* kToolVersion = "1.1.0";   // 1.31.0 : la synchro GitHub, l'archive
+constexpr const char* kToolVersion = "1.2.0";   // 1.31.0 : la synchro GitHub, l'archive ; 1.34.0 : la passerelle des clients
 
 void say(const std::string& text) {
     std::fwrite(text.data(), 1, text.size(), stdout);
@@ -124,6 +135,21 @@ std::string usage() {
            "  github-etat [--hors-ligne]                     la configuration, puis ce qui serait re\xC3\xA7u et envoy\xC3\xA9 (sans rien changer)\n"
            "  github-synchroniser [--recevoir-seulement]     re\xC3\xA7oit ce que le d\xC3\xA9p\xC3\xB4t a de plus r\xC3\xA9" "cent, puis publie le reste (un commit)\n"
            "  github-code-secours --afficher                 remontre le code de secours de la cl\xC3\xA9 de synchro\n"
+           "\nLa passerelle des clients (un d\xC3\xA9p\xC3\xB4t GitHub PUBLIC, \xC3\xA0 part : les demandes y arrivent, les licences en repartent seules) :\n"
+           "  passerelle-config --depot PROPRIETAIRE/NOM [--branche main]\n"
+           "                                                 le d\xC3\xA9p\xC3\xB4t public de la passerelle (ton jeton GitHub doit le couvrir :\n"
+           "                                                 Contents et Issues en lecture et \xC3\xA9" "criture)\n"
+           "  passerelle-jeton-demandes [--variable NOM]     enregistre le jeton DES CLIENTS (Issues seulement, tap\xC3\xA9 sans \xC3\xA9" "cho) ;\n"
+           "                                                 --effacer le retire\n"
+           "  passerelle-verifier                            le d\xC3\xA9p\xC3\xB4t est public, ton jeton y \xC3\xA9" "crit, le jeton des demandes est accept\xC3\xA9\n"
+           "  passerelle-publier-config                      publie la configuration sign\xC3\xA9" "e (le jeton des demandes masqu\xC3\xA9), le registre,\n"
+           "                                                 la liste de r\xC3\xA9vocation\n"
+           "  passerelle-demandes [--toutes]                 rel\xC3\xA8ve les demandes en ligne (rang\xC3\xA9" "es dans demandes-en-ligne/) et les liste\n"
+           "  passerelle-publier-licence --licence F.xpglic  publie une licence sign\xC3\xA9" "e \xC3\xA0 chacun de ses PC (une demande en attente :\n"
+           "                                                 accept\xC3\xA9" "e, son issue ferm\xC3\xA9" "e)\n"
+           "  passerelle-refuser --poste ID --raison TEXTE   refuse la demande en attente de ce poste (la raison scell\xC3\xA9" "e pour lui)\n"
+           "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, GatewayAddress.hpp (et LISEZ-MOI.txt) :\n"
+           "                                                 les fichiers PUBLICS \xC3\xA0 compiler dans les Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "  --version\n\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
            "Le registre des activations (activations.jsonl) : chaque licence sign\xC3\xA9" "e, chaque demande enregistr\xC3\xA9" "e, chaque r\xC3\xA9vocation ;\n"
@@ -201,7 +227,7 @@ int run(const std::vector<std::string>& argv) {
     Args a;
     a.command = argv[0];
     static const std::vector<std::string> kFlags = {"--essai",     "--garder",    "--vide",  "--publier", "--effacer", "--hors-ligne",
-                                                    "--recevoir-seulement", "--afficher", "--remplacer"};
+                                                    "--recevoir-seulement", "--afficher", "--remplacer", "--toutes"};
     for (std::size_t i = 1; i < argv.size(); ++i) {
         const std::string& x = argv[i];
         if (x.rfind("--", 0) == 0) {
@@ -690,6 +716,136 @@ int run(const std::vector<std::string>& argv) {
         if (!key && !a.flag("--recevoir-seulement"))
             say("(Pas de cl\xC3\xA9 d'\xC3\xA9" "diteur sur ce poste : les signatures re\xC3\xA7ues ne sont v\xC3\xA9rifi\xC3\xA9" "es que par les cl\xC3\xA9s compil\xC3\xA9" "es dans l'outil.)\n");
         return syncReport(key.get(), a.flag("--recevoir-seulement"), false);
+    }
+    // ---- 1.34.0 : la passerelle des clients ----
+    const auto passerelleOptions = [&] {
+        passerelle::Options o;
+        o.now = licensing::systemNow();
+        o.tool = std::string("XPG-License-Admin/") + kToolVersion;
+        return o;
+    };
+    const auto showResult = [&](const passerelle::Result& r) -> int {
+        std::string text = r.text();
+        if (r.ok) {
+            say(text + "\n");
+            return 0;
+        }
+        complain(text);
+        return 1;
+    };
+    if (a.command == "passerelle-config") {
+        passerelle::Config c;
+        const bool had = passerelle::configured(folder);
+        if (had && !passerelle::readConfig(folder, c, &why)) c = passerelle::Config{};
+        if (a.one("--depot").empty() && !had) {
+            complain("passerelle-config : l'option --depot PROPRIETAIRE/NOM manque\n\n" + usage());
+            return 2;
+        }
+        if (!a.one("--depot").empty()) c.repo = a.one("--depot");
+        if (!a.one("--branche").empty()) c.branch = a.one("--branche");
+        if (!a.one("--api").empty()) c.api = a.one("--api");
+        if (!a.one("--raw").empty()) c.raw = a.one("--raw");
+        github::Config archiveRepo;
+        std::string w;
+        if (github::configured(folder) && github::readConfig(folder, archiveRepo, &w) && archiveRepo.repo == c.repo) {
+            complain("Refus\xC3\xA9 : " + c.repo + " est le d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 de l'archive des licences ; la passerelle est un AUTRE d\xC3\xA9p\xC3\xB4t, PUBLIC");
+            return 1;
+        }
+        if (!passerelle::writeConfig(folder, c, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Passerelle : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + (c.api == licensing::gateway::kDefaultApi ? std::string() : ", API " + c.api + ", raw " + c.raw)
+            + "\n  (" + passerelle::configPath(folder) + ")\n");
+        if (!github::hasToken(folder)) say("Ton jeton GitHub manque : XPG-License-Admin github-jeton (il doit couvrir aussi ce d\xC3\xA9p\xC3\xB4t).\n");
+        if (!passerelle::hasRequestToken(folder)) say("Ensuite : XPG-License-Admin passerelle-jeton-demandes (le jeton des clients : Issues seulement).\n");
+        else say("Ensuite : XPG-License-Admin passerelle-verifier, puis passerelle-publier-config.\n");
+        return 0;
+    }
+    if (a.command == "passerelle-jeton-demandes") {
+        if (a.flag("--effacer")) {
+            if (!passerelle::eraseRequestToken(folder, &why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Jeton des demandes retir\xC3\xA9 de ce poste. (Il reste dans la configuration d\xC3\xA9j\xC3\xA0 publi\xC3\xA9" "e : r\xC3\xA9voque-le sur GitHub.)\n");
+            return 0;
+        }
+        std::string token;
+        if (!a.one("--variable").empty()) {
+            const char* v = std::getenv(a.one("--variable").c_str());
+            if (!v || !*v) {
+                complain("Refus\xC3\xA9 : la variable " + a.one("--variable") + " est vide ou absente");
+                return 1;
+            }
+            token = v;
+        } else {
+            complain("Colle le jeton des demandes (celui des clients, Issues seulement) puis Entr\xC3\xA9" "e (il ne s'affiche pas) : ");
+            token = readSecretLine();
+        }
+        const bool ok = passerelle::saveRequestToken(folder, token, &why);
+        std::fill(token.begin(), token.end(), '\0');
+        if (!ok) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Jeton des demandes enregistr\xC3\xA9, prot\xC3\xA9g\xC3\xA9 pour ce compte " + std::string(crypto::protectedHere() ? "Windows (DPAPI)" : "(fichier lisible par son seul propri\xC3\xA9taire)")
+            + ".\nIl part chez les clients, masqu\xC3\xA9, avec : XPG-License-Admin passerelle-publier-config\n");
+        return 0;
+    }
+    if (a.command == "passerelle-verifier") return showResult(passerelle::verify(folder, passerelleOptions()));
+    if (a.command == "passerelle-publier-config" || a.command == "passerelle-demandes" || a.command == "passerelle-publier-licence" ||
+        a.command == "passerelle-refuser") {
+        if (a.command == "passerelle-publier-licence" && !need("--licence")) return 2;
+        if (a.command == "passerelle-refuser" && (!need("--poste") || !need("--raison"))) return 2;
+        auto key = keyOrFail();
+        if (!key) return 1;
+        const passerelle::Options o = passerelleOptions();
+        if (a.command == "passerelle-publier-config") return showResult(passerelle::publishConfig(folder, *key, o));
+        if (a.command == "passerelle-refuser") return showResult(passerelle::refuse(folder, *key, a.one("--poste"), a.one("--raison"), o));
+        if (a.command == "passerelle-publier-licence") {
+            std::string text;
+            if (!readText(a.one("--licence"), text, why)) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            return showResult(passerelle::publishLicence(folder, *key, text, o));
+        }
+        const passerelle::Result r = passerelle::fetchRequests(folder, *key, o);
+        const int rc = showResult(r);
+        const auto all = passerelle::listRequests(folder);
+        int hidden = 0;
+        for (const auto& e : all) {
+            if (!a.flag("--toutes") && !e.waiting()) {
+                ++hidden;
+                continue;
+            }
+            std::string line = "\n#" + std::to_string(e.issue) + "  " + (e.openedAt ? licensing::isoTime(e.openedAt) : std::string("?")) + "  "
+                               + passerelle::requestStateLabel(e.state) + "\n  poste " + e.device;
+            if (e.state != passerelle::RequestState::Unreadable) {
+                line += "\n  client " + e.customer + (e.contact.empty() ? std::string() : " (" + e.contact + ")") + "\n  PC \xC2\xAB "
+                        + (e.deviceName.empty() ? std::string("(sans nom)") : e.deviceName) + " \xC2\xBB " + e.fingerprint
+                        + (e.software.empty() ? std::string() : ", " + e.software) + "\n  licence demand\xC3\xA9" "e "
+                        + (e.licenseId.empty() ? std::string("(nouvelle)") : e.licenseId) + "\n  demande " + e.requestPath;
+                if (!e.message.empty()) line += "\n  message " + e.message;
+                if (!e.answer.empty()) line += "\n  r\xC3\xA9ponse " + e.answer;
+            }
+            for (const auto& p : e.problems) line += "\n  ! " + p;
+            say(line + "\n");
+        }
+        if (hidden > 0) say("\n(" + std::to_string(hidden) + " demande(s) d\xC3\xA9j\xC3\xA0 trait\xC3\xA9" "e(s) : --toutes pour les voir)\n");
+        bool waiting = false;
+        for (const auto& e : all) waiting = waiting || e.waiting();
+        if (waiting)
+            say("\nAccepter : signer-licence --demande <le fichier demande> ... puis passerelle-publier-licence --licence <la licence> ;\n"
+                "refuser : passerelle-refuser --poste <poste> --raison \"...\".\n");
+        return rc;
+    }
+    if (a.command == "kit-studios") {
+        if (!need("--sortie")) return 2;
+        auto key = keyOrFail();
+        if (!key) return 1;
+        return showResult(passerelle::studioKit(folder, key.get(), a.one("--sortie"), licensing::systemNow()));
     }
     if (a.command == "verifier") {
         if (a.positional.empty()) {

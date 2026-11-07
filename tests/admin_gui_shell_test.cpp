@@ -49,7 +49,8 @@ struct Rig {
     bool clickId(const std::string& id) { return click(root(), id); }
 };
 
-const std::string kTitles[] = {"Tableau de bord", "Clients", "Licences", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Activations", "Licences flottantes",
+// 1.34.0 : << Demandes en ligne >> (la passerelle GitHub) apres Activations.
+const std::string kTitles[] = {"Tableau de bord", "Clients", "Licences", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Activations", "Demandes en ligne", "Licences flottantes",
                                "Boutique", "Commandes", "R\xC3\xA9vocations", "Synchronisation GitHub", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 
 } // namespace
@@ -67,8 +68,8 @@ int main(int argc, char** argv) {
         check(has(t, "XPG License Manager") && has(t, "Admin"), "le nom de l'application dans le menu");
         check(has(t, "\xC3\x89" "diteur seulement"), "<< Editeur seulement >>");
         const auto& entries = gui::Shell::entries();
-        check(entries.size() == 13, "13 entrees dans le menu");
-        for (std::size_t i = 0; i < entries.size() && i < 13; ++i) {
+        check(entries.size() == 14, "14 entrees dans le menu");
+        for (std::size_t i = 0; i < entries.size() && i < 14; ++i) {
             check(entries[i].label == kTitles[i], std::string("l'ordre de la maquette : ") + kTitles[i]);
             check(has(t, kTitles[i]), std::string("le menu montre ") + kTitles[i]);
             check(find<ui::Button>(rig.root(), std::string("nav.") + entries[i].id) != nullptr, std::string("nav.") + entries[i].id);

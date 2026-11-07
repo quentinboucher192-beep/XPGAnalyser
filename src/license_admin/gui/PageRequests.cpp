@@ -440,8 +440,9 @@ private:
                                                   "Passerelle : relev\xC3\xA9 des demandes", [w] { return w->passerelleFetch(); },
                                                   [this, alive](const OpResult& r) {
                                                       if (alive.expired()) return;
+                                                      (void)r;
                                                       fetching_ = false;
-                                                      if (!r.ok) ws().reload();   // relevees en partie : la page le montre aussi
+                                                      ws().reload();   // relevees (meme en partie : la page le montre aussi)
                                                       refresh();
                                                   });
         if (!started) {

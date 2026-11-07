@@ -50,6 +50,11 @@ LA PREMIÈRE FOIS
 5. Envoie à l'agent de développement UNIQUEMENT PublisherKey.hpp et le registre signé
    (archive\registre\registre.xpgreg, dans le dossier du poste : « Dossier du poste »,
    en bas à gauche).
+   1.34.0 : plus simple, Paramètres de sécurité > Préparer les fichiers pour les
+   Studios... écrit dans un dossier que tu choisis les TROIS fichiers publics à
+   donner au développeur (PublisherKey.hpp, registre.xpgreg et GatewayAddress.hpp,
+   l'adresse de la passerelle ci-dessous) et un LISEZ-MOI.txt qui dit où les mettre.
+   Refusé avec une clé d'essai. Rien de secret dedans.
 
 POUR CHAQUE CLIENT
 1. Il t'envoie la demande d'activation de son PC (un fichier .xpgreq : dans le
@@ -78,6 +83,39 @@ s'affiche jamais), puis Vérifier (sans rien changer) et Synchroniser. La premi�
 l'application te montre le CODE DE SECOURS : note-le hors de ce PC avant de continuer.
 Un autre PC Admin : « J'ai déjà un code de secours ». Le détail est plus bas, partie
 « La source centrale » (les mêmes étapes en commandes).
+
+LA PASSERELLE DES CLIENTS (1.34.0 ; facultative, mais c'est elle qui évite les fichiers)
+Un SECOND dépôt GitHub, PUBLIC, à part de celui de l'archive (jamais le même) : les
+logiciels des clients y envoient leur demande de licence et y récupèrent leur licence,
+seuls, au démarrage. Ce qui nomme un client y est scellé (personne d'autre que toi ne
+le lit) ; tout ce que tu y publies est signé par ta clé.
+Une seule fois, sur github.com :
+1. Le dépôt : bouton + en haut à droite > New repository > Repository name :
+   passerelle-licences > PUBLIC > Create repository.
+2. Le jeton DES DEMANDES (celui des clients ; il part chez eux, masqué) : ta photo >
+   Settings > Developer settings > Personal access tokens > Fine-grained tokens >
+   Generate new token. Token name : XPG demandes des clients ; Expiration : la plus
+   longue proposée (note la date) ; Repository access : Only select repositories >
+   passerelle-licences SEULEMENT ; Repository permissions > Issues : Read and write,
+   et RIEN d'autre (Contents : No access). Generate token, copie-le.
+3. TON jeton (celui de la synchro, étape 2 de l'assistant) doit couvrir AUSSI ce
+   dépôt : même menu, ton jeton > Edit > Repository access : ajoute
+   passerelle-licences ; Repository permissions > Contents : Read and write et
+   Issues : Read and write. Lui ne part jamais chez les clients.
+Puis dans l'application, Synchronisation GitHub > carte « Passerelle des clients » :
+4. Écris le dépôt (PROPRIETAIRE/NOM), Enregistrer la passerelle ; colle le jeton des
+   demandes (il ne s'affiche pas), Enregistrer le jeton des demandes.
+5. Vérifier (le dépôt est public, ton jeton y écrit), puis Publier la configuration.
+6. Paramètres de sécurité > Préparer les fichiers pour les Studios... : l'adresse de
+   la passerelle part chez le développeur avec la clé publique et le registre.
+Ensuite, chaque jour : Demandes en ligne > Relever les demandes. Une demande :
+Accepter... ouvre l'assistant avec elle (si elle demande une licence existante : en
+ajout de PC, une licence partagée) ; « Signer et publier » - la licence part toute
+seule à CHACUN de ses PC, l'issue se ferme ; rien à envoyer. Refuser... : le client lit
+ta raison dans son logiciel. Le client peut annuler sa demande ; une seule demande par
+PC à la fois. Une révocation, un PC retiré, un nouveau registre partent aussi tout
+seuls sur la passerelle. Hors ligne ou jeton refusé : c'est dit, rien n'est « publié »
+pour de faux ; le fichier signé reste dans l'archive.
 
 Licences flottantes, Boutique, Commandes : elles demandent un service de licences EN
 LIGNE, qui n'existe pas encore. L'application le dit ; rien n'y est simulé.
@@ -330,4 +368,13 @@ main.
   garde l'ancienne clé et ajoute la nouvelle ; les programmes reconnaissent les deux.
 - --dossier D vaut aussi pour la synchro : github.json, le jeton, la clé de synchro et
   archive\ sont dans le dossier de la clé.
+- La passerelle des clients en commandes (1.34.0) :
+     XPG-License-Admin.exe passerelle-config --depot PROPRIETAIRE/passerelle-licences
+     XPG-License-Admin.exe passerelle-jeton-demandes       (colle le jeton des clients)
+     XPG-License-Admin.exe passerelle-verifier
+     XPG-License-Admin.exe passerelle-publier-config
+     XPG-License-Admin.exe passerelle-demandes [--toutes]  (relève et liste les demandes)
+     XPG-License-Admin.exe passerelle-publier-licence --licence L.xpglic
+     XPG-License-Admin.exe passerelle-refuser --poste IDENTIFIANT --raison "..."
+     XPG-License-Admin.exe kit-studios --sortie D:\pour-les-studios
 - Tout est décrit dans docs\LICENCES.md (dans les sources du programme).

@@ -195,6 +195,12 @@ private:
     bool        dim_{false};
 };
 
+// 1.34.0 : "06/11 14:05" (la date d'un releve, courte : une tuile).
+std::string shortWhen(Seconds t) {
+    const std::string full = dateTimeFr(t);   // "06/11/2026 14:05"
+    return full.size() >= 16 ? full.substr(0, 5) + full.substr(10) : full;
+}
+
 struct PosteLine {
     std::string label, value;
     Tone        tone{Tone::Info};
@@ -289,7 +295,8 @@ public:
             // 1.34.0 : les demandes par fichier (notees) et celles en ligne (au dernier releve).
             const int all = d_.pendingRequests + d_.onlinePending;
             const std::string when = d_.onlineFetchedAt ? "relev\xC3\xA9" "es le " + dateTimeFr(d_.onlineFetchedAt) : std::string("en ligne : jamais relev\xC3\xA9" "es");
-            tiles_[5]->set(n(all), d_.onlineFetchedAt ? "dont " + n(d_.onlinePending) + " en ligne, " + when : when, all ? Tone::Warning : Tone::Info, false);
+            tiles_[5]->set(n(all), d_.onlineFetchedAt ? "dont " + n(d_.onlinePending) + " en ligne, relev\xC3\xA9 " + shortWhen(d_.onlineFetchedAt) : when,
+                           all ? Tone::Warning : Tone::Info, false);
             tiles_[5]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
                                   + " en ligne (" + when + "). Clic : Demandes en ligne.");
         } else {
@@ -321,8 +328,8 @@ public:
         if (const auto& pg = w.passerelle(); !pg.problem.empty())
             poste_.push_back({"Passerelle", pg.problem, Tone::Error});
         else if (pg.configured)
-            poste_.push_back({"Passerelle", pg.config.repo + " \xC2\xB7 " + (pg.fetch.fetchedAt ? n(pg.pending) + " en attente (relev\xC3\xA9" "es le " + dateTimeFr(pg.fetch.fetchedAt) + ")"
-                                                                                          : std::string("demandes jamais relev\xC3\xA9" "es")),
+            poste_.push_back({"Passerelle", pg.fetch.fetchedAt ? n(pg.pending) + " en ligne en attente (" + shortWhen(pg.fetch.fetchedAt) + ")"
+                                                               : std::string("demandes jamais relev\xC3\xA9" "es"),
                               pg.pending ? Tone::Warning : Tone::Info});
         const auto& g = w.github();
         if (!g.problem.empty()) poste_.push_back({"Synchro", g.problem, Tone::Error});
