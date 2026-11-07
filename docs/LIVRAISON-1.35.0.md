@@ -77,7 +77,20 @@ Le pas à pas complet : `service-licences\LISEZ-MOI-SERVICE.txt`, dans le zip de
   - **les importants** : un PC libéré rendait sa place tout en gardant son bail (une licence d'un poste sur dix PC) → au-delà de deux transferts par mois, la place revient à la fin du bail ; une identité de PC copiée sur d'autres machines → chaque activation, renouvellement et jeton est lié à l'empreinte de l'installation de Windows ;
   - **les moyens** : n'importe qui pouvait épuiser le plan gratuit de Cloudflare → statistiques en mémoire, compteurs sans parcours, purge des demandes, limiteur par adresse ; des activations sans limite par licence → un plafond par licence, purge des vieilles lignes ; un certificat pour une autre adresse était cru → refusé ;
   - **les mineurs** : le code dans le journal de l'installateur et dans l'écho des scripts → retirés ; un code déposé par un autre compte du PC → ignoré ; un renouvellement après la fin de la licence → refusé ; la liste de révocation entière envoyée à un PC révoqué → plus envoyée ; la Découverte annoncée « impossible à relancer » → la documentation dit honnêtement ses limites.
-- **Sous Wine, avec les programmes Windows (WinHTTP), contre le vrai programme du service lancé sur ce poste** : À COMPLÉTER.
+- **Sous Wine, avec les programmes Windows (WinHTTP), contre le vrai programme du service lancé sur ce poste** (le moteur de Cloudflare, `workerd` ; journal joint : `essai-service-wine.txt`, les codes y sont masqués) :
+  - **ton outil** (la console, avec une clé d'essai) : relier le service, vérifier, **certifier sa clé** (un an), déposer le registre, créer la clé de synchro et **synchroniser l'archive**, créer une licence en ligne de 2 PC et une **flottante** d'un poste (chaque code montré une fois), lister, **retirer un PC**, relever une demande, signer et publier, les compteurs du service ;
+  - **un IHM Studio compilé avec la clé d'essai** (une copie jamais livrée), cinq « PC » :
+    - PC 1 : au premier lancement, **Découverte : il te reste 30 jours**, enregistrée par le service ; avec le code : « Licence XPG-2026-00201 (PROFESSIONAL) activée sur ce PC : bail jusqu'au 07/12/2026 » ;
+    - PC 2 : **le code laissé par l'installateur** s'active seul au premier lancement, puis le fichier est effacé ;
+    - PC 3 : le même code, les deux places prises : « Tous les postes de cette licence sont déjà pris : rien n'est installé » ; après le retrait de PC 1 par ton outil, le code passe ;
+    - PC 1 relancé après son retrait : la licence part, il revient en Découverte ;
+    - la flottante : PC 1 prend le poste, puis son Studio est tué (le poste reste pris 15 minutes) ; PC 4 s'active, mais « aucun poste libre — libre dans 13 min ; nouvel essai tout seul » : l'édition sans licence s'applique, le projet reste ouvert ;
+    - PC 5 : **la demande sans code** ; ton outil la relève, signe, publie ; au lancement suivant, la licence est installée seule ;
+  - **les secrets** : aucun code d'activation en clair dans les dossiers des PC, les journaux des Studios, l'état du service ni le dossier de ton outil ;
+  - **ton application** (XPG License Manager Admin) sur le même service : les pages Service en ligne, Licences, Licences flottantes, Demandes en ligne, Tableau de bord ;
+  - **l'installation par-dessus la 1.34.0**, en silencieux avec `/CODEFICHIER=` : elle passe, ta clé d'API est gardée, les programmes installés sont ceux construits (1.35.0), le code est laissé (sa forme vérifiée, même tapé en minuscules avec des espaces) et **n'est pas dans le journal de l'installateur** ; sous Wine, les droits du fichier (icacls) ne sont pas réellement appliqués ;
+  - **la page « Ta licence » de l'installateur**, en mode fenêtre : la Découverte choisie par défaut, ou le code pré-rempli ;
+  - captures jointes : `captures-1.35.0.zip` (20 images).
 
 ## 6. Installer
 
@@ -85,7 +98,12 @@ Le pas à pas complet : `service-licences\LISEZ-MOI-SERVICE.txt`, dans le zip de
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.35.0.exe` (dans le zip) par-dessus la 1.34.0. Tes projets, tes réglages et ta clé d'API restent. Tant que je n'ai pas tes trois fichiers (§ 1), cette version se comporte chez tes clients comme avant : licences non activées, tout ouvert.
 
-À COMPLÉTER (empreintes)
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.35.0.exe` | `F202E8BFAEA9F0C0C9D112D088DE44974CA76C049B6D8FA09C1ACD51106D862E` | 55 202 151 octets |
+| `API-Studio-1.35.0-portable.zip` | `6FA19DB160A659E682EA96007E6D91AF9197A1860D63063DCF60B9E41D77DDBE` | 190 fichiers |
+| `IHM-Studio-1.35.0-portable.zip` | `EB6136AEC2089901D9EC717C1E029CB67024236ED74F2862BB7F7F0E30E3B077` | 191 fichiers |
+| `XPG-License-Admin-1.35.0-EDITEUR.zip` (**à part, pour toi seul**) | `98C2C993EB81FF7B4BA19E7C50BCB82C0900AAC89FBAE8E2DCD3587A7314D4D7` | 6 060 834 octets |
 
 ## 7. Limites
 
