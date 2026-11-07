@@ -7,7 +7,7 @@
 
 #include "../core/Json.hpp"
 
-#include <algorithm>
+#include <utility>
 
 namespace licensing::gateway {
 

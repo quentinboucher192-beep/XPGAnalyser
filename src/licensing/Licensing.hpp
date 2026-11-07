@@ -156,21 +156,21 @@ struct DeviceView {
 // creee (elle l'est avec la premiere demande d'activation).
 [[nodiscard]] std::string thisDeviceFingerprint();
 
-// ---- 1.34.0 : la passerelle GitHub (app/LicenceGateway, licensing/Gateway.hpp) ----
+// ---- 1.34.0 : la demande en ligne et l'etat du poste (app/LicenceService, licensing/Gateway.hpp ; depuis la
+//      1.35.0 par le service des licences) ----
 // Importer des octets recus (la licence publiee pour ce PC) ; l'etat est revalue.
 [[nodiscard]] ImportReport importLicenseBytes(std::string_view bytes);
 // La demande de ce PC en texte (voir LicenseStore::activationRequestText).
 bool activationRequestText(const std::string& deviceName, const std::string& licenseId, const std::string& software, std::string& blockText,
                            ActivationRequest* parsed, std::string* why);
-// Signer l'annulation d'une demande avec la cle de ce PC ; ouvrir un sceau fait pour elle.
-bool deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why);
+// Ouvrir un sceau fait pour la cle de ce PC (le contenu de l'etat publie par l'editeur).
 bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why);
 // La cle publique de ce PC (64 hexadecimaux), creee si besoin.
 bool deviceKeyHex(std::string& hex, std::string* why);
 // Les cles de l'editeur que ce programme croit (vide : licences non activees).
 [[nodiscard]] std::vector<TrustedKey> trustedPublisherKeys();
-// Ajouter un evenement a l'historique de ce PC (kind "passerelle" : une demande envoyee, annulee, une licence
-// recue par la passerelle).
+// Ajouter un evenement a l'historique de ce PC (kind "service" : une demande envoyee, une activation, une licence
+// recue du service des licences ; "passerelle" : les evenements de la 1.34, gardes dans l'historique).
 bool addHistoryEvent(const HistoryEvent& e, std::string* why);
 
 // ---- 1.35.0 : le service des licences (voir plus haut et Store.hpp) ----

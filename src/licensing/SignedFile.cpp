@@ -14,8 +14,8 @@ constexpr std::string_view kSignature = "SIGNATURE ed25519 ";
 constexpr std::string_view kContext = "XPG-LICENSING-1\n";
 
 bool kindFromKey(std::string_view key, DocKind& out) noexcept {
-    for (DocKind k : {DocKind::License, DocKind::Registry, DocKind::Revocations, DocKind::Request, DocKind::Gateway, DocKind::DeviceStatus,
-                       DocKind::Cancel, DocKind::ServiceCert, DocKind::Activation, DocKind::Lease, DocKind::Time, DocKind::Trial})
+    for (DocKind k : {DocKind::License, DocKind::Registry, DocKind::Revocations, DocKind::Request, DocKind::DeviceStatus, DocKind::ServiceCert,
+                       DocKind::Activation, DocKind::Lease, DocKind::Time, DocKind::Trial})
         if (key == docKindKey(k)) {
             out = k;
             return true;
@@ -45,9 +45,7 @@ const char* docKindKey(DocKind k) noexcept {
         case DocKind::Registry: return "registre";
         case DocKind::Revocations: return "revocations";
         case DocKind::Request: return "demande";
-        case DocKind::Gateway: return "passerelle";
         case DocKind::DeviceStatus: return "poste";
-        case DocKind::Cancel: return "annulation";
         case DocKind::ServiceCert: return "service";
         case DocKind::Activation: return "activation";
         case DocKind::Lease: return "jeton";
@@ -63,9 +61,7 @@ std::string docKindLabel(DocKind k) {
         case DocKind::Registry: return "le registre";
         case DocKind::Revocations: return "la liste de r\xC3\xA9vocation";
         case DocKind::Request: return "la demande d'activation";
-        case DocKind::Gateway: return "la configuration de la passerelle";
         case DocKind::DeviceStatus: return "l'\xC3\xA9tat du PC";
-        case DocKind::Cancel: return "l'annulation de la demande";
         case DocKind::ServiceCert: return "le certificat du service";
         case DocKind::Activation: return "l'activation";
         case DocKind::Lease: return "le jeton de la licence flottante";
@@ -81,9 +77,7 @@ std::size_t docKindMaxBytes(DocKind k) noexcept {
         case DocKind::Registry: return 2u * 1024u * 1024u;
         case DocKind::Revocations: return 8u * 1024u * 1024u;
         case DocKind::Request: return 16u * 1024u;
-        case DocKind::Gateway: return 16u * 1024u;
         case DocKind::DeviceStatus: return 512u * 1024u;   // la licence scellee dedans
-        case DocKind::Cancel: return 4u * 1024u;
         case DocKind::ServiceCert: return 4u * 1024u;
         case DocKind::Activation: return 4u * 1024u;
         case DocKind::Lease: return 2u * 1024u;

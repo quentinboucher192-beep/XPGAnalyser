@@ -29,7 +29,7 @@
 //  d'environnement (les essais, un script). Elle n'est jamais affichee ni ecrite.
 //  1.30.0 : le registre des activations (activations.jsonl, dans le dossier de la cle) : signer-licence,
 //  signer-revocations et enregistrer-demande y ajoutent leurs lignes ; liste montre tous les PC connus.
-//  1.31.0 : l'ARCHIVE du poste (chaque fichier signe y est range). 1.35.0 : PLUS AUCUN GITHUB - l'archive se
+//  1.31.0 : l'ARCHIVE du poste (chaque fichier signe y est range). 1.35.0 : l'archive se
 //  synchronise par le SERVICE DES LICENCES (ArchiveSync.hpp), qui recoit aussi les demandes des clients, active les
 //  licences en ligne par un code, tient les licences flottantes (ServiceClient.hpp, docs/SERVICE-LICENCES.md) :
 //    XPG-License-Admin archiver FICHIER... [--dossier D]
@@ -51,7 +51,7 @@
 //    XPG-License-Admin service-stats
 //    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
-//  Les commandes github-* et passerelle-* (1.31.0 a 1.34.0) n'existent plus : la 1.35.0 a quitte GitHub.
+//  Les commandes github-* et passerelle-* (1.31.0 a 1.34.0) n'existent plus : le service des licences les remplace.
 //  LE CODE D'ACTIVATION (licence-en-ligne) est montre UNE fois, a l'ecran, puis oublie : le service n'en garde que
 //  l'empreinte ; il n'est ecrit dans aucun fichier ni journal.
 //  Code de sortie : 0 fait ; 1 refuse (la raison est ecrite) ; 2 mauvais usage ; 3 signe et range, mais la
@@ -168,7 +168,7 @@ std::string usage() {
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "  --version\n\n"
-           "La 1.35.0 a quitt\xC3\xA9 GitHub : les commandes github-* et passerelle-* n'existent plus (le service les remplace).\n"
+           "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
            "Le registre des activations (activations.jsonl) : chaque licence sign\xC3\xA9" "e, chaque demande enregistr\xC3\xA9" "e, chaque r\xC3\xA9vocation ;\n"
            "seulement ce que les clients t'envoient (rien de leur mat\xC3\xA9riel).\n"
@@ -887,7 +887,7 @@ int run(const std::vector<std::string>& argv) {
         return showResult(online::studioKit(folder, key.get(), a.one("--sortie"), licensing::systemNow()));
     }
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {
-        complain("La commande " + a.command + " n'existe plus : la 1.35.0 a quitt\xC3\xA9 GitHub. L'archive se synchronise par le service des licences "
+        complain("La commande " + a.command + " (1.31 \xC3\xA0 1.34) n'existe plus. L'archive se synchronise par le service des licences "
                  "(archive-cle, archive-synchroniser) et les demandes des clients y arrivent (service-demandes).\n\n" + usage());
         return 2;
     }

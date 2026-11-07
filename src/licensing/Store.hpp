@@ -354,17 +354,16 @@ public:
     // La cle publique de ce PC (64 hexadecimaux), creee si besoin. Faux : `why`.
     bool deviceKey(std::string& hex, std::string* why);
 
-    // ---- 1.34.0 : la passerelle GitHub (licensing/Gateway.hpp, app/LicenceGateway) ----
+    // ---- 1.34.0 : la demande en ligne et l'etat du poste (licensing/Gateway.hpp, app/LicenceService ; depuis la
+    //      1.35.0 par le service des licences) ----
     // La demande d'activation de ce PC, en TEXTE (le bloc signe, comme le fichier .xpgreq) ; la cle du PC est
     // creee si besoin ; `parsed` : ce qu'elle dit (le nonce...). L'historique n'est pas touche (l'appelant le
     // note, une fois la demande envoyee).
     bool activationRequestText(const std::string& deviceName, const std::string& licenseId, const std::string& software,
                                std::string& blockText, ActivationRequest* parsed, std::string* why);
-    // Signer un document avec la cle de ce PC (seulement DocKind::Cancel : l'annulation d'une demande en ligne).
-    bool deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why);
     // Ouvrir un sceau fait pour la cle de ce PC (l'etat publie par l'editeur). Faux : pas de cle, pas pour elle.
     bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why);
-    // Les cles de l'editeur que ce PC croit (pour verifier ce que publie la passerelle).
+    // Les cles de l'editeur que ce PC croit (pour verifier ce que publie l'editeur : l'etat du poste, la licence).
     [[nodiscard]] const std::vector<TrustedKey>& trustedKeys() const noexcept { return opt_.trustedKeys; }
 
     // ---- 1.35.0 : le service des licences (aucun reseau ici : l'application appelle, le magasin verifie et garde) ----

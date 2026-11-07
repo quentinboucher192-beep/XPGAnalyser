@@ -521,7 +521,7 @@ Aucune feuille de route n'est publiée dans ce dépôt.
 | [docs/ASSISTANT-IA.md](docs/ASSISTANT-IA.md) | Assistant IA : fournisseurs, données, opérations, mémoire, limites |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture technique |
 | [docs/DEPLOIEMENT.md](docs/DEPLOIEMENT.md) | Déploiement réseau (1.28.0, 1.29.0) : le paquet signé, le protocole, l'appairage, l'agent, l'envoi, l'installation, le poste lancé et arrêté, le retour en arrière |
-| [docs/LICENCES.md](docs/LICENCES.md) | Licences : documents signés, éditions, activation par fichier, la fenêtre Licence et les verrous (1.30.0), l'outil de l'éditeur jamais livré, sa synchro avec un dépôt GitHub privé (1.31.0) et son application à fenêtres, XPG License Manager Admin (1.33.0) ; l'évaluation dès l'installation et la passerelle GitHub (1.34.0, voir aussi [docs/PASSERELLE-GITHUB.md](docs/PASSERELLE-GITHUB.md)) |
+| [docs/LICENCES.md](docs/LICENCES.md) | Licences : documents signés, éditions, activation par fichier, la fenêtre Licence et les verrous (1.30.0), l'outil de l'éditeur jamais livré, la synchro de son archive (1.31.0) et son application à fenêtres, XPG License Manager Admin (1.33.0) ; la demande en ligne (1.34.0) ; le service des licences, l'activation par code et la Découverte (1.35.0, voir aussi [docs/SERVICE-LICENCES.md](docs/SERVICE-LICENCES.md)) |
 | [docs/FORMATS.md](docs/FORMATS.md) | Formats, données, emplacements, migrations |
 | [docs/TESTS.md](docs/TESTS.md) | Essais et qualité |
 | [docs/GUIDE-COMPILATION.md](docs/GUIDE-COMPILATION.md) | Compilation Linux, MinGW, Windows ; installateur ; outils |

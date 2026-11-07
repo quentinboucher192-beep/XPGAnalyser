@@ -1401,13 +1401,10 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\TlsIdentity.hpp" />
     <ClInclude Include="src\license_admin\Admin.hpp" />
     <ClInclude Include="src\license_admin\ArchiveSync.hpp" />
-    <ClInclude Include="src\license_admin\GitHubSync.hpp" />
     <ClInclude Include="src\license_admin\KeyBackup.hpp" />
-    <ClInclude Include="src\license_admin\Passerelle.hpp" />
     <ClInclude Include="src\license_admin\ServiceClient.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\Gateway.hpp" />
-    <ClInclude Include="src\licensing\GatewayAddress.hpp" />
     <ClInclude Include="src\licensing\KeyFile.hpp" />
     <ClInclude Include="src\licensing\Licensing.hpp" />
     <ClInclude Include="src\licensing\PublisherKey.hpp" />

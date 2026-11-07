@@ -1534,8 +1534,14 @@ void testPackageControl(const std::string& admin) {
         // 1.32.0 : jamais une licence, une demande, la configuration de la synchro, l'etat ou l'historique d'un PC
         {"Client.xpglic", "XPG-LICENSING 1 licence 2\n{}", "une licence signee (*.xpglic)", "outil Admin"},
         {"poste.xpgreq", "XPG-LICENSING 1 demande 2\n{}", "une demande d'activation (*.xpgreq)", "outil Admin"},
-        {"github.json", "{\"depot\": \"x/y\"}", "la configuration de la synchro GitHub", "outil Admin"},
-        {"github-vu.json", "{}", "l'anti-retour de la synchro GitHub", "outil Admin"},
+        {"github.json", "{\"depot\": \"x/y\"}", "la configuration de la synchro GitHub (1.31 a 1.34)", "outil Admin"},
+        {"github-vu.json", "{}", "l'anti-retour de la synchro GitHub (1.31 a 1.34)", "outil Admin"},
+        // 1.35.0 : ni les fichiers du service des licences de l'outil Admin
+        {"service.json", "{\"url\": \"https://xpg-licences.essai.workers.dev\"}", "l'adresse du service des licences de l'Admin", "outil Admin"},
+        {"service-releve.json", "{}", "le dernier releve du service de l'Admin", "outil Admin"},
+        {"archive-vu.json", "{}", "l'anti-retour de la synchro de l'archive", "outil Admin"},
+        {"postes-publies.json", "{}", "les numeros des etats de poste publies", "outil Admin"},
+        {"cle-synchro.cle", "x", "la cle de synchro de l'archive", "outil Admin"},
         {"etat.bin", "x", "l'etat protege d'un PC", "outil Admin"},
         {"historique.jsonl", "{}", "l'historique d'un PC", "outil Admin"},
         {"texte-LICENSE.txt", "XPG-LICENSING 1 licence 2\n{}", "une licence deguisee en texte (son contenu)", "licence signee"},
@@ -1577,6 +1583,11 @@ void testPackageControl(const std::string& admin) {
     writeFile(st / "libs" / "archive" / "licences" / "A.txt", "x");
     r = control();
     check(r.started && !r.ok() && has(r.err, "archive"), "un dossier archive (celle de l'outil Admin) : la construction s'arrete");
+    fs::remove_all(st / "libs");
+    // 1.35.0 : le dossier des demandes en ligne de l'outil Admin (le releve du service), a aucun niveau
+    writeFile(st / "libs" / "demandes-en-ligne" / "releve.json", "{}");
+    r = control();
+    check(r.started && !r.ok() && has(r.err, "demandes-en-ligne"), "un dossier demandes-en-ligne (celui de l'outil Admin) : la construction s'arrete");
     fs::remove_all(st / "libs");
     // [Licences] obligatoires = oui : un paquet sans vraie cle de l'editeur est refuse.
     r = control({"--licences-obligatoires", "oui"});

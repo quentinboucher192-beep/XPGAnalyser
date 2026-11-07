@@ -124,7 +124,9 @@ SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi
 # revocation livree (licences\revocations.xpgrev).
 # 1.32.0 : LE DOSSIER licences\ N'ADMET QUE le registre, la liste de revocation et les textes de licence des
 # bibliotheques (LICENCES_PERMIS) ; et nulle part une licence (*.xpglic), une demande (*.xpgreq), la configuration
-# de la synchro (github*.json), l'archive de l'Admin (un dossier archive), l'etat ou l'historique d'un PC.
+# de la synchro (github*.json, jusqu'a la 1.34.0), l'archive de l'Admin (un dossier archive), l'etat ou l'historique
+# d'un PC. 1.35.0 : ni les fichiers du service des licences de l'outil Admin (service.json, service-releve.json,
+# archive-vu.json, postes-publies.json, cle-synchro.cle), ni son dossier demandes-en-ligne.
 # [Licences] obligatoires = oui (outils/config.ini) : un paquet sans vraie cle d'editeur (PublisherKey.hpp vide :
 # les licences << non activees >>, tout ouvert) est refuse.
 # Le MEME controle est dans outils/lib/package.ps1 (Test-XpgLivraison) : memes chaines, memes motifs
@@ -147,8 +149,10 @@ ADMIN_MOTIFS = (
 )
 ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*",
               "*.xpgcle", "*.xpgsync", "activations.jsonl",
-              "*.xpglic", "*.xpgreq", "github*.json", "etat.bin", "historique.jsonl")   # 1.32.0
-ADMIN_DOSSIERS = ("archive",)   # 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau
+              "*.xpglic", "*.xpgreq", "github*.json", "etat.bin", "historique.jsonl",   # 1.32.0
+              "service.json", "service-releve.json", "archive-vu.json", "postes-publies.json", "cle-synchro.cle")   # 1.35.0
+# 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau ; 1.35.0 : ses demandes en ligne (le releve)
+ADMIN_DOSSIERS = ("archive", "demandes-en-ligne")
 # 1.32.0 : ce que licences\ admet (chemins relatifs a licences\, sans casse) - le reste est un ecart.
 LICENCES_PERMIS = ("registre.xpgreg", "revocations.xpgrev", "*-LICENSE*", "*.LICENSE",
                    "pdfium/*.txt", "pdfium/*.md", "pdfium/*.ijg")
@@ -227,7 +231,8 @@ def controle_livraison(dossier, obligatoires="non"):
     for base, dirs, files in os.walk(dossier):
         for d in sorted(dirs):
             if d.lower() in ADMIN_DOSSIERS:
-                ecarts.append((os.path.relpath(os.path.join(base, d), dossier), "un dossier de l'outil Admin (l'archive des licences signees)"))
+                ecarts.append((os.path.relpath(os.path.join(base, d), dossier),
+                               "un dossier de l'outil Admin (l'archive des licences signees, ses demandes en ligne)"))
         for name in sorted(files):
             full = os.path.join(base, name)
             rel = os.path.relpath(full, dossier)

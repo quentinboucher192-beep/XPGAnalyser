@@ -173,17 +173,6 @@ endif()
 xpg_sources(LICENSING_SOURCES licensing)
 add_library(xpg_licensing STATIC ${LICENSING_SOURCES})
 target_link_libraries(xpg_licensing PUBLIC xpg_core xpg_deploy)
-# 1.34.0 : la passerelle GitHub des licences (licensing/Gateway.hpp) : le depot PUBLIC ou les logiciels des clients
-# lisent leur licence et ouvrent leurs demandes ("proprietaire/nom" ; vide : pas de passerelle, tout par fichier).
-# L'adresse est dans src/licensing/GatewayAddress.hpp ; ces options (non vides) la remplacent a la construction.
-set(XPG_PASSERELLE_DEPOT "" CACHE STRING "Remplace le depot de src/licensing/GatewayAddress.hpp (proprietaire/nom ; vide : celui de l'en-tete)")
-set(XPG_PASSERELLE_BRANCHE "" CACHE STRING "Remplace la branche de src/licensing/GatewayAddress.hpp (vide : celle de l'en-tete)")
-if(XPG_PASSERELLE_DEPOT)
-    target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_DEPOT="${XPG_PASSERELLE_DEPOT}")
-endif()
-if(XPG_PASSERELLE_BRANCHE)
-    target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_BRANCHE="${XPG_PASSERELLE_BRANCHE}")
-endif()
 # 1.35.0 : le service des licences (licensing/Service.hpp, docs/SERVICE-LICENCES.md) ; son adresse est dans
 # src/licensing/ServiceAddress.hpp, cette option (non vide) la remplace a la construction.
 set(XPG_SERVICE_URL "" CACHE STRING "Remplace l'adresse de src/licensing/ServiceAddress.hpp (https://... ; vide : celle de l'en-tete)")
@@ -1064,16 +1053,11 @@ if(XPG_BUILD_TESTS)
     if(TEST service_studios)
         set_tests_properties(service_studios PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :")
     endif()
-    # 1.34.0 : les formats de la passerelle GitHub des licences (et le faux GitHub des essais), sans reseau
-    xpg_add_test_executable(licensing_gateway_test tests/licensing_gateway_test.cpp src/app/ai/AiHttp.cpp)
+    # 1.34.0, 1.35.0 : les formats de la demande en ligne et de l'etat d'un poste (licensing/Gateway), que transporte
+    # le service des licences, sans reseau
+    xpg_add_test_executable(licensing_gateway_test tests/licensing_gateway_test.cpp)
     xpg_target_link_libraries(licensing_gateway_test PRIVATE xpg_licensing)
-    if(TARGET licensing_gateway_test AND NOT WIN32)
-        target_link_libraries(licensing_gateway_test PRIVATE ${CMAKE_DL_LIBS})
-    endif()
-    if(TARGET licensing_gateway_test AND WIN32)
-        target_link_libraries(licensing_gateway_test PRIVATE winhttp)
-    endif()
-    xpg_add_test(NAME passerelle COMMAND licensing_gateway_test)
+    xpg_add_test(NAME formats_poste COMMAND licensing_gateway_test)
     # 1.35.0 : les formats partages du service des licences (licensing/Service), sans reseau
     xpg_add_test_executable(licensing_service_test tests/licensing_service_test.cpp)
     xpg_target_link_libraries(licensing_service_test PRIVATE xpg_licensing)
@@ -1256,8 +1240,6 @@ if(XPG_BUILD_TESTS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME vcxproj COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/verifier_vcxproj.py)
-        # 1.34.0 : le faux GitHub de la passerelle des licences (les essais sous Wine) s'essaie lui-meme
-        add_test(NAME fauxpasserelle COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/outils/licences/faux_passerelle.py --auto-essai)
     endif()
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----

@@ -70,8 +70,9 @@ bool unbase64(std::string_view text, Bytes& out);
 // ---- 1.34.0 : le sceau (une << boite scellee >> de libsodium, vers une cle Ed25519) ----
 //  Chiffrer pour le seul detenteur de la cle secrete Ed25519 dont `pub` est la partie publique (la cle est
 //  convertie en X25519 ; une cle ephemere par sceau : l'expediteur reste anonyme, et ne peut pas relire).
-//  Sert a la passerelle GitHub des licences : une demande scellee pour l'editeur, une licence scellee pour
-//  un PC. Faux : la cle n'est pas un point valide.
+//  Sert aux demandes en ligne et a l'etat d'un poste (licensing/Gateway.hpp, transportes par le service des
+//  licences) : une demande scellee pour l'editeur, une licence scellee pour un PC. Faux : la cle n'est pas un
+//  point valide.
 bool seal(const PublicKey& pub, std::string_view plain, Bytes& out);
 // Ouvrir un sceau avec la cle secrete Ed25519 (64 octets : graine et publique). Faux : pas pour cette cle,
 // modifie, tronque.

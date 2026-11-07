@@ -1759,17 +1759,6 @@ bool LicenseStore::activationRequestText(const std::string& deviceName, const st
     return buildRequest(deviceName, licenseId, software, blockText, parsed, why);
 }
 
-bool LicenseStore::deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why) {
-    if (kind != DocKind::Cancel) {
-        if (why) *why = "la cl\xC3\xA9 de ce PC ne signe que l'annulation d'une demande";
-        return false;
-    }
-    auto key = SigningKey::load(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), why);
-    if (!key) return false;
-    blockText = writeBlock(signBlock(kind, document, key->publicKey(), [&](std::string_view m) { return key->sign(m); }));
-    return true;
-}
-
 bool LicenseStore::deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why) {
     auto key = SigningKey::load(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), why);
     if (!key) return false;

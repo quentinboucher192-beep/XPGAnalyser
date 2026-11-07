@@ -205,7 +205,7 @@ bool writeActivationRequest(const std::string& path, const std::string& deviceNa
     return ok;
 }
 
-// ---- 1.34.0 : la passerelle GitHub ----
+// ---- 1.34.0 : la demande en ligne et l'etat du poste (depuis la 1.35.0 par le service des licences) ----
 ImportReport importLicenseBytes(std::string_view bytes) {
     Module& m = module();
     std::lock_guard<std::mutex> lock(m.mutex);
@@ -232,16 +232,6 @@ bool activationRequestText(const std::string& deviceName, const std::string& lic
     if (ok) m.state = m.store->evaluate();   // l'empreinte de la cle, creee peut-etre a l'instant
     capture(m);
     return ok;
-}
-
-bool deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why) {
-    Module& m = module();
-    std::lock_guard<std::mutex> lock(m.mutex);
-    if (!m.store) {
-        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
-        return false;
-    }
-    return m.store->deviceSign(kind, document, blockText, why);
 }
 
 bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why) {

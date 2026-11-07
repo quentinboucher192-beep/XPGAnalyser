@@ -1,27 +1,30 @@
 // =============================================================================
-//  tests/licensing_gateway_test.cpp - 1.34.0 : les formats de la passerelle
-//  GitHub des licences (licensing/Gateway), sans reseau
+//  tests/licensing_gateway_test.cpp - les formats des demandes en ligne et de
+//  l'etat d'un poste (licensing/Gateway), echanges par le service des licences
+//  (docs/SERVICE-LICENCES.md) ; sans reseau
 // -----------------------------------------------------------------------------
 //  Le sceau (pour la cle d'un PC, pour celle de l'editeur ; pas pour une autre,
-//  pas modifie), le masque du jeton, la configuration, l'etat d'un PC et son
-//  contenu, la demande en ligne (le corps d'une issue), l'annulation signee ; les
-//  champs inconnus, les versions futures, les identifiants mal ecrits refuses ;
-//  le faux GitHub (tests/fake_passerelle.hpp) : raw, Contents, issues, jetons.
+//  pas modifie), l'etat d'un PC et son contenu (le bloc << poste >> signe par
+//  l'editeur), la demande en ligne scellee pour l'editeur ; les champs inconnus,
+//  les versions futures, les identifiants mal ecrits, les caracteres de controle
+//  refuses ; les genres << passerelle >> et << annulation >> de la 1.34.0 sont
+//  inconnus (1.35.0).
 // =============================================================================
-#include "fake_passerelle.hpp"
-
 #include "../src/licensing/Gateway.hpp"
 #include "../src/licensing/KeyFile.hpp"
+#include "../src/licensing/Service.hpp"
 #include "../src/licensing/SignedFile.hpp"
 
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <random>
 #include <string>
 
 namespace fs = std::filesystem;
 namespace lic = licensing;
 namespace gw = licensing::gateway;
+namespace svc = licensing::service;
 
 namespace {
 
@@ -47,7 +50,7 @@ std::unique_ptr<lic::SigningKey> makeKey(const fs::path& dir, const std::string&
 
 int main() {
     std::mt19937_64 rng(std::random_device{}());
-    const fs::path root = fs::temp_directory_path() / ("xpg-passerelle-" + std::to_string(rng() % 1000000000ULL));
+    const fs::path root = fs::temp_directory_path() / ("xpg-formats-poste-" + std::to_string(rng() % 1000000000ULL));
     auto pc = makeKey(root / "pc", "PC essai");
     auto other = makeKey(root / "autre", "Autre PC");
     auto editor = makeKey(root / "editeur", "Editeur essai");
@@ -69,45 +72,13 @@ int main() {
         check(twice != gw::sealFor(pc->publicKey(), "x"), "deux sceaux du meme texte different (cle ephemere)");
     }
 
-    std::printf("-- l'identifiant du poste, l'adresse\n");
+    std::printf("-- l'identifiant du poste (celui du service)\n");
     {
-        const std::string id = gw::deviceId(pc->publicKey());
-        check(gw::isDeviceId(id), "32 hexadecimaux : " + id);
-        check(id == gw::deviceId(pc->publicKey()), "stable");
-        check(id != gw::deviceId(other->publicKey()), "un par PC");
+        const std::string id = svc::deviceId(pc->publicKey());
+        check(svc::isDeviceId(id), "32 hexadecimaux : " + id);
+        check(id == svc::deviceId(pc->publicKey()), "stable");
+        check(id != svc::deviceId(other->publicKey()), "un par PC");
         check(!has(id, pc->publicKeyHex().substr(0, 16)), "ne revele pas la cle");
-        check(gw::validRepo("editeur/passerelle-xpg") && !gw::validRepo("editeur") && !gw::validRepo("a/b/c") && !gw::validRepo("/x") &&
-                  !gw::validRepo("a/..") && !gw::validRepo("a b/c"),
-              "les noms de depot");
-        gw::Address a;
-        a.repo = "editeur/passerelle";
-        check(gw::rawUrl(a, gw::statusPath(id)) == "https://raw.githubusercontent.com/editeur/passerelle/main/postes/" + id + ".xpgpos", "l'adresse raw");
-        check(gw::apiUrl(a, "/issues") == "https://api.github.com/repos/editeur/passerelle/issues", "l'adresse de l'API");
-    }
-
-    std::printf("-- la configuration et le masque du jeton\n");
-    {
-        const std::string token = "essai_jeton_DEMANDES_ESSAI_000000000000_pas_un_vrai";
-        const std::string masked = gw::maskToken("editeur/passerelle", token);
-        check(!has(masked, "essai_jeton") && !has(masked, "ESSAI"), "le jeton masque n'est pas en clair");
-        std::string back;
-        check(gw::unmaskToken("editeur/passerelle", masked, back) && back == token, "le masque se retire");
-        check(!gw::unmaskToken("autre/depot", masked, back) || back != token, "avec un autre depot, pas le meme jeton");
-        gw::Config c;
-        c.number = 3;
-        c.issuedAt = 1793961600;
-        c.repo = "editeur/passerelle";
-        c.requestToken = token;
-        const std::string text = gw::writeConfig(c);
-        check(!has(text, "essai_jeton"), "la configuration ecrite ne montre pas le jeton");
-        gw::Config r;
-        std::string why;
-        check(gw::parseConfig(text, r, &why) && r.number == 3 && r.repo == c.repo && r.requestToken == token && r.issuedAt == c.issuedAt,
-              "la configuration se relit : " + why);
-        check(!gw::parseConfig("{\"version\":2,\"numero\":1}", r, &why) && has(why, "version 1"), "une version future est refusee");
-        std::string extra = text;
-        extra.insert(extra.find('{') + 1, "\"inconnu\":1,");
-        check(!gw::parseConfig(extra, r, &why) && has(why, "inconnu"), "un champ inconnu est refuse");
     }
 
     std::printf("-- l'etat d'un PC\n");
@@ -117,7 +88,7 @@ int main() {
         content.license = "XPG-LICENSING 1 licence 2\n{}SIGNATURE ...\n";
         content.revocations = "XPG-LICENSING 1 revocations 2\n{}SIGNATURE ...\n";
         gw::DeviceStatus s;
-        s.device = gw::deviceId(pc->publicKey());
+        s.device = svc::deviceId(pc->publicKey());
         s.number = 7;
         s.issuedAt = 1793961600;
         s.state = gw::State::Accepted;
@@ -144,6 +115,13 @@ int main() {
         std::string bad = text;
         bad.replace(bad.find("acceptee"), 8, "inventee");
         check(!gw::parseDeviceStatus(bad, r, &why), "un etat inconnu est refuse");
+        bad = text;
+        bad.replace(bad.find(s.device), s.device.size(), "pas-un-poste");
+        check(!gw::parseDeviceStatus(bad, r, &why) && has(why, "poste"), "un identifiant de poste mal ecrit est refuse");
+        bad = text;
+        bad.insert(bad.find('{') + 1, "\"inconnu\":1,");
+        check(!gw::parseDeviceStatus(bad, r, &why) && has(why, "inconnu"), "un champ inconnu est refuse");
+        check(!gw::parseDeviceStatus("{\"version\":2}", r, &why) && has(why, "version 1"), "une version future est refusee");
         // signe par l'editeur : un bloc << poste >>
         const auto block = lic::signBlock(lic::DocKind::DeviceStatus, text, editor->publicKey(), [&](std::string_view m) { return editor->sign(m); });
         std::vector<lic::SignedBlock> blocks;
@@ -152,30 +130,26 @@ int main() {
               "le bloc << poste >> signe se relit et se verifie");
     }
 
-    std::printf("-- la demande en ligne et l'annulation\n");
+    std::printf("-- la demande en ligne\n");
     {
         gw::OnlineRequest q;
         q.request = "XPG-LICENSING 1 demande 10\n{\"x\":1}\nSIGNATURE ...\n";
         q.customer = "Client d'essai Industrie";
         q.contact = "essai@exemple.invalid";
         q.message = "Pour l'atelier";
-        const std::string id = gw::deviceId(pc->publicKey());
-        const std::string body = gw::issueBody(id, editor->keyId(), gw::sealFor(editor->publicKey(), gw::writeOnlineRequest(q)));
-        check(!has(body, "Client d'essai") && !has(body, "essai@") && !has(gw::issueTitle(id), "Client"), "rien en clair dans l'issue");
-        gw::IssueBody b;
+        // ce que le PC envoie au service (POST /v1/demandes : "scelle") ; le service ne l'ouvre pas
+        const std::string sealed = gw::sealFor(editor->publicKey(), gw::writeOnlineRequest(q));
+        check(!sealed.empty() && !has(sealed, "Client d'essai") && !has(sealed, "essai@"), "rien en clair dans la demande scellee");
         std::string why, plain;
-        std::string crlf;
-        for (char c : body) {
-            if (c == '\n') crlf += '\r';
-            crlf += c;
-        }
-        check(gw::parseIssueBody(crlf, b, &why) && b.device == id && b.keyId == editor->keyId(), "le corps se relit (meme en CRLF) : " + why);
         gw::OnlineRequest r;
-        check(gw::openWith(*editor, b.sealed, plain, &why) && gw::parseOnlineRequest(plain, r, &why) && r.customer == q.customer &&
+        check(gw::openWith(*editor, sealed, plain, &why) && gw::parseOnlineRequest(plain, r, &why) && r.customer == q.customer &&
                   r.request == q.request && r.contact == q.contact && r.message == q.message,
               "l'editeur l'ouvre : " + why);
-        check(!gw::openWith(*other, b.sealed, plain, &why), "personne d'autre ne l'ouvre");
-        check(!gw::parseIssueBody("Une issue ordinaire\nbonjour\n", b, &why), "une issue ordinaire n'est pas une demande");
+        check(!gw::openWith(*other, sealed, plain, &why), "personne d'autre ne l'ouvre");
+        check(!gw::openWith(*pc, sealed, plain, &why), "pas meme le PC qui l'a scellee");
+        std::string extra = gw::writeOnlineRequest(q);
+        extra.insert(extra.find('{') + 1, "\"inconnu\":1,");
+        check(!gw::parseOnlineRequest(extra, r, &why) && has(why, "inconnu"), "un champ inconnu est refuse");
         // 1.34.0 (relecture) : une ligne chacun, sans caractere de controle (la console de l'editeur les affiche)
         for (const std::string& bad : {std::string("Client\nlicence demand\xC3\xA9" "e XPG-1"), std::string("Client \x1b[2J"),
                                       std::string("Client \xC2\x9B" "31m"), std::string("Client \xFF")}) {
@@ -194,63 +168,23 @@ int main() {
             x.customer = "Soci\xC3\xA9t\xC3\xA9 d'essai \xE2\x80\x94 atelier \xF0\x9F\x94\xA7";
             check(gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "des accents, un tiret long, un symbole : acceptes");
         }
-        check(!gw::parseIssueBody(std::string(gw::kIssueMagic) + "\nposte " + id + "\ncle zzzzzzzzzzzzzzzzzzzz\nAAAA\n", b, &why),
-              "un identifiant de cle mal ecrit est refuse");
-
-        gw::Cancel c;
-        c.device = id;
-        c.requestNonce = "n0nce";
-        c.at = 1793961600;
-        const auto block = lic::signBlock(lic::DocKind::Cancel, gw::writeCancel(c), pc->publicKey(), [&](std::string_view m) { return pc->sign(m); });
-        const std::string comment = gw::cancelComment(block);
-        lic::SignedBlock back;
-        gw::Cancel rc;
-        check(gw::parseCancelComment(comment, back, &why) && lic::verifyBlock(back, pc->publicKey()) && gw::parseCancel(back.document, rc, &why) &&
-                  rc.requestNonce == "n0nce" && rc.device == id,
-              "l'annulation se relit et se verifie : " + why);
-        check(!lic::verifyBlock(back, other->publicKey()), "signee par ce PC seulement");
-        check(!gw::parseCancelComment("Merci !", back, &why), "un commentaire ordinaire n'est pas une annulation");
     }
 
-    std::printf("-- le faux GitHub\n");
+    std::printf("-- les genres << passerelle >> et << annulation >> de la 1.34.0 sont inconnus\n");
     {
-        fakegh::FakePasserelle fake;
-        fakegh::install(&fake);
-        fake.files["passerelle.xpgpas"] = "config";
-        auto http = app::ai::makeHttpClient();
-        app::ai::HttpRequest get;
-        get.method = "GET";
-        get.url = "https://raw.githubusercontent.com/" + fake.repo + "/main/passerelle.xpgpas";
-        std::string got;
-        app::ai::HttpSink sink;
-        sink.onData = [&](std::string_view d) { got.append(d); };
-        auto resp = http->perform(get, sink);
-        check(resp.ok() && resp.status == 200 && got == "config", "raw sans jeton");
-        app::ai::HttpRequest put;
-        put.method = "PUT";
-        put.url = "https://api.github.com/repos/" + fake.repo + "/contents/postes/x.xpgpos";
-        put.body = "{\"message\":\"m\",\"content\":\"" + deploy::crypto::base64(std::string("etat")) + "\",\"branch\":\"main\"}";
-        put.headers = {{"Authorization", "Bearer " + fake.requestToken}};
-        resp = app::ai::makeHttpClient()->perform(put, {});
-        check(resp.status == 403, "le jeton des demandes n'ecrit pas de fichier");
-        put.headers = {{"Authorization", "Bearer " + fake.adminToken}};
-        resp = app::ai::makeHttpClient()->perform(put, {});
-        check(resp.status == 201 && fake.files["postes/x.xpgpos"] == "etat", "le jeton de l'editeur ecrit");
-        resp = app::ai::makeHttpClient()->perform(put, {});
-        check(resp.status == 409, "remplacer sans le sha : 409");
-        app::ai::HttpRequest issue;
-        issue.method = "POST";
-        issue.url = "https://api.github.com/repos/" + fake.repo + "/issues";
-        issue.body = "{\"title\":\"t\",\"body\":\"b\"}";
-        resp = app::ai::makeHttpClient()->perform(issue, {});
-        check(resp.status == 401, "une issue sans jeton : 401");
-        issue.headers = {{"Authorization", "Bearer " + fake.requestToken}};
-        resp = app::ai::makeHttpClient()->perform(issue, {});
-        check(resp.status == 201 && fake.issues.size() == 1, "le jeton des demandes ouvre une issue");
-        fake.offline = true;
-        resp = app::ai::makeHttpClient()->perform(get, {});
-        check(!resp.ok() && resp.failure == app::ai::HttpResponse::Failure::Connect, "hors ligne : Connect");
-        fakegh::install(nullptr);
+        // un bloc bien forme (<< demande >>, signe par le PC), puis le meme sous un genre disparu
+        const auto block = lic::signBlock(lic::DocKind::Request, "{\"version\":1}", pc->publicKey(), [&](std::string_view m) { return pc->sign(m); });
+        const std::string good = lic::writeBlock(block);
+        std::vector<lic::SignedBlock> blocks;
+        std::string why;
+        check(lic::readBlocks(good, blocks, &why) && blocks.size() == 1, "le bloc << demande >> se lit : " + why);
+        for (const char* kind : {"passerelle", "annulation"}) {
+            std::string text = good;
+            text.replace(text.find(" demande "), 9, std::string(" ") + kind + " ");
+            blocks.clear();
+            why.clear();
+            check(!lic::readBlocks(text, blocks, &why) && !why.empty(), std::string("un bloc << ") + kind + " >> est refuse : " + why);
+        }
     }
 
     std::error_code ec;

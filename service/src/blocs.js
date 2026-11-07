@@ -14,15 +14,14 @@ const MAGIC = "XPG-LICENSING 1 ";
 const SIGNATURE = "SIGNATURE ed25519 ";
 const CONTEXTE = "XPG-LICENSING-1\n";
 
-// Les genres connus et la taille maximale de leur JSON (docKindMaxBytes).
+// Les genres connus et la taille maximale de leur JSON (docKindMaxBytes ; les genres << passerelle >> et
+// << annulation >> de la 1.34 ont disparu en 1.35.0).
 const GENRES = {
     licence: 256 * 1024,
     registre: 2 * 1024 * 1024,
     revocations: 8 * 1024 * 1024,
     demande: 16 * 1024,
-    passerelle: 16 * 1024,
     poste: 512 * 1024,
-    annulation: 4 * 1024,
     service: 4 * 1024,
     activation: 4 * 1024,
     jeton: 2 * 1024,

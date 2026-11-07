@@ -79,7 +79,9 @@ function Copy-XpgArbre {
 #  c'est changer l'autre (docs\LICENCES.md). Les octets sont lus en Latin-1 (un caractere par octet) : les
 #  chaines se cherchent en ordinal, les motifs avec Regex (sensibles a la casse, comme en Python).
 #  1.32.0 : la liste de revocation livree, ce que licences\ admet, ni licence, ni demande, ni github*.json,
-#  ni dossier archive, ni etat ou historique d'un PC ; [Licences] obligatoires.
+#  ni dossier archive, ni etat ou historique d'un PC ; [Licences] obligatoires. 1.35.0 : ni les fichiers du
+#  service des licences de l'outil Admin (service.json, service-releve.json, archive-vu.json, postes-publies.json,
+#  cle-synchro.cle), ni son dossier demandes-en-ligne.
 $script:XpgAdminChaines = @(
     @('XPG-License-Admin', "le nom de l'outil Admin des licences"),
     @('XPG License Manager Admin', "le nom de l'outil Admin des licences"),
@@ -98,8 +100,10 @@ $script:XpgAdminMotifs = @(
 )
 $script:XpgAdminNoms = @('*.cle', 'cle_editeur.bin', 'cle-editeur-licences*', '*license*admin*', '*licence*admin*', '*license_admin*',
                         '*.xpgcle', '*.xpgsync', 'activations.jsonl',
-                        '*.xpglic', '*.xpgreq', 'github*.json', 'etat.bin', 'historique.jsonl')   # 1.32.0
-$script:XpgAdminDossiers = @('archive')   # 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau
+                        '*.xpglic', '*.xpgreq', 'github*.json', 'etat.bin', 'historique.jsonl',   # 1.32.0
+                        'service.json', 'service-releve.json', 'archive-vu.json', 'postes-publies.json', 'cle-synchro.cle')   # 1.35.0
+# 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau ; 1.35.0 : ses demandes en ligne (le releve)
+$script:XpgAdminDossiers = @('archive', 'demandes-en-ligne')
 # 1.32.0 : ce que licences\ admet (chemins relatifs a licences\, sans casse) - le reste est un ecart.
 $script:XpgLicencesPermis = @('registre.xpgreg', 'revocations.xpgrev', '*-LICENSE*', '*.LICENSE',
                              'pdfium\*.txt', 'pdfium\*.md', 'pdfium\*.ijg')
@@ -164,10 +168,10 @@ function Test-XpgLivraison {
             if (-not $permis) { [void]$ecarts.Add("licences\$r : licences\ n'admet que registre.xpgreg, revocations.xpgrev et les textes de licence des bibliotheques") }
         }
     }
-    # 1.32.0 : un dossier de l'outil Admin (son archive), a aucun niveau.
+    # 1.32.0 : un dossier de l'outil Admin (son archive ; 1.35.0 : ses demandes en ligne), a aucun niveau.
     foreach ($d in Get-ChildItem -LiteralPath $base -Recurse -Directory -Force | Sort-Object FullName) {
         if ($script:XpgAdminDossiers -contains $d.Name.ToLowerInvariant()) {
-            [void]$ecarts.Add("$($d.FullName.Substring($base.Length + 1)) : un dossier de l'outil Admin (l'archive des licences signees)")
+            [void]$ecarts.Add("$($d.FullName.Substring($base.Length + 1)) : un dossier de l'outil Admin (l'archive des licences signees, ses demandes en ligne)")
         }
     }
     # Les chaines : en ASCII, et en UTF-16 (petit-boutiste, comme Python « utf-16-le »).

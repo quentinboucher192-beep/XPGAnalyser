@@ -3730,9 +3730,6 @@
     <ClInclude Include="src\licensing\Gateway.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
-    <ClInclude Include="src\licensing\GatewayAddress.hpp">
-      <Filter>licensing</Filter>
-    </ClInclude>
     <ClInclude Include="src\licensing\PublisherKeyEntry.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
@@ -3748,13 +3745,7 @@
     <ClInclude Include="src\license_admin\ArchiveSync.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
-    <ClInclude Include="src\license_admin\GitHubSync.hpp">
-      <Filter>license_admin</Filter>
-    </ClInclude>
     <ClInclude Include="src\license_admin\KeyBackup.hpp">
-      <Filter>license_admin</Filter>
-    </ClInclude>
-    <ClInclude Include="src\license_admin\Passerelle.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\ServiceClient.hpp">
