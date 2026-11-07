@@ -71,7 +71,16 @@ Le pas à pas complet : `service-licences\LISEZ-MOI-SERVICE.txt`, dans le zip de
 
 ## 5. Les essais
 
-- **Linux : À COMPLÉTER**
+- **Linux : 159 suites sur 159 réussies** (`ctest`, sur la version livrée). Celles des licences :
+  - `service` (85 contrôles) : les formats partagés - l'appel signé, le code d'activation, l'empreinte de la machine, le certificat et la chaîne de confiance, l'adresse ;
+  - `service_worker` (84 essais) : le service lui-même, contre `workerd` - chaque route, les limites, les places, le bail, la flottante, la Découverte, les demandes, l'archive, les attaques de la relecture ;
+  - `service_local` (77) : le C++ et le service, octet pour octet ;
+  - `activation` (213) : le magasin - l'activation, le bail et son compteur, l'horloge reculée, le compteur effacé, deux Studios ouverts, le poste, l'adresse du certificat, le code de l'installateur et qui l'a posé ;
+  - `service_studios` (127) : les Studios contre le vrai service - activer, renouveler, libérer, la flottante, la Découverte, la demande, hors ligne, et le code jamais écrit ;
+  - `adminservice` (158) : ton outil et sa console contre le vrai service ;
+  - `adminguidemandes` (114) et `adminguisecurite` (162) : tes pages, dont Service en ligne, contre le vrai service ;
+  - `licensing` (322), `evaluation` (86), `licenceui` (55), `formats_poste` (41) : les licences par fichier, la Découverte, la fenêtre Licence, les formats des demandes.
+- `adminguidemandes` a échoué une fois (2 contrôles) dans une première série complète, puis a réussi dans neuf passages (seul, à trois en parallèle, sous forte charge, et dans la série complète finale). La cause n'est pas trouvée.
 - **La relecture de sécurité**, faite après coup sur le service et les Studios, a trouvé :
   - **le grave** : en effaçant le compteur et en reculant l'horloge, une licence en ligne restait valable indéfiniment hors ligne → sans compteur, « en pause » ; l'heure a un plancher signé ; l'horloge reculée compte aussi pour les licences en ligne ;
   - **les importants** : un PC libéré rendait sa place tout en gardant son bail (une licence d'un poste sur dix PC) → au-delà de deux transferts par mois, la place revient à la fin du bail ; une identité de PC copiée sur d'autres machines → chaque activation, renouvellement et jeton est lié à l'empreinte de l'installation de Windows ;
