@@ -1,7 +1,8 @@
 // =============================================================================
 //  tests/admin_gui_shell_test.cpp - 1.33.0 : LA COQUILLE de XPG-License-Manager-Admin
 //  (le menu, la barre du haut, le bandeau, le travail lent, les fichiers glisses),
-//  le TABLEAU DE BORD et les trois pages du SERVICE EN LIGNE, dessines a blanc.
+//  le TABLEAU DE BORD, les deux pages de la VENTE EN LIGNE (pas encore) et, 1.35.0,
+//  la vraie page des LICENCES FLOTTANTES (un releve du service), dessines a blanc.
 //  argv[1] : la racine du depot (le registre d'exemple).
 // =============================================================================
 #include "admin_gui_harness.hpp"
@@ -18,6 +19,7 @@
 #include <thread>
 
 using namespace admintest;
+namespace online = license_admin::online;
 
 namespace {
 
@@ -49,9 +51,10 @@ struct Rig {
     bool clickId(const std::string& id) { return click(root(), id); }
 };
 
-// 1.34.0 : << Demandes en ligne >> (la passerelle GitHub) apres Activations.
+// 1.34.0 : << Demandes en ligne >> apres Activations. 1.35.0 : << Service en ligne >> a la place de << Synchronisation
+// GitHub >> ; << Licences flottantes >> est une vraie page (seules Boutique et Commandes restent grisees).
 const std::string kTitles[] = {"Tableau de bord", "Clients", "Licences", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Activations", "Demandes en ligne", "Licences flottantes",
-                               "Boutique", "Commandes", "R\xC3\xA9vocations", "Synchronisation GitHub", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
+                               "Boutique", "Commandes", "R\xC3\xA9vocations", "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 
 } // namespace
 
@@ -76,12 +79,13 @@ int main(int argc, char** argv) {
         }
         int online = 0;
         for (const auto& e : entries) online += e.online ? 1 : 0;
-        check(online == 3 && gui::Shell::entry("flottantes")->online && gui::Shell::entry("boutique")->online && gui::Shell::entry("commandes")->online,
-              "trois entrees du service en ligne");
-        check(has(t, "SERVICE EN LIGNE"), "le menu dit << service en ligne >>");
+        check(online == 2 && !gui::Shell::entry("flottantes")->online && gui::Shell::entry("boutique")->online && gui::Shell::entry("commandes")->online,
+              "deux entrees grisees (la vente en ligne) ; Licences flottantes est une vraie page");
+        check(has(t, "VENTE EN LIGNE") && !has(t, "GitHub"), "le menu dit << vente en ligne >> ; plus aucun GitHub");
+        check(gui::Shell::entry("service") && !gui::Shell::entry("github"), "la page << service >> ; plus de page << github >>");
         check(rig.shell->currentPageId() == "tableau", "on ouvre sur le tableau de bord");
         check(has(t, "Pas de cl\xC3\xA9") && rig.shell->keyStatusTone() == gui::Tone::Error, "<< Pas de cle >> en rouge");
-        check(has(t, "GitHub : non r\xC3\xA9gl\xC3\xA9"), "<< GitHub : non regle >>");
+        check(has(t, "Service : non r\xC3\xA9gl\xC3\xA9"), "<< Service : non regle >>");
         check(has(t, "Pour commencer") && has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9"), "le tableau de bord dit comment commencer");
         check(has(t, "Pr\xC3\xAAt."), "le bandeau avant toute operation");
         auto* nl = find<ui::Button>(rig.root(), "tableau.nouvelle-licence");
@@ -89,7 +93,7 @@ int main(int argc, char** argv) {
         check(rig.clickId("tableau.creer-cle") && rig.shell->currentPageId() == "securite", "Creer la cle... ouvre Parametres de securite");
         rig.shell->navigate("tableau");
         check(rig.clickId("shell.cle") && rig.shell->currentPageId() == "securite", "un clic sur l'etat de la cle : Parametres de securite");
-        check(rig.clickId("shell.synchro") && rig.shell->currentPageId() == "github", "un clic sur la synchro : la page GitHub");
+        check(rig.clickId("shell.synchro") && rig.shell->currentPageId() == "service", "un clic sur l'etat du service : la page Service en ligne");
         // La plus petite fenetre : le menu tient en entier.
         rig.paint(1100.f, 700.f);
         auto* last = find<ui::Button>(rig.root(), "nav.securite");
@@ -130,7 +134,8 @@ int main(int argc, char** argv) {
         check(nl && nl->enabled(), "Nouvelle licence... possible");
         check(has(t, "R\xC3\xA9partition par \xC3\xA9" "dition") && has(t, "\xC3\x89tat du poste") && has(t, "Derni\xC3\xA8res op\xC3\xA9rations"), "les trois cadres du tableau de bord");
         check(has(t, "Aucune op\xC3\xA9ration pour l'instant"), "aucune operation encore");
-        check(has(t, "Licences flottantes") && has(t, "demande le service en ligne"), "la tuile des licences flottantes, sans chiffre");
+        check(has(t, "Licences flottantes") && has(t, "Licences en ligne") && has(t, "service non r\xC3\xA9gl\xC3\xA9"),
+              "les tuiles du service : sans chiffre tant qu'il n'est pas regle");
         check(has(t, "Finissent dans 30 jours"), "la tuile << Finissent dans 30 jours >>");
         check(has(t, "n\xC2\xB0 " + std::to_string(fx.ws->registry().number)), "le numero du registre");
     }
@@ -150,22 +155,21 @@ int main(int argc, char** argv) {
           "une page inconnue : on reste, et c'est dit");
 
     // ------------------------------------------------------------------------------------------------
-    std::printf("-- les pages du service en ligne\n");
+    std::printf("-- la vente en ligne (pas encore) et les licences flottantes (une vraie page)\n");
     {
         const struct {
             const char* id;
             const char* word;
             const char* go;
             const char* to;
-        } pages[] = {{"flottantes", "atomique", "en-ligne.flottantes.aller", "licences"},
-                     {"boutique", "prestataire", "en-ligne.boutique.aller", "licences"},
+        } pages[] = {{"boutique", "prestataire", "en-ligne.boutique.aller", "licences"},
                      {"commandes", "aucune commande", "en-ligne.commandes.aller", "historique"}};
         for (const auto& p : pages) {
             rig.shell->navigate(p.id);
             const std::string t = rig.paint();
-            check(has(t, "Pas encore fait") && has(t, "n'existe pas encore"), std::string(p.id) + " : << pas encore >>");
+            check(has(t, "Pas encore fait") && has(t, "paiement en ligne"), std::string(p.id) + " : << pas encore >> (un paiement)");
             check(has(t, "Rien n'y est simul\xC3\xA9"), std::string(p.id) + " : rien de simule");
-            check(has(t, "Ce que fera cette page") && has(t, "Pourquoi il faut le service en ligne"), std::string(p.id) + " : ce qu'elle fera, pourquoi");
+            check(has(t, "Ce que fera cette page") && has(t, "Pourquoi ce n'est pas encore fait"), std::string(p.id) + " : ce qu'elle fera, pourquoi");
             check(has(t, p.word), std::string(p.id) + " : " + p.word);
             check(rig.clickId(p.go) && rig.shell->currentPageId() == p.to, std::string(p.id) + " : En attendant -> " + p.to);
             // Etroite : rien ne deborde, la page se lit encore.
@@ -173,6 +177,46 @@ int main(int argc, char** argv) {
             const std::string n = rig.paint(1100.f, 700.f);
             check(has(n, "Pas encore fait"), std::string(p.id) + " a 1100 x 700");
         }
+        rig.shell->navigate("flottantes");
+        std::string t = rig.paint();
+        check(has(t, "EN M\xC3\x8AME TEMPS") && has(t, "pas de licence flottante sans lui") && !has(t, "Pas encore fait"),
+              "flottantes : une vraie page ; le service pas regle, c'est dit");
+        auto* fr = find<ui::Button>(rig.root(), "flottantes.relever");
+        check(fr && !fr->enabled(), "Relever grise sans service");
+        check(rig.clickId("flottantes.regler") && rig.shell->currentPageId() == "service", "Regler le service -> Service en ligne");
+        // Un releve (le dernier, garde sur ce poste) : la page le montre, chiffres et date.
+        check(rig.shell->workspace().serviceConfigure("https://xpg-licences.essai.workers.dev").ok, "le service regle (sans reseau)");
+        online::Snapshot s;
+        s.at = g_now;
+        s.url = "https://xpg-licences.essai.workers.dev";
+        online::OnlineLicence fl;
+        fl.licenseId = "XPG-2026-00077";
+        fl.type = "floating";
+        fl.seats = 2;
+        fl.leaseDays = 30;
+        fl.hasCode = true;
+        online::OnlineActivation a1;
+        a1.deviceKey = std::string(64, 'a');
+        a1.name = "Poste flottant A";
+        a1.state = "active";
+        a1.activatedAt = a1.seenAt = g_now - 3600;
+        a1.until = g_now + 29 * 86400;
+        fl.activations.push_back(a1);
+        fl.leases.push_back({a1.deviceKey, g_now + 600});
+        s.licences.push_back(fl);
+        std::string why;
+        check(online::writeSnapshot(U(fx.admin), s, &why), "un releve d'essai garde sur ce poste");
+        rig.shell->reloadAll();
+        rig.shell->navigate("flottantes");
+        t = rig.paint();
+        check(has(t, "XPG-2026-00077") && has(t, "1 / 2") && has(t, "1 jeton(s) en cours sur 2 poste(s)"), "flottantes : la licence, les postes pris, le releve");
+        check(has(t, "Poste flottant A"), "le PC qui tient le jeton");
+        rig.shell->navigate("tableau");
+        t = rig.paint();
+        check(has(t, "jeton(s) sur 2 poste(s)") && has(t, "Licences en ligne"), "le tableau de bord : les chiffres du releve");
+        (void)fs::remove(fx.admin / online::kSnapshotFile);
+        (void)fs::remove(fx.admin / online::kConfigFile);
+        rig.shell->reloadAll();
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -261,7 +305,7 @@ int main(int argc, char** argv) {
             if (!finished) std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         check(finished && doneSeen, "fini : done puis le bandeau (sur le fil de l'interface)");
-        check(!has(rig.paint(), "Synchro en cours"), "la barre du haut redit l'etat de la synchro");
+        check(!has(rig.paint(), "Synchro en cours"), "la barre du haut redit l'etat du service");
         // finishSlow (les essais, la fermeture) : le meme rendu.
         check(rig.shell->runSlow("Encore", [] { return gui::OpResult::fail("lent et refuse"); }, nullptr) && rig.shell->finishSlow(),
               "finishSlow rend le resultat");
@@ -335,7 +379,7 @@ int main(int argc, char** argv) {
         rig.shell->navigate("tableau");
         check(rig.clickId("tableau.tuile.flottantes") && rig.shell->currentPageId() == "flottantes", "tuile flottantes -> sa page");
         rig.shell->navigate("tableau");
-        check(rig.clickId("tableau.synchroniser") && rig.shell->currentPageId() == "github", "Synchroniser -> la page GitHub");
+        check(rig.clickId("tableau.synchroniser") && rig.shell->currentPageId() == "service", "Service en ligne -> sa page");
         // Petite fenetre : les tuiles restent dans la page.
         rig.shell->navigate("tableau");
         rig.paint(1100.f, 700.f);

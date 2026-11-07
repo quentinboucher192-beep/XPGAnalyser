@@ -663,6 +663,7 @@ private:
     void syncArchive(int mode);   // 0 : verifier, 1 : synchroniser, 2 : recevoir seulement
     void listLicences();
     void stats();
+    void writePublicKey();
     void askShowCode();
     void copyCode();
     void acknowledge();
@@ -692,6 +693,7 @@ private:
     ui::Button*                     hide_{nullptr};
     ui::Button*                     list_{nullptr};
     ui::Button*                     stats_{nullptr};
+    ui::Button*                     publicKey_{nullptr};
 
     std::string              recovery_;   // le code de secours montre ("" : aucun)
     Reveal                   reveal_{Reveal::None};
@@ -752,6 +754,8 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     list_->setIcon(ui::Icon::Refresh);
     stats_ = body_->make<ui::Button>("Les compteurs du service", "service.stats");
     stats_->setIcon(ui::Icon::Chart);
+    publicKey_ = body_->make<ui::Button>("\xC3\x89" "crire cle-publique.txt\xE2\x80\xA6", "service.cle-publique");
+    publicKey_->setIcon(ui::Icon::Export);
 
     links_ += saveUrl_->clicked->connect([this] { saveUrl(); });
     links_ += verify_->clicked->connect([this] { verify(); });
@@ -775,6 +779,7 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     links_ += hide_->clicked->connect([this] { hideCode(); });
     links_ += list_->clicked->connect([this] { listLicences(); });
     links_ += stats_->clicked->connect([this] { stats(); });
+    links_ += publicKey_->clicked->connect([this] { writePublicKey(); });
 
     if (ws().service().configured && ws().service().problem.empty()) url_->setText(ws().service().config.url);
     refresh();
@@ -805,6 +810,7 @@ void ServicePage::syncEnabled() {
     dry_->setEnabled(!b && s.ready() && key && s.syncKey);
     list_->setEnabled(!b && s.ready() && key);
     stats_->setEnabled(!b && s.ready() && key);
+    publicKey_->setEnabled(key);
     continue_->setEnabled(noted_->isChecked());
 }
 
@@ -968,19 +974,22 @@ void ServicePage::rebuild() {
     bl.note("Le d\xC3\xA9tail (les PC de chaque licence, Retirer ce PC) : la page Licences ; les jetons : Licences flottantes.");
     bl.end();
 
-    // ---- mettre le service en ligne ----
+    // ---- mettre le service en ligne (outils/service/LISEZ-MOI-SERVICE.txt, resume) ----
     bl.card("Mettre le service en ligne (une fois)");
-    bl.text("Le service est un petit programme (un Worker) que tu mets en ligne toi-m\xC3\xAAme, sur ton compte Cloudflare gratuit. Les \xC3\xA9tapes "
-            "d\xC3\xA9taill\xC3\xA9" "es : outils/service/LISEZ-MOI-SERVICE.txt. En bref :");
-    bl.bullet("1. Un compte Cloudflare (gratuit) : dash.cloudflare.com \xE2\x80\xBA Sign up.");
-    bl.bullet("2. Node.js (la version LTS) sur ce PC : nodejs.org.");
-    bl.bullet("3. Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Pr\xC3\xA9parer les fichiers pour les Studios\xE2\x80\xA6 : cle-publique.txt porte ta cl\xC3\xA9 publique "
-              "(le service ne croit qu'elle).");
-    bl.bullet("4. Dans le dossier outils/service : le script de mise en ligne (npx wrangler login, puis npx wrangler deploy, avec ta cl\xC3\xA9 publique).");
-    bl.bullet("5. Il affiche l'adresse https://xpg-licences.<ton-compte>.workers.dev : colle-la plus haut, Enregistrer, puis V\xC3\xA9rifier.");
-    bl.bullet("6. Certifier la cl\xC3\xA9 du service (puis Renouveler, chaque ann\xC3\xA9" "e).");
-    bl.bullet("7. Synchroniser l'archive ; signer le registre (\xC3\x89" "ditions) : il part sur le service.");
-    bl.bullet("8. Pr\xC3\xA9parer les fichiers pour les Studios de nouveau (ServiceAddress.hpp porte l'adresse), puis reconstruire les Studios.");
+    bl.text("Le service est un petit programme (un Worker) que tu mets en ligne toi-m\xC3\xAAme, sur ton compte Cloudflare gratuit ; compte une "
+            "demi-heure la premi\xC3\xA8re fois. Le pas \xC3\xA0 pas complet : LISEZ-MOI-SERVICE.txt, avec le dossier du service. En bref :");
+    bl.bullet("1. Installe Node.js (la version LTS, 22 ou plus) : nodejs.org.");
+    bl.bullet("2. Cr\xC3\xA9" "e ton compte Cloudflare (gratuit) : dash.cloudflare.com/sign-up ; dans \xC2\xAB Workers et Pages \xC2\xBB, choisis ton sous-domaine.");
+    bl.bullet("3. Mets dans un m\xC3\xAAme dossier : le dossier service, deployer.bat (ou deployer.sh), deployer.mjs, LISEZ-MOI-SERVICE.txt, et "
+              "cle-publique.txt (ta cl\xC3\xA9 PUBLIQUE : le bouton ci-dessous).");
+    bl.bullet("4. Dans un terminal ouvert dans le dossier service : npx wrangler login (une fois par PC).");
+    bl.bullet("5. Double-clique deployer.bat : il \xC3\xA9" "crit l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e aussi dans "
+              "adresse-du-service.txt).");
+    bl.bullet("6. Colle-la plus haut, Enregistrer l'adresse, V\xC3\xA9rifier, puis Certifier la cl\xC3\xA9 du service (et Renouveler, chaque ann\xC3\xA9" "e).");
+    bl.bullet("7. Signe le registre (\xC3\x89" "ditions : il part sur le service), synchronise l'archive, puis cr\xC3\xA9" "e tes licences en ligne (Licences).");
+    bl.bullet("8. Pour les Studios livr\xC3\xA9s : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Pr\xC3\xA9parer les fichiers pour les Studios (ServiceAddress.hpp porte "
+              "l'adresse), puis reconstruire les Studios.");
+    bl.row({publicKey_});
     bl.note("Ce qui ne va jamais sur le service : ta cl\xC3\xA9 priv\xC3\xA9" "e, la cl\xC3\xA9 de synchro, son code de secours, un code d'activation (le service n'en "
             "garde que l'empreinte).");
     bl.end();
@@ -1144,6 +1153,22 @@ void ServicePage::listLicences() {
 void ServicePage::stats() {
     const Workspace* w = &ws();
     (void)slow("Service : les compteurs", [w] { return w->serviceStats(); }, [this](const OpResult& r) { note(licences_, "compteurs", r); });
+}
+
+void ServicePage::writePublicKey() {
+    if (!ws().key().present) {
+        refuse("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9)");
+        return;
+    }
+    ui::FilePick p;
+    p.title = "Le dossier o\xC3\xB9 \xC3\xA9" "crire cle-publique.txt (celui de deployer.bat)";
+    p.folder = true;
+    const auto alive = aliveCheck();
+    if (host_.pickFile)
+        host_.pickFile(p, [this, alive](std::string path) {
+            if (!alive() || path.empty()) return;
+            if (host_.report) host_.report(ws().writePublicKeyFile(path));
+        });
 }
 
 // ---------------------------------------------------------------------------------------------------- le code de secours

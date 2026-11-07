@@ -153,8 +153,8 @@ struct ServiceJob {
     std::string              deviceKey;
     std::vector<std::string> deviceKeys;
     std::string              reason;
-    std::string              codeHash;          // OnlineLicence : l'empreinte d'un code neuf (jamais le code)
-    int                      leaseDays{online::kDefaultLeaseDays};
+    std::string              codeHash;          // OnlineLicence : l'empreinte d'un code neuf (jamais le code) ; vide : le code reste
+    int                      leaseDays{0};      // OnlineLicence : le bail (jours) ; 0 : le service garde le sien
     int                      requestNumber{0};  // OnlineLicence : la demande manuelle a laquelle elle repond (0 : aucune)
 };
 
@@ -303,6 +303,8 @@ public:
     [[nodiscard]] static bool isOnlineLicence(const licensing::License& l) { return !l.service.empty(); }
     // Les fichiers PUBLICS a compiler dans les Studios (la cle publique, le registre, l'adresse du service).
     OpResult studioKit(const std::string& outDir) const;
+    // cle-publique.txt (la cle PUBLIQUE de l'editeur en hexadecimal : PUBLISHER_KEYS du service) dans ce dossier.
+    OpResult writePublicKeyFile(const std::string& outDir) const;
 
 private:
     void loadKey();

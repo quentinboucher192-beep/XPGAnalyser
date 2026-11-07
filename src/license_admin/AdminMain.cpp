@@ -739,10 +739,7 @@ int run(const std::vector<std::string>& argv) {
             return showResult(online::publishBoundLicence(folder, *key, text, false, o));
         }
         if (a.command == "service-desactiver") {
-            const bool on = a.flag("--reactiver");
-            int lease = online::kDefaultLeaseDays;
-            if (const auto* l = online::readSnapshot(folder).licence(a.one("--licence"))) lease = l->leaseDays;
-            return showResult(online::setActive(folder, *key, a.one("--licence"), on, lease, o));
+            return showResult(online::setActive(folder, *key, a.one("--licence"), a.flag("--reactiver"), 0, o));
         }
         if (a.command == "service-licences") {
             online::Snapshot s;
@@ -807,7 +804,7 @@ int run(const std::vector<std::string>& argv) {
             complain("Refus\xC3\xA9 : " + why);
             return 1;
         }
-        int lease = online::kDefaultLeaseDays;
+        int lease = a.flag("--etendre") ? 0 : online::kDefaultLeaseDays;   // etendre : le service garde son bail, sauf --bail-jours
         if (!a.one("--bail-jours").empty()) {
             const std::string t = a.one("--bail-jours");
             if (t.empty() || t.size() > 3 || !std::all_of(t.begin(), t.end(), [](char c) { return c >= '0' && c <= '9'; }) || std::atoi(t.c_str()) < 1 ||

@@ -46,6 +46,15 @@ inline std::string readFile(const fs::path& p) {
     std::ifstream f(p, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(f), {});
 }
+// 1.35.0 : un texte (un secret) se trouve-t-il dans un fichier de ce dossier (tout l'arbre) ?
+inline bool foundIn(const fs::path& dir, const std::string& needle) {
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) break;
+        if (it->is_regular_file(ec) && readFile(it->path()).find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
 inline int finish() {
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures ? 1 : 0;

@@ -603,7 +603,7 @@ Result putLicence(const std::string& folder, const licensing::SigningKey& key, c
     if (lic.service.empty() || !lic.devices.empty())
         return refused("la licence " + lic.licenseId + " n'est pas une licence en ligne (elle est li\xC3\xA9" "e \xC3\xA0 des PC : elle part \xC3\xA0 ses PC, pas avec un code)");
     if (!codeHash.empty() && (codeHash.size() != 64 || !licensing::isKeyHex(codeHash))) return refused("l'empreinte du code est illisible");
-    if (leaseDays < 1 || leaseDays > 366) return refused("le bail d'une activation va de 1 \xC3\xA0 366 jours");
+    if (leaseDays < 0 || leaseDays > 366) return refused("le bail d'une activation va de 1 \xC3\xA0 366 jours");
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     if (lic.service != c->url())
@@ -611,15 +611,18 @@ Result putLicence(const std::string& folder, const licensing::SigningKey& key, c
     Value body = Value::object();
     body.set("licence", licensing::writeBlock(block));
     if (!codeHash.empty()) body.set("code_hash", codeHash);
-    body.set("bail_jours", leaseDays);
+    if (leaseDays > 0) body.set("bail_jours", leaseDays);   // 0 : le service garde le sien
     body.set("active", active);
     const Reply r = c->call("PUT", "/admin/licences", core::json::write(body, false));
     if (r.status != 200 || !r.error.empty()) return refused(c->explain(r, "d\xC3\xA9poser la licence " + lic.licenseId));
     Result res;
     res.ok = true;
     res.message = "Licence en ligne " + lic.licenseId + (active ? " d\xC3\xA9pos\xC3\xA9" "e sur le service" : " d\xC3\xA9sactiv\xC3\xA9" "e sur le service") + ".";
+    int lease = leaseDays;
+    if (r.json.isObject() && r.json.has("bail_jours")) lease = static_cast<int>(r.json.integer("bail_jours"));
     res.details.push_back(std::to_string(lic.maxDevices) + (lic.type == licensing::LicenseType::Floating ? " postes en m\xC3\xAAme temps (flottante)" : " PC au plus") +
-                          ", bail de " + std::to_string(leaseDays) + " j" + (lic.expiresAt ? ", fin le " + licensing::isoDate(lic.expiresAt) : std::string(", sans fin")) + ".");
+                          (lease > 0 ? ", bail de " + std::to_string(lease) + " j" : std::string()) +
+                          (lic.expiresAt ? ", fin le " + licensing::isoDate(lic.expiresAt) : std::string(", sans fin")) + ".");
     if (!codeHash.empty()) res.details.push_back("Le service ne garde que l'empreinte du code d'activation, jamais le code.");
     else if (active) res.details.push_back("Le code d'activation reste le m\xC3\xAAme.");
     if (!active) res.details.push_back("Ses PC ne sont plus renouvel\xC3\xA9s : chacun s'arr\xC3\xAAte \xC3\xA0 la fin de son bail, ou d\xC3\xA8s qu'il se connecte ; le code ne marche plus.");
@@ -669,7 +672,7 @@ Result setActive(const std::string& folder, const licensing::SigningKey& key, co
     if (!licensing::isLicenseId(licenseId)) return refused("identifiant de licence non valide : " + licenseId);
     const std::string text = archive::archivedText(folder, "licences/" + archive::safeName(licenseId) + ".xpglic");
     if (text.empty()) return refused("la licence " + licenseId + " n'est pas dans l'archive de ce poste (synchronise l'archive d'abord)");
-    return putLicence(folder, key, text, {}, leaseDays > 0 ? leaseDays : kDefaultLeaseDays, active, o);
+    return putLicence(folder, key, text, {}, leaseDays, active, o);
 }
 
 Result stats(const std::string& folder, const licensing::SigningKey& key, const Options& o) {
@@ -1430,6 +1433,11 @@ std::string serviceAddressHeader(const std::string& url) {
            "} // namespace licensing::service\n";
 }
 
+std::string publicKeyText(const licensing::SigningKey& key) {
+    return "# La cle PUBLIQUE de l'editeur des licences XPG (" + key.keyId() + ") : PUBLISHER_KEYS du service. Rien de secret.\n" + key.publicKeyHex() +
+           "\n";
+}
+
 Result studioKit(const std::string& folder, const licensing::SigningKey* key, const std::string& outDir, Seconds now) {
     if (!key) return refused("pas de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste");
     if (key->test())
@@ -1456,7 +1464,7 @@ Result studioKit(const std::string& folder, const licensing::SigningKey* key, co
         return refused("l'adresse r\xC3\xA9gl\xC3\xA9" "e (" + url + ") est celle d'un service d'essai sur ce poste : les Studios livr\xC3\xA9s demandent https://. "
                        "R\xC3\xA8gle l'adresse de ton vrai service (Service en ligne), puis recommence");
     const std::string address = serviceAddressHeader(url);
-    const std::string publicKey = key->publicKeyHex() + "\n";
+    const std::string publicKey = publicKeyText(*key);
     const std::string date = licensing::isoDate(now);
     std::string readme =
         "Les fichiers pour les Studios (API Studio, IHM Studio) - pr\xC3\xA9par\xC3\xA9s le " + date + " par l'outil de l'\xC3\xA9" "diteur.\n"

@@ -6,7 +6,10 @@
 //  d'exemple, des PC fictifs) : la cle, les demandes, signer une licence,
 //  l'etendre, revoquer un PC puis la licence, retirer une revocation, le
 //  registre modifie, ranger des fichiers, le tableau de bord, les clients, la
-//  sauvegarde de la cle, la configuration GitHub (sans reseau), le travail lent.
+//  sauvegarde de la cle, le travail lent ; 1.35.0 : le service des licences
+//  (sans reseau : son adresse, la cle de synchro de l'archive et son code de
+//  secours, une licence en ligne preparee - son code jamais ecrit - et le
+//  service injoignable dit tel quel).
 // =============================================================================
 #include "admin_test_fixture.hpp"
 
@@ -203,20 +206,61 @@ int main(int argc, char** argv) {
         check(!has(readFile(backup), "sept chevaux"), "la phrase n'est pas dans le fichier");
     }
 
-    std::printf("-- GitHub (sans reseau)\n");
+    std::printf("-- le service des licences (sans reseau)\n");
     {
+        check(!ws.service().configured && !ws.hasServiceJob(), "pas encore regle : rien a publier");
+        check(!ws.serviceConfigure("http://exemple.invalid").ok, "une adresse http:// vers un autre poste : refusee");
+        check(!ws.serviceConfigure("https://exemple.invalid/chemin").ok, "une adresse avec un chemin : refusee");
+        const auto c = ws.serviceConfigure("https://xpg-licences.essai.workers.dev/");
+        check(c.ok && ws.service().ready() && ws.service().config.url == "https://xpg-licences.essai.workers.dev", "reglee (" + c.text() + ")");
         std::string code;
-        check(!ws.githubConfigure("pas un depot", "main", "", "", false, &code).ok, "un depot mal ecrit : refuse");
-        const auto c = ws.githubConfigure("editeur-essai/licences-essai", "", "", "", false, &code);
-        check(c.ok && ws.github().configured && ws.github().syncKey && code.rfind("XPGS1-", 0) == 0, "configure : la cle de synchro et son code de secours (" + c.text() + ")");
+        const auto k = ws.syncKeyCreate(&code);
+        check(k.ok && ws.service().syncKey && code.rfind("XPGS1-", 0) == 0 && ws.service().syncKeyId.rfind("xpgs-", 0) == 0, "la cle de synchro et son code de secours");
         std::string why;
-        check(ws.githubRecoveryCode(&why) == code, "le code de secours se remontre");
+        check(ws.syncRecoveryCode(&why) == code, "le code de secours se remontre");
         std::string again;
-        const auto c2 = ws.githubConfigure("editeur-essai/licences-essai", "main", "", "", false, &again);
-        check(c2.ok && again.empty(), "reconfigurer : la cle reste, pas de nouveau code");
-        check(ws.githubSaveToken("essai_jeton_ESSAI_APPLICATION_0000000000").ok && ws.github().token, "le jeton enregistre (protege)");
-        check(!has(readFile(f.admin / license_admin::github::kTokenFile), "ESSAI_APPLICATION"), "le jeton n'est pas en clair dans son fichier");
-        check(ws.githubEraseToken().ok && !ws.github().token, "le jeton retire");
+        check(!ws.syncKeyCreate(&again).ok && again.empty(), "une seconde cle : refusee (jamais remplacee)");
+        check(!foundIn(f.admin, code), "le code de secours n'est ecrit nulle part en clair");
+        Fixture f2(source, "ws-service-b");
+        check(!f2.ws->syncKeyRestore("XPGS1-FAUX", false).ok, "un faux code : refuse");
+        check(f2.ws->syncKeyRestore(code, false).ok && f2.ws->service().syncKeyId == ws.service().syncKeyId, "un autre poste : la meme cle par le code");
+        // une licence en ligne preparee : signee, rangee, un code tire ; rien n'est parti
+        gui::LicenceDraft od;
+        od.online = true;
+        od.licenseId = "XPG-2026-00090";
+        od.customer = "Client d'essai en ligne";
+        od.edition = "PROFESSIONAL";
+        od.maxDevices = 3;
+        od.durationDays = 365;
+        od.leaseDays = 20;
+        od.requestPaths = {f.request("pc-online", "Poste essai en ligne")};
+        gui::ServiceJob job;
+        std::string activation;
+        check(!ws.prepareOnlineLicence(od, {}, job, activation).ok && activation.empty(), "une demande de PC avec une licence en ligne : refusee");
+        od.requestPaths.clear();
+        const auto p = ws.prepareOnlineLicence(od, {}, job, activation);
+        check(p.ok && activation.size() == 23 && activation.rfind("XPG-", 0) == 0 && job.codeHash.size() == 64 && job.leaseDays == 20, "preparee : un code, son empreinte (" + p.text() + ")");
+        const auto* l = ws.licence("XPG-2026-00090");
+        check(l && gui::Workspace::isOnlineLicence(l->licence) && l->licence.devices.empty() && l->licence.maxDevices == 3, "rangee : en ligne, aucun PC");
+        check(!foundIn(f.admin, activation), "le code n'est ecrit dans aucun fichier");
+        const auto run = ws.serviceRun(job);
+        check(!run.ok && has(run.message, "pas de r\xC3\xA9ponse du service"), "le service injoignable : dit tel quel, rien d'invente (" + run.message + ")");
+        check(!ws.prepareOnlineLicence(od, {}, job, activation).ok, "le meme identifiant : refuse (il est dans l'archive)");
+        gui::LicenceDraft e = od;
+        e.extend = true;
+        e.durationDays = 500;
+        std::string none;
+        const auto x = ws.prepareOnlineLicence(e, {}, job, none);
+        check(x.ok && none.empty() && job.codeHash.empty() && job.leaseDays == 0, "prolongee : le meme code, le bail du service garde");
+        // une licence liee signee avec le service regle : elle part a ses PC (un travail), et un registre aussi
+        ws.takeServiceJob();
+        const auto s = f.licence("XPG-2026-00091", "Client d'essai lie", "PERSONAL", {f.request("pc-lie", "Poste essai lie")});
+        check(s.ok && ws.hasServiceJob(), "une licence liee signee : sa publication attend (" + s.text() + ")");
+        const auto j = ws.takeServiceJob();
+        check(j && j->kind == gui::ServiceJob::Kind::Licence && j->licenseId == "XPG-2026-00091" && !ws.hasServiceJob(), "le travail : la licence a ses PC");
+        // le tableau de bord : jamais releve -> aucun chiffre du service
+        const auto dash = ws.dashboard();
+        check(dash.serviceConfigured && dash.snapshotAt == 0 && dash.onlineLicences == 0, "le tableau de bord : le service regle, jamais releve");
     }
 
     return finish();

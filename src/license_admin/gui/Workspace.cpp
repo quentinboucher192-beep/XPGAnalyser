@@ -705,9 +705,7 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
         job.kind = ServiceJob::Kind::OnlineLicence;
         job.label = "Service : nouvelle \xC3\xA9mission de " + d.licenseId;
         job.licenseId = d.licenseId;
-        job.licenceText = out;
-        job.leaseDays = d.leaseDays;
-        if (const auto* l = service_.snapshot.licence(d.licenseId)) job.leaseDays = l->leaseDays;
+        job.licenceText = out;   // leaseDays 0 : le service garde son bail
         queueServiceJob(std::move(job));
     } else if (service_.ready()) {
         r.details.push_back("Service : la licence part \xC3\xA0 chacun de ses PC (ils la r\xC3\xA9" "cup\xC3\xA8rent seuls \xC3\xA0 leur prochaine connexion).");
@@ -754,7 +752,7 @@ OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::s
     job.label = "Service : d\xC3\xA9p\xC3\xB4t de la licence en ligne " + draft.licenseId;
     job.licenseId = draft.licenseId;
     job.licenceText = out;
-    job.leaseDays = draft.leaseDays;
+    job.leaseDays = draft.extend ? 0 : draft.leaseDays;   // une prolongation : le service garde son bail
     job.requestNumber = requestNumber;
     if (!draft.extend) {
         // Le code : tire ici, son empreinte seule part au service ; le code lui-meme est rendu a l'appelant (montre une fois).
@@ -763,8 +761,6 @@ OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::s
         (void)licensing::service::normalizeCode(code, normalized);
         job.codeHash = licensing::service::codeHash(normalized);
         crypto::wipe(normalized.data(), normalized.size());
-    } else if (const auto* s = service_.snapshot.licence(draft.licenseId)) {
-        job.leaseDays = s->leaseDays;   // une prolongation garde le bail du service
     }
     OpResult r = OpResult::done(draft.extend ? "Licence en ligne " + draft.licenseId + " prolong\xC3\xA9" "e : la nouvelle \xC3\xA9mission part sur le service (le code reste le m\xC3\xAAme)."
                                              : "Licence en ligne " + draft.licenseId + " sign\xC3\xA9" "e : elle part sur le service avec l'empreinte d'un code d'activation neuf.");
@@ -790,8 +786,7 @@ OpResult Workspace::prepareNewCode(const std::string& licenseId, ServiceJob& job
     job.label = "Service : un code neuf pour " + licenseId;
     job.licenseId = licenseId;
     job.licenceText = std::move(text);
-    job.codeHash = licensing::service::codeHash(normalized);
-    if (const auto* s = service_.snapshot.licence(licenseId)) job.leaseDays = s->leaseDays;
+    job.codeHash = licensing::service::codeHash(normalized);   // leaseDays 0 : le bail du service garde
     crypto::wipe(normalized.data(), normalized.size());
     return OpResult::done("Un code neuf pour la licence " + licenseId + " : il remplace l'ancien d\xC3\xA8s qu'il est d\xC3\xA9pos\xC3\xA9.");
 }
@@ -1112,9 +1107,7 @@ OpResult Workspace::serviceRetire(const std::string& licenseId, const std::strin
 
 OpResult Workspace::serviceSetActive(const std::string& licenseId, bool active) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    int lease = online::kDefaultLeaseDays;
-    if (const auto* l = service_.snapshot.licence(licenseId)) lease = l->leaseDays;
-    return fromResult(online::setActive(folder_, *key, licenseId, active, lease, optionsAt(now())));
+    return fromResult(online::setActive(folder_, *key, licenseId, active, 0, optionsAt(now())));
 }
 
 OpResult Workspace::serviceFetch() const {
@@ -1204,6 +1197,19 @@ const online::Entry* Workspace::onlineRequestAt(const std::string& path) const {
 }
 
 OpResult Workspace::studioKit(const std::string& outDir) const { return fromResult(online::studioKit(folder_, signing_.get(), outDir, now())); }
+
+OpResult Workspace::writePublicKeyFile(const std::string& outDir) const {
+    if (!signing_) return OpResult::fail(key_.problem);
+    if (outDir.empty()) return OpResult::fail("dans quel dossier ?");
+    const std::string path = U(P(outDir) / "cle-publique.txt");
+    std::string why;
+    if (!deploy::crypto::replaceFile(path, online::publicKeyText(*signing_), false, &why)) return OpResult::fail(why);
+    OpResult r = OpResult::done("Cl\xC3\xA9 publique \xC3\xA9" "crite : " + path);
+    r.details.push_back("Pour la mise en ligne du service (deployer.bat la lit : PUBLISHER_KEYS). Rien de secret dedans.");
+    if (signing_->test()) r.details.push_back("CL\xC3\x89 D'ESSAI : un service qui la croit n'est que pour des essais.");
+    r.output = path;
+    return r;
+}
 
 // ---------------------------------------------------------------------------------------------------- Background
 Background::~Background() { wait(); }

@@ -82,6 +82,9 @@ private:
     std::vector<gfx::Rect> clips_;
 };
 
+// Ce que l'application a mis dans le presse-papiers (les essais le relisent).
+inline std::string g_copied;
+
 inline void installMetrics() {
     ui::PlatformServices s;
     s.measureWidth = [](std::string_view t, gfx::FontId f) {
@@ -89,8 +92,8 @@ inline void installMetrics() {
         return static_cast<float>(TextRenderer::chars(t)) * h * 0.5f;
     };
     s.lineHeight = [](gfx::FontId f) { return f.v ? static_cast<float>(f.v) : 16.f; };
-    s.clipboardGet = [] { return std::string{}; };
-    s.clipboardSet = [](std::string_view) {};
+    s.clipboardGet = [] { return g_copied; };
+    s.clipboardSet = [](std::string_view t) { g_copied = std::string(t); };
     s.surfaceSize = [] { return gfx::Size{1280.f, 800.f}; };
     ui::installPlatformServices(std::move(s));
 }

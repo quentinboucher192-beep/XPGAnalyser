@@ -1,5 +1,5 @@
 // =============================================================================
-//  tests/admin_gui_licences_test.cpp - 1.33.0 : l'application de l'editeur, la
+//  tests/admin_gui_licences_test.cpp - 1.35.0 : l'application de l'editeur, la
 //  page Licences, l'assistant << Nouvelle licence >> et la page Revocations
 // -----------------------------------------------------------------------------
 //  A blanc (TextRenderer, HostRig) sur un poste Admin d'essai (cle d'ESSAI,
@@ -10,8 +10,12 @@
 //  annule) ; une licence perpetuelle aux fonctionnalites choisies ; une licence
 //  etendue (un PC de plus) ; la page Licences (liste, filtres, recherche,
 //  detail, exporter, revoquer toute la licence ou un PC, glisser des demandes) ;
-//  la page Revocations (liste, revoquer, retirer, exporter). argv[1] : la racine
-//  du depot.
+//  la page Revocations (liste, revoquer, retirer, exporter). 1.35.0 : la
+//  publication sur le service (un service d'essai ou rien n'ecoute : le refus
+//  dit, rien d'invente), la licence EN LIGNE (l'assistant, le bail, le depot
+//  refuse : aucun code montre ni ecrit), la page Licences d'une licence en ligne
+//  (ses activations, Retirer ce PC, Nouveau code, Desactiver, Relever), le
+//  dialogue du code (masque, Afficher, Copier). argv[1] : la racine du depot.
 // =============================================================================
 #include "admin_gui_harness.hpp"
 
@@ -21,11 +25,14 @@
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <iterator>
+#include <regex>
 #include <string>
 #include <thread>
 #include <vector>
 
 using namespace admintest;
+namespace online = license_admin::online;
 
 namespace {
 
@@ -47,6 +54,12 @@ int rowOf(ui::TableView& t, std::size_t col, const std::string& text) {
     for (std::size_t r = 0; r < m->rowCount(); ++r)
         if (m->cellText(static_cast<ui::RowIndex>(r), col) == text) return static_cast<int>(r);
     return -1;
+}
+
+std::string cell(ui::Widget& root, std::string_view id, int row, std::size_t col) {
+    auto* t = find<ui::TableView>(root, id);
+    if (!t || !t->model() || row < 0 || static_cast<std::size_t>(row) >= t->model()->rowCount()) return {};
+    return t->model()->cellText(static_cast<ui::RowIndex>(row), col);
 }
 
 std::size_t rows(ui::Widget& root, std::string_view id) {
@@ -88,6 +101,19 @@ void checkText(bool ok, const std::string& what, const std::string& text) {
 
 // Avancer l'assistant d'une etape (Suivant doit etre pret).
 bool next(ui::Widget& w) { return click(w, "wizard.suivant"); }
+
+// Un code d'activation (XPG-XXXX-XXXX-XXXX-XXXX) ecrit dans un fichier du dossier : il ne doit y en avoir aucun.
+bool codeWritten(const fs::path& dir) {
+    static const std::regex code("XPG-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}");
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        std::ifstream in(it->path(), std::ios::binary);
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (std::regex_search(text, code)) return true;
+    }
+    return false;
+}
 
 } // namespace
 
@@ -257,18 +283,18 @@ int main(int argc, char** argv) {
         t = paintDialog(d);
         check(has(t, "Licence sign\xC3\xA9" "e") && has(t, "Envoie ce fichier"), "le resultat est montre");
         check(shown(w, "wizard.dossier") && shown(w, "wizard.fermer") && !shown(w, "wizard.signer") && !shown(w, "wizard.annuler"), "apres : dossier, fermer");
-        check(!shown(w, "wizard.github"), "GitHub pas reglee : pas de Publier");
+        check(!fx.ws->hasServiceJob(), "le service pas regle : rien a publier");
         check(click(w, "wizard.dossier") && !rig.openedFolders.empty() && rig.openedFolders.back() == U(fx.root / "envoi"), "Ouvrir le dossier");
         check(click(w, "wizard.fermer") && closed(d), "Fermer");
     }
 
     // ------------------------------------------------------------------------------------------------
-    std::printf("-- une licence perpetuelle, fonctionnalites choisies, publiee (GitHub sans jeton : refus dit)\n");
+    std::printf("-- une licence perpetuelle, fonctionnalites choisies, publiee (le service ne repond pas : refus dit)\n");
     const std::string reqC = fx.request("pcC", "Poste essai C");
     std::string idBeta;
     {
-        std::string code;
-        check(fx.ws->githubConfigure("editeur-essai/licences-essai", "main", "", "", false, &code).ok, "GitHub reglee (sans jeton)");
+        // Un service d'essai sur ce poste ou rien n'ecoute : la publication part, et son refus est dit.
+        check(fx.ws->serviceConfigure("http://127.0.0.1:9").ok && fx.ws->service().ready(), "le service regle (rien n'y repond)");
         h.openDialog(gui::makeLicenceWizard(h, {reqC}, {}, "Client d'essai Beta"));
         auto& d = *rig.dialogs.back();
         ui::Widget& w = *d.widgetRoot();
@@ -299,21 +325,29 @@ int main(int argc, char** argv) {
         check(next(w), "etape 6");
         const std::string out = U(fx.root / "envoi" / (idBeta + ".xpglic"));
         rig.picks = {out};
+        rig.slowOnThread = true;
+        const std::size_t before = rig.reports.size();
         check(click(w, "wizard.signer"), "Signer");
         const gui::LicenceEntry* l = fx.ws->licence(idBeta);
         check(l && l->licence.type == lic::LicenseType::Perpetual && l->licence.expiresAt == 0, "perpetuelle, sans fin");
         check(l && l->licence.grant("multi_user") == nullptr && l->licence.grant("floating_licenses") != nullptr, "multi_user retiree, le reste garde");
-        check(shown(w, "wizard.github"), "GitHub reglee : Publier sur GitHub");
-        rig.slowOnThread = true;
-        const std::size_t before = rig.reports.size();
-        check(click(w, "wizard.github"), "Publier sur GitHub");
-        check(!find<ui::Button>(w, "wizard.github")->enabled(), "pendant la publication : le bouton attend");
+        check(rig.reports.size() == before + 1 && rig.reports.back().ok, "la signature est rapportee");
+        check(static_cast<bool>(rig.pendingDone) && !fx.ws->hasServiceJob(), "la publication sur le service part d'elle-meme (sur son fil)");
+        t = paintDialog(d);
+        check(has(t, "publication sur le service est en cours"), "l'assistant le dit pendant ce temps");
         check(rig.finishSlow(), "la publication finit (sur son fil)");
         rig.slowOnThread = false;
-        check(rig.reports.size() == before + 1 && !rig.reports.back().ok, "la publication est rapportee (refusee : pas de jeton)");
+        check(rig.reports.size() == before + 2 && !rig.reports.back().ok && has(rig.reports.back().message, "pas de r\xC3\xA9ponse du service"),
+              "la publication est rapportee : refusee, rien d'invente (" + (rig.last() ? rig.last()->text() : std::string()) + ")");
         t = paintDialog(d);
-        check(has(t, "Refus\xC3\xA9"), "le refus est montre dans l'assistant");
+        check(has(t, "PAS publi\xC3\xA9" "e sur le service") && has(t, "envoie le fichier au client"), "le refus est montre dans l'assistant");
+        check(exists(out), "le fichier est la (a envoyer au client)");
         check(click(w, "wizard.fermer") && closed(d), "Fermer");
+        // La suite se passe sans service (le fichier service.json retire).
+        std::error_code ec;
+        fs::remove(fx.admin / "service.json", ec);
+        fx.ws->reload();
+        check(!fx.ws->service().configured && !fx.ws->hasServiceJob(), "le service retire pour la suite");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -552,6 +586,177 @@ int main(int argc, char** argv) {
         check(rig.last() && rig.last()->ok && has(rig.last()->message, "retir"), "le resultat est rapporte");
         t = paintPage(*rp);
         check(!has(t, "Fin de contrat (essai)") && has(t, "2 r\xC3\xA9vocations"), "la page suit");
+    }
+
+    // ------------------------------------------------------------------------------------------------ 1.35.0
+    std::printf("-- une licence en ligne : l'assistant (sans service : grise ; le service ne repond pas : aucun code montre)\n");
+    const std::string testUrl = "http://127.0.0.1:9";   // un service d'essai sur ce poste ou rien n'ecoute
+    std::string idDelta;
+    rig.refreshers.clear();   // la page Revocations d'avant est fermee
+    {
+        auto lp = gui::makeLicencesPage(h);
+        (void)paintPage(*lp);
+        check(shown(*lp, "licences.nouvelle-en-ligne") && !find<ui::Button>(*lp, "licences.nouvelle-en-ligne")->enabled() && !shown(*lp, "licences.relever"),
+              "sans service : Nouvelle licence en ligne grisee, pas de Relever");
+        h.openDialog(gui::makeLicenceWizard(h, {}, {}, "Client d'essai Delta"));
+        auto& d0 = *rig.dialogs.back();
+        (void)paintDialog(d0);
+        ui::Widget& w0 = *d0.widgetRoot();
+        check(shown(w0, "wizard.mode.en-ligne") && !find<ui::RadioButton>(w0, "wizard.mode.en-ligne")->enabled() &&
+                  find<ui::RadioButton>(w0, "wizard.mode.lies")->selected(),
+              "sans service : << En ligne >> grise, << Lier des PC >> choisi");
+        check(click(w0, "wizard.annuler") && closed(d0), "Annuler");
+
+        check(fx.ws->serviceConfigure(testUrl).ok && fx.ws->service().ready(), "le service regle (rien n'y repond)");
+        lp->refresh();
+        (void)paintPage(*lp);
+        check(find<ui::Button>(*lp, "licences.nouvelle-en-ligne")->enabled() && shown(*lp, "licences.relever"), "le service regle : Nouvelle licence en ligne, Relever");
+        const std::size_t n = rig.dialogs.size();
+        check(click(*lp, "licences.nouvelle-en-ligne") && rig.dialogs.size() == n + 1, "Nouvelle licence en ligne... ouvre l'assistant");
+        auto& d = *rig.dialogs.back();
+        ui::Widget& w = *d.widgetRoot();
+        std::string t = paintDialog(d);
+        check(find<ui::RadioButton>(w, "wizard.mode.en-ligne")->selected() && shown(w, "wizard.bail") && !shown(w, "wizard.demandes.ajouter"),
+              "en ligne : le bail, aucune demande a choisir");
+        check(find<ui::InputText>(w, "wizard.bail")->text() == "30", "le bail : 30 jours par defaut");
+        checkText(has(t, "CODE D'ACTIVATION") && has(t, "Nouveau code"), "l'assistant dit le code, et quoi faire s'il est perdu", t);
+        check(type(w, "wizard.bail", "0") && !next(w), "un bail de 0 jour : refuse");
+        check(type(w, "wizard.bail", "45") && next(w), "45 jours : etape 2");
+        check(find<ui::InputText>(w, "wizard.client")->text().empty() && type(w, "wizard.client", "Client d'essai Delta"), "le client");
+        idDelta = find<ui::InputText>(w, "wizard.identifiant")->text();
+        check(!idDelta.empty() && fx.ws->licence(idDelta) == nullptr && next(w), "un identifiant neuf : etape 3");
+        auto* eds = find<ui::TableView>(w, "wizard.editions");
+        eds->selectModelRows({static_cast<ui::RowIndex>(rowOf(*eds, 0, "ENTERPRISE"))});
+        auto* floating = find<ui::RadioButton>(w, "wizard.type.flottante");
+        check(floating && floating->enabled(), "en ligne : flottante possible");
+        if (floating) floating->select();
+        check(type(w, "wizard.pc", "2") && next(w), "2 postes en meme temps : etape 4");
+        check(next(w), "etape 5");
+        t = paintDialog(d);
+        checkText(has(t, "flottante") && has(t, "2 postes en m\xC3\xAAme temps, bail 45 j, un code neuf"), "recapitulatif : flottante, en ligne, le bail", t);
+        check(next(w) && find<ui::Button>(w, "wizard.signer")->text() == "Signer et d\xC3\xA9poser", "etape 6 : Signer et deposer");
+        rig.slowOnThread = true;
+        const std::size_t before = rig.reports.size(), dialogs = rig.dialogs.size();
+        check(click(w, "wizard.signer"), "Signer et deposer");
+        const gui::LicenceEntry* l = fx.ws->licence(idDelta);
+        check(l && l->licence.service == testUrl && l->licence.devices.empty() && l->licence.type == lic::LicenseType::Floating && l->licence.maxDevices == 2,
+              "signee et rangee : en ligne, sans PC lie, flottante, 2 postes");
+        t = paintDialog(d);
+        check(has(t, "d\xC3\xA9p\xC3\xB4t sur le service est en cours"), "le depot est en cours (sur son fil)");
+        check(rig.finishSlow(), "le depot finit");
+        rig.slowOnThread = false;
+        check(rig.reports.size() == before + 2 && !rig.reports.back().ok && has(rig.reports.back().message, "pas de r\xC3\xA9ponse du service"),
+              "le depot est rapporte : refuse (" + (rig.last() ? rig.last()->text() : std::string()) + ")");
+        check(rig.dialogs.size() == dialogs, "le depot refuse : aucun code montre");
+        t = paintDialog(d);
+        check(has(t, "PAS d\xC3\xA9pos\xC3\xA9" "e sur le service"), "l'assistant le dit");
+        check(!shown(w, "wizard.dossier") && shown(w, "wizard.fermer"), "pas de fichier a envoyer : pas de dossier");
+        check(!codeWritten(fx.root), "le code n'est ecrit dans aucun fichier");
+        check(click(w, "wizard.fermer") && closed(d), "Fermer");
+    }
+
+    std::printf("-- la page Licences : une licence en ligne (ses activations, Retirer ce PC, Nouveau code, Desactiver, Relever : hors ligne, dit)\n");
+    {
+        // Un releve du service, ecrit comme l'outil l'ecrit : un PC active, un retire.
+        online::Snapshot snap;
+        snap.at = g_now - 600;
+        snap.url = testUrl;
+        online::OnlineLicence ol;
+        ol.licenseId = idDelta;
+        ol.issuedAt = fx.ws->licence(idDelta) ? fx.ws->licence(idDelta)->licence.issuedAt : 0;
+        ol.type = "floating";
+        ol.seats = 2;
+        ol.leaseDays = 45;
+        ol.hasCode = true;
+        online::OnlineActivation a1;
+        a1.deviceKey = std::string(64, 'a');
+        a1.name = "Poste essai en ligne 1";
+        a1.state = "active";
+        a1.activatedAt = g_now - 3 * kDay;
+        a1.seenAt = g_now - 600;
+        a1.until = g_now + 44 * kDay;
+        online::OnlineActivation a2 = a1;
+        a2.deviceKey = std::string(64, 'b');
+        a2.name = "Poste essai en ligne 2";
+        a2.state = "retiree";
+        ol.activations = {a1, a2};
+        snap.licences = {ol};
+        std::string why;
+        check(online::writeSnapshot(U(fx.admin), snap, &why), "un releve d'essai (" + why + ")");
+        fx.ws->reload();
+        auto lp = gui::makeLicencesPage(h);
+        auto* table = find<ui::TableView>(*lp, "licences.table");
+        table->selectModelRows({static_cast<ui::RowIndex>(rowOf(*table, 0, idDelta))});
+        std::string t = paintPage(*lp, 1400.f, 900.f);
+        const int row = rowOf(*table, 0, idDelta);
+        check(cell(*lp, "licences.table", row, 3) == "flottante (en ligne)" && cell(*lp, "licences.table", row, 4) == "1 / 2 en ligne", "la liste : en ligne, ses PC actives");
+        check(shown(*lp, "licences.nouveau-code") && shown(*lp, "licences.desactiver") && find<ui::Button>(*lp, "licences.ajouter-pc")->text() == "Prolonger\xE2\x80\xA6" &&
+                  find<ui::Button>(*lp, "licences.retirer-pc")->text() == "Retirer ce PC\xE2\x80\xA6",
+              "une licence en ligne : Prolonger, Retirer ce PC, Nouveau code, Desactiver");
+        check(rows(*lp, "licences.pcs") == 2 && cell(*lp, "licences.pcs", 0, 0) == "Poste essai en ligne 1" && cell(*lp, "licences.pcs", 1, 1) == "retir\xC3\xA9" "e" &&
+                  cell(*lp, "licences.pcs", 0, 5) == gui::dateFr(g_now + 44 * kDay) && has(t, "Vu le"),
+              "ses activations, au dernier releve (le bail de chacune)");
+        bool where = false, onService = false;
+        for (const auto& c : find<ui::PropertyGrid>(*lp, "licences.details")->categories())
+            for (const auto& p : c.properties) {
+                where = where || (p.name == "En ligne" && p.value == testUrl);
+                onService = onService || (p.name == "Sur le service" && has(p.value, "1 PC activ\xC3\xA9(s), bail de 45 j"));
+            }
+        check(where && onService, "le detail : le service, ce qu'il en dit");
+
+        check(click(*lp, "licences.retirer-pc") && lastFlash(rig, "Choisis d'abord le PC"), "Retirer ce PC sans choix : dit");
+        find<ui::TableView>(*lp, "licences.pcs")->selectModelRows({0});
+        std::size_t n = rig.dialogs.size();
+        check(click(*lp, "licences.retirer-pc") && rig.dialogs.size() == n + 1, "Retirer ce PC... : une confirmation");
+        t = paintDialog(*rig.dialogs.back());
+        check(has(t, "Retirer ce PC") && has(t, idDelta), "elle dit de quelle licence");
+        std::size_t before = rig.reports.size();
+        check(click(*rig.dialogs.back()->widgetRoot(), "confirmer.ok"), "Retirer");
+        check(rig.reports.size() == before + 1 && !rig.reports.back().ok && has(rig.reports.back().message, "pas de r\xC3\xA9ponse du service"),
+              "hors ligne : le refus est dit (" + (rig.last() ? rig.last()->text() : std::string()) + ")");
+        const auto* still = fx.ws->service().snapshot.licence(idDelta);
+        check(still && still->activations.size() == 2 && still->activations[0].state == "active", "rien d'invente : le releve reste");
+
+        n = rig.dialogs.size();
+        check(click(*lp, "licences.nouveau-code") && rig.dialogs.size() == n + 1, "Nouveau code... : une confirmation");
+        t = paintDialog(*rig.dialogs.back());
+        check(has(t, "nouveau code") && has(t, idDelta), "elle dit ce qui arrive a l'ancien");
+        before = rig.reports.size();
+        check(click(*rig.dialogs.back()->widgetRoot(), "confirmer.ok"), "Tirer un nouveau code");
+        check(rig.reports.size() == before + 1 && !rig.reports.back().ok && has(rig.reports.back().message, "pas de r\xC3\xA9ponse du service"), "hors ligne : refuse, dit");
+        check(rig.dialogs.size() == n + 1, "aucun code montre");
+        check(!codeWritten(fx.root), "le code tire n'est ecrit nulle part");
+
+        n = rig.dialogs.size();
+        check(click(*lp, "licences.desactiver") && rig.dialogs.size() == n + 1, "Desactiver... : une confirmation");
+        t = paintDialog(*rig.dialogs.back());
+        check(has(t, "D\xC3\xA9sactiver la licence en ligne " + idDelta), "elle dit laquelle");
+        before = rig.reports.size();
+        check(click(*rig.dialogs.back()->widgetRoot(), "confirmer.ok") && rig.reports.size() == before + 1 && !rig.reports.back().ok, "hors ligne : refuse, dit");
+        check(fx.ws->service().snapshot.licence(idDelta) && fx.ws->service().snapshot.licence(idDelta)->active, "toujours active au releve");
+
+        before = rig.reports.size();
+        check(click(*lp, "licences.relever") && rig.reports.size() == before + 1 && !rig.reports.back().ok, "Relever hors ligne : refuse, dit");
+        check(fx.ws->service().snapshot.licence(idDelta) != nullptr, "le dernier releve reste");
+    }
+
+    std::printf("-- le code d'activation : masque, Afficher, Copier, oublie a la fermeture\n");
+    {
+        const std::string code = "XPG-ESSA-IAAA-BBBB-CCCC";   // un faux code (aucun service ne le connait)
+        h.openDialog(gui::makeCodeDialog(idDelta, code));
+        auto& d = *rig.dialogs.back();
+        ui::Widget& w = *d.widgetRoot();
+        std::string t = paintDialog(d);
+        check(has(t, "Code d'activation") && has(t, idDelta), "le titre dit la licence");
+        check(!has(t, code) && has(t, "\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2-\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2\xE2\x80\xA2-"), "masque d'abord");
+        check(click(w, "code.afficher") && has(paintDialog(d), code), "Afficher : le code");
+        check(find<ui::Button>(w, "code.afficher")->text() == "Masquer" && click(w, "code.afficher") && !has(paintDialog(d), code), "Masquer");
+        g_copied.clear();
+        check(click(w, "code.copier") && g_copied == code, "Copier : le code dans le presse-papiers, sur ce clic");
+        check(has(paintDialog(d), "Copi\xC3\xA9"), "Copie : dit");
+        g_copied.clear();
+        check(click(w, "code.fermer") && closed(d), "J'ai note le code : ferme");
+        check(!codeWritten(fx.root), "le code n'est ecrit nulle part");
     }
 
     return finish();

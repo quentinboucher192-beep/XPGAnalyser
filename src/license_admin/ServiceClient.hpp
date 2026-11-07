@@ -205,7 +205,8 @@ bool parseLicences(const core::json::Value& reply, Snapshot& out, std::string* w
 bool writeSnapshot(const std::string& folder, const Snapshot& s, std::string* why);
 
 // Deposer une licence en ligne (le texte .xpglic : son bloc de licence, signe par cette cle, SANS PC). `codeHash` :
-// l'empreinte du code d'activation (service::codeHash) ; vide : le service garde celle qu'il a. `leaseDays` : le bail.
+// l'empreinte du code d'activation (service::codeHash) ; vide : le service garde celle qu'il a. `leaseDays` : le bail
+// (jours) ; 0 : le service garde celui qu'il a (30 pour une licence neuve).
 [[nodiscard]] Result putLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText, const std::string& codeHash,
                                 int leaseDays, bool active, const Options& o);
 // GET /admin/licences ; `out` : le releve (aussi ecrit dans service-releve.json).
@@ -213,7 +214,8 @@ bool writeSnapshot(const std::string& folder, const Snapshot& s, std::string* wh
 // POST /admin/activations/retirer : ce PC n'est plus renouvele (il s'arrete a la fin de son bail, ou des qu'il se connecte).
 [[nodiscard]] Result retireDevice(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId,
                                   const std::string& deviceKey, const Options& o);
-// Desactiver (ou reactiver) une licence en ligne : la licence de l'archive redeposee avec active = false (true).
+// Desactiver (ou reactiver) une licence en ligne : la licence de l'archive redeposee avec active = false (true) ;
+// `leaseDays` 0 : le bail du service garde.
 [[nodiscard]] Result setActive(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId, bool active, int leaseDays,
                                const Options& o);
 // GET /admin/stats : les compteurs, une ligne chacun.
@@ -307,6 +309,8 @@ struct FetchState {
 //    cle-publique.txt     la cle publique en hexadecimal (PUBLISHER_KEYS du Worker)     -> outils/service/
 //    LISEZ-MOI.txt        quoi en faire
 [[nodiscard]] std::string serviceAddressHeader(const std::string& url);
+// cle-publique.txt : une ligne # (ce que c'est), puis la cle PUBLIQUE en hexadecimal (64) - ce que deployer.bat lit.
+[[nodiscard]] std::string publicKeyText(const licensing::SigningKey& key);
 [[nodiscard]] Result studioKit(const std::string& folder, const licensing::SigningKey* key, const std::string& outDir, Seconds now);
 
 } // namespace license_admin::online
