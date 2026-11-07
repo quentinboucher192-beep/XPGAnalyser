@@ -17,8 +17,13 @@
 //    aucun chemin (l'onglet qui s'ouvre, Demarrer, Les deux, une vue choisie,
 //    Redemarrer), le poste d'exploitation si ; la validation d'un import de vues
 //    (advanced_import) est refusee ; avant start(), tout reste ouvert.
+//  - 1.35.0 : la licence active toujours visible - la pastille et l'indicateur
+//    (la meme phrase : << Licence : PERSONAL . jusqu'au ... >>, << Sans licence >>),
+//    l'encart de l'accueil, la partie << licence >> du bandeau haut (son texte, la
+//    forme courte puis le cadenas seul quand c'est serre, un clic : help.licence).
 // =============================================================================
 #include "../src/app/Licence.hpp"
+#include "../src/app/TopBar.hpp"                // 1.35.0 : la licence active dans le bandeau haut
 #include "../src/app/hmi/HmiImportDialog.hpp"   // 1.32.0 : la validation d'un import de vues
 #include "../src/app/hmi/HmiSimulation.hpp"     // 1.32.0 : la simulation de l'IHM (hmi_runtime)
 #include "../src/hmi/HmiModel.hpp"
@@ -161,6 +166,7 @@ int main(int argc, char** argv) {
                   && !app::licence::allows("hmi_scripts"),
               "FREE : l'editeur et le poste ouverts ; l'Assistant IA et les scripts fermes");
         check(has(app::licence::badge().text, "Sans licence") && app::licence::badge().tone == 2, "la pastille : " + app::licence::badge().text);
+        check(app::licence::indicator().text == "Sans licence" && app::licence::indicator().tone == 2, "l'indicateur du bandeau : la meme phrase");
         check(app::licence::featureLabel("ai_generation") != "ai_generation", "le libelle d'une fonctionnalite vient du registre : "
               + app::licence::featureLabel("ai_generation"));
 
@@ -197,7 +203,36 @@ int main(int argc, char** argv) {
         check(!locked.empty() && has(locked, "PERSONAL"), "la phrase d'une entree fermee : " + locked);
         check(app::licence::lockedText("ai_assistant").empty(), "une entree ouverte : pas de phrase");
         const auto b = app::licence::badge();
-        check(has(b.text, "Licence PERSONAL") && has(b.text, "valide jusqu'au") && b.tone == 1, "la pastille : " + b.text);
+        check(has(b.text, "Licence : PERSONAL \xC2\xB7 jusqu'au ") && b.tone == 1 && b.shortText == "PERSONAL", "la pastille : " + b.text);
+        {   // 1.35.0 : la meme phrase dans le bandeau haut ; l'encart de l'accueil apres startNotices
+            const auto ind = app::licence::indicator();
+            check(ind.text == b.text && ind.tone == 1 && has(ind.tip, "fen\xC3\xAAtre Licence"), "l'indicateur : " + ind.text);
+            check(app::licence::startCard().title.empty(), "l'encart de l'accueil : rien avant startNotices (le poste d'exploitation)");
+            app::licence::startNotices(false);
+            const auto card = app::licence::startCard();
+            check(has(card.title, "Licence : PERSONAL") && has(card.text, "XPG-UI-0001") && card.tone == 1 && card.tab == app::licence::kTabAuto,
+                  "l'encart de l'accueil : " + card.title + " / " + card.text);
+            app::TopBar bar("barre.licence");
+            std::vector<std::string> sent;
+            bar.setActionSink([&sent](core::ActionId a) { sent.emplace_back(a); });
+            bar.setBounds(gfx::Rect{0.f, 0.f, 1600.f, 44.f});
+            bar.layout();
+            check(bar.partRect("licence").w <= 0.f, "le bandeau : sans licence donnee, pas de partie licence");
+            bar.setLicence({ind.text, ind.shortText, ind.tip, ind.tone});
+            bar.layout();
+            const auto lr = bar.partRect("licence"), aide = bar.partRect("aide"), cloche = bar.partRect("cloche");
+            check(lr.w > 120.f && lr.right() <= aide.x && lr.x > cloche.right() - 0.5f, "le bandeau (1600 px) : la licence a droite, avant Affichage et Aide");
+            check(bar.reaches("help.licence") && bar.liveTooltip({lr.x + 10.f, lr.y + 10.f}) == ind.tip, "son infobulle : la phrase de l'etat");
+            bar.trigger("help.licence");
+            check(!sent.empty() && sent.back() == "help.licence", "un clic : la fenetre Licence (help.licence)");
+            bar.setBounds(gfx::Rect{0.f, 0.f, 1100.f, 44.f});
+            bar.layout();
+            const float compact = bar.partRect("licence").w;
+            check(compact > 0.f && compact < lr.w && bar.partRect("aide").right() <= 1100.f, "1100 px : la forme courte, tout tient");
+            bar.setBounds(gfx::Rect{0.f, 0.f, 860.f, 44.f});
+            bar.layout();
+            check(bar.partRect("licence").w > 0.f && bar.partRect("licence").w <= 36.f, "tres serre : le cadenas seul (sa couleur reste)");
+        }
         const auto devices = lic::getLicensedDevices();
         check(devices.size() == 1 && devices[0].thisPc && devices[0].name == "Poste d'essai", "Mes appareils : ce PC, sous le nom donne");
         const auto history = lic::getHistory(20);
