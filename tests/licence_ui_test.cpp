@@ -23,7 +23,9 @@
 //    forme courte puis le cadenas seul quand c'est serre, un clic : help.licence).
 // =============================================================================
 #include "../src/app/Licence.hpp"
+#include "../src/app/StartPage.hpp"             // 1.35.0 : l'encart de la licence sur l'accueil (le menu principal)
 #include "../src/app/TopBar.hpp"                // 1.35.0 : la licence active dans le bandeau haut
+#include "../src/ui/Theme.hpp"
 #include "../src/app/hmi/HmiImportDialog.hpp"   // 1.32.0 : la validation d'un import de vues
 #include "../src/app/hmi/HmiSimulation.hpp"     // 1.32.0 : la simulation de l'IHM (hmi_runtime)
 #include "../src/hmi/HmiModel.hpp"
@@ -31,6 +33,7 @@
 #include "../src/license_admin/Admin.hpp"
 #include "../src/licensing/Licensing.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -70,6 +73,33 @@ void writeFile(const fs::path& p, const std::string& text) {
     fs::create_directories(p.parent_path());
     std::ofstream(p, std::ios::binary) << text;
 }
+
+// 1.35.0 : un renderer qui retient les textes (le bandeau haut, l'accueil dessines a blanc).
+struct Recorder final : gfx::IRenderer {
+    std::vector<std::string> texts;
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId f) const override {
+        return {static_cast<float>(t.size()) * f.v * 0.5f, static_cast<float>(f.v), 0.8f * f.v, 0.2f * f.v};
+    }
+    float lineHeight(gfx::FontId f) const override { return static_cast<float>(f.v); }
+    gfx::Size surfaceSize() const override { return {1600.f, 900.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId f, float w) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w / (f.v * 0.5f))));
+    }
+    [[nodiscard]] bool saw(std::string_view what) const {
+        return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(what) != std::string::npos; });
+    }
+};
 
 lic::TrustedKey trustedOf(const lic::SigningKey& k) {
     lic::TrustedKey t;
@@ -214,7 +244,7 @@ int main(int argc, char** argv) {
                   "l'encart de l'accueil : " + card.title + " / " + card.text);
             app::TopBar bar("barre.licence");
             std::vector<std::string> sent;
-            bar.setActionSink([&sent](core::ActionId a) { sent.emplace_back(a); });
+            bar.setActionSink([&sent](core::ActionId a) { sent.emplace_back(std::string(a)); });
             bar.setBounds(gfx::Rect{0.f, 0.f, 1600.f, 44.f});
             bar.layout();
             check(bar.partRect("licence").w <= 0.f, "le bandeau : sans licence donnee, pas de partie licence");
@@ -229,9 +259,35 @@ int main(int argc, char** argv) {
             bar.layout();
             const float compact = bar.partRect("licence").w;
             check(compact > 0.f && compact < lr.w && bar.partRect("aide").right() <= 1100.f, "1100 px : la forme courte, tout tient");
-            bar.setBounds(gfx::Rect{0.f, 0.f, 860.f, 44.f});
+            bar.setBounds(gfx::Rect{0.f, 0.f, 640.f, 44.f});
             bar.layout();
-            check(bar.partRect("licence").w > 0.f && bar.partRect("licence").w <= 36.f, "tres serre : le cadenas seul (sa couleur reste)");
+            check(bar.partRect("licence").w > 0.f && bar.partRect("licence").w <= 36.f,
+                  "tres serre : le cadenas seul, jamais disparu (" + std::to_string(bar.partRect("licence").w) + " px)");
+            // dessines a blanc : le bandeau (la phrase entiere a 1600 px) et l'encart de l'accueil
+            bar.setBounds(gfx::Rect{0.f, 0.f, 1600.f, 44.f});
+            bar.layout();
+            Recorder rec;
+            bar.render(ui::PaintContext{rec, ui::Theme::dark(), bar.bounds(), 0.0, nullptr});
+            // (la phrase entiere si elle tient a la mesure du renderer, sinon la forme courte)
+            check(rec.saw(ind.text) || rec.saw(ind.shortText), "le bandeau dessine la licence : " + ind.text);
+            app::start::StartRail rail("startup.rail");
+            rail.setBounds(gfx::Rect{0.f, 0.f, 380.f, 900.f});
+            rail.setLicenceCard(card.title, card.text, card.tone, card.button);
+            rail.layout();
+            Recorder r2;
+            rail.render(ui::PaintContext{r2, ui::Theme::light(), rail.bounds(), 0.0, nullptr});
+            check(r2.saw("Licence : PERSONAL") && rail.licenceButton().visible() && rail.licenceButton().text() == card.button && rail.licenceTone() == 1,
+                  "l'accueil dessine l'encart de la licence, son bouton (" + rail.licenceButton().text() + ")");
+            rail.setLicenceCard("D\xC3\xA9" "couverte : il te reste 23 jours (jusqu'au 30/11/2026)", "Ensuite : les fonctions de l'\xC3\xA9" "dition sans licence.", 4,
+                                "Activer avec un code\xE2\x80\xA6");
+            rail.layout();
+            Recorder r3;
+            rail.render(ui::PaintContext{r3, ui::Theme::dark(), rail.bounds(), 0.0, nullptr});
+            check(r3.saw("D\xC3\xA9" "couverte") && rail.licenceButton().text() == "Activer avec un code\xE2\x80\xA6" && rail.licenceTone() == 4,
+                  "l'encart de la Decouverte : Activer avec un code...");
+            rail.setLicenceCard({}, {}, 0, {});
+            rail.layout();
+            check(!rail.licenceButton().visible(), "pas d'encart : le bouton cache");
         }
         const auto devices = lic::getLicensedDevices();
         check(devices.size() == 1 && devices[0].thisPc && devices[0].name == "Poste d'essai", "Mes appareils : ce PC, sous le nom donne");

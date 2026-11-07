@@ -2026,7 +2026,7 @@ bool startupLease(const lic::StoreOptions& options, int waitMs) {
         lic::SignedBlock b;
         lsv::Lease l;
         if (lsv::findBlock(text, lic::DocKind::Lease, b, nullptr) && lsv::parseLease(b.document, l, nullptr) && l.licenseId == lid &&
-            l.until > lic::systemNow() + 120)
+            l.until > (options.clock ? options.clock() : lic::systemNow()) + 120)
             return false;
     }
     // Un magasin a part (le module n'est pas encore configure) : la cle de ce PC, l'heure signee, le jeton.

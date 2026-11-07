@@ -1056,10 +1056,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(licence_ui_test tests/licence_ui_test.cpp src/license_admin/Admin.cpp)
     xpg_target_link_libraries(licence_ui_test PRIVATE xpg_app xpg_licensing)
     xpg_add_test(NAME licenceui COMMAND licence_ui_test ${CMAKE_SOURCE_DIR})
-    # 1.34.0 : la demande en ligne des Studios par la passerelle GitHub (app/LicenceGateway), le faux GitHub
-    xpg_add_test_executable(licence_gateway_test tests/licence_gateway_test.cpp src/license_admin/Admin.cpp)
-    xpg_target_link_libraries(licence_gateway_test PRIVATE xpg_app xpg_licensing)
-    xpg_add_test(NAME passerelle_studios COMMAND licence_gateway_test ${CMAKE_SOURCE_DIR})
+    # 1.35.0 : les Studios et le service des licences (app/LicenceService) : activation par code, bail, flottante,
+    # Decouverte, demandes - contre le VRAI Worker sur ce poste (SAUTE sans Node.js ni wrangler)
+    xpg_add_test_executable(licence_service_test tests/licence_service_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licence_service_test PRIVATE xpg_app xpg_licensing)
+    xpg_add_test(NAME service_studios COMMAND licence_service_test ${CMAKE_SOURCE_DIR})
+    if(TEST service_studios)
+        set_tests_properties(service_studios PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :")
+    endif()
     # 1.31.0 : la synchro des licences avec un depot GitHub PRIVE (license_admin/GitHubSync), contre un FAUX
     # GitHub dans le processus (le transport injecte d'app/ai/AiHttp : aucun reseau) ; deux postes Admin, un
     # envoi concurrent, les refus (jeton, depot public, autre cle de synchro, fichiers modifies hors de l'outil).

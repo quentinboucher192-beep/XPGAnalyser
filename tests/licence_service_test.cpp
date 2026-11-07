@@ -646,18 +646,23 @@ int main(int argc, char** argv) {
 
         // Le lancement suivant, 20 minutes plus tard (le jeton garde a pris fin) : le poste est repris AVANT la
         // premiere evaluation - pas de << Valide -> aucun poste -> Valide >> dans l'historique.
+        check(svc.restart(20 * 60), "20 minutes passent (le service aussi) (" + svc.error() + ")");
+        g_url = svc.url();
+        address.url = g_url;
+        ls::setAddressForTests(address);
         g_shift = 20 * 60;
         const bool pre = ls::startupLease(pcOptions("F2", "machine-essai-f2"));
         usePc("F2", "machine-essai-f2");
-        auto st = lic::getLicenseState();
+        st = lic::getLicenseState();
         check(pre && st.status == lic::LicenseStatus::Valid && st.leaseUntil > lic::systemNow() && stateLines() == linesBefore,
-              "relance : le poste repris avant l'evaluation, Valide, aucune ligne d'etat de plus (" + st.message + ")");
+              "relance : le poste repris avant l'evaluation, Valide, aucune ligne d'etat de plus (" + std::string(pre ? "pris" : "PAS PRIS") + ", jeton " +
+                  (present(folderOf("F2") / lic::LicenseStore::kLeaseFile) ? "present" : "absent") + ", " + std::to_string(stateLines() - linesBefore) +
+                  " ligne(s), " + st.message + ")");
         // ... rendu de nouveau a la fermeture (le fil de fond)
         const auto rev = ls::revision();
         ls::startRunner();
         (void)waitRunner(rev);
         ls::shutdown();
-        g_shift = 0;
         // Un autre PC prend le poste rendu ; ce PC (son jeton garde, encore bon) demande le sien : le service dit non,
         // le jeton garde est efface.
         usePc("F1", "machine-essai-f1");
@@ -674,6 +679,7 @@ int main(int argc, char** argv) {
         usePc("F1", "machine-essai-f1");
         r = keep(ls::returnLease());
         check(r.ok, "F1 rend son poste");
+        g_shift = 0;
     }
 
     std::printf("-- la demande sans code\n");
