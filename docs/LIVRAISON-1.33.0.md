@@ -41,7 +41,7 @@ Ton travail reste dans l'archive. Le bandeau du bas montre le dernier résultat,
 
 ## 2. Les pages
 
-Captures prises sous Wine, sur un poste de démonstration : une clé d'essai, des clients et des PC fictifs (« Client démo … »). Elles sont jointes à la livraison (`captures/`).
+Captures prises sous Wine, sur un poste de démonstration : une clé d'essai, des clients et des PC fictifs (« Client démo … »). Elles sont jointes à la livraison (`captures-1.33.0.zip`).
 
 | Page | Ce qu'elle fait |
 |---|---|
@@ -72,12 +72,12 @@ Les captures jointes :
 
 ## 4. Les essais
 
-- **Linux : @NSUITES@ suites sur @NSUITES@ réussies** (`ctest`, sur la version livrée). Cinq sont nouvelles, pour l'application :
-  - `adminworkspace` (@N_WS@ contrôles) : le modèle de données, sans fenêtre. La clé, l'archive, l'assistant, signer, révoquer, la synchro, la sauvegarde de la clé, remplacer un PC ;
-  - `adminguishell` (@N_SHELL@) : la coquille, le menu, le tableau de bord et les pages du service en ligne ;
-  - `adminguilicences` (@N_LIC@) : Licences, l'assistant, Révocations ;
-  - `adminguisecurite` (@N_SEC@) : Paramètres de sécurité, Synchronisation GitHub. Le travail lent tourne sur un vrai fil, et aucun secret n'apparaît dans les messages ;
-  - `adminguidonnees` (@N_DON@) : Éditions, Fonctionnalités, Activations, Clients, Historique.
+- **Linux : 151 suites sur 151 réussies** (`ctest`, sur la version livrée). Cinq sont nouvelles, pour l'application :
+  - `adminworkspace` (57 contrôles) : le modèle de données, sans fenêtre. La clé, l'archive, l'assistant, signer, révoquer, la synchro, la sauvegarde de la clé, remplacer un PC ;
+  - `adminguishell` (212 contrôles) : la coquille, le menu, le tableau de bord et les pages du service en ligne ;
+  - `adminguilicences` (216) : Licences, l'assistant, Révocations ;
+  - `adminguisecurite` (158) : Paramètres de sécurité, Synchronisation GitHub. Le travail lent tourne sur un vrai fil, et aucun secret n'apparaît dans les messages ;
+  - `adminguidonnees` (226) : Éditions, Fonctionnalités, Activations, Clients, Historique.
 
   Les pages sont dessinées et cliquées sans fenêtre : les boutons font l'opération, les refus sont vérifiés (pas de clé, travail en cours, champ vide).
 - **Sous Wine, avec les programmes Windows livrés :**
@@ -100,7 +100,7 @@ Les captures jointes :
 | `API-IHM-Studio-Setup-1.33.0.exe` | `19A7DEA45F82044D2DB0C8CC4BB9077157C5231E7838B461149C1593C82CB7DB` | 54 858 752 octets |
 | `API-Studio-1.33.0-portable.zip` | `045AD2CC684BC736C4DDDAE64A68FAFEDA3F81301216CA28914AD7909F8C72BA` | 190 fichiers |
 | `IHM-Studio-1.33.0-portable.zip` | `B8A48546333A3C0B73ABC51817F70FCB592573DD974E6C2C0DC1D54FFDCAA1CD` | 191 fichiers |
-| `XPG-License-Admin-1.33.0-EDITEUR.zip` (**à part, pour toi seul**) | `@SHA_EDITEUR@` | @TAILLE_EDITEUR@ octets |
+| `XPG-License-Admin-1.33.0-EDITEUR.zip` (**à part, pour toi seul**) | `6659DB8EB1F81DF5CF90F101A2F00E44F9406ACE691DA6CD996CC89B7D63335E` | 5 444 931 octets |
 
 ## 6. Limites
 
