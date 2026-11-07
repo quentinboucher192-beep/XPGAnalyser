@@ -1001,6 +1001,44 @@ bool LicenseStore::writeActivationRequest(const std::string& path, const std::st
 
 bool LicenseStore::writeRequestFile(const std::string& path, const std::string& deviceName, const std::string& licenseId,
                                     const std::string& software, std::string* why) {
+    std::string text;
+    if (!buildRequest(deviceName, licenseId, software, text, nullptr, why)) return false;
+    return writeAll(path, text, why);
+}
+
+bool LicenseStore::activationRequestText(const std::string& deviceName, const std::string& licenseId, const std::string& software,
+                                         std::string& blockText, ActivationRequest* parsed, std::string* why) {
+    return buildRequest(deviceName, licenseId, software, blockText, parsed, why);
+}
+
+bool LicenseStore::deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why) {
+    if (kind != DocKind::Cancel) {
+        if (why) *why = "la cl\xC3\xA9 de ce PC ne signe que l'annulation d'une demande";
+        return false;
+    }
+    auto key = SigningKey::load(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), why);
+    if (!key) return false;
+    blockText = writeBlock(signBlock(kind, document, key->publicKey(), [&](std::string_view m) { return key->sign(m); }));
+    return true;
+}
+
+bool LicenseStore::deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why) {
+    auto key = SigningKey::load(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), why);
+    if (!key) return false;
+    crypto::Bytes box;
+    if (!crypto::unbase64(sealedBase64, box)) {
+        if (why) *why = "le contenu scell\xC3\xA9 n'est pas du base64";
+        return false;
+    }
+    if (!key->openSeal(box, plain)) {
+        if (why) *why = "le contenu scell\xC3\xA9 ne s'ouvre pas avec la cl\xC3\xA9 de ce PC";
+        return false;
+    }
+    return true;
+}
+
+bool LicenseStore::buildRequest(const std::string& deviceName, const std::string& licenseId, const std::string& software, std::string& blockText,
+                                ActivationRequest* parsed, std::string* why) {
     auto key = SigningKey::loadOrCreate(deploy::joinPath(opt_.folder, kDeviceKeyFile), deviceKeySpec(), "", why);
     if (!key) return false;
     ActivationRequest q;
@@ -1016,7 +1054,9 @@ bool LicenseStore::writeRequestFile(const std::string& path, const std::string& 
     ActivationRequest back;
     if (!parseRequest(text, back, why)) return false;
     const SignedBlock b = signBlock(DocKind::Request, text, key->publicKey(), [&](std::string_view m) { return key->sign(m); });
-    return writeAll(path, writeBlock(b), why);
+    blockText = writeBlock(b);
+    if (parsed) *parsed = back;
+    return true;
 }
 
 } // namespace licensing

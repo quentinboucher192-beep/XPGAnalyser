@@ -249,6 +249,19 @@ public:
     // La cle publique de ce PC (64 hexadecimaux), creee si besoin. Faux : `why`.
     bool deviceKey(std::string& hex, std::string* why);
 
+    // ---- 1.34.0 : la passerelle GitHub (licensing/Gateway.hpp, app/LicenceGateway) ----
+    // La demande d'activation de ce PC, en TEXTE (le bloc signe, comme le fichier .xpgreq) ; la cle du PC est
+    // creee si besoin ; `parsed` : ce qu'elle dit (le nonce...). L'historique n'est pas touche (l'appelant le
+    // note, une fois la demande envoyee).
+    bool activationRequestText(const std::string& deviceName, const std::string& licenseId, const std::string& software,
+                               std::string& blockText, ActivationRequest* parsed, std::string* why);
+    // Signer un document avec la cle de ce PC (seulement DocKind::Cancel : l'annulation d'une demande en ligne).
+    bool deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why);
+    // Ouvrir un sceau fait pour la cle de ce PC (l'etat publie par l'editeur). Faux : pas de cle, pas pour elle.
+    bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why);
+    // Les cles de l'editeur que ce PC croit (pour verifier ce que publie la passerelle).
+    [[nodiscard]] const std::vector<TrustedKey>& trustedKeys() const noexcept { return opt_.trustedKeys; }
+
 private:
     struct Loaded;
     [[nodiscard]] Seconds now() const;
@@ -258,6 +271,8 @@ private:
     ImportReport importChecked(std::string_view bytes);
     bool writeRequestFile(const std::string& path, const std::string& deviceName, const std::string& licenseId, const std::string& software,
                           std::string* why);
+    bool buildRequest(const std::string& deviceName, const std::string& licenseId, const std::string& software, std::string& blockText,
+                      ActivationRequest* parsed, std::string* why);
     ImportReport finishImport(ImportReport rep);
     std::string noteState(const LicenseState& s);
     [[nodiscard]] std::string lastLoggedStatus() const;

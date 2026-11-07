@@ -202,6 +202,84 @@ bool writeActivationRequest(const std::string& path, const std::string& deviceNa
     return ok;
 }
 
+// ---- 1.34.0 : la passerelle GitHub ----
+ImportReport importLicenseBytes(std::string_view bytes) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        ImportReport r;
+        r.why = "Les licences ne sont pas encore configur\xC3\xA9" "es (initialize).";
+        return r;
+    }
+    ImportReport r = m.store->importBytes(bytes);
+    m.state = r.state;
+    capture(m);
+    return r;
+}
+
+bool activationRequestText(const std::string& deviceName, const std::string& licenseId, const std::string& software, std::string& blockText,
+                           ActivationRequest* parsed, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    const bool ok = m.store->activationRequestText(deviceName, licenseId, software, blockText, parsed, why);
+    if (ok) m.state = m.store->evaluate();   // l'empreinte de la cle, creee peut-etre a l'instant
+    capture(m);
+    return ok;
+}
+
+bool deviceSign(DocKind kind, const std::string& document, std::string& blockText, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    return m.store->deviceSign(kind, document, blockText, why);
+}
+
+bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    return m.store->deviceOpenSeal(sealedBase64, plain, why);
+}
+
+bool deviceKeyHex(std::string& hex, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    return m.store->deviceKey(hex, why);
+}
+
+std::vector<TrustedKey> trustedPublisherKeys() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (m.store) return m.store->trustedKeys();
+    return compiledPublisherKeys();
+}
+
+bool addHistoryEvent(const HistoryEvent& e, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    const bool ok = m.store->addHistory(e, "", why);
+    capture(m);
+    return ok;
+}
+
 bool isConfigured() {
     Module& m = module();
     std::lock_guard<std::mutex> lock(m.mutex);
