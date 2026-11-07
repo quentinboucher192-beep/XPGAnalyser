@@ -219,6 +219,8 @@ std::string SigningKey::fingerprint(std::size_t groups) const { return publicKey
 
 crypto::Signature SigningKey::sign(std::string_view message) const noexcept { return crypto::sign(secret_, message); }
 
+bool SigningKey::openSeal(const crypto::Bytes& box, std::string& plain) const { return crypto::openSeal(secret_, box, plain); }
+
 std::string publicKeyFingerprint(const crypto::PublicKey& key, std::size_t groups) {
     return crypto::fingerprintText(crypto::sha256(key.data(), key.size()), groups);
 }

@@ -84,18 +84,24 @@ enum class LicenseStatus : std::uint8_t {
     Absent,            // Absente : aucune licence
     ClockRolledBack,   // Horloge reculee
     NotConfigured,     // 1.30.0 - Non activees : ce programme ne contient aucune cle de l'editeur ; TOUT est ouvert
+    Evaluation,        // 1.34.0 - Evaluation : pas de licence ; la periode d'evaluation de CE PC court (depuis le premier
+                       // lancement) - les fonctionnalites de l'edition d'evaluation du registre, le temps qu'elle dure
 };
 // "valid", "grace"... (stable : pour un journal, un essai).
 [[nodiscard]] const char* statusKey(LicenseStatus) noexcept;
 // "Valide", "Gr\xC3\xA2" "ce"... (l'etiquette affichee).
 [[nodiscard]] std::string statusLabel(LicenseStatus);
 // Les fonctionnalites de la licence sont-elles ouvertes dans cet etat ?
-[[nodiscard]] constexpr bool licenseFeaturesApply(LicenseStatus s) noexcept { return s == LicenseStatus::Valid || s == LicenseStatus::Grace; }
+// 1.34.0 : et pendant l'evaluation (celles de l'edition d'evaluation).
+[[nodiscard]] constexpr bool licenseFeaturesApply(LicenseStatus s) noexcept {
+    return s == LicenseStatus::Valid || s == LicenseStatus::Grace || s == LicenseStatus::Evaluation;
+}
 // 1.30.0 : TOUTES les fonctionnalites sont-elles ouvertes (les licences ne sont pas actives) ?
 [[nodiscard]] constexpr bool allFeaturesOpen(LicenseStatus s) noexcept { return s == LicenseStatus::NotConfigured; }
-// 1.30.0 : un etat sans anomalie (Valide, Grace, Absente, Non activees) - pour l'historique.
+// 1.30.0 : un etat sans anomalie (Valide, Grace, Absente, Non activees ; 1.34.0 : Evaluation) - pour l'historique.
 [[nodiscard]] constexpr bool statusIsNormal(LicenseStatus s) noexcept {
-    return s == LicenseStatus::Valid || s == LicenseStatus::Grace || s == LicenseStatus::Absent || s == LicenseStatus::NotConfigured;
+    return s == LicenseStatus::Valid || s == LicenseStatus::Grace || s == LicenseStatus::Absent || s == LicenseStatus::NotConfigured ||
+           s == LicenseStatus::Evaluation;
 }
 
 // Une cle de l'editeur que ce programme croit.
@@ -147,6 +153,14 @@ struct LicenseState {
     std::string   detail;                 // la raison precise (signature fausse, champ en double...) ; vide si rien a dire
     std::string   registryProblem;        // vide : le registre est en ordre
     Seconds       evaluatedAt{0};
+    // 1.34.0 - L'EVALUATION DE CE PC (sans licence, licences actives) : commencee au premier lancement, elle dure
+    // ce que dit l'edition d'evaluation du registre. evaluationStartedAt : 0 si elle n'a jamais commence (pas
+    // d'edition d'evaluation dans le registre, ou une licence a toujours ete la).
+    Seconds       evaluationStartedAt{0};
+    Seconds       evaluationEndsAt{0};
+    int           evaluationDaysLeft{0};  // Evaluation : les jours qui restent (arrondis au jour superieur)
+    bool          evaluationOver{false};  // elle a pris fin (l'etat est alors Absente : l'edition sans licence)
+    std::string   evaluationEdition;      // l'edition d'evaluation du registre ("EVALUATION")
 
     // Ouverte ? (NotConfigured : toujours vrai, rien n'est verrouille.)
     [[nodiscard]] bool hasFeature(std::string_view id) const noexcept;

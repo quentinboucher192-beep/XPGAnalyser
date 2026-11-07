@@ -77,6 +77,9 @@ public:
     [[nodiscard]] bool created() const noexcept { return created_; }
 
     [[nodiscard]] crypto::Signature sign(std::string_view message) const noexcept;
+    // 1.34.0 : ouvrir un sceau fait pour cette cle (crypto::seal vers publicKey()) ; la partie secrete ne sort
+    // pas de l'objet. Faux : pas pour cette cle, modifie, tronque.
+    bool openSeal(const crypto::Bytes& box, std::string& plain) const;
 
 private:
     friend struct license_admin::KeyBackupAccess;

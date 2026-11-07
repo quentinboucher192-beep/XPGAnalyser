@@ -143,6 +143,67 @@ bool verify(const PublicKey& pub, std::string_view message, const Signature& sig
                                                static_cast<unsigned long long>(message.size()), pub.data()) == 0;
 }
 
+std::string base64(const void* data, std::size_t size) {
+    if (!init()) return {};
+    std::string out(sodium_base64_ENCODED_LEN(size, sodium_base64_VARIANT_ORIGINAL), '\0');
+    sodium_bin2base64(out.data(), out.size(), static_cast<const unsigned char*>(data), size, sodium_base64_VARIANT_ORIGINAL);
+    out.resize(std::strlen(out.c_str()));
+    return out;
+}
+
+bool unbase64(std::string_view text, Bytes& out) {
+    out.clear();
+    if (!init()) return false;
+    std::string clean;
+    clean.reserve(text.size());
+    for (char c : text)
+        if (c != ' ' && c != '\n' && c != '\r' && c != '\t') clean.push_back(c);
+    out.resize(clean.size() / 4 * 3 + 3);
+    std::size_t len = 0;
+    const char* end = nullptr;
+    if (sodium_base642bin(out.data(), out.size(), clean.data(), clean.size(), nullptr, &len, &end, sodium_base64_VARIANT_ORIGINAL) != 0 ||
+        end != clean.data() + clean.size()) {
+        out.clear();
+        return false;
+    }
+    out.resize(len);
+    return true;
+}
+
+bool seal(const PublicKey& pub, std::string_view plain, Bytes& out) {
+    out.clear();
+    if (!init()) return false;
+    unsigned char x[crypto_box_PUBLICKEYBYTES];
+    if (crypto_sign_ed25519_pk_to_curve25519(x, pub.data()) != 0) return false;
+    out.resize(plain.size() + crypto_box_SEALBYTES);
+    if (crypto_box_seal(out.data(), reinterpret_cast<const unsigned char*>(plain.data()), static_cast<unsigned long long>(plain.size()), x) != 0) {
+        out.clear();
+        return false;
+    }
+    return true;
+}
+
+bool openSeal(const SecretKey& secret, const Bytes& box, std::string& plain) {
+    plain.clear();
+    if (!init() || box.size() < crypto_box_SEALBYTES) return false;
+    unsigned char xs[crypto_box_SECRETKEYBYTES];
+    unsigned char xp[crypto_box_PUBLICKEYBYTES];
+    // La partie publique est dans les 32 derniers octets de la cle secrete Ed25519 de libsodium.
+    if (crypto_sign_ed25519_sk_to_curve25519(xs, secret.data()) != 0 || crypto_sign_ed25519_pk_to_curve25519(xp, secret.data() + 32) != 0) {
+        sodium_memzero(xs, sizeof xs);
+        return false;
+    }
+    std::string out(box.size() - crypto_box_SEALBYTES, '\0');
+    const int rc = crypto_box_seal_open(reinterpret_cast<unsigned char*>(out.data()), box.data(), static_cast<unsigned long long>(box.size()), xp, xs);
+    sodium_memzero(xs, sizeof xs);
+    if (rc != 0) {
+        sodium_memzero(out.data(), out.size());
+        return false;
+    }
+    plain = std::move(out);
+    return true;
+}
+
 void randomBytes(void* out, std::size_t size) noexcept { randombytes_buf(out, size); }
 
 std::string randomDigits(int count) {

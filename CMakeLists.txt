@@ -173,6 +173,11 @@ endif()
 xpg_sources(LICENSING_SOURCES licensing)
 add_library(xpg_licensing STATIC ${LICENSING_SOURCES})
 target_link_libraries(xpg_licensing PUBLIC xpg_core xpg_deploy)
+# 1.34.0 : la passerelle GitHub des licences (licensing/Gateway.hpp) : le depot PUBLIC ou les logiciels des clients
+# lisent leur licence et ouvrent leurs demandes ("proprietaire/nom" ; vide : pas de passerelle, tout par fichier).
+set(XPG_PASSERELLE_DEPOT "" CACHE STRING "Le depot GitHub public de la passerelle des licences (proprietaire/nom ; vide : aucune)")
+set(XPG_PASSERELLE_BRANCHE "main" CACHE STRING "La branche du depot de la passerelle des licences")
+target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_DEPOT="${XPG_PASSERELLE_DEPOT}" XPG_PASSERELLE_BRANCHE="${XPG_PASSERELLE_BRANCHE}")
 # 1.30.0 : les vraies cles (src/licensing/PublisherKey.hpp) toujours ; la cle d'essai seulement avec l'option.
 if(XPG_LICENCES_CLE_ESSAI)
     target_compile_definitions(xpg_licensing PRIVATE XPG_LICENCES_CLE_ESSAI=1)
@@ -1044,6 +1049,16 @@ if(XPG_BUILD_TESTS)
         target_link_libraries(github_sync_test PRIVATE winhttp)
     endif()
     xpg_add_test(NAME githubsync COMMAND github_sync_test ${CMAKE_SOURCE_DIR})
+    # 1.34.0 : les formats de la passerelle GitHub des licences (et le faux GitHub des essais), sans reseau
+    xpg_add_test_executable(licensing_gateway_test tests/licensing_gateway_test.cpp src/app/ai/AiHttp.cpp)
+    xpg_target_link_libraries(licensing_gateway_test PRIVATE xpg_licensing)
+    if(TARGET licensing_gateway_test AND NOT WIN32)
+        target_link_libraries(licensing_gateway_test PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+    if(TARGET licensing_gateway_test AND WIN32)
+        target_link_libraries(licensing_gateway_test PRIVATE winhttp)
+    endif()
+    xpg_add_test(NAME passerelle COMMAND licensing_gateway_test)
     # 1.33.0 : l'application de l'editeur - le Workspace (sans ecran), puis ses pages dessinees a blanc.
     xpg_add_test_executable(admin_workspace_test tests/admin_workspace_test.cpp)
     xpg_target_link_libraries(admin_workspace_test PRIVATE xpg_admin_core)

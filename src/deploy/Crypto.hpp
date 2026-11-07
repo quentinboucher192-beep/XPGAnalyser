@@ -61,6 +61,22 @@ struct SignKeys {
 [[nodiscard]] Signature sign(const SecretKey& secret, std::string_view message) noexcept;
 [[nodiscard]] bool verify(const PublicKey& pub, std::string_view message, const Signature& sig) noexcept;
 
+// ---- 1.34.0 : le base64 standard (avec le bourrage), sans retour a la ligne ; la lecture ignore les espaces
+// et les fins de ligne. Faux : pas du base64. ----
+[[nodiscard]] std::string base64(const void* data, std::size_t size);
+[[nodiscard]] inline std::string base64(std::string_view s) { return base64(s.data(), s.size()); }
+bool unbase64(std::string_view text, Bytes& out);
+
+// ---- 1.34.0 : le sceau (une << boite scellee >> de libsodium, vers une cle Ed25519) ----
+//  Chiffrer pour le seul detenteur de la cle secrete Ed25519 dont `pub` est la partie publique (la cle est
+//  convertie en X25519 ; une cle ephemere par sceau : l'expediteur reste anonyme, et ne peut pas relire).
+//  Sert a la passerelle GitHub des licences : une demande scellee pour l'editeur, une licence scellee pour
+//  un PC. Faux : la cle n'est pas un point valide.
+bool seal(const PublicKey& pub, std::string_view plain, Bytes& out);
+// Ouvrir un sceau avec la cle secrete Ed25519 (64 octets : graine et publique). Faux : pas pour cette cle,
+// modifie, tronque.
+bool openSeal(const SecretKey& secret, const Bytes& box, std::string& plain);
+
 // ---- le hasard ----
 void randomBytes(void* out, std::size_t size) noexcept;
 // `count` chiffres decimaux tires uniformement ("482913").

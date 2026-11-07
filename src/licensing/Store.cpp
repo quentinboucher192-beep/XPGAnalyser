@@ -172,6 +172,7 @@ const char* statusKey(LicenseStatus s) noexcept {
         case LicenseStatus::Absent: return "absent";
         case LicenseStatus::ClockRolledBack: return "clock-rolled-back";
         case LicenseStatus::NotConfigured: return "non-configuree";
+        case LicenseStatus::Evaluation: return "evaluation";
     }
     return "?";
 }
@@ -187,6 +188,7 @@ std::string statusLabel(LicenseStatus s) {
         case LicenseStatus::Absent: return "Absente";
         case LicenseStatus::ClockRolledBack: return "Horloge recul\xC3\xA9" "e";
         case LicenseStatus::NotConfigured: return "Non activ\xC3\xA9" "es";
+        case LicenseStatus::Evaluation: return "\xC3\x89valuation";
     }
     return "?";
 }
@@ -584,7 +586,7 @@ std::string LicenseStore::noteState(const LicenseState& s) {
     const std::string prev = lastLoggedStatus();
     if (prev == key) return {};
     std::string prevLabel;
-    for (int i = 0; i <= static_cast<int>(LicenseStatus::NotConfigured); ++i)
+    for (int i = 0; i <= static_cast<int>(LicenseStatus::Evaluation); ++i)
         if (prev == statusKey(static_cast<LicenseStatus>(i))) prevLabel = statusLabel(static_cast<LicenseStatus>(i));
     HistoryEvent e;
     e.at = s.evaluatedAt;
@@ -814,6 +816,8 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
     const SignedBlock *licB = nullptr, *regB = nullptr, *revB = nullptr;
     for (const auto& b : blocks) {
         const SignedBlock** slot = b.kind == DocKind::License ? &licB : b.kind == DocKind::Registry ? &regB : b.kind == DocKind::Revocations ? &revB : nullptr;
+        if (!slot && b.kind != DocKind::Request)   // 1.34.0 : les documents de la passerelle ne s'importent pas
+            return refuse("Ce fichier est refus\xC3\xA9 : c'est un document de la passerelle GitHub (" + docKindLabel(b.kind) + "), il ne s'importe pas.");
         if (!slot) return refuse("Ce fichier est une demande d'activation : elle est \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur, pas \xC3\xA0 importer ici.");
         if (*slot) return refuse("Ce fichier est refus\xC3\xA9 : il contient deux fois " + docKindLabel(b.kind) + ".");
         *slot = &b;
