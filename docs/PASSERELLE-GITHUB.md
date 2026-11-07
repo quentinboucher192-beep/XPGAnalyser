@@ -49,7 +49,7 @@ Pour ouvrir une issue, il faut un jeton GitHub. Les logiciels de tes clients uti
    - Repository access : **Only select repositories**, la passerelle seulement ;
    - Repository permissions : **Issues : Read and write**, et rien d'autre (Metadata : Read-only est ajouté par GitHub).
 4. Dans **XPG License Manager Admin**, page Synchronisation GitHub, carte « Passerelle des clients » :
-   - le dépôt (`ton-compte/xpg-licences-passerelle`) et le jeton des demandes ;
+   - le dépôt (`ton-compte/xpg-licences-passerelle`) et le jeton des demandes, puis **Enregistrer la passerelle** ;
    - **Vérifier**, puis **Publier la configuration**. Elle publie aussi ton registre et ta liste de révocation.
 5. **Pour que les logiciels de tes clients s'en servent**, ils doivent connaître ta clé publique et l'adresse de la passerelle :
    - Paramètres de sécurité › **Préparer les fichiers pour les Studios…** écrit `PublisherKey.hpp`, `registre.xpgreg` et `GatewayAddress.hpp` ;
