@@ -3366,6 +3366,8 @@ void App::frame(double dt) {
     licence::tick();   // 1.30.0 : une revaluation par heure (une licence peut prendre fin pendant le travail)
     // 1.34.0 : ce qu'apporte la passerelle (une licence installee, un refus) - la barre d'etat (et la cloche).
     for (auto& m : licence::takeMessages()) bus_.publish(StatusNotice{std::move(m), 20.0});
+    // 1.36.0 : la reponse de l'editeur a la demande de ce PC (acceptee : la licence installee ; refusee) - une fenetre.
+    if (auto answer = licence::takeAnswer()) licence::showAnswer(*this, *answer);
     if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
         (void)recovery_.autosave([this](const std::string& folder, std::string* reason) {

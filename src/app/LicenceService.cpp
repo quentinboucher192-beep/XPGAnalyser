@@ -664,6 +664,8 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     res.licenseInstalled = true;
                     res.changed = true;
                     rec.receivedLicense = lid;
+                    res.answer = updated ? kAnswerUpdated : kAnswerAccepted;   // 1.36.0 : la fenetre qui le confirme
+                    res.answerNote = trim(content.message);
                     text = updated ? "Ta licence " + lid + " est mise \xC3\xA0 jour (re\xC3\xA7ue de l'\xC3\xA9" "diteur)."
                                    : "Ta licence " + lid + " est install\xC3\xA9" "e (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
                     notice = text;
@@ -699,6 +701,8 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                                   : "Ta demande d'activation a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e : " + sentence(reason);
             ok = false;
             res.refused = true;
+            res.answer = kAnswerRefused;   // 1.36.0 : la fenetre qui le dit
+            res.answerNote = sealProblem.empty() ? trim(content.message) : reason;
             notice = text;
             tone = "warning";
             rec.outcome = "refusee";
@@ -1178,6 +1182,7 @@ bool begin(Result& res, Conn& c, Record& rec, const char* offlineTail = "rien n'
         return false;
     }
     res.pendingAfter = pending(rec);
+    res.requestSentAt = res.pendingAfter ? rec.sentAt : 0;
     if (!connect(c, rec, res, why)) {
         if (c.offline) res.message = why + " ; " + offlineTail + ".";
         else res.message = sentence(why) + (res.reached ? std::string() : " Rien n'a chang\xC3\xA9.");
@@ -1195,6 +1200,7 @@ void finish(Result& res, const Conn& c, const Record& rec, std::vector<std::stri
     std::string why;
     if (!storeRecord(rec, &why)) res.message = join({res.message, "Attention : " + why});
     res.pendingAfter = pending(rec);
+    res.requestSentAt = res.pendingAfter ? rec.sentAt : 0;
 }
 
 } // namespace
@@ -1917,6 +1923,7 @@ struct Runner {
     double             nextTrial{0};
     double             nextLook{0};
     bool               waiting{false};     // une demande manuelle attend
+    lic::Seconds       waitingSince{0};    // 1.36.0 : envoyee le (la cadence de la verification)
     bool               retry{false};       // un etat << poste >> a reprendre
     std::atomic<bool>  heldBack{false};    // le poste flottant rendu par l'utilisateur
     std::atomic<lic::Seconds> freeAt{0};   // flottante sans poste : quand un poste se libere
@@ -1969,6 +1976,11 @@ bool launch(Job kind, std::function<Result()> fn) {
 }
 
 } // namespace
+
+double requestCheckDelay(lic::Seconds age) noexcept {
+    if (age < 2 * 3600) return 60.0;
+    return 300.0;
+}
 
 void startRunner() {
     Runner& r = runner();
@@ -2064,12 +2076,20 @@ bool collect() {
     r.running = false;
     r.job = Job::None;
     const double now = steadyNow();
-    if (res.job == Job::Sync || res.job == Job::Device || res.job == Job::Request || res.job == Job::CancelRequest) r.waiting = res.pendingAfter;
+    if (res.job == Job::Sync || res.job == Job::Device || res.job == Job::Request || res.job == Job::CancelRequest) {
+        const bool was = r.waiting;
+        r.waiting = res.pendingAfter;
+        r.waitingSince = res.requestSentAt;
+        // 1.36.0 : une demande qui attend : sa reponse regardee souvent (requestCheckDelay) ; une demande qui vient de
+        // partir (ou de se voir, au lancement) : la premiere verification dans une minute.
+        if (r.waiting && (!was || res.job != Job::Device))
+            r.nextDevice = now + requestCheckDelay(lic::systemNow() - r.waitingSince);
+    }
     if (res.job == Job::Sync || res.job == Job::Device) r.retry = res.retryLater;
     if (res.job == Job::Sync) {
         r.synced = res.reached;
         r.nextSync = now + (res.reached ? kHour : 15.0 * 60.0);   // hors ligne : un nouvel essai dans un quart d'heure
-        if (res.reached) r.nextDevice = now + kHour;
+        if (res.reached && !r.waiting) r.nextDevice = now + kHour;
     }
     if (res.job == Job::Renew && res.reached) r.nextRenew = now + kHour;
     if (res.job == Job::LeaseTake) {
@@ -2093,6 +2113,8 @@ bool collect() {
     }
     // Les avis : la cloche et la barre d'etat ; puis l'etat revalue.
     if (res.changed) licence::refresh();
+    // 1.36.0 : la reponse de l'editeur a la demande de ce PC : la fenetre qui la confirme (l'application la montre).
+    if (!res.answer.empty()) licence::queueAnswer({res.answer, res.licenseId, res.answerNote});
     for (const auto& n : res.notices) {
         licence::postNotice(n.key, n.title, res.message == n.title ? std::string() : res.message, n.tone.empty() ? "info" : n.tone);
         licence::queueMessage(n.title);
@@ -2133,9 +2155,10 @@ void poll() {
             return;
         }
     }
-    // Une demande manuelle qui attend (ou un etat a reprendre) : une verification par heure.
+    // Une demande manuelle qui attend : toutes les minutes au debut (1.36.0 : requestCheckDelay) ; un etat a
+    // reprendre : une verification par heure.
     if ((r.waiting || r.retry) && now >= r.nextDevice) {
-        r.nextDevice = now + kHour;
+        r.nextDevice = now + (r.waiting ? requestCheckDelay(lic::systemNow() - r.waitingSince) : kHour);
         (void)startCheckDevice();
         return;
     }

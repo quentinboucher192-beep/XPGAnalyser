@@ -17,6 +17,6 @@
 
 namespace licensing::service {
 
-inline constexpr const char* kCompiledServiceUrl = "";
+inline constexpr const char* kCompiledServiceUrl = "https://xpg-licences.xpg-licences-workersdev.workers.dev";
 
 } // namespace licensing::service

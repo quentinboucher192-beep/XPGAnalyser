@@ -34,6 +34,7 @@
 #include "../licensing/Store.hpp"
 
 #include <atomic>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -164,6 +165,36 @@ void shutdown();
 // "07/11/2027" (une date de licence, UTC) ; vide : 0.
 [[nodiscard]] std::string dayOf(licensing::Seconds at);
 
+// ---- 1.36.0 : LA DEMANDE EN LIGNE, LE CHEMIN PRINCIPAL ----
+// Ce programme a-t-il un service des licences (la demande en ligne) ? Faux : la demande et la licence par fichier.
+[[nodiscard]] bool onlineRequests();
+// La demande de ce PC qui attend l'editeur (le releve du service, relu quand il change, au plus une fois par seconde).
+struct PendingRequest {
+    bool               pending{false};
+    std::uint64_t      number{0};
+    licensing::Seconds sentAt{0};
+    std::string        state;     // service::stateText : "Envoy\xC3\xA9" "e \xE2\x80\x94 en attente de l'\xC3\xA9" "diteur"...
+};
+[[nodiscard]] PendingRequest pendingRequest();
+// LA REPONSE DE L'EDITEUR a la demande de ce PC (le fil du service la pose, l'application la prend chaque image et
+// la montre : showAnswer). Seulement avec les avis (quelqu'un devant l'ecran ; pas le poste d'exploitation qui tourne).
+struct Answer {
+    std::string kind;        // service::kAnswerAccepted, kAnswerUpdated, kAnswerRefused
+    std::string licenseId;
+    std::string note;        // le mot de l'editeur, ou la raison du refus
+};
+void queueAnswer(Answer a);
+[[nodiscard]] std::optional<Answer> takeAnswer();
+// Ce que dit la fenetre : acceptee - l'edition, le client, jusqu'a quand (et les jours), les PC, ce qu'elle ouvre (par
+// logiciel), le mot de l'editeur ; refusee - la raison, et une nouvelle demande. `st` : l'etat apres l'installation.
+struct AnswerView {
+    std::string title, text;
+    std::string confirm;     // "Voir ma licence", "Nouvelle demande\xE2\x80\xA6"
+    int         tab{kTabMine};
+    bool        accepted{true};
+};
+[[nodiscard]] AnswerView answerView(const Answer& a, const licensing::LicenseState& st);
+
 } // namespace licence
 
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
@@ -173,6 +204,9 @@ namespace licence {
 // 1.35.1 : le controle de projectsAllowed, avec la fenetre << Licence necessaire >> quand c'est ferme (son bouton : la
 // fenetre Licence, onglet Activation). Vrai : on peut continuer.
 bool gateProjects(App& app);
+// 1.36.0 : la fenetre de la reponse de l'editeur (answerView) ; son bouton : la fenetre Licence (Ma licence, ou une
+// nouvelle demande).
+void showAnswer(App& app, const Answer& a);
 } // namespace licence
 
 } // namespace app

@@ -2,7 +2,7 @@
 //  licensing/PublisherKey.hpp - LES CLES PUBLIQUES DE L'EDITEUR, compilees dans
 //  les logiciels clients (API Studio, IHM Studio, License Manager, agent)
 // -----------------------------------------------------------------------------
-//  GENERE par l'outil Admin des licences (XPG-License-Admin exporter-cle) le 2026-11-07T19:15:03Z.
+//  GENERE par l'outil Admin des licences (XPG-License-Admin exporter-cle) le 2026-11-07T21:30:28Z.
 //  Ne le modifie pas a la main : regenere-le sur le poste Admin.
 //  Seules des cles PUBLIQUES sont ici : elles VERIFIENT les licences, les registres
 //  et les revocations ; elles ne permettent pas d'en signer.
@@ -24,7 +24,7 @@
 namespace licensing::publisher {
 
 inline constexpr std::array<KeyEntry, 1> kKeys{{
-    {"xpg-1f422b8063a39e7c", "Cle de l'editeur des licences XPG", false,
+    {"xpg-1f422b8063a39e7c", "\xC3\x89" "diteur XPG", false,
      {0x7f, 0x3d, 0xb6, 0x5e, 0xc7, 0x76, 0x14, 0xeb,
       0x7e, 0xf8, 0xc9, 0xda, 0xd8, 0xcc, 0x4e, 0x1c,
       0xf0, 0xfa, 0xae, 0x60, 0xb6, 0x7e, 0xf9, 0xb1,

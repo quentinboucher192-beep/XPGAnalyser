@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.35.1", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.36.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.35.1", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 21 h 57"},
     {"1.35.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 18 h 19"},
     {"1.34.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 12 h 37"},
     {"1.33.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 8 h 50"},
@@ -179,6 +180,17 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.36.0 : la licence par une demande en ligne a l'editeur (la reponse attendue, la fenetre de l'activation)
+        note("1.36.0", "Projet", Kind::New,
+         "DEMANDE TA LICENCE EN LIGNE : Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence (ou le bouton de l'accueil) : ta soci\xC3\xA9t\xC3\xA9, un contact, "
+         "un mot ; la demande part chez l'\xC3\xA9" "diteur par son service des licences. Elle reste visible tant qu'elle attend (son num\xC3\xA9ro, sa date), et le "
+         "Studio regarde lui-m\xC3\xAAme toutes les minutes si l'\xC3\xA9" "diteur a r\xC3\xA9pondu. Aucun fichier, aucun code \xC3\xA0 taper.",
+         "licence", ""),
+        note("1.36.0", "Projet", Kind::New,
+         "TA LICENCE ACTIV\xC3\x89" "E, CONFIRM\xC3\x89" "E : d\xC3\xA8s que l'\xC3\xA9" "diteur accepte ta demande, la licence s'installe d'elle-m\xC3\xAAme et une "
+         "fen\xC3\xAAtre te le confirme : l'\xC3\xA9" "dition, ce qu'elle ouvre, jusqu'\xC3\xA0 quand, le nombre de PC, le mot de l'\xC3\xA9" "diteur. Une demande "
+         "refus\xC3\xA9" "e : la fen\xC3\xAAtre dit pourquoi, et tu peux en envoyer une nouvelle.",
+         "licence", ""),
         // 1.35.1 : les licences actives avec la cle de l'editeur ; sans licence, le logiciel ne s'utilise pas
         note("1.35.1", "Projet", Kind::Changed,
          "SANS LICENCE, LE LOGICIEL NE S'UTILISE PAS : au premier lancement, la D\xC3\xA9" "couverte (30 jours d'essai) ouvre tout ; "

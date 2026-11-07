@@ -40,6 +40,7 @@ double            g_next{0};      // la prochaine revaluation (secondes, horloge
 // 1.34.0 : les avis (startNotices) et les messages pour la barre d'etat (takeMessages).
 std::atomic<bool>        g_notices{false};
 std::vector<std::string> g_messages;   // sous g_mutex
+std::vector<Answer>      g_answers;    // 1.36.0 : les reponses de l'editeur a montrer (sous g_mutex)
 constexpr const char*    kDiscoveryNotice = "licence:decouverte";
 constexpr const char*    kLeaseNotice = "licence:bail-fin";
 
@@ -52,8 +53,10 @@ void syncStateNotices() {
         bgtasks::withdraw(kDiscoveryNotice);
     } else {
         postNotice(kDiscoveryNotice, text,
-                   "Les fonctions de la D\xC3\xA9" "couverte sont ouvertes jusqu'\xC3\xA0 cette date ; ensuite, sans licence, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e. "
-                   "Pour continuer : Licence\xE2\x80\xA6 \xE2\x80\xBA Activation (le code re\xC3\xA7u de l'\xC3\xA9" "diteur).",
+                   std::string("Les fonctions de la D\xC3\xA9" "couverte sont ouvertes jusqu'\xC3\xA0 cette date ; ensuite, sans licence, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e. ") +
+                   (onlineRequests() ? std::string("Pour continuer : demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur (Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence) ; "
+                                                   "d\xC3\xA8s qu'il l'accepte, elle s'installe d'elle-m\xC3\xAAme.")
+                                       : std::string("Pour continuer : Licence\xE2\x80\xA6 \xE2\x80\xBA Activation (le code re\xC3\xA7u de l'\xC3\xA9" "diteur).")),
                    st.evaluationDaysLeft <= 7 ? "warning" : "info");
     }
     if (const std::string text = leaseText(st); text.empty()) {
@@ -367,6 +370,18 @@ Card startCard() {
             c.tone = st.evaluationDaysLeft <= 7 ? 2 : 4;
             c.button = "Activer avec un code\xE2\x80\xA6";
             c.tab = kTabActivation;
+            // 1.36.0 : la demande en ligne d'abord (ou celle qui attend)
+            if (onlineRequests()) {
+                if (const auto pr = pendingRequest(); pr.pending) {
+                    c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, ta licence s'installe "
+                             "d'elle-m\xC3\xAAme.";
+                    c.button = "Voir ma demande";
+                } else {
+                    c.text = "Ensuite, sans licence, aucun projet ne s'ouvre. Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : elle s'installe d\xC3\xA8s qu'il l'accepte.";
+                    c.button = "Demander ma licence\xE2\x80\xA6";
+                }
+                c.tab = kTabRequest;
+            }
             break;
         }
         case S::Absent:
@@ -377,6 +392,21 @@ Card startCard() {
             c.tone = 3;
             c.button = "Activer avec un code\xE2\x80\xA6";
             c.tab = kTabActivation;
+            // 1.36.0 : la demande en ligne d'abord (ou celle qui attend)
+            if (onlineRequests()) {
+                if (const auto pr = pendingRequest(); pr.pending) {
+                    c.title = "Demande envoy\xC3\xA9" "e : en attente de l'\xC3\xA9" "diteur";
+                    c.text = "Demande n\xC2\xB0 " + std::to_string(pr.number) + " du " + service::dateText(pr.sentAt) +
+                             ". D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme ; en attendant, aucun projet ne s'ouvre.";
+                    c.tone = 2;
+                    c.button = "Voir ma demande";
+                } else {
+                    c.text = std::string(st.evaluationOver ? "Ta D\xC3\xA9" "couverte est finie. " : "") +
+                             "Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, elle s'installe d'elle-m\xC3\xAAme.";
+                    c.button = "Demander ma licence\xE2\x80\xA6";
+                }
+                c.tab = kTabRequest;
+            }
             break;
         case S::LeaseExpired:
             if (leasePaused(st)) {
@@ -424,6 +454,13 @@ Card startCard() {
             c.text = stateText(st);
             c.tone = 3;
             c.tab = kTabActivation;
+            // 1.36.0 : une licence finie, revoquee, refusee... : une nouvelle demande en ligne (ou celle qui attend)
+            if (onlineRequests()) {
+                const auto pr = pendingRequest();
+                if (pr.pending) c.text = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " attend l'\xC3\xA9" "diteur : d\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme.";
+                c.button = pr.pending ? "Voir ma demande" : "Demander ma licence\xE2\x80\xA6";
+                c.tab = kTabRequest;
+            }
             break;
     }
     // 1.35.1 : une licence en pause (bail, flottante sans poste) : rien ne s'ouvre non plus en attendant
@@ -476,6 +513,121 @@ std::vector<std::string> takeMessages() {
 }
 
 void startService() { service::startRunner(); }
+
+// ============================================================ 1.36.0 : la demande en ligne ==
+bool onlineRequests() { return g_active && service::available(); }
+
+PendingRequest pendingRequest() {
+    // Le releve relu quand le service a fini un travail, et au plus une fois par seconde (l'autre Studio l'ecrit aussi).
+    static std::mutex          m;
+    static PendingRequest      cached;
+    static unsigned long long  seenRevision = ~0ull;
+    static double              seenAt = -1e9;
+    std::lock_guard<std::mutex> lock(m);
+    const double now = nowSeconds();
+    const unsigned long long rev = service::revision();
+    if (rev != seenRevision || now - seenAt >= 1.0) {
+        seenRevision = rev;
+        seenAt = now;
+        service::Record rec;
+        cached = PendingRequest{};
+        if (service::loadRecord(rec, nullptr) && service::pending(rec)) {
+            cached.pending = true;
+            cached.number = rec.number;
+            cached.sentAt = rec.sentAt;
+            cached.state = service::stateText(rec);
+        }
+    }
+    return cached;
+}
+
+void queueAnswer(Answer a) {
+    if (!g_notices || a.kind.empty()) return;   // personne devant l'ecran (le poste d'exploitation qui tourne)
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_answers.size() < 4) g_answers.push_back(std::move(a));
+}
+
+std::optional<Answer> takeAnswer() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_answers.empty()) return std::nullopt;
+    Answer a = std::move(g_answers.front());
+    g_answers.erase(g_answers.begin());
+    return a;
+}
+
+AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
+    AnswerView v;
+    if (a.kind == service::kAnswerRefused) {
+        v.accepted = false;
+        v.title = "Ta demande de licence est refus\xC3\xA9" "e";
+        v.text = "L'\xC3\xA9" "diteur a refus\xC3\xA9 ta demande.";
+        v.text += a.note.empty() ? std::string(" Il n'a pas donn\xC3\xA9 de raison.") : "\n\nSa raison : \xC2\xAB " + a.note + " \xC2\xBB";
+        v.text += "\n\nTu peux lui envoyer une nouvelle demande (Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence), ou le contacter.";
+        v.confirm = "Nouvelle demande\xE2\x80\xA6";
+        v.tab = kTabRequest;
+        return v;
+    }
+    const bool updated = a.kind == service::kAnswerUpdated;
+    v.title = updated ? "Ta licence est mise \xC3\xA0 jour" : "Ta licence est activ\xC3\xA9" "e";
+    v.confirm = "Voir ma licence";
+    v.tab = kTabMine;
+    const std::string id = !st.licenseId.empty() ? st.licenseId : a.licenseId;
+    std::string text = updated ? "L'\xC3\xA9" "diteur a mis \xC3\xA0 jour ta licence : elle est install\xC3\xA9" "e sur ce PC."
+                               : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.";
+    text += "\n\nLicence : " + id + (st.editionLabel.empty() && st.licensedEdition.empty() ? std::string() : " \xC2\xB7 " + editionOf(st));
+    if (!st.customer.empty()) text += "\nClient : " + st.customer;
+    // La duree : jusqu'a quand, et les jours qui restent.
+    if (st.expiresAt > 0) {
+        const licensing::Seconds now = st.trustedNow > 0 ? st.trustedNow : licensing::systemNow();
+        const long long days = st.expiresAt > now ? (st.expiresAt - now + licensing::kDay - 1) / licensing::kDay : 0;
+        text += "\nValable jusqu'au " + dayOf(st.expiresAt) + " (" + daysText(static_cast<int>(days)) + ")";
+    } else {
+        text += "\nValable sans fin";
+    }
+    if (st.maxDevices > 0)
+        text += "\nPC : " + std::to_string(st.maxDevices) + (st.maxDevices > 1 ? " au plus (ce PC en est un)" : " (ce PC)");
+    // Ce qu'elle ouvre, par logiciel (le registre : l'ordre et les noms).
+    if (!st.features.empty()) {
+        std::vector<std::pair<std::string, std::vector<std::string>>> byProduct;
+        const auto reg = licensing::getRegistry();
+        const auto limitText = [](const licensing::FeatureGrant& g) {
+            std::string s;
+            for (const auto& [name, value] : g.limits) s += (s.empty() ? " (" : ", ") + name + " : " + std::to_string(value);
+            return s.empty() ? s : s + ")";
+        };
+        const auto add = [&byProduct](const std::string& product, std::string label) {
+            for (auto& [p, labels] : byProduct)
+                if (p == product) {
+                    labels.push_back(std::move(label));
+                    return;
+                }
+            byProduct.push_back({product, {std::move(label)}});
+        };
+        std::size_t counted = 0;
+        if (reg)
+            for (const auto& f : reg->features)
+                for (const auto& g : st.features)
+                    if (g.id == f.id) {
+                        add(f.product.empty() ? std::string("Autres") : f.product, (f.label.empty() ? f.id : f.label) + limitText(g));
+                        ++counted;
+                    }
+        if (counted < st.features.size())   // une fonction que le registre ne nomme pas : son identifiant
+            for (const auto& g : st.features) {
+                bool known = false;
+                if (reg)
+                    for (const auto& f : reg->features) known = known || f.id == g.id;
+                if (!known) add("Autres", g.id + limitText(g));
+            }
+        text += "\n\nCe qu'elle ouvre (" + std::to_string(st.features.size()) + (st.features.size() > 1 ? " fonctions" : " fonction") + ") :";
+        for (const auto& [product, labels] : byProduct) {
+            text += "\n  " + product + " : ";
+            for (std::size_t i = 0; i < labels.size(); ++i) text += (i ? ", " : "") + labels[i];
+        }
+    }
+    if (!a.note.empty()) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
+    v.text = std::move(text);
+    return v;
+}
 
 void showNotices() {
     if (!g_notices.exchange(true)) syncStateNotices();

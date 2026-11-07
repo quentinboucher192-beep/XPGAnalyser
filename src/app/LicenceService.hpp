@@ -63,7 +63,8 @@
 //  Ensuite : la licence flottante prend son jeton et le renouvelle toutes les
 //  5 minutes (sans poste libre : un avis << libre dans N min >>, un nouvel essai) ;
 //  le bail est renouvele chaque heure s'il finit dans 7 jours ; une demande qui
-//  attend est verifiee chaque heure. UN travail a la fois ; poll() (le fil de
+//  attend est verifiee toutes les minutes (1.36.0 ; les deux premieres heures, puis
+//  toutes les 5 minutes : requestCheckDelay), un etat a reprendre chaque heure. UN travail a la fois ; poll() (le fil de
 //  l'interface, chaque image : licence::tick) releve le resultat, pose les avis
 //  (la cloche, la barre d'etat) et revalue la licence. shutdown() arrete la
 //  requete en cours, attend le fil, puis rend le jeton flottant (au mieux, un
@@ -173,7 +174,18 @@ struct Result {
     std::string         licenseId;
     std::string         message;                  // une phrase en francais (le dernier geste)
     std::vector<Notice> notices;                  // a dire en avis (la cloche, la barre d'etat)
+    // 1.36.0 : LA REPONSE DE L'EDITEUR a la demande de ce PC, apportee par CE travail (la fenetre qui la confirme) :
+    // kAnswerAccepted (la licence installee), kAnswerUpdated (mise a jour), kAnswerRefused ; vide : rien de neuf.
+    std::string         answer;
+    std::string         answerNote;               // le mot de l'editeur (acceptee) ou la raison (refusee)
+    licensing::Seconds  requestSentAt{0};         // une demande attend encore : envoyee le (0 : aucune)
 };
+inline constexpr const char* kAnswerAccepted = "acceptee";
+inline constexpr const char* kAnswerUpdated = "mise_a_jour";
+inline constexpr const char* kAnswerRefused = "refusee";
+// 1.36.0 : une demande qui attend, sa reponse regardee : toutes les minutes les deux premieres heures apres l'envoi,
+// puis toutes les 5 minutes (age : secondes depuis l'envoi ; un age negatif, l'horloge reculee : comme au debut).
+[[nodiscard]] double requestCheckDelay(licensing::Seconds age) noexcept;
 
 // ---- BLOQUANTS : un fil de travail seulement ----
 [[nodiscard]] Result readTime();                                           // etat + heure signee

@@ -342,11 +342,21 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     tabs->addTab({"\xC3\x89" "ditions", ui::Icon::Layers}, std::move(editions));
     tabs->addTab({"Historique", ui::Icon::History}, std::move(history));
     tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
-    tabs->addTab({"Demande \xC3\xA0 l'\xC3\xA9" "diteur", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest
+    tabs->addTab({"Demander ma licence", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest (1.36.0 : son nom)
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
     request_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Demander une activation\xE2\x80\xA6", "dialog.licence.demander")));
+    // 1.36.0 : avec le service des licences, la demande en ligne est le chemin principal (onglet Demander ma licence) ;
+    // les fichiers restent pour un PC sans Internet - en second.
+    if (licence::onlineRequests()) {
+        import_->setText("Fichier de licence\xE2\x80\xA6");
+        import_->setStyle(ui::Button::Style::Default);
+        import_->setTooltip("Un fichier .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur (un PC sans Internet). Avec Internet, demande plut\xC3\xB4t ta licence "
+                            "(onglet Demander ma licence) : elle s'installe d'elle-m\xC3\xAAme.");
+        request_->setText("Demande par fichier (sans Internet)\xE2\x80\xA6");
+        request_->setTooltip("\xC3\x89" "crit une demande (.xpgreq) \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur toi-m\xC3\xAAme : seulement pour un PC sans Internet.");
+    }
     folder_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir le dossier des licences", "dialog.licence.dossier")));
     close_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.licence.fermer")));
     links_ += import_->clicked->connect([this] { askImport(); });
@@ -362,8 +372,14 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     wasBusy_ = licence::service::busy();
     reload();
     if (tab < 0) {   // licence::kTabAuto : Ma licence pour une licence par fichier valable, sinon Activation
-        const bool fileLicence = !state_.online && (state_.status == licensing::LicenseStatus::Valid || state_.status == licensing::LicenseStatus::Grace);
+        using S = licensing::LicenseStatus;
+        const bool valid = state_.status == S::Valid || state_.status == S::Grace;
+        const bool fileLicence = !state_.online && valid;
         tab = fileLicence ? licence::kTabMine : licence::kTabActivation;
+        // 1.36.0 : sans licence valable (ni bail a renouveler, ni poste flottant a attendre), la demande en ligne
+        if (!valid && state_.status != S::LeaseExpired && state_.status != S::NoFloatingSeat && state_.status != S::NotConfigured &&
+            licence::onlineRequests())
+            tab = licence::kTabRequest;
     }
     tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabRequest)));
 }
@@ -1080,8 +1096,8 @@ OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.dema
     cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler la demande", "licence.demande.annuler")));
     cancel_->setStyle(ui::Button::Style::Danger);
     check_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("V\xC3\xA9rifier maintenant", "licence.demande.verifier")));
-    check_->setTooltip("Demande au service des licences ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (il le fait aussi \xC3\xA0 chaque lancement, puis toutes les heures "
-                       "tant qu'une demande attend, ou qu'une licence re\xC3\xA7ue n'a pas pu \xC3\xAAtre install\xC3\xA9" "e).");
+    check_->setTooltip("Demande au service des licences ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (le Studio le fait aussi tout seul : \xC3\xA0 chaque lancement, "
+                       "puis toutes les minutes tant qu'une demande attend - toutes les 5 minutes apr\xC3\xA8s deux heures).");
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });
@@ -1205,15 +1221,20 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f), lh = r.lineHeight(kSmall) + 4.f;
     const float labelW = 210.f, fieldX = x + labelW;
     // L'introduction.
-    const std::string intro = available_
-        ? std::string("Pas de code ? Ta demande part chez l'\xC3\xA9" "diteur par le service des licences, scell\xC3\xA9" "e : lui seul la lit (rien de ta soci\xC3\xA9t\xC3\xA9 "
-                      "n'y est en clair). Sa r\xC3\xA9ponse revient ici d'elle-m\xC3\xAAme : une licence accept\xC3\xA9" "e s'installe au lancement suivant, ou avec "
-                      "V\xC3\xA9rifier maintenant - aucun fichier \xC3\xA0 importer. Une seule demande \xC3\xA0 la fois pour ce PC.")
-        : why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), puis Activer par "
-                 "fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
+    // 1.36.0 : la demande en ligne, le chemin principal : ce qui va se passer, dit simplement.
+    const std::string intro = !available_ ? std::string()
+        : pending_
+        ? std::string("Ta demande attend l'\xC3\xA9" "diteur. Le Studio regarde tout seul, toutes les minutes, s'il a r\xC3\xA9pondu : d\xC3\xA8s qu'il "
+                      "l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre te le confirme (ce qu'elle ouvre, jusqu'\xC3\xA0 quand). "
+                      "Tu peux fermer cette fen\xC3\xAAtre, et m\xC3\xAAme le Studio : la r\xC3\xA9ponse t'attendra au prochain lancement.")
+        : std::string("Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9 suffit, le reste est facultatif. Ta demande part par son service "
+                      "des licences, scell\xC3\xA9" "e : lui seul la lit. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre "
+                      "te le confirme - aucun fichier, aucun code. Une seule demande \xC3\xA0 la fois pour ce PC.");
+    const std::string introOff = why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), "
+                                 "puis Activer par fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
     float y = b.y + 16.f;
     int n = 0;
-    for (const auto& l : wrapText(r, intro, kSmall, W)) {
+    for (const auto& l : wrapText(r, available_ ? intro : introOff, kSmall, W)) {
         if (++n > 3) break;
         r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, available_ ? c.text : c.textMuted);
         y += 20.f;
@@ -1286,16 +1307,41 @@ bool gateProjects(App& app) {
     std::string why;
     if (projectsAllowed(&why)) return true;
     showNotices();   // 1.35.1 : le poste d'exploitation refuse revient a l'accueil : l'encart y dit << Sans licence >>
+    // 1.36.0 : la demande en ligne d'abord (ou celle qui attend) ; sans service : le code, ou le fichier.
+    std::string how = "Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur (ou demande-la) : Activer ma licence\xE2\x80\xA6";
+    std::string button = "Activer ma licence\xE2\x80\xA6";
+    int tab = kTabActivation;
+    if (onlineRequests()) {
+        tab = kTabRequest;
+        if (const auto pr = pendingRequest(); pr.pending) {
+            how = "Ta demande n\xC2\xB0 " + std::to_string(pr.number) + " (envoy\xC3\xA9" "e le " + service::dateText(pr.sentAt) +
+                  ") attend l'\xC3\xA9" "diteur. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre te le confirme.";
+            button = "Voir ma demande";
+        } else {
+            how = "Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9, un contact, et c'est parti. D\xC3\xA8s qu'il l'accepte, ta licence "
+                  "s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre te le confirme. Aucun fichier, aucun code \xC3\xA0 taper.";
+            button = "Demander ma licence\xE2\x80\xA6";
+        }
+    }
     auto dlg = std::make_unique<MessageDialog>(
         "Licence n\xC3\xA9" "cessaire",
-        "Sans licence, " + core::productName() + " ne s'utilise pas : aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e.\n\n" + why +
-            "\n\nActive ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur (ou demande-la) : Activer ma licence\xE2\x80\xA6",
-        MessageDialog::Icon::Warning, "Activer ma licence\xE2\x80\xA6");
+        "Sans licence, " + core::productName() + " ne s'utilise pas : aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e.\n\n" + why + "\n\n" + how,
+        MessageDialog::Icon::Warning, button);
     dlg->setCancelLabel("Fermer");
-    app.menus().ShowDialog(std::move(dlg), [&app](const menu::DialogResult& r) {
-        if (r.accepted()) showLicenceWindow(app, kTabActivation);
+    app.menus().ShowDialog(std::move(dlg), [&app, tab](const menu::DialogResult& r) {
+        if (r.accepted()) showLicenceWindow(app, tab);
     });
     return false;
+}
+
+void showAnswer(App& app, const Answer& a) {
+    const auto v = answerView(a, licensing::getLicenseState());
+    auto dlg = std::make_unique<MessageDialog>(v.title, v.text, v.accepted ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning, v.confirm);
+    dlg->setCancelLabel(v.accepted ? "Fermer" : "Plus tard");
+    const int tab = v.tab;
+    app.menus().ShowDialog(std::move(dlg), [&app, tab](const menu::DialogResult& r) {
+        if (r.accepted()) showLicenceWindow(app, tab);
+    });
 }
 
 } // namespace licence
