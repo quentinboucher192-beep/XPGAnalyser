@@ -17,6 +17,7 @@
 //    XPG-License-Admin signer-licence --parametres p.json --demande pc.xpgreq [--demande ...]
 //                      [--licence ancienne.xpglic] --registre registre.xpgreg
 //                      [--revocations revocations.xpgrev] --sortie licence.xpglic [--dossier D]
+//                      1.33.0 : [--retirer-pc CLE] (avec --licence : une nouvelle emission sans ce PC)
 //    XPG-License-Admin verifier FICHIER [--dossier D]
 //    XPG-License-Admin enregistrer-demande FICHIER.xpgreq [--dossier D]       (1.30.0)
 //    XPG-License-Admin liste [--licence ID] [--client TEXTE] [--csv F.csv] [--dossier D]   (1.30.0)
@@ -104,6 +105,7 @@ std::string usage() {
            "                                                 [device] (un seul PC), [issued_before] (les \xC3\xA9missions sign\xC3\xA9" "es avant cette date)\n"
            "  signer-licence --parametres P.json --demande PC.xpgreq [--demande ...] [--licence ANCIENNE.xpglic]\n"
            "                 --registre R.xpgreg [--revocations V.xpgrev] --sortie L.xpglic\n"
+           "                 [--retirer-pc CLE_DU_PC ...] (avec --licence : une nouvelle \xC3\xA9mission sans ce PC)\n"
            "  verifier FICHIER                               lit un fichier sign\xC3\xA9 et dit ce qu'il contient\n"
            "  enregistrer-demande PC.xpgreq                  note une demande re\xC3\xA7ue (pas encore sign\xC3\xA9" "e) dans le registre des activations\n"
            "  liste [--licence ID] [--client TEXTE] [--csv F.csv]\n"
@@ -364,6 +366,8 @@ int run(const std::vector<std::string>& argv) {
             complain("Refus\xC3\xA9 : " + why);
             return 1;
         }
+        // 1.33.0 : retirer des PC de la licence etendue (--licence) : un PC remplace ou rendu.
+        if (auto drop = a.options.find("--retirer-pc"); drop != a.options.end()) in.dropDevices = drop->second;
         auto it = a.options.find("--demande");
         if (it != a.options.end())
             for (const auto& path : it->second) {

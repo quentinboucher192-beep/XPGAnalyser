@@ -601,6 +601,14 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         l.devices = old.devices;
     }
     std::string added;
+    // 1.33.0 : retirer des PC de la licence etendue (un PC remplace, un PC rendu).
+    if (!in.dropDevices.empty() && in.existing.empty()) return fail("retirer un PC demande la licence \xC3\xA0 \xC3\xA9tendre (--licence)");
+    for (const auto& gone : in.dropDevices) {
+        auto it = std::find_if(l.devices.begin(), l.devices.end(), [&](const BoundDevice& x) { return x.key == gone; });
+        if (it == l.devices.end()) return fail("le PC \xC3\xA0 retirer (" + fingerprintOfHex(gone) + ") n'est pas li\xC3\xA9 \xC3\xA0 la licence " + cite(l.licenseId));
+        added += "  PC retir\xC3\xA9 : " + (it->name.empty() ? std::string("(sans nom)") : it->name) + " - " + fingerprintOfHex(it->key) + "\n";
+        l.devices.erase(it);
+    }
     std::vector<ActivationRequest> asked;   // pour le registre des activations : le logiciel, la date de chaque demande
     for (std::size_t i = 0; i < in.requests.size(); ++i) {
         ActivationRequest q;
@@ -637,7 +645,7 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         for (const auto& d : l.devices)
             if (const Revocation* r = rev.find(l.licenseId, d.key, l.issuedAt))
                 return fail("la licence " + cite(l.licenseId) + (r->device.empty() ? "" : " (pour un de ces PC)") + " est dans la liste de r\xC3\xA9vocation n\xC2\xB0 "
-                            + std::to_string(rev.number));
+                            + std::to_string(rev.number) + (r->device.empty() ? std::string() : " : retire ce PC de la licence (--retirer-pc " + d.key + ")"));
     }
     l.manifest = reg.number;
     l.nonce = newNonce();

@@ -36,6 +36,8 @@ namespace licdlg {
 // Definis dans LicenceWizard.cpp.
 menu::MenuPtr makeRevokeDialog(ShellHost host, std::string licenseId);
 bool wizardTakeDrop(const std::vector<std::string>& paths);
+menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger,
+                                std::function<void()> onOk);
 std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
 void rememberFolder(const std::string& filePath);
@@ -156,6 +158,9 @@ public:
         export_->setTooltip("Le .xpglic de la licence choisie, \xC3\xA0 renvoyer au client");
         revoke_ = &button(*this, "R\xC3\xA9voquer\xE2\x80\xA6", "licences.revoquer", ui::Button::Style::Danger);
         revoke_->setTooltip("Toute la licence choisie, ou un de ses PC");
+        // 1.33.0 : retirer un PC de la licence (un PC remplace ou rendu) : une nouvelle emission sans lui.
+        dropPc_ = &button(*this, "Retirer un PC\xE2\x80\xA6", "licences.retirer-pc");
+        dropPc_->setTooltip("Le PC choisi dans la liste des PC : une nouvelle \xC3\xA9mission de la licence sans lui (m\xC3\xAA" "me fin), \xC3\xA0 renvoyer au client");
         folder_ = &button(*this, "Ouvrir le dossier de l'archive", "licences.dossier");
         search_ = &adopt(*this, std::make_unique<ui::InputText>("licences.recherche"));
         search_->setPlaceholder("Chercher : identifiant, client, \xC3\xA9" "dition");
@@ -196,6 +201,10 @@ public:
             if (const LicenceEntry* l = selected()) host_.openDialog(licdlg::makeRevokeDialog(host_, l->licence.licenseId));
         });
         links_ += folder_->clicked->connect([this] { openArchive(); });
+        links_ += dropPc_->clicked->connect([this] { dropSelectedPc(); });
+        links_ += pcs_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
+            selectedPc_ = sel.empty() ? -1 : static_cast<int>(sel.front());
+        });
         links_ += search_->textChanged->connect([this](const std::string&) { rebuild(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
             if (syncing_) return;
@@ -238,12 +247,17 @@ protected:
         const float x = r.x + kPad, w = std::max(200.f, r.w - 2.f * kPad);
         actionsY_ = r.y + kPad + 64.f;
         float bx = x;
-        for (ui::Button* b : {new_, addPc_, export_, revoke_, folder_}) {
+        float rowY = actionsY_;
+        for (ui::Button* b : {new_, addPc_, export_, dropPc_, revoke_, folder_}) {
             const float bw = buttonWidth(*b, 96.f);
-            b->setBounds({bx, actionsY_, bw, 32.f});
+            if (bx > x && bx + bw > x + w) {   // trop etroit : la suite sur une deuxieme ligne
+                bx = x;
+                rowY += 40.f;
+            }
+            b->setBounds({bx, rowY, bw, 32.f});
             bx += bw + 8.f;
         }
-        filterY_ = actionsY_ + 44.f;
+        filterY_ = rowY + 44.f;
         const float sw = std::min(360.f, std::max(180.f, w * 0.35f));
         search_->setBounds({x, filterY_, sw, 30.f});
         float cx = x + sw + 12.f;
@@ -362,6 +376,8 @@ private:
         addPc_->setEnabled(e != nullptr);
         export_->setEnabled(e != nullptr);
         revoke_->setEnabled(e != nullptr);
+        dropPc_->setEnabled(e != nullptr && e->licence.devices.size() > 1);
+        selectedPc_ = -1;
         std::vector<PG::Category> cats;
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> tips;
@@ -447,6 +463,49 @@ private:
         invalidate();
     }
 
+    // 1.33.0 : retirer le PC choisi de la licence (une nouvelle emission sans lui, la meme fin).
+    void dropSelectedPc() {
+        const LicenceEntry* e = selected();
+        if (!e) return;
+        if (host_.busy && host_.busy()) {
+            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+            return;
+        }
+        if (selectedPc_ < 0 || selectedPc_ >= static_cast<int>(e->licence.devices.size())) {
+            host_.flash("Choisis d'abord le PC \xC3\xA0 retirer, dans la liste des PC de la licence.", Tone::Warning);
+            return;
+        }
+        const std::string id = e->licence.licenseId;
+        const auto& dev = e->licence.devices[static_cast<std::size_t>(selectedPc_)];
+        const std::string key = dev.key;
+        const std::string name = dev.name.empty() ? std::string("(sans nom)") : dev.name;
+        auto alive = alive_;
+        const std::string text = "Retirer le PC \xC2\xAB " + name + " \xC2\xBB (" + licdlg::fingerprintOfKey(key) + ") de la licence " + id
+                                 + " ?\n\nUne nouvelle \xC3\xA9mission de la licence est sign\xC3\xA9" "e sans lui (m\xC3\xAA" "me fin, m\xC3\xAA" "mes fonctionnalit\xC3\xA9s) : "
+                                   "tu choisis o\xC3\xB9 l'\xC3\xA9" "crire, puis tu l'envoies au client. Pour que ce PC ne serve plus avec l'ancienne \xC3\xA9mission, "
+                                   "r\xC3\xA9voque-le aussi (R\xC3\xA9voquer\xE2\x80\xA6).";
+        host_.openDialog(licdlg::makeConfirmDialog("dialog.retirer-pc", "Retirer un PC", text, "Retirer et signer\xE2\x80\xA6", true, [this, alive, id, key] {
+            if (!*alive) return;
+            ui::FilePick pick;
+            pick.title = "La nouvelle \xC3\xA9mission de la licence " + id;
+            pick.filters = {{"Licences XPG (.xpglic)", "xpglic"}};
+            pick.save = true;
+            pick.start = licdlg::startFor(id + ".xpglic");
+            host_.pickFile(pick, [this, alive, id, key](const std::string& chosen) {
+                if (!*alive) return;
+                if (chosen.empty()) {
+                    host_.flash("Annul\xC3\xA9 : rien n'a \xC3\xA9t\xC3\xA9 sign\xC3\xA9.", Tone::Info);
+                    return;
+                }
+                std::string path = chosen;
+                if (extOf(path) != ".xpglic") path += ".xpglic";
+                const OpResult r = ws().removeDevice(id, key, path);
+                if (r.ok) licdlg::rememberFolder(path);
+                host_.report(r);
+            });
+        }));
+    }
+
     void exportSelected() {
         const LicenceEntry* e = selected();
         if (!e) return;
@@ -486,6 +545,8 @@ private:
     ui::Button*                 addPc_{nullptr};
     ui::Button*                 export_{nullptr};
     ui::Button*                 revoke_{nullptr};
+    ui::Button*                 dropPc_{nullptr};
+    int                         selectedPc_{-1};
     ui::Button*                 folder_{nullptr};
     ui::InputText*              search_{nullptr};
     ui::Button*                 chips_[4]{};

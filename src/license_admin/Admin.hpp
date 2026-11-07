@@ -106,6 +106,9 @@ struct LicenseInputs {
     std::string              existing;      // facultatif : la licence a etendre (.xpglic : ses PC sont gardes)
     std::string              registry;      // le registre signe (.xpgreg), obligatoire
     std::string              revocations;   // facultatif : la liste signee (.xpgrev), jointe au fichier
+    // 1.33.0 : les PC (leur cle, 64 hexadecimaux) a RETIRER de la licence etendue (`existing`) : un PC remplace ne
+    // reste pas dans la nouvelle emission (sinon, revoque, il bloquerait toute nouvelle emission).
+    std::vector<std::string> dropDevices;
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
 // `summary` : ce qui a ete signe, en une ligne par fait. 1.32.0 (H2) : l'empreinte du poste de chaque demande

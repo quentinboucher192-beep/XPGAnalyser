@@ -126,6 +126,8 @@ struct LicenceDraft {
     int                      offlineGraceDays{-1}; // -1 : celui de l'edition
     std::vector<std::string> features;             // vide : celles de l'edition
     bool                     extend{false};        // etendre la licence licenseId de l'archive (ses PC sont gardes)
+    Seconds                  expiresAt{0};         // 1.33.0 : une fin exacte (une extension garde la sienne) ; 0 : durationDays
+    std::vector<std::string> dropDevices;          // 1.33.0 : les PC (cles) a retirer de la licence etendue
 };
 
 class Workspace {
@@ -177,6 +179,9 @@ public:
     OpResult signLicence(const LicenceDraft& draft, const std::string& outPath);
     // Noter des demandes recues (pas encore signees).
     OpResult recordRequests(const std::vector<std::string>& paths);
+    // 1.33.0 : retirer un PC d'une licence (un PC remplace ou rendu) : une nouvelle emission, sans lui, avec la meme
+    // fin, les memes fonctionnalites et le meme nombre de PC ; ecrite dans `outPath` (a envoyer au client).
+    OpResult removeDevice(const std::string& licenseId, const std::string& deviceKey, const std::string& outPath);
 
     // ---- revoquer (une nouvelle liste : numero + 1, signee, rangee) ----
     // `deviceKey` vide : toute la licence ; `onlyThisIssue` : seulement les emissions jusqu'a celle de l'archive

@@ -424,6 +424,7 @@ struct WizardState {
     LicenseType           type{LicenseType::Temporary};
     int                   maxDevices{1};     // -1 : illisible
     int                   days{365};         // -1 : illisible
+    int                   baseDays{-1};      // 1.33.0 : une extension - les jours jusqu'a la fin de la licence etendue
     int                   grace{14};         // -1 : illisible
     bool                  endInvalid{false};
     bool                  raisedDevices{false};
@@ -1525,6 +1526,7 @@ void WizardBody::loadBase(const LicenceEntry& l) {
     st_.days = 365;
     if (l.licence.expiresAt > now())
         st_.days = static_cast<int>((l.licence.expiresAt - now() + kDaySeconds - 1) / kDaySeconds);   // la meme fin, a un jour pres
+    st_.baseDays = l.licence.expiresAt > now() ? st_.days : -1;
     st_.grace = l.licence.offlineGraceDays;
     st_.features.clear();
     for (const auto& g : l.licence.features) st_.features.insert(g.id);
@@ -1576,6 +1578,9 @@ LicenceDraft WizardBody::draft() const {
     d.type = st_.type;
     d.maxDevices = std::max(1, st_.maxDevices);
     d.durationDays = st_.type == LicenseType::Perpetual ? 0 : st_.days;
+    // 1.33.0 : une extension dont la duree n'a pas ete changee garde EXACTEMENT la fin de la licence etendue.
+    if (st_.extend && st_.baseDays > 0 && st_.days == st_.baseDays && st_.type == st_.base.type && st_.base.expiresAt > 0)
+        d.expiresAt = st_.base.expiresAt;
     d.offlineGraceDays = st_.type == LicenseType::Temporary ? std::max(0, st_.grace) : 0;
     if (customFeatures()) d.features.assign(st_.features.begin(), st_.features.end());
     d.extend = st_.extend;

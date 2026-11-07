@@ -62,6 +62,10 @@ POUR CHAQUE CLIENT
 3. Envoie ce fichier .xpglic au client, EN PIÈCE JOINTE, tel quel. Il l'importe :
    Aide > Licence... > Activer par fichier de licence.
 - Un PC de plus sur la même licence : Licences > choisis-la > Ajouter un PC...
+- Un PC REMPLACÉ (ou rendu) : Licences > choisis la licence, puis le PC dans la liste
+  de ses PC > Retirer un PC... : une nouvelle émission sans lui (même fin), à envoyer
+  au client ; puis Révoquer... ce PC, pour qu'il ne serve plus avec l'ancienne. Le
+  nouveau PC : Ajouter un PC... avec sa demande.
 - Retirer une licence ou un PC (fin de contrat, PC remplacé) : Licences > Révoquer...
   ou la page Révocations. La liste de révocation part avec les prochaines licences, ou
   Révocations > Exporter la liste... (le client l'importe comme une licence).

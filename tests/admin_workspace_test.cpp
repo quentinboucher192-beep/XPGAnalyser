@@ -143,6 +143,49 @@ int main(int argc, char** argv) {
         ws.reload();
     }
 
+    std::printf("-- remplacer un PC (1.33.0 : retirer un PC d'une licence)\n");
+    {
+        g_now += 3600;
+        ws.reload();
+        const std::string reqF = f.request("pc-f", "Poste essai F"), reqG = f.request("pc-g", "Poste essai G");
+        gui::LicenceDraft g;
+        g.licenseId = "XPG-2026-00020";
+        g.customer = "Client d'essai Gamma";
+        g.edition = "PROFESSIONAL";
+        g.maxDevices = 2;
+        g.requestPaths = {reqF, reqG};
+        check(ws.signLicence(g, U(f.root / "sortie" / "gamma.xpglic")).ok, "Gamma : 2 PC sur 2");
+        const auto* lg = ws.licence("XPG-2026-00020");
+        const auto end = lg->licence.expiresAt;
+        const std::string pcF = lg->licence.devices[0].key;
+        check(ws.revoke("XPG-2026-00020", pcF, "PC remplace (essai)", false).ok, "le PC F revoque (toutes les emissions)");
+        g_now += 3600;
+        ws.reload();
+        gui::LicenceDraft blocked = g;
+        blocked.extend = true;
+        blocked.requestPaths = {f.request("pc-h", "Poste essai H")};
+        blocked.maxDevices = 3;
+        const auto refused = ws.preview(blocked);
+        check(!refused.ok && has(refused.message, "retire ce PC"), "etendre sans retirer F : refuse, et le remede est dit (" + refused.message + ")");
+        gui::LicenceDraft swap = blocked;
+        swap.maxDevices = 2;
+        swap.dropDevices = {pcF};
+        swap.expiresAt = end;
+        const auto swapped = ws.signLicence(swap, U(f.root / "sortie" / "gamma-2.xpglic"));
+        lg = ws.licence("XPG-2026-00020");
+        check(swapped.ok && lg->licence.devices.size() == 2 && lg->licence.devices[0].key != pcF && lg->licence.expiresAt == end && has(swapped.text(), "PC retir"),
+              "F retire, H ajoute, la meme fin (" + swapped.text() + ")");
+        g_now += 3600;
+        ws.reload();
+        const std::string pcG = ws.licence("XPG-2026-00020")->licence.devices[0].key;
+        const auto rm = ws.removeDevice("XPG-2026-00020", pcG, U(f.root / "sortie" / "gamma-3.xpglic"));
+        lg = ws.licence("XPG-2026-00020");
+        check(rm.ok && lg->licence.devices.size() == 1 && lg->licence.expiresAt == end && fs::exists(f.root / "sortie" / "gamma-3.xpglic"),
+              "removeDevice : une nouvelle emission sans le PC G, la meme fin (" + rm.text() + ")");
+        check(!ws.removeDevice("XPG-2026-00020", lg->licence.devices[0].key, U(f.root / "sortie" / "x.xpglic")).ok, "le dernier PC ne se retire pas (revoquer la licence)");
+        check(!ws.removeDevice("XPG-2026-00020", pcG, U(f.root / "sortie" / "y.xpglic")).ok, "un PC qui n'est plus lie : refuse");
+    }
+
     std::printf("-- la sauvegarde de la cle (Argon2id)\n");
     {
         gui::Background bg;

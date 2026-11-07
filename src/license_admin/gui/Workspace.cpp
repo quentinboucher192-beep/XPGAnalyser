@@ -538,21 +538,26 @@ namespace {
 
 // Les parametres de la console (signer-licence --parametres), depuis le brouillon. Une fonctionnalite choisie
 // garde les limites que l'edition lui donne (max_views...) : la liste donnee remplace celle de l'edition.
-std::string paramsOf(const LicenceDraft& d, const licensing::Registry& reg) {
+std::string paramsOf(const LicenceDraft& d, const licensing::Registry& reg, const licensing::License* existing) {
     core::json::Value p = core::json::Value::object();
     p.set("license_id", d.licenseId);
     p.set("customer", d.customer);
     p.set("edition", d.edition);
     if (d.type) p.set("type", licensing::licenseTypeKey(*d.type));
     if (d.maxDevices > 0) p.set("max_devices", d.maxDevices);
-    if (d.durationDays >= 0 && !(d.type && *d.type == licensing::LicenseType::Perpetual)) p.set("duration_days", d.durationDays);
+    const bool perpetual = d.type && *d.type == licensing::LicenseType::Perpetual;
+    if (d.expiresAt > 0 && !perpetual) p.set("expires_at", licensing::isoTime(d.expiresAt));
+    else if (d.durationDays >= 0 && !perpetual) p.set("duration_days", d.durationDays);
     if (d.offlineGraceDays >= 0) p.set("offline_grace_days", d.offlineGraceDays);
     if (!d.features.empty()) {
         core::json::Value f = core::json::Value::array();
         const licensing::EditionDef* ed = reg.edition(d.edition);
         for (const auto& id : d.features) {
             const licensing::FeatureGrant* grant = nullptr;
-            if (ed)
+            if (existing)   // une licence etendue garde ses propres limites
+                for (const auto& g : existing->features)
+                    if (g.id == id) grant = &g;
+            if (!grant && ed)
                 for (const auto& g : ed->features)
                     if (g.id == id) grant = &g;
             if (!grant || grant->limits.empty()) {
@@ -577,7 +582,9 @@ OpResult Workspace::preview(const LicenceDraft& d) const {
     if (!signing_) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     LicenseInputs in;
-    in.params = paramsOf(d, registry_);
+    const LicenceEntry* old = d.extend ? licence(d.licenseId) : nullptr;
+    in.params = paramsOf(d, registry_, old ? &old->licence : nullptr);
+    in.dropDevices = d.dropDevices;
     in.registry = archivedText(kRegistryRel);
     in.revocations = archivedText(kRevocationsRel);
     std::string why;
@@ -608,7 +615,9 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier de licence ?");
     LicenseInputs in;
-    in.params = paramsOf(d, registry_);
+    const LicenceEntry* old = d.extend ? licence(d.licenseId) : nullptr;
+    in.params = paramsOf(d, registry_, old ? &old->licence : nullptr);
+    in.dropDevices = d.dropDevices;
     in.registry = archivedText(kRegistryRel);
     in.revocations = archivedText(kRevocationsRel);
     std::string why;
@@ -637,6 +646,33 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     r.details.push_back("Envoie ce fichier au client : Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.");
     r.output = outPath;
     return archiveAndNote(out, records, std::move(r));
+}
+
+OpResult Workspace::removeDevice(const std::string& licenseId, const std::string& deviceKey, const std::string& outPath) {
+    const LicenceEntry* l = licence(licenseId);
+    if (!l) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
+    const auto& lic = l->licence;
+    if (std::none_of(lic.devices.begin(), lic.devices.end(), [&](const licensing::BoundDevice& x) { return x.key == deviceKey; }))
+        return OpResult::fail("ce PC n'est pas li\xC3\xA9 \xC3\xA0 la licence " + licenseId);
+    if (lic.devices.size() < 2) return OpResult::fail("c'est le seul PC de la licence : r\xC3\xA9voque-la plut\xC3\xB4t (R\xC3\xA9voquer...)");
+    LicenceDraft d;
+    d.extend = true;
+    d.licenseId = lic.licenseId;
+    d.customer = lic.customer;
+    d.edition = lic.edition;
+    d.type = lic.type;
+    d.maxDevices = lic.maxDevices;
+    d.offlineGraceDays = lic.offlineGraceDays;
+    d.expiresAt = lic.expiresAt;
+    d.durationDays = lic.expiresAt ? -1 : 0;
+    for (const auto& g : lic.features) d.features.push_back(g.id);
+    d.dropDevices = {deviceKey};
+    OpResult r = signLicence(d, outPath);
+    if (r.ok) {
+        r.message = "PC retir\xC3\xA9 de la licence " + licenseId + " : nouvelle \xC3\xA9mission " + outPath;
+        r.details.push_back("Pour qu'il ne serve plus avec l'ancienne \xC3\xA9mission : R\xC3\xA9voquer... ce PC (\xC2\xAB toutes les \xC3\xA9missions \xC2\xBB).");
+    }
+    return r;
 }
 
 OpResult Workspace::recordRequests(const std::vector<std::string>& paths) {
