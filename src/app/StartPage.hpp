@@ -337,6 +337,8 @@ private:
     StartButton*   licence_{nullptr};     // 1.34.0
     std::string    licenceTitle_, licenceText_;
     gfx::Rect      licenceBox_{};
+    std::vector<std::string> licenceLines_;   // le titre (en gras : les licenceBold_ premieres), puis le texte
+    std::size_t    licenceBold_{0};
     std::string    autostartName_, tag_, date_;
     std::string              codeStats_;              // 1.11.7
     std::vector<std::string> codeLines_;

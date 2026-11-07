@@ -216,7 +216,7 @@ public:
         filter_->setItems({{"En attente de ta d\xC3\xA9" "cision", "attente"}, {"Toutes", ""}});
         filter_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("demandes.table"));
-        table_->setColumns({{"Date", 128.f}, {"Client", 190.f}, {"PC", 170.f}, {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 150.f}, {"\xC3\x89tat", 150.f},
+        table_->setColumns({{"Date", 150.f}, {"Client", 190.f}, {"PC", 170.f}, {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 150.f}, {"\xC3\x89tat", 150.f},
                             {"Message", 320.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Date", "Client", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "\xC3\x89tat", "Message"});

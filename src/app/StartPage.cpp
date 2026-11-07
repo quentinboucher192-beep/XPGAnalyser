@@ -1613,13 +1613,23 @@ float StartRail::placeBody(int level) {
 
     // ---- 1.34.0 : l'encart de la licence (l'evaluation : les jours qui restent) --
     if (!licenceTitle_.empty()) {
-        const float bh = level >= 2 ? 44.f : 56.f;
+        // Le texte sur toute la largeur (le titre en gras, deux lignes au plus ; le texte, sauf tres serre), puis le
+        // bouton dessous, a droite : la colonne est etroite.
+        const float room = std::max(40.f, w - 12.f - 22.f - 12.f);
+        licenceLines_ = wrap(licenceTitle_, kSmall, room, 2);
+        licenceBold_ = licenceLines_.size();
+        if (level <= 2 && !licenceText_.empty())
+            for (auto& l : wrap(licenceText_, kSmall, room, 2)) licenceLines_.push_back(std::move(l));
+        const float lh = ui::lineHeight(kSmall);
+        const float bh = std::round(10.f + lh * static_cast<float>(licenceLines_.size()) + 8.f + 26.f + 10.f);
         licenceBox_ = {x0, y, w, bh};
-        const float bw = std::min(licence_->naturalWidth(), std::max(60.f, w * 0.4f));
-        licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.y + std::round((bh - 26.f) * 0.5f), bw, 26.f});
+        const float bw = std::min(licence_->naturalWidth(), w - 24.f);
+        licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.bottom() - 10.f - 26.f, bw, 26.f});
         licence_->setVisibility(ui::Visibility::Visible);
         y += bh + (easy ? 12.f : 8.f);
     } else {
+        licenceLines_.clear();
+        licenceBold_ = 0;
         licenceBox_ = {};
         licence_->setVisibility(ui::Visibility::Collapsed);
     }
@@ -1753,13 +1763,15 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
         ctx.r.fillRoundedRect(licenceBox_, mix(c.border, c.warning, 0.55f), 8.f);
         ctx.r.fillRoundedRect(licenceBox_.inset(1.f, 1.f), mix(c.panelBg, c.warning, th.isDark() ? 0.16f : 0.12f), 7.f);
         const float left = licenceBox_.x + 12.f, tx = left + 22.f;
-        const float room = licence_->bounds().x - 10.f - tx;
+        const float room = licenceBox_.right() - 12.f - tx;
         const float lh = ctx.r.lineHeight(kSmall);
-        const bool two = !licenceText_.empty() && licenceBox_.h >= 56.f;
-        const float ty = licenceBox_.y + std::round((licenceBox_.h - (two ? 2.f : 1.f) * lh) * 0.5f);
-        ui::drawIcon(ctx.r, ui::Icon::Warning, {left, licenceBox_.y + std::round((licenceBox_.h - 14.f) * 0.5f), 14.f, 14.f}, warn);
-        drawBold(ctx.r, {tx, ty}, elide(ctx.r, licenceTitle_, kSmall, room), kSmall, warn);
-        if (two) ctx.r.drawText({tx, ty + lh}, elide(ctx.r, licenceText_, kSmall, room), kSmall, c.text);
+        float ty = licenceBox_.y + 10.f;
+        ui::drawIcon(ctx.r, ui::Icon::Warning, {left, ty + std::round((lh - 14.f) * 0.5f), 14.f, 14.f}, warn);
+        for (std::size_t i = 0; i < licenceLines_.size(); ++i) {
+            if (i < licenceBold_) drawBold(ctx.r, {tx, ty}, elide(ctx.r, licenceLines_[i], kSmall, room), kSmall, warn);
+            else ctx.r.drawText({tx, ty}, elide(ctx.r, licenceLines_[i], kSmall, room), kSmall, c.text);
+            ty += lh;
+        }
     }
 
     // ---- la zone ou glisser -------------------------------------------------------

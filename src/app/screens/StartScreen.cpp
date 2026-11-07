@@ -394,7 +394,12 @@ static void applyLicenceNotice(start::StartRail& rail) {
         return;
     }
     const std::string days = std::to_string(st.evaluationDaysLeft) + (st.evaluationDaysLeft > 1 ? " jours" : " jour");
-    rail.setLicenceNotice("\xC3\x89valuation : il te reste " + days, "Pour continuer ensuite : une licence (Licence\xE2\x80\xA6).");
+    std::string until;
+    if (st.evaluationEndsAt) {
+        const std::string d = licensing::isoDate(st.evaluationEndsAt);   // "2026-12-07"
+        if (d.size() == 10) until = " (jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) + ")";
+    }
+    rail.setLicenceNotice("\xC3\x89valuation : il te reste " + days + until, "Ensuite, il te faudra une licence : demande-la en ligne.");
 }
 
 core::Status StartupScreen::buildUi() {
