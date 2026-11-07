@@ -1047,6 +1047,10 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(licensing_evaluation_test tests/licensing_evaluation_test.cpp src/license_admin/Admin.cpp)
     xpg_target_link_libraries(licensing_evaluation_test PRIVATE xpg_licensing)
     xpg_add_test(NAME evaluation COMMAND licensing_evaluation_test ${CMAKE_CURRENT_SOURCE_DIR})
+    # 1.35.0 : le magasin et le service des licences (activation, bail et son compteur, heure signee, jeton, Decouverte), sans reseau
+    xpg_add_test_executable(licensing_activation_test tests/licensing_activation_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licensing_activation_test PRIVATE xpg_licensing)
+    xpg_add_test(NAME activation COMMAND licensing_activation_test ${CMAKE_CURRENT_SOURCE_DIR})
     # 1.30.0 : l'ecran Licence et les verrous des entrees (app/Licence*), sans ecran, avec une cle d'editeur
     # d'essai creee pour l'occasion (Admin.cpp) ; il lit tests/fixtures/licences/registre-exemple.json.
     xpg_add_test_executable(licence_ui_test tests/licence_ui_test.cpp src/license_admin/Admin.cpp)

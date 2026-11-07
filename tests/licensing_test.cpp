@@ -13,7 +13,7 @@
 //    - chaque refus : signature fausse, cle inconnue, autre PC, expiree, en grace,
 //      au-dela de la grace, revoquee, registre plus ancien, liste plus ancienne,
 //      horloge reculee, fichier tronque, champ en double, champ inconnu, edition
-//      inconnue, licence flottante, service en ligne, emission plus ancienne,
+//      inconnue, licence flottante liee a un PC, en ligne et liee (1.35.0), emission plus ancienne,
 //      demande modifiee, trop de PC ;
 //    - les fonctionnalites par edition (la matrice de la maquette), FREE sans
 //      licence, les limites, l'API (isFeatureEnabled, getEdition...) ;
@@ -583,18 +583,20 @@ void testRefusals() {
     install(pc1, signRaw(lic::DocKind::License, feat, *g_key));
     st = s1.evaluate();
     check(st.status == LicenseStatus::Invalid && has(st.detail, "ai_telepathy"), "fonctionnalite inconnue du registre : Invalide");
-    // Flottante, service en ligne : prevus dans le format, refuses en version 1.
+    // 1.35.0 : la flottante n'existe qu'en ligne (service donne, aucun PC lie) ; une licence en ligne qui lie un PC
+    // est refusee (un melange). Les licences en ligne elles-memes : tests/licensing_activation_test.cpp.
     std::string fl = doc;
     fl.replace(fl.find("\"temporary\""), 11, "\"floating\"");
     install(pc1, signRaw(lic::DocKind::License, fl, *g_key));
     st = s1.evaluate();
-    check(st.status == LicenseStatus::Invalid && has(st.detail, "flottante"), "licence flottante : lue, puis refusee (pas en version 1)");
-    check(signLicense(params("ENTERPRISE", "\"type\": \"floating\""), {req1}, &why).empty() && has(why, "flottantes"), "l'Admin refuse une licence flottante");
+    check(st.status == LicenseStatus::Invalid && has(st.detail, "flottante"), "licence flottante liee a un PC, sans service : Invalide (" + st.detail + ")");
+    check(signLicense(params("ENTERPRISE", "\"type\": \"floating\""), {req1}, &why).empty() && has(why, "flottante"), "l'Admin refuse une licence flottante liee a un PC");
     std::string sv = doc;
     sv.replace(sv.find("\"service\": null"), 15, "\"service\": \"https://licences.example\"");
     install(pc1, signRaw(lic::DocKind::License, sv, *g_key));
     st = s1.evaluate();
-    check(st.status == LicenseStatus::Invalid && has(st.detail, "service en ligne"), "licence liee a un service en ligne : refusee (pas en version 1)");
+    check(st.status == LicenseStatus::Invalid && has(st.detail, "en ligne") && has(st.detail, "ne lie aucun PC"),
+          "licence en ligne (service) qui lie aussi un PC : Invalide, un melange (" + st.detail + ")");
     // Plus de PC lies que permis.
     std::string many = doc;
     many.replace(many.find("\"max_devices\": 2"), 16, "\"max_devices\": 0");

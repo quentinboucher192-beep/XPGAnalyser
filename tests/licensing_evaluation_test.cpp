@@ -1,5 +1,6 @@
 // =============================================================================
 //  tests/licensing_evaluation_test.cpp - 1.34.0 : la periode d'evaluation de ce PC
+//  (1.35.0 : affichee << Decouverte >> ; l'etat Evaluation et la cle "evaluation" restent)
 // -----------------------------------------------------------------------------
 //  Tout se passe dans un dossier temporaire, avec une cle d'editeur d'ESSAI creee
 //  pour l'occasion, le registre d'exemple (tests/fixtures/licences : son edition
@@ -186,8 +187,8 @@ void testFirstLaunch() {
     lic::LicenseStore st(optionsFor(pc));
     check(st.evaluationPeriod() && st.configured(), "l'evaluation est donnee, les licences sont actives");
     auto s = st.evaluate();
-    check(s.status == LicenseStatus::Evaluation && std::string(lic::statusKey(s.status)) == "evaluation" && lic::statusLabel(s.status) == "\xC3\x89valuation",
-          "Evaluation (cle << evaluation >>, etiquette << \xC3\x89valuation >>) : " + lic::statusLabel(s.status));
+    check(s.status == LicenseStatus::Evaluation && std::string(lic::statusKey(s.status)) == "evaluation" && lic::statusLabel(s.status) == "D\xC3\xA9" "couverte",
+          "Evaluation (cle << evaluation >>, etiquette 1.35.0 << D\xC3\xA9" "couverte >>) : " + lic::statusLabel(s.status));
     check(sameEvaluation(s, T0, 30) && s.evaluationEdition == "EVALUATION" && s.editionLabel == "EVALUATION",
           "commencee maintenant, 30 jours, l'edition EVALUATION (" + std::to_string(s.evaluationDaysLeft) + " jours)");
     check(s.hasFeature("ai_generation") && s.hasFeature("api_compiler") && s.hasFeature("professional_tools") && s.hasFeature("hmi_export")
@@ -195,7 +196,7 @@ void testFirstLaunch() {
           "les fonctionnalites d'EVALUATION (18) ; ni les modeles avances, ni le multi-utilisateur");
     check(s.maxDevices == 1 && s.type == lic::LicenseType::Evaluation && s.expirationDate() == "2026-12-07" && s.licenseId.empty(),
           "maxDevices de l'edition (1), type evaluation, fin 2026-12-07, pas d'identifiant de licence");
-    check(s.message == "\xC3\x89valuation : il te reste 30 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence\xE2\x80\xA6).",
+    check(s.message == "D\xC3\xA9" "couverte : il te reste 30 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence\xE2\x80\xA6).",
           "la phrase : " + s.message);
     check(lic::licenseFeaturesApply(s.status) && lic::statusIsNormal(s.status) && !lic::allFeaturesOpen(s.status), "Evaluation : fonctionnalites de l'edition, sans anomalie");
     std::error_code ec;
@@ -203,7 +204,7 @@ void testFirstLaunch() {
           "etat.bin et evaluation.bin ecrits");
     auto h = st.history();
     check(h.size() == 2 && h[0].kind == "etat" && h[0].ok && h[0].text == s.message && h[1].kind == "evaluation" && h[1].ok
-              && h[1].text == "\xC3\x89valuation commenc\xC3\xA9" "e : 30 jours, jusqu'au 07/12/2026." && h[1].at == T0,
+              && h[1].text == "D\xC3\xA9" "couverte commenc\xC3\xA9" "e : 30 jours, jusqu'au 07/12/2026." && h[1].at == T0,
           "historique : << Evaluation commencee : 30 jours, jusqu'au 07/12/2026. >>, puis l'etat (sans << Evaluation : >> repete) (" + std::to_string(h.size()) + ")");
     const auto etat = readProtected(pc / lic::LicenseStore::kStateFile);
     check(etat.str("format") == "xpg-etat-licences" && etat.integer("version", 0) == 1 && etat.str("evaluation_started") == "2026-11-07T10:00:00Z"
@@ -238,7 +239,7 @@ void testDaysAndCopies() {
     s = st.evaluate();
     check(sameEvaluation(s, T0, 18) && readProtected(etat).str("evaluation_started") == "2026-11-07T10:00:00Z", "etat.bin efface : la meme evaluation ; etat.bin refait avec son debut");
     bool controle = false;
-    for (const auto& e : st.history()) controle = controle || (e.kind == "controle" && has(e.text, "pendant l'\xC3\xA9valuation"));
+    for (const auto& e : st.history()) controle = controle || (e.kind == "controle" && has(e.text, "pendant la D\xC3\xA9" "couverte"));
     check(controle && has(s.detail, "recr\xC3\xA9\xC3\xA9"), "etat.bin efface : << Etat recree ... pendant l'evaluation >> dans l'historique, detail le dit");
     // evaluation.bin efface.
     fs::remove(copy, ec);
@@ -305,12 +306,12 @@ void testDaysAndCopies() {
               && s.maxDevices == 1 && s.expiresAt == 0,
           "jour 31 : l'edition FREE (l'editeur, le poste ; ni la generation IA, ni la compilation)");
     check(s.message
-              == "Ton \xC3\xA9valuation de 30 jours est finie depuis le 07/12/2026 : demande une licence (menu Licence\xE2\x80\xA6). En attendant, l'\xC3\xA9"
+              == "Ta D\xC3\xA9" "couverte de 30 jours est finie depuis le 07/12/2026 : demande une licence (menu Licence\xE2\x80\xA6). En attendant, l'\xC3\xA9"
                  "dition FREE s'applique.",
           "la phrase : " + s.message);
     {
         const auto h = st.history();
-        check(!h.empty() && h[0].kind == "etat" && h[0].ok && has(h[0].text, "\xC3\x89valuation \xE2\x86\x92 Absente : Ton \xC3\xA9valuation de 30 jours"),
+        check(!h.empty() && h[0].kind == "etat" && h[0].ok && has(h[0].text, "D\xC3\xA9" "couverte \xE2\x86\x92 Absente : Ta D\xC3\xA9" "couverte de 30 jours"),
               "historique : << Evaluation -> Absente : Ton evaluation de 30 jours est finie... >> (" + (h.empty() ? std::string() : h[0].text) + ")");
     }
     // Finie : effacer une copie, ou deux, ne la fait pas recommencer.
@@ -395,7 +396,7 @@ void testLicense() {
           "avec une licence : l'evaluation ne compte plus (ses champs vides)");
     {
         const auto h = st.history();
-        check(!h.empty() && h[0].kind == "etat" && has(h[0].text, "\xC3\x89valuation \xE2\x86\x92 Valide"), "historique : << Evaluation -> Valide >>");
+        check(!h.empty() && h[0].kind == "etat" && has(h[0].text, "D\xC3\xA9" "couverte \xE2\x86\x92 Valide"), "historique : << Evaluation -> Valide >>");
     }
     std::error_code ec;
     check(readProtected(pc / lic::LicenseStore::kStateFile).str("evaluation_started") == "2026-11-07T10:00:00Z", "etat.bin garde le debut de l'evaluation");
@@ -487,7 +488,7 @@ void testNotApplicable() {
     {
         const auto h = sr.history();
         // le plus recent d'abord : l'etat (apres l'import), l'import, le debut de l'evaluation, l'etat d'avant
-        check(h.size() == 4 && h[0].kind == "etat" && has(h[0].text, "Absente \xE2\x86\x92 \xC3\x89valuation : il te reste 30 jours") && h[1].kind == "import"
+        check(h.size() == 4 && h[0].kind == "etat" && has(h[0].text, "Absente \xE2\x86\x92 D\xC3\xA9" "couverte : il te reste 30 jours") && h[1].kind == "import"
                   && h[2].kind == "evaluation" && h[3].kind == "etat",
               "historique : l'etat de depart, l'evaluation commencee, l'import, << Absente -> Evaluation >> (" + std::to_string(h.size()) + ")");
     }
@@ -579,11 +580,11 @@ void testApi() {
     lic::initialize(optionsFor(pc));
     check(lic::getLicenseStatus() == LicenseStatus::Evaluation && lic::getEdition() == "EVALUATION" && lic::isFeatureEnabled("ai_generation")
               && !lic::isFeatureEnabled("multi_user") && lic::getMaxDevices() == 1 && lic::getExpirationDate() == "2026-12-07" && lic::getLicenseId().empty()
-              && lic::getStatusLabel() == "\xC3\x89valuation",
+              && lic::getStatusLabel() == "D\xC3\xA9" "couverte",
           "API : Evaluation, EVALUATION, ses fonctionnalites, maxDevices 1, la fin, pas de licence");
     check(has(lic::getStatusMessage(), "il te reste 30 jours"), "API : la phrase (" + lic::getStatusMessage() + ")");
     const std::string locked = lic::lockedMessage("multi_user");
-    check(has(locked, "n'est pas incluse dans l'\xC3\xA9valuation (EVALUATION)") && has(locked, "Enregistrer") && !has(locked, "ta licence"),
+    check(has(locked, "n'est pas incluse dans la D\xC3\xA9" "couverte (EVALUATION)") && has(locked, "Enregistrer") && !has(locked, "ta licence"),
           "API : la phrase d'une entree fermee pendant l'evaluation (" + locked + ")");
     const auto st = lic::getLicenseState();
     check(st.evaluationStartedAt == T0 && st.evaluationDaysLeft == 30 && st.evaluationEdition == "EVALUATION", "API : getLicenseState porte l'evaluation");

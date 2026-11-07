@@ -46,6 +46,21 @@
 //  (historique.jsonl), getLicenseFolder, thisDeviceFingerprint. Comme le reste :
 //  sous verrou, sans relire de fichier (ce que la derniere evaluation a lu ;
 //  l'historique est relu a chaque initialize, refresh, import et demande).
+//
+//  1.35.0 - LE SERVICE DES LICENCES (docs/SERVICE-LICENCES.md) : l'application
+//  (app/, sur un fil de travail) parle au service ; ce module ne fait AUCUN
+//  reseau. Il signe les appels avec la cle de ce PC (deviceSignServiceMessage),
+//  installe ce que le service a signe apres l'avoir verifie (installActivation,
+//  noteServiceTime, installLease, installTrialRecord), efface ce que le service
+//  ne renouvelle plus (dropActivation, dropLease), donne l'empreinte de la
+//  machine (thisMachineHash) et le code laisse par l'installateur
+//  (pendingActivationCode). Chaque appel qui change quelque chose revalue l'etat
+//  (getLicenseState : online, activationUntil, activationWarning, floating,
+//  leaseUntil, lastServiceSync, trustedNow). Tout est sous le verrou du module,
+//  comme le reste. Avant initialize() : refuse (faux, ou un rapport refuse),
+//  sauf thisMachineHash et pendingActivationCode (le dossier par defaut).
+//  L'evaluation de ce PC s'appelle maintenant << Decouverte >> (l'etat
+//  LicenseStatus::Evaluation, la cle "evaluation" gardes).
 // =============================================================================
 #pragma once
 
@@ -157,6 +172,37 @@ bool deviceKeyHex(std::string& hex, std::string* why);
 // Ajouter un evenement a l'historique de ce PC (kind "passerelle" : une demande envoyee, annulee, une licence
 // recue par la passerelle).
 bool addHistoryEvent(const HistoryEvent& e, std::string* why);
+
+// ---- 1.35.0 : le service des licences (voir plus haut et Store.hpp) ----
+// Signer le message d'un appel au service (service::requestMessage : il commence par "XPG-SERVICE-1\n", sinon refuse)
+// avec la cle de ce PC, creee si besoin (l'etat est alors revalue : son empreinte). `pub` : la cle publique de ce PC.
+bool deviceSignServiceMessage(std::string_view message, crypto::Signature& sig, crypto::PublicKey& pub, std::string* why);
+// La reponse de /v1/activer ou /v1/renouveler : la licence en ligne (bloc << licence >>), l'activation de ce PC (bloc
+// << activation >>) et le certificat du service (bloc << service >>). licence.xpglic et activation.xpgact ne sont
+// ecrits que si TOUT se verifie pour CE PC ; sinon `why` dit pourquoi, en francais (<< cette activation est pour un
+// autre PC >>, << le certificat du service a expire le ... >>). L'etat est revalue (rapport et module).
+[[nodiscard]] ImportReport installActivation(std::string_view licenceText, std::string_view activationText, std::string_view certText);
+// Le service a dit que l'activation de ce PC pour `licenseId` est finie (liberee, retiree, revoquee) : activation.xpgact
+// (et le jeton) effaces, et licence.xpglic si c'est cette licence en ligne ; l'etat est revalue. Rien pour cette
+// licence : vrai.
+bool dropActivation(std::string_view licenseId, std::string* why);
+// L'heure signee du service (bloc << heure >> de /v1/heure?n=<expectedNonce>) et le certificat : plus recente que la
+// derniere gardee, elle recale le compteur du bail ; plus ancienne : ignoree (vrai). L'etat est revalue.
+bool noteServiceTime(std::string_view timeText, std::string_view expectedNonce, std::string_view certText, std::string* why);
+// Le jeton d'une licence flottante (bloc << jeton >> de /v1/flottante/jeton) et le certificat ; dropLease l'efface
+// (apres /v1/flottante/rendre, ou a la fermeture). L'etat est revalue.
+bool installLease(std::string_view leaseText, std::string_view certText, std::string* why);
+void dropLease();
+// La Decouverte de cette machine selon le service (bloc << decouverte >> de /v1/decouverte) et le certificat : le
+// debut le plus ancien gagne. L'etat est revalue.
+bool installTrialRecord(std::string_view trialText, std::string_view certText, std::string* why);
+// L'empreinte de cette machine pour /v1/decouverte (32 hexadecimaux ; vide : identifiant de l'installation illisible).
+[[nodiscard]] std::string thisMachineHash();
+// Le code d'activation laisse par l'installateur (code-activation.txt du dossier des licences, sa premiere ligne,
+// tel quel : a relire avec service::normalizeCode) ; "" s'il n'y en a pas. C'est un SECRET : jamais dans un journal,
+// un historique, un message. clearPendingActivationCode l'efface une fois l'activation faite (absent : vrai).
+[[nodiscard]] std::string pendingActivationCode();
+bool clearPendingActivationCode(std::string* why);
 
 // Pour les essais : oublier la configuration (retour a << avant initialize() >>).
 void resetForTests();

@@ -32,8 +32,10 @@
 //    registre    signe par une cle de l'editeur, pas plus ancien que le plus
 //                recent deja vu (sinon : remplace par un plus ancien -> Invalide) ;
 //    licence     absente -> Absente ; tronquee, signature fausse, champ en double,
-//                inconnu, type flottant ou service en ligne (pas en version 1),
-//                edition ou fonctionnalite inconnue du registre -> Invalide ;
+//                inconnu (1.35.0 : en ligne ET liee a un PC, flottante sans
+//                service), edition ou fonctionnalite inconnue du registre ->
+//                Invalide ; 1.35.0 : une licence EN LIGNE -> son activation (voir
+//                plus bas : Bail expire, Autre PC, Invalide) ; sinon
 //                pas liee a la cle de ce PC, ou (1.32.0) liee a une autre
 //                installation de Windows (l'empreinte du poste) -> Autre PC ;
 //                1.32.0 : une emission plus ancienne que la plus recente deja
@@ -82,10 +84,58 @@
 //  lancement, et `detail` dit qu'elle n'est pas gardee d'un lancement a l'autre.
 //  Honnetement : quelqu'un qui efface TOUTES les copies (et l'historique)
 //  recommence ; ceci arrete la reinstallation et l'effacement d'un fichier.
+//
+//  1.35.0 - LE SERVICE DES LICENCES (Service.hpp, docs/SERVICE-LICENCES.md). Le
+//  magasin ne fait AUCUN reseau : il verifie et garde ce que l'application lui
+//  donne (app/ : le client du service). Ses fichiers de plus :
+//      activation.xpgact     l'activation de CE PC (bloc << activation >> signe
+//                            par le service) et le certificat du service (bloc
+//                            << service >> signe par l'editeur)
+//      jeton.xpgjet          le jeton d'une licence flottante (15 min) et le
+//                            certificat
+//      decouverte.xpgdec     la Decouverte de cette machine selon le service
+//                            (bloc << decouverte >>) et le certificat
+//      horloge.bin           une copie du compteur du bail (protegee comme
+//                            etat.bin ; sous Windows, et pour le dossier par
+//                            defaut, aussi la valeur << horloge >> de HKCU)
+//      code-activation.txt   un code laisse par l'installateur (lu, puis efface
+//                            par l'application ; jamais ecrit dans un journal)
+//  LA LICENCE EN LIGNE (service = l'adresse du service, aucun PC lie) ne vaut
+//  sur ce PC qu'avec une activation verifiee : un certificat signe par une cle
+//  de l'editeur que ce programme croit, pas expire a l'heure retenue, qui donne
+//  le droit << activation >> ; le bloc signe par la cle qu'il nomme ; la meme
+//  licence et la meme emission ; la cle de CE PC ; l'empreinte du poste (si
+//  donnee) ; le bail (jusqu_a) pas fini a l'heure retenue. Sinon : Bail expire
+//  (le bail fini, le certificat expire, l'activation absente), Autre PC
+//  (l'activation d'un autre PC), Invalide (signature, licence). Puis les etats
+//  d'avant (revocation, horloge, fin, grace). Une licence FLOTTANTE demande en
+//  plus un jeton (droit << flottante >>) pour cette licence et ce PC, pas fini :
+//  sinon Flottante : aucun poste. Les licences liees par l'editeur (service
+//  vide) marchent exactement comme avant.
+//  LE COMPTEUR DU BAIL (etat.bin, horloge.bin, HKCU) : la derniere heure signee
+//  recue du service (noteServiceTime), le temps ecoule depuis, et l'horloge du
+//  PC la plus avancee deja comptee. Le temps ecoule ne fait qu'avancer : les
+//  ecarts positifs de l'horloge du PC d'une evaluation a l'autre et, dans un
+//  meme lancement, le temps mesure par une horloge monotone (le plus grand des
+//  deux). L'HEURE RETENUE = max(horloge du PC, derniere heure signee + temps
+//  ecoule) : le bail, le certificat et l'avertissement des 7 jours s'y
+//  comparent ; reculer l'horloge ne prolonge jamais un bail. Une heure signee
+//  plus recente remet le temps ecoule a zero (elle recale tout, meme vers le
+//  passe : une horloge avancee par erreur) ; une plus ancienne est ignoree. Le
+//  jeton (15 min) se compte a l'heure du service (derniere heure signee + temps
+//  ecoule) : une horloge du PC en avance ne le perime pas d'avance. Copies : la
+//  meilleure gagne (l'heure signee la plus recente, puis le plus de temps
+//  ecoule) ; une copie en retard est remise.
+//  LA DECOUVERTE (l'evaluation de la 1.34, renommee pour l'utilisateur ; l'etat
+//  et les cles gardent le nom Evaluation / "evaluation") : decouverte.xpgdec
+//  est une copie de plus de son debut - pour cette machine (machineHash) et
+//  cette cle de PC ; le debut LE PLUS ANCIEN gagne (jamais prolongee) ; la duree
+//  reste celle de l'edition d'evaluation du registre.
 // =============================================================================
 #pragma once
 
 #include "Documents.hpp"
+#include "Service.hpp"
 #include "SignedFile.hpp"
 
 #include <cstddef>
@@ -109,11 +159,17 @@ enum class LicenseStatus : std::uint8_t {
     ClockRolledBack,   // Horloge reculee
     NotConfigured,     // 1.30.0 - Non activees : ce programme ne contient aucune cle de l'editeur ; TOUT est ouvert
     Evaluation,        // 1.34.0 - Evaluation : pas de licence ; la periode d'evaluation de CE PC court (depuis le premier
-                       // lancement) - les fonctionnalites de l'edition d'evaluation du registre, le temps qu'elle dure
+                       // lancement) - les fonctionnalites de l'edition d'evaluation du registre, le temps qu'elle dure.
+                       // 1.35.0 : affichee << Decouverte >> (la cle reste "evaluation")
+    LeaseExpired,      // 1.35.0 - Bail expire : la licence en ligne n'a plus d'activation valable sur ce PC (le bail fini,
+                       // le certificat du service expire, l'activation absente) - connecter ce PC a Internet ; FREE
+    NoFloatingSeat,    // 1.35.0 - Flottante : aucun poste - une licence flottante sans jeton valable ; FREE
 };
-// "valid", "grace"... (stable : pour un journal, un essai).
+inline constexpr LicenseStatus kLastLicenseStatus = LicenseStatus::NoFloatingSeat;
+// "valid", "grace"... (stable : pour un journal, un essai) ; 1.35.0 : "lease-expired", "no-floating-seat".
 [[nodiscard]] const char* statusKey(LicenseStatus) noexcept;
-// "Valide", "Gr\xC3\xA2" "ce"... (l'etiquette affichee).
+// "Valide", "Gr\xC3\xA2" "ce"... (l'etiquette affichee) ; 1.35.0 : Evaluation -> "D\xC3\xA9" "couverte",
+// "Bail expir\xC3\xA9", "Flottante : aucun poste".
 [[nodiscard]] std::string statusLabel(LicenseStatus);
 // Les fonctionnalites de la licence sont-elles ouvertes dans cet etat ?
 // 1.34.0 : et pendant l'evaluation (celles de l'edition d'evaluation).
@@ -149,7 +205,8 @@ struct TrustedKey {
 // 1.30.0 : un evenement de l'historique de ce PC (historique.jsonl).
 struct HistoryEvent {
     std::int64_t at{0};    // l'heure (secondes UTC)
-    std::string  kind;     // "import", "demande", "etat" ; 1.34.0 : "evaluation" (son debut), "passerelle"
+    std::string  kind;     // "import", "demande", "etat" ; 1.34.0 : "evaluation" (son debut), "passerelle" ;
+                           // 1.35.0 : "service" (une activation retiree, une Decouverte enregistree...)
     bool         ok{false};   // import accepte, demande ecrite ; etat : sans anomalie (statusIsNormal)
     std::string  text;     // une phrase (en francais) : ce qui a ete importe, la raison du refus...
 };
@@ -185,6 +242,15 @@ struct LicenseState {
     int           evaluationDaysLeft{0};  // Evaluation : les jours qui restent (arrondis au jour superieur)
     bool          evaluationOver{false};  // elle a pris fin (l'etat est alors Absente : l'edition sans licence)
     std::string   evaluationEdition;      // l'edition d'evaluation du registre ("EVALUATION")
+    // 1.35.0 - LE SERVICE DES LICENCES (une licence en ligne ; voir plus haut)
+    bool          online{false};          // la licence installee est une licence en ligne (activee par le service)
+    Seconds       activationUntil{0};     // la fin du bail de l'activation de ce PC (0 : pas d'activation valable)
+    int           activationDaysLeft{0};  // les jours de bail qui restent (a l'heure retenue, arrondis au jour superieur)
+    bool          activationWarning{false};   // 7 jours ou moins : << connecte ce PC a Internet avant le ... >>
+    bool          floating{false};        // une licence flottante (en ligne)
+    Seconds       leaseUntil{0};          // la fin du jeton de la licence flottante (0 : pas de jeton valable)
+    Seconds       lastServiceSync{0};     // la derniere heure signee recue du service (0 : jamais)
+    Seconds       trustedNow{0};          // l'heure retenue : max(horloge du PC, derniere heure signee + temps ecoule)
 
     // Ouverte ? (NotConfigured : toujours vrai, rien n'est verrouille.)
     [[nodiscard]] bool hasFeature(std::string_view id) const noexcept;
@@ -211,6 +277,9 @@ struct StoreOptions {
     // cles COMPILEES (trustedKeys vide et compiledKeys : le Studio livre), NON quand l'appelant donne ses propres
     // cles (les essais d'avant la 1.34.0, les outils) ; un essai de l'evaluation la met a vrai.
     std::optional<bool>            evaluationPeriod;
+    // 1.35.0 : une horloge MONOTONE en secondes (le temps ou le programme tourne, pour le compteur du bail) ; vide :
+    // std::chrono::steady_clock. Les essais la donnent (et l'avancent a la main).
+    std::function<Seconds()>       monotonicClock;
 };
 
 // Ce qu'a donne l'import d'un fichier.
@@ -235,6 +304,11 @@ public:
     static constexpr const char* kStateFile = "etat.bin";
     static constexpr const char* kHistoryFile = "historique.jsonl";
     static constexpr const char* kEvaluationFile = "evaluation.bin";   // 1.34.0 : une copie du debut de l'evaluation
+    static constexpr const char* kActivationFile = "activation.xpgact";   // 1.35.0 : l'activation de ce PC + le certificat
+    static constexpr const char* kLeaseFile = "jeton.xpgjet";             // 1.35.0 : le jeton flottant + le certificat
+    static constexpr const char* kTrialFile = "decouverte.xpgdec";        // 1.35.0 : la Decouverte selon le service + le certificat
+    static constexpr const char* kClockFile = "horloge.bin";              // 1.35.0 : une copie du compteur du bail
+    static constexpr const char* kPendingCodeFile = "code-activation.txt";   // 1.35.0 : le code laisse par l'installateur
     static constexpr std::size_t kHistoryMaxLines = 500;
 
     [[nodiscard]] const std::string& folder() const noexcept { return opt_.folder; }
@@ -293,18 +367,54 @@ public:
     // Les cles de l'editeur que ce PC croit (pour verifier ce que publie la passerelle).
     [[nodiscard]] const std::vector<TrustedKey>& trustedKeys() const noexcept { return opt_.trustedKeys; }
 
+    // ---- 1.35.0 : le service des licences (aucun reseau ici : l'application appelle, le magasin verifie et garde) ----
+    // Signer le message d'un appel au service (Service.hpp : requestMessage) avec la cle de ce PC, creee si besoin.
+    // Refuse tout message qui ne commence pas par "XPG-SERVICE-1\n". `created` : la cle vient d'etre creee.
+    bool deviceSignServiceMessage(std::string_view message, crypto::Signature& sig, crypto::PublicKey& pub, bool* created, std::string* why);
+    // Installer la licence en ligne et l'activation de CE PC (la reponse de /v1/activer ou /v1/renouveler) : ecrit
+    // licence.xpglic et activation.xpgact seulement si tout se verifie pour ce PC (voir plus haut) et si le bail court
+    // encore a l'heure retenue. Un renouvellement (meme licence, meme emission, meme numero) ne note rien dans
+    // l'historique, sauf un changement d'etat. L'etat est revalue (dans le rapport).
+    [[nodiscard]] ImportReport installActivation(std::string_view licenceText, std::string_view activationText, std::string_view certText);
+    // Le service a dit que l'activation de ce PC pour cette licence est finie (liberee, retiree, revoquee) : efface
+    // activation.xpgact (et jeton.xpgjet) s'ils sont pour cette licence, et licence.xpglic si c'est cette licence EN
+    // LIGNE. Rien pour cette licence : vrai (rien a faire). Faux : un fichier ne s'efface pas (`why`).
+    bool dropActivation(std::string_view licenseId, std::string* why);
+    // Une heure signee par le service (bloc << heure >>, droit << heure >>) qui repond au nonce `expectedNonce` :
+    // plus recente que celle gardee, elle remet le compteur (temps ecoule = 0) ; pas plus recente : ignoree (vrai).
+    bool noteServiceTime(std::string_view timeText, std::string_view expectedNonce, std::string_view certText, std::string* why);
+    // Le jeton d'une licence flottante (bloc << jeton >>, droit << flottante >>) pour la licence installee et ce PC,
+    // pas fini : ecrit jeton.xpgjet. dropLease : l'efface (le poste est rendu).
+    bool installLease(std::string_view leaseText, std::string_view certText, std::string* why);
+    void dropLease();
+    // La Decouverte de cette machine selon le service (bloc << decouverte >>, droit << decouverte >>) pour cette
+    // machine et ce PC : ecrit decouverte.xpgdec (un debut plus ancien deja garde reste).
+    bool installTrialRecord(std::string_view trialText, std::string_view certText, std::string* why);
+    // L'empreinte de cette machine pour le service (service::machineHash de l'identifiant de l'installation).
+    [[nodiscard]] std::string thisMachineHash() const;
+    // Le code laisse par l'installateur (code-activation.txt, sa premiere ligne non vide, sans espaces autour) ;
+    // "" s'il n'y en a pas. Jamais ecrit dans l'historique. clearPendingActivationCode : l'efface (absent : vrai).
+    [[nodiscard]] std::string pendingActivationCode() const;
+    bool clearPendingActivationCode(std::string* why);
+
 private:
     struct Loaded;
     [[nodiscard]] Seconds now() const;
     [[nodiscard]] const TrustedKey* trusted(std::string_view keyId) const noexcept;
     bool verifyTrusted(const SignedBlock& b, std::string* why) const;
     LicenseState judge(const Loaded& in, Seconds now) const;
+    struct Counter;       // 1.35.0 : le compteur du bail (Store.cpp)
+    struct CounterRead;
+    [[nodiscard]] CounterRead readCounter(Seconds now, const Counter& fromState) const;
+    [[nodiscard]] Seconds monotonicNow() const;
+    [[nodiscard]] std::vector<crypto::PublicKey> publisherKeys() const;
+    ImportReport activationChecked(std::string_view licenceText, std::string_view activationText, std::string_view certText, bool& quiet);
     ImportReport importChecked(std::string_view bytes);
     bool writeRequestFile(const std::string& path, const std::string& deviceName, const std::string& licenseId, const std::string& software,
                           std::string* why);
     bool buildRequest(const std::string& deviceName, const std::string& licenseId, const std::string& software, std::string& blockText,
                       ActivationRequest* parsed, std::string* why);
-    ImportReport finishImport(ImportReport rep);
+    ImportReport finishImport(ImportReport rep, bool logImport = true);
     std::string noteState(const LicenseState& s);
     [[nodiscard]] std::string lastLoggedStatus() const;
     [[nodiscard]] std::string notWritable(const std::string& why) const;
@@ -321,6 +431,13 @@ private:
     std::string             pendingStatus_;
     bool                    evaluation_{false};   // 1.34.0 : la periode d'evaluation est donnee
     Seconds                 evaluationMemo_{0};   // 1.34.0 : un debut qu'aucune copie n'a pu garder (ce lancement)
+    // 1.35.0 : le compteur du bail tel que ce lancement l'a laisse (une copie de plus, en memoire), et l'horloge
+    // monotone a ce moment (le temps ou le programme tourne compte d'une evaluation a l'autre).
+    Seconds                 memoServiceTime_{0};
+    Seconds                 memoElapsed_{0};
+    Seconds                 memoWall_{0};
+    Seconds                 memoSteady_{0};
+    bool                    memoSet_{false};
 };
 
 } // namespace licensing

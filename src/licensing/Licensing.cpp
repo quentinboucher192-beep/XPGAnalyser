@@ -164,8 +164,8 @@ std::string lockedMessage(std::string_view featureId) {
     const LicenseState s = getLicenseState();
     std::string text = "Cette fonctionnalit\xC3\xA9 (" + std::string(featureId) + ") ";
     if (allFeaturesOpen(s.status)) return text + "est ouverte : les licences ne sont pas encore actives dans ce programme.";
-    if (s.status == LicenseStatus::Evaluation)   // 1.34.0 : pas de licence, l'edition d'evaluation
-        text += "n'est pas incluse dans l'\xC3\xA9valuation (" + (s.editionLabel.empty() ? s.edition : s.editionLabel)
+    if (s.status == LicenseStatus::Evaluation)   // 1.34.0 : pas de licence, l'edition d'evaluation (1.35.0 : la Decouverte)
+        text += "n'est pas incluse dans la D\xC3\xA9" "couverte (" + (s.editionLabel.empty() ? s.edition : s.editionLabel)
                 + ") : demande une licence qui la contient (menu Licence\xE2\x80\xA6).";
     else if (licenseFeaturesApply(s.status))
         text += "n'est pas incluse dans ta licence " + (s.editionLabel.empty() ? s.edition : s.editionLabel) + ".";
@@ -319,6 +319,116 @@ std::string thisDeviceFingerprint() {
     Module& m = module();
     std::lock_guard<std::mutex> lock(m.mutex);
     return m.state.deviceFingerprint;
+}
+
+// ---- 1.35.0 : le service des licences ----
+namespace {
+constexpr const char* kNotInitialized = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+
+bool notInitialized(std::string* why) {
+    if (why) *why = kNotInitialized;
+    return false;
+}
+
+// Apres un appel qui a change quelque chose : l'etat revalue, l'ecran Licence avec (sous le verrou).
+void reevaluate(Module& m) {
+    m.state = m.store->evaluate();
+    capture(m);
+}
+} // namespace
+
+bool deviceSignServiceMessage(std::string_view message, crypto::Signature& sig, crypto::PublicKey& pub, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    bool created = false;
+    const bool ok = m.store->deviceSignServiceMessage(message, sig, pub, &created, why);
+    if (ok && created) reevaluate(m);   // l'empreinte de la cle, creee a l'instant
+    return ok;
+}
+
+ImportReport installActivation(std::string_view licenceText, std::string_view activationText, std::string_view certText) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        ImportReport r;
+        r.why = "Les licences ne sont pas encore configur\xC3\xA9" "es (initialize).";
+        return r;
+    }
+    ImportReport r = m.store->installActivation(licenceText, activationText, certText);
+    m.state = r.state;
+    capture(m);
+    return r;
+}
+
+bool dropActivation(std::string_view licenseId, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    const bool ok = m.store->dropActivation(licenseId, why);
+    reevaluate(m);
+    return ok;
+}
+
+bool noteServiceTime(std::string_view timeText, std::string_view expectedNonce, std::string_view certText, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    const bool ok = m.store->noteServiceTime(timeText, expectedNonce, certText, why);
+    if (ok) reevaluate(m);
+    return ok;
+}
+
+bool installLease(std::string_view leaseText, std::string_view certText, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    const bool ok = m.store->installLease(leaseText, certText, why);
+    if (ok) reevaluate(m);
+    return ok;
+}
+
+void dropLease() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return;
+    m.store->dropLease();
+    reevaluate(m);
+}
+
+bool installTrialRecord(std::string_view trialText, std::string_view certText, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    const bool ok = m.store->installTrialRecord(trialText, certText, why);
+    if (ok) reevaluate(m);
+    return ok;
+}
+
+std::string thisMachineHash() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (m.store) return m.store->thisMachineHash();
+    return service::machineHash(systemMachineId());
+}
+
+std::string pendingActivationCode() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (m.store) return m.store->pendingActivationCode();
+    StoreOptions o;
+    o.folder = LicenseStore::defaultFolder();
+    o.compiledKeys = false;
+    o.machineId = "-";   // pas besoin de lire l'identifiant de l'installation pour lire un fichier
+    o.evaluationPeriod = false;
+    return LicenseStore(std::move(o)).pendingActivationCode();
+}
+
+bool clearPendingActivationCode(std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return notInitialized(why);
+    return m.store->clearPendingActivationCode(why);
 }
 
 void resetForTests() {

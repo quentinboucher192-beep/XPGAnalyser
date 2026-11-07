@@ -17,7 +17,7 @@ Retour au [README](../README.md). Voir aussi [DEPLOIEMENT.md](DEPLOIEMENT.md) (l
 | Outil Admin | **1.33.0 : l'application `XPG-License-Manager-Admin`** (ses fenêtres, § 11 septies) ; `src/license_admin/` : `XPG-License-Admin` en console (clé de l'éditeur, `exporter-cle` vide ou à plusieurs clés, signer registre / licence / révocations, vérifier). **1.30.0** : le **registre des activations** (`activations.jsonl`, `enregistrer-demande`, `liste`, `--csv`) ; **livré à part à l'éditeur** (`outils/mingw/admin_editeur.sh` : `XPG-License-Admin-<version>-EDITEUR.zip`, avec son LISEZ-MOI pas à pas). **1.31.0** : l'**archive** du poste et la **synchro avec un dépôt GitHub privé** (§ 11 quater : licences et registre des activations chiffrés, un commit par envoi, fusion entre postes, code de secours). **1.32.0** : la **sauvegarde de la clé par une phrase de passe** (§ 11 quinquies), le dépôt remis en arrière refusé (§ 11 sexies) | la boutique, les commandes et les licences flottantes (le service en ligne), la vérification du poste Admin par défi signé ; la synchro n'a **pas** été essayée contre le vrai GitHub (§ 11 quater) |
 | Interface | **1.30.0** : les Studios lient `xpg_licensing` (l'écran Licence et les verrous des entrées : `src/app/Licence*`) | — |
 | Installateur | **1.30.0** : `%ProgramData%\XPG\Licences` créé pour tous les comptes, avec le droit Modifier des Utilisateurs ; gardé à la désinstallation ; le registre livré (`licences\registre.xpgreg`) s'il est dans le dossier à livrer ; le contrôle du paquet dans `package_mingw.py` **et** `package.ps1` (§ 13) | le registre réel, signé par toi (`ressources-licences/registre.xpgreg`) |
-| En ligne | le format le prévoit (`type: floating`, champ `service`) ; une licence qui les emploie est **refusée** avec une phrase qui le dit | l'activation en ligne, les licences flottantes, la désactivation et le transfert en ligne, l'heure signée, **voir chaque lancement du logiciel** (§ 12) |
+| En ligne | **1.35.0** : le service des licences (`docs/SERVICE-LICENCES.md`) ; côté PC (§ 12 bis) : la **licence en ligne** (champ `service`, aucun PC lié) valable avec l'activation de ce PC signée par le service, le **bail** et son **compteur** (l'heure retenue), l'heure signée, la licence **flottante** et son jeton, la **Découverte** enregistrée par le service | **voir chaque lancement du logiciel** (§ 12) |
 
 ## 2. Les programmes et les modules
 
@@ -160,11 +160,13 @@ Une relecture de sécurité a confirmé que la cryptographie tient (signature v�
 | **Grâce** | après `expires_at`, pendant `offline_grace_days` (pas pour une évaluation) | celles de la licence | « Ta licence PROFESSIONAL a pris fin le 2027-11-06 : ses fonctionnalités restent ouvertes encore 11 jours, le temps d'importer son renouvellement. Ensuite, l'édition FREE s'appliquera ; tes projets restent ouverts et enregistrables. » |
 | **Expirée** | au-delà de la grâce | FREE | « Ta licence PROFESSIONAL a pris fin le 2027-11-06 : l'édition FREE s'applique. Ton projet reste ouvert ; Enregistrer et Exporter restent permis. Pour retrouver tes fonctionnalités, importe le renouvellement reçu de l'éditeur. » |
 | **Révoquée** | dans la liste de révocation (toute la licence, ou ce PC) | FREE | « Ta licence XPG-… a été révoquée par l'éditeur le … (motif : Fin de contrat) : l'édition FREE s'applique. … » |
-| **Invalide** | signature fausse ou clé inconnue, fichier tronqué, champ en double ou inconnu, édition ou fonctionnalité inconnue du registre, registre ou liste de révocation remplacés par des plus anciens, licence flottante ou liée à un service | FREE | « Le fichier de licence de ce PC n'est pas valide : l'édition FREE s'applique. … Demande un nouveau fichier à l'éditeur. » (+ `detail` : la raison précise) |
+| **Invalide** | signature fausse ou clé inconnue, fichier tronqué, champ en double ou inconnu, édition ou fonctionnalité inconnue du registre, registre ou liste de révocation remplacés par des plus anciens ; 1.35.0 : une licence en ligne qui lie aussi un PC, une flottante sans service, l'activation d'une licence en ligne abîmée ou mal signée | FREE | « Le fichier de licence de ce PC n'est pas valide : l'édition FREE s'applique. … Demande un nouveau fichier à l'éditeur. » (+ `detail` : la raison précise) |
 | **Autre PC** | la licence n'est pas liée à la clé de ce PC | FREE | « Cette licence (…) a été délivrée pour un autre PC : … Envoie la demande d'activation de ce PC à l'éditeur pour recevoir la tienne. » |
 | **Absente** | aucune licence | FREE | « Aucune licence sur ce PC : l'édition FREE s'applique. » |
 | **Horloge reculée** | licence datée, et l'heure du PC est en arrière de plus de 24 h sur l'heure la plus tardive vue | FREE | « L'horloge de ce PC indique le 2027-10-01, alors que le 2027-11-21 a déjà été vu : remets-la à l'heure. En attendant, l'édition FREE s'applique. … » |
-| **Évaluation** (1.34.0) | aucune licence, licences actives, une édition d'évaluation au registre : pendant sa durée, depuis le premier lancement (§ 8 ter) | celles de l'édition d'évaluation | « Évaluation : il te reste 18 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence…). » |
+| **Découverte** (1.34.0 ; nommée « Évaluation » jusqu'en 1.34) | aucune licence, licences actives, une édition d'évaluation au registre : pendant sa durée, depuis le premier lancement (§ 8 ter) | celles de l'édition d'évaluation | « Découverte : il te reste 18 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence…). » |
+| **Bail expiré** (1.35.0) | une licence en ligne sans activation valable sur ce PC : le bail fini à l'heure retenue, le certificat du service expiré, l'activation absente (§ 12 bis) | FREE | « Connecte ce PC à Internet pour renouveler sa licence (bail fini le 07/12/2026). En attendant, l'édition FREE s'applique. Ton projet reste ouvert ; Enregistrer et Exporter restent permis. » |
+| **Flottante : aucun poste** (1.35.0) | une licence flottante activée, sans jeton valable (§ 12 bis) | FREE | « Licence flottante PROFESSIONAL : ce PC n'a pas de poste en ce moment. Connecte-le à Internet pour en prendre un ; en attendant, l'édition FREE s'applique. … » |
 
 **L'horloge** : l'heure la plus tardive vue est gardée dans `etat.bin` ; les dates d'émission des documents signés (licence, registre, révocations) servent aussi d'ancrage. Une licence perpétuelle ne dépend pas de l'heure. **Honnêtement** : un PC sans réseau ne peut pas prouver l'heure ; ce contrôle arrête le retour en arrière ordinaire de l'horloge, pas quelqu'un qui efface l'état **et** remet une horloge postérieure aux dates des documents. Le vrai garde-temps viendra avec le service (une heure signée).
 
@@ -185,7 +187,9 @@ Tant que la vraie clé de l'éditeur n'est pas compilée (`PublisherKey.hpp` vid
 | Fichiers | l'évaluation n'écrit rien (pas même le dossier) ; seule une demande ou un import tenté écrit (la clé du PC, l'historique) |
 | `lockedMessage(id)` | « Cette fonctionnalité (id) est ouverte : les licences ne sont pas encore actives dans ce programme. » |
 
-### 8 ter. Évaluation (1.34.0)
+### 8 ter. La Découverte (1.34.0 : « Évaluation », renommée en 1.35.0)
+
+**1.35.0** : pour l'utilisateur, l'évaluation de ce PC s'appelle la **Découverte** (l'étiquette, les phrases, l'historique, `lockedMessage`). Dans le code, l'état reste `LicenseStatus::Evaluation`, sa clé `evaluation`, les champs `evaluation*` et le genre `evaluation` des lignes de l'historique (compatibles avec la 1.34). Le service en ligne garde aussi son début (§ 12 bis) : le plus ancien gagne. Le tableau ci-dessous garde les phrases de la 1.34 ; en 1.35.0, « Évaluation » y devient « Découverte » (« Découverte : il te reste… », « Ta Découverte de 30 jours est finie depuis le… », « Découverte commencée : 30 jours… »).
 
 Un Studio installé, licences actives (une clé de l'éditeur), **sans fichier de licence** : la période d'évaluation de ce PC commence au premier lancement qui le constate, si le registre accepté a une **édition d'évaluation** (type `evaluation`, pas retirée ; `EVALUATION` d'abord, sinon la première). Elle dure son `duration_days` (0 : 30 jours). Une notification la rappelle à chaque ouverture, avec les jours qui restent.
 
@@ -432,6 +436,8 @@ Le contrôle du paquet refuse aussi le nom `XPG-License-Manager-Admin` ; l'appli
 
 ## 12. Ce qui est prévu pour plus tard, et pourquoi il faut un service hébergé
 
+*1.35.0 : le service est là (un Worker Cloudflare, `docs/SERVICE-LICENCES.md`) ; ce que le PC en fait est au § 12 bis. Ce paragraphe garde le raisonnement de la 1.30.*
+
 Le format prévoit `type: "floating"` et `service` ; rien ne prétend les faire : une telle licence est lue puis refusée, avec la phrase qui le dit.
 
 - **Les licences flottantes** (N jetons simultanés) demandent un **compteur partagé avec un verrou atomique** : deux postes qui démarrent en même temps ne doivent pas prendre le dernier jeton tous les deux. Un fichier ou un dépôt GitHub n'a ni verrou atomique ni contrôle d'accès par client ; il faut une base transactionnelle derrière un service (baux de 45 min renouvelés, jeton emprunté avant de partir hors ligne, maquette).
@@ -443,6 +449,58 @@ Le format prévoit `type: "floating"` et `service` ; rien ne prétend les faire 
 - **Voir chaque lancement du logiciel** (même sans activation : qui l'utilise, quelle version, quand) : le registre des activations de l'Admin (§ 11) ne voit que les demandes que les clients lui envoient. Voir chaque lancement demande le **service de licences en ligne** : à chaque lancement, le client enverrait l'identifiant de sa licence (s'il en a une), l'**empreinte de la clé du PC**, la version du logiciel et la date — **jamais le matériel** (ni nom réseau, ni adresse MAC, ni numéro de série). Il faudra aussi **informer clairement les utilisateurs** (RGPD : une mention dans les conditions d'utilisation, ce qui est envoyé, pourquoi, combien de temps c'est gardé). Prévu avec l'hébergement ; **pas fait**.
 
 L'hébergement (un petit serveur, ou une fonction en ligne avec sa base) n'est pas décidé ; le format est prêt à l'accueillir sans changer les licences par fichier.
+
+## 12 bis. Le service en ligne (1.35.0) : le côté du PC
+
+Le contrat (les clés, les appels signés, les documents, les routes) est dans [SERVICE-LICENCES.md](SERVICE-LICENCES.md). Ici, ce que fait **le magasin** (`src/licensing/Store`, `Licensing.hpp`) : il ne fait **aucun réseau** ; l'application (`src/app`, sur un fil de travail) parle au service et lui passe ce qu'elle a reçu ; le magasin le **vérifie**, le **garde** et en tire l'état.
+
+### La licence en ligne
+
+Une licence **en ligne** a le champ `service` (l'adresse du service, `https://…`) et **aucun PC lié** ; `max_devices` est le nombre de postes que le service accorde. La lecture le vérifie (`Documents.cpp`) : sans `service`, au moins un PC lié (comme avant) ; avec, aucun (un mélange est refusé) ; `floating` seulement en ligne. Une licence en ligne ne s'importe **pas** en fichier (« c'est une licence en ligne : elle s'active avec son code d'activation (menu Licence…), pas par un fichier. ») et ne lie jamais un PC par elle-même.
+
+Elle vaut sur ce PC avec `activation.xpgact` : le bloc `activation` (signé par le service) et le bloc `service` (le certificat, signé par l'éditeur). Tout est vérifié, à chaque évaluation :
+
+| Contrôle | Sinon |
+|---|---|
+| le certificat signé par une clé de l'éditeur que ce programme croit | Invalide |
+| le certificat pas expiré à **l'heure retenue** | **Bail expiré** (« le certificat du service a expiré le … ») |
+| l'activation signée par la clé que nomme le certificat, qui donne le droit `activation` | Invalide |
+| la même licence, la même émission (`emission` = `issued_at` de la licence) | Bail expiré (une autre licence) ; Invalide (une autre émission) |
+| la clé de **ce** PC ; l'empreinte du poste (`station`, si donnée) | Autre PC |
+| le type (`fixe` / `flottante`) celui de la licence | Invalide |
+| le bail (`jusqu_a`) pas fini à l'heure retenue | **Bail expiré** |
+
+Puis les règles de toute licence : jamais une émission plus ancienne, la révocation, l'horloge reculée (une licence datée), la fin et la grâce. Une licence **liée par l'éditeur** (sans `service`) marche **exactement comme avant** : l'activation ne la regarde pas.
+
+`installActivation(licence, activation, certificat)` (la réponse de `/v1/activer` ou `/v1/renouveler`) écrit `licence.xpglic` et `activation.xpgact` seulement si **tout** se vérifie pour ce PC et que le bail court encore ; sinon le rapport dit pourquoi (« cette activation est pour un autre PC », « … pour une autre émission de la licence … », « … pour une autre installation de Windows », « le certificat du service a expiré le 06/11/2026 », « le certificat du service ne donne pas le droit « activation » », « son bail est déjà fini (le …) : connecte ce PC à Internet pour le renouveler. »). Le premier import est noté dans l'historique ; un **renouvellement** (même licence, même émission, même numéro) ne note rien, sauf un changement d'état ; une activation rejouée plus courte que celle gardée ne la remplace pas. `dropActivation(id)` (le service a dit : libérée, retirée, révoquée) efface l'activation, le jeton et la licence en ligne de cette licence ; une ligne `service` le dit.
+
+### Le bail et son compteur (l'heure retenue)
+
+`etat.bin` garde trois champs de plus (que la 1.34 ignore) : `service_time` (la dernière heure signée reçue du service), `service_elapsed` (le temps écoulé depuis) et `service_wall` (l'horloge du PC la plus avancée déjà comptée). Une copie : `horloge.bin` (protégé comme lui, DPAPI machine) et, sous Windows et pour le dossier par défaut, la valeur `horloge` de `HKCU\Software\XPG\Licences`. La meilleure copie gagne (l'heure signée la plus récente, puis le plus de temps écoulé) ; une copie qui manque ou en retard est remise ; `etat.bin` effacé est recréé comme avant (§ 7 bis), le compteur repris de `horloge.bin`.
+
+- **Le temps écoulé ne fait qu'avancer**, à chaque évaluation (`refresh`, un import…) : l'horloge du PC la plus avancée déjà comptée avance jusqu'à l'heure du PC ; et, dans un même lancement, du temps mesuré par une **horloge monotone** (`std::chrono::steady_clock`, le temps où le programme tourne) — le plus grand des deux, jamais les deux additionnés. D'un lancement à l'autre, seuls les écarts positifs de l'horloge du PC comptent.
+- **L'heure retenue** = max(horloge du PC, dernière heure signée + temps écoulé) (`LicenseState::trustedNow`). Le bail, le certificat et l'avertissement s'y comparent : **reculer l'horloge ne prolonge jamais un bail** ; une horloge avancée par erreur l'avance (le bail peut paraître fini) jusqu'à la connexion suivante.
+- **`noteServiceTime(heure, nonce, certificat)`** : le bloc `heure` de `/v1/heure?n=<nonce>`, signé par la clé certifiée (droit `heure`), qui répond au nonce de la demande, dans la validité du certificat à l'heure signée. **Plus récente** que la dernière gardée : le compteur repart d'elle (temps écoulé à zéro) — elle recale tout, même vers le passé. **Pas plus récente** : ignorée (vrai, rien ne change). Un autre nonce, une autre clé, un certificat sans le droit : refusée.
+- **Sept jours avant la fin** du bail : `activationWarning`, et la phrase ajoute « Connecte ce PC à Internet avant le 07/12/2026 pour renouveler sa licence. » ; sinon « Activée en ligne jusqu'au 07/12/2026 (renouvelée à chaque connexion). ».
+- **Honnêtement** : un PC hors ligne qui recule son horloge entre deux lancements perd ce temps-là (rien ne le mesure quand le programme ne tourne pas) ; il ne gagne jamais plus que ce que le bail donnait encore, et qui efface **toutes** les copies du compteur (et `etat.bin`, et HKCU) retombe sur l'horloge du PC. Le bail borne tout : à `jusqu_a` de l'heure retenue, c'est fini, même hors ligne à vie.
+
+### La licence flottante
+
+Activée (une activation `flottante`), elle demande en plus `jeton.xpgjet` : le bloc `jeton` (droit `flottante`) pour cette licence et ce PC, et le certificat ; `installLease` le vérifie et l'écrit, `dropLease` l'efface (le poste rendu). Sans jeton valable : **Flottante : aucun poste** (FREE). Le jeton (15 min) se compte à **l'heure du service** (dernière heure signée + temps écoulé ; jamais avant son émission) : une horloge du PC en avance ne le périme pas d'avance. `leaseUntil` dit sa fin.
+
+### La Découverte enregistrée par le service
+
+`installTrialRecord(découverte, certificat)` : le bloc `decouverte` de `/v1/decouverte` (droit `decouverte`), pour **cette machine** (`machine` = `thisMachineHash()`, l'empreinte de `docs/SERVICE-LICENCES.md` § 7) et **ce PC** ; il est gardé dans `decouverte.xpgdec` (un début plus ancien déjà gardé reste). À l'évaluation, son début est **une copie de plus** du début de la Découverte (§ 8 ter) : le **plus ancien** gagne, jamais prolongée ; la durée reste celle de l'édition d'évaluation du registre. Un début plus ancien venu du service est noté dans l'historique (« Découverte commencée le 28/10/2026 sur cette machine, selon le service des licences : … »). Effacer toutes les copies locales ne relance pas l'essai tant que `decouverte.xpgdec` est là ; et le service, lui, rend toujours le premier début connu.
+
+### Le reste de l'API (Licensing.hpp)
+
+- `deviceSignServiceMessage(message, sig, pub, why)` : signe le message d'un appel au service avec la clé de ce PC (créée si besoin) ; refuse tout message qui ne commence pas par `XPG-SERVICE-1\n` (la clé du PC ne signe rien d'autre pour le réseau).
+- `thisMachineHash()` : l'empreinte de la machine pour `/v1/decouverte`.
+- `pendingActivationCode()` / `clearPendingActivationCode(why)` : le code laissé par l'installateur (`code-activation.txt` du dossier des licences : sa première ligne, sans espaces autour ; UTF-8 avec ou sans BOM, ou UTF-16) ; un **secret** : jamais dans un journal, un historique, un message ; effacé une fois l'activation faite.
+- `LicenseState` : `online`, `activationUntil`, `activationDaysLeft`, `activationWarning`, `floating`, `leaseUntil`, `lastServiceSync`, `trustedNow`.
+- Chaque appel qui change quelque chose revalue l'état ; tout est sous le verrou du module. `StoreOptions::monotonicClock` remplace l'horloge monotone (les essais).
+
+Les fichiers de plus dans le dossier des licences : `activation.xpgact`, `jeton.xpgjet`, `decouverte.xpgdec`, `horloge.bin`, `code-activation.txt` (laissé par l'installateur, effacé après).
 
 ## 13. Le contrôle du paquet
 
@@ -492,6 +550,8 @@ Vérifié : ISCC 6.4.1 (sous Wine, `/O-` : le script compile, sans rien produire
 - **1.30.0** : la bibliothèque `xpg_licensing` construite sans l'option : ni la marque ni l'identifiant de la clé d'essai, rien de l'outil Admin.
 
 `licensing_evaluation_test <racine du dépôt>` (**1.34.0**) : la période d'évaluation (§ 8 ter), avec une clé d'éditeur d'essai, le registre d'exemple et l'heure donnée par l'essai — le premier lancement (Évaluation, 30 jours, les fonctionnalités d'EVALUATION, les fichiers, l'historique), jour 12 (18 jours), le dernier jour (« 1 jour »), la fin (Absente, FREE, la phrase, « Évaluation → Absente ») ; chaque copie effacée, deux à la fois, abîmée, une copie plus tardive ; l'horloge reculée (et tolérée) ; jamais prolongée (60 jours), raccourcie (14) ; une autre édition d'évaluation, une retirée, aucune ; une licence importée puis effacée (l'évaluation d'avant reprend), révoquée, expirée, un PC qui a eu une licence d'abord ; Non activées (rien d'écrit), sans registre puis le registre importé, l'option vide ; un `etat.bin` d'avant ; un dossier non inscriptible ; l'API.
+
+`licensing_activation_test <racine du dépôt>` (**1.35.0**) : le côté PC du service des licences (§ 12 bis), sans réseau — une clé d'éditeur et une clé de service d'essai, le certificat, les licences en ligne, les activations, les jetons, les heures et les Découvertes signés dans l'essai, l'horloge du PC et l'horloge monotone données par l'essai. Les documents (la licence en ligne se lit ; en ligne et liée, flottante sans service, une adresse en http ailleurs, ni service ni PC : refusées) ; une activation valable (Valide, en ligne, le bail, les fichiers, l'historique ; renouvelée sans bruit ; une plus courte rejouée ignorée ; la licence en ligne et le certificat refusés en fichier) ; les refus (un autre PC, une autre émission, une autre installation de Windows, une autre licence, une clé de service inconnue, un certificat d'une clé d'éditeur inconnue, expiré, sans le droit, un bail fini, le type, sans licence, une licence liée, une licence d'une autre clé ; rien d'écrit ; Non activées) ; le bail (7 jours avant : l'avertissement ; Bail expiré et sa phrase ; l'horloge reculée ne le ravive pas ; l'horloge monotone compte, l'horloge du PC arrêtée ; un autre lancement ; `horloge.bin` puis `etat.bin` effacés ; une heure signée puis le renouvellement) ; l'heure signée (une horloge avancée par erreur recalée, une plus ancienne ignorée, les deux horloges ensemble comptées une fois, un autre nonce, une autre clé, sans le droit, après le certificat) ; un certificat qui expire pendant le bail ; la flottante (sans jeton, avec, fini, rendu, d'un autre PC, d'une autre licence, une horloge 20 minutes en avance, `dropActivation`) ; la Découverte du service (une autre machine, un autre PC, sans le droit ; plus ancienne : gagne ; plus tardive : ignorée ; les copies locales effacées ; la fin) ; une licence liée par l'éditeur (comme avant : Valide, Horloge reculée) ; l'API (le code de l'installateur relu et effacé, jamais dans l'historique ; la signature ; activation, jeton, heure, Découverte, `dropActivation`). **125** contrôles sous Linux.
 
 `github_sync_test <racine du dépôt>` (ctest `githubsync`, **1.31.0**) : un faux GitHub dans le processus (le transport injecté : aucun réseau), deux postes Admin (deux dossiers).
 - les briques : le code de secours (aller-retour, minuscules et O pour 0 tolérés, une faute de frappe refusée), l'identifiant de la clé, chiffrer et déchiffrer (rien en clair ; déplacé, autre clé, abîmé : refusé), les lignes manquantes, les noms (dépôt, branche, dossier) ;
