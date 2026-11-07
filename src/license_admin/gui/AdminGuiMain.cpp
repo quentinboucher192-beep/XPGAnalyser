@@ -20,6 +20,8 @@
 //    --assistant F.xpgreq   (repetable) ouvrir l'assistant de licence avec ces demandes
 //    --cliquer ID           (repetable) cliquer ce widget du menu du dessus
 //    --taper ID=TEXTE       (repetable) ecrire dans ce champ du menu du dessus
+//    --choisir ID=N         (repetable) choisir la ligne N (1 : la premiere) de ce tableau ou de
+//                           cette liste deroulante du menu du dessus
 //    --glisser F            (repetable) glisser ce fichier sur la fenetre (plusieurs --glisser
 //                           qui se suivent : un seul geste)
 //                           (les actions dans l'ordre de la ligne de commande, une toutes les 0,3 s)
@@ -35,6 +37,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
+#include "../../ui/widgets/DataViews.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -149,7 +152,7 @@ bool open(SDL_Window* window, const ui::FilePick& pick, std::function<void(std::
 
 // ---- la ligne de commande ----
 struct Action {
-    enum class Kind : std::uint8_t { Click, Type, Drop } kind{Kind::Click};
+    enum class Kind : std::uint8_t { Click, Type, Drop, Choose } kind{Kind::Click};
     std::string id, text;   // Drop : `id` est le fichier
 };
 
@@ -194,6 +197,7 @@ void usage(std::FILE* to) {
                  "  --assistant F.xpgreq  ouvrir l'assistant de licence avec cette demande (r\xC3\xA9p\xC3\xA9table)\n"
                  "  --cliquer ID          cliquer ce widget (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
                  "  --taper ID=TEXTE      \xC3\xA9" "crire dans ce champ (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
+                 "  --choisir ID=N        choisir la ligne N (1 : la premi\xC3\xA8re) de ce tableau ou de cette liste (r\xC3\xA9p\xC3\xA9table)\n"
                  "  --glisser F           glisser ce fichier sur la fen\xC3\xAAtre (r\xC3\xA9p\xC3\xA9table ; ceux qui se suivent : un geste)\n"
                  "  --capture F.png       enregistrer l'image de la fen\xC3\xAAtre, puis quitter\n"
                  "  --apres S             la capture S secondes apr\xC3\xA8s la derni\xC3\xA8re action (d\xC3\xA9" "faut 1)\n",
@@ -249,6 +253,16 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
                 return false;
             }
             o.actions.push_back({Action::Kind::Type, t.substr(0, eq), t.substr(eq + 1)});
+        } else if (a == "--choisir") {
+            if (!more) return need("ID=N");
+            const std::string t = args[++i];
+            const auto eq = t.find('=');
+            const int  n = eq == std::string::npos ? 0 : std::atoi(t.substr(eq + 1).c_str());
+            if (eq == std::string::npos || eq == 0 || n < 1) {
+                why = "--choisir : " + t + " (attendu : ID=N, N \xE2\x89\xA5 1)";
+                return false;
+            }
+            o.actions.push_back({Action::Kind::Choose, t.substr(0, eq), std::to_string(n)});
         } else if (a == "--glisser") {
             if (!more) return need("le fichier");
             o.actions.push_back({Action::Kind::Drop, args[++i], {}});
@@ -274,6 +288,13 @@ void perform(menu::MenuManager& menus, const Action& a) {
         if (auto* t = dynamic_cast<ui::InputText*>(w)) t->setText(a.text);
         else if (auto* m = dynamic_cast<ui::MultiLineText*>(w)) m->setText(a.text);
         else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB n'est pas un champ (%s)\n", a.id.c_str(), where.c_str());
+        return;
+    }
+    if (a.kind == Action::Kind::Choose) {
+        const int row = std::atoi(a.text.c_str()) - 1;
+        if (auto* t = dynamic_cast<ui::TableView*>(w)) t->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+        else if (auto* d = dynamic_cast<ui::DropDown*>(w)) d->setSelectedIndex(row);
+        else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB n'est ni un tableau ni une liste (%s)\n", a.id.c_str(), where.c_str());
         return;
     }
     if (!w->enabled()) std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB est gris\xC3\xA9 (%s) : cliqu\xC3\xA9 quand m\xC3\xAAme\n", a.id.c_str(), where.c_str());
