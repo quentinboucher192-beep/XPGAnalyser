@@ -138,6 +138,19 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 - Effacer les fichiers de la Découverte ne relance donc pas l'essai tant que le PC est en ligne. L'empreinte ne dit rien du matériel, mais elle reconnaît l'installation : c'est dit dans la fenêtre Licence.
 - **Ses limites, honnêtement** : l'identifiant de l'installation Windows (`MachineGuid`) change à une réinstallation de Windows, et un administrateur du PC peut le changer ; un PC qui reste hors ligne compte seulement sur ses copies locales. Quelqu'un qui réinstalle Windows, ou change cet identifiant et efface les copies, recommence donc un essai. La Découverte freine l'essai répété ; elle ne l'empêche pas.
 
+## 7 bis. La demande en ligne, le chemin principal (1.36.0)
+
+Avec un service compilé (`ServiceAddress.hpp`), un client sans licence n'a ni fichier ni code à manier : il **demande sa licence**, l'éditeur l'**accepte**, elle s'installe d'elle-même.
+
+1. **Le Studio** : l'accueil (« Demander ma licence… »), la fenêtre « Licence nécessaire » et la fenêtre Licence (onglet **Demander ma licence**, ouvert d'office sans licence valable) mènent au même formulaire : la société (obligatoire), un contact, le nom du PC, une licence existante, un mot. La demande part scellée pour la clé de l'éditeur (`POST /v1/demandes`).
+2. **En attendant** : la demande reste visible (son numéro, sa date, son état « en attente de l'éditeur », puis « reçue par l'éditeur ») sur l'accueil, dans « Licence nécessaire » et dans l'onglet, avec **Annuler la demande** et **Vérifier maintenant**. Le Studio regarde lui-même la réponse (`GET /v1/poste`) **toutes les minutes pendant deux heures, puis toutes les 5 minutes** (`requestCheckDelay`) ; fermé, il regarde à son prochain lancement. Aucun projet ne s'ouvre en attendant.
+3. **L'outil de l'éditeur** : son application relève les demandes **toute seule** (au lancement, puis toutes les 2 minutes, sans bruit) ; une nouvelle demande : un avis (« Nouvelle demande de licence : le client (PC « … ») — Demandes en ligne › Accepter ») et leur nombre sur **Demandes en ligne**. **Accepter (licence liée)…** signe la licence pour ce PC et la publie (`PUT /admin/postes`) ; **Refuser…** demande la raison (scellée pour ce PC). La console : `service-demandes`, `signer-licence --demande …` puis `service-publier-licence`, ou `service-refuser`.
+4. **La réponse** : à la vérification suivante, la licence s'installe et **une fenêtre le confirme** : l'édition, la licence, le client, jusqu'à quand (et les jours qui restent), le nombre de PC, ce qu'elle ouvre (par logiciel), le mot de l'éditeur ; **Voir ma licence**. Refusée : la fenêtre donne la raison, et **Nouvelle demande…**.
+
+Le poids sur le plan gratuit : une vérification fait au plus quatre appels (`/v1/etat`, le certificat s'il n'est pas déjà lu, `/v1/heure`, `/v1/poste`) ; une demande qui attend deux heures en fait environ 480, puis une cinquantaine par heure. Le formulaire et le fichier restent : **Demande par fichier (sans Internet)…** et **Fichier de licence…** (en bas de la fenêtre), pour un PC qui n'a pas Internet ; l'activation par code aussi (onglet Activation, et la page Licence de l'installateur).
+
+**Une copie d'essai n'appelle jamais le vrai service** : dans une construction avec la clé d'essai (`XPG_LICENCES_CLE_ESSAI`), l'adresse compilée est ignorée ; seule la variable `XPG_SERVICE` (le service des essais, sur ce poste) en donne une.
+
 ## 8. Ce qui reste sur le PC (le dossier des licences)
 
 | Fichier | Contenu |
