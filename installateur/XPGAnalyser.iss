@@ -4893,6 +4893,46 @@ begin
   else if N > 1 then JournalNote(jInfo, 'ia-cles', 'Clés API : ' + IntToStr(N) + ' gardées (protégées par Windows ; la réinstallation n''y touche pas)');
 end;
 
+// 1.32.0 : icacls, caché ; son code (-1 : pas lancé).
+function Icacls(Args: String): Integer;
+var Code: Integer;
+begin
+  Result := -1;
+  if Exec(ExpandConstant('{sys}\icacls.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
+  Log('icacls ' + Args + ' : code ' + IntToStr(Result));
+end;
+
+// 1.32.0 : un dossier qui est un lien (jonction, lien symbolique : FILE_ATTRIBUTE_REPARSE_POINT). Un tel dossier,
+// pose par un utilisateur sous ProgramData, ferait porter les droits donnés par l'installateur sur sa cible.
+function EstUnLien(Chemin: String): Boolean;
+var R: TFindRec;
+begin
+  Result := False;
+  if FindFirst(RemoveBackslashUnlessRoot(Chemin), R) then begin
+    Result := (R.Attributes and $400) <> 0;
+    FindClose(R);
+  end;
+end;
+
+// 1.32.0 : un dossier partagé sous ProgramData, sûr : pas un lien (un lien est retiré - jamais sa cible), le
+// propriétaire Administrateurs, l'héritage coupé, SYSTEM et Administrateurs en contrôle total, et pour les
+// Utilisateurs les droits `DroitsUtilisateurs` (des ACE icacls, déjà avec leurs SID). Faux : il n'a pas pu l'être.
+function DossierProtege(Dossier, DroitsUtilisateurs: String): Boolean;
+begin
+  Result := False;
+  if DirExists(Dossier) and EstUnLien(Dossier) then begin
+    Log('Dossier protégé : ' + Dossier + ' est un lien ; il est retiré (pas sa cible)');
+    if not RemoveDir(Dossier) then begin
+      JournalNote(jAttention, 'droits', Dossier + ' est un lien posé par quelqu''un (jonction) et ne se retire pas : rien n''y est réglé');
+      Exit;
+    end;
+  end;
+  if not ForceDirectories(Dossier) then Exit;
+  if EstUnLien(Dossier) then Exit;
+  if Icacls('"' + Dossier + '" /setowner *S-1-5-32-544') <> 0 then Exit;
+  Result := Icacls('"' + Dossier + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F ' + DroitsUtilisateurs) = 0;
+end;
+
 procedure IAInstaller;
 var Dossier, Xia, Cle, Json, Dabord: String;
 begin
@@ -5732,46 +5772,6 @@ begin
   Result := -1;
   if Exec(ExpandConstant('{sys}\netsh.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
   Log('netsh ' + Args + ' : code ' + IntToStr(Result));
-end;
-
-// 1.32.0 : icacls, caché ; son code (-1 : pas lancé).
-function Icacls(Args: String): Integer;
-var Code: Integer;
-begin
-  Result := -1;
-  if Exec(ExpandConstant('{sys}\icacls.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
-  Log('icacls ' + Args + ' : code ' + IntToStr(Result));
-end;
-
-// 1.32.0 : un dossier qui est un lien (jonction, lien symbolique : FILE_ATTRIBUTE_REPARSE_POINT). Un tel dossier,
-// pose par un utilisateur sous ProgramData, ferait porter les droits donnés par l'installateur sur sa cible.
-function EstUnLien(Chemin: String): Boolean;
-var R: TFindRec;
-begin
-  Result := False;
-  if FindFirst(RemoveBackslashUnlessRoot(Chemin), R) then begin
-    Result := (R.Attributes and $400) <> 0;
-    FindClose(R);
-  end;
-end;
-
-// 1.32.0 : un dossier partagé sous ProgramData, sûr : pas un lien (un lien est retiré - jamais sa cible), le
-// propriétaire Administrateurs, l'héritage coupé, SYSTEM et Administrateurs en contrôle total, et pour les
-// Utilisateurs les droits `DroitsUtilisateurs` (des ACE icacls, déjà avec leurs SID). Faux : il n'a pas pu l'être.
-function DossierProtege(Dossier, DroitsUtilisateurs: String): Boolean;
-begin
-  Result := False;
-  if DirExists(Dossier) and EstUnLien(Dossier) then begin
-    Log('Dossier protégé : ' + Dossier + ' est un lien ; il est retiré (pas sa cible)');
-    if not RemoveDir(Dossier) then begin
-      JournalNote(jAttention, 'droits', Dossier + ' est un lien posé par quelqu''un (jonction) et ne se retire pas : rien n''y est réglé');
-      Exit;
-    end;
-  end;
-  if not ForceDirectories(Dossier) then Exit;
-  if EstUnLien(Dossier) then Exit;
-  if Icacls('"' + Dossier + '" /setowner *S-1-5-32-544') <> 0 then Exit;
-  Result := Icacls('"' + Dossier + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F ' + DroitsUtilisateurs) = 0;
 end;
 
 // La règle entrante du pare-feu pour IHM-Studio.exe (tous les réseaux : une usine est souvent un réseau
