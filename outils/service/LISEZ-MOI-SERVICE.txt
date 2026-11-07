@@ -113,3 +113,5 @@ SI QUELQUE CHOSE NE VA PAS
    les quelques heures). Le service se protège des abus : 10 activations par heure
    et par adresse, 5 par PC, etc. Personne ne peut lire un code d'activation chez
    Cloudflare : le service n'en garde que l'empreinte.
+   Si un jour tes clients se comptent par milliers de PC, le plan payant de
+   Cloudflare (Workers Paid, 5 $ par mois) lève ces plafonds : rien d'autre à changer.

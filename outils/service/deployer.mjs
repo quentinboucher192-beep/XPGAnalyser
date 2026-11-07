@@ -113,9 +113,11 @@ async function principal() {
     console.log("Dossier du service : " + service);
     console.log("Clé publique de l'éditeur (" + (origine === "saisie" ? "saisie" : path.basename(origine)) + ") : " + cle.split(",").map((k) => k.slice(0, 16) + "…").join(", "));
     const cli = installerWrangler(service);
-    const sortie = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "xpg-deploiement-")), "sortie.jsonl");
+    const temporaire = fs.mkdtempSync(path.join(os.tmpdir(), "xpg-deploiement-"));
+    process.on("exit", () => fs.rmSync(temporaire, { recursive: true, force: true }));
+    const sortie = path.join(temporaire, "sortie.jsonl");
     const args = [cli, "deploy", "--var", "PUBLISHER_KEYS:" + cle];
-    if (essai) args.push("--dry-run", "--outdir", path.join(path.dirname(sortie), "paquet"));
+    if (essai) args.push("--dry-run", "--outdir", path.join(temporaire, "paquet"));
     console.log("");
     console.log(essai ? "Essai (rien n'est envoyé à Cloudflare)..." : "Envoi à Cloudflare (la première fois, ton navigateur s'ouvre pour te connecter)...");
     console.log("");

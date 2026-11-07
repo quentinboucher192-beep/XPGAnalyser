@@ -10,7 +10,7 @@
     "test": "node --test --test-concurrency=1 --test-reporter=spec \"test/*.test.js\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "wrangler": "4.158.0"
