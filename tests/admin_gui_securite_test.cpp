@@ -1,7 +1,7 @@
 // =============================================================================
-//  tests/admin_gui_securite_test.cpp - 1.33.0 : les pages << Parametres de
-//  securite >> (la cle de l'editeur) et << Synchronisation GitHub >> (l'assistant)
-//  de XPG-License-Manager-Admin, dessinees a blanc
+//  tests/admin_gui_securite_test.cpp - 1.35.0 : les pages << Parametres de
+//  securite >> (la cle de l'editeur) et << Service en ligne >> de
+//  XPG-License-Manager-Admin, dessinees a blanc
 // -----------------------------------------------------------------------------
 //  La cle : creee par la page (une cle d'ESSAI, apres la confirmation), sauvegardee
 //  (Argon2id sur le vrai fil de Background : les champs vides des le lancement,
@@ -9,272 +9,39 @@
 //  lent), verifiee (bonne, mauvaise phrase), restauree dans un second poste,
 //  exportee (TestPublisherKey.hpp). Un travail en cours : les boutons gris.
 //
-//  GitHub : un FAUX GitHub dans ce processus (le transport injecte,
-//  app::ai::setHttpFactory - le meme que tests/github_sync_test.cpp) ; rien ne part
-//  sur le reseau. L'assistant : un mauvais depot refuse ; le premier poste voit son
-//  code de secours UNE fois (Continuer bloque tant que la case n'est pas cochee,
-//  Copier sur un clic), puis seulement apres une confirmation ; le jeton
-//  enregistre puis retire (jamais dessine) ; Verifier, Synchroniser, Recevoir
-//  seulement par runSlow ; un second poste par le code de secours ; un depot
-//  public refuse.
+//  Le service en ligne (1.35.0, a la place de la synchro GitHub) : l'adresse
+//  (refusee, puis normalisee), cle-publique.txt, le kit des Studios refuse pour une
+//  cle d'essai ; la cle de synchro du premier poste et son code de secours montre
+//  UNE fois (Continuer bloque tant que la case n'est pas cochee, Copier sur un
+//  clic), puis seulement apres une confirmation ; hors ligne (un service d'essai
+//  ou rien n'ecoute) : chaque refus dit, rien d'invente ; un travail en cours :
+//  tout gris. Puis contre le VRAI service local (tests/service_local.hpp ; sans
+//  Node ni wrangler : SAUTE) : Verifier, Certifier (l'empreinte montree, Annuler
+//  ne signe rien), Synchroniser l'archive, Relever, les compteurs, un second
+//  poste par le code de secours qui recoit l'archive.
 // =============================================================================
 #include "admin_gui_harness.hpp"
+#include "service_local.hpp"
 
-#include "../src/app/ai/AiHttp.hpp"
-#include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
-#include "../src/license_admin/GitHubSync.hpp"
+#include "../src/license_admin/ArchiveSync.hpp"
+#include "../src/license_admin/ServiceClient.hpp"
 #include "../src/menu/MenuManager.hpp"
 #include "../src/ui/widgets/Containers.hpp"
 
 #include <atomic>
 #include <chrono>
 #include <cstdio>
-#include <map>
 #include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
 using namespace admintest;
-using core::json::Value;
+namespace archive = license_admin::archive;
+namespace online = license_admin::online;
 
 namespace {
-
-// ---------------------------------------------------------------------------
-//  le faux GitHub (celui de github_sync_test.cpp, sans la course ni la branche protegee)
-// ---------------------------------------------------------------------------
-struct FakeGitHub {
-    std::string repo{"editeur/licences-xpg"};
-    std::string token{"github_pat_essai_jeton_00000000000000000000000000"};
-    std::string branch{"main"};
-    bool        isPrivate{true};
-    std::map<std::string, std::string> blobs;
-    std::map<std::string, std::map<std::string, std::string>> trees;
-    struct Commit {
-        std::string tree;
-        std::vector<std::string> parents;
-        std::string message;
-    };
-    std::map<std::string, Commit> commits;
-    std::map<std::string, std::string> refs;
-    std::vector<std::string> bodies;
-    int counter{0};
-
-    std::string newSha(const std::string& kind, const std::string& content) {
-        return deploy::crypto::sha256Hex(kind + "\n" + std::to_string(++counter) + "\n" + content).substr(0, 40);
-    }
-    std::string blobSha(const std::string& content) {
-        const std::string sha = deploy::crypto::sha256Hex("blob\n" + content).substr(0, 40);
-        blobs[sha] = content;
-        return sha;
-    }
-    std::string makeTree(const std::map<std::string, std::string>& files) {
-        std::string canon;
-        for (const auto& [p, s] : files) canon += p + "=" + s + "\n";
-        const std::string sha = deploy::crypto::sha256Hex("tree\n" + canon).substr(0, 40);
-        trees[sha] = files;
-        return sha;
-    }
-    std::string makeCommit(const std::string& tree, const std::vector<std::string>& parents, const std::string& message) {
-        const std::string sha = newSha("commit", tree + message);
-        commits[sha] = Commit{tree, parents, message};
-        return sha;
-    }
-    [[nodiscard]] bool anyBlobHas(const std::string& needle) const {
-        for (const auto& [sha, content] : blobs)
-            if (has(content, needle)) return true;
-        return false;
-    }
-
-    struct Answer {
-        int status;
-        std::string body;
-    };
-    static Answer json(int status, const Value& v) { return {status, core::json::write(v, false)}; }
-    static Answer msg(int status, const std::string& m) {
-        Value v = Value::object();
-        v.set("message", m);
-        return json(status, v);
-    }
-    static std::string unbase64(const std::string& b64) {
-        std::string content;
-        auto val = [](char c) -> int {
-            if (c >= 'A' && c <= 'Z') return c - 'A';
-            if (c >= 'a' && c <= 'z') return c - 'a' + 26;
-            if (c >= '0' && c <= '9') return c - '0' + 52;
-            if (c == '+') return 62;
-            if (c == '/') return 63;
-            return -1;
-        };
-        unsigned buf = 0;
-        int bits = 0;
-        for (char c : b64) {
-            const int v = val(c);
-            if (v < 0) continue;
-            buf = (buf << 6) | static_cast<unsigned>(v);
-            bits += 6;
-            if (bits >= 8) {
-                content += static_cast<char>((buf >> (bits - 8)) & 0xFF);
-                bits -= 8;
-            }
-        }
-        return content;
-    }
-
-    Answer handle(const app::ai::HttpRequest& req) {
-        std::string auth;
-        for (const auto& [k, v] : req.headers)
-            if (k == "Authorization") auth = v;
-        bodies.push_back(req.body);
-        if (auth != "Bearer " + token) return msg(401, "Bad credentials");
-        const std::string base = "http://127.0.0.1:9/repos/";
-        if (req.url.rfind(base, 0) != 0) return msg(404, "Not Found");
-        std::string rest = req.url.substr(base.size());
-        if (rest.rfind(repo, 0) != 0 || (rest.size() > repo.size() && rest[repo.size()] != '/')) return msg(404, "Not Found");
-        std::string path = rest.substr(repo.size());
-        if (const auto q = path.find('?'); q != std::string::npos) path.resize(q);
-        const bool empty = refs.empty();
-        Value body;
-        if (!req.body.empty()) (void)core::json::parse(req.body, body, nullptr);
-        if (req.method == "GET" && path.empty()) {
-            Value v = Value::object();
-            v.set("full_name", repo);
-            v.set("private", isPrivate);
-            v.set("default_branch", branch);
-            return json(200, v);
-        }
-        if (req.method == "GET" && path.rfind("/git/ref/heads/", 0) == 0) {
-            if (empty) return msg(409, "Git Repository is empty.");
-            const auto it = refs.find(path.substr(15));
-            if (it == refs.end()) return msg(404, "Not Found");
-            Value v = Value::object(), o = Value::object();
-            o.set("sha", it->second);
-            o.set("type", std::string("commit"));
-            v.set("ref", "refs/heads/" + it->first);
-            v.set("object", std::move(o));
-            return json(200, v);
-        }
-        if (req.method == "GET" && path.rfind("/git/commits/", 0) == 0) {
-            const auto it = commits.find(path.substr(13));
-            if (it == commits.end()) return msg(404, "Not Found");
-            Value v = Value::object(), t = Value::object(), a = Value::object();
-            v.set("sha", it->first);
-            t.set("sha", it->second.tree);
-            v.set("tree", std::move(t));
-            v.set("message", it->second.message);
-            a.set("date", std::string("2026-11-06T22:00:00Z"));
-            v.set("author", std::move(a));
-            return json(200, v);
-        }
-        if (req.method == "GET" && path.rfind("/git/trees/", 0) == 0) {
-            const auto it = trees.find(path.substr(11));
-            if (it == trees.end()) return msg(404, "Not Found");
-            Value v = Value::object(), items = Value::array();
-            v.set("sha", it->first);
-            for (const auto& [p, s] : it->second) {
-                Value e = Value::object();
-                e.set("path", p);
-                e.set("mode", std::string("100644"));
-                e.set("type", std::string("blob"));
-                e.set("sha", s);
-                items.push(std::move(e));
-            }
-            v.set("tree", std::move(items));
-            v.set("truncated", false);
-            return json(200, v);
-        }
-        if (req.method == "GET" && path.rfind("/git/blobs/", 0) == 0) {
-            const auto it = blobs.find(path.substr(11));
-            if (it == blobs.end()) return msg(404, "Not Found");
-            std::string b64 = app::ai::base64(it->second), wrapped;
-            for (std::size_t i = 0; i < b64.size(); i += 60) wrapped += b64.substr(i, 60) + "\n";
-            Value v = Value::object();
-            v.set("sha", it->first);
-            v.set("encoding", std::string("base64"));
-            v.set("content", wrapped);
-            return json(200, v);
-        }
-        if (empty && path.rfind("/git/", 0) == 0) return msg(409, "Git Repository is empty.");
-        if (req.method == "POST" && path == "/git/blobs") {
-            Value v = Value::object();
-            v.set("sha", blobSha(unbase64(body.str("content"))));
-            return json(201, v);
-        }
-        if (req.method == "POST" && path == "/git/trees") {
-            std::map<std::string, std::string> files;
-            const std::string baseTree = body.str("base_tree");
-            if (!baseTree.empty()) {
-                if (!trees.count(baseTree)) return msg(422, "base_tree inconnu");
-                files = trees[baseTree];
-            }
-            if (const Value* items = body.find("tree"))
-                for (const auto& it : items->items()) {
-                    if (!blobs.count(it.str("sha"))) return msg(422, "blob inconnu");
-                    files[it.str("path")] = it.str("sha");
-                }
-            Value v = Value::object();
-            v.set("sha", makeTree(files));
-            return json(201, v);
-        }
-        if (req.method == "POST" && path == "/git/commits") {
-            std::vector<std::string> parents;
-            if (const Value* ps = body.find("parents"))
-                for (const auto& p : ps->items()) parents.push_back(p.asString());
-            if (!trees.count(body.str("tree"))) return msg(422, "arbre inconnu");
-            Value v = Value::object();
-            v.set("sha", makeCommit(body.str("tree"), parents, body.str("message")));
-            return json(201, v);
-        }
-        if (req.method == "PATCH" && path.rfind("/git/refs/heads/", 0) == 0) {
-            const std::string b = path.substr(16);
-            if (!refs.count(b)) return msg(422, "Reference does not exist");
-            const std::string target = body.str("sha");
-            if (!commits.count(target)) return msg(422, "commit inconnu");
-            bool ff = false;
-            std::vector<std::string> todo{target};
-            while (!todo.empty() && !ff) {
-                const std::string c = todo.back();
-                todo.pop_back();
-                if (c == refs[b]) ff = true;
-                for (const auto& p : commits[c].parents) todo.push_back(p);
-            }
-            if (!ff && !body.flag("force")) return msg(422, "Update is not a fast forward");
-            refs[b] = target;
-            Value v = Value::object(), o = Value::object();
-            o.set("sha", target);
-            v.set("object", std::move(o));
-            return json(200, v);
-        }
-        if (req.method == "PUT" && path.rfind("/contents/", 0) == 0) {
-            if (!empty) return msg(422, "seulement pour un depot vide dans ce faux");
-            const std::string br = body.str("branch", branch);
-            std::map<std::string, std::string> files{{path.substr(10), blobSha(unbase64(body.str("content")))}};
-            refs[br] = makeCommit(makeTree(files), {}, body.str("message"));
-            Value v = Value::object(), c = Value::object();
-            c.set("sha", refs[br]);
-            v.set("commit", std::move(c));
-            return json(201, v);
-        }
-        return msg(404, "Not Found");
-    }
-};
-
-FakeGitHub* g_fake = nullptr;
-
-class FakeClient final : public app::ai::HttpClient {
-public:
-    app::ai::HttpResponse perform(const app::ai::HttpRequest& req, const app::ai::HttpSink& sink) override {
-        app::ai::HttpResponse r;
-        const auto a = g_fake->handle(req);
-        r.status = a.status;
-        if (sink.onHeaders) sink.onHeaders(a.status, {});
-        if (sink.onData) sink.onData(a.body);
-        return r;
-    }
-    void cancel() override {}
-    [[nodiscard]] bool cancelled() const noexcept override { return false; }
-};
 
 // ---------------------------------------------------------------------------
 //  les aides
@@ -543,240 +310,250 @@ int main(int argc, char** argv) {
         check(nowhere({&rigA, &rigB}, phrase) && nowhere({&rigA, &rigB}, "cheval agrafe"), "la phrase : jamais dans un rapport, un message, un dessin");
     }
 
-    // =========================================================================================== GitHub
-    FakeGitHub fake;
-    g_fake = &fake;
-    app::ai::setHttpFactory([] { return std::make_unique<FakeClient>(); });
-
-    Fixture fc(source, "github-c");
+    // =========================================================================================== le service en ligne
+    Fixture fc(source, "service-c");
     check(fc.ready(), "le poste d'essai : cle et registre");
     {
         const auto l = fc.licence("XPG-2026-00001", "Client d'essai Alpha", "PROFESSIONAL", {fc.request("pc-a", "Poste essai A")});
-        check(l.ok, "une licence a publier (" + l.text() + ")");
+        check(l.ok, "une licence pour l'archive (" + l.text() + ")");
     }
     HostRig rig(fc);
-    auto gp = gui::makeGithubPage(rig.host());
+    auto sp = gui::makeServicePage(rig.host());
     rig.refreshers.push_back([&] {
         fc.ws->reload();
-        gp->refresh();
+        sp->refresh();
     });
     std::string code;   // le code de secours du premier poste
 
-    std::printf("-- github : l'etat et l'etape 1\n");
+    std::printf("-- service : rien de regle, la mise en ligne resumee\n");
     {
-        const std::string t = draw(*gp, tr);
-        check(gp->title() == "Synchronisation GitHub" && has(t, "Synchronisation GitHub"), "le titre");
-        check(has(t, "pas encore r\xC3\xA9gl\xC3\xA9") && has(t, "absent") && has(t, "aucune synchro"), "l'etat : rien de regle");
-        check(has(t, "cr\xC3\xA9" "e un d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 (par exemple licences-xpg)") && has(t, "New repository") && has(t, "Private"),
-              "l'etape 1 : le depot prive, le chemin dans GitHub");
-        check(has(t, "Pas encore essay\xC3\xA9 contre le vrai GitHub") && has(t, "d\xC3\xA9p\xC3\xB4t public est refus\xC3\xA9") && has(t, "Le jeton ne va jamais dans le d\xC3\xA9p\xC3\xB4t"),
-              "les notes honnetes");
-        check(find<ui::InputText>(*gp, "github.branche")->text() == "main", "la branche : main");
-        check(shown(*gp, "github.depot") && shown(*gp, "github.premier") && shown(*gp, "github.secours") && !shown(*gp, "github.code"),
-              "le depot, le choix du poste ; le code seulement pour un autre poste");
-        type(*gp, "github.depot", "pas-un-depot");
-        check(click(*gp, "github.configurer") && !lastOk(rig) && has(lastText(rig), "PROPRIETAIRE/NOM") && !fc.ws->github().configured,
-              "un mauvais depot : refuse (" + lastText(rig) + ")");
+        const std::string t = draw(*sp, tr, 1100.f, 2400.f);
+        check(sp->title() == "Service en ligne" && has(t, "Service en ligne"), "le titre");
+        check(has(t, "pas encore r\xC3\xA9gl\xC3\xA9") && has(t, "pas encore sur ce poste") && has(t, "jamais depuis ce poste"), "l'etat : rien de regle");
+        check(has(t, "Mettre le service en ligne (une fois)") && has(t, "Node.js") && has(t, "npx wrangler login") && has(t, "deployer.bat") &&
+                  has(t, "cle-publique.txt") && has(t, "ServiceAddress.hpp"),
+              "les etapes de la mise en ligne (LISEZ-MOI-SERVICE.txt en bref)");
+        check(has(t, "ne va jamais sur le service") && has(t, "code d'activation"), "ce qui ne va jamais sur le service");
+        check(!enabledW(*sp, "service.verifier") && !enabledW(*sp, "service.certifier") && !enabledW(*sp, "service.licences.relever"),
+              "sans adresse : Verifier, Certifier, Relever gris");
+        check(shown(*sp, "service.archive.premier") && shown(*sp, "service.archive.secours") && shown(*sp, "service.archive.cle") && !shown(*sp, "service.archive.code") &&
+                  !shown(*sp, "service.archive.synchroniser"),
+              "l'archive : le choix du poste ; le code seulement pour un autre poste");
+        check(click(*sp, "service.adresse.enregistrer") && !lastOk(rig) && has(lastText(rig), "colle d'abord"), "sans adresse : refuse (" + lastText(rig) + ")");
+        type(*sp, "service.adresse", "pas une adresse");
+        check(click(*sp, "service.adresse.enregistrer") && !lastOk(rig) && !fc.ws->service().configured, "une adresse fausse : refusee (" + lastText(rig) + ")");
+        type(*sp, "service.adresse", "http://exemple.invalid");
+        check(click(*sp, "service.adresse.enregistrer") && !lastOk(rig) && !fc.ws->service().configured, "http:// ailleurs que sur ce poste : refuse");
     }
 
-    std::printf("-- github : le premier poste et son code de secours\n");
+    std::printf("-- service : l'adresse (sans reseau)\n");
     {
-        type(*gp, "github.depot", "https://github.com/editeur/licences-xpg.git");
-        check(click(*gp, "github.configurer") && lastOk(rig), "l'adresse du navigateur : acceptee (" + lastText(rig) + ")");
-        check(fc.ws->github().configured && fc.ws->github().config.repo == "editeur/licences-xpg" && fc.ws->github().syncKey,
-              "regle : editeur/licences-xpg, la cle de synchro creee");
-        code = fc.ws->githubRecoveryCode(&why);
+        type(*sp, "service.adresse", "  HTTPS://XPG-Licences.Essai.Workers.dev/  ");
+        check(click(*sp, "service.adresse.enregistrer") && lastOk(rig), "enregistree : " + lastText(rig));
+        check(fc.ws->service().ready() && fc.ws->service().config.url == "https://xpg-licences.essai.workers.dev", "en minuscules, sans le / final");
+        check(find<ui::InputText>(*sp, "service.adresse")->text() == "https://xpg-licences.essai.workers.dev", "le champ montre l'adresse retenue");
+        const std::string t = draw(*sp, tr, 1100.f, 2400.f);
+        check(has(t, "pas encore v\xC3\xA9rifi\xC3\xA9") && enabledW(*sp, "service.verifier") && enabledW(*sp, "service.certifier"), "ensuite : Verifier");
+        check(!rig.bg.running() && rig.reports.size() >= 1, "rien n'est parti sur le reseau");
+    }
+
+    std::printf("-- service : cle-publique.txt (pour PUBLISHER_KEYS) ; le kit des Studios refuse une cle d'essai\n");
+    {
+        const fs::path dir = fc.root / "mise-en-ligne";
+        fs::create_directories(dir);
+        rig.picks.push_back(U(dir));
+        check(click(*sp, "service.cle-publique") && lastOk(rig), "Ecrire cle-publique.txt : " + lastText(rig));
+        check(!rig.asked.empty() && rig.asked.back().folder, "un dossier demande");
+        const std::string pub = readFile(dir / "cle-publique.txt");
+        check(fc.ws->signingKey() && has(pub, fc.ws->signingKey()->publicKeyHex()) && !has(pub, "PRIV") && has(lastText(rig), "ESSAI"),
+              "la cle PUBLIQUE en hexadecimal ; une cle d'essai : dit");
+        auto secu = gui::makeSecurityPage(rig.host());
+        const std::size_t asked = rig.asked.size();
+        check(click(*secu, "securite.kit-studios") && !lastOk(rig) && has(lastText(rig), "ESSAI") && rig.asked.size() == asked,
+              "le kit des Studios : une cle d'essai refusee avant de choisir (" + lastText(rig) + ")");
+    }
+
+    std::printf("-- service : le premier poste et son code de secours\n");
+    {
+        check(click(*sp, "service.archive.cle") && lastOk(rig), "Creer la cle de synchro : " + lastText(rig));
+        check(fc.ws->service().syncKey && !fc.ws->service().syncKeyId.empty(), "la cle de synchro sur le poste");
+        code = fc.ws->syncRecoveryCode(&why);
         check(code.rfind("XPGS1-", 0) == 0, "le code de secours existe");
         check(!has(lastText(rig), code), "le code n'est pas dans le rapport");
-        std::string t = draw(*gp, tr);
+        std::string t = draw(*sp, tr, 1100.f, 2400.f);
         check(has(t, code), "le code est montre, en entier");
         check(has(t, "Note-le MAINTENANT hors de ce PC"), "et ce qu'il faut en faire");
-        check(!enabledW(*gp, "github.code.continuer") && !click(*gp, "github.code.continuer"), "Continuer : bloque tant que la case n'est pas cochee");
-        check(!shown(*gp, "github.jeton") && !shown(*gp, "github.configurer"), "l'assistant attend");
+        check(!enabledW(*sp, "service.code.continuer") && !click(*sp, "service.code.continuer"), "Continuer : bloque tant que la case n'est pas cochee");
         g_clipboard.clear();
-        check(click(*gp, "github.code.copier") && g_clipboard == code, "Copier : le code dans le presse-papiers (sur ce clic)");
+        check(click(*sp, "service.code.copier") && g_clipboard == code, "Copier : le code dans le presse-papiers (sur ce clic)");
         check(!rig.flashes.empty() && !has(rig.flashes.back(), code), "le message ne contient pas le code");
-        find<ui::Checkbox>(*gp, "github.code.note")->setState(ui::Checkbox::State::Checked);
-        check(enabledW(*gp, "github.code.continuer") && click(*gp, "github.code.continuer"), "coche : Continuer");
-        t = draw(*gp, tr);
+        find<ui::Checkbox>(*sp, "service.code.note")->setState(ui::Checkbox::State::Checked);
+        check(enabledW(*sp, "service.code.continuer") && click(*sp, "service.code.continuer"), "coche : Continuer");
+        t = draw(*sp, tr, 1100.f, 2400.f);
         check(!has(t, code), "le code n'est plus montre");
-        check(has(t, "2. Le jeton") && has(t, "Settings \xE2\x80\xBA Developer settings \xE2\x80\xBA Personal access tokens \xE2\x80\xBA Fine-grained tokens")
-                  && has(t, "Contents : Read and write") && has(t, "Only select repositories") && has(t, "Expiration : 1 an"),
-              "l'etape 2 : le chemin exact du jeton");
-        check(has(t, fc.ws->github().syncKeyId), "l'etat : l'identifiant de la cle de synchro");
+        check(has(t, fc.ws->service().syncKeyId) && shown(*sp, "service.archive.synchroniser") && shown(*sp, "service.archive.recevoir") &&
+                  !shown(*sp, "service.archive.cle"),
+              "l'etat : l'identifiant de la cle ; Synchroniser, Recevoir seulement");
     }
 
-    std::printf("-- github : afficher le code de secours (apres confirmation)\n");
+    std::printf("-- service : afficher le code de secours (apres confirmation)\n");
     {
-        check(shown(*gp, "github.code.afficher"), "le bouton est la");
-        check(click(*gp, "github.code.afficher") && !rig.dialogs.empty(), "une confirmation d'abord");
+        check(shown(*sp, "service.archive.code.afficher"), "le bouton est la");
+        check(click(*sp, "service.archive.code.afficher") && !rig.dialogs.empty(), "une confirmation d'abord");
         if (!rig.dialogs.empty()) {
             rig.dialogs.back()->attach(&menus);
             const std::string d = drawMenu(*rig.dialogs.back(), tr);
             check(has(d, "personne ne regarde ton \xC3\xA9" "cran") && !has(d, code), "la confirmation : pas encore le code");
-            check(click(*rig.dialogs.back()->widgetRoot(), "github.code.confirmation.non"), "Annuler");
+            check(click(*rig.dialogs.back()->widgetRoot(), "service.code.confirmation.non"), "Annuler");
         }
-        std::string t = draw(*gp, tr);
+        std::string t = draw(*sp, tr, 1100.f, 2400.f);
         check(!has(t, code), "annule : pas de code");
-        check(click(*gp, "github.code.afficher") && !rig.dialogs.empty() && click(*rig.dialogs.back()->widgetRoot(), "github.code.confirmation.oui"),
+        check(click(*sp, "service.archive.code.afficher") && !rig.dialogs.empty() && click(*rig.dialogs.back()->widgetRoot(), "service.code.confirmation.oui"),
               "Afficher le code");
-        t = draw(*gp, tr);
+        t = draw(*sp, tr, 1100.f, 2400.f);
         check(has(t, code), "le code est montre");
-        check(click(*gp, "github.code.masquer"), "Masquer le code");
-        t = draw(*gp, tr);
+        check(click(*sp, "service.code.masquer"), "Masquer le code");
+        t = draw(*sp, tr, 1100.f, 2400.f);
         check(!has(t, code), "cache de nouveau");
     }
 
-    std::printf("-- github : sans jeton, la synchro refuse\n");
+    std::printf("-- service : hors ligne, chaque refus est dit (rien d'invente)\n");
     {
-        check(click(*gp, "github.etape3"), "l'etape 3");
-        const std::string t = draw(*gp, tr);
-        check(has(t, "Il manque le jeton"), "l'etape 3 le dit");
+        type(*sp, "service.adresse", "http://127.0.0.1:9");   // un service d'essai sur ce poste ou rien n'ecoute
+        check(click(*sp, "service.adresse.enregistrer") && lastOk(rig) && has(lastText(rig), "ESSAI"), "http://127.0.0.1 : un service d'essai, dit");
         rig.slowOnThread = true;
-        check(click(*gp, "github.verifier") && !lastOk(rig) && has(lastText(rig), "jeton") && !rig.bg.running(),
-              "Verifier sans jeton : refuse, aucun travail (" + lastText(rig) + ")");
+        check(click(*sp, "service.verifier") && has(rig.bg.label(), "Service"), "Verifier : un travail lent (" + rig.bg.label() + ")");
+        check(rig.finishSlow() && !lastOk(rig) && has(lastText(rig), "pas de r\xC3\xA9ponse du service"), "hors ligne : refuse (" + lastText(rig) + ")");
+        std::string t = draw(*sp, tr, 1100.f, 2400.f);
+        check(has(t, "le service n'a pas r\xC3\xA9pondu"), "la page le dit");
+        const std::size_t dialogs = rig.dialogs.size();
+        check(click(*sp, "service.certifier") && rig.finishSlow() && !lastOk(rig) && rig.dialogs.size() == dialogs, "Certifier hors ligne : refuse, rien a signer");
+        check(click(*sp, "service.archive.synchroniser") && rig.finishSlow() && !lastOk(rig) && has(lastText(rig), "Refus"), "Synchroniser hors ligne : " + lastText(rig));
+        check(archive::lastSync(fc.ws->folder()).at == 0, "aucune synchro notee");
+        check(click(*sp, "service.licences.relever") && rig.finishSlow() && !lastOk(rig), "Relever hors ligne : refuse");
+        check(click(*sp, "service.stats") && rig.finishSlow() && !lastOk(rig), "les compteurs hors ligne : refuses");
+        t = draw(*sp, tr, 1100.f, 2400.f);
+        check(has(t, "Dernier r\xC3\xA9sultat") && has(t, "jamais sur ce poste"), "la page : les derniers refus, aucun releve");
     }
 
-    std::printf("-- github : le jeton\n");
-    {
-        check(click(*gp, "github.etape2"), "l'etape 2");
-        check(find<ui::InputText>(*gp, "github.jeton")->masked(), "le champ du jeton : masque");
-        check(click(*gp, "github.jeton.enregistrer") && !lastOk(rig), "vide : refuse");
-        type(*gp, "github.jeton", fake.token);
-        check(click(*gp, "github.jeton.enregistrer") && lastOk(rig) && has(lastText(rig), "Jeton GitHub enregistr"), "enregistre : " + lastText(rig));
-        check(find<ui::InputText>(*gp, "github.jeton")->text().empty() && fc.ws->github().token, "le champ vide, le jeton sur le poste");
-        const std::string t = draw(*gp, tr);
-        check(has(t, "enregistr\xC3\xA9 sur ce poste") && !has(t, fake.token), "l'etat : enregistre (jamais sa valeur)");
-        check(has(t, "3. V\xC3\xA9rifier, puis synchroniser"), "l'assistant passe a l'etape 3");
-        check(fc.ws->githubSetApi("http://127.0.0.1:9").ok, "(l'essai : le faux GitHub)");
-        gp->refresh();
-    }
-
-    std::printf("-- github : verifier, synchroniser, recevoir (runSlow)\n");
-    {
-        rig.slowOnThread = true;
-        check(click(*gp, "github.verifier") && has(rig.bg.label(), "Synchro GitHub"), "Verifier : un travail lent (" + rig.bg.label() + ")");
-        std::string t = draw(*gp, tr);
-        if (rig.bg.running()) {
-            check(has(t, "Synchro en cours"), "la page dit : Synchro en cours...");
-            check(!enabledW(*gp, "github.synchroniser") && !enabledW(*gp, "github.verifier") && !enabledW(*gp, "github.jeton.enregistrer"),
-                  "pendant ce temps : boutons gris");
-        }
-        check(rig.finishSlow(), "la verification finit");
-        check(lastOk(rig) && has(lastText(rig), "V\xC3\xA9rifi\xC3\xA9, rien n'a chang\xC3\xA9") && has(lastText(rig), "\xC3\x80 envoyer"), "ce qui serait envoye : " + lastText(rig));
-        check(fake.commits.empty(), "rien n'a ete envoye");
-        t = draw(*gp, tr);
-        check(has(t, "Dernier r\xC3\xA9sultat : v\xC3\xA9rification") && has(t, "\xC3\x80 envoyer"), "le dernier rapport dans la page");
-
-        check(click(*gp, "github.synchroniser") && rig.finishSlow(), "Synchroniser");
-        check(lastOk(rig) && has(lastText(rig), "Synchro faite") && has(lastText(rig), "Commit"), "publie : " + lastText(rig));
-        check(!fake.commits.empty() && !fake.refs.empty(), "le faux GitHub a recu un commit");
-        check(!fake.anyBlobHas(fake.token) && !fake.anyBlobHas("Client d'essai Alpha") && !fake.anyBlobHas("Poste essai A"),
-              "dans le depot : ni le jeton, ni le client, ni le PC en clair");
-        t = draw(*gp, tr);
-        check(has(t, "Envoy\xC3\xA9 (commit") && has(t, "Dernier r\xC3\xA9sultat : synchronisation"), "la page : envoye, le commit");
-
-        check(click(*gp, "github.recevoir") && rig.finishSlow() && lastOk(rig), "Recevoir seulement : " + lastText(rig));
-        check(click(*gp, "github.verifier") && rig.finishSlow() && lastOk(rig) && has(lastText(rig), "m\xC3\xAAmes fichiers"), "puis a jour : " + lastText(rig));
-    }
-
-    std::printf("-- github : un travail en cours, tout attend\n");
+    std::printf("-- service : un travail en cours, tout attend\n");
     {
         Blocker blocker;
         check(blocker.start(rig), "un travail long commence");
-        const std::string t = draw(*gp, tr);
+        const std::string t = draw(*sp, tr, 1100.f, 2400.f);
         check(has(t, "Un travail est en cours"), "la page le dit");
-        check(!enabledW(*gp, "github.verifier") && !enabledW(*gp, "github.synchroniser") && !enabledW(*gp, "github.recevoir"), "la synchro : grise");
-        check(!click(*gp, "github.synchroniser"), "un clic n'y fait rien");
+        check(!enabledW(*sp, "service.verifier") && !enabledW(*sp, "service.certifier") && !enabledW(*sp, "service.archive.synchroniser") &&
+                  !enabledW(*sp, "service.archive.recevoir") && !enabledW(*sp, "service.licences.relever") && !enabledW(*sp, "service.adresse.enregistrer"),
+              "tout est gris");
+        check(!click(*sp, "service.archive.synchroniser"), "un clic n'y fait rien");
         blocker.release.store(true);
         check(rig.finishSlow(), "le travail long finit");
-        (void)draw(*gp, tr);
-        check(enabledW(*gp, "github.synchroniser"), "puis tout revient");
+        (void)draw(*sp, tr, 1100.f, 2400.f);
+        check(enabledW(*sp, "service.archive.synchroniser") && enabledW(*sp, "service.verifier"), "puis tout revient");
     }
 
-    std::printf("-- github : terminer l'assistant, Modifier\n");
-    {
-        check(shown(*gp, "github.terminer") && click(*gp, "github.terminer"), "Terminer l'assistant");
-        std::string t = draw(*gp, tr);
-        check(has(t, "Synchroniser") && shown(*gp, "github.synchroniser") && shown(*gp, "github.modifier") && !shown(*gp, "github.depot"),
-              "la carte Synchroniser ; Modifier...");
-        check(click(*gp, "github.modifier") && shown(*gp, "github.depot") && find<ui::InputText>(*gp, "github.depot")->text() == "editeur/licences-xpg",
-              "Modifier : l'assistant, le depot prerempli");
-    }
+    // ------------------------------------------------------------------------------------- le vrai service, local
+    std::printf("-- service : le vrai service local (Verifier, Certifier, Synchroniser, un autre poste)\n");
+    xpg_test::LocalService::Options so;
+    so.sourceDir = source;
+    xpg_test::LocalService svc({fc.ws->signingKey() ? fc.ws->signingKey()->publicKeyHex() : std::string()}, so);
+    if (svc.skipped()) {
+        std::printf("SAUTE : %s\n", svc.error().c_str());
+    } else {
+        check(svc.ready(), "le service demarre (" + svc.error() + ")");
+        if (svc.ready()) {
+            rig.slowOnThread = true;
+            type(*sp, "service.adresse", svc.url());
+            check(click(*sp, "service.adresse.enregistrer") && lastOk(rig), "l'adresse du service local : " + lastText(rig));
+            check(click(*sp, "service.verifier") && rig.finishSlow() && lastOk(rig), "Verifier : " + lastText(rig));
+            std::string t = draw(*sp, tr, 1100.f, 2400.f);
+            check(has(t, "il r\xC3\xA9pond") && has(t, "accept\xC3\xA9" "e par le service"), "il repond ; la cle de l'editeur acceptee");
+            check(fc.ws->service().hasState && !fc.ws->service().state.certOk && find<ui::Button>(*sp, "service.certifier")->text() == "Certifier la cl\xC3\xA9 du service\xE2\x80\xA6",
+                  "pas encore de certificat : Certifier");
+            const std::string serviceKey = fc.ws->service().state.serviceKey;
+            check(serviceKey.size() == 64 && has(t, online::keyFingerprint(serviceKey)), "la cle du service : son empreinte");
 
-    std::printf("-- github : un autre poste, par le code de secours\n");
-    {
-        Fixture fd(source, "github-d");
-        {
-            const fs::path bk = fc.root / "cle-c.xpgcle";   // un autre PC Admin : la meme cle de l'editeur, restauree
-            const auto saved = fc.ws->backupKey(phrase, U(bk));
-            const auto restored = fd.ws->restoreKey(U(bk), phrase);
-            check(saved.ok && restored.ok, "(le second poste : la cle de l'editeur restauree) " + restored.text());
-        }
-        HostRig rigD(fd);
-        auto dp = gui::makeGithubPage(rigD.host());
-        rigD.refreshers.push_back([&] {
+            std::size_t dialogs = rig.dialogs.size();
+            check(click(*sp, "service.certifier") && rig.finishSlow() && lastOk(rig) && rig.dialogs.size() == dialogs + 1, "Certifier : la cle lue, une confirmation");
+            if (rig.dialogs.size() == dialogs + 1) {
+                rig.dialogs.back()->attach(&menus);
+                const std::string d = drawMenu(*rig.dialogs.back(), tr);
+                check(has(d, online::keyFingerprint(serviceKey)) && has(d, "Compare-la"), "la confirmation montre l'empreinte a comparer");
+                check(click(*rig.dialogs.back()->widgetRoot(), "service.certification.non") && !fc.ws->service().state.certOk, "Annuler : rien n'est signe");
+            }
+            check(click(*sp, "service.certifier") && rig.finishSlow() && rig.dialogs.size() == dialogs + 2 &&
+                      click(*rig.dialogs.back()->widgetRoot(), "service.certification.oui"),
+                  "Certifier (confirme)");
+            check(rig.finishSlow() && lastOk(rig) && has(lastText(rig), "certifi\xC3\xA9" "e jusqu'au"), "la cle du service certifiee : " + lastText(rig));
+            check(rig.finishSlow(), "l'etat relu aussitot");
+            t = draw(*sp, tr, 1100.f, 2400.f);
+            check(fc.ws->service().state.certOk && has(t, "valable jusqu'au") && find<ui::Button>(*sp, "service.certifier")->text() == "Renouveler le certificat\xE2\x80\xA6",
+                  "le certificat : valable ; Renouveler");
+
+            check(click(*sp, "service.archive.verifier") && rig.finishSlow() && lastOk(rig) && has(lastText(rig), "envoyer"),
+                  "Verifier (sans rien changer) : ce qui partirait : " + lastText(rig));
+            check(archive::lastSync(fc.ws->folder()).at == 0, "rien n'a change");
+            check(click(*sp, "service.archive.synchroniser") && rig.finishSlow() && lastOk(rig) && has(lastText(rig), "Archive synchronis"),
+                  "Synchroniser : " + lastText(rig));
+            check(archive::lastSync(fc.ws->folder()).at != 0 && archive::lastSync(fc.ws->folder()).url == svc.url(), "la synchro notee");
+            t = draw(*sp, tr, 1100.f, 2400.f);
+            check(has(t, "Envoy\xC3\xA9") && has(t, "(version 1)"), "la page : envoye, la version");
+            check(click(*sp, "service.archive.verifier") && rig.finishSlow() && lastOk(rig) && has(lastText(rig), "m\xC3\xAAmes fichiers"), "puis a jour : " + lastText(rig));
+            check(click(*sp, "service.licences.relever") && rig.finishSlow() && lastOk(rig), "Relever les licences en ligne : " + lastText(rig));
+            check(click(*sp, "service.stats") && rig.finishSlow() && lastOk(rig), "les compteurs : " + lastText(rig));
+            t = draw(*sp, tr, 1100.f, 2400.f);
+            check(!has(t, "jamais sur ce poste") && has(t, "Licences en ligne"), "le releve est note");
+
+            // Un autre poste : la meme cle de l'editeur (restauree), la cle de synchro par le code de secours.
+            Fixture fd(source, "service-d");
+            {
+                const fs::path bk = fc.root / "cle-c.xpgcle";
+                const auto saved = fc.ws->backupKey(phrase, U(bk));
+                const auto restored = fd.ws->restoreKey(U(bk), phrase);
+                check(saved.ok && restored.ok, "(le second poste : la cle de l'editeur restauree) " + restored.text());
+            }
+            HostRig rigD(fd);
+            auto dp = gui::makeServicePage(rigD.host());
+            rigD.refreshers.push_back([&] {
+                fd.ws->reload();
+                dp->refresh();
+            });
+            (void)draw(*dp, tr, 1100.f, 2400.f);
+            find<ui::RadioButton>(*dp, "service.archive.secours")->select();
+            (void)draw(*dp, tr, 1100.f, 2400.f);
+            check(shown(*dp, "service.archive.code") && find<ui::InputText>(*dp, "service.archive.code")->masked(), "le champ du code : montre, masque");
+            check(click(*dp, "service.archive.code.montrer") && !find<ui::InputText>(*dp, "service.archive.code")->masked(), "Montrer : en clair");
+            check(click(*dp, "service.archive.code.montrer") && find<ui::InputText>(*dp, "service.archive.code")->masked(), "Masquer : masque");
+            check(click(*dp, "service.archive.cle") && !lastOk(rigD), "sans code : refuse");
+            type(*dp, "service.archive.code", code);
+            check(click(*dp, "service.archive.cle") && lastOk(rigD), "le code de secours : " + lastText(rigD));
+            check(fd.ws->service().syncKeyId == fc.ws->service().syncKeyId, "la meme cle de synchro que le premier poste");
+            check(find<ui::InputText>(*dp, "service.archive.code")->text().empty(), "le champ du code est vide");
+            t = draw(*dp, tr, 1100.f, 2400.f);
+            check(!has(t, code), "pas de code montre sur ce poste");
+            type(*dp, "service.adresse", svc.url());
+            check(click(*dp, "service.adresse.enregistrer") && lastOk(rigD), "l'adresse du service");
+            rigD.slowOnThread = true;
+            check(click(*dp, "service.archive.recevoir") && rigD.finishSlow() && lastOk(rigD) && has(lastText(rigD), "Re\xC3\xA7u"), "Recevoir seulement : " + lastText(rigD));
             fd.ws->reload();
-            dp->refresh();
-        });
-        (void)draw(*dp, tr);
-        find<ui::RadioButton>(*dp, "github.secours")->select();
-        (void)draw(*dp, tr);
-        check(shown(*dp, "github.code") && find<ui::InputText>(*dp, "github.code")->masked(), "le champ du code : montre, masque");
-        check(click(*dp, "github.code.montrer") && !find<ui::InputText>(*dp, "github.code")->masked(), "Montrer : en clair");
-        check(click(*dp, "github.code.montrer") && find<ui::InputText>(*dp, "github.code")->masked(), "Masquer : masque");
-        type(*dp, "github.depot", "editeur/licences-xpg");
-        check(click(*dp, "github.configurer") && !lastOk(rigD), "sans code : refuse");
-        type(*dp, "github.code", code);
-        check(click(*dp, "github.configurer") && lastOk(rigD), "le code de secours : " + lastText(rigD));
-        check(fd.ws->github().syncKeyId == fc.ws->github().syncKeyId, "la meme cle de synchro que le premier poste");
-        check(find<ui::InputText>(*dp, "github.code")->text().empty(), "le champ du code est vide");
-        std::string t = draw(*dp, tr);
-        check(!has(t, code) && !shown(*dp, "github.code.copier"), "pas de code montre sur ce poste");
-        check(has(t, "2. Le jeton"), "ensuite : le jeton");
-        type(*dp, "github.jeton", fake.token);
-        check(click(*dp, "github.jeton.enregistrer") && lastOk(rigD), "le jeton du second poste");
-        check(fd.ws->githubSetApi("http://127.0.0.1:9").ok, "(l'essai : le faux GitHub)");
-        dp->refresh();
-        rigD.slowOnThread = true;
-        check(click(*dp, "github.recevoir") && rigD.finishSlow() && lastOk(rigD), "Recevoir seulement : " + lastText(rigD));
-        fd.ws->reload();
-        check(fd.ws->licence("XPG-2026-00001") != nullptr, "la licence du premier poste est recue");
-        t = draw(*dp, tr);
-        check(has(t, "Re\xC3\xA7u") && has(t, "Dernier r\xC3\xA9sultat : r\xC3\xA9" "ception"), "la page : recu");
-
-        fake.isPrivate = false;
-        check(click(*dp, "github.verifier") && rigD.finishSlow() && !lastOk(rigD) && has(lastText(rigD), "PUBLIC"),
-              "un depot public : refuse (" + lastText(rigD) + ")");
-        t = draw(*dp, tr);
-        check(has(t, "PUBLIC"), "la page le dit");
-        fake.isPrivate = true;
-        check(nowhere({&rigD}, fake.token), "le jeton du second poste : jamais montre");
-    }
-
-    std::printf("-- github : retirer le jeton\n");
-    {
-        check(click(*gp, "github.etape2") && enabledW(*gp, "github.jeton.retirer"), "Retirer le jeton : possible");
-        check(click(*gp, "github.jeton.retirer") && lastOk(rig) && has(lastText(rig), "r\xC3\xA9voquer"), "retire, et le rappel de le revoquer : " + lastText(rig));
-        check(!fc.ws->github().token, "plus de jeton sur le poste");
-        const std::string t = draw(*gp, tr);
-        check(has(t, "absent") && has(t, "aucun jeton"), "l'etat : absent");
-        check(!enabledW(*gp, "github.jeton.retirer"), "Retirer : gris sans jeton");
+            check(fd.ws->licence("XPG-2026-00001") != nullptr, "la licence du premier poste est recue");
+            t = draw(*dp, tr, 1100.f, 2400.f);
+            check(has(t, "Re\xC3\xA7u"), "la page : recu");
+            check(nowhere({&rig, &rigD}, phrase), "la phrase : jamais montree");
+        }
     }
 
     std::printf("-- les secrets\n");
     {
-        check(nowhere({&rig}, fake.token), "le jeton : jamais dans un rapport, un message, un dessin");
         std::size_t paintedWithCode = 0;
         for (const auto& t : g_painted)
             if (has(t, code)) ++paintedWithCode;
-        check(paintedWithCode == 2, "le code de secours : dessine seulement deux fois (le premier reglage, puis Afficher) : "
-                                        + std::to_string(paintedWithCode));
+        check(paintedWithCode == 2, "le code de secours : dessine seulement deux fois (le premier poste, puis Afficher) : " + std::to_string(paintedWithCode));
         bool inReports = false;
-        for (const auto* r : {&rig})
-            for (const auto& x : r->reports) inReports = inReports || has(x.text(), code);
+        for (const auto& x : rig.reports) inReports = inReports || has(x.text(), code);
         for (const auto& f : rig.flashes) inReports = inReports || has(f, code);
         check(!inReports, "le code de secours : jamais dans un rapport ni un message");
+        check(!foundIn(fc.root, code), "le code de secours : dans aucun fichier du poste");
     }
 
     return finish();

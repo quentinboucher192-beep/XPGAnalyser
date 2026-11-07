@@ -25,7 +25,7 @@ L'APPLICATION : XPG-License-Manager-Admin.exe (1.33.0)
 =============================================================================
 
 À gauche, le menu. En haut, l'état de ta clé (« CLÉ D'ESSAI » en orange, « Pas de clé »
-en rouge) et de la synchro GitHub. En bas, le résultat de la dernière opération
+en rouge) et du service des licences. En bas, le résultat de la dernière opération
 (« Détails » pour tout lire, « Journal » pour toute la séance). Tu peux glisser des
 fichiers sur la fenêtre : une demande d'activation (.xpgreq) ouvre l'assistant de
 licence ; une licence, un registre ou une liste de révocation signés sont rangés dans
@@ -50,11 +50,12 @@ LA PREMIÈRE FOIS
 5. Envoie à l'agent de développement UNIQUEMENT PublisherKey.hpp et le registre signé
    (archive\registre\registre.xpgreg, dans le dossier du poste : « Dossier du poste »,
    en bas à gauche).
-   1.34.0 : plus simple, Paramètres de sécurité > Préparer les fichiers pour les
-   Studios... écrit dans un dossier que tu choisis les TROIS fichiers publics à
-   donner au développeur (PublisherKey.hpp, registre.xpgreg et GatewayAddress.hpp,
-   l'adresse de la passerelle ci-dessous) et un LISEZ-MOI.txt qui dit où les mettre.
-   Refusé avec une clé d'essai. Rien de secret dedans.
+   Plus simple : Paramètres de sécurité > Préparer les fichiers pour les Studios...
+   écrit dans un dossier que tu choisis les fichiers PUBLICS à donner au développeur
+   (PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp - l'adresse de ton service
+   des licences, plus bas - et cle-publique.txt) et un LISEZ-MOI.txt qui dit où les
+   mettre. Refusé avec une clé d'essai, ou avec un service d'essai (http://). Rien de
+   secret dedans.
 
 POUR CHAQUE CLIENT
 1. Il t'envoie la demande d'activation de son PC (un fichier .xpgreq : dans le
@@ -76,61 +77,85 @@ POUR CHAQUE CLIENT
   Révocations > Exporter la liste... (le client l'importe comme une licence).
 - Qui a le logiciel : Activations (tous les PC connus, leur état ; Exporter pour Excel),
   Clients, Historique.
+- Sans fichier à envoyer : une licence EN LIGNE (le service des licences, plus bas).
 
-LA SYNCHRO GITHUB (facultative)
-Synchronisation GitHub : l'assistant en trois étapes - le dépôt PRIVÉ, le jeton (il ne
-s'affiche jamais), puis Vérifier (sans rien changer) et Synchroniser. La première fois,
-l'application te montre le CODE DE SECOURS : note-le hors de ce PC avant de continuer.
-Un autre PC Admin : « J'ai déjà un code de secours ». Le détail est plus bas, partie
-« La source centrale » (les mêmes étapes en commandes).
+LE SERVICE DES LICENCES (1.35.0 ; il remplace GitHub pour tout)
+Ton service des licences est un petit programme (un « Worker ») que tu mets en ligne
+toi-même, sur ton compte Cloudflare gratuit. Les logiciels de tes clients lui parlent
+pour activer une licence avec un CODE D'ACTIVATION, la renouveler (le bail), prendre
+un jeton de licence flottante, envoyer une demande de licence et récupérer leur
+licence. Ton outil lui parle pour déposer tes licences, tes révocations, l'état de
+chaque PC, et pour garder une copie CHIFFRÉE de ton archive (tes autres PC Admin, une
+panne). Ta clé privée ne quitte jamais ce PC : chaque appel est signé ici.
+Une seule fois :
+1. Le mettre en ligne : suis LISEZ-MOI-SERVICE.txt (Node.js, le compte Cloudflare,
+   npx wrangler login, deployer.bat). Il lui faut ta clé PUBLIQUE :
+   Service en ligne > Écrire cle-publique.txt... dans le dossier de deployer.bat.
+   deployer.bat écrit l'adresse : https://xpg-licences.<ton compte>.workers.dev
+2. Service en ligne : colle l'adresse > Enregistrer l'adresse > Vérifier (il répond,
+   il accepte ta clé).
+3. Certifier la clé du service... : l'outil lit la clé que ton service a créée et te
+   montre son empreinte ; compare-la avec <adresse>/v1/etat ouvert dans ton
+   navigateur (le champ cle_service), puis Certifier. Le certificat vaut UN AN : la
+   page dit quand le renouveler (un mois avant) - « Renouveler le certificat... ».
+4. L'archive en ligne : « Premier poste : créer la clé de synchro ». L'application te
+   montre le CODE DE SECOURS (XPGS1-...) une seule fois : note-le HORS de ce PC
+   (gestionnaire de mots de passe, papier au coffre), coche « Je l'ai noté », puis
+   Synchroniser l'archive. Un autre PC Admin (ou ce PC réinstallé) : « Un autre
+   poste : j'ai le code de secours », puis Recevoir seulement. Afficher le code de
+   secours... le remontre, après une confirmation.
+5. Signe le registre (Éditions) : il part sur le service. Puis Paramètres de sécurité
+   > Préparer les fichiers pour les Studios... : l'adresse du service part chez le
+   développeur (ServiceAddress.hpp) avec la clé publique et le registre.
+Ce qui ne va JAMAIS sur le service : ta clé de l'éditeur, la clé de synchro, son code
+de secours, un code d'activation (le service n'en garde que l'empreinte). Tout ce qui
+nomme un client (licences, révocations, registre des activations) y part chiffré par
+ta clé de synchro : Cloudflare ne lit rien.
 
-LA PASSERELLE DES CLIENTS (1.34.0 ; facultative, mais c'est elle qui évite les fichiers)
-Un SECOND dépôt GitHub, PUBLIC, à part de celui de l'archive (jamais le même) : les
-logiciels des clients y envoient leur demande de licence et y récupèrent leur licence,
-seuls, au démarrage. Ce qui nomme un client y est scellé (personne d'autre que toi ne
-le lit) ; tout ce que tu y publies est signé par ta clé.
-Une seule fois, sur github.com :
-1. Le dépôt : bouton + en haut à droite > New repository > Repository name :
-   passerelle-licences > PUBLIC > Create repository.
-2. Le jeton DES DEMANDES (celui des clients ; il part chez eux, masqué) : ta photo >
-   Settings > Developer settings > Personal access tokens > Fine-grained tokens >
-   Generate new token. Token name : XPG demandes des clients ; Expiration : la plus
-   longue proposée (note la date) ; Repository access : Only select repositories >
-   passerelle-licences SEULEMENT ; Repository permissions > Issues : Read and write,
-   et RIEN d'autre (Contents : No access). Generate token, copie-le.
-3. TON jeton (celui de la synchro, étape 2 de l'assistant) doit couvrir AUSSI ce
-   dépôt : même menu, ton jeton > Edit > Repository access : ajoute
-   passerelle-licences ; Repository permissions > Contents : Read and write et
-   Issues : Read and write. Lui ne part jamais chez les clients.
-Puis dans l'application, Synchronisation GitHub > carte « Passerelle des clients » :
-4. Écris le dépôt (PROPRIETAIRE/NOM), Enregistrer la passerelle ; colle le jeton des
-   demandes (il ne s'affiche pas), Enregistrer le jeton des demandes.
-5. Vérifier (le dépôt est public, ton jeton y écrit), puis Publier la configuration
-   (elle publie aussi ton registre ; la liste de révocation, elle, n'est jamais publique :
-   elle part scellée aux seuls PC concernés).
-6. Paramètres de sécurité > Préparer les fichiers pour les Studios... : l'adresse de
-   la passerelle part chez le développeur avec la clé publique et le registre.
-Ensuite, chaque jour : Demandes en ligne > Relever les demandes. Une demande :
-Accepter... ouvre l'assistant avec elle (si elle demande une licence existante : en
-ajout de PC, une licence partagée) ; « Signer et publier » - la licence part toute
-seule à CHACUN de ses PC, l'issue se ferme ; rien à envoyer. Refuser... : le client lit
-ta raison dans son logiciel. Le client peut annuler sa demande ; une seule demande par
-PC à la fois. Une révocation (la raison et la liste de révocation scellées pour chaque
-PC révoqué, jamais en clair), un PC retiré, un nouveau registre partent aussi tout
-seuls sur la passerelle. Hors ligne ou jeton refusé : c'est dit, rien n'est « publié »
-pour de faux ; le fichier signé reste dans l'archive.
+UNE LICENCE EN LIGNE (aucun fichier, aucune demande à attendre)
+Licences > Nouvelle licence en ligne... : l'assistant, choix « En ligne : code
+d'activation ». Le nombre de PC (ou, pour une licence FLOTTANTE, de postes en même
+temps), le BAIL (combien de jours un PC reste activé sans se connecter ; 30 par
+défaut), puis « Signer et déposer ». Une fois la licence déposée, l'application te
+montre son CODE D'ACTIVATION (XPG-XXXX-XXXX-XXXX-XXXX), masqué : Afficher, ou Copier.
+Note-le pour ton client : il n'est gardé NULLE PART (ni sur ce PC, ni sur le service,
+qui n'en garde que l'empreinte). Le client le tape dans Aide > Licence... > Activer
+avec un code (ou dans l'installateur). Hors ligne : la licence est signée et rangée,
+mais pas déposée, et aucun code n'est montré - Licences > Nouveau code... la dépose
+plus tard.
+Sur la page Licences, une licence en ligne : Relever (ses PC activés : vu le, bail
+jusqu'au), Retirer ce PC... (il n'est plus renouvelé ; sa place se libère),
+Nouveau code... (l'ancien ne marche plus ; les PC activés restent), Désactiver...
+(son code ne marche plus et ses PC s'arrêtent à la fin de leur bail ; Réactiver...
+l'annule), Prolonger... (une émission plus récente, le même code).
+Licences flottantes : les licences flottantes et les jetons en cours (un par poste
+qui tourne), au dernier relevé.
+
+LES DEMANDES DES CLIENTS (Demandes en ligne)
+Un client peut aussi DEMANDER une licence depuis son logiciel : sa demande arrive sur
+ton service, scellée pour ta clé (personne d'autre ne la lit). Demandes en ligne >
+Relever les demandes. Une demande :
+- Accepter... ouvre l'assistant avec elle (si elle demande une licence existante : en
+  ajout de PC) ; « Signer et publier » - la licence part toute seule à CHACUN de ses
+  PC (scellée pour lui) ; rien à envoyer.
+- Accepter en ligne... : une licence en ligne pour ce client ; son code t'est montré
+  une fois, tu le lui donnes ; son PC voit « acceptée » (sans le code).
+- Refuser... : le client lit ta raison dans son logiciel (scellée pour son PC).
+Le client peut annuler sa demande ; une seule demande par PC à la fois. Une
+révocation (la liste de révocation scellée pour chaque PC concerné, jamais publique),
+un PC retiré, un nouveau registre partent aussi tout seuls sur le service. Hors ligne
+ou clé refusée : c'est dit, rien n'est « publié » pour de faux ; le fichier signé
+reste dans l'archive.
 ATTENTION, une demande « ajouter ce PC à la licence XPG-... » n'est PAS une preuve :
 n'importe qui peut taper un identifiant de licence et un nom de société. Elle est
 marquée « à vérifier » ; confirme avec ton client (téléphone, courriel connu), puis
 coche « J'ai vérifié avec mon client » à l'étape Signer de l'assistant.
-Les issues du dépôt s'écrivent par n'importe qui (le jeton des demandes est public en
-pratique) ; l'outil s'en garde : une ancienne demande remise en ligne est ignorée
-(« Ignorée (rejouée) »), une issue modifiée après coup garde son contenu d'origine,
-« reçue » n'écrase jamais un état plus récent ni une licence, et au plus 20 « reçue »
-sont publiées par relevé (le reste au relevé suivant, c'est dit).
+L'outil se garde des demandes rejouées : une ancienne demande remise en ligne est
+ignorée (« Ignorée (rejouée) »), une demande modifiée après coup garde son contenu
+d'origine, et un état plus récent n'est jamais écrasé.
 
-Licences flottantes, Boutique, Commandes : elles demandent un service de licences EN
-LIGNE, qui n'existe pas encore. L'application le dit ; rien n'y est simulé.
+Boutique, Commandes : la vente en ligne demande un paiement en ligne, qui n'est pas
+fait dans cette version. L'application le dit ; rien n'y est simulé.
 
 
 =============================================================================
@@ -278,93 +303,105 @@ de l'activation, de la fin, et l'état (demande, activé, révoqué, expiré à 
 jour) ; en bas, les totaux (PC, licences, clients).
 
 Ce que tu NE vois PAS : rien du matériel des PC (la demande n'en porte pas), et aucun
-PC qui ne t'a jamais envoyé de demande. Voir CHAQUE LANCEMENT du logiciel (même sans
-activation) demandera le service de licences en ligne : à chaque lancement, le
-logiciel enverrait l'identifiant de sa licence, l'empreinte de la clé du PC, sa
-version et la date - jamais le matériel - et il faudra en informer clairement les
-utilisateurs (RGPD : une mention dans les conditions d'utilisation). C'est prévu avec
-l'hébergement du service ; ce n'est pas fait dans cette version.
+PC qui ne t'a jamais envoyé de demande. Les PC d'une licence EN LIGNE, eux, se
+connectent à ton service pour renouveler leur bail : service-licences (ou la page
+Licences) dit, pour chacun, quand il a été vu et jusqu'à quand il reste activé. Ce que
+le service reçoit d'un PC (la clé publique du PC, son nom, la date) doit être dit aux
+utilisateurs (RGPD : une mention dans les conditions d'utilisation).
 
 
 =============================================================================
-LA SOURCE CENTRALE : TON DÉPÔT GITHUB PRIVÉ (1.31.0)
+LE SERVICE DES LICENCES ET L'ARCHIVE EN LIGNE (1.35.0)
 =============================================================================
 
-L'outil range chaque fichier qu'il signe dans son ARCHIVE (archive\, à côté de ta clé),
-et peut la synchroniser avec un dépôt GitHub PRIVÉ : le registre, la liste de
-révocation, chaque licence et le registre des activations. Un autre PC Admin (ou ce
-PC après une panne) les y retrouve.
+L'outil range chaque fichier qu'il signe dans son ARCHIVE (archive\, à côté de ta clé) :
+le registre, la liste de révocation, chaque licence, et le registre des activations.
+Ton service des licences (LISEZ-MOI-SERVICE.txt pour le mettre en ligne) en garde une
+copie pour tes autres PC Admin, ou pour ce PC après une panne. (1.31.0 à 1.34.0 :
+c'était un dépôt GitHub ; la 1.35.0 a quitté GitHub, les commandes github-* et
+passerelle-* n'existent plus.)
 
-Ce qui part sur GitHub : le registre (signé, en clair : aucun client n'y est nommé) ;
-la liste de révocation, les licences et le registre des activations CHIFFRÉS avec ta
-clé de synchro (ni GitHub ni qui volerait le jeton ne peut lire les noms des clients
-ou de leurs PC) ; un index authentifié et un LISEZ-MOI. Les identifiants de licence
-(XPG-2026-00042) restent lisibles : n'y mets pas le nom du client.
-Ce qui n'y va JAMAIS : ta clé de l'éditeur, le jeton GitHub, le code de secours.
+Ce qui part sur le service : le registre (signé, en clair : aucun client n'y est
+nommé) ; la liste de révocation, les licences et le registre des activations CHIFFRÉS
+avec ta clé de synchro (ni Cloudflare ni personne ne lit les noms des clients ou de
+leurs PC) ; un index authentifié.
+Ce qui n'y va JAMAIS : ta clé de l'éditeur, la clé de synchro, son code de secours, un
+code d'activation.
 
 Une seule fois :
 
-1. Sur github.com : crée un dépôt PRIVÉ, réservé aux licences (par exemple
-   licences-xpg ; coche « Private »). L'outil refuse un dépôt public.
+1. L'adresse de ton service (deployer.bat te l'a donnée), puis la vérifier :
 
-2. Crée un jeton qui ne voit QUE ce dépôt : github.com > ta photo > Settings >
-   Developer settings > Personal access tokens > Fine-grained tokens > Generate new
-   token. Repository access : « Only select repositories », ce dépôt. Permissions :
-   Repository permissions > Contents : « Read and write » (rien d'autre). Choisis une
-   date d'expiration (par exemple un an) et note-la. Copie le jeton (github_pat_...).
+     XPG-License-Admin.exe service-config --url https://xpg-licences.TON-COMPTE.workers.dev
+     XPG-License-Admin.exe service-verifier
 
-3. Configure l'outil (TON-COMPTE : ton nom sur GitHub) :
+2. Certifier la clé du service (l'outil montre son empreinte : compare-la avec
+   <adresse>/v1/etat dans ton navigateur). Le certificat vaut un an ; relance la même
+   commande pour le renouveler (service-verifier dit quand) :
 
-     XPG-License-Admin.exe github-config --depot TON-COMPTE/licences-xpg
+     XPG-License-Admin.exe service-certifier
 
-   La première fois, il crée la CLÉ DE SYNCHRO et affiche son CODE DE SECOURS
-   (XPGS1-....). NOTE-LE HORS DE CE PC : gestionnaire de mots de passe, ou papier au
-   coffre. Sans lui, après une panne de ce PC, les licences et le registre des
-   activations du dépôt restent illisibles. Ne le mets jamais dans le dépôt ni dans un
-   courriel. github-code-secours --afficher le remontre.
+3. La clé de synchro de l'archive. La première fois, l'outil affiche son CODE DE
+   SECOURS (XPGS1-....) : NOTE-LE HORS DE CE PC. Sans lui, après une panne de ce PC,
+   les licences et le registre des activations de l'archive en ligne restent
+   illisibles. archive-code-secours --afficher le remontre.
 
-4. Enregistre le jeton (il ne s'affiche pas quand tu le colles ; puis Entrée) :
+     XPG-License-Admin.exe archive-cle
 
-     XPG-License-Admin.exe github-jeton
-
-   Il est protégé pour ton compte Windows (DPAPI). Expiré ou révoqué : refais
-   github-jeton. Pour le retirer de ce PC : github-jeton --effacer.
-
-5. Range dans l'archive les fichiers signés AVANT cette version (un par un) :
+4. Range dans l'archive les fichiers signés AVANT cette version (un par un), puis
+   regarde ce qui partirait, sans rien changer, puis envoie :
 
      XPG-License-Admin.exe archiver registre.xpgreg
-     XPG-License-Admin.exe archiver client-abc.xpglic
-
-   (tous les .xpglic d'un dossier : for %f in (*.xpglic) do XPG-License-Admin.exe archiver "%f")
-
-6. Regarde ce qui partirait, sans rien changer, puis publie :
-
-     XPG-License-Admin.exe github-etat
-     XPG-License-Admin.exe github-synchroniser
+     XPG-License-Admin.exe archive-synchroniser --a-blanc
+     XPG-License-Admin.exe archive-synchroniser
+     XPG-License-Admin.exe service-registre
 
 Ensuite, à chaque signature, ajoute --publier (signer-licence ... --publier,
 signer-revocations ... --publier, enregistrer-demande ... --publier) : le fichier est
-rangé dans l'archive et publié dans la foulée. Sans --publier, l'outil te rappelle de
-lancer github-synchroniser.
+rangé dans l'archive, l'archive synchronisée, et le registre ou la liste de révocation
+déposés dans la foulée. Sans --publier, l'outil te rappelle de lancer
+archive-synchroniser.
 
 Un autre PC Admin, ou ce PC réinstallé après une panne :
 
-     XPG-License-Admin.exe github-config --depot TON-COMPTE/licences-xpg --code-secours XPGS1-...
-     XPG-License-Admin.exe github-jeton
+     XPG-License-Admin.exe service-config --url https://xpg-licences.TON-COMPTE.workers.dev
+     XPG-License-Admin.exe archive-cle --code-secours XPGS1-...
    (Si ce PC a déjà sa propre clé de synchro, l'outil le dit : ajoute --remplacer ;
    l'ancienne est gardée à côté, jamais effacée.)
-     XPG-License-Admin.exe github-synchroniser --recevoir-seulement
+     XPG-License-Admin.exe archive-synchroniser --recevoir-seulement
 
    Il reçoit l'archive et le registre des activations (liste marche aussitôt). Pour
    SIGNER sur ce PC, il lui faut aussi ta clé de l'éditeur (ta copie de secours) ; sans
    elle, une nouvelle clé (et une version des programmes qui la connaît).
 
-Comment ça se passe : un envoi = un commit. Si un autre PC a publié entre-temps,
-l'outil relit le dépôt, fusionne et recommence. Le plus grand numéro de registre ou
-de liste de révocation gagne ; pour une licence, la plus récente ; le registre des
-activations garde les lignes des deux côtés. Un fichier changé sur GitHub hors de
-l'outil est refusé (et republié par un PC qui a le bon). Ne modifie pas le dépôt à la
-main.
+Comment ça se passe : si un autre PC a envoyé entre-temps, l'outil relit l'archive en
+ligne, fusionne et recommence. Le plus grand numéro de registre ou de liste de
+révocation gagne ; pour une licence, la plus récente ; le registre des activations
+garde les lignes des deux côtés. Un fichier changé hors de l'outil est refusé, une
+archive remise à un état plus ancien aussi.
+
+Une licence EN LIGNE (aucun PC lié : chaque PC l'active avec un code) :
+
+     XPG-License-Admin.exe licence-en-ligne --parametres client-abc.json [--bail-jours 30]
+
+   Elle est signée, rangée, déposée sur le service avec l'empreinte d'un CODE
+   D'ACTIVATION neuf, et l'outil t'affiche ce code UNE FOIS (il n'est écrit nulle
+   part : note-le pour ton client). "type": "floating" dans les paramètres : une
+   licence flottante (max_devices postes en même temps). Hors ligne : la licence est
+   signée et rangée, mais le code n'est pas montré ; relance avec --etendre
+   --nouveau-code quand le service répond. Prolonger (une autre fin, plus de postes) :
+   --etendre (le même code), ou --etendre --nouveau-code (l'ancien ne marche plus).
+
+     XPG-License-Admin.exe service-licences                (les licences en ligne, leurs PC, les jetons)
+     XPG-License-Admin.exe service-retirer --licence ID --poste CLE_DU_PC
+     XPG-License-Admin.exe service-desactiver --licence ID [--reactiver]
+
+Les demandes des clients (envoyées depuis leur logiciel) :
+
+     XPG-License-Admin.exe service-demandes [--toutes]     (relève et liste les demandes)
+     XPG-License-Admin.exe signer-licence --parametres P.json --demande demandes-en-ligne\...xpgreq ... --publier
+     XPG-License-Admin.exe service-publier-licence --licence L.xpglic
+     XPG-License-Admin.exe service-refuser --numero N --raison "..."
 
 
 =============================================================================
@@ -373,20 +410,15 @@ main.
 
 - Code de sortie : 0 fait, 1 refusé (la raison est écrite), 2 mauvais usage,
   3 signé et rangé mais pas publié (--publier) : ne signe pas de nouveau, relance
-  github-synchroniser.
+  archive-synchroniser.
 - --dossier D : un autre dossier pour la clé (par défaut %LOCALAPPDATA%\XPG\LicenseAdmin).
 - Changer de clé (une rotation) : crée la nouvelle clé dans un autre dossier, puis
   exporter-cle --sortie PublisherKey.hpp --garder --dossier NOUVEAU-DOSSIER : le fichier
   garde l'ancienne clé et ajoute la nouvelle ; les programmes reconnaissent les deux.
-- --dossier D vaut aussi pour la synchro : github.json, le jeton, la clé de synchro et
-  archive\ sont dans le dossier de la clé.
-- La passerelle des clients en commandes (1.34.0) :
-     XPG-License-Admin.exe passerelle-config --depot PROPRIETAIRE/passerelle-licences
-     XPG-License-Admin.exe passerelle-jeton-demandes       (colle le jeton des clients)
-     XPG-License-Admin.exe passerelle-verifier
-     XPG-License-Admin.exe passerelle-publier-config
-     XPG-License-Admin.exe passerelle-demandes [--toutes]  (relève et liste les demandes)
-     XPG-License-Admin.exe passerelle-publier-licence --licence L.xpglic
-     XPG-License-Admin.exe passerelle-refuser --poste IDENTIFIANT --raison "..."
+- --dossier D vaut aussi pour le service : service.json (l'adresse), la clé de synchro,
+  archive\ et demandes-en-ligne\ sont dans le dossier de la clé.
+- Les fichiers PUBLICS des Studios (PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp,
+  cle-publique.txt et un LISEZ-MOI.txt) :
      XPG-License-Admin.exe kit-studios --sortie D:\pour-les-studios
+- Les compteurs de ton service : XPG-License-Admin.exe service-stats
 - Tout est décrit dans docs\LICENCES.md (dans les sources du programme).
