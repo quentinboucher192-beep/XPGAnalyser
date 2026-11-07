@@ -1,0 +1,312 @@
+// =============================================================================
+//  license_admin/ServiceClient.hpp - 1.35.0 : LE SERVICE DES LICENCES, COTE
+//  EDITEUR (l'outil de l'EDITEUR seulement ; jamais livre a un client)
+// -----------------------------------------------------------------------------
+//  Le contrat : docs/SERVICE-LICENCES.md ; les formats partages :
+//  licensing/Service.hpp. Le service est le Worker Cloudflare que l'editeur met
+//  en ligne lui-meme (outils/service/LISEZ-MOI-SERVICE.txt). Il remplace GitHub
+//  pour tout (la passerelle des demandes de la 1.34, la synchro de la 1.31).
+//
+//  CE QUE FAIT L'OUTIL DE L'EDITEUR AVEC LUI :
+//    - le regler : son adresse (service.json, dans le dossier de la cle) -
+//      https://..., ou http://127.0.0.1 pour les essais ;
+//    - le verifier : GET /v1/etat, la cle du service, son certificat ;
+//    - CERTIFIER LA CLE DU SERVICE : lire sa cle publique (son empreinte est
+//      montree), signer avec la cle de l'editeur un certificat << service >>
+//      (un an ; les droits activation, flottante, heure, decouverte ; l'adresse
+//      reglee) et le deposer - puis le renouveler avant sa fin ;
+//    - publier le registre, et la liste de revocation (PRIVEE : le service ne
+//      la donne qu'aux PC concernes) ;
+//    - LES LICENCES EN LIGNE : une licence signee SANS PC (licensing : le champ
+//      service = l'adresse, aucun PC lie), deposee avec l'empreinte d'un CODE
+//      D'ACTIVATION tire ici (le code lui-meme n'est jamais envoye ni ecrit : il
+//      est montre une fois a l'editeur) et la duree du bail ; la lister (les
+//      activations par PC, les jetons flottants), retirer un PC, la desactiver,
+//      la prolonger (une emission plus recente, le meme code ou un neuf) ;
+//    - LES DEMANDES MANUELLES : les relever (GET /admin/demandes), les ouvrir
+//      avec la cle de l'editeur (scellees pour elle), verifier la signature du
+//      PC, les ranger sur ce poste (demandes-en-ligne/) ; refuser (l'etat
+//      << poste >> signe, la raison scellee pour le PC) ; repondre par une
+//      licence liee au PC (son etat << poste >>, la licence scellee pour lui) ;
+//    - les comptes (GET /admin/stats) ; les fichiers PUBLICS des Studios (kit).
+//
+//  CHAQUE APPEL /admin EST SIGNE par la cle de l'editeur (service::signRequest :
+//  elle ne quitte jamais ce poste) ; l'heure est celle du service (GET /v1/etat :
+//  l'ecart est corrige). Aucun secret dans une adresse, un message, un journal.
+//
+//  LES DEMANDES (gardes de la 1.34, adaptees) : une demande (poste, nonce) deja
+//  vue, ou dont la date SIGNEE par le PC n'est pas plus recente que la derniere
+//  de ce PC, est REJOUEE : ignoree, rien n'est publie pour elle ; le sceau d'une
+//  demande est garde a sa premiere lecture (son empreinte) - un sceau change
+//  ensuite est ignore ; une demande d'AJOUT a une licence existante n'est pas
+//  une preuve (joinWarning : l'application demande une confirmation) ; au plus
+//  50 lignes de detail par releve (une avalanche ne noie rien).
+//
+//  RESEAU : tout ce qui suit << le reseau >> est BLOQUANT (runSlow dans
+//  l'application, la console attend). Hors ligne, cle refusee, limite atteinte :
+//  un refus en francais, jamais une reussite inventee.
+// =============================================================================
+#pragma once
+
+#include "../core/Json.hpp"
+#include "../licensing/Gateway.hpp"
+#include "../licensing/KeyFile.hpp"
+#include "../licensing/Time.hpp"
+
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace license_admin::online {
+
+using licensing::Seconds;
+
+inline constexpr const char* kConfigFile = "service.json";
+inline constexpr const char* kSnapshotFile = "service-releve.json";   // le dernier releve des licences en ligne
+inline constexpr const char* kStatusNumbersFile = "postes-publies.json";   // le dernier numero d'etat publie par PC
+inline constexpr const char* kRequestsDir = "demandes-en-ligne";
+inline constexpr const char* kFetchFile = "releve.json";               // dans kRequestsDir : le dernier releve
+inline constexpr const char* kLicencesDir = "licences";                // dans kRequestsDir : les licences signees pour elles
+inline constexpr int kDefaultLeaseDays = 30;                           // le bail d'une activation (jours)
+inline constexpr int kCertificateDays = 365;                           // un certificat de service vaut un an
+inline constexpr int kRenewBeforeDays = 30;                            // le renouveler dans ses 30 derniers jours
+
+// ---- la configuration (service.json, dans le dossier de la cle) ----
+struct Config {
+    std::string url;   // "https://xpg-licences.compte.workers.dev" (sans / final)
+};
+[[nodiscard]] std::string configPath(const std::string& folder);
+[[nodiscard]] bool configured(const std::string& folder);
+bool readConfig(const std::string& folder, Config& out, std::string* why);
+// L'adresse : https://hote[:port] sans chemin, ou http://127.0.0.1 / localhost (les essais). Une adresse copiee avec
+// un / final est acceptee (il est retire).
+bool writeConfig(const std::string& folder, const Config& config, std::string* why);
+[[nodiscard]] std::string normalizeUrl(std::string_view in);
+
+// ---- le resultat d'une operation (en francais ; jamais un secret) ----
+struct Result {
+    bool                     ok{false};
+    std::string              message;
+    std::vector<std::string> details;
+    [[nodiscard]] std::string text() const;   // message puis details
+};
+
+struct Options {
+    Seconds     now{0};       // l'heure de ce poste (les essais la fixent) ; l'ecart avec le service est corrige
+    std::string tool;         // "XPG-License-Admin/1.3.0" (l'User-Agent)
+};
+
+// ============================================================================ le client (BLOQUANT)
+struct Reply {
+    int               status{0};
+    std::string       body;
+    std::string       error;   // une panne du reseau (en francais) ; vide : une reponse est arrivee
+    core::json::Value json;
+    [[nodiscard]] std::string code() const;      // "erreur" d'une reponse refusee ("code", "complet"...)
+    [[nodiscard]] std::string message() const;   // son "message" (nettoye, 300 caracteres au plus)
+};
+
+class Client {
+public:
+    // `key` : la cle de l'editeur (elle signe chaque appel /admin) ; elle doit vivre plus longtemps que le client.
+    Client(std::string url, const licensing::SigningKey& key, Options options);
+    // GET /v1/etat : l'heure du service (l'ecart est corrige pour signer). Faux : `why`.
+    bool connect(std::string* why);
+    [[nodiscard]] bool connected() const noexcept { return connected_; }
+    [[nodiscard]] const core::json::Value& state() const noexcept { return state_; }   // la reponse de /v1/etat
+    [[nodiscard]] Seconds serviceNow() const noexcept { return options_.now + offset_; }
+    [[nodiscard]] const std::string& url() const noexcept { return url_; }
+    // Un appel ; `signed_` : avec les quatre en-tetes X-XPG-* (toutes les routes /admin et celles d'un PC).
+    Reply call(const std::string& method, const std::string& pathAndQuery, const std::string& body = {}, bool signed_ = true);
+    // Une reponse refusee, en francais : ce qui a ete refuse et pourquoi.
+    [[nodiscard]] std::string explain(const Reply& r, const std::string& what) const;
+
+private:
+    std::string                    url_;
+    const licensing::SigningKey&   key_;
+    Options                        options_;
+    Seconds                        offset_{0};
+    bool                           connected_{false};
+    core::json::Value              state_;
+};
+
+// Ouvrir le client du service de ce poste (la configuration, puis GET /v1/etat). Faux : `why`.
+bool openClient(const std::string& folder, const licensing::SigningKey& key, const Options& o, std::unique_ptr<Client>& out, std::string* why);
+
+// ============================================================================ l'etat, le certificat
+struct ServiceState {
+    bool          reached{false};      // /v1/etat a repondu
+    std::string   version;             // celle du Worker
+    Seconds       time{0};             // son heure
+    std::string   serviceKey;          // sa cle publique (64 hexadecimaux) ; vide : pas encore creee
+    bool          certified{false};    // /v1/etat dit qu'un certificat est depose
+    bool          adminOk{false};      // la cle de ce poste est acceptee (/admin/cle-service : pas 403)
+    bool          certOk{false};       // le certificat lu : signe par CETTE cle de l'editeur, pour cette cle de service et cette adresse
+    Seconds       certIssued{0}, certExpires{0};
+    std::string   certUrl;
+    std::string   certProblem;         // pourquoi le certificat ne va pas (vide : il va)
+    std::uint64_t registry{0};         // le numero du registre depose (0 : aucun)
+    [[nodiscard]] bool needsRenewal(Seconds now) const;   // pas de certificat valable, ou il finit dans kRenewBeforeDays
+};
+// L'empreinte lisible d'une cle de service (64 hexadecimaux) : "1A2B 3C4D ..." ; vide si illisible.
+[[nodiscard]] std::string keyFingerprint(const std::string& keyHex);
+
+// ============================================================================ le reseau (BLOQUANT)
+[[nodiscard]] Result verify(const std::string& folder, const licensing::SigningKey& key, const Options& o, ServiceState* out = nullptr);
+// La cle publique du service (GET /admin/cle-service), a montrer avant de la certifier.
+[[nodiscard]] Result readServiceKey(const std::string& folder, const licensing::SigningKey& key, const Options& o, std::string& keyHex);
+// Signer et deposer le certificat (un an). `expectedKey` (facultatif) : la cle montree a l'editeur ; une autre cle
+// trouvee entre-temps est refusee (rien n'est signe).
+[[nodiscard]] Result certify(const std::string& folder, const licensing::SigningKey& key, const Options& o, const std::string& expectedKey = {});
+// Le registre de l'archive (signe par cette cle) : depose s'il est plus recent que celui du service.
+[[nodiscard]] Result publishRegistry(const std::string& folder, const licensing::SigningKey& key, const Options& o);
+// La liste de revocation de l'archive (signee par cette cle) : PUT /admin/revocations (PRIVEE).
+[[nodiscard]] Result publishRevocations(const std::string& folder, const licensing::SigningKey& key, const Options& o);
+
+// ---- les licences en ligne ----
+struct OnlineActivation {
+    std::string deviceKey;      // la cle du PC (64 hexadecimaux)
+    std::string name;           // le nom du PC (donne par le client)
+    std::string station;
+    std::string state;          // "active", "liberee", "retiree", "revoquee"
+    Seconds     activatedAt{0}, seenAt{0}, until{0};
+    [[nodiscard]] std::string stateLabel() const;   // "active", "lib\xC3\xA9r\xC3\xA9" "e"...
+};
+struct OnlineLease {
+    std::string deviceKey;
+    Seconds     until{0};
+};
+struct OnlineLicence {
+    std::string                   licenseId;
+    Seconds                       issuedAt{0};
+    std::string                   type;          // "perpetual", "temporary", "floating"...
+    int                           seats{0};      // postes_max
+    int                           leaseDays{kDefaultLeaseDays};
+    bool                          active{true};
+    bool                          hasCode{false};
+    std::vector<OnlineActivation> activations;
+    std::vector<OnlineLease>      leases;        // les jetons flottants en cours
+    [[nodiscard]] bool floating() const { return type == "floating"; }
+    [[nodiscard]] int activeCount() const;       // les activations << active >>
+    [[nodiscard]] const OnlineActivation* activation(const std::string& deviceKey) const;
+};
+struct Snapshot {
+    Seconds                    at{0};      // 0 : jamais releve
+    std::string                url;
+    std::vector<OnlineLicence> licences;
+    [[nodiscard]] const OnlineLicence* licence(const std::string& id) const;
+    [[nodiscard]] int devices() const;     // les PC actives (toutes licences)
+    [[nodiscard]] int leases() const;      // les jetons flottants en cours
+};
+bool parseLicences(const core::json::Value& reply, Snapshot& out, std::string* why);
+[[nodiscard]] Snapshot readSnapshot(const std::string& folder);
+bool writeSnapshot(const std::string& folder, const Snapshot& s, std::string* why);
+
+// Deposer une licence en ligne (le texte .xpglic : son bloc de licence, signe par cette cle, SANS PC). `codeHash` :
+// l'empreinte du code d'activation (service::codeHash) ; vide : le service garde celle qu'il a. `leaseDays` : le bail.
+[[nodiscard]] Result putLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText, const std::string& codeHash,
+                                int leaseDays, bool active, const Options& o);
+// GET /admin/licences ; `out` : le releve (aussi ecrit dans service-releve.json).
+[[nodiscard]] Result listLicences(const std::string& folder, const licensing::SigningKey& key, const Options& o, Snapshot& out);
+// POST /admin/activations/retirer : ce PC n'est plus renouvele (il s'arrete a la fin de son bail, ou des qu'il se connecte).
+[[nodiscard]] Result retireDevice(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId,
+                                  const std::string& deviceKey, const Options& o);
+// Desactiver (ou reactiver) une licence en ligne : la licence de l'archive redeposee avec active = false (true).
+[[nodiscard]] Result setActive(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId, bool active, int leaseDays,
+                               const Options& o);
+// GET /admin/stats : les compteurs, une ligne chacun.
+[[nodiscard]] Result stats(const std::string& folder, const licensing::SigningKey& key, const Options& o);
+
+// ---- les demandes manuelles ----
+enum class RequestState : std::uint8_t {
+    Pending,      // << attente >> : elle attend ta decision
+    Accepted,     // << acceptee >> : la licence est partie (liee au PC, ou en ligne avec un code)
+    Refused,      // << refusee >>
+    Cancelled,    // << annulee >> : le PC l'a annulee
+    Replaced,     // << remplacee >> : une demande plus recente du meme PC
+    Handled,      // << traitee >> : traitee ailleurs (un autre poste Admin)
+    Unreadable,   // << illisible >> : scellee pour une autre cle, signature fausse...
+    Ignored,      // << ignoree >> : rejouee (deja vue, ou pas plus recente que la derniere de ce PC)
+};
+[[nodiscard]] const char* requestStateKey(RequestState s) noexcept;
+[[nodiscard]] bool parseRequestStateKey(std::string_view key, RequestState& out) noexcept;
+[[nodiscard]] std::string requestStateLabel(RequestState s);
+
+struct Entry {
+    int                      number{0};      // le numero de la demande sur le service
+    RequestState             state{RequestState::Pending};
+    std::string              serviceState;   // "attente", "annulee", "remplacee", "traitee"
+    std::string              device;         // l'identifiant du poste (32 hexadecimaux)
+    std::string              deviceKey;      // la cle du PC ; vide : illisible
+    std::string              nonce;
+    std::string              customer, contact, message;
+    std::string              deviceName, fingerprint, software, licenseId;   // licenseId : celle demandee
+    Seconds                  requestedAt{0};   // la date SIGNEE par le PC
+    Seconds                  createdAt{0};     // le depot sur le service
+    Seconds                  seenAt{0};        // le premier releve qui l'a vue
+    Seconds                  answeredAt{0};
+    std::string              answer;           // acceptee : la licence ; refusee : la raison (sur ce poste seulement)
+    std::string              requestPath;      // le .xpgreq ("" : illisible)
+    std::string              sidecarPath;      // le .json
+    std::string              sealedHash;       // SHA-256 du sceau a sa premiere lecture
+    std::vector<std::string> problems;
+    [[nodiscard]] bool waiting() const noexcept { return state == RequestState::Pending; }
+    [[nodiscard]] bool joinRequest() const noexcept { return !licenseId.empty() && state != RequestState::Unreadable; }
+};
+// << A verifier : ajout a la licence X demande par quelqu'un qui dit etre << Y >> - confirme avec ton client ... >>
+[[nodiscard]] std::string joinWarning(const Entry& e);
+[[nodiscard]] std::string joinWarning(const std::string& licenseId, const std::string& customer);
+[[nodiscard]] std::vector<Entry> listRequests(const std::string& folder);   // les plus recentes d'abord
+[[nodiscard]] std::string requestsFolder(const std::string& folder);
+// La demande en attente : "N" ou "#N" (son numero), ou l'identifiant d'un poste (6 caracteres au moins).
+bool findWaiting(const std::string& folder, const std::string& which, Entry& out, std::string* why);
+[[nodiscard]] bool isOnlineRequestPath(const std::string& folder, const std::string& path);
+
+struct FetchState {
+    Seconds     fetchedAt{0};
+    int         total{0}, pending{0};
+    std::string url;
+};
+[[nodiscard]] FetchState readFetchState(const std::string& folder);
+
+// Relever les demandes (GET /admin/demandes?depuis=N) et les ranger (processRequests).
+[[nodiscard]] Result fetchRequests(const std::string& folder, const licensing::SigningKey& key, const Options& o);
+// Ranger une liste de demandes ({"demandes":[...]}, telle que le service la rend) : les ouvrir, les verifier,
+// appliquer les gardes. Sans reseau (le releve l'appelle ; les essais aussi).
+[[nodiscard]] Result processRequests(const std::string& folder, const licensing::SigningKey& key, const core::json::Value& reply, const std::string& url,
+                                     const Options& o);
+// Refuser la demande en attente (findWaiting) : l'etat << refusee >> du poste, la raison scellee pour le PC, la
+// demande marquee traitee.
+[[nodiscard]] Result refuse(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& reason,
+                            const Options& o);
+// Repondre a une demande par une licence EN LIGNE (le PC l'active avec le code que l'editeur donne au client : le code
+// n'est jamais dans la reponse) : << acceptee >>, un mot pour le PC, la demande marquee traitee.
+[[nodiscard]] Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId,
+                                  const Options& o);
+
+// ---- les licences liees a des PC (l'etat << poste >> de chacun, signe par l'editeur) ----
+// Une licence signee (.xpglic) a CHACUN de ses PC : << acceptee >> pour celui dont une demande attend (elle est marquee
+// traitee), << mise_a_jour >> pour les autres ; la licence scellee pour chaque PC (et la liste de revocation de
+// l'archive si elle nomme cette licence, ou si `withRevocations`).
+[[nodiscard]] Result publishBoundLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText,
+                                         bool withRevocations, const Options& o);
+// Apres une revocation : la liste deposee (PUT /admin/revocations), puis << revoquee >> pour chaque PC lie donne.
+[[nodiscard]] Result publishRevocation(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId,
+                                       const std::vector<std::string>& deviceKeys, const std::string& reason, const Options& o);
+// Apres le retrait d'un PC d'une licence liee : la nouvelle emission aux autres, << retiree >> pour lui.
+[[nodiscard]] Result publishRemoval(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText,
+                                    const std::string& removedDeviceKey, const Options& o);
+
+// ============================================================================ les fichiers des Studios
+//  Ce que l'integrateur compile dans les Studios livres (rien de secret) :
+//    PublisherKey.hpp     la cle PUBLIQUE de l'editeur (une cle d'ESSAI est refusee)   -> src/licensing/
+//    registre.xpgreg      le registre signe de l'archive (signe par CETTE cle)         -> ressources-licences/
+//    ServiceAddress.hpp   l'adresse du service (vide : pas de service)                 -> src/licensing/
+//    cle-publique.txt     la cle publique en hexadecimal (PUBLISHER_KEYS du Worker)     -> outils/service/
+//    LISEZ-MOI.txt        quoi en faire
+[[nodiscard]] std::string serviceAddressHeader(const std::string& url);
+[[nodiscard]] Result studioKit(const std::string& folder, const licensing::SigningKey* key, const std::string& outDir, Seconds now);
+
+} // namespace license_admin::online
