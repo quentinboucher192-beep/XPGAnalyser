@@ -27,10 +27,15 @@
 //  valeurs (l'ordre des cles fixe, deux espaces, des \n, UTF-8). Le verifieur ne
 //  reecrit jamais : il verifie les octets recus (voir SignedFile.hpp).
 //
-//  PREVU, PAS CODE (la version 1 est sans service en ligne) : le type
-//  << floating >> (licence flottante) et le champ << service >> (le service de
-//  licences qui tiendrait la licence) sont dans le format ; une licence qui les
-//  emploie est lue, puis refusee (Store.cpp) avec une phrase qui le dit.
+//  1.35.0 - LA LICENCE EN LIGNE (le service des licences, Service.hpp,
+//  docs/SERVICE-LICENCES.md) : le champ << service >> = l'adresse du service
+//  (service::validUrl) et AUCUN PC lie (devices vide) ; max_devices est alors
+//  le nombre de postes (d'activations) que le service accorde. Le type
+//  << floating >> (licence flottante) n'existe qu'en ligne. Les regles :
+//  service vide -> au moins un PC lie (comme avant) ; service donne -> aucun PC
+//  (un melange est refuse) ; floating sans service -> refuse. Sur un PC, une
+//  licence en ligne ne vaut qu'avec l'activation de ce PC signee par le service
+//  (activation.xpgact, Store.hpp) : elle ne lie jamais un PC par elle-meme.
 //
 //  1.32.0 - TROIS CHAMPS FACULTATIFS (ecrits seulement s'ils servent ; un
 //  document sans eux reste lisible par la 1.30 et la 1.31) :
@@ -66,7 +71,7 @@ enum class LicenseType : std::uint8_t {
     Perpetual,    // "perpetual"   sans fin
     Temporary,    // "temporary"   jusqu'a expires_at, puis la grace
     Evaluation,   // "evaluation"  jusqu'a expires_at, sans grace
-    Floating,     // "floating"    PREVU : des jetons pris aupres du service (pas en version 1)
+    Floating,     // "floating"    1.35.0 : en ligne seulement - un jeton pris aupres du service (jeton.xpgjet)
 };
 [[nodiscard]] const char* licenseTypeKey(LicenseType) noexcept;
 // "perp\xC3\xA9tuelle", "temporaire", "\xC3\xA9valuation", "flottante" (pour l'affichage).
@@ -131,7 +136,7 @@ struct License {
     std::string               customer;         // le nom du client
     std::string               edition;          // "PROFESSIONAL"
     LicenseType               type{LicenseType::Temporary};
-    std::string               service;          // PREVU : le service en ligne ; vide en version 1
+    std::string               service;          // 1.35.0 : l'adresse du service (une licence EN LIGNE, sans PC lie) ; vide : liee par l'editeur
     int                       maxDevices{1};
     std::vector<FeatureGrant> features;         // triees par identifiant
     Seconds                   issuedAt{0};

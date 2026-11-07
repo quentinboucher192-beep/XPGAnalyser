@@ -2,6 +2,7 @@
 //  licensing/Documents.cpp - 1.30.0 : les documents signes (voir Documents.hpp)
 // =============================================================================
 #include "Documents.hpp"
+#include "Service.hpp"   // 1.35.0 : service::validUrl (une licence en ligne)
 
 #include "../core/Json.hpp"
 #include "../deploy/Crypto.hpp"
@@ -606,7 +607,16 @@ bool parseLicense(std::string_view json, License& out, std::string* why) {
         if (why) *why = std::string(kWhat) + " n'est pas coh\xC3\xA9rente : " + text;
         return false;
     };
-    if (l.devices.empty()) return bad("aucun PC n'y est li\xC3\xA9");
+    // 1.35.0 : une licence EN LIGNE (service = l'adresse du service) ne lie aucun PC ; une licence liee par l'editeur
+    // (service vide) en lie au moins un ; la flottante n'existe qu'en ligne.
+    const bool online = !l.service.empty();
+    if (online && !service::validUrl(l.service))
+        return bad("l'adresse du service " + cite(l.service) + " n'est pas valide (https://h\xC3\xB4te, sans chemin)");
+    if (!online && l.devices.empty()) return bad("aucun PC n'y est li\xC3\xA9");
+    if (online && !l.devices.empty())
+        return bad("une licence en ligne (service) ne lie aucun PC : ses PC s'activent aupr\xC3\xA8s du service, pas dans la licence");
+    if (l.type == LicenseType::Floating && !online)
+        return bad("une licence flottante est une licence en ligne : il lui faut l'adresse du service (champ \xC2\xAB service \xC2\xBB)");
     if (static_cast<int>(l.devices.size()) > l.maxDevices)
         return bad(std::to_string(l.devices.size()) + " PC li\xC3\xA9s pour " + std::to_string(l.maxDevices) + " autoris\xC3\xA9s");
     const bool timed = l.type == LicenseType::Temporary || l.type == LicenseType::Evaluation;

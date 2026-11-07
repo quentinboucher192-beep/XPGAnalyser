@@ -1,0 +1,24 @@
+# Le service des licences XPG (1.35.0) : un Worker Cloudflare et UN Durable Object (SQLite).
+# Le contrat : docs/SERVICE-LICENCES.md. La mise en ligne : outils/service/LISEZ-MOI-SERVICE.txt
+# (npx wrangler deploy --var PUBLISHER_KEYS:<la cle publique de l'editeur>).
+name = "xpg-licences"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+# Pas de journal des appels chez Cloudflare (aucun secret n'y est ecrit, mais rien n'y a sa place).
+observability = { enabled = false }
+
+[vars]
+# La duree de la Decouverte (l'essai), en jours.
+DECOUVERTE_JOURS = "30"
+# Les cles PUBLIQUES de l'editeur (64 hexadecimaux, plusieurs separees par des virgules) : donnees au
+# deploiement (--var PUBLISHER_KEYS:...). Vide : aucun appel /admin n'est accepte.
+PUBLISHER_KEYS = ""
+
+[[durable_objects.bindings]]
+name = "LICENCES"
+class_name = "Licences"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Licences"]
