@@ -614,6 +614,10 @@ var
   TexteIAAdresse, TexteIAModele: TNewStaticText;
   EditIAAdresse, EditIAModele: TNewEdit;
   PageXia: TInputFileWizardPage;
+  // 1.35.0 : la licence (la Decouverte, ou un code de licence laisse pour le premier lancement en ligne)
+  PageLicence: TInputOptionWizardPage;
+  TexteLicenceCode, NoteLicence: TNewStaticText;
+  EditLicenceCode: TNewEdit;
 
 // ---------------------------------------------- 1.8.0 : la liste des blocs ----
 //  Une vraie ListView de Windows (aide\xpgliste.c) : setuponly et delayload - la DLL
@@ -1884,7 +1888,7 @@ const
   // 1.14.0 : « Applications » (que veux-tu installer ? et le poste d'exploitation) ; « Raccourcis » devient
   // « Options » (les raccourcis, les fichiers, le pare-feu, la copie de secours).
   // 1.18.0 : « IA » (l'Assistant IA et l'IA depuis un autre PC : elles montraient « Terminé »).
-  EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|IA|Options|Récapitulatif|Installation|Terminé';
+  EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|IA|Licence|Options|Récapitulatif|Installation|Terminé';
   EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|ia|raccourcis|recapitulatif|installation|termine';
   // 1.12.28 : le diaporama de la copie (une diapositive toutes les 5,6 s) : son image
   // (images\ui\<image>.bmp) | son titre | son texte. Une diapositive de plus = un morceau de plus
@@ -2248,10 +2252,12 @@ begin
   else if (PageBiblio <> nil) and (PageID = PageBiblio.ID) then Result := 4
   // 1.18.0 : l'Assistant IA, et l'apprentissage d'un autre PC (.xia)
   else if ((PageIA <> nil) and (PageID = PageIA.ID)) or ((PageXia <> nil) and (PageID = PageXia.ID)) then Result := 5
-  else if PageID = wpSelectTasks then Result := 6
-  else if PageID = wpReady then Result := 7
-  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 8
-  else Result := 9;   // « Ce qui a été installé » et la fin
+  // 1.35.0 : la licence
+  else if (PageLicence <> nil) and (PageID = PageLicence.ID) then Result := 6
+  else if PageID = wpSelectTasks then Result := 7
+  else if PageID = wpReady then Result := 8
+  else if (PageID = wpPreparing) or (PageID = wpInstalling) then Result := 9
+  else Result := 10;   // « Ce qui a été installé » et la fin
 end;
 
 // ======================================================== 1.12.28 : le mouvement ====
@@ -4855,6 +4861,121 @@ begin
   PageXia.Values[0] := Trim(ExpandConstant('{param:APPRENTISSAGE|}'));
 end;
 
+// ======================================================== 1.35.0 : la licence ====
+//  La Decouverte (30 jours d'essai, sans rien saisir : le choix par defaut) ou un code de licence
+//  (XPG-XXXX-XXXX-XXXX-XXXX, donne par l'editeur ; /CODE= en silencieux). Le code est laisse dans le dossier
+//  des licences de ce PC (code-activation.txt) : le premier lancement d'un Studio en ligne l'active aupres du
+//  service des licences de l'editeur, puis l'efface. Le code est un secret : il n'est ecrit dans aucun journal.
+const
+  lcDecouverte = 0;
+  lcCode = 1;
+  AlphabetCode = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';   // Crockford : ni I, L, O, U
+
+// Le code relu avec souplesse, comme licensing::service::normalizeCode : minuscules, espaces et tirets permis, le
+// prefixe XPG facultatif, O pour 0, I et L pour 1. Vrai : `Normal` = les 16 caracteres.
+function CodeNormalise(Texte: String; var Normal: String): Boolean;
+var I: Integer;
+    S: String;
+    C: Char;
+begin
+  Result := False;
+  Normal := '';
+  S := '';
+  for I := 1 to Length(Texte) do begin
+    C := Texte[I];
+    if (C <> ' ') and (C <> '-') and (C <> #9) then begin
+      if (C >= 'a') and (C <= 'z') then C := Chr(Ord(C) - 32);
+      S := S + C;
+    end;
+  end;
+  if (Length(S) = 19) and (Copy(S, 1, 3) = 'XPG') then Delete(S, 1, 3);
+  if Length(S) <> 16 then Exit;
+  for I := 1 to 16 do begin
+    C := S[I];
+    if C = 'O' then C := '0'
+    else if (C = 'I') or (C = 'L') then C := '1';
+    if Pos(C, AlphabetCode) = 0 then Exit;
+    S[I] := C;
+  end;
+  Normal := S;
+  Result := True;
+end;
+
+function CodeAffiche(Normal: String): String;
+begin
+  Result := 'XPG-' + Copy(Normal, 1, 4) + '-' + Copy(Normal, 5, 4) + '-' + Copy(Normal, 9, 4) + '-' + Copy(Normal, 13, 4);
+end;
+
+// Une licence est-elle deja sur ce PC ? (une activation du service, ou un fichier de licence)
+function LicenceDejaSurCePC: Boolean;
+var R: TFindRec;
+    D: String;
+begin
+  D := DossierLicences('');
+  Result := FileExists(D + '\activation.xpgact');
+  if not Result and FindFirst(D + '\*.xpglic', R) then begin
+    Result := True;
+    FindClose(R);
+  end;
+end;
+
+procedure LicenceChoixChange(Sender: TObject);
+begin
+  EditLicenceCode.Enabled := PageLicence.SelectedValueIndex = lcCode;
+  TexteLicenceCode.Enabled := EditLicenceCode.Enabled;
+end;
+
+procedure CreerPageLicence;
+var Y: Integer;
+    S: String;
+    DejaLa: Boolean;
+begin
+  DejaLa := LicenceDejaSurCePC;
+  if DejaLa then
+    S := 'Une licence est déjà sur ce PC : elle est gardée. Un code ne sert qu''à en activer une autre.'
+  else
+    S := 'Sans licence, les Studios démarrent en Découverte : 30 jours d''essai avec toutes les fonctions, puis seulement celles de l''édition sans licence.';
+  PageLicence := CreateInputOptionPage(PageXia.ID, 'Ta licence', 'Découverte, ou un code de licence ?',
+    S + #13#10 + 'Tout se change plus tard dans le logiciel : la fenêtre Licence.', True, False);
+  if DejaLa then
+    PageLicence.Add('Garder la licence de ce PC')
+  else
+    PageLicence.Add('Découverte : 30 jours d''essai, sans rien saisir');
+  PageLicence.Add('J''ai un code de licence');
+  PageLicence.SelectedValueIndex := lcDecouverte;
+  PageLicence.CheckListBox.Height := ScaleY(52);
+  Y := PageLicence.CheckListBox.Top + PageLicence.CheckListBox.Height + ScaleY(12);
+  TexteLicenceCode := TNewStaticText.Create(PageLicence);
+  TexteLicenceCode.Parent := PageLicence.Surface;
+  TexteLicenceCode.Top := Y + ScaleY(3);
+  TexteLicenceCode.Caption := 'Code de licence :';
+  EditLicenceCode := TNewEdit.Create(PageLicence);
+  EditLicenceCode.Parent := PageLicence.Surface;
+  EditLicenceCode.Top := Y;
+  EditLicenceCode.Left := ScaleX(200);
+  EditLicenceCode.Width := ScaleX(260);
+  EditLicenceCode.MaxLength := 40;
+  Y := Y + ScaleY(34);
+  NoteLicence := TNewStaticText.Create(PageLicence);
+  NoteLicence.Parent := PageLicence.Surface;
+  NoteLicence.Top := Y;
+  NoteLicence.AutoSize := False;
+  NoteLicence.WordWrap := True;
+  NoteLicence.Width := PageLicence.SurfaceWidth;
+  NoteLicence.Height := ScaleY(70);
+  NoteLicence.Caption := 'Le code ressemble à XPG-7K3M-9QPT-2WXD-H8NB : l''éditeur te l''a donné. Il s''active au premier lancement ' +
+    'd''un Studio avec Internet, auprès du service des licences de l''éditeur ; hors ligne, le Studio démarre en Découverte et ' +
+    'l''active dès qu''il est en ligne. Le code n''est écrit dans aucun journal.';
+  PageLicence.CheckListBox.OnClickCheck := @LicenceChoixChange;
+  // le silencieux, un deploiement : /CODE=XPG-XXXX-XXXX-XXXX-XXXX
+  S := Trim(ExpandConstant('{param:CODE|}'));
+  if S <> '' then begin
+    EditLicenceCode.Text := S;
+    PageLicence.SelectedValueIndex := lcCode;
+  end;
+  LicenceChoixChange(nil);
+end;
+
 // Une chaine JSON en ASCII : les guillemets, les barres, les accents en \u (le fichier se lit sans BOM ni ANSI).
 function JsonAscii(S: String): String;
 var I, C: Integer;
@@ -5038,6 +5159,8 @@ begin
   CreerPageBiblio;
   // ---- 1.17.0 : l'Assistant IA, un apprentissage d'un autre PC ----
   CreerPagesIA;
+  // ---- 1.35.0 : la licence (la Découverte, ou un code) ----
+  CreerPageLicence;
   // ---- 1.8.0 : Ce qui a été installé (après la copie) ----
   PageRecap := CreateOutputMsgMemoPage(wpInstalling, 'Ce qui a été installé',
     'Les programmes, leur architecture, et où se trouve chaque chose.', 'Le même texte est enregistré dans tes journaux.', '');
@@ -5182,6 +5305,20 @@ begin
     MsgBox('Donne l''adresse du service compatible OpenAI (par exemple http://localhost:1234/v1 pour LM Studio).', mbError, MB_OK);
     Result := False;
     Exit;
+  end;
+  // 1.35.0 : un code de licence a la bonne forme (en silencieux : le journal le dit, la Découverte reste)
+  if (PageLicence <> nil) and (CurPageID = PageLicence.ID) and (PageLicence.SelectedValueIndex = lcCode) and
+     not CodeNormalise(EditLicenceCode.Text, D) then begin
+    if WizardSilent then
+      Log('Licence : le code donné (/CODE=) n''a pas la forme XPG-XXXX-XXXX-XXXX-XXXX ; il n''est pas gardé, ce PC démarre en Découverte')
+    else begin
+      if Trim(EditLicenceCode.Text) = '' then
+        MsgBox('Saisis ton code de licence, ou choisis la Découverte.', mbError, MB_OK)
+      else
+        MsgBox('Ce code n''a pas la bonne forme : il ressemble à XPG-7K3M-9QPT-2WXD-H8NB (16 lettres et chiffres après XPG).', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
   end;
   if (PageXia <> nil) and (CurPageID = PageXia.ID) and (Trim(PageXia.Values[0]) <> '') and not FileExists(Trim(PageXia.Values[0])) then begin
     MsgBox('Ce fichier n''existe pas : ' + Trim(PageXia.Values[0]), mbError, MB_OK);
@@ -5890,6 +6027,33 @@ begin
                 + 'seul un administrateur pourra y importer une licence');
 end;
 
+// 1.35.0 : le code de licence choisi (la page Licence, ou /CODE=) est laissé dans le dossier des licences de ce PC,
+// code-activation.txt : le premier lancement d'un Studio en ligne l'active, puis l'efface. Jamais dans un journal.
+// Un fichier déjà là est retiré d'abord (un lien est retiré, pas sa cible) ; un dossier qui est un lien : rien.
+procedure LicenceCodeLaisser;
+var N, Dossier, Fichier: String;
+begin
+  if (PageLicence = nil) or (PageLicence.SelectedValueIndex <> lcCode) then begin
+    JournalNote(jInfo, 'licence-code', 'Licence : aucun code saisi ; sans licence sur ce PC, les Studios démarrent en Découverte (30 jours d''essai)');
+    Exit;
+  end;
+  if not CodeNormalise(EditLicenceCode.Text, N) then begin
+    JournalNote(jAttention, 'licence-code', 'Le code de licence donné n''a pas la bonne forme : il n''est pas gardé ; ce PC démarre en Découverte');
+    Exit;
+  end;
+  Dossier := DossierLicences('');
+  Fichier := Dossier + '\code-activation.txt';
+  if (DirExists(Dossier) and EstUnLien(Dossier)) or not ForceDirectories(Dossier) or EstUnLien(Dossier) then begin
+    JournalNote(jAttention, 'licence-code', 'Le code de licence n''a pas pu être laissé (' + Dossier + ' est un lien ou ne peut pas être créé) : saisis-le au premier lancement, fenêtre Licence');
+    Exit;
+  end;
+  if FileExists(Fichier) then DeleteFile(Fichier);
+  if FileExists(Fichier) or not SaveStringToFile(Fichier, CodeAffiche(N) + #13#10, False) then
+    JournalNote(jAttention, 'licence-code', 'Le code de licence n''a pas pu être laissé dans ' + Dossier + ' : saisis-le au premier lancement, fenêtre Licence')
+  else
+    JournalNote(jFait, 'licence-code', 'Le code de licence est laissé pour le premier lancement d''un Studio en ligne (' + Fichier + ', effacé après l''activation ; le code n''est dans aucun journal)');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
     Sources2, Lot8, Migrer, Setup, Blocs: String;
@@ -5920,6 +6084,7 @@ begin
     ParefeuRegler;
     AgentRegler;   // 1.29.0
     LicencesRegler;   // 1.30.0
+    LicenceCodeLaisser;   // 1.35.0
   except
     Log('Détails : ' + GetExceptionMessage);
   end;

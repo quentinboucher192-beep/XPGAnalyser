@@ -73,6 +73,7 @@ API-IHM-Studio-Setup-1.22.0.exe /VERYSILENT /ALLUSERS /PROFIL=poste /POSTE="D:\P
 | `/POSTERELANCE=oui\|non` | le poste est relancé s'il se ferme (non par défaut) |
 | `/IA=integree\|ollama\|anthropic\|compatible\|garder`, `/IAADRESSE=…`, `/IAMODELE=…`, `/IADABORD=oui\|non` | réglage initial de l'Assistant IA (jamais de clé API) |
 | `/APPRENTISSAGE="…\fichier.xia"` | apprentissage de l'Assistant repris d'un autre PC |
+| `/CODE=XPG-XXXX-XXXX-XXXX-XXXX` | (1.35.0) un code de licence donné par l'éditeur : laissé dans `%ProgramData%\XPG\Licences\code-activation.txt`, activé au premier lancement d'un Studio en ligne, puis effacé ; il n'est écrit dans aucun journal. Sans code : la Découverte (30 jours d'essai) |
 | `/COMPOSITION=non` | avec l'assistant : retire le double tampon de Windows si sa fenêtre se dessine mal |
 | `/ANIMATIONS=non` | l'assistant ne s'anime pas (sinon il suit le réglage de Windows) |
 | `/TASKS="…"`, `/MERGETASKS="…"` | les options : `bureauapi`, `bureauihm`, `bureauposte`, `barre`, `xihm`, `xapi`, `xpg`, `parefeu`, `reserve` ; `/MERGETASKS="!reserve"` : sans copie de secours |
