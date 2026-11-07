@@ -980,8 +980,8 @@ void ServicePage::rebuild() {
             "demi-heure la premi\xC3\xA8re fois. Le pas \xC3\xA0 pas complet : LISEZ-MOI-SERVICE.txt, avec le dossier du service. En bref :");
     bl.bullet("1. Installe Node.js (la version LTS, 22 ou plus) : nodejs.org.");
     bl.bullet("2. Cr\xC3\xA9" "e ton compte Cloudflare (gratuit) : dash.cloudflare.com/sign-up ; dans \xC2\xAB Workers et Pages \xC2\xBB, choisis ton sous-domaine.");
-    bl.bullet("3. Mets dans un m\xC3\xAAme dossier : le dossier service, deployer.bat (ou deployer.sh), deployer.mjs, LISEZ-MOI-SERVICE.txt, et "
-              "cle-publique.txt (ta cl\xC3\xA9 PUBLIQUE : le bouton ci-dessous).");
+    bl.bullet("3. Le dossier service-licences du zip de ton outil d'\xC3\xA9" "diteur contient d\xC3\xA9j\xC3\xA0 tout ; mets-y cle-publique.txt (ta cl\xC3\xA9 "
+              "PUBLIQUE : le bouton ci-dessous).");
     bl.bullet("4. Dans un terminal ouvert dans le dossier service : npx wrangler login (une fois par PC).");
     bl.bullet("5. Double-clique deployer.bat : il \xC3\xA9" "crit l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e aussi dans "
               "adresse-du-service.txt).");
