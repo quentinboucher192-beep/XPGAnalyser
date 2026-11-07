@@ -120,6 +120,7 @@ struct Pc {
         r.software = "API Studio 1.35.0 (essai)";
         r.createdAt = at;
         r.nonce = hex32();
+        r.station = lic::stationHash("machine d'essai " + name, key->publicKey());   // le service l'exige (activer)
         nonce = r.nonce;
         const auto b = lic::signBlock(lic::DocKind::Request, lic::writeRequest(r), key->publicKey(), [this](std::string_view m) { return key->sign(m); });
         return lic::writeBlock(b);

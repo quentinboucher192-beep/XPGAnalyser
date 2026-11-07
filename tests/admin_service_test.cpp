@@ -155,6 +155,15 @@ struct Pc {
         if (!key) std::printf("  (cle du PC : %s)\n", why.c_str());
     }
     [[nodiscard]] std::string device() const { return sv::deviceId(key->publicKey()); }
+    // L'empreinte de << son >> installation de Windows (le service la demande : activer, renouveler, jeton).
+    [[nodiscard]] std::string station() const { return lic::stationHash("machine d'essai " + name, key->publicKey()); }
+    // Le corps de /v1/renouveler, ou d'un jeton (licence non vide), avec la station de ce PC.
+    [[nodiscard]] std::string body(const std::string& licence = {}) const {
+        json::Value v = json::Value::object();
+        if (!licence.empty()) v.set("licence", licence);
+        v.set("station", station());
+        return json::write(v, false);
+    }
     // Une demande d'activation signee par ce PC.
     [[nodiscard]] std::string request(const std::string& licenseId, lic::Seconds at, std::string* nonce = nullptr) const {
         lic::ActivationRequest r;
@@ -164,6 +173,7 @@ struct Pc {
         r.software = "IHM Studio 1.35.0 (essai)";
         r.createdAt = at;
         r.nonce = hex32();
+        r.station = station();
         if (nonce) *nonce = r.nonce;
         const auto b = lic::signBlock(lic::DocKind::Request, lic::writeRequest(r), key->publicKey(), [this](std::string_view m) { return key->sign(m); });
         return lic::writeBlock(b);
@@ -538,7 +548,7 @@ int main(int argc, char** argv) {
         r = on::listLicences(A, *ed.key, ed.options(), s);
         l = s.licence("XPG-ESSAI-EN-LIGNE-1");
         check(l && l->activation(pc1.key->publicKeyHex()) && l->activation(pc1.key->publicKeyHex())->state == "retiree" && l->activeCount() == 1, "la liste : retire");
-        const Reply ren = call(url, "POST", "/v1/renouveler", "{}", pc1.key.get());
+        const Reply ren = call(url, "POST", "/v1/renouveler", pc1.body(), pc1.key.get());
         bool retired = false;
         if (const json::Value* rr = ren.value.find("retirees"); rr && rr->isArray())
             for (const auto& v : rr->items()) retired = retired || v.asString() == "XPG-ESSAI-EN-LIGNE-1";
@@ -575,9 +585,9 @@ int main(int argc, char** argv) {
         check(call(url, "POST", "/v1/activer", activateBody(code, f1.request({}, lic::systemNow()), f1.name), f1.key.get()).status == 200 &&
                   call(url, "POST", "/v1/activer", activateBody(code, f2.request({}, lic::systemNow()), f2.name), f2.key.get()).status == 200,
               "deux PC actives (une flottante n'a pas de limite d'activations)");
-        const Reply j1 = call(url, "POST", "/v1/flottante/jeton", "{\"licence\":\"XPG-ESSAI-FLOTTANTE-1\"}", f1.key.get());
+        const Reply j1 = call(url, "POST", "/v1/flottante/jeton", f1.body("XPG-ESSAI-FLOTTANTE-1"), f1.key.get());
         check(j1.status == 200 && j1.value.isObject() && !j1.value.str("jeton").empty(), "le premier prend le jeton");
-        const Reply j2 = call(url, "POST", "/v1/flottante/jeton", "{\"licence\":\"XPG-ESSAI-FLOTTANTE-1\"}", f2.key.get());
+        const Reply j2 = call(url, "POST", "/v1/flottante/jeton", f2.body("XPG-ESSAI-FLOTTANTE-1"), f2.key.get());
         check(j2.status == 409 && j2.value.str("erreur") == "complet", "le second : 409 complet (un poste en meme temps)");
         on::Snapshot s;
         (void)on::listLicences(A, *ed.key, ed.options(), s);
@@ -588,7 +598,7 @@ int main(int argc, char** argv) {
         check(on::retireDevice(A, *ed.key, "XPG-ESSAI-FLOTTANTE-1", f1.key->publicKeyHex(), ed.options()).ok, "retirer le PC qui tient le jeton");
         (void)on::listLicences(A, *ed.key, ed.options(), s);
         check(s.licence("XPG-ESSAI-FLOTTANTE-1") && s.licence("XPG-ESSAI-FLOTTANTE-1")->leases.empty(), "son jeton est rendu");
-        check(call(url, "POST", "/v1/flottante/jeton", "{\"licence\":\"XPG-ESSAI-FLOTTANTE-1\"}", f2.key.get()).status == 200, "l'autre PC le prend");
+        check(call(url, "POST", "/v1/flottante/jeton", f2.body("XPG-ESSAI-FLOTTANTE-1"), f2.key.get()).status == 200, "l'autre PC le prend");
     }
 
     std::printf("-- les demandes manuelles : refusee, acceptee, rejouee\n");
@@ -677,12 +687,15 @@ int main(int argc, char** argv) {
         const on::Result r = on::publishRevocations(A, *ed.key, ed.options());
         check(r.ok, "deposee (" + r.text() + ")");
         check(call(url, "GET", "/v1/revocations", {}, nullptr).status >= 400, "aucune route publique ne la donne");
-        Reply ren = call(url, "POST", "/v1/renouveler", "{}", pc6.key.get());
-        check(ren.status == 200 && ren.value.find("revocations") && ren.value.at("revocations").isString() && has(ren.value.at("revocations").asString(), "XPG-LICENSING"),
-              "le PC concerne la recoit a sa connexion");
+        // 1.35.0 (revue) : la liste ne sort jamais du service ; le PC concerne lit sa revocation dans le motif de son retrait.
+        Reply ren = call(url, "POST", "/v1/renouveler", pc6.body(), pc6.key.get());
+        const json::Value* motifs = ren.value.find("motifs");
+        check(ren.status == 200 && !ren.value.find("revocations") && motifs && motifs->str("XPG-ESSAI-EN-LIGNE-1") == "revoquee" &&
+                  !has(ren.body, "Essai de revocation"),
+              "le PC concerne : sa licence retiree (motif revoquee), sans la liste ni sa raison");
         Pc f3(root / "pc-f3", "PC sans rapport");
-        ren = call(url, "POST", "/v1/renouveler", "{}", f3.key.get());
-        check(ren.status == 200 && ren.value.find("revocations") && ren.value.at("revocations").isNull(), "un PC sans rapport : rien");
+        ren = call(url, "POST", "/v1/renouveler", f3.body(), f3.key.get());
+        check(ren.status == 200 && !ren.value.find("revocations") && !has(ren.body, "XPG-LICENSING 1 revocations"), "un PC sans rapport : rien");
         on::Snapshot s;
         (void)on::listLicences(A, *ed.key, ed.options(), s);
         const auto* l = s.licence("XPG-ESSAI-EN-LIGNE-1");

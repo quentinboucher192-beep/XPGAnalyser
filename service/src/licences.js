@@ -6,24 +6,38 @@
 //  LES TABLES
 //    config        la cle du service (creee ici au premier appel ; la partie
 //                  secrete ne sort jamais), le certificat, le registre, la
-//                  liste de revocation (privee), les compteurs (numeros)
+//                  liste de revocation (privee), les compteurs (numeros, et le
+//                  nombre de lignes des grandes tables : jamais de COUNT(*) sur
+//                  elles a chaque appel)
 //    licences      les licences en ligne : le bloc signe par l'editeur (la
 //                  derniere emission), le type, les postes, le bail, l'EMPREINTE
 //                  du code (jamais le code), active
-//    activations   une ligne par (licence, PC) : numero, bail (jusqu_a), etat
-//    jetons        les jetons des licences flottantes (15 min)
+//    activations   une ligne par (licence, PC) : numero, station (l'empreinte de
+//                  l'installation de Windows du PC), bail (jusqu_a), etat, et
+//                  place_jusqu (un PC libere au-dela des transferts permis garde
+//                  sa place jusqu'a la fin de son bail)
+//    liberations   les liberations faites par les PC eux-memes qui ont rendu leur
+//                  place tout de suite (les transferts : 30 jours glissants)
+//    jetons        les jetons des licences flottantes (15 min), par (licence, PC,
+//                  station)
 //    decouvertes   la premiere fois qu'une machine a ete vue (gardee a vie)
 //    demandes      les demandes manuelles (scellees pour l'editeur)
 //    postes        l'etat d'un PC (bloc << poste >> signe par l'editeur)
 //    archive       l'archive privee de l'editeur (chiffree par lui) et sa version
 //    nonces        les nonces vus (20 min : un appel rejoue est refuse)
 //    debits        les compteurs des limites (par adresse, par PC)
-//    stats         les appels du jour
+//    stats_jour    les appels du jour : UNE ligne par jour (JSON), ecrite une fois
+//                  par minute au plus (les compteurs sont tenus en memoire)
 //
 //  LES ECRITURES (le plan gratuit compte les lignes ecrites, 100 000 par jour) :
-//  un appel ecrit 2 a 4 petites lignes (statistique, nonce, compteurs de
-//  limite) en plus de son travail ; les petites tables sont WITHOUT ROWID (une
-//  ecriture par ligne, sans index a part).
+//  un appel signe ecrit son nonce, et une ligne de limite par PC pour les routes
+//  limitees, en plus de son travail ; les routes publiques n'ecrivent rien (leur
+//  limite par adresse est celle de Cloudflare, devant le service : index.js).
+//  Pres de 127.0.0.1, la reponse dit combien de lignes l'appel a ecrites
+//  (X-XPG-Lignes-Ecrites : les essais les comptent).
+//  LES MENAGES : toutes les 5 minutes (nonces, jetons, limites), et une fois par
+//  jour (statistiques, demandes closes apres 7 jours, activations finies,
+//  liberations de plus de 30 jours).
 //
 //  LES APPELS SONT TRAITES UN PAR UN (une file) : un numero, une place, une
 //  version de l'archive ne sont jamais donnes deux fois.
@@ -65,7 +79,7 @@ import {
 } from "./outils.js";
 
 const VERSION = "1.35.0";
-const SCHEMA = 1;
+const SCHEMA = 2;
 const JOUR = 86400;
 const HEURE = 3600;
 const FENETRE_APPEL = 600; // +-600 s
@@ -76,34 +90,50 @@ const BAIL_DEFAUT = 30;
 const MAX_LICENCES = 10000;
 const MAX_ACTIVATIONS = 100000;
 const MAX_DEMANDES_ATTENTE = 1000;
-const MAX_SCELLE = 256 * 1024;
-const GARDE_DEMANDES = 90 * JOUR; // une demande close (annulee, remplacee, traitee) est effacee apres 90 jours
+const MAX_SCELLE = 64 * 1024;
+const MAX_OCTETS_DEMANDES = 20 * 1024 * 1024; // toutes les demandes gardees (scellees), au plus
+const GARDE_DEMANDES = 7 * JOUR; // une demande close (annulee, remplacee, traitee) est effacee apres 7 jours
 const MAX_DECOUVERTES = 1000000;
 const MAX_POSTES = 100000;
 const MAX_FICHIER = 1.5 * 1024 * 1024;
 const MAX_FICHIERS = 20000;
 const MAX_ARCHIVE = 512 * 1024 * 1024;
 
+// Les transferts : un PC qui se libere lui-meme rend sa place tout de suite au plus max(2, postes) fois par
+// licence sur 30 jours glissants ; au-dela, sa place reste prise jusqu'a la fin de son bail (son activation,
+// gardee hors ligne, vaut jusque-la).
+const FENETRE_TRANSFERTS = 30 * JOUR;
+const transfertsPermis = (lic) => Math.max(2, lic.postesMax);
+// Les lignes d'activation d'une licence (toutes, quel que soit leur etat), au plus : un client ne remplit jamais la
+// table des autres.
+const maxLignes = (lic) => (lic.type === "floating" ? Math.max(50, 20 * lic.postesMax) : 10 * lic.postesMax + 10);
+// Une activation finie est effacee apres la fin de son bail : 7 jours (liberee, retiree), 90 jours (active : un PC
+// parti sans se liberer ; revenu plus tard, il s'active de nouveau avec son code).
+const GARDE_FINIE = 7 * JOUR;
+const GARDE_ACTIVE = 90 * JOUR;
+// Les compteurs des appels du jour : ecrits une fois par minute au plus.
+const ECRIRE_STATS = 60;
+
 const DROITS = { activation: "activation", flottante: "flottante", heure: "heure", decouverte: "decouverte" };
 
-// Les limites (le plan gratuit, et les abus) : [nom, nombre, duree en secondes].
+// Les limites (le plan gratuit, et les abus) : [nom, nombre, duree en secondes]. Les routes publiques (etat, heure,
+// certificat, registre) sont limitees par adresse DEVANT le service (index.js, le limiteur de Cloudflare).
 const PAR_IP = {
     activer: ["activer", 10, HEURE],
     decouverte: ["decouverte", 10, HEURE],
-    heure: ["heure", 120, HEURE],
     demandes: ["demandes", 10, HEURE],
 };
 const PAR_PC = {
     activer: ["activer", 5, HEURE],
-    renouveler: ["renouveler", 30, HEURE],
-    jeton: ["jeton", 60, HEURE],
+    renouveler: ["renouveler", 30, HEURE, "memoire"],
+    jeton: ["jeton", 60, HEURE, "memoire"],
     demandes: ["demandes", 5, JOUR],
 };
 
 // signe : "pc" (la cle du PC), "editeur" (une cle de PUBLISHER_KEYS) ; absent : public.
 const ROUTES = {
     "GET /v1/etat": { f: "etat" },
-    "GET /v1/heure": { f: "heure", ip: PAR_IP.heure },
+    "GET /v1/heure": { f: "heure" },
     "GET /v1/certificat": { f: "lireCertificat" },
     "GET /v1/registre": { f: "lireRegistre" },
     "POST /v1/activer": { f: "activer", signe: "pc", ip: PAR_IP.activer, pc: PAR_PC.activer },
@@ -134,6 +164,40 @@ const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 
 
 // ---- les erreurs courantes ----
 const mal = (champ, phrase) => new Erreur(400, "champ", phrase || "Le champ « " + champ + " » manque ou est mal écrit.");
+
+// La station d'un appel (l'empreinte de l'installation de Windows du PC, stationHash : 32 hexadecimaux).
+function stationDe(corps) {
+    if (!estHex(corps.station, 32))
+        throw mal("station", "Le champ « station » doit être l'empreinte de l'installation de Windows de ce PC (32 hexadécimaux minuscules) : mets le programme à jour.");
+    return corps.station;
+}
+
+const autrePoste = () =>
+    new Erreur(
+        403,
+        "activation",
+        "Cette activation est pour un autre poste : la clé de ce PC sert sur une autre installation de Windows (une clé recopiée ?). Rien n'est fait.",
+    );
+
+// "JJ/MM/AAAA" (UTC).
+function dateFr(t) {
+    const d = iso(t);
+    return d.slice(8, 10) + "/" + d.slice(5, 7) + "/" + d.slice(0, 4);
+}
+
+// Toutes les places d'une licence fixe sont prises ; `revient` : quand une place gardee par un PC libere revient.
+function complet(lic, revient) {
+    let m = "Cette licence est déjà activée sur " + lic.postesMax + " PC (le maximum).";
+    if (revient)
+        m +=
+            " Une place revient le " +
+            dateFr(revient) +
+            " : celle d'un PC libéré au-delà des " +
+            transfertsPermis(lic) +
+            " changements de PC permis en 30 jours, qui la garde jusqu'à la fin de son bail.";
+    m += " Libère un PC, ou demande à l'éditeur.";
+    return new Erreur(409, "complet", m, revient ? { libre_le: iso(revient) } : null);
+}
 
 function dureeTexte(s) {
     if (s < 120) return s + " secondes";
@@ -170,6 +234,10 @@ export class Licences extends DurableObject {
         this.sql = ctx.storage.sql;
         this.file = Promise.resolve();
         this.dernierMenage = 0;
+        this.menageJour = null; // le jour du dernier grand menage (lu de config une fois)
+        this.ecrites = 0; // les lignes ecrites par l'appel en cours
+        this.debitsMem = new Map(); // les limites tenues en memoire (renouveler, jeton) : aucune ecriture
+        this.statsMem = null; // les appels du jour, en memoire : {jour, routes, sale, ecrit}
         ctx.blockConcurrencyWhile(async () => {
             this.creerTables();
             await this.chargerCle();
@@ -177,9 +245,25 @@ export class Licences extends DurableObject {
     }
 
     // ================================================================ la base ==
+    // Toute requete passe ici : les lignes rendues, et les lignes ecrites comptees (X-XPG-Lignes-Ecrites).
+    x(q, ...a) {
+        const c = this.sql.exec(q, ...a);
+        const r = c.toArray();
+        this.ecrites += c.rowsWritten || 0;
+        return r;
+    }
+
     creerTables() {
-        this.sql.exec(`
-            CREATE TABLE IF NOT EXISTS config (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL) WITHOUT ROWID;
+        this.x("CREATE TABLE IF NOT EXISTS config (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL) WITHOUT ROWID");
+        const avant = Number(this.config("schema") || "0");
+        if (avant === 1) {
+            // 1 -> 2 : la place gardee d'un PC libere, les jetons par station (ils durent 15 min : refaits), une ligne
+            // de statistiques par jour.
+            this.x("ALTER TABLE activations ADD COLUMN place_jusqu INTEGER NOT NULL DEFAULT 0");
+            this.x("DROP TABLE IF EXISTS jetons");
+            this.x("DROP TABLE IF EXISTS stats");
+        }
+        this.x(`
             CREATE TABLE IF NOT EXISTS licences (
                 id TEXT PRIMARY KEY, bloc TEXT NOT NULL, emission INTEGER NOT NULL, type TEXT NOT NULL,
                 postes_max INTEGER NOT NULL, expire INTEGER NOT NULL, bail_jours INTEGER NOT NULL,
@@ -187,11 +271,12 @@ export class Licences extends DurableObject {
             CREATE TABLE IF NOT EXISTS activations (
                 licence TEXT NOT NULL, poste TEXT NOT NULL, nom TEXT NOT NULL, station TEXT NOT NULL, type TEXT NOT NULL,
                 numero INTEGER NOT NULL, activee INTEGER NOT NULL, vue INTEGER NOT NULL, emis INTEGER NOT NULL,
-                jusqu_a INTEGER NOT NULL, etat TEXT NOT NULL, PRIMARY KEY (licence, poste));
+                jusqu_a INTEGER NOT NULL, etat TEXT NOT NULL, place_jusqu INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (licence, poste));
             CREATE INDEX IF NOT EXISTS activations_poste ON activations (poste);
+            CREATE TABLE IF NOT EXISTS liberations (licence TEXT NOT NULL, t INTEGER NOT NULL, poste TEXT NOT NULL, PRIMARY KEY (licence, t, poste)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS jetons (
-                licence TEXT NOT NULL, poste TEXT NOT NULL, emis INTEGER NOT NULL, jusqu_a INTEGER NOT NULL,
-                PRIMARY KEY (licence, poste)) WITHOUT ROWID;
+                licence TEXT NOT NULL, poste TEXT NOT NULL, station TEXT NOT NULL, emis INTEGER NOT NULL, jusqu_a INTEGER NOT NULL,
+                PRIMARY KEY (licence, poste, station)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS decouvertes (machine TEXT PRIMARY KEY, debut INTEGER NOT NULL, poste TEXT NOT NULL, vue INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS demandes (
                 numero INTEGER PRIMARY KEY, poste TEXT NOT NULL, cle TEXT NOT NULL, scelle TEXT NOT NULL,
@@ -203,16 +288,28 @@ export class Licences extends DurableObject {
                 chemin TEXT PRIMARY KEY, contenu TEXT NOT NULL, sha256 TEXT NOT NULL, taille INTEGER NOT NULL, version INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, vu INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS debits (cle TEXT NOT NULL, fin INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (cle, fin)) WITHOUT ROWID;
-            CREATE TABLE IF NOT EXISTS stats (jour TEXT NOT NULL, route TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (jour, route)) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS stats_jour (jour TEXT PRIMARY KEY, routes TEXT NOT NULL) WITHOUT ROWID;
         `);
-        if (!this.config("schema")) this.ecrireConfig("schema", String(SCHEMA));
+        if (avant < SCHEMA) {
+            // Les compteurs des grandes tables : comptes UNE fois (une base d'avant), puis tenus a chaque ecriture.
+            if (avant) {
+                const n = (q) => String(this.nombre(q));
+                this.ecrireConfig("n_licences", n("SELECT COUNT(*) AS n FROM licences"));
+                this.ecrireConfig("n_activations", n("SELECT COUNT(*) AS n FROM activations"));
+                this.ecrireConfig("n_decouvertes", n("SELECT COUNT(*) AS n FROM decouvertes"));
+                this.ecrireConfig("n_postes", n("SELECT COUNT(*) AS n FROM postes"));
+                this.ecrireConfig("n_attente", n("SELECT COUNT(*) AS n FROM demandes WHERE etat = 'attente'"));
+                this.ecrireConfig("octets_demandes", n("SELECT COALESCE(SUM(LENGTH(scelle)), 0) AS n FROM demandes"));
+            }
+            this.ecrireConfig("schema", String(SCHEMA));
+        }
     }
 
     lignes(q, ...a) {
-        return this.sql.exec(q, ...a).toArray();
+        return this.x(q, ...a);
     }
     ligne(q, ...a) {
-        const r = this.sql.exec(q, ...a).toArray();
+        const r = this.x(q, ...a);
         return r.length ? r[0] : null;
     }
     nombre(q, ...a) {
@@ -224,14 +321,21 @@ export class Licences extends DurableObject {
         return r ? r.valeur : null;
     }
     ecrireConfig(cle, valeur) {
-        if (valeur === null) this.sql.exec("DELETE FROM config WHERE cle = ?", cle);
-        else this.sql.exec("INSERT INTO config (cle, valeur) VALUES (?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur", cle, valeur);
+        if (valeur === null) this.x("DELETE FROM config WHERE cle = ?", cle);
+        else this.x("INSERT INTO config (cle, valeur) VALUES (?, ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur", cle, valeur);
     }
     // Un compteur croissant (les numeros des activations, des demandes, la version de l'archive).
     suivant(nom) {
         const n = Number(this.config(nom) || "0") + 1;
         this.ecrireConfig(nom, String(n));
         return n;
+    }
+    // Le nombre de lignes d'une grande table (n_activations...), tenu a chaque ecriture : jamais un COUNT(*).
+    compte(nom) {
+        return Number(this.config(nom) || "0");
+    }
+    ajouter(nom, d) {
+        if (d) this.ecrireConfig(nom, String(Math.max(0, this.compte(nom) + d)));
     }
 
     // ================================================================ les cles ==
@@ -356,6 +460,8 @@ export class Licences extends DurableObject {
         const url = new URL(request.url);
         const local = url.hostname === "127.0.0.1" || url.hostname === "localhost";
         const now = this.maintenant(local);
+        let reponse;
+        let compte = false;
         try {
             const methode = request.method.toUpperCase();
             const route = ROUTES[methode + " " + url.pathname];
@@ -365,50 +471,132 @@ export class Licences extends DurableObject {
             }
             this.menage(now);
             this.compter(now, methode + " " + url.pathname);
+            // Les lignes ecrites par CET appel (sans les menages, ni la statistique : une fois par minute au plus).
+            this.ecrites = 0;
+            compte = true;
             const corps = new Uint8Array(await request.arrayBuffer());
             const ip = request.headers.get("X-XPG-IP") || "inconnue";
             // LIMITES_ESSAI = "sans" : les limites levees, SEULEMENT sur ce poste (les essais qui enchainent les appels).
             const limites = !(local && this.env.LIMITES_ESSAI === "sans");
-            if (route.ip && limites) this.debit("ip", route.ip, ip, now);
             const ctx = { request, url, methode, corps, ip, now, appelant: null };
+            // L'ordre : la signature (rien n'est ecrit), puis les limites, puis le nonce. Un appel refuse n'ecrit rien.
             if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe === "editeur");
+            if (route.ip && limites) this.debit("ip", route.ip, ip, now);
             if (route.pc && limites) this.debit("pc", route.pc, ctx.appelant.cle, now);
-            return await this[route.f](ctx);
+            if (ctx.appelant) this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, now);
+            reponse = await this[route.f](ctx);
         } catch (e) {
-            if (e instanceof Erreur) return reponseErreur(e);
-            // Rien du corps ni de l'appel dans le journal : seulement le genre de l'erreur.
-            console.error("erreur interne :", e && e.name ? e.name : "?");
-            return reponseErreur(new Erreur(500, "interne", "Le service a rencontré une erreur interne. Réessaie plus tard."));
+            if (e instanceof Erreur) reponse = reponseErreur(e);
+            else {
+                // Rien du corps ni de l'appel dans le journal : seulement le genre de l'erreur.
+                console.error("erreur interne :", e && e.name ? e.name : "?");
+                reponse = reponseErreur(new Erreur(500, "interne", "Le service a rencontré une erreur interne. Réessaie plus tard."));
+            }
+        }
+        // Pres de 127.0.0.1 seulement : les lignes ecrites par l'appel (les essais mesurent le plan gratuit).
+        if (local && compte) reponse.headers.set("X-XPG-Lignes-Ecrites", String(this.ecrites));
+        try {
+            this.ecrireStats(now, false);
+        } catch {
+            // la statistique attendra l'appel suivant
+        }
+        return reponse;
+    }
+
+    // Les menages : toutes les 5 minutes au plus (nonces, jetons, limites), et une fois par jour (le reste).
+    menage(now) {
+        if (now - this.dernierMenage >= 300) {
+            this.dernierMenage = now;
+            this.x("DELETE FROM nonces WHERE vu < ?", now - DUREE_NONCE - FENETRE_APPEL);
+            this.x("DELETE FROM jetons WHERE jusqu_a < ?", now - HEURE);
+            this.x("DELETE FROM debits WHERE fin < ?", now);
+            for (const [cle, d] of this.debitsMem) if (d.fin < now) this.debitsMem.delete(cle);
+        }
+        const jour = jourDe(now);
+        if (this.menageJour === null) this.menageJour = this.config("menage_jour") || "";
+        if (this.menageJour !== jour) {
+            this.grandMenage(now);
+            this.menageJour = jour;
+            this.ecrireConfig("menage_jour", jour);
         }
     }
 
-    // Les menages (toutes les 5 minutes au plus) : nonces, jetons, compteurs, statistiques.
-    menage(now) {
-        if (now - this.dernierMenage < 300) return;
-        this.dernierMenage = now;
-        this.sql.exec("DELETE FROM nonces WHERE vu < ?", now - DUREE_NONCE - FENETRE_APPEL);
-        this.sql.exec("DELETE FROM jetons WHERE jusqu_a < ?", now - HEURE);
-        this.sql.exec("DELETE FROM debits WHERE fin < ?", now);
-        this.sql.exec("DELETE FROM stats WHERE jour < ?", jourDe(now - 60 * JOUR));
-        this.sql.exec("DELETE FROM demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES);
+    // Une fois par jour : les statistiques de plus de 60 jours, les demandes closes de plus de 7 jours, les activations
+    // finies (7 jours apres la fin du bail ; 90 jours pour un PC parti sans se liberer), les liberations de plus de
+    // 30 jours. Chaque requete parcourt sa table une fois : une fois par jour.
+    grandMenage(now) {
+        this.x("DELETE FROM stats_jour WHERE jour < ?", jourDe(now - 60 * JOUR));
+        const d = this.ligne(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(scelle)), 0) AS o FROM demandes WHERE etat != 'attente' AND maj < ?",
+            now - GARDE_DEMANDES,
+        );
+        if (d && d.n) {
+            this.x("DELETE FROM demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES);
+            this.ajouter("octets_demandes", -Number(d.o));
+        }
+        const finies = "(etat != 'active' AND jusqu_a < ?) OR (etat = 'active' AND jusqu_a < ?)";
+        const n = this.nombre("SELECT COUNT(*) AS n FROM activations WHERE " + finies, now - GARDE_FINIE, now - GARDE_ACTIVE);
+        if (n) {
+            this.x("DELETE FROM activations WHERE " + finies, now - GARDE_FINIE, now - GARDE_ACTIVE);
+            this.ajouter("n_activations", -n);
+        }
+        this.x("DELETE FROM liberations WHERE t < ?", now - FENETRE_TRANSFERTS);
     }
 
+    // Les appels du jour : comptes en memoire, ecrits (une ligne) une fois par minute au plus. Un objet arrete entre
+    // deux ecritures perd ce qu'il n'a pas ecrit : c'est une statistique, pas une facture.
     compter(now, route) {
-        this.sql.exec("INSERT INTO stats (jour, route, n) VALUES (?, ?, 1) ON CONFLICT (jour, route) DO UPDATE SET n = n + 1", jourDe(now), route);
+        const jour = jourDe(now);
+        if (!this.statsMem || this.statsMem.jour !== jour) {
+            if (this.statsMem) this.ecrireStats(now, true);
+            const r = this.ligne("SELECT routes FROM stats_jour WHERE jour = ?", jour);
+            let routes = {};
+            try {
+                routes = r ? JSON.parse(r.routes) : {};
+            } catch {
+                routes = {};
+            }
+            this.statsMem = { jour, routes, sale: false, ecrit: 0 };
+        }
+        this.statsMem.routes[route] = (this.statsMem.routes[route] || 0) + 1;
+        this.statsMem.sale = true;
     }
 
-    debit(portee, [nom, limite, duree], qui, now) {
+    ecrireStats(now, maintenant) {
+        const m = this.statsMem;
+        if (!m || !m.sale || (!maintenant && now - m.ecrit < ECRIRE_STATS)) return;
+        this.x(
+            "INSERT INTO stats_jour (jour, routes) VALUES (?, ?) ON CONFLICT (jour) DO UPDATE SET routes = excluded.routes",
+            m.jour,
+            JSON.stringify(m.routes),
+        );
+        m.sale = false;
+        m.ecrit = now;
+    }
+
+    // Une limite : [nom, nombre, duree, "memoire"?]. En memoire : aucune ecriture (renouveler, jeton : les appels
+    // frequents) ; l'objet n'est arrete qu'apres un moment sans appel, la limite tient donc tant qu'on la presse.
+    debit(portee, [nom, limite, duree, memoire], qui, now) {
         const fin = (Math.floor(now / duree) + 1) * duree;
         const cle = portee + ":" + nom + ":" + qui;
-        const r = this.ligne("SELECT n FROM debits WHERE cle = ? AND fin = ?", cle, fin);
-        if (r && r.n >= limite) {
+        const trop = () => {
             const attente = Math.max(1, fin - now);
-            throw new Erreur(429, "trop", "Trop d'appels « " + nom + " » : réessaie dans " + dureeTexte(attente) + ".", { reessayer_dans: attente });
+            return new Erreur(429, "trop", "Trop d'appels « " + nom + " » : réessaie dans " + dureeTexte(attente) + ".", { reessayer_dans: attente });
+        };
+        if (memoire) {
+            const m = this.debitsMem.get(cle);
+            const n = m && m.fin === fin ? m.n : 0;
+            if (n >= limite) throw trop();
+            this.debitsMem.set(cle, { fin, n: n + 1 });
+            return;
         }
-        this.sql.exec("INSERT INTO debits (cle, fin, n) VALUES (?, ?, 1) ON CONFLICT (cle, fin) DO UPDATE SET n = n + 1", cle, fin);
+        const r = this.ligne("SELECT n FROM debits WHERE cle = ? AND fin = ?", cle, fin);
+        if (r && r.n >= limite) throw trop();
+        this.x("INSERT INTO debits (cle, fin, n) VALUES (?, ?, 1) ON CONFLICT (cle, fin) DO UPDATE SET n = n + 1", cle, fin);
     }
 
-    // L'appel signe : X-XPG-Cle, X-XPG-Date, X-XPG-Nonce, X-XPG-Signature (Service.hpp, verifyRequest).
+    // L'appel signe : X-XPG-Cle, X-XPG-Date, X-XPG-Nonce, X-XPG-Signature (Service.hpp, verifyRequest). Rien n'est
+    // ecrit ici : le nonce l'est par traiter(), une fois les limites passees.
     async verifierAppel(ctx, admin) {
         const h = ctx.request.headers;
         const cle = h.get("X-XPG-Cle");
@@ -431,8 +619,7 @@ export class Licences extends DurableObject {
         const octets = unhex(cle);
         if (!(await verifierEd25519(octets, enc.encode(message), sig))) throw new Erreur(401, "signature", "La signature de l'appel est fausse.");
         if (this.ligne("SELECT 1 AS x FROM nonces WHERE nonce = ?", nonce)) throw new Erreur(401, "rejeu", "Cet appel a déjà été reçu (nonce déjà vu) : il est refusé.");
-        this.sql.exec("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", nonce, ctx.now);
-        return { cle, octets, poste: await posteDe(octets) };
+        return { cle, octets, nonce, poste: await posteDe(octets) };
     }
 
     // Le corps JSON d'un appel (un objet) ; vide : {}.
@@ -475,26 +662,42 @@ export class Licences extends DurableObject {
         return trouvee ? this.licence(trouvee) : null;
     }
 
-    // Les places prises d'une licence : les activations actives, dans leur bail, non revoquees (sauf `sauf`).
-    placesPrises(lic, now, sauf) {
+    // Les places prises d'une licence fixe : les activations actives dans leur bail, et les PC liberes au-dela des
+    // transferts permis, jusqu'a la fin de leur bail (place_jusqu) ; jamais un PC revoque. `sauf` {cle, station} : le
+    // PC qui demande reprend sa propre place (la meme cle ET la meme installation de Windows).
+    // {n, revient} : `revient` = la premiere fin d'une place gardee par un PC libere (0 : aucune).
+    places(lic, now, sauf) {
         let n = 0;
-        for (const r of this.lignes("SELECT poste, jusqu_a FROM activations WHERE licence = ? AND etat = 'active'", lic.id))
-            if (r.poste !== sauf && r.jusqu_a > now && !this.revoquee(lic, r.poste)) n++;
-        return n;
+        let revient = 0;
+        for (const r of this.lignes(
+            "SELECT poste, station, jusqu_a, etat, place_jusqu FROM activations WHERE licence = ? AND (etat = 'active' OR (etat = 'liberee' AND place_jusqu > ?))",
+            lic.id,
+            now,
+        )) {
+            const fin = r.etat === "active" ? r.jusqu_a : r.place_jusqu;
+            if (fin <= now || this.revoquee(lic, r.poste)) continue;
+            if (sauf && r.poste === sauf.cle && (!r.station || !sauf.station || r.station === sauf.station)) continue;
+            n++;
+            if (r.etat === "liberee" && (!revient || fin < revient)) revient = fin;
+        }
+        return { n, revient };
     }
 
-    // Signer l'activation de ce PC (un numero neuf, le bail de la licence a partir de maintenant).
+    // Signer l'activation de ce PC (un numero neuf, le bail de la licence a partir de maintenant). La fin de la licence
+    // (et sa grace) est appliquee par le PC lui-meme, avec ses dates signees par l'editeur ; le service, lui, ne
+    // renouvelle plus une licence finie (renouveler : motif expiree).
     async signerActivation(lic, poste, station, now) {
         const numero = this.suivant("numero_activation");
         const jusqu = now + lic.bail * JOUR;
         const type = lic.type === "floating" ? "flottante" : "fixe";
-        this.sql.exec(
-            "UPDATE activations SET numero = ?, emis = ?, jusqu_a = ?, vue = ?, type = ? WHERE licence = ? AND poste = ?",
+        this.x(
+            "UPDATE activations SET numero = ?, emis = ?, jusqu_a = ?, vue = ?, type = ?, station = ? WHERE licence = ? AND poste = ?",
             numero,
             now,
             jusqu,
             now,
             type,
+            station,
             lic.id,
             poste,
         );
@@ -557,6 +760,13 @@ export class Licences extends DurableObject {
             throw new Erreur(400, "demande", "La demande d'activation est refusée : " + e.message + ".");
         }
         if (demande.cle !== cle) throw new Erreur(400, "demande", "La demande d'activation est refusée : elle porte la clé d'un autre PC.");
+        // L'activation est liee a l'installation de Windows de ce PC (station) : une demande sans elle est refusee.
+        if (!demande.station)
+            throw new Erreur(
+                400,
+                "demande",
+                "La demande d'activation est refusée : elle ne porte pas l'empreinte de l'installation de Windows de ce PC (« station »). Mets le programme à jour, puis réessaie.",
+            );
         const cert = await this.exigerCertificat(ctx.now, DROITS.activation);
         const norm = normaliserCode(corps.code);
         // Toujours le meme travail, que le code soit lisible ou non.
@@ -564,20 +774,37 @@ export class Licences extends DurableObject {
         const lic = norm ? this.licenceParCode(hash) : null;
         if (!lic || !lic.active) throw new Erreur(403, "code", "Ce code d'activation n'est pas valable (inconnu ou désactivé). Vérifie-le, ou demande-le à l'éditeur.");
         if (this.revoquee(lic, cle)) throw new Erreur(410, "revoquee", "Cette licence est révoquée : elle ne peut plus être activée.");
-        if (lic.expire && ctx.now > lic.expire) throw new Erreur(410, "expiree", "Cette licence a expiré le " + jourDe(lic.expire) + ".");
+        if (lic.expire && ctx.now >= lic.expire) throw new Erreur(410, "expiree", "Cette licence a expiré le " + dateFr(lic.expire) + ".");
         const avant = this.ligne("SELECT * FROM activations WHERE licence = ? AND poste = ?", lic.id, cle);
-        const tientSaPlace = avant && avant.etat === "active" && avant.jusqu_a > ctx.now;
-        if (lic.type !== "floating" && !tientSaPlace && this.placesPrises(lic, ctx.now, cle) >= lic.postesMax)
-            throw new Erreur(409, "complet", "Cette licence est déjà activée sur " + lic.postesMax + " PC (le maximum). Libère un PC, ou demande à l'éditeur.");
-        if (!avant && this.nombre("SELECT COUNT(*) AS n FROM activations") >= MAX_ACTIVATIONS)
-            throw new Erreur(507, "limite", "Le service a atteint son nombre maximal d'activations.");
+        const memePoste = !!avant && (!avant.station || avant.station === demande.station);
+        // La cle de ce PC, active pour cette licence sur une AUTRE installation de Windows, dans son bail : une cle
+        // recopiee. Elle ne prend pas la place de l'autre.
+        if (avant && !memePoste && avant.etat === "active" && avant.jusqu_a > ctx.now) throw autrePoste();
+        const tientSaPlace = memePoste && avant.etat === "active" && avant.jusqu_a > ctx.now;
+        if (lic.type !== "floating" && !tientSaPlace) {
+            const p = this.places(lic, ctx.now, { cle, station: demande.station });
+            if (p.n >= lic.postesMax) throw complet(lic, p.revient);
+        }
+        if (!avant) {
+            // Les lignes de CETTE licence (son maximum ne gene aucune autre licence), puis tout le service.
+            const max = maxLignes(lic);
+            if (this.nombre("SELECT COUNT(*) AS n FROM activations WHERE licence = ?", lic.id) >= max)
+                throw new Erreur(
+                    409,
+                    "limite",
+                    "Cette licence a déjà " +
+                        max +
+                        " activations enregistrées (son maximum) : demande à l'éditeur de retirer les PC qui ne servent plus. Une activation finie s'efface d'elle-même une semaine après la fin de son bail.",
+                );
+            if (this.compte("n_activations") >= MAX_ACTIVATIONS) throw new Erreur(507, "limite", "Le service a atteint son nombre maximal d'activations.");
+        }
         const nom = nomPropre(corps.nom !== undefined ? corps.nom : demande.nom);
-        const activee = avant && avant.etat === "active" ? avant.activee : ctx.now;
-        this.sql.exec(
-            `INSERT INTO activations (licence, poste, nom, station, type, numero, activee, vue, emis, jusqu_a, etat)
-             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active')
+        const activee = tientSaPlace ? avant.activee : ctx.now;
+        this.x(
+            `INSERT INTO activations (licence, poste, nom, station, type, numero, activee, vue, emis, jusqu_a, etat, place_jusqu)
+             VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 'active', 0)
              ON CONFLICT (licence, poste) DO UPDATE SET nom = excluded.nom, station = excluded.station, activee = excluded.activee,
-                 vue = excluded.vue, etat = 'active'`,
+                 vue = excluded.vue, etat = 'active', place_jusqu = 0`,
             lic.id,
             cle,
             nom,
@@ -588,56 +815,118 @@ export class Licences extends DurableObject {
             ctx.now,
             ctx.now,
         );
+        if (!avant) this.ajouter("n_activations", 1);
         const a = await this.signerActivation(lic, cle, demande.station, ctx.now);
         const message =
             lic.type === "floating"
-                ? "La licence flottante " + lic.id + " est activée sur ce PC (bail jusqu'au " + jourDe(a.jusqu) + ")."
-                : "La licence " + lic.id + " est activée sur ce PC jusqu'au " + jourDe(a.jusqu) + " ; elle se renouvelle à chaque connexion.";
+                ? "La licence flottante " + lic.id + " est activée sur ce PC (bail jusqu'au " + dateFr(a.jusqu) + ")."
+                : "La licence " + lic.id + " est activée sur ce PC jusqu'au " + dateFr(a.jusqu) + " ; elle se renouvelle à chaque connexion.";
         return reponseJson(200, { licence: lic.bloc, activation: a.bloc, certificat: cert.bloc, message });
     }
 
+    // Le renouvellement : le bail de chaque activation de ce PC (cette cle, cette installation de Windows). Les autres
+    // sont dans `retirees`, avec leur motif (`motifs`) : liberee, retiree, revoquee, desactivee, expiree, autre_poste
+    // (la cle de ce PC sert ailleurs : jamais renouvelee ici), inconnue. La liste de revocation de l'editeur ne sort
+    // jamais : une revocation se lit ici (revoquee), ou dans l'etat << poste >> scelle pour un PC lie par l'editeur.
     async renouveler(ctx) {
-        this.corpsJson(ctx);
+        const corps = this.corpsJson(ctx);
+        const station = stationDe(corps);
         const { cle, poste } = ctx.appelant;
         const cert = await this.exigerCertificat(ctx.now, DROITS.activation);
         const activations = [];
         const retirees = [];
-        let concerne = false;
-        const liste = this.revocations();
+        const motifs = {};
+        const retirer = (id, motif) => {
+            retirees.push(id);
+            motifs[id] = motif;
+        };
         for (const r of this.lignes("SELECT * FROM activations WHERE poste = ? ORDER BY licence", cle)) {
-            if (liste && liste.revoquees.some((x) => x.licence === r.licence)) concerne = true;
+            // Une activation faite par une autre installation de Windows : rien n'en est dit de plus, rien n'est change.
+            if (r.station && r.station !== station) {
+                retirer(r.licence, "autre_poste");
+                continue;
+            }
             const lic = this.licence(r.licence);
-            if (!lic || r.etat !== "active" || !lic.active || this.revoquee(lic, cle)) {
-                retirees.push(r.licence);
-                if (lic && this.revoquee(lic, cle)) this.sql.exec("DELETE FROM jetons WHERE licence = ? AND poste = ?", r.licence, cle);
+            if (!lic) {
+                retirer(r.licence, "inconnue");
+                continue;
+            }
+            if (r.etat !== "active") {
+                retirer(r.licence, r.etat === "liberee" ? "liberee" : "retiree");
+                continue;
+            }
+            if (this.revoquee(lic, cle)) {
+                this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", r.licence, cle);
+                retirer(r.licence, "revoquee");
+                continue;
+            }
+            if (!lic.active) {
+                retirer(r.licence, "desactivee");
+                continue;
+            }
+            // Une licence finie n'est plus renouvelee (une emission plus recente, deposee par l'editeur, la prolonge).
+            if (lic.expire && ctx.now >= lic.expire) {
+                retirer(r.licence, "expiree");
                 continue;
             }
             // Un bail echu dont la place a ete reprise par un autre PC : ce PC est retire.
-            if (r.jusqu_a <= ctx.now && lic.type !== "floating" && this.placesPrises(lic, ctx.now, cle) >= lic.postesMax) {
-                this.sql.exec("UPDATE activations SET etat = 'retiree', vue = ? WHERE licence = ? AND poste = ?", ctx.now, r.licence, cle);
-                retirees.push(r.licence);
+            if (r.jusqu_a <= ctx.now && lic.type !== "floating" && this.places(lic, ctx.now, { cle, station }).n >= lic.postesMax) {
+                this.x("UPDATE activations SET etat = 'retiree', vue = ? WHERE licence = ? AND poste = ?", ctx.now, r.licence, cle);
+                retirer(r.licence, "retiree");
                 continue;
             }
-            const a = await this.signerActivation(lic, cle, r.station, ctx.now);
+            const a = await this.signerActivation(lic, cle, station, ctx.now);
             activations.push({ licence: lic.bloc, activation: a.bloc });
         }
         const etatPoste = this.ligne("SELECT bloc FROM postes WHERE poste = ?", poste);
-        return reponseJson(200, {
-            activations,
-            retirees,
-            certificat: cert.bloc,
-            revocations: concerne ? this.config("revocations") : null,
-            poste: etatPoste ? etatPoste.bloc : null,
-        });
+        return reponseJson(200, { activations, retirees, motifs, certificat: cert.bloc, poste: etatPoste ? etatPoste.bloc : null });
     }
 
+    // Liberer ce PC. Sa place revient tout de suite dans les transferts permis (max(2, postes) en 30 jours glissants,
+    // par licence) ; au-dela, elle reste prise jusqu'a la fin de son bail (son activation, gardee hors ligne, vaut
+    // jusque-la). Une licence flottante n'a pas de place a garder (le jeton est rendu).
     async liberer(ctx) {
         const corps = this.corpsJson(ctx);
         if (!estIdLicence(corps.licence)) throw mal("licence");
+        const station = corps.station === undefined ? "" : stationDe(corps);
         const { cle } = ctx.appelant;
-        this.sql.exec("UPDATE activations SET etat = 'liberee', vue = ? WHERE licence = ? AND poste = ? AND etat = 'active'", ctx.now, corps.licence, cle);
-        this.sql.exec("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, cle);
-        return reponseJson(200, {});
+        const r = this.ligne("SELECT * FROM activations WHERE licence = ? AND poste = ?", corps.licence, cle);
+        if (r && station && r.station && r.station !== station) throw autrePoste();
+        let garde = 0;
+        let faits = 0;
+        let permis = 0;
+        if (r && r.etat === "active") {
+            const lic = this.licence(r.licence);
+            if (lic && lic.type !== "floating" && lic.active && r.jusqu_a > ctx.now && !this.revoquee(lic, cle)) {
+                permis = transfertsPermis(lic);
+                faits = this.nombre("SELECT COUNT(*) AS n FROM liberations WHERE licence = ? AND t > ?", lic.id, ctx.now - FENETRE_TRANSFERTS);
+                if (faits < permis) {
+                    this.x("INSERT INTO liberations (licence, t, poste) VALUES (?, ?, ?) ON CONFLICT DO NOTHING", lic.id, ctx.now, cle);
+                    faits++;
+                } else {
+                    garde = r.jusqu_a;
+                }
+            }
+            this.x("UPDATE activations SET etat = 'liberee', vue = ?, place_jusqu = ? WHERE licence = ? AND poste = ?", ctx.now, garde, corps.licence, cle);
+        } else if (r && r.etat === "liberee" && r.place_jusqu > ctx.now) {
+            garde = r.place_jusqu;
+        }
+        this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, cle);
+        const rep = garde ? { place: "gardee", jusqu_a: iso(garde) } : { place: "rendue" };
+        if (permis) {
+            rep.transferts = faits;
+            rep.transferts_permis = permis;
+        }
+        rep.message = garde
+            ? "Ce PC est libéré, mais la licence " +
+              corps.licence +
+              " a déjà changé de PC " +
+              (permis || "plusieurs") +
+              " fois en 30 jours (le maximum) : sa place reste prise jusqu'à la fin de son bail, le " +
+              dateFr(garde) +
+              "."
+            : "Ce PC est libéré : sa place est rendue, un autre PC peut la prendre.";
+        return reponseJson(200, rep);
     }
 
     async decouverte(ctx) {
@@ -646,12 +935,13 @@ export class Licences extends DurableObject {
         await this.exigerCertificat(ctx.now, DROITS.decouverte);
         let r = this.ligne("SELECT debut FROM decouvertes WHERE machine = ?", corps.machine);
         if (!r) {
-            if (this.nombre("SELECT COUNT(*) AS n FROM decouvertes") >= MAX_DECOUVERTES)
-                throw new Erreur(507, "limite", "Le service a atteint son nombre maximal de Découvertes.");
-            this.sql.exec("INSERT INTO decouvertes (machine, debut, poste, vue) VALUES (?, ?, ?, ?)", corps.machine, ctx.now, ctx.appelant.cle, ctx.now);
+            if (this.compte("n_decouvertes") >= MAX_DECOUVERTES) throw new Erreur(507, "limite", "Le service a atteint son nombre maximal de Découvertes.");
+            this.x("INSERT INTO decouvertes (machine, debut, poste, vue) VALUES (?, ?, ?, ?)", corps.machine, ctx.now, ctx.appelant.cle, ctx.now);
+            this.ajouter("n_decouvertes", 1);
             r = { debut: ctx.now };
         } else {
-            this.sql.exec("UPDATE decouvertes SET vue = ? WHERE machine = ?", ctx.now, corps.machine);
+            // vue : une fois par jour au plus (une ecriture de moins pour les declarations repetees)
+            this.x("UPDATE decouvertes SET vue = ? WHERE machine = ? AND vue < ?", ctx.now, corps.machine, ctx.now - JOUR);
         }
         let jours = Number.parseInt(String(this.env.DECOUVERTE_JOURS || "30"), 10);
         if (!Number.isFinite(jours) || jours < 1 || jours > 366) jours = 30;
@@ -659,19 +949,28 @@ export class Licences extends DurableObject {
         return reponseTexte(200, bloc);
     }
 
+    // Le jeton d'une licence flottante : pour (licence, cle, station) - la station doit etre celle de l'activation.
     async prendreJeton(ctx) {
         const corps = this.corpsJson(ctx);
         if (!estIdLicence(corps.licence)) throw mal("licence");
+        const station = stationDe(corps);
         const { cle } = ctx.appelant;
         const lic = this.licence(corps.licence);
         const act = lic ? this.ligne("SELECT * FROM activations WHERE licence = ? AND poste = ?", lic.id, cle) : null;
         if (!lic || !act || act.etat !== "active" || lic.type !== "floating" || !lic.active)
             throw new Erreur(403, "activation", "Ce PC n'a pas d'activation flottante pour cette licence.");
+        if (act.station && act.station !== station) throw autrePoste();
         if (this.revoquee(lic, cle)) throw new Erreur(410, "revoquee", "Cette licence est révoquée.");
-        if (lic.expire && ctx.now > lic.expire) throw new Erreur(410, "expiree", "Cette licence a expiré le " + jourDe(lic.expire) + ".");
+        if (lic.expire && ctx.now >= lic.expire) throw new Erreur(410, "expiree", "Cette licence a expiré le " + dateFr(lic.expire) + ".");
         if (act.jusqu_a <= ctx.now) throw new Erreur(403, "activation", "Le bail de l'activation de ce PC est échu : renouvelle-la d'abord.");
         await this.exigerCertificat(ctx.now, DROITS.flottante);
-        const autres = this.lignes("SELECT jusqu_a FROM jetons WHERE licence = ? AND poste != ? AND jusqu_a > ?", lic.id, cle, ctx.now);
+        const autres = this.lignes(
+            "SELECT jusqu_a FROM jetons WHERE licence = ? AND NOT (poste = ? AND station = ?) AND jusqu_a > ?",
+            lic.id,
+            cle,
+            station,
+            ctx.now,
+        );
         if (autres.length >= lic.postesMax) {
             const libre = Math.max(1, Math.min(...autres.map((x) => x.jusqu_a)) - ctx.now);
             throw new Erreur(409, "complet", "Les " + lic.postesMax + " jetons de cette licence sont pris : un se libère dans " + dureeTexte(libre) + ".", {
@@ -679,14 +978,17 @@ export class Licences extends DurableObject {
             });
         }
         const jusqu = ctx.now + DUREE_JETON;
-        this.sql.exec(
-            "INSERT INTO jetons (licence, poste, emis, jusqu_a) VALUES (?, ?, ?, ?) ON CONFLICT (licence, poste) DO UPDATE SET emis = excluded.emis, jusqu_a = excluded.jusqu_a",
+        this.x(
+            `INSERT INTO jetons (licence, poste, station, emis, jusqu_a) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (licence, poste, station) DO UPDATE SET emis = excluded.emis, jusqu_a = excluded.jusqu_a`,
             lic.id,
             cle,
+            station,
             ctx.now,
             jusqu,
         );
-        this.sql.exec("UPDATE activations SET vue = ? WHERE licence = ? AND poste = ?", ctx.now, lic.id, cle);
+        // vu : une fois par heure au plus (le jeton est repris toutes les 5 minutes)
+        this.x("UPDATE activations SET vue = ? WHERE licence = ? AND poste = ? AND vue < ?", ctx.now, lic.id, cle, ctx.now - HEURE);
         const jeton = await this.signer("jeton", { version: 1, licence: lic.id, poste: cle, emis: iso(ctx.now), jusqu_a: iso(jusqu) });
         return reponseJson(200, { jeton });
     }
@@ -694,7 +996,10 @@ export class Licences extends DurableObject {
     async rendreJeton(ctx) {
         const corps = this.corpsJson(ctx);
         if (!estIdLicence(corps.licence)) throw mal("licence");
-        this.sql.exec("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, ctx.appelant.cle);
+        const station = stationDe(corps);
+        const act = this.ligne("SELECT station FROM activations WHERE licence = ? AND poste = ?", corps.licence, ctx.appelant.cle);
+        if (act && act.station && act.station !== station) throw autrePoste();
+        this.x("DELETE FROM jetons WHERE licence = ? AND poste = ? AND station = ?", corps.licence, ctx.appelant.cle, station);
         return reponseJson(200, {});
     }
 
@@ -704,13 +1009,20 @@ export class Licences extends DurableObject {
         if (!(await this.clesEditeur()).some((k) => k.id === corps.cle))
             throw new Erreur(400, "cle", "Cette demande est scellée pour une clé que l'éditeur n'emploie pas sur ce service.");
         if (typeof corps.scelle !== "string" || !corps.scelle || corps.scelle.length > MAX_SCELLE || !/^[A-Za-z0-9+/=\r\n]+$/.test(corps.scelle))
-            throw mal("scelle", "Le champ « scelle » doit être du base64 (256 Kio au plus).");
+            throw mal("scelle", "Le champ « scelle » doit être du base64 (64 Kio au plus).");
         const poste = ctx.appelant.poste;
-        const autres = this.nombre("SELECT COUNT(*) AS n FROM demandes WHERE etat = 'attente' AND poste != ?", poste);
-        if (autres >= MAX_DEMANDES_ATTENTE) throw new Erreur(507, "limite", "Trop de demandes attendent l'éditeur : réessaie plus tard.");
-        this.sql.exec("UPDATE demandes SET etat = 'remplacee', maj = ? WHERE poste = ? AND etat = 'attente'", ctx.now, poste);
+        // Les demandes en attente et leur taille : des compteurs (config), jamais un COUNT(*) de la table.
+        const miennes = this.nombre("SELECT COUNT(*) AS n FROM demandes WHERE poste = ? AND etat = 'attente'", poste);
+        if (this.compte("n_attente") - miennes >= MAX_DEMANDES_ATTENTE) throw new Erreur(507, "limite", "Trop de demandes attendent l'éditeur : réessaie plus tard.");
+        if (this.compte("octets_demandes") + corps.scelle.length > MAX_OCTETS_DEMANDES)
+            throw new Erreur(
+                507,
+                "limite",
+                "Le service garde déjà trop de demandes (leur taille maximale est atteinte) : réessaie dans quelques jours, ou écris à l'éditeur.",
+            );
+        if (miennes) this.x("UPDATE demandes SET etat = 'remplacee', maj = ? WHERE poste = ? AND etat = 'attente'", ctx.now, poste);
         const numero = this.suivant("numero_demande");
-        this.sql.exec(
+        this.x(
             "INSERT INTO demandes (numero, poste, cle, scelle, etat, cree, maj) VALUES (?, ?, ?, ?, 'attente', ?, ?)",
             numero,
             poste,
@@ -719,6 +1031,8 @@ export class Licences extends DurableObject {
             ctx.now,
             ctx.now,
         );
+        this.ajouter("n_attente", 1 - miennes);
+        this.ajouter("octets_demandes", corps.scelle.length);
         return reponseJson(201, { numero });
     }
 
@@ -727,8 +1041,10 @@ export class Licences extends DurableObject {
         if (!entierPositif(corps.numero) || corps.numero < 1) throw mal("numero");
         const r = this.ligne("SELECT etat FROM demandes WHERE numero = ? AND poste = ?", corps.numero, ctx.appelant.poste);
         if (!r) throw new Erreur(404, "demande", "Cette demande n'existe pas, ou n'est pas celle de ce PC.");
-        if (r.etat === "attente") this.sql.exec("UPDATE demandes SET etat = 'annulee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
-        else if (r.etat !== "annulee")
+        if (r.etat === "attente") {
+            this.x("UPDATE demandes SET etat = 'annulee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
+            this.ajouter("n_attente", -1);
+        } else if (r.etat !== "annulee")
             throw new Erreur(409, "etat", r.etat === "traitee" ? "L'éditeur a déjà traité cette demande." : "Cette demande a été remplacée par une plus récente.");
         return reponseJson(200, {});
     }
@@ -797,9 +1113,9 @@ export class Licences extends DurableObject {
         });
         this.revCache = null;
         // Les jetons des PC revoques sont rendus tout de suite (leurs activations ne sont plus renouvelees).
-        for (const j of this.lignes("SELECT licence, poste FROM jetons")) {
+        for (const j of this.lignes("SELECT DISTINCT licence, poste FROM jetons")) {
             const lic = this.licence(j.licence);
-            if (lic && this.revoquee(lic, j.poste)) this.sql.exec("DELETE FROM jetons WHERE licence = ? AND poste = ?", j.licence, j.poste);
+            if (lic && this.revoquee(lic, j.poste)) this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", j.licence, j.poste);
         }
         return reponseJson(200, { revocations: liste.numero });
     }
@@ -821,14 +1137,14 @@ export class Licences extends DurableObject {
         const avant = this.licence(doc.id);
         if (avant && doc.emission < avant.emission)
             throw new Erreur(409, "ancien", "Cette émission de la licence est plus ancienne que celle du service (" + iso(avant.emission) + ").");
-        if (!avant && this.nombre("SELECT COUNT(*) AS n FROM licences") >= MAX_LICENCES)
+        if (!avant && this.compte("n_licences") >= MAX_LICENCES)
             throw new Erreur(507, "limite", "Le service a atteint son nombre maximal de licences.");
         const codeHash = corps.code_hash === undefined ? (avant ? avant.codeHash : null) : corps.code_hash;
         if (codeHash && this.ligne("SELECT id FROM licences WHERE code_hash = ? AND id != ?", codeHash, doc.id))
             throw new Erreur(409, "code", "Ce code est déjà celui d'une autre licence : crée un code neuf.");
         const bail = corps.bail_jours !== undefined ? corps.bail_jours : avant ? avant.bail : BAIL_DEFAUT;
         const active = corps.active !== undefined ? corps.active : avant ? avant.active : true;
-        this.sql.exec(
+        this.x(
             `INSERT INTO licences (id, bloc, emission, type, postes_max, expire, bail_jours, code_hash, active, maj)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (id) DO UPDATE SET bloc = excluded.bloc, emission = excluded.emission, type = excluded.type,
@@ -845,6 +1161,9 @@ export class Licences extends DurableObject {
             active ? 1 : 0,
             ctx.now,
         );
+        if (!avant) this.ajouter("n_licences", 1);
+        // Desactivee par l'editeur : les places gardees par des PC liberes reviennent (sa decision).
+        if (!active) this.x("UPDATE activations SET place_jusqu = 0 WHERE licence = ? AND etat = 'liberee' AND place_jusqu > 0", doc.id);
         return reponseJson(200, this.descriptionLicence(this.licence(doc.id), ctx.now));
     }
 
@@ -857,6 +1176,8 @@ export class Licences extends DurableObject {
             vue: iso(r.vue),
             jusqu_a: iso(r.jusqu_a),
             etat: r.etat === "active" && this.revoquee(lic, r.poste) ? "revoquee" : r.etat,
+            // un PC libere au-dela des transferts permis : sa place reste prise jusque-la (null : aucune place gardee)
+            place_jusqu_a: r.etat === "liberee" && r.place_jusqu > now ? iso(r.place_jusqu) : null,
         }));
         const jetons = this.lignes("SELECT poste, jusqu_a FROM jetons WHERE licence = ? AND jusqu_a > ? ORDER BY jusqu_a", lic.id, now).map((r) => ({
             poste: r.poste,
@@ -886,8 +1207,9 @@ export class Licences extends DurableObject {
         if (!estHex(corps.poste, 64)) throw mal("poste", "Le champ « poste » doit être la clé du PC (64 hexadécimaux minuscules).");
         const r = this.ligne("SELECT etat FROM activations WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
         if (!r) throw new Erreur(404, "activation", "Ce PC n'a pas d'activation pour cette licence.");
-        this.sql.exec("UPDATE activations SET etat = 'retiree' WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
-        this.sql.exec("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
+        // Retire par l'editeur : la place revient tout de suite (sa decision), meme celle d'un PC libere qui la gardait.
+        this.x("UPDATE activations SET etat = 'retiree', place_jusqu = 0 WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
+        this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
         return reponseJson(200, {});
     }
 
@@ -912,8 +1234,10 @@ export class Licences extends DurableObject {
         if (!entierPositif(corps.numero) || corps.numero < 1) throw mal("numero");
         const r = this.ligne("SELECT etat FROM demandes WHERE numero = ?", corps.numero);
         if (!r) throw new Erreur(404, "demande", "Cette demande n'existe pas.");
-        if (r.etat === "attente") this.sql.exec("UPDATE demandes SET etat = 'traitee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
-        else if (r.etat !== "traitee")
+        if (r.etat === "attente") {
+            this.x("UPDATE demandes SET etat = 'traitee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
+            this.ajouter("n_attente", -1);
+        } else if (r.etat !== "traitee")
             throw new Erreur(409, "etat", r.etat === "annulee" ? "Le PC a annulé cette demande." : "Le PC a remplacé cette demande par une plus récente.", { etat: r.etat });
         return reponseJson(200, {});
     }
@@ -933,14 +1257,15 @@ export class Licences extends DurableObject {
         const avant = this.ligne("SELECT numero, bloc FROM postes WHERE poste = ?", corps.poste);
         if (avant && (p.numero < avant.numero || (p.numero === avant.numero && texte !== avant.bloc)))
             throw new Erreur(409, "ancien", "Cet état (n° " + p.numero + ") n'est pas plus récent que celui du service (n° " + avant.numero + ").", { numero: avant.numero });
-        if (!avant && this.nombre("SELECT COUNT(*) AS n FROM postes") >= MAX_POSTES) throw new Erreur(507, "limite", "Le service a atteint son nombre maximal de postes.");
-        this.sql.exec(
+        if (!avant && this.compte("n_postes") >= MAX_POSTES) throw new Erreur(507, "limite", "Le service a atteint son nombre maximal de postes.");
+        this.x(
             "INSERT INTO postes (poste, bloc, numero, maj) VALUES (?, ?, ?, ?) ON CONFLICT (poste) DO UPDATE SET bloc = excluded.bloc, numero = excluded.numero, maj = excluded.maj",
             corps.poste,
             texte,
             p.numero,
             ctx.now,
         );
+        if (!avant) this.ajouter("n_postes", 1);
         return reponseJson(200, {});
     }
 
@@ -980,9 +1305,9 @@ export class Licences extends DurableObject {
         const nouvelle = version + 1;
         this.ctx.storage.transactionSync(() => {
             for (const c of changements) {
-                if (c.texte === null) this.sql.exec("DELETE FROM archive WHERE chemin = ?", c.chemin);
+                if (c.texte === null) this.x("DELETE FROM archive WHERE chemin = ?", c.chemin);
                 else
-                    this.sql.exec(
+                    this.x(
                         "INSERT INTO archive (chemin, contenu, sha256, taille, version) VALUES (?, ?, ?, ?, ?) ON CONFLICT (chemin) DO UPDATE SET contenu = excluded.contenu, sha256 = excluded.sha256, taille = excluded.taille, version = excluded.version",
                         c.chemin,
                         c.texte,
@@ -1016,11 +1341,14 @@ export class Licences extends DurableObject {
         }
         activations.active -= revoquees;
         activations.revoquee += revoquees;
+        activations.lignes = this.compte("n_activations"); // le compteur tenu a chaque ecriture
+        // Les appels du jour : les compteurs en memoire (cet appel compris, traiter() l'a compte), ecrits au passage.
+        this.ecrireStats(ctx.now, true);
         const routes = {};
         let total = 0;
-        for (const r of this.lignes("SELECT route, n FROM stats WHERE jour = ? ORDER BY route", jour)) {
-            routes[r.route] = r.n;
-            total += r.n;
+        for (const route of Object.keys(this.statsMem.routes).sort()) {
+            routes[route] = this.statsMem.routes[route];
+            total += routes[route];
         }
         const archive = this.ligne("SELECT COUNT(*) AS n, COALESCE(SUM(taille), 0) AS o FROM archive");
         return reponseJson(200, {
@@ -1032,9 +1360,9 @@ export class Licences extends DurableObject {
             },
             activations,
             jetons: this.nombre("SELECT COUNT(*) AS n FROM jetons WHERE jusqu_a > ?", ctx.now),
-            demandes: { attente: 0, annulee: 0, remplacee: 0, traitee: 0, ...parEtat("demandes") },
-            decouvertes: this.nombre("SELECT COUNT(*) AS n FROM decouvertes"),
-            postes: this.nombre("SELECT COUNT(*) AS n FROM postes"),
+            demandes: { attente: 0, annulee: 0, remplacee: 0, traitee: 0, ...parEtat("demandes"), octets: this.compte("octets_demandes") },
+            decouvertes: this.compte("n_decouvertes"),
+            postes: this.compte("n_postes"),
             archive: { version: Number(this.config("archive_version") || "0"), fichiers: archive.n, octets: archive.o },
             appels_jour: { jour, total, routes },
         });

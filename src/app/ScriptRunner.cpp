@@ -209,6 +209,24 @@ std::vector<std::string> words(const std::string& raw) {
     return out;
 }
 
+// La ligne telle qu'elle s'ecrit au journal : jamais un secret. 1.15.0 : une cle API (ia cle, la case de la cle des
+// parametres). 1.35.0 : le code d'activation (licence-code CODE [NOM_PC]) - le nom du PC reste.
+std::string shownLine(const std::string& raw) {
+    std::string shown = raw;
+    const std::size_t k = shown.find_first_not_of(" \t");
+    if (k == std::string::npos) return shown;
+    if (shown.compare(k, 6, "ia cle") == 0) return shown.substr(0, k + 6) + " \"***\"";
+    if (shown.compare(k, 12, "licence-code") == 0 && (k + 12 == shown.size() || std::isspace(static_cast<unsigned char>(shown[k + 12])))) {
+        const std::vector<std::string> w = words(shown);
+        std::string out = shown.substr(0, k) + "licence-code";
+        if (w.size() > 1) out += " \"***\"";
+        for (std::size_t i = 2; i < w.size(); ++i) out += " \"" + w[i] + "\"";
+        return out;
+    }
+    if (const std::size_t field = shown.find("parametres.cle\""); field != std::string::npos) return shown.substr(0, field + 15) + " \"***\"";
+    return shown;
+}
+
 std::string lower(std::string_view s) {
     std::string out(s);
     for (auto& c : out) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
@@ -342,7 +360,7 @@ bool ScriptRunner::afterRender(gfx::IRenderer& renderer) {
         if (w.empty() || w.front().front() == '#') { ++pc_; continue; }
         const Step step = run(w, renderer);
         if (step == Step::Retry) {
-            if (++retries_ > 3000) { fail("toujours pas pret apres 3000 images : " + lines_[pc_]); retries_ = 0; ++pc_; }
+            if (++retries_ > 3000) { fail("toujours pas pret apres 3000 images : " + shownLine(lines_[pc_])); retries_ = 0; ++pc_; }
             return true;
         }
         retries_ = 0;
@@ -409,16 +427,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         m.alt = has("alt");
         return m;
     };
-    {
-        // 1.15.0 : une cle API (ia cle, la case de la cle des parametres) ne s'ecrit jamais au journal.
-        std::string shown = lines_[pc_];
-        const std::size_t k = shown.find_first_not_of(" \t");
-        const bool keyCmd = k != std::string::npos && shown.compare(k, 6, "ia cle") == 0;
-        const std::size_t field = shown.find("parametres.cle\"");
-        if (keyCmd) shown = shown.substr(0, k + 6) + " \"***\"";
-        else if (field != std::string::npos) shown = shown.substr(0, field + 15) + " \"***\"";
-        std::printf("[script] %zu: %s\n", pc_ + 1, shown.c_str());
-    }
+    // 1.15.0 : une cle API (ia cle, la case de la cle des parametres) ne s'ecrit jamais au journal ; 1.35.0 : ni le code
+    // d'activation (licence-code).
+    std::printf("[script] %zu: %s\n", pc_ + 1, shownLine(lines_[pc_]).c_str());
     std::fflush(stdout);
 
     // ---- Lot API 8 : Centre de simulation ----

@@ -163,11 +163,13 @@ std::string inText(long long seconds) {
     return "dans " + std::to_string((min + 59) / 60) + " h";
 }
 
-// Ce que dit une erreur du service ({"erreur":"<code>","message":"...","reessayer_dans":N,"libre_dans":N}).
+// Ce que dit une erreur du service ({"erreur":"<code>","message":"...","reessayer_dans":N,"libre_dans":N,
+// "libre_le":"<date>"}).
 struct ServiceError {
     std::string code, message;
     long long   retryIn{0};
     long long   freeIn{0};
+    lic::Seconds freeOn{0};   // 409 complet (licence fixe) : quand une place gardee par un PC libere revient
 };
 ServiceError errorOf(const Got& g) {
     ServiceError e;
@@ -188,6 +190,8 @@ ServiceError errorOf(const Got& g) {
     e.message = m;
     e.retryIn = std::max<long long>(0, v.integer("reessayer_dans"));
     e.freeIn = std::max<long long>(0, v.integer("libre_dans"));
+    lic::Seconds on = 0;
+    if (lic::parseIsoTime(v.str("libre_le"), on)) e.freeOn = on;
     return e;
 }
 
@@ -348,6 +352,16 @@ bool existingDevice(std::string& id, std::string& why) {
     if (!devicePublicKey(pk, why)) return false;
     id = lsv::deviceId(pk);
     return true;
+}
+
+// L'empreinte de l'installation de Windows de ce PC (licensing::thisStationHash, celle que porte sa demande) : le
+// service la demande pour renouveler, prendre ou rendre un jeton, liberer - une cle de PC recopiee ailleurs n'y
+// sert a rien. Vide : `why` (une phrase).
+std::string stationOf(std::string& why) {
+    std::string s = lic::thisStationHash();
+    if (s.empty())
+        why = "L'empreinte de l'installation de Windows de ce PC n'est pas lisible : le service des licences ne peut pas reconna\xC3\xAEtre ce poste.";
+    return s;
 }
 
 // Qui signe les appels : la cle de ce PC, par le module (licensing::deviceSignServiceMessage) ; au lancement, avant
@@ -779,9 +793,22 @@ bool stepActivate(Conn& c, const std::string& normalized, const std::string& pcN
             res.definitive = true;
             lines.push_back("Ce code n'est pas reconnu par le service des licences (inconnu ou d\xC3\xA9sactiv\xC3\xA9) : rien n'est install\xC3\xA9. "
                             "V\xC3\xA9rifie-le, ou demande-le \xC3\xA0 l'\xC3\xA9" "diteur.");
+        } else if (g.status == 409 && e.code == "limite") {
+            // Le maximum d'activations enregistrees de CETTE licence (le service le dit)
+            lines.push_back((e.message.empty() ? std::string("Cette licence a trop d'activations enregistr\xC3\xA9" "es : demande \xC3\xA0 l'\xC3\xA9" "diteur.")
+                                               : sentence(e.message)) +
+                            " Rien n'est install\xC3\xA9.");
         } else if (g.status == 409) {
-            lines.push_back("Tous les postes de cette licence sont d\xC3\xA9j\xC3\xA0 pris : rien n'est install\xC3\xA9. Lib\xC3\xA8re un autre PC (fen\xC3\xAAtre Licence de ce "
-                            "PC \xE2\x80\xBA Lib\xC3\xA9rer ce poste), ou demande un poste de plus \xC3\xA0 l'\xC3\xA9" "diteur.");
+            std::string text = "Tous les postes de cette licence sont d\xC3\xA9j\xC3\xA0 pris : rien n'est install\xC3\xA9. Lib\xC3\xA8re un autre PC (fen\xC3\xAAtre Licence de ce "
+                               "PC \xE2\x80\xBA Lib\xC3\xA9rer ce poste), ou demande un poste de plus \xC3\xA0 l'\xC3\xA9" "diteur.";
+            // Une place gardee par un PC libere au-dela des changements de PC permis : la date ou elle revient.
+            if (e.freeOn > 0)
+                text += " Une place revient le " + isoDay(e.freeOn) + " : celle d'un PC lib\xC3\xA9r\xC3\xA9 alors que la licence avait d\xC3\xA9j\xC3\xA0 chang\xC3\xA9 "
+                        "de PC plusieurs fois ce mois-ci (il la garde jusqu'\xC3\xA0 la fin de son bail).";
+            lines.push_back(text);
+        } else if (g.status == 403 && e.code == "activation") {
+            // La cle de ce PC est deja activee pour cette licence sur une autre installation de Windows.
+            lines.push_back((e.message.empty() ? std::string("Cette activation est pour un autre poste.") : sentence(e.message)) + " Rien n'est install\xC3\xA9.");
         } else if (g.status == 410) {
             res.definitive = true;
             lines.push_back(std::string("Cette licence est ") + (e.code == "expiree" ? "expir\xC3\xA9" "e" : "r\xC3\xA9voqu\xC3\xA9" "e") +
@@ -826,11 +853,39 @@ bool stepActivate(Conn& c, const std::string& normalized, const std::string& pcN
     return true;
 }
 
-// Le renouvellement : le bail de chaque activation, celles retirees, la liste de revocation, l'etat << poste >>.
+// Pourquoi le service ne renouvelle plus une activation de ce PC (le motif de /v1/renouveler), en une phrase.
+std::string goneText(const std::string& lid, const std::string& motif) {
+    const std::string pre = "Ce PC n'est plus activ\xC3\xA9 pour la licence " + lid + " : ";
+    const std::string post = " Son activation est effac\xC3\xA9" "e de ce PC.";
+    if (motif == "liberee") return pre + "ce poste a \xC3\xA9t\xC3\xA9 lib\xC3\xA9r\xC3\xA9." + post;
+    if (motif == "retiree")
+        return pre + "l'\xC3\xA9" "diteur l'a retir\xC3\xA9, ou un autre PC a pris sa place apr\xC3\xA8s la fin de son bail." + post;
+    if (motif == "revoquee") return pre + "l'\xC3\xA9" "diteur a r\xC3\xA9voqu\xC3\xA9 cette licence." + post;
+    if (motif == "desactivee") return pre + "l'\xC3\xA9" "diteur a d\xC3\xA9sactiv\xC3\xA9 cette licence." + post;
+    if (motif == "autre_poste")
+        return pre + "cette activation est celle d'une autre installation de Windows (la cl\xC3\xA9 de ce PC a-t-elle \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e ?)." + post +
+               " Active ce PC avec son code, ou demande \xC3\xA0 l'\xC3\xA9" "diteur.";
+    if (motif == "inconnue_ici")
+        return pre + "le service ne conna\xC3\xAEt plus son activation (elle est effac\xC3\xA9" "e quelque temps apr\xC3\xA8s la fin de son bail)." + post +
+               " Active-le de nouveau avec son code.";
+    return pre + "l'\xC3\xA9" "diteur l'a lib\xC3\xA9r\xC3\xA9, retir\xC3\xA9 ou r\xC3\xA9voqu\xC3\xA9." + post;
+}
+
+// Le renouvellement : le bail de chaque activation de ce PC (sa cle ET son installation de Windows : "station"), celles
+// que le service ne renouvelle plus (`retirees` et leur motif), l'etat << poste >>. La liste de revocation de l'editeur
+// ne vient plus d'ici : une revocation d'une licence en ligne est un motif (revoquee) ; celle d'une licence liee a ce
+// PC vient dans son etat << poste >>, scelle pour lui.
 bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& lines, bool& devicePart) {
     std::string why;
     const auto before = lic::getLicenseState();
-    const Got g = callSigned(c, "POST", "/v1/renouveler", "{}", why);
+    const std::string station = stationOf(why);
+    if (station.empty()) {
+        lines.push_back(why + " Le bail n'a pas pu \xC3\xAAtre renouvel\xC3\xA9.");
+        return false;
+    }
+    json::Value body = json::Value::object();
+    body.set("station", station);
+    const Got g = callSigned(c, "POST", "/v1/renouveler", json::write(body, false), why);
     if (!g.reached() || g.status != 200) {
         res.retryAfter = static_cast<int>(errorOf(g).retryIn);
         lines.push_back(!why.empty() && !g.reached() ? why : problem(g, c.host, "Le bail n'a pas pu \xC3\xAAtre renouvel\xC3\xA9") + " Rien n'a chang\xC3\xA9.");
@@ -842,46 +897,68 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
         return false;
     }
     adoptCert(c, field(v, "certificat"));
-    // La liste de revocation de ce PC, d'abord (une licence revoquee n'est pas renouvelee).
-    if (const std::string revs = field(v, "revocations"); !revs.empty()) {
-        std::string line;
-        (void)adoptBytes(revs, lic::DocKind::Revocations, lic::getLicenseState().revocationNumber, "La liste de r\xC3\xA9vocation re\xC3\xA7ue", line, res.changed);
-        lines.push_back(line);
-    }
     bool allOk = true;
+    bool renewed = false;
+    bool unclear = false;             // une activation recue sans licence lisible : rien n'est deduit de son absence
+    std::vector<std::string> known;   // les licences dont le service a parle (renouvelees ou retirees)
     if (const json::Value* acts = v.find("activations"); acts && acts->isArray()) {
         for (const auto& a : acts->items()) {
-            if (!a.isObject()) continue;
+            if (!a.isObject()) {
+                unclear = true;
+                continue;
+            }
+            const std::string lid = licenseIdOf(field(a, "licence"));
+            if (lid.empty()) unclear = true;
+            else known.push_back(lid);
             const auto rep = lic::installActivation(field(a, "licence"), field(a, "activation"), c.cert);
             if (!rep.ok) {
                 allOk = false;
-                const std::string lid = licenseIdOf(field(a, "licence"));
                 lines.push_back("Le bail de la licence " + (lid.empty() ? std::string("re\xC3\xA7ue") : lid) + " n'est pas install\xC3\xA9 : " + sentence(rep.why));
             } else {
                 res.changed = true;
+                renewed = true;
             }
         }
     }
+    const json::Value* motifs = v.find("motifs");
+    // Une activation que le service ne renouvelle plus : effacee de ce PC (sauf une licence finie : elle reste, le
+    // magasin la dit finie, avec sa grace).
+    const auto drop = [&](const std::string& lid, const std::string& motif) {
+        const bool had = lic::getLicenseState().licenseId == lid || rec.activatedLicense == lid;
+        if (motif == "expiree") {
+            if (!had) return;
+            const std::string text = "La licence " + lid + " a pris fin : le service ne la renouvelle plus. Demande une prolongation \xC3\xA0 l'\xC3\xA9" "diteur.";
+            res.notices.push_back({"licence:fin", text, "warning"});
+            lines.push_back(text);
+            return;
+        }
+        std::string w;
+        if (!lic::dropActivation(lid, &w)) {
+            allOk = false;
+            lines.push_back("L'activation de la licence " + lid + " n'a pas pu \xC3\xAAtre effac\xC3\xA9" "e : " + sentence(w));
+            return;
+        }
+        res.changed = true;
+        if (rec.activatedLicense == lid) rec.activatedLicense.clear();
+        if (!had) return;
+        const std::string text = goneText(lid, motif);
+        note(false, text);
+        res.notices.push_back({"licence:retrait", text, "warning"});
+        lines.push_back(text);
+    };
     if (const json::Value* gone = v.find("retirees"); gone && gone->isArray()) {
         for (const auto& item : gone->items()) {
             const std::string lid = item.asString();
             if (lid.empty()) continue;
-            std::string w;
-            const bool had = lic::getLicenseState().licenseId == lid || rec.activatedLicense == lid;
-            if (!lic::dropActivation(lid, &w)) {
-                allOk = false;
-                lines.push_back("L'activation de la licence " + lid + " n'a pas pu \xC3\xAAtre effac\xC3\xA9" "e : " + sentence(w));
-                continue;
-            }
-            res.changed = true;
-            if (rec.activatedLicense == lid) rec.activatedLicense.clear();
-            if (!had) continue;
-            const std::string text = "Ce PC n'est plus activ\xC3\xA9 pour la licence " + lid +
-                                     " : l'\xC3\xA9" "diteur l'a lib\xC3\xA9r\xC3\xA9, retir\xC3\xA9 ou r\xC3\xA9voqu\xC3\xA9. Son activation est effac\xC3\xA9" "e de ce PC.";
-            note(false, text);
-            res.notices.push_back({"licence:retrait", text, "warning"});
-            lines.push_back(text);
+            known.push_back(lid);
+            drop(lid, motifs && motifs->isObject() ? motifs->str(lid) : std::string());
         }
+    }
+    // La licence en ligne de ce PC dont le service ne dit rien : il ne connait plus cette activation (effacee apres la
+    // fin de son bail) - elle ne sera plus jamais renouvelee.
+    if (!unclear) {
+        const auto st = lic::getLicenseState();
+        if (st.online && !st.licenseId.empty() && std::find(known.begin(), known.end(), st.licenseId) == known.end()) drop(st.licenseId, "inconnue_ici");
     }
     if (const std::string poste = field(v, "poste"); !poste.empty()) {
         std::string id, w;
@@ -897,7 +974,7 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
                                  (after.activationUntil ? " (jusqu'au " + isoDay(after.activationUntil) + ")." : std::string("."));
         res.notices.push_back({"licence:bail", text, "ok"});
         lines.push_back(text);
-    } else if (after.online && after.activationUntil) {
+    } else if (after.online && after.activationUntil && renewed) {
         lines.push_back("Bail renouvel\xC3\xA9 jusqu'au " + isoDay(after.activationUntil) + ".");
     } else if (!after.online && before.online && lines.empty()) {
         lines.push_back("Le service n'a plus d'activation pour ce PC.");
@@ -952,9 +1029,15 @@ std::string floatingLicense() {
 }
 
 bool stepTakeLease(Conn& c, const std::string& lid, Result& res, std::vector<std::string>& lines) {
+    std::string why;
+    const std::string station = stationOf(why);
+    if (station.empty()) {
+        lines.push_back(why + " Le poste flottant n'a pas pu \xC3\xAAtre pris.");
+        return false;
+    }
     json::Value body = json::Value::object();
     body.set("licence", lid);
-    std::string why;
+    body.set("station", station);
     const Got g = callSigned(c, "POST", "/v1/flottante/jeton", json::write(body, false), why);
     if (!g.reached()) {
         lines.push_back(!why.empty() ? why : offlineText(g, c.host) + " ; le poste flottant n'a pas pu \xC3\xAAtre pris.");
@@ -1007,9 +1090,15 @@ bool stepTakeLease(Conn& c, const std::string& lid, Result& res, std::vector<std
 // qu'il n'y en a plus (409 : le jeton est alors efface).
 bool stepReturnLease(Conn& c, const std::string& lid, Result& res, std::vector<std::string>& lines, int connectTimeout, int idleTimeout,
                      bool dropLocal = true) {
+    std::string why;
+    const std::string station = stationOf(why);
+    if (station.empty()) {
+        lines.push_back(why + " Le poste flottant se lib\xC3\xA9rera de lui-m\xC3\xAAme \xC3\xA0 la fin du jeton (15 min au plus).");
+        return false;
+    }
     json::Value body = json::Value::object();
     body.set("licence", lid);
-    std::string why;
+    body.set("station", station);
     const Got g = callSigned(c, "POST", "/v1/flottante/rendre", json::write(body, false), why, connectTimeout, idleTimeout);
     if (!g.reached() || g.status != 200) {
         lines.push_back((!why.empty() && !g.reached() ? why : problem(g, c.host, "Le poste flottant n'a pas pu \xC3\xAAtre rendu")) +
@@ -1392,12 +1481,21 @@ Result release(const std::string& licenseId) {
     Conn c;
     Record rec;
     if (!begin(res, c, rec)) return res;
-    json::Value body = json::Value::object();
-    body.set("licence", lid);
     std::string why;
     std::vector<std::string> lines;
+    const std::string station = stationOf(why);
+    if (station.empty()) {
+        lines.push_back(why + " Ce PC garde sa licence.");
+        finish(res, c, rec, std::move(lines));
+        return res;
+    }
+    json::Value body = json::Value::object();
+    body.set("licence", lid);
+    body.set("station", station);
     const Got g = callSigned(c, "POST", "/v1/liberer", json::write(body, false), why);
     const ServiceError e = errorOf(g);
+    // 404, ou 403 activation (cette activation est celle d'une autre installation de Windows) : le service n'a pas
+    // d'activation de CE poste pour cette licence - elle est effacee ici aussi.
     const bool unknown = g.reached() && (g.status == 404 || (g.status == 403 && e.code == "activation"));
     if (!g.reached() || (g.status != 200 && !unknown)) {
         res.retryAfter = static_cast<int>(e.retryIn);
@@ -1405,6 +1503,19 @@ Result release(const std::string& licenseId) {
                         " Il garde sa licence.");
         finish(res, c, rec, std::move(lines));
         return res;
+    }
+    // La place : rendue tout de suite, ou gardee jusqu'a la fin du bail de ce PC (la licence a deja change de PC
+    // autant de fois que permis ces 30 derniers jours).
+    lic::Seconds keptUntil = 0;
+    long long moves = 0, allowed = 0;
+    if (!unknown) {
+        json::Value v;
+        if (json::parse(g.body, v) && v.isObject() && v.str("place") == "gardee") {
+            lic::Seconds t = 0;
+            if (lic::parseIsoTime(v.str("jusqu_a"), t)) keptUntil = t;
+            moves = v.integer("transferts");
+            allowed = v.integer("transferts_permis");
+        }
     }
     std::string w;
     if (floatingLicense() == lid) lic::dropLease();
@@ -1421,10 +1532,23 @@ Result release(const std::string& licenseId) {
     res.ok = true;
     res.changed = true;
     res.licenseId = lid;
-    const std::string text = unknown ? "Le service n'avait plus d'activation de ce PC pour la licence " + lid + " : elle est effac\xC3\xA9" "e ici aussi."
-                                     : "Ce PC est lib\xC3\xA9r\xC3\xA9 : son poste de la licence " + lid +
-                                           " est rendu (un autre PC peut le prendre). Les fonctions de la licence sont ferm\xC3\xA9" "es ici.";
+    std::string text;
+    if (unknown && g.status == 403)
+        text = "Le service n'a pas d'activation de ce poste pour la licence " + lid +
+               " (elle est celle d'une autre installation de Windows) : elle est effac\xC3\xA9" "e ici aussi.";
+    else if (unknown)
+        text = "Le service n'avait plus d'activation de ce PC pour la licence " + lid + " : elle est effac\xC3\xA9" "e ici aussi.";
+    else if (keptUntil > 0)
+        text = "Ce PC est lib\xC3\xA9r\xC3\xA9 : les fonctions de la licence " + lid + " sont ferm\xC3\xA9" "es ici. Sa place reste prise jusqu'au " + isoDay(keptUntil) +
+               " (la fin de son bail) : la licence a d\xC3\xA9j\xC3\xA0 chang\xC3\xA9 de PC " +
+               (moves > 0 ? std::to_string(moves) + " fois" : std::string("plusieurs fois")) + " ces 30 derniers jours" +
+               (allowed > 0 ? " (" + std::to_string(allowed) + " au plus)" : std::string()) +
+               ". Pour la rendre tout de suite, demande \xC3\xA0 l'\xC3\xA9" "diteur de retirer ce PC.";
+    else
+        text = "Ce PC est lib\xC3\xA9r\xC3\xA9 : son poste de la licence " + lid +
+               " est rendu (un autre PC peut le prendre). Les fonctions de la licence sont ferm\xC3\xA9" "es ici.";
     note(true, text);
+    if (keptUntil > 0) res.notices.push_back({"licence:liberation", text, "info"});
     lines.push_back(text);
     finish(res, c, rec, std::move(lines));
     return res;
@@ -2059,6 +2183,7 @@ bool startupLease(const lic::StoreOptions& options, int waitMs) {
                                       }};
             json::Value body = json::Value::object();
             body.set("licence", lid);
+            body.set("station", store->thisStationHash());
             const Got g = callSigned(c, "POST", "/v1/flottante/jeton", json::write(body, false), why, 3, 4, signer);
             json::Value v;
             if (g.reached() && g.status == 200 && json::parse(g.body, v) && v.isObject()) ok = store->installLease(field(v, "jeton"), c.cert, &w);

@@ -868,8 +868,8 @@ void ActivationPanel::refresh() {
                 st.activationWarning ? 2 : 1);
         const licensing::Seconds sync = st.lastServiceSync ? st.lastServiceSync : rec.lastSync;
         add(Item::Pair, "Derni\xC3\xA8re synchronisation", sync ? ls::dateText(sync) : std::string("jamais"), sync ? 0 : 2);
-        add(Item::Text, {}, "Le bail se renouvelle tout seul \xC3\xA0 chaque connexion. Lib\xC3\xA9rer ce poste rend sa place \xC3\xA0 un autre PC (les fonctions de la "
-                            "licence se ferment ici).", 5);
+        add(Item::Text, {}, "Le bail se renouvelle tout seul \xC3\xA0 chaque connexion. Lib\xC3\xA9rer ce poste rend sa place \xC3\xA0 un autre PC : tout de suite "
+                            "deux fois par mois (ou autant que de postes), sinon \xC3\xA0 la fin de son bail. Les fonctions de la licence se ferment ici.", 5);
         add(Item::Buttons, {}, {}, 0, {renew_, release_});
     }
 
@@ -937,7 +937,8 @@ void ActivationPanel::askRelease() {
     if (releaseId_.empty()) return;
     auto dialog = std::make_unique<MessageDialog>(
         "Lib\xC3\xA9rer ce poste",
-        "Ce PC rend son poste de la licence " + releaseId_ + " : un autre PC pourra prendre sa place, et les fonctions de la licence se "
+        "Ce PC rend son poste de la licence " + releaseId_ + " : un autre PC pourra prendre sa place (tout de suite, ou \xC3\xA0 la fin du bail de ce "
+        "PC si la licence a d\xC3\xA9j\xC3\xA0 chang\xC3\xA9 de PC deux fois ce mois-ci, ou autant que de postes), et les fonctions de la licence se "
         "fermeront ici (ton travail reste ouvert ; Enregistrer et Exporter restent permis). Pour la retrouver plus tard sur ce PC : son code, s'il "
         "reste un poste libre.",
         MessageDialog::Icon::Question, "Lib\xC3\xA9rer ce poste");

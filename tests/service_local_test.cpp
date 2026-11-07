@@ -15,7 +15,11 @@
 //      (writeRequest + signBlock) ; le C++ verifie l'activation rendue
 //      (verifyCert + verifyServiceBlock + parseActivation) ;
 //    - l'heure signee, le renouvellement, la Decouverte, le jeton d'une licence
-//      flottante, une requete avec ?depuis= signee, et des refus.
+//      flottante, une requete avec ?depuis= signee, et des refus ;
+//    - la station (l'installation de Windows) : exigee dans la demande, et dans
+//      renouveler / jeton / rendre / liberer ; une autre station est refusee ;
+//    - liberer : la place rendue, puis gardee au-dela des changements de PC
+//      permis (le 409 dit quand elle revient : libre_le).
 //  Sans Node.js ni wrangler sur ce poste : "SAUTE : ..." et 0.
 //  argv[1] (facultatif) : le dossier source (sinon XPG_SOURCE_DIR, sinon celui
 //  de tests/service_local.hpp).
@@ -34,6 +38,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <vector>
 
 namespace fs = std::filesystem;
 namespace lic = licensing;
@@ -230,6 +235,8 @@ int main(int argc, char** argv) {
 
     std::printf("-- un PC s'active avec le code\n");
     const std::string station = lic::stationHash("machine-d-essai", pc->publicKey());
+    const std::string station2 = lic::stationHash("machine-d-essai-2", pc2->publicKey());
+    const std::string stationAilleurs = lic::stationHash("une-autre-machine", pc->publicKey());   // la cle de pc recopiee ailleurs
     std::uint64_t firstNumber = 0;
     {
         // le code tape avec souplesse (minuscules, espaces)
@@ -254,23 +261,35 @@ int main(int argc, char** argv) {
         check(sv::writeActivation(a) == ab.document, "le JSON du Worker est exactement celui qu'ecrit le C++");
         firstNumber = a.number;
         // un deuxieme PC : la licence n'a qu'un poste
-        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc2, "", now)}}), pc2.get(), now);
-        check(r.status == 409 && r.value.str("erreur") == "complet", "un deuxieme PC : 409 complet");
-        r = call(base, "POST", "/v1/activer", body({{"code", sv::newActivationCode()}, {"demande", request(*pc2, "", now)}}), pc2.get(), now);
+        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc2, station2, now)}}), pc2.get(), now);
+        check(r.status == 409 && r.value.str("erreur") == "complet" && !r.value.find("libre_le"), "un deuxieme PC : 409 complet (aucune place gardee)");
+        r = call(base, "POST", "/v1/activer", body({{"code", sv::newActivationCode()}, {"demande", request(*pc2, station2, now)}}), pc2.get(), now);
         check(r.status == 403 && r.value.str("erreur") == "code", "un code inconnu : 403");
-        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc, "", now)}}), pc2.get(), now);
+        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc, station, now)}}), pc2.get(), now);
         check(r.status == 400 && r.value.str("erreur") == "demande", "la demande d'un autre PC : 400");
+        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc2, "", now)}}), pc2.get(), now);
+        check(r.status == 400 && r.value.str("erreur") == "demande" && r.value.str("message").find("station") != std::string::npos,
+              "une demande sans station : 400 demande (" + r.value.str("message") + ")");
+        r = call(base, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc, stationAilleurs, now)}}), pc.get(), now);
+        check(r.status == 403 && r.value.str("erreur") == "activation", "la cle de pc, active, depuis une autre installation : 403 activation");
         check(r.body.find(norm) == std::string::npos && r.body.find(code) == std::string::npos, "le code n'est jamais rendu");
     }
 
     std::printf("-- renouveler\n");
     {
         r = call(base, "POST", "/v1/renouveler", "{}", pc.get(), now);
+        check(r.status == 400 && r.value.str("erreur") == "champ", "sans station : 400 champ");
+        r = call(base, "POST", "/v1/renouveler", body({{"station", stationAilleurs}}), pc.get(), now);
+        const json::Value* motifs = r.value.find("motifs");
+        check(r.status == 200 && r.value.at("activations").items().empty() && r.value.at("retirees").items().size() == 1 && motifs && motifs->isObject() &&
+                  motifs->str("XPG-2026-00042") == "autre_poste",
+              "une autre station : rien de renouvele, motif autre_poste : " + r.body.substr(0, 200));
+        r = call(base, "POST", "/v1/renouveler", body({{"station", station}}), pc.get(), now);
         check(r.status == 200, "POST /v1/renouveler : " + r.body);
         const json::Value& acts = r.value.at("activations");
-        check(acts.isArray() && acts.items().size() == 1 && r.value.at("retirees").items().empty() && r.value.at("revocations").isNull() &&
+        check(acts.isArray() && acts.items().size() == 1 && r.value.at("retirees").items().empty() && !r.value.find("revocations") &&
                   r.value.at("poste").isNull(),
-              "une activation, rien de retire");
+              "une activation, rien de retire, pas de liste de revocation");
         if (acts.isArray() && acts.items().size() == 1) {
             lic::SignedBlock ab;
             sv::Activation a;
@@ -304,7 +323,7 @@ int main(int argc, char** argv) {
         r = call(base, "PUT", "/admin/licences", body({{"licence", fText}, {"code_hash", sv::codeHash(fnorm)}}), editor.get(), now);
         check(r.status == 200 && r.value.str("type") == "floating", "la licence flottante deposee : " + r.body);
         for (const auto* k : {pc.get(), pc2.get()}) {
-            r = call(base, "POST", "/v1/activer", body({{"code", fcode}, {"demande", request(*k, "", now)}}), k, now);
+            r = call(base, "POST", "/v1/activer", body({{"code", fcode}, {"demande", request(*k, k == pc.get() ? station : station2, now)}}), k, now);
             lic::SignedBlock ab;
             sv::Activation a;
             check(r.status == 200 && sv::findBlock(r.value.str("activation"), lic::DocKind::Activation, ab, &why) && sv::parseActivation(ab.document, a, &why) &&
@@ -312,6 +331,10 @@ int main(int argc, char** argv) {
                   "l'activation flottante : " + r.body);
         }
         r = call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}}), pc.get(), now);
+        check(r.status == 400 && r.value.str("erreur") == "champ", "le jeton sans station : 400");
+        r = call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}, {"station", stationAilleurs}}), pc.get(), now);
+        check(r.status == 403 && r.value.str("erreur") == "activation", "le jeton depuis une autre installation : 403 activation");
+        r = call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}, {"station", station}}), pc.get(), now);
         lic::SignedBlock b;
         sv::Lease l;
         check(r.status == 200 && sv::findBlock(r.value.str("jeton"), lic::DocKind::Lease, b, &why) &&
@@ -319,10 +342,45 @@ int main(int argc, char** argv) {
               "le jeton : " + why);
         check(l.licenseId == "XPG-2026-F0042" && l.deviceKey == pc->publicKeyHex() && l.until - l.issuedAt == 900 && sv::writeLease(l) == b.document,
               "ses champs, 15 minutes");
-        r = call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}}), pc2.get(), now);
+        r = call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}, {"station", station2}}), pc2.get(), now);
         check(r.status == 409 && r.value.str("erreur") == "complet" && r.value.integer("libre_dans") > 0, "le seul jeton est pris : 409 et libre_dans");
-        check(call(base, "POST", "/v1/flottante/rendre", body({{"licence", "XPG-2026-F0042"}}), pc.get(), now).status == 200, "rendu");
-        check(call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}}), pc2.get(), now).status == 200, "repris par l'autre PC");
+        check(call(base, "POST", "/v1/flottante/rendre", body({{"licence", "XPG-2026-F0042"}, {"station", stationAilleurs}}), pc.get(), now).status == 403,
+              "rendre depuis une autre installation : 403");
+        check(call(base, "POST", "/v1/flottante/rendre", body({{"licence", "XPG-2026-F0042"}, {"station", station}}), pc.get(), now).status == 200, "rendu");
+        check(call(base, "POST", "/v1/flottante/jeton", body({{"licence", "XPG-2026-F0042"}, {"station", station2}}), pc2.get(), now).status == 200,
+              "repris par l'autre PC");
+    }
+
+    std::printf("-- liberer : la place rendue, puis gardee au-dela des changements de PC permis\n");
+    {
+        const std::string tcode = sv::newActivationCode();
+        std::string tnorm;
+        (void)sv::normalizeCode(tcode, tnorm);
+        const std::string tText = onlineLicense("XPG-2026-T0042", lic::LicenseType::Perpetual, 1, now, base, *editor, nullptr);
+        r = call(base, "PUT", "/admin/licences", body({{"licence", tText}, {"code_hash", sv::codeHash(tnorm)}}), editor.get(), now);
+        check(r.status == 200, "la licence d'un poste deposee : " + r.body);
+        std::vector<std::unique_ptr<lic::SigningKey>> pcs;
+        std::string kept, keptUntil;
+        for (int i = 0; i < 3; ++i) {
+            pcs.push_back(makeKey(root / ("pc-t" + std::to_string(i)), "PC transfert"));
+            const auto& k = *pcs.back();
+            const std::string st = lic::stationHash("machine-t" + std::to_string(i), k.publicKey());
+            r = call(base, "POST", "/v1/activer", body({{"code", tcode}, {"demande", request(k, st, now)}}), &k, now);
+            check(r.status == 200, "PC " + std::to_string(i) + " active : " + r.body.substr(0, 160));
+            lic::SignedBlock ab;
+            sv::Activation a;
+            if (sv::findBlock(r.value.str("activation"), lic::DocKind::Activation, ab, &why) && sv::parseActivation(ab.document, a, &why)) keptUntil = lic::isoTime(a.until);
+            r = call(base, "POST", "/v1/liberer", body({{"licence", "XPG-2026-T0042"}, {"station", st}}), &k, now);
+            check(r.status == 200 && r.value.integer("transferts_permis") == 2, "PC " + std::to_string(i) + " libere : " + r.body.substr(0, 200));
+            kept = r.value.str("place");
+            if (i < 2) check(kept == "rendue", "dans les changements permis : la place est rendue");
+        }
+        check(kept == "gardee" && r.value.str("jusqu_a") == keptUntil, "le troisieme : la place gardee jusqu'a la fin de son bail (" + r.value.str("jusqu_a") + ")");
+        const std::string st3 = lic::stationHash("machine-t3", other->publicKey());
+        r = call(base, "POST", "/v1/activer", body({{"code", tcode}, {"demande", request(*other, st3, now)}}), other.get(), now);
+        lic::Seconds on = 0;
+        check(r.status == 409 && r.value.str("erreur") == "complet" && lic::parseIsoTime(r.value.str("libre_le"), on) && lic::isoTime(on) == keptUntil,
+              "un autre PC : 409 complet, et quand la place revient (libre_le) : " + r.body.substr(0, 240));
     }
 
     std::printf("-- une requete signee avec ?depuis=, l'archive\n");
@@ -351,12 +409,13 @@ int main(int argc, char** argv) {
         const lic::Seconds later = e2.value.integer("heure");
         check(e2.value.str("cle_service") == serviceKey && later - now > 30 * lic::kDay, "la meme cle, 31 jours plus tard");
         // le bail de pc est echu : pc2 prend la place ; pc, revenu, est retire
-        r = call(base2, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc2, "", later)}}), pc2.get(), later);
+        r = call(base2, "POST", "/v1/activer", body({{"code", code}, {"demande", request(*pc2, station2, later)}}), pc2.get(), later);
         check(r.status == 200, "pc2 prend la place liberee par le bail echu : " + r.body);
-        r = call(base2, "POST", "/v1/renouveler", "{}", pc.get(), later);
+        r = call(base2, "POST", "/v1/renouveler", body({{"station", station}}), pc.get(), later);
         bool retired = false;
         for (const auto& x : r.value.at("retirees").items()) retired = retired || x.asString() == "XPG-2026-00042";
-        check(r.status == 200 && retired, "pc est retire : " + r.body);
+        const json::Value* motifs = r.value.find("motifs");
+        check(r.status == 200 && retired && motifs && motifs->str("XPG-2026-00042") == "retiree", "pc est retire (motif retiree) : " + r.body.substr(0, 300));
     }
 
     std::error_code ec;

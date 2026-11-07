@@ -22,7 +22,9 @@
 //  defaut : tous les appels d'un essai viennent de 127.0.0.1 (contractLimits :
 //  les garder). LE TEMPS : restart(decalage) relance le service sur le MEME etat avec son
 //  horloge avancee de `decalage` secondes (un bail echu, un jeton expire) ; la
-//  cle du service et les tables sont gardees.
+//  cle du service et les tables sont gardees, et le MEME port (le certificat du
+//  service nomme son adresse : les Studios refusent un document d'une autre
+//  adresse) - s'il est pris entre-temps, un autre (url() change).
 //
 //  Ou est le depot : le parametre `sourceDir`, sinon la variable XPG_SOURCE_DIR,
 //  sinon le dossier de ce fichier (__FILE__ : .../tests/service_local.hpp).
@@ -104,9 +106,14 @@ public:
 
     // Relancer sur le meme etat, l'horloge du service avancee de `clockOffset` secondes. Faux : error().
     bool restart(long long clockOffset) {
+        const int same = port_;
         stop();
         opt_.clockOffset = clockOffset;
-        start();
+        start(same);
+        if (!ready_ && same > 0) {
+            stop();
+            start(0);   // le port a ete pris entre-temps : un autre
+        }
         return ready_;
     }
 
@@ -197,7 +204,7 @@ private:
     }
 #endif
 
-    void start() {
+    void start(int wantedPort = 0) {
         ready_ = false;
         skipped_ = false;
         error_.clear();
@@ -225,6 +232,7 @@ private:
             error_ = "pipe impossible";
             return;
         }
+        const std::string portArg = std::to_string(wantedPort > 0 ? wantedPort : 0);   // avant fork : rien n'est alloue dans l'enfant
         const double t0 = nowSeconds();
         const pid_t pid = ::fork();
         if (pid < 0) {
@@ -254,7 +262,7 @@ private:
             ::setenv("XPG_SERVICE_ATTENTE", std::to_string(opt_.timeoutSeconds).c_str(), 1);
             if (opt_.contractLimits) ::unsetenv("XPG_LIMITES_ESSAI");
             else ::setenv("XPG_LIMITES_ESSAI", "sans", 1);
-            ::execl("/bin/bash", "bash", script_.c_str(), "0", stateDir_.c_str(), keysCsv_.c_str(), static_cast<char*>(nullptr));
+            ::execl("/bin/bash", "bash", script_.c_str(), portArg.c_str(), stateDir_.c_str(), keysCsv_.c_str(), static_cast<char*>(nullptr));
             ::_exit(127);
         }
         ::close(fds[1]);

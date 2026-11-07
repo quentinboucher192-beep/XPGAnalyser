@@ -24,6 +24,15 @@
 //      reseau ; efface s'il est refuse ; le fil de fond du lancement ;
 //    - le renouvellement et l'heure signee recalee (le service en avance) ;
 //    - retire par l'editeur : efface au renouvellement suivant ; liberer ;
+//    - la cle d'un PC recopiee sur une autre installation : rien n'est
+//      renouvele pour la copie, son activation est effacee ; l'original garde
+//      la sienne ;
+//    - liberer au-dela des changements de PC permis : la place gardee jusqu'a la
+//      fin du bail (la phrase le dit) ; le refus d'un autre PC dit quand elle
+//      revient ;
+//    - une licence finie : plus renouvelee (gardee sur le PC, un avis) ;
+//    - une activation que le service a oubliee (effacee 90 jours apres la fin
+//      de son bail) : effacee du PC au renouvellement ;
 //    - le bail : 7 jours avant, expire hors ligne (l'horloge du magasin), puis
 //      la connexion revenue (renouvele, un avis) ;
 //    - LE CODE JAMAIS dans un message, l'historique, le releve.
@@ -214,7 +223,7 @@ bool publisherSetup(std::string& why) {
 }
 
 // Une licence en ligne deposee avec l'empreinte d'un code neuf ; rend le code (forme XPG-XXXX-...).
-std::string putLicence(const std::string& id, lic::LicenseType type, int seats, int bailDays = 30) {
+std::string putLicence(const std::string& id, lic::LicenseType type, int seats, int bailDays = 30, Seconds expiresIn = 0) {
     lic::License l;
     l.licenseId = id;
     l.customer = "Client d'essai Atelier";
@@ -226,7 +235,7 @@ std::string putLicence(const std::string& id, lic::LicenseType type, int seats, 
     lic::normalizeGrants(l.features);
     const Seconds now = serviceTime();
     l.issuedAt = now - 3600;
-    l.expiresAt = type == lic::LicenseType::Temporary ? now + 365 * D : 0;
+    l.expiresAt = expiresIn > 0 ? now + expiresIn : type == lic::LicenseType::Temporary ? now + 365 * D : 0;
     l.offlineGraceDays = type == lic::LicenseType::Temporary ? 14 : 0;
     l.manifest = g_reg.number;
     l.nonce = lic::newNonce();
@@ -263,6 +272,7 @@ lic::StoreOptions pcOptions(const std::string& name, const std::string& machine)
     o.clock = [] { return lic::systemNow() + static_cast<Seconds>(g_shift.load()); };
     o.machineId = machine;
     o.evaluationPeriod = true;
+    o.serviceUrl = g_url;   // les documents du service ne sont crus que pour SON adresse (celle du certificat)
     return o;
 }
 
@@ -583,6 +593,66 @@ int main(int argc, char** argv) {
         (void)ls::saveRecord(clean, &why);
     }
 
+    std::printf("-- la cle d'un PC recopiee sur une autre installation de Windows\n");
+    {
+        // A est actif (XPG-2026-00201) ; son dossier recopie tel quel (la cle, la licence, l'activation, le releve) sur une
+        // autre machine.
+        std::error_code e2;
+        fs::remove_all(folderOf("A-copie"), e2);
+        fs::create_directories(folderOf("A-copie"), e2);
+        for (const std::string f : {std::string(lic::kDeviceKeyFile), std::string("licence.xpglic"), std::string(lic::LicenseStore::kActivationFile),
+                                    std::string(ls::kRecordFile)})
+            fs::copy_file(folderOf("A") / f, folderOf("A-copie") / f, fs::copy_options::overwrite_existing, e2);
+        usePc("A-copie", "machine-essai-copie");
+        const auto r = keep(ls::renew());
+        check(noticeKey(r, "licence:retrait") && has(noticeTitle(r, "licence:retrait"), "autre installation de Windows") && !lic::getLicenseState().online &&
+                  !present(folderOf("A-copie") / lic::LicenseStore::kActivationFile),
+              "la copie : rien de renouvele, son activation effacee (" + noticeTitle(r, "licence:retrait") + " / " + r.message + ")");
+        const auto a = keep(ls::activate(code1, "Copie de A"));
+        check(!a.ok && a.refused && !a.definitive && has(a.message, "autre poste") && !present(folderOf("A-copie") / lic::LicenseStore::kActivationFile),
+              "la copie ne prend pas la place de A avec le code (" + a.message + ")");
+        usePc("A", "machine-essai-1");
+        const auto o = keep(ls::renew());
+        const auto st = lic::getLicenseState();
+        check(o.ok && st.status == lic::LicenseStatus::Valid && st.online && st.licenseId == "XPG-2026-00201", "A garde la sienne (" + o.message + ")");
+    }
+
+    std::printf("-- une licence finie : plus renouvelee\n");
+    {
+        const std::string code7 = putLicence("XPG-2026-00701", lic::LicenseType::Temporary, 1, 30, 8);
+        usePc("E", "machine-essai-e");
+        const auto a = keep(ls::activate(code7, "Poste essai E"));
+        check(a.ok && lic::getLicenseState().licenseId == "XPG-2026-00701", "activee 8 s avant sa fin (" + a.message + ")");
+        std::this_thread::sleep_for(std::chrono::seconds(9));
+        const auto r = keep(ls::renew());
+        const auto st = lic::getLicenseState();
+        check(noticeKey(r, "licence:fin") && has(noticeTitle(r, "licence:fin"), "XPG-2026-00701") && has(noticeTitle(r, "licence:fin"), "a pris fin") &&
+                  present(folderOf("E") / lic::LicenseStore::kActivationFile) && st.licenseId == "XPG-2026-00701" && !has(r.message, "Bail renouvel"),
+              "finie : pas renouvelee, gardee sur le PC (le magasin la dit finie), un avis (" + noticeTitle(r, "licence:fin") + " / " + st.message + ")");
+    }
+
+    std::printf("-- liberer au-dela des changements de PC permis\n");
+    {
+        const std::string code6 = putLicence("XPG-2026-00601", lic::LicenseType::Perpetual, 1);
+        ls::Result last;
+        for (int i = 1; i <= 3; ++i) {
+            const std::string name = "T" + std::to_string(i);
+            usePc(name, "machine-essai-t" + std::to_string(i));
+            const auto a = keep(ls::activate(code6, "Poste essai " + name));
+            check(a.ok, name + " active (" + a.message + ")");
+            last = keep(ls::release());
+            check(last.ok && !lic::getLicenseState().online && !present(folderOf(name) / lic::LicenseStore::kActivationFile),
+                  name + " libere (" + last.message + ")");
+            if (i < 3) check(has(last.message, "est rendu"), name + " : la place rendue tout de suite");
+        }
+        check(has(last.message, "Sa place reste prise jusqu'au") && has(last.message, "2 fois ces 30 derniers jours") && noticeKey(last, "licence:liberation"),
+              "le troisieme : la place gardee jusqu'a la fin de son bail, la phrase le dit (" + last.message + ")");
+        usePc("T4", "machine-essai-t4");
+        const auto r = keep(ls::activate(code6, "Poste essai T4"));
+        check(!r.ok && r.refused && has(r.message, "Tous les postes") && has(r.message, "Une place revient le "),
+              "un autre PC : refuse, et quand la place revient (" + r.message + ")");
+    }
+
     std::printf("-- la licence flottante\n");
     const std::string code2 = putLicence("XPG-2026-00301", lic::LicenseType::Floating, 1);
     {
@@ -900,6 +970,22 @@ int main(int argc, char** argv) {
               "la connexion revenue : renouvele, de nouveau actif (" + noticeTitle(r, "licence:bail") + ")");
         check(!bell("licence:bail-fin"), "l'avis du bail retire");
         g_shift = 0;
+    }
+
+    std::printf("-- une activation que le service a oubliee (effacee 90 jours apres la fin de son bail)\n");
+    {
+        // Le bail de A court jusqu'au 63e jour (le service a +33 j) ; 160 jours plus tard, le service l'a effacee.
+        check(svc.restart(160 * D), "160 jours passent chez le service (" + svc.error() + ")");
+        check(svc.url() == g_url, "le meme port (le certificat nomme l'adresse du service)");
+        g_url = svc.url();
+        address.url = g_url;
+        ls::setAddressForTests(address);
+        usePc("A", "machine-essai-1");
+        const auto r = keep(ls::renew());
+        const auto st = lic::getLicenseState();
+        check(noticeKey(r, "licence:retrait") && has(noticeTitle(r, "licence:retrait"), "ne conna\xC3\xAEt plus") && !st.online &&
+                  !present(folderOf("A") / lic::LicenseStore::kActivationFile),
+              "le service ne la connait plus : effacee du PC, un avis (" + noticeTitle(r, "licence:retrait") + " / " + r.message + ")");
     }
 
     std::printf("-- le code n'est jamais ecrit (messages, historique, releve)\n");

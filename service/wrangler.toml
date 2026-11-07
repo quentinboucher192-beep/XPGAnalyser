@@ -15,6 +15,19 @@ DECOUVERTE_JOURS = "30"
 # deploiement (--var PUBLISHER_KEYS:...). Vide : aucun appel /admin n'est accepte.
 PUBLISHER_KEYS = ""
 
+# Le limiteur de Cloudflare, DEVANT le service, par adresse IP et par minute (rien n'est ecrit ; un appel refuse ne
+# coute rien a l'objet) : les routes publiques (etat, heure, certificat, registre), puis les autres routes /v1.
+# namespace_id : un nombre propre a ce compte (choisi ici, sans rapport avec un autre service).
+[[ratelimits]]
+name = "LIMITE_PUBLIQUE"
+namespace_id = "13501"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "LIMITE_PC"
+namespace_id = "13502"
+simple = { limit = 120, period = 60 }
+
 [[durable_objects.bindings]]
 name = "LICENCES"
 class_name = "Licences"

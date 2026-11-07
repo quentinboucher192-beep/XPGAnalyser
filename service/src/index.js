@@ -41,14 +41,38 @@ async function lireCorps(request) {
     return out;
 }
 
+// Les routes publiques (sans signature) : LIMITE_PUBLIQUE ; les autres routes /v1 : LIMITE_PC.
+const PUBLIQUES = new Set(["/v1/etat", "/v1/heure", "/v1/certificat", "/v1/registre"]);
+
+// Le limiteur de Cloudflare (par adresse, par minute ; une liaison absente : rien). Faux : trop d'appels.
+async function passe(env, url, ip) {
+    // LIMITES_ESSAI = "sans" : SEULEMENT sur ce poste (127.0.0.1), pour les essais qui enchainent les appels.
+    const local = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    if (local && env.LIMITES_ESSAI === "sans") return true;
+    let limiteur = null;
+    if (PUBLIQUES.has(url.pathname)) limiteur = env.LIMITE_PUBLIQUE;
+    else if (url.pathname.startsWith("/v1/")) limiteur = env.LIMITE_PC;
+    if (!limiteur || typeof limiteur.limit !== "function") return true;
+    try {
+        const { success } = await limiteur.limit({ key: ip });
+        return success !== false;
+    } catch {
+        return true; // le limiteur en panne : l'objet garde ses propres limites
+    }
+}
+
 export default {
     async fetch(request, env) {
         try {
+            const url = new URL(request.url);
+            const ip = request.headers.get("CF-Connecting-IP") || "inconnue";
+            if (!(await passe(env, url, ip)))
+                throw new Erreur(429, "trop", "Trop d'appels de ton adresse : réessaie dans une minute.", { reessayer_dans: 60 });
             const methode = request.method.toUpperCase();
             const corps = methode === "GET" || methode === "HEAD" ? null : await lireCorps(request);
             const entetes = new Headers(request.headers);
             // L'adresse de l'appelant : celle que Cloudflare donne (jamais un en-tete pose par le client).
-            entetes.set("X-XPG-IP", request.headers.get("CF-Connecting-IP") || "inconnue");
+            entetes.set("X-XPG-IP", ip);
             const objet = env.LICENCES.get(env.LICENCES.idFromName("principal"));
             return await objet.fetch(new Request(request.url, { method: methode, headers: entetes, body: corps }));
         } catch (e) {

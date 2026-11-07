@@ -22,11 +22,21 @@
 //                dans le corps de cet appel - jamais dans un message, l'historique,
 //                le releve, un journal, une adresse.
 //    renouveler  le bail de chaque activation (installActivation), celles que le
-//                service a retirees (liberees, retirees, revoquees : dropActivation),
-//                la liste de revocation de ce PC (importLicenseBytes), l'etat
-//                << poste >> (les reponses aux demandes, comme en 1.34).
-//    liberer     ce PC rend son poste (une autre machine peut prendre la place) ;
-//                son activation est effacee.
+//                service ne renouvelle plus (`retirees`, et leur motif : liberee,
+//                retiree, revoquee, desactivee, autre_poste... : dropActivation ;
+//                expiree : gardee, le magasin la dit finie), la licence en ligne
+//                dont le service ne dit plus rien (effacee), l'etat << poste >>
+//                (les reponses aux demandes, et la revocation d'une licence liee a
+//                ce PC, comme en 1.34). La liste de revocation de l'editeur ne
+//                vient plus du service.
+//    liberer     ce PC rend son poste : tout de suite dans les changements de PC
+//                permis (2 par mois, ou autant que de postes), sinon a la fin de
+//                son bail (le service le dit, la phrase aussi) ; son activation est
+//                effacee.
+//    LA STATION : renouveler, liberer, prendre et rendre le jeton portent
+//                l'empreinte de l'installation de Windows de ce PC
+//                (licensing::thisStationHash) : une cle de PC recopiee ailleurs
+//                ne renouvelle rien, ne prend aucun jeton.
 //    decouverte  l'empreinte de la machine (thisMachineHash) -> le debut connu du
 //                service (installTrialRecord : le plus ancien des deux est garde).
 //    flottante   le jeton (15 min) d'une licence flottante, et le rendre.

@@ -18,12 +18,14 @@ export const sha256Hex = (data) => crypto.createHash("sha256").update(data).dige
 export const hasard = (n) => crypto.randomBytes(n).toString("hex");
 
 // ---- les cles ----
+// Une cle de PC (ou de l'editeur) ; `station` : l'empreinte de << son >> installation de Windows (stationHash).
 export function nouvelleCle() {
     const { publicKey, privateKey } = crypto.generateKeyPairSync("ed25519");
     const pub = Buffer.from(publicKey.export({ format: "jwk" }).x, "base64url");
     return {
         pub,
         hex: pub.toString("hex"),
+        station: crypto.randomBytes(16).toString("hex"),
         id: "xpg-" + sha256Hex(pub).slice(0, 16),
         poste: sha256Hex(Buffer.concat([Buffer.from("xpg-poste-passerelle/1"), pub])).slice(0, 32),
         signer: (m) => crypto.sign(null, Buffer.from(m), privateKey),
@@ -94,7 +96,8 @@ export function licenceJson({ id, type = "temporary", max = 2, emission, expire,
     );
 }
 
-export function demandeJson(cle, { nom = "PC d'essai", station } = {}) {
+// `station` : celle de la cle par defaut ; null : aucune (une demande d'avant la 1.35.0).
+export function demandeJson(cle, { nom = "PC d'essai", station = cle.station } = {}) {
     const o = {
         format: "xpg-activation-request",
         version: 1,
@@ -214,3 +217,12 @@ export function certificat(editeur, cleService, { emis, expire, droits = ["activ
     });
     return bloc("service", json, editeur);
 }
+
+// La meme cle de PC recopiee sur une autre installation de Windows (une autre station).
+export const copieAilleurs = (cle) => ({ ...cle, station: crypto.randomBytes(16).toString("hex") });
+
+// Les lignes ecrites par un appel (le service les dit pres de 127.0.0.1 : X-XPG-Lignes-Ecrites) ; -1 : non dit.
+export const lignesEcrites = (r) => {
+    const v = r.entetes.get("x-xpg-lignes-ecrites");
+    return v === null ? -1 : Number(v);
+};
