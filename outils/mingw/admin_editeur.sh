@@ -15,6 +15,9 @@
 #                                         LISEZ-MOI-EDITEUR.txt (CRLF : le pas a pas)
 #                                         registre.json (= tests/fixtures/licences/registre-exemple.json)
 #                                         parametres-exemple.json
+#                                         service-licences/ (1.35.0 : le kit de mise en ligne du service des
+#                                           licences - service/ sans node_modules, deployer.bat/.sh/.mjs,
+#                                           LISEZ-MOI-SERVICE.txt ; l'editeur y ajoute cle-publique.txt)
 #      -> DOSSIER/XPG-License-Admin-<version>-EDITEUR.zip
 #    DOSSIER : par defaut <racine>/dist-editeur (jamais dans dist/).
 #    XPG_VERSION=1.30.0   la version (par defaut : outils/config.ini, [Produit] version)
@@ -78,6 +81,13 @@ cp -f "$APP" "$DEST/XPG-License-Manager-Admin.exe"
 cp -f "$OUT/SDL3.dll" "$DEST/SDL3.dll"
 cp -f tests/fixtures/licences/registre-exemple.json "$DEST/registre.json"
 cp -f tests/fixtures/licences/parametres-exemple.json "$DEST/parametres-exemple.json"
+# 1.35.0 : le kit du service des licences (le Worker, sans ses essais ni node_modules ; les scripts de mise en ligne)
+KIT="$DEST/service-licences"
+mkdir -p "$KIT/service/src"
+cp -f service/wrangler.toml service/package.json service/package-lock.json service/.gitignore "$KIT/service/"
+cp -f service/src/*.js "$KIT/service/src/"
+cp -f outils/service/deployer.bat outils/service/deployer.mjs outils/service/LISEZ-MOI-SERVICE.txt "$KIT/"
+cp -f outils/service/deployer.sh "$KIT/deployer.sh" && chmod 755 "$KIT/deployer.sh"
 # Le pas a pas : UTF-8 avec BOM, fins de ligne CRLF (le Bloc-notes), la version mise.
 python3 - "$ROOT/outils/mingw/LISEZ-MOI-EDITEUR.txt" "$DEST/LISEZ-MOI-EDITEUR.txt" "$VERSION" <<'PY'
 import sys
@@ -96,8 +106,12 @@ python3 - "$SORTIE" "$NOM" "$ZIP" <<'PY'
 import os, sys, zipfile
 base, nom, archive = sys.argv[1:4]
 with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-    for name in sorted(os.listdir(os.path.join(base, nom))):
-        z.write(os.path.join(base, nom, name), nom + "/" + name)
+    racine = os.path.join(base, nom)
+    for dossier, sous, fichiers in os.walk(racine):
+        sous.sort()
+        for name in sorted(fichiers):
+            chemin = os.path.join(dossier, name)
+            z.write(chemin, nom + "/" + os.path.relpath(chemin, racine).replace(os.sep, "/"))
 with zipfile.ZipFile(archive) as z:
     for i in z.infolist():
         print(f"  {i.filename}  ({i.file_size} octets)")

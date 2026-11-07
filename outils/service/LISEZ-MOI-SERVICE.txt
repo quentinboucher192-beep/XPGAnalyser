@@ -37,13 +37,14 @@ outil (étape 7).
 
 3. PRÉPARER LE DOSSIER
 ----------------------
-   Dans le kit de ton outil d'éditeur (Service en ligne › Kit), tu as :
+   Dans le zip de ton outil d'éditeur, le dossier service-licences contient déjà :
      service\                le programme du service (wrangler.toml, src\, package.json...)
      deployer.bat            la mise en ligne (Windows) ; deployer.sh (Linux, macOS)
      deployer.mjs            ce que deployer.bat lance (à garder à côté de lui)
-     cle-publique.txt        ta clé PUBLIQUE (écrite par l'outil de l'éditeur)
      LISEZ-MOI-SERVICE.txt   ce fichier
-   Copie-les ensemble dans un dossier de ton PC, par exemple C:\XPG\service-licences.
+   Copie ce dossier sur ton PC, par exemple C:\XPG\service-licences. Puis ajoute-y
+   ta clé PUBLIQUE : dans l'outil de l'éditeur, Service en ligne › Écrire
+   cle-publique.txt…, et choisis ce dossier (celui de deployer.bat).
 
 
 4. OUVRIR UN TERMINAL DANS LE DOSSIER DU SERVICE
