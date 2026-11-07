@@ -415,8 +415,8 @@ int main(int argc, char** argv) {
         check(!ls::available(&why) && has(why, "pas activ"), "licences pas activees : " + why);
         const auto r = keep(ls::readTime());
         check(!r.ok && !r.reached, "pas activees : aucun appel");
-        check(app::licence::indicator().text.empty() && has(app::licence::startCard().title, "non activ"),
-              "pas activees : pas d'indicateur, l'encart le dit (1.35.1) : " + app::licence::startCard().title);
+        check(app::licence::indicator().text.empty() && app::licence::startCard().title.empty(),
+              "pas activees : ni indicateur, ni encart (les avis pas encore demarres)");
     }
 
     std::printf("-- le service pas encore certifie\n");

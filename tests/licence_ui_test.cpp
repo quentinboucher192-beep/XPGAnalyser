@@ -162,6 +162,7 @@ int main(int argc, char** argv) {
     {
         lic::StoreOptions o;
         o.folder = U(base / "sans-cle");
+        o.compiledKeys = false;   // 1.35.1 : la vraie cle de l'editeur est compilee ; << sans cle >> : un programme qui n'en a pas
         app::licence::start(std::move(o));
         const auto st = lic::getLicenseState();
         bool allOpen = true;
