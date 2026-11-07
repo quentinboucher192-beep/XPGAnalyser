@@ -1540,6 +1540,10 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
                       "biblioth\xC3\xA8ques, th\xC3\xA8mes) : les ouvrir, les ajouter aux r\xC3\xA9" "cents (Ctrl+Maj+P)");
     swatches_ = &static_cast<ThemeSwatches&>(addChild(std::make_unique<ThemeSwatches>("startup.themes")));
     autostart_ = make("Choisir\xE2\x80\xA6", "startup.autostart", L::Ghost, G::None);
+    // 1.34.0 : le bouton de l'encart de la licence (cache sans encart).
+    licence_ = make("Licence\xE2\x80\xA6", "startup.licence", L::Secondary, G::None);
+    licence_->setTooltip("La fen\xC3\xAAtre Licence : ton \xC3\xA9valuation, ta demande de licence en ligne");
+    licence_->setVisibility(ui::Visibility::Collapsed);
     autostart_->setTooltip("Le poste d'exploitation d'un projet FINISH, lanc\xC3\xA9 au d\xC3\xA9marrage du PC (un seul projet par PC)");
 }
 
@@ -1552,6 +1556,14 @@ void StartRail::setAutostart(std::string projectName) {
 
 void StartRail::setCodeStats(std::string text) {
     codeStats_ = std::move(text);
+    invalidateLayout();
+    invalidate();
+}
+
+void StartRail::setLicenceNotice(std::string title, std::string text) {
+    if (title == licenceTitle_ && text == licenceText_) return;
+    licenceTitle_ = std::move(title);
+    licenceText_ = std::move(text);
     invalidateLayout();
     invalidate();
 }
@@ -1598,6 +1610,19 @@ float StartRail::placeBody(int level) {
     taglineY_ = titleY_ + titleH + 6.f;
     chipY_ = titleY_ + titleH + (tagline_.empty() ? 0.f : 6.f + tagH) + 8.f;
     y += brandH + (tall ? 24.f : easy ? 16.f : 10.f);
+
+    // ---- 1.34.0 : l'encart de la licence (l'evaluation : les jours qui restent) --
+    if (!licenceTitle_.empty()) {
+        const float bh = level >= 2 ? 44.f : 56.f;
+        licenceBox_ = {x0, y, w, bh};
+        const float bw = std::min(licence_->naturalWidth(), std::max(60.f, w * 0.4f));
+        licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.y + std::round((bh - 26.f) * 0.5f), bw, 26.f});
+        licence_->setVisibility(ui::Visibility::Visible);
+        y += bh + (easy ? 12.f : 8.f);
+    } else {
+        licenceBox_ = {};
+        licence_->setVisibility(ui::Visibility::Collapsed);
+    }
 
     // ---- les deux grandes actions -------------------------------------------
     const float cardH = tall ? 66.f : easy ? 58.f : 54.f;
@@ -1720,6 +1745,21 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
             ctx.r.drawText({textX_, cy}, l, kSmall, c.textMuted);
             cy += ctx.r.lineHeight(kSmall);
         }
+    }
+
+    // ---- 1.34.0 : l'encart de la licence ------------------------------------------
+    if (!licenceTitle_.empty() && licenceBox_.w > 0.f) {
+        const auto warn = th.onSurface(c.warning);
+        ctx.r.fillRoundedRect(licenceBox_, mix(c.border, c.warning, 0.55f), 8.f);
+        ctx.r.fillRoundedRect(licenceBox_.inset(1.f, 1.f), mix(c.panelBg, c.warning, th.isDark() ? 0.16f : 0.12f), 7.f);
+        const float left = licenceBox_.x + 12.f, tx = left + 22.f;
+        const float room = licence_->bounds().x - 10.f - tx;
+        const float lh = ctx.r.lineHeight(kSmall);
+        const bool two = !licenceText_.empty() && licenceBox_.h >= 56.f;
+        const float ty = licenceBox_.y + std::round((licenceBox_.h - (two ? 2.f : 1.f) * lh) * 0.5f);
+        ui::drawIcon(ctx.r, ui::Icon::Warning, {left, licenceBox_.y + std::round((licenceBox_.h - 14.f) * 0.5f), 14.f, 14.f}, warn);
+        drawBold(ctx.r, {tx, ty}, elide(ctx.r, licenceTitle_, kSmall, room), kSmall, warn);
+        if (two) ctx.r.drawText({tx, ty + lh}, elide(ctx.r, licenceText_, kSmall, room), kSmall, c.text);
     }
 
     // ---- la zone ou glisser -------------------------------------------------------

@@ -297,6 +297,11 @@ public:
     [[nodiscard]] StartButton&   findLink() noexcept { return *find_; }
     [[nodiscard]] ThemeSwatches& swatches() noexcept { return *swatches_; }
     [[nodiscard]] StartButton&   autostartButton() noexcept { return *autostart_; }
+    // 1.34.0 : l'encart de la licence (l'evaluation et les jours qui restent), sous la marque ; son bouton
+    // << Licence... >> ouvre la fenetre Licence. Un titre vide : pas d'encart.
+    [[nodiscard]] StartButton&   licenceButton() noexcept { return *licence_; }
+    void setLicenceNotice(std::string title, std::string text);
+    [[nodiscard]] const std::string& licenceTitle() const noexcept { return licenceTitle_; }
 
     // Le poste d'exploitation lance au demarrage du PC : le nom du projet ;
     // vide : aucun.
@@ -329,6 +334,9 @@ private:
     StartButton*   find_{nullptr};        // 1.14.0 (lot M5)
     ThemeSwatches* swatches_{nullptr};
     StartButton*   autostart_{nullptr};
+    StartButton*   licence_{nullptr};     // 1.34.0
+    std::string    licenceTitle_, licenceText_;
+    gfx::Rect      licenceBox_{};
     std::string    autostartName_, tag_, date_;
     std::string              codeStats_;              // 1.11.7
     std::vector<std::string> codeLines_;

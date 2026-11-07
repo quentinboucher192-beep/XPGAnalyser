@@ -32,6 +32,7 @@
 #include "../App.hpp"
 #include "../Dossiers.hpp"
 #include "../Licence.hpp"   // 1.34.0 : l'evaluation, dite a chaque lancement
+#include "../../licensing/Licensing.hpp"
 #include "../../core/Version.hpp"
 #include "../StartPage.hpp"
 #include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : les chemins des cartes (Ouvrir dans l'explorateur, Aller a)
@@ -380,6 +381,22 @@ StartupScreen::StartupScreen(App& app) : menu::WidgetMenu("startup"), app_(app) 
 
 StartupScreen::~StartupScreen() = default;
 
+// 1.34.0 : l'encart de la licence sur l'accueil - pendant l'evaluation, les jours qui restent (rien sinon, ni sur
+// le poste d'exploitation : licence::launchNotice y est vide).
+static void applyLicenceNotice(start::StartRail& rail) {
+    if (licence::launchNotice().empty()) {
+        rail.setLicenceNotice({}, {});
+        return;
+    }
+    const auto st = licensing::getLicenseState();
+    if (st.status != licensing::LicenseStatus::Evaluation) {
+        rail.setLicenceNotice({}, {});
+        return;
+    }
+    const std::string days = std::to_string(st.evaluationDaysLeft) + (st.evaluationDaysLeft > 1 ? " jours" : " jour");
+    rail.setLicenceNotice("\xC3\x89valuation : il te reste " + days, "Pour continuer ensuite : une licence (Licence\xE2\x80\xA6).");
+}
+
 core::Status StartupScreen::buildUi() {
     auto page = std::make_unique<start::StartPage>("startup.page");
     page_ = page.get();
@@ -407,6 +424,7 @@ core::Status StartupScreen::buildUi() {
     }
     // 1.34.0 : la periode d'evaluation de ce PC (les jours qui restent) - dite a chaque lancement (la cloche aussi).
     if (const auto eval = licence::launchNotice(); !eval.empty()) page_->status().setMessage(eval, StatusBar::Severity::Warning);
+    applyLicenceNotice(page_->rail());   // ... et, bien visible, l'encart sous la marque
 
     // LES SIGNAUX DES WIDGETS, UNE FOIS POUR TOUTES : ici et pas dans onEnter,
     // que MenuManager rappelle a chaque dialogue ferme (voir en tete).
@@ -423,6 +441,7 @@ core::Status StartupScreen::buildUi() {
     });
     uiLinks_ += rail.swatches().chosen->connect([this](const std::string& key) { chooseTheme(key); });
     uiLinks_ += rail.autostartButton().clicked->connect([this] { askAutostart(); });
+    uiLinks_ += rail.licenceButton().clicked->connect([this] { showLicenceWindow(app_, 6); });   // 1.34.0 : Demande en ligne
     // Le bouton ... du champ du chemin : l'explorateur part du dossier des
     // projets ; le project.xpgproj choisi designe son dossier ; puis comme Entree.
     {
@@ -514,7 +533,9 @@ void StartupScreen::onEnter() {
     // 1.34.0 : les messages courts de l'application (une licence recue par la passerelle...) - ici aussi.
     busLinks_ += app_.events().subscribe<StatusNotice>([this](const StatusNotice& e) {
         page_->status().setTransientMessage(e.text, e.seconds, StatusBar::Severity::Info);
+        applyLicenceNotice(page_->rail());   // une licence recue : l'encart de l'evaluation s'en va
     });
+    applyLicenceNotice(page_->rail());
     page_->grid().resetClickChain();
     reload();
     // 1.8.0 : ce que le demarrage n'a pas pu faire avec les dossiers (un dossier
@@ -1340,7 +1361,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     menuButton_ = nullptr;
     auto& rail = page.rail();
     start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
-                                           &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton()};
+                                           &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton(), &rail.licenceButton()};
     for (auto* b : buttons)
         if (b->visible() && b->bounds().contains(at) && !b->text().empty()) {
             heading(b->text());
