@@ -401,8 +401,7 @@ void LicenceBody::reload() {
         c.properties.push_back(prop("\xC3\x89tat", licensing::statusLabel(st.status), licence::stateText(st)));
         if (!st.licensedEdition.empty() || !st.edition.empty())
             c.properties.push_back(prop("\xC3\x89" "dition", st.licensedEdition.empty() ? st.edition : st.licensedEdition,
-                                        "L'\xC3\xA9" "dition de la licence ; sans licence valide, c'est l'\xC3\xA9" "dition sans licence du registre qui s'applique : "
-                                            + (st.editionLabel.empty() ? st.edition : st.editionLabel)));
+                                        "L'\xC3\xA9" "dition de la licence ; sans licence valable, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e (1.35.1)."));
         if (!st.customer.empty()) c.properties.push_back(prop("Propri\xC3\xA9taire", st.customer));
         if (!st.licenseId.empty()) c.properties.push_back(prop("Identifiant", st.licenseId));
         if (!st.licenseId.empty()) c.properties.push_back(prop("Type", typeLabel(st.type)));
@@ -418,7 +417,7 @@ void LicenceBody::reload() {
         if (st.status == licensing::LicenseStatus::Evaluation)   // 1.34.0 ; 1.35.0 : la Decouverte
             c.properties.push_back(prop("D\xC3\xA9" "couverte", licence::discoveryText(st),
                                         "La D\xC3\xA9" "couverte de ce PC (30 jours), depuis son premier lancement : les fonctionnalit\xC3\xA9s de "
-                                        "l'\xC3\xA9" "dition d'\xC3\xA9valuation du registre. Ensuite : l'\xC3\xA9" "dition sans licence."));
+                                        "l'\xC3\xA9" "dition d'\xC3\xA9valuation du registre. Ensuite, sans licence, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e."));
         if (st.online) {   // 1.35.0 : la licence en ligne
             c.properties.push_back(prop("Activation", "en ligne, par le service des licences",
                                         "Ce PC a son activation sign\xC3\xA9" "e par le service des licences de l'\xC3\xA9" "diteur ; elle vaut le temps d'un bail, "

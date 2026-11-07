@@ -184,7 +184,7 @@ const std::vector<Note>& table() {
          "SANS LICENCE, LE LOGICIEL NE S'UTILISE PAS : au premier lancement, la D\xC3\xA9" "couverte (30 jours d'essai) ouvre tout ; "
          "ensuite, sans licence valable, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e. L'accueil dit toujours o\xC3\xB9 tu en es (ta licence, "
          "les jours de D\xC3\xA9" "couverte, ou \xC2\xAB Sans licence \xC2\xBB) ; Activer ma licence\xE2\x80\xA6 m\xC3\xA8ne au code re\xC3\xA7u de l'\xC3\xA9" "diteur. Un projet d\xC3\xA9j\xC3\xA0 "
-         "ouvert reste ouvert et s'enregistre : rien n'est perdu.",
+         "ouvert reste ouvert et s'enregistre : rien n'est perdu. Le poste d'exploitation non plus ne d\xC3\xA9marre pas sans licence.",
          "licence", ""),
         // 1.35.0 : le service des licences de l'editeur (on sort de GitHub) : le code, le bail, la flottante, la Decouverte
         note("1.35.0", "Projet", Kind::New,

@@ -52,7 +52,7 @@ void syncStateNotices() {
         bgtasks::withdraw(kDiscoveryNotice);
     } else {
         postNotice(kDiscoveryNotice, text,
-                   "Les fonctions de la D\xC3\xA9" "couverte sont ouvertes jusqu'\xC3\xA0 cette date ; ensuite, celles de l'\xC3\xA9" "dition sans licence. "
+                   "Les fonctions de la D\xC3\xA9" "couverte sont ouvertes jusqu'\xC3\xA0 cette date ; ensuite, sans licence, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e. "
                    "Pour continuer : Licence\xE2\x80\xA6 \xE2\x80\xBA Activation (le code re\xC3\xA7u de l'\xC3\xA9" "diteur).",
                    st.evaluationDaysLeft <= 7 ? "warning" : "info");
     }
@@ -363,7 +363,7 @@ Card startCard() {
         case S::Evaluation: {
             c.title = discoveryText(st);
             if (!c.title.empty() && c.title.back() == '.') c.title.pop_back();
-            c.text = "Ensuite : les fonctions de l'\xC3\xA9" "dition sans licence. Tu as un code ? Active ta licence.";
+            c.text = "Ensuite, sans licence, aucun projet ne s'ouvre. Tu as un code ? Active ta licence.";   // 1.35.1
             c.tone = st.evaluationDaysLeft <= 7 ? 2 : 4;
             c.button = "Activer avec un code\xE2\x80\xA6";
             c.tab = kTabActivation;
