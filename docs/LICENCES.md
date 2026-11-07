@@ -164,6 +164,7 @@ Une relecture de sécurité a confirmé que la cryptographie tient (signature v�
 | **Autre PC** | la licence n'est pas liée à la clé de ce PC | FREE | « Cette licence (…) a été délivrée pour un autre PC : … Envoie la demande d'activation de ce PC à l'éditeur pour recevoir la tienne. » |
 | **Absente** | aucune licence | FREE | « Aucune licence sur ce PC : l'édition FREE s'applique. » |
 | **Horloge reculée** | licence datée, et l'heure du PC est en arrière de plus de 24 h sur l'heure la plus tardive vue | FREE | « L'horloge de ce PC indique le 2027-10-01, alors que le 2027-11-21 a déjà été vu : remets-la à l'heure. En attendant, l'édition FREE s'applique. … » |
+| **Évaluation** (1.34.0) | aucune licence, licences actives, une édition d'évaluation au registre : pendant sa durée, depuis le premier lancement (§ 8 ter) | celles de l'édition d'évaluation | « Évaluation : il te reste 18 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence…). » |
 
 **L'horloge** : l'heure la plus tardive vue est gardée dans `etat.bin` ; les dates d'émission des documents signés (licence, registre, révocations) servent aussi d'ancrage. Une licence perpétuelle ne dépend pas de l'heure. **Honnêtement** : un PC sans réseau ne peut pas prouver l'heure ; ce contrôle arrête le retour en arrière ordinaire de l'horloge, pas quelqu'un qui efface l'état **et** remet une horloge postérieure aux dates des documents. Le vrai garde-temps viendra avec le service (une heure signée).
 
@@ -183,6 +184,29 @@ Tant que la vraie clé de l'éditeur n'est pas compilée (`PublisherKey.hpp` vid
 | Demande d'activation | **marche** (elle ne dépend pas de la clé de l'éditeur) : le PC peut déjà envoyer sa demande |
 | Fichiers | l'évaluation n'écrit rien (pas même le dossier) ; seule une demande ou un import tenté écrit (la clé du PC, l'historique) |
 | `lockedMessage(id)` | « Cette fonctionnalité (id) est ouverte : les licences ne sont pas encore actives dans ce programme. » |
+
+### 8 ter. Évaluation (1.34.0)
+
+Un Studio installé, licences actives (une clé de l'éditeur), **sans fichier de licence** : la période d'évaluation de ce PC commence au premier lancement qui le constate, si le registre accepté a une **édition d'évaluation** (type `evaluation`, pas retirée ; `EVALUATION` d'abord, sinon la première). Elle dure son `duration_days` (0 : 30 jours). Une notification la rappelle à chaque ouverture, avec les jours qui restent.
+
+| | |
+|---|---|
+| État | `LicenseStatus::Evaluation` — clé `evaluation`, étiquette « Évaluation » ; les fonctionnalités, les limites et `maxDevices` de l'édition d'évaluation ; `getExpirationDate()` rend sa fin |
+| `LicenseState` | `evaluationStartedAt`, `evaluationEndsAt`, `evaluationDaysLeft` (arrondi au jour supérieur), `evaluationOver`, `evaluationEdition` |
+| La phrase | « Évaluation : il te reste 18 jours (jusqu'au 07/12/2026). Pour continuer ensuite, demande une licence (menu Licence…). » |
+| Après | **Absente** (FREE) et `evaluationOver` : « Ton évaluation de 30 jours est finie depuis le 07/12/2026 : demande une licence (menu Licence…). En attendant, l'édition FREE s'applique. » ; une ligne `etat` « Évaluation → Absente » dans l'historique |
+| Horloge | reculée de plus de 24 h pendant l'évaluation : **Horloge reculée** (FREE), comme une licence datée ; avant son début, elle ne commence pas tant que l'horloge est en arrière |
+| Licence | une licence installée passe avant (les champs `evaluation*` restent vides) ; retirée, l'évaluation d'avant reprend avec ses dates — **jamais une nouvelle** ; expirée ou révoquée : l'état d'avant (Expirée, Révoquée) ; un PC qui a déjà eu une licence (notée dans `etat.bin`) n'en reçoit pas |
+| `lockedMessage(id)` | « Cette fonctionnalité (multi_user) n'est pas incluse dans l'évaluation (EVALUATION) : demande une licence qui la contient (menu Licence…). Ton projet reste ouvert ; … » |
+
+**Son début est gardé en plusieurs copies** : `etat.bin` (deux champs de plus, `evaluation_started` et `evaluation_days`, que la 1.33 ignore ; un `etat.bin` d'avant se lit), `evaluation.bin` (protégé comme lui, DPAPI machine ; il garde aussi l'heure la plus tardive vue), une ligne `evaluation` de l'historique (« Évaluation commencée : 30 jours, jusqu'au 07/12/2026. », avec les champs `started` et `days`) et, sous Windows et pour le dossier par défaut seulement, la valeur `evaluation` de `HKCU\Software\XPG\Licences` (elle survit à une désinstallation). Le début **le plus ancien** de toutes les copies compte, et une copie qui manque est remise : effacer `etat.bin`, `evaluation.bin` ou l'historique (un, ou deux à la fois) ne la fait pas recommencer ; `etat.bin` effacé pendant l'évaluation est recréé comme avec une licence (§ 7 bis), une ligne `controle` le dit. **Jamais prolongée** : les jours notés à son début comptent ; un registre qui en donne moins la raccourcit, un registre qui en donne plus ne change rien.
+
+**L'option** `StoreOptions::evaluationPeriod` : vide, l'évaluation est donnée au programme qui croit ses clés **compilées** (le Studio livré), pas quand l'appelant donne ses propres clés (les essais d'avant la 1.34.0, les outils) ; un essai la met à vrai. Non activées (aucune clé) : rien ne commence, rien n'est écrit. Sans registre, ou sans édition d'évaluation : Absente, comme avant.
+
+**Un dossier où ce compte n'écrit pas** : un début déjà noté (dans n'importe quelle copie) compte ; si aucune copie ne peut le noter, l'évaluation est donnée depuis ce lancement, et `detail` dit qu'elle n'est pas gardée d'un lancement à l'autre (sous Windows, la copie de HKCU s'écrit presque toujours).
+
+**Honnêtement** : quelqu'un qui efface **toutes** les copies (et l'historique) recommence ; ceci arrête la réinstallation et l'effacement d'un fichier, pas davantage — comme pour l'horloge (§ 8).
+
 ## 9. L'API (`src/licensing/Licensing.hpp`)
 
 ```cpp
@@ -190,12 +214,12 @@ licensing::LicenseState licensing::initialize(licensing::StoreOptions options); 
 licensing::LicenseState licensing::refresh();                                     // après un import, et une fois par heure
 bool                    licensing::isFeatureEnabled(std::string_view featureId);
 std::string             licensing::getEdition();          // "PROFESSIONAL" ; sans licence : "FREE" (le registre)
-licensing::LicenseStatus licensing::getLicenseStatus();   // Valid, Grace, Expired, Revoked, Invalid, OtherDevice, Absent, ClockRolledBack, NotConfigured
+licensing::LicenseStatus licensing::getLicenseStatus();   // Valid, Grace, Expired, Revoked, Invalid, OtherDevice, Absent, ClockRolledBack, NotConfigured, Evaluation (1.34.0)
 int                     licensing::getMaxDevices();       // 5
 std::string             licensing::getExpirationDate();   // "2027-03-31" ; "" : pas de fin
 std::string             licensing::getLicenseId();        // "XPG-2026-00042" ; "" sans licence
 std::string             licensing::getStatusMessage();    // la phrase claire de l'état
-std::string             licensing::getStatusLabel();      // "Valide", "Grâce", "Expirée", "Révoquée", "Invalide", "Autre PC", "Absente", "Horloge reculée", "Non activées"
+std::string             licensing::getStatusLabel();      // "Valide", "Grâce", "Expirée", "Révoquée", "Invalide", "Autre PC", "Absente", "Horloge reculée", "Non activées", "Évaluation"
 std::optional<std::int64_t> licensing::getFeatureLimit(std::string_view featureId, std::string_view limit);
 licensing::LicenseState licensing::getLicenseState();     // tout, pour l'écran Licence
 std::string             licensing::lockedMessage(std::string_view featureId);   // la phrase d'une entrée verrouillée
@@ -466,6 +490,8 @@ Vérifié : ISCC 6.4.1 (sous Wine, `/O-` : le script compile, sans rien produire
 - **1.30.0** : l'écran Licence (le registre de la maquette par `getRegistry`, une fonctionnalité et sa limite, deux éditions ; les PC liés, un seul `thisPc`, son empreinte = `thisDeviceFingerprint` ; la licence d'autres PC : Autre PC, ses PC listés, aucun n'est ce PC ; sans licence : aucun) ; l'historique (les 6 premiers événements d'un PC, Valide → Grâce et Grâce → Expirée constatés par `refresh`, un refresh sans changement n'ajoute rien ; 600 ajouts → 500 lignes, les plus anciennes parties ; des lignes illisibles ignorées puis non recopiées ; une ligne d'une version plus récente lue) ; un dossier non inscriptible (l'évaluation marche, `detail` le dit une fois) ;
 - **1.30.0** : le registre des activations en sous-processus (deux licences pour deux PC, une extension, une révocation d'un PC, une demande enregistrée seule, une demande modifiée refusée ; 6 lignes, les premières jamais réécrites, pas le nom réseau ; l'état de chaque PC — activé, expiré, révoqué, demande — ; le tableau et ses totaux ; `--client`, `--licence` ; le CSV : BOM, `;`, CRLF, un champ entre guillemets ; une ligne abîmée ignorée et dite) ;
 - **1.30.0** : la bibliothèque `xpg_licensing` construite sans l'option : ni la marque ni l'identifiant de la clé d'essai, rien de l'outil Admin.
+
+`licensing_evaluation_test <racine du dépôt>` (**1.34.0**) : la période d'évaluation (§ 8 ter), avec une clé d'éditeur d'essai, le registre d'exemple et l'heure donnée par l'essai — le premier lancement (Évaluation, 30 jours, les fonctionnalités d'EVALUATION, les fichiers, l'historique), jour 12 (18 jours), le dernier jour (« 1 jour »), la fin (Absente, FREE, la phrase, « Évaluation → Absente ») ; chaque copie effacée, deux à la fois, abîmée, une copie plus tardive ; l'horloge reculée (et tolérée) ; jamais prolongée (60 jours), raccourcie (14) ; une autre édition d'évaluation, une retirée, aucune ; une licence importée puis effacée (l'évaluation d'avant reprend), révoquée, expirée, un PC qui a eu une licence d'abord ; Non activées (rien d'écrit), sans registre puis le registre importé, l'option vide ; un `etat.bin` d'avant ; un dossier non inscriptible ; l'API.
 
 `github_sync_test <racine du dépôt>` (ctest `githubsync`, **1.31.0**) : un faux GitHub dans le processus (le transport injecté : aucun réseau), deux postes Admin (deux dossiers).
 - les briques : le code de secours (aller-retour, minuscules et O pour 0 tolérés, une faute de frappe refusée), l'identifiant de la clé, chiffrer et déchiffrer (rien en clair ; déplacé, autre clé, abîmé : refusé), les lignes manquantes, les noms (dépôt, branche, dossier) ;

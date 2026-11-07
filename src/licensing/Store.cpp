@@ -16,6 +16,16 @@
 #include <filesystem>
 #include <map>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace licensing {
 
 namespace {
@@ -89,6 +99,8 @@ struct State {
     std::uint64_t registryMax{0};
     std::uint64_t revocationsMax{0};
     std::map<std::string, Seconds> issued;   // 1.32.0 : par licence, l'emission la plus recente installee (M2)
+    Seconds       evaluationStarted{0};      // 1.34.0 : le debut de l'evaluation de ce PC (0 : pas commencee)
+    int           evaluationDays{0};         // 1.34.0 : ses jours, notes a son debut (0 : pas dits)
     bool          found{false};
 };
 
@@ -120,6 +132,11 @@ State readState(const std::string& path, std::string* note) {
             Seconds at = 0;
             if (isLicenseId(id) && x.isString() && parseIsoTime(x.asString(), at)) s.issued[id] = std::max(s.issued[id], at);
         }
+    // 1.34.0 : l'evaluation (un etat d'avant n'en a pas : 0)
+    if (parseIsoTime(v.str("evaluation_started"), t) && t > 0) {
+        s.evaluationStarted = t;
+        s.evaluationDays = static_cast<int>(std::clamp<std::int64_t>(v.integer("evaluation_days", 0), 0, 3650));
+    }
     s.found = true;
     return s;
 }
@@ -141,6 +158,11 @@ bool writeState(const std::string& path, const State& s, std::string* why) {
         for (const auto& [at, id] : keep) m.set(id, isoTime(at));
         v.set("issued", std::move(m));
     }
+    if (s.evaluationStarted > 0) {
+        // 1.34.0 : deux champs de plus, ignores par la 1.33 (l'etat reste lisible dans les deux sens)
+        v.set("evaluation_started", isoTime(s.evaluationStarted));
+        v.set("evaluation_days", s.evaluationDays);
+    }
     const std::string text = core::json::write(v, true);
     crypto::Bytes plain(text.begin(), text.end()), sealed;
     if (!crypto::protect(plain, sealed, /*machine=*/true, why)) return false;
@@ -156,6 +178,141 @@ Seconds fileModified(const std::string& path) {
     const auto sys = std::chrono::system_clock::now()
                      + std::chrono::duration_cast<std::chrono::system_clock::duration>(ft - std::filesystem::file_time_type::clock::now());
     return static_cast<Seconds>(std::chrono::duration_cast<std::chrono::seconds>(sys.time_since_epoch()).count());
+}
+
+// Ajouter une ligne a l'historique (les lignes illisibles ne sont pas recopiees ; 500 au plus).
+bool appendHistoryLine(const std::string& path, const core::json::Value& v, std::string* why) {
+    std::vector<std::string> raw;
+    (void)readHistoryLines(path, &raw);
+    raw.push_back(core::json::write(v, false));
+    if (raw.size() > LicenseStore::kHistoryMaxLines)
+        raw.erase(raw.begin(), raw.begin() + static_cast<std::ptrdiff_t>(raw.size() - LicenseStore::kHistoryMaxLines));
+    std::string text;
+    for (const auto& l : raw) text += l + "\n";
+    return writeAll(path, text, why);
+}
+
+// ---- 1.34.0 : l'evaluation de ce PC ----
+constexpr int kEvaluationDefaultDays = 30;
+constexpr std::string_view kEvaluationFormat = "xpg-evaluation";
+
+// L'edition d'evaluation du registre : de type evaluation, pas retiree ; "EVALUATION" d'abord, sinon la premiere.
+const EditionDef* evaluationEditionOf(const Registry& r) {
+    const EditionDef* first = nullptr;
+    for (const auto& e : r.editions) {
+        if (e.type != LicenseType::Evaluation || e.retired) continue;
+        if (e.id == "EVALUATION") return &e;
+        if (!first) first = &e;
+    }
+    return first;
+}
+
+int evaluationDaysOf(const EditionDef& e) { return e.durationDays > 0 ? e.durationDays : kEvaluationDefaultDays; }
+
+// "07/12/2026" : les phrases de l'evaluation (JJ/MM/AAAA, UTC).
+std::string frenchDate(Seconds t) {
+    const std::string d = isoDate(t);
+    return d.size() == 10 ? d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) : d;
+}
+
+// Une copie du debut de l'evaluation (evaluation.bin ; sous Windows, aussi la valeur du registre de ce compte),
+// protegee comme etat.bin (DPAPI machine) ; elle garde aussi l'heure la plus tardive vue.
+struct EvaluationCopy {
+    Seconds started{0};
+    int     days{0};
+    Seconds latestSeen{0};
+    bool    found{false};
+};
+
+bool sealEvaluation(const EvaluationCopy& c, crypto::Bytes& out, std::string* why) {
+    core::json::Value v = core::json::Value::object();
+    v.set("format", std::string(kEvaluationFormat));
+    v.set("version", 1);
+    v.set("started", isoTime(c.started));
+    v.set("days", c.days);
+    if (c.latestSeen > 0) v.set("latest_seen", isoTime(c.latestSeen));
+    const std::string text = core::json::write(v, true);
+    const crypto::Bytes plain(text.begin(), text.end());
+    return crypto::protect(plain, out, /*machine=*/true, why);
+}
+
+EvaluationCopy openEvaluation(const crypto::Bytes& sealed) {
+    EvaluationCopy c;
+    crypto::Bytes plain;
+    std::string why;
+    if (sealed.empty() || !crypto::unprotect(sealed, plain, &why)) return c;
+    core::json::Value v;
+    if (!core::json::parse(std::string(plain.begin(), plain.end()), v) || !v.isObject() || v.str("format") != kEvaluationFormat) return c;
+    Seconds t = 0;
+    if (!parseIsoTime(v.str("started"), t) || t <= 0) return c;
+    c.started = t;
+    c.days = static_cast<int>(std::clamp<std::int64_t>(v.integer("days", 0), 0, 3650));
+    if (parseIsoTime(v.str("latest_seen"), t)) c.latestSeen = t;
+    c.found = true;
+    return c;
+}
+
+EvaluationCopy readEvaluationFile(const std::string& path) {
+    if (!fileExists(path)) return {};
+    crypto::Bytes sealed;
+    std::string why;
+    if (!crypto::readFile(path, sealed, &why, 64u * 1024u)) return {};
+    return openEvaluation(sealed);
+}
+
+bool writeEvaluationFile(const std::string& path, const EvaluationCopy& c, std::string* why) {
+    crypto::Bytes sealed;
+    return sealEvaluation(c, sealed, why) && crypto::writePrivateFile(path, sealed, why);
+}
+
+#ifdef _WIN32
+// La troisieme copie : HKCU\Software\XPG\Licences, valeur "evaluation" (REG_BINARY, le meme contenu protege).
+// Elle survit a une desinstallation et au dossier efface ; ce compte peut toujours l'ecrire.
+constexpr const wchar_t* kEvaluationRegKey = L"Software\\XPG\\Licences";
+constexpr const wchar_t* kEvaluationRegValue = L"evaluation";
+
+EvaluationCopy readEvaluationSystem() {
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, kEvaluationRegKey, 0, KEY_QUERY_VALUE, &key) != ERROR_SUCCESS) return {};
+    DWORD type = 0, size = 0;
+    crypto::Bytes data;
+    if (RegQueryValueExW(key, kEvaluationRegValue, nullptr, &type, nullptr, &size) == ERROR_SUCCESS && type == REG_BINARY && size > 0
+        && size <= 64u * 1024u) {
+        data.resize(size);
+        if (RegQueryValueExW(key, kEvaluationRegValue, nullptr, &type, data.data(), &size) != ERROR_SUCCESS || type != REG_BINARY) data.clear();
+        else data.resize(size);
+    }
+    RegCloseKey(key);
+    return openEvaluation(data);
+}
+
+bool writeEvaluationSystem(const EvaluationCopy& c, std::string* why) {
+    crypto::Bytes sealed;
+    if (!sealEvaluation(c, sealed, why)) return false;
+    HKEY key = nullptr;
+    LONG rc = RegCreateKeyExW(HKEY_CURRENT_USER, kEvaluationRegKey, 0, nullptr, 0, KEY_SET_VALUE, nullptr, &key, nullptr);
+    if (rc == ERROR_SUCCESS) {
+        rc = RegSetValueExW(key, kEvaluationRegValue, 0, REG_BINARY, sealed.data(), static_cast<DWORD>(sealed.size()));
+        RegCloseKey(key);
+    }
+    if (rc != ERROR_SUCCESS) {
+        if (why) *why = "le registre de Windows refuse la valeur (erreur " + std::to_string(rc) + ")";
+        return false;
+    }
+    return true;
+}
+#endif
+
+// Les lignes "evaluation" de l'historique : le debut le plus ancien (0 : aucun) et le moins de jours notes (0 : pas dits).
+void evaluationFromHistory(const std::vector<core::json::Value>& lines, Seconds& started, int& days) {
+    for (const auto& h : lines) {
+        if (h.str("kind") != "evaluation") continue;
+        Seconds t = 0;
+        if (!parseIsoTime(h.str("started"), t) || t <= 0) continue;
+        if (started == 0 || t < started) started = t;
+        const auto d = std::clamp<std::int64_t>(h.integer("days", 0), 0, 3650);
+        if (d > 0 && (days == 0 || d < days)) days = static_cast<int>(d);
+    }
 }
 
 } // namespace
@@ -260,12 +417,31 @@ struct LicenseStore::Loaded {
     std::string    deviceProblem;
     std::string    station;                 // 1.32.0 : l'empreinte de ce poste (vide : pas d'identifiant d'installation)
     Seconds        bundledIssuedAt{0};      // 1.32.0 : les documents livres avec le programme (leur heure d'emission)
+    Seconds        anchor{0};               // l'heure la plus tardive vue, et les emissions des documents (l'horloge)
+    // 1.34.0 : l'evaluation (sans licence, une edition d'evaluation au registre ; vide : elle ne s'applique pas)
+    std::string    evaluationEdition;
+    Seconds        evaluationStarted{0};    // le debut le plus ancien de toutes les copies (ou maintenant : elle commence)
+    int            evaluationDays{0};
+    bool           evaluationRefused{false};   // pas de nouvelle evaluation : une licence a deja ete installee sur ce PC
 };
 
 LicenseStore::LicenseStore(StoreOptions options) : opt_(std::move(options)) {
-    if (opt_.trustedKeys.empty() && opt_.compiledKeys) opt_.trustedKeys = compiledPublisherKeys();
+    const bool compiledTrust = opt_.trustedKeys.empty() && opt_.compiledKeys;   // le programme livre : ses cles compilees
+    if (compiledTrust) opt_.trustedKeys = compiledPublisherKeys();
     if (opt_.clockTolerance < 0) opt_.clockTolerance = 0;
     if (opt_.machineId.empty()) opt_.machineId = systemMachineId();
+    // 1.34.0 : la periode d'evaluation - par defaut celle du programme livre (ses cles compilees), pas d'un essai
+    evaluation_ = opt_.evaluationPeriod.value_or(compiledTrust);
+}
+
+// 1.34.0 : la copie de l'evaluation dans le registre de Windows (HKCU) - seulement pour le dossier par defaut (le
+// programme livre) : un essai, un dossier remplace, ne touche jamais celle de l'installation de ce PC.
+bool LicenseStore::systemEvaluationCopy() const {
+#ifdef _WIN32
+    return !opt_.folder.empty() && opt_.folder == defaultFolder();
+#else
+    return false;
+#endif
 }
 
 Seconds LicenseStore::fileTime(const std::string& path) const {
@@ -477,22 +653,85 @@ LicenseState LicenseStore::evaluate() {
         }
     }
 
-    // ---- 1.32.0 (M1) : une licence est la, l'etat protege non (efface, illisible) : il n'est pas remis a zero en
-    // silence. L'heure la plus tardive repart de la plus recente des traces du dossier.
+    // ---- 1.34.0 : l'evaluation de ce PC - son debut LE PLUS ANCIEN parmi toutes ses copies (etat.bin,
+    // evaluation.bin, la ligne de l'historique, et sous Windows la valeur de HKCU), jamais avance.
+    const std::string historyPath = deploy::joinPath(dir, kHistoryFile);
+    std::vector<core::json::Value> historyLines;
+    bool historyRead = false;
+    const auto historyOnce = [&]() -> const std::vector<core::json::Value>& {
+        if (!historyRead) {
+            historyLines = readHistoryLines(historyPath, nullptr);
+            historyRead = true;
+        }
+        return historyLines;
+    };
+    const std::string evaluationPath = deploy::joinPath(dir, kEvaluationFile);
+    EvaluationCopy evalFile, evalSystem;
+    Seconds evalHistory = 0;
+    if (evaluation_) {
+        evalFile = readEvaluationFile(evaluationPath);
+#ifdef _WIN32
+        if (systemEvaluationCopy()) evalSystem = readEvaluationSystem();
+#endif
+        int historyDays = 0;
+        evaluationFromHistory(historyOnce(), evalHistory, historyDays);
+        const auto take = [&](Seconds started, int days) {
+            if (started > 0 && (in.evaluationStarted == 0 || started < in.evaluationStarted)) in.evaluationStarted = started;
+            if (days > 0 && (in.evaluationDays == 0 || days < in.evaluationDays)) in.evaluationDays = days;
+        };
+        take(in.state.evaluationStarted, in.state.evaluationDays);
+        if (evalFile.found) take(evalFile.started, evalFile.days);
+        if (evalSystem.found) take(evalSystem.started, evalSystem.days);
+        take(evalHistory, historyDays);
+        take(evaluationMemo_, 0);
+        // l'heure la plus tardive gardee aussi par les copies (etat.bin efface pendant l'evaluation)
+        in.state.latestSeen = std::max({in.state.latestSeen, evalFile.latestSeen, evalSystem.latestSeen});
+    }
+
+    // ---- 1.32.0 (M1) : une licence est la (1.34.0 : ou une evaluation a commence), l'etat protege non (efface,
+    // illisible) : il n'est pas remis a zero en silence. L'heure la plus tardive repart de la plus recente des traces.
     Seconds rebuiltFloor = -1;
-    if (!in.state.found && in.hasLicenseFile) {
+    if (!in.state.found && (in.hasLicenseFile || in.evaluationStarted > 0)) {
         Seconds floor = in.bundledIssuedAt;
         if (in.licenseRead) floor = std::max(floor, in.license.issuedAt);
         if (in.hasRegistry) floor = std::max(floor, in.registry.issuedAt);
         if (in.hasRevocations) floor = std::max(floor, in.revocations.issuedAt);
-        for (const auto& h : readHistoryLines(deploy::joinPath(dir, kHistoryFile), nullptr)) {
+        for (const auto& h : historyOnce()) {
             Seconds at = 0;
             if (parseIsoTime(h.str("at"), at)) floor = std::max(floor, at);
         }
-        for (const char* f : {kLicenseFile, kRegistryFile, kRevocationsFile, kHistoryFile, kDeviceKeyFile})
+        for (const char* f : {kLicenseFile, kRegistryFile, kRevocationsFile, kHistoryFile, kDeviceKeyFile, kEvaluationFile})
             floor = std::max(floor, fileTime(deploy::joinPath(dir, f)));
+        floor = std::max({floor, evalFile.latestSeen, evalSystem.latestSeen});   // 1.34.0 : les copies de l'evaluation
         in.state.latestSeen = std::max(in.state.latestSeen, floor);
         rebuiltFloor = floor;
+    }
+
+    // ---- l'horloge : l'heure la plus tardive vue, les emissions des documents signes (1.34.0 : et le debut de
+    // l'evaluation).
+    in.anchor = std::max(in.state.latestSeen, in.bundledIssuedAt);   // 1.32.0 : et les documents livres avec le programme
+    if (in.hasRegistry) in.anchor = std::max(in.anchor, in.registry.issuedAt);
+    if (in.hasRevocations) in.anchor = std::max(in.anchor, in.revocations.issuedAt);
+    if (in.licenseRead) in.anchor = std::max(in.anchor, in.license.issuedAt);
+    if (in.evaluationStarted > 0) in.anchor = std::max(in.anchor, in.evaluationStarted);
+    const bool clockBack = in.anchor > 0 && t + opt_.clockTolerance < in.anchor;
+
+    // ---- 1.34.0 : sans licence, l'edition d'evaluation du registre ; la premiere fois, l'evaluation commence.
+    bool evalFresh = false;
+    if (evaluation_ && !in.hasLicenseFile && in.hasRegistry) {
+        if (const EditionDef* ed = evaluationEditionOf(in.registry)) {
+            in.evaluationEdition = ed->id;
+            const int edDays = evaluationDaysOf(*ed);
+            // jamais prolongee : les jours notes a son debut ; un registre qui en donne moins les reduit
+            in.evaluationDays = in.evaluationDays > 0 ? std::min(in.evaluationDays, edDays) : edDays;
+            if (in.evaluationStarted == 0) {
+                if (!in.state.issued.empty()) in.evaluationRefused = true;   // ce PC a deja eu une licence
+                else if (!clockBack) {
+                    in.evaluationStarted = t;   // pas tant que l'horloge est en arriere (judge : Horloge reculee)
+                    evalFresh = true;
+                }
+            }
+        }
     }
 
     LicenseState s = judge(in, t);
@@ -507,23 +746,89 @@ LicenseState LicenseStore::evaluate() {
     // 1.32.0 (M2) : l'emission de la licence de CE PC (signee, liee a lui) - une plus ancienne ne revient plus
     if (in.licenseRead && s.status != LicenseStatus::Invalid && s.status != LicenseStatus::OtherDevice)
         after.issued[in.license.licenseId] = std::max(after.issued[in.license.licenseId], in.license.issuedAt);
+    // 1.34.0 : le debut de l'evaluation (le plus ancien) suit dans l'etat protege, meme une fois la licence la
+    if (in.evaluationStarted > 0) {
+        after.evaluationStarted = in.evaluationStarted;
+        if (in.evaluationDays > 0) after.evaluationDays = in.evaluationDays;
+    }
     const bool changed = !before.found || after.registryMax != before.registryMax || after.revocationsMax != before.revocationsMax
-                         || after.latestSeen >= before.latestSeen + 60 || after.issued != before.issued;
+                         || after.latestSeen >= before.latestSeen + 60 || after.issued != before.issued
+                         || after.evaluationStarted != before.evaluationStarted || after.evaluationDays != before.evaluationDays;
     std::string unwritten;   // ce qui ne s'ecrit pas (un dossier ou ce compte n'ecrit pas) : dit une fois
+    const auto addUnwritten = [&](const std::string& what) {   // 1.34.0 : chaque fichier une seule fois
+        if (unwritten.find(what.substr(0, what.find(" ("))) == std::string::npos) unwritten += (unwritten.empty() ? "" : ", ") + what;
+    };
+    bool stateWritten = false;
     if (changed) {
         std::error_code ec;
         std::filesystem::create_directories(P(dir), ec);
         std::string w;
         if (!writeState(statePath, after, &w)) unwritten = "l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 ne s'\xC3\xA9" "crit pas (" + w + ")";
-        else if (rebuiltFloor >= 0) {
-            // une seule fois : l'etat est maintenant la
-            HistoryEvent e;
-            e.at = t;
-            e.kind = "controle";
-            e.ok = false;
-            e.text = "\xC3\x89tat recr\xC3\xA9\xC3\xA9 : l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 de ce PC manquait (ou ne se lisait plus) alors qu'une licence est install\xC3\xA9" "e ; "
-                     "l'heure la plus tardive est reprise des documents sign\xC3\xA9s, de l'historique et des fichiers du dossier (" + isoTime(rebuiltFloor) + ").";
-            if (!addHistory(e, "", &w)) unwritten = "l'historique ne s'\xC3\xA9" "crit pas (" + w + ")";
+        else {
+            stateWritten = true;
+            if (rebuiltFloor >= 0) {
+                // une seule fois : l'etat est maintenant la
+                HistoryEvent e;
+                e.at = t;
+                e.kind = "controle";
+                e.ok = false;
+                e.text = "\xC3\x89tat recr\xC3\xA9\xC3\xA9 : l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 de ce PC manquait (ou ne se lisait plus) "
+                         + std::string(in.hasLicenseFile ? "alors qu'une licence est install\xC3\xA9" "e" : "pendant l'\xC3\xA9valuation de ce PC") + " ; "
+                         "l'heure la plus tardive est reprise des documents sign\xC3\xA9s, de l'historique et des fichiers du dossier (" + isoTime(rebuiltFloor) + ").";
+                if (!addHistory(e, "", &w)) unwritten = "l'historique ne s'\xC3\xA9" "crit pas (" + w + ")";
+            }
+        }
+    }
+    // ---- 1.34.0 : les copies du debut de l'evaluation (sans licence) : une qui manque, ou en retard, est remise.
+    if (evaluation_ && in.evaluationStarted > 0 && !in.hasLicenseFile && (in.evaluationDays > 0 || after.evaluationDays > 0)) {
+        EvaluationCopy c;
+        c.started = in.evaluationStarted;
+        c.days = in.evaluationDays > 0 ? in.evaluationDays : after.evaluationDays;
+        c.latestSeen = after.latestSeen;
+        // qui garde ce debut, une fois les ecritures faites (un debut que rien ne garde repart au lancement suivant)
+        bool kept = before.evaluationStarted == c.started || stateWritten;
+        const bool fileStale = !evalFile.found || evalFile.started != c.started || evalFile.days != c.days;
+        if (!fileStale) kept = true;
+        if (fileStale || changed) {
+            std::error_code ec;
+            std::filesystem::create_directories(P(dir), ec);
+            std::string w;
+            if (writeEvaluationFile(evaluationPath, c, &w)) kept = true;
+            else addUnwritten(std::string(kEvaluationFile) + " ne s'\xC3\xA9" "crit pas (" + w + ")");
+        }
+#ifdef _WIN32
+        if (systemEvaluationCopy()) {
+            const bool systemStale = !evalSystem.found || evalSystem.started != c.started || evalSystem.days != c.days;
+            std::string w;
+            if (!systemStale) kept = true;
+            if ((systemStale || changed) && writeEvaluationSystem(c, &w)) kept = true;
+        }
+#endif
+        if (evalHistory == c.started) {
+            kept = true;
+        } else {
+            // la ligne de l'historique : au debut ; remise si elle manque (l'historique efface, ou parti au-dela de 500 lignes)
+            const Seconds endsAt = c.started + static_cast<Seconds>(c.days) * kDay;
+            core::json::Value v = core::json::Value::object();
+            v.set("at", isoTime(t));
+            v.set("kind", std::string("evaluation"));
+            v.set("ok", true);
+            v.set("text", evalFresh ? "\xC3\x89valuation commenc\xC3\xA9" "e : " + plural(c.days, "jour", "jours") + ", jusqu'au " + frenchDate(endsAt) + "."
+                                    : "\xC3\x89valuation en cours, commenc\xC3\xA9" "e le " + frenchDate(c.started) + " : " + plural(c.days, "jour", "jours")
+                                          + ", jusqu'au " + frenchDate(endsAt) + " (sa trace est remise dans l'historique).");
+            v.set("started", isoTime(c.started));
+            v.set("days", c.days);
+            std::string w;
+            if (appendHistoryLine(historyPath, v, &w)) kept = true;
+            else addUnwritten("l'historique ne s'\xC3\xA9" "crit pas (" + w + ")");
+        }
+        if (kept) {
+            evaluationMemo_ = 0;
+        } else {
+            // Rien ne garde ce debut : il vaut pour ce lancement (le programme ouvert) ; le suivant repartira.
+            evaluationMemo_ = c.started;
+            addDetail(s, "le d\xC3\xA9" "but de l'\xC3\xA9valuation n'a pas pu \xC3\xAAtre not\xC3\xA9 sur ce PC : elle n'est pas gard\xC3\xA9" "e d'un lancement \xC3\xA0 l'autre "
+                         "tant que ce compte ne peut pas \xC3\xA9" "crire dans le dossier des licences");
         }
     }
     if (rebuiltFloor >= 0)
@@ -531,7 +836,7 @@ LicenseState LicenseStore::evaluate() {
                        + " ; recr\xC3\xA9\xC3\xA9, l'heure la plus tardive reprise au " + isoTime(rebuiltFloor);
     if (!in.stateNote.empty() && s.detail.empty()) s.detail = in.stateNote;
     else if (rebuiltFloor >= 0) addDetail(s, in.stateNote);
-    if (const std::string w = noteState(s); !w.empty()) unwritten += (unwritten.empty() ? "" : ", ") + w;
+    if (const std::string w = noteState(s); !w.empty()) addUnwritten(w);
     if (!unwritten.empty()) addDetail(s, notWritable(unwritten));
     return s;
 }
@@ -553,20 +858,13 @@ std::vector<HistoryEvent> LicenseStore::history(int limit) const {
 }
 
 bool LicenseStore::addHistory(const HistoryEvent& e, std::string_view statusKey, std::string* why) {
-    const std::string path = deploy::joinPath(opt_.folder, kHistoryFile);
-    std::vector<std::string> raw;
-    (void)readHistoryLines(path, &raw);   // les lignes illisibles ne sont pas recopiees
     core::json::Value v = core::json::Value::object();
     v.set("at", isoTime(e.at));
     v.set("kind", e.kind);
     v.set("ok", e.ok);
     if (!statusKey.empty()) v.set("status", std::string(statusKey));
     v.set("text", e.text);
-    raw.push_back(core::json::write(v, false));
-    if (raw.size() > kHistoryMaxLines) raw.erase(raw.begin(), raw.begin() + static_cast<std::ptrdiff_t>(raw.size() - kHistoryMaxLines));
-    std::string text;
-    for (const auto& l : raw) text += l + "\n";
-    return writeAll(path, text, why);
+    return appendHistoryLine(deploy::joinPath(opt_.folder, kHistoryFile), v, why);   // les lignes illisibles ne sont pas recopiees
 }
 
 std::string LicenseStore::lastLoggedStatus() const {
@@ -592,7 +890,9 @@ std::string LicenseStore::noteState(const LicenseState& s) {
     e.at = s.evaluatedAt;
     e.kind = "etat";
     e.ok = statusIsNormal(s.status);
-    e.text = (prevLabel.empty() ? std::string() : prevLabel + " \xE2\x86\x92 ") + statusLabel(s.status) + " : " + s.message;
+    // 1.34.0 : une phrase qui commence deja par l'etiquette (<< Evaluation : il te reste... >>) ne la repete pas
+    const std::string label = statusLabel(s.status) + " : ";
+    e.text = (prevLabel.empty() ? std::string() : prevLabel + " \xE2\x86\x92 ") + (s.message.rfind(label, 0) == 0 ? s.message : label + s.message);
     if (deferState_) {
         pendingState_ = e;
         pendingStatus_ = key;
@@ -630,18 +930,60 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
                                       : "seules les fonctions qui ne demandent aucune licence restent ouvertes (le registre des \xC3\xA9" "ditions manque ou est refus\xC3\xA9)";
     static const std::string kNoLoss = " Ton projet reste ouvert ; Enregistrer et Exporter restent permis.";
 
-    // Une horloge en arriere : l'heure la plus tardive vue, et les dates d'emission des documents signes.
-    Seconds anchor = std::max(in.state.latestSeen, in.bundledIssuedAt);   // 1.32.0 : et les documents livres avec le programme
-    if (in.hasRegistry) anchor = std::max(anchor, in.registry.issuedAt);
-    if (in.hasRevocations) anchor = std::max(anchor, in.revocations.issuedAt);
-    if (in.licenseRead) anchor = std::max(anchor, in.license.issuedAt);
+    // Une horloge en arriere : l'heure la plus tardive vue, et les dates d'emission des documents signes (evaluate).
+    const Seconds anchor = in.anchor;
     const bool clockBack = anchor > 0 && t + opt_.clockTolerance < anchor;
+    const auto clockRolledBack = [&] {
+        s.status = LicenseStatus::ClockRolledBack;
+        s.detail = "heure du PC " + isoTime(t) + ", heure la plus tardive d\xC3\xA9j\xC3\xA0 vue " + isoTime(anchor);
+        applyFree();
+        s.message = "L'horloge de ce PC indique le " + isoDate(t) + ", alors que le " + isoDate(anchor)
+                    + " a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 vu : remets-la \xC3\xA0 l'heure. En attendant, " + fallback + "." + kNoLoss;
+        return s;
+    };
 
     if (!in.hasLicenseFile) {
+        // 1.34.0 : la periode d'evaluation de ce PC (evaluate : son edition, son debut le plus ancien, ses jours).
+        if (const EditionDef* ev = in.evaluationEdition.empty() ? nullptr : in.registry.edition(in.evaluationEdition)) {
+            const int days = in.evaluationDays > 0 ? in.evaluationDays : evaluationDaysOf(*ev);
+            if (in.evaluationStarted == 0 && clockBack) {   // elle ne commence pas tant que l'horloge est en arriere
+                clockRolledBack();
+                s.evaluationEdition = ev->id;
+                addDetail(s, "l'\xC3\xA9valuation commencera quand l'horloge sera remise \xC3\xA0 l'heure");
+                return s;
+            }
+            if (in.evaluationStarted > 0) {
+                s.evaluationEdition = ev->id;
+                s.evaluationStartedAt = in.evaluationStarted;
+                s.evaluationEndsAt = in.evaluationStarted + static_cast<Seconds>(days) * kDay;
+                if (clockBack) return clockRolledBack();
+                if (t < s.evaluationEndsAt) {
+                    s.status = LicenseStatus::Evaluation;
+                    s.evaluationDaysLeft = static_cast<int>(std::min<Seconds>(days, (s.evaluationEndsAt - t + kDay - 1) / kDay));
+                    s.edition = ev->id;
+                    s.editionLabel = ev->label;
+                    s.features = ev->features;
+                    s.maxDevices = ev->maxDevices;
+                    s.type = LicenseType::Evaluation;
+                    s.expiresAt = s.evaluationEndsAt;
+                    s.message = "\xC3\x89valuation : il te reste " + plural(s.evaluationDaysLeft, "jour", "jours") + " (jusqu'au " + frenchDate(s.evaluationEndsAt)
+                                + "). Pour continuer ensuite, demande une licence (menu Licence\xE2\x80\xA6).";
+                    return s;
+                }
+                s.status = LicenseStatus::Absent;
+                s.evaluationOver = true;
+                applyFree();
+                s.message = "Ton \xC3\xA9valuation de " + plural(days, "jour", "jours") + " est finie depuis le " + frenchDate(s.evaluationEndsAt)
+                            + " : demande une licence (menu Licence\xE2\x80\xA6). En attendant, " + fallback + ".";
+                return s;
+            }
+        }
         s.status = LicenseStatus::Absent;
         applyFree();
         s.message = free ? "Aucune licence sur ce PC : " + fallback + "." : "Aucune licence sur ce PC, et " + fallback + ".";
         if (!in.registryProblem.empty()) s.detail = in.registryProblem;
+        if (in.evaluationRefused)
+            addDetail(s, "pas de p\xC3\xA9riode d'\xC3\xA9valuation : une licence a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 install\xC3\xA9" "e sur ce PC");
         return s;
     }
     if (in.licenseRead) {
@@ -708,14 +1050,7 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
         }
     }
     const bool timed = l.expiresAt != 0;
-    if (timed && clockBack) {
-        s.status = LicenseStatus::ClockRolledBack;
-        s.detail = "heure du PC " + isoTime(t) + ", heure la plus tardive d\xC3\xA9j\xC3\xA0 vue " + isoTime(anchor);
-        applyFree();
-        s.message = "L'horloge de ce PC indique le " + isoDate(t) + ", alors que le " + isoDate(anchor)
-                    + " a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 vu : remets-la \xC3\xA0 l'heure. En attendant, " + fallback + "." + kNoLoss;
-        return s;
-    }
+    if (timed && clockBack) return clockRolledBack();
     const std::string edLabel = [&] {
         const EditionDef* e = in.registry.edition(l.edition);
         return e && !e->label.empty() ? e->label : l.edition;

@@ -164,7 +164,10 @@ std::string lockedMessage(std::string_view featureId) {
     const LicenseState s = getLicenseState();
     std::string text = "Cette fonctionnalit\xC3\xA9 (" + std::string(featureId) + ") ";
     if (allFeaturesOpen(s.status)) return text + "est ouverte : les licences ne sont pas encore actives dans ce programme.";
-    if (licenseFeaturesApply(s.status))
+    if (s.status == LicenseStatus::Evaluation)   // 1.34.0 : pas de licence, l'edition d'evaluation
+        text += "n'est pas incluse dans l'\xC3\xA9valuation (" + (s.editionLabel.empty() ? s.edition : s.editionLabel)
+                + ") : demande une licence qui la contient (menu Licence\xE2\x80\xA6).";
+    else if (licenseFeaturesApply(s.status))
         text += "n'est pas incluse dans ta licence " + (s.editionLabel.empty() ? s.edition : s.editionLabel) + ".";
     else if (s.edition.empty())
         text += "n'est pas ouverte sur ce PC.";

@@ -58,6 +58,30 @@
 //  l'horloge, et rend plus difficile celui de quelqu'un qui efface l'etat - pas
 //  de quelqu'un qui efface tout et remet les dates de ses fichiers. Le vrai
 //  garde-temps viendra avec le service en ligne (une heure signee).
+//
+//  1.34.0 - LA PERIODE D'EVALUATION DE CE PC (StoreOptions::evaluationPeriod) :
+//  licences actives (une cle de l'editeur), AUCUN fichier de licence, et un
+//  registre accepte qui a une edition d'evaluation (type evaluation, pas
+//  retiree ; "EVALUATION" d'abord, sinon la premiere) -> l'evaluation commence
+//  a la premiere evaluation qui le constate et dure duration_days de cette
+//  edition (0 : 30 jours). Pendant : l'etat Evaluation, les fonctionnalites et
+//  les limites de cette edition ; apres : Absente (FREE), evaluationOver.
+//  Son debut est garde en plusieurs copies : etat.bin, evaluation.bin (protege
+//  comme lui, DPAPI machine ; il garde aussi l'heure la plus tardive vue), une
+//  ligne "evaluation" de l'historique et, sous Windows et pour le dossier par
+//  defaut seulement, la valeur "evaluation" de HKCU\Software\XPG\Licences.
+//  A la lecture, le debut LE PLUS ANCIEN de toutes les copies compte ; une
+//  copie qui manque est remise. Elle ne recommence jamais et n'est jamais
+//  prolongee (les jours notes au debut ; un registre qui en donne moins les
+//  reduit, un registre qui en donne plus ne change rien). Un PC qui a deja eu
+//  une licence (etat.bin) n'en recoit pas de nouvelle ; une licence installee
+//  passe avant (l'evaluation ne compte plus). L'horloge reculee pendant
+//  l'evaluation -> Horloge reculee (comme une licence datee) ; avant son debut,
+//  elle ne commence pas tant que l'horloge est en arriere. Rien ne peut noter
+//  le debut (aucune copie ne s'ecrit) : l'evaluation est donnee depuis ce
+//  lancement, et `detail` dit qu'elle n'est pas gardee d'un lancement a l'autre.
+//  Honnetement : quelqu'un qui efface TOUTES les copies (et l'historique)
+//  recommence ; ceci arrete la reinstallation et l'effacement d'un fichier.
 // =============================================================================
 #pragma once
 
@@ -125,7 +149,7 @@ struct TrustedKey {
 // 1.30.0 : un evenement de l'historique de ce PC (historique.jsonl).
 struct HistoryEvent {
     std::int64_t at{0};    // l'heure (secondes UTC)
-    std::string  kind;     // "import", "demande", "etat"
+    std::string  kind;     // "import", "demande", "etat" ; 1.34.0 : "evaluation" (son debut), "passerelle"
     bool         ok{false};   // import accepte, demande ecrite ; etat : sans anomalie (statusIsNormal)
     std::string  text;     // une phrase (en francais) : ce qui a ete importe, la raison du refus...
 };
@@ -142,7 +166,7 @@ struct LicenseState {
     int           maxDevices{0};      // de la licence ; sans licence : celui de l'edition sans licence
     int           boundDevices{0};    // les PC lies dans la licence
     Seconds       issuedAt{0};
-    Seconds       expiresAt{0};       // 0 : jamais
+    Seconds       expiresAt{0};       // 0 : jamais ; 1.34.0 : pendant l'evaluation, sa fin (type Evaluation)
     Seconds       graceEndsAt{0};     // 0 : pas de grace
     int           graceDaysLeft{0};   // Grace : les jours qui restent (arrondis au jour superieur)
     std::vector<FeatureGrant> features;   // les fonctionnalites OUVERTES (et leurs limites), triees
@@ -183,6 +207,10 @@ struct StoreOptions {
     // 1.32.0 : l'heure de modification d'un fichier (l'etat recree) ; vide : celle du systeme de fichiers,
     // seulement avec l'horloge du systeme (une horloge d'essai ne se compare pas aux dates des fichiers).
     std::function<Seconds(const std::string& path)> fileTime;
+    // 1.34.0 : la periode d'evaluation de ce PC (voir plus haut). Vide : OUI pour un programme qui croit ses
+    // cles COMPILEES (trustedKeys vide et compiledKeys : le Studio livre), NON quand l'appelant donne ses propres
+    // cles (les essais d'avant la 1.34.0, les outils) ; un essai de l'evaluation la met a vrai.
+    std::optional<bool>            evaluationPeriod;
 };
 
 // Ce qu'a donne l'import d'un fichier.
@@ -206,11 +234,14 @@ public:
     static constexpr const char* kRevocationsFile = "revocations.xpgrev";
     static constexpr const char* kStateFile = "etat.bin";
     static constexpr const char* kHistoryFile = "historique.jsonl";
+    static constexpr const char* kEvaluationFile = "evaluation.bin";   // 1.34.0 : une copie du debut de l'evaluation
     static constexpr std::size_t kHistoryMaxLines = 500;
 
     [[nodiscard]] const std::string& folder() const noexcept { return opt_.folder; }
     // 1.30.0 : une cle de l'editeur au moins ? Faux : NotConfigured (tout est ouvert).
     [[nodiscard]] bool configured() const noexcept { return !opt_.trustedKeys.empty(); }
+    // 1.34.0 : la periode d'evaluation est-elle donnee sur ce PC (StoreOptions::evaluationPeriod) ?
+    [[nodiscard]] bool evaluationPeriod() const noexcept { return evaluation_; }
 
     // 1.30.0 : ce que la derniere evaluation a lu (l'ecran Licence ; aucun fichier relu) :
     // le registre en vigueur, la licence installee lisible (signee, meme finie, revoquee
@@ -278,6 +309,7 @@ private:
     [[nodiscard]] std::string lastLoggedStatus() const;
     [[nodiscard]] std::string notWritable(const std::string& why) const;
     [[nodiscard]] Seconds fileTime(const std::string& path) const;
+    [[nodiscard]] bool systemEvaluationCopy() const;
 
     StoreOptions            opt_;
     std::optional<Registry> registry_;
@@ -287,6 +319,8 @@ private:
     bool                    deferState_{false}; // pendant un import : l'evenement d'etat vient apres celui de l'import
     std::optional<HistoryEvent> pendingState_;
     std::string             pendingStatus_;
+    bool                    evaluation_{false};   // 1.34.0 : la periode d'evaluation est donnee
+    Seconds                 evaluationMemo_{0};   // 1.34.0 : un debut qu'aucune copie n'a pu garder (ce lancement)
 };
 
 } // namespace licensing

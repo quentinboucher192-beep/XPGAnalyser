@@ -1037,6 +1037,10 @@ if(XPG_BUILD_TESTS)
         add_dependencies(licensing_test xpg_license_admin)
     endif()
     xpg_add_test(NAME licensing COMMAND licensing_test $<TARGET_FILE:xpg_license_admin> ${CMAKE_CURRENT_SOURCE_DIR} $<TARGET_FILE:xpg_licensing>)
+    # 1.34.0 : la periode d'evaluation de ce PC (licensing/Store), une cle d'editeur d'essai, le registre d'exemple
+    xpg_add_test_executable(licensing_evaluation_test tests/licensing_evaluation_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licensing_evaluation_test PRIVATE xpg_licensing)
+    xpg_add_test(NAME evaluation COMMAND licensing_evaluation_test ${CMAKE_CURRENT_SOURCE_DIR})
     # 1.30.0 : l'ecran Licence et les verrous des entrees (app/Licence*), sans ecran, avec une cle d'editeur
     # d'essai creee pour l'occasion (Admin.cpp) ; il lit tests/fixtures/licences/registre-exemple.json.
     xpg_add_test_executable(licence_ui_test tests/licence_ui_test.cpp src/license_admin/Admin.cpp)
