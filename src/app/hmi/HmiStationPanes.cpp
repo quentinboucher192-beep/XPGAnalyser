@@ -335,6 +335,35 @@ bool HmiStationPane::change(const std::string& label, const std::function<void(h
 }
 
 bool HmiStationPane::setSetting(const std::string& key, const std::string& raw, std::string* why) {
+    // 1.32.0 : les dossiers autorises aux scripts de l'IHM, sur CE PC (separes par ;) - pas une modification du projet.
+    if (key == "dossiers_autorises") {
+        std::vector<std::string> list;
+        std::string cur;
+        for (char ch : raw + ";") {
+            if (ch == ';') {
+                const std::string t = trimmed(cur);
+                if (!t.empty()) {
+                    const std::filesystem::path p(std::u8string(t.begin(), t.end()));
+                    if (!p.is_absolute()) {
+                        const std::string m = "dossier autoris\xC3\xA9 \xC2\xAB " + t + " \xC2\xBB : un chemin complet (C:\\Recettes, \\\\serveur\\partage)";
+                        say(m, true);
+                        if (why) *why = m;
+                        return false;
+                    }
+                    list.push_back(t);
+                }
+                cur.clear();
+            } else {
+                cur += ch;
+            }
+        }
+        if (!hosts_.setAllowedFolders) return false;
+        hosts_.setAllowedFolders(list);
+        say(list.empty() ? std::string("Les scripts de l'IHM n'\xC3\xA9" "crivent plus que dans donnees/ et exports/ du projet (ce PC).")
+                         : std::to_string(list.size()) + " dossier(s) autoris\xC3\xA9(s) aux scripts de l'IHM sur ce PC, en plus de donnees/ et exports/.");
+        refresh();
+        return true;
+    }
     // 1.12.24 : la mise a l'echelle de la vue sur l'ecran du poste.
     if (key == "echelle") {
         const std::string v = trimmed(raw);
@@ -609,6 +638,19 @@ void HmiStationPane::rebuildProperties() {
             sc.properties.push_back(prop("Vue", it->view, PG::ValueType::Enum, field("vue"), "La vue que cet \xC3\xA9" "cran montre en direct.", screenViews(p)));
             cats.push_back(std::move(sc));
         }
+    }
+    // 1.32.0 : ce PC (pas le projet) - les dossiers autorises aux scripts.
+    if (hosts_.allowedFolders) {
+        std::string joined;
+        for (const auto& f : hosts_.allowedFolders()) joined += (joined.empty() ? "" : "; ") + f;
+        PG::Category pc;
+        pc.name = "Ce PC (pas dans le projet)";
+        pc.properties.push_back(prop("Dossiers autoris\xC3\xA9s aux scripts", joined, PG::ValueType::Text, commit("dossiers_autorises"),
+                                     "Les fonctions de fichiers des scripts (FILE_*, DIR_*, RESOURCE_EXTRACT, les exports d'enregistrements) "
+                                     "ne lisent et n'\xC3\xA9" "crivent que dans donnees/ et exports/ du projet. Ajoute ici, s\xC3\xA9par\xC3\xA9s par \xC2\xAB ; \xC2\xBB, les "
+                                     "dossiers de CE PC qu'ils peuvent aussi utiliser (C:\\Recettes; \\\\serveur\\partage). Ce r\xC3\xA9glage n'est "
+                                     "jamais enregistr\xC3\xA9 dans le projet : un projet re\xC3\xA7u ne peut pas s'ouvrir le disque lui-m\xC3\xAAme."));
+        cats.push_back(std::move(pc));
     }
     grid_->setCategories(std::move(cats));
 }

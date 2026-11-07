@@ -46,6 +46,9 @@ public:
 
     struct Hosts {
         std::function<WebHost*()> web;
+        // 1.32.0 : l'acces web permis sur CE PC (un reglage du poste, jamais du projet).
+        std::function<bool()>     allowedHere;
+        std::function<void(bool)> setAllowedHere;
     };
     void setHosts(Hosts h);
 

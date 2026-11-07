@@ -115,6 +115,17 @@ bool HmiWebPane::setSetting(const std::string& key, const std::string& raw, std:
         return false;
     };
     const std::string v = trimmed(raw);
+    if (key == "permis") {   // 1.32.0 : un reglage de ce PC, pas une modification du projet
+        bool on = false;
+        if (v == "1" || v == "oui" || v == "true" || v == "vrai") on = true;
+        else if (!(v == "0" || v == "non" || v == "false" || v == "faux")) return fail("permis : oui ou non");
+        if (!hosts_.setAllowedHere) return false;
+        hosts_.setAllowedHere(on);
+        say(on ? std::string("Acc\xC3\xA8s web permis sur ce poste : le serveur d\xC3\xA9marre si le projet l'active.")
+               : std::string("Acc\xC3\xA8s web refus\xC3\xA9 sur ce poste : le serveur ne d\xC3\xA9marre pas, quel que soit le projet."));
+        refresh();
+        return true;
+    }
     const auto apply = [&](const std::string& label, const std::function<void(hmi::WebAccess&)>& fn) {
         auto cmd = hmi::changeProject(doc_, label, [&](hmi::Project& p) { fn(p.web); });
         if (!cmd) return false;
@@ -195,6 +206,15 @@ void HmiWebPane::rebuildProperties() {
         srv.properties.push_back(prop("\xC3\x89tat", state, PG::ValueType::ReadOnly));
     }
     cats.push_back(std::move(srv));
+    // 1.32.0 : ce poste (pas le projet) - un projet recu n'ouvre pas tout seul un serveur sur le reseau.
+    if (hosts_.allowedHere) {
+        PG::Category here;
+        here.name = "Ce poste (pas dans le projet)";
+        here.properties.push_back(prop(std::string(WebHost::kSettingLabel), tf(hosts_.allowedHere()), PG::ValueType::Boolean, commit("permis"),
+                                       "Faux par d\xC3\xA9" "faut : le serveur web d'un projet ne d\xC3\xA9marre sur ce poste que si tu le permets ici. "
+                                       "Ce r\xC3\xA9glage n'est jamais enregistr\xC3\xA9 dans le projet."));
+        cats.push_back(std::move(here));
+    }
     PG::Category acc;
     acc.name = "Acc\xC3\xA8s";
     acc.properties.push_back(prop("Se connecter", tf(w.login), PG::ValueType::Boolean, commit("connexion"),

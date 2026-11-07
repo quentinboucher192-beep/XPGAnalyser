@@ -1237,6 +1237,29 @@ void confinement132() {
               && !hmi::unsafePathSegment("C:/Donnees/../a.csv") && !hmi::unsafePathSegment("./donnees/COM10.txt"),
           "unsafePathSegment : CON, LPT1, un point final ; pas C:, .., ni COM10");
     hmi::setUserAllowedFolders({});
+    // Le bac a sable de l'IA (confineFiles) reste plus strict : son dossier de travail seul, meme avec un dossier autorise.
+    {
+        const fs::path box = fs::temp_directory_path() / "xpg_natives_bac132";
+        fs::remove_all(box, ec);
+        fs::create_directories(box, ec);
+        hmi::setUserAllowedFolders({outside.string()});
+        hmi::confineFiles(box.string());
+        const auto [g1, e1] = run("BOOL", "R := FILE_WRITE('essai.txt', 'ok');");
+        const auto [g2, e2] = run("BOOL", "R := FILE_WRITE('" + out + "/bac.txt', 'x');");
+        const auto [g3, e3] = run("BOOL", "R := FILE_WRITE('../bac_dehors.txt', 'x');");
+#ifndef _WIN32
+        fs::create_directory_symlink(outside, box / "lien", ec);
+        const auto [g4, e4] = run("BOOL", ec ? std::string("R := FALSE;") : std::string("R := FILE_WRITE('lien/bac_lien.txt', 'x');"));
+#else
+        const std::string g4 = "FALSE";
+#endif
+        hmi::confineFiles({});
+        hmi::setUserAllowedFolders({});
+        check(g1 == "TRUE" && fs::exists(box / "essai.txt"), "bac a sable : un chemin relatif s'ecrit dans le dossier de travail");
+        check(g2 == "FALSE" && g3 == "FALSE" && g4 == "FALSE" && !fs::exists(outside / "bac.txt") && !fs::exists(outside / "bac_lien.txt"),
+              "bac a sable : ni un chemin complet (meme autorise), ni .., ni un lien vers ailleurs");
+        fs::remove_all(box, ec);
+    }
     // Generer le dit d'avance : un chemin complet ecrit dans un appel de fichier, hors des dossiers autorises de ce poste.
     {
         Bench b("BOOL", "FILE_WRITE('C:/Export/releve.csv', 'x');\nR := FILE_EXISTS('releve.csv');");

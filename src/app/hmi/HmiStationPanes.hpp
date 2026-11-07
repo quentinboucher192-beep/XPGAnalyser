@@ -82,6 +82,10 @@ public:
         std::function<bool(std::string*)> finished;
         // 1.28.0 : IHM > Deploiement reseau (envoyer ce poste sur un PC de maintenance).
         std::function<void()> deploy;
+        // 1.32.0 : les dossiers que les scripts de l'IHM peuvent lire et ecrire en plus de donnees/ et exports/ -
+        // un reglage de CE PC (jamais dans le projet : un projet recu ne s'ouvre pas lui-meme le disque).
+        std::function<std::vector<std::string>()>             allowedFolders;
+        std::function<void(const std::vector<std::string>&)> setAllowedFolders;
     };
     void setHosts(Hosts h);
 

@@ -19360,8 +19360,16 @@ const std::vector<Topic>& topics() {
              {K::Heading, "Lire et \xC3\xA9" "crire des fichiers, les ressources du projet", {}, "1.12.26"},
              {K::Paragraph, "Les natives du dossier **Fichiers** lisent et \xC3\xA9" "crivent des fichiers "
                          "texte (UTF-8), parcourent un dossier et lisent les ressources du projet. Un chemin "
-                         "relatif part du dossier **donnees/** du projet (`DIR_DATA()` le dit) ; un chemin "
-                         "complet (`C:/Donnees/recette.csv`) va o\xC3\xB9 il dit.", {}, "1.12.26"},
+                         "relatif part du dossier **donnees/** du projet (`DIR_DATA()` le dit). **1.32.0** : "
+                         "un script ne lit et n'\xC3\xA9" "crit que dans **donnees/** et **exports/** du "
+                         "projet, et dans les **dossiers autoris\xC3\xA9s sur ce PC** (IHM \xE2\x80\xBA "
+                         "Configuration \xE2\x80\xBA Poste d'exploitation \xE2\x80\xBA *Dossiers "
+                         "autoris\xC3\xA9s aux scripts* : un r\xC3\xA9glage du PC, jamais du projet) ; "
+                         "ailleurs (`C:/Donnees/recette.csv` non autoris\xC3\xA9, un chemin r\xC3\xA9seau "
+                         "`\\\\serveur\\partage` non autoris\xC3\xA9, un nom r\xC3\xA9serv\xC3\xA9 de "
+                         "Windows comme `CON` ou `NUL`), la native rend FAUX et `FILE_ERROR()` dit quel "
+                         "dossier autoriser. Un projet re\xC3\xA7u ne peut donc pas \xC3\xA9" "crire ni "
+                         "effacer ailleurs sur le PC.", {}, "1.12.26"},
              {K::Table, "Native\tCe qu'elle fait\nFILE_READ(chemin), FILE_READ_LINES(chemin)\ttout le texte "
                          "; ses lignes (LIST OF STRING)\nFILE_WRITE(chemin, texte), FILE_WRITE_LINES(chemin, "
                          "lignes)\t\xC3\xA9" "crit le fichier d'un bloc (cr\xC3\xA9\xC3\xA9 ou "

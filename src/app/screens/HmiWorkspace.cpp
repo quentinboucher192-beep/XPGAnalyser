@@ -2161,6 +2161,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         auto pane = std::make_unique<HmiWebPane>("hmi.web", doc, apply);
         HmiWebPane::Hosts hosts;
         hosts.web = [this] { return &app_.web(); };
+        hosts.allowedHere = [this] { return app_.settings().getBool(poste::kHmiWebAllowed, false); };   // 1.32.0 : ce poste
+        hosts.setAllowedHere = [this](bool on) {
+            app_.settings().set(poste::kHmiWebAllowed, on);
+            (void)app_.settings().save();
+            app_.web().setAllowedOnThisPc(on);
+        };
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Acc\xC3\xA8s web";
@@ -2176,6 +2182,12 @@ void MainAnalysisScreen::openHmiPane(const std::string& key) {
         hosts.finished = [this](std::string* why) { return app_.projectFinished(why); };   // lot 15
         hosts.askPassword = [this] { askHmiStationPassword(); };
         hosts.deploy = [this] { openHmiPane("deploiement"); };   // 1.28.0
+        hosts.allowedFolders = [this] { return app_.settings().getList(poste::kHmiScriptFolders); };   // 1.32.0 : ce PC
+        hosts.setAllowedFolders = [this](const std::vector<std::string>& list) {
+            app_.settings().setList(poste::kHmiScriptFolders, list);
+            (void)app_.settings().save();
+            hmi::setUserAllowedFolders(list);
+        };
         pane->setHosts(std::move(hosts));
         page = std::move(pane);
         title = "IHM \xC2\xB7 Poste d'exploitation";
@@ -2665,7 +2677,7 @@ void MainAnalysisScreen::askHmiForce(std::string variable) {
     }
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Variable", variable, "Armoires[0].ana.PT1.mes", false, {}});
-    fields.push_back({"Valeur", current, "TRUE, 42, 7,5, 5 s, Azote Â· =expression", false, {}});
+    fields.push_back({"Valeur", current, "TRUE, 42, 7,5, 5 s, Azote \xC3\x82\xC2\xB7 =expression", false, {}});
     auto dialog = std::make_unique<FormDialog>("dialog.hmiForce", "Forcer une variable",
             core::hasApi() ? "Tant qu'elle est forc\xC3\xA9" "e, le programme n'\xC3\xA9" "crit plus dans la variable : elle relit "
                              "toujours cette valeur, comme dans la table de for\xC3\xA7" "age de l'automate. \"Tout rel\xC3\xA2" "cher\" "
@@ -3804,13 +3816,13 @@ void MainAnalysisScreen::askHmiNewScript(hmi::ScriptLang lang) {
             double ms = 0;
             if (!hmi::parseNumber(v[2], ms) || ms < 10) {
                 field = 2;
-                return "Â« " + v[2] + " Â» : une pÃ©riode en ms, 10 au moins.";
+                return "\xC3\x82\xC2\xAB " + v[2] + " \xC3\x82\xC2\xBB : une p\xC3\x83\xC2\xA9riode en ms, 10 au moins.";
             }
         }
         if (v[1] == "Sur changement") {
             const std::string watch = ui::exprfield::withoutEquals(v[3]);
             field = 3;
-            if (watch.empty()) return "Sur changement : l'expression Ã  surveiller manque.";
+            if (watch.empty()) return "Sur changement : l'expression \xC3\x83\xC2\xA0 surveiller manque.";
             const auto e = hmi::Expression::compile(watch);
             if (!e.valid()) {
                 std::string rest;

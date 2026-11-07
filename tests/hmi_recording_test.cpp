@@ -710,8 +710,10 @@ void testNatives() {
     script("ListePrefixe", "VAR L : LIST OF STRING; END_VAR\nL := IHM_ENREG_LISTE('Zz');\nR_Nombre := LIST_COUNT(L);");
     // 1.14.0 (relecture M4b) : pendant la relecture, rien ne s'ecrit (R_Bool := ... non plus) - le resultat se lit par IF.
     script("Rejouer", "IF IHM_REJOUER('Nat A', 2.0) THEN\n  IHM_RELECTURE_ALLER(T#1s);\nEND_IF;");
-    script("Exporter", "R_Bool := IHM_ENREG_EXPORTER('Nat A', '" + st.folder + "/dehors');");
-    script("Importer", "R_Texte := IHM_ENREG_IMPORTER('" + st.folder + "/dehors/Nat A.xrec');");
+    // 1.32.0 : la destination et la source restent dans les dossiers permis aux scripts (ici exports/ du projet).
+    script("Exporter", "R_Bool := IHM_ENREG_EXPORTER('Nat A', '" + st.folder + "/exports/dehors');");
+    script("ExporterDehors", "R_Bool := IHM_ENREG_EXPORTER('Nat A', '" + st.folder + "/dehors');");
+    script("Importer", "R_Texte := IHM_ENREG_IMPORTER('" + st.folder + "/exports/dehors/Nat A.xrec');");
     script("Supprimer", "R_Bool := IHM_ENREG_SUPPRIMER('Nat A (2)');");
     Runtime rt;
     st.hooks(rt);
@@ -743,7 +745,10 @@ void testNatives() {
     run("ListePrefixe");
     check(var("R_Nombre") == "0", "IHM_ENREG_LISTE('Zz') : le prefixe filtre");
     run("Exporter");
-    check(var("R_Bool") == "TRUE" && fs::exists(fs::path(st.folder) / "dehors" / "Nat A.xrec"), "IHM_ENREG_EXPORTER");
+    check(var("R_Bool") == "TRUE" && fs::exists(fs::path(st.folder) / "exports" / "dehors" / "Nat A.xrec"), "IHM_ENREG_EXPORTER");
+    run("ExporterDehors");
+    check(var("R_Bool") == "FALSE" && !fs::exists(fs::path(st.folder) / "dehors" / "Nat A.xrec"),
+          "IHM_ENREG_EXPORTER hors des dossiers permis (le dossier du projet lui-meme) : refuse");
     run("Importer");
     check(var("R_Texte") == "Nat A (2)", "IHM_ENREG_IMPORTER : le nom pris (" + var("R_Texte") + ")");
     run("Supprimer");
