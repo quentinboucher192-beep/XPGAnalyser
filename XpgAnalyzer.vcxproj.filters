@@ -1324,6 +1324,9 @@
     <ClCompile Include="src\app\Licence.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\LicenceGateway.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\LicenceWindow.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -3094,6 +3097,9 @@
     <ClInclude Include="src\app\Licence.hpp">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\LicenceGateway.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\LicenceWindow.hpp">
       <Filter>app</Filter>
     </ClInclude>
@@ -3737,6 +3743,9 @@
       <Filter>license_admin</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\KeyBackup.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\Passerelle.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
   </ItemGroup>

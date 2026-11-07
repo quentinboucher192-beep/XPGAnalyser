@@ -573,6 +573,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\Licence.cpp" />
+    <ClCompile Include="src\app\LicenceGateway.cpp" />
     <ClCompile Include="src\app\LicenceWindow.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\PerfPane.cpp" />
@@ -1178,6 +1179,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\Licence.hpp" />
+    <ClInclude Include="src\app\LicenceGateway.hpp" />
     <ClInclude Include="src\app\LicenceWindow.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\PerfPane.hpp" />
@@ -1400,6 +1402,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\license_admin\Admin.hpp" />
     <ClInclude Include="src\license_admin\GitHubSync.hpp" />
     <ClInclude Include="src\license_admin\KeyBackup.hpp" />
+    <ClInclude Include="src\license_admin\Passerelle.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\Gateway.hpp" />
     <ClInclude Include="src\licensing\GatewayAddress.hpp" />
