@@ -501,10 +501,11 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->recovery_.start((std::filesystem::path(Settings::defaultPath()).parent_path() / "reprise").string());
     // 1.30.0 : les licences de ce PC (src/licensing) - verifiees hors ligne ; sans cle d'editeur dans le
     // programme : << non activees >>, tout est ouvert.
-    licence::start();
-    // 1.34.0 : les avis de la licence (l'evaluation, a chaque lancement : la cloche, l'accueil) et la passerelle
-    // en ligne (une verification sur un fil de travail : une licence acceptee s'installe d'elle-meme). Pas sur le
-    // poste d'exploitation (--ihm) : personne devant l'ecran, rien a demander.
+    // 1.35.0 : hors du poste d'exploitation, une licence flottante prend son poste avant la premiere evaluation.
+    licence::start(/*takeFloatingSeat=*/a->options_.station.empty());
+    // 1.34.0 : les avis de la licence (la Decouverte, a chaque lancement : la cloche, l'accueil) et, 1.35.0, le
+    // service des licences (un fil de travail : l'heure, le bail, la Decouverte, le code de l'installateur, le jeton
+    // flottant, les reponses de l'editeur). Pas sur le poste d'exploitation (--ihm) : personne devant l'ecran.
     if (a->options_.station.empty()) licence::startNotices(true);
     // La periode de la sauvegarde de reprise (2 min ; un reglage pour les essais).
     if (const int period = a->settings_.getInt("recovery.autosaveSeconds", 120); period >= 5)
@@ -570,7 +571,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
 
 App::~App() {
     if (auto* instance = core::instance::current()) instance->setWake({});   // 1.11.2 (UNI) : avant SDL_Quit
-    licence::shutdown();   // 1.34.0 : la requete de la passerelle en cours est coupee, son fil attendu
+    licence::shutdown();   // 1.35.0 : la requete du service en cours est coupee, son fil attendu, le jeton flottant rendu
     exchange::shutdown();   // 1.12.30 : une archive en cours d'ecriture se termine
     fenetres::retirer(announcedFolder_);   // 1.12.27 : ce projet n'est plus ouvert ici
     tutorials::shutdown();   // 1.11 (T1) : la session de tutoriel tient l'appli (UiDriver)

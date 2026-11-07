@@ -18,12 +18,18 @@
 //    4. Fonctionnalites        celles de l'edition, cochees ; a la main sinon ;
 //    5. Recapitulatif          Workspace::preview : ce qui sera signe, ou le refus ;
 //    6. Signer                 ou enregistrer le .xpglic, Workspace::signLicence ;
-//                              puis ouvrir le dossier, publier sur GitHub (lent).
-//                              1.34.0 : la passerelle reglee, la licence part
-//                              d'elle-meme a TOUS ses PC (publishToGateway) ; des
-//                              demandes en ligne seulement : << Signer et publier >>
-//                              ecrit le fichier sans rien demander
-//                              (demandes-en-ligne/licences/).
+//                              puis ouvrir le dossier. 1.35.0 : le service regle,
+//                              la licence part d'elle-meme a TOUS ses PC
+//                              (publishToService) ; des demandes en ligne
+//                              seulement : << Signer et publier >> ecrit le fichier
+//                              sans rien demander (demandes-en-ligne/licences/).
+//  1.35.0 : UNE LICENCE EN LIGNE (le choix << En ligne : code d'activation >> de
+//  l'etape 1, ou << Nouvelle licence en ligne... >>) : aucun PC a choisir - le
+//  bail (jours) a la place des demandes ; le type peut etre << flottante >> ;
+//  << Signer et deposer >> signe la licence SANS PC, la range, tire un code
+//  d'activation et la depose sur le service (lent) ; le code n'est montre
+//  qu'ensuite, une fois (makeCodeDialog : masque, Afficher, Copier). Une licence
+//  en ligne etendue (Prolonger...) garde son code.
 //  Sans cle ou sans registre, l'assistant ne montre pas les etapes : il dit ou
 //  aller (Parametres de securite, Editions).
 //
@@ -291,25 +297,6 @@ std::vector<Lines::Line> linesOf(const OpResult& r) {
     return out;
 }
 
-// Le rapport de la synchro GitHub, rendu comme un resultat d'operation.
-OpResult syncResult(const github::SyncReport& rep) {
-    OpResult r;
-    r.ok = rep.ok;
-    if (rep.ok)
-        r.message = rep.upToDate ? "GitHub : d\xC3\xA9j\xC3\xA0 \xC3\xA0 jour." : "Publi\xC3\xA9 sur GitHub.";
-    else
-        r.message = "Refus\xC3\xA9 : " + rep.why;
-    const std::string text = rep.text();
-    for (std::size_t a = 0, b; a < text.size(); a = b + 1) {
-        b = text.find('\n', a);
-        if (b == std::string::npos) b = text.size();
-        const std::string line = text.substr(a, b - a);
-        if (line.empty() || line == r.message || line.rfind("Refus\xC3\xA9 : ", 0) == 0) continue;
-        r.details.push_back(line);
-    }
-    return r;
-}
-
 // ---------------------------------------------------------------------------------------- un dialogue modal
 // Un WidgetMenu de dialogue : se dessine et se ferme aussi sans MenuManager (les essais).
 class DialogMenu : public menu::WidgetMenu {
@@ -441,14 +428,16 @@ struct WizardState {
     OpResult              signResult;
     bool                  signAttempted{false};
     bool                  signedOk{false};
-    bool                  publishing{false};
-    bool                  published{false};
-    OpResult              publish;
-    // 1.34.0 : la passerelle (la licence a tous ses PC).
-    bool                  gatewaying{false};   // en cours
-    bool                  gatewayWaits{false}; // un autre travail tournait : elle part des qu'il a fini
-    bool                  gatewayed{false};
-    OpResult              gateway;
+    // 1.35.0 : le service (la licence a tous ses PC ; une licence en ligne deposee).
+    bool                  servicing{false};    // en cours
+    bool                  serviceWaits{false}; // un autre travail tournait : elle part des qu'il a fini
+    bool                  serviced{false};
+    OpResult              service;
+    // 1.35.0 : une licence EN LIGNE (aucun PC, un code d'activation).
+    bool                  online{false};
+    int                   leaseDays{online::kDefaultLeaseDays};   // -1 : illisible
+    int                   requestNumber{0};    // la demande manuelle a laquelle elle repond (0 : aucune)
+    std::string           requestNote;         // "la demande n 12 de ..., PC ..."
     // 1.34.0 (relecture) : un PC d'une demande EN LIGNE ajoute a une licence existante - n'importe qui peut la demander :
     // l'editeur confirme avoir verifie avec son client (la case de l'etape << Signer >>) avant de signer.
     bool                  joinConfirmed{false};
@@ -475,7 +464,7 @@ protected:
 
 class WizardBody final : public ui::Widget {
 public:
-    WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer);
+    WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer, bool online);
     ~WizardBody() override;
 
     [[nodiscard]] Workspace& ws() const { return host_.workspace(); }
@@ -503,8 +492,11 @@ public:
     [[nodiscard]] bool blocked() const noexcept { return !blockedWhy_.empty(); }
     [[nodiscard]] std::string windowTitle() const;
     [[nodiscard]] std::string requestedExisting() const;   // la licence de l'archive que demandent les PC (pas etendue)
-    // 1.34.0 : des demandes en ligne seulement, la passerelle reglee : signer ecrit le fichier sans rien demander.
-    [[nodiscard]] bool onlineMode() const;
+    // 1.34.0 : des demandes en ligne seulement, le service regle : signer ecrit le fichier sans rien demander.
+    [[nodiscard]] bool requestsOnly() const;
+    // 1.35.0 : une licence EN LIGNE (aucun PC : un code d'activation).
+    [[nodiscard]] bool online() const noexcept { return st_.online; }
+    void setOnline(bool on);
     // 1.34.0 (relecture) : les avertissements des PC de demandes EN LIGNE ajoutes a la licence existante (une demande
     // d'ajout n'est pas une preuve) ; non vide : la case << j'ai verifie >> est exigee avant de signer.
     [[nodiscard]] std::vector<std::string> joinChecks() const;
@@ -524,8 +516,8 @@ private:
     void prev();
     void sign();
     void doSign(const LicenceDraft& d, const std::string& path);
-    void publish();
-    void publishGateway();
+    void signOnline(const LicenceDraft& d);
+    void publishService();
     void updateButtons();
     [[nodiscard]] bool canReach(std::size_t index) const;
     [[nodiscard]] std::size_t railIndexAt(gfx::Point p) const;
@@ -543,7 +535,6 @@ private:
     ui::Button*         next_{nullptr};
     ui::Button*         sign_{nullptr};
     ui::Button*         folder_{nullptr};
-    ui::Button*         github_{nullptr};
     ui::Button*         close_{nullptr};
     ui::Button*         goto_{nullptr};
     Frame               frame_;
@@ -554,16 +545,19 @@ private:
 
 class WizardMenu final : public DialogMenu {
 public:
-    WizardMenu(ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer)
+    WizardMenu(ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer, bool online)
         : DialogMenu("dialog.licence-assistant"), host_(std::move(host)), requests_(std::move(requests)), extendId_(std::move(extendId)),
-          customer_(std::move(customer)) {}
-    [[nodiscard]] std::string title() const override { return extendId_.empty() ? "Nouvelle licence" : "Ajouter des PC \xC3\xA0 " + extendId_; }
+          customer_(std::move(customer)), online_(online) {}
+    [[nodiscard]] std::string title() const override {
+        if (!extendId_.empty()) return (online_ ? "Prolonger " : "Ajouter des PC \xC3\xA0 ") + extendId_;
+        return online_ ? "Nouvelle licence en ligne" : "Nouvelle licence";
+    }
     // Un fichier glisse sur la fenetre pendant que l'assistant est ouvert (il est au-dessus de la coquille).
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override;
 
 protected:
     core::Status buildUi() override {
-        auto body = std::make_unique<WizardBody>(*this, host_, std::move(requests_), extendId_, customer_);
+        auto body = std::make_unique<WizardBody>(*this, host_, std::move(requests_), extendId_, customer_, online_);
         body_ = body.get();
         setRoot(std::move(body));
         return core::ok();
@@ -573,6 +567,7 @@ private:
     ShellHost                host_;
     std::vector<std::string> requests_;
     std::string              extendId_, customer_;
+    bool                     online_{false};
     WizardBody*              body_{nullptr};
 };
 
@@ -589,6 +584,22 @@ public:
         existing_ = &adopt(*this, std::make_unique<ui::TableView>("wizard.pc.existants"));
         existing_->setColumns({{"PC", 170.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 110.f}, {"\xC3\x89tat", 280.f}});
         existing_->setSelectionMode(ui::SelectionMode::None);
+        // 1.35.0 : lier des PC (leurs demandes), ou une licence EN LIGNE (un code d'activation, aucun PC).
+        modeGroup_ = std::make_shared<ui::RadioGroup>();
+        bound_ = &adopt(*this, std::make_unique<ui::RadioButton>("Lier des PC (leurs demandes .xpgreq)", modeGroup_, 0, "wizard.mode.lies"));
+        onlineMode_ = &adopt(*this, std::make_unique<ui::RadioButton>("En ligne : code d'activation (aucun PC \xC3\xA0 choisir)", modeGroup_, 1, "wizard.mode.en-ligne"));
+        lease_ = &adopt(*this, std::make_unique<ui::InputText>("wizard.bail"));
+        lease_->setMaxLength(3);
+        lease_->setValidator([](std::string_view v) { return std::all_of(v.begin(), v.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
+        links_ += modeGroup_->valueChanged->connect([this](int v) {
+            if (syncing_) return;
+            w_.setOnline(v == 1);
+        });
+        links_ += lease_->textChanged->connect([this](const std::string& v) {
+            if (syncing_) return;
+            w_.st().leaseDays = parseCount(v);
+            w_.changed();
+        });
         links_ += add_->clicked->connect([this] { w_.pickRequest(); });
         links_ += remove_->clicked->connect([this] {
             std::vector<std::size_t> rows;
@@ -597,9 +608,16 @@ public:
         });
         links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { remove_->setEnabled(!table_->selection().empty()); });
     }
-    [[nodiscard]] std::string heading() const override { return "Demandes des PC"; }
+    [[nodiscard]] std::string heading() const override { return w_.online() ? "En ligne : le code et le bail" : "Demandes des PC"; }
+    [[nodiscard]] std::string railLabel() const override { return w_.online() ? "En ligne" : "Demandes des PC"; }
     [[nodiscard]] std::string intro() const override {
         const auto& s = w_.st();
+        if (w_.online() && s.extend)
+            return "Une \xC3\xA9mission plus r\xC3\xA9" "cente de la licence en ligne " + s.extendId + " (une autre fin, plus de postes, d'autres fonctionnalit\xC3\xA9s) : "
+                   "elle part sur le service, le code d'activation reste le m\xC3\xAAme.";
+        if (w_.online())
+            return "Aucun PC \xC3\xA0 choisir : chaque PC du client active la licence avec un CODE D'ACTIVATION, tir\xC3\xA9 \xC3\xA0 la signature et montr\xC3\xA9 une fois. "
+                   "Le bail : combien de jours un PC reste activ\xC3\xA9 sans se connecter (puis il s'arr\xC3\xAAte : un PC retir\xC3\xA9 ou perdu ne sert plus).";
         if (s.extend)
             return "Les demandes (.xpgreq) des PC \xC3\xA0 ajouter \xC3\xA0 la licence " + s.extendId
                    + ". Les PC d\xC3\xA9j\xC3\xA0 li\xC3\xA9s restent ; sans nouvelle demande, la licence est r\xC3\xA9-\xC3\xA9mise avec les m\xC3\xAAmes PC (pour changer sa dur\xC3\xA9" "e ou ses fonctionnalit\xC3\xA9s).";
@@ -607,6 +625,21 @@ public:
     }
     void enter() override {
         const auto& s = w_.st();
+        syncing_ = true;
+        modeGroup_->setValue(s.online ? 1 : 0);
+        lease_->setText(s.leaseDays >= 0 ? std::to_string(s.leaseDays) : lease_->text());
+        syncing_ = false;
+        const bool chooser = !s.extend;   // une licence etendue garde son genre
+        show(bound_, chooser);
+        show(onlineMode_, chooser);
+        const bool ready = w_.ws().service().ready();
+        onlineMode_->setEnabled(ready || s.online);
+        onlineMode_->setTooltip(ready ? std::string("Le service des licences active la licence par un code")
+                                      : std::string("Il faut d'abord r\xC3\xA9gler le service des licences (Service en ligne)"));
+        show(lease_, s.online);
+        show(add_, !s.online);
+        show(remove_, !s.online);
+        show(table_, !s.online);
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> tips;
         std::vector<int> kinds;   // 0 bonne, 1 deja liee, 2 refusee, 3 a verifier (une demande en ligne d'ajout a la licence)
@@ -659,8 +692,8 @@ public:
         table_->setModel(model_);
         remove_->setEnabled(false);
 
-        show(existing_, s.extend);
-        if (s.extend) {
+        show(existing_, s.extend && !s.online);
+        if (s.extend && !s.online) {
             std::vector<std::vector<std::string>> ex;
             std::vector<bool> revoked;
             for (const auto& d : s.base.devices) {
@@ -684,6 +717,11 @@ public:
     }
     [[nodiscard]] std::string blocker() const override {
         const auto& s = w_.st();
+        if (s.online) {
+            if (!w_.ws().service().ready()) return "R\xC3\xA8gle d'abord le service des licences (Service en ligne) : une licence en ligne le nomme.";
+            if (s.leaseDays < 1 || s.leaseDays > 366) return "Le bail va de 1 \xC3\xA0 366 jours (30 par d\xC3\xA9" "faut).";
+            return {};
+        }
         int good = 0, bad = 0;
         for (const auto& r : s.requests) (r.ok() ? good : bad)++;
         if (bad > 0) {
@@ -697,7 +735,18 @@ public:
 
 protected:
     void onLayout() override {
-        const auto r = bounds();
+        auto r = bounds();
+        if (bound_->visible()) {
+            bound_->setBounds({r.x, r.y, ui::measureWidth(bound_->label(), gfx::FontId{16}) + 34.f, 26.f});
+            onlineMode_->setBounds({bound_->bounds().right() + 16.f, r.y, ui::measureWidth(onlineMode_->label(), gfx::FontId{16}) + 34.f, 26.f});
+            r.y += 36.f;
+            r.h = std::max(60.f, r.h - 36.f);
+        }
+        if (w_.online()) {
+            leaseY_ = r.y;
+            lease_->setBounds({r.x + 150.f, r.y, 70.f, 28.f});
+            return;
+        }
         add_->setBounds({r.x, r.y, buttonWidth(*add_, 110.f), 30.f});
         remove_->setBounds({add_->bounds().right() + 8.f, r.y, buttonWidth(*remove_), 30.f});
         const float top = r.y + 40.f;
@@ -713,8 +762,26 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override {
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
-        const float x = remove_->bounds().right() + 16.f;
         const auto& s = w_.st();
+        if (s.online) {
+            const auto b = bounds();
+            const float ty = leaseY_ + (28.f - r.lineHeight(ctx.theme.font.ui)) * 0.5f;
+            r.drawText({b.x, ty}, "Bail (jours)", ctx.theme.font.ui, c.text);
+            r.drawText({lease_->bounds().right() + 12.f, ty},
+                       fit(r, "un PC activ\xC3\xA9 se reconnecte avant ; 30 par d\xC3\xA9" "faut", ctx.theme.font.ui, b.right() - lease_->bounds().right() - 12.f),
+                       ctx.theme.font.ui, c.textMuted);
+            float y = leaseY_ + 44.f;
+            if (!s.requestNote.empty()) y += drawWrapped(r, b.x, y, b.w, s.requestNote, ctx.theme.font.ui, c.text, 3) + 8.f;
+            y += drawWrapped(r, b.x, y, b.w,
+                             "Le code n'est gard\xC3\xA9 nulle part : ni sur ce poste, ni sur le service (il n'en garde que l'empreinte). Perdu, tu en tires un nouveau "
+                             "(Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6).",
+                             ctx.theme.font.ui, c.textMuted, 3);
+            if (!w_.ws().service().ready())
+                (void)drawWrapped(r, b.x, y + 8.f, b.w, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : Service en ligne, d'abord.", ctx.theme.font.ui,
+                                  toneColor(ctx.theme, Tone::Warning), 2);
+            return;
+        }
+        const float x = remove_->bounds().right() + 16.f;
         int good = 0, bad = 0;
         for (const auto& q : s.requests) (q.ok() ? good : bad)++;
         std::string line = "ou glisse les fichiers .xpgreq sur la fen\xC3\xAAtre";
@@ -727,7 +794,7 @@ protected:
                        ctx.theme.font.ui, c.text);
     }
     void onPaintOverlay(const ui::PaintContext& ctx) override {
-        if (!w_.st().requests.empty()) return;
+        if (!w_.st().requests.empty() || w_.online()) return;
         const auto t = table_->bounds();
         const std::string empty = "Aucune demande pour l'instant. Ajouter\xE2\x80\xA6 (ou glisse les .xpgreq ici).";
         ctx.r.drawText({t.x + 16.f, t.y + 44.f}, fit(ctx.r, empty, ctx.theme.font.ui, t.w - 32.f), ctx.theme.font.ui, ctx.theme.color.textMuted);
@@ -747,6 +814,11 @@ private:
     ui::TableView*             existing_{nullptr};
     std::shared_ptr<Rows>      model_, existingModel_;
     float                      existingCaption_{0.f};
+    std::shared_ptr<ui::RadioGroup> modeGroup_;
+    ui::RadioButton*           bound_{nullptr};
+    ui::RadioButton*           onlineMode_{nullptr};
+    ui::InputText*             lease_{nullptr};
+    float                      leaseY_{0.f};
 };
 
 // --------------------------------------------------------------------- etape 2 : le client, l'identifiant
@@ -909,7 +981,7 @@ public:
         for (int i = 0; i < 4; ++i)
             types_[i] = &adopt(*this, std::make_unique<ui::RadioButton>(typeLabel(static_cast<LicenseType>(i)), typeGroup_, i, typeIds[i]));
         types_[3]->setEnabled(false);
-        types_[3]->setTooltip("Une licence flottante demande le service de licences en ligne, qui n'existe pas encore.");
+        types_[3]->setTooltip("Une licence flottante est une licence EN LIGNE : choisis \xC2\xAB En ligne : code d'activation \xC2\xBB \xC3\xA0 l'\xC3\xA9tape 1.");
         minus_ = &button(*this, "\xE2\x88\x92", "wizard.pc.moins");
         pcs_ = &adopt(*this, std::make_unique<ui::InputText>("wizard.pc"));
         pcs_->setMaxLength(6);
@@ -944,7 +1016,7 @@ public:
             loadForm();
         });
         links_ += typeGroup_->valueChanged->connect([this](int v) {
-            if (syncing_ || v < 0 || v > 2) return;
+            if (syncing_ || v < 0 || v > 3 || (v == 3 && !w_.online())) return;
             w_.st().type = static_cast<LicenseType>(v);
             loadForm();
             w_.changed();
@@ -1002,6 +1074,9 @@ public:
     [[nodiscard]] std::string heading() const override { return "\xC3\x89" "dition et dur\xC3\xA9" "e"; }
     [[nodiscard]] std::string railLabel() const override { return "\xC3\x89" "dition"; }
     [[nodiscard]] std::string intro() const override {
+        if (w_.online())
+            return "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste le type (flottante : des postes EN M\xC3\x8AME TEMPS), le nombre de PC qui pourront "
+                   "l'activer, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce.";
         return "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste pour ce client le type, le nombre de PC, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce hors ligne.";
     }
     void enter() override {
@@ -1127,6 +1202,9 @@ protected:
         const int need = w_.neededDevices();
         std::string pcNote = "au moins " + std::to_string(need) + (w_.boundDevices() > 0 ? " : les PC li\xC3\xA9s et les demandes" : " : les demandes");
         if (s.raisedDevices) pcNote += " (relev\xC3\xA9 pour les accueillir)";
+        if (w_.online())
+            pcNote = s.type == LicenseType::Floating ? std::string("postes EN M\xC3\x8AME TEMPS (un jeton chacun, pris au d\xC3\xA9marrage)")
+                                                      : std::string("PC qui pourront l'activer avec le code");
         note(plus_->bounds().right() + 14.f, 1, pcNote);
         if (s.type == LicenseType::Perpetual) {
             note(days_->bounds().x, 3, "sans fin : une licence perp\xC3\xA9tuelle n'a pas de date de fin.");
@@ -1140,7 +1218,7 @@ protected:
         else
             note(grace_->bounds().right() + 12.f, 4, "sans objet pour une licence " + typeLabel(s.type) + ".");
         if (!types_[3]->enabled())
-            r.drawText({types_[3]->bounds().right() + 6.f, rowY_[0] + ty}, fit(r, "(demande le service en ligne)", kSmall, b.right() - types_[3]->bounds().right() - 6.f),
+            r.drawText({types_[3]->bounds().right() + 6.f, rowY_[0] + ty}, fit(r, "(une licence en ligne)", kSmall, b.right() - types_[3]->bounds().right() - 6.f),
                        kSmall, c.textMuted);
     }
 
@@ -1168,7 +1246,9 @@ private:
     }
     // L'etat -> les champs.
     void loadForm() {
-        const auto& s = w_.st();
+        auto& s = w_.st();
+        if (s.type == LicenseType::Floating && !s.online) s.type = LicenseType::Temporary;
+        types_[3]->setEnabled(s.online);
         syncing_ = true;
         typeGroup_->setValue(static_cast<int>(s.type));
         pcs_->setText(s.maxDevices >= 0 ? std::to_string(s.maxDevices) : pcs_->text());
@@ -1395,8 +1475,12 @@ private:
         out.emplace_back("Licence", trim(s.licenseId) + (s.extend ? " (\xC3\xA9tendue)" : ""));
         out.emplace_back("\xC3\x89" "dition", w_.editionLabel(s.edition));
         out.emplace_back("Type", typeLabel(s.type));
-        out.emplace_back("PC", std::to_string(s.maxDevices) + " autoris\xC3\xA9s : " + (w_.boundDevices() ? std::to_string(w_.boundDevices()) + " li\xC3\xA9s + " : std::string())
-                                   + plural(w_.newDevices(), "nouveau", "nouveaux"));
+        if (s.online)
+            out.emplace_back("En ligne", std::to_string(s.maxDevices) + (s.type == LicenseType::Floating ? " postes en m\xC3\xAAme temps" : " PC au plus") + ", bail " +
+                                             std::to_string(s.leaseDays) + " j, " + (s.extend ? std::string("le m\xC3\xAAme code") : std::string("un code neuf")));
+        else
+            out.emplace_back("PC", std::to_string(s.maxDevices) + " autoris\xC3\xA9s : " + (w_.boundDevices() ? std::to_string(w_.boundDevices()) + " li\xC3\xA9s + " : std::string())
+                                       + plural(w_.newDevices(), "nouveau", "nouveaux"));
         if (s.type == LicenseType::Perpetual)
             out.emplace_back("Validit\xC3\xA9", "sans fin");
         else
@@ -1440,35 +1524,41 @@ public:
     [[nodiscard]] std::string railLabel() const override { return "Signer"; }
     [[nodiscard]] std::string intro() const override {
         const auto& s = w_.st();
-        if (s.signedOk && s.gatewayed && s.gateway.ok)
-            return "La licence est publi\xC3\xA9" "e sur la passerelle : chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul au prochain d\xC3\xA9marrage de son logiciel. Rien d'autre \xC3\xA0 faire.";
-        if (s.signedOk && (s.gatewaying || s.gatewayWaits)) return "La licence est sign\xC3\xA9" "e ; sa publication sur la passerelle est en cours.";
-        if (s.signedOk && s.gatewayed)
-            return "La licence est sign\xC3\xA9" "e et rang\xC3\xA9" "e, mais PAS publi\xC3\xA9" "e sur la passerelle : republie-la (Demandes en ligne), ou envoie le fichier au client.";
+        if (s.online) {
+            if (s.signedOk && s.serviced && s.service.ok)
+                return s.extend ? std::string("La nouvelle \xC3\xA9mission est sur le service : chaque PC la re\xC3\xA7oit \xC3\xA0 sa prochaine connexion. Le code reste le m\xC3\xAAme.")
+                                : std::string("La licence est sur le service. Son code t'a \xC3\xA9t\xC3\xA9 montr\xC3\xA9 une fois : donne-le \xC3\xA0 ton client (Aide \xE2\x80\xBA "
+                                              "Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code).");
+            if (s.signedOk && s.servicing) return "La licence est sign\xC3\xA9" "e ; son d\xC3\xA9p\xC3\xB4t sur le service est en cours.";
+            if (s.signedOk)
+                return "La licence est sign\xC3\xA9" "e et rang\xC3\xA9" "e, mais PAS d\xC3\xA9pos\xC3\xA9" "e sur le service" +
+                       std::string(s.extend ? "" : " (son code est oubli\xC3\xA9 : il ne servirait \xC3\xA0 rien)") + ". Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6 la d\xC3\xA9pose de nouveau.";
+            return s.extend ? "Signe la nouvelle \xC3\xA9mission avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive puis d\xC3\xA9pos\xC3\xA9" "e sur le service ; le code reste le m\xC3\xAAme."
+                            : "Signe la licence avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive, puis d\xC3\xA9pos\xC3\xA9" "e sur le service avec l'empreinte d'un code "
+                              "d'activation neuf. Le code s'affiche ensuite, une fois.";
+        }
+        if (s.signedOk && s.serviced && s.service.ok)
+            return "La licence est publi\xC3\xA9" "e sur le service : chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul \xC3\xA0 sa prochaine connexion. Rien d'autre \xC3\xA0 faire.";
+        if (s.signedOk && (s.servicing || s.serviceWaits)) return "La licence est sign\xC3\xA9" "e ; sa publication sur le service est en cours.";
+        if (s.signedOk && s.serviced)
+            return "La licence est sign\xC3\xA9" "e et rang\xC3\xA9" "e, mais PAS publi\xC3\xA9" "e sur le service : envoie le fichier au client.";
         if (s.signedOk) return "Envoie le fichier au client : il l'importe par Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.";
-        if (w_.onlineMode())
-            return "Signe la licence avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive puis publi\xC3\xA9" "e sur la passerelle, pour chacun de ses PC ; la demande en ligne est ferm\xC3\xA9" "e.";
+        if (w_.requestsOnly())
+            return "Signe la licence avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive puis publi\xC3\xA9" "e sur le service, pour chacun de ses PC ; la demande est trait\xC3\xA9" "e.";
         return "Signe la licence avec ta cl\xC3\xA9 et enregistre le fichier .xpglic \xC3\xA0 envoyer au client ; elle est aussi rang\xC3\xA9" "e dans l'archive.";
     }
     void enter() override {
         const auto& s = w_.st();
         std::vector<Lines::Line> lines;
         if (s.signAttempted) lines = linesOf(s.signResult);
-        if (s.gatewaying || s.gatewayWaits || s.gatewayed) {
+        if (s.servicing || s.serviceWaits || s.serviced) {
             lines.push_back({"", ui::Tone::None});
-            if (s.gatewaying)
-                lines.push_back({"Publication sur la passerelle en cours\xE2\x80\xA6", ui::Tone::Info});
-            else if (s.gatewayWaits)
-                lines.push_back({"La publication sur la passerelle attend la fin du travail en cours, puis part d'elle-m\xC3\xAAme.", ui::Tone::Info});
+            if (s.servicing)
+                lines.push_back({"Publication sur le service en cours\xE2\x80\xA6", ui::Tone::Info});
+            else if (s.serviceWaits)
+                lines.push_back({"La publication sur le service attend la fin du travail en cours, puis part d'elle-m\xC3\xAAme.", ui::Tone::Info});
             else
-                for (auto& l : linesOf(s.gateway)) lines.push_back(std::move(l));
-        }
-        if (s.published || s.publishing) {
-            lines.push_back({"", ui::Tone::None});
-            if (s.publishing)
-                lines.push_back({"Publication sur GitHub en cours\xE2\x80\xA6", ui::Tone::Info});
-            else
-                for (auto& l : linesOf(s.publish)) lines.push_back(std::move(l));
+                for (auto& l : linesOf(s.service)) lines.push_back(std::move(l));
         }
         model_ = std::make_shared<Lines>(std::move(lines));
         result_->setModel(model_);
@@ -1525,9 +1615,13 @@ private:
     [[nodiscard]] std::string headerText() const {
         const auto& s = w_.st();
         const std::string id = trim(s.licenseId);
-        if (w_.onlineMode())
+        if (s.online)
+            return "Signer et d\xC3\xA9poser : la licence en ligne " + id + " de " + trim(s.customer) + " est sign\xC3\xA9" "e (aucun PC li\xC3\xA9), rang\xC3\xA9" "e dans "
+                   "l'archive, puis d\xC3\xA9pos\xC3\xA9" "e sur le service" + (s.extend ? std::string(" (le code reste le m\xC3\xAAme).")
+                                                                               : std::string(" avec l'empreinte d'un code neuf ; le code s'affiche une fois, masqu\xC3\xA9."));
+        if (w_.requestsOnly())
             return "Signer et publier : la licence " + id + " de " + trim(s.customer) + " est sign\xC3\xA9" "e, rang\xC3\xA9" "e dans l'archive, "
-                   "puis publi\xC3\xA9" "e sur la passerelle pour chacun de ses PC ; chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul. Aucun fichier \xC3\xA0 envoyer.";
+                   "puis publi\xC3\xA9" "e sur le service pour chacun de ses PC ; chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul. Aucun fichier \xC3\xA0 envoyer.";
         return "Signer et enregistrer\xE2\x80\xA6 : choisis o\xC3\xB9 \xC3\xA9" "crire " + id + ".xpglic, le fichier \xC3\xA0 envoyer au client " + trim(s.customer) +
                ". La licence est ensuite rang\xC3\xA9" "e dans l'archive et chaque PC not\xC3\xA9 dans le registre des activations.";
     }
@@ -1540,7 +1634,7 @@ private:
 };
 
 // =========================================================================================== WizardBody
-WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer)
+WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::string> requests, std::string extendId, std::string customer, bool online)
     : ui::Widget("dialog.licence-assistant.corps"), owner_(owner), host_(std::move(host)) {
     const Workspace& w = ws();
     const LicenceEntry* ext = extendId.empty() ? nullptr : w.licence(extendId);
@@ -1563,7 +1657,6 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     next_ = &button(*this, "Suivant", "wizard.suivant", ui::Button::Style::Primary);
     sign_ = &button(*this, "Signer et enregistrer\xE2\x80\xA6", "wizard.signer", ui::Button::Style::Primary);
     folder_ = &button(*this, "Ouvrir le dossier", "wizard.dossier");
-    github_ = &button(*this, "Publier sur GitHub", "wizard.github");
     close_ = &button(*this, "Fermer", "wizard.fermer", ui::Button::Style::Primary);
     goto_ = &button(*this, blockedLabel_.empty() ? std::string("Aller") : blockedLabel_, "wizard.aller", ui::Button::Style::Primary);
     links_ += cancel_->clicked->connect([this] { owner_.close(); });
@@ -1571,7 +1664,6 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     links_ += prev_->clicked->connect([this] { prev(); });
     links_ += next_->clicked->connect([this] { next(); });
     links_ += sign_->clicked->connect([this] { sign(); });
-    links_ += github_->clicked->connect([this] { publish(); });
     links_ += folder_->clicked->connect([this] {
         if (!st_.signResult.output.empty() && host_.openFolder) host_.openFolder(folderOf(st_.signResult.output));
     });
@@ -1590,6 +1682,22 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
         st_.customer = std::move(customer);
         st_.licenseId = w.suggestLicenseId();
     }
+    // 1.35.0 : une licence EN LIGNE. Etendue : celle de l'archive l'est-elle ? Neuve, depuis une demande manuelle
+    // (Accepter en ligne) : la demande ne lie aucun PC, elle dit a qui repondre.
+    st_.online = ext ? Workspace::isOnlineLicence(ext->licence) : online;
+    if (st_.online && !ext) {
+        for (const auto& path : requests)
+            if (const online::Entry* e = w.onlineRequestAt(path); e && e->waiting()) {
+                st_.requestNumber = e->number;
+                st_.requestNote = "En r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(e->number) + " de " + (e->customer.empty() ? std::string("?") : e->customer) +
+                                  " (PC \xC2\xAB " + (e->deviceName.empty() ? std::string("sans nom") : e->deviceName) + " \xC2\xBB) : ce PC voit \xC2\xAB accept\xC3\xA9" "e \xC2\xBB ; "
+                                  "tu donnes le code au client, il l'active.";
+                break;
+            }
+        requests.clear();
+    }
+    if (st_.online && ext)
+        if (const auto* on = w.service().snapshot.licence(ext->licence.licenseId)) st_.leaseDays = on->leaseDays;
     addRequests(requests, true);
 
     steps_.push_back(&adopt(*this, std::make_unique<StepRequests>(*this)));
@@ -1615,7 +1723,7 @@ void WizardBody::loadBase(const LicenceEntry& l) {
     st_.licenseId = l.licence.licenseId;
     st_.customer = l.licence.customer;
     st_.edition = l.licence.edition;
-    st_.type = l.licence.type == LicenseType::Floating ? LicenseType::Temporary : l.licence.type;
+    st_.type = l.licence.type == LicenseType::Floating && !Workspace::isOnlineLicence(l.licence) ? LicenseType::Temporary : l.licence.type;
     st_.maxDevices = l.licence.maxDevices;
     st_.days = 365;
     if (l.licence.expiresAt > now())
@@ -1659,7 +1767,8 @@ std::string WizardBody::requestedExisting() const {
 }
 
 std::string WizardBody::windowTitle() const {
-    return st_.extend ? "Ajouter des PC \xC3\xA0 la licence " + st_.extendId : std::string("Nouvelle licence");
+    if (st_.extend) return (st_.online ? "Prolonger la licence en ligne " : "Ajouter des PC \xC3\xA0 la licence ") + st_.extendId;
+    return st_.online ? std::string("Nouvelle licence en ligne") : std::string("Nouvelle licence");
 }
 
 LicenceDraft WizardBody::draft() const {
@@ -1678,6 +1787,9 @@ LicenceDraft WizardBody::draft() const {
     d.offlineGraceDays = st_.type == LicenseType::Temporary ? std::max(0, st_.grace) : 0;
     if (customFeatures()) d.features.assign(st_.features.begin(), st_.features.end());
     d.extend = st_.extend;
+    d.online = st_.online;
+    d.leaseDays = st_.leaseDays > 0 ? st_.leaseDays : online::kDefaultLeaseDays;
+    if (st_.online) d.requestPaths.clear();
     return d;
 }
 
@@ -1865,7 +1977,11 @@ void WizardBody::sign() {
         say(check.message, Tone::Error);
         return;
     }
-    if (onlineMode()) {   // 1.34.0 : une demande en ligne - le fichier va dans demandes-en-ligne/licences/, sans rien demander
+    if (online()) {   // 1.35.0 : une licence en ligne - aucun fichier a envoyer : deposee sur le service
+        signOnline(d);
+        return;
+    }
+    if (requestsOnly()) {   // 1.34.0 : une demande en ligne - le fichier va dans demandes-en-ligne/licences/, sans rien demander
         doSign(d, ws().onlineLicencePath(d.licenseId));
         return;
     }
@@ -1897,10 +2013,10 @@ void WizardBody::doSign(const LicenceDraft& d, const std::string& path) {
     st_.signAttempted = true;
     st_.signResult = r;
     st_.signedOk = r.ok;
-    if (r.ok && !onlineMode()) licdlg::rememberFolder(path);
+    if (r.ok && !requestsOnly()) licdlg::rememberFolder(path);
     if (host_.report) host_.report(r);
     if (!*alive) return;
-    if (r.ok) publishGateway();   // la passerelle reglee : la licence part a ses PC
+    if (r.ok) publishService();   // le service regle : la licence part a ses PC
     if (!*alive) return;
     steps_.back()->enter();
     updateButtons();
@@ -1917,9 +2033,9 @@ std::vector<std::string> WizardBody::joinChecks() const {
     std::vector<std::string> out;
     for (const auto& r : st_.requests) {
         if (!joinUnverified(r)) continue;
-        const passerelle::Entry* e = ws().onlineRequestAt(r.p.path);
+        const online::Entry* e = ws().onlineRequestAt(r.p.path);
         const std::string who = e ? e->customer : std::string();
-        std::string t = passerelle::joinWarning(st_.extendId, who);
+        std::string t = online::joinWarning(st_.extendId, who);
         const std::string pc = r.p.record.deviceName.empty() ? std::string("(sans nom)") : r.p.record.deviceName;
         t += " (PC \xC2\xAB " + pc + " \xC2\xBB)";
         if (!who.empty() && trim(st_.base.customer) != trim(who)) t += " La licence est au nom de \xC2\xAB " + st_.base.customer + " \xC2\xBB.";
@@ -1928,9 +2044,8 @@ std::vector<std::string> WizardBody::joinChecks() const {
     return out;
 }
 
-bool WizardBody::onlineMode() const {
-    const auto& g = ws().passerelle();
-    if (!g.configured || !g.problem.empty()) return false;
+bool WizardBody::requestsOnly() const {
+    if (st_.online || !ws().service().ready()) return false;
     bool any = false;
     for (const auto& r : st_.requests) {
         if (!r.ok()) continue;
@@ -1940,53 +2055,73 @@ bool WizardBody::onlineMode() const {
     return any;
 }
 
-void WizardBody::publishGateway() {
-    if (!ws().hasGatewayJob()) return;
+void WizardBody::setOnline(bool on) {
+    if (st_.extend || st_.signedOk || on == st_.online) return;
+    st_.online = on;
+    if (!on && st_.type == LicenseType::Floating) st_.type = LicenseType::Temporary;
+    if (on && st_.maxDevices < 1) st_.maxDevices = 1;
+    if (!steps_.empty()) steps_[0]->enter();
+    changed();
+    invalidateLayout();
+}
+
+void WizardBody::signOnline(const LicenceDraft& d) {
+    ServiceJob job;
+    std::string code;
     auto alive = alive_;
-    st_.gatewaying = true;
-    const bool started = publishToGateway(host_, [this, alive](const OpResult& g) {
+    OpResult r = ws().prepareOnlineLicence(d, {}, job, code, st_.requestNumber);
+    st_.signAttempted = true;
+    st_.signResult = r;
+    st_.signedOk = r.ok;
+    if (host_.report) host_.report(r);
+    if (!*alive) return;
+    if (!r.ok) {
+        steps_.back()->enter();
+        updateButtons();
+        invalidateLayout();
+        say(r.message, Tone::Error);
+        return;
+    }
+    // Le depot (lent) ; le code n'est montre qu'une fois le depot reussi (depositOnlineLicence), puis oublie.
+    st_.servicing = true;
+    const bool started = depositOnlineLicence(host_, std::move(job), std::move(code), [this, alive](const OpResult& g) {
         if (!*alive) return;
-        st_.gatewaying = false;
-        st_.gatewayWaits = false;
-        st_.gatewayed = true;
-        st_.gateway = g;
+        st_.servicing = false;
+        st_.serviced = true;
+        st_.service = g;
         steps_.back()->enter();
         updateButtons();
         invalidateLayout();
     });
     if (!*alive) return;
-    if (!started && !st_.gatewayed) {   // un travail tourne : la coquille la lance des qu'il a fini
-        st_.gatewaying = false;
-        st_.gatewayWaits = ws().hasGatewayJob();
+    if (!started && !st_.serviced) {
+        st_.servicing = false;
+        st_.serviced = true;
+        st_.service = OpResult::fail("un autre travail tournait : la licence n'est pas d\xC3\xA9pos\xC3\xA9" "e (son code est oubli\xC3\xA9). Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6 la d\xC3\xA9pose.");
     }
-}
-
-void WizardBody::publish() {
-    if (!st_.signedOk || st_.publishing || !ws().github().configured || !host_.runSlow) return;
-    if (host_.busy && host_.busy()) {
-        say("Un travail est d\xC3\xA9j\xC3\xA0 en cours : attends qu'il finisse pour publier.", Tone::Warning);
-        return;
-    }
-    Workspace* w = &ws();
-    auto alive = alive_;
-    st_.publishing = true;
     steps_.back()->enter();
     updateButtons();
-    const bool started = host_.runSlow(
-        "Publication sur GitHub", [w] { return syncResult(w->githubSync(false, false)); },
-        [this, alive](const OpResult& r) {
-            if (!*alive) return;
-            st_.publishing = false;
-            st_.published = true;
-            st_.publish = r;
-            steps_.back()->enter();
-            updateButtons();
-        });
-    if (!started && *alive && st_.publishing) {
-        st_.publishing = false;
+    invalidateLayout();
+}
+
+void WizardBody::publishService() {
+    if (!ws().hasServiceJob()) return;
+    auto alive = alive_;
+    st_.servicing = true;
+    const bool started = publishToService(host_, [this, alive](const OpResult& g) {
+        if (!*alive) return;
+        st_.servicing = false;
+        st_.serviceWaits = false;
+        st_.serviced = true;
+        st_.service = g;
         steps_.back()->enter();
         updateButtons();
-        say("Un travail est d\xC3\xA9j\xC3\xA0 en cours : attends qu'il finisse pour publier.", Tone::Warning);
+        invalidateLayout();
+    });
+    if (!*alive) return;
+    if (!started && !st_.serviced) {   // un travail tourne : la coquille la lance des qu'il a fini
+        st_.servicing = false;
+        st_.serviceWaits = ws().hasServiceJob();
     }
 }
 
@@ -1998,16 +2133,14 @@ void WizardBody::updateButtons() {
     show(prev_, !isBlocked && !done);
     show(next_, !isBlocked && !done && !last);
     show(sign_, !isBlocked && !done && last);
-    sign_->setText(onlineMode() ? std::string("Signer et publier") : std::string("Signer et enregistrer\xE2\x80\xA6"));
-    show(folder_, done);
-    show(github_, done && ws().github().configured);
+    sign_->setText(online() ? std::string("Signer et d\xC3\xA9poser") : requestsOnly() ? std::string("Signer et publier") : std::string("Signer et enregistrer\xE2\x80\xA6"));
+    show(folder_, done && !online());
     show(close_, isBlocked || done);
     show(goto_, isBlocked && !blockedPage_.empty());
     if (!isBlocked && !done && !steps_.empty()) {
         prev_->setEnabled(current_ > 0);
         next_->setEnabled(steps_[current_]->blocker().empty());
     }
-    github_->setEnabled(!st_.publishing && !(st_.published && st_.publish.ok));
     invalidateLayout();
 }
 
@@ -2031,7 +2164,7 @@ void WizardBody::onLayout() {
 
     const float by = panel.bottom() - 44.f;
     float left = panel.x + 16.f;
-    for (auto* b : {cancel_, folder_, github_}) {
+    for (auto* b : {cancel_, folder_}) {
         if (!b->visible()) continue;
         const float w = buttonWidth(*b, 110.f);
         b->setBounds({left, by, w, 32.f});
@@ -2088,13 +2221,9 @@ void WizardBody::onPaint(const ui::PaintContext& ctx) {
             line = s.blocker();
             tone = Tone::Warning;
         }
-        if (line.empty() && st_.signedOk && st_.published) {
-            line = st_.publish.message;
-            tone = st_.publish.ok ? Tone::Ok : Tone::Error;
-        }
-        if (line.empty() && st_.signedOk && st_.gatewayed) {
-            line = st_.gateway.message;
-            tone = st_.gateway.ok ? Tone::Ok : Tone::Error;
+        if (line.empty() && st_.signedOk && st_.serviced) {
+            line = st_.service.message;
+            tone = st_.service.ok ? Tone::Ok : Tone::Error;
         }
         drawBand(r, ctx.theme, band_, line, tone);
     }
@@ -2298,7 +2427,7 @@ private:
         }
         const OpResult r = host_.workspace().revoke(id, key, reason, onlyIssued_->isChecked());
         if (host_.report) host_.report(r);
-        if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee, les PC sont prevenus
+        if (r.ok) (void)publishToService(host_);   // 1.35.0 : le service regle (la liste deposee, les PC lies prevenus)
         if (r.ok) owner_.close();
         else error_ = r.message;
         invalidate();
@@ -2497,12 +2626,119 @@ private:
     std::function<void()> onOk_;
 };
 
+// =============================================================== le code d'activation (un dialogue, 1.35.0)
+//  Montre UNE fois : masque d'abord ; << Afficher >> le montre (personne ne regarde ?), << Copier >> le met dans le
+//  presse-papiers sur ce clic seulement ; fermer l'oublie (efface). Rien ne l'ecrit ailleurs.
+class CodeBody final : public ui::Widget {
+public:
+    CodeBody(DialogMenu& owner, std::string licenseId, std::string code)
+        : ui::Widget("dialog.code-activation.corps"), owner_(owner), licenseId_(std::move(licenseId)), code_(std::move(code)) {
+        show_ = &button(*this, "Afficher", "code.afficher");
+        show_->setIcon(ui::Icon::Search);
+        copy_ = &button(*this, "Copier", "code.copier");
+        copy_->setIcon(ui::Icon::Copy);
+        close_ = &button(*this, "J'ai not\xC3\xA9 le code", "code.fermer", ui::Button::Style::Primary);
+        links_ += show_->clicked->connect([this] {
+            visible_ = !visible_;
+            show_->setText(visible_ ? "Masquer" : "Afficher");
+            invalidate();
+        });
+        links_ += copy_->clicked->connect([this] {
+            ui::setClipboardText(code_);
+            copied_ = true;
+            invalidate();
+        });
+        links_ += close_->clicked->connect([this] { owner_.close(); });
+    }
+    ~CodeBody() override { deploy::crypto::wipe(code_.data(), code_.size()); }
+    // Les essais : ce qui est dessine pour le code (masque ou non).
+    [[nodiscard]] std::string shownCode() const {
+        if (visible_) return code_;
+        std::string m;
+        for (char c : code_) m += c == '-' ? std::string("-") : std::string("\xE2\x80\xA2");
+        return m;
+    }
+
+protected:
+    void onLayout() override {
+        frame_.place(*this, 600.f, 380.f);
+        const auto& p = frame_.panel;
+        const float by = p.bottom() - 44.f;
+        const float cw = buttonWidth(*close_, 150.f);
+        close_->setBounds({p.right() - 16.f - cw, by, cw, 32.f});
+        codeY_ = p.y + 43.f + 20.f + wrappedHeight(text(), gfx::FontId{16}, p.w - 40.f, 6) + 14.f;
+        const float sw = buttonWidth(*show_, 100.f), kw = buttonWidth(*copy_, 100.f);
+        show_->setBounds({p.x + 20.f, codeY_ + 52.f, sw, 30.f});
+        copy_->setBounds({p.x + 28.f + sw, codeY_ + 52.f, kw, 30.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& p = frame_.panel;
+        const auto& c = ctx.theme.color;
+        frame_.paint(ctx.r, ctx.theme, "Code d'activation \xE2\x80\x94 " + licenseId_);
+        (void)drawWrapped(ctx.r, p.x + 20.f, p.y + 43.f + 20.f, p.w - 40.f, text(), ctx.theme.font.ui, c.text, 6);
+        const gfx::Rect box{p.x + 20.f, codeY_, p.w - 40.f, 40.f};
+        ctx.r.fillRoundedRect(box, ctx.theme.brand.codeBg.a ? ctx.theme.brand.codeBg : c.inputBg, 6.f);
+        ctx.r.strokeRect(box, c.borderStrong, 1.f);
+        const gfx::FontId big{22};
+        ctx.r.drawText({box.x + 14.f, box.y + (box.h - ctx.r.lineHeight(big)) * 0.5f}, shownCode(), big, c.text);
+        if (copied_)
+            ctx.r.drawText({copy_->bounds().right() + 12.f, copy_->bounds().y + 6.f},
+                           fit(ctx.r, "Copi\xC3\xA9 : colle-le, puis copie autre chose.", ctx.theme.font.ui, p.right() - copy_->bounds().right() - 32.f),
+                           ctx.theme.font.ui, c.textMuted);
+        ctx.r.fillRect({p.x, p.bottom() - 57.f, p.w, 1.f}, c.border);
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (frame_.hitClose(ev)) {
+            owner_.close();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    [[nodiscard]] std::string text() const {
+        return "Le code de la licence en ligne " + licenseId_ + ". Il n'est montr\xC3\xA9 qu'ici, une fois : note-le pour ton client, qui le tape dans "
+               "Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code (ou dans l'installateur). Seule son empreinte est gard\xC3\xA9" "e, sur le service ; "
+               "ce poste ne le garde pas : ferm\xC3\xA9" "e, cette fen\xC3\xAAtre l'oublie. Perdu : Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6";
+    }
+
+    DialogMenu&           owner_;
+    std::string           licenseId_, code_;
+    bool                  visible_{false}, copied_{false};
+    ui::Button*           show_{nullptr};
+    ui::Button*           copy_{nullptr};
+    ui::Button*           close_{nullptr};
+    float                 codeY_{0.f};
+    Frame                 frame_;
+    core::ConnectionScope links_;
+};
+
+class CodeMenu final : public DialogMenu {
+public:
+    CodeMenu(std::string licenseId, std::string code) : DialogMenu("dialog.code-activation"), licenseId_(std::move(licenseId)), code_(std::move(code)) {}
+    ~CodeMenu() override { deploy::crypto::wipe(code_.data(), code_.size()); }
+    [[nodiscard]] std::string title() const override { return "Code d'activation"; }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<CodeBody>(*this, licenseId_, code_));
+        deploy::crypto::wipe(code_.data(), code_.size());   // il ne vit plus que dans le corps du dialogue
+        code_.clear();
+        return core::ok();
+    }
+
+private:
+    std::string licenseId_, code_;
+};
+
 } // namespace
 
 // ============================================================================================ l'exterieur
-menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId, std::string customer) {
-    return std::make_unique<WizardMenu>(std::move(host), std::move(requests), std::move(extendLicenseId), std::move(customer));
+menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId, std::string customer, bool online) {
+    return std::make_unique<WizardMenu>(std::move(host), std::move(requests), std::move(extendLicenseId), std::move(customer), online);
 }
+
+menu::MenuPtr makeCodeDialog(std::string licenseId, std::string code) { return std::make_unique<CodeMenu>(std::move(licenseId), std::move(code)); }
 
 namespace licdlg {
 

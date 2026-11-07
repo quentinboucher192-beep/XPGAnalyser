@@ -62,6 +62,7 @@
 #pragma once
 
 #include "../licensing/Service.hpp"
+#include "../licensing/Store.hpp"
 #include "../licensing/Time.hpp"
 
 #include <cstdint>
@@ -203,7 +204,13 @@ void poll();
 [[nodiscard]] licensing::Seconds seatFreeAt() noexcept;
 // La phrase d'un travail en cours ("Activation en cours...").
 [[nodiscard]] std::string jobText(Job j);
-// A la fermeture : la requete en cours arretee, le fil attendu, le jeton flottant rendu (au mieux, delai court).
+// Au lancement (l'application, pas le poste d'exploitation), AVANT la premiere evaluation du module : une licence
+// flottante en ligne sur ce PC prend son poste tout de suite (un magasin a part, sur un fil ; `waitMs` au plus,
+// puis la requete est arretee ; hors ligne, ou un jeton encore bon : rien). L'etat ne passe donc pas par
+// << Flottante : aucun poste >> a chaque lancement (ni dans l'historique). Vrai : un jeton est installe.
+bool startupLease(const licensing::StoreOptions& options, int waitMs = 4000);
+// A la fermeture : la requete en cours arretee, le fil attendu, le jeton flottant rendu au service (au mieux, delai
+// court ; le fichier du jeton reste jusqu'a sa fin : l'etat de ce PC ne change pas en partant).
 void shutdown();
 
 } // namespace app::licence::service

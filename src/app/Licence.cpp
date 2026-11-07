@@ -126,7 +126,7 @@ void start(licensing::StoreOptions options) {
     syncStateNotices();
 }
 
-void start() {
+void start(bool takeFloatingSeat) {
     licensing::StoreOptions o;
     // 1.32.0 (M1) : la variable n'est lue que dans une construction d'essai (vide sinon)
     o.folder = licensing::testFolderOverride();
@@ -140,6 +140,8 @@ void start() {
         if (std::filesystem::is_regular_file(dir / "registre.xpgreg", ec)) o.bundledRegistry = U(dir / "registre.xpgreg");
         if (std::filesystem::is_regular_file(dir / "revocations.xpgrev", ec)) o.bundledRevocations = U(dir / "revocations.xpgrev");
     }
+    // 1.35.0 : une licence flottante prend son poste AVANT la premiere evaluation (sur un fil, quelques secondes au plus).
+    if (takeFloatingSeat) (void)service::startupLease(o);
     (void)licensing::initialize(std::move(o));
     arm();
     syncStateNotices();

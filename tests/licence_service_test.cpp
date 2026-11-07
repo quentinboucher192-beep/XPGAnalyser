@@ -89,7 +89,7 @@ void writeFile(const fs::path& p, const std::string& text) {
     fs::create_directories(p.parent_path());
     std::ofstream(p, std::ios::binary) << text;
 }
-bool exists(const fs::path& p) {
+bool present(const fs::path& p) {
     std::error_code ec;
     return fs::exists(p, ec);
 }
@@ -254,7 +254,7 @@ json::Value licenceAtService(const std::string& id) {
 // ---- les PC (un dossier de licences chacun) ----
 fs::path folderOf(const std::string& name) { return g_base / "pcs" / name; }
 
-void usePc(const std::string& name, const std::string& machine) {
+lic::StoreOptions pcOptions(const std::string& name, const std::string& machine) {
     lic::StoreOptions o;
     o.folder = U(folderOf(name));
     o.trustedKeys = {trustedOf(*g_editor)};
@@ -263,7 +263,15 @@ void usePc(const std::string& name, const std::string& machine) {
     o.clock = [] { return lic::systemNow() + static_cast<Seconds>(g_shift.load()); };
     o.machineId = machine;
     o.evaluationPeriod = true;
-    app::licence::start(std::move(o));
+    return o;
+}
+
+void usePc(const std::string& name, const std::string& machine) { app::licence::start(pcOptions(name, machine)); }
+
+int stateLines() {
+    int n = 0;
+    for (const auto& h : lic::getHistory(0)) n += h.kind == "etat";
+    return n;
 }
 
 std::string pcKeyHex() {
@@ -420,7 +428,7 @@ int main(int argc, char** argv) {
         const auto a = keep(ls::activate("XPG-AAAA-BBBB-CCCC-DDDD", "Poste essai A"));
         check(!a.ok && !a.reached && has(a.message, "ton code n'a pas \xC3\xA9t\xC3\xA9 envoy\xC3\xA9") && !has(a.message, "AAAA"),
               "hors ligne, activer : " + a.message);
-        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !exists(folderOf("A") / "licence.xpglic"), "rien n'est installe");
+        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !present(folderOf("A") / "licence.xpglic"), "rien n'est installe");
         ls::setAddressForTests(address);
     }
 
@@ -437,7 +445,7 @@ int main(int argc, char** argv) {
         const auto r = keep(ls::trial());
         const auto rec = record();
         st = lic::getLicenseState();
-        check(r.ok && rec.trialRecordedAt > 0 && near(rec.trialStart, lic::systemNow(), 300) && exists(folderOf("A") / lic::LicenseStore::kTrialFile),
+        check(r.ok && rec.trialRecordedAt > 0 && near(rec.trialStart, lic::systemNow(), 300) && present(folderOf("A") / lic::LicenseStore::kTrialFile),
               "declaree : enregistree par le service (" + r.message + ")");
         check(st.status == lic::LicenseStatus::Evaluation && st.evaluationDaysLeft == 30, "toujours 30 jours");
         trialStart = rec.trialStart;
@@ -463,8 +471,8 @@ int main(int argc, char** argv) {
         const auto wrong = keep(ls::activate("XPG-AAAA-BBBB-CCCC-DDDD", "Poste essai A"));
         check(!wrong.ok && wrong.reached && wrong.refused && wrong.definitive && has(wrong.message, "pas reconnu") && !has(wrong.message, "AAAA"),
               "un code faux : refuse (" + wrong.message + ")");
-        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !exists(folderOf("A") / "licence.xpglic") &&
-                  !exists(folderOf("A") / lic::LicenseStore::kActivationFile),
+        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !present(folderOf("A") / "licence.xpglic") &&
+                  !present(folderOf("A") / lic::LicenseStore::kActivationFile),
               "un code faux : rien n'est installe");
         // le code lu avec souplesse : minuscules, espaces
         std::string loose = code1;
@@ -476,7 +484,7 @@ int main(int argc, char** argv) {
         check(r.ok && r.licenseInstalled && r.licenseId == "XPG-2026-00201" && noticeKey(r, "licence:activation"),
               "le bon code (en minuscules, avec des espaces) : active (" + r.message + ")");
         check(st.status == lic::LicenseStatus::Valid && st.online && st.licenseId == "XPG-2026-00201" && st.activationDaysLeft == 30 &&
-                  near(st.activationUntil, lic::systemNow() + 30 * D, 300) && exists(folderOf("A") / lic::LicenseStore::kActivationFile),
+                  near(st.activationUntil, lic::systemNow() + 30 * D, 300) && present(folderOf("A") / lic::LicenseStore::kActivationFile),
               "Valide, en ligne, bail de 30 jours (" + st.message + ")");
         const auto rec = record();
         check(rec.activatedLicense == "XPG-2026-00201" && rec.activatedPcName == "Poste essai A", "le releve : la licence, le nom du PC");
@@ -493,7 +501,7 @@ int main(int argc, char** argv) {
         usePc("C", "machine-essai-3");
         const auto r = keep(ls::activate(code1, "Poste essai C"));
         check(!r.ok && r.refused && !r.definitive && has(r.message, "Tous les postes"), "un second PC : tous les postes pris (" + r.message + ")");
-        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !exists(folderOf("C") / "licence.xpglic"), "rien n'est installe sur C");
+        check(lic::getLicenseState().status == lic::LicenseStatus::Evaluation && !present(folderOf("C") / "licence.xpglic"), "rien n'est installe sur C");
     }
 
     std::printf("-- un 401 du a l'heure : l'heure du service relue, un second essai\n");
@@ -586,7 +594,7 @@ int main(int argc, char** argv) {
         r = keep(ls::takeLease());
         st = lic::getLicenseState();
         check(r.ok && st.status == lic::LicenseStatus::Valid && near(st.leaseUntil, lic::systemNow() + 900, 120) &&
-                  exists(folderOf("F1") / lic::LicenseStore::kLeaseFile),
+                  present(folderOf("F1") / lic::LicenseStore::kLeaseFile),
               "le jeton pris : Valide, 15 min (" + r.message + ")");
         check(app::licence::indicator().text == "Flottante \xC2\xB7 poste pris" && app::licence::indicator().tone == 1, "l'indicateur : " + app::licence::indicator().text);
 
@@ -602,7 +610,7 @@ int main(int argc, char** argv) {
 
         usePc("F1", "machine-essai-f1");
         r = keep(ls::returnLease());
-        check(r.ok && !exists(folderOf("F1") / lic::LicenseStore::kLeaseFile) && lic::getLicenseState().status == lic::LicenseStatus::NoFloatingSeat,
+        check(r.ok && !present(folderOf("F1") / lic::LicenseStore::kLeaseFile) && lic::getLicenseState().status == lic::LicenseStatus::NoFloatingSeat,
               "F1 rend son poste (" + r.message + ")");
 
         usePc("F2", "machine-essai-f2");
@@ -627,11 +635,45 @@ int main(int argc, char** argv) {
         json::Value at = licenceAtService("XPG-2026-00301");
         const json::Value* jetons = at.find("jetons");
         check(jetons && jetons->isArray() && jetons->items().size() == 1, "chez le service : un jeton pris");
+        const int linesBefore = stateLines();
         ls::shutdown();
         at = licenceAtService("XPG-2026-00301");
         jetons = at.find("jetons");
-        check(jetons && jetons->isArray() && jetons->items().empty() && !exists(folderOf("F2") / lic::LicenseStore::kLeaseFile),
-              "la fermeture rend le jeton (chez le service : aucun)");
+        check(jetons && jetons->isArray() && jetons->items().empty(), "la fermeture rend le jeton (chez le service : aucun)");
+        check(present(folderOf("F2") / lic::LicenseStore::kLeaseFile) && lic::getLicenseState().status == lic::LicenseStatus::Valid &&
+                  stateLines() == linesBefore,
+              "... et l'etat de ce PC ne change pas en partant (le fichier du jeton finit seul ; rien dans l'historique)");
+
+        // Le lancement suivant, 20 minutes plus tard (le jeton garde a pris fin) : le poste est repris AVANT la
+        // premiere evaluation - pas de << Valide -> aucun poste -> Valide >> dans l'historique.
+        g_shift = 20 * 60;
+        const bool pre = ls::startupLease(pcOptions("F2", "machine-essai-f2"));
+        usePc("F2", "machine-essai-f2");
+        auto st = lic::getLicenseState();
+        check(pre && st.status == lic::LicenseStatus::Valid && st.leaseUntil > lic::systemNow() && stateLines() == linesBefore,
+              "relance : le poste repris avant l'evaluation, Valide, aucune ligne d'etat de plus (" + st.message + ")");
+        // ... rendu de nouveau a la fermeture (le fil de fond)
+        const auto rev = ls::revision();
+        ls::startRunner();
+        (void)waitRunner(rev);
+        ls::shutdown();
+        g_shift = 0;
+        // Un autre PC prend le poste rendu ; ce PC (son jeton garde, encore bon) demande le sien : le service dit non,
+        // le jeton garde est efface.
+        usePc("F1", "machine-essai-f1");
+        r = keep(ls::takeLease());
+        check(r.ok, "F1 prend le poste rendu (" + r.message + ")");
+        usePc("F2", "machine-essai-f2");
+        check(lic::getLicenseState().status == lic::LicenseStatus::Valid, "F2 : son jeton garde vaut encore (15 min au plus)");
+        r = keep(ls::takeLease());
+        st = lic::getLicenseState();
+        check(!r.ok && r.noSeat && st.status == lic::LicenseStatus::NoFloatingSeat && !present(folderOf("F2") / lic::LicenseStore::kLeaseFile),
+              "le service dit : aucun poste - le jeton garde est efface (" + st.message + ")");
+        check(!ls::startupLease(pcOptions("F2", "machine-essai-f2")) && lic::getLicenseState().status == lic::LicenseStatus::NoFloatingSeat,
+              "au lancement, sans poste libre : rien (l'avis viendra du fil de fond)");
+        usePc("F1", "machine-essai-f1");
+        r = keep(ls::returnLease());
+        check(r.ok, "F1 rend son poste");
     }
 
     std::printf("-- la demande sans code\n");
@@ -724,24 +766,24 @@ int main(int argc, char** argv) {
         writeFile(codeFile, lower + "\r\n");
         ls::setAddressForTests(dead);
         auto r = keep(ls::sync());
-        check(!r.ok && !r.reached && exists(codeFile) && lic::getLicenseState().status == lic::LicenseStatus::Evaluation,
+        check(!r.ok && !r.reached && present(codeFile) && lic::getLicenseState().status == lic::LicenseStatus::Evaluation,
               "sans reseau : le code est garde (" + r.message + ")");
         ls::setAddressForTests(address);
         r = keep(ls::sync());
         auto st = lic::getLicenseState();
-        check(r.licenseInstalled && st.status == lic::LicenseStatus::Valid && st.licenseId == "XPG-2026-00401" && !exists(codeFile) &&
+        check(r.licenseInstalled && st.status == lic::LicenseStatus::Valid && st.licenseId == "XPG-2026-00401" && !present(codeFile) &&
                   noticeKey(r, "licence:activation"),
               "en ligne : active, puis efface (" + r.message + ")");
         check(record().trialRecordedAt > 0, "la Decouverte declaree au passage (avant l'activation)");
         writeFile(codeFile, "XPG-ZZZZ-ZZZZ-ZZZZ-ZZZZ\n");
         g_codes.push_back("ZZZZZZZZZZZZZZZZ");
         r = keep(ls::sync());
-        check(!exists(codeFile) && noticeKey(r, "licence:code-installateur") && has(noticeTitle(r, "licence:code-installateur"), "Il est effac") &&
+        check(!present(codeFile) && noticeKey(r, "licence:code-installateur") && has(noticeTitle(r, "licence:code-installateur"), "Il est effac") &&
                   lic::getLicenseState().licenseId == "XPG-2026-00401",
               "un code refuse : efface, un avis, la licence reste (" + noticeTitle(r, "licence:code-installateur") + ")");
         writeFile(codeFile, "pas un code\n");
         r = keep(ls::sync());
-        check(!exists(codeFile) && noticeKey(r, "licence:code-installateur"), "pas un code : efface, un avis");
+        check(!present(codeFile) && noticeKey(r, "licence:code-installateur"), "pas un code : efface, un avis");
     }
     {
         // le fil de fond du lancement : il trouve le code et l'active
@@ -756,7 +798,7 @@ int main(int argc, char** argv) {
         const auto last = ls::lastResult();
         g_said.push_back(last.message);
         const auto st = lic::getLicenseState();
-        check(last.job == ls::Job::Sync && st.status == lic::LicenseStatus::Valid && st.licenseId == "XPG-2026-00402" && !exists(codeFile),
+        check(last.job == ls::Job::Sync && st.status == lic::LicenseStatus::Valid && st.licenseId == "XPG-2026-00402" && !present(codeFile),
               "le code de l'installateur active au lancement (" + last.message + ")");
         std::string title;
         check(bell("licence:activation", &title) && has(title, "XPG-2026-00402"), "l'avis de la cloche : " + title);
@@ -794,7 +836,7 @@ int main(int argc, char** argv) {
         const auto r = keep(ls::renew());
         const auto st = lic::getLicenseState();
         check(noticeKey(r, "licence:retrait") && has(noticeTitle(r, "licence:retrait"), "XPG-2026-00201") && !st.online && st.licenseId.empty() &&
-                  !exists(folderOf("A") / "licence.xpglic") && !exists(folderOf("A") / lic::LicenseStore::kActivationFile),
+                  !present(folderOf("A") / "licence.xpglic") && !present(folderOf("A") / lic::LicenseStore::kActivationFile),
               "au renouvellement : l'activation effacee, un avis (" + noticeTitle(r, "licence:retrait") + ")");
         check(record().activatedLicense.empty(), "le releve l'oublie");
         usePc("C", "machine-essai-3");
@@ -802,7 +844,7 @@ int main(int argc, char** argv) {
         check(c.ok && lic::getLicenseState().online, "la place libre : C s'active (" + c.message + ")");
         c = keep(ls::release());
         const auto stc = lic::getLicenseState();
-        check(c.ok && !stc.online && !exists(folderOf("C") / lic::LicenseStore::kActivationFile) && has(c.message, "lib\xC3\xA9r\xC3\xA9"),
+        check(c.ok && !stc.online && !present(folderOf("C") / lic::LicenseStore::kActivationFile) && has(c.message, "lib\xC3\xA9r\xC3\xA9"),
               "C se libere (" + c.message + ")");
         std::string etatC;
         if (const json::Value* acts = licenceAtService("XPG-2026-00201").find("activations"); acts && acts->isArray())
@@ -816,7 +858,9 @@ int main(int argc, char** argv) {
     {
         auto r = keep(ls::activate(code1, "Poste essai A"));
         check(r.ok && lic::getLicenseState().online, "A de nouveau activee (" + r.message + ")");
-        g_shift = 2 * D + 25 * D;   // le PC hors ligne 25 jours
+        // Le PC hors ligne : son horloge avance de 25 jours. Le compteur du bail compte ce saut depuis la derniere heure
+        // signee (le service a +2 j) : l'heure retenue = +27 j, le bail (jusqu'a +32 j) : 5 jours.
+        g_shift = 25 * D;
         app::licence::refresh();
         auto st = lic::getLicenseState();
         check(st.status == lic::LicenseStatus::Valid && st.activationWarning && st.activationDaysLeft == 5, "5 jours de bail : l'avertissement");
@@ -826,7 +870,7 @@ int main(int argc, char** argv) {
         check(bell("licence:bail-fin", &title) && has(title, "Bail : il reste 5 jours") && has(app::licence::launchNotice(), "connecte ce PC"),
               "l'avis de la cloche : " + title);
         check(has(app::licence::startCard().title, "Bail : il reste 5 jours"), "l'encart : " + app::licence::startCard().title);
-        g_shift = 2 * D + 31 * D;   // ... puis 31 jours : le bail est fini
+        g_shift = 31 * D;   // ... puis 31 jours (l'heure retenue : +33 j) : le bail est fini
         app::licence::refresh();
         st = lic::getLicenseState();
         check(st.status == lic::LicenseStatus::LeaseExpired && st.online && !app::licence::allows("ai_generation"),

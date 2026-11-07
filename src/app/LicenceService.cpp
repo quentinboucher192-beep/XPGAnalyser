@@ -350,11 +350,25 @@ bool existingDevice(std::string& id, std::string& why) {
     return true;
 }
 
+// Qui signe les appels : la cle de ce PC, par le module (licensing::deviceSignServiceMessage) ; au lancement, avant
+// le module, un magasin temporaire (startupLease).
+struct DeviceSigner {
+    std::function<bool(crypto::PublicKey&, std::string&)>                                          publicKey;
+    std::function<bool(std::string_view, crypto::Signature&, crypto::PublicKey&, std::string&)> sign;
+};
+const DeviceSigner& moduleSigner() {
+    static const DeviceSigner s{[](crypto::PublicKey& pk, std::string& why) { return devicePublicKey(pk, why); },
+                                [](std::string_view m, crypto::Signature& sig, crypto::PublicKey& pub, std::string& why) {
+                                    return lic::deviceSignServiceMessage(m, sig, pub, &why);
+                                }};
+    return s;
+}
+
 // Un appel signe par la cle de ce PC. Un refus 401 du a l'heure : /v1/etat relu, l'appel refait une fois.
 Got callSigned(Conn& c, const std::string& method, const std::string& path, const std::string& body, std::string& why, int connectTimeout = 15,
-               int idleTimeout = 30) {
+               int idleTimeout = 30, const DeviceSigner& signer = moduleSigner()) {
     crypto::PublicKey pk{};
-    if (!devicePublicKey(pk, why)) {
+    if (!signer.publicKey(pk, why)) {
         Got g;
         g.failure = ai::HttpResponse::Failure::Other;
         g.error = why;
@@ -366,7 +380,7 @@ Got callSigned(Conn& c, const std::string& method, const std::string& path, cons
             crypto::Signature sig{};
             crypto::PublicKey pub{};
             std::string w;
-            if (!lic::deviceSignServiceMessage(m, sig, pub, &w) || pub != pk) {
+            if (!signer.sign(m, sig, pub, w) || pub != pk) {
                 signedOk = false;
                 signWhy = w.empty() ? std::string("la cl\xC3\xA9 de ce PC a chang\xC3\xA9") : w;
             }
@@ -410,7 +424,7 @@ Got callSigned(Conn& c, const std::string& method, const std::string& path, cons
 
 // Le certificat du service (garde en memoire tant que la cle du service ne change pas), verifie : signe par une cle
 // de l'editeur que ce programme croit, pour la cle que le service annonce, pas expire.
-bool fetchCert(Conn& c, const std::string& serviceKey, std::string& why) {
+bool fetchCert(Conn& c, const std::string& serviceKey, std::string& why, const std::vector<lic::TrustedKey>* trusted = nullptr) {
     {
         std::lock_guard<std::mutex> lock(certMutex());
         if (!certCache().empty() && certKeyCache() == serviceKey) {
@@ -426,7 +440,7 @@ bool fetchCert(Conn& c, const std::string& serviceKey, std::string& why) {
         return false;
     }
     std::vector<crypto::PublicKey> keys;
-    for (const auto& k : lic::trustedPublisherKeys()) keys.push_back(k.key);
+    for (const auto& k : trusted ? *trusted : lic::trustedPublisherKeys()) keys.push_back(k.key);
     lsv::ServiceCert cert;
     std::string w;
     if (!lsv::verifyCert(g.body, keys, serviceNow(), cert, &w)) {
@@ -948,6 +962,7 @@ bool stepTakeLease(Conn& c, const std::string& lid, Result& res, std::vector<std
     }
     const ServiceError e = errorOf(g);
     if (g.status == 409) {
+        lic::dropLease();   // le service le dit : ce PC n'a pas de poste (un jeton garde de la fermeture ne vaut plus)
         res.noSeat = true;
         res.refused = true;
         res.retryAfter = static_cast<int>(e.freeIn);
@@ -957,9 +972,11 @@ bool stepTakeLease(Conn& c, const std::string& lid, Result& res, std::vector<std
         lines.push_back(text);
         return false;
     }
-    if (g.status == 403) {
+    if (g.status == 403 || g.status == 410) {
+        lic::dropLease();
         res.refused = true;
-        lines.push_back("Ce PC n'a pas d'activation flottante pour la licence " + lid + " : le service ne lui donne pas de poste.");
+        lines.push_back(!e.message.empty() ? "Pas de poste flottant : " + sentence(e.message)
+                                           : "Ce PC n'a pas d'activation flottante pour la licence " + lid + " : le service ne lui donne pas de poste.");
         return false;
     }
     if (g.status != 200) {
@@ -984,7 +1001,12 @@ bool stepTakeLease(Conn& c, const std::string& lid, Result& res, std::vector<std
     return true;
 }
 
-bool stepReturnLease(Conn& c, const std::string& lid, Result& res, std::vector<std::string>& lines, int connectTimeout, int idleTimeout) {
+// `dropLocal` faux (la fermeture) : le jeton de ce PC reste dans son dossier jusqu'a sa fin (15 min au plus) - le poste
+// est rendu au service, et l'etat de ce PC ne change pas en partant (pas de << Valide -> aucun poste >> dans son
+// historique a chaque fermeture) ; au lancement suivant, le poste est repris (startupLease), ou le service dit
+// qu'il n'y en a plus (409 : le jeton est alors efface).
+bool stepReturnLease(Conn& c, const std::string& lid, Result& res, std::vector<std::string>& lines, int connectTimeout, int idleTimeout,
+                     bool dropLocal = true) {
     json::Value body = json::Value::object();
     body.set("licence", lid);
     std::string why;
@@ -994,8 +1016,8 @@ bool stepReturnLease(Conn& c, const std::string& lid, Result& res, std::vector<s
                         " Il se lib\xC3\xA9rera de lui-m\xC3\xAAme \xC3\xA0 la fin du jeton (15 min au plus).");
         return false;
     }
-    lic::dropLease();
-    res.changed = true;
+    if (dropLocal) lic::dropLease();
+    res.changed = dropLocal;
     lines.push_back("Poste flottant rendu : un autre PC peut le prendre.");
     return true;
 }
@@ -1979,6 +2001,85 @@ void poll() {
     }
 }
 
+// ============================================================ le poste flottant au lancement ==
+bool startupLease(const lic::StoreOptions& options, int waitMs) {
+    if (address().empty() || options.folder.empty()) return false;
+    // Une licence flottante en ligne sur ce PC ? (son activation ; rien n'est verifie ici : le magasin le fera)
+    const auto readText = [](const std::string& path, std::string& out) {
+        crypto::Bytes bytes;
+        std::string w;
+        if (!crypto::readFile(path, bytes, &w, 1024u * 1024u)) return false;
+        out.assign(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        return true;
+    };
+    std::string text, lid;
+    {
+        lic::SignedBlock b;
+        lsv::Activation a;
+        if (!readText(deploy::joinPath(options.folder, lic::LicenseStore::kActivationFile), text) ||
+            !lsv::findBlock(text, lic::DocKind::Activation, b, nullptr) || !lsv::parseActivation(b.document, a, nullptr) || !a.floating)
+            return false;
+        lid = a.licenseId;
+    }
+    // Un jeton encore bon (un lancement juste apres une fermeture) : rien a faire maintenant (le fil de fond le renouvelle).
+    if (readText(deploy::joinPath(options.folder, lic::LicenseStore::kLeaseFile), text)) {
+        lic::SignedBlock b;
+        lsv::Lease l;
+        if (lsv::findBlock(text, lic::DocKind::Lease, b, nullptr) && lsv::parseLease(b.document, l, nullptr) && l.licenseId == lid &&
+            l.until > lic::systemNow() + 120)
+            return false;
+    }
+    // Un magasin a part (le module n'est pas encore configure) : la cle de ce PC, l'heure signee, le jeton.
+    auto store = std::make_shared<lic::LicenseStore>(options);
+    if (!store->configured()) return false;
+    auto done = std::make_shared<std::promise<bool>>();
+    auto result = done->get_future();
+    std::thread worker([store, lid, done] {
+        bool ok = false;
+        Conn c;
+        c.a = address();
+        c.host = hostOf(c.a.url);
+        json::Value etat;
+        std::string why, w;
+        if (readState(c, etat, why) && etat.flag("certifie") && fetchCert(c, etat.str("cle_service"), why, &store->trustedKeys())) {
+            std::uint8_t n[16];
+            crypto::randomBytes(n, sizeof n);
+            const std::string nonce = crypto::hex(n, sizeof n);
+            const Got t = getPublic(c, "/v1/heure?n=" + nonce);
+            if (t.reached() && t.status == 200) (void)store->noteServiceTime(t.body, nonce, c.cert, &w);
+            const DeviceSigner signer{[store](crypto::PublicKey& pk, std::string& e) {
+                                          std::string hex;
+                                          crypto::Bytes kb;
+                                          if (!store->deviceKey(hex, &e) || !crypto::unhex(hex, kb, pk.size())) return false;
+                                          std::copy(kb.begin(), kb.end(), pk.begin());
+                                          return true;
+                                      },
+                                      [store](std::string_view m, crypto::Signature& sig, crypto::PublicKey& pub, std::string& e) {
+                                          return store->deviceSignServiceMessage(m, sig, pub, nullptr, &e);
+                                      }};
+            json::Value body = json::Value::object();
+            body.set("licence", lid);
+            const Got g = callSigned(c, "POST", "/v1/flottante/jeton", json::write(body, false), why, 3, 4, signer);
+            json::Value v;
+            if (g.reached() && g.status == 200 && json::parse(g.body, v) && v.isObject()) ok = store->installLease(field(v, "jeton"), c.cert, &w);
+            else if (g.reached() && (g.status == 409 || g.status == 403 || g.status == 410)) store->dropLease();
+        }
+        done->set_value(ok);
+    });
+    bool ok = false;
+    if (result.wait_for(std::chrono::milliseconds(std::max(100, waitMs))) == std::future_status::ready) {
+        ok = result.get();
+    } else {
+        g_stopping = true;   // trop long (un reseau lent) : la requete en cours est arretee ; le fil de fond reprendra
+        std::lock_guard<std::mutex> lock(httpMutex());
+        if (g_active) g_active->cancel();
+    }
+    worker.join();
+    g_stopping = false;
+    if (ok) runner().leaseTaken = true;   // a rendre a la fermeture
+    return ok;
+}
+
 Result lastResult() { return runner().last; }
 
 unsigned long long revision() noexcept { return runner().revision.load(); }
@@ -2012,7 +2113,7 @@ void shutdown() {
             c.host = hostOf(c.a.url);
             Result res;
             std::vector<std::string> lines;
-            (void)stepReturnLease(c, lid, res, lines, 3, 3);
+            (void)stepReturnLease(c, lid, res, lines, 3, 3, /*dropLocal=*/false);
             done.set_value();
         });
         if (fut.wait_for(std::chrono::seconds(4)) != std::future_status::ready) {

@@ -57,6 +57,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -114,6 +115,9 @@ struct SyncOptions {
     bool        dryRun{false};         // dire ce qui serait recu et envoye, sans rien changer
     Seconds     now{0};
     std::string tool;                  // "XPG-License-Admin 1.3.0" (l'index le note : qui a envoye)
+    // Les essais seulement : appele juste avant le premier envoi de chaque tentative (un autre poste envoie
+    // entre-temps : le 409, puis la relecture et la fusion).
+    std::function<void()> beforeSend;
 };
 struct SyncReport {
     bool                     ok{false};

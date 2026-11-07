@@ -60,8 +60,9 @@ struct Gate {
 
 // Au lancement (App) : configure le module. XPG_LICENCES_DOSSIER (environnement) remplace le dossier des
 // licences de ce PC - 1.32.0 : SEULEMENT dans une construction d'essai (licensing::testFolderOverride, option
-// CMake XPG_LICENCES_CLE_ESSAI : les captures) ; un programme livre l'ignore.
-void start();
+// CMake XPG_LICENCES_CLE_ESSAI : les captures) ; un programme livre l'ignore. 1.35.0 : `takeFloatingSeat` (pas le
+// poste d'exploitation) : une licence flottante prend son poste avant la premiere evaluation (service::startupLease).
+void start(bool takeFloatingSeat = false);
 // Les essais : configurer avec ces options (un dossier, des cles de confiance).
 void start(licensing::StoreOptions options);
 // Chaque image : une revaluation par heure.

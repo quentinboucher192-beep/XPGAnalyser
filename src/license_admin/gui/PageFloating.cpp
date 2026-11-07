@@ -25,6 +25,7 @@
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <string>

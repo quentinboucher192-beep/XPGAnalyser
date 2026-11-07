@@ -202,8 +202,7 @@ std::string padKey(long long v) {
 
 ui::Tone toneOf(RequestState s) {
     switch (s) {
-        case RequestState::Pending:
-        case RequestState::Received: return ui::Tone::Warning;
+        case RequestState::Pending: return ui::Tone::Warning;
         case RequestState::Accepted: return ui::Tone::Ok;
         case RequestState::Refused:
         case RequestState::Unreadable:
@@ -438,7 +437,7 @@ private:
             ui::CellStyle st;
             if (r >= states.size() || c != 5) return st;
             st.fgTone = toneOf(states[r]);
-            st.bold = states[r] == RequestState::Pending || states[r] == RequestState::Received;
+            st.bold = states[r] == RequestState::Pending;
             return st;
         });
         if (!shown_.empty() && table_->selection().empty()) table_->selectModelRows({0}, false);

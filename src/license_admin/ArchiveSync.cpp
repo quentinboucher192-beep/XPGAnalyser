@@ -1104,6 +1104,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey& k
         const std::uint64_t newCounter = std::max(remote.counter, lastSeen(folder, url)) + 1;
         uploads.emplace_back(kIndexName, writeIndex(skey, newIndex, opt.now, by, newCounter));
 
+        if (opt.beforeSend) opt.beforeSend();
         std::uint64_t base = remote.version;
         bool conflict = false;
         std::size_t i = 0;
