@@ -349,8 +349,9 @@ protected:
 
 private:
     static constexpr const char* kLead =
-        "Les demandes de licence que les clients envoient depuis leur logiciel, par le service des licences : rien \xC3\xA0 importer. Accepte-en une : "
-        "l'assistant signe la licence (li\xC3\xA9" "e \xC3\xA0 ce PC, ou en ligne avec un code), puis elle part d'elle-m\xC3\xAAme. Une demande par PC ; le client peut l'annuler.";
+        "Les demandes de licence que les clients envoient depuis leur logiciel, par le service des licences : relev\xC3\xA9" "es toutes seules (\xC3\xA0 "
+        "l'ouverture, puis toutes les 2 minutes), rien \xC3\xA0 importer. Accepte-en une : l'assistant signe la licence (li\xC3\xA9" "e \xC3\xA0 ce PC, ou en ligne avec un "
+        "code), elle part d'elle-m\xC3\xAAme ; le Studio du client l'installe dans la minute et le lui confirme. Une demande par PC ; le client peut l'annuler.";
 
     [[nodiscard]] bool busy() const { return host_.busy && host_.busy(); }
     [[nodiscard]] bool ready() const { return ws().service().ready(); }
