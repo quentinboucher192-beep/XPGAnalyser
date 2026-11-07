@@ -163,11 +163,65 @@ Restent de ces listes : la console de l'agent qui peut apparaître un instant à
 
 ## 5. Les essais
 
-@ESSAIS@
+- **Linux : 146 suites sur 146 réussies** (`ctest`, sur la version livrée), dont une nouvelle, `clesauvegarde` (la sauvegarde de la clé de l'éditeur). Chaque correction de sécurité a son essai dans la suite de sa partie :
+  - **fichiers et scripts** (`hminatives`, `hmi`, `hmieditor`, `hmirecording`, `echanges`, `robustness`) :
+    - le confinement, les liens, les noms réservés, un projet sur un partage ;
+    - des icônes, des polices, des archives et des classeurs forgés ;
+    - un XML d'un million de commentaires ;
+    - l'accès web (adresse appelée, origine, jeton) ;
+  - **agent de déploiement** (`deploynet`, `deployinstall`, `deployui`, `deploycrypto`, `deploypackage`) :
+    - un journal attaqué (caractères de contrôle, 5 000 protocoles, plafond du jour) ;
+    - les connexions par adresse et les places réservées ;
+    - une taille démesurée, un dossier d'extraction piégé, des liens ;
+    - l'aller-retour « Revenir à la précédente », l'historique borné ;
+  - **licences** (`licensing`, `licenceui`, `githubsync`, `clesauvegarde`) :
+    - les verrous à la source, l'empreinte du poste, une émission plus ancienne, l'état local effacé ;
+    - un CSV piégé, l'anti-retour du dépôt ;
+    - la sauvegarde de la clé : phrase fausse, en-tête ou paramètres modifiés ;
+  - **Assistant IA** (31 suites, et `coreprocess`) :
+    - des pièces jointes aux chemins hostiles ;
+    - un `.xia` qui voudrait changer l'adresse ;
+    - la clé liée au serveur, les adresses locales trompeuses ;
+    - le mode Direct, les secrets retirés du bac à sable ;
+    - aucun descripteur hérité par un processus enfant.
+- **Sous Wine, avec les programmes Windows livrés :**
+  - **l'installation par-dessus la 1.31.0** :
+    - elle passe, et ta clé d'API est gardée ;
+    - les programmes installés sont ceux construits : versions 1.32.0, agent 1.2.0 ;
+    - `--cli`, le bac à sable, les associations de fichiers et les copies de secours marchent ;
+    - rien de l'outil de l'éditeur n'est installé ;
+    - le journal montre les droits posés sur les dossiers communs, dans l'ordre : l'ancien dossier de l'agent d'abord ;
+  - **l'agent 1.2.0 reprend le dossier de l'agent 1.1.0** (créé pour l'essai sous `C:\ProgramData\XPG\Agent`) :
+    - il est déplacé dans le profil, et l'ancien n'existe plus ;
+    - **l'empreinte de son identité est la même avant et après** : les PC appairés n'ont rien à refaire ;
+    - journal joint : `essai-agent-et-poste-wine.txt` ;
+  - **les réglages du poste sans fenêtre** (`--autoriser-dossier-scripts`, `--acces-web-sur-ce-poste`…) :
+    - un chemin relatif est refusé ;
+    - le même dossier écrit autrement (casse, barre finale) n'est pas ajouté deux fois ;
+  - **l'outil de l'éditeur** (WinHTTP et DPAPI de Wine, contre le faux GitHub local) :
+    - 17 commandes réussies et les 5 refus attendus ;
+    - la sauvegarde de la clé : écrite, vérifiée, une phrase fausse refusée, restaurée sur un « autre PC » avec le même identifiant, et jamais par-dessus une clé déjà là ;
+    - une adresse d'API autre que GitHub est refusée ;
+    - journal joint : `essai-outil-wine.txt`, codes de secours masqués.
+- **Une cinquième relecture**, faite après les corrections (§ 1), a trouvé six problèmes. Ils sont corrigés et couverts par les essais.
 
 ## 6. Installer
 
-@INSTALLER@
+Comme d'habitude : lance `API-IHM-Studio-Setup-1.32.0.exe` (dans le zip) par-dessus la 1.31.0. Tes projets, tes réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.32.0.exe` | `603D9517DE2281D390B0691A1A82BA6020502653E11E7277E8402FB87475FBD8` | 54 855 623 octets |
+| `API-Studio-1.32.0-portable.zip` | `66C67AF032A28A90FAB0D53B4972524826C30ED51322042720E45DD900F04B74` | 190 fichiers |
+| `IHM-Studio-1.32.0-portable.zip` | `FECF3E7AE39ED5BC81CA810EF641BB5CC1D15F323378851FE5B3E7E40346151D` | 191 fichiers |
+| `XPG-License-Admin-1.32.0-EDITEUR.zip` (**à part, pour toi seul**) | `4002D22C79411A663F1C517D4B7C400588A240F4B81C77444687D98677EF8CDB` | 1 328 609 octets |
+
+**L'outil de l'éditeur** remplace celui de la 1.31.0 : mets le nouveau `XPG-License-Admin.exe` à la place de l'ancien. Ta clé, ton archive et ta synchro ne bougent pas (`%LOCALAPPDATA%\XPG\LicenseAdmin`). Ne le mets jamais avec l'installateur. **Première chose à faire avec lui : `sauvegarder-cle`** (§ 2).
+
+Après l'installation, sur les PC concernés :
+- un script écrit hors du projet : autorise son dossier (§ 2) ;
+- l'accès web : coche « permis sur ce poste » ;
+- l'agent de déploiement : il reprend seul son ancien dossier à son prochain démarrage, rien à faire.
 
 ## 7. Ce qui reste
 
@@ -192,4 +246,5 @@ Restent de ces listes : la console de l'agent qui peut apparaître un instant à
 - **Non couverts :**
   - les macros d'une bibliothèque `.xapi` peuvent encore écrire un chemin relatif dans leur dossier `Macros` ;
   - la police d'interface choisie par l'utilisateur n'est pas relue comme les polices des projets.
+- **L'outil de l'éditeur reste en ligne de commande.** Son application avec des fenêtres (ta demande de ce matin) est la **1.33**, commencée dès cette livraison : la clé, signer une licence en glissant la demande, la liste des activations, les révocations, et un assistant pour GitHub.
 - **Reportés :** les licences du poste d'exploitation (Runtime, la maquette) et les limites de la 1.27.0 (`Stop(son)`…).
