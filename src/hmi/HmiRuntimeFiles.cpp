@@ -239,25 +239,27 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
         out = fullC;
         return true;
     }
+    std::string joined;   // le chemin relatif joint en texte : garde le // d'un partage (generic() le reduit sous Linux)
     if (!p.has_root_name() && !p.has_root_directory() && !networkOrDevicePath(text)) {
         if (projectFolder.empty()) {
             why = "le projet n'est pas encore enregistr\xC3\xA9 : un chemin relatif part de son dossier donnees/ (enregistre-le, "
                   "ou donne un chemin complet dans un dossier autoris\xC3\xA9) - " + text;
             return false;
         }
+        joined = projectFolder + "/donnees/" + text;
         p = pathOf(projectFolder) / "donnees" / p;
     }
     // Un chemin reseau - ecrit en entier, ou relatif a un projet range sur un partage : compare en texte (rien n'est ouvert
     // avant), permis sous le dossier du projet (le meme serveur) ou dans un dossier autorise sur ce poste, avec les memes
     // gardes qu'un chemin local (les fichiers du projet, donnees/ et exports/ ou un dossier autorise, pas le dossier lui-meme).
-    if (const std::string full = networkOrDevicePath(text) ? text : generic(p); networkOrDevicePath(full)) {
+    if (const std::string full = networkOrDevicePath(text) ? text : joined.empty() ? generic(p) : joined; networkOrDevicePath(full)) {
         const bool inProject = !projectFolder.empty() && pathPlace(full, projectFolder) != 0;
         if (!inProject && !insideUserAllowedFolder(full)) {
             why = outsideWhy(text);
             return false;
         }
         if (writing && !projectFolder.empty()) {
-            const std::string ihm = generic(pathOf(projectFolder) / "ihm"), file = generic(pathOf(projectFolder) / "project.xpgproj");
+            const std::string ihm = projectFolder + "/ihm", file = projectFolder + "/project.xpgproj";
             if (pathPlace(full, ihm) != 0 || pathPlace(ihm, full) == 1 || pathPlace(full, file) == 2) {
                 why = "les fichiers du projet (ihm/, project.xpgproj) ne se changent pas par un script - " + text;
                 return false;
@@ -265,7 +267,7 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
         }
         std::vector<std::string> roots = userAllowedFolders();
         if (!projectFolder.empty())
-            for (const char* sub : {"donnees", "exports"}) roots.push_back(generic(pathOf(projectFolder) / sub));
+            for (const char* sub : {"donnees", "exports"}) roots.push_back(projectFolder + "/" + sub);
         bool inside = false, equal = false;
         for (const auto& r : roots) {
             const int at = pathPlace(full, r);

@@ -1248,7 +1248,8 @@ void confinement132() {
         const bool rel = hmi::confinedScriptPath(proj, "recettes/a.csv", true, r, w);
         check(rel && r.find("donnees") != std::string::npos && r.find("a.csv") != std::string::npos,
               "projet sur un partage : un chemin relatif part de donnees/ (" + r + w + ")");
-        check(hmi::confinedScriptPath(proj, proj + "/exports/b.csv", true, r, w), "projet sur un partage : DIR_DATA()/exports en entier (" + w + ")");
+        const bool whole = hmi::confinedScriptPath(proj, proj + "/exports/b.csv", true, r, w);
+        check(whole, "projet sur un partage : DIR_DATA()/exports en entier (" + w + ")");
         check(!hmi::confinedScriptPath(proj, proj + "/ihm/vues.json", true, r, w) && w.find("ihm/") != std::string::npos,
               "projet sur un partage : ihm/ ne s'ecrit pas (" + w + ")");
         check(!hmi::confinedScriptPath(proj, proj + "/autre/c.csv", false, r, w), "projet sur un partage : hors de donnees/ et exports/, refuse");

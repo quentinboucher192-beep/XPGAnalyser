@@ -10692,8 +10692,9 @@ void lot14_notifications_rapports_web() {
     check(!web.running() && web.error().find(std::string(app::WebHost::kSettingLabel)) != std::string::npos,
           "le projet seul : rien n'\xC3\xA9" "coute, et l'\xC3\xA9tat dit quel r\xC3\xA9glage du poste cocher");
     wp.refreshLive();
-    check(wp.clients().model()->rowCount() == 1 && wp.clients().model()->cellText(0, 0).find("R\xC3\xA9glages") != std::string::npos,
-          "... la table le dit aussi");
+    check(wp.clients().model()->rowCount() == 1 && wp.clients().model()->cellText(0, 0).find("Ce poste") != std::string::npos
+              && wp.clients().model()->cellText(0, 0).find("--acces-web-sur-ce-poste oui") != std::string::npos,
+          "... la table le dit aussi (ou cocher, et la commande d'un poste sans \xC3\xA9" "diteur)");
     {
         const auto said = web.takeEvents();
         check(std::any_of(said.begin(), said.end(), [](const std::string& e) { return e.find("non d\xC3\xA9marr\xC3\xA9") != std::string::npos; }),
