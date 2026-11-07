@@ -301,6 +301,39 @@ if(XPG_WITH_SDL)
     target_compile_definitions(xpg_app PUBLIC XPG_WITH_SDL=1)
 endif()
 
+# --- 1.33.0 : XPG-License-Manager-Admin, L'APPLICATION DE L'EDITEUR (ses fenetres) --------------------------
+#  JAMAIS LIVREE, comme la console XPG-License-Admin : construite par outils/mingw/admin_editeur.sh seulement,
+#  refusee par le controle du paquet. Trois etages :
+#    xpg_admin_core  ce que fait la console (Admin, GitHubSync, KeyBackup, le transport HTTPS) et le Workspace
+#                    (license_admin/gui/Workspace : le poste Admin vu par l'application, sans ecran) ;
+#    xpg_admin_gui   les pages et la coquille (ui::Widget ; sans SDL : les essais les dessinent a blanc) ;
+#    l'executable    la fenetre SDL (license_admin/gui/AdminGuiMain.cpp), seulement avec XPG_WITH_SDL.
+add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp src/license_admin/KeyBackup.cpp
+                                  src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
+target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
+if(WIN32)
+    target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp)
+else()
+    target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
+endif()
+file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace)\\.cpp$")
+if(XPG_ADMIN_GUI_SOURCES)
+    add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
+    target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
+endif()
+if(XPG_WITH_SDL AND TARGET xpg_admin_gui AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/AdminGuiMain.cpp")
+    add_executable(xpg_license_manager_admin src/license_admin/gui/AdminGuiMain.cpp src/platform/FontAtlas.cpp ${SDL_SOURCES})
+    target_link_libraries(xpg_license_manager_admin PRIVATE xpg_admin_gui SDL3::SDL3)
+    target_compile_definitions(xpg_license_manager_admin PRIVATE XPG_WITH_SDL=1)
+    set_target_properties(xpg_license_manager_admin PROPERTIES OUTPUT_NAME XPG-License-Manager-Admin)
+    if(WIN32)
+        set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/ihm_studio.ico")
+        configure_file(resources/windows/xpg_license_admin.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc @ONLY)
+        target_sources(xpg_license_manager_admin PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc)
+    endif()
+endif()
+
 # --- lot 12 : le logo de l'executable Windows ---------------------------------
 #
 #  1.12.20 : resources/logo/api_studio.ico et ihm_studio.ico (faits depuis leur SVG,
@@ -1010,6 +1043,17 @@ if(XPG_BUILD_TESTS)
         target_link_libraries(github_sync_test PRIVATE winhttp)
     endif()
     xpg_add_test(NAME githubsync COMMAND github_sync_test ${CMAKE_SOURCE_DIR})
+    # 1.33.0 : l'application de l'editeur - le Workspace (sans ecran), puis ses pages dessinees a blanc.
+    xpg_add_test_executable(admin_workspace_test tests/admin_workspace_test.cpp)
+    xpg_target_link_libraries(admin_workspace_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminworkspace COMMAND admin_workspace_test ${CMAKE_SOURCE_DIR})
+    if(TARGET xpg_admin_gui)
+        foreach(part shell licences securite donnees)
+            xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
+            xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
+            xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})
+        endforeach()
+    endif()
     # 1.32.0 : la sauvegarde de la cle de l'editeur chiffree par une phrase de passe (license_admin/KeyBackup) :
     # aller-retour, phrase fausse, en-tete modifie, parametres affaiblis, cle deja la, phrase trop simple.
     xpg_add_test_executable(key_backup_test tests/key_backup_test.cpp src/license_admin/Admin.cpp src/license_admin/KeyBackup.cpp)
