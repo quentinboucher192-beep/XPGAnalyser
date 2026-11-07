@@ -1889,7 +1889,9 @@ const
   // « Options » (les raccourcis, les fichiers, le pare-feu, la copie de secours).
   // 1.18.0 : « IA » (l'Assistant IA et l'IA depuis un autre PC : elles montraient « Terminé »).
   EtapesNoms = 'Bienvenue|Applications|Emplacement|Tes données|Bibliothèque|IA|Licence|Options|Récapitulatif|Installation|Terminé';
-  EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|ia|raccourcis|recapitulatif|installation|termine';
+  // 1.35.0 : « Licence » (la Découverte ou un code) : son icône aussi (une liste plus courte que l'autre : une icône
+  // « icone-.bmp » introuvable à la dernière page)
+  EtapesIcones = 'bienvenue|applications|emplacement|donnees|bibliotheque|ia|licence|raccourcis|recapitulatif|installation|termine';
   // 1.12.28 : le diaporama de la copie (une diapositive toutes les 5,6 s) : son image
   // (images\ui\<image>.bmp) | son titre | son texte. Une diapositive de plus = un morceau de plus
   // dans chacune des trois listes. (#160 : une espace insécable, devant les deux-points.)

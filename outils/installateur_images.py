@@ -685,6 +685,35 @@ def tuile_ia(taille, fond_page):
     return f
 
 
+# 1.35.0 : l'etape << Licence >> (la Decouverte ou un code) : une cle dessinee, sans la police d'icones - la tuile
+# des autres etapes.
+def tuile_licence(taille, fond_page):
+    def f(e):
+        t = taille * e
+        g = t * SS
+        im = Image.new("RGBA", (g, g), fond_page + (255,))
+        fond = degrade_horizontal(g, g, BLEU_FONCE, TURQUOISE_FONCE).convert("RGBA")
+        masque = Image.new("L", (g, g))
+        ImageDraw.Draw(masque).rounded_rectangle((0, 0, g - 1, g - 1), radius=int(g * 0.26), fill=255)
+        im.paste(fond, (0, 0), masque)
+        cle = Image.new("RGBA", (g, g), (0, 0, 0, 0))
+        d = ImageDraw.Draw(cle)
+        blanc = BLANC + (255,)
+        # l'anneau (la tete de la cle), puis la tige et ses deux dents, a l'horizontale
+        cx, cy, r = g * 0.33, g * 0.50, g * 0.17
+        d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=blanc)
+        rt = r * 0.45
+        d.ellipse((cx - rt, cy - rt, cx + rt, cy + rt), fill=(0, 0, 0, 0))
+        e2 = g * 0.065
+        d.rectangle((cx + r * 0.85, cy - e2, g * 0.80, cy + e2), fill=blanc)
+        d.rectangle((g * 0.62, cy, g * 0.69, cy + g * 0.15), fill=blanc)
+        d.rectangle((g * 0.73, cy, g * 0.80, cy + g * 0.11), fill=blanc)
+        cle = cle.rotate(-35, resample=Image.Resampling.BICUBIC, center=(g / 2, g / 2))
+        im.alpha_composite(cle)
+        return im.resize((t, t), Image.Resampling.LANCZOS).convert("RGB")
+    return f
+
+
 # --------------------------------------- 1.12.29 : les « Details » de la copie ----
 # Une marque devant chaque ligne (16 x 16) : fait (la coche turquoise), en cours (un anneau),
 # attention (l'ambre et son point d'exclamation), erreur (le rouge et sa croix), info (un point) ;
@@ -895,6 +924,7 @@ def main():
     deux_tailles_alpha("journal-roue", marque_journal(j_roue, 12), MARQUE_J, MARQUE_J, 12)
     deux_tailles_alpha("barre-eclat", barre_eclat, 64, 10)
     deux_tailles("icone-ia", tuile_ia(44, BLANC), 44, 44)   # 1.18.0 : l'etape IA
+    deux_tailles("icone-licence", tuile_licence(44, BLANC), 44, 44)   # 1.35.0 : l'etape Licence
     deux_tailles("diapo-api", logo_carte("api_studio", 56), 56, 56)
     deux_tailles("diapo-ihm", logo_carte("ihm_studio", 56), 56, 56)
     if a.icones:

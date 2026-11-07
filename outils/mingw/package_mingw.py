@@ -486,6 +486,9 @@ def main():
         return
 
     # ---- 3. Inno Setup sous Wine ----
+    # 1.35.0 : les etapes de l'assistant et leurs icones (une liste plus courte que l'autre : une icone
+    # << icone-.bmp >> introuvable a la derniere page, une erreur d'execution chez le client)
+    controler_etapes(os.path.join(ROOT, "installateur", "XPGAnalyser.iss"))
     if not a.iscc or not os.path.exists(a.iscc):
         sys.exit("ISCC.exe introuvable (--iscc).")
     setup_nom = f"{fichier}-Setup-{version}.exe"
@@ -520,6 +523,26 @@ def main():
     with open(os.path.join(dist, "SHA256SUMS.txt"), "w", encoding="utf-8", newline="") as f:
         f.write(f"{h}  {setup_nom}\r\n")
     print(f"fait : {setup} ({os.path.getsize(setup) // 1024} Kio) ; SHA-256 {h}")
+
+
+def controler_etapes(iss):
+    """EtapesNoms et EtapesIcones : autant de morceaux, et chaque icone (1x et 2x) dans images/ui."""
+    with open(iss, encoding="utf-8-sig") as f:
+        texte = f.read()
+    def liste(nom):
+        m = re.search(r"^\s*" + nom + r"\s*=\s*'([^']*)'\s*;", texte, re.M)
+        if not m:
+            sys.exit(f"installateur : {nom} introuvable dans {iss}")
+        return m.group(1).split("|")
+    noms, icones = liste("EtapesNoms"), liste("EtapesIcones")
+    if len(noms) != len(icones):
+        sys.exit(f"installateur : {len(noms)} etapes (EtapesNoms) mais {len(icones)} icones (EtapesIcones)")
+    ui = os.path.join(os.path.dirname(iss), "images", "ui")
+    for i in icones:
+        for suffixe in ("", "-2x"):
+            if not i or not os.path.exists(os.path.join(ui, f"icone-{i}{suffixe}.bmp")):
+                sys.exit(f"installateur : l'icone d'etape icone-{i}{suffixe}.bmp manque dans {ui}")
+    print(f"etapes de l'assistant : {len(noms)}, chacune son icone")
 
 
 if __name__ == "__main__":
