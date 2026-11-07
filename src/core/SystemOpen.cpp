@@ -119,4 +119,28 @@ void hardenLibrarySearch() noexcept {
 #endif
 }
 
+bool linkBelow(const std::filesystem::path& target, const std::filesystem::path& root) {
+    std::size_t skip = 0;
+    for (const auto& e : root)
+        if (!e.empty()) ++skip;
+    std::filesystem::path cur;
+    std::size_t at = 0;
+    for (const auto& e : target) {
+        if (e.empty()) continue;
+        cur /= e;
+        if (++at <= skip) continue;
+#if defined(_WIN32)
+        const DWORD a = GetFileAttributesW(cur.c_str());
+        if (a == INVALID_FILE_ATTRIBUTES) return false;
+        if (a & FILE_ATTRIBUTE_REPARSE_POINT) return true;
+#else
+        std::error_code ec;
+        const auto st = std::filesystem::symlink_status(cur, ec);
+        if (ec || !std::filesystem::exists(st)) return false;
+        if (std::filesystem::is_symlink(st)) return true;
+#endif
+    }
+    return false;
+}
+
 } // namespace core

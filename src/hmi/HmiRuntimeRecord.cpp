@@ -189,7 +189,7 @@ std::string Runtime::recordingsFolder() const {
     const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
     std::string folder = rec::folderOf(live->recording, pf);
     // 1.32.0 : un dossier reseau ecrit dans le projet n'est pas touche (fuite NTLM), sauf dossier autorise sur ce poste.
-    if (!projectPathAllowed(folder)) return {};
+    if (!projectPathAllowed(folder, nullptr, pf)) return {};
     return folder;
 }
 

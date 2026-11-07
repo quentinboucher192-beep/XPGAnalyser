@@ -99,9 +99,14 @@ void setUserAllowedFolders(std::vector<std::string> folders);
 [[nodiscard]] bool unsafePathSegment(std::string_view path, std::string* bad = nullptr);
 // Le chemin est-il dans un dossier autorise sur ce poste ? Compare les textes, sans toucher au disque ni au reseau.
 [[nodiscard]] bool insideUserAllowedFolder(std::string_view path);
+// Ou est `path` par rapport a `folder` ? En texte (/ ou \\, casse ASCII, . et ..), sans toucher au disque ni au reseau.
+// 0 : dehors (ou un chemin qui remonte au-dessus de sa racine) ; 1 : dedans ; 2 : le dossier lui-meme.
+[[nodiscard]] int pathPlace(std::string_view path, std::string_view folder);
 // Un chemin venu du projet (fichier externe, document, lien d'archive) peut-il etre ouvert ? Faux : un chemin reseau ou
 // de peripherique hors des dossiers autorises ; `why` le dit, en francais, avec le remede (rien n'est ouvert avant).
-[[nodiscard]] bool projectPathAllowed(std::string_view path, std::string* why = nullptr);
+// `projectFolder` : un chemin sous le dossier du projet lui-meme est permis (un projet range sur un partage : le meme
+// serveur, rien de nouveau n'est contacte).
+[[nodiscard]] bool projectPathAllowed(std::string_view path, std::string* why = nullptr, std::string_view projectFolder = {});
 
 // ---- 1.14.1 (lot N6) : LA BIBLIOTHEQUE D'IMAGES ---------------------------------------------
 //  Des images pretes a poser, rangees par categorie (fleches, interface, securite, industrie,

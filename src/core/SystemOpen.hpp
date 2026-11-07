@@ -18,6 +18,7 @@
 // =============================================================================
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 
@@ -32,5 +33,10 @@ namespace core {
 // plus que dans le dossier du programme et dans System32 - jamais dans le dossier courant (un projet, un
 // dossier de donnees) ni dans le PATH : une DLL posee a cote d'un projet ne se charge pas. Ailleurs : rien.
 void hardenLibrarySearch() noexcept;
+
+// 1.32.0 : `target` passe-t-il par un lien (lien symbolique, jonction : un point de reparse sous Windows) SOUS `root` ?
+// Les elements qui existent, au-dela de ceux de `root` (compte en elements) ; s'arrete au premier qui n'existe pas.
+// Sous Windows, weakly_canonical (libstdc++) ne suit pas les jonctions : c'est la garde des dossiers permis.
+[[nodiscard]] bool linkBelow(const std::filesystem::path& target, const std::filesystem::path& root);
 
 } // namespace core

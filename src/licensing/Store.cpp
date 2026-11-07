@@ -685,8 +685,9 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
         return otherDevice(in.hasDeviceKey ? "la cl\xC3\xA9 de ce PC (" + in.deviceFingerprint + ") n'est pas parmi les " + plural(l.devices.size(), "PC li\xC3\xA9", "PC li\xC3\xA9s")
                                            : in.deviceProblem);
     // 1.32.0 (H2) : le PC lie porte l'empreinte de l'installation qui a fait la demande ; une autre (la cle de ce
-    // PC recopiee ailleurs) n'est pas ce PC. Sans empreinte (une licence d'avant) : rien a comparer.
-    if (const BoundDevice* d = l.device(in.deviceKeyHex); d && !d->station.empty() && d->station != in.station)
+    // PC recopiee ailleurs) n'est pas ce PC. Sans empreinte (une licence d'avant) : rien a comparer. L'identifiant de
+    // Windows illisible sur ce PC (empreinte locale vide) : rien a comparer non plus - jamais une licence valide perdue.
+    if (const BoundDevice* d = l.device(in.deviceKeyHex); d && !d->station.empty() && !in.station.empty() && d->station != in.station)
         return otherDevice("la cl\xC3\xA9 de ce PC (" + in.deviceFingerprint + ") a \xC3\xA9t\xC3\xA9 activ\xC3\xA9" "e sur une autre installation de Windows : "
                            "l'empreinte du poste ne correspond pas (la cl\xC3\xA9 a-t-elle \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e ?)");
     // 1.32.0 (M2) : une emission plus ancienne que la plus recente deja installee (un vieux .xpglic remis a sa place).
@@ -903,7 +904,7 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
         }
         if (!lic.boundTo(keyHex)) return refuse(pre + "elle a \xC3\xA9t\xC3\xA9 d\xC3\xA9livr\xC3\xA9" "e pour un autre PC. Envoie la demande d'activation de CE PC \xC3\xA0 l'\xC3\xA9" "diteur.");
         // 1.32.0 (H2) : liee a cette cle, mais pour une autre installation de Windows (la cle recopiee).
-        if (const BoundDevice* d = lic.device(keyHex); d && !d->station.empty() && d->station != station)
+        if (const BoundDevice* d = lic.device(keyHex); d && !d->station.empty() && !station.empty() && d->station != station)
             return refuse(pre + "elle a \xC3\xA9t\xC3\xA9 d\xC3\xA9livr\xC3\xA9" "e pour une autre installation de Windows (la cl\xC3\xA9 de ce PC a-t-elle \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e ?). "
                                 "Envoie la demande d'activation de CE PC \xC3\xA0 l'\xC3\xA9" "diteur.");
         // 1.32.0 (M2) : jamais une emission plus ancienne qu'une deja installee sur ce PC (meme remplacee depuis).

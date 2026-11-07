@@ -5875,6 +5875,11 @@ begin
   // coupé. Les Utilisateurs lisent XPG ; dans Licences, ils créent des fichiers (RX,WD,AD sur le dossier : il ne peut
   // être ni supprimé ni remplacé par un lien) et modifient ce qui est dedans ((OI)(CI)(IO)M : les fichiers seulement).
   Code := -1;
+  // L'ancien dossier de l'agent de déploiement (XPG\Agent, 1.28 à 1.31) garde les droits de son opérateur (copiés,
+  // plus hérités) : l'agent 1.32 le déplace dans le profil de l'opérateur et n'y laisse pas sa clé ; couper l'héritage
+  // de XPG les lui retirerait, et le déplacement échouerait.
+  if DirExists(ExtractFileDir(Dossier) + '\Agent') and not EstUnLien(ExtractFileDir(Dossier) + '\Agent') then
+    Icacls('"' + ExtractFileDir(Dossier) + '\Agent" /inheritance:d');
   if not DossierProtege(ExtractFileDir(Dossier), '*S-1-5-32-545:(OI)(CI)RX') then
     Log('Licences : le dossier parent ' + ExtractFileDir(Dossier) + ' n''a pas pu être protégé');
   if DossierProtege(Dossier, '*S-1-5-32-545:(RX,WD,AD) *S-1-5-32-545:(OI)(CI)(IO)M') then Code := 0;

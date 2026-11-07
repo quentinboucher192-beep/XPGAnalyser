@@ -963,6 +963,13 @@ std::vector<std::string> migrateLegacyAgentDir(const std::string& newDir) {
     if (!fs::is_directory(from, ec)) return out;   // rien a reprendre
     std::vector<unsigned char> buf;
     const PSID me = tokenUser(buf);
+    // Le compte systeme (une installation deployee par SCCM, Intune...) ne prend jamais le dossier de l'operateur : il
+    // l'emporterait dans son propre profil, et l'agent de la session de l'operateur repartirait de zero.
+    if (me && IsWellKnownSid(me, WinLocalSystemSid)) {
+        out.push_back("ATTENTION : l'agent tourne sous le compte syst\xC3\xA8me : l'ancien dossier " + old
+                      + " n'est pas repris ici ; il le sera par l'agent lanc\xC3\xA9 dans la session de l'op\xC3\xA9rateur.");
+        return out;
+    }
     if (!me || !trustedOwner(from, me)) {
         out.push_back("ATTENTION : l'ancien dossier de l'agent " + old
                       + " n'appartient ni \xC3\xA0 ce compte, ni aux Administrateurs, ni au syst\xC3\xA8me : il n'est PAS repris (un autre compte de ce PC a pu le pr\xC3\xA9parer)."
@@ -972,6 +979,7 @@ std::vector<std::string> migrateLegacyAgentDir(const std::string& newDir) {
     fs::create_directories(to.parent_path(), ec);
     // Le meme volume : un seul renommage (les droits et les dates suivent). Sinon : une copie.
     const bool moved = MoveFileExW(from.c_str(), to.c_str(), 0) != 0;
+    bool noteLeft = false, oldRemoved = false;
     if (!moved) {
         const DWORD moveError = GetLastError();
         const std::string tmpText = newDir + ".migration";
@@ -989,9 +997,26 @@ std::vector<std::string> migrateLegacyAgentDir(const std::string& newDir) {
         }
         if (skipped)
             out.push_back("ATTENTION : " + std::to_string(skipped) + " \xC3\xA9l\xC3\xA9ment(s) de l'ancien dossier (\xC3\xA0 un autre compte de ce PC, ou des liens) n'ont pas \xC3\xA9t\xC3\xA9 recopi\xC3\xA9s.");
-        const std::string note = "Ce dossier n'est plus utilis\xC3\xA9 par XPG-Deployment-Agent : il a \xC3\xA9t\xC3\xA9 recopi\xC3\xA9 vers\r\n" + newDir
-                                 + "\r\n(le dossier de l'op\xC3\xA9rateur, ferm\xC3\xA9 aux autres comptes du PC). Un administrateur peut l'effacer.\r\n";
-        (void)crypto::replaceFile(joinPath(old, "DOSSIER-DEPLACE.txt"), note, false, nullptr);
+        // L'ancien dossier ne doit pas garder la cle d'identite (protegee pour la machine : tout compte du PC la lit) :
+        // tout l'effacer, sinon au moins les secrets ; sinon, le dire.
+        if (!install::removeTree(old, nullptr)) {
+            std::vector<std::string> left;
+            for (const char* secret : {"identite.cle", "appairage.code"}) {
+                std::error_code e4;
+                const fs::path f = from / secret;
+                if (fs::exists(f, e4) && !fs::remove(f, e4)) left.push_back(secret);
+            }
+            if (!left.empty())
+                out.push_back("ATTENTION : l'ancien dossier " + old + " garde " + listed(left)
+                              + ", lisible(s) par les autres comptes de ce PC : fais effacer ce dossier par un administrateur. "
+                                "Si d'autres personnes ouvrent une session sur ce PC, cr\xC3\xA9" "e une nouvelle identit\xC3\xA9 (efface identite.cer et "
+                                "identite.cle dans " + newDir + ", relance l'agent) puis r\xC3\xA9" "appaire les PC d'IHM Studio.");
+            const std::string note = "Ce dossier n'est plus utilis\xC3\xA9 par XPG-Deployment-Agent : il a \xC3\xA9t\xC3\xA9 recopi\xC3\xA9 vers\r\n" + newDir
+                                     + "\r\n(le dossier de l'op\xC3\xA9rateur, ferm\xC3\xA9 aux autres comptes du PC). Un administrateur peut l'effacer.\r\n";
+            noteLeft = crypto::replaceFile(joinPath(old, "DOSSIER-DEPLACE.txt"), note, false, nullptr);
+        } else {
+            oldRemoved = true;
+        }
     }
     std::string w;
     if (!restrictAgentDir(newDir, &w)) out.push_back("ATTENTION : " + w);
@@ -1006,7 +1031,9 @@ std::vector<std::string> migrateLegacyAgentDir(const std::string& newDir) {
     reprotect(newDir, out);
     out.insert(out.begin(), "Le dossier de l'agent a \xC3\xA9t\xC3\xA9 " + std::string(moved ? "d\xC3\xA9plac\xC3\xA9" : "recopi\xC3\xA9") + " de " + old + " vers " + newDir
                                 + " : il est d\xC3\xA9sormais dans le profil de ce compte, ferm\xC3\xA9 aux autres comptes du PC"
-                                + (moved ? std::string(".") : std::string(" (l'ancien reste, une note y dit o\xC3\xB9 est le nouveau).")));
+                                + (moved || oldRemoved ? std::string(".")
+                                   : noteLeft ? std::string(" (l'ancien reste, une note y dit o\xC3\xB9 est le nouveau).")
+                                              : std::string(" (l'ancien reste : un administrateur peut l'effacer).")));
 #else
     (void)newDir;
 #endif

@@ -386,7 +386,7 @@ std::shared_ptr<const hmi::ExternalData> hmiExternalData(const hmi::ExternalFile
     if (e.data && e.stamp == st.modified && e.bytes == st.bytes) return e.data;
     e.stamp = st.modified;
     e.bytes = st.bytes;
-    e.data = std::make_shared<hmi::ExternalData>(hmi::readExternal(f.kind, st.resolvedPath, f.part, maxRows));
+    e.data = std::make_shared<hmi::ExternalData>(hmi::readExternal(f.kind, st.resolvedPath, f.part, maxRows, folderRef()));
     return e.data;
 }
 

@@ -1233,6 +1233,32 @@ void confinement132() {
               && !hmi::projectPathAllowed("//pirate/partage/doc.pdf") && !hmi::projectPathAllowed("\\\\?\\UNC\\pirate\\x")
               && hmi::projectPathAllowed("C:/Donnees/doc.pdf") && hmi::projectPathAllowed("docs/notice.pdf"),
           "projectPathAllowed : le reseau seulement dans un dossier autorise, un chemin local passe");
+    // Un projet range sur un partage : ses propres chemins passent (le meme serveur), pas un autre partage.
+    check(hmi::projectPathAllowed("\\\\srv\\atelier\\Projet\\media\\a.png", nullptr, "\\\\SRV\\atelier\\Projet")
+              && hmi::projectPathAllowed("//srv/atelier/Projet/enregistrements/x", nullptr, "\\\\srv\\atelier\\Projet")
+              && !hmi::projectPathAllowed("\\\\srv\\atelier\\Autre\\a.png", nullptr, "\\\\srv\\atelier\\Projet")
+              && !hmi::projectPathAllowed("\\\\srv\\atelier\\Projet\\..\\Autre\\a.png", nullptr, "\\\\srv\\atelier\\Projet"),
+          "projectPathAllowed : un projet sur un partage lit ses propres fichiers, pas ceux d'a cote");
+    check(hmi::pathPlace("//srv/p/Projet/donnees/a.csv", "\\\\srv\\p\\projet") == 1 && hmi::pathPlace("//srv/p/Projet", "//srv/p/Projet/") == 2
+              && hmi::pathPlace("//srv/p/Projet2/a", "//srv/p/Projet") == 0 && hmi::pathPlace("C:/a/b", "c:\\A") == 1,
+          "pathPlace : dedans, le dossier lui-meme, le voisin, la casse et les barres");
+    {
+        const std::string proj = "//srv/atelier/Projet";
+        std::string r, w;
+        const bool rel = hmi::confinedScriptPath(proj, "recettes/a.csv", true, r, w);
+        check(rel && r.find("donnees") != std::string::npos && r.find("a.csv") != std::string::npos,
+              "projet sur un partage : un chemin relatif part de donnees/ (" + r + w + ")");
+        check(hmi::confinedScriptPath(proj, proj + "/exports/b.csv", true, r, w), "projet sur un partage : DIR_DATA()/exports en entier (" + w + ")");
+        check(!hmi::confinedScriptPath(proj, proj + "/ihm/vues.json", true, r, w) && w.find("ihm/") != std::string::npos,
+              "projet sur un partage : ihm/ ne s'ecrit pas (" + w + ")");
+        check(!hmi::confinedScriptPath(proj, proj + "/autre/c.csv", false, r, w), "projet sur un partage : hors de donnees/ et exports/, refuse");
+        check(!hmi::confinedScriptPath(proj, "//srv/atelier/Autre/d.csv", false, r, w), "projet sur un partage : un autre dossier du partage, refuse");
+        check(!hmi::confinedScriptPath(proj, "../../Autre/e.csv", false, r, w), "projet sur un partage : .. ne sort pas");
+        hmi::setUserAllowedFolders({"\\\\nas\\p"});
+        check(!hmi::confinedScriptPath("//nas/p/Projet", "//nas/p/Projet/ihm/x.json", true, r, w),
+              "un partage autorise qui contient le projet : ihm/ ne s'ecrit toujours pas");
+        hmi::setUserAllowedFolders({});
+    }
     check(hmi::unsafePathSegment("docs/CON.pdf") && hmi::unsafePathSegment("a\\LPT1") && hmi::unsafePathSegment("a/b./c")
               && !hmi::unsafePathSegment("C:/Donnees/../a.csv") && !hmi::unsafePathSegment("./donnees/COM10.txt"),
           "unsafePathSegment : CON, LPT1, un point final ; pas C:, .., ni COM10");
@@ -1266,7 +1292,7 @@ void confinement132() {
         const auto said = [&] {
             for (const auto& i : generate(b.p, [](std::string_view) { return true; }))
                 if (i.category == "Script" && i.message.find("FILE_WRITE('C:/Export/releve.csv')") != std::string::npos
-                    && i.message.find(std::string(hmi::kAllowedFoldersSetting)) != std::string::npos)
+                    && i.message.find(std::string(hmi::kAllowedFoldersWhere)) != std::string::npos)
                     return true;
             return false;
         };

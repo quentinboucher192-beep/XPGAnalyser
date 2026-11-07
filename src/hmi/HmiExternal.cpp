@@ -537,7 +537,8 @@ bool readSqliteRows(const std::vector<std::uint8_t>& file, const SqliteTable& t,
     return true;
 }
 
-ExternalData readExternal(ExternalKind kind, const std::string& path, std::string_view part, std::size_t maxRows) {
+ExternalData readExternal(ExternalKind kind, const std::string& path, std::string_view part, std::size_t maxRows,
+                          std::string_view projectFolder) {
     ExternalData d;
     if (kind == ExternalKind::Database) {
         // "Driver={ODBC Driver 17};Server=srv;Database=prod;" ou "postgresql://user@srv:5432/prod"
@@ -570,7 +571,7 @@ ExternalData readExternal(ExternalKind kind, const std::string& path, std::strin
         return d;
     }
     // 1.32.0 : un chemin reseau venu du projet n'est pas ouvert (fuite NTLM), sauf dossier autorise sur ce poste.
-    if (!projectPathAllowed(path, &d.error)) return d;
+    if (!projectPathAllowed(path, &d.error, projectFolder)) return d;
     std::error_code ec;
     if (!fs::is_regular_file(path, ec)) { d.error = "fichier absent : " + path; return d; }
     if (kind == ExternalKind::Excel) {

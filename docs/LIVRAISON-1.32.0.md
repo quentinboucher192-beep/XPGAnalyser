@@ -29,6 +29,17 @@ Quatre relectures indépendantes du code, en lecture seule, chacune sur une part
 
 Chacune a classé ce qu'elle a trouvé (critique, élevé, moyen, faible) avec un scénario concret. Tout ce qui est critique ou élevé est corrigé ; le reste l'est presque entièrement (§ 3, et § 7 pour ce qui reste). Chaque correction a son essai.
 
+Une **cinquième relecture**, faite après les corrections, a cherché ce qu'elles pourraient casser dans un usage normal, ou laisser ouvert. Ce qu'elle a trouvé est corrigé :
+- **un projet rangé sur un partage réseau** (`\\serveur\partage\Projet`) aurait perdu ses enregistrements, ses fichiers externes et l'écriture de ses scripts. Un chemin sous le dossier du projet lui-même est maintenant permis : c'est le même serveur, rien de nouveau n'est contacté ;
+- **un chemin réseau autorisé** échappait aux gardes des fichiers du projet (`ihm/`, `project.xpgproj`) et du dossier permis lui-même. Il passe maintenant par les mêmes gardes qu'un chemin local ;
+- **sous Windows, une jonction** sous un dossier permis laissait sortir un script. Chaque élément du chemin sous le dossier permis est maintenant vérifié ;
+- **l'ancien dossier de l'agent** :
+  - l'installateur lui garde les droits de l'opérateur, pour que l'agent puisse le déplacer ;
+  - après une copie, sa clé n'y reste pas ;
+  - le compte système (une installation par SCCM ou Intune) ne le prend jamais à l'opérateur ;
+- **un PC dont l'identifiant de Windows ne se lit pas** ne perd plus sa licence valide ;
+- **dans le bac à sable de l'IA**, copier un fichier vers un dossier marche de nouveau.
+
 ## 2. Ce qui change pour toi
 
 | Quoi | Avant | Maintenant | Ce que tu fais |

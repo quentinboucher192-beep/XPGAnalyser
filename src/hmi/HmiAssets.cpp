@@ -395,20 +395,24 @@ bool unsafePathSegment(std::string_view path, std::string* bad) {
     return false;
 }
 
-bool insideUserAllowedFolder(std::string_view path) {
+int pathPlace(std::string_view path, std::string_view folder) {
     const std::string key = lexicalKey(path);
-    if (key.empty()) return false;
-    for (const auto& f : userAllowedFolders()) {
-        std::string root = lexicalKey(f);
-        if (root.empty()) continue;
-        if (root.size() > 1 && root.back() == '/') root.pop_back();
-        if (key == root || (key.size() > root.size() && key.compare(0, root.size(), root) == 0 && key[root.size()] == '/')) return true;
-    }
+    std::string root = lexicalKey(folder);
+    if (key.empty() || root.empty()) return 0;
+    if (root.size() > 1 && root.back() == '/') root.pop_back();
+    if (key == root) return 2;
+    return key.size() > root.size() && key.compare(0, root.size(), root) == 0 && (key[root.size()] == '/' || root.back() == '/') ? 1 : 0;
+}
+
+bool insideUserAllowedFolder(std::string_view path) {
+    for (const auto& f : userAllowedFolders())
+        if (pathPlace(path, f) != 0) return true;
     return false;
 }
 
-bool projectPathAllowed(std::string_view path, std::string* why) {
+bool projectPathAllowed(std::string_view path, std::string* why, std::string_view projectFolder) {
     if (!networkOrDevicePath(path) || insideUserAllowedFolder(path)) return true;
+    if (!projectFolder.empty() && pathPlace(path, projectFolder) != 0) return true;   // un projet range sur un partage
     if (why)
         *why = "chemin r\xC3\xA9seau ou de p\xC3\xA9riph\xC3\xA9rique venu du projet, pas ouvert (" + std::string(path)
              + ") : pour le permettre sur ce poste, ajoute son dossier dans " + std::string(kAllowedFoldersWhere);
@@ -427,7 +431,7 @@ ExternalState externalState(const ExternalFile& f, const std::string& projectFol
     st.resolvedPath = resolveExternalPath(f, projectFolder);
     if (f.kind == ExternalKind::Database) { st.status = ExternalStatus::Unverifiable; return st; }
     // 1.32.0 : un chemin reseau venu du projet n'est pas touche (fuite NTLM) : non verifiable, et pourquoi.
-    if (!projectPathAllowed(st.resolvedPath, &st.refused)) { st.status = ExternalStatus::Unverifiable; return st; }
+    if (!projectPathAllowed(st.resolvedPath, &st.refused, projectFolder)) { st.status = ExternalStatus::Unverifiable; return st; }
     std::error_code ec;
     if (!fs::is_regular_file(st.resolvedPath, ec)) { st.status = ExternalStatus::Missing; return st; }
     st.bytes = static_cast<std::uint64_t>(fs::file_size(st.resolvedPath, ec));

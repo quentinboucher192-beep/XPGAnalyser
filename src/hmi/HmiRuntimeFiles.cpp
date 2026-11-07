@@ -25,6 +25,7 @@
 
 #include "HmiAssets.hpp"   // 1.32.0 : les dossiers autorises, les chemins reseau
 #include "../core/AtomicFile.hpp"
+#include "../core/SystemOpen.hpp"   // 1.32.0 : linkBelow (les jonctions sous Windows)
 #include "../sim/DialectLib.hpp"
 
 #include <algorithm>
@@ -231,29 +232,53 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
         // 1.32.0 : et un lien du dossier de travail vers ailleurs ne le fait pas sortir.
         const fs::path rootC = canonicalOf(root, ec);
         const fs::path fullC = ec ? fs::path{} : canonicalOf(full, ec);
-        if (rel.empty() || *rel.begin() == ".." || ec || placeIn(fullC, rootC) != 1) {
+        if (rel.empty() || *rel.begin() == ".." || ec || placeIn(fullC, rootC) != 1 || core::linkBelow(fullC, rootC)) {
             why = "bac \xC3\xA0 sable : ce chemin sort du dossier de travail - " + text;
             return false;
         }
         out = fullC;
         return true;
     }
-    // Un chemin reseau : seulement dans un dossier autorise sur ce poste, compare en texte (rien n'est ouvert avant).
-    if (networkOrDevicePath(text)) {
-        if (!insideUserAllowedFolder(text)) {
-            why = outsideWhy(text);
-            return false;
-        }
-        out = p.lexically_normal();
-        return true;
-    }
-    if (!p.has_root_name() && !p.has_root_directory()) {
+    if (!p.has_root_name() && !p.has_root_directory() && !networkOrDevicePath(text)) {
         if (projectFolder.empty()) {
             why = "le projet n'est pas encore enregistr\xC3\xA9 : un chemin relatif part de son dossier donnees/ (enregistre-le, "
                   "ou donne un chemin complet dans un dossier autoris\xC3\xA9) - " + text;
             return false;
         }
         p = pathOf(projectFolder) / "donnees" / p;
+    }
+    // Un chemin reseau - ecrit en entier, ou relatif a un projet range sur un partage : compare en texte (rien n'est ouvert
+    // avant), permis sous le dossier du projet (le meme serveur) ou dans un dossier autorise sur ce poste, avec les memes
+    // gardes qu'un chemin local (les fichiers du projet, donnees/ et exports/ ou un dossier autorise, pas le dossier lui-meme).
+    if (const std::string full = networkOrDevicePath(text) ? text : generic(p); networkOrDevicePath(full)) {
+        const bool inProject = !projectFolder.empty() && pathPlace(full, projectFolder) != 0;
+        if (!inProject && !insideUserAllowedFolder(full)) {
+            why = outsideWhy(text);
+            return false;
+        }
+        if (writing && !projectFolder.empty()) {
+            const std::string ihm = generic(pathOf(projectFolder) / "ihm"), file = generic(pathOf(projectFolder) / "project.xpgproj");
+            if (pathPlace(full, ihm) != 0 || pathPlace(ihm, full) == 1 || pathPlace(full, file) == 2) {
+                why = "les fichiers du projet (ihm/, project.xpgproj) ne se changent pas par un script - " + text;
+                return false;
+            }
+        }
+        std::vector<std::string> roots = userAllowedFolders();
+        if (!projectFolder.empty())
+            for (const char* sub : {"donnees", "exports"}) roots.push_back(generic(pathOf(projectFolder) / sub));
+        bool inside = false, equal = false;
+        for (const auto& r : roots) {
+            const int at = pathPlace(full, r);
+            inside = inside || at == 1;
+            equal = equal || at == 2;
+        }
+        if (!inside && !equal) {
+            why = outsideWhy(text);
+            return false;
+        }
+        if (isRoot) *isRoot = equal && !inside;
+        out = pathOf(full).lexically_normal();
+        return true;
     }
     p = p.lexically_normal();
     const fs::path canon = canonicalOf(p, ec);
@@ -277,14 +302,19 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
             return false;
         }
     }
-    bool inside = false, equal = false;
+    bool inside = false, equal = false, link = false;
     for (const auto& r : allowedRoots(projectFolder)) {
         const int at = placeIn(canon, r);
         inside = inside || at == 1;
         equal = equal || at == 2;
+        link = link || (at == 1 && core::linkBelow(canon, r));   // une jonction sous le dossier permis (Windows)
     }
     if (!inside && !equal) {
         why = outsideWhy(text);
+        return false;
+    }
+    if (link) {
+        why = "ce chemin passe par un lien (ou une jonction) sous un dossier permis : refus\xC3\xA9 - " + text;
         return false;
     }
     if (isRoot) *isRoot = equal && !inside;
@@ -438,8 +468,14 @@ bool Runtime::fileOp(std::string_view op, const std::vector<std::string>& args, 
         if (u == "FILE_COPY" && fs::is_directory(p, ec)) return fail(shown(p) + " est un dossier : FILE_COPY copie un fichier");
         if (fs::is_directory(to, ec) && !fs::is_directory(p, ec)) {                         // dans un dossier : le meme nom
             to /= p.filename();
-            // 1.32.0 : revu avec ce nom (un lien qui sortirait des dossiers permis).
-            if (!resolve(folder, generic(to), true, to, why)) return fail(why);
+            // 1.32.0 : revu avec ce nom (un lien qui sortirait des dossiers permis) ; le bac a sable ne prend que du relatif.
+            std::string again = generic(to);
+            if (const std::string& box = confinedRoot(); !box.empty()) {
+                std::error_code e3;
+                const fs::path boxC = canonicalOf(pathOf(box).lexically_normal(), e3);
+                again = e3 ? std::string{} : generic(to.lexically_relative(boxC));
+            }
+            if (!resolve(folder, again, true, to, why)) return fail(why);
         }
         if (to.has_parent_path()) fs::create_directories(to.parent_path(), ec);
         ec.clear();

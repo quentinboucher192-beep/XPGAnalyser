@@ -38,8 +38,9 @@ struct ExternalData {
     [[nodiscard]] bool ok() const noexcept { return error.empty(); }
 };
 
+// 1.32.0 : `projectFolder` - un chemin reseau sous le dossier du projet (range sur un partage) se lit.
 [[nodiscard]] ExternalData readExternal(ExternalKind, const std::string& path, std::string_view part = {},
-                                        std::size_t maxRows = 200);
+                                        std::size_t maxRows = 200, std::string_view projectFolder = {});
 
 // Les deux lecteurs qui n'existaient pas dans le projet, exposes pour les tests.
 struct JsonCheck { bool ok{false}; std::size_t line{0}, column{0}; std::string error; };
