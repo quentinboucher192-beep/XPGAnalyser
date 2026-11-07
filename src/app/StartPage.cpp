@@ -1542,7 +1542,7 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     autostart_ = make("Choisir\xE2\x80\xA6", "startup.autostart", L::Ghost, G::None);
     // 1.34.0 : le bouton de l'encart de la licence (cache sans encart).
     licence_ = make("Licence\xE2\x80\xA6", "startup.licence", L::Secondary, G::None);
-    licence_->setTooltip("La fen\xC3\xAAtre Licence : ton \xC3\xA9valuation, ta demande de licence en ligne");
+    licence_->setTooltip("La fen\xC3\xAAtre Licence : ta licence, sa D\xC3\xA9" "couverte, l'activation avec un code");
     licence_->setVisibility(ui::Visibility::Collapsed);
     autostart_->setTooltip("Le poste d'exploitation d'un projet FINISH, lanc\xC3\xA9 au d\xC3\xA9marrage du PC (un seul projet par PC)");
 }
@@ -1560,10 +1560,16 @@ void StartRail::setCodeStats(std::string text) {
     invalidate();
 }
 
-void StartRail::setLicenceNotice(std::string title, std::string text) {
-    if (title == licenceTitle_ && text == licenceText_) return;
+void StartRail::setLicenceCard(std::string title, std::string text, int tone, std::string button) {
+    if (button.empty()) button = "Licence\xE2\x80\xA6";
+    if (title == licenceTitle_ && text == licenceText_ && tone == licenceTone_ && button == licenceLabel_) return;
     licenceTitle_ = std::move(title);
     licenceText_ = std::move(text);
+    licenceTone_ = tone;
+    if (button != licenceLabel_) {
+        licenceLabel_ = std::move(button);
+        licence_->setText(licenceLabel_);
+    }
     invalidateLayout();
     invalidate();
 }
@@ -1757,16 +1763,19 @@ void StartRail::onPaint(const ui::PaintContext& ctx) {
         }
     }
 
-    // ---- 1.34.0 : l'encart de la licence ------------------------------------------
+    // ---- 1.34.0 : l'encart de la licence ; 1.35.0 : la licence active, sa couleur selon l'etat ------------
     if (!licenceTitle_.empty() && licenceBox_.w > 0.f) {
-        const auto warn = th.onSurface(c.warning);
-        ctx.r.fillRoundedRect(licenceBox_, mix(c.border, c.warning, 0.55f), 8.f);
-        ctx.r.fillRoundedRect(licenceBox_.inset(1.f, 1.f), mix(c.panelBg, c.warning, th.isDark() ? 0.16f : 0.12f), 7.f);
+        const gfx::Color base = licenceTone_ == 1 ? c.ok : licenceTone_ == 3 ? c.error : licenceTone_ == 4 ? c.accent : licenceTone_ == 0 ? c.border : c.warning;
+        const ui::Icon icon = licenceTone_ == 1 ? ui::Icon::Ok : licenceTone_ == 3 ? ui::Icon::Error : licenceTone_ == 4 ? ui::Icon::Info
+                            : licenceTone_ == 0 ? ui::Icon::Lock : ui::Icon::Warning;
+        const auto warn = th.onSurface(base);
+        ctx.r.fillRoundedRect(licenceBox_, mix(c.border, base, 0.55f), 8.f);
+        ctx.r.fillRoundedRect(licenceBox_.inset(1.f, 1.f), mix(c.panelBg, base, th.isDark() ? 0.16f : 0.12f), 7.f);
         const float left = licenceBox_.x + 12.f, tx = left + 22.f;
         const float room = licenceBox_.right() - 12.f - tx;
         const float lh = ctx.r.lineHeight(kSmall);
         float ty = licenceBox_.y + 10.f;
-        ui::drawIcon(ctx.r, ui::Icon::Warning, {left, ty + std::round((lh - 14.f) * 0.5f), 14.f, 14.f}, warn);
+        ui::drawIcon(ctx.r, icon, {left, ty + std::round((lh - 14.f) * 0.5f), 14.f, 14.f}, warn);
         for (std::size_t i = 0; i < licenceLines_.size(); ++i) {
             if (i < licenceBold_) drawBold(ctx.r, {tx, ty}, elide(ctx.r, licenceLines_[i], kSmall, room), kSmall, warn);
             else ctx.r.drawText({tx, ty}, elide(ctx.r, licenceLines_[i], kSmall, room), kSmall, c.text);

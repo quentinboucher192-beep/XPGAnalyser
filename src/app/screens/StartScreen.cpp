@@ -381,25 +381,14 @@ StartupScreen::StartupScreen(App& app) : menu::WidgetMenu("startup"), app_(app) 
 
 StartupScreen::~StartupScreen() = default;
 
-// 1.34.0 : l'encart de la licence sur l'accueil - pendant l'evaluation, les jours qui restent (rien sinon, ni sur
-// le poste d'exploitation : licence::launchNotice y est vide).
-static void applyLicenceNotice(start::StartRail& rail) {
-    if (licence::launchNotice().empty()) {
-        rail.setLicenceNotice({}, {});
-        return;
-    }
-    const auto st = licensing::getLicenseState();
-    if (st.status != licensing::LicenseStatus::Evaluation) {
-        rail.setLicenceNotice({}, {});
-        return;
-    }
-    const std::string days = std::to_string(st.evaluationDaysLeft) + (st.evaluationDaysLeft > 1 ? " jours" : " jour");
-    std::string until;
-    if (st.evaluationEndsAt) {
-        const std::string d = licensing::isoDate(st.evaluationEndsAt);   // "2026-12-07"
-        if (d.size() == 10) until = " (jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) + ")";
-    }
-    rail.setLicenceNotice("\xC3\x89valuation : il te reste " + days + until, "Ensuite, il te faudra une licence : demande-la en ligne.");
+// 1.34.0 : l'encart de la licence sur l'accueil. 1.35.0 : LA LICENCE ACTIVE, TOUJOURS VISIBLE sur le menu principal -
+// la licence et sa fin, la Decouverte et ses jours, le bail qui finit, sans licence -> << Activer avec un code... >>
+// (rien sur le poste d'exploitation, ni quand les licences ne sont pas actives : licence::startCard y est vide).
+// Rend l'onglet de la fenetre Licence qu'ouvre son bouton.
+static int applyLicenceNotice(start::StartRail& rail) {
+    const auto card = licence::startCard();
+    rail.setLicenceCard(card.title, card.text, card.tone, card.button);
+    return card.tab;
 }
 
 core::Status StartupScreen::buildUi() {
@@ -427,9 +416,10 @@ core::Status StartupScreen::buildUi() {
             page_->status().setMessage("Nouveaut\xC3\xA9s de la " + help::news::shortVersion(help::news::sessionVersion()) + " : " + std::to_string(unseen)
                                        + " \xC3\xA0 d\xC3\xA9" "couvrir \xE2\x80\x94 menu Aide \xE2\x80\xBA Nouveaut\xC3\xA9s\xE2\x80\xA6");
     }
-    // 1.34.0 : la periode d'evaluation de ce PC (les jours qui restent) - dite a chaque lancement (la cloche aussi).
+    // 1.34.0 : la Decouverte de ce PC (les jours qui restent) ; 1.35.0 : le bail qui finit - dits a chaque lancement
+    // (la cloche aussi).
     if (const auto eval = licence::launchNotice(); !eval.empty()) page_->status().setMessage(eval, StatusBar::Severity::Warning);
-    applyLicenceNotice(page_->rail());   // ... et, bien visible, l'encart sous la marque
+    licenceTab_ = applyLicenceNotice(page_->rail());   // ... et, bien visible, la licence active sous la marque
 
     // LES SIGNAUX DES WIDGETS, UNE FOIS POUR TOUTES : ici et pas dans onEnter,
     // que MenuManager rappelle a chaque dialogue ferme (voir en tete).
@@ -446,7 +436,7 @@ core::Status StartupScreen::buildUi() {
     });
     uiLinks_ += rail.swatches().chosen->connect([this](const std::string& key) { chooseTheme(key); });
     uiLinks_ += rail.autostartButton().clicked->connect([this] { askAutostart(); });
-    uiLinks_ += rail.licenceButton().clicked->connect([this] { showLicenceWindow(app_, 6); });   // 1.34.0 : Demande en ligne
+    uiLinks_ += rail.licenceButton().clicked->connect([this] { showLicenceWindow(app_, licenceTab_); });   // 1.35.0 : l'onglet de l'encart
     // Le bouton ... du champ du chemin : l'explorateur part du dossier des
     // projets ; le project.xpgproj choisi designe son dossier ; puis comme Entree.
     {
@@ -535,12 +525,12 @@ void StartupScreen::onEnter() {
     // Un enregistrement (le projet ouvert renomme, "les enregistrer d'abord") :
     // la carte doit le montrer.
     busLinks_ += app_.events().subscribe<ProjectSaved>([this](const ProjectSaved&) { reload(); });
-    // 1.34.0 : les messages courts de l'application (une licence recue par la passerelle...) - ici aussi.
+    // 1.34.0 : les messages courts de l'application (une licence activee par le service...) - ici aussi.
     busLinks_ += app_.events().subscribe<StatusNotice>([this](const StatusNotice& e) {
         page_->status().setTransientMessage(e.text, e.seconds, StatusBar::Severity::Info);
-        applyLicenceNotice(page_->rail());   // une licence recue : l'encart de l'evaluation s'en va
+        licenceTab_ = applyLicenceNotice(page_->rail());   // une licence activee : l'encart la montre
     });
-    applyLicenceNotice(page_->rail());
+    licenceTab_ = applyLicenceNotice(page_->rail());
     page_->grid().resetClickChain();
     reload();
     // 1.8.0 : ce que le demarrage n'a pas pu faire avec les dossiers (un dossier
@@ -588,6 +578,8 @@ void StartupScreen::Update(const menu::FrameContext& fc) {
     // l'accorde qu'a une fenetre au premier plan : une seconde apres l'ouverture, et
     // quand aucun dialogue n'est ouvert (la cle administrateur passe avant).
     if (app_.taskbarPinPending() && frame_ > 60 && manager().top() == this) app_.proposeTaskbarPin();
+    // 1.35.0 : l'encart de la licence suit l'etat (une activation, le bail, le poste flottant) : relu chaque seconde.
+    if (page_ && frame_ % 60 == 0) licenceTab_ = applyLicenceNotice(page_->rail());
     // Les fichiers glisses dans la fenetre : ceux d'un meme depot arrivent un a
     // un, dans la meme image ; on les ouvre ensemble (un .XPG et son .XHW).
     if (!pendingDrops_.empty()) {

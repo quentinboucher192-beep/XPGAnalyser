@@ -1,0 +1,115 @@
+﻿SERVICE DES LICENCES XPG (1.35.0) - LE METTRE EN LIGNE, PAS À PAS
+==================================================================
+
+Le service des licences est un petit programme qui tourne chez Cloudflare (un
+« Worker »), sur TON compte, gratuitement. Les Studios de tes clients lui parlent
+pour activer une licence avec un code, la renouveler, prendre un jeton de licence
+flottante, lire l'heure, déclarer leur Découverte. Ton outil d'éditeur lui parle
+pour déposer les licences, les révocations, les états des PC, et pour la synchro
+de ton archive (chiffrée par toi : Cloudflare ne lit rien).
+
+Ce qu'il te faut : un PC sous Windows 10 ou 11 (ou Linux, macOS), une connexion à
+Internet, une adresse électronique pour le compte Cloudflare. Compte une demi-heure
+la première fois.
+
+Rien de secret ne passe par ici : le service reçoit la clé PUBLIQUE de l'éditeur
+(cle-publique.txt) ; ta clé privée reste dans ton outil, sur ton PC. Le service
+crée lui-même sa propre clé, qui ne le quitte jamais ; tu la certifies depuis ton
+outil (étape 7).
+
+
+1. INSTALLER NODE.JS (une fois)
+-------------------------------
+   Va sur https://nodejs.org et installe la version « LTS » (22 ou plus récente).
+   Garde les choix proposés. Pour vérifier : ouvre un terminal (touche Windows,
+   tape « cmd », Entrée) et tape :   node --version
+   Tu dois lire v22... ou plus.
+
+
+2. CRÉER TON COMPTE CLOUDFLARE (gratuit, une fois)
+--------------------------------------------------
+   Va sur https://dash.cloudflare.com/sign-up , crée le compte (adresse et mot de
+   passe), confirme l'adresse reçue par courriel. Le plan gratuit suffit.
+   La première fois, dans le tableau de bord, ouvre « Workers et Pages » : Cloudflare
+   te demande de choisir ton sous-domaine (par exemple « mon-entreprise ») ; ton
+   service s'appellera https://xpg-licences.mon-entreprise.workers.dev
+
+
+3. PRÉPARER LE DOSSIER
+----------------------
+   Dans le kit de ton outil d'éditeur (Service en ligne › Kit), tu as :
+     service\                le programme du service (wrangler.toml, src\, package.json...)
+     deployer.bat            la mise en ligne (Windows) ; deployer.sh (Linux, macOS)
+     deployer.mjs            ce que deployer.bat lance (à garder à côté de lui)
+     cle-publique.txt        ta clé PUBLIQUE (écrite par l'outil de l'éditeur)
+     LISEZ-MOI-SERVICE.txt   ce fichier
+   Copie-les ensemble dans un dossier de ton PC, par exemple C:\XPG\service-licences.
+
+
+4. OUVRIR UN TERMINAL DANS LE DOSSIER DU SERVICE
+------------------------------------------------
+   Dans l'Explorateur, ouvre le dossier « service », clique dans la barre d'adresse,
+   tape « cmd » puis Entrée : un terminal s'ouvre, déjà dans ce dossier.
+
+
+5. TE CONNECTER À CLOUDFLARE (une fois par PC)
+----------------------------------------------
+   Dans ce terminal, tape :
+
+       npx wrangler login
+
+   (la première fois, npx propose d'installer wrangler : réponds « y ».) Ton
+   navigateur s'ouvre sur Cloudflare : connecte-toi et clique « Allow ». Le
+   terminal dit alors « Successfully logged in ».
+
+
+6. METTRE EN LIGNE
+------------------
+   Double-clique sur deployer.bat (ou, sous Linux et macOS : ./deployer.sh).
+   Il vérifie Node.js, lit ta clé publique dans cle-publique.txt (s'il ne le trouve
+   pas, il te demande de la coller), installe ce qu'il faut la première fois, puis
+   envoie le service chez Cloudflare. À la fin, il écrit l'adresse :
+
+       Ton service est en ligne : https://xpg-licences.<ton compte>.workers.dev
+
+   Note-la : elle est aussi gardée dans adresse-du-service.txt, à côté de
+   deployer.bat.
+   Pour faire la même chose à la main, dans le terminal du dossier « service » :
+
+       npx wrangler deploy --var PUBLISHER_KEYS:<ta clé publique>
+
+   Tu peux relancer deployer.bat quand tu veux (une nouvelle version du service,
+   une nouvelle clé dans cle-publique.txt) : les licences, les activations et ton
+   archive sont gardées chez Cloudflare. Donne TOUJOURS ta clé publique : sans
+   elle, le service refuse tous les appels de ton outil.
+
+
+7. LE RELIER À TON OUTIL D'ÉDITEUR
+----------------------------------
+   Dans l'outil de l'éditeur : Service en ligne › colle l'adresse du service ›
+   Vérifier. L'outil lit la clé du service et te la montre. Puis : Certifier la clé
+   du service. Il la signe avec ta clé et dépose le certificat : à partir de là,
+   les Studios croient ce que le service signe (activations, jetons, heure,
+   Découvertes).
+   Puis, depuis l'outil : dépose le registre, tes licences en ligne (avec leur
+   code d'activation) et, s'il y en a, ta liste de révocation.
+   Pour les Studios livrés : l'adresse est compilée dedans (le kit de l'outil,
+   ServiceAddress.hpp) ; donne-la à ton intégrateur.
+
+
+SI QUELQUE CHOSE NE VA PAS
+--------------------------
+   « Node.js n'est pas installé » : étape 1, puis ferme et rouvre le terminal.
+   « Not logged in » ou une erreur d'authentification : étape 5, puis relance
+     deployer.bat.
+   « You need to register a workers.dev subdomain » : étape 2 (Workers et Pages).
+   L'outil de l'éditeur dit « clé refusée » (403) : la clé publique donnée au
+     service n'est pas la tienne ; vérifie cle-publique.txt, puis relance
+     deployer.bat.
+   L'outil dit « pas certifié » : étape 7, « Certifier la clé du service ».
+
+   Le plan gratuit de Cloudflare permet 100 000 appels par jour : bien plus que ce
+   dont tes clients ont besoin (un appel au lancement d'un Studio, puis un toutes
+   les quelques heures). Le service se protège des abus : 10 activations par heure
+   et par adresse, 5 par PC, etc. Personne ne peut lire un code d'activation chez
+   Cloudflare : le service n'en garde que l'empreinte.

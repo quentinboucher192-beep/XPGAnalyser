@@ -109,6 +109,11 @@ struct LicenseInputs {
     // 1.33.0 : les PC (leur cle, 64 hexadecimaux) a RETIRER de la licence etendue (`existing`) : un PC remplace ne
     // reste pas dans la nouvelle emission (sinon, revoque, il bloquerait toute nouvelle emission).
     std::vector<std::string> dropDevices;
+    // 1.35.0 : une LICENCE EN LIGNE - l'adresse du service des licences (ServiceClient.hpp) ; vide : une licence liee a
+    // des PC (comme avant). Une licence en ligne ne lie AUCUN PC : elle s'active par un code aupres de ce service
+    // (son champ << service >> le nomme) ; pas de demande ; elle peut etre flottante (type floating). Etendre une licence
+    // en ligne (existing) garde son service.
+    std::string              service;
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
 // `summary` : ce qui a ete signe, en une ligne par fait. 1.32.0 (H2) : l'empreinte du poste de chaque demande

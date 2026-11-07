@@ -4,8 +4,8 @@
 #include "Licence.hpp"
 
 #include "App.hpp"
-#include "BackgroundTasks.hpp"   // 1.34.0 : les avis de la cloche (l'evaluation, la passerelle)
-#include "LicenceGateway.hpp"    // 1.34.0 : la demande en ligne
+#include "BackgroundTasks.hpp"   // 1.34.0 : les avis de la cloche (la Decouverte, le service)
+#include "LicenceService.hpp"    // 1.35.0 : le service des licences (remplace la passerelle de la 1.34)
 #include "hmi/HmiStationLaunch.hpp"
 #include "screens/Screens.hpp"
 
@@ -33,20 +33,30 @@ double            g_next{0};      // la prochaine revaluation (secondes, horloge
 // 1.34.0 : les avis (startNotices) et les messages pour la barre d'etat (takeMessages).
 std::atomic<bool>        g_notices{false};
 std::vector<std::string> g_messages;   // sous g_mutex
-constexpr const char*    kEvaluationNotice = "licence:evaluation";
+constexpr const char*    kDiscoveryNotice = "licence:decouverte";
+constexpr const char*    kLeaseNotice = "licence:bail-fin";
 
-// L'avis de l'evaluation suit l'etat : pose (ou mis a jour) pendant l'evaluation, retire sinon.
-void syncEvaluationNotice() {
+// Les avis qui suivent l'etat : poses (ou mis a jour) tant que la chose dure, retires sinon - la Decouverte et ses
+// jours ; 1.35.0 : le bail d'une licence en ligne qui finit (7 jours) ou qui est fini.
+void syncStateNotices() {
     if (!g_notices || !g_active) return;
     const auto st = licensing::getLicenseState();
-    const std::string text = evaluationText(st);
-    if (text.empty()) {
-        bgtasks::withdraw(kEvaluationNotice);
-        return;
+    if (const std::string text = discoveryText(st); text.empty()) {
+        bgtasks::withdraw(kDiscoveryNotice);
+    } else {
+        postNotice(kDiscoveryNotice, text,
+                   "Les fonctions de la D\xC3\xA9" "couverte sont ouvertes jusqu'\xC3\xA0 cette date ; ensuite, celles de l'\xC3\xA9" "dition sans licence. "
+                   "Pour continuer : Licence\xE2\x80\xA6 \xE2\x80\xBA Activation (le code re\xC3\xA7u de l'\xC3\xA9" "diteur).",
+                   st.evaluationDaysLeft <= 7 ? "warning" : "info");
     }
-    std::string detail = "Les fonctionnalit\xC3\xA9s de l'\xC3\xA9" "dition d'\xC3\xA9valuation sont ouvertes jusqu'\xC3\xA0 cette date. Pour continuer "
-                         "ensuite : Licence\xE2\x80\xA6 \xE2\x80\xBA Demande en ligne (ou une demande par fichier).";
-    postNotice(kEvaluationNotice, text, detail, st.evaluationDaysLeft <= 7 ? "warning" : "info");
+    if (const std::string text = leaseText(st); text.empty()) {
+        bgtasks::withdraw(kLeaseNotice);
+    } else {
+        postNotice(kLeaseNotice, text,
+                   "Le bail d'une licence en ligne se renouvelle tout seul \xC3\xA0 chaque connexion. Sans connexion avant sa fin, les fonctions "
+                   "de la licence se mettent en pause sur ce PC (rien ne se ferme) jusqu'\xC3\xA0 la prochaine connexion.",
+                   st.status == licensing::LicenseStatus::LeaseExpired ? "error" : "warning");
+    }
 }
 
 double nowSeconds() {
@@ -113,7 +123,7 @@ std::string_view featureOf(Where where, std::string_view key) {
 void start(licensing::StoreOptions options) {
     (void)licensing::initialize(std::move(options));
     arm();
-    syncEvaluationNotice();
+    syncStateNotices();
 }
 
 void start() {
@@ -132,12 +142,12 @@ void start() {
     }
     (void)licensing::initialize(std::move(o));
     arm();
-    syncEvaluationNotice();
+    syncStateNotices();
 }
 
 void tick() {
     if (!g_active) return;
-    gateway::poll();   // 1.34.0 : un travail de la passerelle fini (les avis), la verification de l'heure
+    service::poll();   // 1.35.0 : un travail du service fini (les avis) ; ce que le fil de fond a a faire
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         const double now = nowSeconds();
@@ -145,7 +155,7 @@ void tick() {
         g_next = now + 3600.0;
     }
     (void)licensing::refresh();
-    syncEvaluationNotice();
+    syncStateNotices();
 }
 
 void refresh() {
@@ -155,7 +165,7 @@ void refresh() {
         std::lock_guard<std::mutex> lock(g_mutex);
         g_next = nowSeconds() + 3600.0;
     }
-    syncEvaluationNotice();
+    syncStateNotices();
 }
 
 bool active() noexcept { return g_active; }
@@ -185,7 +195,7 @@ bool gate(App& app, std::string_view feature) {
     auto dialog = std::make_unique<MessageDialog>("Pas dans ta licence", std::move(text), MessageDialog::Icon::Info, "Licence\xE2\x80\xA6");
     dialog->setCancelLabel("Fermer");
     app.menus().ShowDialog(std::move(dialog), [&app](const menu::DialogResult& r) {
-        if (r.accepted()) showLicenceWindow(app, 2);
+        if (r.accepted()) showLicenceWindow(app, kTabFeatures);
     });
     return false;
 }
@@ -195,59 +205,193 @@ bool gate(App& app, Where where, std::string_view key) {
     return f.empty() || gate(app, f);
 }
 
-Badge badge() {
+namespace {
+
+// L'edition affichee (son nom du registre, sinon son identifiant).
+std::string editionOf(const licensing::LicenseState& st) {
+    if (!st.licensedEdition.empty()) return st.licensedEdition;
+    return st.editionLabel.empty() ? st.edition : st.editionLabel;
+}
+
+std::string daysText(int n) { return std::to_string(std::max(0, n)) + (n > 1 ? " jours" : " jour"); }
+
+} // namespace
+
+std::string dayOf(licensing::Seconds at) {
+    const std::string d = at ? licensing::isoDate(at) : std::string();   // "2026-11-19"
+    return d.size() == 10 ? d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) : d;
+}
+
+Badge indicator() {
     Badge b;
     if (!g_active) return b;
     const auto st = licensing::getLicenseState();
     using S = licensing::LicenseStatus;
-    const std::string edition = st.editionLabel.empty() ? st.edition : st.editionLabel;
+    const std::string edition = editionOf(st);
     switch (st.status) {
         case S::NotConfigured:
-            b.text = "Licences non activ\xC3\xA9" "es";
-            b.tone = 0;
-            break;
+            return b;   // rien a montrer : les licences ne sont pas actives (tout est ouvert)
         case S::Valid:
-            b.text = "Licence " + edition + (st.expiresAt ? " \xC2\xB7 valide jusqu'au " + st.expirationDate() : std::string(" \xC2\xB7 sans fin"));
-            b.tone = 1;
+            if (st.online && st.activationWarning) {
+                b.text = "Bail : " + std::to_string(std::max(0, st.activationDaysLeft)) + " j \xE2\x80\x94 connecte-toi";
+                b.shortText = "Bail : " + std::to_string(std::max(0, st.activationDaysLeft)) + " j";
+                b.tone = 2;
+            } else if (st.floating) {
+                b.text = "Flottante \xC2\xB7 poste pris";
+                b.shortText = "Flottante";
+                b.tone = 1;
+            } else {
+                b.text = "Licence : " + edition + (st.expiresAt ? " \xC2\xB7 jusqu'au " + dayOf(st.expiresAt) : std::string(" \xC2\xB7 sans fin"));
+                b.shortText = edition;
+                b.tone = 1;
+            }
             break;
         case S::Grace:
-            b.text = "Licence " + edition + " \xC2\xB7 gr\xC3\xA2" "ce : " + std::to_string(st.graceDaysLeft) + " j";
+            b.text = "Licence : " + edition + " \xC2\xB7 gr\xC3\xA2" "ce : " + std::to_string(st.graceDaysLeft) + " j";
+            b.shortText = edition + " \xC2\xB7 gr\xC3\xA2" "ce";
             b.tone = 2;
+            break;
+        case S::Evaluation:
+            b.text = "D\xC3\xA9" "couverte \xC2\xB7 " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j";
+            b.shortText = b.text;
+            b.tone = st.evaluationDaysLeft <= 7 ? 2 : 4;
             break;
         case S::Absent:
-            b.text = edition.empty() ? std::string("Sans licence") : "Sans licence \xC2\xB7 \xC3\xA9" "dition " + edition;
+            b.text = "Sans licence";
+            b.shortText = b.text;
             b.tone = 2;
             break;
-        case S::Evaluation:   // 1.34.0
-            b.text = "\xC3\x89valuation \xC2\xB7 " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j restant" +
-                     (st.evaluationDaysLeft > 1 ? "s" : "");
+        case S::LeaseExpired:
+            b.text = "Bail expir\xC3\xA9 \xE2\x80\x94 connecte-toi";
+            b.shortText = "Bail expir\xC3\xA9";
+            b.tone = 3;
+            break;
+        case S::NoFloatingSeat:
+            b.text = "Flottante : aucun poste";
+            b.shortText = "Aucun poste";
             b.tone = 2;
             break;
         default:
-            b.text = "Licence " + licensing::statusLabel(st.status) + (edition.empty() ? std::string{} : " \xC2\xB7 \xC3\xA9" "dition " + edition);
+            b.text = "Licence : " + licensing::statusLabel(st.status);
+            b.shortText = licensing::statusLabel(st.status);
             b.tone = 3;
             break;
     }
-    b.tip = st.message + "\n(un clic : la fen\xC3\xAAtre Licence)";
+    std::string tip = st.message;
+    if (st.online && st.activationUntil) tip += "\nBail de ce PC jusqu'au " + service::dateText(st.activationUntil) + " (renouvel\xC3\xA9 \xC3\xA0 chaque connexion).";
+    if (st.floating && st.leaseUntil) tip += "\nPoste flottant pris jusqu'\xC3\xA0 " + service::dateText(st.leaseUntil).substr(11) + ".";
+    b.tip = tip + "\n(un clic : la fen\xC3\xAAtre Licence)";
     return b;
 }
 
-// ============================================================ 1.34.0 : les avis ==
-std::string evaluationText(const licensing::LicenseState& st) {
-    if (st.status != licensing::LicenseStatus::Evaluation) return {};
-    const int n = std::max(0, st.evaluationDaysLeft);
-    std::string text = "\xC3\x89valuation : il te reste " + std::to_string(n) + (n > 1 ? " jours" : " jour");
-    const licensing::Seconds end = st.evaluationEndsAt ? st.evaluationEndsAt : st.expiresAt;
-    if (end) {
-        const std::string d = licensing::isoDate(end);   // "2026-11-19"
-        if (d.size() == 10) text += " (jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) + ")";
+Badge badge() {
+    if (!g_active) return {};
+    if (licensing::getLicenseState().status == licensing::LicenseStatus::NotConfigured) {
+        Badge b;
+        b.text = "Licences non activ\xC3\xA9" "es";
+        b.shortText = b.text;
+        b.tip = licensing::getStatusMessage() + "\n(un clic : la fen\xC3\xAAtre Licence)";
+        return b;
     }
+    return indicator();
+}
+
+Card startCard() {
+    Card c;
+    if (!g_notices || !g_active) return c;
+    const auto st = licensing::getLicenseState();
+    using S = licensing::LicenseStatus;
+    const std::string edition = editionOf(st);
+    c.button = "Licence\xE2\x80\xA6";
+    c.tab = kTabAuto;
+    switch (st.status) {
+        case S::NotConfigured:
+            return Card{};
+        case S::Evaluation: {
+            c.title = discoveryText(st);
+            if (!c.title.empty() && c.title.back() == '.') c.title.pop_back();
+            c.text = "Ensuite : les fonctions de l'\xC3\xA9" "dition sans licence. Tu as un code ? Active ta licence.";
+            c.tone = st.evaluationDaysLeft <= 7 ? 2 : 4;
+            c.button = "Activer avec un code\xE2\x80\xA6";
+            c.tab = kTabActivation;
+            break;
+        }
+        case S::Absent:
+            c.title = "Sans licence" + (edition.empty() ? std::string() : " \xC2\xB7 \xC3\xA9" "dition " + edition);
+            c.text = st.evaluationOver ? "Ta D\xC3\xA9" "couverte est finie. Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur."
+                                       : "Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur (ou demande-la).";
+            c.tone = 2;
+            c.button = "Activer avec un code\xE2\x80\xA6";
+            c.tab = kTabActivation;
+            break;
+        case S::LeaseExpired:
+            c.title = "Bail expir\xC3\xA9 : ta licence " + st.licenseId + " est en pause sur ce PC";
+            c.text = "Connecte ce PC \xC3\xA0 Internet : le bail se renouvelle tout seul et les fonctions reviennent.";
+            c.tone = 3;
+            c.tab = kTabActivation;
+            break;
+        case S::NoFloatingSeat: {
+            c.title = "Licence flottante " + st.licenseId + " : aucun poste libre";
+            const licensing::Seconds at = service::seatFreeAt();
+            c.text = at > licensing::systemNow() ? "Un poste se lib\xC3\xA8re dans " + std::to_string((at - licensing::systemNow() + 59) / 60) +
+                                                       " min ; nouvel essai tout seul."
+                                                 : std::string("Nouvel essai tout seul toutes les quelques minutes.");
+            c.tone = 2;
+            c.tab = kTabActivation;
+            break;
+        }
+        case S::Valid:
+            if (st.online && st.activationWarning) {
+                c.title = "Bail : il reste " + daysText(st.activationDaysLeft) + " sur ce PC";
+                c.text = "Connecte ce PC \xC3\xA0 Internet avant le " + dayOf(st.activationUntil) + " : le bail de ta licence " + st.licenseId +
+                         " se renouvelle tout seul.";
+                c.tone = 2;
+                c.tab = kTabActivation;
+                break;
+            }
+            c.title = "Licence : " + edition + (st.expiresAt ? " \xC2\xB7 jusqu'au " + dayOf(st.expiresAt) : std::string(" \xC2\xB7 sans fin"));
+            if (st.floating) c.text = "Flottante \xC2\xB7 poste pris" + (st.leaseUntil ? " jusqu'\xC3\xA0 " + service::dateText(st.leaseUntil).substr(11) : std::string());
+            else if (st.online) c.text = st.licenseId + " \xC2\xB7 activ\xC3\xA9" "e en ligne, bail jusqu'au " + dayOf(st.activationUntil);
+            else c.text = st.licenseId + (st.customer.empty() ? std::string() : " \xC2\xB7 " + st.customer);
+            c.tone = 1;
+            break;
+        case S::Grace:
+            c.title = "Licence : " + edition + " \xC2\xB7 gr\xC3\xA2" "ce, " + daysText(st.graceDaysLeft);
+            c.text = "Ta licence a pris fin : importe son renouvellement avant la fin de la gr\xC3\xA2" "ce.";
+            c.tone = 2;
+            break;
+        default:
+            c.title = "Licence : " + licensing::statusLabel(st.status);
+            c.text = st.message;
+            c.tone = 3;
+            break;
+    }
+    return c;
+}
+
+// ============================================================ 1.34.0 : les avis ==
+std::string discoveryText(const licensing::LicenseState& st) {
+    if (st.status != licensing::LicenseStatus::Evaluation) return {};
+    std::string text = "D\xC3\xA9" "couverte : il te reste " + daysText(st.evaluationDaysLeft);
+    const licensing::Seconds end = st.evaluationEndsAt ? st.evaluationEndsAt : st.expiresAt;
+    if (end) text += " (jusqu'au " + dayOf(end) + ")";
     return text + ".";
+}
+
+std::string leaseText(const licensing::LicenseState& st) {
+    if (st.status == licensing::LicenseStatus::LeaseExpired)
+        return "Bail expir\xC3\xA9" + (st.licenseId.empty() ? std::string() : " pour la licence " + st.licenseId) +
+               " : connecte ce PC \xC3\xA0 Internet pour la r\xC3\xA9" "activer.";
+    if (st.online && st.status == licensing::LicenseStatus::Valid && st.activationWarning)
+        return "Bail : il reste " + daysText(st.activationDaysLeft) + " \xE2\x80\x94 connecte ce PC \xC3\xA0 Internet avant le " + dayOf(st.activationUntil) + ".";
+    return {};
 }
 
 std::string launchNotice() {
     if (!g_notices || !g_active) return {};
-    return evaluationText(licensing::getLicenseState());
+    const auto st = licensing::getLicenseState();
+    if (auto t = leaseText(st); !t.empty()) return t;
+    return discoveryText(st);
 }
 
 void postNotice(const std::string& key, const std::string& title, const std::string& detail, const std::string& tone) {
@@ -267,10 +411,10 @@ std::vector<std::string> takeMessages() {
 
 void startNotices(bool online) {
     g_notices = true;
-    syncEvaluationNotice();
-    if (online) gateway::startRunner();
+    syncStateNotices();
+    if (online) service::startRunner();
 }
 
-void shutdown() { gateway::shutdown(); }
+void shutdown() { service::shutdown(); }
 
 } // namespace app::licence

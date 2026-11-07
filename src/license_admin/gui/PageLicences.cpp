@@ -7,16 +7,24 @@
 //  fonctionnalites, ses PC (nom, empreinte, date d'activation ; les PC revoques
 //  marques). Les gestes :
 //    Nouvelle licence...          l'assistant (LicenceWizard.cpp) ;
-//    Ajouter un PC...             l'assistant sur la licence choisie ;
+//    Nouvelle licence en ligne... 1.35.0 : l'assistant d'une licence EN LIGNE
+//                                 (aucun PC : un code d'activation, montre une
+//                                 fois, masque, Afficher et Copier) ;
+//    Ajouter un PC...             l'assistant sur la licence choisie (en ligne :
+//                                 Prolonger..., une emission plus recente) ;
 //    Exporter le fichier...       le .xpglic a renvoyer au client ;
 //    Revoquer...                  un dialogue : toute la licence ou un PC ;
 //    Ouvrir le dossier de l'archive.
+//  1.35.0 : une licence EN LIGNE montre ses ACTIVATIONS (le dernier releve du
+//  service : le nom du PC, vu le, bail jusqu'au, etat) ; << Retirer ce PC >>
+//  (il n'est plus renouvele), << Nouveau code... >> (l'ancien ne marche plus),
+//  << Desactiver >> / << Reactiver >>, << Relever >> (lents : runSlow).
 //  Des demandes (.xpgreq) glissees sur la page vont a l'assistant (ouvert, ou
 //  ouvert pour elles) ; un .xpglic n'est pas pour elle (la coquille le range).
 // =============================================================================
 #include "Page.hpp"
 
-#include "../GitHubSync.hpp"
+#include "../ArchiveSync.hpp"
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -152,6 +160,15 @@ public:
     explicit LicencesPage(ShellHost host) : Page("licences", std::move(host)) {
         new_ = &button(*this, "Nouvelle licence\xE2\x80\xA6", "licences.nouvelle", ui::Button::Style::Primary);
         new_->setTooltip("L'assistant : les demandes des PC, le client, l'\xC3\xA9" "dition, les fonctionnalit\xC3\xA9s, puis signer");
+        newOnline_ = &button(*this, "Nouvelle licence en ligne\xE2\x80\xA6", "licences.nouvelle-en-ligne");
+        newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (montr\xC3\xA9 une fois) aupr\xC3\xA8s du service des licences");
+        refreshOnline_ = &button(*this, "Relever", "licences.relever");
+        refreshOnline_->setIcon(ui::Icon::Refresh);
+        refreshOnline_->setTooltip("Lit sur le service les activations des licences en ligne (les PC, vu le, bail jusqu'au)");
+        newCode_ = &button(*this, "Nouveau code\xE2\x80\xA6", "licences.nouveau-code");
+        newCode_->setTooltip("Un code d'activation neuf pour la licence en ligne choisie : l'ancien ne marche plus (les PC d\xC3\xA9j\xC3\xA0 activ\xC3\xA9s restent)");
+        active_ = &button(*this, "D\xC3\xA9sactiver\xE2\x80\xA6", "licences.desactiver", ui::Button::Style::Danger);
+        active_->setTooltip("La licence en ligne ne s'active plus et ses PC ne sont plus renouvel\xC3\xA9s (chacun s'arr\xC3\xAAte \xC3\xA0 la fin de son bail)");
         addPc_ = &button(*this, "Ajouter un PC\xE2\x80\xA6", "licences.ajouter-pc");
         addPc_->setTooltip("Lier de nouveaux PC \xC3\xA0 la licence choisie (ses PC li\xC3\xA9s sont gard\xC3\xA9s) ; la r\xC3\xA9-\xC3\xA9mettre");
         export_ = &button(*this, "Exporter le fichier\xE2\x80\xA6", "licences.exporter");
@@ -193,8 +210,13 @@ public:
         split_ = &adopt(*this, std::move(split));
 
         links_ += new_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {})); });
+        links_ += newOnline_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {}, {}, {}, true)); });
+        links_ += refreshOnline_->clicked->connect([this] { fetchOnline(); });
+        links_ += newCode_->clicked->connect([this] { askNewCode(); });
+        links_ += active_->clicked->connect([this] { askActive(); });
         links_ += addPc_->clicked->connect([this] {
-            if (const LicenceEntry* l = selected()) host_.openDialog(makeLicenceWizard(host_, {}, l->licence.licenseId));
+            if (const LicenceEntry* l = selected())
+                host_.openDialog(makeLicenceWizard(host_, {}, l->licence.licenseId, {}, Workspace::isOnlineLicence(l->licence)));
         });
         links_ += export_->clicked->connect([this] { exportSelected(); });
         links_ += revoke_->clicked->connect([this] {
@@ -248,7 +270,8 @@ protected:
         actionsY_ = r.y + kPad + 64.f;
         float bx = x;
         float rowY = actionsY_;
-        for (ui::Button* b : {new_, addPc_, export_, dropPc_, revoke_, folder_}) {
+        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, newCode_, active_, refreshOnline_, revoke_, folder_}) {
+            if (b->visibility() == ui::Visibility::Collapsed) continue;
             const float bw = buttonWidth(*b, 96.f);
             if (bx > x && bx + bw > x + w) {   // trop etroit : la suite sur une deuxieme ligne
                 bx = x;
@@ -342,7 +365,13 @@ private:
                 tone = std::max(tone, 1);
             }
             shownIds_.push_back(l.licenseId);
-            rows.push_back({l.licenseId, l.customer, edLabel, typeLabel(l.type), std::to_string(l.devices.size()) + " / " + std::to_string(l.maxDevices),
+            std::string pcs = std::to_string(l.devices.size()) + " / " + std::to_string(l.maxDevices);
+            if (Workspace::isOnlineLicence(l)) {   // en ligne : les PC actives au dernier releve
+                const auto* on = ws().service().snapshot.licence(l.licenseId);
+                pcs = (on ? std::to_string(on->activeCount()) : std::string("?")) + " / " + std::to_string(l.maxDevices) + " en ligne";
+                if (on && !on->active) state += " \xE2\x80\x94 d\xC3\xA9sactiv\xC3\xA9" "e sur le service";
+            }
+            rows.push_back({l.licenseId, l.customer, edLabel, typeLabel(l.type) + (Workspace::isOnlineLicence(l) ? std::string(" (en ligne)") : std::string()), pcs,
                             dateFr(l.issuedAt),
                             l.expiresAt ? dateFr(l.expiresAt) : std::string("sans fin"), state});
             tones.push_back(tone);
@@ -373,11 +402,26 @@ private:
 
     void showDetails() {
         const LicenceEntry* e = selected();
+        const bool onlineLic = e && Workspace::isOnlineLicence(e->licence);
+        const bool ready = ws().service().ready();
+        const online::OnlineLicence* on = onlineLic ? ws().service().snapshot.licence(e->licence.licenseId) : nullptr;
         addPc_->setEnabled(e != nullptr);
+        addPc_->setText(onlineLic ? std::string("Prolonger\xE2\x80\xA6") : std::string("Ajouter un PC\xE2\x80\xA6"));
         export_->setEnabled(e != nullptr);
         revoke_->setEnabled(e != nullptr);
-        dropPc_->setEnabled(e != nullptr && e->licence.devices.size() > 1);
+        dropPc_->setText(onlineLic ? std::string("Retirer ce PC\xE2\x80\xA6") : std::string("Retirer un PC\xE2\x80\xA6"));
+        dropPc_->setEnabled(e != nullptr && (onlineLic ? on && !on->activations.empty() : e->licence.devices.size() > 1));
+        newOnline_->setEnabled(ready);
+        refreshOnline_->setVisibility(ready ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        newCode_->setVisibility(onlineLic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        active_->setVisibility(onlineLic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        newCode_->setEnabled(onlineLic && ready);
+        active_->setEnabled(onlineLic && ready);
+        active_->setText(on && !on->active ? std::string("R\xC3\xA9" "activer\xE2\x80\xA6") : std::string("D\xC3\xA9sactiver\xE2\x80\xA6"));
+        active_->setStyle(on && !on->active ? ui::Button::Style::Default : ui::Button::Style::Danger);
+        invalidateLayout();
         selectedPc_ = -1;
+        onlineKeys_.clear();
         std::vector<PG::Category> cats;
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> tips;
@@ -392,8 +436,23 @@ private:
             a.properties.push_back(prop("Client", l.customer));
             a.properties.push_back(prop("\xC3\x89" "dition", ed && !ed->label.empty() && ed->label != l.edition ? ed->label + " (" + l.edition + ")" : l.edition));
             a.properties.push_back(prop("Type", typeLabel(l.type)));
-            a.properties.push_back(prop("PC", std::to_string(l.devices.size()) + " li\xC3\xA9(s) sur " + std::to_string(l.maxDevices) + " autoris\xC3\xA9(s)"
-                                                  + (e->revokedDevices ? ", " + std::to_string(e->revokedDevices) + " r\xC3\xA9voqu\xC3\xA9(s)" : std::string())));
+            if (onlineLic) {
+                a.properties.push_back(prop("En ligne", l.service, "Une licence sans PC li\xC3\xA9 : chaque PC l'active avec son code aupr\xC3\xA8s de ce service."));
+                a.properties.push_back(prop(l.type == LicenseType::Floating ? "Postes en m\xC3\xAAme temps" : "PC au plus", std::to_string(l.maxDevices)));
+                if (on) {
+                    a.properties.push_back(prop("Sur le service", std::string(on->active ? "active" : "D\xC3\xA9SACTIV\xC3\x89" "E") + ", " + std::to_string(on->activeCount()) +
+                                                                      " PC activ\xC3\xA9(s), bail de " + std::to_string(on->leaseDays) + " j" +
+                                                                      (on->hasCode ? std::string() : std::string(", sans code")) +
+                                                                      (on->issuedAt != l.issuedAt ? std::string(" (une autre \xC3\xA9mission que celle de l'archive)") : std::string())));
+                    a.properties.push_back(prop("Relev\xC3\xA9 le", dateTimeFr(ws().service().snapshot.at)));
+                } else {
+                    a.properties.push_back(prop("Sur le service", ws().service().snapshot.at ? std::string("absente du dernier relev\xC3\xA9 (pas d\xC3\xA9pos\xC3\xA9" "e ?)")
+                                                                                              : std::string("jamais relev\xC3\xA9 : Relever")));
+                }
+            } else {
+                a.properties.push_back(prop("PC", std::to_string(l.devices.size()) + " li\xC3\xA9(s) sur " + std::to_string(l.maxDevices) + " autoris\xC3\xA9(s)"
+                                                      + (e->revokedDevices ? ", " + std::to_string(e->revokedDevices) + " r\xC3\xA9voqu\xC3\xA9(s)" : std::string())));
+            }
             a.properties.push_back(prop("\xC3\x89mise le", dateTimeFr(l.issuedAt), "La date de signature de cette \xC3\xA9mission (la derni\xC3\xA8re rang\xC3\xA9" "e dans l'archive)."));
             a.properties.push_back(prop("Fin", l.expiresAt ? dateTimeFr(l.expiresAt) : std::string("sans fin")));
             a.properties.push_back(prop("Gr\xC3\xA2" "ce hors ligne", l.type == LicenseType::Temporary ? std::to_string(l.offlineGraceDays) + " j" : std::string("sans objet"),
@@ -435,6 +494,14 @@ private:
                 cats.push_back(std::move(rv));
             }
 
+            if (on)   // en ligne : les activations, au dernier releve
+                for (const auto& act : on->activations) {
+                    onlineKeys_.push_back(act.deviceKey);
+                    rows.push_back({act.name.empty() ? std::string("(sans nom)") : act.name, act.stateLabel(), licdlg::fingerprintOfKey(act.deviceKey),
+                                    dateFr(act.activatedAt), dateTimeFr(act.seenAt), dateFr(act.until)});
+                    tips.push_back("Vu le " + dateTimeFr(act.seenAt) + " ; son activation vaut jusqu'au " + dateTimeFr(act.until) + " sans nouvelle connexion.");
+                    revoked.push_back(act.state != "active");
+                }
             for (const auto& d : l.devices) {
                 const licensing::Revocation* x = deviceRevocation(ws(), l, d.key);
                 const bool all = e->revoked;
@@ -446,7 +513,16 @@ private:
             }
         }
         details_->setCategories(std::move(cats));
-        pcsModel_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Activ\xC3\xA9 le"}, std::move(rows),
+        if (onlineLic != pcsOnline_) {
+            pcsOnline_ = onlineLic;
+            if (onlineLic)
+                pcs_->setColumns({{"PC", 150.f}, {"\xC3\x89tat", 120.f}, {"Empreinte", 220.f}, {"Activ\xC3\xA9 le", 100.f}, {"Vu le", 130.f}, {"Bail jusqu'au", 110.f}});
+            else
+                pcs_->setColumns({{"PC", 160.f}, {"\xC3\x89tat", 230.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 120.f}});
+        }
+        pcsModel_ = std::make_shared<Rows>(onlineLic ? std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Activ\xC3\xA9 le", "Vu le", "Bail jusqu'au"}
+                                                     : std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Activ\xC3\xA9 le"},
+                                           std::move(rows),
                                            [revoked](ui::RowIndex r, std::size_t c) {
                                                ui::CellStyle s;
                                                if (c == 2) s.monospace = true;
@@ -463,12 +539,17 @@ private:
         invalidate();
     }
 
-    // 1.33.0 : retirer le PC choisi de la licence (une nouvelle emission sans lui, la meme fin).
+    // 1.33.0 : retirer le PC choisi de la licence (une nouvelle emission sans lui, la meme fin). 1.35.0 : en ligne, ce PC
+    // n'est plus renouvele par le service.
     void dropSelectedPc() {
         const LicenceEntry* e = selected();
         if (!e) return;
         if (host_.busy && host_.busy()) {
             host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+            return;
+        }
+        if (Workspace::isOnlineLicence(e->licence)) {
+            retireOnline(e->licence.licenseId);
             return;
         }
         if (selectedPc_ < 0 || selectedPc_ >= static_cast<int>(e->licence.devices.size())) {
@@ -502,7 +583,7 @@ private:
                 const OpResult r = ws().removeDevice(id, key, path);
                 if (r.ok) licdlg::rememberFolder(path);
                 host_.report(r);
-                if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee, les PC sont prevenus
+                if (r.ok) (void)publishToService(host_);   // 1.35.0 : le service regle, les PC sont prevenus
             });
         }));
     }
@@ -536,13 +617,111 @@ private:
     }
 
     void openArchive() {
-        const std::string archive = github::archiveFolder(ws().folder());
-        const fs::path licences = P(archive) / "licences";
+        const std::string archiveDir = archive::archiveFolder(ws().folder());
+        const fs::path licences = P(archiveDir) / "licences";
         std::error_code ec;
-        host_.openFolder(fs::is_directory(licences, ec) ? U(licences) : archive);
+        host_.openFolder(fs::is_directory(licences, ec) ? U(licences) : archiveDir);
+    }
+
+    // ---- 1.35.0 : les licences en ligne ----
+    [[nodiscard]] bool busyNow() {
+        if (!(host_.busy && host_.busy())) return false;
+        host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+        return true;
+    }
+
+    void fetchOnline() {
+        if (busyNow()) return;
+        auto alive = alive_;
+        (void)refreshOnlineLicences(host_, [this, alive](const OpResult&) {
+            if (*alive) rebuild();
+        });
+    }
+
+    void retireOnline(const std::string& id) {
+        if (selectedPc_ < 0 || selectedPc_ >= static_cast<int>(onlineKeys_.size())) {
+            host_.flash("Choisis d'abord le PC \xC3\xA0 retirer, dans la liste de ses activations (Relever pour la mettre \xC3\xA0 jour).", Tone::Warning);
+            return;
+        }
+        const std::string key = onlineKeys_[static_cast<std::size_t>(selectedPc_)];
+        auto alive = alive_;
+        ShellHost host = host_;
+        host_.openDialog(licdlg::makeConfirmDialog(
+            "dialog.retirer-pc-en-ligne", "Retirer ce PC",
+            "Retirer le PC " + licdlg::fingerprintOfKey(key) + " de la licence en ligne " + id +
+                " ?\n\nIl n'est plus renouvel\xC3\xA9 : il s'arr\xC3\xAAte \xC3\xA0 la fin de son bail, ou d\xC3\xA8s qu'il se connecte. Sa place se lib\xC3\xA8re ; le client "
+                "peut activer un autre PC avec le m\xC3\xAAme code.",
+            "Retirer", true, [this, alive, host, id, key] {
+                if (!*alive || (host.busy && host.busy())) return;
+                const Workspace* w = &host.workspace();
+                (void)host.runSlow("Service : retrait d'un PC de " + id, [w, id, key] { return w->serviceRetire(id, key); },
+                                   [this, alive, host](const OpResult& r) {
+                                       if (!*alive || !r.ok) return;
+                                       (void)refreshOnlineLicences(host, [this, alive](const OpResult&) {
+                                           if (*alive) rebuild();
+                                       });
+                                   });
+            }));
+    }
+
+    void askNewCode() {
+        const LicenceEntry* e = selected();
+        if (!e || !Workspace::isOnlineLicence(e->licence) || busyNow()) return;
+        const std::string id = e->licence.licenseId;
+        auto alive = alive_;
+        host_.openDialog(licdlg::makeConfirmDialog(
+            "dialog.nouveau-code", "Un nouveau code d'activation",
+            "Tirer un nouveau code pour la licence " + id + " ?\n\nL'ancien ne marchera plus d\xC3\xA8s que le nouveau est d\xC3\xA9pos\xC3\xA9 (les PC d\xC3\xA9j\xC3\xA0 "
+            "activ\xC3\xA9s restent). Le nouveau t'est montr\xC3\xA9 une fois : note-le pour ton client.",
+            "Tirer un nouveau code", false, [this, alive, id] {
+                if (!*alive) return;
+                ServiceJob job;
+                std::string code;
+                const OpResult r = ws().prepareNewCode(id, job, code);
+                if (!r.ok) {
+                    host_.report(r);
+                    return;
+                }
+                if (!depositOnlineLicence(host_, std::move(job), std::move(code), [this, alive](const OpResult& d) {
+                        if (*alive && d.ok) fetchOnline();
+                    }))
+                    host_.flash("Un travail est en cours : rien n'est parti, le code est oubli\xC3\xA9. Recommence quand il a fini.", Tone::Warning);
+            }));
+    }
+
+    void askActive() {
+        const LicenceEntry* e = selected();
+        if (!e || !Workspace::isOnlineLicence(e->licence) || busyNow()) return;
+        const std::string id = e->licence.licenseId;
+        const auto* on = ws().service().snapshot.licence(id);
+        const bool activate = on && !on->active;
+        auto alive = alive_;
+        ShellHost host = host_;
+        host_.openDialog(licdlg::makeConfirmDialog(
+            activate ? "dialog.reactiver" : "dialog.desactiver", activate ? "R\xC3\xA9" "activer la licence" : "D\xC3\xA9sactiver la licence",
+            activate ? "R\xC3\xA9" "activer la licence en ligne " + id + " ?\n\nSon code marche de nouveau et ses PC sont renouvel\xC3\xA9s \xC3\xA0 leur prochaine connexion."
+                     : "D\xC3\xA9sactiver la licence en ligne " + id + " ?\n\nSon code ne marche plus ; ses PC ne sont plus renouvel\xC3\xA9s : chacun s'arr\xC3\xAAte \xC3\xA0 la "
+                       "fin de son bail, ou d\xC3\xA8s qu'il se connecte. Pour l'annuler pour de bon, r\xC3\xA9voque-la aussi.",
+            activate ? "R\xC3\xA9" "activer" : "D\xC3\xA9sactiver", !activate, [this, alive, host, id, activate] {
+                if (!*alive || (host.busy && host.busy())) return;
+                const Workspace* w = &host.workspace();
+                (void)host.runSlow(std::string(activate ? "Service : r\xC3\xA9" "activation de " : "Service : d\xC3\xA9sactivation de ") + id,
+                                   [w, id, activate] { return w->serviceSetActive(id, activate); }, [this, alive, host](const OpResult& r) {
+                                       if (!*alive || !r.ok) return;
+                                       (void)refreshOnlineLicences(host, [this, alive](const OpResult&) {
+                                           if (*alive) rebuild();
+                                       });
+                                   });
+            }));
     }
 
     ui::Button*                 new_{nullptr};
+    ui::Button*                 newOnline_{nullptr};
+    ui::Button*                 refreshOnline_{nullptr};
+    ui::Button*                 newCode_{nullptr};
+    ui::Button*                 active_{nullptr};
+    std::vector<std::string>    onlineKeys_;
+    bool                        pcsOnline_{false};
     ui::Button*                 addPc_{nullptr};
     ui::Button*                 export_{nullptr};
     ui::Button*                 revoke_{nullptr};

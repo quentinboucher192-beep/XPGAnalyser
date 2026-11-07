@@ -61,7 +61,6 @@ bool writeFileAt(const std::string& path, std::string_view text, std::string* wh
     crypto::Bytes bytes(text.begin(), text.end());
     return crypto::writePrivateFile(path, bytes, why);
 }
-std::string cite(std::string_view s) { return "\xC2\xAB " + std::string(s) + " \xC2\xBB"; }
 
 // ---- un secret garde sur ce poste (la cle de synchro) ----
 
@@ -633,3 +632,515 @@ std::vector<std::string> missingLines(std::string_view local, std::string_view r
 }
 
 // ============================================================================
+std::string archivedText(const std::string& folder, const std::string& relative) {
+    const std::string path = U(P(archiveFolder(folder)) / P(relative));
+    std::string text;
+    if (!isFile(path) || !readText(path, text, nullptr)) return {};
+    return text;
+}
+
+// ============================================================================
+//  le service (les routes /admin/archive)
+// ============================================================================
+
+namespace {
+
+constexpr const char* kSeenFormat = "xpg-archive-vu/1";
+
+struct Remote {
+    std::uint64_t                      version{0};
+    std::map<std::string, std::string> files;     // chemin -> SHA-256 du texte depose (ce que le service dit)
+    bool                               hasIndex{false};
+    std::vector<Entry>                 index;
+    std::string                        publishedAt, publishedBy;
+    std::uint64_t                      counter{0};   // le numero de l'index (croissant a chaque envoi)
+};
+
+// ---- LE PLUS GRAND COMPTEUR D'INDEX DEJA VU par ce poste, pour ce service (archive-vu.json) : une archive remise
+//      a un etat plus ancien est refusee. Aussi : la date et la version de la derniere synchro reussie. ----
+std::string seenPath(const std::string& folder) { return deploy::joinPath(folder, kSeenFile); }
+
+Value readSeen(const std::string& folder) {
+    std::string text;
+    Value v;
+    if (!isFile(seenPath(folder)) || !readText(seenPath(folder), text, nullptr) || !core::json::parse(text, v, nullptr) || !v.isObject() ||
+        v.str("format") != kSeenFormat)
+        return Value::object();
+    return v;
+}
+
+std::uint64_t lastSeen(const std::string& folder, const std::string& url) {
+    const Value v = readSeen(folder);
+    const Value* s = v.find("services");
+    const Value* d = s ? s->find(url) : nullptr;
+    return d ? static_cast<std::uint64_t>(d->integer("compteur")) : 0;
+}
+
+void rememberSeen(const std::string& folder, const std::string& url, std::uint64_t counter, std::uint64_t version, Seconds now, bool synced) {
+    Value v = readSeen(folder);
+    v.set("format", std::string(kSeenFormat));
+    Value services = v.has("services") && v.at("services").isObject() ? v.at("services") : Value::object();
+    Value d = services.has(url) && services.at(url).isObject() ? services.at(url) : Value::object();
+    if (counter > static_cast<std::uint64_t>(d.integer("compteur"))) d.set("compteur", static_cast<std::uint64_t>(counter));
+    if (synced) {
+        d.set("version", static_cast<std::uint64_t>(version));
+        d.set("synchro_le", licensing::isoTime(now));
+        v.set("derniere", url);
+    }
+    services.set(url, std::move(d));
+    v.set("services", std::move(services));
+    (void)writeFileAt(seenPath(folder), core::json::write(v, true) + "\n", nullptr);
+}
+
+// Un chemin relatif sans "." ni ".." ni segment vide, en lettres, chiffres, . _ - et /.
+bool safeRelPath(std::string_view p) {
+    if (p.empty() || p.size() > 200 || p.front() == '/' || p.back() == '/') return false;
+    for (char c : p)
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '_' && c != '-' && c != '/') return false;
+    std::size_t pos = 0;
+    while (pos <= p.size()) {
+        std::size_t end = p.find('/', pos);
+        if (end == std::string_view::npos) end = p.size();
+        const auto seg = p.substr(pos, end - pos);
+        if (seg.empty() || seg == "." || seg == "..") return false;
+        pos = end + 1;
+    }
+    return true;
+}
+bool knownKind(const std::string& k) { return k == "registre" || k == "revocations" || k == "licence" || k == "activations"; }
+
+// L'index : "XPG-INDEX 1 <cle> <code>\n" puis le JSON. Faux : `why` ; `foreignKey` : l'index vient d'une autre cle.
+bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& foreignKey, std::string* why) {
+    foreignKey = false;
+    const auto nl = text.find('\n');
+    if (nl == std::string_view::npos) {
+        if (why) *why = "l'index de l'archive en ligne est illisible";
+        return false;
+    }
+    const std::string head(text.substr(0, nl));
+    const std::string_view body = text.substr(nl + 1);
+    std::vector<std::string> parts;
+    std::size_t pos = 0;
+    while (pos <= head.size()) {
+        std::size_t end = head.find(' ', pos);
+        if (end == std::string::npos) end = head.size();
+        parts.push_back(head.substr(pos, end - pos));
+        pos = end + 1;
+    }
+    if (parts.size() != 4 || parts[0] != "XPG-INDEX" || parts[1] != "1") {
+        if (why) *why = "l'index de l'archive en ligne n'est pas du bon format";
+        return false;
+    }
+    if (parts[2] != syncKeyId(key)) {
+        foreignKey = true;
+        if (why)
+            *why = "l'archive en ligne a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9" "e avec une AUTRE cl\xC3\xA9 de synchro (" + parts[2] + ") que celle de ce poste (" + syncKeyId(key)
+                   + ") : redonne-lui la bonne avec son code de secours (archive-cle --code-secours CODE --remplacer ; dans l'application : "
+                     "Service en ligne \xE2\x80\xBA Archive \xE2\x80\xBA Un autre poste)";
+        return false;
+    }
+    const std::string mac = indexMac(key, body);
+    if (parts[3].size() != mac.size() || sodium_memcmp(parts[3].data(), mac.data(), mac.size()) != 0) {
+        if (why) *why = "l'index de l'archive en ligne a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9 hors de l'outil (son code d'authentification est faux) : rien n'est re\xC3\xA7u ni envoy\xC3\xA9";
+        return false;
+    }
+    Value v;
+    std::string err;
+    if (!core::json::parse(body, v, &err) || !v.isObject() || v.str("format") != kSyncFormat) {
+        if (why) *why = "l'index de l'archive en ligne est illisible (" + err + ")";
+        return false;
+    }
+    out.publishedAt = v.str("publie_le");
+    out.publishedBy = v.str("publie_par");
+    out.counter = static_cast<std::uint64_t>(v.integer("compteur"));
+    if (const Value* files = v.find("fichiers"); files && files->isArray())
+        for (const auto& f : files->items()) {
+            Entry e;
+            e.path = f.str("chemin");
+            e.kind = f.str("genre");
+            e.encrypted = f.flag("chiffre");
+            e.sha256 = f.str("sha256");
+            e.number = static_cast<std::uint64_t>(f.integer("numero"));
+            (void)licensing::parseIsoTime(f.str("date"), e.date);
+            e.licenseId = f.str("licence");
+            e.lines = static_cast<int>(f.integer("lignes"));
+            e.stored = f.str("stocke");
+            if (!safeRelPath(e.path) || e.sha256.size() != 64) continue;
+            out.index.push_back(std::move(e));   // un genre inconnu (une version plus recente) : garde tel quel, jamais traite
+        }
+    out.hasIndex = true;
+    return true;
+}
+
+std::string writeIndex(const SyncKey& key, const std::vector<Entry>& entries, Seconds now, const std::string& by, std::uint64_t counter) {
+    Value v = Value::object();
+    v.set("format", std::string(kSyncFormat));
+    v.set("compteur", static_cast<std::uint64_t>(counter));
+    v.set("cle_synchro", syncKeyId(key));
+    v.set("publie_le", licensing::isoTime(now));
+    v.set("publie_par", by);
+    Value files = Value::array();
+    for (const auto& e : entries) {
+        Value f = Value::object();
+        f.set("chemin", e.path);
+        f.set("genre", e.kind);
+        f.set("chiffre", e.encrypted);
+        f.set("sha256", e.sha256);
+        if (e.kind == "registre" || e.kind == "revocations") f.set("numero", static_cast<std::uint64_t>(e.number));
+        if (e.date) f.set("date", licensing::isoTime(e.date));
+        if (!e.licenseId.empty()) f.set("licence", e.licenseId);
+        if (e.kind == "activations") f.set("lignes", e.lines);
+        if (!e.stored.empty()) f.set("stocke", e.stored);
+        files.push(std::move(f));
+    }
+    v.set("fichiers", std::move(files));
+    const std::string body = core::json::write(v, true) + "\n";
+    return "XPG-INDEX 1 " + syncKeyId(key) + " " + indexMac(key, body) + "\n" + body;
+}
+
+// Un parametre d'adresse (le chemin d'un fichier) : tout ce qui n'est pas lettre, chiffre, - . _ ~ est code (%2F...).
+std::string encodeQuery(std::string_view s) {
+    static const char* hex = "0123456789ABCDEF";
+    std::string out;
+    for (unsigned char c : s) {
+        if (std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~') {
+            out += static_cast<char>(c);
+        } else {
+            out += '%';
+            out += hex[c >> 4];
+            out += hex[c & 15];
+        }
+    }
+    return out;
+}
+
+bool getRemoteFile(online::Client& c, const std::string& path, std::string& out, std::string* why) {
+    const online::Reply r = c.call("GET", "/admin/archive/fichier?chemin=" + encodeQuery(path));
+    if (r.status != 200 || !r.error.empty()) {
+        if (why) *why = c.explain(r, "lire " + path + " dans l'archive en ligne");
+        return false;
+    }
+    out = r.body;
+    return true;
+}
+
+// Lire l'archive en ligne. Faux : `why` (et `foreignKey` si l'index vient d'une autre cle de synchro).
+bool readRemote(online::Client& c, const SyncKey& key, Remote& out, bool& foreignKey, std::string* why) {
+    out = Remote{};
+    foreignKey = false;
+    const online::Reply r = c.call("GET", "/admin/archive");
+    if (r.status != 200 || !r.error.empty()) {
+        if (why) *why = c.explain(r, "lire la liste de l'archive en ligne");
+        return false;
+    }
+    const Value* files = r.json.isObject() ? r.json.find("fichiers") : nullptr;
+    if (!files || !files->isArray()) {
+        if (why) *why = "le service a rendu une liste d'archive illisible";
+        return false;
+    }
+    out.version = static_cast<std::uint64_t>(r.json.integer("version"));
+    for (const auto& f : files->items())
+        if (f.isObject() && safeRelPath(f.str("chemin"))) out.files[f.str("chemin")] = f.str("sha256");
+    const auto idx = out.files.find(kIndexName);
+    if (idx == out.files.end()) return true;   // jamais synchronisee : rien a recevoir
+    std::string text;
+    if (!getRemoteFile(c, kIndexName, text, why)) return false;
+    if (!idx->second.empty() && crypto::sha256Hex(text) != idx->second) {
+        if (why) *why = "l'index de l'archive en ligne ne correspond pas \xC3\xA0 la liste du service (il change pendant la lecture ?) : r\xC3\xA9" "essaie";
+        return false;
+    }
+    return readIndex(key, text, out, foreignKey, why);
+}
+
+} // namespace
+
+std::string SyncReport::text() const {
+    std::string t;
+    if (!remoteInfo.empty()) t += "Archive en ligne : " + remoteInfo + "\n";
+    if (!ok) {
+        if (!received.empty()) {
+            t += "Re\xC3\xA7u (d\xC3\xA9j\xC3\xA0 \xC3\xA9" "crit sur ce poste) :\n";
+            for (const auto& r : received) t += "  - " + r + "\n";
+        }
+        return t + "Refus\xC3\xA9 : " + why + "\n";
+    }
+    if (!received.empty()) {
+        t += preview ? "\xC3\x80 recevoir :\n" : "Re\xC3\xA7u :\n";
+        for (const auto& r : received) t += "  - " + r + "\n";
+    }
+    if (!sent.empty()) {
+        t += preview ? "\xC3\x80 envoyer :\n" : "Envoy\xC3\xA9 (version " + std::to_string(version) + ") :\n";
+        for (const auto& s : sent) t += "  - " + s + "\n";
+    }
+    if (!warnings.empty()) {
+        t += "Attention :\n";
+        for (const auto& w : warnings) t += "  - " + w + "\n";
+    }
+    if (upToDate) t += "D\xC3\xA9j\xC3\xA0 \xC3\xA0 jour : le poste et l'archive en ligne ont les m\xC3\xAAmes fichiers.\n";
+    return t;
+}
+
+LastSync lastSync(const std::string& folder) {
+    LastSync s;
+    const Value v = readSeen(folder);
+    s.url = v.str("derniere");
+    const Value* all = v.find("services");
+    const Value* d = all && !s.url.empty() ? all->find(s.url) : nullptr;
+    if (!d) return LastSync{};
+    s.version = static_cast<std::uint64_t>(d->integer("version"));
+    (void)licensing::parseIsoTime(d->str("synchro_le"), s.at);
+    return s;
+}
+
+SyncReport synchronize(const std::string& folder, const licensing::SigningKey& key, const SyncOptions& opt) {
+    SyncReport rep;
+    SyncKey skey{};
+    if (!crypto::init()) {
+        rep.why = "libsodium ne d\xC3\xA9marre pas";
+        return rep;
+    }
+    if (!loadSyncKey(folder, skey, &rep.why)) return rep;
+    struct Wipe {
+        SyncKey& k;
+        ~Wipe() { sodium_memzero(k.data(), k.size()); }
+    } wipeKey{skey};
+    online::Options o;
+    o.now = opt.now;
+    o.tool = opt.tool;
+    std::unique_ptr<online::Client> client;
+    if (!online::openClient(folder, key, o, client, &rep.why)) return rep;
+    online::Client& svc = *client;
+    const std::string url = svc.url();
+    const auto trusted = trustedKeys(&key);
+    const std::string by = (opt.tool.empty() ? std::string("XPG-License-Admin") : opt.tool) + " ; cl\xC3\xA9 " + key.keyId();
+    const bool writeLocal = !opt.dryRun;
+    const bool writeRemote = !opt.dryRun && !opt.receiveOnly;
+
+    bool raced = false;
+    rep.preview = opt.dryRun;
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        rep.attempts = attempt + 1;
+        if (opt.dryRun) rep.received.clear();   // sinon : ce qui a ete recu a un essai precedent est ecrit, et reste dit
+        rep.sent.clear();
+        rep.warnings.clear();
+        if (raced) rep.warnings.push_back("un autre poste a envoy\xC3\xA9 pendant l'envoi : l'outil a relu l'archive en ligne, fusionn\xC3\xA9, puis recommenc\xC3\xA9");
+        Remote remote;
+        bool foreignKey = false;
+        if (!readRemote(svc, skey, remote, foreignKey, &rep.why)) return rep;
+        if (remote.hasIndex && remote.counter < lastSeen(folder, url)) {
+            rep.why = "l'archive en ligne a \xC3\xA9t\xC3\xA9 remise \xC3\xA0 un \xC3\xA9tat plus ancien (index n\xC2\xB0 " + std::to_string(remote.counter) + ", ce poste a d\xC3\xA9j\xC3\xA0 vu le n\xC2\xB0 "
+                      + std::to_string(lastSeen(folder, url)) + ") : rien n'est re\xC3\xA7u ni envoy\xC3\xA9. Le service a-t-il \xC3\xA9t\xC3\xA9 r\xC3\xA9install\xC3\xA9 ou restaur\xC3\xA9 ?";
+            return rep;
+        }
+        if (remote.hasIndex && !opt.dryRun) rememberSeen(folder, url, remote.counter, remote.version, opt.now, false);
+        rep.version = remote.version;
+        rep.remoteInfo = url + " (version " + std::to_string(remote.version) + ")";
+        if (!remote.publishedAt.empty()) rep.remoteInfo += ", dernier envoi le " + remote.publishedAt + (remote.publishedBy.empty() ? "" : " par " + remote.publishedBy);
+        else rep.remoteInfo += " : jamais synchronis\xC3\xA9" "e";
+
+        // ---- recevoir ----
+        std::vector<std::string> localWarnings;
+        std::vector<Entry> local = localEntries(folder, localWarnings);
+        const auto findLocal = [&](const std::string& path) -> const Entry* {
+            for (const auto& e : local)
+                if (e.path == path) return &e;
+            return nullptr;
+        };
+        std::set<std::string> keepLocal;   // les conflits : la version du poste reste, et n'est pas envoyee
+        std::set<std::string> rejected;    // refuses : le poste renvoie la sienne
+        std::set<std::string> untrusted;   // signes par une cle que ce poste ne connait pas : ni recus, ni ecrases par plus ancien
+        std::string remoteActivations;     // le registre des activations en ligne, dechiffre (s'il a ete lu)
+        bool remoteActivationsRead = false;
+        for (const auto& e : remote.index) {
+            if (!knownKind(e.kind)) continue;   // d'une version plus recente de l'outil : laisse tel quel
+            const Entry* l = findLocal(e.path);
+            const auto there = remote.files.find(e.path);
+            if (there == remote.files.end()) {
+                rep.warnings.push_back(e.path + " : dans l'index mais absent de l'archive en ligne" + (l ? " (ce poste le renvoie)" : ""));
+                rejected.insert(e.path);
+                continue;
+            }
+            if (!e.stored.empty() && !there->second.empty() && there->second != e.stored) {
+                rep.warnings.push_back(e.path + " refus\xC3\xA9 : il a \xC3\xA9t\xC3\xA9 chang\xC3\xA9 dans l'archive en ligne hors de l'outil" + (l ? " (ce poste renvoie le sien)" : ""));
+                rejected.insert(e.path);
+                continue;
+            }
+            if (l && l->sha256 == e.sha256) continue;
+            if (l && e.kind != "activations" && newer(e, *l) < 0) continue;   // le poste a plus recent (l'index le dit) : il l'enverra
+            std::string raw, plain, w;
+            if (!getRemoteFile(svc, e.path, raw, &rep.why)) return rep;
+            if (!e.stored.empty() && crypto::sha256Hex(raw) != e.stored) {
+                rep.warnings.push_back(e.path + " refus\xC3\xA9 : son texte ne correspond pas \xC3\xA0 l'index (modifi\xC3\xA9 hors de l'outil)");
+                rejected.insert(e.path);
+                continue;
+            }
+            if (e.encrypted ? !openSealed(skey, e.path, raw, plain, &w) : (plain = raw, false)) {
+                rep.warnings.push_back(e.path + " refus\xC3\xA9 : " + w);
+                rejected.insert(e.path);
+                continue;
+            }
+            if (crypto::sha256Hex(plain) != e.sha256) {
+                rep.warnings.push_back(e.path + " refus\xC3\xA9 : son contenu ne correspond pas \xC3\xA0 l'index (modifi\xC3\xA9 hors de l'outil)");
+                rejected.insert(e.path);
+                continue;
+            }
+            if (e.kind == "activations") {
+                remoteActivations = plain;
+                remoteActivationsRead = true;
+                std::string localText;
+                if (l && !readText(l->local, localText, &rep.why)) return rep;
+                const auto missing = missingLines(localText, plain);
+                if (missing.empty()) continue;
+                if (writeLocal) {
+                    std::error_code ec;
+                    fs::create_directories(P(folder), ec);
+                    std::string add;
+                    if (!localText.empty() && localText.back() != '\n') add += "\n";
+                    for (const auto& line : missing) add += line + "\n";
+                    std::ofstream out(P(activationsPath(folder)), std::ios::binary | std::ios::app);   // a la fin : jamais reecrit
+                    out.write(add.data(), static_cast<std::streamsize>(add.size()));
+                    out.flush();
+                    if (!out) {
+                        rep.why = "impossible d'\xC3\xA9" "crire " + activationsPath(folder);
+                        return rep;
+                    }
+                }
+                rep.received.push_back("registre des activations : " + std::to_string(missing.size()) + " ligne(s) d'un autre poste");
+                continue;
+            }
+            Entry got;
+            bool verified = false;
+            if (!describeSigned(plain, trusted, got, verified, &w) || got.path != e.path || got.kind != e.kind) {
+                rep.warnings.push_back(e.path + " refus\xC3\xA9 : " + (w.empty() ? std::string("il ne contient pas ce que dit l'index") : w));
+                rejected.insert(e.path);
+                continue;
+            }
+            if (!verified) {
+                rep.warnings.push_back(describeEntry(got) + " pas re\xC3\xA7u : sign\xC3\xA9 par une cl\xC3\xA9 d'\xC3\xA9" "diteur que ce poste ne conna\xC3\xAEt pas (une autre cl\xC3\xA9 ? exporter-cle --garder)");
+                untrusted.insert(e.path);
+                continue;
+            }
+            if (l) {
+                const int cmp = newer(got, *l);
+                if (cmp < 0) continue;   // le poste a plus recent : il l'enverra
+                if (cmp == 0) {
+                    rep.warnings.push_back(describeEntry(got) + " : l'archive en ligne et ce poste en ont deux versions diff\xC3\xA9rentes de m\xC3\xAAme date ; ce poste garde la sienne");
+                    keepLocal.insert(e.path);
+                    continue;
+                }
+            }
+            if (writeLocal && !writeFileAt(localPathOf(folder, got), plain, &rep.why)) return rep;
+            rep.received.push_back(describeEntry(got));
+        }
+        if (writeLocal) {
+            localWarnings.clear();
+            local = localEntries(folder, localWarnings);
+        }
+        for (const auto& w : localWarnings) rep.warnings.push_back(w);
+
+        // ---- envoyer : ce que l'archive en ligne n'a pas ----
+        std::vector<const Entry*> toSend;
+        for (const auto& l : local) {
+            if (keepLocal.count(l.path)) continue;
+            const Entry* r = nullptr;
+            for (const auto& e : remote.index)
+                if (e.path == l.path) r = &e;
+            if (r && untrusted.count(l.path) && newer(l, *r) <= 0) continue;   // jamais un plus ancien par-dessus
+            if (r && r->sha256 == l.sha256 && !rejected.count(l.path)) continue;
+            if (r && l.kind == "activations" && !rejected.count(l.path)) {
+                // Envoyer seulement si le poste a des lignes que l'archive en ligne n'a pas (l'ordre seul ne compte pas).
+                std::string mine;
+                if (!readText(l.local, mine, &rep.why)) return rep;
+                if (remoteActivationsRead && missingLines(remoteActivations, mine).empty()) continue;
+            }
+            if (r && !rejected.count(l.path) && l.kind != "activations" && newer(l, *r) < 0) continue;
+            toSend.push_back(&l);
+        }
+        for (const auto* l : toSend) rep.sent.push_back(describeEntry(*l));
+        if (toSend.empty() && remote.hasIndex) {
+            rep.upToDate = rep.received.empty() && rep.warnings.empty();
+            rep.ok = true;
+            if (writeLocal) rememberSeen(folder, url, remote.counter, remote.version, opt.now, true);
+            return rep;
+        }
+        if (toSend.empty() && !remote.hasIndex && local.empty()) {
+            rep.ok = true;
+            rep.warnings.push_back("rien \xC3\xA0 envoyer : l'archive de ce poste est vide (signer-registre, signer-licence, archiver)");
+            return rep;
+        }
+        if (!writeRemote) {
+            rep.ok = true;
+            if (writeLocal && remote.hasIndex) rememberSeen(folder, url, remote.counter, remote.version, opt.now, true);
+            return rep;
+        }
+
+        // Les textes a deposer (chiffres), puis l'index ; par lots de kMaxPostBytes au plus, l'index dans le dernier.
+        std::vector<std::pair<std::string, std::string>> uploads;   // chemin -> texte depose
+        std::set<std::string> sentPaths;
+        std::map<std::string, std::string> storedOf;
+        for (const auto* l : toSend) {
+            std::string plain;
+            if (!readText(l->local, plain, &rep.why)) return rep;
+            std::string content = l->encrypted ? seal(skey, l->path, plain) : plain;
+            if (content.size() > kMaxRemoteFile) {
+                rep.why = describeEntry(*l) + " est trop gros pour l'archive en ligne (" + std::to_string(content.size() / 1024) + " Kio ; 1536 Kio au plus)";
+                return rep;
+            }
+            storedOf[l->path] = crypto::sha256Hex(content);
+            sentPaths.insert(l->path);
+            uploads.emplace_back(l->path, std::move(content));
+        }
+        std::vector<Entry> newIndex;
+        for (const auto& l : local)
+            if (sentPaths.count(l.path)) {
+                Entry e = l;
+                e.stored = storedOf[l.path];
+                e.local.clear();
+                newIndex.push_back(std::move(e));
+            }
+        for (const auto& e : remote.index)
+            if (!sentPaths.count(e.path)) newIndex.push_back(e);
+        std::sort(newIndex.begin(), newIndex.end(), [](const Entry& a, const Entry& b) { return a.path < b.path; });
+        const std::uint64_t newCounter = std::max(remote.counter, lastSeen(folder, url)) + 1;
+        uploads.emplace_back(kIndexName, writeIndex(skey, newIndex, opt.now, by, newCounter));
+
+        std::uint64_t base = remote.version;
+        bool conflict = false;
+        std::size_t i = 0;
+        while (i < uploads.size()) {
+            Value files = Value::object();
+            std::size_t bytes = 0;
+            const std::size_t first = i;
+            while (i < uploads.size() && (i == first || bytes + uploads[i].second.size() + 256 <= kMaxPostBytes)) {
+                bytes += uploads[i].second.size() + 256;
+                files.set(uploads[i].first, Value(uploads[i].second));
+                ++i;
+            }
+            Value body = Value::object();
+            body.set("base", static_cast<std::uint64_t>(base));
+            body.set("fichiers", std::move(files));
+            const online::Reply r = svc.call("POST", "/admin/archive", core::json::write(body, false));
+            if (r.status == 409 && r.error.empty()) {
+                conflict = true;
+                break;
+            }
+            if (r.status != 200 || !r.error.empty() || !r.json.isObject() || !r.json.has("version")) {
+                rep.why = svc.explain(r, "envoyer dans l'archive en ligne");
+                return rep;
+            }
+            base = static_cast<std::uint64_t>(r.json.integer("version"));
+        }
+        if (conflict) {   // un autre poste a envoye entre-temps : relire, fusionner, recommencer
+            raced = true;
+            continue;
+        }
+        rep.version = base;
+        rep.ok = true;
+        rememberSeen(folder, url, newCounter, base, opt.now, true);
+        return rep;
+    }
+    rep.why = "l'archive en ligne change sans arr\xC3\xAAt (d'autres postes y envoient) : r\xC3\xA9" "essaie dans un moment";
+    return rep;
+}
+
+} // namespace license_admin::archive

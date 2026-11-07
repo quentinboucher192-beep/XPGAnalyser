@@ -37,7 +37,7 @@ namespace license_admin::gui {
 namespace {
 
 // =============================================================================================================
-//  LA PAGE EN BLOCS (le meme petit outil que PageGithub.cpp) : des cartes, du texte qui passe a la ligne, des
+//  LA PAGE EN BLOCS (le meme petit outil que PageService.cpp) : des cartes, du texte qui passe a la ligne, des
 //  rangees de boutons, des champs avec leur etiquette - de haut en bas, dans la largeur donnee.
 // =============================================================================================================
 std::size_t nextChar(const std::string& s, std::size_t i) {
@@ -818,25 +818,29 @@ void SecurityPage::rebuild() {
         bl.row({export_});
         bl.end();
 
-        // 1.34.0 : ce que l'integrateur compile dans les Studios livres (rien de secret).
+        // 1.34.0 : ce que l'integrateur compile dans les Studios livres (rien de secret). 1.35.0 : l'adresse du service.
         bl.card("Les fichiers pour les Studios");
-        bl.text("Les trois fichiers PUBLICS que le d\xC3\xA9veloppeur compile dans API Studio et IHM Studio livr\xC3\xA9s, pour que les licences, "
-                "l'\xC3\xA9valuation et la passerelle y marchent : PublisherKey.hpp (ta cl\xC3\xA9 publique), registre.xpgreg (le registre sign\xC3\xA9 de l'archive) "
-                "et GatewayAddress.hpp (l'adresse de la passerelle), avec un LISEZ-MOI.txt qui dit o\xC3\xB9 les mettre.");
+        bl.text("Les fichiers PUBLICS que le d\xC3\xA9veloppeur compile dans API Studio et IHM Studio livr\xC3\xA9s, pour que les licences, la "
+                "D\xC3\xA9" "couverte et le service en ligne y marchent : PublisherKey.hpp (ta cl\xC3\xA9 publique), registre.xpgreg (le registre sign\xC3\xA9 de "
+                "l'archive), ServiceAddress.hpp (l'adresse de ton service des licences) et cle-publique.txt (la m\xC3\xAAme cl\xC3\xA9 publique, pour mettre le "
+                "service en ligne), avec un LISEZ-MOI.txt qui dit o\xC3\xB9 les mettre.");
         if (k.test)
             bl.note("Refus\xC3\xA9 avec une cl\xC3\xA9 d'essai : les Studios livr\xC3\xA9s ne doivent jamais la reconna\xC3\xAEtre.", ui::Tone::Warning);
         else
-            bl.note("Rien de secret dedans : ni la cl\xC3\xA9 priv\xC3\xA9" "e, ni un jeton, ni le code de secours.");
+            bl.note("Rien de secret dedans : ni la cl\xC3\xA9 priv\xC3\xA9" "e, ni la cl\xC3\xA9 de synchro, ni un code.");
         bl.row({kit_});
         bl.end();
     }
 
     bl.card("Ce qui prot\xC3\xA8ge ton poste");
-    bl.bullet("La cl\xC3\xA9 priv\xC3\xA9" "e ne quitte jamais ce PC : ni dans le d\xC3\xA9p\xC3\xB4t GitHub, ni dans les Studios, ni dans un fichier envoy\xC3\xA9 \xC3\xA0 un client.");
+    bl.bullet("La cl\xC3\xA9 priv\xC3\xA9" "e ne quitte jamais ce PC : ni sur le service des licences (il ne re\xC3\xA7oit que des appels sign\xC3\xA9s par elle), ni "
+              "dans les Studios, ni dans un fichier envoy\xC3\xA9 \xC3\xA0 un client.");
     bl.bullet("Cette application n'est jamais livr\xC3\xA9" "e : elle reste sur le poste de l'\xC3\xA9" "diteur, comme XPG-License-Admin.exe.");
     bl.bullet("La sauvegarde est chiffr\xC3\xA9" "e par ta phrase de passe : sans la phrase, elle ne sert \xC3\xA0 rien. Garde-les s\xC3\xA9par\xC3\xA9ment.");
-    bl.bullet(k.protectedHere ? std::string("Le jeton GitHub et la cl\xC3\xA9 de synchro sont prot\xC3\xA9g\xC3\xA9s par DPAPI pour ce compte Windows.")
-                              : std::string("Le jeton GitHub et la cl\xC3\xA9 de synchro sont dans des fichiers lisibles par ce compte seulement."));
+    bl.bullet(k.protectedHere ? std::string("La cl\xC3\xA9 de synchro de l'archive est prot\xC3\xA9g\xC3\xA9" "e par DPAPI pour ce compte Windows.")
+                              : std::string("La cl\xC3\xA9 de synchro de l'archive est dans un fichier lisible par ce compte seulement."));
+    bl.bullet("Un code d'activation n'est montr\xC3\xA9 qu'une fois, \xC3\xA0 sa cr\xC3\xA9" "ation : ni ce poste ni le service ne le gardent (le service n'en a que "
+              "l'empreinte).");
     bl.end();
     body_->setBlocks(std::move(bl.items));
 }

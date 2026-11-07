@@ -3,16 +3,17 @@
 // -----------------------------------------------------------------------------
 //  Ce que disent l'archive et le registre des activations de ce poste, hors
 //  ligne (Workspace::dashboard) :
-//    - les tuiles : clients, licences actives, expirees, revoquees, PC actives,
-//      demandes en attente, celles qui finissent dans 30 jours ; les licences
-//      flottantes demandent le service en ligne (grisee : aucun chiffre) ;
-//      un clic sur une tuile ouvre la page qui en dit plus ;
+//    - les tuiles : clients, licences actives (et expirees), licences en ligne,
+//      revoquees, PC actives (lies et en ligne), demandes en attente, celles qui
+//      finissent dans 30 jours, jetons flottants en cours ; 1.35.0 : ce qui vient
+//      du service est le DERNIER RELEVE (sa date est dite ; jamais releve : pas
+//      de chiffre) ; un clic sur une tuile ouvre la page qui en dit plus ;
 //    - les dernieres operations (signees, demandes, revocations) ;
 //    - la repartition des licences actives par edition (des barres) ;
-//    - l'etat du poste : la cle, le registre, la liste de revocation, la synchro ;
+//    - l'etat du poste : la cle, le registre, la liste de revocation, le service ;
 //    - les actions rapides : Nouvelle licence... (l'assistant), Noter des
-//      demandes... (des .xpgreq recus, pas encore signes), Synchroniser (la page
-//      GitHub) ;
+//      demandes... (des .xpgreq recus, pas encore signes), Service en ligne (la
+//      page du service : l'archive, le certificat) ;
 //    - le premier lancement (aucune cle) : comment commencer.
 //  Des demandes (.xpgreq) glissees sur la page ouvrent l'assistant avec elles.
 // =============================================================================
@@ -211,13 +212,13 @@ public:
     explicit DashboardPage(ShellHost host) : Page("page.tableau", std::move(host)) {
         newLicence_ = addButton("Nouvelle licence\xE2\x80\xA6", "tableau.nouvelle-licence", ui::Button::Style::Primary, ui::Icon::Plus);
         noteRequests_ = addButton("Noter des demandes\xE2\x80\xA6", "tableau.noter-demandes", ui::Button::Style::Default, ui::Icon::Import);
-        sync_ = addButton("Synchroniser", "tableau.synchroniser", ui::Button::Style::Default, ui::Icon::Refresh);
+        sync_ = addButton("Service en ligne", "tableau.synchroniser", ui::Button::Style::Default, ui::Icon::Refresh);
         newLicence_->setTooltip("L'assistant : le client, l'\xC3\xA9" "dition, les PC (leurs demandes .xpgreq), la dur\xC3\xA9" "e, puis signer.");
         noteRequests_->setTooltip("Des demandes d'activation re\xC3\xA7ues (.xpgreq), pas encore sign\xC3\xA9" "es : not\xC3\xA9" "es dans le registre des activations.");
-        sync_->setTooltip("La page Synchronisation GitHub : recevoir et envoyer l'archive.");
+        sync_->setTooltip("La page Service en ligne : l'archive, la cl\xC3\xA9 du service et son certificat.");
         links_ += newLicence_->clicked->connect([this] { openWizard({}); });
         links_ += noteRequests_->clicked->connect([this] { askRequests(); });
-        links_ += sync_->clicked->connect([this] { host_.navigate("github"); });
+        links_ += sync_->clicked->connect([this] { host_.navigate("service"); });
 
         createKey_ = addButton("Cr\xC3\xA9" "er la cl\xC3\xA9\xE2\x80\xA6", "tableau.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
         restore_ = addButton("Restaurer une sauvegarde\xE2\x80\xA6", "tableau.restaurer", ui::Button::Style::Default, ui::Icon::Open);
@@ -233,7 +234,7 @@ public:
         } tiles[] = {
             {"clients", "Clients", "clients"},
             {"actives", "Licences actives", "licences"},
-            {"expirees", "Expir\xC3\xA9" "es", "licences"},
+            {"en-ligne", "Licences en ligne", "licences"},
             {"revoquees", "R\xC3\xA9voqu\xC3\xA9" "es", "revocations"},
             {"pc", "PC activ\xC3\xA9s", "activations"},
             {"demandes", "Demandes en attente", "activations"},
@@ -245,12 +246,12 @@ public:
             const std::string page = t.page;
             const bool requests = std::string(t.id) == "demandes";
             links_ += tile->clicked->connect([this, page, requests] {
-                // 1.34.0 : la passerelle reglee, les demandes en attente sont d'abord celles en ligne.
-                host_.navigate(requests && ws().passerelle().configured ? std::string("demandes") : page);
+                // Le service regle, les demandes en attente sont d'abord celles en ligne.
+                host_.navigate(requests && ws().service().ready() ? std::string("demandes") : page);
             });
             tiles_.push_back(&static_cast<StatTile&>(addChild(std::move(tile))));
         }
-        tiles_.back()->setTooltip("Les licences flottantes demandent le service de licences en ligne, pas encore fait : aucun chiffre ici.");
+        tiles_.back()->setTooltip("Les jetons flottants en cours, au dernier relev\xC3\xA9 du service (Licences flottantes \xE2\x80\xBA Relever).");
 
         auto table = std::make_unique<ui::TableView>("tableau.operations");
         table->setColumns({{"Date", 132.f}, {"Op\xC3\xA9ration", 140.f}, {"Licence", 140.f}, {"Client", 180.f}, {"PC", 220.f}});
@@ -286,12 +287,20 @@ public:
 
         const auto n = [](int v) { return std::to_string(v); };
         tiles_[0]->set(n(d_.clients), "dans l'archive", Tone::Info, false);
-        tiles_[1]->set(n(d_.activeLicences), "sur " + n(d_.licences) + " au total", Tone::Info, false);
-        tiles_[2]->set(n(d_.expiredLicences), "\xC3\xA0 renouveler", d_.expiredLicences ? Tone::Warning : Tone::Info, false);
+        tiles_[1]->set(n(d_.activeLicences), "sur " + n(d_.licences) + (d_.expiredLicences ? ", " + n(d_.expiredLicences) + " expir\xC3\xA9" "e(s)" : std::string(" au total")),
+                       d_.expiredLicences ? Tone::Warning : Tone::Info, false);
+        // 1.35.0 : ce que dit le service, au dernier releve (jamais releve : pas de chiffre).
+        const std::string seen = d_.snapshotAt ? "relev\xC3\xA9 " + shortWhen(d_.snapshotAt) : std::string();
+        if (!d_.serviceConfigured) tiles_[2]->set("", "service non r\xC3\xA9gl\xC3\xA9", Tone::Info, true);
+        else if (!d_.snapshotAt) tiles_[2]->set("", "jamais relev\xC3\xA9" "es", Tone::Info, true);
+        else tiles_[2]->set(n(d_.onlineLicences), seen, Tone::Info, false);
         tiles_[3]->set(n(d_.revokedLicences), w.hasRevocations() ? "liste n\xC2\xB0 " + std::to_string(w.revocations().number) : std::string("aucune liste"),
                        d_.revokedLicences ? Tone::Error : Tone::Info, false);
-        tiles_[4]->set(n(d_.devices), "li\xC3\xA9s \xC3\xA0 une licence", Tone::Info, false);
-        if (d_.onlineConfigured) {
+        if (d_.serviceConfigured && d_.snapshotAt)
+            tiles_[4]->set(n(d_.devices + d_.onlineDevices), n(d_.devices) + " li\xC3\xA9s, " + n(d_.onlineDevices) + " en ligne", Tone::Info, false);
+        else
+            tiles_[4]->set(n(d_.devices), "li\xC3\xA9s \xC3\xA0 une licence", Tone::Info, false);
+        if (d_.serviceConfigured) {
             // 1.34.0 : les demandes par fichier (notees) et celles en ligne (au dernier releve).
             const int all = d_.pendingRequests + d_.onlinePending;
             const std::string when = d_.onlineFetchedAt ? "relev\xC3\xA9" "es le " + dateTimeFr(d_.onlineFetchedAt) : std::string("en ligne : jamais relev\xC3\xA9" "es");
@@ -304,7 +313,11 @@ public:
             tiles_[5]->setTooltip({});
         }
         tiles_[6]->set(n(d_.expiringSoon), "licences actives", d_.expiringSoon ? Tone::Warning : Tone::Info, false);
-        tiles_[7]->set("", "demande le service en ligne", Tone::Info, true);
+        if (!d_.serviceConfigured) tiles_[7]->set("", "service non r\xC3\xA9gl\xC3\xA9", Tone::Info, true);
+        else if (!d_.snapshotAt) tiles_[7]->set("", "jamais relev\xC3\xA9" "es", Tone::Info, true);
+        else
+            tiles_[7]->set(n(d_.floatingLeases), "jeton(s) sur " + n(d_.floatingSeats) + " poste(s), " + seen,
+                           d_.floatingSeats && d_.floatingLeases >= d_.floatingSeats ? Tone::Warning : Tone::Info, false);
 
         rebuildOps();
 
@@ -325,16 +338,23 @@ public:
                           Tone::Info});
         poste_.push_back({"Archive", plural(static_cast<int>(w.licences().size()), "licence sign\xC3\xA9" "e", "licences sign\xC3\xA9" "es"), Tone::Info});
         poste_.push_back({"Activations", plural(static_cast<int>(w.records().size()), "ligne", "lignes") + " dans le registre", Tone::Info});
-        if (const auto& pg = w.passerelle(); !pg.problem.empty())
-            poste_.push_back({"Passerelle", pg.problem, Tone::Error});
-        else if (pg.configured)
-            poste_.push_back({"Passerelle", pg.fetch.fetchedAt ? n(pg.pending) + " en ligne en attente (" + shortWhen(pg.fetch.fetchedAt) + ")"
-                                                               : std::string("demandes jamais relev\xC3\xA9" "es"),
-                              pg.pending ? Tone::Warning : Tone::Info});
-        const auto& g = w.github();
-        if (!g.problem.empty()) poste_.push_back({"Synchro", g.problem, Tone::Error});
-        else if (!g.configured) poste_.push_back({"Synchro", "GitHub non r\xC3\xA9gl\xC3\xA9", Tone::Info});
-        else poste_.push_back({"Synchro", g.config.repo + (g.token ? std::string() : std::string(" (pas de jeton)")), g.token ? Tone::Info : Tone::Warning});
+        const auto& sv = w.service();
+        if (!sv.problem.empty()) {
+            poste_.push_back({"Service", sv.problem, Tone::Error});
+        } else if (!sv.configured) {
+            poste_.push_back({"Service", "non r\xC3\xA9gl\xC3\xA9 (licences par fichier seulement)", Tone::Info});
+        } else {
+            std::string host = sv.config.url;
+            if (const auto p = host.find("://"); p != std::string::npos) host.erase(0, p + 3);
+            const bool certBad = sv.hasState && (!sv.state.certOk || sv.state.needsRenewal(w.now()));
+            poste_.push_back({"Service", host + (certBad ? std::string(" (certificat \xC3\xA0 renouveler)") : std::string()), certBad ? Tone::Warning : Tone::Info});
+            poste_.push_back({"Demandes", sv.fetch.fetchedAt ? n(sv.pending) + " en ligne en attente (" + shortWhen(sv.fetch.fetchedAt) + ")"
+                                                             : std::string("jamais relev\xC3\xA9" "es"),
+                              sv.pending ? Tone::Warning : Tone::Info});
+            poste_.push_back({"Archive en ligne", !sv.syncKey ? std::string("pas de cl\xC3\xA9 de synchro")
+                                                  : sv.lastSync.at ? "synchronis\xC3\xA9" "e " + shortWhen(sv.lastSync.at) : std::string("jamais synchronis\xC3\xA9" "e"),
+                              !sv.syncKey || !sv.lastSync.at ? Tone::Warning : Tone::Info});
+        }
         if (!w.archiveProblems().empty())
             poste_.push_back({"Illisibles", plural(static_cast<int>(w.archiveProblems().size()), "fichier de l'archive", "fichiers de l'archive"), Tone::Warning});
         if (w.skippedLines() > 0)

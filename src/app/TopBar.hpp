@@ -195,6 +195,19 @@ public:
     [[nodiscard]] std::string hiddenPartAction(std::string_view part) const;
     // ---- fin Lot API 8 : bandeau haut ----
 
+    // ---- 1.35.0 : LA LICENCE ACTIVE, TOUJOURS VISIBLE (la partie "licence", a droite, avant Affichage) ----
+    //  "Licence : PROFESSIONAL \xC2\xB7 jusqu'au 07/11/2027", "D\xC3\xA9" "couverte \xC2\xB7 23 j", "Bail : 5 j \xE2\x80\x94 connecte-toi",
+    //  "Flottante \xC2\xB7 poste pris", "Sans licence" (licence::indicator) ; colore selon l'etat. Serre : la forme
+    //  courte, puis le cadenas seul (sa couleur reste). Un clic : "help.licence" (la fenetre Licence). Un texte
+    //  vide : la partie disparait (les licences ne sont pas actives).
+    struct LicenceChip {
+        std::string text, shortText, tip;
+        int         tone{0};          // 0 neutre, 1 bon, 2 attention, 3 erreur, 4 information
+        [[nodiscard]] bool operator==(const LicenceChip&) const = default;
+    };
+    void setLicence(LicenceChip chip);
+    [[nodiscard]] const LicenceChip& licence() const noexcept { return licence_; }
+
 protected:
     void            onLayout() override;
     void            onPaint(const ui::PaintContext&) override;
@@ -257,6 +270,7 @@ private:
     void paintBell(const ui::PaintContext&, const Part&, bool hot) const;
     void paintTasks(const ui::PaintContext&, const Part&, bool hot) const;
     void paintSparkline(const ui::PaintContext&, const gfx::Rect&, gfx::Color) const;
+    void paintLicence(const ui::PaintContext&, const Part&, bool hot) const;   // 1.35.0
     std::vector<std::string> recents_;
     std::vector<UndoItem>    undoList_;
     std::vector<Notice>      notices_;
@@ -267,6 +281,7 @@ private:
     mutable gfx::Rect        stateRect_{}, undoBox_{}, exportBox_{};
     double                   pressedAt_{0.0};      // le clic long sur Annuler (secondes)
     // ---- fin Lot API 8 : bandeau haut ----
+    LicenceChip              licence_;             // 1.35.0 : la licence active (setLicence)
 };
 
 } // namespace app

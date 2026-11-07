@@ -3,8 +3,9 @@
 //  QUE LA COQUILLE LUI DONNE (XPG-License-Manager-Admin ; jamais livre)
 // -----------------------------------------------------------------------------
 //  La coquille (Shell.hpp) : a gauche le menu (les 13 entrees de la maquette ;
-//  1.34.0 : 14, avec << Demandes en ligne >> apres Activations),
-//  en haut l'etat (la cle, la synchro, un travail en cours), au centre la page
+//  1.34.0 : 14, avec << Demandes en ligne >> apres Activations ; 1.35.0 :
+//  << Service en ligne >> a la place de << Synchronisation GitHub >>),
+//  en haut l'etat (la cle, le service, un travail en cours), au centre la page
 //  choisie, en bas le bandeau du dernier resultat. Une page est un ui::Widget ;
 //  elle lit le Workspace et demande a la coquille ce qui depasse sa surface :
 //  montrer un resultat, lancer un travail lent, ouvrir un dialogue, choisir un
@@ -13,12 +14,12 @@
 //  REGLES (toutes les pages) :
 //    - jamais de reseau ni d'Argon2id sur le fil de l'interface : runSlow ;
 //    - une operation qui ecrit attend qu'aucun travail lent ne tourne (busy) ;
-//    - un secret tape (phrase, jeton, code de secours) : InputText masque, jamais
-//      dans un message, un journal, le presse-papiers (sauf le code de secours,
-//      copie a la demande explicite de l'utilisateur), vide des que l'operation
-//      est lancee ;
-//    - une fonctionnalite qui n'existe pas (le service en ligne) n'est jamais
-//      simulee : la page le dit ;
+//    - un secret tape (phrase, code de secours) : InputText masque, jamais dans
+//      un message, un journal, le presse-papiers (sauf le code de secours et le
+//      code d'activation, copies a la demande explicite de l'utilisateur), vide
+//      des que l'operation est lancee ;
+//    - une fonctionnalite qui n'existe pas (la boutique, les commandes : elles
+//      demandent un paiement) n'est jamais simulee : la page le dit ;
 //    - les textes en francais (UTF-8 en \xHH dans le C++), tutoiement.
 // =============================================================================
 #pragma once
@@ -54,8 +55,6 @@ struct ShellHost {
     std::function<void(const ui::FilePick& pick, std::function<void(std::string)> done)> pickFile;
     // Ouvrir un dossier dans l'explorateur (le dossier de l'archive, d'un fichier ecrit).
     std::function<void(const std::string& folder)> openFolder;
-    // 1.34.0 : ouvrir une page de GitHub dans le navigateur du systeme (https://github.com/... seulement).
-    std::function<void(const std::string& url)> openUrl;
 };
 
 class Page : public ui::Widget {
@@ -86,12 +85,12 @@ using PagePtr = std::unique_ptr<Page>;
 //  "editions"       Editions                                 PageEditions.cpp
 //  "fonctionnalites" Fonctionnalites                         PageEditions.cpp
 //  "activations"    Activations                              PageActivations.cpp
-//  "demandes"       Demandes en ligne (la passerelle, 1.34)  PageRequests.cpp
-//  "flottantes"     Licences flottantes (service en ligne)   PageOnline.cpp
-//  "boutique"       Boutique (service en ligne)              PageOnline.cpp
-//  "commandes"      Commandes (service en ligne)             PageOnline.cpp
+//  "demandes"       Demandes en ligne (le service, 1.35)     PageRequests.cpp
+//  "flottantes"     Licences flottantes (le service, 1.35)   PageFloating.cpp
+//  "boutique"       Boutique (pas encore : un paiement)      PageOnline.cpp
+//  "commandes"      Commandes (pas encore : un paiement)     PageOnline.cpp
 //  "revocations"    Revocations                              PageRevocations.cpp
-//  "github"         Synchronisation GitHub                   PageGithub.cpp
+//  "service"        Service en ligne (1.35)                  PageService.cpp
 //  "historique"     Historique                               PageHistory.cpp
 //  "securite"       Parametres de securite (la cle)          PageSecurity.cpp
 PagePtr makeDashboardPage(ShellHost host);
@@ -101,23 +100,35 @@ PagePtr makeEditionsPage(ShellHost host);
 PagePtr makeFeaturesPage(ShellHost host);
 PagePtr makeActivationsPage(ShellHost host);
 PagePtr makeRequestsPage(ShellHost host);
-PagePtr makeOnlinePage(ShellHost host, const std::string& which);   // "flottantes", "boutique", "commandes"
+PagePtr makeFloatingPage(ShellHost host);
+PagePtr makeOnlinePage(ShellHost host, const std::string& which);   // "boutique", "commandes"
 PagePtr makeRevocationsPage(ShellHost host);
-PagePtr makeGithubPage(ShellHost host);
+PagePtr makeServicePage(ShellHost host);
 PagePtr makeHistoryPage(ShellHost host);
 PagePtr makeSecurityPage(ShellHost host);
 
 // L'assistant de creation d'une licence (un dialogue) ; `requests` : des demandes deja choisies (glissees) ;
-// `extendLicenseId` : ajouter des PC a cette licence de l'archive ; `customer` : le client prerempli (page Clients).
-menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId = {}, std::string customer = {});
+// `extendLicenseId` : ajouter des PC a cette licence de l'archive (une licence en ligne : la prolonger) ; `customer` : le
+// client prerempli (page Clients) ; `online` : 1.35.0 - une licence EN LIGNE (aucun PC, un code d'activation).
+menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId = {}, std::string customer = {},
+                                bool online = false);
 
-// 1.34.0 : publier sur la passerelle ce que la derniere operation a signe (Workspace::takeGatewayJob) - une licence a
-// tous ses PC, une revocation, un PC retire, un registre - par runSlow ; `done` (facultatif) recoit le resultat sur le
-// fil de l'interface. Faux : rien a publier (la passerelle n'est pas reglee), ou un travail tourne deja (la publication
-// attend alors dans le Workspace : la coquille la lance des qu'il a fini). Jamais bloquant ; un echec est dit tel quel
-// (le fichier signe reste dans l'archive).
-bool publishToGateway(const ShellHost& host, std::function<void(const OpResult&)> done = {});
-// L'adresse de GitHub qu'on ose ouvrir : https://github.com/<proprietaire>/<nom>[/issues/<n>] (rien d'autre).
-[[nodiscard]] bool safeGithubUrl(const std::string& url);
+// 1.35.0 : LE CODE D'ACTIVATION d'une licence en ligne, montre UNE fois : masque, << Afficher >>, << Copier >> (le
+// presse-papiers, sur ce clic seulement), et le rappel que seule son empreinte est gardee. Le dialogue efface le code en
+// se fermant.
+menu::MenuPtr makeCodeDialog(std::string licenseId, std::string code);
+// Deposer une licence en ligne preparee (Workspace::prepareOnlineLicence, prepareNewCode) par runSlow, puis montrer son
+// code (makeCodeDialog) si le depot a reussi ; un echec : le code est oublie, et c'est dit. `done` (facultatif) recoit le
+// resultat. Faux : un travail tourne deja (rien n'est parti ; le code est oublie).
+bool depositOnlineLicence(const ShellHost& host, ServiceJob job, std::string code, std::function<void(const OpResult&)> done = {});
+
+// 1.35.0 : publier sur le service ce que la derniere operation a signe (Workspace::takeServiceJob) - une licence a tous
+// ses PC, une revocation, un PC retire, un registre - par runSlow ; `done` (facultatif) recoit le resultat sur le fil de
+// l'interface. Faux : rien a publier (le service n'est pas regle), ou un travail tourne deja (la publication attend alors
+// dans le Workspace : la coquille la lance des qu'il a fini). Jamais bloquant ; un echec est dit tel quel (le fichier
+// signe reste dans l'archive).
+bool publishToService(const ShellHost& host, std::function<void(const OpResult&)> done = {});
+// Relever les licences en ligne (GET /admin/licences) par runSlow, et adopter le releve (`done` facultatif).
+bool refreshOnlineLicences(const ShellHost& host, std::function<void(const OpResult&)> done = {});
 
 } // namespace license_admin::gui

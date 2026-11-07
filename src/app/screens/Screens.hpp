@@ -177,6 +177,7 @@ private:
     std::uint64_t            dialogFrame_{~std::uint64_t{0}};
     core::ConnectionScope    uiLinks_;                     // les widgets : branches une fois (buildUi)
     core::ConnectionScope    busLinks_;                    // le bus : renouvele a chaque onEnter
+    int                      licenceTab_{0};               // 1.35.0 : l'onglet de la fenetre Licence qu'ouvre l'encart
 };
 
 // --------------------------------------------------- 2. Main analysis screen ---

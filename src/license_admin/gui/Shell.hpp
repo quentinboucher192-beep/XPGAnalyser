@@ -5,11 +5,14 @@
 //  Un ecran (menu::WidgetMenu, "admin.shell") :
 //    - a gauche, le menu (220 px) : le nom de l'application, << Editeur
 //      seulement >>, puis les 13 entrees de la maquette (1.34.0 : 14, avec
-//      << Demandes en ligne >>, Page.hpp) ; les trois
-//      du service en ligne sont grisees mais ouvrent leur page d'explication ;
+//      << Demandes en ligne >>, Page.hpp ; 1.35.0 : << Service en ligne >> a la
+//      place de << Synchronisation GitHub >>, << Licences flottantes >> une vraie
+//      page) ; les deux de la vente en ligne (Boutique, Commandes : un paiement,
+//      pas encore fait) sont grisees mais ouvrent leur page d'explication ;
 //    - en haut de la page : son titre ; a droite l'etat de la cle (un clic :
-//      Parametres de securite) et de la synchro GitHub (un clic : la page
-//      GitHub) - pendant un travail lent, ce qu'il fait, avec un sablier ;
+//      Parametres de securite) et du service des licences (un clic : la page
+//      Service en ligne) - pendant un travail lent, ce qu'il fait, avec un
+//      sablier ;
 //    - au centre, la page choisie (creee a la premiere visite, rafraichie a
 //      chaque retour) ;
 //    - en bas, le bandeau du dernier resultat (vert : fait ; rouge : refuse),
@@ -43,7 +46,7 @@ public:
         const char* id;       // l'identifiant de la page ("licences")
         const char* label;    // UTF-8 ("Licences")
         ui::Icon    icon;
-        bool        online;   // le service en ligne : grisee, la page explique
+        bool        online;   // la vente en ligne (pas encore) : grisee, la page explique
     };
     [[nodiscard]] static const std::vector<NavEntry>& entries();
     [[nodiscard]] static const NavEntry* entry(const std::string& pageId);

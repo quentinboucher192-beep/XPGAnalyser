@@ -1,7 +1,7 @@
 // =============================================================================
 //  app/LicenceService.hpp - 1.35.0 : LE CLIENT DU SERVICE DES LICENCES (le
 //  Worker Cloudflare de l'editeur ; le contrat : docs/SERVICE-LICENCES.md, les
-//  formats : licensing/Service.hpp) - remplace la passerelle GitHub de la 1.34
+//  formats : licensing/Service.hpp) - remplace la passerelle de la 1.34
 // -----------------------------------------------------------------------------
 //  LES APPELS SIGNES : chaque appel /v1/... qui touche a ce PC porte les quatre
 //  en-tetes X-XPG-* (service::signRequest), signes par la cle de ce PC

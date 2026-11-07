@@ -181,6 +181,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
          {}, ui::Icon::History, Menu::Tasks, true);
     part("deposer", "D\xC3\xA9poser un fichier", "D\xC3\xA9poser un fichier dans le projet : choisis-le (ou glisse-le sur la fen\xC3\xAAtre)",
          "files.drop", ui::Icon::Open, Menu::None, true);
+    // 1.35.0 : la licence active (setLicence) ; un clic : la fenetre Licence.
+    part("licence", "Licence", "La licence de ce PC : un clic ouvre la fen\xC3\xAAtre Licence", "help.licence", ui::Icon::Lock);
     for (auto& p : parts_)
         if (p.key == "simuler" || p.key == "nouveau" || p.key == "affichage" || p.key == "aide") p.iconOnly = true;
     // ---- fin Lot API 8 : bandeau haut ----
@@ -941,6 +943,7 @@ void TopBar::onPaint(const ui::PaintContext& ctx) {
         if (p.key == "cloche") { paintBell(ctx, p, hot); continue; }
         if (p.key == "ihm") { paintHmi(ctx, p, hot); continue; }   // 1.10
         if (p.key == "taches") { paintTasks(ctx, p, hot); continue; }
+        if (p.key == "licence") { paintLicence(ctx, p, hot); continue; }   // 1.35.0
         if (p.key == "annuler-liste") {
             if (hot || opened_ == Menu::UndoList) ctx.r.fillRoundedRect(p.rect, c.text.withAlpha(opened_ == Menu::UndoList ? 30 : 22), 5.f);
             chevron(ctx.r, p.rect.x + p.rect.w * 0.5f, p.rect.y + p.rect.h * 0.5f, undoList_.empty() ? c.textDisabled : c.textMuted);
@@ -1020,6 +1023,7 @@ std::string TopBar::tipAt(gfx::Point p) const {
             return part.tip + (unseen > 0 ? "\n" + std::to_string(unseen) + " nouveaut\xC3\xA9(s) pas encore vue(s) : Aide \xE2\x80\xBA Nouveaut\xC3\xA9s\xE2\x80\xA6"
                                           : std::string{});
         }
+        if (part.key == "licence") return licence_.tip.empty() ? part.tip : licence_.tip;   // 1.35.0
         if (part.key == "taches")
             return tasks_.empty() ? std::string("Aucune t\xC3\xA2" "che de fond en cours")
                                   : tasks_.front().label + (tasks_.size() > 1 ? " (+" + std::to_string(tasks_.size() - 1) + ")" : std::string{})

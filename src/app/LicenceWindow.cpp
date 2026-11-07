@@ -3,7 +3,13 @@
 //  client, maquette << XPG License Manager (client) >>)
 // -----------------------------------------------------------------------------
 //  En tete : l'edition, le statut, le client, la licence ; les PC autorises et
-//  lies, la fin, le registre ; la phrase de l'etat. Six onglets :
+//  lies, la fin, le registre ; la phrase de l'etat. Les onglets :
+//    Activation       1.35.0 : activer avec un code (XPG-XXXX-XXXX-XXXX-XXXX,
+//                     le nom de ce PC, Activer) ; la licence en ligne (le bail,
+//                     la derniere synchronisation, Renouveler maintenant,
+//                     Liberer ce poste) ; la licence flottante (le jeton, Rendre
+//                     le poste) ; la Decouverte et ce qu'en garde le service
+//                     (et la phrase sur l'empreinte de la machine) ;
 //    Ma licence       ce que dit la licence signee de ce PC ;
 //    Mes appareils    les PC lies (le nom donne par le client, l'empreinte de sa
 //                     cle : rien de son materiel) ; << ce PC >> ;
@@ -13,28 +19,31 @@
 //    Historique       les imports, les demandes, les changements d'etat ;
 //    Parametres       le dossier, l'empreinte de ce PC, les numeros du registre
 //                     et de la liste de revocation, la cle de l'editeur ;
-//    Demande en ligne 1.34.0 : la passerelle GitHub (app/LicenceGateway) - le
-//                     formulaire (Societe, Contact, Nom de ce PC, Licence
-//                     existante, Message) et Envoyer a l'editeur ; la demande en
-//                     cours (sa date, son etat), Annuler la demande, Verifier
-//                     maintenant ; la derniere reponse. Le reseau part sur le fil
-//                     de la passerelle : la fenetre ne fait que le relever.
-//                     Sans passerelle dans ce programme : la phrase qui le dit,
-//                     et les boutons par fichier du bas, comme avant.
+//    Demande a l'editeur  la demande sans code (1.34.0, par le service des
+//                     licences depuis la 1.35.0) - le formulaire (Societe,
+//                     Contact, Nom de ce PC, Licence existante, Message) et
+//                     Envoyer a l'editeur ; la demande en cours (sa date, son
+//                     etat), Annuler la demande, Verifier maintenant ; la derniere
+//                     reponse.
+//  Le reseau part sur le fil du service (app/LicenceService) : la fenetre ne
+//  fait que le relever. Sans service dans ce programme : la phrase qui le dit,
+//  et les boutons par fichier du bas, comme avant.
 //  En bas : Activer par fichier de licence..., Demander une activation...,
-//  Ouvrir le dossier, Fermer. L'en-tete dit l'evaluation (les jours qui restent).
+//  Ouvrir le dossier, Fermer. L'en-tete dit la Decouverte (les jours qui restent)
+//  et, pour une licence en ligne, la fin du bail.
 // =============================================================================
 #include "Licence.hpp"
 
 #include "App.hpp"
 #include "Dossiers.hpp"
-#include "LicenceGateway.hpp"   // 1.34.0 : la demande en ligne
+#include "LicenceService.hpp"   // 1.35.0 : le service des licences
 #include "Settings.hpp"
 #include "hmi/HmiPaneKit.hpp"
 #include "screens/Screens.hpp"
 
 #include "../core/Edition.hpp"
 #include "../core/Version.hpp"
+#include "../deploy/Crypto.hpp"
 #include "../licensing/Licensing.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../ui/DialogFrame.hpp"
@@ -45,6 +54,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -74,8 +84,8 @@ std::string typeLabel(licensing::LicenseType t) {
     switch (t) {
         case licensing::LicenseType::Perpetual: return "perp\xC3\xA9tuelle";
         case licensing::LicenseType::Temporary: return "temporaire";
-        case licensing::LicenseType::Evaluation: return "\xC3\xA9valuation";
-        case licensing::LicenseType::Floating: return "flottante (pas en version 1)";
+        case licensing::LicenseType::Evaluation: return "d\xC3\xA9" "couverte";
+        case licensing::LicenseType::Floating: return "flottante";
     }
     return {};
 }
@@ -138,7 +148,50 @@ std::vector<std::string> wrapText(gfx::IRenderer& r, const std::string& text, gf
     return out;
 }
 
-// ---- 1.34.0 : l'onglet Demande en ligne ----
+// ---- 1.35.0 : l'onglet Activation (le code, la licence en ligne, la flottante, la Decouverte) ----
+class ActivationPanel final : public ui::Widget {
+public:
+    ActivationPanel(LicenceBody& body, App& app);
+    // L'etat, le releve, le travail en cours : relus (rien du reseau).
+    void refresh();
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    // Une ligne de l'onglet : un titre de section, un texte (coupe), un libelle et sa valeur, un champ, des boutons.
+    struct Item {
+        enum Kind : unsigned char { Heading, Text, Pair, Field, Buttons } kind{Text};
+        std::string label, value;
+        int         tone{0};                  // 0 normal, 1 bon, 2 attention, 3 erreur, 5 discret
+        std::vector<ui::Widget*> widgets;
+        std::vector<std::string> lines;       // onLayout
+        float       y{0};
+    };
+    void add(Item::Kind kind, std::string label, std::string value = {}, int tone = 0, std::vector<ui::Widget*> widgets = {});
+    void doActivate();
+    void askRelease();
+    ui::Button* button(const char* id, const std::string& text, ui::Button::Style style = ui::Button::Style::Default);
+
+    LicenceBody&       body_;
+    App&               app_;
+    ui::InputText*     code_{nullptr};
+    ui::InputText*     pc_{nullptr};
+    ui::Button*        activate_{nullptr};
+    ui::Button*        renew_{nullptr};
+    ui::Button*        release_{nullptr};
+    ui::Button*        leaseReturn_{nullptr};
+    ui::Button*        leaseTake_{nullptr};
+    ui::Button*        trial_{nullptr};
+    std::vector<Item>  items_;
+    std::string        releaseId_;
+    licence::service::Job busy_{licence::service::Job::None};
+    float              bottom_{0};
+    core::ConnectionScope links_;
+};
+
+// ---- 1.34.0 / 1.35.0 : l'onglet Demande a l'editeur (la demande sans code, par le service) ----
 class OnlinePanel final : public ui::Widget {
 public:
     OnlinePanel(LicenceBody& body, App& app);
@@ -167,10 +220,10 @@ private:
     ui::Button*        check_{nullptr};
     bool               available_{false};
     std::string        why_;
-    licence::gateway::Record rec_;
+    licence::service::Record rec_;
     std::string        recProblem_;
     bool               pending_{false};
-    licence::gateway::Job busy_{licence::gateway::Job::None};
+    licence::service::Job busy_{licence::service::Job::None};
     float              rowsY_{0}, infoY_{0}, footY_{0};
     core::ConnectionScope links_;
 };
@@ -179,7 +232,7 @@ class LicenceBody final : public ui::Widget {
 public:
     LicenceBody(LicenceWindow& owner, App& app, int tab);
     void reload();
-    // 1.34.0 : chaque image (la fenetre) : un travail de la passerelle fini -> sa phrase, tout relu.
+    // 1.34.0 : chaque image (la fenetre) : un travail du service fini -> sa phrase, tout relu.
     void poll();
     void say(std::string text, int tone) {
         flash_ = std::move(text);
@@ -207,7 +260,8 @@ private:
     ui::TableView*    history_{nullptr};
     ui::PropertyGrid* params_{nullptr};
     OnlinePanel*      online_{nullptr};      // 1.34.0
-    unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail de la passerelle releve
+    ActivationPanel*  activation_{nullptr};  // 1.35.0
+    unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
     bool              wasBusy_{false};
     ui::Button*       import_{nullptr};
     ui::Button*       request_{nullptr};
@@ -234,7 +288,7 @@ public:
         }
         return menu::WidgetMenu::HandleEvent(ev);
     }
-    void Update(const menu::FrameContext& f) override {   // 1.34.0 : la demande en ligne (le fil de la passerelle)
+    void Update(const menu::FrameContext& f) override {   // 1.34.0 : le fil du service des licences
         menu::WidgetMenu::Update(f);
         if (body_) body_->poll();
     }
@@ -279,13 +333,16 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     params_ = params.get();
     auto online = std::make_unique<OnlinePanel>(*this, app);   // 1.34.0
     online_ = online.get();
+    auto activation = std::make_unique<ActivationPanel>(*this, app);   // 1.35.0
+    activation_ = activation.get();
+    tabs->addTab({"Activation", ui::Icon::Network}, std::move(activation));   // 1.35.0 : licence::kTabActivation
     tabs->addTab({"Ma licence", ui::Icon::Lock}, std::move(mine));
     tabs->addTab({"Mes appareils", ui::Icon::Screen}, std::move(devices));
     tabs->addTab({"Fonctionnalit\xC3\xA9s", ui::Icon::Ok}, std::move(features));
     tabs->addTab({"\xC3\x89" "ditions", ui::Icon::Layers}, std::move(editions));
     tabs->addTab({"Historique", ui::Icon::History}, std::move(history));
     tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
-    tabs->addTab({"Demande en ligne", ui::Icon::Network}, std::move(online));   // 1.34.0
+    tabs->addTab({"Demande \xC3\xA0 l'\xC3\xA9" "diteur", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
@@ -301,26 +358,31 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
         if (auto why = dossiers::ouvrirDansLeSysteme(f); !why.empty()) say("Le dossier ne s'ouvre pas : " + why, 3);
     });
     links_ += close_->clicked->connect([this] { owner_.fermer(); });
-    seenRevision_ = licence::gateway::revision();
-    wasBusy_ = licence::gateway::busy();
+    seenRevision_ = licence::service::revision();
+    wasBusy_ = licence::service::busy();
     reload();
-    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, 6)));
+    if (tab < 0) {   // licence::kTabAuto : Ma licence pour une licence par fichier valable, sinon Activation
+        const bool fileLicence = !state_.online && (state_.status == licensing::LicenseStatus::Valid || state_.status == licensing::LicenseStatus::Grace);
+        tab = fileLicence ? licence::kTabMine : licence::kTabActivation;
+    }
+    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabRequest)));
 }
 
 void LicenceBody::poll() {
-    namespace lg = licence::gateway;
+    namespace lg = licence::service;
     lg::poll();
     if (const auto rev = lg::revision(); rev != seenRevision_) {
         seenRevision_ = rev;
         wasBusy_ = lg::busy();
         const auto r = lg::lastResult();
-        if (!r.message.empty()) say(r.message, r.licenseInstalled || (r.ok && !r.refused && r.notice.empty()) ? 1 : (r.refused || r.ok) ? 2 : 3);
+        if (!r.message.empty()) say(r.message, r.licenseInstalled || (r.ok && !r.refused) ? 1 : (r.refused || r.ok) ? 2 : 3);
         reload();
         return;
     }
     if (const bool b = lg::busy(); b != wasBusy_) {
         wasBusy_ = b;
         online_->refresh();
+        activation_->refresh();
     }
 }
 
@@ -353,26 +415,50 @@ void LicenceBody::reload() {
         c.properties.push_back(prop("Signature", configured ? std::string("v\xC3\xA9rifi\xC3\xA9" "e hors ligne avec la cl\xC3\xA9 de l'\xC3\xA9" "diteur compil\xC3\xA9" "e dans ce programme")
                                                             : std::string("ce programme n'a pas encore la cl\xC3\xA9 de l'\xC3\xA9" "diteur")));
         c.properties.push_back(prop("R\xC3\xA9vocations", st.revocationNumber ? "liste n\xC2\xB0 " + std::to_string(st.revocationNumber) : std::string("aucune liste")));
-        if (st.status == licensing::LicenseStatus::Evaluation)   // 1.34.0
-            c.properties.push_back(prop("\xC3\x89valuation", licence::evaluationText(st),
-                                        "La p\xC3\xA9riode d'\xC3\xA9valuation de ce PC, depuis son premier lancement : les fonctionnalit\xC3\xA9s de "
+        if (st.status == licensing::LicenseStatus::Evaluation)   // 1.34.0 ; 1.35.0 : la Decouverte
+            c.properties.push_back(prop("D\xC3\xA9" "couverte", licence::discoveryText(st),
+                                        "La D\xC3\xA9" "couverte de ce PC (30 jours), depuis son premier lancement : les fonctionnalit\xC3\xA9s de "
                                         "l'\xC3\xA9" "dition d'\xC3\xA9valuation du registre. Ensuite : l'\xC3\xA9" "dition sans licence."));
+        if (st.online) {   // 1.35.0 : la licence en ligne
+            c.properties.push_back(prop("Activation", "en ligne, par le service des licences",
+                                        "Ce PC a son activation sign\xC3\xA9" "e par le service des licences de l'\xC3\xA9" "diteur ; elle vaut le temps d'un bail, "
+                                        "renouvel\xC3\xA9 \xC3\xA0 chaque connexion."));
+            c.properties.push_back(prop("Bail jusqu'au", st.activationUntil ? licence::service::dateText(st.activationUntil) + " (" +
+                                                                                 std::to_string(std::max(0, st.activationDaysLeft)) + " j)"
+                                                                           : std::string("aucun bail valable"),
+                                        "Sans connexion avant cette date, les fonctions de la licence se mettent en pause sur ce PC, jusqu'\xC3\xA0 la "
+                                        "prochaine connexion. Reculer l'horloge ne prolonge pas le bail."));
+            if (st.lastServiceSync)
+                c.properties.push_back(prop("Derni\xC3\xA8re synchronisation", licence::service::dateText(st.lastServiceSync),
+                                            "La derni\xC3\xA8re heure sign\xC3\xA9" "e re\xC3\xA7ue du service."));
+        }
+        if (st.floating)
+            c.properties.push_back(prop("Poste flottant", st.leaseUntil ? "pris jusqu'\xC3\xA0 " + licence::service::dateText(st.leaseUntil)
+                                                                        : std::string("aucun poste pris"),
+                                        "Une licence flottante : un poste du nombre achet\xC3\xA9 est pris tant que le programme tourne, et rendu \xC3\xA0 sa fermeture."));
         if (!st.detail.empty()) c.properties.push_back(prop("D\xC3\xA9tail", st.detail));
         cats.push_back(std::move(c));
         PG::Category a;
         a.name = "Activer une licence";
+        {
+            std::string why;   // 1.35.0 : le code, par le service des licences
+            if (licence::service::available(&why))
+                a.properties.push_back(prop("Avec un code", "l'onglet Activation (le code XPG-XXXX-XXXX-XXXX-XXXX re\xC3\xA7u de l'\xC3\xA9" "diteur)",
+                                            "Le service des licences v\xC3\xA9rifie le code et active la licence sur ce PC, tout de suite, sans fichier."));
+            else a.properties.push_back(prop("Avec un code", "pas dans ce programme", why));
+        }
         a.properties.push_back(prop("Par fichier", "Activer par fichier de licence\xE2\x80\xA6 (le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur)",
                                     "Le fichier contient la licence sign\xC3\xA9" "e, le registre et, s'il y en a une, la liste de r\xC3\xA9vocation. Elle "
                                     "n'est install\xC3\xA9" "e que si elle vaut pour ce PC, maintenant."));
         a.properties.push_back(prop("La demande", "Demander une activation\xE2\x80\xA6 (un .xpgreq \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur)",
                                     "Elle porte la cl\xC3\xA9 publique de ce PC et le nom que tu lui donnes ; rien de son mat\xC3\xA9riel."));
         {
-            std::string why;   // 1.34.0 : la passerelle GitHub
-            if (licence::gateway::available(&why))
-                a.properties.push_back(prop("En ligne", "l'onglet Demande en ligne (par la passerelle GitHub de l'\xC3\xA9" "diteur)",
+            std::string why;   // 1.34.0 ; 1.35.0 : par le service des licences
+            if (licence::service::available(&why))
+                a.properties.push_back(prop("Sans code", "l'onglet Demande \xC3\xA0 l'\xC3\xA9" "diteur (par le service des licences)",
                                             "La demande part chez l'\xC3\xA9" "diteur, scell\xC3\xA9" "e pour lui ; sa r\xC3\xA9ponse revient ici : une licence "
-                                            "accept\xC3\xA9" "e s'installe d'elle-m\xC3\xAA" "me, sans fichier. Les licences flottantes ne sont pas encore l\xC3\xA0."));
-            else a.properties.push_back(prop("En ligne", "pas dans ce programme", why));
+                                            "accept\xC3\xA9" "e s'installe d'elle-m\xC3\xAA" "me, sans fichier."));
+            else a.properties.push_back(prop("Sans code", "pas dans ce programme", why));
         }
         cats.push_back(std::move(a));
         mine_->setCategories(std::move(cats));
@@ -464,10 +550,11 @@ void LicenceBody::reload() {
     // ---- Historique ----
     {
         std::vector<std::vector<std::string>> rows;
-        // 1.34.0 : les genres en francais (l'evaluation, la passerelle en plus).
+        // 1.34.0 : les genres en francais ; 1.35.0 : la Decouverte, le service.
         const auto kindLabel = [](const std::string& k) -> std::string {
             if (k == "etat") return "\xC3\xA9tat";
-            if (k == "evaluation") return "\xC3\xA9valuation";
+            if (k == "evaluation") return "D\xC3\xA9" "couverte";
+            if (k == "passerelle") return "demande (1.34)";
             return k;
         };
         for (const auto& h : licensing::getHistory(200))
@@ -507,7 +594,8 @@ void LicenceBody::reload() {
         cats.push_back(std::move(p));
         params_->setCategories(std::move(cats));
     }
-    online_->refresh();   // 1.34.0
+    online_->refresh();       // 1.34.0
+    activation_->refresh();   // 1.35.0
     import_->setEnabled(configured);
     import_->setTooltip(configured ? std::string("Le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur")
                                    : std::string("Ce programme ne peut pas encore v\xC3\xA9rifier une licence : il n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur"));
@@ -615,7 +703,7 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
     // L'en-tete : deux lignes de quatre cases.
     const auto& st = state_;
     const bool hasLicence = !st.licenseId.empty();
-    const bool evaluation = st.status == licensing::LicenseStatus::Evaluation;   // 1.34.0
+    const bool evaluation = st.status == licensing::LicenseStatus::Evaluation;   // 1.34.0 ; 1.35.0 : la Decouverte
     const std::string evalEnd = st.evaluationEndsAt ? licensing::isoDate(st.evaluationEndsAt) : std::string();
     const std::string edition = !st.licensedEdition.empty() ? st.licensedEdition : (st.edition.empty() ? std::string("\xE2\x80\x94") : st.edition);
     struct Cell { const char* label; std::string value; bool status; };
@@ -624,22 +712,24 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
         {"Statut", licensing::statusLabel(st.status), true},
         {"Client", hasLicence && !st.customer.empty() ? st.customer : std::string("\xE2\x80\x94"), false},
         {"Licence", hasLicence ? st.licenseId
-                               : evaluation ? "\xC3\xA9valuation : " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j restant" +
+                               : evaluation ? "D\xC3\xA9" "couverte : " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j restant" +
                                                   (st.evaluationDaysLeft > 1 ? "s" : "")
                                             : std::string("\xE2\x80\x94"), evaluation && !hasLicence},
         {"PC autoris\xC3\xA9s", hasLicence ? std::to_string(st.maxDevices) : std::string("\xE2\x80\x94"), false},
-        {"PC li\xC3\xA9s", hasLicence ? std::to_string(st.boundDevices) + " (" + std::to_string(std::max(0, st.maxDevices - st.boundDevices)) + " libres)"
-                                      : std::string("\xE2\x80\x94"), false},
+        {st.online ? "Bail" : "PC li\xC3\xA9s",
+         st.online ? (st.activationUntil ? "jusqu'au " + licence::dayOf(st.activationUntil) : std::string("fini"))
+                   : hasLicence ? std::to_string(st.boundDevices) + " (" + std::to_string(std::max(0, st.maxDevices - st.boundDevices)) + " libres)"
+                                : std::string("\xE2\x80\x94"), st.online},
         {"Expire le", hasLicence ? (st.expiresAt ? st.expirationDate() : std::string("jamais"))
-                                 : (evaluation && !evalEnd.empty()) ? evalEnd + " (\xC3\xA9valuation)" : std::string("\xE2\x80\x94"), false},
+                                 : (evaluation && !evalEnd.empty()) ? evalEnd + " (D\xC3\xA9" "couverte)" : std::string("\xE2\x80\x94"), false},
         {"Registre", st.registryNumber ? "n\xC2\xB0 " + std::to_string(st.registryNumber) : std::string("aucun"), false},
     };
     const float x = panel_.x + 16.f, W = panel_.w - 32.f, cw = W / 4.f;
     using S = licensing::LicenseStatus;
     const gfx::Color good = ctx.theme.tone(ui::Tone::Ok, c.text), warn = ctx.theme.tone(ui::Tone::Warning, c.text),
                      bad = ctx.theme.tone(ui::Tone::Error, c.text);
-    const gfx::Color statusColor = st.status == S::Valid ? good
-                                 : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation) ? warn
+    const gfx::Color statusColor = st.status == S::Valid ? (st.online && st.activationWarning ? warn : good)
+                                 : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation || st.status == S::NoFloatingSeat) ? warn
                                  : st.status == S::NotConfigured ? c.textMuted : bad;
     for (int i = 0; i < 8; ++i) {
         const float cx = x + cw * static_cast<float>(i % 4);
@@ -650,7 +740,7 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
     // La phrase de l'etat (ou le dernier geste).
     const std::string line = flash_.empty() ? st.message : flash_;
     const int tone = flash_.empty() ? (st.status == S::Valid ? 1 : st.status == S::NotConfigured ? 0
-                                       : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation) ? 2 : 3)
+                                       : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation || st.status == S::NoFloatingSeat) ? 2 : 3)
                                     : flashTone_;
     const gfx::Color lineColor = tone == 1 ? good : tone == 2 ? warn : tone == 3 ? bad : c.text;
     const gfx::Rect band{x, messageY_, W, 28.f};
@@ -667,20 +757,330 @@ ui::EventResult LicenceBody::onEvent(const ui::InputEvent& ev) {
     return ui::EventResult::Ignored;
 }
 
-// ============================================================ 1.34.0 : Demande en ligne ==
+// ============================================================ 1.35.0 : Activation ==
+ActivationPanel::ActivationPanel(LicenceBody& body, App& app) : ui::Widget("licence.activation"), body_(body), app_(app) {
+    auto code = std::make_unique<ui::InputText>("licence.code.champ");
+    code->setPlaceholder("XPG-XXXX-XXXX-XXXX-XXXX");
+    code->setMaxLength(48);
+    code->setMonospace(true);
+    code_ = &static_cast<ui::InputText&>(addChild(std::move(code)));
+    auto pc = std::make_unique<ui::InputText>("licence.code.pc");
+    pc->setPlaceholder("Poste bureau d'\xC3\xA9tudes (facultatif : le nom que tu donnes \xC3\xA0 ce PC)");
+    pc->setMaxLength(licence::service::kMaxPcName);
+    pc_ = &static_cast<ui::InputText&>(addChild(std::move(pc)));
+    activate_ = button("licence.code.activer", "Activer", ui::Button::Style::Primary);
+    activate_->setTooltip("Le service des licences v\xC3\xA9rifie le code et active la licence sur ce PC (le code ne va que l\xC3\xA0, il n'est \xC3\xA9" "crit nulle part)");
+    renew_ = button("licence.renouveler", "Renouveler maintenant");
+    renew_->setTooltip("Renouvelle le bail de ce PC tout de suite (il l'est aussi \xC3\xA0 chaque lancement, puis chaque heure quand il finit bient\xC3\xB4t)");
+    release_ = button("licence.liberer", "Lib\xC3\xA9rer ce poste\xE2\x80\xA6", ui::Button::Style::Danger);
+    release_->setTooltip("Rend le poste de ce PC : un autre PC peut prendre sa place ; les fonctions de la licence se ferment ici");
+    leaseReturn_ = button("licence.flottante.rendre", "Rendre le poste");
+    leaseReturn_->setTooltip("Rend le poste flottant tout de suite (un coll\xC3\xA8gue peut le prendre) ; il n'est plus repris tout seul");
+    leaseTake_ = button("licence.flottante.prendre", "Prendre un poste", ui::Button::Style::Primary);
+    trial_ = button("licence.decouverte", "D\xC3\xA9" "clarer maintenant");
+    trial_->setTooltip("D\xC3\xA9" "clare la D\xC3\xA9" "couverte de cette machine au service des licences (elle l'est aussi \xC3\xA0 chaque lancement)");
+    links_ += activate_->clicked->connect([this] { doActivate(); });
+    links_ += renew_->clicked->connect([this] {
+        if (!licence::service::startRenew()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else body_.say("Renouvellement du bail\xE2\x80\xA6", 0);
+        refresh();
+    });
+    links_ += release_->clicked->connect([this] { askRelease(); });
+    links_ += leaseReturn_->clicked->connect([this] {
+        if (!licence::service::startReturnLease()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else body_.say("Retour du poste flottant\xE2\x80\xA6", 0);
+        refresh();
+    });
+    links_ += leaseTake_->clicked->connect([this] {
+        if (!licence::service::startTakeLease()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else body_.say("Prise d'un poste flottant\xE2\x80\xA6", 0);
+        refresh();
+    });
+    links_ += trial_->clicked->connect([this] {
+        if (!licence::service::startTrial()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else body_.say("D\xC3\xA9" "claration de la D\xC3\xA9" "couverte\xE2\x80\xA6", 0);
+        refresh();
+    });
+    refresh();
+}
+
+ui::Button* ActivationPanel::button(const char* id, const std::string& text, ui::Button::Style style) {
+    auto b = std::make_unique<ui::Button>(text, id);
+    b->setStyle(style);
+    return &static_cast<ui::Button&>(addChild(std::move(b)));
+}
+
+void ActivationPanel::add(Item::Kind kind, std::string label, std::string value, int tone, std::vector<ui::Widget*> widgets) {
+    Item it;
+    it.kind = kind;
+    it.label = std::move(label);
+    it.value = std::move(value);
+    it.tone = tone;
+    it.widgets = std::move(widgets);
+    for (auto* w : it.widgets) w->setVisibility(ui::Visibility::Visible);
+    items_.push_back(std::move(it));
+}
+
+void ActivationPanel::refresh() {
+    namespace ls = licence::service;
+    const auto st = licensing::getLicenseState();
+    std::string why;
+    const bool on = ls::available(&why);
+    ls::Record rec;
+    std::string recProblem;
+    if (!ls::loadRecord(rec, &recProblem)) rec = ls::Record{};
+    busy_ = ls::busyJob();
+    const bool idle = busy_ == ls::Job::None;
+    items_.clear();
+    for (auto* w : std::initializer_list<ui::Widget*>{code_, pc_, activate_, renew_, release_, leaseReturn_, leaseTake_, trial_}) {
+        w->setVisibility(ui::Visibility::Collapsed);
+        w->setEnabled(idle && on);
+    }
+    activate_->setText(busy_ == ls::Job::Activate ? std::string("Activation en cours\xE2\x80\xA6") : std::string("Activer"));
+    renew_->setText(busy_ == ls::Job::Renew || busy_ == ls::Job::Sync ? std::string("Renouvellement en cours\xE2\x80\xA6") : std::string("Renouveler maintenant"));
+
+    // ---- activer avec un code ----
+    add(Item::Heading, "Activer avec un code");
+    if (!on) {
+        add(Item::Text, {}, why + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), puis Activer par "
+                               "fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.", 5);
+    } else {
+        add(Item::Text, {}, "Le code re\xC3\xA7u de l'\xC3\xA9" "diteur (XPG-XXXX-XXXX-XXXX-XXXX) : le service des licences le v\xC3\xA9rifie et active la licence sur ce "
+                            "PC, tout de suite. Le code n'est \xC3\xA9" "crit nulle part sur ce PC.");
+        add(Item::Field, "Code d'activation", {}, 0, {code_});
+        add(Item::Field, "Nom de ce PC", {}, 0, {pc_});
+        add(Item::Buttons, {}, {}, 0, {activate_});
+        if (pc_->text().empty() && !rec.activatedPcName.empty()) pc_->setText(rec.activatedPcName);
+    }
+
+    // ---- la licence en ligne ----
+    releaseId_ = st.online ? st.licenseId : rec.activatedLicense;
+    if (st.online || !rec.activatedLicense.empty()) {
+        add(Item::Heading, "Ta licence en ligne");
+        const std::string edition = !st.licensedEdition.empty() ? st.licensedEdition : st.edition;
+        add(Item::Pair, "Licence", releaseId_ + (edition.empty() ? std::string() : " \xC2\xB7 " + edition) +
+                                       (rec.activatedPcName.empty() ? std::string() : " \xC2\xB7 PC \xC2\xAB " + rec.activatedPcName + " \xC2\xBB"));
+        if (st.status == licensing::LicenseStatus::LeaseExpired)
+            add(Item::Pair, "Bail", "expir\xC3\xA9 : connecte ce PC \xC3\xA0 Internet, il se renouvelle tout seul", 3);
+        else if (st.activationUntil)
+            add(Item::Pair, "Bail", "jusqu'au " + ls::dateText(st.activationUntil) + " (" + std::to_string(std::max(0, st.activationDaysLeft)) + " j)" +
+                                        (st.activationWarning ? " \xE2\x80\x94 connecte ce PC \xC3\xA0 Internet avant cette date" : std::string()),
+                st.activationWarning ? 2 : 1);
+        const licensing::Seconds sync = st.lastServiceSync ? st.lastServiceSync : rec.lastSync;
+        add(Item::Pair, "Derni\xC3\xA8re synchronisation", sync ? ls::dateText(sync) : std::string("jamais"), sync ? 0 : 2);
+        add(Item::Text, {}, "Le bail se renouvelle tout seul \xC3\xA0 chaque connexion. Lib\xC3\xA9rer ce poste rend sa place \xC3\xA0 un autre PC (les fonctions de la "
+                            "licence se ferment ici).", 5);
+        add(Item::Buttons, {}, {}, 0, {renew_, release_});
+    }
+
+    // ---- la licence flottante ----
+    if (st.floating) {
+        add(Item::Heading, "Licence flottante");
+        const licensing::Seconds now = licensing::systemNow();
+        if (st.leaseUntil > 0 && st.status != licensing::LicenseStatus::NoFloatingSeat)
+            add(Item::Pair, "Poste", "pris jusqu'\xC3\xA0 " + ls::dateText(st.leaseUntil).substr(11) + " (renouvel\xC3\xA9 toutes les 5 minutes tant que le programme tourne)", 1);
+        else if (ls::leaseHeldBack())
+            add(Item::Pair, "Poste", "rendu : il n'est plus repris tout seul (Prendre un poste le reprend)", 2);
+        else if (const licensing::Seconds at = ls::seatFreeAt(); at > now)
+            add(Item::Pair, "Poste", "aucun poste libre \xE2\x80\x94 libre dans " + std::to_string((at - now + 59) / 60) + " min ; nouvel essai tout seul", 2);
+        else
+            add(Item::Pair, "Poste", "aucun poste pris pour l'instant ; nouvel essai tout seul", 2);
+        add(Item::Buttons, {}, {}, 0, {st.leaseUntil > 0 && !ls::leaseHeldBack() ? leaseReturn_ : leaseTake_});
+    }
+
+    // ---- la Decouverte ----
+    if (st.status == licensing::LicenseStatus::Evaluation || st.evaluationStartedAt) {
+        add(Item::Heading, "D\xC3\xA9" "couverte");
+        if (st.status == licensing::LicenseStatus::Evaluation) add(Item::Pair, "D\xC3\xA9" "couverte", licence::discoveryText(st), st.evaluationDaysLeft <= 7 ? 2 : 0);
+        else if (st.evaluationOver) add(Item::Pair, "D\xC3\xA9" "couverte", "finie" + (st.evaluationEndsAt ? " le " + licence::dayOf(st.evaluationEndsAt) : std::string()), 5);
+        if (rec.trialRecordedAt)
+            add(Item::Pair, "Chez le service", "enregistr\xC3\xA9" "e par le service le " + ls::dateText(rec.trialRecordedAt) +
+                                                    (rec.trialStart ? " (d\xC3\xA9" "but connu pour cette machine : " + licence::dayOf(rec.trialStart) + ")" : std::string()), 0);
+        else
+            add(Item::Pair, "Chez le service", on ? std::string("pas encore enregistr\xC3\xA9" "e : elle le sera \xC3\xA0 la prochaine connexion") : std::string("\xE2\x80\x94"), 5);
+        add(Item::Text, {}, "Pour que la D\xC3\xA9" "couverte ne recommence pas en r\xC3\xA9installant Windows ou en effa\xC3\xA7" "ant ses fichiers, le service des licences garde "
+                            "une empreinte de cette machine (tir\xC3\xA9" "e de l'identifiant de l'installation de Windows) : elle ne dit rien de ton mat\xC3\xA9riel, "
+                            "mais elle reconna\xC3\xAEt la machine.", 5);
+        if (on && st.status == licensing::LicenseStatus::Evaluation && !rec.trialRecordedAt) add(Item::Buttons, {}, {}, 0, {trial_});
+    }
+    if (!idle) add(Item::Text, {}, ls::jobText(busy_), 5);
+    if (!recProblem.empty()) add(Item::Text, {}, recProblem, 3);
+    invalidateLayout();
+    invalidate();
+}
+
+void ActivationPanel::doActivate() {
+    std::string code = code_->text();
+    if (code.find_first_not_of(" \t") == std::string::npos) {
+        body_.say("Tape d'abord le code re\xC3\xA7u de l'\xC3\xA9" "diteur (XPG-XXXX-XXXX-XXXX-XXXX).", 2);
+        return;
+    }
+    std::string normalized;
+    if (!licensing::service::normalizeCode(code, normalized)) {
+        body_.say("Ce n'est pas un code d'activation : il a la forme XPG-XXXX-XXXX-XXXX-XXXX (16 lettres et chiffres).", 2);
+        return;
+    }
+    deploy::crypto::wipe(normalized.data(), normalized.size());
+    // Le reseau part sur le fil du service ; la fenetre relevera le resultat (LicenceBody::poll). Le champ est vide :
+    // le code ne reste pas a l'ecran.
+    if (!licence::service::startActivate(code, pc_->text())) {
+        body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin, puis r\xC3\xA9" "essaie.", 2);
+    } else {
+        code_->setText({});
+        body_.say("Activation en cours\xE2\x80\xA6", 0);
+    }
+    deploy::crypto::wipe(code.data(), code.size());
+    refresh();
+}
+
+void ActivationPanel::askRelease() {
+    if (releaseId_.empty()) return;
+    auto dialog = std::make_unique<MessageDialog>(
+        "Lib\xC3\xA9rer ce poste",
+        "Ce PC rend son poste de la licence " + releaseId_ + " : un autre PC pourra prendre sa place, et les fonctions de la licence se "
+        "fermeront ici (ton travail reste ouvert ; Enregistrer et Exporter restent permis). Pour la retrouver plus tard sur ce PC : son code, s'il "
+        "reste un poste libre.",
+        MessageDialog::Icon::Question, "Lib\xC3\xA9rer ce poste");
+    dialog->setCancelLabel("Garder la licence ici");
+    const std::string id = releaseId_;
+    app_.menus().ShowDialog(std::move(dialog), [this, id](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        if (!licence::service::startRelease(id)) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else body_.say("Lib\xC3\xA9ration de ce poste\xE2\x80\xA6", 0);
+        refresh();
+    });
+}
+
+void ActivationPanel::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
+    const float labelW = 210.f, valueX = x + labelW, valueW = std::max(120.f, W - labelW);
+    const gfx::FontId small{14}, head{15};
+    const float lh = ui::lineHeight(small) + 4.f;
+    const auto wrap = [](const std::string& text, gfx::FontId f, float w) {
+        std::vector<std::string> out;
+        std::string line, word;
+        const auto flush = [&] {
+            if (word.empty()) return;
+            const std::string t = line.empty() ? word : line + " " + word;
+            if (!line.empty() && ui::measureWidth(t, f) > w) {
+                out.push_back(line);
+                line = word;
+            } else {
+                line = t;
+            }
+            word.clear();
+        };
+        for (const char c : text) {
+            if (c == ' ') flush();
+            else word += c;
+        }
+        flush();
+        if (!line.empty()) out.push_back(line);
+        return out;
+    };
+    float y = b.y + 12.f;
+    for (auto& it : items_) {
+        it.lines.clear();
+        switch (it.kind) {
+            case Item::Heading:
+                if (&it != &items_.front()) y += 10.f;
+                it.y = y;
+                y += ui::lineHeight(head) + 8.f;
+                break;
+            case Item::Text:
+                it.lines = wrap(it.value, small, W);
+                if (it.lines.size() > 4) it.lines.resize(4);
+                it.y = y;
+                y += lh * static_cast<float>(it.lines.size()) + 4.f;
+                break;
+            case Item::Pair:
+                it.lines = wrap(it.value, small, valueW);
+                if (it.lines.size() > 3) it.lines.resize(3);
+                if (it.lines.empty()) it.lines.push_back({});
+                it.y = y;
+                y += lh * static_cast<float>(it.lines.size());
+                break;
+            case Item::Field:
+                it.y = y;
+                for (auto* w : it.widgets) w->setBounds({valueX, y, std::min(520.f, valueW), 28.f});
+                y += 36.f;
+                break;
+            case Item::Buttons: {
+                it.y = y + 2.f;
+                float bx = valueX;
+                for (auto* w : it.widgets) {
+                    const float bw = std::max(150.f, w->sizeHint().preferred.w);
+                    w->setBounds({bx, it.y, bw, 32.f});
+                    bx += bw + 8.f;
+                }
+                y += 44.f;
+                break;
+            }
+        }
+    }
+    bottom_ = y;
+}
+
+void ActivationPanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f), labelW = 210.f;
+    const gfx::FontId small{14}, head{15};
+    const float lh = r.lineHeight(small) + 4.f;
+    const gfx::Color good = ctx.theme.tone(ui::Tone::Ok, c.text), warn = ctx.theme.tone(ui::Tone::Warning, c.text),
+                     bad = ctx.theme.tone(ui::Tone::Error, c.text);
+    const auto color = [&](int tone) { return tone == 1 ? good : tone == 2 ? warn : tone == 3 ? bad : tone == 5 ? c.textMuted : c.text; };
+    r.pushClip(b);
+    for (const auto& it : items_) {
+        switch (it.kind) {
+            case Item::Heading:
+                r.drawText({x, it.y}, it.label, head, c.text);
+                r.drawText({x + 0.6f, it.y}, it.label, head, c.text);
+                r.fillRect({x, it.y + r.lineHeight(head) + 3.f, W, 1.f}, c.border);
+                break;
+            case Item::Text: {
+                float y = it.y;
+                for (const auto& l : it.lines) {
+                    r.drawText({x, y}, fit(r, l, small, W), small, color(it.tone));
+                    y += lh;
+                }
+                break;
+            }
+            case Item::Pair: {
+                r.drawText({x, it.y}, fit(r, it.label, small, labelW - 10.f), small, c.textMuted);
+                float y = it.y;
+                for (const auto& l : it.lines) {
+                    r.drawText({x + labelW, y}, fit(r, l, small, W - labelW), small, color(it.tone));
+                    y += lh;
+                }
+                break;
+            }
+            case Item::Field:
+                r.drawText({x, it.y + (28.f - r.lineHeight(small)) * 0.5f}, it.label, small, c.text);
+                break;
+            case Item::Buttons:
+                break;
+        }
+    }
+    r.popClip();
+}
+
+// ============================================================ 1.34.0 / 1.35.0 : Demande a l'editeur ==
 OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.demande"), body_(body), app_(app) {
-    customer_ = field("licence.demande.client", "le nom de ta soci\xC3\xA9t\xC3\xA9 (obligatoire)", licence::gateway::kMaxCustomer);
-    contact_ = field("licence.demande.contact", "un courriel ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::gateway::kMaxContact);
-    pcName_ = field("licence.demande.pc", "Poste bureau d'\xC3\xA9tudes (facultatif)", licence::gateway::kMaxPcName);
+    customer_ = field("licence.demande.client", "le nom de ta soci\xC3\xA9t\xC3\xA9 (obligatoire)", licence::service::kMaxCustomer);
+    contact_ = field("licence.demande.contact", "un courriel ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::service::kMaxContact);
+    pcName_ = field("licence.demande.pc", "Poste bureau d'\xC3\xA9tudes (facultatif)", licence::service::kMaxPcName);
     licenseId_ = field("licence.demande.licence", "XPG-2026-00042 (facultatif : pour ajouter ce PC \xC3\xA0 une licence de ta soci\xC3\xA9t\xC3\xA9)",
-                       licence::gateway::kMaxLicenseId);
-    message_ = field("licence.demande.message", "un mot pour l'\xC3\xA9" "diteur (facultatif)", licence::gateway::kMaxMessage);
+                       licence::service::kMaxLicenseId);
+    message_ = field("licence.demande.message", "un mot pour l'\xC3\xA9" "diteur (facultatif)", licence::service::kMaxMessage);
     send_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer \xC3\xA0 l'\xC3\xA9" "diteur", "licence.demande.envoyer")));
     send_->setStyle(ui::Button::Style::Primary);
     cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler la demande", "licence.demande.annuler")));
     cancel_->setStyle(ui::Button::Style::Danger);
     check_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("V\xC3\xA9rifier maintenant", "licence.demande.verifier")));
-    check_->setTooltip("Demande \xC3\xA0 la passerelle ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (elle le fait aussi \xC3\xA0 chaque lancement, puis toutes les heures "
+    check_->setTooltip("Demande au service des licences ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (il le fait aussi \xC3\xA0 chaque lancement, puis toutes les heures "
                        "tant qu'une demande attend, ou qu'une licence re\xC3\xA7ue n'a pas pu \xC3\xAAtre install\xC3\xA9" "e).");
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
@@ -696,16 +1096,16 @@ ui::InputText* OnlinePanel::field(const char* id, const std::string& placeholder
 }
 
 void OnlinePanel::refresh() {
-    namespace lg = licence::gateway;
-    available_ = lg::available(&why_);
+    namespace ls = licence::service;
+    available_ = ls::available(&why_);
     recProblem_.clear();
-    if (!lg::loadRecord(rec_, &recProblem_)) rec_ = lg::Record{};
-    pending_ = lg::pending(rec_);
-    busy_ = lg::busyJob();
+    if (!ls::loadRecord(rec_, &recProblem_)) rec_ = ls::Record{};
+    pending_ = ls::pending(rec_);
+    busy_ = ls::busyJob();
     const bool form = available_ && !pending_;
     for (auto* f : {customer_, contact_, pcName_, licenseId_, message_}) {
         f->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        f->setEnabled(busy_ == lg::Job::None);
+        f->setEnabled(busy_ == ls::Job::None);
     }
     if (form && licenseId_->text().empty()) {
         const auto st = licensing::getLicenseState();
@@ -714,17 +1114,17 @@ void OnlinePanel::refresh() {
     send_->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     cancel_->setVisibility(available_ && pending_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     check_->setVisibility(available_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-    for (auto* b : {send_, cancel_, check_}) b->setEnabled(busy_ == lg::Job::None);
-    send_->setText(busy_ == lg::Job::Send ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer \xC3\xA0 l'\xC3\xA9" "diteur"));
-    cancel_->setText(busy_ == lg::Job::Cancel ? std::string("Annulation en cours\xE2\x80\xA6") : std::string("Annuler la demande"));
-    check_->setText(busy_ == lg::Job::Check ? std::string("V\xC3\xA9rification en cours\xE2\x80\xA6") : std::string("V\xC3\xA9rifier maintenant"));
+    for (auto* b : {send_, cancel_, check_}) b->setEnabled(busy_ == ls::Job::None);
+    send_->setText(busy_ == ls::Job::Request ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer \xC3\xA0 l'\xC3\xA9" "diteur"));
+    cancel_->setText(busy_ == ls::Job::CancelRequest ? std::string("Annulation en cours\xE2\x80\xA6") : std::string("Annuler la demande"));
+    check_->setText(busy_ == ls::Job::Device ? std::string("V\xC3\xA9rification en cours\xE2\x80\xA6") : std::string("V\xC3\xA9rifier maintenant"));
     invalidateLayout();
     invalidate();
 }
 
 void OnlinePanel::doSend() {
-    namespace lg = licence::gateway;
-    lg::SendForm f;
+    namespace ls = licence::service;
+    ls::RequestForm f;
     f.customer = customer_->text();
     f.contact = contact_->text();
     f.pcName = pcName_->text();
@@ -734,8 +1134,8 @@ void OnlinePanel::doSend() {
         body_.say("Indique d'abord le nom de ta soci\xC3\xA9t\xC3\xA9 (Soci\xC3\xA9t\xC3\xA9 / client).", 2);
         return;
     }
-    // Le reseau part sur le fil de la passerelle ; la fenetre relevera le resultat (LicenceBody::poll).
-    if (!lg::startSend(f)) body_.say("Un travail de la passerelle est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+    // Le reseau part sur le fil du service ; la fenetre relevera le resultat (LicenceBody::poll).
+    if (!ls::startRequest(f)) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
     else body_.say("Envoi de la demande \xC3\xA0 l'\xC3\xA9" "diteur\xE2\x80\xA6", 0);
     refresh();
 }
@@ -743,24 +1143,24 @@ void OnlinePanel::doSend() {
 void OnlinePanel::askCancel() {
     auto dialog = std::make_unique<MessageDialog>(
         "Annuler la demande",
-        "La demande n\xC2\xB0 " + std::to_string(rec_.issue) + " (envoy\xC3\xA9" "e le " + licence::gateway::dateText(rec_.sentAt) +
-            ") est retir\xC3\xA9" "e : l'\xC3\xA9" "diteur re\xC3\xA7oit l'annulation, sign\xC3\xA9" "e par ce PC. Tu pourras en envoyer une nouvelle.",
+        "La demande n\xC2\xB0 " + std::to_string(rec_.number) + " (envoy\xC3\xA9" "e le " + licence::service::dateText(rec_.sentAt) +
+            ") est retir\xC3\xA9" "e : l'\xC3\xA9" "diteur ne la verra plus en attente. Tu pourras en envoyer une nouvelle.",
         MessageDialog::Icon::Question, "Annuler la demande");
     dialog->setCancelLabel("Garder la demande");
     app_.menus().ShowDialog(std::move(dialog), [this](const menu::DialogResult& r) {
         if (!r.accepted()) return;
-        if (!licence::gateway::startCancel()) body_.say("Un travail de la passerelle est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        if (!licence::service::startCancelRequest()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
         else body_.say("Annulation de la demande\xE2\x80\xA6", 0);
         refresh();
     });
 }
 
 void OnlinePanel::doCheck() {
-    if (!licence::gateway::startCheck()) {
-        body_.say(available_ ? std::string("Un travail de la passerelle est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.") : why_, 2);
+    if (!licence::service::startCheckDevice()) {
+        body_.say(available_ ? std::string("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.") : why_, 2);
         return;
     }
-    body_.say("V\xC3\xA9rification aupr\xC3\xA8s de la passerelle\xE2\x80\xA6", 0);
+    body_.say("V\xC3\xA9rification aupr\xC3\xA8s du service des licences\xE2\x80\xA6", 0);
     refresh();
 }
 
@@ -798,7 +1198,7 @@ void OnlinePanel::onLayout() {
 }
 
 void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
-    namespace lg = licence::gateway;
+    namespace ls = licence::service;
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
     const auto b = bounds();
@@ -806,9 +1206,9 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     const float labelW = 210.f, fieldX = x + labelW;
     // L'introduction.
     const std::string intro = available_
-        ? std::string("Ta demande part chez l'\xC3\xA9" "diteur par GitHub, scell\xC3\xA9" "e : lui seul la lit (rien de ta soci\xC3\xA9t\xC3\xA9 n'y est en clair). Sa "
-                      "r\xC3\xA9ponse revient ici d'elle-m\xC3\xAA" "me : une licence accept\xC3\xA9" "e s'installe au lancement suivant, ou avec V\xC3\xA9rifier maintenant "
-                      "- aucun fichier \xC3\xA0 importer. Une seule demande \xC3\xA0 la fois pour ce PC.")
+        ? std::string("Pas de code ? Ta demande part chez l'\xC3\xA9" "diteur par le service des licences, scell\xC3\xA9" "e : lui seul la lit (rien de ta soci\xC3\xA9t\xC3\xA9 "
+                      "n'y est en clair). Sa r\xC3\xA9ponse revient ici d'elle-m\xC3\xAAme : une licence accept\xC3\xA9" "e s'installe au lancement suivant, ou avec "
+                      "V\xC3\xA9rifier maintenant - aucun fichier \xC3\xA0 importer. Une seule demande \xC3\xA0 la fois pour ce PC.")
         : why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), puis Activer par "
                  "fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
     float y = b.y + 16.f;
@@ -830,11 +1230,11 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         }
     } else {
         // La demande en cours.
-        const std::string state = lg::stateText(rec_);
+        const std::string state = ls::stateText(rec_);
         struct Line { const char* label; std::string value; bool strong; };
         const Line lines[6] = {
-            {"Demande", "n\xC2\xB0 " + std::to_string(rec_.issue), false},
-            {"Envoy\xC3\xA9" "e le", lg::dateText(rec_.sentAt), false},
+            {"Demande", "n\xC2\xB0 " + std::to_string(rec_.number), false},
+            {"Envoy\xC3\xA9" "e le", ls::dateText(rec_.sentAt), false},
             {"\xC3\x89tat", state, true},
             {"Soci\xC3\xA9t\xC3\xA9 / client", rec_.customer.empty() ? std::string("\xE2\x80\x94") : rec_.customer, false},
             {"Nom de ce PC", rec_.pcName.empty() ? std::string("\xE2\x80\x94") : rec_.pcName, false},
@@ -849,14 +1249,12 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     }
     // La derniere reponse, la derniere verification.
     float fy = footY_;
-    if (busy_ != lg::Job::None) {
-        r.drawText({x, fy}, busy_ == lg::Job::Send ? "Envoi en cours\xE2\x80\xA6" : busy_ == lg::Job::Cancel ? "Annulation en cours\xE2\x80\xA6"
-                                                                                                   : "V\xC3\xA9rification en cours\xE2\x80\xA6",
-                   kSmall, c.textMuted);
+    if (busy_ != ls::Job::None) {
+        r.drawText({x, fy}, ls::jobText(busy_), kSmall, c.textMuted);
         fy += lh;
     }
     if (!rec_.local.empty() && !pending_) {
-        const std::string last = "Derni\xC3\xA8re demande (n\xC2\xB0 " + std::to_string(rec_.issue) + ", " + lg::dateText(rec_.sentAt) + ") : " + lg::stateText(rec_);
+        const std::string last = "Derni\xC3\xA8re demande (n\xC2\xB0 " + std::to_string(rec_.number) + ", " + ls::dateText(rec_.sentAt) + ") : " + ls::stateText(rec_);
         const gfx::Color col = rec_.outcome == "acceptee" ? good : rec_.outcome == "refusee" ? bad : c.text;
         r.drawText({x, fy}, fit(r, last, kSmall, W), kSmall, col);
         fy += lh;
@@ -870,7 +1268,7 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         }
     }
     if (rec_.lastCheck) {
-        r.drawText({x, fy}, "Derni\xC3\xA8re v\xC3\xA9rification : " + lg::dateText(rec_.lastCheck), kSmall, c.textMuted);
+        r.drawText({x, fy}, "Derni\xC3\xA8re v\xC3\xA9rification : " + ls::dateText(rec_.lastCheck), kSmall, c.textMuted);
         fy += lh;
     }
     if (!recProblem_.empty()) r.drawText({x, fy}, fit(r, recProblem_, kSmall, W), kSmall, bad);

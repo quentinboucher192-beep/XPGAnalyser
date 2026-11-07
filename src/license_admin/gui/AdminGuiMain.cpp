@@ -191,7 +191,7 @@ void usage(std::FILE* to) {
                  "%s %s (l'outil de l'\xC3\xA9" "diteur : jamais livr\xC3\xA9 \xC3\xA0 un client)\n"
                  "  --dossier D           le dossier du poste Admin (d\xC3\xA9" "faut : celui de la cl\xC3\xA9, comme XPG-License-Admin)\n"
                  "  --page ID             ouvrir sur cette page (tableau, clients, licences, editions, fonctionnalites,\n"
-                 "                        activations, demandes, flottantes, boutique, commandes, revocations, github, historique,\n"
+                 "                        activations, demandes, flottantes, boutique, commandes, revocations, service, historique,\n"
                  "                        securite)\n"
                  "  --version             le nom et la version\n"
                  "  --taille LxH          la taille de la fen\xC3\xAAtre\n"

@@ -404,7 +404,8 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
     const auto project = app_.project();
     const auto tip = [&st](StatusChip* c, std::string text) { if (!st.quiet) c->setTooltip(std::move(text)); };
 
-    // 1.30.0 : la licence (la pastille ; l'etat se revalue une fois par heure, ou apres un import).
+    // 1.30.0 : la licence (la pastille ; l'etat se revalue une fois par heure, ou apres un import). 1.35.0 : la meme
+    // phrase que l'indicateur du bandeau haut (licence::indicator).
     if (st.licence && now - st.licenceAt >= 1.0) {
         st.licenceAt = now;
         const auto b = licence::badge();
@@ -412,7 +413,7 @@ void MainAnalysisScreen::tickStatusStrip(double now) {
             st.licenceText = b.text;
             st.licence->setText(b.text);
             st.licence->setShown(!b.text.empty());
-            st.licence->setTone(b.tone == 1 ? Tone::Ok : b.tone == 2 ? Tone::Warning : b.tone == 3 ? Tone::Error : Tone::None);
+            st.licence->setTone(b.tone == 1 ? Tone::Ok : b.tone == 2 ? Tone::Warning : b.tone == 3 ? Tone::Error : b.tone == 4 ? Tone::Info : Tone::None);
             tip(st.licence, b.tip);
         }
     }

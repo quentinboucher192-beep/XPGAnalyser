@@ -1,13 +1,14 @@
 // =============================================================================
-//  license_admin/gui/PageOnline.cpp - 1.33.0 : LES TROIS PAGES DU SERVICE EN
-//  LIGNE (Licences flottantes, Boutique, Commandes)
+//  license_admin/gui/PageOnline.cpp - 1.33.0 : LES PAGES DE LA VENTE EN LIGNE
+//  (Boutique, Commandes)
 // -----------------------------------------------------------------------------
-//  Elles demandent le service de licences en ligne, qui n'existe pas encore.
+//  1.35.0 : le service des licences existe (Licences flottantes est devenue une
+//  vraie page : PageFloating.cpp). La Boutique et les Commandes demandent en plus
+//  un PAIEMENT EN LIGNE (un prestataire, ses confirmations), qui n'est pas fait.
 //  Chaque page le DIT, honnetement : ce qu'elle fera (la maquette, section 11),
-//  pourquoi il faut un service en ligne (un compteur partage et atomique, un
-//  paiement confirme par un prestataire), et ce qu'on fait en attendant (un
-//  bouton vers la page qui marche aujourd'hui). Rien n'est simule : aucun
-//  chiffre, aucune commande, aucun jeton.
+//  pourquoi ce n'est pas encore fait, et ce qu'on fait en attendant (un bouton
+//  vers la page qui marche aujourd'hui). Rien n'est simule : aucune commande,
+//  aucun montant.
 // =============================================================================
 #include "Page.hpp"
 
@@ -39,22 +40,6 @@ struct OnlineText {
 
 const OnlineText& textFor(const std::string& which) {
     static const std::vector<OnlineText> all = {
-        {"flottantes",
-         "Licences flottantes",
-         "Un nombre de postes en m\xC3\xAAme temps, partag\xC3\xA9 par toute une \xC3\xA9quipe : n'importe quel PC du client prend un jeton au d\xC3\xA9marrage du "
-         "logiciel et le rend en le fermant.",
-         {"Cr\xC3\xA9" "er une licence flottante : un client, une \xC3\xA9" "dition, le nombre de jetons (les postes qui travaillent en m\xC3\xAAme temps).",
-          "Voir les jetons pris en ce moment : par quel PC, depuis quand, sa derni\xC3\xA8re nouvelle.",
-          "Rendre un jeton rest\xC3\xA9 pris (un PC \xC3\xA9teint sans fermer le logiciel).",
-          "Suivre l'usage : le maximum atteint, les refus quand tous les jetons sont pris."},
-         {"Un jeton se prend et se rend en direct : il faut un compteur partag\xC3\xA9, tenu par un serveur, que deux PC ne peuvent jamais prendre "
-          "en m\xC3\xAAme temps (une op\xC3\xA9ration atomique).",
-          "Un fichier de licence sign\xC3\xA9 ici, hors ligne, vaut pour les PC qu'il nomme : il ne sait pas qui travaille en ce moment, il ne peut "
-          "donc rien compter.",
-          "Le tableau de bord ne montre aucun chiffre de licences flottantes tant que ce service n'existe pas."},
-         "Une licence par poste, avec autant de PC que n\xC3\xA9" "cessaire (Licences \xE2\x80\xBA Nouvelle licence\xE2\x80\xA6).",
-         "Aller aux licences",
-         "licences"},
         {"boutique",
          "Boutique",
          "La vente en ligne : le client choisit une \xC3\xA9" "dition, paie, et re\xC3\xA7oit sa licence sans attendre que tu la signes \xC3\xA0 la main.",
@@ -62,10 +47,11 @@ const OnlineText& textFor(const std::string& which) {
           "Le paiement par un prestataire (carte bancaire) : aucune donn\xC3\xA9" "e de carte ne passe par ce poste.",
           "La licence sign\xC3\xA9" "e et envoy\xC3\xA9" "e d\xC3\xA8s que le paiement est confirm\xC3\xA9, puis rang\xC3\xA9" "e dans l'archive.",
           "Les renouvellements et les passages \xC3\xA0 une \xC3\xA9" "dition sup\xC3\xA9rieure."},
-         {"Un paiement est confirm\xC3\xA9 en ligne, par le prestataire, \xC3\xA0 n'importe quelle heure : il faut un service h\xC3\xA9" "berg\xC3\xA9 qui re\xC3\xA7oit cette "
-          "confirmation et produit la licence tout de suite.",
-          "Ce poste, lui, signe les licences \xC3\xA0 la main et hors ligne : il ne re\xC3\xA7oit rien d'Internet."},
-         "Vends sur devis et facture, puis signe la licence ici (Licences \xE2\x80\xBA Nouvelle licence\xE2\x80\xA6).",
+         {"Un paiement est confirm\xC3\xA9 en ligne, par un prestataire (carte bancaire), \xC3\xA0 n'importe quelle heure : le service des licences "
+          "devrait recevoir cette confirmation et produire la licence et son code tout de suite.",
+          "Le service des licences sait d\xC3\xA9j\xC3\xA0 activer une licence par un code ; c'est le paiement qui n'y est pas branch\xC3\xA9 (aucun "
+          "prestataire choisi, aucun compte)."},
+         "Vends sur devis et facture, puis cr\xC3\xA9" "e la licence en ligne ici et donne son code au client (Licences \xE2\x80\xBA Nouvelle licence en ligne\xE2\x80\xA6).",
          "Aller aux licences",
          "licences"},
         {"commandes",
@@ -75,7 +61,7 @@ const OnlineText& textFor(const std::string& which) {
           "La licence de chaque commande, et la renvoyer au client si besoin.",
           "Les remboursements : la licence r\xC3\xA9voqu\xC3\xA9" "e en m\xC3\xAAme temps.",
           "L'export pour la comptabilit\xC3\xA9."},
-         {"Une commande na\xC3\xAEt dans la boutique en ligne et son paiement est confirm\xC3\xA9 par le prestataire : sans le service en ligne, il n'y a "
+         {"Une commande na\xC3\xAEt dans la boutique en ligne et son paiement est confirm\xC3\xA9 par le prestataire : sans paiement en ligne, il n'y a "
           "aucune commande \xC3\xA0 montrer.",
           "Rien n'est invent\xC3\xA9 ici : pas de commande d'exemple, pas de montant."},
          "Chaque licence sign\xC3\xA9" "e est dans l'archive (Licences), et chaque op\xC3\xA9ration dans l'historique.",
@@ -163,8 +149,8 @@ protected:
             y += 14.f;
             line("Pas encore fait", x0 + 44.f, y, FontId{17}, Ink::Warning, Kind::Bold);
             y += 24.f;
-            para("Cette page demande le service de licences en ligne, qui n'existe pas encore. Rien n'y est simul\xC3\xA9 : aucun chiffre, aucun "
-                 "jeton, aucune commande.",
+            para("Cette page demande un paiement en ligne (un prestataire de paiement), pas encore branch\xC3\xA9 sur le service des licences. "
+                 "Rien n'y est simul\xC3\xA9 : aucune commande, aucun montant.",
                  x0 + 44.f, w - 60.f, FontId{15}, Ink::Text, 20.f);
             y += 12.f;
             items_[at].r = {x0, cardY, w, y - cardY};
@@ -198,13 +184,13 @@ protected:
         const std::size_t second = items_.size();
         float endB;
         if (side) {
-            endB = card("Pourquoi il faut le service en ligne", t_.why, x0 + colW + 16.f, startY);
+            endB = card("Pourquoi ce n'est pas encore fait", t_.why, x0 + colW + 16.f, startY);
             const float h = std::max(endA, endB) - startY;   // les deux cadres a la meme hauteur
             items_[first].r.h = h;
             items_[second].r.h = h;
             y = startY + h + 16.f;
         } else {
-            endB = card("Pourquoi il faut le service en ligne", t_.why, x0, endA + 12.f);
+            endB = card("Pourquoi ce n'est pas encore fait", t_.why, x0, endA + 12.f);
             y = endB + 16.f;
         }
 

@@ -1,30 +1,34 @@
 // =============================================================================
 //  license_admin/gui/PageRequests.cpp - 1.34.0 : LA PAGE << Demandes en ligne >>
-//  (la passerelle GitHub des licences, cote editeur)
+//  (1.35.0 : par le service des licences ; plus aucun GitHub)
 // -----------------------------------------------------------------------------
-//  Les demandes que les clients envoient depuis leur logiciel (une issue du
-//  depot PUBLIC de la passerelle, scellee pour la cle de l'editeur) : relevees
+//  Les demandes MANUELLES que les clients envoient depuis leur logiciel (au
+//  service : POST /v1/demandes, scellees pour la cle de l'editeur) : relevees
 //  par << Relever les demandes >> (lent : runSlow), rangees dans le dossier de
 //  la cle (demandes-en-ligne/) - aucun fichier a importer. La table : date,
 //  client, PC, logiciel, licence demandee, etat, message. Pour une demande en
 //  attente :
-//    - Accepter... ouvre l'assistant de licence avec elle (une licence
-//      existante demandee : en ajout de PC - une licence partagee) ; signee, la
-//      licence part d'elle-meme a TOUS ses PC (publishToGateway) et l'issue se
-//      ferme. 1.34.0 (relecture) : une demande d'AJOUT a une licence existante
-//      n'est pas une preuve (n'importe qui peut taper un identifiant et un nom
-//      de client) : la table la marque << a verifier >>, la page le dit en
-//      entier quand elle est choisie, et l'assistant demande une confirmation
-//      avant de signer ;
-//    - Refuser... demande la raison (le client la lit ; scellee pour son PC) ;
-//    - Voir sur GitHub ouvre l'issue dans le navigateur.
-//  La passerelle pas reglee, pas de jeton, jamais relevee, rien a montrer : la
-//  page dit quoi faire. Rien n'est simule : hors ligne, c'est dit.
+//    - Accepter (licence liee)... ouvre l'assistant de licence avec elle (une
+//      licence existante demandee : en ajout de PC) ; signee, la licence part
+//      d'elle-meme a TOUS ses PC (publishToService : l'etat << poste >> de
+//      chacun, la licence scellee pour lui) et la demande est marquee traitee.
+//      Une demande d'AJOUT a une licence existante n'est pas une preuve
+//      (n'importe qui peut taper un identifiant et un nom de client) : la table
+//      la marque << a verifier >>, la page le dit en entier quand elle est
+//      choisie, et l'assistant demande une confirmation avant de signer ;
+//    - Accepter en ligne... : l'assistant d'une licence EN LIGNE (aucun PC, un
+//      code d'activation montre une fois, a donner au client) ; le PC voit
+//      << acceptee >> (sans le code) ;
+//    - Refuser... demande la raison (le client la lit ; scellee pour son PC).
+//  Le service pas regle, jamais releve, rien a montrer : la page dit quoi
+//  faire. Rien n'est simule : hors ligne, c'est dit.
 //
-//  Ici aussi : publishToGateway et safeGithubUrl (Page.hpp).
+//  Ici aussi : publishToService, refreshOnlineLicences, depositOnlineLicence
+//  (Page.hpp).
 // =============================================================================
 #include "Page.hpp"
 
+#include "../../deploy/Crypto.hpp"
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -35,6 +39,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -48,41 +53,60 @@ std::string fingerprintOfKey(const std::string& hex);
 } // namespace licdlg
 
 // ============================================================================================ l'exterieur
-bool publishToGateway(const ShellHost& host, std::function<void(const OpResult&)> done) {
+bool publishToService(const ShellHost& host, std::function<void(const OpResult&)> done) {
     if (!host.workspace || !host.runSlow) return false;
     Workspace& w = host.workspace();
-    if (!w.hasGatewayJob()) return false;
+    if (!w.hasServiceJob()) return false;
     if (host.busy && host.busy()) return false;   // il attend dans le Workspace : la coquille le lance ensuite
-    std::optional<GatewayJob> job = w.takeGatewayJob();
+    std::optional<ServiceJob> job = w.takeServiceJob();
     if (!job) return false;
     const Workspace* wp = &w;
-    const GatewayJob copy = *job;
-    const bool started = host.runSlow(copy.label, [wp, copy] { return wp->passerelleRun(copy); }, std::move(done));
-    if (!started) w.queueGatewayJob(std::move(*job));
+    const ServiceJob copy = *job;
+    const bool started = host.runSlow(copy.label, [wp, copy] { return wp->serviceRun(copy); }, std::move(done));
+    if (!started) w.queueServiceJob(std::move(*job));
     return started;
 }
 
-bool safeGithubUrl(const std::string& url) {
-    const std::string head = "https://github.com/";
-    if (url.rfind(head, 0) != 0 || url.size() > 300) return false;
-    const std::string rest = url.substr(head.size());
-    int slashes = 0;
-    for (char c : rest) {
-        if (c == '/') {
-            ++slashes;
-            continue;
-        }
-        if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-')) return false;
+bool refreshOnlineLicences(const ShellHost& host, std::function<void(const OpResult&)> done) {
+    if (!host.workspace || !host.runSlow) return false;
+    const Workspace* wp = &host.workspace();
+    auto snap = std::make_shared<online::Snapshot>();
+    ShellHost h = host;
+    return host.runSlow("Service : relev\xC3\xA9 des licences en ligne", [wp, snap] { return wp->serviceListLicences(*snap); },
+                        [h, snap, done](const OpResult& r) {
+                            if (r.ok) h.workspace().adoptSnapshot(std::move(*snap));
+                            if (done) done(r);
+                        });
+}
+
+bool depositOnlineLicence(const ShellHost& host, ServiceJob job, std::string code, std::function<void(const OpResult&)> done) {
+    if (!host.workspace || !host.runSlow) {
+        deploy::crypto::wipe(code.data(), code.size());
+        return false;
     }
-    if (rest.find("..") != std::string::npos || rest.find("//") != std::string::npos) return false;
-    return slashes == 1 || slashes == 3;
+    const Workspace* wp = &host.workspace();
+    // Le code reste en memoire (ici seulement) jusqu'a la reponse du service : montre si le depot a reussi, oublie sinon.
+    auto secret = std::make_shared<std::string>(std::move(code));
+    const std::string id = job.licenseId;
+    ShellHost h = host;
+    const bool started = host.runSlow(job.label, [wp, job] { return wp->serviceRun(job); }, [h, secret, id, done](const OpResult& r) {
+        if (r.ok && !secret->empty() && h.openDialog) h.openDialog(makeCodeDialog(id, *secret));
+        deploy::crypto::wipe(secret->data(), secret->size());
+        secret->clear();
+        if (done) done(r);
+    });
+    if (!started) {
+        deploy::crypto::wipe(secret->data(), secret->size());
+        secret->clear();
+    }
+    return started;
 }
 
 namespace {
 
 using RowIndex = ui::RowIndex;
-using passerelle::Entry;
-using passerelle::RequestState;
+using online::Entry;
+using online::RequestState;
 
 const ui::Fonts kFonts{};
 constexpr float kPad = 16.f;
@@ -185,7 +209,8 @@ ui::Tone toneOf(RequestState s) {
         case RequestState::Unreadable:
         case RequestState::Ignored: return ui::Tone::Error;
         case RequestState::Cancelled:
-        case RequestState::Replaced: return ui::Tone::Muted;
+        case RequestState::Replaced:
+        case RequestState::Handled: return ui::Tone::Muted;
     }
     return ui::Tone::None;
 }
@@ -203,20 +228,18 @@ public:
         fetch_ = add(*this, std::make_unique<ui::Button>("Relever les demandes", "demandes.relever"));
         fetch_->setStyle(ui::Button::Style::Primary);
         fetch_->setIcon(ui::Icon::Refresh);
-        fetch_->setTooltip("Lit les demandes envoy\xC3\xA9" "es par les logiciels des clients (les issues du d\xC3\xA9p\xC3\xB4t de la passerelle), les range sur ce poste "
-                           "et dit \xC2\xAB Re\xC3\xA7ue par l'\xC3\xA9" "diteur \xC2\xBB aux PC.");
+        fetch_->setTooltip("Lit les demandes envoy\xC3\xA9" "es par les logiciels des clients au service des licences, les ouvre avec ta cl\xC3\xA9 et les range sur ce poste.");
         accept_ = add(*this, std::make_unique<ui::Button>("Accepter\xE2\x80\xA6", "demandes.accepter"));
         accept_->setIcon(ui::Icon::Ok);
-        accept_->setTooltip("L'assistant de licence, avec cette demande ; sign\xC3\xA9" "e, la licence part d'elle-m\xC3\xAAme \xC3\xA0 chacun de ses PC.");
+        accept_->setTooltip("L'assistant de licence, avec cette demande : une licence LI\xC3\x89" "E \xC3\xA0 ce PC ; sign\xC3\xA9" "e, elle part d'elle-m\xC3\xAAme \xC3\xA0 chacun de ses PC.");
+        acceptOnline_ = add(*this, std::make_unique<ui::Button>("Accepter en ligne\xE2\x80\xA6", "demandes.accepter-en-ligne"));
+        acceptOnline_->setTooltip("Une licence EN LIGNE pour ce client (aucun PC li\xC3\xA9) : son code d'activation t'est montr\xC3\xA9 une fois, tu le lui donnes.");
         refuse_ = add(*this, std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", "demandes.refuser"));
         refuse_->setStyle(ui::Button::Style::Danger);
         refuse_->setTooltip("Le client voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison dans son logiciel (scell\xC3\xA9" "e : personne d'autre ne la lit).");
-        github_ = add(*this, std::make_unique<ui::Button>("Voir sur GitHub", "demandes.github"));
-        github_->setIcon(ui::Icon::Globe);
-        github_->setTooltip("L'issue de cette demande, dans ton navigateur (son contenu y est scell\xC3\xA9).");
-        settings_ = add(*this, std::make_unique<ui::Button>("R\xC3\xA9gler la passerelle", "demandes.regler"));
+        settings_ = add(*this, std::make_unique<ui::Button>("R\xC3\xA9gler le service", "demandes.regler"));
         settings_->setIcon(ui::Icon::Settings);
-        settings_->setTooltip("Synchronisation GitHub \xE2\x80\xBA Passerelle des clients.");
+        settings_->setTooltip("La page Service en ligne : l'adresse de ton service des licences.");
         filter_ = add(*this, std::make_unique<ui::DropDown>("demandes.filtre"));
         filter_->setItems({{"En attente de ta d\xC3\xA9" "cision", "attente"}, {"Toutes", ""}});
         filter_->setSelectedIndex(0);
@@ -228,15 +251,15 @@ public:
         table_->setModel(model_);
 
         links_ += fetch_->clicked->connect([this] { fetch(); });
-        links_ += accept_->clicked->connect([this] { accept(); });
+        links_ += accept_->clicked->connect([this] { accept(false); });
+        links_ += acceptOnline_->clicked->connect([this] { accept(true); });
         links_ += refuse_->clicked->connect([this] { askRefuse(); });
-        links_ += github_->clicked->connect([this] { openIssue(); });
         links_ += settings_->clicked->connect([this] {
-            if (host_.navigate) host_.navigate("github");
+            if (host_.navigate) host_.navigate("service");
         });
         links_ += filter_->selectionChanged->connect([this](int) { rebuild(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) { syncButtons(); });
-        links_ += table_->activated->connect([this](RowIndex) { accept(); });
+        links_ += table_->activated->connect([this](RowIndex) { accept(false); });
         refresh();
     }
     ~RequestsPage() override {
@@ -271,7 +294,7 @@ protected:
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
         float bx = x;
-        for (ui::Button* btn : {fetch_, accept_, refuse_, github_, settings_}) {
+        for (ui::Button* btn : {fetch_, accept_, acceptOnline_, refuse_, settings_}) {
             if (!btn->visible()) continue;
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
@@ -327,44 +350,39 @@ protected:
 
 private:
     static constexpr const char* kLead =
-        "Les demandes de licence que les clients envoient depuis leur logiciel, par la passerelle GitHub : rien \xC3\xA0 importer. Accepte-en une : "
-        "l'assistant signe la licence, puis elle part d'elle-m\xC3\xAAme \xC3\xA0 chacun de ses PC. Une demande par PC ; le client peut l'annuler.";
+        "Les demandes de licence que les clients envoient depuis leur logiciel, par le service des licences : rien \xC3\xA0 importer. Accepte-en une : "
+        "l'assistant signe la licence (li\xC3\xA9" "e \xC3\xA0 ce PC, ou en ligne avec un code), puis elle part d'elle-m\xC3\xAAme. Une demande par PC ; le client peut l'annuler.";
 
     [[nodiscard]] bool busy() const { return host_.busy && host_.busy(); }
-    [[nodiscard]] bool ready() const {
-        const auto& g = ws().passerelle();
-        return g.configured && g.problem.empty();
-    }
+    [[nodiscard]] bool ready() const { return ws().service().ready(); }
 
     [[nodiscard]] std::string status() const {
-        const auto& g = ws().passerelle();
+        const auto& g = ws().service();
         if (fetching_ && busy()) return "Relev\xC3\xA9 des demandes en cours\xE2\x80\xA6 (le r\xC3\xA9seau peut prendre quelques secondes)";
-        if (!g.problem.empty()) return "La passerelle est mal r\xC3\xA9gl\xC3\xA9" "e : " + g.problem;
-        if (!g.configured) return "La passerelle n'est pas r\xC3\xA9gl\xC3\xA9" "e.";
-        std::string t = "Passerelle " + g.config.repo + " \xC2\xB7 ";
+        if (!g.problem.empty()) return "Le service des licences est mal r\xC3\xA9gl\xC3\xA9 : " + g.problem;
+        if (!g.configured) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9.";
+        std::string t = "Service " + g.config.url + " \xC2\xB7 ";
         if (g.fetch.fetchedAt == 0) t += "jamais relev\xC3\xA9" "es sur ce poste";
         else t += "relev\xC3\xA9" "es le " + dateTimeFr(g.fetch.fetchedAt) + " : " + std::to_string(g.pending) + " en attente de ta d\xC3\xA9" "cision";
-        if (!g.publisherToken) t += " \xC2\xB7 il manque ton jeton GitHub";
+        if (!ws().key().present) t += " \xC2\xB7 il manque la cl\xC3\xA9 de l'\xC3\xA9" "diteur";
         return t;
     }
     [[nodiscard]] ui::Tone statusTone() const {
-        const auto& g = ws().passerelle();
+        const auto& g = ws().service();
         if (!g.problem.empty()) return ui::Tone::Error;
-        if (!g.configured || !g.publisherToken) return ui::Tone::Warning;
+        if (!g.configured || !ws().key().present) return ui::Tone::Warning;
         if (g.pending > 0) return ui::Tone::Warning;
         return ui::Tone::None;
     }
 
     [[nodiscard]] std::string empty() const {
-        const auto& g = ws().passerelle();
-        if (!g.problem.empty()) return "Corrige le r\xC3\xA9glage dans Synchronisation GitHub \xE2\x80\xBA Passerelle des clients.";
+        const auto& g = ws().service();
+        if (!g.problem.empty()) return "Corrige le r\xC3\xA9glage dans Service en ligne.";
         if (!g.configured)
-            return "La passerelle n'est pas encore r\xC3\xA9gl\xC3\xA9" "e : les clients ne peuvent pas demander une licence depuis leur logiciel. R\xC3\xA8gle-la dans "
-                   "Synchronisation GitHub \xE2\x80\xBA Passerelle des clients (un d\xC3\xA9p\xC3\xB4t GitHub PUBLIC et le jeton des demandes), puis \xC2\xAB Publier la "
-                   "configuration \xC2\xBB. En attendant, les demandes arrivent par fichier (Activations \xE2\x80\xBA Noter des demandes).";
-        if (!g.publisherToken)
-            return "Il manque ton jeton GitHub (Synchronisation GitHub \xE2\x80\xBA 2. Le jeton) : il sert aussi \xC3\xA0 la passerelle et doit couvrir son "
-                   "d\xC3\xA9p\xC3\xB4t (Contents et Issues : Read and write).";
+            return "Le service des licences n'est pas encore r\xC3\xA9gl\xC3\xA9 : les clients ne peuvent pas demander une licence depuis leur logiciel. Mets-le en "
+                   "ligne (Service en ligne : les \xC3\xA9tapes), puis donne son adresse. En attendant, les demandes arrivent par fichier (Activations \xE2\x80\xBA "
+                   "Noter des demandes).";
+        if (!ws().key().present) return "Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur : les demandes sont scell\xC3\xA9" "es pour elle, et elle signe chaque appel au service.";
         if (g.fetch.fetchedAt == 0) return "Pas encore relev\xC3\xA9" "es sur ce poste : clique \xC2\xAB Relever les demandes \xC2\xBB.";
         if (!g.requests.empty() && wantWaiting())
             return "Aucune demande n'attend ta d\xC3\xA9" "cision. \xC2\xAB Toutes \xC2\xBB montre celles d\xC3\xA9j\xC3\xA0 trait\xC3\xA9" "es.";
@@ -378,7 +396,7 @@ private:
         if (!e || !e->waiting() || !e->joinRequest()) return {};
         const LicenceEntry* l = ws().licence(e->licenseId);
         if (!l) return {};   // une licence qui n'existe pas encore : une licence neuve, rien a quoi s'ajouter
-        std::string t = passerelle::joinWarning(*e);
+        std::string t = online::joinWarning(*e);
         if (lowerAscii(l->licence.customer) != lowerAscii(e->customer))
             t += " La licence " + e->licenseId + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
         return t;
@@ -390,7 +408,7 @@ private:
     }
 
     void rebuild() {
-        const auto& g = ws().passerelle();
+        const auto& g = ws().service();
         shown_.clear();
         for (const auto& e : g.requests)
             if (!wantWaiting() || e.waiting()) shown_.push_back(e);
@@ -401,7 +419,7 @@ private:
             std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
             const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId);
             if (joins) licence += " (ajouter ce PC)";
-            std::string state = passerelle::requestStateLabel(e.state);
+            std::string state = online::requestStateLabel(e.state);
             if (joins && e.waiting()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
                 licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
                 state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
@@ -410,10 +428,10 @@ private:
             const std::string pc = e.state == RequestState::Unreadable ? "poste " + e.device.substr(0, 12)
                                    : e.deviceName.empty()               ? std::string("(sans nom)")
                                                                         : e.deviceName;
-            rows.push_back({dateTimeFr(e.openedAt ? e.openedAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, pc,
+            rows.push_back({dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, pc,
                             e.software, e.state == RequestState::Unreadable ? std::string() : licence, state,
                             oneLine(e.message) + (e.contact.empty() ? std::string() : (e.message.empty() ? "" : " \xC2\xB7 ") + e.contact)});
-            keys.push_back(padKey(e.openedAt ? e.openedAt : e.requestedAt));
+            keys.push_back(padKey(e.createdAt ? e.createdAt : e.requestedAt));
             states.push_back(e.state);
         }
         model_->set(std::move(rows), std::move(keys), [states](RowIndex r, std::size_t c) {
@@ -441,13 +459,13 @@ private:
         const bool on = ready();
         fetch_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         accept_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        acceptOnline_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         refuse_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        github_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        settings_->setVisibility(on && ws().passerelle().publisherToken ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-        fetch_->setEnabled(!b);
+        settings_->setVisibility(on ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+        fetch_->setEnabled(!b && ws().key().present);
         accept_->setEnabled(!b && e && e->waiting());
+        acceptOnline_->setEnabled(!b && e && e->waiting());
         refuse_->setEnabled(!b && e && e->waiting());
-        github_->setEnabled(e != nullptr && e->issue > 0);
         invalidateLayout();
     }
 
@@ -460,14 +478,14 @@ private:
     void fetch() {
         if (refuseIfBusy()) return;
         if (!ready()) {
-            host_.report(OpResult::fail("la passerelle n'est pas r\xC3\xA9gl\xC3\xA9" "e (Synchronisation GitHub \xE2\x80\xBA Passerelle des clients)"));
+            host_.report(OpResult::fail("le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne)"));
             return;
         }
         const Workspace* w = &ws();
         std::weak_ptr<bool> alive = life_;
         fetching_ = true;
         const bool started = host_.runSlow && host_.runSlow(
-                                                  "Passerelle : relev\xC3\xA9 des demandes", [w] { return w->passerelleFetch(); },
+                                                  "Service : relev\xC3\xA9 des demandes", [w] { return w->serviceFetch(); },
                                                   [this, alive](const OpResult& r) {
                                                       if (alive.expired()) return;
                                                       (void)r;
@@ -486,7 +504,7 @@ private:
         }
     }
 
-    void accept() {
+    void accept(bool onlineLicence) {
         if (refuseIfBusy()) return;
         const Entry* e = selected();
         if (!e) {
@@ -494,7 +512,7 @@ private:
             return;
         }
         if (!e->waiting()) {
-            host_.report(OpResult::fail("cette demande n'attend pas de d\xC3\xA9" "cision (" + passerelle::requestStateLabel(e->state) + ")"));
+            host_.report(OpResult::fail("cette demande n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e->state) + ")"));
             return;
         }
         std::error_code ec;
@@ -502,12 +520,16 @@ private:
             host_.report(OpResult::fail("le fichier de la demande manque sur ce poste : rel\xC3\xA8ve de nouveau les demandes"));
             return;
         }
+        if (onlineLicence) {   // une licence EN LIGNE : aucun PC lie, la demande dit seulement a qui (et y repond)
+            if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {e->requestPath}, {}, e->customer, true));
+            return;
+        }
         std::string extend;
         if (!e->licenseId.empty())
             if (const LicenceEntry* l = ws().licence(e->licenseId)) {
                 extend = e->licenseId;   // une licence partagee : ce PC s'y ajoute - a verifier (l'assistant demande de confirmer)
                 if (host_.flash) {
-                    std::string t = passerelle::joinWarning(*e);
+                    std::string t = online::joinWarning(*e);
                     if (lowerAscii(l->licence.customer) != lowerAscii(e->customer))
                         t += " La licence " + extend + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
                     host_.flash(t, Tone::Warning);
@@ -523,14 +545,14 @@ private:
             if (host_.flash) host_.flash("Choisis d'abord une demande en attente.", Tone::Warning);
             return;
         }
-        const std::string ref = "#" + std::to_string(e->issue);
+        const std::string ref = std::to_string(e->number);
         const std::string who = (e->customer.empty() ? std::string("ce client") : e->customer) + ", PC \xC2\xAB " + (e->deviceName.empty() ? "(sans nom)" : e->deviceName) + " \xC2\xBB";
         std::weak_ptr<bool> alive = life_;
         ShellHost host = host_;
         host_.openDialog(licdlg::makeReasonDialog(
             "demandes.refus", "Refuser la demande",
-            "Refuser la demande de " + who + " ?\n\nLe client lit ta raison dans son logiciel ; elle est scell\xC3\xA9" "e pour son PC (personne d'autre ne la lit). "
-            "L'issue est ferm\xC3\xA9" "e avec le seul mot \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB.",
+            "Refuser la demande de " + who + " ?\n\nLe client lit ta raison dans son logiciel ; elle est scell\xC3\xA9" "e pour son PC (personne d'autre ne la lit, "
+            "pas m\xC3\xAAme le service).",
             "la raison, par exemple : pas de contrat pour ce poste", "Refuser",
             [this, alive, host, ref](const std::string& reason) {
                 if (host.busy && host.busy()) {
@@ -539,7 +561,7 @@ private:
                 }
                 const Workspace* w = &host.workspace();
                 const bool started = host.runSlow && host.runSlow(
-                                                         "Passerelle : refus de la demande " + ref, [w, ref, reason] { return w->passerelleRefuse(ref, reason); },
+                                                         "Service : refus de la demande n\xC2\xB0 " + ref, [w, ref, reason] { return w->serviceRefuse(ref, reason); },
                                                          [this, alive](const OpResult&) {
                                                              if (alive.expired()) return;
                                                              ws().reload();
@@ -549,20 +571,12 @@ private:
             }));
     }
 
-    void openIssue() {
-        const Entry* e = selected();
-        if (!e || e->issue <= 0) return;
-        const std::string url = passerelle::issueLink(ws().passerelle().config.repo, e->issue);
-        if (host_.openUrl) host_.openUrl(url);
-        else if (host_.flash) host_.flash("L'issue : " + url, Tone::Info);
-    }
-
     std::shared_ptr<bool>    life_{std::make_shared<bool>(true)};
     core::ConnectionScope    links_;
     ui::Button*              fetch_{nullptr};
     ui::Button*              accept_{nullptr};
+    ui::Button*              acceptOnline_{nullptr};
     ui::Button*              refuse_{nullptr};
-    ui::Button*              github_{nullptr};
     ui::Button*              settings_{nullptr};
     ui::DropDown*            filter_{nullptr};
     ui::TableView*           table_{nullptr};

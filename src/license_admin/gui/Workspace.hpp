@@ -4,39 +4,42 @@
 // -----------------------------------------------------------------------------
 //  Ce que les ecrans de l'application lisent et font, sans aucun ecran : la cle
 //  de l'editeur, l'archive (le registre, la liste de revocation, chaque licence),
-//  le registre des activations, la synchro GitHub. Chaque operation rend un
-//  OpResult (fait ou refuse, en francais, et ce qui a ete ecrit) ; les ecrans le
-//  montrent tel quel. Les memes fonctions que la console (Admin.hpp,
-//  GitHubSync.hpp, KeyBackup.hpp) : un fichier signe par l'application est
-//  identique a celui de la console.
+//  le registre des activations, le service des licences. Chaque operation rend
+//  un OpResult (fait ou refuse, en francais, et ce qui a ete ecrit) ; les ecrans
+//  le montrent tel quel. Les memes fonctions que la console (Admin.hpp,
+//  ArchiveSync.hpp, ServiceClient.hpp, KeyBackup.hpp) : un fichier signe par
+//  l'application est identique a celui de la console.
 //
 //  Le dossier : celui de la cle (defaultKeyFolder : %LOCALAPPDATA%\XPG\LicenseAdmin),
 //  le meme que XPG-License-Admin.exe - les deux outils voient la meme cle, la
 //  meme archive, le meme registre des activations.
 //
-//  LES SECRETS (phrase de passe, jeton GitHub, code de secours) passent par les
-//  arguments des fonctions et ne sont jamais gardes ni ecrits par le Workspace
-//  (le jeton : protege par DPAPI, par GitHubSync).
+//  LES SECRETS (phrase de passe, code de secours, code d'activation) passent par
+//  les arguments des fonctions et ne sont jamais gardes ni ecrits par le
+//  Workspace. Le code d'activation d'une licence en ligne : tire par
+//  prepareOnlineLicence, rendu a l'appelant (montre une fois), seule son
+//  empreinte part au service.
 //
 //  LENT : backupKey / checkBackup / restoreKey (Argon2id, quelques secondes) et
-//  githubSync (le reseau) - a lancer par Background, jamais sur le fil de
-//  l'interface. Le reste lit ou ecrit de petits fichiers.
+//  tout ce qui parle au service (service*, archiveSync) - a lancer par
+//  Background / runSlow, jamais sur le fil de l'interface. Ces fonctions-la sont
+//  const : elles relisent la cle et les fichiers, jamais l'etat du Workspace ; ce
+//  qu'elles rapportent (l'etat du service, le releve des licences en ligne) est
+//  adopte ensuite sur le fil de l'interface (adoptServiceState, adoptSnapshot).
+//  Le reste lit ou ecrit de petits fichiers.
 //
-//  1.34.0 : LA PASSERELLE DES CLIENTS (un depot GitHub PUBLIC, Passerelle.hpp) :
-//  la regler, relever les demandes en ligne (passerelleFetch), refuser, et
-//  PUBLIER ce qu'une operation vient de signer (une licence a tous ses PC, une
-//  revocation, un PC retire, un registre) : chaque operation qui signe, la
-//  passerelle reglee, laisse un GatewayJob (takeGatewayJob) que l'application
-//  lance par runSlow (publishToGateway, Page.hpp). Les passerelle* qui touchent
-//  au reseau sont LENTES (const : elles relisent la cle et les fichiers ; jamais
-//  l'etat du Workspace).
+//  1.35.0 : LE SERVICE DES LICENCES (ServiceClient.hpp ; plus aucun GitHub) :
+//  chaque operation qui signe, le service regle, laisse un ServiceJob
+//  (takeServiceJob : une licence liee a ses PC, une revocation, un PC retire, un
+//  registre, une licence en ligne prolongee) que l'application lance par runSlow
+//  (publishToService, Page.hpp).
 // =============================================================================
 #pragma once
 
 #include "../Admin.hpp"
-#include "../GitHubSync.hpp"
+#include "../ArchiveSync.hpp"
 #include "../KeyBackup.hpp"
-#include "../Passerelle.hpp"
+#include "../ServiceClient.hpp"
 #include "../../licensing/Documents.hpp"
 
 #include <atomic>
@@ -53,7 +56,7 @@ namespace license_admin::gui {
 using licensing::Seconds;
 
 inline constexpr const char* kAppName = "XPG License Manager Admin";
-inline constexpr const char* kAppVersion = "1.0.0";   // 1.33.0 : la premiere application
+inline constexpr const char* kAppVersion = "1.1.0";   // 1.33.0 : la premiere application ; 1.35.0 : le service des licences
 
 // ---- le resultat d'une operation : montre tel quel ----
 struct OpResult {
@@ -102,52 +105,57 @@ struct Dashboard {
     int expiringSoon{0};                // actives qui finissent dans les 30 jours
     int devices{0};                     // PC actives (dernier etat "active")
     int pendingRequests{0};             // demandes recues pas encore signees
-    // 1.34.0 : les demandes en ligne (la passerelle) qui attendent ta decision, au dernier releve.
-    bool    onlineConfigured{false};
-    int     onlinePending{0};
-    Seconds onlineFetchedAt{0};         // 0 : jamais relevees sur ce poste
+    // 1.35.0 : le service des licences, au dernier releve (0 : jamais releve sur ce poste).
+    bool    serviceConfigured{false};
+    int     onlineLicences{0};          // les licences en ligne (le service)
+    int     onlineDevices{0};           // les PC actives en ligne
+    int     floatingLeases{0};          // les jetons flottants en cours
+    int     floatingSeats{0};           // les postes des licences flottantes (au total)
+    int     onlinePending{0};           // les demandes manuelles qui attendent ta decision
+    Seconds snapshotAt{0};              // le releve des licences en ligne
+    Seconds onlineFetchedAt{0};         // le releve des demandes
     std::vector<std::pair<std::string, int>> byEdition;   // edition -> licences actives
     std::vector<ActivationRecord>            recent;      // les dernieres operations (les plus recentes d'abord, 12 au plus)
 };
 
-// ---- la synchro GitHub ----
-struct GithubStatus {
-    bool           configured{false};
-    github::Config config;
-    bool           token{false};
-    bool           syncKey{false};
-    std::string    syncKeyId;
-    std::string    problem;      // la configuration ne se lit pas
+// ---- 1.35.0 : le service des licences et l'archive en ligne ----
+struct ServiceStatus {
+    bool                       configured{false};
+    online::Config             config;
+    std::string                problem;           // la configuration ne se lit pas
+    bool                       syncKey{false};    // la cle de synchro de l'archive est sur ce poste
+    std::string                syncKeyId;
+    archive::LastSync          lastSync;          // la derniere synchro reussie de l'archive
+    online::FetchState         fetch;             // le dernier releve des demandes
+    std::vector<online::Entry> requests;          // les demandes relevees (les plus recentes d'abord)
+    int                        pending{0};        // celles qui attendent une decision
+    online::Snapshot           snapshot;          // le dernier releve des licences en ligne (service-releve.json)
+    bool                       hasState{false};   // l'etat du service lu dans cette seance (Verifier)
+    online::ServiceState       state;
+    Seconds                    stateAt{0};
+    [[nodiscard]] bool ready() const { return configured && problem.empty(); }
 };
 
-// ---- 1.34.0 : la passerelle des clients (Passerelle.hpp) ----
-struct PasserelleStatus {
-    bool                           configured{false};
-    passerelle::Config             config;
-    bool                           requestToken{false};    // le jeton des demandes (celui des clients) est sur ce poste
-    bool                           publisherToken{false};  // le jeton GitHub de l'editeur (celui de la synchro)
-    std::string                    problem;                // la configuration ne se lit pas
-    passerelle::FetchState         fetch;                  // le dernier releve
-    std::vector<passerelle::Entry> requests;               // les demandes relevees (les plus recentes d'abord)
-    int                            pending{0};             // celles qui attendent une decision
-};
-
-// Ce qu'une operation qui signe laisse a publier sur la passerelle (lance par l'application, lentement).
-struct GatewayJob {
+// Ce qu'une operation qui signe laisse a publier sur le service (lance par l'application, lentement).
+struct ServiceJob {
     enum class Kind : std::uint8_t {
-        Licence,      // une licence signee : a chacun de ses PC (licenceText)
-        Removal,      // un PC retire : la nouvelle emission aux autres, << retiree >> pour lui (deviceKey)
-        Revocation,   // << revoquee >> pour deviceKeys (la raison et la liste de revocation scellees pour chacun)
-        Unrevoke,     // le registre, puis la licence (licenceText, si elle est la) a ses PC, avec la liste scellee
-        Registry,     // le registre de l'archive (la liste de revocation n'est plus publiee en clair)
+        Licence,         // une licence liee a des PC : a chacun (son etat << poste >>, la licence scellee) - licenceText
+        Removal,         // un PC retire d'une licence liee : la nouvelle emission aux autres, << retiree >> pour lui (deviceKey)
+        Revocation,      // la liste deposee, puis << revoquee >> pour deviceKeys (les PC lies)
+        Unrevoke,        // la liste deposee, puis la licence liee (licenceText, si elle est la) a ses PC
+        Registry,        // le registre de l'archive
+        OnlineLicence,   // une licence EN LIGNE deposee (licenceText) ; codeHash vide : le code reste le meme
     };
     Kind                     kind{Kind::Licence};
-    std::string              label;        // "Passerelle : publication de XPG-2026-00042"
+    std::string              label;        // "Service : publication de XPG-2026-00042"
     std::string              licenseId;
     std::string              licenceText;
     std::string              deviceKey;
     std::vector<std::string> deviceKeys;
     std::string              reason;
+    std::string              codeHash;          // OnlineLicence : l'empreinte d'un code neuf (jamais le code)
+    int                      leaseDays{online::kDefaultLeaseDays};
+    int                      requestNumber{0};  // OnlineLicence : la demande manuelle a laquelle elle repond (0 : aucune)
 };
 
 // ---- une demande d'activation lue (l'apercu de l'assistant) ----
@@ -172,6 +180,8 @@ struct LicenceDraft {
     bool                     extend{false};        // etendre la licence licenseId de l'archive (ses PC sont gardes)
     Seconds                  expiresAt{0};         // 1.33.0 : une fin exacte (une extension garde la sienne) ; 0 : durationDays
     std::vector<std::string> dropDevices;          // 1.33.0 : les PC (cles) a retirer de la licence etendue
+    bool                     online{false};        // 1.35.0 : une licence EN LIGNE (aucun PC : un code d'activation)
+    int                      leaseDays{online::kDefaultLeaseDays};   // son bail (jours)
 };
 
 class Workspace {
@@ -247,57 +257,58 @@ public:
     [[nodiscard]] int skippedLines() const noexcept { return skipped_; }
     OpResult exportCsv(const std::vector<KnownDevice>& devices, const std::string& path) const;
 
-    // ---- la synchro GitHub ----
-    [[nodiscard]] const GithubStatus& github() const noexcept { return github_; }
-    // Le depot (proprietaire/nom), la branche, la racine. La premiere fois : la cle de synchro est creee et
-    // `recoveryCode` recoit son code de secours (a noter hors du PC). `code` donne : la cle redonnee par ce code
-    // (un autre poste) ; `replace` : une autre cle deja la est mise de cote.
-    OpResult githubConfigure(const std::string& repo, const std::string& branch, const std::string& root, const std::string& code,
-                             bool replace, std::string* recoveryCode);
-    OpResult githubSaveToken(const std::string& token);
-    OpResult githubEraseToken();
-    [[nodiscard]] std::string githubRecoveryCode(std::string* why) const;
-    // LENT (le reseau) : par Background. `dryRun` : ce qui serait recu et envoye (github-etat).
-    [[nodiscard]] github::SyncReport githubSync(bool receiveOnly, bool dryRun) const;
-    // Pour les essais (le faux GitHub) : l'adresse de l'API.
-    OpResult githubSetApi(const std::string& api);
-
-    // ---- 1.34.0 : la passerelle des clients ----
-    [[nodiscard]] const PasserelleStatus& passerelle() const noexcept { return passerelle_; }
-    // Le depot PUBLIC (proprietaire/nom) et la branche.
-    OpResult passerelleConfigure(const std::string& repo, const std::string& branch);
-    // Le jeton des demandes (celui des clients : Issues seulement) ; jamais garde par le Workspace.
-    OpResult passerelleSaveRequestToken(const std::string& token);
-    OpResult passerelleEraseRequestToken();
-    // Pour les essais (le faux GitHub local) : les adresses de l'API et de raw.
-    OpResult passerelleSetAddress(const std::string& api, const std::string& raw);
-    // LENT (le reseau) : par Background / runSlow.
-    [[nodiscard]] OpResult passerelleVerify() const;
-    [[nodiscard]] OpResult passerellePublishConfig() const;
-    [[nodiscard]] OpResult passerelleFetch() const;
-    // Refuser la demande en attente de ce poste (son identifiant, ou "#<issue>").
-    [[nodiscard]] OpResult passerelleRefuse(const std::string& device, const std::string& reason) const;
-    [[nodiscard]] OpResult passerelleRun(const GatewayJob& job) const;
-    // Ce que la derniere operation a laisse a publier (rien si la passerelle n'est pas reglee).
-    [[nodiscard]] bool hasGatewayJob() const noexcept { return job_.has_value(); }
-    std::optional<GatewayJob> takeGatewayJob();
-    // Remettre un travail pris (la publication n'a pas pu commencer : un autre travail tournait).
-    void queueGatewayJob(GatewayJob job);
+    // ---- 1.35.0 : le service des licences ----
+    [[nodiscard]] const ServiceStatus& service() const noexcept { return service_; }
+    // L'adresse du service (https://..., ou http://127.0.0.1 pour les essais).
+    OpResult serviceConfigure(const std::string& url);
+    // La cle de synchro de l'archive : la creer (`recoveryCode` recoit son code de secours, a noter hors du PC), ou la
+    // redonner par un code (un autre poste ; `replace` : une autre cle deja la est mise de cote).
+    OpResult syncKeyCreate(std::string* recoveryCode);
+    OpResult syncKeyRestore(const std::string& code, bool replace);
+    [[nodiscard]] std::string syncRecoveryCode(std::string* why) const;
+    // LENT (le reseau) : par runSlow. `state` (facultatif) : ce qui a ete lu, a adopter ensuite (adoptServiceState).
+    [[nodiscard]] OpResult serviceVerify(online::ServiceState* state = nullptr) const;
+    [[nodiscard]] OpResult serviceReadKey(std::string& keyHex) const;
+    [[nodiscard]] OpResult serviceCertify(const std::string& expectedKey) const;
+    [[nodiscard]] archive::SyncReport archiveSync(bool receiveOnly, bool dryRun) const;
+    [[nodiscard]] OpResult serviceListLicences(online::Snapshot& out) const;
+    [[nodiscard]] OpResult serviceRetire(const std::string& licenseId, const std::string& deviceKey) const;
+    [[nodiscard]] OpResult serviceSetActive(const std::string& licenseId, bool active) const;
+    [[nodiscard]] OpResult serviceFetch() const;
+    [[nodiscard]] OpResult serviceRefuse(const std::string& which, const std::string& reason) const;
+    [[nodiscard]] OpResult serviceStats() const;
+    [[nodiscard]] OpResult serviceRun(const ServiceJob& job) const;
+    // Sur le fil de l'interface : ce qu'un travail lent a lu.
+    void adoptServiceState(const online::ServiceState& state);
+    void adoptSnapshot(online::Snapshot snapshot);
+    // Ce que la derniere operation a laisse a publier (rien si le service n'est pas regle).
+    [[nodiscard]] bool hasServiceJob() const noexcept { return job_.has_value(); }
+    std::optional<ServiceJob> takeServiceJob();
+    void queueServiceJob(ServiceJob job);
+    // Une LICENCE EN LIGNE : la signer (aucun PC), la ranger, tirer un CODE D'ACTIVATION neuf. Rien n'est envoye : `job`
+    // la depose (par runSlow, serviceRun) ; `code` (le code lisible) n'est a montrer qu'une fois ce depot reussi, puis a
+    // oublier. `outPath` (facultatif) : une copie du .xpglic. `requestNumber` : la demande manuelle a laquelle elle repond.
+    // Une licence en ligne PROLONGEE (draft.extend) : une emission plus recente, le meme code (`code` vide, l'empreinte
+    // absente : le service garde la sienne).
+    OpResult prepareOnlineLicence(const LicenceDraft& draft, const std::string& outPath, ServiceJob& job, std::string& code, int requestNumber = 0);
+    // Un code neuf pour une licence en ligne de l'archive (l'ancien ne marche plus une fois deposee).
+    OpResult prepareNewCode(const std::string& licenseId, ServiceJob& job, std::string& code);
     // Une demande relevee (dans demandes-en-ligne/) ? Ou ecrire la licence qui lui repond (sans rien demander).
     [[nodiscard]] bool isOnlineRequest(const std::string& path) const;
     [[nodiscard]] std::string onlineLicencePath(const std::string& licenseId) const;
-    [[nodiscard]] const passerelle::Entry* onlineRequest(int issue) const;
+    [[nodiscard]] const online::Entry* onlineRequest(int number) const;
     // La demande relevee dont `path` est le .xpgreq (nullptr : ce n'en est pas une).
-    [[nodiscard]] const passerelle::Entry* onlineRequestAt(const std::string& path) const;
-    // Les fichiers PUBLICS a compiler dans les Studios (la cle publique, le registre, l'adresse de la passerelle).
+    [[nodiscard]] const online::Entry* onlineRequestAt(const std::string& path) const;
+    // Une licence de l'archive est-elle EN LIGNE (son champ service) ?
+    [[nodiscard]] static bool isOnlineLicence(const licensing::License& l) { return !l.service.empty(); }
+    // Les fichiers PUBLICS a compiler dans les Studios (la cle publique, le registre, l'adresse du service).
     OpResult studioKit(const std::string& outDir) const;
 
 private:
     void loadKey();
     void loadArchive();
     void loadActivations();
-    void loadGithub();
-    void loadPasserelle();
+    void loadService();
     OpResult archiveAndNote(const std::string& bytes, const std::vector<ActivationRecord>& records, OpResult r);
     [[nodiscard]] std::string archivedText(const std::string& relative) const;
     OpResult signRevocationList(licensing::RevocationList list, const std::string& what);
@@ -314,9 +325,8 @@ private:
     std::vector<std::string>               archiveProblems_;
     std::vector<ActivationRecord>          records_;
     int                                    skipped_{0};
-    GithubStatus                           github_;
-    PasserelleStatus                       passerelle_;
-    std::optional<GatewayJob>              job_;
+    ServiceStatus                          service_;
+    std::optional<ServiceJob>              job_;
 };
 
 // ---- un travail lent sur un fil a part : l'interface le suit sans attendre (jamais bloquee) ----

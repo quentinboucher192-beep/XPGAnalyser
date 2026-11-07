@@ -92,26 +92,51 @@ inline std::atomic<RequireFn> g_require{nullptr};
 // Le libelle d'une fonctionnalite (le registre ; sinon son identifiant).
 [[nodiscard]] std::string featureLabel(std::string_view feature);
 
-// La pastille de la barre d'etat : "Licence PROFESSIONAL \xC2\xB7 valide jusqu'au 2027-03-31".
+// 1.35.0 : LA LICENCE ACTIVE, TOUJOURS VISIBLE - la pastille de la barre d'etat (badge) et l'indicateur du bandeau
+// haut (indicator, la meme phrase ; vide quand les licences ne sont pas actives) :
+//   "Licence : PROFESSIONAL \xC2\xB7 jusqu'au 07/11/2027", "D\xC3\xA9" "couverte \xC2\xB7 23 j",
+//   "Bail : 5 j \xE2\x80\x94 connecte-toi", "Flottante \xC2\xB7 poste pris", "Sans licence"...
+// Un clic : la fenetre Licence.
 struct Badge {
     std::string text;
+    std::string shortText;   // la forme courte (un bandeau serre) : "PROFESSIONAL", "D\xC3\xA9" "couverte \xC2\xB7 23 j"
     std::string tip;
-    int         tone{0};     // 0 neutre, 1 bon, 2 attention, 3 erreur
+    int         tone{0};     // 0 neutre, 1 bon, 2 attention, 3 erreur, 4 information (la Decouverte)
 };
 [[nodiscard]] Badge badge();
+[[nodiscard]] Badge indicator();
 
-// ---- 1.34.0 : LES AVIS DE LA LICENCE ET LA PASSERELLE EN LIGNE (app/LicenceGateway) ----
+// 1.35.0 : l'encart de la licence sur l'accueil (le menu principal) - la licence active, la Decouverte et ses jours,
+// le bail qui finit, sans licence -> << Activer avec un code... >>. Un titre vide : pas d'encart (licences pas
+// actives, poste d'exploitation).
+struct Card {
+    std::string title, text;
+    int         tone{0};          // comme Badge::tone
+    std::string button;           // "Licence\xE2\x80\xA6", "Activer avec un code\xE2\x80\xA6"
+    int         tab{0};           // l'onglet de la fenetre Licence qu'ouvre le bouton
+};
+[[nodiscard]] Card startCard();
+
+// Les onglets de la fenetre Licence (1.35.0 : Activation en tete ; -1 : le plus utile - Ma licence pour une licence
+// par fichier valable, sinon Activation).
+inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevices = 2, kTabFeatures = 3, kTabEditions = 4, kTabHistory = 5,
+                     kTabSettings = 6, kTabRequest = 7;
+
+// ---- 1.34.0 / 1.35.0 : LES AVIS DE LA LICENCE ET LE SERVICE DES LICENCES (app/LicenceService) ----
 //  App, apres start(), SAUF le poste d'exploitation (--ihm : personne devant l'ecran) : startNotices(true).
-//    - l'evaluation : a CHAQUE lancement, tant qu'elle court, un avis de la cloche (bouton Licence...) et la
+//    - la Decouverte : a CHAQUE lancement, tant qu'elle court, un avis de la cloche (bouton Licence...) et la
 //      phrase launchNotice() sur l'accueil ; revalue a chaque refresh (les jours qui restent) ;
-//    - `online` : la passerelle (si ce programme en a une) - une verification sur un fil de travail tout de
-//      suite, puis une par heure tant qu'une demande attend ; ce qu'elle apporte (une licence installee, un
-//      refus) devient un avis de la cloche et un message de la barre d'etat (takeMessages).
+//    - 1.35.0 : le bail d'une licence en ligne qui finit dans 7 jours (ou fini) : un avis, tenu a jour ;
+//    - `online` : le service des licences (si ce programme en a un) - le fil de fond (heure, renouvellement,
+//      Decouverte, code de l'installateur, jeton flottant, demande manuelle) ; ce qu'il apporte devient un avis
+//      de la cloche et un message de la barre d'etat (takeMessages).
 //  Jamais une fenetre qui bloque le demarrage.
 void startNotices(bool online);
-// "\xC3\x89valuation : il te reste 12 jours (jusqu'au 19/11/2026)." ; vide : pas en evaluation.
-[[nodiscard]] std::string evaluationText(const licensing::LicenseState& st);
-// La phrase de l'evaluation pour l'accueil (vide : rien a dire, ou startNotices pas appele).
+// "D\xC3\xA9" "couverte : il te reste 12 jours (jusqu'au 19/11/2026)." ; vide : pas en Decouverte.
+[[nodiscard]] std::string discoveryText(const licensing::LicenseState& st);
+// "Bail : il reste 5 jours \xE2\x80\x94 connecte ce PC \xC3\xA0 Internet avant le 12/11/2026." ; vide : rien a dire.
+[[nodiscard]] std::string leaseText(const licensing::LicenseState& st);
+// La phrase de la licence pour l'accueil (la Decouverte, le bail ; vide : rien a dire, ou startNotices pas appele).
 [[nodiscard]] std::string launchNotice();
 // Un avis de la cloche de la licence (bouton << Licence... >> : la fenetre Licence) ; tone : "ok", "info",
 // "warning", "error".
@@ -119,13 +144,16 @@ void postNotice(const std::string& key, const std::string& title, const std::str
 // Les messages pour la barre d'etat (App les publie : StatusNotice), sures entre fils.
 void queueMessage(std::string text);
 [[nodiscard]] std::vector<std::string> takeMessages();
-// A la fermeture (App) : le fil de la passerelle s'arrete (la requete en cours est coupee).
+// A la fermeture (App) : le fil du service s'arrete (la requete en cours est coupee, le jeton flottant rendu).
 void shutdown();
+
+// "07/11/2027" (une date de licence, UTC) ; vide : 0.
+[[nodiscard]] std::string dayOf(licensing::Seconds at);
 
 } // namespace licence
 
-// La fenetre Licence (le License Manager du client) ; `tab` : 0 Ma licence, 1 Mes appareils,
-// 2 Fonctionnalites, 3 Editions, 4 Historique, 5 Parametres, 6 (1.34.0) Demande en ligne.
-void showLicenceWindow(App& app, int tab = 0);
+// La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
+// 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
+void showLicenceWindow(App& app, int tab = licence::kTabAuto);
 
 } // namespace app

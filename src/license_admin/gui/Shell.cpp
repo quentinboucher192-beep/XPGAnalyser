@@ -22,19 +22,6 @@
 #include <system_error>
 #include <vector>
 
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <windows.h>
-#include <shellapi.h>
-#else
-#include <spawn.h>
-#include <sys/wait.h>
-#include <thread>
-extern char** environ;
-#endif
-
 namespace license_admin::gui {
 
 namespace {
@@ -135,34 +122,6 @@ std::string clockOf(Seconds t) {
     return b;
 }
 
-// 1.34.0 : une page de GitHub dans le navigateur du systeme (l'adresse est verifiee avant : safeGithubUrl). Vide :
-// ouverte ; sinon la phrase.
-std::string openUrlWithSystem(const std::string& url) {
-#if defined(_WIN32)
-    const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
-    std::wstring w(static_cast<std::size_t>(n > 0 ? n : 1), L'\0');
-    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, w.data(), n);
-    const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (r <= 32) return "Windows n'a pas pu ouvrir le navigateur (code " + std::to_string(static_cast<long long>(r)) + ").";
-    return {};
-#else
-#  if defined(__APPLE__)
-    const char* tool = "open";
-#  else
-    const char* tool = "xdg-open";
-#  endif
-    std::string a0 = tool, a1 = url;
-    char* argv[] = {a0.data(), a1.data(), nullptr};
-    pid_t pid = 0;
-    if (posix_spawnp(&pid, tool, nullptr, nullptr, argv, environ) != 0) return std::string("aucun navigateur n'a pu s'ouvrir (") + tool + " manque ?)";
-    std::thread([pid] {
-        int status = 0;
-        (void)waitpid(pid, &status, 0);
-    }).detach();
-    return {};
-#endif
-}
-
 std::string parentFolder(const std::string& path) {
     const std::filesystem::path p(std::u8string(path.begin(), path.end()));
     std::error_code ec;
@@ -200,7 +159,7 @@ private:
 class NavItem final : public ui::Button {
 public:
     NavItem(const Shell::NavEntry& e, const Shell& shell) : ui::Button(e.label, std::string("nav.") + e.id), e_(e), shell_(shell) {
-        if (e.online) setTooltip("Demande le service de licences en ligne, pas encore fait : la page explique ce qu'elle fera.");
+        if (e.online) setTooltip("Demande un paiement en ligne, pas encore fait : la page explique ce qu'elle fera.");
     }
 
 protected:
@@ -291,7 +250,7 @@ protected:
         ctx.r.drawText({pill.x + 8.f, pill.y + (pill.h - ctx.r.lineHeight(kF12)) * 0.5f}, only, kF12, c.warning);
         ctx.r.fillRect({b.x + 16.f, b.y + 88.f, b.w - 32.f, 1.f}, c.border);
         if (captionY_ >= 0.f)
-            ctx.r.drawText({b.x + 20.f, captionY_ + 4.f}, "SERVICE EN LIGNE \xC2\xB7 PAS ENCORE", kF12, c.textMuted);
+            ctx.r.drawText({b.x + 20.f, captionY_ + 4.f}, "VENTE EN LIGNE \xC2\xB7 PAS ENCORE", kF12, c.textMuted);
         if (sepY_ >= 0.f) ctx.r.fillRect({b.x + 16.f, sepY_, b.w - 32.f, 1.f}, c.border);
         if (folder_->visible()) {
             const std::string v = std::string("v") + kAppVersion;
@@ -358,7 +317,7 @@ public:
         key_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.cle")));
         sync_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.synchro")));
         links += key_->clicked->connect([this] { shell_.navigate("securite"); });
-        links += sync_->clicked->connect([this] { shell_.navigate("github"); });
+        links += sync_->clicked->connect([this] { shell_.navigate("service"); });
         update();
     }
     // L'etat a montrer (a chaque image : un travail lent commence ou finit).
@@ -371,12 +330,14 @@ public:
             sync_->set(shell_.syncStatusText(), Tone::Info, ui::Icon::Refresh, true, false);
             sync_->setTooltip("Un travail lent tourne sur un autre fil : la fen\xC3\xAAtre reste utilisable. Les op\xC3\xA9rations qui \xC3\xA9" "crivent attendent sa fin.");
         } else {
-            const auto& g = shell_.workspace().github();
-            const Tone t = !g.problem.empty() ? Tone::Error : g.configured && !g.token ? Tone::Warning : Tone::Info;
-            sync_->set(shell_.syncStatusText(), t, ui::Icon::Refresh, false, !g.configured && g.problem.empty());
-            sync_->setTooltip(!g.problem.empty() ? g.problem
-                              : g.configured   ? "Le d\xC3\xA9p\xC3\xB4t GitHub de l'archive (branche " + g.config.branch + ")" + (g.token ? std::string() : std::string(" ; pas de jeton enregistr\xC3\xA9")) + ". Clic : la page Synchronisation GitHub."
-                                               : std::string("La synchro GitHub n'est pas r\xC3\xA9gl\xC3\xA9" "e. Clic : la page Synchronisation GitHub."));
+            const auto& s = shell_.workspace().service();
+            const bool certWarn = s.hasState && (!s.state.certOk || s.state.needsRenewal(shell_.workspace().now()));
+            const Tone t = !s.problem.empty() ? Tone::Error : s.configured && (!s.syncKey || certWarn) ? Tone::Warning : Tone::Info;
+            sync_->set(shell_.syncStatusText(), t, ui::Icon::Globe, false, !s.configured && s.problem.empty());
+            sync_->setTooltip(!s.problem.empty() ? s.problem
+                              : s.configured   ? "Le service des licences : " + s.config.url + (certWarn ? std::string(" ; sa cl\xC3\xA9 est \xC3\xA0 certifier ou \xC3\xA0 renouveler") : std::string()) +
+                                                     ". Clic : la page Service en ligne."
+                                               : std::string("Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9. Clic : la page Service en ligne."));
         }
     }
 
@@ -647,12 +608,12 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"editions", "\xC3\x89" "ditions", ui::Icon::Layers, false},
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"activations", "Activations", ui::Icon::Station, false},
-        {"demandes", "Demandes en ligne", ui::Icon::Import, false},   // 1.34.0 : la passerelle GitHub
-        {"flottantes", "Licences flottantes", ui::Icon::Network, true},
-        {"boutique", "Boutique", ui::Icon::Globe, true},
+        {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
+        {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
+        {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
         {"commandes", "Commandes", ui::Icon::Mail, true},
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
-        {"github", "Synchronisation GitHub", ui::Icon::Refresh, false},
+        {"service", "Service en ligne", ui::Icon::Refresh, false},        // 1.35.0 : a la place de Synchronisation GitHub
         {"historique", "Historique", ui::Icon::History, false},
         {"securite", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9", ui::Icon::Lock, false},
     };
@@ -696,14 +657,6 @@ ShellHost Shell::host() {
     h.openDialog = [this](menu::MenuPtr m) { openDialog(std::move(m)); };
     h.pickFile = [this](const ui::FilePick& p, std::function<void(std::string)> done) { pickFile(p, std::move(done)); };
     h.openFolder = [this](const std::string& f) { openFolder(f); };
-    h.openUrl = [this](const std::string& u) {
-        if (!safeGithubUrl(u)) {
-            report(OpResult::fail("cette adresse ne s'ouvre pas d'ici : " + u));
-            return;
-        }
-        if (const std::string why = openUrlWithSystem(u); !why.empty()) report(OpResult::fail(why));
-        else flash("Ouvert dans ton navigateur : " + u, Tone::Info);
-    };
     return h;
 }
 
@@ -733,9 +686,10 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "fonctionnalites") p = makeFeaturesPage(h);
     else if (id == "activations") p = makeActivationsPage(h);
     else if (id == "demandes") p = makeRequestsPage(h);
-    else if (id == "flottantes" || id == "boutique" || id == "commandes") p = makeOnlinePage(h, id);
+    else if (id == "flottantes") p = makeFloatingPage(h);
+    else if (id == "boutique" || id == "commandes") p = makeOnlinePage(h, id);
     else if (id == "revocations") p = makeRevocationsPage(h);
-    else if (id == "github") p = makeGithubPage(h);
+    else if (id == "service") p = makeServicePage(h);
     else if (id == "historique") p = makeHistoryPage(h);
     else if (id == "securite") p = makeSecurityPage(h);
     if (!p) p = std::make_unique<MissingPage>(h, entry(id)->label);
@@ -813,8 +767,8 @@ bool Shell::poll() {
     pendingDone_ = nullptr;
     if (done) done(*r);
     report(*r);
-    // 1.34.0 : une publication sur la passerelle qui attendait la fin de ce travail.
-    if (!busy() && ws_->hasGatewayJob()) (void)publishToGateway(host());
+    // 1.35.0 : une publication sur le service qui attendait la fin de ce travail.
+    if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());
     return true;
 }
 
@@ -861,7 +815,7 @@ void Shell::dropFiles(const std::vector<std::string>& paths) {
 void Shell::reloadAll() {
     ws_->reload();
     refreshPages();
-    flash("Relu : la cl\xC3\xA9, l'archive, le registre des activations, la synchro.", Tone::Info);
+    flash("Relu : la cl\xC3\xA9, l'archive, le registre des activations, le service.", Tone::Info);
 }
 
 void Shell::setDetailsOpen(bool open) {
@@ -895,15 +849,18 @@ std::string Shell::syncStatusText() const {
         const bool dots = l.size() >= 3 && (l.compare(l.size() - 3, 3, "...") == 0 || l.compare(l.size() - 3, 3, "\xE2\x80\xA6") == 0);
         return dots ? l : l + "\xE2\x80\xA6";
     }
-    const auto& g = ws_->github();
-    if (!g.problem.empty()) return "GitHub : r\xC3\xA9glage illisible";
-    if (!g.configured) return "GitHub : non r\xC3\xA9gl\xC3\xA9";
-    return "GitHub : " + g.config.repo + (g.token ? std::string() : std::string(" (sans jeton)"));
+    const auto& s = ws_->service();
+    if (!s.problem.empty()) return "Service : r\xC3\xA9glage illisible";
+    if (!s.configured) return "Service : non r\xC3\xA9gl\xC3\xA9";
+    std::string host = s.config.url;
+    if (const auto p = host.find("://"); p != std::string::npos) host.erase(0, p + 3);
+    if (s.hasState && !s.state.certOk) return "Service : " + host + " (cl\xC3\xA9 \xC3\xA0 certifier)";
+    return "Service : " + host;
 }
 
 void Shell::Update(const menu::FrameContext& fc) {
     (void)poll();
-    if (!busy() && ws_->hasGatewayJob()) (void)publishToGateway(host());   // 1.34.0 : une publication en attente
+    if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());   // 1.35.0 : une publication en attente
     if (view_) static_cast<ShellView*>(view_)->updateTop();
     menu::WidgetMenu::Update(fc);
 }

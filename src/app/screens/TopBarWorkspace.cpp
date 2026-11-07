@@ -116,6 +116,12 @@ void MainAnalysisScreen::refreshTopBarLot8() {
     if (!tick) return;
     topBarNoticesAt_ = now;
 
+    // 1.35.0 : la licence active, toujours visible dans le bandeau (licence::indicator ; un clic : la fenetre Licence).
+    {
+        const auto b = licence::indicator();
+        topBar_->setLicence({b.text, b.shortText, b.tip, b.tone});
+    }
+
     // 1.11 (R111, decisions 6 et 15) : les conditions d'activation manquantes
     // d'un projet importe avant la 1.8.0 - l'avis de la cloche, pose des
     // l'ouverture, tenu a jour chaque seconde (un reimport du .XPG qui les rend

@@ -1,6 +1,6 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "Licence.hpp"                 // 1.30.0
-#include "LicenceGateway.hpp"          // 1.34.0 : licence-en-ligne-...
+#include "LicenceService.hpp"          // 1.35.0 : licence-code, licence-renouveler... (le service des licences)
 #include "../licensing/Licensing.hpp"   // 1.30.0
 #include "../core/Edition.hpp"           // 1.30.0 : le nom de l'application (licence-demande)
 #include "../core/Version.hpp"           // 1.30.0
@@ -6061,12 +6061,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
     // 1.30.0 : LES LICENCES. Le message s'ecrit dans la sortie ([script] licence ...).
-    //   licence [ONGLET]            la fenetre Licence (0 Ma licence ... 5 Parametres)
+    //   licence [ONGLET]            la fenetre Licence (1.35.0 : 0 Activation, 1 Ma licence ... 6 Parametres, 7 Demande a l'editeur)
     //   licence-importer FICHIER    importer un .xpglic (comme Activer par fichier de licence), puis l'etat
     //   licence-demande NOM FICHIER ecrire la demande d'activation de ce PC
     //   licence-etat                l'etat (edition, statut, la phrase)
     if (cmd == "licence") {
-        showLicenceWindow(app_, arg(1).empty() ? 0 : std::atoi(arg(1).c_str()));
+        showLicenceWindow(app_, arg(1).empty() ? licence::kTabAuto : std::atoi(arg(1).c_str()));
         return Step::Yield;
     }
     if (cmd == "licence-importer") {
@@ -6089,66 +6089,100 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         std::printf("[script] licence-etat : %s / %s / %s\n", licensing::statusLabel(st.status).c_str(), st.edition.c_str(), st.message.c_str());
         return Step::Yield;
     }
-    // 1.34.0 : LA DEMANDE EN LIGNE (la passerelle GitHub, app/LicenceGateway). Le travail part sur le fil de la
-    // passerelle ; la commande attend sa fin (jusqu'a 3000 images) et ecrit sa phrase. Jamais le jeton.
-    //   licence-en-ligne-envoyer CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE]   envoyer la demande de ce PC (echec : refusee)
-    //   licence-en-ligne-verifier   ce que l'editeur a repondu (une licence acceptee s'installe), le registre, les revocations
-    //   licence-en-ligne-annuler    annuler la demande en cours (signee par ce PC, l'issue fermee)
-    //   licence-en-ligne-etat       le releve local : la demande, sa date, son etat, la derniere phrase
-    if (cmd == "licence-en-ligne-envoyer" || cmd == "licence-en-ligne-verifier" || cmd == "licence-en-ligne-annuler") {
-        namespace lg = licence::gateway;
+    // 1.35.0 : LE SERVICE DES LICENCES (app/LicenceService ; remplace les licence-en-ligne-* de la 1.34).
+    // Le travail part sur le fil du service ; la commande attend la fin d'un travail d'avant (la synchro du
+    // lancement), puis la sienne (jusqu'a 3000 images), et ecrit sa phrase. Echec : le travail n'a pas abouti.
+    // JAMAIS LE CODE dans la sortie (la phrase du service ne le contient pas).
+    //   licence-code CODE [NOM_PC]      activer avec un code (XPG-XXXX-XXXX-XXXX-XXXX)
+    //   licence-renouveler              renouveler le bail (et ce que dit le service : retraits, revocations, poste)
+    //   licence-liberer                 liberer ce poste (la licence en ligne de ce PC)
+    //   licence-flottante-prendre | licence-flottante-rendre   le poste d'une licence flottante
+    //   licence-decouverte              declarer la Decouverte de cette machine
+    //   licence-heure                   l'heure signee du service (le compteur du bail recale)
+    //   licence-demande-en-ligne CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE]   la demande sans code
+    //   licence-demande-annuler | licence-demande-verifier   l'annuler ; ce que l'editeur a repondu
+    //   licence-service-etat            le releve local et l'etat (jamais un code)
+    if (cmd == "licence-code" || cmd == "licence-renouveler" || cmd == "licence-liberer" || cmd == "licence-flottante-prendre" ||
+        cmd == "licence-flottante-rendre" || cmd == "licence-decouverte" || cmd == "licence-heure" || cmd == "licence-demande-en-ligne" ||
+        cmd == "licence-demande-annuler" || cmd == "licence-demande-verifier") {
+        namespace ls = licence::service;
         static bool               started = false;   // une commande a la fois (le script)
         static unsigned long long seen = 0;
         if (retries_ == 0) started = false;
         if (!started) {
-            lg::poll();
-            if (lg::busy()) return Step::Retry;   // un travail d'avant (la verification du lancement) : attendre sa fin
-            if (cmd == "licence-en-ligne-envoyer") {
-                lg::SendForm f;
+            ls::poll();
+            if (ls::busy()) {   // un travail d'avant (la synchro du lancement) : attendre sa fin
+                if (retries_ < 3000) return Step::Retry;
+                fail(cmd + " : un travail du service des licences ne finit pas");
+                return Step::Next;
+            }
+            if (std::string why; !ls::available(&why)) {
+                std::printf("[script] %s : %s\n", cmd.c_str(), why.c_str());
+                fail(cmd + " : " + why);
+                return Step::Yield;
+            }
+            if (cmd == "licence-code") started = ls::startActivate(arg(1), arg(2));
+            else if (cmd == "licence-renouveler") started = ls::startRenew();
+            else if (cmd == "licence-liberer") started = ls::startRelease();
+            else if (cmd == "licence-flottante-prendre") started = ls::startTakeLease();
+            else if (cmd == "licence-flottante-rendre") started = ls::startReturnLease();
+            else if (cmd == "licence-decouverte") started = ls::startTrial();
+            else if (cmd == "licence-heure") started = ls::startTime();
+            else if (cmd == "licence-demande-annuler") started = ls::startCancelRequest();
+            else if (cmd == "licence-demande-verifier") started = ls::startCheckDevice();
+            else {
+                ls::RequestForm f;
                 f.customer = arg(1);
                 f.contact = arg(2);
                 f.pcName = arg(3);
                 f.licenseId = arg(4);
                 f.message = arg(5);
-                started = lg::startSend(f);
-            } else if (cmd == "licence-en-ligne-verifier") {
-                std::string why;
-                if (!lg::available(&why)) {
-                    std::printf("[script] %s : %s\n", cmd.c_str(), why.c_str());
-                    fail(cmd + " : " + why);
-                    return Step::Yield;
-                }
-                started = lg::startCheck();
-            } else {
-                started = lg::startCancel();
+                started = ls::startRequest(f);
             }
             if (!started) {
-                fail(cmd + " : un travail de la passerelle est d\xC3\xA9j\xC3\xA0 en cours");
+                fail(cmd + " : un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours");
                 return Step::Next;
             }
-            seen = lg::revision();
+            seen = ls::revision();
             return Step::Retry;
         }
-        lg::poll();
-        if (lg::busy() || lg::revision() == seen) return Step::Retry;
-        const auto r = lg::lastResult();
+        ls::poll();
+        if (ls::busy() || ls::revision() == seen) {
+            if (retries_ < 3000) return Step::Retry;
+            fail(cmd + " : pas fini");
+            return Step::Next;
+        }
+        const auto r = ls::lastResult();
         std::printf("[script] %s : %s\n", cmd.c_str(), r.message.c_str());
-        if (cmd != "licence-en-ligne-verifier" && !r.ok) fail(cmd + " : " + r.message);
+        if (!r.ok) fail(cmd + " : " + r.message);
         return Step::Yield;
     }
-    if (cmd == "licence-en-ligne-etat") {
-        namespace lg = licence::gateway;
+    if (cmd == "licence-service-etat") {
+        namespace ls = licence::service;
         std::string why;
-        const bool on = lg::available(&why);
-        lg::Record rec;
+        const bool on = ls::available(&why);
+        ls::Record rec;
         std::string problem;
-        if (!lg::loadRecord(rec, &problem)) {
-            std::printf("[script] licence-en-ligne-etat : %s\n", problem.c_str());
-            fail("licence-en-ligne-etat : " + problem);
+        if (!ls::loadRecord(rec, &problem)) {
+            std::printf("[script] licence-service-etat : %s\n", problem.c_str());
+            fail("licence-service-etat : " + problem);
             return Step::Yield;
         }
-        std::printf("[script] licence-en-ligne-etat : %s / %s%s / %s\n", on ? "passerelle" : why.c_str(),
-                    lg::stateText(rec).c_str(), rec.issue > 0 ? (" (n\xC2\xB0 " + std::to_string(rec.issue) + ", envoy\xC3\xA9" "e le " + lg::dateText(rec.sentAt) + ")").c_str() : "",
+        const auto st = licensing::getLicenseState();
+        std::printf("[script] licence-service-etat : %s / %s / %s\n", on ? ls::address().url.c_str() : why.c_str(),
+                    licensing::statusLabel(st.status).c_str(), st.message.c_str());
+        std::printf("[script]   licence en ligne : %s%s%s\n", st.online ? st.licenseId.c_str() : "aucune",
+                    st.online && st.activationUntil ? (" \xC2\xB7 bail jusqu'au " + ls::dateText(st.activationUntil)).c_str() : "",
+                    st.floating ? (st.leaseUntil ? (" \xC2\xB7 flottante, poste pris jusqu'\xC3\xA0 " + ls::dateText(st.leaseUntil)).c_str()
+                                                 : " \xC2\xB7 flottante, aucun poste")
+                                : "");
+        std::printf("[script]   derni\xC3\xA8re connexion : %s \xC2\xB7 renouvellement : %s \xC2\xB7 heure sign\xC3\xA9" "e : %s\n",
+                    rec.lastSync ? ls::dateText(rec.lastSync).c_str() : "jamais", rec.lastRenew ? ls::dateText(rec.lastRenew).c_str() : "jamais",
+                    st.lastServiceSync ? ls::dateText(st.lastServiceSync).c_str() : "jamais");
+        std::printf("[script]   D\xC3\xA9" "couverte : %s%s\n", st.status == licensing::LicenseStatus::Evaluation ? licence::discoveryText(st).c_str() : "-",
+                    rec.trialRecordedAt ? (" \xC2\xB7 enregistr\xC3\xA9" "e par le service le " + ls::dateText(rec.trialRecordedAt)).c_str() : "");
+        std::printf("[script]   demande : %s%s / %s\n", ls::stateText(rec).c_str(),
+                    rec.number > 0 ? (" (n\xC2\xB0 " + std::to_string(rec.number) + ", envoy\xC3\xA9" "e le " + ls::dateText(rec.sentAt) + ")").c_str() : "",
                     rec.lastMessage.empty() ? "-" : rec.lastMessage.c_str());
         return Step::Yield;
     }

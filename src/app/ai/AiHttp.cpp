@@ -80,7 +80,7 @@ enum : int {
     kOptWriteFunction = 20011,
     kOptPostFields = 10015,
     kOptUserAgent = 10018,
-    kOptCustomRequest = 10036,   // 1.31.0 : PATCH, PUT (l'outil de l'editeur et GitHub)
+    kOptCustomRequest = 10036,   // 1.31.0 : PATCH, PUT (l'outil de l'editeur ; 1.35.0 : le service des licences)
     kOptHttpHeader = 10023,
     kOptHeaderData = 10029,
     kOptNoProgress = 43,

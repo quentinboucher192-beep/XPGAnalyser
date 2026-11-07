@@ -8,6 +8,7 @@
 #include "../../core/Json.hpp"
 #include "../../deploy/Crypto.hpp"
 #include "../../deploy/Paths.hpp"
+#include "../../licensing/Service.hpp"
 #include "../../licensing/SignedFile.hpp"
 #include "../../licensing/Time.hpp"
 
@@ -147,8 +148,7 @@ void Workspace::reload() {
     loadKey();
     loadArchive();
     loadActivations();
-    loadGithub();
-    loadPasserelle();
+    loadService();
 }
 
 void Workspace::loadKey() {
@@ -176,7 +176,7 @@ void Workspace::loadKey() {
 
 std::string Workspace::archivedText(const std::string& relative) const {
     std::string text;
-    const std::string path = U(P(github::archiveFolder(folder_)) / P(relative));
+    const std::string path = U(P(archive::archiveFolder(folder_)) / P(relative));
     std::error_code ec;
     if (!fs::is_regular_file(P(path), ec)) return {};
     std::string why;
@@ -205,7 +205,7 @@ void Workspace::loadArchive() {
         else
             archiveProblems_.push_back("liste de r\xC3\xA9vocation : " + why);
     }
-    const fs::path dir = P(github::archiveFolder(folder_)) / kLicencesDir;
+    const fs::path dir = P(archive::archiveFolder(folder_)) / kLicencesDir;
     std::error_code ec;
     if (fs::is_directory(dir, ec)) {
         for (const auto& e : fs::directory_iterator(dir, ec)) {
@@ -250,36 +250,37 @@ void Workspace::loadActivations() {
     if (!readActivations(folder_, records_, &skipped_, &why)) archiveProblems_.push_back("registre des activations : " + why);
 }
 
-void Workspace::loadGithub() {
-    github_ = GithubStatus{};
-    github_.configured = github::configured(folder_);
-    if (github_.configured) {
+void Workspace::loadService() {
+    const bool hadState = service_.hasState;
+    const online::ServiceState state = service_.state;
+    const Seconds stateAt = service_.stateAt;
+    service_ = ServiceStatus{};
+    service_.configured = online::configured(folder_);
+    if (service_.configured) {
         std::string why;
-        if (!github::readConfig(folder_, github_.config, &why)) github_.problem = why;
+        if (!online::readConfig(folder_, service_.config, &why)) service_.problem = why;
     }
-    github_.token = github::hasToken(folder_);
-    github_.syncKey = github::hasSyncKey(folder_);
-    if (github_.syncKey) {
-        github::SyncKey k{};
+    service_.syncKey = archive::hasSyncKey(folder_);
+    if (service_.syncKey) {
+        archive::SyncKey k{};
         std::string why;
-        if (github::loadSyncKey(folder_, k, &why)) github_.syncKeyId = github::syncKeyId(k);
-        else if (github_.problem.empty()) github_.problem = why;
+        if (archive::loadSyncKey(folder_, k, &why)) service_.syncKeyId = archive::syncKeyId(k);
+        else if (service_.problem.empty()) service_.problem = why;
         crypto::wipe(k);
     }
-}
-
-void Workspace::loadPasserelle() {
-    passerelle_ = PasserelleStatus{};
-    passerelle_.configured = passerelle::configured(folder_);
-    if (passerelle_.configured) {
-        std::string why;
-        if (!passerelle::readConfig(folder_, passerelle_.config, &why)) passerelle_.problem = why;
+    service_.lastSync = archive::lastSync(folder_);
+    service_.fetch = online::readFetchState(folder_);
+    service_.requests = online::listRequests(folder_);
+    for (const auto& e : service_.requests) service_.pending += e.waiting() ? 1 : 0;
+    service_.snapshot = online::readSnapshot(folder_);
+    // Le releve d'un AUTRE service (l'adresse a change) ne compte plus.
+    if (!service_.snapshot.url.empty() && service_.snapshot.url != service_.config.url) service_.snapshot = online::Snapshot{};
+    // L'etat lu dans cette seance reste (il ne se relit que par Verifier), s'il est du meme service.
+    if (hadState && service_.ready()) {
+        service_.hasState = true;
+        service_.state = state;
+        service_.stateAt = stateAt;
     }
-    passerelle_.requestToken = passerelle::hasRequestToken(folder_);
-    passerelle_.publisherToken = github::hasToken(folder_);
-    passerelle_.fetch = passerelle::readFetchState(folder_);
-    passerelle_.requests = passerelle::listRequests(folder_);
-    for (const auto& e : passerelle_.requests) passerelle_.pending += e.waiting() ? 1 : 0;
 }
 
 const LicenceEntry* Workspace::licence(const std::string& licenseId) const {
@@ -355,9 +356,14 @@ Dashboard Workspace::dashboard() const {
         if (dev.state == "active") ++d.devices;
         else if (dev.state == "demande") ++d.pendingRequests;
     }
-    d.onlineConfigured = passerelle_.configured && passerelle_.problem.empty();
-    d.onlinePending = passerelle_.pending;
-    d.onlineFetchedAt = passerelle_.fetch.fetchedAt;
+    d.serviceConfigured = service_.ready();
+    d.onlineLicences = static_cast<int>(service_.snapshot.licences.size());
+    d.onlineDevices = service_.snapshot.devices();
+    d.floatingLeases = service_.snapshot.leases();
+    for (const auto& l : service_.snapshot.licences) d.floatingSeats += l.floating() ? l.seats : 0;
+    d.onlinePending = service_.pending;
+    d.snapshotAt = service_.snapshot.at;
+    d.onlineFetchedAt = service_.fetch.fetchedAt;
     const std::size_t n = std::min<std::size_t>(records_.size(), 12);
     for (std::size_t i = 0; i < n; ++i) d.recent.push_back(records_[records_.size() - 1 - i]);
     return d;
@@ -445,13 +451,13 @@ OpResult Workspace::archiveAndNote(const std::string& bytes, const std::vector<A
             r.details.push_back("ATTENTION : le registre des activations n'a pas \xC3\xA9t\xC3\xA9 mis \xC3\xA0 jour (" + why + ") ; le fichier sign\xC3\xA9 est bien \xC3\xA9" "crit.");
     }
     std::string what, why;
-    if (github::archiveSigned(folder_, bytes, github::trustedKeys(signing_.get()), &what, &why))
+    if (archive::archiveSigned(folder_, bytes, archive::trustedKeys(signing_.get()), &what, &why))
         // Une emission de la meme seconde que celle de l'archive n'y entre pas : c'est dit en clair.
         r.details.push_back((what.rfind("plus ancien", 0) == 0 ? std::string("ATTENTION : archive : ") : std::string("Archive : ")) + what + ".");
     else
         r.details.push_back("ATTENTION : pas rang\xC3\xA9 dans l'archive (" + why + ") ; le fichier sign\xC3\xA9 est bien \xC3\xA9" "crit.");
     reload();
-    if (github_.configured) r.details.push_back("\xC3\x80 publier : Synchronisation GitHub \xE2\x80\xBA Synchroniser.");
+    if (service_.ready() && service_.syncKey) r.details.push_back("\xC3\x80 envoyer dans l'archive en ligne : Service en ligne \xE2\x80\xBA Synchroniser l'archive.");
     return r;
 }
 
@@ -487,7 +493,7 @@ OpResult Workspace::importFiles(const std::vector<std::string>& paths) {
             continue;
         }
         std::string what;
-        if (github::archiveSigned(folder_, text, github::trustedKeys(signing_.get()), &what, &why)) {
+        if (archive::archiveSigned(folder_, text, archive::trustedKeys(signing_.get()), &what, &why)) {
             r.details.push_back(name + " : " + what + ".");
             ++stored;
         } else {
@@ -597,35 +603,75 @@ std::string paramsOf(const LicenceDraft& d, const licensing::Registry& reg, cons
 
 } // namespace
 
-OpResult Workspace::preview(const LicenceDraft& d) const {
-    if (!signing_) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
-    if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
-    LicenseInputs in;
-    const LicenceEntry* old = d.extend ? licence(d.licenseId) : nullptr;
-    in.params = paramsOf(d, registry_, old ? &old->licence : nullptr);
-    in.dropDevices = d.dropDevices;
-    in.registry = archivedText(kRegistryRel);
-    in.revocations = archivedText(kRevocationsRel);
-    std::string why;
-    if (d.extend) {
-        const LicenceEntry* l = licence(d.licenseId);
-        if (!l) return OpResult::fail("la licence " + d.licenseId + " n'est pas dans l'archive");
-        if (!readText(l->path, in.existing, &why)) return OpResult::fail(why);
-    }
-    for (const auto& path : d.requestPaths) {
-        std::string req;
-        if (!readText(path, req, &why)) return OpResult::fail(U(P(path).filename()) + " : " + why);
-        in.requests.push_back(std::move(req));
-    }
-    if (in.requests.empty() && !d.extend) return OpResult::fail("il faut au moins une demande d'activation (.xpgreq) du client");
-    std::string out, summary;
-    if (!signLicense(*signing_, in, now(), out, &why, &summary)) return OpResult::fail(why);
-    OpResult r = OpResult::done("La licence " + d.licenseId + " est pr\xC3\xAAte \xC3\xA0 \xC3\xAAtre sign\xC3\xA9" "e :");
+namespace {
+
+// Le resume de signLicense -> les lignes du detail.
+void addSummary(OpResult& r, const std::string& summary) {
     for (std::size_t a = 0, b; a < summary.size(); a = b + 1) {
         b = summary.find('\n', a);
         if (b == std::string::npos) b = summary.size();
         if (b > a) r.details.push_back(summary.substr(a, b - a));
     }
+}
+
+} // namespace
+
+// Les entrees de signLicense, depuis le brouillon (faux : `why`).
+static bool inputsOf(const Workspace& w, const LicenceDraft& d, const std::string& registry, const std::string& revocations, LicenseInputs& in,
+                     std::string* why) {
+    const LicenceEntry* old = d.extend ? w.licence(d.licenseId) : nullptr;
+    in.params = paramsOf(d, w.registry(), old ? &old->licence : nullptr);
+    in.dropDevices = d.dropDevices;
+    in.registry = registry;
+    in.revocations = revocations;
+    if (d.extend) {
+        if (!old) {
+            if (why) *why = "la licence " + d.licenseId + " n'est pas dans l'archive";
+            return false;
+        }
+        if (!readText(old->path, in.existing, why)) return false;
+    }
+    if (d.online) {
+        const auto& s = w.service();
+        if (!s.ready()) {
+            if (why) *why = "le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne) : une licence en ligne le nomme";
+            return false;
+        }
+        if (!d.requestPaths.empty()) {
+            if (why) *why = "une licence en ligne ne lie aucun PC : chaque PC l'active avec son code (retire les demandes)";
+            return false;
+        }
+        in.service = s.config.url;
+        return true;
+    }
+    for (const auto& path : d.requestPaths) {
+        std::string req;
+        if (!readText(path, req, why)) {
+            if (why) *why = U(P(path).filename()) + " : " + *why;
+            return false;
+        }
+        in.requests.push_back(std::move(req));
+    }
+    if (in.requests.empty() && !d.extend) {
+        if (why) *why = "il faut au moins une demande d'activation (.xpgreq) du client";
+        return false;
+    }
+    return true;
+}
+
+OpResult Workspace::preview(const LicenceDraft& d) const {
+    if (!signing_) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
+    if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
+    LicenseInputs in;
+    std::string why;
+    if (!inputsOf(*this, d, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
+    std::string out, summary;
+    if (!signLicense(*signing_, in, now(), out, &why, &summary)) return OpResult::fail(why);
+    OpResult r = OpResult::done("La licence " + d.licenseId + " est pr\xC3\xAAte \xC3\xA0 \xC3\xAAtre sign\xC3\xA9" "e :");
+    addSummary(r, summary);
+    if (d.online)
+        r.details.push_back("En ligne : un code d'activation neuf est tir\xC3\xA9 \xC3\xA0 la signature ; bail de " + std::to_string(d.leaseDays) +
+                            " j (un PC qui ne se connecte plus s'arr\xC3\xAAte au bout).");
     return r;
 }
 
@@ -633,24 +679,11 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     if (!signing_) return OpResult::fail(key_.problem);
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier de licence ?");
+    LicenceDraft bound = d;
     LicenseInputs in;
-    const LicenceEntry* old = d.extend ? licence(d.licenseId) : nullptr;
-    in.params = paramsOf(d, registry_, old ? &old->licence : nullptr);
-    in.dropDevices = d.dropDevices;
-    in.registry = archivedText(kRegistryRel);
-    in.revocations = archivedText(kRevocationsRel);
     std::string why;
-    if (d.extend) {
-        const LicenceEntry* l = licence(d.licenseId);
-        if (!l) return OpResult::fail("la licence " + d.licenseId + " n'est pas dans l'archive");
-        if (!readText(l->path, in.existing, &why)) return OpResult::fail(why);
-    }
-    for (const auto& path : d.requestPaths) {
-        std::string req;
-        if (!readText(path, req, &why)) return OpResult::fail(U(P(path).filename()) + " : " + why);
-        in.requests.push_back(std::move(req));
-    }
-    if (in.requests.empty() && !d.extend) return OpResult::fail("il faut au moins une demande d'activation (.xpgreq) du client");
+    if (d.online && !d.extend) return OpResult::fail("une licence en ligne se signe avec son code (Nouvelle licence en ligne)");
+    if (!inputsOf(*this, bound, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
     std::string out, summary;
     std::vector<ActivationRecord> records;
     if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
@@ -660,31 +693,107 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     }
     if (!writeText(outPath, out, &why)) return OpResult::fail(why);
     OpResult r = OpResult::done("Licence " + d.licenseId + " sign\xC3\xA9" "e : " + outPath);
-    for (std::size_t a = 0, b; a < summary.size(); a = b + 1) {
-        b = summary.find('\n', a);
-        if (b == std::string::npos) b = summary.size();
-        if (b > a) r.details.push_back(summary.substr(a, b - a));
-    }
+    addSummary(r, summary);
     if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
-    if (passerelle_.configured && passerelle_.problem.empty()) {
-        r.details.push_back("Passerelle : la licence part \xC3\xA0 chacun de ses PC (ils la r\xC3\xA9" "cup\xC3\xA8rent seuls au prochain d\xC3\xA9marrage).");
-        const bool allOnline = !d.requestPaths.empty() && std::all_of(d.requestPaths.begin(), d.requestPaths.end(), [this](const std::string& p) {
-            return passerelle::isOnlineRequestPath(folder_, p);
-        });
-        if (!allOnline)
-            r.details.push_back("Un logiciel sans passerelle (une version d'avant la 1.34.0) : envoie-lui aussi ce fichier (Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA "
-                                "Activer par fichier de licence).");
-        GatewayJob job;
-        job.kind = GatewayJob::Kind::Licence;
-        job.label = "Passerelle : publication de " + d.licenseId;
+    licensing::License signedLicence;
+    SignedBlock lb;
+    const bool online = blockOf(out, DocKind::License, lb, nullptr) && licensing::parseLicense(lb.document, signedLicence, nullptr) && isOnlineLicence(signedLicence);
+    if (service_.ready() && online) {
+        // Une licence en ligne prolongee : deposee sur le service, le code reste le meme.
+        r.details.push_back("Service : la nouvelle \xC3\xA9mission part sur le service ; le code d'activation reste le m\xC3\xAAme.");
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::OnlineLicence;
+        job.label = "Service : nouvelle \xC3\xA9mission de " + d.licenseId;
         job.licenseId = d.licenseId;
         job.licenceText = out;
-        queueGatewayJob(std::move(job));
+        job.leaseDays = d.leaseDays;
+        if (const auto* l = service_.snapshot.licence(d.licenseId)) job.leaseDays = l->leaseDays;
+        queueServiceJob(std::move(job));
+    } else if (service_.ready()) {
+        r.details.push_back("Service : la licence part \xC3\xA0 chacun de ses PC (ils la r\xC3\xA9" "cup\xC3\xA8rent seuls \xC3\xA0 leur prochaine connexion).");
+        const bool allOnline = !d.requestPaths.empty() && std::all_of(d.requestPaths.begin(), d.requestPaths.end(), [this](const std::string& p) {
+            return online::isOnlineRequestPath(folder_, p);
+        });
+        if (!allOnline)
+            r.details.push_back("Un logiciel d'avant la 1.35.0 ne lit pas le service : envoie-lui aussi ce fichier (Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA "
+                                "Activer par fichier de licence).");
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::Licence;
+        job.label = "Service : publication de " + d.licenseId;
+        job.licenseId = d.licenseId;
+        job.licenceText = out;
+        queueServiceJob(std::move(job));
     } else {
         r.details.push_back("Envoie ce fichier au client : Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.");
     }
     r.output = outPath;
     return archiveAndNote(out, records, std::move(r));
+}
+
+OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::string& outPath, ServiceJob& job, std::string& code, int requestNumber) {
+    code.clear();
+    if (!signing_) return OpResult::fail(key_.problem);
+    if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
+    if (!draft.online) return OpResult::fail("ce n'est pas une licence en ligne");
+    if (draft.leaseDays < 1 || draft.leaseDays > 366) return OpResult::fail("le bail d'une activation va de 1 \xC3\xA0 366 jours");
+    if (!draft.extend && licence(draft.licenseId))
+        return OpResult::fail("la licence " + draft.licenseId + " est d\xC3\xA9j\xC3\xA0 dans l'archive : choisis un autre identifiant");
+    LicenseInputs in;
+    std::string why;
+    if (!inputsOf(*this, draft, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
+    std::string out, summary;
+    std::vector<ActivationRecord> records;
+    if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
+    if (!outPath.empty()) {
+        std::error_code ec;
+        fs::create_directories(P(outPath).parent_path(), ec);
+        if (!writeText(outPath, out, &why)) return OpResult::fail(why);
+    }
+    job = ServiceJob{};
+    job.kind = ServiceJob::Kind::OnlineLicence;
+    job.label = "Service : d\xC3\xA9p\xC3\xB4t de la licence en ligne " + draft.licenseId;
+    job.licenseId = draft.licenseId;
+    job.licenceText = out;
+    job.leaseDays = draft.leaseDays;
+    job.requestNumber = requestNumber;
+    if (!draft.extend) {
+        // Le code : tire ici, son empreinte seule part au service ; le code lui-meme est rendu a l'appelant (montre une fois).
+        code = licensing::service::newActivationCode();
+        std::string normalized;
+        (void)licensing::service::normalizeCode(code, normalized);
+        job.codeHash = licensing::service::codeHash(normalized);
+        crypto::wipe(normalized.data(), normalized.size());
+    } else if (const auto* s = service_.snapshot.licence(draft.licenseId)) {
+        job.leaseDays = s->leaseDays;   // une prolongation garde le bail du service
+    }
+    OpResult r = OpResult::done(draft.extend ? "Licence en ligne " + draft.licenseId + " prolong\xC3\xA9" "e : la nouvelle \xC3\xA9mission part sur le service (le code reste le m\xC3\xAAme)."
+                                             : "Licence en ligne " + draft.licenseId + " sign\xC3\xA9" "e : elle part sur le service avec l'empreinte d'un code d'activation neuf.");
+    addSummary(r, summary);
+    if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
+    if (!outPath.empty()) r.output = outPath;
+    return archiveAndNote(out, records, std::move(r));
+}
+
+OpResult Workspace::prepareNewCode(const std::string& licenseId, ServiceJob& job, std::string& code) {
+    code.clear();
+    const LicenceEntry* l = licence(licenseId);
+    if (!l) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
+    if (!isOnlineLicence(l->licence)) return OpResult::fail("la licence " + licenseId + " est li\xC3\xA9" "e \xC3\xA0 des PC : elle n'a pas de code d'activation");
+    if (!service_.ready()) return OpResult::fail("le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne)");
+    std::string text, why;
+    if (!readText(l->path, text, &why)) return OpResult::fail(why);
+    code = licensing::service::newActivationCode();
+    std::string normalized;
+    (void)licensing::service::normalizeCode(code, normalized);
+    job = ServiceJob{};
+    job.kind = ServiceJob::Kind::OnlineLicence;
+    job.label = "Service : un code neuf pour " + licenseId;
+    job.licenseId = licenseId;
+    job.licenceText = std::move(text);
+    job.codeHash = licensing::service::codeHash(normalized);
+    if (const auto* s = service_.snapshot.licence(licenseId)) job.leaseDays = s->leaseDays;
+    crypto::wipe(normalized.data(), normalized.size());
+    return OpResult::done("Un code neuf pour la licence " + licenseId + " : il remplace l'ancien d\xC3\xA8s qu'il est d\xC3\xA9pos\xC3\xA9.");
 }
 
 OpResult Workspace::removeDevice(const std::string& licenseId, const std::string& deviceKey, const std::string& outPath) {
@@ -707,10 +816,10 @@ OpResult Workspace::removeDevice(const std::string& licenseId, const std::string
     for (const auto& g : lic.features) d.features.push_back(g.id);
     d.dropDevices = {deviceKey};
     OpResult r = signLicence(d, outPath);
-    if (r.ok && job_ && job_->kind == GatewayJob::Kind::Licence && job_->licenseId == licenseId) {
-        job_->kind = GatewayJob::Kind::Removal;
+    if (r.ok && job_ && job_->kind == ServiceJob::Kind::Licence && job_->licenseId == licenseId) {
+        job_->kind = ServiceJob::Kind::Removal;
         job_->deviceKey = deviceKey;
-        job_->label = "Passerelle : nouvelle \xC3\xA9mission de " + licenseId + " (PC retir\xC3\xA9)";
+        job_->label = "Service : nouvelle \xC3\xA9mission de " + licenseId + " (PC retir\xC3\xA9)";
     }
     if (r.ok) {
         r.message = "PC retir\xC3\xA9 de la licence " + licenseId + " : nouvelle \xC3\xA9mission " + outPath;
@@ -787,16 +896,16 @@ OpResult Workspace::revoke(const std::string& licenseId, const std::string& devi
     if (!deviceKey.empty()) {
         if (!onlyThisIssue) keys.push_back(deviceKey);
     } else if (const LicenceEntry* l = licence(licenseId); l && !onlyThisIssue)
-        for (const auto& dv : l->licence.devices) keys.push_back(dv.key);
+        for (const auto& dv : l->licence.devices) keys.push_back(dv.key);   // une licence en ligne n'en a pas : le service suffit
     OpResult r = signRevocationList(std::move(list), what);
-    if (r.ok && passerelle_.configured && passerelle_.problem.empty()) {
-        GatewayJob job;
-        job.kind = GatewayJob::Kind::Revocation;
-        job.label = "Passerelle : r\xC3\xA9vocation de " + licenseId;
+    if (r.ok && service_.ready()) {
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::Revocation;
+        job.label = "Service : r\xC3\xA9vocation de " + licenseId;
         job.licenseId = licenseId;
         job.deviceKeys = std::move(keys);
         job.reason = reason;
-        queueGatewayJob(std::move(job));
+        queueServiceJob(std::move(job));
     }
     return r;
 }
@@ -807,16 +916,16 @@ OpResult Workspace::unrevoke(std::size_t index) {
     const auto removed = list.revoked[index];
     list.revoked.erase(list.revoked.begin() + static_cast<std::ptrdiff_t>(index));
     OpResult r = signRevocationList(std::move(list), "R\xC3\xA9vocation retir\xC3\xA9" "e : " + removed.licenseId + (removed.device.empty() ? "" : " (un PC)") + ".");
-    if (r.ok && passerelle_.configured && passerelle_.problem.empty()) {
-        GatewayJob job;
-        job.kind = GatewayJob::Kind::Unrevoke;
-        job.label = "Passerelle : r\xC3\xA9vocation retir\xC3\xA9" "e (" + removed.licenseId + ")";
+    if (r.ok && service_.ready()) {
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::Unrevoke;
+        job.label = "Service : r\xC3\xA9vocation retir\xC3\xA9" "e (" + removed.licenseId + ")";
         job.licenseId = removed.licenseId;
-        if (const LicenceEntry* l = licence(removed.licenseId)) {
+        if (const LicenceEntry* l = licence(removed.licenseId); l && !isOnlineLicence(l->licence)) {
             std::string why;
             (void)readText(l->path, job.licenceText, &why);
         }
-        queueGatewayJob(std::move(job));
+        queueServiceJob(std::move(job));
     }
     if (r.ok) r.details.push_back("Un client qui a d\xC3\xA9j\xC3\xA0 import\xC3\xA9 l'ancienne liste la garde jusqu'\xC3\xA0 ce qu'il re\xC3\xA7oive celle-ci.");
     return r;
@@ -846,11 +955,11 @@ OpResult Workspace::signRegistry(const licensing::Registry& edited) {
                                 + ", " + plural(static_cast<int>(reg.features.size()), "fonctionnalit\xC3\xA9", "fonctionnalit\xC3\xA9s") + ").");
     r.details.push_back("Il part avec chaque licence sign\xC3\xA9" "e ensuite ; un client l'a \xC3\xA0 sa prochaine licence.");
     OpResult done = archiveAndNote(out, {}, std::move(r));
-    if (done.ok && passerelle_.configured && passerelle_.problem.empty()) {
-        GatewayJob job;
-        job.kind = GatewayJob::Kind::Registry;
-        job.label = "Passerelle : publication du registre n\xC2\xB0 " + std::to_string(reg.number);
-        queueGatewayJob(std::move(job));
+    if (done.ok && service_.ready()) {
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::Registry;
+        job.label = "Service : d\xC3\xA9p\xC3\xB4t du registre n\xC2\xB0 " + std::to_string(reg.number);
+        queueServiceJob(std::move(job));
     }
     return done;
 }
@@ -868,11 +977,11 @@ OpResult Workspace::signRegistryJson(const std::string& path) {
                               + ") : augmente \"number\"");
     OpResult r = OpResult::done("Registre n\xC2\xB0 " + std::to_string(reg.number) + " sign\xC3\xA9 depuis " + U(P(path).filename()) + ".");
     OpResult done = archiveAndNote(out, {}, std::move(r));
-    if (done.ok && passerelle_.configured && passerelle_.problem.empty()) {
-        GatewayJob job;
-        job.kind = GatewayJob::Kind::Registry;
-        job.label = "Passerelle : publication du registre n\xC2\xB0 " + std::to_string(reg.number);
-        queueGatewayJob(std::move(job));
+    if (done.ok && service_.ready()) {
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::Registry;
+        job.label = "Service : d\xC3\xA9p\xC3\xB4t du registre n\xC2\xB0 " + std::to_string(reg.number);
+        queueServiceJob(std::move(job));
     }
     return done;
 }
@@ -887,194 +996,19 @@ OpResult Workspace::exportCsv(const std::vector<KnownDevice>& list, const std::s
     return r;
 }
 
-// ------------------------------------------------------------------------------------------------------ GitHub
-OpResult Workspace::githubConfigure(const std::string& repo, const std::string& branch, const std::string& root, const std::string& code, bool replace,
-                                    std::string* recoveryCodeOut) {
-    if (recoveryCodeOut) recoveryCodeOut->clear();
-    if (!github::validRepo(repo)) return OpResult::fail("le d\xC3\xA9p\xC3\xB4t s'\xC3\xA9" "crit PROPRIETAIRE/NOM (par exemple ton-compte/licences-xpg)");
-    const std::string br = branch.empty() ? std::string("main") : branch;
-    if (!github::validBranch(br)) return OpResult::fail("nom de branche non valide : " + br);
-    if (!github::validRoot(root)) return OpResult::fail("dossier du d\xC3\xA9p\xC3\xB4t non valide : " + root);
-    github::Config c;
-    std::string why;
-    if (github::configured(folder_) && !github::readConfig(folder_, c, &why)) c = github::Config{};
-    c.repo = repo;
-    c.branch = br;
-    c.root = root;
-    github::SyncKey sk{};
-    std::string kept;
-    OpResult r = OpResult::done("");
-    if (!code.empty()) {   // d'abord la cle : un code refuse ne change rien
-        if (!github::restoreSyncKey(folder_, code, sk, &why, replace, &kept)) return OpResult::fail(why);
-        r.details.push_back("Cl\xC3\xA9 de synchro redonn\xC3\xA9" "e par le code de secours : " + github::syncKeyId(sk) + ".");
-        if (!kept.empty()) r.details.push_back("L'ancienne est gard\xC3\xA9" "e \xC3\xA0 c\xC3\xB4t\xC3\xA9 : " + kept);
-    }
-    if (!github::writeConfig(folder_, c, &why)) {
-        crypto::wipe(sk);
-        return OpResult::fail(why);
-    }
-    r.message = "Synchro GitHub r\xC3\xA9gl\xC3\xA9" "e : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + (c.root.empty() ? std::string() : ", dossier " + c.root) + ".";
-    if (code.empty()) {
-        if (github::hasSyncKey(folder_)) {
-            if (github::loadSyncKey(folder_, sk, &why)) r.details.push_back("Cl\xC3\xA9 de synchro d\xC3\xA9j\xC3\xA0 sur ce poste : " + github::syncKeyId(sk) + ".");
-            else r.details.push_back("ATTENTION : la cl\xC3\xA9 de synchro de ce poste ne se lit pas (" + why + ").");
-        } else if (github::createSyncKey(folder_, sk, &why)) {
-            r.details.push_back("Cl\xC3\xA9 de synchro cr\xC3\xA9\xC3\xA9" "e : " + github::syncKeyId(sk) + ". NOTE SON CODE DE SECOURS hors de ce PC.");
-            if (recoveryCodeOut) *recoveryCodeOut = github::recoveryCode(sk);
-        } else {
-            crypto::wipe(sk);
-            reload();
-            return OpResult::fail(why);
-        }
-    }
-    crypto::wipe(sk);
-    reload();
-    r.details.push_back(github_.token ? "Ensuite : V\xC3\xA9rifier, puis Synchroniser." : "Ensuite : le jeton GitHub de ce d\xC3\xA9p\xC3\xB4t.");
-    return r;
-}
-
-OpResult Workspace::githubSaveToken(const std::string& token) {
-    std::string t = token;
-    while (!t.empty() && (t.back() == '\r' || t.back() == '\n' || t.back() == ' ')) t.pop_back();
-    while (!t.empty() && t.front() == ' ') t.erase(0, 1);
-    const std::string kind = github::tokenKind(t);
-    std::string why;
-    const bool ok = github::saveToken(folder_, t, &why);
-    std::fill(t.begin(), t.end(), '\0');
-    if (!ok) return OpResult::fail(why);
-    reload();
-    OpResult r = OpResult::done("Jeton GitHub enregistr\xC3\xA9" + (kind.empty() ? std::string() : " (" + kind + ")") + ", prot\xC3\xA9g\xC3\xA9 pour ce compte"
-                                + (crypto::protectedHere() ? " Windows (DPAPI)." : "."));
-    if (kind.empty()) r.details.push_back("Attention : ce jeton n'a pas une forme connue (github_pat_..., ghp_...).");
-    return r;
-}
-
-OpResult Workspace::githubEraseToken() {
-    std::string why;
-    if (!github::eraseToken(folder_, &why)) return OpResult::fail(why);
-    reload();
-    OpResult r = OpResult::done("Jeton GitHub retir\xC3\xA9 de ce poste.");
-    r.details.push_back("Pense aussi \xC3\xA0 le r\xC3\xA9voquer sur GitHub : Settings \xE2\x80\xBA Developer settings.");
-    return r;
-}
-
-std::string Workspace::githubRecoveryCode(std::string* why) const {
-    github::SyncKey sk{};
-    if (!github::loadSyncKey(folder_, sk, why)) return {};
-    std::string code = github::recoveryCode(sk);
-    crypto::wipe(sk);
-    return code;
-}
-
-github::SyncReport Workspace::githubSync(bool receiveOnly, bool dryRun) const {
-    github::SyncOptions o;
-    o.receiveOnly = receiveOnly;
-    o.dryRun = dryRun;
-    o.now = now();
-    o.tool = std::string(kAppName) + " " + kAppVersion;
-    std::string why;
-    auto key = loadPublisherKey(folder_, &why);   // une copie a ce fil : le Workspace n'est pas partage
-    return github::synchronize(folder_, key.get(), o);
-}
-
-OpResult Workspace::githubSetApi(const std::string& api) {
-    github::Config c;
-    std::string why;
-    if (!github::readConfig(folder_, c, &why)) return OpResult::fail(why);
-    c.api = api;
-    if (!github::writeConfig(folder_, c, &why)) return OpResult::fail(why);
-    reload();
-    return OpResult::done("API GitHub : " + api);
-}
-
-// -------------------------------------------------------------------------------------------- la passerelle
+// ------------------------------------------------------------------------------------------------- le service
 namespace {
 
-OpResult fromResult(const passerelle::Result& x) {
+OpResult fromResult(const online::Result& x) {
     OpResult r;
     r.ok = x.ok;
     r.message = x.message;
     r.details = x.details;
-    if (!x.published.empty())
-        r.details.push_back(plural(static_cast<int>(x.published.size()), "fichier \xC3\xA9" "crit", "fichiers \xC3\xA9" "crits") + " dans le d\xC3\xA9p\xC3\xB4t de la passerelle.");
     return r;
 }
 
-std::string trimmedCopy(const std::string& in) {
-    std::string t = in;
-    while (!t.empty() && (t.back() == '\r' || t.back() == '\n' || t.back() == ' ' || t.back() == '\t')) t.pop_back();
-    std::size_t a = 0;
-    while (a < t.size() && (t[a] == ' ' || t[a] == '\t')) ++a;
-    return t.substr(a);
-}
-
-} // namespace
-
-void Workspace::queueGatewayJob(GatewayJob job) { job_ = std::move(job); }
-
-std::optional<GatewayJob> Workspace::takeGatewayJob() {
-    std::optional<GatewayJob> out;
-    out.swap(job_);
-    return out;
-}
-
-OpResult Workspace::passerelleConfigure(const std::string& repoIn, const std::string& branchIn) {
-    const std::string repo = trimmedCopy(repoIn);
-    const std::string branch = trimmedCopy(branchIn).empty() ? std::string("main") : trimmedCopy(branchIn);
-    if (!licensing::gateway::validRepo(repo)) return OpResult::fail("le d\xC3\xA9p\xC3\xB4t s'\xC3\xA9" "crit PROPRIETAIRE/NOM (par exemple ton-compte/passerelle-licences)");
-    if (!licensing::gateway::validBranch(branch)) return OpResult::fail("nom de branche non valide : " + branch);
-    if (github_.configured && github_.config.repo == repo)
-        return OpResult::fail("c'est le d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 de l'archive des licences : la passerelle doit \xC3\xAAtre un autre d\xC3\xA9p\xC3\xB4t, PUBLIC");
-    passerelle::Config c;
-    std::string why;
-    if (passerelle::configured(folder_) && !passerelle::readConfig(folder_, c, &why)) c = passerelle::Config{};
-    c.repo = repo;
-    c.branch = branch;
-    if (!passerelle::writeConfig(folder_, c, &why)) return OpResult::fail(why);
-    reload();
-    OpResult r = OpResult::done("Passerelle r\xC3\xA9gl\xC3\xA9" "e : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + ".");
-    if (!passerelle_.requestToken) r.details.push_back("Ensuite : le jeton des demandes (celui des clients), puis V\xC3\xA9rifier et Publier la configuration.");
-    else r.details.push_back("Ensuite : V\xC3\xA9rifier, puis Publier la configuration.");
-    return r;
-}
-
-OpResult Workspace::passerelleSaveRequestToken(const std::string& token) {
-    std::string t = trimmedCopy(token);
-    if (t.empty()) return OpResult::fail("colle d'abord le jeton des demandes");
-    std::string why;
-    const bool ok = passerelle::saveRequestToken(folder_, t, &why);
-    std::fill(t.begin(), t.end(), '\0');
-    if (!ok) return OpResult::fail(why);
-    reload();
-    OpResult r = OpResult::done(std::string("Jeton des demandes enregistr\xC3\xA9, prot\xC3\xA9g\xC3\xA9 pour ce compte") + (crypto::protectedHere() ? " Windows (DPAPI)." : "."));
-    r.details.push_back("Il part chez les clients, masqu\xC3\xA9, avec \xC2\xAB Publier la configuration \xC2\xBB : il ne doit permettre QUE les issues de ce d\xC3\xA9p\xC3\xB4t.");
-    return r;
-}
-
-OpResult Workspace::passerelleEraseRequestToken() {
-    std::string why;
-    if (!passerelle::eraseRequestToken(folder_, &why)) return OpResult::fail(why);
-    reload();
-    OpResult r = OpResult::done("Jeton des demandes retir\xC3\xA9 de ce poste.");
-    r.details.push_back("Il reste dans la configuration d\xC3\xA9j\xC3\xA0 publi\xC3\xA9" "e : pour le couper, r\xC3\xA9voque-le sur GitHub (Settings \xE2\x80\xBA Developer settings).");
-    return r;
-}
-
-OpResult Workspace::passerelleSetAddress(const std::string& api, const std::string& raw) {
-    passerelle::Config c;
-    std::string why;
-    if (!passerelle::readConfig(folder_, c, &why)) return OpResult::fail(why);
-    c.api = api;
-    c.raw = raw;
-    if (!passerelle::writeConfig(folder_, c, &why)) return OpResult::fail(why);
-    reload();
-    return OpResult::done("Passerelle : API " + api + ", raw " + raw);
-}
-
-namespace {
-
-passerelle::Options optionsAt(Seconds now) {
-    passerelle::Options o;
+online::Options optionsAt(Seconds now) {
+    online::Options o;
     o.now = now;
     o.tool = std::string("XPG-License-Manager-Admin/") + kAppVersion;
     return o;
@@ -1082,80 +1016,194 @@ passerelle::Options optionsAt(Seconds now) {
 
 } // namespace
 
-OpResult Workspace::passerelleVerify() const { return fromResult(passerelle::verify(folder_, optionsAt(now()))); }
-
-OpResult Workspace::passerellePublishConfig() const {
+OpResult Workspace::serviceConfigure(const std::string& url) {
+    online::Config c;
+    c.url = url;
     std::string why;
-    auto key = loadPublisherKey(folder_, &why);   // une copie a ce fil : le Workspace n'est pas partage
-    if (!key) return OpResult::fail(why);
-    return fromResult(passerelle::publishConfig(folder_, *key, optionsAt(now())));
+    const bool changed = !service_.config.url.empty() && online::normalizeUrl(url) != service_.config.url;
+    if (!online::writeConfig(folder_, c, &why)) return OpResult::fail(why);
+    if (changed) service_.hasState = false;   // l'etat lu etait celui de l'autre adresse
+    reload();
+    OpResult r = OpResult::done("Service des licences r\xC3\xA9gl\xC3\xA9 : " + service_.config.url + ".");
+    r.details.push_back("Ensuite : V\xC3\xA9rifier, puis Certifier la cl\xC3\xA9 du service (une fois par an).");
+    if (service_.config.url.rfind("http://", 0) == 0) r.details.push_back("Une adresse http:// sur ce poste : un service d'ESSAI, jamais pour les Studios livr\xC3\xA9s.");
+    return r;
 }
 
-OpResult Workspace::passerelleFetch() const {
+OpResult Workspace::syncKeyCreate(std::string* recoveryCodeOut) {
+    if (recoveryCodeOut) recoveryCodeOut->clear();
+    archive::SyncKey sk{};
     std::string why;
-    auto key = loadPublisherKey(folder_, &why);
-    if (!key) return OpResult::fail("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour ouvrir les demandes (elles sont scell\xC3\xA9" "es pour elle) : " + why);
-    return fromResult(passerelle::fetchRequests(folder_, *key, optionsAt(now())));
+    if (!archive::createSyncKey(folder_, sk, &why)) return OpResult::fail(why);
+    OpResult r = OpResult::done("Cl\xC3\xA9 de synchro de l'archive cr\xC3\xA9\xC3\xA9" "e : " + archive::syncKeyId(sk) + ".");
+    r.details.push_back("NOTE SON CODE DE SECOURS hors de ce PC : sans lui, l'archive en ligne est illisible apr\xC3\xA8s une panne.");
+    if (recoveryCodeOut) *recoveryCodeOut = archive::recoveryCode(sk);
+    crypto::wipe(sk);
+    reload();
+    return r;
 }
 
-OpResult Workspace::passerelleRefuse(const std::string& device, const std::string& reason) const {
-    std::string why;
-    auto key = loadPublisherKey(folder_, &why);
-    if (!key) return OpResult::fail(why);
-    return fromResult(passerelle::refuse(folder_, *key, device, reason, optionsAt(now())));
+OpResult Workspace::syncKeyRestore(const std::string& code, bool replace) {
+    archive::SyncKey sk{};
+    std::string why, kept;
+    if (!archive::restoreSyncKey(folder_, code, sk, &why, replace, &kept)) return OpResult::fail(why);
+    OpResult r = OpResult::done("Cl\xC3\xA9 de synchro redonn\xC3\xA9" "e par le code de secours : " + archive::syncKeyId(sk) + ".");
+    if (!kept.empty()) r.details.push_back("L'ancienne est gard\xC3\xA9" "e \xC3\xA0 c\xC3\xB4t\xC3\xA9 : " + kept);
+    r.details.push_back("Ensuite : Recevoir l'archive (un poste neuf), puis Synchroniser.");
+    crypto::wipe(sk);
+    reload();
+    return r;
 }
 
-OpResult Workspace::passerelleRun(const GatewayJob& job) const {
+std::string Workspace::syncRecoveryCode(std::string* why) const {
+    archive::SyncKey sk{};
+    if (!archive::loadSyncKey(folder_, sk, why)) return {};
+    std::string code = archive::recoveryCode(sk);
+    crypto::wipe(sk);
+    return code;
+}
+
+// Les fonctions lentes relisent la cle (une copie a ce fil : le Workspace n'est pas partage).
+#define XPG_SERVICE_KEY_OR_FAIL                                  \
+    std::string why;                                             \
+    auto key = loadPublisherKey(folder_, &why);                  \
+    if (!key) return OpResult::fail("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (elle signe chaque appel au service) : " + why)
+
+OpResult Workspace::serviceVerify(online::ServiceState* state) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::verify(folder_, *key, optionsAt(now()), state));
+}
+
+OpResult Workspace::serviceReadKey(std::string& keyHex) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::readServiceKey(folder_, *key, optionsAt(now()), keyHex));
+}
+
+OpResult Workspace::serviceCertify(const std::string& expectedKey) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::certify(folder_, *key, optionsAt(now()), expectedKey));
+}
+
+archive::SyncReport Workspace::archiveSync(bool receiveOnly, bool dryRun) const {
+    archive::SyncOptions o;
+    o.receiveOnly = receiveOnly;
+    o.dryRun = dryRun;
+    o.now = now();
+    o.tool = std::string(kAppName) + " " + kAppVersion;
     std::string why;
     auto key = loadPublisherKey(folder_, &why);
-    if (!key) return OpResult::fail(why);
-    const passerelle::Options o = optionsAt(now());
+    if (!key) {
+        archive::SyncReport r;
+        r.why = "il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (elle signe chaque appel au service) : " + why;
+        return r;
+    }
+    return archive::synchronize(folder_, *key, o);
+}
+
+OpResult Workspace::serviceListLicences(online::Snapshot& out) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::listLicences(folder_, *key, optionsAt(now()), out));
+}
+
+OpResult Workspace::serviceRetire(const std::string& licenseId, const std::string& deviceKey) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::retireDevice(folder_, *key, licenseId, deviceKey, optionsAt(now())));
+}
+
+OpResult Workspace::serviceSetActive(const std::string& licenseId, bool active) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    int lease = online::kDefaultLeaseDays;
+    if (const auto* l = service_.snapshot.licence(licenseId)) lease = l->leaseDays;
+    return fromResult(online::setActive(folder_, *key, licenseId, active, lease, optionsAt(now())));
+}
+
+OpResult Workspace::serviceFetch() const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::fetchRequests(folder_, *key, optionsAt(now())));
+}
+
+OpResult Workspace::serviceRefuse(const std::string& which, const std::string& reason) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::refuse(folder_, *key, which, reason, optionsAt(now())));
+}
+
+OpResult Workspace::serviceStats() const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::stats(folder_, *key, optionsAt(now())));
+}
+
+OpResult Workspace::serviceRun(const ServiceJob& job) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    const online::Options o = optionsAt(now());
     switch (job.kind) {
-        case GatewayJob::Kind::Licence: return fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, o));
-        case GatewayJob::Kind::Removal: return fromResult(passerelle::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o));
-        case GatewayJob::Kind::Revocation: return fromResult(passerelle::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o));
-        case GatewayJob::Kind::Registry: return fromResult(passerelle::publishArchive(folder_, *key, o));
-        case GatewayJob::Kind::Unrevoke: {
-            OpResult r = fromResult(passerelle::publishArchive(folder_, *key, o));
+        case ServiceJob::Kind::Licence: return fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o));
+        case ServiceJob::Kind::Removal: return fromResult(online::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o));
+        case ServiceJob::Kind::Revocation: return fromResult(online::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o));
+        case ServiceJob::Kind::Registry: return fromResult(online::publishRegistry(folder_, *key, o));
+        case ServiceJob::Kind::Unrevoke: {
+            OpResult r = fromResult(online::publishRevocations(folder_, *key, o));
             if (!r.ok || job.licenceText.empty()) return r;
-            // La liste qui ne revoque plus cette licence part scellee a chacun de ses PC (elle ne la nomme plus).
-            passerelle::Options withList = o;
-            withList.revocations = true;
-            OpResult l = fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, withList));
-            l.details.insert(l.details.begin(), r.details.begin(), r.details.end());
+            // La liste qui ne revoque plus cette licence part scellee a chacun de ses PC lies.
+            OpResult l = fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, true, o));
+            l.details.insert(l.details.begin(), r.message);
             return l;
+        }
+        case ServiceJob::Kind::OnlineLicence: {
+            OpResult r = fromResult(online::putLicence(folder_, *key, job.licenceText, job.codeHash, job.leaseDays, true, o));
+            if (r.ok && job.requestNumber > 0) {
+                const OpResult a = fromResult(online::answerOnline(folder_, *key, job.requestNumber, job.licenseId, o));
+                r.details.push_back(a.message);
+                for (const auto& d : a.details) r.details.push_back(d);
+            }
+            return r;
         }
     }
     return OpResult::fail("publication inconnue");
 }
 
-bool Workspace::isOnlineRequest(const std::string& path) const { return passerelle::isOnlineRequestPath(folder_, path); }
+#undef XPG_SERVICE_KEY_OR_FAIL
+
+void Workspace::adoptServiceState(const online::ServiceState& state) {
+    service_.state = state;
+    service_.hasState = true;
+    service_.stateAt = now();
+}
+
+void Workspace::adoptSnapshot(online::Snapshot snapshot) { service_.snapshot = std::move(snapshot); }
+
+void Workspace::queueServiceJob(ServiceJob job) { job_ = std::move(job); }
+
+std::optional<ServiceJob> Workspace::takeServiceJob() {
+    std::optional<ServiceJob> out;
+    out.swap(job_);
+    return out;
+}
+
+bool Workspace::isOnlineRequest(const std::string& path) const { return online::isOnlineRequestPath(folder_, path); }
 
 std::string Workspace::onlineLicencePath(const std::string& licenseId) const {
     std::string stamp;
     for (char c : licensing::isoTime(now()))
         if (c >= '0' && c <= '9') stamp += c;
     if (stamp.size() == 14) stamp.insert(8, "-");
-    const std::string dir = deploy::joinPath(passerelle::requestsFolder(folder_), passerelle::kLicencesDir);
-    return deploy::joinPath(dir, github::safeName(licenseId) + "-" + stamp + ".xpglic");
+    const std::string dir = deploy::joinPath(online::requestsFolder(folder_), online::kLicencesDir);
+    return deploy::joinPath(dir, archive::safeName(licenseId) + "-" + stamp + ".xpglic");
 }
 
-const passerelle::Entry* Workspace::onlineRequest(int issue) const {
-    for (const auto& e : passerelle_.requests)
-        if (e.issue == issue) return &e;
+const online::Entry* Workspace::onlineRequest(int number) const {
+    for (const auto& e : service_.requests)
+        if (e.number == number) return &e;
     return nullptr;
 }
 
-const passerelle::Entry* Workspace::onlineRequestAt(const std::string& path) const {
+const online::Entry* Workspace::onlineRequestAt(const std::string& path) const {
     if (path.empty()) return nullptr;
-    for (const auto& e : passerelle_.requests)
+    for (const auto& e : service_.requests)
         if (e.requestPath == path) return &e;
     return nullptr;
 }
 
-OpResult Workspace::studioKit(const std::string& outDir) const {
-    return fromResult(passerelle::studioKit(folder_, signing_.get(), outDir, now()));
-}
+OpResult Workspace::studioKit(const std::string& outDir) const { return fromResult(online::studioKit(folder_, signing_.get(), outDir, now())); }
 
 // ---------------------------------------------------------------------------------------------------- Background
 Background::~Background() { wait(); }

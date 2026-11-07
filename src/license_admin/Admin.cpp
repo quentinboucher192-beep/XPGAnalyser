@@ -6,6 +6,7 @@
 
 #include "../core/Json.hpp"
 #include "../deploy/Paths.hpp"
+#include "../licensing/Service.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -532,9 +533,19 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     if (!ed) return fail("l'\xC3\xA9" "dition " + cite(l.edition) + " n'est pas dans le registre n\xC2\xB0 " + std::to_string(reg.number));
     if (ed->retired) return fail("l'\xC3\xA9" "dition " + cite(l.edition) + " est retir\xC3\xA9" "e du registre");
     l.type = ed->type;
-    if (p.has("type") && !parseLicenseType(p.str("type"), l.type)) return fail("type inconnu : " + cite(p.str("type")) + " (perpetual, temporary, evaluation)");
-    if (l.type == LicenseType::Floating)
-        return fail("les licences flottantes ne sont pas encore possibles : elles demandent le service de licences en ligne (pas encore h\xC3\xA9" "berg\xC3\xA9)");
+    if (p.has("type") && !parseLicenseType(p.str("type"), l.type)) return fail("type inconnu : " + cite(p.str("type")) + " (perpetual, temporary, evaluation, floating)");
+    // 1.35.0 : une licence en ligne (le service qui l'active) ; etendue, elle garde le sien.
+    std::string service = in.service;
+    if (service.empty() && !in.existing.empty()) {
+        SignedBlock ob;
+        License o;
+        if (readOwnBlock(in.existing, DocKind::License, key, ob, &err) && parseLicense(ob.document, o, &err)) service = o.service;
+    }
+    const bool online = !service.empty();
+    if (online && !licensing::service::validUrl(service)) return fail("l'adresse du service " + cite(service) + " n'est pas valide (https://...)");
+    if (l.type == LicenseType::Floating && !online)
+        return fail("une licence flottante est une licence EN LIGNE : ses postes prennent un jeton aupr\xC3\xA8s du service des licences (licence-en-ligne, ou "
+                    "Licences \xE2\x80\xBA Nouvelle licence en ligne)");
     const auto intParam = [&](const char* name, int def, int lo, int hi, int& outv) {
         const Value* v = p.find(name);
         if (!v) {
@@ -638,7 +649,14 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         if (crypto::unhex(q.deviceKey, raw, 32)) std::copy(raw.begin(), raw.end(), pub.begin());
         added += "  PC ajout\xC3\xA9 : " + (q.deviceName.empty() ? std::string("(sans nom)") : q.deviceName) + " - " + publicKeyFingerprint(pub) + "\n";
     }
-    if (l.devices.empty()) return fail("aucun PC : donne au moins une demande d'activation (--demande)");
+    if (online) {
+        if (!in.requests.empty()) return fail("une licence en ligne ne lie aucun PC : chaque PC l'active avec son code (pas de --demande)");
+        if (!in.dropDevices.empty()) return fail("une licence en ligne ne lie aucun PC : retire un PC sur le service (service-retirer)");
+        if (!l.devices.empty()) return fail("la licence \xC3\xA0 \xC3\xA9tendre est li\xC3\xA9" "e \xC3\xA0 des PC : elle ne devient pas une licence en ligne");
+        l.service = service;
+    } else if (l.devices.empty()) {
+        return fail("aucun PC : donne au moins une demande d'activation (--demande)");
+    }
     if (static_cast<int>(l.devices.size()) > l.maxDevices)
         return fail(std::to_string(l.devices.size()) + " PC pour " + std::to_string(l.maxDevices) + " autoris\xC3\xA9s (max_devices)");
     if (hasRev) {
@@ -656,6 +674,20 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     out = writeBlock(signBlock(DocKind::License, text, key.publicKey(), [&](std::string_view m) { return key.sign(m); }));
     out += writeBlock(regB);
     if (hasRev) out += writeBlock(revB);
+    if (records && online) {   // une licence en ligne : une ligne pour la licence (ses PC s'activent sur le service)
+        ActivationRecord a;
+        a.kind = "licence";
+        a.at = now;
+        a.licenseId = l.licenseId;
+        a.customer = l.customer;
+        a.edition = l.edition;
+        a.type = licenseTypeKey(l.type);
+        a.expiresAt = l.expiresAt;
+        a.signedAt = now;
+        a.issuedAt = l.issuedAt;
+        a.extension = !in.existing.empty();
+        records->push_back(std::move(a));
+    }
     if (records)
         for (const auto& d : l.devices) {
             ActivationRecord a;
@@ -682,8 +714,12 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         }
     if (summary) {
         *summary = "Licence " + l.licenseId + " - " + l.customer + " - " + l.edition + " (" + licenseTypeLabel(l.type) + ")\n";
-        *summary += "  " + std::to_string(l.features.size()) + " fonctionnalit\xC3\xA9s, " + std::to_string(l.devices.size()) + " PC li\xC3\xA9(s) sur "
-                    + std::to_string(l.maxDevices) + "\n";
+        if (online)
+            *summary += "  " + std::to_string(l.features.size()) + " fonctionnalit\xC3\xA9s, EN LIGNE (" + l.service + ") : " + std::to_string(l.maxDevices)
+                        + (l.type == LicenseType::Floating ? " postes en m\xC3\xAAme temps" : " PC au plus") + ", activ\xC3\xA9s par un code\n";
+        else
+            *summary += "  " + std::to_string(l.features.size()) + " fonctionnalit\xC3\xA9s, " + std::to_string(l.devices.size()) + " PC li\xC3\xA9(s) sur "
+                        + std::to_string(l.maxDevices) + "\n";
         *summary += "  \xC3\xA9mise le " + isoTime(l.issuedAt) + (l.expiresAt ? ", fin le " + isoTime(l.expiresAt) : std::string(", sans fin"))
                     + (l.type == LicenseType::Temporary ? ", gr\xC3\xA2" "ce " + std::to_string(l.offlineGraceDays) + " j" : std::string()) + "\n";
         *summary += "  registre n\xC2\xB0 " + std::to_string(reg.number) + (hasRev ? ", r\xC3\xA9vocations n\xC2\xB0 " + std::to_string(rev.number) : std::string()) + " joints\n";

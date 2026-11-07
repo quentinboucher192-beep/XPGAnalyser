@@ -273,7 +273,7 @@ private:
                 }
                 const OpResult r = ws().unrevoke(index);
                 host_.report(r);
-                if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee
+                if (r.ok) (void)publishToService(host_);   // 1.35.0 : le service regle (la liste deposee, les PC lies prevenus)
             }));
     }
 

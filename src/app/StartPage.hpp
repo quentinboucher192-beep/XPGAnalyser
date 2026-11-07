@@ -297,11 +297,15 @@ public:
     [[nodiscard]] StartButton&   findLink() noexcept { return *find_; }
     [[nodiscard]] ThemeSwatches& swatches() noexcept { return *swatches_; }
     [[nodiscard]] StartButton&   autostartButton() noexcept { return *autostart_; }
-    // 1.34.0 : l'encart de la licence (l'evaluation et les jours qui restent), sous la marque ; son bouton
-    // << Licence... >> ouvre la fenetre Licence. Un titre vide : pas d'encart.
+    // 1.34.0 : l'encart de la licence, sous la marque ; son bouton ouvre la fenetre Licence. Un titre vide : pas
+    // d'encart. 1.35.0 : LA LICENCE ACTIVE (licence::startCard) - la licence et sa fin, la Decouverte, le bail,
+    // sans licence ; `tone` (0 neutre, 1 bon, 2 attention, 3 erreur, 4 information) donne sa couleur et son icone ;
+    // `button` : le libelle du bouton ("Licence...", "Activer avec un code...").
     [[nodiscard]] StartButton&   licenceButton() noexcept { return *licence_; }
-    void setLicenceNotice(std::string title, std::string text);
+    void setLicenceCard(std::string title, std::string text, int tone, std::string button);
+    void setLicenceNotice(std::string title, std::string text) { setLicenceCard(std::move(title), std::move(text), 2, "Licence\xE2\x80\xA6"); }
     [[nodiscard]] const std::string& licenceTitle() const noexcept { return licenceTitle_; }
+    [[nodiscard]] int licenceTone() const noexcept { return licenceTone_; }
 
     // Le poste d'exploitation lance au demarrage du PC : le nom du projet ;
     // vide : aucun.
@@ -351,6 +355,8 @@ private:
     // lignes) et le bouton dessous.
     bool                     stationStacked_{false};
     float                    stationTextY_{0.f};
+    std::string    licenceLabel_;          // 1.35.0 : le libelle du bouton de l'encart
+    int            licenceTone_{2};        // 1.35.0 : sa couleur
 };
 
 // ------------------------------------------------------------ la page ----

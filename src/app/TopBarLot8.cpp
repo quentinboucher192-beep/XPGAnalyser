@@ -79,6 +79,14 @@ void TopBar::markNoticesRead() {
     invalidate();
 }
 
+void TopBar::setLicence(LicenceChip chip) {
+    if (chip == licence_) return;
+    const bool relayout = chip.text != licence_.text || chip.shortText != licence_.shortText;
+    licence_ = std::move(chip);
+    if (relayout) invalidateLayout();
+    invalidate();
+}
+
 void TopBar::setTasks(std::vector<Task> tasks) {
     if (tasks == tasks_) return;
     const bool relayout = tasks.empty() != tasks_.empty();
@@ -161,6 +169,12 @@ void TopBar::layoutLot8() const {
         // serre : Deposer un fichier tombe (le glisser-deposer et la palette ">deposer" restent)
         if (!tight) putR("deposer", 34.f);
         rx -= 8.f;
+        // 1.35.0 : la licence active - le texte entier, puis la forme courte, puis le cadenas seul.
+        if (!licence_.text.empty()) {
+            const std::string& t = compact ? (licence_.shortText.empty() ? licence_.text : licence_.shortText) : licence_.text;
+            putR("licence", tight ? 34.f : std::min(compact ? 170.f : 300.f, 9.f + 16.f + 7.f + ui::measureWidth(t, kSmall8) + 12.f));
+            rx -= 8.f;
+        }
         // 1.12.0 : la sortie vers Control Expert (Release/Debug) est celle de l'automate.
         configRect_ = {};
         exportBox_ = {};
@@ -389,6 +403,27 @@ void TopBar::paintTasks(const ui::PaintContext& ctx, const Part& p, bool hot) co
     ctx.r.fillRoundedRect(track, c.border, 2.f);
     const float f = t.progress >= 0.f ? std::clamp(t.progress, 0.f, 1.f) : 0.35f;
     if (f > 0.f) ctx.r.fillRoundedRect({track.x, track.y, std::max(4.f, track.w * f), track.h}, c.accent, 2.f);
+}
+
+// 1.35.0 : la licence active - une pastille de la couleur de l'etat, le cadenas, le texte (entier ou court).
+void TopBar::paintLicence(const ui::PaintContext& ctx, const Part& p, bool hot) const {
+    const auto& c = ctx.theme.color;
+    const auto r = p.rect;
+    const gfx::Color tone = licence_.tone == 1 ? c.ok : licence_.tone == 2 ? c.warning : licence_.tone == 3 ? c.error
+                          : licence_.tone == 4 ? c.accent : c.textMuted;
+    ctx.r.fillRoundedRect({r.x + 1.f, r.y + 3.f, r.w - 2.f, r.h - 6.f}, tone.withAlpha(hot ? (ctx.theme.isDark() ? 60 : 46) : (ctx.theme.isDark() ? 38 : 26)), 6.f);
+    const bool iconOnly = r.w <= 36.f;
+    const gfx::Rect ib{r.x + (iconOnly ? (r.w - 16.f) * 0.5f : 9.f), r.y + (r.h - 16.f) * 0.5f, 16.f, 16.f};
+    ui::drawIcon(ctx.r, ui::Icon::Lock, ib, ctx.theme.onSurface(tone));
+    if (iconOnly) return;
+    const float tx = ib.right() + 7.f, maxW = r.right() - tx - 8.f;
+    const std::string& full = licence_.text;
+    const std::string& small = licence_.shortText.empty() ? licence_.text : licence_.shortText;
+    const std::string& t = ctx.r.measure(full, kSmall8).width <= maxW ? full : small;
+    const auto n = ctx.r.fitCharacters(t, kSmall8, maxW);
+    std::string shown = n >= t.size() ? t : t.substr(0, n);
+    while (!shown.empty() && shown.size() < t.size() && (static_cast<unsigned char>(t[shown.size()]) & 0xC0) == 0x80) shown.pop_back();
+    ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kSmall8)) * 0.5f}, shown, kSmall8, c.text);
 }
 
 void TopBar::paintSparkline(const ui::PaintContext& ctx, const gfx::Rect& r, gfx::Color col) const {
