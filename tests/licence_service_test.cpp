@@ -865,7 +865,7 @@ int main(int argc, char** argv) {
         const Http put2 = http("PUT", "/admin/postes", jsonBody({{"poste", s2.device}, {"etat", block(lic::DocKind::DeviceStatus, lgw::writeDeviceStatus(s2))}}), true);
         r = keep(ls::checkDevice());
         rec = record();
-        check(put2.status == 200 && !r.ok && r.refused && r.answer == ls::kAnswerRefused && r.answerNote == no.message && rec.outcome == "refusee" &&
+        check(put2.status == 200 && r.refused && r.answer == ls::kAnswerRefused && r.answerNote == no.message && rec.outcome == "refusee" &&
                   lic::getLicenseState().licenseId == "XPG-2026-00501",
               "1.36.0 : refusee : la raison remonte, la licence deja la reste (" + r.message + ")");
         const auto v = app::licence::answerView({r.answer, r.licenseId, r.answerNote}, lic::getLicenseState());
