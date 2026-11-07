@@ -23,7 +23,14 @@
 //      Valide ; le jeton fini, rendu ; une horloge en avance ;
 //    - la Decouverte enregistree par le service : la plus ancienne gagne ;
 //      l'etiquette << Decouverte >> ;
-//    - une licence liee par l'editeur : comme avant ; l'API (Licensing.hpp).
+//    - une licence liee par l'editeur : comme avant ; l'API (Licensing.hpp) ;
+//    - la revue de securite de la 1.35.0 : le compteur efface + l'horloge
+//      reculee (la preuve de concept) -> Bail expire ; l'heure retenue au moins
+//      l'emission de l'activation et du jeton ; l'horloge reculee sur une licence
+//      en ligne perpetuelle -> Horloge reculee, recalee par l'heure signee ; deux
+//      Studios ouverts ; le jeton et l'horloge reculee ; la fin d'une licence en
+//      ligne a l'heure retenue ; l'activation sans empreinte du poste ; l'adresse
+//      du service dans le certificat ; code-activation.txt selon son proprietaire.
 //
 //  licensing_activation_test <racine du depot>   (XPG_VERBOSE=1 : chaque controle)
 //  Aucune donnee client : un << Client d'essai >>.
@@ -44,6 +51,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 namespace lic = licensing;
@@ -137,15 +148,16 @@ lic::StoreOptions optionsFor(const fs::path& folder) {
     o.machineId = "machine-essai-" + folder.filename().string();
     o.evaluationPeriod = true;
     o.bundledRegistry = U(g_bundled);
+    o.serviceUrl = std::string(kUrl);   // 1.35.0 (revue 6) : l'adresse du service de ce << programme >>
     return o;
 }
 
 // Le certificat du service : la cle du service (par defaut), signe par l'editeur (par defaut).
 std::string certText(Seconds issued, Seconds expires, std::vector<std::string> rights = {"activation", "flottante", "heure", "decouverte"},
-                     const lic::SigningKey* serviceKey = nullptr, const lic::SigningKey* signer = nullptr) {
+                     const lic::SigningKey* serviceKey = nullptr, const lic::SigningKey* signer = nullptr, const char* url = kUrl) {
     sv::ServiceCert c;
     c.key = (serviceKey ? serviceKey : g_service.get())->publicKeyHex();
-    c.url = kUrl;
+    c.url = url;
     c.issuedAt = issued;
     c.expiresAt = expires;
     c.rights = std::move(rights);
@@ -216,6 +228,16 @@ std::string trialText(const std::string& keyHex, const std::string& machine, Sec
 }
 
 std::string nonce() { return lic::newNonce(); }
+
+// 1.35.0 (revue 1) : l'heure signee du service notee sur ce PC (le compteur du bail), comme a chaque connexion avant
+// l'activation : sans elle, une licence en ligne est en Bail expire.
+bool syncTime(lic::LicenseStore& st, Seconds at, const std::string& cert = std::string()) {
+    std::string why;
+    const std::string n = nonce();
+    const bool ok = st.noteServiceTime(timeText(at, n), n, cert.empty() ? g_cert : cert, &why);
+    if (!ok) std::printf("  (heure du service refusee : %s)\n", why.c_str());
+    return ok;
+}
 
 // La cle de ce PC (creee par la signature d'un premier appel) et son empreinte du poste.
 struct Pc {
@@ -296,6 +318,8 @@ void testActivation() {
           "sans licence : la Decouverte (etiquette << D\xC3\xA9" "couverte >>)");
     const lic::License l = onlineLicense("XPG-2026-00135", lic::LicenseType::Temporary, T0 - D, T0 + 365 * D);
     const std::string lt = licenseText(l);
+    check(st.thisStationHash() == pc.station && pc.station.size() == 32, "thisStationHash : l'empreinte du poste (celle de l'activation)");
+    check(syncTime(st, T0), "l'heure du service notee (la connexion, avant l'activation)");
     auto rep = st.installActivation(lt, activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
     s = rep.state;
     check(rep.ok && rep.licenseInstalled && rep.why.empty(), "installActivation : acceptee (" + rep.why + ")");
@@ -368,6 +392,11 @@ void testRefusals() {
     a.station = std::string(32, 'a');
     refused(activationText(a), g_cert, "autre installation de Windows", "une activation pour une autre installation de Windows");
     a = good;
+    a.station.clear();   // revue 3 : sans empreinte, elle vaudrait sur toute installation ou la cle serait recopiee
+    refused(activationText(a), g_cert, "ne porte pas l'empreinte du poste", "une activation sans empreinte du poste (station vide)");
+    refused(activationText(good), certText(T0 - 30 * D, T0 + 365 * D, {"activation"}, nullptr, nullptr, "https://xpg-licences.autre.workers.dev"),
+            "pour une autre adresse (https://xpg-licences.autre.workers.dev)", "un certificat pour l'adresse d'un autre service (revue 6)");
+    a = good;
     a.licenseId = "XPG-2026-00999";
     refused(activationText(a), g_cert, "pour une autre licence", "une activation pour une autre licence");
     refused(activationText(good, g_rogue.get()), g_cert, "la signature n'est pas celle de la cl\xC3\xA9 du service", "une activation signee par une cle de service inconnue");
@@ -401,7 +430,20 @@ void testRefusals() {
     lic::LicenseStore none(o);
     const auto rep = none.installActivation(lt, activationText(good), g_cert);
     check(!rep.ok && rep.state.status == LicenseStatus::NotConfigured, "sans cle de l'editeur : refusee, Non activees");
-    // la bonne passe enfin
+    // revue 6 : un programme sans adresse de service ne croit aucun document du service
+    {
+        lic::StoreOptions ns = optionsFor(g_root / "pc-sans-service");
+        ns.serviceUrl = std::string();
+        lic::LicenseStore noService(ns);
+        const Pc p2 = pcKey(noService, g_root / "pc-sans-service");
+        std::string w;
+        const std::string n = nonce();
+        check(!noService.noteServiceTime(timeText(T0, n), n, g_cert, &w) && has(w, "pas de service des licences"), "sans service : l'heure refusee (" + w + ")");
+        const auto r2 = noService.installActivation(lt, activationText(activationFor(l, p2.keyHex, p2.station, T0, T0 + 30 * D)), g_cert);
+        check(!r2.ok && has(r2.why, "pas de service des licences"), "sans service : l'activation refusee (" + r2.why + ")");
+    }
+    // la bonne passe enfin (apres l'heure du service : la connexion)
+    check(syncTime(st, T0), "l'heure du service notee");
     check(st.installActivation(lt, activationText(good), g_cert).state.status == LicenseStatus::Valid, "la bonne activation : Valide");
 }
 
@@ -415,11 +457,11 @@ void testBail() {
     const Pc pc = pcKey(*st, folder);
     const lic::License l = onlineLicense("XPG-2026-00150", lic::LicenseType::Perpetual, T0 - D, 0);
     const std::string lt = licenseText(l);
-    check(st->installActivation(lt, activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert).state.status == LicenseStatus::Valid,
-          "activee : bail jusqu'au 07/12/2026");
     std::string why;
     const std::string n1 = nonce();
     check(st->noteServiceTime(timeText(T0, n1), n1, g_cert, &why), "l'heure signee du service est notee : " + why);
+    check(st->installActivation(lt, activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert).state.status == LicenseStatus::Valid,
+          "activee : bail jusqu'au 07/12/2026");
     auto s = st->evaluate();
     check(s.lastServiceSync == T0 && s.trustedNow == T0, "lastServiceSync et l'heure retenue : T0");
     std::error_code ec;
@@ -482,10 +524,10 @@ void testRecalibration() {
     lic::LicenseStore st(optionsFor(folder));
     const Pc pc = pcKey(st, folder);
     const lic::License l = onlineLicense("XPG-2026-00160", lic::LicenseType::Perpetual, T0 - D, 0);
-    (void)st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
     std::string why;
     std::string n = nonce();
     check(st.noteServiceTime(timeText(T0, n), n, g_cert, &why), "l'heure du service notee (T0)");
+    (void)st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
     g_now = T0 + 60 * D;   // l'horloge avancee par erreur
     auto s = st.evaluate();
     check(s.status == LicenseStatus::LeaseExpired, "l'horloge avancee de 60 jours : Bail expire");
@@ -512,6 +554,9 @@ void testRecalibration() {
           "un certificat sans le droit << heure >> : refusee");
     check(!st.noteServiceTime(timeText(T0 + 2 * D, n), n, certText(T0 - 100 * D, T0 - D), &why) && has(why, "expir"),
           "une heure apres la fin du certificat : refusee");
+    check(!st.noteServiceTime(timeText(T0 + 2 * D, n), n, certText(T0 - D, T0 + 365 * D, {"heure"}, nullptr, nullptr, "https://xpg-licences.autre.workers.dev"), &why)
+              && has(why, "autre adresse"),
+          "un certificat d'un autre service (une autre adresse) : refusee (" + why + ")");
     check(st.evaluate().lastServiceSync == T0 + D, "rien de tout cela n'a touche le compteur");
 
     std::printf("-- le certificat du service expire pendant le bail\n");
@@ -520,6 +565,7 @@ void testRecalibration() {
     lic::LicenseStore s2(optionsFor(f2));
     const Pc p2 = pcKey(s2, f2);
     const lic::License l2 = onlineLicense("XPG-2026-00161", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(s2, T0), "l'heure du service notee");
     auto rep = s2.installActivation(licenseText(l2), activationText(activationFor(l2, p2.keyHex, p2.station, T0, T0 + 30 * D)), certText(T0 - D, T0 + 20 * D));
     check(rep.ok && rep.state.status == LicenseStatus::Valid, "activee avec un certificat qui finit le 27/11/2026");
     g_now = T0 + 21 * D;
@@ -537,6 +583,7 @@ void testFloating() {
     lic::LicenseStore st(optionsFor(folder));
     const Pc pc = pcKey(st, folder);
     const lic::License l = onlineLicense("XPG-2026-00170", lic::LicenseType::Floating, T0 - D, 0);
+    check(syncTime(st, T0), "l'heure du service notee");
     auto rep = st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
     auto s = rep.state;
     check(rep.ok && s.status == LicenseStatus::NoFloatingSeat && s.floating && s.online && s.edition == "FREE" && !s.hasFeature("ai_generation")
@@ -550,6 +597,9 @@ void testFloating() {
     check(!st.installLease(leaseText(l.licenseId, pc.keyHex, T0, T0 + 900), certText(T0 - D, T0 + D, {"activation"}), &why) && has(why, "flottante"),
           "un certificat sans le droit << flottante >> : refuse (" + why + ")");
     check(!st.installLease(leaseText(l.licenseId, pc.keyHex, T0 - 1000, T0 - 100), g_cert, &why) && has(why, "pris fin"), "un jeton deja fini : refuse");
+    check(!st.installLease(leaseText(l.licenseId, pc.keyHex, T0, T0 + 900), certText(T0 - D, T0 + D, {"flottante"}, nullptr, nullptr, "https://xpg-licences.autre.workers.dev"), &why)
+              && has(why, "autre adresse"),
+          "un jeton certifie pour un autre service : refuse (" + why + ")");
     check(st.installLease(leaseText(l.licenseId, pc.keyHex, T0, T0 + 900), g_cert, &why), "un jeton de 15 minutes : accepte (" + why + ")");
     s = st.evaluate();
     check(s.status == LicenseStatus::Valid && s.leaseUntil == T0 + 900 && s.hasFeature("ai_generation") && has(s.message, "ce PC a un poste"),
@@ -598,6 +648,9 @@ void testTrial() {
     check(!st.installTrialRecord(trialText(g_otherPc->publicKeyHex(), machine, T0 - 10 * D), g_cert, &why) && has(why, "autre PC"), "d'un autre PC : refusee");
     check(!st.installTrialRecord(trialText(pc.keyHex, machine, T0 - 10 * D), certText(T0 - D, T0 + D, {"activation"}), &why) && has(why, "decouverte"),
           "un certificat sans le droit << decouverte >> : refusee");
+    check(!st.installTrialRecord(trialText(pc.keyHex, machine, T0 - 10 * D), certText(T0 - D, T0 + D, {"decouverte"}, nullptr, nullptr, "https://xpg-licences.autre.workers.dev"), &why)
+              && has(why, "autre adresse"),
+          "une Decouverte certifiee pour un autre service : refusee (" + why + ")");
     check(st.installTrialRecord(trialText(pc.keyHex, machine, T0 - 10 * D), g_cert, &why), "le service l'a vue commencer 10 jours plus tot : acceptee (" + why + ")");
     s = st.evaluate();
     check(s.status == LicenseStatus::Evaluation && s.evaluationStartedAt == T0 - 10 * D && s.evaluationDaysLeft == 20 && has(s.message, "il te reste 20 jours (jusqu'au 27/11/2026)"),
@@ -660,6 +713,330 @@ void testBoundUnchanged() {
     check(st.evaluate().status == LicenseStatus::Valid, "un activation.xpgact abime a cote : sans effet sur une licence liee");
 }
 
+// ================================================== 1.35.0 : la revue de securite (le compteur) ==
+// Constatation 1 : effacer le compteur du bail et reculer l'horloge ne doit jamais faire durer une activation.
+void testCounterDeleted() {
+    std::printf("-- revue 1 : le compteur efface + l'horloge reculee (la preuve de concept) -> Bail expire\n");
+    g_now = T0;
+    g_steady = 5000;
+    const fs::path folder = g_root / "pc-revue-poc";
+    auto st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    const Pc pc = pcKey(*st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00901", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(*st, T0), "l'heure du service notee (T0)");
+    check(st->installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert).state.status
+              == LicenseStatus::Valid,
+          "activee (bail jusqu'au 07/12/2026)");
+    g_now = T0 + 200 * D;
+    g_steady += 200 * D;
+    check(st->evaluate().status == LicenseStatus::LeaseExpired, "jour 200 (hors ligne) : Bail expire");
+    // l'attaque : etat.bin et horloge.bin effaces (sous Windows aussi HKCU\...\horloge), l'horloge remise au jour 5
+    std::error_code ec;
+    fs::remove(folder / lic::LicenseStore::kStateFile, ec);
+    fs::remove(folder / lic::LicenseStore::kClockFile, ec);
+    g_now = T0 + 5 * D;
+    g_steady = 7;
+    auto s = lic::LicenseStore(optionsFor(folder)).evaluate();
+    check(s.status == LicenseStatus::LeaseExpired && s.edition == "FREE" && !s.hasFeature("ai_generation") && s.online && s.activationDaysLeft == 0,
+          "les copies du compteur effacees, l'horloge au jour 5 : Bail expire, FREE (" + std::string(lic::statusKey(s.status)) + ")");
+    check(s.message == "Connecte ce PC \xC3\xA0 Internet pour renouveler sa licence : l'heure du service des licences n'est plus connue sur ce PC. "
+                       "En attendant, l'\xC3\xA9" "dition FREE s'applique." + kNoLoss,
+          "la phrase : connecte ce PC a Internet pour renouveler (" + s.message + ")");
+    g_now = T0 + 25 * D;
+    s = lic::LicenseStore(optionsFor(folder)).evaluate();
+    check(s.status == LicenseStatus::LeaseExpired && !fs::exists(folder / lic::LicenseStore::kClockFile, ec),
+          "le lancement suivant (horloge au jour 25) : toujours Bail expire, aucun compteur invente");
+    g_now = T0 + 2 * D;
+    check(lic::LicenseStore(optionsFor(folder)).evaluate().status == LicenseStatus::LeaseExpired, "l'horloge reculee encore (jour 2) : Bail expire");
+    // la connexion suivante : l'heure signee, puis le renouvellement -> Valide
+    g_now = T0 + 201 * D;
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    check(syncTime(*st, T0 + 201 * D), "la connexion : l'heure du service (jour 201)");
+    s = st->evaluate();
+    check(s.status == LicenseStatus::LeaseExpired && has(s.message, "bail fini le 07/12/2026"), "l'heure connue : le bail d'avant est fini (" + s.message + ")");
+    check(st->installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0 + 201 * D, T0 + 231 * D)), g_cert).state.status
+              == LicenseStatus::Valid,
+          "renouvelee : Valide");
+
+    std::printf("-- revue 1 : l'activation sans aucune heure signee -> Bail expire jusqu'a la connexion\n");
+    g_now = T0;
+    const fs::path f2 = g_root / "pc-revue-sans-heure";
+    lic::LicenseStore s2(optionsFor(f2));
+    const Pc p2 = pcKey(s2, f2);
+    auto rep = s2.installActivation(licenseText(l), activationText(activationFor(l, p2.keyHex, p2.station, T0, T0 + 30 * D)), g_cert);
+    check(rep.ok && rep.state.status == LicenseStatus::LeaseExpired && has(rep.state.message, "onnecte ce PC \xC3\xA0 Internet pour renouveler"),
+          "installee sans heure du service (/v1/heure n'a pas repondu) : Bail expire, pas l'horloge du PC (" + rep.state.message + ")");
+    check(syncTime(s2, T0) && s2.evaluate().status == LicenseStatus::Valid, "l'heure du service notee : Valide, sans rien reinstaller");
+}
+
+// L'heure retenue est au moins l'emission (emis) de l'activation et du jeton : elles sont signees, rien ne les efface.
+void testFloors() {
+    std::printf("-- revue 1 : l'heure retenue au moins l'emission de l'activation\n");
+    g_now = T0;
+    g_steady = 100;
+    const fs::path folder = g_root / "pc-revue-plancher";
+    lic::LicenseStore st(optionsFor(folder));
+    const Pc pc = pcKey(st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00910", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(st, T0), "l'heure du service notee (T0)");
+    // une activation emise au jour 20 (renouvelee alors que /v1/heure n'a pas repondu) ; l'horloge du PC reste a T0
+    auto rep = st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0 + 20 * D, T0 + 50 * D)), g_cert);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid && rep.state.trustedNow == T0 + 20 * D && rep.state.activationDaysLeft == 30,
+          "l'heure retenue = l'emission de l'activation (jour 20), pas l'horloge du PC : 30 jours (" + lic::isoTime(rep.state.trustedNow) + ")");
+    g_steady += 3600;
+    auto s = st.evaluate();
+    check(s.trustedNow == T0 + 20 * D + 3600 && s.status == LicenseStatus::Valid,
+          "une heure plus tard : le compteur repart de l'emission (jour 20 + 1 h) (" + lic::isoTime(s.trustedNow) + ")");
+    st = lic::LicenseStore(optionsFor(folder));
+    g_steady = 5;
+    s = st.evaluate();
+    check(s.trustedNow == T0 + 20 * D + 3600 && s.lastServiceSync == T0 + 20 * D, "un autre lancement : le compteur recale est garde (etat.bin, horloge.bin)");
+    // une activation rejouee, plus ancienne, ne fait pas reculer l'heure retenue
+    rep = st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
+    check(rep.ok && rep.state.activationUntil == T0 + 50 * D && rep.state.trustedNow >= T0 + 20 * D, "une activation plus ancienne rejouee : la plus longue reste");
+    // un bail fini a l'emission d'une autre activation (le service l'a dite fin au jour 25, emise au jour 26) : refuse
+    rep = st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0 + 26 * D, T0 + 26 * D + 60, 2)), g_cert);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "une activation de numero 2 (un autre poste) emise au jour 26 : installee");
+    g_steady += 120;
+    s = st.evaluate();
+    check(s.status == LicenseStatus::LeaseExpired && s.trustedNow >= T0 + 26 * D, "une minute plus tard : son bail est fini a l'heure retenue (jour 26)");
+}
+
+// L'horloge reculee sur une licence en ligne (perpetuelle) : Horloge reculee jusqu'a la connexion suivante.
+void testOnlineClockBack() {
+    std::printf("-- revue 1 : l'horloge reculee sur une licence en ligne perpetuelle -> Horloge reculee, recalee par l'heure signee\n");
+    g_now = T0;
+    g_steady = 100;
+    const fs::path folder = g_root / "pc-revue-recul";
+    auto st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    const Pc pc = pcKey(*st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00920", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(*st, T0), "l'heure du service notee (T0)");
+    (void)st->installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
+    g_now = T0 + 10 * D;
+    g_steady += 10 * D;
+    check(st->evaluate().status == LicenseStatus::Valid, "jour 10 : Valide");
+    // l'horloge remise au jour 9 et demi (dans la tolerance d'un jour) : rien ne change
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    g_steady = 3;
+    g_now = T0 + 9 * D + D / 2;
+    auto s = st->evaluate();
+    check(s.status == LicenseStatus::Valid && s.trustedNow == T0 + 10 * D, "l'horloge reculee d'une demi-journee : Valide, l'heure retenue ne recule pas");
+    // remise au jour 3 : Horloge reculee (la licence est perpetuelle : la 1.34 ne regardait que les licences datees)
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    g_now = T0 + 3 * D;
+    s = st->evaluate();
+    check(s.status == LicenseStatus::ClockRolledBack && s.edition == "FREE" && !s.hasFeature("ai_generation") && s.online,
+          "l'horloge remise au jour 3 : Horloge reculee, FREE (" + std::string(lic::statusKey(s.status)) + ")");
+    check(has(s.message, "L'horloge de ce PC indique le 2026-11-10, alors que le 2026-11-17 a d\xC3\xA9j\xC3\xA0 \xC3\xA9t\xC3\xA9 vu : remets-la \xC3\xA0 l'heure, ou connecte ce PC "
+                         "\xC3\xA0 Internet pour la recaler."),
+          "la phrase : " + s.message);
+    g_now = T0 + 25 * D;
+    s = lic::LicenseStore(optionsFor(folder)).evaluate();
+    check(s.status == LicenseStatus::Valid && s.activationDaysLeft == 5, "remise a l'heure (jour 25) : Valide, 5 jours");
+    // la connexion avec l'horloge toujours en arriere : l'heure signee recale le compteur
+    g_now = T0 + 3 * D;
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    check(st->evaluate().status == LicenseStatus::ClockRolledBack, "de nouveau au jour 3 : Horloge reculee");
+    check(syncTime(*st, T0 + 26 * D), "la connexion : l'heure du service (jour 26)");
+    s = st->evaluate();
+    check(s.status == LicenseStatus::Valid && s.trustedNow == T0 + 26 * D && s.activationDaysLeft == 4,
+          "recalee par l'heure signee : Valide, 4 jours (l'horloge du PC toujours au jour 3)");
+    // deux Studios ouverts ensemble : le temps ne compte qu'une fois
+    lic::LicenseStore other(optionsFor(folder));
+    (void)other.evaluate();
+    g_now += 3600;
+    g_steady += 3600;
+    s = st->evaluate();
+    const auto s2 = other.evaluate();
+    check(s.trustedNow == T0 + 26 * D + 3600 && s2.trustedNow == T0 + 26 * D + 3600,
+          "deux Studios ouverts : une heure comptee une fois (" + lic::isoTime(s.trustedNow) + " / " + lic::isoTime(s2.trustedNow) + ")");
+}
+
+// La licence flottante : le jeton se compte a l'heure du service, plancher compris ; l'horloge reculee n'y change rien.
+void testFloatingClockBack() {
+    std::printf("-- revue 1 : la licence flottante, l'horloge reculee, le compteur efface\n");
+    g_now = T0;
+    g_steady = 100;
+    const fs::path folder = g_root / "pc-revue-flottante";
+    auto st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    const Pc pc = pcKey(*st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00930", lic::LicenseType::Floating, T0 - D, 0);
+    check(syncTime(*st, T0), "l'heure du service notee (T0)");
+    (void)st->installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
+    std::string why;
+    check(st->installLease(leaseText(l.licenseId, pc.keyHex, T0, T0 + 900), g_cert, &why) && st->evaluate().status == LicenseStatus::Valid,
+          "un jeton de 15 minutes : Valide");
+    g_now = T0 + 10 * 60;
+    g_steady += 10 * 60;
+    check(st->evaluate().status == LicenseStatus::Valid, "10 minutes : Valide");
+    // un autre lancement, l'horloge reculee de 9 minutes (dans la tolerance) puis arretee : le compteur continue
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    g_steady = 1;
+    g_now = T0 + 60;
+    check(st->evaluate().status == LicenseStatus::Valid, "l'horloge remise a T0 + 1 min : le jeton vaut encore (compte depuis T0 + 10 min)");
+    g_steady += 6 * 60;
+    auto s = st->evaluate();
+    check(s.status == LicenseStatus::NoFloatingSeat && has(s.detail, "jeton a pris fin"),
+          "6 minutes de plus, l'horloge du PC arretee : le jeton est fini (" + std::string(lic::statusKey(s.status)) + ")");
+    // un jeton emis plus tard que l'heure du compteur : son emission est le plancher
+    check(st->installLease(leaseText(l.licenseId, pc.keyHex, T0 + 2 * D, T0 + 2 * D + 900), g_cert, &why), "un jeton emis au jour 2 : accepte");
+    s = st->evaluate();
+    check(s.status == LicenseStatus::Valid && s.trustedNow >= T0 + 2 * D, "Valide, l'heure retenue au moins son emission (" + lic::isoTime(s.trustedNow) + ")");
+    g_steady += 16 * 60;
+    check(st->evaluate().status == LicenseStatus::NoFloatingSeat, "16 minutes plus tard (l'horloge du PC toujours en arriere) : fini");
+    // l'horloge reculee de deux jours : Horloge reculee
+    st = std::make_unique<lic::LicenseStore>(optionsFor(folder));
+    g_now = T0 - 2 * D;
+    check(st->installLease(leaseText(l.licenseId, pc.keyHex, T0 + 2 * D + 1000, T0 + 2 * D + 1900), g_cert, &why), "un jeton frais");
+    check(st->evaluate().status == LicenseStatus::ClockRolledBack, "l'horloge reculee de plusieurs jours : Horloge reculee, meme avec un jeton");
+    // la preuve de concept 3 : le compteur efface, l'horloge figee pres de l'emission du jeton
+    std::error_code ec;
+    fs::remove(folder / lic::LicenseStore::kStateFile, ec);
+    fs::remove(folder / lic::LicenseStore::kClockFile, ec);
+    g_now = T0 + 2 * D + 1060;
+    g_steady = 1;
+    s = lic::LicenseStore(optionsFor(folder)).evaluate();
+    check(s.status == LicenseStatus::LeaseExpired && !s.hasFeature("ai_generation"),
+          "le compteur efface, l'horloge juste apres l'emission du jeton : Bail expire (" + std::string(lic::statusKey(s.status)) + ")");
+}
+
+// Constatation 10 : la fin (et la grace) d'une licence en ligne se compare a l'heure retenue.
+void testOnlineExpiry() {
+    std::printf("-- revue 10 : la fin d'une licence en ligne datee, a l'heure retenue\n");
+    g_now = T0 - 5 * D;   // l'horloge du PC a 5 jours de retard sur le service
+    g_steady = 100;
+    const fs::path folder = g_root / "pc-revue-fin";
+    lic::LicenseStore st(optionsFor(folder));
+    const Pc pc = pcKey(st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00940", lic::LicenseType::Temporary, T0 - D, T0 + 10 * D);
+    check(syncTime(st, T0), "l'heure du service (T0), l'horloge du PC au 02/11/2026");
+    auto rep = st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "activee (l'horloge du PC en retard sur l'emission de la licence : rien a redire) (" + rep.why + ")");
+    g_now = T0 + 7 * D;
+    g_steady += 12 * D;
+    auto s = st.evaluate();
+    check(s.status == LicenseStatus::Grace && s.trustedNow == T0 + 12 * D && s.graceDaysLeft == 12,
+          "l'horloge du PC au jour 7, l'heure retenue au jour 12 : la licence (fin au jour 10) est en Grace, 12 jours (" + std::string(lic::statusKey(s.status)) + ")");
+    g_now = T0 + 20 * D;
+    g_steady += 13 * D;
+    s = st.evaluate();
+    check(s.status == LicenseStatus::Expired && has(s.message, "connecte ce PC \xC3\xA0 Internet"), "l'heure retenue au jour 25 : Expiree (" + s.message + ")");
+}
+
+// Constatations 3 et 6 : l'empreinte du poste, l'adresse du service.
+void testStationAndUrl() {
+    std::printf("-- revue 3 et 6 : l'activation sans empreinte du poste, la cle recopiee, l'adresse du service\n");
+    g_now = T0;
+    g_steady = 100;
+    std::error_code ec;
+    const fs::path folder = g_root / "pc-revue-station";
+    lic::LicenseStore st(optionsFor(folder));
+    const Pc pc = pcKey(st, folder);
+    const lic::License l = onlineLicense("XPG-2026-00950", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(st, T0), "l'heure du service notee");
+    check(st.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert).state.status
+              == LicenseStatus::Valid,
+          "activee avec l'empreinte du poste");
+    // la cle du PC recopiee sur une autre installation de Windows (un autre identifiant d'installation)
+    const fs::path clone = g_root / "pc-revue-station-copie";
+    fs::copy(folder, clone, fs::copy_options::recursive, ec);
+    auto s = lic::LicenseStore(optionsFor(clone)).evaluate();
+    check(s.status == LicenseStatus::OtherDevice && has(s.detail, "autre installation de Windows"), "le dossier recopie sur une autre installation : Autre PC (" + s.detail + ")");
+    // une activation sans empreinte, posee dans le dossier : Autre PC, ici comme ailleurs
+    writeFile(folder / lic::LicenseStore::kActivationFile, activationText(activationFor(l, pc.keyHex, "", T0, T0 + 30 * D)) + g_cert);
+    s = st.evaluate();
+    check(s.status == LicenseStatus::OtherDevice && has(s.detail, "ne porte pas l'empreinte du poste") && !s.hasFeature("ai_generation"),
+          "activation.xpgact sans empreinte du poste : Autre PC (" + s.detail + ")");
+    // l'adresse du service : celle du programme change -> l'activation n'est plus crue
+    writeFile(folder / lic::LicenseStore::kActivationFile, activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)) + g_cert);
+    check(st.evaluate().status == LicenseStatus::Valid, "l'activation remise : Valide");
+    lic::StoreOptions moved = optionsFor(folder);
+    moved.serviceUrl = std::string("https://xpg-licences.autre.workers.dev");
+    s = lic::LicenseStore(moved).evaluate();
+    check(s.status == LicenseStatus::Invalid && has(s.detail, "autre adresse"), "un programme d'un autre service : l'activation n'est pas crue (" + s.detail + ")");
+    moved.serviceUrl = std::string();
+    s = lic::LicenseStore(moved).evaluate();
+    check(s.status == LicenseStatus::Invalid && has(s.detail, "pas de service des licences"), "un programme sans service : Invalide (" + s.detail + ")");
+    moved.serviceUrl = std::string(kUrl) + "/";
+    check(lic::LicenseStore(moved).evaluate().status == LicenseStatus::Valid, "l'adresse avec un / final : la meme (normalisee)");
+    moved.serviceUrl = std::string("https://xpg-licences.essai.workers.dev:8443");
+    check(lic::LicenseStore(moved).evaluate().status == LicenseStatus::Invalid, "un autre port : une autre adresse");
+    moved.serviceUrl = std::nullopt;
+    check(lic::LicenseStore(moved).serviceUrl() == sv::compiledAddress().url, "par defaut : l'adresse compilee (" + sv::compiledAddress().url + ")");
+}
+
+// Constatation 9 : le code laisse dans le dossier des licences (n'importe quel compte peut y creer un fichier).
+void testPendingCodeOwner() {
+    std::printf("-- revue 9 : code-activation.txt, selon qui l'a ecrit\n");
+    g_now = T0;
+    g_steady = 100;
+    const std::string kCode = "XPG-7K3M-9QPT-2WXD-H8NB";
+    lic::FileOwner owner = lic::FileOwner::Admin;
+    const auto withOwner = [&](const fs::path& f) {
+        lic::StoreOptions o = optionsFor(f);
+        o.fileOwner = [&owner](const std::string&) { return owner; };
+        return o;
+    };
+    // sans licence (la Decouverte) : l'installateur (administrateurs) ou ce compte -> lu ; un autre compte -> ignore
+    const fs::path free = g_root / "pc-code-libre";
+    lic::LicenseStore a(withOwner(free));
+    (void)a.evaluate();
+    writeFile(free / lic::LicenseStore::kPendingCodeFile, kCode + "\r\n");
+    owner = lic::FileOwner::Admin;
+    check(a.pendingActivationCode() == kCode, "sans licence, ecrit par l'installateur (administrateurs) : lu");
+    owner = lic::FileOwner::CurrentUser;
+    check(a.pendingActivationCode() == kCode, "sans licence, ecrit par ce compte : lu (une installation pour ce compte, ou pose a la main)");
+    owner = lic::FileOwner::Unknown;
+    check(a.pendingActivationCode() == kCode, "sans licence, proprietaire illisible (Wine) : comme ce compte, lu");
+    owner = lic::FileOwner::Other;
+    std::string why;
+    check(a.pendingActivationCode().empty(), "sans licence, ecrit par un autre compte : ignore");
+    check(a.clearPendingActivationCode(&why) && fs::exists(free / lic::LicenseStore::kPendingCodeFile), "le fichier d'un autre compte n'est jamais efface");
+    (void)a.pendingActivationCode();
+    int lines = 0;
+    for (const auto& e : a.history()) {
+        check(!has(e.text, "7K3M"), "le code n'est jamais dans l'historique");
+        lines += has(e.text, "code-activation.txt est ignor\xC3\xA9") ? 1 : 0;
+    }
+    check(lines == 1, "une seule ligne de l'historique le dit (" + std::to_string(lines) + ")");
+    // une licence valable installee : seul l'installateur peut encore laisser un code
+    const fs::path lic1 = g_root / "pc-code-licence";
+    lic::LicenseStore b(withOwner(lic1));
+    const Pc pc = pcKey(b, lic1);
+    const lic::License l = onlineLicense("XPG-2026-00960", lic::LicenseType::Perpetual, T0 - D, 0);
+    check(syncTime(b, T0), "l'heure du service notee");
+    check(b.installActivation(licenseText(l), activationText(activationFor(l, pc.keyHex, pc.station, T0, T0 + 30 * D)), g_cert).state.status
+              == LicenseStatus::Valid,
+          "une licence en ligne installee : Valide");
+    writeFile(lic1 / lic::LicenseStore::kPendingCodeFile, kCode);
+    owner = lic::FileOwner::CurrentUser;
+    check(b.pendingActivationCode().empty(), "une licence installee, ecrit par ce compte : ignore (pas de licence remplacee par un code pose)");
+    owner = lic::FileOwner::Unknown;
+    check(b.pendingActivationCode().empty(), "une licence installee, proprietaire illisible : ignore");
+    owner = lic::FileOwner::Other;
+    check(b.pendingActivationCode().empty(), "une licence installee, un autre compte : ignore");
+    owner = lic::FileOwner::Admin;
+    check(b.pendingActivationCode() == kCode, "une licence installee, ecrit par l'installateur : lu");
+    check(b.clearPendingActivationCode(&why) && !fs::exists(lic1 / lic::LicenseStore::kPendingCodeFile), "et efface une fois l'activation faite");
+    bool line = false;
+    for (const auto& e : b.history()) line = line || (e.kind == "controle" && has(e.text, "une licence est d\xC3\xA9j\xC3\xA0 install\xC3\xA9" "e sur ce PC"));
+    check(line, "l'historique dit pourquoi le code de ce compte a ete ignore");
+    // le proprietaire reel (ce systeme) : un fichier cree par ce programme
+    const fs::path f = g_root / "proprietaire.txt";
+    writeFile(f, "x");
+    const lic::FileOwner mine = lic::fileOwnerOf(U(f));
+#ifndef _WIN32
+    check(mine == (::geteuid() == 0 ? lic::FileOwner::Admin : lic::FileOwner::CurrentUser), "fileOwnerOf : un fichier de ce compte (root : Admin)");
+    if (::geteuid() == 0) {
+        check(::chown(U(f).c_str(), 4242, 4242) == 0 && lic::fileOwnerOf(U(f)) == lic::FileOwner::Other, "fileOwnerOf : un fichier d'un autre compte (uid 4242)");
+    }
+#else
+    check(mine == lic::FileOwner::CurrentUser || mine == lic::FileOwner::Admin || mine == lic::FileOwner::Unknown, "fileOwnerOf : un fichier de ce compte");
+#endif
+    check(lic::fileOwnerOf(U(g_root / "absent.txt")) == lic::FileOwner::Unknown, "fileOwnerOf : un fichier absent -> illisible");
+}
+
 // ============================================================================== l'API ==
 void testApi() {
     std::printf("-- l'API (Licensing.hpp)\n");
@@ -669,6 +1046,7 @@ void testApi() {
     lic::resetForTests();
     std::string why;
     check(!lic::noteServiceTime("", "", "", &why) && has(why, "initialize"), "avant initialize : refuse");
+    check(lic::thisStationHash().empty(), "thisStationHash avant initialize : vide");
     lic::initialize(optionsFor(folder));
     check(lic::getLicenseStatus() == LicenseStatus::Evaluation && lic::getStatusLabel() == "D\xC3\xA9" "couverte", "initialize : la Decouverte");
     check(lic::thisMachineHash() == sv::machineHash("machine-essai-pc-api"), "thisMachineHash");
@@ -688,15 +1066,16 @@ void testApi() {
     check(!lic::deviceSignServiceMessage("autre chose", sig, pub, &why), "deviceSignServiceMessage : seulement XPG-SERVICE-1");
     const std::string keyHex = lic::crypto::hex(pub);
     const std::string station = lic::stationHash("machine-essai-pc-api", pub);
+    check(lic::thisStationHash() == station, "thisStationHash : l'empreinte du poste de ce PC (a envoyer au service)");
     const lic::License l = onlineLicense("XPG-2026-00190", lic::LicenseType::Floating, T0 - D, 0);
+    const std::string n = nonce();
+    check(lic::noteServiceTime(timeText(T0, n), n, g_cert, &why) && lic::getLicenseState().lastServiceSync == T0, "noteServiceTime : lastServiceSync");
     const auto rep = lic::installActivation(licenseText(l), activationText(activationFor(l, keyHex, station, T0, T0 + 30 * D)), g_cert);
     check(rep.ok && lic::getLicenseStatus() == LicenseStatus::NoFloatingSeat && lic::getLicenseState().floating && lic::getLicenseId() == "XPG-2026-00190",
           "installActivation : Flottante : aucun poste (" + rep.why + ")");
     check(lic::installLease(leaseText(l.licenseId, keyHex, T0, T0 + 900), g_cert, &why) && lic::getLicenseStatus() == LicenseStatus::Valid
               && lic::isFeatureEnabled("ai_generation"),
           "installLease : Valide, les fonctionnalites ouvertes");
-    const std::string n = nonce();
-    check(lic::noteServiceTime(timeText(T0, n), n, g_cert, &why) && lic::getLicenseState().lastServiceSync == T0, "noteServiceTime : lastServiceSync");
     lic::dropLease();
     check(lic::getLicenseStatus() == LicenseStatus::NoFloatingSeat && !lic::isFeatureEnabled("ai_generation"), "dropLease : Flottante : aucun poste");
     check(lic::installTrialRecord(trialText(keyHex, lic::thisMachineHash(), T0 - D), g_cert, &why), "installTrialRecord : " + why);
@@ -755,6 +1134,13 @@ int main(int argc, char** argv) {
     testFloating();
     testTrial();
     testBoundUnchanged();
+    testCounterDeleted();
+    testFloors();
+    testOnlineClockBack();
+    testFloatingClockBack();
+    testOnlineExpiry();
+    testStationAndUrl();
+    testPendingCodeOwner();
     testApi();
 
     lic::resetForTests();

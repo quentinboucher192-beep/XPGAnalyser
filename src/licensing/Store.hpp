@@ -104,8 +104,8 @@
 //  sur ce PC qu'avec une activation verifiee : un certificat signe par une cle
 //  de l'editeur que ce programme croit, pas expire a l'heure retenue, qui donne
 //  le droit << activation >> ; le bloc signe par la cle qu'il nomme ; la meme
-//  licence et la meme emission ; la cle de CE PC ; l'empreinte du poste (si
-//  donnee) ; le bail (jusqu_a) pas fini a l'heure retenue. Sinon : Bail expire
+//  licence et la meme emission ; la cle de CE PC ; l'empreinte du poste (exigee
+//  si cette installation en a une) ; le bail (jusqu_a) pas fini a l'heure retenue. Sinon : Bail expire
 //  (le bail fini, le certificat expire, l'activation absente), Autre PC
 //  (l'activation d'un autre PC), Invalide (signature, licence). Puis les etats
 //  d'avant (revocation, horloge, fin, grace). Une licence FLOTTANTE demande en
@@ -126,6 +126,23 @@
 //  ecoule) : une horloge du PC en avance ne le perime pas d'avance. Copies : la
 //  meilleure gagne (l'heure signee la plus recente, puis le plus de temps
 //  ecoule) ; une copie en retard est remise.
+//  1.35.0 (revue de securite) - LA LICENCE EN LIGNE NE CROIT PAS L'HORLOGE DU PC
+//  SEULE : sans aucune copie lisible du compteur (etat.bin, horloge.bin, HKCU,
+//  ce lancement), une licence en ligne activee -> Bail expire (<< connecte ce PC
+//  a Internet pour renouveler >>), jamais l'horloge du PC ; l'heure retenue est
+//  au moins l'emission (emis) de l'activation et du jeton (signees par le
+//  service : rien a effacer) et la derniere heure signee ; l'horloge du PC en
+//  arriere de plus que la tolerance sur la plus avancee deja comptee depuis la
+//  derniere heure signee (wall) -> Horloge reculee, jusqu'a la connexion
+//  suivante (l'heure signee recale) ; la fin et la grace d'une licence en ligne
+//  se comparent a l'heure retenue. Le certificat de chaque document du service
+//  doit nommer l'adresse du service de CE programme (StoreOptions::serviceUrl,
+//  par defaut service::compiledAddress()) ; sans adresse, aucun document du
+//  service n'est cru. Une activation sans empreinte du poste (station) est
+//  refusee (Autre PC) quand cette installation en a une. Le code laisse par
+//  l'installateur n'est lu que s'il a ete ecrit par les administrateurs (ou
+//  SYSTEM ; ailleurs root), ou par ce compte quand aucune licence valable n'est
+//  installee (pendingActivationCode).
 //  LA DECOUVERTE (l'evaluation de la 1.34, renommee pour l'utilisateur ; l'etat
 //  et les cles gardent le nom Evaluation / "evaluation") : decouverte.xpgdec
 //  est une copie de plus de son debut - pour cette machine (machineHash) et
@@ -201,6 +218,16 @@ struct TrustedKey {
 // construction d'essai (XPG_LICENCES_CLE_ESSAI : captures, essais) ; ailleurs, toujours vide (la lecture de la
 // variable n'est pas compilee : personne ne remplace le dossier, ni son etat protege, d'un programme livre).
 [[nodiscard]] std::string testFolderOverride();
+
+// 1.35.0 (revue 9) : qui a ecrit un fichier du dossier des licences (code-activation.txt).
+enum class FileOwner : std::uint8_t {
+    Admin,         // Windows : les Administrateurs (S-1-5-32-544) ou SYSTEM (S-1-5-18) - l'installateur ; ailleurs : root
+    CurrentUser,   // le compte qui fait tourner ce programme
+    Other,         // un autre compte
+    Unknown,       // illisible (Wine, un volume sans droits...) : traite comme CurrentUser
+};
+// Le proprietaire d'un fichier (Windows : GetNamedSecurityInfoW ; ailleurs : stat, root ou ce compte).
+[[nodiscard]] FileOwner fileOwnerOf(const std::string& path);
 
 // 1.30.0 : un evenement de l'historique de ce PC (historique.jsonl).
 struct HistoryEvent {
@@ -280,6 +307,13 @@ struct StoreOptions {
     // 1.35.0 : une horloge MONOTONE en secondes (le temps ou le programme tourne, pour le compteur du bail) ; vide :
     // std::chrono::steady_clock. Les essais la donnent (et l'avancent a la main).
     std::function<Seconds()>       monotonicClock;
+    // 1.35.0 (revue 6) : l'adresse du service des licences de ce programme ; le certificat de chaque document du
+    // service (activation, jeton, heure, Decouverte) doit nommer CETTE adresse (schema, hote et port, sans / final).
+    // nullopt : service::compiledAddress() (une construction d'essai : XPG_SERVICE) ; vide (ou mal ecrite) : ce
+    // programme n'a pas de service, aucun document du service n'est cru. Les essais la donnent.
+    std::optional<std::string>     serviceUrl;
+    // 1.35.0 (revue 9) : le proprietaire d'un fichier ; vide : fileOwnerOf (le systeme). Les essais le donnent.
+    std::function<FileOwner(const std::string& path)> fileOwner;
 };
 
 // Ce qu'a donne l'import d'un fichier.
@@ -391,8 +425,18 @@ public:
     bool installTrialRecord(std::string_view trialText, std::string_view certText, std::string* why);
     // L'empreinte de cette machine pour le service (service::machineHash de l'identifiant de l'installation).
     [[nodiscard]] std::string thisMachineHash() const;
+    // 1.35.0 (revue 3) : l'empreinte du poste de CE PC (stationHash de l'identifiant de l'installation et de la cle du
+    // PC, 32 hexadecimaux), celle que porte son activation ; la cle est creee si besoin (`created`). Vide : la cle ne
+    // se cree pas, ou l'identifiant de l'installation est illisible.
+    [[nodiscard]] std::string thisStationHash(bool* created = nullptr);
+    // 1.35.0 (revue 6) : l'adresse du service que ce magasin croit (normalisee ; vide : aucun document du service).
+    [[nodiscard]] const std::string& serviceUrl() const noexcept { return serviceUrl_; }
     // Le code laisse par l'installateur (code-activation.txt, sa premiere ligne non vide, sans espaces autour) ;
-    // "" s'il n'y en a pas. Jamais ecrit dans l'historique. clearPendingActivationCode : l'efface (absent : vrai).
+    // "" s'il n'y en a pas. Jamais ecrit dans l'historique. 1.35.0 (revue 9) : seulement s'il a ete ecrit par les
+    // administrateurs ou SYSTEM (l'installateur ; ailleurs root), ou par CE compte quand aucune licence valable
+    // n'est installee (la derniere evaluation) ; sinon "" - le fichier reste, une ligne de l'historique le dit
+    // (sans le code). clearPendingActivationCode : l'efface (absent : vrai) ; jamais celui d'un autre compte (vrai,
+    // laisse tel quel).
     [[nodiscard]] std::string pendingActivationCode() const;
     bool clearPendingActivationCode(std::string* why);
 
@@ -419,6 +463,8 @@ private:
     [[nodiscard]] std::string notWritable(const std::string& why) const;
     [[nodiscard]] Seconds fileTime(const std::string& path) const;
     [[nodiscard]] bool systemEvaluationCopy() const;
+    [[nodiscard]] FileOwner ownerOf(const std::string& path) const;
+    [[nodiscard]] bool validLicenseInstalled() const;
 
     StoreOptions            opt_;
     std::optional<Registry> registry_;
@@ -437,6 +483,9 @@ private:
     Seconds                 memoWall_{0};
     Seconds                 memoSteady_{0};
     bool                    memoSet_{false};
+    std::string             serviceUrl_;          // 1.35.0 (revue 6) : l'adresse du service crue (normalisee)
+    std::optional<LicenseStatus> lastEvaluated_;  // 1.35.0 (revue 9) : l'etat de la derniere evaluation
+    mutable bool            pendingIgnoredNoted_{false};   // 1.35.0 (revue 9) : le code ignore deja note (ce lancement)
 };
 
 } // namespace licensing

@@ -114,9 +114,18 @@ Address compiledAddress() {
     // Seulement dans une construction d'essai : le service des essais, sur ce poste.
     if (const char* env = std::getenv("XPG_SERVICE"); env && *env) a.url = env;
 #endif
-    while (!a.url.empty() && a.url.back() == '/') a.url.pop_back();
-    if (!a.url.empty() && !validUrl(a.url)) a.url.clear();
+    a.url = normalizeUrl(a.url);
     return a;
+}
+
+std::string normalizeUrl(std::string_view url) {
+    while (!url.empty() && url.back() == '/') url.remove_suffix(1);
+    return validUrl(url) ? std::string(url) : std::string();
+}
+
+bool sameUrl(std::string_view a, std::string_view b) {
+    const std::string na = normalizeUrl(a), nb = normalizeUrl(b);
+    return !na.empty() && na == nb;
 }
 
 // ============================================================ les appels signes ==

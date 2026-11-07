@@ -54,7 +54,8 @@
 //  noteServiceTime, installLease, installTrialRecord), efface ce que le service
 //  ne renouvelle plus (dropActivation, dropLease), donne l'empreinte de la
 //  machine (thisMachineHash) et le code laisse par l'installateur
-//  (pendingActivationCode). Chaque appel qui change quelque chose revalue l'etat
+//  (pendingActivationCode), l'empreinte du poste a envoyer au service
+//  (thisStationHash). Chaque appel qui change quelque chose revalue l'etat
 //  (getLicenseState : online, activationUntil, activationWarning, floating,
 //  leaseUntil, lastServiceSync, trustedNow). Tout est sous le verrou du module,
 //  comme le reste. Avant initialize() : refuse (faux, ou un rapport refuse),
@@ -198,9 +199,16 @@ void dropLease();
 bool installTrialRecord(std::string_view trialText, std::string_view certText, std::string* why);
 // L'empreinte de cette machine pour /v1/decouverte (32 hexadecimaux ; vide : identifiant de l'installation illisible).
 [[nodiscard]] std::string thisMachineHash();
+// 1.35.0 (revue 3) : l'empreinte du poste de CE PC (stationHash : l'identifiant de l'installation de Windows et la cle
+// du PC, 32 hexadecimaux), celle que porte son activation et que demande le service dans /v1/renouveler,
+// /v1/flottante/jeton et /v1/flottante/rendre ("station"). La cle du PC est creee si besoin (l'etat est alors revalue).
+// Vide : avant initialize(), la cle ne se cree pas, ou l'identifiant de l'installation est illisible.
+[[nodiscard]] std::string thisStationHash();
 // Le code d'activation laisse par l'installateur (code-activation.txt du dossier des licences, sa premiere ligne,
 // tel quel : a relire avec service::normalizeCode) ; "" s'il n'y en a pas. C'est un SECRET : jamais dans un journal,
 // un historique, un message. clearPendingActivationCode l'efface une fois l'activation faite (absent : vrai).
+// 1.35.0 (revue 9) : seulement un fichier ecrit par les administrateurs ou SYSTEM (l'installateur), ou par CE compte
+// quand aucune licence valable n'est installee ; un autre est ignore ("", laisse tel quel, une ligne de l'historique).
 [[nodiscard]] std::string pendingActivationCode();
 bool clearPendingActivationCode(std::string* why);
 

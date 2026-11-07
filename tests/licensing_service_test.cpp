@@ -64,6 +64,17 @@ int main() {
     check(!sv::validUrl("http://exemple.com") && !sv::validUrl("https://h/chemin") && !sv::validUrl("ftp://h") && !sv::validUrl("https://u@h") &&
               !sv::validUrl("https://") && !sv::validUrl("https://H.com"),
           "les adresses refusees (http ailleurs, chemin, identifiant, majuscules)");
+    // 1.35.0 (revue 6) : le certificat d'un document du service doit nommer l'adresse du service de ce programme
+    check(sv::normalizeUrl("https://xpg-licences.editeur.workers.dev//") == "https://xpg-licences.editeur.workers.dev" && sv::normalizeUrl("https://h/x").empty()
+              && sv::normalizeUrl("").empty(),
+          "normalizeUrl : les / finaux retires ; une adresse invalide -> vide");
+    check(sv::sameUrl("https://xpg-licences.editeur.workers.dev/", "https://xpg-licences.editeur.workers.dev")
+              && sv::sameUrl("http://127.0.0.1:8787", "http://127.0.0.1:8787/"),
+          "sameUrl : la meme adresse, avec ou sans / final");
+    check(!sv::sameUrl("https://xpg-licences.editeur.workers.dev", "https://xpg-licences.autre.workers.dev")
+              && !sv::sameUrl("https://h.workers.dev", "https://h.workers.dev:8443") && !sv::sameUrl("http://127.0.0.1:8787", "http://127.0.0.1:8788")
+              && !sv::sameUrl("http://localhost:1", "https://localhost:1") && !sv::sameUrl("", "") && !sv::sameUrl("https://h/x", "https://h/x"),
+          "sameUrl : un autre hote, port ou schema ; vide ou invalide : jamais");
 
     std::printf("-- l'appel signe\n");
     {

@@ -402,6 +402,16 @@ std::string thisMachineHash() {
     return service::machineHash(systemMachineId());
 }
 
+std::string thisStationHash() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return {};
+    bool created = false;
+    std::string h = m.store->thisStationHash(&created);
+    if (created) reevaluate(m);   // l'empreinte de la cle, creee a l'instant
+    return h;
+}
+
 std::string pendingActivationCode() {
     Module& m = module();
     std::lock_guard<std::mutex> lock(m.mutex);

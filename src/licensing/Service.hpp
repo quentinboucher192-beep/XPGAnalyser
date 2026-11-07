@@ -41,6 +41,10 @@ struct Address {
 // de service (licences par fichier seulement). SEULEMENT dans une construction d'essai (XPG_LICENCES_CLE_ESSAI) : la
 // variable d'environnement XPG_SERVICE la remplace (le service des essais, sur ce poste).
 [[nodiscard]] Address compiledAddress();
+// 1.35.0 (revue 6) : l'adresse normalisee (les / finaux retires) ; vide si elle n'est pas valide (validUrl).
+[[nodiscard]] std::string normalizeUrl(std::string_view url);
+// Deux adresses sont-elles le meme service ? Normalisees, le schema, l'hote et le port exactement ; une vide : jamais.
+[[nodiscard]] bool sameUrl(std::string_view a, std::string_view b);
 
 // ---- les appels signes ----
 inline constexpr const char* kHeaderKey = "X-XPG-Cle";
