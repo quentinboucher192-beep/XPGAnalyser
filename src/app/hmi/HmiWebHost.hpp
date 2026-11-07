@@ -38,7 +38,7 @@ public:
     WebHost& operator=(const WebHost&) = delete;
 
     // 1.32.0 : le nom du reglage du poste qui permet l'acces web (Reglages).
-    static constexpr std::string_view kSettingLabel = "Acc\xC3\xA8s web de l'IHM permis sur ce poste";
+    static constexpr std::string_view kSettingLabel = hmi::web::kThisPcSetting;
     // 1.32.0 : l'acces web est-il permis sur ce poste (le reglage de l'utilisateur) ? Faux par defaut.
     void setAllowedOnThisPc(bool on) noexcept { allowedHere_ = on; }
     [[nodiscard]] bool allowedOnThisPc() const noexcept { return allowedHere_; }

@@ -18,6 +18,7 @@
 #include "HmiLoginMenu.hpp"
 #include "HmiNavigation.hpp"
 #include "HmiScript.hpp"
+#include "HmiWeb.hpp"        // 1.32.0 : le reglage du poste qui permet l'acces web
 #include "HmiDecl.hpp"         // 1.11.18 (refonte, lot 3) : les declarations du modele, reconstruites
 #include "HmiCalc.hpp"         // 1.12.7 : les valeurs calculees au demarrage, les constantes qualifiees
 #include "HmiCalculator.hpp"   // 1.14.1 (N4) : la Calculatrice (ses choix, sa taille minimale)
@@ -4187,6 +4188,58 @@ void checkReports(const Project& p, std::vector<Issue>& out) {
     }
 }
 
+// 1.32.0 : UN CHEMIN COMPLET ECRIT DANS UN APPEL DE FICHIER (FILE_WRITE('C:\Export\a.csv', ...), DIR_LIST('\\nas\x')) : en
+// marche, il n'est permis que dans un dossier autorise sur le poste (Reglages) - Generer le dit d'avance, a chaque texte.
+void checkLiteralFilePaths(const Project& p, std::vector<Issue>& out) {
+    using S = Issue::Severity;
+    const auto absolute = [](std::string_view t) {
+        return (t.size() >= 2 && (t[0] == '/' || t[0] == '\\')) || (t.size() >= 3 && std::isalpha(static_cast<unsigned char>(t[0])) && t[1] == ':');
+    };
+    const auto allowed = [](const std::string& path) {
+        if (networkOrDevicePath(path)) return insideUserAllowedFolder(path);
+        std::string key = path;
+        for (auto& c : key) c = c == '\\' ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (std::string root : userAllowedFolders()) {
+            for (auto& c : root) c = c == '\\' ? '/' : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            while (root.size() > 1 && root.back() == '/') root.pop_back();
+            if (key == root || key.rfind(root + "/", 0) == 0) return true;
+        }
+        return false;
+    };
+    std::set<std::string> said;
+    forEachCode(p, [&](const std::string& text, CodeForm, const CodeSite& site) {
+        if (text.find("FILE_") == std::string::npos && text.find("DIR_") == std::string::npos && text.find("RESOURCE_EXTRACT") == std::string::npos)
+            return;
+        for (std::size_t at = 0; at < text.size(); ++at) {
+            const bool file = text.compare(at, 5, "FILE_") == 0, dir = text.compare(at, 4, "DIR_") == 0,
+                       res = text.compare(at, 16, "RESOURCE_EXTRACT") == 0;
+            if (!(file || dir || res) || (at > 0 && (std::isalnum(static_cast<unsigned char>(text[at - 1])) || text[at - 1] == '_'))) continue;
+            std::size_t k = at;
+            while (k < text.size() && (std::isalnum(static_cast<unsigned char>(text[k])) || text[k] == '_')) ++k;
+            const std::string fn = text.substr(at, k - at);
+            while (k < text.size() && (text[k] == ' ' || text[k] == '\t')) ++k;
+            if (k >= text.size() || text[k] != '(') continue;
+            // Les litteraux de l'appel, jusqu'a sa parenthese fermante.
+            int depth = 0;
+            for (std::size_t i = k; i < text.size(); ++i) {
+                if (text[i] == '(') ++depth;
+                else if (text[i] == ')' && --depth == 0) break;
+                else if (text[i] == '\'') {
+                    const std::size_t end = text.find('\'', i + 1);
+                    if (end == std::string::npos) break;
+                    const std::string lit = text.substr(i + 1, end - i - 1);
+                    if (absolute(lit) && !allowed(lit) && said.insert(site.where + "|" + lit).second)
+                        add(out, S::Warning, "Script", kNoId, kNoId, site.where,
+                            site.where + " : " + fn + "('" + lit + "') vise un dossier hors du projet - en marche, il n'est permis que si "
+                            "ce dossier est ajout\xC3\xA9 sur le poste dans R\xC3\xA9glages > " + std::string(kAllowedFoldersSetting)
+                            + " (sinon FILE_ERROR() le dit)", site.script);
+                    i = end;
+                }
+            }
+        }
+    });
+}
+
 void checkWeb(const Project& p, std::vector<Issue>& out) {
     using S = Issue::Severity;
     const auto& w = p.web;
@@ -4194,8 +4247,14 @@ void checkWeb(const Project& p, std::vector<Issue>& out) {
     const std::string cat = "Acc\xC3\xA8s web";
     if (w.login && p.security.users.empty())
         add(out, S::Error, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web avec connexion, mais aucun utilisateur (Configuration > Utilisateurs)");
-    if (!w.login && w.control)
-        add(out, S::Warning, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web sans connexion, avec commande : n'importe quel navigateur du r\xC3\xA9seau pilote l'IHM");
+    // 1.32.0 : le projet seul n'ouvre pas de serveur ; ouvert au reseau sans connexion, jamais la commande.
+    add(out, S::Info, cat, kNoId, kNoId, {}, "l'acc\xC3\xA8s web ne d\xC3\xA9marre que sur un poste qui l'autorise : R\xC3\xA9glages > "
+                                                  + std::string(web::kThisPcSetting));
+    if (!w.login && w.control && w.allInterfaces)
+        add(out, S::Warning, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web sans connexion, ouvert au r\xC3\xA9seau, avec commande : la commande est refus\xC3\xA9" "e, "
+                                                     "le navigateur reste en lecture seule (coche Se connecter pour piloter)");
+    else if (!w.login && w.control)
+        add(out, S::Warning, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web sans connexion, avec commande : n'importe quel navigateur de ce poste pilote l'IHM");
     if (!w.login && w.allInterfaces)
         add(out, S::Info, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web sans connexion, ouvert au r\xC3\xA9seau : tout le r\xC3\xA9seau voit l'IHM");
     if (w.port == p.comm.demoPort && p.comm.demoServer)
@@ -5898,6 +5957,7 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
     checkNotify(p, out);                                              // lot 14 : les notifications
     checkReports(p, out);                                             // lot 14 : les rapports
     checkWeb(p, out);                                                 // lot 14 : l'acces web
+    checkLiteralFilePaths(p, out);                                    // 1.32.0 : les chemins complets des scripts
     checkEquipments(p, out);                                          // lot 15 : les equipements du reseau
     if (p.config.quality) checkQuality(p, qualityOptions(p, options.measure), out);   // lot 13 : la qualite
 

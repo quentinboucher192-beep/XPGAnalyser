@@ -100,6 +100,8 @@ std::string usage() {
            "  exporter-cle --sortie PublisherKey.hpp --vide   le fichier SANS cl\xC3\xA9 (les licences ne sont pas actives)\n"
            "  signer-registre --entree R.json --sortie R.xpgreg\n"
            "  signer-revocations --entree V.json --sortie V.xpgrev\n"
+           "                                                 V.json : number, revoked[] ; chaque entr\xC3\xA9" "e : license_id, reason,\n"
+           "                                                 [device] (un seul PC), [issued_before] (les \xC3\xA9missions sign\xC3\xA9" "es avant cette date)\n"
            "  signer-licence --parametres P.json --demande PC.xpgreq [--demande ...] [--licence ANCIENNE.xpglic]\n"
            "                 --registre R.xpgreg [--revocations V.xpgrev] --sortie L.xpglic\n"
            "  verifier FICHIER                               lit un fichier sign\xC3\xA9 et dit ce qu'il contient\n"

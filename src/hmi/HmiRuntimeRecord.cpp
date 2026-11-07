@@ -42,6 +42,7 @@
 #include "HmiRuntime.hpp"
 
 #include "HmiActionKinds.hpp"
+#include "HmiAssets.hpp"     // 1.32.0 : un dossier des enregistrements reseau venu du projet
 #include "HmiCrypto.hpp"
 #include "HmiExpr.hpp"
 #include "HmiLibrary.hpp"  // 1.20.2 : les bibliotheques reliees de la copie du projet
@@ -186,7 +187,10 @@ std::string Runtime::recordingsFolder() const {
     const Project* live = liveProject();
     if (!live) return {};
     const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
-    return rec::folderOf(live->recording, pf);
+    std::string folder = rec::folderOf(live->recording, pf);
+    // 1.32.0 : un dossier reseau ecrit dans le projet n'est pas touche (fuite NTLM), sauf dossier autorise sur ce poste.
+    if (!projectPathAllowed(folder)) return {};
+    return folder;
 }
 
 // ======================================================================== 1.20.2 : le projet de son moment ==
@@ -1273,7 +1277,11 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
         // Personne pour repondre a "Remplacer ?" : un fichier deja la garde le sien, la copie prend un nom libre.
         rec::ExportOptions eo;
         eo.ifExists = rec::ExportOptions::IfExists::FreeName;
-        const bool ok = it && rec::exportFile(recordingsFolder(), it->name, text(1), &written, &why, eo);
+        // 1.32.0 : la destination reste dans les dossiers permis aux scripts (comme FILE_WRITE).
+        const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
+        std::string dest;
+        const bool permitted = confinedScriptPath(pf, text(1), true, dest, why);
+        const bool ok = it && permitted && rec::exportFile(recordingsFolder(), it->name, dest, &written, &why, eo);
         if (!it) said("enregistrement introuvable : " + text(0));
         else if (!ok) said(why);
         else log("Enregistrement", source, it->name + " export\xC3\xA9 vers " + written);
@@ -1281,8 +1289,10 @@ bool Runtime::recordingNative(const std::string& u, const std::vector<std::pair<
         return true;
     }
     if (u == "IHM_ENREG_IMPORTER") {
-        std::string why, name;
-        const bool ok = rec::importFile(text(0), recordingsFolder(), name, &why);
+        std::string why, name, from;
+        // 1.32.0 : la source reste dans les dossiers permis aux scripts (comme FILE_READ).
+        const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
+        const bool ok = confinedScriptPath(pf, text(0), false, from, why) && rec::importFile(from, recordingsFolder(), name, &why);
         if (!ok) said(why);
         else log("Enregistrement", source, "import\xC3\xA9 : " + name);
         if (rec_) rec_->itemsAt = -1e9;
@@ -1471,7 +1481,11 @@ bool Runtime::recordingCommand(const View& v, const Object* o, const Action& a, 
             // Un nom rendu ({formule}) n'est jamais un chemin (exportFile le verifie) ; un fichier deja la : un nom libre.
             rec::ExportOptions eo;
             eo.ifExists = rec::ExportOptions::IfExists::FreeName;
-            if (rec::exportFile(recordingsFolder(), name, rendered(a.value), &written, &why, eo)) log("Enregistrement", source, name + " export\xC3\xA9 vers " + written);
+            // 1.32.0 : la destination ecrite dans le projet reste dans les dossiers permis (comme FILE_WRITE).
+            const std::string pf = hooks_.projectFolder ? hooks_.projectFolder() : std::string{};
+            std::string dest;
+            if (confinedScriptPath(pf, rendered(a.value), true, dest, why) && rec::exportFile(recordingsFolder(), name, dest, &written, &why, eo))
+                log("Enregistrement", source, name + " export\xC3\xA9 vers " + written);
             else log("Erreur", source, "exporter l'enregistrement : " + why);
             break;
         }

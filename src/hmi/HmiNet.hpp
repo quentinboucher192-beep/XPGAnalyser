@@ -93,6 +93,8 @@ private:
 // L'adresse d'une carte reseau de ce poste, pour dire ou joindre un serveur
 // ("192.168.1.30") ; "127.0.0.1" a defaut.
 [[nodiscard]] std::string localAddress();
+// 1.32.0 : le nom de ce poste ("POSTE-IHM") ; vide s'il ne se lit pas.
+[[nodiscard]] std::string hostName();
 
 // Base64 (l'authentification SMTP, les en-tetes HTTP).
 [[nodiscard]] std::string base64(std::string_view bytes);

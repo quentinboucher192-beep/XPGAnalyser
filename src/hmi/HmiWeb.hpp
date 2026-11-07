@@ -41,11 +41,15 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <utility>
 #include <vector>
 
 namespace hmi::web {
+
+// 1.32.0 : le reglage DU POSTE (jamais du projet) sans lequel l'acces web ne demarre pas (app/hmi/HmiWebHost).
+inline constexpr std::string_view kThisPcSetting = "Acc\xC3\xA8s web de l'IHM permis sur ce poste";
 
 struct Frame {
     std::shared_ptr<const Bytes> jpeg;
@@ -105,8 +109,9 @@ public:
     // 1.32.0 : les reglages tels qu'ils s'appliquent - accessible du reseau sans connexion : sans la commande.
     [[nodiscard]] static WebAccess effective(const WebAccess&);
     // 1.32.0 : l'en-tete Host d'une requete designe-t-il ce poste ? `local` : l'adresse et le port ou la connexion est
-    // arrivee ("192.168.1.5:8080") ; 127.0.0.1 et localhost pour une connexion locale.
-    [[nodiscard]] static bool hostMatches(const std::string& host, const std::string& local);
+    // arrivee ("192.168.1.5:8080") ; 127.0.0.1 et localhost pour une connexion locale ; `machine` : le nom du poste, tel
+    // quel (POSTE-IHM:8080 ; jamais un nom a points, qu'un DNS d'ailleurs ferait pointer ici).
+    [[nodiscard]] static bool hostMatches(const std::string& host, const std::string& local, const std::string& machine = {});
 
 private:
     struct Session {
@@ -130,6 +135,7 @@ private:
     mutable std::mutex          mutex_;
     WebAccess                   settings_;
     std::string                 project_;
+    std::string                 machine_;               // 1.32.0 : le nom du poste (Host permis)
     Authenticate                auth_;
     Frame                       frame_;
     double                      lastRequest_{-1e9};

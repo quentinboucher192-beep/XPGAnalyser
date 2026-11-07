@@ -559,6 +559,13 @@ std::string localAddress() {
     return out;
 }
 
+std::string hostName() {
+    if (!startup()) return {};
+    char name[256] = {0};
+    if (::gethostname(name, sizeof name - 1) != 0) return {};
+    return name;
+}
+
 std::string base64(std::string_view bytes) {
     static constexpr char kTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;

@@ -220,12 +220,13 @@ bool sameToken(std::string_view a, std::string_view b) {
 }
 } // namespace
 
-bool Server::hostMatches(const std::string& host, const std::string& local) {
+bool Server::hostMatches(const std::string& host, const std::string& local, const std::string& machine) {
     std::string hn, ln;
     int hp = 0, lp = 0;
     if (!splitHostPort(host, hn, hp, 80) || !splitHostPort(local, ln, lp, -1)) return false;
     if (hp != lp) return false;
     if (hn == ln) return true;
+    if (!machine.empty() && machine.find('.') == std::string::npos && hn == lowerAscii(machine)) return true;
     return ln.rfind("127.", 0) == 0 && (hn == "localhost" || hn == "127.0.0.1" || hn == "[::1]");
 }
 
@@ -247,6 +248,7 @@ bool Server::start(const WebAccess& w, std::string projectName, Authenticate aut
     {
         std::lock_guard<std::mutex> lock(mutex_);
         settings_ = effective(w);
+        machine_ = net::hostName();
         if (w.control && !settings_.control)
             event("commande refus\xC3\xA9" "e : accessible du r\xC3\xA9seau sans connexion, l'acc\xC3\xA8s web reste en lecture seule "
                   "(coche Se connecter pour piloter)");
@@ -404,13 +406,14 @@ void Server::serve(void* raw, const std::string& peer) {
             const std::size_t a = t.find_first_not_of(" \t"), b = t.find_last_not_of(" \t");
             return a == std::string::npos ? std::string{} : t.substr(a, b - a + 1);
         };
-        const bool hostOk = hostMatches(host, c.localName());
+        const bool hostOk = hostMatches(host, c.localName(), machine_);
         const std::string from = bare(origin), expected = "http://" + bare(host);
         const bool originOk = from.empty() || from == expected;
         if (!hostOk || !originOk) {
             {
                 std::lock_guard<std::mutex> g(mutex_);
-                event("Requ\xC3\xAAte refus\xC3\xA9" "e (" + peer + ") : " + (hostOk ? "origine \xC3\xA9trang\xC3\xA8re " + origin : "adresse inattendue " + host));
+                const std::string shownHeader = (hostOk ? origin : host).substr(0, 80);   // un en-tete recu : coupe
+                event("Requ\xC3\xAAte refus\xC3\xA9" "e (" + peer + ") : " + (hostOk ? "origine \xC3\xA9trang\xC3\xA8re " : "adresse inattendue ") + shownHeader);
             }
             reply(403, "text/plain; charset=utf-8",
                   "Requ\xC3\xAAte refus\xC3\xA9" "e : ouvre la page \xC3\xA0 l'adresse du poste (http://<adresse du poste>:<port>), depuis elle.");

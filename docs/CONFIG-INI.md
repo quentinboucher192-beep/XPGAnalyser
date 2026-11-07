@@ -85,6 +85,12 @@ Un seul fichier de paramètres pour toute la chaîne de fabrication. Il est lu p
 |---|---|
 | `sauvegardes_a_garder` | 3 : les plus anciennes sauvegardes partent au-delà. |
 
+## [Licences]
+
+| Clé | Rôle |
+|---|---|
+| `obligatoires` | `non` par défaut (1.32.0). À `oui`, le contrôle du paquet (`package_mingw.py`, `package.ps1`) refuse une construction dont `src/licensing/PublisherKey.hpp` n'a aucune clé de l'éditeur : une version livrée « Non activées » (tout ouvert, pour toujours) ne peut plus partir par erreur. À passer à `oui` dès que ta clé est dans les programmes. |
+
 ## Les deux autres .ini (côté utilisateur)
 
 - **`installation.ini`**, à côté du programme installé, est écrit par l'installateur ; ne pas le modifier.

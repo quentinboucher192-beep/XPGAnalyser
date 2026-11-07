@@ -145,6 +145,7 @@ void applyGain(Pcm&, double gain);
 
 // Du texte ecrit avec une police TTF/OTF : blanc, la couverture dans l'alpha.
 // C'est l'apercu d'une police importee, et ce qui dessine un texte qui l'utilise.
+// 1.32.0 : seulement une police TrueType que le lecteur borne accepte (fontRenderable) ; faux sinon.
 [[nodiscard]] bool renderFontText(const Bytes& font, std::string_view utf8, float pixelHeight, Rgba& out);
 // 1.25.1 (la mise en page des rapports : une police TrueType des ressources dans le PDF) : ses mesures, en millemes de
 // cadratin - la chasse de chaque point de code de `codes` (0 : absent de la police), la hauteur au-dessus et au-dessous

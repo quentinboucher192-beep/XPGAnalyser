@@ -12,6 +12,7 @@
 //  NATIVES_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
 #include "../src/hmi/HmiAssets.hpp"     // 1.32.0 : les dossiers autorises sur ce poste
+#include "../src/hmi/HmiCheck.hpp"      // 1.32.0 : Generer signale un chemin complet
 #include "../src/hmi/HmiRoles.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
@@ -1236,6 +1237,21 @@ void confinement132() {
               && !hmi::unsafePathSegment("C:/Donnees/../a.csv") && !hmi::unsafePathSegment("./donnees/COM10.txt"),
           "unsafePathSegment : CON, LPT1, un point final ; pas C:, .., ni COM10");
     hmi::setUserAllowedFolders({});
+    // Generer le dit d'avance : un chemin complet ecrit dans un appel de fichier, hors des dossiers autorises de ce poste.
+    {
+        Bench b("BOOL", "FILE_WRITE('C:/Export/releve.csv', 'x');\nR := FILE_EXISTS('releve.csv');");
+        const auto said = [&] {
+            for (const auto& i : generate(b.p, [](std::string_view) { return true; }))
+                if (i.category == "Script" && i.message.find("FILE_WRITE('C:/Export/releve.csv')") != std::string::npos
+                    && i.message.find(std::string(hmi::kAllowedFoldersSetting)) != std::string::npos)
+                    return true;
+            return false;
+        };
+        check(said(), "Generer : un chemin complet dans FILE_WRITE est signale, avec le reglage du poste");
+        hmi::setUserAllowedFolders({"C:\\Export"});
+        check(!said(), "Generer : ... plus quand son dossier est autorise sur ce poste");
+        hmi::setUserAllowedFolders({});
+    }
     fs::remove_all(outside, ec);
 }
 

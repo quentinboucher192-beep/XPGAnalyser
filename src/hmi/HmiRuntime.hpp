@@ -2712,5 +2712,10 @@ private:
 // Vide : comme avant. Pour tout le processus (l'enfant du bac a sable le pose une fois, avant tout).
 void confineFiles(std::string root);
 [[nodiscard]] const std::string& filesConfinedTo();
+// 1.32.0 : un chemin que le projet donne a un script ou a une action (FILE_*, IHM_ENREG_EXPORTER, IHM_ENREG_IMPORTER,
+// l'action Exporter un enregistrement) : resolu et confine comme FILE_WRITE - donnees/ et exports/ du projet, les dossiers
+// autorises sur ce poste ; jamais un peripherique ni un nom reserve de Windows. Faux : `why` le dit (avec le reglage).
+[[nodiscard]] bool confinedScriptPath(const std::string& projectFolder, const std::string& given, bool writing, std::string& resolved,
+                                      std::string& why);
 
 } // namespace hmi

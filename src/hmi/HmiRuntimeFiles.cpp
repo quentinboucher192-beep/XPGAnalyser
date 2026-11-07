@@ -297,6 +297,13 @@ bool resolve(const std::string& projectFolder, const std::string& given, bool wr
 void confineFiles(std::string root) { confinedRoot() = std::move(root); }
 const std::string& filesConfinedTo() { return confinedRoot(); }
 
+bool confinedScriptPath(const std::string& projectFolder, const std::string& given, bool writing, std::string& resolved, std::string& why) {
+    fs::path out;
+    if (!resolve(projectFolder, given, writing, out, why)) return false;
+    resolved = generic(out);
+    return true;
+}
+
 void Runtime::fileFailed(const std::string& op, const std::string& why) {
     if (!fileSaid_.insert(op + "|" + why).second) return;
     logAt(LogLevel::Warning, "Fichier", source_, op + " : " + why + " (FILE_ERROR() le dit au script)");

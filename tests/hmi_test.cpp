@@ -13251,6 +13251,9 @@ void webSecurite132() {
               && !Server::hostMatches("localhost:8080", "192.168.1.5:8080") && !Server::hostMatches("", "127.0.0.1:8080")
               && !Server::hostMatches("127.0.0.1:80x", "127.0.0.1:80") && !Server::hostMatches("127.0.0.1:8080", ""),
           "Host : un autre nom (DNS rebinding), un autre port, un en-tete vide ou illisible : refuses");
+    check(Server::hostMatches("Poste-IHM:8080", "192.168.1.5:8080", "POSTE-IHM") && !Server::hostMatches("poste-ihm.pirate.example:8080", "192.168.1.5:8080", "POSTE-IHM")
+              && !Server::hostMatches("poste-ihm.lan:8080", "192.168.1.5:8080", "poste-ihm.lan"),
+          "Host : le nom du poste, tel quel ; jamais un nom a points (qu'un DNS d'ailleurs ferait pointer ici)");
     WebAccess w;
     w.enabled = true;
     w.port = 0;
