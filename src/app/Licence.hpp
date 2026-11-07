@@ -95,6 +95,9 @@ inline std::atomic<RequireFn> g_require{nullptr};
 // il ne demarre pas). Tout ouvert : les licences pas actives (aucune cle de l'editeur compilee). Un projet deja ouvert
 // reste ouvert et s'enregistre (un poste qui tourne continue) : rien n'est perdu. `why` : la raison, pour une phrase.
 [[nodiscard]] bool projectsAllowed(std::string* why = nullptr);
+// 1.35.1 : la phrase de l'etat telle que l'ecran la montre. Le module dit << l'edition FREE s'applique >> et << ton projet
+// reste ouvert >> ; dans les Studios, sans licence valable, aucun projet ne s'ouvre : la phrase le dit.
+[[nodiscard]] std::string stateText(const licensing::LicenseState& st);
 // Le libelle d'une fonctionnalite (le registre ; sinon son identifiant).
 [[nodiscard]] std::string featureLabel(std::string_view feature);
 

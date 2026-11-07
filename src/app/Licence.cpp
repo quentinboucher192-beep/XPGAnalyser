@@ -184,6 +184,20 @@ bool allows(std::string_view feature) {
     return licensing::isFeatureEnabled(feature);
 }
 
+std::string stateText(const licensing::LicenseState& st) {
+    std::string m = st.message;
+    if (!g_active || licensing::allFeaturesOpen(st.status) || licensing::licenseFeaturesApply(st.status)) return m;
+    // << l'edition X s'applique >> (le module) : ici, rien ne s'ouvre
+    const std::string ed = "l'\xC3\xA9" "dition ";
+    if (const auto a = m.find(ed); a != std::string::npos)
+        if (const auto b = m.find(" s'applique", a); b != std::string::npos)
+            m.replace(a, b + 11 - a, "aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e");
+    const std::string keep = "Ton projet reste ouvert ; Enregistrer et Exporter restent permis.";
+    if (const auto k = m.find(keep); k != std::string::npos) m.replace(k, keep.size(), "Un projet d\xC3\xA9j\xC3\xA0 ouvert reste ouvert et s'enregistre.");
+    if (m.find("aucun projet") == std::string::npos) m += (m.empty() ? "" : " ") + std::string("Aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e.");
+    return m;
+}
+
 bool projectsAllowed(std::string* why) {
     if (!g_active) return true;
     const auto st = licensing::getLicenseState();
@@ -193,7 +207,7 @@ bool projectsAllowed(std::string* why) {
             *why = st.evaluationOver ? "Ta D\xC3\xA9" "couverte (l'essai de 30 jours) est finie, et ce PC n'a pas de licence."
                                      : "Ce PC n'a pas de licence.";
         else
-            *why = licensing::statusLabel(st.status) + (st.message.empty() ? std::string(".") : " : " + st.message);
+            *why = licensing::statusLabel(st.status) + (st.message.empty() ? std::string(".") : " : " + stateText(st));
     }
     return false;
 }
@@ -312,7 +326,7 @@ Badge indicator() {
             b.tone = 3;
             break;
     }
-    std::string tip = st.message;
+    std::string tip = stateText(st);
     if (st.online && st.activationUntil) tip += "\nBail de ce PC jusqu'au " + service::dateText(st.activationUntil) + " (renouvel\xC3\xA9 \xC3\xA0 chaque connexion).";
     if (st.floating && st.leaseUntil) tip += "\nPoste flottant pris jusqu'\xC3\xA0 " + service::dateText(st.leaseUntil).substr(11) + ".";
     b.tip = tip + "\n(un clic : la fen\xC3\xAAtre Licence)";
@@ -407,7 +421,7 @@ Card startCard() {
             break;
         default:
             c.title = "Licence : " + licensing::statusLabel(st.status) + " \xC2\xB7 aucun projet ne s'ouvre";
-            c.text = st.message;
+            c.text = stateText(st);
             c.tone = 3;
             c.tab = kTabActivation;
             break;

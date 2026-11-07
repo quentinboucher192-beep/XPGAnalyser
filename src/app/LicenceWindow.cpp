@@ -398,7 +398,7 @@ void LicenceBody::reload() {
         std::vector<PG::Category> cats;
         PG::Category c;
         c.name = "Ma licence";
-        c.properties.push_back(prop("\xC3\x89tat", licensing::statusLabel(st.status), st.message));
+        c.properties.push_back(prop("\xC3\x89tat", licensing::statusLabel(st.status), licence::stateText(st)));
         if (!st.licensedEdition.empty() || !st.edition.empty())
             c.properties.push_back(prop("\xC3\x89" "dition", st.licensedEdition.empty() ? st.edition : st.licensedEdition,
                                         "L'\xC3\xA9" "dition de la licence ; sans licence valide, c'est l'\xC3\xA9" "dition sans licence du registre qui s'applique : "
@@ -738,7 +738,7 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
         r.drawText({cx, cy + r.lineHeight(kSmall) + 1.f}, fit(r, cells[i].value, kValue, cw - 12.f), kValue, cells[i].status ? statusColor : c.text);
     }
     // La phrase de l'etat (ou le dernier geste).
-    const std::string line = flash_.empty() ? st.message : flash_;
+    const std::string line = flash_.empty() ? licence::stateText(st) : flash_;
     const int tone = flash_.empty() ? (st.status == S::Valid ? 1 : st.status == S::NotConfigured ? 0
                                        : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation || st.status == S::NoFloatingSeat) ? 2 : 3)
                                     : flashTone_;
