@@ -7,7 +7,7 @@ Depuis la 1.34.0, les logiciels de tes clients (API Studio, IHM Studio) et ton o
 - tu l'**acceptes** : la licence est signée **et publiée** pour ce PC. Le logiciel du client l'installe seul au démarrage suivant (ou avec « Vérifier maintenant »). Il n'y a pas de fichier à importer ;
 - tu peux aussi la **refuser** en donnant une raison. Le client voit où en est sa demande, et peut l'**annuler** ;
 - **une licence pour plusieurs PC** : le client demande « ajouter ce PC à ma licence XPG-… ». Tu l'acceptes, et la nouvelle licence est publiée à **tous** ses PC, qui la récupèrent seuls ;
-- une révocation, un PC retiré, un nouveau registre sont publiés de la même façon.
+- une révocation, un PC retiré, un nouveau registre sont publiés de la même façon. La révocation part scellée, aux seuls PC de la licence révoquée.
 
 La demande par fichier (`.xpgreq` / `.xpglic`) reste possible, pour un PC sans Internet.
 
@@ -18,9 +18,9 @@ Le dépôt est **public** : les logiciels des clients le lisent sans mot de pass
 | Dans le dépôt | Lisible par tous ? |
 |---|---|
 | `passerelle.xpgpas` : la configuration, **signée par ta clé** | oui, mais le jeton des demandes y est masqué (voir plus bas) |
-| `registre.xpgreg` et `revocations.xpgrev`, signés | oui, comme dans l'installateur |
-| `postes/<poste>.xpgpos` : l'état de chaque PC, **signé** | seulement l'état (reçue, acceptée…) et ses dates |
-| la licence d'un PC, la raison d'un refus | **non** : scellées pour la clé de ce PC seul |
+| `registre.xpgreg`, signé | oui, comme dans l'installateur (aucune donnée de client) |
+| `postes/<poste>.xpgpos` : l'état de chaque PC, **signé** | seulement l'état (reçue, acceptée…), son numéro et ses dates |
+| la licence d'un PC (et son identifiant), la raison d'un refus, la liste de révocation | **non** : scellées pour la clé de ce PC seul |
 | les issues (une par demande) | seulement un identifiant de poste et des dates |
 | le nom du client, du PC, son contact, son message | **non** : scellés pour ta clé seule |
 
@@ -33,8 +33,15 @@ Tout ce que lit un logiciel client est **signé par ta clé** : une fausse licen
 Pour ouvrir une issue, il faut un jeton GitHub. Les logiciels de tes clients utilisent **le jeton des demandes** :
 - c'est un jeton à grain fin, limité **aux issues de ce dépôt**. Il ne peut écrire aucun fichier, donc ni licence ni configuration ;
 - il est publié dans `passerelle.xpgpas`, masqué : les robots de GitHub ne le prennent pas pour une fuite. **Quelqu'un qui cherche peut tout de même le lire** ;
-- avec ce jeton, on peut seulement ouvrir, commenter ou fermer des issues de ce dépôt. Au pire, quelqu'un pourrait ouvrir de fausses demandes : ton outil les montre, tu les refuses ou tu les ignores. Une demande modifiée ou forgée ne passe pas les signatures ;
-- s'il est abusé, crée-en un autre, puis « Publier la configuration ». Les logiciels prennent le nouveau à leur prochaine vérification. Révoque ensuite l'ancien sur GitHub.
+- avec ce jeton, on peut seulement ouvrir, modifier, commenter ou fermer des issues de ce dépôt. Ton outil s'en garde :
+  - une demande forgée ne passe pas la signature du PC ;
+  - une ancienne demande remise en ligne est reconnue (déjà vue, ou pas plus récente) et ignorée ;
+  - une demande modifiée après coup garde son contenu d'origine ;
+  - une issue fermée sans annulation signée par le PC reste en attente ;
+  - au plus 20 accusés « reçue » sont publiés par relevé, pour qu'une avalanche de fausses demandes n'épuise pas ton quota GitHub ;
+- **une demande « ajouter ce PC à la licence XPG-… » n'est pas une preuve** : n'importe qui peut taper un identifiant et un nom de société. Ton outil la marque « à vérifier » et te demande de confirmer. Vérifie auprès de ton client avant d'accepter ;
+- les issues apparaissent sous ton nom GitHub, puisque le jeton est le tien. Si tu préfères un compte à part, crée une **organisation** GitHub (gratuite) qui possède le dépôt ;
+- s'il est abusé, ou si GitHub le révoque (quelqu'un pourrait le publier en clair pour le faire révoquer), crée-en un autre, puis « Publier la configuration ». Les logiciels prennent le nouveau à leur prochaine vérification. Révoque ensuite l'ancien sur GitHub.
 
 ## Mettre en place (une fois)
 
@@ -50,7 +57,7 @@ Pour ouvrir une issue, il faut un jeton GitHub. Les logiciels de tes clients uti
    - Repository permissions : **Issues : Read and write**, et rien d'autre (Metadata : Read-only est ajouté par GitHub).
 4. Dans **XPG License Manager Admin**, page Synchronisation GitHub, carte « Passerelle des clients » :
    - le dépôt (`ton-compte/xpg-licences-passerelle`) et le jeton des demandes, puis **Enregistrer la passerelle** ;
-   - **Vérifier**, puis **Publier la configuration**. Elle publie aussi ton registre et ta liste de révocation.
+   - **Vérifier**, puis **Publier la configuration**. Elle publie aussi ton registre. La liste de révocation, elle, part scellée aux seuls PC concernés.
 5. **Pour que les logiciels de tes clients s'en servent**, ils doivent connaître ta clé publique et l'adresse de la passerelle :
    - Paramètres de sécurité › **Préparer les fichiers pour les Studios…** écrit `PublisherKey.hpp`, `registre.xpgreg` et `GatewayAddress.hpp` ;
    - ce sont des fichiers **publics**, sans aucun secret. Donne-les au développeur : ils sont compilés dans la version suivante.
