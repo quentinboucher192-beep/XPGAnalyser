@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.33.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.34.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.33.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 8 h 50"},
     {"1.32.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 7 h 02"},
     {"1.31.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 22 h 29"},
     {"1.30.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 21 h 49"},
@@ -176,6 +177,18 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.34.0 : la passerelle GitHub des licences (la demande en ligne, la licence recue seule) et l'evaluation
+        note("1.34.0", "Projet", Kind::New,
+         "\xC3\x89VALUATION D\xC3\x88S L'INSTALLATION : sans licence, le programme est en \xC3\xA9valuation pendant la dur\xC3\xA9" "e de "
+         "l'\xC3\xA9" "dition d'\xC3\xA9valuation (30 jours), depuis son premier lancement ; \xC3\xA0 chaque ouverture, un message dit "
+         "les jours qui restent. Ensuite, sans licence, il revient \xC3\xA0 l'\xC3\xA9" "dition sans licence : rien ne se ferme, ton projet reste ouvert.",
+         "licence", ""),
+        note("1.34.0", "Projet", Kind::New,
+         "LA DEMANDE DE LICENCE EN LIGNE : Licence\xE2\x80\xA6 \xE2\x80\xBA Demande en ligne envoie ta demande \xC3\xA0 l'\xC3\xA9" "diteur "
+         "(une par PC) ; tu vois o\xC3\xB9 elle en est, tu peux l'annuler. Accept\xC3\xA9" "e, la licence s'installe seule au d\xC3\xA9marrage "
+         "suivant (ou avec V\xC3\xA9rifier maintenant) : aucun fichier \xC3\xA0 importer. Elle passe par GitHub, scell\xC3\xA9" "e : ni ton nom "
+         "ni ta licence n'y sont lisibles. Sans r\xC3\xA9seau, la demande par fichier reste.",
+         "licence", ""),
         // 1.33.0 : l'application de l'editeur (XPG License Manager Admin : ses fenetres ; cote editeur seulement)
         note("1.33.0", "Projet", Kind::New,
          "L'\xC3\x89" "DITEUR SIGNE TES LICENCES DANS UNE APPLICATION : son outil a maintenant des fen\xC3\xAAtres (tableau de bord, clients, "
