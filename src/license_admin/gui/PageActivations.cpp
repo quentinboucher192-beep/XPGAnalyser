@@ -1,0 +1,392 @@
+// =============================================================================
+//  license_admin/gui/PageActivations.cpp - 1.33.0 : LA PAGE Activations (les PC
+//  connus du poste Admin)
+// -----------------------------------------------------------------------------
+//  Le registre des activations (activations.jsonl, dans le dossier de la cle) :
+//  le dernier etat de chaque PC (Workspace::devices) - une demande recue, une
+//  licence signee, une revocation. Seulement ce que les clients envoient : il
+//  n'y a pas de service en ligne, rien ne remonte des PC eux-memes, et une
+//  demande ne porte rien de leur materiel (une cle publique, un nom choisi, le
+//  logiciel). La page cherche, filtre par etat, compte, note des demandes
+//  (.xpgreq, choisies ou glissees sur la fenetre) et ecrit le tableau pour
+//  Excel (le CSV de la console : UTF-8 avec BOM, ; et CRLF, les formules
+//  neutralisees).
+// =============================================================================
+#include "Page.hpp"
+
+#include "../../ui/TextSearch.hpp"
+#include "../../ui/Theme.hpp"
+#include "../../ui/widgets/Controls.hpp"
+#include "../../ui/widgets/DataViews.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <functional>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+namespace license_admin::gui {
+
+namespace {
+
+using RowIndex = ui::RowIndex;
+
+const ui::Fonts kFonts{};
+constexpr float kPad = 16.f;
+constexpr float kButtonH = 32.f;
+constexpr float kFieldH = 28.f;
+constexpr float kGap = 8.f;
+constexpr float kLineH = 20.f;
+constexpr const char* kBusy = "Un travail est en cours : attends qu'il finisse.";
+
+// ---------------------------------------------------------------------------------------------- les aides
+class Rows final : public ui::ITableModel {
+public:
+    using Style = std::function<ui::CellStyle(RowIndex, std::size_t)>;
+    explicit Rows(std::vector<std::string> headers) : headers_(std::move(headers)) {}
+    void set(std::vector<std::vector<std::string>> rows, std::vector<std::vector<std::string>> keys, Style style) {
+        rows_ = std::move(rows);
+        keys_ = std::move(keys);
+        style_ = std::move(style);
+        modelReset->emit();
+    }
+    [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
+    [[nodiscard]] std::size_t columnCount() const override { return headers_.size(); }
+    [[nodiscard]] std::string headerText(std::size_t c) const override { return c < headers_.size() ? headers_[c] : std::string(); }
+    [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
+        return r < rows_.size() && c < rows_[r].size() ? rows_[r][c] : std::string();
+    }
+    [[nodiscard]] ui::CellStyle cellStyle(RowIndex r, std::size_t c) const override { return style_ ? style_(r, c) : ui::CellStyle{}; }
+    [[nodiscard]] bool less(RowIndex a, RowIndex b, std::size_t c) const override { return key(a, c) < key(b, c); }
+
+private:
+    [[nodiscard]] std::string key(RowIndex r, std::size_t c) const {
+        if (r < keys_.size() && c < keys_[r].size() && !keys_[r][c].empty()) return keys_[r][c];
+        return cellText(r, c);
+    }
+    std::vector<std::string>              headers_;
+    std::vector<std::vector<std::string>> rows_, keys_;
+    Style                                 style_;
+};
+
+template <class T>
+T* add(ui::Widget& parent, std::unique_ptr<T> w) {
+    T* p = w.get();
+    parent.addChild(std::move(w));
+    return p;
+}
+
+std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w) {
+    if (w <= 8.f) return {};
+    if (r.measure(s, f).width <= w) return s;
+    std::string t = s;
+    while (!t.empty() && r.measure(t + "\xE2\x80\xA6", f).width > w) {
+        t.pop_back();
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+    }
+    return t + "\xE2\x80\xA6";
+}
+
+std::vector<std::string> wrap(const std::string& text, gfx::FontId f, float w, std::size_t maxLines) {
+    std::vector<std::string> words;
+    for (std::size_t i = 0; i <= text.size();) {
+        std::size_t j = text.find(' ', i);
+        if (j == std::string::npos) j = text.size();
+        if (j > i) words.push_back(text.substr(i, j - i));
+        i = j + 1;
+    }
+    std::vector<std::string> lines;
+    std::string line;
+    for (const auto& word : words) {
+        const std::string t = line.empty() ? word : line + " " + word;
+        if (line.empty() || ui::measureWidth(t, f) <= w) {
+            line = t;
+            continue;
+        }
+        lines.push_back(line);
+        line = word;
+        if (lines.size() == maxLines) {
+            lines.back() += "\xE2\x80\xA6";
+            return lines;
+        }
+    }
+    if (!line.empty()) lines.push_back(line);
+    return lines;
+}
+
+std::string count(std::size_t n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
+
+std::string padKey(long long v) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%012lld", v);
+    return b;
+}
+
+std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+// L'etat d'un PC, a l'ecran (KnownDevice::state : "demande", "active", "revoque", "expire").
+std::string stateLabel(const std::string& s) {
+    if (s == "demande") return "demande";
+    if (s == "active") return "active";
+    if (s == "revoque") return "r\xC3\xA9voqu\xC3\xA9" "e";
+    if (s == "expire") return "expir\xC3\xA9" "e";
+    return s;
+}
+
+ui::Tone stateTone(const std::string& s) {
+    if (s == "active") return ui::Tone::Ok;
+    if (s == "demande") return ui::Tone::Info;
+    if (s == "revoque") return ui::Tone::Error;
+    if (s == "expire") return ui::Tone::Warning;
+    return ui::Tone::None;
+}
+
+bool isRequestFile(const std::string& path) {
+    const std::string l = lowerAscii(path);
+    return l.size() > 7 && l.compare(l.size() - 7, 7, ".xpgreq") == 0;
+}
+
+// =================================================================================== la page
+class ActivationsPage final : public Page {
+public:
+    explicit ActivationsPage(ShellHost host) : Page("page.activations", std::move(host)) {
+        record_ = add(*this, std::make_unique<ui::Button>("Noter des demandes\xE2\x80\xA6", "activations.noter"));
+        record_->setStyle(ui::Button::Style::Primary);
+        record_->setIcon(ui::Icon::Import);
+        record_->setTooltip("Une demande d'activation (.xpgreq) re\xC3\xA7ue d'un client, not\xC3\xA9" "e sans rien signer. Plusieurs : glisse-les sur la fen\xC3\xAAtre.");
+        export_ = add(*this, std::make_unique<ui::Button>("Exporter pour Excel\xE2\x80\xA6", "activations.exporter"));
+        export_->setIcon(ui::Icon::Export);
+        export_->setTooltip("Les PC montr\xC3\xA9s (recherche et filtre compris), en CSV : UTF-8, s\xC3\xA9parateur ; - Excel l'ouvre tel quel.");
+        folder_ = add(*this, std::make_unique<ui::Button>("Ouvrir le registre des activations", "activations.dossier"));
+        folder_->setIcon(ui::Icon::FolderOpen);
+        folder_->setTooltip("Le dossier du poste Admin : activations.jsonl (une ligne par \xC3\xA9v\xC3\xA9nement, jamais r\xC3\xA9\xC3\xA9" "crite).");
+        search_ = add(*this, std::make_unique<ui::InputText>("activations.recherche"));
+        search_->setPlaceholder("Chercher un PC, un client, une licence\xE2\x80\xA6");
+        search_->setEscapeClears(true);
+        state_ = add(*this, std::make_unique<ui::DropDown>("activations.etat"));
+        state_->setItems({{"Tous les \xC3\xA9tats", ""}, {"Demandes en attente", "demande"}, {"Actives", "active"}, {"R\xC3\xA9voqu\xC3\xA9" "es", "revoque"}, {"Expir\xC3\xA9" "es", "expire"}});
+        state_->setSelectedIndex(0);
+        table_ = add(*this, std::make_unique<ui::TableView>("activations.table"));
+        table_->setColumns({{"PC", 170.f}, {"Empreinte", 210.f}, {"Client", 190.f}, {"Licence", 140.f}, {"\xC3\x89" "dition", 120.f}, {"Logiciel", 190.f},
+                            {"Demand\xC3\xA9" "e le", 110.f}, {"Activ\xC3\xA9" "e le", 110.f}, {"Fin", 110.f}, {"\xC3\x89tat", 96.f}});
+        table_->setSelectionMode(ui::SelectionMode::Extended);
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte", "Client", "Licence", "\xC3\x89" "dition", "Logiciel", "Demand\xC3\xA9" "e le", "Activ\xC3\xA9" "e le", "Fin", "\xC3\x89tat"});
+        table_->setModel(model_);
+
+        links_ += record_->clicked->connect([this] { pickRequest(); });
+        links_ += export_->clicked->connect([this] { exportCsv(); });
+        links_ += folder_->clicked->connect([this] {
+            if (host_.openFolder) host_.openFolder(ws().folder());
+        });
+        links_ += search_->textChanged->connect([this](const std::string&) { rebuild(); });
+        links_ += state_->selectionChanged->connect([this](int) { rebuild(); });
+        refresh();
+    }
+    ~ActivationsPage() override { *life_ = false; }
+
+    [[nodiscard]] std::string title() const override { return "Activations"; }
+
+    void refresh() override {
+        all_ = ws().devices();
+        rebuild();
+        invalidateLayout();
+        invalidate();
+    }
+
+    bool dropFiles(const std::vector<std::string>& paths) override {
+        if (paths.empty()) return false;
+        for (const auto& p : paths)
+            if (!isRequestFile(p)) return false;   // autre chose : la coquille range le tout (importFiles)
+        if (host_.busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return true;
+        }
+        host_.report(ws().recordRequests(paths));
+        refresh();
+        return true;
+    }
+
+    // Les essais : les PC montres (apres recherche et filtre).
+    [[nodiscard]] const std::vector<KnownDevice>& shown() const noexcept { return shown_; }
+
+protected:
+    void onLayout() override {
+        const gfx::Rect b = bounds();
+        const float x = b.x + kPad, w = std::max(200.f, b.w - 2.f * kPad);
+        float y = b.y + kPad;
+        titleY_ = y;
+        y += 34.f;
+        leadLines_ = wrap(kLead, kFonts.ui, w, 3);
+        leadY_ = y;
+        y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
+        float bx = x;
+        for (ui::Button* btn : {record_, export_, folder_}) {
+            const float bw = btn->sizeHint().preferred.w;
+            btn->setBounds({bx, y, bw, kButtonH});
+            bx += bw + kGap;
+        }
+        y += kButtonH + kGap;
+        const float sw = std::min(360.f, w * 0.4f), dw = 200.f;
+        search_->setBounds({x, y + 2.f, sw, kFieldH});
+        state_->setBounds({x + sw + kGap, y + 2.f, dw, kFieldH});
+        y += kButtonH + 2.f;
+        totalsRect_ = {x, y, w, 22.f};
+        y += 22.f + 4.f;
+        noteY_ = y;
+        if (ws().skippedLines() > 0) y += kLineH + 4.f;
+        table_->setBounds({x, y, w, std::max(60.f, b.bottom() - kPad - y)});
+        emptyY_ = y + 40.f;
+    }
+
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        const gfx::Rect b = bounds();
+        r.fillRect(b, c.panelBg);
+        const float x = b.x + kPad, w = std::max(200.f, b.w - 2.f * kPad);
+        r.drawText({x, titleY_}, "Activations", ctx.theme.font.title, c.text);
+        for (std::size_t i = 0; i < leadLines_.size(); ++i)
+            r.drawText({x, leadY_ + static_cast<float>(i) * kLineH}, fit(r, leadLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
+        r.drawText({totalsRect_.x, totalsRect_.y + (totalsRect_.h - r.lineHeight(ctx.theme.font.ui)) * 0.5f}, fit(r, totals(), ctx.theme.font.ui, totalsRect_.w),
+                   ctx.theme.font.ui, c.text);
+        if (ws().skippedLines() > 0)
+            r.drawText({x, noteY_},
+                       fit(r, count(static_cast<std::size_t>(ws().skippedLines()), "ligne illisible ignor\xC3\xA9" "e", "lignes illisibles ignor\xC3\xA9" "es")
+                                  + " dans activations.jsonl (ab\xC3\xAEm\xC3\xA9" "e, ou \xC3\xA9" "crite par une version plus r\xC3\xA9" "cente de l'outil).",
+                           ctx.theme.font.ui, w),
+                       ctx.theme.font.ui, ctx.theme.tone(ui::Tone::Warning, c.text));
+    }
+
+    void onPaintOverlay(const ui::PaintContext& ctx) override {
+        if (!shown_.empty()) return;
+        // Rien a montrer : dire pourquoi, sur la table vide.
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        const gfx::Rect t = table_->bounds();
+        const std::string line = all_.empty() ? "Aucun PC connu pour l'instant : le registre se remplit avec les demandes not\xC3\xA9" "es et les licences sign\xC3\xA9" "es."
+                                              : "Aucun PC ne correspond \xC3\xA0 la recherche ou au filtre.";
+        r.drawText({t.x + 16.f, emptyY_}, fit(r, line, ctx.theme.font.ui, t.w - 32.f), ctx.theme.font.ui, c.textMuted);
+    }
+
+private:
+    static constexpr const char* kLead =
+        "Les PC connus de ce poste : seulement ce que les clients t'envoient (leurs demandes .xpgreq) et les licences sign\xC3\xA9" "es ici. "
+        "Pas de service en ligne : rien ne remonte des PC eux-m\xC3\xAAmes, rien de leur mat\xC3\xA9riel. Glisse des demandes sur la fen\xC3\xAAtre pour les noter.";
+
+    [[nodiscard]] std::string totals() const {
+        std::set<std::string> licences, customers;
+        std::size_t active = 0, pending = 0, revoked = 0, expired = 0;
+        for (const auto& d : shown_) {
+            if (!d.licenseId.empty() && d.state != "demande") licences.insert(d.licenseId);
+            if (!d.customer.empty()) customers.insert(lowerAscii(d.customer));
+            if (d.state == "active") ++active;
+            else if (d.state == "demande") ++pending;
+            else if (d.state == "revoque") ++revoked;
+            else if (d.state == "expire") ++expired;
+        }
+        std::string t = count(shown_.size(), "PC", "PC") + ", " + count(licences.size(), "licence", "licences") + ", " + count(customers.size(), "client", "clients")
+                        + " : " + count(active, "activ\xC3\xA9", "activ\xC3\xA9s") + ", " + std::to_string(pending) + " en attente, "
+                        + count(revoked, "r\xC3\xA9voqu\xC3\xA9", "r\xC3\xA9voqu\xC3\xA9s") + ", " + count(expired, "expir\xC3\xA9", "expir\xC3\xA9s");
+        if (shown_.size() != all_.size()) t += " (sur " + count(all_.size(), "PC", "PC") + " en tout)";
+        return t;
+    }
+
+    void rebuild() {
+        const ui::SearchQuery q(search_->text());
+        const auto* item = state_->selectedItem();
+        const std::string want = item ? item->value : std::string();
+        shown_.clear();
+        for (const auto& d : all_) {
+            if (!want.empty() && d.state != want) continue;
+            if (!q.empty() && !q.matches({d.name, d.fingerprint, d.customer, d.licenseId, d.edition, d.software, d.deviceKey, stateLabel(d.state)})) continue;
+            shown_.push_back(d);
+        }
+        std::vector<std::vector<std::string>> rows, keys;
+        std::vector<std::string> states;
+        for (const auto& d : shown_) {
+            rows.push_back({d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.customer, d.licenseId, d.edition, d.software,
+                            dateFr(d.requestedAt), dateFr(d.activatedAt),
+                            d.expiresAt ? dateFr(d.expiresAt) : (d.state == "demande" ? std::string() : std::string("sans fin")), stateLabel(d.state)});
+            keys.push_back({"", "", "", "", "", "", padKey(d.requestedAt), padKey(d.activatedAt), padKey(d.expiresAt ? d.expiresAt : 99999999999LL), ""});
+            states.push_back(d.state);
+        }
+        model_->set(std::move(rows), std::move(keys), [states](RowIndex r, std::size_t c) {
+            ui::CellStyle s;
+            if (r >= states.size()) return s;
+            if (c == 1) s.monospace = true;
+            if (c == 9) {
+                s.fgTone = stateTone(states[r]);
+                s.bold = true;
+            }
+            return s;
+        });
+        invalidate();
+    }
+
+    void pickRequest() {
+        if (host_.busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return;
+        }
+        ui::FilePick pick;
+        pick.title = "Choisis la demande du client (.xpgreq)";
+        pick.filters = {{"Demandes d'activation (.xpgreq)", "xpgreq"}, {"Tous les fichiers", "*"}};
+        std::weak_ptr<bool> alive = life_;
+        ShellHost host = host_;
+        host_.pickFile(pick, [this, alive, host](std::string path) {
+            if (path.empty()) return;
+            if (host.busy()) {
+                if (host.flash) host.flash(kBusy, Tone::Warning);
+                return;
+            }
+            host.report(host.workspace().recordRequests({path}));
+            if (!alive.expired()) refresh();
+        });
+    }
+
+    void exportCsv() {
+        if (shown_.empty()) {
+            if (host_.flash) host_.flash("Aucun PC \xC3\xA0 exporter (la recherche ou le filtre n'en montre aucun).", Tone::Warning);
+            return;
+        }
+        ui::FilePick pick;
+        pick.title = "Exporter les activations pour Excel";
+        pick.filters = {{"Tableau pour Excel (.csv)", "csv"}};
+        pick.start = "activations.csv";
+        pick.save = true;
+        const std::vector<KnownDevice> list = shown_;   // ce qui est montre au moment du clic
+        ShellHost host = host_;
+        host_.pickFile(pick, [list, host](std::string path) {
+            if (path.empty()) return;
+            const auto dot = path.find_last_of("./\\");
+            if (dot == std::string::npos || path[dot] != '.') path += ".csv";
+            host.report(host.workspace().exportCsv(list, path));
+        });
+    }
+
+    std::shared_ptr<bool>    life_{std::make_shared<bool>(true)};
+    core::ConnectionScope    links_;
+    ui::Button*              record_{nullptr};
+    ui::Button*              export_{nullptr};
+    ui::Button*              folder_{nullptr};
+    ui::InputText*           search_{nullptr};
+    ui::DropDown*            state_{nullptr};
+    ui::TableView*           table_{nullptr};
+    std::shared_ptr<Rows>    model_;
+    std::vector<KnownDevice> all_, shown_;
+    std::vector<std::string> leadLines_;
+    float                    titleY_{0}, leadY_{0}, noteY_{0}, emptyY_{0};
+    gfx::Rect                totalsRect_{};
+};
+
+} // namespace
+
+PagePtr makeActivationsPage(ShellHost host) { return std::make_unique<ActivationsPage>(std::move(host)); }
+
+} // namespace license_admin::gui
