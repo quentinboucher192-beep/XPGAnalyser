@@ -259,6 +259,7 @@ struct Conn {
     std::string              serviceKey;    // sa cle (64 hexadecimaux)
     std::vector<std::string> lines;         // ce qui s'est passe en se connectant (un registre adopte...)
     bool                     timeNoted{false};
+    int                      timeLine{-1};         // la phrase de l'heure pas notee (retiree si un second essai la note)
     bool                     offline{false};       // /v1/etat n'a pas repondu (why : la phrase, sans point)
 };
 
@@ -487,6 +488,34 @@ void adoptCert(Conn& c, const std::string& text) {
     certKeyCache() = cert.key;
 }
 
+// L'heure signee (un nonce frais) : le compteur du bail est recale. `say` : une panne est dite (sinon, en silence : un
+// second essai). Vrai : notee.
+bool noteTime(Conn& c, Record& rec, bool say) {
+    std::uint8_t n[16];
+    crypto::randomBytes(n, sizeof n);
+    const std::string nonce = crypto::hex(n, sizeof n);
+    const Got g = getPublic(c, "/v1/heure?n=" + nonce);
+    const auto said = [&c, say](std::string line) {
+        if (!say) return;
+        c.timeLine = static_cast<int>(c.lines.size());
+        c.lines.push_back(std::move(line));
+    };
+    if (!g.reached() || g.status != 200) {
+        said(problem(g, c.host, "L'heure du service n'a pas pu \xC3\xAAtre lue"));
+        return false;
+    }
+    std::string w;
+    if (!lic::noteServiceTime(g.body, nonce, c.cert, &w)) {
+        said("L'heure sign\xC3\xA9" "e du service est refus\xC3\xA9" "e : " + sentence(w));
+        return false;
+    }
+    c.timeNoted = true;
+    rec.lastTime = lic::systemNow();
+    if (c.timeLine >= 0 && c.timeLine < static_cast<int>(c.lines.size())) c.lines.erase(c.lines.begin() + c.timeLine);
+    c.timeLine = -1;
+    return true;
+}
+
 // A CHAQUE CONNEXION : l'etat du service (l'ecart d'heure, certifie, le registre), le certificat, l'heure signee.
 // Faux : `why` (une phrase ; hors ligne, pas certifie...). `rec` : les dates des connexions.
 bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
@@ -511,23 +540,14 @@ bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
         }
     }
     if (!fetchCert(c, etat.str("cle_service"), why)) return false;
-    // L'heure signee (un nonce frais) : le compteur du bail est recale.
-    std::uint8_t n[16];
-    crypto::randomBytes(n, sizeof n);
-    const std::string nonce = crypto::hex(n, sizeof n);
-    const Got g = getPublic(c, "/v1/heure?n=" + nonce);
-    if (!g.reached() || g.status != 200) {
-        c.lines.push_back(problem(g, c.host, "L'heure du service n'a pas pu \xC3\xAAtre lue"));
-        return true;   // le reste peut se faire ; le compteur attend la prochaine connexion
-    }
-    std::string w;
-    if (lic::noteServiceTime(g.body, nonce, c.cert, &w)) {
-        c.timeNoted = true;
-        rec.lastTime = lic::systemNow();
-    } else {
-        c.lines.push_back("L'heure sign\xC3\xA9" "e du service est refus\xC3\xA9" "e : " + sentence(w));
-    }
+    (void)noteTime(c, rec, true);   // le reste peut se faire sans elle ; le compteur attend un nouvel essai
     return true;
+}
+
+// Une seconde chance pour l'heure signee : apres une activation ou un renouvellement reussi, si elle n'a pas pu etre
+// notee en se connectant (sans elle, une licence en ligne reste << bail expire >> jusqu'a la prochaine connexion).
+void noteTimeAgain(Conn& c, Record& rec) {
+    if (!c.timeNoted && !c.cert.empty()) (void)noteTime(c, rec, false);
 }
 
 // ============================================================ l'etat << poste >> (la demande manuelle) ==
@@ -833,6 +853,7 @@ bool stepActivate(Conn& c, const std::string& normalized, const std::string& pcN
         lines.push_back("Le service a accept\xC3\xA9 le code, mais la licence re\xC3\xA7ue n'est pas install\xC3\xA9" "e : " + sentence(rep.why));
         return false;
     }
+    noteTimeAgain(c, rec);
     const auto st = lic::getLicenseState();
     const std::string lid = !st.licenseId.empty() ? st.licenseId : licenseIdOf(field(v, "licence"));
     res.licenseId = lid;
@@ -956,6 +977,7 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
     }
     // La licence en ligne de ce PC dont le service ne dit rien : il ne connait plus cette activation (effacee apres la
     // fin de son bail) - elle ne sera plus jamais renouvelee.
+    if (renewed) noteTimeAgain(c, rec);
     if (!unclear) {
         const auto st = lic::getLicenseState();
         if (st.online && !st.licenseId.empty() && std::find(known.begin(), known.end(), st.licenseId) == known.end()) drop(st.licenseId, "inconnue_ici");

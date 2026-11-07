@@ -27,6 +27,13 @@ namespace app::licence {
 
 namespace {
 
+// 1.35.0 (revue) : une licence en ligne << bail expire >> dont le bail court encore a l'heure retenue par le magasin :
+// l'heure du service n'est plus connue sur ce PC (ou son certificat a fini) - la licence est en pause, son bail ne
+// l'est pas.
+bool leasePaused(const licensing::LicenseState& st) {
+    return st.status == licensing::LicenseStatus::LeaseExpired && st.activationUntil > 0 && st.trustedNow > 0 && st.activationUntil > st.trustedNow;
+}
+
 std::atomic<bool> g_active{false};
 std::mutex        g_mutex;
 double            g_next{0};      // la prochaine revaluation (secondes, horloge monotone)
@@ -264,8 +271,20 @@ Badge indicator() {
             b.tone = 2;
             break;
         case S::LeaseExpired:
-            b.text = "Bail expir\xC3\xA9 \xE2\x80\x94 connecte-toi";
-            b.shortText = "Bail expir\xC3\xA9";
+            // 1.35.0 (revue) : le bail court encore, mais l'heure du service n'est plus connue sur ce PC (ou le certificat a
+            // fini) : la licence est en pause, pas son bail fini.
+            if (leasePaused(st)) {
+                b.text = "Licence en pause \xE2\x80\x94 connecte-toi";
+                b.shortText = "En pause";
+            } else {
+                b.text = "Bail expir\xC3\xA9 \xE2\x80\x94 connecte-toi";
+                b.shortText = "Bail expir\xC3\xA9";
+            }
+            b.tone = 3;
+            break;
+        case S::ClockRolledBack:
+            b.text = "Horloge recul\xC3\xA9" "e \xE2\x80\x94 remets-la \xC3\xA0 l'heure";
+            b.shortText = "Horloge recul\xC3\xA9" "e";
             b.tone = 3;
             break;
         case S::NoFloatingSeat:
@@ -327,8 +346,13 @@ Card startCard() {
             c.tab = kTabActivation;
             break;
         case S::LeaseExpired:
-            c.title = "Bail expir\xC3\xA9 : ta licence " + st.licenseId + " est en pause sur ce PC";
-            c.text = "Connecte ce PC \xC3\xA0 Internet : le bail se renouvelle tout seul et les fonctions reviennent.";
+            if (leasePaused(st)) {
+                c.title = "Ta licence " + st.licenseId + " est en pause sur ce PC";
+                c.text = "Connecte ce PC \xC3\xA0 Internet : l'heure du service des licences se recale toute seule et les fonctions reviennent.";
+            } else {
+                c.title = "Bail expir\xC3\xA9 : ta licence " + st.licenseId + " est en pause sur ce PC";
+                c.text = "Connecte ce PC \xC3\xA0 Internet : le bail se renouvelle tout seul et les fonctions reviennent.";
+            }
             c.tone = 3;
             c.tab = kTabActivation;
             break;
@@ -381,6 +405,9 @@ std::string discoveryText(const licensing::LicenseState& st) {
 }
 
 std::string leaseText(const licensing::LicenseState& st) {
+    if (st.status == licensing::LicenseStatus::LeaseExpired && leasePaused(st))
+        return "Licence" + (st.licenseId.empty() ? std::string() : " " + st.licenseId) +
+               " en pause sur ce PC (l'heure du service n'y est plus connue) : connecte-le \xC3\xA0 Internet pour la r\xC3\xA9" "activer.";
     if (st.status == licensing::LicenseStatus::LeaseExpired)
         return "Bail expir\xC3\xA9" + (st.licenseId.empty() ? std::string() : " pour la licence " + st.licenseId) +
                " : connecte ce PC \xC3\xA0 Internet pour la r\xC3\xA9" "activer.";

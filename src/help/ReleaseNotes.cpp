@@ -183,7 +183,8 @@ const std::vector<Note>& table() {
          "ACTIVER AVEC UN CODE : l'\xC3\xA9" "diteur te donne un code (XPG-XXXX-XXXX-XXXX-XXXX) ; tape-le dans Licence\xE2\x80\xA6 \xE2\x80\xBA Activation, "
          "ou d\xC3\xA8s l'installation (page Licence). Le service des licences de l'\xC3\xA9" "diteur active ce PC tout seul : aucun fichier \xC3\xA0 "
          "\xC3\xA9" "changer. L'activation est un bail de 30 jours, renouvel\xC3\xA9 seul d\xC3\xA8s que le PC est en ligne ; un PC qui reste hors ligne "
-         "garde sa licence jusqu'\xC3\xA0 la fin de son bail, m\xC3\xAAme si son horloge recule. Lib\xC3\xA9rer ce poste rend la place pour un autre PC.",
+         "garde sa licence jusqu'\xC3\xA0 la fin de son bail (reculer son horloge ne le prolonge pas). Lib\xC3\xA9rer ce poste rend sa place \xC3\xA0 un autre PC : tout de suite "
+         "deux fois par mois (ou autant que la licence a de postes), sinon \xC3\xA0 la fin de son bail.",
          "licence", ""),
         note("1.35.0", "Projet", Kind::New,
          "TA LICENCE TOUJOURS EN VUE : en haut \xC3\xA0 droite, dans la barre d'\xC3\xA9tat et sur l'accueil - l'\xC3\xA9" "dition et sa fin, les jours de "

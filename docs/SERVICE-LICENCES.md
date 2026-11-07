@@ -44,7 +44,7 @@ Ce sont des blocs `XPG-LICENSING 1 <genre> <taille>` (voir `SignedFile.hpp`), si
 | Genre | Signé par | JSON |
 |---|---|---|
 | `service` | l'éditeur | `{"version":1,"cle":"<64 hexa>","url":"https://…","emis":"…","expire":"…","droits":["activation","flottante","heure","decouverte"]}` |
-| `activation` | le service | `{"version":1,"licence":"<id>","emission":"<emission de la licence>","poste":"<64 hexa>","station":"<32 hexa>","type":"fixe"\|"flottante","numero":N,"emis":"…","jusqu_a":"…"}` (`station` absente si vide) |
+| `activation` | le service | `{"version":1,"licence":"<id>","emission":"<emission de la licence>","poste":"<64 hexa>","station":"<32 hexa>","type":"fixe"\|"flottante","numero":N,"emis":"…","jusqu_a":"…"}` (`station` : toujours là, le service refuse une demande sans elle) |
 | `jeton` | le service | `{"version":1,"licence":"<id>","poste":"<64 hexa>","emis":"…","jusqu_a":"…"}` |
 | `heure` | le service | `{"version":1,"heure":"…","n":"<32 hexa, le nonce du client>"}` |
 | `decouverte` | le service | `{"version":1,"poste":"<64 hexa>","machine":"<32 hexa>","debut":"…","jours":N}` |
@@ -56,8 +56,17 @@ Les licences, le registre, les révocations et l'état d'un PC (`poste`, 1.34) r
 - Une activation vaut **jusqu'à `jusqu_a`** : `emis` + le bail de la licence (`bail_jours`, 30 par défaut, réglé par l'éditeur).
 - **À chaque connexion**, le Studio la renouvelle (`POST /v1/renouveler`) et reçoit une heure signée.
 - **Un PC libéré, retiré ou révoqué** n'est plus renouvelé. S'il se connecte, le service le lui dit et il efface son activation. S'il reste hors ligne à vie, il s'arrête à `jusqu_a`.
+- **Une licence finie** (`expire` passé) n'est plus renouvelée : le PC la garde, et la dit finie (avec sa grâce) d'après ses propres dates. Une émission plus récente, déposée par l'éditeur, la prolonge.
+- **La place d'un PC libéré** (§ 4 bis) revient tout de suite dans les changements de PC permis ; au-delà, elle reste prise jusqu'à son `jusqu_a` : son activation, gardée hors ligne, vaut jusque-là.
 - **Le compteur** (dans `etat.bin` et ses copies) : la dernière heure signée du service, et le temps écoulé depuis. Ce temps ne fait qu'avancer : les écarts positifs de l'horloge, et le temps où le programme tourne. L'heure retenue est le **maximum** de l'horloge du PC et de « dernière heure signée + temps écoulé ». Reculer l'horloge ne prolonge donc pas un bail. À la connexion suivante, l'heure signée recale tout.
 - **Sept jours avant la fin**, le Studio prévient : « connecte ce PC à Internet avant le … ».
+
+## 4 bis. La station et les changements de PC
+
+- **La station** : l'empreinte de l'installation de Windows du PC (`stationHash` : l'identifiant de l'installation et la clé du PC, 32 hexadécimaux). Le `.xpgreq` envoyé à `/v1/activer` la porte (sinon : 400 `demande`) ; le service la garde avec l'activation. `/v1/renouveler`, `/v1/flottante/jeton` et `/v1/flottante/rendre` la portent aussi (`"station"`, obligatoire) ; `/v1/liberer` peut la porter. Une autre station que celle de l'activation : rien n'est renouvelé (motif `autre_poste`), aucun jeton n'est donné ni rendu (403 `activation`, « cette activation est pour un autre poste »). Les jetons flottants sont tenus par (licence, clé, station). Une clé de PC recopiée sur d'autres machines n'y sert donc à rien : chaque copie est une autre station.
+- **Activer avec la clé d'un PC déjà actif pour cette licence, depuis une autre station**, pendant son bail : 403 `activation` (la copie ne prend pas la place de l'original).
+- **Les changements de PC** (une licence fixe) : un PC qui se libère lui-même (`/v1/liberer`) rend sa place tout de suite au plus **max(2, postes)** fois par licence sur **30 jours glissants**. Au-delà, sa place reste prise jusqu'à la fin de son bail (`place_jusqu_a` dans `GET /admin/licences`) ; le refus d'un autre PC (409 `complet`) le dit, avec `"libre_le"`. Une place retirée par l'éditeur (`/admin/activations/retirer`), ou d'une licence qu'il désactive, revient **tout de suite** (sa décision). Une licence flottante n'a pas de place à garder (son jeton est rendu).
+- **Le ménage** (une fois par jour) : une activation libérée ou retirée est effacée 7 jours après son `jusqu_a`, une activation active 90 jours après (un PC parti sans se libérer : revenu, il s'active de nouveau avec son code) ; le Studio efface alors l'activation dont le service ne dit plus rien. Une licence a au plus **10 × postes + 10** lignes d'activation (flottante : **max(50, 20 × postes)**) : au-delà, 409 `limite` pour CETTE licence seulement.
 
 ## 5. Les routes
 
@@ -76,13 +85,13 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 
 | Route | Corps | Réponse |
 |---|---|---|
-| `POST /v1/activer` | `{"code":"<le code>","demande":"<le .xpgreq, signé par ce PC>","nom":"<nom du PC>"}` | 200 `{"licence":"<bloc>","activation":"<bloc>","certificat":"<bloc>","message":"…"}`. Erreurs : 403 `code` (inconnu ou désactivé, sans dire lequel), 409 `complet`, 410 `revoquee` ou `expiree`, 400 `demande`. Déjà activé : la même activation, renouvelée. |
-| `POST /v1/renouveler` | `{}` | 200 `{"activations":[{"licence":"<bloc licence>","activation":"<bloc>"}],"retirees":["<id>",…],"certificat":"<bloc>","revocations":"<bloc>"\|null,"poste":"<bloc poste>"\|null}` |
-| `POST /v1/liberer` | `{"licence":"<id>"}` | 200 `{}` : le poste est rendu, et l'activation de ce PC n'est plus renouvelée |
+| `POST /v1/activer` | `{"code":"<le code>","demande":"<le .xpgreq, signé par ce PC, avec sa station>","nom":"<nom du PC>"}` | 200 `{"licence":"<bloc>","activation":"<bloc>","certificat":"<bloc>","message":"…"}`. Erreurs : 403 `code` (inconnu ou désactivé, sans dire lequel), 409 `complet` (avec `"libre_le":"<date>"` quand une place gardée par un PC libéré revient), 409 `limite` (les lignes d'activation de cette licence, § 4 bis), 410 `revoquee` ou `expiree`, 400 `demande` (illisible, d'un autre PC, ou sans station), 403 `activation` (la clé de ce PC, active pour cette licence sur une autre station). Déjà activé : la même activation, renouvelée. |
+| `POST /v1/renouveler` | `{"station":"<32 hexa>"}` | 200 `{"activations":[{"licence":"<bloc licence>","activation":"<bloc>"}],"retirees":["<id>",…],"motifs":{"<id>":"liberee"\|"retiree"\|"revoquee"\|"desactivee"\|"expiree"\|"autre_poste"\|"inconnue"},"certificat":"<bloc>","poste":"<bloc poste>"\|null}`. La liste de révocation de l'éditeur n'y est jamais : une révocation est un motif. 400 `champ` sans station. |
+| `POST /v1/liberer` | `{"licence":"<id>","station":"<32 hexa>"}` (station facultative) | 200 `{"place":"rendue"\|"gardee","jusqu_a":"<date>"(gardee),"transferts":N,"transferts_permis":M,"message":"…"}` : l'activation de ce PC n'est plus renouvelée ; sa place est rendue tout de suite, ou gardée jusqu'à la fin de son bail (§ 4 bis). 403 `activation` : une autre station. |
 | `POST /v1/decouverte` | `{"machine":"<32 hexa>"}` | 200 : le bloc `decouverte` (texte). `debut` = la première fois que cette machine a été vue ; `jours` = `DECOUVERTE_JOURS` (30) |
-| `POST /v1/flottante/jeton` | `{"licence":"<id>"}` | 200 `{"jeton":"<bloc>"}` (15 min) ; 409 `complet` avec `"libre_dans":<secondes>` ; 403 `activation` si ce PC n'a pas d'activation flottante pour cette licence |
-| `POST /v1/flottante/rendre` | `{"licence":"<id>"}` | 200 `{}` |
-| `POST /v1/demandes` | `{"cle":"<id de la clé de l'éditeur>","scelle":"<base64>"}` | 201 `{"numero":N}` ; une seule demande en attente par PC (l'ancienne passe « remplacée ») |
+| `POST /v1/flottante/jeton` | `{"licence":"<id>","station":"<32 hexa>"}` | 200 `{"jeton":"<bloc>"}` (15 min) ; 409 `complet` avec `"libre_dans":<secondes>` ; 403 `activation` si ce PC n'a pas d'activation flottante pour cette licence, ou depuis une autre station ; 400 `champ` sans station |
+| `POST /v1/flottante/rendre` | `{"licence":"<id>","station":"<32 hexa>"}` | 200 `{}` ; 403 `activation` depuis une autre station |
+| `POST /v1/demandes` | `{"cle":"<id de la clé de l'éditeur>","scelle":"<base64, 64 Kio au plus>"}` | 201 `{"numero":N}` ; une seule demande en attente par PC (l'ancienne passe « remplacée ») ; 507 `limite` quand le service garde déjà 20 Mio de demandes |
 | `POST /v1/demandes/annuler` | `{"numero":N}` | 200 `{}` |
 | `GET /v1/poste` | — | 200 `{"poste":"<bloc poste>"\|null}` |
 
@@ -93,25 +102,27 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 | `GET /admin/cle-service` | — | `{"cle":"<hexa>","certificat":"<bloc>"\|null}` |
 | `PUT /admin/certificat` | `{"certificat":"<bloc service>"}` | 200 ; refusé si sa clé n'est pas celle du service |
 | `PUT /admin/registre` | `{"registre":"<bloc>"}` | 200 ; refusé s'il n'est pas plus récent |
-| `PUT /admin/revocations` | `{"revocations":"<bloc>"}` | 200. Les activations des licences révoquées ne sont plus renouvelées. La liste ne part qu'aux PC concernés, jamais en public. |
-| `PUT /admin/licences` | `{"licence":"<bloc>","code_hash":"<64 hexa>"\|absent,"bail_jours":30,"active":true}` | 200 : la licence en ligne (ses postes = `max_devices`, flottante si son type l'est) |
-| `GET /admin/licences` | — | `{"licences":[{"licence":"<id>","emission":"…","type":"…","postes_max":N,"bail_jours":N,"active":bool,"code":bool,"activations":[{"poste":"<64 hexa>","nom":"…","station":"…","activee":"…","vue":"…","jusqu_a":"…","etat":"active"\|"liberee"\|"retiree"\|"revoquee"}],"jetons":[{"poste":"…","jusqu_a":"…"}]}]}` |
-| `POST /admin/activations/retirer` | `{"licence":"<id>","poste":"<64 hexa>"}` | 200 |
+| `PUT /admin/revocations` | `{"revocations":"<bloc>"}` | 200. Les activations des licences révoquées ne sont plus renouvelées (motif `revoquee`). La liste ne sort jamais du service : un PC lié par l'éditeur reçoit sa révocation dans son état « poste », scellé pour lui. |
+| `PUT /admin/licences` | `{"licence":"<bloc>","code_hash":"<64 hexa>"\|absent,"bail_jours":30,"active":true}` | 200 : la licence en ligne (ses postes = `max_devices`, flottante si son type l'est). Désactivée : les places gardées par des PC libérés reviennent. |
+| `GET /admin/licences` | — | `{"licences":[{"licence":"<id>","emission":"…","type":"…","postes_max":N,"bail_jours":N,"active":bool,"code":bool,"activations":[{"poste":"<64 hexa>","nom":"…","station":"…","activee":"…","vue":"…","jusqu_a":"…","etat":"active"\|"liberee"\|"retiree"\|"revoquee","place_jusqu_a":"…"\|null}],"jetons":[{"poste":"…","jusqu_a":"…"}]}]}` (`place_jusqu_a` : un PC libéré au-delà des changements permis garde sa place jusque-là) |
+| `POST /admin/activations/retirer` | `{"licence":"<id>","poste":"<64 hexa>"}` | 200 : la place revient tout de suite, même gardée |
 | `GET /admin/demandes?depuis=N` | — | `{"demandes":[{"numero":N,"poste":"<32 hexa>","cle":"<id>","scelle":"<base64>","etat":"attente"\|"annulee"\|"remplacee"\|"traitee","cree":"…","maj":"…"}]}` |
 | `POST /admin/demandes/traiter` | `{"numero":N}` | 200 |
 | `PUT /admin/postes` | `{"poste":"<32 hexa>","etat":"<bloc poste>"}` | 200 (lu par `GET /v1/poste`) |
 | `GET /admin/archive` | — | `{"version":V,"fichiers":[{"chemin":"…","sha256":"…","taille":N}]}` |
 | `GET /admin/archive/fichier?chemin=…` | — | le texte du fichier (chiffré par l'éditeur avec sa clé de synchro) |
 | `POST /admin/archive` | `{"base":V,"fichiers":{"<chemin>":"<texte>"\|null}}` | 200 `{"version":V+1}` ; 409 `{"version":<actuelle>}` si `base` n'est pas la version actuelle |
-| `GET /admin/stats` | — | les compteurs (licences, activations, demandes, appels du jour) |
+| `GET /admin/stats` | — | les compteurs (licences, activations et leurs `lignes`, demandes et leurs `octets`, Découvertes, postes, appels du jour) |
 
 ### Les limites (le plan gratuit, et les abus)
 
 - Corps : 2 Mio au plus. Un fichier de l'archive : 1,5 Mio au plus.
-- Par adresse IP et par heure : `activer` 10, `decouverte` 10, `heure` 120, `demandes` 10.
-- Par PC : `activer` 5 par heure, `renouveler` 30 par heure, `flottante/jeton` 60 par heure, `demandes` 5 par jour.
+- Devant le service (le limiteur de Cloudflare, `[[ratelimits]]` de `wrangler.toml`), par adresse IP et par minute : les routes publiques (`etat`, `heure`, `certificat`, `registre`) 60, les autres routes `/v1` 120. Un appel refusé là ne coûte rien au service.
+- Par adresse IP et par heure : `activer` 10, `decouverte` 10, `demandes` 10.
+- Par PC : `activer` 5 par heure, `renouveler` 30 par heure, `flottante/jeton` 60 par heure, `demandes` 5 par jour (`renouveler` et `jeton` sont comptés en mémoire : aucune écriture).
 - Au-delà : 429 `trop` avec `"reessayer_dans":<secondes>`.
-- Au plus 1 000 demandes en attente, 10 000 licences et 100 000 activations.
+- Au plus 1 000 demandes en attente et 20 Mio de demandes gardées (une demande close est effacée après 7 jours), 10 000 licences, 100 000 activations (et par licence, § 4 bis).
+- **Les lignes écrites** (le plan gratuit : 100 000 par jour) : une route publique n'écrit rien ; `renouveler` 3 (le nonce, le bail, le numéro ; +2 par licence de plus), `flottante/jeton` 2, `activer` 9 (un PC neuf) ; un appel refusé (signature, limite) : 0. Les appels du jour sont comptés en mémoire et écrits une fois par minute au plus. Sur 127.0.0.1 seulement, la réponse le dit : `X-XPG-Lignes-Ecrites`.
 
 ## 6. Le code d'activation
 
@@ -124,7 +135,8 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 
 - Au premier lancement, le Studio commence sa Découverte sur le PC : c'est l'évaluation de la 1.34, renommée. Elle marche hors ligne.
 - En ligne, il la déclare au service (`POST /v1/decouverte`) avec l'empreinte de la machine : `machine` = les 32 premiers hexadécimaux de SHA-256(`"xpg-decouverte/1|"` + l'identifiant de l'installation Windows). Le service rend le **premier début connu pour cette machine**, et le Studio retient le plus ancien des deux.
-- Réinstaller Windows ou effacer ses fichiers ne relance donc pas l'essai. L'empreinte ne dit rien du matériel, mais elle reconnaît la machine : c'est dit dans la fenêtre Licence.
+- Effacer les fichiers de la Découverte ne relance donc pas l'essai tant que le PC est en ligne. L'empreinte ne dit rien du matériel, mais elle reconnaît l'installation : c'est dit dans la fenêtre Licence.
+- **Ses limites, honnêtement** : l'identifiant de l'installation Windows (`MachineGuid`) change à une réinstallation de Windows, et un administrateur du PC peut le changer ; un PC qui reste hors ligne compte seulement sur ses copies locales. Quelqu'un qui réinstalle Windows, ou change cet identifiant et efface les copies, recommence donc un essai. La Découverte freine l'essai répété ; elle ne l'empêche pas.
 
 ## 8. Ce qui reste sur le PC (le dossier des licences)
 

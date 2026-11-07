@@ -124,7 +124,7 @@ SIGNATURE ed25519 xpg-cb0d1ae560b52310 <128 hexadécimaux>
                { "license_id": "XPG-2026-00044", "device": "<clé du PC>", "revoked_at": "…", "reason": "Transfert" } ] }
 ```
 
-Numérotée et signée ; un client refuse une liste plus ancienne que la plus récente vue. Avec `device` : la licence n'est retirée que pour ce PC (un transfert). Une liste déjà vue qui **disparaît** du disque, ou qui est remplacée par une plus ancienne : la licence devient Invalide (pas de retour à Valide). Sans service, un PC n'apprend une révocation qu'en important un fichier qui la porte (le renouvellement suivant de quiconque en reçoit une, ou un envoi exprès).
+Numérotée et signée ; un client refuse une liste plus ancienne que la plus récente vue. Avec `device` : la licence n'est retirée que pour ce PC (un transfert). Une liste déjà vue qui **disparaît** du disque, ou qui est remplacée par une plus ancienne : la licence devient Invalide (pas de retour à Valide). Sans service, un PC n'apprend une révocation qu'en important un fichier qui la porte (une licence renouvelée, ou un envoi exprès). 1.35.0 : une licence EN LIGNE révoquée revient dans la réponse du renouvellement (`retirees`, raison `revoquee`) et ce PC la retire - la liste entière n'est plus envoyée ; une licence liée à des PC reçoit la liste par l'état de son poste, scellée par l'éditeur pour ce seul PC.
 
 ## 7. L'identité du PC et l'activation par fichier
 

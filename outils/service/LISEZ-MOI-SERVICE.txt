@@ -30,6 +30,10 @@ outil (étape 7).
 --------------------------------------------------
    Va sur https://dash.cloudflare.com/sign-up , crée le compte (adresse et mot de
    passe), confirme l'adresse reçue par courriel. Le plan gratuit suffit.
+   PROTÈGE CE COMPTE : active la double authentification (Mon profil › Authentification).
+   Qui entre dans ton compte Cloudflare peut lire la clé du service, et signer des
+   activations jusqu'à la fin de son certificat (un an) : dans ce cas, change ton mot
+   de passe, remets le service en ligne et certifie sa nouvelle clé (étape 7).
    La première fois, dans le tableau de bord, ouvre « Workers et Pages » : Cloudflare
    te demande de choisir ton sous-domaine (par exemple « mon-entreprise ») ; ton
    service s'appellera https://xpg-licences.mon-entreprise.workers.dev
@@ -109,10 +113,16 @@ SI QUELQUE CHOSE NE VA PAS
      deployer.bat.
    L'outil dit « pas certifié » : étape 7, « Certifier la clé du service ».
 
-   Le plan gratuit de Cloudflare permet 100 000 appels par jour : bien plus que ce
-   dont tes clients ont besoin (un appel au lancement d'un Studio, puis un toutes
-   les quelques heures). Le service se protège des abus : 10 activations par heure
-   et par adresse, 5 par PC, etc. Personne ne peut lire un code d'activation chez
+   Le plan gratuit de Cloudflare permet 100 000 appels et 100 000 lignes écrites
+   par jour : bien plus que ce dont tes clients ont besoin. Un PC en licence fixe
+   fait quelques appels par jour (au lancement d'un Studio, puis un toutes les
+   quelques heures) : une dizaine de lignes écrites. Un PC en licence flottante
+   reprend son poste toutes les 5 minutes tant qu'un Studio est ouvert : environ
+   100 appels et 200 lignes par journée de travail. Lire l'heure ou l'état
+   n'écrit rien. Le service se protège des abus : le limiteur de Cloudflare par
+   adresse (60 appels publics par minute), 10 activations par heure et par
+   adresse, 5 par PC, etc. Personne ne peut lire un code d'activation chez
    Cloudflare : le service n'en garde que l'empreinte.
-   Si un jour tes clients se comptent par milliers de PC, le plan payant de
-   Cloudflare (Workers Paid, 5 $ par mois) lève ces plafonds : rien d'autre à changer.
+   Si un jour tes clients se comptent par milliers de PC (ou par centaines de PC
+   en licence flottante ouverts toute la journée), le plan payant de Cloudflare
+   (Workers Paid, 5 $ par mois) lève ces plafonds : rien d'autre à changer.

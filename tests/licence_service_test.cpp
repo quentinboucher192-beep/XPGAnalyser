@@ -273,6 +273,8 @@ lic::StoreOptions pcOptions(const std::string& name, const std::string& machine)
     o.machineId = machine;
     o.evaluationPeriod = true;
     o.serviceUrl = g_url;   // les documents du service ne sont crus que pour SON adresse (celle du certificat)
+    // code-activation.txt : ecrit par l'installateur (les administrateurs), comme sur un vrai poste
+    o.fileOwner = [](const std::string&) { return lic::FileOwner::Admin; };
     return o;
 }
 
