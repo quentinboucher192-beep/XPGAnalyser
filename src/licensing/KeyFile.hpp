@@ -20,9 +20,13 @@
 //  UNE CLE QUI NE SE RELIT PAS N'EST JAMAIS REMPLACEE EN SILENCE (comme
 //  deploy::DevKey) : la licence de ce PC, ou les licences signees, en dependent.
 //
-//  CE QUE CA PROTEGE, HONNETEMENT : la cle ne se recopie pas sur un autre PC
-//  (DPAPI), et elle n'est pas lisible en ouvrant le fichier. Un programme qui
-//  tourne sur CE PC peut l'utiliser (c'est le principe de DPAPI machine).
+//  CE QUE CA PROTEGE, HONNETEMENT : la partie secrete n'est pas lisible en
+//  ouvrant le fichier, et le fichier recopie tel quel sur un autre PC ne s'y
+//  relit pas (DPAPI). Mais DPAPI MACHINE n'empeche PAS de la recopier : tout
+//  programme qui tourne sur CE PC, sous n'importe quel compte, peut la dechiffrer
+//  (c'est le principe de DPAPI machine), puis la reecrire ailleurs. D'ou, en
+//  1.32.0, le fil d'alarme stationHash (ci-dessous) : la licence porte
+//  l'empreinte de l'installation de Windows qui a fait la demande.
 // =============================================================================
 #pragma once
 
@@ -93,5 +97,16 @@ private:
 // ---- l'identite du PC ----
 inline constexpr const char* kDeviceKeyFile = "identite-pc.cle";
 [[nodiscard]] const KeyFileSpec& deviceKeySpec();
+
+// ---- 1.32.0 : le fil d'alarme d'une cle de PC recopiee (H2) ----
+//  L'identifiant de CETTE installation du systeme : Windows, MachineGuid
+//  (HKLM\SOFTWARE\Microsoft\Cryptography, vue 64 bits) ; ailleurs /etc/machine-id.
+//  Vide : illisible (rien n'est alors lie a l'installation).
+[[nodiscard]] std::string systemMachineId();
+//  L'empreinte du poste : hex(SHA-256("xpg-poste/1" || identifiant || cle publique
+//  du PC)), les 32 premiers hexadecimaux. Salee par la cle du PC : elle ne
+//  reconnait pas la machine d'une licence a l'autre et ne dit rien du materiel.
+//  Vide si `machineId` est vide.
+[[nodiscard]] std::string stationHash(std::string_view machineId, const crypto::PublicKey& deviceKey);
 
 } // namespace licensing

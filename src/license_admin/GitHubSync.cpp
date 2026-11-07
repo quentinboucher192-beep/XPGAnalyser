@@ -212,6 +212,29 @@ bool validRoot(std::string_view r) noexcept {
     return true;
 }
 
+namespace {
+
+// 1.32.0 (L1) : l'adresse de l'API recoit le jeton (Authorization: Bearer) : seulement GitHub lui-meme, ou ce poste
+// (127.0.0.1, localhost : le faux GitHub des essais). Un github.json modifie ne l'envoie nulle part ailleurs.
+bool allowedApi(const std::string& api, std::string* why) {
+    app::ai::Url u;
+    std::string w;
+    if (!app::ai::parseUrl(api, u, &w)) {
+        if (why) *why = w;
+        return false;
+    }
+    if (u.loopback()) return true;
+    std::string t = api;
+    while (!t.empty() && t.back() == '/') t.pop_back();
+    if (t == kDefaultApi) return true;
+    if (why)
+        *why = cite(api) + " : le jeton GitHub ne part que vers " + std::string(kDefaultApi)
+               + " (ou vers ce poste, 127.0.0.1 ou localhost, pour les essais)";
+    return false;
+}
+
+} // namespace
+
 std::string configPath(const std::string& folder) { return deploy::joinPath(folder, kConfigFile); }
 bool configured(const std::string& folder) { return isFile(configPath(folder)); }
 
@@ -233,17 +256,19 @@ bool readConfig(const std::string& folder, Config& out, std::string* why) {
     out.root = v.str("racine");
     out.api = v.str("api", kDefaultApi);
     while (!out.api.empty() && out.api.back() == '/') out.api.pop_back();
-    app::ai::Url u;
     std::string w;
-    if (!validRepo(out.repo) || !validBranch(out.branch) || !validRoot(out.root) || !app::ai::parseUrl(out.api, u, &w)) {
-        if (why) *why = path + " : d\xC3\xA9p\xC3\xB4t, branche, racine ou adresse refus\xC3\xA9s" + (w.empty() ? std::string() : " (" + w + ")");
+    if (!validRepo(out.repo) || !validBranch(out.branch) || !validRoot(out.root)) {
+        if (why) *why = path + " : d\xC3\xA9p\xC3\xB4t, branche ou racine refus\xC3\xA9s";
+        return false;
+    }
+    if (!allowedApi(out.api, &w)) {
+        if (why) *why = path + " : adresse de l'API refus\xC3\xA9" "e : " + w;
         return false;
     }
     return true;
 }
 
 bool writeConfig(const std::string& folder, const Config& c, std::string* why) {
-    app::ai::Url u;
     std::string w;
     if (!validRepo(c.repo)) {
         if (why) *why = "le d\xC3\xA9p\xC3\xB4t s'\xC3\xA9" "crit PROPRIETAIRE/NOM (par exemple mon-compte/licences-xpg) : " + cite(c.repo) + " est refus\xC3\xA9";
@@ -257,7 +282,7 @@ bool writeConfig(const std::string& folder, const Config& c, std::string* why) {
         if (why) *why = "le dossier dans le d\xC3\xA9p\xC3\xB4t (--racine) est refus\xC3\xA9 : " + cite(c.root) + " (lettres, chiffres, . _ - et /)";
         return false;
     }
-    if (!app::ai::parseUrl(c.api, u, &w)) {
+    if (!allowedApi(c.api, &w)) {
         if (why) *why = "adresse de l'API refus\xC3\xA9" "e : " + w;
         return false;
     }

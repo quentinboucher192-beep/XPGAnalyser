@@ -1,8 +1,8 @@
 // =============================================================================
 //  deploy/Protocol.hpp - 1.28.0 : le protocole entre IHM Studio et l'agent
 // -----------------------------------------------------------------------------
-//  En-tete d'une demande :  {"proto":1,"op":"STATUS","id":"op-1a2b3c4d","seq":7,"ts":<ms depuis 1970>}
-//  En-tete d'une reponse :  {"proto":1,"op":"STATUS","re":"op-1a2b3c4d","seq":7,"ok":true}
+//  En-tete d'une demande :  {"proto":1,"op":"STATUS","id":"op-1a2b...","seq":7,"ts":<ms depuis 1970>}
+//  En-tete d'une reponse :  {"proto":1,"op":"STATUS","re":"op-1a2b...","seq":7,"ok":true}
 //                           ou "ok":false,"error":"<code>","message":"<phrase>"
 //                           (+ "replay":true : la reponse gardee d'une operation deja faite)
 //  Les arguments et les resultats sont dans les donnees de la trame (du JSON).
@@ -11,7 +11,8 @@
 //    - seq croit strictement sur une connexion ;
 //    - ts a 5 minutes au plus de l'horloge de l'agent ;
 //    - un identifiant d'operation deja vu (pour ce pair) rend la meme reponse,
-//      sans rien refaire.
+//      sans rien refaire (1.32.0 : un PC appaire seulement - les reponses a un
+//      pair inconnu ne sont pas gardees).
 //  Les versions : IDENTIFY porte les versions acceptees de chaque cote ; la plus
 //  haute commune est choisie, aucune -> "incompatible" (jamais forcee).
 //
@@ -123,7 +124,8 @@ inline constexpr std::string_view kLocalPackage = "paquet-local";       // le pa
 
 // Les millisecondes depuis 1970 (UTC).
 [[nodiscard]] std::int64_t nowMs();
-// Un identifiant d'operation neuf : "op-" et 8 chiffres hexadecimaux tires au hasard.
+// Un identifiant d'operation neuf : "op-" et 32 chiffres hexadecimaux tires au hasard (1.32.0 ; avant : 8).
+// L'agent accepte tout identifiant de 1 a 64 caracteres (parseRequest) : les Studios d'avant passent encore.
 [[nodiscard]] std::string newOperationId();
 // La plus haute version commune, 0 si aucune.
 [[nodiscard]] int chooseVersion(const std::vector<int>& ours, const std::vector<int>& theirs);

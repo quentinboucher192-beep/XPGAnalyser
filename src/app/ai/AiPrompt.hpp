@@ -90,6 +90,9 @@ struct PromptInput {
 struct PromptParts {
     std::string stable;    // les consignes, le format des operations, le registre, les connaissances actives
     std::string dynamic;   // le detail des genres de la vue et de la demande, puis le contexte
+    // Les connaissances jointes qui viennent d'un .xia importe (marquees "importee") : une donnee d'un autre poste - le
+    // mode Direct n'applique pas seul une reponse qui les a lues (Assistant::autoApply).
+    std::vector<std::string> imported{};
 };
 [[nodiscard]] PromptParts promptParts(const PromptInput&);
 // 1.15.0 : le texte du resultat d'outil (en erreur) d'une proposition que le logiciel refuse - ses

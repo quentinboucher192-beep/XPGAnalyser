@@ -73,6 +73,10 @@ namespace hmi::audit { struct Report; }   // 1.22.0 : l'audit final d'une missio
 
 namespace app::ai {
 
+// L'adresse ou partent les demandes de ces reglages (Anthropic : <adresse>/v1/messages ; compatible OpenAI : <base>/chat/
+// completions) ; vide : illisible ou sans reseau. La cle API y est liee (AiKeys : la cle liee a ses serveurs).
+[[nodiscard]] std::string serviceUrl(const Settings& s);
+
 struct LocalReply;   // AiLocal.hpp
 
 class Assistant {
@@ -701,7 +705,11 @@ private:
         int                     fixErrors{0};
         // 1.22.6 : ce que fait l'IA (les evenements du fournisseur, a l'instant) et ce que coutent ses appels.
         activity::Tracker       act;
+        // Ce que la reponse a lu d'ailleurs que l'utilisateur (des pieces jointes, des retours d'outils, des connaissances
+        // importees) : sa proposition n'est jamais appliquee seule (le mode Direct demande).
+        std::vector<std::string> untrusted;
     };
+    void noteUntrusted(const char* what);
 
     Host                      host_;
     Settings                  settings_;
@@ -918,6 +926,8 @@ private:
     [[nodiscard]] std::string              capKey() const;
     std::string                            noTools_;
     std::string                            modelsProvider_;
+    // L'essai en cours (Lister les modeles, Tester) : la cle et l'adresse - un succes y lie la cle (AiKeys::confirmServer).
+    std::string                            testKey_, testUrl_;
     // 1.22.6 : L'ACTIVITE ET LE BILAN (AiActivity.hpp) - le suivi de la reponse qui commence (son contexte : la mission, la
     // correction ; `contextGuess` : env. les jetons envoyes) ; a sa fin (finie, en erreur, arretee), son bilan garde avec le
     // message et ses etapes gardees pour la ligne qui suit (la verification, Generer et Compiler de sa proposition).

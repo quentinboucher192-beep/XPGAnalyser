@@ -8,6 +8,7 @@
 #include "HmiStore.hpp"      // serializeProject, parseProject, parseRecord, quote, nowStamp
 #include "HmiUnits.hpp"      // 1.13.0 : les unites des bibliotheques (unitConfig)
 #include "../core/Version.hpp"
+#include "../xls/ZipLimits.hpp"   // 1.32.0 : les bornes d'un zip recu
 #include "../../third_party/miniz.h"
 
 #include <algorithm>
@@ -154,15 +155,26 @@ std::vector<std::string>& foldersSlot() {
     return v;
 }
 
-void readZip(const Bytes& bytes, std::map<std::string, std::string>& files, bool& zip) {
+// 1.32.0 : `tooBig` - le zip passe les bornes communes (une bombe) : rien n'est lu, et pourquoi.
+void readZip(const Bytes& bytes, std::map<std::string, std::string>& files, bool& zip, std::string& tooBig) {
     mz_zip_archive archive;
     std::memset(&archive, 0, sizeof archive);
     zip = !bytes.empty() && mz_zip_reader_init_mem(&archive, bytes.data(), bytes.size(), 0);
     if (!zip) return;
     const mz_uint n = mz_zip_reader_get_num_files(&archive);
+    xls::ziplimits::Budget budget;
+    if (!budget.entries(n, &tooBig)) {
+        mz_zip_reader_end(&archive);
+        return;
+    }
     for (mz_uint i = 0; i < n; ++i) {
         mz_zip_archive_file_stat st;
         if (!mz_zip_reader_file_stat(&archive, i, &st) || st.m_is_directory) continue;
+        if (!budget.take(st.m_uncomp_size, st.m_filename, &tooBig)) {
+            files.clear();
+            mz_zip_reader_end(&archive);
+            return;
+        }
         std::size_t size = 0;
         void* data = mz_zip_reader_extract_to_heap(&archive, i, &size, 0);
         if (!data) continue;
@@ -268,8 +280,10 @@ Bytes toZip(const Package& pkg) {
 core::Result<Package> fromZip(const Bytes& bytes) {
     std::map<std::string, std::string> files;
     bool zip = false;
-    readZip(bytes, files, zip);
+    std::string tooBig;
+    readZip(bytes, files, zip, tooBig);
     if (!zip) return core::fail(core::ErrorCode::FileUnreadable, "pas une biblioth\xC3\xA8que (le fichier n'est pas un zip)");
+    if (!tooBig.empty()) return core::fail(core::ErrorCode::FileTooLarge, "biblioth\xC3\xA8que refus\xC3\xA9" "e : " + tooBig);
     const auto man = files.find(std::string(kManifestFile));
     if (man == files.end())
         return core::fail(core::ErrorCode::FileUnreadable, "pas une biblioth\xC3\xA8que (bibliotheque.txt absent) - un paquet .xpgtypes s'importe, il ne se relie pas");

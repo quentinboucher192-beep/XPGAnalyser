@@ -157,6 +157,11 @@ struct FontMetrics {
     std::string         family;          // le nom de la famille (table name), s'il se lit
 };
 [[nodiscard]] bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, FontMetrics& out);
+// 1.32.0 : UNE POLICE D'UN PROJET RECU n'est jamais donnee telle quelle a stb_truetype (qui ne verifie rien de ce qu'il
+// lit) : elle passe par le lecteur borne (ttf::read), puis stb dessine sa copie reecrite (ttf::write : des tables sures),
+// son crenage (GPOS, kern) seulement s'il tient dans ses tables. Une OpenType a contours CFF (OTTO) et une collection
+// (ttcf) sont refusees. renderFontText et fontMetrics le font d'eux-memes ; faux : `why` dit pourquoi.
+[[nodiscard]] bool fontRenderable(const Bytes& font, std::string* why = nullptr);
 
 // "12,4 Ko", "3,1 Mo" : le poids d'un fichier, lisible.
 [[nodiscard]] std::string formatBytes(std::uint64_t bytes);

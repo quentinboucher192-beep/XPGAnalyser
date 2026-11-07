@@ -117,6 +117,49 @@ bool fail(std::string* why, std::string text) {
     return false;
 }
 
+// Un socket NON HERITABLE : un processus enfant (le bac a sable de l'IA, un programme lance) ne recoit jamais une connexion
+// de l'IHM. Windows : WSA_FLAG_NO_HANDLE_INHERIT (7 SP1 et apres ; avant : SetHandleInformation) ; ailleurs : SOCK_CLOEXEC.
+#if defined(_WIN32)
+#  ifndef WSA_FLAG_NO_HANDLE_INHERIT
+#    define WSA_FLAG_NO_HANDLE_INHERIT 0x80
+#  endif
+void noInherit(Native s) {
+    if (s != INVALID_SOCKET) (void)SetHandleInformation(reinterpret_cast<HANDLE>(s), HANDLE_FLAG_INHERIT, 0);
+}
+Native openSocket(int family, int type, int protocol) {
+    Native s = ::WSASocketW(family, type, protocol, nullptr, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+    if (s == INVALID_SOCKET) {   // un Windows qui ne connait pas le drapeau
+        s = ::socket(family, type, protocol);
+        noInherit(s);
+    }
+    return s;
+}
+Native acceptSocket(Native listener, sockaddr* from, SockLen* len) {
+    const Native c = ::accept(listener, from, len);
+    noInherit(c);
+    return c;
+}
+#else
+Native openSocket(int family, int type, int protocol) {
+#  if defined(SOCK_CLOEXEC)
+    return ::socket(family, type | SOCK_CLOEXEC, protocol);
+#  else
+    const Native s = ::socket(family, type, protocol);
+    if (s >= 0) (void)fcntl(s, F_SETFD, FD_CLOEXEC);
+    return s;
+#  endif
+}
+Native acceptSocket(Native listener, sockaddr* from, SockLen* len) {
+#  if defined(__linux__) && defined(SOCK_CLOEXEC)
+    return ::accept4(listener, from, len, SOCK_CLOEXEC);
+#  else
+    const Native c = ::accept(listener, from, len);
+    if (c >= 0) (void)fcntl(c, F_SETFD, FD_CLOEXEC);
+    return c;
+#  endif
+}
+#endif
+
 void setNonBlocking(Native s) {
 #if defined(_WIN32)
     u_long on = 1;
@@ -222,7 +265,7 @@ bool Socket::connect(const std::string& host, int port, int timeoutMs, std::stri
         return fail(why, "adresse inconnue : " + host);
     std::string last = "aucune adresse utilisable pour " + host;
     for (addrinfo* ai = found; ai; ai = ai->ai_next) {
-        const Native s = ::socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        const Native s = openSocket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
         if (invalidNative(s)) {
             last = errorText(lastError());
             continue;
@@ -273,7 +316,7 @@ bool Socket::listen(const std::string& bindAddress, int port, std::string* why) 
     const char* node = bindAddress.empty() || bindAddress == "0.0.0.0" ? nullptr : bindAddress.c_str();
     if (getaddrinfo(node, service.c_str(), &hints, &found) != 0 || !found)
         return fail(why, "adresse d'\xC3\xA9" "coute inconnue : " + bindAddress);
-    const Native s = ::socket(found->ai_family, found->ai_socktype, found->ai_protocol);
+    const Native s = openSocket(found->ai_family, found->ai_socktype, found->ai_protocol);
     if (invalidNative(s)) {
         freeaddrinfo(found);
         return fail(why, errorText(lastError()));
@@ -307,7 +350,7 @@ Socket Socket::accept(int timeoutMs, std::string* peer) {
     if (!valid() || waitFor(nat(fd_), false, timeoutMs) <= 0) return out;
     sockaddr_storage from{};
     SockLen len = sizeof from;
-    const Native c = ::accept(nat(fd_), reinterpret_cast<sockaddr*>(&from), &len);
+    const Native c = acceptSocket(nat(fd_), reinterpret_cast<sockaddr*>(&from), &len);
     if (invalidNative(c)) return out;
     setNonBlocking(c);
     tune(c);
@@ -497,7 +540,7 @@ std::string localAddress() {
     if (!startup()) return "127.0.0.1";
     // Une "connexion" UDP n'envoie rien : elle choisit seulement la carte de la
     // route par defaut, dont on lit l'adresse.
-    const Native s = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    const Native s = openSocket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (invalidNative(s)) return "127.0.0.1";
     sockaddr_in to{};
     to.sin_family = AF_INET;

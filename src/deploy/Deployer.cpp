@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -42,6 +43,9 @@ std::string seconds(std::int64_t ms) {
     std::snprintf(buf, sizeof buf, "%lld,%lld s", static_cast<long long>(ms / 1000), static_cast<long long>((ms % 1000) / 100));
     return buf;
 }
+
+// a + b, sature (jamais de debordement).
+std::uint64_t addCapped(std::uint64_t a, std::uint64_t b) { return a > UINT64_MAX - b ? UINT64_MAX : a + b; }
 
 bool isHex64(const std::string& s) {
     return s.size() == 64 && std::all_of(s.begin(), s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
@@ -211,7 +215,7 @@ struct Deployer::Impl {
         v.set("application", station->app);
         v.set("version", station->id);
         v.set("folder", station->folder);
-        v.set("stopFile", station->stopFile);
+        v.set("stopFile", station->stopFile);   // pour qui lit le fichier ; 1.32.0 : jamais relu par l'agent
         v.set("startedAt", station->startedAt);
         v.set("adopted", station->adopted);
         (void)install::atomicWrite(postePath(), core::json::write(v, true) + "\n", nullptr);
@@ -356,7 +360,7 @@ struct Deployer::Impl {
         if (!install::atomicWrite(stopFile, core::json::write(req, false) + "\n", &w))
             return failed(err::kInternal, "impossible d'\xC3\xA9" "crire la demande d'arr\xC3\xAAt : " + w, d);
         journal.write("", "POSTE", "arr\xC3\xAAt demand\xC3\xA9 : " + app + " " + id + " pid " + std::to_string(pid) + ", d\xC3\xA9lai " + std::to_string(delay)
-                                       + " s (" + reason + ")");
+                                       + " s (" + Journal::field(reason) + ")");
         const std::int64_t wait = delay * 1000 + cfg.stopGraceMs;
         const auto t0 = std::chrono::steady_clock::now();
         int code = -1;
@@ -508,19 +512,49 @@ void Deployer::start() {
     auto& d = *d_;
     std::error_code ec;
     // Les installations coupees : les dossiers .extraction, les versions sans fiche.
+    // 1.32.0 : jamais a travers un lien ou une jonction (l'application, versions/ : rien n'y est efface) ; une
+    // version qui est un lien (l'agent n'en cree jamais) : le lien seul est retire, jamais ce qu'il designe.
     for (fs::directory_iterator a(P(d.store.root()), ec), end; !ec && a != end; a.increment(ec)) {
+        const std::string versions = U(a->path() / "versions");
+        if (install::linkBelow(d.cfg.dir, versions)) {
+            d.journal.write("", "NETTOYAGE", "refus\xC3\xA9 : un lien ou une jonction sur le chemin de " + versions + " (rien n'y est effac\xC3\xA9)");
+            continue;
+        }
+        std::vector<fs::path> cut;
         std::error_code e2;
-        for (fs::directory_iterator v(a->path() / "versions", e2), vend; !e2 && v != vend; v.increment(e2)) {
+        for (fs::directory_iterator v(P(versions), e2), vend; !e2 && v != vend; v.increment(e2)) {
             std::error_code e3;
-            if (!v->is_directory(e3)) continue;
             const fs::path p = v->path();
+            const bool link = install::isLink(U(p));
+            if (!link && !v->is_directory(e3)) continue;
             fs::path fiche = p;
             fiche += u8".json";
-            if (p.extension() == ".extraction" || !fs::exists(fiche, e3)) {
-                fs::remove_all(p, e3);
-                d.journal.write("", "NETTOYAGE", "installation coup\xC3\xA9" "e effac\xC3\xA9" "e : " + U(p));
-            }
+            if (link || p.extension() == ".extraction" || !fs::exists(fiche, e3)) cut.push_back(p);
         }
+        for (const auto& p : cut) {
+            const bool link = install::isLink(U(p));
+            std::string w;
+            if (install::removeTree(U(p), &w))
+                d.journal.write("", "NETTOYAGE", std::string(link ? "lien retir\xC3\xA9 (sans le suivre) : " : "installation coup\xC3\xA9" "e effac\xC3\xA9" "e : ") + U(p));
+            else
+                d.journal.write("", "NETTOYAGE", "\xC3\xA9" "chec : " + w);
+        }
+    }
+    // 1.32.0 : apres le deplacement du dossier de l'agent (ProgramData -> le profil de l'operateur), l'entree du
+    // poste (cle Run, .desktop) peut designer un dossier qui n'existe plus : elle est refaite sur la version active
+    // de l'application qui demarre avec la session. Une entree valide (ou celle d'un autre programme) ne change pas.
+    {
+        const auto entry = station::readAutostart(false);
+        const std::string folder = entry.present ? station::folderOfCommand(entry.command) : std::string();
+        std::error_code e4;
+        if (!folder.empty() && !fs::exists(P(folder), e4))
+            for (const auto& a : d.store.list())
+                if (a.autostart && !a.active.empty() && a.find(a.active)) {
+                    const std::string note = d.applyAutostart(a.name, a.active, true, false);
+                    d.journal.write("", "SESSION", "l'entr\xC3\xA9" "e du poste d\xC3\xA9signait un dossier disparu (" + folder + ") : refaite pour " + a.name + " " + a.active
+                                                       + (note.empty() ? std::string() : " ; " + note));
+                    break;
+                }
     }
     // Le poste lance avant le redemarrage de l'agent.
     Value v;
@@ -537,7 +571,8 @@ void Deployer::start() {
             r->app = v.str("application");
             r->id = v.str("version");
             r->folder = v.str("folder");
-            r->stopFile = v.str("stopFile");
+            // 1.32.0 : jamais un chemin lu dans un fichier (poste.json a pu etre modifie) : arret.json de l'agent.
+            r->stopFile = d.stopPath();
             r->startedAt = v.integer("startedAt");
             r->adopted = v.flag("adopted");
             d.journal.write("", "POSTE", "retrouv\xC3\xA9 : " + r->app + " " + r->id + " pid " + std::to_string(r->proc.pid()));
@@ -561,6 +596,9 @@ OpResult Deployer::prepare(const Peer& peer, const Value& args) {
     const auto maxSize = static_cast<std::int64_t>(d.cfg.limits.maxTotalBytes + 64ull * 1024 * 1024);
     if (size <= 0 || size > maxSize) return failed(err::kBadArgs, "\"size\" : la taille du paquet (1 octet \xC3\xA0 " + packageSizeText(static_cast<std::uint64_t>(maxSize)) + ")");
     if (content < 0) return failed(err::kBadArgs, "\"contentSize\" n\xC3\xA9gatif");
+    // 1.32.0 : le contenu annonce ne depasse pas ce qu'un paquet peut contenir (sinon la place demandee deborde).
+    if (static_cast<std::uint64_t>(content) > d.cfg.limits.maxTotalBytes)
+        return failed(err::kBadArgs, "\"contentSize\" : le contenu du paquet (" + packageSizeText(d.cfg.limits.maxTotalBytes) + " au plus)");
     Value data = Value::object();
     data.set("transfer", sha);
     data.set("chunkSize", static_cast<std::int64_t>(protocol::kChunkSize));
@@ -579,6 +617,37 @@ OpResult Deployer::prepare(const Peer& peer, const Value& args) {
     std::lock_guard<std::mutex> lock(d.transferMutex);
     const std::string part = d.incoming(sha, ".part"), metaPath = d.incoming(sha, ".json");
     std::error_code ec;
+    // 1.32.0 : un envoi en cours par PC - celui d'avant (un autre paquet) est abandonne. Ceux des autres PC
+    // comptent dans la place : ce qu'il leur reste a recevoir et leur contenu a installer (ce que leurs .part
+    // ont deja recu manque deja a la place libre).
+    std::uint64_t pending = 0;
+    {
+        std::vector<std::string> others;
+        for (fs::directory_iterator it(P(joinPath(d.cfg.dir, "incoming")), ec), end; !ec && it != end; it.increment(ec)) {
+            const fs::path p = it->path();
+            const std::string other = U(p.stem());
+            if (p.extension() == ".json" && other != sha && isHex64(other)) others.push_back(other);
+        }
+        ec.clear();
+        for (const auto& other : others) {
+            Value om;
+            if (!install::readJson(d.incoming(other, ".json"), om, nullptr)) continue;
+            if (om.str("studio") == peer.fingerprint) {
+                std::error_code e2;
+                fs::remove(P(d.incoming(other, ".part")), e2);
+                fs::remove(P(d.incoming(other, ".json")), e2);
+                d.journal.write("", "PREPARE", "envoi pr\xC3\xA9" "c\xC3\xA9" "dent abandonn\xC3\xA9 (" + Journal::field(om.str("application")) + " "
+                                                   + Journal::field(om.str("version")) + ") : un envoi en cours par PC");
+                continue;
+            }
+            std::error_code e2;
+            const auto have = fs::file_size(P(d.incoming(other, ".part")), e2);
+            if (e2) continue;   // plus de .part : plus rien a attendre de cet envoi
+            const auto osize = static_cast<std::uint64_t>(std::clamp<std::int64_t>(om.integer("size"), 0, maxSize));
+            const auto ocontent = static_cast<std::uint64_t>(std::clamp<std::int64_t>(om.integer("contentSize"), 0, static_cast<std::int64_t>(d.cfg.limits.maxTotalBytes)));
+            pending = addCapped(pending, addCapped(osize > have ? osize - have : 0, ocontent));
+        }
+    }
     std::int64_t offset = 0;
     Value meta;
     if (install::readJson(metaPath, meta, nullptr) && meta.integer("size") == size && meta.str("sha256") == sha) {
@@ -595,17 +664,21 @@ OpResult Deployer::prepare(const Peer& peer, const Value& args) {
         std::ofstream(P(part), std::ios::binary | std::ios::trunc).close();
         meta = Value::object();
     }
-    // La place : le reste du paquet, son contenu extrait, la marge.
+    // La place : le reste du paquet, son contenu extrait, la marge ; 1.32.0 : et les envois des autres PC.
+    // Sans debordement : chaque terme est borne (size, contentSize : 4 Gio et un peu), la somme saturee.
     const std::int64_t freeNow = d.freeBytes();
-    const std::int64_t need = (size - offset) + content + d.cfg.diskReserveBytes;
+    const std::uint64_t need = addCapped(addCapped(static_cast<std::uint64_t>(size - offset), static_cast<std::uint64_t>(content)),
+                                         addCapped(static_cast<std::uint64_t>(std::max<std::int64_t>(0, d.cfg.diskReserveBytes)), pending));
     data.set("diskFree", freeNow);
-    if (freeNow >= 0 && freeNow < need) {
+    if (freeNow >= 0 && static_cast<std::uint64_t>(freeNow) < need) {
         Value det = data;
-        det.set("needed", need);
+        det.set("needed", static_cast<std::int64_t>(std::min<std::uint64_t>(need, static_cast<std::uint64_t>(INT64_MAX))));
+        det.set("pending", static_cast<std::int64_t>(std::min<std::uint64_t>(pending, static_cast<std::uint64_t>(INT64_MAX))));
         return failed(err::kNoSpace,
-                      "pas assez de place sur le disque de ce PC : il faut " + packageSizeText(static_cast<std::uint64_t>(need)) + " (le paquet, son contenu install\xC3\xA9 et une marge de "
-                          + packageSizeText(static_cast<std::uint64_t>(d.cfg.diskReserveBytes)) + "), il reste " + packageSizeText(static_cast<std::uint64_t>(freeNow))
-                          + ". Lib\xC3\xA8re de la place, ou supprime d'anciennes versions.",
+                      "pas assez de place sur le disque de ce PC : il faut " + packageSizeText(need) + " (le paquet, son contenu install\xC3\xA9 et une marge de "
+                          + packageSizeText(static_cast<std::uint64_t>(d.cfg.diskReserveBytes))
+                          + (pending ? ", plus " + packageSizeText(pending) + " pour les envois en cours d'autres PC" : std::string()) + "), il reste "
+                          + packageSizeText(static_cast<std::uint64_t>(freeNow)) + ". Lib\xC3\xA8re de la place, ou supprime d'anciennes versions.",
                       det);
     }
     meta.set("format", "xpg-agent-reception");
@@ -767,11 +840,18 @@ OpResult Deployer::install(const Peer& peer, const Value& args) {
         label = meta.str("version");
         id = d.store.freeId(app, label);
         if (id.empty()) return failed(err::kInstallFailed, "trop de versions nomm\xC3\xA9" "es " + label + " sur ce PC");
+        // 1.32.0 : rien ne se cree a travers un lien ou une jonction (Applications, l'application, versions/).
+        if (install::linkBelow(d.cfg.dir, d.store.versionsDir(app))) {
+            const std::string m = "un lien ou une jonction dans le dossier de l'application (" + d.store.versionsDir(app) + ") : rien n'est install\xC3\xA9";
+            d.record("INSTALL", peer, app, id, label, false, "echec", m);
+            return failed(err::kInstallFailed, m);
+        }
         std::error_code ec;
         fs::create_directories(P(d.store.versionsDir(app)), ec);
         PackageExtractOptions xo;
         xo.approvedKeys = d.approvedKeys();
         xo.limits = d.cfg.limits;
+        xo.root = d.cfg.dir;
         const std::string dest = d.store.versionDir(app, id);
         const PackageExtractResult x = extractPackage(d.incoming(sha, ".part"), dest, xo);
         if (!x.ok) {
@@ -796,7 +876,7 @@ OpResult Deployer::install(const Peer& peer, const Value& args) {
         v.files = x.files;
         v.bytes = x.bytes;
         if (!d.store.writeVersion(app, v, &w)) {
-            fs::remove_all(P(dest), ec);
+            (void)install::removeTree(dest);
             d.record("INSTALL", peer, app, id, label, false, "echec", w);
             return failed(err::kInstallFailed, w);
         }

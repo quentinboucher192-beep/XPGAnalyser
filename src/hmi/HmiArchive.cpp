@@ -305,6 +305,11 @@ core::Result<pa::Bytes> projectArchive(const std::string& folder, const ProjectA
         if (f.kind == ExternalKind::Database) continue;
         const std::string resolved = resolveExternalPath(f, folder);
         std::error_code ec;
+        // 1.32.0 : un chemin reseau venu du projet n'est pas touche (fuite NTLM), sauf dossier autorise sur ce poste.
+        if (std::string refused; !projectPathAllowed(resolved, &refused)) {
+            rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB pas dans l'archive : " + refused);
+            continue;
+        }
         if (!fs::is_regular_file(fs::path(resolved), ec)) {
             rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB introuvable (" + f.path + ") : il n'est pas dans l'archive");
             continue;
@@ -416,7 +421,11 @@ core::Status unpackProjectArchive(const pa::Contents& c, const std::string& fold
                     if (f.path != e.link || f.kind == ExternalKind::Database) continue;
                     const std::string original = resolveExternalPath(f, folder);
                     std::string there;
-                    const bool present = fs::is_regular_file(fs::path(original), ec);
+                    // 1.32.0 : le lien d'une archive recue ne fait pas toucher un chemin reseau (fuite NTLM) : la copie.
+                    std::string refused;
+                    const bool reachable = projectPathAllowed(original, &refused);
+                    if (!reachable) rep.notes.push_back("fichier externe \xC2\xAB " + f.name + " \xC2\xBB : " + refused);
+                    const bool present = reachable && fs::is_regular_file(fs::path(original), ec);
                     if (present && core::readFileAll(fs::path(original), there)
                         && project::toHex(project::sha256(there)) == e.sha256) {
                         fs::remove(fs::path(folder) / fs::path(copy), ec);

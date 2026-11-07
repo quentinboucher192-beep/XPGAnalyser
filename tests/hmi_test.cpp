@@ -103,6 +103,10 @@
 #include "../src/hmi/HmiRoles.hpp"          // 1.12.6 (lots B et C) : le role de chaque propriete
 #include "../src/hmi/HmiEquipmentLink.hpp"  // 1.12.11 (lot G) : la liaison Equipement, le mode Etat
 #include "../src/hmi/HmiPackage.hpp"  // lot 20
+#include "../src/hmi/HmiLibrary.hpp"   // 1.32.0 : une bibliotheque qui ment sur ses tailles
+#include "../src/hmi/HmiTrueType.hpp"  // 1.32.0 : une police forgee
+#include "../src/xls/Workbook.hpp"     // 1.32.0 : un classeur forge (miniz)
+#include "../src/xls/XlsmSource.hpp"   // 1.32.0 : un classeur forge (le lecteur maison)
 #include "../src/hmi/HmiSymbols.hpp"
 #include "../src/hmi/HmiRetain.hpp"   // 1.12.3 : l'etat des structures du poste
 #include "../src/import/ProjectImporter.hpp"
@@ -13195,11 +13199,14 @@ struct WebReply {
     int         status{0};
     std::string headers, body, cookie;
 };
-WebReply webRequest(int port, const std::string& method, const std::string& path, const std::string& cookie = {}, const std::string& body = {}) {
+// 1.32.0 : Host est l'adresse et le port du poste (comme un navigateur l'envoie) ; `extra` : d'autres en-tetes (Origin).
+WebReply webRequest(int port, const std::string& method, const std::string& path, const std::string& cookie = {}, const std::string& body = {},
+                    const std::string& extra = {}, const std::string& host = {}) {
     WebReply r;
     hmi::net::Socket s;
     if (!s.connect("127.0.0.1", port, 2000)) return r;
-    std::string rq = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n";
+    std::string rq = method + " " + path + " HTTP/1.1\r\nHost: " + (host.empty() ? "127.0.0.1:" + std::to_string(port) : host)
+                   + "\r\nConnection: close\r\n" + extra;
     if (!cookie.empty()) rq += "Cookie: xpg_ihm=" + cookie + "\r\n";
     if (!body.empty() || method == "POST") rq += "Content-Type: application/x-www-form-urlencoded\r\nContent-Length: " + std::to_string(body.size()) + "\r\n";
     rq += "\r\n" + body;
@@ -13222,7 +13229,92 @@ WebReply webRequest(int port, const std::string& method, const std::string& path
     }
     return r;
 }
+// 1.32.0 : le jeton des clics, tel que la page le donne.
+std::string webToken(int port, const std::string& cookie) {
+    const std::string page = webRequest(port, "GET", "/", cookie).body;
+    const auto at = page.find("const jeton='");
+    if (at == std::string::npos) return {};
+    const auto start = at + 13;
+    return page.substr(start, page.find('\'', start) - start);
+}
 } // namespace
+
+// 1.32.0 : l'acces web ne se pilote que depuis sa page - Host et Origin de ce poste, le jeton de la session sur chaque clic ;
+// pas de session d'office sur un POST ; tout le reseau sans connexion : jamais la commande.
+void webSecurite132() {
+    std::printf("1.32.0 : l'acc\xC3\xA8s web (Host, Origin, jeton des clics, lecture seule sans connexion sur le r\xC3\xA9seau)\n");
+    using namespace hmi::web;
+    check(Server::hostMatches("127.0.0.1:8080", "127.0.0.1:8080") && Server::hostMatches(" LocalHost:8080", "127.0.0.1:8080")
+              && Server::hostMatches("192.168.1.5:8080", "192.168.1.5:8080") && Server::hostMatches("192.168.1.5", "192.168.1.5:80"),
+          "Host : l'adresse et le port du poste (localhost pour une connexion locale)");
+    check(!Server::hostMatches("pirate.example:8080", "127.0.0.1:8080") && !Server::hostMatches("127.0.0.1:8081", "127.0.0.1:8080")
+              && !Server::hostMatches("localhost:8080", "192.168.1.5:8080") && !Server::hostMatches("", "127.0.0.1:8080")
+              && !Server::hostMatches("127.0.0.1:80x", "127.0.0.1:80") && !Server::hostMatches("127.0.0.1:8080", ""),
+          "Host : un autre nom (DNS rebinding), un autre port, un en-tete vide ou illisible : refuses");
+    WebAccess w;
+    w.enabled = true;
+    w.port = 0;
+    w.login = true;
+    w.control = true;
+    const auto auth = [](const std::string& l, const std::string& pwd, bool* control, std::string* why) {
+        if (l == "chef" && pwd == "1234") { *control = true; return true; }
+        if (why) *why = "utilisateur ou mot de passe faux";
+        return false;
+    };
+    Server server;
+    std::string why;
+    check(server.start(w, "Armoire_Gaz", auth, &why), "le serveur web \xC3\xA9" "coute");
+    const int port = server.port();
+    const std::string here = "127.0.0.1:" + std::to_string(port);
+    auto r = webRequest(port, "POST", "/connexion", {}, "login=chef&password=1234", {}, "pirate.example:" + std::to_string(port));
+    check(r.status == 403 && r.cookie.empty(), "une connexion adressee a un autre nom (DNS rebinding) : 403, pas de session");
+    r = webRequest(port, "POST", "/connexion", {}, "login=chef&password=1234", "Origin: http://pirate.example\r\n");
+    check(r.status == 403 && r.cookie.empty(), "une connexion postee depuis une autre page (Origin etrangere) : 403");
+    r = webRequest(port, "POST", "/connexion", {}, "login=chef&password=1234", "Origin: http://" + here + "\r\n");
+    const std::string chef = r.cookie;
+    check(r.status == 303 && !chef.empty(), "depuis la page du poste (meme Origin) : connecte");
+    hmi::web::Frame f;
+    f.jpeg = std::make_shared<const hmi::Bytes>(hmi::Bytes{0xFF, 0xD8, 0xFF, 0xD9});
+    f.width = 200;
+    f.height = 100;
+    f.running = true;
+    server.setFrame(f);
+    const std::string jeton = webToken(port, chef);
+    check(!jeton.empty(), "le jeton est dans la page");
+    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10").status == 403, "un clic sans le jeton : 403");
+    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10&jeton=" + std::string(jeton.size(), '0')).status == 403, "un clic avec un faux jeton : 403");
+    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10&jeton=" + jeton, "Origin: http://pirate.example\r\n").status == 403,
+          "un clic venu d'une autre page, meme avec le cookie : 403");
+    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10&jeton=" + jeton, "Origin: http://" + here + "\r\n").status == 204
+              && server.takeClicks().size() == 1,
+          "le clic de la page du poste, avec son jeton : accepte (un seul)");
+    const auto events = server.takeEvents();
+    check(std::any_of(events.begin(), events.end(), [](const std::string& e) { return e.find("Requ\xC3\xAAte refus\xC3\xA9" "e") == 0; }),
+          "le journal dit les requetes refusees");
+    server.stop();
+    // Sans connexion : un POST ne cree pas de session.
+    w.login = false;
+    Server open;
+    check(open.start(w, "Armoire_Gaz", auth, &why), "sans connexion : le serveur \xC3\xA9" "coute");
+    r = webRequest(open.port(), "POST", "/clic", {}, "x=1&y=1");
+    check(r.status == 401 && r.cookie.empty() && open.clientCount() == 0, "sans connexion : un POST sans session est refuse, sans en creer une");
+    open.stop();
+    // Tout le reseau, sans connexion : la commande est refusee (lecture seule), et c'est dit.
+    w.allInterfaces = true;
+    check(!Server::effective(w).control && Server::effective(WebAccess{}).control == WebAccess{}.control, "effective : reseau + sans connexion = lecture seule");
+    Server lan;
+    if (lan.start(w, "Armoire_Gaz", auth, &why)) {
+        r = webRequest(lan.port(), "GET", "/");
+        check(!r.cookie.empty() && webRequest(lan.port(), "GET", "/etat", r.cookie).body.find("\"commande\":false") != std::string::npos,
+              "accessible du reseau sans connexion : lecture seule malgre la Commande du projet");
+        const auto said = lan.takeEvents();
+        check(std::any_of(said.begin(), said.end(), [](const std::string& e) { return e.find("commande refus\xC3\xA9" "e") == 0; }),
+              "... et le journal le dit");
+        lan.stop();
+    } else {
+        std::printf("  (toutes les cartes indisponibles ici : %s)\n", why.c_str());
+    }
+}
 
 void webLot14() {
     std::printf("lot 14 : l'acc\xC3\xA8s web (la page, la connexion, l'image, les clics)\n");
@@ -13284,8 +13376,10 @@ void webLot14() {
     check(r.status == 200 && r.headers.find("Content-Type: image/jpeg") != std::string::npos && r.body.size() == 9
               && static_cast<unsigned char>(r.body[0]) == 0xFF && r.headers.find("Cache-Control: no-store") != std::string::npos,
           "l'image : le JPEG tel quel, jamais en cache");
-    check(webRequest(port, "POST", "/clic", chef, "x=10.5&y=20").status == 204, "un clic du chef : accept\xC3\xA9");
-    check(webRequest(port, "POST", "/clic", chef, "x=500&y=20").status == 400, "un clic hors de l'image : refus\xC3\xA9");
+    const std::string jeton = webToken(port, chef);
+    check(jeton.size() == 32, "1.32.0 : la page donne le jeton des clics de la session");
+    check(webRequest(port, "POST", "/clic", chef, "x=10.5&y=20&jeton=" + jeton).status == 204, "un clic du chef : accept\xC3\xA9");
+    check(webRequest(port, "POST", "/clic", chef, "x=500&y=20&jeton=" + jeton).status == 400, "un clic hors de l'image : refus\xC3\xA9");
     auto clicks = server.takeClicks();
     check(clicks.size() == 1 && clicks[0].x == 10.5 && clicks[0].y == 20 && clicks[0].user == "chef" && clicks[0].peer == "127.0.0.1",
           "le clic, en pixels de l'image, avec qui et d'o\xC3\xB9");
@@ -13298,7 +13392,7 @@ void webLot14() {
     // La commande retiree : plus personne ne pilote.
     w.control = false;
     server.configure(w);
-    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10").status == 403, "la commande retir\xC3\xA9" "e : le chef aussi est en lecture seule");
+    check(webRequest(port, "POST", "/clic", chef, "x=10&y=10&jeton=" + jeton).status == 403, "la commande retir\xC3\xA9" "e : le chef aussi est en lecture seule");
     // Se deconnecter.
     r = webRequest(port, "GET", "/deconnexion", op);
     check(r.status == 303 && webRequest(port, "GET", "/etat", op).status == 401, "se d\xC3\xA9" "connecter : la session est ferm\xC3\xA9" "e");
@@ -13321,6 +13415,7 @@ void webLot14() {
     check(webRequest(open.port(), "GET", "/etat", r.cookie).body.find("\"commande\":true") != std::string::npos, "... avec la commande (r\xC3\xA9glage)");
     check(webRequest(open.port(), "GET", "/").status == 503, "un second navigateur : au plus 1 (503)");
     open.stop();
+    webSecurite132();
 }
 
 void simulateurModbusLot14(const std::string& xpg) {
@@ -33086,6 +33181,146 @@ void explorateur1141() {
 // =====================================================================================================================
 fs::path gFonts1260;   // resources/polices (le 3e argument ; sinon devine depuis le .XPG des fixtures)
 
+// =============================================================================
+//  1.32.0 : LES FICHIERS RECUS D'AILLEURS - une icone forgee, une police forgee, des zips qui mentent sur leurs tailles :
+//  refuses proprement, sans ecrire ni lire hors des tampons, sans allouer ce qu'ils annoncent.
+// =============================================================================
+namespace {
+std::string zip132(const std::vector<std::pair<std::string, std::string>>& files, mz_uint level) {
+    mz_zip_archive zip;
+    std::memset(&zip, 0, sizeof zip);
+    if (!mz_zip_writer_init_heap(&zip, 0, 0)) return {};
+    for (const auto& [name, data] : files) (void)mz_zip_writer_add_mem(&zip, name.c_str(), data.data(), data.size(), level);
+    void* buf = nullptr;
+    size_t size = 0;
+    (void)mz_zip_writer_finalize_heap_archive(&zip, &buf, &size);
+    std::string out(static_cast<const char*>(buf), size);
+    mz_free(buf);
+    mz_zip_writer_end(&zip);
+    return out;
+}
+// Le repertoire central ment : chaque entree annonce `size` octets decompresses.
+void lieAboutSize132(std::string& zip, std::uint32_t size) {
+    for (std::size_t at = zip.find("PK\x01\x02"); at != std::string::npos; at = zip.find("PK\x01\x02", at + 4))
+        if (at + 28 <= zip.size())
+            for (int k = 0; k < 4; ++k) zip[at + 24 + static_cast<std::size_t>(k)] = static_cast<char>((size >> (8 * k)) & 0xFF);
+}
+void put132(hmi::Bytes& b, std::size_t at, std::uint32_t v, int bytes) {
+    for (int k = 0; k < bytes; ++k) b[at + static_cast<std::size_t>(k)] = static_cast<std::uint8_t>(v >> (8 * k));
+}
+// Une icone d'une seule image (DIB) : `entry`, ses octets.
+hmi::Bytes ico132(const hmi::Bytes& entry) {
+    hmi::Bytes d = {0, 0, 1, 0, 1, 0, 32, 32, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    put132(d, 14, static_cast<std::uint32_t>(entry.size()), 4);
+    put132(d, 18, 22, 4);
+    d.insert(d.end(), entry.begin(), entry.end());
+    return d;
+}
+hmi::Bytes dib132(std::int32_t w, std::int32_t h, std::uint32_t bpp, std::uint32_t colors, std::size_t total) {
+    hmi::Bytes e(total, 0);
+    put132(e, 0, 40, 4);
+    put132(e, 4, static_cast<std::uint32_t>(w), 4);
+    put132(e, 8, static_cast<std::uint32_t>(h), 4);
+    put132(e, 12, 1, 2);
+    put132(e, 14, bpp, 2);
+    put132(e, 32, colors, 4);
+    return e;
+}
+} // namespace
+
+void securite132() {
+    std::printf("1.32.0 : les fichiers re\xC3\xA7us (une ic\xC3\xB4ne, une police, des zips forg\xC3\xA9s)\n");
+    // ---- une icone forgee : chaque image est refusee, sans ecrire hors du tampon refait
+    Rgba img;
+    for (std::size_t n = 1; n <= 11; ++n) {
+        hmi::Bytes e(n, 0);
+        e[0] = 40;                                       // annonce un en-tete de 40 octets
+        check(!decodeImage(ico132(e), "ICO", img), "ICO : une image de " + std::to_string(n) + " octet(s) est refus\xC3\xA9" "e");
+    }
+    check(!decodeImage(ico132(dib132(32, 0x7FFFFFFF, 32, 0, 64)), "ICO", img), "ICO : une hauteur d\xC3\xA9mesur\xC3\xA9" "e est refus\xC3\xA9" "e");
+    check(!decodeImage(ico132(dib132(100000, 64, 32, 0, 64)), "ICO", img), "ICO : une largeur d\xC3\xA9mesur\xC3\xA9" "e est refus\xC3\xA9" "e");
+    check(!decodeImage(ico132(dib132(32, 64, 8, 1000, 64)), "ICO", img), "ICO : une palette de 1000 couleurs est refus\xC3\xA9" "e");
+    check(!decodeImage(ico132(dib132(32, 64, 7, 0, 64)), "ICO", img), "ICO : 7 bits par point : refus\xC3\xA9");
+    {
+        auto e = dib132(32, 64, 32, 0, 64);
+        put132(e, 0, 0xFFF0, 4);                         // un en-tete plus long que l'image
+        check(!decodeImage(ico132(e), "ICO", img), "ICO : un en-t\xC3\xAAte plus long que l'image : refus\xC3\xA9");
+    }
+    {
+        auto e = dib132(2, 4, 32, 0, 64);                // 2 x 2, 32 bits : 40 + 16 + le masque (8)
+        for (std::size_t px = 0; px < 4; ++px) {
+            e[40 + px * 4 + 2] = 255;                    // rouge (BGRA)
+            e[40 + px * 4 + 3] = 255;
+        }
+        check(decodeImage(ico132(e), "ICO", img) && img.width == 2 && img.height == 2 && img.pixels.size() == 16 && img.pixels[0] == 255,
+              "ICO : une petite image saine se lit toujours");
+    }
+    // ---- une police forgee
+    {
+        std::string why;
+        const hmi::Bytes otto = {'O', 'T', 'T', 'O', 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        check(!fontRenderable(otto, &why) && why.find("CFF") != std::string::npos && !renderFontText(otto, "abc", 20.f, img),
+              "une OpenType CFF (OTTO) : refus\xC3\xA9" "e, et dite - " + why);
+        const hmi::Bytes ttc = {'t', 't', 'c', 'f', 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 12};
+        check(!fontRenderable(ttc, &why) && why.find("TTC") != std::string::npos, "une collection (ttcf) : refus\xC3\xA9" "e - " + why);
+        hmi::Bytes cut = {0, 1, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 'g', 'l', 'y', 'f', 0, 0, 0, 0, 0xFF, 0xFF, 0, 0, 0, 0x10, 0, 0};
+        check(!fontRenderable(cut, &why) && !renderFontText(cut, "a", 20.f, img), "une police tronqu\xC3\xA9" "e : refus\xC3\xA9" "e par le lecteur born\xC3\xA9 - " + why);
+        // Une police dont le crenage (GPOS, kern) sort de ses tables, et un compose qui se contient : elle se dessine.
+        namespace tt = hmi::ttf;
+        tt::Font f = tt::blank("Essai132");
+        const int b = tt::glyphOf(f, 'b');
+        if (b > 0) {
+            tt::Component self;
+            self.glyph = b;
+            f.glyphs[static_cast<std::size_t>(b)].contours.clear();
+            f.glyphs[static_cast<std::size_t>(b)].components = {self};
+        }
+        f.keep.emplace_back("GPOS", hmi::Bytes{0, 1, 0, 0, 0, 0, 0, 0, 0, 10, 0xFF, 0xFF});
+        f.keep.emplace_back("kern", hmi::Bytes{0, 0, 0, 1, 0, 0, 0, 14, 0, 1, 0xFF, 0xFF, 0, 0});
+        const hmi::Bytes forged = tt::write(f);
+        check(b > 0 && fontRenderable(forged, &why), "une police au cr\xC3\xA9nage ab\xC3\xAEm\xC3\xA9 et au compos\xC3\xA9 circulaire : dessinable - " + why);
+        check(renderFontText(forged, "abab", 24.f, img) && img.width > 1, "... sans boucler ni lire hors de ses tables (le cr\xC3\xA9nage ab\xC3\xAEm\xC3\xA9 est \xC3\xB4t\xC3\xA9)");
+        FontMetrics m;
+        check(fontMetrics(forged, {'a', 'b'}, m) && m.widths.size() == 2, "... et ses mesures se lisent");
+    }
+    // ---- des zips qui mentent : refuses avant d'allouer ce qu'ils annoncent
+    {
+        const std::string text(1000, 'a');               // compressible : l'entree est "deflate"
+        std::string z = zip132({{"paquet.txt", text}, {"bibliotheque.txt", text}, {"ihm/ihm.txt", text}}, MZ_DEFAULT_COMPRESSION);
+        lieAboutSize132(z, 300u << 20);
+        const hmi::Bytes bomb(z.begin(), z.end());
+        const auto p = hmi::pkg::fromZip(bomb);
+        check(!p && p.error().context.find("256 Mo") != std::string::npos, "un paquet de vues qui annonce 300 Mo : refus\xC3\xA9 - " + (p ? std::string{} : p.error().context));
+        const auto l = hmi::biblio::fromZip(bomb);
+        check(!l && l.error().context.find("256 Mo") != std::string::npos, "une biblioth\xC3\xA8que qui annonce 300 Mo : refus\xC3\xA9" "e - " + (l ? std::string{} : l.error().context));
+        std::vector<std::pair<std::string, std::string>> many;
+        for (int i = 0; i < 20001; ++i) many.emplace_back("f" + std::to_string(i), std::string{});
+        const std::string mz = zip132(many, MZ_NO_COMPRESSION);
+        const auto p2 = hmi::pkg::fromZip(hmi::Bytes(mz.begin(), mz.end()));
+        check(!p2 && p2.error().context.find("20000") != std::string::npos, "un paquet de 20 001 entr\xC3\xA9" "es : refus\xC3\xA9");
+        const fs::path dir = fs::temp_directory_path() / "xpg_securite132";
+        std::error_code ec;
+        fs::create_directories(dir, ec);
+        n5x::writeFile(dir / "entrees.xlsx", mz);
+        check(xls::inspect((dir / "entrees.xlsx").string()).sheets.empty() && !xls::Workbook::open((dir / "entrees.xlsx").string()),
+              "un classeur de 20 001 entr\xC3\xA9" "es : refus\xC3\xA9 (les deux lecteurs)");
+        std::string book = zip132({{"[Content_Types].xml", text}, {"xl/workbook.xml", text}, {"xl/_rels/workbook.xml.rels", text}}, MZ_DEFAULT_COMPRESSION);
+        lieAboutSize132(book, 300u << 20);
+        n5x::writeFile(dir / "bombe.xlsx", book);
+        const auto wb = xls::Workbook::open((dir / "bombe.xlsx").string());
+        check(xls::inspect((dir / "bombe.xlsx").string()).sheets.empty() && !wb && wb.error().context.find("256 Mo") != std::string::npos,
+              "un classeur qui annonce 300 Mo : refus\xC3\xA9 sans les allouer - " + (wb ? std::string{} : wb.error().context));
+        // Une entree stockee (sans compression) qui annonce plus d'octets qu'elle n'en a : jamais lue au-dela.
+        std::string stored = zip132({{"xl/workbook.xml", "<workbook/>"}, {"xl/_rels/workbook.xml.rels", "<Relationships/>"}}, MZ_NO_COMPRESSION);
+        lieAboutSize132(stored, 100000);
+        n5x::writeFile(dir / "stocke.xlsx", stored);
+        const auto st = xls::Workbook::open((dir / "stocke.xlsx").string());
+        check(!st && st.error().context.find("incoherente") != std::string::npos, "une entr\xC3\xA9" "e stock\xC3\xA9" "e plus longue qu'annonc\xC3\xA9" "e : refus\xC3\xA9" "e - "
+                  + (st ? std::string{} : st.error().context));
+        fs::remove_all(dir, ec);
+    }
+}
+
 void polices1260() {
     std::printf("[1.26.0 : la biblioth\xC3\xA8que de polices, la police partout]\n");
     namespace fl = hmi::fontlib;
@@ -33390,6 +33625,12 @@ int main(int argc, char** argv) {
     // 1.26.0 : resources/polices - le 3e argument ; sinon a cote des fixtures (tests/fixtures/MAST.XPG -> la racine).
     if (argc > 3) gFonts1260 = fs::path(argv[3]);
     else if (argc > 1) gFonts1260 = fs::path(argv[1]).parent_path().parent_path().parent_path() / "resources" / "polices";
+    if (const char* only = std::getenv("HMI_TEST_132"); only && *only == '1') {   // 1.32.0 : les fichiers recus, le web, seuls
+        securite132();
+        webLot14();
+        std::printf("%d controles, %d echec(s)\n", checks, failures);
+        return failures == 0 ? 0 : 1;
+    }
     if (const char* only = std::getenv("HMI_TEST_POL"); only && *only == '1') {   // 1.26.0 : les polices, seules
         polices1260();
         std::printf("%d controles, %d echec(s)\n", checks, failures);
@@ -33620,6 +33861,7 @@ int main(int argc, char** argv) {
     notificationsLot14();
     rapportsLot14();
     webLot14();
+    securite132();   // 1.32.0
     equipementsLot15();
     variablesLieesLot15();
     reseauPcLot15();

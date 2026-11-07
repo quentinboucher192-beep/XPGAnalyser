@@ -38,7 +38,8 @@ std::int64_t nowMs() {
 }
 
 std::string newOperationId() {
-    unsigned char b[4];
+    // 1.32.0 : 128 bits (32 chiffres) - 32 bits se devinaient ; l'agent accepte encore les anciens (8 chiffres).
+    unsigned char b[16];
     crypto::randomBytes(b, sizeof b);
     return "op-" + crypto::hex(b, sizeof b);
 }

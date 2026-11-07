@@ -5,6 +5,8 @@
 //  l'entree et la sortie, le code de sortie, l'environnement vide, le temps
 //  depasse, la memoire depassee, la sortie trop longue (coupee), l'arret a la
 //  demande, un programme absent.
+//  Securite : l'enfant n'herite d'aucun autre descripteur que 0, 1, 2 (Linux) ;
+//  un enfant qui ecrit beaucoup AVANT de lire son entree ne bloque pas le parent.
 // =============================================================================
 #include "../src/core/Process.hpp"
 
@@ -16,6 +18,11 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#if !defined(_WIN32)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -48,6 +55,25 @@ int child(const char* what) {
         for (int i = 0; i < 200000; ++i) std::printf("ligne %d\n", i);
         return 0;
     }
+    if (std::strcmp(what, "bavard-avant") == 0) {   // 1 Mo de sortie avant de lire l'entree
+        const std::string line(1023, 'x');
+        for (int i = 0; i < 1024; ++i) std::printf("%s\n", line.c_str());
+        std::fflush(stdout);
+        std::size_t got = 0;
+        char b[65536];
+        for (std::size_t n; (n = std::fread(b, 1, sizeof b, stdin)) > 0;) got += n;
+        std::fprintf(stderr, "%zu", got);
+        return 0;
+    }
+#if !defined(_WIN32)
+    if (std::strcmp(what, "descripteurs") == 0) {   // un descripteur au-dela de 2 encore ouvert ?
+        int open = 0;
+        for (int fd = 3; fd < 1024; ++fd)
+            if (fcntl(fd, F_GETFD) != -1) ++open;
+        std::printf("%d", open);
+        return 0;
+    }
+#endif
     return 99;
 }
 
@@ -89,6 +115,26 @@ int main(int argc, char** argv) {
     const auto e = pr::run(r, &stop);
     t.join();
     check(e.cancelled && e.seconds < 5.0, "Arreter : l'enfant tue tout de suite");
+    // Une entree de 1 Mo pour un enfant qui ecrit 1 Mo d'abord : ni l'un ni l'autre ne reste bloque.
+    pr::Request big;
+    big.program = pr::selfPath();
+    big.args = {"bavard-avant"};
+    big.input.assign(std::size_t{1} << 20, 'e');
+    big.limits.seconds = 20.0;
+    big.limits.outputBytes = std::size_t{4} << 20;
+    const auto g = pr::run(big);
+    check(g.started && !g.timedOut && g.exitCode == 0 && g.out.size() == std::size_t{1} << 20 && g.err == std::to_string(std::size_t{1} << 20),
+          "1 Mo de sortie avant de lire 1 Mo d'entree : fini, sans blocage (" + g.summary() + ", entree lue : " + g.err + ")");
+#if !defined(_WIN32)
+    // Un descripteur heritable du parent (sans O_CLOEXEC) : l'enfant ne l'a pas.
+    const int leak = ::open("/dev/null", O_RDONLY);
+    pr::Request fds;
+    fds.program = pr::selfPath();
+    fds.args = {"descripteurs"};
+    const auto h = pr::run(fds);
+    if (leak >= 0) ::close(leak);
+    check(leak >= 0 && h.started && h.exitCode == 0 && h.out == "0", "l'enfant n'herite d'aucun descripteur au-dela de 0, 1, 2 (ouverts : " + h.out + ")");
+#endif
     pr::Request bad;
     bad.program = "/nexiste/pas/du/tout";
     const auto f = pr::run(bad);

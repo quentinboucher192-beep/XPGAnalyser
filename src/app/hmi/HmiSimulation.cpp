@@ -3,6 +3,7 @@
 #include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
 #include "HmiDebugPane.hpp"          // 1.13.0 (lot J2) : Simulation > Debogage
 #include "../Disposition.hpp"
+#include "../Licence.hpp"   // 1.32.0 : la licence au point ou l'IHM demarre (hmi_runtime)
 #include "../../core/Edition.hpp"   // 1.12.0 : IHM Studio - la simulation de l'IHM seule
 #include "../../core/AtomicFile.hpp"   // 1.11.15 : l'instantane de la simulation, ecrit d'un bloc
 #include "../../hmi/HmiSimData.hpp"
@@ -4351,6 +4352,16 @@ void HmiSimulationPane::ensureStarted(double now) {
     }
     runtime_.bind(&doc_->project, link ? link : static_cast<sim::Environment*>(rt));
     if (!started_) {
+        // 1.32.0 (H3) : LA LICENCE, au seul point ou l'IHM demarre : chaque chemin y passe (sa barre, F8, le clic droit,
+        // une vue choisie, Les deux, le build, l'onglet qui s'ouvre, un script). Le poste d'exploitation, jamais. (Apres
+        // bind : la vue arretee se dessine comme apres un build refuse.)
+        if (std::string locked; !station_ && !app::licence::require("hmi_runtime", &locked)) {
+            autoStart_ = false;   // arretee : l'onglet ne la redemande pas a chaque image
+            blockedNote_ = "D\xC3\xA9marrage refus\xC3\xA9 : " + locked + "\nLicence\xE2\x80\xA6 (menu Aide) montre ta licence et importe la nouvelle.";
+            runtime_.logAt(hmi::LogLevel::Warning, "Simulation", "IHM", "D\xC3\xA9marrage refus\xC3\xA9 : " + locked);
+            status_->setTransientMessage("D\xC3\xA9marrage refus\xC3\xA9 : " + locked, 10.0, ui::StatusBar::Severity::Warning);
+            return;
+        }
         // 1.11.13 : pas de demarrage sans build valide (l'hote le lance ; buildDone suit).
         if (!askBuild(gateSource_.empty() ? std::string("d\xC3\xA9marrage") : gateSource_)) return;
         gateOpen_ = false;
@@ -4647,6 +4658,12 @@ void HmiSimulationPane::buildDone(bool ok, const std::string& why, const std::st
 
 void HmiSimulationPane::startHmi(const std::string& source) {
     if (started_) return;
+    // 1.32.0 (H3) : refusee, rien a construire - ensureStarted le dit
+    if (!station_ && !app::licence::require("hmi_runtime")) {
+        ensureStarted(now_);
+        refreshPane();
+        return;
+    }
     if (host_.buildGate && !gateOpen_) {   // 1.11.13 : le build d'abord
         (void)askBuild(source);
         refreshBar();

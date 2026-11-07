@@ -5,7 +5,8 @@
 //  sont ouvertes ; ici, ce que l'application en fait :
 //
 //    start()   au lancement : le dossier des licences de ce PC, le registre livre
-//              avec le programme (<programme>/licences/registre.xpgreg) ;
+//              avec le programme (<programme>/licences/registre.xpgreg) et, 1.32.0,
+//              la liste de revocation livree (<programme>/licences/revocations.xpgrev) ;
 //    tick()    une fois par heure, l'etat est revalue (une licence prend fin
 //              pendant que le logiciel tourne : rien ne se ferme, seules les
 //              ENTREES des fonctionnalites se verrouillent) ;
@@ -13,6 +14,12 @@
 //              gates() : une action, un volet, un geste -> l'identifiant de sa
 //              fonctionnalite). Ouverte : vrai. Fermee : la fenetre << Pas dans ta
 //              licence >> (la phrase du module, et << Licence... >>), faux.
+//
+//    require() 1.32.0 (H3) : LE MEME CONTROLE AUX POINTS DE PASSAGE, la ou la
+//              fonctionnalite se fait quel que soit le geste qui l'a demandee (la
+//              simulation de l'IHM qui demarre, la validation d'un import de vues,
+//              les commandes de script). Sans App : ouverte -> vrai ; fermee ->
+//              faux et la phrase du module ; c'est a l'appelant de la dire.
 //
 //  JAMAIS DE PERTE DE TRAVAIL : Ouvrir, Enregistrer, Enregistrer sous, Exporter
 //  le projet, Fermer, Quitter ne sont dans aucune entree de gates() - un essai le
@@ -26,6 +33,7 @@
 
 #include "../licensing/Store.hpp"
 
+#include <atomic>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -51,7 +59,8 @@ struct Gate {
 [[nodiscard]] std::string_view featureOf(Where where, std::string_view key);
 
 // Au lancement (App) : configure le module. XPG_LICENCES_DOSSIER (environnement) remplace le dossier des
-// licences de ce PC (les essais, les captures).
+// licences de ce PC - 1.32.0 : SEULEMENT dans une construction d'essai (licensing::testFolderOverride, option
+// CMake XPG_LICENCES_CLE_ESSAI : les captures) ; un programme livre l'ignore.
 void start();
 // Les essais : configurer avec ces options (un dossier, des cles de confiance).
 void start(licensing::StoreOptions options);
@@ -66,6 +75,18 @@ void refresh();
 // Le controle d'un point d'entree : ouverte -> vrai ; fermee -> la fenetre << Pas dans ta licence >>, faux.
 bool gate(App& app, std::string_view feature);
 bool gate(App& app, Where where, std::string_view key);
+
+// 1.32.0 (H3) : le controle aux points de passage (voir l'en-tete). EN LIGNE DANS CET EN-TETE : les fichiers qui
+// l'appellent (app/hmi/HmiSimulation.cpp, HmiImportDialog.cpp) se compilent aussi dans des essais sans Licence.cpp
+// ni les licences (hmi_editor_test) ; start() branche le vrai controle. Avant start() : ouverte, comme allows().
+namespace detail {
+using RequireFn = bool (*)(std::string_view feature, std::string* why);
+inline std::atomic<RequireFn> g_require{nullptr};
+} // namespace detail
+[[nodiscard]] inline bool require(std::string_view feature, std::string* why = nullptr) {
+    const detail::RequireFn f = detail::g_require.load(std::memory_order_acquire);
+    return f == nullptr || f(feature, why);
+}
 // La phrase d'une entree verrouillee (le module), ou vide si elle est ouverte.
 [[nodiscard]] std::string lockedText(std::string_view feature);
 // Le libelle d'une fonctionnalite (le registre ; sinon son identifiant).

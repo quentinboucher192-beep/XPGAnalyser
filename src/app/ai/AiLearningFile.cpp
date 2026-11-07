@@ -18,6 +18,12 @@
 //  [A-Za-z0-9._-]) est ignore ; rien ne s'ecrit hors du dossier IA. Les reglages
 //  du fichier ne s'appliquent que si l'Assistant n'est encore relie a aucune IA
 //  (l'IA integree ou la Demonstration) : un reglage fait a la main reste.
+//  SECURITE : le fournisseur, le service et l'adresse d'un fichier ne s'importent
+//  JAMAIS (un .xia ne choisit pas a qui partent les demandes et la cle) - l'apercu
+//  dit qu'ils sont ignores. Une conversation importee perd ses chemins (l'original
+//  sur l'autre PC, la copie et le texte extrait : ses pieces ne voyagent pas) ; une
+//  connaissance importee est marquee "importee" (le mode Direct ne s'applique pas
+//  aux reponses qui l'ont lue).
 // =============================================================================
 #include "AiLearningFile.hpp"
 
@@ -35,6 +41,21 @@
 #include <filesystem>
 #include <set>
 #include <system_error>
+
+// Apres les autres en-tetes : les macros de windows.h ne touchent que ce fichier.
+#if defined(_WIN32)
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#    endif
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#    include <windows.h>
+#    include <aclapi.h>
+#else
+#    include <sys/stat.h>
+#    include <unistd.h>
+#endif
 
 namespace app::ai::learning {
 
@@ -116,6 +137,32 @@ std::string providerText(const Settings& s) {
     return name;
 }
 
+// Un texte venu d'un fichier, montre dans l'apercu : une ligne, borne.
+std::string shown(std::string_view s) {
+    std::string out;
+    for (const char c : s) out += static_cast<unsigned char>(c) < 0x20 ? ' ' : c;
+    if (out.size() > 160) out = out.substr(0, 160) + "\xE2\x80\xA6";
+    return out;
+}
+
+// Une conversation importee : ses pieces jointes ne voyagent pas dans un .xia - le chemin d'origine (un chemin de l'autre
+// PC), la copie et le texte extrait sont oublies (ils designeraient des fichiers de CE poste) ; la piece est dite manquante.
+Json withoutPaths(Json c) {
+    if (Json* msgs = c.get("messages"); msgs && msgs->isArray())
+        for (auto& m : msgs->items)
+            if (Json* pieces = m.isObject() ? m.get("pieces") : nullptr; pieces && pieces->isArray())
+                for (auto& a : pieces->items) {
+                    if (!a.isObject()) continue;
+                    for (const char* key : {"cheminOrigine", "source", "fichier"})
+                        while (a.erase(key)) {}   // un champ en double aussi
+                    if (Json* an = a.get("analyses"); an && an->isArray())
+                        for (auto& r : an->items)
+                            if (r.isObject())
+                                while (r.erase("texte")) {}
+                }
+    return c;
+}
+
 // Le dossier commun ou l'installateur depose installation.json et le .xia.
 std::string installationDir() {
     if (const char* forced = std::getenv("XPG_IA_INSTALLATION"); forced && *forced) return forced;   // les essais (Linux)
@@ -125,6 +172,28 @@ std::string installationDir() {
     return c.programData + "\\XPGAnalyser\\IA";
 #else
     return {};
+#endif
+}
+
+// Un fichier du dossier commun n'est cru que s'il appartient a l'administrateur : Windows, BUILTIN\Administrateurs ou
+// SYSTEM (ce que l'installateur ecrit) - un utilisateur ordinaire peut creer des fichiers sous ProgramData ; ailleurs, root
+// (ou, pour les essais seulement - le dossier force par XPG_IA_INSTALLATION -, l'utilisateur lui-meme).
+bool ownedByAdministrator(const std::string& path) {
+#if defined(_WIN32)
+    std::wstring w = dossiers::cheminDe(path).wstring();
+    PSID owner = nullptr;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    if (GetNamedSecurityInfoW(w.data(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &owner, nullptr, nullptr, nullptr, &sd) != ERROR_SUCCESS)
+        return false;
+    const bool ok = owner && IsValidSid(owner) && (IsWellKnownSid(owner, WinBuiltinAdministratorsSid) || IsWellKnownSid(owner, WinLocalSystemSid));
+    if (sd) LocalFree(sd);
+    return ok;
+#else
+    struct stat st{};
+    if (::stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return false;
+    if (st.st_uid == 0) return true;
+    const char* forced = std::getenv("XPG_IA_INSTALLATION");
+    return forced && *forced && st.st_uid == ::geteuid();
 #endif
 }
 
@@ -208,20 +277,26 @@ Plan makePlan(const Json& file, bool replaceSame, ImportReport& report) {
         plan.hasSettings = true;
         const Settings cur = loadSettings();
         Settings s = cur;
-        s.provider = rs->str("fournisseur", cur.provider);
-        s.preset = rs->str("service", cur.preset);
-        s.endpoint = rs->str("adresse", cur.endpoint);
+        // SECURITE : le fournisseur, le service et l'adresse ne viennent jamais d'un fichier (ils decident a qui partent les
+        // demandes, et la cle) - ignores, et dit ; le reste (le modele, les preferences) suit la regle d'avant.
+        const std::string provider = rs->str("fournisseur"), preset = rs->str("service"), address = rs->str("adresse");
+        if ((!provider.empty() && provider != cur.provider) || (!preset.empty() && preset != cur.preset) || (!address.empty() && address != cur.endpoint)) {
+            std::string what = "r\xC3\xA9glages : le fournisseur et l'adresse du fichier sont ignor\xC3\xA9s (";
+            what += provider.empty() ? std::string("fournisseur non dit") : "\xC2\xAB " + shown(provider) + " \xC2\xBB";
+            if (!preset.empty()) what += ", service \xC2\xAB " + shown(preset) + " \xC2\xBB";
+            if (!address.empty()) what += ", adresse \xC2\xAB " + shown(address) + " \xC2\xBB";
+            what += ") : ils se choisissent dans les Param\xC3\xA8tres de l'Assistant IA";
+            report.lines.push_back(std::move(what));
+        }
         s.model = rs->str("modele", cur.model);
         s.localFirst = rs->flag("integreeDabord", cur.localFirst);
         s.notifyReplies = rs->flag("avertirReponses", cur.notifyReplies);
         s.applyWithErrors = rs->flag("appliquerMalgreErreurs", cur.applyWithErrors);
-        const bool known = std::any_of(providers().begin(), providers().end(), [&](const ProviderInfo& p) { return p.key == s.provider; });
-        if (!known) {
-            report.lines.push_back("r\xC3\xA9glages : ignor\xC3\xA9s (fournisseur inconnu : " + s.provider + ")");
-        } else if (cur.provider == "integree" || cur.provider == "demo") {
+        if (cur.provider == "integree" || cur.provider == "demo") {
             plan.applySettings = true;
             plan.settings = s;
-            report.lines.push_back("r\xC3\xA9glages : " + providerText(s) + " (appliqu\xC3\xA9s ; la cl\xC3\xA9 API, elle, ne voyage jamais)");
+            report.lines.push_back("r\xC3\xA9glages : pr\xC3\xA9" "f\xC3\xA9rences appliqu\xC3\xA9" "es (mod\xC3\xA8le, IA int\xC3\xA9gr\xC3\xA9" "e d'abord, "
+                                   "avertissements) ; la cl\xC3\xA9 API, elle, ne voyage jamais");
         } else {
             report.lines.push_back("r\xC3\xA9glages : gard\xC3\xA9s (l'Assistant est d\xC3\xA9j\xC3\xA0 r\xC3\xA9gl\xC3\xA9 sur " + providerText(cur) + ")");
         }
@@ -236,7 +311,7 @@ Plan makePlan(const Json& file, bool replaceSame, ImportReport& report) {
                 ++plan.conversationsKept;
                 continue;
             }
-            plan.conversations.push_back(toStore(c));
+            plan.conversations.push_back(toStore(withoutPaths(c)));
         }
         if (!plan.conversations.empty() || plan.conversationsKept > 0)
             report.lines.push_back("conversations : " + pluralize(static_cast<int>(plan.conversations.size()), "ajout\xC3\xA9" "e", "ajout\xC3\xA9" "es")
@@ -335,7 +410,18 @@ bool peek(const std::string& path, ImportReport& preview, std::string* why) {
     return true;
 }
 
+namespace {
+// `fromInstaller` : le .xia de l'installation (depose par l'administrateur) ; sinon un fichier choisi par l'utilisateur,
+// dont chaque connaissance est marquee "importee" (une donnee d'un autre poste : AiPrompt PromptParts::imported).
+bool importFile(const std::string& path, ImportReport& report, bool replaceSame, std::string* why, bool fromInstaller);
+} // namespace
+
 bool importFrom(const std::string& path, ImportReport& report, bool replaceSame, std::string* why) {
+    return importFile(path, report, replaceSame, why, false);
+}
+
+namespace {
+bool importFile(const std::string& path, ImportReport& report, bool replaceSame, std::string* why, bool fromInstaller) {
     report = ImportReport{};
     if (root().empty()) return fail(why, "pas de dossier pour l'Assistant IA");
     Json file;
@@ -348,7 +434,9 @@ bool importFrom(const std::string& path, ImportReport& report, bool replaceSame,
     for (const auto& it : plan.items) {
         if (it.what != Plan::Item::What::Add && it.what != Plan::Item::What::Replace) continue;
         std::string err;
-        if (!memory::writeText(knowledgeDir() + "/" + it.id + ".json", memory::writeJson(it.raw, true), &err)) {
+        Json raw = it.raw;
+        if (!fromInstaller) raw.set("importee", Json::makeBool(true));
+        if (!memory::writeText(knowledgeDir() + "/" + it.id + ".json", memory::writeJson(raw, true), &err)) {
             report.lines.push_back("non \xC3\xA9" "crite : " + it.name + (err.empty() ? std::string{} : " (" + err + ")"));
             (it.what == Plan::Item::What::Add ? report.added : report.replaced)--;
             if (it.raw.str("categorie") == "modele-fichier") --report.models;
@@ -372,6 +460,7 @@ bool importFrom(const std::string& path, ImportReport& report, bool replaceSame,
     (void)written;
     return true;
 }
+} // namespace
 
 // ------------------------------------------------------------ apres l'installation --
 //  installation.json (depose par l'installateur, dans le dossier commun) :
@@ -384,6 +473,8 @@ bool applyInstallation(std::string* said) {
     const std::string dir = installationDir();
     if (dir.empty()) return false;
     std::string text;
+    // Un installation.json qui n'appartient pas a l'administrateur (depose par un utilisateur ordinaire) : ignore.
+    if (!ownedByAdministrator(dir + "/installation.json")) return false;
     if (!memory::readText(dir + "/installation.json", text)) return false;
     Json inst;
     if (!memory::parseJson(text, inst) || !inst.isObject()) return false;
@@ -426,11 +517,18 @@ bool applyInstallation(std::string* said) {
                                                    + (s.provider == "anthropic" ? std::string(" (la cl\xC3\xA9 API se saisit dans les param\xC3\xA8tres)") : std::string{}));
         }
     }
-    if (const std::string xia = inst.str("apprentissage"); !xia.empty() && xia.find("..") == std::string::npos) {
-        const std::string path = xia.find_first_of("/\\") == std::string::npos ? dir + "/" + xia : xia;
+    if (const std::string xia = inst.str("apprentissage"); !xia.empty()) {
+        // Un nom de fichier du dossier de l'installation, rien d'autre : ni chemin absolu, ni partage reseau (UNC),
+        // ni lecteur, ni "..". Le .xia appartient lui aussi a l'administrateur.
+        const bool plainName = xia.find_first_of("/\\:") == std::string::npos && xia.find("..") == std::string::npos;
+        const std::string path = dir + "/" + xia;
         ImportReport r;
         std::string why;
-        if (importFrom(path, r, false, &why))
+        if (!plainName)
+            parts.push_back("apprentissage non import\xC3\xA9 : \xC2\xAB " + shown(xia) + " \xC2\xBB n'est pas un fichier du dossier de l'installation");
+        else if (!ownedByAdministrator(path))
+            parts.push_back("apprentissage non import\xC3\xA9 : " + shown(xia) + " n'a pas \xC3\xA9t\xC3\xA9 d\xC3\xA9pos\xC3\xA9 par l'administrateur");
+        else if (importFile(path, r, false, &why, true))
             parts.push_back("apprentissage import\xC3\xA9 : " + pluralize(r.added, "connaissance", "connaissances")
                             + (r.kept ? " (" + pluralize(r.kept, "gard\xC3\xA9" "e", "gard\xC3\xA9" "es") + ")" : std::string{}));
         else

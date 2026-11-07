@@ -5,8 +5,8 @@
 //  X.509 auto-signe, crees au premier lancement dans le dossier donne :
 //      <dossier>/<nom>.cer   le certificat (DER, public)
 //      <dossier>/<nom>.cle   la cle privee (DER) protegee par crypto::protect
-//                            (Windows : DPAPI, la machine pour l'agent, le compte
-//                            pour le Studio ; ailleurs : un fichier en 0600)
+//                            (Windows : DPAPI, le compte - 1.32.0 : l'agent aussi,
+//                            plus la machine ; ailleurs : un fichier en 0600)
 //  Aucune autorite ne juge ce certificat : son EMPREINTE (SHA-256 du DER) est
 //  epinglee a l'appairage (deploy/Pairing). L'identifiant lisible d'une machine
 //  en est tire : "M-" et les deux premiers octets ("M-7F21").

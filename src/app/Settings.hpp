@@ -20,6 +20,16 @@
 
 namespace app {
 
+// 1.32.0 : DES REGLAGES DE CE POSTE QU'UN PROJET NE CHANGE PAS (la securite) : ils restent dans le fichier de
+// l'utilisateur, jamais dans un projet (un projet recu d'ailleurs ne s'ouvre pas de droits).
+namespace poste {
+// Une liste de dossiers (vide par defaut) : "Dossiers autorises aux scripts de l'IHM" - FILE_READ, FILE_WRITE...
+// y lisent et ecrivent en plus de donnees/ et exports/ du projet ; un chemin reseau venu du projet s'y ouvre.
+inline constexpr const char* kHmiScriptFolders = "hmi.scripts.dossiersAutorises";
+// Vrai : "Acces web de l'IHM permis sur ce poste" - le serveur web que demande un projet peut demarrer (faux par defaut).
+inline constexpr const char* kHmiWebAllowed = "hmi.web.permisSurCePoste";
+} // namespace poste
+
 class Settings {
 public:
     // %APPDATA%\XpgAnalyzer\settings.txt on Windows, $XDG_CONFIG_HOME or

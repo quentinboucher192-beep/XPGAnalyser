@@ -4410,26 +4410,80 @@ hmi::Id openViewOf(const hmi::Project& project, const Proposal& p) {
 
 } // namespace
 
-bool sensitive(const Proposal& p) {
+namespace {
+
+// Le code appelle-t-il une fonction de fichiers ? Un identifiant entier, sans la casse : FILE_*, DIR_*, RESOURCE_EXTRACT.
+// Prudent : un nom dans un commentaire ou une chaine compte aussi (la proposition attend alors un clic, rien de plus).
+bool callsFileFunctions(std::string_view code) {
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    for (std::size_t i = 0; i < code.size();) {
+        if (!word(code[i]) || (i > 0 && word(code[i - 1]))) {
+            ++i;
+            continue;
+        }
+        std::size_t j = i;
+        while (j < code.size() && word(code[j])) ++j;
+        std::string id(code.substr(i, j - i));
+        for (auto& c : id) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        if (id.rfind("FILE_", 0) == 0 || id.rfind("DIR_", 0) == 0 || id == "RESOURCE_EXTRACT") return true;
+        i = j;
+    }
+    return false;
+}
+
+// Un evenement de script qui part seul (sans appel) : Demarrage, Cyclique, Changement - les memes mots que creer_script.
+bool selfStarting(std::string_view event) {
+    const std::string l = lower(event);
+    return l == "demarrage" || l == "d\xC3\xA9marrage" || l == "au demarrage" || l == "startup" || l == "cyclique" || l == "cycle"
+           || l == "periodique" || l == "changement" || l == "sur changement";
+}
+
+} // namespace
+
+std::string sensitiveReason(const Proposal& p) {
     for (const auto& op : p.ops) {
         if (std::find(p.excluded.begin(), p.excluded.end(), static_cast<std::size_t>(&op - p.ops.data())) != p.excluded.end()) continue;
         const auto has = [&](const char* k) { return std::any_of(op.props.begin(), op.props.end(), [&](const auto& kv) { return kv.first == k; }); };
+        const std::string body = Run::prop(op, "corps").empty() ? op.code : Run::prop(op, "corps");
         switch (op.action) {
             case Operation::Action::Security:
-                if (has("active") && !boolWord(Run::prop(op, "active")).value_or(true)) return true;   // la desactiver
+                if (has("active") && !boolWord(Run::prop(op, "active")).value_or(true)) return "la s\xC3\xA9" "curit\xC3\xA9, les comptes";   // la desactiver
                 break;
             case Operation::Action::UserEdit:   // un compte desactive, change de groupe ou de protection : peut-etre le dernier qui administre
-                if ((has("actif") && !boolWord(Run::prop(op, "actif")).value_or(true)) || has("groupe") || has("protection")) return true;
+                if ((has("actif") && !boolWord(Run::prop(op, "actif")).value_or(true)) || has("groupe") || has("protection"))
+                    return "la s\xC3\xA9" "curit\xC3\xA9, les comptes";
                 break;
             case Operation::Action::GroupEdit:  // les roles d'un groupe : peut-etre le dernier qui a Administrer
-                if (has("roles")) return true;
+                if (has("roles")) return "la s\xC3\xA9" "curit\xC3\xA9, les comptes";
+                break;
+            // Ce qui touche aux fichiers du poste ou part seul en marche : toujours relu avant d'etre applique.
+            case Operation::Action::Script: {
+                if (callsFileFunctions(body)) return "un script qui lit ou \xC3\xA9" "crit des fichiers";
+                if (selfStarting(Run::prop(op, "evenement"))) return "un script qui s'ex\xC3\xA9" "cute seul (d\xC3\xA9marrage, cyclique ou sur changement)";
+                const std::string lang = lower(Run::prop(op, "langage"));
+                if (lang == "c" || lang == "c++" || lang == "cpp") return "un script C ou C++";
+                break;
+            }
+            case Operation::Action::Function:
+                if (callsFileFunctions(body)) return "une fonction qui lit ou \xC3\xA9" "crit des fichiers";
+                break;
+            // Un equipement, une adresse : ce que l'IHM lit et ecrit sur le reseau de l'usine.
+            case Operation::Action::Equipment: return "un \xC3\xA9quipement";
+            case Operation::Action::Address: return "une adresse d'\xC3\xA9quipement";
+            case Operation::Action::VarEdit:
+                if (has("equipement") || has("adresse") || has("formule") || has("motif")) return "le lien d'une variable \xC3\xA0 un \xC3\xA9quipement";
+                break;
+            case Operation::Action::Remove:
+                if (lower(op.kind) == "equipement" || lower(op.kind) == "\xC3\xA9quipement") return "un \xC3\xA9quipement";
                 break;
             default:
                 break;
         }
     }
-    return false;
+    return {};
 }
+
+bool sensitive(const Proposal& p) { return !sensitiveReason(p).empty(); }
 
 bool secretField(Operation::Action a, std::string_view key) { return secretKey(a, key); }
 

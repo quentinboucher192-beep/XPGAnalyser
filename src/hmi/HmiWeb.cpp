@@ -133,8 +133,12 @@ const char* const kStyle =
 
 } // namespace
 
-std::string Server::page(const std::string& projectName, bool loginForm, const std::string& message, int refreshMs) {
+std::string Server::page(const std::string& projectName, bool loginForm, const std::string& message, int refreshMs,
+                         const std::string& token) {
     const std::string name = htmlEscape(projectName.empty() ? std::string("IHM") : projectName);
+    std::string jeton;                                   // 1.32.0 : le jeton des clics, des chiffres hexadecimaux seulement
+    for (const char c : token)
+        if (std::isxdigit(static_cast<unsigned char>(c))) jeton += c;
     std::string html = "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
                        "<title>" + name + " \xE2\x80\x94 IHM</title><style>" + kStyle + "</style></head><body>";
     if (loginForm) {
@@ -151,6 +155,7 @@ std::string Server::page(const std::string& projectName, bool loginForm, const s
             "<span class=\"sp\"></span><span id=\"user\"></span><a href=\"/deconnexion\">Se d\xC3\xA9" "connecter</a></header>"
             "<main><img id=\"img\" alt=\"La vue en marche\" style=\"display:none\"><div id=\"msg\">Connexion au poste\xE2\x80\xA6</div></main>"
             "<script>"
+            "const jeton='" + jeton + "';"
             "const img=document.getElementById('img'),msg=document.getElementById('msg');let serial=-1,control=false,busy=false;"
             "async function tick(){if(busy)return;busy=true;try{const r=await fetch('/etat',{cache:'no-store'});"
             "if(r.status==401){location.href='/';return}const s=await r.json();"
@@ -163,9 +168,65 @@ std::string Server::page(const std::string& projectName, bool loginForm, const s
             "setInterval(tick," + std::to_string(std::max(100, refreshMs)) + ");tick();"
             "img.addEventListener('click',e=>{if(!control)return;const r=img.getBoundingClientRect();"
             "const x=(e.clientX-r.left)*img.naturalWidth/r.width,y=(e.clientY-r.top)*img.naturalHeight/r.height;"
-            "fetch('/clic',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'x='+x.toFixed(1)+'&y='+y.toFixed(1)})});"
+            "fetch('/clic',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'x='+x.toFixed(1)+'&y='+y.toFixed(1)+'&jeton='+jeton})});"
             "</script></body></html>";
     return html;
+}
+
+WebAccess Server::effective(const WebAccess& w) {
+    WebAccess out = w;
+    if (w.allInterfaces && !w.login) out.control = false;   // tout le reseau, sans connexion : jamais piloter
+    return out;
+}
+
+namespace {
+// "nom:port" -> nom (en minuscules) et port ; sans port : `fallback`. Faux : illisible.
+bool splitHostPort(std::string_view text, std::string& name, int& port, int fallback) {
+    std::string s = lowerAscii(text);
+    while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
+    std::size_t a = 0;
+    while (a < s.size() && (s[a] == ' ' || s[a] == '\t')) ++a;
+    s = s.substr(a);
+    if (s.empty()) return false;
+    std::string rest;
+    if (s.front() == '[') {                              // [::1]:8080
+        const std::size_t close = s.find(']');
+        if (close == std::string::npos) return false;
+        name = s.substr(0, close + 1);
+        rest = s.substr(close + 1);
+    } else {
+        const std::size_t colon = s.rfind(':');
+        name = s.substr(0, colon);
+        rest = colon == std::string::npos ? std::string{} : s.substr(colon);
+    }
+    port = fallback;
+    if (!rest.empty()) {
+        if (rest.front() != ':' || rest.size() < 2 || rest.size() > 6) return false;
+        port = 0;
+        for (std::size_t i = 1; i < rest.size(); ++i) {
+            if (rest[i] < '0' || rest[i] > '9') return false;
+            port = port * 10 + (rest[i] - '0');
+        }
+    }
+    return !name.empty() && port > 0 && port <= 65535;
+}
+
+// Deux jetons, compares sans s'arreter au premier caractere different.
+bool sameToken(std::string_view a, std::string_view b) {
+    if (a.empty() || a.size() != b.size()) return false;
+    unsigned diff = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) diff |= static_cast<unsigned>(static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]));
+    return diff == 0;
+}
+} // namespace
+
+bool Server::hostMatches(const std::string& host, const std::string& local) {
+    std::string hn, ln;
+    int hp = 0, lp = 0;
+    if (!splitHostPort(host, hn, hp, 80) || !splitHostPort(local, ln, lp, -1)) return false;
+    if (hp != lp) return false;
+    if (hn == ln) return true;
+    return ln.rfind("127.", 0) == 0 && (hn == "localhost" || hn == "127.0.0.1" || hn == "[::1]");
 }
 
 struct Server::Listener {
@@ -185,7 +246,10 @@ bool Server::start(const WebAccess& w, std::string projectName, Authenticate aut
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        settings_ = w;
+        settings_ = effective(w);
+        if (w.control && !settings_.control)
+            event("commande refus\xC3\xA9" "e : accessible du r\xC3\xA9seau sans connexion, l'acc\xC3\xA8s web reste en lecture seule "
+                  "(coche Se connecter pour piloter)");
         project_ = std::move(projectName);
         auth_ = std::move(auth);
         sessions_.clear();
@@ -206,9 +270,13 @@ void Server::stop() {
     listener_.reset();
 }
 
-void Server::configure(const WebAccess& w) {
+void Server::configure(const WebAccess& wanted) {
     std::lock_guard<std::mutex> lock(mutex_);
+    const WebAccess w = effective(wanted);
     const bool controlChanged = w.control != settings_.control;
+    if (controlChanged && wanted.control && !w.control)
+        event("commande refus\xC3\xA9" "e : accessible du r\xC3\xA9seau sans connexion, l'acc\xC3\xA8s web reste en lecture seule "
+              "(coche Se connecter pour piloter)");
     settings_ = w;
     if (controlChanged)
         for (auto& s : sessions_) s.control = s.control && w.control;
@@ -290,13 +358,15 @@ void Server::serve(void* raw, const std::string& peer) {
     constexpr int kWait = 3000;
     std::string requestLine;
     if (!c.receiveLine(requestLine, kWait)) return;
-    std::string cookie;
+    std::string cookie, host, origin;
     long long length = 0;
     for (int guard = 0; guard < 100; ++guard) {
         std::string h;
         if (!c.receiveLine(h, kWait) || h.empty()) break;
         const std::string l = lowerAscii(h);
         if (l.rfind("content-length:", 0) == 0) length = std::atoll(h.c_str() + 15);
+        if (l.rfind("host:", 0) == 0) host = h.substr(5);          // 1.32.0 : qui la page croit joindre
+        if (l.rfind("origin:", 0) == 0) origin = h.substr(7);      // 1.32.0 : d'ou vient la requete
         if (l.rfind("cookie:", 0) == 0) {
             const std::string v = h.substr(7);
             const std::size_t at = v.find(std::string(kCookie) + "=");
@@ -326,6 +396,28 @@ void Server::serve(void* raw, const std::string& peer) {
     };
     const auto redirect = [&](const std::string& to, const std::string& extra = {}) { reply(303, {}, {}, "Location: " + to + "\r\n" + extra); };
 
+    // 1.32.0 : UNE REQUETE QUI CHANGE QUELQUE CHOSE vient de la page de ce poste : Host est son adresse et son port (pas
+    // un nom d'ailleurs qui pointerait ici), Origin, s'il est la, la meme origine (pas une autre page du navigateur).
+    if (method == "POST") {
+        const auto bare = [](std::string t) {
+            t = lowerAscii(t);
+            const std::size_t a = t.find_first_not_of(" \t"), b = t.find_last_not_of(" \t");
+            return a == std::string::npos ? std::string{} : t.substr(a, b - a + 1);
+        };
+        const bool hostOk = hostMatches(host, c.localName());
+        const std::string from = bare(origin), expected = "http://" + bare(host);
+        const bool originOk = from.empty() || from == expected;
+        if (!hostOk || !originOk) {
+            {
+                std::lock_guard<std::mutex> g(mutex_);
+                event("Requ\xC3\xAAte refus\xC3\xA9" "e (" + peer + ") : " + (hostOk ? "origine \xC3\xA9trang\xC3\xA8re " + origin : "adresse inattendue " + host));
+            }
+            reply(403, "text/plain; charset=utf-8",
+                  "Requ\xC3\xAAte refus\xC3\xA9" "e : ouvre la page \xC3\xA0 l'adresse du poste (http://<adresse du poste>:<port>), depuis elle.");
+            return;
+        }
+    }
+
     const double now = clockSeconds();
     std::unique_lock<std::mutex> lock(mutex_);
     const WebAccess cfg = settings_;
@@ -337,7 +429,7 @@ void Server::serve(void* raw, const std::string& peer) {
     };
     // Sans connexion demandee : une session d'office, par navigateur.
     std::string setCookie;
-    if (!session && !cfg.login) {
+    if (!session && !cfg.login && method == "GET") {      // 1.32.0 : jamais sur un POST
         if (activeCount() >= cfg.maxClients) {
             lock.unlock();
             reply(503, "text/plain; charset=utf-8", "Trop de navigateurs connect\xC3\xA9s (" + std::to_string(cfg.maxClients) + " au plus).");
@@ -349,6 +441,7 @@ void Server::serve(void* raw, const std::string& peer) {
         s.since = clockText();
         s.lastSeen = now;
         s.control = cfg.control;
+        s.csrf = randomHex(16);
         event("Navigateur connect\xC3\xA9 : " + peer + (s.control ? " (commande)" : " (lecture seule)"));
         sessions_.push_back(std::move(s));
         session = &sessions_.back();
@@ -398,6 +491,7 @@ void Server::serve(void* raw, const std::string& peer) {
         s.since = clockText();
         s.lastSeen = now;
         s.control = cfg.control && control;
+        s.csrf = randomHex(16);
         event("Connexion web : " + login + " (" + peer + ")" + (s.control ? " - commande" : " - lecture seule"));
         const std::string token = s.token;
         sessions_.push_back(std::move(s));
@@ -422,8 +516,9 @@ void Server::serve(void* raw, const std::string& peer) {
         return;
     }
     if (path == "/" || path == "/index.html") {
+        const std::string csrf = session->csrf;
         lock.unlock();
-        reply(200, "text/html; charset=utf-8", page(project, false, {}, cfg.refreshMs), setCookie);
+        reply(200, "text/html; charset=utf-8", page(project, false, {}, cfg.refreshMs, csrf), setCookie);
         return;
     }
     if (path == "/etat") {
@@ -455,6 +550,13 @@ void Server::serve(void* raw, const std::string& peer) {
             return;
         }
         const auto form = formOf(body);
+        // 1.32.0 : le jeton de la session, donne dans la page : une autre page du navigateur ne l'a pas.
+        if (!sameToken(form.count("jeton") ? form.at("jeton") : std::string{}, session->csrf)) {
+            event("Clic refus\xC3\xA9 (" + peer + ") : jeton de la page absent ou faux");
+            lock.unlock();
+            reply(403, "text/plain; charset=utf-8", "Jeton absent ou faux : recharge la page.");
+            return;
+        }
         Click k;
         k.x = form.count("x") ? std::atof(form.at("x").c_str()) : -1;
         k.y = form.count("y") ? std::atof(form.at("y").c_str()) : -1;

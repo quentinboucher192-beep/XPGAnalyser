@@ -5907,13 +5907,18 @@ std::vector<Issue> generateWith(const Project& p, const NameExists& plcHasName, 
         if (!resourceNames.insert(r.name).second)
             add(out, S::Error, "Ressource", kNoId, kNoId, r.name, "nom de ressource en double : " + r.name);
         if (!r.data) add(out, S::Error, "Ressource", kNoId, kNoId, r.name, "fichier absent : " + r.name);
+        // 1.32.0 : une police que l'IHM ne dessinera pas (CFF, collection, illisible) : dit ici, pas en marche.
+        if (std::string why; r.data && r.kind() == MediaKind::Font && !fontRenderable(*r.data, &why))
+            add(out, S::Warning, "Ressource", kNoId, kNoId, r.name, "police " + r.name + " : " + why + " (l'IHM dessine ses textes avec la police par d\xC3\xA9" "faut)");
     }
     for (const auto* r : unusedResources(p))
         add(out, S::Info, "Ressource", kNoId, kNoId, r->name, "ressource inutilis\xC3\xA9" "e : " + r->name + " (" + formatBytes(r->bytes) + ")");
     // Fichiers externes : l'etat du disque, quand on sait ou est le projet.
     for (const auto& f : p.assets.files) {
         const auto st = externalState(f, projectFolder);
-        if (st.status == ExternalStatus::Missing)
+        if (!st.refused.empty())                                      // 1.32.0 : un chemin reseau non autorise
+            add(out, S::Warning, "Fichier externe", kNoId, kNoId, f.name, st.refused);
+        else if (st.status == ExternalStatus::Missing)
             add(out, S::Warning, "Fichier externe", kNoId, kNoId, f.name,
                 "fichier absent : " + f.path + (st.resolvedPath != f.path ? "  (" + st.resolvedPath + ")" : std::string{}));
         else if (st.status == ExternalStatus::Modified)

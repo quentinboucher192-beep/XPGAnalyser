@@ -8,9 +8,9 @@
 //    SignKeys, sign, verify            Ed25519 (les signatures des paquets)
 //    randomBytes, randomDigits         le hasard du systeme (le code d'appairage)
 //    protect / unprotect               une cle gardee sur CE PC : DPAPI sous Windows
-//                                      (l'utilisateur, ou la machine pour l'agent) ;
-//                                      sous Linux, aucun chiffrement - le fichier
-//                                      est ecrit en 0600 par writePrivateFile
+//                                      (l'utilisateur ; 1.32.0 : l'agent aussi, plus la
+//                                      machine) ; sous Linux, aucun chiffrement - le
+//                                      fichier est ecrit en 0600 par writePrivateFile
 //    wipe                              effacer un secret de la memoire
 //
 //  init() doit avoir rendu vrai avant tout appel (il est sans danger de
@@ -72,13 +72,19 @@ template <std::size_t N>
 void wipe(std::array<std::uint8_t, N>& a) noexcept { wipe(a.data(), a.size()); }
 
 // ---- garder un secret sur ce PC ----
-// Windows : CryptProtectData (machine : CRYPTPROTECT_LOCAL_MACHINE - un service le relit ; sinon l'utilisateur).
+// Windows : CryptProtectData (machine : CRYPTPROTECT_LOCAL_MACHINE - tout compte du PC le relit, et peut en
+// fabriquer : a eviter ; sinon l'utilisateur). unprotect relit les deux.
 // Ailleurs : recopie telle quelle (le fichier, lui, est en 0600 : writePrivateFile). `protectedHere()` le dit.
 [[nodiscard]] bool protectedHere() noexcept;
 bool protect(const Bytes& plain, Bytes& out, bool machine, std::string* why);
 bool unprotect(const Bytes& in, Bytes& plain, std::string* why);
 
-// Ecrire un fichier lisible par son seul proprietaire (0600 hors Windows), par un fichier temporaire renomme.
+// 1.32.0 : remplacer un fichier d'un coup. Le fichier temporaire voisin a un nom imprevisible
+// (<nom>.<16 chiffres hexadecimaux>.tmp) et il est cree en exclusivite (O_EXCL / CREATE_NEW) : jamais un
+// fichier ou un lien pose la d'avance par quelqu'un d'autre. Puis il est renomme sur la cible (rename,
+// MoveFileEx). `ownerOnly` : lisible par son seul proprietaire (0600 hors Windows). Faux : `why`.
+bool replaceFile(const std::string& path, std::string_view data, bool ownerOnly, std::string* why);
+// Ecrire un fichier lisible par son seul proprietaire (0600 hors Windows) : replaceFile.
 bool writePrivateFile(const std::string& path, const Bytes& data, std::string* why);
 bool readFile(const std::string& path, Bytes& out, std::string* why, std::uint64_t maxSize = 64u * 1024u * 1024u);
 

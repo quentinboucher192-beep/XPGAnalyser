@@ -9,6 +9,7 @@
 #include "Package.hpp"
 
 #include "DevKey.hpp"
+#include "Install.hpp"
 
 #include "../core/Json.hpp"
 #include "../core/Version.hpp"
@@ -1196,17 +1197,28 @@ PackageExtractResult extractPackage(const std::string& path, const std::string& 
     const PackageManifest& m = r.report.manifest;
 
     // 2. Le dossier : il ne doit pas exister ; le dossier temporaire voisin est refait.
+    // 1.32.0 : aucun lien ni jonction sur le chemin (un autre compte aurait pu en poser un pour faire ecrire
+    // ailleurs) ; le temporaire laisse par une installation coupee doit s'effacer en entier (un lien : le
+    // lien seul), puis il est cree NEUF : jamais d'extraction dans un dossier deja la.
     const fs::path dest = P(destination);
+    const std::string parent = U(dest.parent_path());
     std::error_code ec;
-    if (fs::exists(dest, ec)) return failWith("le dossier " + cite(destination) + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9.");
-    const fs::path tmp = P(destination + ".extraction");
-    fs::remove_all(tmp, ec);
+    if (opt.root.empty() ? install::isLink(parent) : install::linkBelow(opt.root, parent))
+        return failWith("un lien ou une jonction sur le chemin de " + cite(destination) + " : rien n'est extrait.");
+    if (install::isLink(destination) || fs::exists(dest, ec))
+        return failWith("le dossier " + cite(destination) + " existe d\xC3\xA9j\xC3\xA0 : rien n'est \xC3\xA9" "cras\xC3\xA9.");
+    const std::string tmpText = destination + ".extraction";
+    const fs::path tmp = P(tmpText);
+    std::string w;
+    if (!install::removeTree(tmpText, &w))
+        return failWith("le dossier temporaire " + cite(tmpText) + " reste d'une installation coup\xC3\xA9" "e et ne s'efface pas (" + w
+                        + ") : rien n'est extrait. Efface-le \xC3\xA0 la main.");
+    fs::create_directories(dest.parent_path(), ec);
     ec.clear();
-    fs::create_directories(tmp, ec);
-    if (ec) return failWith("impossible de cr\xC3\xA9" "er " + cite(U(tmp)) + " (" + ec.message() + ").");
+    if (!fs::create_directory(tmp, ec) || ec)
+        return failWith("impossible de cr\xC3\xA9" "er " + cite(tmpText) + " (" + (ec ? ec.message() : std::string("il existe d\xC3\xA9j\xC3\xA0")) + ").");
     const auto abandon = [&](std::string text) {
-        std::error_code e2;
-        fs::remove_all(tmp, e2);
+        (void)install::removeTree(tmpText);
         return failWith(std::move(text));
     };
 

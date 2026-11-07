@@ -178,6 +178,9 @@ int serve(const deploy::AgentConfig& cfg) {
 int pair(const std::string& dir) {
     std::error_code ec;
     std::filesystem::create_directories(P(dir), ec);
+    // 1.32.0 : le dossier ferme aux autres comptes du PC avant d'y poser le code.
+    std::string closed;
+    if (!deploy::restrictAgentDir(dir, &closed)) complain("XPG-Deployment-Agent : attention : " + closed);
     deploy::pairing::CodeState cs;
     std::string why;
     if (!deploy::pairing::createCode(dir, cs, &why)) {
@@ -297,6 +300,7 @@ int main(int argc, char** argv) {
     std::string command, sessionValue;
     deploy::AgentConfig cfg;
     cfg.dir = deploy::defaultAgentDir();
+    bool chosenDir = false;   // --dossier : rien a reprendre
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& a = args[i];
         const bool hasValue = i + 1 < args.size();
@@ -319,6 +323,7 @@ int main(int argc, char** argv) {
             }
         } else if (a == "--dossier" && hasValue) {
             cfg.dir = args[++i];
+            chosenDir = true;
         } else if (a == "--port" && hasValue) {
             if (!parsePort(args[++i], cfg.port)) {
                 complain("XPG-Deployment-Agent : --port attend un nombre de 1 \xC3\xA0 65535 (" + args[i] + ")");
@@ -353,6 +358,19 @@ int main(int argc, char** argv) {
             if (HWND w = GetConsoleWindow()) ShowWindow(w, SW_HIDE);
     }
 #endif
+    // 1.32.0 : l'ancien dossier (C:\ProgramData\XPG\Agent, ouvert aux autres comptes du PC) repris une fois dans
+    // celui de l'operateur - s'il appartient a ce compte, aux Administrateurs ou au systeme (deploy/Agent.hpp).
+    if (!chosenDir && (command == "--servir" || command == "--appairer" || command == "--etat")) {
+        const auto notes = deploy::migrateLegacyAgentDir(cfg.dir);
+        for (const auto& n : notes) {
+            if (n.rfind("ATTENTION", 0) == 0) complain("XPG-Deployment-Agent : " + n);
+            else say(n);
+        }
+        if (!notes.empty()) {
+            deploy::Journal journal(cfg.dir);
+            for (const auto& n : notes) journal.write("", "MIGRATION", n);
+        }
+    }
     if (command == "--servir") return serve(cfg);
     if (command == "--appairer") return pair(cfg.dir);
     if (command == "--etat") return state(cfg.dir);

@@ -60,6 +60,7 @@ struct ExternalState {
     std::uint64_t  bytes{0};
     std::string    modified;       // la date du fichier sur le disque, maintenant
     std::string    resolvedPath;
+    std::string    refused;        // 1.32.0 : un chemin reseau non autorise (Unverifiable, rien n'est ouvert) : pourquoi
 };
 // Le chemin reel : absolu tel quel, relatif au dossier du projet sinon.
 [[nodiscard]] std::string   resolveExternalPath(const ExternalFile&, const std::string& projectFolder);
@@ -74,6 +75,29 @@ void relinkExternal(ExternalFile&, const std::string& projectFolder);
 
 // La date d'un fichier, "2026-09-22 01:10:05" ; vide si absent.
 [[nodiscard]] std::string fileStamp(const std::string& path);
+
+// ---- 1.32.0 : LES CHEMINS VENUS DU PROJET -----------------------------------------------------
+//  Un projet recu d'ailleurs n'est pas digne de confiance. Un chemin reseau (\\serveur\partage,
+//  //serveur/partage) ou de peripherique (\\?\, \\.\) qu'il contient n'est JAMAIS ouvert : Windows
+//  s'authentifierait aupres d'un serveur inconnu (fuite NTLM). Sauf dans un dossier que l'utilisateur
+//  autorise sur CE poste (un reglage du poste, jamais dans le projet) : la meme liste ouvre aux scripts
+//  de l'IHM (FILE_READ, FILE_WRITE...) d'autres dossiers que donnees/ et exports/ du projet.
+//  L'application la pose au demarrage et quand le reglage change ; vide par defaut.
+inline constexpr std::string_view kAllowedFoldersSetting = "Dossiers autoris\xC3\xA9s aux scripts de l'IHM";
+void setUserAllowedFolders(std::vector<std::string> folders);
+[[nodiscard]] std::vector<std::string> userAllowedFolders();
+// \\x, //x, \\?\, \\.\ (et leurs variantes avec / ) : le reseau ou un peripherique.
+[[nodiscard]] bool networkOrDevicePath(std::string_view path) noexcept;
+// \\?\, \\.\ seulement.
+[[nodiscard]] bool devicePath(std::string_view path) noexcept;
+// Un element du chemin que Windows reserve (CON, PRN, AUX, NUL, COM1-9, LPT1-9, avec ou sans extension), qui finit par un
+// point ou une espace, ou porte ':' ailleurs qu'apres la lettre du disque (un flux NTFS). Vrai : `bad` le dit.
+[[nodiscard]] bool unsafePathSegment(std::string_view path, std::string* bad = nullptr);
+// Le chemin est-il dans un dossier autorise sur ce poste ? Compare les textes, sans toucher au disque ni au reseau.
+[[nodiscard]] bool insideUserAllowedFolder(std::string_view path);
+// Un chemin venu du projet (fichier externe, document, lien d'archive) peut-il etre ouvert ? Faux : un chemin reseau ou
+// de peripherique hors des dossiers autorises ; `why` le dit, en francais, avec le remede (rien n'est ouvert avant).
+[[nodiscard]] bool projectPathAllowed(std::string_view path, std::string* why = nullptr);
 
 // ---- 1.14.1 (lot N6) : LA BIBLIOTHEQUE D'IMAGES ---------------------------------------------
 //  Des images pretes a poser, rangees par categorie (fleches, interface, securite, industrie,

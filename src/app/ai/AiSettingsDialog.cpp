@@ -845,6 +845,7 @@ void AiSettingsDialog::save() {
                 if (keys::replace(id, text, remember, &why)) {
                     for (const auto& x : keys::list(provider))
                         if (x.name == name) id = x.id;
+                    (void)keys::bindServer(id, serviceUrl(s));   // saisie ici, l'adresse sous les yeux
                 } else if (panel_.uiHost().status) {
                     panel_.uiHost().status("Assistant IA : " + why);
                 }
@@ -859,6 +860,7 @@ void AiSettingsDialog::save() {
                 e.name = "Ma cl\xC3\xA9 (" + keys::providerLabel(provider) + ") " + std::to_string(n);
             id = keys::add(e, text, remember, &why);
             if (id.empty() && panel_.uiHost().status) panel_.uiHost().status("Assistant IA : " + why);
+            else if (!id.empty()) (void)keys::bindServer(id, serviceUrl(s));   // ajoutee ici, l'adresse sous les yeux
         }
         if (!id.empty()) (void)keys::setActive(id);
     }

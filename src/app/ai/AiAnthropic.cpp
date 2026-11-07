@@ -2,6 +2,8 @@
 //  app/ai/AiAnthropic.cpp - voir AiAnthropic.hpp
 // =============================================================================
 #include "AiAnthropic.hpp"
+
+#include "AiKeys.hpp"   // la cle liee a ses serveurs
 #include "../../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
 #include "AiJson.hpp"
@@ -629,6 +631,8 @@ bool AnthropicProvider::start(ProviderRequest request, std::string* why) {
     if (request.apiKey.empty() && blank(request.endpoint)) return fail("Entre ta cl\xC3\xA9 API dans les Param\xC3\xA8tres de l'Assistant IA.");
     std::string messages, models, w;
     if (!anthropicUrls(request.endpoint, messages, models, &w)) return fail(w);
+    // La cle ne part que vers un serveur ou elle a ete ajoutee ou essayee (AiKeys : une adresse changee ne la recoit pas).
+    if (!request.apiKey.empty() && !keys::allowedFor(request.apiKey, messages, &w)) return fail(w);
     if (!httpAvailable(&w)) return fail("Pas de connexion possible sur ce poste : " + w + ".");
     if (thread_.joinable()) thread_.join();   // le precedent est fini (busy_ faux)
     {

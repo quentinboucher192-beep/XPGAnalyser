@@ -449,7 +449,12 @@ inline constexpr std::size_t kHeavyOps = 40;
 // groupe ou sa protection, changer les roles d'un groupe (le dernier compte, le dernier groupe qui administre). Lu dans les
 // operations seules (sans le projet), donc prudent : le mode Direct ne l'applique JAMAIS sans clic (Assistant::autoApply). La
 // validation dit la raison precise en tete des avertissements (kSensitive) quand le projet d'apres perd quelque chose.
+// SECURITE : aussi ce qui agit sans clic ou hors de l'IHM - un script ou une fonction qui appelle les fonctions de fichiers
+// (FILE_*, DIR_*, RESOURCE_EXTRACT), un script de demarrage, cyclique ou sur changement, un script C ou C++, un equipement
+// cree ou supprime, une adresse ou un lien d'equipement change (adresser, modifier_variable equipement/adresse/formule).
 [[nodiscard]] bool sensitive(const Proposal&);
+// La raison, en francais ("la s\xC3\xA9" "curit\xC3\xA9, les comptes", "un \xC3\xA9quipement"...) ; vide : pas sensible.
+[[nodiscard]] std::string sensitiveReason(const Proposal&);
 // 1.22.6 : un champ qui porterait un SECRET (un mot de passe, un badge, un secret de code dynamique) : jamais lu ni garde - la
 // lecture de l'outil le refuse, operationsFromJson le retire (seul son nom reste, l'operation est refusee). Pour << securite >>,
 // << badge >> est le reglage << connexion par badge >> (oui, non) : permis.

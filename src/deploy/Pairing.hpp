@@ -22,7 +22,8 @@
 //
 //  Ce fichier garde aussi :
 //    - le code en cours, cote agent (<dossier>/appairage.code, protege comme la
-//      cle : 6 chiffres, valable 5 minutes, une seule fois, 3 essais) ;
+//      cle - 1.32.0 : pour l'utilisateur, plus la machine - : 6 chiffres, valable
+//      5 minutes, une seule fois, 3 essais) ;
 //    - les PC appaires, cote agent (<dossier>/appaires.json : empreinte, nom,
 //      cle d'editeur Ed25519 en hexadecimal) ;
 //    - les machines appairees, cote Studio (MachineStore, <dossier>/machines-appairees.json :
@@ -121,7 +122,7 @@ struct CodeState {
 };
 enum class CodeLoad { Ok, None, Expired, Exhausted, Error };
 [[nodiscard]] std::string codePath(const std::string& agentDir);
-// Un code neuf (remplace le precedent), garde protege (la machine). Faux : `why`.
+// Un code neuf (remplace le precedent), garde protege (l'utilisateur ; 1.32.0). Faux : `why`.
 bool createCode(const std::string& agentDir, CodeState& out, std::string* why, std::int64_t validityMs = kCodeValidityMs);
 CodeLoad loadCode(const std::string& agentDir, CodeState& out, std::string* why);
 bool saveCode(const std::string& agentDir, const CodeState& state, std::string* why);

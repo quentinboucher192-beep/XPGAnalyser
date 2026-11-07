@@ -304,6 +304,15 @@ bool isKeyHex(std::string_view s) noexcept {
     return s.size() == 64 && std::all_of(s.begin(), s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 }
 
+bool isStationHex(std::string_view s) noexcept {
+    return s.size() == 32 && std::all_of(s.begin(), s.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+}
+
+bool looksLikeFormula(std::string_view s) noexcept {
+    // les caracteres qui font d'une cellule une formule (Excel, LibreOffice) : injection par un CSV
+    return !s.empty() && (s[0] == '=' || s[0] == '+' || s[0] == '-' || s[0] == '@' || s[0] == '\t' || s[0] == '\r');
+}
+
 std::string newNonce() {
     std::uint8_t b[16];
     deploy::crypto::randomBytes(b, sizeof b);
@@ -337,15 +346,18 @@ const FeatureGrant* License::grant(std::string_view id) const noexcept {
     return nullptr;
 }
 
-bool License::boundTo(std::string_view deviceKeyHex) const noexcept {
+bool License::boundTo(std::string_view deviceKeyHex) const noexcept { return device(deviceKeyHex) != nullptr; }
+
+const BoundDevice* License::device(std::string_view deviceKeyHex) const noexcept {
     for (const auto& d : devices)
-        if (d.key == deviceKeyHex) return true;
-    return false;
+        if (d.key == deviceKeyHex) return &d;
+    return nullptr;
 }
 
-const Revocation* RevocationList::find(std::string_view licenseId, std::string_view deviceKeyHex) const noexcept {
+const Revocation* RevocationList::find(std::string_view licenseId, std::string_view deviceKeyHex, Seconds licenseIssuedAt) const noexcept {
     for (const auto& r : revoked)
-        if (r.licenseId == licenseId && (r.device.empty() || r.device == deviceKeyHex)) return &r;
+        if (r.licenseId == licenseId && (r.device.empty() || r.device == deviceKeyHex) && (r.issuedBefore == 0 || licenseIssuedAt < r.issuedBefore))
+            return &r;
     return nullptr;
 }
 
@@ -521,6 +533,7 @@ std::string writeLicense(const License& l) {
         o.set("key", d.key);
         o.set("name", d.name);
         o.set("activated_at", isoTime(d.activatedAt));
+        if (!d.station.empty()) o.set("station", d.station);   // 1.32.0 : seulement s'il sert (la 1.31 relit le reste)
         devs.push(std::move(o));
     }
     root.set("devices", std::move(devs));
@@ -569,6 +582,8 @@ bool parseLicense(std::string_view json, License& out, std::string* why) {
             if (g.ok() && !isKeyHex(d.key)) g.fail("la cl\xC3\xA9 de PC " + g.name("key") + " n'est pas une cl\xC3\xA9 publique (64 hexad\xC3\xA9" "cimaux)");
             g.text("name", d.name, true, 100);
             g.time("activated_at", d.activatedAt, true);
+            g.text("station", d.station, false, 32);
+            if (g.ok() && !d.station.empty() && !isStationHex(d.station)) g.fail("le champ " + g.name("station") + " n'est pas une empreinte de poste (32 hexad\xC3\xA9" "cimaux)");
             g.finish();
             if (!g.ok()) {
                 f.fail(g.error());
@@ -614,6 +629,7 @@ std::string writeRevocations(const RevocationList& r) {
         if (!x.device.empty()) o.set("device", x.device);
         o.set("revoked_at", isoTime(x.revokedAt));
         o.set("reason", x.reason);
+        if (x.issuedBefore) o.set("issued_before", isoTime(x.issuedBefore));   // 1.32.0 : seulement s'il sert
         arr.push(std::move(o));
     }
     root.set("revoked", std::move(arr));
@@ -647,6 +663,7 @@ bool parseRevocations(std::string_view json, RevocationList& out, std::string* w
             if (g.ok() && !x.device.empty() && !isKeyHex(x.device)) g.fail("la cl\xC3\xA9 de PC " + g.name("device") + " n'est pas valide");
             g.time("revoked_at", x.revokedAt, true);
             g.text("reason", x.reason, true, 200);
+            g.time("issued_before", x.issuedBefore, false);
             g.finish();
             if (!g.ok()) {
                 f.fail(g.error());
@@ -669,6 +686,7 @@ std::string writeRequest(const ActivationRequest& q) {
     root.set("software", q.software);
     root.set("created_at", isoTime(q.createdAt));
     root.set("nonce", q.nonce);
+    if (!q.station.empty()) root.set("station", q.station);   // 1.32.0
     return finishText(root);
 }
 
@@ -683,11 +701,16 @@ bool parseRequest(std::string_view json, ActivationRequest& out, std::string* wh
     f.text("device_key", q.deviceKey, true, 64);
     if (f.ok() && !isKeyHex(q.deviceKey)) f.fail("la cl\xC3\xA9 du PC n'est pas une cl\xC3\xA9 publique (64 hexad\xC3\xA9" "cimaux)");
     f.text("device_name", q.deviceName, true, 100);
+    // 1.32.0 : le nom finit dans le CSV de l'Admin (liste --csv) : jamais une formule de tableur
+    if (f.ok() && looksLikeFormula(q.deviceName))
+        f.fail("le nom du PC " + cite(q.deviceName) + " ne peut pas commencer par = + - ou @ (un tableur le prendrait pour une formule)");
     f.text("license_id", q.licenseId, true, 64);
     if (f.ok() && !q.licenseId.empty() && !isLicenseId(q.licenseId)) f.fail("l'identifiant de licence " + cite(q.licenseId) + " n'est pas valide");
     f.text("software", q.software, true, 100);
     f.time("created_at", q.createdAt, true);
     f.text("nonce", q.nonce, true, 64);
+    f.text("station", q.station, false, 32);
+    if (f.ok() && !q.station.empty() && !isStationHex(q.station)) f.fail("le champ \xC2\xAB station \xC2\xBB n'est pas une empreinte de poste (32 hexad\xC3\xA9" "cimaux)");
     if (!finishDocument(f, kWhat, why)) return false;
     out = std::move(q);
     return true;

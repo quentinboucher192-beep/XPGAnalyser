@@ -420,6 +420,37 @@ int main(int argc, char** argv) {
               "le nom de fichier d'une licence, jamais \"..\" : " + gh::safeName("XPG-2026/00042 .."));
     }
 
+    // ---- 1.32.0 (L1) : l'adresse de l'API recoit le jeton : GitHub, ou ce poste (les essais) ----
+    std::printf("-- l'adresse de l'API (le jeton ne part que vers GitHub)\n");
+    {
+        const fs::path cfg = base / "config-api";
+        gh::Config c;
+        c.repo = "editeur/licences-xpg";
+        gh::Config back;
+        bool okAll = true;
+        for (const char* api : {"https://api.github.com", "https://api.github.com/", "http://127.0.0.1:9", "https://127.0.0.1:8443", "http://localhost:8080"}) {
+            c.api = api;
+            okAll = gh::writeConfig(U(cfg), c, &why) && gh::readConfig(U(cfg), back, &why) && okAll;
+        }
+        check(okAll, "https://api.github.com et ce poste (127.0.0.1, localhost) : acceptes (" + why + ")");
+        bool refusedAll = true;
+        for (const char* api : {"https://evil.example", "https://api.github.com.evil.example", "https://API.GITHUB.COM.evil.example", "https://api.github.com:8443",
+                                "https://api.github.com/proxy", "https://github.example.com/api/v3", "http://api.github.com", "https://user@api.github.com"}) {
+            c.api = api;
+            const bool refused = !gh::writeConfig(U(cfg), c, &why) && has(why, "refus");
+            if (!refused) std::printf("  (accepte a tort : %s)\n", api);
+            refusedAll = refusedAll && refused;
+        }
+        check(refusedAll, "une autre adresse (un autre hote, un port, un chemin, http vers GitHub, un identifiant) : refusee");
+        c.api = "https://evil.example";
+        check(!gh::writeConfig(U(cfg), c, &why) && has(why, "ne part que vers https://api.github.com"), "le refus dit vers ou le jeton peut partir (" + why + ")");
+        // github.json modifie a la main : relu, refuse - la synchro n'envoie jamais le jeton ailleurs.
+        std::ofstream(cfg / gh::kConfigFile, std::ios::binary | std::ios::trunc)
+            << "{\"format\": \"xpg-github-licences/1\", \"depot\": \"editeur/licences-xpg\", \"branche\": \"main\", "
+               "\"racine\": \"\", \"api\": \"https://collecte.example\"}\n";
+        check(!gh::readConfig(U(cfg), back, &why) && has(why, "collecte.example"), "github.json modifie (une autre adresse) : refuse a la lecture (" + why + ")");
+    }
+
     // ---- les deux postes : la cle de l'editeur, le registre, deux PC, une licence ----
     const fs::path pc1 = base / "admin-1", pc2 = base / "admin-2";
     auto key = adm::createPublisherKey(U(pc1), "essai github_sync_test", true, &why);

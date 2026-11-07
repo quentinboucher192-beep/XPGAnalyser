@@ -588,6 +588,7 @@ PromptParts promptParts(const PromptInput& in) {
             continue;
         }
         added += one;
+        if (k.raw.flag("importee")) out.imported.push_back(k.name);   // venue d'un .xia (AiLearningFile)
     }
     if (!added.empty() || cut > 0) {
         s += "\n";

@@ -38,11 +38,13 @@
 #include "../src/project/ApiArchive.hpp"
 #include "../src/project/ProjectArchive.hpp"
 #include "../src/project/ProjectStore.hpp"
+#include "../third_party/miniz.h"   // 1.32.0 : une archive forgee
 
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -677,6 +679,67 @@ void archivesRefusees() {
     }
 }
 
+// ===================================================== 1.32.0 : les archives forgees ==
+// Une archive recue ne pose a cote du dossier que la disposition des grafcets (<nom>.xpglayout) ; un zip qui annonce des
+// centaines de Mo, ou des dizaines de milliers d'entrees, ne s'ouvre pas.
+void archivesForgees132() {
+    std::printf("1.32.0 : les archives forg\xC3\xA9" "es (a c\xC3\xB4t\xC3\xA9 du dossier, bombes)\n");
+    const auto bytesOf = [](const std::string& t) { return std::make_shared<const pa::Bytes>(t.begin(), t.end()); };
+    pa::Manifest m;
+    m.kind = pa::Kind::Api;
+    m.tool = "API Studio 1.32.0";
+    std::vector<pa::Item> items;
+    pa::Item folder;
+    folder.path = "notes.txt";
+    folder.data = bytesOf("des notes\n");
+    items.push_back(folder);
+    for (const char* bad : {"_a-cote/Lanceur.exe", "_a-cote/Projet.lnk", "_a-cote/sous/Projet.xpglayout", "Projet.xpglayout"}) {
+        pa::Item it;
+        it.path = bad;
+        it.origin = pa::Origin::Beside;
+        it.data = bytesOf("MZ...");
+        items.push_back(it);
+    }
+    auto zip = pa::pack(m, items);
+    auto c = zip ? pa::read(*zip) : core::Result<pa::Contents>(core::fail(core::ErrorCode::InvalidArgument, "pack"));
+    check(c && c->intact(), "une archive forg\xC3\xA9" "e (des entr\xC3\xA9" "es \"a cote\" de toute extension) se relit");
+    if (c) {
+        const fs::path dest = scratch() / "forge132" / "Projet";
+        std::error_code ec;
+        fs::remove_all(dest.parent_path(), ec);
+        pa::Unpacked u;
+        check(static_cast<bool>(pa::unpack(*c, dest.string(), pa::UnpackOptions{}, &u)), "elle se d\xC3\xA9" "balle (ce qui est permis)");
+        std::size_t besideFiles = 0;
+        for (const auto& e : fs::directory_iterator(dest.parent_path(), ec))
+            if (e.path().filename() != "Projet") ++besideFiles;
+        std::size_t refused = 0;
+        for (const auto& n : u.notes) refused += n.find("refus\xC3\xA9") != std::string::npos;
+        check(besideFiles == 0 && u.beside.empty() && refused == 4,
+              "rien n'est pos\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 du dossier (ni .exe, ni .lnk, ni un sous-dossier), et chaque refus est dit");
+        check(fs::exists(dest / "notes.txt"), "le contenu du dossier, lui, est d\xC3\xA9" "ball\xC3\xA9");
+    }
+    // Un zip dont le repertoire central annonce 300 Mo pour une entree : refuse avant d'allouer.
+    {
+        mz_zip_archive w;
+        std::memset(&w, 0, sizeof w);
+        const std::string text(1000, 'a');
+        std::string bomb;
+        if (mz_zip_writer_init_heap(&w, 0, 0)) {
+            (void)mz_zip_writer_add_mem(&w, "manifeste.txt", text.data(), text.size(), MZ_DEFAULT_COMPRESSION);
+            void* buf = nullptr;
+            size_t size = 0;
+            if (mz_zip_writer_finalize_heap_archive(&w, &buf, &size)) bomb.assign(static_cast<const char*>(buf), size);
+            mz_free(buf);
+            mz_zip_writer_end(&w);
+        }
+        for (std::size_t at = bomb.find("PK\x01\x02"); at != std::string::npos; at = bomb.find("PK\x01\x02", at + 4))
+            for (int k = 0; k < 4 && at + 28 <= bomb.size(); ++k) bomb[at + 24 + static_cast<std::size_t>(k)] = static_cast<char>(((300u << 20) >> (8 * k)) & 0xFF);
+        const auto r = pa::read(pa::Bytes(bomb.begin(), bomb.end()));
+        check(!r && r.error().context.find("256 Mo") != std::string::npos, "une archive qui annonce 300 Mo pour une entr\xC3\xA9" "e : refus\xC3\xA9" "e ("
+                  + (r ? std::string{} : r.error().context) + ")");
+    }
+}
+
 // ============================================================ 4. l'ancienne .zip ==
 void ancienneArchive(const fs::path& bac) {
     std::printf("4. l'ancienne archive .zip de l'IHM (1.x) : relue, et ouverte en projet\n");
@@ -1196,6 +1259,7 @@ int main(int argc, char** argv) {
         archiveIhm(bac);
         cacheDeConstruction(bac);         // 1.12.31 : le cache de construction voyage
         archivesRefusees();
+        archivesForgees132();   // 1.32.0
         ancienneArchive(bac);
         archiveApi(bac, libs);
     } else {

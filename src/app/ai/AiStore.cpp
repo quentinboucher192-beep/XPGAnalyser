@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiStore.hpp"
 
+#include "AiHttp.hpp"
 #include "AiPaths.hpp"
 #include "../../core/AtomicFile.hpp"
 
@@ -39,6 +40,36 @@ std::tm localTm(std::time_t t) {
     localtime_r(&t, &tm);
 #endif
     return tm;
+}
+
+// Lettre ou chiffre ASCII (jamais selon la langue du poste).
+bool asciiAlnum(char c) noexcept { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); }
+
+// Un nom de fichier seul (le dernier element d'une copie) : ni separateur, ni "..", ni caractere de controle.
+bool safeLeaf(std::string_view name) noexcept {
+    if (name.empty() || name.size() > 255) return false;
+    if (name.find_first_not_of(". ") == std::string_view::npos) return false;   // ".", "..", "...", " " (Windows les rogne)
+    for (const char c : name) {
+        const auto u = static_cast<unsigned char>(c);
+        if (u < 0x20 || u == 0x7F || c == '/' || c == '\\') return false;
+#if defined(_WIN32)
+        if (c == ':') return false;   // un lecteur, un flux NTFS
+#endif
+    }
+    return true;
+}
+
+// p est-il sous base, une fois les liens et les ".." resolus ?
+bool insideDir(const fs::path& base, const fs::path& p) {
+    std::error_code ec;
+    const fs::path b = fs::weakly_canonical(base, ec);
+    if (ec || b.empty()) return false;
+    const fs::path q = fs::weakly_canonical(p, ec);
+    if (ec) return false;
+    const fs::path rel = q.lexically_relative(b);
+    if (rel.empty() || rel == ".") return false;
+    const auto first = rel.begin();
+    return first != rel.end() && *first != ".." && !rel.is_absolute();
 }
 
 std::string lowerExt(std::string_view name) {
@@ -125,9 +156,11 @@ json::Value toJson(const Attachment& a) {
     return o;
 }
 
-Attachment attachmentFromJson(const json::Value& o) {
+// Nullopt : un identifiant refuse (il deviendrait un nom de dossier a effacer) - la piece est ecartee.
+std::optional<Attachment> attachmentFromJson(const json::Value& o) {
     Attachment a;
     a.id = o.str("id");
+    if (!safeAttachmentId(a.id)) return std::nullopt;
     a.name = o.str("nom");
     a.type = o.str("type");
     a.bytes = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o.integer("octets")));
@@ -148,6 +181,11 @@ Attachment attachmentFromJson(const json::Value& o) {
         if (r.isObject()) a.analyses.push_back(analysisFromJson(r));
     a.extra = json::unknownMembers(o, {"id", "nom", "type", "octets", "fichier", "conversation", "message", "extension", "mime", "ajoute", "sha256",
                                        "origine", "cheminOrigine", "copieDe", "doublonDe", "retiree", "analyse", "analyses"});
+    // Une copie hors de pieces-jointes/<id>/<nom> ou un texte hors du cache : oublies (la piece est dite manquante).
+    std::replace(a.file.begin(), a.file.end(), '\\', '/');
+    if (!a.file.empty() && !safeAttachmentFile(a.file)) a.file.clear();
+    for (auto& r : a.analyses)
+        if (!r.textFile.empty() && r.textFile != "cache/documents/" + a.id + ".txt") r.textFile.clear();
     return a;
 }
 
@@ -189,7 +227,8 @@ Message messageFromJson(const json::Value& o) {
     m.date = o.str("date");
     m.text = o.str("texte");
     m.state = o.str("etat");
-    for (const auto& a : o.at("pieces").items()) m.attachments.push_back(attachmentFromJson(a));
+    for (const auto& a : o.at("pieces").items())
+        if (auto one = attachmentFromJson(a)) m.attachments.push_back(std::move(*one));
     if (const auto* p = o.find("proposition"); p && p->isObject()) m.proposal = proposalFromJson(*p);
     m.note = o.str("note");
     m.provider = o.str("fournisseur");
@@ -241,9 +280,8 @@ bool providerNeedsKey(const Settings& s) noexcept {
     if (s.provider == "anthropic") return s.endpoint.empty();
     if (s.provider != "openai") return false;
     if (s.preset == "ollama" || s.preset == "lmstudio") return false;
-    const std::string_view e = s.endpoint;
-    const auto has = [&](std::string_view w) { return e.find(w) != std::string_view::npos; };
-    if (has("://127.0.0.1") || has("://localhost") || has("://[::1]")) return false;
+    // L'hote lu en entier (Url::loopback), jamais par un morceau du texte : http://127.0.0.1.exemple.com n'est pas ce poste.
+    if (Url u; !s.endpoint.empty() && parseUrl(s.endpoint, u, nullptr, true) && u.loopback()) return false;
     return s.preset != "autre";   // un service "autre" : la cle est facultative (le service le dira)
 }
 
@@ -441,7 +479,8 @@ std::vector<Conversation> loadConversations(std::vector<std::string>* problems) 
             continue;
         }
         Conversation c = conversationFromJson(v);
-        if (c.id.empty()) c.id = U(e.path().stem());
+        // L'identifiant nomme le fichier a effacer : un identifiant refuse prend le nom du fichier lu.
+        if (!safeConversationId(c.id)) c.id = U(e.path().stem());
         out.push_back(std::move(c));
     }
     std::stable_sort(out.begin(), out.end(), [](const Conversation& a, const Conversation& b) { return a.modified > b.modified; });
@@ -450,8 +489,8 @@ std::vector<Conversation> loadConversations(std::vector<std::string>* problems) 
 
 bool saveConversation(const Conversation& c, std::string* why) {
     if (root().empty()) return true;   // rien a ecrire : tout reste en memoire
-    if (c.id.empty()) {
-        if (why) *why = "conversation sans identifiant";
+    if (!safeConversationId(c.id)) {
+        if (why) *why = c.id.empty() ? std::string("conversation sans identifiant") : "identifiant de conversation refus\xC3\xA9 : " + c.id;
         return false;
     }
     return writeJsonFile(U(P(conversationsDir()) / P(c.id + ".json")), toJson(c), why);
@@ -461,13 +500,19 @@ bool deleteConversationFiles(const Conversation& c) {
     if (root().empty()) return true;
     std::error_code ec;
     bool ok = true;
-    if (!c.id.empty()) {
+    if (safeConversationId(c.id)) {
         const fs::path file = P(conversationsDir()) / P(c.id + ".json");
         if (fs::exists(file, ec) && !fs::remove(file, ec)) ok = false;
     }
+    // Seulement IA/pieces-jointes/<id> : un identifiant refuse, ou un dossier qui sort de pieces-jointes (un lien), reste.
     for (const auto& m : c.messages)
-        for (const auto& a : m.attachments)
-            if (!a.id.empty()) fs::remove_all(P(attachmentsDir()) / P(a.id), ec);
+        for (const auto& a : m.attachments) {
+            if (!safeAttachmentId(a.id)) continue;
+            const fs::path dir = P(attachmentsDir()) / P(a.id);
+            if (!insideDir(P(attachmentsDir()), dir)) continue;
+            if (fs::is_symlink(fs::symlink_status(dir, ec))) fs::remove(dir, ec);   // le lien, jamais sa cible
+            else fs::remove_all(dir, ec);
+        }
     return ok;
 }
 
@@ -488,10 +533,10 @@ bool trashConversationFiles(const Conversation& c, std::vector<core::trash::Move
         }
         if (moved) moved->push_back({utf8(p), trashed});
     };
-    if (!c.id.empty()) away(P(conversationsDir()) / P(c.id + ".json"));
+    if (safeConversationId(c.id)) away(P(conversationsDir()) / P(c.id + ".json"));
     for (const auto& m : c.messages)
         for (const auto& a : m.attachments)
-            if (!a.id.empty()) away(P(attachmentsDir()) / P(a.id));
+            if (safeAttachmentId(a.id) && insideDir(P(attachmentsDir()), P(attachmentsDir()) / P(a.id))) away(P(attachmentsDir()) / P(a.id));
     return ok;
 }
 
@@ -660,8 +705,41 @@ bool addAttachment(const std::string& sourcePath, Attachment& out, std::string* 
 }
 
 std::string attachmentPath(const Attachment& a) {
-    if (a.file.empty() || root().empty()) return {};
-    return U(P(root()) / P(a.file));
+    if (a.file.empty() || root().empty() || !safeAttachmentFile(a.file)) return {};
+    const fs::path p = P(root()) / P(a.file);
+    if (!insideDir(P(attachmentsDir()), p)) return {};
+    return U(p);
+}
+
+bool safeAttachmentId(std::string_view id) noexcept {
+    if (id.size() < 3 || id.size() > 66 || id.substr(0, 2) != "p-") return false;
+    return std::all_of(id.begin() + 2, id.end(), [](char c) { return asciiAlnum(c) || c == '-'; });
+}
+
+bool safeAttachmentFile(std::string_view file) noexcept {
+    constexpr std::string_view kDir = "pieces-jointes/";
+    if (file.substr(0, kDir.size()) != kDir) return false;
+    const std::string_view rest = file.substr(kDir.size());
+    const auto slash = rest.find('/');
+    if (slash == std::string_view::npos) return false;
+    return safeAttachmentId(rest.substr(0, slash)) && safeLeaf(rest.substr(slash + 1));
+}
+
+bool safeConversationId(std::string_view id) noexcept {
+    if (id.empty() || id.size() > 96 || id == "." || id == ".." || id.find("..") != std::string_view::npos) return false;
+    return std::all_of(id.begin(), id.end(), [](char c) { return asciiAlnum(c) || c == '-' || c == '_' || c == '.'; });
+}
+
+bool insideAttachments(const std::string& pathUtf8) {
+    if (root().empty() || pathUtf8.empty()) return false;
+    return insideDir(P(attachmentsDir()), P(pathUtf8));
+}
+
+std::string analysisTextPath(const Attachment& a) {
+    if (root().empty() || a.analyses.empty() || !safeAttachmentId(a.id)) return {};
+    if (a.analyses.back().textFile != "cache/documents/" + a.id + ".txt") return {};
+    const fs::path p = P(root()) / P(a.analyses.back().textFile);
+    return insideDir(P(cacheDir("documents")), p) ? U(p) : std::string{};
 }
 
 std::vector<std::string> expiredConversations(const std::vector<Conversation>& all, const Settings& s, std::string_view keep) {

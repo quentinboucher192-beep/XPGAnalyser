@@ -2,6 +2,8 @@
 //  app/ai/AiOpenAI.cpp - un service compatible OpenAI (1.16.0) : voir AiOpenAI.hpp
 // =============================================================================
 #include "AiOpenAI.hpp"
+
+#include "AiKeys.hpp"   // la cle liee a ses serveurs
 #include "../../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 #include "AiTextParts.hpp"
 
@@ -674,6 +676,8 @@ bool OpenAIProvider::start(ProviderRequest request, std::string* why) {
     OpenAITarget target;
     std::string w;
     if (!openAITarget(request.endpoint, request.preset, !request.apiKey.empty(), target, &w)) return fail(w);
+    // La cle ne part que vers un serveur ou elle a ete ajoutee ou essayee (AiKeys : une adresse changee ne la recoit pas).
+    if (!request.apiKey.empty() && !keys::allowedFor(request.apiKey, target.chat, &w)) return fail(w);
     if (!httpAvailable(&w)) return fail("Pas de connexion possible sur ce poste : " + w + ".");
     if (thread_.joinable()) thread_.join();
     {

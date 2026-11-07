@@ -5,6 +5,7 @@
 
 #include <sodium.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -17,7 +18,11 @@
 #include <windows.h>
 #include <wincrypt.h>
 #else
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace deploy::crypto {
@@ -196,37 +201,72 @@ bool unprotect(const Bytes& in, Bytes& plain, std::string* why) {
 #endif
 }
 
-bool writePrivateFile(const std::string& path, const Bytes& data, std::string* why) {
+bool replaceFile(const std::string& path, std::string_view data, bool ownerOnly, std::string* why) {
     namespace fs = std::filesystem;
+    const auto fail = [why](std::string text) {
+        if (why) *why = std::move(text);
+        return false;
+    };
+    if (!init()) return fail("le hasard du syst\xC3\xA8me est indisponible (libsodium)");
     const fs::path target = P(path);
     std::error_code ec;
     if (target.has_parent_path()) fs::create_directories(target.parent_path(), ec);
-    const fs::path tmp = target.string() + ".tmp";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            if (why) *why = "impossible d'ecrire " + path;
-            return false;
-        }
-#ifndef _WIN32
-        ::chmod(tmp.c_str(), 0600);
-#endif
-        out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-        if (!out) {
-            if (why) *why = "ecriture incomplete : " + path;
-            return false;
-        }
+    // Un nom que personne ne peut prevoir, cree s'il n'existe pas encore : un fichier ou un lien pose
+    // d'avance sous ce nom fait echouer l'ecriture au lieu d'etre suivi.
+    unsigned char r[8];
+    randomBytes(r, sizeof r);
+    fs::path tmp = target;
+    tmp += P("." + hex(r, sizeof r) + ".tmp");
+#ifdef _WIN32
+    (void)ownerOnly;   // sous Windows : les droits du dossier (herites)
+    HANDLE h = CreateFileW(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return fail("impossible d'\xC3\xA9" "crire " + path + " (erreur " + std::to_string(GetLastError()) + ")");
+    bool written = true;
+    for (std::size_t done = 0; done < data.size() && written;) {
+        const DWORD part = static_cast<DWORD>(std::min<std::size_t>(data.size() - done, 1u << 30));
+        DWORD n = 0;
+        written = WriteFile(h, data.data() + done, part, &n, nullptr) && n > 0;
+        done += n;
     }
-    fs::rename(tmp, target, ec);
-    if (ec) {
-        fs::remove(target, ec);
-        fs::rename(tmp, target, ec);
+    CloseHandle(h);
+    if (!written) {
+        DeleteFileW(tmp.c_str());
+        return fail("\xC3\xA9" "criture incompl\xC3\xA8te : " + path + " (disque plein ?)");
     }
-    if (ec) {
-        if (why) *why = "impossible de remplacer " + path + " : " + ec.message();
-        return false;
+    // Une seule operation : MoveFileEx remplace la cible.
+    if (!MoveFileExW(tmp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        const DWORD e = GetLastError();
+        DeleteFileW(tmp.c_str());
+        return fail("impossible de remplacer " + path + " (erreur " + std::to_string(e) + ")");
     }
     return true;
+#else
+    const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, ownerOnly ? 0600 : 0666);
+    if (fd < 0) return fail("impossible d'\xC3\xA9" "crire " + path + " (" + std::strerror(errno) + ")");
+    bool written = true;
+    for (std::size_t done = 0; done < data.size() && written;) {
+        const ssize_t n = ::write(fd, data.data() + done, data.size() - done);
+        if (n < 0 && errno == EINTR) continue;
+        written = n > 0;
+        if (written) done += static_cast<std::size_t>(n);
+    }
+    if (::close(fd) != 0) written = false;
+    if (!written) {
+        fs::remove(tmp, ec);
+        return fail("\xC3\xA9" "criture incompl\xC3\xA8te : " + path + " (disque plein ?)");
+    }
+    fs::rename(tmp, target, ec);   // rename(2) remplace la cible d'un coup
+    if (ec) {
+        const std::string m = ec.message();
+        fs::remove(tmp, ec);
+        return fail("impossible de remplacer " + path + " (" + m + ")");
+    }
+    return true;
+#endif
+}
+
+bool writePrivateFile(const std::string& path, const Bytes& data, std::string* why) {
+    return replaceFile(path, std::string_view(reinterpret_cast<const char*>(data.data()), data.size()), true, why);
 }
 
 bool readFile(const std::string& path, Bytes& out, std::string* why, std::uint64_t maxSize) {

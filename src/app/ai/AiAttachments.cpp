@@ -460,15 +460,18 @@ std::string copyFolder(const std::string& file) {
     const auto slash = f.find('/', 15);
     if (slash == std::string::npos || slash == 15) return {};
     const std::string dir = f.substr(15, slash - 15);
-    if (dir == "." || dir == "..") return {};
+    if (!safeAttachmentId(dir)) return {};   // un identifiant de piece, jamais "..", un chemin ou un lecteur
     return dir;
 }
 
 bool removeCopyFolder(const std::string& file) {
     const std::string dir = copyFolder(file);
     if (dir.empty() || root().empty()) return false;
+    const fs::path where = P(attachmentsDir()) / P(dir);
+    if (!insideAttachments(U(where))) return false;   // un lien qui sort de pieces-jointes : rien n'est efface
     std::error_code ec;
-    fs::remove_all(P(attachmentsDir()) / P(dir), ec);
+    if (fs::is_symlink(fs::symlink_status(where, ec))) fs::remove(where, ec);
+    else fs::remove_all(where, ec);
     return !ec;
 }
 
@@ -831,7 +834,8 @@ ContextFile contextFile(const Attachment& a, const std::string& conversation, co
     f.kindLabel = formatLabel(f.attachment.ext);
     if (a.analysis == "analysee" && !a.analyses.empty() && !a.analyses.back().textFile.empty() && !root().empty()) {
         std::error_code ec;
-        f.textMissing = !fs::is_regular_file(P(detail::join(root(), a.analyses.back().textFile)), ec);
+        const std::string text = analysisTextPath(a);   // vide : un chemin refuse (dit manquant)
+        f.textMissing = text.empty() || !fs::is_regular_file(P(text), ec);
     }
     return f;
 }
@@ -935,8 +939,7 @@ std::optional<ProviderAttachment> forProvider(const Attachment& a, bool nativePd
     constexpr std::uint64_t kNativePdf = 20ull * 1024 * 1024;
     const bool readsOriginal = imageExt(ext) || textExt(ext) || (ext == "pdf" && nativePdf && a.bytes <= kNativePdf);
     if (readsOriginal) return p;
-    if (!a.analyses.empty() && !a.analyses.back().textFile.empty() && !root().empty()) {
-        const std::string text = detail::join(root(), a.analyses.back().textFile);
+    if (const std::string text = analysisTextPath(a); !text.empty()) {   // seulement cache/documents/<id>.txt
         std::error_code ec;
         if (fs::is_regular_file(P(text), ec)) {
             p.name = a.name + " (texte extrait).txt";
@@ -961,8 +964,8 @@ bool textOf(const Attachment& a, std::string& out, std::string* why, const Limit
         out = textparts::normalize(std::move(bytes));
         return true;
     }
-    if (!a.analyses.empty() && !a.analyses.back().textFile.empty() && !root().empty())
-        if (readAll(detail::join(root(), a.analyses.back().textFile), out)) return true;
+    if (const std::string text = analysisTextPath(a); !text.empty())
+        if (readAll(text, out)) return true;
     // le cache a ete vide : relu depuis la piece jointe originale
     if (av == Availability::Missing) {
         if (why) *why = guill(a.name) + " est manquant : son texte ne peut pas \xC3\xAAtre lu";

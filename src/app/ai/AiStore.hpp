@@ -241,8 +241,21 @@ inline constexpr std::uint64_t kMaxAttachmentBytes = 200ull * 1024 * 1024;
 [[nodiscard]] std::string mimeOfExtension(std::string_view ext);
 // 1.21.0 : le libelle du format ("Document PDF", "Tableur", "Image") ; une extension inconnue : "Fichier ext".
 [[nodiscard]] std::string formatLabel(std::string_view ext);
-// Le chemin complet de la copie (vide : pas copie).
+// Le chemin complet de la copie (vide : pas copie, ou une copie hors de IA/pieces-jointes/ - refusee).
 [[nodiscard]] std::string attachmentPath(const Attachment&);
+// LES CHEMINS VENUS D'UN FICHIER (une conversation lue, importee d'un .xia) ne sortent jamais du dossier de l'Assistant :
+//  - l'identifiant d'une piece : "p-" puis lettres, chiffres, tirets (newId("p") : "p-20261030-173512-1") ;
+//  - sa copie : "pieces-jointes/<identifiant sur>/<nom sans separateur>" (un doublon : le dossier d'une autre piece) ;
+//  - le texte extrait garde : "cache/documents/<son identifiant>.txt" ;
+//  - une conversation : lettres, chiffres, . _ - (jamais ".."), le nom de son fichier.
+// A la lecture, une piece a l'identifiant refuse est ecartee ; une copie ou un texte refuse est oublie (la piece est dite
+// manquante). Avant d'effacer, de lire, d'ouvrir ou d'envoyer : le chemin resolu reste sous IA/pieces-jointes/.
+[[nodiscard]] bool safeAttachmentId(std::string_view id) noexcept;
+[[nodiscard]] bool safeAttachmentFile(std::string_view file) noexcept;
+[[nodiscard]] bool safeConversationId(std::string_view id) noexcept;
+[[nodiscard]] bool insideAttachments(const std::string& pathUtf8);
+// Le texte extrait de la derniere analyse (le chemin complet) ; vide : aucun, ou refuse.
+[[nodiscard]] std::string analysisTextPath(const Attachment&);
 // "12 Ko", "1,3 Mo".
 [[nodiscard]] std::string formatBytes(std::uint64_t bytes);
 

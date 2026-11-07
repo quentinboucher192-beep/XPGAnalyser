@@ -92,8 +92,11 @@ enum : int {
     kOptNoSignal = 99,
     kOptPostFieldSizeLarge = 30120,
     kOptXferInfoFunction = 20219,
+    kOptProtocols = 181,          // CURLOPT_PROTOCOLS (un masque : avant 7.85)
+    kOptProtocolsStr = 10318,     // CURLOPT_PROTOCOLS_STR (7.85 et apres)
     kInfoResponseCode = 0x200002,
 };
+enum : long { kProtoHttp = 1, kProtoHttps = 2 };   // CURLPROTO_HTTP, CURLPROTO_HTTPS
 enum : int {
     kCurlOk = 0,
     kCurlCouldntResolveProxy = 5,
@@ -277,6 +280,9 @@ public:
         lib.setopt(h, kOptConnectTimeout, static_cast<long>(std::max(1, req.connectTimeoutSeconds)));
         lib.setopt(h, kOptErrorBuffer, errbuf);
         lib.setopt(h, kOptUserAgent, "IHM-Studio");
+        // http et https seulement (pas de file://, ftp://...) ; une libcurl trop ancienne pour la forme texte : le masque.
+        // Les redirections ne sont jamais suivies (FOLLOWLOCATION reste a 0) : un 3xx est rendu tel quel.
+        if (lib.setopt(h, kOptProtocolsStr, "http,https") != kCurlOk) (void)lib.setopt(h, kOptProtocols, kProtoHttp | kProtoHttps);
         void* list = nullptr;
         for (const auto& [k, v] : req.headers) list = lib.slistAppend(list, (k + ": " + v).c_str());
         list = lib.slistAppend(list, "Expect:");   // pas de 100-continue : le corps part tout de suite
@@ -351,6 +357,18 @@ private:
 #    ifndef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
 #        define WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3 0x00002000
 #    endif
+#    ifndef WINHTTP_OPTION_REDIRECT_POLICY
+#        define WINHTTP_OPTION_REDIRECT_POLICY 88
+#    endif
+#    ifndef WINHTTP_OPTION_REDIRECT_POLICY_NEVER
+#        define WINHTTP_OPTION_REDIRECT_POLICY_NEVER 0
+#    endif
+#    ifndef WINHTTP_OPTION_DISABLE_FEATURE
+#        define WINHTTP_OPTION_DISABLE_FEATURE 63
+#    endif
+#    ifndef WINHTTP_DISABLE_REDIRECTS
+#        define WINHTTP_DISABLE_REDIRECTS 0x00000002
+#    endif
 
 std::wstring widen(std::string_view s) {
     if (s.empty()) return {};
@@ -413,6 +431,19 @@ public:
             WinHttpCloseHandle(connection);
             WinHttpCloseHandle(session);
             return failure(err, u.host, idle, 0);
+        }
+        // Jamais de redirection suivie (WinHTTP les suit par defaut, en-tetes et cle compris) : un 3xx est rendu tel quel.
+        // Ni la politique ni la fonction ne se coupent : la requete ne part pas.
+        DWORD never = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
+        const BOOL policyOk = WinHttpSetOption(request, WINHTTP_OPTION_REDIRECT_POLICY, &never, sizeof never);
+        DWORD noRedirects = WINHTTP_DISABLE_REDIRECTS;
+        const BOOL featureOk = WinHttpSetOption(request, WINHTTP_OPTION_DISABLE_FEATURE, &noRedirects, sizeof noRedirects);
+        if (!policyOk && !featureOk) {
+            const DWORD err = GetLastError();
+            WinHttpCloseHandle(request);
+            WinHttpCloseHandle(connection);
+            WinHttpCloseHandle(session);
+            return failed(HttpResponse::Failure::Other, u.host, 0, "redirections non d\xC3\xA9sactivables (WinHTTP " + std::to_string(err) + ")");
         }
         {
             std::lock_guard<std::mutex> lk(m_);
@@ -543,9 +574,103 @@ private:
 } // namespace
 
 // ---- les adresses --------------------------------------------------------------------
+namespace {
+
+// Une IPv4 stricte : 4 nombres decimaux de 0 a 255, sans zero en tete (pas de 0127, 127.1,
+// 0x7f) - une forme ambigue n'est jamais prise pour une adresse locale. Ecrit a la main
+// plutot qu'inet_pton : AiHttp sert aussi l'outil de l'editeur, sans ws2_32 sous Windows.
+bool ipv4Strict(std::string_view s, std::uint8_t out[4]) {
+    int part = 0;
+    std::size_t i = 0;
+    while (part < 4) {
+        std::size_t j = i;
+        while (j < s.size() && s[j] >= '0' && s[j] <= '9' && j - i < 4) ++j;
+        const std::size_t len = j - i;
+        if (len == 0 || len > 3 || (len > 1 && s[i] == '0')) return false;
+        int v = 0;
+        for (std::size_t k = i; k < j; ++k) v = v * 10 + (s[k] - '0');
+        if (v > 255) return false;
+        out[part++] = static_cast<std::uint8_t>(v);
+        if (part == 4) return j == s.size();
+        if (j >= s.size() || s[j] != '.') return false;
+        i = j + 1;
+    }
+    return false;
+}
+
+int hexDigit(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+// Une IPv6 (groupes hexadecimaux, un seul "::", une IPv4 stricte en fin) ; une zone (%eth0) : refusee.
+bool ipv6Parse(std::string_view s, std::uint8_t out[16]) {
+    std::uint16_t words[8] = {0};
+    int n = 0, gap = -1;
+    std::size_t i = 0;
+    if (s.size() < 2) return false;
+    if (s[0] == ':') {
+        if (s[1] != ':') return false;
+        gap = 0;
+        i = 2;
+    }
+    while (i < s.size()) {
+        std::size_t j = i;
+        while (j < s.size() && hexDigit(s[j]) >= 0 && j - i < 5) ++j;
+        if (j < s.size() && s[j] == '.') {   // l'IPv4 de la fin (::ffff:127.0.0.1)
+            std::uint8_t v4[4];
+            if (n > 6 || !ipv4Strict(s.substr(i), v4)) return false;
+            words[n++] = static_cast<std::uint16_t>((v4[0] << 8) | v4[1]);
+            words[n++] = static_cast<std::uint16_t>((v4[2] << 8) | v4[3]);
+            i = s.size();
+            break;
+        }
+        if (j == i || j - i > 4 || n >= 8) return false;
+        unsigned v = 0;
+        for (std::size_t k = i; k < j; ++k) v = v * 16 + static_cast<unsigned>(hexDigit(s[k]));
+        words[n++] = static_cast<std::uint16_t>(v);
+        i = j;
+        if (i == s.size()) break;
+        if (s[i] != ':') return false;
+        ++i;
+        if (i < s.size() && s[i] == ':') {
+            if (gap >= 0) return false;
+            gap = n;
+            ++i;
+        } else if (i == s.size()) {
+            return false;   // un ":" seul a la fin
+        }
+    }
+    if (gap < 0 ? n != 8 : n > 7) return false;
+    std::uint16_t full[8] = {0};
+    if (gap < 0) {
+        std::copy(words, words + 8, full);
+    } else {
+        std::copy(words, words + gap, full);
+        std::copy(words + gap, words + n, full + (8 - (n - gap)));
+    }
+    for (int k = 0; k < 8; ++k) {
+        out[2 * k] = static_cast<std::uint8_t>(full[k] >> 8);
+        out[2 * k + 1] = static_cast<std::uint8_t>(full[k] & 0xFF);
+    }
+    return true;
+}
+
+} // namespace
+
 bool Url::loopback() const {
+    // Le nom lu en entier, jamais par son debut : 127.evil.com n'est pas ce poste.
     const std::string h = lower(host);
-    return h == "localhost" || h == "::1" || h.rfind("127.", 0) == 0;
+    if (h == "localhost") return true;
+    std::uint8_t v4[4];
+    if (ipv4Strict(h, v4)) return v4[0] == 127;
+    std::uint8_t v6[16];
+    if (!ipv6Parse(h, v6)) return false;
+    const bool zeros10 = std::all_of(v6, v6 + 10, [](std::uint8_t b) { return b == 0; });
+    if (zeros10 && v6[10] == 0 && v6[11] == 0 && v6[12] == 0 && v6[13] == 0 && v6[14] == 0 && v6[15] == 1) return true;   // ::1
+    return zeros10 && v6[10] == 0xFF && v6[11] == 0xFF && v6[12] == 127;   // ::ffff:127.x.x.x
 }
 
 std::string Url::base() const {
@@ -558,12 +683,10 @@ std::string Url::base() const {
 std::string Url::text() const { return base() + path; }
 
 bool Url::privateLan() const {
-    // Une adresse IPv4 ecrite en chiffres : 10.x.x.x, 192.168.x.x, 172.16.x.x a 172.31.x.x.
-    int a = -1, b = -1, c = -1, d = -1;
-    char tail = 0;
-    if (std::sscanf(host.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &tail) != 4) return false;
-    for (const int n : {a, b, c, d})
-        if (n < 0 || n > 255) return false;
+    // Une adresse IPv4 stricte : 10.x.x.x, 192.168.x.x, 172.16.x.x a 172.31.x.x (010.1.2.3, 10.1 : non).
+    std::uint8_t v4[4];
+    if (!ipv4Strict(host, v4)) return false;
+    const int a = v4[0], b = v4[1];
     return a == 10 || (a == 192 && b == 168) || (a == 172 && b >= 16 && b <= 31);
 }
 

@@ -488,6 +488,7 @@ bool signRevocations(const SigningKey& key, std::string_view inputJson, Seconds 
             a.fingerprint = x.device.empty() ? std::string() : fingerprintOfHex(x.device);
             a.revokedAt = x.revokedAt;
             a.reason = x.reason;
+            a.issuedBefore = x.issuedBefore;   // 1.32.0 : une emission precise (les plus recentes restent)
             records->push_back(std::move(a));
         }
     return true;
@@ -607,11 +608,22 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         if (!q.licenseId.empty() && q.licenseId != l.licenseId)
             return fail("demande n\xC2\xB0 " + std::to_string(i + 1) + " : ce PC demande la licence " + cite(q.licenseId) + ", pas " + cite(l.licenseId));
         asked.push_back(q);
-        if (l.boundTo(q.deviceKey)) continue;   // deja lie (une reactivation)
+        if (auto bound = std::find_if(l.devices.begin(), l.devices.end(), [&](const BoundDevice& x) { return x.key == q.deviceKey; });
+            bound != l.devices.end()) {
+            // deja lie (une reactivation). 1.32.0 (H2) : la meme cle depuis une AUTRE installation de Windows - la cle du
+            // PC a ete recopiee : refuse (revoque ce PC, puis lie la nouvelle demande).
+            if (!bound->station.empty() && !q.station.empty() && bound->station != q.station)
+                return fail("demande n\xC2\xB0 " + std::to_string(i + 1) + " : ce PC (" + (q.deviceName.empty() ? std::string("sans nom") : q.deviceName)
+                            + ") est d\xC3\xA9j\xC3\xA0 li\xC3\xA9 \xC3\xA0 la licence depuis une AUTRE installation de Windows (l'empreinte du poste diff\xC3\xA8re) : "
+                              "sa cl\xC3\xA9 a sans doute \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e. Refus\xC3\xA9 ; r\xC3\xA9voque ce PC si besoin.");
+            if (bound->station.empty()) bound->station = q.station;   // une licence d'avant la 1.32.0 : l'empreinte s'ajoute
+            continue;
+        }
         BoundDevice d;
         d.key = q.deviceKey;
         d.name = q.deviceName;
         d.activatedAt = now;
+        d.station = q.station;   // 1.32.0 (H2) : le client compare avec la sienne (vide : rien a comparer)
         l.devices.push_back(d);
         crypto::Bytes raw;
         crypto::PublicKey pub{};
@@ -623,7 +635,7 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         return fail(std::to_string(l.devices.size()) + " PC pour " + std::to_string(l.maxDevices) + " autoris\xC3\xA9s (max_devices)");
     if (hasRev) {
         for (const auto& d : l.devices)
-            if (const Revocation* r = rev.find(l.licenseId, d.key))
+            if (const Revocation* r = rev.find(l.licenseId, d.key, l.issuedAt))
                 return fail("la licence " + cite(l.licenseId) + (r->device.empty() ? "" : " (pour un de ces PC)") + " est dans la liste de r\xC3\xA9vocation n\xC2\xB0 "
                             + std::to_string(rev.number));
     }
@@ -656,6 +668,7 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
                 }
             a.activatedAt = d.activatedAt;
             a.signedAt = now;
+            a.issuedAt = l.issuedAt;   // 1.32.0 : pour une revocation d'une emission precise (issued_before)
             a.extension = !in.existing.empty();
             records->push_back(std::move(a));
         }
@@ -831,8 +844,10 @@ bool appendActivations(const std::string& folder, const std::vector<ActivationRe
         stamp("activated_at", a.activatedAt);
         stamp("signed_at", a.signedAt);
         if (a.kind == "licence") v.set("extension", a.extension);
+        stamp("issued_at", a.issuedAt);           // 1.32.0
         stamp("revoked_at", a.revokedAt);
         str("reason", a.reason);
+        stamp("issued_before", a.issuedBefore);   // 1.32.0
         text += core::json::write(v, false) + "\n";
     }
     std::error_code ec;
@@ -893,6 +908,8 @@ bool readActivations(const std::string& folder, std::vector<ActivationRecord>& o
         a.extension = v.flag("extension");
         a.revokedAt = timeField(v, "revoked_at");
         a.reason = v.str("reason");
+        a.issuedAt = timeField(v, "issued_at");
+        a.issuedBefore = timeField(v, "issued_before");
         out.push_back(std::move(a));
     }
     return true;
@@ -908,11 +925,13 @@ std::vector<KnownDevice> knownDevices(const std::vector<ActivationRecord>& recor
     std::stable_sort(ordered.begin(), ordered.end(), [](const ActivationRecord* x, const ActivationRecord* y) { return x->at < y->at; });
     std::map<std::string, KnownDevice> byKey;
     std::map<std::string, bool> licensed, revoked;
+    std::map<std::string, Seconds> issuedOf;   // 1.32.0 : l'emission de la licence de chaque PC (une revocation precise)
     for (const ActivationRecord* rec : ordered) {
         const ActivationRecord& a = *rec;
         if (a.kind == "revocation") {
             for (auto& [k, d] : byKey)
-                if (licensed[k] && d.licenseId == a.licenseId && (a.deviceKey.empty() || a.deviceKey == k)) {
+                if (licensed[k] && d.licenseId == a.licenseId && (a.deviceKey.empty() || a.deviceKey == k)
+                    && (a.issuedBefore == 0 || issuedOf[k] < a.issuedBefore)) {
                     revoked[k] = true;
                     d.revokedAt = a.revokedAt ? a.revokedAt : a.at;
                 }
@@ -931,6 +950,7 @@ std::vector<KnownDevice> knownDevices(const std::vector<ActivationRecord>& recor
         }
         licensed[a.deviceKey] = true;
         revoked[a.deviceKey] = false;
+        issuedOf[a.deviceKey] = a.issuedAt ? a.issuedAt : a.signedAt;   // une ligne d'avant la 1.32.0 : l'heure de signature
         d.revokedAt = 0;
         d.customer = a.customer;
         d.licenseId = a.licenseId;
@@ -1011,7 +1031,10 @@ std::string devicesTable(const std::vector<KnownDevice>& devices) {
 }
 
 std::string devicesCsv(const std::vector<KnownDevice>& devices) {
-    const auto field = [](const std::string& x) {
+    const auto field = [](const std::string& raw) {
+        // 1.32.0 (M4) : une cellule qui commence par = + - @ tabulation ou retour serait une FORMULE pour Excel (un nom
+        // de PC ou de client venu d'ailleurs) : une apostrophe devant la rend texte. "-" seul (pas de date) n'en est pas une.
+        const std::string x = looksLikeFormula(raw) && raw != "-" ? "'" + raw : raw;
         if (x.find_first_of(";\"\r\n") == std::string::npos) return x;
         std::string q = "\"";
         for (char c : x) q += c == '"' ? std::string("\"\"") : std::string(1, c);

@@ -21,6 +21,13 @@
 //    GET  /etat          l'etat en JSON (la vue, sa taille, le numero d'image,
 //                        l'utilisateur, la commande permise)
 //    POST /clic          x, y en pixels de l'image (si la commande est permise)
+//
+//  1.32.0 : LES REQUETES QUI CHANGENT QUELQUE CHOSE (POST) viennent de la page
+//  du poste : l'en-tete Host est l'adresse et le port de ce poste (pas un nom
+//  d'ailleurs qui pointerait ici), Origin (s'il est la) est la meme origine,
+//  et un clic porte le jeton de sa session (donne dans la page). Une session
+//  d'office (sans connexion) ne nait que d'un GET. Accessible du reseau, sans
+//  connexion : jamais la commande (lecture seule, et c'est dit).
 // =============================================================================
 #pragma once
 
@@ -92,12 +99,19 @@ public:
     [[nodiscard]] int                 clientCount() const;
     void disconnectAll();
 
-    // La page (pour les essais).
-    [[nodiscard]] static std::string page(const std::string& projectName, bool loginForm, const std::string& message, int refreshMs);
+    // La page (pour les essais). `token` : le jeton de la session, que chaque clic renvoie (1.32.0).
+    [[nodiscard]] static std::string page(const std::string& projectName, bool loginForm, const std::string& message, int refreshMs,
+                                          const std::string& token = {});
+    // 1.32.0 : les reglages tels qu'ils s'appliquent - accessible du reseau sans connexion : sans la commande.
+    [[nodiscard]] static WebAccess effective(const WebAccess&);
+    // 1.32.0 : l'en-tete Host d'une requete designe-t-il ce poste ? `local` : l'adresse et le port ou la connexion est
+    // arrivee ("192.168.1.5:8080") ; 127.0.0.1 et localhost pour une connexion locale.
+    [[nodiscard]] static bool hostMatches(const std::string& host, const std::string& local);
 
 private:
     struct Session {
         std::string token, user, peer, since;
+        std::string csrf;          // 1.32.0 : le jeton des clics (dans la page, jamais dans un cookie)
         double      lastSeen{0};
         bool        control{false};
         std::size_t images{0}, clicks{0};

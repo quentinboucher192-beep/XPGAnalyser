@@ -6,9 +6,18 @@
 #include "SignedFile.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/stat.h>
 #endif
 
@@ -212,6 +221,41 @@ crypto::Signature SigningKey::sign(std::string_view message) const noexcept { re
 
 std::string publicKeyFingerprint(const crypto::PublicKey& key, std::size_t groups) {
     return crypto::fingerprintText(crypto::sha256(key.data(), key.size()), groups);
+}
+
+// ============================================ 1.32.0 : l'empreinte du poste (H2) ==
+std::string systemMachineId() {
+    std::string raw;
+#ifdef _WIN32
+    // MachineGuid : la vue 64 bits (un programme 32 bits lirait sinon une autre cle)
+    HKEY key = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Cryptography", 0, KEY_QUERY_VALUE | KEY_WOW64_64KEY, &key) == ERROR_SUCCESS) {
+        wchar_t buf[128] = {};
+        DWORD size = sizeof buf;
+        if (RegGetValueW(key, nullptr, L"MachineGuid", RRF_RT_REG_SZ, nullptr, buf, &size) == ERROR_SUCCESS)
+            for (const wchar_t* p = buf; *p; ++p)
+                if (*p < 0x80) raw += static_cast<char>(*p);   // un GUID : de l'ASCII
+        RegCloseKey(key);
+    }
+#else
+    crypto::Bytes bytes;
+    std::string why;
+    if (crypto::readFile("/etc/machine-id", bytes, &why, 4096)) raw.assign(bytes.begin(), bytes.end());
+#endif
+    // minuscules, sans blancs : le meme texte quel que soit l'outil qui l'a ecrit
+    std::string id;
+    for (char c : raw)
+        if (!std::isspace(static_cast<unsigned char>(c))) id += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return id;
+}
+
+std::string stationHash(std::string_view machineId, const crypto::PublicKey& deviceKey) {
+    if (machineId.empty()) return {};
+    // prefixe fixe, identifiant, puis 32 octets : la concatenation est sans ambiguite
+    std::string m = "xpg-poste/1";
+    m.append(machineId);
+    m.append(reinterpret_cast<const char*>(deviceKey.data()), deviceKey.size());
+    return crypto::sha256Hex(m).substr(0, 32);
 }
 
 } // namespace licensing

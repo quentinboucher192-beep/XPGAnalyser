@@ -14,6 +14,7 @@
 #include "HmiSymbols.hpp"
 #include "HmiTemplates.hpp"
 #include "HmiTypes.hpp"
+#include "../xls/ZipLimits.hpp"   // 1.32.0 : les bornes d'un zip recu
 #include "../../third_party/miniz.h"
 
 #include <algorithm>
@@ -717,9 +718,19 @@ core::Result<Package> fromZip(const Bytes& bytes) {
         if (bytes.empty() || !mz_zip_reader_init_mem(&zip, bytes.data(), bytes.size(), 0))
             return core::fail(core::ErrorCode::FileUnreadable, "pas un paquet de vues (le fichier n'est pas un zip)");
         const mz_uint n = mz_zip_reader_get_num_files(&zip);
+        xls::ziplimits::Budget budget;                    // 1.32.0 : une bombe ne s'ouvre pas
+        std::string tooBig;
+        if (!budget.entries(n, &tooBig)) {
+            mz_zip_reader_end(&zip);
+            return core::fail(core::ErrorCode::FileTooLarge, "paquet de vues refus\xC3\xA9 : " + tooBig);
+        }
         for (mz_uint i = 0; i < n; ++i) {
             mz_zip_archive_file_stat st;
             if (!mz_zip_reader_file_stat(&zip, i, &st) || st.m_is_directory) continue;
+            if (!budget.take(st.m_uncomp_size, st.m_filename, &tooBig)) {
+                mz_zip_reader_end(&zip);
+                return core::fail(core::ErrorCode::FileTooLarge, "paquet de vues refus\xC3\xA9 : " + tooBig);
+            }
             std::size_t size = 0;
             void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
             if (!data) continue;

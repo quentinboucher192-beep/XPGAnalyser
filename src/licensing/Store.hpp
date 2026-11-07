@@ -9,7 +9,8 @@
 //      revocations.xpgrev    la derniere liste de revocation acceptee
 //      etat.bin              l'etat protege (DPAPI machine) : l'heure la plus
 //                            tardive deja vue, les numeros les plus hauts vus du
-//                            registre et des revocations
+//                            registre et des revocations ; 1.32.0 : par licence,
+//                            l'emission la plus recente installee (issued)
 //      historique.jsonl      1.30.0 : ce qui s'est passe (une ligne JSON par
 //                            evenement : import accepte ou refuse et sa raison,
 //                            demande d'activation ecrite, changement d'etat
@@ -33,20 +34,29 @@
 //    licence     absente -> Absente ; tronquee, signature fausse, champ en double,
 //                inconnu, type flottant ou service en ligne (pas en version 1),
 //                edition ou fonctionnalite inconnue du registre -> Invalide ;
-//                pas liee a la cle de ce PC -> Autre PC ; dans la liste de
-//                revocation -> Revoquee ; horloge -> Horloge reculee (seulement
-//                pour une licence datee) ; apres sa fin -> Grace pendant
-//                offline_grace_days (sauf une evaluation), puis Expiree ;
-//                sinon Valide.
+//                pas liee a la cle de ce PC, ou (1.32.0) liee a une autre
+//                installation de Windows (l'empreinte du poste) -> Autre PC ;
+//                1.32.0 : une emission plus ancienne que la plus recente deja
+//                installee (un vieux .xpglic remis) -> Invalide ; dans la liste
+//                de revocation (1.32.0 : ou cette emission-la) -> Revoquee ;
+//                horloge -> Horloge reculee (seulement pour une licence datee) ;
+//                apres sa fin -> Grace pendant offline_grace_days (sauf une
+//                evaluation), puis Expiree ; sinon Valide.
 //  Valide et Grace : les fonctionnalites de la licence. Tous les autres etats :
 //  celles de l'edition sans licence du registre (FREE). Rien ne ferme un projet :
 //  Enregistrer et Exporter ne dependent d'aucune fonctionnalite (Licensing.hpp).
 //
 //  L'HORLOGE : l'heure la plus tardive deja vue (etat.bin, et les dates
-//  d'emission des documents signes) ; si l'heure du PC est en arriere de plus de
-//  24 h (reglable), c'est << Horloge reculee >>. Honnetement : un PC sans reseau
+//  d'emission des documents signes, ceux livres avec le programme compris) ; si
+//  l'heure du PC est en arriere de plus de 24 h (reglable), c'est << Horloge
+//  reculee >>. 1.32.0 : une licence est la mais etat.bin manque ou ne se lit
+//  plus -> il est RECREE, l'heure la plus tardive reprise de la plus recente
+//  de : l'emission de la licence, du registre, des revocations, la derniere
+//  ligne de l'historique, l'heure de modification des fichiers du dossier ; une
+//  ligne << controle >> de l'historique le dit. Honnetement : un PC sans reseau
 //  ne peut pas prouver l'heure ; ceci arrete le retour en arriere ordinaire de
-//  l'horloge, pas quelqu'un qui efface l'etat et remet ses fichiers - le vrai
+//  l'horloge, et rend plus difficile celui de quelqu'un qui efface l'etat - pas
+//  de quelqu'un qui efface tout et remet les dates de ses fichiers. Le vrai
 //  garde-temps viendra avec le service en ligne (une heure signee).
 // =============================================================================
 #pragma once
@@ -101,6 +111,10 @@ struct TrustedKey {
 [[nodiscard]] std::vector<TrustedKey> compiledPublisherKeys();
 // La cle d'essai est-elle compilee dans ce programme (XPG_LICENCES_CLE_ESSAI) ?
 [[nodiscard]] bool testKeyCompiled() noexcept;
+// 1.32.0 (M1) : le dossier des licences donne par XPG_LICENCES_DOSSIER (environnement) - SEULEMENT dans une
+// construction d'essai (XPG_LICENCES_CLE_ESSAI : captures, essais) ; ailleurs, toujours vide (la lecture de la
+// variable n'est pas compilee : personne ne remplace le dossier, ni son etat protege, d'un programme livre).
+[[nodiscard]] std::string testFolderOverride();
 
 // 1.30.0 : un evenement de l'historique de ce PC (historique.jsonl).
 struct HistoryEvent {
@@ -146,8 +160,15 @@ struct StoreOptions {
     std::vector<TrustedKey>        trustedKeys;         // vide : compiledPublisherKeys() (si compiledKeys)
     bool                           compiledKeys{true};  // faux : seulement trustedKeys (les essais : << un programme sans cle >>)
     std::string                    bundledRegistry;     // facultatif : le registre livre avec le programme (.xpgreg)
+    std::string                    bundledRevocations;  // 1.32.0 : facultatif, la liste livree avec le programme (.xpgrev)
     std::function<Seconds()>       clock;               // vide : systemNow() (les essais avancent l'heure)
     Seconds                        clockTolerance{kDay};   // le recul de l'horloge tolere
+    // 1.32.0 : l'identifiant de l'installation (l'empreinte du poste, KeyFile.hpp) ; vide : systemMachineId().
+    // Les essais en donnent un (deux << installations >> dans un meme processus).
+    std::string                    machineId;
+    // 1.32.0 : l'heure de modification d'un fichier (l'etat recree) ; vide : celle du systeme de fichiers,
+    // seulement avec l'horloge du systeme (une horloge d'essai ne se compare pas aux dates des fichiers).
+    std::function<Seconds(const std::string& path)> fileTime;
 };
 
 // Ce qu'a donne l'import d'un fichier.
@@ -183,6 +204,8 @@ public:
     [[nodiscard]] const std::optional<Registry>& registry() const noexcept { return registry_; }
     [[nodiscard]] const std::optional<License>& license() const noexcept { return license_; }
     [[nodiscard]] const std::string& deviceKeyHex() const noexcept { return deviceKeyHex_; }
+    // 1.32.0 : l'identifiant de l'installation retenu (StoreOptions::machineId, sinon celui du systeme).
+    [[nodiscard]] const std::string& machineId() const noexcept { return opt_.machineId; }
 
     // 1.30.0 : l'historique de ce PC, le plus recent d'abord (`limit` <= 0 : tout). Lu dans le fichier.
     [[nodiscard]] std::vector<HistoryEvent> history(int limit = 0) const;
@@ -225,6 +248,7 @@ private:
     std::string noteState(const LicenseState& s);
     [[nodiscard]] std::string lastLoggedStatus() const;
     [[nodiscard]] std::string notWritable(const std::string& why) const;
+    [[nodiscard]] Seconds fileTime(const std::string& path) const;
 
     StoreOptions            opt_;
     std::optional<Registry> registry_;

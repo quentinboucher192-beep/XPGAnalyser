@@ -1,4 +1,5 @@
 #include "HmiExternal.hpp"
+#include "HmiAssets.hpp"   // 1.32.0 : projectPathAllowed
 #include "HmiMedia.hpp"
 #include "../import/XmlReader.hpp"
 #include "../project/Table.hpp"
@@ -568,6 +569,8 @@ ExternalData readExternal(ExternalKind kind, const std::string& path, std::strin
                   + " param\xC3\xA8tre(s) ; la connexion demande un pilote que l'outil n'embarque pas";
         return d;
     }
+    // 1.32.0 : un chemin reseau venu du projet n'est pas ouvert (fuite NTLM), sauf dossier autorise sur ce poste.
+    if (!projectPathAllowed(path, &d.error)) return d;
     std::error_code ec;
     if (!fs::is_regular_file(path, ec)) { d.error = "fichier absent : " + path; return d; }
     if (kind == ExternalKind::Excel) {

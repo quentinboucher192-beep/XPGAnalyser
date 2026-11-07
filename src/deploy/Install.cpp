@@ -13,6 +13,7 @@
 
 #include "Install.hpp"
 
+#include "Crypto.hpp"
 #include "Package.hpp"
 #include "Paths.hpp"
 
@@ -66,32 +67,93 @@ bool validName(std::string_view name, std::string* why) {
 }
 
 bool atomicWrite(const std::string& path, std::string_view text, std::string* why) {
-    const fs::path target = P(path);
-    std::error_code ec;
-    fs::create_directories(target.parent_path(), ec);
-    fs::path tmp = target;
-    tmp += u8".ecriture";
-    {
-        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-        if (!out) return fail(why, "impossible d'\xC3\xA9" "crire " + U(tmp));
-        out.write(text.data(), static_cast<std::streamsize>(text.size()));
-        out.flush();
-        if (!out) return fail(why, "\xC3\xA9" "criture incompl\xC3\xA8te : " + U(tmp) + " (disque plein ?)");
-    }
+    // 1.32.0 : plus de "<fichier>.ecriture" (un nom connu d'avance, qu'un lien pose la aurait detourne).
+    return crypto::replaceFile(path, text, false, why);
+}
+
+// ================================================================== liens ===
+namespace {
+
+enum class Kind { None, Link, Dir, File };
+
+// Ce qu'est `p`, sans suivre un lien.
+Kind kindOf(const fs::path& p) {
 #if defined(_WIN32)
-    // Une seule operation : MoveFileEx remplace la cible.
-    if (!MoveFileExW(tmp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
-        fs::remove(tmp, ec);
-        return fail(why, "impossible de remplacer " + path + " (erreur " + std::to_string(GetLastError()) + ")");
+    // GetFileAttributes ne suit pas un point d'analyse : ses attributs sont ceux du lien.
+    const DWORD a = GetFileAttributesW(p.c_str());
+    if (a == INVALID_FILE_ATTRIBUTES) {
+        const DWORD e = GetLastError();
+        return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND ? Kind::None : Kind::File;   // illisible : on essaiera d'effacer
     }
+    if (a & FILE_ATTRIBUTE_REPARSE_POINT) return Kind::Link;
+    return (a & FILE_ATTRIBUTE_DIRECTORY) ? Kind::Dir : Kind::File;
 #else
-    fs::rename(tmp, target, ec);   // rename(2) remplace la cible d'un coup
-    if (ec) {
-        fs::remove(tmp, ec);
-        return fail(why, "impossible de remplacer " + path + " (" + ec.message() + ")");
-    }
+    std::error_code ec;
+    const fs::file_status st = fs::symlink_status(p, ec);
+    if (st.type() == fs::file_type::not_found) return Kind::None;
+    if (ec) return Kind::File;
+    if (fs::is_symlink(st)) return Kind::Link;
+    return fs::is_directory(st) ? Kind::Dir : Kind::File;
 #endif
-    return true;
+}
+
+// Retirer une entree seule (un dossier vide, un fichier, un lien - jamais ce qu'il designe).
+bool removeEntry(const fs::path& p, Kind k) {
+#if defined(_WIN32)
+    const DWORD a = GetFileAttributesW(p.c_str());
+    if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) return RemoveDirectoryW(p.c_str()) != 0;   // une jonction : le lien seul
+    if (DeleteFileW(p.c_str())) return true;
+    // Un fichier en lecture seule : l'attribut retire, puis de nouveau.
+    if (k == Kind::File && a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_READONLY)
+        && SetFileAttributesW(p.c_str(), a & ~static_cast<DWORD>(FILE_ATTRIBUTE_READONLY)))
+        return DeleteFileW(p.c_str()) != 0;
+    return false;
+#else
+    (void)k;
+    std::error_code ec;
+    return fs::remove(p, ec) && !ec;   // unlink / rmdir : un lien est retire lui-meme
+#endif
+}
+
+bool removeRec(const fs::path& p, int depth) {
+    const Kind k = kindOf(p);
+    if (k == Kind::None) return true;
+    if (k == Kind::Dir) {
+        if (depth > 200) return false;
+        std::vector<fs::path> children;
+        std::error_code ec;
+        for (fs::directory_iterator it(p, ec), end; !ec && it != end; it.increment(ec)) children.push_back(it->path());
+        bool ok = !ec;
+        for (const auto& c : children) ok = removeRec(c, depth + 1) && ok;
+        if (!ok) return false;
+    }
+    return removeEntry(p, k);
+}
+
+} // namespace
+
+bool isLink(const std::string& path) { return kindOf(P(path)) == Kind::Link; }
+
+bool linkBelow(const std::string& root, const std::string& path) {
+    const fs::path r = P(root).lexically_normal(), p = P(path).lexically_normal();
+    auto ri = r.begin(), pi = p.begin();
+    for (; ri != r.end() && !ri->empty(); ++ri, ++pi)
+        if (pi == p.end() || *ri != *pi) return true;   // pas sous `root`
+    fs::path cur = r;
+    for (; pi != p.end(); ++pi) {
+        if (pi->empty()) continue;
+        cur /= *pi;
+        const Kind k = kindOf(cur);
+        if (k == Kind::Link) return true;
+        if (k == Kind::None) break;   // la suite n'existe pas encore
+    }
+    return false;
+}
+
+bool removeTree(const std::string& path, std::string* why) {
+    const fs::path p = P(path);
+    if (removeRec(p, 0) && kindOf(p) == Kind::None) return true;
+    return fail(why, "impossible d'effacer " + path + " (fichier ouvert ou droits insuffisants ?)");
 }
 
 bool readJson(const std::string& path, core::json::Value& out, std::string* why) {
@@ -222,11 +284,14 @@ std::vector<std::string> AppStore::prune(const std::string& app, int keep, const
     for (const auto& id : kept) count += a.find(id) ? 1 : 0;
     for (auto it = a.versions.rbegin(); it != a.versions.rend() && count < static_cast<std::size_t>(keep); ++it)
         if (kept.insert(it->id).second) ++count;
+    // 1.32.0 : un lien ou une jonction sur le chemin (l'application, versions/) : rien n'est efface (remove_all
+    // le suivrait, au-dela du dossier de l'agent).
+    if (linkBelow(dir_, versionsDir(app))) return removed;
     for (const auto& v : a.versions) {
         if (kept.count(v.id)) continue;
         std::error_code ec;
         fs::remove(P(versionDir(app, v.id) + ".json"), ec);   // la fiche d'abord : un dossier sans fiche n'est plus une version
-        fs::remove_all(P(versionDir(app, v.id)), ec);
+        (void)removeTree(versionDir(app, v.id));               // une version qui est un lien : le lien seul
         removed.push_back(v.id);
     }
     return removed;

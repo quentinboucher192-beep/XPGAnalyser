@@ -13,6 +13,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+// STARTUPINFOEXW, la liste des handles herites, CancelSynchronousIo : Vista et apres.
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0601
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
 #include <windows.h>
 #else
 #include <cerrno>
@@ -24,6 +29,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <climits>
 #include <cstring>
 #endif
@@ -77,6 +83,40 @@ std::wstring quote(const std::wstring& a) {
     out += L'"';
     return out;
 }
+
+// L'entree de l'enfant, ecrite sur son propre fil : un enfant qui ecrit beaucoup avant de lire ne bloque plus le parent
+// (les lecteurs et la limite de temps tournent pendant ce temps). Le fil ferme le tube a la fin.
+struct StdinJob {
+    HANDLE             pipe{nullptr};
+    const std::string* data{nullptr};
+};
+DWORD WINAPI writeStdin(LPVOID p) {
+    auto* job = static_cast<StdinJob*>(p);
+    std::size_t done = 0;
+    while (done < job->data->size()) {
+        const DWORD chunk = static_cast<DWORD>(std::min<std::size_t>(job->data->size() - done, 1u << 20));
+        DWORD wrote = 0;
+        if (!WriteFile(job->pipe, job->data->data() + done, chunk, &wrote, nullptr) || wrote == 0) break;
+        done += wrote;
+    }
+    CloseHandle(job->pipe);
+    job->pipe = nullptr;
+    return 0;
+}
+#else
+// Ferme tout descripteur >= 3 sauf `keep` (le tube qui dit un exec rate, ferme par l'exec) : l'enfant n'herite ni des
+// sockets ni des fichiers ouverts de l'application. close_range (Linux 5.9) d'abord, sinon un par un.
+void closeInherited(int keep) {
+#if defined(SYS_close_range)
+    bool ok = true;
+    if (keep > 3) ok = syscall(SYS_close_range, 3u, static_cast<unsigned>(keep - 1), 0u) == 0;
+    if (ok && syscall(SYS_close_range, static_cast<unsigned>(keep + 1), ~0u, 0u) == 0) return;
+#endif
+    long max = sysconf(_SC_OPEN_MAX);
+    if (max < 0 || max > INT_MAX) max = 65536;
+    for (int fd = 3; fd < static_cast<int>(max); ++fd)
+        if (fd != keep) (void)close(fd);
+}
 #endif
 
 } // namespace
@@ -128,12 +168,36 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
     }
     std::wstring line = quote(wide(req.program));
     for (const auto& a : req.args) line += L" " + quote(wide(a));
-    STARTUPINFOW si{};
+    STARTUPINFOEXW six{};
+    STARTUPINFOW&  si = six.StartupInfo;
     si.cb = sizeof si;
     si.dwFlags = STARTF_USESTDHANDLES;
     si.hStdOutput = outW;
     si.hStdError = errW;
     si.hStdInput = inR;
+    // Seuls les trois tubes passent a l'enfant (PROC_THREAD_ATTRIBUTE_HANDLE_LIST) : aucun autre handle heritable de
+    // l'application (sockets, fichiers). Les fonctions refusent : l'ancien comportement (tout handle heritable passe).
+    HANDLE inherit[3] = {outW, errW, inR};
+    std::vector<char> attrBuf;
+    LPPROC_THREAD_ATTRIBUTE_LIST attrs = nullptr;
+    {
+        SIZE_T size = 0;
+        (void)InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+        if (size > 0) {
+            attrBuf.resize(size);
+            attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrBuf.data());
+            if (!InitializeProcThreadAttributeList(attrs, 1, 0, &size)) {
+                attrs = nullptr;
+            } else if (!UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit, sizeof inherit, nullptr, nullptr)) {
+                DeleteProcThreadAttributeList(attrs);
+                attrs = nullptr;
+            }
+        }
+    }
+    if (attrs) {
+        si.cb = sizeof six;
+        six.lpAttributeList = attrs;
+    }
     PROCESS_INFORMATION pi{};
     // Un environnement presque vide : SystemRoot (sans lui, rien ne demarre sous Windows), rien d'autre.
     std::wstring env;
@@ -145,9 +209,10 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
         env += L'\0';
     }
     const std::wstring dir = wide(req.workDir);
-    const BOOL okStart = CreateProcessW(wide(req.program).c_str(), line.data(), nullptr, nullptr, TRUE,
-                                        CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, env.data(),
+    const DWORD flags = CREATE_SUSPENDED | CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT | (attrs ? EXTENDED_STARTUPINFO_PRESENT : 0);
+    const BOOL okStart = CreateProcessW(wide(req.program).c_str(), line.data(), nullptr, nullptr, TRUE, flags, env.data(),
                                         dir.empty() ? nullptr : dir.c_str(), &si, &pi);
+    if (attrs) DeleteProcThreadAttributeList(attrs);
     CloseHandle(outW);
     CloseHandle(errW);
     CloseHandle(inR);
@@ -164,12 +229,10 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
     CloseHandle(pi.hThread);
     r.started = true;
     r.networkIsolated = false;   // pas d'isolement reseau sans droits d'administrateur
-    // L'entree, puis fermee.
-    if (!req.input.empty()) {
-        DWORD wrote = 0;
-        WriteFile(inW, req.input.data(), static_cast<DWORD>(req.input.size()), &wrote, nullptr);
-    }
-    CloseHandle(inW);
+    // L'entree, sur son fil (writeStdin la ferme) ; un fil refuse : ecrite ici, comme avant.
+    StdinJob stdinJob{inW, &req.input};
+    HANDLE writer = req.input.empty() ? nullptr : CreateThread(nullptr, 0, &writeStdin, &stdinJob, 0, nullptr);
+    if (!writer) (void)writeStdin(&stdinJob);
     // Les sorties lues sur deux fils (un tube plein bloquerait l'enfant).
     std::size_t total = 0;
     std::atomic<bool> cut{false};
@@ -212,6 +275,13 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
     }
     DWORD code = 1;
     GetExitCodeProcess(pi.hProcess, &code);
+    if (writer) {   // l'enfant est fini ou tue : l'ecriture rend ; sinon (un tube garde ailleurs) elle est annulee
+        if (WaitForSingleObject(writer, 2000) == WAIT_TIMEOUT) {
+            (void)CancelSynchronousIo(writer);
+            WaitForSingleObject(writer, INFINITE);
+        }
+        CloseHandle(writer);
+    }
     to.join();
     te.join();
     r.outputCut = cut.load();
@@ -283,6 +353,7 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
         char envSandbox[] = "XPG_BAC_A_SABLE=1";
         char* envp[] = {envSandbox, nullptr};
         close(execFail[0]);
+        closeInherited(execFail[1]);   // rien d'autre que 0, 1, 2 (et le tube de l'exec, ferme par l'exec)
         execve(req.program.c_str(), argv.data(), envp);
         const int e = errno;
         (void)!write(execFail[1], &e, sizeof e);
@@ -312,16 +383,32 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
         close(execFail[0]);
     }
     r.started = true;
-    if (!req.input.empty()) {
-        std::size_t done = 0;
+    // L'entree s'ecrit DANS la boucle (sans bloquer) : un enfant qui ecrit beaucoup avant de lire ne bloque plus le parent,
+    // et la limite de temps court des le depart.
+    std::size_t inDone = 0;
+    int inFd = in[1];
+    if (req.input.empty()) {
+        close(inFd);
+        inFd = -1;
+    } else {
         signal(SIGPIPE, SIG_IGN);
-        while (done < req.input.size()) {
-            const ssize_t w = write(in[1], req.input.data() + done, req.input.size() - done);
-            if (w <= 0) break;
-            done += static_cast<std::size_t>(w);
-        }
+        fcntl(inFd, F_SETFL, O_NONBLOCK);
     }
-    close(in[1]);
+    const auto feed = [&] {
+        while (inFd >= 0 && inDone < req.input.size()) {
+            const ssize_t w = write(inFd, req.input.data() + inDone, req.input.size() - inDone);
+            if (w > 0) {
+                inDone += static_cast<std::size_t>(w);
+                continue;
+            }
+            if (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) return;   // le tube est plein : plus tard
+            break;   // l'enfant ne lit plus (EPIPE) : l'entree s'arrete
+        }
+        if (inFd >= 0) {
+            close(inFd);
+            inFd = -1;
+        }
+    };
     fcntl(out[0], F_SETFL, O_NONBLOCK);
     fcntl(err[0], F_SETFL, O_NONBLOCK);
     std::size_t total = 0;
@@ -351,8 +438,9 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
             r.cancelled = true;
             kill(-pid, SIGKILL);
         }
-        pollfd fds[2] = {{out[0], POLLIN, 0}, {err[0], POLLIN, 0}};
-        (void)poll(fds, 2, 50);
+        pollfd fds[3] = {{out[0], POLLIN, 0}, {err[0], POLLIN, 0}, {inFd, POLLOUT, 0}};
+        (void)poll(fds, inFd >= 0 ? 3 : 2, 50);
+        feed();
         if (outOpen) drain(out[0], &r.out, &outOpen);
         if (errOpen) drain(err[0], &r.err, &errOpen);
         if (!exited) {
@@ -371,6 +459,7 @@ Result run(const Request& req, const std::atomic<bool>* cancel) {
             break;   // un petit-enfant garde les tubes ouverts : on ne l'attend pas
         }
     }
+    if (inFd >= 0) close(inFd);
     close(out[0]);
     close(err[0]);
     if (WIFEXITED(status)) r.exitCode = (r.cancelled || r.timedOut) ? -1 : WEXITSTATUS(status);

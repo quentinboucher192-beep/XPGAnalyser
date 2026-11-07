@@ -438,7 +438,8 @@ Assistant::Assistant(Host host) : host_(std::move(host)) {
             for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
                 for (const auto& a : m->attachments) {
                     if (a.name != name) continue;
-                    if (!a.file.empty() && !root().empty()) return detail::join(root(), a.file);
+                    // la copie verifiee (attachmentPath : jamais hors de IA/pieces-jointes/) ; refusee : rien
+                    if (!a.file.empty() && !root().empty()) return attachmentPath(a);
                     if (!a.source.empty()) return a.source;
                 }
             // 1.22.8 : l'image d'une vue d'un modele de vues (<< PV.pdf > Vue_A >>) - un calque de reference
@@ -466,6 +467,22 @@ Assistant::~Assistant() {
     // 1.22.5 : Generer et Compiler en cours (sur leur copie du projet)
     for (auto& j : buildJobs_)
         if (j && j->worker.joinable()) j->worker.join();
+}
+
+void Assistant::noteUntrusted(const char* what) {
+    if (std::find(gen_.untrusted.begin(), gen_.untrusted.end(), what) == gen_.untrusted.end()) gen_.untrusted.emplace_back(what);
+}
+
+std::string serviceUrl(const Settings& s) {
+    if (s.provider == "anthropic") {
+        std::string messages, models;
+        return anthropicUrls(s.endpoint, messages, models) ? messages : std::string{};
+    }
+    if (s.provider == "openai") {
+        OpenAITarget t;
+        return openAITarget(s.endpoint, s.preset, true, t) ? t.chat : std::string{};
+    }
+    return {};
 }
 
 // ---- le cycle de vie ------------------------------------------------------------------
@@ -1625,7 +1642,7 @@ bool Assistant::frozenEnvironment(Env& out) const {
         for (auto m = c->messages.rbegin(); m != c->messages.rend(); ++m)
             for (const auto& a : m->attachments) {
                 if (files.count(a.name)) continue;
-                if (!a.file.empty() && !root().empty()) files[a.name] = detail::join(root(), a.file);
+                if (!a.file.empty() && !root().empty()) files[a.name] = attachmentPath(a);   // verifiee (vide : refusee)
                 else if (!a.source.empty()) files[a.name] = a.source;
             }
     // 1.22.8 : les images des vues des modeles de vues (<< PV.pdf > Vue_A >>)
@@ -3001,10 +3018,16 @@ bool Assistant::excludeOps(int message, const std::vector<std::size_t>& ops, boo
 }
 
 void Assistant::autoApply(int message) {
-    // 1.22.6 : UNE PROPOSITION SENSIBLE (desactiver la securite, toucher le dernier compte ou groupe qui administre :
-    // AiOperations sensitive) - le mode Direct ne l'applique JAMAIS sans clic : elle attend sur sa carte, la raison dite.
-    if (const Proposal* sp = proposal(message); sp && sensitive(*sp)) {
-        const std::string said = "Mode Direct : pas appliqu\xC3\xA9" "e \xE2\x80\x94 op\xC3\xA9ration sensible (la s\xC3\xA9" "curit\xC3\xA9, les comptes) : "
+    // 1.22.6 : UNE PROPOSITION SENSIBLE (desactiver la securite, toucher le dernier compte ou groupe qui administre ; un script
+    // de fichiers ou qui part seul, un equipement, une adresse : AiOperations sensitive) - le mode Direct ne l'applique JAMAIS
+    // sans clic : elle attend sur sa carte, la raison dite. De meme pour une reponse qui a lu des donnees d'ailleurs (pieces
+    // jointes, retours d'outils, connaissances importees : markUntrusted) - elles peuvent porter des consignes cachees.
+    const Proposal* sp = proposal(message);
+    std::string reason = sp ? sensitiveReason(*sp) : std::string{};
+    if (sp && reason.empty() && sp->extra.isObject())
+        if (const std::string from = sp->extra.str("entreeNonSure"); !from.empty()) reason = "la r\xC3\xA9ponse a lu " + from;
+    if (sp && !reason.empty()) {
+        const std::string said = "Mode Direct : pas appliqu\xC3\xA9" "e \xE2\x80\x94 op\xC3\xA9ration sensible (" + reason + ") : "
                                  "v\xC3\xA9rifie l'aper\xC3\xA7u, puis clique Appliquer.";
         notice_ = said;
         if (auto* c = cur())
@@ -3141,7 +3164,10 @@ bool Assistant::rememberKey(bool on, std::string* why) {
         const auto cur = keys::secret(id);
         const auto e = keys::find(id);
         if (cur && *cur == apiKey_ && e && e->stored) return true;
-        return keys::replace(id, apiKey_, true, why);
+        if (!keys::replace(id, apiKey_, true, why)) return false;
+        // saisie dans les Parametres, l'adresse sous les yeux : liee a ce serveur
+        if (const std::string now = keys::activeId(provider); !now.empty()) (void)keys::bindServer(now, serviceUrl(settings_));
+        return true;
     }
     keys::Entry e;
     e.provider = provider;
@@ -3154,6 +3180,7 @@ bool Assistant::rememberKey(bool on, std::string* why) {
     const std::string made = keys::add(e, apiKey_, true, why);
     if (made.empty()) return false;
     (void)keys::setActive(made);
+    (void)keys::bindServer(made, serviceUrl(settings_));   // ajoutee pour ce serveur
     return made.front() == 'k';
 }
 
@@ -3436,6 +3463,15 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
         parts.dynamic += "\n" + files;
     // 1.21.0 : LES CLASSEURS JOINTS - lus et reconnus par le logiciel (un modele de fichier, sinon la detection) : ce qu'ils
     // sont, leur correspondance, l'outil qui en donne les lignes (n'importe quel fournisseur : Anthropic, compatible OpenAI).
+    // Ce que la demande porte d'ailleurs que l'utilisateur : des pieces jointes, des connaissances importees (un .xia) - une
+    // proposition qui en sort n'est jamais appliquee seule (autoApply).
+    std::vector<std::string> untrusted;
+    for (const auto& msg : c.messages)
+        if (std::any_of(msg.attachments.begin(), msg.attachments.end(), [](const Attachment& x) { return !x.removed; })) {
+            untrusted.push_back("des pi\xC3\xA8" "ces jointes");
+            break;
+        }
+    if (!parts.imported.empty()) untrusted.push_back("des connaissances import\xC3\xA9" "es");
     const std::vector<sheets::Attached> books = settings_.sendAttachments ? attachedWorkbooks(&c, false) : std::vector<sheets::Attached>{};
     const bool booksStructured = std::any_of(books.begin(), books.end(), [](const sheets::Attached& f) { return f.hasLayout; });
     if (const std::string wbText = sheets::workbooksPrompt(books, !req.toolsInText); !wbText.empty()) parts.dynamic += "\n" + wbText;
@@ -3613,6 +3649,7 @@ bool Assistant::startLive(Conversation& c, std::string request, std::string* why
     c.messages.push_back(std::move(a));
     gen_ = {};
     gen_.live = true;
+    gen_.untrusted = std::move(untrusted);
     gen_.phase = Phase::Waiting;
     gen_.message = static_cast<int>(c.messages.size()) - 1;
     gen_.conversation = c.id;
@@ -3649,6 +3686,9 @@ void Assistant::pollLive() {
     for (auto& e : provider_->poll()) {
         // 1.22.6 : l'activite en direct et le cout de chaque appel (la mise en page suit quand les etapes changent)
         if (gen_.act.observe(e, lastNow_)) ++revision_;
+        // un outil repondu sur le fil du fournisseur (bac a sable, lecture d'une piece, recherche) : son retour est une donnee
+        if ((e.type == ProviderEvent::Type::Progress || e.type == ProviderEvent::Type::Status) && e.text == "outil")
+            noteUntrusted("des r\xC3\xA9sultats d'outils");
         switch (e.type) {
             case ProviderEvent::Type::Status: {
                 Phase ph = gen_.phase;
@@ -3770,6 +3810,8 @@ void Assistant::finishLive(const std::string& stopReason) {
         stop();
         return;
     }
+    // Une reponse arrivee : une cle d'avant (sans serveur) est liee a celui-ci (AiKeys).
+    if (!apiKey_.empty()) keys::confirmServer(apiKey_, serviceUrl(settings_), false);
     // 1.21.3 : UNE PROPOSITION COUPEE PAR LA LONGUEUR (max_tokens pendant qu'elle s'ecrivait : rien n'est propose) - redemandee
     // AUSSITOT EN PLUSIEURS PARTIES : la reponse coupee est remplacee par une nouvelle, avec la consigne de proposer une
     // premiere partie complete et de dire le reste dans << suite >>. Une fois seulement (une reprise coupee a son tour : dit).
@@ -3920,6 +3962,13 @@ void Assistant::finishLive(const std::string& stopReason) {
                     validated = std::move(ck);
                 }
                 m.proposal = std::move(*p);
+                // Lue dans des donnees d'ailleurs : dit sur la proposition (gardee), le mode Direct ne l'applique pas seul.
+                if (!gen_.untrusted.empty()) {
+                    std::string from;
+                    for (const auto& u : gen_.untrusted) from += (from.empty() ? "" : ", ") + u;
+                    if (!m.proposal->extra.isObject()) m.proposal->extra = json::Value::object();
+                    m.proposal->extra.set("entreeNonSure", from);
+                }
                 if (doc && heavy && call.id.empty() && !startCheck(c->id, *m.proposal, CheckFor::Counts)) {
                     Check ck = validate(doc->project, *m.proposal, host_.env);
                     m.proposal->create = ck.create;
@@ -4159,6 +4208,9 @@ bool Assistant::queryModels(const Settings& s, const std::string& key, std::stri
     } else if (!modelQuery_->start(s.endpoint, key, s.timeoutSeconds, why)) {
         return false;
     }
+    // Un essai EXPLICITE (l'adresse sous les yeux) : reussi, il lie la cle a ce serveur (pollModels).
+    testKey_ = key;
+    testUrl_ = serviceUrl(s);
     modelsProvider_ = s.provider;
     models_.reset();
     ++revision_;
@@ -4172,6 +4224,9 @@ bool Assistant::pollModels() {
     // 1.16.0 : les fenetres de contexte que le service dit (la fenetre "Auto").
     for (const auto& m : r->models)
         if (m.contextTokens > 0) modelContext_[modelsProvider_ + "|" + m.id] = m.contextTokens;
+    if (r->ok && !testKey_.empty()) keys::confirmServer(testKey_, testUrl_, true);
+    testKey_.clear();
+    testUrl_.clear();
     models_ = std::move(*r);
     ++modelsRev_;
     ++revision_;

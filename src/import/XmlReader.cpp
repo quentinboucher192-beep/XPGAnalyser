@@ -96,49 +96,54 @@ core::Result<XmlEvent> XmlReader::next() {
         return event_;
     }
 
-    attrs_.clear();
-    selfClosing_ = false;
-    text_        = {};
+    // 1.32.0 : une boucle, pas une recursion - des millions de commentaires ou de
+    // declarations a la suite (un fichier recu) ne font plus deborder la pile.
+    for (;;) {
+        attrs_.clear();
+        selfClosing_ = false;
+        text_        = {};
 
-    if (pos_ >= buf_.size()) { event_ = XmlEvent::EndOfDocument; return event_; }
+        if (pos_ >= buf_.size()) { event_ = XmlEvent::EndOfDocument; return event_; }
 
-    // Character data between elements.
-    if (buf_[pos_] != '<') {
-        const auto start = pos_;
-        const auto lt    = buf_.find('<', pos_);
-        const auto end   = (lt == std::string_view::npos) ? buf_.size() : lt;
-        countLines(start, end);
-        text_ = buf_.substr(start, end - start);
-        pos_  = end;
-        // Whitespace-only runs between elements are structural, not content.
-        if (std::all_of(text_.begin(), text_.end(), isSpace)) return next();
-        event_ = XmlEvent::Text;
-        return event_;
-    }
+        // Character data between elements.
+        if (buf_[pos_] != '<') {
+            const auto start = pos_;
+            const auto lt    = buf_.find('<', pos_);
+            const auto end   = (lt == std::string_view::npos) ? buf_.size() : lt;
+            countLines(start, end);
+            text_ = buf_.substr(start, end - start);
+            pos_  = end;
+            // Whitespace-only runs between elements are structural, not content.
+            if (std::all_of(text_.begin(), text_.end(), isSpace)) continue;
+            event_ = XmlEvent::Text;
+            return event_;
+        }
 
-    // Declarations, comments, CDATA, DOCTYPE.
-    if (buf_.compare(pos_, 4, "<!--") == 0) {
-        const auto end = buf_.find("-->", pos_ + 4);
-        if (end == std::string_view::npos) return malformed("unterminated comment");
-        countLines(pos_, end);
-        pos_ = end + 3;
-        return next();
-    }
-    if (buf_.compare(pos_, 9, "<![CDATA[") == 0) {
-        const auto end = buf_.find("]]>", pos_ + 9);
-        if (end == std::string_view::npos) return malformed("unterminated CDATA");
-        text_ = buf_.substr(pos_ + 9, end - pos_ - 9);
-        countLines(pos_, end);
-        pos_   = end + 3;
-        event_ = XmlEvent::Text;
-        return event_;
-    }
-    if (pos_ + 1 < buf_.size() && (buf_[pos_ + 1] == '?' || buf_[pos_ + 1] == '!')) {
-        const auto end = buf_.find('>', pos_);
-        if (end == std::string_view::npos) return malformed("unterminated declaration");
-        countLines(pos_, end);
-        pos_ = end + 1;
-        return next();
+        // Declarations, comments, CDATA, DOCTYPE.
+        if (buf_.compare(pos_, 4, "<!--") == 0) {
+            const auto end = buf_.find("-->", pos_ + 4);
+            if (end == std::string_view::npos) return malformed("unterminated comment");
+            countLines(pos_, end);
+            pos_ = end + 3;
+            continue;
+        }
+        if (buf_.compare(pos_, 9, "<![CDATA[") == 0) {
+            const auto end = buf_.find("]]>", pos_ + 9);
+            if (end == std::string_view::npos) return malformed("unterminated CDATA");
+            text_ = buf_.substr(pos_ + 9, end - pos_ - 9);
+            countLines(pos_, end);
+            pos_   = end + 3;
+            event_ = XmlEvent::Text;
+            return event_;
+        }
+        if (pos_ + 1 < buf_.size() && (buf_[pos_ + 1] == '?' || buf_[pos_ + 1] == '!')) {
+            const auto end = buf_.find('>', pos_);
+            if (end == std::string_view::npos) return malformed("unterminated declaration");
+            countLines(pos_, end);
+            pos_ = end + 1;
+            continue;
+        }
+        break;
     }
 
     // Closing tag.

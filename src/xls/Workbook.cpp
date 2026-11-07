@@ -1,6 +1,7 @@
 #include "Workbook.hpp"
 
 #include "../import/XmlReader.hpp"
+#include "ZipLimits.hpp"   // 1.32.0 : les bornes d'un zip recu
 
 #include <algorithm>
 #include <cstring>
@@ -22,6 +23,11 @@ public:
     explicit Archive(const std::string& path) {
         std::memset(&zip_, 0, sizeof zip_);
         ok_ = mz_zip_reader_init_file(&zip_, path.c_str(), 0) != 0;
+        // 1.32.0 : des milliers d'entrees : pas un classeur, une bombe.
+        if (ok_ && !budget_.entries(mz_zip_reader_get_num_files(&zip_))) {
+            mz_zip_reader_end(&zip_);
+            ok_ = false;
+        }
     }
     ~Archive() { if (ok_) mz_zip_reader_end(&zip_); }
     Archive(const Archive&) = delete;
@@ -38,8 +44,12 @@ public:
     // valide peut ne pas avoir de sharedStrings.xml quand rien n'est du texte.
     [[nodiscard]] std::string read(const char* entry) {
         if (!ok_) return {};
+        // 1.32.0 : la taille annoncee passe les bornes avant que miniz ne l'alloue.
+        const int at = mz_zip_reader_locate_file(&zip_, entry, nullptr, 0);
+        mz_zip_archive_file_stat st;
+        if (at < 0 || !mz_zip_reader_file_stat(&zip_, static_cast<mz_uint>(at), &st) || !budget_.take(st.m_uncomp_size, entry)) return {};
         std::size_t size = 0;
-        void* raw = mz_zip_reader_extract_file_to_heap(&zip_, entry, &size, 0);
+        void* raw = mz_zip_reader_extract_to_heap(&zip_, static_cast<mz_uint>(at), &size, 0);
         if (!raw) return {};
         std::string out(static_cast<const char*>(raw), size);
         mz_free(raw);
@@ -49,6 +59,7 @@ public:
 private:
     mz_zip_archive zip_{};
     bool ok_{false};
+    ziplimits::Budget budget_;
 };
 
 std::string trim(std::string_view s) {

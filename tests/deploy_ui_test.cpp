@@ -166,6 +166,8 @@ int main() {
     const std::string wrong = code.code == "000000" ? "111111" : "000000";
     check(pane.pairWith(id, wrong) && pane.waitIdle(30), "Appairer avec un code faux");
     check(pane.lastError() && !pane.machines().empty() && !pane.machines()[0].paired, "un code faux : refuse [" + pane.message() + "]");
+    // 1.32.0 : l'agent accepte un essai d'appairage par seconde et par adresse ; le developpeur retape le code.
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     check(pane.pairWith(id, code.code) && pane.waitIdle(30), "Appairer avec le bon code");
     check(!pane.lastError() && pane.machines().size() == 1 && pane.machines()[0].paired && has(pane.message(), "Appair"),
           "le bon code : appairee [" + pane.message() + "]");

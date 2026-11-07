@@ -11,8 +11,10 @@
 #include "../deploy/Paths.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 
 namespace licensing {
 
@@ -86,8 +88,11 @@ struct State {
     Seconds       latestSeen{0};
     std::uint64_t registryMax{0};
     std::uint64_t revocationsMax{0};
+    std::map<std::string, Seconds> issued;   // 1.32.0 : par licence, l'emission la plus recente installee (M2)
     bool          found{false};
 };
+
+constexpr std::size_t kIssuedMax = 256;   // borne : les plus anciennes emissions partent d'abord
 
 constexpr std::string_view kStateFormat = "xpg-etat-licences";
 
@@ -110,6 +115,11 @@ State readState(const std::string& path, std::string* note) {
     if (parseIsoTime(v.str("latest_seen"), t)) s.latestSeen = t;
     s.registryMax = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("registry", 0)));
     s.revocationsMax = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("revocations", 0)));
+    if (const core::json::Value* m = v.find("issued"); m && m->isObject())
+        for (const auto& [id, x] : m->members()) {
+            Seconds at = 0;
+            if (isLicenseId(id) && x.isString() && parseIsoTime(x.asString(), at)) s.issued[id] = std::max(s.issued[id], at);
+        }
     s.found = true;
     return s;
 }
@@ -121,10 +131,31 @@ bool writeState(const std::string& path, const State& s, std::string* why) {
     v.set("latest_seen", isoTime(s.latestSeen));
     v.set("registry", static_cast<std::uint64_t>(s.registryMax));
     v.set("revocations", static_cast<std::uint64_t>(s.revocationsMax));
+    if (!s.issued.empty()) {
+        // la 1.31 ignore ce champ : l'etat reste lisible dans les deux sens
+        std::vector<std::pair<Seconds, std::string>> keep;
+        for (const auto& [id, at] : s.issued) keep.emplace_back(at, id);
+        std::sort(keep.begin(), keep.end(), std::greater<>());
+        if (keep.size() > kIssuedMax) keep.resize(kIssuedMax);
+        core::json::Value m = core::json::Value::object();
+        for (const auto& [at, id] : keep) m.set(id, isoTime(at));
+        v.set("issued", std::move(m));
+    }
     const std::string text = core::json::write(v, true);
     crypto::Bytes plain(text.begin(), text.end()), sealed;
     if (!crypto::protect(plain, sealed, /*machine=*/true, why)) return false;
     return crypto::writePrivateFile(path, sealed, why);
+}
+
+// L'heure de modification d'un fichier, en secondes UTC (0 : illisible).
+Seconds fileModified(const std::string& path) {
+    std::error_code ec;
+    const auto ft = std::filesystem::last_write_time(P(path), ec);
+    if (ec) return 0;
+    // file_clock -> system_clock par l'ecart des deux maintenant (portable, a la seconde pres)
+    const auto sys = std::chrono::system_clock::now()
+                     + std::chrono::duration_cast<std::chrono::system_clock::duration>(ft - std::filesystem::file_time_type::clock::now());
+    return static_cast<Seconds>(std::chrono::duration_cast<std::chrono::seconds>(sys.time_since_epoch()).count());
 }
 
 } // namespace
@@ -198,6 +229,14 @@ bool testKeyCompiled() noexcept {
 #endif
 }
 
+std::string testFolderOverride() {
+#ifdef XPG_LICENCES_CLE_ESSAI
+    // seulement une construction d'essai : un programme livre ne se laisse pas deplacer son dossier (et son etat)
+    if (const char* f = std::getenv("XPG_LICENCES_DOSSIER"); f && *f) return f;
+#endif
+    return {};
+}
+
 // ======================================================================= le magasin ==
 struct LicenseStore::Loaded {
     State          state;
@@ -217,11 +256,20 @@ struct LicenseStore::Loaded {
     std::string    deviceKeyHex;
     std::string    deviceFingerprint;
     std::string    deviceProblem;
+    std::string    station;                 // 1.32.0 : l'empreinte de ce poste (vide : pas d'identifiant d'installation)
+    Seconds        bundledIssuedAt{0};      // 1.32.0 : les documents livres avec le programme (leur heure d'emission)
 };
 
 LicenseStore::LicenseStore(StoreOptions options) : opt_(std::move(options)) {
     if (opt_.trustedKeys.empty() && opt_.compiledKeys) opt_.trustedKeys = compiledPublisherKeys();
     if (opt_.clockTolerance < 0) opt_.clockTolerance = 0;
+    if (opt_.machineId.empty()) opt_.machineId = systemMachineId();
+}
+
+Seconds LicenseStore::fileTime(const std::string& path) const {
+    if (opt_.fileTime) return opt_.fileTime(path);
+    if (opt_.clock) return 0;   // une horloge d'essai : les dates des fichiers ne s'y comparent pas
+    return fileModified(path);
 }
 
 std::string LicenseStore::defaultFolder() {
@@ -323,7 +371,10 @@ LicenseState LicenseStore::evaluate() {
             SignedBlock bb;
             hasBundled = readStoredBlock(opt_.bundledRegistry, DocKind::Registry, bb, &bundledWhy) && verifyTrusted(bb, &bundledWhy)
                          && parseRegistry(bb.document, bundled, &bundledWhy);
-            if (hasBundled) bundledBytes = writeBlock(bb);
+            if (hasBundled) {
+                bundledBytes = writeBlock(bb);
+                in.bundledIssuedAt = std::max(in.bundledIssuedAt, bundled.issuedAt);
+            }
         }
         if (hasBundled && (!hasStored || bundled.number > stored.number) && bundled.number >= in.state.registryMax) {
             // Le programme apporte un registre plus recent : il entre dans le magasin.
@@ -346,25 +397,46 @@ LicenseState LicenseStore::evaluate() {
             in.registryProblem = "le registre des \xC3\xA9" "ditions manque sur ce PC";
         }
     }
-    // ---- les revocations.
+    // ---- les revocations : celles du magasin, ou (1.32.0) celles livrees avec le programme si elles sont plus recentes.
     {
         const std::string path = deploy::joinPath(dir, kRevocationsFile);
-        if (fileExists(path)) {
+        const bool storedExists = fileExists(path);
+        RevocationList stored, bundled;
+        std::string storedWhy, bundledWhy, bundledBytes;
+        bool hasStored = false, hasBundled = false;
+        if (storedExists) {
             SignedBlock b;
-            RevocationList r;
-            std::string why;
-            if (readStoredBlock(path, DocKind::Revocations, b, &why) && verifyTrusted(b, &why) && parseRevocations(b.document, r, &why)) {
-                if (r.number < in.state.revocationsMax) {
-                    in.revocationsProblem = "la liste de r\xC3\xA9vocation de ce PC (n\xC2\xB0 " + std::to_string(r.number) + ") est plus ancienne que le n\xC2\xB0 "
-                                            + std::to_string(in.state.revocationsMax) + " d\xC3\xA9j\xC3\xA0 vu : elle a \xC3\xA9t\xC3\xA9 remplac\xC3\xA9" "e";
-                } else {
-                    in.hasRevocations = true;
-                    in.revocations = std::move(r);
-                    in.state.revocationsMax = std::max(in.state.revocationsMax, in.revocations.number);
-                }
-            } else {
-                in.revocationsProblem = why;
+            hasStored = readStoredBlock(path, DocKind::Revocations, b, &storedWhy) && verifyTrusted(b, &storedWhy)
+                        && parseRevocations(b.document, stored, &storedWhy);
+        }
+        if (!opt_.bundledRevocations.empty() && fileExists(opt_.bundledRevocations)) {
+            SignedBlock bb;
+            hasBundled = readStoredBlock(opt_.bundledRevocations, DocKind::Revocations, bb, &bundledWhy) && verifyTrusted(bb, &bundledWhy)
+                         && parseRevocations(bb.document, bundled, &bundledWhy);
+            if (hasBundled) {
+                bundledBytes = writeBlock(bb);
+                in.bundledIssuedAt = std::max(in.bundledIssuedAt, bundled.issuedAt);   // elle releve l'heure la plus tardive
             }
+        }
+        if (hasBundled && (!hasStored || bundled.number > stored.number) && bundled.number >= in.state.revocationsMax) {
+            // Le programme apporte une liste plus recente : elle entre dans le magasin (comme le registre).
+            std::string w;
+            (void)writeAll(path, bundledBytes, &w);
+            stored = std::move(bundled);
+            hasStored = true;
+            storedWhy.clear();
+        }
+        if (hasStored) {
+            if (stored.number < in.state.revocationsMax) {
+                in.revocationsProblem = "la liste de r\xC3\xA9vocation de ce PC (n\xC2\xB0 " + std::to_string(stored.number) + ") est plus ancienne que le n\xC2\xB0 "
+                                        + std::to_string(in.state.revocationsMax) + " d\xC3\xA9j\xC3\xA0 vu : elle a \xC3\xA9t\xC3\xA9 remplac\xC3\xA9" "e";
+            } else {
+                in.hasRevocations = true;
+                in.revocations = std::move(stored);
+                in.state.revocationsMax = std::max(in.state.revocationsMax, in.revocations.number);
+            }
+        } else if (storedExists) {
+            in.revocationsProblem = storedWhy;
         } else if (in.state.revocationsMax > 0) {
             in.revocationsProblem = "la liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(in.state.revocationsMax) + " a disparu de ce PC";
         }
@@ -394,12 +466,31 @@ LicenseState LicenseStore::evaluate() {
                 in.hasDeviceKey = true;
                 in.deviceKeyHex = key->publicKeyHex();
                 in.deviceFingerprint = key->fingerprint();
+                in.station = stationHash(opt_.machineId, key->publicKey());
             } else {
                 in.deviceProblem = why;
             }
         } else {
             in.deviceProblem = "ce PC n'a pas encore de cl\xC3\xA9 d'identit\xC3\xA9 (elle est cr\xC3\xA9\xC3\xA9" "e avec la demande d'activation)";
         }
+    }
+
+    // ---- 1.32.0 (M1) : une licence est la, l'etat protege non (efface, illisible) : il n'est pas remis a zero en
+    // silence. L'heure la plus tardive repart de la plus recente des traces du dossier.
+    Seconds rebuiltFloor = -1;
+    if (!in.state.found && in.hasLicenseFile) {
+        Seconds floor = in.bundledIssuedAt;
+        if (in.licenseRead) floor = std::max(floor, in.license.issuedAt);
+        if (in.hasRegistry) floor = std::max(floor, in.registry.issuedAt);
+        if (in.hasRevocations) floor = std::max(floor, in.revocations.issuedAt);
+        for (const auto& h : readHistoryLines(deploy::joinPath(dir, kHistoryFile), nullptr)) {
+            Seconds at = 0;
+            if (parseIsoTime(h.str("at"), at)) floor = std::max(floor, at);
+        }
+        for (const char* f : {kLicenseFile, kRegistryFile, kRevocationsFile, kHistoryFile, kDeviceKeyFile})
+            floor = std::max(floor, fileTime(deploy::joinPath(dir, f)));
+        in.state.latestSeen = std::max(in.state.latestSeen, floor);
+        rebuiltFloor = floor;
     }
 
     LicenseState s = judge(in, t);
@@ -411,16 +502,33 @@ LicenseState LicenseStore::evaluate() {
     // ---- l'heure la plus tardive vue, et les numeros : gardes s'ils avancent (jamais en arriere).
     State after = in.state;
     if (s.status != LicenseStatus::ClockRolledBack) after.latestSeen = std::max(after.latestSeen, t);
+    // 1.32.0 (M2) : l'emission de la licence de CE PC (signee, liee a lui) - une plus ancienne ne revient plus
+    if (in.licenseRead && s.status != LicenseStatus::Invalid && s.status != LicenseStatus::OtherDevice)
+        after.issued[in.license.licenseId] = std::max(after.issued[in.license.licenseId], in.license.issuedAt);
     const bool changed = !before.found || after.registryMax != before.registryMax || after.revocationsMax != before.revocationsMax
-                         || after.latestSeen >= before.latestSeen + 60;
+                         || after.latestSeen >= before.latestSeen + 60 || after.issued != before.issued;
     std::string unwritten;   // ce qui ne s'ecrit pas (un dossier ou ce compte n'ecrit pas) : dit une fois
     if (changed) {
         std::error_code ec;
         std::filesystem::create_directories(P(dir), ec);
         std::string w;
         if (!writeState(statePath, after, &w)) unwritten = "l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 ne s'\xC3\xA9" "crit pas (" + w + ")";
+        else if (rebuiltFloor >= 0) {
+            // une seule fois : l'etat est maintenant la
+            HistoryEvent e;
+            e.at = t;
+            e.kind = "controle";
+            e.ok = false;
+            e.text = "\xC3\x89tat recr\xC3\xA9\xC3\xA9 : l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 de ce PC manquait (ou ne se lisait plus) alors qu'une licence est install\xC3\xA9" "e ; "
+                     "l'heure la plus tardive est reprise des documents sign\xC3\xA9s, de l'historique et des fichiers du dossier (" + isoTime(rebuiltFloor) + ").";
+            if (!addHistory(e, "", &w)) unwritten = "l'historique ne s'\xC3\xA9" "crit pas (" + w + ")";
+        }
     }
+    if (rebuiltFloor >= 0)
+        in.stateNote = (in.stateNote.empty() ? std::string("l'\xC3\xA9tat prot\xC3\xA9g\xC3\xA9 de ce PC manquait") : in.stateNote)
+                       + " ; recr\xC3\xA9\xC3\xA9, l'heure la plus tardive reprise au " + isoTime(rebuiltFloor);
     if (!in.stateNote.empty() && s.detail.empty()) s.detail = in.stateNote;
+    else if (rebuiltFloor >= 0) addDetail(s, in.stateNote);
     if (const std::string w = noteState(s); !w.empty()) unwritten += (unwritten.empty() ? "" : ", ") + w;
     if (!unwritten.empty()) addDetail(s, notWritable(unwritten));
     return s;
@@ -521,7 +629,7 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
     static const std::string kNoLoss = " Ton projet reste ouvert ; Enregistrer et Exporter restent permis.";
 
     // Une horloge en arriere : l'heure la plus tardive vue, et les dates d'emission des documents signes.
-    Seconds anchor = in.state.latestSeen;
+    Seconds anchor = std::max(in.state.latestSeen, in.bundledIssuedAt);   // 1.32.0 : et les documents livres avec le programme
     if (in.hasRegistry) anchor = std::max(anchor, in.registry.issuedAt);
     if (in.hasRevocations) anchor = std::max(anchor, in.revocations.issuedAt);
     if (in.licenseRead) anchor = std::max(anchor, in.license.issuedAt);
@@ -565,17 +673,29 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
     std::string why;
     if (!checkAgainstRegistry(l, in.registry, &why)) return invalid(why);
 
-    if (!in.hasDeviceKey || !l.boundTo(in.deviceKeyHex)) {
+    const auto otherDevice = [&](const std::string& detail) {
         s.status = LicenseStatus::OtherDevice;
-        s.detail = in.hasDeviceKey ? "la cl\xC3\xA9 de ce PC (" + in.deviceFingerprint + ") n'est pas parmi les " + plural(l.devices.size(), "PC li\xC3\xA9", "PC li\xC3\xA9s")
-                                   : in.deviceProblem;
+        s.detail = detail;
         applyFree();
         s.message = "Cette licence (" + l.licenseId + ") a \xC3\xA9t\xC3\xA9 d\xC3\xA9livr\xC3\xA9" "e pour un autre PC : " + fallback + "." + kNoLoss
                     + " Envoie la demande d'activation de ce PC \xC3\xA0 l'\xC3\xA9" "diteur pour recevoir la tienne.";
         return s;
-    }
+    };
+    if (!in.hasDeviceKey || !l.boundTo(in.deviceKeyHex))
+        return otherDevice(in.hasDeviceKey ? "la cl\xC3\xA9 de ce PC (" + in.deviceFingerprint + ") n'est pas parmi les " + plural(l.devices.size(), "PC li\xC3\xA9", "PC li\xC3\xA9s")
+                                           : in.deviceProblem);
+    // 1.32.0 (H2) : le PC lie porte l'empreinte de l'installation qui a fait la demande ; une autre (la cle de ce
+    // PC recopiee ailleurs) n'est pas ce PC. Sans empreinte (une licence d'avant) : rien a comparer.
+    if (const BoundDevice* d = l.device(in.deviceKeyHex); d && !d->station.empty() && d->station != in.station)
+        return otherDevice("la cl\xC3\xA9 de ce PC (" + in.deviceFingerprint + ") a \xC3\xA9t\xC3\xA9 activ\xC3\xA9" "e sur une autre installation de Windows : "
+                           "l'empreinte du poste ne correspond pas (la cl\xC3\xA9 a-t-elle \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e ?)");
+    // 1.32.0 (M2) : une emission plus ancienne que la plus recente deja installee (un vieux .xpglic remis a sa place).
+    if (const auto it = in.state.issued.find(l.licenseId); it != in.state.issued.end() && l.issuedAt < it->second)
+        return invalid("c'est une \xC3\xA9mission plus ancienne (\xC3\xA9mise le " + isoDate(l.issuedAt) + ") de la licence " + l.licenseId
+                       + " que celle d\xC3\xA9j\xC3\xA0 install\xC3\xA9" "e sur ce PC (\xC3\xA9mise le " + isoDate(it->second)
+                       + ") : remets le dernier fichier re\xC3\xA7u de l'\xC3\xA9" "diteur");
     if (in.hasRevocations) {
-        if (const Revocation* r = in.revocations.find(l.licenseId, in.deviceKeyHex)) {
+        if (const Revocation* r = in.revocations.find(l.licenseId, in.deviceKeyHex, l.issuedAt)) {
             s.status = LicenseStatus::Revoked;
             s.detail = "liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(in.revocations.number) + (r->reason.empty() ? "" : ", motif : " + r->reason);
             applyFree();
@@ -709,6 +829,11 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
     const std::string dir = opt_.folder;
     const std::string statePath = deploy::joinPath(dir, kStateFile);
     State st = readState(statePath, nullptr);
+    // 1.32.0 (M1) : une licence sans etat protege : evaluate le recree (ancre) avant que l'import n'en ecrive un neuf.
+    if (!st.found && fileExists(deploy::joinPath(dir, kLicenseFile))) {
+        (void)evaluate();
+        st = readState(statePath, nullptr);
+    }
     Registry curReg;
     bool hasCurReg = false;
     {
@@ -767,17 +892,26 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
         if (!lic.service.empty()) return refuse(pre + "elle d\xC3\xA9pend d'un service en ligne, que cette version ne sait pas encore joindre.");
         if (!useReg) return refuse(pre + "le registre des \xC3\xA9" "ditions manque sur ce PC (importe le fichier complet re\xC3\xA7u de l'\xC3\xA9" "diteur).");
         if (!checkAgainstRegistry(lic, *useReg, &why)) return refuse(pre + why + ".");
-        std::string keyHex;
+        std::string keyHex, station;
         {
             const std::string kp = deploy::joinPath(dir, kDeviceKeyFile);
             if (!fileExists(kp)) return refuse(pre + "ce PC n'a pas encore de cl\xC3\xA9 d'identit\xC3\xA9 : \xC3\xA9" "cris d'abord sa demande d'activation, et envoie-la \xC3\xA0 l'\xC3\xA9" "diteur.");
             auto key = SigningKey::load(kp, deviceKeySpec(), &why);
             if (!key) return refuse(pre + why);
             keyHex = key->publicKeyHex();
+            station = stationHash(opt_.machineId, key->publicKey());
         }
         if (!lic.boundTo(keyHex)) return refuse(pre + "elle a \xC3\xA9t\xC3\xA9 d\xC3\xA9livr\xC3\xA9" "e pour un autre PC. Envoie la demande d'activation de CE PC \xC3\xA0 l'\xC3\xA9" "diteur.");
+        // 1.32.0 (H2) : liee a cette cle, mais pour une autre installation de Windows (la cle recopiee).
+        if (const BoundDevice* d = lic.device(keyHex); d && !d->station.empty() && d->station != station)
+            return refuse(pre + "elle a \xC3\xA9t\xC3\xA9 d\xC3\xA9livr\xC3\xA9" "e pour une autre installation de Windows (la cl\xC3\xA9 de ce PC a-t-elle \xC3\xA9t\xC3\xA9 recopi\xC3\xA9" "e ?). "
+                                "Envoie la demande d'activation de CE PC \xC3\xA0 l'\xC3\xA9" "diteur.");
+        // 1.32.0 (M2) : jamais une emission plus ancienne qu'une deja installee sur ce PC (meme remplacee depuis).
+        if (const auto it = st.issued.find(lic.licenseId); it != st.issued.end() && lic.issuedAt < it->second)
+            return refuse(pre + "elle est plus ancienne (\xC3\xA9mise le " + isoDate(lic.issuedAt) + ") qu'une \xC3\xA9mission d\xC3\xA9j\xC3\xA0 install\xC3\xA9" "e sur ce PC (\xC3\xA9mise le "
+                                + isoDate(it->second) + ").");
         if (useRev) {
-            if (const Revocation* r = useRev->find(lic.licenseId, keyHex))
+            if (const Revocation* r = useRev->find(lic.licenseId, keyHex, lic.issuedAt))
                 return refuse(pre + "elle a \xC3\xA9t\xC3\xA9 r\xC3\xA9voqu\xC3\xA9" "e par l'\xC3\xA9" "diteur le " + isoDate(r->revokedAt) + (r->reason.empty() ? "" : " (motif : " + r->reason + ")") + ".");
         }
         const Seconds t = now();
@@ -825,7 +959,8 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
     if (writeLic && !writeAll(deploy::joinPath(dir, kLicenseFile), writeBlock(*licB), &why)) return refuse("La licence ne s'\xC3\xA9" "crit pas : " + notWritable(why) + ".");
     if (writeReg) st.registryMax = std::max(st.registryMax, reg.number);
     if (writeRev) st.revocationsMax = std::max(st.revocationsMax, rev.number);
-    if (writeReg || writeRev) (void)writeState(statePath, st, &why);
+    if (writeLic) st.issued[lic.licenseId] = std::max(st.issued[lic.licenseId], lic.issuedAt);   // 1.32.0 (M2)
+    if (writeReg || writeRev || writeLic) (void)writeState(statePath, st, &why);
     rep.ok = true;
     rep.licenseInstalled = writeLic;
     rep.state = evaluate();
@@ -870,6 +1005,7 @@ bool LicenseStore::writeRequestFile(const std::string& path, const std::string& 
     q.software = software;
     q.createdAt = now();
     q.nonce = newNonce();
+    q.station = stationHash(opt_.machineId, key->publicKey());   // 1.32.0 (H2) : l'Admin le recopie dans la licence
     // Relue avant d'etre signee : ce qui part se relit (un nom trop long, une licence mal ecrite...).
     const std::string text = writeRequest(q);
     ActivationRequest back;

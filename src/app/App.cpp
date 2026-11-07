@@ -292,6 +292,10 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // 1.10 (chantier P) : des reglages existaient deja (un profil d'une version d'avant).
     const bool hadSettings = a->settings_.load(Settings::defaultPath());
     a->recent_ = a->settings_.getList("recent.projects");
+    // 1.32.0 : les reglages de securite du poste (jamais du projet) - les dossiers autorises aux scripts de l'IHM (et aux
+    // chemins reseau venus d'un projet), l'acces web de l'IHM permis ici. A reposer quand l'utilisateur les change.
+    hmi::setUserAllowedFolders(a->settings_.getList(poste::kHmiScriptFolders));
+    a->web_.setAllowedOnThisPc(a->settings_.getBool(poste::kHmiWebAllowed, false));
     // 1.12.2 : le profil des raccourcis des editeurs de code (Visual Studio par defaut).
     if (const auto profile = ui::keymap::profileFromKey(a->settings_.getString("editeur.raccourcis", "vs")))
         ui::keymap::setCurrent(*profile);

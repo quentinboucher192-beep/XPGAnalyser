@@ -16,6 +16,7 @@
 //  Puis la partie qui a du sens metier : trouver la ligne d'en-tete.
 // =============================================================================
 #include "XlsmSource.hpp"
+#include "ZipLimits.hpp"   // 1.32.0 : les bornes d'un zip recu
 
 #include <algorithm>
 #include <array>
@@ -233,12 +234,17 @@ bool inflateDynamic(BitReader& br, std::string& out, std::size_t cap) {
     return inflateBlockBody(br, lit, dist, out, cap);
 }
 
+// 1.32.0 : une entree de classeur annoncee au-dela (le repertoire d'un zip recu ment) n'est pas lue.
+constexpr std::size_t kMaxEntry = static_cast<std::size_t>(ziplimits::kMaxEntryBytes);
+
 // DEFLATE brut, sans en-tete zlib : c'est ce que contient un zip.
 bool inflateRaw(const unsigned char* src, std::size_t n, std::size_t expected, std::string& out) {
     BitReader br(src, n);
     out.clear();
+    if (expected > kMaxEntry) return false;             // 1.32.0 : jamais une reservation de 4 Go sur parole
     out.reserve(expected);
-    const std::size_t cap = expected != 0 ? expected : (n * 1024 + 4096);
+    // 1.32.0 : sans taille annoncee, jamais plus que la borne d'une entree.
+    const std::size_t cap = expected != 0 ? expected : (n > (kMaxEntry - 4096) / 1024 ? kMaxEntry : n * 1024 + 4096);
 
     for (;;) {
         std::uint32_t last = 0, type = 0;
@@ -305,6 +311,7 @@ public:
         if (!found) { why = "ce n'est pas un classeur (fin de zip absente)"; return false; }
 
         const std::uint32_t count  = le16(base + eocd + 10);
+        if (!ziplimits::Budget{}.entries(count, &why)) return false;   // 1.32.0
         const std::uint32_t cdSize = le32(base + eocd + 12);
         const std::uint32_t cdAt   = le32(base + eocd + 16);
         if (cdAt == 0xFFFFFFFFu || cdSize == 0xFFFFFFFFu) {
@@ -359,8 +366,14 @@ public:
         const std::size_t extraLen = le16(base + lo + 28);
         const std::size_t data     = lo + 30 + nameLen + extraLen;
         if (data + it->compressed > blob_.size()) { why = "donnees tronquees : " + it->name; return false; }
+        if (it->uncompressed > kMaxEntry) { why = "entree trop grosse (plus de 256 Mo annonces) : " + it->name; return false; }
 
         if (it->method == 0) {                              // stocke tel quel
+            // 1.32.0 : stocke, les deux tailles sont egales ; on ne copie que ce qui est dans le fichier.
+            if (it->compressed != it->uncompressed || data + it->uncompressed > blob_.size()) {
+                why = "taille incoherente pour une entree stockee : " + it->name;
+                return false;
+            }
             out.assign(blob_.data() + data, it->uncompressed);
             return true;
         }

@@ -19,6 +19,10 @@
 #  1.30.0 : licences\registre.xpgreg, le registre des licences signe, s'il est dans
 #  ressources-licences/ (sinon rien, et la sortie le dit) ; le controle du paquet
 #  (--controler) verifie qu'il est signe par une cle de PublisherKey.hpp.
+#  1.32.0 : de meme licences\revocations.xpgrev (la liste de revocation livree) ;
+#  licences\ ne contient QUE le registre, la liste et les textes de licence des
+#  bibliotheques ; [Licences] obligatoires = oui (outils/config.ini, ou
+#  --licences-obligatoires oui) refuse un paquet sans vraie cle d'editeur.
 #
 #    python3 outils/mingw/package_mingw.py --iscc /chemin/ISCC.exe
 #        [--exe build-mingw/XpgAnalyzer.exe] [--sdl third_party/SDL3/lib/x64/SDL3.dll]
@@ -116,7 +120,13 @@ SYSTEM = {"kernel32", "user32", "gdi32", "shell32", "ole32", "oleaut32", "advapi
 #     chaine de mbedTLS, dans les exe : ce n'est pas une cle), un fichier de cle (*.cle, cle_editeur.bin) ;
 #   - un jeton GitHub (ghp_..., github_pat_...).
 # 1.30.0 : le registre livre (licences\registre.xpgreg, s'il y est) doit etre signe par une cle que les
-# programmes croient (src/licensing/PublisherKey.hpp) - jamais par la cle d'essai.
+# programmes croient (src/licensing/PublisherKey.hpp) - jamais par la cle d'essai. 1.32.0 : de meme la liste de
+# revocation livree (licences\revocations.xpgrev).
+# 1.32.0 : LE DOSSIER licences\ N'ADMET QUE le registre, la liste de revocation et les textes de licence des
+# bibliotheques (LICENCES_PERMIS) ; et nulle part une licence (*.xpglic), une demande (*.xpgreq), la configuration
+# de la synchro (github*.json), l'archive de l'Admin (un dossier archive), l'etat ou l'historique d'un PC.
+# [Licences] obligatoires = oui (outils/config.ini) : un paquet sans vraie cle d'editeur (PublisherKey.hpp vide :
+# les licences << non activees >>, tout ouvert) est refuse.
 # Le MEME controle est dans outils/lib/package.ps1 (Test-XpgLivraison) : memes chaines, memes motifs
 # (ecrits sans \b, pour que .NET et Python les lisent pareil), memes noms. Changer l'un, c'est changer l'autre.
 ADMIN_CHAINES = (
@@ -127,16 +137,24 @@ ADMIN_CHAINES = (
     (b"XPG-SAUVEGARDE-CLE", "une sauvegarde de la cle de l'editeur (1.32.0)"),
     (b"XPG-CHIFFRE 1 xpgs-", "un fichier chiffre de la synchro des licences (1.31.0)"),
     (b"XPG-INDEX 1 xpgs-", "l'index de la synchro des licences (1.31.0)"),
+    (b"XPG-LICENSING 1 licence ", "une licence signee (le contenu d'un .xpglic : elle va a un client, jamais dans le paquet) (1.32.0)"),
+    (b"XPG-LICENSING 1 demande ", "une demande d'activation (le contenu d'un .xpgreq) (1.32.0)"),
 )
 ADMIN_MOTIFS = (
     (re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}"), "une cle privee (bloc PEM)"),
     (re.compile(rb"(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{50,}"), "un jeton GitHub"),
 )
 ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*",
-              "*.xpgcle", "*.xpgsync", "activations.jsonl")
+              "*.xpgcle", "*.xpgsync", "activations.jsonl",
+              "*.xpglic", "*.xpgreq", "github*.json", "etat.bin", "historique.jsonl")   # 1.32.0
+ADMIN_DOSSIERS = ("archive",)   # 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau
+# 1.32.0 : ce que licences\ admet (chemins relatifs a licences\, sans casse) - le reste est un ecart.
+LICENCES_PERMIS = ("registre.xpgreg", "revocations.xpgrev", "*-LICENSE*", "*.LICENSE",
+                   "pdfium/*.txt", "pdfium/*.md", "pdfium/*.ijg")
 
 
 REGISTRE_LIVRE = os.path.join("licences", "registre.xpgreg")   # 1.30.0 : le registre des editions livre
+REVOCATIONS_LIVREES = os.path.join("licences", "revocations.xpgrev")   # 1.32.0 : la liste de revocation livree
 
 
 def cles_compilees(nom):
@@ -148,31 +166,67 @@ def cles_compilees(nom):
         return set(re.findall(r'\{"(xpg-[0-9a-f]{16})",', f.read()))
 
 
-def controle_registre(dossier):
-    """Le registre livre : signe par une cle des programmes (PublisherKey.hpp), jamais par la cle d'essai."""
-    chemin = os.path.join(dossier, REGISTRE_LIVRE)
+def controle_signe(dossier, rel, genre, textes):
+    """Un document livre (le registre, la liste de revocation) : signe par une cle des programmes (PublisherKey.hpp),
+    jamais par la cle d'essai. `textes` : (sujet, << pas un ... signe >>, << signe >> accorde)."""
+    sujet, pas_signe, signe = textes
+    chemin = os.path.join(dossier, rel)
     if not os.path.isfile(chemin):
         return []
     with open(chemin, "rb") as f:
         data = f.read()
-    m = re.match(rb"XPG-LICENSING 1 registre ([0-9]+)\n", data)
+    m = re.match(rb"XPG-LICENSING 1 " + genre.encode("ascii") + rb" ([0-9]+)\n", data)
     cles = re.findall(rb"\nSIGNATURE ed25519 (xpg-[0-9a-f]{16}) [0-9a-f]{128}\n", data)
     if not m or len(cles) != 1:
-        return [(REGISTRE_LIVRE, "le registre livre n'est pas un registre signe (un seul bloc XPG-LICENSING registre)")]
+        return [(rel, f"{sujet} n'est pas {pas_signe} (un seul bloc XPG-LICENSING {genre})")]
     cle = cles[0].decode("ascii")
     if cle in cles_compilees("TestPublisherKey.hpp"):
-        return [(REGISTRE_LIVRE, f"le registre livre est signe par la cle d'ESSAI ({cle}) : signe-le avec la vraie cle")]
+        return [(rel, f"{sujet} est {signe} par la cle d'ESSAI ({cle}) : signe-le avec la vraie cle")]
     if cle not in cles_compilees("PublisherKey.hpp"):
-        return [(REGISTRE_LIVRE, f"le registre livre est signe par la cle {cle}, que src/licensing/PublisherKey.hpp ne contient pas : "
-                                 "les programmes ne pourraient pas le verifier")]
+        return [(rel, f"{sujet} est {signe} par la cle {cle}, que src/licensing/PublisherKey.hpp ne contient pas : "
+                      "les programmes ne pourraient pas le verifier")]
     return []
 
 
-def controle_livraison(dossier):
+def controle_registre(dossier):
+    """Le registre et (1.32.0) la liste de revocation livres : signes par une cle des programmes."""
+    return (controle_signe(dossier, REGISTRE_LIVRE, "registre", ("le registre livre", "un registre signe", "signe"))
+            + controle_signe(dossier, REVOCATIONS_LIVREES, "revocations",
+                             ("la liste de revocation livree", "une liste de revocation signee", "signee")))
+
+
+def controle_dossier_licences(dossier):
+    """1.32.0 : licences\\ n'admet que le registre, la liste de revocation et les textes de licence des bibliotheques."""
+    racine = os.path.join(dossier, "licences")
+    ecarts = []
+    for base, _dirs, files in os.walk(racine):
+        for name in sorted(files):
+            rel = os.path.relpath(os.path.join(base, name), racine).replace(os.sep, "/")
+            if not any(fnmatch.fnmatchcase(rel.lower(), p.lower()) for p in LICENCES_PERMIS):
+                ecarts.append((os.path.join("licences", rel.replace("/", os.sep)),
+                               "licences\\ n'admet que registre.xpgreg, revocations.xpgrev et les textes de licence des bibliotheques"))
+    return ecarts
+
+
+def controle_cle_obligatoire(obligatoires):
+    """1.32.0 : [Licences] obligatoires = oui - PublisherKey.hpp doit contenir une vraie cle de l'editeur."""
+    if obligatoires.strip().lower() != "oui":
+        return []
+    if cles_compilees("PublisherKey.hpp"):
+        return []
+    return [(os.path.join("src", "licensing", "PublisherKey.hpp"),
+             "aucune cle de l'editeur alors que [Licences] obligatoires = oui (outils/config.ini) : les programmes livres "
+             "auraient les licences non activees (tout ouvert) ; exporter-cle la vraie cle, ou obligatoires = non")]
+
+
+def controle_livraison(dossier, obligatoires="non"):
     """Les ecarts trouves dans le dossier a livrer : [(chemin relatif, ce qui est trouve)] ; vide : rien."""
-    ecarts = controle_registre(dossier)
+    ecarts = controle_cle_obligatoire(obligatoires) + controle_registre(dossier) + controle_dossier_licences(dossier)
     motifs = [(c, quoi) for c, quoi in ADMIN_CHAINES] + [(c.decode("ascii").encode("utf-16-le"), quoi) for c, quoi in ADMIN_CHAINES]
-    for base, _dirs, files in os.walk(dossier):
+    for base, dirs, files in os.walk(dossier):
+        for d in sorted(dirs):
+            if d.lower() in ADMIN_DOSSIERS:
+                ecarts.append((os.path.relpath(os.path.join(base, d), dossier), "un dossier de l'outil Admin (l'archive des licences signees)"))
         for name in sorted(files):
             full = os.path.join(base, name)
             rel = os.path.relpath(full, dossier)
@@ -193,8 +247,13 @@ def controle_livraison(dossier):
     return ecarts
 
 
-def controler_ou_arreter(dossier):
-    ecarts = controle_livraison(dossier)
+def licences_obligatoires(valeur=""):
+    """[Licences] obligatoires (outils/config.ini) ; `valeur` (--licences-obligatoires) la remplace."""
+    return (valeur or ini("Licences", "obligatoires", "non")).strip().lower()
+
+
+def controler_ou_arreter(dossier, obligatoires=None):
+    ecarts = controle_livraison(dossier, licences_obligatoires() if obligatoires is None else obligatoires)
     if ecarts:
         lignes = "\n".join(f"  {rel} : {quoi}" for rel, quoi in ecarts)
         sys.exit(f"CONTROLE DU PAQUET : construction arretee, {len(ecarts)} ecart(s) dans {dossier}\n{lignes}\n"
@@ -210,7 +269,7 @@ def winpath(path):
 # son manifeste et sa maintenance\config.ini a lui (exe = le sien) :
 # <application>-<version>-portable.zip (1.12.20 : API-Studio-..., IHM-Studio-...), un dossier
 # <application>-<version> dedans.
-def portables(st, sortie, version, editions):
+def portables(st, sortie, version, editions, obligatoires="non"):
     os.makedirs(sortie, exist_ok=True)
     for application, exe, autre in editions:
         nom = f"{application}-{version}"
@@ -249,7 +308,7 @@ def portables(st, sortie, version, editions):
         m["fichiers"].sort(key=lambda x: x["chemin"].lower())
         with open(os.path.join(travail, "manifeste.json"), "w", encoding="utf-8", newline="") as f:
             f.write(json.dumps(m, ensure_ascii=False, indent=4).replace("\n", "\r\n"))
-        controler_ou_arreter(travail)   # 1.30.0 : rien de l'outil Admin des licences
+        controler_ou_arreter(travail, obligatoires)   # 1.30.0 : rien de l'outil Admin des licences
         archive = os.path.join(sortie, nom + "-portable.zip")
         if os.path.exists(archive):
             os.remove(archive)
@@ -276,9 +335,12 @@ def main():
     ap.add_argument("--sans-installateur", action="store_true")
     # 1.30.0 : le controle du paquet seul, sur un dossier (les essais : tests/licensing_test.cpp).
     ap.add_argument("--controler", default="", help="un dossier : le controle du paquet seulement")
+    # 1.32.0 : remplace [Licences] obligatoires de outils/config.ini (les essais).
+    ap.add_argument("--licences-obligatoires", default="", choices=("", "oui", "non"))
     a = ap.parse_args()
+    obligatoires = licences_obligatoires(a.licences_obligatoires)
     if a.controler:
-        controler_ou_arreter(a.controler)
+        controler_ou_arreter(a.controler, obligatoires)
         return
 
     produit = ini("Produit", "nom")
@@ -352,6 +414,11 @@ def main():
     else:
         print("registre des licences : ressources-licences/registre.xpgreg absent - aucun registre livre "
               "(il sera signe par l'editeur avec sa vraie cle)")
+    # 1.32.0 : la liste de revocation signee par l'editeur, s'il y en a une : adoptee si elle est plus recente.
+    revocations = os.path.join(ROOT, "ressources-licences", "revocations.xpgrev")
+    if os.path.isfile(revocations):
+        shutil.copy2(revocations, os.path.join(st, REVOCATIONS_LIVREES))
+        print("liste de revocation : ressources-licences/revocations.xpgrev -> licences\\revocations.xpgrev")
     shutil.copy2(os.path.join(ROOT, "third_party", "SDL3", "LICENSE.txt"), os.path.join(lic, "SDL3-LICENSE.txt"))
     # 1.28.0 : mbedTLS (Apache-2.0) et libsodium (ISC), dans les exe (le deploiement reseau).
     shutil.copy2(os.path.join(ROOT, "third_party", "mbedtls", "LICENSE"), os.path.join(lic, "mbedtls-LICENSE.txt"))
@@ -377,7 +444,7 @@ def main():
         write_text(os.path.join(st, "LISEZ-MOI.txt"), f.read().replace("{VERSION}", version))
     print(f"staging : {exe_nom}, {exe_ihm_nom}, SDL3.dll, pdfium.dll, 0 DLL du runtime (statique), {n_res} ressource(s), {n_libs} fichier(s) de bibliotheque, 6 scripts")
 
-    controler_ou_arreter(st)   # 1.30.0 : rien de l'outil Admin des licences
+    controler_ou_arreter(st, obligatoires)   # 1.30.0 : rien de l'outil Admin des licences
 
     # ---- 2. le manifeste ----
     dlls = sorted(set(imported_dlls(os.path.join(st, exe_nom))) | set(imported_dlls(os.path.join(st, exe_ihm_nom)))
@@ -407,7 +474,8 @@ def main():
         f.write(json.dumps(manifeste, ensure_ascii=False, indent=4).replace("\n", "\r\n"))
     print(f"manifeste : {len(fichiers)} fichiers ; DLL a livrer : {', '.join(a_livrer) or 'aucune'} ; importees : {', '.join(dlls)}")
     if a.portables:
-        portables(st, a.portables, version, ((os.path.splitext(exe_nom)[0], exe_nom, exe_ihm_nom), (os.path.splitext(exe_ihm_nom)[0], exe_ihm_nom, exe_nom)))
+        portables(st, a.portables, version, ((os.path.splitext(exe_nom)[0], exe_nom, exe_ihm_nom), (os.path.splitext(exe_ihm_nom)[0], exe_ihm_nom, exe_nom)),
+                  obligatoires)
     if a.sans_installateur:
         return
 

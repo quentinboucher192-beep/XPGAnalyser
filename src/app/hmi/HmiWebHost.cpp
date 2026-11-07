@@ -88,7 +88,18 @@ void WebHost::tick(const hmi::Project* project) {
     const std::string name = project ? project->config.name : std::string{};
     const bool restart = started_ && (wanted.port != settings_.port || wanted.allInterfaces != settings_.allInterfaces || wanted.login != settings_.login
                                       || name != project_);
-    if (!wanted.enabled || restart) {
+    // 1.32.0 : le projet le demande, le poste ne le permet pas : rien n'ecoute, et l'etat dit quoi cocher.
+    const bool refusedHere = wanted.enabled && !allowedHere_;
+    if (refusedHere) {
+        error_ = "d\xC3\xA9sactiv\xC3\xA9 sur ce poste - le projet demande l'acc\xC3\xA8s web, mais un projet seul n'ouvre pas de serveur : "
+                 "pour l'autoriser sur ce PC, coche R\xC3\xA9glages > " + std::string(kSettingLabel);
+        if (!refusedSaid_) events_.push_back("Acc\xC3\xA8s web non d\xC3\xA9marr\xC3\xA9 : " + error_);
+        refusedSaid_ = true;
+    } else {
+        if (refusedSaid_) error_.clear();
+        refusedSaid_ = false;
+    }
+    if (!wanted.enabled || restart || refusedHere) {
         if (server_ && server_->running()) {
             server_->stop();
             events_.push_back("Acc\xC3\xA8s web arr\xC3\xAAt\xC3\xA9");
@@ -96,7 +107,7 @@ void WebHost::tick(const hmi::Project* project) {
         server_.reset();
         started_ = false;
     }
-    if (wanted.enabled && !started_) {
+    if (wanted.enabled && !refusedHere && !started_) {
         started_ = true;
         settings_ = wanted;
         project_ = name;
@@ -111,7 +122,7 @@ void WebHost::tick(const hmi::Project* project) {
             events_.push_back("Acc\xC3\xA8s web impossible : " + why);
             server_.reset();
         }
-    } else if (wanted.enabled && server_ && !(wanted == settings_)) {
+    } else if (wanted.enabled && !refusedHere && server_ && !(wanted == settings_)) {
         settings_ = wanted;
         server_->configure(wanted);
     }

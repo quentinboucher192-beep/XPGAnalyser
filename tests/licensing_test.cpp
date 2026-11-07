@@ -477,11 +477,22 @@ void testOnePc() {
     g_now = T("2027-11-20T12:00:00Z");
     s = lic::refresh();
     check(s.status != LicenseStatus::ClockRolledBack, "un recul de moins de 24 h est tolere");
-    // L'etat protege efface : les dates des documents signes gardent un ancrage.
+    // 1.32.0 (M1) : l'etat protege efface, une licence installee : il est RECREE, ancre sur l'historique (sa ligne la
+    // plus tardive : 2027-11-21) - effacer etat.bin ne remet plus l'horloge a zero.
     fs::remove(pc / lic::LicenseStore::kStateFile);
+    g_now = T("2027-01-15T00:00:00Z");
+    s = lic::refresh();
+    check(s.status == LicenseStatus::ClockRolledBack && has(s.detail, "recr"),
+          "etat efface + horloge reculee : Horloge reculee, l'etat recree ancre sur l'historique (" + s.detail + ")");
+    last = lic::getHistory(0);
+    check(std::any_of(last.begin(), last.end(), [](const lic::HistoryEvent& e) { return e.kind == "controle" && !e.ok && has(e.text, "recr\xC3\xA9\xC3\xA9"); }),
+          "historique : la ligne << Etat recree >> (controle)");
+    // L'etat ET l'historique effaces : les dates des documents signes gardent un ancrage.
+    fs::remove(pc / lic::LicenseStore::kStateFile);
+    fs::remove(pc / lic::LicenseStore::kHistoryFile);
     g_now = T("2026-10-01T00:00:00Z");
     s = lic::refresh();
-    check(s.status == LicenseStatus::ClockRolledBack, "etat efface + horloge avant l'emission de la licence : Horloge reculee (ancrage des documents)");
+    check(s.status == LicenseStatus::ClockRolledBack, "etat et historique effaces + horloge avant l'emission de la licence : Horloge reculee (ancrage des documents)");
     // Remise a l'heure.
     g_now = T("2027-01-15T00:00:00Z");
     s = lic::refresh();
@@ -899,6 +910,334 @@ void testTestKeyMarker(const std::string& library) {
     else
         check(!marker && !keyId, "construite sans XPG_LICENCES_CLE_ESSAI : ni la marque de la cle d'essai, ni son identifiant (ce qui lie xpg_licensing ne l'a pas)");
     check(!has(bytes, adm::kAdminMarker) && !has(bytes, "XPG-License-Admin"), "la bibliotheque des clients : rien de l'outil Admin");
+    // 1.32.0 (M1) : la lecture de XPG_LICENCES_DOSSIER n'est compilee qu'avec la cle d'essai.
+    check(has(bytes, "XPG_LICENCES_DOSSIER") == lic::testKeyCompiled(),
+          std::string("XPG_LICENCES_DOSSIER ") + (lic::testKeyCompiled() ? "lu (construction d'essai)" : "absent de la bibliotheque (construction normale)"));
+}
+
+// ======================================= 1.32.0 (H2) : l'empreinte du poste ==
+// Le premier bloc d'un fichier signe (la licence d'un .xpglic).
+std::string firstBlock(const std::string& file) {
+    std::vector<lic::SignedBlock> blocks;
+    std::string why;
+    if (!lic::readBlocks(file, blocks, &why) || blocks.empty()) return {};
+    return lic::writeBlock(blocks[0]);
+}
+
+lic::License licenseOf(const std::string& file) {
+    std::vector<lic::SignedBlock> blocks;
+    std::string why;
+    lic::License l;
+    if (lic::readBlocks(file, blocks, &why) && !blocks.empty()) (void)lic::parseLicense(blocks[0].document, l, &why);
+    return l;
+}
+
+void testStation() {
+    std::printf("-- 1.32.0 : l'empreinte du poste (une cle de PC recopiee sur une autre installation)\n");
+    g_now = T("2027-04-01T00:00:00Z");
+    const fs::path pcA = g_root / "poste-a", pcB = g_root / "poste-b";
+    lic::StoreOptions oa = optionsFor(pcA);
+    oa.machineId = "machine-essai-a";
+    lic::StoreOptions ob = optionsFor(pcB);
+    ob.machineId = "machine-essai-b";
+    lic::LicenseStore sa(oa);
+    (void)sa.importBytes(g_registry);
+    std::string why;
+    const fs::path reqPath = g_root / "poste-a.xpgreq";
+    check(sa.writeActivationRequest(U(reqPath), "Poste essai A", "", "IHM Studio (essai)", &why), "la demande du poste A (" + why + ")");
+    const std::string req = readFile(reqPath);
+    std::vector<lic::SignedBlock> blocks;
+    lic::ActivationRequest q;
+    check(lic::readBlocks(req, blocks, &why) && blocks.size() == 1 && lic::parseRequest(blocks[0].document, q, &why) && lic::isStationHex(q.station),
+          "la demande porte l'empreinte du poste (32 hexadecimaux) : " + q.station);
+    deploy::crypto::Bytes raw;
+    deploy::crypto::PublicKey pub{};
+    if (deploy::crypto::unhex(q.deviceKey, raw, 32)) std::copy(raw.begin(), raw.end(), pub.begin());
+    deploy::crypto::PublicKey other = pub;
+    other[0] ^= 1;
+    check(q.station == lic::stationHash("machine-essai-a", pub) && lic::stationHash("machine-essai-b", pub) != q.station
+              && lic::stationHash("machine-essai-a", other) != q.station && lic::stationHash("", pub).empty(),
+          "stationHash : propre a l'installation ET a la cle du PC (salee) ; sans identifiant : vide");
+    check(!has(req, "machine-essai-a"), "la demande ne porte jamais l'identifiant de l'installation (seulement son empreinte salee)");
+    check(lic::systemMachineId() == lic::LicenseStore(optionsFor(g_root / "pc-sysid")).machineId(), "sans machineId donne : celui du systeme");
+
+    const std::string licFile = signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-04-01T00:00:00Z\"", "XPG-POSTE-0001"), {req});
+    const lic::License l = licenseOf(licFile);
+    check(l.devices.size() == 1 && l.devices[0].station == q.station, "l'Admin recopie l'empreinte du poste dans le PC lie de la licence");
+    auto rep = sa.importBytes(licFile);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "sur l'installation qui a fait la demande : Valide (" + rep.why + ")");
+
+    // La cle du PC (et tout le dossier) recopiee sur une autre installation de Windows.
+    std::error_code ec;
+    fs::create_directories(pcB, ec);
+    fs::copy(pcA, pcB, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    auto st = lic::LicenseStore(ob).evaluate();
+    check(st.status == LicenseStatus::OtherDevice && has(st.detail, "installation") && !st.hasFeature("ai_generation"),
+          "la cle du PC recopiee ailleurs : Autre PC (" + st.detail + ")");
+    rep = lic::LicenseStore(ob).importBytes(licFile);
+    check(!rep.ok && has(rep.why, "installation"), "... et l'import y est refuse (" + rep.why + ")");
+    // Depuis la copie, une demande avec la meme cle : l'Admin refuse de l'ajouter a la licence.
+    lic::LicenseStore sb(ob);
+    const fs::path reqB = g_root / "poste-b.xpgreq";
+    check(sb.writeActivationRequest(U(reqB), "Poste essai B", "XPG-POSTE-0001", "IHM Studio (essai)", &why), "la demande depuis la copie");
+    check(signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-04-01T00:00:00Z\"", "XPG-POSTE-0001"), {readFile(reqB)}, &why, licFile).empty()
+              && has(why, "AUTRE installation"),
+          "l'Admin : la meme cle depuis une autre installation -> refuse (" + why + ")");
+    check(lic::LicenseStore(oa).evaluate().status == LicenseStatus::Valid, "l'installation d'origine reste Valide");
+    // Une licence d'avant la 1.32.0 (sans empreinte) : rien a comparer, et son texte n'a pas le champ.
+    lic::License old = l;
+    old.devices[0].station.clear();
+    const std::string oldText = lic::writeLicense(old);
+    check(!has(oldText, "station"), "un PC lie sans empreinte : le champ n'est pas ecrit (la 1.31 relit la licence)");
+    writeFile(pcB / lic::LicenseStore::kLicenseFile, signRaw(lic::DocKind::License, oldText, *g_key));
+    check(lic::LicenseStore(ob).evaluate().status == LicenseStatus::Valid, "une licence sans empreinte : pas de controle (Valide)");
+    // Une empreinte mal ecrite : la licence est refusee a la lecture.
+    lic::License badStation = l;
+    badStation.devices[0].station = "XYZ";
+    lic::License back;
+    check(!lic::parseLicense(lic::writeLicense(badStation), back, &why) && has(why, "station"), "une empreinte qui n'a pas 32 hexadecimaux : refusee (" + why + ")");
+}
+
+// ======================= 1.32.0 (M2) : les emissions d'une licence ==
+void testIssues() {
+    std::printf("-- 1.32.0 : les emissions d'une licence (en revoquer une, ne jamais revenir a une plus ancienne)\n");
+    g_now = T("2027-05-01T00:00:00Z");
+    const fs::path pc = g_root / "pc-emissions";
+    lic::LicenseStore s(optionsFor(pc));
+    (void)s.importBytes(g_registry);
+    const std::string req = requestOf(pc, "Poste essai emissions");
+    const std::string v1 = signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-05-01T00:00:00Z\"", "XPG-EMIS-0001"), {req});
+    auto rep = s.importBytes(v1);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "emission 1 (2027-05-01) : Valide");
+    g_now = T("2027-05-10T00:00:00Z");
+    const std::string v2 = signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-05-10T00:00:00Z\"", "XPG-EMIS-0001"), {req});
+    rep = s.importBytes(v2);
+    check(rep.ok && rep.licenseInstalled && rep.state.status == LicenseStatus::Valid, "emission 2 (2027-05-10) : installee, Valide");
+    // Le vieux fichier remis a la main a la place du nouveau : refuse a l'evaluation.
+    writeFile(pc / lic::LicenseStore::kLicenseFile, firstBlock(v1));
+    auto st = s.evaluate();
+    check(st.status == LicenseStatus::Invalid && has(st.detail, "plus ancienne") && !st.hasFeature("ai_generation"),
+          "l'emission 1 remise sur le disque : Invalide (" + st.detail + ")");
+    rep = s.importBytes(v1);
+    check(!rep.ok && has(rep.why, "plus ancienne"), "l'emission 1 importee : refusee (" + rep.why + ")");
+    rep = s.importBytes(v2);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "l'emission 2 reimportee : Valide");
+    // Une autre licence puis le retour a celle-ci : la meme emission revient (pas plus ancienne).
+    const std::string otherId = signLicense(params("PERSONAL", "", "XPG-EMIS-0009"), {req});
+    rep = s.importBytes(otherId);
+    check(rep.ok && rep.state.licenseId == "XPG-EMIS-0009", "une autre licence installee");
+    rep = s.importBytes(v2);
+    check(rep.ok && rep.state.licenseId == "XPG-EMIS-0001" && rep.state.status == LicenseStatus::Valid, "retour a l'emission 2 : permis (la meme)");
+
+    // issued_before : revoquer les emissions signees AVANT une date (l'emission 1), pas la 2.
+    const std::string rv = revocations(20, "{\"license_id\": \"XPG-EMIS-0001\", \"reason\": \"Emission remplacee\", \"issued_before\": \"2027-05-10T00:00:00Z\"}");
+    std::vector<lic::SignedBlock> blocks;
+    lic::RevocationList list;
+    std::string why;
+    check(lic::readBlocks(rv, blocks, &why) && lic::parseRevocations(blocks[0].document, list, &why) && list.revoked.size() == 1
+              && list.revoked[0].issuedBefore == T("2027-05-10T00:00:00Z"),
+          "signer-revocations accepte issued_before (" + why + ")");
+    check(list.find("XPG-EMIS-0001", "", T("2027-05-01T00:00:00Z")) && !list.find("XPG-EMIS-0001", "", T("2027-05-10T00:00:00Z")),
+          "find : l'emission du 05-01 est revoquee, celle du 05-10 non");
+    rep = s.importBytes(rv);
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "la liste importee : l'emission 2 reste Valide");
+    lic::RevocationList plain;
+    plain.number = 1;
+    plain.issuedAt = g_now;
+    plain.revoked.push_back({"XPG-X", "", g_now, "essai", 0});
+    check(!has(lic::writeRevocations(plain), "issued_before"), "une revocation sans issued_before : le champ n'est pas ecrit (la 1.31 relit la liste)");
+    std::string out;
+    check(!adm::signRevocations(*g_key, "{\"number\": 21, \"revoked\": [{\"license_id\": \"XPG-X\", \"reason\": \"r\", \"issued_before\": \"hier\"}]}", g_now, out, &why)
+              && has(why, "issued_before"),
+          "issued_before qui n'est pas une date : refuse (" + why + ")");
+
+    // De bout en bout sur un autre PC : l'emission 1 revoquee -> Revoquee ; l'Admin signe la nouvelle, Valide.
+    g_now = T("2027-05-01T00:00:00Z");
+    const fs::path pc2 = g_root / "pc-emissions-2";
+    lic::LicenseStore s2(optionsFor(pc2));
+    (void)s2.importBytes(g_registry);
+    const std::string req2 = requestOf(pc2, "Poste essai emissions 2");
+    rep = s2.importBytes(signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-05-01T00:00:00Z\"", "XPG-EMIS-0002"), {req2}));
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "pc2 : emission du 2027-05-01, Valide");
+    g_now = T("2027-05-12T00:00:00Z");
+    const std::string rv2 = revocations(21, "{\"license_id\": \"XPG-EMIS-0002\", \"reason\": \"Copie\", \"issued_before\": \"2027-05-05T00:00:00Z\"}");
+    rep = s2.importBytes(rv2);
+    check(rep.ok && rep.state.status == LicenseStatus::Revoked, "pc2 : les emissions d'avant le 2027-05-05 revoquees -> Revoquee");
+    check(signLicense(params("PROFESSIONAL", "\"issued_at\": \"2027-05-01T00:00:00Z\", \"expires_at\": \"2028-05-01T00:00:00Z\"", "XPG-EMIS-0002"), {req2}, &why, {}, rv2).empty()
+              && has(why, "r\xC3\xA9vocation"),
+          "l'Admin refuse une emission que la liste jointe revoque");
+    const std::string fresh = signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-05-12T00:00:00Z\"", "XPG-EMIS-0002"), {req2}, &why, {}, rv2);
+    rep = s2.importBytes(fresh);
+    check(!fresh.empty() && rep.ok && rep.state.status == LicenseStatus::Valid, "la nouvelle emission (apres la date) : signee et Valide (" + rep.why + ")");
+
+    // Le registre des activations de l'Admin : une revocation d'emission ne touche pas un PC deja re-emis.
+    const std::string key(64, 'a');
+    std::vector<adm::ActivationRecord> recs;
+    adm::ActivationRecord a;
+    a.kind = "licence";
+    a.licenseId = "XPG-K";
+    a.deviceKey = key;
+    a.at = a.signedAt = a.issuedAt = T("2027-05-01T00:00:00Z");
+    recs.push_back(a);
+    a.at = a.signedAt = a.issuedAt = T("2027-05-10T00:00:00Z");
+    recs.push_back(a);
+    adm::ActivationRecord r;
+    r.kind = "revocation";
+    r.licenseId = "XPG-K";
+    r.at = r.revokedAt = T("2027-05-11T00:00:00Z");
+    r.issuedBefore = T("2027-05-10T00:00:00Z");
+    recs.push_back(r);
+    auto known = adm::knownDevices(recs, T("2027-05-12T00:00:00Z"));
+    check(known.size() == 1 && known[0].state == "active", "liste : l'emission d'avant revoquee, le PC re-emis reste actif");
+    recs.back().issuedBefore = T("2027-05-11T00:00:00Z");
+    known = adm::knownDevices(recs, T("2027-05-12T00:00:00Z"));
+    check(known.size() == 1 && known[0].state == "revoque", "liste : la revocation couvre aussi la derniere emission -> revoque");
+    const std::string dir = U(g_root / "admin-emissions");
+    std::vector<adm::ActivationRecord> again;
+    int skipped = 0;
+    check(adm::appendActivations(dir, recs, &why) && adm::readActivations(dir, again, &skipped, &why) && again.size() == 3
+              && again[1].issuedAt == T("2027-05-10T00:00:00Z") && again[2].issuedBefore == T("2027-05-11T00:00:00Z"),
+          "activations.jsonl : issued_at et issued_before relus");
+}
+
+// ================ 1.32.0 (M1) : l'etat protege, l'horloge, les documents livres ==
+void testStateRebuild() {
+    std::printf("-- 1.32.0 : l'etat protege efface ou illisible, la liste de revocation livree, XPG_LICENCES_DOSSIER\n");
+    g_now = T("2027-06-01T00:00:00Z");
+    const fs::path pc = g_root / "pc-etat";
+    Seconds fileClock = 0;
+    lic::StoreOptions o = optionsFor(pc);
+    o.fileTime = [&fileClock](const std::string&) { return fileClock; };   // l'heure des fichiers, donnee par l'essai
+    lic::LicenseStore s(o);
+    (void)s.importBytes(g_registry);
+    const std::string req = requestOf(pc, "Poste essai etat");
+    auto rep = s.importBytes(signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-06-01T00:00:00Z\"", "XPG-ETAT-0001"), {req}));
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "pc-etat : Valide");
+    const auto controles = [&] {
+        int n = 0;
+        for (const auto& e : s.history()) n += e.kind == "controle" && has(e.text, "recr\xC3\xA9\xC3\xA9") ? 1 : 0;
+        return n;
+    };
+    check(controles() == 0, "rien n'a ete recree");
+    // L'etat et l'historique effaces, l'horloge reculee : les fichiers du dossier (leur heure) gardent l'ancrage.
+    std::error_code ec;
+    fs::remove(pc / lic::LicenseStore::kStateFile, ec);
+    fs::remove(pc / lic::LicenseStore::kHistoryFile, ec);
+    fileClock = T("2027-09-01T00:00:00Z");
+    g_now = T("2027-07-01T00:00:00Z");
+    auto st = s.evaluate();
+    check(st.status == LicenseStatus::ClockRolledBack && has(st.detail, "2027-09-01"), "etat et historique effaces : ancre sur l'heure des fichiers (" + st.detail + ")");
+    check(controles() == 1, "historique : une ligne << Etat recree >>");
+    st = s.evaluate();
+    check(controles() == 1, "l'etat recree est ecrit : la ligne n'est pas repetee");
+    fileClock = 0;
+    g_now = T("2027-09-02T00:00:00Z");
+    check(s.evaluate().status == LicenseStatus::Valid, "horloge remise a l'heure : Valide");
+    // L'etat seul efface : l'historique (sa derniere ligne : 2027-09-02) garde l'ancrage.
+    fs::remove(pc / lic::LicenseStore::kStateFile, ec);
+    g_now = T("2027-08-01T00:00:00Z");
+    st = s.evaluate();
+    check(st.status == LicenseStatus::ClockRolledBack, "etat seul efface : ancre sur l'historique (" + st.detail + ")");
+    // L'etat abime (illisible) : de meme.
+    writeFile(pc / lic::LicenseStore::kStateFile, "abime");
+    st = s.evaluate();
+    check(st.status == LicenseStatus::ClockRolledBack && has(st.detail, "recr"), "etat illisible : recree et ancre, pas remis a zero (" + st.detail + ")");
+    // Un import juste apres l'effacement n'ecrit pas un etat neuf a la place.
+    fs::remove(pc / lic::LicenseStore::kStateFile, ec);
+    rep = s.importBytes(g_registry);
+    check(rep.state.status == LicenseStatus::ClockRolledBack, "etat efface puis un import : l'heure la plus tardive tient toujours");
+    // Sans licence : rien a recreer (un PC neuf).
+    const fs::path fresh = g_root / "pc-etat-neuf";
+    lic::LicenseStore n(optionsFor(fresh));
+    (void)n.importBytes(g_registry);
+    fs::remove(fresh / lic::LicenseStore::kStateFile, ec);
+    (void)n.evaluate();
+    bool none = true;
+    for (const auto& e : n.history()) none = none && e.kind != "controle";
+    check(none, "sans licence : un etat absent n'est pas une anomalie (pas de ligne)");
+
+    // La liste de revocation livree avec le programme : adoptee si elle est plus recente, sa date releve l'horloge.
+    g_now = T("2027-07-01T00:00:00Z");
+    const fs::path pr = g_root / "pc-livre-rev";
+    lic::LicenseStore sr(optionsFor(pr));
+    (void)sr.importBytes(g_registry);
+    const std::string reqR = requestOf(pr, "Poste essai livre");
+    rep = sr.importBytes(signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-07-01T00:00:00Z\"", "XPG-LIVRE-0001"), {reqR}));
+    check(rep.ok && rep.state.status == LicenseStatus::Valid, "pc-livre-rev : Valide");
+    g_now = T("2027-07-02T00:00:00Z");
+    writeFile(g_root / "livre-rev" / "revocations.xpgrev", revocations(30, "{\"license_id\": \"XPG-LIVRE-0001\", \"reason\": \"Livree\"}"));
+    lic::StoreOptions orv = optionsFor(pr);
+    orv.bundledRevocations = U(g_root / "livre-rev" / "revocations.xpgrev");
+    st = lic::LicenseStore(orv).evaluate();
+    check(st.status == LicenseStatus::Revoked && st.revocationNumber == 30, "la liste livree (n. 30) est adoptee : Revoquee");
+    st = sr.evaluate();
+    check(st.status == LicenseStatus::Revoked && st.revocationNumber == 30, "...et gardee dans le magasin du PC");
+    writeFile(g_root / "livre-rev-1" / "revocations.xpgrev", revocations(1, "{\"license_id\": \"XPG-AUTRE-0001\", \"reason\": \"Vieille\"}"));
+    orv.bundledRevocations = U(g_root / "livre-rev-1" / "revocations.xpgrev");
+    check(lic::LicenseStore(orv).evaluate().revocationNumber == 30, "une liste livree plus ancienne (n. 1) : ignoree");
+    // Sa date d'emission releve l'heure la plus tardive (une liste signee le 2027-10-01, l'horloge au 2027-08-01).
+    const fs::path pr2 = g_root / "pc-livre-rev-2";
+    lic::LicenseStore sr2(optionsFor(pr2));
+    (void)sr2.importBytes(g_registry);
+    rep = sr2.importBytes(signLicense(params("PROFESSIONAL", "\"expires_at\": \"2028-07-01T00:00:00Z\"", "XPG-LIVRE-0002"), {requestOf(pr2, "Poste essai livre 2")}));
+    g_now = T("2027-10-01T00:00:00Z");
+    writeFile(g_root / "livre-rev-2" / "revocations.xpgrev", revocations(31, "{\"license_id\": \"XPG-AUTRE-0002\", \"reason\": \"Autre\"}"));
+    g_now = T("2027-08-01T00:00:00Z");
+    check(sr2.evaluate().status == LicenseStatus::Valid, "pc-livre-rev-2 : Valide au 2027-08-01 sans la liste livree");
+    lic::StoreOptions orv2 = optionsFor(pr2);
+    orv2.bundledRevocations = U(g_root / "livre-rev-2" / "revocations.xpgrev");
+    st = lic::LicenseStore(orv2).evaluate();
+    check(st.status == LicenseStatus::ClockRolledBack, "la liste livree signee le 2027-10-01 : l'horloge au 2027-08-01 est reculee (" + st.detail + ")");
+
+    // XPG_LICENCES_DOSSIER : lu SEULEMENT dans une construction d'essai (XPG_LICENCES_CLE_ESSAI).
+    const std::string folder = U(g_root / "dossier-variable");
+#ifdef _WIN32
+    _putenv_s("XPG_LICENCES_DOSSIER", folder.c_str());
+#else
+    setenv("XPG_LICENCES_DOSSIER", folder.c_str(), 1);
+#endif
+    if (lic::testKeyCompiled())
+        check(lic::testFolderOverride() == folder, "construction d'essai : XPG_LICENCES_DOSSIER remplace le dossier des licences");
+    else
+        check(lic::testFolderOverride().empty(), "construction normale : XPG_LICENCES_DOSSIER est ignore (sa lecture n'est pas compilee)");
+#ifdef _WIN32
+    _putenv_s("XPG_LICENCES_DOSSIER", "");
+#else
+    unsetenv("XPG_LICENCES_DOSSIER");
+#endif
+}
+
+// ============================ 1.32.0 (M4) : le CSV de l'Admin, les noms de PC ==
+void testCsvInjection() {
+    std::printf("-- 1.32.0 : le CSV de l'Admin (jamais une formule), les noms de PC\n");
+    std::vector<adm::KnownDevice> devs(2);
+    devs[0].name = "=HYPERLINK(\"http://exemple\")";
+    devs[0].customer = "+33 1 23 45";
+    devs[0].licenseId = "@SOMME";
+    devs[0].software = "-2+3";
+    devs[0].state = "demande";
+    devs[1].name = "Poste - 1";
+    devs[1].customer = "\tTabulation";
+    devs[1].edition = "\rRetour";
+    devs[1].state = "demande";
+    const std::string csv = adm::devicesCsv(devs);
+    check(has(csv, "\"'=HYPERLINK(\"\"http://exemple\"\")\"") && has(csv, ";'+33 1 23 45;") && has(csv, ";'@SOMME;") && has(csv, ";'-2+3;")
+              && has(csv, ";'\tTabulation;") && has(csv, "\"'\rRetour\""),
+          "--csv : = + - @ tabulation et retour en tete de cellule -> une apostrophe devant (du texte pour Excel)");
+    check(has(csv, "Poste - 1;") && has(csv, ";-;-;-;"), "--csv : un tiret au milieu, ou seul (pas de date), reste tel quel");
+    bool noFormula = true;
+    for (std::size_t i = 0; i + 1 < csv.size(); ++i)
+        if ((csv[i] == ';' || csv[i] == '\n') && (csv[i + 1] == '=' || csv[i + 1] == '+' || csv[i + 1] == '@')) noFormula = false;
+    check(noFormula, "--csv : aucune cellule ne commence par = + @");
+    // La demande d'activation : un nom de PC qui serait une formule est refuse (a l'ecriture comme a la lecture).
+    lic::LicenseStore st(optionsFor(g_root / "pc-formule"));
+    std::string why;
+    bool refused = true;
+    for (const char* name : {"=cmd|' /C calc'!A0", "+1", "-1+1", "@SOMME(A1)"})
+        refused = !st.writeActivationRequest(U(g_root / "pc-formule.xpgreq"), name, "", "IHM Studio (essai)", &why) && has(why, "formule") && refused;
+    check(refused, "un nom de PC qui commence par = + - @ : la demande est refusee (" + why + ")");
+    check(st.writeActivationRequest(U(g_root / "pc-formule.xpgreq"), "Poste - 1 (atelier)", "", "IHM Studio (essai)", &why), "un tiret ailleurs qu'en tete : permis");
+    check(lic::looksLikeFormula("=1") && lic::looksLikeFormula("\t1") && !lic::looksLikeFormula("A=1") && !lic::looksLikeFormula(""), "looksLikeFormula");
 }
 
 // ============================================== l'outil Admin, en sous-processus ==
@@ -1151,7 +1490,16 @@ void testPackageControl(const std::string& admin) {
     writeFile(st / "API-Studio.exe", std::string("MZ\x90\x00 programme client", 22) + "-----BEGIN PRIVATE KEY-----" + std::string(1, '\0') + "mbedtls");
     writeFile(st / "LISEZ-MOI.txt", "API Studio / IHM Studio\r\n");
     writeFile(st / "licences" / "SDL3-LICENSE.txt", "zlib\n");
-    const auto control = [&]() { return runProgram(python, {script, "--controler", U(st)}, 120); };
+    // 1.32.0 : les textes de licence des bibliotheques, tels qu'ils sont livres
+    writeFile(st / "licences" / "miniz.LICENSE", "MIT\n");
+    writeFile(st / "licences" / "mbedtls-LICENSE.txt", "Apache-2.0\n");
+    writeFile(st / "licences" / "pdfium" / "abseil.txt", "Apache-2.0\n");
+    writeFile(st / "licences" / "pdfium" / "libjpeg_turbo.ijg", "IJG\n");
+    const auto control = [&](const std::vector<std::string>& extra = {}) {
+        std::vector<std::string> args = {script, "--controler", U(st)};
+        args.insert(args.end(), extra.begin(), extra.end());
+        return runProgram(python, args, 120);
+    };
     auto r = control();
     check(r.ok() && has(r.out, "rien de l'outil Admin"), "un dossier de livraison propre : accepte (et l'en-tete PEM seul de mbedTLS n'est pas une cle) (" + r.err + ")");
 
@@ -1181,6 +1529,15 @@ void testPackageControl(const std::string& admin) {
         {"identite-pc.cle", "format=xpg-identite-pc/1\n", "une cle de PC (*.cle)", "cle"},
         {"API-Studio-copie.exe", std::string("programme ") + adm::kTestKeyMarker + " fin", "un programme qui embarque la cle d'ESSAI", "ESSAI"},
         {"config.ini", "token=ghp_" + std::string(36, 'A') + "\n", "un jeton GitHub", "jeton"},
+        // 1.32.0 : jamais une licence, une demande, la configuration de la synchro, l'etat ou l'historique d'un PC
+        {"Client.xpglic", "XPG-LICENSING 1 licence 2\n{}", "une licence signee (*.xpglic)", "outil Admin"},
+        {"poste.xpgreq", "XPG-LICENSING 1 demande 2\n{}", "une demande d'activation (*.xpgreq)", "outil Admin"},
+        {"github.json", "{\"depot\": \"x/y\"}", "la configuration de la synchro GitHub", "outil Admin"},
+        {"github-vu.json", "{}", "l'anti-retour de la synchro GitHub", "outil Admin"},
+        {"etat.bin", "x", "l'etat protege d'un PC", "outil Admin"},
+        {"historique.jsonl", "{}", "l'historique d'un PC", "outil Admin"},
+        {"texte-LICENSE.txt", "XPG-LICENSING 1 licence 2\n{}", "une licence deguisee en texte (son contenu)", "licence signee"},
+        {"lisez.txt", "XPG-LICENSING 1 demande 2\n{}", "une demande d'activation (son contenu)", "demande d'activation"},
     };
     for (const auto& c : cases) {
         const fs::path p = st / "sous-dossier" / c.file;
@@ -1200,8 +1557,36 @@ void testPackageControl(const std::string& admin) {
     r = control();
     check(r.started && !r.ok() && has(r.err, "pas un registre signe"), "un registre livre abime : la construction s'arrete");
     fs::remove(st / "licences" / "registre.xpgreg");
+    // 1.32.0 : la liste de revocation livree, de meme ; licences\ n'admet rien d'autre ; pas d'archive de l'Admin.
+    writeFile(st / "licences" / "revocations.xpgrev", revocations(40, "{\"license_id\": \"XPG-X\", \"reason\": \"essai\"}"));
     r = control();
-    check(r.ok(), "les ecarts retires : accepte de nouveau");
+    check(r.started && !r.ok() && has(r.err, "revocations.xpgrev") && has(r.err, "PublisherKey.hpp"),
+          "une liste de revocation livree signee par une cle que les programmes ne connaissent pas : la construction s'arrete");
+    writeFile(st / "licences" / "revocations.xpgrev", "XPG-LICENSING 1 revocations 2\n{}");
+    r = control();
+    check(r.started && !r.ok() && has(r.err, "pas une liste de revocation signee"), "une liste livree abimee : la construction s'arrete");
+    fs::remove(st / "licences" / "revocations.xpgrev");
+    for (const char* f : {"notes.txt", "XPG-ESSAI-0001.xpglic", "pdfium/notes.pdf", "licence-client.pdf"}) {
+        writeFile(st / "licences" / fs::path(f), "x");
+        r = control();
+        check(r.started && !r.ok() && has(r.err, "n'admet que"), std::string("licences/") + f + " : licences\\ n'admet que le registre, la liste et les textes de licence -> arret");
+        fs::remove(st / "licences" / fs::path(f));
+    }
+    writeFile(st / "libs" / "archive" / "licences" / "A.txt", "x");
+    r = control();
+    check(r.started && !r.ok() && has(r.err, "archive"), "un dossier archive (celle de l'outil Admin) : la construction s'arrete");
+    fs::remove_all(st / "libs");
+    // [Licences] obligatoires = oui : un paquet sans vraie cle de l'editeur est refuse.
+    r = control({"--licences-obligatoires", "oui"});
+    if (lic::publisher::kKeys.empty())
+        check(r.started && !r.ok() && has(r.err, "obligatoires") && has(r.err, "PublisherKey.hpp"),
+              "obligatoires = oui et PublisherKey.hpp sans cle : la construction s'arrete");
+    else
+        check(r.ok(), "obligatoires = oui et une vraie cle compilee : accepte");
+    r = control({"--licences-obligatoires", "non"});
+    check(r.ok(), "obligatoires = non : accepte (les licences pas encore actives)");
+    r = control();
+    check(r.ok(), "les ecarts retires : accepte de nouveau (" + r.err + ")");
 }
 
 } // namespace
@@ -1237,6 +1622,10 @@ int main(int argc, char** argv) {
     testEditions();
     testNotConfigured();
     testScreen();
+    testStation();        // 1.32.0
+    testIssues();         // 1.32.0
+    testStateRebuild();   // 1.32.0
+    testCsvInjection();   // 1.32.0
     testAdminTool(admin);
     testActivations(admin);
     testPackageControl(admin);

@@ -41,8 +41,20 @@ namespace deploy::install {
 bool validName(std::string_view name, std::string* why);
 
 // Ecrire un fichier d'un coup : un fichier temporaire voisin, puis renomme (remplace l'ancien).
+// 1.32.0 : crypto::replaceFile (un nom imprevisible, cree en exclusivite).
 bool atomicWrite(const std::string& path, std::string_view text, std::string* why);
 bool readJson(const std::string& path, core::json::Value& out, std::string* why);
+
+// 1.32.0 : les liens. Un lien symbolique, ou sous Windows un point d'analyse (jonction, lien, point de
+// montage) : l'agent n'y entre jamais - quelqu'un d'autre a pu le poser pour lui faire ecrire ou effacer
+// ailleurs que dans son dossier.
+[[nodiscard]] bool isLink(const std::string& path);
+// Un lien entre `root` (exclu) et `path` (compris), sur ce qui existe deja ? Vrai aussi si `path` n'est
+// pas sous `root` (refuse).
+[[nodiscard]] bool linkBelow(const std::string& root, const std::string& path);
+// Effacer un dossier (et son contenu) ou un fichier. Un lien, ou une jonction, la ou dessous : le lien
+// seul est retire, jamais ce qu'il designe. Absent : vrai. Faux : il en reste quelque chose (`why`).
+bool removeTree(const std::string& path, std::string* why = nullptr);
 
 struct VersionInfo {
     std::string id;              // le dossier ("V3", "V3-2")
@@ -87,6 +99,8 @@ public:
     // La version a reactiver par ROLLBACK : la plus recente installee avant l'active ; vide : aucune.
     [[nodiscard]] std::string olderThanActive(const AppInfo& app) const;
     // Garder `keep` versions (les plus recentes) ; jamais l'active ni `protect`. Rend les ids effaces.
+    // 1.32.0 : un lien sur le chemin (l'application, versions/) : rien n'est efface ; une version qui est
+    // un lien : le lien seul (removeTree).
     std::vector<std::string> prune(const std::string& app, int keep, const std::vector<std::string>& protect);
 
 private:

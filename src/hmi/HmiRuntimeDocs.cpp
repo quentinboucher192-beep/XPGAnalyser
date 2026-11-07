@@ -9,6 +9,7 @@
 // =============================================================================
 #include "HmiRuntime.hpp"
 
+#include "HmiAssets.hpp"      // 1.32.0 : projectPathAllowed
 #include "HmiMarkers.hpp"
 #include "HmiPdf.hpp"
 #include "HmiRoles.hpp"     // 1.14.1 (lot N5) : roles::nameOf (la source de l'explorateur)
@@ -517,6 +518,13 @@ void Runtime::explorerLoad(FileExplorer& e, const View& v, const Object& o) {
         auto p = explorerPath(e.spec);
         e.label = explorerText(p.filename());
         if (e.label.empty()) e.label = e.spec;
+        // 1.32.0 : un dossier reseau venu du projet n'est pas ouvert (fuite NTLM), sauf dossier autorise sur ce poste.
+        if (std::string refused; !projectPathAllowed(e.spec, &refused)) {
+            e.loc.root.clear();
+            e.listing.error = refused;
+            explorerShow(e);
+            return;
+        }
         if (p.is_relative()) {
             if (folder.empty()) {
                 e.loc.root.clear();

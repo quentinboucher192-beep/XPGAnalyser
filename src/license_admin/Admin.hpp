@@ -91,6 +91,10 @@ bool exportPublisherKeys(const SigningKey* key, std::string_view existing, const
 // `out` : le fichier .xpgreg. Faux : `why`.
 bool signRegistry(const SigningKey& key, std::string_view inputJson, Seconds now, std::string& out, std::string* why);
 // Signer une liste de revocation (JSON : number, revoked[] ; revoked_at manquant : maintenant).
+// Chaque entree : license_id, reason, [device] (un seul PC), [revoked_at], et 1.32.0 [issued_before] (date ISO :
+// seules les EMISSIONS de cette licence signees avant cette date sont revoquees - une emission precise, remplacee
+// par une plus recente ; sans lui : toutes). Une liste qui l'emploie n'est lue que par les programmes 1.32.0 ou
+// plus recents (les precedents la refusent : champ inconnu).
 // `records` (facultatif) : une ligne du registre des activations par licence ou PC revoque.
 struct ActivationRecord;
 bool signRevocations(const SigningKey& key, std::string_view inputJson, Seconds now, std::string& out, std::string* why,
@@ -104,7 +108,9 @@ struct LicenseInputs {
     std::string              revocations;   // facultatif : la liste signee (.xpgrev), jointe au fichier
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
-// `summary` : ce qui a ete signe, en une ligne par fait.
+// `summary` : ce qui a ete signe, en une ligne par fait. 1.32.0 (H2) : l'empreinte du poste de chaque demande
+// (station) est recopiee dans le PC lie ; un PC deja lie qui redemande depuis une AUTRE installation de Windows
+// (la meme cle, une autre empreinte : la cle recopiee) est refuse.
 // `records` (facultatif) : une ligne du registre des activations par PC lie.
 bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, std::string& out, std::string* why, std::string* summary,
                  std::vector<ActivationRecord>* records = nullptr);
@@ -142,6 +148,8 @@ struct ActivationRecord {
     bool        extension{false};
     Seconds     revokedAt{0};
     std::string reason;
+    Seconds     issuedAt{0};       // 1.32.0 : "licence" - l'emission de la licence signee
+    Seconds     issuedBefore{0};   // 1.32.0 : "revocation" - seules les emissions d'avant (0 : toutes)
 };
 
 // Une demande d'activation recue (verifiee : signee par la cle du PC qu'elle porte) -> sa ligne "demande".
@@ -162,6 +170,8 @@ struct KnownDevice {
 [[nodiscard]] std::vector<KnownDevice> filterDevices(const std::vector<KnownDevice>& all, const std::string& licenseId, const std::string& customer);
 // Le tableau (un PC par ligne, puis les totaux : PC, licences, clients) ; le meme en CSV (UTF-8 avec BOM,
 // separateur ; et CRLF : pour Excel).
+// 1.32.0 (M4) : dans le CSV, une cellule qui commence par = + - @ (tabulation, retour) prend une apostrophe devant :
+// Excel la lit comme du texte, jamais comme une formule.
 [[nodiscard]] std::string devicesTable(const std::vector<KnownDevice>& devices);
 [[nodiscard]] std::string devicesCsv(const std::vector<KnownDevice>& devices);
 

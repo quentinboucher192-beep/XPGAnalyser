@@ -233,7 +233,8 @@ bool saveCode(const std::string& agentDir, const CodeState& s, std::string* why)
     v.set("attempts", s.attempts);
     const std::string text = core::json::write(v, false);
     crypto::Bytes plain(text.begin(), text.end()), sealed;
-    const bool ok = crypto::protect(plain, sealed, true, why) && crypto::writePrivateFile(codePath(agentDir), sealed, why);
+    // 1.32.0 : protege pour l'utilisateur (la machine : n'importe quel compte du PC aurait pu le lire, ou en poser un).
+    const bool ok = crypto::protect(plain, sealed, false, why) && crypto::writePrivateFile(codePath(agentDir), sealed, why);
     crypto::wipe(plain.data(), plain.size());
     return ok;
 }

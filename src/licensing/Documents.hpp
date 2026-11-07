@@ -31,6 +31,16 @@
 //  << floating >> (licence flottante) et le champ << service >> (le service de
 //  licences qui tiendrait la licence) sont dans le format ; une licence qui les
 //  emploie est lue, puis refusee (Store.cpp) avec une phrase qui le dit.
+//
+//  1.32.0 - TROIS CHAMPS FACULTATIFS (ecrits seulement s'ils servent ; un
+//  document sans eux reste lisible par la 1.30 et la 1.31) :
+//    - "station" (demande, PC lie d'une licence) : l'empreinte salee de
+//      l'installation de Windows (stationHash, KeyFile.hpp) - le fil d'alarme
+//      d'une cle de PC recopiee ailleurs ;
+//    - "issued_before" (revocation) : seules les emissions de la licence
+//      signees AVANT cette date sont revoquees (une emission precise).
+//  Un programme d'avant la 1.32.0 refuse un document qui les porte (champ
+//  inconnu) : c'est voulu (un champ qui restreint ne s'ignore pas).
 // =============================================================================
 #pragma once
 
@@ -112,6 +122,7 @@ struct BoundDevice {
     std::string key;          // la cle publique Ed25519 du PC, 64 hexadecimaux minuscules
     std::string name;         // le nom que le client a donne au PC (facultatif) ; jamais son nom reseau
     Seconds     activatedAt{0};
+    std::string station;      // 1.32.0 : facultatif, 32 hexadecimaux (stationHash) ; vide : pas controle
     bool operator==(const BoundDevice&) const = default;
 };
 struct License {
@@ -132,6 +143,8 @@ struct License {
 
     [[nodiscard]] const FeatureGrant* grant(std::string_view id) const noexcept;
     [[nodiscard]] bool boundTo(std::string_view deviceKeyHex) const noexcept;
+    // 1.32.0 : l'entree de ce PC (nullptr : pas lie).
+    [[nodiscard]] const BoundDevice* device(std::string_view deviceKeyHex) const noexcept;
 };
 
 // ---- les revocations ----------------------------------------------------------------
@@ -140,6 +153,7 @@ struct Revocation {
     std::string device;       // vide : toute la licence ; sinon la cle d'un seul PC (un transfert)
     Seconds     revokedAt{0};
     std::string reason;       // "Fin de contrat"
+    Seconds     issuedBefore{0};   // 1.32.0 : 0 : toutes les emissions ; sinon celles signees avant (issued_at < issuedBefore)
 };
 struct RevocationList {
     int                     version{kFormatVersion};
@@ -147,19 +161,20 @@ struct RevocationList {
     Seconds                 issuedAt{0};
     std::vector<Revocation> revoked;
 
-    // La revocation qui touche cette licence sur ce PC, ou nullptr.
-    [[nodiscard]] const Revocation* find(std::string_view licenseId, std::string_view deviceKeyHex) const noexcept;
+    // La revocation qui touche cette emission de la licence (signee a `licenseIssuedAt`) sur ce PC, ou nullptr.
+    [[nodiscard]] const Revocation* find(std::string_view licenseId, std::string_view deviceKeyHex, Seconds licenseIssuedAt) const noexcept;
 };
 
 // ---- la demande d'activation -----------------------------------------------------------
 struct ActivationRequest {
     int         version{kFormatVersion};
     std::string deviceKey;    // 64 hexadecimaux
-    std::string deviceName;   // facultatif, donne par l'utilisateur
+    std::string deviceName;   // facultatif, donne par l'utilisateur ; 1.32.0 : jamais = + - @ en tete (un tableur)
     std::string licenseId;    // facultatif : la licence demandee (celle recue par courriel)
     std::string software;     // facultatif : "IHM Studio 1.30.0"
     Seconds     createdAt{0};
     std::string nonce;
+    std::string station;      // 1.32.0 : facultatif, 32 hexadecimaux (stationHash) ; l'Admin le recopie dans la licence
 };
 
 // ---- ecrire (l'Admin, la demande du PC) et lire (strictement) -----------------------------
@@ -184,6 +199,9 @@ bool checkAgainstRegistry(const License& license, const Registry& registry, std:
 [[nodiscard]] bool isEditionId(std::string_view s) noexcept;      // [A-Z0-9_]{1,32}, commence par une lettre
 [[nodiscard]] bool isLicenseId(std::string_view s) noexcept;      // [A-Za-z0-9._-]{1,64}
 [[nodiscard]] bool isKeyHex(std::string_view s) noexcept;         // 64 hexadecimaux minuscules
+[[nodiscard]] bool isStationHex(std::string_view s) noexcept;     // 1.32.0 : 32 hexadecimaux minuscules
+// 1.32.0 : un texte qu'un tableur prendrait pour une formule (= + - @ tabulation ou retour en tete).
+[[nodiscard]] bool looksLikeFormula(std::string_view s) noexcept;
 [[nodiscard]] std::string newNonce();                             // 32 hexadecimaux tires au hasard
 // Trier et dedoublonner des fonctionnalites (par identifiant) et leurs limites (par nom).
 void normalizeGrants(std::vector<FeatureGrant>& grants);

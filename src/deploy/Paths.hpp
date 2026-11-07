@@ -1,7 +1,7 @@
 // =============================================================================
 //  deploy/Paths.hpp - 1.28.0 : un chemin sous un dossier, avec le separateur du
-//  systeme (sous Windows : "C:\ProgramData\XPG\Agent\journal", pas un melange de
-//  / et de \ dans les messages). Les chemins sont en UTF-8.
+//  systeme (sous Windows : "C:\Users\op\AppData\Local\XPG\Agent\journal", pas un
+//  melange de / et de \ dans les messages). Les chemins sont en UTF-8.
 // =============================================================================
 #pragma once
 

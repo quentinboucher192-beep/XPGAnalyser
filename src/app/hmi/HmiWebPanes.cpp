@@ -132,8 +132,13 @@ bool HmiWebPane::setSetting(const std::string& key, const std::string& raw, std:
                                   else if (key == "connexion") w.login = on;
                                   else w.control = on;
                               });
-        if (ok && key == "commande" && on && !doc_->project.web.login)
-            say("Commande sans connexion : n'importe quel navigateur qui trouve le poste pilote l'IHM.", true);
+        const auto& w = doc_->project.web;
+        // 1.32.0 : tout le reseau, sans connexion : jamais la commande (le serveur reste en lecture seule).
+        if (ok && w.control && !w.login && w.allInterfaces)
+            say("Commande sans connexion et accessible du r\xC3\xA9seau : refus\xC3\xA9" "e, l'acc\xC3\xA8s web reste en lecture seule "
+                "(coche Se connecter pour piloter).", true);
+        else if (ok && key == "commande" && on && !w.login)
+            say("Commande sans connexion : n'importe quel navigateur de ce poste pilote l'IHM.", true);
         return ok;
     }
     struct Num {
@@ -172,7 +177,8 @@ void HmiWebPane::rebuildProperties() {
     PG::Category srv;
     srv.name = "Serveur web";
     srv.properties.push_back(prop("Actif", tf(w.enabled), PG::ValueType::Boolean, commit("actif"),
-                                  "Le serveur web int\xC3\xA9gr\xC3\xA9 montre la vue en marche \xC3\xA0 un navigateur (une tablette, un autre PC)."));
+                                  "Le serveur web int\xC3\xA9gr\xC3\xA9 montre la vue en marche \xC3\xA0 un navigateur (une tablette, un autre PC). "
+                                  "Il faut aussi l'autoriser sur ce poste : R\xC3\xA9glages > " + std::string(WebHost::kSettingLabel) + "."));
     srv.properties.push_back(prop("Port", std::to_string(w.port), PG::ValueType::Integer, commit("port"), "8080 : http://<le poste>:8080."));
     srv.properties.push_back(prop("Accessible du r\xC3\xA9seau", tf(w.allInterfaces), PG::ValueType::Boolean, commit("reseau"),
                                   "D\xC3\xA9" "coch\xC3\xA9 : ce poste seulement (127.0.0.1). Coch\xC3\xA9 : les autres postes du r\xC3\xA9seau aussi (toutes les cartes)."));

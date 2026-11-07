@@ -7,6 +7,12 @@
 //
 //    - un chemin relatif part de <projet>/donnees/ (DIR_DATA() le dit) ; un
 //      chemin complet (C:\Donnees\recette.csv) va ou il dit ;
+//    - 1.32.0 : MAIS TOUJOURS DANS LES DOSSIERS PERMIS - donnees/ et exports/ du
+//      projet, et ceux que l'utilisateur autorise sur ce poste (Reglages >
+//      Dossiers autorises aux scripts de l'IHM ; jamais dans le projet : un
+//      projet recu d'ailleurs ne lit ni n'efface les fichiers du poste). Un
+//      chemin reseau seulement dans un dossier autorise ; jamais \\?\ ni \\.\,
+//      ni CON, NUL, COM1... ;
 //    - le projet lui-meme (ihm/, project.xpgproj, son dossier) ne s'ecrit pas,
 //      ne se deplace pas, ne se supprime pas par un script ;
 //    - une expression (fx) lit, n'ecrit rien (HmiExpr.cpp le refuse avant) ;
@@ -17,6 +23,7 @@
 // =============================================================================
 #include "HmiRuntime.hpp"
 
+#include "HmiAssets.hpp"   // 1.32.0 : les dossiers autorises, les chemins reseau
 #include "../core/AtomicFile.hpp"
 #include "../sim/DialectLib.hpp"
 
@@ -24,6 +31,7 @@
 #include <cctype>
 #include <chrono>
 #include <ctime>
+#include <cwctype>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -136,54 +144,151 @@ std::string& confinedRoot() {
     return root;
 }
 
-// Le chemin d'un script : relatif, il part de <projet>/donnees/. Pour une ecriture, le projet lui-meme est refuse : son
+// 1.32.0 : un chemin sous un autre, element par element (sans casse sous Windows, comme son disque). 0 : dehors ; 1 :
+// dedans ; 2 : le dossier lui-meme. Les deux sont deja canoniques (weakly_canonical).
+int placeIn(const fs::path& child, const fs::path& root) {
+    std::vector<fs::path::string_type> c, r;
+    for (const auto& e : child)
+        if (!e.empty()) c.push_back(e.native());
+    for (const auto& e : root)
+        if (!e.empty()) r.push_back(e.native());
+    if (r.empty() || c.size() < r.size()) return 0;
+    for (std::size_t i = 0; i < r.size(); ++i) {
+#ifdef _WIN32
+        if (c[i].size() != r[i].size()) return 0;
+        for (std::size_t k = 0; k < r[i].size(); ++k)
+            if (std::towlower(static_cast<std::wint_t>(c[i][k])) != std::towlower(static_cast<std::wint_t>(r[i][k]))) return 0;
+#else
+        if (c[i] != r[i]) return 0;
+#endif
+    }
+    return c.size() == r.size() ? 2 : 1;
+}
+
+fs::path canonicalOf(const fs::path& p, std::error_code& ec) {
+    ec.clear();
+    return fs::weakly_canonical(p, ec);
+}
+
+// 1.32.0 : LES DOSSIERS PERMIS AUX SCRIPTS - donnees/ et exports/ du projet, et ceux que l'utilisateur autorise sur ce
+// poste (Reglages ; jamais le projet). Un dossier reseau autorise se compare en texte (insideUserAllowedFolder).
+std::vector<fs::path> allowedRoots(const std::string& projectFolder) {
+    std::vector<fs::path> out;
+    std::error_code ec;
+    if (!projectFolder.empty())
+        for (const char* sub : {"donnees", "exports"})
+            if (const fs::path c = canonicalOf(pathOf(projectFolder) / sub, ec); !ec) out.push_back(c);
+    for (const auto& f : userAllowedFolders()) {
+        if (networkOrDevicePath(f)) continue;
+        const fs::path fp = pathOf(f);
+        if (!fp.has_root_directory()) continue;                      // un dossier relatif ne designe rien ici
+        if (const fs::path c = canonicalOf(fp, ec); !ec) out.push_back(c);
+    }
+    return out;
+}
+
+std::string outsideWhy(const std::string& text) {
+    return text + " est hors du projet : un script de l'IHM ne lit et n'\xC3\xA9" "crit que dans donnees/ et exports/ du projet. "
+                  "Pour permettre un autre dossier sur ce poste, ajoute-le dans R\xC3\xA9glages > "
+         + std::string(kAllowedFoldersSetting);
+}
+
+// Le chemin d'un script : relatif, il part de <projet>/donnees/. 1.32.0 : TOUT CHEMIN RESTE DANS LES DOSSIERS PERMIS
+// (allowedRoots), compare apres resolution des liens (weakly_canonical) ; un chemin reseau seulement dans un dossier
+// autorise ; jamais un peripherique ni un nom reserve de Windows. Pour une ecriture, le projet lui-meme est refuse : son
 // dossier ihm/ et ce qu'il contient, project.xpgproj, et tout dossier qui contient ihm/ (le projet, ses parents).
-bool resolve(const std::string& projectFolder, const std::string& given, bool writing, fs::path& out, std::string& why) {
+// `isRoot` : le chemin est un dossier permis lui-meme (il ne se supprime ni ne se deplace).
+bool resolve(const std::string& projectFolder, const std::string& given, bool writing, fs::path& out, std::string& why,
+             bool* isRoot = nullptr) {
+    if (isRoot) *isRoot = false;
     const std::string text = trimmed(given);
     if (text.empty()) {
         why = "le chemin est vide";
         return false;
     }
+    // 1.32.0 : ni un peripherique (\\?\, \\.\), ni un nom que Windows reserve ou ecrit autrement qu'on le lit.
+    if (devicePath(text)) {
+        why = "chemin de p\xC3\xA9riph\xC3\xA9rique refus\xC3\xA9 (\\\\?\\ ou \\\\.\\) - " + text;
+        return false;
+    }
+    if (std::string bad; unsafePathSegment(text, &bad)) {
+        why = "nom refus\xC3\xA9 : \xC2\xAB " + bad + " \xC2\xBB (un nom r\xC3\xA9serv\xC3\xA9 par Windows comme CON, NUL, COM1, "
+              "ou qui finit par un point ou une espace, ou qui porte ':') - " + text;
+        return false;
+    }
     fs::path p = pathOf(text);
+    std::error_code ec;
     // 1.21.0 : dans le bac a sable, un chemin complet est refuse et un chemin relatif ne sort pas du dossier de travail
     // (ni lecture ni ecriture ailleurs : les fichiers de l'utilisateur ne sont pas accessibles au code essaye).
     if (const std::string& box = confinedRoot(); !box.empty()) {
-        if (p.has_root_name() || p.has_root_directory()) {
+        if (networkOrDevicePath(text) || p.has_root_name() || p.has_root_directory()) {
             why = "bac \xC3\xA0 sable : seuls les chemins relatifs au dossier de travail sont permis - " + text;
             return false;
         }
         const fs::path root = pathOf(box).lexically_normal();
         const fs::path full = (root / p).lexically_normal();
         const fs::path rel = full.lexically_relative(root);
-        if (rel.empty() || *rel.begin() == "..") {
+        // 1.32.0 : et un lien du dossier de travail vers ailleurs ne le fait pas sortir.
+        const fs::path rootC = canonicalOf(root, ec);
+        const fs::path fullC = ec ? fs::path{} : canonicalOf(full, ec);
+        if (rel.empty() || *rel.begin() == ".." || ec || placeIn(fullC, rootC) != 1) {
             why = "bac \xC3\xA0 sable : ce chemin sort du dossier de travail - " + text;
             return false;
         }
-        out = full;
+        out = fullC;
+        return true;
+    }
+    // Un chemin reseau : seulement dans un dossier autorise sur ce poste, compare en texte (rien n'est ouvert avant).
+    if (networkOrDevicePath(text)) {
+        if (!insideUserAllowedFolder(text)) {
+            why = outsideWhy(text);
+            return false;
+        }
+        out = p.lexically_normal();
         return true;
     }
     if (!p.has_root_name() && !p.has_root_directory()) {
         if (projectFolder.empty()) {
             why = "le projet n'est pas encore enregistr\xC3\xA9 : un chemin relatif part de son dossier donnees/ (enregistre-le, "
-                  "ou donne un chemin complet) - " + text;
+                  "ou donne un chemin complet dans un dossier autoris\xC3\xA9) - " + text;
             return false;
         }
         p = pathOf(projectFolder) / "donnees" / p;
     }
     p = p.lexically_normal();
+    const fs::path canon = canonicalOf(p, ec);
+    if (ec) {
+        why = shown(p) + " : " + reason(ec);
+        return false;
+    }
     if (writing && !projectFolder.empty()) {
+        // Les fichiers du projet, lus tels quels et apres resolution des liens.
         const fs::path root = pathOf(projectFolder).lexically_normal();
         std::string target = lower(generic(p)), ihm = lower(generic(root / "ihm"));
         while (target.size() > 1 && target.back() == '/') target.pop_back();
-        const bool insideIhm = target == ihm || target.rfind(ihm + "/", 0) == 0;
-        const bool holdsIhm = ihm.rfind(target + "/", 0) == 0;
-        const bool projectFile = target == lower(generic(root / "project.xpgproj"));
-        if (insideIhm || holdsIhm || projectFile) {
+        bool refused = target == ihm || target.rfind(ihm + "/", 0) == 0 || ihm.rfind(target + "/", 0) == 0
+                    || target == lower(generic(root / "project.xpgproj"));
+        std::error_code e2;
+        const fs::path ihmC = canonicalOf(root / "ihm", e2);
+        const fs::path fileC = e2 ? fs::path{} : canonicalOf(root / "project.xpgproj", e2);
+        if (!e2) refused = refused || placeIn(canon, ihmC) != 0 || placeIn(ihmC, canon) != 0 || placeIn(canon, fileC) == 2;
+        if (refused) {
             why = "les fichiers du projet (ihm/, project.xpgproj) ne se changent pas par un script - " + shown(p);
             return false;
         }
     }
-    out = p;
+    bool inside = false, equal = false;
+    for (const auto& r : allowedRoots(projectFolder)) {
+        const int at = placeIn(canon, r);
+        inside = inside || at == 1;
+        equal = equal || at == 2;
+    }
+    if (!inside && !equal) {
+        why = outsideWhy(text);
+        return false;
+    }
+    if (isRoot) *isRoot = equal && !inside;
+    out = canon;
     return true;
 }
 
@@ -257,7 +362,11 @@ bool Runtime::fileOp(std::string_view op, const std::vector<std::string>& args, 
     // ---- le disque
     const bool changes = sim::lib::changesFiles(u) && u != "FILE_COPY";   // FILE_COPY lit sa source
     fs::path p;
-    if (!resolve(folder, arg(0), changes, p, why)) return fail(why);
+    bool permittedRoot = false;
+    if (!resolve(folder, arg(0), changes, p, why, &permittedRoot)) return fail(why);
+    // 1.32.0 : un dossier permis lui-meme (donnees/, exports/, un dossier autorise) ne se supprime ni ne se deplace.
+    if (permittedRoot && (u == "DIR_DELETE" || u == "FILE_MOVE" || u == "FILE_DELETE"))
+        return fail(shown(p) + " est un dossier permis aux scripts lui-m\xC3\xAAme : il ne se supprime ni ne se d\xC3\xA9place (ce qu'il contient, oui)");
     if (u == "FILE_EXISTS") {
         out.number = fs::is_regular_file(p, ec) ? 1 : 0;
         return true;
@@ -320,7 +429,11 @@ bool Runtime::fileOp(std::string_view op, const std::vector<std::string>& args, 
         if (!resolve(folder, arg(1), true, to, why)) return fail(why);
         if (!fs::exists(p, ec)) return fail(missing());
         if (u == "FILE_COPY" && fs::is_directory(p, ec)) return fail(shown(p) + " est un dossier : FILE_COPY copie un fichier");
-        if (fs::is_directory(to, ec) && !fs::is_directory(p, ec)) to /= p.filename();        // dans un dossier : le meme nom
+        if (fs::is_directory(to, ec) && !fs::is_directory(p, ec)) {                         // dans un dossier : le meme nom
+            to /= p.filename();
+            // 1.32.0 : revu avec ce nom (un lien qui sortirait des dossiers permis).
+            if (!resolve(folder, generic(to), true, to, why)) return fail(why);
+        }
         if (to.has_parent_path()) fs::create_directories(to.parent_path(), ec);
         ec.clear();
         if (u == "FILE_COPY") {

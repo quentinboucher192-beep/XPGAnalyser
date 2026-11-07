@@ -17,6 +17,9 @@
 #  outils/mingw/package_mingw.py : rien de l'outil Admin des licences, aucune cle privee, aucun
 #  jeton, pas la cle d'essai, un registre signe par une cle de PublisherKey.hpp - un seul ecart
 #  arrete la construction.
+#  1.32.0 : de meme licences\revocations.xpgrev (la liste de revocation livree, depuis
+#  ressources-licences\) ; licences\ n'admet que le registre, la liste et les textes de licence des
+#  bibliotheques ; [Licences] obligatoires = oui (config.ini) refuse un paquet sans vraie cle d'editeur.
 #
 #  /exe:<fichier> /sdl:<SDL3.dll> /pdfium:<pdfium.dll> /chaine:mingw : empaqueter un exe deja
 #  compile ailleurs (c'est ainsi qu'a ete fait l'installateur livre avec la
@@ -75,6 +78,8 @@ function Copy-XpgArbre {
 #  les chaines larges des exe), memes motifs, memes noms, meme controle du registre livre. Changer l'un,
 #  c'est changer l'autre (docs\LICENCES.md). Les octets sont lus en Latin-1 (un caractere par octet) : les
 #  chaines se cherchent en ordinal, les motifs avec Regex (sensibles a la casse, comme en Python).
+#  1.32.0 : la liste de revocation livree, ce que licences\ admet, ni licence, ni demande, ni github*.json,
+#  ni dossier archive, ni etat ou historique d'un PC ; [Licences] obligatoires.
 $script:XpgAdminChaines = @(
     @('XPG-License-Admin', "le nom de l'outil Admin des licences"),
     @('XPG License Manager Admin', "le nom de l'outil Admin des licences"),
@@ -82,14 +87,21 @@ $script:XpgAdminChaines = @(
     @('XPG-CLE-ESSAI-LICENCES', "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)"),
     @('XPG-SAUVEGARDE-CLE', "une sauvegarde de la cle de l'editeur (1.32.0)"),
     @('XPG-CHIFFRE 1 xpgs-', "un fichier chiffre de la synchro des licences (1.31.0)"),
-    @('XPG-INDEX 1 xpgs-', "l'index de la synchro des licences (1.31.0)")
+    @('XPG-INDEX 1 xpgs-', "l'index de la synchro des licences (1.31.0)"),
+    @('XPG-LICENSING 1 licence ', "une licence signee (le contenu d'un .xpglic : elle va a un client, jamais dans le paquet) (1.32.0)"),
+    @('XPG-LICENSING 1 demande ', "une demande d'activation (le contenu d'un .xpgreq) (1.32.0)")
 )
 $script:XpgAdminMotifs = @(
     @('-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}', 'une cle privee (bloc PEM)'),
     @('(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{50,}', 'un jeton GitHub')
 )
 $script:XpgAdminNoms = @('*.cle', 'cle_editeur.bin', 'cle-editeur-licences*', '*license*admin*', '*licence*admin*', '*license_admin*',
-                        '*.xpgcle', '*.xpgsync', 'activations.jsonl')
+                        '*.xpgcle', '*.xpgsync', 'activations.jsonl',
+                        '*.xpglic', '*.xpgreq', 'github*.json', 'etat.bin', 'historique.jsonl')   # 1.32.0
+$script:XpgAdminDossiers = @('archive')   # 1.32.0 : l'archive de l'outil Admin (signer-*, archiver), a aucun niveau
+# 1.32.0 : ce que licences\ admet (chemins relatifs a licences\, sans casse) - le reste est un ecart.
+$script:XpgLicencesPermis = @('registre.xpgreg', 'revocations.xpgrev', '*-LICENSE*', '*.LICENSE',
+                             'pdfium\*.txt', 'pdfium\*.md', 'pdfium\*.ijg')
 
 function Get-XpgClesCompilees {
     # Les identifiants des cles d'un fichier ecrit par exporter-cle (src\licensing\<Nom>).
@@ -100,23 +112,61 @@ function Get-XpgClesCompilees {
     return @([regex]::Matches($t, '\{"(xpg-[0-9a-f]{16})",') | ForEach-Object { $_.Groups[1].Value })
 }
 
+function Test-XpgDocumentSigne {
+    # Un document livre (le registre, la liste de revocation) : signe par une cle des programmes (PublisherKey.hpp),
+    # jamais par la cle d'essai. Rend l'ecart, ou $null (controle_signe de package_mingw.py).
+    param([string] $Base, [string] $Racine, [string] $Rel, [string] $Genre, [string] $Sujet, [string] $PasSigne, [string] $Signe)
+    $chemin = Join-Path $Base $Rel
+    if (-not (Test-Path -LiteralPath $chemin -PathType Leaf)) { return $null }
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $t = $latin1.GetString([System.IO.File]::ReadAllBytes($chemin))
+    $cles = @([regex]::Matches($t, '\nSIGNATURE ed25519 (xpg-[0-9a-f]{16}) [0-9a-f]{128}\n') | ForEach-Object { $_.Groups[1].Value })
+    if (-not [regex]::IsMatch($t, ('\AXPG-LICENSING 1 ' + $Genre + ' ([0-9]+)\n')) -or $cles.Count -ne 1) {
+        return "$Rel : $Sujet n'est pas $PasSigne (un seul bloc XPG-LICENSING $Genre)"
+    }
+    if (@(Get-XpgClesCompilees -Racine $Racine -Nom 'TestPublisherKey.hpp') -contains $cles[0]) {
+        return "$Rel : $Sujet est $Signe par la cle d'ESSAI ($($cles[0])) : signe-le avec la vraie cle"
+    }
+    if (-not (@(Get-XpgClesCompilees -Racine $Racine -Nom 'PublisherKey.hpp') -contains $cles[0])) {
+        return "$Rel : $Sujet est $Signe par la cle $($cles[0]), que src/licensing/PublisherKey.hpp ne contient pas : les programmes ne pourraient pas le verifier"
+    }
+    return $null
+}
+
 function Test-XpgLivraison {
     # Les ecarts trouves dans le dossier a livrer : des chaines « chemin relatif : ce qui est trouve » ; vide : rien.
-    param([string] $Dossier, [string] $Racine)
+    # 1.32.0 : -Obligatoires oui|non remplace [Licences] obligatoires de config.ini.
+    param([string] $Dossier, [string] $Racine, [string] $Obligatoires = '')
     $ecarts = New-Object System.Collections.ArrayList
     $latin1 = [System.Text.Encoding]::GetEncoding(28591)
     $base = (Get-Item -LiteralPath $Dossier).FullName.TrimEnd('\', '/')
-    # Le registre livre : signe par une cle des programmes (PublisherKey.hpp), jamais par la cle d'essai.
-    $reg = Join-Path $base 'licences\registre.xpgreg'
-    if (Test-Path -LiteralPath $reg -PathType Leaf) {
-        $t = $latin1.GetString([System.IO.File]::ReadAllBytes($reg))
-        $cles = @([regex]::Matches($t, '\nSIGNATURE ed25519 (xpg-[0-9a-f]{16}) [0-9a-f]{128}\n') | ForEach-Object { $_.Groups[1].Value })
-        if (-not [regex]::IsMatch($t, '\AXPG-LICENSING 1 registre ([0-9]+)\n') -or $cles.Count -ne 1) {
-            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre n'est pas un registre signe (un seul bloc XPG-LICENSING registre)")
-        } elseif (@(Get-XpgClesCompilees -Racine $Racine -Nom 'TestPublisherKey.hpp') -contains $cles[0]) {
-            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre est signe par la cle d'ESSAI ($($cles[0])) : signe-le avec la vraie cle")
-        } elseif (-not (@(Get-XpgClesCompilees -Racine $Racine -Nom 'PublisherKey.hpp') -contains $cles[0])) {
-            [void]$ecarts.Add("licences\registre.xpgreg : le registre livre est signe par la cle $($cles[0]), que src/licensing/PublisherKey.hpp ne contient pas : les programmes ne pourraient pas le verifier")
+    # 1.32.0 : [Licences] obligatoires = oui - PublisherKey.hpp doit contenir une vraie cle de l'editeur.
+    if ($Obligatoires -eq '') { $Obligatoires = Get-XpgConfig -Section 'Licences' -Cle 'obligatoires' -Defaut 'non' }
+    if ($Obligatoires.Trim().ToLowerInvariant() -eq 'oui' -and @(Get-XpgClesCompilees -Racine $Racine -Nom 'PublisherKey.hpp').Count -eq 0) {
+        [void]$ecarts.Add("src\licensing\PublisherKey.hpp : aucune cle de l'editeur alors que [Licences] obligatoires = oui (outils/config.ini) : les programmes livres auraient les licences non activees (tout ouvert) ; exporter-cle la vraie cle, ou obligatoires = non")
+    }
+    # Le registre et (1.32.0) la liste de revocation livres : signes par une cle des programmes, jamais par la cle d'essai.
+    $e = Test-XpgDocumentSigne -Base $base -Racine $Racine -Rel 'licences\registre.xpgreg' -Genre 'registre' `
+                               -Sujet 'le registre livre' -PasSigne 'un registre signe' -Signe 'signe'
+    if ($e) { [void]$ecarts.Add($e) }
+    $e = Test-XpgDocumentSigne -Base $base -Racine $Racine -Rel 'licences\revocations.xpgrev' -Genre 'revocations' `
+                               -Sujet 'la liste de revocation livree' -PasSigne 'une liste de revocation signee' -Signe 'signee'
+    if ($e) { [void]$ecarts.Add($e) }
+    # 1.32.0 : licences\ n'admet que le registre, la liste de revocation et les textes de licence des bibliotheques.
+    $licDir = Join-Path $base 'licences'
+    if (Test-Path -LiteralPath $licDir -PathType Container) {
+        $licBase = (Get-Item -LiteralPath $licDir).FullName.TrimEnd('\', '/')
+        foreach ($f in Get-ChildItem -LiteralPath $licDir -Recurse -File -Force | Sort-Object FullName) {
+            $r = $f.FullName.Substring($licBase.Length + 1)
+            $permis = $false
+            foreach ($p in $script:XpgLicencesPermis) { if ($r -like $p) { $permis = $true; break } }
+            if (-not $permis) { [void]$ecarts.Add("licences\$r : licences\ n'admet que registre.xpgreg, revocations.xpgrev et les textes de licence des bibliotheques") }
+        }
+    }
+    # 1.32.0 : un dossier de l'outil Admin (son archive), a aucun niveau.
+    foreach ($d in Get-ChildItem -LiteralPath $base -Recurse -Directory -Force | Sort-Object FullName) {
+        if ($script:XpgAdminDossiers -contains $d.Name.ToLowerInvariant()) {
+            [void]$ecarts.Add("$($d.FullName.Substring($base.Length + 1)) : un dossier de l'outil Admin (l'archive des licences signees)")
         }
     }
     # Les chaines : en ASCII, et en UTF-16 (petit-boutiste, comme Python « utf-16-le »).
@@ -310,6 +360,12 @@ anciens_dossiers = $(Get-XpgConfig -Section 'Installateur' -Cle 'anciens_dossier
         Write-XpgLog -Niveau INFO -Message 'Registre des licences : ressources-licences\registre.xpgreg -> licences\registre.xpgreg'
     } else {
         Write-XpgLog -Niveau INFO -Message 'Registre des licences : ressources-licences\registre.xpgreg absent - aucun registre livré (il sera signé par l''éditeur avec sa vraie clé).'
+    }
+    # 1.32.0 : la liste de revocation signee par l'editeur, s'il y en a une : adoptee si elle est plus recente.
+    $revocations = Join-Path $racine 'ressources-licences\revocations.xpgrev'
+    if (Test-Path -LiteralPath $revocations -PathType Leaf) {
+        Copy-Item -LiteralPath $revocations -Destination (Join-Path $lic 'revocations.xpgrev') -Force
+        Write-XpgLog -Niveau INFO -Message 'Liste de révocation : ressources-licences\revocations.xpgrev -> licences\revocations.xpgrev'
     }
     Copy-Item -LiteralPath (Join-Path $racine 'third_party\SDL3\LICENSE.txt') -Destination (Join-Path $lic 'SDL3-LICENSE.txt') -Force
     foreach ($f in Get-ChildItem -LiteralPath (Join-Path $racine 'third_party') -Filter '*.LICENSE' -File) { Copy-Item -LiteralPath $f.FullName -Destination $lic -Force }

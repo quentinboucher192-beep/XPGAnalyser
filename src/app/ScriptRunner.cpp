@@ -4166,6 +4166,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     if (cmd == "simulation-barre" || cmd == "simulation-zoom" || cmd == "simulation-deplacer") {
         auto* pane = dynamic_cast<HmiSimulationPane*>(currentPage());
         if (!pane) { fail(cmd + " : ouvre d'abord Simulation \xC2\xB7 IHM"); return Step::Next; }
+        // 1.32.0 (H3) : demarrer l'IHM (hmi_runtime) - refuse, le script le dit (arreter : toujours permis)
+        if (cmd == "simulation-barre" && !pane->hmiRunning() && (arg(1) == "hmi.start" || arg(1) == "hmi.toggle" || arg(1) == "both.start"))
+            if (std::string why; !licence::require(licence::featureOf(licence::Where::Gesture, "hmi.start"), &why)) {
+                fail(cmd + " " + arg(1) + " : " + why);
+                return Step::Next;
+            }
         if (cmd == "simulation-barre") pane->command(arg(1));
         else if (cmd == "simulation-deplacer")
             pane->canvas().panDisplay(static_cast<float>(std::atof(arg(1).c_str())), static_cast<float>(std::atof(arg(2).c_str())));
@@ -6511,6 +6517,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // "attendre-poste" attend qu'il soit la ; "capture-ecran 2 NOM.png" capture
     // un ecran secondaire (sa fenetre) ; "poste-sortir" demande la sortie.
     if (cmd == "poste") {
+        // 1.32.0 (H3) : Essayer le poste depuis la conception (hmi_runtime), comme son bouton ; le poste lance par
+        // --ihm (App::openStation) n'y passe pas : il n'est jamais arrete par la licence.
+        if (std::string why; !licence::require(licence::featureOf(licence::Where::Gesture, "poste.essayer"), &why)) {
+            fail("poste : " + why);
+            return Step::Next;
+        }
         app_.enterStation();
         sinceInput_ = 0;
         return Step::Yield;

@@ -837,6 +837,13 @@ Resolved resolve(const Assets& assets, std::string_view specIn, const std::strin
         else if (r.type == Type::None) r.error = res->name + " (" + res->format + ") : la visionneuse lit les PDF, les images (PNG, JPEG, BMP, GIF, SVG) et le texte (TXT)";
         return r;
     }
+    // 1.32.0 : un chemin reseau ou de peripherique venu du projet n'est pas ouvert (fuite NTLM), sauf dossier autorise.
+    if (std::string refused; !projectPathAllowed(spec, &refused)) {
+        r.shown = spec;
+        r.type = typeOfName(spec);
+        r.error = refused;
+        return r;
+    }
     fs::path path = pathOf(spec);
     std::error_code ec;
     if (path.is_relative()) {

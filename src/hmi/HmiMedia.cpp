@@ -1,5 +1,6 @@
 #include "HmiMedia.hpp"
 
+#include "HmiTrueType.hpp"   // 1.32.0 : le lecteur borne des polices, avant stb_truetype
 #include "HmiVideo.hpp"   // 1.12.12 (lot H) : l'AVI (le Motion-JPEG)
 
 #include <algorithm>
@@ -8,6 +9,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <new>
 
 // -----------------------------------------------------------------------------
@@ -150,25 +152,40 @@ const IcoEntry* largestIco(const std::vector<IcoEntry>& es) {
 
 // Une image d'icone en DIB n'a pas d'en-tete de fichier BMP, et sa hauteur
 // compte deux fois (l'image puis le masque). On lui refait un fichier BMP que
-// stb_image sait lire.
+// stb_image sait lire. 1.32.0 : une icone d'un projet recu se mefie de tout - l'en-tete
+// (BITMAPINFOHEADER, 40 octets) tient dans l'entree, la palette aussi (256 couleurs au
+// plus), des dimensions sensees ; vide : illisible (avant : une entree de moins de 12
+// octets faisait ecrire la hauteur hors du tampon).
 Bytes icoDibAsBmp(const Bytes& d, const IcoEntry& e) {
+    constexpr std::uint32_t kInfoHeader = 40;
+    constexpr std::int32_t  kMaxSide = 1024;            // une icone : 256 ; au-dela, ce n'en est pas une
     Reader r{d.data(), d.size()};
+    if (e.size < kInfoHeader || !r.has(e.offset, e.size)) return {};
     const std::uint32_t headerSize = r.le32(e.offset);
-    if (headerSize < 40 || !r.has(e.offset, headerSize)) return {};
+    if (headerSize < kInfoHeader || headerSize > e.size) return {};
+    const auto width = static_cast<std::int32_t>(r.le32(e.offset + 4));
+    const auto height = static_cast<std::int32_t>(r.le32(e.offset + 8));   // l'image et son masque
     const std::uint32_t bpp = r.le16(e.offset + 14);
     std::uint32_t colors = r.le32(e.offset + 32);
+    if (width <= 0 || width > kMaxSide || height <= 1 || height > 2 * kMaxSide) return {};
+    if (bpp != 1 && bpp != 4 && bpp != 8 && bpp != 16 && bpp != 24 && bpp != 32) return {};
     if (colors == 0 && bpp <= 8) colors = 1u << bpp;
-    Bytes bmp(14 + e.size);
-    const std::uint32_t fileSize = static_cast<std::uint32_t>(bmp.size());
-    const std::uint32_t dataOffset = 14 + headerSize + colors * 4;
+    if (colors > 256) return {};
+    const std::uint64_t dataOffset = 14ull + headerSize + static_cast<std::uint64_t>(colors) * 4;
+    if (dataOffset > 14ull + e.size) return {};
+    Bytes bmp(14 + static_cast<std::size_t>(e.size));
+    const auto fileSize = static_cast<std::uint32_t>(bmp.size());
+    const auto put32 = [&bmp](std::size_t at, std::uint32_t v) {
+        if (at + 4 > bmp.size()) return false;
+        for (int k = 0; k < 4; ++k) bmp[at + static_cast<std::size_t>(k)] = static_cast<std::uint8_t>(v >> (8 * k));
+        return true;
+    };
     bmp[0] = 'B';
     bmp[1] = 'M';
-    for (int k = 0; k < 4; ++k) bmp[2 + k] = static_cast<std::uint8_t>(fileSize >> (8 * k));
-    for (int k = 0; k < 4; ++k) bmp[10 + k] = static_cast<std::uint8_t>(dataOffset >> (8 * k));
     std::memcpy(bmp.data() + 14, d.data() + e.offset, e.size);
     // La hauteur utile est la moitie de celle du DIB.
-    const std::int32_t h = static_cast<std::int32_t>(r.le32(e.offset + 8)) / 2;
-    for (int k = 0; k < 4; ++k) bmp[14 + 8 + k] = static_cast<std::uint8_t>(static_cast<std::uint32_t>(h) >> (8 * k));
+    if (!put32(2, fileSize) || !put32(10, static_cast<std::uint32_t>(dataOffset)) || !put32(14 + 8, static_cast<std::uint32_t>(height / 2)))
+        return {};
     return bmp;
 }
 
@@ -927,8 +944,185 @@ bool decodePcm(const Bytes& d, std::string_view format, Pcm& out) {
     return false;
 }
 
-bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, FontMetrics& out) {
-    if (font.size() < 12) return false;
+// ---- 1.32.0 : une police sure pour stb_truetype ------------------------------------------------
+namespace {
+
+// La couverture (Coverage) telle que stb la lit : chaque lecture tient dans la table ; `maxIndex` : le plus grand rang
+// qu'elle peut rendre (-1 : aucun).
+bool coverageSafe(const Reader& r, std::size_t at, long& maxIndex) {
+    maxIndex = -1;
+    if (!r.has(at, 4)) return r.has(at, 2) && r.be16(at) != 1 && r.be16(at) != 2;
+    const std::uint32_t format = r.be16(at);
+    const std::size_t n = r.be16(at + 2);
+    if (format == 1) {
+        if (!r.has(at + 4, 2 * n)) return false;
+        maxIndex = static_cast<long>(n) - 1;
+    } else if (format == 2) {
+        if (!r.has(at + 4, 6 * n)) return false;
+        for (std::size_t k = 0; k < n; ++k) {
+            const long start = static_cast<long>(r.be16(at + 4 + 6 * k)), end = static_cast<long>(r.be16(at + 6 + 6 * k));
+            if (end >= start) maxIndex = std::max(maxIndex, static_cast<long>(r.be16(at + 8 + 6 * k)) + end - start);
+        }
+    }
+    return true;
+}
+
+bool classDefSafe(const Reader& r, std::size_t at) {
+    if (!r.has(at, 2)) return false;
+    const std::uint32_t format = r.be16(at);
+    if (format == 1) return r.has(at, 6) && r.has(at + 6, 2 * static_cast<std::size_t>(r.be16(at + 4)));
+    if (format == 2) return r.has(at, 4) && r.has(at + 4, 6 * static_cast<std::size_t>(r.be16(at + 2)));
+    return true;                                         // un autre format : stb ne le lit pas
+}
+
+// Le crenage GPOS, comme stbtt__GetGlyphGPOSInfoAdvance le parcourt : faux, une lecture sortirait de la table.
+bool gposSafe(const Bytes& t) {
+    const Reader r{t.data(), t.size()};
+    if (!r.has(0, 4)) return false;
+    if (r.be16(0) != 1 || r.be16(2) != 0) return true;   // une autre version : stb ne la lit pas
+    if (!r.has(8, 2)) return false;
+    const std::size_t list = r.be16(8);
+    if (!r.has(list, 2)) return false;
+    const std::size_t lookups = r.be16(list);
+    if (!r.has(list + 2, 2 * lookups)) return false;
+    for (std::size_t i = 0; i < lookups; ++i) {
+        const std::size_t lt = list + r.be16(list + 2 + 2 * i);
+        if (!r.has(lt, 6)) return false;
+        if (r.be16(lt) != 2) continue;                    // stb ne lit que l'ajustement de paires
+        const std::size_t subs = r.be16(lt + 4);
+        if (!r.has(lt + 6, 2 * subs)) return false;
+        for (std::size_t k = 0; k < subs; ++k) {
+            const std::size_t st = lt + r.be16(lt + 6 + 2 * k);
+            if (!r.has(st, 4)) return false;
+            long maxIndex = -1;
+            if (!coverageSafe(r, st + r.be16(st + 2), maxIndex)) return false;
+            const std::uint32_t format = r.be16(st);
+            if (format != 1 && format != 2) continue;
+            if (!r.has(st, 8)) return false;
+            if (r.be16(st + 4) != 4 || r.be16(st + 6) != 0) continue;
+            if (format == 1) {
+                if (!r.has(st, 10)) return false;
+                const std::size_t sets = r.be16(st + 8);
+                // stb lit le decalage et le compte de chaque rang atteint AVANT de le comparer a `sets`.
+                if (maxIndex >= 0 && !r.has(st + 10, 2 * (static_cast<std::size_t>(maxIndex) + 1))) return false;
+                for (long ci = 0; ci <= maxIndex; ++ci) {
+                    const std::size_t pv = st + r.be16(st + 10 + 2 * static_cast<std::size_t>(ci));
+                    if (!r.has(pv, 2)) return false;
+                    if (static_cast<std::size_t>(ci) < sets && !r.has(pv + 2, 4 * static_cast<std::size_t>(r.be16(pv)))) return false;
+                }
+            } else {
+                if (!r.has(st, 16)) return false;
+                if (!classDefSafe(r, st + r.be16(st + 8)) || !classDefSafe(r, st + r.be16(st + 10))) return false;
+                const std::uint64_t records = 2ull * r.be16(st + 12) * r.be16(st + 14);   // en 64 bits : pas de debordement
+                if (records > r.n || !r.has(st + 16, static_cast<std::size_t>(records))) return false;
+            }
+        }
+    }
+    return true;
+}
+
+// La table kern (format 0), comme stb la lit.
+bool kernSafe(const Bytes& t) {
+    const Reader r{t.data(), t.size()};
+    if (!r.has(0, 4)) return false;
+    if (r.be16(2) < 1) return true;
+    if (!r.has(0, 12)) return false;
+    if (r.be16(8) != 1) return true;
+    return r.has(18, 6 * static_cast<std::size_t>(r.be16(10)));
+}
+
+// Un compose qui se contient (directement ou non) ferait boucler stb sans fin : ses composants sont retires.
+void breakComponentCycles(ttf::Font& f) {
+    const std::size_t n = f.glyphs.size();
+    std::vector<std::uint8_t> state(n, 0);              // 0 : pas vu ; 1 : en cours ; 2 : fini
+    std::vector<int> depth(n, 0);
+    const auto visit = [&](auto&& self, std::size_t g, int level) -> int {
+        if (state[g] == 2) return depth[g];
+        if (state[g] == 1 || level > 16) return 1000;    // une boucle, ou trop profond
+        state[g] = 1;
+        int d = 0;
+        for (const auto& c : f.glyphs[g].components)
+            if (c.glyph >= 0 && static_cast<std::size_t>(c.glyph) < n) d = std::max(d, 1 + self(self, static_cast<std::size_t>(c.glyph), level + 1));
+        if (d > 16) {
+            f.glyphs[g].components.clear();
+            d = 0;
+        }
+        state[g] = 2;
+        depth[g] = d;
+        return d;
+    };
+    for (std::size_t g = 0; g < n; ++g) (void)visit(visit, g, 0);
+}
+
+struct SafeFont {
+    std::uint64_t                hash{0};
+    std::size_t                  size{0};
+    std::shared_ptr<const Bytes> bytes;            // nulle : refusee
+    std::string                  why;
+    std::uint64_t                used{0};
+};
+
+std::uint64_t fnv1a(const Bytes& d) {
+    std::uint64_t h = 1469598103934665603ull;
+    for (const auto b : d) h = (h ^ b) * 1099511628211ull;
+    return h;
+}
+
+// La copie sure d'une police (les 16 dernieres sont gardees : une police se dessine souvent).
+std::shared_ptr<const Bytes> safeFont(const Bytes& font, std::string* why) {
+    static std::mutex lock;
+    static std::vector<SafeFont> cache;
+    static std::uint64_t tick = 0;
+    const std::uint64_t h = fnv1a(font);
+    {
+        std::lock_guard<std::mutex> g(lock);
+        for (auto& c : cache)
+            if (c.hash == h && c.size == font.size()) {
+                c.used = ++tick;
+                if (!c.bytes && why) *why = c.why;
+                return c.bytes;
+            }
+    }
+    SafeFont made;
+    made.hash = h;
+    made.size = font.size();
+    const auto refuse = [&](std::string m) { made.why = std::move(m); };
+    if (font.size() >= 4 && font[0] == 'O' && font[1] == 'T' && font[2] == 'T' && font[3] == 'O') {
+        refuse("une police OpenType \xC3\xA0 contours CFF (OTTO) ne se dessine pas ici : prends sa version TrueType (.ttf)");
+    } else if (font.size() >= 4 && font[0] == 't' && font[1] == 't' && font[2] == 'c' && font[3] == 'f') {
+        refuse("une collection de polices (TTC) ne se dessine pas ici : enregistre-en une seule, en TrueType (.ttf)");
+    } else {
+        ttf::Font f;
+        std::string w;
+        if (!ttf::read(font, f, &w)) {
+            refuse("police illisible (" + w + ")");
+        } else {
+            // Le crenage seulement s'il tient dans ses tables (stb le lit sans rien verifier).
+            std::erase_if(f.keep, [](const std::pair<std::string, Bytes>& t) {
+                return (t.first == "GPOS" && !gposSafe(t.second)) || (t.first == "kern" && !kernSafe(t.second));
+            });
+            breakComponentCycles(f);
+            made.bytes = std::make_shared<const Bytes>(ttf::write(f));
+        }
+    }
+    if (!made.bytes && why) *why = made.why;
+    std::lock_guard<std::mutex> g(lock);
+    made.used = ++tick;
+    if (cache.size() >= 16)
+        cache.erase(std::min_element(cache.begin(), cache.end(), [](const SafeFont& a, const SafeFont& b) { return a.used < b.used; }));
+    cache.push_back(made);
+    return made.bytes;
+}
+
+} // namespace
+
+bool fontRenderable(const Bytes& font, std::string* why) { return safeFont(font, why) != nullptr; }
+
+bool fontMetrics(const Bytes& raw, const std::vector<std::uint32_t>& codes, FontMetrics& out) {
+    if (raw.size() < 12) return false;
+    const auto safe = safeFont(raw, nullptr);           // 1.32.0 : jamais les octets du projet tels quels
+    if (!safe) return false;
+    const Bytes& font = *safe;
     const int offset = stbtt_GetFontOffsetForIndex(font.data(), 0);
     if (offset < 0) return false;
     stbtt_fontinfo info;
@@ -968,8 +1162,11 @@ bool fontMetrics(const Bytes& font, const std::vector<std::uint32_t>& codes, Fon
     return true;
 }
 
-bool renderFontText(const Bytes& font, std::string_view utf8, float pixelHeight, Rgba& out) {
-    if (font.empty() || utf8.empty() || pixelHeight <= 1.f) return false;
+bool renderFontText(const Bytes& raw, std::string_view utf8, float pixelHeight, Rgba& out) {
+    if (raw.empty() || utf8.empty() || pixelHeight <= 1.f) return false;
+    const auto safe = safeFont(raw, nullptr);           // 1.32.0 : jamais les octets du projet tels quels
+    if (!safe) return false;
+    const Bytes& font = *safe;
     stbtt_fontinfo info;
     const int offset = stbtt_GetFontOffsetForIndex(font.data(), 0);
     if (offset < 0 || !stbtt_InitFont(&info, font.data(), offset)) return false;

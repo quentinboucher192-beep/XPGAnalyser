@@ -16,7 +16,12 @@
 //      meme reponse sans rien refaire, seq qui recule, ts trop vieux), une trame
 //      de 1 Mio qui passe, une trame trop grosse refusee ;
 //    - 8 connexions au plus, la decouverte UDP en direct, un port deja pris,
-//      etat.json, UNPAIR, un certificat d'agent qui change -> refuse, l'arret.
+//      etat.json, UNPAIR, un certificat d'agent qui change -> refuse, l'arret ;
+//    - 1.32.0 : le journal borne (caracteres de controle, un champ coupe, un jour
+//      plein, 30 jours), IDENTIFY et plus de 16 versions, 2 places gardees aux PC
+//      appaires, 2 connexions par adresse, un pair inconnu muet ferme vite, un
+//      PAIR_START par seconde, un PAIR_FINISH manque ferme la connexion, les
+//      reponses a un pair inconnu jamais gardees, des identifiants de 128 bits.
 //
 //  deploy_net_test --distant ADRESSE PORT PORT_UDP CODE : l'essai croise (un agent
 //  ailleurs, par exemple l'agent Windows sous Wine) : decouverte, IDENTIFY,
@@ -94,7 +99,20 @@ AgentConfig agentConfig(const std::string& dir) {
     c.machineName = "PC-ESSAI";
     c.idleTimeoutMs = 20000;
     c.stateIntervalMs = 300;
+    // 1.32.0 : les essais viennent tous de 127.0.0.1, coup sur coup. Les vraies limites (2 connexions par adresse,
+    // un PAIR_START par seconde) ont leur essai a elles (limitsTests).
+    c.maxPerAddress = 8;
+    c.pairStartIntervalMs = 0;
     return c;
+}
+
+bool hasControl(const std::string& s) {
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const auto b = static_cast<unsigned char>(s[i]);
+        if (b < 0x20 || b == 0x7F) return true;
+        if (b == 0xC2 && i + 1 < s.size() && static_cast<unsigned char>(s[i + 1]) >= 0x80 && static_cast<unsigned char>(s[i + 1]) <= 0x9F) return true;
+    }
+    return false;
 }
 
 // Un tiers sur le chemin : il accepte la connexion du Studio avec SON certificat, se connecte a
@@ -264,6 +282,56 @@ void unitTests(const std::string& base) {
         check(discovery::parseDiscover(discovery::discoverMessage("n0"), nonce) && nonce == "n0" && !discovery::parseDiscover("{\"xpgd\":2}", nonce),
               "DISCOVER : lu, et une autre version ignor\xC3\xA9" "e");
     }
+    // 1.32.0 : des identifiants d'operation de 128 bits.
+    check(std::regex_match(protocol::newOperationId(), std::regex("op-[0-9a-f]{32}")), "un identifiant d'op\xC3\xA9ration : 128 bits (32 chiffres)");
+    // 1.32.0 : le journal borne - aucun caractere de controle, des champs coupes, un jour plein, 30 jours.
+    {
+        const std::string dir = base + "/journal-essai";
+        Journal j(dir);
+        const std::string evil = std::string("a") + "\x01" + "b" + "\x1b" + "[31m c" + "\xC2\x85" + "d" + "\t" + "e" + "\r\n" + "00:00:00 - FAUX" + "\x7f"
+                                 + " g" + "\xE2\x80\xA8" + "h" + "\xE2\x80\xAE" + "i " + "\xFF" + "\xC3" + " fin \xC3\xA9t\xC3\xA9";
+        j.write("op-1\n2", std::string("TEST") + "\x1b" + "[0m", evil);
+        const auto lines = j.tail(10);
+        const std::string line = lines.empty() ? std::string() : lines.back();
+        check(lines.size() == 1 && !hasControl(line) && line.find("\xE2\x80\xA8") == std::string::npos && line.find("\xE2\x80\xAE") == std::string::npos
+                  && line.find("fin \xC3\xA9t\xC3\xA9") != std::string::npos && line.find("?") != std::string::npos,
+              "journal : C0, C1, DEL, s\xC3\xA9parateurs et contr\xC3\xB4les de sens retir\xC3\xA9s, l'UTF-8 valide gard\xC3\xA9 [" + line + "]");
+        const std::string longField = Journal::field(std::string(1000, 'x'));
+        std::string accents;
+        for (int i = 0; i < 300; ++i) accents += "\xC3\xA9";
+        const std::string cut = Journal::field(accents);
+        check(longField.size() <= kJournalMaxField && longField.substr(longField.size() - 3) == "..." && cut.size() <= kJournalMaxField
+                  && (cut.size() - 3) % 2 == 0 && cut.substr(cut.size() - 3) == "...",
+              "journal : un champ coup\xC3\xA9 \xC3\xA0 256 octets, sans couper un caract\xC3\xA8re (" + std::to_string(cut.size()) + ")");
+        j.write("", "LONG", std::string(5000, 'y'));
+        const auto after = j.tail(1);
+        check(after.size() == 1 && after.back().size() < kJournalMaxDetail + 64, "journal : un d\xC3\xA9tail born\xC3\xA9 (" + std::to_string(after.empty() ? 0 : after.back().size()) + " octets)");
+
+        const std::string small = base + "/journal-plein";
+        Journal full(small, 2000);
+        for (int i = 0; i < 100; ++i) full.write("op-" + std::to_string(i), "TEST", "une ligne d'essai pour remplir le jour");
+        const auto size1 = fs::file_size(full.todayPath());
+        full.write("", "TEST", "encore une");
+        const auto all = full.tail(1000);
+        check(!all.empty() && all.back().find("JOURNAL plein pour aujourd'hui") != std::string::npos && countLinesWith(all, "JOURNAL plein") == 1
+                  && size1 <= 2000 + 200 && fs::file_size(full.todayPath()) == size1,
+              "journal : un jour plein (2000 octets ici) -> une ligne << plein >>, puis plus rien (" + std::to_string(size1) + " octets)");
+
+        const std::string many = base + "/journal-jours";
+        fs::create_directories(many + "/journal");
+        for (int d = 1; d <= 35; ++d) {
+            char name[32];
+            std::snprintf(name, sizeof name, "2001-%02d-%02d.log", d <= 28 ? 1 : 2, d <= 28 ? d : d - 28);
+            std::ofstream(many + "/journal/" + name) << "00:00:00 - TEST vieux\n";
+        }
+        Journal days(many);
+        days.write("", "TEST", "aujourd'hui");
+        int count = 0;
+        for (const auto& e : fs::directory_iterator(many + "/journal")) count += e.path().extension() == ".log" ? 1 : 0;
+        check(count == 30 && !exists(many + "/journal/2001-01-01.log") && !exists(many + "/journal/2001-01-06.log") && exists(many + "/journal/2001-01-07.log")
+                  && exists(days.todayPath()),
+              "journal : 30 jours gard\xC3\xA9s au plus, les plus anciens effac\xC3\xA9s (" + std::to_string(count) + ")");
+    }
 }
 
 // ------------------------------------------------------------ de bout en bout --
@@ -335,6 +403,34 @@ void endToEnd(const std::string& base) {
         o = c.request("EXECUTE", core::json::Value::object(), r);
         check(!o.ok && o.error == "op-inconnue", "une op\xC3\xA9ration inconnue est refus\xC3\xA9" "e [" + o.message + "]");
     }
+    // 1.32.0 : les reponses a un pair inconnu ne sont pas gardees (le meme identifiant : refait, pas rejoue).
+    {
+        const std::string id = "op-0000cafe";
+        Frame r1, r2;
+        Outcome a1 = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs(), c.proto()), "{}", r1);
+        Outcome a2 = c.exchange(protocol::requestHeader("STATUS", id, c.nextSeq(), protocol::nowMs(), c.proto()), "{}", r2);
+        check(a1.ok && a2.ok && r1.header.str("error") == "non-appaire" && r2.header.str("error") == "non-appaire" && !r2.header.flag("replay"),
+              "un pair inconnu : ses r\xC3\xA9ponses ne sont pas gard\xC3\xA9" "es pour le rejeu");
+    }
+    // 1.32.0 : IDENTIFY et 5000 versions annoncees : refuse ; une ligne courte, sans caractere de controle.
+    {
+        Client k(me, "PC-DEV", keyHex);
+        o = k.connect("127.0.0.1", port, 5000);
+        core::json::Value args = core::json::Value::object(), protos = core::json::Value::array();
+        for (int i = 0; i < 5000; ++i) protos.push(i % 3);
+        args.set("protos", std::move(protos));
+        args.set("machine", std::string("PC\n00:00:00 - FAUX ") + "\x1b" + "[31m" + std::string(400, 'z'));
+        Frame r;
+        if (o) o = k.exchange(protocol::requestHeader("IDENTIFY", protocol::newOperationId(), k.nextSeq(), protocol::nowMs(), 1), core::json::write(args, false), r);
+        check(o.ok && !r.header.flag("ok") && r.header.str("error") == "arguments" && r.header.str("message").find("16 au plus") != std::string::npos,
+              "IDENTIFY avec 5000 versions : refus\xC3\xA9 [" + r.header.str("message") + "]");
+        std::string line;
+        for (const auto& l : Journal(agentDir).tail(50))
+            if (l.find("IDENTIFY") != std::string::npos && l.find("5000 versions") != std::string::npos) line = l;
+        check(!line.empty() && line.size() < 400 && !hasControl(line) && countLinesWith(Journal(agentDir).tail(50), "00:00:00 - FAUX") <= 1
+                  && line.find("00:00:00 - FAUX") != std::string::npos,
+              "IDENTIFY refus\xC3\xA9 : une ligne courte au journal (" + std::to_string(line.size()) + " octets), sans saut de ligne inject\xC3\xA9");
+    }
 
     // ---- l'appairage ----
     PairedMachine m;
@@ -351,8 +447,9 @@ void endToEnd(const std::string& base) {
         Outcome p = k.pair(wrong(cs.code), m);
         check(o.ok && !p.ok && p.error == "code-faux", "code faux, essai " + std::to_string(attempt) + " : refus\xC3\xA9 [" + p.message + "]");
         if (attempt == 1) {
+            // 1.32.0 : un PAIR_FINISH manque ferme la connexion : un autre essai demande une autre connexion.
             p = k.pair(cs.code, m);
-            check(!p.ok && p.error == "appairage", "un seul essai par connexion [" + p.message + "]");
+            check(!p.ok && p.error == "reseau" && !k.connected(), "un seul essai par connexion : l'agent l'a ferm\xC3\xA9" "e [" + p.message + "]");
             pairing::CodeState now;
             check(pairing::loadCode(agentDir, now, nullptr) == pairing::CodeLoad::Ok && now.attempts == 1, "l'essai manqu\xC3\xA9 est compt\xC3\xA9");
         }
@@ -458,12 +555,13 @@ void endToEnd(const std::string& base) {
     {
         bool format = !lines.empty();
         int withOp = 0;
-        const std::regex lineRe("^[0-9]{2}:[0-9]{2}:[0-9]{2} (op-[0-9a-f]{8}|-) [A-Z_]+( .*)?$");
+        // 1.32.0 : les identifiants du Studio ont 32 chiffres (128 bits) ; ceux de 8 (avant) passent encore.
+        const std::regex lineRe("^[0-9]{2}:[0-9]{2}:[0-9]{2} (op-[0-9a-f]{8}|op-[0-9a-f]{32}|-) [A-Z_]+( .*)?$");
         for (const auto& l : lines) {
             format = format && std::regex_match(l, lineRe);
-            if (std::regex_search(l, std::regex("^[0-9:]{8} op-[0-9a-f]{8} STATUS"))) ++withOp;
+            if (std::regex_search(l, std::regex("^[0-9:]{8} op-[0-9a-f]{32} STATUS"))) ++withOp;
         }
-        check(format && withOp >= 1, "le journal : HH:MM:SS op-xxxxxxxx OP d\xC3\xA9tail");
+        check(format && withOp >= 1, "le journal : HH:MM:SS op-<32 chiffres> OP d\xC3\xA9tail");
         check(Journal(agentDir).todayPath().find("/journal/") != std::string::npos && exists(Journal(agentDir).todayPath()),
               "journal/AAAA-MM-JJ.log");
         o = c.logs(3, lines);
@@ -547,6 +645,37 @@ void endToEnd(const std::string& base) {
         for (int i = 0; i < 100 && agent->activeConnections() > 1; ++i) pause(20);
         o = ninth.connect(m, 3000);
         check(o.ok, "une place lib\xC3\xA9r\xC3\xA9" "e : la connexion passe");
+    }
+
+    // ---- 1.32.0 : les 2 dernieres places gardees aux PC appaires ----
+    {
+        for (int i = 0; i < 250 && agent->activeConnections() > 1; ++i) pause(20);
+        const int before = agent->activeConnections();
+        TlsIdentity intrus;
+        check(TlsIdentity::generate("XPG-Studio PC-INTRUS", intrus, nullptr), "un PC non appair\xC3\xA9");
+        std::vector<std::unique_ptr<Client>> strangers, mine;
+        int admitted = 0, refused = 0;
+        for (int i = 0; i < 7 - before; ++i) {
+            strangers.push_back(std::make_unique<Client>(intrus, "PC-INTRUS", keyHex));
+            AgentInfo ii;
+            Outcome a1 = strangers.back()->connect("127.0.0.1", port, 3000);
+            if (a1.ok) a1 = strangers.back()->identify(ii);
+            ++(a1.ok ? admitted : refused);
+        }
+        check(admitted == 6 - before && refused == 1,
+              "non appair\xC3\xA9s : " + std::to_string(admitted) + " admis, le suivant refus\xC3\xA9 (il resterait moins de 3 places)");
+        for (int i = 0; i < 100 && agent->activeConnections() > before + admitted; ++i) pause(20);
+        for (int i = 0; i < 2; ++i) {
+            mine.push_back(std::make_unique<Client>(me, "PC-DEV", keyHex));
+            AgentStatus s4;
+            Outcome a2 = mine.back()->connect(m, 3000);
+            if (a2.ok) a2 = mine.back()->status(s4);
+            check(a2.ok, "un PC appair\xC3\xA9 prend une place gard\xC3\xA9" "e (" + std::to_string(i + 1) + ") [" + a2.message + "]");
+        }
+        check(agent->activeConnections() == 8, "les 8 places : " + std::to_string(agent->activeConnections()));
+        strangers.clear();
+        mine.clear();
+        for (int i = 0; i < 250 && agent->activeConnections() > before; ++i) pause(20);
     }
 
     // ---- la decouverte UDP ----
@@ -644,6 +773,46 @@ void endToEnd(const std::string& base) {
     agent->stop();
 }
 
+// ---- 1.32.0 : les vraies limites - 2 connexions par adresse, un pair inconnu muet, un PAIR_START par seconde ----
+void limitsTests(const std::string& base) {
+    std::string why;
+    TlsIdentity me;
+    check(TlsIdentity::generate("XPG-Studio PC-DEV", me, nullptr), "limites : identit\xC3\xA9 du Studio");
+    const std::string keyHex = crypto::hex(crypto::newSignKeys().pub);
+    AgentConfig cfg = agentConfig(base + "/agent-limites");
+    cfg.discoveryPort = -1;
+    cfg.maxPerAddress = 2;          // les vraies valeurs
+    cfg.pairStartIntervalMs = 1000;
+    cfg.unpairedIdleTimeoutMs = 600;   // 15 s en vrai
+    Agent agent(cfg);
+    check(agent.start(&why), "limites : l'agent d\xC3\xA9marre [" + why + "]");
+    const int port = agent.port();
+    Client a(me, "PC-DEV", keyHex), b(me, "PC-DEV", keyHex), third(me, "PC-DEV", keyHex);
+    AgentInfo ia, ib;
+    Outcome oa = a.connect("127.0.0.1", port, 3000);
+    if (oa) oa = a.identify(ia);
+    Outcome ob = b.connect("127.0.0.1", port, 3000);
+    if (ob) ob = b.identify(ib);
+    check(oa.ok && ob.ok && agent.activeConnections() == 2, "deux connexions depuis 127.0.0.1 [" + oa.message + ob.message + "]");
+    Outcome o3 = third.connect("127.0.0.1", port, 3000);
+    check(!o3.ok && o3.error == "reseau", "la 3e \xC3\xA0 la fois depuis la m\xC3\xAAme adresse : refus\xC3\xA9" "e [" + o3.message + "]");
+    // Sans code en cours, PAIR_START repond << pas-de-code >> (rien n'est consomme) : la limite se voit seule.
+    PairedMachine pm;
+    const Outcome p1 = a.pair("123456", pm);
+    const Outcome p2 = b.pair("123456", pm);
+    check(!p1.ok && p1.error == "pas-de-code" && !p2.ok && p2.error == "occupe",
+          "PAIR_START : un par seconde au plus par adresse [" + p1.error + ", " + p2.message + "]");
+    pause(1500);   // plus que unpairedIdleTimeoutMs : les deux pairs inconnus muets sont fermes
+    AgentStatus st;
+    const Outcome oa2 = a.status(st);
+    check(!oa2.ok && oa2.error == "reseau" && agent.activeConnections() == 0,
+          "un pair inconnu muet est ferm\xC3\xA9 (" + std::to_string(cfg.unpairedIdleTimeoutMs) + " ms ici, 15 s en vrai) [" + oa2.message + "]");
+    Outcome o4 = third.connect("127.0.0.1", port, 3000);
+    const Outcome p3 = o4.ok ? third.pair("123456", pm) : o4;
+    check(o4.ok && !p3.ok && p3.error == "pas-de-code", "les places rendues, une seconde plus tard : PAIR_START de nouveau permis [" + p3.message + "]");
+    agent.stop();
+}
+
 // ---- l'essai croise : un agent ailleurs (l'agent Windows sous Wine) ----
 int remote(const std::string& host, int port, int udpPort, const std::string& code) {
     const std::string base = tempDir("distant");
@@ -713,6 +882,7 @@ int main(int argc, char** argv) {
     const std::string base = tempDir("essai");
     unitTests(base);
     endToEnd(base);
+    limitsTests(base);
     std::error_code ec;
     fs::remove_all(base, ec);
     std::printf("deploy_net_test : %d controles, %d echec(s)\n", g_checks, g_failures);

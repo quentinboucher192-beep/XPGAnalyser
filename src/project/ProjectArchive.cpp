@@ -5,6 +5,7 @@
 
 #include "Security.hpp"
 #include "../core/AtomicFile.hpp"
+#include "../xls/ZipLimits.hpp"   // 1.32.0 : les bornes d'un zip recu
 #include "../../third_party/miniz.h"
 
 #include <algorithm>
@@ -549,17 +550,21 @@ core::Result<Contents> read(const Bytes& zipBytes) {
             return core::fail(core::ErrorCode::FileUnreadable,
                               "ce n'est pas une archive lisible : le fichier est abim\xC3\xA9, coup\xC3\xA9 (copie interrompue) ou d'un autre genre");
         const mz_uint n = mz_zip_reader_get_num_files(&zip);
-        std::uint64_t total = 0;
+        // Une bombe (des Go annonces, des milliers d'entrees) ne s'ouvre pas en memoire : 1.32.0, les bornes communes.
+        xls::ziplimits::Budget budget;
+        std::string tooBig;
+        if (!budget.entries(n, &tooBig)) {
+            mz_zip_reader_end(&zip);
+            return core::fail(core::ErrorCode::FileTooLarge, tooBig);
+        }
         for (mz_uint i = 0; i < n; ++i) {
             mz_zip_archive_file_stat st;
             if (!mz_zip_reader_file_stat(&zip, i, &st) || st.m_is_directory) continue;
             std::string name = st.m_filename;
             for (auto& ch : name) if (ch == '\\') ch = '/';
-            // Une bombe (des Go annonces) ne s'ouvre pas en memoire.
-            total += st.m_uncomp_size;
-            if (st.m_uncomp_size > 0x7FFFFFFFu || total > 0xFFFFFFFFull) {
+            if (!budget.take(st.m_uncomp_size, name, &tooBig)) {
                 mz_zip_reader_end(&zip);
-                return core::fail(core::ErrorCode::FileTooLarge, "l'archive annonce plus de 4 Go : elle ne s'ouvre pas");
+                return core::fail(core::ErrorCode::FileTooLarge, tooBig);
             }
             std::size_t size = 0;
             void* data = mz_zip_reader_extract_to_heap(&zip, i, &size, 0);
@@ -717,7 +722,15 @@ core::Status unpack(const Contents& c, const std::string& folder, const UnpackOp
             case Origin::Beside: {
                 // A cote du dossier, a son nom : <dossier>.xpglayout (le nom sans ce qui suit
                 // son dernier point, comme LayoutFile::pathFor).
+                // 1.32.0 : seulement la disposition des grafcets (_a-cote/<nom>.xpglayout), comme ApiArchive l'ecrit :
+                // une archive recue ne pose pas un .exe, un .lnk ou un .bat a cote du dossier choisi.
                 const std::string ext = extOf(e.path);
+                const std::string besideLeaf = startsWith(e.path, "_a-cote/") ? e.path.substr(8) : std::string{};
+                if (ext != ".xpglayout" || besideLeaf.size() <= ext.size() || besideLeaf.find('/') != std::string::npos) {
+                    u.notes.push_back(e.path + " : refus\xC3\xA9 (\xC3\xA0 c\xC3\xB4t\xC3\xA9 du dossier, seule la disposition des grafcets "
+                                      "<nom>.xpglayout se pose)");
+                    break;
+                }
                 std::string leaf = root.filename().string();
                 if (const auto dot = leaf.find_last_of('.'); dot != std::string::npos && dot > 0) leaf.resize(dot);
                 const fs::path target = root.parent_path() / (leaf + ext);

@@ -10466,7 +10466,9 @@ struct PixelRenderer final : gfx::IRenderer {
 std::string httpGet(int port, const std::string& path, const std::string& cookie, const std::string& body = {}) {
     hmi::net::Socket s;
     if (!s.connect("127.0.0.1", port, 2000)) return {};
-    std::string rq = std::string(body.empty() ? "GET " : "POST ") + path + " HTTP/1.1\r\nHost: x\r\nConnection: close\r\n";
+    // 1.32.0 : Host est l'adresse et le port du poste, comme un navigateur l'envoie (le serveur refuse un POST sinon).
+    std::string rq = std::string(body.empty() ? "GET " : "POST ") + path + " HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port)
+                   + "\r\nConnection: close\r\n";
     if (!cookie.empty()) rq += "Cookie: xpg_ihm=" + cookie + "\r\n";
     if (!body.empty()) rq += "Content-Length: " + std::to_string(body.size()) + "\r\n";
     rq += "\r\n" + body;
@@ -10685,6 +10687,19 @@ void lot14_notifications_rapports_web() {
     doc->project.security.enabled = true;
     check(wp.setSetting("port", std::to_string(freePort)) && wp.setSetting("commande", "TRUE") && wp.setSetting("actif", "TRUE") && doc->project.web.enabled,
           "Actif, sur un port libre, avec la commande");
+    // 1.32.0 : le projet seul n'ouvre pas de serveur - il faut aussi le reglage du poste.
+    web.tick(&doc->project);
+    check(!web.running() && web.error().find(std::string(app::WebHost::kSettingLabel)) != std::string::npos,
+          "le projet seul : rien n'\xC3\xA9" "coute, et l'\xC3\xA9tat dit quel r\xC3\xA9glage du poste cocher");
+    wp.refreshLive();
+    check(wp.clients().model()->rowCount() == 1 && wp.clients().model()->cellText(0, 0).find("R\xC3\xA9glages") != std::string::npos,
+          "... la table le dit aussi");
+    {
+        const auto said = web.takeEvents();
+        check(std::any_of(said.begin(), said.end(), [](const std::string& e) { return e.find("non d\xC3\xA9marr\xC3\xA9") != std::string::npos; }),
+              "... et le journal");
+    }
+    web.setAllowedOnThisPc(true);
     web.tick(&doc->project);
     check(web.running() && web.port() == freePort && web.addresses().size() == 1 && web.addresses()[0] == "http://127.0.0.1:" + std::to_string(freePort),
           "le serveur tourne : http://127.0.0.1:<port> (ce poste seulement)");
@@ -10713,8 +10728,12 @@ void lot14_notifications_rapports_web() {
     check(body != std::string::npos && jpeg.size() > body + 100 && static_cast<unsigned char>(jpeg[body + 4]) == 0xFF
               && static_cast<unsigned char>(jpeg[body + 5]) == 0xD8,
           "l'image : un JPEG (FF D8)");
-    // Un clic du navigateur : un clic sur l'ecran, a la place de l'image.
-    (void)httpGet(freePort, "/clic", cookie, "x=10&y=20");
+    // Un clic du navigateur : un clic sur l'ecran, a la place de l'image (1.32.0 : avec le jeton que la page donne).
+    const std::string page = httpGet(freePort, "/", cookie);
+    const auto tokenAt = page.find("const jeton='");
+    const std::string jeton = tokenAt == std::string::npos ? std::string{} : page.substr(tokenAt + 13, page.find('\'', tokenAt + 13) - tokenAt - 13);
+    check(httpGet(freePort, "/clic", cookie, "x=10&y=20").rfind("HTTP/1.1 403", 0) == 0 && web.takeClicks().empty(), "un clic sans le jeton de la page : 403");
+    (void)httpGet(freePort, "/clic", cookie, "x=10&y=20&jeton=" + jeton);
     const auto clicks = web.takeClicks();
     check(clicks.size() == 1 && clicks[0].at.x == 60.f && clicks[0].at.y == 60.f && clicks[0].user == "chef",
           "le clic (10, 20) de l'image : (60, 60) \xC3\xA0 l'\xC3\xA9" "cran, par le chef");

@@ -18,6 +18,13 @@
 //  reinstallation ni une desinstallation n'y touchent.
 //
 //  JAMAIS EN CLAIR : ni dans index.json, ni dans un journal, ni dans un projet.
+//
+//  LA CLE LIEE A SES SERVEURS (securite) : une cle ne part que vers un serveur
+//  (https://hote:port) avec lequel elle a ete ajoutee ou essayee avec succes.
+//  Une adresse changee ailleurs que par l'utilisateur (un fichier, une faute) ne
+//  recoit jamais la cle : le fournisseur refuse l'envoi et dit d'essayer la cle
+//  pour ce serveur (Tester, ou Lister les modeles) - l'essai l'y lie. Une cle
+//  d'avant (sans serveur) est liee a son premier succes.
 //  La cle IA/cle.bin d'avant (1.15.0 a 1.17.x) devient une cle du gestionnaire
 //  au premier lancement (migrateLegacy) : rien n'est a ressaisir.
 // =============================================================================
@@ -43,6 +50,8 @@ struct Entry {
     int         tested{0};     // 1 : acceptee ; -1 : refusee ; 0 : jamais
     std::string testNote;      // "12 modeles", "401 : cle refusee"
     bool        stored{false}; // memorisee sur ce PC (IA/cles/<id>.bin) ; faux : pour la seance
+    // Les serveurs ou elle peut partir ("https://api.anthropic.com:443") ; vide : pas encore liee (une cle d'avant).
+    std::vector<std::string> servers{};
     bool operator==(const Entry&) const = default;
 };
 
@@ -80,5 +89,17 @@ bool migrateLegacy(std::string_view settingsProvider);
 
 // Les essais : oublier les cles de la seance (pas les fichiers).
 void resetSession();
+
+// ---- la cle liee a ses serveurs ---------------------------------------------------------------------------------------
+// Le serveur d'une adresse : "https://hote:port" (l'hote en minuscules) ; vide : adresse illisible.
+[[nodiscard]] std::string serverOf(std::string_view url);
+// La cle (son secret) peut-elle partir vers `url` ? Faux et `why` (en francais) : elle est liee a d'autres serveurs. Vrai :
+// une cle inconnue du gestionnaire (saisie a l'instant, pas enregistree), une cle d'avant sans serveur, un serveur lie.
+[[nodiscard]] bool allowedFor(const std::string& secret, std::string_view url, std::string* why = nullptr);
+// Un succes avec ce secret vers `url` : les cles de ce secret sans serveur y sont liees ; `retest` (un essai explicite :
+// Tester, Lister les modeles) : le serveur s'ajoute aussi a celles deja liees ailleurs.
+void confirmServer(const std::string& secret, std::string_view url, bool retest);
+// Lie la cle `id` a ce serveur (son ajout, l'adresse sous les yeux). Faux : cle inconnue ou adresse illisible.
+bool bindServer(const std::string& id, std::string_view url);
 
 } // namespace app::ai::keys

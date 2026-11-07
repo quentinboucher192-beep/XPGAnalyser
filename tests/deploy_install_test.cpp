@@ -20,6 +20,11 @@
 //      << plein >> (AgentConfig::simulatedFreeBytes : une place libre SIMULEE,
 //      option d'essai de l'agent) ; demarrer avec la session (un HOME
 //      temporaire sous Linux) ; un poste lance par la session, retrouve.
+//    - 1.32.0 : un temporaire d'extraction laisse la (efface, refait neuf ; un lien :
+//      le lien seul ; qui ne s'efface pas : rien n'est extrait), un lien sur le
+//      chemin, un lien dans versions/ au demarrage, poste.json modifie (son
+//      "stopFile" n'est pas suivi), PREPARE et un contenu annonce demesure, un
+//      envoi en cours par PC.
 //
 //  deploy_install_test [--poste CHEMIN]       (DEPLOY_VERBOSE=1 : chaque controle)
 //  deploy_install_test --distant ADRESSE PORT CODE [DOSSIER] : l'essai croise (un
@@ -41,6 +46,10 @@
 #include "../src/deploy/Station.hpp"
 
 #include "../third_party/miniz.h"
+
+#if !defined(_WIN32)
+#  include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -192,6 +201,9 @@ AgentConfig agentConfig(const std::string& dir, const std::string& program) {
     c.startCheckMs = 1500;
     c.stopGraceMs = 1500;
     c.keepVersions = 3;
+    // 1.32.0 : 2 connexions a la fois par adresse en vrai ; ici tout vient de 127.0.0.1, coup sur coup (une
+    // connexion fermee peut compter encore un instant) : l'essai de la limite est dans deploy_net_test.
+    c.maxPerAddress = 4;
     return c;
 }
 
@@ -321,6 +333,43 @@ void run(const fs::path& base, const std::string& program) {
         }
         x = extractPackage(U(pkg("X")), U(base / "extrait" / "X"), xo);
         check(!x.ok && has(x.error, "approuv") && !present(base / "extrait" / "X"), "extractPackage : une cl\xC3\xA9 non approuv\xC3\xA9" "e est refus\xC3\xA9" "e [" + x.error + "]");
+        // 1.32.0 : le temporaire d'une installation coupee est efface, l'extraction repart d'un dossier neuf.
+        const fs::path d3 = base / "extrait" / "V1-reste";
+        writeFile(fs::path(U(d3) + ".extraction") / "vieux" / "intrus.txt", "reste");
+        x = extractPackage(U(pkg("V1")), U(d3), xo);
+        check(x.ok && present(d3 / "project.xpgproj") && !present(d3 / "vieux") && !present(fs::path(U(d3) + ".extraction")),
+              "extractPackage : le temporaire laiss\xC3\xA9 par une installation coup\xC3\xA9" "e est effac\xC3\xA9, l'extraction repart d'un dossier neuf [" + x.error + "]");
+#if !defined(_WIN32)
+        // Un lien a la place du temporaire : le lien seul est retire, rien n'est ecrit ni efface au-dela.
+        const fs::path outside = base / "dehors";
+        writeFile(outside / "precieux.txt", "a garder");
+        const fs::path d4 = base / "extrait" / "V1-lien";
+        fs::create_directory_symlink(outside, fs::path(U(d4) + ".extraction"));
+        x = extractPackage(U(pkg("V1")), U(d4), xo);
+        check(x.ok && present(d4 / "project.xpgproj") && readFile(outside / "precieux.txt") == "a garder" && !present(outside / "project.xpgproj"),
+              "extractPackage : un lien \xC3\xA0 la place du temporaire : le lien seul est retir\xC3\xA9 [" + x.error + "]");
+        // Un lien sur le chemin, sous le dossier de confiance (celui de l'agent) : refuse, rien n'est ecrit.
+        const fs::path racine = base / "racine";
+        fs::create_directories(racine);
+        fs::create_directory_symlink(outside, racine / "Applications");
+        PackageExtractOptions xr = xo;
+        xr.root = U(racine);
+        x = extractPackage(U(pkg("V1")), U(racine / "Applications" / "App" / "V1"), xr);
+        check(!x.ok && has(x.error, "lien") && !present(outside / "App"), "extractPackage : un lien sur le chemin : refus\xC3\xA9, rien d'\xC3\xA9" "crit [" + x.error + "]");
+        // Un temporaire qui ne s'efface pas en entier : rien n'est extrait. Un dossier sans droit d'ecriture (root
+        // passe outre : alors une profondeur que l'agent refuse de parcourir).
+        const fs::path d5 = base / "extrait" / "V1-bloque";
+        fs::path stuck = fs::path(U(d5) + ".extraction") / "verrou";
+        const bool root = ::geteuid() == 0;
+        if (root)
+            for (int i = 0; i < 210; ++i) stuck /= "a";
+        writeFile(stuck / "fichier.txt", "bloque");
+        if (!root) fs::permissions(stuck, fs::perms::owner_read | fs::perms::owner_exec, fs::perm_options::replace);
+        x = extractPackage(U(pkg("V1")), U(d5), xo);
+        check(!x.ok && has(x.error, "ne s'efface pas") && !present(d5) && present(stuck / "fichier.txt"),
+              "extractPackage : un temporaire qui ne s'efface pas en entier : rien n'est extrait [" + x.error + "]");
+        if (!root) fs::permissions(stuck, fs::perms::owner_all, fs::perm_options::replace);
+#endif
     }
 
     // ============================================================ l'agent ===
@@ -407,8 +456,30 @@ void run(const fs::path& base, const std::string& program) {
     agent->stop();
     agent.reset();
     check(station::processCreated(pidV1) != 0, "l'agent arr\xC3\xAAt\xC3\xA9 : le poste V1 tourne toujours");
+    // 1.32.0 : poste.json modifie pendant l'arret - son "stopFile" n'est jamais suivi (arret.json de l'agent).
+    const fs::path victim = base / "victime.txt";
+    writeFile(victim, "intacte");
+    {
+        Value pv;
+        check(install::readJson(U(fs::path(agentDir) / "poste.json"), pv, &why) && !pv.str("stopFile").empty(), "poste.json \xC3\xA9" "crit par l'agent");
+        pv.set("stopFile", U(victim));
+        writeFile(fs::path(agentDir) / "poste.json", core::json::write(pv, true));
+    }
+#if !defined(_WIN32)
+    // 1.32.0 : un lien dans versions/ (l'agent n'en cree jamais) : retire au demarrage, sans le suivre.
+    const fs::path outsideV = base / "dehors-versions";
+    writeFile(outsideV / "precieux.txt", "a garder");
+    fs::create_directory_symlink(outsideV, apps / "versions" / "V9");
+#endif
     agent = std::make_unique<Agent>(agentConfig(agentDir, program));
     check(agent->start(&why), "l'agent red\xC3\xA9marre [" + why + "]");
+#if !defined(_WIN32)
+    {
+        std::error_code ec;
+        check(!fs::exists(fs::symlink_status(apps / "versions" / "V9", ec)) && readFile(outsideV / "precieux.txt") == "a garder",
+              "au d\xC3\xA9marrage, un lien dans versions/ est retir\xC3\xA9 sans \xC3\xAAtre suivi");
+    }
+#endif
     m.port = agent->port();
     o = c.listApps(m, list);
     check(o.ok && list.station.running && list.station.pid == pidV1 && list.station.version == "V1" && !list.station.adopted,
@@ -436,6 +507,7 @@ void run(const fs::path& base, const std::string& program) {
         check(has(readFile(apps / "versions" / "V2" / "poste-trace.txt"), "repris=etat de V1"),
               "V2 reprend l'\xC3\xA9tat \xC3\xA9" "crit par V1 \xC3\xA0 l'arr\xC3\xAAt (XPG_REPRISE_FICHIER n'est pas effac\xC3\xA9 entre les deux)");
         check(!present(fs::path(agentDir) / "arret.json"), "la demande d'arr\xC3\xAAt est effac\xC3\xA9" "e quand le poste est sorti");
+        check(readFile(victim) == "intacte", "le \"stopFile\" de poste.json n'a pas \xC3\xA9t\xC3\xA9 suivi (ni \xC3\xA9" "crit ni effac\xC3\xA9)");
         check(!present(fs::path(agentDir) / "incoming" / (crypto::sha256Hex(readFile(pkg("V2"))) + ".part")), "le paquet re\xC3\xA7u est effac\xC3\xA9 apr\xC3\xA8s l'installation");
     }
 
@@ -459,6 +531,14 @@ void run(const fs::path& base, const std::string& program) {
         const auto rep = verifyPackage(U(pkg("V3")), vo);
         o = k.prepare("Essai_Deploiement", "V3", bytes.size(), sha, rep.manifest.totalSize, pr);
         check(o.ok && pr.offset == 0 && !pr.installed && pr.chunkSize == protocol::kChunkSize, "PREPARE V3 : depuis 0, blocs de 1 Mio [" + o.message + "]");
+        {
+            // 1.32.0 : un contenu annonce plus gros qu'un paquet ne peut l'etre : refuse (la place demandee debordait).
+            Client::PrepareReply big;
+            const Outcome b1 = k.prepare("Essai_Deploiement", "V3", bytes.size(), sha, 5ull * 1024 * 1024 * 1024, big);
+            const Outcome b2 = k.prepare("Essai_Deploiement", "V3", bytes.size(), sha, 1ull << 62, big);
+            check(!b1.ok && b1.error == "arguments" && has(b1.message, "contentSize") && !b2.ok && b2.error == "arguments",
+                  "PREPARE : un contenu annonc\xC3\xA9 de 5 Gio (ou 2^62 octets) est refus\xC3\xA9 [" + b1.message + "]");
+        }
         std::uint64_t got = 0;
         o = k.sendChunk(pr.transfer, 0, std::string_view(bytes).substr(0, protocol::kChunkSize), got, std::string(64, '0'));
         check(!o.ok && o.error == "bloc-abime" && has(o.message, "renvoie"), "un bloc ab\xC3\xAEm\xC3\xA9 (SHA-256 faux) est refus\xC3\xA9 [" + o.message + "]");
@@ -475,8 +555,13 @@ void run(const fs::path& base, const std::string& program) {
             if (n == "app/donnees/version.txt") d = "V3 modifiee\n";
         const fs::path altered = pk / "altere.xpgdeploy";
         writeZip(altered, e);
+        const fs::path incoming = fs::path(agentDir) / "incoming";
+        check(present(incoming / (sha + ".part")) && present(incoming / (sha + ".json")), "l'envoi de V3 est en cours (incoming/)");
         std::string transfer;
         o = sendAll(k, altered, transfer);
+        // 1.32.0 : un envoi en cours par PC - le PREPARE d'un autre paquet abandonne celui de V3.
+        check(!present(incoming / (sha + ".part")) && !present(incoming / (sha + ".json")),
+              "un envoi en cours par PC : le PREPARE d'un autre paquet a abandonn\xC3\xA9 celui de V3");
         Value vr;
         if (o) o = k.verifyPackage(transfer, vr);
         check(!o.ok && o.error == "paquet-refuse" && has(o.message, "version.txt"), "un paquet alt\xC3\xA9r\xC3\xA9 est refus\xC3\xA9 par l'agent [" + o.message + "]");

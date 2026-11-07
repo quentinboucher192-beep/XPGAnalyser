@@ -11,6 +11,7 @@
 //  overrun into a test failure instead of a crash on someone's desk.
 // =============================================================================
 #include "../src/import/ProjectImporter.hpp"
+#include "../src/import/XmlReader.hpp"   // 1.32.0 : un million de commentaires a la suite
 #include <cstdio>
 #include <fstream>
 #include <random>
@@ -86,6 +87,27 @@ int main(int argc, char** argv) {
         (void)imp.importFile(tmp);
     }
     std::printf("  200 random mutations survived\n");
+
+    // 5. 1.32.0 : a million comments, declarations and blank runs in a row. The reader used to recurse once per skipped
+    // item, so a received file could overflow the stack; it now loops.
+    {
+        std::string s = "<?xml version=\"1.0\"?>";
+        s.reserve(16u * 1000000u);
+        for (int i = 0; i < 1000000; ++i) s += (i % 3 == 0) ? "<!--c-->" : (i % 3 == 1) ? "<?p?> " : "<!X>";
+        s += "<PGMExchangeFile/>";
+        importer::XmlReader r(s);
+        int elements = 0;
+        bool ok = true;
+        for (;;) {
+            auto ev = r.next();
+            if (!ev) { ok = false; break; }
+            if (*ev == importer::XmlEvent::EndOfDocument) break;
+            if (*ev == importer::XmlEvent::StartElement) ++elements;
+        }
+        std::printf("  %-46s %s\n", "a million comments in a row", ok && elements == 1 ? "read, one element" : "WRONG");
+        if (!ok || elements != 1) return 1;
+        run(s, "a million comments in a row (importer)");
+    }
     std::printf("\nno out-of-range access reached\n");
     return 0;
 }

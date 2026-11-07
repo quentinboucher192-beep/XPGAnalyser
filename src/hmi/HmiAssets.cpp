@@ -294,6 +294,127 @@ std::string fileStamp(const std::string& path) {
     return b;
 }
 
+// ---- 1.32.0 : les chemins venus du projet -------------------------------------------------------
+namespace {
+std::mutex& allowedLock() {
+    static std::mutex m;
+    return m;
+}
+std::vector<std::string>& allowedSlot() {
+    static std::vector<std::string> v;
+    return v;
+}
+bool slash(char c) noexcept { return c == '/' || c == '\\'; }
+
+// Le chemin pour comparer sans toucher au disque : / partout, sans . ni .., en minuscules (ASCII). Vide : il remonte
+// au-dessus de sa racine (d'un partage : \\serveur\partage).
+std::string lexicalKey(std::string_view path) {
+    std::string s(path);
+    for (auto& c : s) {
+        if (c == '\\') c = '/';
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    std::string prefix;
+    std::size_t i = 0, keep = 0;                       // keep : ce que .. ne retire pas (serveur et partage)
+    if (s.size() >= 2 && s[0] == '/' && s[1] == '/') {
+        prefix = "//";
+        i = 2;
+        keep = 2;
+    } else if (s.size() >= 2 && s[1] == ':') {
+        prefix = s.substr(0, 2) + "/";
+        i = 2;
+    } else if (!s.empty() && s[0] == '/') {
+        prefix = "/";
+        i = 1;
+    }
+    std::vector<std::string> parts;
+    while (i <= s.size()) {
+        std::size_t end = s.find('/', i);
+        if (end == std::string::npos) end = s.size();
+        const std::string part = s.substr(i, end - i);
+        if (part == "..") {
+            if (parts.size() <= keep) return {};
+            parts.pop_back();
+        } else if (!part.empty() && part != ".") {
+            parts.push_back(part);
+        }
+        i = end + 1;
+    }
+    std::string out = prefix;
+    for (std::size_t k = 0; k < parts.size(); ++k) out += (k ? "/" : "") + parts[k];
+    return out;
+}
+
+bool reservedName(std::string_view seg) {
+    std::string base(seg.substr(0, seg.find('.')));     // CON.txt est CON
+    while (!base.empty() && base.back() == ' ') base.pop_back();
+    for (auto& c : base) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    if (base == "CON" || base == "PRN" || base == "AUX" || base == "NUL" || base == "CONIN$" || base == "CONOUT$") return true;
+    return base.size() == 4 && (base.rfind("COM", 0) == 0 || base.rfind("LPT", 0) == 0) && base[3] >= '1' && base[3] <= '9';
+}
+} // namespace
+
+void setUserAllowedFolders(std::vector<std::string> folders) {
+    std::vector<std::string> kept;
+    for (auto& f : folders) {
+        std::size_t a = 0, b = f.size();
+        while (a < b && std::isspace(static_cast<unsigned char>(f[a]))) ++a;
+        while (b > a && std::isspace(static_cast<unsigned char>(f[b - 1]))) --b;
+        if (b > a) kept.push_back(f.substr(a, b - a));
+    }
+    std::lock_guard<std::mutex> lock(allowedLock());
+    allowedSlot() = std::move(kept);
+}
+
+std::vector<std::string> userAllowedFolders() {
+    std::lock_guard<std::mutex> lock(allowedLock());
+    return allowedSlot();
+}
+
+bool devicePath(std::string_view p) noexcept {
+    return p.size() >= 4 && slash(p[0]) && slash(p[1]) && (p[2] == '?' || p[2] == '.') && slash(p[3]);
+}
+
+bool networkOrDevicePath(std::string_view p) noexcept { return p.size() >= 2 && slash(p[0]) && slash(p[1]); }
+
+bool unsafePathSegment(std::string_view path, std::string* bad) {
+    std::size_t i = 0;
+    if (path.size() >= 2 && path[1] == ':' && std::isalpha(static_cast<unsigned char>(path[0]))) i = 2;   // C:
+    while (i <= path.size()) {
+        std::size_t end = i;
+        while (end < path.size() && !slash(path[end])) ++end;
+        const std::string_view seg = path.substr(i, end - i);
+        const bool dots = seg == "." || seg == "..";
+        if (!seg.empty() && !dots
+            && (seg.back() == '.' || seg.back() == ' ' || seg.find(':') != std::string_view::npos || reservedName(seg))) {
+            if (bad) *bad = std::string(seg);
+            return true;
+        }
+        i = end + 1;
+    }
+    return false;
+}
+
+bool insideUserAllowedFolder(std::string_view path) {
+    const std::string key = lexicalKey(path);
+    if (key.empty()) return false;
+    for (const auto& f : userAllowedFolders()) {
+        std::string root = lexicalKey(f);
+        if (root.empty()) continue;
+        if (root.size() > 1 && root.back() == '/') root.pop_back();
+        if (key == root || (key.size() > root.size() && key.compare(0, root.size(), root) == 0 && key[root.size()] == '/')) return true;
+    }
+    return false;
+}
+
+bool projectPathAllowed(std::string_view path, std::string* why) {
+    if (!networkOrDevicePath(path) || insideUserAllowedFolder(path)) return true;
+    if (why)
+        *why = "chemin r\xC3\xA9seau ou de p\xC3\xA9riph\xC3\xA9rique venu du projet, pas ouvert (" + std::string(path)
+             + ") : pour le permettre sur ce poste, ajoute son dossier dans R\xC3\xA9glages > " + std::string(kAllowedFoldersSetting);
+    return false;
+}
+
 std::string resolveExternalPath(const ExternalFile& f, const std::string& projectFolder) {
     if (f.kind == ExternalKind::Database) return f.path;
     fs::path p(f.path);
@@ -305,6 +426,8 @@ ExternalState externalState(const ExternalFile& f, const std::string& projectFol
     ExternalState st;
     st.resolvedPath = resolveExternalPath(f, projectFolder);
     if (f.kind == ExternalKind::Database) { st.status = ExternalStatus::Unverifiable; return st; }
+    // 1.32.0 : un chemin reseau venu du projet n'est pas touche (fuite NTLM) : non verifiable, et pourquoi.
+    if (!projectPathAllowed(st.resolvedPath, &st.refused)) { st.status = ExternalStatus::Unverifiable; return st; }
     std::error_code ec;
     if (!fs::is_regular_file(st.resolvedPath, ec)) { st.status = ExternalStatus::Missing; return st; }
     st.bytes = static_cast<std::uint64_t>(fs::file_size(st.resolvedPath, ec));

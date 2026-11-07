@@ -873,6 +873,11 @@ void AiPanel::contextAction(int what, const std::string& attachmentId) {
                 say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB est manquant : sa copie n'est plus dans le dossier de l'Assistant.");
                 return;
             }
+            // Seulement la copie (sous IA/pieces-jointes/) ou l'original que l'utilisateur a joint : jamais un autre chemin.
+            if (!insideAttachments(f->path) && (f->attachment.originalPath.empty() || f->path != f->attachment.originalPath)) {
+                say("Assistant IA : \xC2\xAB " + name + " \xC2\xBB n'est pas ouvert : son chemin sort du dossier de l'Assistant.");
+                return;
+            }
             if (const std::string why = dossiers::ouvrirDansLeSysteme(f->path); !why.empty()) say("Assistant IA : " + why);
             return;
         }

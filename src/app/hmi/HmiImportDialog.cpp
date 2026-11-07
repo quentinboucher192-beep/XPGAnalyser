@@ -7,6 +7,7 @@
 #include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : le champ Fichier, un chemin (Ouvrir dans l'explorateur)
 
 #include "../../menu/MenuManager.hpp"
+#include "../Licence.hpp"   // 1.32.0 : la licence a la validation d'un import de vues (advanced_import)
 
 #include <algorithm>
 #include <cctype>
@@ -500,6 +501,15 @@ void HmiImportDialog::confirm() { finish(true); }
 
 void HmiImportDialog::finish(bool ok) {
     if (done_ || (ok && !ready())) return;   // 1.11.2 : rien a importer - Importer est grise
+    // 1.32.0 (H3) : la licence a la validation - chaque chemin vers cette fenetre y passe (Importer des vues, un
+    // paquet lache sur l'appli, la ligne de commande, un script). Seul un paquet de vues est verrouille.
+    if (ok && spec_->manifest.kind == "vues") {
+        if (std::string locked; !app::licence::require("advanced_import", &locked)) {
+            spec_->error = locked;            // le bandeau le dit a la prochaine image
+            if (ok_) ok_->setEnabled(false);  // pas de setRoot ici : on est peut-etre dans le clic de ce bouton
+            return;
+        }
+    }
     done_ = true;
     manager().CloseDialog(menu::DialogResult{ok ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, payload()});
 }

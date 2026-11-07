@@ -58,6 +58,15 @@ std::vector<std::string> wrap(const std::string& text, gfx::FontId f, float widt
 
 const char* const kProviders[][2] = {{"Anthropic", "anthropic"}, {"Compatible OpenAI", "openai"}};
 
+// Les reglages d'un essai de la cle : ceux de l'Assistant, avec son fournisseur et son adresse preferee.
+Settings testSettingsOf(const Settings& assistant, const keys::Entry& e) {
+    Settings s = assistant;
+    s.provider = e.provider;
+    if (!e.endpoint.empty()) s.endpoint = e.endpoint;
+    else if (keys::providerOf(assistant.provider) != e.provider) s.endpoint.clear();
+    return s;
+}
+
 } // namespace
 
 // ------------------------------------------------------------------ la liste ---
@@ -421,6 +430,7 @@ bool AiKeysDialog::saveDetail() {
             say(why, false);
             return false;
         }
+        (void)keys::bindServer(id, serviceUrl(testSettingsOf(panel_.assistant().settings(), e)));   // ajoutee pour ce serveur (celui de Tester)
         selected_ = id;
         say("Cl\xC3\xA9 \xC2\xAB " + e.name + " \xC2\xBB ajout\xC3\xA9" "e" + std::string(remember ? " (m\xC3\xA9moris\xC3\xA9" "e, prot\xC3\xA9g\xC3\xA9" "e par Windows)." : " (pour cette s\xC3\xA9" "ance)."), true);
     } else {
@@ -507,10 +517,7 @@ bool AiKeysDialog::test() {
     if (selected_.empty()) return false;
     const auto e = keys::find(selected_);
     if (!e) return false;
-    Settings s = panel_.assistant().settings();
-    s.provider = e->provider;
-    if (!e->endpoint.empty()) s.endpoint = e->endpoint;
-    else if (keys::providerOf(panel_.assistant().settings().provider) != e->provider) s.endpoint.clear();
+    const Settings s = testSettingsOf(panel_.assistant().settings(), *e);
     std::string why;
     const std::string secret = key_->text();
     if (!panel_.assistant().queryModels(s, secret, &why)) {

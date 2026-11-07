@@ -487,8 +487,31 @@ Outcome runHere(const Job& job, const hmi::Project& project) {
     return o;
 }
 
+// La copie du projet donnee a l'enfant, SANS SES SECRETS : le code essaye n'en a pas besoin, et un code genere ne doit
+// jamais pouvoir les lire (les empreintes et sels des mots de passe, les secrets des codes dynamiques, les badges, le mot
+// de passe de sortie du poste, le mot de passe SMTP et l'adresse des SMS - elle peut porter un jeton).
+namespace {
+hmi::Project withoutSecrets(const hmi::Project& project) {
+    hmi::Project p = project;
+    for (auto& u : p.security.users) {
+        u.passwordHash.clear();
+        u.salt.clear();
+        u.secret.clear();
+        u.previous.clear();
+        u.badge.clear();
+    }
+    p.station.exitSalt.clear();
+    p.station.exitHash.clear();
+    p.notify.smtpUser.clear();
+    p.notify.smtpPassword.clear();
+    p.notify.smsUrl.clear();
+    p.notify.smsBody.clear();
+    return p;
+}
+} // namespace
+
 std::string childInput(const Job& job, const hmi::Project& project) {
-    const std::string packed = hmi::rec::packProject(project);
+    const std::string packed = hmi::rec::packProject(withoutSecrets(project));
     json::Value head = json::Value::object();
     head.set("format", kFormat);
     head.set("travail", jobValue(job));

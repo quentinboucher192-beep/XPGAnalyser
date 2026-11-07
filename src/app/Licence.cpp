@@ -35,6 +35,22 @@ std::string U(const std::filesystem::path& p) {
     return std::string(u8.begin(), u8.end());
 }
 
+// 1.32.0 (H3) : le controle des points de passage (Licence.hpp, require) : la phrase du module quand c'est ferme.
+bool requireImpl(std::string_view feature, std::string* why) {
+    if (allows(feature)) return true;
+    if (why) *why = licensing::lockedMessage(feature);
+    return false;
+}
+
+void arm() {
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_next = nowSeconds() + 3600.0;
+    }
+    g_active = true;
+    detail::g_require.store(&requireImpl, std::memory_order_release);
+}
+
 } // namespace
 
 // LA TABLE DES POINTS D'ENTREE. Les identifiants sont ceux du registre (la maquette) ; le registre signe dit,
@@ -72,30 +88,25 @@ std::string_view featureOf(Where where, std::string_view key) {
 
 void start(licensing::StoreOptions options) {
     (void)licensing::initialize(std::move(options));
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_next = nowSeconds() + 3600.0;
-    }
-    g_active = true;
+    arm();
 }
 
 void start() {
     licensing::StoreOptions o;
-    if (const char* f = std::getenv("XPG_LICENCES_DOSSIER"); f && *f) o.folder = f;
-    else o.folder = licensing::LicenseStore::defaultFolder();
-    // Le registre livre avec le programme (s'il y en a un) : adopte s'il est plus recent que celui du PC.
+    // 1.32.0 (M1) : la variable n'est lue que dans une construction d'essai (vide sinon)
+    o.folder = licensing::testFolderOverride();
+    if (o.folder.empty()) o.folder = licensing::LicenseStore::defaultFolder();
+    // Le registre et (1.32.0) la liste de revocation livres avec le programme (s'il y en a) : adoptes s'ils sont
+    // plus recents que ceux du PC ; leur date releve l'heure la plus tardive vue.
     std::error_code ec;
     const std::string exe = station::currentExecutable();
     if (!exe.empty()) {
-        const auto reg = P(exe).parent_path() / "licences" / "registre.xpgreg";
-        if (std::filesystem::is_regular_file(reg, ec)) o.bundledRegistry = U(reg);
+        const auto dir = P(exe).parent_path() / "licences";
+        if (std::filesystem::is_regular_file(dir / "registre.xpgreg", ec)) o.bundledRegistry = U(dir / "registre.xpgreg");
+        if (std::filesystem::is_regular_file(dir / "revocations.xpgrev", ec)) o.bundledRevocations = U(dir / "revocations.xpgrev");
     }
     (void)licensing::initialize(std::move(o));
-    {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_next = nowSeconds() + 3600.0;
-    }
-    g_active = true;
+    arm();
 }
 
 void tick() {

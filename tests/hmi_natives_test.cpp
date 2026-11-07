@@ -11,6 +11,7 @@
 //
 //  NATIVES_OBS=1 : chaque observation est ecrite (pas seulement les echecs).
 // =============================================================================
+#include "../src/hmi/HmiAssets.hpp"     // 1.32.0 : les dossiers autorises sur ce poste
 #include "../src/hmi/HmiRoles.hpp"
 #include "../src/hmi/HmiExpr.hpp"
 #include "../src/hmi/HmiModel.hpp"
@@ -1079,26 +1080,163 @@ void fichiers1226() {
         check(err.empty() && got == "ligne 1\r\nligne 2\r\n|2|aide.txt,logo.png|aide.txt|21|FALSE|TRUE|21",
               "les ressources : " + got + " " + err);
     }
-    // Sans dossier de projet : un chemin relatif est refuse, un chemin complet passe.
-    {
+    // Sans dossier de projet : un chemin relatif est refuse ; un chemin complet passe s'il est dans un dossier autorise sur
+    // ce poste (1.32.0 : sinon refuse aussi).
+    for (const bool allowed : {false, true}) {
         Project p;
         Script s;
         s.id = p.allocate();
         s.name = "Essai";
         s.event = "Appel";
-        const std::string full = (root / "donnees" / "f1226" / "complet.txt").generic_string();
+        const std::string full = (root / "donnees" / "f1226" / (allowed ? "complet.txt" : "refuse.txt")).generic_string();
         s.body = "VAR a, b : BOOL; e : STRING; END_VAR\na := FILE_WRITE('relatif.txt', 'x');\ne := FILE_ERROR();\nb := FILE_WRITE('" + full + "', 'x');\nIHM_LOG(INFO, CONCAT(TO_STRING(a), '|', TO_STRING(b), '|', e));";
         p.programs.scripts.push_back(s);
+        hmi::setUserAllowedFolders(allowed ? std::vector<std::string>{(root / "donnees" / "f1226").string()} : std::vector<std::string>{});
         Runtime rt;
         rt.bind(&p, nullptr);
         rt.start(0.0);
         std::string err;
         check(rt.callScript("Essai", 0.1, &err) && err.empty(), "sans dossier : le script tourne " + err);
         bool said = false;
+        const std::string expected = allowed ? "FALSE|TRUE|FILE_WRITE : le projet n'est pas encore enregistr" : "FALSE|FALSE|FILE_WRITE : le projet n'est pas encore enregistr";
         for (const auto& line : rt.journal())
-            if (line.message.find("FALSE|TRUE|FILE_WRITE : le projet n'est pas encore enregistr") != std::string::npos) said = true;
-        check(said && fs::exists(full), "sans dossier : relatif refuse, complet ecrit");
+            if (line.message.find(expected) != std::string::npos) said = true;
+        check(said && fs::exists(full) == allowed, allowed ? "sans dossier : relatif refuse, complet ecrit (dossier autorise)"
+                                                           : "sans dossier : relatif refuse, complet refuse (aucun dossier autorise)");
+        hmi::setUserAllowedFolders({});
     }
+}
+
+// 1.32.0 : LE CONFINEMENT DES FICHIERS DES SCRIPTS - donnees/ et exports/ du projet, et les dossiers autorises sur ce
+// poste ; ni un chemin reseau, ni un peripherique, ni un nom reserve de Windows ; un lien ne fait pas sortir ; un dossier
+// permis lui-meme ne se supprime pas.
+void confinement132() {
+    std::printf("-- 1.32.0 : le confinement des fichiers des scripts\n");
+    namespace fs = std::filesystem;
+    const fs::path root = fs::path(benchFolder());
+    const fs::path outside = fs::temp_directory_path() / "xpg_natives_dehors";
+    std::error_code ec;
+    fs::remove_all(outside, ec);
+    fs::create_directories(outside / "sous", ec);
+    { std::ofstream(outside / "secret.txt", std::ios::binary) << "secret"; }
+    hmi::setUserAllowedFolders({});
+    const auto run = [](const std::string& type, const std::string& body, const std::function<void(Project&)>& extra = {}) {
+        Bench b(type, body, extra);
+        std::string err;
+        const std::string got = b.runScript(&err);
+        return std::make_pair(got, err);
+    };
+    const auto has = [](const std::string& s, const std::string& what) { return s.find(what) != std::string::npos; };
+    const std::string out = outside.generic_string();
+    // Hors du projet : refuse, lu comme ecrit ; FILE_ERROR dit le remede (le reglage du poste).
+    {
+        const auto [got, err] = run("STRING", "VAR t : STRING; END_VAR\nt := FILE_READ('" + out + "/secret.txt');\nR := CONCAT('[', t, ']', FILE_ERROR());");
+        check(err.empty() && has(got, "[]FILE_READ : ") && has(got, "hors du projet") && has(got, "R\xC3\xA9glages")
+                  && has(got, std::string(hmi::kAllowedFoldersSetting)),
+              "un chemin complet hors du projet : refuse, et FILE_ERROR dit ou l'autoriser - " + got);
+    }
+    for (const std::string& body : std::vector<std::string>{"R := FILE_WRITE('" + out + "/ecrit.txt', 'x');", "R := FILE_WRITE('../dehors.txt', 'x');",
+                                   "R := DIR_DELETE('" + out + "/sous', TRUE);", "R := FILE_COPY('f1226/a/b.txt', '" + out + "/copie.txt');",
+                                   "R := FILE_MOVE('" + out + "/secret.txt', 'vole.txt');", "R := FILE_EXISTS('" + out + "/secret.txt');",
+                                   "R := FILE_DELETE('" + out + "/secret.txt');", "R := DIR_CREATE('../../xpg_natives_dehors/cree');"}) {
+        const auto [got, err] = run("BOOL", body);
+        check(err.empty() && got == "FALSE", "hors du projet, refuse : " + body + " -> " + got + " " + err);
+    }
+    check(fs::exists(outside / "secret.txt") && fs::is_directory(outside / "sous") && !fs::exists(outside / "ecrit.txt")
+              && !fs::exists(outside / "copie.txt") && !fs::exists(root / "dehors.txt") && !fs::exists(outside / "cree"),
+          "rien n'a change hors du projet");
+    {
+        const auto withResource = [](Project& p) {
+            Resource r;
+            r.id = p.allocate();
+            r.name = "aide.txt";
+            r.format = "TXT";
+            const std::string text = "ligne\r\n";
+            r.data = std::make_shared<const Bytes>(text.begin(), text.end());
+            r.bytes = text.size();
+            p.assets.resources.push_back(r);
+        };
+        const auto [got, err] = run("BOOL", "R := RESOURCE_EXTRACT('aide.txt', '" + out + "/aide.txt');", withResource);
+        check(err.empty() && got == "FALSE" && !fs::exists(outside / "aide.txt"), "RESOURCE_EXTRACT hors du projet : refuse");
+    }
+    // Un chemin reseau, un peripherique, un nom reserve de Windows : refuses, sans rien ouvrir.
+    for (const std::string& path : std::vector<std::string>{"\\\\serveur\\partage\\x.txt", "//serveur/partage/x.txt", "\\\\?\\C:\\x.txt", "\\\\.\\PhysicalDrive0",
+                                   "//./COM1", "CON", "essais/NUL.txt", "essais/com1", "essais/LPT9.log", "essais/x.txt.", "essais /x.txt",
+                                   "essais/a:flux"}) {
+        const auto [got, err] = run("STRING", "VAR b : BOOL; END_VAR\nb := FILE_WRITE('" + path + "', 'x');\nR := CONCAT(TO_STRING(b), '|', FILE_ERROR());");
+        check(err.empty() && got.rfind("FALSE|FILE_WRITE : ", 0) == 0, "refuse : " + path + " -> " + got);
+    }
+    {
+        const auto [got, err] = run("STRING", "FILE_READ('\\\\.\\PhysicalDrive0');\nR := FILE_ERROR();");
+        check(has(got, "p\xC3\xA9riph\xC3\xA9rique"), "un peripherique : dit tel quel - " + got);
+        const auto [g2, e2] = run("STRING", "FILE_WRITE('essais/NUL.txt', 'x');\nR := FILE_ERROR();");
+        check(has(g2, "NUL.txt") && has(g2, "r\xC3\xA9serv\xC3\xA9"), "un nom reserve : dit - " + g2);
+    }
+    // exports/ du projet : permis.
+    {
+        const auto [got, err] = run("BOOL", "R := FILE_WRITE('../exports/rapport_132.csv', 'a;b');");
+        check(err.empty() && got == "TRUE" && fs::exists(root / "exports" / "rapport_132.csv"), "exports/ du projet : permis");
+    }
+    // Un dossier permis lui-meme ne se supprime pas ; ce qu'il contient, oui.
+    {
+        const auto [got, err] = run("BOOL", "FILE_WRITE('jetable/x.txt', 'x');\nR := DIR_DELETE('.', TRUE);");
+        check(err.empty() && got == "FALSE" && fs::is_directory(root / "donnees"), "DIR_DELETE('.') : donnees/ reste");
+        const auto [g2, e2] = run("BOOL", "R := DIR_DELETE('jetable', TRUE);");
+        check(e2.empty() && g2 == "TRUE" && !fs::exists(root / "donnees" / "jetable"), "un sous-dossier de donnees/ se supprime");
+    }
+#ifndef _WIN32
+    // Un lien de donnees/ vers ailleurs ne fait pas sortir (compare apres resolution des liens).
+    {
+        fs::create_directories(root / "donnees", ec);
+        fs::remove(root / "donnees" / "lien132", ec);
+        fs::create_directory_symlink(outside, root / "donnees" / "lien132", ec);
+        if (!ec) {
+            const auto [got, err] = run("STRING", "VAR t : STRING; END_VAR\nt := FILE_READ('lien132/secret.txt');\nR := CONCAT('[', t, ']');");
+            check(err.empty() && got == "[]", "un lien vers ailleurs : refuse - " + got);
+            const auto [g2, e2] = run("BOOL", "R := FILE_WRITE('lien132/par_lien.txt', 'x');");
+            check(g2 == "FALSE" && !fs::exists(outside / "par_lien.txt"), "ecrire par un lien vers ailleurs : refuse");
+            fs::remove(root / "donnees" / "lien132", ec);
+        }
+    }
+#endif
+    // Le dossier autorise sur ce poste (Reglages) : lu, ecrit ; lui-meme ne se supprime pas ; retire, refuse a nouveau.
+    hmi::setUserAllowedFolders({outside.string()});
+    {
+        const auto [got, err] = run("STRING", "R := FILE_READ('" + out + "/secret.txt');");
+        check(err.empty() && got == "secret", "un dossier autorise : FILE_READ lit - " + got);
+        const auto [g2, e2] = run("BOOL", "R := FILE_WRITE('" + out + "/sous/ecrit.txt', 'x');");
+        check(g2 == "TRUE" && fs::exists(outside / "sous" / "ecrit.txt"), "un dossier autorise : FILE_WRITE ecrit");
+        const auto [g3, e3] = run("BOOL", "R := DIR_DELETE('" + out + "', TRUE);");
+        check(g3 == "FALSE" && fs::exists(outside / "secret.txt"), "un dossier autorise lui-meme ne se supprime pas");
+        const auto [g4, e4] = run("BOOL", "R := FILE_EXISTS('//serveur/partage/x.txt');");
+        check(g4 == "FALSE", "un chemin reseau hors des dossiers autorises : refuse");
+    }
+    // Le projet reste protege, meme dans un dossier autorise qui le contient.
+    hmi::setUserAllowedFolders({root.parent_path().string()});
+    {
+        const auto [got, err] = run("STRING", "FILE_WRITE('" + (root / "ihm" / "x.txt").generic_string() + "', 'x');\nR := FILE_ERROR();");
+        check(has(got, "ne se changent pas par un script"), "ihm/ du projet : protege dans un dossier autorise - " + got);
+    }
+    hmi::setUserAllowedFolders({});
+    {
+        const auto [got, err] = run("BOOL", "R := FILE_EXISTS('" + out + "/secret.txt');");
+        check(got == "FALSE", "le dossier retire des reglages : refuse a nouveau");
+    }
+    // Le texte d'un chemin reseau : compare sans toucher au reseau.
+    hmi::setUserAllowedFolders({"\\\\nas\\Exports"});
+    check(hmi::insideUserAllowedFolder("\\\\NAS\\exports\\ligne1\\a.csv") && hmi::insideUserAllowedFolder("//nas/exports/b.csv")
+              && !hmi::insideUserAllowedFolder("\\\\nas\\exports2\\a.csv") && !hmi::insideUserAllowedFolder("\\\\nas\\exports\\..\\autre\\a.csv")
+              && !hmi::insideUserAllowedFolder("\\\\autre\\exports\\a.csv"),
+          "un dossier reseau autorise : ce qu'il contient, pas son voisin ni ce qui en remonte");
+    check(hmi::projectPathAllowed("\\\\nas\\exports\\doc.pdf") && !hmi::projectPathAllowed("\\\\pirate\\partage\\doc.pdf")
+              && !hmi::projectPathAllowed("//pirate/partage/doc.pdf") && !hmi::projectPathAllowed("\\\\?\\UNC\\pirate\\x")
+              && hmi::projectPathAllowed("C:/Donnees/doc.pdf") && hmi::projectPathAllowed("docs/notice.pdf"),
+          "projectPathAllowed : le reseau seulement dans un dossier autorise, un chemin local passe");
+    check(hmi::unsafePathSegment("docs/CON.pdf") && hmi::unsafePathSegment("a\\LPT1") && hmi::unsafePathSegment("a/b./c")
+              && !hmi::unsafePathSegment("C:/Donnees/../a.csv") && !hmi::unsafePathSegment("./donnees/COM10.txt"),
+          "unsafePathSegment : CON, LPT1, un point final ; pas C:, .., ni COM10");
+    hmi::setUserAllowedFolders({});
+    fs::remove_all(outside, ec);
 }
 
 // 1.12.26 : WAIT et les scripts detaches - un script qui n'est pas detache bloque (10 s au plus) ; un script detache
@@ -1303,6 +1441,7 @@ int main() {
     sondeControle1219();
     rappels1220();
     fichiers1226();
+    confinement132();
     attente1226();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

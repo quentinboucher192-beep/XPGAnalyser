@@ -262,6 +262,9 @@ struct PackageExtractOptions {
     std::vector<crypto::PublicKey> approvedKeys;   // les cles d'editeur des PC appaires
     PackageLimits     limits;
     PackageProgressFn progress;                    // facultatif (la verification, puis l'ecriture)
+    // 1.32.0 : le dossier de confiance (celui de l'agent) : entre lui et la destination, aucun lien ni
+    // jonction (install::linkBelow). Vide : le dossier parent de la destination seul.
+    std::string       root;
 };
 
 struct PackageExtractResult {
@@ -275,6 +278,9 @@ struct PackageExtractResult {
 // approuve), puis ecrit le contenu de app/ dans `destination` (app/ihm/ihm.txt ->
 // <destination>/ihm/ihm.txt). `destination` ne doit pas exister : tout est ecrit
 // dans un dossier voisin (<destination>.extraction), puis renomme d'un coup.
+// 1.32.0 : ce dossier voisin, s'il reste d'une installation coupee, est efface (un
+// lien : le lien seul) ; s'il ne s'efface pas en entier, rien n'est extrait (jamais
+// dans un dossier deja la). Un lien ou une jonction sur le chemin (sous `root`) : refuse.
 // Chaque fichier est re-hache pendant l'ecriture et compare au manifeste (le
 // paquet ne peut pas changer entre la verification et l'extraction) ; chaque
 // chemin final est controle sous le dossier (jamais au-dehors). Une erreur n'en

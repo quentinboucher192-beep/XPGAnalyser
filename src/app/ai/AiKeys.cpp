@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiKeys.hpp"
 
+#include "AiHttp.hpp"   // parseUrl : le serveur d'une adresse
 #include "AiMemory.hpp"
 #include "AiMemoryJson.hpp"
 #include "AiPaths.hpp"
@@ -87,6 +88,9 @@ Index readIndex() {
                 e.tested = static_cast<int>(t->num("resultat", 0));
                 e.testNote = t->str("note");
             }
+            if (const Json* sv = o.get("serveurs"); sv && sv->isArray())
+                for (const auto& v : sv->items)
+                    if (v.isString() && !serverOf(v.text).empty()) e.servers.push_back(serverOf(v.text));
             e.stored = true;
             ix.entries.push_back(std::move(e));
         }
@@ -120,6 +124,11 @@ bool writeIndex(const Index& ix, std::string* why) {
             t.set("resultat", Json::makeNumber(e.tested));
             t.set("note", Json::makeString(e.testNote));
             o.set("essai", std::move(t));
+        }
+        if (!e.servers.empty()) {
+            Json sv = Json::makeArray();
+            for (const auto& x : e.servers) sv.items.push_back(Json::makeString(x));
+            o.set("serveurs", std::move(sv));
         }
         list.items.push_back(std::move(o));
     }
@@ -423,6 +432,97 @@ bool migrateLegacy(std::string_view settingsProvider) {
 void resetSession() {
     std::lock_guard g(lock());
     session().clear();
+}
+
+// ---- la cle liee a ses serveurs -------------------------------------------------------------------------------------------
+namespace {
+
+// Les cles de ce secret : la fin connue d'abord (rien a dechiffrer pour les autres), puis le secret relu.
+std::vector<std::string> idsOfSecret(const std::string& secret) {
+    const std::string tail = secret.size() >= 16 ? secret.substr(secret.size() - 4) : std::string{};
+    std::vector<std::string> candidates, out;
+    {
+        std::lock_guard g(lock());
+        for (const auto& s : session())
+            if (s.secret == secret) out.push_back(s.entry.id);
+        for (const auto& e : readIndex().entries)
+            if (e.tail == tail) candidates.push_back(e.id);
+    }
+    for (const auto& id : candidates)
+        if (safeId(id))
+            if (const auto k = loadKeyAt(fileOf(id)); k && *k == secret) out.push_back(id);
+    return out;
+}
+
+bool hasServer(const Entry& e, const std::string& server) { return std::find(e.servers.begin(), e.servers.end(), server) != e.servers.end(); }
+
+// Ajoute `server` aux cles `ids` (toutes si `all`, sinon celles sans serveur).
+void addServer(const std::vector<std::string>& ids, const std::string& server, bool all) {
+    if (ids.empty() || server.empty()) return;
+    std::lock_guard g(lock());
+    const auto wanted = [&](const Entry& e) {
+        return std::find(ids.begin(), ids.end(), e.id) != ids.end() && (all || e.servers.empty()) && !hasServer(e, server);
+    };
+    for (auto& s : session())
+        if (wanted(s.entry)) s.entry.servers.push_back(server);
+    Index ix = readIndex();
+    bool changed = false;
+    for (auto& e : ix.entries)
+        if (wanted(e)) {
+            e.servers.push_back(server);
+            changed = true;
+        }
+    if (changed) (void)writeIndex(ix, nullptr);
+}
+
+} // namespace
+
+std::string serverOf(std::string_view url) {
+    Url u;
+    if (!parseUrl(url, u, nullptr, true)) return {};
+    std::string host = u.host;
+    for (auto& c : host) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (host.find(':') != std::string::npos) host = "[" + host + "]";
+    return std::string(u.https ? "https://" : "http://") + host + ":" + std::to_string(u.port);
+}
+
+bool allowedFor(const std::string& secret, std::string_view url, std::string* why) {
+    if (secret.empty()) return true;
+    const std::string server = serverOf(url);
+    const std::vector<std::string> ids = idsOfSecret(secret);
+    if (ids.empty()) return true;   // une cle saisie a l'instant (pas dans le gestionnaire) : l'utilisateur l'a sous les yeux
+    std::vector<Entry> mine;
+    for (const auto& e : list())
+        if (std::find(ids.begin(), ids.end(), e.id) != ids.end()) mine.push_back(e);
+    for (const auto& e : mine)
+        if (e.servers.empty() || (!server.empty() && hasServer(e, server))) return true;
+    if (why && !mine.empty()) {
+        std::string known;
+        for (const auto& x : mine.front().servers) known += (known.empty() ? "" : ", ") + x;
+        *why = "La cl\xC3\xA9 \xC2\xAB " + mine.front().name + " \xC2\xBB n'est pas envoy\xC3\xA9" "e \xC3\xA0 " + (server.empty() ? std::string(url) : server)
+               + " : elle a \xC3\xA9t\xC3\xA9 essay\xC3\xA9" "e pour " + known + ". Si ce serveur est bien le tien, essaie-la de nouveau pour lui "
+               "(Param\xC3\xA8tres de l'Assistant IA \xE2\x80\xBA Lister les mod\xC3\xA8les, ou G\xC3\xA9rer les cl\xC3\xA9s \xE2\x80\xBA Tester).";
+    }
+    return false;
+}
+
+void confirmServer(const std::string& secret, std::string_view url, bool retest) {
+    if (secret.empty()) return;
+    const std::string server = serverOf(url);
+    if (server.empty()) return;
+    // Sans essai explicite, rien a lier si toutes les cles le sont deja (le cas courant : rien a dechiffrer).
+    if (!retest) {
+        const auto all = list();
+        if (std::none_of(all.begin(), all.end(), [](const Entry& e) { return e.servers.empty(); })) return;
+    }
+    addServer(idsOfSecret(secret), server, retest);
+}
+
+bool bindServer(const std::string& id, std::string_view url) {
+    const std::string server = serverOf(url);
+    if (server.empty() || !find(id)) return false;
+    addServer({id}, server, true);
+    return true;
 }
 
 } // namespace app::ai::keys
