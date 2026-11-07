@@ -1,17 +1,87 @@
-XPG License Admin {VERSION} - l'outil de l'ÉDITEUR pour les licences
+XPG License Admin {VERSION} - les outils de l'ÉDITEUR pour les licences
 =====================================================================
 
 Ce dossier est À TOI SEUL (l'éditeur). Il ne va JAMAIS chez un client : ni dans
-l'installateur, ni dans un zip portable, ni sur un partage réseau. Avec cet outil et
+l'installateur, ni dans un zip portable, ni sur un partage réseau. Avec ces outils et
 ta clé, on fabrique des licences : garde-les pour toi.
 
 Ce qu'il y a dans ce dossier :
-  XPG-License-Admin.exe     l'outil (en console ; Windows 10 ou 11, 64 bits)
-  registre.json             le registre d'exemple : les éditions (FREE, PERSONAL,
-                            PROFESSIONAL, ENTERPRISE, EVALUATION, CUSTOM) et les
-                            21 fonctionnalités de la maquette - à adapter, puis à signer
-  parametres-exemple.json   les paramètres d'une licence - à copier pour chaque client
-  LISEZ-MOI-EDITEUR.txt     ce fichier
+  XPG-License-Manager-Admin.exe  L'APPLICATION (1.33.0) : des fenêtres et des boutons.
+                                 Commence par elle (double-clic). Windows 10 ou 11, 64 bits.
+  SDL3.dll                       ce qu'il faut à l'application pour ses fenêtres : laisse-le à côté
+  XPG-License-Admin.exe          la CONSOLE : les mêmes opérations en commandes (pour les scripts)
+  registre.json                  le registre d'exemple : les éditions (FREE, PERSONAL,
+                                 PROFESSIONAL, ENTERPRISE, EVALUATION, CUSTOM) et les
+                                 21 fonctionnalités de la maquette - à adapter, puis à signer
+  parametres-exemple.json        les paramètres d'une licence (pour la console)
+  LISEZ-MOI-EDITEUR.txt          ce fichier
+
+Les deux outils travaillent dans le MÊME dossier (%LOCALAPPDATA%\XPG\LicenseAdmin) : la
+même clé, la même archive, le même registre des activations. Ce que l'un fait, l'autre le voit.
+
+
+=============================================================================
+L'APPLICATION : XPG-License-Manager-Admin.exe (1.33.0)
+=============================================================================
+
+À gauche, le menu. En haut, l'état de ta clé (« CLÉ D'ESSAI » en orange, « Pas de clé »
+en rouge) et de la synchro GitHub. En bas, le résultat de la dernière opération
+(« Détails » pour tout lire, « Journal » pour toute la séance). Tu peux glisser des
+fichiers sur la fenêtre : une demande d'activation (.xpgreq) ouvre l'assistant de
+licence ; une licence, un registre ou une liste de révocation signés sont rangés dans
+l'archive.
+
+LA PREMIÈRE FOIS
+1. Paramètres de sécurité > Créer la clé... : donne-lui un nom (ton nom d'éditeur).
+   Laisse décochée « clé d'essai ». Elle est créée une fois, protégée pour ton compte
+   Windows.
+2. Tout de suite : Paramètres de sécurité > Sauvegarder la clé... Tape deux fois une
+   PHRASE DE PASSE que tu choisis (12 caractères au moins ; une phrase de plusieurs
+   mots est le plus simple), puis choisis où écrire le fichier .xpgcle. Range-le HORS de
+   ce PC (clé USB au coffre) et note la phrase à part : sans elle, la sauvegarde ne sert
+   à rien ; personne d'autre ne la connaît, pas même l'agent de développement.
+   Vérifier une sauvegarde... la relit. Sur un PC neuf : Restaurer une sauvegarde...
+3. Paramètres de sécurité > Exporter la clé publique... : choisis PublisherKey.hpp.
+   C'est la clé qui VÉRIFIE les licences (elle ne permet pas d'en signer).
+4. Éditions > Signer le premier registre depuis un fichier... : choisis registre.json
+   (ce dossier), après l'avoir adapté si tu veux. Ensuite, les éditions et les
+   fonctionnalités se modifient dans l'application (Éditions, Fonctionnalités), puis
+   « Signer le registre n° ... ».
+5. Envoie à l'agent de développement UNIQUEMENT PublisherKey.hpp et le registre signé
+   (archive\registre\registre.xpgreg, dans le dossier du poste : « Dossier du poste »,
+   en bas à gauche).
+
+POUR CHAQUE CLIENT
+1. Il t'envoie la demande d'activation de son PC (un fichier .xpgreq : dans le
+   logiciel, Aide > Licence... > Demander une activation).
+2. Licences > Nouvelle licence... (ou glisse le .xpgreq sur la fenêtre) : l'assistant
+   te guide en six étapes - les demandes des PC, le client et l'identifiant (proposé :
+   XPG-<année>-<numéro>), l'édition (type, nombre de PC, durée, grâce), les
+   fonctionnalités, le récapitulatif, puis Signer : tu choisis où écrire le fichier
+   .xpglic.
+3. Envoie ce fichier .xpglic au client, EN PIÈCE JOINTE, tel quel. Il l'importe :
+   Aide > Licence... > Activer par fichier de licence.
+- Un PC de plus sur la même licence : Licences > choisis-la > Ajouter un PC...
+- Retirer une licence ou un PC (fin de contrat, PC remplacé) : Licences > Révoquer...
+  ou la page Révocations. La liste de révocation part avec les prochaines licences, ou
+  Révocations > Exporter la liste... (le client l'importe comme une licence).
+- Qui a le logiciel : Activations (tous les PC connus, leur état ; Exporter pour Excel),
+  Clients, Historique.
+
+LA SYNCHRO GITHUB (facultative)
+Synchronisation GitHub : l'assistant en trois étapes - le dépôt PRIVÉ, le jeton (il ne
+s'affiche jamais), puis Vérifier (sans rien changer) et Synchroniser. La première fois,
+l'application te montre le CODE DE SECOURS : note-le hors de ce PC avant de continuer.
+Un autre PC Admin : « J'ai déjà un code de secours ». Le détail est plus bas, partie
+« La source centrale » (les mêmes étapes en commandes).
+
+Licences flottantes, Boutique, Commandes : elles demandent un service de licences EN
+LIGNE, qui n'existe pas encore. L'application le dit ; rien n'y est simulé.
+
+
+=============================================================================
+LA CONSOLE : XPG-License-Admin.exe (les mêmes opérations en commandes)
+=============================================================================
 
 Toutes les commandes se tapent dans une invite de commandes ouverte DANS ce dossier :
 dans l'Explorateur, clic droit dans le dossier > « Ouvrir dans le Terminal » (ou tape
