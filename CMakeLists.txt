@@ -1204,6 +1204,8 @@ if(XPG_BUILD_TESTS)
     find_package(Python3 COMPONENTS Interpreter QUIET)
     if(Python3_Interpreter_FOUND)
         add_test(NAME vcxproj COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/outils/verifier_vcxproj.py)
+        # 1.34.0 : le faux GitHub de la passerelle des licences (les essais sous Wine) s'essaie lui-meme
+        add_test(NAME fauxpasserelle COMMAND ${Python3_EXECUTABLE} -I ${CMAKE_CURRENT_SOURCE_DIR}/outils/licences/faux_passerelle.py --auto-essai)
     endif()
     xpg_add_test(NAME searchfocus COMMAND searchfocus_test)                  # ---- Lot API 8 : finitions (Ctrl+F) ----
     xpg_add_test(NAME lot8tutorials COMMAND lot8tutorials_test)              # ---- Lot API 8 : didacticiels et aide ----
