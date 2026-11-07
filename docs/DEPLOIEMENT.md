@@ -95,7 +95,7 @@ XPG-Deployment-Agent --servir [--dossier D] [--port 47861] [--port-decouverte 47
 XPG-Deployment-Agent --etat [--dossier D]        ce que fait l'agent (sans réseau)
 XPG-Deployment-Agent --appairer [--dossier D]    un code à 6 chiffres
 XPG-Deployment-Agent --demarrer-avec-session oui|non   (1.29.0) l'agent démarre avec la session de l'opérateur
-XPG-Deployment-Agent --version                    « XPG-Deployment-Agent 1.1.0 (protocoles 1 et 2, …) » en 1.29.0
+XPG-Deployment-Agent --version                    « XPG-Deployment-Agent 1.2.0 (protocoles 1 et 2, …) » en 1.32.0 (1.1.0 de la 1.29.0 à la 1.31.0)
 ```
 
 `--demarrer-avec-session oui` écrit la valeur `Run` « XPG Deployment Agent » de **ton** compte (HKCU ; Linux : un `.desktop` dans `~/.config/autostart`) - sauf si l'installateur l'a déjà posée pour tous les comptes (HKLM, lue dans les vues 64 et 32 bits) : alors il retire la sienne et le dit (deux agents au démarrage : le second trouverait le port pris). Lancé ainsi, sans terminal, l'agent cache sa console. `--etat` dit s'il démarre avec la session, et où.
@@ -139,7 +139,7 @@ En 1.29.0, l'agent est un programme sans fenêtre **démarré avec la session de
 
 ### 9.1 La version 2 du protocole
 
-L'agent 1.1.0 (IHM Studio 1.29.0) accepte les versions **1 et 2** ; IHM Studio 1.29.0 offre 1 et 2, la plus haute commune est choisie (`IDENTIFY`). Un Studio 1.28 (version 1) garde IDENTIFY, l'appairage, STATUS (qui liste maintenant les applications), GET_LOGS et UNPAIR ; les nouvelles commandes lui sont refusées (code `proto`, « mets à jour IHM Studio pour déployer sur ce PC »). Un agent 1.28 face à un Studio 1.29 : Déployer dit « l'agent … ne sait pas encore installer : mets-le à jour ».
+L'agent 1.1.0 (IHM Studio 1.29.0) - et l'agent 1.2.0 (1.32.0, même protocole, durci) - accepte les versions **1 et 2** ; IHM Studio 1.29.0 offre 1 et 2, la plus haute commune est choisie (`IDENTIFY`). Un Studio 1.28 (version 1) garde IDENTIFY, l'appairage, STATUS (qui liste maintenant les applications), GET_LOGS et UNPAIR ; les nouvelles commandes lui sont refusées (code `proto`, « mets à jour IHM Studio pour déployer sur ce PC »). Un agent 1.28 face à un Studio 1.29 : Déployer dit « l'agent … ne sait pas encore installer : mets-le à jour ».
 
 | Commande | Arguments | Réponse |
 |---|---|---|

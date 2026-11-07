@@ -41,6 +41,7 @@
 #include <filesystem>
 #include <set>
 #include <system_error>
+#include <vector>
 
 // Apres les autres en-tetes : les macros de windows.h ne touchent que ce fichier.
 #if defined(_WIN32)
@@ -176,8 +177,9 @@ std::string installationDir() {
 }
 
 // Un fichier du dossier commun n'est cru que s'il appartient a l'administrateur : Windows, BUILTIN\Administrateurs ou
-// SYSTEM (ce que l'installateur ecrit) - un utilisateur ordinaire peut creer des fichiers sous ProgramData ; ailleurs, root
-// (ou, pour les essais seulement - le dossier force par XPG_IA_INSTALLATION -, l'utilisateur lui-meme).
+// SYSTEM (ce que l'installateur ecrit) - un utilisateur ordinaire peut creer des fichiers sous ProgramData - ou au compte
+// qui lit (une installation pour lui seul) ; ailleurs, root (ou, pour les essais seulement - le dossier force par
+// XPG_IA_INSTALLATION -, l'utilisateur lui-meme).
 bool ownedByAdministrator(const std::string& path) {
 #if defined(_WIN32)
     std::wstring w = dossiers::cheminDe(path).wstring();
@@ -185,7 +187,22 @@ bool ownedByAdministrator(const std::string& path) {
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (GetNamedSecurityInfoW(w.data(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &owner, nullptr, nullptr, nullptr, &sd) != ERROR_SUCCESS)
         return false;
-    const bool ok = owner && IsValidSid(owner) && (IsWellKnownSid(owner, WinBuiltinAdministratorsSid) || IsWellKnownSid(owner, WinLocalSystemSid));
+    bool ok = owner && IsValidSid(owner) && (IsWellKnownSid(owner, WinBuiltinAdministratorsSid) || IsWellKnownSid(owner, WinLocalSystemSid));
+    // 1.32.0 : une installation "pour moi seul" (sans droits d'administrateur) ecrit ce fichier sous le compte qui
+    // installe : il est cru pour ce compte seulement - un autre compte ne peut rien y imposer qu'a lui-meme.
+    if (!ok && owner && IsValidSid(owner)) {
+        HANDLE token = nullptr;
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+            DWORD size = 0;
+            (void)GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+            std::vector<unsigned char> buf(size ? size : 1);
+            if (size && GetTokenInformation(token, TokenUser, buf.data(), size, &size)) {
+                const auto* user = reinterpret_cast<const TOKEN_USER*>(buf.data());
+                ok = user->User.Sid && EqualSid(owner, user->User.Sid);
+            }
+            CloseHandle(token);
+        }
+    }
     if (sd) LocalFree(sd);
     return ok;
 #else

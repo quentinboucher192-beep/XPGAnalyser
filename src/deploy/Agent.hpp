@@ -49,7 +49,7 @@
 namespace deploy {
 
 // 1.1.0 (IHM Studio 1.29.0) : la version 2 du protocole (l'envoi, l'installation, le poste).
-inline constexpr const char* kAgentVersion = "1.1.0";
+inline constexpr const char* kAgentVersion = "1.2.0";   // 1.32.0 : dossier dans le profil, acces reserve, connexions limitees
 
 struct AgentConfig {
     std::string dir;                                   // son dossier (cree s'il manque)
