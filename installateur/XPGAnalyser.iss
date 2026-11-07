@@ -4898,6 +4898,11 @@ var Dossier, Xia, Cle, Json, Dabord: String;
 begin
   if (PageIA = nil) or not AvecExeIhm(ProfilChoisi) or (ProfilChoisi = pPoste) then Exit;
   IAClesJournal;
+  // 1.32.0 : le dossier commun de l'IA (installation.json, apprentissage.xia : le programme les applique à chaque compte)
+  // est toujours créé et protégé - seuls les administrateurs y écrivent ; un utilisateur ne peut pas y déposer un
+  // réglage qui changerait l'adresse du service d'IA des autres comptes.
+  if IsAdminInstallMode and not DossierProtege(ExpandConstant('{commonappdata}\{#Cle}\IA'), '*S-1-5-32-545:(OI)(CI)RX') then
+    JournalNote(jAttention, 'ia', 'Assistant IA : le dossier commun n''a pas pu être protégé (voir le journal)');
   Cle := IACle(PageIA.SelectedValueIndex);
   Xia := Trim(PageXia.Values[0]);
   if (Cle = 'garder') and (Xia = '') then begin
@@ -5729,6 +5734,46 @@ begin
   Log('netsh ' + Args + ' : code ' + IntToStr(Result));
 end;
 
+// 1.32.0 : icacls, caché ; son code (-1 : pas lancé).
+function Icacls(Args: String): Integer;
+var Code: Integer;
+begin
+  Result := -1;
+  if Exec(ExpandConstant('{sys}\icacls.exe'), Args, '', SW_HIDE, ewWaitUntilTerminated, Code) then Result := Code;
+  Log('icacls ' + Args + ' : code ' + IntToStr(Result));
+end;
+
+// 1.32.0 : un dossier qui est un lien (jonction, lien symbolique : FILE_ATTRIBUTE_REPARSE_POINT). Un tel dossier,
+// pose par un utilisateur sous ProgramData, ferait porter les droits donnés par l'installateur sur sa cible.
+function EstUnLien(Chemin: String): Boolean;
+var R: TFindRec;
+begin
+  Result := False;
+  if FindFirst(RemoveBackslashUnlessRoot(Chemin), R) then begin
+    Result := (R.Attributes and $400) <> 0;
+    FindClose(R);
+  end;
+end;
+
+// 1.32.0 : un dossier partagé sous ProgramData, sûr : pas un lien (un lien est retiré - jamais sa cible), le
+// propriétaire Administrateurs, l'héritage coupé, SYSTEM et Administrateurs en contrôle total, et pour les
+// Utilisateurs les droits `DroitsUtilisateurs` (des ACE icacls, déjà avec leurs SID). Faux : il n'a pas pu l'être.
+function DossierProtege(Dossier, DroitsUtilisateurs: String): Boolean;
+begin
+  Result := False;
+  if DirExists(Dossier) and EstUnLien(Dossier) then begin
+    Log('Dossier protégé : ' + Dossier + ' est un lien ; il est retiré (pas sa cible)');
+    if not RemoveDir(Dossier) then begin
+      JournalNote(jAttention, 'droits', Dossier + ' est un lien posé par quelqu''un (jonction) et ne se retire pas : rien n''y est réglé');
+      Exit;
+    end;
+  end;
+  if not ForceDirectories(Dossier) then Exit;
+  if EstUnLien(Dossier) then Exit;
+  if Icacls('"' + Dossier + '" /setowner *S-1-5-32-544') <> 0 then Exit;
+  Result := Icacls('"' + Dossier + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F ' + DroitsUtilisateurs) = 0;
+end;
+
 // La règle entrante du pare-feu pour IHM-Studio.exe (tous les réseaux : une usine est souvent un réseau
 // « public » pour Windows) - pour tous les comptes seulement (administrateur). Décochée : la nôtre part.
 procedure ParefeuRegler;
@@ -5748,9 +5793,9 @@ begin
     end;
     Netsh('advfirewall firewall delete rule name="' + RegleParefeu + '"');
     if Netsh('advfirewall firewall add rule name="' + RegleParefeu + '" dir=in action=allow program="' + ExpandConstant('{app}\{#ExeIhm}') +
-             '" enable=yes profile=any description="Les esclaves Modbus simulés et le poste d''exploitation d''{#NomIhm} (installé par {#Nom})"') = 0 then begin
+             '" remoteip=localsubnet enable=yes profile=any description="Les esclaves Modbus simulés et le poste d''exploitation d''{#NomIhm} (installé par {#Nom})"') = 0 then begin
       RegWriteStringValue(HKA, 'Software\{#Cle}', 'Parefeu', 'oui');
-      BilanParefeu := 'la règle « ' + RegleParefeu + ' » laisse entrer {#ExeIhm}|sur tous les réseaux (domaine, privé, public)';
+      BilanParefeu := 'la règle « ' + RegleParefeu + ' » laisse entrer {#ExeIhm}|depuis le sous-réseau local seulement (1.32.0), sur tous les réseaux (domaine, privé, public)';
       JournalNote(jFait, 'parefeu', 'Pare-feu : {#NomIhm} peut recevoir des connexions (règle « ' + RegleParefeu + ' »)');
     end else begin
       BilanParefeu := 'la règle n''a pas pu être posée (voir le journal)|Windows demandera au premier lancement';
@@ -5783,12 +5828,12 @@ begin
     Netsh('advfirewall firewall delete rule name="' + RegleAgentTcp + '"');
     Netsh('advfirewall firewall delete rule name="' + RegleAgentUdp + '"');
     Ok := (Netsh('advfirewall firewall add rule name="' + RegleAgentTcp + '" dir=in action=allow program="' + Exe +
-                 '" protocol=TCP localport=47861 enable=yes profile=domain,private description="Les déploiements d''{#NomIhm} (TLS 1.3, machines appairées)"') = 0)
+                 '" protocol=TCP localport=47861 remoteip=localsubnet enable=yes profile=domain,private description="Les déploiements d''{#NomIhm} (TLS 1.3, machines appairées)"') = 0)
           and (Netsh('advfirewall firewall add rule name="' + RegleAgentUdp + '" dir=in action=allow program="' + Exe +
-                     '" protocol=UDP localport=47862 enable=yes profile=domain,private description="La découverte des PC de maintenance par {#NomIhm}"') = 0);
+                     '" protocol=UDP localport=47862 remoteip=localsubnet enable=yes profile=domain,private description="La découverte des PC de maintenance par {#NomIhm}"') = 0);
     if Ok then begin
       RegWriteStringValue(HKA, 'Software\{#Cle}', 'ParefeuAgent', 'oui');
-      JournalNote(jFait, 'agent-parefeu', 'Pare-feu : l''agent reçoit les déploiements (TCP 47861) et la découverte (UDP 47862), réseaux domaine et privé');
+      JournalNote(jFait, 'agent-parefeu', 'Pare-feu : l''agent reçoit les déploiements (TCP 47861) et la découverte (UDP 47862), réseaux domaine et privé, du sous-réseau local seulement');
     end else
       JournalNote(jAttention, 'agent-parefeu', 'Pare-feu de l''agent : une règle n''a pas pu être posée (netsh) ; voir le journal');
     Exit;
@@ -5826,19 +5871,18 @@ begin
     JournalNote(jInfo, 'licences', 'Les licences de ce PC : ' + Dossier + ', créé par le programme au premier besoin (installation pour toi seul : les autres comptes le liront sans y importer)');
     Exit;
   end;
-  if not ForceDirectories(Dossier) then begin
-    Log('Licences : ForceDirectories(' + Dossier + ') a échoué');
-    JournalNote(jAttention, 'licences', 'Le dossier des licences ' + Dossier + ' ne se crée pas : le programme le créera au premier besoin');
-    Exit;
-  end;
+  // 1.32.0 : le parent (XPG) et le dossier lui-même sont protégés : ni lien, propriétaire Administrateurs, héritage
+  // coupé. Les Utilisateurs lisent XPG ; dans Licences, ils créent des fichiers (RX,WD,AD sur le dossier : il ne peut
+  // être ni supprimé ni remplacé par un lien) et modifient ce qui est dedans ((OI)(CI)(IO)M : les fichiers seulement).
   Code := -1;
-  if not Exec(ExpandConstant('{sys}\icacls.exe'), '"' + Dossier + '" /grant *S-1-5-32-545:(OI)(CI)M', '', SW_HIDE, ewWaitUntilTerminated, Code) then Code := -1;
-  Log('icacls "' + Dossier + '" /grant *S-1-5-32-545:(OI)(CI)M : code ' + IntToStr(Code));
+  if not DossierProtege(ExtractFileDir(Dossier), '*S-1-5-32-545:(OI)(CI)RX') then
+    Log('Licences : le dossier parent ' + ExtractFileDir(Dossier) + ' n''a pas pu être protégé');
+  if DossierProtege(Dossier, '*S-1-5-32-545:(RX,WD,AD) *S-1-5-32-545:(OI)(CI)(IO)M') then Code := 0;
   if Code = 0 then
     JournalNote(jFait, 'licences', 'Le dossier des licences de ce PC : ' + Dossier + ' (chaque compte peut y importer une licence ; il est gardé à la désinstallation)')
   else
-    JournalNote(jAttention, 'licences', 'Le dossier des licences ' + Dossier + ' est créé, mais le droit Modifier des Utilisateurs n''a pas pu être posé (icacls, code ' +
-                IntToStr(Code) + ') : seul un administrateur pourra y importer une licence');
+    JournalNote(jAttention, 'licences', 'Le dossier des licences ' + Dossier + ' n''a pas pu être protégé et ouvert aux Utilisateurs (icacls ou lien refusé, voir le journal) : '
+                + 'seul un administrateur pourra y importer une licence');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

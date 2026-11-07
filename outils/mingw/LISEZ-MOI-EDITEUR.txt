@@ -35,18 +35,30 @@ UNE SEULE FOIS : LA CLÉ DE L'ÉDITEUR (sur TON PC, sous TON compte Windows)
    (N'utilise pas --essai : c'est une clé d'essai, qu'aucun programme livré ne
    reconnaît.)
 
-2. Garde une copie de secours CHIFFRÉE et HORS LIGNE du fichier de la clé
-   (cle-editeur-licences.cle), par exemple sur une clé USB chiffrée (BitLocker To Go)
-   rangée à part. SANS CETTE CLÉ, PLUS AUCUNE LICENCE NE PEUT ÊTRE SIGNÉE NI
-   RENOUVELÉE : il faudrait livrer une nouvelle version des programmes avec une
-   nouvelle clé, et refaire toutes les licences.
+2. Fais une SAUVEGARDE CHIFFRÉE de la clé, avec une phrase de passe que tu choisis
+   (1.32.0). SANS CETTE CLÉ, PLUS AUCUNE LICENCE NE PEUT ÊTRE SIGNÉE NI RENOUVELÉE :
+   il faudrait livrer une nouvelle version des programmes avec une nouvelle clé, et
+   refaire toutes les licences.
 
-   À savoir, honnêtement : la protection DPAPI lie ce fichier à ton compte Windows.
-   La copie se relit sous ton compte, sur ce PC ; sur un PC réinstallé ou neuf, elle
-   ne se relit que si ton compte Windows revient avec ses clés DPAPI (une sauvegarde
-   complète de Windows, ou un compte de domaine). Garde donc AUSSI une sauvegarde
-   complète de ce PC (image système). Une sauvegarde de la clé protégée par un mot
-   de passe n'existe pas encore dans cette version de l'outil.
+     XPG-License-Admin.exe sauvegarder-cle --sortie D:\cle-editeur.xpgcle
+
+   La phrase se tape deux fois et ne s'affiche pas : 12 caractères au moins ; le
+   mieux est une phrase de quelques mots que toi seul connais. Le chiffrement prend
+   quelques secondes (Argon2id). Puis vérifie que la phrase ouvre bien la sauvegarde :
+
+     XPG-License-Admin.exe verifier-sauvegarde D:\cle-editeur.xpgcle
+
+   Range la sauvegarde HORS de ce PC (une clé USB au coffre, un second support) et
+   la phrase AILLEURS (gestionnaire de mots de passe, papier sous enveloppe) : avec
+   les deux ensemble, n'importe qui pourrait signer des licences.
+
+   Après une panne, sur le PC réinstallé ou un PC neuf :
+
+     XPG-License-Admin.exe restaurer-cle --entree E:\cle-editeur.xpgcle
+
+   (Le fichier de la clé lui-même, cle-editeur-licences.cle, est protégé par DPAPI :
+   il ne se relit que sous ton compte Windows, sur ce PC. C'est la sauvegarde
+   .xpgcle qui te sauve si le PC est perdu.)
 
 3. Exporte la clé PUBLIQUE (elle vérifie les licences ; elle ne permet pas d'en signer) :
 

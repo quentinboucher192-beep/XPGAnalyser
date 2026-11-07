@@ -14,7 +14,7 @@ Retour au [README](../README.md). Voir aussi [DEPLOIEMENT.md](DEPLOIEMENT.md) (l
 |---|---|---|
 | Bibliothèque | 1.29.0 : `src/licensing/` (`xpg_licensing`) : formats, registre, licence, révocations, identité du PC, demande d'activation, import, vérification hors ligne, états, l'API de la maquette. **1.30.0** : l'état **Non activées** (aucune clé de l'éditeur : tout est ouvert, § 8 bis), ce que lit l'écran Licence (le registre, les PC liés, l'historique, le dossier, l'empreinte de ce PC, § 9), l'historique de ce PC (`historique.jsonl`), un dossier non inscriptible qui ne bloque rien | — |
 | Clés de l'éditeur | **1.30.0** : deux fichiers (§ 11 bis) — `PublisherKey.hpp`, les **vraies** clés, **vide** aujourd'hui ; `TestPublisherKey.hpp`, la clé d'**essai**, compilée **seulement** avec l'option CMake `XPG_LICENCES_CLE_ESSAI` (OFF par défaut) | **la vraie clé**, à créer sur ton PC (§ 11) ; d'ici là, les programmes livrés sont « Non activées » |
-| Outil Admin | `src/license_admin/` : `XPG-License-Admin` en console (clé de l'éditeur, `exporter-cle` vide ou à plusieurs clés, signer registre / licence / révocations, vérifier). **1.30.0** : le **registre des activations** (`activations.jsonl`, `enregistrer-demande`, `liste`, `--csv`) ; **livré à part à l'éditeur** (`outils/mingw/admin_editeur.sh` : `XPG-License-Admin-<version>-EDITEUR.zip`, avec son LISEZ-MOI pas à pas). **1.31.0** : l'**archive** du poste et la **synchro avec un dépôt GitHub privé** (§ 11 quater : licences et registre des activations chiffrés, un commit par envoi, fusion entre postes, code de secours) | l'interface graphique de l'Admin (maquette : tableau de bord, clients, boutique…), la vérification du poste Admin par défi signé, une sauvegarde de la clé protégée par un mot de passe ; la synchro n'a **pas** été essayée contre le vrai GitHub (§ 11 quater) |
+| Outil Admin | `src/license_admin/` : `XPG-License-Admin` en console (clé de l'éditeur, `exporter-cle` vide ou à plusieurs clés, signer registre / licence / révocations, vérifier). **1.30.0** : le **registre des activations** (`activations.jsonl`, `enregistrer-demande`, `liste`, `--csv`) ; **livré à part à l'éditeur** (`outils/mingw/admin_editeur.sh` : `XPG-License-Admin-<version>-EDITEUR.zip`, avec son LISEZ-MOI pas à pas). **1.31.0** : l'**archive** du poste et la **synchro avec un dépôt GitHub privé** (§ 11 quater : licences et registre des activations chiffrés, un commit par envoi, fusion entre postes, code de secours). **1.32.0** : la **sauvegarde de la clé par une phrase de passe** (§ 11 quinquies), le dépôt remis en arrière refusé (§ 11 sexies) | l'interface graphique de l'Admin (maquette : tableau de bord, clients, boutique…), la vérification du poste Admin par défi signé ; la synchro n'a **pas** été essayée contre le vrai GitHub (§ 11 quater) |
 | Interface | **1.30.0** : les Studios lient `xpg_licensing` (l'écran Licence et les verrous des entrées : `src/app/Licence*`) | — |
 | Installateur | **1.30.0** : `%ProgramData%\XPG\Licences` créé pour tous les comptes, avec le droit Modifier des Utilisateurs ; gardé à la désinstallation ; le registre livré (`licences\registre.xpgreg`) s'il est dans le dossier à livrer ; le contrôle du paquet dans `package_mingw.py` **et** `package.ps1` (§ 13) | le registre réel, signé par toi (`ressources-licences/registre.xpgreg`) |
 | En ligne | le format le prévoit (`type: floating`, champ `service`) ; une licence qui les emploie est **refusée** avec une phrase qui le dit | l'activation en ligne, les licences flottantes, la désactivation et le transfert en ligne, l'heure signée, **voir chaque lancement du logiciel** (§ 12) |
@@ -351,6 +351,28 @@ Jamais : la clé de l'éditeur, le jeton, la clé ou le code de synchro. Les mes
 **Le jeton** : un jeton à grain fin (`github_pat_…`) qui ne voit **que** ce dépôt, avec **Contents : Read and write** ; le pas à pas est dans `LISEZ-MOI-EDITEUR.txt`.
 
 **Essayé** : `github_sync_test` (§ 14) contre un faux GitHub dans le processus ; l'outil lui-même, en console, contre `outils/licences/faux_github.py` (un faux GitHub local : l'API Git Data et Contents, de vrais identifiants Git, un envoi concurrent simulé), par libcurl sous Linux et par WinHTTP sous Wine. **Pas essayé contre le vrai GitHub** (aucun jeton ici, et aucun ne doit l'être) : la première synchro réelle est la tienne ; `github-etat` la prépare sans rien écrire.
+
+### 11 quinquies. La sauvegarde de la clé de l'éditeur, par une phrase de passe (1.32.0)
+
+`src/license_admin/KeyBackup.{hpp,cpp}`, dans l'outil de l'éditeur seulement. Le fichier de la clé (`cle-editeur-licences.cle`) est protégé par DPAPI : il ne se relit que sous le compte Windows qui l'a créé. La **sauvegarde** (`.xpgcle`) se relit partout, avec la phrase de passe que l'éditeur choisit et tape lui-même (jamais affichée, jamais écrite) :
+
+```
+XPG-SAUVEGARDE-CLE 1
+cle=xpg-…
+argon2id ops=3 mem=268435456 sel=<32 hexadécimaux>
+<base64 : nonce (24 octets) + chiffré XChaCha20-Poly1305>
+```
+
+- La clé de chiffrement vient de la phrase par **Argon2id** (libsodium `crypto_pwhash` : 3 passes, 256 Mio) ; les trois lignes d'en-tête sont les **données associées** : changer l'identifiant ou les paramètres rend la sauvegarde illisible. À la relecture, des paramètres plus faibles que le minimum (2 passes, 64 Mio) ou démesurés (plus de 16 passes, plus de 1 Gio) sont refusés.
+- Le contenu : la clé secrète, la publique, le nom, essai ou non ; à la restauration, la paire est vérifiée (la secrète porte la publique, signe pour elle, et l'identifiant concorde).
+- La phrase : 12 caractères au moins, variés, pas seulement des chiffres.
+- `sauvegarder-cle --sortie F.xpgcle` (la phrase deux fois, sans écho), `verifier-sauvegarde F.xpgcle` (rien n'est écrit), `restaurer-cle --entree F.xpgcle` (la clé réécrite sous DPAPI pour ce compte ; une clé déjà là n'est jamais remplacée). `--phrase-variable NOM` lit la phrase dans une variable d'environnement (les essais).
+- Le contrôle du paquet refuse un `.xpgcle` et la marque `XPG-SAUVEGARDE-CLE` dans tout dossier à livrer (§ 13).
+- Essai : `key_backup_test` (ctest `clesauvegarde`, 19 contrôles) — aller-retour (la même clé, qui signe pareil), phrase fausse, identifiant ou chiffré modifiés, paramètres affaiblis ou démesurés, une clé déjà là, une phrase trop simple, deux sauvegardes différentes de la même clé.
+
+### 11 sexies. La synchro : un dépôt remis en arrière est refusé (1.32.0)
+
+L'index porte un **compteur**, augmenté à chaque envoi ; chaque poste retient le plus grand qu'il a vu, par dépôt, branche et dossier (`github-vu.json`, à côté de la clé). Un index dont le compteur est plus petit (l'historique de la branche réécrit par quelqu'un qui peut écrire dans le dépôt) arrête la synchro : rien n'est reçu ni envoyé, et c'est dit. Un poste neuf n'a encore rien vu : il reçoit l'état du dépôt tel qu'il est.
 
 ## 12. Ce qui est prévu pour plus tard, et pourquoi il faut un service hébergé
 
