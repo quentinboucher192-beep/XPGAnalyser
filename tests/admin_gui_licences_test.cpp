@@ -161,13 +161,13 @@ int main(int argc, char** argv) {
 
         const std::string broken = U(fx.root / "abimee.xpgreq");
         {
-            std::ofstream f(fs::path(broken), std::ios::binary);
+            std::ofstream f(fx.root / "abimee.xpgreq", std::ios::binary);
             f << "ceci n'est pas une demande";
         }
         rig.picks = {broken};
         check(click(w, "wizard.demandes.ajouter"), "Ajouter... (abimee)");
         t = paintDialog(d);
-        check(rows(w, "wizard.demandes") == 3 && has(t, "refus\xC3\xA9" "e") && has(t, "\xC2\xAB abimee.xpgreq \xC2\xBB refus\xC3\xA9" "e"), "la demande abimee est montree, refusee, sa raison dite");
+        check(rows(w, "wizard.demandes") == 3 && has(t, "refus\xC3\xA9" "e") && has(t, "\xC2\xAB abimee.xpgreq \xC2\xBB"), "la demande abimee est montree, refusee, sa raison dite");
         checkText(!next(w) && has(t, "Retire les demandes refus"), "une demande refusee bloque Suivant", t);
         auto* table = find<ui::TableView>(w, "wizard.demandes");
         table->selectModelRows({2});
@@ -444,6 +444,12 @@ int main(int argc, char** argv) {
         check(page->dropFiles({reqH}) && rig.dialogs.size() == m + 1 && rows(w, "wizard.demandes") == 2, "glisser encore : l'assistant ouvert la prend");
         check(!page->dropFiles({fileAlpha}), "un .xpglic : pas pour la page (la coquille le range)");
         check(!page->dropFiles({reqG, fileAlpha}), "un melange : pour la coquille");
+        const std::string reqI = fx.request("pcI", "Poste essai I");
+        check(rig.dialogs.back()->HandleEvent(ui::InputEvent{ui::FileDropped{reqI, {600.f, 400.f}}}) == ui::EventResult::Consumed && rows(w, "wizard.demandes") == 3,
+              "un .xpgreq lache sur l'assistant ouvert (au-dessus de la coquille) : ajoute");
+        check(rig.dialogs.back()->HandleEvent(ui::InputEvent{ui::FileDropped{fileAlpha, {600.f, 400.f}}}) == ui::EventResult::Consumed && rows(w, "wizard.demandes") == 3
+                  && has(paintDialog(*rig.dialogs.back()), "n'est pas une demande"),
+              "un .xpglic lache sur l'assistant : refuse, dit");
         check(click(w, "wizard.annuler"), "Annuler");
         check(page->dropFiles({reqG}) && rig.dialogs.size() == m + 2, "l'assistant ferme ne prend plus rien : un nouveau s'ouvre");
         check(click(*rig.dialogs.back()->widgetRoot(), "wizard.annuler"), "Annuler");

@@ -144,7 +144,7 @@ public:
         seeLicences_ = add(*this, std::make_unique<ui::Button>("Voir ses licences", "clients.voir-licences"));
         seeLicences_->setIcon(ui::Icon::GoTo);
         table_ = add(*this, std::make_unique<ui::TableView>("clients.table"));
-        table_->setColumns({{"Client", 260.f}, {"Licences", 92.f}, {"Actives", 84.f}, {"PC", 56.f}, {"Demandes en attente", 176.f}, {"Derni\xC3\xA8re activit\xC3\xA9", 156.f}});
+        table_->setColumns({{"Client", 230.f}, {"Licences", 92.f}, {"Actives", 84.f}, {"PC", 56.f}, {"Demandes en attente", 192.f}, {"Derni\xC3\xA8re activit\xC3\xA9", 176.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Client", "Licences", "Actives", "PC", "Demandes en attente", "Derni\xC3\xA8re activit\xC3\xA9"});
         table_->setModel(model_);
@@ -186,9 +186,6 @@ public:
         invalidate();
     }
 
-    // Les essais : le client choisi ("" : aucun).
-    [[nodiscard]] const std::string& selected() const noexcept { return selected_; }
-
 protected:
     void onLayout() override {
         const gfx::Rect b = bounds();
@@ -203,7 +200,9 @@ protected:
         const float sw = seeLicences_->sizeHint().preferred.w, nw = newLicence_->sizeHint().preferred.w;
         seeLicences_->setBounds({x + w - sw, y, sw, kButtonH});
         newLicence_->setBounds({x + w - sw - kGap - nw, y, nw, kButtonH});
-        countRect_ = {x + std::min(320.f, w * 0.35f) + 12.f, y, std::max(0.f, w - std::min(320.f, w * 0.35f) - sw - nw - kGap - 24.f), kButtonH};
+        // Le compte, a droite du titre.
+        const float tw = ui::measureWidth("Clients", kFonts.title) + 24.f;
+        countRect_ = {x + tw, titleY_ + 4.f, std::max(0.f, w - tw), 22.f};
         y += kButtonH + kGap;
         const gfx::Rect area{x, y, w, std::max(60.f, b.bottom() - kPad - y)};
         // En haut les clients ; en bas le client choisi : ses licences et ses PC, cote a cote.
@@ -234,7 +233,9 @@ protected:
             r.drawText({x, leadY_ + static_cast<float>(i) * kLineH}, fit(r, leadLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
         std::string n = count(shown_.size(), "client", "clients");
         if (shown_.size() != all_.size()) n += " (sur " + std::to_string(all_.size()) + ")";
-        r.drawText({countRect_.x, countRect_.y + (kButtonH - r.lineHeight(ctx.theme.font.ui)) * 0.5f}, fit(r, n, ctx.theme.font.ui, countRect_.w), ctx.theme.font.ui,
+        const std::string shownCount = fit(r, n, ctx.theme.font.ui, countRect_.w);
+        r.drawText({countRect_.right() - r.measure(shownCount, ctx.theme.font.ui).width, countRect_.y + (countRect_.h - r.lineHeight(ctx.theme.font.ui)) * 0.5f}, shownCount,
+                   ctx.theme.font.ui,
                    c.textMuted);
         // Le panneau du client choisi.
         r.fillRect(panel_, c.windowBg);

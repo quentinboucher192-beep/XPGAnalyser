@@ -238,7 +238,7 @@ bool stale(const Draft& d, const Workspace& ws) { return d.dirty && (!ws.hasRegi
 // Ce qui change d'un registre a l'autre, une ligne par chose.
 std::vector<std::string> changesOf(const lic::Registry& a, const lic::Registry& b) {
     std::vector<std::string> out;
-    if (a.unlicensedEdition != b.unlicensedEdition) out.push_back("\xC3\xA9" "dition sans licence : " + a.unlicensedEdition + " \xE2\x86\x92 " + b.unlicensedEdition);
+    if (a.unlicensedEdition != b.unlicensedEdition) out.push_back("\xC3\xA9" "dition sans licence : " + a.unlicensedEdition + " devient " + b.unlicensedEdition);
     for (const auto& f : b.features) {
         const lic::FeatureDef* o = a.feature(f.id);
         if (!o) {
@@ -358,9 +358,6 @@ public:
         invalidate();
     }
 
-    // Les essais : la ligne d'erreur de la page ("" : aucune).
-    [[nodiscard]] const std::string& problem() const noexcept { return problem_; }
-
 protected:
     // ---- ce que chaque page fournit ----
     virtual void reloadContent() = 0;                        // relire le brouillon (tables ET champs du panneau)
@@ -415,6 +412,14 @@ protected:
         leadLines_ = wrap(lead_, kFonts.ui, w, 3);
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
+        if (!hasRegistry_) {
+            // Pas encore de registre : l'explication, puis le bouton du premier.
+            content_ = {x, y + 8.f, w, std::max(60.f, b.bottom() - kPad - y - 8.f)};
+            emptyLines_ = wrap(kFirstRegistry, kFonts.ui, w, 8);
+            const float fw = firstBtn_->sizeHint().preferred.w;
+            firstBtn_->setBounds({x, content_.y + 30.f + static_cast<float>(emptyLines_.size()) * kLineH + 14.f, fw, kButtonH});
+            return;
+        }
         // La barre : Nouvelle..., Annuler ; Signer a droite.
         float bx = x;
         for (ui::Button* btn : {newBtn_, cancelBtn_}) {
@@ -441,12 +446,7 @@ protected:
         if (!problemText().empty()) y += kLineH + 4.f;
         const gfx::Rect content{x, y, w, std::max(60.f, b.bottom() - kPad - y)};
         content_ = content;
-        if (hasRegistry_) {
-            layoutContent(content);
-        } else {
-            const float fw = firstBtn_->sizeHint().preferred.w;
-            firstBtn_->setBounds({x, y + 140.f, fw, kButtonH});
-        }
+        layoutContent(content);
     }
 
     // La ligne rouge : un refus, un champ refuse, ou le brouillon perime.
@@ -498,19 +498,9 @@ protected:
             return;
         }
         // Pas encore de registre.
-        float y = content_.y + 8.f;
-        r.drawText({x, y}, "Pas encore de registre", ctx.theme.font.lead, c.text);
-        y += 30.f;
-        std::vector<std::string> lines = {
-            "Le registre dit quelles \xC3\xA9" "ditions et fonctionnalit\xC3\xA9s existent ; sign\xC3\xA9 avec ta cl\xC3\xA9, il part avec chaque licence.",
-            "Le premier se signe depuis un fichier registre.json \xC3\xA9" "crit \xC3\xA0 la main : son format est dans docs/LICENCES.md,",
-            "un exemple complet dans tests/fixtures/licences/registre-exemple.json (21 fonctionnalit\xC3\xA9s, 6 \xC3\xA9" "ditions).",
-            "Ensuite, tout se modifie ici, puis \xC2\xAB Signer le registre n\xC2\xB0 N+1 \xC2\xBB.",
-        };
-        for (const auto& l : lines) {
-            r.drawText({x, y}, fit(r, l, ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
-            y += kLineH;
-        }
+        r.drawText({x, content_.y}, "Pas encore de registre", ctx.theme.font.lead, c.text);
+        for (std::size_t i = 0; i < emptyLines_.size(); ++i)
+            r.drawText({x, content_.y + 30.f + static_cast<float>(i) * kLineH}, fit(r, emptyLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
         std::string note;
         if (!ws().key().present) note = "Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.";
         for (const auto& p : ws().archiveProblems())
@@ -638,7 +628,12 @@ private:
 
     std::string              title_, lead_, problem_;
     std::vector<std::string> leadLines_;
-    std::vector<std::string> newHintLines_;
+    static constexpr const char* kFirstRegistry =
+        "Le registre dit quelles \xC3\xA9" "ditions et fonctionnalit\xC3\xA9s existent ; sign\xC3\xA9 avec ta cl\xC3\xA9, il part avec chaque licence. Le premier se signe "
+        "depuis un fichier registre.json \xC3\xA9" "crit \xC3\xA0 la main : son format est d\xC3\xA9" "crit dans docs/LICENCES.md, et un exemple complet est dans "
+        "tests/fixtures/licences/registre-exemple.json (21 fonctionnalit\xC3\xA9s, 6 \xC3\xA9" "ditions) : copie-le, adapte-le, signe-le. Ensuite, tout se "
+        "modifie ici, puis \xC2\xAB Signer le registre n\xC2\xB0 N+1 \xC2\xBB.";
+    std::vector<std::string> newHintLines_, emptyLines_;
     float                    titleY_{0}, leadY_{0}, newHintY_{0}, problemY_{0};
     gfx::Rect                statusRect_{};
     ui::Button*              newBtn_{nullptr};
@@ -661,13 +656,14 @@ void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::st
     r.fillRect(card, c.windowBg);
     r.strokeRect(card, c.border, 1.f);
     r.fillRect({card.x, card.y, card.w, 32.f}, c.headerBg);
-    r.drawText({card.x + 12.f, card.y + (32.f - r.lineHeight(ctx.theme.font.heading)) * 0.5f}, fit(r, heading, ctx.theme.font.heading, card.w * 0.55f),
-               ctx.theme.font.heading, c.text);
+    float subW = 0.f;
     if (!sub.empty()) {
-        const float sw = std::min(card.w * 0.45f - 16.f, r.measure(sub, ctx.theme.font.caption).width);
-        r.drawText({card.right() - 12.f - sw, card.y + (32.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, sub, ctx.theme.font.caption, sw + 1.f),
+        subW = std::min(card.w * 0.45f - 16.f, r.measure(sub, ctx.theme.font.caption).width);
+        r.drawText({card.right() - 12.f - subW, card.y + (32.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, sub, ctx.theme.font.caption, subW + 1.f),
                    ctx.theme.font.caption, ctx.theme.tone(ui::Tone::Info, c.text));
     }
+    r.drawText({card.x + 12.f, card.y + (32.f - r.lineHeight(ctx.theme.font.heading)) * 0.5f},
+               fit(r, heading, ctx.theme.font.heading, card.w - 36.f - (subW > 0.f ? subW + 12.f : 0.f)), ctx.theme.font.heading, c.text);
 }
 
 // ============================================================================ la page Editions
@@ -679,8 +675,8 @@ public:
                        "avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
                        "Nouvelle \xC3\xA9" "dition\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("editions.table"));
-        table_->setColumns({{"Identifiant", 128.f}, {"Libell\xC3\xA9", 150.f}, {"Type", 100.f}, {"PC", 44.f}, {"Dur\xC3\xA9" "e", 76.f}, {"Gr\xC3\xA2" "ce", 60.f},
-                            {"Fonctionnalit\xC3\xA9s", 128.f}, {"Retir\xC3\xA9" "e", 72.f}});
+        table_->setColumns({{"Identifiant", 160.f}, {"Libell\xC3\xA9", 160.f}, {"Type", 110.f}, {"PC", 56.f}, {"Dur\xC3\xA9" "e", 84.f}, {"Gr\xC3\xA2" "ce", 76.f},
+                            {"Fonctionnalit\xC3\xA9s", 150.f}, {"Retir\xC3\xA9" "e", 90.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Libell\xC3\xA9", "Type", "PC", "Dur\xC3\xA9" "e", "Gr\xC3\xA2" "ce", "Fonctionnalit\xC3\xA9s", "Retir\xC3\xA9" "e"});
         table_->setModel(model_);
@@ -698,7 +694,7 @@ public:
         days_->setTooltip("La dur\xC3\xA9" "e d'une licence neuve, en jours ; 0 : sans fin (une licence perp\xC3\xA9tuelle).");
         grace_ = add(*this, std::make_unique<ui::InputText>("editions.grace"));
         grace_->setTooltip("Apr\xC3\xA8s la fin, les fonctionnalit\xC3\xA9s restent ouvertes ces jours-l\xC3\xA0, le temps d'importer le renouvellement.");
-        retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e : plus propos\xC3\xA9" "e aux licences neuves", "editions.retiree"));
+        retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus propos\xC3\xA9" "e)", "editions.retiree"));
         retired_->setTooltip("Une \xC3\xA9" "dition ne se supprime jamais : des clients l'ont dans leur licence et la gardent. Retir\xC3\xA9" "e, elle n'est plus propos\xC3\xA9" "e.");
         feats_ = add(*this, std::make_unique<ui::TableView>("editions.fonctionnalites"));
         feats_->setColumns({{"Fonctionnalit\xC3\xA9", 170.f}, {"Identifiant", 150.f}, {"Limites", 120.f}});
@@ -769,9 +765,6 @@ public:
         refresh();
     }
 
-    // Les essais : l'edition montree dans le panneau.
-    [[nodiscard]] const std::string& selected() const noexcept { return selected_; }
-
 protected:
     void reloadContent() override {
         const lic::Registry& reg = draft().reg;
@@ -789,7 +782,7 @@ protected:
     }
 
     void layoutContent(const gfx::Rect& area) override {
-        const float pw = std::clamp(area.w * 0.4f, 360.f, 520.f);
+        const float pw = std::clamp(area.w * 0.36f, 360.f, 500.f);
         table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 128.f;
@@ -836,8 +829,7 @@ protected:
             if (!f.retired) ++offered;
             if (grants(*e, f.id)) ++on;
         }
-        const std::string head = "Fonctionnalit\xC3\xA9s accord\xC3\xA9" "es : " + std::to_string(on) + " (sur " + std::to_string(offered) + " en service)"
-                                 + (free ? " - ce qu'ouvre le logiciel sans licence" : "");
+        const std::string head = "Fonctionnalit\xC3\xA9s accord\xC3\xA9" "es : " + std::to_string(on) + " sur " + std::to_string(offered) + (free ? " (sans licence)" : "");
         r.drawText({panel_.x + 12.f, featsHeadY_}, fit(r, head, ctx.theme.font.ui, panel_.w - 24.f), ctx.theme.font.ui, c.text);
     }
 
@@ -1033,6 +1025,7 @@ private:
     void loadPanel() {
         const lic::Registry& reg = draft().reg;
         const lic::EditionDef* e = reg.edition(selected_);
+        errors_.clear();   // les champs reprennent les valeurs du brouillon
         loading_ = true;
         if (e) {
             label_->setText(e->label);
@@ -1105,7 +1098,7 @@ public:
                        "avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
                        "Nouvelle fonctionnalit\xC3\xA9\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("fonctionnalites.table"));
-        table_->setColumns({{"Identifiant", 160.f}, {"Produit", 100.f}, {"Libell\xC3\xA9", 150.f}, {"Limites", 120.f}, {"Retir\xC3\xA9" "e", 72.f}, {"\xC3\x89" "ditions", 80.f}});
+        table_->setColumns({{"Identifiant", 170.f}, {"Produit", 104.f}, {"Libell\xC3\xA9", 150.f}, {"Limites", 110.f}, {"Retir\xC3\xA9" "e", 90.f}, {"\xC3\x89" "ditions", 96.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Produit", "Libell\xC3\xA9", "Limites", "Retir\xC3\xA9" "e", "\xC3\x89" "ditions"});
         table_->setModel(model_);
@@ -1117,7 +1110,7 @@ public:
         label_ = add(*this, std::make_unique<ui::InputText>("fonctionnalites.libelle"));
         product_ = add(*this, std::make_unique<ui::InputText>("fonctionnalites.produit"));
         product_->setAssist([this](std::string_view before, std::size_t& from, std::vector<ui::InputText::Suggestion>& out) { suggestProducts(before, from, out); });
-        retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e : plus accord\xC3\xA9" "e aux licences neuves", "fonctionnalites.retiree"));
+        retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus accord\xC3\xA9" "e)", "fonctionnalites.retiree"));
         retired_->setTooltip("Une fonctionnalit\xC3\xA9 ne se supprime jamais : des clients l'ont dans leur licence et la gardent. Retir\xC3\xA9" "e, aucune \xC3\xA9" "dition ne l'accorde plus.");
         limits_ = add(*this, std::make_unique<ui::TableView>("fonctionnalites.limites"));
         limits_->setColumns({{"Nom", 170.f}, {"Libell\xC3\xA9", 220.f}});
@@ -1183,8 +1176,6 @@ public:
         refresh();
     }
 
-    [[nodiscard]] const std::string& selected() const noexcept { return selected_; }
-
 protected:
     void reloadContent() override {
         const lic::Registry& reg = draft().reg;
@@ -1205,7 +1196,7 @@ protected:
     }
 
     void layoutContent(const gfx::Rect& area) override {
-        const float pw = std::clamp(area.w * 0.4f, 360.f, 520.f);
+        const float pw = std::clamp(area.w * 0.36f, 360.f, 500.f);
         table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 110.f;
@@ -1370,6 +1361,8 @@ private:
         if (id == selected_) return;
         selected_ = id;
         errors_.clear();
+        limitId_->setText({});
+        limitLabel_->setText({});
         loadPanel();
         invalidateLayout();
         invalidate();
@@ -1431,6 +1424,7 @@ private:
 
     void loadPanel() {
         const lic::FeatureDef* f = draft().reg.feature(selected_);
+        errors_.clear();   // les champs reprennent les valeurs du brouillon
         loading_ = true;
         if (f) {
             label_->setText(f->label);

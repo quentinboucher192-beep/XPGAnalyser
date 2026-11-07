@@ -131,8 +131,8 @@ public:
         table_ = &adopt(*this, std::make_unique<ui::TableView>("revocations.table"));
         table_->setSelectionMode(ui::SelectionMode::Single);
         table_->setAlternatingRowColors(true);
-        table_->setColumns({{"Licence", 140.f}, {"Client", 180.f}, {"PC", 250.f}, {"Raison", 220.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 130.f},
-                            {"\xC3\x89missions", 170.f}});
+        table_->setColumns({{"Licence", 140.f}, {"Client", 170.f}, {"PC", 260.f}, {"Raison", 220.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 115.f},
+                            {"\xC3\x89missions", 215.f}});
         links_ += revoke_->clicked->connect([this] {
             if (ws().licences().empty()) {
                 host_.flash("Aucune licence dans l'archive \xC3\xA0 r\xC3\xA9voquer.", Tone::Warning);
@@ -162,7 +162,7 @@ public:
                 if (l)
                     if (const auto* d = l->licence.device(x.device); d && !d->name.empty()) pc = d->name + " \xE2\x80\x94 " + pc;
             }
-            rows.push_back({x.licenseId, l ? l->licence.customer : std::string("(pas dans l'archive)"), pc, x.reason, dateTimeFr(x.revokedAt),
+            rows.push_back({x.licenseId, l ? l->licence.customer : std::string("(pas dans l'archive)"), pc, x.reason, dateFr(x.revokedAt),
                             x.issuedBefore ? "avant le " + dateTimeFr(x.issuedBefore) : std::string("toutes")});
             whole.push_back(x.device.empty());
         }

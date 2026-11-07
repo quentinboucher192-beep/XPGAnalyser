@@ -20,7 +20,9 @@
 //    --assistant F.xpgreq   (repetable) ouvrir l'assistant de licence avec ces demandes
 //    --cliquer ID           (repetable) cliquer ce widget du menu du dessus
 //    --taper ID=TEXTE       (repetable) ecrire dans ce champ du menu du dessus
-//                           (dans l'ordre de la ligne de commande, une toutes les 0,3 s)
+//    --glisser F            (repetable) glisser ce fichier sur la fenetre (plusieurs --glisser
+//                           qui se suivent : un seul geste)
+//                           (les actions dans l'ordre de la ligne de commande, une toutes les 0,3 s)
 //    --capture F.png        dessiner, enregistrer l'image, quitter ;
 //    --apres S              ... S secondes apres la derniere action (defaut 1)
 // =============================================================================
@@ -147,8 +149,8 @@ bool open(SDL_Window* window, const ui::FilePick& pick, std::function<void(std::
 
 // ---- la ligne de commande ----
 struct Action {
-    bool        type{false};   // --taper (sinon --cliquer)
-    std::string id, text;
+    enum class Kind : std::uint8_t { Click, Type, Drop } kind{Kind::Click};
+    std::string id, text;   // Drop : `id` est le fichier
 };
 
 struct Options {
@@ -192,6 +194,7 @@ void usage(std::FILE* to) {
                  "  --assistant F.xpgreq  ouvrir l'assistant de licence avec cette demande (r\xC3\xA9p\xC3\xA9table)\n"
                  "  --cliquer ID          cliquer ce widget (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
                  "  --taper ID=TEXTE      \xC3\xA9" "crire dans ce champ (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
+                 "  --glisser F           glisser ce fichier sur la fen\xC3\xAAtre (r\xC3\xA9p\xC3\xA9table ; ceux qui se suivent : un geste)\n"
                  "  --capture F.png       enregistrer l'image de la fen\xC3\xAAtre, puis quitter\n"
                  "  --apres S             la capture S secondes apr\xC3\xA8s la derni\xC3\xA8re action (d\xC3\xA9" "faut 1)\n",
                  gui::kAppName, gui::kAppVersion);
@@ -236,7 +239,7 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
             o.requests.push_back(args[++i]);
         } else if (a == "--cliquer") {
             if (!more) return need("l'identifiant");
-            o.actions.push_back({false, args[++i], {}});
+            o.actions.push_back({Action::Kind::Click, args[++i], {}});
         } else if (a == "--taper") {
             if (!more) return need("ID=TEXTE");
             const std::string t = args[++i];
@@ -245,7 +248,10 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
                 why = "--taper : " + t + " (attendu : ID=TEXTE)";
                 return false;
             }
-            o.actions.push_back({true, t.substr(0, eq), t.substr(eq + 1)});
+            o.actions.push_back({Action::Kind::Type, t.substr(0, eq), t.substr(eq + 1)});
+        } else if (a == "--glisser") {
+            if (!more) return need("le fichier");
+            o.actions.push_back({Action::Kind::Drop, args[++i], {}});
         } else {
             why = "option inconnue : " + a;
             return false;
@@ -264,7 +270,7 @@ void perform(menu::MenuManager& menus, const Action& a) {
         std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB introuvable dans %s\n", a.id.c_str(), where.c_str());
         return;
     }
-    if (a.type) {
+    if (a.kind == Action::Kind::Type) {
         if (auto* t = dynamic_cast<ui::InputText*>(w)) t->setText(a.text);
         else if (auto* m = dynamic_cast<ui::MultiLineText*>(w)) m->setText(a.text);
         else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB n'est pas un champ (%s)\n", a.id.c_str(), where.c_str());
@@ -447,7 +453,13 @@ int main(int argc, char** argv) {
             renderer->beginFrame(theme.color.windowBg);
             menus.Render(*renderer, fc);
             if (nextAction < o.actions.size() && time >= nextActionAt) {
-                perform(menus, o.actions[nextAction++]);
+                if (o.actions[nextAction].kind == Action::Kind::Drop) {
+                    // Les --glisser qui se suivent : un seul geste, comme dans l'Explorateur.
+                    while (nextAction < o.actions.size() && o.actions[nextAction].kind == Action::Kind::Drop) drops.push_back(o.actions[nextAction++].id);
+                    deliverDrops();
+                } else {
+                    perform(menus, o.actions[nextAction++]);
+                }
                 nextActionAt = time + 0.3;
                 if (nextAction == o.actions.size()) captureAt = time + o.after;
             }

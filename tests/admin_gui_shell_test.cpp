@@ -103,6 +103,19 @@ int main(int argc, char** argv) {
     }
 
     // ------------------------------------------------------------------------------------------------
+    std::printf("-- une cle, pas encore de registre\n");
+    {
+        Fixture fx2(source, "coquille-sans-registre");
+        check(fx2.ws->createKey("essai sans registre", true).ok, "cle d'essai creee");
+        Rig rig2(fx2);
+        const std::string t = rig2.paint();
+        check(has(t, "Il manque le registre") && has(t, "Aller aux \xC3\xA9" "ditions"), "le tableau de bord dit de signer le registre");
+        auto* nl = find<ui::Button>(rig2.root(), "tableau.nouvelle-licence");
+        check(nl && !nl->enabled(), "Nouvelle licence... grisee sans registre");
+        check(rig2.clickId("tableau.aller-editions") && rig2.shell->currentPageId() == "editions", "Aller aux editions");
+    }
+
+    // ------------------------------------------------------------------------------------------------
     std::printf("-- cle d'essai, registre : navigation et etat\n");
     Fixture fx(source, "coquille");
     check(fx.ready(), "le poste d'essai est pret (cle d'essai, registre)");
@@ -182,6 +195,11 @@ int main(int argc, char** argv) {
         rig.shell->report(gui::OpResult::done("Un autre."));
         check(!rig.shell->detailsOpen(), "un nouveau resultat referme les details");
         check(rig.shell->sessionLog().size() >= 4, "le journal garde tout");
+        {
+            Fixture fx3(source, "coquille-journal");
+            Rig rig3(fx3);
+            check(rig3.clickId("shell.journal") && has(rig3.paint(), "Rien encore dans cette s\xC3\xA9" "ance."), "le journal vide le dit");
+        }
         check(rig.clickId("shell.journal") && rig.shell->logOpen(), "Journal : ouvert");
         t = rig.paint();
         check(has(t, "Fermer le journal") && has(t, "essai de refus") && has(t, "Essai fait.") && has(t, "    premier detail de l'essai"),
@@ -190,6 +208,9 @@ int main(int argc, char** argv) {
         check(table && table->visible() && table->model() && table->model()->rowCount() >= 5, "la table du journal");
         check(table && table->model()->cellText(0, 2) == "Un autre.", "le plus recent en haut");
         check(rig.clickId("shell.journal") && !rig.shell->logOpen(), "Journal : ferme");
+        check(rig.clickId("shell.journal") && rig.shell->logOpen(), "Journal : rouvert");
+        (void)rig.menus.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+        check(!rig.shell->logOpen() && rig.menus.top() == rig.shell, "Echap referme le journal (la coquille reste)");
         // Le dossier d'un fichier ecrit (un resultat avec output).
         gui::OpResult out = gui::OpResult::done("Fichier \xC3\xA9" "crit.");
         out.output = U(fx.root / "nulle-part" / "x.xpglic");
@@ -228,6 +249,9 @@ int main(int argc, char** argv) {
         rig.shell->dropFiles({reqWhileBusy});
         check(!rig.shell->lastMessage()->result.ok && has(rig.shell->lastMessage()->result.message, "attends la fin"), "ranger pendant un travail lent : refuse");
         check(rig.shell->workspace().dashboard().pendingRequests == 0, "rien n'a ete note");
+        rig.shell->navigate("tableau");
+        check(rig.clickId("tableau.noter-demandes") && !rig.shell->lastMessage()->result.ok && has(rig.shell->lastMessage()->result.message, "travail lent"),
+              "Noter des demandes... pendant un travail lent : refuse");
         release.store(true);
         bool finished = false;
         for (int i = 0; i < 500 && !finished; ++i) {

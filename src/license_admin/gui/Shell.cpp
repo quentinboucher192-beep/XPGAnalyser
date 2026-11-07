@@ -452,7 +452,7 @@ public:
                 for (auto& l : wrap(d, kF14, std::max(200.f, width - 64.f))) lines_.push_back(std::move(l));
             h += static_cast<float>(lines_.size()) * 19.f + 10.f;
         }
-        if (shell_.logOpen()) h = std::max(h, maxH);
+        if (shell_.logOpen()) h = std::max(h, std::clamp(maxH * 0.7f, std::min(160.f, maxH), 320.f));
         return std::min(std::max(h, kBannerH), std::max(kBannerH, maxH));
     }
 
@@ -470,7 +470,6 @@ protected:
         messageRight_ = x - 8.f;
         float y = b.y + kBannerH;
         if (!lines_.empty()) y += static_cast<float>(lines_.size()) * 19.f + 10.f;
-        detailsBottom_ = y;
         if (table_->visibility() != ui::Visibility::Collapsed) table_->setBounds({b.x + 12.f, y + 2.f, b.w - 24.f, std::max(40.f, b.bottom() - y - 10.f)});
     }
 
@@ -504,8 +503,13 @@ protected:
             ctx.r.drawText({b.x + 42.f, y}, l, kF14, c.textMuted);
             y += 19.f;
         }
-        if (table_->visibility() != ui::Visibility::Collapsed && shell_.sessionLog().empty())
-            ctx.r.drawText({b.x + 24.f, detailsBottom_ + 34.f}, "Rien encore dans cette s\xC3\xA9" "ance.", kF14, c.textMuted);
+    }
+
+    // Par-dessus la table (dessinee apres le fond) : le journal vide le dit.
+    void onPaintOverlay(const ui::PaintContext& ctx) override {
+        if (table_->visibility() == ui::Visibility::Collapsed || !shell_.sessionLog().empty()) return;
+        const Rect t = table_->bounds();
+        ctx.r.drawText({t.x + 12.f, t.y + 36.f}, "Rien encore dans cette s\xC3\xA9" "ance.", kF14, ctx.theme.color.textMuted);
     }
 
 private:
@@ -517,7 +521,7 @@ private:
     std::shared_ptr<RowsModel>  model_;
     std::size_t                 shown_{static_cast<std::size_t>(-1)};
     std::vector<std::string>    lines_;
-    float                       messageRight_{0.f}, detailsBottom_{0.f};
+    float                       messageRight_{0.f};
 };
 
 // ============================================================ la pile ====
@@ -859,7 +863,19 @@ ui::EventResult Shell::HandleEvent(const ui::InputEvent& ev) {
         dropFiles({d->path});
         return ui::EventResult::Consumed;
     }
-    return menu::WidgetMenu::HandleEvent(ev);
+    const ui::EventResult r = menu::WidgetMenu::HandleEvent(ev);
+    // Echap (que rien d'autre n'a pris) referme le journal, puis les details.
+    if (const auto* k = std::get_if<ui::KeyDown>(&ev); r == ui::EventResult::Ignored && k && k->key == ui::Key::Escape) {
+        if (logOpen_) {
+            setLogOpen(false);
+            return ui::EventResult::Consumed;
+        }
+        if (detailsOpen_) {
+            setDetailsOpen(false);
+            return ui::EventResult::Consumed;
+        }
+    }
+    return r;
 }
 
 } // namespace license_admin::gui

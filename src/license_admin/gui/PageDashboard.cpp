@@ -454,11 +454,14 @@ protected:
         card(ctx.r, th, editionsRect_);
         boldText(ctx.r, {editionsRect_.x + 16.f, editionsRect_.y + 12.f}, "R\xC3\xA9partition par \xC3\xA9" "dition", kF16, c.text);
         {
-            const std::string sub = "licences actives";
+            const float rowH = barH_;
+            const std::size_t fits = static_cast<std::size_t>(std::max(1.f, (editionsRect_.bottom() - 8.f - (editionsRect_.y + 44.f)) / rowH));
+            // Toutes ne tiennent pas (une petite fenetre, le journal ouvert) : combien manquent, dans l'en-tete.
+            const std::size_t hidden = d_.byEdition.size() > fits && fits == 1 ? d_.byEdition.size() - 1 : 0;
+            const std::string sub = hidden ? "+ " + std::to_string(hidden) + (hidden > 1 ? " autres" : " autre") : std::string("licences actives");
             const float sw = ctx.r.measure(sub, kF13).width;
             ctx.r.drawText({editionsRect_.right() - 16.f - sw, editionsRect_.y + 14.f}, sub, kF13, c.textMuted);
             float y = editionsRect_.y + 44.f;
-            const float rowH = barH_;
             if (d_.byEdition.empty()) {
                 ctx.r.drawText({editionsRect_.x + 16.f, y}, "Aucune licence active.", kF14, c.textMuted);
             } else {
@@ -468,10 +471,9 @@ protected:
                 const float countW = 36.f;
                 const float barX = editionsRect_.x + 16.f + labelW + 8.f;
                 const float barW = std::max(20.f, editionsRect_.right() - 16.f - countW - barX);
-                const std::size_t fits = static_cast<std::size_t>(std::max(1.f, (editionsRect_.bottom() - 8.f - y) / rowH));
                 for (std::size_t i = 0; i < d_.byEdition.size() && i < fits; ++i) {
                     const auto& [name, count] = d_.byEdition[i];
-                    if (i + 1 == fits && d_.byEdition.size() > fits) {
+                    if (i + 1 == fits && fits > 1 && d_.byEdition.size() > fits) {
                         ctx.r.drawText({editionsRect_.x + 16.f, y + 3.f}, "+ " + std::to_string(d_.byEdition.size() - i) + " autres \xC3\xA9" "ditions", kF13, c.textMuted);
                         break;
                     }

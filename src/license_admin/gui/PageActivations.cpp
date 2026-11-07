@@ -173,8 +173,8 @@ public:
         state_->setItems({{"Tous les \xC3\xA9tats", ""}, {"Demandes en attente", "demande"}, {"Actives", "active"}, {"R\xC3\xA9voqu\xC3\xA9" "es", "revoque"}, {"Expir\xC3\xA9" "es", "expire"}});
         state_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("activations.table"));
-        table_->setColumns({{"PC", 170.f}, {"Empreinte", 210.f}, {"Client", 190.f}, {"Licence", 140.f}, {"\xC3\x89" "dition", 120.f}, {"Logiciel", 190.f},
-                            {"Demand\xC3\xA9" "e le", 110.f}, {"Activ\xC3\xA9" "e le", 110.f}, {"Fin", 110.f}, {"\xC3\x89tat", 96.f}});
+        table_->setColumns({{"PC", 170.f}, {"Empreinte", 250.f}, {"Client", 190.f}, {"Licence", 140.f}, {"\xC3\x89" "dition", 120.f}, {"Logiciel", 220.f},
+                            {"Demand\xC3\xA9" "e le", 128.f}, {"Activ\xC3\xA9" "e le", 120.f}, {"Fin", 110.f}, {"\xC3\x89tat", 96.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte", "Client", "Licence", "\xC3\x89" "dition", "Logiciel", "Demand\xC3\xA9" "e le", "Activ\xC3\xA9" "e le", "Fin", "\xC3\x89tat"});
         table_->setModel(model_);
@@ -211,9 +211,6 @@ public:
         refresh();
         return true;
     }
-
-    // Les essais : les PC montres (apres recherche et filtre).
-    [[nodiscard]] const std::vector<KnownDevice>& shown() const noexcept { return shown_; }
 
 protected:
     void onLayout() override {
@@ -351,6 +348,10 @@ private:
     }
 
     void exportCsv() {
+        if (host_.busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return;
+        }
         if (shown_.empty()) {
             if (host_.flash) host_.flash("Aucun PC \xC3\xA0 exporter (la recherche ou le filtre n'en montre aucun).", Tone::Warning);
             return;
@@ -364,6 +365,10 @@ private:
         ShellHost host = host_;
         host_.pickFile(pick, [list, host](std::string path) {
             if (path.empty()) return;
+            if (host.busy()) {
+                if (host.flash) host.flash(kBusy, Tone::Warning);
+                return;
+            }
             const auto dot = path.find_last_of("./\\");
             if (dot == std::string::npos || path[dot] != '.') path += ".csv";
             host.report(host.workspace().exportCsv(list, path));

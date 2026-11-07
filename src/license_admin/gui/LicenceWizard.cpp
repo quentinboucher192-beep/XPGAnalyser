@@ -482,6 +482,7 @@ public:
     [[nodiscard]] bool customFeatures() const { return st_.features != editionFeatures(st_.edition); }
     [[nodiscard]] LicenceDraft draft() const;
     [[nodiscard]] bool takeDrop(const std::vector<std::string>& paths);
+    void dropped(const std::string& path);
     [[nodiscard]] bool blocked() const noexcept { return !blockedWhy_.empty(); }
     [[nodiscard]] std::string windowTitle() const;
     [[nodiscard]] std::string requestedExisting() const;   // la licence de l'archive que demandent les PC (pas etendue)
@@ -531,10 +532,14 @@ public:
         : DialogMenu("dialog.licence-assistant"), host_(std::move(host)), requests_(std::move(requests)), extendId_(std::move(extendId)),
           customer_(std::move(customer)) {}
     [[nodiscard]] std::string title() const override { return extendId_.empty() ? "Nouvelle licence" : "Ajouter des PC \xC3\xA0 " + extendId_; }
+    // Un fichier glisse sur la fenetre pendant que l'assistant est ouvert (il est au-dessus de la coquille).
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override;
 
 protected:
     core::Status buildUi() override {
-        setRoot(std::make_unique<WizardBody>(*this, host_, std::move(requests_), extendId_, customer_));
+        auto body = std::make_unique<WizardBody>(*this, host_, std::move(requests_), extendId_, customer_);
+        body_ = body.get();
+        setRoot(std::move(body));
         return core::ok();
     }
 
@@ -542,6 +547,7 @@ private:
     ShellHost                host_;
     std::vector<std::string> requests_;
     std::string              extendId_, customer_;
+    WizardBody*              body_{nullptr};
 };
 
 // ------------------------------------------------------------------------------ etape 1 : les demandes
@@ -592,8 +598,16 @@ public:
             tips.push_back(r.p.path + (r.bound ? "\nCe PC est d\xC3\xA9j\xC3\xA0 li\xC3\xA9 \xC3\xA0 la licence : une r\xC3\xA9" "activation." : ""));
             kinds.push_back(r.bound ? 1 : 0);
         }
-        model_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Logiciel", "Demand\xC3\xA9" "e le", "Licence demand\xC3\xA9" "e"},
-                                        std::move(rows),
+        // La colonne << Licence demandee >> seulement si une demande en nomme une.
+        bool named = false;
+        for (const auto& r : s.requests) named = named || (r.ok() && !r.p.record.licenseId.empty());
+        std::vector<std::string> headers{"PC", "\xC3\x89tat", "Empreinte", "Logiciel", "Demand\xC3\xA9" "e le", "Licence demand\xC3\xA9" "e"};
+        if (!named) {
+            headers.pop_back();
+            for (auto& row : rows) row.pop_back();
+        }
+        setColumns(named);
+        model_ = std::make_shared<Rows>(std::move(headers), std::move(rows),
                                         [kinds](ui::RowIndex r, std::size_t c) {
                                             ui::CellStyle st;
                                             if (r >= kinds.size()) return st;
@@ -612,9 +626,6 @@ public:
                                             return st;
                                         },
                                         std::move(tips));
-        bool named = false;
-        for (const auto& r : s.requests) named = named || (r.ok() && !r.p.record.licenseId.empty());
-        setColumns(named);
         table_->setModel(model_);
         remove_->setEnabled(false);
 
@@ -695,8 +706,8 @@ protected:
 private:
     void setColumns(bool withLicence) {
         std::vector<ui::TableView::Column> cols{{"PC", 150.f}, {"\xC3\x89tat", 120.f}, {"Empreinte", 245.f}, {"Logiciel", 225.f},
-                                                {"Demand\xC3\xA9" "e le", 105.f}, {"Licence demand\xC3\xA9" "e", 150.f}};
-        cols[5].visible = withLicence;
+                                                {"Demand\xC3\xA9" "e le", 105.f}};
+        if (withLicence) cols.push_back({"Licence demand\xC3\xA9" "e", 150.f});
         table_->setColumns(std::move(cols));
     }
 
@@ -862,7 +873,7 @@ public:
         editions_ = &adopt(*this, std::make_unique<ui::TableView>("wizard.editions"));
         editions_->setSelectionMode(ui::SelectionMode::Single);
         editions_->setColumns({{"\xC3\x89" "dition", 170.f}, {"Type", 110.f}, {"PC", 50.f}, {"Dur\xC3\xA9" "e", 110.f}, {"Gr\xC3\xA2" "ce", 70.f},
-                               {"Fonctionnalit\xC3\xA9s", 110.f}});
+                               {"Fonctionnalit\xC3\xA9s", 135.f}});
         typeGroup_ = std::make_shared<ui::RadioGroup>();
         const char* typeIds[4] = {"wizard.type.perpetuelle", "wizard.type.temporaire", "wizard.type.evaluation", "wizard.type.flottante"};
         for (int i = 0; i < 4; ++i)
@@ -1031,7 +1042,7 @@ public:
 protected:
     void onLayout() override {
         const auto r = bounds();
-        const float tableH = std::min(28.f + 24.f * static_cast<float>(std::max<std::size_t>(ids_.size(), 3)) + 6.f, std::floor(r.h * 0.4f));
+        const float tableH = std::min(30.f + 24.f * static_cast<float>(std::max<std::size_t>(ids_.size(), 3)) + 14.f, std::floor(r.h * 0.42f));
         editions_->setBounds({r.x, r.y, r.w, tableH});
         const float lx = r.x, cx = r.x + 150.f;
         float y = r.y + tableH + 14.f;
@@ -1091,8 +1102,8 @@ protected:
             note(days_->bounds().x, 3, "sans fin : une licence perp\xC3\xA9tuelle n'a pas de date de fin.");
         } else {
             r.drawText({days_->bounds().right() + 8.f, rowY_[3] + ty}, "jours, fin le", f, c.textMuted);
-            if (s.days > 0 && !s.endInvalid)
-                note(end_->bounds().right() + 12.f, 3, "(" + durationLabel(s.days) + ")");
+            if (s.days >= 365 && s.days % 365 == 0 && !s.endInvalid)
+                note(end_->bounds().right() + 12.f, 3, s.days == 365 ? std::string("soit 1 an") : "soit " + std::to_string(s.days / 365) + " ans");
         }
         if (s.type == LicenseType::Temporary)
             note(grace_->bounds().right() + 12.f, 4, "jours : apr\xC3\xA8s la fin, elle reste ouverte le temps d'importer le renouvellement.");
@@ -1671,6 +1682,20 @@ bool WizardBody::takeDrop(const std::vector<std::string>& paths) {
     return true;
 }
 
+void WizardBody::dropped(const std::string& path) {
+    if (extOf(path) != ".xpgreq") {
+        say("\xC2\xAB " + fileName(path) + " \xC2\xBB n'est pas une demande d'activation (.xpgreq) : l'assistant ne prend que celles-l\xC3\xA0. "
+                "Ferme-le pour ranger ce fichier dans l'archive.",
+            Tone::Warning);
+        return;
+    }
+    if (blocked() || st_.signedOk) {
+        say("L'assistant ne prend plus de demande ici : ouvre une nouvelle licence pour celle-ci.", Tone::Warning);
+        return;
+    }
+    addRequests({path});
+}
+
 void WizardBody::changed() {
     message_.clear();
     updateButtons();
@@ -1916,6 +1941,14 @@ ui::EventResult WizardBody::onEvent(const ui::InputEvent& ev) {
     return ui::EventResult::Ignored;
 }
 
+ui::EventResult WizardMenu::HandleEvent(const ui::InputEvent& ev) {
+    if (const auto* d = std::get_if<ui::FileDropped>(&ev)) {
+        if (body_ && !closed()) body_->dropped(d->path);
+        return ui::EventResult::Consumed;
+    }
+    return DialogMenu::HandleEvent(ev);
+}
+
 // =================================================================================== revoquer (un dialogue)
 class RevokeBody final : public ui::Widget {
 public:
@@ -1965,7 +1998,7 @@ public:
 
 protected:
     void onLayout() override {
-        frame_.place(*this, 640.f, 520.f);
+        frame_.place(*this, 640.f, 480.f);
         const auto& p = frame_.panel;
         const float x = p.x + 20.f, w = p.w - 40.f, cx = x + 150.f, cw = p.right() - 20.f - cx;
         float y = p.y + 60.f;

@@ -49,6 +49,7 @@ constexpr float kButtonH = 32.f;
 constexpr float kFieldH = 28.f;
 constexpr float kGap = 8.f;
 constexpr float kLineH = 20.f;
+constexpr const char* kBusy = "Un travail est en cours : attends qu'il finisse.";
 
 // ---------------------------------------------------------------------------------------------- les aides
 class Rows final : public ui::ITableModel {
@@ -219,13 +220,13 @@ public:
         type_->setItems({{"Tout", ""}, {"Demandes", "demande"}, {"Licences", "licence"}, {"Extensions", "extension"}, {"R\xC3\xA9vocations", "revocation"}});
         type_->setSelectedIndex(0);
         search_ = add(*this, std::make_unique<ui::InputText>("historique.recherche"));
-        search_->setPlaceholder("Chercher une licence, un client, un PC, une raison\xE2\x80\xA6");
+        search_->setPlaceholder("Chercher une licence, un client, un PC\xE2\x80\xA6");
         search_->setEscapeClears(true);
         export_ = add(*this, std::make_unique<ui::Button>("Exporter\xE2\x80\xA6", "historique.exporter"));
         export_->setIcon(ui::Icon::Export);
         export_->setTooltip("Les lignes montr\xC3\xA9" "es (filtre et recherche compris), en CSV pour Excel.");
         table_ = add(*this, std::make_unique<ui::TableView>("historique.table"));
-        table_->setColumns({{"Date", 150.f}, {"Type", 116.f}, {"Licence", 140.f}, {"Client", 180.f}, {"PC", 170.f}, {"D\xC3\xA9tail", 520.f}});
+        table_->setColumns({{"Date", 150.f}, {"Type", 116.f}, {"Licence", 140.f}, {"Client", 170.f}, {"PC", 160.f}, {"D\xC3\xA9tail", 520.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Date", "Type", "Licence", "Client", "PC", "D\xC3\xA9tail"});
         table_->setModel(model_);
@@ -252,9 +253,6 @@ public:
         invalidateLayout();
         invalidate();
     }
-
-    // Les essais : les lignes montrees.
-    [[nodiscard]] const std::vector<ActivationRecord>& shown() const noexcept { return shown_; }
 
 protected:
     void onLayout() override {
@@ -351,6 +349,10 @@ private:
     }
 
     void exportCsv() {
+        if (host_.busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return;
+        }
         if (shown_.empty()) {
             if (host_.flash) host_.flash("Aucune ligne \xC3\xA0 exporter (le filtre ou la recherche n'en montre aucune).", Tone::Warning);
             return;
@@ -364,6 +366,10 @@ private:
         ShellHost host = host_;
         host_.pickFile(pick, [list, host](std::string path) {
             if (path.empty()) return;
+            if (host.busy()) {
+                if (host.flash) host.flash(kBusy, Tone::Warning);
+                return;
+            }
             const auto dot = path.find_last_of("./\\");
             if (dot == std::string::npos || path[dot] != '.') path += ".csv";
             const std::string text = historyCsv(list);

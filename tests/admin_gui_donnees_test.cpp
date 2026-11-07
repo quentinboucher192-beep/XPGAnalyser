@@ -532,6 +532,16 @@ int main(int argc, char** argv) {
                   && cell(p, "historique.table", 0, 1) == "Demande",
               "chercher un PC");
         check(type(p, "historique.recherche", "") && rows(p, "historique.table") == 10, "recherche videe");
+        // Exporter : refuse pendant un travail lent.
+        check(startSlow(rig, h), "un travail lent");
+        const std::size_t nr = rig.reports.size(), nf = rig.flashes.size();
+        rig.picks.push_back(U(fx.root / "sortie" / "historique-lent.csv"));
+        (void)click(p, "historique.exporter");
+        check(rig.reports.size() == nr && rig.flashes.size() == nf + 1 && !fs::exists(fx.root / "sortie" / "historique-lent.csv"),
+              "pendant un travail lent : Exporter refuse (et dit)");
+        check(rig.finishSlow(), "fini");
+        rig.slowOnThread = false;
+        rig.picks.clear();
         // Exporter.
         rig.picks.push_back(U(fx.root / "sortie" / "historique.csv"));
         check(click(p, "historique.exporter") && rig.last() && rig.last()->ok, "Exporter...");

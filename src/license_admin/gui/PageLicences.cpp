@@ -179,7 +179,7 @@ public:
         details_ = details.get();
         auto pcs = std::make_unique<ui::TableView>("licences.pcs");
         pcs->setSelectionMode(ui::SelectionMode::Single);
-        pcs->setColumns({{"PC", 160.f}, {"\xC3\x89tat", 200.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 105.f}});
+        pcs->setColumns({{"PC", 160.f}, {"\xC3\x89tat", 230.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 120.f}});
         pcs_ = pcs.get();
         bottom->addPane(std::move(details), 0.45f, 220.f);
         bottom->addPane(std::move(pcs), 0.55f, 200.f);
