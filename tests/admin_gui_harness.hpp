@@ -160,7 +160,10 @@ struct HostRig {
     bool finishSlow(int timeoutMs = 60000) {
         for (int waited = 0; waited < timeoutMs; waited += 20) {
             if (auto r = bg.take()) {
-                if (pendingDone) pendingDone(*r);
+                // Le rappel peut lancer le travail suivant (runSlow remplace pendingDone) : on le sort d'abord.
+                auto done = std::move(pendingDone);
+                pendingDone = nullptr;
+                if (done) done(*r);
                 reports.push_back(*r);
                 if (r->ok)
                     for (auto& f : refreshers) f();

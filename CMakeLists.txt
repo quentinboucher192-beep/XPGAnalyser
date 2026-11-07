@@ -197,11 +197,11 @@ if(XPG_LICENCES_CLE_ESSAI)
 endif()
 # XPG-License-Admin : l'outil de l'EDITEUR (sa cle, signer registres, licences, revocations). JAMAIS LIVRE :
 # pas dans cross_mingw.sh, pas dans l'installateur ; outils/mingw/package_mingw.py arrete la construction s'il le trouve.
-# 1.31.0 : la synchro avec un depot GitHub PRIVE (license_admin/GitHubSync) passe par le transport HTTPS du
-# systeme, celui de l'Assistant IA (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous
-# Windows, libcurl chargee a la demande ailleurs.
-add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp
-                                 src/license_admin/KeyBackup.cpp src/license_admin/Passerelle.cpp src/app/ai/AiHttp.cpp)
+# 1.35.0 : le service des licences de l'editeur (license_admin/ServiceClient) et la synchro de son archive par ce
+# service (license_admin/ArchiveSync) passent par le transport HTTPS du systeme, celui de l'Assistant IA
+# (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous Windows, libcurl chargee a la demande ailleurs.
+add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp
+                                 src/license_admin/KeyBackup.cpp src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp)
 target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
 if(NOT WIN32)
@@ -321,12 +321,12 @@ endif()
 # --- 1.33.0 : XPG-License-Manager-Admin, L'APPLICATION DE L'EDITEUR (ses fenetres) --------------------------
 #  JAMAIS LIVREE, comme la console XPG-License-Admin : construite par outils/mingw/admin_editeur.sh seulement,
 #  refusee par le controle du paquet. Trois etages :
-#    xpg_admin_core  ce que fait la console (Admin, GitHubSync, KeyBackup, le transport HTTPS) et le Workspace
+#    xpg_admin_core  ce que fait la console (Admin, ServiceClient, ArchiveSync, KeyBackup, le transport HTTPS) et le Workspace
 #                    (license_admin/gui/Workspace : le poste Admin vu par l'application, sans ecran) ;
 #    xpg_admin_gui   les pages et la coquille (ui::Widget ; sans SDL : les essais les dessinent a blanc) ;
 #    l'executable    la fenetre SDL (license_admin/gui/AdminGuiMain.cpp), seulement avec XPG_WITH_SDL.
-add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp src/license_admin/KeyBackup.cpp
-                                  src/license_admin/Passerelle.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
+add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp src/license_admin/KeyBackup.cpp
+                                  src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp)
