@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.34.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.35.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.34.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 12 h 37"},
     {"1.33.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 8 h 50"},
     {"1.32.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 7 h 02"},
     {"1.31.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 22 h 29"},
@@ -177,6 +178,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.35.0 : le service des licences de l'editeur (on sort de GitHub) : le code, le bail, la flottante, la Decouverte
+        note("1.35.0", "Projet", Kind::New,
+         "ACTIVER AVEC UN CODE : l'\xC3\xA9" "diteur te donne un code (XPG-XXXX-XXXX-XXXX-XXXX) ; tape-le dans Licence\xE2\x80\xA6 \xE2\x80\xBA Activation, "
+         "ou d\xC3\xA8s l'installation (page Licence). Le service des licences de l'\xC3\xA9" "diteur active ce PC tout seul : aucun fichier \xC3\xA0 "
+         "\xC3\xA9" "changer. L'activation est un bail de 30 jours, renouvel\xC3\xA9 seul d\xC3\xA8s que le PC est en ligne ; un PC qui reste hors ligne "
+         "garde sa licence jusqu'\xC3\xA0 la fin de son bail, m\xC3\xAAme si son horloge recule. Lib\xC3\xA9rer ce poste rend la place pour un autre PC.",
+         "licence", ""),
+        note("1.35.0", "Projet", Kind::New,
+         "TA LICENCE TOUJOURS EN VUE : en haut \xC3\xA0 droite, dans la barre d'\xC3\xA9tat et sur l'accueil - l'\xC3\xA9" "dition et sa fin, les jours de "
+         "D\xC3\xA9" "couverte, un bail \xC3\xA0 renouveler. Un clic ouvre la fen\xC3\xAAtre Licence. Sans licence, tu es en D\xC3\xA9" "couverte : 30 jours d'essai "
+         "avec toutes les fonctions, puis celles de l'\xC3\xA9" "dition sans licence ; ton projet reste ouvert.",
+         "licence", ""),
+        note("1.35.0", "Projet", Kind::New,
+         "LICENCES FLOTTANTES : une licence partag\xC3\xA9" "e entre plusieurs PC, un nombre de postes \xC3\xA0 la fois. Le Studio prend un poste "
+         "au d\xC3\xA9marrage et le rend en se fermant ; s'il n'y en a plus de libre, il te dit dans combien de temps r\xC3\xA9" "essayer. "
+         "La demande \xC3\xA0 l'\xC3\xA9" "diteur passe aussi par son service : plus rien ne passe par GitHub.",
+         "licence", ""),
         // 1.34.0 : la passerelle GitHub des licences (la demande en ligne, la licence recue seule) et l'evaluation
         note("1.34.0", "Projet", Kind::New,
          "\xC3\x89VALUATION D\xC3\x88S L'INSTALLATION : sans licence, le programme est en \xC3\xA9valuation pendant la dur\xC3\xA9" "e de "
