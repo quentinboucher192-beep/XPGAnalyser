@@ -561,13 +561,17 @@ void run(const fs::path& base, const std::string& program) {
 
     // ---- ROLLBACK ----
     RollbackResult rb;
+    // 1.32.0 : sans version, la precedente est celle qui etait active juste avant (V3 : V4 n'avait pas tenu) ;
+    // deux retours de suite font un aller-retour.
     o = c.rollback(m, rb);
-    check(o.ok && rb.from == "V5" && rb.to == "V4" && !rb.wasRunning && !rb.restarted && has(o.message, "V4"),
-          "ROLLBACK (aucun poste en marche) : V5 -> V4, rien \xC3\xA0 relancer [" + o.message + "]");
+    check(o.ok && rb.from == "V5" && rb.to == "V3" && !rb.wasRunning && !rb.restarted && has(o.message, "V3"),
+          "ROLLBACK (aucun poste en marche) : V5 -> V3, celle d'avant, rien \xC3\xA0 relancer [" + o.message + "]");
+    o = c.rollback(m, rb);
+    check(o.ok && rb.from == "V3" && rb.to == "V5" && !rb.restarted, "ROLLBACK de nouveau : V3 -> V5, un aller-retour [" + o.message + "]");
     RollbackOptions ro;
     ro.version = "V3";
     o = c.rollback(m, rb, ro);
-    check(o.ok && rb.from == "V4" && rb.to == "V3" && !rb.restarted, "ROLLBACK vers une version donn\xC3\xA9" "e (V3) [" + o.message + "]");
+    check(o.ok && rb.from == "V5" && rb.to == "V3" && !rb.restarted, "ROLLBACK vers une version donn\xC3\xA9" "e (V3) [" + o.message + "]");
     {
         Client k(me, "PC-DEV", key->publicKeyHex());
         o = k.connect(m, 5000);
@@ -584,6 +588,7 @@ void run(const fs::path& base, const std::string& program) {
     o = c.rollback(m, rb, ro);
     check(!o.ok && o.error == "arret-delai" && has(o.message, "retour en arri\xC3\xA8re annul\xC3\xA9"), "ROLLBACK : le poste ne quitte pas -> annul\xC3\xA9, dit [" + o.message + "]");
     ro.force = true;
+    ro.version = "V4";
     o = c.rollback(m, rb, ro);
     check(!o.ok && o.error == "demarrage" && rb.from == "V5" && rb.to == "V4" && rb.restarted && !rb.running && has(o.message, "s'est arr\xC3\xAAt\xC3\xA9"),
           "ROLLBACK forc\xC3\xA9 vers V4, qui ne tient pas : dit [" + o.message + "]");
@@ -623,6 +628,7 @@ void run(const fs::path& base, const std::string& program) {
         ro = RollbackOptions{};
         ro.force = true;
         ro.stopDelaySeconds = 0;
+        ro.version = "V5";
         o = c.rollback(m, rb, ro);
         check(o.ok && rb.to == "V5" && station::folderOfCommand(station::readAutostart(false).command) == U(apps / "versions" / "V5"),
               "autostart : r\xC3\xA9\xC3\xA9" "crit \xC3\xA0 la bascule (ROLLBACK vers V5) [" + o.message + "]");

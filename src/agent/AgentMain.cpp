@@ -24,6 +24,7 @@
 #  include <csignal>
 #endif
 
+#include "../core/SystemOpen.hpp"   // 1.32.0 : hardenLibrarySearch
 #include "../deploy/Agent.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Journal.hpp"
@@ -288,6 +289,7 @@ int state(const std::string& dir) {
 } // namespace
 
 int main(int argc, char** argv) {
+    core::hardenLibrarySearch();   // 1.32.0 : aucune DLL du dossier courant ni du PATH
 #if defined(_WIN32)
     SetConsoleOutputCP(CP_UTF8);
 #endif

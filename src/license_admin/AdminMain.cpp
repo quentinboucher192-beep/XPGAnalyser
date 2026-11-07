@@ -28,6 +28,12 @@
 //    XPG-License-Admin github-etat [--hors-ligne]
 //    XPG-License-Admin github-synchroniser [--recevoir-seulement]
 //    XPG-License-Admin github-code-secours --afficher
+//  1.32.0 : LA SAUVEGARDE DE LA CLE PAR UNE PHRASE DE PASSE (KeyBackup.hpp) - relisible sur un autre PC :
+//    XPG-License-Admin sauvegarder-cle --sortie F.xpgcle [--phrase-variable NOM]
+//    XPG-License-Admin verifier-sauvegarde F.xpgcle [--phrase-variable NOM]
+//    XPG-License-Admin restaurer-cle --entree F.xpgcle [--phrase-variable NOM] [--dossier D]
+//  La phrase se tape sans echo (deux fois pour sauvegarder) ; --phrase-variable la lit dans une variable
+//  d'environnement (les essais, un script). Elle n'est jamais affichee ni ecrite.
 //  1.30.0 : le registre des activations (activations.jsonl, dans le dossier de la cle) : signer-licence,
 //  signer-revocations et enregistrer-demande y ajoutent leurs lignes ; liste montre tous les PC connus.
 //    XPG-License-Admin --version
@@ -36,7 +42,9 @@
 // =============================================================================
 #include "Admin.hpp"
 #include "GitHubSync.hpp"
+#include "KeyBackup.hpp"
 
+#include "../core/SystemOpen.hpp"
 #include "../deploy/Crypto.hpp"
 
 #include <algorithm>
@@ -80,6 +88,10 @@ void complain(const std::string& text) {
 std::string usage() {
     return std::string("XPG-License-Admin ") + kToolVersion + " - l'outil de l'\xC3\xA9" "diteur pour les licences (" + kAdminMarker + ")\n"
            "Il ne se livre jamais : il reste sur le poste Admin.\n\n"
+           "  sauvegarder-cle --sortie F.xpgcle              une sauvegarde de la cl\xC3\xA9 chiffr\xC3\xA9" "e par une phrase de passe (tap\xC3\xA9" "e deux fois,\n"
+           "                                                 sans \xC3\xA9" "cho) : elle se relit sur un autre PC, contrairement au fichier DPAPI\n"
+           "  verifier-sauvegarde F.xpgcle                   v\xC3\xA9rifie la phrase et la sauvegarde, sans rien \xC3\xA9" "crire\n"
+           "  restaurer-cle --entree F.xpgcle                remet la cl\xC3\xA9 sur ce PC (prot\xC3\xA9g\xC3\xA9" "e pour ce compte) ; une cl\xC3\xA9 d\xC3\xA9j\xC3\xA0 l\xC3\xA0 reste\n"
            "  creer-cle [--essai] [--nom N] [--dossier D]   cr\xC3\xA9" "e la cl\xC3\xA9 de signature de l'\xC3\xA9" "diteur (prot\xC3\xA9g\xC3\xA9" "e sur ce poste)\n"
            "  cle [--dossier D]                              montre la cl\xC3\xA9 (identifiant, empreinte, essai ou non)\n"
            "  exporter-cle --sortie FICHIER.hpp [--garder]   \xC3\xA9" "crit la cl\xC3\xA9 PUBLIQUE en C++ : src/licensing/PublisherKey.hpp\n"
@@ -427,6 +439,89 @@ int run(const std::vector<std::string>& argv) {
         }
         return 0;
     }
+    // 1.32.0 : la phrase de passe d'une sauvegarde (jamais affichee) : la variable donnee, ou tapee sans echo.
+    const auto readPhrase = [&](const char* prompt, std::string& phrase) -> bool {
+        if (!a.one("--phrase-variable").empty()) {
+            const char* v = std::getenv(a.one("--phrase-variable").c_str());
+            if (!v || !*v) {
+                complain("Refus\xC3\xA9 : la variable " + a.one("--phrase-variable") + " est vide ou absente");
+                return false;
+            }
+            phrase = v;
+            return true;
+        }
+        complain(prompt);
+        phrase = readSecretLine();
+        while (!phrase.empty() && (phrase.back() == '\r' || phrase.back() == '\n')) phrase.pop_back();
+        return true;
+    };
+    const auto wipeText = [](std::string& s) {
+        std::fill(s.begin(), s.end(), '\0');
+        s.clear();
+    };
+    if (a.command == "sauvegarder-cle") {
+        if (!need("--sortie")) return 2;
+        auto key = keyOrFail();
+        if (!key) return 1;
+        std::string p1, p2, out;
+        if (!readPhrase("Phrase de passe de la sauvegarde (12 caract\xC3\xA8res au moins ; elle ne s'affiche pas) : ", p1)) return 1;
+        if (a.one("--phrase-variable").empty()) {
+            if (!readPhrase("La m\xC3\xAAme phrase, une seconde fois : ", p2)) return 1;
+            if (p1 != p2) {
+                wipeText(p1);
+                wipeText(p2);
+                complain("Refus\xC3\xA9 : les deux phrases ne sont pas les m\xC3\xAAmes ; rien n'est \xC3\xA9" "crit.");
+                return 1;
+            }
+            wipeText(p2);
+        }
+        say("Chiffrement de la sauvegarde (Argon2id : quelques secondes, 256 Mio de m\xC3\xA9moire)...\n");
+        const bool ok = writeKeyBackup(*key, p1, out, &why);
+        wipeText(p1);
+        if (!ok || !writeText(a.one("--sortie"), out, why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Sauvegarde \xC3\xA9" "crite : " + a.one("--sortie") + "\n  cl\xC3\xA9 " + key->keyId() + (key->test() ? " (CL\xC3\x89 D'ESSAI)" : "") + "\n"
+            "Range-la HORS de ce PC (cl\xC3\xA9 USB au coffre, un second support) ; note la phrase \xC3\xA0 part (gestionnaire de mots de passe).\n"
+            "Sans la phrase, la sauvegarde ne sert \xC3\xA0 rien ; avec elle, n'importe qui peut signer des licences : garde les deux s\xC3\xA9par\xC3\xA9ment.\n"
+            "V\xC3\xA9rifie-la maintenant : XPG-License-Admin verifier-sauvegarde " + a.one("--sortie") + "\n");
+        return 0;
+    }
+    if (a.command == "verifier-sauvegarde" || a.command == "restaurer-cle") {
+        const bool restore = a.command == "restaurer-cle";
+        const std::string file = restore ? a.one("--entree") : (a.positional.empty() ? std::string() : a.positional[0]);
+        if (file.empty()) {
+            complain(a.command + " : quelle sauvegarde (.xpgcle) ?\n\n" + usage());
+            return 2;
+        }
+        std::string bytes, keyId, text, phrase, name;
+        if (!readText(file, bytes, why) || !describeKeyBackup(bytes, keyId, text, &why)) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say(file + " : " + text + "\n");
+        if (!readPhrase("Phrase de passe de la sauvegarde (elle ne s'affiche pas) : ", phrase)) return 1;
+        if (!restore) {
+            const bool ok = checkKeyBackup(bytes, phrase, keyId, name, &why);
+            wipeText(phrase);
+            if (!ok) {
+                complain("Refus\xC3\xA9 : " + why);
+                return 1;
+            }
+            say("Bonne : la phrase ouvre la sauvegarde de la cl\xC3\xA9 " + keyId + (name.empty() ? std::string() : " (" + name + ")") + ".\n");
+            return 0;
+        }
+        auto key = restoreKeyBackup(folder, bytes, phrase, &why);
+        wipeText(phrase);
+        if (!key) {
+            complain("Refus\xC3\xA9 : " + why);
+            return 1;
+        }
+        say("Cl\xC3\xA9 restaur\xC3\xA9" "e sur ce PC.\n");
+        showKey(*key);
+        return 0;
+    }
     if (a.command == "archiver") {
         if (a.positional.empty()) {
             complain("archiver : quels fichiers sign\xC3\xA9s (registre, r\xC3\xA9vocations, licences) ?\n\n" + usage());
@@ -614,6 +709,7 @@ int run(const std::vector<std::string>& argv) {
 } // namespace
 
 int main(int argc, char** argv) {
+    core::hardenLibrarySearch();   // 1.32.0 : aucune DLL du dossier courant ni du PATH
     std::vector<std::string> args;
 #ifdef _WIN32
     // Les arguments en UTF-8 (un dossier accentue passe), la console en UTF-8.

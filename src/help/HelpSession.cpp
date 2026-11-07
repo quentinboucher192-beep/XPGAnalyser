@@ -1,6 +1,7 @@
 // =============================================================================
 //  help/HelpSession.cpp
 // =============================================================================
+#include "../core/SystemOpen.hpp"
 #include "HelpSession.hpp"
 
 #include "HelpCodes.hpp"
@@ -333,23 +334,8 @@ SourceLocation locate(const project::CatalogEntry& e, std::string_view subject) 
 std::string openInEditor(const SourceLocation& loc) {
     if (loc.path.empty()) return "cette entree n'a pas de fichier sur le disque";
 
-    // Un chemin est une donnee, pas une commande : on le met entre guillemets,
-    // et on refuse ce qui pourrait fermer les guillemets. Un nom de fichier
-    // venu d'un scan de dossier n'a aucune raison d'en contenir.
-    if (loc.path.find('"') != std::string::npos)
-        return "chemin refuse : " + loc.path;
-
-    std::string command;
-#ifdef _WIN32
-    command = "start \"\" \"" + loc.path + "\"";
-#elif defined(__APPLE__)
-    command = "open \"" + loc.path + "\"";
-#else
-    command = "xdg-open \"" + loc.path + "\" >/dev/null 2>&1 &";
-#endif
-    const int rc = std::system(command.c_str());
-    if (rc != 0) return "aucune application n'a pu ouvrir " + loc.path;
-    return {};
+    // 1.32.0 : core/SystemOpen - le chemin est UN argument (aucun shell), et un programme ne se lance jamais.
+    return core::openWithSystem(loc.path);
 }
 
 // ------------------------------------- la boite aux lettres de F1 ------------

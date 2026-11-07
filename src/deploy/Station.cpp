@@ -278,7 +278,6 @@ bool Process::launch(const std::string& program, const std::vector<std::string>&
                      const std::string& outputFile, std::string* why) {
     release();
 #if defined(_WIN32)
-    (void)outputFile;   // le poste est une application fenetree : sa sortie ne va nulle part
     std::wstring cmd = quoteArg(W(program));
     for (const auto& a : args) cmd += L" " + quoteArg(W(a));
     // L'environnement : celui de l'agent, sans les noms redefinis, plus les notres ; trie (sans la casse).
@@ -304,16 +303,55 @@ bool Process::launch(const std::string& program, const std::vector<std::string>&
         block += L'\0';
     }
     block += L'\0';
-    STARTUPINFOW si{};
-    si.cb = sizeof si;
     PROCESS_INFORMATION pi{};
     std::wstring mutableCmd = cmd;
     const std::wstring dir = W(workDir);
-    // Sans heritage de handles (ni la socket d'ecoute) ; son propre groupe (le Ctrl+C de l'agent ne l'atteint pas).
-    if (!CreateProcessW(W(program).c_str(), mutableCmd.data(), nullptr, nullptr, FALSE,
-                        CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS, block.data(),
-                        dir.empty() ? nullptr : dir.c_str(), &si, &pi))
-        return fail(why, "lancement impossible de " + program + " : " + systemMessage(GetLastError()));
+    // 1.32.0 : la sortie du poste va dans `outputFile` (comme sous Linux, refait a chaque lancement). Le SEUL
+    // handle herite est ce fichier (PROC_THREAD_ATTRIBUTE_HANDLE_LIST : ni la socket d'ecoute, ni un autre) ;
+    // si le systeme ne sait pas restreindre l'heritage, le poste part sans sortie gardee (comme avant).
+    HANDLE logFile = INVALID_HANDLE_VALUE;
+    std::vector<unsigned char> attrBuffer;
+    LPPROC_THREAD_ATTRIBUTE_LIST attrs = nullptr;
+    if (!outputFile.empty()) {
+        SECURITY_ATTRIBUTES sa{};
+        sa.nLength = sizeof sa;
+        sa.bInheritHandle = TRUE;
+        logFile = CreateFileW(W(outputFile).c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        SIZE_T size = 0;
+        if (logFile != INVALID_HANDLE_VALUE) {
+            InitializeProcThreadAttributeList(nullptr, 1, 0, &size);
+            attrBuffer.resize(size ? size : 1);
+            attrs = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attrBuffer.data());
+            if (!size || !InitializeProcThreadAttributeList(attrs, 1, 0, &size)) {
+                attrs = nullptr;
+            } else if (!UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, &logFile, sizeof logFile, nullptr, nullptr)) {
+                DeleteProcThreadAttributeList(attrs);
+                attrs = nullptr;
+            }
+            if (!attrs) {
+                CloseHandle(logFile);
+                logFile = INVALID_HANDLE_VALUE;
+            }
+        }
+    }
+    STARTUPINFOEXW six{};
+    six.StartupInfo.cb = attrs ? sizeof six : sizeof six.StartupInfo;
+    if (attrs) {
+        six.lpAttributeList = attrs;
+        six.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+        six.StartupInfo.hStdInput = nullptr;
+        six.StartupInfo.hStdOutput = logFile;
+        six.StartupInfo.hStdError = logFile;
+    }
+    // Son propre groupe (le Ctrl+C de l'agent ne l'atteint pas) ; aucun handle herite, sauf le fichier de sortie.
+    const BOOL created = CreateProcessW(W(program).c_str(), mutableCmd.data(), nullptr, nullptr, attrs ? TRUE : FALSE,
+                                        CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
+                                            | (attrs ? EXTENDED_STARTUPINFO_PRESENT : 0),
+                                        block.data(), dir.empty() ? nullptr : dir.c_str(), &six.StartupInfo, &pi);
+    const DWORD launchError = created ? 0 : GetLastError();
+    if (attrs) DeleteProcThreadAttributeList(attrs);
+    if (logFile != INVALID_HANDLE_VALUE) CloseHandle(logFile);
+    if (!created) return fail(why, "lancement impossible de " + program + " : " + systemMessage(launchError));
     CloseHandle(pi.hThread);
     d_->handle = pi.hProcess;
     d_->pid = static_cast<int>(pi.dwProcessId);

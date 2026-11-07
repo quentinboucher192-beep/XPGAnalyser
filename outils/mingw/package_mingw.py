@@ -124,12 +124,16 @@ ADMIN_CHAINES = (
     (b"XPG License Manager Admin", "le nom de l'outil Admin des licences"),
     (b"XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER", "la marque de l'outil Admin des licences"),
     (b"XPG-CLE-ESSAI-LICENCES", "la cle d'ESSAI de l'editeur (cree la vraie cle et regenere src/licensing/PublisherKey.hpp)"),
+    (b"XPG-SAUVEGARDE-CLE", "une sauvegarde de la cle de l'editeur (1.32.0)"),
+    (b"XPG-CHIFFRE 1 xpgs-", "un fichier chiffre de la synchro des licences (1.31.0)"),
+    (b"XPG-INDEX 1 xpgs-", "l'index de la synchro des licences (1.31.0)"),
 )
 ADMIN_MOTIFS = (
     (re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----\r?\n[A-Za-z0-9+/=\r\n]{40,}"), "une cle privee (bloc PEM)"),
     (re.compile(rb"(?<![A-Za-z0-9_])gh[pousr]_[A-Za-z0-9]{36}(?![A-Za-z0-9_])|(?<![A-Za-z0-9_])github_pat_[A-Za-z0-9_]{50,}"), "un jeton GitHub"),
 )
-ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*")
+ADMIN_NOMS = ("*.cle", "cle_editeur.bin", "cle-editeur-licences*", "*license*admin*", "*licence*admin*", "*license_admin*",
+              "*.xpgcle", "*.xpgsync", "activations.jsonl")
 
 
 REGISTRE_LIVRE = os.path.join("licences", "registre.xpgreg")   # 1.30.0 : le registre des editions livre

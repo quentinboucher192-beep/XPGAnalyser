@@ -15,6 +15,7 @@
 #include "app/Settings.hpp"
 #include "app/ai/AiSandbox.hpp"   // 1.21.0 : --bac-a-sable (le processus enfant de l'Assistant IA)
 #include "core/Version.hpp"
+#include "core/SystemOpen.hpp"   // 1.32.0 : hardenLibrarySearch
 #include "core/Edition.hpp"    // 1.12.0 : API Studio, IHM Studio
 #include "help/TutorialLaunch.hpp"
 #include "core/CrashGuard.hpp"   // 1.10.2 (CR) : le rapport de plantage et de blocage
@@ -175,6 +176,7 @@ static std::string tutorialCheckSession(const std::string& lot, bool captures, c
 }
 
 int main(int argc, char** argv) {
+    core::hardenLibrarySearch();   // 1.32.0 : aucune DLL du dossier courant (un projet) ni du PATH
     // 1.12.0 : DEUX APPLICATIONS, UN SEUL CODE - l'edition est fixee a la construction
     // (CMakeLists.txt : XPG_EDITION_API, XPG_EDITION_IHM), avant tout le reste : les
     // reglages, l'instance unique, les dossiers des projets en dependent.

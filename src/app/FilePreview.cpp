@@ -1,6 +1,7 @@
 // =============================================================================
 //  app/FilePreview.cpp - lot API 8 : l'explorateur de fichiers, 2e partie
 // =============================================================================
+#include "../core/SystemOpen.hpp"
 #include "FilePreview.hpp"
 
 #include "../hmi/HmiMedia.hpp"
@@ -416,20 +417,9 @@ namespace app::preview {
     }
 
     std::string openWithSystem(const std::string& path) {
-        // Comme les Fichiers externes de l'IHM (HmiAssetPanes.cpp) et l'aide :
-        // le chemin entre guillemets ; un chemin qui en contient est refuse.
-        if (path.find('"') != std::string::npos) return "chemin refus\xC3\xA9 : " + path;
         std::error_code ec;
         if (!fs::is_regular_file(pathOf(path), ec)) return "fichier absent : " + path;
-#if defined(_WIN32)
-        const std::string command = "start \"\" \"" + path + "\"";
-#elif defined(__APPLE__)
-        const std::string command = "open \"" + path + "\"";
-#else
-        const std::string command = "xdg-open \"" + path + "\" >/dev/null 2>&1 &";
-#endif
-        if (std::system(command.c_str()) != 0) return "aucun programme n'a pu ouvrir " + path;
-        return {};
+        return core::openWithSystem(path);   // 1.32.0 : sans shell, jamais un programme (core/SystemOpen)
     }
 
 } // namespace app::preview

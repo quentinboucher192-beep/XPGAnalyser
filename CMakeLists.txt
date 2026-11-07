@@ -87,6 +87,9 @@ xpg_sources(CORE_SOURCES core)
 add_library(xpg_core STATIC ${CORE_SOURCES})
 target_include_directories(xpg_core PUBLIC src)
 target_link_libraries(xpg_core PUBLIC Threads::Threads)
+if(WIN32)
+    target_link_libraries(xpg_core PUBLIC shell32)   # 1.32.0 : core/SystemOpen (ShellExecuteW)
+endif()
 
 # --- xls: lire un classeur, et rien d'autre ----------------------------------
 #
@@ -181,7 +184,7 @@ endif()
 # systeme, celui de l'Assistant IA (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous
 # Windows, libcurl chargee a la demande ailleurs.
 add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp
-                                 src/app/ai/AiHttp.cpp)
+                                 src/license_admin/KeyBackup.cpp src/app/ai/AiHttp.cpp)
 target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
 if(NOT WIN32)
@@ -1007,6 +1010,11 @@ if(XPG_BUILD_TESTS)
         target_link_libraries(github_sync_test PRIVATE winhttp)
     endif()
     xpg_add_test(NAME githubsync COMMAND github_sync_test ${CMAKE_SOURCE_DIR})
+    # 1.32.0 : la sauvegarde de la cle de l'editeur chiffree par une phrase de passe (license_admin/KeyBackup) :
+    # aller-retour, phrase fausse, en-tete modifie, parametres affaiblis, cle deja la, phrase trop simple.
+    xpg_add_test_executable(key_backup_test tests/key_backup_test.cpp src/license_admin/Admin.cpp src/license_admin/KeyBackup.cpp)
+    xpg_target_link_libraries(key_backup_test PRIVATE xpg_licensing)
+    xpg_add_test(NAME clesauvegarde COMMAND key_backup_test)
     # 1.22.2 : ce qui consomme (core/Perf : les portees, l'image, les fenetres de 10 s et 60 s, les saccades, le
     # rapport) et l'onglet Performances (app/PerfPane), dessine sans ecran.
     xpg_add_test_executable(perf_test tests/perf_test.cpp src/app/PerfPane.cpp)

@@ -906,7 +906,31 @@ struct Remote {
     bool                               hasIndex{false};
     std::vector<Entry>                 index;
     std::string                        publishedAt, publishedBy;
+    std::uint64_t                      counter{0};       // 1.32.0 : le numero de l'index (croissant a chaque envoi)
 };
+
+// 1.32.0 : LE PLUS GRAND NUMERO D'INDEX DEJA VU par ce poste, pour ce depot (github-vu.json) : un depot remis
+// a un etat plus ancien (l'historique reecrit par quelqu'un qui peut ecrire dans le depot) est refuse.
+std::string seenPath(const std::string& folder) { return deploy::joinPath(folder, "github-vu.json"); }
+std::string seenKey(const Config& c) { return c.repo + "|" + c.branch + "|" + c.root; }
+std::uint64_t lastSeen(const std::string& folder, const Config& c) {
+    std::string text;
+    Value v;
+    if (!isFile(seenPath(folder)) || !readText(seenPath(folder), text, nullptr) || !core::json::parse(text, v, nullptr) || !v.isObject()) return 0;
+    const Value* d = v.find(seenKey(c));
+    return d ? static_cast<std::uint64_t>(d->asNumber(0)) : 0;
+}
+void rememberSeen(const std::string& folder, const Config& c, std::uint64_t counter) {
+    if (counter <= lastSeen(folder, c)) return;
+    std::string text;
+    Value v = Value::object();
+    if (isFile(seenPath(folder)) && readText(seenPath(folder), text, nullptr)) {
+        Value old;
+        if (core::json::parse(text, old, nullptr) && old.isObject()) v = old;
+    }
+    v.set(seenKey(c), static_cast<std::uint64_t>(counter));
+    (void)writeFileAt(seenPath(folder), core::json::write(v, true) + "\n", nullptr);
+}
 
 bool getBlob(Api& api, const std::string& sha, std::string& out, std::string* why) {
     const Reply r = api.call("GET", "/git/blobs/" + sha);
@@ -978,6 +1002,7 @@ bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& for
     }
     out.publishedAt = v.str("publie_le");
     out.publishedBy = v.str("publie_par");
+    out.counter = static_cast<std::uint64_t>(v.integer("compteur"));
     if (const Value* files = v.find("fichiers"); files && files->isArray())
         for (const auto& f : files->items()) {
             Entry e;
@@ -997,9 +1022,10 @@ bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& for
     return true;
 }
 
-std::string writeIndex(const SyncKey& key, const std::vector<Entry>& entries, Seconds now, const std::string& by) {
+std::string writeIndex(const SyncKey& key, const std::vector<Entry>& entries, Seconds now, const std::string& by, std::uint64_t counter) {
     Value v = Value::object();
     v.set("format", std::string(kSyncFormat));
+    v.set("compteur", static_cast<std::uint64_t>(counter));
     v.set("cle_synchro", syncKeyId(key));
     v.set("publie_le", licensing::isoTime(now));
     v.set("publie_par", by);
@@ -1166,6 +1192,13 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
         Remote remote;
         bool foreignKey = false;
         if (!readRemote(api, skey, remote, foreignKey, &rep.why)) return rep;
+        if (remote.hasIndex && remote.counter < lastSeen(folder, config)) {
+            rep.why = "le d\xC3\xA9p\xC3\xB4t a \xC3\xA9t\xC3\xA9 remis \xC3\xA0 un \xC3\xA9tat plus ancien (index n\xC2\xB0 " + std::to_string(remote.counter) + ", ce poste a d\xC3\xA9j\xC3\xA0 vu le n\xC2\xB0 "
+                      + std::to_string(lastSeen(folder, config))
+                      + ") : quelqu'un a r\xC3\xA9\xC3\xA9" "crit son historique ? Rien n'est re\xC3\xA7u ni envoy\xC3\xA9. Regarde l'historique de la branche sur GitHub.";
+            return rep;
+        }
+        if (remote.hasIndex && !opt.dryRun) rememberSeen(folder, config, remote.counter);
         rep.remoteInfo = config.repo + " (priv\xC3\xA9), branche " + config.branch + (config.root.empty() ? std::string() : ", dossier " + config.root);
         if (remote.empty) rep.remoteInfo += " : vide";
         else if (!remote.publishedAt.empty()) rep.remoteInfo += ", dernier envoi le " + remote.publishedAt + (remote.publishedBy.empty() ? "" : " par " + remote.publishedBy);
@@ -1356,7 +1389,8 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
         for (const auto& e : remote.index)
             if (!sentPaths.count(e.path)) newIndex.push_back(e);
         std::sort(newIndex.begin(), newIndex.end(), [](const Entry& a, const Entry& b) { return a.path < b.path; });
-        if (!postBlob(under(config, kIndexName), writeIndex(skey, newIndex, opt.now, by))) return rep;
+        const std::uint64_t newCounter = std::max(remote.counter, lastSeen(folder, config)) + 1;
+        if (!postBlob(under(config, kIndexName), writeIndex(skey, newIndex, opt.now, by, newCounter))) return rep;
         if (readmeMissing && !postBlob(under(config, kReadmeName), readmeText(config))) return rep;
 
         Value tree = Value::object();
@@ -1409,6 +1443,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey* k
         if (r.status == 200) {
             rep.commit = commitSha;
             rep.ok = true;
+            rememberSeen(folder, config, newCounter);
             return rep;
         }
         if (r.status == 422 || r.status == 409) {

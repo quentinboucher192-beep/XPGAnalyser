@@ -237,8 +237,17 @@ History::History(std::string agentDir) : dir_(std::move(agentDir)) {}
 
 std::string History::path() const { return joinPath(dir_, "historique.jsonl"); }
 
+// 1.32.0 : l'historique est borne. Au-dela de kHistoryMaxBytes, historique.jsonl devient historique-1.jsonl
+// (l'ancien -1 est efface) et un nouveau commence : deux fichiers au plus, 2 x 1 Mio.
 void History::append(const core::json::Value& entry) {
     std::lock_guard<std::mutex> lock(mutex_);
+    std::error_code ec;
+    const auto size = fs::file_size(P(path()), ec);
+    if (!ec && size >= kHistoryMaxBytes) {
+        const std::string older = joinPath(dir_, "historique-1.jsonl");
+        fs::remove(P(older), ec);
+        fs::rename(P(path()), P(older), ec);
+    }
     std::ofstream out(P(path()), std::ios::binary | std::ios::app);
     out << core::json::write(entry, false) << "\n";
 }
@@ -246,11 +255,13 @@ void History::append(const core::json::Value& entry) {
 std::vector<core::json::Value> History::tail(std::size_t count) const {
     std::lock_guard<std::mutex> lock(mutex_);
     std::vector<core::json::Value> all;
-    std::ifstream in(P(path()), std::ios::binary);
     std::string line;
-    while (std::getline(in, line)) {
-        core::json::Value v;
-        if (!line.empty() && core::json::parse(line, v, nullptr) && v.isObject()) all.push_back(std::move(v));
+    for (const std::string& file : {joinPath(dir_, "historique-1.jsonl"), path()}) {
+        std::ifstream in(P(file), std::ios::binary);
+        while (std::getline(in, line)) {
+            core::json::Value v;
+            if (!line.empty() && core::json::parse(line, v, nullptr) && v.isObject()) all.push_back(std::move(v));
+        }
     }
     if (all.size() > count) all.erase(all.begin(), all.end() - static_cast<std::ptrdiff_t>(count));
     return all;

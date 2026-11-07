@@ -33,6 +33,10 @@
 #include <string>
 #include <string_view>
 
+namespace license_admin {
+struct KeyBackupAccess;   // 1.32.0 : la sauvegarde chiffree de la cle de l'editeur (l'outil Admin seulement)
+}
+
 namespace licensing {
 
 namespace crypto = deploy::crypto;
@@ -71,6 +75,7 @@ public:
     [[nodiscard]] crypto::Signature sign(std::string_view message) const noexcept;
 
 private:
+    friend struct license_admin::KeyBackupAccess;
     SigningKey() = default;
     bool save(const KeyFileSpec& spec, std::string* why) const;
 

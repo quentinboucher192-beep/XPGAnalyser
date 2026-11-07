@@ -1,5 +1,6 @@
 #include "HmiAssetPanes.hpp"
 #include "../../core/Trash.hpp"   // 1.25.1 : la corbeille commune (<date>~<nom>)
+#include "../../core/SystemOpen.hpp"   // 1.32.0 : ouvrir sans shell, jamais un programme
 
 #include "../FileViewer.hpp"        // 1.21.0 : l'apercu de tous les fichiers
 
@@ -60,18 +61,9 @@ std::string reason(const core::Error& e) { return e.context.empty() ? e.message(
 //  Ouvrir un fichier avec le programme que le systeme lui associe (comme l'aide :
 //  le chemin entre guillemets ; un chemin qui en contient est refuse). Vide : ouvert.
 std::string openWithSystem(const std::string& path) {
-    if (path.find('"') != std::string::npos) return "chemin refus\xC3\xA9 : " + path;
     std::error_code ec;
-    if (!std::filesystem::is_regular_file(std::filesystem::path(path), ec)) return "fichier absent : " + path;
-#if defined(_WIN32)
-    const std::string command = "start \"\" \"" + path + "\"";
-#elif defined(__APPLE__)
-    const std::string command = "open \"" + path + "\"";
-#else
-    const std::string command = "xdg-open \"" + path + "\" >/dev/null 2>&1 &";
-#endif
-    if (std::system(command.c_str()) != 0) return "aucun programme n'a pu ouvrir " + path;
-    return {};
+    if (!std::filesystem::is_regular_file(std::filesystem::path(std::u8string(path.begin(), path.end())), ec)) return "fichier absent : " + path;
+    return core::openWithSystem(path);   // 1.32.0 : sans shell, jamais un programme (core/SystemOpen)
 }
 // ---- fin Lot API 8 : glisser de fichiers, 2e partie ----
 

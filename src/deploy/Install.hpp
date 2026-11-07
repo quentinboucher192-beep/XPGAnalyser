@@ -14,7 +14,7 @@
 //    arret.json                     la demande d'arret au poste (XPG_ARRET_FICHIER), le temps d'un STOP
 //    reprise-poste.txt              l'etat du poste ecrit par lui a l'arret (XPG_REPRISE_FICHIER) ;
 //                                   l'agent ne l'efface pas (sauf s'il a plus de 10 minutes a un lancement)
-//    poste-sortie.log               la sortie du poste (Linux)
+//    poste-sortie.log               la sortie du poste (Linux ; 1.32.0 : Windows aussi), refaite a chaque lancement
 //
 //  <id> est la version du paquet ("V3") ; si une version du meme nom est deja
 //  installee avec un AUTRE contenu (le projet a change sans nouvelle version),
@@ -93,7 +93,8 @@ private:
     std::string dir_;
 };
 
-// L'historique des deploiements (<dossier>/historique.jsonl).
+// L'historique des deploiements (<dossier>/historique.jsonl). 1.32.0 : borne (historique-1.jsonl, l'ancien).
+inline constexpr std::uintmax_t kHistoryMaxBytes = 1024u * 1024u;
 class History {
 public:
     explicit History(std::string agentDir);

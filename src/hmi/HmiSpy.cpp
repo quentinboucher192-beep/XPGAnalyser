@@ -493,7 +493,7 @@ const Pcap& pcap() {
         const UINT n = GetSystemDirectoryW(sys, MAX_PATH);
         if (n > 0 && n < MAX_PATH - 32) {
             const std::wstring path = std::wstring(sys) + L"\\Npcap\\wpcap.dll";
-            h = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+            h = LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);   // 1.32.0 : Packet.dll a cote, rien d'autre
         }
         if (!h) h = LoadLibraryW(L"wpcap.dll");                // WinPcap, ou Npcap en mode compatible
         if (!h) {

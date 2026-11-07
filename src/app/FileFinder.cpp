@@ -1,6 +1,7 @@
 // =============================================================================
 //  app/FileFinder.cpp - 1.14.0 (lot M5) : voir FileFinder.hpp
 // =============================================================================
+#include "../core/SystemOpen.hpp"
 #include "FileFinder.hpp"
 #include "../core/Perf.hpp"   // 1.22.2 : les travaux de fond se voient (l'onglet Performances)
 
@@ -1133,10 +1134,7 @@ std::string revealInExplorer(const std::string& path) {
     return {};
 #else
     const std::string dir = fs::is_directory(pathOf(path), ec) ? path : parentOf(path);
-    if (dir.find('"') != std::string::npos) return "chemin refus\xC3\xA9 : " + dir;
-    const std::string command = "xdg-open \"" + dir + "\" >/dev/null 2>&1 &";
-    if (std::system(command.c_str()) != 0) return "aucun programme n'a pu ouvrir " + dir;
-    return {};
+    return core::openWithSystem(dir);   // 1.32.0 : sans shell (core/SystemOpen)
 #endif
 }
 

@@ -912,7 +912,10 @@ OpResult Deployer::rollback(const Peer& peer, const Value& args) {
     OpResult e;
     if (!d.pickApp(args, a, e)) return e;
     const std::string from = a.active;
-    const std::string to = args.str("version").empty() ? d.store.olderThanActive(a) : args.str("version");
+    // 1.32.0 : sans version demandee, celle qui etait active juste avant (active.json, "previous") ; deux retours
+    // de suite font donc un aller-retour. Sinon (aucune precedente connue) : la plus recente installee avant l'active.
+    std::string to = args.str("version");
+    if (to.empty()) to = (!a.previous.empty() && a.previous != a.active && a.find(a.previous)) ? a.previous : d.store.olderThanActive(a);
     if (to.empty() || !a.find(to)) {
         std::string list;
         for (const auto& v : a.versions) list += (list.empty() ? "" : ", ") + v.id;

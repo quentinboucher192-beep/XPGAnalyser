@@ -3,6 +3,8 @@
 // =============================================================================
 #include "Dossiers.hpp"
 
+#include "../core/SystemOpen.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -815,23 +817,10 @@ std::size_t compterFichiers(const fs::path& p, std::uintmax_t* octets, std::size
 }
 
 std::string ouvrirDansLeSysteme(const std::string& cheminUtf8) {
+    // 1.32.0 : un seul chemin pour tout le logiciel (core/SystemOpen) : jamais de shell, jamais un programme lance.
     std::error_code ec;
     if (!fs::exists(cheminDe(cheminUtf8), ec)) return cheminUtf8 + " n'existe pas encore.";
-#if defined(_WIN32)
-    const std::wstring w = largeDeUtf8(cheminUtf8);
-    const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (r <= 32) return "Windows n'a pas pu ouvrir " + cheminUtf8 + " (code " + std::to_string(static_cast<long long>(r)) + ").";
-    return {};
-#else
-    if (cheminUtf8.find('"') != std::string::npos) return "chemin refus\xC3\xA9 : " + cheminUtf8;
-#  if defined(__APPLE__)
-    const std::string commande = "open \"" + cheminUtf8 + "\"";
-#  else
-    const std::string commande = "xdg-open \"" + cheminUtf8 + "\" >/dev/null 2>&1 &";
-#  endif
-    if (std::system(commande.c_str()) != 0) return "aucun programme n'a pu ouvrir " + cheminUtf8;
-    return {};
-#endif
+    return core::openWithSystem(cheminUtf8);
 }
 
 std::string tailleLisible(std::uintmax_t octets) {

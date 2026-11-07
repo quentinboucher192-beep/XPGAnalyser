@@ -666,6 +666,19 @@ int main(int argc, char** argv) {
         r = sync(pc5, nullptr, true);
         check(r.ok && readFile(pc5 / "archive" / "licences" / "XPG-GH-0001.xpglic") == licA, "le poste neuf la recoit alors");
 
+        // 1.32.0 : le depot remis a un etat plus ancien (l'historique reecrit) : refuse par un poste qui a vu plus recent.
+        {
+            const std::string headNow = fake.refs["main"];
+            std::string older = headNow;
+            for (int i = 0; i < 3 && !fake.commits[older].parents.empty(); ++i) older = fake.commits[older].parents[0];
+            fake.refs["main"] = older;
+            const auto rb = sync(pc1, key.get());
+            check(!rb.ok && has(rb.why, "plus ancien"), "le depot remis en arriere : refuse, rien recu ni envoye (" + rb.why + ")");
+            fake.refs["main"] = headNow;
+            const auto ok = sync(pc1, key.get());
+            check(ok.ok, "remis a sa place : la synchro reprend");
+            check(fs::exists(pc1 / "github-vu.json"), "le poste retient le plus grand numero d'index vu");
+        }
         // Un index modifie : tout est refuse.
         files = fake.headFiles();
         std::string index = files["index.xpgsync"];

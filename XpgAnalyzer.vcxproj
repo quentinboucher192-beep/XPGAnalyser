@@ -649,6 +649,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\core\Perf.cpp" />
     <ClCompile Include="src\core\Process.cpp" />
     <ClCompile Include="src\core\SingleInstance.cpp" />
+    <ClCompile Include="src\core\SystemOpen.cpp" />
     <ClCompile Include="src\core\Trash.cpp" />
     <ClCompile Include="src\help\CenterIndex.cpp" />
     <ClCompile Include="src\help\CenterPages.cpp" />
@@ -1244,6 +1245,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\core\Perf.hpp" />
     <ClInclude Include="src\core\Process.hpp" />
     <ClInclude Include="src\core\SingleInstance.hpp" />
+    <ClInclude Include="src\core\SystemOpen.hpp" />
     <ClInclude Include="src\core\Trash.hpp" />
     <ClInclude Include="src\help\CenterIndex.hpp" />
     <ClInclude Include="src\help\CenterPages.hpp" />
@@ -1396,6 +1398,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\TlsIdentity.hpp" />
     <ClInclude Include="src\license_admin\Admin.hpp" />
     <ClInclude Include="src\license_admin\GitHubSync.hpp" />
+    <ClInclude Include="src\license_admin\KeyBackup.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\KeyFile.hpp" />
     <ClInclude Include="src\licensing\Licensing.hpp" />
