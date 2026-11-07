@@ -542,7 +542,19 @@ def controler_etapes(iss):
         for suffixe in ("", "-2x"):
             if not i or not os.path.exists(os.path.join(ui, f"icone-{i}{suffixe}.bmp")):
                 sys.exit(f"installateur : l'icone d'etape icone-{i}{suffixe}.bmp manque dans {ui}")
-    print(f"etapes de l'assistant : {len(noms)}, chacune son icone")
+    # 1.35.1 : chaque etape dans le rail de la colonne (la 11e, << Termine >>, en sortait en 1.35.0 : invisible).
+    # Une marque fait 22 de haut (11 de part et d'autre de son centre), la pastille de l'etape en cours 30.
+    def constante(nom):
+        m = re.search(r"^\s*" + nom + r"\s*=\s*(\d+)\s*;", texte, re.M)
+        if not m:
+            sys.exit(f"installateur : la constante {nom} introuvable dans {iss}")
+        return int(m.group(1))
+    premier, pas, haut = constante("RailPremier"), constante("RailPas"), constante("RailH")
+    derniere = premier + pas * (len(noms) - 1)
+    if premier < 15 or derniere + 15 > haut or pas < 24:
+        sys.exit(f"installateur : {len(noms)} etapes ne tiennent pas dans le rail (RailPremier {premier}, RailPas {pas}, "
+                 f"RailH {haut} : la derniere finit a {derniere + 15}) - resserrer le pas")
+    print(f"etapes de l'assistant : {len(noms)}, chacune son icone, toutes dans le rail (la derniere finit a {derniere + 15} sur {haut})")
 
 
 if __name__ == "__main__":

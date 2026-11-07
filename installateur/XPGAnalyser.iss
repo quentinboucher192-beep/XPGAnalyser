@@ -1912,13 +1912,15 @@ const
   // redessine jamais le nom à côté d'elle.
   // 1.14.0 : neuf étapes (huit avant) - le pas passe de 34 à 32 : le rail (292) laisse sa place à la note
   // du bas de la colonne. 1.18.0 : dix étapes (l'étape « IA ») - le pas passe à 29 (la dernière marque
-  // finit à 290, dans le rail).
+  // finit à 290, dans le rail). 1.35.1 : onze étapes (l'étape « Licence » de la 1.35.0) - le pas passe à 26
+  // et la première à 17 : la onzième (« Terminé ») sortait du rail et ne se voyait plus ; la dernière marque
+  // finit à 288 et sa pastille à 292 (package_mingw.py le contrôle à chaque construction).
   RailX = 12;
   RailY = 140;
   RailL = 208;
   RailH = 292;
-  RailPremier = 18;
-  RailPas = 29;
+  RailPremier = 17;
+  RailPas = 26;
   RailMarqueX = 22;
   RailCoupe = 40;
   RailTexteX = 46;
