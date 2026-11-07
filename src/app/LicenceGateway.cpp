@@ -287,8 +287,41 @@ void note(bool ok, const std::string& text) {
 
 std::string software() { return core::productName() + " " + XPG_ANALYZER_VERSION; }
 
-// Un document plus recent que celui du PC (registre, revocations) : importe ; sinon rien (pas de bruit dans
-// l'historique). `line` : ce qui s'est passe ("" : rien de nouveau). Faux : la passerelle n'a pas repondu.
+// Des octets signes recus (un registre, une liste de revocation) : importes s'ils sont plus recents que ceux du
+// PC ; sinon rien (pas de bruit dans l'historique). Le magasin verifie la signature. `label` : "La liste de
+// revocation publiee"... ; `line` : ce qui s'est passe ("" : rien de nouveau). Faux : refuses ou illisibles.
+bool adoptBytes(std::string_view bytes, lic::DocKind kind, std::uint64_t current, const std::string& label, std::string& line, bool& changed) {
+    line.clear();
+    std::vector<lic::SignedBlock> blocks;
+    std::string w;
+    std::uint64_t number = 0;
+    if (lic::readBlocks(bytes, blocks, &w) && blocks.size() == 1 && blocks[0].kind == kind) {
+        if (kind == lic::DocKind::Registry) {
+            lic::Registry r;
+            if (lic::parseRegistry(blocks[0].document, r, &w)) number = r.number;
+        } else {
+            lic::RevocationList r;
+            if (lic::parseRevocations(blocks[0].document, r, &w)) number = r.number;
+        }
+    }
+    const bool feminine = kind != lic::DocKind::Registry;
+    if (number == 0) {
+        line = label + " est illisible" + (w.empty() ? std::string(".") : " (" + w + ").");
+        return false;
+    }
+    if (number <= current) return true;
+    const auto rep = lic::importLicenseBytes(bytes);
+    if (rep.ok) {
+        changed = true;
+        line = label + " n\xC2\xB0 " + std::to_string(number) + " est install\xC3\xA9" + (feminine ? "e." : ".");
+        return true;
+    }
+    line = label + " n\xC2\xB0 " + std::to_string(number) + " est refus\xC3\xA9" + (feminine ? "e" : "") + " : " + rep.why;
+    return false;
+}
+
+// Un document publie dans le depot (registre, revocations), plus recent que celui du PC : importe. Faux : la
+// passerelle n'a pas repondu (`why`).
 bool adoptIfNewer(const lgw::Address& a, std::string_view path, lic::DocKind kind, std::uint64_t current, std::string& line, bool& changed,
                   std::string& why) {
     line.clear();
@@ -298,32 +331,27 @@ bool adoptIfNewer(const lgw::Address& a, std::string_view path, lic::DocKind kin
         why = problem(g, kind == lic::DocKind::Registry ? "Le registre n'a pas pu \xC3\xAAtre lu" : "La liste de r\xC3\xA9vocation n'a pas pu \xC3\xAAtre lue");
         return false;
     }
-    std::vector<lic::SignedBlock> blocks;
-    std::string w;
-    std::uint64_t number = 0;
-    if (lic::readBlocks(g.body, blocks, &w) && blocks.size() == 1 && blocks[0].kind == kind) {
-        if (kind == lic::DocKind::Registry) {
-            lic::Registry r;
-            if (lic::parseRegistry(blocks[0].document, r, &w)) number = r.number;
-        } else {
-            lic::RevocationList r;
-            if (lic::parseRevocations(blocks[0].document, r, &w)) number = r.number;
-        }
-    }
-    const std::string label = kind == lic::DocKind::Registry ? "Le registre publi\xC3\xA9" : "La liste de r\xC3\xA9vocation publi\xC3\xA9" "e";
-    if (number == 0) {
-        line = label + " est illisible" + (w.empty() ? std::string(".") : " (" + w + ").");
-        return true;
-    }
-    if (number <= current) return true;
-    const auto rep = lic::importLicenseBytes(g.body);
-    if (rep.ok) {
-        changed = true;
-        line = label + " n\xC2\xB0 " + std::to_string(number) + " est install\xC3\xA9" + (kind == lic::DocKind::Registry ? "." : "e.");
-    } else {
-        line = label + " n\xC2\xB0 " + std::to_string(number) + " est refus\xC3\xA9" + (kind == lic::DocKind::Registry ? "" : "e") + " : " + rep.why;
-    }
+    (void)adoptBytes(g.body, kind, current,
+                     kind == lic::DocKind::Registry ? "Le registre publi\xC3\xA9" : "La liste de r\xC3\xA9vocation publi\xC3\xA9" "e", line, changed);
     return true;
+}
+
+// L'identifiant de la licence d'un fichier .xpglic (pour le dire ; le magasin la verifie a l'import) ; vide : aucune.
+std::string licenseIdOf(std::string_view bytes) {
+    std::vector<lic::SignedBlock> blocks;
+    if (!lic::readBlocks(bytes, blocks, nullptr)) return {};
+    for (const auto& b : blocks) {
+        if (b.kind != lic::DocKind::License) continue;
+        lic::License l;
+        if (lic::parseLicense(b.document, l, nullptr)) return l.licenseId;
+    }
+    return {};
+}
+
+// La licence de ce PC (installee, sinon la derniere recue par la passerelle) ; vide : aucune.
+std::string installedLicenseId(const Record& rec) {
+    const auto st = lic::getLicenseState();
+    return !st.licenseId.empty() ? st.licenseId : rec.receivedLicense;
 }
 
 std::string join(const std::vector<std::string>& parts) {
@@ -336,9 +364,16 @@ std::string join(const std::vector<std::string>& parts) {
     return out;
 }
 
-// La reponse de l'editeur concerne-t-elle la demande en cours ?
-bool answersCurrent(const Record& rec, const lgw::DeviceStatus& s) {
-    return rec.local == kLocalSent && !rec.nonce.empty() && (s.requestNonce == rec.nonce || s.requestNonce.empty());
+// L'etat porte-t-il le nonce EXACT de la demande de ce releve ? (1.34.0, relecture : un etat sans nonce, ou pour
+// une autre demande, ne change pas la demande en cours.)
+bool forThisRequest(const Record& rec, const lgw::DeviceStatus& s) { return !rec.nonce.empty() && s.requestNonce == rec.nonce; }
+
+// Le releve est RELU juste avant d'etre ecrit, et fusionne : un autre Studio sur le meme dossier a pu l'ecrire
+// pendant le reseau (voir LicenceGateway.hpp). Relu illisible : ecrit tel quel.
+bool storeRecord(const Record& mine, std::string* why) {
+    Record disk;
+    if (!loadRecord(disk, nullptr)) return saveRecord(mine, why);
+    return saveRecord(mergeRecords(disk, mine), why);
 }
 
 } // namespace
@@ -447,6 +482,51 @@ bool saveRecord(const Record& r, std::string* why) {
     return true;
 }
 
+Record mergeRecords(const Record& disk, const Record& mine) {
+    Record out = mine;
+    // La demande : la plus recente des deux (envoyee le, puis le numero de l'issue).
+    const auto newer = [](const Record& a, const Record& b) {
+        if (a.issue <= 0) return false;
+        if (b.issue <= 0) return true;
+        if (a.sentAt != b.sentAt) return a.sentAt > b.sentAt;
+        return a.issue > b.issue;
+    };
+    const bool same = disk.issue == mine.issue && disk.nonce == mine.nonce;
+    if (!same && newer(disk, mine)) {
+        out.issue = disk.issue;
+        out.device = disk.device;
+        out.nonce = disk.nonce;
+        out.sentAt = disk.sentAt;
+        out.customer = disk.customer;
+        out.contact = disk.contact;
+        out.message = disk.message;
+        out.pcName = disk.pcName;
+        out.licenseId = disk.licenseId;
+        out.local = disk.local;
+        out.cancelledAt = disk.cancelledAt;
+        out.outcome = disk.outcome;
+    } else if (same && mine.issue > 0) {
+        // La meme demande : une annulation, une reponse de l'un ou de l'autre restent.
+        if (disk.local == kLocalCancelled && out.local != kLocalCancelled) {
+            out.local = kLocalCancelled;
+            out.cancelledAt = disk.cancelledAt;
+        }
+        if (out.outcome.empty()) out.outcome = disk.outcome;
+    }
+    // Ce que la passerelle a dit : celui qui a traite l'etat le plus recent (a egalite : ce travail).
+    if (disk.lastNumber > mine.lastNumber) {
+        out.lastNumber = disk.lastNumber;
+        out.lastState = disk.lastState;
+        out.lastNonce = disk.lastNonce;
+        out.lastMessage = disk.lastMessage;
+        if (!disk.receivedLicense.empty()) out.receivedLicense = disk.receivedLicense;
+    }
+    if (out.receivedLicense.empty()) out.receivedLicense = disk.receivedLicense;
+    out.lastCheck = std::max(disk.lastCheck, mine.lastCheck);
+    out.configNumber = std::max(disk.configNumber, mine.configNumber);
+    return out;
+}
+
 bool pending(const Record& r) noexcept { return r.issue > 0 && r.local == kLocalSent && r.outcome.empty(); }
 
 std::string dateText(lic::Seconds at) {
@@ -469,7 +549,7 @@ std::string stateText(const Record& r) {
     if (r.outcome == "acceptee") return "Accept\xC3\xA9" "e par l'\xC3\xA9" "diteur";
     if (r.outcome == "refusee") return "Refus\xC3\xA9" "e par l'\xC3\xA9" "diteur";
     if (r.outcome == "annulee") return "Annul\xC3\xA9" "e (l'\xC3\xA9" "diteur l'a not\xC3\xA9)";
-    if (r.lastState == "recue" && (r.lastNonce == r.nonce || r.lastNonce.empty()))
+    if (r.lastState == "recue" && !r.nonce.empty() && r.lastNonce == r.nonce)
         return "Re\xC3\xA7ue par l'\xC3\xA9" "diteur \xE2\x80\x94 en attente de sa d\xC3\xA9" "cision";
     return "Envoy\xC3\xA9" "e \xE2\x80\x94 en attente de l'\xC3\xA9" "diteur";
 }
@@ -496,7 +576,6 @@ Result check() {
         return res;
     }
     forget(cfg);   // la verification ne demande rien : le jeton ne sert pas
-    bool recChanged = cfg.config.number > rec.configNumber;
     rec.configNumber = std::max(rec.configNumber, cfg.config.number);
 
     // Le registre et la liste de revocation en vigueur.
@@ -525,7 +604,7 @@ Result check() {
             return res;
         }
         rec.lastCheck = lic::systemNow();
-        (void)saveRecord(rec, nullptr);
+        (void)storeRecord(rec, nullptr);
         res.ok = true;
         res.message = join({join(lines), "Rien de nouveau : ce PC n'a encore fait aucune demande."});
         return res;
@@ -540,7 +619,7 @@ Result check() {
         res.ok = true;
         res.message = join({join(lines), pending(rec) ? "Rien de nouveau : ta demande attend que l'\xC3\xA9" "diteur la voie."
                                                       : "Rien de nouveau de l'\xC3\xA9" "diteur pour ce PC."});
-        if (!saveRecord(rec, &why)) res.message += " " + why;
+        if (!storeRecord(rec, &why)) res.message += " " + why;
         return res;
     }
     lgw::DeviceStatus s;
@@ -565,7 +644,7 @@ Result check() {
                                              ? std::string("Rien de nouveau de l'\xC3\xA9" "diteur pour ce PC.")
                                              : "Un \xC3\xA9tat plus ancien (n\xC2\xB0 " + std::to_string(s.number) + ", d\xC3\xA9j\xC3\xA0 vu le n\xC2\xB0 " +
                                                    std::to_string(rec.lastNumber) + ") est ignor\xC3\xA9."});
-        if (!saveRecord(rec, &why)) res.message += " " + why;
+        if (!storeRecord(rec, &why)) res.message += " " + why;
         return res;
     }
 
@@ -574,32 +653,47 @@ Result check() {
     std::string sealProblem;
     if (!s.sealed.empty()) {
         std::string plain, w;
-        if (!lic::deviceOpenSeal(s.sealed, plain, &w) || !lgw::parseStatusContent(plain, content, &w)) sealProblem = w;
+        if (!lic::deviceOpenSeal(s.sealed, plain, &w) || !lgw::parseStatusContent(plain, content, &w)) sealProblem = w.empty() ? "illisible" : w;
     }
-    const bool current = answersCurrent(rec, s);
+    // Tout ce que porte l'etat est-il en place ? Faux : l'etat n'est pas marque traite, la verification suivante
+    // (celle de l'heure) le reprend.
+    bool applied = true;
+    // 1.34.0 (relecture) : la liste de revocation scellee pour ce PC (signee par l'editeur : le magasin la verifie),
+    // importee AVANT la licence (une licence revoquee n'est pas installee), seulement si elle est plus recente.
+    std::string revLine;
+    if (sealProblem.empty() && !content.revocations.empty()) {
+        if (!adoptBytes(content.revocations, lic::DocKind::Revocations, lic::getLicenseState().revocationNumber,
+                        "La liste de r\xC3\xA9vocation re\xC3\xA7ue de l'\xC3\xA9" "diteur", revLine, res.changed))
+            applied = false;
+    }
+    const bool mine = forThisRequest(rec, s);   // le nonce exact de la demande de ce releve
+    const bool open = pending(rec);             // elle attend une reponse
+    bool stale = false;                         // un etat pour une autre demande (ancien, rejoue) : note, sans effet
     std::string text;
     bool ok = true;
     switch (s.state) {
         case lgw::State::Received:
-            text = current ? "Ta demande est re\xC3\xA7ue par l'\xC3\xA9" "diteur : elle attend sa d\xC3\xA9" "cision."
-                           : "L'\xC3\xA9" "diteur a re\xC3\xA7u une demande de ce PC.";
+            if (mine && open) text = "Ta demande est re\xC3\xA7ue par l'\xC3\xA9" "diteur : elle attend sa d\xC3\xA9" "cision.";
+            else stale = true;
             break;
         case lgw::State::Accepted:
         case lgw::State::Updated: {
+            // Toujours traite : la licence est verifiee par le magasin (signee, pour CE PC, pas plus ancienne).
             const bool updated = s.state == lgw::State::Updated;
+            std::string lid = licenseIdOf(content.license);
+            bool installedOrPresent = false;
             if (!sealProblem.empty()) {
-                ok = false;
+                applied = false;
                 text = "L'\xC3\xA9" "diteur a publi\xC3\xA9 une licence pour ce PC, mais elle ne s'ouvre pas : " + sealProblem + ".";
-                res.notice = text;
-                res.noticeTone = "error";
             } else if (content.license.empty()) {
-                ok = false;
+                applied = false;
                 text = "L'\xC3\xA9" "diteur a " + std::string(updated ? "mis \xC3\xA0 jour" : "accept\xC3\xA9") + " la demande, mais l'\xC3\xA9tat ne contient pas de licence.";
             } else {
                 const auto rep = lic::importLicenseBytes(content.license);
-                const std::string lid = !rep.state.licenseId.empty() ? rep.state.licenseId : s.licenseId;
+                if (lid.empty() && rep.licenseInstalled) lid = rep.state.licenseId;
                 res.licenseId = lid;
                 if (rep.licenseInstalled) {
+                    installedOrPresent = true;
                     res.licenseInstalled = true;
                     res.changed = true;
                     rec.receivedLicense = lid;
@@ -608,20 +702,32 @@ Result check() {
                     res.notice = text;
                     res.noticeTone = "ok";
                 } else if (rep.ok) {
+                    installedOrPresent = true;
+                    if (rec.receivedLicense.empty()) rec.receivedLicense = lid;
                     text = "Ta licence " + lid + " est d\xC3\xA9j\xC3\xA0 install\xC3\xA9" "e.";
                 } else {
-                    ok = false;
-                    text = "La licence re\xC3\xA7ue de l'\xC3\xA9" "diteur n'est pas install\xC3\xA9" "e : " + rep.why;
-                    res.notice = text;
-                    res.noticeTone = "error";
+                    applied = false;
+                    text = "La licence re\xC3\xA7ue de l'\xC3\xA9" "diteur n'est pas install\xC3\xA9" "e : " + sentence(rep.why);
                 }
             }
+            if (!installedOrPresent) {
+                ok = false;
+                text += " Nouvel essai \xC3\xA0 la prochaine v\xC3\xA9rification.";
+                res.notice = text;
+                res.noticeTone = "error";
+            }
             if (!content.message.empty()) text += " Mot de l'\xC3\xA9" "diteur : " + content.message;
-            if (current && s.state == lgw::State::Accepted) rec.outcome = "acceptee";
-            if (current && updated && res.licenseInstalled) rec.outcome = "acceptee";
+            // La reponse a la demande en cours : son nonce exact, ou (une nouvelle emission sans nonce) une licence
+            // qui vient d'arriver pendant qu'elle attend. Jamais sans licence en place.
+            if (installedOrPresent && rec.local == kLocalSent && (mine || (s.requestNonce.empty() && open && res.licenseInstalled)))
+                rec.outcome = "acceptee";
             break;
         }
         case lgw::State::Refused: {
+            if (!(mine && open)) {
+                stale = true;
+                break;
+            }
             std::string reason = trim(content.message);
             if (!sealProblem.empty()) reason = "(la raison ne s'ouvre pas : " + sealProblem + ")";
             text = reason.empty() ? std::string("Ta demande d'activation a \xC3\xA9t\xC3\xA9 refus\xC3\xA9" "e (sans raison donn\xC3\xA9" "e).")
@@ -630,40 +736,82 @@ Result check() {
             res.refused = true;
             res.notice = text;
             res.noticeTone = "warning";
-            if (current) rec.outcome = "refusee";
+            rec.outcome = "refusee";
             break;
         }
         case lgw::State::Cancelled:
-            text = "L'\xC3\xA9" "diteur a pris note de l'annulation de ta demande.";
-            if (current) rec.outcome = "annulee";
+            // L'annulation de CETTE demande (par ce PC, ou par l'autre Studio) : notee.
+            if (mine && (open || rec.local == kLocalCancelled)) {
+                text = "L'\xC3\xA9" "diteur a pris note de l'annulation de ta demande.";
+                if (open) rec.outcome = "annulee";
+            } else {
+                stale = true;
+            }
             break;
-        case lgw::State::Revoked:
-            text = "L'\xC3\xA9" "diteur a r\xC3\xA9voqu\xC3\xA9 la licence " + (s.licenseId.empty() ? std::string("de ce PC") : s.licenseId) + ".";
-            if (!content.message.empty()) text += " " + content.message;
+        case lgw::State::Revoked: {
+            if (!sealProblem.empty()) applied = false;   // la liste scellee ne s'ouvre pas : reprise plus tard
+            const std::string lid = installedLicenseId(rec);
+            text = "L'\xC3\xA9" "diteur a r\xC3\xA9voqu\xC3\xA9 la licence " + (lid.empty() ? std::string("de ce PC") : lid) + ".";
+            if (!content.message.empty()) text += " " + sentence(content.message);
+            if (!sealProblem.empty()) text += " Le d\xC3\xA9tail ne s'ouvre pas : " + sentence(sealProblem);
             ok = false;
             res.notice = text;
             res.noticeTone = "error";
             res.changed = true;
             break;
-        case lgw::State::Removed:
-            text = "Ce PC a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la licence " + (s.licenseId.empty() ? std::string() : s.licenseId + " ") + "par l'\xC3\xA9" "diteur.";
+        }
+        case lgw::State::Removed: {
+            const std::string lid = installedLicenseId(rec);
+            text = "Ce PC a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la licence " + (lid.empty() ? std::string() : lid + " ") + "par l'\xC3\xA9" "diteur.";
             if (!content.message.empty()) text += " " + content.message;
             ok = false;
             res.notice = text;
             res.noticeTone = "warning";
             res.changed = true;
             break;
+        }
     }
-    rec.lastNumber = s.number;
-    rec.lastState = lgw::stateKey(s.state);
-    rec.lastNonce = s.requestNonce;
+    if (!revLine.empty()) {
+        text = join({text, revLine});
+        if (!res.notice.empty()) res.notice = join({res.notice, revLine});
+    }
+    const std::string stamp = " (\xC3\xA9tat n\xC2\xB0 " + std::to_string(s.number) + " de la passerelle)";
+    if (stale) {
+        // Un etat pour une autre demande (ancien, republie, rejoue) : traite (il ne revient pas), note dans
+        // l'historique, mais ni l'etat affiche, ni la reponse de la demande en cours, ni la derniere phrase ne
+        // changent. Rien d'alarmant a dire.
+        text = "L'\xC3\xA9" "diteur a publi\xC3\xA9 l'\xC3\xA9tat \xC2\xAB " + lgw::stateLabel(s.state) + " \xC2\xBB pour " +
+               (open ? std::string("une autre demande de ce PC : ta demande en cours ne change pas.")
+                     : std::string("une demande de ce PC qui n'est plus en cours : rien ne change."));
+        if (applied) rec.lastNumber = s.number;
+        else res.retryLater = true;
+        note(true, text + stamp);
+        res.ok = true;
+        res.changed = true;
+        res.message = join({join(lines), text});
+        if (!storeRecord(rec, &why)) res.message += " " + why;
+        res.pendingAfter = pending(rec);
+        return res;
+    }
+    // Une phrase deja dite (le meme etat repris) n'est ni redite dans l'historique, ni annoncee de nouveau.
+    const bool fresh = applied || text != rec.lastMessage;
+    if (applied) {
+        rec.lastNumber = s.number;
+        rec.lastState = lgw::stateKey(s.state);
+        rec.lastNonce = s.requestNonce;
+    } else {
+        res.retryLater = true;
+        if (!fresh) {
+            res.notice.clear();
+            res.noticeTone.clear();
+        }
+    }
     rec.lastMessage = text;
-    recChanged = true;
-    note(ok, text + " (\xC3\xA9tat n\xC2\xB0 " + std::to_string(s.number) + " de la passerelle)");
+    if (fresh) note(ok, text + stamp);
     res.ok = true;
-    res.changed = res.changed || recChanged;
+    res.changed = true;
     res.message = join({join(lines), text});
-    if (!saveRecord(rec, &why)) res.message += " " + why;
+    if (!storeRecord(rec, &why)) res.message += " " + why;
     res.pendingAfter = pending(rec);
     return res;
 }
@@ -735,6 +883,18 @@ Result send(const SendForm& form0) {
         res.message = "La demande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
         return res;
     }
+    // Relu juste avant de creer l'issue : une demande partie entre-temps depuis l'autre Studio (le meme dossier)
+    // est vue - pas de seconde issue.
+    {
+        Record now;
+        if (loadRecord(now, nullptr) && pending(now)) {
+            forget(cfg);
+            res.pendingAfter = true;
+            res.message = "Une demande vient de partir pour ce PC (n\xC2\xB0 " + std::to_string(now.issue) + ", depuis l'autre Studio ?) : une seule \xC3\xA0 la fois. "
+                          "Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
+            return res;
+        }
+    }
     json::Value body = json::Value::object();
     body.set("title", lgw::issueTitle(id));
     body.set("body", lgw::issueBody(id, cfg.signer.id, sealed));
@@ -781,7 +941,7 @@ Result send(const SendForm& form0) {
     res.pendingAfter = true;
     res.message = "Demande envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur (n\xC2\xB0 " + std::to_string(number) +
                   "). Ta licence s'installera d'elle-m\xC3\xAAme d\xC3\xA8s qu'il l'aura accept\xC3\xA9" "e.";
-    if (!saveRecord(rec, &why)) res.message += " Attention : " + why;
+    if (!storeRecord(rec, &why)) res.message += " Attention : " + why;
     return res;
 }
 
@@ -850,7 +1010,7 @@ Result cancel() {
     res.changed = true;
     res.pendingAfter = false;
     res.message = "Demande annul\xC3\xA9" "e. Tu peux en envoyer une nouvelle.";
-    if (!saveRecord(rec, &why)) res.message += " Attention : " + why;
+    if (!storeRecord(rec, &why)) res.message += " Attention : " + why;
     return res;
 }
 
@@ -871,8 +1031,11 @@ struct Runner {
     std::atomic<unsigned long long> revision{0};
     bool               on{false};     // startRunner : la verification de l'heure
     bool               waiting{false};   // une demande attend (le dernier resultat le dit)
+    bool               retry{false};     // un etat est a reprendre (la derniere verification le dit)
     double             nextCheck{0};
 
+    // Sans shutdown() (une sortie brutale) : la requete en cours arretee, le fil attendu. httpMutex() est construit
+    // AVANT ce Runner (voir runner()) : il est detruit APRES, le verrou ci-dessous est toujours vivant.
     ~Runner() {
         if (worker.joinable()) {
             g_stopping = true;
@@ -886,6 +1049,11 @@ struct Runner {
 };
 
 Runner& runner() {
+    // Les statiques que le fil et ~Runner touchent sont construits AVANT le Runner : detruits APRES lui (l'ordre
+    // inverse de leur construction), ils sont encore vivants quand ~Runner arrete la requete et attend le fil.
+    (void)httpMutex();
+    (void)addressMutex();
+    (void)addressOverride();
     static Runner r;
     return r;
 }
@@ -958,6 +1126,7 @@ bool collect() {
     r.running = false;
     r.job = Job::None;
     r.waiting = res.pendingAfter;
+    if (res.job == Job::Check) r.retry = res.retryLater;   // un envoi, une annulation ne disent rien des etats
     r.nextCheck = steadyNow() + 3600.0;
     // Les avis : la cloche (la licence installee, un refus...) et la barre d'etat ; puis l'etat revalue.
     if (res.changed) licence::refresh();
@@ -975,7 +1144,7 @@ bool collect() {
 void poll() {
     Runner& r = runner();
     if (collect() || r.running) return;
-    if (r.on && r.waiting && steadyNow() >= r.nextCheck) {
+    if (r.on && (r.waiting || r.retry) && steadyNow() >= r.nextCheck) {
         r.nextCheck = steadyNow() + 3600.0;
         (void)startCheck();
     }

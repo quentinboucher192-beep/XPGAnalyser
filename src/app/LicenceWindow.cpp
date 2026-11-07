@@ -681,7 +681,7 @@ OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.dema
     cancel_->setStyle(ui::Button::Style::Danger);
     check_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("V\xC3\xA9rifier maintenant", "licence.demande.verifier")));
     check_->setTooltip("Demande \xC3\xA0 la passerelle ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (elle le fait aussi \xC3\xA0 chaque lancement, puis toutes les heures "
-                       "tant qu'une demande attend).");
+                       "tant qu'une demande attend, ou qu'une licence re\xC3\xA7ue n'a pas pu \xC3\xAAtre install\xC3\xA9" "e).");
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });

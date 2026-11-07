@@ -20,7 +20,14 @@
 //    - le fil de fond : un travail lance, releve (poll), l'avis de la cloche et
 //      le message de la barre d'etat ;
 //    - le jeton des demandes : jamais dans une adresse, un message, l'historique,
-//      le releve local.
+//      le releve local ;
+//    - 1.34.0 (relecture de securite) : l'etat ne porte plus l'identifiant de la
+//      licence en clair (celui de la licence installee est dit) ; la liste de
+//      revocation scellee dans l'etat rend la licence Revoquee ; un etat
+//      << recue >>, << annulee >>, << refusee >> pour une autre demande (rejoue)
+//      ne change pas la demande en cours ; une licence qui ne s'installe pas
+//      (liee a un autre PC) n'est pas marquee traitee et est reprise ; deux
+//      Studios sur le meme dossier ne perdent pas la demande envoyee.
 // =============================================================================
 #include "fake_passerelle.hpp"
 
@@ -34,6 +41,7 @@
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iterator>
 #include <random>
@@ -166,6 +174,26 @@ std::string licenceFor(const lic::SigningKey& key, const std::string& registry, 
     if (!adm::signLicense(key, in, lic::systemNow(), out, &why, &summary)) std::printf("  licence impossible : %s\n", why.c_str());
     return out;
 }
+
+// 1.34.0 (relecture) : un crochet sur le transport - l'AUTRE Studio (le meme dossier) agit pendant une requete de
+// celui-ci. Vrai : fait (une seule fois).
+std::function<bool(const app::ai::HttpRequest&)> g_hook;
+class HookClient final : public app::ai::HttpClient {
+public:
+    app::ai::HttpResponse perform(const app::ai::HttpRequest& req, const app::ai::HttpSink& sink) override {
+        if (g_hook) {
+            auto h = std::move(g_hook);
+            g_hook = nullptr;   // pas de reentree (l'autre Studio fait ses propres requetes)
+            if (!h(req)) g_hook = std::move(h);
+        }
+        return inner_.perform(req, sink);
+    }
+    void cancel() override {}
+    [[nodiscard]] bool cancelled() const noexcept override { return false; }
+
+private:
+    fakegh::Client inner_;
+};
 
 } // namespace
 
@@ -353,7 +381,9 @@ int main(int argc, char** argv) {
         lgw::StatusContent content;
         content.license = licFile;
         content.message = "Bienvenue (essai)";
-        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 5, lgw::State::Accepted, rec.nonce, "XPG-PAS-0001", pk, content));
+        // 1.34.0 (relecture) : l'editeur n'ecrit plus l'identifiant de la licence en clair dans l'etat.
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 5, lgw::State::Accepted, rec.nonce, "", pk, content));
+        check(!fake.anyPublicContains("XPG-PAS-0001"), "l'identifiant de la licence n'est pas en clair dans le depot");
         check(!fake.anyPublicContains("Bienvenue") && !fake.anyPublicContains("Client d'essai"), "l'etat publie : la licence et le mot scelles");
         const int histBefore = countPasserelle();
         const auto r = keep(lg::check());
@@ -418,11 +448,17 @@ int main(int argc, char** argv) {
         check(!r.ok, "un etat modifie apres la signature : refuse (" + r.message + ")");
         lgw::StatusContent forOther;
         forOther.license = "XPG-LICENSING 1 licence 2\n{}";
-        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 6, lgw::State::Accepted, "", "XPG-PAS-0009", otherPc->publicKey(), forOther));
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 6, lgw::State::Accepted, "", "", otherPc->publicKey(), forOther));
+        const int histBefore = countPasserelle();
         r = keep(lg::check());
-        check(r.ok && !r.licenseInstalled && has(r.message, "ne s'ouvre pas") && lic::getLicenseState().licenseId == "XPG-PAS-0001",
-              "une licence scellee pour un autre PC : rien d'installe (" + r.message + ")");
-        check(lg::loadRecord(rec, &why) && rec.lastNumber == 6, "le releve : n\xC2\xB0 6 traite");
+        check(r.ok && !r.licenseInstalled && r.retryLater && has(r.message, "ne s'ouvre pas") && has(r.notice, "Nouvel essai") &&
+                  lic::getLicenseState().licenseId == "XPG-PAS-0001",
+              "une licence scellee pour un autre PC : rien d'installe, a reprendre (" + r.message + ")");
+        check(lg::loadRecord(rec, &why) && rec.lastNumber == 5 && has(rec.lastMessage, "ne s'ouvre pas"),
+              "le releve : le n\xC2\xB0 6 n'est PAS marque traite (dernier : n\xC2\xB0 5), la raison gardee");
+        r = keep(lg::check());
+        check(r.ok && r.retryLater && has(r.message, "ne s'ouvre pas") && r.notice.empty() && countPasserelle() == histBefore + 1,
+              "verifier encore : le n\xC2\xB0 6 repris, sans nouvel avis ni nouvelle ligne d'historique (" + r.message + ")");
     }
 
     std::printf("-- refusee, avec sa raison\n");
@@ -481,7 +517,7 @@ int main(int argc, char** argv) {
         check(openIssue(*key, fake.issues.back(), q, req, device, why), "l'editeur l'ouvre");
         lgw::StatusContent content;
         content.license = licenceFor(*key, registry, "XPG-PAS-0002", q.request);
-        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 8, lgw::State::Accepted, rec.nonce, "XPG-PAS-0002", pk, content));
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 8, lgw::State::Accepted, rec.nonce, "", pk, content));
         (void)app::licence::takeMessages();
         const auto rev = lg::revision();
         check(lg::startCheck() && lg::busy(), "la verification part sur un fil");
@@ -500,13 +536,174 @@ int main(int argc, char** argv) {
         check(bell, "l'avis de la cloche (bouton Licence... -> la fenetre Licence)");
         lgw::StatusContent removed;
         removed.message = "Remplace par un autre PC (essai)";
-        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 9, lgw::State::Removed, "", "XPG-PAS-0002", pk, removed));
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 9, lgw::State::Removed, "", "", pk, removed));
         r = keep(lg::check());
         check(r.ok && has(r.notice, "retir\xC3\xA9 de la licence XPG-PAS-0002") && lg::loadRecord(rec, &why) && rec.lastState == "retiree" && rec.lastNumber == 9,
               "retire de la licence : note, un avis (" + r.message + ")");
         check(lg::startCheck(), "une autre verification");
         lg::shutdown();
         check(!lg::busy(), "shutdown : le fil attendu, rien ne reste en cours");
+    }
+
+    std::printf("-- un etat rejoue pour une autre demande ne change pas la demande en cours\n");
+    const std::string oldNonce = rec.nonce;   // la demande n\xC2\xB0 4, acceptee
+    {
+        auto r = keep(lg::send(form("Poste essai A", "XPG-PAS-0002")));
+        check(r.ok && fake.issues.size() == 5 && lg::loadRecord(rec, &why) && lg::pending(rec) && rec.nonce != oldNonce, "une nouvelle demande (" + r.message + ")");
+        lgw::StatusContent none;
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 10, lgw::State::Received, rec.nonce, "", pk, none));
+        r = keep(lg::check());
+        check(r.ok && lg::loadRecord(rec, &why) && has(lg::stateText(rec), "Re\xC3\xA7ue par l'\xC3\xA9" "diteur") && rec.lastNumber == 10,
+              "recue pour CETTE demande : Recue par l'editeur (" + lg::stateText(rec) + ")");
+        const std::string shown = lg::stateText(rec), lastMessage = rec.lastMessage;
+        const int histBefore = countPasserelle();
+        struct Replay { std::uint64_t number; lgw::State state; std::string nonce; const char* what; };
+        const Replay replays[] = {
+            {11, lgw::State::Received, oldNonce, "recue pour l'ancienne demande"},
+            {12, lgw::State::Cancelled, oldNonce, "annulee pour l'ancienne demande"},
+            {13, lgw::State::Cancelled, "", "annulee sans demande"},
+            {14, lgw::State::Refused, oldNonce, "refusee pour l'ancienne demande"},
+            {15, lgw::State::Received, "", "recue sans demande"},
+        };
+        for (const auto& x : replays) {
+            lgw::StatusContent c;
+            if (x.state == lgw::State::Refused) c.message = "Raison d'essai d'un ancien refus";
+            fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, x.number, x.state, x.nonce, "", pk, c));
+            r = keep(lg::check());
+            check(r.ok && !r.refused && r.notice.empty() && has(r.message, "ne change pas") && lg::loadRecord(rec, &why) && lg::pending(rec) &&
+                      rec.outcome.empty() && lg::stateText(rec) == shown && rec.lastMessage == lastMessage && rec.lastNumber == x.number,
+                  std::string(x.what) + " : la demande en cours ne change pas, l'etat est traite (" + r.message + " / " + lg::stateText(rec) + ")");
+        }
+        check(countPasserelle() == histBefore + 5, "chaque etat rejoue est note dans l'historique");
+        lgw::StatusContent c;
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 16, lgw::State::Cancelled, rec.nonce, "", pk, c));
+        r = keep(lg::check());
+        check(r.ok && lg::loadRecord(rec, &why) && !lg::pending(rec) && rec.outcome == "annulee", "annulee pour CETTE demande : notee (" + r.message + ")");
+    }
+
+    std::printf("-- une licence qui ne s'installe pas est reprise\n");
+    {
+        auto r = keep(lg::send(form("Poste essai A")));
+        check(r.ok && fake.issues.size() == 6 && lg::loadRecord(rec, &why) && lg::pending(rec), "une nouvelle demande (" + r.message + ")");
+        // Une licence liee a un AUTRE PC (sa demande, signee par sa cle) : le magasin la refuse.
+        lic::ActivationRequest oq;
+        oq.deviceKey = otherPc->publicKeyHex();
+        oq.deviceName = "Poste essai B";
+        oq.createdAt = lic::systemNow();
+        oq.nonce = "0123456789abcdef0123456789abcdef";
+        const std::string otherReq = lic::writeBlock(lic::signBlock(lic::DocKind::Request, lic::writeRequest(oq), otherPc->publicKey(),
+                                                                    [&](std::string_view m) { return otherPc->sign(m); }));
+        lgw::StatusContent bad;
+        bad.license = licenceFor(*key, registry, "XPG-PAS-0003", otherReq);
+        check(!bad.license.empty(), "une licence pour l'autre PC");
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 17, lgw::State::Accepted, rec.nonce, "", pk, bad));
+        const int histBefore = countPasserelle();
+        r = keep(lg::check());
+        check(r.ok && !r.licenseInstalled && r.retryLater && has(r.message, "autre PC") && has(r.notice, "Nouvel essai") && r.noticeTone == "error",
+              "acceptee, mais la licence est pour un autre PC : pas installee, a reprendre (" + r.message + ")");
+        check(lg::loadRecord(rec, &why) && rec.lastNumber == 16 && lg::pending(rec) && rec.outcome.empty() && has(rec.lastMessage, "autre PC"),
+              "le releve : l'etat n\xC2\xB0 17 pas traite, la demande attend toujours, la raison gardee");
+        check(lic::getLicenseState().licenseId == "XPG-PAS-0002", "la licence en place reste");
+        r = keep(lg::check());
+        check(r.ok && r.retryLater && r.notice.empty() && has(r.message, "autre PC") && countPasserelle() == histBefore + 1 && lg::loadRecord(rec, &why) &&
+                  rec.lastNumber == 16,
+              "verifier encore : repris (pas de nouvel avis, pas de bruit dans l'historique)");
+        lgw::OnlineRequest q;
+        lic::ActivationRequest req;
+        std::string device;
+        check(openIssue(*key, fake.issues.back(), q, req, device, why), "l'editeur ouvre la demande");
+        lgw::StatusContent good;
+        good.license = licenceFor(*key, registry, "XPG-PAS-0003", q.request);
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 18, lgw::State::Accepted, rec.nonce, "", pk, good));
+        r = keep(lg::check());
+        check(r.ok && r.licenseInstalled && !r.retryLater && has(r.notice, "Ta licence XPG-PAS-0003 est install") && lic::getLicenseState().licenseId == "XPG-PAS-0003",
+              "puis la bonne licence : installee (" + r.message + ")");
+        check(lg::loadRecord(rec, &why) && rec.lastNumber == 18 && rec.outcome == "acceptee" && rec.receivedLicense == "XPG-PAS-0003",
+              "le releve : acceptee, n\xC2\xB0 18");
+    }
+
+    std::printf("-- la liste de revocation scellee dans l'etat\n");
+    {
+        std::string revocations;
+        check(adm::signRevocations(*key, "{\"number\": 3, \"revoked\": [{\"license_id\": \"XPG-PAS-0003\", \"reason\": \"Fin du contrat d'essai\"}]}",
+                                   lic::systemNow(), revocations, &why),
+              "la liste n\xC2\xB0 3 signee (" + why + ")");
+        lgw::StatusContent content;
+        content.revocations = revocations;
+        content.message = "Licence revoquee (essai)";
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 19, lgw::State::Revoked, "", "", pk, content));
+        check(!fake.anyPublicContains("Fin du contrat") && !fake.anyPublicContains("XPG-PAS-0003"), "la liste et sa raison ne sont pas en clair dans le depot");
+        const auto r = keep(lg::check());
+        const auto st = lic::getLicenseState();
+        check(r.ok && st.status == lic::LicenseStatus::Revoked && st.revocationNumber == 3 && st.licenseId == "XPG-PAS-0003",
+              "la licence est Revoquee sur ce PC (" + r.message + " / " + st.message + ")");
+        check(has(r.notice, "r\xC3\xA9voqu\xC3\xA9 la licence XPG-PAS-0003") && has(r.message, "n\xC2\xB0 3 est install"), "l'avis dit la licence installee : " + r.notice);
+        check(lg::loadRecord(rec, &why) && rec.lastNumber == 19 && rec.lastState == "revoquee", "le releve : revoquee, n\xC2\xB0 19");
+    }
+
+    std::printf("-- deux Studios sur le meme dossier\n");
+    {
+        // La fusion : la demande la plus recente, le plus grand numero traite, une annulation de l'un ou de l'autre.
+        lg::Record older, newer;
+        older.issue = 3;
+        older.nonce = "aaaa";
+        older.sentAt = 1000;
+        older.local = lg::kLocalSent;
+        older.outcome = "acceptee";
+        older.lastNumber = 9;
+        older.lastMessage = "neuf";
+        older.configNumber = 4;
+        newer.issue = 4;
+        newer.nonce = "bbbb";
+        newer.sentAt = 2000;
+        newer.local = lg::kLocalSent;
+        newer.lastNumber = 7;
+        newer.configNumber = 2;
+        auto m = lg::mergeRecords(newer, older);
+        check(m.issue == 4 && m.nonce == "bbbb" && lg::pending(m) && m.lastNumber == 9 && m.lastMessage == "neuf" && m.configNumber == 4,
+              "la demande la plus recente (sur le disque), le plus grand numero (de ce travail)");
+        m = lg::mergeRecords(older, newer);
+        check(m.issue == 4 && lg::pending(m) && m.lastNumber == 9 && m.lastMessage == "neuf" && m.configNumber == 4, "dans l'autre sens aussi");
+        lg::Record cancelled = newer;
+        cancelled.local = lg::kLocalCancelled;
+        cancelled.cancelledAt = 2100;
+        m = lg::mergeRecords(cancelled, newer);
+        check(m.local == lg::kLocalCancelled && m.cancelledAt == 2100 && !lg::pending(m), "la meme demande : l'annulation de l'autre reste");
+
+        // Pour de vrai : l'autre Studio envoie sa demande PENDANT la verification de celui-ci.
+        g_hook = [&](const app::ai::HttpRequest& req) {
+            if (!has(req.url, lgw::statusPath(myId))) return false;
+            const auto other = keep(lg::send(form("Poste essai A")));
+            check(other.ok, "l'autre Studio envoie sa demande (" + other.message + ")");
+            return true;
+        };
+        app::ai::setHttpFactory([] { return std::make_unique<HookClient>(); });
+        auto r = keep(lg::check());
+        check(r.ok && !g_hook && fake.issues.size() == 7, "la verification finit (" + r.message + ")");
+        check(lg::loadRecord(rec, &why) && lg::pending(rec) && rec.issue == 7 && rec.lastNumber == 19,
+              "la demande envoyee par l'autre Studio n'est pas perdue (n\xC2\xB0 " + std::to_string(rec.issue) + ")");
+        r = keep(lg::send(form("Poste essai A")));
+        check(!r.ok && fake.issues.size() == 7, "une seconde demande reste refusee (" + r.message + ")");
+
+        // Et l'inverse : l'autre Studio traite un nouvel etat PENDANT l'envoi de celui-ci.
+        r = keep(lg::cancel());
+        check(r.ok && lg::loadRecord(rec, &why) && !lg::pending(rec), "la demande annulee (" + r.message + ")");
+        lgw::StatusContent c;
+        fake.files[lgw::statusPath(myId)] = signedStatus(*key, status(myId, 20, lgw::State::Cancelled, rec.nonce, "", pk, c));
+        g_hook = [&](const app::ai::HttpRequest& req) {
+            if (req.method != "POST" || !has(req.url, "/issues") || has(req.url, "/comments")) return false;
+            const auto other = keep(lg::check());
+            check(other.ok && has(other.message, "pris note de l'annulation"), "l'autre Studio traite l'etat n\xC2\xB0 20 (" + other.message + ")");
+            return true;
+        };
+        r = keep(lg::send(form("Poste essai A")));
+        check(r.ok && !g_hook && fake.issues.size() == 8, "la demande part (" + r.message + ")");
+        check(lg::loadRecord(rec, &why) && lg::pending(rec) && rec.issue == 8 && rec.lastNumber == 20 && rec.lastState == "annulee",
+              "le releve garde la demande ET l'etat n\xC2\xB0 20 traite par l'autre Studio (dernier n\xC2\xB0 " + std::to_string(rec.lastNumber) + ")");
+        r = keep(lg::check());
+        check(r.ok && has(r.message, "Rien de nouveau"), "l'etat n\xC2\xB0 20 n'est pas traite deux fois (" + r.message + ")");
+        g_hook = nullptr;
+        fakegh::install(&fake);
     }
 
     std::printf("-- le jeton des demandes ne sort jamais\n");
