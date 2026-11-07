@@ -143,6 +143,9 @@ inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevice
 void startNotices(bool online);
 // 1.35.1 : le poste d'exploitation (--ihm) : le service seul (le bail, l'heure, le jeton flottant), sans avis.
 void startService();
+// 1.35.1 : les avis (et l'encart de l'accueil) sans relancer le service : le poste d'exploitation refuse faute de
+// licence revient a l'accueil, quelqu'un est devant l'ecran - l'encart dit << Sans licence >>. Sans effet s'ils sont deja la.
+void showNotices();
 // "D\xC3\xA9" "couverte : il te reste 12 jours (jusqu'au 19/11/2026)." ; vide : pas en Decouverte.
 [[nodiscard]] std::string discoveryText(const licensing::LicenseState& st);
 // "Bail : il reste 5 jours \xE2\x80\x94 connecte ce PC \xC3\xA0 Internet avant le 12/11/2026." ; vide : rien a dire.

@@ -477,6 +477,10 @@ std::vector<std::string> takeMessages() {
 
 void startService() { service::startRunner(); }
 
+void showNotices() {
+    if (!g_notices.exchange(true)) syncStateNotices();
+}
+
 void startNotices(bool online) {
     g_notices = true;
     syncStateNotices();

@@ -383,7 +383,8 @@ StartupScreen::~StartupScreen() = default;
 
 // 1.34.0 : l'encart de la licence sur l'accueil. 1.35.0 : LA LICENCE ACTIVE, TOUJOURS VISIBLE sur le menu principal -
 // la licence et sa fin, la Decouverte et ses jours, le bail qui finit, sans licence -> << Activer avec un code... >>
-// (rien sur le poste d'exploitation, ni quand les licences ne sont pas actives : licence::startCard y est vide).
+// (rien sur le poste d'exploitation qui tourne : licence::startCard y est vide ; 1.35.1 : refuse faute de licence, il
+// revient ici et l'encart le dit - licence::showNotices).
 // Rend l'onglet de la fenetre Licence qu'ouvre son bouton.
 static int applyLicenceNotice(start::StartRail& rail) {
     const auto card = licence::startCard();

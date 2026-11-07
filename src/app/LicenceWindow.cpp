@@ -1285,6 +1285,7 @@ namespace licence {
 bool gateProjects(App& app) {
     std::string why;
     if (projectsAllowed(&why)) return true;
+    showNotices();   // 1.35.1 : le poste d'exploitation refuse revient a l'accueil : l'encart y dit << Sans licence >>
     auto dlg = std::make_unique<MessageDialog>(
         "Licence n\xC3\xA9" "cessaire",
         "Sans licence, " + core::productName() + " ne s'utilise pas : aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e.\n\n" + why +

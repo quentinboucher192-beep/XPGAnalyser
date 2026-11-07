@@ -200,8 +200,8 @@ int main(int argc, char** argv) {
         check(has(app::licence::badge().text, "Sans licence") && app::licence::badge().tone == 2, "la pastille : " + app::licence::badge().text);
         check(app::licence::indicator().text == "Sans licence" && app::licence::indicator().tone == 2, "l'indicateur du bandeau : la meme phrase");
         {   // 1.35.1 : sans licence, le logiciel ne s'utilise pas : aucun projet ne s'ouvre ni ne se cree
-            std::string why;
-            check(!app::licence::projectsAllowed(&why) && has(why, "pas de licence"), "sans licence : aucun projet (" + why + ")");
+            std::string refus;
+            check(!app::licence::projectsAllowed(&refus) && has(refus, "pas de licence"), "sans licence : aucun projet (" + refus + ")");
         }
         check(app::licence::featureLabel("ai_generation") != "ai_generation", "le libelle d'une fonctionnalite vient du registre : "
               + app::licence::featureLabel("ai_generation"));
@@ -245,7 +245,8 @@ int main(int argc, char** argv) {
             const auto ind = app::licence::indicator();
             check(ind.text == b.text && ind.tone == 1 && has(ind.tip, "fen\xC3\xAAtre Licence"), "l'indicateur : " + ind.text);
             check(app::licence::startCard().title.empty(), "l'encart de l'accueil : rien avant startNotices (le poste d'exploitation)");
-            app::licence::startNotices(false);
+            app::licence::showNotices();   // 1.35.1 : comme le poste d'exploitation refuse, revenu a l'accueil
+            app::licence::showNotices();   // une deuxieme fois : sans effet
             const auto card = app::licence::startCard();
             check(has(card.title, "Licence : PERSONAL") && has(card.text, "XPG-UI-0001") && card.tone == 1 && card.tab == app::licence::kTabAuto,
                   "l'encart de l'accueil : " + card.title + " / " + card.text);
