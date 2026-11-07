@@ -22,4 +22,49 @@ Elle se met à jour par-dessus la 1.33.0 et garde tes données.
 - **Ce qu'il te reste à faire** (§ 1) : créer le dépôt public et le jeton des demandes, régler la passerelle dans ton outil, puis **me donner trois fichiers publics** pour que la version suivante des Studios s'en serve.
 - **Rien n'a été essayé sur un vrai Windows ni contre le vrai GitHub** : seulement sous Linux, et sous Wine contre un faux GitHub local (§ 4).
 
-@SUITE@
+## 1. Ce qu'il te reste à faire (une fois)
+
+Le pas à pas complet est dans [PASSERELLE-GITHUB.md](PASSERELLE-GITHUB.md) (joint), et dans `LISEZ-MOI-EDITEUR.txt` du zip de l'éditeur. En court :
+
+1. **Crée sur GitHub un dépôt PUBLIC** pour la passerelle, par exemple `ton-compte/xpg-licences-passerelle`, avec les Issues activées.
+2. **Ton jeton GitHub** (celui de la synchro privée) : ajoute-lui ce dépôt, avec **Contents** et **Issues** en « Read and write ».
+3. **Crée le jeton des demandes** : un jeton à grain fin, limité à ce dépôt, avec **Issues : Read and write** et **rien d'autre**. Les logiciels de tes clients s'en servent pour ouvrir leurs demandes. Il est publié masqué, mais lisible par qui cherche : il ne permet d'ouvrir, commenter et fermer que des issues de ce dépôt (§ 6).
+4. **Dans XPG License Manager Admin**, page Synchronisation GitHub, carte « Passerelle des clients » :
+   - le dépôt et le jeton des demandes, puis **Enregistrer la passerelle** ;
+   - **Vérifier**, puis **Publier la configuration**.
+5. **Paramètres de sécurité › Préparer les fichiers pour les Studios…** écrit trois fichiers **publics, sans aucun secret** :
+   - `PublisherKey.hpp`, ta clé publique ;
+   - `registre.xpgreg`, ton registre signé ;
+   - `GatewayAddress.hpp`, l'adresse de ta passerelle.
+
+   **Envoie-les-moi**, ou commite-les aux chemins indiqués dans le `LISEZ-MOI.txt` du dossier. Je les compile dans la version suivante des Studios.
+
+> **Tant que l'étape 5 n'est pas faite, les Studios livrés n'ont pas ta clé** : leurs licences sont « non activées » (tout est ouvert), comme jusqu'ici. Ils n'ont donc ni évaluation ni passerelle. Dans cette 1.34.0, tout a été essayé avec une clé d'**essai** et un faux GitHub (§ 4) : le code est prêt, il attend ta clé et ton dépôt.
+
+## 2. Ce que voit ton client
+
+- **À l'installation** : le Studio est en évaluation.
+  - Un encart orange, bien visible sur l'accueil : « Évaluation : il te reste 30 jours », avec un bouton **Licence…**.
+  - La même phrase en bas de l'accueil, dans la cloche et en tête de la fenêtre Licence, à chaque ouverture.
+- **Licence… › Demande en ligne** : Société / client (obligatoire), Licence existante (pour ajouter ce PC à une licence de sa société), Nom de ce PC, Contact, Message, puis **Envoyer à l'éditeur**.
+- **Sa demande en cours** : son numéro, sa date, son état (« Envoyée — en attente de l'éditeur », « Reçue par l'éditeur », « Acceptée », « Refusée » avec ta raison), **Annuler la demande**, **Vérifier maintenant**.
+- **Acceptée** : au lancement suivant, « Ta licence XPG-… est installée (reçue de l'éditeur). » La licence est valide, sans aucun fichier.
+- **Sans Internet**, ou si le pare-feu bloque GitHub : la demande en ligne dit qu'elle n'a pas pu partir, et la demande par fichier reste là.
+
+## 3. Ce que tu fais dans ton outil
+
+- **Demandes en ligne** (nouvelle entrée du menu, après Activations) :
+  - **Relever les demandes** : chaque demande est vérifiée (la signature du PC) et ouverte avec ta clé. Le client voit alors « Reçue par l'éditeur ».
+  - **Accepter…** : l'assistant de licence s'ouvre avec sa demande. Si elle nomme une licence existante, c'est en mode « ajouter un PC ».
+    - À la signature (« Signer et publier »), la licence est publiée pour **tous** ses PC, et la demande est fermée.
+  - **Refuser…** : écris ta raison ; seul le client la lira.
+  - **Voir sur GitHub** : ouvre la demande sur github.com.
+- **Le tableau de bord** compte les demandes en ligne en attente, avec la date du dernier relevé.
+- **Tout ce que tu signes est publié seul** quand la passerelle est réglée : une licence, un PC ajouté ou retiré, une révocation, un registre. La publication ne bloque jamais la fenêtre ; un échec est dit, et les fichiers restent dans l'archive comme avant.
+- **La console** a les mêmes gestes : `passerelle-config`, `passerelle-jeton-demandes`, `passerelle-verifier`, `passerelle-publier-config`, `passerelle-demandes`, `passerelle-publier-licence`, `passerelle-refuser`, `kit-studios`.
+
+@ESSAIS@
+
+@INSTALLER@
+
+@LIMITES@
