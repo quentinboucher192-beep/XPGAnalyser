@@ -336,6 +336,7 @@ Options lues par `src/main.cpp` :
 | `--version` | Écrit le nom et la version (`API Studio 1.32.0` ou `IHM Studio 1.32.0`) et s'arrête. |
 | `--cli <fichier.XPG> [autres]` | API Studio : analyse sans fenêtre ; code 0 sans constat d'erreur, 1 sinon, 2 si la lecture échoue. |
 | `--poste <dossier>` ou `--ihm <dossier>` | IHM Studio : ouvre le projet en poste d'exploitation. |
+| `--dossiers-scripts`, `--autoriser-dossier-scripts <dossier>`, `--retirer-dossier-scripts <dossier>`, `--acces-web-sur-ce-poste oui\|non` | IHM Studio (1.32.0) : sans fenêtre, les réglages de ce poste qu'un projet ne change pas - les dossiers autorisés aux scripts de l'IHM et l'accès web permis - pour le compte Windows qui lance la commande (un poste d'exploitation sans l'éditeur) ; IHM Studio et le poste fermés. Code 0 fait, 1 refusé, 2 pas IHM Studio. |
 | `--enregistrer`, `--rejouer`, `--arreter-enregistrement`, `--quitter-relecture` (+ `--duree`, `--vitesse`, `--mot-de-passe`, `--jeter`) | IHM Studio : pilote les enregistrements d'une IHM en marche ([détail](docs/IHM-STUDIO.md#enregistrements)). |
 | `--nouvelle-fenetre` | Ouvre une fenêtre de plus (utilisé par Ctrl+Maj+N). |
 | `--light`, `--size <L>x<H>` | Thème clair au lancement ; taille de fenêtre imposée. |

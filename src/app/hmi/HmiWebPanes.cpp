@@ -189,7 +189,7 @@ void HmiWebPane::rebuildProperties() {
     srv.name = "Serveur web";
     srv.properties.push_back(prop("Actif", tf(w.enabled), PG::ValueType::Boolean, commit("actif"),
                                   "Le serveur web int\xC3\xA9gr\xC3\xA9 montre la vue en marche \xC3\xA0 un navigateur (une tablette, un autre PC). "
-                                  "Il faut aussi l'autoriser sur ce poste : R\xC3\xA9glages > " + std::string(WebHost::kSettingLabel) + "."));
+                                  "Il faut aussi l'autoriser sur ce poste : \xC2\xAB " + std::string(WebHost::kSettingLabel) + " \xC2\xBB, plus bas (partie Ce poste)."));
     srv.properties.push_back(prop("Port", std::to_string(w.port), PG::ValueType::Integer, commit("port"), "8080 : http://<le poste>:8080."));
     srv.properties.push_back(prop("Accessible du r\xC3\xA9seau", tf(w.allInterfaces), PG::ValueType::Boolean, commit("reseau"),
                                   "D\xC3\xA9" "coch\xC3\xA9 : ce poste seulement (127.0.0.1). Coch\xC3\xA9 : les autres postes du r\xC3\xA9seau aussi (toutes les cartes)."));

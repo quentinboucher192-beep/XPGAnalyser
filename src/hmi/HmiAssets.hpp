@@ -84,6 +84,10 @@ void relinkExternal(ExternalFile&, const std::string& projectFolder);
 //  de l'IHM (FILE_READ, FILE_WRITE...) d'autres dossiers que donnees/ et exports/ du projet.
 //  L'application la pose au demarrage et quand le reglage change ; vide par defaut.
 inline constexpr std::string_view kAllowedFoldersSetting = "Dossiers autoris\xC3\xA9s aux scripts de l'IHM";
+// Ou le regler : dans l'editeur, et sur un poste d'exploitation sans editeur (la commande, voir main.cpp).
+inline constexpr std::string_view kAllowedFoldersWhere =
+    "Configuration > Poste d'exploitation > Ce PC > Dossiers autoris\xC3\xA9s aux scripts (sur un poste sans \xC3\xA9" "diteur : "
+    "IHM-Studio.exe --autoriser-dossier-scripts <dossier>)";
 void setUserAllowedFolders(std::vector<std::string> folders);
 [[nodiscard]] std::vector<std::string> userAllowedFolders();
 // \\x, //x, \\?\, \\.\ (et leurs variantes avec / ) : le reseau ou un peripherique.

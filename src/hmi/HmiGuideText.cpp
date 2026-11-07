@@ -19377,11 +19377,14 @@ const std::vector<Topic>& topics() {
                          "projet, et dans les **dossiers autoris\xC3\xA9s sur ce PC** (Configuration "
                          "\xE2\x80\xBA Poste d'exploitation, partie *Ce PC* \xE2\x80\xBA *Dossiers "
                          "autoris\xC3\xA9s aux scripts*, s\xC3\xA9par\xC3\xA9s par `;` : un r\xC3\xA9glage "
-                         "du PC, jamais du projet) ; ailleurs (`C:/Donnees/recette.csv` non autoris\xC3\xA9, "
-                         "un chemin r\xC3\xA9seau `\\\\serveur\\partage` non autoris\xC3\xA9, un nom "
-                         "r\xC3\xA9serv\xC3\xA9 de Windows comme `CON` ou `NUL`), la native rend FAUX et "
-                         "`FILE_ERROR()` dit quel dossier autoriser. Un projet re\xC3\xA7u ne peut donc pas "
-                         "\xC3\xA9" "crire ni effacer ailleurs sur le PC.", {}, "1.12.26"},
+                         "du PC, jamais du projet ; sur un poste d'exploitation sans l'\xC3\xA9" "diteur, "
+                         "dans le compte de l'op\xC3\xA9rateur : `IHM-Studio.exe --autoriser-dossier-scripts "
+                         "\"C:\\Donnees\"`, `--dossiers-scripts` pour la liste) ; ailleurs "
+                         "(`C:/Donnees/recette.csv` non autoris\xC3\xA9, un chemin r\xC3\xA9seau "
+                         "`\\\\serveur\\partage` non autoris\xC3\xA9, un nom r\xC3\xA9serv\xC3\xA9 de "
+                         "Windows comme `CON` ou `NUL`), la native rend FAUX et `FILE_ERROR()` dit quel "
+                         "dossier autoriser. Un projet re\xC3\xA7u ne peut donc pas \xC3\xA9" "crire ni "
+                         "effacer ailleurs sur le PC.", {}, "1.12.26"},
              {K::Table, "Native\tCe qu'elle fait\nFILE_READ(chemin), FILE_READ_LINES(chemin)\ttout le texte "
                          "; ses lignes (LIST OF STRING)\nFILE_WRITE(chemin, texte), FILE_WRITE_LINES(chemin, "
                          "lignes)\t\xC3\xA9" "crit le fichier d'un bloc (cr\xC3\xA9\xC3\xA9 ou "
@@ -25574,9 +25577,11 @@ const std::vector<Topic>& topics() {
                          "poste doit laisser passer le port. **1.32.0** : **Actif** est un r\xC3\xA9glage du "
                          "projet ; il ne suffit plus. Sur le PC qui doit servir les navigateurs, coche aussi "
                          "**Acc\xC3\xA8s web de l'IHM permis sur ce poste** (partie *Ce poste*, un "
-                         "r\xC3\xA9glage du PC, jamais du projet) : un projet re\xC3\xA7u n'ouvre donc "
-                         "jamais de port sans toi. Le serveur refuse une requ\xC3\xAAte dont l'adresse "
-                         "appel\xC3\xA9" "e (`Host`) ou l'origine (`Origin`) ne sont pas les siennes.", {}},
+                         "r\xC3\xA9glage du PC, jamais du projet ; sur un poste d'exploitation sans "
+                         "l'\xC3\xA9" "diteur, dans le compte de l'op\xC3\xA9rateur : `IHM-Studio.exe "
+                         "--acces-web-sur-ce-poste oui`) : un projet re\xC3\xA7u n'ouvre donc jamais de port "
+                         "sans toi. Le serveur refuse une requ\xC3\xAAte dont l'adresse appel\xC3\xA9" "e "
+                         "(`Host`) ou l'origine (`Origin`) ne sont pas les siennes.", {}},
              {K::Heading, "Qui voit, qui commande", {}},
              {K::Bullet, "**Se connecter** (coch\xC3\xA9 au d\xC3\xA9part) : un utilisateur de l'IHM et son "
                          "mot de passe (Configuration \xE2\x80\xBA Utilisateurs) ; cinq essais faux d'une "

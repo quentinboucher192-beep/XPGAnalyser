@@ -50,6 +50,9 @@ namespace hmi::web {
 
 // 1.32.0 : le reglage DU POSTE (jamais du projet) sans lequel l'acces web ne demarre pas (app/hmi/HmiWebHost).
 inline constexpr std::string_view kThisPcSetting = "Acc\xC3\xA8s web de l'IHM permis sur ce poste";
+// Ou le cocher : dans l'editeur, et sur un poste d'exploitation sans editeur (la commande, voir main.cpp).
+inline constexpr std::string_view kThisPcWhere =
+    "Configuration > Acc\xC3\xA8s web > Ce poste ; sur un poste sans \xC3\xA9" "diteur : IHM-Studio.exe --acces-web-sur-ce-poste oui";
 
 struct Frame {
     std::shared_ptr<const Bytes> jpeg;

@@ -1132,8 +1132,8 @@ void confinement132() {
     // Hors du projet : refuse, lu comme ecrit ; FILE_ERROR dit le remede (le reglage du poste).
     {
         const auto [got, err] = run("STRING", "VAR t : STRING; END_VAR\nt := FILE_READ('" + out + "/secret.txt');\nR := CONCAT('[', t, ']', FILE_ERROR());");
-        check(err.empty() && has(got, "[]FILE_READ : ") && has(got, "hors du projet") && has(got, "R\xC3\xA9glages")
-                  && has(got, std::string(hmi::kAllowedFoldersSetting)),
+        check(err.empty() && has(got, "[]FILE_READ : ") && has(got, "hors du projet") && has(got, "Poste d'exploitation > Ce PC")
+                  && has(got, std::string(hmi::kAllowedFoldersWhere)) && has(got, "--autoriser-dossier-scripts"),
               "un chemin complet hors du projet : refuse, et FILE_ERROR dit ou l'autoriser - " + got);
     }
     for (const std::string& body : std::vector<std::string>{"R := FILE_WRITE('" + out + "/ecrit.txt', 'x');", "R := FILE_WRITE('../dehors.txt', 'x');",

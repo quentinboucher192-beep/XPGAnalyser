@@ -4231,7 +4231,7 @@ void checkLiteralFilePaths(const Project& p, std::vector<Issue>& out) {
                     if (absolute(lit) && !allowed(lit) && said.insert(site.where + "|" + lit).second)
                         add(out, S::Warning, "Script", kNoId, kNoId, site.where,
                             site.where + " : " + fn + "('" + lit + "') vise un dossier hors du projet - en marche, il n'est permis que si "
-                            "ce dossier est ajout\xC3\xA9 sur le poste dans R\xC3\xA9glages > " + std::string(kAllowedFoldersSetting)
+                            "ce dossier est ajout\xC3\xA9 sur le poste dans " + std::string(kAllowedFoldersWhere)
                             + " (sinon FILE_ERROR() le dit)", site.script);
                     i = end;
                 }
@@ -4248,8 +4248,8 @@ void checkWeb(const Project& p, std::vector<Issue>& out) {
     if (w.login && p.security.users.empty())
         add(out, S::Error, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web avec connexion, mais aucun utilisateur (Configuration > Utilisateurs)");
     // 1.32.0 : le projet seul n'ouvre pas de serveur ; ouvert au reseau sans connexion, jamais la commande.
-    add(out, S::Info, cat, kNoId, kNoId, {}, "l'acc\xC3\xA8s web ne d\xC3\xA9marre que sur un poste qui l'autorise : R\xC3\xA9glages > "
-                                                  + std::string(web::kThisPcSetting));
+    add(out, S::Info, cat, kNoId, kNoId, {}, "l'acc\xC3\xA8s web ne d\xC3\xA9marre que sur un poste qui l'autorise : "
+                                                  + std::string(web::kThisPcSetting) + " (" + std::string(web::kThisPcWhere) + ")");
     if (!w.login && w.control && w.allInterfaces)
         add(out, S::Warning, cat, kNoId, kNoId, {}, "acc\xC3\xA8s web sans connexion, ouvert au r\xC3\xA9seau, avec commande : la commande est refus\xC3\xA9" "e, "
                                                      "le navigateur reste en lecture seule (coche Se connecter pour piloter)");

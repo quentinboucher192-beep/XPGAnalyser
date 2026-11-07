@@ -189,8 +189,8 @@ std::vector<fs::path> allowedRoots(const std::string& projectFolder) {
 
 std::string outsideWhy(const std::string& text) {
     return text + " est hors du projet : un script de l'IHM ne lit et n'\xC3\xA9" "crit que dans donnees/ et exports/ du projet. "
-                  "Pour permettre un autre dossier sur ce poste, ajoute-le dans R\xC3\xA9glages > "
-         + std::string(kAllowedFoldersSetting);
+                  "Pour permettre un autre dossier sur ce poste, ajoute-le dans "
+         + std::string(kAllowedFoldersWhere);
 }
 
 // Le chemin d'un script : relatif, il part de <projet>/donnees/. 1.32.0 : TOUT CHEMIN RESTE DANS LES DOSSIERS PERMIS

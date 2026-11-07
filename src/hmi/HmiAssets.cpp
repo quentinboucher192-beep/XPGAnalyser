@@ -411,7 +411,7 @@ bool projectPathAllowed(std::string_view path, std::string* why) {
     if (!networkOrDevicePath(path) || insideUserAllowedFolder(path)) return true;
     if (why)
         *why = "chemin r\xC3\xA9seau ou de p\xC3\xA9riph\xC3\xA9rique venu du projet, pas ouvert (" + std::string(path)
-             + ") : pour le permettre sur ce poste, ajoute son dossier dans R\xC3\xA9glages > " + std::string(kAllowedFoldersSetting);
+             + ") : pour le permettre sur ce poste, ajoute son dossier dans " + std::string(kAllowedFoldersWhere);
     return false;
 }
 

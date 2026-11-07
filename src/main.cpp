@@ -26,6 +26,8 @@
 #include "import/ProjectImporter.hpp"
 #include "project/SharedLibrary.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -208,6 +210,7 @@ int main(int argc, char** argv) {
     std::string checkBilan;
     std::string checkText;     // --tutoriel-texte : la session ne fait que l'ecrire
     core::crash::Test essai = core::crash::Test::None;
+    std::string posteCommand, posteValue;   // 1.32.0 : les reglages de ce poste, sans fenetre
 
     for (int i = 1; i < argc; ++i) {
         const std::string a = argv[i];
@@ -215,6 +218,12 @@ int main(int argc, char** argv) {
         // 1.8.0 : le nom et la version, puis rien d'autre (les scripts de outils\ s'en servent).
         else if (a == "--version") version = true;
         else if (a == "--light") options.themeName = "Light";
+        // 1.32.0 : les reglages de ce poste que le projet ne change pas (voir plus bas).
+        else if (a == "--dossiers-scripts") posteCommand = a;
+        else if ((a == "--autoriser-dossier-scripts" || a == "--retirer-dossier-scripts" || a == "--acces-web-sur-ce-poste") && i + 1 < argc) {
+            posteCommand = a;
+            posteValue = argv[++i];
+        }
         else if (a == "--verifier-tutoriels") { checkTutorials = true; checkLot = "inscrits"; }
         else if (a == "--verifier-tutoriel" && i + 1 < argc) { checkTutorials = true; checkLot = argv[++i]; }
         else if (a == "--verifier-sujets") { checkTutorials = true; checkLot = "sujets"; }
@@ -290,6 +299,73 @@ int main(int argc, char** argv) {
     if (version) {
         attachParentConsole();
         std::printf("%s %s\n", core::productName().c_str(), XPG_ANALYZER_VERSION);
+        std::fflush(stdout);
+        return 0;
+    }
+
+    // ---- 1.32.0 : LES REGLAGES DE CE POSTE, SANS FENETRE -------------------------------------------------------
+    //  Un poste d'exploitation n'a pas l'editeur (Configuration > Poste d'exploitation > Ce PC) : ces commandes reglent
+    //  le compte Windows qui les lance (celui de l'operateur), IHM Studio et le poste fermes (sinon ils reecrivent leurs
+    //  reglages en quittant) :
+    //    --dossiers-scripts                       la liste des dossiers autorises aux scripts de l'IHM
+    //    --autoriser-dossier-scripts <dossier>    en ajoute un (un chemin complet, un partage \\serveur\partage accepte)
+    //    --retirer-dossier-scripts <dossier>      en retire un
+    //    --acces-web-sur-ce-poste oui|non         l'acces web de l'IHM permis sur ce poste
+    //  Codes : 0 fait, 1 refuse (la raison est ecrite), 2 pas IHM Studio.
+    if (!posteCommand.empty()) {
+        attachParentConsole();
+        if (!core::hasIhm()) {
+            std::fprintf(stderr, "%s : ce r\xC3\xA9glage est celui d'IHM Studio\n", posteCommand.c_str());
+            return 2;
+        }
+        app::Settings st;
+        (void)st.load(app::Settings::defaultPath());
+        auto list = st.getList(app::poste::kHmiScriptFolders);
+        auto same = [](const std::string& x, const std::string& y) {   // Windows : sans tenir compte de la casse
+            auto key = [](const std::string& v) {
+                std::string k = std::filesystem::path(v).lexically_normal().generic_string();
+                for (auto& c : k) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                while (k.size() > 3 && k.back() == '/') k.pop_back();
+                return k;
+            };
+            return key(x) == key(y);
+        };
+        if (posteCommand == "--acces-web-sur-ce-poste") {
+            if (posteValue != "oui" && posteValue != "non") {
+                std::fprintf(stderr, "--acces-web-sur-ce-poste : oui ou non\n");
+                return 1;
+            }
+            st.set(app::poste::kHmiWebAllowed, posteValue == "oui");
+        } else if (posteCommand != "--dossiers-scripts") {
+            std::string folder = posteValue;
+            while (folder.size() > 3 && (folder.back() == '\\' || folder.back() == '/')) folder.pop_back();
+            if (folder.empty() || !std::filesystem::path(folder).is_absolute()) {
+                std::fprintf(stderr, "%s : il faut un chemin complet (C:\\Donnees, \\\\serveur\\partage), pas \"%s\"\n", posteCommand.c_str(),
+                             folder.c_str());
+                return 1;
+            }
+            if (folder.find(';') != std::string::npos) {
+                std::fprintf(stderr, "%s : un chemin sans \";\" (il s\xC3\xA9pare la liste)\n", posteCommand.c_str());
+                return 1;
+            }
+            const auto at = std::find_if(list.begin(), list.end(), [&](const std::string& f) { return same(f, folder); });
+            if (posteCommand == "--autoriser-dossier-scripts") {
+                if (at == list.end()) list.push_back(folder);
+            } else if (at != list.end()) {
+                list.erase(at);
+            } else {
+                std::fprintf(stderr, "%s : \"%s\" n'est pas dans la liste\n", posteCommand.c_str(), folder.c_str());
+                return 1;
+            }
+            st.setList(app::poste::kHmiScriptFolders, list);
+        }
+        if (posteCommand != "--dossiers-scripts" && !st.save()) {
+            std::fprintf(stderr, "%s : les r\xC3\xA9glages ne s'\xC3\xA9" "crivent pas (%s)\n", posteCommand.c_str(), st.path().c_str());
+            return 1;
+        }
+        std::printf("Dossiers autoris\xC3\xA9s aux scripts de l'IHM sur ce poste (%s) :%s\n", st.path().c_str(), list.empty() ? " aucun" : "");
+        for (const auto& f : list) std::printf("  %s\n", f.c_str());
+        std::printf("Acc\xC3\xA8s web de l'IHM permis sur ce poste : %s\n", st.getBool(app::poste::kHmiWebAllowed, false) ? "oui" : "non");
         std::fflush(stdout);
         return 0;
     }

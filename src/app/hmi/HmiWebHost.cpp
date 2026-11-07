@@ -92,7 +92,8 @@ void WebHost::tick(const hmi::Project* project) {
     const bool refusedHere = wanted.enabled && !allowedHere_;
     if (refusedHere) {
         error_ = "d\xC3\xA9sactiv\xC3\xA9 sur ce poste - le projet demande l'acc\xC3\xA8s web, mais un projet seul n'ouvre pas de serveur : "
-                 "pour l'autoriser sur ce PC, coche R\xC3\xA9glages > " + std::string(kSettingLabel);
+                 "pour l'autoriser sur ce PC, coche \xC2\xAB " + std::string(kSettingLabel) + " \xC2\xBB ("
+                 + std::string(hmi::web::kThisPcWhere) + ")";
         if (!refusedSaid_) events_.push_back("Acc\xC3\xA8s web non d\xC3\xA9marr\xC3\xA9 : " + error_);
         refusedSaid_ = true;
     } else {
