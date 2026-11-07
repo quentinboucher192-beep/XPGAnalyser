@@ -1433,7 +1433,7 @@ public:
     }
     [[nodiscard]] std::string blocker() const override {
         if (!w_.st().signedOk && w_.needsJoinConfirm() && !w_.st().joinConfirmed)
-            return "Coche d'abord \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 avec mon client \xC2\xBB : une demande d'ajout \xC3\xA0 la licence n'est pas une preuve.";
+            return "Coche d'abord \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 avec mon client \xC2\xBB avant de signer.";
         return {};
     }
     [[nodiscard]] std::string heading() const override { return w_.st().signedOk ? "Licence sign\xC3\xA9" "e" : "Signer"; }
@@ -1487,6 +1487,10 @@ protected:
         show(confirm_, ask);
         joinLines_.clear();
         if (ask) {
+            // Sous le texte de l'etape (sa hauteur, comme onPaint la dessine).
+            const gfx::FontId f{16};
+            const float head = wrappedHeight(headerText(), f, r.w, 3) + 6.f + lineStep(f) * (w_.ws().key().test ? 2.f : 1.f) + 8.f;
+            top = std::max(top, head);
             joinY_ = r.y + top;
             float h = 0.f;
             for (const auto& t : w_.joinChecks()) {
@@ -1505,16 +1509,8 @@ protected:
         const auto& c = ctx.theme.color;
         const auto b = bounds();
         const auto& k = w_.ws().key();
-        const std::string id = trim(s.licenseId);
         float y = b.y;
-        if (w_.onlineMode())
-            y += drawWrapped(r, b.x, y, b.w, "Signer et publier : la licence " + id + " de " + trim(s.customer) + " est sign\xC3\xA9" "e, rang\xC3\xA9" "e dans l'archive, "
-                                                "puis publi\xC3\xA9" "e sur la passerelle pour chacun de ses PC ; chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul. Aucun fichier \xC3\xA0 envoyer.",
-                             ctx.theme.font.ui, c.text, 3);
-        else
-            y += drawWrapped(r, b.x, y, b.w, "Signer et enregistrer\xE2\x80\xA6 : choisis o\xC3\xB9 \xC3\xA9" "crire " + id + ".xpglic, le fichier \xC3\xA0 envoyer au client "
-                                                + trim(s.customer) + ". La licence est ensuite rang\xC3\xA9" "e dans l'archive et chaque PC not\xC3\xA9 dans le registre des activations.",
-                             ctx.theme.font.ui, c.text, 3);
+        y += drawWrapped(r, b.x, y, b.w, headerText(), ctx.theme.font.ui, c.text, 3);
         y += 6.f;
         r.drawText({b.x, y}, fit(r, "Cl\xC3\xA9 de signature : " + k.name + " (" + k.fingerprint + ")", ctx.theme.font.ui, b.w), ctx.theme.font.ui, c.textMuted);
         y += lineStep(ctx.theme.font.ui);
@@ -1526,6 +1522,16 @@ protected:
     }
 
 private:
+    [[nodiscard]] std::string headerText() const {
+        const auto& s = w_.st();
+        const std::string id = trim(s.licenseId);
+        if (w_.onlineMode())
+            return "Signer et publier : la licence " + id + " de " + trim(s.customer) + " est sign\xC3\xA9" "e, rang\xC3\xA9" "e dans l'archive, "
+                   "puis publi\xC3\xA9" "e sur la passerelle pour chacun de ses PC ; chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul. Aucun fichier \xC3\xA0 envoyer.";
+        return "Signer et enregistrer\xE2\x80\xA6 : choisis o\xC3\xB9 \xC3\xA9" "crire " + id + ".xpglic, le fichier \xC3\xA0 envoyer au client " + trim(s.customer) +
+               ". La licence est ensuite rang\xC3\xA9" "e dans l'archive et chaque PC not\xC3\xA9 dans le registre des activations.";
+    }
+
     ui::ListView*            result_{nullptr};
     ui::Checkbox*            confirm_{nullptr};
     std::shared_ptr<Lines>   model_;

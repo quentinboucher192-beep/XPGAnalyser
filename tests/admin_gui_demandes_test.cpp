@@ -12,6 +12,11 @@
 //  ajout de PC), Refuser... (la raison demandee), Voir sur GitHub, un travail
 //  en cours (refuse), une revocation publiee (publishToGateway), le kit des
 //  Studios refuse avec une cle d'essai.
+//  1.34.0 (relecture) : une demande d'ajout a une licence existante est
+//  marquee << a verifier >> (la table, la page, l'assistant) et l'assistant
+//  exige la case << J'ai verifie avec mon client >> avant de signer ; aucun
+//  identifiant de licence en clair ; la liste de revocation scellee pour le PC
+//  revoque (jamais publique).
 // =============================================================================
 #include "admin_gui_harness.hpp"
 #include "fake_passerelle.hpp"
@@ -117,6 +122,22 @@ bool statusOf(fakegh::FakePasserelle& fake, const std::string& device, gw::Devic
     if (it == fake.files.end()) return false;
     std::vector<lic::SignedBlock> blocks;
     return lic::readBlocks(it->second, blocks, nullptr) && blocks.size() == 1 && gw::parseDeviceStatus(blocks[0].document, out, nullptr);
+}
+
+// Le contenu d'un etat, ouvert par le PC (sa cle).
+bool contentOf(const Pc& pc, const gw::DeviceStatus& s, gw::StatusContent& out) {
+    std::string plain, why;
+    return pc.store && pc.store->deviceOpenSeal(s.sealed, plain, &why) && gw::parseStatusContent(plain, out, &why);
+}
+
+// L'identifiant de la licence d'un fichier .xpglic.
+std::string licenceIdOf(const std::string& text) {
+    std::vector<lic::SignedBlock> blocks;
+    lic::License l;
+    if (!lic::readBlocks(text, blocks, nullptr)) return {};
+    for (const auto& b : blocks)
+        if (b.kind == lic::DocKind::License && lic::parseLicense(b.document, l, nullptr)) return l.licenseId;
+    return {};
 }
 
 void startBusy(HostRig& rig) {
@@ -247,6 +268,15 @@ int main(int argc, char** argv) {
         check(has(t, "Client d'essai Gamma") && has(t, "Client d'essai Beta") && has(t, "Poste essai A") && has(t, "API Studio 1.34.0"), "client, PC, logiciel");
         auto* table = find<ui::TableView>(*page, "demandes.table");
         check(table && rowOf(*table, 4, shared + " (ajouter ce PC)") >= 0 && rowOf(*table, 4, "nouvelle") >= 0, "la licence demandee (une partagee le dit)");
+        check(table && rowOf(*table, 4, shared + " (ajouter ce PC) \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier") >= 0 && rowOf(*table, 5, "\xC3\xA0 v\xC3\xA9rifier") >= 0 &&
+                  rowOf(*table, 5, "\xC3\xA0 v\xC3\xA9rifier") == rowOf(*table, 1, "Client d'essai Beta"),
+              "la demande d'ajout a une licence existante : << a verifier >> (licence et etat)");
+        check(selectRow(*page, 1, "Client d'essai Beta"), "(la demande de B choisie)");
+        const std::string tb = paintPage(*page);
+        check(has(tb, "\xC3\x80 v\xC3\xA9rifier : ajout \xC3\xA0 la licence " + shared) && has(tb, "dit \xC3\xAAtre \xC2\xAB Client d'essai Beta \xC2\xBB") &&
+                  has(tb, "confirme avec ton client"),
+              "choisie : la page le dit en entier");
+        check(selectRow(*page, 1, "Client d'essai Gamma") && !has(paintPage(*page), "\xC3\x80 v\xC3\xA9rifier : ajout"), "une demande de licence neuve : rien a verifier");
         check(has(t, "En attente") && has(t, "Message d'essai de A"), "l'etat, le message");
         check(has(t, "relev\xC3\xA9" "es le " + gui::dateTimeFr(g_now)) && has(t, "2 en attente"), "la date du releve, le compte");
         auto dash = gui::makeDashboardPage(h);
@@ -270,6 +300,7 @@ int main(int argc, char** argv) {
         check(walkToSign(d, true), "jusqu'a l'etape 6");
         auto* sign = find<ui::Button>(w, "wizard.signer");
         t = paintDialog(d);
+        check(!shown(w, "wizard.confirmer-ajout") && !has(t, "\xC3\x80 v\xC3\xA9rifier"), "une licence neuve : pas de case a cocher");
         check(sign && sign->text() == "Signer et publier" && has(t, "Aucun fichier \xC3\xA0 envoyer"), "<< Signer et publier >> : rien a envoyer");
         check(find<ui::InputText>(w, "wizard.client") && find<ui::InputText>(w, "wizard.client")->text() == "Client d'essai Gamma", "le client prerempli");
         const std::size_t asked = rig.asked.size();
@@ -299,13 +330,30 @@ int main(int argc, char** argv) {
         ui::Widget& w = *d.widgetRoot();
         std::string t = paintDialog(d);
         check(has(t, "Ajouter des PC \xC3\xA0 la licence " + shared) && rows(w, "wizard.pc.existants") == 1, "en ajout de PC a " + shared);
+        auto* reqs = find<ui::TableView>(w, "wizard.demandes");
+        check(reqs && rowOf(*reqs, 1, "\xC3\xA0 v\xC3\xA9rifier") == 0, "l'assistant : la demande de B << a verifier >>");
         check(walkToSign(d, false), "jusqu'a l'etape 6");
+        t = paintDialog(d);
+        check(shown(w, "wizard.confirmer-ajout") && has(t, "\xC3\x80 v\xC3\xA9rifier : ajout \xC3\xA0 la licence " + shared) &&
+                  has(t, "qui dit \xC3\xAAtre \xC2\xAB Client") && has(t, "confirme avec ton client") && has(t, "J'ai v\xC3\xA9rifi\xC3\xA9 avec mon client"),
+              "l'etape << Signer >> : l'avertissement et la case a cocher");
         g_now += 60;
+        const std::size_t emissions = fx.ws->licence(shared)->licence.devices.size();
+        check(click(w, "wizard.signer"), "Signer et publier (sans cocher)");
+        t = paintDialog(d);
+        check(fx.ws->licence(shared)->licence.devices.size() == emissions && !fx.ws->hasGatewayJob() && has(t, "Coche d'abord"),
+              "pas cochee : rien n'est signe, et c'est dit");
+        auto* box = find<ui::Checkbox>(w, "wizard.confirmer-ajout");
+        if (box) box->setState(ui::Checkbox::State::Checked);
+        check(box && box->isChecked(), "la case cochee");
         check(click(w, "wizard.signer"), "Signer et publier");
         const gui::LicenceEntry* l = fx.ws->licence(shared);
         check(l && l->licence.devices.size() == 2, "deux PC sur la licence");
         gw::DeviceStatus s;
-        check(statusOf(fake, pcB.device, s) && s.state == gw::State::Accepted && s.licenseId == shared, "B << acceptee >>");
+        gw::StatusContent sc;
+        check(statusOf(fake, pcB.device, s) && s.state == gw::State::Accepted && s.licenseId.empty() && contentOf(pcB, s, sc) && licenceIdOf(sc.license) == shared,
+              "B << acceptee >> : la licence " + shared + " scellee pour lui, son identifiant pas en clair");
+        check(!fake.anyPublicContains(shared), "l'identifiant de la licence n'est nulle part en clair");
         int updated = 0;
         for (const auto& [path, content] : fake.files)
             if (path.rfind("postes/", 0) == 0 && has(content, "mise_a_jour")) ++updated;
@@ -364,7 +412,11 @@ int main(int argc, char** argv) {
         endBusy(rig);
         check(gui::publishToGateway(h) && rig.last() && rig.last()->ok, "puis elle part : " + (rig.last() ? rig.last()->text() : std::string()));
         gw::DeviceStatus s;
-        check(statusOf(fake, pcB.device, s) && s.state == gw::State::Revoked && fake.files.count(gw::kRevocationsPath), "B << revoquee >>, la liste publiee");
+        gw::StatusContent sc;
+        check(statusOf(fake, pcB.device, s) && s.state == gw::State::Revoked && !fake.files.count(gw::kRevocationsPath) && contentOf(pcB, s, sc) &&
+                  !sc.revocations.empty() && sc.revocations == readFile(fx.admin / "archive" / "revocations" / "revocations.xpgrev"),
+              "B << revoquee >>, la liste de revocation scellee pour lui (jamais publique)");
+        check(!fake.anyPublicContains("Fin de contrat"), "la raison n'est pas en clair");
         check(!gui::publishToGateway(h), "plus rien a publier");
     }
 

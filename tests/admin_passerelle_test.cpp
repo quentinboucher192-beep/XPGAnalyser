@@ -17,6 +17,16 @@
 //    cle ; deux demandes d'un meme PC ; revoquer ; retirer un PC ; hors ligne,
 //    jeton refuse, limite de GitHub ; le kit des Studios (une cle d'essai
 //    refusee) ; rien d'un client ni aucun jeton en clair dans le depot.
+//  1.34.0 (relecture de securite : les issues s'ecrivent par n'importe qui) :
+//    une ancienne demande remise dans une issue (rejouee : ignoree, l'etat
+//    accepte du PC intact ; pas plus recente que la derniere ; le dossier perdu :
+//    l'etat publie garde) ; une issue modifiee apres coup (ignoree, l'etat garde) ;
+//    le releve incremental (since) ; une avalanche de 30 demandes (20 << recue >>
+//    par releve, le reste au suivant, c'est dit ; l'etat publie pas relu sans
+//    changement) ; une liste d'issues coupee (dite) ; une demande d'ajout a une
+//    licence marquee << a verifier >> ; aucun identifiant de licence en clair ; la
+//    liste de revocation scellee pour le PC revoque (jamais publique ; l'ancienne
+//    copie publique effacee) ; les numeros qui montent apres un fichier efface.
 // =============================================================================
 #include "admin_test_fixture.hpp"
 #include "fake_passerelle.hpp"
@@ -26,6 +36,7 @@
 #include "../src/licensing/Gateway.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <optional>
 #include <string>
@@ -77,19 +88,19 @@ std::unique_ptr<Pc> makePc(Fixture& fx, const std::string& name) {
     return pc;
 }
 
-// Le Studio : la demande signee, scellee pour l'editeur, dans une issue ouverte avec le jeton des demandes.
-bool ask(Pc& pc, fakegh::FakePasserelle& fake, const lic::SigningKey& editor, const std::string& customer, const std::string& licenseId = {},
-         const std::string& message = "Pour l'atelier d'essai") {
+// Le corps d'une issue de demande (la demande signee par le PC, scellee pour l'editeur), sans l'envoyer.
+std::string requestBody(Pc& pc, const lic::SigningKey& editor, const std::string& customer, const std::string& licenseId = {},
+                        const std::string& message = "Pour l'atelier d'essai") {
     std::string why;
     lic::ActivationRequest parsed;
     if (!pc.store->activationRequestText("Poste essai " + pc.name, licenseId, "IHM Studio 1.34.0 (essai)", pc.request, &parsed, &why)) {
         std::printf("  (demande : %s)\n", why.c_str());
-        return false;
+        return {};
     }
     pc.nonce = parsed.nonce;
     pc.keyHex = parsed.deviceKey;
     deploy::crypto::Bytes raw;
-    if (!deploy::crypto::unhex(pc.keyHex, raw, 32)) return false;
+    if (!deploy::crypto::unhex(pc.keyHex, raw, 32)) return {};
     std::copy(raw.begin(), raw.end(), pc.pub.begin());
     pc.device = gw::deviceId(pc.pub);
     gw::OnlineRequest q;
@@ -97,13 +108,47 @@ bool ask(Pc& pc, fakegh::FakePasserelle& fake, const lic::SigningKey& editor, co
     q.customer = customer;
     q.contact = "essai-" + pc.name + "@exemple.invalid";
     q.message = message;
-    const std::string body = gw::issueBody(pc.device, editor.keyId(), gw::sealFor(editor.publicKey(), gw::writeOnlineRequest(q)));
+    return gw::issueBody(pc.device, editor.keyId(), gw::sealFor(editor.publicKey(), gw::writeOnlineRequest(q)));
+}
+
+// Une issue ouverte avec le jeton des demandes (un Studio, ou n'importe qui) ; rend son numero.
+int postIssue(fakegh::FakePasserelle& fake, const std::string& device, const std::string& body) {
     json::Value v = json::Value::object();
-    v.set("title", gw::issueTitle(pc.device));
+    v.set("title", gw::issueTitle(device));
     v.set("body", body);
-    pc.issue = httpPost(fake, "/issues", v, fake.requestToken);
+    return httpPost(fake, "/issues", v, fake.requestToken);
+}
+
+// Le Studio : la demande signee, scellee pour l'editeur, dans une issue ouverte avec le jeton des demandes.
+bool ask(Pc& pc, fakegh::FakePasserelle& fake, const lic::SigningKey& editor, const std::string& customer, const std::string& licenseId = {},
+         const std::string& message = "Pour l'atelier d'essai") {
+    const std::string body = requestBody(pc, editor, customer, licenseId, message);
+    if (body.empty()) return false;
+    pc.issue = postIssue(fake, pc.device, body);
     return pc.issue > 0;
 }
+
+// Modifier le corps d'une issue (PATCH, le jeton des demandes : ce que peut faire n'importe qui).
+bool editIssue(fakegh::FakePasserelle& fake, int issue, const std::string& body) {
+    app::ai::HttpRequest req;
+    req.method = "PATCH";
+    req.url = fake.api + "/repos/" + fake.repo + "/issues/" + std::to_string(issue);
+    json::Value v = json::Value::object();
+    v.set("body", body);
+    req.body = json::write(v, false);
+    req.headers = {{"Authorization", "Bearer " + fake.requestToken}};
+    app::ai::HttpSink sink;
+    return app::ai::makeHttpClient()->perform(req, sink).status == 200;
+}
+
+// Les requetes passees depuis `from` qui commencent par `prefix` et contiennent `part`.
+int countRequests(const fakegh::FakePasserelle& fake, std::size_t from, const std::string& prefix, const std::string& part) {
+    int n = 0;
+    for (std::size_t i = from; i < fake.requests.size(); ++i)
+        if (fake.requests[i].rfind(prefix, 0) == 0 && has(fake.requests[i], part)) ++n;
+    return n;
+}
+
 
 // Une annulation signee par `signer` (le PC lui-meme, ou un autre : une fausse) pour la demande de `pc`.
 bool cancel(const Pc& pc, const Pc& signer, fakegh::FakePasserelle& fake) {
@@ -198,6 +243,10 @@ int main(int argc, char** argv) {
         opt.now = g_now;
         fx.ws->reload();
     };
+    // XPG_DUMP=1 : montrer ce que dit un resultat (pour relire les textes).
+    const auto dump = [](const pas::Result& r) {
+        if (std::getenv("XPG_DUMP")) std::printf("%s\n", r.text().c_str());
+    };
 
     // ------------------------------------------------------------------------------------------------
     std::printf("-- la configuration et le jeton des demandes\n");
@@ -253,15 +302,27 @@ int main(int argc, char** argv) {
         check(lic::readBlocks(fake.files[gw::kConfigPath], blocks, &why) && blocks.size() == 1 && blocks[0].kind == lic::DocKind::Gateway &&
                   lic::verifyBlock(blocks[0], editor.publicKey()) && gw::parseConfig(blocks[0].document, c, &why),
               "passerelle.xpgpas : un bloc << passerelle >> signe par l'editeur (" + why + ")");
-        check(c.number == 1 && c.repo == fake.repo && c.requestToken == fake.requestToken, "numero 1, le depot, le jeton des demandes (relu une fois demasque)");
+        check(c.number == static_cast<std::uint64_t>(g_now) && c.repo == fake.repo && c.requestToken == fake.requestToken,
+              "numero : l'heure (jamais 1 : il monte encore apres un depot recree), le depot, le jeton des demandes (relu une fois demasque)");
+        const std::uint64_t first = c.number;
         check(!fake.anyPublicContains(fake.requestToken) && !fake.anyPublicContains("DEMANDES_000"), "le jeton des demandes n'est pas en clair dans le depot");
         check(fake.files.count(gw::kRegistryPath) && lic::readBlocks(fake.files[gw::kRegistryPath], blocks, &why) && blocks[0].kind == lic::DocKind::Registry,
               "le registre de l'archive publie aussi");
         check(!fake.files.count(gw::kRevocationsPath), "pas de liste de revocation : rien a publier");
         tick();
         r = pas::publishConfig(folder, editor, opt);
-        check(r.ok && lic::readBlocks(fake.files[gw::kConfigPath], blocks, &why) && gw::parseConfig(blocks[0].document, c, &why) && c.number == 2,
-              "republiee : numero 2 (" + r.text() + ")");
+        check(r.ok && lic::readBlocks(fake.files[gw::kConfigPath], blocks, &why) && gw::parseConfig(blocks[0].document, c, &why) && c.number > first,
+              "republiee : un numero plus grand (" + r.text() + ")");
+        r = pas::publishConfig(folder, editor, opt);
+        const std::uint64_t second = c.number;
+        check(r.ok && lic::readBlocks(fake.files[gw::kConfigPath], blocks, &why) && gw::parseConfig(blocks[0].document, c, &why) && c.number == second + 1,
+              "republiee dans la meme seconde : numero + 1");
+        const std::uint64_t third = c.number;
+        fake.files.erase(gw::kConfigPath);
+        tick();
+        r = pas::publishConfig(folder, editor, opt);
+        check(r.ok && lic::readBlocks(fake.files[gw::kConfigPath], blocks, &why) && gw::parseConfig(blocks[0].document, c, &why) && c.number > third,
+              "le fichier efface du depot puis republie : le numero monte encore (" + std::to_string(c.number) + " > " + std::to_string(third) + ")");
         check(has(r.text(), "d\xC3\xA9j\xC3\xA0 \xC3\xA0 jour"), "le registre deja a jour n'est pas reecrit");
         std::string token;
         check(pas::eraseRequestToken(folder, &why) && !pas::hasRequestToken(folder), "le jeton des demandes retire");
@@ -280,6 +341,7 @@ int main(int argc, char** argv) {
         check(!fake.anyPublicContains("Client d'essai") && !fake.anyPublicContains("essai-A@") && !fake.anyPublicContains("atelier d'essai"),
               "rien du client en clair dans l'issue");
         tick();
+        const std::size_t first = fake.requests.size();
         auto r = pas::fetchRequests(folder, editor, opt);
         check(r.ok && r.newRequests == 1 && r.pending == 1, "relevee : une nouvelle, en attente (" + r.text() + ")");
         const auto all = pas::listRequests(folder);
@@ -291,12 +353,17 @@ int main(int argc, char** argv) {
         check(e && fs::exists(PP(e->sidecarPath)) && pas::isOnlineRequestPath(folder, e->requestPath), "son fichier a cote (.json), dans demandes-en-ligne");
         check(e && fx.ws->readRequest(e->requestPath).ok, "l'assistant la lit (signee par le PC)");
         gw::DeviceStatus s;
-        check(statusOf(fake, editor, pcA->device, s) && s.state == gw::State::Received && s.requestNonce == pcA->nonce && s.number == 1,
-              "<< recue >> publiee pour ce poste (signee, n. 1)");
+        check(statusOf(fake, editor, pcA->device, s) && s.state == gw::State::Received && s.requestNonce == pcA->nonce && s.number == static_cast<std::uint64_t>(g_now),
+              "<< recue >> publiee pour ce poste (signee, numero : l'heure)");
+        check(countRequests(fake, first, "GET ", "/issues?state=all") == 1 && countRequests(fake, first, "GET ", "since=") == 0, "le premier releve lit tout (sans since)");
         const int writes = statusWrites(fake, pcA->device);
         tick();
+        const std::size_t mark = fake.requests.size();
         r = pas::fetchRequests(folder, editor, opt);
         check(r.ok && r.newRequests == 0 && r.pending == 1 && statusWrites(fake, pcA->device) == writes, "relevee de nouveau : << recue >> pas republiee");
+        check(countRequests(fake, mark, "GET ", "/issues?state=all") == 1 && countRequests(fake, mark, "GET ", "since=") == 1,
+              "le releve suivant : incremental (since)");
+        check(countRequests(fake, mark, "GET ", "/contents/postes/") == 0, "rien de change : l'etat publie du PC n'est pas relu");
         const auto st = pas::readFetchState(folder);
         check(st.fetchedAt == g_now && st.pending == 1 && st.total == 1, "le releve : sa date, ses comptes");
     }
@@ -316,14 +383,17 @@ int main(int argc, char** argv) {
         const auto signedR = fx.ws->signLicence(d, U(out));
         check(signedR.ok, "signee : " + signedR.text());
         licA = readFile(out);
+        gw::DeviceStatus before, s;
+        check(statusOf(fake, editor, pcA->device, before), "(l'etat << recue >> de A)");
         tick();
         const auto r = pas::publishLicence(folder, editor, licA, opt);
         check(r.ok && has(r.message, "1 demande accept"), "publiee : " + r.text());
-        gw::DeviceStatus s;
-        check(statusOf(fake, editor, pcA->device, s) && s.state == gw::State::Accepted && s.requestNonce == pcA->nonce && s.licenseId == idA && s.number == 2,
-              "<< acceptee >>, la demande, la licence, n. 2");
+        check(statusOf(fake, editor, pcA->device, s) && s.state == gw::State::Accepted && s.requestNonce == pcA->nonce && s.licenseId.empty() &&
+                  s.number > before.number,
+              "<< acceptee >>, la demande, un numero plus grand ; l'identifiant de la licence n'est pas en clair");
         gw::StatusContent content;
         check(contentOf(*pcA, s, content) && content.license == licA, "le PC A ouvre son contenu : c'est la licence signee");
+        check(!fake.anyPublicContains(idA), "l'identifiant de la licence n'est nulle part en clair dans le depot");
         const auto imported = pcA->store->importBytes(content.license);
         check(imported.licenseInstalled, "le PC A l'installe (" + imported.why + ")");
         check(!fake.anyPublicContains("Client d'essai") && !fake.anyPublicContains("Poste essai"),
@@ -352,6 +422,13 @@ int main(int argc, char** argv) {
         auto r = pas::fetchRequests(folder, editor, opt);
         auto e = entryOf(pas::listRequests(folder), pcB->issue);
         check(r.ok && e && e->waiting() && e->licenseId == idA, "relevee : B demande " + idA);
+        const std::string warn = e ? pas::joinWarning(*e) : std::string();
+        check(e && e->joinRequest() && has(warn, "\xC3\x80 v\xC3\xA9rifier : ajout \xC3\xA0 la licence " + idA) &&
+                  has(warn, "quelqu'un qui dit \xC3\xAAtre \xC2\xAB Client d'essai Alpha \xC2\xBB") && has(warn, "confirme avec ton client avant d'accepter"),
+              "une demande d'ajout a une licence existante : a verifier (" + warn + ")");
+        check(has(r.text(), "\xC3\x80 v\xC3\xA9rifier : ajout"), "le releve le dit aussi");
+        auto a = entryOf(pas::listRequests(folder), pcA->issue);
+        check(a && !a->joinRequest() && pas::joinWarning(*a).empty(), "une demande de licence neuve : rien a verifier");
         gui::LicenceDraft d;
         d.extend = true;
         d.licenseId = idA;
@@ -376,6 +453,93 @@ int main(int argc, char** argv) {
         check(pcB->store->importBytes(cb.license).licenseInstalled && pcA->store->importBytes(ca.license).licenseInstalled, "chacun l'installe");
         const auto* issue = fake.findIssue(pcB->issue);
         check(issue && issue->state == "closed", "l'issue de B fermee");
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- une ancienne demande remise dans une issue (rejouee) : ignoree, l'etat du PC intact\n");
+    {
+        // B est << acceptee >> (sa licence l'attend peut-etre encore) : n'importe qui peut relire le corps de son issue
+        // fermee et le remettre dans une nouvelle issue.
+        const std::string oldBody = fake.findIssue(pcB->issue)->body;
+        const std::string statusB = fake.files[gw::statusPath(pcB->device)];
+        const int writesB = statusWrites(fake, pcB->device);
+        const int replay = postIssue(fake, pcB->device, oldBody);
+        check(replay > pcB->issue, "la demande d'origine de B dans une nouvelle issue (#" + std::to_string(replay) + ")");
+        tick();
+        auto r = pas::fetchRequests(folder, editor, opt);
+        dump(r);
+        auto e = entryOf(pas::listRequests(folder), replay);
+        check(r.ok && r.ignored == 1 && r.newRequests == 0 && e && e->state == pas::RequestState::Ignored && !e->problems.empty() &&
+                  has(e->problems.front(), "d\xC3\xA9j\xC3\xA0 vue") && has(e->problems.front(), "#" + std::to_string(pcB->issue)),
+              "la meme demande dans une autre issue : ignoree, et pourquoi (" + r.text() + ")");
+        check(fake.files[gw::statusPath(pcB->device)] == statusB && statusWrites(fake, pcB->device) == writesB, "l'etat << acceptee >> de B : intact");
+        check(e && !e->waiting() && has(r.message, "rejou\xC3\xA9" "e, ignor\xC3\xA9" "e") && e->requestPath.empty(), "pas en attente, pas de fichier ; le releve le dit");
+        check(pas::requestStateLabel(pas::RequestState::Ignored) == "Ignor\xC3\xA9" "e (rejou\xC3\xA9" "e)", "son etat : << Ignoree (rejouee) >>");
+
+        // ... dans une issue existante (son corps remplace) : le corps garde a la premiere lecture fait foi.
+        auto pcJ = makePc(fx, "J");
+        check(ask(*pcJ, fake, editor, "Client d'essai Iota"), "le PC J demande");
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        auto j = entryOf(pas::listRequests(folder), pcJ->issue);
+        check(r.ok && j && j->state == pas::RequestState::Received && !j->bodyHash.empty(), "J : << recue >> (l'empreinte du corps gardee)");
+        check(editIssue(fake, pcJ->issue, oldBody), "le corps de l'issue de J remplace par l'ancienne demande de B");
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        j = entryOf(pas::listRequests(folder), pcJ->issue);
+        check(r.ok && j && j->state == pas::RequestState::Received && j->device == pcJ->device && j->nonce == pcJ->nonce && j->customer == "Client d'essai Iota" &&
+                  !j->problems.empty() && has(j->problems.back(), "modifi\xC3\xA9" "e apr\xC3\xA8s coup : ignor\xC3\xA9" "e"),
+              "modifiee apres coup : ignoree ; la demande de J garde son contenu et son etat");
+        check(fake.files[gw::statusPath(pcB->device)] == statusB, "B toujours intact");
+        // Une demande ACCEPTEE dont le corps devient illisible : elle reste acceptee.
+        check(editIssue(fake, pcB->issue, "plus une demande"), "le corps de l'issue acceptee de B remplace par du texte");
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        auto b = entryOf(pas::listRequests(folder), pcB->issue);
+        check(r.ok && b && b->state == pas::RequestState::Accepted && b->nonce == pcB->nonce && has(b->problems.back(), "apr\xC3\xA8s coup"),
+              "acceptee, modifiee apres coup : toujours acceptee (jamais << illisible >>)");
+
+        // ... une demande plus ANCIENNE du meme PC, jamais vue : sa date signee n'est pas plus recente.
+        auto pcK = makePc(fx, "K");
+        const std::string older = requestBody(*pcK, editor, "Client d'essai Kappa", {}, "la vieille");
+        tick();
+        check(ask(*pcK, fake, editor, "Client d'essai Kappa", {}, "la recente"), "K demande (une demande plus ancienne de K reste quelque part)");
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        gw::DeviceStatus sk0, sk1;
+        check(r.ok && statusOf(fake, editor, pcK->device, sk0) && sk0.state == gw::State::Received, "K : << recue >>");
+        const int oldIssue = postIssue(fake, pcK->device, older);
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        auto ko = entryOf(pas::listRequests(folder), oldIssue);
+        auto kn = entryOf(pas::listRequests(folder), pcK->issue);
+        check(oldIssue > pcK->issue && ko && ko->state == pas::RequestState::Ignored && !ko->problems.empty() && has(ko->problems.front(), "pas plus r\xC3\xA9" "cente"),
+              "la plus ancienne, dans une issue de plus grand numero : ignoree (la date signee, pas le numero de l'issue)");
+        check(kn && kn->state == pas::RequestState::Received && kn->message == "la recente", "la recente reste la demande en attente de K");
+        check(statusOf(fake, editor, pcK->device, sk1) && sk1.number == sk0.number && sk1.requestNonce == kn->nonce, "l'etat de K : intact");
+        pas::Entry w;
+        std::string why;
+        check(pas::findWaiting(folder, pcK->device, w, &why) && w.issue == pcK->issue, "la demande en attente de K : la recente");
+
+        // ... le dossier des demandes perdu (ou un autre poste Admin) : rien a comparer ici, l'etat publie decide.
+        const auto ea = entryOf(pas::listRequests(folder), pcA->issue);
+        const std::string statusA = fake.files[gw::statusPath(pcA->device)];
+        std::error_code ec;
+        check(ea && fs::remove(PP(ea->sidecarPath), ec) && fs::remove(PP(pas::requestsFolder(folder)) / pas::kFetchFile, ec), "(la demande de A et le releve effaces de ce poste)");
+        tick();
+        std::size_t mark = fake.requests.size();
+        r = pas::fetchRequests(folder, editor, opt);
+        dump(r);
+        auto a2 = entryOf(pas::listRequests(folder), pcA->issue);
+        check(countRequests(fake, mark, "GET ", "since=") == 0, "le releve perdu : tout est relu");
+        check(r.ok && a2 && a2->waiting() && a2->receivedHeld && !a2->problems.empty() && has(a2->problems.back(), "porte une licence pour une autre demande"),
+              "l'ancienne demande de A revue : << recue >> retenue (A a une licence, << mise_a_jour >>), et pourquoi");
+        check(fake.files[gw::statusPath(pcA->device)] == statusA && countRequests(fake, mark, "PUT ", "/contents/postes/" + pcA->device) == 0, "l'etat de A : intact");
+        tick();
+        mark = fake.requests.size();
+        r = pas::fetchRequests(folder, editor, opt);
+        check(r.ok && countRequests(fake, mark, "PUT ", "/contents/postes/") == 0 && countRequests(fake, mark, "GET ", "/contents/postes/") == 0,
+              "retenue : pas reessayee a chaque releve");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -466,24 +630,74 @@ int main(int argc, char** argv) {
     }
 
     // ------------------------------------------------------------------------------------------------
-    std::printf("-- revoquer\n");
+    std::printf("-- revoquer : la liste scellee pour chaque PC revoque, jamais publique\n");
     {
         tick();
         const auto rv = fx.ws->revoke(idA, "", "Fin de contrat (essai)", false);
         check(rv.ok, "revoquee : " + rv.text());
         std::vector<std::string> keys;
         for (const auto& d : fx.ws->licence(idA)->licence.devices) keys.push_back(d.key);
+        // Une liste publique d'avant la relecture, encore dans le depot.
+        fake.files[gw::kRevocationsPath] = "liste publique d'avant la relecture (essai)";
+        fake.shas[gw::kRevocationsPath] = "sha-ancienne";
+        gw::DeviceStatus before;
+        check(statusOf(fake, editor, pcA->device, before), "(l'etat de A avant)");
         tick();
+        const std::size_t mark = fake.requests.size();
         const auto r = pas::publishRevocation(folder, editor, idA, keys, "Fin de contrat (essai)", opt);
+        dump(r);
         check(r.ok, "publiee : " + r.text());
-        check(fake.files.count(gw::kRevocationsPath) && fake.files[gw::kRevocationsPath] == readFile(fx.admin / "archive" / "revocations" / "revocations.xpgrev"),
-              "revocations.xpgrev : celle de l'archive");
+        check(!fake.files.count(gw::kRevocationsPath) && countRequests(fake, mark, "DELETE ", "/contents/revocations.xpgrev") == 1 && has(r.text(), "Effac\xC3\xA9" "e"),
+              "l'ancienne revocations.xpgrev publique : effacee du depot (et c'est dit)");
+        check(countRequests(fake, mark, "PUT ", "/contents/revocations.xpgrev") == 0, "la liste n'est pas republiee en clair");
+        const std::string archived = readFile(fx.admin / "archive" / "revocations" / "revocations.xpgrev");
         gw::DeviceStatus sa, sb;
-        gw::StatusContent ca;
-        check(statusOf(fake, editor, pcA->device, sa) && sa.state == gw::State::Revoked && sa.licenseId == idA && contentOf(*pcA, sa, ca) &&
+        gw::StatusContent ca, cb;
+        check(statusOf(fake, editor, pcA->device, sa) && sa.state == gw::State::Revoked && sa.licenseId.empty() && sa.number > before.number && contentOf(*pcA, sa, ca) &&
                   has(ca.message, "Fin de contrat"),
-              "A : << revoquee >>, la raison scellee");
-        check(statusOf(fake, editor, pcB->device, sb) && sb.state == gw::State::Revoked, "B : << revoquee >>");
+              "A : << revoquee >>, la raison scellee, aucun identifiant de licence en clair");
+        check(!archived.empty() && ca.revocations == archived, "A ouvre (avec sa cle) la liste de revocation scellee pour lui : celle de l'archive");
+        std::vector<lic::SignedBlock> blocks;
+        lic::RevocationList list;
+        bool names = false;
+        if (lic::readBlocks(ca.revocations, blocks, nullptr) && blocks.size() == 1 && blocks[0].kind == lic::DocKind::Revocations &&
+            lic::verifyBlock(blocks[0], editor.publicKey()) && lic::parseRevocations(blocks[0].document, list, nullptr))
+            for (const auto& x : list.revoked) names = names || (x.licenseId == idA && x.reason == "Fin de contrat (essai)");
+        check(names, "signee par l'editeur, elle revoque " + idA);
+        check(statusOf(fake, editor, pcB->device, sb) && sb.state == gw::State::Revoked && contentOf(*pcB, sb, cb) && cb.revocations == archived, "B : << revoquee >>, la liste aussi");
+        gw::StatusContent wrong;
+        check(!contentOf(*pcB, sa, wrong), "B n'ouvre pas celle de A");
+        check(!fake.anyPublicContains("Fin de contrat") && !fake.anyPublicContains(idA), "ni la raison ni la licence en clair dans le depot");
+        auto c1 = pas::publishConfig(folder, editor, opt);
+        auto c2 = pas::publishArchive(folder, editor, opt);
+        check(c1.ok && c2.ok && !fake.files.count(gw::kRevocationsPath), "publier la configuration, le registre : jamais la liste en clair (" + c2.text() + ")");
+        const auto none = pas::publishRevocation(folder, editor, idA, {}, "Essai", opt);
+        check(none.ok && none.published.empty() && has(none.message, "scell\xC3\xA9" "e avec la prochaine \xC3\xA9mission"), "aucun PC a prevenir : rien a publier, et c'est dit");
+
+        // La revocation retiree (l'application) : la licence repart a ses PC avec la liste qui ne la revoque plus.
+        fx.ws->reload();
+        (void)fx.ws->takeGatewayJob();
+        std::size_t index = 0;
+        while (index < fx.ws->revocations().revoked.size() && fx.ws->revocations().revoked[index].licenseId != idA) ++index;
+        tick();
+        const auto un = fx.ws->unrevoke(index);
+        auto job = fx.ws->takeGatewayJob();
+        check(un.ok && job && job->kind == gui::GatewayJob::Kind::Unrevoke, "revocation retiree : une publication attend (" + un.text() + ")");
+        const auto pr = job ? fx.ws->passerelleRun(*job) : gui::OpResult::fail("pas de travail");
+        check(pr.ok, "publiee : " + pr.text());
+        const std::string relisted = readFile(fx.admin / "archive" / "revocations" / "revocations.xpgrev");
+        gw::DeviceStatus sb2;
+        gw::StatusContent cb2;
+        lic::RevocationList list2;
+        bool stillNames = true;
+        if (statusOf(fake, editor, pcB->device, sb2) && contentOf(*pcB, sb2, cb2) && lic::readBlocks(cb2.revocations, blocks, nullptr) && blocks.size() == 1 &&
+            lic::parseRevocations(blocks[0].document, list2, nullptr)) {
+            stillNames = false;
+            for (const auto& x : list2.revoked) stillNames = stillNames || x.licenseId == idA;
+        }
+        check(sb2.state == gw::State::Updated && cb2.revocations == relisted && !stillNames && list2.number > list.number,
+              "B : << mise_a_jour >>, la nouvelle liste (qui ne revoque plus " + idA + ") scellee pour lui");
+        check(!fake.files.count(gw::kRevocationsPath), "toujours aucune liste publique");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -515,8 +729,18 @@ int main(int argc, char** argv) {
             return gw::deviceId(k);
         };
         gw::DeviceStatus sk, sr;
-        check(statusOf(fake, editor, idOf(kept), sk) && sk.state == gw::State::Updated && sk.number == 2, "le PC garde : << mise_a_jour >> (n. 2)");
-        check(statusOf(fake, editor, idOf(removed), sr) && sr.state == gw::State::Removed && sr.licenseId == id, "le PC retire : << retiree >>");
+        check(statusOf(fake, editor, idOf(kept), sk) && sk.state == gw::State::Updated && sk.licenseId.empty(), "le PC garde : << mise_a_jour >>");
+        check(statusOf(fake, editor, idOf(removed), sr) && sr.state == gw::State::Removed && sr.licenseId.empty() && !sr.sealed.empty(),
+              "le PC retire : << retiree >> (le message scelle, pas d'identifiant en clair)");
+        check(!fake.anyPublicContains(id), "l'identifiant " + id + " n'est pas en clair dans le depot");
+        // Le fichier d'etat efface du depot (nettoye, recree) : le numero suivant monte encore.
+        const std::uint64_t was = sk.number;
+        fake.files.erase(gw::statusPath(idOf(kept)));
+        tick();
+        r = pas::publishLicence(folder, editor, readFile(out), opt);
+        gw::DeviceStatus again;
+        check(r.ok && statusOf(fake, editor, idOf(kept), again) && again.number > was,
+              "l'etat efface puis republie : numero " + std::to_string(again.number) + " > " + std::to_string(was) + " (jamais 1)");
         check(!pas::publishLicence(folder, editor, "pas une licence", opt).ok, "pas une licence : refuse");
     }
 
@@ -556,10 +780,98 @@ int main(int argc, char** argv) {
     }
 
     // ------------------------------------------------------------------------------------------------
+    std::printf("-- une avalanche de demandes : au plus 20 << recue >> par releve, le reste au suivant\n");
+    {
+        std::vector<std::unique_ptr<Pc>> flood;
+        for (int i = 0; i < 30; ++i) {
+            flood.push_back(makePc(fx, "flot" + std::to_string(i)));
+            if (!ask(*flood.back(), fake, editor, "Client d'essai Flot")) break;
+        }
+        check(flood.size() == 30 && flood.back()->issue > 0, "30 PC demandent en meme temps");
+        tick();
+        std::size_t mark = fake.requests.size();
+        auto r = pas::fetchRequests(folder, editor, opt);
+        dump(r);
+        check(r.ok && r.newRequests == 30 && countRequests(fake, mark, "PUT ", "/contents/postes/") == pas::kMaxAutoPublishPerFetch && r.deferred == 10,
+              "relevees : 30 nouvelles, 20 << recue >> publiees, 10 remises (" + r.message + ")");
+        check(has(r.message, "prochain relev\xC3\xA9") && has(r.text(), "au plus 20") && pas::readFetchState(folder).deferred == 10, "le plafond est dit, et note");
+        int received = 0;
+        for (const auto& pc : flood) {
+            gw::DeviceStatus st;
+            if (statusOf(fake, editor, pc->device, st) && st.state == gw::State::Received) ++received;
+        }
+        check(received == 20, "20 PC voient deja << recue >>");
+        tick();
+        mark = fake.requests.size();
+        r = pas::fetchRequests(folder, editor, opt);
+        check(r.ok && countRequests(fake, mark, "PUT ", "/contents/postes/") == 10 && r.deferred == 0 && !has(r.message, "prochain"),
+              "le releve suivant : les 10 autres (" + r.message + ")");
+        received = 0;
+        for (const auto& pc : flood) {
+            gw::DeviceStatus st;
+            if (statusOf(fake, editor, pc->device, st) && st.state == gw::State::Received) ++received;
+        }
+        check(received == 30, "les 30 PC voient << recue >>");
+        tick();
+        mark = fake.requests.size();
+        r = pas::fetchRequests(folder, editor, opt);
+        check(r.ok && countRequests(fake, mark, "GET ", "/contents/") == 0 && countRequests(fake, mark, "PUT ", "") == 0 && countRequests(fake, mark, "GET ", "/comments") == 0,
+              "rien de change : aucun etat relu, aucun commentaire lu, rien d'ecrit");
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- le releve incremental (since) ; une liste coupee : dite, jamais tue\n");
+    {
+        // 20 minutes plus tard sur l'horloge de GitHub : les issues d'avant sortent de la fenetre du releve.
+        fake.clockTick += 1200;
+        auto pcL = makePc(fx, "L");
+        check(ask(*pcL, fake, editor, "Client d'essai Lambda"), "L demande");
+        tick();
+        auto r = pas::fetchRequests(folder, editor, opt);
+        check(r.ok && r.newRequests == 1, "L relevee");
+        // Un corps change SANS que GitHub ne date l'issue (impossible en vrai) : pas relue - le releve est incremental.
+        fake.findIssue(pcC->issue)->body = "change en douce (essai)";
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        auto ec = entryOf(pas::listRequests(folder), pcC->issue);
+        check(r.ok && ec && ec->problems.empty(), "une issue pas changee depuis le dernier releve n'est pas relue");
+        check(editIssue(fake, pcC->issue, "change pour de vrai (essai)"), "(puis modifiee pour de vrai : GitHub la date)");
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        ec = entryOf(pas::listRequests(folder), pcC->issue);
+        check(r.ok && ec && ec->state == pas::RequestState::Refused && !ec->problems.empty() && has(ec->problems.back(), "apr\xC3\xA8s coup"),
+              "relue : modifiee apres coup, toujours refusee");
+
+        const std::size_t real = fake.issues.size();
+        const auto before = pas::readFetchState(folder);
+        const std::string t = fake.now();
+        for (int i = 0; i < pas::kMaxListPages * 100 + 50; ++i) {
+            fakegh::Issue junk;
+            junk.number = static_cast<int>(fake.issues.size()) + 1;
+            junk.title = "bruit";
+            junk.body = "pas une demande (essai)";
+            junk.user = fake.owner;
+            junk.createdAt = junk.updatedAt = t;
+            fake.issues.push_back(std::move(junk));
+        }
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        dump(r);
+        const auto after = pas::readFetchState(folder);
+        check(r.truncated && has(r.text(), "plus de 5000 issues") && has(r.message, "coup\xC3\xA9" "e"), "5050 issues changees : la liste est coupee, et c'est dit (" + r.message + ")");
+        check(after.truncated && after.lastUpdated == before.lastUpdated && before.lastUpdated > 0, "le point de depart du releve suivant n'avance pas");
+        fake.issues.resize(real);
+        tick();
+        r = pas::fetchRequests(folder, editor, opt);
+        check(r.ok && !r.truncated && !pas::readFetchState(folder).truncated, "le bruit parti : le releve est complet");
+    }
+
+    // ------------------------------------------------------------------------------------------------
     std::printf("-- rien d'un client ni aucun jeton en clair\n");
     {
-        for (const char* needle : {"Client d'essai", "exemple.invalid", "atelier", "Poste essai", "second poste", "Pas de contrat"})
+        for (const char* needle : {"Client d'essai", "exemple.invalid", "atelier", "Poste essai", "second poste", "Pas de contrat", "XPG-2026-001", "Fin de contrat"})
             check(!fake.anyPublicContains(needle), std::string("pas en clair dans le depot : ") + needle);
+        check(!fake.files.count(gw::kRevocationsPath), "aucune liste de revocation publique");
         check(!fake.anyPublicContains(fake.adminToken) && !fake.anyPublicContains(fake.requestToken), "aucun jeton dans le depot");
         bool inUrl = false;
         for (const auto& line : fake.requests)

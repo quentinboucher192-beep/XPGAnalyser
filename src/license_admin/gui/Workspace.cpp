@@ -782,7 +782,7 @@ OpResult Workspace::revoke(const std::string& licenseId, const std::string& devi
     const std::string what = deviceKey.empty() ? "Licence " + licenseId + " r\xC3\xA9voqu\xC3\xA9" "e" + (onlyThisIssue ? " (les \xC3\xA9missions sign\xC3\xA9" "es jusqu'ici)." : ".")
                                                : "PC r\xC3\xA9voqu\xC3\xA9 sur la licence " + licenseId + ".";
     // Les PC prevenus (<< revoquee >>) : celui-la, ou tous ceux de la licence - sauf une revocation des seules emissions
-    // d'avant (leur emission en cours reste valable : seule la liste de revocation est publiee).
+    // d'avant (leur emission en cours reste valable : la liste de revocation partira, scellee, avec la prochaine emission).
     std::vector<std::string> keys;
     if (!deviceKey.empty()) {
         if (!onlyThisIssue) keys.push_back(deviceKey);

@@ -376,8 +376,10 @@ private:
     [[nodiscard]] std::string notice() const {
         const Entry* e = selected();
         if (!e || !e->waiting() || !e->joinRequest()) return {};
+        const LicenceEntry* l = ws().licence(e->licenseId);
+        if (!l) return {};   // une licence qui n'existe pas encore : une licence neuve, rien a quoi s'ajouter
         std::string t = passerelle::joinWarning(*e);
-        if (const LicenceEntry* l = ws().licence(e->licenseId); l && lowerAscii(l->licence.customer) != lowerAscii(e->customer))
+        if (lowerAscii(l->licence.customer) != lowerAscii(e->customer))
             t += " La licence " + e->licenseId + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
         return t;
     }
@@ -397,9 +399,10 @@ private:
         std::vector<RequestState> states;
         for (const auto& e : shown_) {
             std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
-            if (!e.licenseId.empty() && ws().licence(e.licenseId)) licence += " (ajouter ce PC)";
+            const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId);
+            if (joins) licence += " (ajouter ce PC)";
             std::string state = passerelle::requestStateLabel(e.state);
-            if (e.waiting() && e.joinRequest()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
+            if (joins && e.waiting()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
                 licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
                 state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
             }

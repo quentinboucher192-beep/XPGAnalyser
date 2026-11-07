@@ -1165,8 +1165,8 @@ void GithubPage::buildGateway(Blocks& bl) {
             p.publisherToken ? ui::Tone::Muted : ui::Tone::Warning);
     bl.heading("4. V\xC3\xA9rifier, publier");
     bl.text("V\xC3\xA9rifier : le d\xC3\xA9p\xC3\xB4t est public, ton jeton peut y \xC3\xA9" "crire, le jeton des demandes est accept\xC3\xA9 (rien n'est chang\xC3\xA9). Publier la "
-            "configuration : le jeton des demandes (masqu\xC3\xA9), le registre et la liste de r\xC3\xA9vocation, sign\xC3\xA9s par ta cl\xC3\xA9. Ensuite, les demandes "
-            "arrivent dans Demandes en ligne.");
+            "configuration : le jeton des demandes (masqu\xC3\xA9) et le registre, sign\xC3\xA9s par ta cl\xC3\xA9 (la liste de r\xC3\xA9vocation n'y est jamais "
+            "publique : elle part scell\xC3\xA9" "e aux seuls PC concern\xC3\xA9s). Ensuite, les demandes arrivent dans Demandes en ligne.");
     if (!ws().key().present) bl.note("Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour publier (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).", ui::Tone::Warning);
     bl.row({gwVerify_, gwPublish_});
     bl.end();

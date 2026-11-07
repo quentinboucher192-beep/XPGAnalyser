@@ -1218,6 +1218,16 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
     bool ok = true, diskOk = true;
     Seconds lastUpdated = sameRepo ? before.lastUpdated : 0;
     std::set<int> touched;   // les demandes a reecrire
+    // Une ligne par demande nouvelle (au plus 50 : une avalanche ne noie pas le resultat ; le reste est compte).
+    int lines = 0, unlisted = 0;
+    const auto note = [&](std::string line) {
+        if (lines < 50) {
+            res.details.push_back(std::move(line));
+            ++lines;
+        } else {
+            ++unlisted;
+        }
+    };
 
     // Ce qui est deja connu : les demandes vues (poste, nonce) et la date SIGNEE de la plus recente de chaque poste.
     std::map<std::pair<std::string, std::string>, int> seen;
@@ -1264,7 +1274,7 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
         if (!op.ok) {
             e.state = RequestState::Unreadable;
             e.problems.push_back(op.problem);
-            res.details.push_back("Issue #" + std::to_string(is.number) + " : illisible - " + op.problem + ".");
+            note("Issue #" + std::to_string(is.number) + " : illisible - " + op.problem + ".");
             known.emplace(is.number, std::move(e));
             continue;
         }
@@ -1293,15 +1303,15 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
         Entry& e = known.at(f.issue);
         std::string replay;
         if (const auto dup = seen.find(std::make_pair(e.device, e.nonce)); dup != seen.end())
-            replay = "demande d\xC3\xA9j\xC3\xA0 vue (issue #" + std::to_string(dup->second) + ") : rejou\xC3\xA9" "e, ignor\xC3\xA9" "e - rien n'est publi\xC3\xA9 pour elle";
+            replay = "la m\xC3\xAAme demande que l'issue #" + std::to_string(dup->second) + " (d\xC3\xA9j\xC3\xA0 vue) : rien n'est publi\xC3\xA9 pour elle";
         else if (const auto last = latest.find(e.device); last != latest.end() && e.requestedAt <= last->second)
             replay = "sa date sign\xC3\xA9" "e (" + licensing::isoTime(e.requestedAt) + ") n'est pas plus r\xC3\xA9" "cente que la derni\xC3\xA8re demande de ce PC (" +
-                     licensing::isoTime(last->second) + ") : rejou\xC3\xA9" "e (ou l'horloge du PC recule), ignor\xC3\xA9" "e - rien n'est publi\xC3\xA9 pour elle";
+                     licensing::isoTime(last->second) + ") - une ancienne demande remise en ligne, ou l'horloge du PC recule : rien n'est publi\xC3\xA9 pour elle";
         if (!replay.empty()) {
             e.state = RequestState::Ignored;
             addProblem(e, replay);
             ++res.ignored;
-            res.details.push_back("ATTENTION : issue #" + std::to_string(f.issue) + " ignor\xC3\xA9" "e - " + replay + ".");
+            note("ATTENTION : issue #" + std::to_string(f.issue) + " ignor\xC3\xA9" "e (rejou\xC3\xA9" "e) - " + replay + ".");
             continue;
         }
         seen.emplace(std::make_pair(e.device, e.nonce), f.issue);
@@ -1320,8 +1330,11 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
         std::string line = "Nouvelle : #" + std::to_string(f.issue) + " " + e.customer + ", PC " + cite(e.deviceName.empty() ? "(sans nom)" : e.deviceName) +
                            (e.software.empty() ? std::string() : ", " + e.software) + (e.licenseId.empty() ? std::string() : ", licence " + e.licenseId) + ".";
         if (e.joinRequest()) line += " " + joinWarning(e);
-        res.details.push_back(line);
+        note(std::move(line));
     }
+    if (unlisted > 0)
+        res.details.push_back("\xE2\x80\xA6 et " + plural(static_cast<std::size_t>(unlisted), "autre demande nouvelle", "autres demandes nouvelles") +
+                              " (la liste compl\xC3\xA8te : Demandes en ligne, ou passerelle-demandes --toutes).");
 
     // 3. La plus recente demande de chaque poste, par sa date SIGNEE (jamais par le numero de l'issue, que n'importe
     //    qui choisit) ; les autres en attente sont remplacees.

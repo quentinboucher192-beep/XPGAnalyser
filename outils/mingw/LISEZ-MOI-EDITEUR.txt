@@ -105,7 +105,9 @@ Une seule fois, sur github.com :
 Puis dans l'application, Synchronisation GitHub > carte « Passerelle des clients » :
 4. Écris le dépôt (PROPRIETAIRE/NOM), Enregistrer la passerelle ; colle le jeton des
    demandes (il ne s'affiche pas), Enregistrer le jeton des demandes.
-5. Vérifier (le dépôt est public, ton jeton y écrit), puis Publier la configuration.
+5. Vérifier (le dépôt est public, ton jeton y écrit), puis Publier la configuration
+   (elle publie aussi ton registre ; la liste de révocation, elle, n'est jamais publique :
+   elle part scellée aux seuls PC concernés).
 6. Paramètres de sécurité > Préparer les fichiers pour les Studios... : l'adresse de
    la passerelle part chez le développeur avec la clé publique et le registre.
 Ensuite, chaque jour : Demandes en ligne > Relever les demandes. Une demande :
@@ -113,9 +115,19 @@ Accepter... ouvre l'assistant avec elle (si elle demande une licence existante :
 ajout de PC, une licence partagée) ; « Signer et publier » - la licence part toute
 seule à CHACUN de ses PC, l'issue se ferme ; rien à envoyer. Refuser... : le client lit
 ta raison dans son logiciel. Le client peut annuler sa demande ; une seule demande par
-PC à la fois. Une révocation, un PC retiré, un nouveau registre partent aussi tout
+PC à la fois. Une révocation (la raison et la liste de révocation scellées pour chaque
+PC révoqué, jamais en clair), un PC retiré, un nouveau registre partent aussi tout
 seuls sur la passerelle. Hors ligne ou jeton refusé : c'est dit, rien n'est « publié »
 pour de faux ; le fichier signé reste dans l'archive.
+ATTENTION, une demande « ajouter ce PC à la licence XPG-... » n'est PAS une preuve :
+n'importe qui peut taper un identifiant de licence et un nom de société. Elle est
+marquée « à vérifier » ; confirme avec ton client (téléphone, courriel connu), puis
+coche « J'ai vérifié avec mon client » à l'étape Signer de l'assistant.
+Les issues du dépôt s'écrivent par n'importe qui (le jeton des demandes est public en
+pratique) ; l'outil s'en garde : une ancienne demande remise en ligne est ignorée
+(« Ignorée (rejouée) »), une issue modifiée après coup garde son contenu d'origine,
+« reçue » n'écrase jamais un état plus récent ni une licence, et au plus 20 « reçue »
+sont publiées par relevé (le reste au relevé suivant, c'est dit).
 
 Licences flottantes, Boutique, Commandes : elles demandent un service de licences EN
 LIGNE, qui n'existe pas encore. L'application le dit ; rien n'y est simulé.
