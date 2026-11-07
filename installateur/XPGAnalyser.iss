@@ -4863,9 +4863,11 @@ end;
 
 // ======================================================== 1.35.0 : la licence ====
 //  La Decouverte (30 jours d'essai, sans rien saisir : le choix par defaut) ou un code de licence
-//  (XPG-XXXX-XXXX-XXXX-XXXX, donne par l'editeur ; /CODE= en silencieux). Le code est laisse dans le dossier
-//  des licences de ce PC (code-activation.txt) : le premier lancement d'un Studio en ligne l'active aupres du
-//  service des licences de l'editeur, puis l'efface. Le code est un secret : il n'est ecrit dans aucun journal.
+//  (XPG-XXXX-XXXX-XXXX-XXXX, donne par l'editeur ; en silencieux, /CODEFICHIER="un fichier qui le contient" : un
+//  /CODE= serait ecrit en clair dans le journal d'Inno Setup, qui note la ligne de commande). Le code est laisse
+//  dans le dossier des licences de ce PC (code-activation.txt, ses droits : les Utilisateurs le lisent et
+//  l'effacent, sans pouvoir le changer) : le premier lancement d'un Studio en ligne l'active aupres du service des
+//  licences de l'editeur, puis l'efface. Le code est un secret : il n'est ecrit dans aucun journal.
 const
   lcDecouverte = 0;
   lcCode = 1;
@@ -4926,8 +4928,9 @@ begin
 end;
 
 procedure CreerPageLicence;
-var Y: Integer;
-    S: String;
+var Y, I: Integer;
+    S, Ligne: String;
+    Brut: AnsiString;
     DejaLa: Boolean;
 begin
   DejaLa := LicenceDejaSurCePC;
@@ -4967,12 +4970,21 @@ begin
     'd''un Studio avec Internet, auprès du service des licences de l''éditeur ; hors ligne, le Studio démarre en Découverte et ' +
     'l''active dès qu''il est en ligne. Le code n''est écrit dans aucun journal.';
   PageLicence.CheckListBox.OnClickCheck := @LicenceChoixChange;
-  // le silencieux, un deploiement : /CODE=XPG-XXXX-XXXX-XXXX-XXXX
-  S := Trim(ExpandConstant('{param:CODE|}'));
+  // le silencieux, un deploiement : /CODEFICHIER="C:\...\code.txt" (sa premiere ligne : le code). Jamais /CODE= :
+  // Inno Setup ecrit la ligne de commande dans son journal.
+  S := Trim(ExpandConstant('{param:CODEFICHIER|}'));
   if S <> '' then begin
-    EditLicenceCode.Text := S;
-    PageLicence.SelectedValueIndex := lcCode;
+    if LoadStringFromFile(S, Brut) then begin
+      Ligne := Trim(String(Brut));
+      I := Pos(#10, Ligne);
+      if I > 0 then Ligne := Trim(Copy(Ligne, 1, I - 1));
+      EditLicenceCode.Text := Ligne;
+      PageLicence.SelectedValueIndex := lcCode;
+    end else
+      Log('Licence : le fichier du code (/CODEFICHIER=) ne se lit pas : ' + S + ' ; ce PC démarre en Découverte');
   end;
+  if Trim(ExpandConstant('{param:CODE|}')) <> '' then
+    Log('Licence : /CODE= n''est pas lu (la ligne de commande est écrite dans ce journal) : donne le code par /CODEFICHIER="fichier"');
   LicenceChoixChange(nil);
 end;
 
@@ -5310,7 +5322,7 @@ begin
   if (PageLicence <> nil) and (CurPageID = PageLicence.ID) and (PageLicence.SelectedValueIndex = lcCode) and
      not CodeNormalise(EditLicenceCode.Text, D) then begin
     if WizardSilent then
-      Log('Licence : le code donné (/CODE=) n''a pas la forme XPG-XXXX-XXXX-XXXX-XXXX ; il n''est pas gardé, ce PC démarre en Découverte')
+      Log('Licence : le code donné (/CODEFICHIER=) n''a pas la forme XPG-XXXX-XXXX-XXXX-XXXX ; il n''est pas gardé, ce PC démarre en Découverte')
     else begin
       if Trim(EditLicenceCode.Text) = '' then
         MsgBox('Saisis ton code de licence, ou choisis la Découverte.', mbError, MB_OK)
@@ -6027,9 +6039,12 @@ begin
                 + 'seul un administrateur pourra y importer une licence');
 end;
 
-// 1.35.0 : le code de licence choisi (la page Licence, ou /CODE=) est laissé dans le dossier des licences de ce PC,
-// code-activation.txt : le premier lancement d'un Studio en ligne l'active, puis l'efface. Jamais dans un journal.
+// 1.35.0 : le code de licence choisi (la page Licence, ou /CODEFICHIER=) est laissé dans le dossier des licences de ce
+// PC, code-activation.txt : le premier lancement d'un Studio en ligne l'active, puis l'efface. Jamais dans un journal.
 // Un fichier déjà là est retiré d'abord (un lien est retiré, pas sa cible) ; un dossier qui est un lien : rien.
+// Pour tous les comptes : le fichier appartient aux Administrateurs (le Studio n'accepte qu'un code posé par eux, ou
+// par le compte qui le lance), ses droits hérités sont coupés - les Utilisateurs le lisent et l'effacent (RX,D), sans
+// pouvoir le changer (sinon, n'importe quel compte de ce PC pourrait y mettre un autre code).
 procedure LicenceCodeLaisser;
 var N, Dossier, Fichier: String;
 begin
@@ -6048,10 +6063,20 @@ begin
     Exit;
   end;
   if FileExists(Fichier) then DeleteFile(Fichier);
-  if FileExists(Fichier) or not SaveStringToFile(Fichier, CodeAffiche(N) + #13#10, False) then
-    JournalNote(jAttention, 'licence-code', 'Le code de licence n''a pas pu être laissé dans ' + Dossier + ' : saisis-le au premier lancement, fenêtre Licence')
-  else
-    JournalNote(jFait, 'licence-code', 'Le code de licence est laissé pour le premier lancement d''un Studio en ligne (' + Fichier + ', effacé après l''activation ; le code n''est dans aucun journal)');
+  if FileExists(Fichier) or not SaveStringToFile(Fichier, CodeAffiche(N) + #13#10, False) then begin
+    JournalNote(jAttention, 'licence-code', 'Le code de licence n''a pas pu être laissé dans ' + Dossier + ' : saisis-le au premier lancement, fenêtre Licence');
+    Exit;
+  end;
+  if IsAdminInstallMode then begin
+    if (Icacls('"' + Fichier + '" /setowner *S-1-5-32-544') <> 0) or
+       (Icacls('"' + Fichier + '" /inheritance:r /grant:r *S-1-5-32-544:F *S-1-5-18:F *S-1-5-32-545:(RX,D)') <> 0) then begin
+      // des droits qui n'ont pas pu etre poses : le code ne reste pas la, modifiable par tous
+      DeleteFile(Fichier);
+      JournalNote(jAttention, 'licence-code', 'Le code de licence n''a pas pu être protégé (icacls, voir le journal) : il n''est pas gardé ; saisis-le au premier lancement, fenêtre Licence');
+      Exit;
+    end;
+  end;
+  JournalNote(jFait, 'licence-code', 'Le code de licence est laissé pour le premier lancement d''un Studio en ligne (' + Fichier + ', effacé après l''activation ; le code n''est dans aucun journal)');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
