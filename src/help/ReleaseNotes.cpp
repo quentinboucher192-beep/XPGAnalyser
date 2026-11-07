@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.31.0", "06/11/2026", "\xC3\xA0 venir"},
+    {"1.32.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.31.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 22 h 29"},
     {"1.30.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 21 h 49"},
     {"1.29.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 19 h 06"},
     {"1.28.0", "06/11/2026", "livr\xC3\xA9" "e le 06/11 \xC3\xA0 14 h 28"},
@@ -174,6 +175,39 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.32.0 : la securite partout (quatre relectures du code, leurs corrections) et la liste des limites
+        note("1.32.0", "Scripts", Kind::Changed,
+         "LES FICHIERS DES SCRIPTS RESTENT DANS LE PROJET : une native de fichier ne lit et n'\xC3\xA9" "crit que dans donnees/ et exports/ "
+         "du projet, et dans les dossiers que tu autorises sur ce PC (Configuration \xE2\x80\xBA Poste d'exploitation \xE2\x80\xBA Ce PC \xE2\x80\xBA Dossiers "
+         "autoris\xC3\xA9s aux scripts : un r\xC3\xA9glage du PC, jamais du projet). Ailleurs, elle rend FAUX et FILE_ERROR() dit quel dossier "
+         "autoriser. Un projet re\xC3\xA7u ne peut plus \xC3\xA9" "crire ni effacer ailleurs sur le PC.",
+         "fichiers", ""),
+        note("1.32.0", "Configuration", Kind::Changed,
+         "L'ACC\xC3\x88S WEB SE PERMET SUR CHAQUE PC : un projet qui active l'acc\xC3\xA8s par navigateur ne l'ouvre plus tout seul. Coche \xC2\xAB Acc\xC3\xA8s "
+         "web de l'IHM permis sur ce poste \xC2\xBB (Configuration \xE2\x80\xBA Acc\xC3\xA8s web \xE2\x80\xBA Ce poste) sur le PC qui doit le servir ; un projet re\xC3\xA7u "
+         "n'ouvre donc jamais de port sans toi. Le serveur v\xC3\xA9rifie aussi l'adresse appel\xC3\xA9" "e et l'origine de chaque requ\xC3\xAAte.",
+         "acces-web", ""),
+        note("1.32.0", "Projet", Kind::Changed,
+         "LES FICHIERS VENUS D'AILLEURS SONT BORN\xC3\x89S : archives (projets, vues, Excel), images, ic\xC3\xB4nes et polices sont lus avec des "
+         "limites de taille et de nombre ; une archive pi\xC3\xA9g\xC3\xA9" "e, une image d\xC3\xA9mesur\xC3\xA9" "e ou une police OpenType/collection est refus\xC3\xA9" "e avec "
+         "sa raison, sans bloquer le programme. Ouvrir un fichier \xC2\xAB avec le syst\xC3\xA8me \xC2\xBB n'ex\xC3\xA9" "cute jamais un programme.",
+         "fichiers", ""),
+        note("1.32.0", "Projet", Kind::Changed,
+         "L'AGENT DE D\xC3\x89PLOIEMENT EST DURCI : ses donn\xC3\xA9" "es passent dans le profil de l'op\xC3\xA9rateur (prot\xC3\xA9g\xC3\xA9" "es pour son compte, l'ancien "
+         "dossier est repris seul) ; les connexions sont limit\xC3\xA9" "es par adresse, avec des places r\xC3\xA9serv\xC3\xA9" "es aux PC appair\xC3\xA9s ; son journal "
+         "et son historique sont born\xC3\xA9s. Revenir \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente fait maintenant l'aller-retour entre les deux derni\xC3\xA8res versions.",
+         "deploiement-reseau", ""),
+        note("1.32.0", "Projet", Kind::Changed,
+         "LES LICENCES SONT V\xC3\x89RIFI\xC3\x89" "ES \xC3\x80 LA SOURCE : la simulation de l'IHM, l'import de vues et les commandes de script demandent "
+         "eux-m\xC3\xAAmes leur fonctionnalit\xC3\xA9 ; la demande d'activation porte une empreinte sal\xC3\xA9" "e du PC (jamais son mat\xC3\xA9riel en clair) ; "
+         "l'\xC3\xA9" "diteur peut r\xC3\xA9voquer une \xC3\xA9mission pr\xC3\xA9" "cise d'une licence.",
+         "licence", ""),
+        note("1.32.0", "Assistant IA", Kind::Changed,
+         "L'ASSISTANT IA EST PLUS PRUDENT : ta cl\xC3\xA9 d'API ne part que vers le serveur o\xC3\xB9 tu l'as test\xC3\xA9" "e (apr\xC3\xA8s un changement d'adresse, "
+         "teste-la de nouveau) ; un fichier .xia import\xC3\xA9 n'apporte plus de fournisseur ni d'adresse, ni de chemin de fichier ; en mode "
+         "Direct, une proposition qui touche aux fichiers, aux scripts de d\xC3\xA9marrage ou cycliques, au C/C++ ou aux \xC3\xA9quipements, ou qui "
+         "vient d'un \xC3\xA9" "change avec une pi\xC3\xA8" "ce jointe, demande toujours ton accord.",
+         "assistant-ia", ""),
         // 1.31.0 : la synchro des licences avec un depot GitHub prive (l'outil de l'editeur)
         note("1.31.0", "Projet", Kind::New,
          "LES LICENCES ONT UNE SOURCE CENTRALE : l'\xC3\xA9" "diteur garde chaque licence sign\xC3\xA9" "e, le registre et la liste de r\xC3\xA9vocation dans "

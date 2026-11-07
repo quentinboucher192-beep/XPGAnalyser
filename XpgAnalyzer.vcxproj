@@ -1033,6 +1033,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\xls\MacroXls.hpp" />
     <ClInclude Include="src\xls\Workbook.hpp" />
     <ClInclude Include="src\xls\XlsmSource.hpp" />
+    <ClInclude Include="src\xls\ZipLimits.hpp" />
     <ClInclude Include="src\app\ClipboardFiles.hpp" />
     <ClInclude Include="src\app\MacroFormView.hpp" />
     <ClInclude Include="src\app\MacrosPane.hpp" />

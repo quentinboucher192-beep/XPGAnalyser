@@ -14,6 +14,10 @@
 //      dependance a la compilation) ; absente, l'Assistant le dit.
 //  http:// n'est accepte que vers CE poste (127.0.0.1, localhost, ::1 : les
 //  essais, un relais local) : la cle API ne passe jamais en clair sur le reseau.
+//  L'hote est lu EN ENTIER (127.evil.com, 0127.0.0.1, 127.1 : pas ce poste).
+//  Une redirection (3xx) n'est JAMAIS suivie (WinHTTP comme libcurl) : rendue
+//  telle quelle - les en-tetes (la cle) ne partent pas vers une autre adresse.
+//  libcurl : http et https seulement.
 //
 //  LA FABRIQUE EST INJECTABLE (setHttpFactory) : un essai y met un faux
 //  transport qui rejoue des reponses enregistrees, sans reseau.
@@ -42,7 +46,7 @@ struct Url {
     int         port{443};
     std::string path{"/"};      // le chemin et la requete, "/" au moins
     bool        hasPath{false}; // l'adresse ecrite avait un chemin (autre que "/")
-    [[nodiscard]] bool        loopback() const;   // 127.x.x.x, localhost, ::1
+    [[nodiscard]] bool        loopback() const;   // 127.x.x.x (IPv4 stricte), localhost, ::1 (et ::ffff:127.x.x.x)
     // 1.16.0 : une adresse privee du reseau local (10.x, 192.168.x, 172.16-31.x) - un serveur Ollama de l'usine.
     [[nodiscard]] bool        privateLan() const;
     [[nodiscard]] std::string text() const;       // l'adresse recomposee

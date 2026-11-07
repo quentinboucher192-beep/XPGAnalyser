@@ -24,6 +24,7 @@
 #include "../src/app/ai/AiAssistant.hpp"
 #include "../src/app/ai/AiHttp.hpp"
 #include "../src/app/ai/AiJson.hpp"
+#include "../src/app/ai/AiKeys.hpp"
 #include "../src/app/ai/AiOpenAI.hpp"
 #include "../src/app/ai/AiMarkdown.hpp"
 #include "../src/app/ai/AiPanel.hpp"
@@ -350,6 +351,16 @@ void testUrls() {
           "http://127.0.0.1:port/chemin : accepte (ce poste)");
     check(ai::parseUrl("http://localhost:9000", u) && u.loopback() && ai::parseUrl("http://[::1]:9000", u) && u.loopback() && u.host == "::1",
           "localhost et [::1] : ce poste");
+    // Securite : l'hote lu EN ENTIER (jamais par son debut) ; une forme numerique ambigue n'est pas ce poste.
+    for (const char* local : {"http://127.0.0.1", "http://127.255.0.9:8080", "http://localhost", "http://LOCALHOST:1", "http://[::1]", "http://[0:0:0:0:0:0:0:1]"})
+        check(ai::parseUrl(local, u) && u.loopback(), std::string(local) + " : ce poste");
+    for (const char* other : {"http://127.evil.com", "http://0127.0.0.1", "http://127.1", "http://0x7f.0.0.1", "http://2130706433", "http://127.0.0.1.evil.com",
+                              "http://localhost.evil.com", "http://[::2]", "http://127.000.0.1"})
+        check(!ai::parseUrl(other, u, &why) && has(why, "https://"), std::string(other) + " : pas ce poste, http:// refuse");
+    check(ai::parseUrl("https://127.evil.com", u) && !u.loopback() && !u.privateLan(), "https://127.evil.com : un serveur distant (pas de passe-droit)");
+    check(ai::parseUrl("http://10.1.2.3", u, nullptr, true) && u.privateLan() && !ai::parseUrl("http://010.1.2.3", u, nullptr, true)
+              && !ai::parseUrl("http://10.1.2", u, nullptr, true) && !ai::parseUrl("http://192.168.1.1.evil.com", u, nullptr, true),
+          "le reseau de l'usine : une IPv4 stricte seulement");
     check(!ai::parseUrl("http://relais.entreprise.fr", u, &why) && has(why, "https://"), "http:// vers un autre poste : refuse (" + why + ")");
     check(!ai::parseUrl("ftp://x", u, &why) && !ai::parseUrl("https://", u, &why) && !ai::parseUrl("https://h:99999", u, &why)
               && !ai::parseUrl("https://user:mdp@h", u, &why),
@@ -1421,6 +1432,72 @@ void testSecret() {
     ai::setKeyProtector({});
 }
 
+// Securite : une cle liee a ses serveurs - une adresse changee (un fichier, une installation) ne la recoit jamais sans un
+// nouvel essai (Tester, Lister les modeles) ; une cle d'avant (sans serveur) est liee a son premier succes.
+void testKeyServer() {
+    std::printf("[cle liee a ses serveurs]\n");
+    namespace keys = ai::keys;
+    const fs::path dir = fs::temp_directory_path() / "xpg_ai_reseau_serveur";
+    fs::remove_all(dir);
+    ai::setRoot(U(dir / "IA"));
+    keys::resetSession();
+    useFakeNet();
+    const std::string api = "https://api.anthropic.com/v1/messages", relay = "https://relais.exemple.fr/v1/messages";
+    check(keys::serverOf("https://API.Anthropic.com/v1/messages") == "https://api.anthropic.com:443" && keys::serverOf("http://[::1]:8080/x") == "http://[::1]:8080"
+              && keys::serverOf("pas une adresse").empty(),
+          "le serveur d'une adresse : le schema, l'hote, le port");
+    const std::string secret = "sk-ant-CLE-LIEE-0123456789abcdef";
+    keys::Entry e;
+    e.provider = "anthropic";
+    e.name = "Anthropic - essai";
+    std::string why;
+    const std::string id = keys::add(e, secret, false, &why);
+    check(!id.empty(), "une cle de la seance (" + why + ")");
+    check(keys::allowedFor(secret, relay), "une cle sans serveur (d'avant) : permise");
+    keys::confirmServer(secret, api, false);
+    auto got = keys::find(id);
+    check(got && got->servers == std::vector<std::string>{"https://api.anthropic.com:443"}, "liee au premier succes");
+    check(keys::allowedFor(secret, "https://api.anthropic.com/v1/models"), "le meme serveur : permise");
+    check(!keys::allowedFor(secret, relay, &why) && has(why, "Anthropic - essai") && has(why, "relais.exemple.fr") && has(why, "Tester"),
+          "un autre serveur : refusee, la raison dite (" + why + ")");
+    check(!keys::allowedFor(secret, "https://api.anthropic.com:8443/v1/messages") && !keys::allowedFor(secret, "http://api.anthropic.com/v1/messages"),
+          "un autre port, un autre schema : refusee");
+    check(keys::allowedFor("sk-autre-cle-jamais-vue-0000000000", relay), "une cle inconnue du gestionnaire (saisie a l'instant) : permise");
+    {   // les fournisseurs refusent AVANT tout envoi
+        ai::AnthropicProvider p(fastRetries());
+        auto r = simpleRequest();
+        r.apiKey = secret;
+        r.endpoint = "https://relais.exemple.fr";
+        check(!p.start(r, &why) && has(why, "essaie-la de nouveau") && g_net.count() == 0, "Anthropic : la cle ne part pas vers le relais (" + why + ")");
+        ai::OpenAIProvider o(fastRetries());
+        r.endpoint = "https://autre.exemple.fr/v1";
+        r.preset = "autre";
+        check(!o.start(r, &why) && g_net.count() == 0, "compatible OpenAI : de meme");
+    }
+    keys::confirmServer(secret, relay, false);
+    check(!keys::allowedFor(secret, relay), "un succes ordinaire ne lie pas une cle deja liee a un autre serveur");
+    keys::confirmServer(secret, relay, true);
+    check(keys::allowedFor(secret, relay) && keys::allowedFor(secret, api), "un essai explicite (Tester) : le serveur s'ajoute");
+    // liee a son ajout ; une cle memorisee (index.json) garde ses serveurs, relue en la dechiffrant
+    ai::KeyProtector fake;
+    fake.protect = [](const std::string& s) -> std::optional<std::string> { return std::string(s.rbegin(), s.rend()); };
+    fake.unprotect = [](const std::string& s) -> std::optional<std::string> { return std::string(s.rbegin(), s.rend()); };
+    ai::setKeyProtector(fake);
+    keys::Entry o;
+    o.provider = "openai";
+    o.name = "OpenAI - essai";
+    const std::string secret2 = "sk-OPENAI-LIEE-00000000000000aa";
+    const std::string id2 = keys::add(o, secret2, true, &why);
+    check(!id2.empty() && id2.front() == 'k' && keys::bindServer(id2, "https://api.openai.com/v1/chat/completions"), "memorisee, liee a son ajout");
+    check(has(readAll(dir / "IA" / "cles" / "index.json"), "https://api.openai.com:443") && !has(readAll(dir / "IA" / "cles" / "index.json"), secret2),
+          "index.json : le serveur, jamais la cle");
+    check(!keys::allowedFor(secret2, "http://127.0.0.1:11434/v1/chat/completions") && keys::allowedFor(secret2, "https://api.openai.com/v1/models"),
+          "relue du fichier : un autre serveur (meme ce poste) refuse, le sien permis");
+    ai::setKeyProtector({});
+    keys::resetSession();
+    fs::remove_all(dir);
+}
+
 
 // =============================================================================
 //  9. L'Assistant branche : le faux fournisseur, le panneau, les parametres
@@ -2421,6 +2498,7 @@ int main() {
     testTextParts();
     testCurl();
     testSecret();
+    testKeyServer();
     testAssistantLive();
     testWritingBeforeText();
     testDirectAndDemo();

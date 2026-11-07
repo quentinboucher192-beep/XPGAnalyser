@@ -2089,6 +2089,9 @@
     <ClInclude Include="src\xls\XlsmSource.hpp">
       <Filter>xls</Filter>
     </ClInclude>
+    <ClInclude Include="src\xls\ZipLimits.hpp">
+      <Filter>xls</Filter>
+    </ClInclude>
     <ClInclude Include="src\sim\DebugShared.hpp">
       <Filter>sim</Filter>
     </ClInclude>

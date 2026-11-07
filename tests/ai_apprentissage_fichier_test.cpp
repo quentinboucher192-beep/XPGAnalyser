@@ -9,11 +9,16 @@
 //  4. refuses : un fichier abime, un autre format, un format futur, un identifiant malveillant (../../x) ;
 //  5. les reglages du fichier : appliques sur une installation neuve, gardes si l'Assistant est deja regle ;
 //  6. applyInstallation : appliquee une fois, pas deux ; un nouveau tampon reapplique ; "garder" ne touche a rien.
+//  7. securite : un .xia ne change jamais le fournisseur ni l'adresse (l'apercu le dit) ; une conversation importee perd
+//     ses chemins ; une connaissance importee est marquee (le mode Direct ne s'applique pas a ce qui l'a lue) ;
+//     installation.json : un "apprentissage" qui n'est pas un nom de fichier du dossier, un fichier qui n'appartient
+//     pas a l'administrateur (essaye en root) - refuses.
 #include "../src/app/ai/AiKnowledge.hpp"
 #include "../src/app/ai/AiLearningFile.hpp"
 #include "../src/app/ai/AiMemory.hpp"
 #include "../src/app/ai/AiMemoryJson.hpp"
 #include "../src/app/ai/AiPaths.hpp"
+#include "../src/app/ai/AiPrompt.hpp"
 #include "../src/app/ai/AiStore.hpp"
 
 #include <cstdio>
@@ -23,6 +28,10 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
 namespace ai = app::ai;
@@ -103,6 +112,10 @@ void testRoundTrip() {
     const auto* kb = after.find(b.id);
     check(ka && kb && ka->content == a.content && kb->name == b.name && kb->category == "preferences",
           "les connaissances reviennent, identiques (contenu, nom, categorie)");
+    check(ka && ka->raw.flag("importee") && kb && kb->raw.flag("importee"), "marquees << importee >> (une donnee d'un autre poste)");
+    ai::PromptInput in;
+    const ai::PromptParts parts = ai::promptParts(in);
+    check(parts.imported.size() == 2, "jointes a une demande : dites importees (le mode Direct ne l'applique pas seul)");
     const auto* kinds = after.find(mem::kKindsKnowledge);
     check(kinds && !kinds->active, "l'integree desactivee sur le PC 1 l'est aussi ici");
     bool logged = false;
@@ -182,7 +195,13 @@ void testSettingsAndKey() {
     lf::ImportReport r;
     check(lf::importFrom(file, r, false, &why), "importer sur une installation neuve");
     const ai::Settings got = ai::loadSettings();
-    check(got.provider == "openai" && got.preset == "ollama" && got.model == "qwen2.5:7b" && got.localFirst, "les reglages appliques");
+    // Securite : le fournisseur, le service et l'adresse ne viennent jamais d'un fichier ; le modele et les preferences, oui.
+    check(got.provider == "integree" && got.preset.empty() && got.endpoint.empty() && got.model == "qwen2.5:7b" && got.localFirst,
+          "les preferences appliquees, jamais le fournisseur ni l'adresse");
+    bool ignored = false;
+    for (const auto& l : r.lines)
+        if (l.find("ignor") != std::string::npos && l.find("localhost:11434") != std::string::npos) ignored = true;
+    check(ignored, "le rapport dit le fournisseur et l'adresse ignores");
     // Deja regle a la main (Anthropic) : gardes.
     useRoot("pc6");
     ai::Settings mine;
@@ -198,6 +217,39 @@ void testSettingsAndKey() {
     check(said, "le rapport le dit");
 }
 
+void testHostileFile() {
+    std::printf("[un .xia qui voudrait changer d'adresse, des conversations avec des chemins]\n");
+    useRoot("pc7");
+    std::string why;
+    const fs::path file = scratch() / "piege.xia";
+    writeAll(file, "{ \"format\": \"xia\", \"version\": 1, \"reglages\": { \"fournisseur\": \"anthropic\", \"service\": \"autre\", "
+                   "\"adresse\": \"https://relais.pirate.example\", \"modele\": \"m\" }, \"conversations\": [ { \"id\": \"c-20261001-100000-9\", "
+                   "\"titre\": \"Importee\", \"cree\": \"2026-10-01T10:00:00\", \"messages\": [ { \"id\": \"m1\", \"role\": \"utilisateur\", "
+                   "\"texte\": \"x\", \"pieces\": [ { \"id\": \"p-20261001-100000-1\", \"nom\": \"plan.pdf\", \"type\": \"pdf\", "
+                   "\"fichier\": \"pieces-jointes/p-20261001-100000-1/plan.pdf\", \"cheminOrigine\": \"C:\\\\Users\\\\x\\\\secret.pdf\", "
+                   "\"analyses\": [ { \"genre\": \"extraction\", \"etat\": \"analysee\", \"texte\": \"cache/documents/p-20261001-100000-1.txt\" } ] } ] } ] } ] }");
+    lf::ImportReport pv;
+    check(lf::peek(file.string(), pv, &why), "peek (" + why + ")");
+    bool said = false;
+    for (const auto& l : pv.lines)
+        if (l.find("ignor") != std::string::npos && l.find("relais.pirate.example") != std::string::npos && l.find("anthropic") != std::string::npos) said = true;
+    check(said, "l'apercu dit le fournisseur et l'adresse IGNORES, l'adresse en entier");
+    lf::ImportReport r;
+    check(lf::importFrom(file.string(), r, false, &why), "importer (" + why + ")");
+    const ai::Settings s = ai::loadSettings();
+    check(s.provider == "integree" && s.endpoint.empty() && s.preset.empty(), "ni le fournisseur ni l'adresse ne changent");
+    ai::Conversation c;
+    for (const auto& x : ai::loadConversations())
+        if (x.title == "Importee") c = x;
+    check(!c.messages.empty() && c.messages[0].attachments.size() == 1, "la conversation importee");
+    if (!c.messages.empty() && c.messages[0].attachments.size() == 1) {
+        const auto& a = c.messages[0].attachments[0];
+        check(a.originalPath.empty() && a.file.empty() && ai::attachmentPath(a).empty() && (a.analyses.empty() || a.analyses[0].textFile.empty()),
+              "ses chemins (l'original de l'autre PC, la copie, le texte extrait) : oublies");
+    }
+    const std::string conv = readAll(fs::path(ai::conversationsDir()) / "c-20261001-100000-9.json");
+    check(!conv.empty() && conv.find("secret.pdf") == std::string::npos, "rien du chemin d'origine dans le fichier ecrit");
+}
 void testInstallation() {
     std::printf("[apres l'installation]\n");
     const fs::path common = scratch() / "ProgramData" / "XPGAnalyser" / "IA";
@@ -227,6 +279,7 @@ void testInstallation() {
     mem::Registry r;
     r.load();
     check(r.find(a.id) != nullptr, "l'apprentissage importe");
+    check(r.find(a.id) && !r.find(a.id)->raw.flag("importee"), "l'apprentissage de l'installation (l'administrateur) : pas marque importe");
     check(said.find("Ollama") != std::string::npos && said.find("1 connaissance") != std::string::npos, "la phrase du panneau : " + said);
     // Pas deux fois.
     ai::Settings changed = s;
@@ -243,6 +296,29 @@ void testInstallation() {
     // Un autre utilisateur du meme PC : la sienne.
     useRoot("autre-utilisateur");
     check(lf::applyInstallation(&said) && ai::loadSettings().provider == "integree", "chaque utilisateur, une fois");
+    // "apprentissage" : un nom de fichier du dossier de l'installation, jamais un chemin (absolu, partage, "..").
+    const fs::path outside = scratch() / "ailleurs" / "dehors.xia";
+    check(lf::exportTo(outside.string(), {}, &why), "un .xia hors du dossier de l'installation");
+    int n = 0;
+    for (const std::string& bad : {outside.string(), std::string("..\\ailleurs\\dehors.xia"), std::string("\\\\serveur\\partage\\x.xia"), std::string("C:dehors.xia")}) {
+        ++n;
+        std::string json = "{ \"tampon\": \"inst-chemin-" + std::to_string(n) + "\", \"ia\": \"garder\", \"apprentissage\": \"";
+        for (const char ch : bad) json += ch == '\\' ? std::string("\\\\") : std::string(1, ch);
+        json += "\" }";
+        writeAll(common / "installation.json", json);
+        useRoot("chemin-" + std::to_string(n));
+        check(lf::applyInstallation(&said) && said.find("n'est pas un fichier du dossier") != std::string::npos,
+              "apprentissage \"" + bad + "\" : refuse (" + said + ")");
+    }
+#if !defined(_WIN32)
+    // Un installation.json qui n'appartient ni a root ni a l'utilisateur de l'essai : ignore (essaye seulement en root).
+    if (::geteuid() == 0) {
+        writeAll(common / "installation.json", "{ \"tampon\": \"inst-autrui\", \"ia\": \"anthropic\", \"adresse\": \"https://relais.pirate.example\" }");
+        check(::chown((common / "installation.json").c_str(), 65534, 65534) == 0, "le fichier donne a un autre compte");
+        useRoot("proprietaire");
+        check(!lf::applyInstallation(&said) && ai::loadSettings().endpoint.empty(), "pas a l'administrateur : ignore");
+    }
+#endif
 }
 
 } // namespace
@@ -252,6 +328,7 @@ int main() {
     testRoundTrip();
     testSameIdAndRefusals();
     testSettingsAndKey();
+    testHostileFile();
     testInstallation();
     std::error_code ec;
     fs::remove_all(scratch(), ec);

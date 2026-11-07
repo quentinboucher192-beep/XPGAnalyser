@@ -12,7 +12,9 @@
 //  6. retirer de la discussion, remettre ; une copie de travail (l'original intact) ; un doublon (pas de copie inutile) ;
 //  7. vider le cache sans perdre une piece jointe (octet pour octet), le texte extrait refait ;
 //  8. l'isolation des pieces jointes entre conversations ;
-//  9. le volet << Contexte de la discussion >> : le compteur, la liste, les gestes, la recherche, son dessin.
+//  9. le volet << Contexte de la discussion >> : le compteur, la liste, les gestes, la recherche, son dessin ;
+// 10. securite : une conversation dont les chemins sortent du dossier de l'Assistant (un identifiant, une copie, un texte
+//     extrait, un lien) - rien n'est lu, ouvert, envoye ni efface hors de IA/pieces-jointes/.
 #include "../src/app/ai/AiAttachments.hpp"
 #include "../src/app/ai/AiContextPane.hpp"
 #include "../src/app/ai/AiMemory.hpp"
@@ -544,6 +546,74 @@ void isolation() {
     check(!at::applyOutcome(c1, o) && !at::applyOutcome(c2, o), "un resultat ne va qu'a sa conversation");
 }
 
+// ------------------------------------------------- 10. des chemins qui sortent ---
+void hostilePaths() {
+    std::printf("== 10. des chemins qui sortent du dossier de l'Assistant ==\n");
+    check(ai::safeAttachmentId("p-20261030-173512-1") && !ai::safeAttachmentId("../victime") && !ai::safeAttachmentId("p-a/b")
+              && !ai::safeAttachmentId("p-") && !ai::safeAttachmentId("q-1") && !ai::safeAttachmentId("p-..") && !ai::safeAttachmentId("C:\\x"),
+          "l'identifiant d'une piece : p- puis lettres, chiffres, tirets");
+    check(ai::safeAttachmentFile("pieces-jointes/p-1/plan.pdf") && !ai::safeAttachmentFile("pieces-jointes/p-1/../../x")
+              && !ai::safeAttachmentFile("pieces-jointes/../x/y") && !ai::safeAttachmentFile("/etc/passwd") && !ai::safeAttachmentFile("pieces-jointes/p-1/..")
+              && !ai::safeAttachmentFile("pieces-jointes/p-1/"),
+          "la copie : pieces-jointes/<id>/<nom sans separateur>");
+    // Un dossier HORS de IA/, avec ce qu'un fichier pieges voudrait lire ou effacer.
+    const fs::path victim = scratch() / "victime";
+    writeFile(victim / "secret.txt", "NE PAS LIRE");
+    writeFile(victim / "x.json", "{}");
+    writeFile(victim / "p-1" / "garde.txt", "NE PAS EFFACER");
+    writeFile(fs::path(ai::attachmentsDir()) / "p-bon-3" / "plan.txt", "plan\n");
+    std::error_code ec;
+    fs::create_directories(ai::attachmentsDir(), ec);
+    fs::create_directory_symlink(victim, fs::path(ai::attachmentsDir()) / "p-lien-1", ec);
+    const bool link = !ec;
+    const std::string conv =
+        "{\"format\": 1, \"id\": \"../../victime/x\", \"titre\": \"Piegee\", \"cree\": \"2026-10-01T10:00:00\", \"modifie\": \"2026-10-01T10:00:00\", "
+        "\"projet\": {\"nom\": \"\", \"chemin\": \"\", \"vue\": \"\"}, \"messages\": [{\"id\": \"m1\", \"role\": \"utilisateur\", \"date\": "
+        "\"2026-10-01T10:00:00\", \"texte\": \"x\", \"pieces\": ["
+        "{\"id\": \"../../victime\", \"nom\": \"a.txt\", \"type\": \"txt\", \"fichier\": \"pieces-jointes/../../victime/secret.txt\"},"
+        "{\"id\": \"p-bon-1\", \"nom\": \"b.txt\", \"type\": \"txt\", \"fichier\": \"pieces-jointes/p-bon-1/../../../victime/secret.txt\"},"
+        "{\"id\": \"p-bon-2\", \"nom\": \"c.txt\", \"type\": \"txt\", \"fichier\": \"../victime/secret.txt\"},"
+        "{\"id\": \"p-bon-3\", \"nom\": \"plan.txt\", \"type\": \"txt\", \"fichier\": \"pieces-jointes/p-bon-3/plan.txt\", \"analyse\": \"analysee\", "
+        "\"analyses\": [{\"date\": \"2026-10-01T10:00:00\", \"genre\": \"extraction\", \"etat\": \"analysee\", \"texte\": \"../victime/secret.txt\"}]},"
+        "{\"id\": \"p-lien-1\", \"nom\": \"autre.txt\", \"type\": \"txt\", \"octets\": 11, \"fichier\": \"pieces-jointes/p-lien-1/autre.txt\"}]}]}";
+    writeFile(fs::path(ai::conversationsDir()) / "c-piegee.json", conv);
+    ai::Conversation c;
+    for (const auto& x : ai::loadConversations())
+        if (x.title == "Piegee") c = x;
+    check(c.id == "c-piegee", "un identifiant de conversation refuse : celui du fichier (" + c.id + ")");
+    check(!c.messages.empty() && c.messages[0].attachments.size() == 4, "la piece a l'identifiant refuse est ecartee");
+    if (c.messages.empty() || c.messages[0].attachments.size() != 4) return;
+    const auto& list = c.messages[0].attachments;
+    check(list[0].file.empty() && list[1].file.empty() && ai::attachmentPath(list[0]).empty() && ai::attachmentPath(list[1]).empty(),
+          "une copie hors de pieces-jointes/<id>/ : oubliee");
+    check(list[2].file == "pieces-jointes/p-bon-3/plan.txt" && !ai::attachmentPath(list[2]).empty() && list[2].analyses.at(0).textFile.empty()
+              && ai::analysisTextPath(list[2]).empty(),
+          "une copie juste gardee ; son texte extrait hors du cache : oublie");
+    check(at::availability(list[0]) == at::Availability::Missing && at::availability(list[1]) == at::Availability::Missing, "dites manquantes");
+    std::string text, why;
+    for (const auto& a : list) {
+        (void)at::textOf(a, text, &why);
+        const auto sent = at::forProvider(a, true);
+        check(!has(text, "NE PAS LIRE") && (!sent || !has(sent->path, "victime")), "rien n'est lu ni envoye hors du dossier : " + a.id);
+    }
+    if (link) {
+        check(ai::attachmentPath(list[3]).empty() && !ai::insideAttachments((fs::path(ai::attachmentsDir()) / "p-lien-1" / "secret.txt").string())
+                  && at::availability(list[3]) == at::Availability::Missing,
+              "un lien vers l'exterieur : refuse (resolu, il sort), meme un fichier de la meme taille n'y est pas cherche");
+    } else {
+        skip("liens symboliques indisponibles : le cas du lien n'est pas essaye");
+    }
+    check(ai::deleteConversationFiles(c), "la conversation effacee");
+    check(fs::exists(victim / "secret.txt") && fs::exists(victim / "x.json") && fs::exists(victim / "p-1" / "garde.txt"), "rien n'est efface hors du dossier");
+    check(!fs::exists(fs::path(ai::conversationsDir()) / "c-piegee.json") && !fs::exists(fs::path(ai::attachmentsDir()) / "p-bon-3"),
+          "son fichier et sa copie juste, eux, partent");
+    fs::remove(fs::path(ai::attachmentsDir()) / "p-lien-1", ec);
+    ai::Attachment forged;
+    forged.id = "p-1";
+    forged.file = "pieces-jointes/p-1/../../victime/secret.txt";
+    check(ai::attachmentPath(forged).empty(), "une piece forgee en memoire : son chemin refuse aussi");
+}
+
 // ---------------------------------------------------------------- 9. le volet ---
 class Recorder final : public gfx::IRenderer {
 public:
@@ -725,6 +795,7 @@ int main(int argc, char** argv) {
     removeCopyDuplicate(c);
     cacheClean(c);
     isolation();
+    hostilePaths();
     pane(c);
     if (!std::getenv("AI_CONTEXTE_GARDER")) fs::remove_all(scratch(), ec);
     else std::printf("garde : %s\n", scratch().string().c_str());

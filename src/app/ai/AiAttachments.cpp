@@ -504,10 +504,11 @@ Availability availability(const Attachment& a, std::string* where) {
     // Sous son dossier, sous un autre nom (renomme a la main) : la meme taille.
     if (!a.file.empty() && !root().empty()) {
         const std::string dir = copyFolder(a.file);
-        if (!dir.empty())
+        // jamais par un lien qui sort de pieces-jointes/ (le dossier, puis chaque fichier, une fois resolus)
+        if (!dir.empty() && insideAttachments(U(P(attachmentsDir()) / P(dir))))
             for (fs::directory_iterator it(P(attachmentsDir()) / P(dir), ec), end; !ec && it != end; it.increment(ec)) {
                 std::error_code e2;
-                if (!it->is_regular_file(e2) || it->file_size(e2) != a.bytes) continue;
+                if (!it->is_regular_file(e2) || it->file_size(e2) != a.bytes || !insideAttachments(U(it->path()))) continue;
                 if (where) *where = U(it->path());
                 return Availability::Moved;
             }

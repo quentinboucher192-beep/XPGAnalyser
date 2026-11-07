@@ -6,7 +6,8 @@
 //  - le C et le C++ : relus seulement, jamais compiles ni executes (et c'est dit) ;
 //  - le vrai processus enfant (ce programme relance en --bac-a-sable) : le meme resultat, le dossier de travail
 //    efface, une boucle sans fin arretee (temps borne), un chemin complet refuse par FILE_WRITE (rien d'ecrit) ;
-//  - l'entree de l'outil (JSON), sa definition, le compte rendu (jamais << reussi >> sans cas joue).
+//  - l'entree de l'outil (JSON), sa definition, le compte rendu (jamais << reussi >> sans cas joue) ;
+//  - la copie du projet donnee a l'enfant, sans ses secrets (mots de passe, codes dynamiques, badges, SMTP, sortie du poste).
 // =============================================================================
 #include "../src/app/ai/AiAgentTools.hpp"
 #include "../src/app/ai/AiJson.hpp"
@@ -14,6 +15,7 @@
 #include "../src/core/Process.hpp"
 #include "../src/hmi/HmiDiscovery.hpp"
 #include "../src/hmi/HmiModel.hpp"
+#include "../src/hmi/HmiRecording.hpp"
 #include "../src/hmi/HmiRuntime.hpp"
 
 #include <atomic>
@@ -259,6 +261,41 @@ void confinement() {
     fs::remove_all(box, ec);
 }
 
+// ---- la copie du projet donnee a l'enfant : sans ses secrets -------------------------------------------------------
+void childSecrets() {
+    std::printf("La copie du projet, sans ses secrets\n");
+    hmi::Project p = projectWithFunction();
+    hmi::User u;
+    u.id = p.allocate();
+    u.login = "operateur";
+    u.passwordHash = "HASH-SECRET-0123";
+    u.salt = "SEL-SECRET-4567";
+    u.secret = "TOTP-SECRET-89AB";
+    u.badge = "sel:BADGE-SECRET";
+    u.previous = {"sel:ANCIEN-SECRET"};
+    p.security.users.push_back(u);
+    p.station.exitSalt = "SEL-SORTIE-SECRET";
+    p.station.exitHash = "HASH-SORTIE-SECRET";
+    p.notify.smtpUser = "compte-smtp";
+    p.notify.smtpPassword = "MDP-SMTP-SECRET";
+    p.notify.smsUrl = "https://sms.exemple.fr/envoi?jeton=JETON-SECRET";
+    const std::string in = sb::childInput(moyenne(), p);
+    const std::size_t nl = in.find('\n');
+    app::ai::json::Value head;
+    hmi::Project back;
+    std::string why;
+    const bool ok = nl != std::string::npos && app::ai::json::parse(std::string_view(in).substr(0, nl), head)
+                    && hmi::rec::unpackProject(std::string_view(in).substr(nl + 1, static_cast<std::size_t>(head.integer("taille_projet"))), back, &why);
+    check(ok, "la copie se relit (" + why + ")");
+    check(!has(in, "SECRET"), "aucun secret dans ce qui part a l'enfant");
+    check(back.security.users.size() == 1 && back.security.users[0].login == "operateur" && back.security.users[0].passwordHash.empty()
+              && back.security.users[0].salt.empty() && back.security.users[0].secret.empty() && back.security.users[0].badge.empty()
+              && back.security.users[0].previous.empty() && back.station.exitHash.empty() && back.notify.smtpPassword.empty() && back.notify.smsUrl.empty(),
+          "relue : le compte reste, ses secrets non");
+    check(back.programs.functions.size() == 1 && back.programs.functions[0].name == "Double", "le reste du projet est la");
+    check(p.security.users[0].passwordHash == "HASH-SECRET-0123", "le projet de l'application n'est pas touche");
+}
+
 // ---- analyser_projet (lecture seule) ------------------------------------------------------------------------------
 void agentTools() {
     std::printf("analyser_projet\n");
@@ -323,6 +360,7 @@ int main(int argc, char** argv) {
     const std::string self = core::process::selfPath();
     inProcess();
     toolInput();
+    childSecrets();
     agentTools();
     scanTools();
     confinement();
