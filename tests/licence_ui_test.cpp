@@ -23,6 +23,7 @@
 //    forme courte puis le cadenas seul quand c'est serre, un clic : help.licence).
 // =============================================================================
 #include "../src/app/Licence.hpp"
+#include "../src/app/LicenceService.hpp"   // 1.36.0 : la demande en ligne
 #include "../src/app/StartPage.hpp"             // 1.35.0 : l'encart de la licence sur l'accueil (le menu principal)
 #include "../src/app/TopBar.hpp"                // 1.35.0 : la licence active dans le bandeau haut
 #include "../src/ui/Theme.hpp"
@@ -42,6 +43,7 @@
 #include <random>
 #include <set>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -399,6 +401,52 @@ int main(int argc, char** argv) {
             station.refreshAt(0.0);
             check(station.hmiRunning(), "le poste d'exploitation : jamais arrete par la licence (hmi_runtime fermee, il demarre)");
             station.command("hmi.stop");
+        }
+
+        // ---- 1.36.0 : la demande en ligne, le chemin principal (un PC sans licence ; aucun appel au reseau ici) ----
+        std::printf("-- 1.36.0 : la demande en ligne (l'encart, la demande qui attend, la reponse)\n");
+        {
+            namespace ls = app::licence::service;
+            lic::StoreOptions o2;
+            o2.folder = U(base / "pc-demande");
+            o2.trustedKeys = {trustedOf(*key)};
+            o2.bundledRegistry = U(base / "livre" / "registre.xpgreg");
+            app::licence::start(o2);   // les avis restent (startNotices plus haut)
+            check(lic::getLicenseState().status == lic::LicenseStatus::Absent, "un autre PC, sans licence");
+            ls::setAddressForTests(licensing::service::Address{});   // pas de service
+            auto card = app::licence::startCard();
+            check(!app::licence::onlineRequests() && has(card.button, "Activer avec un code") && card.tab == app::licence::kTabActivation,
+                  "sans service : le code (ou le fichier), comme avant (" + card.button + ")");
+            licensing::service::Address a;
+            a.url = "http://127.0.0.1:1";   // un service suppose (personne n'y ecoute ; rien ne l'appelle ici)
+            ls::setAddressForTests(a);
+            card = app::licence::startCard();
+            check(app::licence::onlineRequests() && card.button == "Demander ma licence\xE2\x80\xA6" && card.tab == app::licence::kTabRequest &&
+                      has(card.title, "Sans licence") && has(card.text, "Demande ta licence") && card.tone == 3,
+                  "avec un service : << Demander ma licence... >>, l'onglet de la demande (" + card.text + ")");
+            // une demande qui attend (le releve du service, tel que l'ecrit le Studio)
+            writeFile(base / "pc-demande" / ls::kRecordFile,
+                      "{\"numero\": 12, \"poste\": \"0123456789abcdef0123456789abcdef\", \"demande\": \"nonce-essai\", \"envoyee_le\": \"2026-11-07T10:42:00Z\", "
+                      "\"client\": \"Client d'essai\", \"etat_local\": \"envoyee\"}");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1100));   // le releve est relu au plus une fois par seconde
+            const auto pr = app::licence::pendingRequest();
+            card = app::licence::startCard();
+            check(pr.pending && pr.number == 12 && has(pr.state, "attente"), "la demande qui attend : relue (" + pr.state + ")");
+            check(has(card.title, "Demande envoy") && has(card.text, "n\xC2\xB0 12") && has(card.text, "aucun projet ne s'ouvre") && card.button == "Voir ma demande" &&
+                      card.tab == app::licence::kTabRequest && card.tone == 2,
+                  "l'encart : la demande en attente, << Voir ma demande >> (" + card.title + " / " + card.text + ")");
+            std::string refus;
+            check(!app::licence::projectsAllowed(&refus), "en attendant : aucun projet");
+            // la reponse de l'editeur : une fenetre (la file)
+            app::licence::queueAnswer({ls::kAnswerAccepted, "XPG-UI-0002", "Bonne route"});
+            app::licence::queueAnswer({ls::kAnswerRefused, "", "Raison d'essai"});
+            const auto first = app::licence::takeAnswer();
+            const auto second = app::licence::takeAnswer();
+            check(first && first->kind == ls::kAnswerAccepted && first->note == "Bonne route" && second && second->kind == ls::kAnswerRefused &&
+                      !app::licence::takeAnswer(),
+                  "les reponses de l'editeur : une fenetre chacune, dans l'ordre");
+            fs::remove(base / "pc-demande" / ls::kRecordFile, ec);
+            ls::setAddressForTests(licensing::service::Address{});
         }
     }
 

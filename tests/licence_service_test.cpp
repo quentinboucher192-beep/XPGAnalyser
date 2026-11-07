@@ -453,7 +453,9 @@ int main(int argc, char** argv) {
         check(app::licence::indicator().text == "D\xC3\xA9" "couverte \xC2\xB7 30 j" && app::licence::indicator().tone == 4,
               "l'indicateur : " + app::licence::indicator().text);
         const auto card = app::licence::startCard();
-        check(has(card.title, "D\xC3\xA9" "couverte : il te reste 30 jours") && card.button == "Activer avec un code\xE2\x80\xA6" && card.tab == app::licence::kTabActivation,
+        // 1.36.0 : avec un service, la demande en ligne d'abord
+        check(has(card.title, "D\xC3\xA9" "couverte : il te reste 30 jours") && card.button == "Demander ma licence\xE2\x80\xA6" && card.tab == app::licence::kTabRequest &&
+                  has(card.text, "Demande ta licence"),
               "l'encart de l'accueil : " + card.title + " / " + card.button);
         const auto r = keep(ls::trial());
         const auto rec = record();
@@ -766,6 +768,9 @@ int main(int argc, char** argv) {
         auto r = keep(ls::sendRequest(f));
         auto rec = record();
         check(r.ok && r.pendingAfter && rec.number > 0 && ls::pending(rec) && rec.customer == f.customer, "envoyee (" + r.message + ")");
+        check(r.requestSentAt == rec.sentAt && rec.sentAt > 0 && r.answer.empty(), "1.36.0 : le resultat dit quand elle est partie (la cadence), pas de reponse");
+        check(ls::requestCheckDelay(0) == 60.0 && ls::requestCheckDelay(7199) == 60.0 && ls::requestCheckDelay(7200) == 300.0 && ls::requestCheckDelay(-30) == 60.0,
+              "1.36.0 : une demande qui attend : verifiee toutes les minutes deux heures, puis toutes les 5 minutes");
         const std::uint64_t first = rec.number;
         r = keep(ls::sendRequest(f));
         check(!r.ok && has(r.message, "d\xC3\xA9j\xC3\xA0 en cours"), "une seule a la fois (" + r.message + ")");
@@ -831,8 +836,41 @@ int main(int argc, char** argv) {
               "acceptee : la licence s'installe (" + r.message + ")");
         check(rec.outcome == "acceptee" && !ls::pending(rec) && noticeKey(r, "licence:demande") && has(r.message, "Bienvenue"),
               "la reponse notee, un avis (" + ls::stateText(rec) + ")");
+        check(r.answer == ls::kAnswerAccepted && r.answerNote == "Bienvenue (essai)" && r.requestSentAt == 0,
+              "1.36.0 : la reponse de l'editeur remonte (acceptee, son mot) : la fenetre qui la confirme");
+        {   // 1.36.0 : ce que dit la fenetre
+            const auto v = app::licence::answerView({r.answer, r.licenseId, r.answerNote}, st);
+            check(v.accepted && has(v.title, "activ\xC3\xA9" "e") && has(v.text, "XPG-2026-00501") && has(v.text, "PERSONAL") &&
+                      has(v.text, "Client d'essai Industrie") && has(v.text, "Valable jusqu'au ") && has(v.text, " jours)") &&
+                      has(v.text, "Ce qu'elle ouvre (") && has(v.text, "Bienvenue (essai)") && v.tab == app::licence::kTabMine && v.confirm == "Voir ma licence",
+                  "la fenetre de l'activation : la licence, l'edition, le client, jusqu'a quand, ce qu'elle ouvre, le mot de l'editeur");
+            std::printf("%s\n%s\n", v.title.c_str(), v.text.c_str());
+        }
         r = keep(ls::checkDevice());
-        check(r.ok && has(r.message, "Rien de nouveau"), "verifiee de nouveau : rien de nouveau (" + r.message + ")");
+        check(r.ok && has(r.message, "Rien de nouveau") && r.answer.empty(), "verifiee de nouveau : rien de nouveau, pas de seconde fenetre (" + r.message + ")");
+
+        // 1.36.0 : une demande refusee : la raison remonte (la fenetre la dit)
+        r = keep(ls::sendRequest(f));
+        rec = record();
+        check(r.ok && ls::pending(rec), "une demande de plus (" + r.message + ")");
+        lgw::StatusContent no;
+        no.message = "Pas de seconde licence pour ce poste d'essai";
+        lgw::DeviceStatus s2;
+        s2.device = s.device;
+        s2.number = 2;
+        s2.issuedAt = lic::systemNow();
+        s2.state = lgw::State::Refused;
+        s2.requestNonce = rec.nonce;
+        s2.sealed = lgw::sealFor(pk, lgw::writeStatusContent(no));
+        const Http put2 = http("PUT", "/admin/postes", jsonBody({{"poste", s2.device}, {"etat", block(lic::DocKind::DeviceStatus, lgw::writeDeviceStatus(s2))}}), true);
+        r = keep(ls::checkDevice());
+        rec = record();
+        check(put2.status == 200 && !r.ok && r.refused && r.answer == ls::kAnswerRefused && r.answerNote == no.message && rec.outcome == "refusee" &&
+                  lic::getLicenseState().licenseId == "XPG-2026-00501",
+              "1.36.0 : refusee : la raison remonte, la licence deja la reste (" + r.message + ")");
+        const auto v = app::licence::answerView({r.answer, r.licenseId, r.answerNote}, lic::getLicenseState());
+        check(!v.accepted && has(v.title, "refus\xC3\xA9" "e") && has(v.text, no.message) && v.tab == app::licence::kTabRequest && has(v.confirm, "Nouvelle demande"),
+              "la fenetre du refus : la raison, une nouvelle demande");
     }
 
     std::printf("-- le code laisse par l'installateur\n");

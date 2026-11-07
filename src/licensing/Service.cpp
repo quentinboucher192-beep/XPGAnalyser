@@ -111,7 +111,10 @@ Address compiledAddress() {
     if (std::string_view(XPG_SERVICE_URL).size()) a.url = XPG_SERVICE_URL;
 #endif
 #ifdef XPG_LICENCES_CLE_ESSAI
-    // Seulement dans une construction d'essai : le service des essais, sur ce poste.
+    // Seulement dans une construction d'essai : le service des essais, sur ce poste - JAMAIS celui de l'editeur (1.36.0 :
+    // l'adresse compilee est celle de son vrai service ; une copie d'essai n'y declare ni Decouverte ni demande). Sans
+    // XPG_SERVICE : pas de service.
+    a.url.clear();
     if (const char* env = std::getenv("XPG_SERVICE"); env && *env) a.url = env;
 #endif
     a.url = normalizeUrl(a.url);

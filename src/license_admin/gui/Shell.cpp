@@ -13,11 +13,13 @@
 #include "../../ui/widgets/DataViews.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -176,7 +178,19 @@ protected:
         const Color ink = sel ? c.accent : e_.online ? c.textDisabled : c.text;
         const Color iconInk = sel ? c.accent : e_.online ? c.textDisabled : c.textMuted;
         ui::drawIcon(ctx.r, e_.icon, {r.x + 12.f, r.y + (r.h - 18.f) * 0.5f, 18.f, 18.f}, iconInk);
-        const std::string t = fit(ctx.r, e_.label, kF15, r.w - 46.f);
+        // 1.36.0 : les demandes en attente de ta decision, comptees sur leur page (une pastille).
+        const int count = std::string(e_.id) == "demandes" ? shell_.pendingRequests() : 0;
+        float badgeW = 0.f;
+        if (count > 0) {
+            const std::string n = count > 99 ? std::string("99+") : std::to_string(count);
+            badgeW = std::max(22.f, ctx.r.measure(n, kF13).width + 12.f);
+            const Rect pill{r.right() - 10.f - badgeW, r.y + (r.h - 20.f) * 0.5f, badgeW, 20.f};
+            ctx.r.fillRoundedRect(pill, ctx.theme.tone(ui::Tone::Warning, c.accent), 10.f);
+            ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(n, kF13).width) * 0.5f, pill.y + (20.f - ctx.r.lineHeight(kF13)) * 0.5f}, n, kF13,
+                           gfx::Color{255, 255, 255, 255});
+            badgeW += 8.f;
+        }
+        const std::string t = fit(ctx.r, e_.label, kF15, r.w - 46.f - badgeW);
         const float h = ctx.r.lineHeight(kF15);
         const gfx::Point at{r.x + 38.f, r.y + (r.h - h) * 0.5f};
         if (sel) boldText(ctx.r, at, t, kF15, ink);
@@ -754,6 +768,7 @@ bool Shell::runSlow(const std::string& label, std::function<OpResult()> work, st
     if (!work) return false;
     if (!bg_.start(label, std::move(work))) return false;   // un travail tourne deja
     pendingDone_ = std::move(done);
+    quietSlow_ = false;
     if (view_) static_cast<ShellView*>(view_)->updateTop();
     return true;
 }
@@ -765,8 +780,10 @@ bool Shell::poll() {
     if (!r) return false;
     auto done = std::move(pendingDone_);
     pendingDone_ = nullptr;
+    const bool quiet = quietSlow_;
+    quietSlow_ = false;
     if (done) done(*r);
-    report(*r);
+    if (!quiet) report(*r);   // 1.36.0 : la releve automatique ne parle que si elle a du nouveau (son `done`)
     // 1.35.0 : une publication sur le service qui attendait la fin de ce travail.
     if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());
     return true;
@@ -858,8 +875,53 @@ std::string Shell::syncStatusText() const {
     return "Service : " + host;
 }
 
+int Shell::pendingRequests() const { return ws_->service().ready() ? ws_->service().pending : 0; }
+
+bool Shell::autoFetchRequests() {
+    if (busy() || !ws_->service().ready() || !ws_->key().present) return false;
+    std::set<int> before;
+    for (const auto& e : ws_->service().requests)
+        if (e.waiting()) before.insert(e.number);
+    const Workspace* w = ws_.get();
+    if (!runSlow("Service : relev\xC3\xA9 des demandes", [w] { return w->serviceFetch(); },
+                 [this, before](const OpResult& r) {
+                     ws_->reload();
+                     refreshPages();
+                     if (!r.ok) {
+                         if (!autoProblemSaid_) flash("Rel\xC3\xA8ve automatique des demandes : " + r.message, Tone::Warning);
+                         autoProblemSaid_ = true;
+                         return;
+                     }
+                     autoProblemSaid_ = false;
+                     std::vector<const online::Entry*> fresh;
+                     for (const auto& e : ws_->service().requests)
+                         if (e.waiting() && !before.count(e.number)) fresh.push_back(&e);
+                     if (fresh.empty()) return;
+                     if (fresh.size() == 1) {
+                         const auto& e = *fresh.front();
+                         std::string who = e.customer.empty() ? std::string("un client") : e.customer;
+                         if (!e.deviceName.empty()) who += " (PC \xC2\xAB " + e.deviceName + " \xC2\xBB)";
+                         flash("Nouvelle demande de licence : " + who + " \xE2\x80\x94 Demandes en ligne \xE2\x80\xBA Accepter.", Tone::Warning);
+                     } else {
+                         flash(std::to_string(fresh.size()) + " nouvelles demandes de licence \xE2\x80\x94 Demandes en ligne \xE2\x80\xBA Accepter.", Tone::Warning);
+                     }
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
 void Shell::Update(const menu::FrameContext& fc) {
     (void)poll();
+    // 1.36.0 : la releve automatique des demandes (au lancement, puis toutes les 2 minutes ; pas sous un dialogue).
+    {
+        const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        if (nextAutoFetch_ < 0) nextAutoFetch_ = now + kAutoFetchFirst;
+        if (now >= nextAutoFetch_ && attached_ && manager().top() == this && !busy()) {
+            nextAutoFetch_ = now + kAutoFetchPeriod;
+            (void)autoFetchRequests();
+        }
+    }
     if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());   // 1.35.0 : une publication en attente
     if (view_) static_cast<ShellView*>(view_)->updateTop();
     menu::WidgetMenu::Update(fc);

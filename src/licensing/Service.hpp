@@ -39,7 +39,8 @@ struct Address {
 [[nodiscard]] bool validUrl(std::string_view url) noexcept;
 // L'adresse compilee (ServiceAddress.hpp ; l'option CMake XPG_SERVICE_URL la remplace) ; vide : ce programme n'a pas
 // de service (licences par fichier seulement). SEULEMENT dans une construction d'essai (XPG_LICENCES_CLE_ESSAI) : la
-// variable d'environnement XPG_SERVICE la remplace (le service des essais, sur ce poste).
+// variable d'environnement XPG_SERVICE la remplace (le service des essais, sur ce poste) ; 1.36.0 : sans elle, une
+// construction d'essai n'a PAS de service - jamais l'adresse du vrai service de l'editeur.
 [[nodiscard]] Address compiledAddress();
 // 1.35.0 (revue 6) : l'adresse normalisee (les / finaux retires) ; vide si elle n'est pas valide (validUrl).
 [[nodiscard]] std::string normalizeUrl(std::string_view url);

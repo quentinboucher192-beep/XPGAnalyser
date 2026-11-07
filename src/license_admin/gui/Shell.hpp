@@ -91,6 +91,15 @@ public:
     // Les essais : attendre la fin du travail lent et rendre son resultat (vrai : rendu).
     bool finishSlow();
 
+    // 1.36.0 : LA RELEVE AUTOMATIQUE DES DEMANDES EN LIGNE - au lancement, puis toutes les 2 minutes tant que
+    // l'application est ouverte (le service regle, la cle la, aucun travail en cours, aucun dialogue ouvert) ; sans bruit :
+    // rien au journal, sauf une NOUVELLE demande (un avis : le client, le PC -> Demandes en ligne) ou la premiere
+    // panne (une seule fois, jusqu'a la prochaine releve reussie). Vrai : une releve est partie (les essais l'appellent).
+    bool autoFetchRequests();
+    // Les demandes en attente de ta decision (le menu de gauche les compte : Demandes en ligne).
+    [[nodiscard]] int pendingRequests() const;
+    static constexpr double kAutoFetchFirst = 4.0, kAutoFetchPeriod = 120.0;   // secondes
+
     // ---- ce qui se lit (les essais, la fenetre) ----
     [[nodiscard]] const std::string& currentPageId() const noexcept { return current_; }
     [[nodiscard]] Page* page(const std::string& pageId) const;   // nul : pas encore ouverte
@@ -131,6 +140,9 @@ private:
     ui::Widget*                stack_{nullptr};   // la pile des pages (l'arbre la possede)
     ui::Widget*                view_{nullptr};    // la racine
     std::function<void(const OpResult&)> pendingDone_;
+    bool                       quietSlow_{false};        // 1.36.0 : le travail en cours est la releve automatique
+    double                     nextAutoFetch_{-1};       // 1.36.0 : l'heure (steady, secondes) de la prochaine releve
+    bool                       autoProblemSaid_{false};  // 1.36.0 : la panne de la releve deja dite
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;
 };
