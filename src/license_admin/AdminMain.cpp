@@ -413,6 +413,10 @@ int run(const std::vector<std::string>& argv) {
         say("Sign\xC3\xA9" "e : " + a.one("--sortie") + "\n" + summary + (key->test() ? "!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI !!!\n" : ""));
         noteActivations(records);
         archive(out, *key);
+        // 1.34.0 : la passerelle reglee, la licence part a ses PC (et repond a leur demande en ligne) par une commande.
+        if (passerelle::configured(folder))
+            say("\xC3\x80 publier sur la passerelle (chacun de ses PC la r\xC3\xA9" "cup\xC3\xA8re seul) : XPG-License-Admin passerelle-publier-licence --licence "
+                + a.one("--sortie") + "\n");
         return afterSigning(*key);
     }
     if (a.command == "enregistrer-demande") {

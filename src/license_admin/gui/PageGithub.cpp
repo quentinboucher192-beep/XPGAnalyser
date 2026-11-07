@@ -1024,7 +1024,8 @@ void GithubPage::rebuild() {
     bl.card("\xC3\x80 savoir");
     bl.bullet("Pas encore essay\xC3\xA9 contre le vrai GitHub : la synchro est \xC3\xA9prouv\xC3\xA9" "e contre un faux GitHub dans les essais, comme \xC3\xA0 la livraison "
               "1.31. Premier essai conseill\xC3\xA9 : un d\xC3\xA9p\xC3\xB4t priv\xC3\xA9 de test, puis \xC2\xAB V\xC3\xA9rifier (sans rien changer) \xC2\xBB.");
-    bl.bullet("Un d\xC3\xA9p\xC3\xB4t public est refus\xC3\xA9 : rien n'y est envoy\xC3\xA9.");
+    bl.bullet("Le d\xC3\xA9p\xC3\xB4t de l'archive doit \xC3\xAAtre priv\xC3\xA9 : un d\xC3\xA9p\xC3\xB4t public est refus\xC3\xA9, rien n'y est envoy\xC3\xA9. (La passerelle des clients, "
+              "elle, est un AUTRE d\xC3\xA9p\xC3\xB4t, public : sa carte est plus haut.)");
     bl.bullet("Le jeton ne va jamais dans le d\xC3\xA9p\xC3\xB4t, ni la cl\xC3\xA9 de l'\xC3\xA9" "diteur, ni la cl\xC3\xA9 de synchro. Les licences, les r\xC3\xA9vocations et le "
               "registre des activations y sont chiffr\xC3\xA9s par la cl\xC3\xA9 de synchro ; le registre des \xC3\xA9" "ditions (sans donn\xC3\xA9" "e de client) y est en clair.");
     bl.bullet("Un envoi = un commit. Si un autre poste a publi\xC3\xA9 entre-temps, l'outil relit, fusionne et recommence : rien n'est \xC3\xA9" "cras\xC3\xA9 en silence.");

@@ -668,6 +668,12 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
     if (passerelle_.configured && passerelle_.problem.empty()) {
         r.details.push_back("Passerelle : la licence part \xC3\xA0 chacun de ses PC (ils la r\xC3\xA9" "cup\xC3\xA8rent seuls au prochain d\xC3\xA9marrage).");
+        const bool allOnline = !d.requestPaths.empty() && std::all_of(d.requestPaths.begin(), d.requestPaths.end(), [this](const std::string& p) {
+            return passerelle::isOnlineRequestPath(folder_, p);
+        });
+        if (!allOnline)
+            r.details.push_back("Un logiciel sans passerelle (une version d'avant la 1.34.0) : envoie-lui aussi ce fichier (Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA "
+                                "Activer par fichier de licence).");
         GatewayJob job;
         job.kind = GatewayJob::Kind::Licence;
         job.label = "Passerelle : publication de " + d.licenseId;
@@ -775,9 +781,12 @@ OpResult Workspace::revoke(const std::string& licenseId, const std::string& devi
     list.revoked.push_back(x);
     const std::string what = deviceKey.empty() ? "Licence " + licenseId + " r\xC3\xA9voqu\xC3\xA9" "e" + (onlyThisIssue ? " (les \xC3\xA9missions sign\xC3\xA9" "es jusqu'ici)." : ".")
                                                : "PC r\xC3\xA9voqu\xC3\xA9 sur la licence " + licenseId + ".";
+    // Les PC prevenus (<< revoquee >>) : celui-la, ou tous ceux de la licence - sauf une revocation des seules emissions
+    // d'avant (leur emission en cours reste valable : seule la liste de revocation est publiee).
     std::vector<std::string> keys;
-    if (!deviceKey.empty()) keys.push_back(deviceKey);
-    else if (const LicenceEntry* l = licence(licenseId))
+    if (!deviceKey.empty()) {
+        if (!onlyThisIssue) keys.push_back(deviceKey);
+    } else if (const LicenceEntry* l = licence(licenseId); l && !onlyThisIssue)
         for (const auto& dv : l->licence.devices) keys.push_back(dv.key);
     OpResult r = signRevocationList(std::move(list), what);
     if (r.ok && passerelle_.configured && passerelle_.problem.empty()) {

@@ -195,7 +195,7 @@ endif()
 # systeme, celui de l'Assistant IA (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous
 # Windows, libcurl chargee a la demande ailleurs.
 add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp
-                                 src/license_admin/KeyBackup.cpp src/app/ai/AiHttp.cpp)
+                                 src/license_admin/KeyBackup.cpp src/license_admin/Passerelle.cpp src/app/ai/AiHttp.cpp)
 target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
 if(NOT WIN32)
@@ -320,7 +320,7 @@ endif()
 #    xpg_admin_gui   les pages et la coquille (ui::Widget ; sans SDL : les essais les dessinent a blanc) ;
 #    l'executable    la fenetre SDL (license_admin/gui/AdminGuiMain.cpp), seulement avec XPG_WITH_SDL.
 add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/GitHubSync.cpp src/license_admin/KeyBackup.cpp
-                                  src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
+                                  src/license_admin/Passerelle.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp)
@@ -1077,8 +1077,12 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(admin_workspace_test tests/admin_workspace_test.cpp)
     xpg_target_link_libraries(admin_workspace_test PRIVATE xpg_admin_core)
     xpg_add_test(NAME adminworkspace COMMAND admin_workspace_test ${CMAKE_SOURCE_DIR})
+    # 1.34.0 : la passerelle GitHub cote editeur (license_admin/Passerelle), le faux GitHub en memoire
+    xpg_add_test_executable(admin_passerelle_test tests/admin_passerelle_test.cpp)
+    xpg_target_link_libraries(admin_passerelle_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminpasserelle COMMAND admin_passerelle_test ${CMAKE_SOURCE_DIR})
     if(TARGET xpg_admin_gui)
-        foreach(part shell licences securite donnees)
+        foreach(part shell licences securite donnees demandes)   # 1.34.0 : demandes (Demandes en ligne)
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})

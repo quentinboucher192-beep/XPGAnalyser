@@ -414,12 +414,11 @@ bool findWaiting(const std::string& folder, const std::string& deviceIn, Entry& 
 }
 
 bool isOnlineRequestPath(const std::string& folder, const std::string& path) {
-    std::error_code ec;
-    const fs::path dir = fs::weakly_canonical(P(requestsFolder(folder)), ec);
-    if (ec) return false;
-    const fs::path p = fs::weakly_canonical(P(path), ec);
-    if (ec) return false;
-    return p.parent_path() == dir && p.extension() == ".xpgreq";
+    // Sans toucher au disque (l'assistant le demande a chaque image) : les chemins des demandes relevees sont ecrits
+    // par listRequests, sous requestsFolder(folder).
+    const fs::path dir = P(requestsFolder(folder)).lexically_normal();
+    const fs::path p = P(path).lexically_normal();
+    return !path.empty() && p.parent_path() == dir && p.extension() == ".xpgreq";
 }
 
 FetchState readFetchState(const std::string& folder) {
@@ -516,7 +515,8 @@ public:
             case 403:
                 if (r.rateLeft == "0") return "GitHub limite les requ\xC3\xAAtes de ce jeton pour l'instant : r\xC3\xA9" "essaie dans une heure" + m;
                 return std::string(whose) + " n'a pas le droit de " + what + " sur " + config_.repo
-                       + " (il lui faut, sur ce d\xC3\xA9p\xC3\xB4t : Contents et Issues en lecture et \xC3\xA9" "criture)" + m;
+                       + (std::string(whose) == "ton jeton GitHub" ? " (il lui faut, sur ce d\xC3\xA9p\xC3\xB4t : Contents et Issues en lecture et \xC3\xA9" "criture)"
+                                                                    : " (il lui faut, sur ce d\xC3\xA9p\xC3\xB4t : Issues en lecture et \xC3\xA9" "criture)") + m;
             case 404:
                 return "introuvable sur GitHub pour " + what + " : le d\xC3\xA9p\xC3\xB4t " + config_.repo
                        + " n'existe pas, ou " + whose + " ne le voit pas (un jeton \xC3\xA0 grain fin doit nommer ce d\xC3\xA9p\xC3\xB4t)" + m;
