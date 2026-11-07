@@ -65,13 +65,13 @@ Le pas à pas complet est dans [PASSERELLE-GITHUB.md](PASSERELLE-GITHUB.md) (joi
 
 ## 4. Les essais
 
-- **Linux : @NSUITES@ suites sur @NSUITES@ réussies** (`ctest`, sur la version livrée). Six sont nouvelles :
-  - `evaluation` (@N_EVAL@ contrôles) : le premier lancement, les jours qui restent, la fin, l'horloge reculée, une copie effacée qui ne relance rien, une licence qui passe avant ;
-  - `passerelle` (@N_GW@) : les formats, le sceau (pour un PC, pour l'éditeur, pas pour un autre), le masque du jeton, les caractères de contrôle refusés ;
-  - `fauxpasserelle` (@N_FAUX@) : le faux GitHub local qui sert aux essais sous Wine ;
-  - `passerelle_studios` (@N_STUDIO@) : envoyer, une seule demande par PC, annuler, la licence installée seule, un refus, des états faux, plus anciens, d'un autre poste ou rejoués, hors ligne, la limite de GitHub, deux Studios sur le même PC, et le jeton qui ne sort jamais ;
-  - `adminpasserelle` (@N_ADMIN@) : régler, vérifier, publier, relever, accepter (un PC, puis une licence partagée), refuser, révoquer, retirer un PC, et les attaques de la relecture (une demande rejouée, une issue modifiée, une avalanche de demandes, une demande d'ajout à vérifier) ;
-  - `adminguidemandes` (@N_PAGE@) : la page Demandes en ligne.
+- **Linux : 157 suites sur 157 réussies** (`ctest`, sur la version livrée). Six sont nouvelles :
+  - `evaluation` (86 contrôles) : le premier lancement, les jours qui restent, la fin, l'horloge reculée, une copie effacée qui ne relance rien, une licence qui passe avant ;
+  - `passerelle` (56) : les formats, le sceau (pour un PC, pour l'éditeur, pas pour un autre), le masque du jeton, les caractères de contrôle refusés ;
+  - `fauxpasserelle` (18) : le faux GitHub local qui sert aux essais sous Wine ;
+  - `passerelle_studios` (122) : envoyer, une seule demande par PC, annuler, la licence installée seule, un refus, des états faux, plus anciens, d'un autre poste ou rejoués, hors ligne, la limite de GitHub, deux Studios sur le même PC, et le jeton qui ne sort jamais ;
+  - `adminpasserelle` (199) : régler, vérifier, publier, relever, accepter (un PC, puis une licence partagée), refuser, révoquer, retirer un PC, et les attaques de la relecture (une demande rejouée, une issue modifiée, une avalanche de demandes, une demande d'ajout à vérifier) ;
+  - `adminguidemandes` (94) : la page Demandes en ligne.
 - **Une relecture de sécurité** du code de la passerelle, faite après coup, a trouvé un problème grave, trois moyens et cinq mineurs. Ils sont tous corrigés, et chacun a son essai :
   - **le grave** : une ancienne demande remise en ligne aurait fait publier « reçue » par-dessus une licence pas encore récupérée ;
   - **les moyens** : une demande modifiée après coup, une avalanche de fausses demandes, l'identifiant de licence et la liste de révocation en clair ;
@@ -84,11 +84,22 @@ Le pas à pas complet est dans [PASSERELLE-GITHUB.md](PASSERELLE-GITHUB.md) (joi
     - un deuxième PC annule sa demande ; un troisième est refusé et voit ta raison ;
   - **ce qui est public** : aucun nom de client, contact, message, nom de PC ni jeton dans le dépôt, dans les issues ou dans le journal du serveur ;
   - **l'installation par-dessus la 1.33.0** : elle passe, ta clé d'API est gardée, les programmes installés sont ceux construits (1.34.0), et rien de l'outil de l'éditeur n'est installé ;
-  - **la synchro privée de l'archive (1.31)** : @CLI@ ;
+  - **la synchro privée de l'archive (1.31)** : 17 commandes réussies et les 5 refus attendus, comme en 1.33.0 (journal joint : `essai-outil-wine.txt`) ;
   - captures jointes : `captures-1.34.0.zip`.
 
 
-@INSTALLER@
+## 5. Installer
+
+**L'outil de l'éditeur** (le zip **à part, pour toi seul**) : remplace l'ancien dossier par le nouveau. Il contient `XPG-License-Manager-Admin.exe` (l'application), `SDL3.dll`, `XPG-License-Admin.exe` (la console), `LISEZ-MOI-EDITEUR.txt` (avec la mise en place de la passerelle), `registre.json` et `parametres-exemple.json`. Ta clé, ton archive et ta synchro ne bougent pas. Ne le mets jamais avec l'installateur.
+
+**Les Studios** : lance `API-IHM-Studio-Setup-1.34.0.exe` (dans le zip) par-dessus la 1.33.0. Tes projets, tes réglages et ta clé d'API restent. Tant que je n'ai pas tes trois fichiers (§ 1), cette version se comporte chez tes clients comme la 1.33.0 : licences non activées, tout ouvert.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.34.0.exe` | `E0745ECB7FEFE48DE83E1EE8C0412C1BF3C590A217C9691B95766A17EA8DB932` | 55 007 206 octets |
+| `API-Studio-1.34.0-portable.zip` | `5EF6BF06E1A9653BD70264CA87AF68E0FC8848A08EBED0EB2569AE578460E8D3` | 190 fichiers |
+| `IHM-Studio-1.34.0-portable.zip` | `EE2EA76153722879734BBDB17526794AE467AE8394C908F57F87C54035CC45ED` | 191 fichiers |
+| `XPG-License-Admin-1.34.0-EDITEUR.zip` (**à part, pour toi seul**) | `AC3AAC6F53770F1CBBF4A6895AE989FD0C99CEEE565F2A3E2403898C6A48E3DF` | 5 848 492 octets |
 
 ## 6. Limites
 
