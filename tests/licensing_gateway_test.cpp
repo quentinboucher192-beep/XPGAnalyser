@@ -87,9 +87,9 @@ int main() {
 
     std::printf("-- la configuration et le masque du jeton\n");
     {
-        const std::string token = "github_pat_ESSAI_0000000000000000000000_pas_un_vrai";
+        const std::string token = "essai_jeton_DEMANDES_ESSAI_000000000000_pas_un_vrai";
         const std::string masked = gw::maskToken("editeur/passerelle", token);
-        check(!has(masked, "github_pat_") && !has(masked, "ESSAI"), "le jeton masque n'est pas en clair");
+        check(!has(masked, "essai_jeton") && !has(masked, "ESSAI"), "le jeton masque n'est pas en clair");
         std::string back;
         check(gw::unmaskToken("editeur/passerelle", masked, back) && back == token, "le masque se retire");
         check(!gw::unmaskToken("autre/depot", masked, back) || back != token, "avec un autre depot, pas le meme jeton");
@@ -99,7 +99,7 @@ int main() {
         c.repo = "editeur/passerelle";
         c.requestToken = token;
         const std::string text = gw::writeConfig(c);
-        check(!has(text, "github_pat_"), "la configuration ecrite ne montre pas le jeton");
+        check(!has(text, "essai_jeton"), "la configuration ecrite ne montre pas le jeton");
         gw::Config r;
         std::string why;
         check(gw::parseConfig(text, r, &why) && r.number == 3 && r.repo == c.repo && r.requestToken == token && r.issuedAt == c.issuedAt,
