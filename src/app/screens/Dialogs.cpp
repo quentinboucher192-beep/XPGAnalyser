@@ -668,11 +668,32 @@ namespace app {
         // Past a certain size a paragraph is the wrong widget: it cannot scroll, so
         // the part that does not fit is simply not shown. A read-only editor can,
         // and it already honours the newlines.
-        const bool longMessage = lines > 8 || message_.size() > 500;
-        const float width = longMessage ? 760.f : 560.f;
+        bool longMessage = lines > 8 || message_.size() > 500;
+        float width = longMessage ? 760.f : 560.f;
+        float cap = 520.f;
+        // 1.36.0 : un paragraphe plus large, a lire d'un coup (setParagraphWidth) : les lignes repliees a sa largeur.
+        if (paragraphWidth_ > 0.f) {
+            const std::size_t perLine = static_cast<std::size_t>(std::max(40.f, (paragraphWidth_ - 70.f) / 7.f));
+            std::size_t folded = 0, run = 0;
+            for (char ch : message_) {
+                ++run;
+                if (ch == '\n') {
+                    folded += std::max<std::size_t>(1, (run + perLine - 1) / perLine);
+                    run = 0;
+                }
+            }
+            folded += std::max<std::size_t>(1, (run + perLine - 1) / perLine);
+            if (folded <= 24) {
+                longMessage = false;
+                width = paragraphWidth_;
+                wrapped = folded;
+                lines = std::min(lines, folded);
+                cap = 640.f;
+            }
+        }
         const float height = longMessage
             ? 470.f
-            : std::min(520.f, 120.f + static_cast<float>(std::max(lines, wrapped)) * 19.f);
+            : std::min(cap, 120.f + static_cast<float>(std::max(lines, wrapped)) * 19.f);
         auto frame = std::make_unique<DialogFrame>(title_, width, height);
 
         auto body = std::make_unique<BoxLayout>(Orientation::Vertical, "dialog.message.body");

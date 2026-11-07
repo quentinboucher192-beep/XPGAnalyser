@@ -1915,6 +1915,9 @@ public:
     // Le compte a rebours suit l'horloge du PC, pas les images : un poste qui
     // rame (ou une image lente) ne le ralentit pas.
     void setCountdown(double seconds) { countdown_ = seconds; deadline_ = -1; }
+    // 1.36.0 : un texte a lire d'un coup (la licence activee : ce qu'elle ouvre, jusqu'a quand) : un paragraphe de
+    // cette largeur meme au-dela de 8 lignes (24 lignes repliees au plus ; au-dela, l'editeur qui defile).
+    void setParagraphWidth(float width) { paragraphWidth_ = width; }
     void Update(const menu::FrameContext& f) override;
 protected:
     core::Status buildUi() override;
@@ -1923,6 +1926,7 @@ private:
     std::string           cancelLabel_{"Annuler"};
     double                countdown_{0};
     double                deadline_{-1};        // l'heure (steady_clock, s) de la reponse d'office
+    float                 paragraphWidth_{0};   // 1.36.0 : setParagraphWidth
     bool                  answered_{false};
     ui::Button*           okButton_{nullptr};
     Icon                  icon_;

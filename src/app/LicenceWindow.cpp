@@ -1338,6 +1338,7 @@ void showAnswer(App& app, const Answer& a) {
     const auto v = answerView(a, licensing::getLicenseState());
     auto dlg = std::make_unique<MessageDialog>(v.title, v.text, v.accepted ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning, v.confirm);
     dlg->setCancelLabel(v.accepted ? "Fermer" : "Plus tard");
+    dlg->setParagraphWidth(720.f);   // ce qu'elle ouvre, jusqu'a quand : un paragraphe, pas un editeur
     const int tab = v.tab;
     app.menus().ShowDialog(std::move(dlg), [&app, tab](const menu::DialogResult& r) {
         if (r.accepted()) showLicenceWindow(app, tab);

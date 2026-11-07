@@ -1571,6 +1571,9 @@ void StartRail::setLicenceCard(std::string title, std::string text, int tone, st
         licence_->setText(licenceLabel_);
     }
     invalidateLayout();
+    // 1.36.0 : mise en page tout de suite - sous une fenetre (la licence activee), l'accueil n'est pas remis en page :
+    // le titre et le texte restaient ceux d'avant, avec la couleur et le bouton d'apres.
+    if (bounds().w > 0.f && bounds().h > 0.f) layout();
     invalidate();
 }
 
