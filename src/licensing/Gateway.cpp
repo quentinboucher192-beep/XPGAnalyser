@@ -3,18 +3,13 @@
 //  formats (voir Gateway.hpp)
 // =============================================================================
 #include "Gateway.hpp"
+#include "GatewayAddress.hpp"
 
 #include "../core/Json.hpp"
 
 #include <algorithm>
 #include <cstdlib>
 
-#ifndef XPG_PASSERELLE_DEPOT
-#  define XPG_PASSERELLE_DEPOT ""
-#endif
-#ifndef XPG_PASSERELLE_BRANCHE
-#  define XPG_PASSERELLE_BRANCHE "main"
-#endif
 
 namespace licensing::gateway {
 
@@ -115,8 +110,15 @@ bool validBranch(std::string_view branch) noexcept {
 
 Address compiledAddress() {
     Address a;
-    a.repo = XPG_PASSERELLE_DEPOT;
-    a.branch = XPG_PASSERELLE_BRANCHE;
+    a.repo = kCompiledRepo;
+    a.branch = kCompiledBranch;
+#if defined(XPG_PASSERELLE_DEPOT)
+    // L'option CMake (non vide) remplace l'en-tete.
+    if (std::string_view(XPG_PASSERELLE_DEPOT).size()) a.repo = XPG_PASSERELLE_DEPOT;
+#endif
+#if defined(XPG_PASSERELLE_BRANCHE)
+    if (std::string_view(XPG_PASSERELLE_BRANCHE).size()) a.branch = XPG_PASSERELLE_BRANCHE;
+#endif
 #ifdef XPG_LICENCES_CLE_ESSAI
     // Seulement dans une construction d'essai : le faux GitHub des essais et des captures.
     if (const char* env = std::getenv("XPG_PASSERELLE"); env && *env) {

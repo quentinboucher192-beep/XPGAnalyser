@@ -3724,6 +3724,9 @@
     <ClInclude Include="src\licensing\Gateway.hpp">
       <Filter>licensing</Filter>
     </ClInclude>
+    <ClInclude Include="src\licensing\GatewayAddress.hpp">
+      <Filter>licensing</Filter>
+    </ClInclude>
     <ClInclude Include="src\licensing\PublisherKeyEntry.hpp">
       <Filter>licensing</Filter>
     </ClInclude>

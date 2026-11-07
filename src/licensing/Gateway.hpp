@@ -63,7 +63,7 @@ struct Address {
 };
 [[nodiscard]] bool validRepo(std::string_view repo) noexcept;     // "proprietaire/nom" (lettres, chiffres, . _ -)
 [[nodiscard]] bool validBranch(std::string_view branch) noexcept;
-// L'adresse compilee dans ce programme (l'option CMake XPG_PASSERELLE_DEPOT, et XPG_PASSERELLE_BRANCHE) ; vide :
+// L'adresse compilee dans ce programme (GatewayAddress.hpp ; l'option CMake XPG_PASSERELLE_DEPOT la remplace) ; vide :
 // ce programme n'a pas de passerelle (les demandes et les licences passent par fichier, comme avant).
 // SEULEMENT dans une construction d'essai (XPG_LICENCES_CLE_ESSAI) : la variable d'environnement
 // XPG_PASSERELLE la remplace - "proprietaire/nom" ou "proprietaire/nom@http://127.0.0.1:PORT" (api = base/api,

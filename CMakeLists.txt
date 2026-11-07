@@ -175,9 +175,15 @@ add_library(xpg_licensing STATIC ${LICENSING_SOURCES})
 target_link_libraries(xpg_licensing PUBLIC xpg_core xpg_deploy)
 # 1.34.0 : la passerelle GitHub des licences (licensing/Gateway.hpp) : le depot PUBLIC ou les logiciels des clients
 # lisent leur licence et ouvrent leurs demandes ("proprietaire/nom" ; vide : pas de passerelle, tout par fichier).
-set(XPG_PASSERELLE_DEPOT "" CACHE STRING "Le depot GitHub public de la passerelle des licences (proprietaire/nom ; vide : aucune)")
-set(XPG_PASSERELLE_BRANCHE "main" CACHE STRING "La branche du depot de la passerelle des licences")
-target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_DEPOT="${XPG_PASSERELLE_DEPOT}" XPG_PASSERELLE_BRANCHE="${XPG_PASSERELLE_BRANCHE}")
+# L'adresse est dans src/licensing/GatewayAddress.hpp ; ces options (non vides) la remplacent a la construction.
+set(XPG_PASSERELLE_DEPOT "" CACHE STRING "Remplace le depot de src/licensing/GatewayAddress.hpp (proprietaire/nom ; vide : celui de l'en-tete)")
+set(XPG_PASSERELLE_BRANCHE "" CACHE STRING "Remplace la branche de src/licensing/GatewayAddress.hpp (vide : celle de l'en-tete)")
+if(XPG_PASSERELLE_DEPOT)
+    target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_DEPOT="${XPG_PASSERELLE_DEPOT}")
+endif()
+if(XPG_PASSERELLE_BRANCHE)
+    target_compile_definitions(xpg_licensing PRIVATE XPG_PASSERELLE_BRANCHE="${XPG_PASSERELLE_BRANCHE}")
+endif()
 # 1.30.0 : les vraies cles (src/licensing/PublisherKey.hpp) toujours ; la cle d'essai seulement avec l'option.
 if(XPG_LICENCES_CLE_ESSAI)
     target_compile_definitions(xpg_licensing PRIVATE XPG_LICENCES_CLE_ESSAI=1)
