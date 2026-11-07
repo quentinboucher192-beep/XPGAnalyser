@@ -102,7 +102,8 @@ PagePtr makeGithubPage(ShellHost host);
 PagePtr makeHistoryPage(ShellHost host);
 PagePtr makeSecurityPage(ShellHost host);
 
-// L'assistant de creation d'une licence (un dialogue) ; `requests` : des demandes deja choisies (glissees).
-menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId = {});
+// L'assistant de creation d'une licence (un dialogue) ; `requests` : des demandes deja choisies (glissees) ;
+// `extendLicenseId` : ajouter des PC a cette licence de l'archive ; `customer` : le client prerempli (page Clients).
+menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId = {}, std::string customer = {});
 
 } // namespace license_admin::gui
