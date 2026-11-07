@@ -329,6 +329,7 @@ if(XPG_WITH_SDL AND TARGET xpg_admin_gui AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}
     set_target_properties(xpg_license_manager_admin PROPERTIES OUTPUT_NAME XPG-License-Manager-Admin)
     if(WIN32)
         set(XPG_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/logo/ihm_studio.ico")
+        set(XPG_MANIFEST "${CMAKE_CURRENT_SOURCE_DIR}/resources/windows/xpg_analyzer.manifest")   # la page de code UTF-8
         configure_file(resources/windows/xpg_license_admin.rc.in ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc @ONLY)
         target_sources(xpg_license_manager_admin PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/xpg_license_manager_admin.rc)
     endif()

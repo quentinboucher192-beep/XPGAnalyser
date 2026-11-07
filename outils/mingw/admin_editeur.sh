@@ -54,7 +54,9 @@ fi
 EXE="$OUT/XPG-License-Admin.exe"
 [ -f "$EXE" ] || { echo "$EXE manque apres la construction" >&2; exit 1; }
 grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$EXE" || { echo "$EXE ne porte pas la marque de l'outil Admin : ce n'est pas lui" >&2; exit 1; }
-if x86_64-w64-mingw32-objdump -p "$EXE" | grep -q "Subsystem.*(Windows GUI)"; then
+# (la sortie d'objdump lue en entier : avec pipefail, un grep -q qui s'arrete tot ferait echouer le tube)
+SOUS_SYSTEME_EXE=$(x86_64-w64-mingw32-objdump -p "$EXE" | grep "Subsystem" || true)
+if echo "$SOUS_SYSTEME_EXE" | grep -q "(Windows GUI)"; then
     echo "$EXE n'est pas un programme en console (-mconsole manque)" >&2
     exit 1
 fi
@@ -62,7 +64,8 @@ fi
 APP="$OUT/XPG-License-Manager-Admin.exe"
 [ -f "$APP" ] || { echo "$APP manque apres la construction" >&2; exit 1; }
 grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$APP" || { echo "$APP ne porte pas la marque de l'outil Admin : ce n'est pas lui" >&2; exit 1; }
-x86_64-w64-mingw32-objdump -p "$APP" | grep -q "Subsystem.*(Windows GUI)" || { echo "$APP n'est pas une application a fenetre" >&2; exit 1; }
+SOUS_SYSTEME_APP=$(x86_64-w64-mingw32-objdump -p "$APP" | grep "Subsystem" || true)
+echo "$SOUS_SYSTEME_APP" | grep -q "(Windows GUI)" || { echo "$APP n'est pas une application a fenetre" >&2; exit 1; }
 [ -f "$OUT/SDL3.dll" ] || { echo "$OUT/SDL3.dll manque (l'application en a besoin)" >&2; exit 1; }
 
 # ---- 2. le dossier de l'editeur ----
