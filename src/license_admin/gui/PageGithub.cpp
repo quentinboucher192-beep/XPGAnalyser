@@ -18,6 +18,13 @@
 //  LES SECRETS : le jeton et le code de secours sont tapes dans des champs
 //  masques, vides des leur emploi ; le code de secours n'est montre qu'une fois
 //  (le premier reglage) ou sur demande confirmee (Afficher le code de secours).
+//
+//  1.34.0 : LA CARTE << Passerelle des clients >> (un AUTRE depot, PUBLIC :
+//  licensing/Gateway.hpp, license_admin/Passerelle.hpp) - le depot, la branche,
+//  le JETON DES DEMANDES (celui des clients : Issues seulement, champ masque),
+//  le chemin exact de github.com pour le creer, Verifier et Publier la
+//  configuration (lents : runSlow), le dernier resultat. Le jeton de l'editeur
+//  doit couvrir aussi ce depot (Contents et Issues : Read and write).
 // =============================================================================
 #include "Page.hpp"
 
@@ -633,6 +640,7 @@ public:
         wipe(recovery_);
         clearSecret(code_);
         clearSecret(token_);
+        clearSecret(gwToken_);
     }
     [[nodiscard]] std::string title() const override { return "Synchronisation GitHub"; }
     void refresh() override;
@@ -679,6 +687,13 @@ private:
     void hideCode();
     void buildStep(Blocks& bl);
     void buildReport(Blocks& bl);
+    // 1.34.0 : la passerelle des clients.
+    void buildGateway(Blocks& bl);
+    void gatewayConfigure();
+    void gatewaySaveToken();
+    void gatewayEraseToken();
+    void gatewaySlow(int what);   // 0 : verifier, 1 : publier la configuration
+    [[nodiscard]] bool gatewayRunning() const;
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -710,6 +725,21 @@ private:
     ui::Checkbox*                   noted_{nullptr};
     ui::Button*                     continue_{nullptr};
     ui::Button*                     hide_{nullptr};
+    ui::InputText*                  gwRepo_{nullptr};
+    ui::InputText*                  gwBranch_{nullptr};
+    ui::Button*                     gwSave_{nullptr};
+    ui::InputText*                  gwToken_{nullptr};
+    ui::Button*                     gwSaveToken_{nullptr};
+    ui::Button*                     gwEraseToken_{nullptr};
+    ui::Button*                     gwVerify_{nullptr};
+    ui::Button*                     gwPublish_{nullptr};
+    struct GatewayLast {
+        bool        has{false}, ok{false};
+        std::string what, message;
+        std::vector<std::string> details;
+        Seconds     at{0};
+    } gwLast_;
+    bool                     gwRunning_{false};
 
     bool                     assistant_{false};
     int                      step_{0};
@@ -789,6 +819,26 @@ GithubPage::GithubPage(ShellHost host) : Page("github", std::move(host)) {
     continue_->setStyle(ui::Button::Style::Primary);
     hide_ = body_->make<ui::Button>("Masquer le code", "github.code.masquer");
 
+    gwRepo_ = body_->make<ui::InputText>("github.passerelle.depot");
+    gwRepo_->setPlaceholder("ton-compte/passerelle-licences");
+    gwRepo_->setMaxLength(200);
+    gwBranch_ = body_->make<ui::InputText>("github.passerelle.branche");
+    gwBranch_->setPlaceholder("main");
+    gwBranch_->setMaxLength(100);
+    gwSave_ = body_->make<ui::Button>("Enregistrer la passerelle", "github.passerelle.enregistrer");
+    gwSave_->setStyle(ui::Button::Style::Primary);
+    gwToken_ = body_->make<ui::InputText>("github.passerelle.jeton");
+    gwToken_->setMasked(true);
+    gwToken_->setPlaceholder("github_pat_\xE2\x80\xA6 (Issues seulement)");
+    gwToken_->setMaxLength(300);
+    gwSaveToken_ = body_->make<ui::Button>("Enregistrer le jeton des demandes", "github.passerelle.jeton.enregistrer");
+    gwEraseToken_ = body_->make<ui::Button>("Retirer", "github.passerelle.jeton.retirer");
+    gwVerify_ = body_->make<ui::Button>("V\xC3\xA9rifier", "github.passerelle.verifier");
+    gwVerify_->setIcon(ui::Icon::Search);
+    gwPublish_ = body_->make<ui::Button>("Publier la configuration", "github.passerelle.publier");
+    gwPublish_->setStyle(ui::Button::Style::Primary);
+    gwPublish_->setIcon(ui::Icon::Export);
+
     links_ += modify_->clicked->connect([this] { openAssistant(0); });
     links_ += showCode_->clicked->connect([this] { askShowCode(); });
     links_ += step1_->clicked->connect([this] { openAssistant(0); });
@@ -818,12 +868,23 @@ GithubPage::GithubPage(ShellHost host) : Page("github", std::move(host)) {
     links_ += noted_->stateChanged->connect([this](ui::Checkbox::State) { syncEnabled(); });
     links_ += continue_->clicked->connect([this] { acknowledge(); });
     links_ += hide_->clicked->connect([this] { hideCode(); });
+    links_ += gwSave_->clicked->connect([this] { gatewayConfigure(); });
+    links_ += gwSaveToken_->clicked->connect([this] { gatewaySaveToken(); });
+    links_ += gwEraseToken_->clicked->connect([this] { gatewayEraseToken(); });
+    links_ += gwVerify_->clicked->connect([this] { gatewaySlow(0); });
+    links_ += gwPublish_->clicked->connect([this] { gatewaySlow(1); });
 
     prefill();
     refresh();
 }
 
 void GithubPage::prefill() {
+    if (const auto& p = ws().passerelle(); p.configured && p.problem.empty()) {
+        gwRepo_->setText(p.config.repo);
+        gwBranch_->setText(p.config.branch);
+    } else if (gwBranch_->text().empty()) {
+        gwBranch_->setText("main");
+    }
     const auto& g = ws().github();
     if (g.configured) {
         repo_->setText(g.config.repo);
@@ -845,7 +906,14 @@ void GithubPage::refresh() {
         reveal_ = Reveal::None;
     }
     lastBusy_ = busy();
-    if (!lastBusy_) syncing_ = false;
+    if (!lastBusy_) {
+        syncing_ = false;
+        gwRunning_ = false;
+    }
+    if (const auto& p = ws().passerelle(); p.configured && p.problem.empty() && gwRepo_->text().empty()) {
+        gwRepo_->setText(p.config.repo);
+        gwBranch_->setText(p.config.branch);
+    }
     rebuild();
     syncEnabled();
 }
@@ -857,6 +925,11 @@ void GithubPage::syncEnabled() {
         w->setEnabled(!b);
     eraseToken_->setEnabled(!b && g.token);
     continue_->setEnabled(noted_->isChecked());
+    const auto& p = ws().passerelle();
+    for (auto* w : std::initializer_list<ui::Widget*>{gwSave_, gwSaveToken_}) w->setEnabled(!b);
+    gwEraseToken_->setEnabled(!b && p.requestToken);
+    gwVerify_->setEnabled(!b && p.configured);
+    gwPublish_->setEnabled(!b && p.configured && p.requestToken && ws().key().present);
 }
 
 void GithubPage::openAssistant(int step) {
@@ -946,6 +1019,7 @@ void GithubPage::rebuild() {
     }
 
     buildReport(bl);
+    buildGateway(bl);
 
     bl.card("\xC3\x80 savoir");
     bl.bullet("Pas encore essay\xC3\xA9 contre le vrai GitHub : la synchro est \xC3\xA9prouv\xC3\xA9" "e contre un faux GitHub dans les essais, comme \xC3\xA0 la livraison "
@@ -1040,6 +1114,142 @@ void GithubPage::buildReport(Blocks& bl) {
     }
     if (s.ok && s.received.empty() && s.sent.empty() && s.warnings.empty()) bl.note("Le poste et le d\xC3\xA9p\xC3\xB4t ont les m\xC3\xAAmes fichiers.");
     bl.end();
+}
+
+// ---------------------------------------------------------------------------------------------------- la passerelle
+void GithubPage::buildGateway(Blocks& bl) {
+    const auto& p = ws().passerelle();
+    const bool ready = p.configured && p.problem.empty() && p.requestToken && p.publisherToken;
+    bl.card("Passerelle des clients", ready ? ui::Tone::Ok : ui::Tone::Warning);
+    bl.text("Un AUTRE d\xC3\xA9p\xC3\xB4t GitHub, PUBLIC (jamais celui de l'archive) : les logiciels des clients y envoient leurs demandes de licence et y "
+            "r\xC3\xA9" "cup\xC3\xA8rent leur licence, seuls. Ce qui nomme un client y est scell\xC3\xA9 ; tout ce que tu y publies est sign\xC3\xA9 par ta cl\xC3\xA9.");
+    if (gatewayRunning()) bl.text("Passerelle : " + gwLast_.what + " en cours\xE2\x80\xA6", ui::Tone::Info);
+    bl.pair("D\xC3\xA9p\xC3\xB4t public", p.configured && p.problem.empty() ? p.config.repo : std::string("pas encore r\xC3\xA9gl\xC3\xA9"),
+            p.configured ? ui::Tone::None : ui::Tone::Warning);
+    if (p.configured && p.problem.empty()) {
+        bl.pair("Branche", p.config.branch);
+        if (p.config.api != licensing::gateway::kDefaultApi) bl.pair("API", p.config.api + " (pas celle de GitHub : un essai)", ui::Tone::Warning);
+    }
+    if (!p.problem.empty()) bl.text("Probl\xC3\xA8me : " + p.problem, ui::Tone::Error);
+    bl.pair("Jeton des demandes", p.requestToken ? std::string("enregistr\xC3\xA9 sur ce poste (prot\xC3\xA9g\xC3\xA9 pour ce compte Windows)") : std::string("absent"),
+            p.requestToken ? ui::Tone::None : ui::Tone::Warning);
+    bl.pair("Ton jeton GitHub", p.publisherToken ? std::string("enregistr\xC3\xA9 (il doit couvrir aussi ce d\xC3\xA9p\xC3\xB4t)") : std::string("absent : \xC3\xA9tape 2 de l'assistant ci-dessus"),
+            p.publisherToken ? ui::Tone::None : ui::Tone::Warning);
+    if (gwLast_.has)
+        bl.pair("Dernier r\xC3\xA9sultat", gwLast_.message + " (" + dateTimeFr(gwLast_.at) + ")", gwLast_.ok ? ui::Tone::Ok : ui::Tone::Error);
+    else
+        bl.pair("Dernier r\xC3\xA9sultat", "ni v\xC3\xA9rifi\xC3\xA9" "e ni publi\xC3\xA9" "e depuis l'ouverture de l'application", ui::Tone::Muted);
+    if (gwLast_.has)
+        for (std::size_t i = 0; i < gwLast_.details.size() && i < 12; ++i) bl.bullet(gwLast_.details[i], gwLast_.ok ? ui::Tone::None : ui::Tone::Warning);
+
+    bl.heading("1. Le d\xC3\xA9p\xC3\xB4t public");
+    bl.text("Sur github.com : le bouton + en haut \xC3\xA0 droite \xE2\x80\xBA New repository \xE2\x80\xBA Repository name : passerelle-licences \xE2\x80\xBA Public \xE2\x80\xBA "
+            "Create repository. Puis \xC3\xA9" "cris-le ici sous la forme PROPRIETAIRE/NOM.");
+    bl.field("D\xC3\xA9p\xC3\xB4t public", gwRepo_, 380.f);
+    bl.field("Branche", gwBranch_, 200.f);
+    bl.row({gwSave_});
+    bl.heading("2. Le jeton des demandes (celui des clients)");
+    bl.text("Un SECOND jeton, distinct du tien : il part chez les clients (masqu\xC3\xA9, dans la configuration publi\xC3\xA9" "e) et ne doit permettre QUE les "
+            "issues de ce d\xC3\xA9p\xC3\xB4t. Sur github.com : ta photo \xE2\x80\xBA Settings \xE2\x80\xBA Developer settings \xE2\x80\xBA Personal access tokens \xE2\x80\xBA "
+            "Fine-grained tokens \xE2\x80\xBA Generate new token, puis :");
+    bl.bullet("Token name : XPG demandes des clients.");
+    bl.bullet("Expiration : la plus longue propos\xC3\xA9" "e ; note la date (\xC3\xA0 son terme, les clients ne peuvent plus demander : enregistre un nouveau jeton et republie).");
+    bl.bullet("Repository access : Only select repositories \xE2\x80\xBA le d\xC3\xA9p\xC3\xB4t de la passerelle seulement.");
+    bl.bullet("Permissions \xE2\x80\xBA Repository permissions \xE2\x80\xBA Issues : Read and write. RIEN d'autre (Contents : No access ; Metadata : Read-only, ajout\xC3\xA9 par GitHub).");
+    bl.field("Jeton des demandes", gwToken_, 460.f);
+    bl.row({gwSaveToken_, gwEraseToken_});
+    bl.heading("3. Ton propre jeton");
+    bl.note("Ton jeton GitHub (\xC3\xA9tape 2 de l'assistant ci-dessus) publie les licences : sur github.com, ajoute-lui ce d\xC3\xA9p\xC3\xB4t (Repository access) avec "
+            "Contents : Read and write et Issues : Read and write. Il ne part jamais chez les clients.",
+            p.publisherToken ? ui::Tone::Muted : ui::Tone::Warning);
+    bl.heading("4. V\xC3\xA9rifier, publier");
+    bl.text("V\xC3\xA9rifier : le d\xC3\xA9p\xC3\xB4t est public, ton jeton peut y \xC3\xA9" "crire, le jeton des demandes est accept\xC3\xA9 (rien n'est chang\xC3\xA9). Publier la "
+            "configuration : le jeton des demandes (masqu\xC3\xA9), le registre et la liste de r\xC3\xA9vocation, sign\xC3\xA9s par ta cl\xC3\xA9. Ensuite, les demandes "
+            "arrivent dans Demandes en ligne.");
+    if (!ws().key().present) bl.note("Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour publier (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).", ui::Tone::Warning);
+    bl.row({gwVerify_, gwPublish_});
+    bl.end();
+}
+
+bool GithubPage::gatewayRunning() const { return gwRunning_ && busy(); }
+
+void GithubPage::gatewayConfigure() {
+    if (refuseIfBusy()) return;
+    const std::string repo = normalizeRepo(gwRepo_->text());
+    const OpResult r = ws().passerelleConfigure(repo, trimmed(gwBranch_->text()));
+    if (r.ok) gwRepo_->setText(repo);
+    if (host_.report) host_.report(r);
+    refresh();
+}
+
+void GithubPage::gatewaySaveToken() {
+    if (refuseIfBusy()) return;
+    std::string t = trimmed(gwToken_->text());
+    clearSecret(gwToken_);
+    if (t.empty()) {
+        refuse("colle d'abord le jeton des demandes (github_pat_\xE2\x80\xA6)");
+        return;
+    }
+    const OpResult r = ws().passerelleSaveRequestToken(t);
+    wipe(t);
+    if (host_.report) host_.report(r);
+    refresh();
+}
+
+void GithubPage::gatewayEraseToken() {
+    if (refuseIfBusy()) return;
+    if (!ws().passerelle().requestToken) {
+        refuse("aucun jeton des demandes sur ce poste");
+        return;
+    }
+    const OpResult r = ws().passerelleEraseRequestToken();
+    if (host_.report) host_.report(r);
+    refresh();
+}
+
+void GithubPage::gatewaySlow(int what) {
+    if (refuseIfBusy()) return;
+    const auto& p = ws().passerelle();
+    if (!p.configured || !p.problem.empty()) {
+        refuse("la passerelle n'est pas encore r\xC3\xA9gl\xC3\xA9" "e : son d\xC3\xA9p\xC3\xB4t public d'abord (1.)");
+        return;
+    }
+    if (!p.publisherToken) {
+        refuse("pas encore de jeton GitHub sur ce poste : \xC3\xA9tape 2 de l'assistant ci-dessus (il doit couvrir aussi la passerelle)");
+        return;
+    }
+    if (what == 1 && !p.requestToken) {
+        refuse("enregistre d'abord le jeton des demandes (2.) : il part chez les clients avec la configuration");
+        return;
+    }
+    if (what == 1 && !ws().key().present) {
+        refuse("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour signer la configuration (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9)");
+        return;
+    }
+    gwLast_.what = what == 0 ? "v\xC3\xA9rification" : "publication";
+    gwRunning_ = true;
+    const Workspace* w = &ws();
+    const auto alive = aliveCheck();
+    const bool started = host_.runSlow
+                         && host_.runSlow(what == 0 ? "Passerelle : v\xC3\xA9rification" : "Passerelle : publication de la configuration",
+                                          [w, what] { return what == 0 ? w->passerelleVerify() : w->passerellePublishConfig(); },
+                                          [this, alive](const OpResult& r) {
+                                              if (!alive()) return;
+                                              gwRunning_ = false;
+                                              gwLast_.has = true;
+                                              gwLast_.ok = r.ok;
+                                              gwLast_.message = r.message;
+                                              gwLast_.details = r.details;
+                                              gwLast_.at = ws().now();
+                                              refresh();
+                                          });
+    if (!started) {
+        gwRunning_ = false;
+        refuse("un travail est d\xC3\xA9j\xC3\xA0 en cours : attends qu'il finisse, puis recommence");
+    }
+    lastBusy_ = busy();
+    rebuild();
+    syncEnabled();
 }
 
 // ---------------------------------------------------------------------------------------------------- etape 1
@@ -1216,7 +1426,8 @@ void GithubPage::sync(int mode) {
 void GithubPage::onLayout() {
     const auto r = bounds();
     const ui::Fonts f{};
-    subtitle_ = wrapText("Le d\xC3\xA9p\xC3\xB4t GitHub priv\xC3\xA9 o\xC3\xB9 l'archive des licences est publi\xC3\xA9" "e, chiffr\xC3\xA9" "e, pour tes autres PC Admin.", f.ui,
+    subtitle_ = wrapText("Le d\xC3\xA9p\xC3\xB4t GitHub priv\xC3\xA9 o\xC3\xB9 l'archive des licences est publi\xC3\xA9" "e, chiffr\xC3\xA9" "e, pour tes autres PC Admin ; "
+                         "et la passerelle des clients (un d\xC3\xA9p\xC3\xB4t public, plus bas).", f.ui,
                          std::max(200.f, r.w - kMarginLeft - kMarginRight));
     headerH_ = 16.f + ui::lineHeight(f.title) + 6.f + static_cast<float>(subtitle_.size()) * (ui::lineHeight(f.ui) + 2.f) + 10.f;
     scroll_->setBounds({r.x, r.y + headerH_, r.w, std::max(0.f, r.h - headerH_)});
@@ -1225,7 +1436,10 @@ void GithubPage::onLayout() {
 void GithubPage::onPaint(const ui::PaintContext& ctx) {
     if (const bool b = busy(); b != lastBusy_) {
         lastBusy_ = b;
-        if (!b) syncing_ = false;
+        if (!b) {
+            syncing_ = false;
+            gwRunning_ = false;
+        }
         syncEnabled();
         rebuild();
     }

@@ -7,6 +7,7 @@
 
 #include "../../core/Json.hpp"
 #include "../../deploy/Crypto.hpp"
+#include "../../deploy/Paths.hpp"
 #include "../../licensing/SignedFile.hpp"
 #include "../../licensing/Time.hpp"
 
@@ -147,6 +148,7 @@ void Workspace::reload() {
     loadArchive();
     loadActivations();
     loadGithub();
+    loadPasserelle();
 }
 
 void Workspace::loadKey() {
@@ -266,6 +268,20 @@ void Workspace::loadGithub() {
     }
 }
 
+void Workspace::loadPasserelle() {
+    passerelle_ = PasserelleStatus{};
+    passerelle_.configured = passerelle::configured(folder_);
+    if (passerelle_.configured) {
+        std::string why;
+        if (!passerelle::readConfig(folder_, passerelle_.config, &why)) passerelle_.problem = why;
+    }
+    passerelle_.requestToken = passerelle::hasRequestToken(folder_);
+    passerelle_.publisherToken = github::hasToken(folder_);
+    passerelle_.fetch = passerelle::readFetchState(folder_);
+    passerelle_.requests = passerelle::listRequests(folder_);
+    for (const auto& e : passerelle_.requests) passerelle_.pending += e.waiting() ? 1 : 0;
+}
+
 const LicenceEntry* Workspace::licence(const std::string& licenseId) const {
     for (const auto& l : licences_)
         if (l.licence.licenseId == licenseId) return &l;
@@ -339,6 +355,9 @@ Dashboard Workspace::dashboard() const {
         if (dev.state == "active") ++d.devices;
         else if (dev.state == "demande") ++d.pendingRequests;
     }
+    d.onlineConfigured = passerelle_.configured && passerelle_.problem.empty();
+    d.onlinePending = passerelle_.pending;
+    d.onlineFetchedAt = passerelle_.fetch.fetchedAt;
     const std::size_t n = std::min<std::size_t>(records_.size(), 12);
     for (std::size_t i = 0; i < n; ++i) d.recent.push_back(records_[records_.size() - 1 - i]);
     return d;
@@ -635,6 +654,10 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     std::string out, summary;
     std::vector<ActivationRecord> records;
     if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
+    {
+        std::error_code ec;   // 1.34.0 : demandes-en-ligne/licences/ (une demande en ligne : le fichier sans rien demander)
+        fs::create_directories(P(outPath).parent_path(), ec);
+    }
     if (!writeText(outPath, out, &why)) return OpResult::fail(why);
     OpResult r = OpResult::done("Licence " + d.licenseId + " sign\xC3\xA9" "e : " + outPath);
     for (std::size_t a = 0, b; a < summary.size(); a = b + 1) {
@@ -643,7 +666,17 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
         if (b > a) r.details.push_back(summary.substr(a, b - a));
     }
     if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
-    r.details.push_back("Envoie ce fichier au client : Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.");
+    if (passerelle_.configured && passerelle_.problem.empty()) {
+        r.details.push_back("Passerelle : la licence part \xC3\xA0 chacun de ses PC (ils la r\xC3\xA9" "cup\xC3\xA8rent seuls au prochain d\xC3\xA9marrage).");
+        GatewayJob job;
+        job.kind = GatewayJob::Kind::Licence;
+        job.label = "Passerelle : publication de " + d.licenseId;
+        job.licenseId = d.licenseId;
+        job.licenceText = out;
+        queueGatewayJob(std::move(job));
+    } else {
+        r.details.push_back("Envoie ce fichier au client : Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.");
+    }
     r.output = outPath;
     return archiveAndNote(out, records, std::move(r));
 }
@@ -668,6 +701,11 @@ OpResult Workspace::removeDevice(const std::string& licenseId, const std::string
     for (const auto& g : lic.features) d.features.push_back(g.id);
     d.dropDevices = {deviceKey};
     OpResult r = signLicence(d, outPath);
+    if (r.ok && job_ && job_->kind == GatewayJob::Kind::Licence && job_->licenseId == licenseId) {
+        job_->kind = GatewayJob::Kind::Removal;
+        job_->deviceKey = deviceKey;
+        job_->label = "Passerelle : nouvelle \xC3\xA9mission de " + licenseId + " (PC retir\xC3\xA9)";
+    }
     if (r.ok) {
         r.message = "PC retir\xC3\xA9 de la licence " + licenseId + " : nouvelle \xC3\xA9mission " + outPath;
         r.details.push_back("Pour qu'il ne serve plus avec l'ancienne \xC3\xA9mission : R\xC3\xA9voquer... ce PC (\xC2\xAB toutes les \xC3\xA9missions \xC2\xBB).");
@@ -737,7 +775,21 @@ OpResult Workspace::revoke(const std::string& licenseId, const std::string& devi
     list.revoked.push_back(x);
     const std::string what = deviceKey.empty() ? "Licence " + licenseId + " r\xC3\xA9voqu\xC3\xA9" "e" + (onlyThisIssue ? " (les \xC3\xA9missions sign\xC3\xA9" "es jusqu'ici)." : ".")
                                                : "PC r\xC3\xA9voqu\xC3\xA9 sur la licence " + licenseId + ".";
-    return signRevocationList(std::move(list), what);
+    std::vector<std::string> keys;
+    if (!deviceKey.empty()) keys.push_back(deviceKey);
+    else if (const LicenceEntry* l = licence(licenseId))
+        for (const auto& dv : l->licence.devices) keys.push_back(dv.key);
+    OpResult r = signRevocationList(std::move(list), what);
+    if (r.ok && passerelle_.configured && passerelle_.problem.empty()) {
+        GatewayJob job;
+        job.kind = GatewayJob::Kind::Revocation;
+        job.label = "Passerelle : r\xC3\xA9vocation de " + licenseId;
+        job.licenseId = licenseId;
+        job.deviceKeys = std::move(keys);
+        job.reason = reason;
+        queueGatewayJob(std::move(job));
+    }
+    return r;
 }
 
 OpResult Workspace::unrevoke(std::size_t index) {
@@ -746,6 +798,17 @@ OpResult Workspace::unrevoke(std::size_t index) {
     const auto removed = list.revoked[index];
     list.revoked.erase(list.revoked.begin() + static_cast<std::ptrdiff_t>(index));
     OpResult r = signRevocationList(std::move(list), "R\xC3\xA9vocation retir\xC3\xA9" "e : " + removed.licenseId + (removed.device.empty() ? "" : " (un PC)") + ".");
+    if (r.ok && passerelle_.configured && passerelle_.problem.empty()) {
+        GatewayJob job;
+        job.kind = GatewayJob::Kind::Unrevoke;
+        job.label = "Passerelle : r\xC3\xA9vocation retir\xC3\xA9" "e (" + removed.licenseId + ")";
+        job.licenseId = removed.licenseId;
+        if (const LicenceEntry* l = licence(removed.licenseId)) {
+            std::string why;
+            (void)readText(l->path, job.licenceText, &why);
+        }
+        queueGatewayJob(std::move(job));
+    }
     if (r.ok) r.details.push_back("Un client qui a d\xC3\xA9j\xC3\xA0 import\xC3\xA9 l'ancienne liste la garde jusqu'\xC3\xA0 ce qu'il re\xC3\xA7oive celle-ci.");
     return r;
 }
@@ -773,7 +836,14 @@ OpResult Workspace::signRegistry(const licensing::Registry& edited) {
     OpResult r = OpResult::done("Registre n\xC2\xB0 " + std::to_string(reg.number) + " sign\xC3\xA9 (" + plural(static_cast<int>(reg.editions.size()), "\xC3\xA9" "dition", "\xC3\xA9" "ditions")
                                 + ", " + plural(static_cast<int>(reg.features.size()), "fonctionnalit\xC3\xA9", "fonctionnalit\xC3\xA9s") + ").");
     r.details.push_back("Il part avec chaque licence sign\xC3\xA9" "e ensuite ; un client l'a \xC3\xA0 sa prochaine licence.");
-    return archiveAndNote(out, {}, std::move(r));
+    OpResult done = archiveAndNote(out, {}, std::move(r));
+    if (done.ok && passerelle_.configured && passerelle_.problem.empty()) {
+        GatewayJob job;
+        job.kind = GatewayJob::Kind::Registry;
+        job.label = "Passerelle : publication du registre n\xC2\xB0 " + std::to_string(reg.number);
+        queueGatewayJob(std::move(job));
+    }
+    return done;
 }
 
 OpResult Workspace::signRegistryJson(const std::string& path) {
@@ -788,7 +858,14 @@ OpResult Workspace::signRegistryJson(const std::string& path) {
         return OpResult::fail("ce registre porte le n\xC2\xB0 " + std::to_string(reg.number) + ", pas plus que celui de l'archive (n\xC2\xB0 " + std::to_string(registry_.number)
                               + ") : augmente \"number\"");
     OpResult r = OpResult::done("Registre n\xC2\xB0 " + std::to_string(reg.number) + " sign\xC3\xA9 depuis " + U(P(path).filename()) + ".");
-    return archiveAndNote(out, {}, std::move(r));
+    OpResult done = archiveAndNote(out, {}, std::move(r));
+    if (done.ok && passerelle_.configured && passerelle_.problem.empty()) {
+        GatewayJob job;
+        job.kind = GatewayJob::Kind::Registry;
+        job.label = "Passerelle : publication du registre n\xC2\xB0 " + std::to_string(reg.number);
+        queueGatewayJob(std::move(job));
+    }
+    return done;
 }
 
 // ------------------------------------------------------------------------------------------------- activations
@@ -899,6 +976,166 @@ OpResult Workspace::githubSetApi(const std::string& api) {
     if (!github::writeConfig(folder_, c, &why)) return OpResult::fail(why);
     reload();
     return OpResult::done("API GitHub : " + api);
+}
+
+// -------------------------------------------------------------------------------------------- la passerelle
+namespace {
+
+OpResult fromResult(const passerelle::Result& x) {
+    OpResult r;
+    r.ok = x.ok;
+    r.message = x.message;
+    r.details = x.details;
+    if (!x.published.empty())
+        r.details.push_back(plural(static_cast<int>(x.published.size()), "fichier \xC3\xA9" "crit", "fichiers \xC3\xA9" "crits") + " dans le d\xC3\xA9p\xC3\xB4t de la passerelle.");
+    return r;
+}
+
+std::string trimmedCopy(const std::string& in) {
+    std::string t = in;
+    while (!t.empty() && (t.back() == '\r' || t.back() == '\n' || t.back() == ' ' || t.back() == '\t')) t.pop_back();
+    std::size_t a = 0;
+    while (a < t.size() && (t[a] == ' ' || t[a] == '\t')) ++a;
+    return t.substr(a);
+}
+
+} // namespace
+
+void Workspace::queueGatewayJob(GatewayJob job) { job_ = std::move(job); }
+
+std::optional<GatewayJob> Workspace::takeGatewayJob() {
+    std::optional<GatewayJob> out;
+    out.swap(job_);
+    return out;
+}
+
+OpResult Workspace::passerelleConfigure(const std::string& repoIn, const std::string& branchIn) {
+    const std::string repo = trimmedCopy(repoIn);
+    const std::string branch = trimmedCopy(branchIn).empty() ? std::string("main") : trimmedCopy(branchIn);
+    if (!licensing::gateway::validRepo(repo)) return OpResult::fail("le d\xC3\xA9p\xC3\xB4t s'\xC3\xA9" "crit PROPRIETAIRE/NOM (par exemple ton-compte/passerelle-licences)");
+    if (!licensing::gateway::validBranch(branch)) return OpResult::fail("nom de branche non valide : " + branch);
+    if (github_.configured && github_.config.repo == repo)
+        return OpResult::fail("c'est le d\xC3\xA9p\xC3\xB4t PRIV\xC3\x89 de l'archive des licences : la passerelle doit \xC3\xAAtre un autre d\xC3\xA9p\xC3\xB4t, PUBLIC");
+    passerelle::Config c;
+    std::string why;
+    if (passerelle::configured(folder_) && !passerelle::readConfig(folder_, c, &why)) c = passerelle::Config{};
+    c.repo = repo;
+    c.branch = branch;
+    if (!passerelle::writeConfig(folder_, c, &why)) return OpResult::fail(why);
+    reload();
+    OpResult r = OpResult::done("Passerelle r\xC3\xA9gl\xC3\xA9" "e : d\xC3\xA9p\xC3\xB4t " + c.repo + ", branche " + c.branch + ".");
+    if (!passerelle_.requestToken) r.details.push_back("Ensuite : le jeton des demandes (celui des clients), puis V\xC3\xA9rifier et Publier la configuration.");
+    else r.details.push_back("Ensuite : V\xC3\xA9rifier, puis Publier la configuration.");
+    return r;
+}
+
+OpResult Workspace::passerelleSaveRequestToken(const std::string& token) {
+    std::string t = trimmedCopy(token);
+    if (t.empty()) return OpResult::fail("colle d'abord le jeton des demandes");
+    std::string why;
+    const bool ok = passerelle::saveRequestToken(folder_, t, &why);
+    std::fill(t.begin(), t.end(), '\0');
+    if (!ok) return OpResult::fail(why);
+    reload();
+    OpResult r = OpResult::done(std::string("Jeton des demandes enregistr\xC3\xA9, prot\xC3\xA9g\xC3\xA9 pour ce compte") + (crypto::protectedHere() ? " Windows (DPAPI)." : "."));
+    r.details.push_back("Il part chez les clients, masqu\xC3\xA9, avec \xC2\xAB Publier la configuration \xC2\xBB : il ne doit permettre QUE les issues de ce d\xC3\xA9p\xC3\xB4t.");
+    return r;
+}
+
+OpResult Workspace::passerelleEraseRequestToken() {
+    std::string why;
+    if (!passerelle::eraseRequestToken(folder_, &why)) return OpResult::fail(why);
+    reload();
+    OpResult r = OpResult::done("Jeton des demandes retir\xC3\xA9 de ce poste.");
+    r.details.push_back("Il reste dans la configuration d\xC3\xA9j\xC3\xA0 publi\xC3\xA9" "e : pour le couper, r\xC3\xA9voque-le sur GitHub (Settings \xE2\x80\xBA Developer settings).");
+    return r;
+}
+
+OpResult Workspace::passerelleSetAddress(const std::string& api, const std::string& raw) {
+    passerelle::Config c;
+    std::string why;
+    if (!passerelle::readConfig(folder_, c, &why)) return OpResult::fail(why);
+    c.api = api;
+    c.raw = raw;
+    if (!passerelle::writeConfig(folder_, c, &why)) return OpResult::fail(why);
+    reload();
+    return OpResult::done("Passerelle : API " + api + ", raw " + raw);
+}
+
+namespace {
+
+passerelle::Options optionsAt(Seconds now) {
+    passerelle::Options o;
+    o.now = now;
+    o.tool = std::string("XPG-License-Manager-Admin/") + kAppVersion;
+    return o;
+}
+
+} // namespace
+
+OpResult Workspace::passerelleVerify() const { return fromResult(passerelle::verify(folder_, optionsAt(now()))); }
+
+OpResult Workspace::passerellePublishConfig() const {
+    std::string why;
+    auto key = loadPublisherKey(folder_, &why);   // une copie a ce fil : le Workspace n'est pas partage
+    if (!key) return OpResult::fail(why);
+    return fromResult(passerelle::publishConfig(folder_, *key, optionsAt(now())));
+}
+
+OpResult Workspace::passerelleFetch() const {
+    std::string why;
+    auto key = loadPublisherKey(folder_, &why);
+    if (!key) return OpResult::fail("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour ouvrir les demandes (elles sont scell\xC3\xA9" "es pour elle) : " + why);
+    return fromResult(passerelle::fetchRequests(folder_, *key, optionsAt(now())));
+}
+
+OpResult Workspace::passerelleRefuse(const std::string& device, const std::string& reason) const {
+    std::string why;
+    auto key = loadPublisherKey(folder_, &why);
+    if (!key) return OpResult::fail(why);
+    return fromResult(passerelle::refuse(folder_, *key, device, reason, optionsAt(now())));
+}
+
+OpResult Workspace::passerelleRun(const GatewayJob& job) const {
+    std::string why;
+    auto key = loadPublisherKey(folder_, &why);
+    if (!key) return OpResult::fail(why);
+    const passerelle::Options o = optionsAt(now());
+    switch (job.kind) {
+        case GatewayJob::Kind::Licence: return fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, o));
+        case GatewayJob::Kind::Removal: return fromResult(passerelle::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o));
+        case GatewayJob::Kind::Revocation: return fromResult(passerelle::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o));
+        case GatewayJob::Kind::Registry: return fromResult(passerelle::publishArchive(folder_, *key, o));
+        case GatewayJob::Kind::Unrevoke: {
+            OpResult r = fromResult(passerelle::publishArchive(folder_, *key, o));
+            if (!r.ok || job.licenceText.empty()) return r;
+            OpResult l = fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, o));
+            l.details.insert(l.details.begin(), r.details.begin(), r.details.end());
+            return l;
+        }
+    }
+    return OpResult::fail("publication inconnue");
+}
+
+bool Workspace::isOnlineRequest(const std::string& path) const { return passerelle::isOnlineRequestPath(folder_, path); }
+
+std::string Workspace::onlineLicencePath(const std::string& licenseId) const {
+    std::string stamp;
+    for (char c : licensing::isoTime(now()))
+        if (c >= '0' && c <= '9') stamp += c;
+    if (stamp.size() == 14) stamp.insert(8, "-");
+    const std::string dir = deploy::joinPath(passerelle::requestsFolder(folder_), passerelle::kLicencesDir);
+    return deploy::joinPath(dir, github::safeName(licenseId) + "-" + stamp + ".xpglic");
+}
+
+const passerelle::Entry* Workspace::onlineRequest(int issue) const {
+    for (const auto& e : passerelle_.requests)
+        if (e.issue == issue) return &e;
+    return nullptr;
+}
+
+OpResult Workspace::studioKit(const std::string& outDir) const {
+    return fromResult(passerelle::studioKit(folder_, signing_.get(), outDir, now()));
 }
 
 // ---------------------------------------------------------------------------------------------------- Background

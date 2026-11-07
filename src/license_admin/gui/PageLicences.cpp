@@ -502,6 +502,7 @@ private:
                 const OpResult r = ws().removeDevice(id, key, path);
                 if (r.ok) licdlg::rememberFolder(path);
                 host_.report(r);
+                if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee, les PC sont prevenus
             });
         }));
     }

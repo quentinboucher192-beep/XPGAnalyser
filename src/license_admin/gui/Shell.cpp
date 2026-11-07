@@ -22,6 +22,19 @@
 #include <system_error>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <spawn.h>
+#include <sys/wait.h>
+#include <thread>
+extern char** environ;
+#endif
+
 namespace license_admin::gui {
 
 namespace {
@@ -120,6 +133,34 @@ std::string clockOf(Seconds t) {
     char b[16];
     std::snprintf(b, sizeof b, "%02d:%02d:%02d", tm.tm_hour, tm.tm_min, tm.tm_sec);
     return b;
+}
+
+// 1.34.0 : une page de GitHub dans le navigateur du systeme (l'adresse est verifiee avant : safeGithubUrl). Vide :
+// ouverte ; sinon la phrase.
+std::string openUrlWithSystem(const std::string& url) {
+#if defined(_WIN32)
+    const int n = MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, nullptr, 0);
+    std::wstring w(static_cast<std::size_t>(n > 0 ? n : 1), L'\0');
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, url.c_str(), -1, w.data(), n);
+    const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (r <= 32) return "Windows n'a pas pu ouvrir le navigateur (code " + std::to_string(static_cast<long long>(r)) + ").";
+    return {};
+#else
+#  if defined(__APPLE__)
+    const char* tool = "open";
+#  else
+    const char* tool = "xdg-open";
+#  endif
+    std::string a0 = tool, a1 = url;
+    char* argv[] = {a0.data(), a1.data(), nullptr};
+    pid_t pid = 0;
+    if (posix_spawnp(&pid, tool, nullptr, nullptr, argv, environ) != 0) return std::string("aucun navigateur n'a pu s'ouvrir (") + tool + " manque ?)";
+    std::thread([pid] {
+        int status = 0;
+        (void)waitpid(pid, &status, 0);
+    }).detach();
+    return {};
+#endif
 }
 
 std::string parentFolder(const std::string& path) {
@@ -606,6 +647,7 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"editions", "\xC3\x89" "ditions", ui::Icon::Layers, false},
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"activations", "Activations", ui::Icon::Station, false},
+        {"demandes", "Demandes en ligne", ui::Icon::Import, false},   // 1.34.0 : la passerelle GitHub
         {"flottantes", "Licences flottantes", ui::Icon::Network, true},
         {"boutique", "Boutique", ui::Icon::Globe, true},
         {"commandes", "Commandes", ui::Icon::Mail, true},
@@ -654,6 +696,14 @@ ShellHost Shell::host() {
     h.openDialog = [this](menu::MenuPtr m) { openDialog(std::move(m)); };
     h.pickFile = [this](const ui::FilePick& p, std::function<void(std::string)> done) { pickFile(p, std::move(done)); };
     h.openFolder = [this](const std::string& f) { openFolder(f); };
+    h.openUrl = [this](const std::string& u) {
+        if (!safeGithubUrl(u)) {
+            report(OpResult::fail("cette adresse ne s'ouvre pas d'ici : " + u));
+            return;
+        }
+        if (const std::string why = openUrlWithSystem(u); !why.empty()) report(OpResult::fail(why));
+        else flash("Ouvert dans ton navigateur : " + u, Tone::Info);
+    };
     return h;
 }
 
@@ -682,6 +732,7 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "editions") p = makeEditionsPage(h);
     else if (id == "fonctionnalites") p = makeFeaturesPage(h);
     else if (id == "activations") p = makeActivationsPage(h);
+    else if (id == "demandes") p = makeRequestsPage(h);
     else if (id == "flottantes" || id == "boutique" || id == "commandes") p = makeOnlinePage(h, id);
     else if (id == "revocations") p = makeRevocationsPage(h);
     else if (id == "github") p = makeGithubPage(h);
@@ -762,6 +813,8 @@ bool Shell::poll() {
     pendingDone_ = nullptr;
     if (done) done(*r);
     report(*r);
+    // 1.34.0 : une publication sur la passerelle qui attendait la fin de ce travail.
+    if (!busy() && ws_->hasGatewayJob()) (void)publishToGateway(host());
     return true;
 }
 
@@ -850,6 +903,7 @@ std::string Shell::syncStatusText() const {
 
 void Shell::Update(const menu::FrameContext& fc) {
     (void)poll();
+    if (!busy() && ws_->hasGatewayJob()) (void)publishToGateway(host());   // 1.34.0 : une publication en attente
     if (view_) static_cast<ShellView*>(view_)->updateTop();
     menu::WidgetMenu::Update(fc);
 }

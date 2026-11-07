@@ -4,7 +4,8 @@
 // -----------------------------------------------------------------------------
 //  Un ecran (menu::WidgetMenu, "admin.shell") :
 //    - a gauche, le menu (220 px) : le nom de l'application, << Editeur
-//      seulement >>, puis les 13 entrees de la maquette (Page.hpp) ; les trois
+//      seulement >>, puis les 13 entrees de la maquette (1.34.0 : 14, avec
+//      << Demandes en ligne >>, Page.hpp) ; les trois
 //      du service en ligne sont grisees mais ouvrent leur page d'explication ;
 //    - en haut de la page : son titre ; a droite l'etat de la cle (un clic :
 //      Parametres de securite) et de la synchro GitHub (un clic : la page

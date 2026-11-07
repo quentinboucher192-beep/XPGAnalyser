@@ -4,18 +4,24 @@
 #include "Licence.hpp"
 
 #include "App.hpp"
+#include "BackgroundTasks.hpp"   // 1.34.0 : les avis de la cloche (l'evaluation, la passerelle)
+#include "LicenceGateway.hpp"    // 1.34.0 : la demande en ligne
 #include "hmi/HmiStationLaunch.hpp"
 #include "screens/Screens.hpp"
 
 #include "../licensing/Licensing.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace app::licence {
 
@@ -24,6 +30,24 @@ namespace {
 std::atomic<bool> g_active{false};
 std::mutex        g_mutex;
 double            g_next{0};      // la prochaine revaluation (secondes, horloge monotone)
+// 1.34.0 : les avis (startNotices) et les messages pour la barre d'etat (takeMessages).
+std::atomic<bool>        g_notices{false};
+std::vector<std::string> g_messages;   // sous g_mutex
+constexpr const char*    kEvaluationNotice = "licence:evaluation";
+
+// L'avis de l'evaluation suit l'etat : pose (ou mis a jour) pendant l'evaluation, retire sinon.
+void syncEvaluationNotice() {
+    if (!g_notices || !g_active) return;
+    const auto st = licensing::getLicenseState();
+    const std::string text = evaluationText(st);
+    if (text.empty()) {
+        bgtasks::withdraw(kEvaluationNotice);
+        return;
+    }
+    std::string detail = "Les fonctionnalit\xC3\xA9s de l'\xC3\xA9" "dition d'\xC3\xA9valuation sont ouvertes jusqu'\xC3\xA0 cette date. Pour continuer "
+                         "ensuite : Licence\xE2\x80\xA6 \xE2\x80\xBA Demande en ligne (ou une demande par fichier).";
+    postNotice(kEvaluationNotice, text, detail, st.evaluationDaysLeft <= 7 ? "warning" : "info");
+}
 
 double nowSeconds() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -89,6 +113,7 @@ std::string_view featureOf(Where where, std::string_view key) {
 void start(licensing::StoreOptions options) {
     (void)licensing::initialize(std::move(options));
     arm();
+    syncEvaluationNotice();
 }
 
 void start() {
@@ -107,10 +132,12 @@ void start() {
     }
     (void)licensing::initialize(std::move(o));
     arm();
+    syncEvaluationNotice();
 }
 
 void tick() {
     if (!g_active) return;
+    gateway::poll();   // 1.34.0 : un travail de la passerelle fini (les avis), la verification de l'heure
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         const double now = nowSeconds();
@@ -118,13 +145,17 @@ void tick() {
         g_next = now + 3600.0;
     }
     (void)licensing::refresh();
+    syncEvaluationNotice();
 }
 
 void refresh() {
     if (!g_active) return;
     (void)licensing::refresh();
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_next = nowSeconds() + 3600.0;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_next = nowSeconds() + 3600.0;
+    }
+    syncEvaluationNotice();
 }
 
 bool active() noexcept { return g_active; }
@@ -187,6 +218,11 @@ Badge badge() {
             b.text = edition.empty() ? std::string("Sans licence") : "Sans licence \xC2\xB7 \xC3\xA9" "dition " + edition;
             b.tone = 2;
             break;
+        case S::Evaluation:   // 1.34.0
+            b.text = "\xC3\x89valuation \xC2\xB7 " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j restant" +
+                     (st.evaluationDaysLeft > 1 ? "s" : "");
+            b.tone = 2;
+            break;
         default:
             b.text = "Licence " + licensing::statusLabel(st.status) + (edition.empty() ? std::string{} : " \xC2\xB7 \xC3\xA9" "dition " + edition);
             b.tone = 3;
@@ -195,5 +231,46 @@ Badge badge() {
     b.tip = st.message + "\n(un clic : la fen\xC3\xAAtre Licence)";
     return b;
 }
+
+// ============================================================ 1.34.0 : les avis ==
+std::string evaluationText(const licensing::LicenseState& st) {
+    if (st.status != licensing::LicenseStatus::Evaluation) return {};
+    const int n = std::max(0, st.evaluationDaysLeft);
+    std::string text = "\xC3\x89valuation : il te reste " + std::to_string(n) + (n > 1 ? " jours" : " jour");
+    const licensing::Seconds end = st.evaluationEndsAt ? st.evaluationEndsAt : st.expiresAt;
+    if (end) {
+        const std::string d = licensing::isoDate(end);   // "2026-11-19"
+        if (d.size() == 10) text += " (jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + "/" + d.substr(0, 4) + ")";
+    }
+    return text + ".";
+}
+
+std::string launchNotice() {
+    if (!g_notices || !g_active) return {};
+    return evaluationText(licensing::getLicenseState());
+}
+
+void postNotice(const std::string& key, const std::string& title, const std::string& detail, const std::string& tone) {
+    bgtasks::post({key, "Licence", title, detail, "Licence\xE2\x80\xA6", "help.licence", tone});
+}
+
+void queueMessage(std::string text) {
+    if (text.empty()) return;
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_messages.size() < 20) g_messages.push_back(std::move(text));
+}
+
+std::vector<std::string> takeMessages() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return std::exchange(g_messages, {});
+}
+
+void startNotices(bool online) {
+    g_notices = true;
+    syncEvaluationNotice();
+    if (online) gateway::startRunner();
+}
+
+void shutdown() { gateway::shutdown(); }
 
 } // namespace app::licence

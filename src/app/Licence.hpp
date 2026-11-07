@@ -100,10 +100,32 @@ struct Badge {
 };
 [[nodiscard]] Badge badge();
 
+// ---- 1.34.0 : LES AVIS DE LA LICENCE ET LA PASSERELLE EN LIGNE (app/LicenceGateway) ----
+//  App, apres start(), SAUF le poste d'exploitation (--ihm : personne devant l'ecran) : startNotices(true).
+//    - l'evaluation : a CHAQUE lancement, tant qu'elle court, un avis de la cloche (bouton Licence...) et la
+//      phrase launchNotice() sur l'accueil ; revalue a chaque refresh (les jours qui restent) ;
+//    - `online` : la passerelle (si ce programme en a une) - une verification sur un fil de travail tout de
+//      suite, puis une par heure tant qu'une demande attend ; ce qu'elle apporte (une licence installee, un
+//      refus) devient un avis de la cloche et un message de la barre d'etat (takeMessages).
+//  Jamais une fenetre qui bloque le demarrage.
+void startNotices(bool online);
+// "\xC3\x89valuation : il te reste 12 jours (jusqu'au 19/11/2026)." ; vide : pas en evaluation.
+[[nodiscard]] std::string evaluationText(const licensing::LicenseState& st);
+// La phrase de l'evaluation pour l'accueil (vide : rien a dire, ou startNotices pas appele).
+[[nodiscard]] std::string launchNotice();
+// Un avis de la cloche de la licence (bouton << Licence... >> : la fenetre Licence) ; tone : "ok", "info",
+// "warning", "error".
+void postNotice(const std::string& key, const std::string& title, const std::string& detail, const std::string& tone);
+// Les messages pour la barre d'etat (App les publie : StatusNotice), sures entre fils.
+void queueMessage(std::string text);
+[[nodiscard]] std::vector<std::string> takeMessages();
+// A la fermeture (App) : le fil de la passerelle s'arrete (la requete en cours est coupee).
+void shutdown();
+
 } // namespace licence
 
 // La fenetre Licence (le License Manager du client) ; `tab` : 0 Ma licence, 1 Mes appareils,
-// 2 Fonctionnalites, 3 Editions, 4 Historique, 5 Parametres.
+// 2 Fonctionnalites, 3 Editions, 4 Historique, 5 Parametres, 6 (1.34.0) Demande en ligne.
 void showLicenceWindow(App& app, int tab = 0);
 
 } // namespace app

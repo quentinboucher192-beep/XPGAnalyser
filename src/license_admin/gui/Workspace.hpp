@@ -21,12 +21,22 @@
 //  LENT : backupKey / checkBackup / restoreKey (Argon2id, quelques secondes) et
 //  githubSync (le reseau) - a lancer par Background, jamais sur le fil de
 //  l'interface. Le reste lit ou ecrit de petits fichiers.
+//
+//  1.34.0 : LA PASSERELLE DES CLIENTS (un depot GitHub PUBLIC, Passerelle.hpp) :
+//  la regler, relever les demandes en ligne (passerelleFetch), refuser, et
+//  PUBLIER ce qu'une operation vient de signer (une licence a tous ses PC, une
+//  revocation, un PC retire, un registre) : chaque operation qui signe, la
+//  passerelle reglee, laisse un GatewayJob (takeGatewayJob) que l'application
+//  lance par runSlow (publishToGateway, Page.hpp). Les passerelle* qui touchent
+//  au reseau sont LENTES (const : elles relisent la cle et les fichiers ; jamais
+//  l'etat du Workspace).
 // =============================================================================
 #pragma once
 
 #include "../Admin.hpp"
 #include "../GitHubSync.hpp"
 #include "../KeyBackup.hpp"
+#include "../Passerelle.hpp"
 #include "../../licensing/Documents.hpp"
 
 #include <atomic>
@@ -92,6 +102,10 @@ struct Dashboard {
     int expiringSoon{0};                // actives qui finissent dans les 30 jours
     int devices{0};                     // PC actives (dernier etat "active")
     int pendingRequests{0};             // demandes recues pas encore signees
+    // 1.34.0 : les demandes en ligne (la passerelle) qui attendent ta decision, au dernier releve.
+    bool    onlineConfigured{false};
+    int     onlinePending{0};
+    Seconds onlineFetchedAt{0};         // 0 : jamais relevees sur ce poste
     std::vector<std::pair<std::string, int>> byEdition;   // edition -> licences actives
     std::vector<ActivationRecord>            recent;      // les dernieres operations (les plus recentes d'abord, 12 au plus)
 };
@@ -104,6 +118,36 @@ struct GithubStatus {
     bool           syncKey{false};
     std::string    syncKeyId;
     std::string    problem;      // la configuration ne se lit pas
+};
+
+// ---- 1.34.0 : la passerelle des clients (Passerelle.hpp) ----
+struct PasserelleStatus {
+    bool                           configured{false};
+    passerelle::Config             config;
+    bool                           requestToken{false};    // le jeton des demandes (celui des clients) est sur ce poste
+    bool                           publisherToken{false};  // le jeton GitHub de l'editeur (celui de la synchro)
+    std::string                    problem;                // la configuration ne se lit pas
+    passerelle::FetchState         fetch;                  // le dernier releve
+    std::vector<passerelle::Entry> requests;               // les demandes relevees (les plus recentes d'abord)
+    int                            pending{0};             // celles qui attendent une decision
+};
+
+// Ce qu'une operation qui signe laisse a publier sur la passerelle (lance par l'application, lentement).
+struct GatewayJob {
+    enum class Kind : std::uint8_t {
+        Licence,      // une licence signee : a chacun de ses PC (licenceText)
+        Removal,      // un PC retire : la nouvelle emission aux autres, << retiree >> pour lui (deviceKey)
+        Revocation,   // la liste de revocation, puis << revoquee >> pour deviceKeys
+        Unrevoke,     // la liste de revocation, puis la licence (licenceText, si elle est la) a ses PC
+        Registry,     // le registre (et la liste de revocation) de l'archive
+    };
+    Kind                     kind{Kind::Licence};
+    std::string              label;        // "Passerelle : publication de XPG-2026-00042"
+    std::string              licenseId;
+    std::string              licenceText;
+    std::string              deviceKey;
+    std::vector<std::string> deviceKeys;
+    std::string              reason;
 };
 
 // ---- une demande d'activation lue (l'apercu de l'assistant) ----
@@ -218,11 +262,40 @@ public:
     // Pour les essais (le faux GitHub) : l'adresse de l'API.
     OpResult githubSetApi(const std::string& api);
 
+    // ---- 1.34.0 : la passerelle des clients ----
+    [[nodiscard]] const PasserelleStatus& passerelle() const noexcept { return passerelle_; }
+    // Le depot PUBLIC (proprietaire/nom) et la branche.
+    OpResult passerelleConfigure(const std::string& repo, const std::string& branch);
+    // Le jeton des demandes (celui des clients : Issues seulement) ; jamais garde par le Workspace.
+    OpResult passerelleSaveRequestToken(const std::string& token);
+    OpResult passerelleEraseRequestToken();
+    // Pour les essais (le faux GitHub local) : les adresses de l'API et de raw.
+    OpResult passerelleSetAddress(const std::string& api, const std::string& raw);
+    // LENT (le reseau) : par Background / runSlow.
+    [[nodiscard]] OpResult passerelleVerify() const;
+    [[nodiscard]] OpResult passerellePublishConfig() const;
+    [[nodiscard]] OpResult passerelleFetch() const;
+    // Refuser la demande en attente de ce poste (son identifiant, ou "#<issue>").
+    [[nodiscard]] OpResult passerelleRefuse(const std::string& device, const std::string& reason) const;
+    [[nodiscard]] OpResult passerelleRun(const GatewayJob& job) const;
+    // Ce que la derniere operation a laisse a publier (rien si la passerelle n'est pas reglee).
+    [[nodiscard]] bool hasGatewayJob() const noexcept { return job_.has_value(); }
+    std::optional<GatewayJob> takeGatewayJob();
+    // Remettre un travail pris (la publication n'a pas pu commencer : un autre travail tournait).
+    void queueGatewayJob(GatewayJob job);
+    // Une demande relevee (dans demandes-en-ligne/) ? Ou ecrire la licence qui lui repond (sans rien demander).
+    [[nodiscard]] bool isOnlineRequest(const std::string& path) const;
+    [[nodiscard]] std::string onlineLicencePath(const std::string& licenseId) const;
+    [[nodiscard]] const passerelle::Entry* onlineRequest(int issue) const;
+    // Les fichiers PUBLICS a compiler dans les Studios (la cle publique, le registre, l'adresse de la passerelle).
+    OpResult studioKit(const std::string& outDir) const;
+
 private:
     void loadKey();
     void loadArchive();
     void loadActivations();
     void loadGithub();
+    void loadPasserelle();
     OpResult archiveAndNote(const std::string& bytes, const std::vector<ActivationRecord>& records, OpResult r);
     [[nodiscard]] std::string archivedText(const std::string& relative) const;
     OpResult signRevocationList(licensing::RevocationList list, const std::string& what);
@@ -240,6 +313,8 @@ private:
     std::vector<ActivationRecord>          records_;
     int                                    skipped_{0};
     GithubStatus                           github_;
+    PasserelleStatus                       passerelle_;
+    std::optional<GatewayJob>              job_;
 };
 
 // ---- un travail lent sur un fil a part : l'interface le suit sans attendre (jamais bloquee) ----

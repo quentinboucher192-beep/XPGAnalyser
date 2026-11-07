@@ -610,6 +610,7 @@ private:
     void askBackup();
     void askCheck();
     void askExport();
+    void askKit();
     void launch(const std::string& label, std::function<OpResult()> work, bool reloadAfter);
     [[nodiscard]] std::function<bool()> aliveCheck() const {
         std::weak_ptr<bool> w = alive_;
@@ -631,6 +632,7 @@ private:
     ui::Button*              check_{nullptr};
     ui::Checkbox*            keep_{nullptr};
     ui::Button*              export_{nullptr};
+    ui::Button*              kit_{nullptr};
     std::string              hint_;
     ui::Tone                 hintTone_{ui::Tone::Muted};
     std::string              running_;   // le travail lent lance d'ici ("" : aucun)
@@ -682,6 +684,8 @@ SecurityPage::SecurityPage(ShellHost host) : Page("securite", std::move(host)) {
     keep_ = body_->make<ui::Checkbox>("garder les cl\xC3\xA9s d\xC3\xA9j\xC3\xA0 dans le fichier (rotation)", "securite.export.garder");
     export_ = body_->make<ui::Button>("Exporter la cl\xC3\xA9 publique\xE2\x80\xA6", "securite.exporter");
     export_->setIcon(ui::Icon::Export);
+    kit_ = body_->make<ui::Button>("Pr\xC3\xA9parer les fichiers pour les Studios\xE2\x80\xA6", "securite.kit-studios");
+    kit_->setIcon(ui::Icon::FolderOpen);
 
     links_ += folder_->clicked->connect([this] {
         if (host_.openFolder) host_.openFolder(ws().folder());
@@ -691,6 +695,7 @@ SecurityPage::SecurityPage(ShellHost host) : Page("securite", std::move(host)) {
     links_ += backup_->clicked->connect([this] { askBackup(); });
     links_ += check_->clicked->connect([this] { askCheck(); });
     links_ += export_->clicked->connect([this] { askExport(); });
+    links_ += kit_->clicked->connect([this] { askKit(); });
     links_ += phrase1_->textChanged->connect([this](const std::string&) { updateHint(); });
     links_ += phrase2_->textChanged->connect([this](const std::string&) { updateHint(); });
 
@@ -707,7 +712,7 @@ void SecurityPage::refresh() {
 
 void SecurityPage::syncEnabled() {
     const bool b = busy();
-    for (auto* w : std::initializer_list<ui::Widget*>{create_, restore_, backup_, check_, export_, test_, keep_}) w->setEnabled(!b);
+    for (auto* w : std::initializer_list<ui::Widget*>{create_, restore_, backup_, check_, export_, test_, keep_, kit_}) w->setEnabled(!b);
 }
 
 void SecurityPage::updateHint() {
@@ -811,6 +816,18 @@ void SecurityPage::rebuild() {
         bl.row({keep_});
         bl.note("Coche-la quand tu changes de cl\xC3\xA9 : les licences sign\xC3\xA9" "es avec l'ancienne restent valables.");
         bl.row({export_});
+        bl.end();
+
+        // 1.34.0 : ce que l'integrateur compile dans les Studios livres (rien de secret).
+        bl.card("Les fichiers pour les Studios");
+        bl.text("Les trois fichiers PUBLICS que le d\xC3\xA9veloppeur compile dans API Studio et IHM Studio livr\xC3\xA9s, pour que les licences, "
+                "l'\xC3\xA9valuation et la passerelle y marchent : PublisherKey.hpp (ta cl\xC3\xA9 publique), registre.xpgreg (le registre sign\xC3\xA9 de l'archive) "
+                "et GatewayAddress.hpp (l'adresse de la passerelle), avec un LISEZ-MOI.txt qui dit o\xC3\xB9 les mettre.");
+        if (k.test)
+            bl.note("Refus\xC3\xA9 avec une cl\xC3\xA9 d'essai : les Studios livr\xC3\xA9s ne doivent jamais la reconna\xC3\xAEtre.", ui::Tone::Warning);
+        else
+            bl.note("Rien de secret dedans : ni la cl\xC3\xA9 priv\xC3\xA9" "e, ni un jeton, ni le code de secours.");
+        bl.row({kit_});
         bl.end();
     }
 
@@ -1018,6 +1035,33 @@ void SecurityPage::askExport() {
             if (!alive() || path.empty()) return;
             if (refuseIfBusy()) return;
             const OpResult r = ws().exportPublicKey(path, keep_->isChecked());
+            if (host_.report) host_.report(r);
+            refresh();
+        });
+}
+
+// ---------------------------------------------------------------------------------------------------- le kit des Studios
+void SecurityPage::askKit() {
+    if (refuseIfBusy()) return;
+    const KeyStatus& k = ws().key();
+    if (!k.present) {
+        refuse(k.problem);
+        return;
+    }
+    if (k.test) {
+        refuse("c'est une cl\xC3\xA9 d'ESSAI : elle ne va jamais dans les Studios livr\xC3\xA9s. Cr\xC3\xA9" "e la vraie cl\xC3\xA9 de l'\xC3\xA9" "diteur (ou restaure sa sauvegarde) sur ce poste");
+        return;
+    }
+    ui::FilePick p;
+    p.title = "Le dossier o\xC3\xB9 \xC3\xA9" "crire les fichiers pour les Studios";
+    p.folder = true;
+    const auto alive = aliveCheck();
+    if (host_.pickFile)
+        host_.pickFile(p, [this, alive](std::string path) {
+            if (!alive() || path.empty()) return;
+            if (refuseIfBusy()) return;
+            OpResult r = ws().studioKit(path);
+            if (r.ok) r.output = path + "/LISEZ-MOI.txt";
             if (host_.report) host_.report(r);
             refresh();
         });

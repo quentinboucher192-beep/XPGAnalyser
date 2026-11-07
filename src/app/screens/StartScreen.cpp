@@ -31,6 +31,7 @@
 
 #include "../App.hpp"
 #include "../Dossiers.hpp"
+#include "../Licence.hpp"   // 1.34.0 : l'evaluation, dite a chaque lancement
 #include "../../core/Version.hpp"
 #include "../StartPage.hpp"
 #include "../../ui/widgets/PropertyGridHooks.hpp"   // 1.25.1 : les chemins des cartes (Ouvrir dans l'explorateur, Aller a)
@@ -404,6 +405,8 @@ core::Status StartupScreen::buildUi() {
             page_->status().setMessage("Nouveaut\xC3\xA9s de la " + help::news::shortVersion(help::news::sessionVersion()) + " : " + std::to_string(unseen)
                                        + " \xC3\xA0 d\xC3\xA9" "couvrir \xE2\x80\x94 menu Aide \xE2\x80\xBA Nouveaut\xC3\xA9s\xE2\x80\xA6");
     }
+    // 1.34.0 : la periode d'evaluation de ce PC (les jours qui restent) - dite a chaque lancement (la cloche aussi).
+    if (const auto eval = licence::launchNotice(); !eval.empty()) page_->status().setMessage(eval, StatusBar::Severity::Warning);
 
     // LES SIGNAUX DES WIDGETS, UNE FOIS POUR TOUTES : ici et pas dans onEnter,
     // que MenuManager rappelle a chaque dialogue ferme (voir en tete).
@@ -508,6 +511,10 @@ void StartupScreen::onEnter() {
     // Un enregistrement (le projet ouvert renomme, "les enregistrer d'abord") :
     // la carte doit le montrer.
     busLinks_ += app_.events().subscribe<ProjectSaved>([this](const ProjectSaved&) { reload(); });
+    // 1.34.0 : les messages courts de l'application (une licence recue par la passerelle...) - ici aussi.
+    busLinks_ += app_.events().subscribe<StatusNotice>([this](const StatusNotice& e) {
+        page_->status().setTransientMessage(e.text, e.seconds, StatusBar::Severity::Info);
+    });
     page_->grid().resetClickChain();
     reload();
     // 1.8.0 : ce que le demarrage n'a pas pu faire avec les dossiers (un dossier

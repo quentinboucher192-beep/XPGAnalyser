@@ -502,6 +502,10 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     // 1.30.0 : les licences de ce PC (src/licensing) - verifiees hors ligne ; sans cle d'editeur dans le
     // programme : << non activees >>, tout est ouvert.
     licence::start();
+    // 1.34.0 : les avis de la licence (l'evaluation, a chaque lancement : la cloche, l'accueil) et la passerelle
+    // en ligne (une verification sur un fil de travail : une licence acceptee s'installe d'elle-meme). Pas sur le
+    // poste d'exploitation (--ihm) : personne devant l'ecran, rien a demander.
+    if (a->options_.station.empty()) licence::startNotices(true);
     // La periode de la sauvegarde de reprise (2 min ; un reglage pour les essais).
     if (const int period = a->settings_.getInt("recovery.autosaveSeconds", 120); period >= 5)
         a->recovery_.setAutosavePeriod(period);
@@ -566,6 +570,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
 
 App::~App() {
     if (auto* instance = core::instance::current()) instance->setWake({});   // 1.11.2 (UNI) : avant SDL_Quit
+    licence::shutdown();   // 1.34.0 : la requete de la passerelle en cours est coupee, son fil attendu
     exchange::shutdown();   // 1.12.30 : une archive en cours d'ecriture se termine
     fenetres::retirer(announcedFolder_);   // 1.12.27 : ce projet n'est plus ouvert ici
     tutorials::shutdown();   // 1.11 (T1) : la session de tutoriel tient l'appli (UiDriver)
@@ -3351,6 +3356,8 @@ void App::frame(double dt) {
     lap.to(XPG_PARTIE("enregistrement-auto"));
     recovery_.tick(dt);
     licence::tick();   // 1.30.0 : une revaluation par heure (une licence peut prendre fin pendant le travail)
+    // 1.34.0 : ce qu'apporte la passerelle (une licence installee, un refus) - la barre d'etat (et la cloche).
+    for (auto& m : licence::takeMessages()) bus_.publish(StatusNotice{std::move(m), 20.0});
     if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
         (void)recovery_.autosave([this](const std::string& folder, std::string* reason) {

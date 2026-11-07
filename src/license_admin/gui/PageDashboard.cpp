@@ -237,7 +237,11 @@ public:
         for (const auto& t : tiles) {
             auto tile = std::make_unique<StatTile>(std::string("tableau.tuile.") + t.id, t.label);
             const std::string page = t.page;
-            links_ += tile->clicked->connect([this, page] { host_.navigate(page); });
+            const bool requests = std::string(t.id) == "demandes";
+            links_ += tile->clicked->connect([this, page, requests] {
+                // 1.34.0 : la passerelle reglee, les demandes en attente sont d'abord celles en ligne.
+                host_.navigate(requests && ws().passerelle().configured ? std::string("demandes") : page);
+            });
             tiles_.push_back(&static_cast<StatTile&>(addChild(std::move(tile))));
         }
         tiles_.back()->setTooltip("Les licences flottantes demandent le service de licences en ligne, pas encore fait : aucun chiffre ici.");
@@ -281,7 +285,17 @@ public:
         tiles_[3]->set(n(d_.revokedLicences), w.hasRevocations() ? "liste n\xC2\xB0 " + std::to_string(w.revocations().number) : std::string("aucune liste"),
                        d_.revokedLicences ? Tone::Error : Tone::Info, false);
         tiles_[4]->set(n(d_.devices), "li\xC3\xA9s \xC3\xA0 une licence", Tone::Info, false);
-        tiles_[5]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
+        if (d_.onlineConfigured) {
+            // 1.34.0 : les demandes par fichier (notees) et celles en ligne (au dernier releve).
+            const int all = d_.pendingRequests + d_.onlinePending;
+            const std::string when = d_.onlineFetchedAt ? "relev\xC3\xA9" "es le " + dateTimeFr(d_.onlineFetchedAt) : std::string("en ligne : jamais relev\xC3\xA9" "es");
+            tiles_[5]->set(n(all), d_.onlineFetchedAt ? "dont " + n(d_.onlinePending) + " en ligne, " + when : when, all ? Tone::Warning : Tone::Info, false);
+            tiles_[5]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
+                                  + " en ligne (" + when + "). Clic : Demandes en ligne.");
+        } else {
+            tiles_[5]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
+            tiles_[5]->setTooltip({});
+        }
         tiles_[6]->set(n(d_.expiringSoon), "licences actives", d_.expiringSoon ? Tone::Warning : Tone::Info, false);
         tiles_[7]->set("", "demande le service en ligne", Tone::Info, true);
 
@@ -304,6 +318,12 @@ public:
                           Tone::Info});
         poste_.push_back({"Archive", plural(static_cast<int>(w.licences().size()), "licence sign\xC3\xA9" "e", "licences sign\xC3\xA9" "es"), Tone::Info});
         poste_.push_back({"Activations", plural(static_cast<int>(w.records().size()), "ligne", "lignes") + " dans le registre", Tone::Info});
+        if (const auto& pg = w.passerelle(); !pg.problem.empty())
+            poste_.push_back({"Passerelle", pg.problem, Tone::Error});
+        else if (pg.configured)
+            poste_.push_back({"Passerelle", pg.config.repo + " \xC2\xB7 " + (pg.fetch.fetchedAt ? n(pg.pending) + " en attente (relev\xC3\xA9" "es le " + dateTimeFr(pg.fetch.fetchedAt) + ")"
+                                                                                          : std::string("demandes jamais relev\xC3\xA9" "es")),
+                              pg.pending ? Tone::Warning : Tone::Info});
         const auto& g = w.github();
         if (!g.problem.empty()) poste_.push_back({"Synchro", g.problem, Tone::Error});
         else if (!g.configured) poste_.push_back({"Synchro", "GitHub non r\xC3\xA9gl\xC3\xA9", Tone::Info});

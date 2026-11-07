@@ -271,7 +271,9 @@ private:
                     host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
                     return;
                 }
-                host_.report(ws().unrevoke(index));
+                const OpResult r = ws().unrevoke(index);
+                host_.report(r);
+                if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee
             }));
     }
 

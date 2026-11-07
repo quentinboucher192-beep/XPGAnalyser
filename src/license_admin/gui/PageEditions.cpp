@@ -597,6 +597,7 @@ private:
         }
         problem_.clear();
         host_.report(r);
+        if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee, le registre y part
         refresh();
     }
 
@@ -622,6 +623,7 @@ private:
             }
             const OpResult r = host.workspace().signRegistryJson(path);
             host.report(r);
+            if (r.ok) (void)publishToGateway(host);   // 1.34.0 : la passerelle reglee, le registre y part
             if (!alive.expired()) refresh();
         });
     }

@@ -19,6 +19,11 @@
 //    5. Recapitulatif          Workspace::preview : ce qui sera signe, ou le refus ;
 //    6. Signer                 ou enregistrer le .xpglic, Workspace::signLicence ;
 //                              puis ouvrir le dossier, publier sur GitHub (lent).
+//                              1.34.0 : la passerelle reglee, la licence part
+//                              d'elle-meme a TOUS ses PC (publishToGateway) ; des
+//                              demandes en ligne seulement : << Signer et publier >>
+//                              ecrit le fichier sans rien demander
+//                              (demandes-en-ligne/licences/).
 //  Sans cle ou sans registre, l'assistant ne montre pas les etapes : il dit ou
 //  aller (Parametres de securite, Editions).
 //
@@ -57,6 +62,9 @@ namespace licdlg {
 menu::MenuPtr makeRevokeDialog(ShellHost host, std::string licenseId);
 menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger,
                                 std::function<void()> onOk);
+// 1.34.0 : une raison a taper (refuser une demande en ligne) ; `onOk` la recoit (jamais vide).
+menu::MenuPtr makeReasonDialog(std::string id, std::string title, std::string text, std::string placeholder, std::string okLabel,
+                               std::function<void(const std::string&)> onOk);
 bool wizardTakeDrop(const std::vector<std::string>& paths);
 std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
@@ -436,6 +444,11 @@ struct WizardState {
     bool                  publishing{false};
     bool                  published{false};
     OpResult              publish;
+    // 1.34.0 : la passerelle (la licence a tous ses PC).
+    bool                  gatewaying{false};   // en cours
+    bool                  gatewayWaits{false}; // un autre travail tournait : elle part des qu'il a fini
+    bool                  gatewayed{false};
+    OpResult              gateway;
 };
 
 class WizardMenu;
@@ -487,6 +500,8 @@ public:
     [[nodiscard]] bool blocked() const noexcept { return !blockedWhy_.empty(); }
     [[nodiscard]] std::string windowTitle() const;
     [[nodiscard]] std::string requestedExisting() const;   // la licence de l'archive que demandent les PC (pas etendue)
+    // 1.34.0 : des demandes en ligne seulement, la passerelle reglee : signer ecrit le fichier sans rien demander.
+    [[nodiscard]] bool onlineMode() const;
 
 protected:
     void onLayout() override;
@@ -500,7 +515,9 @@ private:
     void next();
     void prev();
     void sign();
+    void doSign(const LicenceDraft& d, const std::string& path);
     void publish();
+    void publishGateway();
     void updateButtons();
     [[nodiscard]] bool canReach(std::size_t index) const;
     [[nodiscard]] std::size_t railIndexAt(gfx::Point p) const;
@@ -1395,13 +1412,30 @@ public:
     [[nodiscard]] std::string heading() const override { return w_.st().signedOk ? "Licence sign\xC3\xA9" "e" : "Signer"; }
     [[nodiscard]] std::string railLabel() const override { return "Signer"; }
     [[nodiscard]] std::string intro() const override {
-        if (w_.st().signedOk) return "Envoie le fichier au client : il l'importe par Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.";
+        const auto& s = w_.st();
+        if (s.signedOk && s.gatewayed && s.gateway.ok)
+            return "La licence est publi\xC3\xA9" "e sur la passerelle : chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul au prochain d\xC3\xA9marrage de son logiciel. Rien d'autre \xC3\xA0 faire.";
+        if (s.signedOk && (s.gatewaying || s.gatewayWaits)) return "La licence est sign\xC3\xA9" "e ; sa publication sur la passerelle est en cours.";
+        if (s.signedOk && s.gatewayed)
+            return "La licence est sign\xC3\xA9" "e et rang\xC3\xA9" "e, mais PAS publi\xC3\xA9" "e sur la passerelle : republie-la (Demandes en ligne), ou envoie le fichier au client.";
+        if (s.signedOk) return "Envoie le fichier au client : il l'importe par Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.";
+        if (w_.onlineMode())
+            return "Signe la licence avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive puis publi\xC3\xA9" "e sur la passerelle, pour chacun de ses PC ; la demande en ligne est ferm\xC3\xA9" "e.";
         return "Signe la licence avec ta cl\xC3\xA9 et enregistre le fichier .xpglic \xC3\xA0 envoyer au client ; elle est aussi rang\xC3\xA9" "e dans l'archive.";
     }
     void enter() override {
         const auto& s = w_.st();
         std::vector<Lines::Line> lines;
         if (s.signAttempted) lines = linesOf(s.signResult);
+        if (s.gatewaying || s.gatewayWaits || s.gatewayed) {
+            lines.push_back({"", ui::Tone::None});
+            if (s.gatewaying)
+                lines.push_back({"Publication sur la passerelle en cours\xE2\x80\xA6", ui::Tone::Info});
+            else if (s.gatewayWaits)
+                lines.push_back({"La publication sur la passerelle attend la fin du travail en cours, puis part d'elle-m\xC3\xAAme.", ui::Tone::Info});
+            else
+                for (auto& l : linesOf(s.gateway)) lines.push_back(std::move(l));
+        }
         if (s.published || s.publishing) {
             lines.push_back({"", ui::Tone::None});
             if (s.publishing)
@@ -1430,9 +1464,14 @@ protected:
         const auto& k = w_.ws().key();
         const std::string id = trim(s.licenseId);
         float y = b.y;
-        y += drawWrapped(r, b.x, y, b.w, "Signer et enregistrer\xE2\x80\xA6 : choisis o\xC3\xB9 \xC3\xA9" "crire " + id + ".xpglic, le fichier \xC3\xA0 envoyer au client "
-                                            + trim(s.customer) + ". La licence est ensuite rang\xC3\xA9" "e dans l'archive et chaque PC not\xC3\xA9 dans le registre des activations.",
-                         ctx.theme.font.ui, c.text, 3);
+        if (w_.onlineMode())
+            y += drawWrapped(r, b.x, y, b.w, "Signer et publier : la licence " + id + " de " + trim(s.customer) + " est sign\xC3\xA9" "e, rang\xC3\xA9" "e dans l'archive, "
+                                                "puis publi\xC3\xA9" "e sur la passerelle pour chacun de ses PC ; chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul. Aucun fichier \xC3\xA0 envoyer.",
+                             ctx.theme.font.ui, c.text, 3);
+        else
+            y += drawWrapped(r, b.x, y, b.w, "Signer et enregistrer\xE2\x80\xA6 : choisis o\xC3\xB9 \xC3\xA9" "crire " + id + ".xpglic, le fichier \xC3\xA0 envoyer au client "
+                                                + trim(s.customer) + ". La licence est ensuite rang\xC3\xA9" "e dans l'archive et chaque PC not\xC3\xA9 dans le registre des activations.",
+                             ctx.theme.font.ui, c.text, 3);
         y += 6.f;
         r.drawText({b.x, y}, fit(r, "Cl\xC3\xA9 de signature : " + k.name + " (" + k.fingerprint + ")", ctx.theme.font.ui, b.w), ctx.theme.font.ui, c.textMuted);
         y += lineStep(ctx.theme.font.ui);
@@ -1764,6 +1803,10 @@ void WizardBody::sign() {
         say(check.message, Tone::Error);
         return;
     }
+    if (onlineMode()) {   // 1.34.0 : une demande en ligne - le fichier va dans demandes-en-ligne/licences/, sans rien demander
+        doSign(d, ws().onlineLicencePath(d.licenseId));
+        return;
+    }
     ui::FilePick pick;
     pick.title = "Enregistrer la licence \xC3\xA0 envoyer au client";
     pick.filters = {{"Licences XPG (.xpglic)", "xpglic"}};
@@ -1782,18 +1825,58 @@ void WizardBody::sign() {
         }
         std::string path = chosen;
         if (extOf(path) != ".xpglic") path += ".xpglic";
-        OpResult r = ws().signLicence(d, path);
-        st_.signAttempted = true;
-        st_.signResult = r;
-        st_.signedOk = r.ok;
-        if (r.ok) licdlg::rememberFolder(path);
-        if (host_.report) host_.report(r);
+        doSign(d, path);
+    });
+}
+
+void WizardBody::doSign(const LicenceDraft& d, const std::string& path) {
+    auto alive = alive_;
+    OpResult r = ws().signLicence(d, path);
+    st_.signAttempted = true;
+    st_.signResult = r;
+    st_.signedOk = r.ok;
+    if (r.ok && !onlineMode()) licdlg::rememberFolder(path);
+    if (host_.report) host_.report(r);
+    if (!*alive) return;
+    if (r.ok) publishGateway();   // la passerelle reglee : la licence part a ses PC
+    if (!*alive) return;
+    steps_.back()->enter();
+    updateButtons();
+    invalidateLayout();
+    if (!r.ok) say(r.message, Tone::Error);
+}
+
+bool WizardBody::onlineMode() const {
+    const auto& g = ws().passerelle();
+    if (!g.configured || !g.problem.empty()) return false;
+    bool any = false;
+    for (const auto& r : st_.requests) {
+        if (!r.ok()) continue;
+        if (!ws().isOnlineRequest(r.p.path)) return false;
+        any = true;
+    }
+    return any;
+}
+
+void WizardBody::publishGateway() {
+    if (!ws().hasGatewayJob()) return;
+    auto alive = alive_;
+    st_.gatewaying = true;
+    const bool started = publishToGateway(host_, [this, alive](const OpResult& g) {
         if (!*alive) return;
+        st_.gatewaying = false;
+        st_.gatewayWaits = false;
+        st_.gatewayed = true;
+        st_.gateway = g;
         steps_.back()->enter();
         updateButtons();
         invalidateLayout();
-        if (!r.ok) say(r.message, Tone::Error);
     });
+    if (!*alive) return;
+    if (!started && !st_.gatewayed) {   // un travail tourne : la coquille la lance des qu'il a fini
+        st_.gatewaying = false;
+        st_.gatewayWaits = ws().hasGatewayJob();
+    }
 }
 
 void WizardBody::publish() {
@@ -1833,6 +1916,7 @@ void WizardBody::updateButtons() {
     show(prev_, !isBlocked && !done);
     show(next_, !isBlocked && !done && !last);
     show(sign_, !isBlocked && !done && last);
+    sign_->setText(onlineMode() ? std::string("Signer et publier") : std::string("Signer et enregistrer\xE2\x80\xA6"));
     show(folder_, done);
     show(github_, done && ws().github().configured);
     show(close_, isBlocked || done);
@@ -1925,6 +2009,10 @@ void WizardBody::onPaint(const ui::PaintContext& ctx) {
         if (line.empty() && st_.signedOk && st_.published) {
             line = st_.publish.message;
             tone = st_.publish.ok ? Tone::Ok : Tone::Error;
+        }
+        if (line.empty() && st_.signedOk && st_.gatewayed) {
+            line = st_.gateway.message;
+            tone = st_.gateway.ok ? Tone::Ok : Tone::Error;
         }
         drawBand(r, ctx.theme, band_, line, tone);
     }
@@ -2128,6 +2216,7 @@ private:
         }
         const OpResult r = host_.workspace().revoke(id, key, reason, onlyIssued_->isChecked());
         if (host_.report) host_.report(r);
+        if (r.ok) (void)publishToGateway(host_);   // 1.34.0 : la passerelle reglee, les PC sont prevenus
         if (r.ok) owner_.close();
         else error_ = r.message;
         invalidate();
@@ -2220,6 +2309,93 @@ private:
     core::ConnectionScope links_;
 };
 
+// ============================================================================ une raison a taper (un dialogue)
+class ReasonBody final : public ui::Widget {
+public:
+    ReasonBody(DialogMenu& owner, std::string title, std::string text, std::string placeholder, std::string okLabel,
+               std::function<void(const std::string&)> onOk)
+        : ui::Widget("dialog.raison.corps"), owner_(owner), title_(std::move(title)), text_(std::move(text)), onOk_(std::move(onOk)) {
+        reason_ = &adopt(*this, std::make_unique<ui::InputText>("raison.texte"));
+        reason_->setPlaceholder(std::move(placeholder));
+        reason_->setMaxLength(1500);
+        cancel_ = &button(*this, "Annuler", "raison.annuler");
+        ok_ = &button(*this, std::move(okLabel), "raison.ok", ui::Button::Style::Danger);
+        links_ += cancel_->clicked->connect([this] { owner_.close(); });
+        links_ += ok_->clicked->connect([this] {
+            if (done_) return;
+            const std::string why = trim(reason_->text());
+            if (why.empty()) {
+                error_ = "Donne une raison : le client la lit dans son logiciel.";
+                invalidate();
+                return;
+            }
+            done_ = true;
+            auto run = onOk_;
+            owner_.close();
+            if (run) run(why);
+        });
+    }
+
+protected:
+    void onLayout() override {
+        const float h = 43.f + 20.f + wrappedHeight(text_, gfx::FontId{16}, 560.f - 40.f) + 16.f + 32.f + 50.f + 57.f;
+        frame_.place(*this, 560.f, std::max(240.f, h));
+        const auto& p = frame_.panel;
+        textY_ = p.y + 43.f + 20.f;
+        const float fy = textY_ + wrappedHeight(text_, gfx::FontId{16}, p.w - 40.f) + 16.f;
+        reason_->setBounds({p.x + 20.f, fy, p.w - 40.f, 30.f});
+        const float by = p.bottom() - 44.f;
+        const float okW = buttonWidth(*ok_, 120.f), caW = buttonWidth(*cancel_, 110.f);
+        ok_->setBounds({p.right() - 16.f - okW, by, okW, 32.f});
+        cancel_->setBounds({ok_->bounds().x - 8.f - caW, by, caW, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& p = frame_.panel;
+        frame_.paint(ctx.r, ctx.theme, title_);
+        (void)drawWrapped(ctx.r, p.x + 20.f, textY_, p.w - 40.f, text_, ctx.theme.font.ui, ctx.theme.color.text);
+        if (!error_.empty()) drawBand(ctx.r, ctx.theme, {p.x + 20.f, p.bottom() - 56.f - 34.f, p.w - 40.f, 28.f}, error_, Tone::Error);
+        ctx.r.fillRect({p.x, p.bottom() - 57.f, p.w, 1.f}, ctx.theme.color.border);
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (frame_.hitClose(ev)) {
+            owner_.close();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    DialogMenu&                             owner_;
+    std::string                             title_, text_, error_;
+    std::function<void(const std::string&)> onOk_;
+    bool                                    done_{false};
+    float                                   textY_{0.f};
+    ui::InputText*                          reason_{nullptr};
+    ui::Button*                             cancel_{nullptr};
+    ui::Button*                             ok_{nullptr};
+    Frame                                   frame_;
+    core::ConnectionScope                   links_;
+};
+
+class ReasonMenu final : public DialogMenu {
+public:
+    ReasonMenu(std::string id, std::string title, std::string text, std::string placeholder, std::string okLabel,
+               std::function<void(const std::string&)> onOk)
+        : DialogMenu("dialog." + std::move(id)), title_(std::move(title)), text_(std::move(text)), placeholder_(std::move(placeholder)), ok_(std::move(okLabel)),
+          onOk_(std::move(onOk)) {}
+    [[nodiscard]] std::string title() const override { return title_; }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<ReasonBody>(*this, title_, text_, placeholder_, ok_, onOk_));
+        return core::ok();
+    }
+
+private:
+    std::string                             title_, text_, placeholder_, ok_;
+    std::function<void(const std::string&)> onOk_;
+};
+
 class ConfirmMenu final : public DialogMenu {
 public:
     ConfirmMenu(std::string id, std::string title, std::string text, std::string okLabel, bool danger, std::function<void()> onOk)
@@ -2252,6 +2428,11 @@ menu::MenuPtr makeRevokeDialog(ShellHost host, std::string licenseId) { return s
 
 menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger, std::function<void()> onOk) {
     return std::make_unique<ConfirmMenu>(std::move(id), std::move(title), std::move(text), std::move(okLabel), danger, std::move(onOk));
+}
+
+menu::MenuPtr makeReasonDialog(std::string id, std::string title, std::string text, std::string placeholder, std::string okLabel,
+                               std::function<void(const std::string&)> onOk) {
+    return std::make_unique<ReasonMenu>(std::move(id), std::move(title), std::move(text), std::move(placeholder), std::move(okLabel), std::move(onOk));
 }
 
 bool wizardTakeDrop(const std::vector<std::string>& paths) { return g_openWizard && g_openWizard->takeDrop(paths); }

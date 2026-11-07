@@ -2,7 +2,8 @@
 //  license_admin/gui/Page.hpp - 1.33.0 : UNE PAGE DE L'APPLICATION ADMIN, ET CE
 //  QUE LA COQUILLE LUI DONNE (XPG-License-Manager-Admin ; jamais livre)
 // -----------------------------------------------------------------------------
-//  La coquille (Shell.hpp) : a gauche le menu (les 13 entrees de la maquette),
+//  La coquille (Shell.hpp) : a gauche le menu (les 13 entrees de la maquette ;
+//  1.34.0 : 14, avec << Demandes en ligne >> apres Activations),
 //  en haut l'etat (la cle, la synchro, un travail en cours), au centre la page
 //  choisie, en bas le bandeau du dernier resultat. Une page est un ui::Widget ;
 //  elle lit le Workspace et demande a la coquille ce qui depasse sa surface :
@@ -53,6 +54,8 @@ struct ShellHost {
     std::function<void(const ui::FilePick& pick, std::function<void(std::string)> done)> pickFile;
     // Ouvrir un dossier dans l'explorateur (le dossier de l'archive, d'un fichier ecrit).
     std::function<void(const std::string& folder)> openFolder;
+    // 1.34.0 : ouvrir une page de GitHub dans le navigateur du systeme (https://github.com/... seulement).
+    std::function<void(const std::string& url)> openUrl;
 };
 
 class Page : public ui::Widget {
@@ -83,6 +86,7 @@ using PagePtr = std::unique_ptr<Page>;
 //  "editions"       Editions                                 PageEditions.cpp
 //  "fonctionnalites" Fonctionnalites                         PageEditions.cpp
 //  "activations"    Activations                              PageActivations.cpp
+//  "demandes"       Demandes en ligne (la passerelle, 1.34)  PageRequests.cpp
 //  "flottantes"     Licences flottantes (service en ligne)   PageOnline.cpp
 //  "boutique"       Boutique (service en ligne)              PageOnline.cpp
 //  "commandes"      Commandes (service en ligne)             PageOnline.cpp
@@ -96,6 +100,7 @@ PagePtr makeLicencesPage(ShellHost host);
 PagePtr makeEditionsPage(ShellHost host);
 PagePtr makeFeaturesPage(ShellHost host);
 PagePtr makeActivationsPage(ShellHost host);
+PagePtr makeRequestsPage(ShellHost host);
 PagePtr makeOnlinePage(ShellHost host, const std::string& which);   // "flottantes", "boutique", "commandes"
 PagePtr makeRevocationsPage(ShellHost host);
 PagePtr makeGithubPage(ShellHost host);
@@ -105,5 +110,14 @@ PagePtr makeSecurityPage(ShellHost host);
 // L'assistant de creation d'une licence (un dialogue) ; `requests` : des demandes deja choisies (glissees) ;
 // `extendLicenseId` : ajouter des PC a cette licence de l'archive ; `customer` : le client prerempli (page Clients).
 menu::MenuPtr makeLicenceWizard(ShellHost host, std::vector<std::string> requests, std::string extendLicenseId = {}, std::string customer = {});
+
+// 1.34.0 : publier sur la passerelle ce que la derniere operation a signe (Workspace::takeGatewayJob) - une licence a
+// tous ses PC, une revocation, un PC retire, un registre - par runSlow ; `done` (facultatif) recoit le resultat sur le
+// fil de l'interface. Faux : rien a publier (la passerelle n'est pas reglee), ou un travail tourne deja (la publication
+// attend alors dans le Workspace : la coquille la lance des qu'il a fini). Jamais bloquant ; un echec est dit tel quel
+// (le fichier signe reste dans l'archive).
+bool publishToGateway(const ShellHost& host, std::function<void(const OpResult&)> done = {});
+// L'adresse de GitHub qu'on ose ouvrir : https://github.com/<proprietaire>/<nom>[/issues/<n>] (rien d'autre).
+[[nodiscard]] bool safeGithubUrl(const std::string& url);
 
 } // namespace license_admin::gui

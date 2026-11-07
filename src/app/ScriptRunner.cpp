@@ -1,5 +1,6 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "Licence.hpp"                 // 1.30.0
+#include "LicenceGateway.hpp"          // 1.34.0 : licence-en-ligne-...
 #include "../licensing/Licensing.hpp"   // 1.30.0
 #include "../core/Edition.hpp"           // 1.30.0 : le nom de l'application (licence-demande)
 #include "../core/Version.hpp"           // 1.30.0
@@ -6086,6 +6087,69 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     if (cmd == "licence-etat") {
         const auto st = licensing::getLicenseState();
         std::printf("[script] licence-etat : %s / %s / %s\n", licensing::statusLabel(st.status).c_str(), st.edition.c_str(), st.message.c_str());
+        return Step::Yield;
+    }
+    // 1.34.0 : LA DEMANDE EN LIGNE (la passerelle GitHub, app/LicenceGateway). Le travail part sur le fil de la
+    // passerelle ; la commande attend sa fin (jusqu'a 3000 images) et ecrit sa phrase. Jamais le jeton.
+    //   licence-en-ligne-envoyer CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE]   envoyer la demande de ce PC (echec : refusee)
+    //   licence-en-ligne-verifier   ce que l'editeur a repondu (une licence acceptee s'installe), le registre, les revocations
+    //   licence-en-ligne-annuler    annuler la demande en cours (signee par ce PC, l'issue fermee)
+    //   licence-en-ligne-etat       le releve local : la demande, sa date, son etat, la derniere phrase
+    if (cmd == "licence-en-ligne-envoyer" || cmd == "licence-en-ligne-verifier" || cmd == "licence-en-ligne-annuler") {
+        namespace lg = licence::gateway;
+        static bool               started = false;   // une commande a la fois (le script)
+        static unsigned long long seen = 0;
+        if (retries_ == 0) started = false;
+        if (!started) {
+            lg::poll();
+            if (lg::busy()) return Step::Retry;   // un travail d'avant (la verification du lancement) : attendre sa fin
+            if (cmd == "licence-en-ligne-envoyer") {
+                lg::SendForm f;
+                f.customer = arg(1);
+                f.contact = arg(2);
+                f.pcName = arg(3);
+                f.licenseId = arg(4);
+                f.message = arg(5);
+                started = lg::startSend(f);
+            } else if (cmd == "licence-en-ligne-verifier") {
+                std::string why;
+                if (!lg::available(&why)) {
+                    std::printf("[script] %s : %s\n", cmd.c_str(), why.c_str());
+                    fail(cmd + " : " + why);
+                    return Step::Yield;
+                }
+                started = lg::startCheck();
+            } else {
+                started = lg::startCancel();
+            }
+            if (!started) {
+                fail(cmd + " : un travail de la passerelle est d\xC3\xA9j\xC3\xA0 en cours");
+                return Step::Next;
+            }
+            seen = lg::revision();
+            return Step::Retry;
+        }
+        lg::poll();
+        if (lg::busy() || lg::revision() == seen) return Step::Retry;
+        const auto r = lg::lastResult();
+        std::printf("[script] %s : %s\n", cmd.c_str(), r.message.c_str());
+        if (cmd != "licence-en-ligne-verifier" && !r.ok) fail(cmd + " : " + r.message);
+        return Step::Yield;
+    }
+    if (cmd == "licence-en-ligne-etat") {
+        namespace lg = licence::gateway;
+        std::string why;
+        const bool on = lg::available(&why);
+        lg::Record rec;
+        std::string problem;
+        if (!lg::loadRecord(rec, &problem)) {
+            std::printf("[script] licence-en-ligne-etat : %s\n", problem.c_str());
+            fail("licence-en-ligne-etat : " + problem);
+            return Step::Yield;
+        }
+        std::printf("[script] licence-en-ligne-etat : %s / %s%s / %s\n", on ? "passerelle" : why.c_str(),
+                    lg::stateText(rec).c_str(), rec.issue > 0 ? (" (n\xC2\xB0 " + std::to_string(rec.issue) + ", envoy\xC3\xA9" "e le " + lg::dateText(rec.sentAt) + ")").c_str() : "",
+                    rec.lastMessage.empty() ? "-" : rec.lastMessage.c_str());
         return Step::Yield;
     }
     // 1.27.0 : la section Execution des scripts d'une vue (l'onglet courant : les scripts de la vue).
