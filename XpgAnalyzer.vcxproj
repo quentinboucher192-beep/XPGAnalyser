@@ -1409,6 +1409,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\licensing\Store.hpp" />
     <ClInclude Include="src\licensing\TestPublisherKey.hpp" />
     <ClInclude Include="src\licensing\Time.hpp" />
+    <ClInclude Include="src\license_admin\gui\Page.hpp" />
+    <ClInclude Include="src\license_admin\gui\Shell.hpp" />
+    <ClInclude Include="src\license_admin\gui\Workspace.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />

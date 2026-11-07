@@ -10,6 +10,9 @@
     <Filter Include="license_admin">
       <UniqueIdentifier>{7818e3b5-0239-4531-8d18-381bef9801c1}</UniqueIdentifier>
     </Filter>
+    <Filter Include="license_admin\gui">
+      <UniqueIdentifier>{5d2e9a41-7c3b-4e86-b1f0-33a9c7d1e420}</UniqueIdentifier>
+    </Filter>
     <Filter Include="core">
       <UniqueIdentifier>{A0000000-0000-0000-0000-000000000000}</UniqueIdentifier>
     </Filter>

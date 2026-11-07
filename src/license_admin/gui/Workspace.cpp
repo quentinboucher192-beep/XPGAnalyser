@@ -427,7 +427,8 @@ OpResult Workspace::archiveAndNote(const std::string& bytes, const std::vector<A
     }
     std::string what, why;
     if (github::archiveSigned(folder_, bytes, github::trustedKeys(signing_.get()), &what, &why))
-        r.details.push_back("Archive : " + what + ".");
+        // Une emission de la meme seconde que celle de l'archive n'y entre pas : c'est dit en clair.
+        r.details.push_back((what.rfind("plus ancien", 0) == 0 ? std::string("ATTENTION : archive : ") : std::string("Archive : ")) + what + ".");
     else
         r.details.push_back("ATTENTION : pas rang\xC3\xA9 dans l'archive (" + why + ") ; le fichier sign\xC3\xA9 est bien \xC3\xA9" "crit.");
     reload();
@@ -535,8 +536,9 @@ std::string Workspace::suggestLicenseId() const {
 
 namespace {
 
-// Les parametres de la console (signer-licence --parametres), depuis le brouillon.
-std::string paramsOf(const LicenceDraft& d) {
+// Les parametres de la console (signer-licence --parametres), depuis le brouillon. Une fonctionnalite choisie
+// garde les limites que l'edition lui donne (max_views...) : la liste donnee remplace celle de l'edition.
+std::string paramsOf(const LicenceDraft& d, const licensing::Registry& reg) {
     core::json::Value p = core::json::Value::object();
     p.set("license_id", d.licenseId);
     p.set("customer", d.customer);
@@ -547,7 +549,23 @@ std::string paramsOf(const LicenceDraft& d) {
     if (d.offlineGraceDays >= 0) p.set("offline_grace_days", d.offlineGraceDays);
     if (!d.features.empty()) {
         core::json::Value f = core::json::Value::array();
-        for (const auto& id : d.features) f.push(id);
+        const licensing::EditionDef* ed = reg.edition(d.edition);
+        for (const auto& id : d.features) {
+            const licensing::FeatureGrant* grant = nullptr;
+            if (ed)
+                for (const auto& g : ed->features)
+                    if (g.id == id) grant = &g;
+            if (!grant || grant->limits.empty()) {
+                f.push(id);
+                continue;
+            }
+            core::json::Value item = core::json::Value::object();
+            item.set("id", id);
+            core::json::Value lim = core::json::Value::object();
+            for (const auto& [name, value] : grant->limits) lim.set(name, value);
+            item.set("limits", std::move(lim));
+            f.push(std::move(item));
+        }
         p.set("features", std::move(f));
     }
     return core::json::write(p);
@@ -559,7 +577,7 @@ OpResult Workspace::preview(const LicenceDraft& d) const {
     if (!signing_) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     LicenseInputs in;
-    in.params = paramsOf(d);
+    in.params = paramsOf(d, registry_);
     in.registry = archivedText(kRegistryRel);
     in.revocations = archivedText(kRevocationsRel);
     std::string why;
@@ -590,7 +608,7 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier de licence ?");
     LicenseInputs in;
-    in.params = paramsOf(d);
+    in.params = paramsOf(d, registry_);
     in.registry = archivedText(kRegistryRel);
     in.revocations = archivedText(kRevocationsRel);
     std::string why;
