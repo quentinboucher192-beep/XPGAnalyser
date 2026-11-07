@@ -142,8 +142,8 @@ std::string usage() {
            "  passerelle-jeton-demandes [--variable NOM]     enregistre le jeton DES CLIENTS (Issues seulement, tap\xC3\xA9 sans \xC3\xA9" "cho) ;\n"
            "                                                 --effacer le retire\n"
            "  passerelle-verifier                            le d\xC3\xA9p\xC3\xB4t est public, ton jeton y \xC3\xA9" "crit, le jeton des demandes est accept\xC3\xA9\n"
-           "  passerelle-publier-config                      publie la configuration sign\xC3\xA9" "e (le jeton des demandes masqu\xC3\xA9), le registre,\n"
-           "                                                 la liste de r\xC3\xA9vocation\n"
+           "  passerelle-publier-config                      publie la configuration sign\xC3\xA9" "e (le jeton des demandes masqu\xC3\xA9) et le\n"
+           "                                                 registre (la liste de r\xC3\xA9vocation, elle, part scell\xC3\xA9" "e aux seuls PC concern\xC3\xA9s)\n"
            "  passerelle-demandes [--toutes]                 rel\xC3\xA8ve les demandes en ligne (rang\xC3\xA9" "es dans demandes-en-ligne/) et les liste\n"
            "  passerelle-publier-licence --licence F.xpglic  publie une licence sign\xC3\xA9" "e \xC3\xA0 chacun de ses PC (une demande en attente :\n"
            "                                                 accept\xC3\xA9" "e, son issue ferm\xC3\xA9" "e)\n"
@@ -833,16 +833,24 @@ int run(const std::vector<std::string>& argv) {
                         + (e.licenseId.empty() ? std::string("(nouvelle)") : e.licenseId) + "\n  demande " + e.requestPath;
                 if (!e.message.empty()) line += "\n  message " + e.message;
                 if (!e.answer.empty()) line += "\n  r\xC3\xA9ponse " + e.answer;
+                // 1.34.0 (relecture) : une demande d'ajout a une licence existante n'est pas une preuve.
+                if (e.joinRequest() && e.waiting()) line += "\n  !! " + passerelle::joinWarning(e);
             }
             for (const auto& p : e.problems) line += "\n  ! " + p;
             say(line + "\n");
         }
         if (hidden > 0) say("\n(" + std::to_string(hidden) + " demande(s) d\xC3\xA9j\xC3\xA0 trait\xC3\xA9" "e(s) : --toutes pour les voir)\n");
-        bool waiting = false;
-        for (const auto& e : all) waiting = waiting || e.waiting();
+        bool waiting = false, join = false;
+        for (const auto& e : all) {
+            waiting = waiting || e.waiting();
+            join = join || (e.waiting() && e.joinRequest());
+        }
         if (waiting)
             say("\nAccepter : signer-licence --demande <le fichier demande> ... puis passerelle-publier-licence --licence <la licence> ;\n"
                 "refuser : passerelle-refuser --poste <poste> --raison \"...\".\n");
+        if (join)
+            say("Une demande d'ajout \xC3\xA0 une licence existante (!!) : n'importe qui peut taper un identifiant de licence et un nom de client - "
+                "confirme avec ton client avant de l'accepter.\n");
         return rc;
     }
     if (a.command == "kit-studios") {

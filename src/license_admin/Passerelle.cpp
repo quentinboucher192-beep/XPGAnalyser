@@ -40,7 +40,11 @@ constexpr const char* kTokenFormat = "xpg-jeton-demandes/1";
 constexpr const char* kEntryFormat = "xpg-demande-en-ligne/1";
 constexpr const char* kFetchFormat = "xpg-releve-demandes/1";
 constexpr std::size_t kMaxReply = 32u * 1024u * 1024u;
-constexpr int kMaxPages = 50;   // 5000 issues : au-dela, un depot de passerelle n'est plus raisonnable
+// Le releve (1.34.0, relecture : les issues s'ecrivent par n'importe qui - rien d'illimite).
+constexpr Seconds kSinceMargin = 600;           // la marge du releve incremental (10 minutes, sur l'horloge de GitHub)
+constexpr int kMaxClosesPerFetch = 20;          // issues deja repondues refermees au plus par releve
+constexpr int kMaxCommentReadsPerFetch = 40;    // issues dont les commentaires sont relus au plus par releve
+constexpr int kMaxCommentPages = 10;            // pages de 100 commentaires lues au plus par issue
 
 fs::path P(const std::string& utf8) { return fs::path(std::u8string(utf8.begin(), utf8.end())); }
 std::string U(const fs::path& p) {
@@ -260,13 +264,14 @@ const char* requestStateKey(RequestState s) noexcept {
         case RequestState::Cancelled: return "annulee";
         case RequestState::Replaced: return "remplacee";
         case RequestState::Unreadable: return "illisible";
+        case RequestState::Ignored: return "ignoree";
     }
     return "?";
 }
 
 bool parseRequestStateKey(std::string_view key, RequestState& out) noexcept {
     for (RequestState s : {RequestState::Pending, RequestState::Received, RequestState::Accepted, RequestState::Refused, RequestState::Cancelled,
-                           RequestState::Replaced, RequestState::Unreadable})
+                           RequestState::Replaced, RequestState::Unreadable, RequestState::Ignored})
         if (key == requestStateKey(s)) {
             out = s;
             return true;
@@ -283,9 +288,18 @@ std::string requestStateLabel(RequestState s) {
         case RequestState::Cancelled: return "Annul\xC3\xA9" "e par le client";
         case RequestState::Replaced: return "Remplac\xC3\xA9" "e";
         case RequestState::Unreadable: return "Illisible";
+        case RequestState::Ignored: return "Ignor\xC3\xA9" "e (rejou\xC3\xA9" "e)";
     }
     return "?";
 }
+
+std::string joinWarning(const std::string& licenseId, const std::string& customer) {
+    if (licenseId.empty()) return {};
+    return "\xC3\x80 v\xC3\xA9rifier : ajout \xC3\xA0 la licence " + licenseId + " demand\xC3\xA9 par quelqu'un qui dit \xC3\xAAtre \xC2\xAB " +
+           (customer.empty() ? std::string("?") : customer) + " \xC2\xBB \xE2\x80\x94 confirme avec ton client avant d'accepter.";
+}
+
+std::string joinWarning(const Entry& e) { return e.joinRequest() ? joinWarning(e.licenseId, e.customer) : std::string(); }
 
 std::string requestsFolder(const std::string& folder) { return deploy::joinPath(folder, kRequestsDir); }
 
@@ -324,6 +338,12 @@ bool writeEntry(const std::string& folder, Entry& e, std::string* why) {
     if (!e.answer.empty()) v.set("reponse", e.answer);
     if (!e.requestPath.empty()) v.set("fichier", U(P(e.requestPath).filename()));
     v.set("recue_publiee", e.receivedPublished);
+    if (e.receivedHeld) v.set("recue_retenue", true);
+    if (!e.bodyHash.empty()) v.set("empreinte_corps", e.bodyHash);
+    if (e.issueUpdatedAt) v.set("issue_maj", isoOr(e.issueUpdatedAt));
+    v.set("commentaires", e.issueComments);
+    if (e.checkedUpdatedAt) v.set("verifiee_maj", isoOr(e.checkedUpdatedAt));
+    v.set("commentaires_vus", e.checkedComments);
     Value probs = Value::array();
     for (const auto& p : e.problems) probs.push(Value(p));
     v.set("problemes", std::move(probs));
@@ -360,6 +380,12 @@ bool readEntry(const std::string& folder, const std::string& path, Entry& e) {
     if (!file.empty() && file.find('/') == std::string::npos && file.find('\\') == std::string::npos && file != "." && file != "..")
         e.requestPath = deploy::joinPath(requestsFolder(folder), file);
     e.receivedPublished = v.flag("recue_publiee");
+    e.receivedHeld = v.flag("recue_retenue");
+    e.bodyHash = v.str("empreinte_corps");
+    e.issueUpdatedAt = timeOf(v, "issue_maj");
+    e.issueComments = static_cast<int>(v.integer("commentaires"));
+    e.checkedUpdatedAt = timeOf(v, "verifiee_maj");
+    e.checkedComments = v.has("commentaires_vus") ? static_cast<int>(v.integer("commentaires_vus")) : -1;
     if (const Value* p = v.find("problemes"); p && p->isArray())
         for (const auto& x : p->items())
             if (x.isString()) e.problems.push_back(x.asString());
@@ -409,7 +435,11 @@ bool findWaiting(const std::string& folder, const std::string& deviceIn, Entry& 
         }
     if (hits.empty()) return fail(why, "aucune demande en attente pour le poste " + device + " (rel\xC3\xA8ve d'abord les demandes)");
     if (devices.size() > 1) return fail(why, "plusieurs postes commencent par " + device + " : donne l'identifiant entier");
-    out = *hits[0];   // la plus recente (listRequests : les plus recentes d'abord)
+    // La plus recente par sa date SIGNEE (jamais par le numero de l'issue, que n'importe qui choisit).
+    const Entry* best = hits[0];
+    for (const Entry* e : hits)
+        if (e->requestedAt > best->requestedAt) best = e;
+    out = *best;
     return true;
 }
 
@@ -431,6 +461,10 @@ FetchState readFetchState(const std::string& folder) {
     s.fetchedAt = timeOf(v, "releve_le");
     s.total = static_cast<int>(v.integer("demandes"));
     s.pending = static_cast<int>(v.integer("en_attente"));
+    s.repo = v.str("depot");
+    s.lastUpdated = timeOf(v, "issues_maj_max");
+    s.truncated = v.flag("tronque");
+    s.deferred = static_cast<int>(v.integer("reportees"));
     return s;
 }
 
@@ -586,18 +620,35 @@ bool putFile(Api& api, const std::string& path, const std::string& content, cons
     return fail(why, path + " a chang\xC3\xA9 sur GitHub pendant l'\xC3\xA9" "criture (deux fois) : relance plus tard");
 }
 
+// Effacer un fichier du depot (un commit) ; `known` : ce que getFile vient de lire (il existe).
+bool deleteFile(Api& api, const std::string& path, const std::string& message, const RemoteFile& known, std::string* why) {
+    Value body = Value::object();
+    body.set("message", message);
+    body.set("sha", known.sha);
+    body.set("branch", api.config().branch);
+    const Reply r = api.call("DELETE", "/contents/" + path, core::json::write(body, false));
+    if (r.status == 200 || (r.status == 404 && r.error.empty())) return true;
+    return fail(why, api.explain(r, "effacer " + path));
+}
+
 // ---- les issues ----
 struct Issue {
     int         number{0};
     std::string title, body, state;
     int         comments{0};
     Seconds     createdAt{0};
+    Seconds     updatedAt{0};
 };
 
-bool listIssues(Api& api, std::vector<Issue>& out, std::string* why) {
+// Les issues (toutes, ou celles changees depuis `since` : 0, toutes), les plus recentes d'abord (par creation : une
+// issue modifiee pendant la lecture ne deplace pas les autres d'une page a l'autre). Plus de kMaxListPages pages :
+// `truncated` (le reste n'est pas lu - c'est dit, jamais tu).
+bool listIssues(Api& api, Seconds since, std::vector<Issue>& out, bool& truncated, std::string* why) {
     out.clear();
-    for (int page = 1; page <= kMaxPages; ++page) {
-        const Reply r = api.call("GET", "/issues?state=all&per_page=100&page=" + std::to_string(page));
+    truncated = false;
+    const std::string filter = since > 0 ? "&since=" + licensing::isoTime(since) : std::string();
+    for (int page = 1; page <= kMaxListPages; ++page) {
+        const Reply r = api.call("GET", "/issues?state=all&per_page=100" + filter + "&page=" + std::to_string(page));
         if (r.status != 200) return fail(why, api.explain(r, "lire les issues"));
         if (!r.json.isArray()) return fail(why, "GitHub a rendu une liste d'issues illisible");
         for (const auto& it : r.json.items()) {
@@ -609,16 +660,20 @@ bool listIssues(Api& api, std::vector<Issue>& out, std::string* why) {
             i.state = it.str("state");
             i.comments = static_cast<int>(it.integer("comments"));
             i.createdAt = timeOf(it, "created_at");
+            i.updatedAt = timeOf(it, "updated_at");
             if (i.number > 0) out.push_back(std::move(i));
         }
         if (r.json.items().size() < 100) return true;
     }
+    truncated = true;
     return true;
 }
 
-bool listComments(Api& api, int issue, std::vector<std::string>& bodies, std::string* why) {
+// Les commentaires d'une issue (au plus kMaxCommentPages pages : `truncated` au-dela).
+bool listComments(Api& api, int issue, std::vector<std::string>& bodies, bool& truncated, std::string* why) {
     bodies.clear();
-    for (int page = 1; page <= 10; ++page) {
+    truncated = false;
+    for (int page = 1; page <= kMaxCommentPages; ++page) {
         const Reply r = api.call("GET", "/issues/" + std::to_string(issue) + "/comments?per_page=100&page=" + std::to_string(page));
         if (r.status != 200) return fail(why, api.explain(r, "lire les commentaires de l'issue #" + std::to_string(issue)));
         if (!r.json.isArray()) return fail(why, "GitHub a rendu des commentaires illisibles");
@@ -626,6 +681,7 @@ bool listComments(Api& api, int issue, std::vector<std::string>& bodies, std::st
             if (c.isObject()) bodies.push_back(c.str("body"));
         if (r.json.items().size() < 100) return true;
     }
+    truncated = true;
     return true;
 }
 
@@ -668,23 +724,30 @@ licensing::Signer signerOf(const licensing::SigningKey& key) {
     return [&key](std::string_view m) { return key.sign(m); };
 }
 
-// Publier l'etat d'un PC (numero : celui du depot + 1). `line` : ce qui a ete publie.
+// Le numero d'un fichier publie (un etat, la configuration) : plus grand que celui du depot, et au moins l'heure Unix -
+// il monte encore apres un depot nettoye ou recree (un PC qui a vu un numero refuserait un << 1 >>).
+std::uint64_t nextNumber(std::uint64_t remote, Seconds now) {
+    return std::max<std::uint64_t>(remote + 1, static_cast<std::uint64_t>(std::max<Seconds>(now, 1)));
+}
+
+// Publier l'etat d'un PC. `known` : l'etat du depot que l'appelant vient de lire pour ce PC (nullptr : lu ici).
+// `line` : ce qui a ete publie. L'identifiant de la licence n'est jamais ecrit en clair (il est dans la licence scellee).
 bool publishStatus(Api& api, const licensing::SigningKey& key, const std::string& deviceKeyHex, gw::State state, const std::string& nonce,
-                   const std::string& licenseId, const gw::StatusContent& content, Seconds now, std::string& line, std::string* why) {
+                   const gw::StatusContent& content, Seconds now, std::string& line, std::string* why, const RemoteStatus* known = nullptr) {
     crypto::PublicKey pc{};
     if (!keyFromHex(deviceKeyHex, pc)) return fail(why, "la cl\xC3\xA9 du PC est illisible");
     const std::string device = gw::deviceId(pc);
     RemoteStatus remote;
-    if (!readRemoteStatus(api, device, remote, why)) return false;
+    if (known) remote = *known;
+    else if (!readRemoteStatus(api, device, remote, why)) return false;
     gw::DeviceStatus s;
     s.device = device;
-    // Un etat illisible dans le depot (abime, ecrit a la main) : un numero que le PC n'a pas pu voir passer.
-    s.number = remote.readable ? remote.status.number + 1 : remote.file.exists ? static_cast<std::uint64_t>(std::max<Seconds>(now, 1)) : 1;
+    // Un etat illisible dans le depot (abime, ecrit a la main) : l'heure (un numero que le PC n'a pas pu voir passer).
+    s.number = nextNumber(remote.readable ? remote.status.number : 0, now);
     s.issuedAt = now;
     s.state = state;
     s.requestNonce = nonce;
-    s.licenseId = licenseId;
-    if (!content.message.empty() || !content.license.empty()) {
+    if (!content.message.empty() || !content.license.empty() || !content.revocations.empty()) {
         s.sealed = gw::sealFor(pc, gw::writeStatusContent(content));
         if (s.sealed.empty()) return fail(why, "impossible de sceller le contenu pour ce PC (sa cl\xC3\xA9 est refus\xC3\xA9" "e)");
     }
@@ -736,19 +799,18 @@ std::uint64_t numberOf(std::string_view bytes, DocKind kind) {
     return 0;
 }
 
-// Le registre et la liste de revocation de l'archive -> le depot (s'ils y manquent ou y sont plus anciens).
-bool syncArchiveFiles(Api& api, const std::string& folder, const licensing::SigningKey& key, bool registry, bool revocations, Result& res) {
+// Le registre de l'archive -> le depot (s'il y manque ou y est plus ancien). 1.34.0 (relecture) : la liste de
+// revocation n'est PLUS publiee en clair (ses raisons sont du texte libre, elle lie des cles de PC a des licences) :
+// elle part scellee dans l'etat des PC concernes (archiveRevocations).
+bool syncArchiveFiles(Api& api, const std::string& folder, const licensing::SigningKey& key, Result& res) {
     bool ok = true;
     const struct {
-        bool        want;
         const char* local;
         const char* remote;
         DocKind     kind;
         const char* label;
-    } files[] = {{registry, "registre/registre.xpgreg", gw::kRegistryPath, DocKind::Registry, "registre"},
-                 {revocations, "revocations/revocations.xpgrev", gw::kRevocationsPath, DocKind::Revocations, "liste de r\xC3\xA9vocation"}};
+    } files[] = {{"registre/registre.xpgreg", gw::kRegistryPath, DocKind::Registry, "registre"}};
     for (const auto& f : files) {
-        if (!f.want) continue;
         const std::string path = U(P(github::archiveFolder(folder)) / P(f.local));
         if (!isFile(path)) {
             res.details.push_back(std::string("Pas de ") + f.label + " dans l'archive : rien \xC3\xA0 publier.");
@@ -789,6 +851,49 @@ bool syncArchiveFiles(Api& api, const std::string& folder, const licensing::Sign
         res.details.push_back(std::string("Publi\xC3\xA9 : ") + f.remote + " (n\xC2\xB0 " + std::to_string(mine) + ").");
     }
     return ok;
+}
+
+// Une ancienne revocations.xpgrev PUBLIQUE (d'avant la relecture) : effacee du depot (elle reste dans son
+// historique git - c'est dit). Ne rien trouver est normal.
+bool retirePublicRevocations(Api& api, Result& res) {
+    RemoteFile remote;
+    std::string why;
+    if (!getFile(api, gw::kRevocationsPath, remote, &why)) {
+        res.details.push_back("ATTENTION : " + why);
+        return false;
+    }
+    if (!remote.exists) return true;
+    if (!deleteFile(api, gw::kRevocationsPath, "Passerelle : la liste de revocation n'est plus publique (elle part scellee aux PC concernes)", remote, &why)) {
+        res.details.push_back("ATTENTION : l'ancienne " + std::string(gw::kRevocationsPath) + " publique n'a pas pu \xC3\xAAtre effac\xC3\xA9" "e : " + why);
+        return false;
+    }
+    res.published.push_back(std::string(gw::kRevocationsPath) + " (effac\xC3\xA9" "e)");
+    res.details.push_back("Effac\xC3\xA9" "e : l'ancienne " + std::string(gw::kRevocationsPath) + " publique (la liste part maintenant scell\xC3\xA9" "e aux seuls PC concern\xC3\xA9s ; "
+                          "l'historique du d\xC3\xA9p\xC3\xB4t garde l'ancienne copie).");
+    return true;
+}
+
+// La liste de revocation de l'archive, telle quelle (signee par CETTE cle) ; faux : aucune (`why` vide), ou illisible,
+// ou d'une autre cle (`why` le dit).
+bool archiveRevocations(const std::string& folder, const licensing::SigningKey& key, std::string& text, licensing::RevocationList& list, std::string* why) {
+    text.clear();
+    list = licensing::RevocationList{};
+    if (why) why->clear();
+    const std::string path = U(P(github::archiveFolder(folder)) / P("revocations/revocations.xpgrev"));
+    if (!isFile(path)) return false;
+    std::string w;
+    if (!readText(path, text, &w)) return fail(why, "la liste de r\xC3\xA9vocation de l'archive est illisible (" + w + ")");
+    std::vector<SignedBlock> blocks;
+    if (!licensing::readBlocks(text, blocks, &w) || blocks.size() != 1 || blocks[0].kind != DocKind::Revocations ||
+        !licensing::verifyBlock(blocks[0], key.publicKey()) || !licensing::parseRevocations(blocks[0].document, list, &w)) {
+        text.clear();
+        return fail(why, "la liste de r\xC3\xA9vocation de l'archive n'est pas sign\xC3\xA9" "e par la cl\xC3\xA9 de ce poste (ou illisible)");
+    }
+    return true;
+}
+
+bool namesLicence(const licensing::RevocationList& list, const std::string& licenseId) {
+    return std::any_of(list.revoked.begin(), list.revoked.end(), [&](const licensing::Revocation& x) { return x.licenseId == licenseId; });
 }
 
 // Une demande en ligne ouverte et verifiee.
@@ -859,15 +964,41 @@ bool cancelledBy(const std::vector<std::string>& comments, const crypto::PublicK
     return found;
 }
 
-std::string requestFileName(const std::string& device, const std::string& nonce) {
+// `full` : tout le nonce (deux nonces qui commencent pareil).
+std::string requestFileName(const std::string& device, const std::string& nonce, bool full = false) {
     std::string n;
     for (char c : nonce)
         if (std::isalnum(static_cast<unsigned char>(c))) n += c;
-    return device + "-" + n.substr(0, 8) + ".xpgreq";
+    return device + "-" + (full ? n.substr(0, 64) : n.substr(0, 8)) + ".xpgreq";
 }
 
 void addProblem(Entry& e, const std::string& p) {
     if (std::find(e.problems.begin(), e.problems.end(), p) == e.problems.end()) e.problems.push_back(p);
+}
+// Retirer les problemes qui contiennent `marker` (ceux qui se recomptent a chaque lecture).
+void dropProblems(Entry& e, std::string_view marker) {
+    e.problems.erase(std::remove_if(e.problems.begin(), e.problems.end(), [&](const std::string& p) { return p.find(marker) != std::string::npos; }),
+                     e.problems.end());
+}
+
+constexpr const char* kEditedProblem = "issue modifi\xC3\xA9" "e apr\xC3\xA8s coup : ignor\xC3\xA9" "e (la demande garde son contenu d'origine)";
+constexpr const char* kForgedMarker = "par ce PC, ou pas pour cette demande";
+constexpr const char* kClosedMarker = "ferm\xC3\xA9" "e sur GitHub sans annulation";
+
+// << recue >> ou << annulee >> peut-elle s'ecrire sur l'etat publie de ce PC ? Jamais sur un etat plus recent que la
+// demande (sa date SIGNEE), ni sur un etat qui porte une licence (acceptee, mise a jour, revoquee, retiree) pour une
+// autre demande : une demande rejouee ne doit rien effacer. Faux : `why` est le probleme a noter.
+bool mayPublishOver(const RemoteStatus& r, const Entry& e, std::string& why) {
+    if (!r.file.exists || !r.readable) return true;
+    const gw::DeviceStatus& s = r.status;
+    if (s.requestNonce == e.nonce && s.state == gw::State::Received) return true;
+    const bool weighty = s.state == gw::State::Accepted || s.state == gw::State::Updated || s.state == gw::State::Revoked || s.state == gw::State::Removed;
+    if (s.requestNonce != e.nonce && !weighty && s.issuedAt < e.requestedAt) return true;
+    why = "l'\xC3\xA9tat publi\xC3\xA9 de ce PC (\xC2\xAB " + std::string(gw::stateKey(s.state)) + " \xC2\xBB du " + licensing::isoTime(s.issuedAt) + ") " +
+          (weighty && s.requestNonce != e.nonce ? std::string("porte une licence pour une autre demande")
+                                                : "est plus r\xC3\xA9" "cent que cette demande (sign\xC3\xA9" "e le " + licensing::isoTime(e.requestedAt) + ")") +
+          " : il est gard\xC3\xA9, rien n'est publi\xC3\xA9 automatiquement (une demande rejou\xC3\xA9" "e ? d\xC3\xA9" "cide toi-m\xC3\xAAme : accepter ou refuser)";
+    return false;
 }
 
 // Fermer les autres issues ouvertes de ce poste (des demandes remplacees) apres une reponse.
@@ -902,21 +1033,25 @@ bool publishToDevices(Api& api, const std::string& folder, const licensing::Sign
     bool ok = true;
     accepted = updated = 0;
     const auto entries = listRequests(folder);
+    // La liste de revocation de l'archive, scellee avec la licence si elle la nomme (ou si on le demande).
+    std::string revText, revWhy;
+    licensing::RevocationList revList;
+    const bool hasRev = archiveRevocations(folder, key, revText, revList, &revWhy);
+    if (!hasRev && !revWhy.empty()) res.details.push_back("ATTENTION : " + revWhy + " : elle ne part pas avec la licence.");
+    const bool withRev = hasRev && (o.revocations || namesLicence(revList, lic.licenseId));
     std::vector<Entry> answered;
     for (const auto& d : lic.devices) {
         const Entry* waiting = nullptr;
-        for (const auto& e : entries)   // la plus recente d'abord
-            if (e.waiting() && e.deviceKey == d.key) {
-                waiting = &e;
-                break;
-            }
+        for (const auto& e : entries)   // la plus recente par sa date signee
+            if (e.waiting() && e.deviceKey == d.key && (!waiting || e.requestedAt > waiting->requestedAt)) waiting = &e;
         gw::StatusContent content;
         content.license = licenceText;
+        if (withRev) content.revocations = revText;
         content.message = waiting ? "Licence " + lic.licenseId + " accept\xC3\xA9" "e." : "Nouvelle \xC3\xA9mission de la licence " + lic.licenseId + ".";
         std::string line, why;
         const gw::State st = waiting ? gw::State::Accepted : gw::State::Updated;
         const std::string who = "PC " + (d.name.empty() ? std::string("(sans nom)") : cite(d.name));
-        if (!publishStatus(api, key, d.key, st, waiting ? waiting->nonce : std::string(), lic.licenseId, content, o.now, line, &why)) {
+        if (!publishStatus(api, key, d.key, st, waiting ? waiting->nonce : std::string(), content, o.now, line, &why)) {
             res.details.push_back("\xC3\x89" "CHEC pour le " + who + " : " + why);
             ok = false;
             continue;
@@ -930,6 +1065,8 @@ bool publishToDevices(Api& api, const std::string& folder, const licensing::Sign
             ++updated;
         }
     }
+    if (withRev)
+        res.details.push_back("La liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(revList.number) + " part scell\xC3\xA9" "e avec la licence (jamais en clair).");
     for (auto& e : answered) {
         std::string why;
         e.state = RequestState::Accepted;
@@ -997,8 +1134,11 @@ Result publishArchive(const std::string& folder, const licensing::SigningKey& ke
     std::string why;
     if (!openApi(folder, o, c, api, &why)) return refused(why);
     Result res;
-    res.ok = syncArchiveFiles(*api, folder, key, true, true, res);
-    res.message = res.ok ? "Registre et r\xC3\xA9vocations de la passerelle \xC3\xA0 jour." : "Refus\xC3\xA9 : le registre ou la liste de r\xC3\xA9vocation n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9.";
+    const bool files = syncArchiveFiles(*api, folder, key, res);
+    const bool retired = retirePublicRevocations(*api, res);
+    res.ok = files && retired;
+    res.message = res.ok ? "Registre de la passerelle \xC3\xA0 jour (la liste de r\xC3\xA9vocation part scell\xC3\xA9" "e aux seuls PC concern\xC3\xA9s)."
+                         : "Refus\xC3\xA9 : le registre n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9, ou l'ancienne liste de r\xC3\xA9vocation publique n'a pas pu \xC3\xAAtre effac\xC3\xA9" "e.";
     return res;
 }
 
@@ -1024,12 +1164,9 @@ Result publishConfig(const std::string& folder, const licensing::SigningKey& key
         return refused(why);
     }
     gw::Config gc;
-    gc.number = 1;
-    if (remote.exists) {
-        const std::uint64_t before = numberOf(remote.content, DocKind::Gateway);
-        // Illisible (abimee, ecrite a la main) : un numero plus grand que tout ce qu'un Studio a pu voir.
-        gc.number = before > 0 ? before + 1 : static_cast<std::uint64_t>(std::max<Seconds>(o.now, 1));
-    }
+    // max(celui du depot + 1, l'heure) : il monte encore apres un depot nettoye ou recree (ou une configuration
+    // illisible : abimee, ecrite a la main).
+    gc.number = nextNumber(remote.exists ? numberOf(remote.content, DocKind::Gateway) : 0, o.now);
     gc.issuedAt = o.now;
     gc.repo = c.repo;
     gc.requestToken = token;
@@ -1044,10 +1181,11 @@ Result publishConfig(const std::string& folder, const licensing::SigningKey& key
         return refused(why);
     res.published.push_back(std::string(gw::kConfigPath) + " (n\xC2\xB0 " + std::to_string(gc.number) + ")");
     res.details.push_back("Publi\xC3\xA9 : " + std::string(gw::kConfigPath) + " (n\xC2\xB0 " + std::to_string(gc.number) + ", le jeton des demandes masqu\xC3\xA9).");
-    const bool files = syncArchiveFiles(*api, folder, key, true, true, res);
+    const bool registry = syncArchiveFiles(*api, folder, key, res);
+    const bool files = retirePublicRevocations(*api, res) && registry;
     res.ok = files;
     res.message = files ? "Configuration de la passerelle publi\xC3\xA9" "e (n\xC2\xB0 " + std::to_string(gc.number) + ") sur " + c.repo + "."
-                        : "Configuration publi\xC3\xA9" "e (n\xC2\xB0 " + std::to_string(gc.number) + "), mais le registre ou la liste de r\xC3\xA9vocation n'a pas pu l'\xC3\xAAtre.";
+                        : "Configuration publi\xC3\xA9" "e (n\xC2\xB0 " + std::to_string(gc.number) + "), mais le registre n'a pas pu l'\xC3\xAAtre (ou l'ancienne liste de r\xC3\xA9vocation publique effac\xC3\xA9" "e).";
     if (!files) res.message = "Refus\xC3\xA9 : " + res.message;
     return res;
 }
@@ -1058,52 +1196,78 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
     std::unique_ptr<Api> api;
     std::string why;
     if (!openApi(folder, o, c, api, &why)) return refused(why);
+    // Le releve incremental : les issues changees depuis le dernier releve (sur l'horloge de GitHub, moins une marge ;
+    // jamais apres l'heure de ce poste). Le premier releve (ou un autre depot) lit tout ; les demandes deja rangees
+    // restent sur ce poste.
+    const FetchState before = readFetchState(folder);
+    const bool sameRepo = before.repo == c.repo;
+    Seconds since = 0;
+    if (sameRepo && before.lastUpdated > 0) {
+        const Seconds from = o.now > 0 ? std::min(before.lastUpdated, o.now) : before.lastUpdated;
+        since = std::max<Seconds>(1, from - kSinceMargin);
+    }
     std::vector<Issue> issues;
-    if (!listIssues(*api, issues, &why)) return refused(why);
+    bool truncated = false;
+    if (!listIssues(*api, since, issues, truncated, &why)) return refused(why);
 
     std::map<int, Entry> known;
     for (auto& e : listRequests(folder)) known[e.issue] = std::move(e);
 
     Result res;
-    bool ok = true;
-    std::vector<Entry> entries;
-    std::map<int, crypto::PublicKey> keys;
-    std::map<int, int> commentCount;
+    res.truncated = truncated;
+    bool ok = true, diskOk = true;
+    Seconds lastUpdated = sameRepo ? before.lastUpdated : 0;
+    std::set<int> touched;   // les demandes a reecrire
+
+    // Ce qui est deja connu : les demandes vues (poste, nonce) et la date SIGNEE de la plus recente de chaque poste.
+    std::map<std::pair<std::string, std::string>, int> seen;
+    std::map<std::string, Seconds> latest;
+    for (const auto& [n, e] : known) {
+        if (e.nonce.empty()) continue;
+        seen.emplace(std::make_pair(e.device, e.nonce), n);
+        if (e.state != RequestState::Ignored) latest[e.device] = std::max(latest[e.device], e.requestedAt);
+    }
+
+    // 1. Les issues listees : une demande connue (son etat sur GitHub ; un corps change ensuite est ignore), ou une
+    //    demande nouvelle (ouverte, verifiee).
+    struct Fresh {
+        int         issue;
+        std::string request;   // le .xpgreq tel quel
+    };
+    std::vector<Fresh> fresh;
     for (const auto& is : issues) {
+        lastUpdated = std::max(lastUpdated, is.updatedAt);
+        if (const auto old = known.find(is.number); old != known.end()) {
+            Entry& e = old->second;
+            e.issueOpen = is.state != "closed";
+            e.issueUpdatedAt = is.updatedAt;
+            e.issueComments = is.comments;
+            const std::string hash = crypto::sha256Hex(is.body);
+            if (e.bodyHash.empty()) e.bodyHash = hash;   // (une demande rangee avant que l'empreinte soit gardee)
+            else if (e.bodyHash != hash) addProblem(e, kEditedProblem);
+            touched.insert(is.number);
+            continue;
+        }
         gw::IssueBody ib;
         if (!gw::parseIssueBody(is.body, ib, nullptr)) continue;   // une issue ordinaire : pas une demande
         Entry e;
-        const auto old = known.find(is.number);
-        const bool isNew = old == known.end();
-        if (!isNew) e = old->second;
         e.issue = is.number;
         e.issueOpen = is.state != "closed";
         e.openedAt = is.createdAt;
-        if (!e.seenAt) e.seenAt = o.now;
+        e.seenAt = o.now;
         e.device = ib.device;
-        e.problems.clear();
+        e.bodyHash = crypto::sha256Hex(is.body);
+        e.issueUpdatedAt = is.updatedAt;
+        e.issueComments = is.comments;
+        touched.insert(is.number);
         const Opened op = openRequest(key, ib, o.now);
         if (!op.ok) {
             e.state = RequestState::Unreadable;
             e.problems.push_back(op.problem);
-            if (!writeEntry(folder, e, &why)) {
-                res.details.push_back("ATTENTION : " + why);
-                ok = false;
-            }
-            if (isNew) res.details.push_back("Issue #" + std::to_string(is.number) + " : illisible - " + op.problem + ".");
+            res.details.push_back("Issue #" + std::to_string(is.number) + " : illisible - " + op.problem + ".");
+            known.emplace(is.number, std::move(e));
             continue;
         }
-        // Le .xpgreq tel quel (l'assistant de licence prend des fichiers).
-        const std::string file = deploy::joinPath(requestsFolder(folder), requestFileName(ib.device, op.request.nonce));
-        if (!isFile(file) && !writePrivate(file, op.online.request, &why)) {
-            res.details.push_back("ATTENTION : " + why);
-            ok = false;
-        }
-        if (e.nonce != op.request.nonce && !e.nonce.empty()) {   // le corps de l'issue a change : une autre demande
-            e.state = RequestState::Pending;
-            e.receivedPublished = false;
-        }
-        e.requestPath = file;
         e.deviceKey = op.request.deviceKey;
         e.nonce = op.request.nonce;
         e.customer = op.online.customer;
@@ -1114,118 +1278,236 @@ Result fetchRequests(const std::string& folder, const licensing::SigningKey& key
         e.software = op.record.software;
         e.licenseId = op.record.licenseId;
         e.requestedAt = op.request.createdAt;
-        if (e.state == RequestState::Unreadable || e.state == RequestState::Replaced) e.state = RequestState::Pending;
-        if (isNew) {
-            ++res.newRequests;
-            res.details.push_back("Nouvelle : #" + std::to_string(is.number) + " " + e.customer + ", PC " + cite(e.deviceName.empty() ? "(sans nom)" : e.deviceName)
-                                  + (e.software.empty() ? std::string() : ", " + e.software) + (e.licenseId.empty() ? std::string() : ", licence " + e.licenseId) + ".");
-        }
-        keys[e.issue] = op.pc;
-        commentCount[e.issue] = is.comments;
-        entries.push_back(std::move(e));
+        e.state = RequestState::Pending;
+        fresh.push_back({is.number, op.online.request});
+        known.emplace(is.number, std::move(e));
     }
 
-    // La plus recente de chaque poste l'emporte ; les autres en attente sont remplacees.
-    std::map<std::string, int> newest;
-    for (const auto& e : entries) newest[e.device] = std::max(newest[e.device], e.issue);
+    // 2. Les nouvelles, dans l'ordre de leur date signee : une demande deja vue, ou pas plus recente que la derniere
+    //    de ce PC, est REJOUEE (une ancienne demande remise dans une issue) : ignoree, rien n'est publie pour elle.
+    std::sort(fresh.begin(), fresh.end(), [&known](const Fresh& a, const Fresh& b) {
+        const Seconds ta = known.at(a.issue).requestedAt, tb = known.at(b.issue).requestedAt;
+        return ta != tb ? ta < tb : a.issue < b.issue;
+    });
+    for (const auto& f : fresh) {
+        Entry& e = known.at(f.issue);
+        std::string replay;
+        if (const auto dup = seen.find(std::make_pair(e.device, e.nonce)); dup != seen.end())
+            replay = "demande d\xC3\xA9j\xC3\xA0 vue (issue #" + std::to_string(dup->second) + ") : rejou\xC3\xA9" "e, ignor\xC3\xA9" "e - rien n'est publi\xC3\xA9 pour elle";
+        else if (const auto last = latest.find(e.device); last != latest.end() && e.requestedAt <= last->second)
+            replay = "sa date sign\xC3\xA9" "e (" + licensing::isoTime(e.requestedAt) + ") n'est pas plus r\xC3\xA9" "cente que la derni\xC3\xA8re demande de ce PC (" +
+                     licensing::isoTime(last->second) + ") : rejou\xC3\xA9" "e (ou l'horloge du PC recule), ignor\xC3\xA9" "e - rien n'est publi\xC3\xA9 pour elle";
+        if (!replay.empty()) {
+            e.state = RequestState::Ignored;
+            addProblem(e, replay);
+            ++res.ignored;
+            res.details.push_back("ATTENTION : issue #" + std::to_string(f.issue) + " ignor\xC3\xA9" "e - " + replay + ".");
+            continue;
+        }
+        seen.emplace(std::make_pair(e.device, e.nonce), f.issue);
+        latest[e.device] = e.requestedAt;
+        // Le .xpgreq tel quel (l'assistant de licence prend des fichiers).
+        std::string file = deploy::joinPath(requestsFolder(folder), requestFileName(e.device, e.nonce));
+        std::string there;
+        if (isFile(file) && (!readText(file, there, nullptr) || there != f.request))
+            file = deploy::joinPath(requestsFolder(folder), requestFileName(e.device, e.nonce, true));
+        if (!isFile(file) && !writePrivate(file, f.request, &why)) {
+            res.details.push_back("ATTENTION : " + why);
+            ok = diskOk = false;
+        }
+        e.requestPath = file;
+        ++res.newRequests;
+        std::string line = "Nouvelle : #" + std::to_string(f.issue) + " " + e.customer + ", PC " + cite(e.deviceName.empty() ? "(sans nom)" : e.deviceName) +
+                           (e.software.empty() ? std::string() : ", " + e.software) + (e.licenseId.empty() ? std::string() : ", licence " + e.licenseId) + ".";
+        if (e.joinRequest()) line += " " + joinWarning(e);
+        res.details.push_back(line);
+    }
 
-    for (auto& e : entries) {
+    // 3. La plus recente demande de chaque poste, par sa date SIGNEE (jamais par le numero de l'issue, que n'importe
+    //    qui choisit) ; les autres en attente sont remplacees.
+    std::map<std::string, std::pair<Seconds, int>> newest;
+    for (const auto& [n, e] : known) {
+        if (e.nonce.empty() || e.state == RequestState::Ignored || e.state == RequestState::Unreadable) continue;
+        const auto cand = std::make_pair(e.requestedAt, n);
+        const auto it = newest.find(e.device);
+        if (it == newest.end() || it->second < cand) newest[e.device] = cand;
+    }
+
+    // 4. Le travail, plafonne (les issues s'ecrivent par n'importe qui) : refermer une issue repondue restee ouverte ;
+    //    pour la plus recente demande en attente d'un poste, SEULEMENT si son issue a change (ou si << recue >> reste a
+    //    publier) : l'annulation signee par le PC, l'etat publie, << recue >>.
+    int publishLeft = kMaxAutoPublishPerFetch, closesLeft = kMaxClosesPerFetch, readsLeft = kMaxCommentReadsPerFetch;
+    int statusLeft = 3 * kMaxAutoPublishPerFetch;
+    for (auto& [n, e] : known) {
+        if (e.state == RequestState::Ignored || e.state == RequestState::Unreadable) continue;
         const bool final = e.state == RequestState::Accepted || e.state == RequestState::Refused || e.state == RequestState::Cancelled;
         if (final) {
-            if (e.issueOpen) {   // repondue, mais l'issue est restee ouverte (une panne) : fermee maintenant
-                if (closeIssue(*api, e.issue, e.state == RequestState::Accepted, &why)) e.issueOpen = false;
-                else res.details.push_back("ATTENTION : " + why);
+            if (!e.issueOpen) continue;   // repondue, mais l'issue est restee (ou a ete remise) ouverte : refermee
+            if (closesLeft <= 0) {
+                ++res.deferred;
+                continue;
             }
-        } else if (e.issue != newest[e.device]) {
-            e.state = RequestState::Replaced;
-        } else {
-            // Une annulation signee par le PC ?
-            bool cancelled = false;
-            if (commentCount[e.issue] > 0) {
-                std::vector<std::string> comments;
-                if (!listComments(*api, e.issue, comments, &why)) {
-                    res.details.push_back("ATTENTION : " + why);
-                    ok = false;
-                } else {
-                    int forged = 0;
-                    cancelled = cancelledBy(comments, keys[e.issue], e.device, e.nonce, forged);
-                    if (forged > 0) addProblem(e, plural(static_cast<std::size_t>(forged), "annulation refus\xC3\xA9" "e (pas sign\xC3\xA9" "e par ce PC, ou pas pour cette demande)",
-                                                         "annulations refus\xC3\xA9" "es (pas sign\xC3\xA9" "es par ce PC, ou pas pour cette demande)"));
-                }
+            --closesLeft;
+            touched.insert(n);
+            if (closeIssue(*api, n, e.state == RequestState::Accepted, &why)) e.issueOpen = false;
+            else res.details.push_back("ATTENTION : " + why);
+            continue;
+        }
+        const auto nb = newest.find(e.device);
+        if (nb == newest.end() || nb->second.second != n) {
+            if (e.waiting()) {
+                e.state = RequestState::Replaced;
+                touched.insert(n);
             }
-            RemoteStatus remote;
-            const bool remoteOk = readRemoteStatus(*api, e.device, remote, &why);
-            if (!remoteOk) {
+            continue;
+        }
+        if (!e.waiting()) continue;
+        const bool changed = e.issueUpdatedAt != e.checkedUpdatedAt || e.issueComments != e.checkedComments;
+        const bool wantsReceived = !e.receivedPublished && !e.receivedHeld;
+        if (!changed && !wantsReceived) continue;   // rien de neuf : ni les commentaires ni l'etat publie ne sont relus
+        if (publishLeft <= 0 || statusLeft <= 0) {   // le plafond : au releve suivant
+            ++res.deferred;
+            continue;
+        }
+        touched.insert(n);
+        crypto::PublicKey pc{};
+        if (!keyFromHex(e.deviceKey, pc)) {
+            addProblem(e, "la cl\xC3\xA9 du PC est illisible");
+            continue;
+        }
+        // Une annulation signee par le PC ? (les commentaires ne sont relus que si l'issue a change)
+        bool cancelled = false;
+        if (changed && e.issueComments > 0) {
+            if (readsLeft <= 0) {
+                ++res.deferred;
+                continue;
+            }
+            --readsLeft;
+            std::vector<std::string> comments;
+            bool cut = false;
+            if (!listComments(*api, n, comments, cut, &why)) {
                 res.details.push_back("ATTENTION : " + why);
                 ok = false;
+                continue;
             }
-            const bool remoteForThis = remoteOk && remote.readable && remote.status.requestNonce == e.nonce;
-            if (cancelled) {
-                std::string line;
-                if (remoteForThis && remote.status.state == gw::State::Cancelled) {
-                    e.state = RequestState::Cancelled;
-                } else if (remoteOk && publishStatus(*api, key, e.deviceKey, gw::State::Cancelled, e.nonce, {}, {}, o.now, line, &why)) {
-                    res.published.push_back(line);
-                    e.state = RequestState::Cancelled;
-                } else {
-                    res.details.push_back("ATTENTION : l'annulation de #" + std::to_string(e.issue) + " n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9" "e : " + why);
-                    ok = false;
-                }
-                if (e.state == RequestState::Cancelled) {
-                    e.answeredAt = o.now;
-                    res.details.push_back("Annul\xC3\xA9" "e par le client : #" + std::to_string(e.issue) + " (" + e.customer + ").");
-                    if (e.issueOpen) {
-                        if (closeIssue(*api, e.issue, false, &why)) e.issueOpen = false;
-                        else res.details.push_back("ATTENTION : " + why);
-                    }
-                }
-            } else if (remoteForThis && (remote.status.state == gw::State::Accepted || remote.status.state == gw::State::Refused ||
-                                          remote.status.state == gw::State::Cancelled)) {
-                // Deja repondue (par un autre poste Admin, ou avant la perte de ce dossier).
-                e.state = remote.status.state == gw::State::Accepted ? RequestState::Accepted
-                          : remote.status.state == gw::State::Refused ? RequestState::Refused : RequestState::Cancelled;
-                if (e.state == RequestState::Accepted) e.answer = remote.status.licenseId;
-            } else {
-                if (!e.issueOpen) addProblem(e, "l'issue a \xC3\xA9t\xC3\xA9 ferm\xC3\xA9" "e sur GitHub sans annulation sign\xC3\xA9" "e par le PC");
-                if (!e.receivedPublished && remoteForThis) e.receivedPublished = true;   // << recue >> deja publiee
-                if (!e.receivedPublished && remoteOk) {
-                    std::string line;
-                    if (publishStatus(*api, key, e.deviceKey, gw::State::Received, e.nonce, {}, {}, o.now, line, &why)) {
-                        e.receivedPublished = true;
-                        res.published.push_back(line);
-                    } else {
-                        res.details.push_back("ATTENTION : \xC2\xAB re\xC3\xA7ue \xC2\xBB n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9" "e pour #" + std::to_string(e.issue) + " : " + why);
-                        ok = false;
-                    }
-                }
-                e.state = e.receivedPublished ? RequestState::Received : RequestState::Pending;
-            }
+            int forged = 0;
+            cancelled = cancelledBy(comments, pc, e.device, e.nonce, forged);
+            dropProblems(e, kForgedMarker);
+            if (forged > 0)
+                addProblem(e, plural(static_cast<std::size_t>(forged), "annulation refus\xC3\xA9" "e (pas sign\xC3\xA9" "e par ce PC, ou pas pour cette demande)",
+                                     "annulations refus\xC3\xA9" "es (pas sign\xC3\xA9" "es par ce PC, ou pas pour cette demande)"));
+            if (cut)
+                addProblem(e, "plus de " + std::to_string(kMaxCommentPages * 100) + " commentaires : seuls les premiers sont lus (une annulation au-del\xC3\xA0 n'est pas vue)");
         }
-        if (!writeEntry(folder, e, &why)) {
+        --statusLeft;
+        RemoteStatus remote;
+        if (!readRemoteStatus(*api, e.device, remote, &why)) {
             res.details.push_back("ATTENTION : " + why);
             ok = false;
+            continue;
+        }
+        const bool forThis = remote.readable && remote.status.requestNonce == e.nonce;
+        const gw::State rs = remote.status.state;
+        if (forThis && (rs == gw::State::Accepted || rs == gw::State::Refused || rs == gw::State::Cancelled)) {
+            // Deja repondue (par un autre poste Admin, ou avant la perte de ce dossier) : adoptee, rien n'est publie.
+            e.state = rs == gw::State::Accepted ? RequestState::Accepted : rs == gw::State::Refused ? RequestState::Refused : RequestState::Cancelled;
+            if (!e.answeredAt) e.answeredAt = remote.status.issuedAt;
+            res.details.push_back("#" + std::to_string(n) + " : d\xC3\xA9j\xC3\xA0 \xC2\xAB " + gw::stateKey(rs) + " \xC2\xBB sur la passerelle (rien n'est republi\xC3\xA9).");
+        } else if (cancelled) {
+            // L'annulation est bien du PC : la demande est annulee ici ; l'etat publie ne change que s'il le peut.
+            std::string held;
+            if (!mayPublishOver(remote, e, held)) {
+                addProblem(e, held);
+            } else {
+                --publishLeft;
+                std::string line;
+                if (!publishStatus(*api, key, e.deviceKey, gw::State::Cancelled, e.nonce, {}, o.now, line, &why, &remote)) {
+                    res.details.push_back("ATTENTION : l'annulation de #" + std::to_string(n) + " n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9" "e : " + why);
+                    ok = false;
+                    continue;
+                }
+                res.published.push_back(line);
+            }
+            e.state = RequestState::Cancelled;
+            e.answeredAt = o.now;
+            res.details.push_back("Annul\xC3\xA9" "e par le client : #" + std::to_string(n) + " (" + e.customer + ").");
+            if (e.issueOpen && closesLeft > 0) {
+                --closesLeft;
+                if (closeIssue(*api, n, false, &why)) e.issueOpen = false;
+                else res.details.push_back("ATTENTION : " + why);
+            }
+        } else {
+            if (!e.issueOpen) addProblem(e, "l'issue a \xC3\xA9t\xC3\xA9 ferm\xC3\xA9" "e sur GitHub sans annulation sign\xC3\xA9" "e par le PC");
+            else dropProblems(e, kClosedMarker);
+            if (!e.receivedPublished && forThis && rs == gw::State::Received) e.receivedPublished = true;   // deja publiee
+            if (!e.receivedPublished && !e.receivedHeld) {
+                std::string held;
+                if (!mayPublishOver(remote, e, held)) {
+                    e.receivedHeld = true;
+                    addProblem(e, held);
+                    res.details.push_back("ATTENTION : #" + std::to_string(n) + " : \xC2\xAB re\xC3\xA7ue \xC2\xBB n'est pas publi\xC3\xA9" "e - " + held + ".");
+                } else {
+                    --publishLeft;
+                    std::string line;
+                    if (!publishStatus(*api, key, e.deviceKey, gw::State::Received, e.nonce, {}, o.now, line, &why, &remote)) {
+                        res.details.push_back("ATTENTION : \xC2\xAB re\xC3\xA7ue \xC2\xBB n'a pas \xC3\xA9t\xC3\xA9 publi\xC3\xA9" "e pour #" + std::to_string(n) + " : " + why);
+                        ok = false;
+                        continue;
+                    }
+                    e.receivedPublished = true;
+                    res.published.push_back(line);
+                }
+            }
+            e.state = e.receivedPublished ? RequestState::Received : RequestState::Pending;
+        }
+        e.checkedUpdatedAt = e.issueUpdatedAt;
+        e.checkedComments = e.issueComments;
+    }
+    for (const int n : touched) {
+        if (!writeEntry(folder, known.at(n), &why)) {
+            res.details.push_back("ATTENTION : " + why);
+            ok = diskOk = false;
         }
     }
 
-    // Le releve : sa date, les comptes.
+    // Le releve : sa date, ses comptes, et le point de depart du suivant (il n'avance pas sur une liste coupee, ni si
+    // une demande n'a pas pu etre rangee : elle sera relue).
     const auto all = listRequests(folder);
     int pending = 0;
     for (const auto& e : all) pending += e.waiting() ? 1 : 0;
     res.pending = pending;
+    const Seconds anchor = diskOk && !truncated ? lastUpdated : sameRepo ? before.lastUpdated : 0;
     Value v = Value::object();
     v.set("format", std::string(kFetchFormat));
     v.set("releve_le", licensing::isoTime(o.now));
     v.set("depot", c.repo);
     v.set("demandes", static_cast<int>(all.size()));
     v.set("en_attente", pending);
+    if (anchor > 0) v.set("issues_maj_max", licensing::isoTime(anchor));
+    if (truncated) v.set("tronque", true);
+    if (res.deferred > 0) v.set("reportees", res.deferred);
     if (!writePrivate(deploy::joinPath(requestsFolder(folder), kFetchFile), core::json::write(v, true) + "\n", &why)) {
         res.details.push_back("ATTENTION : " + why);
         ok = false;
     }
+    if (res.deferred > 0)
+        res.details.insert(res.details.begin(),
+                           "ATTENTION : " + plural(static_cast<std::size_t>(res.deferred), "t\xC3\xA2" "che remise", "t\xC3\xA2" "ches remises") +
+                               " au prochain relev\xC3\xA9 (au plus " + std::to_string(kMaxAutoPublishPerFetch) + " \xC2\xAB re\xC3\xA7ue \xC2\xBB ou \xC2\xAB annul\xC3\xA9" "e \xC2\xBB publi\xC3\xA9" "es, " +
+                               std::to_string(kMaxClosesPerFetch) + " issues referm\xC3\xA9" "es et " + std::to_string(kMaxCommentReadsPerFetch) +
+                               " issues relues par relev\xC3\xA9) : rel\xC3\xA8ve de nouveau dans un moment.");
+    if (truncated)
+        res.details.insert(res.details.begin(),
+                           "ATTENTION : plus de " + std::to_string(kMaxListPages * 100) + " issues " + (since ? "chang\xC3\xA9" "es depuis le dernier relev\xC3\xA9" : "dans le d\xC3\xA9p\xC3\xB4t") +
+                               " : seules les " + std::to_string(kMaxListPages * 100) +
+                               " plus r\xC3\xA9" "centes sont lues. Rel\xC3\xA8ve de nouveau ; si \xC3\xA7" "a se r\xC3\xA9p\xC3\xA8te, le d\xC3\xA9p\xC3\xB4t est inond\xC3\xA9 (regarde ses issues sur GitHub).");
     res.ok = ok;
     std::string head = plural(all.size(), "demande en ligne", "demandes en ligne") + " sur " + c.repo + " : " + std::to_string(pending) + " en attente de ta d\xC3\xA9" "cision";
     if (res.newRequests > 0) head += " (" + plural(static_cast<std::size_t>(res.newRequests), "nouvelle", "nouvelles") + ")";
+    if (res.ignored > 0) head += " ; " + plural(static_cast<std::size_t>(res.ignored), "rejou\xC3\xA9" "e, ignor\xC3\xA9" "e", "rejou\xC3\xA9" "es, ignor\xC3\xA9" "es");
     res.message = (ok ? "Demandes relev\xC3\xA9" "es : " : "Relev\xC3\xA9 incomplet : ") + head + ".";
+    if (truncated) res.message += " La liste des issues est coup\xC3\xA9" "e : rel\xC3\xA8ve de nouveau.";
+    if (res.deferred > 0) res.message += " Le reste au prochain relev\xC3\xA9 (plafond par relev\xC3\xA9).";
     if (!ok) res.message = "Refus\xC3\xA9 : " + res.message;
     return res;
 }
@@ -1269,7 +1551,7 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     gw::StatusContent content;
     content.message = reason;
     std::string line;
-    if (!publishStatus(*api, key, e.deviceKey, gw::State::Refused, e.nonce, {}, content, o.now, line, &why)) return refused(why);
+    if (!publishStatus(*api, key, e.deviceKey, gw::State::Refused, e.nonce, content, o.now, line, &why)) return refused(why);
     res.published.push_back(line);
     e.state = RequestState::Refused;
     e.answer = reason;
@@ -1287,18 +1569,31 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
 // ============================================================================ revocation, PC retire
 Result publishRevocation(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId, const std::vector<std::string>& deviceKeys,
                          const std::string& reason, const Options& o) {
+    // La liste de revocation de l'archive, signee par cette cle : elle part scellee pour chaque PC revoque (jamais en
+    // clair dans le depot public : ses raisons sont du texte libre, elle lie des cles de PC a des licences).
+    std::string revText, why;
+    licensing::RevocationList revList;
+    if (!archiveRevocations(folder, key, revText, revList, &why))
+        return refused(why.empty() ? std::string("pas de liste de r\xC3\xA9vocation dans l'archive : signe d'abord la r\xC3\xA9vocation") : why);
+    if (deviceKeys.empty()) {
+        Result res;
+        res.ok = true;
+        res.message = "Rien \xC3\xA0 publier sur la passerelle pour l'instant : la liste de r\xC3\xA9vocation n'y est plus publi\xC3\xA9" "e en clair ; elle part scell\xC3\xA9" "e avec la "
+                      "prochaine \xC3\xA9mission de la licence " + licenseId + " (\xC3\xA0 chacun de ses PC).";
+        return res;
+    }
     Config c;
     std::unique_ptr<Api> api;
-    std::string why;
     if (!openApi(folder, o, c, api, &why)) return refused(why);
     Result res;
-    bool ok = syncArchiveFiles(*api, folder, key, false, true, res);
+    bool ok = retirePublicRevocations(*api, res);
     int done = 0;
     for (const auto& dk : deviceKeys) {
         gw::StatusContent content;
         content.message = reason.empty() ? std::string("Licence r\xC3\xA9voqu\xC3\xA9" "e.") : reason;
+        content.revocations = revText;
         std::string line;
-        if (publishStatus(*api, key, dk, gw::State::Revoked, {}, licenseId, content, o.now, line, &why)) {
+        if (publishStatus(*api, key, dk, gw::State::Revoked, {}, content, o.now, line, &why)) {
             res.published.push_back(line);
             ++done;
         } else {
@@ -1306,6 +1601,8 @@ Result publishRevocation(const std::string& folder, const licensing::SigningKey&
             ok = false;
         }
     }
+    if (done > 0)
+        res.details.push_back("La liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(revList.number) + " et la raison partent scell\xC3\xA9" "es pour chaque PC r\xC3\xA9voqu\xC3\xA9 (jamais en clair).");
     res.ok = ok;
     res.message = ok ? "R\xC3\xA9vocation publi\xC3\xA9" "e sur la passerelle (" + plural(static_cast<std::size_t>(done), "PC pr\xC3\xA9venu", "PC pr\xC3\xA9venus") + ")."
                      : "Refus\xC3\xA9 : la r\xC3\xA9vocation n'est publi\xC3\xA9" "e qu'en partie sur la passerelle (" + std::to_string(done) + " PC sur " + std::to_string(deviceKeys.size()) + ").";
@@ -1325,8 +1622,11 @@ Result publishRemoval(const std::string& folder, const licensing::SigningKey& ke
     bool ok = publishToDevices(*api, folder, key, licenceText, lic, o, res, accepted, updated);
     gw::StatusContent content;
     content.message = "Ce PC a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la licence " + lic.licenseId + ".";
+    std::string revText, revWhy;
+    licensing::RevocationList revList;
+    if (archiveRevocations(folder, key, revText, revList, &revWhy) && (o.revocations || namesLicence(revList, lic.licenseId))) content.revocations = revText;
     std::string line;
-    if (publishStatus(*api, key, removedDeviceKey, gw::State::Removed, {}, lic.licenseId, content, o.now, line, &why)) {
+    if (publishStatus(*api, key, removedDeviceKey, gw::State::Removed, {}, content, o.now, line, &why)) {
         res.published.push_back(line);
         res.details.push_back("PC retir\xC3\xA9 : " + line + ".");
     } else {

@@ -7,8 +7,9 @@
 //    - les fichiers (raw : GET <raw>/<depot>/<branche>/<chemin>, sans jeton) ;
 //    - l'API Contents (GET avec ou sans jeton ; PUT et DELETE : le jeton de
 //      l'EDITEUR seulement, le sha exige pour remplacer, 409 sinon) ;
-//    - les issues (POST, GET liste paginee, GET une, PATCH l'etat, les
-//      commentaires : POST et GET) : le jeton des DEMANDES ou celui de
+//    - les issues (POST, GET liste paginee - et filtree par since : celles dont
+//      updated_at >= since, comme GitHub -, GET une, PATCH l'etat ou le corps,
+//      les commentaires : POST et GET) : le jeton des DEMANDES ou celui de
 //      l'editeur ; sans jeton : 401 pour ecrire ;
 //    - GET <api>/repos/<depot> : public, et ce que le jeton peut faire.
 //  Des pannes a la demande : hors ligne (Connect), un code d'erreur pour les N
@@ -258,9 +259,10 @@ struct FakePasserelle {
                 const std::string state = queryValue(query, "state").empty() ? "open" : queryValue(query, "state");
                 const int perPage = std::clamp(std::atoi(queryValue(query, "per_page").c_str()) > 0 ? std::atoi(queryValue(query, "per_page").c_str()) : 30, 1, 100);
                 const int page = std::max(1, std::atoi(queryValue(query, "page").c_str()));
+                const std::string since = queryValue(query, "since");   // "AAAA-MM-JJTHH:MM:SSZ" : se compare en texte
                 std::vector<const Issue*> list;
                 for (auto it = issues.rbegin(); it != issues.rend(); ++it)   // les plus recentes d'abord (comme GitHub)
-                    if (state == "all" || it->state == state) list.push_back(&*it);
+                    if ((state == "all" || it->state == state) && (since.empty() || it->updatedAt >= since)) list.push_back(&*it);
                 json::Value arr = json::Value::array();
                 for (std::size_t k = static_cast<std::size_t>((page - 1) * perPage); k < list.size() && k < static_cast<std::size_t>(page * perPage); ++k)
                     arr.push(issueJson(*list[k]));

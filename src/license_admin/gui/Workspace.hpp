@@ -137,9 +137,9 @@ struct GatewayJob {
     enum class Kind : std::uint8_t {
         Licence,      // une licence signee : a chacun de ses PC (licenceText)
         Removal,      // un PC retire : la nouvelle emission aux autres, << retiree >> pour lui (deviceKey)
-        Revocation,   // la liste de revocation, puis << revoquee >> pour deviceKeys
-        Unrevoke,     // la liste de revocation, puis la licence (licenceText, si elle est la) a ses PC
-        Registry,     // le registre (et la liste de revocation) de l'archive
+        Revocation,   // << revoquee >> pour deviceKeys (la raison et la liste de revocation scellees pour chacun)
+        Unrevoke,     // le registre, puis la licence (licenceText, si elle est la) a ses PC, avec la liste scellee
+        Registry,     // le registre de l'archive (la liste de revocation n'est plus publiee en clair)
     };
     Kind                     kind{Kind::Licence};
     std::string              label;        // "Passerelle : publication de XPG-2026-00042"
@@ -287,6 +287,8 @@ public:
     [[nodiscard]] bool isOnlineRequest(const std::string& path) const;
     [[nodiscard]] std::string onlineLicencePath(const std::string& licenseId) const;
     [[nodiscard]] const passerelle::Entry* onlineRequest(int issue) const;
+    // La demande relevee dont `path` est le .xpgreq (nullptr : ce n'en est pas une).
+    [[nodiscard]] const passerelle::Entry* onlineRequestAt(const std::string& path) const;
     // Les fichiers PUBLICS a compiler dans les Studios (la cle publique, le registre, l'adresse de la passerelle).
     OpResult studioKit(const std::string& outDir) const;
 

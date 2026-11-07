@@ -1118,7 +1118,10 @@ OpResult Workspace::passerelleRun(const GatewayJob& job) const {
         case GatewayJob::Kind::Unrevoke: {
             OpResult r = fromResult(passerelle::publishArchive(folder_, *key, o));
             if (!r.ok || job.licenceText.empty()) return r;
-            OpResult l = fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, o));
+            // La liste qui ne revoque plus cette licence part scellee a chacun de ses PC (elle ne la nomme plus).
+            passerelle::Options withList = o;
+            withList.revocations = true;
+            OpResult l = fromResult(passerelle::publishLicence(folder_, *key, job.licenceText, withList));
             l.details.insert(l.details.begin(), r.details.begin(), r.details.end());
             return l;
         }
@@ -1140,6 +1143,13 @@ std::string Workspace::onlineLicencePath(const std::string& licenseId) const {
 const passerelle::Entry* Workspace::onlineRequest(int issue) const {
     for (const auto& e : passerelle_.requests)
         if (e.issue == issue) return &e;
+    return nullptr;
+}
+
+const passerelle::Entry* Workspace::onlineRequestAt(const std::string& path) const {
+    if (path.empty()) return nullptr;
+    for (const auto& e : passerelle_.requests)
+        if (e.requestPath == path) return &e;
     return nullptr;
 }
 

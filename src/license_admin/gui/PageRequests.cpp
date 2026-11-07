@@ -11,7 +11,11 @@
 //    - Accepter... ouvre l'assistant de licence avec elle (une licence
 //      existante demandee : en ajout de PC - une licence partagee) ; signee, la
 //      licence part d'elle-meme a TOUS ses PC (publishToGateway) et l'issue se
-//      ferme ;
+//      ferme. 1.34.0 (relecture) : une demande d'AJOUT a une licence existante
+//      n'est pas une preuve (n'importe qui peut taper un identifiant et un nom
+//      de client) : la table la marque << a verifier >>, la page le dit en
+//      entier quand elle est choisie, et l'assistant demande une confirmation
+//      avant de signer ;
 //    - Refuser... demande la raison (le client la lit ; scellee pour son PC) ;
 //    - Voir sur GitHub ouvre l'issue dans le navigateur.
 //  La passerelle pas reglee, pas de jeton, jamais relevee, rien a montrer : la
@@ -178,7 +182,8 @@ ui::Tone toneOf(RequestState s) {
         case RequestState::Received: return ui::Tone::Warning;
         case RequestState::Accepted: return ui::Tone::Ok;
         case RequestState::Refused:
-        case RequestState::Unreadable: return ui::Tone::Error;
+        case RequestState::Unreadable:
+        case RequestState::Ignored: return ui::Tone::Error;
         case RequestState::Cancelled:
         case RequestState::Replaced: return ui::Tone::Muted;
     }
@@ -252,6 +257,7 @@ public:
     // Les essais.
     [[nodiscard]] const std::vector<Entry>& shown() const noexcept { return shown_; }
     [[nodiscard]] std::string statusText() const { return status(); }
+    [[nodiscard]] std::string noticeText() const { return notice(); }
     [[nodiscard]] std::string emptyText() const { return empty(); }
 
 protected:
@@ -277,6 +283,10 @@ protected:
         statusLines_ = wrap(status(), kFonts.ui, w, 2);
         statusY_ = y;
         y += static_cast<float>(statusLines_.size()) * kLineH + 6.f;
+        const std::string n = notice();
+        noticeLines_ = n.empty() ? std::vector<std::string>{} : wrap(n, kFonts.ui, w, 3);
+        noticeY_ = y;
+        if (!noticeLines_.empty()) y += static_cast<float>(noticeLines_.size()) * kLineH + 6.f;
         table_->setBounds({x, y, w, std::max(60.f, b.bottom() - kPad - y)});
         emptyY_ = y + 40.f;
     }
@@ -299,6 +309,9 @@ protected:
         for (std::size_t i = 0; i < statusLines_.size(); ++i)
             r.drawText({x, statusY_ + static_cast<float>(i) * kLineH}, fit(r, statusLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui,
                        tone == ui::Tone::None ? c.text : ctx.theme.tone(tone, c.text));
+        for (std::size_t i = 0; i < noticeLines_.size(); ++i)
+            r.drawText({x, noticeY_ + static_cast<float>(i) * kLineH}, fit(r, noticeLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui,
+                       ctx.theme.tone(ui::Tone::Warning, c.text));
     }
 
     void onPaintOverlay(const ui::PaintContext& ctx) override {
@@ -359,6 +372,16 @@ private:
                "temps en temps.";
     }
 
+    // La demande choisie demande l'AJOUT de son PC a une licence existante : le dire en entier (a verifier).
+    [[nodiscard]] std::string notice() const {
+        const Entry* e = selected();
+        if (!e || !e->waiting() || !e->joinRequest()) return {};
+        std::string t = passerelle::joinWarning(*e);
+        if (const LicenceEntry* l = ws().licence(e->licenseId); l && lowerAscii(l->licence.customer) != lowerAscii(e->customer))
+            t += " La licence " + e->licenseId + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
+        return t;
+    }
+
     [[nodiscard]] bool wantWaiting() const {
         const auto* item = filter_->selectedItem();
         return item && item->value == "attente";
@@ -376,6 +399,10 @@ private:
             std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
             if (!e.licenseId.empty() && ws().licence(e.licenseId)) licence += " (ajouter ce PC)";
             std::string state = passerelle::requestStateLabel(e.state);
+            if (e.waiting() && e.joinRequest()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
+                licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
+                state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
+            }
             if (!e.problems.empty()) state += " \xE2\x80\x94 " + e.problems.front();
             const std::string pc = e.state == RequestState::Unreadable ? "poste " + e.device.substr(0, 12)
                                    : e.deviceName.empty()               ? std::string("(sans nom)")
@@ -475,11 +502,13 @@ private:
         std::string extend;
         if (!e->licenseId.empty())
             if (const LicenceEntry* l = ws().licence(e->licenseId)) {
-                extend = e->licenseId;   // une licence partagee : ce PC s'y ajoute
-                if (lowerAscii(l->licence.customer) != lowerAscii(e->customer) && host_.flash)
-                    host_.flash("Attention : la licence " + extend + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB, la demande vient de \xC2\xAB " +
-                                    e->customer + " \xC2\xBB. V\xC3\xA9rifie avant de signer.",
-                                Tone::Warning);
+                extend = e->licenseId;   // une licence partagee : ce PC s'y ajoute - a verifier (l'assistant demande de confirmer)
+                if (host_.flash) {
+                    std::string t = passerelle::joinWarning(*e);
+                    if (lowerAscii(l->licence.customer) != lowerAscii(e->customer))
+                        t += " La licence " + extend + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
+                    host_.flash(t, Tone::Warning);
+                }
             }
         if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {e->requestPath}, extend, extend.empty() ? e->customer : std::string()));
     }
@@ -536,10 +565,10 @@ private:
     ui::TableView*           table_{nullptr};
     std::shared_ptr<Rows>    model_;
     std::vector<Entry>       shown_;
-    std::vector<std::string> leadLines_, statusLines_;
+    std::vector<std::string> leadLines_, statusLines_, noticeLines_;
     bool                     fetching_{false};
     bool                     lastBusy_{false};
-    float                    titleY_{0}, leadY_{0}, statusY_{0}, emptyY_{0};
+    float                    titleY_{0}, leadY_{0}, statusY_{0}, noticeY_{0}, emptyY_{0};
 };
 
 } // namespace

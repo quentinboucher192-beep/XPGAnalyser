@@ -449,6 +449,9 @@ struct WizardState {
     bool                  gatewayWaits{false}; // un autre travail tournait : elle part des qu'il a fini
     bool                  gatewayed{false};
     OpResult              gateway;
+    // 1.34.0 (relecture) : un PC d'une demande EN LIGNE ajoute a une licence existante - n'importe qui peut la demander :
+    // l'editeur confirme avoir verifie avec son client (la case de l'etape << Signer >>) avant de signer.
+    bool                  joinConfirmed{false};
 };
 
 class WizardMenu;
@@ -502,6 +505,11 @@ public:
     [[nodiscard]] std::string requestedExisting() const;   // la licence de l'archive que demandent les PC (pas etendue)
     // 1.34.0 : des demandes en ligne seulement, la passerelle reglee : signer ecrit le fichier sans rien demander.
     [[nodiscard]] bool onlineMode() const;
+    // 1.34.0 (relecture) : les avertissements des PC de demandes EN LIGNE ajoutes a la licence existante (une demande
+    // d'ajout n'est pas une preuve) ; non vide : la case << j'ai verifie >> est exigee avant de signer.
+    [[nodiscard]] std::vector<std::string> joinChecks() const;
+    [[nodiscard]] bool joinUnverified(const Req& r) const;
+    [[nodiscard]] bool needsJoinConfirm() const { return !joinChecks().empty(); }
 
 protected:
     void onLayout() override;
@@ -601,7 +609,7 @@ public:
         const auto& s = w_.st();
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> tips;
-        std::vector<int> kinds;   // 0 bonne, 1 deja liee, 2 refusee
+        std::vector<int> kinds;   // 0 bonne, 1 deja liee, 2 refusee, 3 a verifier (une demande en ligne d'ajout a la licence)
         for (const auto& r : s.requests) {
             const auto& rec = r.p.record;
             if (!r.ok()) {
@@ -610,11 +618,14 @@ public:
                 kinds.push_back(2);
                 continue;
             }
+            const bool verify = w_.joinUnverified(r);
             rows.push_back({rec.deviceName.empty() ? std::string("(sans nom)") : rec.deviceName,
-                            r.bound ? std::string("d\xC3\xA9j\xC3\xA0 sur la licence") : std::string("valide"), rec.fingerprint, rec.software,
-                            dateFr(rec.requestedAt), rec.licenseId.empty() ? std::string("\xE2\x80\x94") : rec.licenseId});
-            tips.push_back(r.p.path + (r.bound ? "\nCe PC est d\xC3\xA9j\xC3\xA0 li\xC3\xA9 \xC3\xA0 la licence : une r\xC3\xA9" "activation." : ""));
-            kinds.push_back(r.bound ? 1 : 0);
+                            r.bound ? std::string("d\xC3\xA9j\xC3\xA0 sur la licence") : verify ? std::string("\xC3\xA0 v\xC3\xA9rifier") : std::string("valide"),
+                            rec.fingerprint, rec.software, dateFr(rec.requestedAt), rec.licenseId.empty() ? std::string("\xE2\x80\x94") : rec.licenseId});
+            tips.push_back(r.p.path + (r.bound ? "\nCe PC est d\xC3\xA9j\xC3\xA0 li\xC3\xA9 \xC3\xA0 la licence : une r\xC3\xA9" "activation."
+                                       : verify ? "\nUne demande en ligne : n'importe qui peut demander l'ajout \xC3\xA0 une licence. Confirme avec ton client avant de signer."
+                                                : ""));
+            kinds.push_back(r.bound ? 1 : verify ? 3 : 0);
         }
         // La colonne << Licence demandee >> seulement si une demande en nomme une.
         bool named = false;
@@ -637,9 +648,10 @@ public:
                                                     st.iconTone = ui::Tone::Error;
                                                 }
                                             } else if (c == 1) {
-                                                st.fgTone = kinds[r] == 1 ? ui::Tone::Warning : ui::Tone::Ok;
-                                                st.icon = kinds[r] == 1 ? ui::Icon::Info : ui::Icon::Ok;
+                                                st.fgTone = kinds[r] == 1 || kinds[r] == 3 ? ui::Tone::Warning : ui::Tone::Ok;
+                                                st.icon = kinds[r] == 1 ? ui::Icon::Info : kinds[r] == 3 ? ui::Icon::Warning : ui::Icon::Ok;
                                                 st.iconTone = st.fgTone;
+                                                st.bold = kinds[r] == 3;
                                             }
                                             return st;
                                         },
@@ -1408,6 +1420,21 @@ public:
     explicit StepSign(WizardBody& w) : Step("wizard.etape.signer", w) {
         result_ = &adopt(*this, std::make_unique<ui::ListView>("wizard.resultat"));
         result_->setSelectionMode(ui::SelectionMode::None);
+        // 1.34.0 (relecture) : un PC d'une demande en ligne ajoute a une licence existante - confirme avant de signer.
+        confirm_ = &adopt(*this, std::make_unique<ui::Checkbox>("J'ai v\xC3\xA9rifi\xC3\xA9 avec mon client : ce PC est bien le sien", "wizard.confirmer-ajout"));
+        confirm_->setTooltip("Une demande d'ajout \xC3\xA0 une licence existante n'est pas une preuve : n'importe qui peut taper un identifiant de licence et un nom "
+                             "de client. Appelle ou \xC3\xA9" "cris \xC3\xA0 ton client avant de signer.");
+        links_ += confirm_->stateChanged->connect([this](ui::Checkbox::State st) {
+            if (syncing_) return;
+            w_.st().joinConfirmed = st == ui::Checkbox::State::Checked;
+            w_.changed();
+        });
+        show(confirm_, false);
+    }
+    [[nodiscard]] std::string blocker() const override {
+        if (!w_.st().signedOk && w_.needsJoinConfirm() && !w_.st().joinConfirmed)
+            return "Coche d'abord \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 avec mon client \xC2\xBB : une demande d'ajout \xC3\xA0 la licence n'est pas une preuve.";
+        return {};
     }
     [[nodiscard]] std::string heading() const override { return w_.st().signedOk ? "Licence sign\xC3\xA9" "e" : "Signer"; }
     [[nodiscard]] std::string railLabel() const override { return "Signer"; }
@@ -1446,13 +1473,29 @@ public:
         model_ = std::make_shared<Lines>(std::move(lines));
         result_->setModel(model_);
         show(result_, s.signAttempted);
+        syncing_ = true;
+        confirm_->setState(s.joinConfirmed ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+        syncing_ = false;
         invalidateLayout();
     }
 
 protected:
     void onLayout() override {
         const auto r = bounds();
-        const float top = w_.st().signedOk ? 0.f : 120.f;
+        float top = w_.st().signedOk ? 0.f : 120.f;
+        const bool ask = !w_.st().signedOk && w_.needsJoinConfirm();
+        show(confirm_, ask);
+        joinLines_.clear();
+        if (ask) {
+            joinY_ = r.y + top;
+            float h = 0.f;
+            for (const auto& t : w_.joinChecks()) {
+                joinLines_.push_back(t);
+                h += wrappedHeight(t, gfx::FontId{16}, r.w, 3);
+            }
+            confirm_->setBounds({r.x, joinY_ + h + 4.f, r.w, 26.f});
+            top += h + 40.f;
+        }
         result_->setBounds({r.x, r.y + top, r.w, std::max(48.f, r.h - top)});
     }
     void onPaint(const ui::PaintContext& ctx) override {
@@ -1478,11 +1521,16 @@ protected:
         if (k.test)
             r.drawText({b.x, y}, fit(r, "CL\xC3\x89 D'ESSAI : une licence sign\xC3\xA9" "e avec elle n'est jamais pour un client.", ctx.theme.font.ui, b.w), ctx.theme.font.ui,
                        toneColor(ctx.theme, Tone::Error));
+        float jy = joinY_;
+        for (const auto& t : joinLines_) jy += drawWrapped(r, b.x, jy, b.w, t, ctx.theme.font.ui, toneColor(ctx.theme, Tone::Warning), 3);
     }
 
 private:
-    ui::ListView*           result_{nullptr};
-    std::shared_ptr<Lines>  model_;
+    ui::ListView*            result_{nullptr};
+    ui::Checkbox*            confirm_{nullptr};
+    std::shared_ptr<Lines>   model_;
+    std::vector<std::string> joinLines_;
+    float                    joinY_{0.f};
 };
 
 // =========================================================================================== WizardBody
@@ -1555,6 +1603,7 @@ WizardBody::~WizardBody() {
 
 void WizardBody::loadBase(const LicenceEntry& l) {
     st_.extend = true;
+    st_.joinConfirmed = false;
     st_.extendId = l.licence.licenseId;
     st_.base = l.licence;
     st_.licenseId = l.licence.licenseId;
@@ -1658,6 +1707,7 @@ void WizardBody::addRequests(const std::vector<std::string>& paths, bool quiet) 
             r.bound = st_.extend && st_.base.boundTo(r.p.record.deviceKey);
         }
         st_.requests.push_back(std::move(r));
+        st_.joinConfirmed = false;   // une demande de plus : a confirmer de nouveau
         ++added;
         g_lastFolder = g_lastFolder.empty() ? folderOf(path) : g_lastFolder;
     }
@@ -1678,6 +1728,7 @@ void WizardBody::removeRequests(std::vector<std::size_t> indexes) {
     indexes.erase(std::unique(indexes.begin(), indexes.end()), indexes.end());
     for (auto it = indexes.rbegin(); it != indexes.rend(); ++it)
         if (*it < st_.requests.size()) st_.requests.erase(st_.requests.begin() + static_cast<std::ptrdiff_t>(*it));
+    st_.joinConfirmed = false;
     if (!steps_.empty()) steps_[0]->enter();
     changed();
 }
@@ -1793,6 +1844,11 @@ void WizardBody::sign() {
         say("Un travail est en cours : attends qu'il finisse pour signer.", Tone::Warning);
         return;
     }
+    // 1.34.0 (relecture) : un PC d'une demande en ligne ajoute a une licence existante - confirme d'abord.
+    if (const std::string why = steps_.back()->blocker(); !why.empty()) {
+        say(why, Tone::Warning);
+        return;
+    }
     // Ce qui sera signe doit encore tenir (l'archive a pu changer depuis le recapitulatif).
     const LicenceDraft d = draft();
     const OpResult check = ws().preview(d);
@@ -1844,6 +1900,26 @@ void WizardBody::doSign(const LicenceDraft& d, const std::string& path) {
     updateButtons();
     invalidateLayout();
     if (!r.ok) say(r.message, Tone::Error);
+}
+
+bool WizardBody::joinUnverified(const Req& r) const {
+    // Un PC NOUVEAU sur une licence existante, d'apres une demande EN LIGNE (que n'importe qui peut ecrire).
+    return st_.extend && r.ok() && !r.bound && ws().isOnlineRequest(r.p.path);
+}
+
+std::vector<std::string> WizardBody::joinChecks() const {
+    std::vector<std::string> out;
+    for (const auto& r : st_.requests) {
+        if (!joinUnverified(r)) continue;
+        const passerelle::Entry* e = ws().onlineRequestAt(r.p.path);
+        const std::string who = e ? e->customer : std::string();
+        std::string t = passerelle::joinWarning(st_.extendId, who);
+        const std::string pc = r.p.record.deviceName.empty() ? std::string("(sans nom)") : r.p.record.deviceName;
+        t += " (PC \xC2\xAB " + pc + " \xC2\xBB)";
+        if (!who.empty() && trim(st_.base.customer) != trim(who)) t += " La licence est au nom de \xC2\xAB " + st_.base.customer + " \xC2\xBB.";
+        out.push_back(std::move(t));
+    }
+    return out;
 }
 
 bool WizardBody::onlineMode() const {
