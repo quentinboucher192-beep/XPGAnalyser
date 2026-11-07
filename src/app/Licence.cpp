@@ -461,6 +461,8 @@ std::vector<std::string> takeMessages() {
     return std::exchange(g_messages, {});
 }
 
+void startService() { service::startRunner(); }
+
 void startNotices(bool online) {
     g_notices = true;
     syncStateNotices();

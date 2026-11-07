@@ -501,12 +501,14 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->recovery_.start((std::filesystem::path(Settings::defaultPath()).parent_path() / "reprise").string());
     // 1.30.0 : les licences de ce PC (src/licensing) - verifiees hors ligne ; sans cle d'editeur dans le
     // programme : << non activees >>, tout est ouvert.
-    // 1.35.0 : hors du poste d'exploitation, une licence flottante prend son poste avant la premiere evaluation.
-    licence::start(/*takeFloatingSeat=*/a->options_.station.empty());
+    // 1.35.0 : une licence flottante prend son poste avant la premiere evaluation ; 1.35.1 : le poste d'exploitation
+    // aussi (sans licence, il ne tourne pas : il lui faut son poste flottant et son bail).
+    licence::start(/*takeFloatingSeat=*/true);
     // 1.34.0 : les avis de la licence (la Decouverte, a chaque lancement : la cloche, l'accueil) et, 1.35.0, le
     // service des licences (un fil de travail : l'heure, le bail, la Decouverte, le code de l'installateur, le jeton
     // flottant, les reponses de l'editeur). Pas sur le poste d'exploitation (--ihm) : personne devant l'ecran.
     if (a->options_.station.empty()) licence::startNotices(true);
+    else licence::startService();   // 1.35.1 : le bail, l'heure, le jeton flottant - sans avis (personne devant l'ecran)
     // La periode de la sauvegarde de reprise (2 min ; un reglage pour les essais).
     if (const int period = a->settings_.getInt("recovery.autosaveSeconds", 120); period >= 5)
         a->recovery_.setAutosavePeriod(period);
@@ -1932,6 +1934,7 @@ void App::openRecovered(const Recovery::Found& found) {
 }
 
 void App::openStation(const std::string& folder, bool force) {
+    if (!licence::gateProjects(*this)) return;   // 1.35.1 : sans licence, le poste d'exploitation ne demarre pas
     stationPending_ = true;
     stationForce_ = force;
     openProjectFolder(folder);

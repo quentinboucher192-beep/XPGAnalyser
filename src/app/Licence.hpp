@@ -91,9 +91,9 @@ inline std::atomic<RequireFn> g_require{nullptr};
 // La phrase d'une entree verrouillee (le module), ou vide si elle est ouverte.
 [[nodiscard]] std::string lockedText(std::string_view feature);
 // 1.35.1 : LE LOGICIEL NE S'UTILISE PAS SANS LICENCE (la demande de l'editeur). Ouvrir, creer, importer un projet :
-// seulement avec une licence valable (Valide, Grace) ou la Decouverte en cours. Tout ouvert : les licences pas actives
-// (aucune cle de l'editeur compilee) et le poste d'exploitation (le module pas demarre). Un projet deja ouvert reste
-// ouvert et s'enregistre : rien n'est perdu. `why` : la raison, pour une phrase.
+// seulement avec une licence valable (Valide, Grace) ou la Decouverte en cours ; le poste d'exploitation aussi (--ihm :
+// il ne demarre pas). Tout ouvert : les licences pas actives (aucune cle de l'editeur compilee). Un projet deja ouvert
+// reste ouvert et s'enregistre (un poste qui tourne continue) : rien n'est perdu. `why` : la raison, pour une phrase.
 [[nodiscard]] bool projectsAllowed(std::string* why = nullptr);
 // Le libelle d'une fonctionnalite (le registre ; sinon son identifiant).
 [[nodiscard]] std::string featureLabel(std::string_view feature);
@@ -138,6 +138,8 @@ inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevice
 //      de la cloche et un message de la barre d'etat (takeMessages).
 //  Jamais une fenetre qui bloque le demarrage.
 void startNotices(bool online);
+// 1.35.1 : le poste d'exploitation (--ihm) : le service seul (le bail, l'heure, le jeton flottant), sans avis.
+void startService();
 // "D\xC3\xA9" "couverte : il te reste 12 jours (jusqu'au 19/11/2026)." ; vide : pas en Decouverte.
 [[nodiscard]] std::string discoveryText(const licensing::LicenseState& st);
 // "Bail : il reste 5 jours \xE2\x80\x94 connecte ce PC \xC3\xA0 Internet avant le 12/11/2026." ; vide : rien a dire.
