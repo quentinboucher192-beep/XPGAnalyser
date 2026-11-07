@@ -184,6 +184,20 @@ bool allows(std::string_view feature) {
     return licensing::isFeatureEnabled(feature);
 }
 
+bool projectsAllowed(std::string* why) {
+    if (!g_active) return true;
+    const auto st = licensing::getLicenseState();
+    if (licensing::allFeaturesOpen(st.status) || licensing::licenseFeaturesApply(st.status)) return true;
+    if (why) {
+        if (st.status == licensing::LicenseStatus::Absent)
+            *why = st.evaluationOver ? "Ta D\xC3\xA9" "couverte (l'essai de 30 jours) est finie, et ce PC n'a pas de licence."
+                                     : "Ce PC n'a pas de licence.";
+        else
+            *why = licensing::statusLabel(st.status) + (st.message.empty() ? std::string(".") : " : " + st.message);
+    }
+    return false;
+}
+
 std::string lockedText(std::string_view feature) {
     if (allows(feature)) return {};
     return licensing::lockedMessage(feature);
@@ -327,7 +341,11 @@ Card startCard() {
     c.tab = kTabAuto;
     switch (st.status) {
         case S::NotConfigured:
-            return Card{};
+            // 1.35.1 : l'encart reste la, meme sans cle de l'editeur compilee : on sait toujours ou on en est
+            c.title = "Licences non activ\xC3\xA9" "es dans cette version";
+            c.text = "Toutes les fonctions sont ouvertes : cette version n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur.";
+            c.tone = 0;
+            break;
         case S::Evaluation: {
             c.title = discoveryText(st);
             if (!c.title.empty() && c.title.back() == '.') c.title.pop_back();
@@ -338,10 +356,11 @@ Card startCard() {
             break;
         }
         case S::Absent:
-            c.title = "Sans licence" + (edition.empty() ? std::string() : " \xC2\xB7 \xC3\xA9" "dition " + edition);
-            c.text = st.evaluationOver ? "Ta D\xC3\xA9" "couverte est finie. Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur."
+            // 1.35.1 : sans licence, le logiciel ne s'utilise pas - l'encart le dit d'abord
+            c.title = "Sans licence : aucun projet ne s'ouvre";
+            c.text = st.evaluationOver ? "Ta D\xC3\xA9" "couverte (l'essai de 30 jours) est finie. Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur."
                                        : "Active ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur (ou demande-la).";
-            c.tone = 2;
+            c.tone = 3;
             c.button = "Activer avec un code\xE2\x80\xA6";
             c.tab = kTabActivation;
             break;
@@ -387,11 +406,15 @@ Card startCard() {
             c.tone = 2;
             break;
         default:
-            c.title = "Licence : " + licensing::statusLabel(st.status);
+            c.title = "Licence : " + licensing::statusLabel(st.status) + " \xC2\xB7 aucun projet ne s'ouvre";
             c.text = st.message;
             c.tone = 3;
+            c.tab = kTabActivation;
             break;
     }
+    // 1.35.1 : une licence en pause (bail, flottante sans poste) : rien ne s'ouvre non plus en attendant
+    if ((st.status == S::LeaseExpired || st.status == S::NoFloatingSeat) && !c.text.empty())
+        c.text += " En attendant, aucun projet ne s'ouvre.";
     return c;
 }
 

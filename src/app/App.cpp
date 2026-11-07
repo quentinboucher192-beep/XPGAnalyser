@@ -913,6 +913,7 @@ void App::registerActions() {
     // avant de declencher file.open (StartupScreen::openFileDialog) : pas deux fois.
     actions_.add(Action{"file.open", "Ouvrir un projet\xE2\x80\xA6", help::keys::bindingOf("file.open"), {}, {}, nullptr,
                         [this] {
+                            if (!licence::gateProjects(*this)) return;   // 1.35.1 : la question avant le dialogue
                             const auto show = [this] {
                                 menus_->ShowDialog(std::make_unique<OpenProjectDialog>(*this),
                                                    [this](const menu::DialogResult& r) {
@@ -980,6 +981,7 @@ void App::registerActions() {
                         }});
     actions_.add(Action{"project.new", "Nouveau projet\xE2\x80\xA6", help::keys::bindingOf("project.new"), {}, {}, nullptr,
                         [this] {
+                            if (!licence::gateProjects(*this)) return;   // 1.35.1 : sans licence, rien ne se cree
                             namespace fs = std::filesystem;
                             // 1.12.0 : IHM Studio - un dossier d'IHM, sans programme : son nom, son dossier.
                             if (!core::hasApi()) {
@@ -1641,6 +1643,7 @@ void App::registerActions() {
 
 void App::openPath(std::string path) {
     if (path.empty()) return;
+    if (!licence::gateProjects(*this)) return;   // 1.35.1 : sans licence, rien ne s'ouvre
     XPG_PORTEE_TEXTE("App::openPath", std::filesystem::path(path).filename().string());   // 1.10.2 (CR)
     // 1.12.30 : UNE ARCHIVE DE PROJET (.xihm, .xapi) - Ouvrir..., la ligne de commande
     // (IHM-Studio.exe chemin.xihm), une autre instance, un fichier lache : relue, verifiee,
@@ -2178,6 +2181,7 @@ static std::string editionMismatch(const project::Manifest& m) {
 }
 
 void App::openProjectFolder(std::string folder) {
+    if (!licence::gateProjects(*this)) return;   // 1.35.1 : sans licence, rien ne s'ouvre
     // 1.12.27 : LE MEME PROJET DANS DEUX FENETRES s'ecraserait a l'enregistrement : la question d'abord.
     if (!script_)
         if (const auto other = fenetres::autreFenetre(folder)) {

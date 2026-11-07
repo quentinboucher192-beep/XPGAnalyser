@@ -90,6 +90,11 @@ inline std::atomic<RequireFn> g_require{nullptr};
 }
 // La phrase d'une entree verrouillee (le module), ou vide si elle est ouverte.
 [[nodiscard]] std::string lockedText(std::string_view feature);
+// 1.35.1 : LE LOGICIEL NE S'UTILISE PAS SANS LICENCE (la demande de l'editeur). Ouvrir, creer, importer un projet :
+// seulement avec une licence valable (Valide, Grace) ou la Decouverte en cours. Tout ouvert : les licences pas actives
+// (aucune cle de l'editeur compilee) et le poste d'exploitation (le module pas demarre). Un projet deja ouvert reste
+// ouvert et s'enregistre : rien n'est perdu. `why` : la raison, pour une phrase.
+[[nodiscard]] bool projectsAllowed(std::string* why = nullptr);
 // Le libelle d'une fonctionnalite (le registre ; sinon son identifiant).
 [[nodiscard]] std::string featureLabel(std::string_view feature);
 
@@ -108,8 +113,8 @@ struct Badge {
 [[nodiscard]] Badge indicator();
 
 // 1.35.0 : l'encart de la licence sur l'accueil (le menu principal) - la licence active, la Decouverte et ses jours,
-// le bail qui finit, sans licence -> << Activer avec un code... >>. Un titre vide : pas d'encart (licences pas
-// actives, poste d'exploitation).
+// le bail qui finit, sans licence -> << Activer avec un code... >> ; 1.35.1 : licences pas actives (aucune cle de
+// l'editeur compilee) -> le dit aussi. Un titre vide : pas d'encart (le poste d'exploitation).
 struct Card {
     std::string title, text;
     int         tone{0};          // comme Badge::tone
@@ -156,5 +161,10 @@ void shutdown();
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
 // 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
 void showLicenceWindow(App& app, int tab = licence::kTabAuto);
+namespace licence {
+// 1.35.1 : le controle de projectsAllowed, avec la fenetre << Licence necessaire >> quand c'est ferme (son bouton : la
+// fenetre Licence, onglet Activation). Vrai : on peut continuer.
+bool gateProjects(App& app);
+} // namespace licence
 
 } // namespace app

@@ -1281,4 +1281,23 @@ void showLicenceWindow(App& app, int tab) {
     app.menus().ShowDialog(std::make_unique<LicenceWindow>(app, tab), nullptr);
 }
 
+namespace licence {
+
+bool gateProjects(App& app) {
+    std::string why;
+    if (projectsAllowed(&why)) return true;
+    auto dlg = std::make_unique<MessageDialog>(
+        "Licence n\xC3\xA9" "cessaire",
+        "Sans licence, " + core::productName() + " ne s'utilise pas : aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e.\n\n" + why +
+            "\n\nActive ta licence avec le code re\xC3\xA7u de l'\xC3\xA9" "diteur (ou demande-la) : Activer ma licence\xE2\x80\xA6",
+        MessageDialog::Icon::Warning, "Activer ma licence\xE2\x80\xA6");
+    dlg->setCancelLabel("Fermer");
+    app.menus().ShowDialog(std::move(dlg), [&app](const menu::DialogResult& r) {
+        if (r.accepted()) showLicenceWindow(app, kTabActivation);
+    });
+    return false;
+}
+
+} // namespace licence
+
 } // namespace app

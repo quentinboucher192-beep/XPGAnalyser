@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.35.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.35.1", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.35.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 18 h 19"},
     {"1.34.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 12 h 37"},
     {"1.33.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 8 h 50"},
     {"1.32.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 7 h 02"},
@@ -178,6 +179,13 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.35.1 : les licences actives avec la cle de l'editeur ; sans licence, le logiciel ne s'utilise pas
+        note("1.35.1", "Projet", Kind::Changed,
+         "SANS LICENCE, LE LOGICIEL NE S'UTILISE PAS : au premier lancement, la D\xC3\xA9" "couverte (30 jours d'essai) ouvre tout ; "
+         "ensuite, sans licence valable, aucun projet ne s'ouvre ni ne se cr\xC3\xA9" "e. L'accueil dit toujours o\xC3\xB9 tu en es (ta licence, "
+         "les jours de D\xC3\xA9" "couverte, ou \xC2\xAB Sans licence \xC2\xBB) ; Activer ma licence\xE2\x80\xA6 m\xC3\xA8ne au code re\xC3\xA7u de l'\xC3\xA9" "diteur. Un projet d\xC3\xA9j\xC3\xA0 "
+         "ouvert reste ouvert et s'enregistre : rien n'est perdu.",
+         "licence", ""),
         // 1.35.0 : le service des licences de l'editeur (on sort de GitHub) : le code, le bail, la flottante, la Decouverte
         note("1.35.0", "Projet", Kind::New,
          "ACTIVER AVEC UN CODE : l'\xC3\xA9" "diteur te donne un code (XPG-XXXX-XXXX-XXXX-XXXX) ; tape-le dans Licence\xE2\x80\xA6 \xE2\x80\xBA Activation, "

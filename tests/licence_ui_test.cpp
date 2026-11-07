@@ -169,6 +169,7 @@ int main(int argc, char** argv) {
         check(app::licence::active() && st.status == lic::LicenseStatus::NotConfigured, "sans cle : Non activees (" + lic::statusLabel(st.status) + ")");
         check(allOpen && app::licence::lockedText("ai_generation").empty(), "sans cle : chaque point d'entree est ouvert");
         check(has(app::licence::badge().text, "non activ"), "la pastille : " + app::licence::badge().text);
+        check(app::licence::projectsAllowed(), "1.35.1 : sans cle, les projets s'ouvrent (licences pas actives)");
     }
 
     // ---- une vraie chaine, avec une cle d'essai ----
@@ -197,6 +198,10 @@ int main(int argc, char** argv) {
               "FREE : l'editeur et le poste ouverts ; l'Assistant IA et les scripts fermes");
         check(has(app::licence::badge().text, "Sans licence") && app::licence::badge().tone == 2, "la pastille : " + app::licence::badge().text);
         check(app::licence::indicator().text == "Sans licence" && app::licence::indicator().tone == 2, "l'indicateur du bandeau : la meme phrase");
+        {   // 1.35.1 : sans licence, le logiciel ne s'utilise pas : aucun projet ne s'ouvre ni ne se cree
+            std::string why;
+            check(!app::licence::projectsAllowed(&why) && has(why, "pas de licence"), "sans licence : aucun projet (" + why + ")");
+        }
         check(app::licence::featureLabel("ai_generation") != "ai_generation", "le libelle d'une fonctionnalite vient du registre : "
               + app::licence::featureLabel("ai_generation"));
 
@@ -226,6 +231,7 @@ int main(int argc, char** argv) {
         st = lic::getLicenseState();
         check(report.ok && report.licenseInstalled && st.status == lic::LicenseStatus::Valid && st.edition == "PERSONAL",
               "la licence importee : Valide, PERSONAL (" + st.message + ")");
+        check(app::licence::projectsAllowed(), "1.35.1 : avec la licence, les projets s'ouvrent");
         check(app::licence::allows("ai_assistant") && app::licence::allows("hmi_scripts") && app::licence::allows("api_library")
                   && !app::licence::allows("ai_generation") && !app::licence::allows("professional_tools") && !app::licence::allows("hmi_export"),
               "PERSONAL : l'Assistant, les scripts, les bibliotheques ouverts ; la generation IA, les outils pro, l'export des vues fermes");

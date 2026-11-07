@@ -986,6 +986,7 @@ void StartupScreen::openSelected() {
 }
 
 void StartupScreen::openPath(const std::string& path) {
+    if (!licence::gateProjects(app_)) return;   // 1.35.1 : sans licence, rien ne s'ouvre (ni ne s'importe)
     // A project folder and a bare export are opened by different machinery; the
     // startup screen decides which, so no other code has to care.
     if (project::ProjectStore::isProjectFolder(path)) {
@@ -1055,6 +1056,7 @@ void StartupScreen::openDropped(std::vector<std::string> paths) {
 
 // Lot 15 : ouvrir le projet choisi directement en poste d'exploitation.
 void StartupScreen::openStation() {
+    if (!licence::gateProjects(app_)) return;   // 1.35.1 : sans licence, rien ne s'ouvre
     const auto* sel = page_->selected();
     if (!sel || !sel->isFolder || sel->missing) {
         page_->status().setMessage("Poste d'exploitation : choisis d'abord un projet (un dossier) dans la liste.", StatusBar::Severity::Warning);
