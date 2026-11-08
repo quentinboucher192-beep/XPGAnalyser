@@ -189,15 +189,17 @@ endif()
 # 1.35.0 : le service des licences de l'editeur (license_admin/ServiceClient) et la synchro de son archive par ce
 # service (license_admin/ArchiveSync) passent par le transport HTTPS du systeme, celui de l'Assistant IA
 # (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous Windows, libcurl chargee a la demande ailleurs.
+# 1.37.0 : + license_admin/Mail (le courriel de l'editeur par SMTP, TLS mbedTLS ; crypt32 : le magasin ROOT de Windows).
 add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp
-                                 src/license_admin/KeyBackup.cpp src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp)
+                                 src/license_admin/KeyBackup.cpp src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp
+                                 src/license_admin/Mail.cpp)
 target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
 if(NOT WIN32)
     target_link_libraries(xpg_license_admin PRIVATE ${CMAKE_DL_LIBS})
 endif()
 if(WIN32)
-    target_link_libraries(xpg_license_admin PRIVATE shell32 winhttp)
+    target_link_libraries(xpg_license_admin PRIVATE shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
     if(MINGW)
         target_link_options(xpg_license_admin PRIVATE -mconsole)   # une console (la chaine MinGW met -mwindows partout)
     endif()
@@ -319,10 +321,11 @@ endif()
 #    xpg_admin_gui   les pages et la coquille (ui::Widget ; sans SDL : les essais les dessinent a blanc) ;
 #    l'executable    la fenetre SDL (license_admin/gui/AdminGuiMain.cpp), seulement avec XPG_WITH_SDL.
 add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp src/license_admin/KeyBackup.cpp
-                                  src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp)
+                                  src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp
+                                  src/license_admin/Mail.cpp)   # 1.37.0 : + Mail (le courriel de l'editeur)
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
-    target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp)
+    target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
 else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
@@ -1099,6 +1102,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME adminservice COMMAND admin_service_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:xpg_license_admin>)
     if(TEST adminservice)
         set_tests_properties(adminservice PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
+    # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
+    # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
+    xpg_add_test_executable(admin_mail_test tests/admin_mail_test.cpp src/license_admin/Mail.cpp)
+    xpg_target_link_libraries(admin_mail_test PRIVATE xpg_deploy)
+    xpg_add_test(NAME adminmail COMMAND admin_mail_test ${CMAKE_SOURCE_DIR})
+    if(TEST adminmail)
+        set_tests_properties(adminmail PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 120)
     endif()
     if(TARGET xpg_admin_gui)
         foreach(part shell licences securite donnees demandes)   # 1.34.0 : demandes (Demandes en ligne)

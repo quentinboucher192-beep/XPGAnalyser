@@ -36,6 +36,11 @@
 //  1.0, text/plain UTF-8 en base64 (lignes de 76) ; QUIT.
 //  Chaque etape a son delai. Un echec rend UNE phrase claire, en francais
 //  (tutoiement) : jamais le mot de passe, efface de la memoire apres usage.
+//
+//  LIMITES : pas d'OAuth (XOAUTH2) - Microsoft (Outlook, Hotmail, Microsoft
+//  365) n'accepte plus de mot de passe : refuse, avec une phrase qui le dit ;
+//  pas de SMTPUTF8 (une adresse non ASCII n'est pas plausible) ; la recherche
+//  du nom du serveur (getaddrinfo) n'est pas bornee par le delai.
 // =============================================================================
 #pragma once
 
