@@ -50,9 +50,23 @@ public:
         std::function<void(const std::string& text)>   status;   // la barre d'etat
     };
     enum class Filter : std::uint8_t { All, Unread };
+    // 1.38.0 : le carnet lu - celui de l'Assistant (par defaut), ou les notifications generales du Studio (app/Notices.hpp).
+    struct Source {
+        std::uint64_t (*revision)();
+        std::vector<notifs::Item> (*list)();
+        bool (*markRead)(std::uint64_t, bool);
+        bool (*remove)(std::uint64_t);
+        std::size_t (*markAllRead)();
+        std::size_t (*clearRead)();
+    };
+    [[nodiscard]] static Source assistant();
 
     explicit AiNotificationsView(std::string id, Callbacks cb = {});
     void setCallbacks(Callbacks cb) { cb_ = std::move(cb); }
+    void setSource(Source s) {
+        src_ = s;
+        refresh();
+    }
 
     // Relit le journal si sa revision a change (le panneau, a chaque image) ; vrai : il a change.
     bool poll();
@@ -125,6 +139,7 @@ private:
     [[nodiscard]] float     viewH() const noexcept { return list_.h; }
 
     Callbacks                 cb_;
+    Source                    src_{assistant()};
     std::vector<notifs::Item> all_, shown_;
     std::set<std::uint64_t>   kept_;       // Non lues : lues pendant qu'on les regardait (gardees jusqu'au prochain choix)
     std::vector<Line>         lines_;

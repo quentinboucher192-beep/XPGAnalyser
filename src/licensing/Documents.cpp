@@ -289,6 +289,13 @@ bool isFeatureId(std::string_view s) noexcept {
     return std::all_of(s.begin(), s.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
 }
 
+bool isAnnouncementId(std::string_view s) noexcept {   // 1.38.0
+    if (s.empty() || s.size() > 40) return false;
+    return std::all_of(s.begin(), s.end(), [](char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+    });
+}
+
 bool isEditionId(std::string_view s) noexcept {
     if (s.empty() || s.size() > 32 || !(s[0] >= 'A' && s[0] <= 'Z')) return false;
     return std::all_of(s.begin(), s.end(), [](char c) { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; });
@@ -401,9 +408,27 @@ std::string writeRegistry(const Registry& r) {
         if (e.retired) o.set("retired", true);
         if (!e.price.empty()) o.set("price", e.price);              // 1.37.0
         if (!e.description.empty()) o.set("description", e.description);
+        if (!e.promoPrice.empty()) {                                 // 1.38.0 : une reduction
+            o.set("promo_price", e.promoPrice);
+            o.set("promo_until", isoTime(e.promoUntil));
+        }
         eds.push(std::move(o));
     }
     root.set("editions", std::move(eds));
+    if (!r.announcements.empty()) {   // 1.38.0
+        Value ann = Value::array();
+        for (const auto& a : r.announcements) {
+            Value o = Value::object();
+            o.set("id", a.id);
+            o.set("title", a.title);
+            o.set("text", a.text);
+            if (!a.edition.empty()) o.set("edition", a.edition);
+            o.set("at", isoTime(a.at));
+            if (a.until) o.set("until", isoTime(a.until));
+            ann.push(std::move(o));
+        }
+        root.set("announcements", std::move(ann));
+    }
     return finishText(root);
 }
 
@@ -486,6 +511,8 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
             g.boolean("retired", e.retired, false);
             g.text("price", e.price, false, 60);              // 1.37.0
             g.text("description", e.description, false, 200);
+            g.text("promo_price", e.promoPrice, false, 60);   // 1.38.0 : une reduction (avec sa fin)
+            if (g.ok() && !e.promoPrice.empty()) g.time("promo_until", e.promoUntil, true);
             g.finish();
             if (!g.ok()) {
                 f.fail(g.error());
@@ -498,6 +525,36 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
             r.editions.push_back(std::move(e));
         }
     }
+    // 1.38.0 : les annonces de l'editeur.
+    if (const Value* arr = f.array("announcements", false, 20)) {
+        for (std::size_t i = 0; i < arr->items().size() && f.ok(); ++i) {
+            const Value& item = arr->items()[i];
+            const std::string where = "announcements[" + std::to_string(i) + "].";
+            if (!item.isObject()) {
+                f.fail("l'\xC3\xA9l\xC3\xA9ment " + cite(where.substr(0, where.size() - 1)) + " n'est pas un objet");
+                break;
+            }
+            Fields g(item, where);
+            Announcement a;
+            g.text("id", a.id, true, 40);
+            if (g.ok() && !isAnnouncementId(a.id)) g.fail("l'identifiant d'annonce " + cite(a.id) + " n'est pas valide");
+            g.text("title", a.title, true, 120);
+            g.text("text", a.text, true, 600);
+            g.text("edition", a.edition, false, 32);
+            g.time("at", a.at, true);
+            g.time("until", a.until, false);
+            g.finish();
+            if (!g.ok()) {
+                f.fail(g.error());
+                break;
+            }
+            if (std::any_of(r.announcements.begin(), r.announcements.end(), [&](const Announcement& x) { return x.id == a.id; })) {
+                f.fail("l'annonce " + cite(a.id) + " est d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
+                break;
+            }
+            r.announcements.push_back(std::move(a));
+        }
+    }
     if (!finishDocument(f, kWhat, why)) return false;
     // La coherence : l'edition sans licence existe ; chaque edition n'accorde que des fonctionnalites et limites declarees.
     const auto bad = [&](const std::string& text) {
@@ -505,6 +562,8 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
         return false;
     };
     if (!r.edition(r.unlicensedEdition)) return bad("l'\xC3\xA9" "dition sans licence " + cite(r.unlicensedEdition) + " n'y est pas");
+    for (const auto& a : r.announcements)   // 1.38.0
+        if (!a.edition.empty() && !r.edition(a.edition)) return bad("l'annonce " + cite(a.id) + " parle de " + cite(a.edition) + ", qui n'y est pas");
     for (const auto& e : r.editions)
         for (const auto& g : e.features) {
             const FeatureDef* d = r.feature(g.id);

@@ -429,6 +429,8 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += rail.tutorialLink().clicked->connect([this] { showTutorial(); });
     uiLinks_ += rail.helpLink().clicked->connect([this] { triggerAction("help.open"); });
     uiLinks_ += rail.findLink().clicked->connect([this] { triggerAction("app.findFiles"); });   // 1.14.0 (lot M5)
+    uiLinks_ += rail.noticesLink().clicked->connect([this] { showNoticesWindow(app_); });   // 1.38.0
+    rail.setUnreadNotices(notices::unread());
     uiLinks_ += rail.settingsLink().clicked->connect([this] { showSettings(); });
     // 1.8.0 : les dossiers de l'application.
     uiLinks_ += rail.foldersLink().clicked->connect([this] {
@@ -582,6 +584,7 @@ void StartupScreen::Update(const menu::FrameContext& fc) {
     if (app_.taskbarPinPending() && frame_ > 60 && manager().top() == this) app_.proposeTaskbarPin();
     // 1.35.0 : l'encart de la licence suit l'etat (une activation, le bail, le poste flottant) : relu chaque seconde.
     if (page_ && frame_ % 60 == 0) licenceTab_ = applyLicenceNotice(page_->rail());
+    if (page_ && frame_ % 30 == 0) page_->rail().setUnreadNotices(notices::unread());   // 1.38.0 : le nombre non lu
     // Les fichiers glisses dans la fenetre : ceux d'un meme depot arrivent un a
     // un, dans la meme image ; on les ouvre ensemble (un .XPG et son .XHW).
     if (!pendingDrops_.empty()) {
@@ -1361,7 +1364,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     // Le bouton sous la souris : son geste d'abord.
     menuButton_ = nullptr;
     auto& rail = page.rail();
-    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
+    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.noticesLink(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
                                            &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton(), &rail.licenceButton(),
                                            &rail.profileButton()};
     for (auto* b : buttons)

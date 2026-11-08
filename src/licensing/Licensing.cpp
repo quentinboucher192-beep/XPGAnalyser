@@ -52,11 +52,15 @@ RegistryView viewOf(const Registry& r) {
         ev.graceDays = e.offlineGraceDays;
         ev.price = e.price;              // 1.37.0
         ev.description = e.description;
+        ev.promoPrice = e.promoPrice;    // 1.38.0
+        ev.promoUntil = static_cast<std::int64_t>(e.promoUntil);
         ev.retired = e.retired;
         for (const auto& g : e.features) ev.features.push_back(g.id);
         std::sort(ev.features.begin(), ev.features.end());
         v.editions.push_back(std::move(ev));
     }
+    for (const auto& a : r.announcements)   // 1.38.0
+        v.announcements.push_back({a.id, a.title, a.text, a.edition, static_cast<std::int64_t>(a.at), static_cast<std::int64_t>(a.until)});
     return v;
 }
 

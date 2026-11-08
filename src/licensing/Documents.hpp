@@ -113,6 +113,21 @@ struct EditionDef {
     // l'editeur l'ecrit ("490 \xE2\x82\xAC HT / an", 60 caracteres au plus) et une phrase (200 au plus).
     std::string               price;
     std::string               description;
+    // 1.38.0 (facultatifs) : une reduction - le nouveau prix ("390 \xE2\x82\xAC HT / an", 60 au plus) et sa fin (0 : aucune ;
+    // passee, la carte de la boutique reprend le prix normal). Le prix reduit sans date : refuse.
+    std::string               promoPrice;
+    Seconds                   promoUntil{0};
+};
+// 1.38.0 : une annonce de l'editeur (<< Prevenir mes clients >>) - une notification dans les Studios, jamais un mail. Elle
+// voyage dans le registre signe : un client hors connexion la recoit a sa prochaine connexion, une seule fois (son id).
+struct Announcement {
+    std::string id;        // "A-20261108-1" : [A-Za-z0-9_-], 40 au plus, unique dans le registre
+    std::string title;     // une ligne (120 au plus)
+    std::string text;      // le detail (600 au plus)
+    std::string edition;   // l'offre concernee (facultatif) : la notification ouvre la boutique
+    Seconds     at{0};     // quand l'editeur l'a ecrite
+    Seconds     until{0};  // apres : plus montree (0 : sans fin)
+    bool operator==(const Announcement&) const = default;
 };
 struct Registry {
     int                     version{kFormatVersion};
@@ -121,6 +136,7 @@ struct Registry {
     std::string             unlicensedEdition;       // l'edition sans licence : "FREE"
     std::vector<FeatureDef> features;
     std::vector<EditionDef> editions;
+    std::vector<Announcement> announcements;         // 1.38.0 (facultatif, 20 au plus ; ecrit seulement s'il y en a)
 
     [[nodiscard]] const FeatureDef* feature(std::string_view id) const noexcept;
     [[nodiscard]] const EditionDef* edition(std::string_view id) const noexcept;
@@ -206,6 +222,7 @@ bool checkAgainstRegistry(const License& license, const Registry& registry, std:
 // Des aides partagees avec l'Admin.
 [[nodiscard]] bool isFeatureId(std::string_view s) noexcept;      // [a-z0-9_]{1,64}, commence par une lettre
 [[nodiscard]] bool isEditionId(std::string_view s) noexcept;      // [A-Z0-9_]{1,32}, commence par une lettre
+[[nodiscard]] bool isAnnouncementId(std::string_view s) noexcept; // 1.38.0 : [A-Za-z0-9_-]{1,40}
 [[nodiscard]] bool isLicenseId(std::string_view s) noexcept;      // [A-Za-z0-9._-]{1,64}
 [[nodiscard]] bool isKeyHex(std::string_view s) noexcept;         // 64 hexadecimaux minuscules
 [[nodiscard]] bool isStationHex(std::string_view s) noexcept;     // 1.32.0 : 32 hexadecimaux minuscules

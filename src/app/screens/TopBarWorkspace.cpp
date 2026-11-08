@@ -173,6 +173,20 @@ void MainAnalysisScreen::refreshTopBarLot8() {
         n.key = std::move(a.key);
         notices.push_back(std::move(n));
     }
+    // 1.38.0 : les notifications generales non lues (la licence, les offres, les annonces) ; un clic : la fenetre.
+    for (const auto& g : notices::list()) {
+        if (g.read) continue;
+        TopBar::Notice n;
+        n.group = "Notifications";
+        n.title = g.title;
+        n.detail = g.detail;
+        n.button = "Voir";
+        n.action = "help.notifications";
+        n.tone = g.tone;
+        n.key = "notification:" + std::to_string(g.id);
+        notices.push_back(std::move(n));
+        if (notices.size() >= 40) break;
+    }
     if (sim.attached() && app_.project()) {
         ensureSimCenter();
         const auto snap = simSnapshot(app_.simJournal().now());

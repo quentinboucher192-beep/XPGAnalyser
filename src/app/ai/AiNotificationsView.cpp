@@ -119,6 +119,10 @@ std::string countBadge(int n) { return "\xC3\x97" + std::to_string(n); }
 } // namespace
 
 // ============================================================================ la vue ==
+AiNotificationsView::Source AiNotificationsView::assistant() {
+    return {&notifs::revision, &notifs::list, &notifs::markRead, &notifs::remove, &notifs::markAllRead, &notifs::clearRead};
+}
+
 AiNotificationsView::AiNotificationsView(std::string id, Callbacks cb) : ui::Widget(std::move(id)), cb_(std::move(cb)) {
     setFocusPolicy(true);
     const std::string base = this->id();
@@ -145,14 +149,14 @@ void AiNotificationsView::say(const std::string& text) const {
 }
 
 bool AiNotificationsView::poll() {
-    if (notifs::revision() == seen_) return false;
+    if (src_.revision() == seen_) return false;
     refresh();
     return true;
 }
 
 void AiNotificationsView::refresh() {
-    seen_ = notifs::revision();
-    all_ = notifs::list();
+    seen_ = src_.revision();
+    all_ = src_.list();
     rebuild();
 }
 
@@ -304,7 +308,7 @@ bool AiNotificationsView::select(int row) {
     selectedId_ = shown_[static_cast<std::size_t>(row)].id;
     if (!shown_[static_cast<std::size_t>(row)].read) {
         if (filter_ == Filter::Unread) kept_.insert(selectedId_);   // elle reste a sa place, grisee
-        (void)notifs::markRead(selectedId_, true);
+        (void)src_.markRead(selectedId_, true);
         refresh();
     }
     ensureVisible(selected_);
@@ -328,7 +332,7 @@ bool AiNotificationsView::setRead(int row, bool read) {
     if (row < 0 || row >= static_cast<int>(shown_.size())) return false;
     const auto id = shown_[static_cast<std::size_t>(row)].id;
     if (read && filter_ == Filter::Unread) kept_.insert(id);
-    if (!notifs::markRead(id, read)) return false;
+    if (!src_.markRead(id, read)) return false;
     refresh();
     return true;
 }
@@ -337,7 +341,7 @@ bool AiNotificationsView::removeRow(int row) {
     if (row < 0 || row >= static_cast<int>(shown_.size())) return false;
     const auto id = shown_[static_cast<std::size_t>(row)].id;
     const std::string title = shown_[static_cast<std::size_t>(row)].title;
-    if (!notifs::remove(id)) return false;
+    if (!src_.remove(id)) return false;
     // la ligne choisie passe a la suivante (ou a la precedente, la derniere partie)
     if (id == selectedId_) {
         const std::size_t next = static_cast<std::size_t>(row) + 1 < shown_.size() ? static_cast<std::size_t>(row) + 1
@@ -366,7 +370,7 @@ bool AiNotificationsView::copyRow(int row) {
 std::size_t AiNotificationsView::markAllRead() {
     if (filter_ == Filter::Unread)
         for (const auto& n : shown_) kept_.insert(n.id);
-    const std::size_t n = notifs::markAllRead();
+    const std::size_t n = src_.markAllRead();
     refresh();
     say(n == 0 ? std::string("Tout est d\xC3\xA9j\xC3\xA0 lu.")
                : std::to_string(n) + (n > 1 ? " notifications marqu\xC3\xA9" "es comme lues." : " notification marqu\xC3\xA9" "e comme lue."));
@@ -374,7 +378,7 @@ std::size_t AiNotificationsView::markAllRead() {
 }
 
 std::size_t AiNotificationsView::clearRead() {
-    const std::size_t n = notifs::clearRead();
+    const std::size_t n = src_.clearRead();
     kept_.clear();
     refresh();
     say(n == 0 ? std::string("Aucune notification lue \xC3\xA0 effacer.")

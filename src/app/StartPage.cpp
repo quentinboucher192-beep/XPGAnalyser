@@ -10,6 +10,7 @@
 #include "../help/Trails.hpp"     // 1.12.28 : la duree de la visite, celle de sa carte
 
 #include "Brand.hpp"
+#include "ai/AiNotificationsView.hpp"   // 1.38.0 : la cloche des notifications
 #include "../project/ProjectIcon.hpp"
 
 #include <algorithm>
@@ -205,6 +206,7 @@ void drawGlyph(gfx::IRenderer& r, StartButton::Glyph g, const gfx::Rect& area, g
             break;
         case G::Open: ui::drawIcon(r, ui::Icon::Open, b, c); break;
         case G::Search: ui::drawIcon(r, ui::Icon::Search, b, c); break;   // 1.14.0 (lot M5)
+        case G::Bell: ai::AiNotificationsView::drawBell(r, b, c); break;    // 1.38.0
         case G::Tutorial:           // une toque de diplome : le didacticiel
             p.stroke(8.f, 3.f, 15.f, 6.5f);
             p.stroke(15.f, 6.5f, 8.f, 10.f);
@@ -1538,6 +1540,11 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     find_->setHint("Ctrl+Maj+P");
     find_->setTooltip("Chercher les fichiers de l'appli sur tout le PC (projets, archives, exports Control Expert, paquets IHM, "
                       "biblioth\xC3\xA8ques, th\xC3\xA8mes) : les ouvrir, les ajouter aux r\xC3\xA9" "cents (Ctrl+Maj+P)");
+    // 1.38.0 : LES NOTIFICATIONS GENERALES - ta licence, les offres de l'editeur, ses annonces (jamais par mail).
+    notices_ = make("Notifications", "startup.notifications", L::Link, G::Bell);
+    notices_->setHint(">");
+    notices_->setTooltip("Ta licence (install\xC3\xA9" "e, renouvel\xC3\xA9" "e, bient\xC3\xB4t finie), les offres de l'\xC3\xA9" "diteur (ce qui change, avant et apr\xC3\xA8s) "
+                         "et ses annonces - ici, jamais par mail");
     swatches_ = &static_cast<ThemeSwatches&>(addChild(std::make_unique<ThemeSwatches>("startup.themes")));
     autostart_ = make("Choisir\xE2\x80\xA6", "startup.autostart", L::Ghost, G::None);
     // 1.34.0 : le bouton de l'encart de la licence (cache sans encart).
@@ -1557,6 +1564,14 @@ void StartRail::setAutostart(std::string projectName) {
     autostartName_ = std::move(projectName);
     autostart_->setText(autostartName_.empty() ? "Choisir\xE2\x80\xA6" : "Changer\xE2\x80\xA6");
     invalidateLayout();
+}
+
+void StartRail::setUnreadNotices(std::size_t unread) {
+    if (unread == unreadNotices_) return;
+    unreadNotices_ = unread;
+    notices_->setHint(unread == 0 ? std::string(">") : std::to_string(unread) + (unread > 1 ? " non lues" : " non lue"));
+    notices_->setSubtitle(unread == 0 ? std::string() : std::string("du nouveau"));
+    invalidate();
 }
 
 void StartRail::setCodeStats(std::string text) {
@@ -1692,7 +1707,7 @@ float StartRail::placeBody(int level) {
 
     // ---- les liens ------------------------------------------------------------
     const float linkH = tall ? 34.f : easy ? 30.f : 28.f;
-    for (auto* link : {find_, tutorial_, help_, settings_, folders_}) {
+    for (auto* link : {notices_, find_, tutorial_, help_, settings_, folders_}) {   // 1.38.0 : les notifications d'abord
         link->setBounds({x0 - 8.f, y, w + 16.f, linkH});
         y += linkH;
     }

@@ -32,12 +32,20 @@
 #pragma once
 
 #include "../licensing/Store.hpp"
+#include "Notices.hpp"   // 1.38.0 : les notifications generales (la licence, les offres, les annonces)
 
 #include <atomic>
+#include <cstdint>
 #include <optional>
+#include <tuple>
+#include <utility>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace licensing {
+struct RegistryView;
+}
 
 namespace app {
 
@@ -229,11 +237,60 @@ struct FeaturePreview {
 };
 [[nodiscard]] FeaturePreview featurePreview(const std::string& featureId);
 
+// ---- 1.38.0 : LES NOTIFICATIONS DE LA LICENCE (le carnet general, Notices.hpp ; jamais un mail) ----
+//  Chaque Studio retient ce qu'il a deja vu (<ses reglages>/vu-licence.json) : les offres du registre (leurs
+//  fonctionnalites, leur prix), les annonces de l'editeur, la licence installee. A chaque changement (un registre
+//  adopte a la connexion, une licence installee ou renouvelee, revoquee, bientot finie), il compare et poste :
+//    - une offre dont les fonctionnalites changent : l'avant et l'apres (ce qui est ajoute, ce qui est retire) ;
+//    - une offre nouvelle, une offre retiree ;
+//    - une annonce de l'editeur (<< Prevenir mes clients >> : une reduction...), une seule fois ;
+//    - la licence : installee, renouvelee, une autre offre, revoquee, finie, bientot finie (14 jours avant).
+//  Un client hors connexion les recoit a sa prochaine connexion : elles viennent du registre signe et de la licence.
+//  Le premier lancement retient sans rien dire (sauf les annonces en cours).
+namespace watch {
+struct Offer {
+    std::string              id, label, price, promoPrice;
+    std::vector<std::string> features;   // les identifiants, tries
+    std::int64_t             promoUntil{0};
+    bool                     retired{false};
+    bool operator==(const Offer&) const = default;
+};
+struct Seen {
+    bool                     known{false};   // un etat retenu existait (faux : le premier lancement)
+    std::uint64_t            registry{0};
+    std::vector<Offer>       offers;
+    std::vector<std::pair<std::string, std::string>> names;   // les fonctionnalites : identifiant, nom
+    std::vector<std::string> announcements;   // les annonces deja montrees (leurs identifiants)
+    std::string              licenseId, edition, editionLabel;
+    std::int64_t             expiresAt{0};
+    int                      status{-1};      // licensing::LicenseStatus (-1 : inconnu)
+    std::int64_t             remindedEnd{0};  // la fin pour laquelle << bientot finie >> a ete dite
+    // Pas retenu : les annonces du registre courant (pour compare).
+    std::vector<std::tuple<std::string, std::string, std::string, std::string, std::int64_t>> current;   // id, titre, texte, offre, fin
+};
+// L'etat courant (le registre peut manquer).
+[[nodiscard]] Seen snapshot(const licensing::RegistryView* reg, const licensing::LicenseState& st);
+// Les notifications de `before` a `now` ; `now.announcements` et `now.remindedEnd` sont mis a jour (a retenir).
+[[nodiscard]] std::vector<notices::Item> compare(const Seen& before, Seen& now, std::int64_t at);
+[[nodiscard]] std::string seenPath();
+[[nodiscard]] bool loadSeen(const std::string& file, Seen& out);
+bool saveSeen(const std::string& file, const Seen& s);
+// Les essais : un autre fichier (vide : seenPath()).
+void setSeenFile(std::string file);
+// Regarde (au plus toutes les 3 secondes ; `force` : tout de suite) ; rend le nombre de notifications postees.
+std::size_t check(bool force = false);
+// Le carnet general : <les reglages de l'application>/notifications.json.
+[[nodiscard]] std::string noticesPath();
+} // namespace watch
+
 } // namespace licence
 
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
 // 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
 void showLicenceWindow(App& app, int tab = licence::kTabAuto);
+// 1.38.0 : la fenetre Notifications (le carnet general, Notices.hpp) ; le bouton d'une notification de licence ouvre la
+// fenetre Licence sur son onglet.
+void showNoticesWindow(App& app);
 namespace licence {
 // 1.35.1 : le controle de projectsAllowed, avec la fenetre << Licence necessaire >> quand c'est ferme (son bouton : la
 // fenetre Licence, onglet Activation). Vrai : on peut continuer.

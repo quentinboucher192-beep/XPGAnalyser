@@ -108,7 +108,8 @@ public:
         Ghost,         // petit et discret (Changer...)
     };
     enum class Glyph : std::uint8_t { None, Plus, Open, Tutorial, Help, Settings, Station, Copy, Rename, Trash, Remove,
-                                      Search };   // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
+                                      Search,     // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
+                                      Bell };     // 1.38.0 : les notifications
 
     StartButton(std::string text, std::string id, Look look, Glyph glyph = Glyph::None);
 
@@ -295,6 +296,9 @@ public:
     [[nodiscard]] StartButton&   foldersLink() noexcept { return *folders_; }
     // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (Ctrl+Maj+P).
     [[nodiscard]] StartButton&   findLink() noexcept { return *find_; }
+    // 1.38.0 : les notifications generales (la licence, les offres, les annonces) ; `unread` : le nombre a droite.
+    [[nodiscard]] StartButton&   noticesLink() noexcept { return *notices_; }
+    void setUnreadNotices(std::size_t unread);
     [[nodiscard]] ThemeSwatches& swatches() noexcept { return *swatches_; }
     [[nodiscard]] StartButton&   autostartButton() noexcept { return *autostart_; }
     // 1.34.0 : l'encart de la licence, sous la marque ; son bouton ouvre la fenetre Licence. Un titre vide : pas
@@ -338,6 +342,8 @@ private:
     StartButton*   settings_{nullptr};
     StartButton*   folders_{nullptr};     // 1.8.0
     StartButton*   find_{nullptr};        // 1.14.0 (lot M5)
+    StartButton*   notices_{nullptr};     // 1.38.0
+    std::size_t    unreadNotices_{static_cast<std::size_t>(-1)};
     ThemeSwatches* swatches_{nullptr};
     StartButton*   autostart_{nullptr};
     StartButton*   licence_{nullptr};     // 1.34.0

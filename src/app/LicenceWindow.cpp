@@ -40,6 +40,8 @@
 #include "Settings.hpp"
 #include "hmi/HmiImages.hpp"    // 1.37.0 : la capture d'une fonctionnalite (onglet Editions)
 #include "hmi/HmiPaneKit.hpp"
+#include "Notices.hpp"                // 1.38.0 : les notifications generales
+#include "ai/AiNotificationsView.hpp" // 1.38.0 : la liste (la meme que celle de l'Assistant)
 #include "screens/Screens.hpp"
 
 #include "../core/Edition.hpp"
@@ -2103,7 +2105,124 @@ void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const
                            [](const menu::DialogResult&) {});
 }
 
+// ============================================================ 1.38.0 : la fenetre Notifications ==
+class NoticesBody final : public ui::Widget {
+public:
+    NoticesBody(std::function<void(int)> openLicence, std::function<void()> close)
+        : ui::Widget("dialog.notifications.corps"), openLicence_(std::move(openLicence)), close_(std::move(close)) {
+        ai::AiNotificationsView::Callbacks cb;
+        cb.follow = [this](const std::string& action) {
+            const auto t = notices::parseAction(action);
+            if (t.kind == "licence" && openLicence_) {
+                openLicence_(t.tab);
+                return true;
+            }
+            return false;
+        };
+        list_ = &static_cast<ai::AiNotificationsView&>(addChild(std::make_unique<ai::AiNotificationsView>("dialog.notifications.liste", cb)));
+        ai::AiNotificationsView::Source src{&notices::revision, &notices::list, &notices::markRead, &notices::remove, &notices::markAllRead,
+                                            &notices::clearRead};
+        list_->setSource(src);
+        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.notifications.fermer")));
+        closeButton_->setStyle(ui::Button::Style::Primary);
+        links_ += closeButton_->clicked->connect([this] {
+            if (close_) close_();
+        });
+    }
+    [[nodiscard]] ai::AiNotificationsView& list() noexcept { return *list_; }
+    void poll() { (void)list_->poll(); }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(820.f, std::max(420.f, r.w - 40.f)), h = std::min(720.f, std::max(320.f, r.h - 40.f));
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+        closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
+        ui::dialogframe::keep(*this, closeBox_);
+        list_->setBounds({panel_.x + 12.f, panel_.y + 50.f + 22.f, panel_.w - 24.f, std::max(80.f, panel_.h - 50.f - 22.f - 56.f)});
+        const float cw = std::max(110.f, closeButton_->sizeHint().preferred.w);
+        closeButton_->setBounds({panel_.right() - 16.f - cw, panel_.bottom() - 44.f, cw, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(panel_, c.panelBg);
+        r.strokeRect(panel_, c.borderStrong, 1.f);
+        r.fillRect({panel_.x, panel_.y, panel_.w, 42.f}, c.headerBg);
+        ai::AiNotificationsView::drawBell(r, {panel_.x + 14.f, panel_.y + 11.f, 20.f, 20.f}, c.text);
+        r.drawText({panel_.x + 42.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, "Notifications", kTitle, c.text);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+        r.drawText({panel_.x + 14.f, panel_.y + 50.f},
+                   fit(r, "Ta licence, les offres de l'\xC3\xA9" "diteur et ses annonces - ici seulement, jamais par mail.", kSmall, panel_.w - 28.f), kSmall,
+                   c.textMuted);
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+            if (close_) close_();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::function<void(int)>   openLicence_;
+    std::function<void()>      close_;
+    ai::AiNotificationsView*   list_{nullptr};
+    ui::Button*                closeButton_{nullptr};
+    gfx::Rect                  panel_{}, closeBox_{};
+    core::ConnectionScope      links_;
+};
+
+class NoticesWindow final : public menu::WidgetMenu {
+public:
+    explicit NoticesWindow(std::shared_ptr<int> then) : menu::WidgetMenu("dialog.notifications"), then_(std::move(then)) {}
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return "Notifications"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer();
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void Update(const menu::FrameContext& f) override {
+        menu::WidgetMenu::Update(f);
+        if (body_) body_->poll();   // une notification arrivee pendant qu'on regarde
+    }
+    void fermer() {
+        if (done_) return;
+        done_ = true;
+        manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+    }
+
+protected:
+    core::Status buildUi() override {
+        auto body = std::make_unique<NoticesBody>(
+            [this](int tab) {
+                *then_ = tab < 0 ? licence::kTabAuto : tab;   // la fenetre Licence, une fois celle-ci fermee
+                fermer();
+            },
+            [this] { fermer(); });
+        body_ = body.get();
+        setRoot(std::move(body));
+        return core::ok();
+    }
+
+private:
+    std::shared_ptr<int> then_;
+    NoticesBody*         body_{nullptr};
+    bool                 done_{false};
+};
+
 } // namespace
+
+void showNoticesWindow(App& app) {
+    auto then = std::make_shared<int>(-1000);
+    app.menus().ShowDialog(std::make_unique<NoticesWindow>(then), [&app, then](const menu::DialogResult&) {
+        if (*then != -1000) showLicenceWindow(app, *then);
+    });
+}
 
 void showLicenceWindow(App& app, int tab) {
     app.menus().ShowDialog(std::make_unique<LicenceWindow>(app, tab), nullptr);

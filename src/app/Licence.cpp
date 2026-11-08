@@ -18,6 +18,8 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <ctime>
+#include <iterator>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -166,6 +168,7 @@ void start(bool takeFloatingSeat) {
 void tick() {
     if (!g_active) return;
     service::poll();   // 1.35.0 : un travail du service fini (les avis) ; ce que le fil de fond a a faire
+    if (g_notices) (void)watch::check();   // 1.38.0 : les notifications de la licence, des offres, des annonces
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         const double now = nowSeconds();
@@ -794,5 +797,324 @@ void startNotices(bool online) {
 }
 
 void shutdown() { service::shutdown(); }
+
+// ============================================================ 1.38.0 : les notifications de la licence ==
+namespace watch {
+
+namespace {
+std::mutex  g_watchMutex;
+std::string g_seenFile;            // vide : seenPath()
+double      g_watchNext{0};
+std::string g_watchSig;            // la derniere signature regardee (rien de change : rien a comparer)
+
+std::string labelOf(const Seen& s, const std::string& id) {
+    for (const auto& [k, v] : s.names)
+        if (k == id) return v.empty() ? id : v;
+    return id;
+}
+std::string listOf(const Seen& a, const Seen& b, const std::vector<std::string>& ids) {
+    std::string out;
+    for (const auto& id : ids) {
+        std::string l = labelOf(a, id);
+        if (l == id) l = labelOf(b, id);
+        out += (out.empty() ? "" : ", ") + l;
+    }
+    return out.empty() ? std::string("aucune") : out;
+}
+const Offer* offerOf(const Seen& s, const std::string& id) {
+    for (const auto& o : s.offers)
+        if (o.id == id) return &o;
+    return nullptr;
+}
+std::string dayOf(std::int64_t at) { return service::dayText(static_cast<licensing::Seconds>(at)); }
+} // namespace
+
+std::string noticesPath() {
+    const auto p = std::filesystem::path(Settings::defaultPath()).parent_path() / "notifications.json";
+    const auto u8 = p.u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+std::string seenPath() {
+    const auto p = std::filesystem::path(Settings::defaultPath()).parent_path() / "vu-licence.json";
+    const auto u8 = p.u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+void setSeenFile(std::string file) {
+    std::lock_guard<std::mutex> lk(g_watchMutex);
+    g_seenFile = std::move(file);
+    g_watchSig.clear();
+    g_watchNext = 0;
+}
+
+Seen snapshot(const licensing::RegistryView* reg, const licensing::LicenseState& st) {
+    Seen s;
+    s.known = true;
+    if (reg) {
+        s.registry = reg->number;
+        for (const auto& f : reg->features) s.names.emplace_back(f.id, f.label);
+        for (const auto& e : reg->editions) {
+            if (e.id == reg->unlicensedEdition) continue;   // l'edition sans licence : rien a annoncer
+            Offer o;
+            o.id = e.id;
+            o.label = e.label.empty() ? e.id : e.label;
+            o.price = e.price;
+            o.promoPrice = e.promoPrice;
+            o.promoUntil = e.promoUntil;
+            o.features = e.features;
+            std::sort(o.features.begin(), o.features.end());
+            o.retired = e.retired;
+            s.offers.push_back(std::move(o));
+        }
+        for (const auto& a : reg->announcements) s.current.emplace_back(a.id, a.title, a.text, a.edition, a.until);
+    }
+    s.licenseId = st.licenseId;
+    s.edition = st.licensedEdition;
+    s.editionLabel = st.editionLabel;
+    s.expiresAt = st.licenseId.empty() ? 0 : static_cast<std::int64_t>(st.expiresAt);
+    s.status = static_cast<int>(st.status);
+    return s;
+}
+
+std::vector<notices::Item> compare(const Seen& before, Seen& now, std::int64_t at) {
+    std::vector<notices::Item> out;
+    const auto add = [&](std::string category, std::string title, std::string detail, std::string tone, std::string key, int tab) {
+        notices::Item n;
+        n.at = at;
+        n.category = std::move(category);
+        n.title = std::move(title);
+        n.detail = std::move(detail);
+        n.tone = std::move(tone);
+        n.key = std::move(key);
+        if (tab >= 0) {
+            n.button = tab == kTabRequest ? "Voir les offres" : tab == kTabEditions ? "Comparer les offres" : "Voir ma licence";
+            n.action = notices::toLicence(tab);
+        }
+        out.push_back(std::move(n));
+    };
+    const std::string q1 = "\xC2\xAB ", q2 = " \xC2\xBB";
+    // ---- les offres (un registre plus recent, deja vu un autre avant) ----
+    if (before.known && before.registry != 0 && now.registry > before.registry) {
+        const std::string rk = std::to_string(now.registry);
+        for (const auto& o : now.offers) {
+            const Offer* old = offerOf(before, o.id);
+            const bool mine = !now.edition.empty() && o.id == now.edition;
+            const std::string tag = mine ? std::string(" (ta licence)") : std::string();
+            if (!old) {
+                if (o.retired) continue;
+                add("Offres", "Nouvelle offre : " + o.label,
+                    "Elle contient : " + listOf(now, before, o.features) + "." + (o.price.empty() ? std::string() : " Prix : " + o.price + "."), "info",
+                    "offre:" + o.id + ":" + rk, kTabRequest);
+                continue;
+            }
+            if (o.retired && !old->retired) {
+                add("Offres", "Offre retir\xC3\xA9" "e : " + o.label + tag,
+                    mine ? std::string("Ta licence reste valable telle qu'elle est ; l'\xC3\xA9" "diteur ne propose plus cette offre aux nouveaux clients.")
+                         : std::string("L'\xC3\xA9" "diteur ne propose plus cette offre."),
+                    "info", "offre:" + o.id + ":" + rk, kTabEditions);
+                continue;
+            }
+            if (o.features != old->features) {
+                std::vector<std::string> added, removed;
+                std::set_difference(o.features.begin(), o.features.end(), old->features.begin(), old->features.end(), std::back_inserter(added));
+                std::set_difference(old->features.begin(), old->features.end(), o.features.begin(), o.features.end(), std::back_inserter(removed));
+                std::string d;
+                if (!added.empty()) d += "Ajout\xC3\xA9" + std::string(added.size() > 1 ? "es" : "e") + " : " + listOf(now, before, added) + ". ";
+                if (!removed.empty()) d += "Retir\xC3\xA9" + std::string(removed.size() > 1 ? "es" : "e") + " : " + listOf(now, before, removed) + ". ";
+                d += "Avant : " + listOf(before, now, old->features) + ". Apr\xC3\xA8s : " + listOf(now, before, o.features) + ".";
+                if (mine) d += " Ta licence garde ce qu'elle contient jusqu'\xC3\xA0 son renouvellement.";
+                add("Offres", "Offre " + q1 + o.label + q2 + " modifi\xC3\xA9" "e" + tag, d, mine && !removed.empty() ? "warning" : "info",
+                    "offre:" + o.id + ":" + rk, kTabEditions);
+            }
+        }
+        for (const auto& old : before.offers)
+            if (!offerOf(now, old.id) && !old.retired)
+                add("Offres", "Offre retir\xC3\xA9" "e : " + old.label, "L'\xC3\xA9" "diteur ne propose plus cette offre.", "info", "offre:" + old.id + ":" + rk,
+                    kTabEditions);
+    }
+    // ---- les annonces de l'editeur (une seule fois chacune ; une annonce finie n'est plus montree) ----
+    std::vector<std::string> seen;
+    for (const auto& [id, title, text, edition, until] : now.current) {
+        const bool already = std::find(before.announcements.begin(), before.announcements.end(), id) != before.announcements.end();
+        seen.push_back(id);
+        if (already || (until != 0 && until <= at)) continue;
+        std::string d = text;
+        if (until != 0) d += (d.empty() ? "" : " ") + std::string("(jusqu'au ") + dayOf(until) + ")";
+        add("Annonce", title, d, "info", "annonce:" + id, edition.empty() ? -1 : kTabRequest);
+    }
+    now.announcements = std::move(seen);   // seulement celles du registre courant (une annonce retiree est oubliee)
+    // ---- la licence ----
+    now.remindedEnd = before.remindedEnd;
+    using S = licensing::LicenseStatus;
+    if (before.known) {
+        const std::string lk = now.licenseId + ":" + std::to_string(now.expiresAt);
+        const std::string name = now.editionLabel.empty() ? now.edition : now.editionLabel;
+        if (!now.licenseId.empty() && now.licenseId != before.licenseId)
+            add("Licence", "Licence install\xC3\xA9" "e : " + name,
+                "Licence " + now.licenseId + (now.expiresAt ? ", jusqu'au " + dayOf(now.expiresAt) : std::string(", sans fin")) + ".", "ok",
+                "licence:installee:" + lk, kTabMine);
+        else if (!now.licenseId.empty() && now.licenseId == before.licenseId) {
+            if (now.edition != before.edition && !now.edition.empty())
+                add("Licence", "Ta licence passe en " + name, "Licence " + now.licenseId + " : l'offre " + name + ".", "ok",
+                    "licence:offre:" + lk + ":" + now.edition, kTabMine);
+            else if (now.expiresAt > before.expiresAt && before.expiresAt != 0)
+                add("Licence", "Licence renouvel\xC3\xA9" "e jusqu'au " + dayOf(now.expiresAt), "Licence " + now.licenseId + " (" + name + ").", "ok",
+                    "licence:renouvelee:" + lk, kTabMine);
+            if (now.status != before.status && now.status == static_cast<int>(S::Revoked))
+                add("Licence", "Licence r\xC3\xA9voqu\xC3\xA9" "e", "L'\xC3\xA9" "diteur a r\xC3\xA9voqu\xC3\xA9 la licence " + now.licenseId + " : contacte-le si c'est une erreur.",
+                    "error", "licence:revoquee:" + now.licenseId, kTabMine);
+            else if (now.status != before.status && now.status == static_cast<int>(S::Expired))
+                add("Licence", "Licence finie", "La licence " + now.licenseId + " a pris fin : demande \xC3\xA0 l'\xC3\xA9" "diteur de la renouveler.", "warning",
+                    "licence:finie:" + lk, kTabRequest);
+        }
+    }
+    // Bientot finie : 14 jours avant (une fois par fin).
+    if (!now.licenseId.empty() && now.expiresAt > at && now.expiresAt - at <= 14 * 86400 && now.remindedEnd != now.expiresAt &&
+        (now.status == static_cast<int>(S::Valid) || now.status == static_cast<int>(S::Grace))) {
+        const auto days = (now.expiresAt - at + 86399) / 86400;
+        add("Licence", "Ta licence finit le " + dayOf(now.expiresAt),
+            "Encore " + std::to_string(days) + (days > 1 ? " jours" : " jour") + " : pense \xC3\xA0 la faire renouveler par l'\xC3\xA9" "diteur.", "warning",
+            "licence:bientot:" + now.licenseId + ":" + std::to_string(now.expiresAt), kTabMine);
+        now.remindedEnd = now.expiresAt;
+    }
+    return out;
+}
+
+bool loadSeen(const std::string& file, Seen& out) {
+    out = Seen{};
+    std::string text;
+    core::json::Value v;
+    if (!readAll(pathOf(file), text, 1024 * 1024) || !core::json::parse(text, v, nullptr) || !v.isObject() || v.str("format") != "xpg-vu-licence/1")
+        return false;
+    out.known = true;
+    out.registry = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("registre")));
+    for (const auto& o : v.at("offres").items()) {
+        Offer x;
+        x.id = o.str("id");
+        x.label = o.str("nom");
+        x.price = o.str("prix");
+        x.promoPrice = o.str("prix_reduit");
+        x.promoUntil = o.integer("reduction_fin");
+        x.retired = o.flag("retiree");
+        for (const auto& f : o.at("fonctions").items()) x.features.push_back(f.asString());
+        std::sort(x.features.begin(), x.features.end());
+        if (!x.id.empty()) out.offers.push_back(std::move(x));
+    }
+    for (const auto& [k, n] : v.at("noms").members()) out.names.emplace_back(k, n.asString());
+    for (const auto& a : v.at("annonces").items()) out.announcements.push_back(a.asString());
+    const auto& l = v.at("licence");
+    out.licenseId = l.str("id");
+    out.edition = l.str("offre");
+    out.editionLabel = l.str("nom");
+    out.expiresAt = l.integer("fin");
+    out.status = static_cast<int>(l.integer("etat", -1));
+    out.remindedEnd = l.integer("rappel");
+    return true;
+}
+
+bool saveSeen(const std::string& file, const Seen& s) {
+    core::json::Value v = core::json::Value::object();
+    v.set("format", "xpg-vu-licence/1");
+    v.set("registre", s.registry);
+    core::json::Value offers = core::json::Value::array();
+    for (const auto& o : s.offers) {
+        core::json::Value x = core::json::Value::object();
+        x.set("id", o.id);
+        x.set("nom", o.label);
+        if (!o.price.empty()) x.set("prix", o.price);
+        if (!o.promoPrice.empty()) {
+            x.set("prix_reduit", o.promoPrice);
+            x.set("reduction_fin", o.promoUntil);
+        }
+        if (o.retired) x.set("retiree", true);
+        core::json::Value f = core::json::Value::array();
+        for (const auto& id : o.features) f.push(id);
+        x.set("fonctions", std::move(f));
+        offers.push(std::move(x));
+    }
+    v.set("offres", std::move(offers));
+    core::json::Value names = core::json::Value::object();
+    for (const auto& [k, n] : s.names) names.set(k, n);
+    v.set("noms", std::move(names));
+    core::json::Value anns = core::json::Value::array();
+    for (const auto& a : s.announcements) anns.push(a);
+    v.set("annonces", std::move(anns));
+    core::json::Value l = core::json::Value::object();
+    l.set("id", s.licenseId);
+    l.set("offre", s.edition);
+    l.set("nom", s.editionLabel);
+    l.set("fin", s.expiresAt);
+    l.set("etat", s.status);
+    l.set("rappel", s.remindedEnd);
+    v.set("licence", std::move(l));
+    const auto path = pathOf(file);
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    auto tmp = path;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        out << core::json::write(v, true) << "\n";
+        if (!out.good()) return false;
+    }
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return false;
+    }
+    return true;
+}
+
+std::size_t check(bool force) {
+    std::string file;
+    {
+        std::lock_guard<std::mutex> lk(g_watchMutex);
+        const double t = nowSeconds();
+        if (!force && t < g_watchNext) return 0;
+        g_watchNext = t + 3.0;
+        file = g_seenFile.empty() ? seenPath() : g_seenFile;
+    }
+    const auto st = licensing::getLicenseState();
+    const std::int64_t at = static_cast<std::int64_t>(std::time(nullptr));
+    // Rien de change (le registre, la licence, le jour) : rien a comparer - pas de copie du registre a chaque fois.
+    const std::string sig = std::to_string(st.registryNumber) + "|" + st.licenseId + "|" + st.licensedEdition + "|" + std::to_string(st.expiresAt) + "|" +
+                            std::to_string(static_cast<int>(st.status)) + "|" + std::to_string(at / 86400);
+    {
+        std::lock_guard<std::mutex> lk(g_watchMutex);
+        if (!force && sig == g_watchSig) return 0;
+        g_watchSig = sig;
+    }
+    const auto reg = licensing::getRegistry();
+    Seen before;
+    (void)loadSeen(file, before);
+    Seen now = snapshot(reg ? &*reg : nullptr, st);
+    if (!before.known) {   // le premier lancement : retenir sans rien dire (sauf les annonces en cours)
+        Seen empty;
+        auto items = compare(empty, now, at);
+        std::erase_if(items, [](const notices::Item& n) { return n.category != "Annonce" && n.key.rfind("licence:bientot:", 0) != 0; });
+        for (auto& n : items) (void)notices::post(std::move(n));
+        (void)saveSeen(file, now);
+        return items.size();
+    }
+    if (!reg) {   // pas de registre lisible : garder les offres et les annonces deja vues
+        now.registry = before.registry;
+        now.offers = before.offers;
+        now.names = before.names;
+        for (const auto& id : before.announcements) now.current.emplace_back(id, std::string(), std::string(), std::string(), 1);
+    }
+    auto items = compare(before, now, at);
+    if (!reg) now.announcements = before.announcements;
+    if (now.registry < before.registry) {   // un registre plus ancien (une restauration) : on garde le plus recent vu
+        now.registry = before.registry;
+        now.offers = before.offers;
+        now.names = before.names;
+    }
+    for (auto& n : items) (void)notices::post(std::move(n));
+    (void)saveSeen(file, now);
+    return items.size();
+}
+
+} // namespace watch
 
 } // namespace app::licence

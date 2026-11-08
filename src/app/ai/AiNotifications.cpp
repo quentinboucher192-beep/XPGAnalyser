@@ -2,6 +2,7 @@
 //  app/ai/AiNotifications.cpp - 1.21.2 : le journal des notifications de l'Assistant (voir le .hpp)
 // =============================================================================
 #include "AiNotifications.hpp"
+#include "../Notices.hpp"   // 1.38.0 : le carnet general (le meme mecanisme)
 
 #include "AiJson.hpp"
 #include "../../core/AtomicFile.hpp"
@@ -55,9 +56,11 @@ struct Journal {
     }
 };
 
-Journal& journal() {
-    static Journal j;
-    return j;
+// 1.38.0 : deux carnets, le meme mecanisme - 0 : l'Assistant (ce module), 1 : les notifications generales du Studio
+// (app/Notices.hpp : la licence, les offres, les annonces de l'editeur).
+Journal& journal(int which = 0) {
+    static Journal j[2];
+    return j[which == 1 ? 1 : 0];
 }
 
 // Au-dela de kMax : les plus anciennes lues partent d'abord, puis les plus anciennes (sous le mutex).
@@ -177,9 +180,10 @@ long dayNumber(std::int64_t at) {
 
 } // namespace
 
+namespace {
+
 // ============================================================================ le journal ==
-std::uint64_t post(Item n) {
-    auto& j = journal();
+std::uint64_t postIn(Journal& j, Item n) {
     if (n.at == 0) n.at = nowSeconds();
     if (n.tone.empty()) n.tone = "info";
     n.read = false;
@@ -204,40 +208,34 @@ std::uint64_t post(Item n) {
     return id;
 }
 
-std::vector<Item> list() {
-    auto& j = journal();
+std::vector<Item> listIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return std::vector<Item>(j.items.rbegin(), j.items.rend());
 }
 
-std::optional<Item> find(std::uint64_t id) {
-    auto& j = journal();
+std::optional<Item> findIn(Journal& j, std::uint64_t id) {
     std::lock_guard<std::mutex> lk(j.m);
     for (const auto& x : j.items)
         if (x.id == id) return x;
     return std::nullopt;
 }
 
-std::size_t size() {
-    auto& j = journal();
+std::size_t sizeIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return j.items.size();
 }
 
-std::size_t unread() {
-    auto& j = journal();
+std::size_t unreadIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return static_cast<std::size_t>(std::count_if(j.items.begin(), j.items.end(), [](const Item& x) { return !x.read; }));
 }
 
-bool unreadError() {
-    auto& j = journal();
+bool unreadErrorIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return std::any_of(j.items.begin(), j.items.end(), [](const Item& x) { return !x.read && x.tone == "error"; });
 }
 
-bool markRead(std::uint64_t id, bool read) {
-    auto& j = journal();
+bool markReadIn(Journal& j, std::uint64_t id, bool read) {
     std::lock_guard<std::mutex> lk(j.m);
     for (auto& x : j.items)
         if (x.id == id) {
@@ -249,8 +247,7 @@ bool markRead(std::uint64_t id, bool read) {
     return false;
 }
 
-std::size_t markAllRead() {
-    auto& j = journal();
+std::size_t markAllReadIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     std::size_t n = 0;
     for (auto& x : j.items)
@@ -262,8 +259,7 @@ std::size_t markAllRead() {
     return n;
 }
 
-bool remove(std::uint64_t id) {
-    auto& j = journal();
+bool removeIn(Journal& j, std::uint64_t id) {
     std::lock_guard<std::mutex> lk(j.m);
     const auto before = j.items.size();
     std::erase_if(j.items, [&](const Item& x) { return x.id == id; });
@@ -272,23 +268,20 @@ bool remove(std::uint64_t id) {
     return true;
 }
 
-std::size_t clearRead() {
-    auto& j = journal();
+std::size_t clearReadIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     const auto n = std::erase_if(j.items, [](const Item& x) { return x.read; });
     if (n) touched(j);
     return static_cast<std::size_t>(n);
 }
 
-std::uint64_t revision() {
-    auto& j = journal();
+std::uint64_t revisionIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return j.rev;
 }
 
 // ======================================================================= le disque ==
-void open(const std::string& file) {
-    auto& j = journal();
+void openIn(Journal& j, const std::string& file) {
     {
         std::lock_guard<std::mutex> lk(j.m);
         if (j.worker.joinable() && j.file == file) return;
@@ -304,28 +297,24 @@ void open(const std::string& file) {
     j.worker = std::thread([&j] { run(j); });
 }
 
-void close() { journal().shut(); }
+void closeIn(Journal& j) { j.shut(); }
 
-bool opened() {
-    auto& j = journal();
+bool openedIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return j.worker.joinable();
 }
 
-bool waitIdle(int timeoutMs) {
-    auto& j = journal();
+bool waitIdleIn(Journal& j, int timeoutMs) {
     std::unique_lock<std::mutex> lk(j.m);
     return j.cv.wait_for(lk, std::chrono::milliseconds(timeoutMs), [&] { return j.loaded && !j.dirty && !j.writing; });
 }
 
-std::string lastError() {
-    auto& j = journal();
+std::string lastErrorIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     return j.error;
 }
 
-void resetForTests() {
-    auto& j = journal();
+void resetForTestsIn(Journal& j) {
     j.shut();
     std::lock_guard<std::mutex> lk(j.m);
     j.items.clear();
@@ -334,6 +323,27 @@ void resetForTests() {
     j.error.clear();
     ++j.rev;
 }
+
+} // namespace
+
+// ============================================================================ l'Assistant ==
+std::uint64_t post(Item n) { return postIn(journal(0), std::move(n)); }
+std::vector<Item> list() { return listIn(journal(0)); }
+std::optional<Item> find(std::uint64_t id) { return findIn(journal(0), id); }
+std::size_t size() { return sizeIn(journal(0)); }
+std::size_t unread() { return unreadIn(journal(0)); }
+bool unreadError() { return unreadErrorIn(journal(0)); }
+bool markRead(std::uint64_t id, bool read) { return markReadIn(journal(0), id, read); }
+std::size_t markAllRead() { return markAllReadIn(journal(0)); }
+bool remove(std::uint64_t id) { return removeIn(journal(0), id); }
+std::size_t clearRead() { return clearReadIn(journal(0)); }
+std::uint64_t revision() { return revisionIn(journal(0)); }
+void open(const std::string& file) { openIn(journal(0), file); }
+bool opened() { return openedIn(journal(0)); }
+bool waitIdle(int timeoutMs) { return waitIdleIn(journal(0), timeoutMs); }
+std::string lastError() { return lastErrorIn(journal(0)); }
+void resetForTests() { resetForTestsIn(journal(0)); }
+void close() { closeIn(journal(0)); }
 
 std::string toJson(const std::vector<Item>& oldestFirst) {
     json::Value root = json::Value::object();
@@ -515,3 +525,26 @@ std::string oneLine(std::string_view text, std::size_t max) {
 }
 
 } // namespace app::ai::notifs
+
+// ============================================================================ 1.38.0 : le carnet general ==
+//  Les notifications generales du Studio (app/Notices.hpp) : le meme journal, un autre carnet (journal(1)).
+namespace app::notices {
+namespace nf = app::ai::notifs;
+std::uint64_t post(nf::Item n) { return nf::postIn(nf::journal(1), std::move(n)); }
+std::vector<nf::Item> list() { return nf::listIn(nf::journal(1)); }
+std::optional<nf::Item> find(std::uint64_t id) { return nf::findIn(nf::journal(1), id); }
+std::size_t size() { return nf::sizeIn(nf::journal(1)); }
+std::size_t unread() { return nf::unreadIn(nf::journal(1)); }
+bool unreadError() { return nf::unreadErrorIn(nf::journal(1)); }
+bool markRead(std::uint64_t id, bool read) { return nf::markReadIn(nf::journal(1), id, read); }
+std::size_t markAllRead() { return nf::markAllReadIn(nf::journal(1)); }
+bool remove(std::uint64_t id) { return nf::removeIn(nf::journal(1), id); }
+std::size_t clearRead() { return nf::clearReadIn(nf::journal(1)); }
+std::uint64_t revision() { return nf::revisionIn(nf::journal(1)); }
+void open(const std::string& file) { nf::openIn(nf::journal(1), file); }
+bool opened() { return nf::openedIn(nf::journal(1)); }
+bool waitIdle(int timeoutMs) { return nf::waitIdleIn(nf::journal(1), timeoutMs); }
+std::string lastError() { return nf::lastErrorIn(nf::journal(1)); }
+void resetForTests() { nf::resetForTestsIn(nf::journal(1)); }
+void close() { nf::closeIn(nf::journal(1)); }
+} // namespace app::notices

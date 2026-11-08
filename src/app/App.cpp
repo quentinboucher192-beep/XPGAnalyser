@@ -370,6 +370,8 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         // 1.21.2 : les notifications de l'Assistant - relues sur le fil du journal (l'interface n'attend pas le disque),
         // ecrites au plus une fois par seconde sur ce meme fil.
         app::ai::notifs::open(app::ai::notificationsFile());
+        // 1.38.0 : les notifications generales de ce Studio (la licence, les offres, les annonces de l'editeur).
+        app::notices::open(licence::watch::noticesPath());
         // 1.25.1 : la corbeille de l'IA (IA/corbeille) - ce qui y est depuis plus de 7 jours part pour de bon.
         (void)app::ai::memory::purgeTrash();
     }
@@ -591,6 +593,7 @@ App::~App() {
     notify_.shutdown();
     incidents_.shutdown();  // 1.20.0 : les ecritures en cours finissent
     app::ai::notifs::close();   // 1.21.2 : les notifications de l'Assistant, ecrites une derniere fois (apres les incidents)
+    app::notices::close();      // 1.38.0 : les notifications generales
     web_.shutdown();
     // Persist on the way out: the workspace a user arranged should survive
     // closing the program, including when they close it with the window button.
@@ -1631,6 +1634,8 @@ void App::registerActions() {
     actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
     // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet.
     actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this, licence::kTabProfile); }});
+    // 1.38.0 : les notifications generales (la licence, les offres, les annonces de l'editeur).
+    actions_.add(Action{"help.notifications", "Notifications\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showNoticesWindow(*this); }});
     // 1.30.0 : LES ACTIONS D'UNE FONCTIONNALITE (licence::gates) passent par le controle : fermee, la fenetre
     // << Pas dans ta licence >> ; ouverte, l'action comme avant. Elles restent actives (un clic dit pourquoi).
     for (const auto& g : licence::gates()) {

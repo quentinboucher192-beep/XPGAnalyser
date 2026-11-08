@@ -130,12 +130,19 @@ struct RegistryEditionView {
     std::vector<std::string> features;          // les identifiants, tries
     bool                     retired{false};    // retiree : plus accordee par l'Admin
     std::string              price, description;   // 1.37.0 : la << boutique >> (vides : pas ecrits)
+    std::string              promoPrice;           // 1.38.0 : une reduction (vide : aucune) ...
+    std::int64_t             promoUntil{0};        // ... jusqu'a ce moment (secondes depuis 1970)
+};
+struct RegistryAnnouncementView {   // 1.38.0 : une annonce de l'editeur (une notification, jamais un mail)
+    std::string  id, title, text, edition;
+    std::int64_t at{0}, until{0};   // until 0 : sans fin
 };
 struct RegistryView {
     std::uint64_t                    number{0};
     std::string                      issuedAt, unlicensedEdition;
     std::vector<RegistryFeatureView> features;
     std::vector<RegistryEditionView> editions;
+    std::vector<RegistryAnnouncementView> announcements;   // 1.38.0
 };
 [[nodiscard]] std::optional<RegistryView> getRegistry();
 
