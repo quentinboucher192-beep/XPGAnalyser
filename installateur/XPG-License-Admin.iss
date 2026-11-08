@@ -190,9 +190,7 @@ Root: HKA; Subkey: "Software\Classes\.xpgrev\OpenWithProgids"; ValueType: string
 Root: HKA; Subkey: "Software\Classes\{#ProgIdRevocations}"; ValueType: string; ValueName: ""; ValueData: "Liste de révocation XPG"; Flags: uninsdeletekey; Tasks: fichiers
 Root: HKA; Subkey: "Software\Classes\{#ProgIdRevocations}\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#App},0"; Tasks: fichiers
 Root: HKA; Subkey: "Software\Classes\{#ProgIdRevocations}\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#App}"" ""%1"""; Tasks: fichiers
-; la console dans le PATH (le sien seulement : retire a la desinstallation, [Code])
-Root: HKCU; Subkey: "Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: AjouterAuPath(False); Tasks: path
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Check: AjouterAuPath(True); Tasks: path
+; la console dans le PATH : [Code] (AjouterAuPath a la fin de l'installation, RetirerDuPath a la desinstallation)
 
 [Run]
 Filename: "{app}\{#App}"; Description: "{cm:Lancer}"; WorkingDir: "{app}"; Flags: postinstall nowait skipifsilent
@@ -269,6 +267,24 @@ begin
   CleEnvironnement(Machine, Racine, Cle);
   if not RegQueryStringValue(Racine, Cle, 'Path', Chemin) then Chemin := '';
   Result := Pos(';' + Lowercase(ExpandConstant('{app}')) + ';', ';' + Lowercase(Chemin) + ';') = 0;
+end;
+
+// A la fin de l'installation (l'option << la console dans le PATH >>) : le dossier de l'Admin ajoute au PATH du compte
+// (de la machine pour une installation pour tous), s'il n'y est pas deja ; sans << ; >> en trop si le PATH etait vide.
+procedure AjouterAuPathMaintenant;
+var Racine: Integer;
+    Cle, Chemin: String;
+begin
+  if not AjouterAuPath(IsAdminInstallMode) then Exit;
+  CleEnvironnement(IsAdminInstallMode, Racine, Cle);
+  if not RegQueryStringValue(Racine, Cle, 'Path', Chemin) then Chemin := '';
+  if (Chemin <> '') and (Copy(Chemin, Length(Chemin), 1) <> ';') then Chemin := Chemin + ';';
+  RegWriteExpandStringValue(Racine, Cle, 'Path', Chemin + ExpandConstant('{app}'));
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssPostInstall) and WizardIsTaskSelected('path') then AjouterAuPathMaintenant;
 end;
 
 // A la desinstallation : le dossier de l'Admin retire du PATH (seulement lui).
