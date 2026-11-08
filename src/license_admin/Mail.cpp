@@ -16,6 +16,13 @@
 //  serveur) ; s'il la reconnait, sa racine est ajoutee et la connexion
 //  recommence : c'est encore mbedTLS qui verifie tout (nom, dates, chaine).
 //  Toute autre raison (nom, dates) : refuse, sans recours.
+//
+//  1.38.0 : LE COMPTE MICROSOFT (OAuth 2.0, voir Mail.hpp). Le HTTPS est celui
+//  de app/ai/AiHttp (WinHTTP, libcurl) : un corps de formulaire, une reponse
+//  JSON, des delais bornes. Les tampons qui portent un jeton (le corps envoye,
+//  la reponse brute, la ligne XOAUTH2) sont effaces apres usage. La rotation du
+//  jeton de rafraichissement (relire, rafraichir, reecrire) se fait sous un
+//  verrou : deux envois en meme temps ne gardent pas un jeton perime.
 // =============================================================================
 #include "Mail.hpp"
 
@@ -33,6 +40,7 @@
 #  include <wincrypt.h>
 #endif
 
+#include "../app/ai/AiHttp.hpp"   // 1.38.0 : le HTTPS du systeme (OAuth 2.0 de Microsoft)
 #include "../core/Json.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Net.hpp"
@@ -55,6 +63,7 @@
 #include <filesystem>
 #include <functional>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 namespace license_admin::mail {
@@ -74,6 +83,17 @@ constexpr std::size_t kMaxReply = 64u * 1024u;          // une reponse SMTP (tou
 constexpr std::size_t kMaxCaFile = 4u * 1024u * 1024u;  // un fichier d'autorites
 constexpr std::size_t kMaxBody = 4u * 1024u * 1024u;    // le texte d'un courriel
 constexpr std::size_t kMaxName = 100;                   // un nom montre (octets)
+// 1.38.0 : Microsoft
+constexpr const char* kMicrosoftFormat = "xpg-courriel-microsoft/1";
+constexpr std::size_t kMaxHttpReply = 256u * 1024u;     // une reponse de Microsoft
+constexpr std::size_t kMaxToken = 16u * 1024u;          // un jeton, un code d'appareil
+constexpr const char* kDeviceGrant = "urn:ietf:params:oauth:grant-type:device_code";
+// La connexion demande aussi openid profile : l'id_token dit le compte (preferred_username). Le rafraichissement
+// ne demande que l'envoi (et un nouveau jeton de rafraichissement).
+constexpr const char* kSignInScope = "https://outlook.office.com/SMTP.Send offline_access openid profile";
+constexpr const char* kRefreshScope = "https://outlook.office.com/SMTP.Send offline_access";
+// Le chemin de l'interface pour se connecter (les phrases le citent).
+constexpr const char* kSignInPath = "Service en ligne \xE2\x80\xBA Le mail \xE2\x80\xBA Se connecter";
 
 // ---------------------------------------------------------------- petits outils
 fs::path P(const std::string& utf8) { return fs::path(std::u8string(utf8.begin(), utf8.end())); }
@@ -168,7 +188,85 @@ Config normalized(const Config& in) {
     c.fromName = clipUtf8(oneLine(in.fromName), kMaxName);
     c.user = trimmed(in.user);
     c.caFile = trimmed(in.caFile);
+    // 1.38.0 : l'identification ; un vide vaut le defaut (un mail.json de 1.37 n'a aucune de ces cles)
+    c.auth = lower(trimmed(in.auth));
+    if (c.auth.empty()) c.auth = kAuthPassword;
+    c.clientId = lower(trimmed(in.clientId));
+    c.tenant = lower(trimmed(in.tenant));
+    if (c.tenant.empty()) c.tenant = "common";
+    c.authority = lower(trimmed(in.authority));
+    while (!c.authority.empty() && c.authority.back() == '/') c.authority.pop_back();
     return c;
+}
+
+// ---------------------------------------------------------------- 1.38.0 : les reglages de Microsoft
+// Un GUID : 8-4-4-4-12 chiffres hexadecimaux (sans accolades).
+bool isGuid(std::string_view s) {
+    if (s.size() != 36) return false;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const bool dash = i == 8 || i == 13 || i == 18 || i == 23;
+        if (dash ? s[i] != '-' : !std::isxdigit(static_cast<unsigned char>(s[i]))) return false;
+    }
+    return true;
+}
+// Un nom de domaine : au moins deux etiquettes (lettres, chiffres, -), aucune vide ni bordee d'un -.
+bool isDomain(std::string_view d) {
+    if (d.empty() || d.size() > 253) return false;
+    std::size_t labels = 0, start = 0;
+    for (std::size_t i = 0; i <= d.size(); ++i) {
+        if (i < d.size() && d[i] != '.') {
+            if (!(std::isalnum(static_cast<unsigned char>(d[i])) || d[i] == '-')) return false;
+            continue;
+        }
+        const std::string_view label = d.substr(start, i - start);
+        if (label.empty() || label.size() > 63 || label.front() == '-' || label.back() == '-') return false;
+        ++labels;
+        start = i + 1;
+    }
+    return labels >= 2;
+}
+bool validTenant(std::string_view t) {
+    return t == "common" || t == "consumers" || t == "organizations" || isGuid(t) || isDomain(t);
+}
+// L'autorite (normalisee) : vide, ou https://NOM[:PORT] sans chemin, ni requete, ni identifiant ; http:// vers
+// 127.0.0.1 ou localhost seulement (les essais : le faux serveur de tests/outils/oauth_essai.py).
+bool validAuthority(const std::string& a) {
+    if (a.empty()) return true;
+    if (hasControl(a) || !isAscii(a) || a.find_first_of(" ?#") != std::string::npos) return false;
+    app::ai::Url u;
+    if (!app::ai::parseUrl(a, u, nullptr)) return false;
+    if (u.hasPath || u.path != "/") return false;
+    if (!u.https && u.host != "127.0.0.1" && u.host != "localhost") return false;
+    return true;
+}
+std::string authorityOf(const Config& c) { return c.authority.empty() ? std::string(kMicrosoftAuthority) : c.authority; }
+// {autorite}/{locataire}/oauth2/v2.0/{point} ("devicecode", "token")
+std::string endpoint(const Config& c, const char* point) { return authorityOf(c) + "/" + c.tenant + "/oauth2/v2.0/" + point; }
+// Le nom de l'hote de l'autorite (les phrases) : "login.microsoftonline.com".
+std::string authorityHost(const Config& c) {
+    app::ai::Url u;
+    return app::ai::parseUrl(authorityOf(c), u, nullptr) ? u.host : std::string("login.microsoftonline.com");
+}
+
+// L'ID d'application (exige si `requireId`, sinon un GUID s'il est donne), le locataire, l'autorite (normalises).
+bool checkMicrosoft(const Config& c, bool requireId, std::string* why) {
+    if (c.clientId.empty()) {
+        if (requireId)
+            return fail(why, "l'ID d'application Microsoft est vide : colle l'\xC2\xAB ID d'application (client) \xC2\xBB de ton application "
+                             "(portail Microsoft Entra \xE2\x80\xBA Inscriptions d'applications \xE2\x80\xBA ton application \xE2\x80\xBA Vue d'ensemble)");
+    } else if (!isGuid(c.clientId)) {
+        return fail(why, "l'ID d'application Microsoft " + cite(clipUtf8(oneLine(c.clientId), 60)) +
+                             " n'est pas valable (un GUID : 32 chiffres hexad\xC3\xA9" "cimaux en 5 groupes, 8-4-4-4-12, sans accolades)");
+    }
+    if (!validTenant(c.tenant))
+        return fail(why, "le locataire Microsoft " + cite(clipUtf8(oneLine(c.tenant), 80)) +
+                             " est refus\xC3\xA9 : \xC2\xAB consumers \xC2\xBB (Outlook.com, Hotmail), \xC2\xAB organizations \xC2\xBB (Microsoft 365), \xC2\xAB common \xC2\xBB (les deux), "
+                             "ou le GUID ou le domaine de ton annuaire");
+    if (!validAuthority(c.authority))
+        return fail(why, "l'autorit\xC3\xA9 Microsoft " + cite(clipUtf8(oneLine(c.authority), 120)) +
+                             " est refus\xC3\xA9" "e : laisse-la vide (https://login.microsoftonline.com), ou https://NOM sans chemin ; "
+                             "http:// seulement vers 127.0.0.1 ou localhost (les essais)");
+    return true;
 }
 
 // ---------------------------------------------------------------- l'en-tete du message
@@ -700,11 +798,28 @@ struct Attempt {
 
 class Session {
 public:
-    Session(const Config& c, int timeoutMs) : c_(c), t_(timeoutMs) {}
+    // 1.38.0 : `oauth` - AUTH XOAUTH2 avec un jeton d'acces (le secret) ; `account` : le compte Microsoft connecte
+    // (les phrases d'un refus le citent), vide s'il n'est pas connu.
+    Session(const Config& c, int timeoutMs, bool oauth = false, std::string account = {})
+        : c_(c), t_(timeoutMs), oauth_(oauth), account_(std::move(account)) {
+        secrets_.reserve(4);   // sans reallocation : aucune copie d'un secret laissee en memoire
+    }
+    ~Session() {
+        for (auto& s : secrets_) wipe(s);
+    }
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
 
-    Attempt run(const std::string& password, const std::string& data, const std::string& to, const std::vector<Bytes>& extraRoots) {
+    // `secret` : le mot de passe d'application, ou (oauth) le jeton d'acces.
+    Attempt run(const std::string& secret, const std::string& data, const std::string& to, const std::vector<Bytes>& extraRoots) {
+        for (auto& s : secrets_) wipe(s);
+        secrets_.clear();
+        if (!secret.empty()) {
+            secrets_.push_back(secret);
+            secrets_.push_back(crypto::base64(secret));
+        }
         Attempt a;
-        a.result = steps(password, data, to, extraRoots, a);
+        a.result = steps(secret, data, to, extraRoots, a);
         a.result.reached = link_.reached();
         link_.close();
         return a;
@@ -795,29 +910,112 @@ private:
         }
     }
 
-    // Le texte d'un serveur montre a l'editeur : jamais s'il contient le mot de passe (ou sa forme base64).
-    static std::string shown(const Reply& r, const std::string& password) {
-        const std::string t = r.text();
-        if (password.empty()) return t;
-        std::string b64 = crypto::base64(password);
-        const bool leak = t.find(password) != std::string::npos || t.find(b64) != std::string::npos;
-        wipe(b64);
-        return leak ? std::to_string(r.code) : t;
+    // Le texte d'un serveur montre a l'editeur : jamais s'il contient un secret de cet envoi (le mot de passe, le
+    // jeton, leur forme base64, la ligne XOAUTH2 - ou leurs 16 premiers caracteres : le texte montre est coupe a
+    // 200) - le code seul alors. Cherche dans le texte entier, avant la coupe.
+    std::string shown(const Reply& r) const {
+        std::string all;
+        for (const auto& l : r.lines) {
+            all += l;
+            all += '\n';
+        }
+        bool leak = false;
+        for (const auto& s : secrets_) {
+            if (s.empty()) continue;
+            if (all.find(s) != std::string::npos || (s.size() > 16 && all.find(std::string_view(s).substr(0, 16)) != std::string::npos)) {
+                leak = true;
+                break;
+            }
+        }
+        wipe(all);
+        return leak ? std::to_string(r.code) : r.text();
     }
 
-    SendResult authRefused(const Reply& r, const std::string& password) const {
-        const std::string said = shown(r, password);
+    SendResult authRefused(const Reply& r) const {
+        const std::string said = shown(r);
         std::string low = lower(said);
-        // Microsoft (Outlook, Hotmail, Microsoft 365) : l'identification par mot de passe est retiree, OAuth seulement.
-        if (low.find("basic authentication is disabled") != std::string::npos || low.find("5.7.139") != std::string::npos)
+        // Microsoft (Outlook, Hotmail, Microsoft 365) : l'identification par mot de passe est retiree, OAuth seulement
+        // (1.38.0 : aussi tout 535 d'un serveur de Microsoft).
+        if (low.find("basic authentication is disabled") != std::string::npos || low.find("5.7.139") != std::string::npos ||
+            (r.code == 535 && microsoftHost(c_.host)))
             return failure("Le serveur " + where() + " refuse toute identification par mot de passe pour ce compte (Microsoft exige "
-                           "d\xC3\xA9sormais OAuth, que cet outil ne g\xC3\xA8re pas) : utilise une autre bo\xC3\xAEte, par exemple Gmail avec un "
-                           "mot de passe d'application ; sa r\xC3\xA9ponse : " + cite(said) + ".");
+                           "d\xC3\xA9sormais OAuth) : dans les r\xC3\xA9glages du courriel, choisis l'identification par compte Microsoft, puis "
+                           "connecte-toi (" + std::string(kSignInPath) + ") ; sa r\xC3\xA9ponse : " + cite(said) + ".");
         return failure("Le serveur refuse l'identifiant ou le mot de passe d'application : pour Gmail, il faut un mot de passe d'application "
                        "(compte Google \xE2\x80\xBA S\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Validation en deux \xC3\xA9tapes) ; sa r\xC3\xA9ponse : " + cite(said) + ".");
     }
 
+    // 1.38.0 : le refus du jeton Microsoft (AUTH XOAUTH2).
+    SendResult xoauthRefused(const Reply& r) const {
+        const std::string said = shown(r);
+        const std::string low = lower(said);
+        // Microsoft 365 : SMTP AUTH coupe pour la boite ou pour toute l'organisation (5.7.139, SmtpClientAuthentication).
+        if (low.find("5.7.139") != std::string::npos || low.find("smtpclientauthentication") != std::string::npos ||
+            low.find("smtp_auth_disabled") != std::string::npos)
+            return failure("Microsoft refuse l'envoi authentifi\xC3\xA9 (SMTP AUTH) pour la bo\xC3\xAEte " + c_.user +
+                           " : sur Microsoft 365, l'administrateur doit autoriser \xC2\xAB SMTP authentifi\xC3\xA9 \xC2\xBB pour cette bo\xC3\xAEte (centre "
+                           "d'administration Microsoft 365 \xE2\x80\xBA Utilisateurs actifs \xE2\x80\xBA la bo\xC3\xAEte \xE2\x80\xBA Courrier \xE2\x80\xBA G\xC3\xA9rer les applications de "
+                           "messagerie) et ne pas le d\xC3\xA9sactiver pour toute l'organisation ; sa r\xC3\xA9ponse : " + cite(said) + ".");
+        std::string hint;
+        if (!account_.empty() && lower(account_) != lower(c_.user))
+            hint = "la connexion Microsoft est celle de " + account_ + ", mais l'identifiant SMTP r\xC3\xA9gl\xC3\xA9 est " + c_.user +
+                   " : mets l'adresse du compte connect\xC3\xA9, ou reconnecte-toi avec la bonne bo\xC3\xAEte (" + std::string(kSignInPath) + ")";
+        else
+            hint = "v\xC3\xA9rifie que l'identifiant SMTP est l'adresse de la bo\xC3\xAEte connect\xC3\xA9" "e et que l'application a la permission "
+                   "SMTP.Send (portail Microsoft Entra \xE2\x80\xBA ton application \xE2\x80\xBA Autorisations d'API) ; sinon reconnecte-toi (" +
+                   std::string(kSignInPath) + ")";
+        return failure("Le serveur " + where() + " refuse le jeton Microsoft : " + hint + " ; sa r\xC3\xA9ponse : " + cite(said) + ".");
+    }
+
+    // 1.38.0 : AUTH XOAUTH2 en deux temps (l'exemple de Microsoft) : << AUTH XOAUTH2 >>, 334, la ligne
+    // base64("user=" + identifiant + ^A + "auth=Bearer " + jeton + ^A ^A) ; 235 : accepte. Un refus en 334 (le
+    // defi d'erreur, RFC 7628 : un JSON en base64) recoit une ligne vide, puis le serveur dit 535.
+    bool xoauth2(const std::string& token, const Reply& ehlo, SendResult& out) {
+        if (!link_.secure()) {
+            out = failure("La connexion avec " + where() + " n'est pas chiffr\xC3\xA9" "e : le jeton Microsoft n'est pas envoy\xC3\xA9.");
+            return false;
+        }
+        std::string mechs;
+        if (!ehlo.capability("AUTH", &mechs)) {
+            out = failure("Le serveur " + where() + " ne propose aucune identification sur ce port : v\xC3\xA9rifie le serveur et le port (587 ou 465).");
+            return false;
+        }
+        mechs = " " + mechs + " ";
+        if (mechs.find(" XOAUTH2 ") == std::string::npos) {
+            out = failure("Le serveur " + where() + " ne propose pas l'identification par compte Microsoft (AUTH XOAUTH2) : pour Outlook.com "
+                          "ou Hotmail, choisis " + std::string(kOutlookHost) + " ; pour Microsoft 365, " + std::string(kOffice365Host) +
+                          " (port 587, STARTTLS).");
+            return false;
+        }
+        Reply r;
+        if (!command("AUTH XOAUTH2", r, "de l'identification", out)) return false;
+        if (r.code != 334) {
+            out = xoauthRefused(r);
+            return false;
+        }
+        std::string sasl;
+        sasl.reserve(c_.user.size() + token.size() + 24);
+        sasl += "user=";
+        sasl += c_.user;
+        sasl += '\x01';
+        sasl += "auth=Bearer ";
+        sasl += token;
+        sasl += '\x01';
+        sasl += '\x01';
+        std::string line = crypto::base64(sasl);
+        wipe(sasl);
+        secrets_.push_back(line);   // une copie, pour taire un serveur qui la renverrait (effacee a la fin)
+        const bool ok = command(line, r, "de l'identification", out);
+        wipe(line);
+        if (!ok) return false;
+        if (r.code == 235) return true;
+        if (r.code == 334 && !command("", r, "de l'identification", out)) return false;   // le defi d'erreur : une ligne vide
+        out = xoauthRefused(r);
+        return false;
+    }
+
     bool authenticate(const std::string& password, const Reply& ehlo, SendResult& out) {
+        if (oauth_) return xoauth2(password, ehlo, out);
         // Jamais avant TLS (la suite ne le permet pas ; la regle est verifiee quand meme).
         if (!link_.secure()) {
             out = failure("La connexion avec " + where() + " n'est pas chiffr\xC3\xA9" "e : l'identifiant et le mot de passe ne sont pas envoy\xC3\xA9s.");
@@ -832,7 +1030,9 @@ private:
         const bool plain = mechs.find(" PLAIN ") != std::string::npos;
         const bool login = mechs.find(" LOGIN ") != std::string::npos;
         if (!plain && !login) {
-            out = failure("Le serveur " + where() + " ne propose ni AUTH PLAIN ni AUTH LOGIN (il exige sans doute OAuth, que cet outil ne g\xC3\xA8re pas) : ce poste ne sait pas s'y identifier par mot de passe.");
+            out = failure("Le serveur " + where() + " ne propose ni AUTH PLAIN ni AUTH LOGIN (il exige sans doute OAuth) : ce poste ne peut pas s'y "
+                          "identifier par mot de passe ; pour Outlook, Hotmail ou Microsoft 365, choisis l'identification par compte Microsoft "
+                          "dans les r\xC3\xA9glages du courriel.");
             return false;
         }
         Reply r;
@@ -856,12 +1056,12 @@ private:
         } else {
             ok = command("AUTH LOGIN", r, "de l'identification", out);
             if (ok && r.code != 334) {
-                out = authRefused(r, password);
+                out = authRefused(r);
                 return false;
             }
             if (ok) ok = command(crypto::base64(c_.user), r, "de l'identification", out);
             if (ok && r.code != 334) {
-                out = authRefused(r, password);
+                out = authRefused(r);
                 return false;
             }
             if (ok) {
@@ -872,7 +1072,7 @@ private:
         }
         if (!ok) return false;
         if (r.code != 235) {
-            out = authRefused(r, password);
+            out = authRefused(r);
             return false;
         }
         return true;
@@ -901,37 +1101,37 @@ private:
         Reply r;
         Io io = link_.reply(r, t_);
         if (io != Io::Ok) return ioFailure(io, "de l'accueil");
-        if (r.code != 220) return failure("Le serveur " + h + " refuse la connexion ; sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ".");
+        if (r.code != 220) return failure("Le serveur " + h + " refuse la connexion ; sa r\xC3\xA9ponse : " + cite(shown(r)) + ".");
         const std::string hello = "EHLO " + ehloName();
         if (!command(hello, r, "EHLO", out)) return out;
-        if (r.code != 250) return failure("Le serveur " + h + " refuse EHLO ; sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ".");
+        if (r.code != 250) return failure("Le serveur " + h + " refuse EHLO ; sa r\xC3\xA9ponse : " + cite(shown(r)) + ".");
         if (!implicitTls) {
             if (!r.capability("STARTTLS"))
                 return failure("Le serveur " + h + " ne propose pas STARTTLS sur le port " + std::to_string(c_.port) +
                                " : rien n'est envoy\xC3\xA9 sans chiffrement (si ton fournisseur l'indique, choisis TLS sur le port 465).");
             if (!command("STARTTLS", r, "STARTTLS", out)) return out;
             if (r.code != 220)
-                return failure("Le serveur " + h + " refuse STARTTLS (sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ") : rien n'est envoy\xC3\xA9 sans chiffrement.");
+                return failure("Le serveur " + h + " refuse STARTTLS (sa r\xC3\xA9ponse : " + cite(shown(r)) + ") : rien n'est envoy\xC3\xA9 sans chiffrement.");
             link_.discardInput();
             const int rc = link_.handshake(c_.host, t_, &why);
             if (rc != 0) return tlsFailure(rc, why, a);
             if (!command(hello, r, "EHLO", out)) return out;
-            if (r.code != 250) return failure("Le serveur " + h + " refuse EHLO ; sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ".");
+            if (r.code != 250) return failure("Le serveur " + h + " refuse EHLO ; sa r\xC3\xA9ponse : " + cite(shown(r)) + ".");
         }
         if (!authenticate(password, r, out)) return out;
         if (!command("MAIL FROM:<" + c_.from + ">", r, "MAIL FROM", out)) return out;
         if (r.code != 250)
-            return failure("Le serveur refuse l'exp\xC3\xA9" "diteur " + cite(c_.from) + " (sa r\xC3\xA9ponse : " + cite(shown(r, password)) +
+            return failure("Le serveur refuse l'exp\xC3\xA9" "diteur " + cite(c_.from) + " (sa r\xC3\xA9ponse : " + cite(shown(r)) +
                            ") : l'adresse d'exp\xC3\xA9" "dition doit \xC3\xAAtre celle de ton compte, ou un alias autoris\xC3\xA9.");
         if (!command("RCPT TO:<" + to + ">", r, "RCPT TO", out)) return out;
         if (r.code != 250 && r.code != 251)
-            return failure("Le serveur refuse le destinataire " + cite(to) + " (sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ") : v\xC3\xA9rifie son adresse.");
+            return failure("Le serveur refuse le destinataire " + cite(to) + " (sa r\xC3\xA9ponse : " + cite(shown(r)) + ") : v\xC3\xA9rifie son adresse.");
         if (!command("DATA", r, "DATA", out)) return out;
-        if (r.code != 354) return failure("Le serveur refuse l'envoi du message ; sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ".");
+        if (r.code != 354) return failure("Le serveur refuse l'envoi du message ; sa r\xC3\xA9ponse : " + cite(shown(r)) + ".");
         io = link_.send(dotStuffed(data), t_);
         if (io == Io::Ok) io = link_.reply(r, t_);
         if (io != Io::Ok) return ioFailure(io, "de l'envoi du message");
-        if (r.code != 250) return failure("Le serveur a refus\xC3\xA9 le message ; sa r\xC3\xA9ponse : " + cite(shown(r, password)) + ".");
+        if (r.code != 250) return failure("Le serveur a refus\xC3\xA9 le message ; sa r\xC3\xA9ponse : " + cite(shown(r)) + ".");
         // QUIT : le message est deja accepte, une panne ici ne change rien.
         if (link_.send("QUIT\r\n", std::min(t_, 5000)) == Io::Ok) (void)link_.reply(r, std::min(t_, 5000));
         SendResult ok;
@@ -941,9 +1141,12 @@ private:
         return ok;
     }
 
-    const Config& c_;
-    int           t_;
-    Link          link_;
+    const Config&            c_;
+    int                      t_;
+    bool                     oauth_{false};
+    std::string              account_;
+    std::vector<std::string> secrets_;   // les formes du secret a taire (effacees a la fin)
+    Link                     link_;
 };
 
 bool readPassword(const std::string& folder, std::string& out, std::string* why) {
@@ -962,6 +1165,436 @@ bool readPassword(const std::string& folder, std::string& out, std::string* why)
     wipe(sealed);
     wipe(plain);
     return true;
+}
+
+
+// ============================================================================ 1.38.0 : OAuth 2.0 (Microsoft)
+std::mutex& microsoftLock() {
+    static std::mutex m;   // relire, rafraichir et reecrire mail-microsoft.bin d'un seul tenant
+    return m;
+}
+
+// Un jeton, un code d'appareil : 1 a 16 Kio de caracteres ASCII visibles (ni espace ni controle).
+bool tokenText(std::string_view s) {
+    if (s.empty() || s.size() > kMaxToken) return false;
+    return std::all_of(s.begin(), s.end(), [](char ch) {
+        const auto c = static_cast<unsigned char>(ch);
+        return c > 0x20 && c < 0x7F;
+    });
+}
+
+// Un champ de formulaire application/x-www-form-urlencoded ajoute a `out` (sans copie intermediaire : la
+// valeur peut etre un jeton). Rien que les caracteres non reserves restent tels quels.
+void appendField(std::string& out, const char* key, std::string_view value) {
+    static const char* const kHex = "0123456789ABCDEF";
+    if (!out.empty()) out += '&';
+    out += key;
+    out += '=';
+    for (char ch : value) {
+        const auto c = static_cast<unsigned char>(ch);
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' || c == '~') {
+            out += ch;
+        } else {
+            out += '%';
+            out += kHex[c >> 4];
+            out += kHex[c & 15];
+        }
+    }
+}
+
+struct OAuthReply {
+    bool        answered{false};   // une reponse HTTP entiere est arrivee (quel que soit son code)
+    int         status{0};
+    Value       json;              // l'objet rendu (nul si ce n'est pas un objet JSON)
+    std::string failure;           // !answered : la panne du transport (le texte de AiHttp, sans secret)
+};
+
+// POST d'un formulaire, une reponse JSON. `body` est consomme et efface (il porte un code ou un jeton) ; la
+// reponse brute aussi, apres lecture.
+OAuthReply postForm(const std::string& url, std::string& body, int timeoutMs, bool french) {
+    OAuthReply out;
+    app::ai::HttpRequest req;
+    req.method = "POST";
+    req.url = url;
+    req.headers = {{"Content-Type", "application/x-www-form-urlencoded"}, {"Accept", "application/json"}, {"User-Agent", "XPG-License-Admin"}};
+    if (french) req.headers.emplace_back("Accept-Language", "fr-FR, fr;q=0.9");   // la phrase de Microsoft (DeviceCode::message)
+    req.body.swap(body);
+    const int seconds = std::clamp((std::max(1, timeoutMs) + 999) / 1000, 1, 120);
+    req.connectTimeoutSeconds = seconds;
+    req.idleTimeoutSeconds = seconds;
+    std::string raw;
+    raw.reserve(32u * 1024u);   // une reponse ordinaire tient sans reallocation (pas de copie du jeton laissee en memoire)
+    bool tooBig = false;
+    app::ai::HttpSink sink;
+    sink.onData = [&](std::string_view chunk) {
+        if (tooBig || raw.size() + chunk.size() > kMaxHttpReply) {
+            tooBig = true;
+            return;
+        }
+        raw.append(chunk);
+    };
+    const std::unique_ptr<app::ai::HttpClient> client = app::ai::makeHttpClient();
+    const app::ai::HttpResponse resp = client->perform(req, sink);
+    wipe(req.body);
+    if (!resp.ok()) {
+        app::ai::Url u;
+        (void)app::ai::parseUrl(url, u, nullptr);
+        out.failure = resp.error.empty() ? app::ai::failureText(resp.failure, u.host) : resp.error;
+        wipe(raw);
+        return out;
+    }
+    if (tooBig) {
+        out.failure = "la r\xC3\xA9ponse est trop grande";
+        wipe(raw);
+        return out;
+    }
+    out.answered = true;
+    out.status = resp.status;
+    Value v;
+    if (core::json::parse(raw, v, nullptr) && v.isObject()) out.json = std::move(v);
+    wipe(raw);
+    return out;
+}
+
+// "Microsoft (login.microsoftonline.com) ne repond pas QUOI : la panne ; FIN."
+std::string unreachable(const Config& c, const std::string& failure, const char* what, const char* end) {
+    std::string f = trimmed(failure);
+    while (!f.empty() && f.back() == '.') f.pop_back();
+    if (!f.empty() && f[0] >= 'A' && f[0] <= 'Z') f[0] = static_cast<char>(f[0] - 'A' + 'a');
+    if (f.compare(0, 2, "\xC3\x89") == 0) f.replace(0, 2, "\xC3\xA9");
+    return "Microsoft (" + authorityHost(c) + ") ne r\xC3\xA9pond pas " + what + " : " + (f.empty() ? std::string("pas de r\xC3\xA9ponse") : f) + " ; " + end + ".";
+}
+
+// Un entier d'une reponse (un nombre, ou un texte de chiffres : l'ancienne autorite de Microsoft les ecrivait ainsi).
+long long intOf(const Value& j, std::string_view key, long long fallback) {
+    const Value& v = j.at(key);
+    if (v.isNumber()) return v.asInt(fallback);
+    const std::string& s = v.asString();
+    if (!s.empty() && s.size() <= 9 && std::all_of(s.begin(), s.end(), [](char c) { return c >= '0' && c <= '9'; })) return std::atoll(s.c_str());
+    return fallback;
+}
+
+struct OAuthError {
+    std::string code;      // "authorization_pending", "invalid_grant"... (minuscules) ; vide : pas un refus OAuth lisible
+    long long   aadsts{0}; // le code de Microsoft (AADSTS70016...), 0 sans
+    std::string said;      // le debut de error_description : une ligne, 200 octets au plus ; vide s'il porte un secret
+};
+OAuthError oauthError(const OAuthReply& r, std::initializer_list<const std::string*> secrets) {
+    OAuthError e;
+    e.code = lower(clipUtf8(oneLine(r.json.str("error")), 64));
+    const std::string d = r.json.str("error_description");
+    if (const auto at = d.find("AADSTS"); at != std::string::npos) {
+        for (std::size_t i = at + 6; i < d.size() && i < at + 15 && std::isdigit(static_cast<unsigned char>(d[i])); ++i) e.aadsts = e.aadsts * 10 + (d[i] - '0');
+    }
+    if (e.aadsts == 0) {
+        const Value& codes = r.json.at("error_codes");
+        if (codes.isArray() && !codes.items().empty()) e.aadsts = codes.items()[0].asInt(0);
+    }
+    std::string first = d;
+    for (const char* cut : {"\r", "\n", " Trace ID", " Correlation ID", " Timestamp:"})
+        if (const auto at = first.find(cut); at != std::string::npos) first.resize(at);
+    e.said = clipUtf8(oneLine(first), 200);
+    for (const std::string* s : secrets) {
+        if (!s || s->empty()) continue;
+        std::string b64 = crypto::base64(*s);
+        const bool leak = e.said.find(*s) != std::string::npos || e.said.find(b64) != std::string::npos ||
+                          (s->size() >= 16 && e.said.find(s->substr(0, 16)) != std::string::npos);
+        wipe(b64);
+        if (leak) {
+            e.said.clear();
+            break;
+        }
+    }
+    return e;
+}
+
+enum class Stage { Start, Poll, Refresh };
+
+bool permissionError(const OAuthError& e) {
+    switch (e.aadsts) {
+        case 65001: case 65005: case 70011: case 90008: case 90094: case 90095: case 500011: case 650052: case 650057: return true;
+        default: break;
+    }
+    return e.code == "invalid_scope" || e.code == "consent_required";
+}
+bool policyError(const OAuthError& e) { return e.aadsts == 53000 || e.aadsts == 53001 || e.aadsts == 53002 || e.aadsts == 53003 || e.aadsts == 530032; }
+bool tenantError(const OAuthError& e) {
+    return e.aadsts == 90002 || e.aadsts == 900023 || e.aadsts == 50059 || e.aadsts == 50020 || e.aadsts == 50194 || e.aadsts == 90072;
+}
+std::string permissionText() {
+    return "l'application n'a pas la permission d'envoyer des mails : dans le portail Microsoft Entra \xE2\x80\xBA ton application \xE2\x80\xBA "
+           "Autorisations d'API, ajoute Office 365 Exchange Online \xE2\x80\xBA SMTP.Send (d\xC3\xA9l\xC3\xA9gu\xC3\xA9" "e) ; pour Microsoft 365, un administrateur doit "
+           "aussi donner son consentement ; puis reconnecte-toi (" + std::string(kSignInPath) + ")";
+}
+
+// La phrase d'un refus de Microsoft (jamais un jeton ni un code : `e.said` est deja tu s'il en portait un).
+std::string oauthRefusal(const Config& c, const OAuthReply& r, const OAuthError& e, Stage stage) {
+    const std::string tail = e.said.empty() ? std::string() : " ; sa r\xC3\xA9ponse : " + cite(e.said);
+    const char* head = stage == Stage::Start ? "La connexion \xC3\xA0 Microsoft ne peut pas commencer : "
+                       : stage == Stage::Poll ? "La connexion \xC3\xA0 Microsoft a \xC3\xA9" "chou\xC3\xA9 : "
+                                              : "Le courriel n'est pas parti : ";
+    const auto says = [&](const std::string& what) { return head + what + tail + "."; };
+    if (r.status == 429) return says("Microsoft limite les demandes pour l'instant, r\xC3\xA9" "essaie dans quelques minutes");
+    if (r.status >= 500) return says("Microsoft a une panne (code " + std::to_string(r.status) + "), r\xC3\xA9" "essaie dans quelques minutes");
+    if (!r.json.isObject() || e.code.empty())
+        return says("Microsoft (" + authorityHost(c) + ") a r\xC3\xA9pondu " + std::to_string(r.status) +
+                    " sans explication lisible ; v\xC3\xA9rifie l'autorit\xC3\xA9 (laisse-la vide pour https://login.microsoftonline.com)");
+    if (e.aadsts == 7000218 || (e.code == "invalid_client" && e.aadsts != 700016))
+        return says("l'application n'accepte pas la connexion par code : dans le portail Microsoft Entra \xE2\x80\xBA ton application \xE2\x80\xBA "
+                    "Authentification, mets \xC2\xAB Autoriser les flux clients publics \xC2\xBB \xC3\xA0 Oui");
+    if (e.aadsts == 700016)
+        return says("Microsoft ne conna\xC3\xAEt pas l'application " + c.clientId + " : v\xC3\xA9rifie l'ID d'application (client) copi\xC3\xA9 du portail "
+                    "Microsoft Entra (ton application \xE2\x80\xBA Vue d'ensemble) et le locataire (\xC2\xAB consumers \xC2\xBB pour Outlook.com et Hotmail, "
+                    "\xC2\xAB organizations \xC2\xBB pour Microsoft 365)");
+    if (e.code == "unauthorized_client" && (c.tenant == "consumers" || lower(e.said).find("consumers") != std::string::npos))
+        return says("l'application n'accepte pas les comptes Microsoft personnels (Outlook.com, Hotmail) : dans le portail Microsoft "
+                    "Entra \xE2\x80\xBA ton application \xE2\x80\xBA Authentification, choisis les comptes de tout annuaire et les comptes Microsoft personnels");
+    if (tenantError(e))
+        return says("Microsoft refuse le locataire " + cite(c.tenant) + " pour ce compte : choisis \xC2\xAB consumers \xC2\xBB (Outlook.com, Hotmail), "
+                    "\xC2\xAB organizations \xC2\xBB (Microsoft 365) ou \xC2\xAB common \xC2\xBB, et v\xC3\xA9rifie les types de comptes accept\xC3\xA9s par l'application "
+                    "(portail Microsoft Entra \xE2\x80\xBA ton application \xE2\x80\xBA Authentification)");
+    if (permissionError(e)) return says(permissionText());
+    if (policyError(e))
+        return says("une r\xC3\xA8gle d'acc\xC3\xA8s de ton organisation bloque la connexion \xC3\xA0 Microsoft : demande \xC3\xA0 ton administrateur Microsoft 365");
+    if (e.code == "unauthorized_client")
+        return says("Microsoft n'autorise pas l'application " + c.clientId + " ici : v\xC3\xA9rifie l'ID d'application (client) et le locataire");
+    if (stage == Stage::Poll && (e.code == "invalid_grant" || e.code == "bad_verification_code"))
+        return says("Microsoft ne reconna\xC3\xAEt pas ce code de connexion, recommence (" + std::string(kSignInPath) + ")");
+    return says("Microsoft refuse la demande (" + e.code + ")");
+}
+
+// Le base64url (JWT) en octets.
+bool unbase64url(std::string_view s, Bytes& out) {
+    std::string b(s);
+    for (auto& ch : b) {
+        if (ch == '-') ch = '+';
+        else if (ch == '_') ch = '/';
+    }
+    while (b.size() % 4 != 0) b += '=';
+    return crypto::unbase64(b, out);
+}
+// Le compte d'un id_token (preferred_username, sinon email, sinon upn). Il n'est que MONTRE : sa signature
+// n'est pas verifiee (il arrive par TLS de l'autorite elle-meme, dans la reponse a notre demande).
+std::string accountOf(const std::string& idToken) {
+    const auto a = idToken.find('.');
+    if (a == std::string::npos) return {};
+    const auto b = idToken.find('.', a + 1);
+    if (b == std::string::npos || b - a - 1 > kMaxToken) return {};
+    Bytes payload;
+    if (!unbase64url(std::string_view(idToken).substr(a + 1, b - a - 1), payload)) return {};
+    Value v;
+    if (!core::json::parse(std::string_view(reinterpret_cast<const char*>(payload.data()), payload.size()), v, nullptr) || !v.isObject()) return {};
+    for (const char* k : {"preferred_username", "email", "upn"}) {
+        const std::string s = clipUtf8(oneLine(v.str(k)), 254);
+        if (!s.empty()) return s;
+    }
+    return {};
+}
+
+struct Tokens {
+    std::string access, refresh, account;
+    Tokens() = default;
+    Tokens(const Tokens&) = delete;
+    Tokens& operator=(const Tokens&) = delete;
+    ~Tokens() {
+        wipe(access);
+        wipe(refresh);
+    }
+};
+// Les jetons d'une reponse 200 de .../token. `needRefresh` : la connexion (sans jeton de rafraichissement, rien a
+// garder). Faux : `why` (un fragment de phrase).
+bool readTokens(const Value& j, Tokens& t, bool needRefresh, std::string* why) {
+    t.access = j.str("access_token");
+    if (!tokenText(t.access)) return fail(why, "Microsoft a r\xC3\xA9pondu sans jeton d'acc\xC3\xA8s lisible");
+    const std::string type = lower(trimmed(j.str("token_type")));
+    if (!type.empty() && type != "bearer")
+        return fail(why, "Microsoft a donn\xC3\xA9 un jeton d'un autre type que Bearer (" + cite(clipUtf8(oneLine(type), 40)) + ")");
+    t.refresh = j.str("refresh_token");
+    if (!t.refresh.empty() && !tokenText(t.refresh)) return fail(why, "Microsoft a donn\xC3\xA9 un jeton de rafra\xC3\xAE" "chissement illisible");
+    if (needRefresh && t.refresh.empty())
+        return fail(why, "Microsoft n'a pas donn\xC3\xA9 de jeton durable (la permission offline_access manque) : ajoute-la dans le portail "
+                         "Microsoft Entra \xE2\x80\xBA ton application \xE2\x80\xBA Autorisations d'API, puis recommence");
+    // Les portees accordees, si Microsoft les dit : SMTP.Send doit y etre.
+    const std::string scope = lower(j.str("scope"));
+    if (!scope.empty() && scope.find("smtp.send") == std::string::npos) return fail(why, permissionText());
+    t.account = accountOf(j.str("id_token"));
+    return true;
+}
+
+// ---- mail-microsoft.bin : un JSON protege (crypto::protect), ecrit en prive
+struct Stored {
+    std::string  account, clientId, tenant, authority, refresh;
+    std::int64_t since{0};
+    Stored() = default;
+    Stored(const Stored&) = delete;
+    Stored& operator=(const Stored&) = delete;
+    ~Stored() { wipe(refresh); }
+};
+std::string notConnectedText() {
+    return "Aucun compte Microsoft n'est connect\xC3\xA9 sur ce poste. Connecte-toi \xC3\xA0 Microsoft : " + std::string(kSignInPath) + ".";
+}
+bool writeStored(const std::string& folder, const Stored& s, std::string* why) {
+    Value v = Value::object();
+    v.set("format", std::string(kMicrosoftFormat));
+    v.set("id_application", s.clientId);
+    v.set("locataire", s.tenant);
+    if (!s.authority.empty()) v.set("autorite", s.authority);
+    if (!s.account.empty()) v.set("compte", s.account);
+    v.set("depuis", s.since);
+    v.set("jeton", s.refresh);
+    std::string text = core::json::write(v, false);
+    Bytes plain(text.begin(), text.end()), sealed;
+    wipe(text);
+    std::string w;
+    bool ok = crypto::protect(plain, sealed, /*machine=*/false, &w);
+    if (!ok) w = "la connexion Microsoft ne peut pas \xC3\xAAtre prot\xC3\xA9g\xC3\xA9" "e sur ce poste (" + w + ")";
+    if (ok) ok = writePrivate(microsoftPath(folder), sealed, &w);
+    wipe(plain);
+    wipe(sealed);
+    if (!ok && why) *why = w;
+    return ok;
+}
+bool readStored(const std::string& folder, Stored& s, std::string* why) {
+    const std::string path = microsoftPath(folder);
+    if (!isFile(path)) return fail(why, notConnectedText());
+    const std::string again = " : reconnecte-toi (" + std::string(kSignInPath) + ").";
+    Bytes sealed, plain;
+    std::string w;
+    if (!crypto::readFile(path, sealed, &w, kMaxHttpReply) || sealed.empty())
+        return fail(why, "La connexion Microsoft enregistr\xC3\xA9" "e est illisible" + again);
+    if (!crypto::unprotect(sealed, plain, &w)) {
+        wipe(sealed);
+        return fail(why, "La connexion Microsoft enregistr\xC3\xA9" "e ne peut pas \xC3\xAAtre relue par ce compte sur ce PC (" + w + ")" + again);
+    }
+    wipe(sealed);
+    Value v;
+    const bool parsed = core::json::parse(std::string_view(reinterpret_cast<const char*>(plain.data()), plain.size()), v, nullptr) &&
+                        v.isObject() && v.str("format") == kMicrosoftFormat;
+    wipe(plain);
+    if (!parsed) return fail(why, "La connexion Microsoft enregistr\xC3\xA9" "e est illisible" + again);
+    s.clientId = v.str("id_application");
+    s.tenant = v.str("locataire");
+    s.authority = v.str("autorite");
+    s.account = clipUtf8(oneLine(v.str("compte")), 254);
+    s.since = v.integer("depuis", 0);
+    s.refresh = v.str("jeton");
+    if (!tokenText(s.refresh)) return fail(why, "La connexion Microsoft enregistr\xC3\xA9" "e est illisible" + again);
+    return true;
+}
+
+// Le jeton de rafraichissement -> un jeton d'acces (et peut-etre un nouveau jeton de rafraichissement).
+enum class Refresh { Ok, Dead, Failed };   // Dead : Microsoft ne reconnait plus la connexion (invalid_grant)
+Refresh refreshTokens(const Config& c, const std::string& refreshToken, Tokens& t, std::string* why, int timeoutMs) {
+    std::string body;
+    body.reserve(refreshToken.size() * 3 + 256);
+    appendField(body, "grant_type", "refresh_token");
+    appendField(body, "client_id", c.clientId);
+    appendField(body, "refresh_token", refreshToken);
+    appendField(body, "scope", kRefreshScope);
+    const OAuthReply r = postForm(endpoint(c, "token"), body, timeoutMs, false);
+    if (!r.answered) {
+        (void)fail(why, unreachable(c, r.failure, "pour donner le jeton d'envoi", "rien n'est envoy\xC3\xA9, v\xC3\xA9rifie ta connexion \xC3\xA0 Internet"));
+        return Refresh::Failed;
+    }
+    std::string w;
+    if (r.status == 200 && r.json.isObject() && !r.json.has("error")) {
+        if (readTokens(r.json, t, false, &w)) return Refresh::Ok;
+        (void)fail(why, "Le courriel n'est pas parti : " + w + ".");
+        return Refresh::Failed;
+    }
+    const OAuthError e = oauthError(r, {&refreshToken});
+    if (e.code == "invalid_grant" && !permissionError(e) && !policyError(e)) {
+        (void)fail(why, "Microsoft ne reconna\xC3\xAEt plus ta connexion (elle a expir\xC3\xA9 ou a \xC3\xA9t\xC3\xA9 retir\xC3\xA9" "e) : reconnecte-toi (" + std::string(kSignInPath) +
+                            ") ; rien n'est envoy\xC3\xA9" + (e.said.empty() ? std::string() : " ; sa r\xC3\xA9ponse : " + cite(e.said)) + ".");
+        return Refresh::Dead;
+    }
+    (void)fail(why, oauthRefusal(c, r, e, Stage::Refresh));
+    return Refresh::Failed;
+}
+
+// ---- l'envoi, commun aux deux identifications
+// Les refus avant toute connexion (`c` normalisee). Faux : `r.message`.
+bool precheck(const Config& c, const Message& m, SendResult& r) {
+    std::string why;
+    if (!validate(c, &why)) {
+        r.message = "Les r\xC3\xA9glages du courriel sont refus\xC3\xA9s : " + why + ".";
+        return false;
+    }
+    const std::string to = trimmed(m.to);
+    if (!plausibleAddress(to)) {
+        r.message = "L'adresse du destinataire " + cite(oneLine(to)) + " n'est pas valable : rien n'est envoy\xC3\xA9.";
+        return false;
+    }
+    if (m.body.size() > kMaxBody) {
+        r.message = "Le texte du courriel est trop long (4 Mo au plus) : rien n'est envoy\xC3\xA9.";
+        return false;
+    }
+    if (!crypto::init()) {
+        r.message = "Le hasard du syst\xC3\xA8me est indisponible (libsodium) : rien n'est envoy\xC3\xA9.";
+        return false;
+    }
+    return true;
+}
+// Une session SMTP (et, sous Windows, une seconde si l'autorite manquait au magasin ROOT). `secret` : le mot de
+// passe, ou (oauth) le jeton d'acces.
+SendResult deliver(const Config& c, const std::string& secret, const Message& m, int timeoutMs, bool oauth, const std::string& account) {
+    const int t = timeoutMs > 0 ? std::max(500, timeoutMs) : kDefaultTimeoutMs;
+    const std::string to = trimmed(m.to);
+    const std::string data = composeMessage(c, m);
+    std::vector<Bytes> extra;
+    Attempt a = Session(c, t, oauth, account).run(secret, data, to, extra);
+#if defined(_WIN32)
+    // Une autorite que le magasin ROOT n'a pas encore : Windows verifie la chaine (et peut la telecharger) ; s'il la
+    // reconnait pour ce nom, sa racine est ajoutee et mbedTLS verifie de nouveau, tout.
+    if (!a.result.ok && a.untrustedOnly && !a.chain.empty()) {
+        Bytes root;
+        if (windowsRootFor(a.chain, c.host, t, root)) {
+            extra.push_back(std::move(root));
+            a = Session(c, t, oauth, account).run(secret, data, to, extra);
+        }
+    }
+#endif
+    return a.result;
+}
+// auth "microsoft" : la connexion gardee -> un jeton d'acces (la rotation gardee) -> XOAUTH2.
+SendResult sendMicrosoft(const std::string& folder, const Config& c, const Message& m, int timeoutMs) {
+    SendResult r;
+    if (!precheck(c, m, r)) return r;
+    Tokens t;
+    std::string account, note;
+    {
+        std::lock_guard<std::mutex> lock(microsoftLock());
+        Stored st;
+        std::string why;
+        if (!readStored(folder, st, &why)) {
+            r.message = why;
+            return r;
+        }
+        if (st.clientId != c.clientId || st.tenant != c.tenant || st.authority != c.authority) {
+            r.message = "La connexion Microsoft enregistr\xC3\xA9" "e a \xC3\xA9t\xC3\xA9 faite pour une autre application ou un autre locataire que ceux des "
+                        "r\xC3\xA9glages : reconnecte-toi (" + std::string(kSignInPath) + ") ; rien n'est envoy\xC3\xA9.";
+            return r;
+        }
+        const Refresh rr = refreshTokens(c, st.refresh, t, &why, timeoutMs);
+        if (rr != Refresh::Ok) {
+            if (rr == Refresh::Dead) {   // une connexion morte : l'interface montre de nouveau << Se connecter >>
+                std::error_code ec;
+                fs::remove(P(microsoftPath(folder)), ec);
+            }
+            r.message = why;
+            return r;
+        }
+        account = st.account;
+        if (!t.refresh.empty() && t.refresh != st.refresh) {   // la rotation : le nouveau jeton remplace l'ancien
+            wipe(st.refresh);
+            st.refresh = t.refresh;
+            if (!writeStored(folder, st, &why))
+                note = " (Le nouveau jeton de Microsoft n'a pas pu \xC3\xAAtre gard\xC3\xA9 : " + why + " ; si le prochain envoi \xC3\xA9" "choue, reconnecte-toi.)";
+        }
+    }
+    r = deliver(c, t.access, m, timeoutMs, /*oauth=*/true, account);
+    r.message += note;
+    return r;
 }
 
 } // namespace
@@ -998,6 +1631,7 @@ bool plausibleAddress(std::string_view s) {
 // ============================================================================ la configuration
 std::string configPath(const std::string& folder) { return deploy::joinPath(folder, kConfigFile); }
 std::string passwordPath(const std::string& folder) { return deploy::joinPath(folder, kPasswordFile); }
+std::string microsoftPath(const std::string& folder) { return deploy::joinPath(folder, kMicrosoftFile); }
 
 int defaultPort(std::string_view security) noexcept { return security == "tls" ? 465 : 587; }
 
@@ -1018,7 +1652,44 @@ bool validate(const Config& in, std::string* why) {
     if (c.user.empty()) return fail(why, "l'identifiant SMTP est vide (le plus souvent, ton adresse)");
     if (hasControl(c.user) || c.user.size() > 254) return fail(why, "l'identifiant SMTP " + cite(oneLine(c.user)) + " n'est pas valable");
     if (!c.caFile.empty() && !isFile(c.caFile)) return fail(why, "le fichier d'autorit\xC3\xA9s " + cite(c.caFile) + " est introuvable");
+    // 1.38.0 : l'identification
+    if (c.auth != kAuthPassword && c.auth != kAuthMicrosoft)
+        return fail(why, "l'identification " + cite(clipUtf8(oneLine(c.auth), 40)) +
+                             " est refus\xC3\xA9" "e : \xC2\xAB motdepasse \xC2\xBB (un mot de passe d'application) ou \xC2\xAB microsoft \xC2\xBB (un compte Microsoft, OAuth 2.0)");
+    if (!checkMicrosoft(c, c.auth == kAuthMicrosoft, why)) return false;
+    if (c.auth == kAuthMicrosoft && !plausibleAddress(c.user))
+        return fail(why, "avec un compte Microsoft, l'identifiant SMTP est l'adresse de ta bo\xC3\xAEte (par exemple prenom.nom@outlook.fr) : " +
+                             cite(clipUtf8(oneLine(c.user), 254)) + " n'en est pas une");
     return true;
+}
+
+Config microsoftPreset(bool personal, Config base) {
+    base.host = personal ? kOutlookHost : kOffice365Host;
+    base.port = 587;
+    base.security = "starttls";
+    base.auth = kAuthMicrosoft;
+    base.tenant = personal ? "consumers" : "organizations";
+    return base;
+}
+
+bool microsoftHost(std::string_view host) noexcept {
+    while (!host.empty() && (host.back() == '.' || host.back() == ' ')) host.remove_suffix(1);
+    while (!host.empty() && host.front() == ' ') host.remove_prefix(1);
+    const auto sameText = [](std::string_view a, std::string_view b) noexcept {
+        if (a.size() != b.size()) return false;
+        for (std::size_t i = 0; i < a.size(); ++i) {
+            char x = a[i];
+            if (x >= 'A' && x <= 'Z') x = static_cast<char>(x - 'A' + 'a');
+            if (x != b[i]) return false;
+        }
+        return true;
+    };
+    for (std::string_view d : {std::string_view("outlook.com"), std::string_view("office365.com"), std::string_view("hotmail.com"),
+                               std::string_view("live.com"), std::string_view("office.com")}) {
+        if (sameText(host, d)) return true;
+        if (host.size() > d.size() + 1 && host[host.size() - d.size() - 1] == '.' && sameText(host.substr(host.size() - d.size()), d)) return true;
+    }
+    return false;
 }
 
 bool loadConfig(const std::string& folder, Config& out, std::string* why) {
@@ -1040,6 +1711,11 @@ bool loadConfig(const std::string& folder, Config& out, std::string* why) {
     c.fromName = v.str("nom");
     c.user = v.str("identifiant");
     c.caFile = v.str("autorites");
+    // 1.38.0 : absentes d'un mail.json de 1.37 -> les defauts (mot de passe d'application)
+    c.auth = v.str("authentification", kAuthPassword);
+    c.clientId = v.str("id_application");
+    c.tenant = v.str("locataire", "common");
+    c.authority = v.str("autorite");
     c = normalized(c);
     std::string w;
     if (!validate(c, &w)) return fail(why, path + " : " + w);
@@ -1064,6 +1740,11 @@ bool saveConfig(const std::string& folder, const Config& in, std::string* why) {
     if (!c.fromName.empty()) v.set("nom", c.fromName);
     v.set("identifiant", c.user);
     if (!c.caFile.empty()) v.set("autorites", c.caFile);
+    // 1.38.0 : seulement hors des defauts (un mail.json de 1.37 se reecrit a l'identique)
+    if (c.auth != kAuthPassword) v.set("authentification", c.auth);
+    if (!c.clientId.empty()) v.set("id_application", c.clientId);
+    if (c.tenant != "common") v.set("locataire", c.tenant);
+    if (!c.authority.empty()) v.set("autorite", c.authority);
     const std::string text = core::json::write(v, true) + "\n";
     return writePrivate(configPath(folder), Bytes(text.begin(), text.end()), why);
 }
@@ -1092,7 +1773,8 @@ bool hasPassword(const std::string& folder) {
 bool forget(const std::string& folder, std::string* why) {
     bool ok = true;
     std::string w;
-    for (const std::string& path : {configPath(folder), passwordPath(folder)}) {
+    std::lock_guard<std::mutex> lock(microsoftLock());
+    for (const std::string& path : {configPath(folder), passwordPath(folder), microsoftPath(folder)}) {
         std::error_code ec;
         fs::remove(P(path), ec);
         if (ec || isFile(path)) {
@@ -1104,13 +1786,177 @@ bool forget(const std::string& folder, std::string* why) {
     return ok;
 }
 
+bool readyToSend(const std::string& folder) {
+    Config c;
+    if (!isFile(configPath(folder)) || !loadConfig(folder, c, nullptr)) return false;
+    return c.auth == kAuthMicrosoft ? microsoftConnected(folder) : hasPassword(folder);
+}
+
+// ============================================================================ 1.38.0 : le compte Microsoft
+bool microsoftStart(const Config& in, DeviceCode& out, std::string* why, int timeoutMs) {
+    const Config c = normalized(in);
+    std::string w;
+    if (!checkMicrosoft(c, /*requireId=*/true, &w)) return fail(why, "Les r\xC3\xA9glages du compte Microsoft sont refus\xC3\xA9s : " + w + ".");
+    std::string body;
+    appendField(body, "client_id", c.clientId);
+    appendField(body, "scope", kSignInScope);
+    const OAuthReply r = postForm(endpoint(c, "devicecode"), body, timeoutMs, /*french=*/true);
+    if (!r.answered) return fail(why, unreachable(c, r.failure, "pour commencer la connexion", "v\xC3\xA9rifie ta connexion \xC3\xA0 Internet"));
+    if (r.status != 200 || !r.json.isObject() || r.json.has("error")) return fail(why, oauthRefusal(c, r, oauthError(r, {}), Stage::Start));
+    DeviceCode dc;
+    dc.userCode = trimmed(r.json.str("user_code"));
+    dc.verificationUri = trimmed(r.json.str("verification_uri"));
+    if (dc.verificationUri.empty()) dc.verificationUri = trimmed(r.json.str("verification_url"));   // l'ancienne autorite (v1)
+    dc.message = clipUtf8(oneLine(r.json.str("message")), 600);
+    dc.deviceCode = r.json.str("device_code");
+    dc.interval = static_cast<int>(std::clamp<long long>(intOf(r.json, "interval", 5), 1, 60));
+    dc.expiresIn = static_cast<int>(std::clamp<long long>(intOf(r.json, "expires_in", 900), 60, 3600));
+    // Ce qui sera montre : un code court (lettres, chiffres, -) et une adresse https (http:// vers ce poste : les essais).
+    const bool codeOk = !dc.userCode.empty() && dc.userCode.size() <= 64 &&
+                        std::all_of(dc.userCode.begin(), dc.userCode.end(), [](char ch) { return std::isalnum(static_cast<unsigned char>(ch)) || ch == '-'; });
+    app::ai::Url u;
+    const bool uriOk = !dc.verificationUri.empty() && dc.verificationUri.size() <= 300 && isAscii(dc.verificationUri) &&
+                       !hasControl(dc.verificationUri) && dc.verificationUri.find(' ') == std::string::npos &&
+                       app::ai::parseUrl(dc.verificationUri, u, nullptr);
+    if (!codeOk || !uriOk || !tokenText(dc.deviceCode)) {
+        wipe(dc.deviceCode);
+        return fail(why, "Microsoft a r\xC3\xA9pondu sans code de connexion lisible : r\xC3\xA9" "essaie dans quelques minutes.");
+    }
+    out = std::move(dc);
+    return true;
+}
+
+std::string microsoftInstructions(const DeviceCode& dc) {
+    const int minutes = std::max(1, (dc.expiresIn + 59) / 60);
+    return "Ouvre " + dc.verificationUri + " dans ton navigateur, tape le code " + dc.userCode +
+           ", puis connecte-toi avec la bo\xC3\xAEte qui enverra les mails (le code est valable " + std::to_string(minutes) + " min).";
+}
+
+PollResult microsoftPoll(const std::string& folder, const Config& in, const DeviceCode& dc, std::string* why, int timeoutMs) {
+    PollResult res;
+    const auto end = [&](PollState state, std::string text) {
+        res.state = state;
+        res.message = std::move(text);
+        if (why && state != PollState::Pending && state != PollState::Done) *why = res.message;
+        return res;
+    };
+    const Config c = normalized(in);
+    std::string w;
+    if (!checkMicrosoft(c, /*requireId=*/true, &w)) return end(PollState::Error, "Les r\xC3\xA9glages du compte Microsoft sont refus\xC3\xA9s : " + w + ".");
+    if (!tokenText(dc.deviceCode))
+        return end(PollState::Error, "Aucune connexion \xC3\xA0 Microsoft n'est en cours : recommence (" + std::string(kSignInPath) + ").");
+    (void)crypto::init();
+    std::string body;
+    body.reserve(dc.deviceCode.size() * 3 + 192);
+    appendField(body, "grant_type", kDeviceGrant);
+    appendField(body, "client_id", c.clientId);
+    appendField(body, "device_code", dc.deviceCode);
+    const OAuthReply r = postForm(endpoint(c, "token"), body, timeoutMs, false);
+    if (!r.answered)
+        return end(PollState::Error, unreachable(c, r.failure, "pendant la connexion", "v\xC3\xA9rifie ta connexion \xC3\xA0 Internet, puis recommence"));
+    const int interval = std::clamp(dc.interval, 1, 60);
+    if (r.status == 200 && r.json.isObject() && !r.json.has("error")) {
+        Tokens t;
+        if (!readTokens(r.json, t, /*needRefresh=*/true, &w)) return end(PollState::Error, "La connexion \xC3\xA0 Microsoft a \xC3\xA9" "chou\xC3\xA9 : " + w + ".");
+        Stored st;
+        st.account = t.account;
+        st.clientId = c.clientId;
+        st.tenant = c.tenant;
+        st.authority = c.authority;
+        st.refresh = t.refresh;
+        st.since = static_cast<std::int64_t>(std::time(nullptr));
+        {
+            std::lock_guard<std::mutex> lock(microsoftLock());
+            if (!writeStored(folder, st, &w))
+                return end(PollState::Error, "La connexion \xC3\xA0 Microsoft a r\xC3\xA9ussi, mais elle ne peut pas \xC3\xAAtre gard\xC3\xA9" "e sur ce poste (" + w + ") : recommence.");
+        }
+        res.account = st.account;
+        std::string text = st.account.empty() ? std::string("La connexion \xC3\xA0 Microsoft est faite : les mails partiront de ta bo\xC3\xAEte.")
+                                              : "La connexion \xC3\xA0 Microsoft est faite (compte " + st.account + ") : les mails partiront de cette bo\xC3\xAEte.";
+        if (!st.account.empty() && !c.user.empty() && lower(st.account) != lower(c.user))
+            text += " Attention : l'identifiant SMTP r\xC3\xA9gl\xC3\xA9 est " + c.user + " ; mets plut\xC3\xB4t " + st.account + ", l'adresse du compte connect\xC3\xA9.";
+        return end(PollState::Done, std::move(text));
+    }
+    const OAuthError e = oauthError(r, {&dc.deviceCode});
+    if (e.code == "authorization_pending") {
+        res.waitSeconds = interval;
+        return end(PollState::Pending, "Microsoft attend que tu tapes le code dans ton navigateur.");
+    }
+    if (e.code == "slow_down") {
+        res.waitSeconds = std::min(interval + 5, 120);
+        res.slowDown = true;
+        return end(PollState::Pending, "Microsoft demande d'espacer les v\xC3\xA9rifications : la prochaine dans " + std::to_string(res.waitSeconds) + " s.");
+    }
+    if (e.code == "authorization_declined" || e.code == "access_denied" || e.aadsts == 65004)
+        return end(PollState::Refused, "Tu as refus\xC3\xA9 la connexion dans le navigateur : rien n'est enregistr\xC3\xA9 (recommence quand tu veux : " +
+                                           std::string(kSignInPath) + ").");
+    if (e.code == "expired_token" || e.code == "code_expired")
+        return end(PollState::Expired, "Le code de connexion a expir\xC3\xA9 : recommence (" + std::string(kSignInPath) + ").");
+    return end(PollState::Error, oauthRefusal(c, r, e, Stage::Poll));
+}
+
+PollResult microsoftWait(const std::string& folder, const Config& c, DeviceCode dc, const std::function<bool()>& stop, int timeoutMs) {
+    const auto deadline = Clock::now() + std::chrono::seconds(std::max(1, dc.expiresIn));
+    int wait = std::clamp(dc.interval, 1, 60);
+    for (;;) {
+        const auto next = Clock::now() + std::chrono::seconds(wait);
+        while (Clock::now() < next) {
+            if (stop && stop()) {
+                PollResult r;
+                r.state = PollState::Cancelled;
+                r.message = "La connexion \xC3\xA0 Microsoft est arr\xC3\xAAt\xC3\xA9" "e : rien n'est enregistr\xC3\xA9.";
+                return r;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (Clock::now() >= deadline) {
+            PollResult r;
+            r.state = PollState::Expired;
+            r.message = "Le code de connexion a expir\xC3\xA9 : recommence (" + std::string(kSignInPath) + ").";
+            return r;
+        }
+        PollResult r = microsoftPoll(folder, c, dc, nullptr, timeoutMs);
+        if (r.state != PollState::Pending) return r;
+        wait = std::clamp(r.waitSeconds, 1, 120);
+        dc.interval = wait;
+    }
+}
+
+bool microsoftConnected(const std::string& folder) {
+    std::error_code ec;
+    const fs::path p = P(microsoftPath(folder));
+    return fs::is_regular_file(p, ec) && fs::file_size(p, ec) > 0 && !ec;
+}
+
+bool microsoftLink(const std::string& folder, MicrosoftLink& out, std::string* why) {
+    std::lock_guard<std::mutex> lock(microsoftLock());
+    Stored st;
+    if (!readStored(folder, st, why)) return false;
+    out.account = st.account;
+    out.clientId = st.clientId;
+    out.tenant = st.tenant;
+    out.authority = st.authority;
+    out.since = st.since;
+    return true;
+}
+
+bool microsoftForget(const std::string& folder, std::string* why) {
+    std::lock_guard<std::mutex> lock(microsoftLock());
+    const std::string path = microsoftPath(folder);
+    std::error_code ec;
+    fs::remove(P(path), ec);
+    if (ec || isFile(path)) return fail(why, "impossible d'effacer " + path + (ec ? " (" + ec.message() + ")" : std::string()));
+    return true;
+}
+
 // ============================================================================ l'envoi
 SendResult sendWith(const Config& in, const std::string& password, const Message& m, int timeoutMs) {
     SendResult r;
     const Config c = normalized(in);
-    std::string why;
-    if (!validate(c, &why)) {
-        r.message = "Les r\xC3\xA9glages du courriel sont refus\xC3\xA9s : " + why + ".";
+    if (!precheck(c, m, r)) return r;
+    if (c.auth == kAuthMicrosoft) {
+        r.message = "Ces r\xC3\xA9glages s'identifient par un compte Microsoft, pas par un mot de passe : le courriel part avec la connexion "
+                    "Microsoft enregistr\xC3\xA9" "e (" + std::string(kSignInPath) + ").";
         return r;
     }
     if (password.empty()) {
@@ -1121,35 +1967,18 @@ SendResult sendWith(const Config& in, const std::string& password, const Message
         r.message = "Le mot de passe d'application contient un retour \xC3\xA0 la ligne ou un caract\xC3\xA8re invisible : saisis-le de nouveau.";
         return r;
     }
-    const std::string to = trimmed(m.to);
-    if (!plausibleAddress(to)) {
-        r.message = "L'adresse du destinataire " + cite(oneLine(to)) + " n'est pas valable : rien n'est envoy\xC3\xA9.";
+    return deliver(c, password, m, timeoutMs, /*oauth=*/false, {});
+}
+
+SendResult sendWithToken(const Config& in, const std::string& accessToken, const Message& m, int timeoutMs) {
+    SendResult r;
+    const Config c = normalized(in);
+    if (!precheck(c, m, r)) return r;
+    if (!tokenText(accessToken)) {
+        r.message = "Le jeton d'acc\xC3\xA8s est vide ou illisible : rien n'est envoy\xC3\xA9.";
         return r;
     }
-    if (m.body.size() > kMaxBody) {
-        r.message = "Le texte du courriel est trop long (4 Mo au plus) : rien n'est envoy\xC3\xA9.";
-        return r;
-    }
-    if (!crypto::init()) {
-        r.message = "Le hasard du syst\xC3\xA8me est indisponible (libsodium) : rien n'est envoy\xC3\xA9.";
-        return r;
-    }
-    const int t = timeoutMs > 0 ? std::max(500, timeoutMs) : kDefaultTimeoutMs;
-    const std::string data = composeMessage(c, m);
-    std::vector<Bytes> extra;
-    Attempt a = Session(c, t).run(password, data, to, extra);
-#if defined(_WIN32)
-    // Une autorite que le magasin ROOT n'a pas encore : Windows verifie la chaine (et peut la telecharger) ; s'il la
-    // reconnait pour ce nom, sa racine est ajoutee et mbedTLS verifie de nouveau, tout.
-    if (!a.result.ok && a.untrustedOnly && !a.chain.empty()) {
-        Bytes root;
-        if (windowsRootFor(a.chain, c.host, t, root)) {
-            extra.push_back(std::move(root));
-            a = Session(c, t).run(password, data, to, extra);
-        }
-    }
-#endif
-    return a.result;
+    return deliver(c, accessToken, m, timeoutMs, /*oauth=*/true, {});
 }
 
 SendResult send(const std::string& folder, const Message& m, int timeoutMs) {
@@ -1164,6 +1993,7 @@ SendResult send(const std::string& folder, const Message& m, int timeoutMs) {
         r.message = "Les r\xC3\xA9glages du courriel sont illisibles (" + why + ") : r\xC3\xA8gle-les de nouveau.";
         return r;
     }
+    if (c.auth == kAuthMicrosoft) return sendMicrosoft(folder, c, m, timeoutMs);   // 1.38.0
     std::string password;
     if (!readPassword(folder, password, &why)) {
         r.message = why;

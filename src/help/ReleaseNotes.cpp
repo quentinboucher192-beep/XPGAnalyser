@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.37.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.38.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.37.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 9 h 56"},
     {"1.36.0", "07/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 0 h 14"},
     {"1.35.1", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 21 h 57"},
     {"1.35.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 18 h 19"},
@@ -181,6 +182,29 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.38.0 : les notifications, les offres et les reductions, les captures qu'on agrandit, Mes appareils, copier le code
+        note("1.38.0", "Projet", Kind::New,
+         "LES NOTIFICATIONS : l'accueil (Notifications, et le nombre non lu), Aide \xE2\x80\xBA Notifications\xE2\x80\xA6 et la cloche du projet. Ta licence "
+         "(install\xC3\xA9" "e, renouvel\xC3\xA9" "e, bient\xC3\xB4t finie, r\xC3\xA9voqu\xC3\xA9" "e), les offres de l'\xC3\xA9" "diteur et ses annonces y arrivent - ici, "
+         "jamais par mail. Hors connexion, elles arrivent \xC3\xA0 ta prochaine connexion.",
+         "licence", ""),
+        note("1.38.0", "Projet", Kind::New,
+         "LES OFFRES QUI CHANGENT : quand l'\xC3\xA9" "diteur change les fonctionnalit\xC3\xA9s d'une offre, une notification dit l'avant et l'apr\xC3\xA8s (ce qui "
+         "est ajout\xC3\xA9, ce qui est retir\xC3\xA9). Une r\xC3\xA9" "duction : la boutique barre l'ancien prix et montre le nouveau jusqu'\xC3\xA0 sa fin.",
+         "licence", ""),
+        note("1.38.0", "Projet", Kind::New,
+         "LES CAPTURES S'AGRANDISSENT : dans la fen\xC3\xAAtre Licence (\xC3\x89" "ditions, Fonctionnalit\xC3\xA9s, et la boutique de Demander ma licence, "
+         "o\xC3\xB9 l'offre choisie montre ses fonctionnalit\xC3\xA9s \xC3\xA0 droite), la molette zoome sur la capture, glisser la d\xC3\xA9place, un double clic "
+         "l'ajuste et un clic l'ouvre en grand.",
+         "licence", ""),
+        note("1.38.0", "Projet", Kind::New,
+         "MES APPAREILS : une licence en ligne montre tous ses PC (celui-ci d'abord, et il compte) : \xC2\xAB 3 PC sur 20 \xC2\xBB, quand chacun a \xC3\xA9t\xC3\xA9 "
+         "activ\xC3\xA9 et vu, jusqu'\xC3\xA0 quand, une place gard\xC3\xA9" "e par un PC lib\xC3\xA9r\xC3\xA9.",
+         "licence", ""),
+        note("1.38.0", "Projet", Kind::Fixed,
+         "COPIER LE CODE : la fen\xC3\xAAtre \xC2\xAB Ta licence en ligne est activ\xC3\xA9" "e \xC2\xBB a un bouton Copier le code. Mon profil coche ton courriel : "
+         "une adresse valide, puis v\xC3\xA9rifi\xC3\xA9" "e quand un mail de l'\xC3\xA9" "diteur y est parti.",
+         "licence", ""),
         // 1.37.0 : la boutique, Mon profil, la licence en ligne activee seule, l'apercu des fonctionnalites
         note("1.37.0", "Projet", Kind::New,
          "CHOISIS TA LICENCE : Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence montre les \xC3\xA9" "ditions en cartes (leur prix, ce qu'elles donnent : "

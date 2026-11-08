@@ -23,6 +23,7 @@
 //    forme courte puis le cadenas seul quand c'est serre, un clic : help.licence).
 // =============================================================================
 #include "../src/app/Licence.hpp"
+#include "../src/app/Notices.hpp"           // 1.38.0 : les notifications generales
 #include "../src/app/LicenceService.hpp"   // 1.36.0 : la demande en ligne
 #include "../src/app/StartPage.hpp"             // 1.35.0 : l'encart de la licence sur l'accueil (le menu principal)
 #include "../src/app/TopBar.hpp"                // 1.35.0 : la licence active dans le bandeau haut
@@ -500,6 +501,168 @@ int main(int argc, char** argv) {
         unsetenv("XDG_CONFIG_HOME");
     }
 #endif
+
+    // ---- 1.38.0 : le registre - une reduction, les annonces ----
+    std::printf("-- 1.38.0 : le registre (reduction, annonces)\n");
+    {
+        const std::string text = readFile(repo / "tests" / "fixtures" / "licences" / "registre-exemple.json");
+        lic::Registry r;
+        std::string why;
+        check(lic::parseRegistry(text, r, &why) && r.editions.size() >= 2, "le registre d'exemple se lit (" + why + ")");
+        auto& e = r.editions[1];
+        e.promoPrice = "390 \xE2\x82\xAC HT / an";
+        e.promoUntil = 1795000000;
+        const lic::Announcement ann{"R12-" + e.id, "R\xC3\xA9" "duction", "Au lieu de 490.", e.id, 1790000000, 1795000000};
+        r.announcements.push_back(ann);
+        const std::string out = lic::writeRegistry(r);
+        lic::Registry back;
+        check(lic::parseRegistry(out, back, &why) && back.editions[1].promoPrice == e.promoPrice && back.editions[1].promoUntil == e.promoUntil &&
+                  back.announcements.size() == 1 && back.announcements[0] == ann,
+              "ecrit puis relu : le prix reduit, sa fin, l'annonce (" + why + ")");
+        check(lic::writeRegistry(back) == out, "le meme texte (l'ordre fixe)");
+        const auto refused = [&](std::string t, const char* what) {
+            lic::Registry x;
+            std::string w;
+            check(!lic::parseRegistry(t, x, &w), std::string(what) + " : refuse (" + w + ")");
+        };
+        {
+            std::string t = out;
+            const auto p = t.find("\"promo_until\"");
+            t.erase(p, t.find('\n', p) - p + 1);
+            const auto q = t.rfind("\"promo_price\"", p);
+            const auto lineEnd = t.find('\n', q);
+            if (t[lineEnd - 1] == ',') t.erase(lineEnd - 1, 1);   // le prix reduit, sans sa fin
+            refused(t, "un prix reduit sans fin");
+        }
+        {
+            std::string t = out;
+            const auto p = t.find("\"R12-");
+            t.replace(p + 1, 4, "R 12");
+            refused(t, "un identifiant d'annonce avec une espace");
+        }
+        {
+            std::string t = out;
+            const auto p = t.find("\"edition\": \"" + e.id + "\"");
+            t.replace(p, 13 + e.id.size(), "\"edition\": \"NULLE_PART\"");
+            refused(t, "une annonce d'une offre absente");
+        }
+    }
+
+    // ---- 1.38.0 : les notifications des offres, des annonces, de la licence ----
+    std::printf("-- 1.38.0 : les notifications (avant / apres)\n");
+    {
+        namespace w = app::licence::watch;
+        const std::int64_t now = 1790000000;
+        w::Seen before;
+        before.known = true;
+        before.registry = 5;
+        before.names = {{"a", "Analyse"}, {"b", "Biblioth\xC3\xA8que"}, {"c", "Captures"}, {"d", "D\xC3\xA9ploiement"}};
+        before.offers.push_back({"PRO", "Pro", "490 \xE2\x82\xAC", "", {"a", "b", "c"}, 0, false});
+        before.offers.push_back({"OLD", "Ancienne", "", "", {"a"}, 0, false});
+        before.licenseId = "XPG-2026-00042";
+        before.edition = "PRO";
+        before.editionLabel = "Pro";
+        before.expiresAt = now + 100 * 86400;
+        before.status = static_cast<int>(lic::LicenseStatus::Valid);
+        w::Seen after = before;
+        after.registry = 6;
+        after.offers[0].features = {"a", "b", "d"};
+        after.offers[1].retired = true;
+        after.offers.push_back({"TEAM", "\xC3\x89quipe", "990 \xE2\x82\xAC", "", {"a", "b", "c", "d"}, 0, false});
+        after.current.emplace_back("A1", "R\xC3\xA9" "duction Pro", "Jusqu'au 30.", "PRO", now + 86400);
+        after.current.emplace_back("A0", "Finie", "", "", now - 10);
+        const auto items = w::compare(before, after, now);
+        const auto find = [&](const std::string& word) -> const app::notices::Item* {
+            for (const auto& n : items)
+                if (has(n.title, word)) return &n;
+            return nullptr;
+        };
+        const auto* changed = find("modifi");
+        check(changed && has(changed->title, "Pro") && has(changed->title, "ta licence") && has(changed->detail, "D\xC3\xA9ploiement") &&
+                  has(changed->detail, "Avant : Analyse, Biblioth\xC3\xA8que, Captures") && has(changed->detail, "Apr\xC3\xA8s : Analyse, Biblioth\xC3\xA8que, D\xC3\xA9ploiement") &&
+                  changed->tone == "warning" && changed->action == app::notices::toLicence(app::licence::kTabEditions),
+              "une offre modifiee : l'avant et l'apres, ajoutee et retiree, la sienne en attention");
+        check(find("Nouvelle offre") != nullptr && find("retir\xC3\xA9" "e : Ancienne") != nullptr, "une offre nouvelle, une offre retiree");
+        const auto* ann = find("R\xC3\xA9" "duction Pro");
+        check(ann && ann->category == "Annonce" && ann->action == app::notices::toLicence(app::licence::kTabRequest) && find("Finie") == nullptr,
+              "l'annonce en cours (son bouton : les offres), pas celle qui est finie");
+        check(after.announcements.size() == 2, "les deux annonces sont retenues comme vues");
+        check(items.size() == 4, "rien d'autre (" + std::to_string(items.size()) + ")");
+        w::Seen again = after;
+        check(w::compare(after, again, now).empty(), "rien de neuf : aucune notification (une annonce une seule fois)");
+        // la licence
+        w::Seen lic2 = after;
+        lic2.expiresAt = now + 465 * 86400;
+        auto l1 = w::compare(after, lic2, now);
+        check(l1.size() == 1 && has(l1[0].title, "renouvel") && l1[0].tone == "ok", "la licence renouvelee");
+        w::Seen lic3 = lic2;
+        lic3.status = static_cast<int>(lic::LicenseStatus::Revoked);
+        auto l2 = w::compare(lic2, lic3, now);
+        check(l2.size() == 1 && has(l2[0].title, "r\xC3\xA9voqu") && l2[0].tone == "error", "la licence revoquee");
+        w::Seen soon = after;
+        soon.expiresAt = now + 5 * 86400;
+        w::Seen soonBefore = soon;
+        auto l3 = w::compare(soonBefore, soon, now);
+        check(l3.size() == 1 && has(l3[0].title, "finit le") && soon.remindedEnd == soon.expiresAt, "bientot finie : dite une fois");
+        w::Seen soon2 = soon;
+        check(w::compare(soon, soon2, now + 3600).empty(), "... pas deux");
+        w::Seen first;   // le premier lancement : rien des offres ni de la licence
+        w::Seen now1 = after;
+        auto f = w::compare(first, now1, now);
+        check(f.size() == 1 && f[0].category == "Annonce", "le premier lancement : seulement l'annonce en cours");
+        // garde sur le disque
+        const std::string file = U(base / "vu-licence.json");
+        check(w::saveSeen(file, after), "l'etat vu s'ecrit");
+        w::Seen read;
+        check(w::loadSeen(file, read) && read.registry == 6 && read.offers.size() == after.offers.size() && read.offers[0] == after.offers[0] &&
+                  read.announcements == after.announcements && read.licenseId == after.licenseId && read.expiresAt == after.expiresAt,
+              "et se relit tel quel");
+    }
+
+    // ---- 1.38.0 : le carnet general (un second journal, le meme mecanisme) ----
+    std::printf("-- 1.38.0 : le carnet des notifications generales\n");
+    {
+        app::ai::notifs::resetForTests();
+        app::notices::resetForTests();
+        const auto id1 = app::notices::post({0, 0, "Licence", "Licence install\xC3\xA9" "e", "jusqu'au 31/12/2027", "Voir ma licence", "licence:1", "ok", "k1"});
+        (void)app::notices::post({0, 0, "Offres", "Offre modifi\xC3\xA9" "e", "Avant / apr\xC3\xA8s", "", "", "info", ""});
+        check(app::notices::size() == 2 && app::notices::unread() == 2 && app::ai::notifs::size() == 0, "deux notifications generales ; l'Assistant n'en voit aucune");
+        (void)app::notices::post({0, 0, "Licence", "Licence install\xC3\xA9" "e", "encore", "", "", "ok", "k1"});
+        check(app::notices::size() == 2 && app::notices::find(id1) && app::notices::find(id1)->count == 2, "la meme cle remplace (x2)");
+        check(app::notices::markRead(id1) && app::notices::unread() == 1 && app::notices::clearRead() == 1 && app::notices::size() == 1, "lue, effacee");
+        const std::string file = U(base / "notifications.json");
+        app::notices::open(file);
+        (void)app::notices::post({0, 0, "Annonce", "R\xC3\xA9" "duction", "jusqu'au 30", "", "", "info", "annonce:A1"});
+        check(app::notices::waitIdle(5000) && fs::exists(fs::path(file)), "ecrit dans son fichier");
+        app::notices::close();
+        app::notices::resetForTests();
+        app::notices::open(file);
+        check(app::notices::waitIdle(5000) && app::notices::size() == 2, "relu a la reouverture (" + std::to_string(app::notices::size()) + ")");
+        app::notices::close();
+        app::notices::resetForTests();
+        const auto t = app::notices::parseAction("licence:7");
+        check(t.kind == "licence" && t.tab == 7 && app::notices::parseAction("licence:-1").tab == -1 && app::notices::parseAction("conv:x").kind.empty(),
+              "le bouton : licence:<onglet>");
+    }
+
+    // ---- 1.38.0 : les PC d'une licence en ligne (Mes appareils) ----
+    std::printf("-- 1.38.0 : les PC d'une licence en ligne\n");
+    {
+        namespace ls = app::licence::service;
+        const std::string k1(64, 'a'), k2(64, 'b');
+        const std::string postes = "{\"XPG-2026-00042\": {\"max\": 20, \"type\": \"temporary\", \"utilises\": 2, \"total\": 3, \"liste\": ["
+                                   "{\"nom\": \"PC-ATELIER-1\", \"cle\": \"" + k1 + "\", \"activee\": \"2026-11-02T08:14:03Z\", \"vue\": \"2026-11-08T13:05:41Z\", "
+                                   "\"jusqu_a\": \"2026-12-08T13:05:41Z\", \"etat\": \"active\", \"ce_pc\": true},"
+                                   "{\"nom\": \"\", \"cle\": \"" + k2 + "\", \"activee\": \"2026-10-20T09:00:00Z\", \"vue\": \"2026-11-01T12:00:00Z\", "
+                                   "\"jusqu_a\": \"2026-11-20T09:00:00Z\", \"etat\": \"liberee\", \"ce_pc\": false}]}}";
+        std::vector<ls::OnlineDevices> all;
+        check(ls::parseDevices(postes, 1790000000, all) && all.size() == 1 && all[0].licenseId == "XPG-2026-00042" && all[0].max == 20 && all[0].used == 2 &&
+                  all[0].total == 3 && all[0].list.size() == 2 && all[0].list[0].thisPc && all[0].list[0].name == "PC-ATELIER-1" &&
+                  all[0].list[1].state == "liberee" && all[0].list[1].until > 0,
+              "le champ postes se lit : ce PC d'abord, << 2 sur 20 >>, une place gardee");
+        check(ls::shortKey(k1) == "AAAAAA\xE2\x80\xA6" "AAAAAA", "la cle courte");
+        check(!ls::parseDevices("[1,2]", 0, all), "pas un objet : refuse");
+    }
 
     fs::remove_all(base, ec);
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);

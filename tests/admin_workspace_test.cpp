@@ -128,6 +128,56 @@ int main(int argc, char** argv) {
     const auto sr = ws.signRegistry(reg);
     check(sr.ok && ws.registry().number == before + 1 && ws.registry().editions[0].label == "Libre (essai modifie)", "le registre n+1, signe et range (" + sr.text() + ")");
 
+    std::printf("-- 1.38.0 : une reduction et son annonce dans le registre\n");
+    {
+        lic::Registry r2 = ws.registry();
+        const auto n0 = r2.number;
+        r2.editions.back().promoPrice = "390 \xE2\x82\xAC HT / an";
+        r2.editions.back().promoUntil = lic::systemNow() + 10 * 86400;
+        lic::Announcement a;
+        a.id = "R" + std::to_string(n0 + 1) + "-" + r2.editions.back().id;
+        a.title = "R\xC3\xA9" "duction d'essai";
+        a.text = "Jusqu'\xC3\xA0 la fin du mois (essai).";
+        a.edition = r2.editions.back().id;
+        a.at = lic::systemNow();
+        a.until = r2.editions.back().promoUntil;
+        r2.announcements.push_back(a);
+        const auto s2 = ws.signRegistry(r2);
+        check(s2.ok && ws.registry().number == n0 + 1 && ws.registry().editions.back().promoPrice == "390 \xE2\x82\xAC HT / an" &&
+                  ws.registry().announcements.size() == 1 && ws.registry().announcements[0] == a,
+              "la reduction et l'annonce signees, relues de l'archive (" + s2.text() + ")");
+        lic::Registry bad = ws.registry();
+        bad.announcements[0].edition = "INCONNUE";
+        check(!ws.signRegistry(bad).ok, "une annonce d'une offre inconnue : refusee");
+    }
+
+    std::printf("-- 1.38.0 : supprimer une licence revoquee\n");
+    {
+        const gui::LicenceEntry* other = nullptr;
+        for (const auto& l : ws.licences())
+            if (!l.revoked) other = &l;
+        if (other) {
+            const auto r = ws.deleteRevokedLicence(other->licence.licenseId);
+            check(!r.ok && has(r.message, "r\xC3\xA9voqu"), "une licence pas revoquee : refusee (" + r.message + ")");
+        }
+        const auto n = ws.licences().size();
+        const lic::Seconds issued = ws.licence("XPG-2026-00001")->licence.issuedAt;
+        const auto del = ws.deleteRevokedLicence("XPG-2026-00001");
+        check(del.ok && !ws.licence("XPG-2026-00001") && ws.licences().size() == n - 1, "la licence revoquee quitte la liste (" + del.text() + ")");
+        bool stillRevoked = false;
+        for (const auto& x : ws.revocations().revoked) stillRevoked = stillRevoked || x.licenseId == "XPG-2026-00001";
+        check(stillRevoked, "sa revocation reste dans la liste signee");
+        std::size_t inTrash = 0;
+        std::error_code ec2;
+        for (const auto& it : fs::directory_iterator(fs::path(ws.folder()) / "corbeille-licences", ec2)) inTrash += it.path().extension() == ".xpglic";
+        check(inTrash == 1, "son fichier est dans la corbeille de l'outil");
+        const auto gone = license_admin::archive::deletedLicences(ws.folder());
+        check(gone.size() == 1 && gone[0].id == "XPG-2026-00001" && license_admin::archive::isDeleted(gone, "XPG-2026-00001", issued) &&
+                  !license_admin::archive::isDeleted(gone, "XPG-2026-00001", issued + 60),
+              "retenue comme supprimee (une emission plus recente reviendrait)");
+        check(!ws.deleteRevokedLicence("XPG-2026-00001").ok, "deja supprimee : refuse");
+    }
+
     std::printf("-- l'expiration\n");
     {
         gui::LicenceDraft t;

@@ -1321,7 +1321,7 @@ MailText acceptanceMail(const licensing::License& l, const licensing::Registry* 
 }
 
 Mailer smtpMailer(const std::string& folder, const licensing::Registry* regIn) {
-    if (!mail::configured(folder) || !mail::hasPassword(folder)) return {};
+    if (!mail::configured(folder) || !mail::readyToSend(folder)) return {};   // 1.38.0 : un mot de passe ou Microsoft
     mail::Config cfg;
     if (!mail::loadConfig(folder, cfg, nullptr)) return {};
     const bool hasReg = regIn != nullptr;

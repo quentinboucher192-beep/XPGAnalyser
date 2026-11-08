@@ -37,6 +37,8 @@
 #include "../../ui/widgets/Controls.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -679,6 +681,12 @@ private:
     void testMail();
     void forgetMail();
     void mailBlocks(Blocks& bl);
+    // 1.38.0 : une boite Microsoft (Outlook.com, Hotmail, Microsoft 365) - la connexion par code (OAuth), sans mot de passe.
+    [[nodiscard]] bool microsoftChosen() const;
+    [[nodiscard]] mail::Config mailFromFields() const;
+    void connectMicrosoft();
+    void waitMicrosoft(mail::Config cfg, mail::DeviceCode dc);
+    void disconnectMicrosoft();
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -718,6 +726,18 @@ private:
     ui::Button*                     mailTest_{nullptr};
     ui::Button*                     mailForget_{nullptr};
     Last                            mail_;
+    // 1.38.0 : Microsoft
+    ui::DropDown*                   mailAuth_{nullptr};
+    ui::Button*                     mailOutlook_{nullptr};
+    ui::Button*                     mailM365_{nullptr};
+    ui::InputText*                  mailClientId_{nullptr};
+    ui::Button*                     mailConnect_{nullptr};
+    ui::Button*                     mailCancel_{nullptr};
+    ui::Button*                     mailCopyCode_{nullptr};
+    ui::Button*                     mailDisconnect_{nullptr};
+    std::shared_ptr<std::atomic<bool>> msStop_;
+    std::string                     msCode_, msUri_;   // le code a taper et son adresse (pendant l'attente)
+    bool                            msWaiting_{false};
 
     std::string              recovery_;   // le code de secours montre ("" : aucun)
     Reveal                   reveal_{Reveal::None};
@@ -813,6 +833,52 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     mailTest_->setIcon(ui::Icon::Mail);
     mailTest_->setTooltip("Un mail d'essai \xC3\xA0 ta propre adresse d'exp\xC3\xA9" "dition : il dit tout de suite si le r\xC3\xA9glage et le mot de passe marchent");
     mailForget_ = body_->make<ui::Button>("Oublier le r\xC3\xA9glage", "service.mail.oublier");
+    // 1.38.0 : Outlook, Hotmail, Microsoft 365 - la connexion Microsoft (un code a taper dans le navigateur, jamais de mot de passe).
+    mailAuth_ = body_->make<ui::DropDown>("service.mail.connexion");
+    mailAuth_->setItems({{"Mot de passe d'application (Gmail, autres)", mail::kAuthPassword},
+                         {"Compte Microsoft (Outlook, Hotmail, Microsoft 365)", mail::kAuthMicrosoft}});
+    mailAuth_->setSelectedIndex(0);
+    mailOutlook_ = body_->make<ui::Button>("Outlook / Hotmail", "service.mail.outlook");
+    mailOutlook_->setTooltip("Une bo\xC3\xAEte Outlook.com, Hotmail ou Live : smtp-mail.outlook.com, port 587, STARTTLS, connexion Microsoft");
+    mailM365_ = body_->make<ui::Button>("Microsoft 365", "service.mail.m365");
+    mailM365_->setTooltip("Une bo\xC3\xAEte professionnelle Microsoft 365 : smtp.office365.com, port 587, STARTTLS, connexion Microsoft");
+    mailClientId_ = body_->make<ui::InputText>("service.mail.id-application");
+    mailClientId_->setPlaceholder("00000000-0000-0000-0000-000000000000 (ID d'application, portail Microsoft Entra)");
+    mailClientId_->setMaxLength(36);
+    mailConnect_ = body_->make<ui::Button>("Se connecter \xC3\xA0 Microsoft\xE2\x80\xA6", "service.mail.microsoft.connecter");
+    mailConnect_->setStyle(ui::Button::Style::Primary);
+    mailConnect_->setTooltip("Demande un code \xC3\xA0 Microsoft : tu le tapes dans ton navigateur (microsoft.com/devicelogin), tu te connectes \xC3\xA0 ta bo\xC3\xAEte, "
+                             "et l'outil garde la connexion chiffr\xC3\xA9" "e sur ce poste - jamais ton mot de passe");
+    mailCancel_ = body_->make<ui::Button>("Annuler la connexion", "service.mail.microsoft.annuler");
+    mailCopyCode_ = body_->make<ui::Button>("Copier le code", "service.mail.microsoft.copier");
+    mailDisconnect_ = body_->make<ui::Button>("Se d\xC3\xA9" "connecter de Microsoft", "service.mail.microsoft.oublier");
+    links_ += mailAuth_->selectionChanged->connect([this](int) { refresh(); });
+    links_ += mailOutlook_->clicked->connect([this] {
+        const auto c = mail::microsoftPreset(true);
+        mailHost_->setText(c.host);
+        mailPort_->setText(std::to_string(c.port));
+        mailSecurity_->setSelectedIndex(c.security == "tls" ? 1 : 0);
+        mailAuth_->setSelectedIndex(1);
+        refresh();
+    });
+    links_ += mailM365_->clicked->connect([this] {
+        const auto c = mail::microsoftPreset(false);
+        mailHost_->setText(c.host);
+        mailPort_->setText(std::to_string(c.port));
+        mailSecurity_->setSelectedIndex(c.security == "tls" ? 1 : 0);
+        mailAuth_->setSelectedIndex(1);
+        refresh();
+    });
+    links_ += mailConnect_->clicked->connect([this] { connectMicrosoft(); });
+    links_ += mailCancel_->clicked->connect([this] {
+        if (msStop_) msStop_->store(true);
+    });
+    links_ += mailCopyCode_->clicked->connect([this] {
+        if (msCode_.empty()) return;
+        ui::setClipboardText(msCode_);
+        if (host_.flash) host_.flash("Code copi\xC3\xA9 : colle-le dans la page de Microsoft.", Tone::Ok);
+    });
+    links_ += mailDisconnect_->clicked->connect([this] { disconnectMicrosoft(); });
     links_ += mailGmail_->clicked->connect([this] {
         mailHost_->setText("smtp.gmail.com");
         mailPort_->setText("587");
@@ -883,8 +949,11 @@ void ServicePage::syncEnabled() {
     // 1.37.0 : le mail
     const bool mailSet = mail::configured(ws().folder());
     mailSave_->setEnabled(!b);
-    mailTest_->setEnabled(!b && mailSet && mail::hasPassword(ws().folder()));
-    mailForget_->setEnabled(!b && (mailSet || mail::hasPassword(ws().folder())));
+    mailTest_->setEnabled(!b && mailSet && mail::readyToSend(ws().folder()));   // 1.38.0 : un mot de passe OU Microsoft
+    mailForget_->setEnabled(!b && (mailSet || mail::hasPassword(ws().folder()) || mail::microsoftConnected(ws().folder())));
+    mailConnect_->setEnabled(!b);
+    mailCancel_->setEnabled(msWaiting_);   // l'attente de la connexion : le seul bouton qui reste
+    mailDisconnect_->setEnabled(!b && mail::microsoftConnected(ws().folder()));
     publicKey_->setEnabled(key);
     continue_->setEnabled(noted_->isChecked());
 }
@@ -1074,33 +1143,71 @@ void ServicePage::rebuild() {
 }
 
 // ---------------------------------------------------------------------------------------------------- 1.37.0 : le mail
+bool ServicePage::microsoftChosen() const {
+    const auto* a = mailAuth_->selectedItem();
+    return a && a->value == mail::kAuthMicrosoft;
+}
+
 void ServicePage::mailBlocks(Blocks& bl) {
     const std::string folder = ws().folder();
-    const bool set = mail::configured(folder), pw = mail::hasPassword(folder);
-    bl.card("Le mail au client", set && pw ? ui::Tone::Ok : ui::Tone::None);
+    const bool set = mail::configured(folder);
+    const bool ms = microsoftChosen();
+    bl.card("Le mail au client", set && mail::readyToSend(folder) ? ui::Tone::Ok : ui::Tone::None);
     bl.text("Quand tu acceptes une demande, un mail part tout seul au client (s'il a donn\xC3\xA9 son courriel) depuis TA bo\xC3\xAEte : sa licence, "
             "ce qu'elle ouvre, jusqu'\xC3\xA0 quand, et le code d'une licence en ligne. Pas parti (une adresse fausse, ta bo\xC3\xAEte injoignable) : le "
             "Studio du client le lui dit, lui montre son code et lui demande de v\xC3\xA9rifier son adresse. Rien de r\xC3\xA9gl\xC3\xA9 : aucun mail (le "
             "Studio montre le code).");
     mail::Config cfg;
-    if (set && mail::loadConfig(folder, cfg, nullptr))
+    const bool loaded = set && mail::loadConfig(folder, cfg, nullptr);
+    mail::MicrosoftLink link;
+    const bool linked = mail::microsoftConnected(folder) && mail::microsoftLink(folder, link, nullptr);
+    if (loaded && cfg.auth == mail::kAuthMicrosoft)
         bl.pair("\xC3\x89tat", "r\xC3\xA9gl\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) +
-                                    (pw ? std::string(" (mot de passe gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)") : std::string(" \xE2\x80\x94 il manque le mot de passe")),
-                pw ? ui::Tone::Ok : ui::Tone::Warning);
+                                    (linked ? " (connexion Microsoft" + (link.account.empty() ? std::string() : " : " + link.account) + ", gard\xC3\xA9" "e chiffr\xC3\xA9" "e sur ce poste)"
+                                            : std::string(" \xE2\x80\x94 pas encore connect\xC3\xA9 \xC3\xA0 Microsoft")),
+                linked ? ui::Tone::Ok : ui::Tone::Warning);
+    else if (loaded)
+        bl.pair("\xC3\x89tat", "r\xC3\xA9gl\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) +
+                                    (mail::hasPassword(folder) ? std::string(" (mot de passe gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)") : std::string(" \xE2\x80\x94 il manque le mot de passe")),
+                mail::hasPassword(folder) ? ui::Tone::Ok : ui::Tone::Warning);
     else
         bl.pair("\xC3\x89tat", "pas r\xC3\xA9gl\xC3\xA9 : aucun mail ne part", ui::Tone::Muted);
-    bl.field("Serveur", mailHost_, 300.f, {mailGmail_});
+    bl.field("Connexion", mailAuth_, 380.f);
+    bl.field("Serveur", mailHost_, 300.f, {mailGmail_, mailOutlook_, mailM365_});
     bl.field("Port", mailPort_, 90.f);
     bl.field("S\xC3\xA9" "curit\xC3\xA9", mailSecurity_, 300.f);
     bl.field("Adresse d'exp\xC3\xA9" "dition", mailFrom_, 360.f);
     bl.field("Nom montr\xC3\xA9", mailName_, 360.f);
     bl.field("Identifiant", mailUser_, 360.f);
-    bl.field("Mot de passe d'application", mailPassword_, 300.f, {mailShow_});
-    bl.note(pw ? "Un mot de passe est d\xC3\xA9j\xC3\xA0 gard\xC3\xA9 (chiffr\xC3\xA9 pour ton compte Windows) : laisse le champ vide pour le garder, ou tape le nouveau."
-               : "Gmail : active la validation en deux \xC3\xA9tapes de ton compte Google, puis cr\xC3\xA9" "e un \xC2\xAB mot de passe d'application \xC2\xBB "
-                 "(myaccount.google.com \xE2\x80\xBA S\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Mots de passe des applications) et colle-le ici. Jamais ton mot de "
-                 "passe Google. Outlook / Hotmail ne marchent pas (Microsoft exige une autre connexion) : prends une bo\xC3\xAEte Gmail.");
-    bl.row({mailSave_, mailTest_, mailForget_});
+    if (!ms) {
+        bl.field("Mot de passe d'application", mailPassword_, 300.f, {mailShow_});
+        bl.note(mail::hasPassword(folder)
+                    ? "Un mot de passe est d\xC3\xA9j\xC3\xA0 gard\xC3\xA9 (chiffr\xC3\xA9 pour ton compte Windows) : laisse le champ vide pour le garder, ou tape le nouveau."
+                    : "Gmail : active la validation en deux \xC3\xA9tapes de ton compte Google, puis cr\xC3\xA9" "e un \xC2\xAB mot de passe d'application \xC2\xBB "
+                      "(myaccount.google.com \xE2\x80\xBA S\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Mots de passe des applications) et colle-le ici. Jamais ton mot de "
+                      "passe Google. Outlook, Hotmail, Microsoft 365 : choisis Connexion \xE2\x80\xBA Compte Microsoft.");
+        bl.row({mailSave_, mailTest_, mailForget_});
+    } else {
+        // 1.38.0 : la connexion Microsoft (un code a taper dans le navigateur ; l'outil ne voit jamais ton mot de passe).
+        bl.field("ID d'application", mailClientId_, 380.f);
+        bl.note("Une fois pour toutes, sur portal.azure.com (gratuit) : Microsoft Entra ID \xE2\x80\xBA Inscriptions d'applications \xE2\x80\xBA Nouvelle "
+                "inscription (\xC2\xAB Comptes dans un annuaire et comptes Microsoft personnels \xC2\xBB) ; Authentification \xE2\x80\xBA Autoriser les flux "
+                "clients publics : Oui ; Autorisations d'API \xE2\x80\xBA Ajouter \xE2\x80\xBA Office 365 Exchange Online (ou Microsoft Graph) \xE2\x80\xBA "
+                "D\xC3\xA9l\xC3\xA9gu\xC3\xA9" "es : SMTP.Send et offline_access. Copie ici son \xC2\xAB ID d'application (client) \xC2\xBB, Enregistrer le mail, "
+                "puis Se connecter. Microsoft 365 : l'administrateur doit permettre \xC2\xAB SMTP authentifi\xC3\xA9 \xC2\xBB pour ta bo\xC3\xAEte.");
+        if (msWaiting_ && !msCode_.empty()) {
+            bl.pair("Code \xC3\xA0 taper", msCode_, ui::Tone::Warning);
+            bl.pair("Adresse", msUri_.empty() ? std::string("https://microsoft.com/devicelogin") : msUri_, ui::Tone::None);
+            bl.note("Ouvre cette adresse dans ton navigateur, tape le code, puis connecte-toi \xC3\xA0 la bo\xC3\xAEte d'exp\xC3\xA9" "dition : l'outil attend ta "
+                    "connexion et la garde chiffr\xC3\xA9" "e sur ce poste (jamais ton mot de passe).");
+            bl.row({mailCopyCode_, mailCancel_});
+        } else if (linked) {
+            bl.pair("Connect\xC3\xA9", (link.account.empty() ? std::string("compte Microsoft") : link.account) + (link.since ? " depuis le " + dateTimeFr(link.since) : std::string()),
+                    ui::Tone::Ok);
+        }
+        bl.row({mailSave_, mailConnect_, mailTest_});
+        bl.row({mailDisconnect_, mailForget_});
+    }
     if (mail_.has) {
         bl.pair("Dernier r\xC3\xA9sultat", mail_.message + " (" + dateTimeFr(mail_.at) + ")", mail_.ok ? ui::Tone::Ok : ui::Tone::Error);
         for (std::size_t i = 0; i < mail_.details.size() && i < 6; ++i) bl.bullet(mail_.details[i]);
@@ -1117,10 +1224,12 @@ void ServicePage::loadMail() {
     mailFrom_->setText(cfg.from);
     mailName_->setText(cfg.fromName);
     mailUser_->setText(cfg.user == cfg.from ? std::string() : cfg.user);
+    mailAuth_->setSelectedIndex(cfg.auth == mail::kAuthMicrosoft ? 1 : 0);   // 1.38.0
+    mailClientId_->setText(cfg.clientId);
 }
 
-void ServicePage::saveMail() {
-    if (refuseIfBusy()) return;
+// 1.38.0 : le reglage tel que la page le montre (Microsoft : les reglages tout faits de la boite, son ID d'application).
+mail::Config ServicePage::mailFromFields() const {
     mail::Config cfg;
     const auto trim = [](std::string t) {
         const auto b = t.find_first_not_of(" \t");
@@ -1136,6 +1245,102 @@ void ServicePage::saveMail() {
     cfg.fromName = trim(mailName_->text());
     cfg.user = trim(mailUser_->text());
     if (cfg.user.empty()) cfg.user = cfg.from;
+    if (microsoftChosen()) {
+        std::string id = trim(mailClientId_->text());
+        for (char& ch : id) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        cfg.clientId = id;
+        const bool office = cfg.host.find("office365") != std::string::npos;
+        const std::string host = cfg.host;
+        const int prt = cfg.port;
+        const std::string security = cfg.security;
+        cfg = mail::microsoftPreset(!office, cfg);
+        if (!host.empty() && !mail::microsoftHost(host)) {   // un autre serveur (un relais) : le sien reste
+            cfg.host = host;
+            cfg.port = prt;
+            cfg.security = security;
+        }
+    }
+    return cfg;
+}
+
+void ServicePage::connectMicrosoft() {
+    if (refuseIfBusy()) return;
+    mail::Config cfg = mailFromFields();
+    std::string why;
+    if (!mail::validate(cfg, &why)) {
+        refuse("la connexion Microsoft ne peut pas commencer : " + why);
+        return;
+    }
+    if (!mail::saveConfig(ws().folder(), cfg, &why)) {   // le reglage d'abord : l'envoi saura qu'il passe par Microsoft
+        refuse("le mail n'est pas enregistr\xC3\xA9 : " + why);
+        return;
+    }
+    auto code = std::make_shared<mail::DeviceCode>();
+    (void)slow("Microsoft : demande d'un code de connexion",
+               [cfg, code] {
+                   std::string w;
+                   if (!mail::microsoftStart(cfg, *code, &w)) return OpResult::fail(w);
+                   return OpResult::done("Code re\xC3\xA7u : " + mail::microsoftInstructions(*code));
+               },
+               [this, cfg, code](const OpResult& r) {
+                   if (!r.ok) {
+                       note(mail_, "mail", r);
+                       if (host_.report) host_.report(r);
+                       return;
+                   }
+                   waitMicrosoft(cfg, *code);
+               });
+}
+
+void ServicePage::waitMicrosoft(mail::Config cfg, mail::DeviceCode dc) {
+    msStop_ = std::make_shared<std::atomic<bool>>(false);
+    msCode_ = dc.userCode;
+    msUri_ = dc.verificationUri;
+    msWaiting_ = true;
+    const std::string folder = ws().folder();
+    auto stop = msStop_;
+    const bool started = slow("Microsoft : en attente de ta connexion (le code " + dc.userCode + ")",
+                              [folder, cfg, dc, stop] {
+                                  const auto p = mail::microsoftWait(folder, cfg, dc, [stop] { return stop->load(); });
+                                  switch (p.state) {
+                                      case mail::PollState::Done:
+                                          return OpResult::done("Connect\xC3\xA9 \xC3\xA0 Microsoft" + (p.account.empty() ? std::string(".") : " : " + p.account + ".") +
+                                                                " Essaie-le : Envoyer un mail d'essai.");
+                                      case mail::PollState::Cancelled: return OpResult::fail("connexion Microsoft annul\xC3\xA9" "e");
+                                      default: return OpResult::fail(p.message.empty() ? std::string("la connexion Microsoft n'a pas abouti") : p.message);
+                                  }
+                              },
+                              [this](const OpResult& r) {
+                                  msWaiting_ = false;
+                                  msCode_.clear();
+                                  msUri_.clear();
+                                  msStop_.reset();
+                                  note(mail_, "mail", r);
+                                  if (host_.report) host_.report(r);
+                              });
+    if (!started) {
+        msWaiting_ = false;
+        msCode_.clear();
+    }
+    refresh();
+}
+
+void ServicePage::disconnectMicrosoft() {
+    if (refuseIfBusy()) return;
+    std::string why;
+    if (!mail::microsoftForget(ws().folder(), &why)) {
+        refuse("la connexion Microsoft n'est pas oubli\xC3\xA9" "e : " + why);
+        return;
+    }
+    const OpResult r = OpResult::done("Connexion Microsoft oubli\xC3\xA9" "e sur ce poste : aucun mail ne part plus tant que tu ne te reconnectes pas.");
+    note(mail_, "mail", r);
+    if (host_.report) host_.report(r);
+    refresh();
+}
+
+void ServicePage::saveMail() {
+    if (refuseIfBusy()) return;
+    const mail::Config cfg = mailFromFields();   // 1.38.0 : Microsoft compris
     std::string why;
     const std::string folder = ws().folder();
     if (!mail::saveConfig(folder, cfg, &why)) {
@@ -1143,8 +1348,12 @@ void ServicePage::saveMail() {
         return;
     }
     OpResult r = OpResult::done("Mail enregistr\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) + ".");
-    std::string pw = mailPassword_->text();
-    if (!pw.empty()) {
+    std::string pw = cfg.auth == mail::kAuthMicrosoft ? std::string() : mailPassword_->text();
+    if (cfg.auth == mail::kAuthMicrosoft) {   // 1.38.0
+        clearSecret(mailPassword_);
+        r.details.push_back(mail::microsoftConnected(folder) ? std::string("La connexion Microsoft de ce poste est gard\xC3\xA9" "e.")
+                                                             : std::string("Il reste \xC3\xA0 te connecter : Se connecter \xC3\xA0 Microsoft\xE2\x80\xA6"));
+    } else if (!pw.empty()) {
         const bool ok = mail::savePassword(folder, pw, &why);
         std::fill(pw.begin(), pw.end(), '\0');
         clearSecret(mailPassword_);

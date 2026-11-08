@@ -11,6 +11,7 @@
 #pragma once
 
 #include "../src/license_admin/gui/Workspace.hpp"
+#include "../src/license_admin/ArchiveSync.hpp"   // 1.38.0 : les licences supprimees
 #include "../src/licensing/Licensing.hpp"
 #include "../src/licensing/Store.hpp"
 

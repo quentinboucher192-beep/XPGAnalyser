@@ -1392,6 +1392,31 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     if (cmd == "glisser") { drag({num(1), num(2)}, {num(3), num(4)}, mods()); return Step::Yield; }
     // survol X Y [alt|ctrl|maj] : 1.12.30 - Alt tenu au survol (les cotes de l'editeur de vues)
     if (cmd == "survol") { moveTo({num(1), num(2)}, mods()); return Step::Yield; }
+    // 1.38.0 : clic-id ID [double] | molette-id ID DY - au centre d'un widget visible par son identifiant (le menu du
+    // dessus) : la capture qu'on agrandit (dialog.licence.fonctionnalites.panneau.apercu.capture), une ligne...
+    if (cmd == "clic-id" || cmd == "molette-id") {
+        ui::Widget* found = nullptr;
+        if (auto* root = top()) {
+            found = root->findById(arg(1));
+            if (found && !shown(*found)) found = nullptr;
+        }
+        if (!found) {
+            if (retries_ < 60) return Step::Retry;
+            fail(cmd + " : " + arg(1) + " introuvable (ou cache)");
+            return Step::Next;
+        }
+        const auto r = found->bounds();
+        const gfx::Point p{r.x + r.w / 2.f, r.y + r.h / 2.f};
+        if (cmd == "clic-id") {
+            click(p, MouseButton::Left, 1, mods());
+            if (has("double")) click(p, MouseButton::Left, 2, mods());
+        } else {
+            moveTo(p, mods());
+            send(ui::MouseWheel{p, 0.f, num(2), mods()});
+        }
+        std::printf("[script] %s %s : %d, %d\n", cmd.c_str(), arg(1).c_str(), static_cast<int>(p.x), static_cast<int>(p.y));
+        return Step::Yield;
+    }
     if (cmd == "molette") {
         const gfx::Point p{num(1), num(2)};
         moveTo(p, mods());
@@ -6078,6 +6103,20 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   licence-etat                l'etat (edition, statut, la phrase)
     if (cmd == "licence") {
         showLicenceWindow(app_, arg(1).empty() ? licence::kTabAuto : std::atoi(arg(1).c_str()));
+        return Step::Yield;
+    }
+    // 1.38.0 : les notifications generales - "notifications" ouvre la fenetre ; "notifications-liste" ecrit chacune
+    // (non lue d'abord, sa categorie, son titre, son detail) apres un regard tout de suite sur la licence et le registre.
+    if (cmd == "notifications") {
+        showNoticesWindow(app_);
+        return Step::Yield;
+    }
+    if (cmd == "notifications-liste") {
+        (void)licence::watch::check(true);
+        const auto all = notices::list();
+        std::printf("[script] notifications-liste : %zu (%zu non lues)\n", all.size(), notices::unread());
+        for (const auto& n : all)
+            std::printf("[script]   %s %s | %s | %s\n", n.read ? "lue    " : "non lue", n.category.c_str(), n.title.c_str(), n.detail.c_str());
         return Step::Yield;
     }
     if (cmd == "licence-importer") {

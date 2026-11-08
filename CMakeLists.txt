@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.37.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.38.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -1105,8 +1105,17 @@ if(XPG_BUILD_TESTS)
     endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
-    xpg_add_test_executable(admin_mail_test tests/admin_mail_test.cpp src/license_admin/Mail.cpp)
+    # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
+    # un faux serveur OAuth sur ce poste (tests/outils/oauth_essai.py) - jamais le vrai Microsoft
+    xpg_add_test_executable(admin_mail_test tests/admin_mail_test.cpp src/license_admin/Mail.cpp src/app/ai/AiHttp.cpp)   # 1.38.0 : + AiHttp
     xpg_target_link_libraries(admin_mail_test PRIVATE xpg_deploy)
+    if(TARGET admin_mail_test)   # 1.38.0 : WinHTTP sous Windows, libcurl chargee a la demande ailleurs
+        if(WIN32)
+            target_link_libraries(admin_mail_test PRIVATE winhttp)
+        else()
+            target_link_libraries(admin_mail_test PRIVATE ${CMAKE_DL_LIBS})
+        endif()
+    endif()
     xpg_add_test(NAME adminmail COMMAND admin_mail_test ${CMAKE_SOURCE_DIR})
     if(TEST adminmail)
         set_tests_properties(adminmail PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 120)

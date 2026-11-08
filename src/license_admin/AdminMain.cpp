@@ -68,6 +68,7 @@
 #include "../licensing/Service.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -173,6 +174,10 @@ std::string usage() {
            "  mail-mot-de-passe                              le mot de passe d'application, tap\xC3\xA9 sans \xC3\xA9" "cho (gard\xC3\xA9 chiffr\xC3\xA9)\n"
            "  mail-essai [--a ADRESSE]                       un mail d'essai (par d\xC3\xA9" "faut \xC3\xA0 ton adresse d'exp\xC3\xA9" "dition)\n"
            "  mail-oublier                                   retire le r\xC3\xA9glage du mail et son mot de passe\n"
+           "  mail-config --microsoft outlook|365 --expediteur A --id-application GUID [--nom N]\n"
+           "                                                 1.38.0 : une bo\xC3\xAEte Outlook.com / Hotmail (outlook) ou Microsoft 365 (365)\n"
+           "  mail-microsoft-connecter                       la connexion Microsoft : un code \xC3\xA0 taper dans ton navigateur\n"
+           "  mail-microsoft-oublier                         oublie la connexion Microsoft de ce poste\n"
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "  --version\n\n"
@@ -938,6 +943,59 @@ int run(const std::vector<std::string>& argv) {
         return 0;
     }
     // 1.37.0 : le mail au client (le reglage, le mot de passe d'application, un essai)
+    if (a.command == "mail-config" && !a.one("--microsoft").empty()) {   // 1.38.0 : Outlook, Hotmail, Microsoft 365
+        if (!need("--expediteur") || !need("--id-application")) return 2;
+        const std::string kind = a.one("--microsoft");
+        if (kind != "outlook" && kind != "365") {
+            complain("Refus\xC3\xA9 : --microsoft outlook (Outlook.com, Hotmail) ou --microsoft 365 (Microsoft 365)");
+            return 2;
+        }
+        license_admin::mail::Config base;
+        base.from = a.one("--expediteur");
+        base.fromName = a.one("--nom");
+        base.user = a.one("--identifiant").empty() ? base.from : a.one("--identifiant");
+        base.clientId = a.one("--id-application");
+        for (char& ch : base.clientId) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        const auto cfg = license_admin::mail::microsoftPreset(kind == "outlook", base);
+        std::string w;
+        if (!license_admin::mail::saveConfig(folder, cfg, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say("Mail r\xC3\xA9gl\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) + " (connexion Microsoft).\n" +
+            (license_admin::mail::microsoftConnected(folder) ? std::string("Essaie-le : mail-essai.\n") : std::string("Connecte-toi : mail-microsoft-connecter.\n")));
+        return 0;
+    }
+    if (a.command == "mail-microsoft-connecter") {
+        license_admin::mail::Config cfg;
+        std::string w;
+        if (!license_admin::mail::loadConfig(folder, cfg, &w) || cfg.auth != license_admin::mail::kAuthMicrosoft) {
+            complain("Refus\xC3\xA9 : " + (w.empty() ? std::string("le mail n'est pas r\xC3\xA9gl\xC3\xA9 pour Microsoft") : w) + " (mail-config --microsoft d'abord)");
+            return 1;
+        }
+        license_admin::mail::DeviceCode dc;
+        if (!license_admin::mail::microsoftStart(cfg, dc, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say(license_admin::mail::microsoftInstructions(dc) + "\nJ'attends ta connexion (Ctrl+C pour arr\xC3\xAAter)...\n");
+        const auto p = license_admin::mail::microsoftWait(folder, cfg, dc);
+        if (p.state != license_admin::mail::PollState::Done) {
+            complain(p.message.empty() ? std::string("La connexion Microsoft n'a pas abouti.") : p.message);
+            return 1;
+        }
+        say("Connect\xC3\xA9 \xC3\xA0 Microsoft" + (p.account.empty() ? std::string(".") : " : " + p.account + ".") + " Essaie-le : mail-essai.\n");
+        return 0;
+    }
+    if (a.command == "mail-microsoft-oublier") {
+        std::string w;
+        if (!license_admin::mail::microsoftForget(folder, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say("Connexion Microsoft oubli\xC3\xA9" "e sur ce poste.\n");
+        return 0;
+    }
     if (a.command == "mail-config") {
         if (!need("--hote") || !need("--expediteur")) return 2;
         license_admin::mail::Config cfg;

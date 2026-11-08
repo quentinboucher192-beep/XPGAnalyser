@@ -1181,6 +1181,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\Licence.hpp" />
     <ClInclude Include="src\app\LicenceService.hpp" />
     <ClInclude Include="src\app\LicenceWindow.hpp" />
+    <ClInclude Include="src\app\Notices.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
     <ClInclude Include="src\app\PerfPane.hpp" />
     <ClInclude Include="src\app\ProjectExchange.hpp" />

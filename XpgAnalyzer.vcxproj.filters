@@ -3103,6 +3103,9 @@
     <ClInclude Include="src\app\LicenceWindow.hpp">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\Notices.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\NoveltyCenter.hpp">
       <Filter>app</Filter>
     </ClInclude>

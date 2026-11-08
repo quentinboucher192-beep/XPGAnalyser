@@ -173,6 +173,27 @@ ATTENTION : un registre avec un prix ou une description est REFUSÉ par les Stud
 1.36 et plus anciens. Installe d'abord la 1.37.0 chez tes clients (et sur ton PC),
 puis seulement ajoute des prix et signe le registre.
 
+LES RÉDUCTIONS ET « PRÉVENIR MES CLIENTS » (1.38.0)
+Dans Éditions, une édition peut avoir un PRIX RÉDUIT et sa FIN (« Réduction jusqu'au »,
+AAAA-MM-JJ : le dernier jour). Signe le registre : la carte de la boutique des Studios
+barre l'ancien prix, montre le nouveau et « jusqu'au … » ; après cette date, elle
+reprend le prix normal d'elle-même (rien à refaire). Coche « Prévenir mes clients »
+avant de signer : une annonce part avec le registre, et chaque Studio la montre UNE
+fois dans ses Notifications - jamais un mail (pas de spam). Un client hors connexion la
+reçoit à sa prochaine connexion.
+Changer les FONCTIONNALITÉS d'une édition (et signer) : chaque Studio le dit tout seul
+dans ses Notifications, avec l'avant et l'après (rien à cocher).
+ATTENTION : un registre avec une réduction ou une annonce est refusé par les Studios
+1.37 et plus anciens (ils gardent leur registre d'avant) : installe d'abord la 1.38.0
+chez tes clients.
+
+SUPPRIMER UNE LICENCE RÉVOQUÉE (1.38.0)
+Licences > choisis une licence révoquée > « Supprimer… » : elle quitte la liste. Son
+fichier va dans corbeille-licences\ (dans le dossier de ta clé : rien n'est effacé) ;
+sa révocation reste dans la liste signée (les Studios la refusent toujours) ; la
+synchro de l'archive ne la ramène pas sur ce PC (l'archive en ligne en garde une copie
+chiffrée). Une licence qui n'est pas révoquée ne se supprime pas : révoque-la d'abord.
+
 LE MAIL AU CLIENT (1.37.0)
 Quand tu acceptes une demande, un mail part tout seul au client (s'il a donné son
 courriel) depuis TA boîte : sa licence, son édition, ce qu'elle ouvre, jusqu'à quand,
@@ -186,8 +207,25 @@ mail au client » :
 3. « Envoyer un mail d'essai » : un mail à ta propre adresse ; il dit tout de suite si
    le réglage marche.
 Le mot de passe est gardé chiffré sur ce PC pour ton compte Windows (DPAPI) : sur un
-autre PC ou un autre compte, tape-le de nouveau. Outlook / Hotmail / Microsoft 365 ne
-marchent pas (Microsoft refuse les mots de passe d'application ici) : prends Gmail.
+autre PC ou un autre compte, tape-le de nouveau.
+1.38.0 : OUTLOOK, HOTMAIL, MICROSOFT 365. Microsoft refuse les mots de passe ici : la
+connexion se fait par un CODE à taper dans ton navigateur (jamais ton mot de passe).
+Une fois pour toutes, enregistre une application (gratuit) :
+  a. portal.azure.com > Microsoft Entra ID > Inscriptions d'applications > Nouvelle
+     inscription ; types de comptes : « Comptes dans un annuaire et comptes Microsoft
+     personnels » ; pas d'URI de redirection.
+  b. Authentification > « Autoriser les flux clients publics » : Oui > Enregistrer.
+  c. Autorisations d'API > Ajouter une autorisation > Office 365 Exchange Online (ou
+     Microsoft Graph) > Autorisations déléguées : SMTP.Send et offline_access.
+  d. Copie son « ID d'application (client) » (un GUID).
+Puis page Service en ligne > Le mail au client : Connexion « Compte Microsoft », bouton
+« Outlook / Hotmail » (ou « Microsoft 365 »), ton adresse, colle l'ID d'application,
+Enregistrer le mail, « Se connecter à Microsoft… » : l'outil montre un code ; ouvre
+https://microsoft.com/devicelogin, tape-le, connecte-toi à ta boîte. La connexion est
+gardée chiffrée sur ce PC (DPAPI) ; « Envoyer un mail d'essai » pour vérifier.
+Microsoft 365 : l'administrateur doit permettre « SMTP authentifié » pour ta boîte.
+Si Microsoft retire la connexion (mot de passe changé, 90 jours sans mail) : le
+résultat le dit, reconnecte-toi (Se connecter à Microsoft…).
 Si le mail ne part pas (adresse fausse, boîte injoignable) : le résultat de
 l'acceptation le dit, et le Studio du client lui montre son code et lui demande de
 vérifier son adresse (Mon profil). Rien de réglé : aucun mail, le Studio montre le
@@ -448,6 +486,9 @@ Le mail au client (1.37.0 ; c'est l'application qui l'envoie à l'acceptation) :
      XPG-License-Admin.exe mail-mot-de-passe              (le mot de passe d'application, tapé sans écho)
      XPG-License-Admin.exe mail-essai [--a ADRESSE]       (un mail d'essai ; par défaut à ton adresse)
      XPG-License-Admin.exe mail-oublier
+     (1.38.0) XPG-License-Admin.exe mail-config --microsoft outlook --expediteur toi@outlook.fr --id-application GUID
+     (1.38.0) XPG-License-Admin.exe mail-microsoft-connecter   (un code à taper dans ton navigateur)
+     (1.38.0) XPG-License-Admin.exe mail-microsoft-oublier
 
 
 =============================================================================
