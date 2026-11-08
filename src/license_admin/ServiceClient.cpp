@@ -627,7 +627,9 @@ Result putLicence(const std::string& folder, const licensing::SigningKey& key, c
                           (lic.expiresAt ? ", fin le " + licensing::isoDate(lic.expiresAt) : std::string(", sans fin")) + ".");
     if (!codeHash.empty()) res.details.push_back("Le service ne garde que l'empreinte du code d'activation, jamais le code.");
     else if (active) res.details.push_back("Le code d'activation reste le m\xC3\xAAme.");
-    if (!active) res.details.push_back("Ses PC ne sont plus renouvel\xC3\xA9s : chacun s'arr\xC3\xAAte \xC3\xA0 la fin de son bail, ou d\xC3\xA8s qu'il se connecte ; le code ne marche plus.");
+    if (!active)
+        res.details.push_back("Ses PC ne sont plus renouvel\xC3\xA9s ; le code ne marche plus. Un Studio ouvert et connect\xC3\xA9 la perd dans les 2 minutes (une "
+                              "fen\xC3\xAAtre le dit au client) ; sinon \xC3\xA0 son prochain lancement connect\xC3\xA9, au plus tard \xC3\xA0 la fin de son bail.");
     return res;
 }
 
@@ -666,7 +668,8 @@ Result retireDevice(const std::string& folder, const licensing::SigningKey& key,
     Result res;
     res.ok = true;
     res.message = "PC " + keyFingerprint(deviceKey).substr(0, 19) + " retir\xC3\xA9 de la licence " + licenseId + ".";
-    res.details.push_back("Son activation n'est plus renouvel\xC3\xA9" "e : il s'arr\xC3\xAAte \xC3\xA0 la fin de son bail, ou d\xC3\xA8s qu'il se connecte. Sa place est libre.");
+    res.details.push_back("Son activation n'est plus renouvel\xC3\xA9" "e. Son Studio, ouvert et connect\xC3\xA9, la perd dans les 2 minutes (une fen\xC3\xAAtre le dit) ; "
+                          "sinon \xC3\xA0 son prochain lancement connect\xC3\xA9, au plus tard \xC3\xA0 la fin de son bail. Sa place est libre.");
     return res;
 }
 
