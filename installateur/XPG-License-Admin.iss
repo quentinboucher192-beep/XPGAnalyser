@@ -99,6 +99,8 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 WelcomeLabel1=Bienvenue dans l'installation de l'Admin
 WelcomeLabel2=Tout est dans ce seul fichier : l'application de l'éditeur, sa console et de quoi mettre en ligne ton service des licences.%n%nTa clé d'éditeur, ton archive et tes réglages restent sur ce PC, à leur place : l'installation n'y touche jamais, la désinstallation non plus.%n%nTu avais l'ancien dossier du zip (editeur-...) ? Une fois l'Admin installé, tu peux le supprimer : plus rien n'en sert.
 ClickNext=Clique sur Suivant pour continuer, ou sur Annuler pour quitter l'assistant.
+ClickFinish=Clique sur Terminer pour fermer l'assistant.
+ClickInstall=Clique sur Installer pour commencer, ou sur Précédent pour changer un choix.
 SelectDirDesc=Où installer l'Admin ?
 SelectDirBrowseLabel=Pour continuer, clique sur Suivant. Pour choisir un autre dossier, clique sur Parcourir.
 DiskSpaceMBLabel=Il faut au moins [mb] Mo d'espace libre.
@@ -565,12 +567,13 @@ begin
   Ecrire(WizardForm.WelcomeLabel2.Font, '', 11, CouleurTexte);
   WizardForm.FinishedHeadingLabel.SetBounds(X, ScaleY(34), L, ScaleY(40));
   Ecrire(WizardForm.FinishedHeadingLabel.Font, 'Bold', 18, CouleurTitre);
-  WizardForm.FinishedLabel.Left := X;
-  WizardForm.FinishedLabel.Top := ScaleY(84);
-  WizardForm.FinishedLabel.Width := L;
+  // la fin : le texte a une hauteur fixe, la case << Lancer l'Admin >> juste dessous - places ici, une fois (deplacee
+  // a l'affichage de la page, Wine laissait son ancien dessin : deux cases)
+  WizardForm.FinishedLabel.AutoSize := False;
+  WizardForm.FinishedLabel.WordWrap := True;
+  WizardForm.FinishedLabel.SetBounds(X, ScaleY(84), L, ScaleY(80));
   Ecrire(WizardForm.FinishedLabel.Font, '', 11, CouleurTexte);
-  WizardForm.RunList.Left := X;
-  WizardForm.RunList.Width := L;
+  WizardForm.RunList.SetBounds(X, ScaleY(176), L, WizardForm.RunList.Height);
   WizardForm.YesRadio.Left := X;
   WizardForm.NoRadio.Left := X;
 end;
@@ -599,11 +602,4 @@ begin
   E := EtapeDePage(CurPageID);
   if E >= 0 then MajEtapes(E);
   if CurPageID = PageDonnees.ID then TexteDonneesLabel.Caption := TexteDonnees;
-  // la fin : le texte du dessus a sa hauteur, la case << Lancer l'Admin >> juste dessous
-  if CurPageID = wpFinished then begin
-    WizardForm.FinishedLabel.AutoSize := False;
-    WizardForm.FinishedLabel.WordWrap := True;
-    WizardForm.FinishedLabel.Height := ScaleY(80);
-    WizardForm.RunList.Top := WizardForm.FinishedLabel.Top + ScaleY(92);
-  end;
 end;
