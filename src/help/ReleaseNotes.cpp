@@ -192,7 +192,7 @@ const std::vector<Note>& table() {
          "les cases \xC3\xA0 coins arrondis. Il remplace le Clair une fois, \xC3\xA0 la mise \xC3\xA0 jour ; le Clair d'avant et les autres th\xC3\xA8mes "
          "restent dans Affichage \xE2\x80\xBA Th\xC3\xA8me\xE2\x80\xA6 Le texte de tes IHM garde sa police. Les \xC3\xA9" "crans se refont un par un dans les "
          "versions suivantes.",
-         "themes", ""),
+         "fenetres", ""),
         // 1.40.0 : la fenetre Licence ne se chevauche plus
         note("1.40.0", "Projet", Kind::Fixed,
          "LA FEN\xC3\x8ATRE LICENCE : quand ta licence arrive (\xC2\xAB Ta licence est activ\xC3\xA9" "e \xC2\xBB), l'onglet Demander ma licence ne "
