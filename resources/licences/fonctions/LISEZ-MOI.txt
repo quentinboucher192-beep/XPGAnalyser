@@ -1,0 +1,4 @@
+Les aperçus des fonctionnalités (1.37.0) : la fenêtre Licence, onglet Éditions, montre la capture <identifiant>.png
+(960 x 600) et la phrase de descriptions.json de la fonctionnalité choisie. Captures faites sur un projet de
+démonstration fictif (aucune donnée de client), sous Wine, avec les programmes Windows 1.36.0.
+Une fonctionnalité ajoutée au registre sans capture : l'onglet le dit (« Pas encore de capture »).
