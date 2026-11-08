@@ -72,7 +72,6 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 WizardStyle=modern
 WizardResizable=no
-WizardSizePercent=120,135
 DisableWelcomePage=no
 WizardImageFile=admin\grande.bmp,admin\grande-2x.bmp
 WizardSmallImageFile=admin\petite.bmp,admin\petite-2x.bmp
@@ -210,6 +209,8 @@ const
   CouleurAmbre = $0042C5F5;        // #F5C542
   CouleurPastille = $005E3F2A;     // #2A3F5E : une etape a venir
   ColonneL = 224;                  // la largeur de la colonne des etapes (96 ppp)
+  PlusH = 90;                      // la fenetre plus haute que celle d'Inno Setup (96 ppp), si l'ecran le permet
+  SPI_GETWORKAREA = $0030;
   NbEtapes = 8;
 
 var
@@ -226,6 +227,8 @@ function CreateEllipticRgn(X1, Y1, X2, Y2: Integer): LongWord;
   external 'CreateEllipticRgn@gdi32.dll stdcall setuponly';
 function SetWindowRgn(Fenetre: HWND; Region: LongWord; Redessiner: BOOL): Integer;
   external 'SetWindowRgn@user32.dll stdcall setuponly';
+function SystemParametersInfo(Action, Param: Cardinal; var Zone: TRect; WinIni: Cardinal): BOOL;
+  external 'SystemParametersInfoW@user32.dll stdcall setuponly';
 
 // ---------------------------------------------------------------- les dossiers ----
 // Le dossier du programme propose : pour toi seul, %LOCALAPPDATA%\Programs (ce que vaut {autopf} sous Windows ;
@@ -283,7 +286,9 @@ begin
   // le point-virgule en trop (celui d'avant, ou celui d'apres s'il etait le premier)
   if (P > 1) and (Copy(Chemin, P - 1, 1) = ';') then Delete(Chemin, P - 1, 1)
   else if Copy(Chemin, P, 1) = ';' then Delete(Chemin, P, 1);
-  RegWriteExpandStringValue(Racine, Cle, 'Path', Chemin);
+  // vide : il n'y avait que lui (la valeur est retiree, comme avant l'installation)
+  if Trim(Chemin) = '' then RegDeleteValue(Racine, Cle, 'Path')
+  else RegWriteExpandStringValue(Racine, Cle, 'Path', Chemin);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -432,16 +437,23 @@ begin
 end;
 
 procedure CreerColonne;
-var L, I, X, Y, W0, Annuler0: Integer;
+var L, I, X, Y, W0, Annuler0, H: Integer;
+    Zone: TRect;
     Logo: TBitmapImage;
     Pied: TLabel;
     Fichier: String;
 begin
   L := ScaleX(ColonneL);
-  // la fenetre s'elargit de la colonne : les pages gardent leur place et leur taille
+  // la fenetre s'elargit de la colonne : les pages gardent leur place et leur taille ; elle grandit aussi en
+  // hauteur (PlusH) - jamais au-dela de l'ecran (la zone de travail ; un petit ecran garde la taille d'Inno Setup)
   W0 := WizardForm.ClientWidth;
   Annuler0 := WizardForm.CancelButton.Left;
   WizardForm.ClientWidth := W0 + L;
+  H := ScaleY(PlusH);
+  if SystemParametersInfo(SPI_GETWORKAREA, 0, Zone, 0) then
+    if (Zone.Bottom - Zone.Top > 0) and (WizardForm.Height + H > Zone.Bottom - Zone.Top - ScaleY(8)) then
+      H := Zone.Bottom - Zone.Top - ScaleY(8) - WizardForm.Height;
+  if H > 0 then WizardForm.ClientHeight := WizardForm.ClientHeight + H;
   WizardForm.OuterNotebook.SetBounds(L, WizardForm.OuterNotebook.Top, W0, WizardForm.OuterNotebook.Height);
   WizardForm.Bevel.SetBounds(L, WizardForm.Bevel.Top, W0, WizardForm.Bevel.Height);
   WizardForm.BeveledLabel.Left := WizardForm.BeveledLabel.Left + L;
