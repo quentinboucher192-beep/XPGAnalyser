@@ -38,6 +38,7 @@
 #include "Dossiers.hpp"
 #include "LicenceService.hpp"   // 1.35.0 : le service des licences
 #include "Settings.hpp"
+#include "hmi/HmiImages.hpp"    // 1.37.0 : la capture d'une fonctionnalite (onglet Editions)
 #include "hmi/HmiPaneKit.hpp"
 #include "screens/Screens.hpp"
 
@@ -54,6 +55,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -197,21 +199,36 @@ public:
     OnlinePanel(LicenceBody& body, App& app);
     // Le releve, la disponibilite, le travail en cours : relus (rien du reseau).
     void refresh();
+    // 1.37.0 : Mon profil remplit les champs vides (la societe, le nom, le courriel).
+    void prefill();
 
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext& ctx) override;
+    ui::EventResult onEvent(const ui::InputEvent& ev) override;
 
 private:
     void doSend();
     void askCancel();
     void doCheck();
     ui::InputText* field(const char* id, const std::string& placeholder, std::size_t maxLen);
+    // 1.37.0 : la boutique - une carte par edition du registre (son prix, sa description, ce qu'elle donne).
+    struct Card {
+        std::string id, label, price, description, facts;
+        gfx::Rect   box{};
+    };
+    void buildCards();
+    // Ce que contiendra la licence d'une edition (le rappel pendant l'attente) ; vide : inconnue.
+    [[nodiscard]] std::string futureText(const std::string& editionId) const;
 
     LicenceBody&       body_;
     App&               app_;
+    std::vector<Card>  cards_;
+    std::string        chosen_;   // l'edition choisie ; vide : l'editeur choisit
+    float              shopY_{0};
     ui::InputText*     customer_{nullptr};
     ui::InputText*     contact_{nullptr};
+    ui::InputText*     email_{nullptr};
     ui::InputText*     pcName_{nullptr};
     ui::InputText*     licenseId_{nullptr};
     ui::InputText*     message_{nullptr};
@@ -224,8 +241,58 @@ private:
     std::string        recProblem_;
     bool               pending_{false};
     licence::service::Job busy_{licence::service::Job::None};
-    float              rowsY_{0}, infoY_{0}, footY_{0};
+    float              rowsY_{0}, infoY_{0}, footY_{0}, fieldsY_{0};
     core::ConnectionScope links_;
+};
+
+// ---- 1.37.0 : l'onglet Mon profil (tout facultatif : il remplit la demande ; le courriel recoit le mail de l'editeur) ----
+class ProfilePanel final : public ui::Widget {
+public:
+    explicit ProfilePanel(LicenceBody& body);
+    void refresh();   // relu du disque
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    void doSave();
+    LicenceBody&          body_;
+    ui::InputText*        email_{nullptr};
+    ui::InputText*        name_{nullptr};
+    ui::InputText*        company_{nullptr};
+    ui::Button*           save_{nullptr};
+    float                 rowsY_{0};
+    core::ConnectionScope links_;
+};
+
+// ---- 1.37.0 : l'onglet Editions - le tableau, et l'apercu de la fonctionnalite choisie (sa capture, deux lignes) ----
+class EditionsPanel final : public ui::Widget {
+public:
+    EditionsPanel();
+    [[nodiscard]] ui::TableView& table() noexcept { return *table_; }
+    // Une ligne du tableau : la fonctionnalite (id vide : une ligne de resume), son nom, son logiciel, ses editions.
+    struct RowInfo {
+        std::string id, label, product, editions;
+    };
+    void setRows(std::vector<RowInfo> rows);
+    // Les essais : ce que montre l'apercu.
+    [[nodiscard]] const std::string& shownFeature() const noexcept { return shown_.id; }
+    [[nodiscard]] const licence::FeaturePreview& preview() const noexcept { return preview_; }
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    void choose();
+    ui::TableView*          table_{nullptr};
+    std::vector<RowInfo>    rows_;
+    RowInfo                 shown_;
+    licence::FeaturePreview preview_;
+    hmi::Resource           image_;
+    gfx::Rect               pane_{};
+    core::ConnectionScope   links_;
 };
 
 class LicenceBody final : public ui::Widget {
@@ -238,6 +305,10 @@ public:
         flash_ = std::move(text);
         flashTone_ = tone;
         invalidate();
+    }
+    // 1.37.0 : Mon profil enregistre - la demande reprend ce qui y manque.
+    void profileSaved() {
+        if (online_) online_->prefill();
     }
 
 protected:
@@ -257,10 +328,12 @@ private:
     ui::TableView*    devices_{nullptr};
     ui::TableView*    features_{nullptr};
     ui::TableView*    editions_{nullptr};
+    EditionsPanel*    editionsPanel_{nullptr};   // 1.37.0 : avec l'apercu
     ui::TableView*    history_{nullptr};
     ui::PropertyGrid* params_{nullptr};
     OnlinePanel*      online_{nullptr};      // 1.34.0
     ActivationPanel*  activation_{nullptr};  // 1.35.0
+    ProfilePanel*     profile_{nullptr};     // 1.37.0
     unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
     bool              wasBusy_{false};
     ui::Button*       import_{nullptr};
@@ -324,8 +397,9 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     features->setColumns({{"Fonctionnalit\xC3\xA9", 220.f}, {"Identifiant", 170.f}, {"Logiciel", 110.f}, {"\xC3\x89tat", 150.f},
                           {"Limites", 160.f}, {"Dans le programme", 380.f}});
     features_ = features.get();
-    auto editions = std::make_unique<ui::TableView>("dialog.licence.editions");
-    editions_ = editions.get();
+    auto editions = std::make_unique<EditionsPanel>();   // 1.37.0 : le tableau et l'apercu de la fonctionnalite choisie
+    editionsPanel_ = editions.get();
+    editions_ = &editions->table();
     auto history = std::make_unique<ui::TableView>("dialog.licence.historique");
     history->setColumns({{"Quand (UTC)", 150.f}, {"Quoi", 120.f}, {"R\xC3\xA9sultat", 90.f}, {"D\xC3\xA9tail", 620.f}});
     history_ = history.get();
@@ -335,6 +409,8 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     online_ = online.get();
     auto activation = std::make_unique<ActivationPanel>(*this, app);   // 1.35.0
     activation_ = activation.get();
+    auto profile = std::make_unique<ProfilePanel>(*this);   // 1.37.0
+    profile_ = profile.get();
     tabs->addTab({"Activation", ui::Icon::Network}, std::move(activation));   // 1.35.0 : licence::kTabActivation
     tabs->addTab({"Ma licence", ui::Icon::Lock}, std::move(mine));
     tabs->addTab({"Mes appareils", ui::Icon::Screen}, std::move(devices));
@@ -343,6 +419,7 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     tabs->addTab({"Historique", ui::Icon::History}, std::move(history));
     tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
     tabs->addTab({"Demander ma licence", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest (1.36.0 : son nom)
+    tabs->addTab({"Mon profil", ui::Icon::User}, std::move(profile));            // 1.37.0 : licence::kTabProfile
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
@@ -529,7 +606,8 @@ void LicenceBody::reload() {
         std::vector<std::string> headers{"Fonctionnalit\xC3\xA9"};
         std::vector<ui::TableView::Column> cols{{"Fonctionnalit\xC3\xA9", 200.f}};
         std::vector<std::vector<std::string>> rows;
-        std::size_t mineCol = 0;
+        std::vector<EditionsPanel::RowInfo> infos;   // 1.37.0 : la fonctionnalite de chaque ligne (l'apercu)
+        std::size_t mineCol = 0, summary = 0;
         if (reg) {
             for (const auto& e : reg->editions) {
                 const bool isMine = !st.licensedEdition.empty() ? e.id == st.licensedEdition : e.id == st.edition;
@@ -543,23 +621,38 @@ void LicenceBody::reload() {
                 for (const auto& e : reg->editions)
                     line.push_back(std::to_string(e.maxDevices) + " PC \xC2\xB7 " + (e.durationDays > 0 ? std::to_string(e.durationDays) + " j" : std::string("sans fin")));
                 rows.push_back(std::move(line));
+                infos.push_back({});
             }
+            // 1.37.0 : le prix (la boutique), si l'editeur en a donne un.
+            if (std::any_of(reg->editions.begin(), reg->editions.end(), [](const auto& e) { return !e.price.empty(); })) {
+                std::vector<std::string> line{"Prix"};
+                for (const auto& e : reg->editions) line.push_back(e.price.empty() ? std::string("\xE2\x80\x94") : e.price);
+                rows.push_back(std::move(line));
+                infos.push_back({});
+            }
+            summary = rows.size();
             for (const auto& f : reg->features) {
                 if (f.retired) continue;
                 std::vector<std::string> line{f.label.empty() ? f.id : f.label};
-                for (const auto& e : reg->editions)
-                    line.push_back(std::find(e.features.begin(), e.features.end(), f.id) != e.features.end() ? "\xE2\x9C\x93" : "\xE2\x80\x94");
+                std::string in;
+                for (const auto& e : reg->editions) {
+                    const bool has = std::find(e.features.begin(), e.features.end(), f.id) != e.features.end();
+                    line.push_back(has ? "\xE2\x9C\x93" : "\xE2\x80\x94");
+                    if (has) in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
+                }
                 rows.push_back(std::move(line));
+                infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
             }
         }
         editions_->setColumns(cols);
-        editionsModel_ = std::make_shared<Rows>(std::move(headers), std::move(rows), [mineCol](ui::RowIndex r, std::size_t c) {
+        editionsModel_ = std::make_shared<Rows>(std::move(headers), std::move(rows), [mineCol, summary](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
-            if (r == 0) s.bold = true;
+            if (r < summary) s.bold = true;
             if (c > 0 && c == mineCol) s.bold = true;
             return s;
         });
         editions_->setModel(editionsModel_);
+        editionsPanel_->setRows(std::move(infos));
     }
 
     // ---- Historique ----
@@ -1084,9 +1177,23 @@ void ActivationPanel::onPaint(const ui::PaintContext& ctx) {
 }
 
 // ============================================================ 1.34.0 / 1.35.0 : Demande a l'editeur ==
+// 1.37.0 : ce que donne une edition, en une ligne : "1 PC \xC2\xB7 1 an \xC2\xB7 18 fonctions".
+std::string durationText(const licensing::RegistryEditionView& e) {
+    if (e.type == "perpetual" || e.durationDays <= 0) return "sans fin";
+    if (e.durationDays % 365 == 0) return e.durationDays == 365 ? std::string("1 an") : std::to_string(e.durationDays / 365) + " ans";
+    return std::to_string(e.durationDays) + " jours";
+}
+std::string editionFacts(const licensing::RegistryEditionView& e) {
+    std::string t = std::to_string(std::max(1, e.maxDevices)) + (e.type == "floating" ? " postes en m\xC3\xAAme temps" : e.maxDevices > 1 ? " PC" : " PC");
+    t += " \xC2\xB7 " + durationText(e);
+    t += " \xC2\xB7 " + std::to_string(e.features.size()) + (e.features.size() > 1 ? " fonctions" : " fonction");
+    return t;
+}
+
 OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.demande"), body_(body), app_(app) {
     customer_ = field("licence.demande.client", "le nom de ta soci\xC3\xA9t\xC3\xA9 (obligatoire)", licence::service::kMaxCustomer);
-    contact_ = field("licence.demande.contact", "un courriel ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::service::kMaxContact);
+    contact_ = field("licence.demande.contact", "ton nom, ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::service::kMaxContact);
+    email_ = field("licence.demande.courriel", "nom@societe.fr (facultatif : le mail de l'\xC3\xA9" "diteur quand il accepte)", licence::service::kMaxEmail);
     pcName_ = field("licence.demande.pc", "Poste bureau d'\xC3\xA9tudes (facultatif)", licence::service::kMaxPcName);
     licenseId_ = field("licence.demande.licence", "XPG-2026-00042 (facultatif : pour ajouter ce PC \xC3\xA0 une licence de ta soci\xC3\xA9t\xC3\xA9)",
                        licence::service::kMaxLicenseId);
@@ -1101,6 +1208,7 @@ OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.dema
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });
+    prefill();   // 1.37.0 : Mon profil
     refresh();
 }
 
@@ -1111,6 +1219,50 @@ ui::InputText* OnlinePanel::field(const char* id, const std::string& placeholder
     return &static_cast<ui::InputText&>(addChild(std::move(f)));
 }
 
+void OnlinePanel::prefill() {
+    const auto p = licence::loadProfile();
+    if (customer_->text().empty()) customer_->setText(!p.company.empty() ? p.company : p.name);
+    if (contact_->text().empty() && !p.company.empty()) contact_->setText(p.name);
+    if (email_->text().empty()) email_->setText(p.email);
+}
+
+void OnlinePanel::buildCards() {
+    cards_.clear();
+    const auto reg = licensing::getRegistry();
+    if (!reg) return;
+    for (const auto& e : reg->editions) {
+        if (e.retired || e.id == reg->unlicensedEdition) continue;
+        Card k;
+        k.id = e.id;
+        k.label = e.label.empty() ? e.id : e.label;
+        k.price = e.price;
+        k.description = e.description;
+        k.facts = editionFacts(e);
+        cards_.push_back(std::move(k));
+        if (cards_.size() >= 8) break;   // une boutique lisible
+    }
+    if (std::none_of(cards_.begin(), cards_.end(), [this](const Card& k) { return k.id == chosen_; })) chosen_.clear();
+}
+
+std::string OnlinePanel::futureText(const std::string& id) const {
+    const auto reg = licensing::getRegistry();
+    if (!reg || id.empty()) return {};
+    for (const auto& e : reg->editions) {
+        if (e.id != id) continue;
+        std::string names;
+        std::size_t n = 0;
+        for (const auto& f : reg->features)
+            if (std::find(e.features.begin(), e.features.end(), f.id) != e.features.end()) {
+                names += (n++ ? ", " : "") + (f.label.empty() ? f.id : f.label);
+            }
+        std::string t = "\xC3\x80 l'acceptation, ta licence " + (e.label.empty() ? e.id : e.label) + " contiendra : " + editionFacts(e);
+        if (!names.empty()) t += " \xE2\x80\x94 " + names;
+        t += ". L'\xC3\xA9" "diteur peut l'ajuster en l'acceptant.";
+        return t;
+    }
+    return {};
+}
+
 void OnlinePanel::refresh() {
     namespace ls = licence::service;
     available_ = ls::available(&why_);
@@ -1118,8 +1270,9 @@ void OnlinePanel::refresh() {
     if (!ls::loadRecord(rec_, &recProblem_)) rec_ = ls::Record{};
     pending_ = ls::pending(rec_);
     busy_ = ls::busyJob();
+    buildCards();
     const bool form = available_ && !pending_;
-    for (auto* f : {customer_, contact_, pcName_, licenseId_, message_}) {
+    for (auto* f : {customer_, contact_, email_, pcName_, licenseId_, message_}) {
         f->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         f->setEnabled(busy_ == ls::Job::None);
     }
@@ -1143,6 +1296,8 @@ void OnlinePanel::doSend() {
     ls::RequestForm f;
     f.customer = customer_->text();
     f.contact = contact_->text();
+    f.email = email_->text();   // 1.37.0
+    f.edition = chosen_;
     f.pcName = pcName_->text();
     f.licenseId = licenseId_->text();
     f.message = message_->text();
@@ -1180,16 +1335,50 @@ void OnlinePanel::doCheck() {
     refresh();
 }
 
+ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
+    // 1.37.0 : la boutique - un clic choisit une edition, un second clic la rend (l'editeur choisira).
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && available_ && !pending_)
+        for (const auto& k : cards_)
+            if (k.box.contains(d->pos)) {
+                chosen_ = chosen_ == k.id ? std::string() : k.id;
+                body_.say(chosen_.empty() ? std::string("Aucune \xC3\xA9" "dition choisie : l'\xC3\xA9" "diteur la choisira avec toi.")
+                                          : "\xC3\x89" "dition choisie : " + k.label + (k.price.empty() ? std::string() : " (" + k.price + ")") + ".",
+                          0);
+                invalidate();
+                return ui::EventResult::Consumed;
+            }
+    return ui::EventResult::Ignored;
+}
+
+namespace {
+constexpr float kCardH = 98.f, kCardGap = 10.f, kIntroLines = 3.f;
+} // namespace
+
 void OnlinePanel::onLayout() {
     const auto b = bounds();
     const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
     const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(620.f, W - labelW));
-    rowsY_ = b.y + 16.f + 3.f * 20.f + 10.f;   // sous l'introduction (trois lignes au plus)
+    rowsY_ = b.y + 16.f + kIntroLines * 20.f + 10.f;   // sous l'introduction (trois lignes au plus)
     float y = rowsY_;
     if (available_ && !pending_) {
-        for (auto* f : {customer_, licenseId_, pcName_, contact_, message_}) {
+        // 1.37.0 : la boutique - les cartes des editions, sur une ou deux rangees.
+        shopY_ = y;
+        if (!cards_.empty()) {
+            y += 24.f;
+            const std::size_t n = cards_.size();
+            const std::size_t perRow = std::max<std::size_t>(1, std::min<std::size_t>(n, static_cast<std::size_t>((W + kCardGap) / (180.f + kCardGap))));
+            const float cw = std::min(260.f, (W - kCardGap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow));
+            for (std::size_t i = 0; i < n; ++i) {
+                const float cx = x + static_cast<float>(i % perRow) * (cw + kCardGap);
+                const float cy = y + static_cast<float>(i / perRow) * (kCardH + kCardGap);
+                cards_[i].box = {cx, cy, cw, kCardH};
+            }
+            y += static_cast<float>((n + perRow - 1) / perRow) * (kCardH + kCardGap) + 4.f;
+        }
+        fieldsY_ = y;
+        for (auto* f : {customer_, contact_, email_, licenseId_, pcName_, message_}) {
             f->setBounds({fieldX, y, fieldW, 28.f});
-            y += 36.f;
+            y += 34.f;
         }
         y += 4.f;
         float bx = fieldX;
@@ -1200,7 +1389,7 @@ void OnlinePanel::onLayout() {
         }
         y += 44.f;
     } else if (available_) {
-        y += 6.f * 22.f + 6.f;   // la demande en cours (six lignes)
+        y += 7.f * 22.f + 3.f * 20.f + 10.f;   // la demande en cours (sept lignes) et ce que contiendra sa licence
         float bx = fieldX;
         for (auto* btn : {cancel_, check_}) {
             const float bw = std::max(150.f, btn->sizeHint().preferred.w);
@@ -1227,9 +1416,9 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         ? std::string("Ta demande attend l'\xC3\xA9" "diteur. Le Studio regarde tout seul, toutes les minutes, s'il a r\xC3\xA9pondu : d\xC3\xA8s qu'il "
                       "l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre te le confirme (ce qu'elle ouvre, jusqu'\xC3\xA0 quand). "
                       "Tu peux fermer cette fen\xC3\xAAtre, et m\xC3\xAAme le Studio : la r\xC3\xA9ponse t'attendra au prochain lancement.")
-        : std::string("Demande ta licence \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9 suffit, le reste est facultatif. Ta demande part par son service "
-                      "des licences, scell\xC3\xA9" "e : lui seul la lit. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre "
-                      "te le confirme - aucun fichier, aucun code. Une seule demande \xC3\xA0 la fois pour ce PC.");
+        : std::string("Choisis ta licence et demande-la \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9 suffit, le reste est facultatif (Mon profil remplit "
+                      "les champs). Ta demande part scell\xC3\xA9" "e : lui seul la lit. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et "
+                      "une fen\xC3\xAAtre te le confirme - aucun fichier, aucun code \xC3\xA0 taper. Une seule demande \xC3\xA0 la fois pour ce PC.");
     const std::string introOff = why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), "
                                  "puis Activer par fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
     float y = b.y + 16.f;
@@ -1243,20 +1432,55 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     const gfx::Color good = ctx.theme.tone(ui::Tone::Ok, c.text), warn = ctx.theme.tone(ui::Tone::Warning, c.text),
                      bad = ctx.theme.tone(ui::Tone::Error, c.text);
     if (!pending_) {
-        const char* labels[5] = {"Soci\xC3\xA9t\xC3\xA9 / client *", "Licence existante", "Nom de ce PC", "Contact", "Message"};
-        float fy = rowsY_;
+        // 1.37.0 : la boutique.
+        if (!cards_.empty()) {
+            r.drawText({x, shopY_}, "Choisis ta licence (facultatif : sinon l'\xC3\xA9" "diteur la choisit avec toi) - aucun paiement ici, l'\xC3\xA9" "diteur te contacte.",
+                       kSmall, c.textMuted);
+            for (const auto& k : cards_) {
+                const bool on = k.id == chosen_;
+                r.fillRect(k.box, on ? c.headerBg : c.inputBg);
+                r.strokeRect(k.box, on ? c.accent : c.border, on ? 2.f : 1.f);
+                const float ix = k.box.x + 10.f, iw = k.box.w - 20.f;
+                float ty = k.box.y + 8.f;
+                const std::string title = fit(r, k.label, kValue, iw - (on ? 22.f : 0.f));
+                r.drawText({ix, ty}, title, kValue, c.text);
+                r.drawText({ix + 1.f, ty}, title, kValue, c.text);   // gras
+                if (on) r.drawText({k.box.right() - 26.f, ty}, "\xE2\x9C\x93", kValue, c.accent);
+                ty += r.lineHeight(kValue) + 2.f;
+                r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
+                           k.price.empty() ? c.textMuted : c.accent);
+                ty += 19.f;
+                int dl = 0;
+                for (const auto& l : wrapText(r, k.description, kSmall, iw)) {
+                    if (++dl > 1) break;
+                    r.drawText({ix, ty}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
+                }
+                ty += 19.f;
+                r.drawText({ix, ty}, fit(r, k.facts, kSmall, iw), kSmall, c.text);
+            }
+        }
+        const char* labels[6] = {"Soci\xC3\xA9t\xC3\xA9 / client *", "Ton nom", "Courriel", "Licence existante", "Nom de ce PC", "Message"};
+        float fy = fieldsY_;
         for (const char* l : labels) {
             r.drawText({x, fy + (28.f - r.lineHeight(kSmall)) * 0.5f}, l, kSmall, c.text);
-            fy += 36.f;
+            fy += 34.f;
         }
     } else {
         // La demande en cours.
         const std::string state = ls::stateText(rec_);
+        std::string wanted = "\xE2\x80\x94 (l'\xC3\xA9" "diteur la choisit)";
+        if (!rec_.edition.empty()) {
+            wanted = rec_.edition;
+            if (const auto reg = licensing::getRegistry())
+                for (const auto& e : reg->editions)
+                    if (e.id == rec_.edition) wanted = (e.label.empty() ? e.id : e.label) + (e.price.empty() ? std::string() : " \xC2\xB7 " + e.price);
+        }
         struct Line { const char* label; std::string value; bool strong; };
-        const Line lines[6] = {
+        const Line lines[7] = {
             {"Demande", "n\xC2\xB0 " + std::to_string(rec_.number), false},
             {"Envoy\xC3\xA9" "e le", ls::dateText(rec_.sentAt), false},
             {"\xC3\x89tat", state, true},
+            {"Licence demand\xC3\xA9" "e", wanted, false},   // 1.37.0 : la boutique
             {"Soci\xC3\xA9t\xC3\xA9 / client", rec_.customer.empty() ? std::string("\xE2\x80\x94") : rec_.customer, false},
             {"Nom de ce PC", rec_.pcName.empty() ? std::string("\xE2\x80\x94") : rec_.pcName, false},
             {"Licence existante", rec_.licenseId.empty() ? std::string("\xE2\x80\x94 (une nouvelle licence)") : rec_.licenseId, false},
@@ -1266,6 +1490,17 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
             r.drawText({x, ly}, l.label, kSmall, c.textMuted);
             r.drawText({fieldX, ly}, fit(r, l.value, kSmall, W - labelW), kSmall, l.strong ? warn : c.text);
             ly += 22.f;
+        }
+        // 1.37.0 : le rappel de ce que contiendra la licence acceptee.
+        const std::string future = futureText(rec_.edition);
+        int k = 0;
+        for (const auto& l : wrapText(r, future.empty() ? std::string("\xC3\x80 l'acceptation, l'\xC3\xA9" "diteur choisit l'\xC3\xA9" "dition, la dur\xC3\xA9" "e et le nombre de PC ; "
+                                                                      "la fen\xC3\xAAtre de confirmation te dira ce qu'elle ouvre.")
+                                                        : future,
+                                      kSmall, W)) {
+            if (++k > 3) break;
+            r.drawText({x, ly + 4.f}, fit(r, l, kSmall, W), kSmall, c.text);
+            ly += 20.f;
         }
     }
     // La derniere reponse, la derniere verification.
@@ -1293,6 +1528,184 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         fy += lh;
     }
     if (!recProblem_.empty()) r.drawText({x, fy}, fit(r, recProblem_, kSmall, W), kSmall, bad);
+}
+
+// ============================================================ 1.37.0 : Mon profil ==
+ProfilePanel::ProfilePanel(LicenceBody& body) : ui::Widget("licence.profil"), body_(body) {
+    const auto mk = [this](const char* id, const char* placeholder) {
+        auto f = std::make_unique<ui::InputText>(id);
+        f->setPlaceholder(placeholder);
+        f->setMaxLength(licence::kMaxProfileField);
+        return &static_cast<ui::InputText&>(addChild(std::move(f)));
+    };
+    email_ = mk("licence.profil.courriel", "nom@societe.fr");
+    name_ = mk("licence.profil.nom", "Pr\xC3\xA9nom Nom");
+    company_ = mk("licence.profil.societe", "Ta soci\xC3\xA9t\xC3\xA9");
+    save_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Enregistrer mon profil", "licence.profil.enregistrer")));
+    save_->setStyle(ui::Button::Style::Primary);
+    links_ += save_->clicked->connect([this] { doSave(); });
+    refresh();
+}
+
+void ProfilePanel::refresh() {
+    const auto p = licence::loadProfile();
+    email_->setText(p.email);
+    name_->setText(p.name);
+    company_->setText(p.company);
+    invalidate();
+}
+
+void ProfilePanel::doSave() {
+    licence::Profile p;
+    p.email = email_->text();
+    p.name = name_->text();
+    p.company = company_->text();
+    std::string why;
+    if (!licence::saveProfile(p, &why)) {
+        body_.say("Profil non enregistr\xC3\xA9 : " + why + ".", 3);
+        return;
+    }
+    refresh();
+    body_.say("Profil enregistr\xC3\xA9 : il remplit ta demande de licence ; ton courriel recevra le mail de l'\xC3\xA9" "diteur.", 1);
+    body_.profileSaved();
+}
+
+void ProfilePanel::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
+    const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(520.f, W - labelW));
+    rowsY_ = b.y + 16.f + 3.f * 20.f + 10.f;
+    float y = rowsY_;
+    for (auto* f : {email_, name_, company_}) {
+        f->setBounds({fieldX, y, fieldW, 28.f});
+        y += 36.f;
+    }
+    save_->setBounds({fieldX, y + 4.f, std::max(180.f, save_->sizeHint().preferred.w), 32.f});
+}
+
+void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
+    const std::string intro =
+        "Tout est facultatif. Ton profil remplit ta demande de licence (onglet Demander ma licence) ; ton courriel re\xC3\xA7oit le mail de l'\xC3\xA9" "diteur "
+        "quand il accepte ta demande (avec le code d'une licence en ligne). Il reste sur ce PC, pour API Studio et IHM Studio ; rien ne part tant que "
+        "tu n'envoies pas une demande.";
+    float y = b.y + 16.f;
+    int n = 0;
+    for (const auto& l : wrapText(r, intro, kSmall, W)) {
+        if (++n > 3) break;
+        r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.text);
+        y += 20.f;
+    }
+    const char* labels[3] = {"Courriel", "Nom", "Soci\xC3\xA9t\xC3\xA9"};
+    float fy = rowsY_;
+    for (const char* l : labels) {
+        r.drawText({x, fy + (28.f - r.lineHeight(kSmall)) * 0.5f}, l, kSmall, c.text);
+        fy += 36.f;
+    }
+    r.drawText({x, fy + 48.f}, fit(r, "Enregistr\xC3\xA9 dans : " + licence::profilePath(), kSmall, W), kSmall, c.textMuted);
+}
+
+// ============================================================ 1.37.0 : Editions et l'apercu ==
+EditionsPanel::EditionsPanel() : ui::Widget("dialog.licence.editions.panneau") {
+    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("dialog.licence.editions")));
+    table_->setSelectionMode(ui::SelectionMode::Single);
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { choose(); });
+}
+
+void EditionsPanel::setRows(std::vector<RowInfo> rows) {
+    rows_ = std::move(rows);
+    shown_ = RowInfo{};
+    choose();
+}
+
+void EditionsPanel::choose() {
+    const auto sel = table_->selectedModelRows();
+    RowInfo info;
+    if (!sel.empty() && sel.front() < rows_.size()) info = rows_[sel.front()];
+    if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
+    shown_ = std::move(info);
+    preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
+    image_ = hmi::Resource{};
+    if (!preview_.imagePath.empty()) {
+        std::error_code ec;
+        const auto path = std::filesystem::path(std::u8string(preview_.imagePath.begin(), preview_.imagePath.end()));
+        const auto size = std::filesystem::file_size(path, ec);
+        if (!ec && size > 0 && size < 8u * 1024u * 1024u) {
+            std::ifstream in(path, std::ios::binary);
+            hmi::Bytes bytes(static_cast<std::size_t>(size));
+            if (in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) {
+                image_.name = shown_.id + ".png";
+                image_.format = "PNG";
+                image_.data = std::make_shared<const hmi::Bytes>(std::move(bytes));
+            }
+        }
+    }
+    invalidate();
+}
+
+void EditionsPanel::onLayout() {
+    const auto b = bounds();
+    const float pw = std::clamp(std::floor(b.w * 0.42f), 280.f, 470.f);
+    table_->setBounds({b.x, b.y, std::max(200.f, b.w - pw - 12.f), b.h});
+    pane_ = {b.right() - pw, b.y, pw, b.h};
+}
+
+void EditionsPanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    r.fillRect(pane_, c.headerBg);
+    r.strokeRect(pane_, c.border, 1.f);
+    const float x = pane_.x + 12.f, W = pane_.w - 24.f;
+    float y = pane_.y + 12.f;
+    if (shown_.id.empty()) {
+        for (const auto& l : wrapText(r, "Choisis une fonctionnalit\xC3\xA9 dans la liste : une capture et ce qu'elle fait s'affichent ici.", kSmall, W)) {
+            r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
+            y += 20.f;
+        }
+        return;
+    }
+    const std::string title = fit(r, shown_.label, kValue, W);
+    r.drawText({x, y}, title, kValue, c.text);
+    r.drawText({x + 1.f, y}, title, kValue, c.text);
+    y += r.lineHeight(kValue) + 2.f;
+    if (!shown_.product.empty()) {
+        r.drawText({x, y}, fit(r, shown_.product, kSmall, W), kSmall, c.textMuted);
+        y += 20.f;
+    }
+    y += 4.f;
+    // La capture (960 x 600), a la largeur du volet.
+    const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, pane_.h * 0.5f));
+    const gfx::Rect box{x, y, W, ih};
+    r.fillRect(box, c.inputBg);
+    bool drawn = false;
+    if (image_.data) {
+        const auto img = HmiImageCache::instance().resource(r, image_);
+        if (img.valid()) {
+            const float k = std::min(box.w / static_cast<float>(img.width), box.h / static_cast<float>(img.height));
+            const float w = static_cast<float>(img.width) * k, h = static_cast<float>(img.height) * k;
+            r.drawImage(img.tex, {box.x + (box.w - w) * 0.5f, box.y + (box.h - h) * 0.5f, w, h});
+            drawn = true;
+        }
+    }
+    if (!drawn)
+        r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, "Pas encore de capture pour cette fonctionnalit\xC3\xA9.", kSmall, W - 24.f),
+                   kSmall, c.textMuted);
+    r.strokeRect(box, c.border, 1.f);
+    y += ih + 10.f;
+    int n = 0;
+    for (const auto& l : wrapText(r, preview_.description.empty() ? std::string("(pas encore de description)") : preview_.description, kSmall, W)) {
+        if (++n > 4) break;
+        r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, preview_.description.empty() ? c.textMuted : c.text);
+        y += 20.f;
+    }
+    y += 6.f;
+    for (const auto& l : wrapText(r, "Dans : " + (shown_.editions.empty() ? std::string("aucune \xC3\xA9" "dition") : shown_.editions), kSmall, W)) {
+        r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
+        y += 20.f;
+    }
 }
 
 } // namespace

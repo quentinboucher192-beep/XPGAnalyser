@@ -302,6 +302,8 @@ public:
     // sans licence ; `tone` (0 neutre, 1 bon, 2 attention, 3 erreur, 4 information) donne sa couleur et son icone ;
     // `button` : le libelle du bouton ("Licence...", "Activer avec un code...").
     [[nodiscard]] StartButton&   licenceButton() noexcept { return *licence_; }
+    // 1.37.0 : << Mon profil... >> dans l'encart (a gauche du bouton de la licence, s'il y a la place).
+    [[nodiscard]] StartButton&   profileButton() noexcept { return *profile_; }
     void setLicenceCard(std::string title, std::string text, int tone, std::string button);
     void setLicenceNotice(std::string title, std::string text) { setLicenceCard(std::move(title), std::move(text), 2, "Licence\xE2\x80\xA6"); }
     [[nodiscard]] const std::string& licenceTitle() const noexcept { return licenceTitle_; }
@@ -339,6 +341,7 @@ private:
     ThemeSwatches* swatches_{nullptr};
     StartButton*   autostart_{nullptr};
     StartButton*   licence_{nullptr};     // 1.34.0
+    StartButton*   profile_{nullptr};     // 1.37.0
     std::string    licenceTitle_, licenceText_;
     gfx::Rect      licenceBox_{};
     std::vector<std::string> licenceLines_;   // le titre (en gras : les licenceBold_ premieres), puis le texte

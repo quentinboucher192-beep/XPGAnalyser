@@ -1629,6 +1629,8 @@ void App::registerActions() {
                         [this] { menus_->PreviousMenu(); }});
     // 1.30.0 : la fenetre Licence (Aide > Licence..., la pastille de la barre d'etat).
     actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
+    // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet.
+    actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this, licence::kTabProfile); }});
     // 1.30.0 : LES ACTIONS D'UNE FONCTIONNALITE (licence::gates) passent par le controle : fermee, la fenetre
     // << Pas dans ta licence >> ; ouverte, l'action comme avant. Elles restent actives (un clic dit pourquoi).
     for (const auto& g : licence::gates()) {

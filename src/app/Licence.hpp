@@ -200,6 +200,28 @@ struct AnswerView {
 };
 [[nodiscard]] AnswerView answerView(const Answer& a, const licensing::LicenseState& st);
 
+// ---- 1.37.0 : MON PROFIL (tout facultatif) : il remplit la demande de licence ; le courriel recoit le mail de
+// l'editeur a l'acceptation. Dans le dossier des reglages (commun aux deux Studios), en clair (rien de secret).
+struct Profile {
+    std::string email, name, company;
+    [[nodiscard]] bool empty() const noexcept { return email.empty() && name.empty() && company.empty(); }
+};
+inline constexpr std::size_t kMaxProfileField = 200;
+[[nodiscard]] std::string profilePath();
+[[nodiscard]] Profile loadProfile();   // absent ou illisible : vide
+// Faux : `why` (un courriel qui n'a pas la forme d'une adresse, un champ trop long, l'ecriture).
+bool saveProfile(const Profile& p, std::string* why);
+
+// ---- 1.37.0 : L'APERCU D'UNE FONCTIONNALITE (onglet Editions) : une capture et deux lignes, livrees avec le
+// logiciel (resources/licences/fonctions/<id>.png et descriptions.json). `folder` : celui d'a cote de l'exe (main) ;
+// sinon resources/licences/fonctions du dossier de travail.
+void setFeatureImagesFolder(std::string folder);
+struct FeaturePreview {
+    std::string imagePath;     // vide : pas de capture
+    std::string description;   // vide : pas de texte
+};
+[[nodiscard]] FeaturePreview featurePreview(const std::string& featureId);
+
 } // namespace licence
 
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,

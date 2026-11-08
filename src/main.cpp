@@ -11,6 +11,7 @@
 #include "app/App.hpp"
 #include "app/CrashDialogs.hpp"   // 1.10.2 (CR) : la fenetre de blocage de l'appli
 #include "app/Dossiers.hpp"
+#include "app/Licence.hpp"   // 1.37.0 : setFeatureImagesFolder
 #include "app/ReportWindow.hpp"   // 1.12.28 : la fenetre de rapport a part (un blocage, un plantage)
 #include "app/Settings.hpp"
 #include "app/ai/AiSandbox.hpp"   // 1.21.0 : --bac-a-sable (le processus enfant de l'Assistant IA)
@@ -514,6 +515,11 @@ int main(int argc, char** argv) {
         if (!exe.empty() && fs::is_directory(exe / "resources" / "polices", ec)) {
             const auto u8 = (exe / "resources" / "polices").u8string();
             hmi::fontlib::setNativeFolder(std::string(u8.begin(), u8.end()));
+        }
+        // 1.37.0 : les apercus des fonctionnalites (fenetre Licence, onglet Editions), a cote de l'exe aussi.
+        if (!exe.empty() && fs::is_directory(exe / "resources" / "licences" / "fonctions", ec)) {
+            const auto u8 = (exe / "resources" / "licences" / "fonctions").u8string();
+            app::licence::setFeatureImagesFolder(std::string(u8.begin(), u8.end()));
         }
     }
 

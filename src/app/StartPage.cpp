@@ -1544,6 +1544,11 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     licence_ = make("Licence\xE2\x80\xA6", "startup.licence", L::Secondary, G::None);
     licence_->setTooltip("La fen\xC3\xAAtre Licence : ta licence, sa D\xC3\xA9" "couverte, l'activation avec un code");
     licence_->setVisibility(ui::Visibility::Collapsed);
+    // 1.37.0 : Mon profil (courriel, nom, societe : facultatifs) - il remplit la demande de licence.
+    profile_ = make("Mon profil\xE2\x80\xA6", "startup.profil", L::Link, G::None);
+    profile_->setTooltip("Ton courriel, ton nom, ta soci\xC3\xA9t\xC3\xA9 (facultatifs) : ils remplissent ta demande de licence ; le courriel re\xC3\xA7oit "
+                         "le mail de l'\xC3\xA9" "diteur quand il l'accepte");
+    profile_->setVisibility(ui::Visibility::Collapsed);
     autostart_->setTooltip("Le poste d'exploitation d'un projet FINISH, lanc\xC3\xA9 au d\xC3\xA9marrage du PC (un seul projet par PC)");
 }
 
@@ -1635,12 +1640,20 @@ float StartRail::placeBody(int level) {
         const float bw = std::min(licence_->naturalWidth(), w - 24.f);
         licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.bottom() - 10.f - 26.f, bw, 26.f});
         licence_->setVisibility(ui::Visibility::Visible);
+        const float pw = profile_->naturalWidth();   // 1.37.0 : a gauche, s'il y a la place
+        if (pw + 8.f + bw <= w - 20.f) {
+            profile_->setBounds({licenceBox_.x + 10.f, licenceBox_.bottom() - 10.f - 26.f, pw, 26.f});
+            profile_->setVisibility(ui::Visibility::Visible);
+        } else {
+            profile_->setVisibility(ui::Visibility::Collapsed);
+        }
         y += bh + (easy ? 12.f : 8.f);
     } else {
         licenceLines_.clear();
         licenceBold_ = 0;
         licenceBox_ = {};
         licence_->setVisibility(ui::Visibility::Collapsed);
+        profile_->setVisibility(ui::Visibility::Collapsed);
     }
 
     // ---- les deux grandes actions -------------------------------------------

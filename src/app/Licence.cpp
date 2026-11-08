@@ -9,6 +9,9 @@
 #include "hmi/HmiStationLaunch.hpp"
 #include "screens/Screens.hpp"
 
+#include "Settings.hpp"   // 1.37.0 : le dossier des reglages (Mon profil)
+
+#include "../core/Json.hpp"
 #include "../licensing/Gateway.hpp"   // 1.37.0 : kMailSent, kMailFailed
 #include "../licensing/Licensing.hpp"
 
@@ -18,7 +21,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <sstream>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -642,6 +647,126 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
     }
     v.text = std::move(text);
     return v;
+}
+
+// ============================================================ 1.37.0 : Mon profil ==
+namespace {
+std::filesystem::path pathOf(const std::string& utf8) { return std::filesystem::path(std::u8string(utf8.begin(), utf8.end())); }
+std::string trimmed(std::string s) {
+    const auto b = s.find_first_not_of(" \t\r\n");
+    if (b == std::string::npos) return {};
+    const auto e = s.find_last_not_of(" \t\r\n");
+    return s.substr(b, e - b + 1);
+}
+bool readAll(const std::filesystem::path& p, std::string& out, std::size_t limit) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(p, ec) || std::filesystem::file_size(p, ec) > limit) return false;
+    std::ifstream in(p, std::ios::binary);
+    if (!in) return false;
+    std::ostringstream ss;
+    ss << in.rdbuf();
+    out = ss.str();
+    return true;
+}
+std::mutex  g_featureMutex;
+std::string g_featureFolder;
+} // namespace
+
+std::string profilePath() {
+    const auto p = std::filesystem::path(Settings::sharedFolder()) / "profil.json";
+    const auto u8 = p.u8string();
+    return std::string(u8.begin(), u8.end());
+}
+
+Profile loadProfile() {
+    Profile p;
+    std::string text;
+    core::json::Value v;
+    if (!readAll(pathOf(profilePath()), text, 64 * 1024) || !core::json::parse(text, v, nullptr) || !v.isObject()) return p;
+    const auto field = [&v](const char* key) {
+        std::string s = trimmed(v.str(key));
+        if (s.size() > kMaxProfileField) s.clear();
+        return s;
+    };
+    p.email = field("courriel");
+    p.name = field("nom");
+    p.company = field("societe");
+    if (!p.email.empty() && !licensing::gateway::plausibleEmail(p.email)) p.email.clear();
+    return p;
+}
+
+bool saveProfile(const Profile& in, std::string* why) {
+    Profile p{trimmed(in.email), trimmed(in.name), trimmed(in.company)};
+    const auto fail = [why](std::string t) {
+        if (why) *why = std::move(t);
+        return false;
+    };
+    if (p.email.size() > kMaxProfileField || p.name.size() > kMaxProfileField || p.company.size() > kMaxProfileField)
+        return fail("un champ est trop long (" + std::to_string(kMaxProfileField) + " caract\xC3\xA8res au plus)");
+    if (!p.email.empty() && !licensing::gateway::plausibleEmail(p.email))
+        return fail("\xC2\xAB " + p.email + " \xC2\xBB n'a pas la forme d'une adresse (nom@domaine.fr) : corrige-la, ou laisse-la vide");
+    for (const std::string* s : {&p.email, &p.name, &p.company})
+        for (unsigned char ch : *s)
+            if (ch < 0x20) return fail("un champ contient un caract\xC3\xA8re de contr\xC3\xB4le");
+    core::json::Value v = core::json::Value::object();
+    v.set("format", "xpg-profil/1");
+    v.set("courriel", p.email);
+    v.set("nom", p.name);
+    v.set("societe", p.company);
+    const auto path = pathOf(profilePath());
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
+    auto tmp = path;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        out << core::json::write(v, true) << "\n";
+        if (!out.good()) return fail("le profil n'a pas pu \xC3\xAAtre \xC3\xA9" "crit (" + profilePath() + ")");
+    }
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        std::filesystem::remove(tmp, ec);
+        return fail("le profil n'a pas pu \xC3\xAAtre \xC3\xA9" "crit (" + profilePath() + ")");
+    }
+    return true;
+}
+
+// ============================================================ 1.37.0 : l'apercu d'une fonctionnalite ==
+void setFeatureImagesFolder(std::string folder) {
+    std::lock_guard<std::mutex> lock(g_featureMutex);
+    g_featureFolder = std::move(folder);
+}
+
+FeaturePreview featurePreview(const std::string& featureId) {
+    FeaturePreview out;
+    // Un identifiant du registre ([a-z0-9._-]) : jamais un chemin.
+    if (featureId.empty() || featureId.size() > 64 ||
+        !std::all_of(featureId.begin(), featureId.end(), [](char ch) {
+            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '_' || ch == '-';
+        }) ||
+        featureId.find("..") != std::string::npos)
+        return out;
+    std::vector<std::filesystem::path> dirs;
+    {
+        std::lock_guard<std::mutex> lock(g_featureMutex);
+        if (!g_featureFolder.empty()) dirs.push_back(pathOf(g_featureFolder));
+    }
+    std::error_code ec;
+    dirs.push_back(std::filesystem::absolute(std::filesystem::path("resources") / "licences" / "fonctions", ec));
+    for (const auto& d : dirs) {
+        if (!std::filesystem::is_directory(d, ec)) continue;
+        const auto img = d / (featureId + ".png");
+        if (std::filesystem::is_regular_file(img, ec)) {
+            const auto u8 = img.u8string();
+            out.imagePath.assign(u8.begin(), u8.end());
+        }
+        std::string text;
+        core::json::Value v;
+        if (readAll(d / "descriptions.json", text, 256 * 1024) && core::json::parse(text, v, nullptr) && v.isObject())
+            if (const auto* all = v.find("fonctions"); all && all->isObject()) out.description = trimmed(all->str(featureId));
+        if (!out.imagePath.empty() || !out.description.empty()) break;
+    }
+    return out;
 }
 
 void showNotices() {

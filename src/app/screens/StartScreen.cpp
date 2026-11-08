@@ -438,6 +438,7 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += rail.swatches().chosen->connect([this](const std::string& key) { chooseTheme(key); });
     uiLinks_ += rail.autostartButton().clicked->connect([this] { askAutostart(); });
     uiLinks_ += rail.licenceButton().clicked->connect([this] { showLicenceWindow(app_, licenceTab_); });   // 1.35.0 : l'onglet de l'encart
+    uiLinks_ += rail.profileButton().clicked->connect([this] { showLicenceWindow(app_, licence::kTabProfile); });   // 1.37.0
     // Le bouton ... du champ du chemin : l'explorateur part du dossier des
     // projets ; le project.xpgproj choisi designe son dossier ; puis comme Entree.
     {
@@ -1361,7 +1362,8 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     menuButton_ = nullptr;
     auto& rail = page.rail();
     start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
-                                           &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton(), &rail.licenceButton()};
+                                           &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton(), &rail.licenceButton(),
+                                           &rail.profileButton()};
     for (auto* b : buttons)
         if (b->visible() && b->bounds().contains(at) && !b->text().empty()) {
             heading(b->text());

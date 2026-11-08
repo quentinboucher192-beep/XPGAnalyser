@@ -326,6 +326,7 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     e(help_, "Rep\xC3\xA8res des nouveaut\xC3\xA9s", "", ui::Icon::Ok, "help.newsMarks");
     e(help_, "Journal interne (historique des appels)\xE2\x80\xA6", "", ui::Icon::Document, "help.callTrail");   // 1.10.2 (CR)
     e(help_, "Licence\xE2\x80\xA6", "", ui::Icon::Lock, "help.licence");   // 1.30.0
+    e(help_, "Mon profil\xE2\x80\xA6", "", ui::Icon::User, "help.profile");   // 1.37.0
     e(help_, "\xC3\x80 propos d'" + core::productName() + "\xE2\x80\xA6", "", ui::Icon::Info, "help.about");
 }
 
