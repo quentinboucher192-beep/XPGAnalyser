@@ -238,8 +238,7 @@ protected:
                 case Kind::Icon: ui::drawIcon(ctx.r, it.icon, it.r, ink(it.ink)); break;
                 case Kind::Dot: ctx.r.fillRoundedRect(it.r, ink(it.ink), 3.f); break;
                 case Kind::Bold:
-                    ctx.r.drawText({it.r.x, it.r.y}, it.text, it.font, ink(it.ink));
-                    ctx.r.drawText({it.r.x + 0.6f, it.r.y}, it.text, it.font, ink(it.ink));
+                    ctx.r.drawText({it.r.x, it.r.y}, it.text, gfx::semibold(it.font), ink(it.ink));   // 1.41.0 : la demi-grasse
                     break;
                 case Kind::Line: ctx.r.drawText({it.r.x, it.r.y}, it.text, it.font, ink(it.ink)); break;
             }

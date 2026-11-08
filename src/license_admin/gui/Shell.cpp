@@ -92,12 +92,6 @@ std::vector<std::string> wrap(const std::string& text, FontId f, float w) {
     return out;
 }
 
-// Gras simule (une seule face : le texte trace deux fois, a un demi-pixel).
-void boldText(gfx::IRenderer& r, gfx::Point p, const std::string& s, FontId f, Color c) {
-    r.drawText(p, s, f, c);
-    r.drawText({p.x + 0.6f, p.y}, s, f, c);
-}
-
 // Un sablier : huit points en rond, la tete tourne.
 void spinner(gfx::IRenderer& r, gfx::Point c, float radius, Color col, double t) {
     constexpr int n = 8;

@@ -231,8 +231,7 @@ protected:
         }
         for (const auto& run : laid_.runs) {
             const gfx::Color col = run.tone == ui::Tone::None ? c.text : run.tone == ui::Tone::Muted ? c.textMuted : th.onSurface(th.tone(run.tone, c.text));
-            r.drawText(run.at, run.text, run.font, col);
-            if (run.bold) r.drawText({run.at.x + 0.6f, run.at.y}, run.text, run.font, col);
+            r.drawText(run.at, run.text, run.bold ? gfx::semibold(run.font) : run.font, col);   // 1.41.0 : la demi-grasse
         }
     }
 
