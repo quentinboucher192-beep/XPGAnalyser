@@ -1136,10 +1136,10 @@ void ServicePage::rebuild() {
             "demi-heure la premi\xC3\xA8re fois. Le pas \xC3\xA0 pas complet : LISEZ-MOI-SERVICE.txt, avec le dossier du service. En bref :");
     bl.bullet("1. Installe Node.js (la version LTS, 22 ou plus) : nodejs.org.");
     bl.bullet("2. Cr\xC3\xA9" "e ton compte Cloudflare (gratuit) : dash.cloudflare.com/sign-up ; dans \xC2\xAB Workers et Pages \xC2\xBB, choisis ton sous-domaine.");
-    bl.bullet("3. Le dossier service-licences du zip de ton outil d'\xC3\xA9" "diteur contient d\xC3\xA9j\xC3\xA0 tout ; mets-y cle-publique.txt (ta cl\xC3\xA9 "
-              "PUBLIQUE : le bouton ci-dessous).");
+    bl.bullet("3. Le dossier du service, install\xC3\xA9 avec l'Admin (menu D\xC3\xA9marrer \xE2\x80\xBA D\xC3\xA9ployer le service en ligne), contient d\xC3\xA9j\xC3\xA0 "
+              "tout ; le bouton ci-dessous y \xC3\xA9" "crit cle-publique.txt (ta cl\xC3\xA9 PUBLIQUE).");
     bl.bullet("4. Dans un terminal ouvert dans le dossier service : npx wrangler login (une fois par PC).");
-    bl.bullet("5. Double-clique deployer.bat : il \xC3\xA9" "crit l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e aussi dans "
+    bl.bullet("5. Menu D\xC3\xA9marrer \xE2\x80\xBA D\xC3\xA9ployer le service en ligne (deployer.bat) : il \xC3\xA9" "crit l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e aussi dans "
               "adresse-du-service.txt).");
     bl.bullet("6. Colle-la plus haut, Enregistrer l'adresse, V\xC3\xA9rifier, puis Certifier la cl\xC3\xA9 du service (et Renouveler, chaque ann\xC3\xA9" "e).");
     bl.bullet("7. Signe le registre (\xC3\x89" "ditions : il part sur le service), synchronise l'archive, puis cr\xC3\xA9" "e tes licences en ligne (Licences).");
@@ -1580,9 +1580,28 @@ void ServicePage::stats() {
     (void)slow("Service : les compteurs", [w] { return w->serviceStats(); }, [this](const OpResult& r) { note(licences_, "compteurs", r); });
 }
 
+// 1.40.0 : le dossier du service installe avec l'Admin (l'installateur : %LOCALAPPDATA%\XPG\ServiceLicences, avec
+// deployer.bat) ; vide : pas installe (l'ancien zip, un autre PC) - on demande alors le dossier.
+std::string installedServiceKit() {
+#ifdef _WIN32
+    const char* la = std::getenv("LOCALAPPDATA");
+    if (!la || !*la) return {};
+    const std::string dir = std::string(la) + "\\XPG\\ServiceLicences";
+    std::error_code ec;
+    const std::filesystem::path bat = std::filesystem::path(std::u8string(dir.begin(), dir.end())) / "deployer.bat";
+    return std::filesystem::is_regular_file(bat, ec) ? dir : std::string();
+#else
+    return {};
+#endif
+}
+
 void ServicePage::writePublicKey() {
     if (!ws().key().present) {
         refuse("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9)");
+        return;
+    }
+    if (const std::string kit = installedServiceKit(); !kit.empty()) {   // 1.40.0 : le dossier installe, sans question
+        if (host_.report) host_.report(ws().writePublicKeyFile(kit));
         return;
     }
     ui::FilePick p;

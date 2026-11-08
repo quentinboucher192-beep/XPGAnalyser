@@ -132,6 +132,13 @@ void WidgetMenu::Render(gfx::IRenderer& r, const FrameContext& fc) {
         root_->setBounds({0.f, 0.f, fc.surface.w, fc.surface.h});
         const ui::dialogframe::KeyScope key(id_);
         root_->layout();
+    } else if (root_->needsLayout()) {
+        // 1.40.0 : un ecran SOUS un dialogue n'a pas de mise a jour (donc pas de mise en page), mais il se dessine :
+        // ses donnees changees pendant ce temps (une licence acceptee pendant que << Ta licence est activee >> est
+        // ouverte) se dessinaient sur l'ancienne mise en page - les lignes du nouvel etat par-dessus les champs. Il se
+        // remet en page avant de se dessiner, a sa taille.
+        const ui::dialogframe::KeyScope key(id_);
+        root_->layout();
     }
 
     std::vector<ui::Widget*> overlays;

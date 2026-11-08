@@ -173,6 +173,33 @@ private:
     menu::MenuId id_;
 };
 
+// 1.40.0 : un ecran dont les donnees changent pendant qu'un dialogue est ouvert par-dessus.
+class LayoutProbe final : public ui::Widget {
+public:
+    int mode{0}, layouts{0}, laidMode{-1}, paintedWith{-1};
+
+protected:
+    void onLayout() override {
+        ++layouts;
+        laidMode = mode;
+    }
+    void onPaint(const ui::PaintContext&) override { paintedWith = laidMode; }
+};
+
+class ProbeScreen final : public menu::WidgetMenu {
+public:
+    ProbeScreen() : menu::WidgetMenu("ecran.sonde") {}
+    LayoutProbe* probe{nullptr};
+
+protected:
+    core::Status buildUi() override {
+        auto p = std::make_unique<LayoutProbe>();
+        probe = p.get();
+        setRoot(std::move(p));
+        return core::ok();
+    }
+};
+
 menu::MenuFactory factory() {
     menu::MenuFactory f;
     f.add("analysis", [] { return menu::MenuPtr(std::make_unique<FakeScreen>("analysis")); });
@@ -470,6 +497,29 @@ int main() {
                                                                             "Mot de passe incorrect.");
         check(ask.fieldX.size() == 1 && ask.okTop > ask.lastNoteBottom && ask.okTop - ask.lastNoteBottom < 24.f,
               "la demande du mot de passe : Rejouer juste sous le champ (" + std::to_string(static_cast<int>(ask.okTop - ask.lastNoteBottom)) + " px)");
+    }
+
+    std::printf("9. 1.40.0 : un ecran sous un dialogue se remet en page avant de se dessiner\n");
+    {
+        MenuManager mm9(factory());
+        auto scr = std::make_unique<ProbeScreen>();
+        ProbeScreen* screen9 = scr.get();
+        mm9.PushMenu(std::move(scr));
+        mm9.applyPending();
+        mm9.Update(mainFc);
+        check(screen9->probe && screen9->probe->laidMode == 0, "l'ecran mis en page (etat 0)");
+        mm9.ShowDialog(std::make_unique<TestDialog>("dialog.licence-activee", mm9), {});
+        mm9.applyPending();
+        mm9.Update(mainFc);
+        // ses donnees changent pendant que le dialogue est ouvert (une licence acceptee) : il n'a pas de mise a jour
+        screen9->probe->mode = 1;
+        screen9->probe->invalidateLayout();
+        FakeRenderer r9(mainSize);
+        mm9.Render(r9, mainFc);
+        check(screen9->probe->paintedWith == 1, "dessine sur la mise en page de son NOUVEL etat (avant : l'ancienne - les lignes par-dessus les champs)");
+        const int layouts = screen9->probe->layouts;
+        mm9.Render(r9, mainFc);
+        check(screen9->probe->layouts == layouts, "rien de change : pas de mise en page de plus");
     }
 
     std::printf("\n%s : %d echec(s)\n", failures ? "ECHEC" : "OK", failures);

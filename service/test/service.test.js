@@ -78,7 +78,7 @@ describe("l'etat public, avant tout certificat", () => {
         assert.ok(r.type.startsWith("application/json"));
         assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre", "revocations", "changements"]);
         assert.equal(r.json.service, "xpg-licences");
-        assert.equal(r.json.version, "1.39.0");
+        assert.equal(r.json.version, "1.40.0");
         assert.equal(r.json.revocations, 0);
         assert.equal(r.json.changements, 0);
         assert.ok(Math.abs(r.json.heure - now()) < 30);
@@ -1205,7 +1205,7 @@ describe("les lignes ecrites par appel (le plan gratuit : 100 000 par jour)", ()
         assert.equal((await deposerLicence({ ...W, emission: now() - 60 }, { code_hash: CW.hash })).statut, 200);
         const a = await activer(p, CW.code);
         assert.equal(a.statut, 200);
-        assert.ok(lignesEcrites(a) <= 9, "activer : " + lignesEcrites(a));
+        assert.ok(lignesEcrites(a) <= 10, "activer : " + lignesEcrites(a)); // 1.40.0 : + le compteur << activite >>
         const r = await renouveler(p);
         assert.equal(r.json.activations.length, 1);
         assert.equal(lignesEcrites(r), 3);
@@ -1276,6 +1276,65 @@ describe("les changements vus par les Studios (GET /v1/etat)", () => {
         // le compteur ne dit rien de plus : ni licence, ni PC, ni motif
         const brut = (await appel(svc, "GET", "/v1/etat")).texte;
         assert.ok(!brut.includes(L.id) && !brut.includes(y.hex) && !brut.includes("Essai"));
+    });
+});
+
+describe("ce que l'outil de l'editeur voit bouger (GET /admin/etat)", () => {
+    const etatAdmin = async () => {
+        const r = await appel(svc, "GET", "/admin/etat", { cle: editeur });
+        assert.equal(r.statut, 200, r.texte);
+        return r.json;
+    };
+
+    it("signe par l'editeur seulement", async () => {
+        erreur(await appel(svc, "GET", "/admin/etat"), 401, "signature");
+        erreur(await appel(svc, "GET", "/admin/etat", { cle: pc() }), 403, "editeur");
+    });
+
+    it("un PC active, libere par son client, retire a son renouvellement : << activite >> monte ; un renouvellement, non", async () => {
+        const L = { id: "XPG-2026-00040", max: 1, emission: now() - 10, expire: now() + 100 * JOUR };
+        const c = nouveauCode();
+        codes.push(c);
+        assert.equal((await deposerLicence(L, { code_hash: c.hash })).statut, 200);
+        let e = await etatAdmin();
+        assert.equal(e.version, "1.40.0");
+        let n = e.activite;
+        const x = pc();
+        assert.equal((await activer(x, c.code)).statut, 200);
+        e = await etatAdmin();
+        assert.equal(e.activite, n + 1, "un PC active");
+        n = e.activite;
+        assert.equal((await renouveler(x)).statut, 200);
+        assert.equal((await etatAdmin()).activite, n, "un renouvellement : rien");
+        assert.equal((await activer(x, c.code)).statut, 200);
+        assert.equal((await etatAdmin()).activite, n, "le meme PC qui s'active de nouveau (il tient sa place) : rien");
+        assert.equal((await liberer(x, L.id)).statut, 200);
+        e = await etatAdmin();
+        assert.equal(e.activite, n + 1, "le client a libere son PC");
+        n = e.activite;
+        assert.equal((await liberer(x, L.id)).statut, 200);
+        assert.equal((await etatAdmin()).activite, n, "deja libere : rien");
+        assert.equal((await activer(x, c.code)).statut, 200);
+        assert.equal((await etatAdmin()).activite, n + 1, "libere puis active de nouveau");
+        // le compteur public des Studios ne bouge pas pour autant
+        const pub = (await appel(svc, "GET", "/v1/etat")).json;
+        assert.equal(pub.activite, undefined, "le compteur d'activite n'est jamais public");
+    });
+
+    it("une demande deposee ou annulee par un client : << demandes >> monte, << attente >> la compte", async () => {
+        let e = await etatAdmin();
+        const n = e.demandes;
+        const attente = e.attente;
+        const d = pc();
+        const r = await appel(svc, "POST", "/v1/demandes", { cle: d, corps: { cle: editeur.id, scelle: "AAAA" } });
+        assert.equal(r.statut, 201, r.texte);
+        e = await etatAdmin();
+        assert.equal(e.demandes, n + 1);
+        assert.equal(e.attente, attente + 1);
+        assert.equal((await appel(svc, "POST", "/v1/demandes/annuler", { cle: d, corps: { numero: r.json.numero } })).statut, 200);
+        e = await etatAdmin();
+        assert.equal(e.demandes, n + 2);
+        assert.equal(e.attente, attente);
     });
 });
 

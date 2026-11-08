@@ -1,11 +1,22 @@
-XPG License Admin {VERSION} - les outils de l'ÉDITEUR pour les licences
+﻿XPG License Admin {VERSION} - les outils de l'ÉDITEUR pour les licences
 =====================================================================
 
-Ce dossier est À TOI SEUL (l'éditeur). Il ne va JAMAIS chez un client : ni dans
-l'installateur, ni dans un zip portable, ni sur un partage réseau. Avec ces outils et
-ta clé, on fabrique des licences : garde-les pour toi.
+Ces outils sont À TOI SEUL (l'éditeur). Ils ne vont JAMAIS chez un client : ni dans
+l'installateur des Studios, ni dans un zip portable, ni sur un partage réseau. Avec eux
+et ta clé, on fabrique des licences : garde-les pour toi.
 
-Ce qu'il y a dans ce dossier :
+1.40.0 : ILS S'INSTALLENT D'UN SEUL FICHIER : XPG-License-Admin-Setup-{VERSION}-EDITEUR.exe.
+Double-clique-le : il installe l'application, la console, le service en ligne et ces
+notes (« Ce que tu installes »), avec ses options (un raccourci sur le Bureau, ouvrir
+les .xpgreq, .xpglic, .xpgreg, .xpgrev d'un double-clic, la console dans le PATH). Pour
+toi seul par défaut (sans droits d'administrateur). Une nouvelle version s'installe
+par-dessus : tes choix sont repris. Ta clé, ton archive et tes réglages
+(%LOCALAPPDATA%\XPG\LicenseAdmin) ne sont JAMAIS touchés, ni à l'installation ni à la
+désinstallation. Le service en ligne s'installe dans %LOCALAPPDATA%\XPG\ServiceLicences
+(menu Démarrer > Déployer le service en ligne) ; ton cle-publique.txt y reste. L'ancien
+dossier du zip (editeur-...) ne sert plus : tu peux le supprimer.
+
+Ce qui est installé (le dossier du programme) :
   XPG-License-Manager-Admin.exe  L'APPLICATION (1.33.0) : des fenêtres et des boutons.
                                  Commence par elle (double-clic). Windows 10 ou 11, 64 bits.
   SDL3.dll                       ce qu'il faut à l'application pour ses fenêtres : laisse-le à côté
@@ -15,6 +26,8 @@ Ce qu'il y a dans ce dossier :
                                  21 fonctionnalités de la maquette - à adapter, puis à signer
   parametres-exemple.json        les paramètres d'une licence (pour la console)
   LISEZ-MOI-EDITEUR.txt          ce fichier
+  exemples\                      registre.json et parametres-exemple.json (l'installateur les
+                                 range là)
 
 Les deux outils travaillent dans le MÊME dossier (%LOCALAPPDATA%\XPG\LicenseAdmin) : la
 même clé, la même archive, le même registre des activations. Ce que l'un fait, l'autre le voit.
@@ -123,8 +136,14 @@ code... le remontre quand tu veux (le service, lui, n'en garde que l'empreinte).
 client le tape dans Aide > Licence... > Activer avec un code (ou dans l'installateur). Hors ligne : la licence est signée et rangée,
 mais pas déposée, et aucun code n'est montré - Licences > Nouveau code... la dépose
 plus tard.
-Sur la page Licences, une licence en ligne : Relever (ses PC activés : vu le, bail
-jusqu'au), Retirer ce PC... (il n'est plus renouvelé ; sa place se libère),
+Sur la page Licences, une licence en ligne : ses PC activés (vu le, bail jusqu'au).
+1.40.0 : EN DIRECT - tant que l'application est ouverte, elle regarde ton service toutes
+les 15 secondes : un PC activé, ou LIBÉRÉ par son client (Licence > Mes appareils dans
+son Studio), apparaît tout seul, et un avis le dit (« Atelier ... a libéré le PC ... :
+sa place est libre »). Une nouvelle demande aussi. En haut : « Service : ... · en
+direct ». (Redéploie le service 1.40.0 : avec un service plus ancien, l'application
+relit les licences toutes les 30 secondes.) Relever le fait tout de suite.
+Retirer ce PC... (il n'est plus renouvelé ; sa place se libère),
 Nouveau code... (l'ancien ne marche plus ; les PC activés restent), Désactiver...
 (son code ne marche plus et ses PC s'arrêtent à la fin de leur bail ; Réactiver...
 l'annule), Prolonger... (une émission plus récente, le même code).

@@ -164,7 +164,9 @@ public:
         newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste) aupr\xC3\xA8s du service des licences");
         refreshOnline_ = &button(*this, "Relever", "licences.relever");
         refreshOnline_->setIcon(ui::Icon::Refresh);
-        refreshOnline_->setTooltip("Lit sur le service les activations des licences en ligne (les PC, vu le, bail jusqu'au)");
+        // 1.40.0 : l'application le fait seule (le regard en direct : un PC active ou libere apparait sans clic)
+        refreshOnline_->setTooltip("Lit tout de suite sur le service les activations des licences en ligne (les PC, vu le, bail jusqu'au). "
+                                   "L'application le fait seule d\xC3\xA8s qu'un PC est activ\xC3\xA9 ou lib\xC3\xA9r\xC3\xA9 (en direct).");
         showCode_ = &button(*this, "Voir le code\xE2\x80\xA6", "licences.voir-code");   // 1.37.0
         showCode_->setTooltip("Le code d'activation de la licence en ligne choisie, gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ce compte Windows)");
         newCode_ = &button(*this, "Nouveau code\xE2\x80\xA6", "licences.nouveau-code");

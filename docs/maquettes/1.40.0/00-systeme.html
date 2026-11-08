@@ -1,0 +1,96 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Le nouveau design</title>
+<link rel="stylesheet" href="ds.css">
+<style>
+html,body{height:770px}body{padding:34px 40px}
+.hd{display:flex;align-items:flex-end;gap:16px}
+.ids{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.id{padding:18px;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden}
+.id .top{display:flex;align-items:center;gap:13px}
+.id .lg{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;color:#fff}
+.id .lg .ico{width:26px;height:26px;stroke-width:1.9}
+.id .nm{font:700 18px "Inter Display",Inter;letter-spacing:-.01em}
+.id .ro{font-size:12.5px;color:var(--muted)}
+.sws{display:flex;gap:6px}
+.sws span{flex:1;height:34px;border-radius:8px;display:flex;align-items:flex-end;padding:4px 6px;font:600 10px Inter}
+.id .glow{position:absolute;right:-60px;top:-60px;width:200px;height:200px;border-radius:50%;opacity:.12}
+.g3{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:16px;margin-top:16px}
+.bx{padding:18px}
+.bx .h2{font-size:15px;margin-bottom:14px}
+.ty{display:flex;align-items:baseline;gap:14px;padding:7px 0;border-bottom:1px solid var(--line)}
+.ty:last-child{border:0}
+.ty .m{width:110px;flex:none;font-size:11.5px;color:var(--faint);font-weight:550}
+.st{display:flex;flex-wrap:wrap;gap:8px}
+.surf{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+.surf div{height:52px;border-radius:9px;border:1px solid var(--line);display:flex;align-items:flex-end;padding:5px 7px;font:600 10.5px Inter;color:var(--muted)}
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.in{height:36px;border:1px solid var(--line2);border-radius:9px;padding:0 12px;display:flex;align-items:center;font-size:13px;background:#fff}
+.in.f{border-color:var(--violet);box-shadow:0 0 0 4px rgba(109,74,255,.13)}
+.in.e{border-color:#f19999;box-shadow:0 0 0 4px rgba(220,38,38,.08)}
+.err{font-size:11.5px;color:var(--red);margin-top:5px;display:flex;gap:5px;align-items:center}
+.seg{display:inline-flex;background:var(--sunken);border-radius:9px;padding:3px;gap:2px}
+.seg span{height:28px;padding:0 11px;display:grid;place-items:center;border-radius:7px;font:600 12px Inter;color:var(--muted)}
+.seg span.on{background:#fff;color:var(--ink);box-shadow:var(--sh1)}
+.tg{width:34px;height:20px;border-radius:99px;background:var(--violet);position:relative;display:inline-block;vertical-align:middle}
+.tg:after{content:"";position:absolute;right:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#fff}
+.tg.off{background:var(--line2)}.tg.off:after{right:auto;left:3px}
+.cb{width:18px;height:18px;border-radius:5px;background:var(--violet);display:inline-grid;place-items:center;color:#fff;vertical-align:middle}
+.cb .ico{width:12px;height:12px;stroke-width:3.2}
+.pr{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:16px}
+.p{padding:16px 18px;display:flex;gap:13px}
+.p .n{width:30px;height:30px;border-radius:9px;background:var(--ink);color:#fff;display:grid;place-items:center;font:700 13px Inter;flex:none}
+.p b{display:block;font-weight:650;font-size:14px}
+.p .t{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+</style></head><body data-h="770"><script src="icons.js"></script>
+<div class="hd"><div><div class="over" style="color:var(--violet)">Proposition · 1.40</div><div class="h1" style="font-size:32px;margin-top:6px">Un seul langage pour l'Admin, API Studio et IHM Studio</div>
+ <div class="muted" style="margin-top:6px;font-size:14.5px">Calme, net, lisible de loin : moins de bordures et de mots, plus d'air, une couleur par logiciel, l'état en direct partout.</div></div></div>
+
+<div class="ids">
+ <div class="card id"><span class="glow" style="background:#6d4aff"></span>
+  <div class="top"><div class="lg" style="background:linear-gradient(140deg,#8b6dff,#6d4aff 50%,#4b2fd6);box-shadow:0 8px 20px rgba(109,74,255,.35)"><i data-i="key"></i></div><div><div class="nm">License Manager Admin</div><div class="ro">l'éditeur · violet</div></div></div>
+  <div class="sws"><span style="background:#f1edff;color:#4b2fd6">50</span><span style="background:#e4dcff;color:#4b2fd6">100</span><span style="background:#6d4aff;color:#fff">500</span><span style="background:#4b2fd6;color:#fff">700</span><span style="background:#101833;color:#a993ff">barre</span></div>
+  <div class="row gap8"><span class="btn sm primary"><i data-i="plus" class="sm"></i>Nouvelle licence</span><span class="pill p-violet">PROFESSIONAL</span><span class="live" style="margin-left:auto"><i></i>En direct</span></div>
+ </div>
+ <div class="card id"><span class="glow" style="background:#2563eb"></span>
+  <div class="top"><div class="lg" style="background:linear-gradient(140deg,#60a5fa,#2563eb 55%,#1d4ed8);box-shadow:0 8px 20px rgba(37,99,235,.35)"><i data-i="cpu"></i></div><div><div class="nm">API Studio</div><div class="ro">le programme de l'automate · bleu</div></div></div>
+  <div class="sws"><span style="background:#eef4ff;color:#1d4ed8">50</span><span style="background:#dbe7ff;color:#1d4ed8">100</span><span style="background:#2563eb;color:#fff">500</span><span style="background:#1d4ed8;color:#fff">700</span><span style="background:#f8fafc;color:#64748b;border:1px solid #e3e8ef">volets</span></div>
+  <div class="row gap8"><span class="btn sm blue"><i data-i="hammer" class="sm"></i>Compiler</span><span class="pill p-green"><span class="d"></span>Simulation</span><span class="mono muted" style="margin-left:auto">TRUE · 68.2</span></div>
+ </div>
+ <div class="card id"><span class="glow" style="background:#0d9488"></span>
+  <div class="top"><div class="lg" style="background:linear-gradient(140deg,#2dd4bf,#0d9488 55%,#0f766e);box-shadow:0 8px 20px rgba(13,148,136,.35)"><i data-i="gauge"></i></div><div><div class="nm">IHM Studio</div><div class="ro">les écrans de l'exploitation · turquoise</div></div></div>
+  <div class="sws"><span style="background:#e8f8f6;color:#0f766e">50</span><span style="background:#c9efea;color:#0f766e">100</span><span style="background:#0d9488;color:#fff">500</span><span style="background:#0f766e;color:#fff">700</span><span style="background:#0f1b2d;color:#5eead4">écran</span></div>
+  <div class="row gap8"><span class="btn sm teal"><i data-i="play" class="sm"></i>Simuler</span><span class="pill p-teal">Vue_Supervision</span><span class="cap" style="margin-left:auto">1280 × 800</span></div>
+ </div>
+</div>
+
+<div class="g3">
+ <div class="card bx"><div class="h2">Écriture</div>
+  <div class="ty"><span class="m">Titre · 26</span><span style="font:700 26px 'Inter Display';letter-spacing:-.02em">Licences</span></div>
+  <div class="ty"><span class="m">Section · 16</span><span class="h2" style="margin:0">PC de la licence</span></div>
+  <div class="ty"><span class="m">Texte · 13,5</span><span>Le client a libéré ce PC.</span></div>
+  <div class="ty"><span class="m">Légende · 12</span><span class="cap">vu il y a 1 min</span></div>
+  <div class="ty"><span class="m">Code · 12,5</span><span class="mono">XPG-2026-00391</span></div>
+  <div class="cap" style="margin-top:10px">Inter et JetBrains Mono : libres, embarquées, nettes à toutes les tailles.</div>
+ </div>
+ <div class="card bx"><div class="h2">États et surfaces</div>
+  <div class="st"><span class="pill p-green"><span class="d"></span>Active</span><span class="pill p-amber"><span class="d"></span>Finit bientôt</span><span class="pill p-red"><span class="d"></span>Révoquée</span><span class="pill p-blue"><span class="d"></span>Nouvelle</span><span class="pill p-gray"><span class="d"></span>Hors ligne</span><span class="pill p-violet">Libéré</span></div>
+  <div class="cap" style="margin-top:10px">Toujours une pastille + un mot : jamais la couleur seule.</div>
+  <div class="surf"><div style="background:var(--bg)">fond</div><div style="background:#fff;box-shadow:var(--sh2)">carte</div><div style="background:var(--sunken)">creux</div><div style="background:#0b1222;color:#7c89a3;border-color:#0b1222">nuit</div></div>
+ </div>
+ <div class="card bx"><div class="h2">Composants</div>
+  <div class="row gap8" style="flex-wrap:wrap"><span class="btn sm primary">Principal</span><span class="btn sm">Secondaire</span><span class="btn sm ghost">Discret</span><span class="btn sm danger">Révoquer…</span><span class="btn sm" style="padding:0 8px"><i data-i="more" class="sm"></i></span></div>
+  <div class="cmp" style="margin-top:14px">
+   <div><div class="in f">Atelier Meyer</div></div>
+   <div><div class="in e">camille@</div><div class="err"><i data-i="alert" class="sm" style="width:12px;height:12px"></i>Il manque la fin de l'adresse.</div></div>
+   <div class="row gap10"><span class="seg"><span class="on">Toutes</span><span>Actives</span><span>Expirées</span></span></div>
+   <div class="row gap12"><span class="tg"></span><span class="tg off"></span><span class="cb"><i data-i="check"></i></span><span class="strike row gap4">Rapports</span><i data-i="lock" class="sm faint"></i></div>
+  </div>
+ </div>
+</div>
+
+<div class="pr">
+ <div class="card p"><span class="n">1</span><div><b>Moins de mots</b><div class="t">Un titre, une phrase. Le détail va dans l'info-bulle ou « En savoir plus ».</div></div></div>
+ <div class="card p"><span class="n">2</span><div><b>Une action principale</b><div class="t">Un bouton coloré par écran ; le reste dans le menu, le dangereux en rouge.</div></div></div>
+ <div class="card p"><span class="n">3</span><div><b>En direct</b><div class="t">Rien à relever à la main : ce qui change apparaît seul, signalé par « En direct ».</div></div></div>
+ <div class="card p"><span class="n">4</span><div><b>Rien ne se chevauche</b><div class="t">Une grille de 8 px, chaque zone sa place ; une fenêtre petite fait défiler, sans superposer.</div></div></div>
+</div>
+</body></html>

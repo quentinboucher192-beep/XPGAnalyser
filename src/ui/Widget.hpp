@@ -297,6 +297,8 @@ namespace ui {
         void invalidate() noexcept;                        // repaint needed
         void invalidateLayout() noexcept;                  // re-measure needed
         [[nodiscard]] bool needsRepaint() const noexcept { return dirtyPaint_; }
+        // 1.40.0 : une mise en page attend (des donnees ont change depuis la derniere).
+        [[nodiscard]] bool needsLayout() const noexcept { return dirtyLayout_; }
 
         [[nodiscard]] virtual SizeHint sizeHint() const;
 

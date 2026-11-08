@@ -87,7 +87,7 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.39.0";
+const VERSION = "1.40.0";
 const SCHEMA = 2;
 const JOUR = 86400;
 const HEURE = 3600;
@@ -171,6 +171,7 @@ const ROUTES = {
     "GET /admin/archive/fichier": { f: "lireFichier", signe: "editeur" },
     "POST /admin/archive": { f: "ecrireArchive", signe: "editeur" },
     "GET /admin/stats": { f: "stats", signe: "editeur" },
+    "GET /admin/etat": { f: "etatAdmin", signe: "editeur" },
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
 
@@ -352,6 +353,15 @@ export class Licences extends DurableObject {
     // 1.39.0 : un changement que les Studios doivent voir tout de suite (GET /v1/etat : << changements >>).
     signalerChangement() {
         return this.suivant("changements");
+    }
+    // 1.40.0 : ce que l'outil de l'editeur, ouvert, doit voir tout de suite (GET /admin/etat, PRIVE) : un PC active,
+    // libere par son client, retire au renouvellement (sa place reprise) - << activite >> ; une demande deposee ou
+    // annulee par un client - << demandes >>. Jamais au renouvellement d'un bail (trop frequent, rien a montrer).
+    signalerActivite() {
+        return this.suivant("activite");
+    }
+    signalerDemande() {
+        return this.suivant("demandes_changements");
     }
 
     // ================================================================ les cles ==
@@ -876,6 +886,7 @@ export class Licences extends DurableObject {
             ctx.now,
         );
         if (!avant) this.ajouter("n_activations", 1);
+        if (!avant || avant.etat !== "active") this.signalerActivite();
         const a = await this.signerActivation(lic, cle, demande.station, ctx.now);
         const message =
             lic.type === "floating"
@@ -936,6 +947,7 @@ export class Licences extends DurableObject {
             // Un bail echu dont la place a ete reprise par un autre PC : ce PC est retire.
             if (r.jusqu_a <= ctx.now && lic.type !== "floating" && this.places(lic, ctx.now, { cle, station }).n >= lic.postesMax) {
                 this.x("UPDATE activations SET etat = 'retiree', vue = ? WHERE licence = ? AND poste = ?", ctx.now, r.licence, cle);
+                this.signalerActivite();
                 retirer(r.licence, "retiree");
                 continue;
             }
@@ -974,6 +986,7 @@ export class Licences extends DurableObject {
                 }
             }
             this.x("UPDATE activations SET etat = 'liberee', vue = ?, place_jusqu = ? WHERE licence = ? AND poste = ?", ctx.now, garde, corps.licence, cle);
+            this.signalerActivite();
         } else if (r && r.etat === "liberee" && r.place_jusqu > ctx.now) {
             garde = r.place_jusqu;
         }
@@ -1099,6 +1112,7 @@ export class Licences extends DurableObject {
         );
         this.ajouter("n_attente", 1 - miennes);
         this.ajouter("octets_demandes", corps.scelle.length);
+        this.signalerDemande();
         return reponseJson(201, { numero });
     }
 
@@ -1110,6 +1124,7 @@ export class Licences extends DurableObject {
         if (r.etat === "attente") {
             this.x("UPDATE demandes SET etat = 'annulee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
             this.ajouter("n_attente", -1);
+            this.signalerDemande();
         } else if (r.etat !== "annulee")
             throw new Erreur(409, "etat", r.etat === "traitee" ? "L'éditeur a déjà traité cette demande." : "Cette demande a été remplacée par une plus récente.");
         return reponseJson(200, {});
@@ -1395,6 +1410,20 @@ export class Licences extends DurableObject {
     }
 
     // ================================================================ les compteurs ==
+    // 1.40.0 : L'ETAT VU PAR L'EDITEUR (signe par lui) - des compteurs qui montent a chaque changement : l'outil
+    // ouvert le regarde toutes les 15 secondes et ne relit les licences (ou les demandes) que s'ils ont bouge.
+    async etatAdmin(ctx) {
+        return reponseJson(200, {
+            version: VERSION,
+            heure: ctx.now,
+            activite: this.compte("activite"),
+            demandes: this.compte("demandes_changements"),
+            attente: this.compte("n_attente"),
+            changements: this.compte("changements"),
+            registre: Number(this.config("registre_numero") || "0"),
+        });
+    }
+
     async stats(ctx) {
         const jour = jourDe(ctx.now);
         const parEtat = (table) => {

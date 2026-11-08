@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.39.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.40.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.39.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 17 h 20"},
     {"1.38.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 15 h 05"},
     {"1.37.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 9 h 56"},
     {"1.36.0", "07/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 0 h 14"},
@@ -183,6 +184,12 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.40.0 : la fenetre Licence ne se chevauche plus
+        note("1.40.0", "Projet", Kind::Fixed,
+         "LA FEN\xC3\x8ATRE LICENCE : quand ta licence arrive (\xC2\xAB Ta licence est activ\xC3\xA9" "e \xC2\xBB), l'onglet Demander ma licence ne "
+         "montre plus ses lignes (derni\xC3\xA8re demande, r\xC3\xA9ponse, v\xC3\xA9rification) par-dessus le formulaire : un \xC3\xA9" "cran sous une "
+         "fen\xC3\xAAtre se remet en page avant de se dessiner.",
+         "licence", ""),
         // 1.39.0 : l'offre modifiee en tableau, les actions pas dans la licence, la licence perdue en direct
         note("1.39.0", "Projet", Kind::New,
          "L'OFFRE MODIFI\xC3\x89" "E, PR\xC3\x89" "CIS\xC3\x89" "MENT : la notification dit ce qui change en une ligne (1 fonctionnalit\xC3\xA9 retir\xC3\xA9" "e : "

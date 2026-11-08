@@ -18,8 +18,11 @@
 #                                         service-licences/ (1.35.0 : le kit de mise en ligne du service des
 #                                           licences - service/ sans node_modules, deployer.bat/.sh/.mjs,
 #                                           LISEZ-MOI-SERVICE.txt ; l'editeur y ajoute cle-publique.txt)
-#      -> DOSSIER/XPG-License-Admin-<version>-EDITEUR.zip
+#      -> DOSSIER/XPG-License-Admin-Setup-<version>-EDITEUR.exe  1.40.0 : L'INSTALLATEUR (un seul .exe, a la
+#                                         place du zip : installateur/XPG-License-Admin.iss) - avec ISCC=...
+#      -> DOSSIER/XPG-License-Admin-<version>-EDITEUR.zip   (seulement avec ZIP=1 : l'ancien paquet)
 #    DOSSIER : par defaut <racine>/dist-editeur (jamais dans dist/).
+#    ISCC=/chemin/ISCC.exe Inno Setup 6.3 ou plus (sous Wine hors de Windows) ; sans lui : le dossier seulement
 #    XPG_VERSION=1.30.0   la version (par defaut : outils/config.ini, [Produit] version)
 #    OUT=build-mingw      le dossier de construction MinGW (configure par cross_mingw.sh)
 #    JOBS=2               les compilations a la fois
@@ -99,7 +102,25 @@ with open(dst, "w", encoding="utf-8-sig", newline="") as f:
     f.write(text)
 PY
 
-# ---- 3. le zip (un dossier editeur-<version> dedans) ----
+# ---- 3. 1.40.0 : l'installateur (un seul .exe : l'application, la console, le service, les notes ; ses options) ----
+SETUP="$SORTIE/XPG-License-Admin-Setup-$VERSION-EDITEUR.exe"
+rm -f "$SETUP"
+if [ -n "${ISCC:-}" ]; then
+    [ -f "$ISCC" ] || { echo "ISCC introuvable : $ISCC" >&2; exit 2; }
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*) W() { cygpath -w "$1"; }; LANCE=("$ISCC") ;;   # sous Windows
+        *) W() { winepath -w "$1"; }; LANCE=(wine "$ISCC") ;;                 # ailleurs : sous Wine
+    esac
+    "${LANCE[@]}" /Q "/DVersion=$VERSION" "/DSource=$(W "$DEST")" "/DSortie=$(W "$SORTIE")" "$(W "$ROOT/installateur/XPG-License-Admin.iss")"
+    [ -f "$SETUP" ] || { echo "l'installateur n'a pas ete fait ($SETUP)" >&2; exit 1; }
+    grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$DEST/XPG-License-Manager-Admin.exe" || { echo "marque absente" >&2; exit 1; }
+    echo "installateur de l'editeur : $SETUP ($(( $(stat -c %s "$SETUP") / 1024 )) Kio)"
+else
+    echo "(pas d'installateur : ISCC=/chemin/ISCC.exe pour le faire)"
+fi
+[ "${ZIP:-0}" = "1" ] || { echo "outil de l'editeur : $DEST"; exit 0; }
+
+# ---- 4. le zip (un dossier editeur-<version> dedans) : seulement avec ZIP=1 ----
 ZIP="$SORTIE/XPG-License-Admin-$VERSION-EDITEUR.zip"
 rm -f "$ZIP"
 python3 - "$SORTIE" "$NOM" "$ZIP" <<'PY'

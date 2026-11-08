@@ -113,6 +113,7 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 | `GET /admin/archive/fichier?chemin=…` | — | le texte du fichier (chiffré par l'éditeur avec sa clé de synchro) |
 | `POST /admin/archive` | `{"base":V,"fichiers":{"<chemin>":"<texte>"\|null}}` | 200 `{"version":V+1}` ; 409 `{"version":<actuelle>}` si `base` n'est pas la version actuelle |
 | `GET /admin/stats` | — | les compteurs (licences, activations et leurs `lignes`, demandes et leurs `octets`, Découvertes, postes, appels du jour) |
+| `GET /admin/etat` | — | 1.40.0 : `{"version":"…","heure":T,"activite":N,"demandes":N,"attente":N,"changements":N,"registre":N}` — des compteurs qui montent à chaque changement : `activite` (un PC activé — pas un renouvellement, ni le même PC qui s'active de nouveau —, libéré par son client, retiré à son renouvellement quand sa place a été reprise), `demandes` (une demande déposée ou annulée par un client), `attente` (les demandes en attente). Jamais public (le compteur public des Studios, `/v1/etat`, n'en dit rien). L'outil de l'éditeur, ouvert, le regarde toutes les 15 secondes et ne relit les licences (ou les demandes) que s'ils ont bougé ; un service d'avant (404) : il relit les licences toutes les 30 secondes. |
 
 ### Les limites (le plan gratuit, et les abus)
 

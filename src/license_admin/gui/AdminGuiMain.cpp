@@ -15,6 +15,9 @@
 //                        %LOCALAPPDATA%\XPG\LicenseAdmin, comme la console)
 //    --page ID           ouvrir sur cette page (tableau, licences, securite...)
 //    --version           << XPG License Manager Admin 1.0.0 >>, puis rien d'autre
+//    FICHIER             1.40.0 : un fichier ouvert d'un double-clic (l'installateur associe ses types) -
+//                        une demande (.xpgreq) ouvre l'assistant, une licence, un registre, une liste de
+//                        revocation (.xpglic, .xpgreg, .xpgrev) sont ranges dans l'archive (comme glisses)
 //    --taille LxH        la taille de la fenetre (les captures)
 //  Les captures des livraisons (Wine) :
 //    --assistant F.xpgreq   (repetable) ouvrir l'assistant de licence avec ces demandes
@@ -42,6 +45,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -162,6 +166,7 @@ struct Options {
     int                      width{1400}, height{900};
     bool                     version{false}, help{false};
     std::vector<std::string> requests;
+    std::vector<std::string> open;   // 1.40.0 : les fichiers ouverts d'un double-clic (ranges dans l'archive)
     std::vector<Action>      actions;
 };
 
@@ -194,6 +199,7 @@ void usage(std::FILE* to) {
                  "                        activations, demandes, flottantes, boutique, commandes, revocations, service, historique,\n"
                  "                        securite)\n"
                  "  --version             le nom et la version\n"
+                 "  FICHIER               une demande (.xpgreq) : l'assistant ; .xpglic, .xpgreg, .xpgrev : rang\xC3\xA9s dans l'archive\n"
                  "  --taille LxH          la taille de la fen\xC3\xAAtre\n"
                  "  --assistant F.xpgreq  ouvrir l'assistant de licence avec cette demande (r\xC3\xA9p\xC3\xA9table)\n"
                  "  --cliquer ID          cliquer ce widget (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
@@ -267,6 +273,17 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
         } else if (a == "--glisser") {
             if (!more) return need("le fichier");
             o.actions.push_back({Action::Kind::Drop, args[++i], {}});
+        } else if (!a.empty() && a[0] != '-') {
+            // 1.40.0 : un fichier ouvert d'un double-clic (l'installateur associe .xpgreq, .xpglic, .xpgreg, .xpgrev) :
+            // une demande va a l'assistant, le reste est range comme s'il etait glisse sur la fenetre.
+            std::string ext = a.size() >= 7 ? a.substr(a.size() - 7) : std::string();
+            for (auto& ch : ext) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            if (ext == ".xpgreq") o.requests.push_back(a);
+            else if (ext == ".xpglic" || ext == ".xpgreg" || ext == ".xpgrev") o.open.push_back(a);
+            else {
+                why = "fichier non pris en charge : " + a + " (attendu : .xpgreq, .xpglic, .xpgreg ou .xpgrev)";
+                return false;
+            }
         } else {
             why = "option inconnue : " + a;
             return false;
@@ -418,6 +435,7 @@ int main(int argc, char** argv) {
         if (!o.page.empty()) shell->navigate(o.page);
         menus.PushMenu(std::move(owned));
         menus.applyPending();
+        if (!o.open.empty()) shell->dropFiles(o.open);   // 1.40.0 : les fichiers ouverts d'un double-clic
         if (!o.requests.empty()) {
             shell->openDialog(gui::makeLicenceWizard(shell->host(), o.requests));
             menus.applyPending();

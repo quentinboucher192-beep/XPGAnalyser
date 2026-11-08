@@ -1,0 +1,158 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - licences</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css">
+<style>
+.tb{display:flex;align-items:center;gap:10px;margin-top:20px}
+.fsearch{display:flex;align-items:center;gap:9px;height:36px;width:300px;padding:0 12px;border-radius:9px;background:#fff;border:1px solid var(--line2);color:var(--faint);box-shadow:var(--sh1)}
+.fsearch .ico{width:16px;height:16px}
+.chips{display:flex;gap:6px}
+.chip{height:32px;padding:0 12px;border-radius:99px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px Inter;color:var(--ink2);border:1px solid var(--line2);background:#fff}
+.chip i{font-style:normal;color:var(--faint);font-weight:600}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff} .chip.on i{color:#94a3b8}
+.split{display:flex;gap:16px;margin-top:16px;height:780px}
+.tablecard{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.cl{font-weight:600}
+table.t td{padding:9px 14px}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.chg{font:700 11px Inter;color:var(--violet-700);background:var(--violet-100);padding:2px 7px;border-radius:99px;animation:none}
+.det{width:476px;flex:none;display:flex;flex-direction:column;overflow:hidden}
+.dh{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.av{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;color:#fff;font:700 16px Inter;background:linear-gradient(140deg,#8b6dff,#4b2fd6);box-shadow:0 6px 16px rgba(109,74,255,.3)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.fact{background:#fff;padding:11px 16px}
+.fact .k{font-size:11.5px;color:var(--faint);font-weight:550}
+.fact .v{font-weight:600;margin-top:2px}
+.sec{padding:14px 20px 4px;display:flex;align-items:center;gap:8px}
+.pc{display:flex;align-items:center;gap:12px;margin:0 12px;padding:10px 10px;border-radius:10px}
+.pc + .pc{border-top:1px solid var(--line);border-radius:0}
+.pc .pi{width:34px;height:34px;border-radius:9px;background:var(--sunken);display:grid;place-items:center;color:var(--ink2);flex:none;position:relative}
+.pc .pi .st{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;border:2px solid #fff}
+.pc .nm{font-weight:600;font-family:"JetBrains Mono";font-size:12.5px}
+.pc .s{font-size:12px;color:var(--muted)}
+.pc.gone{background:var(--violet-50);border:1px dashed #c4b5fd;border-radius:10px;margin:6px 12px}
+.pc.gone + .pc{border-top:0}
+.pc.gone .nm{text-decoration:line-through;color:var(--muted)}
+.free{margin:6px 22px 0;height:40px;border:1.5px dashed var(--line2);border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--faint);font-weight:550;font-size:12.5px}
+.tl{padding:6px 22px 0;position:relative}
+.tli{display:flex;gap:12px;padding:7px 0;position:relative}
+.tli .b{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none;box-shadow:0 0 0 3px #fff;position:relative;z-index:1}
+.tl:before{content:"";position:absolute;left:26px;top:16px;bottom:10px;width:1.5px;background:var(--line)}
+.tli .s{font-size:12px;color:var(--muted)}
+.toast{position:absolute;left:290px;bottom:26px;width:430px;background:#0f172a;color:#e2e8f0;border-radius:14px;padding:14px 14px 14px 16px;display:flex;gap:12px;box-shadow:0 20px 50px rgba(15,23,42,.35)}
+.toast .ti{width:34px;height:34px;border-radius:10px;background:rgba(139,109,255,.22);color:#c4b5fd;display:grid;place-items:center;flex:none}
+.toast b{color:#fff;font-weight:600}
+.toast .s{font-size:12.5px;color:#94a3b8;margin-top:2px}
+.ann{position:absolute}
+.p-dark{background:#1e1b4b;color:#e0e7ff}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+ <aside class="side">
+  <div class="brand"><div class="logo"><i data-i="key"></i></div><div><b>License Manager</b><span>Admin · éditeur</span></div></div>
+  <div class="navg"><div class="over">Pilotage</div>
+   <div class="nav"><i data-i="dash"></i>Tableau de bord</div>
+   <div class="nav on"><i data-i="key"></i>Licences<span class="n">128</span></div>
+   <div class="nav"><i data-i="users"></i>Clients<span class="n">54</span></div>
+   <div class="nav"><i data-i="inbox"></i>Demandes<span class="n warn">3</span></div>
+   <div class="nav"><i data-i="laptop"></i>PC activés<span class="n">342</span></div>
+  </div>
+  <div class="navg"><div class="over">Catalogue</div>
+   <div class="nav"><i data-i="layers"></i>Éditions</div>
+   <div class="nav"><i data-i="blocks"></i>Fonctionnalités</div>
+   <div class="nav"><i data-i="network"></i>Licences flottantes</div>
+  </div>
+  <div class="navg"><div class="over">Sécurité</div>
+   <div class="nav"><i data-i="ban"></i>Révocations</div>
+   <div class="nav"><i data-i="cloud"></i>Service en ligne</div>
+   <div class="nav"><i data-i="history"></i>Historique</div>
+   <div class="nav"><i data-i="sliders"></i>Réglages</div>
+  </div>
+  <div class="sidefoot">
+   <div class="svc"><div class="t"><span class="live" style="gap:0"><i></i></span>Service en ligne</div><div class="s">Connecté · relevé il y a 4 s · v1.40.0</div></div>
+   <div class="ver"><span>Dossier du poste</span><span>1.40.0</span></div>
+  </div>
+ </aside>
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i><b>Licences</b></div>
+   <div class="search"><i data-i="search"></i>Chercher une licence, un client, un PC…<span class="kbd">Ctrl K</span></div>
+   <div style="margin-left:auto" class="row gap12">
+    <span class="live"><i></i>En direct · il y a 3 s</span>
+    <div class="ibtn"><i data-i="bell"></i><span class="badge">5</span></div>
+    <span class="btn"><i data-i="download"></i>Exporter</span>
+    <span class="btn primary"><i data-i="plus"></i>Nouvelle licence<span style="width:1px;height:18px;background:rgba(255,255,255,.3);margin:0 2px"></span><i data-i="down" class="sm"></i></span>
+   </div>
+  </div>
+  <div class="content">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Licences</div><div class="muted" style="margin-top:4px">128 licences · 342 PC en ligne sur 410 places</div></div></div>
+   <div class="tb">
+    <div class="fsearch"><i data-i="search"></i>Identifiant, client, PC…</div>
+    <div class="chips"><span class="chip on">Toutes <i>128</i></span><span class="chip">Actives <i>117</i></span><span class="chip">Finissent bientôt <i>7</i></span><span class="chip">Expirées <i>3</i></span><span class="chip">Révoquées <i>1</i></span></div>
+    <span class="btn sm" style="margin-left:auto"><i data-i="filter" class="sm"></i>Édition : toutes<i data-i="down" class="sm"></i></span>
+   </div>
+   <div class="split">
+    <div class="card tablecard">
+     <table class="t"><tr><th>Client · licence</th><th>Édition</th><th>PC</th><th>Fin</th><th>État</th></tr><tr class="sel"><td><div class="cl">Atelier Meyer</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00391</div></td>
+<td><span class="pill p-violet">PROFESSIONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">2 / 5</b><span class='chg'>3 → 2</span></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:40.0%;background:#16a34a"></i></div></td>
+<td>08/11/2027<div class="cap">dans 365 j</div></td><td><span class='pill p-green'><span class='d'></span>Active</span></td></tr><tr class=""><td><div class="cl">Brasserie du Nord</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00377</div></td>
+<td><span class="pill p-dark">ENTERPRISE</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">12 / 20</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:60.0%;background:#16a34a"></i></div></td>
+<td>14/03/2027<div class="cap">dans 126 j</div></td><td><span class='pill p-green'><span class='d'></span>Active</span></td></tr><tr class=""><td><div class="cl">Ferme Solaire Ouest</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00212</div></td>
+<td><span class="pill p-gray">PERSONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">2 / 2</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:100.0%;background:#d97706"></i></div></td>
+<td>14/11/2026<div class="cap">dans 6 j</div></td><td><span class='pill p-amber'><span class='d'></span>Finit bientôt</span></td></tr><tr class=""><td><div class="cl">Hydro Vallée</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00148</div></td>
+<td><span class="pill p-dark">ENTERPRISE</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">18 / 20</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:90.0%;background:#d97706"></i></div></td>
+<td>27/11/2026<div class="cap">dans 19 j</div></td><td><span class='pill p-amber'><span class='d'></span>Finit bientôt</span></td></tr><tr class=""><td><div class="cl">Studio Lumen</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00402</div></td>
+<td><span class="pill p-violet">PROFESSIONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">0 / 3</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:0.0%;background:#16a34a"></i></div></td>
+<td>—<div class="cap">pas encore activée</div></td><td><span class='pill p-blue'><span class='d'></span>Nouvelle</span></td></tr><tr class=""><td><div class="cl">Menuiserie Arnaud</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00355</div></td>
+<td><span class="pill p-gray">PERSONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">1 / 2</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:50.0%;background:#16a34a"></i></div></td>
+<td>02/05/2027<div class="cap">dans 175 j</div></td><td><span class='pill p-green'><span class='d'></span>Active</span></td></tr><tr class=""><td><div class="cl">Laiterie des Prés</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00301</div></td>
+<td><span class="pill p-violet">PROFESSIONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">4 / 5</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:80.0%;background:#cbd5e1"></i></div></td>
+<td>19/01/2027<div class="cap">dans 72 j</div></td><td><span class='pill p-gray'><span class='d'></span>Désactivée</span></td></tr><tr class=""><td><div class="cl">Verrerie Saint-Clair</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00287</div></td>
+<td><span class="pill p-teal">EVALUATION</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">1 / 1</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:100.0%;background:#d97706"></i></div></td>
+<td>20/11/2026<div class="cap">dans 12 j</div></td><td><span class='pill p-green'><span class='d'></span>Active</span></td></tr><tr class=""><td><div class="cl">Transports Royer</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00199</div></td>
+<td><span class="pill p-gray">PERSONAL</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">0 / 2</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:0.0%;background:#cbd5e1"></i></div></td>
+<td>01/02/2026<div class="cap">il y a 280 j</div></td><td><span class='pill p-red'><span class='d'></span>Expirée</span></td></tr><tr class=""><td><div class="cl">Cave Coopérative</div><div class="mono muted" style="font-size:12px;margin-top:1px">XPG-2026-00166</div></td>
+<td><span class="pill p-dark">ENTERPRISE</span></td>
+<td><div class="row gap8"><b style="font-weight:600;min-width:40px">0 / 20</b></div><div class="bar" style="width:92px;margin-top:6px;height:5px"><i style="width:0.0%;background:#cbd5e1"></i></div></td>
+<td>30/06/2027<div class="cap">—</div></td><td><span class='pill p-red'><span class='d'></span>Révoquée</span></td></tr></table>
+    </div>
+    <div class="card det">
+     <div class="dh">
+      <div class="row gap12"><div class="av">AM</div><div class="grow"><div class="h2" style="font-size:17px">Atelier Meyer</div><div class="row gap6 mono muted" style="font-size:12px;margin-top:2px">XPG-2026-00391<i data-i="copy" class="sm" style="width:13px;height:13px"></i></div></div>
+       <span class="pill p-green"><span class="d"></span>Active</span></div>
+      <div class="row gap8" style="margin-top:14px"><span class="btn sm primary"><i data-i="calendar" class="sm"></i>Prolonger…</span><span class="btn sm"><i data-i="download" class="sm"></i>Fichier de licence</span><span class="btn sm"><i data-i="mail" class="sm"></i>Code</span><span class="btn sm" style="margin-left:auto;padding:0 8px"><i data-i="more" class="sm"></i></span></div>
+     </div>
+     <div class="facts">
+      <div class="fact"><div class="k">Édition</div><div class="v">PROFESSIONAL</div></div>
+      <div class="fact"><div class="k">Fin</div><div class="v">08/11/2027</div></div>
+      <div class="fact"><div class="k">Prix</div><div class="v">490 € HT / an</div></div>
+      <div class="fact"><div class="k">PC</div><div class="v">2 sur 5</div></div>
+      <div class="fact"><div class="k">Hors ligne</div><div class="v">14 j de grâce</div></div>
+      <div class="fact"><div class="k">Registre</div><div class="v">n° 319</div></div>
+     </div>
+     <div class="sec"><span class="h3">PC</span><span class="cap">2 sur 5</span><span class="live" style="margin-left:auto;font-size:11.5px"><i></i>mis à jour à l'instant</span></div>
+     <div class="pc"><span class="pi"><i data-i="laptop" class="sm"></i><span class="st" style="background:#22c55e"></span></span><div class="grow"><div class="nm">PC-ATELIER-01</div><div class="s">En ligne · vu il y a 1 min · IHM Studio 1.40</div></div><i data-i="more" class="sm faint"></i></div>
+     <div class="pc gone"><span class="pi" style="background:#fff"><i data-i="logout" class="sm" style="color:var(--violet)"></i></span><div class="grow"><div class="nm">PC-ATELIER-02</div><div class="s" style="color:var(--violet-700)">Libéré par le client · à l'instant</div></div><span class="pill p-violet" style="height:22px">Libéré</span></div>
+     <div class="pc"><span class="pi"><i data-i="laptop" class="sm"></i><span class="st" style="background:#f59e0b"></span></span><div class="grow"><div class="nm">PC-BUREAU-03</div><div class="s">Hors ligne depuis 3 j · bail jusqu'au 02/12</div></div><i data-i="more" class="sm faint"></i></div>
+     <div class="free"><i data-i="plus" class="sm"></i>3 places libres</div>
+     <div class="sec" style="padding-top:18px"><span class="h3">Historique</span></div>
+     <div class="tl">
+      <div class="tli"><span class="b" style="background:var(--violet)"></span><div><div>Le client a libéré <b class="mono" style="font-size:12.5px;font-weight:600">PC-ATELIER-02</b></div><div class="s">aujourd'hui 14:32 · depuis IHM Studio (Licence › Mes appareils)</div></div></div>
+      <div class="tli"><span class="b" style="background:var(--blue)"></span><div><div>Prolongée d'un an</div><div class="s">12/10/2026 · par toi</div></div></div>
+      <div class="tli"><span class="b" style="background:var(--green)"></span><div><div><b class="mono" style="font-size:12.5px;font-weight:600">PC-BUREAU-03</b> activé</div><div class="s">03/10/2026</div></div></div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="toast"><span class="ti"><i data-i="logout"></i></span><div class="grow"><b>PC libéré</b><div class="s">Atelier Meyer a libéré PC-ATELIER-02 · 3 places libres sur 5</div></div><span class="btn sm" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff;box-shadow:none">Voir</span><i data-i="x" class="sm" style="color:#64748b;margin-top:7px"></i></div>
+  <div class="annot" data-n="1" style="right:500px;top:566px;width:250px">Le PC libéré par le client <b>apparaît seul</b> : plus de « Relever ». L'outil regarde le service toutes les 15 s tant qu'il est ouvert.</div>
+  <div class="annot" data-n="2" style="right:44px;top:92px;width:300px">11 boutons → <b>3 boutons + « … »</b>. Désactiver et Révoquer sont rangés dans le menu, en rouge.</div>
+ </main>
+</div>
+</body></html>

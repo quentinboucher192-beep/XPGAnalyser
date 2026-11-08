@@ -396,5 +396,43 @@ int main(int argc, char** argv) {
         alone.openDialog(gui::makeLicenceWizard(alone.host(), {}));
         check(alone.looseDialogs().size() == 1, "le dialogue est garde (pas de MenuManager)");
     }
+    std::printf("-- 1.40.0 : ce que le regard en direct dit (describeChanges)\n");
+    {
+        online::Snapshot a, b;
+        online::OnlineLicence l;
+        l.licenseId = "XPG-2026-00391";
+        online::OnlineActivation x, y, z;
+        x.deviceKey = std::string(64, 'a');
+        x.name = "PC-ATELIER-02";
+        x.state = "active";
+        y.deviceKey = std::string(64, 'b');
+        y.name = "PC-BUREAU-03";
+        y.state = "active";
+        z.deviceKey = std::string(64, 'c');
+        z.name = "PC-NEUF";
+        z.state = "active";
+        l.activations = {x, y};
+        a.licences = {l};
+        const auto customer = [](const std::string& id) { return id == "XPG-2026-00391" ? std::string("Atelier d'essai Meyer") : std::string(); };
+        b = a;
+        check(gui::Shell::describeChanges(a, b, customer).empty(), "jamais releve avant : rien a dire");
+        a.at = 1000;
+        b.at = 2000;
+        check(gui::Shell::describeChanges(a, b, customer).empty(), "rien n'a bouge : rien");
+        b.licences[0].activations[0].state = "liberee";
+        b.licences[0].activations[1].state = "retiree";
+        b.licences[0].activations.push_back(z);
+        const auto said = gui::Shell::describeChanges(a, b, customer);
+        check(said.size() == 3, "trois changements : " + std::to_string(said.size()));
+        if (said.size() == 3) {
+            check(said[0] == "Atelier d'essai Meyer a lib\xC3\xA9r\xC3\xA9 le PC \xC2\xAB PC-ATELIER-02 \xC2\xBB (licence XPG-2026-00391) : sa place est libre.", said[0]);
+            check(said[1] == "Le PC \xC2\xAB PC-BUREAU-03 \xC2\xBB (licence XPG-2026-00391) n'est plus actif : sa place a \xC3\xA9t\xC3\xA9 reprise par un autre PC.", said[1]);
+            check(said[2] == "Atelier d'essai Meyer a activ\xC3\xA9 le PC \xC2\xAB PC-NEUF \xC2\xBB (licence XPG-2026-00391).", said[2]);
+        }
+        const auto anon = gui::Shell::describeChanges(a, b, {});
+        check(!anon.empty() && anon[0].rfind("Le client a lib", 0) == 0, "sans client connu : << Le client >>");
+    }
+
+
     return finish();
 }

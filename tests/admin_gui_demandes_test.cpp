@@ -30,6 +30,7 @@
 #include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
 #include "../src/license_admin/ServiceClient.hpp"
+#include "../src/license_admin/gui/Shell.hpp"
 #include "../src/licensing/Gateway.hpp"
 #include "../src/licensing/KeyFile.hpp"
 #include "../src/licensing/Service.hpp"
@@ -566,6 +567,40 @@ int main(int argc, char** argv) {
         check(posteState(url, pcD, editor, st, sc) && st.state == gw::State::Accepted && sc.license.empty() && sc.code == code && sc.onlineLicense == id &&
                   !has(sc.message, code),
               "1.37.0 : D lit << acceptee >> et le code scelle pour lui (son Studio s'active seul), jamais le code dans le mot");
+
+        std::printf("-- 1.40.0 : le regard en direct - le PC libere par son client, vu seul\n");
+        {
+            gui::Shell shell(fx.admin.string(), [] { return g_now; });
+            check(shell.autoWatch() && shell.finishSlow() && shell.live(), "le premier regard (GET /admin/etat) : en direct");
+            check(has(shell.syncStatusText(), "en direct"), "le haut de la fen\xC3\xAAtre le dit : " + shell.syncStatusText());
+            check(shell.autoRefreshLicences() && shell.finishSlow(), "le premier releve (rien a comparer : rien a dire)");
+            const online::OnlineLicence* ol = shell.workspace().service().snapshot.licence(id);
+            const std::string pcKey = pcE.key ? pcE.key->publicKeyHex() : std::string();
+            check(ol && ol->activation(pcKey) && ol->activation(pcKey)->state == "active", "le PC de E est actif");
+            const std::size_t logged = shell.sessionLog().size();
+            check(shell.autoWatch() && shell.finishSlow(), "un regard sans changement");
+            check(shell.sessionLog().size() == logged, "rien ne bouge : rien au journal");
+            json::Value lb = json::Value::object();
+            lb.set("licence", id);
+            lb.set("station", lic::stationHash("machine d'essai " + pcE.name, pcE.key->publicKey()));
+            const Reply rl = call(url, "POST", "/v1/liberer", json::write(lb, false), pcE.key.get());
+            check(rl.status == 200, "E libere son PC (" + rl.body.substr(0, 120) + ")");
+            // le regard voit << activite >> bouger : la coquille relit les licences des que rien ne tourne (Update)
+            check(shell.autoWatch() && shell.finishSlow(), "le regard suivant");
+            check(shell.autoRefreshLicences() && shell.finishSlow(), "les licences relues");
+            ol = shell.workspace().service().snapshot.licence(id);
+            check(ol && ol->activation(pcKey) && ol->activation(pcKey)->state == "liberee", "le releve le montre libere");
+            const gui::Shell::LogLine* m = shell.lastMessage();
+            check(m && has(m->result.message, "a lib\xC3\xA9r\xC3\xA9 le PC \xC2\xAB " + pcE.name + " \xC2\xBB") && has(m->result.message, id) &&
+                      has(m->result.message, "sa place est libre"),
+                  "un avis le dit : " + (m ? m->result.message : std::string("(rien)")));
+            // le regard n'occupe pas : un travail lance pendant qu'il tourne attend sa fin, puis part seul
+            check(shell.autoWatch() && !shell.busy(), "pendant le regard : pas occupe pour toi");
+            bool ran = false;
+            check(shell.runSlow("Essai : un travail", [] { return gui::OpResult::done("fait"); }, [&ran](const gui::OpResult&) { ran = true; }) && shell.busy(),
+                  "un travail lance pendant le regard : il attend (occupe)");
+            check(shell.finishSlow() && ran && !shell.busy(), "puis il part seul, et finit");
+        }
     }
 
     std::printf("-- refuser : la raison, scellee pour le PC\n");

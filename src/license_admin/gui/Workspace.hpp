@@ -40,6 +40,7 @@
 #include "../ArchiveSync.hpp"
 #include "../KeyBackup.hpp"
 #include "../ServiceClient.hpp"
+#include "../../core/Version.hpp"
 #include "../../licensing/Documents.hpp"
 
 #include <atomic>
@@ -56,7 +57,9 @@ namespace license_admin::gui {
 using licensing::Seconds;
 
 inline constexpr const char* kAppName = "XPG License Manager Admin";
-inline constexpr const char* kAppVersion = "1.1.0";   // 1.33.0 : la premiere application ; 1.35.0 : le service des licences
+// 1.33.0 : la premiere application (1.0.0) ; 1.35.0 : le service des licences (1.1.0) ; 1.40.0 : la version des Studios (son
+// installateur la porte : une seule version a dire)
+inline constexpr const char* kAppVersion = XPG_ANALYZER_VERSION;
 
 // ---- le resultat d'une operation : montre tel quel ----
 struct OpResult {
@@ -282,6 +285,8 @@ public:
     [[nodiscard]] OpResult serviceFetch() const;
     [[nodiscard]] OpResult serviceRefuse(const std::string& which, const std::string& reason) const;
     [[nodiscard]] OpResult serviceStats() const;
+    // 1.40.0 : les compteurs de ce qui change (GET /admin/etat) - le regard de l'outil ouvert (Shell::autoWatch).
+    [[nodiscard]] OpResult serviceWatch(online::AdminWatch& out) const;
     [[nodiscard]] OpResult serviceRun(const ServiceJob& job) const;
     // 1.37.0 : une licence EN LIGNE deposee avec son code : le code garde chiffre sur ce poste (Voir le code...), et la
     // reponse a la demande (requestNumber) porte le code scelle pour le PC (son Studio s'active seul) et l'etat du mail.

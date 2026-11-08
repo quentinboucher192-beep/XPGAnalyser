@@ -1,0 +1,169 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>API Studio</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="studio.css">
+<style>
+:root{--acc:#2563eb;--acc-50:#eef4ff;--acc-100:#dbe7ff;--acc-700:#1d4ed8}
+.ed{flex:1;min-width:0;display:flex;flex-direction:column;background:#fff}
+.online{height:38px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;background:linear-gradient(90deg,#ecfdf3,#f8fffb);border-bottom:1px solid #d1fadf;font-size:12.5px;color:#166534}
+.online b{font-weight:650}
+.tog{width:30px;height:17px;border-radius:99px;background:#16a34a;position:relative;flex:none}
+.tog:after{content:"";position:absolute;right:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff}
+.code{flex:1;overflow:hidden;padding:10px 0;font:13px/24px "JetBrains Mono",monospace;letter-spacing:-.01em}
+.ln{display:flex;align-items:center;height:24px;padding-right:16px}
+.ln .g{width:58px;flex:none;text-align:right;padding-right:18px;color:#b6c0ce;font-size:12px;position:relative}
+.ln.cur{background:#f5f8ff}
+.ln.cur .g{color:var(--acc)}
+.ln.dim{opacity:.38}
+.ln .bp{position:absolute;left:12px;top:7px;width:11px;height:11px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px #fee2e2}
+.k{color:#7c3aed;font-weight:600}.c{color:#94a3b8;font-style:italic}.n{color:#c2410c}.a{color:#0f766e}.f{color:#2563eb}.o{color:#64748b}
+.lv{display:inline-flex;align-items:center;height:19px;padding:0 7px;margin-left:6px;border-radius:6px;font:600 11.5px "JetBrains Mono";vertical-align:1px}
+.lv.t{background:#dcfce7;color:#15803d}.lv.fa{background:#f1f5f9;color:#64748b}.lv.v{background:var(--acc-50);color:var(--acc-700)}.lv.w{background:#fef3c7;color:#b45309}
+.btm{height:232px;flex:none;border-top:1px solid var(--line);display:flex;flex-direction:column;background:#fff}
+.btabs{height:38px;display:flex;align-items:center;gap:4px;padding:0 10px;border-bottom:1px solid var(--line)}
+.btabs span{height:28px;padding:0 10px;border-radius:7px;display:flex;align-items:center;gap:6px;font:600 12px Inter;color:var(--muted)}
+.btabs span.on{background:var(--sunken);color:var(--ink)}
+.btabs i{font-style:normal;font-size:10.5px;background:var(--line2);color:var(--ink2);border-radius:99px;padding:0 6px}
+table.w{width:100%;border-collapse:collapse;font-size:12.5px}
+table.w th{font:650 11px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+table.w td{padding:6px 14px;border-bottom:1px solid var(--line);height:34px}
+.right{width:296px;border-left:1px solid var(--line);border-right:0;background:var(--surface2)}
+.sc{margin:0 12px 12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.sc .t{font:650 12.5px Inter;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0}
+.kv span:first-child{color:var(--muted)}
+.inp{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:12.5px}
+.inp + .inp{border-top:1px solid var(--line)}
+.inp .mono{font-size:12px}
+.sw2{width:30px;height:17px;border-radius:99px;background:var(--line2);position:relative;flex:none;margin-left:auto}
+.sw2:after{content:"";position:absolute;left:2px;top:2px;width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:var(--sh1)}
+.sw2.on{background:var(--acc)}.sw2.on:after{left:auto;right:2px}
+.sl{height:4px;border-radius:99px;background:var(--line2);position:relative;margin:10px 0 4px}
+.sl i{position:absolute;left:0;top:0;bottom:0;width:68%;background:var(--acc);border-radius:99px}
+.sl b{position:absolute;left:68%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#fff;border:2px solid var(--acc)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+ <div class="tbar">
+  <div class="alogo" style="background:linear-gradient(140deg,#60a5fa,#2563eb 55%,#1d4ed8);box-shadow:0 4px 12px rgba(37,99,235,.35)"><i data-i="cpu"></i></div>
+  <div class="proj">Armoire_Gaz<span class="tag" style="height:19px;font-size:10.5px;background:var(--acc-50);color:var(--acc-700)">FINISH</span><i data-i="down" class="sm faint"></i></div>
+  <div class="sep"></div>
+  <div class="saved"><i data-i="check"></i>Compilé · 0 erreur</div>
+  <div class="cmdk"><i data-i="search"></i>Aller à / Faire…<span class="kbd">Ctrl K</span></div>
+  <div class="tb-r">
+   <span class="lic" style="background:var(--green-50);color:#15803d;height:32px"><span class="live" style="gap:0"><i></i></span>&nbsp;Simulation · 10 ms · 00:12:44</span>
+   <div class="ib" style="border:1px solid var(--line)"><i data-i="pause"></i></div><div class="ib" style="border:1px solid var(--line)"><i data-i="stop"></i></div>
+   <div class="sep"></div>
+   <div class="ib"><i data-i="sparkles"></i></div>
+   <div class="ib"><i data-i="bell"></i></div>
+   <span class="lic" style="background:var(--green-50);color:#15803d"><i data-i="shield" class="sm"></i>PROFESSIONAL</span>
+  </div>
+ </div>
+ <div class="body">
+  <div class="rail">
+   <div class="ri on" style="color:var(--acc)"><i data-i="folder"></i></div>
+   <div class="ri"><i data-i="activity"></i><span class="n" style="background:#16a34a;width:9px;min-width:9px;height:9px;padding:0;top:5px;right:5px"></span></div>
+   <div class="ri"><i data-i="bug"></i></div>
+   <div class="ri"><i data-i="branch"></i></div>
+   <div class="ri"><i data-i="search"></i></div>
+   <div style="margin-top:auto" class="ri"><i data-i="sliders"></i></div>
+  </div>
+  <div class="pane" style="width:262px">
+   <div class="ph"><span class="over">Programme</span><span style="margin-left:auto" class="row gap4"><span class="ib" style="width:28px;height:28px"><i data-i="plus" class="sm"></i></span><span class="ib" style="width:28px;height:28px"><i data-i="filter" class="sm"></i></span></span></div>
+   <div class="tree">
+    <div class="tr h"><i data-i="down" class="cv"></i><i data-i="clock" style="color:var(--acc)"></i>MAST<span class="c">cyclique · 10 ms</span></div>
+    <div class="tr" style="padding-left:30px"><i data-i="code"></i>Init<span class="c">ST</span></div>
+    <div class="tr sel" style="padding-left:30px"><i data-i="code"></i>Pompes<span class="c" style="color:var(--acc)">ST</span></div>
+    <div class="tr" style="padding-left:30px"><i data-i="code"></i>Alarmes<span class="c">ST</span></div>
+    <div class="tr" style="padding-left:30px"><i data-i="network"></i>Remplissage<span class="c">Grafcet</span></div>
+    <div class="tr" style="padding-left:30px"><i data-i="code"></i>Communication<span class="c">ST</span></div>
+    <div class="tr h" style="margin-top:6px"><i data-i="right" class="cv"></i><i data-i="clock"></i>FAST<span class="c">2 ms</span></div>
+    <div class="tr h" style="margin-top:6px"><i data-i="down" class="cv"></i><i data-i="box"></i>Blocs (DFB)<span class="c">4</span></div>
+    <div class="tr" style="padding-left:30px"><i data-i="box"></i>FB_Pompe</div>
+    <div class="tr" style="padding-left:30px"><i data-i="box"></i>FB_Filtre</div>
+    <div class="tr h" style="margin-top:6px"><i data-i="right" class="cv"></i><i data-i="layers"></i>Types (DDT)<span class="c">7</span></div>
+    <div class="tr h"><i data-i="right" class="cv"></i><i data-i="db"></i>Variables<span class="c">412</span></div>
+    <div class="tr h"><i data-i="right" class="cv"></i><i data-i="cpu"></i>Automate_1<span class="c">M580</span></div>
+    <div class="tr h"><i data-i="right" class="cv"></i><i data-i="network"></i>Modbus<span class="c">3 esclaves</span></div>
+    <div class="tr h"><i data-i="right" class="cv"></i><i data-i="layers"></i>Bibliothèques<span class="c">113 blocs</span></div>
+   </div>
+  </div>
+  <div class="ed">
+   <div class="tabs">
+    <div class="tab on"><i data-i="code" style="color:var(--acc)"></i>Pompes<i data-i="x" style="width:13px;height:13px;color:var(--faint)"></i></div>
+    <div class="tab"><i data-i="network"></i>Sequence_Remplissage</div>
+    <div class="tab"><i data-i="db"></i>Variables</div>
+    <div class="tab" style="padding:0 8px"><i data-i="plus"></i></div>
+   </div>
+   <div class="online"><span class="live"><i></i></span><b>En direct</b> · les valeurs viennent de la simulation · la partie grisée ne tourne pas en ce moment<span style="margin-left:auto" class="row gap8">Valeurs dans le code<span class="tog"></span></span></div>
+   <div class="code" id="code"></div>
+   <div class="btm">
+    <div class="btabs"><span class="on"><i data-i="eye" class="sm"></i>Surveillance <i>4</i></span><span>Problèmes <i>0</i></span><span>Journal</span><span>Console</span><span style="margin-left:auto;color:var(--acc-700)"><i data-i="plus" class="sm"></i>Ajouter</span></div>
+    <table class="w"><tr><th style="width:30%">Variable</th><th>Type</th><th>Valeur</th><th style="width:30%">10 dernières secondes</th><th></th></tr>
+     <tr><td class="mono">Niveau_C1</td><td class="muted">REAL</td><td><b>68,2</b> <span class="faint">%</span></td><td><svg width="190" height="22"><path d="M2 16 C20 14 30 8 50 9 S80 15 100 12 S140 5 160 7 S180 9 188 8" fill="none" stroke="#2563eb" stroke-width="1.8"/></svg></td><td class="faint" style="text-align:right">Forcer…</td></tr>
+     <tr><td class="mono">P101.Marche</td><td class="muted">BOOL</td><td><span class="lv t" style="margin:0">TRUE</span></td><td><svg width="190" height="22"><path d="M2 18 H40 V5 H188" fill="none" stroke="#16a34a" stroke-width="1.8"/></svg></td><td class="faint" style="text-align:right">Forcer…</td></tr>
+     <tr><td class="mono">P102.Marche</td><td class="muted">BOOL</td><td><span class="lv fa" style="margin:0">FALSE</span></td><td><svg width="190" height="22"><path d="M2 18 H188" fill="none" stroke="#94a3b8" stroke-width="1.8"/></svg></td><td class="faint" style="text-align:right">Forcer…</td></tr>
+     <tr><td class="mono">Defaut_F1</td><td class="muted">BOOL</td><td><span class="lv w" style="margin:0">TRUE</span> <span class="tag" style="height:19px;font-size:11px;background:#fef3c7;color:#b45309">forcée</span></td><td><svg width="190" height="22"><path d="M2 18 H120 V5 H188" fill="none" stroke="#d97706" stroke-width="1.8"/></svg></td><td style="text-align:right;color:var(--red);font-weight:600">Libérer</td></tr>
+    </table>
+   </div>
+  </div>
+  <div class="pane right">
+   <div class="ph"><span class="over">Simulation</span><span class="pill p-green" style="margin-left:auto;height:22px"><span class="d"></span>en marche</span></div>
+   <div class="sc"><div class="t"><i data-i="gauge" class="sm" style="color:var(--acc)"></i>Cycle MAST</div>
+    <div class="kv"><span>Période</span><b>10 ms</b></div>
+    <div class="kv"><span>Durée moyenne</span><b>2,1 ms</b></div>
+    <div class="kv"><span>Charge</span><b>21 %</b></div>
+    <div class="bar" style="margin-top:6px"><i style="width:21%;background:var(--acc)"></i></div>
+   </div>
+   <div class="sc"><div class="t"><i data-i="sliders" class="sm" style="color:var(--acc)"></i>Entrées<span class="cap" style="margin-left:auto;font-weight:500">clic : basculer</span></div>
+    <div class="inp"><span class="mono">%I0.1</span><span class="muted">Bouton_Marche</span><span class="sw2 on"></span></div>
+    <div class="inp"><span class="mono">%I0.3</span><span class="muted">Retour_P101</span><span class="sw2 on"></span></div>
+    <div class="inp"><span class="mono">%I0.4</span><span class="muted">Retour_P102</span><span class="sw2"></span></div>
+    <div class="inp" style="display:block"><div class="row"><span class="mono">%IW2</span><span class="muted" style="margin-left:10px">Capteur_Niveau</span><b style="margin-left:auto">68 %</b></div><div class="sl"><i></i><b></b></div></div>
+   </div>
+   <div class="sc"><div class="t"><i data-i="play" class="sm" style="color:var(--acc)"></i>Scénario</div>
+    <div class="row gap10"><div class="grow"><div style="font-weight:600;font-size:12.5px">Remplissage lent</div><div class="cap">étape 3 sur 5 · 01:12</div></div><span class="btn sm"><i data-i="pause" class="sm"></i></span></div>
+    <div class="bar" style="margin-top:10px"><i style="width:60%;background:var(--acc)"></i></div>
+   </div>
+   <div class="sc"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 2px #fee2e2"></span>Points d'arrêt<span class="cap" style="margin-left:auto;font-weight:500">1</span></div>
+    <div class="inp"><span class="mono">Pompes : 18</span><span class="muted">FB_P101(…)</span><span class="sw2 on"></span></div>
+    <div class="cap" style="margin-top:4px">La simulation s'arrête quand la ligne tourne ; F10 : pas à pas.</div>
+   </div>
+  </div>
+ </div>
+ <div class="sbar"><span class="row gap6"><span class="dot" style="background:#22c55e;width:7px;height:7px"></span>Simulation en marche</span><span>Ligne 11, colonne 9</span><span>ST · UTF-8</span><span class="row gap6"><i data-i="check" style="color:var(--green)"></i>Compilé il y a 12 s</span>
+  <div class="r"><span class="row gap6"><i data-i="shield"></i>PROFESSIONAL · jusqu'au 08/11/2027</span><span>F5 : compiler · F8 : simuler</span></div></div>
+</div>
+<script>
+// Le code ST, colorie a la main ; {{valeur|classe}} : la valeur en direct
+const L=[
+['c','(* Section Pompes : alternance P101 / P102 selon le niveau de la cuve C1 *)'],
+[''],
+['','Seuil_Haut := <n>85.0</n>;'],
+['','Seuil_Bas  := <n>20.0</n>;'],
+[''],
+['','<k>IF</k> Defaut_F1{{TRUE|w}} <k>THEN</k>'],
+['','    Alarme_Filtre := <k>TRUE</k>;'],
+['','<k>END_IF</k>;'],
+[''],
+['','<k>IF</k> Niveau_C1{{68.2|v}} &gt; Seuil_Haut <k>THEN</k>'],
+['cur','    P101.Marche{{TRUE|t}} := <k>TRUE</k>;'],
+['','    P102.Marche{{FALSE|fa}} := Niveau_C1 &gt; <n>95.0</n>;'],
+['dim','<k>ELSIF</k> Niveau_C1 &lt; Seuil_Bas <k>THEN</k>'],
+['dim','    P101.Marche := <k>FALSE</k>;'],
+['dim','    P102.Marche := <k>FALSE</k>;'],
+['','<k>END_IF</k>;'],
+[''],
+['bp','<f>FB_P101</f>(Ordre := P101.Marche, Retour := <a>%I0.3</a>, Tempo := <n>T#5s</n>);'],
+['','<f>FB_P102</f>(Ordre := P102.Marche, Retour := <a>%I0.4</a>, Tempo := <n>T#5s</n>);'],
+[''],
+['','Debit_Total{{42.6|v}} := FB_P101.Debit + FB_P102.Debit;'],
+];
+let h='';
+L.forEach((l,i)=>{
+  let t=(l[1]||'').replace(/<(k|n|a|f)>/g,'<span class="$1">').replace(/<\/(k|n|a|f)>/g,'</span>');
+  t=t.replace(/\{\{([^|]+)\|(\w+)\}\}/g,'<span class="lv $2">$1</span>');
+  if(l[0]==='c') t='<span class="c">'+t+'</span>';
+  const cls=l[0]==='cur'?'cur':l[0]==='dim'?'dim':'';
+  h+=`<div class="ln ${cls}"><span class="g">${l[0]==='bp'?'<span class="bp"></span>':''}${i+1}</span><span style="white-space:pre">${t}</span></div>`;
+});
+document.getElementById('code').innerHTML=h;
+</script>
+</body></html>

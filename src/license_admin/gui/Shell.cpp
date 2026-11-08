@@ -766,6 +766,13 @@ void Shell::flash(const std::string& text, Tone tone) {
 
 bool Shell::runSlow(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done) {
     if (!work) return false;
+    if (bg_.running()) {
+        // 1.40.0 : pendant le regard en direct (court, sans bruit), le travail attend sa fin ; sinon : refuse.
+        if (!quietSlow_ || queued_) return false;
+        queued_ = Queued{label, std::move(work), std::move(done)};
+        if (view_) static_cast<ShellView*>(view_)->updateTop();
+        return true;
+    }
     if (!bg_.start(label, std::move(work))) return false;   // un travail tourne deja
     pendingDone_ = std::move(done);
     quietSlow_ = false;
@@ -773,7 +780,23 @@ bool Shell::runSlow(const std::string& label, std::function<OpResult()> work, st
     return true;
 }
 
-std::string Shell::busyLabel() const { return bg_.running() ? bg_.label() : std::string(); }
+std::string Shell::busyLabel() const {
+    if (queued_) return queued_->label;
+    return busy() ? bg_.label() : std::string();
+}
+
+void Shell::startQueued() {
+    if (!queued_ || bg_.running()) return;
+    Queued q = std::move(*queued_);
+    queued_.reset();
+    if (!bg_.start(q.label, std::move(q.work))) {
+        report(OpResult::fail("Â« " + q.label + " Â» n'a pas pu partir : recommence"));
+        return;
+    }
+    pendingDone_ = std::move(q.done);
+    quietSlow_ = false;
+    if (view_) static_cast<ShellView*>(view_)->updateTop();
+}
 
 bool Shell::poll() {
     auto r = bg_.take();
@@ -784,6 +807,7 @@ bool Shell::poll() {
     quietSlow_ = false;
     if (done) done(*r);
     if (!quiet) report(*r);   // 1.36.0 : la releve automatique ne parle que si elle a du nouveau (son `done`)
+    startQueued();            // 1.40.0 : le travail qui attendait la fin du regard
     // 1.35.0 : une publication sur le service qui attendait la fin de ce travail.
     if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());
     return true;
@@ -791,7 +815,12 @@ bool Shell::poll() {
 
 bool Shell::finishSlow() {
     bg_.wait();
-    return poll();
+    const bool r = poll();
+    if (bg_.running()) {   // 1.40.0 : le travail qui attendait le regard est parti : sa fin aussi
+        bg_.wait();
+        (void)poll();
+    }
+    return r;
 }
 
 void Shell::openDialog(menu::MenuPtr dialog) {
@@ -861,7 +890,7 @@ Tone Shell::keyStatusTone() const {
 
 std::string Shell::syncStatusText() const {
     if (busy()) {
-        std::string l = bg_.label();
+        std::string l = busyLabel();
         if (l.empty()) l = "Travail en cours";
         const bool dots = l.size() >= 3 && (l.compare(l.size() - 3, 3, "...") == 0 || l.compare(l.size() - 3, 3, "\xE2\x80\xA6") == 0);
         return dots ? l : l + "\xE2\x80\xA6";
@@ -872,13 +901,13 @@ std::string Shell::syncStatusText() const {
     std::string host = s.config.url;
     if (const auto p = host.find("://"); p != std::string::npos) host.erase(0, p + 3);
     if (s.hasState && !s.state.certOk) return "Service : " + host + " (cl\xC3\xA9 \xC3\xA0 certifier)";
-    return "Service : " + host;
+    return "Service : " + host + (live() ? " \xC2\xB7 en direct" : "");
 }
 
 int Shell::pendingRequests() const { return ws_->service().ready() ? ws_->service().pending : 0; }
 
 bool Shell::autoFetchRequests() {
-    if (busy() || !ws_->service().ready() || !ws_->key().present) return false;
+    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
     std::set<int> before;
     for (const auto& e : ws_->service().requests)
         if (e.waiting()) before.insert(e.number);
@@ -911,15 +940,127 @@ bool Shell::autoFetchRequests() {
     return true;
 }
 
+// ============================================================================ 1.40.0 : le regard en direct
+namespace {
+double steadyNow() { return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+}
+
+bool Shell::live() const { return lastLive_ >= 0 && steadyNow() - lastLive_ < 3.0 * kWatchFallback; }
+
+bool Shell::autoWatch() {
+    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
+    const Workspace* w = ws_.get();
+    auto st = std::make_shared<online::AdminWatch>();
+    if (!runSlow("Service : en direct", [w, st] { return w->serviceWatch(*st); },
+                 [this, st](const OpResult& r) {
+                     if (!r.ok) {
+                         lastLive_ = -1;
+                         if (!autoProblemSaid_) flash("En direct : " + r.message, Tone::Warning);
+                         autoProblemSaid_ = true;
+                         return;
+                     }
+                     autoProblemSaid_ = false;
+                     lastLive_ = steadyNow();
+                     if (!st->supported) {   // un service d'avant la 1.40.0 : relire les licences elles-memes
+                         watchSupported_ = false;
+                         wantLicences_ = true;
+                         return;
+                     }
+                     watchSupported_ = true;
+                     // Le premier regard : relire les licences si rien n'a jamais ete releve sur ce poste.
+                     if (knownActivity_ < 0 ? ws_->service().snapshot.at == 0 : st->activity != knownActivity_) wantLicences_ = true;
+                     if (knownRequests_ >= 0 && st->requests != knownRequests_) wantRequests_ = true;
+                     knownActivity_ = st->activity;
+                     knownRequests_ = st->requests;
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
+bool Shell::autoRefreshLicences() {
+    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
+    const Workspace* w = ws_.get();
+    auto snap = std::make_shared<online::Snapshot>();
+    auto before = std::make_shared<online::Snapshot>(ws_->service().snapshot);
+    if (!runSlow("Service : relev\xC3\xA9 des licences en ligne", [w, snap] { return w->serviceListLicences(*snap); },
+                 [this, snap, before](const OpResult& r) {
+                     if (!r.ok) {
+                         if (!autoProblemSaid_) flash("Rel\xC3\xA8ve automatique des licences en ligne : " + r.message, Tone::Warning);
+                         autoProblemSaid_ = true;
+                         return;
+                     }
+                     autoProblemSaid_ = false;
+                     lastLive_ = steadyNow();
+                     ws_->adoptSnapshot(std::move(*snap));
+                     refreshPages();
+                     const auto customerOf = [this](const std::string& id) {
+                         const LicenceEntry* e = ws_->licence(id);
+                         return e ? e->licence.customer : std::string();
+                     };
+                     const std::vector<std::string> said = describeChanges(*before, ws_->service().snapshot, customerOf);
+                     if (said.size() == 1) flash(said.front(), Tone::Info);
+                     else if (!said.empty()) {
+                         OpResult m;
+                         m.ok = true;
+                         m.message = std::to_string(said.size()) + " changements sur tes licences en ligne (D\xC3\xA9tails).";
+                         m.details = said;
+                         pushLog(Tone::Info, std::move(m));
+                     }
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
+std::vector<std::string> Shell::describeChanges(const online::Snapshot& before, const online::Snapshot& after,
+                                                const std::function<std::string(const std::string&)>& customerOf) {
+    std::vector<std::string> out;
+    if (before.at == 0) return out;   // pas de releve d'avant : rien a comparer
+    for (const auto& lic : after.licences) {
+        const online::OnlineLicence* old = before.licence(lic.licenseId);
+        std::string who = customerOf ? customerOf(lic.licenseId) : std::string();
+        const std::string where = " (licence " + lic.licenseId + ")";
+        for (const auto& a : lic.activations) {
+            const online::OnlineActivation* was = old ? old->activation(a.deviceKey) : nullptr;
+            const std::string nom = "PC \xC2\xAB " + (a.name.empty() ? std::string("sans nom") : a.name) + " \xC2\xBB";
+            const std::string pc = "le " + nom;
+            const std::string sujet = who.empty() ? std::string("Le client") : who;
+            if (a.state == "active" && (!was || was->state != "active"))
+                out.push_back(sujet + " a activ\xC3\xA9 " + pc + where + ".");
+            else if (a.state == "liberee" && was && was->state == "active")
+                out.push_back(sujet + " a lib\xC3\xA9r\xC3\xA9 " + pc + where + " : sa place est libre.");
+            else if (a.state == "retiree" && was && was->state == "active")
+                out.push_back("Le " + nom + where + " n'est plus actif : sa place a \xC3\xA9t\xC3\xA9 reprise par un autre PC.");
+        }
+    }
+    return out;
+}
+
 void Shell::Update(const menu::FrameContext& fc) {
     (void)poll();
     // 1.36.0 : la releve automatique des demandes (au lancement, puis toutes les 2 minutes ; pas sous un dialogue).
+    // 1.40.0 : le regard en direct (toutes les 15 s) ; ce qu'il a vu bouger est relu des que rien ne tourne ; les
+    // demandes ne sont plus relues que toutes les 10 minutes quand le regard les suit.
     {
         const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         if (nextAutoFetch_ < 0) nextAutoFetch_ = now + kAutoFetchFirst;
-        if (now >= nextAutoFetch_ && attached_ && manager().top() == this && !busy()) {
-            nextAutoFetch_ = now + kAutoFetchPeriod;
+        if (nextWatch_ < 0) nextWatch_ = now + kWatchFirst;
+        const bool free = attached_ && manager().top() == this && !bg_.running() && !queued_;
+        if (free && wantLicences_) {
+            wantLicences_ = false;
+            (void)autoRefreshLicences();
+        } else if (free && wantRequests_) {
+            wantRequests_ = false;
+            nextAutoFetch_ = now + (watchSupported_ ? kFetchWhenWatched : kAutoFetchPeriod);
             (void)autoFetchRequests();
+        } else if (free && now >= nextAutoFetch_) {
+            nextAutoFetch_ = now + (watchSupported_ && live() ? kFetchWhenWatched : kAutoFetchPeriod);
+            (void)autoFetchRequests();
+        } else if (free && now >= nextWatch_) {
+            nextWatch_ = now + (watchSupported_ ? kWatchPeriod : kWatchFallback);
+            if (watchSupported_) (void)autoWatch();
+            else (void)autoRefreshLicences();
         }
     }
     if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());   // 1.35.0 : une publication en attente

@@ -680,6 +680,34 @@ Result setActive(const std::string& folder, const licensing::SigningKey& key, co
     return putLicence(folder, key, text, {}, leaseDays, active, o);
 }
 
+Result watchState(const std::string& folder, const licensing::SigningKey& key, const Options& o, AdminWatch& out) {
+    out = AdminWatch{};
+    std::unique_ptr<Client> c;
+    std::string why;
+    if (!openClient(folder, key, o, c, &why)) return refused(why);
+    out.version = clean(c->state().str("version"), 40);
+    const Reply r = c->call("GET", "/admin/etat");
+    Result res;
+    res.ok = true;
+    if (r.error.empty() && r.status == 404) {   // un service d'avant la 1.40.0 : l'outil relit les licences elles-memes
+        res.message = "Le service (version " + (out.version.empty() ? std::string("?") : out.version) + ") ne dit pas encore ce qui change : red\xC3\xA9ploie-le.";
+        return res;
+    }
+    if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return refused(c->explain(r, "regarder ce qui change"));
+    const auto num = [&](const char* k) -> std::int64_t {
+        const Value* v = r.json.find(k);
+        return v && v->isNumber() ? v->asInt(-1) : -1;
+    };
+    out.supported = true;
+    out.activity = num("activite");
+    out.requests = num("demandes");
+    out.pending = num("attente");
+    out.changes = num("changements");
+    if (const std::string v = clean(r.json.str("version"), 40); !v.empty()) out.version = v;
+    res.message = "Service regard\xC3\xA9 : activit\xC3\xA9 " + std::to_string(out.activity) + ", demandes " + std::to_string(out.requests) + ".";
+    return res;
+}
+
 Result stats(const std::string& folder, const licensing::SigningKey& key, const Options& o) {
     std::unique_ptr<Client> c;
     std::string why;

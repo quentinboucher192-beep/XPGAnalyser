@@ -220,6 +220,16 @@ bool writeSnapshot(const std::string& folder, const Snapshot& s, std::string* wh
 // `leaseDays` 0 : le bail du service garde.
 [[nodiscard]] Result setActive(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId, bool active, int leaseDays,
                                const Options& o);
+// 1.40.0 : GET /admin/etat (signe par l'editeur) - des compteurs qui montent a chaque changement : << activite >> (un PC
+// active, libere par son client, retire au renouvellement), << demandes >> (une demande deposee ou annulee par un
+// client). L'outil ouvert le regarde toutes les 15 secondes et ne relit les licences, ou les demandes, que s'ils ont
+// bouge. Un service d'avant la 1.40.0 ne l'a pas (404) : `supported` faux, le resultat reste reussi.
+struct AdminWatch {
+    bool          supported{false};
+    std::int64_t  activity{-1}, requests{-1}, pending{-1}, changes{-1};
+    std::string   version;
+};
+[[nodiscard]] Result watchState(const std::string& folder, const licensing::SigningKey& key, const Options& o, AdminWatch& out);
 // GET /admin/stats : les compteurs, une ligne chacun.
 [[nodiscard]] Result stats(const std::string& folder, const licensing::SigningKey& key, const Options& o);
 

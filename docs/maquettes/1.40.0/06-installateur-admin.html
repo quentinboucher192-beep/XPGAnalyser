@@ -1,0 +1,105 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Installateur de l'Admin</title>
+<link rel="stylesheet" href="ds.css">
+<style>
+@font-face{font-family:Barlow;font-weight:400;src:url(../../../installateur/polices/Barlow-Regular.ttf)}
+@font-face{font-family:Barlow;font-weight:500;src:url(../../../installateur/polices/Barlow-Medium.ttf)}
+@font-face{font-family:Barlow;font-weight:600;src:url(../../../installateur/polices/Barlow-SemiBold.ttf)}
+@font-face{font-family:Barlow;font-weight:700;src:url(../../../installateur/polices/Barlow-Bold.ttf)}
+body{background:radial-gradient(1200px 700px at 20% 10%,#c7d2fe 0%,transparent 60%),radial-gradient(900px 600px at 90% 90%,#ddd6fe 0%,transparent 60%),linear-gradient(135deg,#e0e7ff,#f5f3ff);font-family:Barlow,Inter;font-size:15px}
+.win{position:absolute;left:170px;top:92px;width:1260px;height:800px;border-radius:10px;overflow:hidden;box-shadow:0 40px 90px rgba(30,27,75,.35),0 0 0 1px rgba(30,27,75,.15);display:flex;flex-direction:column;background:#fff}
+.tit{height:40px;flex:none;display:flex;align-items:center;gap:10px;padding:0 0 0 14px;background:#f3f3f3;border-bottom:1px solid #e5e5e5;font:13px "Segoe UI",Inter;color:#1f1f1f}
+.tit .wb{margin-left:auto;display:flex}
+.tit .wb span{width:46px;height:40px;display:grid;place-items:center;color:#444}
+.wbody{flex:1;display:flex;min-height:0}
+.col{width:300px;flex:none;background:linear-gradient(180deg,#151a3d 0%,#0e1230 100%);color:#c9cfe6;padding:30px 26px 22px;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.col .lg{width:58px;height:58px;border-radius:15px;display:grid;place-items:center;color:#fff;background:linear-gradient(140deg,#8b6dff,#6d4aff 50%,#4b2fd6);box-shadow:0 10px 28px rgba(109,74,255,.5),inset 0 1px 0 rgba(255,255,255,.25)}
+.col .lg .ico{width:30px;height:30px;stroke-width:1.9}
+.col h1{font:700 27px/1.1 Barlow;color:#fff;margin-top:18px;letter-spacing:-.01em}
+.col .v{font:500 14px Barlow;color:#8f97bd;margin-top:4px}
+.steps{margin-top:26px;display:flex;flex-direction:column;gap:2px;position:relative}
+.s{display:flex;align-items:center;gap:13px;height:34px;padding:0 10px;border-radius:9px;font:500 16px Barlow;color:#8f97bd;position:relative;z-index:1}
+.s .b{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex:none}
+.s.done{color:#e5e8f6}.s.done .b{background:#8b6dff;color:#fff}.s.done .b .ico{width:12px;height:12px;stroke-width:3.2}
+.s.now{background:rgba(139,109,255,.16);color:#fff;font-weight:700}
+.s.now .b{border:2px solid #fbbf24;background:#151a3d}.s.now .b:after{content:"";width:8px;height:8px;border-radius:50%;background:#fbbf24}
+.s.todo .b{border:2px solid #474e78}
+.rail{position:absolute;left:19px;top:20px;bottom:20px;width:2px;background:#2b3260}
+.circ{position:absolute;left:0;right:0;bottom:0;height:150px;opacity:.55}
+.colfoot{margin-top:auto;margin-bottom:96px;font:400 13.5px/1.4 Barlow;color:#8f97bd;position:relative;z-index:1}
+.page{flex:1;min-width:0;display:flex;flex-direction:column}
+.ph{height:96px;flex:none;display:flex;align-items:center;padding:0 30px;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#6d4aff,#a78bfa 60%,#c4b5fd) 1}
+.ph h2{font:700 24px Barlow;color:#14183a}
+.ph .d{font:400 15.5px Barlow;color:#6b7194;margin-top:2px}
+.ph .pi{margin-left:auto;width:54px;height:54px;border-radius:14px;display:grid;place-items:center;color:#fff;background:linear-gradient(140deg,#7c5cff,#4b2fd6)}
+.ph .pi .ico{width:26px;height:26px}
+.pc{flex:1;min-height:0;padding:22px 30px 10px;overflow:hidden}
+.upd{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:#f4f1ff;border:1px solid #e1d9ff;color:#3b2a8f;font-size:15px}
+.upd .ico{color:#6d4aff}
+.grp{font:700 13px Barlow;letter-spacing:.08em;text-transform:uppercase;color:#8f97bd;margin:20px 0 10px}
+.comp{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cp{display:flex;gap:13px;padding:14px 15px;border:1.5px solid #e4e6f0;border-radius:12px;background:#fff;align-items:flex-start}
+.cp.on{border-color:#c9bcff;background:linear-gradient(180deg,#fbfaff,#fff)}
+.cb{width:22px;height:22px;border-radius:6px;border:2px solid #c3c7da;flex:none;display:grid;place-items:center;margin-top:1px}
+.cp.on .cb,.op.on .cb{background:#6d4aff;border-color:#6d4aff;color:#fff}
+.cb .ico{width:14px;height:14px;stroke-width:3.2}
+.cp.lock .cb{background:#b9acf5;border-color:#b9acf5}
+.cp .ci{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none}
+.cp .ci .ico{width:20px;height:20px}
+.cp b{display:block;font:600 16.5px Barlow;color:#14183a}
+.cp .t{font:400 14.5px/1.35 Barlow;color:#6b7194;margin-top:2px}
+.cp .sz{margin-left:auto;font:500 13.5px Barlow;color:#9aa0c0;white-space:nowrap}
+.ops{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
+.op{display:flex;align-items:center;gap:11px;height:36px;font:400 15.5px Barlow;color:#2a2f55}
+.op .cb{width:20px;height:20px}
+.foot{height:68px;flex:none;border-top:1px solid #eceef5;background:#f8f9fc;display:flex;align-items:center;gap:10px;padding:0 24px}
+.wbtn{height:36px;padding:0 20px;border-radius:7px;border:1px solid #d3d6e4;background:#fff;font:600 15px Barlow;color:#2a2f55;display:grid;place-items:center}
+.wbtn.pri{background:#6d4aff;border-color:#6d4aff;color:#fff;box-shadow:0 2px 8px rgba(109,74,255,.35)}
+.space{font:400 14px Barlow;color:#8f97bd}
+</style></head><body><script src="icons.js"></script>
+<div class="win">
+ <div class="tit"><span style="width:16px;height:16px;border-radius:4px;background:linear-gradient(140deg,#8b6dff,#4b2fd6)"></span>Installation — XPG License Manager Admin 1.40.0<div class="wb"><span>&#8212;</span><span>&#9744;</span><span>&#10005;</span></div></div>
+ <div class="wbody">
+  <div class="col">
+   <div class="lg"><i data-i="key"></i></div>
+   <h1>License Manager<br>Admin</h1>
+   <div class="v">Version 1.40.0 · pour l'éditeur</div>
+   <div class="steps"><span class="rail"></span>
+    <div class="s done"><span class="b"><i data-i="check"></i></span>Bienvenue</div>
+    <div class="s done"><span class="b"><i data-i="check"></i></span>Emplacement</div>
+    <div class="s now"><span class="b"></span>Ce que tu installes</div>
+    <div class="s todo"><span class="b"></span>Ta clé et ton archive</div>
+    <div class="s todo"><span class="b"></span>Options</div>
+    <div class="s todo"><span class="b"></span>Récapitulatif</div>
+    <div class="s todo"><span class="b"></span>Installation</div>
+    <div class="s todo"><span class="b"></span>Terminé</div>
+   </div>
+   <svg class="circ" viewBox="0 0 300 150"><g stroke="#6d4aff" stroke-width="1.2" fill="none" opacity=".7"><path d="M0 120 H60 L90 90 H160 L190 60 H300"/><path d="M0 140 H110 L130 120 H220 L250 100 H300"/><path d="M40 150 V130 L60 110 H100"/></g><g fill="#a78bfa"><circle cx="90" cy="90" r="3"/><circle cx="190" cy="60" r="3"/><circle cx="130" cy="120" r="3"/><circle cx="250" cy="100" r="3"/><circle cx="100" cy="110" r="2.5"/></g><circle cx="190" cy="60" r="7" fill="#a78bfa" opacity=".25"/></svg>
+   <div class="colfoot">Un seul fichier : l'application, la console et ton service en ligne. Rien d'autre à télécharger.</div>
+  </div>
+  <div class="page">
+   <div class="ph"><div><h2>Ce que tu installes</h2><div class="d">Coche ce que tu veux sur ce PC. L'application est toujours installée.</div></div><span class="pi"><i data-i="box"></i></span></div>
+   <div class="pc">
+    <div class="upd"><i data-i="refresh"></i><div><b style="font-weight:600">La 1.39.0 est installée : elle est mise à jour.</b> Ta clé d'éditeur, ton archive des licences et tes réglages ne bougent pas.</div></div>
+    <div class="grp">Composants</div>
+    <div class="comp">
+     <div class="cp on lock"><span class="cb"><i data-i="check"></i></span><span class="ci" style="background:#f1edff;color:#6d4aff"><i data-i="dash"></i></span><div><b>L'application</b><div class="t">Licences, clients, demandes, PC, en direct. Toujours installée.</div></div><span class="sz">18 Mo</span></div>
+     <div class="cp on"><span class="cb"><i data-i="check"></i></span><span class="ci" style="background:#eef2ff;color:#4f46e5"><i data-i="terminal"></i></span><div><b>La console</b><div class="t">Les mêmes commandes pour tes scripts : <span class="mono" style="font-size:13px">xpg-licence-admin</span>.</div></div><span class="sz">6 Mo</span></div>
+     <div class="cp on"><span class="cb"><i data-i="check"></i></span><span class="ci" style="background:#ecfeff;color:#0891b2"><i data-i="cloud"></i></span><div><b>Le service en ligne</b><div class="t">De quoi déployer ou mettre à jour ton service Cloudflare (Déployer le service, dans le menu Démarrer).</div></div><span class="sz">2 Mo</span></div>
+     <div class="cp"><span class="cb"></span><span class="ci" style="background:#f5f5f4;color:#57534e"><i data-i="file"></i></span><div><b>Les guides</b><div class="t">Licences, service en ligne, sécurité de ta clé : les notes à lire.</div></div><span class="sz">1 Mo</span></div>
+    </div>
+    <div class="grp">Options</div>
+    <div class="ops">
+     <div class="op on"><span class="cb"><i data-i="check"></i></span>Un raccourci sur le Bureau</div>
+     <div class="op on"><span class="cb"><i data-i="check"></i></span>Ouvrir les .xpglic, .xpgreg, .xpgdemande d'un double-clic</div>
+     <div class="op on"><span class="cb"><i data-i="check"></i></span>Le menu Démarrer (l'Admin, la console, Déployer le service)</div>
+     <div class="op"><span class="cb"></span>Ajouter la console au PATH (pour tes scripts)</div>
+     <div class="op on"><span class="cb"><i data-i="check"></i></span>Garder une copie de secours pour Réparer</div>
+     <div class="op on"><span class="cb"><i data-i="check"></i></span>Lancer l'Admin à la fin</div>
+    </div>
+   </div>
+   <div class="foot"><span class="space">Espace utilisé : 27 Mo · pour toi seul (sans droits d'administrateur)</span><span style="margin-left:auto" class="wbtn">Précédent</span><span class="wbtn pri">Suivant</span><span class="wbtn">Annuler</span></div>
+  </div>
+ </div>
+</div>
+<div class="annot" data-n="1" style="left:1200px;top:30px;width:330px"><b>Un seul .exe</b>, comme les Studios : composants, options, mise à jour par-dessus, désinstallation propre. Plus de zip.</div>
+</body></html>

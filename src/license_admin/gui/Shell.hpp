@@ -33,6 +33,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -72,7 +73,9 @@ public:
     void report(const OpResult& r);
     void flash(const std::string& text, Tone tone);
     bool runSlow(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done);
-    [[nodiscard]] bool busy() const noexcept { return bg_.running(); }
+    // 1.40.0 : occupe POUR TOI - un travail que tu as lance, ou qui attend. Le regard en direct (un appel court, sans
+    // bruit) n'occupe pas : un travail lance pendant qu'il tourne attend sa fin (une file d'une place) et part seul.
+    [[nodiscard]] bool busy() const noexcept { return (bg_.running() && !quietSlow_) || queued_.has_value(); }
     [[nodiscard]] std::string busyLabel() const;
     void navigate(const std::string& pageId);
     void openDialog(menu::MenuPtr dialog);
@@ -99,6 +102,22 @@ public:
     // Les demandes en attente de ta decision (le menu de gauche les compte : Demandes en ligne).
     [[nodiscard]] int pendingRequests() const;
     static constexpr double kAutoFetchFirst = 4.0, kAutoFetchPeriod = 120.0;   // secondes
+
+    // 1.40.0 : LE REGARD EN DIRECT - tant que l'application est ouverte (le service regle, la cle la, aucun dialogue),
+    // toutes les 15 secondes : GET /admin/etat (des compteurs) ; un PC active ou libere par son client, une demande
+    // deposee : les licences (ou les demandes) sont relues seules, les pages suivent, et un avis dit ce qui a change
+    // (<< Atelier Meyer a libere le PC ... >>). Un service d'avant la 1.40.0 (sans /admin/etat) : les licences sont
+    // relues toutes les 30 secondes. Sans bruit : la premiere panne est dite une fois. Vrai : un regard est parti.
+    bool autoWatch();
+    // Relire les licences en ligne sans bruit, et dire ce qui a change depuis le dernier releve (les essais l'appellent).
+    bool autoRefreshLicences();
+    // Ce qui a change entre deux releves, en phrases (un PC active, libere par son client, retire) ; vide : rien, ou
+    // pas de releve d'avant. `customerOf` : le client d'une licence (l'archive).
+    [[nodiscard]] static std::vector<std::string> describeChanges(const online::Snapshot& before, const online::Snapshot& after,
+                                                                  const std::function<std::string(const std::string&)>& customerOf);
+    // Le regard marche (le haut de la fenetre le dit : << en direct >>).
+    [[nodiscard]] bool live() const;
+    static constexpr double kWatchFirst = 2.0, kWatchPeriod = 15.0, kWatchFallback = 30.0, kFetchWhenWatched = 600.0;
 
     // ---- ce qui se lit (les essais, la fenetre) ----
     [[nodiscard]] const std::string& currentPageId() const noexcept { return current_; }
@@ -142,6 +161,19 @@ private:
     std::function<void(const OpResult&)> pendingDone_;
     bool                       quietSlow_{false};        // 1.36.0 : le travail en cours est la releve automatique
     double                     nextAutoFetch_{-1};       // 1.36.0 : l'heure (steady, secondes) de la prochaine releve
+    // 1.40.0 : le regard en direct
+    struct Queued {
+        std::string                          label;
+        std::function<OpResult()>            work;
+        std::function<void(const OpResult&)> done;
+    };
+    std::optional<Queued>      queued_;                  // un travail lance pendant le regard : il part a sa fin
+    void                       startQueued();
+    double                     nextWatch_{-1};
+    std::int64_t               knownActivity_{-1}, knownRequests_{-1};
+    bool                       watchSupported_{true};    // faux : un service d'avant la 1.40.0
+    bool                       wantLicences_{false}, wantRequests_{false};   // a relire des que possible
+    double                     lastLive_{-1};            // la derniere fois que le service a repondu au regard
     bool                       autoProblemSaid_{false};  // 1.36.0 : la panne de la releve deja dite
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;

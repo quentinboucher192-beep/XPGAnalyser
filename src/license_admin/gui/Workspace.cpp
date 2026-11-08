@@ -1164,6 +1164,11 @@ OpResult Workspace::serviceStats() const {
     return fromResult(online::stats(folder_, *key, optionsAt(now())));
 }
 
+OpResult Workspace::serviceWatch(online::AdminWatch& out) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::watchState(folder_, *key, optionsAt(now()), out));
+}
+
 OpResult Workspace::serviceRun(const ServiceJob& job) const {
     XPG_SERVICE_KEY_OR_FAIL;
     const online::Options o = optionsAt(now());
