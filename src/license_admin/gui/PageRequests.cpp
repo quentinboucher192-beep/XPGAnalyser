@@ -89,7 +89,8 @@ bool depositOnlineLicence(const ShellHost& host, ServiceJob job, std::string cod
     auto secret = std::make_shared<std::string>(std::move(code));
     const std::string id = job.licenseId;
     ShellHost h = host;
-    const bool started = host.runSlow(job.label, [wp, job] { return wp->serviceRun(job); }, [h, secret, id, done](const OpResult& r) {
+    // 1.37.0 : le code garde chiffre sur ce poste, et scelle pour le PC d'une demande (serviceRunOnline).
+    const bool started = host.runSlow(job.label, [wp, job, secret] { return wp->serviceRunOnline(job, *secret); }, [h, secret, id, done](const OpResult& r) {
         if (r.ok && !secret->empty() && h.openDialog) h.openDialog(makeCodeDialog(id, *secret));
         deploy::crypto::wipe(secret->data(), secret->size());
         secret->clear();
@@ -232,7 +233,7 @@ public:
         accept_->setIcon(ui::Icon::Ok);
         accept_->setTooltip("L'assistant de licence, avec cette demande : une licence LI\xC3\x89" "E \xC3\xA0 ce PC ; sign\xC3\xA9" "e, elle part d'elle-m\xC3\xAAme \xC3\xA0 chacun de ses PC.");
         acceptOnline_ = add(*this, std::make_unique<ui::Button>("Accepter en ligne\xE2\x80\xA6", "demandes.accepter-en-ligne"));
-        acceptOnline_->setTooltip("Une licence EN LIGNE pour ce client (aucun PC li\xC3\xA9) : son code d'activation t'est montr\xC3\xA9 une fois, tu le lui donnes.");
+        acceptOnline_->setTooltip("Une licence EN LIGNE pour ce client (aucun PC li\xC3\xA9) : son code part scell\xC3\xA9 \xC3\xA0 son PC (il s'active tout seul) et par mail ; gard\xC3\xA9 chiffr\xC3\xA9 ici.");
         refuse_ = add(*this, std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", "demandes.refuser"));
         refuse_->setStyle(ui::Button::Style::Danger);
         refuse_->setTooltip("Le client voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison dans son logiciel (scell\xC3\xA9" "e : personne d'autre ne la lit).");

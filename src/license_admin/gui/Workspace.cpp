@@ -1129,7 +1129,7 @@ OpResult Workspace::serviceRun(const ServiceJob& job) const {
     XPG_SERVICE_KEY_OR_FAIL;
     const online::Options o = optionsAt(now());
     switch (job.kind) {
-        case ServiceJob::Kind::Licence: return fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o));
+        case ServiceJob::Kind::Licence: return fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o, mailer()));
         case ServiceJob::Kind::Removal: return fromResult(online::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o));
         case ServiceJob::Kind::Revocation: return fromResult(online::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o));
         case ServiceJob::Kind::Registry: return fromResult(online::publishRegistry(folder_, *key, o));
@@ -1141,18 +1141,33 @@ OpResult Workspace::serviceRun(const ServiceJob& job) const {
             l.details.insert(l.details.begin(), r.message);
             return l;
         }
-        case ServiceJob::Kind::OnlineLicence: {
-            OpResult r = fromResult(online::putLicence(folder_, *key, job.licenceText, job.codeHash, job.leaseDays, true, o));
-            if (r.ok && job.requestNumber > 0) {
-                const OpResult a = fromResult(online::answerOnline(folder_, *key, job.requestNumber, job.licenseId, o));
-                r.details.push_back(a.message);
-                for (const auto& d : a.details) r.details.push_back(d);
-            }
-            return r;
-        }
+        case ServiceJob::Kind::OnlineLicence: return serviceRunOnline(job, {});
     }
     return OpResult::fail("publication inconnue");
 }
+
+OpResult Workspace::serviceRunOnline(const ServiceJob& job, const std::string& code) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    const online::Options o = optionsAt(now());
+    OpResult r = fromResult(online::putLicence(folder_, *key, job.licenceText, job.codeHash, job.leaseDays, true, o));
+    if (!r.ok) return r;
+    if (!code.empty()) {
+        std::string w;
+        if (online::storeCode(folder_, job.licenseId, code, &w))
+            r.details.push_back("Le code est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste : Licences \xE2\x80\xBA Voir le code\xE2\x80\xA6 pour le revoir.");
+        else
+            r.details.push_back("ATTENTION : le code n'a pas pu \xC3\xAAtre gard\xC3\xA9 sur ce poste (" + w + ") : note-le.");
+    }
+    if (job.requestNumber > 0) {
+        const OpResult a = fromResult(online::answerOnline(folder_, *key, job.requestNumber, job.licenseId, code, job.licenceText, mailer(), o));
+        r.details.push_back(a.message);
+        for (const auto& d : a.details) r.details.push_back(d);
+        if (!a.ok) r.ok = false;
+    }
+    return r;
+}
+
+online::Mailer Workspace::mailer() const { return {}; }   // 1.37.0 : remplace par le mail (Mail.hpp)
 
 #undef XPG_SERVICE_KEY_OR_FAIL
 

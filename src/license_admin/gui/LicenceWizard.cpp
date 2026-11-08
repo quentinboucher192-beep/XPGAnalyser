@@ -616,7 +616,7 @@ public:
             return "Une \xC3\xA9mission plus r\xC3\xA9" "cente de la licence en ligne " + s.extendId + " (une autre fin, plus de postes, d'autres fonctionnalit\xC3\xA9s) : "
                    "elle part sur le service, le code d'activation reste le m\xC3\xAAme.";
         if (w_.online())
-            return "Aucun PC \xC3\xA0 choisir : chaque PC du client active la licence avec un CODE D'ACTIVATION, tir\xC3\xA9 \xC3\xA0 la signature et montr\xC3\xA9 une fois. "
+            return "Aucun PC \xC3\xA0 choisir : chaque PC du client active la licence avec un CODE D'ACTIVATION, tir\xC3\xA9 \xC3\xA0 la signature (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste). "
                    "Le bail : combien de jours un PC reste activ\xC3\xA9 sans se connecter (puis il s'arr\xC3\xAAte : un PC retir\xC3\xA9 ou perdu ne sert plus).";
         if (s.extend)
             return "Les demandes (.xpgreq) des PC \xC3\xA0 ajouter \xC3\xA0 la licence " + s.extendId
@@ -773,8 +773,8 @@ protected:
             float y = leaseY_ + 44.f;
             if (!s.requestNote.empty()) y += drawWrapped(r, b.x, y, b.w, s.requestNote, ctx.theme.font.ui, c.text, 3) + 8.f;
             y += drawWrapped(r, b.x, y, b.w,
-                             "Le code n'est gard\xC3\xA9 nulle part : ni sur ce poste, ni sur le service (il n'en garde que l'empreinte). Perdu, tu en tires un nouveau "
-                             "(Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6).",
+                             "Le code est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (Licences \xE2\x80\xBA Voir le code\xE2\x80\xA6) ; le service n'en garde que l'empreinte. Le PC "
+                             "d'une demande le re\xC3\xA7oit scell\xC3\xA9 et s'active tout seul. Perdu ou divulgu\xC3\xA9 : Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6",
                              ctx.theme.font.ui, c.textMuted, 3);
             if (!w_.ws().service().ready())
                 (void)drawWrapped(r, b.x, y + 8.f, b.w, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : Service en ligne, d'abord.", ctx.theme.font.ui,
@@ -1529,15 +1529,15 @@ public:
         if (s.online) {
             if (s.signedOk && s.serviced && s.service.ok)
                 return s.extend ? std::string("La nouvelle \xC3\xA9mission est sur le service : chaque PC la re\xC3\xA7oit \xC3\xA0 sa prochaine connexion. Le code reste le m\xC3\xAAme.")
-                                : std::string("La licence est sur le service. Son code t'a \xC3\xA9t\xC3\xA9 montr\xC3\xA9 une fois : donne-le \xC3\xA0 ton client (Aide \xE2\x80\xBA "
-                                              "Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code).");
+                                : std::string("La licence est sur le service. Son code est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (Licences \xE2\x80\xBA Voir le code\xE2\x80\xA6) ; "
+                                              "le PC d'une demande l'a re\xC3\xA7u scell\xC3\xA9 et s'active tout seul, et le mail part si tu l'as r\xC3\xA9gl\xC3\xA9.");
             if (s.signedOk && s.servicing) return "La licence est sign\xC3\xA9" "e ; son d\xC3\xA9p\xC3\xB4t sur le service est en cours.";
             if (s.signedOk)
                 return "La licence est sign\xC3\xA9" "e et rang\xC3\xA9" "e, mais PAS d\xC3\xA9pos\xC3\xA9" "e sur le service" +
                        std::string(s.extend ? "" : " (son code est oubli\xC3\xA9 : il ne servirait \xC3\xA0 rien)") + ". Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6 la d\xC3\xA9pose de nouveau.";
             return s.extend ? "Signe la nouvelle \xC3\xA9mission avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive puis d\xC3\xA9pos\xC3\xA9" "e sur le service ; le code reste le m\xC3\xAAme."
                             : "Signe la licence avec ta cl\xC3\xA9 : elle est rang\xC3\xA9" "e dans l'archive, puis d\xC3\xA9pos\xC3\xA9" "e sur le service avec l'empreinte d'un code "
-                              "d'activation neuf. Le code s'affiche ensuite, une fois.";
+                              "d'activation neuf. Le code s'affiche ensuite ; il est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste.";
         }
         if (s.signedOk && s.serviced && s.service.ok)
             return "La licence est publi\xC3\xA9" "e sur le service : chaque PC la r\xC3\xA9" "cup\xC3\xA8re seul \xC3\xA0 sa prochaine connexion. Rien d'autre \xC3\xA0 faire.";
@@ -2699,9 +2699,10 @@ protected:
 
 private:
     [[nodiscard]] std::string text() const {
-        return "Le code de la licence en ligne " + licenseId_ + ". Il n'est montr\xC3\xA9 qu'ici, une fois : note-le pour ton client, qui le tape dans "
-               "Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code (ou dans l'installateur). Seule son empreinte est gard\xC3\xA9" "e, sur le service ; "
-               "ce poste ne le garde pas : ferm\xC3\xA9" "e, cette fen\xC3\xAAtre l'oublie. Perdu : Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6";
+        return "Le code de la licence en ligne " + licenseId_ + ". Le client le tape dans Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code (ou dans "
+               "l'installateur) ; s'il a fait une demande, son Studio l'a re\xC3\xA7u scell\xC3\xA9 et s'active tout seul. Il est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste "
+               "(pour ce compte Windows) : Licences \xE2\x80\xBA Voir le code\xE2\x80\xA6 le remontre ; le service n'en garde que l'empreinte. "
+               "Perdu ou divulgu\xC3\xA9 : Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6";
     }
 
     DialogMenu&           owner_;

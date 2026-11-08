@@ -278,6 +278,11 @@ public:
     [[nodiscard]] OpResult serviceRefuse(const std::string& which, const std::string& reason) const;
     [[nodiscard]] OpResult serviceStats() const;
     [[nodiscard]] OpResult serviceRun(const ServiceJob& job) const;
+    // 1.37.0 : une licence EN LIGNE deposee avec son code : le code garde chiffre sur ce poste (Voir le code...), et la
+    // reponse a la demande (requestNumber) porte le code scelle pour le PC (son Studio s'active seul) et l'etat du mail.
+    [[nodiscard]] OpResult serviceRunOnline(const ServiceJob& job, const std::string& code) const;
+    // 1.37.0 : le mail au client a l'acceptation (vide : pas de mail regle sur ce poste).
+    [[nodiscard]] online::Mailer mailer() const;
     // Sur le fil de l'interface : ce qu'un travail lent a lu.
     void adoptServiceState(const online::ServiceState& state);
     void adoptSnapshot(online::Snapshot snapshot);

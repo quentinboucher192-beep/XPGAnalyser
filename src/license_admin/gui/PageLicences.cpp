@@ -161,10 +161,12 @@ public:
         new_ = &button(*this, "Nouvelle licence\xE2\x80\xA6", "licences.nouvelle", ui::Button::Style::Primary);
         new_->setTooltip("L'assistant : les demandes des PC, le client, l'\xC3\xA9" "dition, les fonctionnalit\xC3\xA9s, puis signer");
         newOnline_ = &button(*this, "Nouvelle licence en ligne\xE2\x80\xA6", "licences.nouvelle-en-ligne");
-        newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (montr\xC3\xA9 une fois) aupr\xC3\xA8s du service des licences");
+        newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste) aupr\xC3\xA8s du service des licences");
         refreshOnline_ = &button(*this, "Relever", "licences.relever");
         refreshOnline_->setIcon(ui::Icon::Refresh);
         refreshOnline_->setTooltip("Lit sur le service les activations des licences en ligne (les PC, vu le, bail jusqu'au)");
+        showCode_ = &button(*this, "Voir le code\xE2\x80\xA6", "licences.voir-code");   // 1.37.0
+        showCode_->setTooltip("Le code d'activation de la licence en ligne choisie, gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ce compte Windows)");
         newCode_ = &button(*this, "Nouveau code\xE2\x80\xA6", "licences.nouveau-code");
         newCode_->setTooltip("Un code d'activation neuf pour la licence en ligne choisie : l'ancien ne marche plus (les PC d\xC3\xA9j\xC3\xA0 activ\xC3\xA9s restent)");
         active_ = &button(*this, "D\xC3\xA9sactiver\xE2\x80\xA6", "licences.desactiver", ui::Button::Style::Danger);
@@ -213,6 +215,7 @@ public:
         links_ += newOnline_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {}, {}, {}, true)); });
         links_ += refreshOnline_->clicked->connect([this] { fetchOnline(); });
         links_ += newCode_->clicked->connect([this] { askNewCode(); });
+        links_ += showCode_->clicked->connect([this] { showCode(); });
         links_ += active_->clicked->connect([this] { askActive(); });
         links_ += addPc_->clicked->connect([this] {
             if (const LicenceEntry* l = selected())
@@ -270,7 +273,7 @@ protected:
         actionsY_ = r.y + kPad + 64.f;
         float bx = x;
         float rowY = actionsY_;
-        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, newCode_, active_, refreshOnline_, revoke_, folder_}) {
+        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, showCode_, newCode_, active_, refreshOnline_, revoke_, folder_}) {
             if (b->visibility() == ui::Visibility::Collapsed) continue;
             const float bw = buttonWidth(*b, 96.f);
             if (bx > x && bx + bw > x + w) {   // trop etroit : la suite sur une deuxieme ligne
@@ -414,6 +417,7 @@ private:
         newOnline_->setEnabled(ready);
         refreshOnline_->setVisibility(ready ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         newCode_->setVisibility(onlineLic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        showCode_->setVisibility(onlineLic ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.37.0
         active_->setVisibility(onlineLic ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         newCode_->setEnabled(onlineLic && ready);
         active_->setEnabled(onlineLic && ready);
@@ -672,7 +676,7 @@ private:
         host_.openDialog(licdlg::makeConfirmDialog(
             "dialog.nouveau-code", "Un nouveau code d'activation",
             "Tirer un nouveau code pour la licence " + id + " ?\n\nL'ancien ne marchera plus d\xC3\xA8s que le nouveau est d\xC3\xA9pos\xC3\xA9 (les PC d\xC3\xA9j\xC3\xA0 "
-            "activ\xC3\xA9s restent). Le nouveau t'est montr\xC3\xA9 une fois : note-le pour ton client.",
+            "activ\xC3\xA9s restent). Le nouveau s'affiche, et il est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste.",
             "Tirer un nouveau code", false, [this, alive, id] {
                 if (!*alive) return;
                 ServiceJob job;
@@ -687,6 +691,19 @@ private:
                     }))
                     host_.flash("Un travail est en cours : rien n'est parti, le code est oubli\xC3\xA9. Recommence quand il a fini.", Tone::Warning);
             }));
+    }
+
+    // 1.37.0 : le code garde chiffre sur ce poste, montre dans la fenetre du code (Afficher, Copier)
+    void showCode() {
+        const LicenceEntry* e = selected();
+        if (!e || !Workspace::isOnlineLicence(e->licence)) return;
+        std::string code, why;
+        if (!online::readCode(ws().folder(), e->licence.licenseId, code, &why)) {
+            host_.report(OpResult::fail(why));
+            return;
+        }
+        host_.openDialog(makeCodeDialog(e->licence.licenseId, code));
+        deploy::crypto::wipe(code.data(), code.size());
     }
 
     void askActive() {
@@ -719,6 +736,7 @@ private:
     ui::Button*                 newOnline_{nullptr};
     ui::Button*                 refreshOnline_{nullptr};
     ui::Button*                 newCode_{nullptr};
+    ui::Button*                 showCode_{nullptr};   // 1.37.0
     ui::Button*                 active_{nullptr};
     std::vector<std::string>    onlineKeys_;
     bool                        pcsOnline_{false};

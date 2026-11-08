@@ -165,6 +165,7 @@ std::string usage() {
            "  service-refuser --numero N --raison TEXTE      refuse cette demande (la raison scell\xC3\xA9" "e pour le PC)\n"
            "  service-publier-licence --licence F.xpglic     une licence li\xC3\xA9" "e \xC3\xA0 des PC : \xC3\xA0 chacun (sa demande en attente : accept\xC3\xA9" "e)\n"
            "  service-stats                                  les compteurs du service\n"
+           "  code-licence --licence ID                      1.37.0 : revoir le code d'activation d'une licence en ligne (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)\n"
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "  --version\n\n"
@@ -871,13 +872,30 @@ int run(const std::vector<std::string>& argv) {
         }
         say(r.text() + "\n");
         if (newCode) {
-            say("\n  CODE D'ACTIVATION (montr\xC3\xA9 une seule fois : note-le pour ton client, il n'est gard\xC3\xA9 nulle part) :\n\n      " + code + "\n\n"
-                "  Le client le tape dans Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code (ou dans l'installateur).\n"
+            // 1.37.0 : garde chiffre sur ce poste (pour ce compte) : il se revoit (code-licence --licence ID)
+            std::string keepWhy;
+            const bool kept = online::storeCode(folder, id, code, &keepWhy);
+            say("\n  CODE D'ACTIVATION :\n\n      " + code + "\n\n"
+                "  Le client le tape dans Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer avec un code (ou dans l'installateur).\n" +
+                (kept ? std::string("  Il est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ce compte) : code-licence --licence ID pour le revoir.\n")
+                      : "  ATTENTION : il n'a pas pu \xC3\xAAtre gard\xC3\xA9 sur ce poste (" + keepWhy + ") : note-le.\n") +
                 "  Le service n'en garde que l'empreinte. Perdu : licence-en-ligne ... --etendre --nouveau-code (l'ancien ne marche plus).\n");
             crypto::wipe(code.data(), code.size());
         } else {
             say("Le code d'activation reste le m\xC3\xAAme.\n");
         }
+        return 0;
+    }
+    // 1.37.0 : revoir le code d'activation d'une licence en ligne (garde chiffre sur ce poste)
+    if (a.command == "code-licence") {
+        if (!need("--licence")) return 2;
+        std::string code, w;
+        if (!online::readCode(folder, a.one("--licence"), code, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say("Code d'activation de " + a.one("--licence") + " : " + code + "\n");
+        crypto::wipe(code.data(), code.size());
         return 0;
     }
     if (a.command == "kit-studios") {
