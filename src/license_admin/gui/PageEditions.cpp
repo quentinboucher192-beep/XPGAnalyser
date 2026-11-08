@@ -614,9 +614,10 @@ private:
             a.id = ("R" + next + "-" + id).substr(0, 40);
             const std::string name = e->label.empty() ? e->id : e->label;
             a.title = ("R\xC3\xA9" "duction sur " + name + " : " + e->promoPrice).substr(0, 120);
-            std::string text = e->price.empty() ? std::string() : "Au lieu de " + e->price + ". ";
-            text += "Jusqu'au " + lic::isoDate(e->promoUntil) + ".";
-            if (!e->description.empty()) text += " " + e->description;
+            // La fin : chaque Studio l'ajoute a sa facon (<< jusqu'au 31/12/2026 >>) ; ici, l'ancien prix et la phrase.
+            std::string text = e->price.empty() ? std::string() : "Au lieu de " + e->price + ".";
+            if (!e->description.empty()) text += (text.empty() ? "" : " ") + e->description;
+            if (text.empty()) text = name + ".";
             if (text.size() > 600) text.resize(600);
             a.text = text;
             a.edition = id;
@@ -932,8 +933,8 @@ protected:
         grace_->setBounds({px + w1 + w2 + 2.f * kGap, fy, w3, kFieldH});
         y = fy + kFieldH + kGap;
         // Retiree, et 1.38.0 : Prevenir mes clients (la reduction), sur la meme ligne.
-        retired_->setBounds({px, y, std::floor(pw2 * 0.42f), 24.f});
-        announce_->setBounds({px + std::floor(pw2 * 0.42f) + kGap, y, pw2 - std::floor(pw2 * 0.42f) - kGap, 24.f});
+        retired_->setBounds({px, y, std::floor(pw2 * 0.52f), 24.f});
+        announce_->setBounds({px + std::floor(pw2 * 0.52f) + kGap, y, pw2 - std::floor(pw2 * 0.52f) - kGap, 24.f});
         y += 24.f + kGap;
         featsHeadY_ = y;
         y += 22.f;

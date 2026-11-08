@@ -843,7 +843,8 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     mailM365_ = body_->make<ui::Button>("Microsoft 365", "service.mail.m365");
     mailM365_->setTooltip("Une bo\xC3\xAEte professionnelle Microsoft 365 : smtp.office365.com, port 587, STARTTLS, connexion Microsoft");
     mailClientId_ = body_->make<ui::InputText>("service.mail.id-application");
-    mailClientId_->setPlaceholder("00000000-0000-0000-0000-000000000000 (ID d'application, portail Microsoft Entra)");
+    mailClientId_->setPlaceholder("00000000-0000-0000-0000-000000000000");
+    mailClientId_->setTooltip("L'ID d'application (client) de ton inscription sur le portail Microsoft Entra");
     mailClientId_->setMaxLength(36);
     mailConnect_ = body_->make<ui::Button>("Se connecter \xC3\xA0 Microsoft\xE2\x80\xA6", "service.mail.microsoft.connecter");
     mailConnect_->setStyle(ui::Button::Style::Primary);
@@ -852,7 +853,16 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     mailCancel_ = body_->make<ui::Button>("Annuler la connexion", "service.mail.microsoft.annuler");
     mailCopyCode_ = body_->make<ui::Button>("Copier le code", "service.mail.microsoft.copier");
     mailDisconnect_ = body_->make<ui::Button>("Se d\xC3\xA9" "connecter de Microsoft", "service.mail.microsoft.oublier");
-    links_ += mailAuth_->selectionChanged->connect([this](int) { refresh(); });
+    links_ += mailAuth_->selectionChanged->connect([this](int) {
+        // Compte Microsoft sans serveur : la boite Outlook / Hotmail toute faite (le cas le plus courant).
+        if (mailAuth_->selectedIndex() == 1 && mailHost_->text().empty()) {
+            const auto c = mail::microsoftPreset(true);
+            mailHost_->setText(c.host);
+            mailPort_->setText(std::to_string(c.port));
+            mailSecurity_->setSelectedIndex(c.security == "tls" ? 1 : 0);
+        }
+        refresh();
+    });
     links_ += mailOutlook_->clicked->connect([this] {
         const auto c = mail::microsoftPreset(true);
         mailHost_->setText(c.host);

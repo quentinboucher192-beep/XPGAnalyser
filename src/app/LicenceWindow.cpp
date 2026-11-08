@@ -1732,17 +1732,24 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
                         px += ow + 8.f;
                     }
                     const gfx::Color hot = ctx.theme.tone(ui::Tone::Ok, c.accent);
-                    const std::string now = fit(r, k.promo + "  " + k.promoEnd, kSmall, std::max(20.f, ix + iw - px));
+                    const std::string now = fit(r, k.promo, kSmall, std::max(20.f, ix + iw - px));
                     r.drawText({px, ty}, now, kSmall, hot);
                     r.drawText({px + 1.f, ty}, now, kSmall, hot);
+                    // Sa fin, entiere, sur la ligne suivante (a la place de la premiere ligne de la phrase).
+                    r.drawText({ix, ty + 19.f}, fit(r, "R\xC3\xA9" "duction " + k.promoEnd, kSmall, iw), kSmall, hot);
                 } else
                     r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
                                k.price.empty() ? c.textMuted : c.accent);
                 ty += 19.f;
-                int dl = 0;   // la phrase : deux lignes
-                for (const auto& l : wrapText(r, k.description, kSmall, iw)) {
-                    if (++dl > 2) break;
-                    r.drawText({ix, ty + static_cast<float>(dl - 1) * 18.f}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
+                int dl = 0;   // la phrase : deux lignes (une avec une reduction : sa fin prend la premiere)
+                const int maxLines = k.promo.empty() ? 2 : 1;
+                const float dy = k.promo.empty() ? 0.f : 18.f;
+                const auto lines = wrapText(r, k.description, kSmall, iw);
+                for (std::size_t li = 0; li < lines.size(); ++li) {
+                    if (++dl > maxLines) break;
+                    std::string l = lines[li];
+                    if (dl == maxLines && li + 1 < lines.size()) l += " \xE2\x80\xA6";   // la suite ne tient pas
+                    r.drawText({ix, ty + dy + static_cast<float>(dl - 1) * 18.f}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
                 }
                 ty += 37.f;
                 r.drawText({ix, ty}, fit(r, k.facts, kSmall, iw), kSmall, c.text);
@@ -2024,7 +2031,7 @@ void ZoomImage::onPaint(const ui::PaintContext& ctx) {
         r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, empty_, kSmall, box.w - 24.f), kSmall, c.textMuted);
     else if (hint_) {
         const std::string t = zoom_ > 1.f ? "\xC3\x97" + std::to_string(static_cast<int>(std::lround(zoom_ * 100.f))) + " % \xC2\xB7 glisser : d\xC3\xA9placer \xC2\xB7 double clic : ajuster"
-                                          : "Molette : zoom \xC2\xB7 clic : en grand";
+                                          : onOpen ? "Molette : zoom \xC2\xB7 clic : en grand" : "Molette : zoom \xC2\xB7 glisser \xC2\xB7 double clic : ajuster";
         const float tw = std::min(box.w - 8.f, r.measure(t, kSmall).width + 12.f);
         const gfx::Rect tag{box.right() - tw - 4.f, box.bottom() - r.lineHeight(kSmall) - 8.f, tw, r.lineHeight(kSmall) + 4.f};
         r.fillRect(tag, c.panelBg.withAlpha(215));
