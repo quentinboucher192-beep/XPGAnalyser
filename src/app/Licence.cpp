@@ -9,6 +9,7 @@
 #include "hmi/HmiStationLaunch.hpp"
 #include "screens/Screens.hpp"
 
+#include "../licensing/Gateway.hpp"   // 1.37.0 : kMailSent, kMailFailed
 #include "../licensing/Licensing.hpp"
 
 #include <algorithm>
@@ -567,12 +568,14 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
         return v;
     }
     const bool updated = a.kind == service::kAnswerUpdated;
-    v.title = updated ? "Ta licence est mise \xC3\xA0 jour" : "Ta licence est activ\xC3\xA9" "e";
+    v.title = updated ? "Ta licence est mise \xC3\xA0 jour" : a.online ? "Ta licence en ligne est activ\xC3\xA9" "e" : "Ta licence est activ\xC3\xA9" "e";
     v.confirm = "Voir ma licence";
     v.tab = kTabMine;
     const std::string id = !st.licenseId.empty() ? st.licenseId : a.licenseId;
-    std::string text = updated ? "L'\xC3\xA9" "diteur a mis \xC3\xA0 jour ta licence : elle est install\xC3\xA9" "e sur ce PC."
-                               : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.";
+    std::string text = updated    ? "L'\xC3\xA9" "diteur a mis \xC3\xA0 jour ta licence : elle est install\xC3\xA9" "e sur ce PC."
+                       : a.online ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence en ligne est activ\xC3\xA9" "e sur ce PC (avec son code, re\xC3\xA7u "
+                                    "scell\xC3\xA9 pour lui), tu peux travailler."
+                                  : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.";
     text += "\n\nLicence : " + id + (st.editionLabel.empty() && st.licensedEdition.empty() ? std::string() : " \xC2\xB7 " + editionOf(st));
     if (!st.customer.empty()) text += "\nClient : " + st.customer;
     // La duree : jusqu'a quand, et les jours qui restent.
@@ -624,6 +627,19 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
         }
     }
     if (!a.note.empty()) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
+    // 1.37.0 : le mail de l'editeur ; parti : le dire ; pas parti : l'adresse a verifier, et le code (une fois, ici).
+    if (a.mail == licensing::gateway::kMailFailed) {
+        text += "\n\nLe mail de l'\xC3\xA9" "diteur n'est pas parti" + (a.mailTo.empty() ? std::string() : " (vers " + a.mailTo + ")") +
+                " : v\xC3\xA9rifie ton adresse dans ton profil.";
+        if (!a.code.empty())
+            text += "\nTon code d'activation : " + a.code + "\nNote-le : il r\xC3\xA9" "active ta licence sur un autre PC ou apr\xC3\xA8s une r\xC3\xA9installation. "
+                    "Garde-le pour toi.";
+        v.confirm = "V\xC3\xA9rifier mon adresse\xE2\x80\xA6";
+        v.tab = kTabProfile;
+    } else if (a.mail == licensing::gateway::kMailSent) {
+        text += "\n\nL'\xC3\xA9" "diteur t'a aussi envoy\xC3\xA9 un mail" + (a.mailTo.empty() ? std::string() : " (\xC3\xA0 " + a.mailTo + ")") +
+                (a.online ? std::string(" avec ton code d'activation.") : std::string("."));
+    }
     v.text = std::move(text);
     return v;
 }

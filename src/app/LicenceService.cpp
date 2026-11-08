@@ -609,9 +609,13 @@ std::string installedLicenseId(const Record& rec) {
 
 bool forThisRequest(const Record& rec, const lgw::DeviceStatus& s) { return !rec.nonce.empty() && s.requestNonce == rec.nonce; }
 
+bool stepActivate(Conn& c, const std::string& normalized, const std::string& pcName0, Record& rec, Result& res, std::vector<std::string>& lines);
+void scrub(std::string& text, const std::string& normalized, const std::string& typed);
+
 // L'etat de CE PC publie par l'editeur (le bloc << poste >> de /v1/renouveler ou /v1/poste) : les reponses aux
-// demandes manuelles, avec les memes regles de relecture qu'en 1.34.
-void applyDeviceStatus(std::string_view blockText, const std::string& id, Record& rec, Result& res, std::vector<std::string>& lines) {
+// demandes manuelles, avec les memes regles de relecture qu'en 1.34. 1.37.0 : `conn` (la connexion ouverte) active une
+// licence EN LIGNE acceptee avec son code (scelle pour ce PC) ; nul : a la prochaine verification.
+void applyDeviceStatus(std::string_view blockText, const std::string& id, Record& rec, Result& res, std::vector<std::string>& lines, Conn* conn) {
     rec.lastCheck = lic::systemNow();
     lgw::DeviceStatus s;
     {
@@ -656,12 +660,75 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
             const bool updated = s.state == lgw::State::Updated;
             std::string lid = licenseIdOf(content.license);
             bool installedOrPresent = false;
+            bool settled = false;   // 1.37.0 : une reponse finale sans licence installee ici (le code a demander, illisible...)
             if (!sealProblem.empty()) {
                 applied = false;
                 text = "L'\xC3\xA9" "diteur a publi\xC3\xA9 une licence pour ce PC, mais elle ne s'ouvre pas : " + sentence(sealProblem);
+            } else if (content.license.empty() && !content.code.empty() && !updated) {
+                // 1.37.0 : une licence EN LIGNE, son code scelle pour CE PC : activee ici, sans rien taper.
+                const std::string onlineId = content.onlineLicense;
+                const auto now = lic::getLicenseState();
+                std::string normalized;
+                if (now.online && !onlineId.empty() && now.licenseId == onlineId &&
+                    (now.status == lic::LicenseStatus::Valid || now.status == lic::LicenseStatus::Grace)) {
+                    installedOrPresent = true;
+                    lid = onlineId;
+                    if (rec.receivedLicense.empty()) rec.receivedLicense = lid;
+                    text = "Ta licence en ligne " + lid + " est d\xC3\xA9j\xC3\xA0 activ\xC3\xA9" "e sur ce PC.";
+                } else if (!lsv::normalizeCode(content.code, normalized)) {
+                    settled = true;
+                    text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande (licence en ligne " + onlineId + "), mais son code d'activation est illisible : demande-le-lui.";
+                    notice = text;
+                    tone = "warning";
+                } else if (!conn) {
+                    applied = false;
+                    text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande (licence en ligne " + onlineId + ") : elle s'active \xC3\xA0 la prochaine v\xC3\xA9rification.";
+                } else {
+                    Result one;
+                    std::vector<std::string> act;
+                    const bool done = stepActivate(*conn, normalized, rec.pcName, rec, one, act);
+                    for (auto& l : act) scrub(l, normalized, content.code);
+                    res.retryAfter = std::max(res.retryAfter, one.retryAfter);
+                    if (done) {
+                        installedOrPresent = true;
+                        lid = !one.licenseId.empty() ? one.licenseId : onlineId;
+                        res.licenseId = lid;
+                        res.licenseInstalled = true;
+                        res.changed = true;
+                        rec.receivedLicense = lid;
+                        res.answer = kAnswerAccepted;   // la fenetre qui le confirme
+                        res.answerNote = trim(content.message);
+                        res.answerOnline = true;
+                        // Le mail n'est pas parti : le code est montre une fois, dans la fenetre (jamais ecrit).
+                        if (content.mail == lgw::kMailFailed) res.answerCode = lsv::formatCode(normalized);
+                        text = "Ta licence en ligne " + lid + " est activ\xC3\xA9" "e sur ce PC (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
+                        notice = text;
+                        tone = "ok";
+                    } else if (one.definitive) {
+                        settled = true;
+                        text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande (licence en ligne " + onlineId + "), mais le service refuse son code : " +
+                               (act.empty() ? std::string("demande-le-lui.") : act.back());
+                        notice = text;
+                        tone = "warning";
+                    } else {
+                        applied = false;
+                        text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande (licence en ligne " + onlineId + "), mais son activation n'a pas pu se faire" +
+                               (act.empty() ? std::string(".") : " : " + act.back());
+                    }
+                }
+                crypto::wipe(normalized.data(), normalized.size());
+            } else if (content.license.empty() && !updated) {
+                // Acceptee par une licence en ligne SANS son code (un outil de l'editeur d'avant la 1.37.0) : c'est fini
+                // ici, le code vient de l'editeur (avant : << en attente >> sans fin).
+                settled = true;
+                text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande par une licence en ligne" +
+                       (content.onlineLicense.empty() ? std::string() : " (" + content.onlineLicense + ")") +
+                       " : il te donne son code d'activation ; entre-le dans Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Activer avec un code.";
+                notice = text;
+                tone = "info";
             } else if (content.license.empty()) {
                 applied = false;
-                text = std::string("L'\xC3\xA9" "diteur a ") + (updated ? "mis \xC3\xA0 jour" : "accept\xC3\xA9") + " la demande, mais l'\xC3\xA9tat ne contient pas de licence.";
+                text = "L'\xC3\xA9" "diteur a mis \xC3\xA0 jour la demande, mais l'\xC3\xA9tat ne contient pas de licence.";
             } else {
                 const auto rep = lic::importLicenseBytes(content.license);
                 if (lid.empty() && rep.licenseInstalled) lid = rep.state.licenseId;
@@ -686,15 +753,28 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     text = "La licence re\xC3\xA7ue de l'\xC3\xA9" "diteur n'est pas install\xC3\xA9" "e : " + sentence(rep.why);
                 }
             }
-            if (!installedOrPresent) {
+            if (!installedOrPresent && !settled) {
                 ok = false;
                 text += " Nouvel essai \xC3\xA0 la prochaine v\xC3\xA9rification.";
                 notice = text;
                 tone = "error";
             }
             if (!content.message.empty()) text += " Mot de l'\xC3\xA9" "diteur : " + content.message;
-            if (installedOrPresent && rec.local == kLocalSent && (mine || (s.requestNonce.empty() && open && res.licenseInstalled)))
+            if ((installedOrPresent || settled) && rec.local == kLocalSent && (mine || (s.requestNonce.empty() && open && res.licenseInstalled)))
                 rec.outcome = "acceptee";
+            // 1.37.0 : le mail de l'editeur n'est pas parti - verifier l'adresse (le profil) ; le code est dans la fenetre.
+            if (applied && content.mail == lgw::kMailFailed && !updated) {
+                res.answerMail = content.mail;
+                res.answerMailTo = content.mailTo;
+                std::string m = "Le mail de l'\xC3\xA9" "diteur n'est pas parti" + (content.mailTo.empty() ? std::string() : " (vers " + content.mailTo + ")") +
+                                " : v\xC3\xA9rifie ton adresse (Licence\xE2\x80\xA6 \xE2\x80\xBA Mon profil).";
+                if (!res.answerCode.empty()) m += " Ton code d'activation est dans la fen\xC3\xAAtre de confirmation.";
+                res.notices.push_back({"licence:mail", m, "warning"});
+                text += " " + m;
+            } else if (applied && content.mail == lgw::kMailSent && !updated) {
+                res.answerMail = content.mail;
+                res.answerMailTo = content.mailTo;
+            }
             break;
         }
         case lgw::State::Refused: {
@@ -995,7 +1075,7 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
     }
     if (const std::string poste = field(v, "poste"); !poste.empty()) {
         std::string id, w;
-        if (existingDevice(id, w)) applyDeviceStatus(poste, id, rec, res, lines);
+        if (existingDevice(id, w)) applyDeviceStatus(poste, id, rec, res, lines, &c);
     }
     devicePart = true;
     rec.lastRenew = lic::systemNow();
@@ -1168,7 +1248,7 @@ bool stepDevice(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
     }
     const std::size_t before = lines.size();
     const std::string poste = field(v, "poste");
-    if (!poste.empty()) applyDeviceStatus(poste, id, rec, res, lines);
+    if (!poste.empty()) applyDeviceStatus(poste, id, rec, res, lines, &c);
     else rec.lastCheck = lic::systemNow();
     if (lines.size() == before)
         lines.push_back(pending(rec) ? std::string("Rien de nouveau : ta demande attend que l'\xC3\xA9" "diteur la voie.")
@@ -1283,6 +1363,8 @@ bool loadRecord(Record& out, std::string* why) {
     r.message = v.str("message");
     r.pcName = v.str("nom_pc");
     r.licenseId = v.str("licence_demandee");
+    r.edition = v.str("edition");   // 1.37.0
+    r.email = v.str("courriel");
     r.local = v.str("etat_local");
     r.cancelledAt = time("annulee_le");
     r.outcome = v.str("reponse");
@@ -1324,6 +1406,8 @@ bool saveRecord(const Record& r, std::string* why) {
     text("message", r.message);
     text("nom_pc", r.pcName);
     text("licence_demandee", r.licenseId);
+    text("edition", r.edition);   // 1.37.0
+    text("courriel", r.email);
     text("etat_local", r.local);
     time("annulee_le", r.cancelledAt);
     text("reponse", r.outcome);
@@ -1370,6 +1454,8 @@ Record mergeRecords(const Record& disk, const Record& mine) {
         out.message = disk.message;
         out.pcName = disk.pcName;
         out.licenseId = disk.licenseId;
+        out.edition = disk.edition;
+        out.email = disk.email;
         out.local = disk.local;
         out.cancelledAt = disk.cancelledAt;
         out.outcome = disk.outcome;
@@ -1652,14 +1738,25 @@ Result sendRequest(const RequestForm& form0) {
     f.pcName = trim(form0.pcName);
     f.licenseId = trim(form0.licenseId);
     f.message = trim(form0.message);
+    f.edition = trim(form0.edition);
+    f.email = trim(form0.email);
     if (f.customer.empty()) {
         res.message = "Indique le nom de ta soci\xC3\xA9t\xC3\xA9 (ou le tien) : l'\xC3\xA9" "diteur en a besoin pour \xC3\xA9tablir la licence.";
         return res;
     }
     if (f.customer.size() > kMaxCustomer || f.contact.size() > kMaxContact || f.message.size() > kMaxMessage || f.pcName.size() > kMaxPcName ||
-        f.licenseId.size() > kMaxLicenseId) {
-        res.message = "Un champ est trop long (soci\xC3\xA9t\xC3\xA9 et contact : " + std::to_string(kMaxCustomer) + " caract\xC3\xA8res, nom du PC : " +
+        f.licenseId.size() > kMaxLicenseId || f.email.size() > kMaxEmail) {
+        res.message = "Un champ est trop long (soci\xC3\xA9t\xC3\xA9, contact et courriel : " + std::to_string(kMaxCustomer) + " caract\xC3\xA8res, nom du PC : " +
                       std::to_string(kMaxPcName) + ", message : " + std::to_string(kMaxMessage) + ").";
+        return res;
+    }
+    if (!f.email.empty() && !lgw::plausibleEmail(f.email)) {
+        res.message = "Le courriel \xC2\xAB " + f.email + " \xC2\xBB ne ressemble pas \xC3\xA0 une adresse (nom@domaine.fr) : corrige-le, ou laisse-le vide.";
+        return res;
+    }
+    if (f.edition.size() > kMaxEdition ||
+        !std::all_of(f.edition.begin(), f.edition.end(), [](char ch) { return (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'; })) {
+        res.message = "L'\xC3\xA9" "dition choisie est illisible : choisis-la de nouveau dans la liste.";
         return res;
     }
     std::string why;
@@ -1704,6 +1801,8 @@ Result sendRequest(const RequestForm& form0) {
     q.customer = f.customer;
     q.contact = f.contact;
     q.message = f.message;
+    q.edition = f.edition;   // 1.37.0
+    q.email = f.email;
     std::string sealed = lgw::sealFor(key->key, lgw::writeOnlineRequest(q));
     if (sealed.empty()) {
         res.message = "La demande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
@@ -1763,6 +1862,8 @@ Result sendRequest(const RequestForm& form0) {
     rec.message = f.message;
     rec.pcName = f.pcName;
     rec.licenseId = f.licenseId;
+    rec.edition = f.edition;
+    rec.email = f.email;
     rec.local = kLocalSent;
     rec.cancelledAt = 0;
     rec.outcome.clear();
@@ -1770,6 +1871,7 @@ Result sendRequest(const RequestForm& form0) {
     std::string what = "n\xC2\xB0 " + std::to_string(number);
     if (!f.pcName.empty()) what += ", PC \xC2\xAB " + f.pcName + " \xC2\xBB";
     if (!f.licenseId.empty()) what += ", pour la licence " + f.licenseId;
+    if (!f.edition.empty()) what += ", \xC3\xA9" "dition " + f.edition;
     note(true, "Demande d'activation envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur par le service des licences (" + what + ").");
     res.ok = true;
     res.changed = true;
@@ -2131,7 +2233,19 @@ bool collect() {
     // Les avis : la cloche et la barre d'etat ; puis l'etat revalue.
     if (res.changed) licence::refresh();
     // 1.36.0 : la reponse de l'editeur a la demande de ce PC : la fenetre qui la confirme (l'application la montre).
-    if (!res.answer.empty()) licence::queueAnswer({res.answer, res.licenseId, res.answerNote});
+    if (!res.answer.empty()) {
+        licence::Answer a;
+        a.kind = res.answer;
+        a.licenseId = res.licenseId;
+        a.note = res.answerNote;
+        a.online = res.answerOnline;   // 1.37.0
+        a.code = res.answerCode;
+        a.mail = res.answerMail;
+        a.mailTo = res.answerMailTo;
+        licence::queueAnswer(std::move(a));
+        crypto::wipe(res.answerCode.data(), res.answerCode.size());   // le code : dans la fenetre seulement
+        res.answerCode.clear();
+    }
     for (const auto& n : res.notices) {
         licence::postNotice(n.key, n.title, res.message == n.title ? std::string() : res.message, n.tone.empty() ? "info" : n.tone);
         licence::queueMessage(n.title);

@@ -381,7 +381,7 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
             licence::onlineRequests())
             tab = licence::kTabRequest;
     }
-    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabRequest)));
+    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabProfile)));
 }
 
 void LicenceBody::poll() {

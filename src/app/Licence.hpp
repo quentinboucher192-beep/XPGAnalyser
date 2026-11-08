@@ -130,7 +130,7 @@ struct Card {
 // Les onglets de la fenetre Licence (1.35.0 : Activation en tete ; -1 : le plus utile - Ma licence pour une licence
 // par fichier valable, sinon Activation).
 inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevices = 2, kTabFeatures = 3, kTabEditions = 4, kTabHistory = 5,
-                     kTabSettings = 6, kTabRequest = 7;
+                     kTabSettings = 6, kTabRequest = 7, kTabProfile = 8;   // 1.37.0 : Mon profil
 
 // ---- 1.34.0 / 1.35.0 : LES AVIS DE LA LICENCE ET LE SERVICE DES LICENCES (app/LicenceService) ----
 //  App, apres start(), SAUF le poste d'exploitation (--ihm : personne devant l'ecran) : startNotices(true).
@@ -182,6 +182,11 @@ struct Answer {
     std::string kind;        // service::kAnswerAccepted, kAnswerUpdated, kAnswerRefused
     std::string licenseId;
     std::string note;        // le mot de l'editeur, ou la raison du refus
+    // 1.37.0 : une licence EN LIGNE activee avec le code recu ; le code (en memoire seulement) quand le mail de l'editeur
+    // n'est pas parti (mail : gateway::kMailFailed, vers mailTo) : la fenetre le montre et demande de verifier l'adresse.
+    bool        online{false};
+    std::string code;
+    std::string mail, mailTo;
 };
 void queueAnswer(Answer a);
 [[nodiscard]] std::optional<Answer> takeAnswer();

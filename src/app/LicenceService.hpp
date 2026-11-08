@@ -105,6 +105,7 @@ struct Record {
     std::string        nonce;           // celui de la demande signee
     licensing::Seconds sentAt{0};
     std::string        customer, contact, message, pcName, licenseId;
+    std::string        edition, email;  // 1.37.0 : l'edition choisie (la boutique), le courriel (facultatifs)
     std::string        local;           // kLocalSent, kLocalCancelled ; vide : aucune demande
     licensing::Seconds cancelledAt{0};
     std::string        outcome;         // la reponse de l'editeur a CETTE demande : "acceptee", "refusee", "annulee"
@@ -149,8 +150,11 @@ struct RequestForm {
     std::string pcName;      // facultatif
     std::string licenseId;   // facultatif : une licence existante de la societe
     std::string message;     // facultatif
+    std::string edition;     // 1.37.0, facultatif : l'edition choisie dans la boutique (son identifiant, [A-Z0-9_])
+    std::string email;       // 1.37.0, facultatif : le courriel (le mail de l'editeur a l'acceptation)
 };
-inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage = 2000, kMaxPcName = 80, kMaxLicenseId = 64;
+inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage = 2000, kMaxPcName = 80, kMaxLicenseId = 64, kMaxEdition = 40,
+                             kMaxEmail = 200;
 
 // ---- ce qu'a donne un travail ----
 enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device };
@@ -178,6 +182,12 @@ struct Result {
     // kAnswerAccepted (la licence installee), kAnswerUpdated (mise a jour), kAnswerRefused ; vide : rien de neuf.
     std::string         answer;
     std::string         answerNote;               // le mot de l'editeur (acceptee) ou la raison (refusee)
+    // 1.37.0 : une licence EN LIGNE activee par le code recu de l'editeur (scelle pour ce PC). Le code n'est rendu
+    // (answerCode, en memoire seulement) que si le mail de l'editeur n'est pas parti : la fenetre le montre.
+    bool                answerOnline{false};
+    std::string         answerCode;               // "XPG-XXXX-..." ; vide : rien a montrer
+    std::string         answerMail;               // gateway::kMailSent, kMailFailed ; vide : pas de mail
+    std::string         answerMailTo;
     licensing::Seconds  requestSentAt{0};         // une demande attend encore : envoyee le (0 : aucune)
 };
 inline constexpr const char* kAnswerAccepted = "acceptee";

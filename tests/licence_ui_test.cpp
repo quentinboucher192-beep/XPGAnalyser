@@ -438,8 +438,15 @@ int main(int argc, char** argv) {
             std::string refus;
             check(!app::licence::projectsAllowed(&refus), "en attendant : aucun projet");
             // la reponse de l'editeur : une fenetre (la file)
-            app::licence::queueAnswer({ls::kAnswerAccepted, "XPG-UI-0002", "Bonne route"});
-            app::licence::queueAnswer({ls::kAnswerRefused, "", "Raison d'essai"});
+            const auto answerOf = [](const char* kind, const char* id, const char* note) {
+                app::licence::Answer a;
+                a.kind = kind;
+                a.licenseId = id;
+                a.note = note;
+                return a;
+            };
+            app::licence::queueAnswer(answerOf(ls::kAnswerAccepted, "XPG-UI-0002", "Bonne route"));
+            app::licence::queueAnswer(answerOf(ls::kAnswerRefused, "", "Raison d'essai"));
             const auto first = app::licence::takeAnswer();
             const auto second = app::licence::takeAnswer();
             check(first && first->kind == ls::kAnswerAccepted && first->note == "Bonne route" && second && second->kind == ls::kAnswerRefused &&
