@@ -199,7 +199,8 @@ const std::vector<Note>& table() {
          "licence", ""),
         note("1.38.0", "Projet", Kind::New,
          "MES APPAREILS : une licence en ligne montre tous ses PC (celui-ci d'abord, et il compte) : \xC2\xAB 3 PC sur 20 \xC2\xBB, quand chacun a \xC3\xA9t\xC3\xA9 "
-         "activ\xC3\xA9 et vu, jusqu'\xC3\xA0 quand, une place gard\xC3\xA9" "e par un PC lib\xC3\xA9r\xC3\xA9.",
+         "activ\xC3\xA9 et vu, jusqu'\xC3\xA0 quand, une place gard\xC3\xA9" "e par un PC lib\xC3\xA9r\xC3\xA9. La liste est relev\xC3\xA9" "e au service \xC3\xA0 "
+         "l'ouverture de l'onglet (toutes les 10 minutes au plus).",
          "licence", ""),
         note("1.38.0", "Projet", Kind::Fixed,
          "COPIER LE CODE : la fen\xC3\xAAtre \xC2\xAB Ta licence en ligne est activ\xC3\xA9" "e \xC2\xBB a un bouton Copier le code. Mon profil coche ton courriel : "

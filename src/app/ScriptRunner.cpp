@@ -6164,6 +6164,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   licence-demande-en-ligne CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE] [EDITION] [COURRIEL]   la demande sans code
     //   licence-demande-annuler | licence-demande-verifier   l'annuler ; ce que l'editeur a repondu
     //   licence-service-etat            le releve local et l'etat (jamais un code)
+    //   licence-attendre                1.38.0 : la fin d'un travail lance par l'interface (Mes appareils releve ses PC)
+    if (cmd == "licence-attendre") {
+        namespace ls = licence::service;
+        ls::poll();
+        if (ls::busy()) {
+            if (retries_ < 3000) return Step::Retry;
+            fail("licence-attendre : un travail du service des licences ne finit pas");
+            return Step::Next;
+        }
+        std::printf("[script] licence-attendre : %s\n", ls::lastResult().message.c_str());
+        return Step::Yield;
+    }
     if (cmd == "licence-code" || cmd == "licence-renouveler" || cmd == "licence-liberer" || cmd == "licence-flottante-prendre" ||
         cmd == "licence-flottante-rendre" || cmd == "licence-decouverte" || cmd == "licence-heure" || cmd == "licence-demande-en-ligne" ||
         cmd == "licence-demande-annuler" || cmd == "licence-demande-verifier") {

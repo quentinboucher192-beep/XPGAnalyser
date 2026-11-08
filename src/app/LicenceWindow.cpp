@@ -48,6 +48,7 @@
 #include "../core/Version.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../licensing/Licensing.hpp"
+#include "../licensing/Time.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../ui/DialogFrame.hpp"
 #include "../ui/widgets/Containers.hpp"
@@ -479,6 +480,7 @@ private:
     ProfilePanel*     profile_{nullptr};     // 1.37.0
     unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
     bool              wasBusy_{false};
+    licensing::Seconds devicesCheckedAt_{0};  // 1.38.0 : la derniere fois que Mes appareils a regarde l'age de sa liste
     ui::Button*       import_{nullptr};
     ui::Button*       request_{nullptr};
     ui::Button*       folder_{nullptr};
@@ -626,6 +628,18 @@ void LicenceBody::poll() {
         online_->refresh();
         activation_->refresh();
     }
+    // 1.38.0 : Mes appareils ouvert sur une licence en ligne - les PC de la licence relus au service s'ils ont plus de
+    // 10 minutes (un renouvellement du bail, au plus toutes les 10 minutes) : << N PC sur 20 >> suit les autres PC
+    // sans attendre le renouvellement automatique (7 jours avant la fin du bail).
+    if (tabs_->currentIndex() == static_cast<std::size_t>(licence::kTabDevices) && state_.online && !state_.licenseId.empty() && !lg::busy()) {
+        constexpr licensing::Seconds kDevicesMaxAge = 600;
+        const licensing::Seconds now = licensing::systemNow();
+        if (now - devicesCheckedAt_ >= kDevicesMaxAge) {
+            devicesCheckedAt_ = now;
+            const auto known = lg::onlineDevices(state_.licenseId);
+            if (!known || now - known->receivedAt >= kDevicesMaxAge) (void)lg::startRenew();
+        }
+    }
 }
 
 void LicenceBody::reload() {
@@ -737,7 +751,8 @@ void LicenceBody::reload() {
                                        : std::to_string(online->used) + " PC sur " + std::to_string(online->max) + " utilis\xC3\xA9" + (online->used > 1 ? "s" : "") +
                                              " \xE2\x80\x94 ce PC compris";
             sum += " \xC2\xB7 licence " + st.licenseId;
-            std::string note = "Relev\xC3\xA9 au dernier renouvellement (" + ls::dateText(online->receivedAt) + "), sans les PC lib\xC3\xA9r\xC3\xA9s ni retir\xC3\xA9s.";
+            std::string note = "Relev\xC3\xA9 au service le " + ls::dateText(online->receivedAt) +
+                               " (\xC3\xA0 l'ouverture de cet onglet, toutes les 10 minutes au plus), sans les PC lib\xC3\xA9r\xC3\xA9s ni retir\xC3\xA9s.";
             if (online->total > static_cast<int>(online->list.size()))
                 note += " Les " + std::to_string(online->list.size()) + " plus r\xC3\xA9" "cents sont montr\xC3\xA9s.";
             devicesPanel_->setSummary(std::move(sum), std::move(note));
@@ -754,7 +769,7 @@ void LicenceBody::reload() {
                 rows.insert(rows.begin(), {(rec.activatedPcName.empty() ? std::string("(sans nom)") : rec.activatedPcName) + " \xE2\x80\x94 ce PC",
                                            st.deviceFingerprint, ls::dayText(rec.activatedAt), "ce PC"});
                 sum = "Ce PC \xC2\xB7 licence " + st.licenseId + " (" + std::to_string(st.maxDevices) + " PC au plus)";
-                note = "La liste des autres PC de la licence vient au prochain renouvellement (une connexion \xC3\xA0 Internet).";
+                note = "La liste des autres PC de la licence arrive du service des licences d\xC3\xA8s qu'il r\xC3\xA9pond (une connexion \xC3\xA0 Internet).";
             } else if (!rows.empty() && st.maxDevices > 0)
                 sum = std::to_string(rows.size()) + " PC sur " + std::to_string(st.maxDevices) + " li\xC3\xA9" + (rows.size() > 1 ? "s" : "") + " \xC3\xA0 la licence";
             devices_->setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
