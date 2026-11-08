@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.36.0", "07/11/2026", "\xC3\xA0 venir"},
+    {"1.37.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.36.0", "07/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 0 h 14"},
     {"1.35.1", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 21 h 57"},
     {"1.35.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 18 h 19"},
     {"1.34.0", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 12 h 37"},
@@ -180,6 +181,25 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.37.0 : la boutique, Mon profil, la licence en ligne activee seule, l'apercu des fonctionnalites
+        note("1.37.0", "Projet", Kind::New,
+         "CHOISIS TA LICENCE : Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence montre les \xC3\xA9" "ditions en cartes (leur prix, ce qu'elles donnent : "
+         "PC, dur\xC3\xA9" "e, fonctions) ; un clic choisit la tienne, elle part avec ta demande (aucun paiement en ligne : l'\xC3\xA9" "diteur te contacte). "
+         "Pendant l'attente, la demande rappelle ce que contiendra ta licence une fois accept\xC3\xA9" "e.",
+         "licence", ""),
+        note("1.37.0", "Projet", Kind::New,
+         "MON PROFIL : ton courriel, ton nom, ta soci\xC3\xA9t\xC3\xA9, tous facultatifs (l'accueil, Aide \xE2\x80\xBA Mon profil\xE2\x80\xA6, ou l'onglet Mon profil de "
+         "la fen\xC3\xAAtre Licence). Ils remplissent ta demande de licence ; ton courriel re\xC3\xA7oit le mail de l'\xC3\xA9" "diteur quand il l'accepte.",
+         "licence", ""),
+        note("1.37.0", "Projet", Kind::New,
+         "LA LICENCE EN LIGNE S'ACTIVE TOUTE SEULE : quand l'\xC3\xA9" "diteur accepte ta demande par une licence en ligne, son code arrive scell\xC3\xA9 "
+         "pour ce PC et le Studio s'active seul, puis la fen\xC3\xAAtre de confirmation te le dit. Un mail te l'envoie aussi ; s'il n'est pas parti, la "
+         "fen\xC3\xAAtre te montre ton code et te demande de v\xC3\xA9rifier ton adresse.",
+         "licence", ""),
+        note("1.37.0", "Projet", Kind::New,
+         "VOIR AVANT DE CHOISIR : dans la fen\xC3\xAAtre Licence, onglet \xC3\x89" "ditions, choisis une fonctionnalit\xC3\xA9 : une capture et deux lignes "
+         "montrent ce qu'elle fait, et dans quelles \xC3\xA9" "ditions elle est.",
+         "licence", ""),
         // 1.36.0 : la licence par une demande en ligne a l'editeur (la reponse attendue, la fenetre de l'activation)
         note("1.36.0", "Projet", Kind::New,
          "DEMANDE TA LICENCE EN LIGNE : Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence (ou le bouton de l'accueil) : ta soci\xC3\xA9t\xC3\xA9, un contact, "
