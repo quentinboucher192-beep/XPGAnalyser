@@ -179,6 +179,10 @@ public:
         std::function<bool(const std::string& missionId, int mode)> openMission;
         // Montrer le panneau (replie : le deplier) - le tableau de bord y mene (Verifier une proposition, la conversation).
         std::function<void()> showPanel;
+        // ---- 1.39.0 : la licence (a la fin ; nul : les essais, tout passe) ----
+        // Le controle d'un geste (licence::gates : "ia.envoyer", "ia.mission") : faux - pas dans la licence, la fenetre
+        // << Ta licence ne permet pas cette action >> est montree ; rien ne part.
+        std::function<bool(const char* gesture)> licenceGate;
     };
 
     AiPanel(std::string id, Assistant::Host core, UiHost ui);

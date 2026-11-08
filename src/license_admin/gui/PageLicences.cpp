@@ -659,7 +659,8 @@ private:
         host_.openDialog(licdlg::makeConfirmDialog(
             "dialog.retirer-pc-en-ligne", "Retirer ce PC",
             "Retirer le PC " + licdlg::fingerprintOfKey(key) + " de la licence en ligne " + id +
-                " ?\n\nIl n'est plus renouvel\xC3\xA9 : il s'arr\xC3\xAAte \xC3\xA0 la fin de son bail, ou d\xC3\xA8s qu'il se connecte. Sa place se lib\xC3\xA8re ; le client "
+                " ?\n\nIl n'est plus renouvel\xC3\xA9. Son Studio, ouvert et connect\xC3\xA9, le voit dans les 2 minutes (une fen\xC3\xAAtre le lui dit) ; "
+                "sinon \xC3\xA0 son prochain lancement connect\xC3\xA9, au plus tard \xC3\xA0 la fin de son bail. Sa place se lib\xC3\xA8re ; le client "
                 "peut activer un autre PC avec le m\xC3\xAAme code.",
             "Retirer", true, [this, alive, host, id, key] {
                 if (!*alive || (host.busy && host.busy())) return;
@@ -745,8 +746,9 @@ private:
         host_.openDialog(licdlg::makeConfirmDialog(
             activate ? "dialog.reactiver" : "dialog.desactiver", activate ? "R\xC3\xA9" "activer la licence" : "D\xC3\xA9sactiver la licence",
             activate ? "R\xC3\xA9" "activer la licence en ligne " + id + " ?\n\nSon code marche de nouveau et ses PC sont renouvel\xC3\xA9s \xC3\xA0 leur prochaine connexion."
-                     : "D\xC3\xA9sactiver la licence en ligne " + id + " ?\n\nSon code ne marche plus ; ses PC ne sont plus renouvel\xC3\xA9s : chacun s'arr\xC3\xAAte \xC3\xA0 la "
-                       "fin de son bail, ou d\xC3\xA8s qu'il se connecte. Pour l'annuler pour de bon, r\xC3\xA9voque-la aussi.",
+                     : "D\xC3\xA9sactiver la licence en ligne " + id + " ?\n\nSon code ne marche plus ; ses PC ne sont plus renouvel\xC3\xA9s. Un Studio ouvert et "
+                       "connect\xC3\xA9 la perd dans les 2 minutes (une fen\xC3\xAAtre le dit au client) ; sinon \xC3\xA0 son prochain lancement connect\xC3\xA9, au "
+                       "plus tard \xC3\xA0 la fin de son bail. Pour l'annuler pour de bon, r\xC3\xA9voque-la aussi.",
             activate ? "R\xC3\xA9" "activer" : "D\xC3\xA9sactiver", !activate, [this, alive, host, id, activate] {
                 if (!*alive || (host.busy && host.busy())) return;
                 const Workspace* w = &host.workspace();

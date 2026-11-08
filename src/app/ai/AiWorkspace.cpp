@@ -213,6 +213,8 @@ ui::WidgetPtr MainAnalysisScreen::buildAssistantPanel() {
     ui.close = [this] { showAssistant(false); };
     ui.memoryAvailable = [this] { return app_.actions().find("ia.memoire") != nullptr; };
     ui.openMemory = [this] { (void)app_.actions().trigger("ia.memoire", app_.commands()); };
+    // 1.39.0 : envoyer, creer une mission - pas dans la licence : la fenetre (plus seulement une phrase dans le panneau)
+    ui.licenceGate = [this](const char* gesture) { return licence::gate(app_, licence::Where::Gesture, gesture); };
     // 1.18.0 : << Detecter ce qui repond... >> d'une carte appliquee : Communication > Scanner IP, la plage remplie.
     // Le scanner n'est PAS lance : c'est l'utilisateur qui clique Demarrer.
     ui.openScan = [this](const std::string& equipment, const std::string& range, std::string* why) {

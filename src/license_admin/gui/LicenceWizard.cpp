@@ -2378,9 +2378,14 @@ protected:
                          "Pour retirer une ancienne \xC3\xA9mission remplac\xC3\xA9" "e par une plus r\xC3\xA9" "cente : une licence sign\xC3\xA9" "e ensuite reste valable.",
                          kSmall, c.textMuted, 2);
         y += 10.f;
+        // 1.39.0 : avec le service, la revocation est deposee tout de suite : un Studio ouvert et connecte la voit en 2 minutes
+        const bool online = host_.workspace && host_.workspace().service().ready();
         y += drawWrapped(r, x, y, p.w - 40.f,
-                         "Sign\xC3\xA9" "e dans une nouvelle liste, elle n'arrive chez le client qu'avec un fichier qu'il importe : sa prochaine licence, ou la "
-                         "liste export\xC3\xA9" "e (R\xC3\xA9vocations \xE2\x80\xBA Exporter la liste\xE2\x80\xA6). Pas de service en ligne.",
+                         online ? std::string("Sign\xC3\xA9" "e dans une nouvelle liste, d\xC3\xA9pos\xC3\xA9" "e tout de suite sur ton service : un Studio ouvert et "
+                                              "connect\xC3\xA9 perd la licence dans les 2 minutes (une fen\xC3\xAAtre le dit au client) ; sinon \xC3\xA0 son "
+                                              "prochain lancement connect\xC3\xA9. Un PC jamais connect\xC3\xA9 : avec un fichier qu'il importe.")
+                                : std::string("Sign\xC3\xA9" "e dans une nouvelle liste, elle n'arrive chez le client qu'avec un fichier qu'il importe : sa prochaine licence, "
+                                              "ou la liste export\xC3\xA9" "e (R\xC3\xA9vocations \xE2\x80\xBA Exporter la liste\xE2\x80\xA6). Pas de service en ligne."),
                          f, c.textMuted, 4);
         if (!error_.empty()) drawBand(r, ctx.theme, {x, p.bottom() - 56.f - 34.f, p.w - 40.f, 28.f}, error_, Tone::Error);
         r.fillRect({p.x, p.bottom() - 57.f, p.w, 1.f}, c.border);

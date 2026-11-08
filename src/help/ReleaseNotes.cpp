@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.38.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.39.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.38.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 15 h 05"},
     {"1.37.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 9 h 56"},
     {"1.36.0", "07/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 0 h 14"},
     {"1.35.1", "07/11/2026", "livr\xC3\xA9" "e le 07/11 \xC3\xA0 21 h 57"},
@@ -182,6 +183,21 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.39.0 : l'offre modifiee en tableau, les actions pas dans la licence, la licence perdue en direct
+        note("1.39.0", "Projet", Kind::New,
+         "L'OFFRE MODIFI\xC3\x89" "E, PR\xC3\x89" "CIS\xC3\x89" "MENT : la notification dit ce qui change en une ligne (1 fonctionnalit\xC3\xA9 retir\xC3\xA9" "e : "
+         "\xC3\x89" "diteur) et le montre dans un tableau (fonctionnalit\xC3\xA9, logiciel, avant, apr\xC3\xA8s ; en rouge, en vert), avec le prix, les PC et "
+         "la dur\xC3\xA9" "e qui changent. Voir le d\xC3\xA9tail : toute l'offre, avant et apr\xC3\xA8s, et la capture de chaque fonctionnalit\xC3\xA9.",
+         "licence", ""),
+        note("1.39.0", "Projet", Kind::New,
+         "PAS DANS TA LICENCE : dans les menus, l'arbre du projet et Aller \xC3\xA0 / Faire (Ctrl+K), une action que ta licence ne permet pas est barr\xC3\xA9" "e, "
+         "avec un cadenas. La choisir ouvre une fen\xC3\xAAtre : ce qu'elle demande, pourquoi, sa capture, les offres qui la contiennent (Voir les offres\xE2\x80\xA6).",
+         "licence", ""),
+        note("1.39.0", "Projet", Kind::New,
+         "LA LICENCE PERDUE EN DIRECT : si l'\xC3\xA9" "diteur r\xC3\xA9voque ou d\xC3\xA9sactive ta licence, ou retire ce PC, le Studio le sait dans les "
+         "2 minutes (connect\xC3\xA9) ou \xC3\xA0 son prochain lancement : une fen\xC3\xAAtre le dit, une notification aussi. Ton projet reste ouvert ; "
+         "Enregistrer et Exporter restent permis.",
+         "licence", ""),
         // 1.38.0 : les notifications, les offres et les reductions, les captures qu'on agrandit, Mes appareils, copier le code
         note("1.38.0", "Projet", Kind::New,
          "LES NOTIFICATIONS : l'accueil (Notifications, et le nombre non lu), Aide \xE2\x80\xBA Notifications\xE2\x80\xA6 et la cloche du projet. Ta licence "

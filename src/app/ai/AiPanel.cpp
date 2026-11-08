@@ -1310,6 +1310,7 @@ bool AiPanel::send() {
 
 bool AiPanel::sendText(const std::string& text) {
     cancelRename();
+    if (ui_.licenceGate && !ui_.licenceGate("ia.envoyer")) return false;   // 1.39.0 : pas dans la licence - sa fenetre
     std::string why;
     // 1.16.0 : le budget atteint - une fenetre du logiciel demande confirmation (rien n'est bloque sans le dire).
     if (std::string question; assistant_->budgetBlocks(&question)) {
@@ -2040,6 +2041,7 @@ bool AiPanel::chooseMission(bool create) {
             if (message >= 0) return createMissionFromMessage(message);
             std::string why;
             cancelRename();
+            if (ui_.licenceGate && !ui_.licenceGate("ia.mission")) return false;   // 1.39.0
             if (!assistant_->sendAsMission(text, &why)) {
                 say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
                 return false;
@@ -2124,6 +2126,7 @@ bool AiPanel::sendAsMission() {
         return false;
     }
     cancelRename();
+    if (ui_.licenceGate && !ui_.licenceGate("ia.mission")) return false;   // 1.39.0 : pas dans la licence - sa fenetre
     std::string why;
     if (!assistant_->sendAsMission(text, &why)) {
         say(why.empty() ? std::string("Mission IA : elle n'a pas pu \xC3\xAAtre cr\xC3\xA9\xC3\xA9" "e.") : "Mission IA : " + why);
