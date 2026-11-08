@@ -1381,6 +1381,7 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
         const MailOutcome m = mailer(e, lic, code);
         content.mail = m.state;
         content.mailTo = m.to;
+        if (!m.note.empty()) res.details.push_back("Mail : " + m.note);
     }
     std::string line;
     if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
@@ -1421,6 +1422,7 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
             const MailOutcome m = mailer(*waiting, lic, {});
             content.mail = m.state;
             content.mailTo = m.to;
+            if (!m.note.empty()) res.details.push_back("Mail : " + m.note);
         }
         std::string line, why;
         const gw::State st = waiting ? gw::State::Accepted : gw::State::Updated;

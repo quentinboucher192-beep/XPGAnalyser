@@ -636,11 +636,12 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
     if (a.mail == licensing::gateway::kMailFailed) {
         text += "\n\nLe mail de l'\xC3\xA9" "diteur n'est pas parti" + (a.mailTo.empty() ? std::string() : " (vers " + a.mailTo + ")") +
                 " : v\xC3\xA9rifie ton adresse dans ton profil.";
-        if (!a.code.empty())
-            text += "\nTon code d'activation : " + a.code + "\nNote-le : il r\xC3\xA9" "active ta licence sur un autre PC ou apr\xC3\xA8s une r\xC3\xA9installation. "
-                    "Garde-le pour toi.";
         v.confirm = "V\xC3\xA9rifier mon adresse\xE2\x80\xA6";
         v.tab = kTabProfile;
+    }
+    if (!a.code.empty() && a.mail != licensing::gateway::kMailSent) {
+        text += std::string(a.mail == licensing::gateway::kMailFailed ? "\n" : "\n\n") + "Ton code d'activation : " + a.code +
+                "\nNote-le : il r\xC3\xA9" "active ta licence sur un autre PC ou apr\xC3\xA8s une r\xC3\xA9installation. Garde-le pour toi.";
     } else if (a.mail == licensing::gateway::kMailSent) {
         text += "\n\nL'\xC3\xA9" "diteur t'a aussi envoy\xC3\xA9 un mail" + (a.mailTo.empty() ? std::string() : " (\xC3\xA0 " + a.mailTo + ")") +
                 (a.online ? std::string(" avec ton code d'activation.") : std::string("."));

@@ -302,6 +302,7 @@ bool readCode(const std::string& folder, const std::string& licenseId, std::stri
 struct MailOutcome {
     std::string state;   // gateway::kMailSent, kMailFailed ; vide : aucun mail
     std::string to;
+    std::string note;    // la phrase pour l'editeur (le mail parti, pourquoi il n'est pas parti) ; vide : rien a dire
 };
 using Mailer = std::function<MailOutcome(const Entry& request, const licensing::License& licence, const std::string& code)>;
 // Le mail d'acceptation (sans reseau) : l'objet et le texte - la licence, l'edition, le client, jusqu'a quand, les PC, ce

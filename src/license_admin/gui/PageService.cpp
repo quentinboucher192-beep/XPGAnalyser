@@ -27,6 +27,8 @@
 // =============================================================================
 #include "Page.hpp"
 
+#include "../Mail.hpp"   // 1.37.0 : le mail au client
+
 #include "../../deploy/Crypto.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/DialogFrame.hpp"
@@ -36,6 +38,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -621,6 +624,7 @@ public:
         links_.clear();   // plus de rappel vers le Workspace pendant que la fenetre se defait
         wipe(recovery_);
         clearSecret(code_);
+        clearSecret(mailPassword_);
     }
     [[nodiscard]] std::string title() const override { return "Service en ligne"; }
     void refresh() override;
@@ -669,6 +673,12 @@ private:
     void acknowledge();
     void hideCode();
     void note(Last& l, const std::string& what, const OpResult& r);
+    // 1.37.0 : le mail au client (a l'acceptation), par ta boite.
+    void loadMail();
+    void saveMail();
+    void testMail();
+    void forgetMail();
+    void mailBlocks(Blocks& bl);
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -694,6 +704,20 @@ private:
     ui::Button*                     list_{nullptr};
     ui::Button*                     stats_{nullptr};
     ui::Button*                     publicKey_{nullptr};
+    // 1.37.0 : le mail
+    ui::Button*                     mailGmail_{nullptr};
+    ui::InputText*                  mailHost_{nullptr};
+    ui::InputText*                  mailPort_{nullptr};
+    ui::DropDown*                   mailSecurity_{nullptr};
+    ui::InputText*                  mailFrom_{nullptr};
+    ui::InputText*                  mailName_{nullptr};
+    ui::InputText*                  mailUser_{nullptr};
+    ui::InputText*                  mailPassword_{nullptr};
+    ui::Button*                     mailShow_{nullptr};
+    ui::Button*                     mailSave_{nullptr};
+    ui::Button*                     mailTest_{nullptr};
+    ui::Button*                     mailForget_{nullptr};
+    Last                            mail_;
 
     std::string              recovery_;   // le code de secours montre ("" : aucun)
     Reveal                   reveal_{Reveal::None};
@@ -757,6 +781,52 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     publicKey_ = body_->make<ui::Button>("\xC3\x89" "crire cle-publique.txt\xE2\x80\xA6", "service.cle-publique");
     publicKey_->setIcon(ui::Icon::Export);
 
+    // 1.37.0 : le mail au client
+    mailGmail_ = body_->make<ui::Button>("Gmail", "service.mail.gmail");
+    mailGmail_->setTooltip("Remplit le serveur de Gmail : smtp.gmail.com, port 587, STARTTLS");
+    mailHost_ = body_->make<ui::InputText>("service.mail.hote");
+    mailHost_->setPlaceholder("smtp.gmail.com");
+    mailHost_->setMaxLength(253);
+    mailPort_ = body_->make<ui::InputText>("service.mail.port");
+    mailPort_->setPlaceholder("587");
+    mailPort_->setMaxLength(5);
+    mailPort_->setValidator([](std::string_view t) { return std::all_of(t.begin(), t.end(), [](char ch) { return ch >= '0' && ch <= '9'; }); });
+    mailSecurity_ = body_->make<ui::DropDown>("service.mail.securite");
+    mailSecurity_->setItems({{"STARTTLS (port 587)", "starttls"}, {"TLS d\xC3\xA8s la connexion (port 465)", "tls"}});
+    mailSecurity_->setSelectedIndex(0);
+    mailFrom_ = body_->make<ui::InputText>("service.mail.expediteur");
+    mailFrom_->setPlaceholder("ton-adresse@gmail.com");
+    mailFrom_->setMaxLength(254);
+    mailName_ = body_->make<ui::InputText>("service.mail.nom");
+    mailName_->setPlaceholder("\xC3\x89" "diteur XPG (facultatif : le nom que voit le client)");
+    mailName_->setMaxLength(100);
+    mailUser_ = body_->make<ui::InputText>("service.mail.identifiant");
+    mailUser_->setPlaceholder("l'identifiant SMTP (vide : l'adresse d'exp\xC3\xA9" "dition)");
+    mailUser_->setMaxLength(254);
+    mailPassword_ = body_->make<ui::InputText>("service.mail.mot-de-passe");
+    mailPassword_->setMasked(true);
+    mailPassword_->setMaxLength(200);
+    mailShow_ = body_->make<ui::Button>("Montrer", "service.mail.mot-de-passe.montrer");
+    mailSave_ = body_->make<ui::Button>("Enregistrer le mail", "service.mail.enregistrer");
+    mailSave_->setStyle(ui::Button::Style::Primary);
+    mailTest_ = body_->make<ui::Button>("Envoyer un mail d'essai", "service.mail.essai");
+    mailTest_->setIcon(ui::Icon::Mail);
+    mailTest_->setTooltip("Un mail d'essai \xC3\xA0 ta propre adresse d'exp\xC3\xA9" "dition : il dit tout de suite si le r\xC3\xA9glage et le mot de passe marchent");
+    mailForget_ = body_->make<ui::Button>("Oublier le r\xC3\xA9glage", "service.mail.oublier");
+    links_ += mailGmail_->clicked->connect([this] {
+        mailHost_->setText("smtp.gmail.com");
+        mailPort_->setText("587");
+        mailSecurity_->setSelectedIndex(0);
+    });
+    links_ += mailShow_->clicked->connect([this] {
+        mailPassword_->setMasked(!mailPassword_->masked());
+        mailShow_->setText(mailPassword_->masked() ? "Montrer" : "Masquer");
+    });
+    links_ += mailSave_->clicked->connect([this] { saveMail(); });
+    links_ += mailTest_->clicked->connect([this] { testMail(); });
+    links_ += mailForget_->clicked->connect([this] { forgetMail(); });
+    loadMail();
+
     links_ += saveUrl_->clicked->connect([this] { saveUrl(); });
     links_ += verify_->clicked->connect([this] { verify(); });
     links_ += certify_->clicked->connect([this] { askCertify(); });
@@ -810,6 +880,11 @@ void ServicePage::syncEnabled() {
     dry_->setEnabled(!b && s.ready() && key && s.syncKey);
     list_->setEnabled(!b && s.ready() && key);
     stats_->setEnabled(!b && s.ready() && key);
+    // 1.37.0 : le mail
+    const bool mailSet = mail::configured(ws().folder());
+    mailSave_->setEnabled(!b);
+    mailTest_->setEnabled(!b && mailSet && mail::hasPassword(ws().folder()));
+    mailForget_->setEnabled(!b && (mailSet || mail::hasPassword(ws().folder())));
     publicKey_->setEnabled(key);
     continue_->setEnabled(noted_->isChecked());
 }
@@ -903,6 +978,8 @@ void ServicePage::rebuild() {
     bl.row({verify_});
     bl.end();
 
+    mailBlocks(bl);   // 1.37.0
+
     // ---- la cle du service et son certificat ----
     const bool certOk = s.hasState && s.state.certOk;
     const bool renew = s.hasState && s.state.needsRenewal(now);
@@ -994,6 +1071,135 @@ void ServicePage::rebuild() {
             "garde que l'empreinte).");
     bl.end();
     body_->setBlocks(std::move(bl.items));
+}
+
+// ---------------------------------------------------------------------------------------------------- 1.37.0 : le mail
+void ServicePage::mailBlocks(Blocks& bl) {
+    const std::string folder = ws().folder();
+    const bool set = mail::configured(folder), pw = mail::hasPassword(folder);
+    bl.card("Le mail au client", set && pw ? ui::Tone::Ok : ui::Tone::None);
+    bl.text("Quand tu acceptes une demande, un mail part tout seul au client (s'il a donn\xC3\xA9 son courriel) depuis TA bo\xC3\xAEte : sa licence, "
+            "ce qu'elle ouvre, jusqu'\xC3\xA0 quand, et le code d'une licence en ligne. Pas parti (une adresse fausse, ta bo\xC3\xAEte injoignable) : le "
+            "Studio du client le lui dit, lui montre son code et lui demande de v\xC3\xA9rifier son adresse. Rien de r\xC3\xA9gl\xC3\xA9 : aucun mail (le "
+            "Studio montre le code).");
+    mail::Config cfg;
+    if (set && mail::loadConfig(folder, cfg, nullptr))
+        bl.pair("\xC3\x89tat", "r\xC3\xA9gl\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) +
+                                    (pw ? std::string(" (mot de passe gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)") : std::string(" \xE2\x80\x94 il manque le mot de passe")),
+                pw ? ui::Tone::Ok : ui::Tone::Warning);
+    else
+        bl.pair("\xC3\x89tat", "pas r\xC3\xA9gl\xC3\xA9 : aucun mail ne part", ui::Tone::Muted);
+    bl.field("Serveur", mailHost_, 300.f, {mailGmail_});
+    bl.field("Port", mailPort_, 90.f);
+    bl.field("S\xC3\xA9" "curit\xC3\xA9", mailSecurity_, 300.f);
+    bl.field("Adresse d'exp\xC3\xA9" "dition", mailFrom_, 360.f);
+    bl.field("Nom montr\xC3\xA9", mailName_, 360.f);
+    bl.field("Identifiant", mailUser_, 360.f);
+    bl.field("Mot de passe d'application", mailPassword_, 300.f, {mailShow_});
+    bl.note(pw ? "Un mot de passe est d\xC3\xA9j\xC3\xA0 gard\xC3\xA9 (chiffr\xC3\xA9 pour ton compte Windows) : laisse le champ vide pour le garder, ou tape le nouveau."
+               : "Gmail : active la validation en deux \xC3\xA9tapes de ton compte Google, puis cr\xC3\xA9" "e un \xC2\xAB mot de passe d'application \xC2\xBB "
+                 "(myaccount.google.com \xE2\x80\xBA S\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Mots de passe des applications) et colle-le ici. Jamais ton mot de "
+                 "passe Google. Outlook / Hotmail ne marchent pas (Microsoft exige une autre connexion) : prends une bo\xC3\xAEte Gmail.");
+    bl.row({mailSave_, mailTest_, mailForget_});
+    if (mail_.has) {
+        bl.pair("Dernier r\xC3\xA9sultat", mail_.message + " (" + dateTimeFr(mail_.at) + ")", mail_.ok ? ui::Tone::Ok : ui::Tone::Error);
+        for (std::size_t i = 0; i < mail_.details.size() && i < 6; ++i) bl.bullet(mail_.details[i]);
+    }
+    bl.end();
+}
+
+void ServicePage::loadMail() {
+    mail::Config cfg;
+    if (!mail::configured(ws().folder()) || !mail::loadConfig(ws().folder(), cfg, nullptr)) return;
+    mailHost_->setText(cfg.host);
+    mailPort_->setText(std::to_string(cfg.port));
+    mailSecurity_->setSelectedIndex(cfg.security == "tls" ? 1 : 0);
+    mailFrom_->setText(cfg.from);
+    mailName_->setText(cfg.fromName);
+    mailUser_->setText(cfg.user == cfg.from ? std::string() : cfg.user);
+}
+
+void ServicePage::saveMail() {
+    if (refuseIfBusy()) return;
+    mail::Config cfg;
+    const auto trim = [](std::string t) {
+        const auto b = t.find_first_not_of(" \t");
+        if (b == std::string::npos) return std::string();
+        return t.substr(b, t.find_last_not_of(" \t") - b + 1);
+    };
+    cfg.host = trim(mailHost_->text());
+    const auto* sec = mailSecurity_->selectedItem();
+    cfg.security = sec ? sec->value : std::string("starttls");
+    const std::string port = trim(mailPort_->text());
+    cfg.port = port.empty() ? mail::defaultPort(cfg.security) : std::atoi(port.c_str());
+    cfg.from = trim(mailFrom_->text());
+    cfg.fromName = trim(mailName_->text());
+    cfg.user = trim(mailUser_->text());
+    if (cfg.user.empty()) cfg.user = cfg.from;
+    std::string why;
+    const std::string folder = ws().folder();
+    if (!mail::saveConfig(folder, cfg, &why)) {
+        refuse("le mail n'est pas enregistr\xC3\xA9 : " + why);
+        return;
+    }
+    OpResult r = OpResult::done("Mail enregistr\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) + ".");
+    std::string pw = mailPassword_->text();
+    if (!pw.empty()) {
+        const bool ok = mail::savePassword(folder, pw, &why);
+        std::fill(pw.begin(), pw.end(), '\0');
+        clearSecret(mailPassword_);
+        if (!ok) {
+            refuse("le mot de passe n'est pas gard\xC3\xA9 : " + why);
+            return;
+        }
+        r.details.push_back("Le mot de passe d'application est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ton compte Windows).");
+    } else if (!mail::hasPassword(folder)) {
+        r.details.push_back("Il manque le mot de passe d'application : tape-le, puis Enregistrer le mail.");
+    }
+    r.details.push_back("Essaie-le : Envoyer un mail d'essai (\xC3\xA0 ta propre adresse).");
+    note(mail_, "mail", r);
+    if (host_.report) host_.report(r);
+    refresh();
+}
+
+void ServicePage::testMail() {
+    const std::string folder = ws().folder();
+    mail::Config cfg;
+    std::string why;
+    if (!mail::loadConfig(folder, cfg, &why)) {
+        refuse("le mail n'est pas r\xC3\xA9gl\xC3\xA9 : " + why);
+        return;
+    }
+    mail::Message m;
+    m.to = cfg.from;
+    m.toName = cfg.fromName;
+    m.subject = "Essai du mail de l'outil de l'\xC3\xA9" "diteur XPG";
+    m.body = "Bonjour,\n\nCe mail d'essai est parti de ton outil de l'\xC3\xA9" "diteur (XPG-License-Admin, page Service en ligne).\n"
+             "Le r\xC3\xA9glage marche : \xC3\xA0 chaque demande accept\xC3\xA9" "e, le client recevra le sien (sa licence et, pour une licence en ligne, son "
+             "code d'activation).\n";
+    slow("Mail : un essai vers " + cfg.from, [folder, m] {
+             const mail::SendResult r = mail::send(folder, m);
+             return r.ok ? OpResult::done(r.message) : OpResult::fail(r.message);
+         },
+         [this](const OpResult& r) {
+             note(mail_, "mail", r);
+             if (host_.report) host_.report(r);
+         });
+}
+
+void ServicePage::forgetMail() {
+    if (refuseIfBusy()) return;
+    std::string why;
+    if (!mail::forget(ws().folder(), &why)) {
+        refuse("le r\xC3\xA9glage du mail n'est pas oubli\xC3\xA9 : " + why);
+        return;
+    }
+    for (auto* f : {mailHost_, mailPort_, mailFrom_, mailName_, mailUser_}) f->setText({});
+    clearSecret(mailPassword_);
+    const OpResult r = OpResult::done("R\xC3\xA9glage du mail oubli\xC3\xA9 (et le mot de passe) : aucun mail ne part plus.");
+    note(mail_, "mail", r);
+    if (host_.report) host_.report(r);
+    refresh();
 }
 
 // ---------------------------------------------------------------------------------------------------- le service

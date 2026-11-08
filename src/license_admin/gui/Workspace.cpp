@@ -5,6 +5,8 @@
 // =============================================================================
 #include "Workspace.hpp"
 
+#include "../Mail.hpp"   // 1.37.0 : le mail au client a l'acceptation
+
 #include "../../core/Json.hpp"
 #include "../../deploy/Crypto.hpp"
 #include "../../deploy/Paths.hpp"
@@ -1196,7 +1198,41 @@ OpResult Workspace::serviceResendAnswer(int number) const {
     return r;
 }
 
-online::Mailer Workspace::mailer() const { return {}; }   // 1.37.0 : remplace par le mail (Mail.hpp)
+// 1.37.0 : LE MAIL au client a l'acceptation - par la boite de l'editeur (Service en ligne : le mail), s'il est regle et
+// que la demande donne un courriel. Envoye AVANT la reponse : son etat part avec elle (pas parti : le Studio montre le code
+// et demande de verifier l'adresse). Rien de regle : aucun mail (le Studio montre le code).
+online::Mailer Workspace::mailer() const {
+    const std::string folder = folder_;
+    if (!mail::configured(folder) || !mail::hasPassword(folder)) return {};
+    mail::Config cfg;
+    if (!mail::loadConfig(folder, cfg, nullptr)) return {};
+    const bool hasReg = hasRegistry_;
+    const licensing::Registry reg = hasRegistry_ ? registry_ : licensing::Registry{};
+    const std::string signer = cfg.fromName;
+    return [folder, hasReg, reg, signer](const online::Entry& req, const licensing::License& lic, const std::string& code) {
+        online::MailOutcome out;
+        if (req.email.empty()) {
+            out.note = "la demande ne donne pas de courriel : aucun mail (le Studio du client montre son code)";
+            return out;
+        }
+        out.to = req.email;
+        if (!mail::plausibleAddress(req.email)) {
+            out.state = licensing::gateway::kMailFailed;
+            out.note = "\xC2\xAB " + req.email + " \xC2\xBB n'a pas la forme d'une adresse : pas de mail (le Studio du client le lui dit, avec son code)";
+            return out;
+        }
+        const online::MailText text = online::acceptanceMail(lic, hasReg ? &reg : nullptr, req, code, signer);
+        mail::Message m;
+        m.to = req.email;
+        m.toName = !req.contact.empty() && req.contact.find('@') == std::string::npos ? req.contact : req.customer;
+        m.subject = text.subject;
+        m.body = text.body;
+        const mail::SendResult r = mail::send(folder, m);
+        out.state = r.ok ? licensing::gateway::kMailSent : licensing::gateway::kMailFailed;
+        out.note = r.ok ? r.message : r.message + " Le Studio du client le lui dit, avec son code, et lui demande de v\xC3\xA9rifier son adresse.";
+        return out;
+    };
+}
 
 #undef XPG_SERVICE_KEY_OR_FAIL
 

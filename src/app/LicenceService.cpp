@@ -699,8 +699,9 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                         res.answer = kAnswerAccepted;   // la fenetre qui le confirme
                         res.answerNote = trim(content.message);
                         res.answerOnline = true;
-                        // Le mail n'est pas parti : le code est montre une fois, dans la fenetre (jamais ecrit).
-                        if (content.mail == lgw::kMailFailed) res.answerCode = lsv::formatCode(normalized);
+                        // Le mail ne l'a pas apporte (pas parti, ou aucun mail) : le code est montre une fois, dans la
+                        // fenetre (jamais ecrit) - pour un autre PC ou une reinstallation.
+                        if (content.mail != lgw::kMailSent) res.answerCode = lsv::formatCode(normalized);
                         text = "Ta licence en ligne " + lid + " est activ\xC3\xA9" "e sur ce PC (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
                         notice = text;
                         tone = "ok";

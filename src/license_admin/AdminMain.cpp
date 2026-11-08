@@ -60,6 +60,7 @@
 #include "Admin.hpp"
 #include "ArchiveSync.hpp"
 #include "KeyBackup.hpp"
+#include "Mail.hpp"   // 1.37.0 : le mail au client
 #include "ServiceClient.hpp"
 
 #include "../core/SystemOpen.hpp"
@@ -166,6 +167,11 @@ std::string usage() {
            "  service-publier-licence --licence F.xpglic     une licence li\xC3\xA9" "e \xC3\xA0 des PC : \xC3\xA0 chacun (sa demande en attente : accept\xC3\xA9" "e)\n"
            "  service-stats                                  les compteurs du service\n"
            "  code-licence --licence ID                      1.37.0 : revoir le code d'activation d'une licence en ligne (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)\n"
+           "  mail-config --hote H --expediteur A [--port P] [--securite starttls|tls] [--nom N] [--identifiant I]\n"
+           "                                                 1.37.0 : le mail au client \xC3\xA0 l'acceptation (ta bo\xC3\xAEte ; l'application l'envoie)\n"
+           "  mail-mot-de-passe                              le mot de passe d'application, tap\xC3\xA9 sans \xC3\xA9" "cho (gard\xC3\xA9 chiffr\xC3\xA9)\n"
+           "  mail-essai [--a ADRESSE]                       un mail d'essai (par d\xC3\xA9" "faut \xC3\xA0 ton adresse d'exp\xC3\xA9" "dition)\n"
+           "  mail-oublier                                   retire le r\xC3\xA9glage du mail et son mot de passe\n"
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
            "  --version\n\n"
@@ -896,6 +902,66 @@ int run(const std::vector<std::string>& argv) {
         }
         say("Code d'activation de " + a.one("--licence") + " : " + code + "\n");
         crypto::wipe(code.data(), code.size());
+        return 0;
+    }
+    // 1.37.0 : le mail au client (le reglage, le mot de passe d'application, un essai)
+    if (a.command == "mail-config") {
+        if (!need("--hote") || !need("--expediteur")) return 2;
+        license_admin::mail::Config cfg;
+        cfg.host = a.one("--hote");
+        cfg.security = a.one("--securite").empty() ? std::string("starttls") : a.one("--securite");
+        cfg.port = a.one("--port").empty() ? license_admin::mail::defaultPort(cfg.security) : std::atoi(a.one("--port").c_str());
+        cfg.from = a.one("--expediteur");
+        cfg.fromName = a.one("--nom");
+        cfg.user = a.one("--identifiant").empty() ? cfg.from : a.one("--identifiant");
+        std::string w;
+        if (!license_admin::mail::saveConfig(folder, cfg, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say("Mail r\xC3\xA9gl\xC3\xA9 : " + cfg.from + " par " + cfg.host + ":" + std::to_string(cfg.port) + ".\n" +
+            (license_admin::mail::hasPassword(folder) ? std::string("Essaie-le : mail-essai.\n") : std::string("Il manque le mot de passe d'application : mail-mot-de-passe.\n")));
+        return 0;
+    }
+    if (a.command == "mail-mot-de-passe") {
+        std::fputs("Mot de passe d'application (rien ne s'affiche) : ", stderr);
+        std::string pw = readSecretLine();
+        std::string w;
+        const bool ok = !pw.empty() && license_admin::mail::savePassword(folder, pw, &w);
+        crypto::wipe(pw.data(), pw.size());
+        if (!ok) {
+            complain("Refus\xC3\xA9 : " + (w.empty() ? std::string("aucun mot de passe tap\xC3\xA9") : w));
+            return 1;
+        }
+        say("Mot de passe gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste.\n");
+        return 0;
+    }
+    if (a.command == "mail-essai") {
+        license_admin::mail::Config cfg;
+        std::string w;
+        if (!license_admin::mail::loadConfig(folder, cfg, &w)) {
+            complain("Refus\xC3\xA9 : " + w + " (mail-config d'abord)");
+            return 1;
+        }
+        license_admin::mail::Message m;
+        m.to = a.one("--a").empty() ? cfg.from : a.one("--a");
+        m.subject = "Essai du mail de l'outil de l'\xC3\xA9" "diteur XPG";
+        m.body = "Bonjour,\n\nCe mail d'essai est parti de ton outil de l'\xC3\xA9" "diteur (XPG-License-Admin) : le r\xC3\xA9glage marche.\n";
+        const auto r = license_admin::mail::send(folder, m);
+        if (!r.ok) {
+            complain(r.message);
+            return 1;
+        }
+        say(r.message + "\n");
+        return 0;
+    }
+    if (a.command == "mail-oublier") {
+        std::string w;
+        if (!license_admin::mail::forget(folder, &w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        say("R\xC3\xA9glage du mail oubli\xC3\xA9 : aucun mail ne part plus.\n");
         return 0;
     }
     if (a.command == "kit-studios") {
