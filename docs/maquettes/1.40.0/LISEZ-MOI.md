@@ -11,3 +11,5 @@ Pages HTML (1600 x 1000) rendues en PNG par `rendre.js` (Playwright) : `node ren
 - `05-licence-client.html` : la fenetre Licence (le suivi de la demande dans sa propre bande ; son fond
   est la capture de `03`, rendue d'abord).
 - `06-installateur-admin.html` : l'installateur de l'Admin.
+- `maquette-1.40.0.html` : les 8 planches dans une seule page autonome (styles, icones, images et polices dedans),
+  faite par `assembler.py` (python3 assembler.py <dossier des planches et de leurs rendus v/> maquette-1.40.0.html).
