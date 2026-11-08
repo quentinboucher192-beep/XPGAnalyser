@@ -129,7 +129,8 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 - Sa forme : `XPG-XXXX-XXXX-XXXX-XXXX`, 16 caractères en base32 de Crockford, soit 80 bits tirés au hasard par l'outil de l'éditeur.
 - Il est lu avec souplesse : minuscules, espaces, `O` pour `0`, `I` ou `L` pour `1`.
 - Le service n'en garde que l'**empreinte** : hex(SHA-256(`"xpg-code/1|"` + les 16 caractères normalisés)).
-- L'éditeur voit le code une fois, à la création, et le donne à son client.
+- L'éditeur voit le code à la création. 1.37.0 : son outil le garde **chiffré** (DPAPI, pour son compte Windows) dans `codes-activation/` pour le revoir (Licences › Voir le code…, `code-licence`) ; le service, lui, n'en a toujours que l'empreinte.
+- 1.37.0 : en réponse à une demande, le code part aussi **scellé pour le PC qui l'a demandée**, dans son état « poste » (les champs `code`, `licence_en_ligne`) : son Studio l'ouvre avec sa clé et s'active seul (`POST /v1/activer`). Le service ne voit qu'un bloc scellé.
 
 ## 7. La Découverte (l'essai de 30 jours)
 
@@ -148,6 +149,15 @@ Avec un service compilé (`ServiceAddress.hpp`), un client sans licence n'a ni f
 4. **La réponse** : à la vérification suivante, la licence s'installe et **une fenêtre le confirme** : l'édition, la licence, le client, jusqu'à quand (et les jours qui restent), le nombre de PC, ce qu'elle ouvre (par logiciel), le mot de l'éditeur ; **Voir ma licence**. Refusée : la fenêtre donne la raison, et **Nouvelle demande…**.
 
 Le poids sur le plan gratuit : une vérification fait au plus quatre appels (`/v1/etat`, le certificat s'il n'est pas déjà lu, `/v1/heure`, `/v1/poste`) ; une demande qui attend deux heures en fait environ 480, puis une cinquantaine par heure. Le formulaire et le fichier restent : **Demande par fichier (sans Internet)…** et **Fichier de licence…** (en bas de la fenêtre), pour un PC qui n'a pas Internet ; l'activation par code aussi (onglet Activation, et la page Licence de l'installateur).
+
+### 1.37.0 : la boutique, le profil, le code livré, le mail
+
+- **La boutique** : une édition du registre peut porter `price` (60 caractères au plus, tel que l'éditeur l'écrit) et `description` (200 au plus), écrits seulement s'ils sont remplis. Le Studio montre les éditions en cartes (prix, phrase, PC, durée, nombre de fonctions) ; celle choisie part dans la demande (`edition`, scellée). Aucun paiement en ligne. **Un registre avec un prix ou une description est refusé par les Studios 1.36 et plus anciens** (leur lecture est stricte) : installer la 1.37.0 avant d'en signer un.
+- **Mon profil** (Studio, facultatif) : courriel, nom, société, dans `profil.json` du dossier des réglages (commun aux deux Studios, en clair : rien de secret). Il remplit la demande ; le courriel part dans la demande (`courriel`, scellé).
+- **Pendant l'attente**, l'onglet rappelle ce que contiendra la licence de l'édition choisie (PC, durée, fonctions).
+- **Une seule acceptation** : dans l'outil, une demande est « acceptée ici » dès que la licence est signée (`reponse` dans sa fiche locale) ; on ne l'accepte ni ne la refuse plus, on **renvoie la réponse** si elle n'est pas partie.
+- **Le mail** : l'application de l'éditeur l'envoie à l'acceptation, par SMTP depuis sa boîte (STARTTLS ou TLS, mbedTLS ; un mot de passe d'application gardé par DPAPI), **avant** de publier la réponse, dont l'état « poste » dit alors `mail` = `envoye` ou `echec` (et `mail_a`). Pas parti : le Studio le dit (un avis), montre le code dans la fenêtre de confirmation (en mémoire seulement, jamais écrit) et demande de vérifier l'adresse (Mon profil). Pas de mail du tout (rien de réglé, pas de courriel) : la fenêtre montre aussi le code.
+- **Le Worker ne change pas** : ces champs vivent dans les blocs scellés et le registre ; le service n'en lit rien.
 
 **Une copie d'essai n'appelle jamais le vrai service** : dans une construction avec la clé d'essai (`XPG_LICENCES_CLE_ESSAI`), l'adresse compilée est ignorée ; seule la variable `XPG_SERVICE` (le service des essais, sur ce poste) en donne une.
 

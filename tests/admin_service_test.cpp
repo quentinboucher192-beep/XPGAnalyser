@@ -664,11 +664,77 @@ int main(int argc, char** argv) {
         d = call(url, "POST", "/v1/demandes", json::write(b, false), pc7.key.get());
         const int n7 = static_cast<int>(d.value.integer("numero"));
         (void)on::fetchRequests(A, *ed.key, ed.options());
-        r = on::answerOnline(A, *ed.key, n7, "XPG-ESSAI-EN-LIGNE-1", ed.options());
-        check(r.ok, "acceptee par une licence en ligne (" + r.text() + ")");
-        check(readPosteState(url, pc7, *ed.key, st, content) && st.state == gw::State::Accepted && content.license.empty() && has(content.message, "code") &&
+        // 1.37.0 : LE CODE part SCELLE pour CE PC (son Studio s'active seul), avec l'identifiant et l'etat du mail.
+        int mailed = 0;
+        std::string mailedCode, mailedTo;
+        const on::Mailer failing = [&](const on::Entry& e, const lic::License& l, const std::string& code) {
+            ++mailed;
+            mailedCode = code;
+            mailedTo = e.customer + " / " + l.licenseId;
+            on::MailOutcome m;
+            m.state = gw::kMailFailed;
+            m.to = "client@exemple.fr";
+            m.note = "la boite d'essai ne repond pas";
+            return m;
+        };
+        r = on::answerOnline(A, *ed.key, n7, "XPG-ESSAI-EN-LIGNE-1", code1, {}, failing, ed.options());
+        check(r.ok && mailed == 1 && mailedCode == code1 && has(mailedTo, "XPG-ESSAI-EN-LIGNE-1"), "acceptee par une licence en ligne, le mail tente (" + r.text() + ")");
+        check(has(r.text(), "Mail : la boite d'essai ne repond pas"), "le resultat dit ce qu'est devenu le mail");
+        check(readPosteState(url, pc7, *ed.key, st, content) && st.state == gw::State::Accepted && content.license.empty() && content.code == code1 &&
+                  content.onlineLicense == "XPG-ESSAI-EN-LIGNE-1" && content.mail == gw::kMailFailed && content.mailTo == "client@exemple.fr" &&
                   !has(content.message, code1),
-              "le PC lit << acceptee >>, un mot, jamais le code");
+              "le PC lit << acceptee >> : le code scelle pour lui, la licence, le mail en echec (jamais le code dans le mot)");
+        // Une seule acceptation : elle n'attend plus.
+        r = on::answerOnline(A, *ed.key, n7, "XPG-ESSAI-EN-LIGNE-1", code1, {}, {}, ed.options());
+        check(!r.ok && mailed == 1, "une seconde reponse a la meme demande est refusee (" + r.text() + ")");
+
+        // 1.37.0 : << acceptee ici >> - la licence signee, la reponse pas encore partie : ni refus ni seconde decision.
+        Pc pc8(root / "pc-8", "PC d'essai 8");
+        b.set("scelle", sealedRequest(*ed.key, pc8.request({}, lic::systemNow()), "Client d'essai ici"));
+        d = call(url, "POST", "/v1/demandes", json::write(b, false), pc8.key.get());
+        const int n8 = static_cast<int>(d.value.integer("numero"));
+        (void)on::fetchRequests(A, *ed.key, ed.options());
+        std::string w;
+        check(on::markAcceptedHere(A, n8, "XPG-ESSAI-ICI-1", &w), "acceptee ici des la signature (" + w + ")");
+        bool here = false;
+        for (const auto& e : on::listRequests(A))
+            if (e.number == n8) here = e.acceptedHere() && e.answer == "XPG-ESSAI-ICI-1" && e.waiting();
+        check(here, "la demande dit << acceptee ici >> (la licence), toujours en attente de sa reponse");
+        check(!on::markAcceptedHere(A, n8, "XPG-ESSAI-ICI-2", &w) && has(w, "XPG-ESSAI-ICI-1"), "une autre licence pour la meme demande : refusee (" + w + ")");
+        r = on::refuse(A, *ed.key, std::to_string(n8), "trop tard", ed.options());
+        check(!r.ok && has(r.text(), "d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici") && has(r.text(), "Renvoyer la r\xC3\xA9ponse"), "le refus d'une demande acceptee ici : refuse (" + r.text() + ")");
+        r = on::answerOnline(A, *ed.key, n8, "XPG-ESSAI-ICI-1", code1, {}, {}, ed.options());   // le renvoi
+        bool done8 = false;
+        for (const auto& e : on::listRequests(A))
+            if (e.number == n8) done8 = e.state == on::RequestState::Accepted && e.answer == "XPG-ESSAI-ICI-1";
+        check(r.ok && done8, "la reponse renvoyee : acceptee (" + r.text() + ")");
+        check(readPosteState(url, pc8, *ed.key, st, content) && content.code == code1 && content.mail.empty(), "sans mail : l'etat ne dit rien du mail");
+
+        // 1.37.0 : le code garde sur ce poste (Voir le code..., code-licence) ; illisible ailleurs (DPAPI sous Windows).
+        check(on::storeCode(A, "XPG-ESSAI-EN-LIGNE-1", code1, &w) && on::hasCode(A, "XPG-ESSAI-EN-LIGNE-1"), "le code garde (" + w + ")");
+        std::string back;
+        check(on::readCode(A, "XPG-ESSAI-EN-LIGNE-1", back, &w) && back == code1, "le code relu tel quel");
+        check(!on::readCode(A, "XPG-ESSAI-INCONNUE", back, &w) && back.empty() && has(w, "Nouveau code"), "une licence sans code garde : la phrase dit quoi faire (" + w + ")");
+#ifdef _WIN32
+        check(!foundInFiles(ed.folder, code1), "sous Windows : le code n'est en clair dans aucun fichier (DPAPI)");
+#endif
+        // 1.37.0 : le texte du mail d'acceptation.
+        lic::License ml;
+        ml.licenseId = "XPG-ESSAI-EN-LIGNE-1";
+        ml.customer = "Client d'essai en ligne";
+        ml.edition = "PROFESSIONAL";
+        ml.maxDevices = 2;
+        ml.expiresAt = lic::systemNow() + 365 * lic::kDay;
+        on::Entry me;
+        me.customer = "Client d'essai en ligne";
+        me.contact = "Camille Essai";
+        me.email = "client@exemple.fr";
+        const on::MailText mt = on::acceptanceMail(ml, nullptr, me, code1, "\xC3\x89" "diteur d'essai");
+        check(has(mt.subject, "XPG-ESSAI-EN-LIGNE-1") && has(mt.body, code1) && has(mt.body, "Activer avec un code") && has(mt.body, "\xC3\x89" "diteur d'essai") &&
+                  has(mt.body, "PROFESSIONAL"),
+              "le mail : la licence, son edition, le code et comment l'activer, la signature");
+        const on::MailText mb = on::acceptanceMail(ml, nullptr, me, {}, {});
+        check(!has(mb.body, "code d'activation") && has(mb.body, "Ton \xC3\xA9" "diteur"), "une licence liee : pas de code ; sans nom : << Ton editeur >>");
     }
 
     std::printf("-- la liste de revocation : privee\n");

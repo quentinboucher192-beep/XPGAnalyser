@@ -118,9 +118,9 @@ d'activation ». Le nombre de PC (ou, pour une licence FLOTTANTE, de postes en m
 temps), le BAIL (combien de jours un PC reste activé sans se connecter ; 30 par
 défaut), puis « Signer et déposer ». Une fois la licence déposée, l'application te
 montre son CODE D'ACTIVATION (XPG-XXXX-XXXX-XXXX-XXXX), masqué : Afficher, ou Copier.
-Note-le pour ton client : il n'est gardé NULLE PART (ni sur ce PC, ni sur le service,
-qui n'en garde que l'empreinte). Le client le tape dans Aide > Licence... > Activer
-avec un code (ou dans l'installateur). Hors ligne : la licence est signée et rangée,
+1.37.0 : il est GARDÉ CHIFFRÉ sur ce PC (pour ton compte Windows) : Licences > Voir le
+code... le remontre quand tu veux (le service, lui, n'en garde que l'empreinte). Le
+client le tape dans Aide > Licence... > Activer avec un code (ou dans l'installateur). Hors ligne : la licence est signée et rangée,
 mais pas déposée, et aucun code n'est montré - Licences > Nouveau code... la dépose
 plus tard.
 Sur la page Licences, une licence en ligne : Relever (ses PC activés : vu le, bail
@@ -138,8 +138,18 @@ Relever les demandes. Une demande :
 - Accepter... ouvre l'assistant avec elle (si elle demande une licence existante : en
   ajout de PC) ; « Signer et publier » - la licence part toute seule à CHACUN de ses
   PC (scellée pour lui) ; rien à envoyer.
-- Accepter en ligne... : une licence en ligne pour ce client ; son code t'est montré
-  une fois, tu le lui donnes ; son PC voit « acceptée » (sans le code).
+- Accepter en ligne... : une licence en ligne pour ce client. 1.37.0 : son code part
+  SCELLÉ pour son PC (le service ne le lit pas) : son Studio s'active tout seul et lui
+  montre la fenêtre de confirmation. Le mail le lui envoie aussi (voir LE MAIL AU
+  CLIENT). Le code reste gardé chiffré ici (Licences > Voir le code...).
+1.37.0 : la colonne « Édition voulue » dit l'édition que le client a choisie dans la
+boutique de son Studio (et son prix) ; l'assistant la présélectionne (« Le client a
+demandé : ... ») et le récapitulatif la rappelle. Son courriel est dans la colonne
+Message.
+1.37.0 : UNE SEULE ACCEPTATION. Dès que la licence est signée, la demande est
+« Acceptée ici » : Accepter, Accepter en ligne et Refuser ne marchent plus pour elle.
+Si sa réponse n'est pas partie (le service injoignable), « Renvoyer la réponse » la
+renvoie (la même licence, le même code, et le mail).
 - Refuser... : le client lit ta raison dans son logiciel (scellée pour son PC).
 Le client peut annuler sa demande ; une seule demande par PC à la fois. Une
 révocation (la liste de révocation scellée pour chaque PC concerné, jamais publique),
@@ -154,7 +164,36 @@ L'outil se garde des demandes rejouées : une ancienne demande remise en ligne e
 ignorée (« Ignorée (rejouée) »), une demande modifiée après coup garde son contenu
 d'origine, et un état plus récent n'est jamais écrasé.
 
-Boutique, Commandes : la vente en ligne demande un paiement en ligne, qui n'est pas
+LA BOUTIQUE DES STUDIOS (1.37.0)
+Dans Éditions, chaque édition peut avoir un PRIX (tel que tu l'écris : « 490 € HT /
+an ») et une DESCRIPTION (une phrase). Signe le registre : les Studios montrent les
+éditions en cartes dans « Demander ma licence » ; le client en choisit une, elle
+arrive avec sa demande. Aucun paiement en ligne : tu le contactes.
+ATTENTION : un registre avec un prix ou une description est REFUSÉ par les Studios
+1.36 et plus anciens. Installe d'abord la 1.37.0 chez tes clients (et sur ton PC),
+puis seulement ajoute des prix et signe le registre.
+
+LE MAIL AU CLIENT (1.37.0)
+Quand tu acceptes une demande, un mail part tout seul au client (s'il a donné son
+courriel) depuis TA boîte : sa licence, son édition, ce qu'elle ouvre, jusqu'à quand,
+et le code d'une licence en ligne. Le régler une fois, page Service en ligne > « Le
+mail au client » :
+1. Gmail : active la validation en deux étapes de ton compte Google, puis crée un
+   « mot de passe d'application » (myaccount.google.com > Sécurité > Mots de passe
+   des applications). Jamais ton mot de passe Google.
+2. Bouton « Gmail » (smtp.gmail.com, 587, STARTTLS), ton adresse, le nom que voit le
+   client, colle le mot de passe d'application, Enregistrer le mail.
+3. « Envoyer un mail d'essai » : un mail à ta propre adresse ; il dit tout de suite si
+   le réglage marche.
+Le mot de passe est gardé chiffré sur ce PC pour ton compte Windows (DPAPI) : sur un
+autre PC ou un autre compte, tape-le de nouveau. Outlook / Hotmail / Microsoft 365 ne
+marchent pas (Microsoft refuse les mots de passe d'application ici) : prends Gmail.
+Si le mail ne part pas (adresse fausse, boîte injoignable) : le résultat de
+l'acceptation le dit, et le Studio du client lui montre son code et lui demande de
+vérifier son adresse (Mon profil). Rien de réglé : aucun mail, le Studio montre le
+code au client.
+
+Commandes, paiement : la vente en ligne demande un paiement en ligne, qui n'est pas
 fait dans cette version. L'application le dit ; rien n'y est simulé.
 
 
@@ -385,8 +424,8 @@ Une licence EN LIGNE (aucun PC lié : chaque PC l'active avec un code) :
      XPG-License-Admin.exe licence-en-ligne --parametres client-abc.json [--bail-jours 30]
 
    Elle est signée, rangée, déposée sur le service avec l'empreinte d'un CODE
-   D'ACTIVATION neuf, et l'outil t'affiche ce code UNE FOIS (il n'est écrit nulle
-   part : note-le pour ton client). "type": "floating" dans les paramètres : une
+   D'ACTIVATION neuf, et l'outil t'affiche ce code (1.37.0 : il est aussi gardé
+   chiffré sur ce PC ; le revoir : code-licence --licence ID). "type": "floating" dans les paramètres : une
    licence flottante (max_devices postes en même temps). Hors ligne : la licence est
    signée et rangée, mais le code n'est pas montré ; relance avec --etendre
    --nouveau-code quand le service répond. Prolonger (une autre fin, plus de postes) :
@@ -402,6 +441,13 @@ Les demandes des clients (envoyées depuis leur logiciel) :
      XPG-License-Admin.exe signer-licence --parametres P.json --demande demandes-en-ligne\...xpgreq ... --publier
      XPG-License-Admin.exe service-publier-licence --licence L.xpglic
      XPG-License-Admin.exe service-refuser --numero N --raison "..."
+
+Le mail au client (1.37.0 ; c'est l'application qui l'envoie à l'acceptation) :
+
+     XPG-License-Admin.exe mail-config --hote smtp.gmail.com --expediteur toi@gmail.com --nom "Éditeur XPG"
+     XPG-License-Admin.exe mail-mot-de-passe              (le mot de passe d'application, tapé sans écho)
+     XPG-License-Admin.exe mail-essai [--a ADRESSE]       (un mail d'essai ; par défaut à ton adresse)
+     XPG-License-Admin.exe mail-oublier
 
 
 =============================================================================

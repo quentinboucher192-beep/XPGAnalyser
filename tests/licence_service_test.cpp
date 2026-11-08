@@ -121,6 +121,19 @@ ls::Result keep(ls::Result r) {
     for (const auto& n : r.notices) g_said.push_back(n.title);
     return r;
 }
+// 1.37.0 : la reponse d'un travail, telle que la file des fenetres la recoit.
+app::licence::Answer answerOf(const ls::Result& r) {
+    app::licence::Answer a;
+    a.kind = r.answer;
+    a.licenseId = r.licenseId;
+    a.note = r.answerNote;
+    a.online = r.answerOnline;
+    a.code = r.answerCode;
+    a.mail = r.answerMail;
+    a.mailTo = r.answerMailTo;
+    return a;
+}
+
 bool noticeKey(const ls::Result& r, const std::string& key) {
     for (const auto& n : r.notices)
         if (n.key == key) return true;
@@ -839,7 +852,7 @@ int main(int argc, char** argv) {
         check(r.answer == ls::kAnswerAccepted && r.answerNote == "Bienvenue (essai)" && r.requestSentAt == 0,
               "1.36.0 : la reponse de l'editeur remonte (acceptee, son mot) : la fenetre qui la confirme");
         {   // 1.36.0 : ce que dit la fenetre
-            const auto v = app::licence::answerView({r.answer, r.licenseId, r.answerNote}, st);
+            const auto v = app::licence::answerView(answerOf(r), st);
             check(v.accepted && has(v.title, "activ\xC3\xA9" "e") && has(v.text, "XPG-2026-00501") && has(v.text, "PERSONAL") &&
                       has(v.text, "Client d'essai Industrie") && has(v.text, "Valable jusqu'au ") && has(v.text, " jours)") &&
                       has(v.text, "Ce qu'elle ouvre (") && has(v.text, "Bienvenue (essai)") && v.tab == app::licence::kTabMine && v.confirm == "Voir ma licence",
@@ -868,9 +881,96 @@ int main(int argc, char** argv) {
         check(put2.status == 200 && r.refused && r.answer == ls::kAnswerRefused && r.answerNote == no.message && rec.outcome == "refusee" &&
                   lic::getLicenseState().licenseId == "XPG-2026-00501",
               "1.36.0 : refusee : la raison remonte, la licence deja la reste (" + r.message + ")");
-        const auto v = app::licence::answerView({r.answer, r.licenseId, r.answerNote}, lic::getLicenseState());
+        const auto v = app::licence::answerView(answerOf(r), lic::getLicenseState());
         check(!v.accepted && has(v.title, "refus\xC3\xA9" "e") && has(v.text, no.message) && v.tab == app::licence::kTabRequest && has(v.confirm, "Nouvelle demande"),
               "la fenetre du refus : la raison, une nouvelle demande");
+
+        // 1.37.0 : l'edition choisie (la boutique) et le courriel partent avec la demande.
+        ls::RequestForm f3 = f;
+        f3.edition = "PROFESSIONAL";
+        f3.email = "client.essai@exemple.fr";
+        ls::RequestForm bad = f3;
+        bad.email = "pas une adresse";
+        r = keep(ls::sendRequest(bad));
+        check(!r.ok && has(r.message, "ne ressemble pas"), "1.37.0 : un courriel sans forme d'adresse : rien ne part (" + r.message + ")");
+        bad = f3;
+        bad.edition = "pro fessional";
+        r = keep(ls::sendRequest(bad));
+        check(!r.ok && has(r.message, "illisible"), "une edition illisible : rien ne part (" + r.message + ")");
+        r = keep(ls::sendRequest(f3));
+        rec = record();
+        check(r.ok && ls::pending(rec) && rec.edition == "PROFESSIONAL" && rec.email == f3.email, "1.37.0 : la demande garde l'edition et le courriel (" + r.message + ")");
+        list = http("GET", "/admin/demandes", "", true);
+        sealed.clear();
+        if (const json::Value* d = list.v.find("demandes"); d && d->isArray())
+            for (const auto& x : d->items())
+                if (static_cast<std::uint64_t>(x.num("numero")) == rec.number) sealed = x.str("scelle");
+        lgw::OnlineRequest q3;
+        check(lgw::openWith(*g_editor, sealed, plain, &why) && lgw::parseOnlineRequest(plain, q3, &why) && q3.edition == "PROFESSIONAL" && q3.email == f3.email &&
+                  !has(sealed, "client.essai"),
+              "l'editeur lit l'edition voulue et le courriel (scelles : le service ne les lit pas)");
+        // Acceptee par une licence EN LIGNE : son code arrive scelle pour ce PC, le Studio s'active seul ; le mail n'est
+        // pas parti : le code dans la fenetre (jamais ecrit), verifier l'adresse.
+        const std::string code5 = putLicence("XPG-2026-00551", lic::LicenseType::Temporary, 1);
+        lgw::StatusContent on3;
+        on3.message = "Ta licence en ligne (essai)";
+        on3.code = code5;
+        on3.onlineLicense = "XPG-2026-00551";
+        on3.mail = lgw::kMailFailed;
+        on3.mailTo = f3.email;
+        lgw::DeviceStatus s3;
+        s3.device = s.device;
+        s3.number = 3;
+        s3.issuedAt = lic::systemNow();
+        s3.state = lgw::State::Accepted;
+        s3.requestNonce = rec.nonce;
+        s3.sealed = lgw::sealFor(pk, lgw::writeStatusContent(on3));
+        const Http put3 = http("PUT", "/admin/postes", jsonBody({{"poste", s3.device}, {"etat", block(lic::DocKind::DeviceStatus, lgw::writeDeviceStatus(s3))}}), true);
+        r = keep(ls::checkDevice());
+        rec = record();
+        const auto st3 = lic::getLicenseState();
+        check(put3.status == 200 && r.ok && r.licenseInstalled && st3.online && st3.licenseId == "XPG-2026-00551" && st3.status == lic::LicenseStatus::Valid &&
+                  rec.outcome == "acceptee" && !ls::pending(rec),
+              "1.37.0 : acceptee en ligne : le Studio s'active seul avec le code scelle pour lui (" + r.message + ")");
+        check(r.answer == ls::kAnswerAccepted && r.answerOnline && r.answerMail == lgw::kMailFailed && r.answerMailTo == f3.email && r.answerCode == code5 &&
+                  noticeKey(r, "licence:mail") && !has(r.message, code5) && !has(noticeTitle(r, "licence:mail"), code5),
+              "la reponse : en ligne, le code (pour la fenetre seulement), le mail en echec : un avis sans le code");
+        bool inHistory = false;
+        for (const auto& h : lic::getHistory(200)) inHistory = inHistory || has(h.text, code5);
+        check(!inHistory, "le code n'est pas dans l'historique");
+        {
+            const auto v3 = app::licence::answerView(answerOf(r), st3);
+            check(v3.accepted && has(v3.title, "en ligne") && has(v3.text, code5) && has(v3.text, "v\xC3\xA9rifie ton adresse") && has(v3.text, f3.email) &&
+                      v3.tab == app::licence::kTabProfile && has(v3.confirm, "V\xC3\xA9rifier mon adresse"),
+                  "la fenetre : activee, le code, l'adresse a verifier (Mon profil)");
+            ls::Result sent = r;
+            sent.answerMail = lgw::kMailSent;
+            sent.answerCode.clear();
+            const auto v4 = app::licence::answerView(answerOf(sent), st3);
+            check(!has(v4.text, code5) && has(v4.text, "envoy\xC3\xA9 un mail") && v4.tab == app::licence::kTabMine, "le mail parti : il le dit, pas de code a l'ecran");
+        }
+        r = keep(ls::checkDevice());
+        check(r.ok && r.answer.empty() && r.answerCode.empty(), "verifiee de nouveau : rien de neuf, pas de seconde activation (" + r.message + ")");
+
+        // Acceptee par une licence en ligne SANS code (un outil de l'editeur d'avant la 1.37.0) : plus d'attente sans fin.
+        r = keep(ls::sendRequest(f));
+        rec = record();
+        check(r.ok && ls::pending(rec), "une demande de plus (" + r.message + ")");
+        lgw::StatusContent old;
+        old.message = "Ta licence en ligne XPG-2026-00552 est pr\xC3\xAAte : demande-moi son code.";
+        lgw::DeviceStatus s4;
+        s4.device = s.device;
+        s4.number = 4;
+        s4.issuedAt = lic::systemNow();
+        s4.state = lgw::State::Accepted;
+        s4.requestNonce = rec.nonce;
+        s4.sealed = lgw::sealFor(pk, lgw::writeStatusContent(old));
+        const Http put4 = http("PUT", "/admin/postes", jsonBody({{"poste", s4.device}, {"etat", block(lic::DocKind::DeviceStatus, lgw::writeDeviceStatus(s4))}}), true);
+        r = keep(ls::checkDevice());
+        rec = record();
+        check(put4.status == 200 && r.ok && rec.outcome == "acceptee" && !ls::pending(rec) && has(r.message, "Activer avec un code") && !r.retryLater &&
+                  lic::getLicenseState().licenseId == "XPG-2026-00551",
+              "1.37.0 : acceptee sans code (outil d'avant) : la demande n'attend plus, la phrase dit d'entrer le code (" + r.message + ")");
     }
 
     std::printf("-- le code laisse par l'installateur\n");
