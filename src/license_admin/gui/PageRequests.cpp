@@ -249,11 +249,12 @@ public:
         filter_->setItems({{"En attente de ta d\xC3\xA9" "cision", "attente"}, {"Toutes", ""}});
         filter_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("demandes.table"));
-        table_->setColumns({{"Date", 150.f}, {"Client", 190.f}, {"PC", 170.f}, {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 150.f},
-                            {"\xC3\x89" "dition voulue", 190.f}, {"\xC3\x89tat", 150.f}, {"Message", 320.f}});
+        // 1.37.0 : l'edition voulue et l'etat juste apres le client (vus sans faire defiler).
+        table_->setColumns({{"Date", 140.f}, {"Client", 180.f}, {"\xC3\x89" "dition voulue", 210.f}, {"\xC3\x89tat", 170.f}, {"PC", 150.f},
+                            {"Logiciel", 150.f}, {"Licence demand\xC3\xA9" "e", 170.f}, {"Message", 320.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(
-            std::vector<std::string>{"Date", "Client", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "\xC3\x89" "dition voulue", "\xC3\x89tat", "Message"});
+            std::vector<std::string>{"Date", "Client", "\xC3\x89" "dition voulue", "\xC3\x89tat", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "Message"});
         table_->setModel(model_);
 
         links_ += fetch_->clicked->connect([this] { fetch(); });
@@ -457,8 +458,8 @@ private:
             const std::string pc = e.state == RequestState::Unreadable ? "poste " + e.device.substr(0, 12)
                                    : e.deviceName.empty()               ? std::string("(sans nom)")
                                                                         : e.deviceName;
-            rows.push_back({dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, pc,
-                            e.software, e.state == RequestState::Unreadable ? std::string() : licence, wantedOf(e), state, messageOf(e)});
+            rows.push_back({dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, wantedOf(e),
+                            state, pc, e.software, e.state == RequestState::Unreadable ? std::string() : licence, messageOf(e)});
             keys.push_back(padKey(e.createdAt ? e.createdAt : e.requestedAt));
             states.push_back(e.state);
             here.push_back(e.acceptedHere());
@@ -466,8 +467,8 @@ private:
         model_->set(std::move(rows), std::move(keys), [states, here](RowIndex r, std::size_t c) {
             ui::CellStyle st;
             if (r >= states.size()) return st;
-            if (c == 5) st.bold = states[r] == RequestState::Pending;   // l'edition voulue
-            if (c != 6) return st;
+            if (c == 2) st.bold = states[r] == RequestState::Pending;   // l'edition voulue
+            if (c != 3) return st;
             st.fgTone = here[r] ? ui::Tone::Warning : toneOf(states[r]);
             st.bold = states[r] == RequestState::Pending;
             return st;

@@ -631,7 +631,8 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
             for (std::size_t i = 0; i < labels.size(); ++i) text += (i ? ", " : "") + labels[i];
         }
     }
-    if (!a.note.empty()) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
+    // 1.37.0 : une licence en ligne : le mot automatique de l'outil n'apprend rien ici (la fenetre dit tout).
+    if (!a.note.empty() && !a.online) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
     // 1.37.0 : le mail de l'editeur ; parti : le dire ; pas parti : l'adresse a verifier, et le code (une fois, ici).
     if (a.mail == licensing::gateway::kMailFailed) {
         text += "\n\nLe mail de l'\xC3\xA9" "diteur n'est pas parti" + (a.mailTo.empty() ? std::string() : " (vers " + a.mailTo + ")") +

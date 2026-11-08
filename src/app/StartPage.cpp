@@ -1640,9 +1640,11 @@ float StartRail::placeBody(int level) {
         const float bw = std::min(licence_->naturalWidth(), w - 24.f);
         licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.bottom() - 10.f - 26.f, bw, 26.f});
         licence_->setVisibility(ui::Visibility::Visible);
-        const float pw = profile_->naturalWidth();   // 1.37.0 : a gauche, s'il y a la place
-        if (pw + 8.f + bw <= w - 20.f) {
-            profile_->setBounds({licenceBox_.x + 10.f, licenceBox_.bottom() - 10.f - 26.f, pw, 26.f});
+        // 1.37.0 : a gauche, toute la place jusqu'au bouton de la licence (son libelle entier), s'il y en a assez.
+        const float pw = profile_->naturalWidth();
+        const float pRoom = licenceBox_.right() - 10.f - bw - 8.f - (licenceBox_.x + 10.f);
+        if (pRoom >= pw + 4.f) {
+            profile_->setBounds({licenceBox_.x + 10.f, licenceBox_.bottom() - 10.f - 26.f, pRoom, 26.f});
             profile_->setVisibility(ui::Visibility::Visible);
         } else {
             profile_->setVisibility(ui::Visibility::Collapsed);

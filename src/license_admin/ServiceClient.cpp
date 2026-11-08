@@ -1404,7 +1404,9 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     gw::StatusContent content;
-    content.message = "Ta licence en ligne " + licenseId + " est pr\xC3\xAAte : ton Studio l'active tout seul.";
+    // Le mot que lit aussi un Studio d'avant la 1.37.0 (il ne lit pas le code) : le code arrive par mail, sinon de l'editeur.
+    content.message = "Ta licence en ligne " + licenseId + " est pr\xC3\xAAte : ton Studio 1.37 l'active tout seul ; sinon, entre son code (re\xC3\xA7u par "
+                      "mail, ou de l'\xC3\xA9" "diteur) dans Licence\xE2\x80\xA6 \xE2\x80\xBA Activation.";
     content.code = code;               // 1.37.0 : scelle pour CE PC (le service n'en voit rien)
     content.onlineLicense = licenseId;
     Result res;

@@ -776,7 +776,8 @@ void LicenceBody::askRequest() {
 
 void LicenceBody::onLayout() {
     const auto r = bounds();
-    const float w = std::min(1180.f, std::max(640.f, r.w - 40.f));
+    // 1.37.0 : 1320 au plus (9 onglets avec Mon profil : leurs noms tiennent ; plus etroit, des icones).
+    const float w = std::min(1320.f, std::max(640.f, r.w - 40.f));
     const float h = std::min(820.f, std::max(480.f, r.h - 40.f));
     panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
     closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};

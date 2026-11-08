@@ -341,9 +341,10 @@ int main(int argc, char** argv) {
         check(rows(*page0, "demandes.table") == 2, "deux en attente (l'illisible n'attend rien)");
         check(has(t, "Client d'essai Gamma") && has(t, "Client d'essai Beta") && has(t, "Poste essai A") && has(t, "API Studio 1.35.0"), "client, PC, logiciel");
         auto* table = find<ui::TableView>(*page0, "demandes.table");
-        check(table && rowOf(*table, 4, shared + " (ajouter ce PC)") >= 0 && rowOf(*table, 4, "nouvelle") >= 0, "la licence demandee (une existante le dit)");
-        check(table && rowOf(*table, 4, shared + " (ajouter ce PC) \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier") >= 0 && rowOf(*table, 6, "\xC3\xA0 v\xC3\xA9rifier") >= 0 &&
-                  rowOf(*table, 6, "\xC3\xA0 v\xC3\xA9rifier") == rowOf(*table, 1, "Client d'essai Beta"),   // 1.37.0 : l'Etat, apres l'Edition voulue
+        // 1.37.0 : Date, Client, Edition voulue, Etat, PC, Logiciel, Licence demandee, Message.
+        check(table && rowOf(*table, 6, shared + " (ajouter ce PC)") >= 0 && rowOf(*table, 6, "nouvelle") >= 0, "la licence demandee (une existante le dit)");
+        check(table && rowOf(*table, 6, shared + " (ajouter ce PC) \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier") >= 0 && rowOf(*table, 3, "\xC3\xA0 v\xC3\xA9rifier") >= 0 &&
+                  rowOf(*table, 3, "\xC3\xA0 v\xC3\xA9rifier") == rowOf(*table, 1, "Client d'essai Beta"),
               "la demande d'ajout a une licence existante : << a verifier >> (licence et etat)");
         check(selectRow(*page0, 1, "Client d'essai Beta"), "(la demande de B choisie)");
         const std::string tb = paintPage(*page0, 1600.f, 760.f);
