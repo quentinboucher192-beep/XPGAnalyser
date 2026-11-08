@@ -1503,13 +1503,15 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
             ly += 20.f;
         }
     }
-    // La derniere reponse, la derniere verification.
+    // La derniere reponse, la derniere verification. 1.37.0 : jamais sous le bas de l'onglet (une fenetre basse :
+    // les lignes du bas ne chevauchent pas les boutons de la fenetre).
     float fy = footY_;
-    if (busy_ != ls::Job::None) {
+    const float limit = b.bottom() - 2.f;
+    if (busy_ != ls::Job::None && fy + lh <= limit) {
         r.drawText({x, fy}, ls::jobText(busy_), kSmall, c.textMuted);
         fy += lh;
     }
-    if (!rec_.local.empty() && !pending_) {
+    if (!rec_.local.empty() && !pending_ && fy + lh <= limit) {
         const std::string last = "Derni\xC3\xA8re demande (n\xC2\xB0 " + std::to_string(rec_.number) + ", " + ls::dateText(rec_.sentAt) + ") : " + ls::stateText(rec_);
         const gfx::Color col = rec_.outcome == "acceptee" ? good : rec_.outcome == "refusee" ? bad : c.text;
         r.drawText({x, fy}, fit(r, last, kSmall, W), kSmall, col);
@@ -1518,16 +1520,16 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     if (!rec_.lastMessage.empty()) {
         int k = 0;
         for (const auto& l : wrapText(r, "Derni\xC3\xA8re r\xC3\xA9ponse : " + rec_.lastMessage, kSmall, W)) {
-            if (++k > 3) break;
+            if (++k > 3 || fy + lh > limit) break;
             r.drawText({x, fy}, fit(r, l, kSmall, W), kSmall, rec_.outcome == "refusee" ? bad : c.text);
             fy += lh;
         }
     }
-    if (rec_.lastCheck) {
+    if (rec_.lastCheck && fy + lh <= limit) {
         r.drawText({x, fy}, "Derni\xC3\xA8re v\xC3\xA9rification : " + ls::dateText(rec_.lastCheck), kSmall, c.textMuted);
         fy += lh;
     }
-    if (!recProblem_.empty()) r.drawText({x, fy}, fit(r, recProblem_, kSmall, W), kSmall, bad);
+    if (!recProblem_.empty() && fy + lh <= limit) r.drawText({x, fy}, fit(r, recProblem_, kSmall, W), kSmall, bad);
 }
 
 // ============================================================ 1.37.0 : Mon profil ==
