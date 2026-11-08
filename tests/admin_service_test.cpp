@@ -100,6 +100,17 @@ bool foundInFiles(const fs::path& dir, const std::string& needle) {
     return false;
 }
 
+// 1.37.0 : ... ailleurs que dans ce sous-dossier (le code garde : codes-activation/).
+bool foundInFilesOutside(const fs::path& dir, const std::string& needle, const std::string& keptIn) {
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) break;
+        if (it->path().parent_path().filename() == keptIn) continue;
+        if (it->is_regular_file(ec) && has(readFile(it->path()), needle)) return true;
+    }
+    return false;
+}
+
 // ---- l'editeur : un dossier, sa cle (d'essai), le registre d'exemple signe et range ----
 struct Editor {
     fs::path                         folder;
@@ -689,7 +700,7 @@ int main(int argc, char** argv) {
         check(!r.ok && mailed == 1, "une seconde reponse a la meme demande est refusee (" + r.text() + ")");
 
         // 1.37.0 : << acceptee ici >> - la licence signee, la reponse pas encore partie : ni refus ni seconde decision.
-        Pc pc8(root / "pc-8", "PC d'essai 8");
+        Pc pc8(root / "pc-ici", "PC d'essai ici");
         b.set("scelle", sealedRequest(*ed.key, pc8.request({}, lic::systemNow()), "Client d'essai ici"));
         d = call(url, "POST", "/v1/demandes", json::write(b, false), pc8.key.get());
         const int n8 = static_cast<int>(d.value.integer("numero"));
@@ -951,7 +962,18 @@ int main(int argc, char** argv) {
         for (auto it = std::sregex_iterator(out.begin(), out.end(), re); it != std::sregex_iterator(); ++it) codes.push_back(it->str());
         check(codes.size() == 1, "le code apparait une seule fois (" + std::to_string(codes.size()) + ")");
         if (codes.size() == 1) {
-            check(!foundInFiles(ed.folder, codes[0]), "et dans aucun fichier du poste");
+            // 1.37.0 : garde chiffre (DPAPI sous Windows) dans codes-activation/ seulement ; code-licence le remontre.
+            check(!foundInFilesOutside(ed.folder, codes[0], "codes-activation"), "et dans aucun autre fichier du poste");
+            std::string kept, keptWhy;
+            check(on::readCode(U(ed.folder), "XPG-ESSAI-CONSOLE-1", kept, &keptWhy) && kept == codes[0], "1.37.0 : le code garde sur ce poste (" + keptWhy + ")");
+            std::string again;
+            const std::string cmd2 = "\"" + console + "\" code-licence --licence XPG-ESSAI-CONSOLE-1 --dossier \"" + U(ed.folder) + "\" 2>&1";
+            if (FILE* p = popen(cmd2.c_str(), "r")) {
+                char buf[4096];
+                std::size_t n = 0;
+                while ((n = std::fread(buf, 1, sizeof buf, p)) > 0) again.append(buf, n);
+                check(pclose(p) == 0 && has(again, codes[0]), "code-licence le remontre");
+            }
             Pc pcC(root / "pc-console", "PC d'essai console");
             check(call(url, "POST", "/v1/activer", activateBody(codes[0], pcC.request({}, lic::systemNow()), pcC.name), pcC.key.get()).status == 200,
                   "un PC s'active avec lui");

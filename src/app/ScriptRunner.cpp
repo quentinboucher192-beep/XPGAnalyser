@@ -6095,6 +6095,18 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (!ok) fail("licence-demande : " + why);
         return Step::Yield;
     }
+    // 1.37.0 : Mon profil (facultatif) - licence-profil COURRIEL NOM SOCIETE (un argument vide : "").
+    if (cmd == "licence-profil") {
+        licence::Profile p;
+        p.email = arg(1);
+        p.name = arg(2);
+        p.company = arg(3);
+        std::string why;
+        const bool ok = licence::saveProfile(p, &why);
+        std::printf("[script] licence-profil : %s\n", ok ? "enregistr\xC3\xA9" : why.c_str());
+        if (!ok) fail("licence-profil : " + why);
+        return Step::Yield;
+    }
     if (cmd == "licence-etat") {
         const auto st = licensing::getLicenseState();
         std::printf("[script] licence-etat : %s / %s / %s\n", licensing::statusLabel(st.status).c_str(), st.edition.c_str(), st.message.c_str());
@@ -6110,7 +6122,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   licence-flottante-prendre | licence-flottante-rendre   le poste d'une licence flottante
     //   licence-decouverte              declarer la Decouverte de cette machine
     //   licence-heure                   l'heure signee du service (le compteur du bail recale)
-    //   licence-demande-en-ligne CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE]   la demande sans code
+    //   licence-demande-en-ligne CLIENT [CONTACT] [NOM_PC] [LICENCE] [MESSAGE] [EDITION] [COURRIEL]   la demande sans code
     //   licence-demande-annuler | licence-demande-verifier   l'annuler ; ce que l'editeur a repondu
     //   licence-service-etat            le releve local et l'etat (jamais un code)
     if (cmd == "licence-code" || cmd == "licence-renouveler" || cmd == "licence-liberer" || cmd == "licence-flottante-prendre" ||
@@ -6148,6 +6160,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 f.pcName = arg(3);
                 f.licenseId = arg(4);
                 f.message = arg(5);
+                f.edition = arg(6);   // 1.37.0 : l'edition choisie (la boutique), le courriel
+                f.email = arg(7);
                 started = ls::startRequest(f);
             }
             if (!started) {

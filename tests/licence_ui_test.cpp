@@ -37,6 +37,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -456,6 +457,49 @@ int main(int argc, char** argv) {
             ls::setAddressForTests(licensing::service::Address{});
         }
     }
+
+#ifndef _WIN32
+    std::printf("-- 1.37.0 : Mon profil, l'apercu d'une fonctionnalite\n");
+    {
+        const fs::path cfg = base / "reglages";
+        fs::create_directories(cfg, ec);
+        setenv("XDG_CONFIG_HOME", cfg.string().c_str(), 1);
+        check(app::licence::loadProfile().empty(), "sans profil : vide (tout est facultatif)");
+        app::licence::Profile p;
+        p.email = " camille.essai@exemple.fr ";
+        p.name = "Camille Essai";
+        p.company = "Client d'essai Atelier";
+        std::string why;
+        check(app::licence::saveProfile(p, &why), "le profil enregistre (" + why + ")");
+        auto back = app::licence::loadProfile();
+        check(back.email == "camille.essai@exemple.fr" && back.name == p.name && back.company == p.company, "relu tel quel (le courriel sans les espaces)");
+        check(fs::path(app::licence::profilePath()).parent_path().string().rfind(cfg.string(), 0) == 0, "dans le dossier des reglages : " + app::licence::profilePath());
+        app::licence::Profile bad = p;
+        bad.email = "pas une adresse";
+        check(!app::licence::saveProfile(bad, &why) && has(why, "forme d'une adresse"), "un courriel sans forme d'adresse : refuse (" + why + ")");
+        check(app::licence::loadProfile().email == "camille.essai@exemple.fr", "le profil d'avant reste");
+        app::licence::Profile empty;
+        check(app::licence::saveProfile(empty, &why) && app::licence::loadProfile().empty(), "tout vide : permis (facultatif)");
+        // L'apercu : la capture et la description livrees avec le logiciel.
+        const fs::path dir = base / "fonctions";
+        fs::create_directories(dir, ec);
+        {
+            std::ofstream(dir / "api_editor.png", std::ios::binary) << "PNG d'essai";
+            std::ofstream(dir / "descriptions.json", std::ios::binary)
+                << "{\"format\": \"xpg-fonctions-apercu/1\", \"fonctions\": {\"api_editor\": \"L'\xC3\xA9" "diteur du programme, en deux lignes.\"}}";
+        }
+        app::licence::setFeatureImagesFolder(dir.string());
+        const auto pv = app::licence::featurePreview("api_editor");
+        check(!pv.imagePath.empty() && pv.imagePath.find("api_editor.png") != std::string::npos && pv.description == "L'\xC3\xA9" "diteur du programme, en deux lignes.",
+              "l'apercu : la capture et sa description");
+        const auto none = app::licence::featurePreview("ai_generation");
+        check(none.imagePath.empty() && none.description.empty(), "une fonctionnalite sans capture : rien (l'onglet le dit)");
+        const auto evil = app::licence::featurePreview("../fonctions/api_editor");
+        check(evil.imagePath.empty() && evil.description.empty(), "un identifiant qui serait un chemin : rien");
+        app::licence::setFeatureImagesFolder({});
+        unsetenv("XDG_CONFIG_HOME");
+    }
+#endif
 
     fs::remove_all(base, ec);
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);

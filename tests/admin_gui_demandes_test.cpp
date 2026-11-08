@@ -342,8 +342,8 @@ int main(int argc, char** argv) {
         check(has(t, "Client d'essai Gamma") && has(t, "Client d'essai Beta") && has(t, "Poste essai A") && has(t, "API Studio 1.35.0"), "client, PC, logiciel");
         auto* table = find<ui::TableView>(*page0, "demandes.table");
         check(table && rowOf(*table, 4, shared + " (ajouter ce PC)") >= 0 && rowOf(*table, 4, "nouvelle") >= 0, "la licence demandee (une existante le dit)");
-        check(table && rowOf(*table, 4, shared + " (ajouter ce PC) \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier") >= 0 && rowOf(*table, 5, "\xC3\xA0 v\xC3\xA9rifier") >= 0 &&
-                  rowOf(*table, 5, "\xC3\xA0 v\xC3\xA9rifier") == rowOf(*table, 1, "Client d'essai Beta"),
+        check(table && rowOf(*table, 4, shared + " (ajouter ce PC) \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier") >= 0 && rowOf(*table, 6, "\xC3\xA0 v\xC3\xA9rifier") >= 0 &&
+                  rowOf(*table, 6, "\xC3\xA0 v\xC3\xA9rifier") == rowOf(*table, 1, "Client d'essai Beta"),   // 1.37.0 : l'Etat, apres l'Edition voulue
               "la demande d'ajout a une licence existante : << a verifier >> (licence et etat)");
         check(selectRow(*page0, 1, "Client d'essai Beta"), "(la demande de B choisie)");
         const std::string tb = paintPage(*page0, 1600.f, 760.f);
@@ -449,6 +449,7 @@ int main(int argc, char** argv) {
         const std::string t = paintPage(*page, 1600.f, 760.f);
         check(rows(*page, "demandes.table") == 4 && has(t, "4 en attente") && has(t, "relev\xC3\xA9" "es le "), "quatre en attente, la date du releve");
         check(has(t, "Client d'essai Epsilon") && has(t, "Message d'essai de Poste essai D"), "le client, le message (ouverts avec la cle de l'editeur)");
+        check(has(t, "\xC3\x89" "dition voulue"), "1.37.0 : la colonne de l'edition voulue (la boutique du Studio)");
         gw::DeviceStatus st;
         gw::StatusContent sc;
         check(!posteState(url, pcA, editor, st, sc), "rien n'est encore publie pour A");
@@ -511,7 +512,7 @@ int main(int argc, char** argv) {
         (void)click(w, "wizard.fermer");
     }
 
-    std::printf("-- accepter en ligne : le code montre une fois (dans le dialogue), un PC s'active avec lui\n");
+    std::printf("-- accepter en ligne : le code montre (dans le dialogue), garde chiffre, scelle pour le PC de la demande\n");
     std::string code;
     {
         fx.ws->reload();
@@ -544,7 +545,9 @@ int main(int argc, char** argv) {
         }
         t = paintDialog(d);
         check(has(t, "La licence est sur le service"), "l'assistant le dit");
-        check(!code.empty() && !foundIn(fx.root, code), "le code n'est ecrit dans aucun fichier du poste");
+        std::string kept, keptWhy;
+        check(!code.empty() && online::readCode(fx.admin.string(), id, kept, &keptWhy) && kept == code, "1.37.0 : le code garde sur ce poste (Voir le code...) " + keptWhy);
+        check(!code.empty() && !foundOutside(fx.root, code, "codes-activation"), "le code n'est ecrit dans aucun autre fichier du poste");
         bool inReports = false;
         for (const auto& r : rig.reports) inReports = inReports || has(r.text(), code);
         for (const auto& f : rig.flashes) inReports = inReports || has(f, code);
@@ -559,8 +562,9 @@ int main(int argc, char** argv) {
         check(a.status == 200 && a.value.isObject() && !a.value.str("activation").empty(), "un PC s'active avec ce code (" + a.body.substr(0, 160) + ")");
         gw::DeviceStatus st;
         gw::StatusContent sc;
-        check(posteState(url, pcD, editor, st, sc) && st.state == gw::State::Accepted && sc.license.empty() && has(sc.message, "code") && !has(sc.message, code),
-              "D lit << acceptee >>, un mot, jamais le code");
+        check(posteState(url, pcD, editor, st, sc) && st.state == gw::State::Accepted && sc.license.empty() && sc.code == code && sc.onlineLicense == id &&
+                  !has(sc.message, code),
+              "1.37.0 : D lit << acceptee >> et le code scelle pour lui (son Studio s'active seul), jamais le code dans le mot");
     }
 
     std::printf("-- refuser : la raison, scellee pour le PC\n");

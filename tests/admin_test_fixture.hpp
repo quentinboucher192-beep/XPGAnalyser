@@ -55,6 +55,16 @@ inline bool foundIn(const fs::path& dir, const std::string& needle) {
     }
     return false;
 }
+// 1.37.0 : ... ailleurs que dans ce sous-dossier (le code garde, codes-activation/ : chiffre sous Windows).
+inline bool foundOutside(const fs::path& dir, const std::string& needle, const std::string& keptIn) {
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) break;
+        if (it->path().parent_path().filename() == keptIn) continue;
+        if (it->is_regular_file(ec) && readFile(it->path()).find(needle) != std::string::npos) return true;
+    }
+    return false;
+}
 inline int finish() {
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures ? 1 : 0;
