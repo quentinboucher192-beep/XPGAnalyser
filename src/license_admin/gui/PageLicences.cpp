@@ -184,6 +184,12 @@ void cardBox(gfx::IRenderer& r, const ui::Theme& th, const gfx::Rect& box) {
     r.fillRoundedRect(box.inset(1.f, 1.f), th.brand.card, 11.f);
 }
 
+// 1.41.0 : "08/11 21:08" (vu le : court, la fiche est etroite ; la date entiere est dans l'infobulle).
+std::string shortWhen(Seconds t) {
+    const std::string full = dateTimeFr(t);   // "08/11/2026 21:08"
+    return full.size() >= 16 ? full.substr(0, 5) + full.substr(10) : full;
+}
+
 // Les initiales d'un client (l'avatar de la fiche) : << Atelier Meyer >> -> << AM >>.
 std::string initialsOf(const std::string& name) {
     std::string out;
@@ -488,7 +494,7 @@ protected:
         const std::string cells[6][2] = {
             {"\xC3\x89" "dition", ed && !ed->label.empty() ? ed->label : l.edition},
             {"Fin", end},
-            {"Type", typeLabel(l.type) + (onlineLic ? std::string(" \xC2\xB7 en ligne") : std::string())},
+            {"Type", typeLabel(l.type)},
             {"PC", pcs},
             {"Hors ligne", l.type == LicenseType::Temporary ? std::to_string(l.offlineGraceDays) + " j de gr\xC3\xA2" "ce" : std::string("sans objet")},
             {"Registre", "n\xC2\xB0 " + std::to_string(l.manifest)},
@@ -510,7 +516,7 @@ protected:
         const gfx::FontId fh = gfx::semibold(gfx::FontId{14});
         r.drawText({cx0, pcsTitleY_}, "PC", fh, c.text);
         const std::size_t n = pcsModel_ ? pcsModel_->rowCount() : 0;
-        r.drawText({cx0 + r.measure("PC", fh).width + 8.f, pcsTitleY_ + 1.f}, n ? std::to_string(n) + (onlineLic ? " activ\xC3\xA9(s), au dernier relev\xC3\xA9" : " li\xC3\xA9(s)") : std::string("aucun"),
+        r.drawText({cx0 + r.measure("PC", fh).width + 8.f, pcsTitleY_ + 1.f}, n ? std::to_string(n) + (onlineLic ? " au dernier relev\xC3\xA9" : " li\xC3\xA9(s)") : std::string("aucun"),
                    gfx::FontId{13}, c.textMuted);
         r.drawText({cx0, detailTitleY_}, "D\xC3\xA9tail", fh, c.text);
     }
@@ -547,10 +553,11 @@ private:
         pcsColumnsFor_ = w;
         std::vector<ui::TableView::Column> cols;
         if (pcsOnline_) {
-            cols = {{"PC", std::floor(w * 0.34f)}, {"\xC3\x89tat", std::floor(w * 0.24f)}, {"Empreinte", 200.f}, {"Activ\xC3\xA9 le", 100.f},
-                    {"Vu le", std::floor(w * 0.22f)}, {"Bail jusqu'au", std::floor(w * 0.20f)}};
+            cols = {{"PC", std::floor(w * 0.32f)}, {"\xC3\x89tat", std::floor(w * 0.40f)}, {"Empreinte", 200.f}, {"Activ\xC3\xA9 le", 100.f},
+                    {"Vu le", std::floor(w * 0.28f)}, {"Bail jusqu'au", 110.f}};
             cols[2].visible = false;
             cols[3].visible = false;
+            cols[5].visible = false;   // le bail : dans l'infobulle de la ligne et le detail
         } else {
             cols = {{"PC", std::floor(w * 0.28f)}, {"\xC3\x89tat", std::floor(w * 0.50f)}, {"Empreinte", 220.f}, {"Activ\xC3\xA9 le", std::floor(w * 0.22f)}};
             cols[2].visible = false;
@@ -563,6 +570,15 @@ private:
     void openMore() {
         menuButtons_.clear();
         std::vector<ui::PopupMenu::Item> items;
+        const LicenceEntry* e = selected();
+        const bool onlineLic = e && Workspace::isOnlineLicence(e->licence);
+        // Une entree grisee dit pourquoi, en quelques mots (l'infobulle du bouton est trop longue pour un menu).
+        const auto reasonOf = [&](ui::Button* b) -> std::string {
+            if (!e) return "choisis une licence";
+            if (b == dropPc_) return onlineLic ? std::string("aucun PC activ\xC3\xA9") : std::string("un seul PC li\xC3\xA9");
+            if (b == newCode_ || b == active_ || b == refreshOnline_) return "le service n'est pas r\xC3\xA9gl\xC3\xA9";
+            return {};
+        };
         auto add = [&](ui::Button* b, ui::Icon icon) {
             if (!b || b->visibility() == ui::Visibility::Collapsed) return;
             ui::PopupMenu::Item it;
@@ -570,7 +586,7 @@ private:
             it.icon = icon;
             it.danger = b->style() == ui::Button::Style::Danger;
             it.enabled = b->enabled();
-            if (!it.enabled) it.disabledReason = b->tooltip();
+            if (!it.enabled) it.disabledReason = reasonOf(b);
             it.id = static_cast<int>(menuButtons_.size());
             menuButtons_.push_back(b);
             items.push_back(std::move(it));
@@ -763,7 +779,7 @@ private:
                 for (const auto& act : on->activations) {
                     onlineKeys_.push_back(act.deviceKey);
                     rows.push_back({act.name.empty() ? std::string("(sans nom)") : act.name, act.stateLabel(), licdlg::fingerprintOfKey(act.deviceKey),
-                                    dateFr(act.activatedAt), dateTimeFr(act.seenAt), dateFr(act.until)});
+                                    dateFr(act.activatedAt), shortWhen(act.seenAt), dateFr(act.until)});
                     tips.push_back("Vu le " + dateTimeFr(act.seenAt) + " ; son activation vaut jusqu'au " + dateTimeFr(act.until) + " sans nouvelle connexion.");
                     revoked.push_back(act.state != "active");
                 }
