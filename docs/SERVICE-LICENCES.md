@@ -76,7 +76,7 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 
 | Route | Réponse |
 |---|---|
-| `GET /v1/etat` | `{"service":"xpg-licences","version":"1.38.0","heure":<unix>,"cle_service":"<hexa>"\|null,"certifie":true\|false,"registre":<numéro>\|0}` |
+| `GET /v1/etat` | `{"service":"xpg-licences","version":"1.39.0","heure":<unix>,"cle_service":"<hexa>"\|null,"certifie":true\|false,"registre":<numéro>\|0,"revocations":<numéro>\|0,"changements":N}`. **1.39.0** : `revocations` = le numéro de la liste de révocation déposée ; `changements` = un compteur qui monte à chaque changement chez les clients (une liste de révocation, une licence déposée ou désactivée, un PC retiré, l'état d'un poste). Un Studio qui a une licence regarde cette route **toutes les 2 minutes** : le compteur (ou le registre) a bougé, il se resynchronise tout de suite (renouveler, son état « poste », le registre) - la licence révoquée, désactivée ou retirée est perdue en direct, et une fenêtre le dit. Le compteur ne dit ni quelle licence ni quel PC. |
 | `GET /v1/heure?n=<32 hexa>` | le bloc `heure` (texte) ; 503 sans certificat |
 | `GET /v1/certificat` | le bloc `service` (texte) ; 404 sans certificat |
 | `GET /v1/registre` | le bloc du registre (texte) ; 404 s'il n'y en a pas |

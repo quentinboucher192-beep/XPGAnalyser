@@ -1,6 +1,6 @@
 {
   "name": "xpg-licences",
-  "version": "1.38.0",
+  "version": "1.39.0",
   "private": true,
   "description": "Le service des licences XPG (API Studio, IHM Studio) : un Worker Cloudflare avec un Durable Object SQLite.",
   "type": "module",

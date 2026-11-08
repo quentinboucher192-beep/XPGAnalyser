@@ -3375,6 +3375,8 @@ void App::frame(double dt) {
     for (auto& m : licence::takeMessages()) bus_.publish(StatusNotice{std::move(m), 20.0});
     // 1.36.0 : la reponse de l'editeur a la demande de ce PC (acceptee : la licence installee ; refusee) - une fenetre.
     if (auto answer = licence::takeAnswer()) licence::showAnswer(*this, *answer);
+    // 1.39.0 : la licence perdue en direct (retiree, revoquee, desactivee par l'editeur) - une fenetre.
+    else if (auto loss = licence::takeLoss()) licence::showLoss(*this, *loss);
     if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
         (void)recovery_.autosave([this](const std::string& folder, std::string* reason) {

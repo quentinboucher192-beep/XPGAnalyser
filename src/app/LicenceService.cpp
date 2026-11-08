@@ -525,6 +525,8 @@ bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
     json::Value etat;
     if (!readState(c, etat, why)) return false;
     res.reached = true;
+    res.serviceChanges = etat.integer("changements", -1);   // 1.39.0 : -1 : un service d'avant
+    res.serviceRegistry = etat.integer("registre", -1);
     rec.lastSync = lic::systemNow();
     if (!etat.flag("certifie")) {
         why = "Le service des licences n'est pas encore pr\xC3\xAAt : l'\xC3\xA9" "diteur ne l'a pas encore certifi\xC3\xA9.";
@@ -1066,7 +1068,8 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
         if (!had) return;
         const std::string text = goneText(lid, motif);
         note(false, text);
-        res.notices.push_back({"licence:retrait", text, "warning"});
+        // 1.39.0 : perdue sans que ce PC l'ait rendue (retiree, revoquee, desactivee...) : une fenetre le dit tout de suite
+        res.notices.push_back({"licence:retrait", text, "warning", motif != "liberee", lid});
         lines.push_back(text);
     };
     if (const json::Value* gone = v.find("retirees"); gone && gone->isArray()) {
@@ -2098,6 +2101,24 @@ Result sync() {
     return res;
 }
 
+// 1.39.0 : le regard toutes les 2 minutes - GET /v1/etat seulement (public, rien d'ecrit sur ce PC ni au service).
+Result watchState() {
+    Result res;
+    res.job = Job::Watch;
+    if (!available()) return res;
+    Conn c;
+    c.a = address();
+    c.host = hostOf(c.a.url);
+    json::Value etat;
+    std::string why;
+    if (!readState(c, etat, why)) return res;   // hors ligne : rien a dire (le prochain regard reessaie)
+    res.reached = true;
+    res.ok = true;
+    res.serviceChanges = etat.integer("changements", -1);
+    res.serviceRegistry = etat.integer("registre", -1);
+    return res;
+}
+
 // ============================================================ le fil de fond ==
 namespace {
 
@@ -2124,6 +2145,9 @@ struct Runner {
     double             nextDevice{0};
     double             nextTrial{0};
     double             nextLook{0};
+    double             nextWatch{0};       // 1.39.0 : le prochain regard sur GET /v1/etat
+    long long          knownChanges{-1};   // 1.39.0 : le compteur des changements deja vu (-1 : pas encore lu)
+    bool               syncNow{false};     // 1.39.0 : le compteur a bouge - la synchronisation complete tout de suite
     bool               waiting{false};     // une demande manuelle attend
     lic::Seconds       waitingSince{0};    // 1.36.0 : envoyee le (la cadence de la verification)
     bool               retry{false};       // un etat << poste >> a reprendre
@@ -2231,10 +2255,14 @@ bool startRequest(const RequestForm& form) {
 }
 bool startCancelRequest() { return launch(Job::CancelRequest, [] { return cancelRequest(); }); }
 bool startCheckDevice() { return launch(Job::Device, [] { return checkDevice(); }); }
+bool startWatch() { return launch(Job::Watch, [] { return watchState(); }); }
 
 bool busy() noexcept { return runner().running; }
 
-Job busyJob() noexcept { return runner().running ? runner().job.load() : Job::None; }
+Job busyJob() noexcept {
+    const Job j = runner().running ? runner().job.load() : Job::None;
+    return j == Job::Watch ? Job::None : j;   // 1.39.0 : le regard ne se montre pas (les boutons restent permis)
+}
 
 bool leaseHeldBack() noexcept { return runner().heldBack; }
 
@@ -2253,6 +2281,7 @@ std::string jobText(Job j) {
         case Job::Request: return "Envoi de la demande\xE2\x80\xA6";
         case Job::CancelRequest: return "Annulation de la demande\xE2\x80\xA6";
         case Job::Device: return "V\xC3\xA9rification aupr\xC3\xA8s du service\xE2\x80\xA6";
+        case Job::Watch:
         case Job::None: break;
     }
     return {};
@@ -2278,6 +2307,18 @@ bool collect() {
     r.running = false;
     r.job = Job::None;
     const double now = steadyNow();
+    // 1.39.0 : le regard - rien a dire, rien a revaluer ; le compteur des changements (ou le registre) a bouge depuis
+    // le dernier vu : la synchronisation complete tout de suite (la licence perdue en direct, les offres changees).
+    if (res.job == Job::Watch) {
+        if (res.reached) {
+            const bool moved = (r.knownChanges >= 0 && res.serviceChanges >= 0 && res.serviceChanges != r.knownChanges) ||
+                               (res.serviceRegistry > 0 && static_cast<std::uint64_t>(res.serviceRegistry) > lic::getLicenseState().registryNumber);
+            if (res.serviceChanges >= 0) r.knownChanges = res.serviceChanges;
+            if (moved || !r.synced) r.syncNow = true;   // ou la synchro du lancement n'avait pas joint le service
+        }
+        return true;
+    }
+    if (res.reached && res.serviceChanges >= 0) r.knownChanges = res.serviceChanges;
     if (res.job == Job::Sync || res.job == Job::Device || res.job == Job::Request || res.job == Job::CancelRequest) {
         const bool was = r.waiting;
         r.waiting = res.pendingAfter;
@@ -2289,6 +2330,7 @@ bool collect() {
     }
     if (res.job == Job::Sync || res.job == Job::Device) r.retry = res.retryLater;
     if (res.job == Job::Sync) {
+        r.nextWatch = now + kWatchPeriod;
         r.synced = res.reached;
         r.nextSync = now + (res.reached ? kHour : 15.0 * 60.0);   // hors ligne : un nouvel essai dans un quart d'heure
         if (res.reached && !r.waiting) r.nextDevice = now + kHour;
@@ -2333,6 +2375,7 @@ bool collect() {
     for (const auto& n : res.notices) {
         licence::postNotice(n.key, n.title, res.message == n.title ? std::string() : res.message, n.tone.empty() ? "info" : n.tone);
         licence::queueMessage(n.title);
+        if (n.lost) licence::queueLoss(n.licenseId, n.title);   // 1.39.0 : la licence perdue en direct - une fenetre
     }
     r.last = std::move(res);
     ++r.revision;
@@ -2355,7 +2398,20 @@ void poll() {
         (void)startSync();
         return;
     }
+    // 1.39.0 : le service a signale un changement (le regard) : la synchronisation complete, tout de suite.
+    if (r.syncNow) {
+        r.syncNow = false;
+        r.nextWatch = now + kWatchPeriod;
+        (void)startSync();
+        return;
+    }
     const auto st = lic::getLicenseState();
+    // 1.39.0 : une licence sur ce PC (en ligne, par fichier, flottante) : un regard sur GET /v1/etat toutes les 2 minutes.
+    if (!st.licenseId.empty() && now >= r.nextWatch) {
+        r.nextWatch = now + kWatchPeriod;
+        (void)startWatch();
+        return;
+    }
     // La licence flottante : son jeton, renouvele toutes les 5 minutes (sauf rendu par l'utilisateur).
     if (st.floating && !r.heldBack && now >= r.nextLease) {
         r.nextLease = now + kLeasePeriod;

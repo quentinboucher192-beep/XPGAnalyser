@@ -7,6 +7,10 @@
 //  PC (et seulement elles), ses PC qui tiennent une place (nom, cle, dates,
 //  etat, ce_pc) et le nombre de places prises (les jetons en cours pour une
 //  flottante). Jamais la station d'un autre PC, jamais un PC revoque.
+//  1.39.0 : LA LICENCE PERDUE EN DIRECT - GET /v1/etat dit aussi `revocations`
+//  (le numero de la liste) et `changements` (un compteur qui monte a chaque
+//  revocation, licence deposee ou desactivee, PC retire, etat de poste depose) ;
+//  les Studios le regardent toutes les 2 minutes et se resynchronisent s'il bouge.
 // -----------------------------------------------------------------------------
 //  LES TABLES
 //    config        la cle du service (creee ici au premier appel ; la partie
@@ -83,7 +87,7 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.38.0";
+const VERSION = "1.39.0";
 const SCHEMA = 2;
 const JOUR = 86400;
 const HEURE = 3600;
@@ -344,6 +348,10 @@ export class Licences extends DurableObject {
     }
     ajouter(nom, d) {
         if (d) this.ecrireConfig(nom, String(Math.max(0, this.compte(nom) + d)));
+    }
+    // 1.39.0 : un changement que les Studios doivent voir tout de suite (GET /v1/etat : << changements >>).
+    signalerChangement() {
+        return this.suivant("changements");
     }
 
     // ================================================================ les cles ==
@@ -767,6 +775,11 @@ export class Licences extends DurableObject {
             cle_service: this.clePub || null,
             certifie: !!c,
             registre: Number(this.config("registre_numero") || "0"),
+            // 1.39.0 : ce qui change chez les clients - la liste de revocation (son numero) et un compteur de
+            // changements (une revocation, une licence deposee ou desactivee, un PC retire, l'etat d'un poste) : un
+            // Studio qui le voit bouger se resynchronise tout de suite (la licence perdue en direct).
+            revocations: Number(this.config("revocations_numero") || "0"),
+            changements: Number(this.config("changements") || "0"),
         });
     }
 
@@ -1170,6 +1183,7 @@ export class Licences extends DurableObject {
             const lic = this.licence(j.licence);
             if (lic && this.revoquee(lic, j.poste)) this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", j.licence, j.poste);
         }
+        this.signalerChangement();
         return reponseJson(200, { revocations: liste.numero });
     }
 
@@ -1217,6 +1231,7 @@ export class Licences extends DurableObject {
         if (!avant) this.ajouter("n_licences", 1);
         // Desactivee par l'editeur : les places gardees par des PC liberes reviennent (sa decision).
         if (!active) this.x("UPDATE activations SET place_jusqu = 0 WHERE licence = ? AND etat = 'liberee' AND place_jusqu > 0", doc.id);
+        this.signalerChangement();
         return reponseJson(200, this.descriptionLicence(this.licence(doc.id), ctx.now));
     }
 
@@ -1263,6 +1278,7 @@ export class Licences extends DurableObject {
         // Retire par l'editeur : la place revient tout de suite (sa decision), meme celle d'un PC libere qui la gardait.
         this.x("UPDATE activations SET etat = 'retiree', place_jusqu = 0 WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
         this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
+        this.signalerChangement();
         return reponseJson(200, {});
     }
 
@@ -1319,6 +1335,7 @@ export class Licences extends DurableObject {
             ctx.now,
         );
         if (!avant) this.ajouter("n_postes", 1);
+        this.signalerChangement();
         return reponseJson(200, {});
     }
 

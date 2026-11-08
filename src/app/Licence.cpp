@@ -555,6 +555,51 @@ void queueAnswer(Answer a) {
     if (g_answers.size() < 4) g_answers.push_back(std::move(a));
 }
 
+// ============================================================ 1.39.0 : la licence perdue en direct ==
+namespace {
+std::vector<Loss>        g_losses;
+std::vector<std::string> g_lossShown;   // une fenetre par licence et par lancement
+} // namespace
+
+void queueLoss(std::string licenseId, std::string text) {
+    if (!g_notices || text.empty()) return;   // personne devant l'ecran (le poste d'exploitation qui tourne)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        const std::string id = licenseId.empty() ? std::string("?") : licenseId;
+        if (std::find(g_lossShown.begin(), g_lossShown.end(), id) != g_lossShown.end()) return;
+        g_lossShown.push_back(id);
+        if (g_losses.size() < 4) g_losses.push_back({licenseId, text});
+    }
+    notices::Item n;
+    n.category = "Licence";
+    n.title = "Licence perdue sur ce PC" + (licenseId.empty() ? std::string() : " : " + licenseId);
+    n.detail = text;
+    n.tone = "error";
+    n.key = "licence:perdue:" + licenseId;
+    n.button = "Voir ma licence";
+    n.action = notices::toLicence(kTabMine);
+    (void)notices::post(std::move(n));
+}
+
+std::optional<Loss> takeLoss() {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_losses.empty()) return std::nullopt;
+    Loss l = std::move(g_losses.front());
+    g_losses.erase(g_losses.begin());
+    return l;
+}
+
+void showLoss(App& app, const Loss& l) {
+    std::string text = l.text;
+    text += "\n\nLes fonctions de ta licence sont ferm\xC3\xA9" "es d\xC3\xA8s maintenant. Rien n'est ferm\xC3\xA9 : ton projet reste ouvert ; "
+            "Enregistrer et Exporter restent permis.\nSi c'est une erreur, contacte l'\xC3\xA9" "diteur.";
+    auto dialog = std::make_unique<MessageDialog>("Ta licence n'est plus active sur ce PC", std::move(text), MessageDialog::Icon::Warning, "Voir ma licence\xE2\x80\xA6");
+    dialog->setCancelLabel("Fermer");
+    app.menus().ShowDialog(std::move(dialog), [&app](const menu::DialogResult& r) {
+        if (r.accepted()) showLicenceWindow(app, kTabMine);
+    });
+}
+
 std::optional<Answer> takeAnswer() {
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_answers.empty()) return std::nullopt;
@@ -1110,7 +1155,11 @@ std::size_t check(bool force) {
         now.offers = before.offers;
         now.names = before.names;
     }
-    for (auto& n : items) (void)notices::post(std::move(n));
+    for (auto& n : items) {
+        // 1.39.0 : une licence revoquee pendant que le logiciel tourne (une liste de revocation adoptee) : la fenetre aussi
+        if (n.key.rfind("licence:revoquee:", 0) == 0) queueLoss(now.licenseId, n.detail);
+        (void)notices::post(std::move(n));
+    }
     (void)saveSeen(file, now);
     return items.size();
 }

@@ -198,6 +198,14 @@ struct Answer {
 };
 void queueAnswer(Answer a);
 [[nodiscard]] std::optional<Answer> takeAnswer();
+// 1.39.0 : LA LICENCE PERDUE EN DIRECT - retiree de ce PC, revoquee ou desactivee par l'editeur (le service le dit au
+// regard des 2 minutes ou au lancement ; une liste de revocation adoptee) : une fenetre tout de suite (showLoss) et une
+// notification. Une fois par licence et par lancement ; seulement avec les avis (pas le poste d'exploitation).
+struct Loss {
+    std::string licenseId, text;
+};
+void queueLoss(std::string licenseId, std::string text);
+[[nodiscard]] std::optional<Loss> takeLoss();
 // Ce que dit la fenetre : acceptee - l'edition, le client, jusqu'a quand (et les jours), les PC, ce qu'elle ouvre (par
 // logiciel), le mot de l'editeur ; refusee - la raison, et une nouvelle demande. `st` : l'etat apres l'installation.
 struct AnswerView {
@@ -298,6 +306,8 @@ bool gateProjects(App& app);
 // 1.36.0 : la fenetre de la reponse de l'editeur (answerView) ; son bouton : la fenetre Licence (Ma licence, ou une
 // nouvelle demande).
 void showAnswer(App& app, const Answer& a);
+// 1.39.0 : la fenetre de la licence perdue (Licence... : Ma licence).
+void showLoss(App& app, const Loss& l);
 } // namespace licence
 
 } // namespace app

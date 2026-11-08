@@ -182,11 +182,14 @@ inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage 
                              kMaxEmail = 200;
 
 // ---- ce qu'a donne un travail ----
-enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device };
+// 1.39.0 : Watch - le regard toutes les 2 minutes sur GET /v1/etat (rien d'ecrit, rien de dit : busyJob() ne le montre pas).
+enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device, Watch };
 struct Notice {
     std::string key;     // "licence:activation"...
     std::string title;
     std::string tone;    // "ok", "info", "warning", "error"
+    bool        lost{false};   // 1.39.0 : la licence de ce PC perdue (retiree, revoquee, desactivee) : une fenetre aussi
+    std::string licenseId;     // 1.39.0 : laquelle (lost)
 };
 struct Result {
     Job                 job{Job::None};
@@ -214,7 +217,15 @@ struct Result {
     std::string         answerMail;               // gateway::kMailSent, kMailFailed ; vide : pas de mail
     std::string         answerMailTo;
     licensing::Seconds  requestSentAt{0};         // une demande attend encore : envoyee le (0 : aucune)
+    // 1.39.0 : ce que GET /v1/etat a dit en se connectant (-1 : pas lu, ou un service d'avant la 1.39) - le compteur des
+    // changements chez les clients (une revocation, une licence desactivee, un PC retire) et le numero du registre.
+    long long           serviceChanges{-1};
+    long long           serviceRegistry{-1};
 };
+// 1.39.0 : LA LICENCE PERDUE EN DIRECT - tant qu'une licence est sur ce PC, le fil de fond regarde GET /v1/etat toutes
+// les kWatchPeriod secondes (un appel public, rien d'ecrit) ; le compteur des changements ou le registre a bouge :
+// la synchronisation complete tout de suite (le bail : retiree, revoquee, desactivee ; l'etat << poste >> ; le registre).
+inline constexpr double kWatchPeriod = 120.0;
 inline constexpr const char* kAnswerAccepted = "acceptee";
 inline constexpr const char* kAnswerUpdated = "mise_a_jour";
 inline constexpr const char* kAnswerRefused = "refusee";
@@ -235,6 +246,8 @@ inline constexpr const char* kAnswerRefused = "refusee";
 [[nodiscard]] Result checkDevice();
 // Le lancement : heure -> renouveler -> Decouverte -> code de l'installateur -> poste.
 [[nodiscard]] Result sync();
+// 1.39.0 : GET /v1/etat seulement (le compteur des changements, le registre) ; rien d'ecrit sur ce PC.
+[[nodiscard]] Result watchState();
 
 // ---- le fil de fond (le fil de l'interface appelle) ----
 void startRunner();
@@ -249,6 +262,7 @@ bool startReturnLease();
 bool startRequest(const RequestForm& form);
 bool startCancelRequest();
 bool startCheckDevice();
+bool startWatch();   // 1.39.0
 [[nodiscard]] bool busy() noexcept;
 [[nodiscard]] Job  busyJob() noexcept;
 // Chaque image : releve un travail fini (les avis, la revaluation) ; lance ce que le fil de fond a a faire.

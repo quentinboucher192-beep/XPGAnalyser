@@ -1048,13 +1048,35 @@ int main(int argc, char** argv) {
     std::printf("-- retire par l'editeur ; liberer\n");
     {
         const std::string keyA = pcKeyHex();
+        // 1.39.0 : le regard des 2 minutes (GET /v1/etat) : le compteur des changements, avant et apres le retrait
+        const auto w0 = ls::watchState();
+        check(w0.job == ls::Job::Watch && w0.reached && w0.ok && w0.serviceChanges >= 0 && w0.notices.empty() && w0.message.empty(),
+              "1.39.0 : le regard lit le compteur des changements (" + std::to_string(w0.serviceChanges) + "), sans rien dire");
         const Http h = http("POST", "/admin/activations/retirer", jsonBody({{"licence", "XPG-2026-00201"}, {"poste", keyA}}), true);
         check(h.status == 200, "l'editeur retire A (" + h.body + ")");
+        const auto w1 = ls::watchState();
+        check(w1.reached && w1.serviceChanges == w0.serviceChanges + 1 && lic::getLicenseState().online,
+              "1.39.0 : le regard voit le compteur bouger (" + std::to_string(w1.serviceChanges) + ") ; la licence est encore la (la synchro la retire)");
         const auto r = keep(ls::renew());
         const auto st = lic::getLicenseState();
         check(noticeKey(r, "licence:retrait") && has(noticeTitle(r, "licence:retrait"), "XPG-2026-00201") && !st.online && st.licenseId.empty() &&
                   !present(folderOf("A") / "licence.xpglic") && !present(folderOf("A") / lic::LicenseStore::kActivationFile),
               "au renouvellement : l'activation effacee, un avis (" + noticeTitle(r, "licence:retrait") + ")");
+        bool lost = false;
+        for (const auto& n : r.notices)
+            if (n.key == "licence:retrait" && n.lost && n.licenseId == "XPG-2026-00201") lost = true;
+        check(lost, "1.39.0 : l'avis du retrait dit << perdue >> (la fenetre de la licence perdue)");
+        // la fenetre et la notification : une fois par licence (la file de l'application)
+        app::licence::showNotices();
+        app::licence::queueLoss("XPG-2026-00201", noticeTitle(r, "licence:retrait"));
+        app::licence::queueLoss("XPG-2026-00201", noticeTitle(r, "licence:retrait"));
+        const auto loss = app::licence::takeLoss();
+        check(loss && loss->licenseId == "XPG-2026-00201" && has(loss->text, "retir") && !app::licence::takeLoss(),
+              "1.39.0 : une fenetre de la licence perdue, une seule (" + (loss ? loss->text : std::string("aucune")) + ")");
+        bool posted = false;
+        for (const auto& n : app::notices::list())
+            if (n.key == "licence:perdue:XPG-2026-00201" && n.tone == "error" && has(n.title, "Licence perdue")) posted = true;
+        check(posted, "1.39.0 : et la notification << Licence perdue sur ce PC >> (le carnet general)");
         check(record().activatedLicense.empty(), "le releve l'oublie");
         usePc("C", "machine-essai-3");
         auto c = keep(ls::activate(code1, "Poste essai C"));

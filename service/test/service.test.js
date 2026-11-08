@@ -76,9 +76,11 @@ describe("l'etat public, avant tout certificat", () => {
         const r = await appel(svc, "GET", "/v1/etat");
         assert.equal(r.statut, 200);
         assert.ok(r.type.startsWith("application/json"));
-        assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre"]);
+        assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre", "revocations", "changements"]);
         assert.equal(r.json.service, "xpg-licences");
-        assert.equal(r.json.version, "1.38.0");
+        assert.equal(r.json.version, "1.39.0");
+        assert.equal(r.json.revocations, 0);
+        assert.equal(r.json.changements, 0);
         assert.ok(Math.abs(r.json.heure - now()) < 30);
         assert.match(r.json.cle_service, /^[0-9a-f]{64}$/);
         assert.equal(r.json.certifie, false);
@@ -1074,7 +1076,9 @@ describe("l'etat d'un PC (bloc poste)", () => {
         let r = await appel(svc, "GET", "/v1/poste", { cle: p9 });
         assert.deepEqual(r.json, { poste: null });
         const e1 = poste(1);
+        const avant = (await appel(svc, "GET", "/v1/etat")).json.changements;
         assert.equal((await appel(svc, "PUT", "/admin/postes", { cle: editeur, corps: { poste: p9.poste, etat: e1 } })).statut, 200);
+        assert.equal((await appel(svc, "GET", "/v1/etat")).json.changements, avant + 1, "1.39.0 : l'etat d'un poste depose, signale aux Studios");
         r = await appel(svc, "GET", "/v1/poste", { cle: p9 });
         assert.equal(r.json.poste, e1);
         r = await renouveler(p9);
@@ -1220,6 +1224,58 @@ describe("les lignes ecrites par appel (le plan gratuit : 100 000 par jour)", ()
         const r = await renouveler(q);
         erreur(r, 429, "trop");
         assert.equal(lignesEcrites(r), 0);
+    });
+});
+
+// 1.39.0 : la licence perdue en direct chez le client - GET /v1/etat dit << changements >> (et le numero de la liste de
+// revocation) : un Studio qui le voit bouger se resynchronise tout de suite.
+describe("les changements vus par les Studios (GET /v1/etat)", () => {
+    const etat = async () => (await appel(svc, "GET", "/v1/etat")).json;
+    const liste = (numero, revoked) =>
+        bloc("revocations", JSON.stringify({ format: "xpg-revocations", version: 1, number: numero, issued_at: iso(now()), revoked }, null, 2) + "\n", editeur);
+
+    it("une licence deposee, un PC retire, une liste de revocation, l'etat d'un poste : le compteur bouge ; un PC qui s'active ou renouvelle, non", async () => {
+        const L = { id: "XPG-2026-00039", max: 2, emission: now() - 10, expire: now() + 100 * JOUR };
+        const c = nouveauCode();
+        codes.push(c);
+        let n = (await etat()).changements;
+        assert.ok(n >= 1, "les essais d'avant ont deja change quelque chose");
+        assert.equal((await deposerLicence(L, { code_hash: c.hash })).statut, 200);
+        let e = await etat();
+        assert.equal(e.changements, n + 1, "une licence deposee (ou desactivee : le meme appel)");
+        n = e.changements;
+        const x = pc();
+        const y = pc();
+        assert.equal((await activer(x, c.code)).statut, 200);
+        assert.equal((await activer(y, c.code)).statut, 200);
+        assert.equal((await renouveler(x)).statut, 200);
+        assert.equal((await etat()).changements, n, "activer, renouveler : rien a signaler aux autres");
+        assert.equal((await retirer(L.id, x)).statut, 200);
+        e = await etat();
+        assert.equal(e.changements, n + 1, "un PC retire");
+        n = e.changements;
+        assert.deepEqual((await renouveler(x)).json.motifs, { [L.id]: "retiree" }, "le PC retire l'apprend a son renouvellement");
+        // une liste de revocation plus recente : son numero et le compteur
+        const avant = e.revocations;
+        assert.ok(avant >= 1);
+        const t = now();
+        const revs = [
+            { license_id: "XPG-2026-00005", revoked_at: iso(t), reason: "Fin de contrat" },
+            { license_id: L.id, device: y.hex, revoked_at: iso(t), reason: "Essai" },
+        ];
+        assert.equal((await appel(svc, "PUT", "/admin/revocations", { cle: editeur, corps: { revocations: liste(avant + 1, revs) } })).statut, 200);
+        e = await etat();
+        assert.equal(e.revocations, avant + 1);
+        assert.equal(e.changements, n + 1, "une liste de revocation deposee");
+        n = e.changements;
+        assert.deepEqual((await renouveler(y)).json.motifs, { [L.id]: "revoquee" });
+        // un depot refuse ne fait rien bouger
+        erreur(await appel(svc, "PUT", "/admin/revocations", { cle: editeur, corps: { revocations: liste(avant, revs) } }), 409, "ancien");
+        erreur(await appel(svc, "POST", "/admin/activations/retirer", { cle: editeur, corps: { licence: L.id, poste: nouvelleCle().hex } }), 404, "activation");
+        assert.equal((await etat()).changements, n, "un refus : rien");
+        // le compteur ne dit rien de plus : ni licence, ni PC, ni motif
+        const brut = (await appel(svc, "GET", "/v1/etat")).texte;
+        assert.ok(!brut.includes(L.id) && !brut.includes(y.hex) && !brut.includes("Essai"));
     });
 });
 
