@@ -2485,7 +2485,7 @@ public:
                                             }
                                             return s;
                                         });
-        panel_->table().setColumns({{"Fonctionnalit\xC3\xA9", 220.f}, {"Logiciel", 110.f}, {"Avant", 64.f}, {"Apr\xC3\xA8s", 64.f}, {"Changement", 120.f}});
+        panel_->table().setColumns({{"Fonctionnalit\xC3\xA9", 210.f}, {"Logiciel", 106.f}, {"Avant", 82.f}, {"Apr\xC3\xA8s", 82.f}, {"Changement", 116.f}});
         panel_->table().setModel(model_);
         panel_->setRows(std::move(infos));
         if (model_->rowCount() > 0) panel_->table().selectModelRows({0});
