@@ -50,6 +50,8 @@ RegistryView viewOf(const Registry& r) {
         ev.maxDevices = e.maxDevices;
         ev.durationDays = e.durationDays;
         ev.graceDays = e.offlineGraceDays;
+        ev.price = e.price;              // 1.37.0
+        ev.description = e.description;
         ev.retired = e.retired;
         for (const auto& g : e.features) ev.features.push_back(g.id);
         std::sort(ev.features.begin(), ev.features.end());

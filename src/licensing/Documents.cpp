@@ -399,6 +399,8 @@ std::string writeRegistry(const Registry& r) {
         o.set("offline_grace_days", e.offlineGraceDays);
         o.set("features", grantsValue(e.features));
         if (e.retired) o.set("retired", true);
+        if (!e.price.empty()) o.set("price", e.price);              // 1.37.0
+        if (!e.description.empty()) o.set("description", e.description);
         eds.push(std::move(o));
     }
     root.set("editions", std::move(eds));
@@ -482,6 +484,8 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
             g.count("offline_grace_days", e.offlineGraceDays, 0, 3660, true);
             readGrants(g, "features", e.features, true);
             g.boolean("retired", e.retired, false);
+            g.text("price", e.price, false, 60);              // 1.37.0
+            g.text("description", e.description, false, 200);
             g.finish();
             if (!g.ok()) {
                 f.fail(g.error());

@@ -178,18 +178,39 @@ std::string writeStatusContent(const StatusContent& c) {
     if (!c.message.empty()) v.set("message", c.message);
     if (!c.license.empty()) v.set("licence", c.license);
     if (!c.revocations.empty()) v.set("revocations", c.revocations);
+    if (!c.code.empty()) v.set("code", c.code);   // 1.37.0
+    if (!c.onlineLicense.empty()) v.set("licence_en_ligne", c.onlineLicense);
+    if (!c.mail.empty()) v.set("mail", c.mail);
+    if (!c.mailTo.empty()) v.set("mail_a", c.mailTo);
     return json::write(v, false);
 }
 
 bool parseStatusContent(std::string_view text, StatusContent& out, std::string* why) {
     constexpr std::string_view what = "le contenu scell\xC3\xA9";
     json::Value v;
-    if (!readObject(text, v, {"version", "message", "licence", "revocations"}, what, why)) return false;
+    if (!readObject(text, v, {"version", "message", "licence", "revocations", "code", "licence_en_ligne", "mail", "mail_a"}, what, why)) return false;
     StatusContent c;
     if (!readString(v, "message", c.message, false, 2000, what, why) || !readString(v, "licence", c.license, false, 300u * 1024u, what, why) ||
-        !readString(v, "revocations", c.revocations, false, 8u * 1024u * 1024u, what, why))
+        !readString(v, "revocations", c.revocations, false, 8u * 1024u * 1024u, what, why) || !readString(v, "code", c.code, false, 64, what, why) ||
+        !readString(v, "licence_en_ligne", c.onlineLicense, false, 64, what, why) || !readString(v, "mail", c.mail, false, 16, what, why) ||
+        !readString(v, "mail_a", c.mailTo, false, 254, what, why))
         return false;
+    if (!c.mail.empty() && c.mail != kMailSent && c.mail != kMailFailed)
+        return fail(why, std::string(what) + " : l'\xC3\xA9tat du mail " + c.mail + " est inconnu");
     out = std::move(c);
+    return true;
+}
+
+// ============================================================ 1.37.0 : un courriel lisible ==
+bool plausibleEmail(std::string_view s) {
+    if (s.empty() || s.size() > 254) return false;
+    const auto at = s.find('@');
+    if (at == std::string_view::npos || at == 0 || s.find('@', at + 1) != std::string_view::npos) return false;
+    const std::string_view domain = s.substr(at + 1);
+    const auto dot = domain.find('.');
+    if (dot == std::string_view::npos || dot == 0 || domain.back() == '.' || domain.size() < 3) return false;
+    for (unsigned char ch : s)
+        if (ch <= 0x20 || ch == 0x7F || ch == '<' || ch == '>' || ch == '"' || ch == ',' || ch == ';' || ch == '\\') return false;
     return true;
 }
 
@@ -201,17 +222,23 @@ std::string writeOnlineRequest(const OnlineRequest& r) {
     v.set("client", r.customer);
     if (!r.contact.empty()) v.set("contact", r.contact);
     if (!r.message.empty()) v.set("message", r.message);
+    if (!r.edition.empty()) v.set("edition", r.edition);   // 1.37.0
+    if (!r.email.empty()) v.set("courriel", r.email);
     return json::write(v, false);
 }
 
 bool parseOnlineRequest(std::string_view text, OnlineRequest& out, std::string* why) {
     constexpr std::string_view what = "la demande en ligne";
     json::Value v;
-    if (!readObject(text, v, {"version", "demande", "client", "contact", "message"}, what, why)) return false;
+    if (!readObject(text, v, {"version", "demande", "client", "contact", "message", "edition", "courriel"}, what, why)) return false;
     OnlineRequest r;
     if (!readString(v, "demande", r.request, true, 32u * 1024u, what, why) || !readString(v, "client", r.customer, true, 200, what, why) ||
-        !readString(v, "contact", r.contact, false, 200, what, why) || !readString(v, "message", r.message, false, 2000, what, why))
+        !readString(v, "contact", r.contact, false, 200, what, why) || !readString(v, "message", r.message, false, 2000, what, why) ||
+        !readString(v, "edition", r.edition, false, 32, what, why) || !readString(v, "courriel", r.email, false, 254, what, why))
         return false;
+    if (!r.edition.empty() && r.edition.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos)
+        return fail(why, std::string(what) + " : l'\xC3\xA9" "dition voulue n'est pas un identifiant d'\xC3\xA9" "dition");
+    if (!r.email.empty() && !plausibleEmail(r.email)) return fail(why, std::string(what) + " : le courriel n'est pas lisible");
     if (!plainLine(r.customer) || !plainLine(r.contact) || !plainLine(r.message))
         return fail(why, std::string(what) + " : le client, le contact ou le message porte un caract\xC3\xA8re de contr\xC3\xB4le");
     if (r.customer.find_first_not_of(' ') == std::string::npos) return fail(why, std::string(what) + " : le client est vide");

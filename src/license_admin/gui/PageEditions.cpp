@@ -264,6 +264,8 @@ std::vector<std::string> changesOf(const lic::Registry& a, const lic::Registry& 
         if (o->maxDevices != e.maxDevices) what.push_back(std::to_string(e.maxDevices) + " PC");
         if (o->durationDays != e.durationDays) what.push_back("dur\xC3\xA9" "e " + daysText(e.durationDays));
         if (o->offlineGraceDays != e.offlineGraceDays) what.push_back("gr\xC3\xA2" "ce " + std::to_string(e.offlineGraceDays) + " j");
+        if (o->price != e.price) what.push_back("prix " + (e.price.empty() ? std::string("retir\xC3\xA9") : e.price));   // 1.37.0
+        if (o->description != e.description) what.push_back("description");
         std::vector<std::string> plus, minus;
         for (const auto& g : e.features)
             if (!grants(*o, g.id)) plus.push_back("+" + g.id);
@@ -694,6 +696,15 @@ public:
         days_->setPlaceholder("0 : sans fin");
         pcs_->setTooltip("Le nombre de PC qu'une licence neuve de cette \xC3\xA9" "dition peut lier (de 1 \xC3\xA0 100 000).");
         days_->setTooltip("La dur\xC3\xA9" "e d'une licence neuve, en jours ; 0 : sans fin (une licence perp\xC3\xA9tuelle).");
+        // 1.37.0 : la << boutique >> des Studios - le prix (tel que tu l'ecris) et une phrase, montres au client qui choisit
+        price_ = add(*this, std::make_unique<ui::InputText>("editions.prix"));
+        price_->setPlaceholder("490 \xE2\x82\xAC HT / an (vide : pas de prix montr\xC3\xA9)");
+        price_->setMaxLength(60);
+        price_->setTooltip("Le prix montr\xC3\xA9 au client dans la boutique de sa demande de licence (Studio \xE2\x80\xBA Demander ma licence), tel que tu "
+                           "l'\xC3\xA9" "cris. Aucun paiement en ligne : il se r\xC3\xA8gle avec toi.");
+        description_ = add(*this, std::make_unique<ui::InputText>("editions.description"));
+        description_->setPlaceholder("Pour un bureau d'\xC3\xA9tudes (facultatif)");
+        description_->setMaxLength(200);
         grace_ = add(*this, std::make_unique<ui::InputText>("editions.grace"));
         grace_->setTooltip("Apr\xC3\xA8s la fin, les fonctionnalit\xC3\xA9s restent ouvertes ces jours-l\xC3\xA0, le temps d'importer le renouvellement.");
         retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus propos\xC3\xA9" "e)", "editions.retiree"));
@@ -715,6 +726,20 @@ public:
                 edited();
             }
         });
+        const auto textField = [this](ui::InputText* field, const char* key, std::size_t maxBytes, std::string what, std::string lic::EditionDef::*member) {
+            links_ += field->textChanged->connect([this, key, maxBytes, what, member](const std::string& t) {
+                if (loading_) return;
+                const std::string v = trim(t);
+                if (v.size() > maxBytes || !plain(v)) return fieldError(key, what + " : " + std::to_string(maxBytes) + " octets au plus, sans caract\xC3\xA8re de contr\xC3\xB4le");
+                fieldError(key, {});
+                if (auto* e = current(); e && e->*member != v) {
+                    e->*member = v;
+                    edited();
+                }
+            });
+        };
+        textField(price_, "prix", 60, "le prix", &lic::EditionDef::price);
+        textField(description_, "description", 200, "la description", &lic::EditionDef::description);
         links_ += type_->selectionChanged->connect([this](int i) {
             if (loading_ || i < 0) return;
             const auto* item = type_->selectedItem();
@@ -797,6 +822,8 @@ protected:
         };
         row("Libell\xC3\xA9", label_);
         row("Type par d\xC3\xA9" "faut", type_);
+        row("Prix (boutique)", price_);          // 1.37.0
+        row("Description", description_);
         // PC, duree, grace : une ligne, leur libelle au-dessus.
         const float inner = pw2 - 2.f * kGap;
         const float w1 = std::floor(inner * 0.26f), w2 = std::floor(inner * 0.37f), w3 = inner - w1 - w2;
@@ -893,7 +920,7 @@ protected:
     }
 
 private:
-    std::vector<ui::Widget*> panelWidgets() { return {label_, type_, pcs_, days_, grace_, retired_, feats_}; }
+    std::vector<ui::Widget*> panelWidgets() { return {label_, type_, price_, description_, pcs_, days_, grace_, retired_, feats_}; }
 
     lic::EditionDef* current() {
         for (auto& e : draft().reg.editions)
@@ -1041,6 +1068,8 @@ private:
             pcs_->setText(std::to_string(e->maxDevices));
             days_->setText(std::to_string(e->durationDays));
             grace_->setText(std::to_string(e->offlineGraceDays));
+            price_->setText(e->price);               // 1.37.0
+            description_->setText(e->description);
             retired_->setState(e->retired ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
         }
         for (ui::Widget* w : panelWidgets()) w->setEnabled(e != nullptr);
@@ -1081,6 +1110,8 @@ private:
     ui::InputText*        pcs_{nullptr};
     ui::InputText*        days_{nullptr};
     ui::InputText*        grace_{nullptr};
+    ui::InputText*        price_{nullptr};         // 1.37.0
+    ui::InputText*        description_{nullptr};
     ui::Checkbox*         retired_{nullptr};
     ui::TableView*        feats_{nullptr};
     std::shared_ptr<Rows> featsModel_;

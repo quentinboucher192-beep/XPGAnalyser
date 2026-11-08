@@ -109,6 +109,10 @@ struct EditionDef {
     int                       offlineGraceDays{0};
     std::vector<FeatureGrant> features;
     bool                      retired{false};
+    // 1.37.0 (facultatifs, ecrits seulement s'ils sont remplis) : la << boutique >> des Studios - le prix tel que
+    // l'editeur l'ecrit ("490 \xE2\x82\xAC HT / an", 60 caracteres au plus) et une phrase (200 au plus).
+    std::string               price;
+    std::string               description;
 };
 struct Registry {
     int                     version{kFormatVersion};

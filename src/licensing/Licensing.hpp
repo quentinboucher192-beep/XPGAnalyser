@@ -129,6 +129,7 @@ struct RegistryEditionView {
     int                      graceDays{0};
     std::vector<std::string> features;          // les identifiants, tries
     bool                     retired{false};    // retiree : plus accordee par l'Admin
+    std::string              price, description;   // 1.37.0 : la << boutique >> (vides : pas ecrits)
 };
 struct RegistryView {
     std::uint64_t                    number{0};

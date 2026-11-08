@@ -73,7 +73,16 @@ struct StatusContent {
     // la liste de revocation (.xpgrev, signee, telle quelle) - scellee pour le PC concerne, jamais transmise en clair
     // (ses raisons sont du texte libre) ; vide : aucune
     std::string revocations;
+    // 1.37.0 : une demande acceptee EN LIGNE (une licence a code) : le code d'activation, scelle pour ce PC (il s'active
+    // tout seul), l'identifiant de la licence en ligne ; et le mail que l'editeur a envoye au client - "envoye", "echec"
+    // (le Studio le dit et demande de verifier l'adresse), vide : pas de mail (pas d'adresse, pas de mail regle).
+    std::string code;
+    std::string onlineLicense;
+    std::string mail;
+    std::string mailTo;
 };
+inline constexpr const char* kMailSent = "envoye";
+inline constexpr const char* kMailFailed = "echec";
 [[nodiscard]] std::string writeStatusContent(const StatusContent& c);
 bool parseStatusContent(std::string_view json, StatusContent& out, std::string* why);
 
@@ -86,7 +95,13 @@ struct OnlineRequest {
     std::string customer;             // le nom du client (la societe), donne par l'utilisateur
     std::string contact;              // facultatif : un courriel, un telephone
     std::string message;              // facultatif : un mot pour l'editeur
+    // 1.37.0 (facultatifs) : l'edition voulue (son identifiant au registre, la << boutique >> du Studio) et le courriel
+    // du client (le mail de l'editeur a l'acceptation).
+    std::string edition;
+    std::string email;
 };
+// 1.37.0 : un courriel lisible (un seul @, un domaine avec un point, 254 caracteres au plus, sans espace ni controle).
+[[nodiscard]] bool plausibleEmail(std::string_view s);
 [[nodiscard]] std::string writeOnlineRequest(const OnlineRequest& r);
 bool parseOnlineRequest(std::string_view json, OnlineRequest& out, std::string* why);
 
