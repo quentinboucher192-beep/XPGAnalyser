@@ -147,8 +147,7 @@ std::string upperFirst(std::string s) {
 }
 
 void boldText(gfx::IRenderer& r, gfx::Point at, std::string_view t, gfx::FontId f, gfx::Color c) {
-    r.drawText(at, t, f, c);
-    r.drawText({at.x + 0.6f, at.y}, t, f, c);
+    r.drawText(at, t, gfx::semibold(f), c);   // 1.41.0 : la demi-grasse (Inter)
 }
 
 std::string countBadge(int n) { return "\xC3\x97" + std::to_string(n); }

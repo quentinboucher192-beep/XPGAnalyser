@@ -573,6 +573,8 @@ public:
     void setSelectionMode(SelectionMode m) { selectionMode_ = m; }
     void setAlternatingRowColors(bool a) { altRows_ = a; invalidate(); }
     void setFrozenColumns(std::size_t n) { frozen_ = n; invalidateLayout(); }
+    // 1.41.0 : la hauteur des lignes (0 : celle du theme) - une liste aeree (les licences de l'Admin).
+    void setRowHeightOverride(float h) { rowOverride_ = h; invalidate(); }
     // 1.13.0 : faux - un double-clic active la ligne meme sur une case editable (F2 l'edite toujours) ; vrai (defaut) :
     // un double-clic edite une case editable.
     void setDoubleClickEdits(bool on) noexcept { doubleClickEdits_ = on; }
@@ -893,6 +895,7 @@ private:
     std::vector<RowIndex>        selection_;   // model rows, stable across sorting
     FilterChain                  filter_;
     std::size_t                  sortColumn_{0}, frozen_{0};
+    float                        rowOverride_{0.f};   // 1.41.0
     SortOrder                    sortOrder_{SortOrder::None};
     SelectionMode                selectionMode_{SelectionMode::Extended};
     bool                         doubleClickEdits_{true};     // 1.13.0 : setDoubleClickEdits

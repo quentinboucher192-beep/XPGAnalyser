@@ -62,8 +62,7 @@ gfx::Color badgeColor(const ui::Theme& th, const std::string& badge) {
 
 // ------------------------------------------------------------------ texte ----
 void drawBold(gfx::IRenderer& r, gfx::Point at, std::string_view s, gfx::FontId f, gfx::Color c) {
-    r.drawText(at, s, f, c);
-    r.drawText({at.x + 0.6f, at.y}, s, f, c);
+    r.drawText(at, s, gfx::semibold(f), c);   // 1.41.0 : la demi-grasse (Inter)
 }
 
 // Le texte a la largeur, termine par ... s'il ne tient pas.

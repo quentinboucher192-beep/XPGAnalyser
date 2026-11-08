@@ -34,6 +34,7 @@ namespace ui {
         void setCompact(bool compact);
         [[nodiscard]] bool compact() const noexcept { return compact_ && icon_ != Icon::None; }
         void setStyle(Style s) { style_ = s; invalidate(); }
+        [[nodiscard]] Style style() const noexcept { return style_; }   // 1.41.0
         void setAction(core::ActionId a) { action_ = a; }   // toolbar buttons bind to the action table
         [[nodiscard]] const std::string& text() const noexcept { return text_; }
         [[nodiscard]] core::ActionId action() const noexcept { return action_; }
@@ -1029,6 +1030,8 @@ namespace ui {
             // dans ta licence >> a droite. L'entree reste choisissable (enabled) :
             // le clic va au controle de la licence, qui dit pourquoi (une fenetre).
             bool        locked{ false };
+            // 1.41.0 : UN GESTE DANGEREUX (revoquer, supprimer, desactiver) - le libelle et l'icone en rouge.
+            bool        danger{ false };
         };
 
         explicit PopupMenu(std::string id = {});

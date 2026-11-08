@@ -4352,9 +4352,17 @@ namespace ui {
                              float rowHeight, int hotIndex, int openIndex, bool scrolls, float scroll, float maxScroll,
                              bool cues) {
             const auto& c = ctx.theme.color;
-            ctx.r.fillRect({ box.x + 2.f, box.y + 2.f, box.w, box.h }, gfx::Color{ 0, 0, 0, 90 });   // shadow
-            ctx.r.fillRect(box, c.panelBg);
-            ctx.r.strokeRect(box, c.borderStrong, 1.f);
+            // 1.41.0 : arrondi comme le reste (un theme aux coins droits : comme avant), l'ombre plus douce.
+            const float rad = std::min(ctx.theme.metric.radius + 2.f, 10.f);
+            if (rad < 1.5f) {
+                ctx.r.fillRect({ box.x + 2.f, box.y + 2.f, box.w, box.h }, gfx::Color{ 0, 0, 0, 90 });   // shadow
+                ctx.r.fillRect(box, c.panelBg);
+                ctx.r.strokeRect(box, c.borderStrong, 1.f);
+            } else {
+                ctx.r.fillRoundedRect({ box.x - 1.f, box.y + 2.f, box.w + 2.f, box.h + 3.f }, gfx::Color{ 15, 23, 42, 22 }, rad + 1.f);
+                ctx.r.fillRoundedRect({ box.x, box.y + 1.f, box.w, box.h + 1.f }, gfx::Color{ 15, 23, 42, 26 }, rad);
+                shapes::fillFramedRect(ctx.r, box, c.panelBg, c.border, rad);
+            }
 
             const float lh = ctx.r.lineHeight(ctx.theme.font.ui);
             const auto mn = cues ? mnemonicsOf(items) : std::vector<Mnemonic>{};
@@ -4381,8 +4389,7 @@ namespace ui {
                     ctx.r.fillRect(row, c.headerBg);
                     const gfx::FontId f = first ? ctx.theme.font.ui : ctx.theme.font.smallUi;
                     const float fh = ctx.r.lineHeight(f);
-                    ctx.r.drawText({ row.x + kMenuPadding, row.y + (h - fh) * 0.5f }, item.label, f, first ? c.text : c.textMuted);
-                    if (first) ctx.r.drawText({ row.x + kMenuPadding + 0.6f, row.y + (h - fh) * 0.5f }, item.label, f, c.text);
+                    ctx.r.drawText({ row.x + kMenuPadding, row.y + (h - fh) * 0.5f }, item.label, first ? gfx::semibold(f) : f, first ? c.text : c.textMuted);   // 1.41.0
                     if (!item.shortcut.empty()) {
                         const float w = measureWidth(item.shortcut, kFontUi);
                         ctx.r.drawText({ row.right() - kMenuPadding - w, row.y + (h - lh) * 0.5f }, item.shortcut, ctx.theme.font.ui, c.textMuted);
@@ -4392,9 +4399,14 @@ namespace ui {
                 }
                 const float ch = item.note.empty() ? h : rowHeight;   // 1.12.18 : la ligne du libelle (la note dessous)
                 const bool hot = (static_cast<int>(i) == hotIndex || static_cast<int>(i) == openIndex) && item.enabled;
-                if (hot) ctx.r.fillRect(row, c.selectionBg);
+                if (hot) {
+                    if (rad < 1.5f) ctx.r.fillRect(row, c.selectionBg);
+                    else ctx.r.fillRoundedRect(row.inset(4.f, 1.f), item.danger ? c.error.withAlpha(24) : c.selectionBg, std::max(2.f, rad - 3.f));
+                }
 
+                // 1.41.0 : un geste dangereux (revoquer, supprimer) en rouge.
                 const gfx::Color fg = !item.enabled ? c.textDisabled
+                    : item.danger ? c.error
                     : (hot ? c.selectionText : (item.locked ? c.textMuted : c.text));
 
                 if (item.checkable || item.radio) {

@@ -1035,8 +1035,7 @@ void MacroFormView::onPaint(const ui::PaintContext& ctx) {
         }
         float ly = ry + 2.f;
         for (const auto& l : row->labelLines) {
-            ctx.r.drawText({b.x + pad, ly}, l, kLabel, c.text);
-            ctx.r.drawText({b.x + pad + 0.6f, ly}, l, kLabel, c.text);   // gras simule
+            ctx.r.drawText({b.x + pad, ly}, l, gfx::semibold(kLabel), c.text);   // 1.41.0 : la demi-grasse
             ly += 20.f;
         }
         for (const auto& l : row->helpLines) {

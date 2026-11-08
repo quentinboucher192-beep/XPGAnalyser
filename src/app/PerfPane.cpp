@@ -651,16 +651,14 @@ void PerfPane::onPaint(const ui::PaintContext& ctx) {
         }
         const float tw = ctx.r.measure(h.label, kSmall).width;
         const gfx::Point at{h.r.x + (h.r.w - tw) * 0.5f, textY(ctx, h.r, kSmall)};
-        ctx.r.drawText(at, h.label, kSmall, c.text);
-        if (on) ctx.r.drawText({at.x + 0.6f, at.y}, h.label, kSmall, c.text);   // le gras du logiciel
+        ctx.r.drawText(at, h.label, on ? gfx::semibold(kSmall) : kSmall, c.text);   // 1.41.0 : la demi-grasse
     }
     // ---- le resume
     if (summary_.w > 0.f) {
         const gfx::Rect l1{summary_.x, summary_.y, summary_.w, kLine};
         const gfx::Rect l2{summary_.x, summary_.y + kLine, summary_.w, kLine};
         const std::string a = fit(ctx, line1_, kBody, summary_.w);
-        ctx.r.drawText({l1.x, textY(ctx, l1, kBody)}, a, kBody, c.text);
-        ctx.r.drawText({l1.x + 0.6f, textY(ctx, l1, kBody)}, a, kBody, c.text);
+        ctx.r.drawText({l1.x, textY(ctx, l1, kBody)}, a, gfx::semibold(kBody), c.text);   // 1.41.0
         ctx.r.drawText({l2.x, textY(ctx, l2, kSmall)}, fit(ctx, line2_, kSmall, summary_.w), kSmall, c.textMuted);
     }
     paintChart(ctx);

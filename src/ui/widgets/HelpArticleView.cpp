@@ -1138,7 +1138,7 @@ void HelpArticleView::rebuild(const PaintContext* ctx) {
             }
         };
         m.measure = [&r, &th](std::string_view t, bool bold, bool mono) {
-            return r.measure(t, mono ? th.font.mono : (bold ? th.font.uiBold : th.font.ui)).width;
+            return r.measure(t, mono ? th.font.mono : (bold ? gfx::semibold(th.font.ui) : th.font.ui)).width;   // 1.41.0 : la demi-grasse
         };
         m.measureFont = [&r, fontOf](std::string_view t, HelpFont f) {
             return r.measure(t, fontOf(f)).width;
@@ -1362,11 +1362,8 @@ void HelpArticleView::onPaint(const PaintContext& ctx) {
         if (run.syntax != 0xFF) colour = ui::colorFor(static_cast<TokenClass>(run.syntax), th.color);
         else if (run.role == HelpRole::Custom && (run.color.a != 0 || run.tone != Tone::None))
             colour = th.onSurface(th.tone(run.tone, run.color));
-        ctx.r.drawText({r.x + run.x, y}, run.text, font, colour);
-        // Le faux gras : le meme texte, un pixel plus loin. Il n'y a pas de
-        // face grasse, et un titre qui n'a que sa taille pour se distinguer
-        // se confond avec un paragraphe au premier coup d'oeil.
-        if (run.fauxBold) ctx.r.drawText({r.x + run.x + 0.7f, y}, run.text, font, colour);
+        // 1.41.0 : le gras d'un titre, la vraie demi-grasse (Inter) - le faux gras (le texte deux fois) bavait.
+        ctx.r.drawText({r.x + run.x, y}, run.text, run.fauxBold ? gfx::semibold(font) : font, colour);
     }
 
     // "Copie" : le bouton repond sur place pendant un peu plus d'une seconde.

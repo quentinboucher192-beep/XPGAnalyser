@@ -68,8 +68,7 @@ std::vector<std::string> wrap(const ui::PaintContext& ctx, const std::string& te
 }
 
 void drawBold(const ui::PaintContext& ctx, gfx::Point at, const std::string& s, gfx::FontId f, gfx::Color c) {
-    ctx.r.drawText(at, s, f, c);
-    ctx.r.drawText({at.x + 0.6f, at.y}, s, f, c);
+    ctx.r.drawText(at, s, gfx::semibold(f), c);   // 1.41.0 : la demi-grasse (Inter)
 }
 
 gfx::Rect button(const ui::PaintContext& ctx, float right, float cy, const std::string& label, bool hot, bool primary) {

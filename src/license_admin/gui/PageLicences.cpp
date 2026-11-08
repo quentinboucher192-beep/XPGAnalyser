@@ -25,6 +25,7 @@
 #include "Page.hpp"
 
 #include "../ArchiveSync.hpp"
+#include "../../ui/Shapes.hpp"   // 1.41.0 : les cadres arrondis
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -57,7 +58,6 @@ namespace fs = std::filesystem;
 using licensing::LicenseType;
 using PG = ui::PropertyGrid;
 
-constexpr float kPad = 16.f;
 constexpr Seconds kDaySeconds = 86400;
 
 fs::path P(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
@@ -138,6 +138,65 @@ float buttonWidth(ui::Widget& b, float minimum) { return std::max(minimum, b.siz
 
 enum class Filter : int { All = 0, Active = 1, Expired = 2, Revoked = 3 };
 
+// 1.41.0 : UNE PASTILLE DE FILTRE (la maquette) - << Toutes 3 >> : choisie, l'encre pleine et le texte blanc ; sinon
+// blanche, bordee. Son texte reste << Toutes (3) >> (ce que lisent les essais et les lecteurs d'ecran).
+class FilterChip final : public ui::Button {
+public:
+    explicit FilterChip(std::string id) : ui::Button("", std::move(id)) {}
+    void setOn(bool on) {
+        if (on_ != on) { on_ = on; invalidate(); }
+    }
+    [[nodiscard]] ui::SizeHint sizeHint() const override {
+        ui::SizeHint h;
+        h.preferred = {ui::measureWidth(text(), gfx::semibold(gfx::FontId{13})) + 26.f, 34.f};
+        h.minimum = h.preferred;
+        return h;
+    }
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& c = ctx.theme.color;
+        const gfx::Rect r = bounds();
+        const std::string& t = text();
+        const auto open = t.rfind(" (");
+        const std::string label = open == std::string::npos ? t : t.substr(0, open);
+        const std::string count = open == std::string::npos || t.size() < open + 3 ? std::string() : t.substr(open + 2, t.size() - open - 3);
+        const gfx::Color fill = on_ ? c.text : hovered() ? c.rowAltBg : c.panelBg;
+        ui::shapes::fillFramedRect(ctx.r, r, fill, on_ ? c.text : c.border, r.h * 0.5f);
+        const gfx::FontId fl = gfx::semibold(gfx::FontId{13}), fc = gfx::FontId{12};
+        const float lw = ctx.r.measure(label, fl).width, cw = count.empty() ? 0.f : ctx.r.measure(count, fc).width + 6.f;
+        float x = r.x + (r.w - lw - cw) * 0.5f;
+        ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(fl)) * 0.5f}, label, fl, on_ ? c.textInverted : c.text);
+        x += lw + 6.f;
+        if (!count.empty())
+            ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(fc)) * 0.5f + 1.f}, count, fc, on_ ? c.textInverted.withAlpha(190) : c.textMuted);
+    }
+
+private:
+    bool on_{false};
+};
+
+// 1.41.0 : la carte de la maquette (blanche, coins de 12, un trait, une ombre a peine).
+void cardBox(gfx::IRenderer& r, const ui::Theme& th, const gfx::Rect& box) {
+    if (box.empty()) return;
+    r.fillRoundedRect({box.x, box.y + 1.f, box.w, box.h + 1.f}, th.brand.cardShadow, 12.f);
+    r.fillRoundedRect(box, th.brand.cardBorder, 12.f);
+    r.fillRoundedRect(box.inset(1.f, 1.f), th.brand.card, 11.f);
+}
+
+// Les initiales d'un client (l'avatar de la fiche) : << Atelier Meyer >> -> << AM >>.
+std::string initialsOf(const std::string& name) {
+    std::string out;
+    bool start = true;
+    for (std::size_t i = 0; i < name.size() && out.size() < 2; ++i) {
+        const unsigned char ch = static_cast<unsigned char>(name[i]);
+        if (ch == ' ' || ch == '-' || ch == '\'') { start = true; continue; }
+        if (start && std::isalnum(ch)) out += static_cast<char>(std::toupper(ch));
+        start = false;
+    }
+    return out.empty() ? std::string("?") : out;
+}
+
 bool inFilter(const LicenceEntry& l, Filter f) {
     switch (f) {
         case Filter::All: return true;
@@ -158,51 +217,64 @@ const licensing::Revocation* deviceRevocation(const Workspace& ws, const licensi
 class LicencesPage final : public Page {
 public:
     explicit LicencesPage(ShellHost host) : Page("licences", std::move(host)) {
-        new_ = &button(*this, "Nouvelle licence\xE2\x80\xA6", "licences.nouvelle", ui::Button::Style::Primary);
+        // 1.41.0 : UNE ACTION PRINCIPALE PAR ECRAN (la maquette validee) - << Nouvelle licence >> est en haut de la fenetre ;
+        // la fiche de la licence choisie montre trois boutons (Prolonger ou Ajouter un PC, Exporter, le code) ; le reste
+        // est dans son menu << ... >> (le dangereux en rouge). Ces boutons-la vivent dans un support jamais dessine : le
+        // menu les nomme, montre ceux qui servent et declenche leur clic.
+        holder_ = &adopt(*this, std::make_unique<ui::Widget>("licences.menu.boutons"));
+        holder_->setVisibility(ui::Visibility::Collapsed);
+        new_ = &button(*holder_, "Nouvelle licence\xE2\x80\xA6", "licences.nouvelle", ui::Button::Style::Primary);
         new_->setTooltip("L'assistant : les demandes des PC, le client, l'\xC3\xA9" "dition, les fonctionnalit\xC3\xA9s, puis signer");
         newOnline_ = &button(*this, "Nouvelle licence en ligne\xE2\x80\xA6", "licences.nouvelle-en-ligne");
         newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste) aupr\xC3\xA8s du service des licences");
-        refreshOnline_ = &button(*this, "Relever", "licences.relever");
+        refreshOnline_ = &button(*holder_, "Relever", "licences.relever");
         refreshOnline_->setIcon(ui::Icon::Refresh);
         // 1.40.0 : l'application le fait seule (le regard en direct : un PC active ou libere apparait sans clic)
         refreshOnline_->setTooltip("Lit tout de suite sur le service les activations des licences en ligne (les PC, vu le, bail jusqu'au). "
                                    "L'application le fait seule d\xC3\xA8s qu'un PC est activ\xC3\xA9 ou lib\xC3\xA9r\xC3\xA9 (en direct).");
         showCode_ = &button(*this, "Voir le code\xE2\x80\xA6", "licences.voir-code");   // 1.37.0
         showCode_->setTooltip("Le code d'activation de la licence en ligne choisie, gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ce compte Windows)");
-        newCode_ = &button(*this, "Nouveau code\xE2\x80\xA6", "licences.nouveau-code");
+        newCode_ = &button(*holder_, "Nouveau code\xE2\x80\xA6", "licences.nouveau-code");
         newCode_->setTooltip("Un code d'activation neuf pour la licence en ligne choisie : l'ancien ne marche plus (les PC d\xC3\xA9j\xC3\xA0 activ\xC3\xA9s restent)");
-        active_ = &button(*this, "D\xC3\xA9sactiver\xE2\x80\xA6", "licences.desactiver", ui::Button::Style::Danger);
+        active_ = &button(*holder_, "D\xC3\xA9sactiver\xE2\x80\xA6", "licences.desactiver", ui::Button::Style::Danger);
         active_->setTooltip("La licence en ligne ne s'active plus et ses PC ne sont plus renouvel\xC3\xA9s (chacun s'arr\xC3\xAAte \xC3\xA0 la fin de son bail)");
-        addPc_ = &button(*this, "Ajouter un PC\xE2\x80\xA6", "licences.ajouter-pc");
+        addPc_ = &button(*this, "Ajouter un PC\xE2\x80\xA6", "licences.ajouter-pc", ui::Button::Style::Primary);   // 1.41.0 : l'action de la fiche
         addPc_->setTooltip("Lier de nouveaux PC \xC3\xA0 la licence choisie (ses PC li\xC3\xA9s sont gard\xC3\xA9s) ; la r\xC3\xA9-\xC3\xA9mettre");
         export_ = &button(*this, "Exporter le fichier\xE2\x80\xA6", "licences.exporter");
         export_->setTooltip("Le .xpglic de la licence choisie, \xC3\xA0 renvoyer au client");
-        revoke_ = &button(*this, "R\xC3\xA9voquer\xE2\x80\xA6", "licences.revoquer", ui::Button::Style::Danger);
+        revoke_ = &button(*holder_, "R\xC3\xA9voquer\xE2\x80\xA6", "licences.revoquer", ui::Button::Style::Danger);
         revoke_->setTooltip("Toute la licence choisie, ou un de ses PC");
         // 1.38.0 : supprimer une licence revoquee (la corbeille de l'outil ; sa revocation reste).
-        delete_ = &button(*this, "Supprimer\xE2\x80\xA6", "licences.supprimer", ui::Button::Style::Danger);
+        delete_ = &button(*holder_, "Supprimer\xE2\x80\xA6", "licences.supprimer", ui::Button::Style::Danger);
         delete_->setTooltip("La licence r\xC3\xA9voqu\xC3\xA9" "e choisie quitte la liste (son fichier va dans la corbeille de l'outil) ; sa r\xC3\xA9vocation reste en vigueur");
         // 1.33.0 : retirer un PC de la licence (un PC remplace ou rendu) : une nouvelle emission sans lui.
-        dropPc_ = &button(*this, "Retirer un PC\xE2\x80\xA6", "licences.retirer-pc");
+        dropPc_ = &button(*holder_, "Retirer un PC\xE2\x80\xA6", "licences.retirer-pc");
         dropPc_->setTooltip("Le PC choisi dans la liste des PC : une nouvelle \xC3\xA9mission de la licence sans lui (m\xC3\xAA" "me fin), \xC3\xA0 renvoyer au client");
-        folder_ = &button(*this, "Ouvrir le dossier de l'archive", "licences.dossier");
+        folder_ = &button(*holder_, "Ouvrir le dossier de l'archive", "licences.dossier");
+        more_ = &button(*this, "\xE2\x80\xA6", "licences.plus");
+        more_->setTooltip("Les autres gestes sur cette licence : nouveau code, retirer un PC, d\xC3\xA9sactiver, r\xC3\xA9voquer, le dossier de l'archive\xE2\x80\xA6");
+        menu_ = &adopt(*this, std::make_unique<ui::PopupMenu>("licences.menu"));
+        links_ += more_->clicked->connect([this] { openMore(); });
+        links_ += menu_->itemChosen->connect([this](int id) {
+            if (id >= 0 && static_cast<std::size_t>(id) < menuButtons_.size() && menuButtons_[static_cast<std::size_t>(id)]->enabled())
+                menuButtons_[static_cast<std::size_t>(id)]->clicked->emit();
+        });
         search_ = &adopt(*this, std::make_unique<ui::InputText>("licences.recherche"));
-        search_->setPlaceholder("Chercher : identifiant, client, \xC3\xA9" "dition");
+        search_->setPlaceholder("Identifiant, client, \xC3\xA9" "dition\xE2\x80\xA6");
         search_->setEscapeClears(true);
         const char* chipIds[4] = {"licences.filtre.toutes", "licences.filtre.actives", "licences.filtre.expirees", "licences.filtre.revoquees"};
         for (int i = 0; i < 4; ++i) {
-            chips_[i] = &button(*this, "", chipIds[i]);
+            chips_[i] = &adopt(*this, std::make_unique<FilterChip>(chipIds[i]));
             links_ += chips_[i]->clicked->connect([this, i] { setFilter(static_cast<Filter>(i)); });
         }
 
-        auto split = std::make_unique<ui::Splitter>(ui::Orientation::Vertical, "licences.separation");
         auto table = std::make_unique<ui::TableView>("licences.table");
+        table->setRowHeightOverride(40.f);   // 1.41.0 : une liste aeree
         table->setSelectionMode(ui::SelectionMode::Single);
         table->setAlternatingRowColors(true);
         table->setColumns({{"ID", 140.f}, {"Client", 190.f}, {"\xC3\x89" "dition", 130.f}, {"Type", 120.f}, {"PC", 70.f}, {"\xC3\x89mise le", 105.f},
                            {"Fin", 105.f}, {"\xC3\x89tat", 220.f}});
         table_ = table.get();
-        auto bottom = std::make_unique<ui::Splitter>(ui::Orientation::Horizontal, "licences.detail");
         auto details = std::make_unique<ui::PropertyGrid>("licences.details");
         details->setShowDescriptionPane(false);
         details_ = details.get();
@@ -210,11 +282,10 @@ public:
         pcs->setSelectionMode(ui::SelectionMode::Single);
         pcs->setColumns({{"PC", 160.f}, {"\xC3\x89tat", 230.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 120.f}});
         pcs_ = pcs.get();
-        bottom->addPane(std::move(details), 0.45f, 220.f);
-        bottom->addPane(std::move(pcs), 0.55f, 200.f);
-        split->addPane(std::move(table), 0.55f, 110.f);
-        split->addPane(std::move(bottom), 0.45f, 140.f);
-        split_ = &adopt(*this, std::move(split));
+        pcs->setRowHeightOverride(34.f);
+        adopt(*this, std::move(table));
+        adopt(*this, std::move(pcs));
+        adopt(*this, std::move(details));
 
         links_ += new_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {})); });
         links_ += newOnline_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {}, {}, {}, true)); });
@@ -257,7 +328,7 @@ public:
         const char* names[4] = {"Toutes", "Actives", "Expir\xC3\xA9" "es", "R\xC3\xA9voqu\xC3\xA9" "es"};
         for (int f = 0; f < 4; ++f) {
             chips_[f]->setText(std::string(names[f]) + " (" + std::to_string(counts[f]) + ")");
-            chips_[f]->setStyle(static_cast<int>(filter_) == f ? ui::Button::Style::Primary : ui::Button::Style::Default);
+            chips_[f]->setOn(static_cast<int>(filter_) == f);
         }
         invalidateLayout();
         rebuild();
@@ -273,79 +344,261 @@ public:
     }
 
 protected:
+    // 1.41.0 : LA MISE EN PAGE DE LA MAQUETTE - le titre et sa ligne, la recherche et les pastilles des filtres, la liste
+    // a gauche (des lignes aerees, dans une carte), la fiche de la licence choisie a droite (une carte : qui, l'etat,
+    // trois boutons et << ... >>, les chiffres, ses PC, le detail).
     void onLayout() override {
         const auto r = bounds();
-        const float x = r.x + kPad, w = std::max(200.f, r.w - 2.f * kPad);
-        actionsY_ = r.y + kPad + 64.f;
-        float bx = x;
-        float rowY = actionsY_;
-        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, showCode_, newCode_, active_, refreshOnline_, revoke_, delete_, folder_}) {
-            if (b->visibility() == ui::Visibility::Collapsed) continue;
-            const float bw = buttonWidth(*b, 96.f);
-            if (bx > x && bx + bw > x + w) {   // trop etroit : la suite sur une deuxieme ligne
-                bx = x;
-                rowY += 40.f;
-            }
-            b->setBounds({bx, rowY, bw, 32.f});
-            bx += bw + 8.f;
-        }
-        filterY_ = rowY + 44.f;
-        const float sw = std::min(360.f, std::max(180.f, w * 0.35f));
-        search_->setBounds({x, filterY_, sw, 30.f});
+        const float pad = r.w < 900.f ? 20.f : 28.f;
+        const float x = r.x + pad, w = std::max(200.f, r.w - 2.f * pad);
+        const bool compact = r.h < 640.f;
+        // En tete, a droite : la licence en ligne (la principale est en haut de la fenetre).
+        const float nw = buttonWidth(*newOnline_, 120.f) + 8.f;
+        newOnline_->setBounds({x + w - nw, r.y + (compact ? 18.f : 26.f) + 4.f, nw, 34.f});
+        filterY_ = r.y + (compact ? 84.f : 100.f);
+        const float sw = std::min(320.f, std::max(180.f, w * 0.28f));
+        search_->setBounds({x, filterY_, sw, 34.f});
         float cx = x + sw + 12.f;
         for (auto* c : chips_) {
-            const float cw = buttonWidth(*c, 70.f);
-            c->setBounds({cx, filterY_, cw, 30.f});
-            cx += cw + 6.f;
+            const float cw = c->sizeHint().preferred.w;
+            c->setBounds({cx, filterY_, cw, 34.f});
+            cx += cw + 8.f;
         }
-        const float top = filterY_ + 42.f;
-        split_->setBounds({x, top, w, std::max(160.f, r.bottom() - kPad - top)});
+        const float top = filterY_ + 50.f, bottom = r.bottom() - 18.f;
+        const float rightW = std::clamp(w * 0.36f, 340.f, 460.f);
+        const float leftW = std::max(260.f, w - rightW - 16.f);
+        listRect_ = {x, top, leftW, std::max(120.f, bottom - top)};
+        table_->setBounds(listRect_.inset(1.f, 1.f));
+        // Les colonnes a la largeur de la liste : le type et l'emission sont dans la fiche ; etroite, l'edition puis la
+        // fin s'effacent aussi (le modele garde toutes les colonnes).
+        const float listW = listRect_.w - 2.f - 14.f;
+        if (std::abs(listW - columnsFor_) > 1.f) {
+            columnsFor_ = listW;
+            const bool edition = listW >= 520.f, end = listW >= 660.f;
+            const float fixed = 124.f + (edition ? 124.f : 0.f) + 92.f + (end ? 96.f : 0.f);
+            const float rest = std::max(200.f, listW - fixed);
+            std::vector<ui::TableView::Column> cols = {{"ID", 124.f}, {"Client", std::floor(rest * 0.6f)}, {"\xC3\x89" "dition", 124.f}, {"Type", 120.f},
+                                                       {"PC", 92.f}, {"\xC3\x89mise le", 105.f}, {"Fin", 96.f}, {"\xC3\x89tat", std::floor(rest * 0.4f)}};
+            cols[2].visible = edition;
+            cols[3].visible = false;
+            cols[5].visible = false;
+            cols[6].visible = end;
+            table_->setColumns(std::move(cols));
+        }
+        cardRect_ = {x + leftW + 16.f, top, rightW, std::max(120.f, bottom - top)};
+        // La fiche.
+        const float cx0 = cardRect_.x + 18.f, cw0 = cardRect_.w - 36.f;
+        headY_ = cardRect_.y + 18.f;
+        float by = headY_ + 58.f;
+        // Les trois boutons de la fiche, a leur largeur ; serres ensemble s'il le faut (jamais sur << ... >>).
+        const float moreW = 38.f;
+        std::vector<ui::Button*> row;
+        std::vector<float> natural;
+        float sum = 0.f;
+        for (ui::Button* b : {addPc_, export_, showCode_})
+            if (b->visibility() != ui::Visibility::Collapsed) {
+                row.push_back(b);
+                natural.push_back(buttonWidth(*b, 80.f) + 8.f);
+                sum += natural.back();
+            }
+        const float gaps = 8.f * static_cast<float>(row.empty() ? 0 : row.size() - 1);
+        const float room = cw0 - moreW - 8.f - gaps;
+        const float k = sum > room && sum > 0.f ? room / sum : 1.f;
+        float bx = cx0;
+        for (std::size_t i = 0; i < row.size(); ++i) {
+            const float bw = std::floor(natural[i] * k);
+            row[i]->setBounds({bx, by, bw, 34.f});
+            bx += bw + 8.f;
+        }
+        more_->setBounds({cx0 + cw0 - moreW, by, moreW, 34.f});
+        menu_->setBounds(r);   // le menu << ... >> se dessine par-dessus la page (son cadre : toute la page)
+        statsY_ = by + 50.f;
+        const float statsH = compact ? 96.f : 112.f;
+        pcsTitleY_ = statsY_ + statsH + 14.f;
+        const float avail = cardRect_.bottom() - 14.f - (pcsTitleY_ + 28.f);
+        const float pcsH = std::clamp(avail * 0.45f, 70.f, 34.f * 4.f + 30.f);
+        pcs_->setBounds({cardRect_.x + 1.f, pcsTitleY_ + 28.f, cardRect_.w - 2.f, pcsH});
+        fitPcsColumns();
+        detailTitleY_ = pcsTitleY_ + 28.f + pcsH + 12.f;
+        details_->setBounds({cardRect_.x + 1.f, detailTitleY_ + 26.f, cardRect_.w - 2.f, std::max(40.f, cardRect_.bottom() - 10.f - (detailTitleY_ + 26.f))});
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
         auto& r = ctx.r;
-        const auto& c = ctx.theme.color;
+        const auto& th = ctx.theme;
+        const auto& c = th.color;
         const auto b = bounds();
-        r.fillRect(b, c.panelBg);
-        const float x = b.x + kPad, w = b.w - 2.f * kPad;
-        r.drawText({x, b.y + kPad}, title(), ctx.theme.font.title, c.text);
-        r.drawText({x, b.y + kPad + 36.f},
-                   fit(r, "Chaque licence sign\xC3\xA9" "e, rang\xC3\xA9" "e dans l'archive. Choisis-en une pour voir ses PC ; Nouvelle licence\xE2\x80\xA6 pour en signer une.",
-                       ctx.theme.font.ui, w),
-                   ctx.theme.font.ui, c.textMuted);
+        r.fillRect(b, c.windowBg);
+        const float pad = b.w < 900.f ? 20.f : 28.f;
+        const float x = b.x + pad, w = b.w - 2.f * pad;
+        const bool compact = b.h < 640.f;
+        const float ty = b.y + (compact ? 18.f : 26.f);
+        r.drawText({x, ty}, title(), gfx::semibold(gfx::FontId{28}), c.text);
+        // La ligne sous le titre : combien, et les PC.
         const auto& list = ws().licences();
-        const std::string count = std::to_string(shownIds_.size()) + (shownIds_.size() == list.size() ? "" : " sur " + std::to_string(list.size()))
-                                  + (list.size() > 1 ? " licences" : " licence");
-        const float cw = r.measure(count, ctx.theme.font.ui).width;
-        const float after = chips_[3]->bounds().right() + 12.f;
-        if (b.right() - kPad - cw > after)
-            r.drawText({b.right() - kPad - cw, filterY_ + (30.f - r.lineHeight(ctx.theme.font.ui)) * 0.5f}, count, ctx.theme.font.ui, c.textMuted);
+        int linked = 0, places = 0;
+        for (const auto& l : list)
+            if (!l.revoked && !l.expired && !Workspace::isOnlineLicence(l.licence)) {
+                linked += static_cast<int>(l.licence.devices.size());
+                places += l.licence.maxDevices;
+            }
+        std::string lead = std::to_string(list.size()) + (list.size() > 1 ? " licences" : " licence");
+        if (places > 0) lead += " \xC2\xB7 " + std::to_string(linked) + " PC li\xC3\xA9s sur " + std::to_string(places) + " places";
+        if (shownIds_.size() != list.size()) lead += " \xC2\xB7 " + std::to_string(shownIds_.size()) + " montr\xC3\xA9" "es";
+        r.drawText({x, ty + 40.f}, fit(r, lead, gfx::FontId{14}, w - newOnline_->bounds().w - 16.f), gfx::FontId{14}, c.textMuted);
+
+        cardBox(r, th, listRect_);
+        cardBox(r, th, cardRect_);
+        const LicenceEntry* e = selected();
+        if (!e) return;
+        const auto& l = e->licence;
+        const float cx0 = cardRect_.x + 18.f, cw0 = cardRect_.w - 36.f;
+        // Qui : l'avatar (les initiales), le client, l'identifiant ; l'etat en pastille.
+        const gfx::Rect av{cx0, headY_, 44.f, 44.f};
+        r.fillRoundedRect(av, c.accent, 12.f);
+        const std::string ini = initialsOf(l.customer);
+        const gfx::FontId fi = gfx::semibold(gfx::FontId{16});
+        r.drawText({av.x + (av.w - r.measure(ini, fi).width) * 0.5f, av.y + (av.h - r.lineHeight(fi)) * 0.5f}, ini, fi, c.textInverted);
+        // l'etat
+        const Seconds now = ws().now();
+        std::string state = e->revoked ? std::string("R\xC3\xA9voqu\xC3\xA9" "e") : e->expired ? std::string("Expir\xC3\xA9" "e") : std::string("Active");
+        gfx::Color tone = e->revoked ? c.error : e->expired ? c.textMuted : c.ok;
+        if (!e->revoked && !e->expired && l.expiresAt != 0 && l.expiresAt - now <= 30 * kDaySeconds) {
+            state = "Finit bient\xC3\xB4t";
+            tone = c.warning;
+        }
+        const gfx::FontId fp = gfx::semibold(gfx::FontId{12});
+        const float pw = r.measure(state, fp).width + 30.f;
+        const gfx::Rect pill{cx0 + cw0 - pw, headY_ + 2.f, pw, 24.f};
+        r.fillRoundedRect(pill, tone.withAlpha(26), 12.f);
+        r.fillRoundedRect({pill.x + 10.f, pill.y + 8.5f, 7.f, 7.f}, tone, 3.5f);
+        r.drawText({pill.x + 22.f, pill.y + (pill.h - r.lineHeight(fp)) * 0.5f}, state, fp, tone);
+        const gfx::FontId fn = gfx::semibold(gfx::FontId{17});
+        r.drawText({av.right() + 12.f, headY_ + 1.f}, fit(r, l.customer, fn, pill.x - 10.f - (av.right() + 12.f)), fn, c.text);
+        r.drawText({av.right() + 12.f, headY_ + 24.f}, l.licenseId, th.font.mono, c.textMuted);
+
+        // Les chiffres : une grille de 3 x 2, des traits fins (la maquette).
+        const auto* ed = ws().registry().edition(l.edition);
+        const bool onlineLic = Workspace::isOnlineLicence(l);
+        const auto* on = onlineLic ? ws().service().snapshot.licence(l.licenseId) : nullptr;
+        std::string pcs = onlineLic ? (on ? std::to_string(on->activeCount()) : std::string("?")) + " sur " + std::to_string(l.maxDevices) + " en ligne"
+                                    : std::to_string(l.devices.size()) + " sur " + std::to_string(l.maxDevices);
+        std::string end = l.expiresAt ? dateFr(l.expiresAt) : std::string("sans fin");
+        if (l.expiresAt && !e->expired && !e->revoked) end += "  \xC2\xB7 " + std::to_string(std::max<Seconds>(0, (l.expiresAt - now) / kDaySeconds)) + " j";
+        const std::string cells[6][2] = {
+            {"\xC3\x89" "dition", ed && !ed->label.empty() ? ed->label : l.edition},
+            {"Fin", end},
+            {"Type", typeLabel(l.type) + (onlineLic ? std::string(" \xC2\xB7 en ligne") : std::string())},
+            {"PC", pcs},
+            {"Hors ligne", l.type == LicenseType::Temporary ? std::to_string(l.offlineGraceDays) + " j de gr\xC3\xA2" "ce" : std::string("sans objet")},
+            {"Registre", "n\xC2\xB0 " + std::to_string(l.manifest)},
+        };
+        const float statsH = compact ? 96.f : 112.f;
+        const gfx::Rect grid{cardRect_.x + 1.f, statsY_, cardRect_.w - 2.f, statsH};
+        r.fillRect({grid.x, grid.y, grid.w, 1.f}, c.gridLine);
+        r.fillRect({grid.x, grid.y + grid.h * 0.5f, grid.w, 1.f}, c.gridLine);
+        r.fillRect({grid.x, grid.bottom(), grid.w, 1.f}, c.gridLine);
+        const float colW = grid.w / 3.f;
+        for (int i = 1; i < 3; ++i) r.fillRect({grid.x + colW * static_cast<float>(i), grid.y, 1.f, grid.h}, c.gridLine);
+        const gfx::FontId fv = gfx::semibold(gfx::FontId{14});
+        for (int i = 0; i < 6; ++i) {
+            const float gx = grid.x + colW * static_cast<float>(i % 3) + 16.f, gy = grid.y + (grid.h * 0.5f) * static_cast<float>(i / 3) + (compact ? 8.f : 12.f);
+            r.drawText({gx, gy}, cells[i][0], gfx::FontId{12}, c.textMuted);
+            r.drawText({gx, gy + 20.f}, fit(r, cells[i][1], fv, colW - 24.f), fv, c.text);
+        }
+        // Ses PC, puis le detail complet.
+        const gfx::FontId fh = gfx::semibold(gfx::FontId{14});
+        r.drawText({cx0, pcsTitleY_}, "PC", fh, c.text);
+        const std::size_t n = pcsModel_ ? pcsModel_->rowCount() : 0;
+        r.drawText({cx0 + r.measure("PC", fh).width + 8.f, pcsTitleY_ + 1.f}, n ? std::to_string(n) + (onlineLic ? " activ\xC3\xA9(s), au dernier relev\xC3\xA9" : " li\xC3\xA9(s)") : std::string("aucun"),
+                   gfx::FontId{13}, c.textMuted);
+        r.drawText({cx0, detailTitleY_}, "D\xC3\xA9tail", fh, c.text);
     }
 
     void onPaintOverlay(const ui::PaintContext& ctx) override {
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
-        const gfx::FontId f = ctx.theme.font.ui;
+        const gfx::FontId f{14};
         if (shownIds_.empty()) {
             const auto t = table_->bounds();
             const std::string text = ws().licences().empty()
-                                         ? std::string("Aucune licence dans l'archive : Nouvelle licence\xE2\x80\xA6 pour signer la premi\xC3\xA8re (ou glisse ici les demandes .xpgreq d'un client).")
+                                         ? std::string("Aucune licence dans l'archive : Nouvelle licence (en haut) pour signer la premi\xC3\xA8re, ou glisse ici les demandes .xpgreq d'un client.")
                                          : std::string("Aucune licence ne correspond \xC3\xA0 la recherche ou au filtre.");
-            r.drawText({t.x + 16.f, t.y + 44.f}, fit(r, text, f, t.w - 32.f), f, c.textMuted);
+            r.drawText({t.x + 20.f, t.y + 48.f}, fit(r, text, f, t.w - 40.f), f, c.textMuted);
         }
         if (!selected()) {
-            const auto d = details_->bounds();
-            r.fillRect({d.x + 1.f, d.y + 1.f, d.w - 2.f, d.h - 2.f}, c.panelBg);   // un volet vide : sans le trait de la grille
-            r.drawText({d.x + 16.f, d.y + 16.f}, fit(r, "Choisis une licence pour voir son d\xC3\xA9tail.", f, d.w - 32.f), f, c.textMuted);
+            // Une fiche vide : rien dessous, une phrase.
+            const auto d = cardRect_.inset(1.f, 1.f);
+            r.fillRoundedRect(d, ctx.theme.brand.card, 11.f);
+            ui::drawIcon(r, ui::Icon::Document, {d.x + d.w * 0.5f - 14.f, d.y + d.h * 0.38f - 34.f, 28.f, 28.f}, c.textDisabled);
+            const std::string t1 = "Choisis une licence pour voir son d\xC3\xA9tail.";
+            r.drawText({d.x + (d.w - r.measure(t1, f).width) * 0.5f, d.y + d.h * 0.38f + 4.f}, fit(r, t1, f, d.w - 32.f), f, c.textMuted);
         }
     }
 
 private:
     [[nodiscard]] const LicenceEntry* selected() const { return selectedId_.empty() ? nullptr : ws().licence(selectedId_); }
 
+    // 1.41.0 : les colonnes des PC a la largeur de la fiche - l'empreinte (et la date d'activation d'un PC en ligne) dans
+    // l'infobulle et le detail ; le modele garde toutes les colonnes.
+    void fitPcsColumns() {
+        const float w = pcs_->bounds().w - 14.f;
+        if (w <= 40.f || std::abs(w - pcsColumnsFor_) <= 1.f) return;
+        pcsColumnsFor_ = w;
+        std::vector<ui::TableView::Column> cols;
+        if (pcsOnline_) {
+            cols = {{"PC", std::floor(w * 0.34f)}, {"\xC3\x89tat", std::floor(w * 0.24f)}, {"Empreinte", 200.f}, {"Activ\xC3\xA9 le", 100.f},
+                    {"Vu le", std::floor(w * 0.22f)}, {"Bail jusqu'au", std::floor(w * 0.20f)}};
+            cols[2].visible = false;
+            cols[3].visible = false;
+        } else {
+            cols = {{"PC", std::floor(w * 0.28f)}, {"\xC3\x89tat", std::floor(w * 0.50f)}, {"Empreinte", 220.f}, {"Activ\xC3\xA9 le", std::floor(w * 0.22f)}};
+            cols[2].visible = false;
+        }
+        pcs_->setColumns(std::move(cols));
+    }
+
+    // 1.41.0 : LE MENU << ... >> - les gestes de la licence choisie qui ne sont pas dans la fiche, puis ceux de la page ;
+    // le dangereux en rouge (une icone d'erreur), a la fin. Une entree grisee dit pourquoi (l'infobulle du bouton).
+    void openMore() {
+        menuButtons_.clear();
+        std::vector<ui::PopupMenu::Item> items;
+        auto add = [&](ui::Button* b, ui::Icon icon) {
+            if (!b || b->visibility() == ui::Visibility::Collapsed) return;
+            ui::PopupMenu::Item it;
+            it.label = b->text();
+            it.icon = icon;
+            it.danger = b->style() == ui::Button::Style::Danger;
+            it.enabled = b->enabled();
+            if (!it.enabled) it.disabledReason = b->tooltip();
+            it.id = static_cast<int>(menuButtons_.size());
+            menuButtons_.push_back(b);
+            items.push_back(std::move(it));
+        };
+        auto separator = [&] {
+            if (items.empty() || items.back().separator) return;
+            ui::PopupMenu::Item it;
+            it.separator = true;
+            items.push_back(std::move(it));
+        };
+        add(dropPc_, ui::Icon::Release);
+        add(newCode_, ui::Icon::Refresh);
+        add(refreshOnline_, ui::Icon::Refresh);
+        separator();
+        add(folder_, ui::Icon::Folder);
+        separator();
+        add(active_, active_->style() == ui::Button::Style::Danger ? ui::Icon::Warning : ui::Icon::Ok);
+        add(revoke_, ui::Icon::Error);
+        add(delete_, ui::Icon::Delete);
+        if (!items.empty() && items.back().separator) items.pop_back();
+        menu_->setItems(std::move(items));
+        const gfx::Rect m = more_->bounds();
+        menu_->openInWindow({m.right() - 240.f, m.bottom() + 4.f});
+    }
+
     void setFilter(Filter f) {
         filter_ = f;
-        for (int k = 0; k < 4; ++k) chips_[k]->setStyle(static_cast<int>(filter_) == k ? ui::Button::Style::Primary : ui::Button::Style::Default);
+        for (int k = 0; k < 4; ++k) chips_[k]->setOn(static_cast<int>(filter_) == k);
         rebuild();
     }
 
@@ -527,10 +780,8 @@ private:
         details_->setCategories(std::move(cats));
         if (onlineLic != pcsOnline_) {
             pcsOnline_ = onlineLic;
-            if (onlineLic)
-                pcs_->setColumns({{"PC", 150.f}, {"\xC3\x89tat", 120.f}, {"Empreinte", 220.f}, {"Activ\xC3\xA9 le", 100.f}, {"Vu le", 130.f}, {"Bail jusqu'au", 110.f}});
-            else
-                pcs_->setColumns({{"PC", 160.f}, {"\xC3\x89tat", 230.f}, {"Empreinte", 250.f}, {"Activ\xC3\xA9 le", 120.f}});
+            pcsColumnsFor_ = -1.f;
+            fitPcsColumns();
         }
         pcsModel_ = std::make_shared<Rows>(onlineLic ? std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Activ\xC3\xA9 le", "Vu le", "Bail jusqu'au"}
                                                      : std::vector<std::string>{"PC", "\xC3\x89tat", "Empreinte", "Activ\xC3\xA9 le"},
@@ -780,8 +1031,13 @@ private:
     int                         selectedPc_{-1};
     ui::Button*                 folder_{nullptr};
     ui::InputText*              search_{nullptr};
-    ui::Button*                 chips_[4]{};
-    ui::Splitter*               split_{nullptr};
+    FilterChip*                 chips_[4]{};
+    ui::Widget*                 holder_{nullptr};    // 1.41.0 : les boutons du menu << ... >> (jamais dessines)
+    ui::Button*                 more_{nullptr};
+    ui::PopupMenu*              menu_{nullptr};
+    std::vector<ui::Button*>    menuButtons_;
+    gfx::Rect                   listRect_{}, cardRect_{};
+    float                       headY_{0.f}, statsY_{0.f}, pcsTitleY_{0.f}, detailTitleY_{0.f};
     ui::TableView*              table_{nullptr};
     ui::PropertyGrid*           details_{nullptr};
     ui::TableView*              pcs_{nullptr};
@@ -790,7 +1046,7 @@ private:
     std::string                 selectedId_;
     Filter                      filter_{Filter::All};
     bool                        syncing_{false};
-    float                       actionsY_{0.f}, filterY_{0.f};
+    float                       filterY_{0.f}, columnsFor_{-1.f}, pcsColumnsFor_{-1.f};
     std::shared_ptr<bool>       alive_ = std::make_shared<bool>(true);
     core::ConnectionScope       links_;
 };

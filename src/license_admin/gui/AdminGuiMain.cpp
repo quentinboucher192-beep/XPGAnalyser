@@ -400,7 +400,17 @@ int main(int argc, char** argv) {
     // 1.41.0 : LE NOUVEAU DESIGN - le theme XPG, en violet (la couleur de l'Admin), et la police Inter fournie a cote
     // de l'exe (resources\fonts).
     ui::Theme::setProductAccent(ui::Theme::ProductAccent::Violet);
-    const ui::Theme theme = ui::Theme::byName("XPG");
+    // Le texte de l'Admin un cran plus petit que celui des Studios (la maquette : 13,5 a 14 px) - plus d'air.
+    const ui::Theme theme = [] {
+        ui::Theme t = ui::Theme::byName("XPG");
+        t.font.ui = gfx::FontId{14};
+        t.font.uiBold = gfx::semibold(gfx::FontId{14});
+        t.font.mono = gfx::FontId{14};
+        t.font.smallUi = gfx::FontId{12};
+        t.metric.rowHeight = 28.f;
+        t.metric.headerHeight = 34.f;
+        return t;
+    }();
     if (const char* base = SDL_GetBasePath(); base && *base) {
         std::error_code ec;
         const std::string b(base);

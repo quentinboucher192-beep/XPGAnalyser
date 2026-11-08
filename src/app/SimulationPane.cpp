@@ -536,8 +536,7 @@ std::string scanTime(std::int64_t micros) {
 }
 
 void drawBold(gfx::IRenderer& r, gfx::Point at, std::string_view s, gfx::FontId f, gfx::Color c) {
-    r.drawText(at, s, f, c);
-    r.drawText({at.x + 0.7f, at.y}, s, f, c);
+    r.drawText(at, s, gfx::semibold(f), c);   // 1.41.0 : la demi-grasse (Inter)
 }
 
 // Un calque transparent pose sur une table : il prend les clics qu'il sait

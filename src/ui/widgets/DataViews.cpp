@@ -151,8 +151,9 @@ void drawMaybeBold(const PaintContext& ctx, gfx::Point at, std::string_view text
     // 1.13.0 (correctif F2) : les deux passes du gras coupent AU MEME ENDROIT. Avant, la premiere avait maxWidth et la
     // seconde 0,6 px de moins : un nom qui tenait juste (T_SuiviVE) se dessinait entier, puis coupe par-dessus
     // ("T_Suiv..." sur "T_SuiviVE" : T_Suiv.iVE a l'ecran).
-    drawClipped(ctx, at, text, font, colour, maxWidth - 0.6f);
-    drawClipped(ctx, {at.x + 0.6f, at.y}, text, font, colour, maxWidth - 0.6f);
+    // 1.41.0 : LA VRAIE DEMI-GRASSE (Inter, fournie) en un seul passage - le faux gras, sur Inter, bavait. Une police
+    // choisie par l'utilisateur n'a qu'une graisse : le titre reste alors normal.
+    drawClipped(ctx, at, text, gfx::semibold(font), colour, maxWidth);
 }
 
 // 1.9 : le melange de deux couleurs (t de 0 a 1), opaque.
@@ -2067,7 +2068,7 @@ void TableView::onPaint(const PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     const auto  area = contentRect();
     if (resizingColumn_ >= 0) cursor::hold(cursor::Shape::ResizeEW);   // 1.14.1 (N2) : jusqu'au lacher
-    const float rowH = rowHeight_ = ctx.theme.metric.rowHeight;
+    const float rowH = rowHeight_ = rowOverride_ > 0.f ? rowOverride_ : ctx.theme.metric.rowHeight;   // 1.41.0
     // Lot 20 : le bandeau du collage prend sa place au-dessus des titres.
     const float bannerH = bannerHeight();
     const float titleH = titleHeight_ = ctx.theme.metric.headerHeight;
@@ -4539,8 +4540,7 @@ void paintLegend(const PaintContext& ctx, gfx::Rect box, const PropertyGrid::Leg
     const bool dots = !l.dots.empty() && (l.style == S::Formula || l.style == S::Markers);
     const float ty = dots ? box.y + 1.f : box.y + (box.h - lh) * 0.5f;
     const gfx::Point at{box.x + (box.w - tw) * 0.5f, ty};
-    ctx.r.drawText(at, l.text, font, textCol);
-    ctx.r.drawText({at.x + 0.6f, at.y}, l.text, font, textCol);   // le gras simule (Fonts : pas de face grasse)
+    ctx.r.drawText(at, l.text, gfx::semibold(font), textCol);   // 1.41.0 : la demi-grasse (Inter)
     if (dots) {
         const float d = 3.f, gap = 2.f;
         const float total = static_cast<float>(l.dots.size()) * d + static_cast<float>(l.dots.size() - 1) * gap;

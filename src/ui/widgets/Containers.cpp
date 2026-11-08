@@ -75,8 +75,7 @@ void GroupBox::onPaint(const PaintContext& ctx) {
     }
     const auto font = th.font.caption;
     const float ty = headerMid - ctx.r.lineHeight(font) * 0.5f;
-    ctx.r.drawText({textX, ty}, title_, font, c.textMuted);
-    ctx.r.drawText({textX + 0.5f, ty}, title_, font, c.textMuted);   // faux gras
+    ctx.r.drawText({textX, ty}, title_, gfx::semibold(font), c.textMuted);   // 1.41.0 : la vraie demi-grasse (Inter)
 }
 
 EventResult GroupBox::onEvent(const InputEvent& ev) {
@@ -679,8 +678,7 @@ void TabControl::onPaint(const PaintContext& ctx) {
             x += side + (t.compact ? 0.f : kTabIconGap);
         }
         if (!t.compact) {
-            ctx.r.drawText({x, hr.y + (th - lh) * 0.5f}, t.meta.title, theme.font.ui, fg);
-            if (active) ctx.r.drawText({x + 0.6f, hr.y + (th - lh) * 0.5f}, t.meta.title, theme.font.ui, fg);
+            ctx.r.drawText({x, hr.y + (th - lh) * 0.5f}, t.meta.title, active ? gfx::semibold(theme.font.ui) : theme.font.ui, fg);   // 1.41.0 : la demi-grasse
             x += ctx.r.measure(t.meta.title, theme.font.ui).width;
         } else if (t.meta.icon == Icon::None) {
             // Reduit sans icone : son titre, coupe.
@@ -945,8 +943,7 @@ void TabControl::paintTile(const PaintContext& ctx) {
         drawIcon(ctx.r, t.meta.icon, {x, hr.y + (bh - side) * 0.5f, side, side}, code >= 0 ? codeIconColor(code) : groupFocus_ ? c.accent : fg);
         x += side + kTabIconGap;
     }
-    ctx.r.drawText({x, hr.y + (bh - lh) * 0.5f}, t.meta.title, theme.font.ui, fg);
-    if (groupFocus_) ctx.r.drawText({x + 0.6f, hr.y + (bh - lh) * 0.5f}, t.meta.title, theme.font.ui, fg);
+    ctx.r.drawText({x, hr.y + (bh - lh) * 0.5f}, t.meta.title, groupFocus_ ? gfx::semibold(theme.font.ui) : theme.font.ui, fg);   // 1.41.0
     x += ctx.r.measure(t.meta.title, theme.font.ui).width;
     if (t.meta.modified) {
         const float d = 7.f;

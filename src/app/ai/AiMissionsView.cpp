@@ -32,8 +32,7 @@ constexpr float kBtnH = 28.f;
 gfx::Color alpha(gfx::Color c, int a) { return c.withAlpha(static_cast<std::uint8_t>(std::clamp(a, 0, 255))); }
 
 void boldText(gfx::IRenderer& r, gfx::Point at, std::string_view t, gfx::FontId f, gfx::Color c) {
-    r.drawText(at, t, f, c);
-    r.drawText({at.x + 0.6f, at.y}, t, f, c);
+    r.drawText(at, t, gfx::semibold(f), c);   // 1.41.0 : la demi-grasse (Inter)
 }
 
 float lh(gfx::FontId f) { return ui::lineHeight(f) + 3.f; }

@@ -418,9 +418,19 @@ int main(int argc, char** argv) {
         std::string t = paintPage(*page);
         check(page->title() == "Licences" && has(t, "Licences"), "le titre");
         check(has(t, idAlpha) && has(t, "Client d'essai Alpha") && has(t, "3 / 3") && has(t, "PROFESSIONAL"), "Alpha : id, client, PC, edition");
-        checkText(has(t, idBeta) && has(t, "perp\xC3\xA9tuelle") && has(t, "sans fin"), "Beta : perpetuelle, sans fin", t);
+        // 1.41.0 : le type et la fin sont dans la fiche (la liste les garde dans son modele, sans les montrer a cette largeur).
+        {
+            auto* tv = find<ui::TableView>(*page, "licences.table");
+            const int rb = tv ? rowOf(*tv, 0, idBeta) : -1;
+            checkText(has(t, idBeta) && rb >= 0 && cell(*page, "licences.table", rb, 3) == "perp\xC3\xA9tuelle" && cell(*page, "licences.table", rb, 6) == "sans fin",
+                      "Beta : perpetuelle, sans fin", t);
+        }
         check(has(t, "Client d'essai Gamma") && has(t, "expir\xC3\xA9" "e"), "Gamma : expiree");
-        check(has(t, "Toutes (3)") && has(t, "Actives (2)") && has(t, "Expir\xC3\xA9" "es (1)") && has(t, "R\xC3\xA9voqu\xC3\xA9" "es (0)"), "les filtres et leurs comptes");
+        // 1.41.0 : des pastilles (<< Toutes 3 >>) ; leur texte reste << Toutes (3) >>.
+        const auto chip = [&](const char* id) { auto* b = find<ui::Button>(*page, id); return b ? b->text() : std::string(); };
+        check(chip("licences.filtre.toutes") == "Toutes (3)" && chip("licences.filtre.actives") == "Actives (2)" && chip("licences.filtre.expirees") == "Expir\xC3\xA9" "es (1)" &&
+                  chip("licences.filtre.revoquees") == "R\xC3\xA9voqu\xC3\xA9" "es (0)" && has(t, "Toutes") && has(t, "Actives"),
+              "les filtres et leurs comptes");
         check(rows(*page, "licences.table") == 3, "3 licences");
         check(click(*page, "licences.filtre.expirees") && rows(*page, "licences.table") == 1, "filtre Expirees");
         check(click(*page, "licences.filtre.actives") && rows(*page, "licences.table") == 2, "filtre Actives");
@@ -446,7 +456,9 @@ int main(int argc, char** argv) {
             }
         check(client && file, "le detail : client, fichier de l'archive");
         check(rows(*page, "licences.pcs") == 3 && has(t, "Poste essai D"), "le detail : ses 3 PC");
-        check(has(t, "Fonctionnalit\xC3\xA9s (18)"), "le detail : ses fonctionnalites");
+        bool features = false;
+        for (const auto& c : grid->categories()) features = features || c.name == "Fonctionnalit\xC3\xA9s (18)";
+        check(features, "le detail : ses fonctionnalites");
     }
 
     std::printf("-- la page Licences : exporter, ajouter un PC, nouvelle licence, dossier, glisser\n");
@@ -510,7 +522,7 @@ int main(int argc, char** argv) {
         check(fx.ws->hasRevocations() && fx.ws->revocations().revoked.size() == 1 && fx.ws->revocations().revoked[0].device.empty(), "toute la licence revoquee");
         check(closed(d) && rig.last() && rig.last()->ok, "le dialogue se ferme, le resultat est rapporte");
         t = paintPage(*page);
-        check(has(t, "R\xC3\xA9voqu\xC3\xA9" "es (1)") && fx.ws->licence(idBeta)->revoked, "la page la montre revoquee");
+        check(find<ui::Button>(*page, "licences.filtre.revoquees")->text() == "R\xC3\xA9voqu\xC3\xA9" "es (1)" && fx.ws->licence(idBeta)->revoked, "la page la montre revoquee");
 
         table->selectModelRows({static_cast<ui::RowIndex>(rowOf(*table, 0, idAlpha))});
         check(click(*page, "licences.revoquer"), "Revoquer... (un PC)");
@@ -693,6 +705,20 @@ int main(int argc, char** argv) {
         check(shown(*lp, "licences.nouveau-code") && shown(*lp, "licences.desactiver") && find<ui::Button>(*lp, "licences.ajouter-pc")->text() == "Prolonger\xE2\x80\xA6" &&
                   find<ui::Button>(*lp, "licences.retirer-pc")->text() == "Retirer ce PC\xE2\x80\xA6",
               "une licence en ligne : Prolonger, Retirer ce PC, Nouveau code, Desactiver");
+        // 1.41.0 : la fiche montre trois boutons ; le reste est dans le menu << ... >> (le dangereux a la fin).
+        {
+            check(click(*lp, "licences.plus"), "le menu ...");
+            auto* menu = find<ui::PopupMenu>(*lp, "licences.menu");
+            std::vector<std::string> labels;
+            if (menu)
+                for (const auto& it : menu->items())
+                    if (!it.separator) labels.push_back(it.label);
+            const auto in = [&](const std::string& l) { return std::find(labels.begin(), labels.end(), l) != labels.end(); };
+            check(menu && menu->isOpen() && in("Retirer ce PC\xE2\x80\xA6") && in("Nouveau code\xE2\x80\xA6") && in("D\xC3\xA9sactiver\xE2\x80\xA6") &&
+                      in("R\xC3\xA9voquer\xE2\x80\xA6") && in("Ouvrir le dossier de l'archive") && labels.back() == "R\xC3\xA9voquer\xE2\x80\xA6",
+                  "le menu ... : retirer, nouveau code, desactiver, revoquer (a la fin), le dossier");
+            if (menu) menu->close();
+        }
         check(rows(*lp, "licences.pcs") == 2 && cell(*lp, "licences.pcs", 0, 0) == "Poste essai en ligne 1" && cell(*lp, "licences.pcs", 1, 1) == "retir\xC3\xA9" "e" &&
                   cell(*lp, "licences.pcs", 0, 5) == gui::dateFr(g_now + 44 * kDay) && has(t, "Vu le"),
               "ses activations, au dernier releve (le bail de chacune)");

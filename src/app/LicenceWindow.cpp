@@ -1367,8 +1367,7 @@ void ActivationPanel::onPaint(const ui::PaintContext& ctx) {
     for (const auto& it : items_) {
         switch (it.kind) {
             case Item::Heading:
-                r.drawText({x, it.y}, it.label, head, c.text);
-                r.drawText({x + 0.6f, it.y}, it.label, head, c.text);
+                r.drawText({x, it.y}, it.label, gfx::semibold(head), c.text);   // 1.41.0 : la demi-grasse
                 r.fillRect({x, it.y + r.lineHeight(head) + 3.f, W, 1.f}, c.border);
                 break;
             case Item::Text: {
