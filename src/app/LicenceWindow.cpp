@@ -1352,7 +1352,7 @@ ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
 }
 
 namespace {
-constexpr float kCardH = 98.f, kCardGap = 10.f, kIntroLines = 3.f;
+constexpr float kCardH = 116.f, kCardGap = 10.f, kIntroLines = 3.f;
 } // namespace
 
 void OnlinePanel::onLayout() {
@@ -1451,12 +1451,12 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
                 r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
                            k.price.empty() ? c.textMuted : c.accent);
                 ty += 19.f;
-                int dl = 0;
+                int dl = 0;   // la phrase : deux lignes
                 for (const auto& l : wrapText(r, k.description, kSmall, iw)) {
-                    if (++dl > 1) break;
-                    r.drawText({ix, ty}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
+                    if (++dl > 2) break;
+                    r.drawText({ix, ty + static_cast<float>(dl - 1) * 18.f}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
                 }
-                ty += 19.f;
+                ty += 37.f;
                 r.drawText({ix, ty}, fit(r, k.facts, kSmall, iw), kSmall, c.text);
             }
         }
