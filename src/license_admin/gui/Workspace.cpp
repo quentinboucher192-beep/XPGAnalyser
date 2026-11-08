@@ -798,6 +798,38 @@ OpResult Workspace::prepareNewCode(const std::string& licenseId, ServiceJob& job
     return OpResult::done("Un code neuf pour la licence " + licenseId + " : il remplace l'ancien d\xC3\xA8s qu'il est d\xC3\xA9pos\xC3\xA9.");
 }
 
+OpResult Workspace::deleteRevokedLicence(const std::string& licenseId) {
+    const LicenceEntry* e = licence(licenseId);
+    if (!e) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
+    if (!e->revoked)
+        return OpResult::fail("la licence " + licenseId + " n'est pas r\xC3\xA9voqu\xC3\xA9" "e : seule une licence r\xC3\xA9voqu\xC3\xA9" "e se supprime (R\xC3\xA9voquer\xE2\x80\xA6 d'abord)");
+    const Seconds t = now();
+    const Seconds issued = e->licence.issuedAt;
+    const std::string from = e->path;
+    // La corbeille : jamais effacee (le nom porte l'heure : deux suppressions de la meme licence ne s'ecrasent pas).
+    const fs::path trash = P(deploy::joinPath(folder_, archive::kTrashDir));
+    std::error_code ec;
+    fs::create_directories(trash, ec);
+    std::string stamp = licensing::isoTime(t);
+    for (char& ch : stamp)
+        if (ch == ':') ch = '-';
+    const fs::path to = trash / P(archive::safeName(licenseId) + "-" + stamp + ".xpglic");
+    std::string why;
+    if (!archive::noteDeleted(folder_, {licenseId, issued, t}, &why)) return OpResult::fail("la suppression n'a pas pu \xC3\xAAtre not\xC3\xA9" "e : " + why);
+    fs::rename(P(from), to, ec);
+    if (ec) {
+        fs::copy_file(P(from), to, fs::copy_options::overwrite_existing, ec);
+        if (!ec) fs::remove(P(from), ec);
+    }
+    if (ec) return OpResult::fail("le fichier " + from + " n'a pas pu aller dans la corbeille : " + ec.message());
+    loadArchive();
+    OpResult r = OpResult::done("Licence " + licenseId + " supprim\xC3\xA9" "e de l'archive.");
+    r.details.push_back("Son fichier est dans la corbeille de l'outil : " + U(to) + " (rien n'est effac\xC3\xA9).");
+    r.details.push_back("Sa r\xC3\xA9vocation reste dans la liste sign\xC3\xA9" "e : les Studios la refusent toujours.");
+    r.details.push_back("La synchro de l'archive ne la ram\xC3\xA8ne pas sur ce poste (l'archive en ligne en garde une copie chiffr\xC3\xA9" "e).");
+    return r;
+}
+
 OpResult Workspace::removeDevice(const std::string& licenseId, const std::string& deviceKey, const std::string& outPath) {
     const LicenceEntry* l = licence(licenseId);
     if (!l) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");

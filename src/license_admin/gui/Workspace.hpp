@@ -243,6 +243,11 @@ public:
     OpResult revoke(const std::string& licenseId, const std::string& deviceKey, const std::string& reason, bool onlyThisIssue);
     // Retirer une revocation (une nouvelle liste sans elle).
     OpResult unrevoke(std::size_t index);
+    // 1.38.0 : SUPPRIMER une licence REVOQUEE de l'archive (Licences > Supprimer) : son fichier va dans la corbeille de
+    // l'outil (corbeille-licences/), la synchro ne la ramene pas (licences-supprimees.json) ; sa revocation reste dans la
+    // liste signee (les Studios la refusent toujours) et le registre des activations garde son histoire. Une licence
+    // pas revoquee : refuse (revoque-la d'abord).
+    OpResult deleteRevokedLicence(const std::string& licenseId);
     // La liste signee a envoyer aux clients (.xpgrev ; ils l'importent comme une licence).
     OpResult exportRevocations(const std::string& outPath) const;
 

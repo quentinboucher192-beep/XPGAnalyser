@@ -199,6 +199,7 @@ struct Draft {
     std::uint64_t    base{0};    // le numero du registre dont elle part
     lic::Registry    reg;
     bool             dirty{false};
+    std::set<std::string> announce;   // 1.38.0 : les editions dont la reduction est annoncee aux clients a la signature
 };
 
 Draft& theDraft() {
@@ -210,6 +211,7 @@ void loadDraft(Draft& d, const Workspace& ws) {
     d.reg = ws.hasRegistry() ? ws.registry() : lic::Registry{};
     d.base = ws.hasRegistry() ? ws.registry().number : 0;
     d.dirty = false;
+    d.announce.clear();
 }
 
 // Le brouillon de ce poste (un autre Workspace : un brouillon neuf). Il n'est relu que par syncDraft : un pointeur
@@ -266,6 +268,9 @@ std::vector<std::string> changesOf(const lic::Registry& a, const lic::Registry& 
         if (o->offlineGraceDays != e.offlineGraceDays) what.push_back("gr\xC3\xA2" "ce " + std::to_string(e.offlineGraceDays) + " j");
         if (o->price != e.price) what.push_back("prix " + (e.price.empty() ? std::string("retir\xC3\xA9") : e.price));   // 1.37.0
         if (o->description != e.description) what.push_back("description");
+        if (o->promoPrice != e.promoPrice || o->promoUntil != e.promoUntil)   // 1.38.0 : une reduction
+            what.push_back(e.promoPrice.empty() ? std::string("r\xC3\xA9" "duction retir\xC3\xA9" "e")
+                                                : "r\xC3\xA9" "duction " + e.promoPrice + " jusqu'au " + lic::isoDate(e.promoUntil));
         std::vector<std::string> plus, minus;
         for (const auto& g : e.features)
             if (!grants(*o, g.id)) plus.push_back("+" + g.id);
@@ -296,6 +301,11 @@ bool checkDraft(const lic::Registry& r, std::string* why) {
         if (f.product.empty()) return no("la fonctionnalit\xC3\xA9 " + f.id + " n'a pas de produit");
         if (f.label.size() > 200 || !plain(f.label)) return no("le libell\xC3\xA9 de " + f.id + " est trop long ou contient des caract\xC3\xA8res interdits");
         if (f.product.size() > 64 || !plain(f.product)) return no("le produit de " + f.id + " est trop long ou contient des caract\xC3\xA8res interdits");
+    }
+    for (const auto& e : r.editions) {   // 1.38.0 : une reduction a une fin, pas encore passee
+        if (!e.promoPrice.empty() && e.promoUntil == 0) return no("la r\xC3\xA9" "duction de " + e.id + " n'a pas de fin (R\xC3\xA9" "duction jusqu'au)");
+        if (!e.promoPrice.empty() && e.promoUntil <= lic::systemNow())
+            return no("la r\xC3\xA9" "duction de " + e.id + " est d\xC3\xA9j\xC3\xA0 finie : retire son prix r\xC3\xA9" "duit ou change sa fin");
     }
     for (const auto& e : r.editions) {
         if (e.label.empty()) return no("l'\xC3\xA9" "dition " + e.id + " n'a pas de libell\xC3\xA9");
@@ -589,9 +599,40 @@ private:
             return;
         }
         const auto changes = changesOf(ws().registry(), d.reg);
-        OpResult r = ws().signRegistry(d.reg);
+        // 1.38.0 : les annonces aux clients - une finie part ; << Prevenir mes clients >> : une notification dans leurs
+        // Studios (jamais un mail), a leur prochaine connexion.
+        lic::Registry signedReg = d.reg;
+        const lic::Seconds at = lic::systemNow();
+        std::erase_if(signedReg.announcements, [at](const lic::Announcement& a) { return a.until != 0 && a.until <= at; });
+        std::vector<std::string> told;
+        const std::string next = std::to_string(ws().hasRegistry() ? ws().registry().number + 1 : 1);
+        for (const auto& id : d.announce) {
+            const lic::EditionDef* e = signedReg.edition(id);
+            if (!e || e->promoPrice.empty() || e->retired) continue;
+            std::erase_if(signedReg.announcements, [&](const lic::Announcement& a) { return a.edition == id; });   // remplacee
+            lic::Announcement a;
+            a.id = ("R" + next + "-" + id).substr(0, 40);
+            const std::string name = e->label.empty() ? e->id : e->label;
+            a.title = ("R\xC3\xA9" "duction sur " + name + " : " + e->promoPrice).substr(0, 120);
+            std::string text = e->price.empty() ? std::string() : "Au lieu de " + e->price + ". ";
+            text += "Jusqu'au " + lic::isoDate(e->promoUntil) + ".";
+            if (!e->description.empty()) text += " " + e->description;
+            if (text.size() > 600) text.resize(600);
+            a.text = text;
+            a.edition = id;
+            a.at = at;
+            a.until = e->promoUntil;
+            signedReg.announcements.push_back(std::move(a));
+            told.push_back(name);
+        }
+        if (signedReg.announcements.size() > 20)   // les plus anciennes partent
+            signedReg.announcements.erase(signedReg.announcements.begin(), signedReg.announcements.end() - 20);
+        OpResult r = ws().signRegistry(signedReg);
         if (r.ok) {
             d.dirty = false;
+            d.announce.clear();
+            if (!told.empty())
+                r.details.push_back("Clients pr\xC3\xA9venus (" + join(told, ", ") + ") : une notification dans leurs Studios \xC3\xA0 leur prochaine connexion, jamais un mail.");
             syncDraft(ws());
             std::vector<std::string> lines;
             for (const auto& ch : changes) lines.push_back("Chang\xC3\xA9 : " + ch + ".");
@@ -705,6 +746,20 @@ public:
         description_ = add(*this, std::make_unique<ui::InputText>("editions.description"));
         description_->setPlaceholder("Pour un bureau d'\xC3\xA9tudes (facultatif)");
         description_->setMaxLength(200);
+        // 1.38.0 : une reduction - le nouveau prix et sa fin ; la carte de la boutique barre l'ancien. << Prevenir mes
+        // clients >> : une notification dans leurs Studios a la signature (jamais un mail).
+        promo_ = add(*this, std::make_unique<ui::InputText>("editions.prix-reduit"));
+        promo_->setPlaceholder("390 \xE2\x82\xAC HT / an (vide : pas de r\xC3\xA9" "duction)");
+        promo_->setMaxLength(60);
+        promo_->setTooltip("Le prix r\xC3\xA9" "duit : dans la boutique des Studios, l'ancien prix est barr\xC3\xA9, le nouveau montr\xC3\xA9 avec sa fin ; apr\xC3\xA8s cette "
+                           "date, la carte reprend le prix normal d'elle-m\xC3\xAAme.");
+        promoEnd_ = add(*this, std::make_unique<ui::InputText>("editions.reduction-fin"));
+        promoEnd_->setPlaceholder("AAAA-MM-JJ (le dernier jour)");
+        promoEnd_->setMaxLength(10);
+        announce_ = add(*this, std::make_unique<ui::Checkbox>("Pr\xC3\xA9venir mes clients (une notification dans leurs Studios, jamais un mail)",
+                                                             "editions.prevenir"));
+        announce_->setTooltip("\xC3\x80 la signature du registre, une annonce part avec lui : chaque Studio la montre une fois dans ses notifications, "
+                              "m\xC3\xAA" "me un client hors connexion (\xC3\xA0 sa prochaine connexion).");
         grace_ = add(*this, std::make_unique<ui::InputText>("editions.grace"));
         grace_->setTooltip("Apr\xC3\xA8s la fin, les fonctionnalit\xC3\xA9s restent ouvertes ces jours-l\xC3\xA0, le temps d'importer le renouvellement.");
         retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus propos\xC3\xA9" "e)", "editions.retiree"));
@@ -740,6 +795,39 @@ public:
         };
         textField(price_, "prix", 60, "le prix", &lic::EditionDef::price);
         textField(description_, "description", 200, "la description", &lic::EditionDef::description);
+        links_ += promo_->textChanged->connect([this](const std::string& t) {   // 1.38.0
+            if (loading_) return;
+            const std::string v = trim(t);
+            if (v.size() > 60 || !plain(v)) return fieldError("prix-reduit", "le prix r\xC3\xA9" "duit : 60 octets au plus, sans caract\xC3\xA8re de contr\xC3\xB4le");
+            fieldError("prix-reduit", {});
+            if (auto* e = current(); e && e->promoPrice != v) {
+                e->promoPrice = v;
+                if (v.empty()) draft().announce.erase(e->id);
+                checkPromo();
+                edited();
+            }
+        });
+        links_ += promoEnd_->textChanged->connect([this](const std::string& t) {
+            if (loading_) return;
+            const std::string v = trim(t);
+            lic::Seconds when = 0;
+            if (!v.empty() && !lic::parseIsoTime(v + "T23:59:59Z", when))
+                return fieldError("reduction-fin", "la fin de la r\xC3\xA9" "duction : une date AAAA-MM-JJ (le dernier jour)");
+            fieldError("reduction-fin", {});
+            if (auto* e = current(); e && e->promoUntil != when) {
+                e->promoUntil = when;
+                checkPromo();
+                edited();
+            }
+        });
+        links_ += announce_->stateChanged->connect([this](ui::Checkbox::State st) {
+            if (loading_) return;
+            auto* e = current();
+            if (!e) return;
+            if (st == ui::Checkbox::State::Checked) draft().announce.insert(e->id);
+            else draft().announce.erase(e->id);
+            if (!draft().dirty && st == ui::Checkbox::State::Checked) edited();   // une annonce seule : un registre a signer
+        });
         links_ += type_->selectionChanged->connect([this](int i) {
             if (loading_ || i < 0) return;
             const auto* item = type_->selectedItem();
@@ -824,6 +912,10 @@ protected:
         row("Type par d\xC3\xA9" "faut", type_);
         row("Prix (boutique)", price_);          // 1.37.0
         row("Description", description_);
+        row("Prix r\xC3\xA9" "duit", promo_);          // 1.38.0
+        row("R\xC3\xA9" "duction jusqu'au", promoEnd_);
+        announce_->setBounds({px, y, pw2, 24.f});
+        y += 24.f + kGap;
         // PC, duree, grace : une ligne, leur libelle au-dessus.
         const float inner = pw2 - 2.f * kGap;
         const float w1 = std::floor(inner * 0.26f), w2 = std::floor(inner * 0.37f), w3 = inner - w1 - w2;
@@ -920,7 +1012,16 @@ protected:
     }
 
 private:
-    std::vector<ui::Widget*> panelWidgets() { return {label_, type_, price_, description_, pcs_, days_, grace_, retired_, feats_}; }
+    std::vector<ui::Widget*> panelWidgets() { return {label_, type_, price_, description_, promo_, promoEnd_, announce_, pcs_, days_, grace_, retired_, feats_}; }
+
+    // 1.38.0 : un prix reduit sans fin - dit tout de suite ; la case << Prevenir >> suit le prix reduit.
+    void checkPromo() {
+        const auto* e = current();
+        if (!e) return;
+        fieldError("reduction", !e->promoPrice.empty() && e->promoUntil == 0 ? std::string("donne la fin de la r\xC3\xA9" "duction (R\xC3\xA9" "duction jusqu'au)")
+                                                                              : std::string());
+        announce_->setEnabled(!e->promoPrice.empty());
+    }
 
     lic::EditionDef* current() {
         for (auto& e : draft().reg.editions)
@@ -1070,6 +1171,9 @@ private:
             grace_->setText(std::to_string(e->offlineGraceDays));
             price_->setText(e->price);               // 1.37.0
             description_->setText(e->description);
+            promo_->setText(e->promoPrice);          // 1.38.0
+            promoEnd_->setText(e->promoUntil ? lic::isoDate(e->promoUntil) : std::string());
+            announce_->setState(draft().announce.count(e->id) ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
             retired_->setState(e->retired ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
         }
         for (ui::Widget* w : panelWidgets()) w->setEnabled(e != nullptr);
@@ -1111,6 +1215,9 @@ private:
     ui::InputText*        days_{nullptr};
     ui::InputText*        grace_{nullptr};
     ui::InputText*        price_{nullptr};         // 1.37.0
+    ui::InputText*        promo_{nullptr};         // 1.38.0
+    ui::InputText*        promoEnd_{nullptr};
+    ui::Checkbox*         announce_{nullptr};
     ui::InputText*        description_{nullptr};
     ui::Checkbox*         retired_{nullptr};
     ui::TableView*        feats_{nullptr};

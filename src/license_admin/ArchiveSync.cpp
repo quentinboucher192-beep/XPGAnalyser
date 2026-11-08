@@ -572,6 +572,48 @@ int newer(const Entry& a, const Entry& b) {
 
 } // namespace
 
+// ============================================================ 1.38.0 : les licences supprimees ==
+std::vector<DeletedLicence> deletedLicences(const std::string& folder) {
+    std::vector<DeletedLicence> out;
+    std::string text, w;
+    if (!readText(deploy::joinPath(folder, kDeletedFile), text, &w)) return out;
+    Value v;
+    if (!core::json::parse(text, v, nullptr) || !v.isObject()) return out;
+    if (const Value* arr = v.find("licences"); arr && arr->isArray())
+        for (const auto& x : arr->items()) {
+            DeletedLicence d;
+            d.id = x.str("id");
+            (void)licensing::parseIsoTime(x.str("emise_le"), d.issuedAt);
+            (void)licensing::parseIsoTime(x.str("supprimee_le"), d.deletedAt);
+            if (licensing::isLicenseId(d.id)) out.push_back(std::move(d));
+        }
+    return out;
+}
+
+bool isDeleted(const std::vector<DeletedLicence>& list, const std::string& licenseId, Seconds issuedAt) {
+    for (const auto& d : list)
+        if (d.id == licenseId && issuedAt <= d.issuedAt) return true;
+    return false;
+}
+
+bool noteDeleted(const std::string& folder, const DeletedLicence& d, std::string* why) {
+    auto list = deletedLicences(folder);
+    std::erase_if(list, [&](const DeletedLicence& x) { return x.id == d.id; });
+    list.push_back(d);
+    Value root = Value::object();
+    root.set("format", "xpg-licences-supprimees/1");
+    Value arr = Value::array();
+    for (const auto& x : list) {
+        Value o = Value::object();
+        o.set("id", x.id);
+        o.set("emise_le", licensing::isoTime(x.issuedAt));
+        o.set("supprimee_le", licensing::isoTime(x.deletedAt));
+        arr.push(std::move(o));
+    }
+    root.set("licences", std::move(arr));
+    return writeFileAt(deploy::joinPath(folder, kDeletedFile), core::json::write(root) + "\n", why);
+}
+
 bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<crypto::PublicKey>& trusted, std::string* what,
                    std::string* why) {
     if (trusted.empty()) {
@@ -946,6 +988,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey& k
                 if (e.path == path) return &e;
             return nullptr;
         };
+        const auto deleted = deletedLicences(folder);   // 1.38.0 : les licences supprimees ici ne reviennent pas
         std::set<std::string> keepLocal;   // les conflits : la version du poste reste, et n'est pas envoyee
         std::set<std::string> rejected;    // refuses : le poste renvoie la sienne
         std::set<std::string> untrusted;   // signes par une cle que ce poste ne connait pas : ni recus, ni ecrases par plus ancien
@@ -966,6 +1009,7 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey& k
                 continue;
             }
             if (l && l->sha256 == e.sha256) continue;
+            if (!l && e.kind == "licence" && isDeleted(deleted, e.licenseId, e.date)) continue;   // 1.38.0 : supprimee sur ce poste
             if (l && e.kind != "activations" && newer(e, *l) < 0) continue;   // le poste a plus recent (l'index le dit) : il l'enverra
             std::string raw, plain, w;
             if (!getRemoteFile(svc, e.path, raw, &rep.why)) return rep;

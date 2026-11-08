@@ -109,6 +109,23 @@ bool archiveSigned(const std::string& folder, std::string_view bytes, const std:
 // Le texte d'un fichier de l'archive (vide : absent ou illisible). `relative` : "registre/registre.xpgreg".
 [[nodiscard]] std::string archivedText(const std::string& folder, const std::string& relative);
 
+// ---- 1.38.0 : les licences SUPPRIMEES de l'archive (une licence revoquee, retiree de la liste) ----
+//  Le fichier va dans la corbeille de l'outil (corbeille-licences/, jamais efface) et son identifiant est retenu
+//  (licences-supprimees.json, a cote de l'archive) : la synchro ne le ramene pas de l'archive en ligne (qui en garde
+//  une copie chiffree). Une emission PLUS RECENTE de la meme licence (re-signee apres) revient, elle. La revocation
+//  reste dans la liste signee : les Studios la refusent toujours.
+inline constexpr const char* kDeletedFile = "licences-supprimees.json";
+inline constexpr const char* kTrashDir = "corbeille-licences";
+struct DeletedLicence {
+    std::string id;
+    Seconds     issuedAt{0};    // l'emission supprimee (une plus recente revient)
+    Seconds     deletedAt{0};
+};
+[[nodiscard]] std::vector<DeletedLicence> deletedLicences(const std::string& folder);
+bool noteDeleted(const std::string& folder, const DeletedLicence& d, std::string* why);
+// Cette emission d'une licence a-t-elle ete supprimee sur ce poste ?
+[[nodiscard]] bool isDeleted(const std::vector<DeletedLicence>& list, const std::string& licenseId, Seconds issuedAt);
+
 // ---- la synchro (le service : /admin/archive) ----
 struct SyncOptions {
     bool        receiveOnly{false};    // recevoir sans rien envoyer (un poste neuf, une restauration)

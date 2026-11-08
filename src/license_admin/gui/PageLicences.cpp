@@ -177,6 +177,9 @@ public:
         export_->setTooltip("Le .xpglic de la licence choisie, \xC3\xA0 renvoyer au client");
         revoke_ = &button(*this, "R\xC3\xA9voquer\xE2\x80\xA6", "licences.revoquer", ui::Button::Style::Danger);
         revoke_->setTooltip("Toute la licence choisie, ou un de ses PC");
+        // 1.38.0 : supprimer une licence revoquee (la corbeille de l'outil ; sa revocation reste).
+        delete_ = &button(*this, "Supprimer\xE2\x80\xA6", "licences.supprimer", ui::Button::Style::Danger);
+        delete_->setTooltip("La licence r\xC3\xA9voqu\xC3\xA9" "e choisie quitte la liste (son fichier va dans la corbeille de l'outil) ; sa r\xC3\xA9vocation reste en vigueur");
         // 1.33.0 : retirer un PC de la licence (un PC remplace ou rendu) : une nouvelle emission sans lui.
         dropPc_ = &button(*this, "Retirer un PC\xE2\x80\xA6", "licences.retirer-pc");
         dropPc_->setTooltip("Le PC choisi dans la liste des PC : une nouvelle \xC3\xA9mission de la licence sans lui (m\xC3\xAA" "me fin), \xC3\xA0 renvoyer au client");
@@ -226,6 +229,7 @@ public:
             if (const LicenceEntry* l = selected()) host_.openDialog(licdlg::makeRevokeDialog(host_, l->licence.licenseId));
         });
         links_ += folder_->clicked->connect([this] { openArchive(); });
+        links_ += delete_->clicked->connect([this] { askDelete(); });   // 1.38.0
         links_ += dropPc_->clicked->connect([this] { dropSelectedPc(); });
         links_ += pcs_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
             selectedPc_ = sel.empty() ? -1 : static_cast<int>(sel.front());
@@ -273,7 +277,7 @@ protected:
         actionsY_ = r.y + kPad + 64.f;
         float bx = x;
         float rowY = actionsY_;
-        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, showCode_, newCode_, active_, refreshOnline_, revoke_, folder_}) {
+        for (ui::Button* b : {new_, newOnline_, addPc_, export_, dropPc_, showCode_, newCode_, active_, refreshOnline_, revoke_, delete_, folder_}) {
             if (b->visibility() == ui::Visibility::Collapsed) continue;
             const float bw = buttonWidth(*b, 96.f);
             if (bx > x && bx + bw > x + w) {   // trop etroit : la suite sur une deuxieme ligne
@@ -412,6 +416,7 @@ private:
         addPc_->setText(onlineLic ? std::string("Prolonger\xE2\x80\xA6") : std::string("Ajouter un PC\xE2\x80\xA6"));
         export_->setEnabled(e != nullptr);
         revoke_->setEnabled(e != nullptr);
+        delete_->setVisibility(e && e->revoked ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.38.0 : une revoquee seulement
         dropPc_->setText(onlineLic ? std::string("Retirer ce PC\xE2\x80\xA6") : std::string("Retirer un PC\xE2\x80\xA6"));
         dropPc_->setEnabled(e != nullptr && (onlineLic ? on && !on->activations.empty() : e->licence.devices.size() > 1));
         newOnline_->setEnabled(ready);
@@ -706,6 +711,28 @@ private:
         deploy::crypto::wipe(code.data(), code.size());
     }
 
+    // 1.38.0 : supprimer la licence revoquee choisie (une question d'abord).
+    void askDelete() {
+        const LicenceEntry* e = selected();
+        if (!e || !e->revoked || busyNow()) return;
+        const std::string id = e->licence.licenseId;
+        auto alive = alive_;
+        ShellHost host = host_;
+        host_.openDialog(licdlg::makeConfirmDialog(
+            "dialog.supprimer-licence", "Supprimer la licence",
+            "Supprimer la licence r\xC3\xA9voqu\xC3\xA9" "e " + id + " de l'archive ?\n\nElle quitte la liste ; son fichier va dans la corbeille de l'outil "
+            "(rien n'est effac\xC3\xA9). Sa r\xC3\xA9vocation reste : les Studios la refusent toujours. La synchro de l'archive ne la ram\xC3\xA8ne pas.",
+            "Supprimer", true, [this, alive, host, id] {
+                if (!*alive) return;
+                const OpResult r = host.workspace().deleteRevokedLicence(id);
+                host.report(r);
+                if (*alive && r.ok) {
+                    selectedId_.clear();
+                    refresh();
+                }
+            }));
+    }
+
     void askActive() {
         const LicenceEntry* e = selected();
         if (!e || !Workspace::isOnlineLicence(e->licence) || busyNow()) return;
@@ -743,6 +770,7 @@ private:
     ui::Button*                 addPc_{nullptr};
     ui::Button*                 export_{nullptr};
     ui::Button*                 revoke_{nullptr};
+    ui::Button*                 delete_{nullptr};    // 1.38.0
     ui::Button*                 dropPc_{nullptr};
     int                         selectedPc_{-1};
     ui::Button*                 folder_{nullptr};
