@@ -587,7 +587,7 @@ int main(int argc, char** argv) {
         check(click(*editions, "editions.nouvelle.fermer") && !shown(*editions, "editions.nouvelle.id"), "Fermer le formulaire");
         (void)paint(*editions, r, 860.f, 600.f);
         auto* ft = table(*editions, "editions.fonctionnalites");
-        check(ft && ft->bounds().h >= 4.f * 24.f, "860x600 : la liste des fonctionnalites garde au moins 4 lignes");
+        check(ft && ft->bounds().h >= 4.f * 24.f, "860x600 : la liste des fonctionnalites garde au moins 4 lignes (" + std::to_string(ft ? static_cast<int>(ft->bounds().h) : -1) + " px)");
         (void)paint(*features, r, 860.f, 600.f);
         auto* lt = table(*features, "fonctionnalites.limites");
         check(lt && lt->bounds().h >= 48.f, "860x600 : la table des limites reste visible");

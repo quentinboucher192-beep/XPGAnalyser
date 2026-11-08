@@ -754,12 +754,12 @@ public:
         promo_->setTooltip("Le prix r\xC3\xA9" "duit : dans la boutique des Studios, l'ancien prix est barr\xC3\xA9, le nouveau montr\xC3\xA9 avec sa fin ; apr\xC3\xA8s cette "
                            "date, la carte reprend le prix normal d'elle-m\xC3\xAAme.");
         promoEnd_ = add(*this, std::make_unique<ui::InputText>("editions.reduction-fin"));
-        promoEnd_->setPlaceholder("AAAA-MM-JJ (le dernier jour)");
+        promoEnd_->setPlaceholder("jusqu'au AAAA-MM-JJ");
+        promoEnd_->setTooltip("Le dernier jour de la r\xC3\xA9" "duction (AAAA-MM-JJ) : apr\xC3\xA8s, la boutique reprend le prix normal d'elle-m\xC3\xAAme.");
         promoEnd_->setMaxLength(10);
-        announce_ = add(*this, std::make_unique<ui::Checkbox>("Pr\xC3\xA9venir mes clients (une notification dans leurs Studios, jamais un mail)",
-                                                             "editions.prevenir"));
-        announce_->setTooltip("\xC3\x80 la signature du registre, une annonce part avec lui : chaque Studio la montre une fois dans ses notifications, "
-                              "m\xC3\xAA" "me un client hors connexion (\xC3\xA0 sa prochaine connexion).");
+        announce_ = add(*this, std::make_unique<ui::Checkbox>("Pr\xC3\xA9venir mes clients", "editions.prevenir"));
+        announce_->setTooltip("La r\xC3\xA9" "duction annonc\xC3\xA9" "e \xC3\xA0 tes clients : \xC3\xA0 la signature du registre, une annonce part avec lui ; chaque "
+                              "Studio la montre une fois dans ses notifications (jamais un mail), m\xC3\xAA" "me un client hors connexion (\xC3\xA0 sa prochaine connexion).");
         grace_ = add(*this, std::make_unique<ui::InputText>("editions.grace"));
         grace_->setTooltip("Apr\xC3\xA8s la fin, les fonctionnalit\xC3\xA9s restent ouvertes ces jours-l\xC3\xA0, le temps d'importer le renouvellement.");
         retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus propos\xC3\xA9" "e)", "editions.retiree"));
@@ -912,10 +912,14 @@ protected:
         row("Type par d\xC3\xA9" "faut", type_);
         row("Prix (boutique)", price_);          // 1.37.0
         row("Description", description_);
-        row("Prix r\xC3\xA9" "duit", promo_);          // 1.38.0
-        row("R\xC3\xA9" "duction jusqu'au", promoEnd_);
-        announce_->setBounds({px, y, pw2, 24.f});
-        y += 24.f + kGap;
+        // 1.38.0 : la reduction - le prix reduit et sa fin sur une ligne (comme Prix).
+        {
+            const float room = pw2 - lw, wa = std::floor((room - kGap) * 0.58f), wb = room - kGap - wa;
+            rows_.push_back({"R\xC3\xA9" "duction", {px, y, lw, kFieldH}});
+            promo_->setBounds({px + lw, y, wa, kFieldH});
+            promoEnd_->setBounds({px + lw + wa + kGap, y, wb, kFieldH});
+            y += kFieldH + kGap;
+        }
         // PC, duree, grace : une ligne, leur libelle au-dessus.
         const float inner = pw2 - 2.f * kGap;
         const float w1 = std::floor(inner * 0.26f), w2 = std::floor(inner * 0.37f), w3 = inner - w1 - w2;
@@ -927,7 +931,9 @@ protected:
         days_->setBounds({px + w1 + kGap, fy, w2, kFieldH});
         grace_->setBounds({px + w1 + w2 + 2.f * kGap, fy, w3, kFieldH});
         y = fy + kFieldH + kGap;
-        retired_->setBounds({px, y, pw2, 24.f});
+        // Retiree, et 1.38.0 : Prevenir mes clients (la reduction), sur la meme ligne.
+        retired_->setBounds({px, y, std::floor(pw2 * 0.42f), 24.f});
+        announce_->setBounds({px + std::floor(pw2 * 0.42f) + kGap, y, pw2 - std::floor(pw2 * 0.42f) - kGap, 24.f});
         y += 24.f + kGap;
         featsHeadY_ = y;
         y += 22.f;

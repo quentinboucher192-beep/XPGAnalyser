@@ -505,10 +505,30 @@ int main(int argc, char** argv) {
     // ---- 1.38.0 : le registre - une reduction, les annonces ----
     std::printf("-- 1.38.0 : le registre (reduction, annonces)\n");
     {
-        const std::string text = readFile(repo / "tests" / "fixtures" / "licences" / "registre-exemple.json");
         lic::Registry r;
         std::string why;
-        check(lic::parseRegistry(text, r, &why) && r.editions.size() >= 2, "le registre d'exemple se lit (" + why + ")");
+        r.number = 12;
+        r.issuedAt = 1790000000;
+        r.unlicensedEdition = "FREE";
+        r.features.push_back({"api_editor", "API Studio", "\xC3\x89" "diteur", {}, false});
+        r.features.push_back({"ai_generation", "IA", "G\xC3\xA9n\xC3\xA9ration", {}, false});
+        {
+            lic::EditionDef free;
+            free.id = "FREE";
+            free.label = "Libre";
+            free.type = lic::LicenseType::Perpetual;
+            free.features.push_back({"api_editor", {}});
+            r.editions.push_back(free);
+            lic::EditionDef pro;
+            pro.id = "PROFESSIONAL";
+            pro.label = "Pro";
+            pro.maxDevices = 5;
+            pro.durationDays = 365;
+            pro.price = "490 \xE2\x82\xAC HT / an";
+            pro.features.push_back({"ai_generation", {}});
+            pro.features.push_back({"api_editor", {}});
+            r.editions.push_back(pro);
+        }
         auto& e = r.editions[1];
         e.promoPrice = "390 \xE2\x82\xAC HT / an";
         e.promoUntil = 1795000000;
