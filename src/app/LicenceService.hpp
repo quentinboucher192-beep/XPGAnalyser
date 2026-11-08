@@ -79,6 +79,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app::licence::service {
@@ -129,6 +130,30 @@ struct Record {
     licensing::Seconds activatedAt{0};
 };
 [[nodiscard]] std::string recordPath();
+
+// ---- 1.38.0 : LES PC D'UNE LICENCE EN LIGNE (Mes appareils) ----
+//  A chaque renouvellement, le service donne, pour chaque licence renouvelee, ses PC (ce PC d'abord) : << 3 PC sur 20 >>.
+//  Garde dans le dossier des licences (postes-en-ligne.json, commun aux deux Studios) : la fenetre Licence le relit,
+//  sans reseau. Jamais la station ni le numero d'un autre PC (le service ne les donne pas).
+struct OnlineDevice {
+    std::string        name, key;          // le nom donne a l'activation (peut etre vide) ; la cle publique (64 hex)
+    licensing::Seconds activatedAt{0}, seenAt{0}, until{0};
+    std::string        state;              // "active", "liberee" (garde sa place jusqu'a `until`)
+    bool               thisPc{false}, token{false};
+};
+struct OnlineDevices {
+    std::string               licenseId, type;   // type : "perpetual", "temporary", "evaluation", "floating"
+    int                       max{0}, used{0}, total{0};
+    std::vector<OnlineDevice> list;
+    licensing::Seconds        receivedAt{0};
+};
+[[nodiscard]] std::string devicesPath();
+// Le champ << postes >> d'une reponse de /v1/renouveler (un objet : licence -> ses PC) ; faux : illisible.
+bool parseDevices(std::string_view postesJson, licensing::Seconds receivedAt, std::vector<OnlineDevices>& out);
+// Les PC retenus d'une licence (le dernier renouvellement) ; vide : rien de retenu.
+[[nodiscard]] std::optional<OnlineDevices> onlineDevices(const std::string& licenseId);
+// "4F9A12..CDEF01" : une cle publique courte, lisible.
+[[nodiscard]] std::string shortKey(const std::string& keyHex);
 // Absent : vrai, un releve vide. Faux : `why` (illisible).
 bool loadRecord(Record& out, std::string* why);
 bool saveRecord(const Record& r, std::string* why);

@@ -56,6 +56,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -152,6 +153,19 @@ std::vector<std::string> wrapText(gfx::IRenderer& r, const std::string& text, gf
     return out;
 }
 
+// 1.38.0 : la reduction en cours d'une edition (son prix reduit et sa fin) ; vide : aucune, ou finie.
+std::string promoOf(const licensing::RegistryEditionView& e) {
+    if (e.promoPrice.empty() || e.promoUntil <= static_cast<std::int64_t>(std::time(nullptr))) return {};
+    return e.promoPrice;
+}
+// "490 EUR -> 390 EUR jusqu'au 30/11/2026" (une ligne : le tableau des editions, le rappel de la demande).
+std::string priceLine(const licensing::RegistryEditionView& e) {
+    const std::string promo = promoOf(e);
+    if (promo.empty()) return e.price;
+    return (e.price.empty() ? std::string() : e.price + " \xE2\x86\x92 ") + promo + " jusqu'au " + licence::service::dayText(e.promoUntil);
+}
+
+
 // ---- 1.35.0 : l'onglet Activation (le code, la licence en ligne, la flottante, la Decouverte) ----
 class ActivationPanel final : public ui::Widget {
 public:
@@ -219,6 +233,7 @@ private:
     // 1.37.0 : la boutique - une carte par edition du registre (son prix, sa description, ce qu'elle donne).
     struct Card {
         std::string id, label, price, description, facts;
+        std::string promo, promoEnd;   // 1.38.0 : la reduction en cours (le prix reduit, "jusqu'au 30/11/2026")
         gfx::Rect   box{};
     };
     void buildCards();
@@ -276,6 +291,44 @@ private:
     ui::Button*           save_{nullptr};
     float                 rowsY_{0}, markX_{0};
     core::ConnectionScope links_;
+};
+
+// ---- 1.38.0 : Mes appareils - une ligne de resume (<< 3 PC sur 20 >>) au-dessus du tableau ----
+class DevicesPanel final : public ui::Widget {
+public:
+    DevicesPanel() : ui::Widget("dialog.licence.appareils.panneau") {
+        table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("dialog.licence.appareils")));
+    }
+    [[nodiscard]] ui::TableView& table() noexcept { return *table_; }
+    void setSummary(std::string text, std::string note) {
+        if (text == summary_ && note == note_) return;
+        summary_ = std::move(text);
+        note_ = std::move(note);
+        invalidateLayout();
+        invalidate();
+    }
+    [[nodiscard]] const std::string& summary() const noexcept { return summary_; }
+
+protected:
+    void onLayout() override {
+        const auto b = bounds();
+        const float top = summary_.empty() ? 0.f : (note_.empty() ? 30.f : 50.f);
+        table_->setBounds({b.x, b.y + top, b.w, std::max(40.f, b.h - top)});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        if (summary_.empty()) return;
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        const auto b = bounds();
+        const std::string t = fit(r, summary_, kValue, b.w - 16.f);
+        r.drawText({b.x + 8.f, b.y + 5.f}, t, kValue, c.text);
+        r.drawText({b.x + 9.f, b.y + 5.f}, t, kValue, c.text);
+        if (!note_.empty()) r.drawText({b.x + 8.f, b.y + 29.f}, fit(r, note_, kSmall, b.w - 16.f), kSmall, c.textMuted);
+    }
+
+private:
+    ui::TableView* table_{nullptr};
+    std::string    summary_, note_;
 };
 
 // ---- 1.38.0 : la fonctionnalite d'une ligne (Editions, Fonctionnalites, la boutique) : id vide, une ligne de resume ----
@@ -414,6 +467,7 @@ private:
     ui::TabControl*   tabs_{nullptr};
     ui::PropertyGrid* mine_{nullptr};
     ui::TableView*    devices_{nullptr};
+    DevicesPanel*     devicesPanel_{nullptr};    // 1.38.0 : << 3 PC sur 20 >>
     ui::TableView*    features_{nullptr};
     FeatureTablePanel* featuresPanel_{nullptr};  // 1.38.0 : avec l'apercu qu'on agrandit
     ui::TableView*    editions_{nullptr};
@@ -479,9 +533,10 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     auto tabs = std::make_unique<ui::TabControl>("dialog.licence.onglets");
     auto mine = std::make_unique<ui::PropertyGrid>("dialog.licence.ma-licence");
     mine_ = mine.get();
-    auto devices = std::make_unique<ui::TableView>("dialog.licence.appareils");
-    devices->setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
-    devices_ = devices.get();
+    auto devices = std::make_unique<DevicesPanel>();   // 1.38.0 : le resume au-dessus du tableau
+    devices->table().setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
+    devicesPanel_ = devices.get();
+    devices_ = &devices->table();
     // 1.38.0 : le tableau des fonctionnalites et, a droite, l'apercu de celle choisie (comme l'onglet Editions).
     auto features = std::make_unique<FeatureTablePanel>("dialog.licence.fonctionnalites.panneau", "dialog.licence.fonctionnalites");
     features->table().setColumns({{"Fonctionnalit\xC3\xA9", 200.f}, {"Identifiant", 150.f}, {"Logiciel", 100.f}, {"\xC3\x89tat", 150.f},
@@ -651,13 +706,62 @@ void LicenceBody::reload() {
     }
 
     // ---- Mes appareils ----
+    // 1.38.0 : une licence en ligne - les PC que le service a donnes au dernier renouvellement (ce PC d'abord, et il
+    // compte : << 3 PC sur 20 >>) ; une licence par fichier - les PC lies dans la licence.
     {
-        std::vector<std::vector<std::string>> rows;
-        for (const auto& d : licensing::getLicensedDevices())
-            rows.push_back({d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.activatedAt.size() >= 10 ? d.activatedAt.substr(0, 10) : d.activatedAt,
-                            d.thisPc ? "ce PC" : ""});
-        devicesModel_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte de sa cl\xC3\xA9", "Activ\xC3\xA9 le", ""}, std::move(rows));
-        devices_->setModel(devicesModel_);
+        namespace ls = licence::service;
+        const auto online = st.online && !st.licenseId.empty() ? ls::onlineDevices(st.licenseId) : std::nullopt;
+        if (online) {
+            std::vector<std::vector<std::string>> rows;
+            std::vector<int> tone;   // 0 neutre, 1 ce PC, 2 une place gardee
+            for (const auto& d : online->list) {
+                std::string state = d.state == "active" ? std::string("actif") : d.state == "liberee" ? "lib\xC3\xA9r\xC3\xA9 (garde sa place)" : d.state;
+                if (online->type == "floating") state += d.token ? std::string(" \xC2\xB7 poste pris") : std::string(" \xC2\xB7 sans poste");
+                rows.push_back({(d.name.empty() ? std::string("(sans nom)") : d.name) + (d.thisPc ? " \xE2\x80\x94 ce PC" : ""), ls::shortKey(d.key),
+                                ls::dayText(d.activatedAt), ls::dateText(d.seenAt), ls::dayText(d.until), state});
+                tone.push_back(d.thisPc ? 1 : d.state == "liberee" ? 2 : 0);
+            }
+            devices_->setColumns({{"PC", 240.f}, {"Cl\xC3\xA9", 150.f}, {"Activ\xC3\xA9 le", 110.f}, {"Vu le", 150.f}, {"Jusqu'au", 110.f}, {"\xC3\x89tat", 220.f}});
+            devicesModel_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Cl\xC3\xA9", "Activ\xC3\xA9 le", "Vu le", "Jusqu'au", "\xC3\x89tat"}, std::move(rows),
+                                                   [tone](ui::RowIndex r, std::size_t c) {
+                                                       ui::CellStyle s;
+                                                       if (c == 1) s.monospace = true;
+                                                       if (r < tone.size() && tone[r] == 1) s.bold = true;
+                                                       if (r < tone.size() && tone[r] == 2 && c == 5) s.fgTone = ui::Tone::Warning;
+                                                       return s;
+                                                   });
+            devices_->setModel(devicesModel_);
+            const bool floating = online->type == "floating";
+            std::string sum = floating ? std::to_string(online->used) + " poste" + (online->used > 1 ? "s" : "") + " pris sur " + std::to_string(online->max) +
+                                             " (licence flottante, " + std::to_string(online->total) + " PC activ\xC3\xA9" + (online->total > 1 ? "s" : "") + ")"
+                                       : std::to_string(online->used) + " PC sur " + std::to_string(online->max) + " utilis\xC3\xA9" + (online->used > 1 ? "s" : "") +
+                                             " \xE2\x80\x94 ce PC compris";
+            sum += " \xC2\xB7 licence " + st.licenseId;
+            std::string note = "Relev\xC3\xA9 au dernier renouvellement (" + ls::dateText(online->receivedAt) + "), sans les PC lib\xC3\xA9r\xC3\xA9s ni retir\xC3\xA9s.";
+            if (online->total > static_cast<int>(online->list.size()))
+                note += " Les " + std::to_string(online->list.size()) + " plus r\xC3\xA9" "cents sont montr\xC3\xA9s.";
+            devicesPanel_->setSummary(std::move(sum), std::move(note));
+        } else {
+            std::vector<std::vector<std::string>> rows;
+            for (const auto& d : licensing::getLicensedDevices())
+                rows.push_back({d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.activatedAt.size() >= 10 ? d.activatedAt.substr(0, 10) : d.activatedAt,
+                                d.thisPc ? "ce PC" : ""});
+            std::string sum, note;
+            if (st.online) {   // une licence en ligne pas encore renouvelee par cette version : ce PC, au moins
+                ls::Record rec;
+                std::string w;
+                (void)ls::loadRecord(rec, &w);
+                rows.insert(rows.begin(), {(rec.activatedPcName.empty() ? std::string("(sans nom)") : rec.activatedPcName) + " \xE2\x80\x94 ce PC",
+                                           st.deviceFingerprint, ls::dayText(rec.activatedAt), "ce PC"});
+                sum = "Ce PC \xC2\xB7 licence " + st.licenseId + " (" + std::to_string(st.maxDevices) + " PC au plus)";
+                note = "La liste des autres PC de la licence vient au prochain renouvellement (une connexion \xC3\xA0 Internet).";
+            } else if (!rows.empty() && st.maxDevices > 0)
+                sum = std::to_string(rows.size()) + " PC sur " + std::to_string(st.maxDevices) + " li\xC3\xA9" + (rows.size() > 1 ? "s" : "") + " \xC3\xA0 la licence";
+            devices_->setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
+            devicesModel_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte de sa cl\xC3\xA9", "Activ\xC3\xA9 le", ""}, std::move(rows));
+            devices_->setModel(devicesModel_);
+            devicesPanel_->setSummary(std::move(sum), std::move(note));
+        }
     }
 
     // ---- Fonctionnalites ----
@@ -726,9 +830,9 @@ void LicenceBody::reload() {
                 infos.push_back({});
             }
             // 1.37.0 : le prix (la boutique), si l'editeur en a donne un.
-            if (std::any_of(reg->editions.begin(), reg->editions.end(), [](const auto& e) { return !e.price.empty(); })) {
+            if (std::any_of(reg->editions.begin(), reg->editions.end(), [](const auto& e) { return !e.price.empty() || !promoOf(e).empty(); })) {
                 std::vector<std::string> line{"Prix"};
-                for (const auto& e : reg->editions) line.push_back(e.price.empty() ? std::string("\xE2\x80\x94") : e.price);
+                for (const auto& e : reg->editions) line.push_back(priceLine(e).empty() ? std::string("\xE2\x80\x94") : priceLine(e));   // 1.38.0 : la reduction
                 rows.push_back(std::move(line));
                 infos.push_back({});
             }
@@ -1345,6 +1449,8 @@ void OnlinePanel::buildCards() {
         k.id = e.id;
         k.label = e.label.empty() ? e.id : e.label;
         k.price = e.price;
+        k.promo = promoOf(e);   // 1.38.0
+        if (!k.promo.empty()) k.promoEnd = "jusqu'au " + licence::service::dayText(e.promoUntil);
         k.description = e.description;
         k.facts = editionFacts(e);
         cards_.push_back(std::move(k));
@@ -1488,7 +1594,8 @@ ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
                 chosen_ = chosen_ == k.id ? std::string() : k.id;
                 buildOffer();   // 1.38.0 : la colonne de droite suit l'offre choisie
                 body_.say(chosen_.empty() ? std::string("Aucune \xC3\xA9" "dition choisie : l'\xC3\xA9" "diteur la choisira avec toi.")
-                                          : "\xC3\x89" "dition choisie : " + k.label + (k.price.empty() ? std::string() : " (" + k.price + ")") + ".",
+                                          : "\xC3\x89" "dition choisie : " + k.label
+                                                + (!k.promo.empty() ? " (" + k.promo + ", " + k.promoEnd + ")" : k.price.empty() ? std::string() : " (" + k.price + ")") + ".",
                           0);
                 invalidate();
                 return ui::EventResult::Consumed;
@@ -1614,8 +1721,23 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
                 r.drawText({ix + 1.f, ty}, title, kValue, c.text);   // gras
                 if (on) r.drawText({k.box.right() - 26.f, ty}, "\xE2\x9C\x93", kValue, c.accent);
                 ty += r.lineHeight(kValue) + 2.f;
-                r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
-                           k.price.empty() ? c.textMuted : c.accent);
+                if (!k.promo.empty()) {
+                    // 1.38.0 : une reduction - l'ancien prix barre, le nouveau, et sa fin.
+                    float px = ix;
+                    if (!k.price.empty()) {
+                        const std::string old = fit(r, k.price, kSmall, iw * 0.45f);
+                        const float ow = r.measure(old, kSmall).width;
+                        r.drawText({px, ty}, old, kSmall, c.textMuted);
+                        r.fillRect({px, ty + r.lineHeight(kSmall) * 0.5f, ow, 1.f}, c.textMuted);
+                        px += ow + 8.f;
+                    }
+                    const gfx::Color hot = ctx.theme.tone(ui::Tone::Ok, c.accent);
+                    const std::string now = fit(r, k.promo + "  " + k.promoEnd, kSmall, std::max(20.f, ix + iw - px));
+                    r.drawText({px, ty}, now, kSmall, hot);
+                    r.drawText({px + 1.f, ty}, now, kSmall, hot);
+                } else
+                    r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
+                               k.price.empty() ? c.textMuted : c.accent);
                 ty += 19.f;
                 int dl = 0;   // la phrase : deux lignes
                 for (const auto& l : wrapText(r, k.description, kSmall, iw)) {
@@ -1640,7 +1762,7 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
             wanted = rec_.edition;
             if (const auto reg = licensing::getRegistry())
                 for (const auto& e : reg->editions)
-                    if (e.id == rec_.edition) wanted = (e.label.empty() ? e.id : e.label) + (e.price.empty() ? std::string() : " \xC2\xB7 " + e.price);
+                    if (e.id == rec_.edition) wanted = (e.label.empty() ? e.id : e.label) + (priceLine(e).empty() ? std::string() : " \xC2\xB7 " + priceLine(e));
         }
         struct Line { const char* label; std::string value; bool strong; };
         const Line lines[7] = {

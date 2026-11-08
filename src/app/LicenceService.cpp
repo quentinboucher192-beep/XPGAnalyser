@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -1033,6 +1034,15 @@ bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& line
             }
         }
     }
+    // 1.38.0 : les PC de chaque licence renouvelee (Mes appareils : << 3 PC sur 20 >>) - gardes pour la fenetre Licence.
+    if (const json::Value* postes = v.find("postes"); postes && postes->isObject()) {
+        json::Value keep = json::Value::object();
+        keep.set("version", 1);
+        keep.set("recu_le", lic::isoTime(lic::systemNow()));
+        keep.set("postes", *postes);
+        std::string w;
+        (void)crypto::replaceFile(devicesPath(), json::write(keep) + "\n", false, &w);
+    }
     const json::Value* motifs = v.find("motifs");
     // Une activation que le service ne renouvelle plus : effacee de ce PC (sauf une licence finie : elle reste, le
     // magasin la dit finie, avec sa grace).
@@ -1329,6 +1339,78 @@ lic::Seconds clockOffset() noexcept { return g_offsetKnown ? static_cast<lic::Se
 
 // ============================================================ le releve ==
 std::string recordPath() { return deploy::joinPath(lic::getLicenseFolder(), kRecordFile); }
+
+// ============================================================ 1.38.0 : les PC d'une licence en ligne ==
+std::string devicesPath() { return deploy::joinPath(lic::getLicenseFolder(), "postes-en-ligne.json"); }
+
+std::string shortKey(const std::string& k) {
+    if (k.size() < 16) return k;
+    std::string a = k.substr(0, 6), b = k.substr(k.size() - 6);
+    for (auto* s : {&a, &b})
+        for (char& ch : *s) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    return a + "\xE2\x80\xA6" + b;
+}
+
+bool parseDevices(std::string_view text, lic::Seconds receivedAt, std::vector<OnlineDevices>& out) {
+    out.clear();
+    json::Value v;
+    if (!json::parse(std::string(text), v) || !v.isObject()) return false;
+    const auto clean = [](std::string s, std::size_t max) {
+        if (s.size() > max) s.resize(max);
+        for (char& ch : s)
+            if (static_cast<unsigned char>(ch) < 0x20) ch = ' ';
+        return s;
+    };
+    const auto when = [](const json::Value& o, const char* key) {
+        lic::Seconds t = 0;
+        (void)lic::parseIsoTime(o.str(key), t);
+        return t;
+    };
+    for (const auto& [lid, l] : v.members()) {
+        if (!l.isObject() || lid.empty() || lid.size() > 64) continue;
+        OnlineDevices d;
+        d.licenseId = lid;
+        d.type = clean(l.str("type"), 16);
+        d.max = static_cast<int>(std::clamp<std::int64_t>(l.integer("max"), 0, 1000000));
+        d.used = static_cast<int>(std::clamp<std::int64_t>(l.integer("utilises"), 0, 1000000));
+        d.total = static_cast<int>(std::clamp<std::int64_t>(l.integer("total"), 0, 1000000));
+        d.receivedAt = receivedAt;
+        if (const json::Value* list = l.find("liste"); list && list->isArray())
+            for (const auto& x : list->items()) {
+                if (!x.isObject() || d.list.size() >= 500) continue;
+                OnlineDevice p;
+                p.name = clean(x.str("nom"), 80);
+                p.key = clean(x.str("cle"), 64);
+                p.activatedAt = when(x, "activee");
+                p.seenAt = when(x, "vue");
+                p.until = when(x, "jusqu_a");
+                p.state = clean(x.str("etat"), 16);
+                p.thisPc = x.flag("ce_pc");
+                p.token = x.flag("jeton");
+                d.list.push_back(std::move(p));
+            }
+        if (d.total < static_cast<int>(d.list.size())) d.total = static_cast<int>(d.list.size());
+        out.push_back(std::move(d));
+    }
+    return true;
+}
+
+std::optional<OnlineDevices> onlineDevices(const std::string& licenseId) {
+    if (licenseId.empty()) return std::nullopt;
+    crypto::Bytes bytes;
+    std::string w;
+    if (!crypto::readFile(devicesPath(), bytes, &w, 2u * 1024u * 1024u)) return std::nullopt;
+    json::Value v;
+    if (!json::parse(std::string(bytes.begin(), bytes.end()), v) || !v.isObject()) return std::nullopt;
+    lic::Seconds at = 0;
+    (void)lic::parseIsoTime(v.str("recu_le"), at);
+    std::vector<OnlineDevices> all;
+    const json::Value& p = v.at("postes");
+    if (!p.isObject() || !parseDevices(json::write(p, false), at, all)) return std::nullopt;
+    for (auto& d : all)
+        if (d.licenseId == licenseId) return std::move(d);
+    return std::nullopt;
+}
 
 bool loadRecord(Record& out, std::string* why) {
     out = Record{};
