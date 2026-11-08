@@ -1024,7 +1024,7 @@ void TreeView::onPaint(const PaintContext& ctx) {
         }
         // ---- Lot API 8 : l'arbre du projet (l'indication grise : ou est un resultat) ----
         if (!st.hint.empty()) {
-            const float used = ctx.r.measure(nodeText, nodeFont).width + 10.f + (dot ? 10.f : 0.f);
+            const float used = ctx.r.measure(nodeText, nodeFont).width + 10.f + (dot ? 10.f : 0.f) + (st.locked ? 16.f : 0.f);   // 1.39.0 : apres le cadenas
             if (used < nodeRoom - 24.f)
                 drawClipped(ctx, {textX + used, r.y + textY}, st.hint, ctx.theme.font.ui,
                             selected ? textColourOf(ctx.theme, st, selected) : c.textMuted, nodeRoom - used);
