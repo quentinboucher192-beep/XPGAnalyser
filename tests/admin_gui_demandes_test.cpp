@@ -337,7 +337,7 @@ int main(int argc, char** argv) {
         check(r.ok, "rangees : " + r.text());
         f0.ws->reload();
         page0->refresh();
-        const std::string t = paintPage(*page0, 1600.f, 760.f);
+        const std::string t = paintPage(*page0, 2000.f, 760.f);
         check(rows(*page0, "demandes.table") == 2, "deux en attente (l'illisible n'attend rien)");
         check(has(t, "Client d'essai Gamma") && has(t, "Client d'essai Beta") && has(t, "Poste essai A") && has(t, "API Studio 1.35.0"), "client, PC, logiciel");
         auto* table = find<ui::TableView>(*page0, "demandes.table");
@@ -447,7 +447,7 @@ int main(int argc, char** argv) {
         page->refresh();
         check(shown(*page, "demandes.relever") && has(paintPage(*page), "jamais relev\xC3\xA9" "es"), "jamais relevees");
         check(click(*page, "demandes.relever") && rig.last() && rig.last()->ok, "Relever : " + lastText(rig));
-        const std::string t = paintPage(*page, 1600.f, 760.f);
+        const std::string t = paintPage(*page, 2000.f, 760.f);
         check(rows(*page, "demandes.table") == 4 && has(t, "4 en attente") && has(t, "relev\xC3\xA9" "es le "), "quatre en attente, la date du releve");
         check(has(t, "Client d'essai Epsilon") && has(t, "Message d'essai de Poste essai D"), "le client, le message (ouverts avec la cle de l'editeur)");
         check(has(t, "\xC3\x89" "dition voulue"), "1.37.0 : la colonne de l'edition voulue (la boutique du Studio)");

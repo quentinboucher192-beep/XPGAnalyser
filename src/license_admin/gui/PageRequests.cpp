@@ -250,8 +250,8 @@ public:
         filter_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("demandes.table"));
         // 1.37.0 : l'edition voulue et l'etat juste apres le client (vus sans faire defiler).
-        table_->setColumns({{"Date", 140.f}, {"Client", 180.f}, {"\xC3\x89" "dition voulue", 210.f}, {"\xC3\x89tat", 170.f}, {"PC", 150.f},
-                            {"Logiciel", 150.f}, {"Licence demand\xC3\xA9" "e", 170.f}, {"Message", 320.f}});
+        table_->setColumns({{"Date", 140.f}, {"Client", 200.f}, {"\xC3\x89" "dition voulue", 210.f}, {"\xC3\x89tat", 170.f}, {"PC", 170.f},
+                            {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 190.f}, {"Message", 380.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(
             std::vector<std::string>{"Date", "Client", "\xC3\x89" "dition voulue", "\xC3\x89tat", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "Message"});
