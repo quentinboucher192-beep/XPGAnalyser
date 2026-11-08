@@ -3,6 +3,7 @@
 // =============================================================================
 #include "AiNotificationsView.hpp"
 #include "../../core/Perf.hpp"   // 1.22.2 : ce qui consomme (l'onglet Performances)
+#include "../../core/Json.hpp"   // 1.39.0 : le petit tableau d'une notification (Item::data)
 
 #include "../../ui/Icons.hpp"
 #include "../../ui/Theme.hpp"
@@ -24,6 +25,40 @@ constexpr float kLeft = 34.f;        // le texte d'une ligne commence apres le f
 
 gfx::Color alpha(gfx::Color c, int a) { return c.withAlpha(static_cast<std::uint8_t>(std::clamp(a, 0, 255))); }
 
+// 1.39.0 : le petit tableau d'une notification - une ligne de 20 px, l'en-tete compris ; 6 lignes au plus.
+constexpr float kTableRow = 20.f;
+constexpr std::size_t kTableMax = 6;
+template <typename L>
+void readTable(const std::string& data, L& l) {
+    l.columns.clear();
+    l.cells.clear();
+    l.tones.clear();
+    l.more = 0;
+    l.tableH = 0.f;
+    if (data.empty()) return;
+    core::json::Value v;
+    if (!core::json::parse(data, v, nullptr) || !v.isObject()) return;
+    const auto* t = v.find("tableau");
+    if (!t || !t->isObject()) return;
+    for (const auto& c : t->at("colonnes").items()) l.columns.push_back(c.asString());
+    if (l.columns.empty() || l.columns.size() > 6) {
+        l.columns.clear();
+        return;
+    }
+    std::size_t total = 0;
+    for (const auto& row : t->at("lignes").items()) {
+        ++total;
+        if (l.cells.size() >= kTableMax) continue;
+        std::vector<std::string> cells;
+        for (const auto& c : row.at("cellules").items()) cells.push_back(c.asString());
+        cells.resize(l.columns.size());
+        l.cells.push_back(std::move(cells));
+        l.tones.push_back(row.str("ton"));
+    }
+    l.more = static_cast<int>(total - l.cells.size()) + static_cast<int>(std::max<std::int64_t>(0, t->integer("plus")));
+    l.tableH = 6.f + kTableRow * static_cast<float>(1 + l.cells.size()) + (l.more > 0 ? kTableRow : 0.f);
+}
+
 gfx::Color toneColor(const ui::Theme& t, const std::string& tone) {
     const auto& c = t.color;
     return tone == "error" ? c.error : tone == "warning" ? c.warning : tone == "ok" ? c.ok : c.info;
@@ -32,6 +67,8 @@ gfx::Color toneColor(const ui::Theme& t, const std::string& tone) {
 ui::Icon toneIcon(const std::string& tone) {
     return tone == "error" ? ui::Icon::Error : tone == "warning" ? ui::Icon::Warning : tone == "ok" ? ui::Icon::Ok : ui::Icon::Info;
 }
+
+gfx::Color ink0(const ui::Palette& c, bool read) { return read ? c.textMuted : c.text; }
 
 std::string toneWord(const std::string& tone) {
     return tone == "error" ? "erreur" : tone == "warning" ? "attention" : tone == "ok" ? "r\xC3\xA9ussi" : "information";
@@ -220,6 +257,8 @@ void AiNotificationsView::layoutLines() {
         l.meta = notifs::timeLabel(n.at) + (n.category.empty() ? std::string{} : " \xC2\xB7 " + n.category);
         l.detail = n.detail.empty() ? std::vector<std::string>{} : wrap(n.detail, kMeta, textW, 2);
         float h = 6.f + lhMeta + lhBody + static_cast<float>(l.detail.size()) * lhMeta;
+        readTable(n.data, l);   // 1.39.0 : le petit tableau sous le detail
+        h += l.tableH;
         if (!n.button.empty() && !n.action.empty()) {
             l.buttonW = std::min(textW, ui::measureWidth(n.button + " \xE2\x80\xBA", kMeta) + 18.f);
             h += 4.f + kButtonH;
@@ -572,6 +611,49 @@ void AiNotificationsView::onPaint(const ui::PaintContext& ctx) {
         for (const auto& d : l.detail) {
             ctx.r.drawText({r.x + kLeft, y}, d, kMeta, c.textMuted);
             y += lhMeta;
+        }
+        // 1.39.0 : le petit tableau (l'avant / l'apres d'une offre...) - un en-tete, les lignes teintees de leur ton
+        if (!l.columns.empty()) {
+            const float tx = r.x + kLeft, tw = std::max(80.f, r.right() - kPad - tx);
+            const float ty = y + 3.f;
+            const std::size_t nc = l.columns.size();
+            std::vector<float> w(nc, 0.f);
+            float rest = tw;
+            for (std::size_t k = 1; k < nc; ++k) {
+                float m = ctx.r.measure(l.columns[k], kMeta).width;
+                for (const auto& row : l.cells) m = std::max(m, ctx.r.measure(row[k], kMeta).width);
+                w[k] = std::clamp(m + 16.f, 56.f, std::max(56.f, tw * 0.24f));
+                rest -= w[k];
+            }
+            w[0] = std::max(60.f, rest);
+            const float lhT = ctx.r.lineHeight(kMeta);
+            ctx.r.fillRoundedRect({tx, ty, tw, kTableRow}, alpha(c.border, 110), 3.f);
+            float cx = tx;
+            for (std::size_t k = 0; k < nc; ++k) {
+                ctx.r.drawText({cx + 6.f, ty + (kTableRow - lhT) * 0.5f}, elide(l.columns[k], kMeta, w[k] - 10.f), kMeta, c.textMuted);
+                cx += w[k];
+            }
+            float ry = ty + kTableRow;
+            for (std::size_t i = 0; i < l.cells.size(); ++i) {
+                const std::string& tn = l.tones[i];
+                if (tn == "error" || tn == "ok" || tn == "warning")
+                    ctx.r.fillRect({tx, ry, tw, kTableRow}, alpha(toneColor(ctx.theme, tn), ctx.theme.isDark() ? 46 : 30));
+                cx = tx;
+                for (std::size_t k = 0; k < nc; ++k) {
+                    const std::string& t = l.cells[i][k];
+                    gfx::Color ink = k == 0 ? ink0(c, n.read) : c.textMuted;
+                    if (t.rfind("\xE2\x9C\x97", 0) == 0) ink = c.error;        // une croix : retiree
+                    else if (t.rfind("\xE2\x9C\x93", 0) == 0) ink = c.ok;      // une coche : ajoutee, incluse
+                    ctx.r.drawText({cx + 6.f, ry + (kTableRow - lhT) * 0.5f}, elide(t, kMeta, w[k] - 10.f), kMeta, ink);
+                    cx += w[k];
+                }
+                ctx.r.fillRect({tx, ry + kTableRow - 1.f, tw, 1.f}, alpha(c.border, 90));
+                ry += kTableRow;
+            }
+            if (l.more > 0)
+                ctx.r.drawText({tx + 6.f, ry + (kTableRow - lhT) * 0.5f},
+                               "+ " + std::to_string(l.more) + (l.more > 1 ? " autres lignes" : " autre ligne") + (n.button.empty() ? std::string() : " \xE2\x80\x94 " + n.button),
+                               kMeta, c.textMuted);
         }
         if (l.buttonW > 0.f) {
             const auto br = buttonArea(l);

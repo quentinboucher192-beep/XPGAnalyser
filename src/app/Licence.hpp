@@ -85,6 +85,13 @@ void refresh();
 // Le controle d'un point d'entree : ouverte -> vrai ; fermee -> la fenetre << Pas dans ta licence >>, faux.
 bool gate(App& app, std::string_view feature);
 bool gate(App& app, Where where, std::string_view key);
+// 1.39.0 : la fenetre << Ta licence ne permet pas cette action >> (ce que l'action demande, pourquoi, la capture de
+// la fonctionnalite, les offres qui la contiennent ; Voir les offres... : la boutique). `actionLabel` vide : le nom de la
+// fonctionnalite. Ecrite dans LicenceWindow.cpp.
+void showLocked(App& app, std::string_view feature, std::string actionLabel = {});
+// 1.39.0 : la fenetre << Offre modifiee : avant / apres >> de la notification `key` (son bouton Voir le detail) ; faux :
+// pas de notification, ou pas une offre modifiee. Ecrite dans LicenceWindow.cpp.
+bool showOfferChange(App& app, const std::string& key);
 
 // 1.32.0 (H3) : le controle aux points de passage (voir l'en-tete). EN LIGNE DANS CET EN-TETE : les fichiers qui
 // l'appellent (app/hmi/HmiSimulation.cpp, HmiImportDialog.cpp) se compilent aussi dans des essais sans Licence.cpp
@@ -97,6 +104,19 @@ inline std::atomic<RequireFn> g_require{nullptr};
     const detail::RequireFn f = detail::g_require.load(std::memory_order_acquire);
     return f == nullptr || f(feature, why);
 }
+// 1.39.0 : UNE ENTREE VERROUILLEE VUE DANS UN MENU OU UNE LISTE - son libelle barre, un cadenas ; le clic va toujours
+// au controle (gate : la fenetre). EN LIGNE, comme require() : les menus et les listes (la barre du haut, l'arbre du
+// projet, Ctrl+K) se compilent aussi dans des essais sans Licence.cpp. Avant start() : rien de verrouille.
+namespace detail {
+using LockedFn = bool (*)(Where where, std::string_view key);
+inline std::atomic<LockedFn> g_locked{nullptr};
+} // namespace detail
+[[nodiscard]] inline bool locked(Where where, std::string_view key) {
+    const detail::LockedFn f = detail::g_locked.load(std::memory_order_acquire);
+    return f != nullptr && !key.empty() && f(where, key);
+}
+// Une action d'un menu (son identifiant : "project.exportSources", "sim.run"...) : une action ou un geste verrouille.
+[[nodiscard]] inline bool lockedAction(std::string_view action) { return locked(Where::Action, action) || locked(Where::Gesture, action); }
 // La phrase d'une entree verrouillee (le module), ou vide si elle est ouverte.
 [[nodiscard]] std::string lockedText(std::string_view feature);
 // 1.35.1 : LE LOGICIEL NE S'UTILISE PAS SANS LICENCE (la demande de l'editeur). Ouvrir, creer, importer un projet :
@@ -261,6 +281,8 @@ struct Offer {
     std::vector<std::string> features;   // les identifiants, tries
     std::int64_t             promoUntil{0};
     bool                     retired{false};
+    int                      devices{-1};    // 1.39.0 : les PC au plus (-1 : pas retenu - un vu-licence.json de la 1.38)
+    int                      days{-1};       // 1.39.0 : la duree en jours (0 : sans fin ; -1 : pas retenue)
     bool operator==(const Offer&) const = default;
 };
 struct Seen {
@@ -268,6 +290,7 @@ struct Seen {
     std::uint64_t            registry{0};
     std::vector<Offer>       offers;
     std::vector<std::pair<std::string, std::string>> names;   // les fonctionnalites : identifiant, nom
+    std::vector<std::pair<std::string, std::string>> products;   // 1.39.0 : identifiant, logiciel (API Studio, IHM Studio...)
     std::vector<std::string> announcements;   // les annonces deja montrees (leurs identifiants)
     std::string              licenseId, edition, editionLabel;
     std::int64_t             expiresAt{0};
@@ -280,6 +303,22 @@ struct Seen {
 [[nodiscard]] Seen snapshot(const licensing::RegistryView* reg, const licensing::LicenseState& st);
 // Les notifications de `before` a `now` ; `now.announcements` et `now.remindedEnd` sont mis a jour (a retenir).
 [[nodiscard]] std::vector<notices::Item> compare(const Seen& before, Seen& now, std::int64_t at);
+// 1.39.0 : l'offre modifiee, telle que sa notification la garde (Item::data, << offre >>) - pour sa fenetre.
+struct OfferChange {
+    struct Row {
+        std::string id, label, product;
+        bool        before{false}, after{false};
+    };
+    struct Value {
+        std::string label, before, after;
+    };
+    std::string        id, label;
+    bool               mine{false};
+    std::uint64_t      registry{0};
+    std::vector<Row>   rows;     // toutes les fonctionnalites de l'avant et de l'apres : les changements d'abord
+    std::vector<Value> values;   // le prix, les PC, la duree qui changent
+};
+[[nodiscard]] std::optional<OfferChange> offerChangeOf(const std::string& data);
 [[nodiscard]] std::string seenPath();
 [[nodiscard]] bool loadSeen(const std::string& file, Seen& out);
 bool saveSeen(const std::string& file, const Seen& s);

@@ -1025,6 +1025,10 @@ namespace ui {
             // ("dans Simulation > Courbes", "MAIN, ligne 42") : la colonne de
             // droite reste aux touches.
             std::string note{};
+            // 1.39.0 : PAS DANS LA LICENCE - le libelle barre, un cadenas et << pas
+            // dans ta licence >> a droite. L'entree reste choisissable (enabled) :
+            // le clic va au controle de la licence, qui dit pourquoi (une fenetre).
+            bool        locked{ false };
         };
 
         explicit PopupMenu(std::string id = {});

@@ -22,6 +22,7 @@
 //      screens/MissionsWorkspace.cpp).
 // =============================================================================
 #include "AiAutomate.hpp"
+#include "../Licence.hpp"   // 1.39.0 : l'Assistant IA passe par le controle de la licence
 #include "AiPanel.hpp"
 
 #include "../App.hpp"
@@ -373,6 +374,8 @@ void MainAnalysisScreen::showAssistant(bool show) {
         if (status_) status_->setTransientMessage("L'Assistant IA est dans IHM Studio (l'\xC3\xA9" "diteur de vues).", 5.0);
         return;
     }
+    // 1.39.0 : l'ouvrir passe par le controle de la licence, d'ou qu'il vienne (Affichage, Ctrl+K, la cloche) ; le fermer, toujours.
+    if (show && !assistantShown() && !licence::gate(app_, licence::Where::Action, "ia.assistant")) return;
     for (const auto& p : panels_)
         if (std::string_view(p.key) == "view.assistant" && p.box->isChecked() != show)
             p.box->setState(show ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);   // replie et retient

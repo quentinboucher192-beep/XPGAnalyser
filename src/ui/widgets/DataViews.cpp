@@ -415,8 +415,14 @@ void ListView::onPaint(const PaintContext& ctx) {
         const float badge = drawBadge(ctx, r, st);
         const auto font = st.monospace ? ctx.theme.font.mono : ctx.theme.font.ui;
         drawMaybeBold(ctx, {textX, r.y + (rowH - ctx.r.lineHeight(font)) * 0.5f},
-                      model_->text(row), font, textColourOf(ctx.theme, st, selected),
+                      model_->text(row), font, st.locked && !selected ? c.textMuted : textColourOf(ctx.theme, st, selected),
                       r.right() - textX - 6.f - badge, st.bold);
+        if (st.locked) {   // 1.39.0 : pas dans la licence - barre
+            const float room = r.right() - textX - 6.f - badge;
+            const float x1 = textX + std::min(room, ctx.r.measure(model_->text(row), font).width);
+            const float sy = std::floor(r.y + rowH * 0.5f) + 0.5f;
+            ctx.r.line({textX - 1.f, sy}, {x1 + 1.f, sy}, selected ? textColourOf(ctx.theme, st, selected) : c.textMuted, 1.f);
+        }
     }
     ctx.r.popClip();
     vbar_.paint(ctx, full, content, full.h, scrollY_);
@@ -906,8 +912,14 @@ void TreeView::onPaint(const PaintContext& ctx) {
                 const gfx::Rect cr{cx, cy, cw, ch};
                 ctx.r.fillRoundedRect(cr, hotRow ? c.textMuted : c.border, ch * 0.5f);
                 ctx.r.fillRoundedRect({cr.x + 1.f, cr.y + 1.f, cr.w - 2.f, cr.h - 2.f}, c.panelBg, ch * 0.5f - 1.f);
-                drawIcon(ctx.r, chip.icon, {cx + (labels ? 8.f : 7.f), cy + (ch - 12.f) * 0.5f, 12.f, 12.f}, iconCol);
-                if (labels) ctx.r.drawText({cx + 24.f, cy + (ch - lh) * 0.5f}, chip.label, chipFont, c.textMuted);
+                drawIcon(ctx.r, chip.locked ? Icon::Lock : chip.icon, {cx + (labels ? 8.f : 7.f), cy + (ch - 12.f) * 0.5f, 12.f, 12.f}, chip.locked ? c.warning : iconCol);
+                if (labels) {
+                    ctx.r.drawText({cx + 24.f, cy + (ch - lh) * 0.5f}, chip.label, chipFont, c.textMuted);
+                    if (chip.locked) {   // 1.39.0 : pas dans la licence - barre
+                        const float sy = std::floor(cy + ch * 0.5f) + 0.5f;
+                        ctx.r.line({cx + 23.f, sy}, {cx + 25.f + ctx.r.measure(chip.label, chipFont).width, sy}, c.textMuted, 1.f);
+                    }
+                }
                 chipHits_.push_back({vr.node, k, cr, chip.label});
                 cx += cw + 4.f;
             }
@@ -930,9 +942,20 @@ void TreeView::onPaint(const PaintContext& ctx) {
         const bool muted = modern_ && st.mutedFrom < nodeText.size();
         const std::string_view headText = muted ? std::string_view(nodeText).substr(0, st.mutedFrom) : std::string_view(nodeText);
         drawMaybeBold(ctx, {textX, r.y + textY}, std::string(headText), nodeFont,
-                      textColourOf(ctx.theme, st, selected),
+                      st.locked && !selected ? c.textMuted : textColourOf(ctx.theme, st, selected),
                       nodeRoom, st.bold);
         float textEnd = textX + ctx.r.measure(headText, nodeFont).width;
+        // 1.39.0 : pas dans la licence - le nom barre, un cadenas apres lui
+        if (st.locked) {
+            const float x1 = std::min(textEnd, textX + nodeRoom);
+            const float sy = std::floor(r.y + rowH * 0.5f) + 0.5f;
+            const gfx::Color ink = selected ? textColourOf(ctx.theme, st, selected) : c.textMuted;
+            ctx.r.line({textX - 1.f, sy}, {x1 + 1.f, sy}, ink, 1.f);
+            if (x1 + 18.f <= textX + nodeRoom) {
+                drawIcon(ctx.r, Icon::Lock, {x1 + 5.f, r.y + (rowH - 12.f) * 0.5f, 12.f, 12.f}, selected ? ink : c.warning);
+                textEnd = x1 + 19.f;
+            }
+        }
         if (muted) {
             const auto tailFont = st.mutedMono ? ctx.theme.font.mono : ctx.theme.font.ui;
             const std::string tail(std::string_view(nodeText).substr(st.mutedFrom));

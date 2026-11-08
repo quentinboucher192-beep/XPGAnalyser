@@ -118,7 +118,7 @@ struct CellStyle {
     // Des boutons dans la ligne, a la place du texte (TreeView) : la rangee des
     // outils sous le titre d'un domaine. Libelles si tout tient, sinon icones
     // seules (le libelle en infobulle). Un clic : TreeView::chipClicked.
-    struct Chip { Icon icon{Icon::None}; std::string label; };
+    struct Chip { Icon icon{Icon::None}; std::string label; bool locked{false}; };   // 1.39.0 : locked - pas dans la licence (barre)
     std::vector<Chip> chips{};
     // 2e partie. LA COULEUR DU DOMAINE (TreeView) : 0 aucune ; 1 API (accent),
     // 2 IHM (info), 3 Simulation (ok), 4 Versions (la couleur des mots-cles du
@@ -184,6 +184,9 @@ struct CellStyle {
     // l'explorateur, Aller a, Copier le chemin (PropertyGridHooks.hpp, ui::paths). Un chemin absolu, relatif (au
     // dossier du projet), "ressource:Nom", "externe:Nom". Vide : pas un chemin (TableView::setPathColumn : le texte).
     std::string       path{};
+    // 1.39.0 : PAS DANS LA LICENCE (TreeView, ListView, TableView) - le texte barre, un cadenas apres lui ; la ligne
+    // reste choisissable (son clic va au controle de la licence, qui dit pourquoi dans une fenetre).
+    bool              locked{false};
 };
 
 // ============================================================== ListView ====

@@ -24,6 +24,7 @@
 // =============================================================================
 #include "../src/app/Licence.hpp"
 #include "../src/app/Notices.hpp"           // 1.38.0 : les notifications generales
+#include "../src/core/Json.hpp"             // 1.39.0 : le tableau d'une notification
 #include "../src/app/LicenceService.hpp"   // 1.36.0 : la demande en ligne
 #include "../src/app/StartPage.hpp"             // 1.35.0 : l'encart de la licence sur l'accueil (le menu principal)
 #include "../src/app/TopBar.hpp"                // 1.35.0 : la licence active dans le bandeau haut
@@ -155,6 +156,8 @@ int main(int argc, char** argv) {
     check(!app::licence::active() && app::licence::allows("ai_generation") && app::licence::lockedText("ai_generation").empty()
               && app::licence::badge().text.empty(),
           "avant start() : rien de configure, tout est ouvert, pas de pastille");
+    check(!app::licence::locked(Where::HmiPane, "scripts") && !app::licence::lockedAction("ia.assistant"),
+          "1.39.0 : avant start(), rien n'est barre dans les menus ni les listes");
     {
         std::string why;
         check(app::licence::require("hmi_runtime", &why) && app::licence::require("advanced_import") && why.empty(),
@@ -201,6 +204,10 @@ int main(int argc, char** argv) {
         check(app::licence::allows("api_editor") && app::licence::allows("hmi_runtime") && !app::licence::allows("ai_assistant")
                   && !app::licence::allows("hmi_scripts"),
               "FREE : l'editeur et le poste ouverts ; l'Assistant IA et les scripts fermes");
+        check(app::licence::locked(Where::HmiPane, "scripts") && app::licence::lockedAction("ia.assistant") && app::licence::locked(Where::HmiPane, "fonctions") &&
+                  !app::licence::lockedAction("hmi.start") && !app::licence::lockedAction("sim.stop") && !app::licence::lockedAction("project.save") &&
+                  !app::licence::locked(Where::HmiPane, "vues") && !app::licence::locked(Where::HmiPane, ""),
+              "1.39.0 : barres dans les menus et les listes - les scripts, l'Assistant IA ; pas le poste, ni Arreter, ni Enregistrer");
         check(has(app::licence::badge().text, "Sans licence") && app::licence::badge().tone == 2, "la pastille : " + app::licence::badge().text);
         check(app::licence::indicator().text == "Sans licence" && app::licence::indicator().tone == 2, "l'indicateur du bandeau : la meme phrase");
         {   // 1.35.1 : sans licence, le logiciel ne s'utilise pas : aucun projet ne s'ouvre ni ne se cree
@@ -598,10 +605,46 @@ int main(int argc, char** argv) {
             return nullptr;
         };
         const auto* changed = find("modifi");
-        check(changed && has(changed->title, "Pro") && has(changed->title, "ta licence") && has(changed->detail, "D\xC3\xA9ploiement") &&
-                  has(changed->detail, "Avant : Analyse, Biblioth\xC3\xA8que, Captures") && has(changed->detail, "Apr\xC3\xA8s : Analyse, Biblioth\xC3\xA8que, D\xC3\xA9ploiement") &&
-                  changed->tone == "warning" && changed->action == app::notices::toLicence(app::licence::kTabEditions),
-              "une offre modifiee : l'avant et l'apres, ajoutee et retiree, la sienne en attention");
+        // 1.39.0 : un message court et precis, un tableau (les changements), la fenetre de l'avant / l'apres
+        check(changed && has(changed->title, "Pro") && has(changed->title, "ta licence") &&
+                  has(changed->detail, "1 fonctionnalit\xC3\xA9 retir\xC3\xA9" "e : Captures") && has(changed->detail, "1 ajout\xC3\xA9" "e : D\xC3\xA9ploiement") &&
+                  !has(changed->detail, "Avant :") && changed->tone == "warning" && changed->button == "Voir le d\xC3\xA9tail" &&
+                  changed->action == app::notices::toDetail("offre:PRO:6"),
+              "1.39.0 : une offre modifiee - le message court (" + (changed ? changed->detail : std::string()) + ")");
+        {
+            core::json::Value d;
+            const bool ok = changed && core::json::parse(changed->data, d, nullptr) && d.isObject();
+            const auto& t = ok ? d.at("tableau") : d;
+            const auto& rows = t.at("lignes");
+            check(ok && t.at("colonnes").items().size() == 4 && rows.items().size() == 2 && rows.items()[0].str("ton") == "error" &&
+                      rows.items()[0].at("cellules").items()[0].asString() == "Captures" && rows.items()[1].str("ton") == "ok" &&
+                      rows.items()[1].at("cellules").items()[0].asString() == "D\xC3\xA9ploiement",
+                  "1.39.0 : son tableau - Captures retiree (rouge), Deploiement ajoutee (vert)");
+            const auto ch = changed ? w::offerChangeOf(changed->data) : std::nullopt;
+            check(ch && ch->id == "PRO" && ch->mine && ch->registry == 6 && ch->rows.size() == 4 && ch->rows[0].id == "c" && ch->rows[0].before &&
+                      !ch->rows[0].after && ch->rows[1].id == "d" && !ch->rows[1].before && ch->rows[1].after && ch->rows[2].before && ch->rows[2].after &&
+                      ch->values.empty(),
+                  "1.39.0 : sa fenetre - toute l'offre, les changements d'abord");
+            check(!w::offerChangeOf("") && !w::offerChangeOf("{}") && !w::offerChangeOf("pas du json"), "1.39.0 : des donnees vides ou fausses : pas de fenetre");
+        }
+        {   // 1.39.0 : le prix, les PC, la duree qui changent (sans fonctionnalite changee) : dits aussi
+            w::Seen b2 = before, a2 = before;
+            b2.offers[0].devices = 5;
+            b2.offers[0].days = 365;
+            a2.registry = 6;
+            a2.offers[0].price = "590 \xE2\x82\xAC";
+            a2.offers[0].devices = 10;
+            a2.offers[0].days = 0;
+            const auto it = w::compare(b2, a2, now);
+            const auto ch = it.empty() ? std::nullopt : w::offerChangeOf(it[0].data);
+            check(it.size() == 1 && has(it[0].detail, "Prix : 490") && has(it[0].detail, "PC au plus : 5") && has(it[0].detail, "sans fin") && ch &&
+                      ch->values.size() == 3 && ch->values[1].before == "5" && ch->values[1].after == "10",
+                  "1.39.0 : le prix, les PC, la duree (" + (it.empty() ? std::string() : it[0].detail) + ")");
+            w::Seen b3 = before, a3 = before;   // une valeur pas retenue (un fichier de la 1.38) : rien n'est invente
+            a3.registry = 6;
+            a3.offers[0].devices = 10;
+            check(w::compare(b3, a3, now).empty(), "1.39.0 : les PC pas retenus avant : rien a dire");
+        }
         check(find("Nouvelle offre") != nullptr && find("retir\xC3\xA9" "e : Ancienne") != nullptr, "une offre nouvelle, une offre retiree");
         const auto* ann = find("R\xC3\xA9" "duction Pro");
         check(ann && ann->category == "Annonce" && ann->action == app::notices::toLicence(app::licence::kTabRequest) && find("Finie") == nullptr,
@@ -635,6 +678,7 @@ int main(int argc, char** argv) {
         check(w::saveSeen(file, after), "l'etat vu s'ecrit");
         w::Seen read;
         check(w::loadSeen(file, read) && read.registry == 6 && read.offers.size() == after.offers.size() && read.offers[0] == after.offers[0] &&
+                  read.products == after.products &&
                   read.announcements == after.announcements && read.licenseId == after.licenseId && read.expiresAt == after.expiresAt,
               "et se relit tel quel");
     }
@@ -652,17 +696,27 @@ int main(int argc, char** argv) {
         check(app::notices::markRead(id1) && app::notices::unread() == 1 && app::notices::clearRead() == 1 && app::notices::size() == 1, "lue, effacee");
         const std::string file = U(base / "notifications.json");
         app::notices::open(file);
-        (void)app::notices::post({0, 0, "Annonce", "R\xC3\xA9" "duction", "jusqu'au 30", "", "", "info", "annonce:A1"});
+        app::notices::Item withData{0, 0, "Annonce", "R\xC3\xA9" "duction", "jusqu'au 30", "", "", "info", "annonce:A1"};
+        withData.data = "{\"tableau\":{\"colonnes\":[\"A\",\"B\"],\"lignes\":[{\"cellules\":[\"x\",\"y\"],\"ton\":\"ok\"}]}}";
+        (void)app::notices::post(withData);
         check(app::notices::waitIdle(5000) && fs::exists(fs::path(file)), "ecrit dans son fichier");
         app::notices::close();
         app::notices::resetForTests();
         app::notices::open(file);
         check(app::notices::waitIdle(5000) && app::notices::size() == 2, "relu a la reouverture (" + std::to_string(app::notices::size()) + ")");
+        {
+            bool kept = false;
+            for (const auto& n : app::notices::list())
+                if (n.key == "annonce:A1" && has(n.data, "\"colonnes\"") && has(n.data, "\"ok\"")) kept = true;
+            check(kept, "1.39.0 : ses donnees (le tableau) relues aussi");
+        }
         app::notices::close();
         app::notices::resetForTests();
         const auto t = app::notices::parseAction("licence:7");
         check(t.kind == "licence" && t.tab == 7 && app::notices::parseAction("licence:-1").tab == -1 && app::notices::parseAction("conv:x").kind.empty(),
               "le bouton : licence:<onglet>");
+        const auto dt = app::notices::parseAction(app::notices::toDetail("offre:PRO:6"));
+        check(dt.kind == "detail" && dt.key == "offre:PRO:6" && app::notices::parseAction("detail:").kind.empty(), "1.39.0 : le bouton : detail:<cle>");
     }
 
     // ---- 1.38.0 : les PC d'une licence en ligne (Mes appareils) ----

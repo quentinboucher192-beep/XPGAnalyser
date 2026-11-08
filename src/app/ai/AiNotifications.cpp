@@ -361,6 +361,10 @@ std::string toJson(const std::vector<Item>& oldestFirst) {
         if (!x.key.empty()) o.set("cle", x.key);
         if (x.count > 1) o.set("fois", x.count);
         o.set("lue", x.read);
+        if (!x.data.empty()) {   // 1.39.0 : un objet (le tableau, l'avant / l'apres)
+            json::Value d;
+            if (json::parse(x.data, d, nullptr) && d.isObject()) o.set("donnees", std::move(d));
+        }
         list.push(std::move(o));
     }
     root.set("notifications", std::move(list));
@@ -388,6 +392,7 @@ bool fromJson(std::string_view text, std::vector<Item>& oldestFirst, std::string
         x.key = o.str("cle");
         x.count = static_cast<int>(std::clamp<std::int64_t>(o.integer("fois", 1), 1, 1000000));
         x.read = o.flag("lue");
+        if (const auto* d = o.find("donnees"); d && d->isObject()) x.data = json::write(*d);   // 1.39.0
         if (x.title.empty()) continue;
         oldestFirst.push_back(std::move(x));
     }

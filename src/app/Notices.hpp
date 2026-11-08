@@ -61,12 +61,20 @@ void resetForTests();
 
 // ---- le bouton ------------------------------------------------------------------------------------------------------
 [[nodiscard]] inline std::string toLicence(int tab) { return "licence:" + std::to_string(tab); }
+// 1.39.0 : la fenetre du detail d'une notification (l'offre modifiee : l'avant / l'apres) - sa cle.
+[[nodiscard]] inline std::string toDetail(const std::string& key) { return "detail:" + key; }
 struct Target {
-    std::string kind;   // "licence" ; vide : inconnu
+    std::string kind;   // "licence", "detail" (1.39.0) ; vide : inconnu
     int         tab{-1};
+    std::string key;    // detail : la cle de la notification
 };
 [[nodiscard]] inline Target parseAction(std::string_view action) {
     Target t;
+    if (action.rfind("detail:", 0) == 0 && action.size() > 7 && action.size() < 300) {
+        t.kind = "detail";
+        t.key = std::string(action.substr(7));
+        return t;
+    }
     if (action.rfind("licence:", 0) == 0) {
         t.kind = "licence";
         int n = 0;

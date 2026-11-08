@@ -54,6 +54,7 @@ public:
         std::string key;             // ce que l'ecran en fait ("hmivar:Pression_Entree"...)
         ui::Icon    icon{ui::Icon::None};
         int         score{0};        // plus petit : mieux (le tri dans le groupe)
+        bool        locked{false};   // 1.39.0 : pas dans la licence (barre, un cadenas ; Entree dit pourquoi)
     };
     // Lot recherche : une categorie trouvee - son titre de groupe, sa pastille,
     // combien de resultats en tout (au-dela de ceux montres).

@@ -1,4 +1,5 @@
 #include "ViewModels.hpp"
+#include "Licence.hpp"   // 1.39.0 : un noeud pas dans la licence (barre, un cadenas)
 #include "../core/Edition.hpp"   // 1.12.0 : les domaines de la racine, ceux de chaque application
 
 #include "../project/CodeIconKeys.hpp"
@@ -3813,6 +3814,37 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         return static_cast<std::uint8_t>((st->compiles() ? 0 : BuildNotCompiling) | (st->generated() ? 0 : BuildNotGenerated));
     }
 
+    // 1.39.0 : le volet verrouillable qu'ouvre un noeud de l'arbre (licence::gates) ; key nul : aucun.
+    namespace {
+    struct NodeGate {
+        licence::Where where{licence::Where::Action};
+        const char*    key{nullptr};
+    };
+    NodeGate gateOfNode(ProjectTreeModel::NodeKind k) {
+        using W = licence::Where;
+        using NodeKind = ProjectTreeModel::NodeKind;
+        switch (k) {
+        case NodeKind::HmiScripts:
+        case NodeKind::HmiScriptsFolder:
+        case NodeKind::HmiVariablesFolder:
+        case NodeKind::HmiGeneralScript:
+        case NodeKind::HmiVariable:
+        case NodeKind::HmiVarFolder: return {W::HmiPane, "scripts"};
+        case NodeKind::HmiFunctionsFolder:
+        case NodeKind::HmiFunction: return {W::HmiPane, "fonctions"};
+        case NodeKind::HmiReports: return {W::HmiPane, "rapports"};
+        case NodeKind::HmiModbusTool: return {W::HmiPane, "outil"};
+        case NodeKind::TablesFolder:
+        case NodeKind::AnimationTable: return {W::ApiPane, "tables"};
+        default: return {};
+        }
+    }
+    bool nodeLocked(ProjectTreeModel::NodeKind k) {
+        const NodeGate g = gateOfNode(k);
+        return g.key != nullptr && licence::locked(g.where, g.key);
+    }
+    } // namespace
+
     ui::CellStyle ProjectTreeModel::style(ui::NodeId n) const {
         ui::CellStyle s;
         // ---- Lot API 8 : l'arbre du projet (2e partie : le domaine, le compteur, le point, les mises a jour) ----
@@ -3823,6 +3855,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             decorate(n, s);
             buildMark(n, s);   // 1.11.13 : l'etat du build de l'IHM
             modernize(n, s);   // 1.11.22 : l'explorateur modernise
+            // 1.39.0 : pas dans la licence - barre, un cadenas (un raccourci epingle ou recent : celui du noeud vise)
+            const auto k = kindOf(n);
+            const auto target = k == NodeKind::PinItem || k == NodeKind::RecentItem ? shortcutTarget(n) : n;
+            if (target != ui::kInvalidNode && nodeLocked(kindOf(target))) s.locked = true;
             return s;
         }
         // ---- fin Lot API 8 ----
@@ -3840,8 +3876,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             const bool hmiRow = indexOf(n) == 1;
             static const char* const apiLabels[] = {"Statistiques"};
             static const char* const hmiLabels[] = {"\xC3\x89" "changes", "Rechercher", "Outil Modbus", "G\xC3\xA9n\xC3\xA9rer", "Compiler"};
-            for (std::size_t k = 0; k < toolCount(hmiRow); ++k)
-                s.chips.push_back({style(toolNode(hmiRow, k)).icon, hmiRow ? hmiLabels[k] : apiLabels[k]});
+            for (std::size_t k = 0; k < toolCount(hmiRow); ++k) {
+                const auto tool = toolNode(hmiRow, k);
+                s.chips.push_back({style(tool).icon, hmiRow ? hmiLabels[k] : apiLabels[k], tool != ui::kInvalidNode && nodeLocked(kindOf(tool))});
+            }
             s.iconTone = hmiRow ? ui::Tone::Info : ui::Tone::Accent;
             return s;
         }

@@ -3836,6 +3836,7 @@ namespace ui {
         constexpr float kScreenMargin = 4.f;      // 1.12.18 : un menu trop haut garde ce jour en haut et en bas
 
         constexpr float kNoteHeight = 14.f;       // 1.12.18 : la note sous le libelle
+        constexpr const char* kLockedNote = "pas dans ta licence";   // 1.39.0 : une entree verrouillee
         float menuRowHeight(const PopupMenu::Item& it, float rowHeight) {
             return it.separator ? kSeparatorHeight : it.note.empty() || it.heading ? rowHeight : rowHeight + kNoteHeight;
         }
@@ -3849,6 +3850,7 @@ namespace ui {
                 if (!it.shortcut.empty())       w += 18.f + measureWidth(it.shortcut, kFontUi);
                 if (!it.enabled && !it.disabledReason.empty())
                     w += 12.f + measureWidth(it.disabledReason, kFontUi);
+                if (it.locked)                  w += 12.f + 18.f + measureWidth(kLockedNote, kFontUi);   // 1.39.0
                 if (!it.children.empty())       w += kSubmenuArrow;
                 // 1.12.18 : la note sous le libelle (petite : 13 contre 16).
                 if (!it.note.empty())
@@ -4384,7 +4386,7 @@ namespace ui {
                 if (hot) ctx.r.fillRect(row, c.selectionBg);
 
                 const gfx::Color fg = !item.enabled ? c.textDisabled
-                    : (hot ? c.selectionText : c.text);
+                    : (hot ? c.selectionText : (item.locked ? c.textMuted : c.text));
 
                 if (item.checkable || item.radio) {
                     // 1.12.18 : la case (cochee ou non) ; le choix, son point.
@@ -4409,6 +4411,11 @@ namespace ui {
                 }
                 const gfx::Point text{ row.x + kMenuPadding + kMenuIconGutter, row.y + (ch - lh) * 0.5f };
                 ctx.r.drawText(text, item.label, ctx.theme.font.ui, fg);
+                // 1.39.0 : pas dans la licence - le libelle barre
+                if (item.locked) {
+                    const float sy = std::floor(text.y + lh * 0.5f) + 0.5f;
+                    ctx.r.line({ text.x - 1.f, sy }, { text.x + measureWidth(item.label, kFontUi) + 1.f, sy }, fg, 1.f);
+                }
                 // 1.12.18 : la lettre au clavier, soulignee.
                 if (cues && i < mn.size() && mn[i].letter && mn[i].pos + mn[i].len <= item.label.size()) {
                     const std::string_view lab = item.label;
@@ -4431,6 +4438,14 @@ namespace ui {
                     ctx.r.drawText({ rightEdge - w, row.y + (ch - lh) * 0.5f }, item.shortcut,
                         ctx.theme.font.ui, hot ? c.selectionText : c.textMuted);
                     rightEdge -= w + 12.f;
+                }
+                // 1.39.0 : pas dans la licence - le cadenas et sa phrase, a droite
+                if (item.locked) {
+                    const gfx::Color ink = hot ? c.selectionText : c.textMuted;
+                    const float w = measureWidth(kLockedNote, kFontUi);
+                    ctx.r.drawText({ rightEdge - w, row.y + (ch - lh) * 0.5f }, kLockedNote, ctx.theme.font.ui, ink);
+                    drawIcon(ctx.r, Icon::Lock, { rightEdge - w - 17.f, row.y + (ch - 13.f) * 0.5f, 13.f, 13.f }, ink);
+                    rightEdge -= w + 30.f;
                 }
                 // Why it is greyed, next to the entry rather than in a tooltip nobody
                 // hovers long enough to see.

@@ -5,6 +5,7 @@
 #include "../core/Edition.hpp"   // 1.12.0 : le bandeau de chaque application
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : le journal interne
 #include "NoveltyCenter.hpp"           // 1.10 (R2, menu Aide) : les reperes, ce qui n'a pas ete vu
+#include "Licence.hpp"                 // 1.39.0 : une entree pas dans la licence (barree, un cadenas)
 #include "../help/Novelties.hpp"
 
 #include "../ui/NoveltyMarks.hpp"   // 1.10 (integration I2) : l'orange des reperes (la pastille sur Aide)
@@ -395,6 +396,7 @@ void TopBar::openContext(const std::string& label, const std::string& shortcut, 
         entry("Ouvrir le menu", {}, ui::Icon::Expand, "bar.openMenu:" + std::to_string(static_cast<int>(menu)));
     } else if (!action.empty()) {
         entry("Ex\xC3\xA9" "cuter", shortcut, ui::Icon::Play, action, canRun ? std::string{} : std::string("pas maintenant"));
+        if (canRun && licence::lockedAction(action)) items.back().locked = true;   // 1.39.0
         const bool pinned = pinned_ && pinned_(action);
         entry(pinned ? "Retirer d'Aller \xC3\xA0 / Faire" : "\xC3\x89pingler dans Aller \xC3\xA0 / Faire", "Ctrl+K", ui::Icon::Pin,
               std::string(pinned ? "bar.unpin:" : "bar.pin:") + action + "\t" + label);
@@ -604,6 +606,7 @@ void TopBar::openMenu(Menu m) {
             if (en.separator) { it.separator = true; create.children.push_back(std::move(it)); continue; }
             it.label = en.label;
             it.icon = en.icon;
+            it.locked = licence::lockedAction(en.action);   // 1.39.0
             it.id = static_cast<int>(popupActions_.size());
             popupActions_.push_back(en.action);
             create.children.push_back(std::move(it));
@@ -643,6 +646,7 @@ void TopBar::openMenu(Menu m) {
         it.enabled = en.enabled && (!enabled_ || en.action.rfind("version.", 0) == 0 || enabled_(en.action));
         if (!it.enabled) it.disabledReason = !en.disabledReason.empty() ? en.disabledReason
                                            : en.action == "project.unlock" ? "le projet n'est pas verrouill\xC3\xA9" : "pas maintenant";
+        it.locked = it.enabled && licence::lockedAction(en.action);   // 1.39.0 : barree ; le clic dit pourquoi
         it.id = static_cast<int>(popupActions_.size());
         popupActions_.push_back(en.action);
         items.push_back(std::move(it));
@@ -985,6 +989,12 @@ void TopBar::onPaint(const ui::PaintContext& ctx) {
         }
         else if (p.icon != ui::Icon::None) ui::drawIcon(ctx.r, p.icon, ib, iconCol);
         else drew = false;
+        // 1.39.0 : un bouton dont l'action n'est pas dans la licence - un petit cadenas sur son icone (le clic dit pourquoi)
+        if (enabled && drew && !p.action.empty() && licence::lockedAction(p.action)) {
+            const gfx::Rect lk{ib.right() - 7.f, ib.bottom() - 8.f, 11.f, 11.f};
+            ctx.r.fillRoundedRect({lk.x - 1.f, lk.y - 1.f, lk.w + 2.f, lk.h + 2.f}, c.panelBg, 3.f);
+            ui::drawIcon(ctx.r, ui::Icon::Lock, lk, c.warning);
+        }
         if (p.iconOnly && p.menu == Menu::None) {
             // l'icone seule, centree
             continue;

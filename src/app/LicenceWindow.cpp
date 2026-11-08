@@ -2249,11 +2249,375 @@ void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const
                            [](const menu::DialogResult&) {});
 }
 
+// ============================================================ 1.39.0 : une action pas dans la licence ==
+// La fenetre du controle (licence::gate) : ce que l'action demande, pourquoi ta licence ne le permet pas, la capture
+// de la fonctionnalite (la molette zoome), les offres qui la contiennent ; Voir les offres... ouvre la boutique.
+class LockedBody final : public ui::Widget {
+public:
+    LockedBody(std::string action, std::string why, std::string offers, std::string description, hmi::Resource img, bool hasImage,
+               std::function<void()> offersFn, std::function<void()> close)
+        : ui::Widget("dialog.licence-bloquee.corps"), action_(std::move(action)), why_(std::move(why)), offers_(std::move(offers)),
+          description_(std::move(description)), hasImage_(hasImage), offersFn_(std::move(offersFn)), close_(std::move(close)) {
+        if (hasImage_) {
+            image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>("dialog.licence-bloquee.capture")));
+            image_->setImage(std::move(img));
+            image_->setHint(true);
+        }
+        offersButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Voir les offres\xE2\x80\xA6", "dialog.licence-bloquee.offres")));
+        offersButton_->setStyle(ui::Button::Style::Primary);
+        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.licence-bloquee.fermer")));
+        links_ += offersButton_->clicked->connect([this] {
+            if (offersFn_) offersFn_();
+        });
+        links_ += closeButton_->clicked->connect([this] {
+            if (close_) close_();
+        });
+    }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(820.f, std::max(460.f, r.w - 40.f));
+        const float h = std::min(hasImage_ ? 640.f : 360.f, std::max(300.f, r.h - 40.f));
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+        closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
+        ui::dialogframe::keep(*this, closeBox_);
+        const float bw = std::max(150.f, offersButton_->sizeHint().preferred.w), cw = std::max(100.f, closeButton_->sizeHint().preferred.w);
+        offersButton_->setBounds({panel_.right() - 16.f - bw, panel_.bottom() - 46.f, bw, 32.f});
+        closeButton_->setBounds({offersButton_->bounds().x - 8.f - cw, panel_.bottom() - 46.f, cw, 32.f});
+        // le texte en haut (l'action, pourquoi : 4 lignes au plus), la capture au milieu, les offres et la note en bas
+        textTop_ = panel_.y + 56.f;
+        imageTop_ = textTop_ + 26.f + 4.f * 19.f + 8.f;
+        bottomText_ = panel_.bottom() - 58.f - 3.f * 19.f - (description_.empty() || !hasImage_ ? 0.f : 19.f);
+        if (image_) image_->setBounds({panel_.x + 16.f, imageTop_, panel_.w - 32.f, std::max(60.f, bottomText_ - 8.f - imageTop_)});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(panel_, c.panelBg);
+        r.strokeRect(panel_, c.borderStrong, 1.f);
+        r.fillRect({panel_.x, panel_.y, panel_.w, 42.f}, c.headerBg);
+        ui::drawIcon(r, ui::Icon::Lock, {panel_.x + 14.f, panel_.y + 13.f, 16.f, 16.f}, c.warning);
+        r.drawText({panel_.x + 38.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, fit(r, "Ta licence ne permet pas cette action", kTitle, panel_.w - 90.f),
+                   kTitle, c.text);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+        r.fillRect({panel_.x, panel_.y + 42.f, 4.f, panel_.h - 42.f}, c.warning);
+        const float W = panel_.w - 36.f, x = panel_.x + 20.f;
+        const std::string head = "\xC2\xAB " + action_ + " \xC2\xBB";
+        r.drawText({x, textTop_}, fit(r, head, kValue, W), kValue, c.text);
+        r.drawText({x + 1.f, textTop_}, fit(r, head, kValue, W), kValue, c.text);
+        float y = textTop_ + 26.f;
+        int n = 0;
+        for (const auto& l : wrapText(r, why_, kSmall, W)) {
+            if (++n > 4) break;
+            r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.text);
+            y += 19.f;
+        }
+        y = bottomText_;
+        if (hasImage_ && !description_.empty()) {
+            r.drawText({x, y}, fit(r, description_, kSmall, W), kSmall, c.textMuted);
+            y += 19.f;
+        }
+        if (!offers_.empty()) {
+            const std::string lead = "Elle est dans : ";
+            r.drawText({x, y}, lead, kSmall, c.text);
+            r.drawText({x + 1.f, y}, lead, kSmall, c.text);
+            r.drawText({x + r.measure(lead, kSmall).width + 2.f, y}, fit(r, offers_, kSmall, W - r.measure(lead, kSmall).width - 2.f), kSmall, c.text);
+            y += 19.f;
+        }
+        for (const auto& l : wrapText(r, "Rien n'est ferm\xC3\xA9 : ton projet reste ouvert ; Enregistrer et Exporter restent permis.", kSmall, W)) {
+            r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
+            y += 19.f;
+            break;
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+            if (close_) close_();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::string           action_, why_, offers_, description_;
+    bool                  hasImage_{false};
+    std::function<void()> offersFn_, close_;
+    ZoomImage*            image_{nullptr};
+    ui::Button*           offersButton_{nullptr};
+    ui::Button*           closeButton_{nullptr};
+    gfx::Rect             panel_{}, closeBox_{};
+    float                 textTop_{0}, imageTop_{0}, bottomText_{0};
+    core::ConnectionScope links_;
+};
+
+class LockedWindow final : public menu::WidgetMenu {
+public:
+    LockedWindow(App& app, std::string action, std::string why, std::string offers, std::string description, hmi::Resource img, bool hasImage)
+        : menu::WidgetMenu("dialog.licence-bloquee"), app_(app), action_(std::move(action)), why_(std::move(why)), offers_(std::move(offers)),
+          description_(std::move(description)), img_(std::move(img)), hasImage_(hasImage) {}
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return "Ta licence ne permet pas cette action"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer(false);
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void fermer(bool offers) {
+        if (done_) return;
+        done_ = true;
+        manager().CloseDialog(menu::DialogResult{offers ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, {}});
+    }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<LockedBody>(action_, why_, offers_, description_, std::move(img_), hasImage_, [this] { fermer(true); },
+                                             [this] { fermer(false); }));
+        return core::ok();
+    }
+
+private:
+    App&          app_;
+    std::string   action_, why_, offers_, description_;
+    hmi::Resource img_;
+    bool          hasImage_{false};
+    bool          done_{false};
+};
+
+} // namespace
+
+namespace licence {
+void showLocked(App& app, std::string_view feature, std::string actionLabel) {
+    const std::string id(feature);
+    const std::string name = featureLabel(id);
+    std::string product;
+    std::string offers;
+    if (const auto reg = licensing::getRegistry()) {
+        for (const auto& f : reg->features)
+            if (f.id == id) product = f.product;
+        for (const auto& e : reg->editions) {
+            if (e.retired || e.id == reg->unlicensedEdition || std::find(e.features.begin(), e.features.end(), id) == e.features.end()) continue;
+            const std::string price = priceLine(e);
+            offers += (offers.empty() ? "" : "   \xC2\xB7   ") + (e.label.empty() ? e.id : e.label) + (price.empty() ? std::string() : " (" + price + ")");
+        }
+    }
+    const auto st = licensing::getLicenseState();
+    const std::string edition = !st.licensedEdition.empty() ? st.licensedEdition : st.editionLabel.empty() ? st.edition : st.editionLabel;
+    std::string why = "Elle demande la fonctionnalit\xC3\xA9 \xC2\xAB " + name + " \xC2\xBB" + (product.empty() ? std::string() : " (" + product + ")");
+    if (st.status == licensing::LicenseStatus::Evaluation)
+        why += " : la D\xC3\xA9" "couverte ne la contient pas. Demande une licence qui la contient.";
+    else if (licensing::licenseFeaturesApply(st.status) && !edition.empty())
+        why += " : ta licence " + edition + (st.licenseId.empty() ? std::string() : " (" + st.licenseId + ")") + " ne la contient pas.";
+    else
+        why += " : ce PC n'a pas de licence valable" + (st.message.empty() ? std::string(".") : std::string(" (") + st.message + ").");
+    const auto pv = featurePreview(id);
+    const bool hasImage = !pv.imagePath.empty();
+    hmi::Resource img = hasImage ? capturePng(pv.imagePath, id + ".png") : hmi::Resource{};
+    app.menus().ShowDialog(std::make_unique<LockedWindow>(app, actionLabel.empty() ? name : std::move(actionLabel), std::move(why), std::move(offers),
+                                                          pv.description, std::move(img), hasImage),
+                           [&app](const menu::DialogResult& r) {
+                               if (r.accepted()) showLicenceWindow(app, kTabRequest);
+                           });
+}
+} // namespace licence
+
+namespace {
+
+// ============================================================ 1.39.0 : l'offre modifiee, avant / apres ==
+// La fenetre << Voir le detail >> d'une notification << Offre modifiee >> : toute l'offre, fonctionnalite par
+// fonctionnalite (avant, apres ; les changements d'abord, en couleur), le prix, les PC, la duree qui changent ; un clic
+// sur une ligne montre sa capture (la molette zoome, un clic l'ouvre en grand). Les changements seuls, ou toute l'offre.
+class OfferChangeBody final : public ui::Widget {
+public:
+    OfferChangeBody(App& app, licence::watch::OfferChange ch, std::function<void()> compare, std::function<void()> close)
+        : ui::Widget("dialog.offre-modifiee.corps"), app_(app), ch_(std::move(ch)), compare_(std::move(compare)), close_(std::move(close)) {
+        for (const auto& r : ch_.rows) changes_ += r.before != r.after ? 1 : 0;
+        onlyChanges_ = changes_ > 0;
+        changesButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(
+            "Les changements (" + std::to_string(changes_) + ")", "dialog.offre-modifiee.changements")));
+        allButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(
+            "Toute l'offre (" + std::to_string(ch_.rows.size()) + ")", "dialog.offre-modifiee.tout")));
+        panel_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("dialog.offre-modifiee.panneau", "dialog.offre-modifiee.table")));
+        panel_->pane().onEnlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
+        compareButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Comparer toutes les offres\xE2\x80\xA6", "dialog.offre-modifiee.comparer")));
+        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.offre-modifiee.fermer")));
+        closeButton_->setStyle(ui::Button::Style::Primary);
+        links_ += changesButton_->clicked->connect([this] { setFilter(true); });
+        links_ += allButton_->clicked->connect([this] { setFilter(false); });
+        links_ += compareButton_->clicked->connect([this] {
+            if (compare_) compare_();
+        });
+        links_ += closeButton_->clicked->connect([this] {
+            if (close_) close_();
+        });
+        setFilter(onlyChanges_);
+    }
+    // Les essais : ce que montre la liste.
+    [[nodiscard]] std::size_t shownRows() const noexcept { return model_ ? model_->rowCount() : 0; }
+    [[nodiscard]] FeatureTablePanel& panel() noexcept { return *panel_; }
+
+    void setFilter(bool onlyChanges) {
+        onlyChanges_ = onlyChanges && changes_ > 0;
+        changesButton_->setStyle(onlyChanges_ ? ui::Button::Style::Primary : ui::Button::Style::Default);
+        allButton_->setStyle(onlyChanges_ ? ui::Button::Style::Default : ui::Button::Style::Primary);
+        changesButton_->setEnabled(changes_ > 0);
+        std::vector<std::vector<std::string>> rows;
+        std::vector<FeatureInfo> infos;
+        std::vector<int> tone;   // -1 retiree, 1 ajoutee, 0 inchangee
+        const std::string yes = "\xE2\x9C\x93", no = "\xE2\x80\x94";
+        for (const auto& r : ch_.rows) {
+            const bool changed = r.before != r.after;
+            if (onlyChanges_ && !changed) continue;
+            const std::string what = !changed ? std::string("inchang\xC3\xA9" "e") : r.after ? std::string("\xE2\x9C\x93 ajout\xC3\xA9" "e") : std::string("\xE2\x9C\x97 retir\xC3\xA9" "e");
+            rows.push_back({r.label, r.product, r.before ? yes : no, r.after ? yes : no, what});
+            infos.push_back({r.id, r.label, r.product, {}});
+            tone.push_back(!changed ? 0 : r.after ? 1 : -1);
+        }
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Logiciel", "Avant", "Apr\xC3\xA8s", "Changement"}, std::move(rows),
+                                        [tone](ui::RowIndex r, std::size_t c) {
+                                            ui::CellStyle s;
+                                            if (r < tone.size() && tone[r] != 0) {
+                                                if (c == 0 || c == 4) s.bold = true;
+                                                if (c >= 3) s.fgTone = tone[r] > 0 ? ui::Tone::Ok : ui::Tone::Error;
+                                            }
+                                            return s;
+                                        });
+        panel_->table().setColumns({{"Fonctionnalit\xC3\xA9", 220.f}, {"Logiciel", 110.f}, {"Avant", 64.f}, {"Apr\xC3\xA8s", 64.f}, {"Changement", 120.f}});
+        panel_->table().setModel(model_);
+        panel_->setRows(std::move(infos));
+        if (model_->rowCount() > 0) panel_->table().selectModelRows({0});
+        invalidate();
+    }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(1180.f, std::max(560.f, r.w - 40.f)), h = std::min(760.f, std::max(400.f, r.h - 40.f));
+        frame_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+        closeBox_ = {frame_.right() - 36.f, frame_.y + 9.f, 24.f, 24.f};
+        ui::dialogframe::keep(*this, closeBox_);
+        const float lines = 1.f + (ch_.values.empty() ? 0.f : 1.f);
+        const float chipsY = frame_.y + 52.f + lines * 20.f + 6.f;
+        const float c1 = std::max(150.f, changesButton_->sizeHint().preferred.w), c2 = std::max(130.f, allButton_->sizeHint().preferred.w);
+        changesButton_->setBounds({frame_.x + 16.f, chipsY, c1, 28.f});
+        allButton_->setBounds({frame_.x + 16.f + c1 + 6.f, chipsY, c2, 28.f});
+        const float top = chipsY + 36.f;
+        panel_->setBounds({frame_.x + 16.f, top, frame_.w - 32.f, std::max(120.f, frame_.bottom() - 56.f - top)});
+        const float cw = std::max(110.f, closeButton_->sizeHint().preferred.w), pw = std::max(200.f, compareButton_->sizeHint().preferred.w);
+        closeButton_->setBounds({frame_.right() - 16.f - cw, frame_.bottom() - 44.f, cw, 32.f});
+        compareButton_->setBounds({frame_.x + 16.f, frame_.bottom() - 44.f, pw, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(frame_, c.panelBg);
+        r.strokeRect(frame_, c.borderStrong, 1.f);
+        r.fillRect({frame_.x, frame_.y, frame_.w, 42.f}, c.headerBg);
+        const std::string title = "Offre \xC2\xAB " + ch_.label + " \xC2\xBB : avant / apr\xC3\xA8s" + (ch_.mine ? " (ta licence)" : "");
+        r.drawText({frame_.x + 16.f, frame_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, fit(r, title, kTitle, frame_.w - 70.f), kTitle, c.text);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({frame_.x, frame_.y + 42.f, frame_.w, 1.f}, c.border);
+        int added = 0, removed = 0;
+        for (const auto& x : ch_.rows) {
+            if (!x.before && x.after) ++added;
+            if (x.before && !x.after) --removed;
+        }
+        std::string sum = std::to_string(-removed) + (removed < -1 ? " fonctionnalit\xC3\xA9s retir\xC3\xA9" "es" : " fonctionnalit\xC3\xA9 retir\xC3\xA9" "e") + ", " +
+                          std::to_string(added) + (added > 1 ? " ajout\xC3\xA9" "es" : " ajout\xC3\xA9" "e");
+        if (ch_.registry) sum += " \xC2\xB7 registre n\xC2\xB0 " + std::to_string(ch_.registry);
+        if (ch_.mine) sum += " \xC2\xB7 ta licence garde ce qu'elle contient jusqu'\xC3\xA0 son renouvellement";
+        float y = frame_.y + 52.f;
+        r.drawText({frame_.x + 16.f, y}, fit(r, sum, kSmall, frame_.w - 32.f), kSmall, c.text);
+        y += 20.f;
+        if (!ch_.values.empty()) {
+            std::string v;
+            for (const auto& x : ch_.values) v += (v.empty() ? "" : "   \xC2\xB7   ") + x.label + " : " + x.before + " \xE2\x86\x92 " + x.after;
+            r.drawText({frame_.x + 16.f, y}, fit(r, v, kSmall, frame_.w - 32.f), kSmall, c.text);
+            r.drawText({frame_.x + 17.f, y}, fit(r, v, kSmall, frame_.w - 32.f), kSmall, c.text);
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+            if (close_) close_();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    App&                  app_;
+    licence::watch::OfferChange  ch_;
+    std::function<void()> compare_, close_;
+    int                   changes_{0};
+    bool                  onlyChanges_{true};
+    ui::Button*           changesButton_{nullptr};
+    ui::Button*           allButton_{nullptr};
+    FeatureTablePanel*    panel_{nullptr};
+    ui::Button*           compareButton_{nullptr};
+    ui::Button*           closeButton_{nullptr};
+    std::shared_ptr<Rows> model_;
+    gfx::Rect             frame_{}, closeBox_{};
+    core::ConnectionScope links_;
+};
+
+class OfferChangeWindow final : public menu::WidgetMenu {
+public:
+    OfferChangeWindow(App& app, licence::watch::OfferChange ch) : menu::WidgetMenu("dialog.offre-modifiee"), app_(app), ch_(std::move(ch)) {}
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return "Offre " + ch_.label + " : avant / apr\xC3\xA8s"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer(false);
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void fermer(bool compare) {
+        if (done_) return;
+        done_ = true;
+        manager().CloseDialog(menu::DialogResult{compare ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, {}});
+    }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<OfferChangeBody>(app_, ch_, [this] { fermer(true); }, [this] { fermer(false); }));
+        return core::ok();
+    }
+
+private:
+    App&                 app_;
+    licence::watch::OfferChange ch_;
+    bool                 done_{false};
+};
+
+} // namespace
+
+namespace licence {
+bool showOfferChange(App& app, const std::string& key) {
+    for (const auto& n : notices::list()) {
+        if (n.key != key) continue;
+        auto ch = watch::offerChangeOf(n.data);
+        if (!ch) return false;
+        (void)notices::markRead(n.id);
+        app.menus().ShowDialog(std::make_unique<OfferChangeWindow>(app, std::move(*ch)), [&app](const menu::DialogResult& r) {
+            if (r.accepted()) showLicenceWindow(app, kTabEditions);
+        });
+        return true;
+    }
+    return false;
+}
+} // namespace licence
+
+namespace {
+
 // ============================================================ 1.38.0 : la fenetre Notifications ==
 class NoticesBody final : public ui::Widget {
 public:
-    NoticesBody(std::function<void(int)> openLicence, std::function<void()> close)
-        : ui::Widget("dialog.notifications.corps"), openLicence_(std::move(openLicence)), close_(std::move(close)) {
+    NoticesBody(std::function<void(int)> openLicence, std::function<bool(const std::string&)> openDetail, std::function<void()> close)
+        : ui::Widget("dialog.notifications.corps"), openLicence_(std::move(openLicence)), openDetail_(std::move(openDetail)), close_(std::move(close)) {
         ai::AiNotificationsView::Callbacks cb;
         cb.follow = [this](const std::string& action) {
             const auto t = notices::parseAction(action);
@@ -2261,6 +2625,7 @@ public:
                 openLicence_(t.tab);
                 return true;
             }
+            if (t.kind == "detail" && openDetail_) return openDetail_(t.key);   // 1.39.0 : l'offre modifiee, avant / apres
             return false;
         };
         list_ = &static_cast<ai::AiNotificationsView&>(addChild(std::make_unique<ai::AiNotificationsView>("dialog.notifications.liste", cb)));
@@ -2311,6 +2676,7 @@ protected:
 
 private:
     std::function<void(int)>   openLicence_;
+    std::function<bool(const std::string&)> openDetail_;   // 1.39.0
     std::function<void()>      close_;
     ai::AiNotificationsView*   list_{nullptr};
     ui::Button*                closeButton_{nullptr};
@@ -2320,7 +2686,7 @@ private:
 
 class NoticesWindow final : public menu::WidgetMenu {
 public:
-    explicit NoticesWindow(std::shared_ptr<int> then) : menu::WidgetMenu("dialog.notifications"), then_(std::move(then)) {}
+    NoticesWindow(App& app, std::shared_ptr<int> then) : menu::WidgetMenu("dialog.notifications"), app_(app), then_(std::move(then)) {}
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
     [[nodiscard]] std::string title() const override { return "Notifications"; }
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
@@ -2347,6 +2713,7 @@ protected:
                 *then_ = tab < 0 ? licence::kTabAuto : tab;   // la fenetre Licence, une fois celle-ci fermee
                 fermer();
             },
+            [this](const std::string& key) { return licence::showOfferChange(app_, key); },   // 1.39.0 : par-dessus celle-ci
             [this] { fermer(); });
         body_ = body.get();
         setRoot(std::move(body));
@@ -2354,6 +2721,7 @@ protected:
     }
 
 private:
+    App&                 app_;
     std::shared_ptr<int> then_;
     NoticesBody*         body_{nullptr};
     bool                 done_{false};
@@ -2363,7 +2731,7 @@ private:
 
 void showNoticesWindow(App& app) {
     auto then = std::make_shared<int>(-1000);
-    app.menus().ShowDialog(std::make_unique<NoticesWindow>(then), [&app, then](const menu::DialogResult&) {
+    app.menus().ShowDialog(std::make_unique<NoticesWindow>(app, then), [&app, then](const menu::DialogResult&) {
         if (*then != -1000) showLicenceWindow(app, *then);
     });
 }

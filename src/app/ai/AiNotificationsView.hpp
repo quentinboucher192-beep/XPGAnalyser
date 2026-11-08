@@ -127,6 +127,13 @@ private:
         std::string              meta;    // "14:05 . Proposition"
         std::vector<std::string> detail;  // deux lignes au plus (la seconde finit par ... si le reste ne tient pas)
         float                    buttonW{0.f};
+        // 1.39.0 : le petit tableau sous le detail (Item::data, << tableau >>) : ses colonnes, ses lignes et leur ton,
+        // combien d'autres lignes ne sont pas montrees ; sa hauteur.
+        std::vector<std::string>              columns;
+        std::vector<std::vector<std::string>> cells;
+        std::vector<std::string>              tones;
+        int                                   more{0};
+        float                                 tableH{0.f};
     };
     void   rebuild();                      // les lignes montrees : le filtre, les jours
     void   layoutLines();                  // a la largeur

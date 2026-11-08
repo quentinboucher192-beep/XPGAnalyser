@@ -57,6 +57,10 @@ struct Item {
     std::string   key;            // vide : aucune ; la meme cle remplace (non lue, count + 1)
     int           count{1};       // les apparitions (<< x3 >>)
     bool          read{false};
+    // 1.39.0 : DES DONNEES EN PLUS (un objet JSON, en texte ; vide : aucune) - << tableau >> : un petit tableau montre
+    // sous le detail ({"colonnes":[...], "lignes":[{"cellules":[...], "ton":"ok"|"error"|""}], "plus":N}) ; le reste
+    // est a celui qui l'a publiee (l'offre modifiee : avant / apres, pour sa fenetre).
+    std::string   data;
     bool operator==(const Item&) const = default;
 };
 

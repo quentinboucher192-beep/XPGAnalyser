@@ -3,6 +3,7 @@
 //  categories, leurs pastilles, le delai de frappe, le defilement) : voir l'en-tete.
 // =============================================================================
 #include "GoToPanel.hpp"
+#include "Licence.hpp"   // 1.39.0 : un resultat pas dans la licence (barre, un cadenas)
 
 #include "../ui/TextSearch.hpp"
 #include "../ui/Theme.hpp"
@@ -117,6 +118,25 @@ void GoToPanel::flush() {
     if (pending_) refresh();
 }
 
+// 1.39.0 : un resultat qui ouvre une entree pas dans la licence (sa cle : le volet, l'action de la barre, la commande).
+static bool lockedKey(const std::string& key) {
+    using W = licence::Where;
+    const auto after = [&](std::string_view head) -> std::string {
+        if (key.rfind(head, 0) != 0) return {};
+        std::string rest = key.substr(head.size());
+        if (const auto c = rest.find(':'); c != std::string::npos) rest.resize(c);
+        return rest;
+    };
+    if (auto p = after("apipane:"); !p.empty()) return licence::locked(W::ApiPane, p);
+    if (auto p = after("pane:"); !p.empty()) return licence::locked(W::HmiPane, p);
+    if (key.rfind("bar:", 0) == 0) return licence::lockedAction(std::string_view(key).substr(4));
+    if (key.rfind("cmd:", 0) == 0) return licence::lockedAction(std::string_view(key).substr(4));
+    if (key == "act:assistant-ia") return licence::locked(W::Action, "ia.assistant");
+    if (key == "act:exporter-vues") return licence::locked(W::Gesture, "vues.exporter");
+    if (key == "act:importer-vues") return licence::locked(W::Gesture, "vues.importer");
+    return false;
+}
+
 void GoToPanel::refresh() {
     pending_ = false;
     if (searchAll_) {
@@ -137,6 +157,7 @@ void GoToPanel::refresh() {
         if (category_ >= 0)
             std::erase_if(results_, [&](const Result& r) { return r.group != category_; });
     }
+    for (auto& r : results_) r.locked = r.locked || lockedKey(r.key);   // 1.39.0 : pas dans la licence (barre)
     if (current_ >= static_cast<int>(results_.size())) current_ = results_.empty() ? 0 : static_cast<int>(results_.size()) - 1;
     invalidate();
 }
@@ -335,13 +356,19 @@ void GoToPanel::onPaint(const ui::PaintContext& ctx) {
             ui::drawIcon(ctx.r, r.icon, {ic.x + 4.f, ic.y + 4.f, 16.f, 16.f}, code >= 0 ? ui::codeIconColor(code) : on ? c.text : c.textMuted);
         }
         const float tx = row.x + 50.f;
-        const std::string hint = on && r.hint.empty() ? std::string("Entr\xC3\xA9" "e") : r.hint;
+        const std::string hint = r.locked ? std::string("pas dans ta licence") : on && r.hint.empty() ? std::string("Entr\xC3\xA9" "e") : r.hint;
         const float hw = hint.empty() ? 0.f : ctx.r.measure(hint, kSmall).width + 24.f;
         const float textW = row.right() - tx - 14.f - hw;
         // Les mots tapes, surlignes : dans le titre et dans la ligne du dessous
         // (le commentaire, la ligne de code ou ils ont ete trouves).
         markTerms(ctx, query, r.title, {tx, row.y + 5.f}, f, textW);
-        drawFit(ctx.r, {tx, row.y + 5.f}, r.title, f, c.text, textW);
+        drawFit(ctx.r, {tx, row.y + 5.f}, r.title, f, r.locked ? c.textMuted : c.text, textW);
+        if (r.locked) {   // 1.39.0 : pas dans la licence - barre, un cadenas apres le titre
+            const float tw = std::min(textW, ctx.r.measure(r.title, f).width);
+            const float sy = std::floor(row.y + 5.f + ctx.r.lineHeight(f) * 0.5f) + 0.5f;
+            ctx.r.line({tx - 1.f, sy}, {tx + tw + 1.f, sy}, c.textMuted, 1.f);
+            if (tw + 20.f <= textW) ui::drawIcon(ctx.r, ui::Icon::Lock, {tx + tw + 6.f, row.y + 6.f, 13.f, 13.f}, c.warning);
+        }
         markTerms(ctx, query, r.subtitle, {tx, row.y + 23.f}, kSmall, textW);
         drawFit(ctx.r, {tx, row.y + 23.f}, r.subtitle, kSmall, c.textMuted, textW);
         if (!hint.empty())

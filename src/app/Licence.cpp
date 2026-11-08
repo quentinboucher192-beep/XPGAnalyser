@@ -94,6 +94,12 @@ bool requireImpl(std::string_view feature, std::string* why) {
     return false;
 }
 
+// 1.39.0 : une entree (action, geste, volet) dont la fonctionnalite n'est pas dans la licence.
+bool lockedImpl(Where where, std::string_view key) {
+    const auto f = featureOf(where, key);
+    return !f.empty() && !allows(f);
+}
+
 void arm() {
     {
         std::lock_guard<std::mutex> lock(g_mutex);
@@ -101,6 +107,7 @@ void arm() {
     }
     g_active = true;
     detail::g_require.store(&requireImpl, std::memory_order_release);
+    detail::g_locked.store(&lockedImpl, std::memory_order_release);   // 1.39.0 : les menus et les listes
 }
 
 } // namespace
@@ -239,19 +246,19 @@ std::string featureLabel(std::string_view feature) {
 
 bool gate(App& app, std::string_view feature) {
     if (allows(feature)) return true;
-    std::string text = licensing::lockedMessage(feature);
-    text += "\n\nRien n'est ferm\xC3\xA9 : ton projet reste ouvert ; Enregistrer et Exporter restent permis.";
-    auto dialog = std::make_unique<MessageDialog>("Pas dans ta licence", std::move(text), MessageDialog::Icon::Info, "Licence\xE2\x80\xA6");
-    dialog->setCancelLabel("Fermer");
-    app.menus().ShowDialog(std::move(dialog), [&app](const menu::DialogResult& r) {
-        if (r.accepted()) showLicenceWindow(app, kTabFeatures);
-    });
+    showLocked(app, feature);   // 1.39.0 : << Ta licence ne permet pas cette action >> (la capture, les offres)
     return false;
 }
 
 bool gate(App& app, Where where, std::string_view key) {
     const auto f = featureOf(where, key);
-    return f.empty() || gate(app, f);
+    if (f.empty() || allows(f)) return true;
+    // 1.39.0 : le libelle de l'entree (<< Simuler l'automate >>, << IHM > Rapports >>) dans la fenetre
+    std::string label;
+    for (const auto& g : gates())
+        if (g.where == where && key == g.key) label = g.label;
+    showLocked(app, f, std::move(label));
+    return false;
 }
 
 namespace {
@@ -866,6 +873,14 @@ std::string listOf(const Seen& a, const Seen& b, const std::vector<std::string>&
     }
     return out.empty() ? std::string("aucune") : out;
 }
+// 1.39.0 : le logiciel d'une fonctionnalite (API Studio, IHM Studio...).
+std::string productOf(const Seen& a, const Seen& b, const std::string& id) {
+    for (const auto* s : {&a, &b})
+        for (const auto& [k, v] : s->products)
+            if (k == id && !v.empty()) return v;
+    return {};
+}
+std::string daysText(int d) { return d == 0 ? std::string("sans fin") : std::to_string(d) + (d > 1 ? " jours" : " jour"); }
 const Offer* offerOf(const Seen& s, const std::string& id) {
     for (const auto& o : s.offers)
         if (o.id == id) return &o;
@@ -898,7 +913,10 @@ Seen snapshot(const licensing::RegistryView* reg, const licensing::LicenseState&
     s.known = true;
     if (reg) {
         s.registry = reg->number;
-        for (const auto& f : reg->features) s.names.emplace_back(f.id, f.label);
+        for (const auto& f : reg->features) {
+            s.names.emplace_back(f.id, f.label);
+            s.products.emplace_back(f.id, f.product);   // 1.39.0 : la colonne Logiciel
+        }
         for (const auto& e : reg->editions) {
             if (e.id == reg->unlicensedEdition) continue;   // l'edition sans licence : rien a annoncer
             Offer o;
@@ -910,6 +928,8 @@ Seen snapshot(const licensing::RegistryView* reg, const licensing::LicenseState&
             o.features = e.features;
             std::sort(o.features.begin(), o.features.end());
             o.retired = e.retired;
+            o.devices = e.maxDevices;    // 1.39.0
+            o.days = e.durationDays;
             s.offers.push_back(std::move(o));
         }
         for (const auto& a : reg->announcements) s.current.emplace_back(a.id, a.title, a.text, a.edition, a.until);
@@ -960,17 +980,85 @@ std::vector<notices::Item> compare(const Seen& before, Seen& now, std::int64_t a
                     "info", "offre:" + o.id + ":" + rk, kTabEditions);
                 continue;
             }
-            if (o.features != old->features) {
+            // 1.39.0 : les fonctionnalites, le prix, les PC, la duree - ce qui change, precisement : un tableau dans la
+            // notification (les changements) et sa fenetre (toute l'offre, l'avant et l'apres, la capture de chacune).
+            const bool priceMoved = !o.price.empty() && !old->price.empty() && o.price != old->price;
+            const bool devicesMoved = o.devices >= 0 && old->devices >= 0 && o.devices != old->devices;
+            const bool daysMoved = o.days >= 0 && old->days >= 0 && o.days != old->days;
+            if (o.features != old->features || priceMoved || devicesMoved || daysMoved) {
                 std::vector<std::string> added, removed;
                 std::set_difference(o.features.begin(), o.features.end(), old->features.begin(), old->features.end(), std::back_inserter(added));
                 std::set_difference(old->features.begin(), old->features.end(), o.features.begin(), o.features.end(), std::back_inserter(removed));
+                const std::string key = "offre:" + o.id + ":" + rk;
+                std::vector<std::string> parts;
+                if (!removed.empty())
+                    parts.push_back(std::to_string(removed.size()) + (removed.size() > 1 ? " fonctionnalit\xC3\xA9s retir\xC3\xA9" "es : " : " fonctionnalit\xC3\xA9 retir\xC3\xA9" "e : ") +
+                                    listOf(before, now, removed));
+                if (!added.empty())
+                    parts.push_back(std::to_string(added.size()) + (added.size() > 1 ? " ajout\xC3\xA9" "es : " : " ajout\xC3\xA9" "e : ") + listOf(now, before, added));
+                core::json::Value values = core::json::Value::array();
+                core::json::Value table = core::json::Value::array();
+                const auto tableRow = [&](std::vector<std::string> cells, const char* tone) {
+                    core::json::Value r = core::json::Value::object();
+                    core::json::Value c = core::json::Value::array();
+                    for (auto& x : cells) c.push(std::move(x));
+                    r.set("cellules", std::move(c));
+                    if (*tone) r.set("ton", tone);
+                    table.push(std::move(r));
+                };
+                const auto value = [&](const char* label, const std::string& a, const std::string& b) {
+                    core::json::Value v = core::json::Value::object();
+                    v.set("nom", label);
+                    v.set("avant", a);
+                    v.set("apres", b);
+                    values.push(std::move(v));
+                    parts.push_back(std::string(label) + " : " + a + " \xE2\x86\x92 " + b);
+                };
+                const std::string yes = "\xE2\x9C\x93 incluse", no = "\xE2\x9C\x97 retir\xC3\xA9" "e", none = "\xE2\x80\x94", plus = "\xE2\x9C\x93 ajout\xC3\xA9" "e";
+                for (const auto& id : removed) tableRow({labelOf(before, id) == id ? labelOf(now, id) : labelOf(before, id), productOf(before, now, id), yes, no}, "error");
+                for (const auto& id : added) tableRow({labelOf(now, id) == id ? labelOf(before, id) : labelOf(now, id), productOf(now, before, id), none, plus}, "ok");
+                if (priceMoved) value("Prix", old->price, o.price);
+                if (devicesMoved) value("PC au plus", std::to_string(old->devices), std::to_string(o.devices));
+                if (daysMoved) value("Dur\xC3\xA9" "e", daysText(old->days), daysText(o.days));
+                for (const auto& v : values.items()) tableRow({v.str("nom"), std::string(), v.str("avant"), v.str("apres")}, "");
+                // toute l'offre, pour la fenetre : les changements d'abord, puis ce qui reste
+                core::json::Value rows = core::json::Value::array();
+                const auto rowOf = [&](const std::string& id, bool a, bool b) {
+                    core::json::Value r = core::json::Value::object();
+                    r.set("id", id);
+                    r.set("nom", labelOf(now, id) == id ? labelOf(before, id) : labelOf(now, id));
+                    r.set("logiciel", productOf(now, before, id));
+                    r.set("avant", a);
+                    r.set("apres", b);
+                    rows.push(std::move(r));
+                };
+                for (const auto& id : removed) rowOf(id, true, false);
+                for (const auto& id : added) rowOf(id, false, true);
+                for (const auto& id : o.features)
+                    if (std::binary_search(old->features.begin(), old->features.end(), id)) rowOf(id, true, true);
+                core::json::Value offer = core::json::Value::object();
+                offer.set("id", o.id);
+                offer.set("nom", o.label);
+                offer.set("ta_licence", mine);
+                offer.set("registre", now.registry);
+                offer.set("lignes", std::move(rows));
+                offer.set("valeurs", std::move(values));
+                core::json::Value cols = core::json::Value::array();
+                for (const char* c : {"Fonctionnalit\xC3\xA9", "Logiciel", "Avant", "Apr\xC3\xA8s"}) cols.push(c);
+                core::json::Value t = core::json::Value::object();
+                t.set("colonnes", std::move(cols));
+                t.set("lignes", std::move(table));
+                core::json::Value data = core::json::Value::object();
+                data.set("tableau", std::move(t));
+                data.set("offre", std::move(offer));
                 std::string d;
-                if (!added.empty()) d += "Ajout\xC3\xA9" + std::string(added.size() > 1 ? "es" : "e") + " : " + listOf(now, before, added) + ". ";
-                if (!removed.empty()) d += "Retir\xC3\xA9" + std::string(removed.size() > 1 ? "es" : "e") + " : " + listOf(now, before, removed) + ". ";
-                d += "Avant : " + listOf(before, now, old->features) + ". Apr\xC3\xA8s : " + listOf(now, before, o.features) + ".";
+                for (const auto& p : parts) d += (d.empty() ? "" : " \xC2\xB7 ") + p;
+                d += ".";
                 if (mine) d += " Ta licence garde ce qu'elle contient jusqu'\xC3\xA0 son renouvellement.";
-                add("Offres", "Offre " + q1 + o.label + q2 + " modifi\xC3\xA9" "e" + tag, d, mine && !removed.empty() ? "warning" : "info",
-                    "offre:" + o.id + ":" + rk, kTabEditions);
+                add("Offres", "Offre " + q1 + o.label + q2 + " modifi\xC3\xA9" "e" + tag, d, mine && !removed.empty() ? "warning" : "info", key, -1);
+                out.back().button = "Voir le d\xC3\xA9tail";
+                out.back().action = notices::toDetail(key);
+                out.back().data = core::json::write(data);
             }
         }
         for (const auto& old : before.offers)
@@ -1026,6 +1114,26 @@ std::vector<notices::Item> compare(const Seen& before, Seen& now, std::int64_t a
     return out;
 }
 
+std::optional<OfferChange> offerChangeOf(const std::string& data) {
+    core::json::Value v;
+    if (data.empty() || !core::json::parse(data, v, nullptr) || !v.isObject()) return std::nullopt;
+    const auto* o = v.find("offre");
+    if (!o || !o->isObject() || o->str("id").empty()) return std::nullopt;
+    OfferChange c;
+    c.id = o->str("id");
+    c.label = o->str("nom", c.id);
+    c.mine = o->flag("ta_licence");
+    c.registry = static_cast<std::uint64_t>(std::max<std::int64_t>(0, o->integer("registre")));
+    for (const auto& r : o->at("lignes").items()) {
+        if (!r.isObject() || r.str("id").empty()) continue;
+        c.rows.push_back({r.str("id"), r.str("nom", r.str("id")), r.str("logiciel"), r.flag("avant"), r.flag("apres")});
+        if (c.rows.size() >= 500) break;
+    }
+    for (const auto& x : o->at("valeurs").items())
+        if (x.isObject()) c.values.push_back({x.str("nom"), x.str("avant"), x.str("apres")});
+    return c;
+}
+
 bool loadSeen(const std::string& file, Seen& out) {
     out = Seen{};
     std::string text;
@@ -1042,11 +1150,14 @@ bool loadSeen(const std::string& file, Seen& out) {
         x.promoPrice = o.str("prix_reduit");
         x.promoUntil = o.integer("reduction_fin");
         x.retired = o.flag("retiree");
+        x.devices = static_cast<int>(o.integer("postes", -1));   // 1.39.0 : -1 (un fichier de la 1.38) : pas retenu
+        x.days = static_cast<int>(o.integer("duree", -1));
         for (const auto& f : o.at("fonctions").items()) x.features.push_back(f.asString());
         std::sort(x.features.begin(), x.features.end());
         if (!x.id.empty()) out.offers.push_back(std::move(x));
     }
     for (const auto& [k, n] : v.at("noms").members()) out.names.emplace_back(k, n.asString());
+    for (const auto& [k, n] : v.at("logiciels").members()) out.products.emplace_back(k, n.asString());   // 1.39.0
     for (const auto& a : v.at("annonces").items()) out.announcements.push_back(a.asString());
     const auto& l = v.at("licence");
     out.licenseId = l.str("id");
@@ -1073,6 +1184,8 @@ bool saveSeen(const std::string& file, const Seen& s) {
             x.set("reduction_fin", o.promoUntil);
         }
         if (o.retired) x.set("retiree", true);
+        if (o.devices >= 0) x.set("postes", o.devices);   // 1.39.0
+        if (o.days >= 0) x.set("duree", o.days);
         core::json::Value f = core::json::Value::array();
         for (const auto& id : o.features) f.push(id);
         x.set("fonctions", std::move(f));
@@ -1082,6 +1195,9 @@ bool saveSeen(const std::string& file, const Seen& s) {
     core::json::Value names = core::json::Value::object();
     for (const auto& [k, n] : s.names) names.set(k, n);
     v.set("noms", std::move(names));
+    core::json::Value products = core::json::Value::object();   // 1.39.0
+    for (const auto& [k, n] : s.products) products.set(k, n);
+    v.set("logiciels", std::move(products));
     core::json::Value anns = core::json::Value::array();
     for (const auto& a : s.announcements) anns.push(a);
     v.set("annonces", std::move(anns));

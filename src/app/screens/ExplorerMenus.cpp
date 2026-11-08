@@ -38,6 +38,7 @@
 #include "../AnimationTablesPane.hpp"
 #include "../ApiPanes.hpp"
 #include "../App.hpp"
+#include "../Licence.hpp"   // 1.39.0 : une entree pas dans la licence (barree, un cadenas ; le clic dit pourquoi)
 #include "../../hmi/HmiBuildState.hpp"   // 1.11 (chantier T3, C4) : les deux filtres de l'arbre
 #include "../ExecutionOrderWiring.hpp"
 #include "../SimCenter.hpp"              // ---- Lot API 8 : Centre de simulation (les menus de ses noeuds) ----
@@ -201,6 +202,12 @@ public:
     }
     void add(std::string label, Icon icon, std::function<void()> fn, std::string shortcut = {}, std::string why = {}) {
         items_.push_back(make(std::move(label), icon, std::move(fn), std::move(shortcut), std::move(why)));
+    }
+    // 1.39.0 : la derniere entree, si elle demande une fonctionnalite pas dans la licence : barree, un cadenas (elle
+    // reste choisissable : le clic va au controle, qui dit pourquoi dans une fenetre).
+    void lock(licence::Where where, std::string_view key) { lockLast(licence::locked(where, key)); }
+    void lockLast(bool on) {
+        if (on && !items_.empty() && items_.back().enabled && !items_.back().separator && !items_.back().heading) items_.back().locked = true;
     }
     // Un sous-menu : ses entrees a cote de lui ; vide, ou `why` : grise.
     void sub(std::string label, Icon icon, std::vector<Item> children, std::string why = {}) {
@@ -983,7 +990,10 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.heading(hmiRow ? "Outils de l'IHM" : "Outils de l'API");
         const auto chips = treeModel_->style(node).chips;
         for (std::size_t k = 0; k < chips.size(); ++k)
+        {
             m.add(chips[k].label, chips[k].icon, [this, hmiRow, k] { (void)openTreeTool(hmiRow, k); });
+            m.lockLast(chips[k].locked);   // 1.39.0
+        }
     }
     // ---- fin Lot API 8 : l'arbre du projet ----
 
@@ -1028,6 +1038,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Exporter le programme lisible" + kDots, Icon::Document, [this] { askProgramExport(0); }, "Ctrl+Maj+E",
               project ? std::string{} : "aucun projet");
         m.add("Vers Control Expert" + kDots, Icon::Export, trigger("project.exportSources"), {}, project ? std::string{} : "aucun projet");
+        m.lock(licence::Where::Action, "project.exportSources");
         break;
 
     case NK::ConfigurationFolder:
@@ -1068,6 +1079,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Voir l'ordre d'ex\xC3\xA9" "cution", Icon::Section, apiPane("ordre"));
         m.add("Simuler", Icon::Play, [this] { runSimulationTransport("sim.run"); }, "F5",
               app_.simulation().state() == SimulationHost::State::Running ? "d\xC3\xA9j\xC3\xA0 en marche" : "");
+        m.lock(licence::Where::Gesture, "sim.run");
         m.separator();
         // 1.12.18 (planche 19) : F2 dit pourquoi (Control Expert nomme ses taches).
         addRename("Renommer" + kDots, {}, "MAST, FAST, AUX : des noms fix\xC3\xA9s par Control Expert");
@@ -1360,6 +1372,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
 
     case NK::TablesFolder:
         m.add("Ouvrir l'onglet Tables d'animation", Icon::AnimationTable, apiPane("tables"));
+        m.lock(licence::Where::ApiPane, "tables");
         m.add("+ Table d'animation", Icon::AnimationTable, newTable, {}, noDoc);
         break;
     case NK::AnimationTable: {
@@ -1400,7 +1413,9 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.separator();
         m.add(running ? "Pause" : "Simuler", running ? Icon::Pause : Icon::Play,
               [this, running] { runSimulationTransport(running ? "sim.pause" : "sim.run"); }, running ? std::string{} : std::string("F5"), haltedWhy);
+        if (!running) m.lock(licence::Where::Gesture, "sim.run");
         m.add("Un cycle", Icon::StepOnce, [this] { runSimulationTransport("sim.step"); }, {}, haltedWhy);
+        m.lock(licence::Where::Gesture, "sim.step");
         m.add("Arr\xC3\xAAter", Icon::Stop, [this] { runSimulationTransport("sim.stop"); }, "Maj+F5",
               attached && state != State::Stopped ? std::string{} : "d\xC3\xA9j\xC3\xA0 arr\xC3\xAAt\xC3\xA9" "e");
         m.separator();
@@ -1472,12 +1487,15 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         // programme de MAST, qu'il n'a pas).
         if (!core::hasApi()) {
             m.add("D\xC3\xA9marrer l'IHM", Icon::Play, [this] { (void)topBarLot8Action("hmi.start"); }, "F8");
+            m.lock(licence::Where::Gesture, "hmi.start");
             m.add("Arr\xC3\xAAter l'IHM", Icon::Stop, [this] { (void)topBarLot8Action("hmi.stop"); }, "Maj+F8");
             break;
         }
         m.add(running ? "Pause" : "Simuler", running ? Icon::Pause : Icon::Play,
               [this, running] { simCenterGo(running ? "sim.pause" : "sim.run"); }, running ? std::string{} : std::string("F5"), haltedWhy);
+        if (!running) m.lock(licence::Where::Gesture, "sim.run");
         m.add("Un cycle", Icon::StepOnce, [this] { simCenterGo("sim.step"); }, {}, haltedWhy);
+        m.lock(licence::Where::Gesture, "sim.step");
         m.add("Arr\xC3\xAAter", Icon::Stop, [this] { simCenterGo("sim.stop"); }, "Maj+F5",
               attached && state != State::Stopped ? std::string{} : "d\xC3\xA9j\xC3\xA0 arr\xC3\xAAt\xC3\xA9" "e");
         break;
@@ -1637,6 +1655,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("+ Vue" + kDots, Icon::Screen, [this] { askNewHmiView("vue"); });
         m.add("+ Popup" + kDots, Icon::Screen, [this] { askNewHmiView("popup"); });
         m.add("Importer des vues" + kDots, Icon::Open, [this] { askHmiImportViews(); });
+        m.lock(licence::Where::Gesture, "vues.importer");
         m.separator();
         m.add("G\xC3\xA9n\xC3\xA9rer", Icon::Analyze, hmiPane("generer"));
         m.add("Simuler l'IHM", Icon::Play, hmiPane("simulation"));
@@ -1670,7 +1689,9 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
             break;
         }
         m.add("Importer des vues" + kDots, Icon::Open, [this] { askHmiImportViews(); });
+        m.lock(licence::Where::Gesture, "vues.importer");
         m.add("Exporter les vues" + kDots, Icon::Export, [this] { askHmiExportViews(0); });
+        m.lock(licence::Where::Gesture, "vues.exporter");
         break;
     }
     case NK::HmiListFolder: {
@@ -1733,8 +1754,10 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         if (view->role == "symbole") {   // 1.11.2 (decision 162) : un symbole part dans un fichier de symboles
             m.add("Exporter le symbole" + kDots, Icon::Export, [this, viewId] { askHmiExportSymbols(viewId); });
             m.add("Importer" + kDots, Icon::Open, [this] { askHmiImport(); });   // 1.11.2 (scene 5 de MQ5)
-        } else
+        } else {
             m.add("Exporter la vue" + kDots, Icon::Export, legacy(ActionHmiExportView));
+            m.lock(licence::Where::Gesture, "vues.exporter");
+        }
         m.separator();
         addRename("Renommer" + kDots, rename("ihm-vue", name));
         addRemove("Supprimer" + kDots, [this, viewId] { askDeleteHmiView(viewId); });
@@ -1787,6 +1810,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
 
     case NK::HmiScripts:
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.lock(licence::Where::HmiPane, "scripts");
         m.separator();
         m.add("+ Script ST" + kDots, Icon::Code, [this] { askHmiNewScript(hmi::ScriptLang::ST); });
         m.add("+ Fonction" + kDots, Icon::Code, [this] { askHmiNewFunction(); });
@@ -1825,6 +1849,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     }
     case NK::HmiScriptsFolder: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.lock(licence::Where::HmiPane, "scripts");
         m.separator();
         m.add("+ Script ST" + kDots, Icon::Code, [this] { askHmiNewScript(hmi::ScriptLang::ST); });
         m.add("+ Script C" + kDots, Icon::Code, [this] { askHmiNewScript(hmi::ScriptLang::C); });
@@ -1860,6 +1885,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     }
     case NK::HmiFunctionsFolder:
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        m.lock(licence::Where::HmiPane, "fonctions");
         m.add("+ Fonction" + kDots, Icon::Code, [this] { askHmiNewFunction(); });
         m.separator();   // 1.11.2 (decision 174)
         m.add("Importer" + kDots, Icon::Open, [this] { askHmiImport(); });
@@ -2250,6 +2276,7 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
     case NK::HmiReports:
     case NK::HmiNotify: {
         m.add("Ouvrir", Icon::Open, [this, node] { openHmiNode(node); });
+        if (kind == NK::HmiReports) m.lock(licence::Where::HmiPane, "rapports");
         const auto made = [this](std::string key) { openHmiPane(key); return hmiTab(key); };
         const std::string help = "Son nom ; le reste dans son onglet (Ctrl+Z le retire).";
         if (kind == NK::HmiAlarms)
@@ -2281,13 +2308,14 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
                 auto* pane = dynamic_cast<HmiStylesPane*>(made("styles"));
                 return pane && pane->addStyle(name) != hmi::kNoId ? std::string{} : std::string("nom d\xC3\xA9j\xC3\xA0 pris ou invalide");
             }));
-        else if (kind == NK::HmiReports)
+        else if (kind == NK::HmiReports) {
             m.add("Nouveau rapport" + kDots, Icon::Plus, askName("Nouveau rapport", help, "Rapport_journalier", [made](const std::string& name) {
                 std::string why;
                 auto* pane = dynamic_cast<HmiReportsPane*>(made("rapports"));
                 return pane && pane->addReport(name, &why) ? std::string{} : why.empty() ? std::string("refus\xC3\xA9") : why;
             }));
-        else
+            m.lock(licence::Where::HmiPane, "rapports");
+        } else
             m.add("Nouveau destinataire" + kDots, Icon::Mail, askName("Nouveau destinataire", "Son nom ; son courriel et son t\xC3\xA9l\xC3\xA9phone dans l'onglet.",
                                                                       "Astreinte", [made](const std::string& name) {
                 std::string why;
