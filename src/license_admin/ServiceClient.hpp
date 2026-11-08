@@ -48,6 +48,7 @@
 // =============================================================================
 #pragma once
 
+#include "../licensing/Documents.hpp"   // 1.37.0 : licensing::License (le mail a l'acceptation)
 #include "../core/Json.hpp"
 #include "../licensing/Gateway.hpp"
 #include "../licensing/KeyFile.hpp"
@@ -55,6 +56,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -244,6 +246,7 @@ struct Entry {
     std::string              deviceKey;      // la cle du PC ; vide : illisible
     std::string              nonce;
     std::string              customer, contact, message;
+    std::string              edition, email;   // 1.37.0 : l'edition voulue (la boutique du Studio), le courriel du client (facultatifs)
     std::string              deviceName, fingerprint, software, licenseId;   // licenseId : celle demandee
     Seconds                  requestedAt{0};   // la date SIGNEE par le PC
     Seconds                  createdAt{0};     // le depot sur le service
@@ -283,17 +286,41 @@ struct FetchState {
 // demande marquee traitee.
 [[nodiscard]] Result refuse(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& reason,
                             const Options& o);
-// Repondre a une demande par une licence EN LIGNE (le PC l'active avec le code que l'editeur donne au client : le code
-// n'est jamais dans la reponse) : << acceptee >>, un mot pour le PC, la demande marquee traitee.
+// 1.37.0 : LE CODE D'ACTIVATION GARDE SUR CE POSTE, pour le revoir (Licences \xE2\x80\xBA Voir le code...) : chiffre pour ce compte
+// de ce PC (DPAPI sous Windows ; ailleurs un fichier 0600), dans codes-activation/<licence>.code du dossier de la cle. Jamais
+// synchronise (l'archive ne le porte pas), jamais en clair sur le disque sous Windows. Un nouveau code remplace l'ancien.
+bool storeCode(const std::string& folder, const std::string& licenseId, const std::string& code, std::string* why);
+bool readCode(const std::string& folder, const std::string& licenseId, std::string& code, std::string* why);
+[[nodiscard]] bool hasCode(const std::string& folder, const std::string& licenseId);
+
+// 1.37.0 : LE MAIL au client a l'acceptation (l'appelant l'envoie avant de publier ; ce module n'envoie rien) : son
+// etat part, scelle, dans la reponse au PC ("envoye", "echec" : le Studio le dit et demande de verifier l'adresse ; vide :
+// pas de mail). Un `Mailer` rend cet etat pour une demande (et la licence acceptee, et le code d'une licence en ligne).
+struct MailOutcome {
+    std::string state;   // gateway::kMailSent, kMailFailed ; vide : aucun mail
+    std::string to;
+};
+using Mailer = std::function<MailOutcome(const Entry& request, const licensing::License& licence, const std::string& code)>;
+// Le mail d'acceptation (sans reseau) : l'objet et le texte - la licence, l'edition, le client, jusqu'a quand, les PC, ce
+// qu'elle ouvre (les noms du registre `reg`, s'il est la), le code d'une licence en ligne et comment l'activer, la
+// signature `signer` (le nom de l'editeur ; vide : << Ton editeur >>).
+struct MailText {
+    std::string subject, body;
+};
+[[nodiscard]] MailText acceptanceMail(const licensing::License& licence, const licensing::Registry* reg, const Entry& request, const std::string& code,
+                                      const std::string& signer);
+// Repondre a une demande par une licence EN LIGNE : << acceptee >>, la demande marquee traitee. 1.37.0 : LE CODE part
+// scelle pour CE PC (son Studio s'active tout seul ; jamais en clair sur le service), avec l'identifiant de la licence
+// et l'etat du mail (`mailer` : nul, pas de mail). `licenceText` : la licence deposee (pour le mail).
 [[nodiscard]] Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId,
-                                  const Options& o);
+                                  const std::string& code, const std::string& licenceText, const Mailer& mailer, const Options& o);
 
 // ---- les licences liees a des PC (l'etat << poste >> de chacun, signe par l'editeur) ----
 // Une licence signee (.xpglic) a CHACUN de ses PC : << acceptee >> pour celui dont une demande attend (elle est marquee
 // traitee), << mise_a_jour >> pour les autres ; la licence scellee pour chaque PC (et la liste de revocation de
 // l'archive si elle nomme cette licence, ou si `withRevocations`).
 [[nodiscard]] Result publishBoundLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText,
-                                         bool withRevocations, const Options& o);
+                                         bool withRevocations, const Options& o, const Mailer& mailer = {});
 // Apres une revocation : la liste deposee (PUT /admin/revocations), puis << revoquee >> pour chaque PC lie donne.
 [[nodiscard]] Result publishRevocation(const std::string& folder, const licensing::SigningKey& key, const std::string& licenseId,
                                        const std::vector<std::string>& deviceKeys, const std::string& reason, const Options& o);

@@ -787,7 +787,9 @@ protected:
         std::string line = "ou glisse les fichiers .xpgreq sur la fen\xC3\xAAtre";
         if (!s.requests.empty())
             line = plural(good, "demande valide", "demandes valides") + (bad ? ", " + plural(bad, "refus\xC3\xA9" "e", "refus\xC3\xA9" "es") : std::string()) + " \xE2\x80\x94 " + line;
-        r.drawText({x, bounds().y + 7.f}, fit(r, line, ctx.theme.font.ui, bounds().right() - x), ctx.theme.font.ui, c.textMuted);
+        // 1.37.0 : sur la ligne d'Ajouter et Retirer (elle etait en haut de l'etape, sur les deux choix : << Lier des PC >>, << En ligne >>)
+        const auto ab = add_->bounds();
+        r.drawText({x, ab.y + (ab.h - r.lineHeight(ctx.theme.font.ui)) * 0.5f}, fit(r, line, ctx.theme.font.ui, bounds().right() - x), ctx.theme.font.ui, c.textMuted);
         if (s.extend)
             r.drawText({bounds().x, existingCaption_}, fit(r, "PC d\xC3\xA9j\xC3\xA0 sur la licence " + s.extendId + " (" + std::to_string(s.base.devices.size()) + ")",
                                                           ctx.theme.font.ui, bounds().w),

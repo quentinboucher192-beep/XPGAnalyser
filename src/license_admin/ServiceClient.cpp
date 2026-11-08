@@ -763,6 +763,8 @@ bool writeEntry(const std::string& folder, Entry& e, std::string* why) {
     if (!e.nonce.empty()) v.set("demande", e.nonce);
     if (!e.customer.empty()) v.set("client", e.customer);
     if (!e.contact.empty()) v.set("contact", e.contact);
+    if (!e.edition.empty()) v.set("edition", e.edition);   // 1.37.0
+    if (!e.email.empty()) v.set("courriel", e.email);
     if (!e.message.empty()) v.set("message", e.message);
     if (!e.deviceName.empty()) v.set("nom_pc", e.deviceName);
     if (!e.fingerprint.empty()) v.set("empreinte", e.fingerprint);
@@ -796,6 +798,8 @@ bool readEntry(const std::string& folder, const std::string& path, Entry& e) {
     e.nonce = v.str("demande");
     e.customer = v.str("client");
     e.contact = v.str("contact");
+    e.edition = v.str("edition");   // 1.37.0
+    e.email = v.str("courriel");
     e.message = v.str("message");
     e.deviceName = v.str("nom_pc");
     e.fingerprint = v.str("empreinte");
@@ -1114,6 +1118,8 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
         e.nonce = op.request.nonce;
         e.customer = op.online.customer;
         e.contact = op.online.contact;
+        e.edition = op.online.edition;   // 1.37.0
+        e.email = op.online.email;
         e.message = op.online.message;
         e.deviceName = op.record.deviceName;
         e.fingerprint = op.record.fingerprint;
@@ -1250,19 +1256,123 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     return res;
 }
 
-Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId, const Options& o) {
+// ============================================================================ 1.37.0 : le mail d'acceptation
+MailText acceptanceMail(const licensing::License& l, const licensing::Registry* reg, const Entry& e, const std::string& code, const std::string& signer) {
+    MailText m;
+    const std::string id = l.licenseId.empty() ? std::string("(licence)") : l.licenseId;
+    std::string editionLabel = l.edition;
+    if (reg)
+        if (const auto* ed = reg->edition(l.edition); ed && !ed->label.empty()) editionLabel = ed->label;
+    m.subject = "Ta licence " + id + (editionLabel.empty() ? std::string() : " (" + editionLabel + ")") + " est pr\xC3\xAAte";
+    std::string b;
+    const std::string who = !e.contact.empty() ? e.contact : e.customer;
+    b += "Bonjour" + (who.empty() ? std::string() : " " + who) + ",\n\n";
+    b += "Ta demande de licence" + (e.number > 0 ? " n\xC2\xB0 " + std::to_string(e.number) : std::string()) + " est accept\xC3\xA9" "e.\n\n";
+    b += "Licence : " + id + (editionLabel.empty() ? std::string() : " \xC2\xB7 " + editionLabel) + "\n";
+    if (!l.customer.empty()) b += "Client : " + l.customer + "\n";
+    if (l.expiresAt > 0) {
+        const long long days = l.issuedAt > 0 && l.expiresAt > l.issuedAt ? (l.expiresAt - l.issuedAt + licensing::kDay - 1) / licensing::kDay : 0;
+        b += "Valable jusqu'au " + licensing::isoDate(l.expiresAt).substr(8, 2) + "/" + licensing::isoDate(l.expiresAt).substr(5, 2) + "/" +
+             licensing::isoDate(l.expiresAt).substr(0, 4) + (days > 0 ? " (" + std::to_string(days) + " jours)" : std::string()) + "\n";
+    } else if (!l.licenseId.empty()) {
+        b += "Valable sans fin\n";
+    }
+    if (l.maxDevices > 0 && !l.licenseId.empty()) b += "PC : " + std::to_string(l.maxDevices) + (l.maxDevices > 1 ? " au plus" : "") + "\n";
+    if (!l.features.empty()) {
+        std::vector<std::pair<std::string, std::vector<std::string>>> byProduct;
+        for (const auto& g : l.features) {
+            std::string product = "Autres", label = g.id;
+            if (reg)
+                if (const auto* f = reg->feature(g.id)) {
+                    if (!f->product.empty()) product = f->product;
+                    if (!f->label.empty()) label = f->label;
+                }
+            bool placed = false;
+            for (auto& [p, labels] : byProduct)
+                if (p == product) {
+                    labels.push_back(label);
+                    placed = true;
+                }
+            if (!placed) byProduct.push_back({product, {label}});
+        }
+        b += "\nCe qu'elle ouvre :\n";
+        for (const auto& [p, labels] : byProduct) {
+            b += "  " + p + " : ";
+            for (std::size_t i = 0; i < labels.size(); ++i) b += (i ? ", " : "") + labels[i];
+            b += "\n";
+        }
+    }
+    if (!code.empty()) {
+        b += "\nTon code d'activation : " + code + "\n";
+        b += "Ton Studio l'active tout seul d\xC3\xA8s qu'il est en ligne. Sinon, ou sur un autre PC : Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA "
+             "Activer avec un code. Garde ce code pour toi : il active la licence.\n";
+    } else {
+        b += "\nTon Studio l'installe tout seul \xC3\xA0 sa prochaine v\xC3\xA9rification (il regarde toutes les minutes pendant deux heures, puis toutes "
+             "les 5 minutes, et \xC3\xA0 chaque lancement).\n";
+    }
+    b += "\nBonne route,\n" + (signer.empty() ? std::string("Ton \xC3\xA9" "diteur") : signer) + "\n";
+    m.body = std::move(b);
+    return m;
+}
+
+// ============================================================================ 1.37.0 : le code garde sur ce poste
+namespace {
+std::string codePath(const std::string& folder, const std::string& licenseId) {
+    return deploy::joinPath(deploy::joinPath(folder, "codes-activation"), archive::safeName(licenseId) + ".code");
+}
+} // namespace
+
+bool storeCode(const std::string& folder, const std::string& licenseId, const std::string& code, std::string* why) {
+    if (licenseId.empty() || code.empty()) return fail(why, "rien \xC3\xA0 garder (la licence ou le code manque)");
+    crypto::Bytes plain(code.begin(), code.end()), sealed;
+    const bool ok = crypto::protect(plain, sealed, /*machine=*/false, why);
+    crypto::wipe(plain.data(), plain.size());
+    if (!ok) return false;
+    std::error_code ec;
+    fs::create_directories(P(codePath(folder, licenseId)).parent_path(), ec);
+    return crypto::writePrivateFile(codePath(folder, licenseId), sealed, why);
+}
+
+bool readCode(const std::string& folder, const std::string& licenseId, std::string& code, std::string* why) {
+    code.clear();
+    crypto::Bytes sealed, plain;
+    if (!hasCode(folder, licenseId))
+        return fail(why, "le code de " + licenseId + " n'est pas gard\xC3\xA9 sur ce poste (cr\xC3\xA9\xC3\xA9 ailleurs, ou avant la 1.37.0) : tire un "
+                                                       "nouveau code (Licences \xE2\x80\xBA Nouveau code\xE2\x80\xA6)");
+    if (!crypto::readFile(codePath(folder, licenseId), sealed, why, 4096) || !crypto::unprotect(sealed, plain, why)) return false;
+    code.assign(plain.begin(), plain.end());
+    crypto::wipe(plain.data(), plain.size());
+    return true;
+}
+
+bool hasCode(const std::string& folder, const std::string& licenseId) {
+    std::error_code ec;
+    return !licenseId.empty() && fs::is_regular_file(P(codePath(folder, licenseId)), ec);
+}
+
+Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId, const std::string& code,
+                    const std::string& licenceText, const Mailer& mailer, const Options& o) {
     Entry e;
     std::string why;
     if (!findWaiting(folder, std::to_string(number), e, &why)) return refused(why);
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     gw::StatusContent content;
-    content.message = "Ta licence en ligne " + licenseId + " est pr\xC3\xAAte : ton \xC3\xA9" "diteur te donne son code d'activation (Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA "
-                      "Activer avec un code).";
+    content.message = "Ta licence en ligne " + licenseId + " est pr\xC3\xAAte : ton Studio l'active tout seul.";
+    content.code = code;               // 1.37.0 : scelle pour CE PC (le service n'en voit rien)
+    content.onlineLicense = licenseId;
+    Result res;
+    if (mailer) {
+        licensing::License lic;
+        std::string w;
+        if (licenceText.empty() || !licenceOf(licenceText, key, lic, nullptr, &w)) lic.licenseId = licenseId;
+        const MailOutcome m = mailer(e, lic, code);
+        content.mail = m.state;
+        content.mailTo = m.to;
+    }
     std::string line;
     if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
-    Result res;
-    res.details.push_back("Publi\xC3\xA9 : " + line + " (sans le code : tu le donnes toi-m\xC3\xAAme au client).");
+    res.details.push_back("Publi\xC3\xA9 : " + line + " (le code scell\xC3\xA9 pour ce PC : son Studio s'active tout seul).");
     if (!markHandled(*c, e.number, &why)) res.details.push_back("ATTENTION : " + why);
     e.state = RequestState::Accepted;
     e.answer = licenseId;
@@ -1277,7 +1387,7 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
 namespace {
 
 bool publishToDevices(Client& c, const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText, const licensing::License& lic,
-                      bool withRevocations, const std::string& skipKey, Result& res, int& accepted, int& updated) {
+                      bool withRevocations, const std::string& skipKey, Result& res, int& accepted, int& updated, const Mailer& mailer = {}) {
     bool ok = true;
     accepted = updated = 0;
     const auto entries = listRequests(folder);
@@ -1295,6 +1405,11 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
         content.license = licenceText;
         if (withRev) content.revocations = revText;
         content.message = waiting ? "Licence " + lic.licenseId + " accept\xC3\xA9" "e." : "Nouvelle \xC3\xA9mission de la licence " + lic.licenseId + ".";
+        if (waiting && mailer) {   // 1.37.0 : le mail au client, envoye avant ; son etat part avec la reponse
+            const MailOutcome m = mailer(*waiting, lic, {});
+            content.mail = m.state;
+            content.mailTo = m.to;
+        }
         std::string line, why;
         const gw::State st = waiting ? gw::State::Accepted : gw::State::Updated;
         const std::string who = "PC " + (d.name.empty() ? std::string("(sans nom)") : cite(d.name));
@@ -1323,7 +1438,8 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
 
 } // namespace
 
-Result publishBoundLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText, bool withRevocations, const Options& o) {
+Result publishBoundLicence(const std::string& folder, const licensing::SigningKey& key, const std::string& licenceText, bool withRevocations, const Options& o,
+                           const Mailer& mailer) {
     licensing::License lic;
     std::string why;
     if (!licenceOf(licenceText, key, lic, nullptr, &why)) return refused(why);
@@ -1332,7 +1448,7 @@ Result publishBoundLicence(const std::string& folder, const licensing::SigningKe
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     Result res;
     int accepted = 0, updated = 0;
-    const bool ok = publishToDevices(*c, folder, key, licenceText, lic, withRevocations, {}, res, accepted, updated);
+    const bool ok = publishToDevices(*c, folder, key, licenceText, lic, withRevocations, {}, res, accepted, updated, mailer);
     res.ok = ok;
     if (ok) {
         res.message = "Licence " + lic.licenseId + " publi\xC3\xA9" "e pour " + plural(lic.devices.size(), "PC", "PC");
