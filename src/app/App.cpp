@@ -380,6 +380,14 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->uiFont_ = a->settings_.getString("view.uiFont", "");
     gfx::setUiFontOverride(uiFontFileOf(a->uiFont_));
     a->options_.themeName = a->settings_.getString("view.theme", a->options_.themeName);
+    // 1.41.0 : LE NOUVEAU DESIGN - la couleur du logiciel (IHM Studio turquoise, API Studio bleu), et une fois, a la
+    // mise a jour : un Studio reste sur le Clair (le defaut d'avant) passe au theme XPG. Un autre theme choisi reste ;
+    // le Clair d'avant reste dans la galerie.
+    ui::Theme::setProductAccent(core::edition() == core::Edition::Ihm ? ui::Theme::ProductAccent::Teal : ui::Theme::ProductAccent::Blue);
+    if (a->settings_.getString("view.design", "") != "1.41") {
+        if (a->options_.themeName == "Light") a->options_.themeName = "XPG";
+        a->settings_.set("view.design", std::string("1.41"));
+    }
     a->setTheme(a->options_.themeName);
     if (auto r = a->initPlatform(a->options_); !r) return core::Err<core::Error>(r.error());
 #if XPG_HAVE_SDL3

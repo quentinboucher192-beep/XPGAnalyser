@@ -137,6 +137,14 @@ private:
 // d'origine. uiFontCandidates : elle d'abord, puis celles d'origine (un fichier illisible n'empeche rien).
 void setUiFontOverride(std::string path);
 [[nodiscard]] const std::string& uiFontOverride();
-[[nodiscard]] std::vector<std::string> uiFontCandidates();
+[[nodiscard]] std::vector<std::string> uiFontCandidates();   // interfaceFontCandidates(0)
+
+// 1.41.0 : LA POLICE DE L'INTERFACE - Inter, fournie avec les logiciels (resources/fonts : Inter-Regular.otf,
+// Inter-SemiBold.otf et leur licence SIL OFL). Le dossier : relatif au dossier courant par defaut ; main le donne en
+// absolu (la version installee travaille dans son dossier des donnees). `weight` : 0 normale, 1 demi-grasse. Dans
+// l'ordre : la police choisie par l'utilisateur (une seule graisse), Inter, puis celles d'origine.
+void setInterfaceFontFolder(std::string folder);
+[[nodiscard]] const std::string& interfaceFontFolder();
+[[nodiscard]] std::vector<std::string> interfaceFontCandidates(int weight);
 
 } // namespace gfx

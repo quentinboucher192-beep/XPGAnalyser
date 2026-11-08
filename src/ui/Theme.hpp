@@ -212,6 +212,16 @@ struct Theme {
     static Theme slate();
     static Theme highContrastLight();
 
+    // 1.41.0 : LE NOUVEAU DESIGN (la maquette de la 1.40.0, validee) - "XPG". Clair et calme : le fond gris bleute
+    // (F4F6FA), des cartes blanches a coins arrondis, l'encre ardoise (0F172A), et UNE COULEUR PAR LOGICIEL - l'accent :
+    // violet pour l'Admin, bleu pour API Studio, turquoise pour IHM Studio. Le logiciel la choisit au lancement
+    // (setProductAccent) ; le theme "XPG" la prend. Les etats gardent leur sens (vert, ambre, rouge).
+    enum class ProductAccent : std::uint8_t { Blue, Teal, Violet };
+    static void setProductAccent(ProductAccent a) noexcept;
+    [[nodiscard]] static ProductAccent productAccent() noexcept;
+    static Theme xpg();                          // l'accent du logiciel
+    static Theme xpg(ProductAccent accent);
+
     // LES THEMES INTEGRES, dans l'ordre de la galerie : les neuf du lot API 6
     // d'abord, puis les trente-quatre du lot API 8. La CLE est ce que
     // retiennent les preferences et les scripts ("Dark", "High contrast" : les

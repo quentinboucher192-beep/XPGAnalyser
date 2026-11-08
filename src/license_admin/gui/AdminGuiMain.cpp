@@ -38,6 +38,7 @@
 #include "../../menu/MenuManager.hpp"
 #include "../../platform/Renderer.hpp"
 #include "../../ui/Theme.hpp"
+#include "../../platform/FontAtlas.hpp"   // 1.41.0 : la police de l'interface
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -396,7 +397,19 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "%s : %s\n", gui::kAppName, SDL_GetError());
         return 2;
     }
-    const ui::Theme theme = ui::Theme::byName("Light");
+    // 1.41.0 : LE NOUVEAU DESIGN - le theme XPG, en violet (la couleur de l'Admin), et la police Inter fournie a cote
+    // de l'exe (resources\fonts).
+    ui::Theme::setProductAccent(ui::Theme::ProductAccent::Violet);
+    const ui::Theme theme = ui::Theme::byName("XPG");
+    if (const char* base = SDL_GetBasePath(); base && *base) {
+        std::error_code ec;
+        const std::string b(base);
+        const auto fonts = std::filesystem::path(std::u8string(b.begin(), b.end())) / "resources" / "fonts";
+        if (std::filesystem::is_directory(fonts, ec)) {
+            const auto u8 = fonts.u8string();
+            gfx::setInterfaceFontFolder(std::string(u8.begin(), u8.end()));
+        }
+    }
     SDL_Window* window = SDL_CreateWindow(gui::kAppName, o.width, o.height, SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_RESIZABLE);
     if (!window) {
         std::fprintf(stderr, "%s : %s\n", gui::kAppName, SDL_GetError());

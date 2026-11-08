@@ -55,7 +55,7 @@ struct AppOptions {
     // programme s'utilise, pas devant une armoire - il se lit mieux et
     // s'imprime tel quel. Le sombre reste a un clic, et le reglage est retenu
     // dans les preferences, donc ce choix ne s'impose qu'une fois.
-    std::string themeName{"Light"};
+    std::string themeName{"XPG"};   // 1.41.0 : le nouveau design
     std::string openOnStart;     // path passed on the command line
     // Une session a rejouer (voir ScriptRunner.hpp), et ou ranger ses captures.
     std::string script;

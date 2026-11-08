@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.40.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.41.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.40.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 19 h 23"},
     {"1.39.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 17 h 20"},
     {"1.38.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 15 h 05"},
     {"1.37.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 9 h 56"},
@@ -184,6 +185,14 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.41.0 : le nouveau design (la maquette validee), son socle
+        note("1.41.0", "Projet", Kind::New,
+         "LE NOUVEAU DESIGN, PREMI\xC3\x88RE \xC3\x89TAPE : le th\xC3\xA8me XPG (clair et calme, des cartes blanches, une couleur par logiciel : "
+         "turquoise pour IHM Studio, bleu pour API Studio), la police Inter fournie avec le logiciel, les boutons, les champs, les listes et "
+         "les cases \xC3\xA0 coins arrondis. Il remplace le Clair une fois, \xC3\xA0 la mise \xC3\xA0 jour ; le Clair d'avant et les autres th\xC3\xA8mes "
+         "restent dans Affichage \xE2\x80\xBA Th\xC3\xA8me\xE2\x80\xA6 Le texte de tes IHM garde sa police. Les \xC3\xA9" "crans se refont un par un dans les "
+         "versions suivantes.",
+         "themes", ""),
         // 1.40.0 : la fenetre Licence ne se chevauche plus
         note("1.40.0", "Projet", Kind::Fixed,
          "LA FEN\xC3\x8ATRE LICENCE : quand ta licence arrive (\xC2\xAB Ta licence est activ\xC3\xA9" "e \xC2\xBB), l'onglet Demander ma licence ne "

@@ -181,6 +181,85 @@ Theme Theme::light() {
     return t;
 }
 
+// ---- 1.41.0 : le nouveau design ----
+namespace {
+Theme::ProductAccent& productAccentRef() noexcept {
+    static Theme::ProductAccent a = Theme::ProductAccent::Blue;
+    return a;
+}
+} // namespace
+
+void Theme::setProductAccent(ProductAccent a) noexcept { productAccentRef() = a; }
+Theme::ProductAccent Theme::productAccent() noexcept { return productAccentRef(); }
+Theme Theme::xpg() { return xpg(productAccentRef()); }
+
+Theme Theme::xpg(ProductAccent accent) {
+    // LES COULEURS DE LA MAQUETTE (docs/maquettes/1.40.0/ds.css), A L'OCTET PRES, sauf deux : le turquoise et le texte
+    // des etats, pris un cran plus sombres - sur du blanc, le turquoise 0D9488 et le vert 16A34A ne tiennent pas 4,5:1
+    // (le test du catalogue le verifie), et un bouton turquoise doit se lire comme un bleu.
+    Theme t = light();
+    t.name = "XPG";
+    struct Teinte { Color base, hover, pressed, selection; };
+    const Teinte k = accent == ProductAccent::Violet ? Teinte{Color::rgb(0x6D4AFF), Color::rgb(0x7C5CFF), Color::rgb(0x4B2FD6), Color::rgb(0xE4DCFF)}
+                   : accent == ProductAccent::Teal   ? Teinte{Color::rgb(0x0F766E), Color::rgb(0x0D9488), Color::rgb(0x115E59), Color::rgb(0xC9EFEA)}
+                                                     : Teinte{Color::rgb(0x2563EB), Color::rgb(0x3B82F6), Color::rgb(0x1D4ED8), Color::rgb(0xDBE7FF)};
+    t.color = Palette{
+        /* windowBg      */ Color::rgb(0xF4F6FA),
+        /* panelBg       */ Color::rgb(0xFFFFFF),
+        /* headerBg      */ Color::rgb(0xF8FAFC),
+        /* railBg        */ Color::rgb(0xF8FAFC),
+        /* inputBg       */ Color::rgb(0xFFFFFF),
+        /* rowAltBg      */ Color::rgb(0xF8FAFC),
+        /* border        */ Color::rgb(0xE3E8EF),
+        /* borderStrong  */ Color::rgb(0xCBD3DE),
+        /* gridLine      */ Color::rgb(0xEEF2F7),
+
+        /* text          */ Color::rgb(0x0F172A),
+        /* textMuted     */ Color::rgb(0x64748B),
+        /* textDisabled  */ Color::rgb(0x94A3B8),
+        /* textInverted  */ Color::rgb(0xFFFFFF),
+
+        /* accent        */ k.base,
+        /* accentHover   */ k.hover,
+        /* accentPressed */ k.pressed,
+        /* selectionBg   */ k.selection,
+        /* selectionText */ Color::rgb(0x0F172A),
+
+        /* ok            */ Color::rgb(0x15803D),
+        /* warning       */ Color::rgb(0xB45309),
+        /* error         */ Color::rgb(0xDC2626),
+        /* info          */ Color::rgb(0x0369A1),
+
+        /* scrollbar     */ Color::rgb(0xCBD5E1),
+        /* scrollbarHover*/ Color::rgb(0x94A3B8),
+
+        // Le code comme dans la maquette d'API Studio : les mots du langage en violet, les blocs en bleu, les
+        // nombres en orange brule, les commentaires en gris.
+        /* syntaxKeyword */ Color::rgb(0x6D28D9),
+        /* syntaxType    */ Color::rgb(0x0F766E),
+        /* syntaxComment */ Color::rgb(0x64748B),
+        /* syntaxString  */ Color::rgb(0xB91C1C),
+        /* syntaxNumber  */ Color::rgb(0xC2410C),
+        /* syntaxPreproc */ Color::rgb(0x7C3AED),
+        /* syntaxFunction*/ Color::rgb(0x1D4ED8),
+        /* syntaxConstant*/ Color::rgb(0x0369A1),
+        /* syntaxOperator*/ Color::rgb(0x0F172A),
+    };
+    t.metric.radius = 8.f;                    // les boutons et les champs (9 dans la maquette ; les cartes : 12)
+    t.brand.card       = Color::rgb(0xFFFFFF);
+    t.brand.cardBorder = Color::rgb(0xE3E8EF);
+    t.brand.cardShadow = Color::rgb(0x0F172A).withAlpha(14);
+    t.brand.hover      = Color::rgb(0x0F172A).withAlpha(9);
+    t.brand.focusRing  = k.base.withAlpha(150);
+    t.brand.codeBg     = Color::rgb(0xFFFFFF);
+    t.brand.codeGutter = Color::rgb(0x94A3B8);
+    t.brand.tooltipBg  = Color::rgb(0x0F172A);
+    t.brand.tooltipText= Color::rgb(0xF8FAFC);
+    t.brand.led        = Color::rgb(0x16A34A);
+    t.brand.ledOff     = Color::rgb(0xCBD5E1);
+    return t;
+}
+
 Theme Theme::highContrast() {
     // FINI, PAS EBAUCHE. Il redefinissait cinq champs : tout le reste - les
     // bordures secondaires, les lignes de grille, les ascenseurs, la coloration
@@ -775,7 +854,7 @@ const std::vector<Theme::Info>& Theme::catalog() {
     static const std::vector<Info> k = [] {
         std::vector<Info> v{
             {"Dark", "Sombre", "Le graphite bleut\xC3\xA9, sombre.", kDarkFamily},
-            {"Light", "Clair", "Le clair, le d\xC3\xA9" "faut.", kLightFamily},
+            {"Light", "Clair", "Le clair d'avant la 1.41.0, aux coins presque droits.", kLightFamily},
             {"High contrast", "Contraste \xC3\xA9lev\xC3\xA9", "Blanc sur noir, 7:1 partout, le texte plus grand.", kHighContrastFamily},
             {"Night", "Nuit", "Bleu nuit profond, accent cyan : les salles sombres.", kDarkFamily},
             {"Graphite", "Graphite", "Sombre et chaud, sans reflet bleu.", kDarkFamily},
@@ -783,6 +862,8 @@ const std::vector<Theme::Info>& Theme::catalog() {
             {"Paper", "Papier", "Clair et chaud, moins \xC3\xA9" "blouissant.", kLightFamily},
             {"Slate", "Ardoise", "Clair et froid, accent indigo.", kLightFamily},
             {"High contrast light", "Contraste \xC3\xA9lev\xC3\xA9 clair", "Noir sur blanc : l'atelier en plein jour.", kHighContrastFamily},
+            // 1.41.0 : le nouveau design, le defaut (apres les neuf du lot API 6 : leurs places ne changent pas).
+            {"XPG", "XPG", "Le nouveau design : clair, des cartes arrondies, une couleur par logiciel (le d\xC3\xA9" "faut).", kLightFamily},
         };
         for (const auto& m : kMore) v.push_back({m.key, m.label, m.description, m.family});
         return v;
@@ -877,6 +958,7 @@ Theme Theme::byName(std::string_view name) {
     else if (key == "Paper") t = paper();
     else if (key == "Slate") t = slate();
     else if (key == "High contrast light") t = highContrastLight();
+    else if (key == "XPG") t = xpg();
     else if (const auto* m = moreOf(key)) t = build(*m);
     else t = light();
     // Ce que la galerie en dit, et sa base : lui-meme (un theme cree a partir

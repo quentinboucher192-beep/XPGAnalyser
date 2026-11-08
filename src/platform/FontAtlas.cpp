@@ -563,7 +563,6 @@ std::vector<std::string> defaultUiFontCandidates() {
     return {
         // Bundled first: a project that ships its own face looks the same on
         // every machine, which matters when two people compare screenshots.
-        "resources/fonts/Inter-Regular.ttf",
         "resources/fonts/DejaVuSans.ttf",
         // Windows
         "C:/Windows/Fonts/segoeui.ttf",
@@ -588,9 +587,34 @@ void setUiFontOverride(std::string path) { uiOverrideRef() = std::move(path); }
 
 const std::string& uiFontOverride() { return uiOverrideRef(); }
 
-std::vector<std::string> uiFontCandidates() {
-    auto out = defaultUiFontCandidates();
-    if (!uiOverrideRef().empty()) out.insert(out.begin(), uiOverrideRef());
+std::vector<std::string> uiFontCandidates() { return interfaceFontCandidates(0); }
+
+// 1.41.0 : LA POLICE DE L'INTERFACE, Inter (fournie : resources/fonts, a cote de l'exe), en deux graisses. Elle passe
+// apres la police choisie par l'utilisateur, avant celles du systeme ; le texte d'une IHM n'en change pas (la police
+// d'origine : defaultUiFontCandidates).
+namespace {
+std::string& interfaceFolderRef() {
+    static std::string folder = "resources/fonts";
+    return folder;
+}
+} // namespace
+
+void setInterfaceFontFolder(std::string folder) {
+    while (!folder.empty() && (folder.back() == '/' || folder.back() == '\\')) folder.pop_back();
+    if (!folder.empty()) interfaceFolderRef() = std::move(folder);
+}
+
+const std::string& interfaceFontFolder() { return interfaceFolderRef(); }
+
+std::vector<std::string> interfaceFontCandidates(int weight) {
+    std::vector<std::string> out;
+    if (!uiOverrideRef().empty()) out.push_back(uiOverrideRef());   // la police choisie : une seule graisse
+    else {
+        const std::string& d = interfaceFolderRef();
+        if (weight > 0) out.push_back(d + "/Inter-SemiBold.otf");
+        out.push_back(d + "/Inter-Regular.otf");
+    }
+    for (auto& c : defaultUiFontCandidates()) out.push_back(std::move(c));
     return out;
 }
 

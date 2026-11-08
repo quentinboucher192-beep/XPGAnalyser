@@ -3,6 +3,7 @@
 // =============================================================================
 #include "Controls.hpp"
 #include "../TextSearch.hpp"   // 1.26.1 : la recherche des listes longues
+#include "../Shapes.hpp"       // 1.41.0 : les cadres arrondis (boutons, champs)
 #include "PropertyGridHooks.hpp"   // 1.24.1 : un champ de chemin - Ouvrir dans l'explorateur, Aller a, Copier le chemin
 #include "../../core/Perf.hpp"   // 1.22.2 : le dessin du code se mesure (l'onglet Performances)
 
@@ -63,7 +64,16 @@ namespace ui {
         }
 
         void drawFocusRing(const PaintContext& ctx, const gfx::Rect& r) {
-            ctx.r.strokeRect(r.inset(1.f, 1.f), ctx.theme.color.accent, 1.f);
+            // 1.41.0 : arrondi comme le controle (un theme aux coins droits : le trait d'avant).
+            const float rad = std::min(ctx.theme.metric.radius, std::min(r.w, r.h) * 0.5f);
+            if (rad < 1.5f) { ctx.r.strokeRect(r.inset(1.f, 1.f), ctx.theme.color.accent, 1.f); return; }
+            shapes::strokeRoundedRect(ctx.r, r, ctx.theme.color.accent.withAlpha(210), rad, 2.f);
+        }
+
+        // 1.41.0 : le rayon d'un champ - celui du theme, sans depasser le quart de sa hauteur (un champ de 24 px dans
+        // une grille reste un champ, pas une pastille).
+        float fieldRadius(const PaintContext& ctx, const gfx::Rect& r) {
+            return std::min(ctx.theme.metric.radius, r.h * 0.25f);
         }
 
         // 1.10 (chantier K) : l'aide a la saisie selon le type du champ. Une
@@ -234,8 +244,9 @@ namespace ui {
         }
         if (!enabled()) { fill = c.panelBg; text = c.textDisabled; }
 
-        if (fill.a > 0) ctx.r.fillRoundedRect(r, fill, ctx.theme.metric.radius);
-        if (style_ == Style::Default) ctx.r.strokeRect(r, c.border, 1.f);
+        // 1.41.0 : le bouton ordinaire, un cadre arrondi (son trait suit le coin).
+        if (style_ == Style::Default) shapes::fillFramedRect(ctx.r, r, fill, c.border, ctx.theme.metric.radius);
+        else if (fill.a > 0) ctx.r.fillRoundedRect(r, fill, ctx.theme.metric.radius);
         if (focused()) drawFocusRing(ctx, r);
 
         const float iconSide = icon_ == Icon::None ? 0.f : std::min(r.h - 8.f, 18.f);
@@ -711,8 +722,7 @@ namespace ui {
         const auto  f = mono_ ? ctx.theme.font.mono : ctx.theme.font.ui;
         fieldFont_ = f;
 
-        ctx.r.fillRect(r, enabled() ? c.inputBg : c.panelBg);
-        ctx.r.strokeRect(r, focused() ? c.accent : c.border, 1.f);
+        shapes::fillFramedRect(ctx.r, r, enabled() ? c.inputBg : c.panelBg, focused() ? c.accent : c.border, fieldRadius(ctx, r));   // 1.41.0
 
         const auto inner = contentRect();
         ctx.r.pushClip(inner);
@@ -2930,8 +2940,8 @@ namespace ui {
         const float box = 13.f;
         const gfx::Rect boxRect{ r.x + 2.f, r.y + (r.h - box) * 0.5f, box, box };
 
-        ctx.r.fillRect(boxRect, enabled() ? c.inputBg : c.panelBg);
-        ctx.r.strokeRect(boxRect, hovered() ? c.accentHover : c.border, 1.f);
+        shapes::fillFramedRect(ctx.r, boxRect, enabled() ? c.inputBg : c.panelBg, hovered() ? c.accentHover : c.borderStrong,
+                               std::min(3.f, ctx.theme.metric.radius));   // 1.41.0 : la case aux coins doux
         if (focused()) drawFocusRing(ctx, r);
 
         if (state_ == State::Checked) {
@@ -3058,8 +3068,7 @@ namespace ui {
         // 1.16.0 : grise, il se dessine grise (le bouton Afficher de la cle, sans connexion).
         const bool on = enabled();
         const gfx::Color fill = !on ? c.panelBg : checked_ ? c.accent : hovered() ? c.rowAltBg : c.panelBg;
-        ctx.r.fillRoundedRect(r, fill, ctx.theme.metric.radius);
-        ctx.r.strokeRect(r, c.border, 1.f);
+        shapes::fillFramedRect(ctx.r, r, fill, checked_ && on ? fill : c.border, ctx.theme.metric.radius);   // 1.41.0
         if (focused() && on) drawFocusRing(ctx, r);
 
         const auto m = ctx.r.measure(text_, ctx.theme.font.ui);
@@ -3484,8 +3493,8 @@ namespace ui {
         const auto& c = ctx.theme.color;
         const auto  r = bounds();
 
-        ctx.r.fillRect(r, enabled() ? c.inputBg : c.panelBg);
-        ctx.r.strokeRect(r, (focused() || popupOpen_) ? c.accent : c.border, 1.f);
+        shapes::fillFramedRect(ctx.r, r, enabled() ? c.inputBg : c.panelBg, (focused() || popupOpen_) ? c.accent : c.border,
+                               fieldRadius(ctx, r));   // 1.41.0
 
         const auto inner = contentRect();
         const auto* item = selectedItem();

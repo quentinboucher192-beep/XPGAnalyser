@@ -27,4 +27,11 @@ void fillArcBand(gfx::IRenderer&, Point centre, float rInner, float rOuter, floa
 // Un rectangle arrondi en polygone (pour le tourner ensuite).
 [[nodiscard]] std::vector<Point> roundedRect(float x, float y, float w, float h, float radius);
 
+// 1.41.0 : LE CADRE ARRONDI des boutons, des champs et des cartes : le fond et son trait d'un pixel, les coins lisses
+// (fillRoundedRect deux fois : le trait, puis le fond un pixel en dedans). Un fond translucide : le fond, puis le trait
+// seul (strokeRoundedRect). Un rayon de moins de 1,5 px : un rectangle et son trait, comme avant.
+void fillFramedRect(gfx::IRenderer&, const gfx::Rect&, Color fill, Color border, float radius);
+// Un anneau arrondi de `width` pixels, a l'interieur de `r` (un trait, un halo translucide autour d'un champ).
+void strokeRoundedRect(gfx::IRenderer&, const gfx::Rect&, Color, float radius, float width = 1.f);
+
 } // namespace ui::shapes

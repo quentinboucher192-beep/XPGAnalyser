@@ -82,6 +82,9 @@ mkdir -p "$DEST"
 cp -f "$EXE" "$DEST/XPG-License-Admin.exe"
 cp -f "$APP" "$DEST/XPG-License-Manager-Admin.exe"
 cp -f "$OUT/SDL3.dll" "$DEST/SDL3.dll"
+# 1.41.0 : la police de l'interface (Inter, deux graisses, licence SIL OFL)
+mkdir -p "$DEST/resources/fonts"
+cp -f resources/fonts/* "$DEST/resources/fonts/"
 cp -f tests/fixtures/licences/registre-exemple.json "$DEST/registre.json"
 cp -f tests/fixtures/licences/parametres-exemple.json "$DEST/parametres-exemple.json"
 # 1.35.0 : le kit du service des licences (le Worker, sans ses essais ni node_modules ; les scripts de mise en ligne)

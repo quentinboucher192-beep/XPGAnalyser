@@ -53,7 +53,8 @@ struct Rig {
 
 // 1.34.0 : << Demandes en ligne >> apres Activations. 1.35.0 : << Service en ligne >> a la place de << Synchronisation
 // GitHub >> ; << Licences flottantes >> est une vraie page (seules Boutique et Commandes restent grisees).
-const std::string kTitles[] = {"Tableau de bord", "Clients", "Licences", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Activations", "Demandes en ligne", "Licences flottantes",
+// 1.41.0 : les groupes de la maquette validee (Pilotage, Catalogue, la vente en ligne, Securite).
+const std::string kTitles[] = {"Tableau de bord", "Licences", "Clients", "Demandes en ligne", "Activations", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
                                "Boutique", "Commandes", "R\xC3\xA9vocations", "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 
 } // namespace
@@ -90,6 +91,8 @@ int main(int argc, char** argv) {
         check(has(t, "Pr\xC3\xAAt."), "le bandeau avant toute operation");
         auto* nl = find<ui::Button>(rig.root(), "tableau.nouvelle-licence");
         check(nl && !nl->enabled(), "Nouvelle licence... grisee sans cle");
+        auto* nlTop = find<ui::Button>(rig.root(), "shell.nouvelle-licence");
+        check(nlTop && !nlTop->enabled(), "1.41.0 : Nouvelle licence (en haut) grisee sans cle");
         check(rig.clickId("tableau.creer-cle") && rig.shell->currentPageId() == "securite", "Creer la cle... ouvre Parametres de securite");
         rig.shell->navigate("tableau");
         check(rig.clickId("shell.cle") && rig.shell->currentPageId() == "securite", "un clic sur l'etat de la cle : Parametres de securite");
@@ -132,7 +135,8 @@ int main(int argc, char** argv) {
         check(!has(t, "Pour commencer"), "plus de conseil de premier lancement");
         auto* nl = find<ui::Button>(rig.root(), "tableau.nouvelle-licence");
         check(nl && nl->enabled(), "Nouvelle licence... possible");
-        check(has(t, "R\xC3\xA9partition par \xC3\xA9" "dition") && has(t, "\xC3\x89tat du poste") && has(t, "Derni\xC3\xA8res op\xC3\xA9rations"), "les trois cadres du tableau de bord");
+        // 1.41.0 : les cadres de la maquette (l'activite, les licences par edition, l'etat du poste).
+        check(has(t, "Licences par \xC3\xA9" "dition") && has(t, "\xC3\x89tat du poste") && has(t, "Activit\xC3\xA9"), "les trois cadres du tableau de bord");
         check(has(t, "Aucune op\xC3\xA9ration pour l'instant"), "aucune operation encore");
         check(has(t, "Licences flottantes") && has(t, "Licences en ligne") && has(t, "service non r\xC3\xA9gl\xC3\xA9"),
               "les tuiles du service : sans chiffre tant qu'il n'est pas regle");
@@ -213,7 +217,7 @@ int main(int argc, char** argv) {
         check(has(t, "Poste flottant A"), "le PC qui tient le jeton");
         rig.shell->navigate("tableau");
         t = rig.paint();
-        check(has(t, "jeton(s) sur 2 poste(s)") && has(t, "Licences en ligne"), "le tableau de bord : les chiffres du releve");
+        check(has(t, "1 / 2") && has(t, "jetons en cours") && has(t, "Licences en ligne"), "le tableau de bord : les chiffres du releve (1.41.0 : 1 / 2 jetons)");
         (void)fs::remove(fx.admin / online::kSnapshotFile);
         (void)fs::remove(fx.admin / online::kConfigFile);
         rig.shell->reloadAll();
@@ -336,7 +340,8 @@ int main(int argc, char** argv) {
         rig.menus.applyPending();
         check(rig.menus.top() == rig.shell, "l'assistant ferme");
         // Nouvelle licence... : l'assistant aussi.
-        check(rig.clickId("tableau.nouvelle-licence"), "Nouvelle licence...");
+        // 1.41.0 : l'action principale, en haut de la fenetre (la maquette).
+        check(rig.clickId("shell.nouvelle-licence"), "Nouvelle licence (en haut)");
         rig.menus.applyPending();
         check(rig.menus.top() != rig.shell, "Nouvelle licence... ouvre l'assistant");
         rig.menus.CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});

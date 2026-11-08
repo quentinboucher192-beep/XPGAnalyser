@@ -21,11 +21,11 @@
 
 #include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Controls.hpp"
-#include "../../ui/widgets/DataViews.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -90,16 +90,6 @@ std::vector<std::string> wrap(const std::string& text, FontId f, float w) {
     return out;
 }
 
-void boldText(gfx::IRenderer& r, gfx::Point p, const std::string& s, FontId f, Color c) {
-    r.drawText(p, s, f, c);
-    r.drawText({p.x + 0.6f, p.y}, s, f, c);
-}
-
-void card(gfx::IRenderer& r, const ui::Theme& th, const Rect& box) {
-    r.fillRoundedRect(box, th.brand.cardBorder, 8.f);
-    r.fillRoundedRect(box.inset(1.f, 1.f), th.brand.card, 7.f);
-}
-
 Color toneColor(const ui::Theme& th, Tone t) {
     switch (t) {
         case Tone::Ok: return th.color.ok;
@@ -118,45 +108,59 @@ bool isRequest(const std::string& path) {
 
 std::string plural(int n, const char* one, const char* many) { return std::to_string(n) + " " + (n > 1 ? many : one); }
 
-// ---- une table a lignes fixes (les dernieres operations) ----
-class RowsModel final : public ui::ITableModel {
-public:
-    RowsModel(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows, std::vector<ui::CellStyle> styles,
-              std::vector<Seconds> keys, std::vector<std::string> tips)
-        : headers_(std::move(headers)), rows_(std::move(rows)), styles_(std::move(styles)), keys_(std::move(keys)), tips_(std::move(tips)) {}
-    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override { return r < tips_.size() ? tips_[r] : std::string(); }
-    [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return headers_.size(); }
-    [[nodiscard]] std::string headerText(std::size_t c) const override { return c < headers_.size() ? headers_[c] : std::string(); }
-    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
-        return r < rows_.size() && c < rows_[r].size() ? rows_[r][c] : std::string();
-    }
-    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
-        if (r >= styles_.size() || c != 1) return {};
-        return styles_[r];
-    }
-    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override {
-        if (c == 0 && a < keys_.size() && b < keys_.size()) return keys_[a] < keys_[b];
-        return cellText(a, c) < cellText(b, c);
-    }
+// 1.34.0 : "06/11 14:05" (la date d'un releve, courte : une tuile).
+std::string shortWhen(Seconds t) {
+    const std::string full = dateTimeFr(t);   // "06/11/2026 14:05"
+    return full.size() >= 16 ? full.substr(0, 5) + full.substr(10) : full;
+}
 
-private:
-    std::vector<std::string>              headers_;
-    std::vector<std::vector<std::string>> rows_;
-    std::vector<ui::CellStyle>            styles_;
-    std::vector<Seconds>                  keys_;
-    std::vector<std::string>              tips_;
-};
+// 1.41.0 : LA CARTE de la maquette - blanche, coins de 12, un trait, une ombre a peine.
+void cardBox(gfx::IRenderer& r, const ui::Theme& th, const Rect& box, Color fill, Color border) {
+    if (box.empty()) return;
+    r.fillRoundedRect({box.x, box.y + 1.f, box.w, box.h + 1.f}, th.brand.cardShadow, 12.f);
+    r.fillRoundedRect(box, border, 12.f);
+    r.fillRoundedRect(box.inset(1.f, 1.f), fill, 11.f);
+}
+void cardBox(gfx::IRenderer& r, const ui::Theme& th, const Rect& box) { cardBox(r, th, box, th.brand.card, th.brand.cardBorder); }
+
+// "il y a 9 min", "il y a 2 h", "hier", ou la date.
+std::string agoFr(Seconds now, Seconds at) {
+    if (at <= 0) return {};
+    const long long d = static_cast<long long>(now) - static_cast<long long>(at);
+    if (d < 60) return "\xC3\xA0 l'instant";
+    if (d < 3600) return "il y a " + std::to_string(d / 60) + " min";
+    if (d < 86400) return "il y a " + std::to_string(d / 3600) + " h";
+    if (d < 2 * 86400) return "hier";
+    return dateFr(at);
+}
+
+// Le jour en toutes lettres : "dimanche 8 novembre".
+std::string longDateFr(Seconds t) {
+    static const char* const kDays[] = {"Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"};
+    static const char* const kMonths[] = {"janvier", "f\xC3\xA9vrier", "mars", "avril", "mai", "juin", "juillet", "ao\xC3\xBBt", "septembre", "octobre", "novembre", "d\xC3\xA9" "cembre"};
+    const std::time_t tt = static_cast<std::time_t>(t);
+    std::tm tm{};
+#if defined(_WIN32)
+    localtime_s(&tm, &tt);
+#else
+    localtime_r(&tt, &tm);
+#endif
+    return std::string(kDays[tm.tm_wday % 7]) + " " + std::to_string(tm.tm_mday) + " " + kMonths[tm.tm_mon % 12];
+}
 
 // ---- une tuile : un chiffre, ce qu'il compte ; un clic ouvre la page qui en dit plus ----
+// 1.41.0 : deux tailles - les quatre grandes de la maquette (l'icone dans son carre teinte, le grand chiffre, une
+// ligne, une barre pour les PC) et quatre petites dessous (le libelle, le chiffre a droite).
 class StatTile final : public ui::Button {
 public:
-    StatTile(std::string id, std::string label) : ui::Button(label, std::move(id)), label_(std::move(label)) {}
-    void set(std::string value, std::string sub, Tone tone, bool dim) {
+    StatTile(std::string id, std::string label, ui::Icon icon, bool big) : ui::Button(label, std::move(id)), label_(std::move(label)), icon_(icon), big_(big) {}
+    void set(std::string value, std::string sub, Tone tone, bool dim, float progress = -1.f, std::string more = {}) {
         value_ = std::move(value);
         sub_ = std::move(sub);
         tone_ = tone;
         dim_ = dim;
+        progress_ = progress;
+        more_ = std::move(more);
         invalidate();
     }
     [[nodiscard]] const std::string& value() const noexcept { return value_; }
@@ -166,41 +170,146 @@ protected:
         const auto& th = ctx.theme;
         const auto& c = th.color;
         const Rect  r = bounds();
-        ctx.r.fillRoundedRect(r, hovered() ? c.accent.withAlpha(150) : th.brand.cardBorder, 8.f);
-        ctx.r.fillRoundedRect(r.inset(1.f, 1.f), th.brand.card, 7.f);
         const bool  marked = tone_ != Tone::Info && !dim_;
-        const Color ink = dim_ ? c.textDisabled : marked ? toneColor(th, tone_) : c.text;
-        if (marked) ctx.r.fillRoundedRect({r.x + 1.f, r.y + 10.f, 3.f, r.h - 20.f}, ink, 1.5f);
-        const float x = r.x + 16.f;
-        ctx.r.drawText({x, r.y + 10.f}, fit(ctx.r, label_, kF13, r.w - 28.f), kF13, dim_ ? c.textDisabled : c.textMuted);
-        const FontId vf = r.h < 66.f ? FontId{24} : kF28;
-        const float  vy = r.y + 28.f;
-        if (value_.empty()) {   // pas de chiffre (le service en ligne) : la phrase, sur deux lignes s'il le faut
-            float ly = r.y + 28.f;
-            for (const auto& l : wrap(sub_, kF13, r.w - 28.f)) {
-                if (ly + 14.f > r.bottom()) break;
+        const Color ink = dim_ ? c.textDisabled : marked ? toneColor(th, tone_) : c.accent;
+        // Une demande a traiter : la carte ambree (la maquette) ; survolee : le trait de l'accent.
+        const Color fill = marked && tone_ == Tone::Warning && big_ ? Color::rgb(0xFFFBF2) : th.brand.card;
+        const Color line = hovered() ? c.accent.withAlpha(170) : marked && tone_ == Tone::Warning && big_ ? Color::rgb(0xF6DFB5) : th.brand.cardBorder;
+        cardBox(ctx.r, th, r, fill, line);
+        const float x = r.x + 18.f;
+        if (!big_) {
+            ui::drawIcon(ctx.r, icon_, {x, r.y + (r.h - 16.f) * 0.5f, 16.f, 16.f}, dim_ ? c.textDisabled : c.textMuted);
+            const FontId vf = gfx::semibold(FontId{20});
+            const float vw = value_.empty() ? 0.f : ctx.r.measure(value_, vf).width;
+            // Le libelle, et dessous ce que compte le chiffre (ou pourquoi il n'y en a pas) ; le chiffre a droite.
+            const bool two = !sub_.empty() && r.h >= 44.f;
+            const float ly = two ? r.y + r.h * 0.5f - ctx.r.lineHeight(kF14) + 1.f : r.y + (r.h - ctx.r.lineHeight(kF14)) * 0.5f;
+            ctx.r.drawText({x + 26.f, ly}, fit(ctx.r, label_, kF14, r.w - 64.f - vw), kF14, dim_ ? c.textDisabled : c.text);
+            if (two) ctx.r.drawText({x + 26.f, r.y + r.h * 0.5f + 2.f}, fit(ctx.r, sub_, kF12, r.w - 64.f - vw), kF12, value_.empty() ? c.textDisabled : c.textMuted);
+            if (!value_.empty())
+                ctx.r.drawText({r.right() - 18.f - vw, r.y + (r.h - ctx.r.lineHeight(vf)) * 0.5f}, value_, vf, marked ? ink : c.text);
+            return;
+        }
+        // L'icone dans son carre teinte, le libelle a cote.
+        const Rect ic{x, r.y + 18.f, 30.f, 30.f};
+        ctx.r.fillRoundedRect(ic, ink.withAlpha(dim_ ? 18 : 26), 9.f);
+        ui::drawIcon(ctx.r, icon_, {ic.x + 7.f, ic.y + 7.f, 16.f, 16.f}, ink);
+        ctx.r.drawText({ic.right() + 10.f, ic.y + (ic.h - ctx.r.lineHeight(kF14)) * 0.5f}, fit(ctx.r, label_, kF14, r.w - 76.f), kF14, c.textMuted);
+        const float vy = ic.bottom() + 12.f;
+        if (value_.empty()) {   // pas de chiffre (le service en ligne) : la phrase
+            float ly = vy + 4.f;
+            for (const auto& l : wrap(sub_, kF13, r.w - 36.f)) {
+                if (ly + 14.f > r.bottom() - 8.f) break;
                 ctx.r.drawText({x, ly}, l, kF13, c.textDisabled);
-                ly += 16.f;
+                ly += 17.f;
             }
             return;
         }
-        boldText(ctx.r, {x, vy}, value_, vf, ink);
-        const float vw = ctx.r.measure(value_, vf).width + 10.f;
+        const FontId vf = gfx::semibold(r.h < 110.f ? FontId{28} : FontId{34});
+        ctx.r.drawText({x, vy}, value_, vf, marked ? ink : c.text);
+        const float vw = ctx.r.measure(value_, vf).width;
         const float lh = ctx.r.lineHeight(vf);
-        ctx.r.drawText({x + vw, vy + lh - ctx.r.lineHeight(kF12) - 3.f}, fit(ctx.r, sub_, kF12, r.w - 28.f - vw), kF12, c.textMuted);
+        if (!more_.empty()) {
+            const FontId fm = gfx::semibold(kF14);
+            ctx.r.drawText({x + vw + 8.f, vy + lh - ctx.r.lineHeight(fm) - 4.f}, fit(ctx.r, more_, fm, r.w - 36.f - vw), fm, c.textDisabled);
+        }
+        const float sy = std::min(r.bottom() - 26.f, vy + lh + 6.f);
+        if (progress_ >= 0.f) {   // les PC : la barre des places prises
+            const Rect track{x, sy + 6.f, r.w - 36.f, 6.f};
+            ctx.r.fillRoundedRect(track, c.gridLine, 3.f);
+            ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * std::clamp(progress_, 0.f, 1.f)), track.h}, c.ok, 3.f);
+        } else {
+            ctx.r.drawText({x, sy}, fit(ctx.r, sub_, kF13, r.w - 36.f), kF13, c.textMuted);
+        }
     }
 
 private:
-    std::string label_, value_, sub_;
+    std::string label_, value_, sub_, more_;
+    ui::Icon    icon_{ui::Icon::None};
+    bool        big_{false};
     Tone        tone_{Tone::Info};
     bool        dim_{false};
+    float       progress_{-1.f};
 };
 
-// 1.34.0 : "06/11 14:05" (la date d'un releve, courte : une tuile).
-std::string shortWhen(Seconds t) {
-    const std::string full = dateTimeFr(t);   // "06/11/2026 14:05"
-    return full.size() >= 16 ? full.substr(0, 5) + full.substr(10) : full;
-}
+// ---- 1.41.0 : L'ACTIVITE - les dernieres operations en fil (la maquette) : l'icone de ce qui s'est passe dans son
+// carre teinte, qui et quoi, la licence et le PC dessous, quand a droite. Un clic : l'historique.
+struct FeedRow {
+    ui::Icon    icon{ui::Icon::Info};
+    Tone        tone{Tone::Info};
+    std::string who, what, detail, when, tip;
+};
+
+class ActivityFeed final : public ui::Widget {
+public:
+    ActivityFeed() : ui::Widget("tableau.operations") {}
+    void setRows(std::vector<FeedRow> rows) {
+        rows_ = std::move(rows);
+        invalidate();
+    }
+    const core::SignalPtr<int> activated = core::Signal<int>::create();
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& th = ctx.theme;
+        const auto& c = th.color;
+        const Rect  b = bounds();
+        ctx.r.pushClip(b);
+        float y = b.y;
+        for (std::size_t i = 0; i < rows_.size(); ++i) {
+            if (y + kRowH > b.bottom() + 1.f) break;
+            const FeedRow& f = rows_[i];
+            const Rect row{b.x, y, b.w, kRowH};
+            if (static_cast<int>(i) == hover_) ctx.r.fillRoundedRect(row.inset(6.f, 3.f), th.brand.hover, 8.f);
+            const Color ink = f.tone == Tone::Info ? c.accent : toneColor(th, f.tone);
+            const Rect  ic{row.x + 18.f, row.y + 13.f, 32.f, 32.f};
+            ctx.r.fillRoundedRect(ic, ink.withAlpha(24), 9.f);
+            ui::drawIcon(ctx.r, f.icon, {ic.x + 8.f, ic.y + 8.f, 16.f, 16.f}, ink);
+            const float tx = ic.right() + 14.f;
+            const float ww = ctx.r.measure(f.when, kF12).width;
+            const float room = row.right() - 18.f - ww - 12.f - tx;
+            const FontId fb = gfx::semibold(kF14);
+            const std::string who = fit(ctx.r, f.who, fb, room * 0.6f);
+            ctx.r.drawText({tx, row.y + 12.f}, who, fb, c.text);
+            const float wx = tx + ctx.r.measure(who, fb).width + (who.empty() ? 0.f : 6.f);
+            ctx.r.drawText({wx, row.y + 12.f}, fit(ctx.r, f.what, kF14, tx + room - wx), kF14, c.text);
+            ctx.r.drawText({tx, row.y + 33.f}, fit(ctx.r, f.detail, kF13, row.right() - 18.f - tx), kF13, c.textMuted);
+            ctx.r.drawText({row.right() - 18.f - ww, row.y + 14.f}, f.when, kF12, c.textDisabled);
+            if (i + 1 < rows_.size()) ctx.r.fillRect({tx, row.bottom() - 1.f, row.right() - 18.f - tx, 1.f}, c.gridLine);
+            y += kRowH;
+        }
+        ctx.r.popClip();
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseMove>(&ev)) {
+            const int h = rowAt(m->pos);
+            if (h != hover_) {
+                hover_ = h;
+                setTooltip(h >= 0 ? rows_[static_cast<std::size_t>(h)].tip : std::string());
+                invalidate();
+            }
+            return ui::EventResult::Ignored;
+        }
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
+            if (d->button == ui::MouseButton::Left && d->clickCount >= 2 && rowAt(d->pos) >= 0) {
+                activated->emit(rowAt(d->pos));
+                return ui::EventResult::Consumed;
+            }
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    static constexpr float kRowH = 58.f;
+    [[nodiscard]] int rowAt(gfx::Point p) const {
+        const Rect b = bounds();
+        if (!b.contains(p)) return -1;
+        const int i = static_cast<int>((p.y - b.y) / kRowH);
+        return i >= 0 && static_cast<std::size_t>(i) < rows_.size() ? i : -1;
+    }
+    std::vector<FeedRow> rows_;
+    int                  hover_{-1};
+};
 
 struct PosteLine {
     std::string label, value;
@@ -210,9 +319,12 @@ struct PosteLine {
 class DashboardPage final : public Page {
 public:
     explicit DashboardPage(ShellHost host) : Page("page.tableau", std::move(host)) {
+        // 1.41.0 : << Nouvelle licence >> est en haut de la fenetre (l'action principale de l'Admin) ; celui-ci reste
+        // pour les essais et les raccourcis, cache.
         newLicence_ = addButton("Nouvelle licence\xE2\x80\xA6", "tableau.nouvelle-licence", ui::Button::Style::Primary, ui::Icon::Plus);
+        newLicence_->setVisibility(ui::Visibility::Collapsed);
         noteRequests_ = addButton("Noter des demandes\xE2\x80\xA6", "tableau.noter-demandes", ui::Button::Style::Default, ui::Icon::Import);
-        sync_ = addButton("Service en ligne", "tableau.synchroniser", ui::Button::Style::Default, ui::Icon::Refresh);
+        sync_ = addButton("Service en ligne", "tableau.synchroniser", ui::Button::Style::Default, ui::Icon::Globe);
         newLicence_->setTooltip("L'assistant : le client, l'\xC3\xA9" "dition, les PC (leurs demandes .xpgreq), la dur\xC3\xA9" "e, puis signer.");
         noteRequests_->setTooltip("Des demandes d'activation re\xC3\xA7ues (.xpgreq), pas encore sign\xC3\xA9" "es : not\xC3\xA9" "es dans le registre des activations.");
         sync_->setTooltip("La page Service en ligne : l'archive, la cl\xC3\xA9 du service et son certificat.");
@@ -231,18 +343,20 @@ public:
             const char* id;
             const char* label;
             const char* page;
+            ui::Icon    icon;
+            bool        big;
         } tiles[] = {
-            {"clients", "Clients", "clients"},
-            {"actives", "Licences actives", "licences"},
-            {"en-ligne", "Licences en ligne", "licences"},
-            {"revoquees", "R\xC3\xA9voqu\xC3\xA9" "es", "revocations"},
-            {"pc", "PC activ\xC3\xA9s", "activations"},
-            {"demandes", "Demandes en attente", "activations"},
-            {"bientot", "Finissent dans 30 jours", "licences"},
-            {"flottantes", "Licences flottantes", "flottantes"},
+            {"actives", "Licences actives", "licences", ui::Icon::Document, true},
+            {"pc", "PC activ\xC3\xA9s", "activations", ui::Icon::Station, true},
+            {"demandes", "Demandes en attente", "activations", ui::Icon::Import, true},
+            {"bientot", "Finissent dans 30 jours", "licences", ui::Icon::History, true},
+            {"clients", "Clients", "clients", ui::Icon::User, false},
+            {"en-ligne", "Licences en ligne", "licences", ui::Icon::Globe, false},
+            {"revoquees", "R\xC3\xA9voqu\xC3\xA9" "es", "revocations", ui::Icon::Close, false},
+            {"flottantes", "Licences flottantes", "flottantes", ui::Icon::Network, false},
         };
         for (const auto& t : tiles) {
-            auto tile = std::make_unique<StatTile>(std::string("tableau.tuile.") + t.id, t.label);
+            auto tile = std::make_unique<StatTile>(std::string("tableau.tuile.") + t.id, t.label, t.icon, t.big);
             const std::string page = t.page;
             const bool requests = std::string(t.id) == "demandes";
             links_ += tile->clicked->connect([this, page, requests] {
@@ -253,11 +367,8 @@ public:
         }
         tiles_.back()->setTooltip("Les jetons flottants en cours, au dernier relev\xC3\xA9 du service (Licences flottantes \xE2\x80\xBA Relever).");
 
-        auto table = std::make_unique<ui::TableView>("tableau.operations");
-        table->setColumns({{"Date", 132.f}, {"Op\xC3\xA9ration", 140.f}, {"Licence", 140.f}, {"Client", 180.f}, {"PC", 220.f}});
-        table->setAlternatingRowColors(true);
-        table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
-        links_ += table_->activated->connect([this](ui::RowIndex) { host_.navigate("historique"); });
+        feed_ = &static_cast<ActivityFeed&>(addChild(std::make_unique<ActivityFeed>()));
+        links_ += feed_->activated->connect([this](int) { host_.navigate("historique"); });
         refresh();
     }
 
@@ -281,45 +392,49 @@ public:
         restore_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toEditions_->setVisibility(hintKind_ == 2 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         newLicence_->setEnabled(k.present && w.hasRegistry());
-        newLicence_->setTooltip(k.present && w.hasRegistry()
-                                    ? std::string("L'assistant : le client, l'\xC3\xA9" "dition, les PC (leurs demandes .xpgreq), la dur\xC3\xA9" "e, puis signer.")
-                                    : std::string("Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur et le registre sign\xC3\xA9."));
 
         const auto n = [](int v) { return std::to_string(v); };
-        tiles_[0]->set(n(d_.clients), "dans l'archive", Tone::Info, false);
-        tiles_[1]->set(n(d_.activeLicences), "sur " + n(d_.licences) + (d_.expiredLicences ? ", " + n(d_.expiredLicences) + " expir\xC3\xA9" "e(s)" : std::string(" au total")),
+        // Les places des licences actives liees (leurs PC au plus) : la barre de la tuile des PC.
+        int places = 0;
+        for (const auto& l : w.licences())
+            if (!l.revoked && !l.expired && !Workspace::isOnlineLicence(l.licence)) places += std::max(0, l.licence.maxDevices);
+        tiles_[0]->set(n(d_.activeLicences), "sur " + n(d_.licences) + (d_.expiredLicences ? ", " + n(d_.expiredLicences) + " expir\xC3\xA9" "e(s)" : std::string(" au total")),
                        d_.expiredLicences ? Tone::Warning : Tone::Info, false);
-        // 1.35.0 : ce que dit le service, au dernier releve (jamais releve : pas de chiffre).
-        const std::string seen = d_.snapshotAt ? "relev\xC3\xA9 " + shortWhen(d_.snapshotAt) : std::string();
-        if (!d_.serviceConfigured) tiles_[2]->set("", "service non r\xC3\xA9gl\xC3\xA9", Tone::Info, true);
-        else if (!d_.snapshotAt) tiles_[2]->set("", "jamais relev\xC3\xA9" "es", Tone::Info, true);
-        else tiles_[2]->set(n(d_.onlineLicences), seen, Tone::Info, false);
-        tiles_[3]->set(n(d_.revokedLicences), w.hasRevocations() ? "liste n\xC2\xB0 " + std::to_string(w.revocations().number) : std::string("aucune liste"),
-                       d_.revokedLicences ? Tone::Error : Tone::Info, false);
         if (d_.serviceConfigured && d_.snapshotAt)
-            tiles_[4]->set(n(d_.devices + d_.onlineDevices), n(d_.devices) + " li\xC3\xA9s, " + n(d_.onlineDevices) + " en ligne", Tone::Info, false);
+            tiles_[1]->set(n(d_.devices + d_.onlineDevices), n(d_.devices) + " li\xC3\xA9s, " + n(d_.onlineDevices) + " en ligne", Tone::Info, false,
+                           places > 0 ? static_cast<float>(d_.devices) / static_cast<float>(places) : -1.f,
+                           places > 0 ? "/ " + n(places + d_.onlineDevices) + " places" : std::string());
         else
-            tiles_[4]->set(n(d_.devices), "li\xC3\xA9s \xC3\xA0 une licence", Tone::Info, false);
+            tiles_[1]->set(n(d_.devices), "li\xC3\xA9s \xC3\xA0 une licence", Tone::Info, false,
+                           places > 0 ? static_cast<float>(d_.devices) / static_cast<float>(places) : -1.f, places > 0 ? "/ " + n(places) + " places" : std::string());
         if (d_.serviceConfigured) {
             // 1.34.0 : les demandes par fichier (notees) et celles en ligne (au dernier releve).
             const int all = d_.pendingRequests + d_.onlinePending;
             const std::string when = d_.onlineFetchedAt ? "relev\xC3\xA9" "es le " + dateTimeFr(d_.onlineFetchedAt) : std::string("en ligne : jamais relev\xC3\xA9" "es");
-            tiles_[5]->set(n(all), d_.onlineFetchedAt ? "dont " + n(d_.onlinePending) + " en ligne, relev\xC3\xA9 " + shortWhen(d_.onlineFetchedAt) : when,
+            tiles_[2]->set(n(all), d_.onlineFetchedAt ? "dont " + n(d_.onlinePending) + " en ligne \xC2\xB7 relev\xC3\xA9 " + shortWhen(d_.onlineFetchedAt) : when,
                            all ? Tone::Warning : Tone::Info, false);
-            tiles_[5]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
+            tiles_[2]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
                                   + " en ligne (" + when + "). Clic : Demandes en ligne.");
         } else {
-            tiles_[5]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
-            tiles_[5]->setTooltip({});
+            tiles_[2]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
+            tiles_[2]->setTooltip({});
         }
-        tiles_[6]->set(n(d_.expiringSoon), "licences actives", d_.expiringSoon ? Tone::Warning : Tone::Info, false);
+        tiles_[3]->set(n(d_.expiringSoon), d_.expiringSoon ? std::string("licences actives \xC3\xA0 prolonger") : std::string("licences actives"),
+                       d_.expiringSoon ? Tone::Error : Tone::Info, false);
+        tiles_[4]->set(n(d_.clients), "dans l'archive", Tone::Info, false);
+        const std::string seen = d_.snapshotAt ? "relev\xC3\xA9 " + shortWhen(d_.snapshotAt) : std::string();
+        if (!d_.serviceConfigured) tiles_[5]->set("", "service non r\xC3\xA9gl\xC3\xA9", Tone::Info, true);
+        else if (!d_.snapshotAt) tiles_[5]->set("", "jamais relev\xC3\xA9" "es", Tone::Info, true);
+        else tiles_[5]->set(n(d_.onlineLicences), seen, Tone::Info, false);
+        tiles_[5]->setTooltip(d_.snapshotAt ? "Les licences en ligne, " + seen + "." : std::string());
+        tiles_[6]->set(n(d_.revokedLicences), w.hasRevocations() ? "liste n\xC2\xB0 " + std::to_string(w.revocations().number) : std::string("aucune liste"),
+                       d_.revokedLicences ? Tone::Error : Tone::Info, false);
         if (!d_.serviceConfigured) tiles_[7]->set("", "service non r\xC3\xA9gl\xC3\xA9", Tone::Info, true);
         else if (!d_.snapshotAt) tiles_[7]->set("", "jamais relev\xC3\xA9" "es", Tone::Info, true);
         else
-            tiles_[7]->set(n(d_.floatingLeases), "jeton(s) sur " + n(d_.floatingSeats) + " poste(s), " + seen,
-                           d_.floatingSeats && d_.floatingLeases >= d_.floatingSeats ? Tone::Warning : Tone::Info, false);
+            tiles_[7]->set(n(d_.floatingLeases) + " / " + n(d_.floatingSeats), "jetons en cours", d_.floatingSeats && d_.floatingLeases >= d_.floatingSeats ? Tone::Warning : Tone::Info, false);
 
-        rebuildOps();
+        rebuildFeed();
 
         // L'etat du poste.
         poste_.clear();
@@ -381,22 +496,24 @@ public:
 protected:
     void onLayout() override {
         const Rect  b = bounds();
-        const float pad = b.w < 760.f ? 16.f : 24.f;
+        const float pad = b.w < 900.f ? 20.f : 28.f;
         const float x0 = b.x + pad, w = std::max(240.f, b.w - 2 * pad);
         const bool  compact = b.h < 680.f;
-        float       y = b.y + 18.f;
-        // Le titre et les actions rapides a droite.
+        float       y = b.y + (compact ? 18.f : 26.f);
+        // Le titre, sa ligne, et deux actions a droite.
         titleY_ = y;
         float bx = x0 + w;
-        for (ui::Button* btn : {newLicence_, noteRequests_, sync_}) {
-            const float bw = btn->sizeHint().preferred.w;
+        for (ui::Button* btn : {noteRequests_, sync_}) {
+            const float bw = btn->sizeHint().preferred.w + 8.f;
             bx -= bw;
-            btn->setBounds({bx, y, bw, 32.f});
+            btn->setBounds({bx, y + 4.f, bw, 34.f});
             bx -= 8.f;
         }
-        y += 40.f;
+        newLicence_->setBounds({bx, y + 4.f, 10.f, 34.f});
+        titleRight_ = bx - 12.f;
+        y += 36.f;
         leadY_ = y;
-        y += 30.f;
+        y += compact ? 28.f : 36.f;
 
         // Le premier lancement.
         hintRect_ = {};
@@ -410,59 +527,47 @@ protected:
             const bool beside = w - bw - 64.f > 320.f;
             hintLines_ = wrap(hint_, kF15, (beside ? w - bw - 72.f : w - 64.f));
             const float textH = static_cast<float>(hintLines_.size()) * 20.f;
-            const float h = beside ? std::max(textH, 32.f) + 28.f : textH + 32.f + 28.f + 8.f;
+            const float h = beside ? std::max(textH, 34.f) + 28.f : textH + 34.f + 28.f + 8.f;
             hintRect_ = {x0, y, w, h};
             float hx = x0 + w - 14.f;
-            const float hy = beside ? y + (h - 32.f) * 0.5f : y + 14.f + textH + 8.f;
+            const float hy = beside ? y + (h - 34.f) * 0.5f : y + 14.f + textH + 8.f;
             if (!beside) hx = x0 + 44.f + bw;
             for (auto it = btns.rbegin(); it != btns.rend(); ++it) {
-                const float bw1 = (*it)->sizeHint().preferred.w;
+                const float bw1 = (*it)->sizeHint().preferred.w + 8.f;
                 hx -= bw1;
-                (*it)->setBounds({hx, hy, bw1, 32.f});
+                (*it)->setBounds({hx, hy, bw1, 34.f});
                 hx -= 8.f;
             }
-            y += h + 14.f;
+            y += h + 16.f;
         }
 
-        // Les tuiles : quatre par ligne.
-        const float tileH = compact ? 62.f : 70.f, gap = 12.f;
+        // Les quatre grandes tuiles, puis les quatre petites.
+        const float gap = 16.f;
+        const float bigH = compact ? 104.f : 126.f, smallH = compact ? 46.f : 52.f;
         const float tileW = (w - 3 * gap) / 4.f;
         for (std::size_t i = 0; i < tiles_.size(); ++i) {
+            const bool big = i < 4;
             const float tx = x0 + static_cast<float>(i % 4) * (tileW + gap);
-            const float ty = y + static_cast<float>(i / 4) * (tileH + gap);
-            tiles_[i]->setBounds({tx, ty, tileW, tileH});
+            const float ty = big ? y : y + bigH + 12.f;
+            tiles_[i]->setBounds({tx, ty, tileW, big ? bigH : smallH});
         }
-        y += 2 * tileH + gap + 16.f;
+        y += bigH + 12.f + smallH + gap;
 
-        // En bas : les dernieres operations a gauche ; a droite, les editions puis l'etat du poste.
-        const float bottom = b.bottom() - 16.f;
-        const float rightW = std::clamp(w * 0.30f, 300.f, 380.f);
-        const float leftW = w - rightW - 16.f;
-        opsRect_ = {x0, y, leftW, std::max(110.f, bottom - y)};
-        table_->setBounds({opsRect_.x + 1.f, opsRect_.y + 40.f, opsRect_.w - 2.f, std::max(40.f, opsRect_.h - 41.f)});
-        // Les colonnes suivent la largeur ; etroite, la date perd l'heure.
-        const float tw = opsRect_.w - 2.f - 14.f;
-        if (std::abs(tw - columnsFor_) > 1.f) {
-            columnsFor_ = tw;
-            const bool narrow = tw < 700.f;
-            const float date = narrow ? 100.f : 138.f, op = 156.f, lic = 142.f;
-            const float rest = std::max(240.f, tw - date - op - lic);
-            table_->setColumns({{"Date", date}, {"Op\xC3\xA9ration", op}, {"Licence", lic}, {"Client", std::floor(rest * 0.5f)}, {"PC", std::floor(rest * 0.5f)}});
-            if (narrow != narrow_) {
-                narrow_ = narrow;
-                rebuildOps();
-            }
-        }
-        // A droite : les editions (a leur hauteur), puis l'etat du poste jusqu'en bas.
+        // En bas : l'activite a gauche ; a droite, les editions puis l'etat du poste.
+        const float bottom = b.bottom() - 18.f;
+        const float rightW = std::clamp(w * 0.34f, 300.f, 440.f);
+        const float leftW = w - rightW - gap;
+        opsRect_ = {x0, y, leftW, std::max(120.f, bottom - y)};
+        feed_->setBounds({opsRect_.x + 1.f, opsRect_.y + 52.f, opsRect_.w - 2.f, std::max(40.f, opsRect_.h - 58.f)});
         const std::size_t bars = std::max<std::size_t>(d_.byEdition.size(), 2);
-        barH_ = compact ? 22.f : 24.f;
-        lineH_ = compact ? 19.f : 21.f;
-        const float wantEd = 44.f + static_cast<float>(std::min<std::size_t>(bars, 8)) * barH_ + 10.f;
-        const float wantPoste = 44.f + static_cast<float>(poste_.size()) * lineH_ + 8.f;
+        barH_ = compact ? 40.f : 46.f;
+        lineH_ = compact ? 19.f : 22.f;
+        const float wantEd = 56.f + static_cast<float>(std::min<std::size_t>(bars, 6)) * barH_ + 8.f;
+        const float wantPoste = 56.f + static_cast<float>(poste_.size()) * lineH_ + 10.f;
         const float colH = std::max(200.f, bottom - y);
-        const float edH = std::clamp(colH - wantPoste - 16.f, 92.f, wantEd);
-        editionsRect_ = {x0 + leftW + 16.f, y, rightW, edH};
-        posteRect_ = {x0 + leftW + 16.f, y + edH + 16.f, rightW, std::max(60.f, colH - edH - 16.f)};
+        const float edH = std::clamp(colH - wantPoste - gap, 100.f, wantEd);
+        editionsRect_ = {x0 + leftW + gap, y, rightW, edH};
+        posteRect_ = {x0 + leftW + gap, y + edH + gap, rightW, std::max(60.f, colH - edH - gap)};
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -470,16 +575,18 @@ protected:
         const auto& c = th.color;
         const Rect  b = bounds();
         ctx.r.fillRect(b, c.windowBg);
-        const float pad = b.w < 760.f ? 16.f : 24.f;
+        const float pad = b.w < 900.f ? 20.f : 28.f;
         const float x0 = b.x + pad;
-        boldText(ctx.r, {x0, titleY_}, "Tableau de bord", kF26, c.text);
-        ctx.r.drawText({x0, leadY_}, fit(ctx.r, "Ce que disent l'archive et le registre des activations de ce poste, hors ligne. Un clic sur un chiffre ouvre sa page.", kF15, b.w - 2 * pad),
-                       kF15, c.textMuted);
+        ctx.r.drawText({x0, titleY_}, "Tableau de bord", gfx::semibold(kF28), c.text);
+        // La ligne sous le titre : le jour, et ce qui se fait seul.
+        const std::string lead = longDateFr(ws().now()) + " \xC2\xB7 " +
+                                 (ws().service().ready() ? std::string("ce qui change en ligne appara\xC3\xAEt seul ; un clic sur un chiffre ouvre sa page.")
+                                                         : std::string("ce que disent l'archive et le registre de ce poste ; un clic sur un chiffre ouvre sa page."));
+        ctx.r.drawText({x0, leadY_}, fit(ctx.r, lead, kF14, b.w - 2 * pad), kF14, c.textMuted);
 
         if (!hintRect_.empty()) {
-            ctx.r.fillRoundedRect(hintRect_, c.accent.withAlpha(110), 8.f);
-            ctx.r.fillRoundedRect(hintRect_.inset(1.f, 1.f), c.panelBg, 7.f);
-            ctx.r.fillRoundedRect(hintRect_.inset(1.f, 1.f), c.accent.withAlpha(16), 7.f);
+            cardBox(ctx.r, th, hintRect_, Color::rgb(0xFFFFFF), c.accent.withAlpha(120));
+            ctx.r.fillRoundedRect(hintRect_.inset(1.f, 1.f), c.accent.withAlpha(14), 11.f);
             ui::drawIcon(ctx.r, hintKind_ == 1 ? ui::Icon::Lock : ui::Icon::Info, {hintRect_.x + 16.f, hintRect_.y + 14.f, 18.f, 18.f}, c.accent);
             float y = hintRect_.y + 14.f;
             for (const auto& l : hintLines_) {
@@ -488,67 +595,61 @@ protected:
             }
         }
 
-        // Les dernieres operations.
-        card(ctx.r, th, opsRect_);
-        boldText(ctx.r, {opsRect_.x + 16.f, opsRect_.y + 12.f}, "Derni\xC3\xA8res op\xC3\xA9rations", kF16, c.text);
+        // L'activite.
+        cardBox(ctx.r, th, opsRect_);
+        const FontId fh = gfx::semibold(kF16);
+        ctx.r.drawText({opsRect_.x + 20.f, opsRect_.y + 17.f}, "Activit\xC3\xA9", fh, c.text);
         {
             const std::string n = d_.recent.empty() ? std::string() : d_.recent.size() >= 12 ? std::string("les 12 plus r\xC3\xA9" "centes") : plural(static_cast<int>(d_.recent.size()), "op\xC3\xA9ration", "op\xC3\xA9rations");
             const float nw = ctx.r.measure(n, kF13).width;
-            ctx.r.drawText({opsRect_.right() - 16.f - nw, opsRect_.y + 14.f}, n, kF13, c.textMuted);
+            ctx.r.drawText({opsRect_.right() - 20.f - nw, opsRect_.y + 19.f}, n, kF13, c.textMuted);
         }
+        ctx.r.fillRect({opsRect_.x + 1.f, opsRect_.y + 51.f, opsRect_.w - 2.f, 1.f}, c.gridLine);
 
-        // La repartition par edition.
-        card(ctx.r, th, editionsRect_);
-        boldText(ctx.r, {editionsRect_.x + 16.f, editionsRect_.y + 12.f}, "R\xC3\xA9partition par \xC3\xA9" "dition", kF16, c.text);
+        // Les licences par edition : le nom, le nombre, la barre dessous (la maquette).
+        cardBox(ctx.r, th, editionsRect_);
+        ctx.r.drawText({editionsRect_.x + 20.f, editionsRect_.y + 17.f}, "Licences par \xC3\xA9" "dition", fh, c.text);
         {
-            const float rowH = barH_;
-            const std::size_t fits = static_cast<std::size_t>(std::max(1.f, (editionsRect_.bottom() - 8.f - (editionsRect_.y + 44.f)) / rowH));
-            // Toutes ne tiennent pas (une petite fenetre, le journal ouvert) : combien manquent, dans l'en-tete.
-            const std::size_t hidden = d_.byEdition.size() > fits && fits == 1 ? d_.byEdition.size() - 1 : 0;
-            const std::string sub = hidden ? "+ " + std::to_string(hidden) + (hidden > 1 ? " autres" : " autre") : std::string("licences actives");
+            const std::size_t fits = static_cast<std::size_t>(std::max(1.f, (editionsRect_.bottom() - 8.f - (editionsRect_.y + 56.f)) / barH_));
+            const std::size_t hidden = d_.byEdition.size() > fits ? d_.byEdition.size() - fits : 0;
+            int total = 0;
+            for (const auto& e : d_.byEdition) total += e.second;
+            const std::string sub = hidden ? "+ " + std::to_string(hidden) + (hidden > 1 ? " autres" : " autre") : std::to_string(total) + (total > 1 ? " actives" : " active");
             const float sw = ctx.r.measure(sub, kF13).width;
-            ctx.r.drawText({editionsRect_.right() - 16.f - sw, editionsRect_.y + 14.f}, sub, kF13, c.textMuted);
-            float y = editionsRect_.y + 44.f;
+            ctx.r.drawText({editionsRect_.right() - 20.f - sw, editionsRect_.y + 19.f}, sub, kF13, c.textMuted);
+            float y = editionsRect_.y + 56.f;
             if (d_.byEdition.empty()) {
-                ctx.r.drawText({editionsRect_.x + 16.f, y}, "Aucune licence active.", kF14, c.textMuted);
+                ctx.r.drawText({editionsRect_.x + 20.f, y}, "Aucune licence active.", kF14, c.textMuted);
             } else {
                 int most = 1;
                 for (const auto& [name, count] : d_.byEdition) most = std::max(most, count);
-                const float labelW = std::min(150.f, editionsRect_.w * 0.4f);
-                const float countW = 36.f;
-                const float barX = editionsRect_.x + 16.f + labelW + 8.f;
-                const float barW = std::max(20.f, editionsRect_.right() - 16.f - countW - barX);
+                const FontId fn = gfx::semibold(kF13);
                 for (std::size_t i = 0; i < d_.byEdition.size() && i < fits; ++i) {
                     const auto& [name, count] = d_.byEdition[i];
-                    if (i + 1 == fits && fits > 1 && d_.byEdition.size() > fits) {
-                        ctx.r.drawText({editionsRect_.x + 16.f, y + 3.f}, "+ " + std::to_string(d_.byEdition.size() - i) + " autres \xC3\xA9" "ditions", kF13, c.textMuted);
-                        break;
-                    }
-                    ctx.r.drawText({editionsRect_.x + 16.f, y + 3.f}, fit(ctx.r, name, kF14, labelW), kF14, c.text);
-                    const Rect track{barX, y + 6.f, barW, 10.f};
-                    ctx.r.fillRoundedRect(track, c.gridLine, 5.f);
-                    const float fw = std::max(10.f, barW * static_cast<float>(count) / static_cast<float>(most));
-                    ctx.r.fillRoundedRect({track.x, track.y, fw, track.h}, c.accent, 5.f);
                     const std::string cnt = std::to_string(count);
                     const float cw = ctx.r.measure(cnt, kF14).width;
-                    boldText(ctx.r, {editionsRect_.right() - 16.f - cw, y + 3.f}, cnt, kF14, c.text);
-                    y += rowH;
+                    ctx.r.drawText({editionsRect_.x + 20.f, y}, fit(ctx.r, name, fn, editionsRect_.w - 60.f - cw), fn, c.text);
+                    ctx.r.drawText({editionsRect_.right() - 20.f - cw, y}, cnt, kF14, c.textMuted);
+                    const Rect track{editionsRect_.x + 20.f, y + 22.f, editionsRect_.w - 40.f, 8.f};
+                    ctx.r.fillRoundedRect(track, c.gridLine, 4.f);
+                    ctx.r.fillRoundedRect({track.x, track.y, std::max(8.f, track.w * static_cast<float>(count) / static_cast<float>(most)), track.h}, c.accent, 4.f);
+                    y += barH_;
                 }
             }
         }
 
         // L'etat du poste.
-        card(ctx.r, th, posteRect_);
-        boldText(ctx.r, {posteRect_.x + 16.f, posteRect_.y + 12.f}, "\xC3\x89tat du poste", kF16, c.text);
+        cardBox(ctx.r, th, posteRect_);
+        ctx.r.drawText({posteRect_.x + 20.f, posteRect_.y + 17.f}, "\xC3\x89tat du poste", fh, c.text);
         {
-            float y = posteRect_.y + 44.f;
-            const float labelW = 86.f;
+            float y = posteRect_.y + 54.f;
+            const float labelW = 112.f;
             for (const auto& l : poste_) {
-                if (y + 18.f > posteRect_.bottom()) break;
-                ctx.r.drawText({posteRect_.x + 16.f, y}, l.label, kF13, c.textMuted);
-                const float vx = posteRect_.x + 16.f + labelW, vw = posteRect_.right() - 16.f - vx;
-                const std::string v = l.label == "Dossier" ? fitTail(ctx.r, l.value, kF14, vw) : fit(ctx.r, l.value, kF14, vw);
-                ctx.r.drawText({vx, y - 1.f}, v, kF14, l.tone == Tone::Info ? c.text : toneColor(th, l.tone));
+                if (y + 18.f > posteRect_.bottom() - 4.f) break;
+                ctx.r.drawText({posteRect_.x + 20.f, y}, l.label, kF13, c.textMuted);
+                const float vx = posteRect_.x + 20.f + labelW, vw = posteRect_.right() - 20.f - vx;
+                const std::string v = l.label == "Dossier" ? fitTail(ctx.r, l.value, kF13, vw) : fit(ctx.r, l.value, kF13, vw);
+                ctx.r.drawText({vx, y}, v, kF13, l.tone == Tone::Info ? c.text : toneColor(th, l.tone));
                 y += lineH_;
             }
         }
@@ -557,49 +658,47 @@ protected:
     void onPaintOverlay(const ui::PaintContext& ctx) override {
         if (!d_.recent.empty()) return;
         const auto& c = ctx.theme.color;
-        const Rect  t = table_->bounds();
-        ctx.r.drawText({t.x + 16.f, t.y + 40.f}, fit(ctx.r, "Aucune op\xC3\xA9ration pour l'instant : signe une licence ou note une demande.", kF14, t.w - 32.f), kF14,
+        const Rect  t = feed_->bounds();
+        ctx.r.drawText({t.x + 20.f, t.y + 18.f}, fit(ctx.r, "Aucune op\xC3\xA9ration pour l'instant : signe une licence ou note une demande.", kF14, t.w - 40.f), kF14,
                        c.textMuted);
     }
 
 private:
-    // Les dernieres operations (etroite : la date sans l'heure).
-    void rebuildOps() {
-        std::vector<std::vector<std::string>> rows;
-        std::vector<ui::CellStyle>            styles;
-        std::vector<Seconds>                  keys;
-        std::vector<std::string>              tips;
+    // Les dernieres operations, en fil.
+    void rebuildFeed() {
+        std::vector<FeedRow> rows;
+        const Seconds now = ws().now();
         for (const auto& a : d_.recent) {
-            std::string what = a.kind;
-            ui::CellStyle s;
+            FeedRow f;
             if (a.kind == "licence") {
-                what = a.extension ? "Licence \xC3\xA9tendue" : "Licence sign\xC3\xA9" "e";
-                s.icon = ui::Icon::Ok;
-                s.iconTone = ui::Tone::Ok;
+                f.what = a.extension ? "Licence \xC3\xA9tendue" : "Licence sign\xC3\xA9" "e";
+                f.icon = ui::Icon::Ok;
+                f.tone = Tone::Ok;
             } else if (a.kind == "demande") {
-                what = "Demande re\xC3\xA7ue";
-                s.icon = ui::Icon::Mail;
-                s.iconTone = ui::Tone::Info;
+                f.what = "Demande re\xC3\xA7ue";
+                f.icon = ui::Icon::Mail;
+                f.tone = Tone::Warning;
             } else if (a.kind == "revocation") {
-                what = a.deviceKey.empty() ? "Licence r\xC3\xA9voqu\xC3\xA9" "e" : "PC r\xC3\xA9voqu\xC3\xA9";
-                s.icon = ui::Icon::Close;
-                s.iconTone = ui::Tone::Error;
+                f.what = a.deviceKey.empty() ? "Licence r\xC3\xA9voqu\xC3\xA9" "e" : "PC r\xC3\xA9voqu\xC3\xA9";
+                f.icon = ui::Icon::Close;
+                f.tone = Tone::Error;
+            } else {
+                f.what = a.kind;
             }
-            const std::string pc = a.kind == "revocation" && a.deviceKey.empty() ? std::string("toute la licence")
-                                   : a.deviceName.empty()                         ? std::string("(sans nom)")
-                                                                                  : a.deviceName;
             // Une revocation ne note pas le client : celui de la licence de l'archive.
             std::string customer = a.customer;
             if (customer.empty() && !a.licenseId.empty())
                 if (const LicenceEntry* l = ws().licence(a.licenseId)) customer = l->licence.customer;
-            rows.push_back({narrow_ ? dateFr(a.at) : dateTimeFr(a.at), what, a.licenseId.empty() ? std::string("-") : a.licenseId, customer, pc});
-            styles.push_back(s);
-            keys.push_back(a.at);
-            tips.push_back(a.fingerprint.empty() ? std::string() : "Empreinte de la cl\xC3\xA9 du PC : " + a.fingerprint);
+            f.who = customer.empty() ? std::string() : customer + " \xC2\xB7";
+            const std::string pc = a.kind == "revocation" && a.deviceKey.empty() ? std::string("toute la licence")
+                                   : a.deviceName.empty()                         ? std::string("(sans nom)")
+                                                                                  : a.deviceName;
+            f.detail = (a.licenseId.empty() ? std::string() : "Licence " + a.licenseId + " \xC2\xB7 ") + "PC " + pc;
+            f.when = agoFr(now, a.at);
+            f.tip = dateTimeFr(a.at) + (a.fingerprint.empty() ? std::string() : " \xC2\xB7 empreinte de la cl\xC3\xA9 du PC : " + a.fingerprint) + ". Double-clic : l'historique.";
+            rows.push_back(std::move(f));
         }
-        model_ = std::make_shared<RowsModel>(std::vector<std::string>{"Date", "Op\xC3\xA9ration", "Licence", "Client", "PC"}, std::move(rows), std::move(styles),
-                                             std::move(keys), std::move(tips));
-        table_->setModel(model_);
+        feed_->setRows(std::move(rows));
     }
 
     ui::Button* addButton(const char* text, const char* id, ui::Button::Style style, ui::Icon icon) {
@@ -647,13 +746,10 @@ private:
     ui::Button*                  restore_{nullptr};
     ui::Button*                  toEditions_{nullptr};
     std::vector<StatTile*>       tiles_;
-    ui::TableView*               table_{nullptr};
-    std::shared_ptr<RowsModel>   model_;
+    ActivityFeed*                feed_{nullptr};
     Rect                         hintRect_{}, opsRect_{}, editionsRect_{}, posteRect_{};
-    float                        columnsFor_{-1.f};
-    float                        barH_{24.f}, lineH_{21.f};
-    bool                         narrow_{false};
-    float                        titleY_{0.f}, leadY_{0.f};
+    float                        barH_{46.f}, lineH_{22.f};
+    float                        titleY_{0.f}, leadY_{0.f}, titleRight_{0.f};
     core::ConnectionScope        links_;
 };
 

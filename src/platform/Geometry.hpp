@@ -59,7 +59,12 @@ struct Color {
 // Opaque resource handles. They live here rather than in Renderer.hpp so that
 // Theme.hpp (and anything else that only needs to *name* a font) does not have
 // to pull in the renderer interface.
-struct FontId    { std::uint16_t v{0}; };
+// v : la hauteur en pixels. w (1.41.0) : la graisse - 0 la normale, 1 la demi-grasse (une vraie face, Inter
+// SemiBold, quand la police de l'interface est celle fournie ; sinon la normale). Construit avec la taille seule,
+// un FontId reste normal : tout le code d'avant garde son texte.
+struct FontId    { std::uint16_t v{0}; std::uint8_t w{0}; };
+[[nodiscard]] constexpr FontId semibold(FontId f) noexcept { return FontId{f.v, 1}; }
+[[nodiscard]] constexpr FontId regular(FontId f) noexcept { return FontId{f.v, 0}; }
 struct TextureId { std::uint32_t v{0}; };
 
 // Padding / margins, CSS order.

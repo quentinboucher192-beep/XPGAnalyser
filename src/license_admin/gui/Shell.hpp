@@ -68,6 +68,7 @@ public:
     // ---- ce que les pages recoivent ----
     [[nodiscard]] ShellHost host();
     [[nodiscard]] Workspace& workspace() noexcept { return *ws_; }
+    [[nodiscard]] const Workspace& workspace() const noexcept { return *ws_; }
 
     // ---- le ShellHost, en clair ----
     void report(const OpResult& r);
@@ -117,6 +118,8 @@ public:
                                                                   const std::function<std::string(const std::string&)>& customerOf);
     // Le regard marche (le haut de la fenetre le dit : << en direct >>).
     [[nodiscard]] bool live() const;
+    // 1.41.0 : depuis quand le service a repondu au regard (secondes ; -1 : jamais) - la carte du menu le dit.
+    [[nodiscard]] double secondsSinceLive() const;
     static constexpr double kWatchFirst = 2.0, kWatchPeriod = 15.0, kWatchFallback = 30.0, kFetchWhenWatched = 600.0;
 
     // ---- ce qui se lit (les essais, la fenetre) ----

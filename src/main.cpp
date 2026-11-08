@@ -7,7 +7,8 @@
 //              a corpus of customer exports, and what lets the import pipeline
 //              be regression-tested without a display server.
 // =============================================================================
-#include "hmi/HmiFontLibrary.hpp"   // 1.26.0 : le dossier des polices fournies
+#include "hmi/HmiFontLibrary.hpp"
+#include "platform/FontAtlas.hpp"   // 1.41.0 : le dossier de la police de l'interface   // 1.26.0 : le dossier des polices fournies
 #include "app/App.hpp"
 #include "app/CrashDialogs.hpp"   // 1.10.2 (CR) : la fenetre de blocage de l'appli
 #include "app/Dossiers.hpp"
@@ -515,6 +516,11 @@ int main(int argc, char** argv) {
         if (!exe.empty() && fs::is_directory(exe / "resources" / "polices", ec)) {
             const auto u8 = (exe / "resources" / "polices").u8string();
             hmi::fontlib::setNativeFolder(std::string(u8.begin(), u8.end()));
+        }
+        // 1.41.0 : la police de l'interface (Inter), a cote de l'exe aussi.
+        if (!exe.empty() && fs::is_directory(exe / "resources" / "fonts", ec)) {
+            const auto u8 = (exe / "resources" / "fonts").u8string();
+            gfx::setInterfaceFontFolder(std::string(u8.begin(), u8.end()));
         }
         // 1.37.0 : les apercus des fonctionnalites (fenetre Licence, onglet Editions), a cote de l'exe aussi.
         if (!exe.empty() && fs::is_directory(exe / "resources" / "licences" / "fonctions", ec)) {

@@ -110,4 +110,65 @@ std::vector<Point> roundedRect(float x, float y, float w, float h, float radius)
     return out;
 }
 
+namespace {
+// Le contour d'un rectangle arrondi, TOUJOURS 28 points (7 par coin, un rayon nul compris) : deux contours se
+// joignent point a point en une bande.
+std::vector<Point> contour(float x, float y, float w, float h, float rad) {
+    std::vector<Point> out;
+    out.reserve(28);
+    auto corner = [&](float cx, float cy, float from) {
+        for (int i = 0; i <= 6; ++i) {
+            const float a = (from + 90.f * static_cast<float>(i) / 6.f) * kPi / 180.f;
+            out.push_back({cx + rad * std::cos(a), cy + rad * std::sin(a)});
+        }
+    };
+    corner(x + w - rad, y + rad, -90);
+    corner(x + w - rad, y + h - rad, 0);
+    corner(x + rad, y + h - rad, 90);
+    corner(x + rad, y + rad, 180);
+    return out;
+}
+} // namespace
+
+void strokeRoundedRect(gfx::IRenderer& r, const gfx::Rect& box, Color c, float radius, float width) {
+    if (box.w <= 0.f || box.h <= 0.f || c.a == 0 || width <= 0.f) return;
+    width = std::min(width, std::min(box.w, box.h) / 2.f);
+    const float rad = std::clamp(radius, 0.f, std::min(box.w, box.h) / 2.f);
+    if (rad < 1.5f) {
+        // Quatre bandes, sans recouvrement (une couleur translucide ne fonce pas aux coins).
+        r.fillRect({box.x, box.y, box.w, width}, c);
+        r.fillRect({box.x, box.bottom() - width, box.w, width}, c);
+        r.fillRect({box.x, box.y + width, width, box.h - 2 * width}, c);
+        r.fillRect({box.right() - width, box.y + width, width, box.h - 2 * width}, c);
+        return;
+    }
+    const auto outer = contour(box.x, box.y, box.w, box.h, rad);
+    const auto inner = contour(box.x + width, box.y + width, box.w - 2 * width, box.h - 2 * width, std::max(0.f, rad - width));
+    std::vector<gfx::Vertex> tris;
+    tris.reserve(outer.size() * 6);
+    for (std::size_t i = 0; i < outer.size(); ++i) {
+        const std::size_t j = (i + 1) % outer.size();
+        tris.push_back({outer[i], c}); tris.push_back({outer[j], c}); tris.push_back({inner[j], c});
+        tris.push_back({outer[i], c}); tris.push_back({inner[j], c}); tris.push_back({inner[i], c});
+    }
+    r.fillTriangles(tris.data(), tris.size());
+}
+
+void fillFramedRect(gfx::IRenderer& r, const gfx::Rect& box, Color fill, Color border, float radius) {
+    if (box.w <= 0.f || box.h <= 0.f) return;
+    const float rad = std::clamp(radius, 0.f, std::min(box.w, box.h) / 2.f);
+    if (rad < 1.5f) {
+        if (fill.a > 0) r.fillRect(box, fill);
+        if (border.a > 0) r.strokeRect(box, border, 1.f);
+        return;
+    }
+    if (fill.a == 255 && border.a == 255) {
+        r.fillRoundedRect(box, border, rad);
+        r.fillRoundedRect(box.inset(1.f, 1.f), fill, rad - 1.f);
+        return;
+    }
+    if (fill.a > 0) r.fillRoundedRect(box, fill, rad);
+    if (border.a > 0) strokeRoundedRect(r, box, border, rad, 1.f);
+}
+
 } // namespace ui::shapes

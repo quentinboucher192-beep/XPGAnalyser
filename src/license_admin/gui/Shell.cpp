@@ -9,6 +9,7 @@
 #include "../../core/SystemOpen.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Icons.hpp"
+#include "../../ui/Shapes.hpp"   // 1.41.0 : les cadres arrondis
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 
@@ -33,7 +34,7 @@ using gfx::FontId;
 using gfx::Rect;
 
 constexpr float  kRailW = 232.f;     // le menu de gauche
-constexpr float  kTopH = 48.f;       // la barre du haut de la page
+constexpr float  kTopH = 64.f;       // la barre du haut de la page (1.41.0 : 64, la maquette)
 constexpr float  kBannerH = 40.f;    // le bandeau du bas (une ligne)
 constexpr FontId kF15{15}, kF14{14}, kF13{13}, kF12{12};
 
@@ -158,11 +159,49 @@ private:
 };
 
 // =============================================================== le menu ====
+// 1.41.0 : LA BARRE DE LA NUIT (la maquette validee : --night). Le menu est sombre quel que soit le theme : c'est la
+// marque de l'Admin, l'accent du logiciel (le violet) y porte la page ouverte.
+constexpr Color kNightTop = Color::rgb(0x101833), kNightBottom = Color::rgb(0x0B1222);
+constexpr Color kNightCard = Color::rgb(0x111A2E), kNightLine = Color::rgb(0x1B2640), kNightActive = Color::rgb(0x1E2A4A);
+constexpr Color kNightInk = Color::rgb(0xC7D0E0), kNightMuted = Color::rgb(0x7C89A3), kNightFaint = Color::rgb(0x56627C);
+constexpr Color kNightWhite = Color::rgb(0xFFFFFF), kVioletSoft = Color::rgb(0xA993FF), kLive = Color::rgb(0x22C55E);
+
+// Un degrade vertical (deux triangles, la couleur a chaque sommet).
+void fillVertical(gfx::IRenderer& r, const Rect& b, Color top, Color bottom) {
+    const gfx::Vertex v[6] = {{{b.x, b.y}, top},           {{b.right(), b.y}, top},      {{b.right(), b.bottom()}, bottom},
+                              {{b.x, b.y}, top},           {{b.right(), b.bottom()}, bottom}, {{b.x, b.bottom()}, bottom}};
+    r.fillTriangles(v, 6);
+}
+
+// La cle de la marque, dessinee : l'anneau, la tige et deux dents.
+void drawKey(gfx::IRenderer& r, const Rect& box, Color c) {
+    const float s = box.w / 20.f;
+    const gfx::Point o{box.x + 6.5f * s, box.y + 13.5f * s};
+    for (int i = 0; i < 24; ++i) {
+        const float a0 = static_cast<float>(i) * 6.2831853f / 24.f, a1 = static_cast<float>(i + 1) * 6.2831853f / 24.f;
+        r.line({o.x + std::cos(a0) * 4.f * s, o.y + std::sin(a0) * 4.f * s}, {o.x + std::cos(a1) * 4.f * s, o.y + std::sin(a1) * 4.f * s}, c, 1.9f * s);
+    }
+    const gfx::Point a{o.x + 2.9f * s, o.y - 2.9f * s}, b{box.x + 17.f * s, box.y + 3.f * s};
+    r.line(a, b, c, 1.9f * s);
+    r.line({box.x + 13.6f * s, box.y + 6.4f * s}, {box.x + 15.8f * s, box.y + 8.6f * s}, c, 1.9f * s);
+    r.line({box.x + 11.3f * s, box.y + 8.7f * s}, {box.x + 12.9f * s, box.y + 10.3f * s}, c, 1.9f * s);
+}
+
+// Les quatre groupes du menu (la maquette), par l'identifiant de leur premiere page.
+const char* sectionBefore(const std::string& id) {
+    if (id == "tableau") return "PILOTAGE";
+    if (id == "editions") return "CATALOGUE";
+    if (id == "boutique") return "VENTE EN LIGNE \xC2\xB7 PAS ENCORE";
+    if (id == "revocations") return "S\xC3\x89" "CURIT\xC3\x89";
+    return nullptr;
+}
+
 class NavItem final : public ui::Button {
 public:
     NavItem(const Shell::NavEntry& e, const Shell& shell) : ui::Button(e.label, std::string("nav.") + e.id), e_(e), shell_(shell) {
         if (e.online) setTooltip("Demande un paiement en ligne, pas encore fait : la page explique ce qu'elle fera.");
     }
+    void setCount(int n) { count_ = n; }
 
 protected:
     void onPaint(const ui::PaintContext& ctx) override {
@@ -170,36 +209,89 @@ protected:
         const Rect  r = bounds();
         const bool  sel = shell_.currentPageId() == e_.id;
         if (sel) {
-            ctx.r.fillRoundedRect(r, c.panelBg, 6.f);
-            ctx.r.fillRoundedRect({r.x, r.y + 8.f, 3.f, r.h - 16.f}, c.accent, 1.5f);
-        } else if (hovered()) {
-            ctx.r.fillRoundedRect(r, ctx.theme.brand.hover, 6.f);
+            ctx.r.fillRoundedRect(r, kNightActive, 8.f);
+            ctx.r.fillRoundedRect({r.x - 8.f, r.y + 7.f, 3.f, r.h - 14.f}, c.accent, 1.5f);
+        } else if (hovered() && !e_.online) {
+            ctx.r.fillRoundedRect(r, kNightWhite.withAlpha(12), 8.f);
         }
-        const Color ink = sel ? c.accent : e_.online ? c.textDisabled : c.text;
-        const Color iconInk = sel ? c.accent : e_.online ? c.textDisabled : c.textMuted;
-        ui::drawIcon(ctx.r, e_.icon, {r.x + 12.f, r.y + (r.h - 18.f) * 0.5f, 18.f, 18.f}, iconInk);
-        // 1.36.0 : les demandes en attente de ta decision, comptees sur leur page (une pastille).
-        const int count = std::string(e_.id) == "demandes" ? shell_.pendingRequests() : 0;
+        const Color ink = sel ? kNightWhite : e_.online ? kNightFaint : kNightInk;
+        const Color iconInk = sel ? kVioletSoft : e_.online ? kNightFaint : kNightMuted;
+        ui::drawIcon(ctx.r, e_.icon, {r.x + 10.f, r.y + (r.h - 17.f) * 0.5f, 17.f, 17.f}, iconInk);
+        // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre.
+        const bool demandes = std::string(e_.id) == "demandes";
+        const int  count = demandes ? shell_.pendingRequests() : count_;
         float badgeW = 0.f;
         if (count > 0) {
-            const std::string n = count > 99 ? std::string("99+") : std::to_string(count);
-            badgeW = std::max(22.f, ctx.r.measure(n, kF13).width + 12.f);
-            const Rect pill{r.right() - 10.f - badgeW, r.y + (r.h - 20.f) * 0.5f, badgeW, 20.f};
-            ctx.r.fillRoundedRect(pill, ctx.theme.tone(ui::Tone::Warning, c.accent), 10.f);
-            ctx.r.drawText({pill.x + (pill.w - ctx.r.measure(n, kF13).width) * 0.5f, pill.y + (20.f - ctx.r.lineHeight(kF13)) * 0.5f}, n, kF13,
-                           gfx::Color{255, 255, 255, 255});
+            const std::string n = count > 999 ? std::string("999+") : std::to_string(count);
+            const float nw = ctx.r.measure(n, kF12).width;
+            badgeW = std::max(24.f, nw + 14.f);
+            const Rect pill{r.right() - 8.f - badgeW, r.y + (r.h - 20.f) * 0.5f, badgeW, 20.f};
+            ctx.r.fillRoundedRect(pill, demandes ? Color::rgb(0xF59E0B).withAlpha(46) : kNightWhite.withAlpha(sel ? 22 : 14), 10.f);
+            ctx.r.drawText({pill.x + (pill.w - nw) * 0.5f, pill.y + (20.f - ctx.r.lineHeight(kF12)) * 0.5f}, n, kF12,
+                           demandes ? Color::rgb(0xFBBF24) : sel ? kNightWhite : kNightMuted);
             badgeW += 8.f;
         }
-        const std::string t = fit(ctx.r, e_.label, kF15, r.w - 46.f - badgeW);
-        const float h = ctx.r.lineHeight(kF15);
-        const gfx::Point at{r.x + 38.f, r.y + (r.h - h) * 0.5f};
-        if (sel) boldText(ctx.r, at, t, kF15, ink);
-        else ctx.r.drawText(at, t, kF15, ink);
+        const FontId f = sel ? gfx::semibold(kF14) : kF14;
+        const std::string t = fit(ctx.r, e_.label, f, r.w - 44.f - badgeW);
+        ctx.r.drawText({r.x + 38.f, r.y + (r.h - ctx.r.lineHeight(f)) * 0.5f}, t, f, ink);
     }
 
 private:
     const Shell::NavEntry& e_;
     const Shell&           shell_;
+    int                    count_{0};
+};
+
+// Un bouton sur la nuit (le dossier du poste) : le texte clair, le survol a peine marque.
+class NightButton final : public ui::Button {
+public:
+    NightButton(std::string text, std::string id) : ui::Button(std::move(text), std::move(id)) {}
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const Rect r = bounds();
+        if (hovered()) ctx.r.fillRoundedRect(r, kNightWhite.withAlpha(12), 8.f);
+        ui::drawIcon(ctx.r, ui::Icon::Folder, {r.x + 8.f, r.y + (r.h - 15.f) * 0.5f, 15.f, 15.f}, kNightMuted);
+        ctx.r.drawText({r.x + 30.f, r.y + (r.h - ctx.r.lineHeight(kF12)) * 0.5f}, fit(ctx.r, text(), kF12, r.w - 34.f), kF12, kNightMuted);
+    }
+};
+
+// La carte du service, en bas du menu : en direct (le point vert), ou ce qui manque. Un clic : la page Service en ligne.
+class ServiceCard final : public ui::Button {
+public:
+    explicit ServiceCard(const Shell& shell) : ui::Button("Service en ligne", "shell.service-carte"), shell_(shell) {
+        setTooltip("Le service des licences. Clic : la page Service en ligne.");
+    }
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const Rect r = bounds();
+        ctx.r.fillRoundedRect(r, kNightLine, 12.f);
+        ctx.r.fillRoundedRect(r.inset(1.f, 1.f), hovered() ? Color::rgb(0x15203A) : kNightCard, 11.f);
+        const auto& s = shell_.workspace().service();
+        const bool  live = shell_.live();
+        const Color dot = live ? kLive : !s.problem.empty() ? Color::rgb(0xEF4444) : s.configured ? Color::rgb(0xF59E0B) : kNightFaint;
+        const float x = r.x + 14.f;
+        float       y = r.y + 12.f;
+        if (live) ctx.r.fillRoundedRect({x - 3.f, y + 2.f, 14.f, 14.f}, kLive.withAlpha(46), 7.f);
+        ctx.r.fillRoundedRect({x, y + 5.f, 8.f, 8.f}, dot, 4.f);
+        const FontId ft = gfx::semibold(kF13);
+        ctx.r.drawText({x + 16.f, y}, "Service en ligne", ft, kNightWhite);
+        y += ctx.r.lineHeight(ft) + 3.f;
+        std::string line;
+        if (!s.problem.empty()) line = "R\xC3\xA9glage illisible";
+        else if (!s.configured) line = "Pas encore r\xC3\xA9gl\xC3\xA9";
+        else if (live) {
+            const double ago = shell_.secondsSinceLive();
+            line = "Connect\xC3\xA9 \xC2\xB7 relev\xC3\xA9 il y a " + std::to_string(static_cast<int>(std::max(0.0, ago))) + " s";
+        } else line = "R\xC3\xA9gl\xC3\xA9 \xC2\xB7 pas en direct";
+        ctx.r.drawText({x, y}, fit(ctx.r, line, kF12, r.w - 28.f), kF12, kNightMuted);
+        y += ctx.r.lineHeight(kF12) + 1.f;
+        ctx.r.drawText({x, y}, std::string("v") + kAppVersion, kF12, kNightFaint);
+    }
+
+private:
+    const Shell& shell_;
 };
 
 class Rail final : public ui::Widget {
@@ -211,94 +303,107 @@ public:
             links += item->clicked->connect([this, id] { shell_.navigate(id); });
             items_.push_back(&static_cast<NavItem&>(addChild(std::move(item))));
         }
-        auto folder = std::make_unique<ui::Button>("Dossier du poste", "shell.dossier");
-        folder->setStyle(ui::Button::Style::Flat);
-        folder->setIcon(ui::Icon::Folder);
-        folder_ = &static_cast<ui::Button&>(addChild(std::move(folder)));
+        card_ = &static_cast<ServiceCard&>(addChild(std::make_unique<ServiceCard>(shell)));
+        links += card_->clicked->connect([this] { shell_.navigate("service"); });
+        folder_ = &static_cast<NightButton&>(addChild(std::make_unique<NightButton>("Dossier du poste", "shell.dossier")));
         links += folder_->clicked->connect([this] { shell_.openFolder(shell_.workspace().folder()); });
+        update();
+    }
+    // Les nombres du menu (apres chaque relecture du Workspace).
+    void update() {
+        const Dashboard d = shell_.workspace().dashboard();
+        for (std::size_t i = 0; i < items_.size(); ++i) {
+            const std::string id = Shell::entries()[i].id;
+            items_[i]->setCount(id == "licences" ? d.licences : id == "clients" ? d.clients : id == "activations" ? d.devices + d.onlineDevices : 0);
+        }
     }
 
 protected:
     void onLayout() override {
         const Rect b = bounds();
-        float y = b.y + 96.f;
-        bool prevOnline = false;
-        captionY_ = sepY_ = -1.f;
+        // La hauteur d'une entree : 36 (la maquette), moins si la fenetre est basse (toutes restent visibles).
+        int sections = 0;
+        for (const auto& e : Shell::entries()) sections += sectionBefore(e.id) ? 1 : 0;
+        const float top = b.y + 84.f, n = static_cast<float>(items_.size());
+        const float needFull = n * 36.f + static_cast<float>(sections) * 30.f;
+        const float room = b.bottom() - 12.f - top;
+        const bool  roomForCard = room >= needFull + 120.f;
+        const float avail = room - (roomForCard ? 120.f : 44.f);
+        const float rowH = std::clamp((avail - static_cast<float>(sections) * 26.f) / n, 28.f, 36.f);
+        const float capH = std::clamp(avail - rowH * n, 18.f * static_cast<float>(sections), 30.f * static_cast<float>(sections)) / std::max(1.f, static_cast<float>(sections));
+        float y = top;
+        captions_.clear();
         for (std::size_t i = 0; i < items_.size(); ++i) {
-            const bool online = Shell::entries()[i].online;
-            if (online && !prevOnline) {
-                captionY_ = y + 2.f;
-                y += 24.f;
+            if (const char* cap = sectionBefore(Shell::entries()[i].id)) {
+                captions_.push_back({y + capH - 18.f, cap});
+                y += capH;
             }
-            if (!online && prevOnline) {
-                sepY_ = y + 3.f;
-                y += 8.f;
-            }
-            prevOnline = online;
-            items_[i]->setBounds({b.x + 8.f, y, b.w - 16.f, 34.f});
-            y += 36.f;
+            items_[i]->setBounds({b.x + 14.f, y, b.w - 28.f, rowH - 2.f});
+            y += rowH;
         }
         folder_->setTooltip(shell_.workspace().folder());
-        const float fy = b.bottom() - 42.f;
+        const float fy = b.bottom() - 34.f;
         folder_->setVisibility(fy > y + 4.f ? ui::Visibility::Visible : ui::Visibility::Hidden);
-        folder_->setBounds({b.x + 8.f, fy, std::min(b.w - 70.f, 150.f), 30.f});
+        folder_->setBounds({b.x + 10.f, fy, std::min(b.w - 70.f, 160.f), 26.f});
         footerY_ = fy;
+        const float cy = fy - 82.f;
+        card_->setVisibility(cy > y + 6.f ? ui::Visibility::Visible : ui::Visibility::Hidden);
+        card_->setBounds({b.x + 14.f, cy, b.w - 28.f, 74.f});
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
-        const auto& th = ctx.theme;
-        const auto& c = th.color;
+        const auto& c = ctx.theme.color;
         const Rect  b = bounds();
-        ctx.r.fillRect(b, c.headerBg);
-        ctx.r.fillRect({b.right() - 1.f, b.y, 1.f, b.h}, c.border);
-        // La marque : un carre de l'accent et le cadenas ; le nom sur deux lignes.
-        ctx.r.fillRoundedRect({b.x + 16.f, b.y + 18.f, 32.f, 32.f}, c.accent, 8.f);
-        ui::drawIcon(ctx.r, ui::Icon::Lock, {b.x + 23.f, b.y + 25.f, 18.f, 18.f}, c.textInverted);
-        boldText(ctx.r, {b.x + 58.f, b.y + 16.f}, "XPG License Manager", kF15, c.text);
-        boldText(ctx.r, {b.x + 58.f, b.y + 34.f}, "Admin", kF15, c.accent);
-        // << Editeur seulement >> : une pastille, l'outil n'est jamais livre a un client.
-        const std::string only = "\xC3\x89" "diteur seulement";
-        const float ow = ctx.r.measure(only, kF12).width + 16.f;
-        const Rect  pill{b.x + 16.f, b.y + 60.f, ow, 20.f};
-        ctx.r.fillRoundedRect(pill, c.warning.withAlpha(28), 10.f);
-        ctx.r.drawText({pill.x + 8.f, pill.y + (pill.h - ctx.r.lineHeight(kF12)) * 0.5f}, only, kF12, c.warning);
-        ctx.r.fillRect({b.x + 16.f, b.y + 88.f, b.w - 32.f, 1.f}, c.border);
-        if (captionY_ >= 0.f)
-            ctx.r.drawText({b.x + 20.f, captionY_ + 4.f}, "VENTE EN LIGNE \xC2\xB7 PAS ENCORE", kF12, c.textMuted);
-        if (sepY_ >= 0.f) ctx.r.fillRect({b.x + 16.f, sepY_, b.w - 32.f, 1.f}, c.border);
+        fillVertical(ctx.r, b, kNightTop, kNightBottom);
+        // La marque : la cle sur un carre de l'accent ; le nom, puis << Admin · Editeur seulement >> (l'outil n'est
+        // jamais livre a un client).
+        const Rect logo{b.x + 18.f, b.y + 20.f, 38.f, 38.f};
+        ctx.r.fillRoundedRect({logo.x, logo.y + 4.f, logo.w, logo.h}, c.accent.withAlpha(60), 11.f);
+        ctx.r.fillRoundedRect(logo, c.accent, 11.f);
+        ctx.r.fillRoundedRect({logo.x + 3.f, logo.y + 2.f, logo.w - 6.f, logo.h * 0.45f}, kNightWhite.withAlpha(22), 9.f);
+        drawKey(ctx.r, {logo.x + 9.f, logo.y + 9.f, 20.f, 20.f}, kNightWhite);
+        const FontId fn = gfx::semibold(kF15);
+        ctx.r.drawText({logo.right() + 12.f, logo.y + 1.f}, "XPG License Manager", fn, kNightWhite);
+        ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, "Admin \xC2\xB7 \xC3\x89" "diteur seulement", kF12, kNightMuted);
+        const FontId fc = gfx::semibold(FontId{11});
+        for (const auto& [y, text] : captions_) ctx.r.drawText({b.x + 24.f, y}, text, fc, kNightFaint);
         if (folder_->visible()) {
-            const std::string v = std::string("v") + kAppVersion;
+            const std::string v = kAppVersion;
             const float vw = ctx.r.measure(v, kF12).width;
-            ctx.r.drawText({b.right() - 16.f - vw, footerY_ + (30.f - ctx.r.lineHeight(kF12)) * 0.5f}, v, kF12, c.textMuted);
+            ctx.r.drawText({b.right() - 18.f - vw, footerY_ + (26.f - ctx.r.lineHeight(kF12)) * 0.5f}, v, kF12, kNightFaint);
         }
     }
 
 private:
     Shell&                 shell_;
     std::vector<NavItem*>  items_;
-    ui::Button*            folder_{nullptr};
-    float                  captionY_{-1.f}, sepY_{-1.f}, footerY_{0.f};
+    ServiceCard*           card_{nullptr};
+    NightButton*           folder_{nullptr};
+    std::vector<std::pair<float, std::string>> captions_;
+    float                  footerY_{0.f};
 };
 
 // ======================================================= la barre du haut ====
-// Une pastille cliquable : l'etat de la cle, de la synchro (ou le travail en cours).
+// Une pastille cliquable : l'etat de la cle, du service (ou le travail en cours). 1.41.0 : en direct, un point vert
+// et le texte vert (la maquette) ; sinon une pastille claire, bordee.
 class Chip final : public ui::Button {
 public:
     explicit Chip(std::string id) : ui::Button("", std::move(id)) {}
-    void set(std::string text, Tone tone, ui::Icon icon, bool spin, bool neutral) {
-        if (text == text_ && tone == tone_ && icon == icon_ && spin == spin_ && neutral == neutral_) return;
+    void set(std::string text, Tone tone, ui::Icon icon, bool spin, bool neutral, bool live = false) {
+        if (text == text_ && tone == tone_ && icon == icon_ && spin == spin_ && neutral == neutral_ && live == live_) return;
         text_ = std::move(text);
         tone_ = tone;
         icon_ = icon;
         spin_ = spin;
         neutral_ = neutral;
+        live_ = live;
         setText(text_);
         invalidateLayout();
     }
-    [[nodiscard]] float wanted() const { return ui::measureWidth(text_, kF13) + 18.f + 24.f; }
+    [[nodiscard]] float wanted() const { return ui::measureWidth(text_, kF13) + 18.f + 26.f; }
     [[nodiscard]] ui::SizeHint sizeHint() const override {
         ui::SizeHint h;
-        h.preferred = {wanted(), 28.f};
+        h.preferred = {wanted(), 32.f};
         h.minimum = h.preferred;
         return h;
     }
@@ -307,22 +412,28 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const auto& c = ctx.theme.color;
         const Rect  r = bounds();
-        const Color ink = neutral_ ? c.textMuted : toneColor(ctx.theme, tone_);
-        const Color text = neutral_ || tone_ == Tone::Info ? c.text : ink;
-        ctx.r.fillRoundedRect(r, neutral_ ? c.headerBg : ink.withAlpha(hovered() ? 40 : 24), r.h * 0.5f);
-        if (hovered()) ctx.r.strokeRect(r, ink.withAlpha(120), 1.f);
-        const Rect ic{r.x + 10.f, r.y + (r.h - 14.f) * 0.5f, 14.f, 14.f};
+        const Color ink = live_ ? c.ok : neutral_ ? c.textMuted : toneColor(ctx.theme, tone_);
+        const Color text = live_ ? c.ok : neutral_ || tone_ == Tone::Info ? c.text : ink;
+        const Color fill = live_ ? c.ok.withAlpha(hovered() ? 30 : 18) : neutral_ || tone_ == Tone::Info ? (hovered() ? c.rowAltBg : c.panelBg) : ink.withAlpha(hovered() ? 34 : 20);
+        const Color line = live_ ? c.ok.withAlpha(60) : neutral_ || tone_ == Tone::Info ? c.border : ink.withAlpha(70);
+        ui::shapes::fillFramedRect(ctx.r, r, fill, line, r.h * 0.5f);
+        const Rect ic{r.x + 12.f, r.y + (r.h - 14.f) * 0.5f, 14.f, 14.f};
         if (spin_) spinner(ctx.r, {ic.x + 7.f, ic.y + 7.f}, 5.5f, ink, ctx.time);
-        else ui::drawIcon(ctx.r, icon_, ic, ink);
-        const std::string t = fit(ctx.r, text_, kF13, r.w - 42.f);
-        ctx.r.drawText({r.x + 30.f, r.y + (r.h - ctx.r.lineHeight(kF13)) * 0.5f}, t, kF13, text);
+        else if (live_) {
+            const float pulse = 0.5f + 0.5f * static_cast<float>(std::sin(ctx.time * 3.0));
+            ctx.r.fillRoundedRect({ic.x - 1.f, ic.y - 1.f, 16.f, 16.f}, kLive.withAlpha(static_cast<std::uint8_t>(30 + 40 * pulse)), 8.f);
+            ctx.r.fillRoundedRect({ic.x + 3.f, ic.y + 3.f, 8.f, 8.f}, kLive, 4.f);
+        } else ui::drawIcon(ctx.r, icon_, ic, ink);
+        const FontId f = live_ ? gfx::semibold(kF13) : kF13;
+        const std::string t = fit(ctx.r, text_, f, r.w - 44.f);
+        ctx.r.drawText({r.x + 32.f, r.y + (r.h - ctx.r.lineHeight(f)) * 0.5f}, t, f, text);
     }
 
 private:
     std::string text_;
     Tone        tone_{Tone::Info};
     ui::Icon    icon_{ui::Icon::None};
-    bool        spin_{false}, neutral_{false};
+    bool        spin_{false}, neutral_{false}, live_{false};
 };
 
 class TopBar final : public ui::Widget {
@@ -330,8 +441,16 @@ public:
     TopBar(Shell& shell, core::ConnectionScope& links) : ui::Widget("shell.haut"), shell_(shell) {
         key_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.cle")));
         sync_ = &static_cast<Chip&>(addChild(std::make_unique<Chip>("shell.synchro")));
+        // 1.41.0 : l'action principale de l'Admin, toujours en haut a droite (la maquette).
+        auto nl = std::make_unique<ui::Button>("Nouvelle licence", "shell.nouvelle-licence");
+        nl->setStyle(ui::Button::Style::Primary);
+        nl->setIcon(ui::Icon::Plus);
+        newLicence_ = &static_cast<ui::Button&>(addChild(std::move(nl)));
         links += key_->clicked->connect([this] { shell_.navigate("securite"); });
         links += sync_->clicked->connect([this] { shell_.navigate("service"); });
+        links += newLicence_->clicked->connect([this] {
+            if (shell_.workspace().key().present && shell_.workspace().hasRegistry()) shell_.openDialog(makeLicenceWizard(shell_.host(), {}));
+        });
         update();
     }
     // L'etat a montrer (a chaque image : un travail lent commence ou finit).
@@ -340,6 +459,11 @@ public:
         key_->set(shell_.keyStatusText(), shell_.keyStatusTone(), k.present ? ui::Icon::Lock : ui::Icon::Unlock, false, false);
         key_->setTooltip(k.present ? "La cl\xC3\xA9 de l'\xC3\xA9" "diteur : " + k.id + (k.name.empty() ? std::string() : " (" + k.name + ")") + ". Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9."
                                    : (k.problem.empty() ? std::string("Aucune cl\xC3\xA9 sur ce poste.") : k.problem) + " Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.");
+        const bool canSign = k.present && shell_.workspace().hasRegistry();
+        newLicence_->setEnabled(canSign);
+        newLicence_->setTooltip(canSign ? std::string("L'assistant : le client, l'\xC3\xA9" "dition, les PC (ou une licence en ligne), la dur\xC3\xA9" "e, puis signer.")
+                                : !k.present ? std::string("Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).")
+                                             : std::string("Il faut d'abord le registre sign\xC3\xA9 (\xC3\x89" "ditions)."));
         if (shell_.busy()) {
             sync_->set(shell_.syncStatusText(), Tone::Info, ui::Icon::Refresh, true, false);
             sync_->setTooltip("Un travail lent tourne sur un autre fil : la fen\xC3\xAAtre reste utilisable. Les op\xC3\xA9rations qui \xC3\xA9" "crivent attendent sa fin.");
@@ -347,7 +471,7 @@ public:
             const auto& s = shell_.workspace().service();
             const bool certWarn = s.hasState && (!s.state.certOk || s.state.needsRenewal(shell_.workspace().now()));
             const Tone t = !s.problem.empty() ? Tone::Error : s.configured && (!s.syncKey || certWarn) ? Tone::Warning : Tone::Info;
-            sync_->set(shell_.syncStatusText(), t, ui::Icon::Globe, false, !s.configured && s.problem.empty());
+            sync_->set(shell_.syncStatusText(), t, ui::Icon::Globe, false, !s.configured && s.problem.empty(), shell_.live() && s.problem.empty() && !certWarn);
             sync_->setTooltip(!s.problem.empty() ? s.problem
                               : s.configured   ? "Le service des licences : " + s.config.url + (certWarn ? std::string(" ; sa cl\xC3\xA9 est \xC3\xA0 certifier ou \xC3\xA0 renouveler") : std::string()) +
                                                      ". Clic : la page Service en ligne."
@@ -358,11 +482,15 @@ public:
 protected:
     void onLayout() override {
         const Rect b = bounds();
-        float x = b.right() - 16.f;
+        float x = b.right() - 20.f;
+        const float bw = std::max(150.f, newLicence_->sizeHint().preferred.w + 24.f);
+        x -= bw;
+        newLicence_->setBounds({x, b.y + (b.h - 36.f) * 0.5f, bw, 36.f});
+        x -= 12.f;
         for (Chip* chip : {key_, sync_}) {
-            const float w = std::min(chip->wanted(), std::max(120.f, b.w * 0.34f));
+            const float w = std::min(chip->wanted(), std::max(120.f, b.w * 0.27f));
             x -= w;
-            chip->setBounds({x, b.y + (b.h - 28.f) * 0.5f, w, 28.f});
+            chip->setBounds({x, b.y + (b.h - 32.f) * 0.5f, w, 32.f});
             x -= 8.f;
         }
         titleRight_ = x - 8.f;
@@ -373,26 +501,27 @@ protected:
         const Rect  b = bounds();
         ctx.r.fillRect(b, c.panelBg);
         ctx.r.fillRect({b.x, b.bottom() - 1.f, b.w, 1.f}, c.border);
-        const Shell::NavEntry* e = Shell::entry(shell_.currentPageId());
-        float x = b.x + 20.f;
-        if (e) {
-            ui::drawIcon(ctx.r, e->icon, {x, b.y + (b.h - 18.f) * 0.5f, 18.f, 18.f}, c.textMuted);
-            x += 28.f;
-        }
         // Le fil : << Admin > la page >> (la page porte son grand titre ; ici, ou l'on est).
-        const std::string crumb = "Admin  \xE2\x80\xBA  ";
-        const float ty = b.y + (b.h - ctx.r.lineHeight(kF15)) * 0.5f;
-        ctx.r.drawText({x, ty}, crumb, kF15, c.textMuted);
-        x += ctx.r.measure(crumb, kF15).width;
-        const std::string t = fit(ctx.r, shell_.pageTitle(), kF15, titleRight_ - x);
-        boldText(ctx.r, {x, ty}, t, kF15, c.text);
+        float x = b.x + 28.f;
+        const std::string crumb = "Admin";
+        const float ty = b.y + (b.h - ctx.r.lineHeight(kF14)) * 0.5f;
+        ctx.r.drawText({x, ty}, crumb, kF14, c.textMuted);
+        x += ctx.r.measure(crumb, kF14).width + 10.f;
+        // le chevron
+        const float cy = b.y + b.h * 0.5f;
+        ctx.r.line({x, cy - 4.f}, {x + 4.f, cy}, c.textDisabled, 1.5f);
+        ctx.r.line({x + 4.f, cy}, {x, cy + 4.f}, c.textDisabled, 1.5f);
+        x += 14.f;
+        const FontId fb = gfx::semibold(kF14);
+        ctx.r.drawText({x, ty}, fit(ctx.r, shell_.pageTitle(), fb, titleRight_ - x), fb, c.text);
     }
 
 private:
-    Shell& shell_;
-    Chip*  key_{nullptr};
-    Chip*  sync_{nullptr};
-    float  titleRight_{0.f};
+    Shell&      shell_;
+    Chip*       key_{nullptr};
+    Chip*       sync_{nullptr};
+    ui::Button* newLicence_{nullptr};
+    float       titleRight_{0.f};
 };
 
 // ======================================================== le bandeau bas ====
@@ -564,6 +693,7 @@ public:
     }
     [[nodiscard]] ui::Widget& stack() { return *stack_; }
     void update() {
+        rail_->update();
         top_->update();
         banner_->update();
         invalidateLayout();
@@ -616,13 +746,15 @@ private:
 // ======================================================================= Shell ====
 const std::vector<Shell::NavEntry>& Shell::entries() {
     static const std::vector<NavEntry> list = {
+        // 1.41.0 : les groupes de la maquette - Pilotage (le tableau, les licences, les clients, les demandes, les PC),
+        // Catalogue (les editions, les fonctionnalites, les flottantes), la vente en ligne, Securite.
         {"tableau", "Tableau de bord", ui::Icon::Chart, false},
-        {"clients", "Clients", ui::Icon::User, false},
         {"licences", "Licences", ui::Icon::Document, false},
+        {"clients", "Clients", ui::Icon::User, false},
+        {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
+        {"activations", "Activations", ui::Icon::Station, false},
         {"editions", "\xC3\x89" "ditions", ui::Icon::Layers, false},
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
-        {"activations", "Activations", ui::Icon::Station, false},
-        {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
         {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
         {"commandes", "Commandes", ui::Icon::Mail, true},
@@ -946,6 +1078,8 @@ double steadyNow() { return std::chrono::duration<double>(std::chrono::steady_cl
 }
 
 bool Shell::live() const { return lastLive_ >= 0 && steadyNow() - lastLive_ < 3.0 * kWatchFallback; }
+
+double Shell::secondsSinceLive() const { return lastLive_ >= 0 ? steadyNow() - lastLive_ : -1.0; }
 
 bool Shell::autoWatch() {
     if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;

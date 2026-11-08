@@ -50,13 +50,16 @@ namespace gfx {
         // chaque appel sur une machine qui n'a aucune police.
         std::map<int, FontAtlas>    faces;
         std::map<int, SDL_Texture*> textures;
-        // 1.26.1 : la police d'origine (le texte d'une IHM) ; ses atlas ont leur cle (la taille + kStockKey) quand la
-        // police du logiciel a ete changee - sinon les memes.
+        // 1.26.1 : la police d'origine (le texte d'une IHM) ; ses atlas ont leur cle (la taille + kStockKey).
+        // 1.41.0 : toujours a part - l'interface a sa police (Inter), une IHM garde la sienne ; et la demi-grasse de
+        // l'interface (FontId::w) a la sienne (la taille + kWeightKey).
         bool                        stock{false};
         static constexpr int        kStockKey = 1 << 20;
+        static constexpr int        kWeightKey = 1 << 21;
         [[nodiscard]] int keyOf(FontId font) const {
             const int px = std::max(1, static_cast<int>(font.v));
-            return stock && !uiFontOverride().empty() ? px + kStockKey : px;
+            if (stock) return px + kStockKey;
+            return font.w ? px + kWeightKey : px;
         }
         // Les images (createImage) : un numero, jamais reutilise - ni par ce
         // renderer, ni par un autre (voir g_nextImage).
@@ -169,7 +172,7 @@ namespace gfx {
 
         // 1.26.1 : la police choisie pour le logiciel d'abord (uiFontCandidates) ; la police d'origine pour une IHM.
         FontAtlas atlas;
-        for (const auto& chemin : key == px ? uiFontCandidates() : defaultUiFontCandidates())
+        for (const auto& chemin : stock ? defaultUiFontCandidates() : interfaceFontCandidates(font.w))
             if (atlas.load(chemin, static_cast<float>(px))) break;
 
         auto& stocke = faces.emplace(key, std::move(atlas)).first->second;

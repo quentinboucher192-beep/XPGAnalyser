@@ -147,6 +147,8 @@ Name: "path"; Description: "Ajouter la console au PATH (taper XPG-License-Admin 
 [Files]
 Source: "{#Source}\{#App}"; DestDir: "{app}"; Components: app; Flags: ignoreversion
 Source: "{#Source}\SDL3.dll"; DestDir: "{app}"; Components: app; Flags: ignoreversion
+; 1.41.0 : la police de l'interface (Inter, et sa licence SIL OFL)
+Source: "{#Source}\resources\fonts\*"; DestDir: "{app}\resources\fonts"; Components: app; Flags: ignoreversion
 Source: "{#Source}\registre.json"; DestDir: "{app}\exemples"; Components: app; Flags: ignoreversion
 Source: "{#Source}\parametres-exemple.json"; DestDir: "{app}\exemples"; Components: app; Flags: ignoreversion
 Source: "{#Source}\{#Console}"; DestDir: "{app}"; Components: console; Flags: ignoreversion

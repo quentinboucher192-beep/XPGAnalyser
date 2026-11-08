@@ -84,7 +84,7 @@ namespace ui {
 
     gfx::FontId zoomedFont(gfx::FontId font, float factor) noexcept {
         const float px = static_cast<float>(font.v ? font.v : 16) * factor;
-        return gfx::FontId{ static_cast<std::uint16_t>(std::clamp(std::lround(px), 6L, 400L)) };
+        return gfx::FontId{ static_cast<std::uint16_t>(std::clamp(std::lround(px), 6L, 400L)), font.w };   // 1.41.0 : la graisse gardee
     }
 
     float measureWidth(std::string_view utf8, gfx::FontId font) {
