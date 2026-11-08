@@ -194,6 +194,8 @@ private:
 };
 
 // ---- 1.34.0 / 1.35.0 : l'onglet Demande a l'editeur (la demande sans code, par le service) ----
+class FeatureTablePanel;   // 1.38.0 : l'offre choisie (la colonne de droite de la boutique)
+
 class OnlinePanel final : public ui::Widget {
 public:
     OnlinePanel(LicenceBody& body, App& app);
@@ -220,6 +222,8 @@ private:
     void buildCards();
     // Ce que contiendra la licence d'une edition (le rappel pendant l'attente) ; vide : inconnue.
     [[nodiscard]] std::string futureText(const std::string& editionId) const;
+    // 1.38.0 : la colonne de droite - les fonctionnalites de l'offre choisie (ou demandee), et l'apercu qu'on agrandit.
+    void buildOffer();
 
     LicenceBody&       body_;
     App&               app_;
@@ -242,6 +246,12 @@ private:
     bool               pending_{false};
     licence::service::Job busy_{licence::service::Job::None};
     float              rowsY_{0}, infoY_{0}, footY_{0}, fieldsY_{0};
+    FeatureTablePanel* offer_{nullptr};          // 1.38.0
+    std::shared_ptr<ui::ITableModel> offerModel_;
+    std::string        offerShown_{"\x01"};     // l'offre deja montree (rien encore)
+    std::string        offerTitle_;
+    float              leftW_{0};                // la largeur de la partie gauche (0 : tout)
+    gfx::Rect          offerBox_{};
     core::ConnectionScope links_;
 };
 
@@ -266,34 +276,110 @@ private:
     core::ConnectionScope links_;
 };
 
-// ---- 1.37.0 : l'onglet Editions - le tableau, et l'apercu de la fonctionnalite choisie (sa capture, deux lignes) ----
-class EditionsPanel final : public ui::Widget {
+// ---- 1.38.0 : la fonctionnalite d'une ligne (Editions, Fonctionnalites, la boutique) : id vide, une ligne de resume ----
+struct FeatureInfo {
+    std::string id, label, product, editions;
+};
+// Lire une capture (PNG) en ressource d'image ; vide : rien a montrer.
+hmi::Resource capturePng(const std::string& path, const std::string& name);
+// La capture en grand (une fenetre au-dessus de la licence).
+void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const std::string& text);
+
+// ---- 1.38.0 : une capture qu'on agrandit - la molette zoome autour de la souris, glisser la deplace, double clic :
+// ajustee ; un clic simple (ajustee) : `onOpen` (la voir en grand). Rien ne deborde : le dessin est coupe a la case. ----
+class ZoomImage final : public ui::Widget {
 public:
-    EditionsPanel();
-    [[nodiscard]] ui::TableView& table() noexcept { return *table_; }
-    // Une ligne du tableau : la fonctionnalite (id vide : une ligne de resume), son nom, son logiciel, ses editions.
-    struct RowInfo {
-        std::string id, label, product, editions;
-    };
-    void setRows(std::vector<RowInfo> rows);
-    // Les essais : ce que montre l'apercu.
-    [[nodiscard]] const std::string& shownFeature() const noexcept { return shown_.id; }
+    explicit ZoomImage(std::string id) : ui::Widget(std::move(id)) {}
+    void setImage(hmi::Resource res) {
+        image_ = std::move(res);
+        fitAgain();
+    }
+    void fitAgain() {
+        zoom_ = 1.f;
+        ox_ = oy_ = 0.f;
+        invalidate();
+    }
+    [[nodiscard]] bool hasImage() const noexcept { return image_.data != nullptr; }
+    [[nodiscard]] float zoom() const noexcept { return zoom_; }
+    [[nodiscard]] const hmi::Resource& image() const noexcept { return image_; }
+    void setEmptyText(std::string t) { empty_ = std::move(t); }
+    void setHint(bool on) { hint_ = on; }
+    std::function<void()> onOpen;
+    // Les essais : un pas de molette en (x, y).
+    void wheelAt(gfx::Point at, float dy) { wheel(at, dy); }
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override;
+    ui::EventResult onEvent(const ui::InputEvent& ev) override;
+
+private:
+    void wheel(gfx::Point at, float dy);
+    void clampOffset();
+    hmi::Resource image_;
+    std::string   empty_{"Pas encore de capture pour cette fonctionnalit\xC3\xA9."};
+    float         zoom_{1.f}, ox_{0.f}, oy_{0.f};
+    float         iw_{0.f}, ih_{0.f};   // la taille de l'image (au dernier dessin)
+    bool          dragging_{false}, moved_{false}, hint_{true};
+    gfx::Point    last_{};
+};
+
+// ---- 1.38.0 : l'apercu de la fonctionnalite choisie (sa capture qu'on agrandit, deux lignes, ses editions) ----
+class FeaturePreviewPane final : public ui::Widget {
+public:
+    explicit FeaturePreviewPane(std::string id);
+    void show(const FeatureInfo& info);
+    void setEmptyText(std::string t) {
+        waiting_ = std::move(t);
+        invalidate();
+    }
+    // La capture en grand (une fenetre au-dessus) : la fonctionnalite, sa capture, sa phrase.
+    std::function<void(const FeatureInfo&, const hmi::Resource&, const std::string&)> onEnlarge;
+    [[nodiscard]] const FeatureInfo& shown() const noexcept { return shown_; }
     [[nodiscard]] const licence::FeaturePreview& preview() const noexcept { return preview_; }
+    [[nodiscard]] ZoomImage& image() noexcept { return *image_; }
 
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext& ctx) override;
 
 private:
-    void choose();
-    ui::TableView*          table_{nullptr};
-    std::vector<RowInfo>    rows_;
-    RowInfo                 shown_;
+    ZoomImage*              image_{nullptr};
+    FeatureInfo             shown_;
     licence::FeaturePreview preview_;
-    hmi::Resource           image_;
-    gfx::Rect               pane_{};
-    core::ConnectionScope   links_;
+    std::string             waiting_{"Choisis une fonctionnalit\xC3\xA9 dans la liste : une capture et ce qu'elle fait s'affichent ici."};
+    float                   textY_{0};
 };
+
+// ---- 1.37.0 : l'onglet Editions - le tableau, et l'apercu de la fonctionnalite choisie ; 1.38.0 : aussi l'onglet
+// Fonctionnalites (le meme volet de droite, qu'on agrandit). ----
+class FeatureTablePanel final : public ui::Widget {
+public:
+    FeatureTablePanel(std::string id, std::string tableId);
+    [[nodiscard]] ui::TableView& table() noexcept { return *table_; }
+    [[nodiscard]] FeaturePreviewPane& pane() noexcept { return *pane_; }
+    using RowInfo = FeatureInfo;
+    void setRows(std::vector<RowInfo> rows);
+    // 1.38.0 : la liste au-dessus de l'apercu (une colonne etroite : la boutique).
+    void setVertical(bool on) {
+        vertical_ = on;
+        invalidateLayout();
+    }
+    // Les essais : ce que montre l'apercu.
+    [[nodiscard]] const std::string& shownFeature() const noexcept { return pane_->shown().id; }
+    [[nodiscard]] const licence::FeaturePreview& preview() const noexcept { return pane_->preview(); }
+
+protected:
+    void onLayout() override;
+
+private:
+    void choose();
+    ui::TableView*        table_{nullptr};
+    FeaturePreviewPane*   pane_{nullptr};
+    std::vector<RowInfo>  rows_;
+    bool                  vertical_{false};
+    core::ConnectionScope links_;
+};
+using EditionsPanel = FeatureTablePanel;
 
 class LicenceBody final : public ui::Widget {
 public:
@@ -327,6 +413,7 @@ private:
     ui::PropertyGrid* mine_{nullptr};
     ui::TableView*    devices_{nullptr};
     ui::TableView*    features_{nullptr};
+    FeatureTablePanel* featuresPanel_{nullptr};  // 1.38.0 : avec l'apercu qu'on agrandit
     ui::TableView*    editions_{nullptr};
     EditionsPanel*    editionsPanel_{nullptr};   // 1.37.0 : avec l'apercu
     ui::TableView*    history_{nullptr};
@@ -393,13 +480,18 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     auto devices = std::make_unique<ui::TableView>("dialog.licence.appareils");
     devices->setColumns({{"PC", 260.f}, {"Empreinte de sa cl\xC3\xA9", 260.f}, {"Activ\xC3\xA9 le", 150.f}, {"", 90.f}});
     devices_ = devices.get();
-    auto features = std::make_unique<ui::TableView>("dialog.licence.fonctionnalites");
-    features->setColumns({{"Fonctionnalit\xC3\xA9", 220.f}, {"Identifiant", 170.f}, {"Logiciel", 110.f}, {"\xC3\x89tat", 150.f},
-                          {"Limites", 160.f}, {"Dans le programme", 380.f}});
-    features_ = features.get();
-    auto editions = std::make_unique<EditionsPanel>();   // 1.37.0 : le tableau et l'apercu de la fonctionnalite choisie
+    // 1.38.0 : le tableau des fonctionnalites et, a droite, l'apercu de celle choisie (comme l'onglet Editions).
+    auto features = std::make_unique<FeatureTablePanel>("dialog.licence.fonctionnalites.panneau", "dialog.licence.fonctionnalites");
+    features->table().setColumns({{"Fonctionnalit\xC3\xA9", 200.f}, {"Identifiant", 150.f}, {"Logiciel", 100.f}, {"\xC3\x89tat", 150.f},
+                                  {"Limites", 140.f}, {"Dans le programme", 320.f}});
+    featuresPanel_ = features.get();
+    features_ = &features->table();
+    auto editions = std::make_unique<EditionsPanel>("dialog.licence.editions.panneau", "dialog.licence.editions");   // 1.37.0 : avec l'apercu
     editionsPanel_ = editions.get();
     editions_ = &editions->table();
+    const auto enlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
+    featuresPanel_->pane().onEnlarge = enlarge;
+    editionsPanel_->pane().onEnlarge = enlarge;
     auto history = std::make_unique<ui::TableView>("dialog.licence.historique");
     history->setColumns({{"Quand (UTC)", 150.f}, {"Quoi", 120.f}, {"R\xC3\xA9sultat", 90.f}, {"D\xC3\xA9tail", 620.f}});
     history_ = history.get();
@@ -570,10 +662,17 @@ void LicenceBody::reload() {
     {
         std::vector<std::vector<std::string>> rows;
         std::vector<bool> open;
+        std::vector<FeatureInfo> infos;   // 1.38.0 : l'apercu de chaque ligne
         if (reg)
             for (const auto& f : reg->features) {
                 if (f.retired) continue;
                 const bool on = licence::allows(f.id);
+                {
+                    std::string in;
+                    for (const auto& e : reg->editions)
+                        if (std::find(e.features.begin(), e.features.end(), f.id) != e.features.end()) in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
+                    infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+                }
                 std::string limits;
                 for (const auto& [lid, llabel] : f.limits)
                     if (const auto v = licensing::getFeatureLimit(f.id, lid))
@@ -599,6 +698,7 @@ void LicenceBody::reload() {
                 return s;
             });
         features_->setModel(featuresModel_);
+        featuresPanel_->setRows(std::move(infos));
     }
 
     // ---- Editions (ce qu'ouvre chacune) ----
@@ -1209,6 +1309,12 @@ OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.dema
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });
+    // 1.38.0 : l'offre choisie - ses fonctionnalites et la capture de celle qu'on clique (zoom, en grand).
+    offer_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("licence.demande.offre", "licence.demande.offre.liste")));
+    offer_->setVertical(true);
+    offer_->table().setColumns({{"Fonctionnalit\xC3\xA9", 230.f}, {"Logiciel", 110.f}});
+    offer_->pane().setEmptyText("Clique une fonctionnalit\xC3\xA9 : sa capture et ce qu'elle fait s'affichent ici (molette : zoom, clic : en grand).");
+    offer_->pane().onEnlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
     prefill();   // 1.37.0 : Mon profil
     refresh();
 }
@@ -1285,6 +1391,7 @@ void OnlinePanel::refresh() {
     cancel_->setVisibility(available_ && pending_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     check_->setVisibility(available_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     for (auto* b : {send_, cancel_, check_}) b->setEnabled(busy_ == ls::Job::None);
+    buildOffer();
     send_->setText(busy_ == ls::Job::Request ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer \xC3\xA0 l'\xC3\xA9" "diteur"));
     cancel_->setText(busy_ == ls::Job::CancelRequest ? std::string("Annulation en cours\xE2\x80\xA6") : std::string("Annuler la demande"));
     check_->setText(busy_ == ls::Job::Device ? std::string("V\xC3\xA9rification en cours\xE2\x80\xA6") : std::string("V\xC3\xA9rifier maintenant"));
@@ -1336,12 +1443,48 @@ void OnlinePanel::doCheck() {
     refresh();
 }
 
+void OnlinePanel::buildOffer() {
+    const std::string id = pending_ ? rec_.edition : chosen_;
+    const auto reg = licensing::getRegistry();
+    const bool visible = available_ && reg && !reg->features.empty();
+    offer_->setVisibility(visible ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    const std::string key = id + "|" + std::to_string(reg ? reg->number : 0);   // le registre change : relu
+    if (!visible || key == offerShown_) return;
+    offerShown_ = key;
+    const licensing::RegistryEditionView* ed = nullptr;
+    for (const auto& e : reg->editions)
+        if (!id.empty() && e.id == id) ed = &e;
+    std::vector<std::vector<std::string>> rows;
+    std::vector<FeatureInfo> infos;
+    for (const auto& f : reg->features) {
+        if (f.retired) continue;
+        if (ed && std::find(ed->features.begin(), ed->features.end(), f.id) == ed->features.end()) continue;
+        std::string in;
+        for (const auto& e : reg->editions)
+            if (!e.retired && e.id != reg->unlicensedEdition && std::find(e.features.begin(), e.features.end(), f.id) != e.features.end())
+                in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
+        rows.push_back({f.label.empty() ? f.id : f.label, f.product});
+        infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+    }
+    const std::string name = ed ? (ed->label.empty() ? ed->id : ed->label) : std::string();
+    offerTitle_ = ed ? (pending_ ? "Ce que contient ta demande : " : "Ce que contient ") + name + " (" + std::to_string(rows.size()) + ")"
+                     : "Les fonctionnalit\xC3\xA9s des offres (" + std::to_string(rows.size()) + ") - choisis une offre";
+    offerModel_ = std::make_shared<Rows>(std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Logiciel"}, std::move(rows));
+    offer_->table().setModel(offerModel_);
+    offer_->setRows(std::move(infos));
+    // L'offre choisie : la premiere fonctionnalite tout de suite (une capture a regarder).
+    if (ed && offerModel_->rowCount() > 0) offer_->table().selectModelRows({0});
+    invalidateLayout();
+    invalidate();
+}
+
 ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
     // 1.37.0 : la boutique - un clic choisit une edition, un second clic la rend (l'editeur choisira).
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && available_ && !pending_)
         for (const auto& k : cards_)
             if (k.box.contains(d->pos)) {
                 chosen_ = chosen_ == k.id ? std::string() : k.id;
+                buildOffer();   // 1.38.0 : la colonne de droite suit l'offre choisie
                 body_.say(chosen_.empty() ? std::string("Aucune \xC3\xA9" "dition choisie : l'\xC3\xA9" "diteur la choisira avec toi.")
                                           : "\xC3\x89" "dition choisie : " + k.label + (k.price.empty() ? std::string() : " (" + k.price + ")") + ".",
                           0);
@@ -1357,9 +1500,22 @@ constexpr float kCardH = 116.f, kCardGap = 10.f, kIntroLines = 3.f;
 
 void OnlinePanel::onLayout() {
     const auto b = bounds();
-    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
-    const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(620.f, W - labelW));
+    const float x = b.x + 16.f, fullW = std::max(200.f, b.w - 32.f);
     rowsY_ = b.y + 16.f + kIntroLines * 20.f + 10.f;   // sous l'introduction (trois lignes au plus)
+    // 1.38.0 : a droite, l'offre choisie (une fenetre assez large) ; sinon tout a gauche, comme avant.
+    float W = fullW;
+    offerBox_ = {};
+    if (offer_->visibility() == ui::Visibility::Visible) {
+        if (fullW >= 900.f) {
+            const float cw = std::clamp(std::floor(fullW * 0.36f), 320.f, 480.f);
+            W = fullW - cw - 20.f;
+            offerBox_ = {x + W + 20.f, rowsY_, cw, std::max(120.f, b.bottom() - 8.f - rowsY_)};
+            offer_->setBounds({offerBox_.x, offerBox_.y + 24.f, offerBox_.w, std::max(80.f, offerBox_.h - 24.f)});
+        } else
+            offer_->setBounds({b.x, b.y, 0.f, 0.f});
+    }
+    leftW_ = W;
+    const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(620.f, W - labelW));
     float y = rowsY_;
     if (available_ && !pending_) {
         // 1.37.0 : la boutique - les cartes des editions, sur une ou deux rangees.
@@ -1408,7 +1564,8 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
     const auto b = bounds();
-    const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f), lh = r.lineHeight(kSmall) + 4.f;
+    const float x = b.x + 16.f, lh = r.lineHeight(kSmall) + 4.f;
+    float W = std::max(200.f, b.w - 32.f);
     const float labelW = 210.f, fieldX = x + labelW;
     // L'introduction.
     // 1.36.0 : la demande en ligne, le chemin principal : ce qui va se passer, dit simplement.
@@ -1432,6 +1589,13 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     if (!available_) return;
     const gfx::Color good = ctx.theme.tone(ui::Tone::Ok, c.text), warn = ctx.theme.tone(ui::Tone::Warning, c.text),
                      bad = ctx.theme.tone(ui::Tone::Error, c.text);
+    // 1.38.0 : la colonne de droite (l'offre) ; la partie gauche garde sa largeur.
+    if (offerBox_.w > 0.f) {
+        const std::string t = fit(r, offerTitle_, kSmall, offerBox_.w);
+        r.drawText({offerBox_.x, offerBox_.y}, t, kSmall, c.text);
+        r.drawText({offerBox_.x + 1.f, offerBox_.y}, t, kSmall, c.text);
+    }
+    if (leftW_ > 0.f) W = std::min(leftW_, W);
     if (!pending_) {
         // 1.37.0 : la boutique.
         if (!cards_.empty()) {
@@ -1632,60 +1796,158 @@ void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x, fy + 48.f}, fit(r, "Enregistr\xC3\xA9 dans : " + licence::profilePath(), kSmall, W), kSmall, c.textMuted);
 }
 
-// ============================================================ 1.37.0 : Editions et l'apercu ==
-EditionsPanel::EditionsPanel() : ui::Widget("dialog.licence.editions.panneau") {
-    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("dialog.licence.editions")));
-    table_->setSelectionMode(ui::SelectionMode::Single);
-    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { choose(); });
+// ============================================================ 1.38.0 : la capture qu'on agrandit ==
+hmi::Resource capturePng(const std::string& path, const std::string& name) {
+    hmi::Resource res;
+    if (path.empty()) return res;
+    std::error_code ec;
+    const auto p = std::filesystem::path(std::u8string(path.begin(), path.end()));
+    const auto size = std::filesystem::file_size(p, ec);
+    if (ec || size == 0 || size >= 8u * 1024u * 1024u) return res;
+    std::ifstream in(p, std::ios::binary);
+    hmi::Bytes bytes(static_cast<std::size_t>(size));
+    if (!in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) return res;
+    res.name = name;
+    res.format = "PNG";
+    res.data = std::make_shared<const hmi::Bytes>(std::move(bytes));
+    return res;
 }
 
-void EditionsPanel::setRows(std::vector<RowInfo> rows) {
-    rows_ = std::move(rows);
-    shown_ = RowInfo{};
-    choose();
+void ZoomImage::clampOffset() {
+    const auto box = bounds();
+    if (iw_ <= 0.f || ih_ <= 0.f) return;
+    const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
+    const float dw = iw_ * k, dh = ih_ * k;
+    const float mx = std::max(0.f, (dw - box.w) * 0.5f), my = std::max(0.f, (dh - box.h) * 0.5f);
+    ox_ = std::clamp(ox_, -mx, mx);
+    oy_ = std::clamp(oy_, -my, my);
 }
 
-void EditionsPanel::choose() {
-    const auto sel = table_->selectedModelRows();
-    RowInfo info;
-    if (!sel.empty() && sel.front() < rows_.size()) info = rows_[sel.front()];
-    if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
-    shown_ = std::move(info);
-    preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
-    image_ = hmi::Resource{};
-    if (!preview_.imagePath.empty()) {
-        std::error_code ec;
-        const auto path = std::filesystem::path(std::u8string(preview_.imagePath.begin(), preview_.imagePath.end()));
-        const auto size = std::filesystem::file_size(path, ec);
-        if (!ec && size > 0 && size < 8u * 1024u * 1024u) {
-            std::ifstream in(path, std::ios::binary);
-            hmi::Bytes bytes(static_cast<std::size_t>(size));
-            if (in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) {
-                image_.name = shown_.id + ".png";
-                image_.format = "PNG";
-                image_.data = std::make_shared<const hmi::Bytes>(std::move(bytes));
-            }
-        }
-    }
+void ZoomImage::wheel(gfx::Point at, float dy) {
+    if (!hasImage() || dy == 0.f) return;
+    const auto box = bounds();
+    const float before = zoom_;
+    zoom_ = std::clamp(zoom_ * (dy > 0.f ? 1.25f : 0.8f), 1.f, 4.f);
+    if (zoom_ == before) return;
+    // Le point sous la souris reste sous la souris.
+    const float cx = box.x + box.w * 0.5f + ox_, cy = box.y + box.h * 0.5f + oy_;
+    const float f = zoom_ / before;
+    ox_ += (at.x - cx) * (1.f - f);
+    oy_ += (at.y - cy) * (1.f - f);
+    if (zoom_ <= 1.f) ox_ = oy_ = 0.f;
+    clampOffset();
     invalidate();
 }
 
-void EditionsPanel::onLayout() {
-    const auto b = bounds();
-    const float pw = std::clamp(std::floor(b.w * 0.42f), 280.f, 470.f);
-    table_->setBounds({b.x, b.y, std::max(200.f, b.w - pw - 12.f), b.h});
-    pane_ = {b.right() - pw, b.y, pw, b.h};
+ui::EventResult ZoomImage::onEvent(const ui::InputEvent& ev) {
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        if (!hasImage()) return ui::EventResult::Ignored;
+        wheel(w->pos, w->dy);
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && hasImage()) {
+        if (d->clickCount >= 2) {
+            fitAgain();
+            dragging_ = false;
+            return ui::EventResult::Consumed;
+        }
+        dragging_ = true;
+        moved_ = false;
+        last_ = d->pos;
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && dragging_) {
+        const float dx = m->pos.x - last_.x, dy = m->pos.y - last_.y;
+        if (std::abs(dx) + std::abs(dy) > 2.f) moved_ = true;
+        last_ = m->pos;
+        if (zoom_ > 1.f) {
+            ox_ += dx;
+            oy_ += dy;
+            clampOffset();
+            invalidate();
+        }
+        return ui::EventResult::Consumed;
+    }
+    if (const auto* u = std::get_if<ui::MouseUp>(&ev); u && dragging_) {
+        dragging_ = false;
+        if (!moved_ && zoom_ <= 1.f && onOpen) onOpen();
+        return ui::EventResult::Consumed;
+    }
+    return ui::EventResult::Ignored;
 }
 
-void EditionsPanel::onPaint(const ui::PaintContext& ctx) {
+void ZoomImage::onPaint(const ui::PaintContext& ctx) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
-    r.fillRect(pane_, c.headerBg);
-    r.strokeRect(pane_, c.border, 1.f);
-    const float x = pane_.x + 12.f, W = pane_.w - 24.f;
-    float y = pane_.y + 12.f;
+    const auto box = bounds();
+    r.fillRect(box, c.inputBg);
+    bool drawn = false;
+    if (image_.data) {
+        const auto img = HmiImageCache::instance().resource(r, image_);
+        if (img.valid()) {
+            iw_ = static_cast<float>(img.width);
+            ih_ = static_cast<float>(img.height);
+            clampOffset();
+            const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
+            const float w = iw_ * k, h = ih_ * k;
+            r.pushClip(box);
+            r.drawImage(img.tex, {box.x + (box.w - w) * 0.5f + ox_, box.y + (box.h - h) * 0.5f + oy_, w, h});
+            r.popClip();
+            drawn = true;
+        }
+    }
+    if (!drawn)
+        r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, empty_, kSmall, box.w - 24.f), kSmall, c.textMuted);
+    else if (hint_) {
+        const std::string t = zoom_ > 1.f ? "\xC3\x97" + std::to_string(static_cast<int>(std::lround(zoom_ * 100.f))) + " % \xC2\xB7 glisser : d\xC3\xA9placer \xC2\xB7 double clic : ajuster"
+                                          : "Molette : zoom \xC2\xB7 clic : en grand";
+        const float tw = std::min(box.w - 8.f, r.measure(t, kSmall).width + 12.f);
+        const gfx::Rect tag{box.right() - tw - 4.f, box.bottom() - r.lineHeight(kSmall) - 8.f, tw, r.lineHeight(kSmall) + 4.f};
+        r.fillRect(tag, c.panelBg.withAlpha(215));
+        r.drawText({tag.x + 6.f, tag.y + 2.f}, fit(r, t, kSmall, tw - 12.f), kSmall, c.textMuted);
+    }
+    r.strokeRect(box, c.border, 1.f);
+}
+
+// ============================================================ 1.38.0 : l'apercu d'une fonctionnalite ==
+FeaturePreviewPane::FeaturePreviewPane(std::string id) : ui::Widget(std::move(id)) {
+    image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>(this->id() + ".capture")));
+    image_->onOpen = [this] {
+        if (onEnlarge && image_->hasImage()) onEnlarge(shown_, image_->image(), preview_.description);
+    };
+    image_->setVisibility(ui::Visibility::Collapsed);
+}
+
+void FeaturePreviewPane::show(const FeatureInfo& info) {
+    if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
+    shown_ = info;
+    preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
+    image_->setImage(capturePng(preview_.imagePath, shown_.id + ".png"));
+    image_->setVisibility(shown_.id.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+    invalidateLayout();
+    invalidate();
+}
+
+void FeaturePreviewPane::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 12.f, W = std::max(60.f, b.w - 24.f);
+    float y = b.y + 12.f + 22.f + (shown_.product.empty() ? 0.f : 20.f) + 4.f;
+    // La capture (960 x 600) a la largeur du volet ; la moitie de la hauteur au plus.
+    const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, b.h * 0.55f));
+    image_->setBounds({x, y, W, ih});
+    textY_ = y + ih + 10.f;
+}
+
+void FeaturePreviewPane::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    r.fillRect(b, c.headerBg);
+    r.strokeRect(b, c.border, 1.f);
+    const float x = b.x + 12.f, W = b.w - 24.f;
+    float y = b.y + 12.f;
     if (shown_.id.empty()) {
-        for (const auto& l : wrapText(r, "Choisis une fonctionnalit\xC3\xA9 dans la liste : une capture et ce qu'elle fait s'affichent ici.", kSmall, W)) {
+        for (const auto& l : wrapText(r, waiting_, kSmall, W)) {
             r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
             y += 20.f;
         }
@@ -1695,41 +1957,150 @@ void EditionsPanel::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x, y}, title, kValue, c.text);
     r.drawText({x + 1.f, y}, title, kValue, c.text);
     y += r.lineHeight(kValue) + 2.f;
-    if (!shown_.product.empty()) {
-        r.drawText({x, y}, fit(r, shown_.product, kSmall, W), kSmall, c.textMuted);
-        y += 20.f;
-    }
-    y += 4.f;
-    // La capture (960 x 600), a la largeur du volet.
-    const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, pane_.h * 0.5f));
-    const gfx::Rect box{x, y, W, ih};
-    r.fillRect(box, c.inputBg);
-    bool drawn = false;
-    if (image_.data) {
-        const auto img = HmiImageCache::instance().resource(r, image_);
-        if (img.valid()) {
-            const float k = std::min(box.w / static_cast<float>(img.width), box.h / static_cast<float>(img.height));
-            const float w = static_cast<float>(img.width) * k, h = static_cast<float>(img.height) * k;
-            r.drawImage(img.tex, {box.x + (box.w - w) * 0.5f, box.y + (box.h - h) * 0.5f, w, h});
-            drawn = true;
-        }
-    }
-    if (!drawn)
-        r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, "Pas encore de capture pour cette fonctionnalit\xC3\xA9.", kSmall, W - 24.f),
-                   kSmall, c.textMuted);
-    r.strokeRect(box, c.border, 1.f);
-    y += ih + 10.f;
+    if (!shown_.product.empty()) r.drawText({x, y}, fit(r, shown_.product, kSmall, W), kSmall, c.textMuted);
+    y = textY_;
     int n = 0;
     for (const auto& l : wrapText(r, preview_.description.empty() ? std::string("(pas encore de description)") : preview_.description, kSmall, W)) {
-        if (++n > 4) break;
+        if (++n > 4 || y + 20.f > b.bottom()) break;
         r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, preview_.description.empty() ? c.textMuted : c.text);
         y += 20.f;
     }
     y += 6.f;
-    for (const auto& l : wrapText(r, "Dans : " + (shown_.editions.empty() ? std::string("aucune \xC3\xA9" "dition") : shown_.editions), kSmall, W)) {
-        r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
-        y += 20.f;
+    if (!shown_.editions.empty())
+        for (const auto& l : wrapText(r, "Dans : " + shown_.editions, kSmall, W)) {
+            if (y + 20.f > b.bottom()) break;
+            r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
+            y += 20.f;
+        }
+}
+
+// ============================================================ 1.37.0 / 1.38.0 : un tableau et son apercu ==
+FeatureTablePanel::FeatureTablePanel(std::string id, std::string tableId) : ui::Widget(std::move(id)) {
+    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>(std::move(tableId))));
+    table_->setSelectionMode(ui::SelectionMode::Single);
+    pane_ = &static_cast<FeaturePreviewPane&>(addChild(std::make_unique<FeaturePreviewPane>(this->id() + ".apercu")));
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) { choose(); });
+}
+
+void FeatureTablePanel::setRows(std::vector<RowInfo> rows) {
+    rows_ = std::move(rows);
+    choose();
+}
+
+void FeatureTablePanel::choose() {
+    const auto sel = table_->selectedModelRows();
+    RowInfo info;
+    if (!sel.empty() && sel.front() < rows_.size()) info = rows_[sel.front()];
+    pane_->show(info);
+}
+
+void FeatureTablePanel::onLayout() {
+    const auto b = bounds();
+    if (vertical_) {
+        const float th = std::clamp(std::floor(b.h * 0.34f), 96.f, 220.f);
+        table_->setBounds({b.x, b.y, b.w, th});
+        pane_->setBounds({b.x, b.y + th + 8.f, b.w, std::max(60.f, b.h - th - 8.f)});
+        return;
     }
+    const float pw = std::clamp(std::floor(b.w * 0.42f), 280.f, 520.f);
+    table_->setBounds({b.x, b.y, std::max(200.f, b.w - pw - 12.f), b.h});
+    pane_->setBounds({b.right() - pw, b.y, pw, b.h});
+}
+
+// ============================================================ 1.38.0 : la capture en grand ==
+class ZoomBody final : public ui::Widget {
+public:
+    ZoomBody(std::string title, hmi::Resource img, std::string text, std::function<void()> close)
+        : ui::Widget("dialog.capture.corps"), title_(std::move(title)), text_(std::move(text)), close_(std::move(close)) {
+        image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>("dialog.capture.image")));
+        image_->setImage(std::move(img));
+        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.capture.fermer")));
+        closeButton_->setStyle(ui::Button::Style::Primary);
+        links_ += closeButton_->clicked->connect([this] {
+            if (close_) close_();
+        });
+    }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(1500.f, std::max(480.f, r.w - 40.f)), h = std::min(980.f, std::max(360.f, r.h - 40.f));
+        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+        closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
+        ui::dialogframe::keep(*this, closeBox_);
+        const float bottom = panel_.bottom() - 52.f;
+        image_->setBounds({panel_.x + 16.f, panel_.y + 52.f, panel_.w - 32.f, std::max(80.f, bottom - 46.f - (panel_.y + 52.f))});
+        const float cw = std::max(110.f, closeButton_->sizeHint().preferred.w);
+        closeButton_->setBounds({panel_.right() - 16.f - cw, panel_.bottom() - 44.f, cw, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(panel_, c.panelBg);
+        r.strokeRect(panel_, c.borderStrong, 1.f);
+        r.fillRect({panel_.x, panel_.y, panel_.w, 42.f}, c.headerBg);
+        r.drawText({panel_.x + 16.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, fit(r, title_, kTitle, panel_.w - 70.f), kTitle, c.text);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+        const float y = image_->bounds().bottom() + 8.f, W = panel_.w - 32.f;
+        int n = 0;
+        for (const auto& l : wrapText(r, text_, kSmall, W)) {
+            if (++n > 2) break;
+            r.drawText({panel_.x + 16.f, y + static_cast<float>(n - 1) * 19.f}, fit(r, l, kSmall, W), kSmall, c.text);
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+            if (close_) close_();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::string           title_, text_;
+    std::function<void()> close_;
+    ZoomImage*            image_{nullptr};
+    ui::Button*           closeButton_{nullptr};
+    gfx::Rect             panel_{}, closeBox_{};
+    core::ConnectionScope links_;
+};
+
+class ZoomWindow final : public menu::WidgetMenu {
+public:
+    ZoomWindow(std::string title, hmi::Resource img, std::string text)
+        : menu::WidgetMenu("dialog.capture"), title_(std::move(title)), img_(std::move(img)), text_(std::move(text)) {}
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return title_; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer();
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void fermer() {
+        if (done_) return;
+        done_ = true;
+        manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+    }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<ZoomBody>(title_, std::move(img_), text_, [this] { fermer(); }));
+        return core::ok();
+    }
+
+private:
+    std::string   title_;
+    hmi::Resource img_;
+    std::string   text_;
+    bool          done_{false};
+};
+
+void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const std::string& text) {
+    app.menus().ShowDialog(std::make_unique<ZoomWindow>(f.label + (f.product.empty() ? std::string() : " \xE2\x80\x94 " + f.product), img, text),
+                           [](const menu::DialogResult&) {});
 }
 
 } // namespace
