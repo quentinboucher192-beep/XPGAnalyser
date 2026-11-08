@@ -6111,6 +6111,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         showNoticesWindow(app_);
         return Step::Yield;
     }
+    // 1.39.0 : notification-detail CLE - la fenetre << Offre modifiee : avant / apres >> d'une notification (son bouton
+    // Voir le detail) ; la cle : "offre:PERSONAL:319".
+    if (cmd == "notification-detail") {
+        if (!licence::showOfferChange(app_, arg(1))) fail("notification-detail : pas d'offre modifiee pour " + arg(1));
+        return Step::Yield;
+    }
     if (cmd == "notifications-liste") {
         (void)licence::watch::check(true);
         const auto all = notices::list();

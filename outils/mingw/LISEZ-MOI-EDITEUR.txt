@@ -194,6 +194,18 @@ sa révocation reste dans la liste signée (les Studios la refusent toujours) ; 
 synchro de l'archive ne la ramène pas sur ce PC (l'archive en ligne en garde une copie
 chiffrée). Une licence qui n'est pas révoquée ne se supprime pas : révoque-la d'abord.
 
+LE CLIENT PERD LA LICENCE EN DIRECT (1.39.0)
+Révoquer, Désactiver, Retirer ce PC : l'outil le dépose tout de suite sur ton service.
+Un Studio 1.39 ouvert et connecté le voit dans les 2 MINUTES : la licence est effacée
+de ce PC, une fenêtre « Ta licence n'est plus active sur ce PC » le dit au client (et
+une notification). Ses fonctions se ferment ; son projet reste ouvert, il peut toujours
+l'enregistrer. Un PC hors ligne : à son prochain lancement connecté, au plus tard à la
+fin de son bail (30 jours). Redéploie le service 1.39.0 (deployer.bat) : sans lui, les
+Studios ne le voient qu'au lancement (ou 7 jours avant la fin du bail).
+Tes offres aussi : un registre déposé est vu par les Studios ouverts dans les 2
+minutes ; « Offre modifiée » y dit précisément ce qui change (un tableau avant / après,
+le prix, les PC, la durée).
+
 LE MAIL AU CLIENT (1.37.0)
 Quand tu acceptes une demande, un mail part tout seul au client (s'il a donné son
 courriel) depuis TA boîte : sa licence, son édition, ce qu'elle ouvre, jusqu'à quand,
