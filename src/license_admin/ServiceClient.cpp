@@ -5,6 +5,8 @@
 // =============================================================================
 #include "ServiceClient.hpp"
 
+#include "Mail.hpp"   // 1.37.0 : le mail d'acceptation (smtpMailer)
+
 #include "Admin.hpp"
 #include "ArchiveSync.hpp"
 
@@ -1316,6 +1318,38 @@ MailText acceptanceMail(const licensing::License& l, const licensing::Registry* 
     b += "\nBonne route,\n" + (signer.empty() ? std::string("Ton \xC3\xA9" "diteur") : signer) + "\n";
     m.body = std::move(b);
     return m;
+}
+
+Mailer smtpMailer(const std::string& folder, const licensing::Registry* regIn) {
+    if (!mail::configured(folder) || !mail::hasPassword(folder)) return {};
+    mail::Config cfg;
+    if (!mail::loadConfig(folder, cfg, nullptr)) return {};
+    const bool hasReg = regIn != nullptr;
+    const licensing::Registry reg = regIn ? *regIn : licensing::Registry{};
+    const std::string signer = cfg.fromName;
+    return [folder, hasReg, reg, signer](const Entry& req, const licensing::License& lic, const std::string& code) {
+        MailOutcome out;
+        if (req.email.empty()) {
+            out.note = "la demande ne donne pas de courriel : aucun mail (le Studio du client montre son code)";
+            return out;
+        }
+        out.to = req.email;
+        if (!mail::plausibleAddress(req.email)) {
+            out.state = gw::kMailFailed;
+            out.note = "\xC2\xAB " + req.email + " \xC2\xBB n'a pas la forme d'une adresse : pas de mail (le Studio du client le lui dit, avec son code)";
+            return out;
+        }
+        const MailText text = acceptanceMail(lic, hasReg ? &reg : nullptr, req, code, signer);
+        mail::Message m;
+        m.to = req.email;
+        m.toName = !req.contact.empty() && req.contact.find('@') == std::string::npos ? req.contact : req.customer;
+        m.subject = text.subject;
+        m.body = text.body;
+        const mail::SendResult r = mail::send(folder, m);
+        out.state = r.ok ? gw::kMailSent : gw::kMailFailed;
+        out.note = r.ok ? r.message : r.message + " Le Studio du client le lui dit, avec son code, et lui demande de v\xC3\xA9rifier son adresse.";
+        return out;
+    };
 }
 
 // ============================================================================ 1.37.0 : le code garde sur ce poste

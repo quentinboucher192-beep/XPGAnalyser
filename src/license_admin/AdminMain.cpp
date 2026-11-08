@@ -166,6 +166,7 @@ std::string usage() {
            "  service-refuser --numero N --raison TEXTE      refuse cette demande (la raison scell\xC3\xA9" "e pour le PC)\n"
            "  service-publier-licence --licence F.xpglic     une licence li\xC3\xA9" "e \xC3\xA0 des PC : \xC3\xA0 chacun (sa demande en attente : accept\xC3\xA9" "e)\n"
            "  service-stats                                  les compteurs du service\n"
+           "  licence-en-ligne ... --demande N                1.37.0 : en r\xC3\xA9ponse \xC3\xA0 la demande N : son code part scell\xC3\xA9 pour son PC (et le mail)\n"
            "  code-licence --licence ID                      1.37.0 : revoir le code d'activation d'une licence en ligne (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)\n"
            "  mail-config --hote H --expediteur A [--port P] [--securite starttls|tls] [--nom N] [--identifiant I]\n"
            "                                                 1.37.0 : le mail au client \xC3\xA0 l'acceptation (ta bo\xC3\xAEte ; l'application l'envoie)\n"
@@ -821,6 +822,19 @@ int run(const std::vector<std::string>& argv) {
             }
             lease = std::atoi(t.c_str());
         }
+        // 1.37.0 : --demande N - la reponse a cette demande (son code scelle pour son PC, et le mail) : verifiee d'abord.
+        const std::string demande = a.one("--demande");
+        if (!demande.empty()) {
+            online::Entry waiting;
+            if (a.flag("--etendre")) {
+                complain("licence-en-ligne : --demande repond par une licence NEUVE (sans --etendre)");
+                return 2;
+            }
+            if (!online::findWaiting(folder, demande, waiting, &why) || waiting.acceptedHere()) {
+                complain("Refus\xC3\xA9 : " + (why.empty() ? "la demande n\xC2\xB0 " + demande + " est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + waiting.answer + ")" : why));
+                return 1;
+            }
+        }
         LicenseInputs in;
         if (!readText(a.one("--parametres"), in.params, why)) {
             complain("Refus\xC3\xA9 : " + why);
@@ -886,6 +900,25 @@ int run(const std::vector<std::string>& argv) {
                 (kept ? std::string("  Il est gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste (pour ce compte) : code-licence --licence ID pour le revoir.\n")
                       : "  ATTENTION : il n'a pas pu \xC3\xAAtre gard\xC3\xA9 sur ce poste (" + keepWhy + ") : note-le.\n") +
                 "  Le service n'en garde que l'empreinte. Perdu : licence-en-ligne ... --etendre --nouveau-code (l'ancien ne marche plus).\n");
+            if (!demande.empty()) {   // 1.37.0 : la reponse a la demande - le code scelle pour son PC (il s'active seul), et le mail
+                std::string w;
+                if (!online::markAcceptedHere(folder, std::atoi(demande.c_str()), id, &w)) say("ATTENTION : " + w + "\n");
+                licensing::Registry reg;
+                bool hasReg = false;
+                std::vector<licensing::SignedBlock> rb;
+                if (licensing::readBlocks(in.registry, rb, nullptr))
+                    for (const auto& blk : rb)
+                        if (blk.kind == licensing::DocKind::Registry) hasReg = licensing::parseRegistry(blk.document, reg, nullptr);
+                const online::Result ar = online::answerOnline(folder, *key, std::atoi(demande.c_str()), id, code, out,
+                                                               online::smtpMailer(folder, hasReg ? &reg : nullptr), o);
+                if (!ar.ok) {
+                    crypto::wipe(code.data(), code.size());
+                    complain(ar.text() + "\nLa licence est d\xC3\xA9pos\xC3\xA9" "e ; la r\xC3\xA9ponse n'est pas partie : l'application la renvoie (Demandes en ligne "
+                                         "\xE2\x80\xBA Renvoyer la r\xC3\xA9ponse).");
+                    return 3;
+                }
+                say(ar.text() + "\n");
+            }
             crypto::wipe(code.data(), code.size());
         } else {
             say("Le code d'activation reste le m\xC3\xAAme.\n");

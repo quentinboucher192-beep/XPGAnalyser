@@ -313,6 +313,10 @@ struct MailText {
 };
 [[nodiscard]] MailText acceptanceMail(const licensing::License& licence, const licensing::Registry* reg, const Entry& request, const std::string& code,
                                       const std::string& signer);
+// Le Mailer de l'editeur : le mail d'acceptation par SA boite (Mail.hpp : <dossier>/mail.json et son mot de passe), s'il
+// est regle et que la demande donne un courriel ; nul : rien de regle (aucun mail, le Studio montre le code). `reg` :
+// les noms du registre (copie).
+[[nodiscard]] Mailer smtpMailer(const std::string& folder, const licensing::Registry* reg);
 // Repondre a une demande par une licence EN LIGNE : << acceptee >>, la demande marquee traitee. 1.37.0 : LE CODE part
 // scelle pour CE PC (son Studio s'active tout seul ; jamais en clair sur le service), avec l'identifiant de la licence
 // et l'etat du mail (`mailer` : nul, pas de mail). `licenceText` : la licence deposee (pour le mail).
