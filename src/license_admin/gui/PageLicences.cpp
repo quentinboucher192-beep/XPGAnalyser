@@ -333,7 +333,7 @@ protected:
         }
         if (!selected()) {
             const auto d = details_->bounds();
-            r.fillRect({d.x + 1.f, d.y + 8.f, d.w - 2.f, r.lineHeight(f) + 16.f}, c.panelBg);
+            r.fillRect({d.x + 1.f, d.y + 1.f, d.w - 2.f, d.h - 2.f}, c.panelBg);   // un volet vide : sans le trait de la grille
             r.drawText({d.x + 16.f, d.y + 16.f}, fit(r, "Choisis une licence pour voir son d\xC3\xA9tail.", f, d.w - 32.f), f, c.textMuted);
         }
     }
