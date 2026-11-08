@@ -1238,6 +1238,9 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     Entry e;
     std::string why;
     if (!findWaiting(folder, which, e, &why)) return refused(why);
+    if (e.acceptedHere())
+        return refused("la demande n\xC2\xB0 " + std::to_string(e.number) + " est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e.answer +
+                       ") : sa r\xC3\xA9ponse n'est pas encore partie ; renvoie-la (Demandes en ligne \xE2\x80\xBA Renvoyer la r\xC3\xA9ponse) plut\xC3\xB4t que de la refuser");
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     gw::StatusContent content;
@@ -1348,6 +1351,15 @@ bool readCode(const std::string& folder, const std::string& licenseId, std::stri
 bool hasCode(const std::string& folder, const std::string& licenseId) {
     std::error_code ec;
     return !licenseId.empty() && fs::is_regular_file(P(codePath(folder, licenseId)), ec);
+}
+
+bool markAcceptedHere(const std::string& folder, int number, const std::string& licenseId, std::string* why) {
+    Entry e;
+    if (number <= 0 || licenseId.empty() || !findWaiting(folder, std::to_string(number), e, why)) return false;
+    if (e.acceptedHere() && e.answer != licenseId)
+        return fail(why, "la demande n\xC2\xB0 " + std::to_string(number) + " est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici par la licence " + e.answer);
+    e.answer = licenseId;
+    return writeEntry(folder, e, why);
 }
 
 Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId, const std::string& code,

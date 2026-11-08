@@ -693,6 +693,13 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     }
     if (!writeText(outPath, out, &why)) return OpResult::fail(why);
     OpResult r = OpResult::done("Licence " + d.licenseId + " sign\xC3\xA9" "e : " + outPath);
+    // 1.37.0 : UNE SEULE ACCEPTATION - les demandes en ligne auxquelles elle repond sont << acceptees ici >> des maintenant,
+    // meme si la reponse ne part pas tout de suite (Demandes en ligne : Renvoyer la reponse).
+    for (const auto& p : d.requestPaths)
+        if (const online::Entry* e = onlineRequestAt(p); e && e->waiting()) {
+            std::string w;
+            if (!online::markAcceptedHere(folder_, e->number, d.licenseId, &w)) r.details.push_back("ATTENTION : " + w);
+        }
     addSummary(r, summary);
     if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
     licensing::License signedLicence;
@@ -1159,11 +1166,33 @@ OpResult Workspace::serviceRunOnline(const ServiceJob& job, const std::string& c
             r.details.push_back("ATTENTION : le code n'a pas pu \xC3\xAAtre gard\xC3\xA9 sur ce poste (" + w + ") : note-le.");
     }
     if (job.requestNumber > 0) {
+        std::string w;   // 1.37.0 : une seule acceptation, meme si la reponse ne part pas (Renvoyer la reponse)
+        if (!online::markAcceptedHere(folder_, job.requestNumber, job.licenseId, &w)) r.details.push_back("ATTENTION : " + w);
         const OpResult a = fromResult(online::answerOnline(folder_, *key, job.requestNumber, job.licenseId, code, job.licenceText, mailer(), o));
         r.details.push_back(a.message);
         for (const auto& d : a.details) r.details.push_back(d);
         if (!a.ok) r.ok = false;
     }
+    return r;
+}
+
+OpResult Workspace::serviceResendAnswer(int number) const {
+    XPG_SERVICE_KEY_OR_FAIL;
+    const online::Entry* e = onlineRequest(number);
+    if (!e || !e->acceptedHere())
+        return OpResult::fail("la demande n\xC2\xB0 " + std::to_string(number) + " n'a pas de r\xC3\xA9ponse en attente sur ce poste (rel\xC3\xA8ve les demandes)");
+    const std::string licenseId = e->answer;
+    const LicenceEntry* l = licence(licenseId);
+    std::string text;
+    why.clear();
+    if (!l || !readText(l->path, text, &why))
+        return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive de ce poste" + (why.empty() ? std::string() : " (" + why + ")"));
+    const online::Options o = optionsAt(now());
+    if (!isOnlineLicence(l->licence)) return fromResult(online::publishBoundLicence(folder_, *key, text, false, o, mailer()));
+    std::string code;
+    if (!online::readCode(folder_, licenseId, code, &why)) return OpResult::fail(why);
+    OpResult r = fromResult(online::answerOnline(folder_, *key, number, licenseId, code, text, mailer(), o));
+    std::fill(code.begin(), code.end(), '\0');
     return r;
 }
 

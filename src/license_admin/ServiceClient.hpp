@@ -259,6 +259,9 @@ struct Entry {
     std::vector<std::string> problems;
     [[nodiscard]] bool waiting() const noexcept { return state == RequestState::Pending; }
     [[nodiscard]] bool joinRequest() const noexcept { return !licenseId.empty() && state != RequestState::Unreadable; }
+    // 1.37.0 : << acceptee ici >> - une licence est signee pour elle sur ce poste (answer : laquelle), sa reponse n'est pas
+    // encore partie (le service injoignable...) : on ne l'accepte ni ne la refuse plus ; on RENVOIE la reponse.
+    [[nodiscard]] bool acceptedHere() const noexcept { return state == RequestState::Pending && !answer.empty(); }
 };
 // << A verifier : ajout a la licence X demande par quelqu'un qui dit etre << Y >> - confirme avec ton client ... >>
 [[nodiscard]] std::string joinWarning(const Entry& e);
@@ -314,6 +317,9 @@ struct MailText {
 // et l'etat du mail (`mailer` : nul, pas de mail). `licenceText` : la licence deposee (pour le mail).
 [[nodiscard]] Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId,
                                   const std::string& code, const std::string& licenceText, const Mailer& mailer, const Options& o);
+// 1.37.0 : UNE SEULE ACCEPTATION - la demande n (en attente) est marquee << acceptee ici >> par la licence `licenseId`,
+// des sa signature, avant que la reponse parte (Entry::acceptedHere). Faux : elle n'attend plus, ou l'ecriture echoue.
+bool markAcceptedHere(const std::string& folder, int number, const std::string& licenseId, std::string* why);
 
 // ---- les licences liees a des PC (l'etat << poste >> de chacun, signe par l'editeur) ----
 // Une licence signee (.xpglic) a CHACUN de ses PC : << acceptee >> pour celui dont une demande attend (elle est marquee

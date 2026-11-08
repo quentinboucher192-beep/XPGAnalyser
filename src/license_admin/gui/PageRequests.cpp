@@ -237,6 +237,11 @@ public:
         refuse_ = add(*this, std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", "demandes.refuser"));
         refuse_->setStyle(ui::Button::Style::Danger);
         refuse_->setTooltip("Le client voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison dans son logiciel (scell\xC3\xA9" "e : personne d'autre ne la lit).");
+        resend_ = add(*this, std::make_unique<ui::Button>("Renvoyer la r\xC3\xA9ponse", "demandes.renvoyer"));
+        resend_->setStyle(ui::Button::Style::Primary);
+        resend_->setIcon(ui::Icon::Refresh);
+        resend_->setTooltip("Cette demande est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici, mais sa r\xC3\xA9ponse n'est pas partie : la renvoyer au PC du client (la m\xC3\xAA" "me licence, "
+                            "le m\xC3\xAA" "me code ; et le mail).");
         settings_ = add(*this, std::make_unique<ui::Button>("R\xC3\xA9gler le service", "demandes.regler"));
         settings_->setIcon(ui::Icon::Settings);
         settings_->setTooltip("La page Service en ligne : l'adresse de ton service des licences.");
@@ -244,16 +249,18 @@ public:
         filter_->setItems({{"En attente de ta d\xC3\xA9" "cision", "attente"}, {"Toutes", ""}});
         filter_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("demandes.table"));
-        table_->setColumns({{"Date", 150.f}, {"Client", 190.f}, {"PC", 170.f}, {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 150.f}, {"\xC3\x89tat", 150.f},
-                            {"Message", 320.f}});
+        table_->setColumns({{"Date", 150.f}, {"Client", 190.f}, {"PC", 170.f}, {"Logiciel", 190.f}, {"Licence demand\xC3\xA9" "e", 150.f},
+                            {"\xC3\x89" "dition voulue", 190.f}, {"\xC3\x89tat", 150.f}, {"Message", 320.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
-        model_ = std::make_shared<Rows>(std::vector<std::string>{"Date", "Client", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "\xC3\x89tat", "Message"});
+        model_ = std::make_shared<Rows>(
+            std::vector<std::string>{"Date", "Client", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "\xC3\x89" "dition voulue", "\xC3\x89tat", "Message"});
         table_->setModel(model_);
 
         links_ += fetch_->clicked->connect([this] { fetch(); });
         links_ += accept_->clicked->connect([this] { accept(false); });
         links_ += acceptOnline_->clicked->connect([this] { accept(true); });
         links_ += refuse_->clicked->connect([this] { askRefuse(); });
+        links_ += resend_->clicked->connect([this] { resend(); });
         links_ += settings_->clicked->connect([this] {
             if (host_.navigate) host_.navigate("service");
         });
@@ -294,7 +301,7 @@ protected:
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
         float bx = x;
-        for (ui::Button* btn : {fetch_, accept_, acceptOnline_, refuse_, settings_}) {
+        for (ui::Button* btn : {fetch_, resend_, accept_, acceptOnline_, refuse_, settings_}) {
             if (!btn->visible()) continue;
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
@@ -394,6 +401,9 @@ private:
     // La demande choisie demande l'AJOUT de son PC a une licence existante : le dire en entier (a verifier).
     [[nodiscard]] std::string notice() const {
         const Entry* e = selected();
+        if (e && e->acceptedHere())   // 1.37.0 : une seule acceptation
+            return "D\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e->answer + "), mais sa r\xC3\xA9ponse n'est pas partie (le service \xC3\xA9tait injoignable ?) : "
+                   "\xC2\xAB Renvoyer la r\xC3\xA9ponse \xC2\xBB. Elle ne s'accepte pas une seconde fois.";
         if (!e || !e->waiting() || !e->joinRequest()) return {};
         const LicenceEntry* l = ws().licence(e->licenseId);
         if (!l) return {};   // une licence qui n'existe pas encore : une licence neuve, rien a quoi s'ajouter
@@ -408,6 +418,23 @@ private:
         return item && item->value == "attente";
     }
 
+    // 1.37.0 : l'edition que le client a choisie dans sa boutique, et son prix (le registre de ce poste).
+    [[nodiscard]] std::string wantedOf(const Entry& e) const {
+        if (e.edition.empty()) return e.state == RequestState::Unreadable ? std::string() : std::string("\xE2\x80\x94");
+        const auto* ed = ws().hasRegistry() ? ws().registry().edition(e.edition) : nullptr;
+        if (!ed) return e.edition + " (inconnue)";
+        std::string t = ed->label.empty() ? ed->id : ed->label;
+        if (!ed->price.empty()) t += " \xC2\xB7 " + ed->price;
+        return t;
+    }
+    // Le mot du client, son courriel (1.37.0) et son contact.
+    [[nodiscard]] static std::string messageOf(const Entry& e) {
+        std::string t = oneLine(e.message);
+        for (const std::string* part : {&e.email, &e.contact})
+            if (!part->empty() && (part != &e.contact || *part != e.email)) t += (t.empty() ? "" : " \xC2\xB7 ") + *part;
+        return t;
+    }
+
     void rebuild() {
         const auto& g = ws().service();
         shown_.clear();
@@ -416,12 +443,13 @@ private:
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> keys;
         std::vector<RequestState> states;
+        std::vector<bool> here;
         for (const auto& e : shown_) {
             std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
             const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId);
             if (joins) licence += " (ajouter ce PC)";
-            std::string state = online::requestStateLabel(e.state);
-            if (joins && e.waiting()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
+            std::string state = e.acceptedHere() ? "Accept\xC3\xA9" "e ici \xE2\x80\x94 r\xC3\xA9ponse \xC3\xA0 renvoyer" : online::requestStateLabel(e.state);
+            if (joins && e.waiting() && !e.acceptedHere()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
                 licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
                 state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
             }
@@ -430,15 +458,17 @@ private:
                                    : e.deviceName.empty()               ? std::string("(sans nom)")
                                                                         : e.deviceName;
             rows.push_back({dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, pc,
-                            e.software, e.state == RequestState::Unreadable ? std::string() : licence, state,
-                            oneLine(e.message) + (e.contact.empty() ? std::string() : (e.message.empty() ? "" : " \xC2\xB7 ") + e.contact)});
+                            e.software, e.state == RequestState::Unreadable ? std::string() : licence, wantedOf(e), state, messageOf(e)});
             keys.push_back(padKey(e.createdAt ? e.createdAt : e.requestedAt));
             states.push_back(e.state);
+            here.push_back(e.acceptedHere());
         }
-        model_->set(std::move(rows), std::move(keys), [states](RowIndex r, std::size_t c) {
+        model_->set(std::move(rows), std::move(keys), [states, here](RowIndex r, std::size_t c) {
             ui::CellStyle st;
-            if (r >= states.size() || c != 5) return st;
-            st.fgTone = toneOf(states[r]);
+            if (r >= states.size()) return st;
+            if (c == 5) st.bold = states[r] == RequestState::Pending;   // l'edition voulue
+            if (c != 6) return st;
+            st.fgTone = here[r] ? ui::Tone::Warning : toneOf(states[r]);
             st.bold = states[r] == RequestState::Pending;
             return st;
         });
@@ -463,10 +493,14 @@ private:
         acceptOnline_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         refuse_->setVisibility(on ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         settings_->setVisibility(on ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+        // 1.37.0 : une seule acceptation - acceptee ici (sa reponse pas partie) : on la renvoie, on ne la decide plus.
+        const bool here = e && e->acceptedHere();
+        resend_->setVisibility(on && here ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         fetch_->setEnabled(!b && ws().key().present);
-        accept_->setEnabled(!b && e && e->waiting());
-        acceptOnline_->setEnabled(!b && e && e->waiting());
-        refuse_->setEnabled(!b && e && e->waiting());
+        resend_->setEnabled(!b && here);
+        accept_->setEnabled(!b && e && e->waiting() && !here);
+        acceptOnline_->setEnabled(!b && e && e->waiting() && !here);
+        refuse_->setEnabled(!b && e && e->waiting() && !here);
         invalidateLayout();
     }
 
@@ -516,6 +550,11 @@ private:
             host_.report(OpResult::fail("cette demande n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e->state) + ")"));
             return;
         }
+        if (e->acceptedHere()) {   // 1.37.0 : une seule acceptation
+            host_.report(OpResult::fail("cette demande est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e->answer +
+                                        ") : sa r\xC3\xA9ponse n'est pas partie, renvoie-la (\xC2\xAB Renvoyer la r\xC3\xA9ponse \xC2\xBB)"));
+            return;
+        }
         std::error_code ec;
         if (e->requestPath.empty() || !std::filesystem::is_regular_file(std::filesystem::path(std::u8string(e->requestPath.begin(), e->requestPath.end())), ec)) {
             host_.report(OpResult::fail("le fichier de la demande manque sur ce poste : rel\xC3\xA8ve de nouveau les demandes"));
@@ -537,6 +576,23 @@ private:
                 }
             }
         if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {e->requestPath}, extend, extend.empty() ? e->customer : std::string()));
+    }
+
+    // 1.37.0 : renvoyer la reponse d'une demande acceptee ici (la meme licence, le meme code) - lent : runSlow.
+    void resend() {
+        if (refuseIfBusy()) return;
+        const Entry* e = selected();
+        if (!e || !e->acceptedHere()) return;
+        const int n = e->number;
+        const Workspace* w = &ws();
+        std::weak_ptr<bool> alive = life_;
+        const bool started = host_.runSlow && host_.runSlow("Service : r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(n),
+                                                            [w, n] { return w->serviceResendAnswer(n); }, [this, alive](const OpResult&) {
+                                                                if (alive.expired()) return;
+                                                                ws().reload();
+                                                                refresh();
+                                                            });
+        if (!started && host_.flash) host_.flash(kBusy, Tone::Warning);
     }
 
     void askRefuse() {
@@ -578,6 +634,7 @@ private:
     ui::Button*              accept_{nullptr};
     ui::Button*              acceptOnline_{nullptr};
     ui::Button*              refuse_{nullptr};
+    ui::Button*              resend_{nullptr};
     ui::Button*              settings_{nullptr};
     ui::DropDown*            filter_{nullptr};
     ui::TableView*           table_{nullptr};

@@ -437,6 +437,7 @@ struct WizardState {
     bool                  online{false};
     int                   leaseDays{online::kDefaultLeaseDays};   // -1 : illisible
     int                   requestNumber{0};    // la demande manuelle a laquelle elle repond (0 : aucune)
+    std::string           wanted;              // 1.37.0 : l'edition que le client a choisie (sa demande en ligne) ; vide : aucune
     std::string           requestNote;         // "la demande n 12 de ..., PC ..."
     // 1.34.0 (relecture) : un PC d'une demande EN LIGNE ajoute a une licence existante - n'importe qui peut la demander :
     // l'editeur confirme avoir verifie avec son client (la case de l'etape << Signer >>) avant de signer.
@@ -485,6 +486,8 @@ public:
     [[nodiscard]] int neededDevices() const { return boundDevices() + newDevices(); }
     [[nodiscard]] std::set<std::string> editionFeatures(const std::string& id) const;
     [[nodiscard]] std::string editionLabel(const std::string& id) const;
+    // 1.37.0 : << PROFESSIONAL (490 EUR HT / an) >> - l'edition voulue par le client et son prix ; vide : aucune.
+    [[nodiscard]] std::string wantedLabel() const;
     [[nodiscard]] bool customFeatures() const { return st_.features != editionFeatures(st_.edition); }
     [[nodiscard]] LicenceDraft draft() const;
     [[nodiscard]] bool takeDrop(const std::vector<std::string>& paths);
@@ -1076,10 +1079,12 @@ public:
     [[nodiscard]] std::string heading() const override { return "\xC3\x89" "dition et dur\xC3\xA9" "e"; }
     [[nodiscard]] std::string railLabel() const override { return "\xC3\x89" "dition"; }
     [[nodiscard]] std::string intro() const override {
+        // 1.37.0 : ce que le client a choisi dans sa boutique, en tete (preselectionnee).
+        const std::string wish = w_.wantedLabel().empty() ? std::string() : "Le client a demand\xC3\xA9 : " + w_.wantedLabel() + ". ";
         if (w_.online())
-            return "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste le type (flottante : des postes EN M\xC3\x8AME TEMPS), le nombre de PC qui pourront "
-                   "l'activer, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce.";
-        return "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste pour ce client le type, le nombre de PC, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce hors ligne.";
+            return wish + "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste le type (flottante : des postes EN M\xC3\x8AME TEMPS), le nombre de PC qui pourront "
+                          "l'activer, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce.";
+        return wish + "L'\xC3\xA9" "dition donne les valeurs par d\xC3\xA9" "faut ; ajuste pour ce client le type, le nombre de PC, la dur\xC3\xA9" "e et la gr\xC3\xA2" "ce hors ligne.";
     }
     void enter() override {
         auto& s = w_.st();
@@ -1476,6 +1481,8 @@ private:
         out.emplace_back("Client", trim(s.customer));
         out.emplace_back("Licence", trim(s.licenseId) + (s.extend ? " (\xC3\xA9tendue)" : ""));
         out.emplace_back("\xC3\x89" "dition", w_.editionLabel(s.edition));
+        if (!s.wanted.empty())
+            out.emplace_back("Voulue par le client", w_.wantedLabel() + (s.wanted == s.edition ? std::string() : std::string(" (tu en donnes une autre)")));
         out.emplace_back("Type", typeLabel(s.type));
         if (s.online)
             out.emplace_back("En ligne", std::to_string(s.maxDevices) + (s.type == LicenseType::Floating ? " postes en m\xC3\xAAme temps" : " PC au plus") + ", bail " +
@@ -1687,13 +1694,20 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     // 1.35.0 : une licence EN LIGNE. Etendue : celle de l'archive l'est-elle ? Neuve, depuis une demande manuelle
     // (Accepter en ligne) : la demande ne lie aucun PC, elle dit a qui repondre.
     st_.online = ext ? Workspace::isOnlineLicence(ext->licence) : online;
+    // 1.37.0 : l'edition que le client a choisie dans sa boutique (sa demande en ligne) : preselectionnee plus bas.
+    if (!ext)
+        for (const auto& path : requests)
+            if (const online::Entry* e = w.onlineRequestAt(path); e && e->waiting() && !e->edition.empty()) {
+                st_.wanted = e->edition;
+                break;
+            }
     if (st_.online && !ext) {
         for (const auto& path : requests)
             if (const online::Entry* e = w.onlineRequestAt(path); e && e->waiting()) {
                 st_.requestNumber = e->number;
                 st_.requestNote = "En r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(e->number) + " de " + (e->customer.empty() ? std::string("?") : e->customer) +
-                                  " (PC \xC2\xAB " + (e->deviceName.empty() ? std::string("sans nom") : e->deviceName) + " \xC2\xBB) : ce PC voit \xC2\xAB accept\xC3\xA9" "e \xC2\xBB ; "
-                                  "tu donnes le code au client, il l'active.";
+                                  " (PC \xC2\xAB " + (e->deviceName.empty() ? std::string("sans nom") : e->deviceName) + " \xC2\xBB) : son Studio re\xC3\xA7oit le code et "
+                                  "s'active tout seul ; le mail le lui envoie aussi.";
                 break;
             }
         requests.clear();
@@ -1708,6 +1722,8 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     steps_.push_back(&adopt(*this, std::make_unique<StepFeatures>(*this)));
     steps_.push_back(&adopt(*this, std::make_unique<StepRecap>(*this)));
     steps_.push_back(&adopt(*this, std::make_unique<StepSign>(*this)));
+    if (!st_.wanted.empty())
+        if (const auto* ed = w.registry().edition(st_.wanted); ed && !ed->retired) chooseEdition(st_.wanted);
     g_openWizard = this;   // le dernier ouvert prend les fichiers glisses
     goTo(0);
 }
@@ -1749,6 +1765,16 @@ std::set<std::string> WizardBody::editionFeatures(const std::string& id) const {
     if (const auto* e = ws().registry().edition(id))
         for (const auto& g : e->features) out.insert(g.id);
     return out;
+}
+
+std::string WizardBody::wantedLabel() const {
+    if (st_.wanted.empty()) return {};
+    const auto* e = ws().registry().edition(st_.wanted);
+    std::string t = e && !e->label.empty() ? e->label : st_.wanted;
+    if (!e) return t + " (absente de ton registre)";
+    if (e->retired) t += " (retir\xC3\xA9" "e)";
+    if (!e->price.empty()) t += " \xE2\x80\x94 " + e->price;
+    return t;
 }
 
 std::string WizardBody::editionLabel(const std::string& id) const {
