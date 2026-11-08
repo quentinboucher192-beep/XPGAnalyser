@@ -3748,6 +3748,9 @@
     <ClInclude Include="src\license_admin\KeyBackup.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\Mail.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\ServiceClient.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>

@@ -119,8 +119,8 @@ void testTopBar() {
     // 1.14.0 (lot M5) : + Chercher des fichiers sur ce PC... (Projet).
     // 1.14.2 : + Assistant IA (Affichage) - IHM Studio seulement (core::hasIhm) ; l'essai a les deux editions.
     // 1.20.0 : + Incidents (Affichage) - IHM Studio seulement, comme l'Assistant IA.
-    // 1.26.0 : + Corbeille... (Projet). 1.30.0 : + Licence... (Aide).
-    check(entries == 56, "les quatre menus : " + std::to_string(entries) + " entrees");
+    // 1.26.0 : + Corbeille... (Projet). 1.30.0 : + Licence... (Aide). 1.37.0 : + Mon profil... (Aide).
+    check(entries == 57, "les quatre menus : " + std::to_string(entries) + " entrees");
     check(bar.reaches("hmi.incidents"), "1.20.0 : Affichage > Incidents");
     check(bar.reaches("app.findFiles") && bar.actionForLabel("Chercher des fichiers sur ce PC...") == "app.findFiles",
           "1.14.0 : Projet > Chercher des fichiers sur ce PC...");
