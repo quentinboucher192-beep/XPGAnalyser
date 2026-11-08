@@ -204,8 +204,15 @@ struct AnswerView {
 // l'editeur a l'acceptation. Dans le dossier des reglages (commun aux deux Studios), en clair (rien de secret).
 struct Profile {
     std::string email, name, company;
+    // 1.38.0 : l'adresse a laquelle un mail de l'editeur est PARTI (son serveur l'a accepte) ; vide : aucune.
+    std::string verified;
     [[nodiscard]] bool empty() const noexcept { return email.empty() && name.empty() && company.empty(); }
+    [[nodiscard]] bool emailVerified() const noexcept { return !email.empty() && verified == email; }
 };
+// 1.38.0 : un courriel a-t-il la forme d'une adresse (la coche de Mon profil) ?
+[[nodiscard]] bool plausibleEmail(const std::string& email);
+// 1.38.0 : le mail de l'editeur est parti vers `address` : si c'est le courriel du profil, il est << verifie >>.
+void noteEmailReached(const std::string& address);
 inline constexpr std::size_t kMaxProfileField = 200;
 [[nodiscard]] std::string profilePath();
 [[nodiscard]] Profile loadProfile();   // absent ou illisible : vide

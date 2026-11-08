@@ -39,6 +39,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <thread>
@@ -1918,6 +1919,13 @@ public:
     // 1.36.0 : un texte a lire d'un coup (la licence activee : ce qu'elle ouvre, jusqu'a quand) : un paragraphe de
     // cette largeur meme au-dela de 8 lignes (24 lignes repliees au plus ; au-dela, l'editeur qui defile).
     void setParagraphWidth(float width) { paragraphWidth_ = width; }
+    // 1.38.0 : un bouton de plus, a gauche de la rangee, qui agit SANS fermer (Copier le code) ; apres le clic son
+    // libelle devient `doneLabel` (s'il est donne).
+    void setExtraButton(std::string label, std::function<void()> action, std::string doneLabel = {}) {
+        extraLabel_ = std::move(label);
+        extraAction_ = std::move(action);
+        extraDone_ = std::move(doneLabel);
+    }
     void Update(const menu::FrameContext& f) override;
 protected:
     core::Status buildUi() override;
@@ -1927,6 +1935,8 @@ private:
     double                countdown_{0};
     double                deadline_{-1};        // l'heure (steady_clock, s) de la reponse d'office
     float                 paragraphWidth_{0};   // 1.36.0 : setParagraphWidth
+    std::string           extraLabel_, extraDone_;   // 1.38.0 : setExtraButton
+    std::function<void()> extraAction_;
     bool                  answered_{false};
     ui::Button*           okButton_{nullptr};
     Icon                  icon_;

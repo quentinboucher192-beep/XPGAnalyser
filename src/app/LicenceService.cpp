@@ -2243,6 +2243,7 @@ bool collect() {
         a.code = res.answerCode;
         a.mail = res.answerMail;
         a.mailTo = res.answerMailTo;
+        if (res.answerMail == lgw::kMailSent) licence::noteEmailReached(res.answerMailTo);   // 1.38.0 : Mon profil, verifie
         licence::queueAnswer(std::move(a));
         crypto::wipe(res.answerCode.data(), res.answerCode.size());   // le code : dans la fenetre seulement
         res.answerCode.clear();

@@ -262,7 +262,7 @@ private:
     ui::InputText*        name_{nullptr};
     ui::InputText*        company_{nullptr};
     ui::Button*           save_{nullptr};
-    float                 rowsY_{0};
+    float                 rowsY_{0}, markX_{0};
     core::ConnectionScope links_;
 };
 
@@ -1547,6 +1547,7 @@ ProfilePanel::ProfilePanel(LicenceBody& body) : ui::Widget("licence.profil"), bo
     save_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Enregistrer mon profil", "licence.profil.enregistrer")));
     save_->setStyle(ui::Button::Style::Primary);
     links_ += save_->clicked->connect([this] { doSave(); });
+    links_ += email_->textChanged->connect([this](const std::string&) { invalidate(); });   // 1.38.0 : la coche en direct
     refresh();
 }
 
@@ -1563,6 +1564,7 @@ void ProfilePanel::doSave() {
     p.email = email_->text();
     p.name = name_->text();
     p.company = company_->text();
+    p.verified = licence::loadProfile().verified;   // 1.38.0 : gardee si le courriel ne change pas
     std::string why;
     if (!licence::saveProfile(p, &why)) {
         body_.say("Profil non enregistr\xC3\xA9 : " + why + ".", 3);
@@ -1583,6 +1585,7 @@ void ProfilePanel::onLayout() {
         f->setBounds({fieldX, y, fieldW, 28.f});
         y += 36.f;
     }
+    markX_ = fieldX + fieldW + 12.f;   // 1.38.0 : la coche du courriel
     save_->setBounds({fieldX, y + 4.f, std::max(180.f, save_->sizeHint().preferred.w), 32.f});
 }
 
@@ -1601,6 +1604,24 @@ void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
         if (++n > 3) break;
         r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.text);
         y += 20.f;
+    }
+    // 1.38.0 : la coche du courriel - sa forme, et s'il a deja recu un mail de l'editeur.
+    {
+        const std::string mail = email_->text();
+        const auto saved = licence::loadProfile();
+        const float my = rowsY_ + (28.f - r.lineHeight(kSmall)) * 0.5f, mw = std::max(40.f, b.right() - 16.f - markX_);
+        if (mail.find_first_not_of(" \t") == std::string::npos) {
+            r.drawText({markX_, my}, fit(r, "(facultatif)", kSmall, mw), kSmall, c.textMuted);
+        } else if (!licence::plausibleEmail(mail)) {
+            r.drawText({markX_, my}, fit(r, "\xE2\x9C\x97 pas une adresse (nom@domaine.fr)", kSmall, mw), kSmall, ctx.theme.tone(ui::Tone::Error, c.text));
+        } else {
+            const auto b0 = mail.find_first_not_of(" \t"), b1 = mail.find_last_not_of(" \t");
+            const bool verified = saved.emailVerified() && saved.email == mail.substr(b0, b1 - b0 + 1);
+            r.drawText({markX_, my}, fit(r, verified ? "\xE2\x9C\x93 v\xC3\xA9rifi\xC3\xA9" "e : un mail de l'\xC3\xA9" "diteur y est parti"
+                                                     : "\xE2\x9C\x93 adresse valide",
+                                         kSmall, mw),
+                       kSmall, ctx.theme.tone(ui::Tone::Ok, c.text));
+        }
     }
     const char* labels[3] = {"Courriel", "Nom", "Soci\xC3\xA9t\xC3\xA9"};
     float fy = rowsY_;
@@ -1755,6 +1776,9 @@ void showAnswer(App& app, const Answer& a) {
     auto dlg = std::make_unique<MessageDialog>(v.title, v.text, v.accepted ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning, v.confirm);
     dlg->setCancelLabel(v.accepted ? "Fermer" : "Plus tard");
     dlg->setParagraphWidth(720.f);   // ce qu'elle ouvre, jusqu'a quand : un paragraphe, pas un editeur
+    // 1.38.0 : le code montre se copie (le presse-papiers, sur ce clic seulement).
+    if (!a.code.empty())
+        dlg->setExtraButton("Copier le code", [code = a.code] { ui::setClipboardText(code); }, "Code copi\xC3\xA9 \xE2\x9C\x93");
     const int tab = v.tab;
     app.menus().ShowDialog(std::move(dlg), [&app, tab](const menu::DialogResult& r) {
         if (r.accepted()) showLicenceWindow(app, tab);

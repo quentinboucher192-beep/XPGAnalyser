@@ -693,12 +693,13 @@ Profile loadProfile() {
     p.email = field("courriel");
     p.name = field("nom");
     p.company = field("societe");
+    p.verified = field("courriel_verifie");   // 1.38.0
     if (!p.email.empty() && !licensing::gateway::plausibleEmail(p.email)) p.email.clear();
     return p;
 }
 
 bool saveProfile(const Profile& in, std::string* why) {
-    Profile p{trimmed(in.email), trimmed(in.name), trimmed(in.company)};
+    Profile p{trimmed(in.email), trimmed(in.name), trimmed(in.company), trimmed(in.verified)};
     const auto fail = [why](std::string t) {
         if (why) *why = std::move(t);
         return false;
@@ -715,6 +716,7 @@ bool saveProfile(const Profile& in, std::string* why) {
     v.set("courriel", p.email);
     v.set("nom", p.name);
     v.set("societe", p.company);
+    if (!p.verified.empty() && p.verified == p.email) v.set("courriel_verifie", p.verified);   // 1.38.0
     const auto path = pathOf(profilePath());
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -731,6 +733,16 @@ bool saveProfile(const Profile& in, std::string* why) {
         return fail("le profil n'a pas pu \xC3\xAAtre \xC3\xA9" "crit (" + profilePath() + ")");
     }
     return true;
+}
+
+bool plausibleEmail(const std::string& email) { return licensing::gateway::plausibleEmail(trimmed(email)); }
+
+void noteEmailReached(const std::string& address) {
+    Profile p = loadProfile();
+    const std::string a = trimmed(address);
+    if (a.empty() || p.email != a || p.verified == a) return;
+    p.verified = a;
+    (void)saveProfile(p, nullptr);
 }
 
 // ============================================================ 1.37.0 : l'apercu d'une fonctionnalite ==

@@ -782,6 +782,15 @@ namespace app {
         // La rangee recoit la hauteur en trop (le Spacer s'etire dans les deux
         // sens) : les boutons gardent leur hauteur, en bas du dialogue.
         buttons->setAlignment(Align::End);
+        // 1.38.0 : le bouton de plus (Copier le code), a gauche ; il agit sans fermer.
+        if (!extraLabel_.empty()) {
+            auto extra = std::make_unique<Button>(extraLabel_, "dialog.message.extra");
+            auto& extraRef = static_cast<Button&>(buttons->addChild(std::move(extra)));
+            links_ += extraRef.clicked->connect([this, b = &extraRef] {
+                if (extraAction_) extraAction_();
+                if (!extraDone_.empty()) b->setText(extraDone_);
+            });
+        }
         buttons->addChild(std::make_unique<Spacer>());
 
         // Two buttons when there is a question to answer, one when there is only
