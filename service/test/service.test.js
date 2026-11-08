@@ -78,7 +78,7 @@ describe("l'etat public, avant tout certificat", () => {
         assert.ok(r.type.startsWith("application/json"));
         assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre"]);
         assert.equal(r.json.service, "xpg-licences");
-        assert.equal(r.json.version, "1.35.0");
+        assert.equal(r.json.version, "1.38.0");
         assert.ok(Math.abs(r.json.heure - now()) < 30);
         assert.match(r.json.cle_service, /^[0-9a-f]{64}$/);
         assert.equal(r.json.certifie, false);
@@ -357,10 +357,21 @@ describe("l'activation par code", () => {
 });
 
 describe("renouveler, liberer, retirer", () => {
-    it("renouveler : l'activation renouvelee, le certificat, pas de liste de revocation, pas de poste", async () => {
+    it("renouveler : l'activation renouvelee, le certificat, pas de liste de revocation, pas de poste ; les PC de la licence", async () => {
         const r = await renouveler(pc1);
         assert.equal(r.statut, 200, r.texte);
-        assert.deepEqual(Object.keys(r.json), ["activations", "retirees", "motifs", "certificat", "poste"]);
+        assert.deepEqual(Object.keys(r.json), ["activations", "retirees", "motifs", "certificat", "poste", "postes"]);
+        // 1.38.0 : les PC de la licence renouvelee (pc1 et pc2 l'ont activee ; pc3 a ete refuse)
+        assert.deepEqual(Object.keys(r.json.postes), [L1.id]);
+        const p = r.json.postes[L1.id];
+        assert.deepEqual([p.max, p.type, p.utilises, p.total], [2, "temporary", 2, 2]);
+        assert.deepEqual(
+            p.liste.map((x) => [x.cle, x.ce_pc]),
+            [
+                [pc1.hex, true],
+                [pc2.hex, false],
+            ],
+        );
         assert.equal(r.json.activations.length, 1);
         assert.deepEqual(r.json.retirees, []);
         assert.deepEqual(r.json.motifs, {});
@@ -386,6 +397,7 @@ describe("renouveler, liberer, retirer", () => {
         assert.equal(r.statut, 200);
         assert.deepEqual(r.json.activations, []);
         assert.deepEqual(r.json.retirees, []);
+        assert.deepEqual(r.json.postes, {});
     });
 
     it("liberer : le poste est rendu (un transfert) ; ce PC n'est plus renouvele ; un autre prend la place", async () => {
@@ -491,6 +503,8 @@ describe("la station : une cle de PC recopiee sur une autre installation de Wind
         assert.deepEqual(r.json.activations, []);
         assert.deepEqual(r.json.retirees, [LS.id]);
         assert.deepEqual(r.json.motifs, { [LS.id]: "autre_poste" });
+        assert.deepEqual(r.json.postes, {}, "la copie ne voit pas les PC de la licence");
+        assert.ok(!r.texte.includes('"nom"'), "ni leurs noms");
         const apres = (await licenceChezLeService(LS.id)).activations[0];
         assert.deepEqual(apres, avant, "rien n'a change chez le service");
         const o = await renouveler(a);
@@ -691,6 +705,13 @@ describe("les revocations", () => {
         r = await renouveler(b);
         assert.equal(r.json.activations.length, 1);
         assert.ok(!("revocations" in r.json));
+        assert.deepEqual(r.json.postes, { [L5.id]: { max: 3, type: "temporary", utilises: 1, total: 1, liste: r.json.postes[L5.id].liste } });
+        assert.deepEqual(
+            r.json.postes[L5.id].liste.map((x) => x.cle),
+            [b.hex],
+            "le PC revoque n'est pas montre (la liste de revocation ne sort pas)",
+        );
+        assert.ok(!r.texte.includes(a.hex));
         for (const p of [a, b, pc1, sans]) {
             const x = await renouveler(p);
             assert.ok(!x.texte.includes(raison) && !x.texte.includes(autreClient.hex) && !x.texte.includes("XPG-2026-AUTRE"), "rien de la liste ne sort");
@@ -796,6 +817,173 @@ describe("les licences flottantes", () => {
         assert.equal(l.json.place, "rendue");
         assert.equal(l.json.transferts, undefined, "pas de transfert compte pour une flottante");
         assert.equal((await jeton(p5, F.id)).statut, 200);
+    });
+});
+
+// 1.38.0 : << Mes appareils >> dans le Studio - le renouvellement rend les PC de chaque licence renouvelee (postes).
+describe("renouveler : les PC de la licence (postes)", () => {
+    const P = { id: "XPG-2026-P0001", type: "temporary", max: 2 };
+    const CP = nouveauCode();
+    codes.push(CP);
+    const Q = { id: "XPG-2026-P0002", type: "perpetual", max: 5 };
+    const CQ = nouveauCode();
+    codes.push(CQ);
+    const [A, B, C, D, Z] = [pc(), pc(), pc(), pc(), pc()];
+    const CLES_PC = ["nom", "cle", "activee", "vue", "jusqu_a", "etat", "ce_pc"];
+    const voir = (r, id) => {
+        assert.equal(r.statut, 200, r.texte);
+        return r.json.postes[id];
+    };
+
+    it("apres l'activation : ce PC, son nom, le maximum, une place prise", async () => {
+        assert.equal((await deposerLicence({ ...P, emission: now() - 60, expire: now() + 100 * JOUR }, { code_hash: CP.hash })).statut, 200);
+        const act = await activer(A, CP.code, { nom: "Poste de Alice" });
+        assert.equal(act.statut, 200, act.texte);
+        const r = await renouveler(A);
+        assert.deepEqual(Object.keys(r.json.postes), [P.id]);
+        const p = voir(r, P.id);
+        assert.deepEqual(Object.keys(p), ["max", "type", "utilises", "total", "liste"]);
+        assert.deepEqual([p.max, p.type, p.utilises, p.total, p.liste.length], [2, "temporary", 1, 1, 1]);
+        const moi = p.liste[0];
+        assert.deepEqual(Object.keys(moi), CLES_PC, "ni la station, ni le numero, ni de jeton pour une licence fixe");
+        assert.deepEqual([moi.nom, moi.cle, moi.etat, moi.ce_pc], ["Poste de Alice", A.hex, "active", true]);
+        for (const k of ["activee", "vue", "jusqu_a"]) assert.match(moi[k], DATE_ISO);
+        // le bail montre : celui que ce renouvellement vient de signer
+        assert.equal(moi.jusqu_a, JSON.parse(lireBloc(r.json.activations[0].activation).json).jusqu_a);
+        assert.ok(Math.abs(Date.parse(moi.vue) / 1000 - now()) < 30);
+    });
+
+    it("un deuxieme PC : les deux montres, 2 places prises ; chacun ne voit ce_pc que sur lui-meme (et en tete)", async () => {
+        assert.equal((await activer(B, CP.code, { nom: "Poste de Bob" })).statut, 200);
+        const ra = await renouveler(A);
+        const rb = await renouveler(B);
+        const [vueA, vueB] = [voir(ra, P.id), voir(rb, P.id)];
+        // la station d'un autre PC ne sort jamais (la sienne est dans sa propre activation signee)
+        assert.ok(!ra.texte.includes(B.station) && !rb.texte.includes(A.station), "la station d'un autre PC ne sort pas");
+        for (const [v, moi, autre] of [
+            [vueA, A, B],
+            [vueB, B, A],
+        ]) {
+            assert.deepEqual([v.max, v.utilises, v.total], [2, 2, 2]);
+            assert.deepEqual(
+                v.liste.map((x) => [x.cle, x.ce_pc]),
+                [
+                    [moi.hex, true],
+                    [autre.hex, false],
+                ],
+            );
+        }
+        assert.deepEqual(vueB.liste.map((x) => x.nom).sort(), ["Poste de Alice", "Poste de Bob"]);
+        // utilises = max : le service refuse bien un troisieme PC
+        erreur(await activer(C, CP.code), 409, "complet");
+    });
+
+    it("une licence ou ce PC n'est pas actif n'est jamais montree", async () => {
+        assert.equal((await deposerLicence({ ...Q, emission: now() - 60 }, { code_hash: CQ.hash })).statut, 200);
+        assert.equal((await activer(Z, CQ.code, { nom: "Poste de Zoe" })).statut, 200);
+        const rz = await renouveler(Z);
+        assert.deepEqual(Object.keys(rz.json.postes), [Q.id]);
+        assert.deepEqual(
+            rz.json.postes[Q.id].liste.map((x) => x.cle),
+            [Z.hex],
+        );
+        const ra = await renouveler(A);
+        assert.deepEqual(Object.keys(ra.json.postes), [P.id]);
+        assert.ok(!ra.texte.includes(Z.hex) && !ra.texte.includes(Q.id) && !ra.texte.includes("Poste de Zoe"), "rien de Q chez A");
+        assert.ok(!rz.texte.includes(A.hex) && !rz.texte.includes(P.id), "rien de P chez Z");
+    });
+
+    it("liberer : un PC qui rend sa place disparait ; un PC libere qui la garde reste montre (liberee) et compte", async () => {
+        let l = await liberer(B, P.id);
+        assert.equal(l.json.place, "rendue", l.texte);
+        let v = voir(await renouveler(A), P.id);
+        assert.deepEqual([v.utilises, v.total], [1, 1]);
+        assert.deepEqual(
+            v.liste.map((x) => x.cle),
+            [A.hex],
+        );
+        // B lui-meme : plus renouvele, il ne voit plus rien de la licence
+        const rb = await renouveler(B);
+        assert.deepEqual(rb.json.motifs, { [P.id]: "liberee" });
+        assert.deepEqual(rb.json.postes, {});
+        // le deuxieme changement de PC permis (2 en 30 jours), puis le troisieme : C garde sa place jusqu'a la fin de son bail
+        assert.equal((await activer(C, CP.code, { nom: "Poste de Carole" })).statut, 200);
+        assert.equal((await liberer(C, P.id)).json.place, "rendue");
+        assert.equal((await activer(D, CP.code, { nom: "Poste de David" })).statut, 200);
+        l = await liberer(D, P.id);
+        assert.equal(l.json.place, "gardee", l.texte);
+        v = voir(await renouveler(A), P.id);
+        assert.deepEqual([v.utilises, v.total], [2, 2]);
+        const d = v.liste.find((x) => x.cle === D.hex);
+        assert.deepEqual([d.nom, d.etat, d.ce_pc, d.jusqu_a], ["Poste de David", "liberee", false, l.json.jusqu_a]);
+        assert.ok(!v.liste.some((x) => x.cle === C.hex || x.cle === B.hex));
+        // la place gardee compte vraiment : 2 sur 2, un autre PC est refuse
+        erreur(await activer(pc(), CP.code), 409, "complet");
+        // retire par l'editeur : la place revient, D n'est plus montre
+        assert.equal((await retirer(P.id, D)).statut, 200);
+        v = voir(await renouveler(A), P.id);
+        assert.deepEqual(
+            [v.utilises, v.liste.map((x) => x.cle)],
+            [1, [A.hex]],
+        );
+    });
+
+    it("flottante : tous ses PC actifs montres, `utilises` = les jetons en cours, `jeton` par PC", async () => {
+        const F = { id: "XPG-2026-P0003", type: "floating", max: 2 };
+        const CF = nouveauCode();
+        codes.push(CF);
+        const [F1, F2, F3] = [pc(), pc(), pc()];
+        assert.equal((await deposerLicence({ ...F, emission: now() - 60 }, { code_hash: CF.hash })).statut, 200);
+        for (const [i, p] of [F1, F2, F3].entries()) assert.equal((await activer(p, CF.code, { nom: "Flottant " + (i + 1) })).statut, 200);
+        let v = voir(await renouveler(F3), F.id);
+        assert.deepEqual([v.max, v.type, v.utilises, v.total], [2, "floating", 0, 3], "3 PC actives, aucun jeton");
+        assert.deepEqual(Object.keys(v.liste[0]), [...CLES_PC, "jeton"]);
+        assert.deepEqual([v.liste[0].cle, v.liste[0].ce_pc], [F3.hex, true]);
+        assert.ok(v.liste.every((x) => x.jeton === false && x.etat === "active"));
+        assert.equal((await jeton(F1, F.id)).statut, 200);
+        assert.equal((await jeton(F2, F.id)).statut, 200);
+        v = voir(await renouveler(F3), F.id);
+        assert.equal(v.utilises, 2, "les 2 jetons sont pris");
+        assert.deepEqual(Object.fromEntries(v.liste.map((x) => [x.nom, x.jeton])), { "Flottant 1": true, "Flottant 2": true, "Flottant 3": false });
+        erreur(await jeton(F3, F.id), 409, "complet");
+        // un jeton rendu : 1 ; un PC libere : il disparait (une flottante n'a pas de place a garder), son jeton aussi
+        assert.equal((await rendre(F1, F.id)).statut, 200);
+        assert.equal(voir(await renouveler(F3), F.id).utilises, 1);
+        assert.equal((await liberer(F2, F.id)).json.place, "rendue");
+        v = voir(await renouveler(F1), F.id);
+        assert.deepEqual([v.utilises, v.total], [0, 2]);
+        assert.deepEqual(v.liste.map((x) => x.cle).sort(), [F1.hex, F3.hex].sort());
+        assert.equal(v.liste[0].cle, F1.hex);
+    });
+
+    it("la borne : 500 PC au plus dans la liste (ce PC toujours, en tete) ; total et utilises restent exacts", async () => {
+        const G = { id: "XPG-2026-P0004", type: "floating", max: 26 }; // max(50, 20 x 26) = 520 lignes permises
+        const CG = nouveauCode();
+        codes.push(CG);
+        assert.equal((await deposerLicence({ ...G, emission: now() - 60 }, { code_hash: CG.hash })).statut, 200);
+        // le premier : le plus ancien (une seconde avant les autres), le seul que la borne coupe chez un autre PC
+        const premier = pc();
+        assert.equal((await activer(premier, CG.code, { nom: "Le premier" })).statut, 200);
+        await new Promise((ok) => setTimeout(ok, 1100));
+        const autres = Array.from({ length: 500 }, () => pc());
+        for (let i = 0; i < autres.length; i += 25) {
+            const lot = await Promise.all(autres.slice(i, i + 25).map((p) => activer(p, CG.code)));
+            for (const r of lot) assert.equal(r.statut, 200, r.texte);
+        }
+        assert.equal((await jeton(autres[7], G.id)).statut, 200);
+        // le premier : 501 PC, la liste en montre 500, lui en tete (il serait coupe sinon : le plus ancien)
+        const r1 = await renouveler(premier);
+        let v = voir(r1, G.id);
+        assert.deepEqual([v.max, v.utilises, v.total, v.liste.length], [26, 1, 501, 500]);
+        assert.deepEqual([v.liste[0].cle, v.liste[0].nom, v.liste[0].ce_pc], [premier.hex, "Le premier", true]);
+        assert.equal(v.liste.filter((x) => x.ce_pc).length, 1);
+        assert.equal(new Set(v.liste.map((x) => x.cle)).size, 500);
+        assert.ok(r1.texte.length < 200 * 1024, "la reponse reste bornee : " + r1.texte.length);
+        // un autre PC : lui en tete, et le plus ancien (le premier) est celui que la borne coupe
+        v = voir(await renouveler(autres[499]), G.id);
+        assert.deepEqual([v.utilises, v.total, v.liste.length, v.liste[0].cle], [1, 501, 500, autres[499].hex]);
+        assert.ok(!v.liste.some((x) => x.cle === premier.hex), "le plus ancien est coupe");
+        assert.equal(v.liste.find((x) => x.cle === autres[7].hex).jeton, true);
     });
 });
 

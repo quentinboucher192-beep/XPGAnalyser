@@ -239,6 +239,9 @@ describe("le temps qui passe", () => {
         await relancer(41 * JOUR);
         const b = await activer(B, CL.code);
         assert.equal(b.statut, 200, b.texte);
+        // 1.38.0 : A (son bail echu) ne tient plus de place - B ne voit que lui, une place prise sur une
+        const vb = await renouveler(B);
+        assert.deepEqual([vb.json.postes[L.id].utilises, vb.json.postes[L.id].liste.map((x) => x.cle)], [1, [B.hex]]);
         const r = await renouveler(A);
         assert.deepEqual(r.json.activations, []);
         assert.deepEqual(r.json.retirees, [L.id]);

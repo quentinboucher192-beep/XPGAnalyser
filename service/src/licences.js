@@ -2,6 +2,11 @@
 //  service/src/licences.js - 1.35.0 : le Durable Object << principal >> du
 //  service des licences (SQLite) : toutes les routes du contrat
 //  (docs/SERVICE-LICENCES.md)
+//  1.38.0 : LES PC DE LA LICENCE (<< Mes appareils >> dans le Studio) - le
+//  renouvellement rend aussi `postes` : pour chaque licence renouvelee pour CE
+//  PC (et seulement elles), ses PC qui tiennent une place (nom, cle, dates,
+//  etat, ce_pc) et le nombre de places prises (les jetons en cours pour une
+//  flottante). Jamais la station d'un autre PC, jamais un PC revoque.
 // -----------------------------------------------------------------------------
 //  LES TABLES
 //    config        la cle du service (creee ici au premier appel ; la partie
@@ -78,7 +83,7 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.35.0";
+const VERSION = "1.38.0";
 const SCHEMA = 2;
 const JOUR = 86400;
 const HEURE = 3600;
@@ -98,6 +103,9 @@ const MAX_POSTES = 100000;
 const MAX_FICHIER = 1.5 * 1024 * 1024;
 const MAX_FICHIERS = 20000;
 const MAX_ARCHIVE = 512 * 1024 * 1024;
+// Les PC d'une licence rendus au renouvellement (postes.liste), au plus : la reponse reste bornee (~100 Kio par
+// licence), meme pour une grande flottante. Le nombre exact est dans `total` (et `utilises`).
+const MAX_LISTE_POSTES = 500;
 
 // Les transferts : un PC qui se libere lui-meme rend sa place tout de suite au plus max(2, postes) fois par
 // licence sur 30 jours glissants ; au-dela, sa place reste prise jusqu'a la fin de son bail (son activation,
@@ -662,25 +670,64 @@ export class Licences extends DurableObject {
         return trouvee ? this.licence(trouvee) : null;
     }
 
-    // Les places prises d'une licence fixe : les activations actives dans leur bail, et les PC liberes au-dela des
-    // transferts permis, jusqu'a la fin de leur bail (place_jusqu) ; jamais un PC revoque. `sauf` {cle, station} : le
-    // PC qui demande reprend sa propre place (la meme cle ET la meme installation de Windows).
+    // Les PC qui tiennent une place d'une licence : les activations actives dans leur bail, et les PC liberes au-dela
+    // des transferts permis, jusqu'a la fin de leur bail (place_jusqu) ; jamais un PC revoque. Une flottante n'a pas de
+    // place a garder : ses PC actifs seulement. [{r, fin}] : `fin` = la fin de la place (le bail ; place_jusqu pour un
+    // PC libere). places() les compte, postesDe() les montre : le meme ensemble, jamais deux regles.
+    occupants(lic, now) {
+        const out = [];
+        for (const r of this.lignes(
+            "SELECT poste, nom, station, activee, vue, jusqu_a, etat, place_jusqu FROM activations WHERE licence = ? AND (etat = 'active' OR (etat = 'liberee' AND place_jusqu > ?))",
+            lic.id,
+            now,
+        )) {
+            if (r.etat !== "active" && lic.type === "floating") continue;
+            const fin = r.etat === "active" ? r.jusqu_a : r.place_jusqu;
+            if (fin <= now || this.revoquee(lic, r.poste)) continue;
+            out.push({ r, fin });
+        }
+        return out;
+    }
+
+    // Les places prises d'une licence fixe : ses occupants. `sauf` {cle, station} : le PC qui demande reprend sa
+    // propre place (la meme cle ET la meme installation de Windows).
     // {n, revient} : `revient` = la premiere fin d'une place gardee par un PC libere (0 : aucune).
     places(lic, now, sauf) {
         let n = 0;
         let revient = 0;
-        for (const r of this.lignes(
-            "SELECT poste, station, jusqu_a, etat, place_jusqu FROM activations WHERE licence = ? AND (etat = 'active' OR (etat = 'liberee' AND place_jusqu > ?))",
-            lic.id,
-            now,
-        )) {
-            const fin = r.etat === "active" ? r.jusqu_a : r.place_jusqu;
-            if (fin <= now || this.revoquee(lic, r.poste)) continue;
+        for (const { r, fin } of this.occupants(lic, now)) {
             if (sauf && r.poste === sauf.cle && (!r.station || !sauf.station || r.station === sauf.station)) continue;
             n++;
             if (r.etat === "liberee" && (!revient || fin < revient)) revient = fin;
         }
         return { n, revient };
+    }
+
+    // 1.38.0 : les PC d'une licence, vus par l'un d'eux (`cle`) au renouvellement - << Mes appareils >> dans le Studio.
+    // La liste : ses occupants (ceux que places() compte), CE PC d'abord (il y est toujours : il vient d'etre renouvele,
+    // et la borne ne le coupe jamais), puis les autres, les plus recemment actives d'abord ; MAX_LISTE_POSTES au plus
+    // (`total` : combien sans la borne). D'un autre PC, rien que son nom, sa cle et ses dates : ni sa station, ni son
+    // numero. `utilises` : ce qui limite la licence, tel que le service l'applique -
+    //   fixe      ses places prises (places().n : un PC libere qui garde sa place compte, jusqu'a la fin de son bail) ;
+    //   flottante ses jetons en cours (prendreJeton compte les jetons, pas les PC actives : une flottante en active
+    //             autant qu'elle veut) ; `jeton` dit alors, pour chaque PC, s'il en tient un.
+    // Rien n'est ecrit ici (des lectures : le renouvellement garde ses 3 lignes).
+    postesDe(lic, cle, now) {
+        const occ = this.occupants(lic, now);
+        occ.sort((a, b) => (b.r.poste === cle) - (a.r.poste === cle) || b.r.activee - a.r.activee || (a.r.poste < b.r.poste ? -1 : a.r.poste > b.r.poste ? 1 : 0));
+        let utilises = occ.length;
+        let tenus = null;
+        if (lic.type === "floating") {
+            const jetons = this.lignes("SELECT poste FROM jetons WHERE licence = ? AND jusqu_a > ?", lic.id, now);
+            utilises = jetons.length;
+            tenus = new Set(jetons.map((j) => j.poste));
+        }
+        const liste = occ.slice(0, MAX_LISTE_POSTES).map(({ r, fin }) => {
+            const p = { nom: r.nom, cle: r.poste, activee: iso(r.activee), vue: iso(r.vue), jusqu_a: iso(fin), etat: r.etat, ce_pc: r.poste === cle };
+            if (tenus) p.jeton = tenus.has(r.poste);
+            return p;
+        });
+        return { max: lic.postesMax, type: lic.type, utilises, total: occ.length, liste };
     }
 
     // Signer l'activation de ce PC (un numero neuf, le bail de la licence a partir de maintenant). La fin de la licence
@@ -828,6 +875,9 @@ export class Licences extends DurableObject {
     // sont dans `retirees`, avec leur motif (`motifs`) : liberee, retiree, revoquee, desactivee, expiree, autre_poste
     // (la cle de ce PC sert ailleurs : jamais renouvelee ici), inconnue. La liste de revocation de l'editeur ne sort
     // jamais : une revocation se lit ici (revoquee), ou dans l'etat << poste >> scelle pour un PC lie par l'editeur.
+    // 1.38.0 : `postes` {"<id>": {max, type, utilises, total, liste}}, pour chaque licence renouvelee ici, et elles
+    // seules (jamais une licence ou ce PC n'est pas actif, ni une retiree) : ses PC et ses places prises (postesDe).
+    // Un Studio d'avant ne lit pas ce champ.
     async renouveler(ctx) {
         const corps = this.corpsJson(ctx);
         const station = stationDe(corps);
@@ -836,6 +886,7 @@ export class Licences extends DurableObject {
         const activations = [];
         const retirees = [];
         const motifs = {};
+        const postes = {};
         const retirer = (id, motif) => {
             retirees.push(id);
             motifs[id] = motif;
@@ -877,9 +928,11 @@ export class Licences extends DurableObject {
             }
             const a = await this.signerActivation(lic, cle, station, ctx.now);
             activations.push({ licence: lic.bloc, activation: a.bloc });
+            // apres signerActivation : le bail neuf de ce PC est celui que la liste montre
+            postes[lic.id] = this.postesDe(lic, cle, ctx.now);
         }
         const etatPoste = this.ligne("SELECT bloc FROM postes WHERE poste = ?", poste);
-        return reponseJson(200, { activations, retirees, motifs, certificat: cert.bloc, poste: etatPoste ? etatPoste.bloc : null });
+        return reponseJson(200, { activations, retirees, motifs, certificat: cert.bloc, poste: etatPoste ? etatPoste.bloc : null, postes });
     }
 
     // Liberer ce PC. Sa place revient tout de suite dans les transferts permis (max(2, postes) en 30 jours glissants,
