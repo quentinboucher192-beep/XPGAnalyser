@@ -13,6 +13,9 @@
 //  par revocation qu'elle contient, les anciennes comprises. La page montre une
 //  revocation une fois (sa premiere ligne) et dit combien de repetitions sont
 //  masquees.
+//
+//  1.44.0 : un client SUPPRIME ou RESTAURE (Clients) a aussi sa ligne (genre
+//  << client >>) : << Client supprime : <nom> (2 licences) >>, et qui l'a fait.
 // =============================================================================
 #include "Page.hpp"
 
@@ -134,15 +137,16 @@ std::string padKey(long long v) {
     return b;
 }
 
-// Le genre d'une ligne, a l'ecran : Demande, Licence, Extension, Revocation.
+// Le genre d'une ligne, a l'ecran : Demande, Licence, Extension, Revocation ; 1.44.0 : Client supprime, Client restaure.
 std::string typeOf(const ActivationRecord& a) {
     if (a.kind == "demande") return "Demande";
     if (a.kind == "licence") return a.extension ? "Extension" : "Licence";
     if (a.kind == "revocation") return "R\xC3\xA9vocation";
+    if (a.kind == "client") return a.action == "restaure" ? "Client restaur\xC3\xA9" : "Client supprim\xC3\xA9";
     return a.kind;
 }
 
-// Le filtre : "", "demande", "licence", "extension", "revocation".
+// Le filtre : "", "demande", "licence", "extension", "revocation", "client" (1.44.0).
 std::string filterKey(const ActivationRecord& a) {
     if (a.kind == "licence") return a.extension ? "extension" : "licence";
     return a.kind;
@@ -170,6 +174,16 @@ std::string detailOf(const ActivationRecord& a) {
         parts.push_back(a.expiresAt ? "fin le " + dateFr(a.expiresAt) : std::string("sans fin"));
         if (a.activatedAt) parts.push_back("PC activ\xC3\xA9 le " + dateFr(a.activatedAt));
         if (!a.software.empty()) parts.push_back(a.software);
+    } else if (a.kind == "client") {   // 1.44.0
+        std::string head = (a.action == "restaure" ? "Client restaur\xC3\xA9 : " : "Client supprim\xC3\xA9 : ") + a.customer;
+        if (!a.licences.empty()) head += " (" + count(a.licences.size(), "licence", "licences") + ")";
+        parts.push_back(head);
+        if (!a.licences.empty()) {
+            std::string ids;
+            for (const auto& id : a.licences) ids += (ids.empty() ? "" : ", ") + id;
+            parts.push_back(ids);
+        }
+        if (!a.by.empty()) parts.push_back("par " + a.by);
     } else if (a.kind == "revocation") {
         if (!a.deviceKey.empty()) parts.push_back("un PC" + (a.fingerprint.empty() ? std::string() : " (" + a.fingerprint + ")"));
         if (!a.reason.empty()) parts.push_back("raison : " + a.reason);
@@ -217,7 +231,7 @@ class HistoryPage final : public Page {
 public:
     explicit HistoryPage(ShellHost host) : Page("page.historique", std::move(host)) {
         type_ = add(*this, std::make_unique<ui::DropDown>("historique.type"));
-        type_->setItems({{"Tout", ""}, {"Demandes", "demande"}, {"Licences", "licence"}, {"Extensions", "extension"}, {"R\xC3\xA9vocations", "revocation"}});
+        type_->setItems({{"Tout", ""}, {"Demandes", "demande"}, {"Licences", "licence"}, {"Extensions", "extension"}, {"R\xC3\xA9vocations", "revocation"}, {"Clients", "client"}});
         type_->setSelectedIndex(0);
         search_ = add(*this, std::make_unique<ui::InputText>("historique.recherche"));
         search_->setPlaceholder("Chercher une licence, un client, un PC\xE2\x80\xA6");
@@ -302,7 +316,7 @@ protected:
 private:
     static constexpr const char* kLead =
         "Tout ce que ce poste a not\xC3\xA9 dans le registre des activations, le plus r\xC3\xA9" "cent d'abord : demandes re\xC3\xA7ues, licences sign\xC3\xA9" "es "
-        "(une ligne par PC li\xC3\xA9), extensions, r\xC3\xA9vocations. Rien n'en est jamais effac\xC3\xA9.";
+        "(une ligne par PC li\xC3\xA9), extensions, r\xC3\xA9vocations, clients supprim\xC3\xA9s ou restaur\xC3\xA9s. Rien n'en est jamais effac\xC3\xA9.";
 
     // La ligne telle que la page la montre (le client et le nom du PC completes).
     [[nodiscard]] ActivationRecord completed(const ActivationRecord& a) const {
@@ -340,7 +354,7 @@ private:
             ui::CellStyle s;
             if (c == 1 && r < kinds.size()) {
                 s.bold = true;
-                s.fgTone = kinds[r] == "demande" ? ui::Tone::Info : kinds[r] == "revocation" ? ui::Tone::Error : kinds[r] == "extension" ? ui::Tone::Accent : ui::Tone::Ok;
+                s.fgTone = kinds[r] == "demande" ? ui::Tone::Info : kinds[r] == "revocation" || kinds[r] == "client" ? ui::Tone::Error : kinds[r] == "extension" ? ui::Tone::Accent : ui::Tone::Ok;
             }
             if (c == 2) s.monospace = true;
             return s;

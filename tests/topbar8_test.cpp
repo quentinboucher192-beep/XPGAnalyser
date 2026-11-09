@@ -103,6 +103,12 @@ void testBellTasks() {
     c.title = "Export termin\xC3\xA9 : alarmes.csv";
     bar.setNotices({a, b, c});
     check(bar.unreadNotices() == 1, "un avis nouveau : 1 non lue");
+    {   // 1.44.0 : le projet ferme puis rouvert (une barre neuve) : ce qui etait lu le reste
+        app::TopBar again("barre2");
+        again.setBounds(gfx::Rect{0.f, 0.f, 1600.f, 44.f});
+        again.setNotices({a, b, c});
+        check(again.unreadNotices() == 1, "1.44.0 : une barre neuve (un projet rouvert) : les avis lus restent lus");
+    }
     ui::PopupMenu popup("barre.menu");
     bar.setPopup(&popup);
     bar.openMenu(app::TopBar::Menu::Notices);

@@ -11963,9 +11963,14 @@ void lot19_historique_onglets() {
         paintAt(2100);
         check(tabs.fit() == ui::TabControl::Fit::ShortBadges && tabs.listButtonRect().w > 0.f && !tabs.compacted(0),
               "un peu serr\xC3\xA9 : les pastilles raccourcies, le bouton de la liste appara\xC3\xAEt");
-        paintAt(1100);
-        check(tabs.fit() == ui::TabControl::Fit::Compact && tabs.compacted(0) && tabs.compacted(9) && !tabs.compacted(7),
-              "serr\xC3\xA9 : les onglets inactifs r\xC3\xA9" "duits \xC3\xA0 leur ic\xC3\xB4ne, l'onglet ouvert garde son nom");
+        paintAt(1500);   // 1.44.0 : plus large qu'avant (les titres restent lisibles : ils prennent de la place)
+        // 1.44.0 : jamais l'icone seule - les titres des onglets inactifs raccourcis (...), l'onglet ouvert en entier
+        bool someShortened = false;
+        for (std::size_t i = 0; i < tabs.tabCount(); ++i) someShortened = someShortened || tabs.compacted(i);
+        check(tabs.fit() == ui::TabControl::Fit::Compact && someShortened && !tabs.compacted(7),
+              "serr\xC3\xA9 : les titres des onglets inactifs raccourcis, l'onglet ouvert garde son nom");
+        check(rec.wrote("\xE2\x80\xA6") && rec.wrote("R\xC3\xA9s") && rec.wrote("Scan") && rec.wrote("\xC3\x89" "qu") && rec.wrote("\xC3\x89" "tat"),
+              "chaque onglet garde le d\xC3\xA9" "but de son titre (pas l'ic\xC3\xB4ne seule)");
         bool allVisible = true;
         for (std::size_t i = 0; i < tabs.tabCount(); ++i) {
             gfx::Rect r{};
@@ -11973,6 +11978,28 @@ void lot19_historique_onglets() {
         }
         check(allVisible, "r\xC3\xA9" "duits, les dix tiennent tous avant le bouton de la liste");
         check(rec.wrote("104+13") && rec.wrote("Valeurs simul\xC3\xA9" "es") && rec.wrote("6 anim\xC3\xA9" "es"), "dessin : 104+13 (court), l'onglet ouvert en entier");
+        {
+            // 1.44.0 : la fenetre Licence (11 onglets sans pastille, 1300 px) : tous lisibles, sans fleches
+            ui::TabControl lic("t19lic");
+            const char* lt[] = {"Activation", "Ma licence", "Mes appareils", "Fonctionnalit\xC3\xA9s", "\xC3\x89" "ditions", "Historique",
+                                "Param\xC3\xA8tres", "Demander ma licence", "Mon profil", "Options", "Mes achats"};
+            for (const char* s : lt) {
+                ui::TabControl::Tab tb;
+                tb.title = s;
+                tb.icon = ui::Icon::Document;
+                (void)lic.addTab(std::move(tb), std::make_unique<ui::Widget>());
+            }
+            lic.setCurrentIndex(7);
+            lic.setBounds({0, 0, 1300, 300});
+            lic.layout();
+            bool inside = true;
+            for (std::size_t i = 0; i < lic.tabCount(); ++i) {
+                gfx::Rect r{};
+                inside = inside && lic.headerRect(i, r) && r.x >= 0.f && r.w >= 16.f + 2.f * 8.f + 40.f;
+            }
+            check(lic.fit() != ui::TabControl::Fit::Scroll && inside && !lic.compacted(7),
+                  "la fen\xC3\xAAtre Licence : ses 11 onglets tiennent, chacun avec le d\xC3\xA9" "but de son titre");
+        }
         paintAt(700);
         check(tabs.fit() == ui::TabControl::Fit::Scroll && tabs.arrowRect(false).w > 0.f && tabs.arrowRect(true).w > 0.f,
               "tr\xC3\xA8s \xC3\xA9troit : les fl\xC3\xA8" "ches pour d\xC3\xA9" "filer");

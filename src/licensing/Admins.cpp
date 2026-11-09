@@ -98,6 +98,7 @@ const std::vector<ActionType> kActions = {
     {"demande_refuser", "Refuser une demande", "clients", Level::Info, false, false},
     {"code_revoir", "Revoir un code d'activation", "clients", Level::Medium, false, false},
     {"client_supprimer", "Supprimer un client", "clients", Level::Medium, false, false},
+    {"client_restaurer", "Restaurer un client", "clients", Level::Info, false, false},   // 1.44.0
     {"clients_exporter", "Exporter les clients (CSV)", "clients", Level::Medium, false, false},
     {"courriel", "\xC3\x89" "crire \xC3\xA0 un client", "clients", Level::Info, false, false},
     {"admin_ajouter", "Ajouter un admin", "admins", Level::Critical, true, false},

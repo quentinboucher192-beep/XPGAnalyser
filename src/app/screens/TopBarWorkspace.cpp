@@ -17,6 +17,7 @@
 #include "../SessionService.hpp"   // 1.43.0
 #include "Screens.hpp"
 #include "../Licence.hpp"   // 1.30.0
+#include "../Updates.hpp"   // 1.44.0 : la pastille de la mise a jour
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 
 #include "../ApiListKit.hpp"
@@ -119,6 +120,15 @@ void MainAnalysisScreen::refreshTopBarLot8() {
         auto& sess = app_.session();
         const std::string t = sess.chipText();
         topBar_->setSession({t, t, t.empty() ? std::string{} : sess.chipTip(), sess.knocks().empty() ? 4 : 2});
+    }
+    // 1.44.0 : la mise a jour disponible (apres << Plus tard >>) - << 1.44.1 disponible >> ; un clic : sa fenetre.
+    {
+        const std::string t = updates::chipText();
+        const auto o = t.empty() ? std::nullopt : updates::available();
+        topBar_->setUpdate({t, o ? o->offer.version : std::string{},
+                            t.empty() ? std::string{} : "La mise \xC3\xA0 jour " + (o ? o->offer.version : std::string{}) +
+                                                            " est disponible : un clic ouvre sa fen\xC3\xAAtre (T\xC3\xA9l\xC3\xA9" "charger et installer, Plus tard).",
+                            4});
     }
     if (!tick) return;
     topBarNoticesAt_ = now;

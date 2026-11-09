@@ -569,6 +569,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\DispositionDialog.cpp" />
     <ClCompile Include="src\app\DispositionPreview.cpp" />
     <ClCompile Include="src\app\EditionMigration.cpp" />
+    <ClCompile Include="src\app\FileDownload.cpp" />
     <ClCompile Include="src\app\FileView.cpp" />
     <ClCompile Include="src\app\FileViewer.cpp" />
     <ClCompile Include="src\app\FileViewerWindow.cpp" />
@@ -767,6 +768,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\SessionMarks.cpp" />
     <ClCompile Include="src\app\SessionService.cpp" />
     <ClCompile Include="src\app\SvgRenderer.cpp" />
+    <ClCompile Include="src\app\Updates.cpp" />
+    <ClCompile Include="src\app\UpdateWindows.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
     <ClCompile Include="src\app\ai\AiKnowledge.cpp" />
     <ClCompile Include="src\app\ai\AiLearning.cpp" />
@@ -1183,6 +1186,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\DispositionDialog.hpp" />
     <ClInclude Include="src\app\DispositionPreview.hpp" />
     <ClInclude Include="src\app\EditionMigration.hpp" />
+    <ClInclude Include="src\app\FileDownload.hpp" />
     <ClInclude Include="src\app\FileView.hpp" />
     <ClInclude Include="src\app\FileViewer.hpp" />
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
@@ -1370,6 +1374,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\SessionMarks.hpp" />
     <ClInclude Include="src\app\SessionService.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
+    <ClInclude Include="src\app\Updates.hpp" />
     <ClInclude Include="src\app\ZoomMemory.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />
     <ClInclude Include="src\app\ai\AiKnowledge.hpp" />

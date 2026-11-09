@@ -2,6 +2,7 @@
 //  app/Licence.cpp - 1.30.0 : les licences dans l'application (voir Licence.hpp)
 // =============================================================================
 #include "Licence.hpp"
+#include "Updates.hpp"   // 1.44.0 : shutdown (le telechargement en cours)
 
 #include "App.hpp"
 #include "BackgroundTasks.hpp"   // 1.34.0 : les avis de la cloche (la Decouverte, le service)
@@ -578,6 +579,10 @@ void queueLoss(std::string licenseId, std::string text) {
         g_lossShown.push_back(id);
         if (g_losses.size() < 4) g_losses.push_back({licenseId, text});
     }
+    // 1.44.0 : UN evenement, UNE notification - la licence revoquee (le regard sur la licence) et la licence perdue (le
+    // service) disaient la meme chose deux fois : la << perdue >>, plus precise, remplace la << revoquee >>.
+    for (const auto& old : notices::list())
+        if (old.key == "licence:revoquee:" + licenseId) (void)notices::remove(old.id);
     notices::Item n;
     n.category = "Licence";
     n.title = "Licence perdue sur ce PC" + (licenseId.empty() ? std::string() : " : " + licenseId);
@@ -831,15 +836,40 @@ FeaturePreview featurePreview(const std::string& featureId) {
     dirs.push_back(std::filesystem::absolute(std::filesystem::path("resources") / "licences" / "fonctions", ec));
     for (const auto& d : dirs) {
         if (!std::filesystem::is_directory(d, ec)) continue;
-        const auto img = d / (featureId + ".png");
-        if (std::filesystem::is_regular_file(img, ec)) {
+        // 1.44.0 : toutes les captures - <id>.png, puis <id>-2.png, <id>-3.png... (la premiere qui manque arrete)
+        for (int i = 1; i <= 8; ++i) {
+            const auto img = d / (featureId + (i == 1 ? std::string(".png") : "-" + std::to_string(i) + ".png"));
+            if (!std::filesystem::is_regular_file(img, ec)) break;
             const auto u8 = img.u8string();
-            out.imagePath.assign(u8.begin(), u8.end());
+            CaptureShot s;
+            s.imagePath.assign(u8.begin(), u8.end());
+            out.shots.push_back(std::move(s));
         }
+        if (!out.shots.empty()) out.imagePath = out.shots.front().imagePath;
         std::string text;
         core::json::Value v;
-        if (readAll(d / "descriptions.json", text, 256 * 1024) && core::json::parse(text, v, nullptr) && v.isObject())
+        if (readAll(d / "descriptions.json", text, 256 * 1024) && core::json::parse(text, v, nullptr) && v.isObject()) {
             if (const auto* all = v.find("fonctions"); all && all->isObject()) out.description = trimmed(all->str(featureId));
+            // les legendes et les bulles, capture par capture
+            if (const auto* caps = v.find("captures"); caps && caps->isObject())
+                if (const auto* list = caps->find(featureId); list && list->isArray())
+                    for (std::size_t i = 0; i < list->items().size() && i < out.shots.size(); ++i) {
+                        const auto& o = list->items()[i];
+                        if (!o.isObject()) continue;
+                        out.shots[i].caption = trimmed(o.str("legende"));
+                        if (const auto* spots = o.find("bulles"); spots && spots->isArray())
+                            for (const auto& s : spots->items()) {
+                                if (!s.isObject() || s.str("texte").empty()) continue;
+                                CaptureSpot cs;
+                                cs.x = static_cast<float>(s.num("x"));
+                                cs.y = static_cast<float>(s.num("y"));
+                                cs.w = static_cast<float>(s.num("l"));
+                                cs.h = static_cast<float>(s.num("h"));
+                                cs.tip = trimmed(s.str("texte"));
+                                if (cs.w > 0.f && cs.h > 0.f && out.shots[i].spots.size() < 12) out.shots[i].spots.push_back(std::move(cs));
+                            }
+                    }
+        }
         if (!out.imagePath.empty() || !out.description.empty()) break;
     }
     return out;
@@ -855,7 +885,12 @@ void startNotices(bool online) {
     if (online) service::startRunner();
 }
 
-void shutdown() { service::shutdown(); }
+void shutdown() {
+    service::shutdown();
+    updates::shutdown();   // 1.44.0 : un telechargement en cours s'arrete
+}
+
+bool noticesShown() noexcept { return g_notices; }   // 1.44.0
 
 // ============================================================ 1.38.0 : les notifications de la licence ==
 namespace watch {
@@ -1279,8 +1314,14 @@ std::size_t check(bool force) {
         now.names = before.names;
     }
     for (auto& n : items) {
-        // 1.39.0 : une licence revoquee pendant que le logiciel tourne (une liste de revocation adoptee) : la fenetre aussi
-        if (n.key.rfind("licence:revoquee:", 0) == 0) queueLoss(now.licenseId, n.detail);
+        // 1.39.0 : une licence revoquee pendant que le logiciel tourne (une liste de revocation adoptee) : la fenetre aussi.
+        // 1.44.0 : et une seule notification pour cet evenement - celle de la licence perdue, si elle est la.
+        if (n.key.rfind("licence:revoquee:", 0) == 0) {
+            queueLoss(now.licenseId, n.detail);
+            const std::string lost = "licence:perdue:" + now.licenseId;
+            const auto all = notices::list();
+            if (std::any_of(all.begin(), all.end(), [&lost](const notices::Item& x) { return x.key == lost; })) continue;
+        }
         (void)notices::post(std::move(n));
     }
     (void)saveSeen(file, now);

@@ -183,7 +183,10 @@ long dayNumber(std::int64_t at) {
 namespace {
 
 // ============================================================================ le journal ==
-std::uint64_t postIn(Journal& j, Item n) {
+// 1.44.0 : `sameEvent` (le carnet general du Studio) - la meme cle avec le meme titre et le meme detail, c'est le MEME
+// evenement poste de nouveau (au lancement, a la reouverture d'un projet, a chaque connexion) : il garde sa place, son
+// etat lu et son compteur ; seuls son bouton et ses donnees suivent. Un autre titre ou detail : un evenement nouveau.
+std::uint64_t postIn(Journal& j, Item n, bool sameEvent = false) {
     if (n.at == 0) n.at = nowSeconds();
     if (n.tone.empty()) n.tone = "info";
     n.read = false;
@@ -191,6 +194,17 @@ std::uint64_t postIn(Journal& j, Item n) {
     std::lock_guard<std::mutex> lk(j.m);
     if (!n.key.empty()) {
         const auto it = std::find_if(j.items.begin(), j.items.end(), [&](const Item& x) { return x.key == n.key; });
+        if (it != j.items.end() && sameEvent && it->title == n.title && it->detail == n.detail) {
+            if (it->button != n.button || it->action != n.action || it->data != n.data || it->category != n.category || it->tone != n.tone) {
+                it->button = std::move(n.button);
+                it->action = std::move(n.action);
+                it->data = std::move(n.data);
+                it->category = std::move(n.category);
+                it->tone = std::move(n.tone);
+                touched(j);
+            }
+            return it->id;
+        }
         if (it != j.items.end()) {
             n.id = it->id;
             n.count = it->count + 1;
@@ -549,7 +563,7 @@ std::string oneLine(std::string_view text, std::size_t max) {
 //  Les notifications generales du Studio (app/Notices.hpp) : le meme journal, un autre carnet (journal(1)).
 namespace app::notices {
 namespace nf = app::ai::notifs;
-std::uint64_t post(nf::Item n) { return nf::postIn(nf::journal(1), std::move(n)); }
+std::uint64_t post(nf::Item n) { return nf::postIn(nf::journal(1), std::move(n), /*sameEvent=*/true); }   // 1.44.0
 std::vector<nf::Item> list() { return nf::listIn(nf::journal(1)); }
 std::optional<nf::Item> find(std::uint64_t id) { return nf::findIn(nf::journal(1), id); }
 std::size_t size() { return nf::sizeIn(nf::journal(1)); }

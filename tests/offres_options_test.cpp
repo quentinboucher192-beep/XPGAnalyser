@@ -189,8 +189,25 @@ int main(int argc, char** argv) {
         check(std::none_of(cl.begin(), cl.end(), [](const gui::ClientEntry& c) { return c.name == "Atelier d'essai"; }), "il n'est plus dans les clients (le registre des activations ne le ramene pas)");
         const auto dc = ws.deletedClients();
         check(dc.size() == 1 && dc[0].licenceIds.size() == 1 && fs::exists(dc[0].trashFiles[0]), "la corbeille des clients : lui, sa licence, son fichier");
+        // 1.44.0 : la suppression dans l'historique (registre des activations), le tableau de bord et le journal des admins
+        {
+            const auto& recs = ws.records();
+            const bool noted = !recs.empty() && recs.back().kind == "client" && recs.back().action == "supprime" && recs.back().customer == "Atelier d'essai" &&
+                               recs.back().licences == std::vector<std::string>{"XPG-2026-00101"} && recs.back().by == "admin+";
+            check(noted, "l'historique : << client supprime >>, ses licences, qui");
+            const auto dash = ws.dashboard();
+            check(!dash.recent.empty() && dash.recent.front().kind == "client", "le tableau de bord : la derniere operation");
+            const std::string outbox = readFile(f.admin / "journal-a-envoyer.jsonl");
+            check(has(outbox, "client_supprimer") && has(outbox, "Atelier d'essai"), "le journal des admins : client_supprimer");
+            std::vector<license_admin::ActivationRecord> again;
+            int skipped = 0;
+            check(license_admin::readActivations(U(f.admin), again, &skipped, nullptr) && skipped == 0 && again.back().kind == "client",
+                  "relu : la ligne << client >> (rien d'ignore)");
+        }
         const auto res = ws.restoreClient("Atelier d'essai");
         check(res.ok && ws.licence("XPG-2026-00101") && ws.deletedClients().empty(), "restaure : sa licence revient (" + res.text() + ")");
+        check(!ws.records().empty() && ws.records().back().kind == "client" && ws.records().back().action == "restaure", "l'historique : << client restaure >>");
+        check(has(readFile(f.admin / "journal-a-envoyer.jsonl"), "client_restaurer"), "le journal des admins : client_restaurer");
         const auto cl2 = ws.clients();
         check(std::any_of(cl2.begin(), cl2.end(), [](const gui::ClientEntry& c) { return c.name == "Atelier d'essai"; }), "il revient dans les clients");
         check(!ws.restoreClient("Personne").ok, "restaurer un client absent : refuse");

@@ -49,7 +49,9 @@ public:
         std::function<bool(const std::string& action)> follow;
         std::function<void(const std::string& text)>   status;   // la barre d'etat
     };
-    enum class Filter : std::uint8_t { All, Unread };
+    // 1.44.0 : WithFiles - << Avec fichiers >> (les notifications generales du Studio : un message avec des fichiers, une
+    // mise a jour) ; le filtre n'est la que si la source sait le dire (Source::files).
+    enum class Filter : std::uint8_t { All, Unread, WithFiles };
     // 1.38.0 : le carnet lu - celui de l'Assistant (par defaut), ou les notifications generales du Studio (app/Notices.hpp).
     struct Source {
         std::uint64_t (*revision)();
@@ -58,6 +60,9 @@ public:
         bool (*remove)(std::uint64_t);
         std::size_t (*markAllRead)();
         std::size_t (*clearRead)();
+        // 1.44.0 : "1 fichier \xC2\xB7 6,5 Mo" pour une notification qui porte des fichiers (vide : aucun) ; nul : la source
+        // n'a pas de fichiers (l'Assistant) - ni le filtre << Avec fichiers >>, ni la ligne.
+        std::string (*files)(const notifs::Item&){nullptr};
     };
     [[nodiscard]] static Source assistant();
 
@@ -97,7 +102,7 @@ public:
     // ---- la geometrie (apres une mise en page) ----
     [[nodiscard]] gfx::Rect rowRect(std::size_t row) const;      // vide : hors de la vue
     [[nodiscard]] gfx::Rect buttonRect(std::size_t row) const;   // le bouton de la ligne (vide : aucun, ou cache)
-    [[nodiscard]] gfx::Rect filterRect(Filter f) const noexcept { return f == Filter::All ? chipAll_ : chipUnread_; }
+    [[nodiscard]] gfx::Rect filterRect(Filter f) const noexcept { return f == Filter::All ? chipAll_ : f == Filter::Unread ? chipUnread_ : chipFiles_; }
     [[nodiscard]] ui::Button& markAllButton() noexcept { return *markAll_; }
     [[nodiscard]] ui::Button& clearReadButton() noexcept { return *clearRead_; }
     [[nodiscard]] ui::PopupMenu* menu() const noexcept { return menu_; }
@@ -134,6 +139,7 @@ private:
         std::vector<std::string>              tones;
         int                                   more{0};
         float                                 tableH{0.f};
+        std::string                           files;   // 1.44.0 : "1 fichier \xC2\xB7 6,5 Mo" (la puce sous le detail)
     };
     void   rebuild();                      // les lignes montrees : le filtre, les jours
     void   layoutLines();                  // a la largeur
@@ -160,7 +166,8 @@ private:
     int                       menuRow_{-1};
     float                     scroll_{0.f}, content_{0.f}, laidW_{-1.f};
     std::int64_t              now_{0};     // le jour de reference des titres de jour (au dernier rebuild)
-    gfx::Rect                 bar_{}, list_{}, chipAll_{}, chipUnread_{};
+    gfx::Rect                 bar_{}, list_{}, chipAll_{}, chipUnread_{}, chipFiles_{};   // 1.44.0 : chipFiles_ (Avec fichiers)
+    std::size_t               withFiles_{0};
     ui::Button*               markAll_{nullptr};
     ui::Button*               clearRead_{nullptr};
     ui::PopupMenu*            menu_{nullptr};

@@ -588,6 +588,29 @@ int main(int argc, char** argv) {
         check(click(p, "historique.exporter"), "Exporter...");
         const std::string csv2 = readFile(fx.root / "sortie" / "historique-2.csv");
         check(has(csv2, "'=CMD") && !has(csv2, ";=CMD"), "par la page aussi : neutralisee");
+        // 1.44.0 : un client supprime, puis restaure (le genre << client >>)
+        license_admin::ActivationRecord gone;
+        gone.kind = "client";
+        gone.at = g_now + 10;
+        gone.customer = "Client d'essai Gamma";
+        gone.action = "supprime";
+        gone.licences = {"XPG-2026-00008", "XPG-2026-00009"};
+        gone.by = "admin+";
+        license_admin::ActivationRecord back = gone;
+        back.action = "restaure";
+        back.at = g_now + 20;
+        const std::string cc = gui::historyCsv({gone, back});
+        check(has(cc, "Client supprim\xC3\xA9;;Client d'essai Gamma;;;Client supprim\xC3\xA9 : Client d'essai Gamma (2 licences), XPG-2026-00008, XPG-2026-00009, par admin+"),
+              "le CSV : << Client supprime : <nom> (2 licences) >>");
+        check(has(cc, "Client restaur\xC3\xA9;;Client d'essai Gamma;"), "le CSV : << Client restaure >>");
+        check(license_admin::appendActivations(fx.ws->folder(), {gone, back}, nullptr), "deux lignes << client >> dans le registre");
+        fx.ws->reload();
+        p.refresh();
+        check(pickDrop(p, "historique.type", "client") && rows(p, "historique.table") == 2 && cell(p, "historique.table", 0, 1) == "Client restaur\xC3\xA9" &&
+                  cell(p, "historique.table", 1, 1) == "Client supprim\xC3\xA9" && cell(p, "historique.table", 1, 3) == "Client d'essai Gamma" &&
+                  has(cell(p, "historique.table", 1, 5), "(2 licences)"),
+              "filtre : clients (supprime, restaure)");
+        check(pickDrop(p, "historique.type", ""), "le filtre remis");
     }
 
     // ------------------------------------------------------------------------------------------------

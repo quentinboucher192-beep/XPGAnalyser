@@ -186,6 +186,9 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     part("licence", "Licence", "La licence de ce PC : un clic ouvre la fen\xC3\xAAtre Licence", "help.licence", ui::Icon::Lock);
     // 1.43.0 : la session en cours (setSession) ; un clic : l'equipe et la discussion.
     part("session", "Session", "La session en cours : un clic ouvre l'\xC3\xA9quipe et la discussion", "session.panel", ui::Icon::User);
+    // 1.44.0 : la mise a jour disponible (setUpdate) ; un clic : sa fenetre.
+    part("maj", "Mise \xC3\xA0 jour", "Une mise \xC3\xA0 jour est disponible : un clic ouvre sa fen\xC3\xAAtre (T\xC3\xA9l\xC3\xA9" "charger et installer)",
+         "update.open", ui::Icon::Assistant);
     for (auto& p : parts_)
         if (p.key == "simuler" || p.key == "nouveau" || p.key == "affichage" || p.key == "aide") p.iconOnly = true;
     // ---- fin Lot API 8 : bandeau haut ----
@@ -959,6 +962,7 @@ void TopBar::onPaint(const ui::PaintContext& ctx) {
         if (p.key == "taches") { paintTasks(ctx, p, hot); continue; }
         if (p.key == "licence") { paintLicence(ctx, p, hot); continue; }   // 1.35.0
         if (p.key == "session") { paintSessionChip(ctx, p, hot); continue; }   // 1.43.0
+        if (p.key == "maj") { paintUpdateChip(ctx, p, hot); continue; }        // 1.44.0
         if (p.key == "annuler-liste") {
             if (hot || opened_ == Menu::UndoList) ctx.r.fillRoundedRect(p.rect, c.text.withAlpha(opened_ == Menu::UndoList ? 30 : 22), 5.f);
             chevron(ctx.r, p.rect.x + p.rect.w * 0.5f, p.rect.y + p.rect.h * 0.5f, undoList_.empty() ? c.textDisabled : c.textMuted);
@@ -1046,6 +1050,7 @@ std::string TopBar::tipAt(gfx::Point p) const {
         }
         if (part.key == "licence") return licence_.tip.empty() ? part.tip : licence_.tip;   // 1.35.0
         if (part.key == "session") return session_.tip.empty() ? part.tip : session_.tip;   // 1.43.0
+        if (part.key == "maj") return update_.tip.empty() ? part.tip : update_.tip;          // 1.44.0
         if (part.key == "taches")
             return tasks_.empty() ? std::string("Aucune t\xC3\xA2" "che de fond en cours")
                                   : tasks_.front().label + (tasks_.size() > 1 ? " (+" + std::to_string(tasks_.size() - 1) + ")" : std::string{})

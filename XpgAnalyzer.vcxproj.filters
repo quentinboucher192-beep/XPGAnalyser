@@ -1315,6 +1315,9 @@
     <ClCompile Include="src\app\EditionMigration.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\FileDownload.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\FileView.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -1904,6 +1907,12 @@
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\app\SvgRenderer.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\Updates.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\UpdateWindows.cpp">
       <Filter>app</Filter>
     </ClCompile>
     <ClCompile Include="src\help\Trails.cpp">
@@ -3112,6 +3121,9 @@
     <ClInclude Include="src\app\EditionMigration.hpp">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\FileDownload.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\FileView.hpp">
       <Filter>app</Filter>
     </ClInclude>
@@ -3668,6 +3680,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\SvgRenderer.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\Updates.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\ZoomMemory.hpp">

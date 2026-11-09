@@ -330,7 +330,8 @@ endif()
 #    l'executable    la fenetre SDL (license_admin/gui/AdminGuiMain.cpp), seulement avec XPG_WITH_SDL.
 add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp src/license_admin/KeyBackup.cpp
                                   src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp
-                                  src/license_admin/Mail.cpp)   # 1.37.0 : + Mail (le courriel de l'editeur)
+                                  src/license_admin/Mail.cpp   # 1.37.0 : + Mail (le courriel de l'editeur)
+                                  src/license_admin/gui/WorkspaceAdmins.cpp)   # 1.44.0 : plusieurs admins (le role, les droits, le journal)
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -338,7 +339,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
@@ -1121,6 +1122,14 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME adminservice COMMAND admin_service_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:xpg_license_admin>)
     if(TEST adminservice)
         set_tests_properties(adminservice PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
+    # 1.44.0 : plusieurs admins dans l'outil de l'editeur (le role, la demande d'admin, l'acceptation, le trousseau, les
+    # droits, le journal des admins et sa chaine, le retrait) contre le VRAI Worker sur ce poste (SAUTE sans Node.js ni wrangler)
+    xpg_add_test_executable(admins_admin_test tests/admins_admin_test.cpp)
+    xpg_target_link_libraries(admins_admin_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminsadmin COMMAND admins_admin_test ${CMAKE_SOURCE_DIR})
+    if(TEST adminsadmin)
+        set_tests_properties(adminsadmin PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
     endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3

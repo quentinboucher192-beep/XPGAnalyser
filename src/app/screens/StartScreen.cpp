@@ -430,6 +430,7 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += rail.helpLink().clicked->connect([this] { triggerAction("help.open"); });
     uiLinks_ += rail.findLink().clicked->connect([this] { triggerAction("app.findFiles"); });   // 1.14.0 (lot M5)
     uiLinks_ += rail.noticesLink().clicked->connect([this] { showNoticesWindow(app_); });   // 1.38.0
+    uiLinks_ += rail.joinLink().clicked->connect([this] { triggerAction("session.join"); });   // 1.44.0
     rail.setUnreadNotices(notices::unread());
     uiLinks_ += rail.settingsLink().clicked->connect([this] { showSettings(); });
     // 1.8.0 : les dossiers de l'application.
@@ -1364,7 +1365,7 @@ void StartupScreen::showPageMenu(gfx::Point at) {
     // Le bouton sous la souris : son geste d'abord.
     menuButton_ = nullptr;
     auto& rail = page.rail();
-    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.noticesLink(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
+    start::StartButton* const buttons[] = {&rail.newCard(), &rail.openCard(), &rail.joinLink(), &rail.noticesLink(), &rail.findLink(), &rail.tutorialLink(), &rail.helpLink(),
                                            &rail.settingsLink(), &rail.foldersLink(), &rail.autostartButton(), &rail.licenceButton(),
                                            &rail.profileButton()};
     for (auto* b : buttons)

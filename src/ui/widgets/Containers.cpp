@@ -400,13 +400,22 @@ namespace {
 // Les largeurs d'un onglet, calculees au meme endroit pour la mise en page et
 // la peinture : deux calculs qui divergent, et le titre deborde sur le voisin.
 constexpr float kTabPadX    = 14.f;
-constexpr float kTabPadCompact = 8.f;
 constexpr float kTabIconGap = 7.f;
 constexpr float kTabDot     = 12.f;   // le point « modifie », marge comprise
 constexpr float kTabLive    = 14.f;   // la LED « en cours »
 constexpr float kListW      = 58.f;   // le bouton de la liste
 constexpr float kArrowW     = 22.f;   // une fleche
-constexpr float kCompactTitleMax = 90.f;   // un onglet sans icone, reduit : son titre coupe
+constexpr float kTabPadShort = 8.f;         // 1.44.0 : la marge d'un onglet au titre raccourci
+constexpr float kTabMinText = 64.f;        // 1.44.0 : un titre raccourci garde au moins cette largeur (puis ...)
+
+// 1.44.0 : un titre coupe a `maxW` (ses caracteres entiers, puis ...).
+std::string elideTitle(gfx::IRenderer& r, const std::string& text, gfx::FontId font, float maxW) {
+    if (maxW <= 0.f || r.measure(text, font).width <= maxW) return text;
+    const float dots = r.measure("\xE2\x80\xA6", font).width;
+    auto k = r.fitCharacters(text, font, std::max(0.f, maxW - dots));
+    while (k > 0 && k < text.size() && (static_cast<unsigned char>(text[k]) & 0xC0) == 0x80) --k;
+    return text.substr(0, k) + "\xE2\x80\xA6";
+}
 
 float badgeWidth(std::string_view badge) {
     return badge.empty() ? 0.f : measureWidth(badge, gfx::FontId{13}) + 14.f + 8.f;
@@ -488,23 +497,19 @@ void TabControl::onLayout() {
         return;
     }
 
-    const auto width = [&](const Entry& t, bool shortened, bool compact) {
+    // 1.44.0 : `cap` - la largeur donnee au titre (< 0 : tout le titre). Jamais l'icone seule.
+    const auto width = [&](const Entry& t, bool shortened, float cap) {
         float w = 0.f;
         if (t.hidden) return 0.f;               // 1.12.0 : pas de place
-        if (compact) {
-            w = 2 * kTabPadCompact;
-            if (t.meta.icon != Icon::None) w += 16.f;
-            else w += std::min(kCompactTitleMax, measureWidth(t.meta.title, tabFont_));
-        } else {
-            w = measureWidth(t.meta.title, tabFont_) + 2 * kTabPadX;
-            if (t.meta.icon != Icon::None) w += 16.f + kTabIconGap;
-        }
+        const float text = measureWidth(t.meta.title, tabFont_);
+        w = (cap >= 0.f ? std::min(text, cap) : text) + 2 * (cap >= 0.f ? kTabPadShort : kTabPadX);
+        if (t.meta.icon != Icon::None) w += 16.f + (t.meta.title.empty() ? 0.f : kTabIconGap);
         if (t.meta.closable) w += 20.f;
         if (t.meta.modified) w += kTabDot;
         if (t.meta.live)     w += kTabLive;
         if (!t.meta.badge.empty()) {
-            const auto b = shownBadge(t.meta, shortened || compact);
-            w += b.empty() ? 12.f : badgeWidth(b) - (compact ? 4.f : 0.f);
+            const auto b = shownBadge(t.meta, shortened);
+            w += b.empty() ? 12.f : badgeWidth(b);
         }
         return w;
     };
@@ -514,7 +519,8 @@ void TabControl::onLayout() {
     for (std::size_t i = 0; i < n; ++i) {
         tabs_[i].compact = false;
         tabs_[i].shortBadge = false;
-        widths[i] = width(tabs_[i], false, false);
+        tabs_[i].textMax = 0.f;
+        widths[i] = width(tabs_[i], false, -1.f);
         total += widths[i];
     }
     stripWidth_ = total;
@@ -526,37 +532,58 @@ void TabControl::onLayout() {
         listButton_ = {area.right() - kListW, area.y, kListW, th};
         viewport_.w = avail;
         float shortTotal = 0.f;
-        for (std::size_t i = 0; i < n; ++i) shortTotal += width(tabs_[i], true, false);
+        for (std::size_t i = 0; i < n; ++i) shortTotal += width(tabs_[i], true, -1.f);
         if (shortTotal <= avail) {
             fit_ = Fit::ShortBadges;
             total = 0.f;
             for (std::size_t i = 0; i < n; ++i) {
                 tabs_[i].shortBadge = true;
-                widths[i] = width(tabs_[i], true, false);
+                widths[i] = width(tabs_[i], true, -1.f);
                 total += widths[i];
             }
         } else {
+            // 1.44.0 : les titres des onglets inactifs raccourcis, tous a la meme largeur au plus (la plus grande qui
+            // tient), jamais moins que kTabMinText ; l'onglet ouvert garde son titre.
+            const auto totalFor = [&](float cap) {
+                float s = 0.f;
+                for (std::size_t i = 0; i < n; ++i) s += width(tabs_[i], true, i == current_ ? -1.f : cap);
+                return s;
+            };
+            float cap = kTabMinText;
+            if (totalFor(kTabMinText) <= avail) {
+                float lo = kTabMinText, hi = 0.f;
+                for (std::size_t i = 0; i < n; ++i) hi = std::max(hi, measureWidth(tabs_[i].meta.title, tabFont_));
+                for (int k = 0; k < 18 && hi - lo > 0.5f; ++k) {
+                    const float mid = 0.5f * (lo + hi);
+                    (totalFor(mid) <= avail ? lo : hi) = mid;
+                }
+                cap = lo;
+                fit_ = Fit::Compact;
+            } else {
+                fit_ = Fit::Scroll;
+            }
             total = 0.f;
             for (std::size_t i = 0; i < n; ++i) {
-                const bool compact = i != current_;
-                tabs_[i].compact = compact;
-                tabs_[i].shortBadge = compact;
-                widths[i] = width(tabs_[i], compact, compact);
+                const bool shorten = i != current_;
+                tabs_[i].shortBadge = true;
+                tabs_[i].textMax = shorten ? cap : 0.f;
+                tabs_[i].compact = shorten && measureWidth(tabs_[i].meta.title, tabFont_) > cap + 0.5f;
+                widths[i] = width(tabs_[i], true, shorten ? cap : -1.f);
                 total += widths[i];
             }
-            fit_ = total <= avail ? Fit::Compact : Fit::Scroll;
             if (fit_ == Fit::Scroll) {
                 arrowLeft_ = {area.x, area.y, kArrowW, th};
                 arrowRight_ = {area.x + avail - kArrowW, area.y, kArrowW, th};
                 viewport_ = {area.x + kArrowW, area.y, std::max(20.f, avail - 2 * kArrowW), th};
-                // 1.12.31 : l'onglet ouvert dont le titre ne tient pas dans la place (un volet etroit,
-                // une page zoomee ; ses marges peuvent rogner) se reduit lui aussi - son icone -
-                // plutot qu'un bout de son titre.
-                if (current_ < n && widths[current_] - 2.f * kTabPadX > viewport_.w) {
+                // 1.12.31 : l'onglet ouvert dont le titre ne tient pas dans la place (un volet etroit, une page zoomee)
+                // se raccourcit lui aussi (1.44.0 : son titre coupe, plus son icone seule).
+                if (current_ < n && widths[current_] > viewport_.w) {
+                    const float fixed = widths[current_] - measureWidth(tabs_[current_].meta.title, tabFont_);
+                    const float c = std::max(24.f, viewport_.w - fixed);
+                    tabs_[current_].textMax = c;
                     tabs_[current_].compact = true;
-                    tabs_[current_].shortBadge = true;
                     total -= widths[current_];
-                    widths[current_] = width(tabs_[current_], true, true);
+                    widths[current_] = width(tabs_[current_], true, c);
                     total += widths[current_];
                 }
             }
@@ -653,7 +680,7 @@ void TabControl::onPaint(const PaintContext& ctx) {
             ctx.r.fillRoundedRect({hr.x + 3.f, hr.y + 4.f, hr.w - 6.f, th - 8.f}, theme.brand.hover, 6.f);
         }
         const auto fg = active || hoverThis ? c.text : c.textMuted;
-        float x = hr.x + (t.compact ? kTabPadCompact : kTabPadX);
+        float x = hr.x + (t.textMax > 0.f ? kTabPadShort : kTabPadX);
 
         if (t.meta.live) {
             // La LED « ca tourne », qui respire : une seconde par cycle, assez
@@ -675,21 +702,14 @@ void TabControl::onPaint(const PaintContext& ctx) {
             const int code = codeIconIndex(t.meta.icon);
             drawIcon(ctx.r, t.meta.icon, {x, hr.y + (th - side) * 0.5f, side, side},
                      code >= 0 ? codeIconColor(code) : active && groupFocus_ ? c.accent : fg);
-            x += side + (t.compact ? 0.f : kTabIconGap);
+            x += side + (t.meta.title.empty() ? 0.f : kTabIconGap);
         }
-        if (!t.compact) {
-            ctx.r.drawText({x, hr.y + (th - lh) * 0.5f}, t.meta.title, active ? gfx::semibold(theme.font.ui) : theme.font.ui, fg);   // 1.41.0 : la demi-grasse
-            x += ctx.r.measure(t.meta.title, theme.font.ui).width;
-        } else if (t.meta.icon == Icon::None) {
-            // Reduit sans icone : son titre, coupe.
-            std::string title = t.meta.title;
-            if (ctx.r.measure(title, theme.font.ui).width > kCompactTitleMax) {
-                auto k = ctx.r.fitCharacters(title, theme.font.ui, kCompactTitleMax - 10.f);
-                while (k > 0 && k < title.size() && (static_cast<unsigned char>(title[k]) & 0xC0) == 0x80) --k;
-                title = title.substr(0, k) + "\xE2\x80\xA6";
-            }
-            ctx.r.drawText({x, hr.y + (th - lh) * 0.5f}, title, theme.font.ui, fg);
-            x += std::min(kCompactTitleMax, ctx.r.measure(title, theme.font.ui).width);
+        {
+            // 1.44.0 : le titre, coupe (...) s'il n'a pas toute sa place - jamais l'icone seule
+            const auto font = active ? gfx::semibold(theme.font.ui) : theme.font.ui;   // 1.41.0 : la demi-grasse
+            const std::string title = t.textMax > 0.f ? elideTitle(ctx.r, t.meta.title, font, t.textMax) : t.meta.title;
+            ctx.r.drawText({x, hr.y + (th - lh) * 0.5f}, title, font, fg);
+            x += t.textMax > 0.f ? std::min(t.textMax, ctx.r.measure(t.meta.title, theme.font.ui).width) : ctx.r.measure(t.meta.title, theme.font.ui).width;
         }
 
         if (t.meta.modified) {
@@ -699,7 +719,7 @@ void TabControl::onPaint(const PaintContext& ctx) {
             x += kTabDot;
         }
         if (!t.meta.badge.empty())
-            x += drawBadge(t.meta, shownBadge(t.meta, t.shortBadge || t.compact), t.compact ? x - 4.f : x, hr);
+            x += drawBadge(t.meta, shownBadge(t.meta, t.shortBadge || t.compact), x, hr);
 
         if (t.meta.closable) {
             const float side = std::min(th - 12.f, 12.f);
@@ -789,7 +809,7 @@ gfx::Point TabControl::contextAnchor(std::size_t index) const {
     // Sous l'en-tete, les croix du menu sous l'icone de l'onglet (le menu met
     // les siennes a 5 px de son bord). Un en-tete a moitie hors de la bande :
     // le menu reste dans la bande, sous ce qu'on en voit.
-    const float x = e.headerRect.x + (e.compact ? kTabPadCompact : kTabPadX) - 5.f;
+    const float x = e.headerRect.x + (e.textMax > 0.f ? kTabPadShort : kTabPadX) - 5.f;
     const float right = std::max(viewport_.x, viewport_.right() - 40.f);
     return {std::clamp(x, viewport_.x, right), e.headerRect.y + barHeight()};
 }

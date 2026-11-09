@@ -156,7 +156,8 @@ bool describeFile(std::string_view bytes, const SigningKey* key, std::string& te
 //    "licence"     a chaque signer-licence, une ligne par PC lie (et "extension" quand --licence
 //                  etendait une licence existante) ;
 //    "demande"     enregistrer-demande : une demande recue, pas encore signee ;
-//    "revocation"  a chaque signer-revocations, une ligne par licence (ou PC) revoque.
+//    "revocation"  a chaque signer-revocations, une ligne par licence (ou PC) revoque ;
+//    "client"      1.44.0 : un client supprime ou restaure (l'application, Clients).
 //  Rien du materiel : la demande n'en porte pas ; l'Admin ne voit que ce que les clients lui envoient.
 //  Voir CHAQUE LANCEMENT du logiciel demandera le service de licences en ligne (docs/LICENCES.md, par. 12).
 inline constexpr const char* kActivationsFile = "activations.jsonl";
@@ -179,6 +180,12 @@ struct ActivationRecord {
     std::string reason;
     Seconds     issuedAt{0};       // 1.32.0 : "licence" - l'emission de la licence signee
     Seconds     issuedBefore{0};   // 1.32.0 : "revocation" - seules les emissions d'avant (0 : toutes)
+    // 1.44.0 : "client" - un client SUPPRIME ou RESTAURE (Clients) : `action` "supprime" / "restaure", `customer` son nom,
+    // `licences` ses licences (dans la corbeille / revenues), `by` qui l'a fait (le nom de l'admin, "admin+"). Une version
+    // d'avant la 1.44.0 ignore ce genre (une ligne qu'elle ne connait pas) ; la synchro l'unit comme les autres lignes.
+    std::string              action;
+    std::vector<std::string> licences;
+    std::string              by;
 };
 
 // Une demande d'activation recue (verifiee : signee par la cle du PC qu'elle porte) -> sa ligne "demande".

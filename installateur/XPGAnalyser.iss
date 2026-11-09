@@ -6083,6 +6083,34 @@ begin
   JournalNote(jFait, 'licence-code', 'Le code de licence est laissé pour le premier lancement d''un Studio en ligne (' + Fichier + ', effacé après l''activation ; le code n''est dans aucun journal)');
 end;
 
+// 1.44.0 : LA MISE A JOUR DEPUIS LE STUDIO (docs/ADMINS.md, 7). Le Studio lance cet installateur en silencieux
+// (/SILENT /SUPPRESSMSGBOXES /NORESTART) avec /RELANCER="<son exe>" et /RELANCERPROJET="<le projet ouvert>", puis se
+// ferme de lui-meme. L'installation finie, le Studio est relance - dans le compte de l'utilisateur (ExecAsOriginalUser),
+// sur son projet - SEULEMENT si cet exe est dans le dossier de l'installation ({app}) et existe : tout autre programme
+// est refuse (et dit au journal). Sans /RELANCER : rien.
+procedure RelancerApres;
+var Exe, Projet, Dossier, Params: String;
+    Code: Integer;
+begin
+  Exe := Trim(ExpandConstant('{param:RELANCER|}'));
+  if Exe = '' then Exit;
+  StringChangeEx(Exe, '"', '', True);
+  Exe := ExpandFileName(Exe);
+  Dossier := AddBackslash(ExpandFileName(ExpandConstant('{app}')));
+  if (Pos(Lowercase(Dossier), Lowercase(Exe)) <> 1) or (Lowercase(ExtractFileExt(Exe)) <> '.exe') or not FileExists(Exe) then begin
+    Log('Relance refusée : ' + Exe + ' n''est pas un programme du dossier de l''installation (' + Dossier + ')');
+    Exit;
+  end;
+  Projet := Trim(ExpandConstant('{param:RELANCERPROJET|}'));
+  StringChangeEx(Projet, '"', '', True);
+  Params := '';
+  if Projet <> '' then Params := '"' + Projet + '"';
+  if ExecAsOriginalUser(Exe, Params, ExtractFileDir(Exe), SW_SHOWNORMAL, ewNoWait, Code) then
+    Log('Relance : ' + Exe + ' ' + Params)
+  else
+    Log('Relance impossible : ' + Exe + ' (code ' + IntToStr(Code) + ')');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var Code: Integer;
     Sources2, Lot8, Migrer, Setup, Blocs: String;
@@ -6091,6 +6119,12 @@ begin
   // 1.8.0 : sans assistant (/VERYSILENT), le recapitulatif va quand meme dans les journaux.
   if CurStep = ssDone then begin
     EcrireRecap;
+    // 1.44.0 : la mise a jour lancee par le Studio : il est relance sur son projet (/RELANCER, /RELANCERPROJET)
+    try
+      RelancerApres;
+    except
+      Log('Relance : ' + GetExceptionMessage);
+    end;
     Exit;
   end;
   if CurStep <> ssPostInstall then Exit;

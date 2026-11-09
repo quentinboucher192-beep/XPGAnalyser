@@ -15,6 +15,7 @@
 // =============================================================================
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -49,6 +50,24 @@ void withdraw(const std::string& key);
 // Change a chaque begin / progress / end / post / withdraw : le bandeau se
 // rafraichit tout de suite (sinon une fois par seconde).
 [[nodiscard]] unsigned long long revision();
+
+// ---- 1.44.0 : LES AVIS LUS (la cloche : Tout marquer comme lu) ----------------
+//  Avant, la barre du haut les retenait ELLE-MEME : une barre neuve a chaque
+//  projet ouvert, et tout revenait << non lu >> (le bug signale : fermer puis
+//  rouvrir un projet). Ils sont retenus ici, pour CE compte - pas pour un
+//  projet ni pour un lancement : un avis (sa cle ET son titre : le meme
+//  evenement) lu le reste, meme poste de nouveau ; un titre nouveau sous la
+//  meme cle est un evenement nouveau (non lu). Gardes sur le disque
+//  (setReadFile : App, <reglages>/cloche-lue.txt ; 500 au plus, les plus
+//  anciens partent) ; sans fichier (les essais) : en memoire.
+void markRead(const std::string& key, const std::string& title);
+[[nodiscard]] bool isRead(const std::string& key, const std::string& title);
+void setReadFile(std::string path);
+// Un avis marque lu ailleurs aussi (App : "notification:<id>", les notifications generales - Notices.hpp, dont la
+// lecture est gardee dans leur carnet). Nul : rien.
+void setReadHook(std::function<void(const std::string& key)> hook);
+// Les essais : tout oublier (rien sur le disque).
+void resetReadForTests();
 
 class Scope {
 public:

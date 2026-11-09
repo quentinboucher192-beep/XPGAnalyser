@@ -14,6 +14,7 @@
 //  le bandeau (la liste d'Annuler le donne) et son action reste joignable.
 // =============================================================================
 #include "TopBar.hpp"
+#include "BackgroundTasks.hpp"   // 1.44.0 : les avis lus (ce compte, tous les projets)
 #include "../core/Edition.hpp"   // 1.12.0 : le bandeau de chaque application
 
 #include "../ui/Theme.hpp"
@@ -62,20 +63,18 @@ void TopBar::setNotices(std::vector<Notice> notices) {
     invalidate();
 }
 
+// 1.44.0 : lu ou non : retenu par bgtasks (ce compte, tous les projets, garde sur le disque) - plus par cette barre, qui
+// renait a chaque projet ouvert (tout revenait << non lu >>).
 int TopBar::unreadNotices() const {
     int n = 0;
-    for (const auto& x : notices_) {
-        const std::string& k = x.key.empty() ? x.title : x.key;
-        if (std::find(readNotices_.begin(), readNotices_.end(), k) == readNotices_.end()) ++n;
-    }
+    for (const auto& x : notices_)
+        if (!bgtasks::isRead(x.key, x.title)) ++n;
     return n;
 }
 
 void TopBar::markNoticesRead() {
-    for (const auto& x : notices_) {
-        const std::string& k = x.key.empty() ? x.title : x.key;
-        if (std::find(readNotices_.begin(), readNotices_.end(), k) == readNotices_.end()) readNotices_.push_back(k);
-    }
+    for (const auto& x : notices_)
+        if (!bgtasks::isRead(x.key, x.title)) bgtasks::markRead(x.key, x.title);
     invalidate();
 }
 
@@ -91,6 +90,15 @@ void TopBar::setSession(LicenceChip chip) {
     if (chip == session_) return;
     const bool relayout = chip.text != session_.text;
     session_ = std::move(chip);
+    if (relayout) invalidateLayout();
+    invalidate();
+}
+
+// 1.44.0 : la mise a jour disponible (<< 1.44.1 disponible >>).
+void TopBar::setUpdate(LicenceChip chip) {
+    if (chip == update_) return;
+    const bool relayout = chip.text != update_.text;
+    update_ = std::move(chip);
     if (relayout) invalidateLayout();
     invalidate();
 }
@@ -177,6 +185,12 @@ void TopBar::layoutLot8() const {
         // serre : Deposer un fichier tombe (le glisser-deposer et la palette ">deposer" restent)
         if (!tight) putR("deposer", 34.f);
         rx -= 8.f;
+        // 1.44.0 : la mise a jour disponible - toujours son texte (la version seule si c'est serre).
+        if (!update_.text.empty()) {
+            const std::string& t = tight && !update_.shortText.empty() ? update_.shortText : update_.text;
+            putR("maj", std::min(220.f, 9.f + 16.f + 7.f + ui::measureWidth(t, kSmall8) + 12.f));
+            rx -= 8.f;
+        }
         // 1.43.0 : la session en cours - son texte, ou la personne seule si c'est serre.
         if (!session_.text.empty()) {
             putR("session", tight ? 34.f : std::min(compact ? 160.f : 260.f, 9.f + 16.f + 7.f + ui::measureWidth(session_.text, kSmall8) + 12.f));
@@ -453,6 +467,22 @@ void TopBar::paintSessionChip(const ui::PaintContext& ctx, const Part& p, bool h
     const auto n = ctx.r.fitCharacters(session_.text, kSmall8, maxW);
     std::string shown = n >= session_.text.size() ? session_.text : session_.text.substr(0, n);
     while (!shown.empty() && shown.size() < session_.text.size() && (static_cast<unsigned char>(session_.text[shown.size()]) & 0xC0) == 0x80) shown.pop_back();
+    ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kSmall8)) * 0.5f}, shown, kSmall8, c.text);
+}
+
+// 1.44.0 : la mise a jour disponible - la couleur de la marque, l'etincelle, le texte (jamais l'icone seule).
+void TopBar::paintUpdateChip(const ui::PaintContext& ctx, const Part& p, bool hot) const {
+    const auto& c = ctx.theme.color;
+    const auto r = p.rect;
+    const gfx::Color tone = c.accent;
+    ctx.r.fillRoundedRect({r.x + 1.f, r.y + 3.f, r.w - 2.f, r.h - 6.f}, tone.withAlpha(hot ? (ctx.theme.isDark() ? 70 : 54) : (ctx.theme.isDark() ? 44 : 32)), 11.f);
+    const gfx::Rect ib{r.x + 9.f, r.y + (r.h - 16.f) * 0.5f, 16.f, 16.f};
+    ui::drawIcon(ctx.r, ui::Icon::Assistant, ib, ctx.theme.onSurface(tone));
+    const float tx = ib.right() + 7.f, maxW = r.right() - tx - 8.f;
+    const std::string& t = ctx.r.measure(update_.text, kSmall8).width <= maxW || update_.shortText.empty() ? update_.text : update_.shortText;
+    const auto n = ctx.r.fitCharacters(t, kSmall8, maxW);
+    std::string shown = n >= t.size() ? t : t.substr(0, n);
+    while (!shown.empty() && shown.size() < t.size() && (static_cast<unsigned char>(t[shown.size()]) & 0xC0) == 0x80) shown.pop_back();
     ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kSmall8)) * 0.5f}, shown, kSmall8, c.text);
 }
 

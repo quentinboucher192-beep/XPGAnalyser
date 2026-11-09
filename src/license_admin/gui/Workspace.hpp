@@ -590,7 +590,7 @@ private:
     // Le fichier a donner au client : la liste des admins d'abord quand c'est un admin qui a signe (un Studio hors ligne
     // la lit pour croire la licence), puis le reste.
     [[nodiscard]] std::string withAdminList(const std::string& signedText) const;
-    [[nodiscard]] online::Options serviceOptions() const;
+    void noteClient(OpResult& r, const std::string& action, const std::string& name, const std::vector<std::string>& licenceIds);
     std::unique_ptr<licensing::SigningKey>      adminSigning_;
     AdminKeyStatus                              adminKey_;
     Role                                        role_{Role::None};

@@ -311,6 +311,7 @@ std::vector<ClientEntry> Workspace::clients() const {
         customerOf[l.licence.licenseId] = k;
     }
     for (const auto& r : records_) {
+        if (r.kind == "client") continue;   // 1.44.0 : une suppression, une restauration ne sont pas une activite du client
         std::string k;
         if (!r.customer.empty()) k = lower(r.customer);
         else if (auto it = customerOf.find(r.licenseId); it != customerOf.end()) k = it->second;
@@ -1405,7 +1406,7 @@ OpResult Workspace::serviceRun(const ServiceJob& job) const {
         }
         case ServiceJob::Kind::OnlineLicence: return serviceRunOnline(job, {});
     }
-    (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : la ligne du journal de l'operation part avec elle
+    if (r.ok) (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : la ligne du journal de l'operation part avec elle
     return r;
 }
 
@@ -1429,7 +1430,7 @@ OpResult Workspace::serviceRunOnline(const ServiceJob& job, const std::string& c
         for (const auto& d : a.details) r.details.push_back(d);
         if (!a.ok) r.ok = false;
     }
-    (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0
+    if (r.ok) (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0
     return r;
 }
 
@@ -1621,6 +1622,29 @@ Seconds Workspace::lastLicenceEnd(const std::string& edition) const {
 
 std::vector<DeletedClient> Workspace::deletedClients() const { return readDeletedClients(folder_); }
 
+// 1.44.0 : un client supprime ou restaure - une ligne << client >> au registre des activations (l'historique, le tableau
+// de bord) et une au journal des admins (client_supprimer, client_restaurer). Ce qui ne s'ecrit pas est dit.
+void Workspace::noteClient(OpResult& r, const std::string& action, const std::string& name, const std::vector<std::string>& licenceIds) {
+    const bool deleted = action == "supprime";
+    ActivationRecord rec;
+    rec.kind = "client";
+    rec.at = now();
+    rec.customer = name;
+    rec.action = action;
+    rec.licences = licenceIds;
+    rec.by = role_ == Role::Admin && me() ? me()->name : std::string("admin+");
+    std::string why;
+    if (!appendActivations(folder_, {rec}, &why)) r.details.push_back("ATTENTION : l'historique n'a pas \xC3\xA9t\xC3\xA9 mis \xC3\xA0 jour (" + why + ").");
+    loadActivations();
+    core::json::Value detail = core::json::Value::object();
+    core::json::Value ids = core::json::Value::array();
+    for (const auto& id : licenceIds) ids.push(id);
+    detail.set("licences", std::move(ids));
+    const OpResult j = journal(deleted ? "client_supprimer" : "client_restaurer", name,
+                               (deleted ? "a supprim\xC3\xA9 le client " : "a restaur\xC3\xA9 le client ") + name, core::json::write(detail, false));
+    if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+}
+
 OpResult Workspace::deleteClient(const std::string& name) {
     if (const auto deny = denied("client_supprimer")) return *deny;   // 1.44.0
     const std::string k = lower(name);
@@ -1665,12 +1689,7 @@ OpResult Workspace::deleteClient(const std::string& name) {
     if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail("le client n'a pas pu \xC3\xAAtre not\xC3\xA9 supprim\xC3\xA9 : " + why);
     loadArchive();
     OpResult r = OpResult::done("Client " + name + " supprim\xC3\xA9.");
-    {   // 1.44.0
-        core::json::Value detail = core::json::Value::object();
-        detail.set("licences", static_cast<int>(d.licenceIds.size()));
-        const OpResult j = journal("client_supprimer", name, "a supprim\xC3\xA9 le client " + name, core::json::write(detail, false));
-        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
-    }
+    noteClient(r, "supprime", name, d.licenceIds);   // 1.44.0 : l'historique et le journal des admins
     if (!d.licenceIds.empty())
         r.details.push_back(plural(static_cast<int>(d.licenceIds.size()), "licence", "licences") + " dans la corbeille de l'outil (rien n'est effac\xC3\xA9) ; la synchro ne les ram\xC3\xA8ne pas.");
     r.details.push_back("Pour le remettre : Clients \xE2\x80\xBA Corbeille \xE2\x80\xBA Restaurer.");
@@ -1698,12 +1717,12 @@ OpResult Workspace::restoreClient(const std::string& name) {
         if (!archive::forgetDeleted(folder_, id, &why)) return OpResult::fail(why);
         ++back;
     }
+    const std::vector<std::string> ids = it->licenceIds;
     list.erase(it);
     if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail(why);
     loadArchive();
     OpResult r = OpResult::done("Client " + name + " restaur\xC3\xA9.");
-    if (const OpResult j = journal("client_supprimer", name, "a restaur\xC3\xA9 le client " + name); !j.ok)   // 1.44.0
-        r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    noteClient(r, "restaure", name, ids);   // 1.44.0 : l'historique et le journal des admins
     if (back) r.details.push_back(plural(back, "licence revenue", "licences revenues") + " dans l'archive (la copie reste dans la corbeille).");
     return r;
 }

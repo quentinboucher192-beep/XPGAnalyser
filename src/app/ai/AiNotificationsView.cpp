@@ -22,6 +22,7 @@ constexpr float kBarH = 34.f;
 constexpr float kDayH = 26.f;
 constexpr float kButtonH = 24.f;
 constexpr float kLeft = 34.f;        // le texte d'une ligne commence apres le filet et l'icone du ton
+constexpr float kFilesH = 22.f;      // 1.44.0 : la puce des fichiers joints
 
 gfx::Color alpha(gfx::Color c, int a) { return c.withAlpha(static_cast<std::uint8_t>(std::clamp(a, 0, 255))); }
 
@@ -206,10 +207,15 @@ void AiNotificationsView::setFilter(Filter f) {
 void AiNotificationsView::rebuild() {
     unread_ = 0;
     read_ = 0;
+    withFiles_ = 0;
     for (const auto& n : all_) (n.read ? read_ : unread_) += 1;
     shown_.clear();
-    for (const auto& n : all_)
-        if (filter_ == Filter::All || !n.read || kept_.count(n.id)) shown_.push_back(n);
+    if (!src_.files && filter_ == Filter::WithFiles) filter_ = Filter::All;
+    for (const auto& n : all_) {
+        const bool files = src_.files && !src_.files(n).empty();   // 1.44.0
+        withFiles_ += files ? 1 : 0;
+        if (filter_ == Filter::WithFiles ? files : (filter_ == Filter::All || !n.read || kept_.count(n.id))) shown_.push_back(n);
+    }
     // la ligne choisie suit sa notification (une autre ligne au-dessus, une ligne partie)
     selected_ = -1;
     for (std::size_t i = 0; i < shown_.size(); ++i)
@@ -258,6 +264,8 @@ void AiNotificationsView::layoutLines() {
         float h = 6.f + lhMeta + lhBody + static_cast<float>(l.detail.size()) * lhMeta;
         readTable(n.data, l);   // 1.39.0 : le petit tableau sous le detail
         h += l.tableH;
+        if (src_.files) l.files = src_.files(n);   // 1.44.0 : la puce des fichiers joints
+        if (!l.files.empty()) h += 4.f + kFilesH;
         if (!n.button.empty() && !n.action.empty()) {
             l.buttonW = std::min(textW, ui::measureWidth(n.button + " \xE2\x80\xBA", kMeta) + 18.f);
             h += 4.f + kButtonH;
@@ -285,6 +293,9 @@ void AiNotificationsView::onLayout() {
     const float aw = ui::measureWidth(all, kMeta) + 20.f, uw = ui::measureWidth(unread, kMeta) + 20.f;
     chipAll_ = {b.x + kPad, b.y + 5.f, aw, kBarH - 10.f};
     chipUnread_ = {chipAll_.right() + 4.f, chipAll_.y, uw, chipAll_.h};
+    // 1.44.0 : Avec fichiers (une source qui en a)
+    chipFiles_ = src_.files ? gfx::Rect{chipUnread_.right() + 4.f, chipAll_.y, ui::measureWidth("Avec fichiers " + std::to_string(withFiles_), kMeta) + 20.f + 16.f, chipAll_.h}
+                            : gfx::Rect{};
     if (std::fabs(list_.w - laidW_) > 0.5f) layoutLines();
 }
 
@@ -542,8 +553,20 @@ void AiNotificationsView::onPaint(const ui::PaintContext& ctx) {
     chip(chipAll_, "Toutes", all_.size(), filter_ == Filter::All, c.text);
     const bool alert = std::any_of(all_.begin(), all_.end(), [](const notifs::Item& n) { return !n.read && n.tone == "error"; });
     chip(chipUnread_, "Non lues", unread_, filter_ == Filter::Unread, alert ? c.error : c.accent);
-    tips_.emplace_back(chipAll_, "Toutes les notifications de l'Assistant, la plus r\xC3\xA9" "cente d'abord");
+    tips_.emplace_back(chipAll_, src_.files ? std::string("Toutes les notifications, la plus r\xC3\xA9" "cente d'abord")
+                                            : std::string("Toutes les notifications de l'Assistant, la plus r\xC3\xA9" "cente d'abord"));
     tips_.emplace_back(chipUnread_, "Seulement celles que tu n'as pas encore vues (une ligne choisie devient lue)");
+    if (chipFiles_.w > 0.f) {   // 1.44.0 : Avec fichiers - le trombone (un lien), puis le libelle et le nombre
+        const bool on = filter_ == Filter::WithFiles;
+        ctx.r.fillRoundedRect(chipFiles_, on ? alpha(c.accent, ctx.theme.isDark() ? 70 : 45) : alpha(c.border, 90), chipFiles_.h / 2.f);
+        if (on) ctx.r.strokeRect(chipFiles_, alpha(c.accent, 160), 1.f);
+        const float ly = chipFiles_.y + (chipFiles_.h - ctx.r.lineHeight(kMeta)) / 2.f;
+        ui::drawIcon(ctx.r, ui::Icon::Link, {chipFiles_.x + 9.f, chipFiles_.y + (chipFiles_.h - 12.f) / 2.f, 12.f, 12.f}, on ? c.text : c.textMuted);
+        const float lw = ctx.r.measure("Avec fichiers ", kMeta).width;
+        ctx.r.drawText({chipFiles_.x + 25.f, ly}, "Avec fichiers", kMeta, on ? c.text : c.textMuted);
+        boldText(ctx.r, {chipFiles_.x + 25.f + lw, ly}, std::to_string(withFiles_), kMeta, withFiles_ > 0 ? c.accent : c.textMuted);
+        tips_.emplace_back(chipFiles_, "Celles qui portent des fichiers : un message de l'\xC3\xA9" "diteur \xC3\xA0 ce PC, une mise \xC3\xA0 jour");
+    }
     // ---- la liste
     ctx.r.pushClip(list_);
     const float lhMeta = ui::lineHeight(kMeta) + 2.f;
@@ -551,7 +574,9 @@ void AiNotificationsView::onPaint(const ui::PaintContext& ctx) {
     if (shown_.empty()) {
         const float y = list_.y + 24.f;
         drawBell(ctx.r, {list_.x + (list_.w - 28.f) / 2.f, y, 28.f, 28.f}, alpha(c.textMuted, 150));
-        const std::string head = filter_ == Filter::Unread && !all_.empty() ? std::string("Tout est lu.") : std::string("Aucune notification.");
+        const std::string head = filter_ == Filter::Unread && !all_.empty()      ? std::string("Tout est lu.")
+                                 : filter_ == Filter::WithFiles && !all_.empty() ? std::string("Aucune notification avec des fichiers.")
+                                                                                 : std::string("Aucune notification.");
         ctx.r.drawText({list_.x + (list_.w - ctx.r.measure(head, kBody).width) / 2.f, y + 40.f}, head, kBody, c.text);
         const auto text = wrap("L'Assistant note ici ce qui s'est pass\xC3\xA9 pendant que tu regardais ailleurs : une r\xC3\xA9ponse ou une "
                                "proposition pr\xC3\xAAte, une proposition appliqu\xC3\xA9" "e ou en \xC3\xA9" "chec, une erreur du service, une "
@@ -654,6 +679,15 @@ void AiNotificationsView::onPaint(const ui::PaintContext& ctx) {
                                "+ " + std::to_string(l.more) + (l.more > 1 ? " autres lignes" : " autre ligne") + (n.button.empty() ? std::string() : " \xE2\x80\x94 " + n.button),
                                kMeta, c.textMuted);
         }
+        // 1.44.0 : les fichiers joints (le trombone, leur nombre et leur taille)
+        if (!l.files.empty()) {
+            const float fy = y + l.tableH + 4.f;
+            const float fw = std::min(r.right() - kPad - r.x - kLeft, ctx.r.measure(l.files, kMeta).width + 30.f);
+            const gfx::Rect pill{r.x + kLeft, fy, fw, kFilesH};
+            ctx.r.fillRoundedRect(pill, alpha(c.border, 110), 5.f);
+            ui::drawIcon(ctx.r, ui::Icon::Link, {pill.x + 7.f, pill.y + (kFilesH - 12.f) / 2.f, 12.f, 12.f}, ink0(c, n.read));
+            ctx.r.drawText({pill.x + 23.f, pill.y + (kFilesH - ctx.r.lineHeight(kMeta)) / 2.f}, elide(l.files, kMeta, pill.w - 28.f), kMeta, ink0(c, n.read));
+        }
         if (l.buttonW > 0.f) {
             const auto br = buttonArea(l);
             const bool overButton = hot && hoverButton_;
@@ -699,6 +733,10 @@ ui::EventResult AiNotificationsView::onEvent(const ui::InputEvent& ev) {
         }
         if (d->button == ui::MouseButton::Left && chipUnread_.contains(d->pos)) {
             setFilter(Filter::Unread);
+            return ui::EventResult::Consumed;
+        }
+        if (d->button == ui::MouseButton::Left && chipFiles_.w > 0.f && chipFiles_.contains(d->pos)) {   // 1.44.0
+            setFilter(Filter::WithFiles);
             return ui::EventResult::Consumed;
         }
         const int row = rowAt(d->pos);

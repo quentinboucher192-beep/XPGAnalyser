@@ -190,6 +190,8 @@ void queueMessage(std::string text);
 [[nodiscard]] std::vector<std::string> takeMessages();
 // A la fermeture (App) : le fil du service s'arrete (la requete en cours est coupee, le jeton flottant rendu).
 void shutdown();
+// 1.44.0 : les avis sont-ils montres (startNotices : quelqu'un devant l'ecran ; faux : le poste d'exploitation) ?
+[[nodiscard]] bool noticesShown() noexcept;
 
 // "07/11/2027" (une date de licence, UTC) ; vide : 0.
 [[nodiscard]] std::string dayOf(licensing::Seconds at);
@@ -261,9 +263,22 @@ bool saveProfile(const Profile& p, std::string* why);
 // logiciel (resources/licences/fonctions/<id>.png et descriptions.json). `folder` : celui d'a cote de l'exe (main) ;
 // sinon resources/licences/fonctions du dossier de travail.
 void setFeatureImagesFolder(std::string folder);
+// 1.44.0 : PLUSIEURS CAPTURES PAR FONCTIONNALITE (<id>.png, <id>-2.png... <id>-8.png), chacune sa legende et ses bulles
+// (descriptions.json, "captures" : {"<id>": [{"legende": "...", "bulles": [{"x":..,"y":..,"l":..,"h":..,"texte":"..."}]}]},
+// dans l'ordre des captures) - une zone de la capture (en pixels de la capture) qui dit ce qu'on y voit au survol.
+struct CaptureSpot {
+    float       x{0.f}, y{0.f}, w{0.f}, h{0.f};
+    std::string tip;
+};
+struct CaptureShot {
+    std::string              imagePath;
+    std::string              caption;   // vide : pas de legende
+    std::vector<CaptureSpot> spots;
+};
 struct FeaturePreview {
-    std::string imagePath;     // vide : pas de capture
+    std::string imagePath;     // vide : pas de capture (la premiere)
     std::string description;   // vide : pas de texte
+    std::vector<CaptureShot> shots;   // 1.44.0 : toutes les captures (la premiere : imagePath)
 };
 [[nodiscard]] FeaturePreview featurePreview(const std::string& featureId);
 
@@ -345,6 +360,8 @@ void setWantedOption(std::string optionId);
 // 1.38.0 : la fenetre Notifications (le carnet general, Notices.hpp) ; le bouton d'une notification de licence ouvre la
 // fenetre Licence sur son onglet.
 void showNoticesWindow(App& app);
+// 1.44.0 : ouverte sur le filtre << Avec fichiers >> (withFiles).
+void showNoticesWindow(App& app, bool withFiles);
 namespace licence {
 // 1.35.1 : le controle de projectsAllowed, avec la fenetre << Licence necessaire >> quand c'est ferme (son bouton : la
 // fenetre Licence, onglet Activation). Vrai : on peut continuer.
@@ -354,6 +371,12 @@ bool gateProjects(App& app);
 void showAnswer(App& app, const Answer& a);
 // 1.39.0 : la fenetre de la licence perdue (Licence... : Ma licence).
 void showLoss(App& app, const Loss& l);
+// 1.44.0 : le bouton d'une notification (son action) : "licence:<onglet>", "detail:<cle>", "fichiers:<cle>" (la fenetre du
+// message et de ses fichiers, planche 05), "maj:<version>" (la fenetre de la mise a jour, planche 06). Faux : rien ouvert.
+// Ecrite dans UpdateWindows.cpp.
+bool openNoticeAction(App& app, const std::string& action);
+// 1.44.0 : la fenetre de la mise a jour disponible (la pastille, le toast) ; faux : aucune.
+bool showUpdateWindow(App& app);
 } // namespace licence
 
 } // namespace app

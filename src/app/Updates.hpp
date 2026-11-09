@@ -40,6 +40,8 @@
 #include "Notices.hpp"
 
 #include "../licensing/Admins.hpp"
+#include "../ui/Theme.hpp"
+#include "../ui/Widget.hpp"
 
 #include <cstdint>
 #include <optional>
@@ -80,13 +82,13 @@ struct NoticeData {
 // La notification a-t-elle des fichiers (le filtre << Avec fichiers >>) ; "1 fichier \xC2\xB7 6,5 Mo" (vide : aucun).
 [[nodiscard]] bool hasFiles(const notices::Item& n);
 [[nodiscard]] std::string filesLine(const notices::Item& n);
-// Le bouton d'une notification : "fichiers:<id>" (un message avec fichiers : sa fenetre), "maj:<version>".
-[[nodiscard]] std::string toMessage(std::uint64_t id);
+// Le bouton d'une notification : "message:<cle>" (un message : sa fenetre ; la cle de la notification), "maj:<version>".
+[[nodiscard]] std::string toMessage(const std::string& key);
 [[nodiscard]] std::string toUpdate(const std::string& version);
 // Un fichier de la notification devient verifie (hashOk) ou refuse ; la notification << Fichier refuse >> aussi.
-void markFile(std::uint64_t noticeId, const std::string& fileId, bool ok, const std::string& refused);
-// La notification d'un message (par son identifiant de carnet) ; nul : partie.
-[[nodiscard]] std::optional<notices::Item> notice(std::uint64_t id);
+void markFile(const std::string& noticeKey, const std::string& fileId, bool ok, const std::string& refused);
+// La notification de cette cle ; nul : partie.
+[[nodiscard]] std::optional<notices::Item> notice(const std::string& key);
 
 // ---- le jeton d'admin de ce compte (laisse par l'Admin) ----
 struct AdminToken {
@@ -152,9 +154,11 @@ void cancelInstall();
 [[nodiscard]] Install install();
 // Le bouton << Installer >> d'un fichier d'un message (l'installateur lance normalement, apres le telechargement verifie).
 // Faux : `why`.
-bool installMessageFile(App& app, std::uint64_t noticeId, const std::string& fileId, std::string* why = nullptr);
-// Telecharger (si besoin) un fichier d'une notification, verifie ; `then` (le fil de l'interface) avec le resultat.
-bool fetchNoticeFile(std::uint64_t noticeId, const std::string& fileId, std::string* why = nullptr);
+bool installMessageFile(const std::string& noticeKey, const std::string& fileId, std::string* why = nullptr);
+// Le bouton << Enregistrer... >> : le fichier verifie (telecharge d'abord s'il le faut), copie ou l'on veut.
+bool saveMessageFile(const std::string& noticeKey, const std::string& fileId, std::string* why = nullptr);
+// Telecharger (si besoin) un fichier d'une notification, verifie ; le resultat : lastFetch (et la notification).
+bool fetchNoticeFile(const std::string& noticeKey, const std::string& fileId, std::string* why = nullptr);
 // Le fichier d'une notification en cours de telechargement (vide : aucun) et l'avancement.
 [[nodiscard]] std::string fetching(float* fraction = nullptr);
 // Le dernier resultat d'un telechargement de fichier de notification (vide : aucun) - les scripts, la fenetre.
@@ -163,6 +167,11 @@ bool fetchNoticeFile(std::uint64_t noticeId, const std::string& fileId, std::str
 void tick(App& app);
 // A la fermeture : le telechargement arrete.
 void shutdown();
+
+// ---- le toast, par-dessus tout (App : apres les ecrans ; UpdateWindows.cpp) ----
+void paintToast(gfx::IRenderer& r, const ui::Theme& theme, gfx::Size surface);
+// Un clic sur le toast : << Voir >> (la fenetre de la mise a jour), la croix. Consumed : pris.
+[[nodiscard]] ui::EventResult handleToast(App& app, const ui::InputEvent& ev);
 
 // ---- les lignes de commande (des essais les verifient) ----
 // L'installateur des Studios, silencieux, qui relance `studioExe` sur `project` (vide : sans projet).

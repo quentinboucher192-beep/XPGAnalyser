@@ -1,26 +1,89 @@
 {
- "format": "xpg-fonctions-apercu/1",
- "fonctions": {
-  "api_editor": "L'éditeur de code ST d'API Studio : la section Commande_Pompe du programme de démonstration, en coloration syntaxique, à côté de l'arbre du projet.",
-  "api_compiler": "API › Statistiques : le programme analysé – lignes de code, variables, mémoire déclarée par type et points à regarder (lectures avant l'écriture).",
-  "api_simulation": "La simulation de l'automate en marche : le programme MAST tourne cycle après cycle, chaque variable affiche sa valeur et la section qui l'écrit.",
-  "api_debugger": "Une table d'animation : les variables choisies du programme, leurs valeurs lues en direct pendant la simulation.",
-  "api_library": "Un bloc de la bibliothèque partagée (DFB_CTL_LEVEL, régulation de niveau) importé dans le projet : son brochage, ses entrées et sorties, sa version à jour.",
-  "api_export": "Vers Control Expert : le programme s'écrit en MAST.XPG (et CONFIG.XHW), prêt à réimporter dans Control Expert.",
-  "hmi_editor": "L'éditeur de vues d'IHM Studio : un synoptique de ligne de gaz, l'objet pompe P_101 sélectionné, ses propriétés à droite.",
-  "hmi_runtime": "Le poste d'exploitation en marche : le synoptique vit (niveaux, pression, vanne, convoyeur) sur des lectures simulées.",
-  "hmi_widgets": "Des objets avancés en exploitation : barres, anneau, radar, courbe XY, chronogramme et histogramme de pesées, mis à jour en direct.",
-  "hmi_animations": "Les animations d'une vue : chaque propriété pilotée par une expression (ouverture de la vanne, défaut de la pompe…), listée dans l'arbre et repérée fx dans les propriétés.",
-  "hmi_scripts": "Programmation générale › Scripts généraux : la liste des scripts (cycliques, au démarrage, appelés) et le code ST de l'un d'eux.",
-  "hmi_export": "Exporter les vues : les vues cochées partent dans un paquet .xpgvues avec tout ce dont elles ont besoin (popups, écrans modèles, images, variables).",
-  "ai_assistant": "L'Assistant IA dans le panneau : une demande en français (« Fais clignoter P_101 quand Defaut_Filtre »), sa réponse et la modification proposée.",
-  "ai_generation": "Génération par l'IA : un synoptique de station de pompage créé sur demande, prévisualisé objet par objet avant d'être appliqué.",
-  "ai_learning": "Mémoire et apprentissage de l'IA : ce qu'elle a appris sur ce PC (modèles métier, vocabulaire, demandes comprises).",
-  "ai_advanced_models": "Les paramètres de l'Assistant IA : le choix du fournisseur et du modèle, l'effort, la fenêtre de contexte et le budget de jetons.",
-  "advanced_import": "Importer des vues : le paquet .xpgvues est comparé au projet avant l'import (vues, symbole, popup, variables).",
-  "advanced_export": "Rapports : générer maintenant le rapport journalier, en PDF ou Excel, avec sa mise en page et son aperçu.",
-  "professional_tools": "L'outil Modbus : une lecture de registres sur un équipement, les valeurs en décimal, hexadécimal et binaire.",
-  "floating_licenses": "Les licences flottantes : des postes en même temps plutôt que des PC fixes ; la fenêtre Licence d'une édition ENTERPRISE les montre ouvertes.",
-  "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, sur le réseau du bureau. L'équipe (qui fait quoi, Suivre, Regarder seulement), la discussion, chacun son objet ; Ctrl+Z n'annule que tes gestes."
- }
+  "format": "xpg-fonctions-apercu/1",
+  "fonctions": {
+    "api_editor": "L'éditeur de code ST d'API Studio : la section Commande_Pompe du programme de démonstration, en coloration syntaxique, à côté de l'arbre du projet.",
+    "api_compiler": "API › Statistiques : le programme analysé – lignes de code, variables, mémoire déclarée par type et points à regarder (lectures avant l'écriture).",
+    "api_simulation": "La simulation de l'automate en marche : le programme MAST tourne cycle après cycle, chaque variable affiche sa valeur et la section qui l'écrit.",
+    "api_debugger": "Une table d'animation : les variables choisies du programme, leurs valeurs lues en direct pendant la simulation.",
+    "api_library": "Un bloc de la bibliothèque partagée (DFB_CTL_LEVEL, régulation de niveau) importé dans le projet : son brochage, ses entrées et sorties, sa version à jour.",
+    "api_export": "Vers Control Expert : le programme s'écrit en MAST.XPG (et CONFIG.XHW), prêt à réimporter dans Control Expert.",
+    "hmi_editor": "L'éditeur de vues d'IHM Studio : un synoptique de ligne de gaz, l'objet pompe P_101 sélectionné, ses propriétés à droite.",
+    "hmi_runtime": "Le poste d'exploitation en marche : le synoptique vit (niveaux, pression, vanne, convoyeur) sur des lectures simulées.",
+    "hmi_widgets": "Des objets avancés en exploitation : barres, anneau, radar, courbe XY, chronogramme et histogramme de pesées, mis à jour en direct.",
+    "hmi_animations": "Les animations d'une vue : chaque propriété pilotée par une expression (ouverture de la vanne, défaut de la pompe…), listée dans l'arbre et repérée fx dans les propriétés.",
+    "hmi_scripts": "Programmation générale › Scripts généraux : la liste des scripts (cycliques, au démarrage, appelés) et le code ST de l'un d'eux.",
+    "hmi_export": "Exporter les vues : les vues cochées partent dans un paquet .xpgvues avec tout ce dont elles ont besoin (popups, écrans modèles, images, variables).",
+    "ai_assistant": "L'Assistant IA dans le panneau : une demande en français (« Fais clignoter P_101 quand Defaut_Filtre »), sa réponse et la modification proposée.",
+    "ai_generation": "Génération par l'IA : un synoptique de station de pompage créé sur demande, prévisualisé objet par objet avant d'être appliqué.",
+    "ai_learning": "Mémoire et apprentissage de l'IA : ce qu'elle a appris sur ce PC (modèles métier, vocabulaire, demandes comprises).",
+    "ai_advanced_models": "Les paramètres de l'Assistant IA : le choix du fournisseur et du modèle, l'effort, la fenêtre de contexte et le budget de jetons.",
+    "advanced_import": "Importer des vues : le paquet .xpgvues est comparé au projet avant l'import (vues, symbole, popup, variables).",
+    "advanced_export": "Rapports : générer maintenant le rapport journalier, en PDF ou Excel, avec sa mise en page et son aperçu.",
+    "professional_tools": "L'outil Modbus : une lecture de registres sur un équipement, les valeurs en décimal, hexadécimal et binaire.",
+    "floating_licenses": "Les licences flottantes : des postes en même temps plutôt que des PC fixes ; la fenêtre Licence d'une édition ENTERPRISE les montre ouvertes.",
+    "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, sur le réseau du bureau. L'équipe (qui fait quoi, Suivre, Regarder seulement), la discussion, chacun son objet ; Ctrl+Z n'annule que tes gestes."
+  },
+  "captures": {
+    "multi_user": [
+      {
+        "legende": "le panneau de la session (l'hôte)",
+        "bulles": [
+          {
+            "x": 104,
+            "y": 78,
+            "l": 370,
+            "h": 112,
+            "texte": "L'équipe : qui est là, sur quel PC, sur quelle vue, et ce qu'il a choisi."
+          },
+          {
+            "x": 270,
+            "y": 153,
+            "l": 207,
+            "h": 32,
+            "texte": "Regarder seulement ou Laisser modifier, personne par personne ; Suivre : voir ce que voit l'équipier."
+          },
+          {
+            "x": 484,
+            "y": 78,
+            "l": 374,
+            "h": 108,
+            "texte": "La discussion de la session : les entrées, les sorties, les messages."
+          },
+          {
+            "x": 484,
+            "y": 492,
+            "l": 372,
+            "h": 32,
+            "texte": "Écrire à l'équipe (Entrée envoie)."
+          },
+          {
+            "x": 643,
+            "y": 533,
+            "l": 130,
+            "h": 34,
+            "texte": "Arrêter la session : chacun garde sa copie du projet ; l'hôte enregistre."
+          }
+        ]
+      },
+      {
+        "legende": "chacun son objet (chez l'équipière)",
+        "bulles": [
+          {
+            "x": 362,
+            "y": 134,
+            "l": 402,
+            "h": 60,
+            "texte": "Pris par Camille : son contour et son nom, à sa couleur. Personne d'autre ne peut le choisir tant qu'elle l'a choisi."
+          },
+          {
+            "x": 30,
+            "y": 88,
+            "l": 240,
+            "h": 200,
+            "texte": "Les changements arrivent objet par objet : deux équipiers sur deux objets de la même vue ne s'écrasent pas."
+          }
+        ]
+      }
+    ]
+  }
 }

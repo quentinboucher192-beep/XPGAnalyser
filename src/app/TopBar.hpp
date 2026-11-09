@@ -211,6 +211,10 @@ public:
     //  "session.panel" (l'equipe, la discussion).
     void setSession(LicenceChip chip);
     [[nodiscard]] const LicenceChip& session() const noexcept { return session_; }
+    // 1.44.0 : LA MISE A JOUR DISPONIBLE (<< 1.44.1 disponible >>, apres << Plus tard >> : planche 06) ; vide : la partie
+    //  disparait. Toujours son texte (jamais l'icone seule). Un clic : "update.open" (la fenetre de la mise a jour).
+    void setUpdate(LicenceChip chip);
+    [[nodiscard]] const LicenceChip& update() const noexcept { return update_; }
 
 protected:
     void            onLayout() override;
@@ -275,11 +279,12 @@ private:
     void paintTasks(const ui::PaintContext&, const Part&, bool hot) const;
     void paintSparkline(const ui::PaintContext&, const gfx::Rect&, gfx::Color) const;
     void paintLicence(const ui::PaintContext&, const Part&, bool hot) const;
-    void paintSessionChip(const ui::PaintContext& ctx, const Part& p, bool hot) const;   // 1.43.0   // 1.35.0
+    void paintSessionChip(const ui::PaintContext& ctx, const Part& p, bool hot) const;   // 1.43.0
+    void paintUpdateChip(const ui::PaintContext& ctx, const Part& p, bool hot) const;    // 1.44.0   // 1.35.0
     std::vector<std::string> recents_;
     std::vector<UndoItem>    undoList_;
     std::vector<Notice>      notices_;
-    std::vector<std::string> readNotices_;
+    // 1.44.0 : les avis lus ne sont plus retenus ici (une barre neuve par projet) : bgtasks::isRead / markRead.
     std::vector<Task>        tasks_;
     std::vector<float>       cycleMs_;
     float                    periodMs_{0.f};
@@ -288,6 +293,7 @@ private:
     // ---- fin Lot API 8 : bandeau haut ----
     LicenceChip              licence_;             // 1.35.0 : la licence active (setLicence)
     LicenceChip              session_;             // 1.43.0 : la session en cours (setSession)
+    LicenceChip              update_;              // 1.44.0 : la mise a jour disponible (setUpdate)
 };
 
 } // namespace app

@@ -164,9 +164,10 @@ public:
 
     // LOT 19 : QUAND LES ONGLETS NE TIENNENT PAS. Par paliers : tout en entier ;
     // les pastilles raccourcies ("104 + 13 IHM" -> "104+13", "nouveau" -> un
-    // point) ; les onglets inactifs reduits a leur icone et leur nombre (l'onglet
-    // ouvert garde son nom) ; enfin des fleches pour defiler. Des qu'un onglet
-    // est reduit ou cache, un bouton a droite liste TOUS les onglets.
+    // point) ; les titres des onglets inactifs raccourcis (1.44.0 : << Fonctionn... >>,
+    // jamais l'icone seule - incomprehensible ; l'onglet ouvert garde son nom) ;
+    // enfin des fleches pour defiler. Des qu'un onglet est reduit ou cache, un
+    // bouton a droite liste TOUS les onglets.
     enum class Fit : std::uint8_t { Full, ShortBadges, Compact, Scroll };
     [[nodiscard]] Fit  fit() const noexcept { return fit_; }
     [[nodiscard]] bool compacted(std::size_t index) const noexcept {
@@ -217,7 +218,9 @@ protected:
     EventResult onEvent(const InputEvent&) override;
     [[nodiscard]] bool hitTest(gfx::Point local) const override;
 private:
-    struct Entry { Tab meta; Widget* page; gfx::Rect headerRect; bool compact{false}; bool shortBadge{false}; bool hidden{false}; };
+    // 1.44.0 : `textMax` - la largeur donnee au titre (0 : tout le titre) ; au-dela, il est coupe (...). `compact` :
+    // le titre est coupe (il ne se reduit plus jamais a l'icone seule).
+    struct Entry { Tab meta; Widget* page; gfx::Rect headerRect; bool compact{false}; bool shortBadge{false}; bool hidden{false}; float textMax{0.f}; };
     // Lot 7 : ou poser le menu d'un onglet (sous son en-tete, dans la bande).
     [[nodiscard]] gfx::Point contextAnchor(std::size_t index) const;
     // Lot 7 (disposition) : la hauteur de la bande (plus basse pour une tuile),

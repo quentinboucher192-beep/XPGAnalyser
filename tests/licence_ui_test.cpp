@@ -22,6 +22,7 @@
 //    l'encart de l'accueil, la partie << licence >> du bandeau haut (son texte, la
 //    forme courte puis le cadenas seul quand c'est serre, un clic : help.licence).
 // =============================================================================
+#include "../src/app/BackgroundTasks.hpp"
 #include "../src/app/Licence.hpp"
 #include "../src/app/Notices.hpp"           // 1.38.0 : les notifications generales
 #include "../src/core/Json.hpp"             // 1.39.0 : le tableau d'une notification
@@ -717,6 +718,61 @@ int main(int argc, char** argv) {
               "le bouton : licence:<onglet>");
         const auto dt = app::notices::parseAction(app::notices::toDetail("offre:PRO:6"));
         check(dt.kind == "detail" && dt.key == "offre:PRO:6" && app::notices::parseAction("detail:").kind.empty(), "1.39.0 : le bouton : detail:<cle>");
+    }
+
+    // ---- 1.44.0 : le bug << les notifications reapparaissent apres Tout marquer comme lu, apres fermeture / ouverture
+    //      d'un projet >> : le MEME evenement poste de nouveau (au lancement, a la reouverture) reste lu ; et les avis de la
+    //      cloche lus le restent pour ce compte (une barre neuve, un autre lancement), plus seulement pour la barre.
+    std::printf("-- 1.44.0 : une notification lue le reste (le meme evenement poste de nouveau ; la cloche)\n");
+    {
+        app::notices::resetForTests();
+        const std::string file = U(base / "notifications-144.json");
+        app::notices::open(file);
+        const app::notices::Item inst{0, 0, "Licence", "Licence install\xC3\xA9" "e : ENTERPRISE", "Licence XPG-2026-00009, sans fin.", "Voir ma licence",
+                                      "licence:1", "ok", "licence:installee:XPG-2026-00009:0"};
+        const app::notices::Item promo{0, 0, "Offres", "R\xC3\xA9" "duction sur ENTERPRISE : 10 \xE2\x82\xAC", "jusqu'au 30/11", "", "", "info", "promo:ENTERPRISE:10"};
+        const auto id1 = app::notices::post(inst);
+        const auto id2 = app::notices::post(promo);
+        check(app::notices::markAllRead() == 2 && app::notices::unread() == 0, "Tout marquer comme lu : 0 non lue");
+        // la reouverture d'un projet (ou un nouveau lancement) poste les memes evenements de nouveau
+        (void)app::notices::post(inst);
+        (void)app::notices::post(promo);
+        check(app::notices::unread() == 0 && app::notices::size() == 2, "les memes evenements postes de nouveau : toujours lus, pas en double (" +
+                                                                              std::to_string(app::notices::unread()) + " non lues)");
+        check(app::notices::find(id1) && app::notices::find(id1)->count == 1 && app::notices::find(id2)->read, "ni x2, ni non lue");
+        // un evenement nouveau sous la meme cle : non lu (et x2)
+        app::notices::Item changed = promo;
+        changed.title = "R\xC3\xA9" "duction sur ENTERPRISE : 20 \xE2\x82\xAC";
+        (void)app::notices::post(changed);
+        check(app::notices::unread() == 1 && app::notices::find(id2)->count == 2, "un titre nouveau sous la meme cle : un evenement nouveau, non lu");
+        check(app::notices::markRead(id2) && app::notices::waitIdle(5000), "lue, ecrite");
+        // l'application relancee : l'etat lu relu du fichier, et les memes evenements postes encore : lus
+        app::notices::close();
+        app::notices::resetForTests();
+        app::notices::open(file);
+        check(app::notices::waitIdle(5000) && app::notices::size() == 2 && app::notices::unread() == 0, "relancee : relues, toujours lues");
+        (void)app::notices::post(inst);
+        check(app::notices::unread() == 0, "relancee, le meme evenement poste encore : toujours lu");
+        app::notices::close();
+        app::notices::resetForTests();
+
+        // la cloche de la barre du haut : lu pour ce compte (pas pour une barre, ni un lancement)
+        app::bgtasks::resetReadForTests();
+        const std::string lu = U(base / "cloche-lue.txt");
+        app::bgtasks::setReadFile(lu);
+        std::vector<std::string> hooked;
+        app::bgtasks::setReadHook([&hooked](const std::string& k) { hooked.push_back(k); });
+        const std::string title = "Ta licence XPG-2026-00009 est install\xC3\xA9" "e (re\xC3\xA7ue de l'\xC3\xA9" "diteur)";
+        check(!app::bgtasks::isRead("licence:installee", title), "un avis de la cloche : non lu");
+        app::bgtasks::markRead("licence:installee", title);
+        app::bgtasks::markRead("notification:7", "Licence r\xC3\xA9voqu\xC3\xA9" "e");
+        check(app::bgtasks::isRead("licence:installee", title) && hooked.size() == 2 && hooked[1] == "notification:7",
+              "lu ; une notification generale est lue aussi dans son carnet (le crochet)");
+        check(!app::bgtasks::isRead("licence:installee", "Une autre licence est install\xC3\xA9" "e"), "un autre titre sous la meme cle : non lu");
+        app::bgtasks::resetReadForTests();   // l'application relancee
+        app::bgtasks::setReadFile(lu);
+        check(app::bgtasks::isRead("licence:installee", title), "relancee : l'avis de la cloche est toujours lu (cloche-lue.txt)");
+        app::bgtasks::resetReadForTests();
     }
 
     // ---- 1.38.0 : les PC d'une licence en ligne (Mes appareils) ----

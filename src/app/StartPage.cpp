@@ -206,6 +206,7 @@ void drawGlyph(gfx::IRenderer& r, StartButton::Glyph g, const gfx::Rect& area, g
         case G::Open: ui::drawIcon(r, ui::Icon::Open, b, c); break;
         case G::Search: ui::drawIcon(r, ui::Icon::Search, b, c); break;   // 1.14.0 (lot M5)
         case G::Bell: ai::AiNotificationsView::drawBell(r, b, c); break;    // 1.38.0
+        case G::Team: ui::drawIcon(r, ui::Icon::User, b, c); break;          // 1.44.0
         case G::Tutorial:           // une toque de diplome : le didacticiel
             p.stroke(8.f, 3.f, 15.f, 6.5f);
             p.stroke(15.f, 6.5f, 8.f, 10.f);
@@ -1539,6 +1540,11 @@ StartRail::StartRail(std::string id) : ui::Widget(std::move(id)) {
     find_->setHint("Ctrl+Maj+P");
     find_->setTooltip("Chercher les fichiers de l'appli sur tout le PC (projets, archives, exports Control Expert, paquets IHM, "
                       "biblioth\xC3\xA8ques, th\xC3\xA8mes) : les ouvrir, les ajouter aux r\xC3\xA9" "cents (Ctrl+Maj+P)");
+    // 1.44.0 : REJOINDRE UNE SESSION des l'accueil (IHM Studio) - sans projet ouvert : le projet arrive de l'hote.
+    join_ = make("Rejoindre une session\xE2\x80\xA6", "startup.join", L::Link, G::Team);
+    join_->setHint(">");
+    join_->setTooltip("Travailler \xC3\xA0 plusieurs sur le projet d'un coll\xC3\xA8gue : sur le r\xC3\xA9seau du bureau, ou par Internet avec le code qu'il te donne");
+    if (api) join_->setVisibility(ui::Visibility::Collapsed);
     // 1.38.0 : LES NOTIFICATIONS GENERALES - ta licence, les offres de l'editeur, ses annonces (jamais par mail).
     notices_ = make("Notifications", "startup.notifications", L::Link, G::Bell);
     notices_->setHint(">");
@@ -1706,7 +1712,8 @@ float StartRail::placeBody(int level) {
 
     // ---- les liens ------------------------------------------------------------
     const float linkH = tall ? 34.f : easy ? 30.f : 28.f;
-    for (auto* link : {notices_, find_, tutorial_, help_, settings_, folders_}) {   // 1.38.0 : les notifications d'abord
+    for (auto* link : {join_, notices_, find_, tutorial_, help_, settings_, folders_}) {   // 1.38.0 : les notifications d'abord ; 1.44.0 : rejoindre avant
+        if (!link->visible()) continue;
         link->setBounds({x0 - 8.f, y, w + 16.f, linkH});
         y += linkH;
     }

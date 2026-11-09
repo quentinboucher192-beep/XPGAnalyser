@@ -1,6 +1,8 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "Licence.hpp"                 // 1.30.0
 #include "LicenceService.hpp"          // 1.35.0 : licence-code, licence-renouveler... (le service des licences)
+#include "FileDownload.hpp"           // 1.44.0 : fichier-telecharger
+#include "Updates.hpp"                // 1.44.0 : messages-relever, maj-verifier, maj-plus-tard...
 #include "../licensing/Licensing.hpp"   // 1.30.0
 #include "../core/Edition.hpp"           // 1.30.0 : le nom de l'application (licence-demande)
 #include "../core/Version.hpp"           // 1.30.0
@@ -6123,6 +6125,174 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // Voir le detail) ; la cle : "offre:PERSONAL:319".
     if (cmd == "notification-detail") {
         if (!licence::showOfferChange(app_, arg(1))) fail("notification-detail : pas d'offre modifiee pour " + arg(1));
+        return Step::Yield;
+    }
+    // 1.44.0 : LES MESSAGES A CE PC ET LES MISES A JOUR (docs/ADMINS.md, 7 ; app/Updates) - pour l'essai de bout en bout.
+    //   notifications-ouvrir [avec-fichiers]   la fenetre Notifications (sur le filtre << Avec fichiers >>)
+    //   notification-ouvrir N                  le bouton de la N-ieme notification (1 : la plus recente) : la fenetre du
+    //                                          message et de ses fichiers, celle de la mise a jour, la fenetre Licence...
+    //   messages-relever                       les messages de ce PC tout de suite (ce qui est arrive)
+    //   fichier-telecharger N|ID               un fichier joint (la N-ieme notification avec fichiers, ou l'identifiant du
+    //                                          fichier) : telecharge et verifie (le resultat, le chemin)
+    //   maj-verifier                           la version publiee tout de suite : << mise a jour X disponible >> ou << a jour >>
+    //   maj-plus-tard                          << Plus tard >> (la fenetre fermee, la pastille)
+    //   maj-installer [tout]                   << Telecharger et installer >> (<< Tout installer >>) ; attend le compte a rebours
+    if (cmd == "notifications-ouvrir") {
+        showNoticesWindow(app_, arg(1) == "avec-fichiers");
+        std::printf("[script] notifications-ouvrir : %zu notifications (%zu non lues)%s\n", notices::size(), notices::unread(),
+                    arg(1) == "avec-fichiers" ? " - filtre Avec fichiers" : "");
+        return Step::Yield;
+    }
+    if (cmd == "notification-ouvrir") {
+        const auto all = notices::list();
+        const int i = std::atoi(arg(1).c_str());
+        if (i < 1 || static_cast<std::size_t>(i) > all.size()) {
+            fail("notification-ouvrir : pas de notification n\xC2\xB0 " + arg(1) + " (" + std::to_string(all.size()) + ")");
+            return Step::Next;
+        }
+        const auto& n = all[static_cast<std::size_t>(i - 1)];
+        const bool opened = !n.action.empty() && licence::openNoticeAction(app_, n.action);
+        std::printf("[script] notification-ouvrir %d : %s | %s%s\n", i, n.title.c_str(), n.action.empty() ? "(sans bouton)" : n.action.c_str(),
+                    opened ? "" : " - rien ne s'ouvre");
+        if (!n.action.empty() && !opened) fail("notification-ouvrir : " + n.action + " ne s'ouvre pas");
+        return Step::Yield;
+    }
+    if (cmd == "messages-relever" || cmd == "maj-verifier") {
+        namespace ls = licence::service;
+        static bool               started = false;
+        static unsigned long long seen = 0;
+        if (retries_ == 0) started = false;
+        if (!started) {
+            ls::poll();
+            if (ls::busy()) {
+                if (retries_ < 3000) return Step::Retry;
+                fail(cmd + " : un travail du service des licences ne finit pas");
+                return Step::Next;
+            }
+            if (std::string why; !ls::available(&why)) {
+                std::printf("[script] %s : %s\n", cmd.c_str(), why.c_str());
+                fail(cmd + " : " + why);
+                return Step::Yield;
+            }
+            started = cmd == "messages-relever" ? ls::startMessages() : ls::startUpdateCheck();
+            if (!started) {
+                fail(cmd + " : un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours");
+                return Step::Next;
+            }
+            seen = ls::revision();
+            return Step::Retry;
+        }
+        ls::poll();
+        if (ls::busy() || ls::revision() == seen) {
+            if (retries_ < 3000) return Step::Retry;
+            fail(cmd + " : pas fini");
+            return Step::Next;
+        }
+        const auto r = ls::lastResult();
+        if (cmd == "messages-relever") {
+            std::printf("[script] messages-relever : %s\n", r.message.c_str());
+            for (const auto& m : r.messages) {
+                std::printf("[script]   n\xC2\xB0 %llu \xC2\xAB %s \xC2\xBB de %s : %zu fichier(s)%s\n", static_cast<unsigned long long>(m.number), m.title.c_str(),
+                            m.from.empty() ? "l'\xC3\xA9" "diteur" : m.from.c_str(), m.files.size(), m.action == "admin" ? " (devenir admin)" : "");
+                for (const auto& f : m.files)
+                    std::printf("[script]     %s \xC2\xB7 %s \xC2\xB7 %s\n", f.name.c_str(), filedl::sizeText(f.size).c_str(),
+                                !f.refused.empty() ? ("refus\xC3\xA9 : " + f.refused).c_str() : f.manifestOk ? "manifeste sign\xC3\xA9 par l'\xC3\xA9" "diteur" : "manifeste pas encore lu");
+            }
+            if (!r.ok) fail("messages-relever : " + r.message);
+        } else {
+            if (r.update) std::printf("[script] maj-verifier : mise \xC3\xA0 jour %s disponible%s%s\n", r.update->version.c_str(),
+                                      r.update->important ? " (importante)" : "", updates::available() && updates::available()->adminPc ? " - PC d'un admin (2 fichiers)" : "");
+            else if (r.reached) std::printf("[script] maj-verifier : \xC3\xA0 jour (%s ; publi\xC3\xA9" "e : %s)\n", XPG_ANALYZER_VERSION,
+                                            r.publishedVersion.empty() ? "aucune" : r.publishedVersion.c_str());
+            else {
+                std::printf("[script] maj-verifier : %s\n", r.message.c_str());
+                fail("maj-verifier : " + r.message);
+            }
+        }
+        return Step::Yield;
+    }
+    if (cmd == "fichier-telecharger") {
+        static bool started = false;
+        if (retries_ == 0) started = false;
+        if (!started) {
+            std::string key, file;
+            const auto all = notices::list();
+            const bool number = !arg(1).empty() && std::all_of(arg(1).begin(), arg(1).end(), [](char ch) { return ch >= '0' && ch <= '9'; }) && arg(1).size() < 6;
+            int seenFiles = 0;
+            for (const auto& n : all) {
+                const auto d = updates::dataOf(n.data);
+                if (!d || d->files.empty()) continue;
+                ++seenFiles;
+                for (const auto& f : d->files) {
+                    if (number ? seenFiles == std::atoi(arg(1).c_str()) && f.refused.empty() : f.id == arg(1)) {
+                        key = n.key;
+                        file = f.id;
+                        break;
+                    }
+                }
+                if (!key.empty()) break;
+            }
+            if (key.empty()) {
+                fail("fichier-telecharger : aucun fichier pour " + arg(1));
+                return Step::Next;
+            }
+            std::string why;
+            if (!updates::fetchNoticeFile(key, file, &why)) {
+                std::printf("[script] fichier-telecharger : %s\n", why.c_str());
+                fail("fichier-telecharger : " + why);
+                return Step::Yield;
+            }
+            started = true;
+            return Step::Retry;
+        }
+        updates::tick(app_);
+        if (!updates::fetching().empty()) {
+            if (retries_ < 30000) return Step::Retry;
+            fail("fichier-telecharger : pas fini");
+            return Step::Next;
+        }
+        bool ok = false;
+        std::string path;
+        const std::string said = updates::lastFetch(&ok, &path);
+        std::printf("[script] fichier-telecharger : %s%s\n", said.c_str(), ok ? (" \xE2\x86\x92 " + path).c_str() : "");
+        if (!ok) fail("fichier-telecharger : " + said);
+        return Step::Yield;
+    }
+    if (cmd == "maj-plus-tard") {
+        const auto o = updates::available();
+        updates::later();
+        if (auto* top = app_.menus().top(); top && top->id() == "dialog.maj")
+            app_.menus().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+        const std::string chip = updates::chipText();
+        std::printf("[script] maj-plus-tard : %s\n", o ? ("la pastille \xC2\xAB " + chip + " \xC2\xBB").c_str() : "aucune mise \xC3\xA0 jour");
+        if (!o) fail("maj-plus-tard : aucune mise \xC3\xA0 jour disponible");
+        return Step::Yield;
+    }
+    if (cmd == "maj-installer") {
+        static bool started = false;
+        if (retries_ == 0) started = false;
+        if (!started) {
+            if (!updates::beginInstall(app_, arg(1) == "tout")) {
+                const auto in = updates::install();
+                std::printf("[script] maj-installer : %s\n", in.message.empty() ? "aucune mise \xC3\xA0 jour, ou d\xC3\xA9j\xC3\xA0 en cours" : in.message.c_str());
+                fail("maj-installer : rien ne d\xC3\xA9marre");
+                return Step::Yield;
+            }
+            started = true;
+            return Step::Retry;
+        }
+        const auto in = updates::install();
+        if (in.phase == updates::Phase::Downloading || in.phase == updates::Phase::Saving) {
+            if (retries_ < 60000) return Step::Retry;
+            fail("maj-installer : le t\xC3\xA9l\xC3\xA9" "chargement ne finit pas");
+            return Step::Next;
+        }
+        if (in.phase == updates::Phase::Countdown)
+            std::printf("[script] maj-installer : t\xC3\xA9l\xC3\xA9" "charg\xC3\xA9 et v\xC3\xA9rifi\xC3\xA9 (%s) ; %s%s se ferme dans %d s : %s\n",
+                        filedl::sizeText(in.total).c_str(), in.project.empty() ? "" : (in.project + " enregistr\xC3\xA9 ; ").c_str(), core::productName().c_str(),
+                        in.secondsLeft, in.command.c_str());
+        else std::printf("[script] maj-installer : %s\n", in.message.c_str());
+        if (in.phase == updates::Phase::Failed || in.phase == updates::Phase::Cancelled) fail("maj-installer : " + in.message);
         return Step::Yield;
     }
     if (cmd == "notifications-liste") {

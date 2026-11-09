@@ -41,6 +41,7 @@
 #include "hmi/HmiImages.hpp"    // 1.37.0 : la capture d'une fonctionnalite (onglet Editions)
 #include "hmi/HmiPaneKit.hpp"
 #include "Notices.hpp"                // 1.38.0 : les notifications generales
+#include "Updates.hpp"                // 1.44.0 : les messages a ce PC, les mises a jour (leurs fenetres : UpdateWindows.cpp)
 #include "ai/AiNotificationsView.hpp" // 1.38.0 : la liste (la meme que celle de l'Assistant)
 #include "screens/Screens.hpp"
 
@@ -450,6 +451,14 @@ public:
     [[nodiscard]] const hmi::Resource& image() const noexcept { return image_; }
     void setEmptyText(std::string t) { empty_ = std::move(t); }
     void setHint(bool on) { hint_ = on; }
+    // 1.44.0 : les bulles de cette capture (en pixels de l'image) : au survol, les zones s'entourent, et celle sous la
+    // souris dit ce qu'on y voit.
+    void setSpots(std::vector<licence::CaptureSpot> s) {
+        spots_ = std::move(s);
+        hoverSpot_ = -1;
+        invalidate();
+    }
+    [[nodiscard]] std::size_t spotCount() const noexcept { return spots_.size(); }
     std::function<void()> onOpen;
     // Les essais : un pas de molette en (x, y).
     void wheelAt(gfx::Point at, float dy) { wheel(at, dy); }
@@ -461,7 +470,10 @@ protected:
 private:
     void wheel(gfx::Point at, float dy);
     void clampOffset();
+    [[nodiscard]] gfx::Rect imageRect() const noexcept;   // 1.44.0 : ou l'image est dessinee (au dernier dessin)
     hmi::Resource image_;
+    std::vector<licence::CaptureSpot> spots_;   // 1.44.0
+    int           hoverSpot_{-1};
     std::string   empty_{"Pas encore de capture pour cette fonctionnalit\xC3\xA9."};
     float         zoom_{1.f}, ox_{0.f}, oy_{0.f};
     float         iw_{0.f}, ih_{0.f};   // la taille de l'image (au dernier dessin)
@@ -489,7 +501,13 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override;
 
 private:
+    void applyShot();   // 1.44.0 : montrer la capture shot_
     ZoomImage*              image_{nullptr};
+    ui::Button*             prev_{nullptr};   // 1.44.0 : plusieurs captures - la precedente, la suivante
+    ui::Button*             next_{nullptr};
+    std::size_t             shot_{0};
+    float                   navY_{0.f};
+    core::ConnectionScope   links_;
     FeatureInfo             shown_;
     licence::FeaturePreview preview_;
     std::string             waiting_{"Choisis une fonctionnalit\xC3\xA9 dans la liste : une capture et ce qu'elle fait s'affichent ici."};
@@ -910,6 +928,7 @@ void LicenceBody::reload() {
             [open](ui::RowIndex r, std::size_t c) {
                 ui::CellStyle s;
                 if (c == 1) s.monospace = true;
+                if (c == 0 && r < open.size() && !open[r]) s.locked = true;   // 1.44.0 : pas dans ta licence - barree
                 if (c == 3 && r < open.size()) {
                     s.icon = open[r] ? ui::Icon::Ok : ui::Icon::Lock;
                     s.iconTone = open[r] ? ui::Tone::Ok : ui::Tone::Warning;
@@ -2173,7 +2192,12 @@ std::string durationText(const licensing::RegistryEditionView& e) {
 std::string editionFacts(const licensing::RegistryEditionView& e) {
     std::string t = std::to_string(std::max(1, e.maxDevices)) + (e.type == "floating" ? " postes en m\xC3\xAAme temps" : e.maxDevices > 1 ? " PC" : " PC");
     t += " \xC2\xB7 " + durationText(e);
-    t += " \xC2\xB7 " + std::to_string(e.features.size()) + (e.features.size() > 1 ? " fonctions" : " fonction");
+    // 1.44.0 : << 18/21 fonctions >> - sur combien le registre en a (les retirees ne comptent pas)
+    std::size_t all = 0;
+    if (const auto reg = licensing::getRegistry())
+        for (const auto& f : reg->features)
+            if (!f.retired) ++all;
+    t += " \xC2\xB7 " + std::to_string(e.features.size()) + (all > 0 ? "/" + std::to_string(all) : std::string()) + (e.features.size() > 1 || all > 1 ? " fonctions" : " fonction");
     return t;
 }
 
@@ -2346,20 +2370,33 @@ void OnlinePanel::buildOffer() {
         if (!id.empty() && e.id == id) ed = &e;
     std::vector<std::vector<std::string>> rows;
     std::vector<FeatureInfo> infos;
+    // 1.44.0 : une offre choisie montre AUSSI ce qu'elle n'a pas, barre (apres ce qu'elle a) : << 18/21 >>
+    std::vector<std::vector<std::string>> outRows;
+    std::vector<FeatureInfo> outInfos;
+    std::size_t all = 0;
     for (const auto& f : reg->features) {
         if (f.retired) continue;
-        if (ed && std::find(ed->features.begin(), ed->features.end(), f.id) == ed->features.end()) continue;
+        ++all;
+        const bool inOffer = !ed || std::find(ed->features.begin(), ed->features.end(), f.id) != ed->features.end();
         std::string in;
         for (const auto& e : reg->editions)
             if (!e.retired && e.id != reg->unlicensedEdition && std::find(e.features.begin(), e.features.end(), f.id) != e.features.end())
                 in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
-        rows.push_back({f.label.empty() ? f.id : f.label, f.product});
-        infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+        (inOffer ? rows : outRows).push_back({f.label.empty() ? f.id : f.label, f.product});
+        (inOffer ? infos : outInfos).push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
     }
+    const std::size_t included = rows.size();
+    for (auto& r : outRows) rows.push_back(std::move(r));
+    for (auto& i : outInfos) infos.push_back(std::move(i));
     const std::string name = ed ? (ed->label.empty() ? ed->id : ed->label) : std::string();
-    offerTitle_ = ed ? (pending_ ? "Ce que contient ta demande : " : "Ce que contient ") + name + " (" + std::to_string(rows.size()) + ")"
+    offerTitle_ = ed ? (pending_ ? "Ce que contient ta demande : " : "Ce que contient ") + name + " (" + std::to_string(included) + "/" + std::to_string(all) + ")"
                      : "Les fonctionnalit\xC3\xA9s des offres (" + std::to_string(rows.size()) + ") - choisis une offre";
-    offerModel_ = std::make_shared<Rows>(std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Logiciel"}, std::move(rows));
+    offerModel_ = std::make_shared<Rows>(std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Logiciel"}, std::move(rows),
+                                         [included](ui::RowIndex r, std::size_t) {
+                                             ui::CellStyle s;
+                                             s.locked = r >= included;   // pas dans cette offre : barree, un cadenas
+                                             return s;
+                                         });
     offer_->table().setModel(offerModel_);
     offer_->setRows(std::move(infos));
     // L'offre choisie : la premiere fonctionnalite tout de suite (une capture a regarder).
@@ -2496,10 +2533,12 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     float y = b.y + 16.f - scroll_;   // 1.42.0 : la partie gauche defile
     // La barre de defilement de la partie gauche (fine, a son bord droit) quand elle est plus haute que l'onglet.
     if (contentH_ > b.h + 1.f) {
+        // 1.44.0 : la barre commence SOUS l'introduction (qui prend toute la largeur) : elle ne la barre plus
         const float colRight = (leftW_ > 0.f ? x + std::min(leftW_, W) : x + W) + 8.f;
-        const float trackH = b.h - 8.f, thumbH = std::max(30.f, trackH * b.h / contentH_);
-        const float thumbY = b.y + 4.f + (trackH - thumbH) * (scroll_ / std::max(1.f, contentH_ - b.h));
-        r.fillRoundedRect({colRight, b.y + 4.f, 4.f, trackH}, c.gridLine, 2.f);
+        const float trackTop = b.y + 16.f + kIntroLines * 20.f + 10.f;
+        const float trackH = std::max(40.f, b.bottom() - 4.f - trackTop), thumbH = std::max(30.f, trackH * b.h / contentH_);
+        const float thumbY = trackTop + (trackH - thumbH) * (scroll_ / std::max(1.f, contentH_ - b.h));
+        r.fillRoundedRect({colRight, trackTop, 4.f, trackH}, c.gridLine, 2.f);
         r.fillRoundedRect({colRight, thumbY, 4.f, thumbH}, c.scrollbarHover, 2.f);
     }
     int n = 0;
@@ -2800,6 +2839,22 @@ ui::EventResult ZoomImage::onEvent(const ui::InputEvent& ev) {
         last_ = d->pos;
         return ui::EventResult::Consumed;
     }
+    if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && !dragging_ && !spots_.empty() && iw_ > 0.f) {
+        // 1.44.0 : la bulle sous la souris
+        const gfx::Rect ir = imageRect();
+        const float k = ir.w / iw_;
+        int at = -1;
+        for (std::size_t i = 0; i < spots_.size(); ++i) {
+            const auto& s = spots_[i];
+            const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
+            if (sr.contains(m->pos)) at = static_cast<int>(i);
+        }
+        if (at != hoverSpot_) {
+            hoverSpot_ = at;
+            invalidate();
+        }
+        return ui::EventResult::Ignored;
+    }
     if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && dragging_) {
         const float dx = m->pos.x - last_.x, dy = m->pos.y - last_.y;
         if (std::abs(dx) + std::abs(dy) > 2.f) moved_ = true;
@@ -2820,6 +2875,14 @@ ui::EventResult ZoomImage::onEvent(const ui::InputEvent& ev) {
     return ui::EventResult::Ignored;
 }
 
+gfx::Rect ZoomImage::imageRect() const noexcept {
+    const auto box = bounds();
+    if (iw_ <= 0.f || ih_ <= 0.f) return {};
+    const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
+    const float w = iw_ * k, h = ih_ * k;
+    return {box.x + (box.w - w) * 0.5f + ox_, box.y + (box.h - h) * 0.5f + oy_, w, h};
+}
+
 void ZoomImage::onPaint(const ui::PaintContext& ctx) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
@@ -2836,15 +2899,45 @@ void ZoomImage::onPaint(const ui::PaintContext& ctx) {
             const float w = iw_ * k, h = ih_ * k;
             r.pushClip(box);
             r.drawImage(img.tex, {box.x + (box.w - w) * 0.5f + ox_, box.y + (box.h - h) * 0.5f + oy_, w, h});
+            // 1.44.0 : les zones qui ont une bulle, au survol de la capture ; celle sous la souris, et sa bulle
+            if (!spots_.empty() && hovered()) {
+                const gfx::Rect ir = imageRect();
+                for (std::size_t i = 0; i < spots_.size(); ++i) {
+                    const auto& s = spots_[i];
+                    const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
+                    const bool on = static_cast<int>(i) == hoverSpot_;
+                    r.strokeRoundedRect(sr, c.accent.withAlpha(on ? 255 : 120), 5.f, on ? 2.f : 1.f);
+                }
+            }
             r.popClip();
+            if (hoverSpot_ >= 0 && hoverSpot_ < static_cast<int>(spots_.size()) && hovered()) {
+                const auto& s = spots_[static_cast<std::size_t>(hoverSpot_)];
+                const gfx::Rect ir = imageRect();
+                const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
+                const float bw = std::min(box.w - 16.f, 300.f);
+                const auto lines = wrapText(r, s.tip, kSmall, bw - 20.f);
+                const float bh = static_cast<float>(std::min<std::size_t>(lines.size(), 6)) * 18.f + 14.f;
+                float bx = std::clamp(sr.x, box.x + 8.f, box.right() - bw - 8.f);
+                float by = sr.bottom() + 6.f;
+                if (by + bh > box.bottom() - 4.f) by = std::max(box.y + 4.f, sr.y - bh - 6.f);
+                r.fillRoundedRect({bx, by, bw, bh}, gfx::Color::rgb(0x111827), 8.f);
+                float ty = by + 7.f;
+                int n = 0;
+                for (const auto& l : lines) {
+                    if (++n > 6) break;
+                    r.drawText({bx + 10.f, ty}, fit(r, l, kSmall, bw - 20.f), kSmall, gfx::Color::rgb(0xFFFFFF));
+                    ty += 18.f;
+                }
+            }
             drawn = true;
         }
     }
     if (!drawn)
         r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, empty_, kSmall, box.w - 24.f), kSmall, c.textMuted);
     else if (hint_) {
-        const std::string t = zoom_ > 1.f ? "\xC3\x97" + std::to_string(static_cast<int>(std::lround(zoom_ * 100.f))) + " % \xC2\xB7 glisser : d\xC3\xA9placer \xC2\xB7 double clic : ajuster"
-                                          : onOpen ? "Molette : zoom \xC2\xB7 clic : en grand" : "Molette : zoom \xC2\xB7 glisser \xC2\xB7 double clic : ajuster";
+        std::string t = zoom_ > 1.f ? "\xC3\x97" + std::to_string(static_cast<int>(std::lround(zoom_ * 100.f))) + " % \xC2\xB7 glisser : d\xC3\xA9placer \xC2\xB7 double clic : ajuster"
+                                    : onOpen ? "Molette : zoom \xC2\xB7 clic : en grand" : "Molette : zoom \xC2\xB7 glisser \xC2\xB7 double clic : ajuster";
+        if (!spots_.empty() && zoom_ <= 1.f) t = "Survole les zones : ce qu'on y voit \xC2\xB7 " + t;   // 1.44.0
         const float tw = std::min(box.w - 8.f, r.measure(t, kSmall).width + 12.f);
         const gfx::Rect tag{box.right() - tw - 4.f, box.bottom() - r.lineHeight(kSmall) - 8.f, tw, r.lineHeight(kSmall) + 4.f};
         r.fillRect(tag, c.panelBg.withAlpha(215));
@@ -2857,17 +2950,50 @@ void ZoomImage::onPaint(const ui::PaintContext& ctx) {
 FeaturePreviewPane::FeaturePreviewPane(std::string id) : ui::Widget(std::move(id)) {
     image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>(this->id() + ".capture")));
     image_->onOpen = [this] {
-        if (onEnlarge && image_->hasImage()) onEnlarge(shown_, image_->image(), preview_.description);
+        if (!onEnlarge || !image_->hasImage()) return;
+        // 1.44.0 : la capture montree, sa legende avant la phrase de la fonctionnalite
+        const std::string caption = shot_ < preview_.shots.size() ? preview_.shots[shot_].caption : std::string();
+        onEnlarge(shown_, image_->image(), caption.empty() ? preview_.description : caption + " \xE2\x80\x94 " + preview_.description);
     };
     image_->setVisibility(ui::Visibility::Collapsed);
+    // 1.44.0 : plusieurs captures - des fleches de part et d'autre de << Capture 2/3 : sa legende >>
+    prev_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("\xE2\x80\xB9", this->id() + ".precedente")));
+    next_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("\xE2\x80\xBA", this->id() + ".suivante")));
+    links_ += prev_->clicked->connect([this] {
+        if (preview_.shots.size() < 2) return;
+        shot_ = (shot_ + preview_.shots.size() - 1) % preview_.shots.size();
+        applyShot();
+    });
+    links_ += next_->clicked->connect([this] {
+        if (preview_.shots.size() < 2) return;
+        shot_ = (shot_ + 1) % preview_.shots.size();
+        applyShot();
+    });
+    prev_->setVisibility(ui::Visibility::Collapsed);
+    next_->setVisibility(ui::Visibility::Collapsed);
 }
 
 void FeaturePreviewPane::show(const FeatureInfo& info) {
     if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
     shown_ = info;
     preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
-    image_->setImage(capturePng(preview_.imagePath, shown_.id + ".png"));
+    shot_ = 0;
+    applyShot();
     image_->setVisibility(shown_.id.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+}
+
+void FeaturePreviewPane::applyShot() {
+    if (shot_ < preview_.shots.size()) {
+        const auto& s = preview_.shots[shot_];
+        image_->setImage(capturePng(s.imagePath, shown_.id + (shot_ == 0 ? std::string(".png") : "-" + std::to_string(shot_ + 1) + ".png")));
+        image_->setSpots(s.spots);
+    } else {
+        image_->setImage(capturePng(preview_.imagePath, shown_.id + ".png"));
+        image_->setSpots({});
+    }
+    const auto vis = preview_.shots.size() > 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed;
+    prev_->setVisibility(vis);
+    next_->setVisibility(vis);
     invalidateLayout();
     invalidate();
 }
@@ -2877,9 +3003,15 @@ void FeaturePreviewPane::onLayout() {
     const float x = b.x + 12.f, W = std::max(60.f, b.w - 24.f);
     float y = b.y + 12.f + 22.f + (shown_.product.empty() ? 0.f : 20.f) + 4.f;
     // La capture (960 x 600) a la largeur du volet ; la moitie de la hauteur au plus.
-    const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, b.h * 0.55f));
+    const bool several = preview_.shots.size() > 1;
+    const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, b.h * 0.55f - (several ? 32.f : 0.f)));
     image_->setBounds({x, y, W, ih});
-    textY_ = y + ih + 10.f;
+    navY_ = y + ih + 4.f;
+    if (several) {
+        prev_->setBounds({x, navY_, 30.f, 26.f});
+        next_->setBounds({x + W - 30.f, navY_, 30.f, 26.f});
+    }
+    textY_ = y + ih + 10.f + (several ? 30.f : 0.f);
 }
 
 void FeaturePreviewPane::onPaint(const ui::PaintContext& ctx) {
@@ -2902,6 +3034,13 @@ void FeaturePreviewPane::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x + 1.f, y}, title, kValue, c.text);
     y += r.lineHeight(kValue) + 2.f;
     if (!shown_.product.empty()) r.drawText({x, y}, fit(r, shown_.product, kSmall, W), kSmall, c.textMuted);
+    // 1.44.0 : << Capture 2/3 : sa legende >>, entre les fleches
+    if (preview_.shots.size() > 1) {
+        const std::string caption = preview_.shots[shot_].caption;
+        const std::string nav = "Capture " + std::to_string(shot_ + 1) + "/" + std::to_string(preview_.shots.size()) + (caption.empty() ? std::string() : " : " + caption);
+        const float nw = W - 2.f * 38.f;
+        r.drawText({x + 38.f, navY_ + (26.f - r.lineHeight(kSmall)) * 0.5f}, fit(r, nav, kSmall, nw), kSmall, c.text);
+    }
     y = textY_;
     int n = 0;
     for (const auto& l : wrapText(r, preview_.description.empty() ? std::string("(pas encore de description)") : preview_.description, kSmall, W)) {
@@ -3475,11 +3614,13 @@ public:
                 return true;
             }
             if (t.kind == "detail" && openDetail_) return openDetail_(t.key);   // 1.39.0 : l'offre modifiee, avant / apres
+            // 1.44.0 : un message a ce PC (ses fichiers), une mise a jour - leur fenetre, par-dessus celle-ci
+            if ((action.rfind("fichiers:", 0) == 0 || action.rfind("maj:", 0) == 0) && openDetail_) return openDetail_(action);
             return false;
         };
         list_ = &static_cast<ai::AiNotificationsView&>(addChild(std::make_unique<ai::AiNotificationsView>("dialog.notifications.liste", cb)));
         ai::AiNotificationsView::Source src{&notices::revision, &notices::list, &notices::markRead, &notices::remove, &notices::markAllRead,
-                                            &notices::clearRead};
+                                            &notices::clearRead, &updates::filesLine};   // 1.44.0 : << Avec fichiers >>
         list_->setSource(src);
         closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.notifications.fermer")));
         closeButton_->setStyle(ui::Button::Style::Primary);
@@ -3512,7 +3653,8 @@ protected:
         r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
         r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
         r.drawText({panel_.x + 14.f, panel_.y + 50.f},
-                   fit(r, "Ta licence, les offres de l'\xC3\xA9" "diteur et ses annonces - ici seulement, jamais par mail.", kSmall, panel_.w - 28.f), kSmall,
+                   fit(r, "Ta licence, les offres de l'\xC3\xA9" "diteur, ses annonces, ses messages \xC3\xA0 ce PC et les mises \xC3\xA0 jour - ici seulement, jamais par mail.",
+                       kSmall, panel_.w - 28.f), kSmall,
                    c.textMuted);
     }
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -3562,12 +3704,20 @@ protected:
                 *then_ = tab < 0 ? licence::kTabAuto : tab;   // la fenetre Licence, une fois celle-ci fermee
                 fermer();
             },
-            [this](const std::string& key) { return licence::showOfferChange(app_, key); },   // 1.39.0 : par-dessus celle-ci
+            [this](const std::string& key) {
+                // 1.44.0 : un message (ses fichiers), une mise a jour
+                if (key.rfind("fichiers:", 0) == 0 || key.rfind("maj:", 0) == 0) return licence::openNoticeAction(app_, key);
+                return licence::showOfferChange(app_, key);   // 1.39.0 : par-dessus celle-ci
+            },
             [this] { fermer(); });
         body_ = body.get();
+        if (withFiles_) body_->list().setFilter(ai::AiNotificationsView::Filter::WithFiles);   // 1.44.0
         setRoot(std::move(body));
         return core::ok();
     }
+
+public:
+    bool withFiles_{false};
 
 private:
     App&                 app_;
@@ -3578,9 +3728,13 @@ private:
 
 } // namespace
 
-void showNoticesWindow(App& app) {
+void showNoticesWindow(App& app) { showNoticesWindow(app, false); }
+
+void showNoticesWindow(App& app, bool withFiles) {
     auto then = std::make_shared<int>(-1000);
-    app.menus().ShowDialog(std::make_unique<NoticesWindow>(app, then), [&app, then](const menu::DialogResult&) {
+    auto w = std::make_unique<NoticesWindow>(app, then);
+    w->withFiles_ = withFiles;   // 1.44.0 : ouverte sur << Avec fichiers >>
+    app.menus().ShowDialog(std::move(w), [&app, then](const menu::DialogResult&) {
         if (*then != -1000) showLicenceWindow(app, *then);
     });
 }

@@ -109,7 +109,8 @@ public:
     };
     enum class Glyph : std::uint8_t { None, Plus, Open, Tutorial, Help, Settings, Station, Copy, Rename, Trash, Remove,
                                       Search,     // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
-                                      Bell };     // 1.38.0 : les notifications
+                                      Bell,       // 1.38.0 : les notifications
+                                      Team };     // 1.44.0 : rejoindre une session
 
     StartButton(std::string text, std::string id, Look look, Glyph glyph = Glyph::None);
 
@@ -296,6 +297,7 @@ public:
     [[nodiscard]] StartButton&   foldersLink() noexcept { return *folders_; }
     // 1.14.0 (lot M5) : Chercher des fichiers sur ce PC (Ctrl+Maj+P).
     [[nodiscard]] StartButton&   findLink() noexcept { return *find_; }
+    [[nodiscard]] StartButton&   joinLink() noexcept { return *join_; }   // 1.44.0 : rejoindre une session (IHM Studio)
     // 1.38.0 : les notifications generales (la licence, les offres, les annonces) ; `unread` : le nombre a droite.
     [[nodiscard]] StartButton&   noticesLink() noexcept { return *notices_; }
     void setUnreadNotices(std::size_t unread);
@@ -342,6 +344,7 @@ private:
     StartButton*   settings_{nullptr};
     StartButton*   folders_{nullptr};     // 1.8.0
     StartButton*   find_{nullptr};        // 1.14.0 (lot M5)
+    StartButton*   join_{nullptr};        // 1.44.0 : rejoindre une session (IHM Studio seulement)
     StartButton*   notices_{nullptr};     // 1.38.0
     std::size_t    unreadNotices_{static_cast<std::size_t>(-1)};
     ThemeSwatches* swatches_{nullptr};

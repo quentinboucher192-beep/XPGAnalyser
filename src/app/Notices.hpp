@@ -39,6 +39,9 @@ namespace app::notices {
 using Item = app::ai::notifs::Item;
 
 // ---- le carnet (sur entre fils ; le mecanisme : ai/AiNotifications.cpp) --------------------------------------------
+// 1.44.0 : la meme cle avec le meme titre et le meme detail est le MEME evenement (poste de nouveau au lancement, a la
+// reouverture d'un projet) : il garde son etat lu, sa place et son compteur (le bouton et les donnees suivent). Un titre
+// ou un detail nouveau sous la meme cle : un evenement nouveau (non lu, remonte, x2).
 std::uint64_t post(Item n);
 [[nodiscard]] std::vector<Item> list();            // la plus recente d'abord
 [[nodiscard]] std::optional<Item> find(std::uint64_t id);

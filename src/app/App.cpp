@@ -38,6 +38,7 @@
 #include "../project/BlockLibrary.hpp"
 #include "AboutDialog.hpp"                    // 1.10 (R2) : A propos d'XPGAnalyser
 #include "Licence.hpp"                        // 1.30.0 : les licences
+#include "Updates.hpp"                        // 1.44.0 : les messages a ce PC, les mises a jour
 #include "Fenetres.hpp"                       // 1.12.27 : plusieurs fenetres d'IHM Studio
 #include "GlisserDehors.hpp"                  // 1.12.27 : glisser des objets vers une autre fenetre
 #include "../project/GrafcetEdit.hpp"
@@ -374,6 +375,17 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
         app::ai::notifs::open(app::ai::notificationsFile());
         // 1.38.0 : les notifications generales de ce Studio (la licence, les offres, les annonces de l'editeur).
         app::notices::open(licence::watch::noticesPath());
+        // 1.44.0 : les avis de la cloche deja lus - pour ce compte, pas pour un projet (une barre neuve a chaque projet
+        // ouvert les remettait << non lus >>) ; << Tout marquer comme lu >> lit aussi les notifications generales.
+        {
+            const std::string np = licence::watch::noticesPath();
+            const auto lu = std::filesystem::path(std::u8string(np.begin(), np.end())).parent_path() / "cloche-lue.txt";
+            const auto lu8 = lu.u8string();
+            bgtasks::setReadFile(std::string(lu8.begin(), lu8.end()));
+            bgtasks::setReadHook([](const std::string& key) {
+                if (key.rfind("notification:", 0) == 0) (void)app::notices::markRead(std::strtoull(key.c_str() + 13, nullptr, 10));
+            });
+        }
         // 1.25.1 : la corbeille de l'IA (IA/corbeille) - ce qui y est depuis plus de 7 jours part pour de bon.
         (void)app::ai::memory::purgeTrash();
     }
@@ -1644,6 +1656,8 @@ void App::registerActions() {
                         [this] { menus_->PreviousMenu(); }});
     // 1.30.0 : la fenetre Licence (Aide > Licence..., la pastille de la barre d'etat).
     actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
+    // 1.44.0 : la mise a jour disponible (la pastille de la barre du haut, le toast) - sa fenetre.
+    actions_.add(Action{"update.open", "Mise \xC3\xA0 jour\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { (void)licence::showUpdateWindow(*this); }});
     // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet.
     actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this, licence::kTabProfile); }});
     // 1.43.0 : LES SESSIONS (IHM Studio) - Projet > Demarrer une session..., Rejoindre une session... ; la pastille du haut.
@@ -3130,6 +3144,8 @@ void App::deliverClientEvent(const ui::InputEvent& e) {
     // 1.10 (chantier P) : la bulle de Me montrer prend ses clics ; un clic
     // sur un element marque NOUVEAU l'utilise (et passe dessous).
     if (noveltyCenter().handle(e) == ui::EventResult::Consumed) return;
+    // 1.44.0 : le toast de la mise a jour (Voir, la croix), par-dessus tout.
+    if (updates::handleToast(*this, e) == ui::EventResult::Consumed) return;
     // 1.11 (T1) : un tutoriel en cours mange la souris et le clavier
     // pendant la lecture ; en "A toi", il ne garde que sa barre.
     if (tutorials::event(e)) return;
@@ -3399,6 +3415,7 @@ void App::frame(double dt) {
     lap.to(XPG_PARTIE("enregistrement-auto"));
     recovery_.tick(dt);
     licence::tick();   // 1.30.0 : une revaluation par heure (une licence peut prendre fin pendant le travail)
+    updates::tick(*this);   // 1.44.0 : la mise a jour (le telechargement, l'enregistrement, l'installateur, la fermeture)
     if (session_) session_->tick();   // 1.43.0 : la session (le reseau, les changements qui partent et arrivent)
     // 1.34.0 : ce qu'apporte la passerelle (une licence installee, un refus) - la barre d'etat (et la cloche).
     for (auto& m : licence::takeMessages()) bus_.publish(StatusNotice{std::move(m), 20.0});
@@ -3466,6 +3483,7 @@ void App::frame(double dt) {
         menus_->Render(*renderer_, fc);   // 4. paint back-to-front
         tutorials::paint(*renderer_, theme_, fc.surface, time_);   // 1.11 (T1) : le calque du tutoriel
         noveltyCenter().paint(*renderer_, theme_, fc.surface);   // 4. bis 1.10 : les reperes orange, la bulle
+        updates::paintToast(*renderer_, theme_, fc.surface);      // 1.44.0 : le toast de la mise a jour
         mainCursor = ui::cursor::shown();
         // ---- Lot API 8 : la question attend dans une fenetre detachee : le
         //      voile de la principale, et ou aller (avant la capture).

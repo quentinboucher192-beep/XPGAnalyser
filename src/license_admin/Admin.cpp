@@ -931,6 +931,13 @@ bool appendActivations(const std::string& folder, const std::vector<ActivationRe
         stamp("revoked_at", a.revokedAt);
         str("reason", a.reason);
         stamp("issued_before", a.issuedBefore);   // 1.32.0
+        str("action", a.action);                  // 1.44.0 : "client"
+        if (!a.licences.empty()) {
+            Value l = Value::array();
+            for (const auto& id : a.licences) l.push(id);
+            v.set("licenses", std::move(l));
+        }
+        str("by", a.by);
         text += core::json::write(v, false) + "\n";
     }
     std::error_code ec;
@@ -969,7 +976,7 @@ bool readActivations(const std::string& folder, std::vector<ActivationRecord>& o
         if (line.empty()) continue;
         Value v;
         const std::string kind = core::json::parse(line, v) && v.isObject() ? v.str("kind") : std::string();
-        if (kind != "licence" && kind != "demande" && kind != "revocation") {
+        if (kind != "licence" && kind != "demande" && kind != "revocation" && kind != "client") {   // 1.44.0 : + client
             if (skipped) ++*skipped;
             continue;
         }
@@ -993,6 +1000,11 @@ bool readActivations(const std::string& folder, std::vector<ActivationRecord>& o
         a.reason = v.str("reason");
         a.issuedAt = timeField(v, "issued_at");
         a.issuedBefore = timeField(v, "issued_before");
+        a.action = v.str("action");   // 1.44.0
+        if (const Value* l = v.find("licenses"); l && l->isArray())
+            for (const auto& x : l->items())
+                if (x.isString()) a.licences.push_back(x.asString());
+        a.by = v.str("by");
         out.push_back(std::move(a));
     }
     return true;
