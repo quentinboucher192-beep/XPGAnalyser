@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.41.0", "08/11/2026", "\xC3\xA0 venir"},
+    {"1.42.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.41.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 21 h 34"},
     {"1.40.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 19 h 23"},
     {"1.39.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 17 h 20"},
     {"1.38.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 15 h 05"},
@@ -185,6 +186,27 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.42.0 : les options, Mes achats, les offres temporaires
+        note("1.42.0", "Projet", Kind::New,
+         "LES OPTIONS : Licence\xE2\x80\xA6 \xE2\x80\xBA Options ajoute une fonction \xC3\xA0 ta licence pour un temps (1 semaine, 1 mois, jusqu'\xC3\xA0 la fin, "
+         "ou des dates), sans changer d'offre : choisis-la, envoie la demande \xC3\xA0 l'\xC3\xA9" "diteur ; accept\xC3\xA9" "e, elle arrive toute seule sur "
+         "tes PC, puis s'arr\xC3\xAAte \xC3\xA0 sa date (le reste ne bouge pas). Une action ferm\xC3\xA9" "e par ta licence propose l'option qui l'ouvre "
+         "(Voir l'option).",
+         "licence", ""),
+        note("1.42.0", "Projet", Kind::New,
+         "MES ACHATS : Licence\xE2\x80\xA6 \xE2\x80\xBA Mes achats montre tout ce que tu as pris depuis ta premi\xC3\xA8re licence (les offres, les "
+         "prolongations, les options, fini ou en cours) : ton offre, l'option en cours et ce qu'il lui reste, une ligne de temps, le tableau "
+         "(Tout, Offres, Options) et son export en CSV.",
+         "licence", ""),
+        note("1.42.0", "Projet", Kind::Changed,
+         "LES OFFRES TEMPORAIRES : la boutique (Demander ma licence, \xC3\x89" "ditions) ne montre une offre en vente pour un temps que pendant "
+         "sa p\xC3\xA9riode, et dit jusqu'\xC3\xA0 quand ; une offre retir\xC3\xA9" "e n'y est plus (ta licence reste montr\xC3\xA9" "e). Les licences de "
+         "la 1.42 portent leurs options et l'historique des achats : installe la 1.42 sur tous tes PC.",
+         "licence", ""),
+        note("1.42.0", "Projet", Kind::Fixed,
+         "LA FEN\xC3\x8ATRE LICENCE : le formulaire de la demande d\xC3\xA9" "file (on en voit le bas), le dernier bouton n'est plus rogn\xC3\xA9 sur "
+         "le bord.",
+         "licence", ""),
         // 1.41.0 : le nouveau design (la maquette validee), son socle
         note("1.41.0", "Projet", Kind::New,
          "LE NOUVEAU DESIGN, PREMI\xC3\x88RE \xC3\x89TAPE : le th\xC3\xA8me XPG (clair et calme, des cartes blanches, une couleur par logiciel : "
