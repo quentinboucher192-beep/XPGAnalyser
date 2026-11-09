@@ -6105,6 +6105,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         showLicenceWindow(app_, arg(1).empty() ? licence::kTabAuto : std::atoi(arg(1).c_str()));
         return Step::Yield;
     }
+    // 1.42.0 : licence-bloquee FONCTIONNALITE [ACTION] - la fenetre << Ta licence ne permet pas cette action >> (avec l'option
+    // qui l'ouvre, s'il y en a une)
+    if (cmd == "licence-bloquee") {
+        licence::showLocked(app_, arg(1), arg(2));
+        return Step::Yield;
+    }
     // 1.38.0 : les notifications generales - "notifications" ouvre la fenetre ; "notifications-liste" ecrit chacune
     // (non lue d'abord, sa categorie, son titre, son detail) apres un regard tout de suite sur la licence et le registre.
     if (cmd == "notifications") {
@@ -6184,7 +6190,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     if (cmd == "licence-code" || cmd == "licence-renouveler" || cmd == "licence-liberer" || cmd == "licence-flottante-prendre" ||
         cmd == "licence-flottante-rendre" || cmd == "licence-decouverte" || cmd == "licence-heure" || cmd == "licence-demande-en-ligne" ||
-        cmd == "licence-demande-annuler" || cmd == "licence-demande-verifier") {
+        cmd == "licence-demande-annuler" || cmd == "licence-demande-verifier" || cmd == "licence-demande-option") {
         namespace ls = licence::service;
         static bool               started = false;   // une commande a la fois (le script)
         static unsigned long long seen = 0;
@@ -6210,7 +6216,19 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             else if (cmd == "licence-heure") started = ls::startTime();
             else if (cmd == "licence-demande-annuler") started = ls::startCancelRequest();
             else if (cmd == "licence-demande-verifier") started = ls::startCheckDevice();
-            else {
+            else if (cmd == "licence-demande-option") {   // 1.42.0 : licence-demande-option <option> <jours> [mot]
+                const auto st = licensing::getLicenseState();
+                ls::RequestForm f;
+                f.customer = st.customer;
+                f.licenseId = st.licenseId;
+                f.option = arg(1);
+                f.optionDays = std::atoi(arg(2).c_str());
+                f.message = arg(3);
+                f.optionText = arg(1) + ", " + arg(2) + " j";
+                if (const auto reg = licensing::getRegistry())
+                    if (const auto* o = reg->option(arg(1))) f.optionText = (o->label.empty() ? o->id : o->label) + ", " + arg(2) + " j";
+                started = ls::startRequest(f);
+            } else {
                 ls::RequestForm f;
                 f.customer = arg(1);
                 f.contact = arg(2);

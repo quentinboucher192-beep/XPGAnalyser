@@ -38,6 +38,7 @@
 #include "../../menu/MenuManager.hpp"
 #include "../../platform/Renderer.hpp"
 #include "../../ui/Theme.hpp"
+#include "../../ui/widgets/DatePicker.hpp"
 #include "../../platform/FontAtlas.hpp"   // 1.41.0 : la police de l'interface
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -321,6 +322,7 @@ void perform(menu::MenuManager& menus, const Action& a) {
     else if (auto* c = dynamic_cast<ui::Checkbox*>(w)) c->setState(c->isChecked() ? ui::Checkbox::State::Unchecked : ui::Checkbox::State::Checked);
     else if (auto* r = dynamic_cast<ui::RadioButton*>(w)) r->select();
     else if (auto* tb = dynamic_cast<ui::ToggleButton*>(w)) tb->setChecked(!tb->checked());
+    else if (auto* dp = dynamic_cast<ui::DatePicker*>(w)) dp->isOpen() ? dp->close() : dp->open();   // 1.42.0 : le mini calendrier
     else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB ne se clique pas (%s)\n", a.id.c_str(), where.c_str());
 }
 
