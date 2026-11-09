@@ -264,6 +264,10 @@ private:
     bool               pending_{false};
     licence::service::Job busy_{licence::service::Job::None};
     float              rowsY_{0}, infoY_{0}, footY_{0}, fieldsY_{0};
+    // 1.42.0 : LA PARTIE GAUCHE DEFILE (une fenetre basse : le formulaire et ses boutons ne passent plus sous le bas de
+    // l'onglet). scroll_ : le decalage ; contentH_ : la hauteur de ce qu'elle montre ; la molette, et une barre fine.
+    float              scroll_{0}, contentH_{0};
+    bool               relayout_{false};
     FeatureTablePanel* offer_{nullptr};          // 1.38.0
     std::shared_ptr<ui::ITableModel> offerModel_;
     std::string        offerShown_{"\x01"};     // l'offre deja montree (rien encore)
@@ -1011,7 +1015,7 @@ void LicenceBody::onLayout() {
     tabs_->setBounds({x, tabsY, W, std::max(60.f, bottom - tabsY - 6.f)});
     float bx = x;
     for (auto* b : {import_, request_, folder_}) {
-        const float bw = std::max(110.f, b->sizeHint().preferred.w);
+        const float bw = std::ceil(std::max(110.f, b->sizeHint().preferred.w));   // 1.42.0 : des pixels entiers (des bords nets)
         b->setBounds({bx, panel_.bottom() - 44.f, bw, 32.f});
         bx += bw + 8.f;
     }
@@ -1601,6 +1605,17 @@ void OnlinePanel::buildOffer() {
 }
 
 ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
+    // 1.42.0 : la molette fait defiler la partie gauche (pas la colonne de l'offre : elle a sa liste).
+    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+        const auto b = bounds();
+        const bool overOffer = offerBox_.w > 0.f && w->pos.x >= offerBox_.x;
+        if (b.contains(w->pos) && !overOffer && contentH_ > b.h + 1.f) {
+            const float before = scroll_;
+            scroll_ = std::clamp(scroll_ - w->dy * 48.f, 0.f, contentH_ - b.h);
+            if (scroll_ != before) invalidateLayout();
+            return ui::EventResult::Consumed;
+        }
+    }
     // 1.37.0 : la boutique - un clic choisit une edition, un second clic la rend (l'editeur choisira).
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && available_ && !pending_)
         for (const auto& k : cards_)
@@ -1624,7 +1639,10 @@ constexpr float kCardH = 116.f, kCardGap = 10.f, kIntroLines = 3.f;
 void OnlinePanel::onLayout() {
     const auto b = bounds();
     const float x = b.x + 16.f, fullW = std::max(200.f, b.w - 32.f);
-    rowsY_ = b.y + 16.f + kIntroLines * 20.f + 10.f;   // sous l'introduction (trois lignes au plus)
+    scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, contentH_ - b.h));
+    const float top = b.y - scroll_;   // 1.42.0 : la partie gauche defile ; la colonne de droite (l'offre) reste
+    const float fixedRowsY = b.y + 16.f + kIntroLines * 20.f + 10.f;
+    rowsY_ = top + 16.f + kIntroLines * 20.f + 10.f;   // sous l'introduction (trois lignes au plus)
     // 1.38.0 : a droite, l'offre choisie (une fenetre assez large) ; sinon tout a gauche, comme avant.
     float W = fullW;
     offerBox_ = {};
@@ -1632,7 +1650,7 @@ void OnlinePanel::onLayout() {
         if (fullW >= 900.f) {
             const float cw = std::clamp(std::floor(fullW * 0.36f), 320.f, 480.f);
             W = fullW - cw - 20.f;
-            offerBox_ = {x + W + 20.f, rowsY_, cw, std::max(120.f, b.bottom() - 8.f - rowsY_)};
+            offerBox_ = {x + W + 20.f, fixedRowsY, cw, std::max(120.f, b.bottom() - 8.f - fixedRowsY)};
             offer_->setBounds({offerBox_.x, offerBox_.y + 24.f, offerBox_.w, std::max(80.f, offerBox_.h - 24.f)});
         } else
             offer_->setBounds({b.x, b.y, 0.f, 0.f});
@@ -1680,6 +1698,15 @@ void OnlinePanel::onLayout() {
     }
     infoY_ = rowsY_;
     footY_ = y;
+    // 1.42.0 : la hauteur de la partie gauche (avec les lignes du bas : la derniere reponse, la verification) ; plus
+    // basse que l'onglet, elle defile.
+    const float before = contentH_;
+    contentH_ = (footY_ + 4.f * 20.f + 8.f) - top;
+    if (std::abs(contentH_ - before) > 0.5f && !relayout_) {
+        relayout_ = true;   // le decalage borne a la nouvelle hauteur : une seconde passe
+        onLayout();
+        relayout_ = false;
+    }
 }
 
 void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
@@ -1702,7 +1729,15 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
                       "une fen\xC3\xAAtre te le confirme - aucun fichier, aucun code \xC3\xA0 taper. Une seule demande \xC3\xA0 la fois pour ce PC.");
     const std::string introOff = why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), "
                                  "puis Activer par fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
-    float y = b.y + 16.f;
+    float y = b.y + 16.f - scroll_;   // 1.42.0 : la partie gauche defile
+    // La barre de defilement de la partie gauche (fine, a son bord droit) quand elle est plus haute que l'onglet.
+    if (contentH_ > b.h + 1.f) {
+        const float colRight = (leftW_ > 0.f ? x + std::min(leftW_, W) : x + W) + 8.f;
+        const float trackH = b.h - 8.f, thumbH = std::max(30.f, trackH * b.h / contentH_);
+        const float thumbY = b.y + 4.f + (trackH - thumbH) * (scroll_ / std::max(1.f, contentH_ - b.h));
+        r.fillRoundedRect({colRight, b.y + 4.f, 4.f, trackH}, c.gridLine, 2.f);
+        r.fillRoundedRect({colRight, thumbY, 4.f, thumbH}, c.scrollbarHover, 2.f);
+    }
     int n = 0;
     for (const auto& l : wrapText(r, available_ ? intro : introOff, kSmall, W)) {
         if (++n > 3) break;

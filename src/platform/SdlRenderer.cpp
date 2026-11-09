@@ -99,10 +99,12 @@ namespace gfx {
                 return;
             }
             const Rect& c = clipStack.back();
-            SDL_Rect r{ static_cast<int>(std::floor(c.x / scale)),
-                       static_cast<int>(std::floor(c.y / scale)),
-                       static_cast<int>(std::ceil(c.w / scale)),
-                       static_cast<int>(std::ceil(c.h / scale)) };
+            // 1.42.0 : LE BORD DROIT ET LE BAS ARRONDIS VERS L'EXTERIEUR (ceil(x + w)), pas la largeur seule. Avant :
+            // floor(x) + ceil(w) - un widget a x = 454,8 et w = 208,7 (droite a 663,5) etait coupe a 663 : la derniere
+            // colonne de son cadre perdue (le bouton << Ouvrir le dossier des licences >>, mange a droite).
+            const int x0 = static_cast<int>(std::floor(c.x / scale)), y0 = static_cast<int>(std::floor(c.y / scale));
+            const int x1 = static_cast<int>(std::ceil((c.x + c.w) / scale)), y1 = static_cast<int>(std::ceil((c.y + c.h) / scale));
+            SDL_Rect r{ x0, y0, std::max(0, x1 - x0), std::max(0, y1 - y0) };
             SDL_SetRenderClipRect(renderer, &r);
         }
 
