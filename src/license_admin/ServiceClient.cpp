@@ -798,6 +798,12 @@ bool writeEntry(const std::string& folder, Entry& e, std::string* why) {
     if (!e.contact.empty()) v.set("contact", e.contact);
     if (!e.edition.empty()) v.set("edition", e.edition);   // 1.37.0
     if (!e.email.empty()) v.set("courriel", e.email);
+    if (!e.option.empty()) {   // 1.42.0
+        v.set("option", e.option);
+        v.set("option_jours", e.optionDays);
+        if (e.optionFrom) v.set("option_du", isoOr(e.optionFrom));
+        if (e.optionLastDay) v.set("option_au", isoOr(e.optionLastDay));
+    }
     if (!e.message.empty()) v.set("message", e.message);
     if (!e.deviceName.empty()) v.set("nom_pc", e.deviceName);
     if (!e.fingerprint.empty()) v.set("empreinte", e.fingerprint);
@@ -833,6 +839,14 @@ bool readEntry(const std::string& folder, const std::string& path, Entry& e) {
     e.contact = v.str("contact");
     e.edition = v.str("edition");   // 1.37.0
     e.email = v.str("courriel");
+    e.option = v.str("option");   // 1.42.0
+    e.optionDays = static_cast<int>(v.integer("option_jours"));
+    if (!e.option.empty()) {
+        Seconds t = 0;
+        if (licensing::parseIsoTime(v.str("option_du"), t)) e.optionFrom = t;
+        t = 0;
+        if (licensing::parseIsoTime(v.str("option_au"), t)) e.optionLastDay = t;
+    }
     e.message = v.str("message");
     e.deviceName = v.str("nom_pc");
     e.fingerprint = v.str("empreinte");
@@ -1155,6 +1169,10 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
         e.contact = op.online.contact;
         e.edition = op.online.edition;   // 1.37.0
         e.email = op.online.email;
+        e.option = op.online.option;   // 1.42.0
+        e.optionDays = op.online.optionDays;
+        e.optionFrom = op.online.optionFrom;
+        e.optionLastDay = op.online.optionLastDay;
         e.message = op.online.message;
         e.deviceName = op.record.deviceName;
         e.fingerprint = op.record.fingerprint;
@@ -1291,6 +1309,34 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     if (!writeEntry(folder, e, &why)) res.details.push_back("ATTENTION : " + why);
     res.ok = true;
     res.message = "Demande n\xC2\xB0 " + std::to_string(e.number) + " refus\xC3\xA9" "e (" + e.customer + ") : le PC voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison.";
+    return res;
+}
+
+// 1.42.0 : une demande d'OPTION acceptee pour une licence EN LIGNE (la nouvelle emission est deja deposee : ses PC la
+// recoivent a leur prochain renouvellement) - << acceptee >> pour le PC qui l'a demandee, sans licence ni code (son
+// Studio le dit et renouvelle), la demande traitee.
+Result answerOption(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& licenseId,
+                    const std::string& messageIn, const Options& o) {
+    Entry e;
+    std::string why;
+    if (!findWaiting(folder, which, e, &why)) return refused(why);
+    if (!e.optionRequest()) return refused("la demande n\xC2\xB0 " + std::to_string(e.number) + " ne demande pas d'option");
+    std::unique_ptr<Client> c;
+    if (!openClient(folder, key, o, c, &why)) return refused(why);
+    gw::StatusContent content;
+    content.message = messageIn.size() > 1500 ? messageIn.substr(0, 1500) : messageIn;
+    content.onlineLicense = licenseId;
+    std::string line;
+    if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
+    Result res;
+    res.details.push_back("Publi\xC3\xA9 : " + line + ".");
+    if (!markHandled(*c, e.number, &why)) res.details.push_back("ATTENTION : " + why + " ; la r\xC3\xA9ponse est bien publi\xC3\xA9" "e pour le PC.");
+    e.state = RequestState::Accepted;
+    e.answer = licenseId;
+    e.answeredAt = o.now;
+    if (!writeEntry(folder, e, &why)) res.details.push_back("ATTENTION : " + why);
+    res.ok = true;
+    res.message = "Demande d'option n\xC2\xB0 " + std::to_string(e.number) + " accept\xC3\xA9" "e (" + e.customer + ") : son PC le voit, l'option arrive avec la nouvelle \xC3\xA9mission.";
     return res;
 }
 
@@ -1486,7 +1532,9 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
         gw::StatusContent content;
         content.license = licenceText;
         if (withRev) content.revocations = revText;
-        content.message = waiting ? "Licence " + lic.licenseId + " accept\xC3\xA9" "e." : "Nouvelle \xC3\xA9mission de la licence " + lic.licenseId + ".";
+        content.message = waiting ? (waiting->optionRequest() ? "Option ajout\xC3\xA9" "e \xC3\xA0 la licence " + lic.licenseId + "."   // 1.42.0
+                                                              : "Licence " + lic.licenseId + " accept\xC3\xA9" "e.")
+                                  : "Nouvelle \xC3\xA9mission de la licence " + lic.licenseId + ".";
         if (waiting && mailer) {   // 1.37.0 : le mail au client, envoye avant ; son etat part avec la reponse
             const MailOutcome m = mailer(*waiting, lic, {});
             content.mail = m.state;

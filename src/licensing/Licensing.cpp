@@ -55,12 +55,27 @@ RegistryView viewOf(const Registry& r) {
         ev.promoPrice = e.promoPrice;    // 1.38.0
         ev.promoUntil = static_cast<std::int64_t>(e.promoUntil);
         ev.retired = e.retired;
+        ev.saleFrom = static_cast<std::int64_t>(e.saleFrom);   // 1.42.0
+        ev.saleUntil = static_cast<std::int64_t>(e.saleUntil);
         for (const auto& g : e.features) ev.features.push_back(g.id);
         std::sort(ev.features.begin(), ev.features.end());
         v.editions.push_back(std::move(ev));
     }
     for (const auto& a : r.announcements)   // 1.38.0
         v.announcements.push_back({a.id, a.title, a.text, a.edition, static_cast<std::int64_t>(a.at), static_cast<std::int64_t>(a.until)});
+    for (const auto& o : r.options) {   // 1.42.0
+        RegistryOptionView ov;
+        ov.id = o.id;
+        ov.label = o.label;
+        ov.description = o.description;
+        for (const auto& g : o.features) ov.features.push_back(g.id);
+        ov.editions = o.editions;
+        for (const auto& d : o.durations) ov.durations.emplace_back(d.days, d.price);
+        ov.trialDays = o.trialDays;
+        ov.shop = o.shop;
+        ov.retired = o.retired;
+        v.options.push_back(std::move(ov));
+    }
     return v;
 }
 

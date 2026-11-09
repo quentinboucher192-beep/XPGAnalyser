@@ -393,5 +393,78 @@
       "offline_grace_days": 14,
       "features": []
     }
+  ],
+  "options": [
+    {
+      "id": "exports_avances",
+      "label": "Exports avancés",
+      "description": "PDF et Excel multi-pages",
+      "features": [
+        {
+          "id": "advanced_export"
+        }
+      ],
+      "editions": [
+        "PERSONAL"
+      ],
+      "durations": [
+        {
+          "days": 7,
+          "price": "19 € HT"
+        },
+        {
+          "days": 30,
+          "price": "49 € HT"
+        },
+        {
+          "days": 0,
+          "price": "290 € HT"
+        }
+      ]
+    },
+    {
+      "id": "ia_avancee",
+      "label": "Assistant IA avancé",
+      "description": "Génération de vues et de code, modèles avancés",
+      "features": [
+        {
+          "id": "ai_advanced_models"
+        }
+      ],
+      "editions": [
+        "PERSONAL",
+        "PROFESSIONAL"
+      ],
+      "durations": [
+        {
+          "days": 30,
+          "price": "29 € HT"
+        }
+      ],
+      "trial_days": 7
+    },
+    {
+      "id": "travail_a_plusieurs",
+      "label": "Travail à plusieurs",
+      "description": "Un projet, plusieurs PC en même temps : tes équipiers en direct",
+      "features": [
+        {
+          "id": "multi_user"
+        }
+      ],
+      "editions": [
+        "PROFESSIONAL"
+      ],
+      "durations": [
+        {
+          "days": 30,
+          "price": "39 € HT"
+        },
+        {
+          "days": 365,
+          "price": "390 € HT"
+        }
+      ]
+    }
   ]
 }

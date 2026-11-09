@@ -44,9 +44,15 @@ int main(int argc, char** argv) {
 
     std::printf("-- le format : rien de nouveau tant que rien ne sert\n");
     {
-        const lic::Registry& r = ws.registry();
+        // 1.42.0 : le registre d'exemple porte les options des offres par defaut ; sans elles, rien de la 1.42 n'est ecrit
+        check(ws.registry().usesFormat142() && ws.registry().options.size() == 3 && ws.registry().option("exports_avances") &&
+                  ws.registry().option("ia_avancee") && ws.registry().option("travail_a_plusieurs"),
+              "le registre d'exemple : les 3 options des offres par defaut");
+        lic::Registry bare = ws.registry();
+        bare.options.clear();
+        const lic::Registry& r = bare;
         const std::string text = lic::writeRegistry(r);
-        check(!r.usesFormat142() && !has(text, "sale_") && !has(text, "\"options\""), "le registre d'exemple : aucun champ de la 1.42 ecrit");
+        check(!r.usesFormat142() && !has(text, "sale_") && !has(text, "\"options\""), "un registre sans option ni vente : aucun champ de la 1.42 ecrit");
         lic::Registry x = r;
         lic::EditionDef* pro = nullptr;
         for (auto& e : x.editions)

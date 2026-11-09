@@ -201,6 +201,16 @@ struct OptionDraft {
     bool        gift{false};
 };
 
+// ---- 1.42.0 : une demande d'option d'un client (Demandes en ligne) : la fenetre << Ajouter une option >> reglee dessus ----
+struct OptionPreset {
+    bool        set{false};
+    std::string optionId;
+    int         days{0};          // 0 : jusqu'a la fin de la licence ; -1 : des dates (from .. lastDay)
+    Seconds     from{0};          // 0 : des qu'elle est acceptee
+    Seconds     lastDay{0};       // des dates : le dernier jour, compris
+    int         requestNumber{0}; // la demande a laquelle elle repond (0 : aucune)
+};
+
 // ---- 1.42.0 : un client supprime (Clients > Supprimer le client...) : ses licences, toutes finies, dans la corbeille ----
 struct DeletedClient {
     std::string              name;
@@ -329,6 +339,8 @@ public:
     [[nodiscard]] OpResult serviceSetActive(const std::string& licenseId, bool active) const;
     [[nodiscard]] OpResult serviceFetch() const;
     [[nodiscard]] OpResult serviceRefuse(const std::string& which, const std::string& reason) const;
+    // 1.42.0 : une demande d'option acceptee pour une licence en ligne (online::answerOption).
+    [[nodiscard]] OpResult serviceAnswerOption(const std::string& which, const std::string& licenseId, const std::string& message) const;
     [[nodiscard]] OpResult serviceStats() const;
     // 1.40.0 : les compteurs de ce qui change (GET /admin/etat) - le regard de l'outil ouvert (Shell::autoWatch).
     [[nodiscard]] OpResult serviceWatch(online::AdminWatch& out) const;

@@ -224,13 +224,21 @@ std::string writeOnlineRequest(const OnlineRequest& r) {
     if (!r.message.empty()) v.set("message", r.message);
     if (!r.edition.empty()) v.set("edition", r.edition);   // 1.37.0
     if (!r.email.empty()) v.set("courriel", r.email);
+    if (!r.option.empty()) {   // 1.42.0
+        v.set("option", r.option);
+        v.set("option_jours", r.optionDays);
+        if (r.optionFrom) v.set("option_du", isoTime(r.optionFrom));
+        if (r.optionLastDay) v.set("option_au", isoTime(r.optionLastDay));
+    }
     return json::write(v, false);
 }
 
 bool parseOnlineRequest(std::string_view text, OnlineRequest& out, std::string* why) {
     constexpr std::string_view what = "la demande en ligne";
     json::Value v;
-    if (!readObject(text, v, {"version", "demande", "client", "contact", "message", "edition", "courriel"}, what, why)) return false;
+    if (!readObject(text, v, {"version", "demande", "client", "contact", "message", "edition", "courriel", "option", "option_jours", "option_du", "option_au"}, what,
+                    why))
+        return false;
     OnlineRequest r;
     if (!readString(v, "demande", r.request, true, 32u * 1024u, what, why) || !readString(v, "client", r.customer, true, 200, what, why) ||
         !readString(v, "contact", r.contact, false, 200, what, why) || !readString(v, "message", r.message, false, 2000, what, why) ||
@@ -239,6 +247,21 @@ bool parseOnlineRequest(std::string_view text, OnlineRequest& out, std::string* 
     if (!r.edition.empty() && r.edition.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_") != std::string::npos)
         return fail(why, std::string(what) + " : l'\xC3\xA9" "dition voulue n'est pas un identifiant d'\xC3\xA9" "dition");
     if (!r.email.empty() && !plausibleEmail(r.email)) return fail(why, std::string(what) + " : le courriel n'est pas lisible");
+    // 1.42.0 : l'option demandee
+    if (!readString(v, "option", r.option, false, 64, what, why)) return false;
+    if (!r.option.empty()) {
+        if (!isFeatureId(r.option)) return fail(why, std::string(what) + " : l'option demand\xC3\xA9" "e n'est pas un identifiant d'option");
+        const json::Value* d = v.find("option_jours");
+        if (!d || !d->isNumber() || d->asNumber() != static_cast<double>(d->asInt()) || d->asInt() < -1 || d->asInt() > 3660)
+            return fail(why, std::string(what) + " : la dur\xC3\xA9" "e de l'option est illisible");
+        r.optionDays = static_cast<int>(d->asInt());
+        if (v.find("option_du") && !readTime(v, "option_du", r.optionFrom, what, why)) return false;
+        if (v.find("option_au") && !readTime(v, "option_au", r.optionLastDay, what, why)) return false;
+        if (r.optionDays == -1 && (!r.optionLastDay || (r.optionFrom && r.optionLastDay < r.optionFrom)))
+            return fail(why, std::string(what) + " : les dates de l'option sont illisibles");
+    } else if (v.find("option_jours") || v.find("option_du") || v.find("option_au")) {
+        return fail(why, std::string(what) + " : une dur\xC3\xA9" "e d'option sans option");
+    }
     if (!plainLine(r.customer) || !plainLine(r.contact) || !plainLine(r.message))
         return fail(why, std::string(what) + " : le client, le contact ou le message porte un caract\xC3\xA8re de contr\xC3\xB4le");
     if (r.customer.find_first_not_of(' ') == std::string::npos) return fail(why, std::string(what) + " : le client est vide");

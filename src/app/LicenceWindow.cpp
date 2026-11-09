@@ -54,6 +54,8 @@
 #include "../ui/widgets/Containers.hpp"
 #include "../ui/widgets/Controls.hpp"
 #include "../ui/widgets/DataViews.hpp"
+#include "../ui/widgets/DatePicker.hpp"   // 1.42.0 : les dates d'une option
+#include "../ui/Shapes.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -62,6 +64,8 @@
 #include <fstream>
 #include <initializer_list>
 #include <memory>
+#include <optional>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -336,6 +340,88 @@ private:
     std::string    summary_, note_;
 };
 
+// ---- 1.42.0 : Options - ajouter une fonction a sa licence pour un temps (le catalogue de l'editeur, sa demande) ----
+class OptionsPanel final : public ui::Widget {
+public:
+    OptionsPanel(LicenceBody& body, App& app);
+    void refresh();
+    // Choisir une option (une action fermee qui la propose, << Prolonger... >>).
+    void choose(const std::string& optionId);
+    [[nodiscard]] const std::string& chosen() const noexcept { return chosen_; }
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    struct Row {
+        std::string id;
+        bool        active{false};
+        bool        inOffer{false};
+    };
+    void loadForm();
+    void send();
+    [[nodiscard]] std::int64_t now() const;
+    [[nodiscard]] int days() const;   // -1 : des dates
+    [[nodiscard]] std::string priceOf(int days) const;
+
+    LicenceBody&     body_;
+    App&             app_;
+    ui::TableView*   table_{nullptr};
+    std::shared_ptr<ui::ITableModel> model_;
+    ui::DropDown*    duration_{nullptr};
+    ui::DropDown*    start_{nullptr};
+    ui::DatePicker*  from_{nullptr};
+    ui::DatePicker*  to_{nullptr};
+    ui::InputText*   message_{nullptr};
+    ui::Button*      send_{nullptr};
+    ui::Button*      extend_{nullptr};
+    std::vector<Row> rows_;
+    std::string      chosen_, edition_, licenseId_, customer_;
+    std::vector<std::string> activeLines_;   // << Exports avances - active, encore 6 j - jusqu'au dim. 15/11/2026 au soir >>
+    std::string      activeId_;               // l'option en cours (Prolonger...)
+    std::string      blocked_;                // vide : la demande peut partir ; sinon pourquoi pas
+    std::string      pendingText_;            // une demande d'option en attente
+    gfx::Rect        formBox_{}, activeBox_{};
+    float            leadY_{0}, footY_{0};
+    bool             loading_{false};
+    core::ConnectionScope links_;
+};
+
+// ---- 1.42.0 : Mes achats - l'historique complet du client (offres, prolongations, options ; fini ou en cours) ----
+class PurchasesPanel final : public ui::Widget {
+public:
+    explicit PurchasesPanel(LicenceBody& body);
+    void refresh();
+    // Les lignes montrees (le filtre) : les essais et le CSV.
+    [[nodiscard]] std::size_t shownCount() const noexcept { return shown_.size(); }
+    [[nodiscard]] std::string csv() const;
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    void rebuild();
+    void exportCsv();
+    [[nodiscard]] std::int64_t now() const;
+
+    LicenceBody&                     body_;
+    ui::TableView*                   table_{nullptr};
+    std::shared_ptr<ui::ITableModel> model_;
+    ui::Button*                      all_{nullptr};
+    ui::Button*                      offers_{nullptr};
+    ui::Button*                      options_{nullptr};
+    ui::Button*                      export_{nullptr};
+    std::vector<licensing::Purchase> all__;
+    std::vector<licensing::Purchase> shown_;
+    int                              filter_{0};   // 0 tout, 1 offres, 2 options
+    std::string                      tile_[3][3];  // Ton offre, Option en cours, Depuis le : titre, valeur, detail
+    gfx::Rect                        tiles_[3]{}, timeline_{};
+    float                            leadY_{0};
+    core::ConnectionScope            links_;
+};
+
 // ---- 1.38.0 : la fonctionnalite d'une ligne (Editions, Fonctionnalites, la boutique) : id vide, une ligne de resume ----
 struct FeatureInfo {
     std::string id, label, product, editions;
@@ -482,6 +568,8 @@ private:
     OnlinePanel*      online_{nullptr};      // 1.34.0
     ActivationPanel*  activation_{nullptr};  // 1.35.0
     ProfilePanel*     profile_{nullptr};     // 1.37.0
+    OptionsPanel*     options_{nullptr};     // 1.42.0
+    PurchasesPanel*   purchases_{nullptr};   // 1.42.0
     unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
     bool              wasBusy_{false};
     licensing::Seconds devicesCheckedAt_{0};  // 1.38.0 : la derniere fois que Mes appareils a regarde l'age de sa liste
@@ -566,6 +654,10 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     activation_ = activation.get();
     auto profile = std::make_unique<ProfilePanel>(*this);   // 1.37.0
     profile_ = profile.get();
+    auto options = std::make_unique<OptionsPanel>(*this, app);   // 1.42.0
+    options_ = options.get();
+    auto purchases = std::make_unique<PurchasesPanel>(*this);    // 1.42.0
+    purchases_ = purchases.get();
     tabs->addTab({"Activation", ui::Icon::Network}, std::move(activation));   // 1.35.0 : licence::kTabActivation
     tabs->addTab({"Ma licence", ui::Icon::Lock}, std::move(mine));
     tabs->addTab({"Mes appareils", ui::Icon::Screen}, std::move(devices));
@@ -575,6 +667,8 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
     tabs->addTab({"Demander ma licence", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest (1.36.0 : son nom)
     tabs->addTab({"Mon profil", ui::Icon::User}, std::move(profile));            // 1.37.0 : licence::kTabProfile
+    tabs->addTab({"Options", ui::Icon::Star}, std::move(options));               // 1.42.0 : licence::kTabOptions
+    tabs->addTab({"Mes achats", ui::Icon::History}, std::move(purchases));       // 1.42.0 : licence::kTabPurchases
     tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
@@ -613,7 +707,7 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
             licence::onlineRequests())
             tab = licence::kTabRequest;
     }
-    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabProfile)));
+    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabPurchases)));
 }
 
 void LicenceBody::poll() {
@@ -631,6 +725,7 @@ void LicenceBody::poll() {
         wasBusy_ = b;
         online_->refresh();
         activation_->refresh();
+        options_->refresh();   // 1.42.0 : Envoyer la demande (un travail du service)
     }
     // 1.38.0 : Mes appareils ouvert sur une licence en ligne - les PC de la licence relus au service s'ils ont plus de
     // 10 minutes (un renouvellement du bail, au plus toutes les 10 minutes) : << N PC sur 20 >> suit les autres PC
@@ -834,7 +929,14 @@ void LicenceBody::reload() {
         std::vector<EditionsPanel::RowInfo> infos;   // 1.37.0 : la fonctionnalite de chaque ligne (l'apercu)
         std::size_t mineCol = 0, summary = 0;
         if (reg) {
-            for (const auto& e : reg->editions) {
+            // 1.42.0 : les offres EN VENTE (une offre temporaire hors de sa periode, une offre retiree : plus montrees), et la tienne
+            std::vector<licensing::RegistryEditionView> eds;
+            const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
+            for (const auto& e : eds) {
+                const bool isMine = !st.licensedEdition.empty() ? e.id == st.licensedEdition : e.id == st.edition;
+                if (isMine || e.id == reg->unlicensedEdition || e.onSale(now)) eds.push_back(e);
+            }
+            for (const auto& e : eds) {
                 const bool isMine = !st.licensedEdition.empty() ? e.id == st.licensedEdition : e.id == st.edition;
                 std::string h = (e.label.empty() ? e.id : e.label) + (isMine ? " (la tienne)" : "");
                 headers.push_back(h);
@@ -843,15 +945,15 @@ void LicenceBody::reload() {
             }
             {
                 std::vector<std::string> line{"PC \xC2\xB7 dur\xC3\xA9" "e"};
-                for (const auto& e : reg->editions)
+                for (const auto& e : eds)
                     line.push_back(std::to_string(e.maxDevices) + " PC \xC2\xB7 " + (e.durationDays > 0 ? std::to_string(e.durationDays) + " j" : std::string("sans fin")));
                 rows.push_back(std::move(line));
                 infos.push_back({});
             }
             // 1.37.0 : le prix (la boutique), si l'editeur en a donne un.
-            if (std::any_of(reg->editions.begin(), reg->editions.end(), [](const auto& e) { return !e.price.empty() || !promoOf(e).empty(); })) {
+            if (std::any_of(eds.begin(), eds.end(), [](const auto& e) { return !e.price.empty() || !promoOf(e).empty(); })) {
                 std::vector<std::string> line{"Prix"};
-                for (const auto& e : reg->editions) line.push_back(priceLine(e).empty() ? std::string("\xE2\x80\x94") : priceLine(e));   // 1.38.0 : la reduction
+                for (const auto& e : eds) line.push_back(priceLine(e).empty() ? std::string("\xE2\x80\x94") : priceLine(e));   // 1.38.0 : la reduction
                 rows.push_back(std::move(line));
                 infos.push_back({});
             }
@@ -860,7 +962,7 @@ void LicenceBody::reload() {
                 if (f.retired) continue;
                 std::vector<std::string> line{f.label.empty() ? f.id : f.label};
                 std::string in;
-                for (const auto& e : reg->editions) {
+                for (const auto& e : eds) {
                     const bool has = std::find(e.features.begin(), e.features.end(), f.id) != e.features.end();
                     line.push_back(has ? "\xE2\x9C\x93" : "\xE2\x80\x94");
                     if (has) in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
@@ -929,6 +1031,8 @@ void LicenceBody::reload() {
     }
     online_->refresh();       // 1.34.0
     activation_->refresh();   // 1.35.0
+    options_->refresh();      // 1.42.0
+    purchases_->refresh();
     import_->setEnabled(configured);
     import_->setTooltip(configured ? std::string("Le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur")
                                    : std::string("Ce programme ne peut pas encore v\xC3\xA9rifier une licence : il n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur"));
@@ -1089,6 +1193,664 @@ ui::EventResult LicenceBody::onEvent(const ui::InputEvent& ev) {
         return ui::EventResult::Consumed;
     }
     return ui::EventResult::Ignored;
+}
+
+// ============================================================ 1.42.0 : Options et Mes achats ==
+namespace {
+
+// << 1 semaine >>, << 1 mois >>, << Jusqu'a la fin de ta licence >> ; -1 : des dates.
+std::string optionDurationText(int days) {
+    if (days < 0) return "D'autres dates\xE2\x80\xA6";
+    if (days == 0) return "Jusqu'\xC3\xA0 la fin de ta licence";
+    if (days == 7) return "1 semaine";
+    if (days == 14) return "2 semaines";
+    if (days == 30) return "1 mois";
+    if (days == 365) return "1 an";
+    return std::to_string(days) + " jours";
+}
+// << la semaine >>, << le mois >>, << l'an >> (apres un prix).
+std::string optionPer(int days) {
+    if (days == 0) return "jusqu'\xC3\xA0 la fin";
+    if (days == 7) return "la semaine";
+    if (days == 30) return "le mois";
+    if (days == 365) return "l'an";
+    return std::to_string(days) + " j";
+}
+// Un prix lisible (<< 490 EUR HT >>, << 1 028 EUR >>) : son montant ; << offerte >> : 0 ; illisible : rien.
+std::optional<double> priceAmount(const std::string& p) {
+    if (p == "offerte" || p == "offert") return 0.0;
+    double v = 0;
+    bool any = false, frac = false;
+    double scale = 0.1;
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const unsigned char c = static_cast<unsigned char>(p[i]);
+        if (c >= '0' && c <= '9') {
+            any = true;
+            if (frac) {
+                v += (c - '0') * scale;
+                scale *= 0.1;
+            } else {
+                v = v * 10 + (c - '0');
+            }
+        } else if (c == ' ' && any && !frac) {
+            continue;
+        } else if (c == 0xC2 && i + 1 < p.size() && (static_cast<unsigned char>(p[i + 1]) == 0xA0)) {   // une espace insecable
+            ++i;
+        } else if (c == 0xE2 && i + 2 < p.size() && static_cast<unsigned char>(p[i + 1]) == 0x80 && static_cast<unsigned char>(p[i + 2]) == 0xAF) {
+            i += 2;   // l'espace fine insecable
+        } else if ((c == ',' || c == '.') && any && !frac) {
+            frac = true;
+        } else if (any) {
+            break;
+        }
+    }
+    if (!any) return std::nullopt;
+    return v;
+}
+std::string euros(double v) {
+    const long long n = static_cast<long long>(std::llround(v));
+    std::string d = std::to_string(n), out;
+    for (std::size_t i = 0; i < d.size(); ++i) {
+        if (i && (d.size() - i) % 3 == 0) out += "\xE2\x80\xAF";
+        out += d[i];
+    }
+    return out + " \xE2\x82\xAC";
+}
+std::string featureNameOf(const licensing::RegistryView& reg, const std::string& id) {
+    for (const auto& f : reg.features)
+        if (f.id == id) return f.label.empty() ? f.id : f.label;
+    return id;
+}
+// Le dernier jour d'une periode qui finit (exclue) a `until` : << dim. 15/11/2026 >>.
+std::string lastDayOf(std::int64_t until) { return until ? ui::DatePicker::frenchDay(until - 1) : std::string(); }
+int daysLeft(std::int64_t now, std::int64_t until) { return until > now ? static_cast<int>((until - now + 86399) / 86400) : 0; }
+
+} // namespace
+
+// ------------------------------------------------------------------ Options
+OptionsPanel::OptionsPanel(LicenceBody& body, App& app) : ui::Widget("licence.options"), body_(body), app_(app) {
+    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.options.catalogue")));
+    table_->setColumns({{"Option", 190.f}, {"Ce qu'elle ouvre", 230.f}, {"Prix (HT)", 200.f}, {"", 130.f}});
+    table_->setSelectionMode(ui::SelectionMode::Single);
+    duration_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>("licence.options.duree")));
+    start_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>("licence.options.debut")));
+    start_->setItems({{"D\xC3\xA8s qu'elle est accept\xC3\xA9" "e", "maintenant"}, {"Le\xE2\x80\xA6", "date"}});
+    start_->setSelectedIndex(0);
+    from_ = &static_cast<ui::DatePicker&>(addChild(std::make_unique<ui::DatePicker>("licence.options.debut-date")));
+    from_->setShortcuts({{"Demain", 1, 0, false}, {"Dans 1 semaine", 7, 0, false}});
+    to_ = &static_cast<ui::DatePicker&>(addChild(std::make_unique<ui::DatePicker>("licence.options.fin")));
+    to_->setShortcuts({{"1 semaine", 7, 0, false}, {"2 semaines", 14, 0, false}, {"1 mois", 0, 1, false}});
+    message_ = &static_cast<ui::InputText&>(addChild(std::make_unique<ui::InputText>("licence.options.mot")));
+    message_->setPlaceholder("Pour la mise en service de la station (facultatif)");
+    message_->setMaxLength(licence::service::kMaxMessage);
+    send_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer la demande", "licence.options.envoyer")));
+    send_->setStyle(ui::Button::Style::Primary);
+    extend_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Prolonger\xE2\x80\xA6", "licence.options.prolonger")));
+    links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& r) {
+        if (loading_ || r.empty() || r.front() >= rows_.size()) return;
+        chosen_ = rows_[r.front()].id;
+        loadForm();
+    });
+    links_ += duration_->selectionChanged->connect([this](int) {
+        if (loading_) return;
+        if (days() < 0 && !to_->date()) {
+            const std::int64_t start = from_->date() ? from_->date() : ui::DatePicker::dayOf(now());
+            to_->setRangeStart(start);
+            to_->setDate(start + 6 * 86400);
+        }
+        invalidateLayout();
+        invalidate();
+    });
+    links_ += start_->selectionChanged->connect([this](int i) {
+        if (loading_) return;
+        if (i == 1 && !from_->date()) from_->setDate(ui::DatePicker::dayOf(now()) + 86400);
+        invalidateLayout();
+        invalidate();
+    });
+    links_ += from_->changed->connect([this](std::int64_t d) {
+        to_->setRangeStart(d);
+        invalidate();
+    });
+    links_ += to_->changed->connect([this](std::int64_t) { invalidate(); });
+    links_ += send_->clicked->connect([this] { send(); });
+    links_ += extend_->clicked->connect([this] {
+        if (!activeId_.empty()) choose(activeId_);
+    });
+    chosen_ = licence::takeWantedOption();   // une action fermee qui l'a proposee
+}
+
+std::int64_t OptionsPanel::now() const {
+    const auto st = licensing::getLicenseState();
+    return st.trustedNow ? static_cast<std::int64_t>(st.trustedNow) : static_cast<std::int64_t>(std::time(nullptr));
+}
+
+int OptionsPanel::days() const {
+    const auto* it = duration_->selectedItem();
+    if (!it || it->value == "dates") return -1;
+    return std::atoi(it->value.c_str());
+}
+
+std::string OptionsPanel::priceOf(int d) const {
+    const auto reg = licensing::getRegistry();
+    const auto* o = reg ? reg->option(chosen_) : nullptr;
+    if (!o) return {};
+    for (const auto& x : o->durations)
+        if (x.first == d) return x.second;
+    return {};
+}
+
+void OptionsPanel::choose(const std::string& optionId) {
+    chosen_ = optionId;
+    refresh();
+}
+
+void OptionsPanel::refresh() {
+    namespace ls = licence::service;
+    loading_ = true;
+    const auto st = licensing::getLicenseState();
+    const auto reg = licensing::getRegistry();
+    const std::int64_t t = now();
+    edition_ = st.licensedEdition;
+    licenseId_ = st.licenseId;
+    customer_ = st.customer;
+    rows_.clear();
+    activeLines_.clear();
+    activeId_.clear();
+    std::vector<std::vector<std::string>> cells;
+    std::vector<int> tones;
+    if (reg) {
+        const licensing::RegistryEditionView* ed = nullptr;
+        for (const auto& e : reg->editions)
+            if (e.id == edition_) ed = &e;
+        for (const auto& o : reg->options) {
+            bool active = false;
+            std::int64_t until = 0;
+            for (const auto& lo : st.options)
+                if (lo.id == o.id && lo.activeAt(st.trustedNow ? st.trustedNow : t, st.expiresAt)) {
+                    active = true;
+                    until = static_cast<std::int64_t>(lo.until ? lo.until : st.expiresAt);
+                }
+            if (!active && (!o.shop || !o.offeredTo(edition_))) continue;
+            bool inOffer = ed && !o.features.empty();
+            if (inOffer)
+                for (const auto& f : o.features)
+                    if (std::find(ed->features.begin(), ed->features.end(), f) == ed->features.end()) inOffer = false;
+            Row row;
+            row.id = o.id;
+            row.active = active;
+            row.inOffer = inOffer;
+            rows_.push_back(row);
+            std::string opens;
+            for (const auto& f : o.features) opens += (opens.empty() ? "" : ", ") + featureNameOf(*reg, f);
+            std::string prices;
+            for (const auto& d : o.durations)
+                prices += (prices.empty() ? "" : " \xC2\xB7 ") + (d.second.empty() ? std::string("sur demande") : d.second) + " " + optionPer(d.first);
+            std::string state;
+            int tone = 0;
+            if (active) {
+                state = until ? "active \xC2\xB7 encore " + std::to_string(daysLeft(t, until)) + " j" : std::string("active");
+                tone = 1;
+            } else if (inOffer) {
+                state = "dans ton offre";
+                tone = 3;
+            }
+            cells.push_back({o.label.empty() ? o.id : o.label, opens, prices, state});
+            tones.push_back(tone);
+            if (active) {
+                if (activeId_.empty()) activeId_ = o.id;
+                std::string line = (o.label.empty() ? o.id : o.label) + " \xE2\x80\x94 active";
+                if (until) line += ", encore " + std::to_string(daysLeft(t, until)) + " j \xE2\x80\x94 jusqu'au " + lastDayOf(until) + " au soir";
+                else line += " jusqu'\xC3\xA0 la fin de ta licence";
+                activeLines_.push_back(line);
+            }
+        }
+    }
+    model_ = std::make_shared<Rows>(std::vector<std::string>{"Option", "Ce qu'elle ouvre", "Prix (HT)", ""}, std::move(cells),
+                                    [tones](ui::RowIndex r, std::size_t c) {
+                                        ui::CellStyle s;
+                                        if (c == 0) s.bold = true;
+                                        if (c == 3 && r < tones.size()) {
+                                            s.fgTone = tones[r] == 1 ? ui::Tone::Ok : tones[r] == 3 ? ui::Tone::Info : ui::Tone::None;
+                                            s.bold = tones[r] == 1;
+                                        }
+                                        return s;
+                                    });
+    table_->setModel(model_);
+    // l'option choisie : celle demandee, sinon la premiere qui n'est pas deja dans l'offre
+    if (std::none_of(rows_.begin(), rows_.end(), [&](const Row& r) { return r.id == chosen_; })) {
+        chosen_.clear();
+        for (const auto& r : rows_)
+            if (!r.inOffer) {
+                chosen_ = r.id;
+                break;
+            }
+    }
+    for (std::size_t i = 0; i < rows_.size(); ++i)
+        if (rows_[i].id == chosen_) table_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    // peut-elle partir ?
+    blocked_.clear();
+    pendingText_.clear();
+    using S = licensing::LicenseStatus;
+    std::string why;
+    ls::Record rec;
+    std::string recProblem;
+    if (!ls::loadRecord(rec, &recProblem)) rec = ls::Record{};
+    if (!licensing::isConfigured()) blocked_ = "Ce programme n'a pas de licence \xC3\xA0 g\xC3\xA9rer : tout y est ouvert.";
+    else if (licenseId_.empty() || (st.status != S::Valid && st.status != S::Grace))
+        blocked_ = "Une option s'ajoute \xC3\xA0 une licence en cours : active d'abord ta licence (onglet Activation ou Demander ma licence).";
+    else if (rows_.empty())
+        blocked_ = "L'\xC3\xA9" "diteur ne propose pas encore d'option pour ton offre" + (edition_.empty() ? std::string(".") : " " + edition_ + ".");
+    else if (!ls::available(&why))
+        blocked_ = "Le service des licences n'est pas joignable d'ici" + (why.empty() ? std::string() : " (" + why + ")") +
+                   " : demande l'option \xC3\xA0 l'\xC3\xA9" "diteur directement.";
+    else if (ls::pending(rec)) {
+        pendingText_ = "Ta demande n\xC2\xB0 " + std::to_string(rec.number) + (rec.option.empty() ? std::string() : " (option " + (rec.optionText.empty() ? rec.option : rec.optionText) + ")") +
+                       " attend la r\xC3\xA9ponse de l'\xC3\xA9" "diteur : une seule demande \xC3\xA0 la fois (Demander ma licence \xE2\x80\xBA Annuler la demande).";
+        blocked_ = pendingText_;
+    }
+    loading_ = false;
+    loadForm();
+}
+
+void OptionsPanel::loadForm() {
+    loading_ = true;
+    const auto reg = licensing::getRegistry();
+    const auto* o = reg ? reg->option(chosen_) : nullptr;
+    std::vector<ui::DropDown::Item> items;
+    if (o)
+        for (const auto& d : o->durations) {
+            ui::DropDown::Item it{optionDurationText(d.first), std::to_string(d.first)};
+            it.note = d.second.empty() ? std::string("sur demande") : d.second;
+            items.push_back(std::move(it));
+        }
+    items.push_back({optionDurationText(-1), "dates"});
+    duration_->setItems(items);
+    duration_->setSelectedIndex(0);
+    const std::int64_t today = ui::DatePicker::dayOf(now());
+    from_->setToday(today);
+    to_->setToday(today);
+    from_->setMinDate(today);
+    to_->setMinDate(today);
+    const bool canSend = blocked_.empty() && o != nullptr;
+    for (ui::Widget* w : std::initializer_list<ui::Widget*>{duration_, start_, from_, to_, message_}) w->setEnabled(canSend);
+    send_->setEnabled(canSend && licence::service::busyJob() == licence::service::Job::None);
+    send_->setText(licence::service::busyJob() == licence::service::Job::Request ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer la demande"));
+    extend_->setVisibility(activeId_.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+    loading_ = false;
+    invalidateLayout();
+    invalidate();
+}
+
+void OptionsPanel::send() {
+    namespace ls = licence::service;
+    if (!blocked_.empty()) return body_.say(blocked_, 2);
+    const auto reg = licensing::getRegistry();
+    const auto* o = reg ? reg->option(chosen_) : nullptr;
+    if (!o) return body_.say("Choisis d'abord une option dans la liste.", 2);
+    const std::int64_t today = ui::DatePicker::dayOf(now());
+    ls::RequestForm f;
+    f.customer = customer_;
+    if (f.customer.empty()) {
+        const auto p = licence::loadProfile();
+        f.customer = !p.company.empty() ? p.company : p.name;
+    }
+    if (f.customer.empty()) return body_.say("Ta licence ne porte pas de nom de client : indique ta soci\xC3\xA9t\xC3\xA9 dans Mon profil, puis recommence.", 2);
+    f.email = licence::loadProfile().email;
+    f.licenseId = licenseId_;
+    f.option = o->id;
+    f.optionDays = days();
+    const bool atDate = start_->selectedIndex() == 1 || f.optionDays < 0;
+    f.optionFrom = atDate && from_->date() > today ? from_->date() : 0;
+    if (f.optionDays < 0) {
+        f.optionLastDay = to_->date();
+        const std::int64_t start = f.optionFrom ? f.optionFrom : today;
+        if (!f.optionLastDay || f.optionLastDay < start) return body_.say("Choisis la fin de l'option (Au) : un jour apr\xC3\xA8s son d\xC3\xA9" "but.", 2);
+    }
+    std::string text = (o->label.empty() ? o->id : o->label) + ", " + optionDurationText(f.optionDays);
+    if (f.optionDays < 0) text = (o->label.empty() ? o->id : o->label) + ", du " + licence::service::dayText(f.optionFrom ? f.optionFrom : today) + " au " +
+                                 licence::service::dayText(f.optionLastDay);
+    f.optionText = text;
+    f.message = message_->text();
+    if (!ls::startRequest(f)) return body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+    body_.say("Envoi de ta demande d'option \xC3\xA0 l'\xC3\xA9" "diteur\xE2\x80\xA6", 0);
+    loadForm();
+}
+
+void OptionsPanel::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    float y = b.y + 10.f;
+    y += 26.f;   // le titre
+    leadY_ = y;
+    y += 22.f;
+    if (!activeLines_.empty()) {
+        const float h = 18.f + 22.f * static_cast<float>(activeLines_.size());
+        activeBox_ = {x, y, w, h};
+        const float ew = std::max(110.f, extend_->sizeHint().preferred.w + 8.f);
+        extend_->setBounds({x + w - ew - 10.f, y + (h - 30.f) * 0.5f, ew, 30.f});
+        y += h + 10.f;
+    } else {
+        activeBox_ = {};
+        extend_->setBounds({});
+    }
+    const float footH = 24.f;
+    const float formW = std::clamp(w * 0.40f, 330.f, 440.f);
+    const float listH = std::max(80.f, b.bottom() - 8.f - footH - y);
+    table_->setBounds({x, y, std::max(160.f, w - formW - 12.f), listH});
+    formBox_ = {x + w - formW, y, formW, listH};
+    footY_ = y + listH + 6.f;
+    // le formulaire
+    const float fx = formBox_.x + 14.f, fw = formBox_.w - 28.f;
+    float fy = formBox_.y + 62.f;
+    duration_->setBounds({fx, fy + 18.f, fw, 30.f});
+    fy += 56.f;
+    const bool dates = days() < 0;
+    const bool atDate = start_->selectedIndex() == 1;
+    if (dates) {
+        start_->setVisibility(ui::Visibility::Collapsed);
+        from_->setVisibility(ui::Visibility::Visible);
+        to_->setVisibility(ui::Visibility::Visible);
+        const float hw = std::floor((fw - 10.f) * 0.5f);
+        from_->setBounds({fx, fy + 18.f, hw, 30.f});
+        to_->setBounds({fx + hw + 10.f, fy + 18.f, fw - hw - 10.f, 30.f});
+    } else {
+        start_->setVisibility(ui::Visibility::Visible);
+        to_->setVisibility(ui::Visibility::Collapsed);
+        from_->setVisibility(atDate ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        const float sw = atDate ? std::floor((fw - 10.f) * 0.55f) : fw;
+        start_->setBounds({fx, fy + 18.f, sw, 30.f});
+        from_->setBounds({fx + sw + 10.f, fy + 18.f, fw - sw - 10.f, 30.f});
+    }
+    fy += 56.f;
+    message_->setBounds({fx, fy + 18.f, fw, 30.f});
+    const float bw = std::max(170.f, send_->sizeHint().preferred.w + 12.f);
+    send_->setBounds({formBox_.right() - 14.f - bw, formBox_.bottom() - 14.f - 32.f, bw, 32.f});
+}
+
+void OptionsPanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    r.drawText({x, b.y + 10.f}, "Options", gfx::semibold(kTitle), c.text);
+    r.drawText({x, leadY_}, fit(r, "Ajoute une fonction \xC3\xA0 ta licence pour un temps, sans changer d'offre. Elle arrive toute seule, puis s'arr\xC3\xAAte \xC3\xA0 sa date.",
+                                   kSmall, w),
+               kSmall, c.textMuted);
+    if (activeBox_.w > 0) {
+        r.fillRoundedRect(activeBox_, ctx.theme.tone(ui::Tone::Ok, c.panelBg).withAlpha(30), 8.f);
+        for (std::size_t i = 0; i < activeLines_.size(); ++i)
+            r.drawText({activeBox_.x + 14.f, activeBox_.y + 9.f + 22.f * static_cast<float>(i)}, fit(r, activeLines_[i], kSmall, activeBox_.w - 160.f), kSmall,
+                       ctx.theme.tone(ui::Tone::Ok, c.text));
+    }
+    // Ta demande
+    r.fillRoundedRect(formBox_, c.windowBg, 8.f);
+    ui::shapes::strokeRoundedRect(r, formBox_, c.border, 8.f, 1.f);
+    const float fx = formBox_.x + 14.f, fw = formBox_.w - 28.f;
+    r.drawText({fx, formBox_.y + 12.f}, "Ta demande", kSmall, c.textMuted);
+    const auto reg = licensing::getRegistry();
+    const auto* o = reg ? reg->option(chosen_) : nullptr;
+    r.drawText({fx, formBox_.y + 32.f}, fit(r, o ? (o->label.empty() ? o->id : o->label) : std::string("Choisis une option"), kValue, fw), kValue, c.text);
+    float fy = formBox_.y + 62.f;
+    r.drawText({fx, fy}, "Pour combien de temps", kSmall, c.textMuted);
+    fy += 56.f;
+    r.drawText({fx, fy}, days() < 0 ? "Du \xE2\x80\xA6 au (compris)" : "\xC3\x80 partir de", kSmall, c.textMuted);
+    fy += 56.f;
+    r.drawText({fx, fy}, "Un mot \xC2\xB7 facultatif", kSmall, c.textMuted);
+    fy += 56.f;
+    // le total et ce qui se passe ensuite
+    const std::string price = days() >= 0 ? priceOf(days()) : std::string();
+    if (!price.empty()) {
+        r.drawText({fx, fy}, "Total HT", kSmall, c.textMuted);
+        const float pw = r.measure(price, kValue).width;
+        r.drawText({fx + fw - pw, fy - 2.f}, price, kValue, c.text);
+        fy += 26.f;
+    }
+    const std::string note = !blocked_.empty() ? blocked_
+                                               : "Aucun paiement ici : l'\xC3\xA9" "diteur re\xC3\xA7oit ta demande et l'accepte. L'option arrive toute seule sur tes PC.";
+    for (const auto& l : wrapText(r, note, kSmall, fw)) {
+        if (fy > send_->bounds().y - 20.f) break;
+        r.drawText({fx, fy}, l, kSmall, !blocked_.empty() ? ctx.theme.tone(ui::Tone::Warning, c.text) : c.textMuted);
+        fy += 18.f;
+    }
+    r.drawText({x, footY_}, "Tes options pass\xC3\xA9" "es sont dans Mes achats.", kSmall, c.textMuted);
+}
+
+// ------------------------------------------------------------------ Mes achats
+PurchasesPanel::PurchasesPanel(LicenceBody& body) : ui::Widget("licence.achats"), body_(body) {
+    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.achats.table")));
+    table_->setColumns({{"Date", 110.f}, {"Achat", 330.f}, {"P\xC3\xA9riode", 220.f}, {"Prix HT", 110.f}, {"\xC3\x89tat", 150.f}});
+    table_->setSelectionMode(ui::SelectionMode::Single);
+    all_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Tout", "licence.achats.tout")));
+    offers_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Offres", "licence.achats.offres")));
+    options_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Options", "licence.achats.options")));
+    export_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Exporter (CSV)", "licence.achats.exporter")));
+    export_->setTooltip("Un fichier CSV (Excel) de ton historique, dans le dossier partag\xC3\xA9 (Licences).");
+    links_ += all_->clicked->connect([this] {
+        filter_ = 0;
+        rebuild();
+    });
+    links_ += offers_->clicked->connect([this] {
+        filter_ = 1;
+        rebuild();
+    });
+    links_ += options_->clicked->connect([this] {
+        filter_ = 2;
+        rebuild();
+    });
+    links_ += export_->clicked->connect([this] { exportCsv(); });
+}
+
+std::int64_t PurchasesPanel::now() const {
+    const auto st = licensing::getLicenseState();
+    return st.trustedNow ? static_cast<std::int64_t>(st.trustedNow) : static_cast<std::int64_t>(std::time(nullptr));
+}
+
+void PurchasesPanel::refresh() {
+    const auto st = licensing::getLicenseState();
+    const auto reg = licensing::getRegistry();
+    const std::int64_t t = now();
+    all__ = st.purchases;
+    // une licence d'avant la 1.42 (sans historique) : ce que dit la licence installee
+    if (all__.empty() && !st.licenseId.empty()) {
+        licensing::Purchase p;
+        p.at = st.issuedAt;
+        p.kind = "offer";
+        p.label = st.editionLabel.empty() ? st.licensedEdition : st.editionLabel;
+        p.licenseId = st.licenseId;
+        p.from = st.issuedAt;
+        p.until = st.expiresAt;
+        if (reg)
+            for (const auto& e : reg->editions)
+                if (e.id == st.licensedEdition) p.price = e.price;
+        all__.push_back(p);
+        for (const auto& o : st.options) {
+            licensing::Purchase q;
+            q.at = o.from;
+            q.kind = "option";
+            q.label = o.label.empty() ? o.id : o.label;
+            q.licenseId = st.licenseId;
+            q.from = o.from;
+            q.until = o.until ? o.until : st.expiresAt;
+            q.price = o.gift ? (o.price.empty() ? std::string("offerte") : o.price) : o.price;
+            all__.push_back(q);
+        }
+    }
+    std::stable_sort(all__.begin(), all__.end(), [](const licensing::Purchase& a, const licensing::Purchase& b) { return a.at > b.at; });
+    // les trois tuiles
+    tile_[0][0] = "Ton offre";
+    tile_[0][1] = st.licenseId.empty() ? std::string("Aucune licence") : (st.editionLabel.empty() ? st.licensedEdition : st.editionLabel);
+    tile_[0][2] = st.licenseId.empty() ? std::string() : (st.expiresAt ? "jusqu'au " + licence::service::dayText(st.expiresAt) : std::string("sans fin")) + " \xC2\xB7 " +
+                                                            std::to_string(std::max(1, st.maxDevices)) + " PC";
+    tile_[1][0] = "Option en cours";
+    tile_[1][1] = "Aucune";
+    tile_[1][2] = "Ajoute-en une dans Options";
+    for (const auto& o : st.options)
+        if (o.activeAt(st.trustedNow ? st.trustedNow : t, st.expiresAt)) {
+            const std::int64_t until = static_cast<std::int64_t>(o.until ? o.until : st.expiresAt);
+            tile_[1][1] = o.label.empty() ? o.id : o.label;
+            tile_[1][2] = until ? "encore " + std::to_string(daysLeft(t, until)) + " j \xC2\xB7 jusqu'au " + lastDayOf(until) + " au soir" : std::string("jusqu'\xC3\xA0 la fin de ta licence");
+            break;
+        }
+    std::int64_t first = 0;
+    double total = 0;
+    bool priced = !all__.empty();
+    for (const auto& p : all__) {
+        if (!first || (p.at && p.at < first)) first = p.at;
+        const auto v = priceAmount(p.price);
+        if (v) total += *v;
+        else priced = false;
+    }
+    tile_[2][0] = first ? "Depuis le " + licence::service::dayText(first) : std::string("Historique");
+    tile_[2][1] = std::to_string(all__.size()) + (all__.size() > 1 ? " achats" : " achat");
+    tile_[2][2] = priced ? euros(total) + " HT en tout" : std::string();
+    rebuild();
+}
+
+void PurchasesPanel::rebuild() {
+    shown_.clear();
+    std::size_t nOffers = 0, nOptions = 0;
+    for (const auto& p : all__) {
+        const bool opt = p.kind == "option";
+        (opt ? nOptions : nOffers) += 1;
+        if (filter_ == 0 || (filter_ == 1 && !opt) || (filter_ == 2 && opt)) shown_.push_back(p);
+    }
+    all_->setText("Tout (" + std::to_string(all__.size()) + ")");
+    offers_->setText("Offres (" + std::to_string(nOffers) + ")");
+    options_->setText("Options (" + std::to_string(nOptions) + ")");
+    all_->setStyle(filter_ == 0 ? ui::Button::Style::Primary : ui::Button::Style::Default);
+    offers_->setStyle(filter_ == 1 ? ui::Button::Style::Primary : ui::Button::Style::Default);
+    options_->setStyle(filter_ == 2 ? ui::Button::Style::Primary : ui::Button::Style::Default);
+    const std::int64_t t = now();
+    std::vector<std::vector<std::string>> cells;
+    std::vector<int> tones;
+    for (const auto& p : shown_) {
+        std::string state;
+        int tone = 0;
+        if (p.from > t) {
+            state = "\xC3\x80 venir";
+            tone = 3;
+        } else if (p.until && t >= p.until) {
+            state = "Finie";
+        } else {
+            state = p.until ? "En cours \xC2\xB7 " + std::to_string(daysLeft(t, p.until)) + " j" : std::string("En cours");
+            tone = 1;
+        }
+        std::string kind = p.kind == "option" ? " \xC2\xB7 option" : p.kind == "extension" ? " \xC2\xB7 prolongation" : std::string();
+        const std::string period = licence::service::dayText(p.from) + " \xE2\x86\x92 " + (p.until ? licence::service::dayText(p.until - (p.kind == "option" ? 1 : 0)) : std::string("sans fin"));
+        cells.push_back({licence::service::dayText(p.at), p.label + kind, period, p.price.empty() ? std::string("\xE2\x80\x94") : p.price, state});
+        tones.push_back(tone);
+    }
+    model_ = std::make_shared<Rows>(std::vector<std::string>{"Date", "Achat", "P\xC3\xA9riode", "Prix HT", "\xC3\x89tat"}, std::move(cells),
+                                    [tones](ui::RowIndex r, std::size_t c) {
+                                        ui::CellStyle s;
+                                        if (c == 4 && r < tones.size()) {
+                                            s.fgTone = tones[r] == 1 ? ui::Tone::Ok : tones[r] == 3 ? ui::Tone::Info : ui::Tone::None;
+                                            s.bold = tones[r] == 1;
+                                        }
+                                        return s;
+                                    });
+    table_->setModel(model_);
+    export_->setEnabled(!all__.empty());
+    invalidateLayout();
+    invalidate();
+}
+
+std::string PurchasesPanel::csv() const {
+    const auto cellOf = [](std::string v) {
+        if (!v.empty() && (v[0] == '=' || v[0] == '+' || v[0] == '-' || v[0] == '@' || v[0] == '\t' || v[0] == '\r')) v = "'" + v;   // pas de formule
+        std::string out = "\"";
+        for (char ch : v) out += ch == '"' ? std::string("\"\"") : std::string(1, ch);
+        return out + "\"";
+    };
+    std::string out = "\xEF\xBB\xBF" "Date;Achat;Type;Du;Au;Prix HT;Licence\r\n";
+    for (const auto& p : all__) {
+        const std::string kind = p.kind == "option" ? "option" : p.kind == "extension" ? "prolongation" : "offre";
+        out += cellOf(licence::service::dayText(p.at)) + ";" + cellOf(p.label) + ";" + cellOf(kind) + ";" + cellOf(licence::service::dayText(p.from)) + ";" +
+               cellOf(p.until ? licence::service::dayText(p.until - (p.kind == "option" ? 1 : 0)) : std::string("sans fin")) + ";" + cellOf(p.price) + ";" +
+               cellOf(p.licenseId) + "\r\n";
+    }
+    return out;
+}
+
+void PurchasesPanel::exportCsv() {
+    const std::string sharedFolder = Settings::sharedFolder();
+    const auto dir = std::filesystem::path(std::u8string(sharedFolder.begin(), sharedFolder.end())) / "Licences";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    const auto file = dir / "mes-achats.csv";
+    std::ofstream out(file, std::ios::binary | std::ios::trunc);
+    const std::string text = csv();
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    out.close();
+    const auto u8 = file.u8string();
+    if (!out) return body_.say("Le fichier n'a pas pu \xC3\xAAtre \xC3\xA9" "crit : " + std::string(u8.begin(), u8.end()), 3);
+    body_.say("Historique export\xC3\xA9 : " + std::string(u8.begin(), u8.end()) + " (Ouvrir le dossier des licences).", 1);
+}
+
+void PurchasesPanel::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    float y = b.y + 10.f + 26.f;
+    leadY_ = y;
+    y += 24.f;
+    const float tw = std::floor((w - 20.f) / 3.f);
+    for (int i = 0; i < 3; ++i) tiles_[i] = {x + static_cast<float>(i) * (tw + 10.f), y, tw, 70.f};
+    y += 80.f;
+    timeline_ = {x, y, w, 44.f};
+    y += 54.f;
+    float bx = x;
+    for (ui::Button* btn : {all_, offers_, options_}) {
+        const float bw = btn->sizeHint().preferred.w + 10.f;
+        btn->setBounds({bx, y, bw, 28.f});
+        bx += bw + 6.f;
+    }
+    const float ew = export_->sizeHint().preferred.w + 12.f;
+    export_->setBounds({x + w - ew, y, ew, 28.f});
+    y += 36.f;
+    table_->setBounds({x, y, w, std::max(60.f, b.bottom() - 8.f - y)});
+}
+
+void PurchasesPanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    r.drawText({x, b.y + 10.f}, "Mes achats", gfx::semibold(kTitle), c.text);
+    r.drawText({x, leadY_}, fit(r, "Tout ce que tu as pris depuis ta premi\xC3\xA8re licence : les offres, les prolongations, les options. M\xC3\xAAme ce qui est fini.", kSmall, w),
+               kSmall, c.textMuted);
+    for (int i = 0; i < 3; ++i) {
+        const auto& t = tiles_[i];
+        r.fillRoundedRect(t, c.windowBg, 8.f);
+        ui::shapes::strokeRoundedRect(r, t, c.border, 8.f, 1.f);
+        r.drawText({t.x + 12.f, t.y + 8.f}, fit(r, tile_[i][0], kSmall, t.w - 24.f), kSmall, c.textMuted);
+        r.drawText({t.x + 12.f, t.y + 26.f}, fit(r, tile_[i][1], kValue, t.w - 24.f), kValue, i == 1 && tile_[i][1] != "Aucune" ? ctx.theme.tone(ui::Tone::Warning, c.text) : c.text);
+        r.drawText({t.x + 12.f, t.y + 48.f}, fit(r, tile_[i][2], kSmall, t.w - 24.f), kSmall, c.textMuted);
+    }
+    // la ligne de temps : les offres (pleines), les options (au-dessus), aujourd'hui
+    if (!all__.empty()) {
+        std::int64_t lo = 0, hi = 0;
+        const std::int64_t t = now();
+        for (const auto& p : all__) {
+            if (!lo || (p.from && p.from < lo)) lo = p.from;
+            hi = std::max<std::int64_t>({hi, p.until, p.from});
+        }
+        hi = std::max(hi, t);
+        if (hi <= lo) hi = lo + 86400;
+        const auto& tl = timeline_;
+        const float bx = tl.x + 4.f, bw = tl.w - 8.f;
+        const auto px = [&](std::int64_t s) { return bx + bw * static_cast<float>(static_cast<double>(s - lo) / static_cast<double>(hi - lo)); };
+        r.fillRoundedRect({bx, tl.y + 20.f, bw, 10.f}, c.border.withAlpha(128), 5.f);
+        for (const auto& p : all__) {
+            const float a = px(p.from), e = px(p.until ? p.until : hi);
+            if (p.kind == "option") r.fillRoundedRect({a, tl.y + 8.f, std::max(4.f, e - a), 8.f}, ctx.theme.tone(ui::Tone::Warning, c.accent), 4.f);
+            else r.fillRoundedRect({a, tl.y + 20.f, std::max(4.f, e - a), 10.f}, c.accent, 5.f);
+        }
+        const float tx = px(t);
+        r.fillRect({tx - 1.f, tl.y + 2.f, 2.f, 34.f}, c.text);
+        r.drawText({bx, tl.y + 33.f}, licence::service::dayText(lo), kSmall, c.textMuted);
+        const std::string end = licence::service::dayText(hi);
+        r.drawText({bx + bw - r.measure(end, kSmall).width, tl.y + 33.f}, end, kSmall, c.textMuted);
+    }
 }
 
 // ============================================================ 1.35.0 : Activation ==
@@ -1461,8 +2223,9 @@ void OnlinePanel::buildCards() {
     cards_.clear();
     const auto reg = licensing::getRegistry();
     if (!reg) return;
+    const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
     for (const auto& e : reg->editions) {
-        if (e.retired || e.id == reg->unlicensedEdition) continue;
+        if (e.retired || e.id == reg->unlicensedEdition || !e.onSale(now)) continue;   // 1.42.0 : hors de sa periode de vente : pas montree
         Card k;
         k.id = e.id;
         k.label = e.label.empty() ? e.id : e.label;
@@ -1471,6 +2234,7 @@ void OnlinePanel::buildCards() {
         if (!k.promo.empty()) k.promoEnd = "jusqu'au " + licence::service::dayText(e.promoUntil);
         k.description = e.description;
         k.facts = editionFacts(e);
+        if (e.saleUntil) k.facts += (k.facts.empty() ? "" : " \xC2\xB7 ") + std::string("en vente jusqu'au ") + licence::service::dayText(e.saleUntil - 1);   // 1.42.0
         cards_.push_back(std::move(k));
         if (cards_.size() >= 8) break;   // une boutique lisible
     }
@@ -2289,9 +3053,10 @@ void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const
 class LockedBody final : public ui::Widget {
 public:
     LockedBody(std::string action, std::string why, std::string offers, std::string description, hmi::Resource img, bool hasImage,
-               std::function<void()> offersFn, std::function<void()> close)
+               std::function<void()> offersFn, std::function<void()> close, std::string optionLine = {}, std::function<void()> optionFn = {})
         : ui::Widget("dialog.licence-bloquee.corps"), action_(std::move(action)), why_(std::move(why)), offers_(std::move(offers)),
-          description_(std::move(description)), hasImage_(hasImage), offersFn_(std::move(offersFn)), close_(std::move(close)) {
+          description_(std::move(description)), optionLine_(std::move(optionLine)), hasImage_(hasImage), offersFn_(std::move(offersFn)),
+          close_(std::move(close)), optionFn_(std::move(optionFn)) {
         if (hasImage_) {
             image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>("dialog.licence-bloquee.capture")));
             image_->setImage(std::move(img));
@@ -2303,6 +3068,15 @@ public:
         links_ += offersButton_->clicked->connect([this] {
             if (offersFn_) offersFn_();
         });
+        // 1.42.0 : une option du catalogue l'ouvre - << Voir l'option >> (le chemin le plus court), les offres en second
+        if (!optionLine_.empty()) {
+            optionButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Voir l'option", "dialog.licence-bloquee.option")));
+            optionButton_->setStyle(ui::Button::Style::Primary);
+            offersButton_->setStyle(ui::Button::Style::Default);
+            links_ += optionButton_->clicked->connect([this] {
+                if (optionFn_) optionFn_();
+            });
+        }
         links_ += closeButton_->clicked->connect([this] {
             if (close_) close_();
         });
@@ -2317,12 +3091,18 @@ protected:
         closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
         ui::dialogframe::keep(*this, closeBox_);
         const float bw = std::max(150.f, offersButton_->sizeHint().preferred.w), cw = std::max(100.f, closeButton_->sizeHint().preferred.w);
-        offersButton_->setBounds({panel_.right() - 16.f - bw, panel_.bottom() - 46.f, bw, 32.f});
+        float right = panel_.right() - 16.f;
+        if (optionButton_) {
+            const float ow = std::max(130.f, optionButton_->sizeHint().preferred.w);
+            optionButton_->setBounds({right - ow, panel_.bottom() - 46.f, ow, 32.f});
+            right -= ow + 8.f;
+        }
+        offersButton_->setBounds({right - bw, panel_.bottom() - 46.f, bw, 32.f});
         closeButton_->setBounds({offersButton_->bounds().x - 8.f - cw, panel_.bottom() - 46.f, cw, 32.f});
         // le texte en haut (l'action, pourquoi : 4 lignes au plus), la capture au milieu, les offres et la note en bas
         textTop_ = panel_.y + 56.f;
         imageTop_ = textTop_ + 26.f + 4.f * 19.f + 8.f;
-        bottomText_ = panel_.bottom() - 58.f - 3.f * 19.f - (description_.empty() || !hasImage_ ? 0.f : 19.f);
+        bottomText_ = panel_.bottom() - 58.f - 3.f * 19.f - (description_.empty() || !hasImage_ ? 0.f : 19.f) - (optionLine_.empty() ? 0.f : 19.f);
         if (image_) image_->setBounds({panel_.x + 16.f, imageTop_, panel_.w - 32.f, std::max(60.f, bottomText_ - 8.f - imageTop_)});
     }
     void onPaint(const ui::PaintContext& ctx) override {
@@ -2360,6 +3140,10 @@ protected:
             r.drawText({x + r.measure(lead, kSmall).width + 2.f, y}, fit(r, offers_, kSmall, W - r.measure(lead, kSmall).width - 2.f), kSmall, c.text);
             y += 19.f;
         }
+        if (!optionLine_.empty()) {   // 1.42.0
+            r.drawText({x, y}, fit(r, optionLine_, gfx::semibold(kSmall), W), gfx::semibold(kSmall), ctx.theme.tone(ui::Tone::Accent, c.text));
+            y += 19.f;
+        }
         for (const auto& l : wrapText(r, "Rien n'est ferm\xC3\xA9 : ton projet reste ouvert ; Enregistrer et Exporter restent permis.", kSmall, W)) {
             r.drawText({x, y}, fit(r, l, kSmall, W), kSmall, c.textMuted);
             y += 19.f;
@@ -2375,10 +3159,11 @@ protected:
     }
 
 private:
-    std::string           action_, why_, offers_, description_;
+    std::string           action_, why_, offers_, description_, optionLine_;
     bool                  hasImage_{false};
-    std::function<void()> offersFn_, close_;
+    std::function<void()> offersFn_, close_, optionFn_;
     ZoomImage*            image_{nullptr};
+    ui::Button*           optionButton_{nullptr};   // 1.42.0
     ui::Button*           offersButton_{nullptr};
     ui::Button*           closeButton_{nullptr};
     gfx::Rect             panel_{}, closeBox_{};
@@ -2388,9 +3173,10 @@ private:
 
 class LockedWindow final : public menu::WidgetMenu {
 public:
-    LockedWindow(App& app, std::string action, std::string why, std::string offers, std::string description, hmi::Resource img, bool hasImage)
+    LockedWindow(App& app, std::string action, std::string why, std::string offers, std::string description, hmi::Resource img, bool hasImage,
+                 std::string optionLine = {})
         : menu::WidgetMenu("dialog.licence-bloquee"), app_(app), action_(std::move(action)), why_(std::move(why)), offers_(std::move(offers)),
-          description_(std::move(description)), img_(std::move(img)), hasImage_(hasImage) {}
+          description_(std::move(description)), optionLine_(std::move(optionLine)), img_(std::move(img)), hasImage_(hasImage) {}
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
     [[nodiscard]] std::string title() const override { return "Ta licence ne permet pas cette action"; }
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
@@ -2400,22 +3186,23 @@ public:
         }
         return menu::WidgetMenu::HandleEvent(ev);
     }
-    void fermer(bool offers) {
+    void fermer(bool offers, bool option = false) {
         if (done_) return;
         done_ = true;
-        manager().CloseDialog(menu::DialogResult{offers ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel, {}});
+        manager().CloseDialog(menu::DialogResult{offers || option ? menu::DialogResult::Button::Ok : menu::DialogResult::Button::Cancel,
+                                                 option ? std::string("option") : std::string()});
     }
 
 protected:
     core::Status buildUi() override {
         setRoot(std::make_unique<LockedBody>(action_, why_, offers_, description_, std::move(img_), hasImage_, [this] { fermer(true); },
-                                             [this] { fermer(false); }));
+                                             [this] { fermer(false); }, optionLine_, [this] { fermer(false, true); }));
         return core::ok();
     }
 
 private:
     App&          app_;
-    std::string   action_, why_, offers_, description_;
+    std::string   action_, why_, offers_, description_, optionLine_;
     hmi::Resource img_;
     bool          hasImage_{false};
     bool          done_{false};
@@ -2424,6 +3211,12 @@ private:
 } // namespace
 
 namespace licence {
+namespace {
+std::string g_wantedOption;   // 1.42.0 : l'option a montrer a l'ouverture de l'onglet Options (fil de l'interface)
+} // namespace
+void setWantedOption(std::string optionId) { g_wantedOption = std::move(optionId); }
+std::string takeWantedOption() { return std::exchange(g_wantedOption, std::string()); }
+
 void showLocked(App& app, std::string_view feature, std::string actionLabel) {
     const std::string id(feature);
     const std::string name = featureLabel(id);
@@ -2447,13 +3240,35 @@ void showLocked(App& app, std::string_view feature, std::string actionLabel) {
         why += " : ta licence " + edition + (st.licenseId.empty() ? std::string() : " (" + st.licenseId + ")") + " ne la contient pas.";
     else
         why += " : ce PC n'a pas de licence valable" + (st.message.empty() ? std::string(".") : std::string(" (") + st.message + ").");
+    // 1.42.0 : une option du catalogue qui l'ouvre, proposee a l'offre de cette licence (en cours)
+    std::string optionLine, optionId;
+    if (const auto reg = licensing::getRegistry();
+        reg && !st.licenseId.empty() && (st.status == licensing::LicenseStatus::Valid || st.status == licensing::LicenseStatus::Grace))
+        for (const auto& o : reg->options) {
+            if (!o.shop || !o.offeredTo(st.licensedEdition) || std::find(o.features.begin(), o.features.end(), id) == o.features.end()) continue;
+            optionId = o.id;
+            optionLine = "Option " + (o.label.empty() ? o.id : o.label);
+            for (const auto& d : o.durations)
+                if (!d.second.empty()) {
+                    optionLine += " \xC2\xB7 d\xC3\xA8s " + d.second + " " + optionPer(d.first);
+                    break;
+                }
+            optionLine += " : ajoute-la \xC3\xA0 ta licence pour un temps.";
+            break;
+        }
     const auto pv = featurePreview(id);
     const bool hasImage = !pv.imagePath.empty();
     hmi::Resource img = hasImage ? capturePng(pv.imagePath, id + ".png") : hmi::Resource{};
     app.menus().ShowDialog(std::make_unique<LockedWindow>(app, actionLabel.empty() ? name : std::move(actionLabel), std::move(why), std::move(offers),
-                                                          pv.description, std::move(img), hasImage),
-                           [&app](const menu::DialogResult& r) {
-                               if (r.accepted()) showLicenceWindow(app, kTabRequest);
+                                                          pv.description, std::move(img), hasImage, optionLine),
+                           [&app, optionId](const menu::DialogResult& r) {
+                               if (!r.accepted()) return;
+                               if (r.payload == "option") {
+                                   setWantedOption(optionId);
+                                   showLicenceWindow(app, kTabOptions);
+                               } else {
+                                   showLicenceWindow(app, kTabRequest);
+                               }
                            });
 }
 } // namespace licence

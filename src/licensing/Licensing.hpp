@@ -132,6 +132,24 @@ struct RegistryEditionView {
     std::string              price, description;   // 1.37.0 : la << boutique >> (vides : pas ecrits)
     std::string              promoPrice;           // 1.38.0 : une reduction (vide : aucune) ...
     std::int64_t             promoUntil{0};        // ... jusqu'a ce moment (secondes depuis 1970)
+    std::int64_t             saleFrom{0}, saleUntil{0};   // 1.42.0 : une offre temporaire (en vente de saleFrom, compris, a saleUntil, exclu ; 0 : sans borne)
+    [[nodiscard]] bool onSale(std::int64_t now) const noexcept { return !retired && (!saleFrom || now >= saleFrom) && (!saleUntil || now < saleUntil); }
+};
+// 1.42.0 : une option du catalogue (des fonctionnalites vendues a part, pour un temps). editions vide : proposee a toutes.
+struct RegistryOptionView {
+    std::string              id, label, description;
+    std::vector<std::string> features;   // les identifiants
+    std::vector<std::string> editions;
+    std::vector<std::pair<int, std::string>> durations;   // jours (0 : jusqu'a la fin de la licence), prix (vide : sur demande)
+    int                      trialDays{0};
+    bool                     shop{true}, retired{false};
+    [[nodiscard]] bool offeredTo(std::string_view edition) const {
+        if (retired) return false;
+        if (editions.empty()) return true;
+        for (const auto& e : editions)
+            if (e == edition) return true;
+        return false;
+    }
 };
 struct RegistryAnnouncementView {   // 1.38.0 : une annonce de l'editeur (une notification, jamais un mail)
     std::string  id, title, text, edition;
@@ -143,6 +161,12 @@ struct RegistryView {
     std::vector<RegistryFeatureView> features;
     std::vector<RegistryEditionView> editions;
     std::vector<RegistryAnnouncementView> announcements;   // 1.38.0
+    std::vector<RegistryOptionView>       options;         // 1.42.0
+    [[nodiscard]] const RegistryOptionView* option(std::string_view id) const {
+        for (const auto& o : options)
+            if (o.id == id) return &o;
+        return nullptr;
+    }
 };
 [[nodiscard]] std::optional<RegistryView> getRegistry();
 

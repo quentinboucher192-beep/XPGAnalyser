@@ -50,7 +50,7 @@ menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string t
 std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
 void rememberFolder(const std::string& filePath);
-menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId);   // 1.42.0
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId, OptionPreset preset = {});   // 1.42.0
 } // namespace licdlg
 
 namespace {

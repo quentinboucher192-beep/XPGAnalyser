@@ -50,6 +50,7 @@ namespace licdlg {
 menu::MenuPtr makeReasonDialog(std::string id, std::string title, std::string text, std::string placeholder, std::string okLabel,
                                std::function<void(const std::string&)> onOk);
 std::string fingerprintOfKey(const std::string& hex);
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId, OptionPreset preset = {});   // 1.42.0
 } // namespace licdlg
 
 // ============================================================================================ l'exterieur
@@ -234,6 +235,11 @@ public:
         accept_->setTooltip("L'assistant de licence, avec cette demande : une licence LI\xC3\x89" "E \xC3\xA0 ce PC ; sign\xC3\xA9" "e, elle part d'elle-m\xC3\xAAme \xC3\xA0 chacun de ses PC.");
         acceptOnline_ = add(*this, std::make_unique<ui::Button>("Accepter en ligne\xE2\x80\xA6", "demandes.accepter-en-ligne"));
         acceptOnline_->setTooltip("Une licence EN LIGNE pour ce client (aucun PC li\xC3\xA9) : son code part scell\xC3\xA9 \xC3\xA0 son PC (il s'active tout seul) et par mail ; gard\xC3\xA9 chiffr\xC3\xA9 ici.");
+        addOption_ = add(*this, std::make_unique<ui::Button>("Ajouter cette option\xE2\x80\xA6", "demandes.ajouter-option"));   // 1.42.0
+        addOption_->setStyle(ui::Button::Style::Primary);
+        addOption_->setIcon(ui::Icon::Star);
+        addOption_->setTooltip("Le client demande une option pour sa licence : la fen\xC3\xAAtre \xC2\xAB Ajouter une option \xC2\xBB r\xC3\xA9gl\xC3\xA9" "e sur sa demande ; "
+                               "sign\xC3\xA9" "e, la nouvelle \xC3\xA9mission part sur le service et son PC voit \xC2\xAB Accept\xC3\xA9" "e \xC2\xBB.");
         refuse_ = add(*this, std::make_unique<ui::Button>("Refuser\xE2\x80\xA6", "demandes.refuser"));
         refuse_->setStyle(ui::Button::Style::Danger);
         refuse_->setTooltip("Le client voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison dans son logiciel (scell\xC3\xA9" "e : personne d'autre ne la lit).");
@@ -260,6 +266,7 @@ public:
         links_ += fetch_->clicked->connect([this] { fetch(); });
         links_ += accept_->clicked->connect([this] { accept(false); });
         links_ += acceptOnline_->clicked->connect([this] { accept(true); });
+        links_ += addOption_->clicked->connect([this] { addOption(); });
         links_ += refuse_->clicked->connect([this] { askRefuse(); });
         links_ += resend_->clicked->connect([this] { resend(); });
         links_ += settings_->clicked->connect([this] {
@@ -302,7 +309,7 @@ protected:
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
         float bx = x;
-        for (ui::Button* btn : {fetch_, resend_, accept_, acceptOnline_, refuse_, settings_}) {
+        for (ui::Button* btn : {fetch_, resend_, addOption_, accept_, acceptOnline_, refuse_, settings_}) {
             if (!btn->visible()) continue;
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
@@ -421,6 +428,7 @@ private:
 
     // 1.37.0 : l'edition que le client a choisie dans sa boutique, et son prix (le registre de ce poste).
     [[nodiscard]] std::string wantedOf(const Entry& e) const {
+        if (e.optionRequest()) return "Option : " + optionText(e);   // 1.42.0
         if (e.edition.empty()) return e.state == RequestState::Unreadable ? std::string() : std::string("\xE2\x80\x94");
         const auto* ed = ws().hasRegistry() ? ws().registry().edition(e.edition) : nullptr;
         if (!ed) return e.edition + " (inconnue)";
@@ -428,6 +436,24 @@ private:
         if (!ed->price.empty()) t += " \xC2\xB7 " + ed->price;
         return t;
     }
+    // 1.42.0 : << Exports avances \xC2\xB7 1 mois, des qu'elle est acceptee >>.
+    [[nodiscard]] std::string optionText(const Entry& e) const {
+        const auto* o = ws().hasRegistry() ? ws().registry().option(e.option) : nullptr;
+        std::string t = o ? (o->label.empty() ? o->id : o->label) : e.option + " (inconnue)";
+        std::string d;
+        if (e.optionDays < 0) d = "du " + dateFr(e.optionFrom ? e.optionFrom : e.requestedAt) + " au " + dateFr(e.optionLastDay);
+        else if (e.optionDays == 0) d = "jusqu'\xC3\xA0 la fin de la licence";
+        else if (e.optionDays == 7) d = "1 semaine";
+        else if (e.optionDays == 30) d = "1 mois";
+        else d = std::to_string(e.optionDays) + " jours";
+        if (o)
+            for (const auto& x : o->durations)
+                if (x.days == e.optionDays && !x.price.empty()) d += " \xC2\xB7 " + x.price;
+        t += " \xC2\xB7 " + d;
+        if (e.optionDays >= 0) t += e.optionFrom ? ", \xC3\xA0 partir du " + dateFr(e.optionFrom) : std::string(", d\xC3\xA8s qu'elle est accept\xC3\xA9" "e");
+        return t;
+    }
+
     // Le mot du client, son courriel (1.37.0) et son contact.
     [[nodiscard]] static std::string messageOf(const Entry& e) {
         std::string t = oneLine(e.message);
@@ -447,8 +473,9 @@ private:
         std::vector<bool> here;
         for (const auto& e : shown_) {
             std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
-            const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId);
+            const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId) && !e.optionRequest();
             if (joins) licence += " (ajouter ce PC)";
+            if (e.optionRequest()) licence += ws().licence(e.licenseId) ? " (une option)" : " (une option ; licence inconnue ici)";
             std::string state = e.acceptedHere() ? "Accept\xC3\xA9" "e ici \xE2\x80\x94 r\xC3\xA9ponse \xC3\xA0 renvoyer" : online::requestStateLabel(e.state);
             if (joins && e.waiting() && !e.acceptedHere()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
                 licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
@@ -499,8 +526,12 @@ private:
         resend_->setVisibility(on && here ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         fetch_->setEnabled(!b && ws().key().present);
         resend_->setEnabled(!b && here);
-        accept_->setEnabled(!b && e && e->waiting() && !here);
-        acceptOnline_->setEnabled(!b && e && e->waiting() && !here);
+        // 1.42.0 : une demande d'option - << Ajouter cette option... >> a la place d'Accepter
+        const bool opt = e && e->optionRequest();
+        addOption_->setVisibility(on && opt && !here ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        addOption_->setEnabled(!b && opt && e->waiting() && !here && ws().licence(e->licenseId) && ws().hasRegistry() && ws().registry().option(e->option));
+        accept_->setEnabled(!b && e && e->waiting() && !here && !opt);
+        acceptOnline_->setEnabled(!b && e && e->waiting() && !here && !opt);
         refuse_->setEnabled(!b && e && e->waiting() && !here);
         invalidateLayout();
     }
@@ -538,6 +569,30 @@ private:
             syncButtons();
             invalidateLayout();
         }
+    }
+
+    // 1.42.0 : la fenetre << Ajouter une option >> reglee sur la demande du client.
+    void addOption() {
+        if (refuseIfBusy()) return;
+        const Entry* e = selected();
+        if (!e || !e->optionRequest() || !e->waiting()) return;
+        const LicenceEntry* l = ws().licence(e->licenseId);
+        if (!l) {
+            host_.report(OpResult::fail("la licence " + e->licenseId + " n'est pas dans l'archive de ce poste : r\xC3\xA9" "cup\xC3\xA8re-la d'abord"));
+            return;
+        }
+        if (!Workspace::inForce(*l)) {
+            host_.report(OpResult::fail("la licence " + e->licenseId + " n'est plus en cours (finie ou r\xC3\xA9voqu\xC3\xA9" "e) : une option ne s'y ajoute pas ; refuse la demande en le disant"));
+            return;
+        }
+        OptionPreset p;
+        p.set = true;
+        p.optionId = e->option;
+        p.days = e->optionDays;
+        p.from = e->optionFrom;
+        p.lastDay = e->optionLastDay;
+        p.requestNumber = e->number;
+        host_.openDialog(licdlg::makeOptionDialog(host_, e->licenseId, p));
     }
 
     void accept(bool onlineLicence) {
@@ -634,6 +689,7 @@ private:
     ui::Button*              fetch_{nullptr};
     ui::Button*              accept_{nullptr};
     ui::Button*              acceptOnline_{nullptr};
+    ui::Button*              addOption_{nullptr};   // 1.42.0
     ui::Button*              refuse_{nullptr};
     ui::Button*              resend_{nullptr};
     ui::Button*              settings_{nullptr};

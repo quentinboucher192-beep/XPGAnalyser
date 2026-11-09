@@ -158,7 +158,8 @@ struct Card {
 // Les onglets de la fenetre Licence (1.35.0 : Activation en tete ; -1 : le plus utile - Ma licence pour une licence
 // par fichier valable, sinon Activation).
 inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevices = 2, kTabFeatures = 3, kTabEditions = 4, kTabHistory = 5,
-                     kTabSettings = 6, kTabRequest = 7, kTabProfile = 8;   // 1.37.0 : Mon profil
+                     kTabSettings = 6, kTabRequest = 7, kTabProfile = 8,   // 1.37.0 : Mon profil
+                     kTabOptions = 9, kTabPurchases = 10;                     // 1.42.0 : Options, Mes achats
 
 // ---- 1.34.0 / 1.35.0 : LES AVIS DE LA LICENCE ET LE SERVICE DES LICENCES (app/LicenceService) ----
 //  App, apres start(), SAUF le poste d'exploitation (--ihm : personne devant l'ecran) : startNotices(true).
@@ -335,6 +336,11 @@ std::size_t check(bool force = false);
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
 // 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
 void showLicenceWindow(App& app, int tab = licence::kTabAuto);
+namespace licence {
+// 1.42.0 : l'option a choisir a l'ouverture de l'onglet Options (une action fermee qui la propose) ; prise une fois.
+void setWantedOption(std::string optionId);
+[[nodiscard]] std::string takeWantedOption();
+} // namespace licence
 // 1.38.0 : la fenetre Notifications (le carnet general, Notices.hpp) ; le bouton d'une notification de licence ouvre la
 // fenetre Licence sur son onglet.
 void showNoticesWindow(App& app);

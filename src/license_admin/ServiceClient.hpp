@@ -257,6 +257,12 @@ struct Entry {
     std::string              nonce;
     std::string              customer, contact, message;
     std::string              edition, email;   // 1.37.0 : l'edition voulue (la boutique du Studio), le courriel du client (facultatifs)
+    // 1.42.0 : une OPTION demandee pour la licence licenseId (vide : une demande de licence) - sa duree en jours (0 : jusqu'a la fin
+    // de la licence ; -1 : des dates), son debut voulu (0 : des qu'elle est acceptee), son dernier jour (des dates, compris).
+    std::string              option;
+    int                      optionDays{0};
+    Seconds                  optionFrom{0}, optionLastDay{0};
+    [[nodiscard]] bool optionRequest() const noexcept { return !option.empty() && state != RequestState::Unreadable; }
     std::string              deviceName, fingerprint, software, licenseId;   // licenseId : celle demandee
     Seconds                  requestedAt{0};   // la date SIGNEE par le PC
     Seconds                  createdAt{0};     // le depot sur le service
@@ -299,6 +305,11 @@ struct FetchState {
 // demande marquee traitee.
 [[nodiscard]] Result refuse(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& reason,
                             const Options& o);
+// 1.42.0 : une demande d'OPTION acceptee pour une licence EN LIGNE (sa nouvelle emission deja deposee) : << acceptee >> pour le PC
+// qui l'a demandee (sans licence ni code : son Studio le dit et renouvelle), la demande traitee. Une licence LIEE : la
+// publication de sa nouvelle emission (publishBoundLicence) repond deja au PC qui l'a demandee.
+[[nodiscard]] Result answerOption(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& licenseId,
+                                  const std::string& message, const Options& o);
 // 1.37.0 : LE CODE D'ACTIVATION GARDE SUR CE POSTE, pour le revoir (Licences \xE2\x80\xBA Voir le code...) : chiffre pour ce compte
 // de ce PC (DPAPI sous Windows ; ailleurs un fichier 0600), dans codes-activation/<licence>.code du dossier de la cle. Jamais
 // synchronise (l'archive ne le porte pas), jamais en clair sur le disque sous Windows. Un nouveau code remplace l'ancien.

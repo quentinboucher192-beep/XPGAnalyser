@@ -99,6 +99,12 @@ struct OnlineRequest {
     // du client (le mail de l'editeur a l'acceptation).
     std::string edition;
     std::string email;
+    // 1.42.0 (facultatifs, ecrits seulement s'ils servent) : une OPTION demandee pour la licence de ce PC - son identifiant au
+    // registre, sa duree en jours (0 : jusqu'a la fin de la licence ; -1 : des dates), son debut voulu (0 : des qu'elle est
+    // acceptee) et, pour des dates, son dernier jour COMPRIS (00:00 UTC). Une Admin 1.41 refuse la demande (champ inconnu).
+    std::string option;
+    int         optionDays{0};
+    Seconds     optionFrom{0}, optionLastDay{0};
 };
 // 1.37.0 : un courriel lisible (un seul @, un domaine avec un point, 254 caracteres au plus, sans espace ni controle).
 [[nodiscard]] bool plausibleEmail(std::string_view s);

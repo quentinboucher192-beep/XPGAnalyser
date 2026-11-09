@@ -1173,6 +1173,11 @@ OpResult Workspace::serviceRefuse(const std::string& which, const std::string& r
     return fromResult(online::refuse(folder_, *key, which, reason, optionsAt(now())));
 }
 
+OpResult Workspace::serviceAnswerOption(const std::string& which, const std::string& licenseId, const std::string& message) const {   // 1.42.0
+    XPG_SERVICE_KEY_OR_FAIL;
+    return fromResult(online::answerOption(folder_, *key, which, licenseId, message, optionsAt(now())));
+}
+
 OpResult Workspace::serviceStats() const {
     XPG_SERVICE_KEY_OR_FAIL;
     return fromResult(online::stats(folder_, *key, optionsAt(now())));

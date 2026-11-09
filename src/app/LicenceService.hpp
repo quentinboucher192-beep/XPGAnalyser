@@ -107,6 +107,7 @@ struct Record {
     licensing::Seconds sentAt{0};
     std::string        customer, contact, message, pcName, licenseId;
     std::string        edition, email;  // 1.37.0 : l'edition choisie (la boutique), le courriel (facultatifs)
+    std::string        option, optionText;   // 1.42.0 : l'option demandee (son identifiant) et ce qu'en dit l'ecran (<< 1 mois >>)
     std::string        local;           // kLocalSent, kLocalCancelled ; vide : aucune demande
     licensing::Seconds cancelledAt{0};
     std::string        outcome;         // la reponse de l'editeur a CETTE demande : "acceptee", "refusee", "annulee"
@@ -177,6 +178,13 @@ struct RequestForm {
     std::string message;     // facultatif
     std::string edition;     // 1.37.0, facultatif : l'edition choisie dans la boutique (son identifiant, [A-Z0-9_])
     std::string email;       // 1.37.0, facultatif : le courriel (le mail de l'editeur a l'acceptation)
+    // 1.42.0, facultatifs : une OPTION pour la licence de ce PC (licenseId : la licence installee) - son identifiant, sa duree
+    // (jours ; 0 : jusqu'a la fin de la licence ; -1 : des dates), son debut (0 : des qu'elle est acceptee), son dernier jour
+    // (des dates, compris), et ce qu'en dit l'ecran (<< Travail a plusieurs, 1 mois >>).
+    std::string        option;
+    int                optionDays{0};
+    licensing::Seconds optionFrom{0}, optionLastDay{0};
+    std::string        optionText;
 };
 inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage = 2000, kMaxPcName = 80, kMaxLicenseId = 64, kMaxEdition = 40,
                              kMaxEmail = 200;

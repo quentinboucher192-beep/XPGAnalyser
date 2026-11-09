@@ -22,6 +22,8 @@
 #include "../src/ui/widgets/DatePicker.hpp"
 
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -176,12 +178,15 @@ int main(int argc, char** argv) {
         auto page = gui::makeOptionsPage(h);
         auto& p = *page;
         std::string t = paintPage(p);
-        check(p.title() == "Options" && rows(p, "options.table") == 0, "la page Options : aucune option encore");
+        check(p.title() == "Options" && rows(p, "options.table") == 3 && rowOf(p, "options.table", 0, "exports_avances") >= 0 &&
+                  rowOf(p, "options.table", 0, "ia_avancee") >= 0 && rowOf(p, "options.table", 0, "travail_a_plusieurs") >= 0,
+              "la page Options : les 3 options des offres par defaut");
         check(click(p, "options.nouvelle") && shown(p, "options.nouvelle.id"), "Nouvelle option... : le formulaire");
-        check(type(p, "options.nouvelle.id", "Exports Avances") && click(p, "options.nouvelle.creer") && rows(p, "options.table") == 0, "un identifiant mal ecrit : refuse");
-        check(type(p, "options.nouvelle.id", "exports_avances") && type(p, "options.nouvelle.nom", "Exports avanc\xC3\xA9s") && click(p, "options.nouvelle.creer") &&
-                  rows(p, "options.table") == 1,
-              "exports_avances creee");
+        check(type(p, "options.nouvelle.id", "Rapports Avances") && click(p, "options.nouvelle.creer") && rows(p, "options.table") == 3, "un identifiant mal ecrit : refuse");
+        check(type(p, "options.nouvelle.id", "exports_avances") && click(p, "options.nouvelle.creer") && rows(p, "options.table") == 3, "un identifiant deja pris : refuse");
+        check(type(p, "options.nouvelle.id", "rapports_avances") && type(p, "options.nouvelle.nom", "Rapports avanc\xC3\xA9s") && click(p, "options.nouvelle.creer") &&
+                  rows(p, "options.table") == 4,
+              "rapports_avances creee");
         t = paintPage(p);
         auto* feats = table(p, "options.fonctionnalites");
         const int adv = rowOf(p, "options.fonctionnalites", 1, "ai_advanced_models");
@@ -191,15 +196,15 @@ int main(int argc, char** argv) {
               "1 semaine (19) et 1 mois (49)");
         check(setCheck(p, "options.boutique", true), "dans la boutique des Studios");
         check(enabledBtn(p, "options.signer") && click(p, "options.signer"), "Signer le registre");
-        const auto* o = fx.ws->registry().option("exports_avances");
-        check(o && o->label == "Exports avanc\xC3\xA9s" && o->features.size() == 1 && o->features.front().id == "ai_advanced_models" && o->durations.size() == 2 &&
+        const auto* o = fx.ws->registry().option("rapports_avances");
+        check(o && o->label == "Rapports avanc\xC3\xA9s" && o->features.size() == 1 && o->features.front().id == "ai_advanced_models" && o->durations.size() == 2 &&
                   o->shop,
               "le registre signe : l'option, ce qu'elle ouvre, ses deux durees");
         check(o && o->durations.front().days == 7 && o->durations.front().price == "19 \xE2\x82\xAC HT" && o->durations.back().days == 30 &&
                   o->durations.back().price == "49 \xE2\x82\xAC HT",
               "les prix de chaque duree");
         t = paintPage(p);
-        check(has(t, "Exports avanc\xC3\xA9s") && has(t, "toutes"), "la table : proposee a toutes les offres");
+        check(has(t, "Rapports avanc\xC3\xA9s") && has(t, "toutes"), "la table : proposee a toutes les offres");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -221,7 +226,7 @@ int main(int argc, char** argv) {
             ui::Widget& w = *d.widgetRoot();
             std::string t = paintDialog(d);
             check(has(t, "Ajouter une option") && has(t, id) && has(t, "Client d'essai Omega"), "le titre : la licence, son client");
-            check(pickItem(w, "option.choix", "exports_avances"), "l'option : Exports avances");
+            check(pickItem(w, "option.choix", "rapports_avances"), "l'option : Rapports avances");
             check(pickItem(w, "option.duree", "30"), "1 mois");
             t = paintDialog(d);
             check(find<ui::InputText>(w, "option.prix") && find<ui::InputText>(w, "option.prix")->text() == "49 \xE2\x82\xAC HT", "le prix du catalogue repris");
@@ -234,7 +239,7 @@ int main(int argc, char** argv) {
             check(!rig.asked.empty() && rig.asked.back().save, "on choisit ou ecrire la nouvelle emission");
             check(rig.last() && rig.last()->ok, "signee : " + (rig.last() ? rig.last()->text() : std::string()));
             const auto* e = fx.ws->licence(id);
-            check(e && e->licence.options.size() == 1 && e->licence.options.front().id == "exports_avances" && e->licence.options.front().price == "49 \xE2\x82\xAC HT",
+            check(e && e->licence.options.size() == 1 && e->licence.options.front().id == "rapports_avances" && e->licence.options.front().price == "49 \xE2\x82\xAC HT",
                   "la licence porte l'option (et son prix)");
             check(e && !e->licence.options.empty() && e->licence.options.front().until == e->licence.options.front().from + 30 * kDay, "pour 30 jours");
             check(e && lic::effectiveGrants(e->licence, g_now + kDay).size() > e->licence.features.size(), "ses droits : ai_advanced_models en plus pendant l'option");
@@ -245,17 +250,27 @@ int main(int argc, char** argv) {
         const std::string t = paintPage(p, 1400.f, 2600.f);   // haute : toute la fiche (ses categories du bas)
         check(has(t, "Options (1 en cours)"), "la fiche : Options (1 en cours)");
         check(has(t, "Achats du client ("), "la fiche : Achats du client");
-        check(has(t, "Exports avanc\xC3\xA9s"), "l'option nommee dans la fiche");
+        check(has(t, "Rapports avanc\xC3\xA9s"), "l'option nommee dans la fiche");
         const auto hist = fx.ws->purchaseHistory("Client d'essai Omega");
-        check(std::any_of(hist.begin(), hist.end(), [](const lic::Purchase& x) { return x.kind == "option" && x.label.rfind("Exports avanc\xC3\xA9s", 0) == 0; }),
+        check(std::any_of(hist.begin(), hist.end(), [](const lic::Purchase& x) { return x.kind == "option" && x.label.rfind("Rapports avanc\xC3\xA9s", 0) == 0; }),
               "l'historique du client : l'option achetee");
     }
 
     // ------------------------------------------------------------------------------------------------
-    std::printf("-- Licences : sans option au catalogue, pas de bouton\n");
+    std::printf("-- Licences : sans option au catalogue, pas de bouton (un registre sans options)\n");
     {
         Fixture f2(source, "options-gui-sans");
-        check(f2.ready(), "un autre poste d'essai");
+        {   // le registre d'exemple sans son catalogue d'options (un registre d'avant la 1.42)
+            std::ifstream in(fs::path(source) / "tests" / "fixtures" / "licences" / "registre-exemple.json", std::ios::binary);
+            std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const auto at = text.find("\"options\"");
+            const auto comma = at == std::string::npos ? std::string::npos : text.rfind(',', at);
+            if (comma != std::string::npos) text = text.substr(0, comma) + "\n}\n";
+            std::ofstream(f2.root / "registre-sans-options.json", std::ios::binary) << text;
+        }
+        check(f2.ws->createKey("essai application", true).ok && f2.ws->signRegistryJson(U(f2.root / "registre-sans-options.json")).ok && f2.ready() &&
+                  f2.ws->registry().options.empty(),
+              "un autre poste d'essai, son registre sans option");
         check(f2.licence("XPG-2026-00302", "Client d'essai Sigma", "PROFESSIONAL", {f2.request("pcB", "Poste essai B")}, 365).ok, "une licence");
         HostRig r2(f2);
         auto p2 = gui::makeLicencesPage(r2.host());

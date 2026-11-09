@@ -613,6 +613,7 @@ std::string installedLicenseId(const Record& rec) {
 bool forThisRequest(const Record& rec, const lgw::DeviceStatus& s) { return !rec.nonce.empty() && s.requestNonce == rec.nonce; }
 
 bool stepActivate(Conn& c, const std::string& normalized, const std::string& pcName0, Record& rec, Result& res, std::vector<std::string>& lines);
+bool stepRenew(Conn& c, Record& rec, Result& res, std::vector<std::string>& lines, bool& devicePart);   // 1.42.0 : une option acceptee
 void scrub(std::string& text, const std::string& normalized, const std::string& typed);
 
 // L'etat de CE PC publie par l'editeur (le bloc << poste >> de /v1/renouveler ou /v1/poste) : les reponses aux
@@ -721,6 +722,28 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     }
                 }
                 crypto::wipe(normalized.data(), normalized.size());
+            } else if (content.license.empty() && !updated && !rec.option.empty() && mine) {
+                // 1.42.0 : une demande d'OPTION acceptee pour la licence en ligne de ce PC : la nouvelle emission est sur le
+                // service - le renouvellement l'apporte (tout de suite si le service repond).
+                settled = true;
+                const std::string what = rec.optionText.empty() ? rec.option : rec.optionText;
+                bool renewed = false;
+                if (conn) {
+                    Result one;
+                    std::vector<std::string> act;
+                    bool devicePart = false;
+                    renewed = stepRenew(*conn, rec, one, act, devicePart);
+                    if (renewed) res.changed = true;
+                }
+                lid = !content.onlineLicense.empty() ? content.onlineLicense : rec.licenseId;
+                res.licenseId = lid;
+                res.answer = kAnswerAccepted;
+                res.answerNote = trim(content.message);
+                text = renewed ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle est sur ce PC."
+                               : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle arrive au prochain renouvellement de ta licence "
+                                 "(Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Renouveler maintenant).";
+                notice = text;
+                tone = "ok";
             } else if (content.license.empty() && !updated) {
                 // Acceptee par une licence en ligne SANS son code (un outil de l'editeur d'avant la 1.37.0) : c'est fini
                 // ici, le code vient de l'editeur (avant : << en attente >> sans fin).
@@ -1451,6 +1474,8 @@ bool loadRecord(Record& out, std::string* why) {
     r.licenseId = v.str("licence_demandee");
     r.edition = v.str("edition");   // 1.37.0
     r.email = v.str("courriel");
+    r.option = v.str("option");   // 1.42.0
+    r.optionText = v.str("option_texte");
     r.local = v.str("etat_local");
     r.cancelledAt = time("annulee_le");
     r.outcome = v.str("reponse");
@@ -1494,6 +1519,8 @@ bool saveRecord(const Record& r, std::string* why) {
     text("licence_demandee", r.licenseId);
     text("edition", r.edition);   // 1.37.0
     text("courriel", r.email);
+    text("option", r.option);   // 1.42.0
+    text("option_texte", r.optionText);
     text("etat_local", r.local);
     time("annulee_le", r.cancelledAt);
     text("reponse", r.outcome);
@@ -1889,6 +1916,10 @@ Result sendRequest(const RequestForm& form0) {
     q.message = f.message;
     q.edition = f.edition;   // 1.37.0
     q.email = f.email;
+    q.option = f.option;     // 1.42.0
+    q.optionDays = f.optionDays;
+    q.optionFrom = f.optionFrom;
+    q.optionLastDay = f.optionLastDay;
     std::string sealed = lgw::sealFor(key->key, lgw::writeOnlineRequest(q));
     if (sealed.empty()) {
         res.message = "La demande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
@@ -1950,6 +1981,8 @@ Result sendRequest(const RequestForm& form0) {
     rec.licenseId = f.licenseId;
     rec.edition = f.edition;
     rec.email = f.email;
+    rec.option = f.option;   // 1.42.0
+    rec.optionText = f.optionText;
     rec.local = kLocalSent;
     rec.cancelledAt = 0;
     rec.outcome.clear();
@@ -1958,10 +1991,14 @@ Result sendRequest(const RequestForm& form0) {
     if (!f.pcName.empty()) what += ", PC \xC2\xAB " + f.pcName + " \xC2\xBB";
     if (!f.licenseId.empty()) what += ", pour la licence " + f.licenseId;
     if (!f.edition.empty()) what += ", \xC3\xA9" "dition " + f.edition;
-    note(true, "Demande d'activation envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur par le service des licences (" + what + ").");
+    if (!f.option.empty()) what += ", option " + (f.optionText.empty() ? f.option : f.optionText);   // 1.42.0
+    note(true, std::string(f.option.empty() ? "Demande d'activation" : "Demande d'option") + " envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur par le service des licences (" + what + ").");
     res.ok = true;
     res.changed = true;
-    lines.push_back("Demande envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur (n\xC2\xB0 " + std::to_string(number) + "). Ta licence s'installera d'elle-m\xC3\xAAme d\xC3\xA8s qu'il l'aura accept\xC3\xA9" "e.");
+    if (!f.option.empty())   // 1.42.0
+        lines.push_back("Demande d'option envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur (n\xC2\xB0 " + std::to_string(number) + "). L'option arrivera d'elle-m\xC3\xAAme sur ce PC d\xC3\xA8s qu'il l'aura accept\xC3\xA9" "e.");
+    else
+        lines.push_back("Demande envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur (n\xC2\xB0 " + std::to_string(number) + "). Ta licence s'installera d'elle-m\xC3\xAAme d\xC3\xA8s qu'il l'aura accept\xC3\xA9" "e.");
     finish(res, c, rec, std::move(lines));
     res.pendingAfter = true;
     return res;

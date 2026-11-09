@@ -147,6 +147,31 @@ int main() {
               "l'editeur l'ouvre : " + why);
         check(!gw::openWith(*other, sealed, plain, &why), "personne d'autre ne l'ouvre");
         check(!gw::openWith(*pc, sealed, plain, &why), "pas meme le PC qui l'a scellee");
+        // 1.42.0 : une demande d'OPTION (facultative, ecrite seulement si elle sert)
+        check(!has(gw::writeOnlineRequest(q), "option"), "sans option : rien d'ecrit (une Admin 1.41 la lit encore)");
+        {
+            gw::OnlineRequest x = q;
+            x.option = "exports_avances";
+            x.optionDays = 30;
+            x.optionFrom = 1800000000 - 1800000000 % 86400;
+            check(gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why) && r.option == "exports_avances" && r.optionDays == 30 && r.optionFrom == x.optionFrom &&
+                      r.optionLastDay == 0,
+                  "une option, 1 mois, a partir d'un jour : relue telle quelle (" + why + ")");
+            x.optionDays = -1;
+            x.optionLastDay = x.optionFrom + 9 * 86400;
+            check(gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why) && r.optionDays == -1 && r.optionLastDay == x.optionLastDay, "des dates (du ... au ...)");
+            x.optionLastDay = x.optionFrom - 86400;
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why) && has(why, "dates"), "des dates a l'envers : refusees");
+            x.optionLastDay = 0;
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why), "des dates sans fin : refusees");
+            x = q;
+            x.option = "Exports Avances";
+            x.optionDays = 7;
+            check(!gw::parseOnlineRequest(gw::writeOnlineRequest(x), r, &why) && has(why, "identifiant"), "un identifiant d'option mal ecrit : refuse");
+            std::string orphan = gw::writeOnlineRequest(q);
+            orphan.insert(orphan.find('{') + 1, "\"option_jours\":7,");
+            check(!gw::parseOnlineRequest(orphan, r, &why) && has(why, "sans option"), "une duree d'option sans option : refusee");
+        }
         std::string extra = gw::writeOnlineRequest(q);
         extra.insert(extra.find('{') + 1, "\"inconnu\":1,");
         check(!gw::parseOnlineRequest(extra, r, &why) && has(why, "inconnu"), "un champ inconnu est refuse");

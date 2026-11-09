@@ -78,7 +78,7 @@ std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
 void rememberFolder(const std::string& filePath);
 // 1.42.0 : ajouter une option a une licence de l'archive.
-menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId);
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId, OptionPreset preset = {});
 } // namespace licdlg
 
 namespace {
@@ -2777,8 +2777,8 @@ private:
 //  ligne : la nouvelle emission part sur le service ; une licence liee : le fichier a envoyer.
 class OptionBody final : public ui::Widget {
 public:
-    OptionBody(DialogMenu& owner, ShellHost host, std::string licenseId)
-        : ui::Widget("dialog.option.corps"), owner_(owner), host_(std::move(host)), licenseId_(std::move(licenseId)) {
+    OptionBody(DialogMenu& owner, ShellHost host, std::string licenseId, OptionPreset preset)
+        : ui::Widget("dialog.option.corps"), owner_(owner), host_(std::move(host)), licenseId_(std::move(licenseId)), preset_(std::move(preset)) {
         choice_ = &adopt(*this, std::make_unique<ui::DropDown>("option.choix"));
         duration_ = &adopt(*this, std::make_unique<ui::DropDown>("option.duree"));
         from_ = &adopt(*this, std::make_unique<ui::DatePicker>("option.debut"));
@@ -2827,6 +2827,7 @@ public:
         links_ += cancel_->clicked->connect([this] { owner_.close(); });
         links_ += ok_->clicked->connect([this] { accept(); });
         loadDurations();
+        applyPreset();
     }
 
 protected:
@@ -2927,6 +2928,35 @@ private:
         return std::to_string(days) + " jours";
     }
 
+    // 1.42.0 : la demande du client - son option, sa duree, son debut (ou ses dates).
+    void applyPreset() {
+        if (!preset_.set) return;
+        const auto& items = choice_->items();
+        for (std::size_t i = 0; i < items.size(); ++i)
+            if (items[i].value == preset_.optionId) choice_->setSelectedIndex(static_cast<int>(i));
+        const auto& durs = duration_->items();
+        const std::string want = preset_.days < 0 ? std::string("dates") : std::to_string(preset_.days);
+        int pick = -1;
+        for (std::size_t i = 0; i < durs.size(); ++i)
+            if (durs[i].value == want) pick = static_cast<int>(i);
+        const lic::Seconds today = ui::DatePicker::dayOf(host_.workspace().now());
+        if (preset_.from > today) from_->setDate(preset_.from);
+        if (pick < 0) {   // une duree que le catalogue n'a pas : des dates
+            for (std::size_t i = 0; i < durs.size(); ++i)
+                if (durs[i].value == "dates") pick = static_cast<int>(i);
+        }
+        if (pick >= 0) duration_->setSelectedIndex(pick);
+        if (customDates()) {
+            const lic::Seconds start = from_->date() ? from_->date() : today;
+            lic::Seconds last = preset_.lastDay;
+            if (!last && preset_.days > 0) last = start + static_cast<lic::Seconds>(preset_.days - 1) * lic::kDay;
+            if (last >= start) to_->setDate(last);
+            to_->setRangeStart(start);
+        }
+        invalidateLayout();
+        invalidate();
+    }
+
     void loadDurations() {
         std::vector<ui::DropDown::Item> items;
         if (const lic::OptionDef* o = option())
@@ -2989,6 +3019,8 @@ private:
         if (e && Workspace::isOnlineLicence(e->licence)) out.push_back("Licence en ligne : la nouvelle \xC3\xA9mission part sur le service, ses PC la re\xC3\xA7oivent seuls.");
         else out.push_back("Licence li\xC3\xA9" "e \xC3\xA0 ses PC : tu choisis o\xC3\xB9 \xC3\xA9" "crire le fichier, puis tu l'envoies au client.");
         out.push_back("Les Studios de ce client doivent avoir la 1.42 ou plus.");
+        if (preset_.requestNumber)
+            out.insert(out.begin(), "En r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(preset_.requestNumber) + " du client : son PC verra \xC2\xAB Accept\xC3\xA9" "e \xC2\xBB.");
         return out;
     }
 
@@ -3017,10 +3049,26 @@ private:
         const LicenceEntry* e = host.workspace().licence(id);
         const bool online = e && Workspace::isOnlineLicence(e->licence);
         owner_.close();
+        const int request = preset_.requestNumber;
+        const std::string label = o->label.empty() ? o->id : o->label;
         if (online) {
             const OpResult r = host.workspace().addOption(id, d, {});
             host.report(r);
-            if (r.ok) (void)publishToService(host);
+            if (!r.ok) return;
+            // 1.42.0 : la demande du client - << acceptee >> pour son PC une fois la nouvelle emission deposee
+            const auto answer = [host, request, id, label] {
+                if (!request || !host.runSlow) return;
+                const Workspace* wp = &host.workspace();
+                const std::string msg = "Option \xC2\xAB " + label + " \xC2\xBB ajout\xC3\xA9" "e \xC3\xA0 ta licence " + id + ".";
+                if (!host.runSlow("Service : r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(request),
+                                  [wp, request, id, msg] { return wp->serviceAnswerOption(std::to_string(request), id, msg); }, nullptr))
+                    host.flash("La r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(request) + " n'est pas partie (un travail en cours) : accepte-la de nouveau ensuite.",
+                               Tone::Warning);
+            };
+            if (!publishToService(host, [answer](const OpResult& pr) {
+                    if (pr.ok) answer();
+                }))
+                answer();
             return;
         }
         ui::FilePick pick;
@@ -3045,6 +3093,7 @@ private:
     DialogMenu&           owner_;
     ShellHost             host_;
     std::string           licenseId_;
+    OptionPreset          preset_;
     ui::DropDown*         choice_{nullptr};
     ui::DropDown*         duration_{nullptr};
     ui::DatePicker*       from_{nullptr};
@@ -3062,18 +3111,20 @@ private:
 
 class OptionMenu final : public DialogMenu {
 public:
-    OptionMenu(ShellHost host, std::string licenseId) : DialogMenu("dialog.option"), host_(std::move(host)), licenseId_(std::move(licenseId)) {}
+    OptionMenu(ShellHost host, std::string licenseId, OptionPreset preset)
+        : DialogMenu("dialog.option"), host_(std::move(host)), licenseId_(std::move(licenseId)), preset_(std::move(preset)) {}
     [[nodiscard]] std::string title() const override { return "Ajouter une option"; }
 
 protected:
     core::Status buildUi() override {
-        setRoot(std::make_unique<OptionBody>(*this, host_, licenseId_));
+        setRoot(std::make_unique<OptionBody>(*this, host_, licenseId_, preset_));
         return core::ok();
     }
 
 private:
-    ShellHost   host_;
-    std::string licenseId_;
+    ShellHost    host_;
+    std::string  licenseId_;
+    OptionPreset preset_;
 };
 
 } // namespace
@@ -3089,7 +3140,9 @@ namespace licdlg {
 
 menu::MenuPtr makeRevokeDialog(ShellHost host, std::string licenseId) { return std::make_unique<RevokeMenu>(std::move(host), std::move(licenseId)); }
 
-menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId) { return std::make_unique<OptionMenu>(std::move(host), std::move(licenseId)); }
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId, OptionPreset preset) {
+    return std::make_unique<OptionMenu>(std::move(host), std::move(licenseId), std::move(preset));
+}
 
 menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger, std::function<void()> onOk) {
     return std::make_unique<ConfirmMenu>(std::move(id), std::move(title), std::move(text), std::move(okLabel), danger, std::move(onOk));
