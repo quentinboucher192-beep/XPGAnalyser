@@ -1180,7 +1180,7 @@ if(XPG_BUILD_TESTS)
         set_tests_properties(adminmail PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 120)
     endif()
     if(TARGET xpg_admin_gui)
-        foreach(part shell licences securite donnees demandes options)   # 1.34.0 : demandes (Demandes en ligne) ; 1.42.0 : options
+        foreach(part shell licences securite donnees demandes options admins versions)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})

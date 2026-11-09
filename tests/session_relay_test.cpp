@@ -3,7 +3,8 @@
 //  du service XPG, chiffre de bout en bout : session/SessionRelay)
 // -----------------------------------------------------------------------------
 //    - le code (10 caracteres, montre "K7Q4-M2XP-T9", tape avec souplesse), le
-//      localisateur (SHA-256 du code, 16 octets), les enregistrements et les trames ;
+//      localisateur (Argon2id du code, 16 octets : 1.44.0, le service ne retrouve pas
+//      le code en essayant toutes les combinaisons), les enregistrements et les trames ;
 //    - un hote et deux equipiers a travers un RELAIS EN MEMOIRE (le transport
 //      injectable : la meme semantique que service/src/relais.js) : 3 codes faux
 //      (refuses, puis refuse meme avec le bon), le bon code tape en minuscules,
@@ -23,6 +24,8 @@
 #include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
 #include "../src/session/SessionRelay.hpp"
+
+#include <sodium.h>
 
 #include <atomic>
 #include <chrono>
@@ -400,9 +403,21 @@ void code() {
     check(relayCodeTyped("o1il-abcd-ef", t) && t == "0111ABCDEF", "O pour 0, I et L pour 1");
     check(!relayCodeTyped("K7Q4-M2XP-T", t) && !relayCodeTyped("K7Q4-M2XP-T9X", t) && !relayCodeTyped("K7Q4-M2XP-TU", t),
           "trop court, trop long, une lettre hors de l'alphabet (U) : refuses");
-    const auto d = crypto::sha256(std::string("K7Q4M2XPT9"));
-    check(relayLocator("k7q4-m2xp-t9") == crypto::hex(d.data(), 16), "le localisateur : les 16 premiers octets de SHA-256(code)");
-    check(relayLocator("K7Q4M2XPT9").size() == 32, "32 hexadecimaux");
+    // Le localisateur : Argon2id (3 passes, 64 Mio, le sel = les 16 premiers octets de SHA-256("XPG-RELAIS-v1")), calcule
+    // ici a part ; plus jamais un SHA-256 du code (le service essaierait toutes les combinaisons).
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::string loc = relayLocator("k7q4-m2xp-t9");
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    const auto salt = crypto::sha256(std::string("XPG-RELAIS-v1"));
+    unsigned char ref[16];
+    const std::string pw = "K7Q4M2XPT9";
+    const bool refOk = crypto_pwhash(ref, sizeof ref, pw.data(), pw.size(), salt.data(), 3, 64u * 1024u * 1024u, crypto_pwhash_ALG_ARGON2ID13) == 0;
+    check(refOk && loc == crypto::hex(ref, sizeof ref), "le localisateur : Argon2id(code), 3 passes, 64 Mio, le sel de XPG-RELAIS-v1");
+    const auto d = crypto::sha256(pw);
+    check(loc.size() == 32 && loc != crypto::hex(d.data(), 16), "32 hexadecimaux, et pas le SHA-256 du code");
+    check(relayLocator("K7Q4M2XPT9") == loc && relayLocator("K7Q4M2XPTA") != loc, "le meme code : le meme localisateur ; un autre : un autre");
+    std::printf("  (le localisateur : %.0f ms)\n", ms);
+    check(ms > 20.0, "le localisateur est lent expres (Argon2id)");
     std::vector<std::string> recs{"Cabc", std::string(70000, 'x'), "S1"}, back;
     check(relay::unpackRecords(relay::packRecords(recs), back) && back == recs, "les enregistrements : aller-retour");
     check(!relay::unpackRecords(std::string("\0\0\0\x09" "abc", 7), back), "un enregistrement tronque : refuse");
@@ -478,7 +493,7 @@ void scenario(const Net& net) {
         g.stop();
     };
     {
-        // Un code faux : le relais ne connait pas son localisateur (SHA-256 du code) - aucune session.
+        // Un code faux : le relais ne connait pas son localisateur (Argon2id du code) - aucune session.
         Events z;
         attempt(wrong, z);
         const auto* c = z.find(LinkEvent::Kind::Closed);

@@ -9,7 +9,10 @@
 //
 //  LE CODE : 10 caracteres du base32 de Crockford (50 bits, "K7Q4-M2XP-T9"), tire a
 //  chaque session ; il ne passe jamais. Le relais connait la session par son
-//  LOCALISATEUR : les 16 premiers octets de SHA-256(code), en hexadecimal.
+//  LOCALISATEUR : Argon2id(code) (libsodium crypto_pwhash : 3 passes, 64 Mio, un sel
+//  fixe tire de "XPG-RELAIS-v1"), 16 octets en hexadecimal. Lent expres (~0,2 s) : le
+//  service ne retrouve pas le code en essayant toutes les combinaisons. Il est calcule
+//  dans le fil du lien, une fois par demarrage ou par entree.
 //
 //  L'ENTREE (pour chaque equipier, a travers le relais) : l'echange CPace des
 //  appairages (deploy::pairing : ristretto255, les memes briques), le code pour
@@ -58,6 +61,9 @@ namespace session {
 
 // ---- le code d'une session par Internet ----
 inline constexpr int kRelayCodeChars = 10;   // base32 de Crockford : 50 bits
+// Le localisateur : Argon2id, 3 passes, 64 Mio (crypto_pwhash).
+inline constexpr unsigned long long kRelayLocatorOps = 3;
+inline constexpr std::size_t kRelayLocatorMem = 64u * 1024u * 1024u;
 // Un code neuf (le hasard du systeme) : "K7Q4M2XPT9".
 [[nodiscard]] std::string newRelayCode();
 // "K7Q4-M2XP-T9".
@@ -65,7 +71,9 @@ inline constexpr int kRelayCodeChars = 10;   // base32 de Crockford : 50 bits
 // Le code tape, avec souplesse (minuscules, espaces, tirets ; O pour 0, I et L pour 1). Faux : pas 10 caracteres
 // de l'alphabet.
 bool relayCodeTyped(std::string_view text, std::string& code);
-// Le localisateur de la session sur le relais : les 16 premiers octets de SHA-256(code), 32 hexadecimaux.
+// Le localisateur de la session sur le relais : Argon2id(code normalise, le sel fixe) sur 16 octets, 32 hexadecimaux ;
+// vide si la memoire manque. BLOQUANT (~0,2 s, 64 Mio) : jamais dans le fil de l'interface (les liens le calculent
+// dans leur fil).
 [[nodiscard]] std::string relayLocator(std::string_view code);
 
 // ---- le transport : un appel au relais (HTTP, signe par la cle du PC) ----

@@ -4,8 +4,9 @@
 // -----------------------------------------------------------------------------
 //  Un Durable Object PAR SESSION (idFromName(localisateur)) : il ne fait que
 //  passer des octets CHIFFRES DE BOUT EN BOUT entre l'hote et ses equipiers. Le
-//  code de la session n'arrive jamais ici : le localisateur est les 16 premiers
-//  octets de SHA-256(code), en hexadecimal (32 caracteres). L'echange CPace et
+//  code de la session n'arrive jamais ici : le localisateur (32 hexadecimaux,
+//  opaque ici) vient du code par Argon2id, dans le Studio - le service ne peut
+//  pas retrouver le code en essayant toutes les combinaisons. L'echange CPace et
 //  le chiffrement (XChaCha20-Poly1305) se font dans les Studios.
 //
 //  LES ROUTES (des appels signes par la cle du PC, comme les autres /v1) :

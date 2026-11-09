@@ -389,10 +389,20 @@ std::string relayCodeShown(std::string_view code) {
 }
 
 std::string relayLocator(std::string_view code) {
+    // Argon2id (libsodium) : lent et gourmand en memoire - le service ne retrouve pas le code en essayant toutes les
+    // combinaisons a partir du localisateur. Le sel est fixe (le localisateur doit etre le meme sur chaque PC).
     std::string n;
     if (!relayCodeTyped(code, n)) n = std::string(code);
-    const auto d = crypto::sha256(n);
-    return crypto::hex(d.data(), 16);
+    if (!crypto::init()) return {};
+    const auto salt = crypto::sha256(std::string("XPG-RELAIS-v1"));
+    static_assert(crypto_pwhash_SALTBYTES <= 32, "le sel : les premiers octets de SHA-256");
+    unsigned char out[16];
+    if (crypto_pwhash(out, sizeof out, n.data(), n.size(), salt.data(), kRelayLocatorOps, kRelayLocatorMem, crypto_pwhash_ALG_ARGON2ID13) != 0) {
+        crypto::wipe(n.data(), n.size());
+        return {};   // la memoire manque
+    }
+    crypto::wipe(n.data(), n.size());
+    return crypto::hex(out, sizeof out);
 }
 
 // ========================================================================================= les briques ===
@@ -656,6 +666,17 @@ struct RelayHostLink::Impl : Core {
 
     void readLoop() {
         auto& t = *cfg.transport;
+        // Le localisateur (Argon2id : ~0,2 s, ici et pas dans le fil de l'interface).
+        {
+            std::string loc = relayLocator(cfg.code);
+            std::lock_guard<std::mutex> lock(m);
+            if (loc.empty()) {
+                closeSession("la cl\xC3\xA9 de recherche de la session ne se calcule pas (m\xC3\xA9moire)");
+                return;
+            }
+            locator = std::move(loc);
+        }
+        if (stopping) return;
         core::json::Value b = core::json::Value::object();
         b.set("locator", locator);
         b.set("nom", cfg.sessionName);
@@ -887,8 +908,7 @@ bool RelayHostLink::start(const RelayHostConfig& cfg, std::string* why) {
     if (!crypto::init()) return fail("la cryptographie ne d\xC3\xA9marre pas");
     d_ = std::make_shared<Impl>();
     d_->cfg = cfg;
-    d_->cfg.code = code;
-    d_->locator = relayLocator(code);
+    d_->cfg.code = code;   // le localisateur : calcule dans le fil du lien (Argon2id)
     auto* d = d_.get();
     d_->reader = std::thread([d] { d->readLoop(); });
     d_->writer = std::thread([d] { d->writeLoop(); });
@@ -902,7 +922,11 @@ void RelayHostLink::stop() {
 
 bool RelayHostLink::running() const noexcept { return d_ && d_->reader.joinable() && !d_->dead && !d_->stopping; }
 bool RelayHostLink::opened() const noexcept { return d_ && d_->isOpen; }
-std::string RelayHostLink::locator() const { return d_ ? d_->locator : std::string{}; }
+std::string RelayHostLink::locator() const {
+    if (!d_) return {};
+    std::lock_guard<std::mutex> lock(d_->m);
+    return d_->locator;
+}
 
 std::vector<LinkEvent> RelayHostLink::poll() { return d_->take(); }
 
@@ -1076,6 +1100,17 @@ struct RelayGuestLink::Impl : Core {
 
     void readLoop() {
         auto& t = *cfg.transport;
+        // Le localisateur (Argon2id : ~0,2 s, ici et pas dans le fil de l'interface).
+        {
+            std::string loc = relayLocator(code);
+            std::lock_guard<std::mutex> lock(m);
+            if (loc.empty()) {
+                end("la cl\xC3\xA9 de recherche de la session ne se calcule pas (m\xC3\xA9moire)");
+                return;
+            }
+            locator = std::move(loc);
+        }
+        if (stopping) return;
         Answer a;
         for (int tries = 0;; ++tries) {
             a = ask(t, "POST", base() + "/frapper", "{}");
@@ -1300,8 +1335,7 @@ bool RelayGuestLink::start(const RelayGuestConfig& cfg, std::string* why) {
     if (!crypto::init()) return fail("la cryptographie ne d\xC3\xA9marre pas");
     d_ = std::make_shared<Impl>();
     d_->cfg = cfg;
-    d_->code = code;
-    d_->locator = relayLocator(code);
+    d_->code = code;   // le localisateur : calcule dans le fil du lien (Argon2id)
     auto* d = d_.get();
     d_->reader = std::thread([d] { d->readLoop(); });
     d_->writer = std::thread([d] { d->writeLoop(); });
