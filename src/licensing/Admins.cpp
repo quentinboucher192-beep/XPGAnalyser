@@ -670,6 +670,8 @@ std::string writeAdminToken(const AdminToken& t) {
     o.set("cle", t.key);
     o.set("poste", t.machine);
     o.set("expire", static_cast<std::int64_t>(t.expires));
+    o.set("version", t.version);
+    o.set("nom", t.name);
     return core::json::write(o, false);
 }
 
@@ -683,6 +685,8 @@ bool parseAdminToken(std::string_view json, AdminToken& out, std::string* why) {
     (void)getText(o, "poste", t.machine, false, 32);
     if (!getCount(o, "expire", exp, true)) return fail(why, "le jeton d'admin n'a pas de fin");
     t.expires = static_cast<Seconds>(exp);
+    (void)getText(o, "version", t.version, false, 20);
+    (void)getText(o, "nom", t.name, false, 60);
     out = std::move(t);
     return true;
 }

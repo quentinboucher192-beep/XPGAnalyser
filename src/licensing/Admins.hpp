@@ -209,6 +209,8 @@ struct AdminToken {
     std::string key;       // la cle de l'admin (64 hexadecimaux) : celle qui signe
     std::string machine;   // le PC (32 hexadecimaux)
     Seconds     expires{0};
+    std::string version;   // la version de l'Admin installe sur ce PC (<< 1.44.0 >>) : le Studio dit s'il est a jour
+    std::string name;      // le nom de l'admin (<< Lea >>)
 };
 [[nodiscard]] std::string writeAdminToken(const AdminToken& t);
 bool parseAdminToken(std::string_view json, AdminToken& out, std::string* why);
