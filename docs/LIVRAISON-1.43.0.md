@@ -22,13 +22,28 @@ Elle se met à jour par-dessus la 1.42.0 et garde tes données. **Le service en 
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 163 suites sur 163 réussies** (`ctest`, sur la version livrée). Celles que cette version touche :
+  - `session` (107 contrôles, nouvelle) : le protocole (la découverte, le code « 482 913 »), **le lien réel** (TLS sur ce poste : entrer sans code, avec le bon code, 3 mauvais codes puis refusé même avec le bon, sans code « il faut le code », une empreinte d'hôte qui ne correspond pas), un message de 1 Mio, la discussion, sortir ; **le miroir** (les changements objet par objet, les lignes du reste du projet) ; **Ctrl+Z en session** (ton déplacement annulé, celui de l'équipier gardé ; une création ; une variable) ;
+  - `hmieditor` (11 038 contrôles) : la note de la 1.43.0 dans Nouveautés (116 versions) ; l'historique des objets signé par le PC de l'équipier.
+- **Sous Wine, de bout en bout** : **deux IHM Studio côte à côte** sur ce poste (chacun son dossier, son certificat, son profil : Camille Essai l'hôte, Léa Essai l'équipière), le vrai service lancé sur ce poste (`workerd`) pour leur licence ENTERPRISE (journal : `essai-1.43.0-wine.txt`, le code masqué ; captures : `captures-1.43.0.zip`). Les Studios sont des copies avec la clé d'essai, jamais livrées :
+  - Camille ouvre Armoire_Gaz (un projet fictif, `1430_00`) et **démarre la session** « Mise en service Armoire_Gaz » (j'accepte chaque entrée, `1430_01`) ;
+  - Léa **la trouve seule** sur le réseau (`1430_02`) et frappe (`1430_02b`) ; Camille la **fait entrer** (`1430_03`) ; le projet arrive chez Léa ;
+  - Camille choisit Titre_Accueil et le déplace ; Léa choisit Texte_Etat et le déplace : chez Camille, **Léa le tient** (son contour et son nom, `1430_05`) ; Léa veut choisir Titre_Accueil : **pris par Camille** (`1430_04`) ;
+  - **Léa annule (Ctrl+Z)** : Texte_Etat revient à sa place, le titre déplacé par Camille reste où il est (vérifié chez les deux) ; Léa déplace ensuite Texte_Compteurs ;
+  - **l'équipe et la discussion** chez l'une et chez l'autre (`1430_06`, `1430_07`) ; Camille arrête la session : Léa le voit (`1430_08`, `1430_10`) ;
+  - **l'historique de Texte_Compteurs**, chez Camille après l'enregistrement : la modification est **signée par le PC de Léa** (son nom, son PC, son identifiant « M-… », la session, `1430_09`).
+- **Les Studios** : l'installation en silencieux par-dessus la 1.42.0 passe, ta clé d'API est gardée, les programmes installés sont ceux construits (1.43.0), le code laissé par `/CODEFICHIER=` n'est pas dans le journal. Le Studio livré (ton service compilé) s'ouvre (`1430_00a`), lancé avec une adresse de service locale où rien ne répond : **ton service n'a pas été appelé**.
+- Corrigé au passage : la fenêtre **Historique** d'un objet montrait « Oui, revenir / Non » à son ouverture (avant tout clic).
 
 ## 3. Installer
 
 **Les Studios** : lance `API-IHM-Studio-Setup-1.43.0.exe` (dans le zip) par-dessus la 1.42.0. Tes projets, tes réglages et ta clé d'API restent.
 
-@@EMPREINTES@@
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.43.0.exe` | `0F9C47C2A056BDE1B51386FED19AB135F0A1DF25AFBDFBE00A3804D68E266C4F` | 57 610 091 octets |
+| `API-Studio-1.43.0-portable.zip` | `7E27F54E15C15BE639E000614AD054FBB41CF0A0FA259C2BF796EDCC56782614` | 217 fichiers |
+| `IHM-Studio-1.43.0-portable.zip` | `9E0185A46C88304F2AB891538D94B523B78394DF93561912794423F3DCBD8103` | 218 fichiers |
 
 ## 4. Limites
 

@@ -214,7 +214,7 @@ version et l'heure (`logiciels`). `GET /admin/versions` (admin+) : les versions 
   X disponible » (une fois par version ; « importante » : à chaque lancement), le toast, la pastille en haut ;
   **Télécharger et installer** : le téléchargement vérifié, le projet enregistré, l'installateur lancé en silencieux
   (`/RELANCER=` : il rouvre le Studio sur le projet), le Studio se ferme.
-- **Sur le PC d'un admin** : l'Admin laisse un **jeton d'admin** (`jeton-admin.xpgjet`, genre `jeton`, signé par sa clé :
+- **Sur le PC d'un admin** : l'Admin laisse un **jeton d'admin** (`jeton-admin.xpgjet`, genre `jetonadmin`, signé par sa clé :
   `{"cle","poste","expire"}`, 30 jours) dans son dossier ; le Studio du même compte le lit et l'envoie
   (`X-XPG-Jeton`) pour télécharger aussi l'installateur de l'Admin : « Ton Admin 1.44.0 n'est plus à jour ».
 
