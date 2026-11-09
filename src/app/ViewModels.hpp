@@ -397,6 +397,11 @@ namespace app {
             // polices, puis Sans empattement, Avec empattement, Chasse fixe), HmiFontItem une famille (index : son dossier ;
             // sub : son rang dedans). Un clic ouvre le volet sur la police. A LA FIN, toujours.
             HmiFontLibrary, HmiFontGroup, HmiFontItem,
+            // 1.45.0 : LA SESSION (le client : << on ne voit pas les gens dans l'explorateur d'application >>) - en
+            // haut de la racine pendant une session : SessionFolder << Session >>, SessionMember un membre (index : son
+            // rang dans setSession) - ses initiales dans sa couleur, son nom, hote ou equipier, son PC, la vue ou il
+            // est, Modifier / Regarder. Un clic le suit (sa vue s'ouvre). A LA FIN, toujours.
+            SessionFolder, SessionMember,
         };
         // Les parties d'une vue, dans l'ordre de l'arbre. 1.11.10 : un symbole a en plus
         // ses Fonctions et ses Popups (les deux dernieres).
@@ -748,6 +753,19 @@ namespace app {
         [[nodiscard]] ui::NodeId shortcutTarget(ui::NodeId n) const;
         [[nodiscard]] static ui::NodeId pinsFolderNode() { return pack(NodeKind::PinsFolder, 0); }
         [[nodiscard]] static ui::NodeId recentsFolderNode() { return pack(NodeKind::RecentFolder, 0); }
+        //  1.45.0 : LA SESSION, en tete de la racine (avant Epingles) pendant une session : ses membres. Vide : pas de
+        //  noeud. Vrai : change. sessionMemberOf : le numero du membre d'un SessionMember (-1 : pas un membre).
+        struct SessionRow {
+            int           number{0};
+            std::string   name, initials, machine, view;
+            std::uint32_t color{0};
+            bool          host{false}, me{false}, watch{false};
+            bool operator==(const SessionRow&) const = default;
+        };
+        bool setSession(std::vector<SessionRow> people, std::string title = {});
+        [[nodiscard]] const std::vector<SessionRow>& session() const noexcept { return session_; }
+        [[nodiscard]] int sessionMemberOf(ui::NodeId n) const;
+        [[nodiscard]] static ui::NodeId sessionFolderNode() { return pack(NodeKind::SessionFolder, 0); }
         //  2e partie. LES COMPTEURS EN PASTILLE : le texte d'un dossier ne porte
         //  plus son nombre ("Types derives (28)", "Variables  [251]" -> le nom,
         //  et la pastille "28", "251" alignee a droite, le meme format partout).
@@ -796,8 +814,12 @@ namespace app {
         bool                      allVersions_{false};
         bool                      filtering_{false};
         std::vector<ShortcutRow>  pins_, recents_;
-        mutable bool              rootGuard_{false};  // childCount / childAt de la racine sans Epingles / Recents
-        [[nodiscard]] std::size_t shortcutFolders() const noexcept { return (pins_.empty() ? 0u : 1u) + (recents_.empty() ? 0u : 1u); }
+        std::vector<SessionRow>   session_;           // 1.45.0 : les membres de la session (vide : pas de noeud)
+        std::string               sessionTitle_;
+        mutable bool              rootGuard_{false};  // childCount / childAt de la racine sans Session / Epingles / Recents
+        [[nodiscard]] std::size_t shortcutFolders() const noexcept {
+            return (session_.empty() ? 0u : 1u) + (pins_.empty() ? 0u : 1u) + (recents_.empty() ? 0u : 1u);
+        }
         [[nodiscard]] bool        briefVersions() const noexcept {
             return !allVersions_ && !filtering_ && versions_.size() > kBriefVersions + 1;
         }

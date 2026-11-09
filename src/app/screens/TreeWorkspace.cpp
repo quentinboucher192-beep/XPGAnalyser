@@ -19,6 +19,7 @@
 // =============================================================================
 #include "Screens.hpp"
 
+#include "../SessionMarks.hpp"   // 1.45.0 : le noeud Session de l'arbre
 #include "../App.hpp"
 #include "../GoToSearch.hpp"
 #include "../../core/Edition.hpp"   // 1.12.0 : le rail de chaque application
@@ -667,6 +668,7 @@ bool shortcutable(ui::NodeId n) {
     case Kind::Root: case Kind::ApiFolder: case Kind::HmiFolder: case Kind::ToolRow: case Kind::VersionsMore:
     case Kind::FilterHit: case Kind::PinsFolder: case Kind::PinItem: case Kind::RecentFolder: case Kind::RecentItem:
     case Kind::MemberNode:
+    case Kind::SessionFolder: case Kind::SessionMember:   // 1.45.0 : la session n'est pas un endroit du projet
         return false;
     default:
         return true;
@@ -777,6 +779,7 @@ std::vector<ui::NodeId> MainAnalysisScreen::treeSubtree(ui::NodeId from, std::si
         todo.pop_back();
         const auto kind = ProjectTreeModel::kindOf(n);
         if (kind == Kind::PinsFolder || kind == Kind::PinItem || kind == Kind::RecentFolder || kind == Kind::RecentItem) continue;
+        if (kind == Kind::SessionFolder || kind == Kind::SessionMember) continue;   // 1.45.0
         out.push_back(n);
         if (ProjectTreeModel::holdsMembers(n)) continue;
         const auto count = treeModel_->childCount(n);
@@ -883,6 +886,41 @@ void MainAnalysisScreen::refreshTreeShortcuts() {
     if (pinsNew) open.push_back(ProjectTreeModel::pinsFolderNode());
     if (recentsNew) open.push_back(ProjectTreeModel::recentsFolderNode());
     explorer_->setExpandedNodes(std::move(open));
+}
+
+// ---------------------------------------------------------- 1.45.0 : la session ----
+//  Le noeud << Session >> en tete de l'arbre pendant une session : ses membres (initiales dans leur couleur, nom,
+//  hote ou equipier, PC, vue, Modifier / Regarder). Il arrive deplie ; un clic sur un membre le suit.
+void MainAnalysisScreen::tickSessionTree() {
+    if (!treeModel_ || !explorer_) return;
+    const auto rev = sessionmarks::active() ? sessionmarks::boardRevision() : 0;
+    if (rev == sessionTreeSeen_) return;
+    sessionTreeSeen_ = rev;
+    std::vector<ProjectTreeModel::SessionRow> rows;
+    std::string title;
+    if (sessionmarks::active()) {
+        const auto& b = sessionmarks::board();
+        for (const auto& p : b.people) {
+            ProjectTreeModel::SessionRow r;
+            r.number = p.number;
+            r.name = p.name;
+            r.initials = p.initials;
+            r.machine = p.machine + (p.machineId.empty() ? std::string{} : " \xC2\xB7 " + p.machineId);
+            r.view = p.viewName;
+            r.color = p.color;
+            r.host = p.host;
+            r.me = p.me;
+            r.watch = p.watch;
+            rows.push_back(std::move(r));
+        }
+        title = b.sessionName;
+    }
+    const bool fresh = treeModel_->session().empty() && !rows.empty();
+    if (!treeModel_->setSession(std::move(rows), std::move(title))) return;
+    auto open = explorer_->expandedNodes();
+    if (fresh) open.push_back(ProjectTreeModel::sessionFolderNode());
+    explorer_->setExpandedNodes(std::move(open));   // les lignes se refont
+    explorer_->invalidate();
 }
 
 // ------------------------------------------------------ ce que montre l'arbre ----

@@ -2,6 +2,7 @@
 #include "HmiFontLibraryPane.hpp"    // 1.26.0 : le sous-onglet Polices de la bibliotheque
 #include "../../hmi/HmiFontLibrary.hpp"   // 1.26.0 : la case Police (le theme, les polices du projet, la bibliotheque)
 #include "HmiPanels.hpp"
+#include "../SessionMarks.hpp"   // 1.45.0 : qui tient un objet (ses initiales, sa couleur)
 #include "../../core/Command.hpp"   // 1.24.0 : CommandGroupScope (supprimer plusieurs d'un coup)
 #include "../../hmi/HmiStyles.hpp"   // 1.23.0 : les styles fournis dans la liste Style nomme
 #include "HmiChoiceItems.hpp"          // 1.26.1 : les listes Police et Style nomme (sections, apercus, recherche)
@@ -973,10 +974,23 @@ std::string HmiObjectList::modifiedTip(hmi::Id id) const {
 std::string HmiObjectList::liveTooltip(gfx::Point mouse) const {
     if (!editor_ && listArea().contains(mouse)) {
         const int i = rowAt(mouse.y);
-        if (i >= 0 && rows_[static_cast<std::size_t>(i)].object())
-            if (auto t = modifiedTip(rows_[static_cast<std::size_t>(i)].id); !t.empty()) return t;
+        if (i >= 0 && rows_[static_cast<std::size_t>(i)].object()) {
+            const auto id = rows_[static_cast<std::size_t>(i)].id;
+            std::string t = heldTip(id);   // 1.45.0 : en session, qui le tient
+            if (auto m = modifiedTip(id); !m.empty()) t += (t.empty() ? "" : "\n") + m;
+            if (!t.empty()) return t;
+        }
     }
     return Widget::liveTooltip(mouse);
+}
+
+bool HmiObjectList::sessionHeld() { return sessionmarks::active(); }
+
+// 1.45.0 : << tenu par Lea >> (un membre de la session l'a choisi : les autres ne le choisissent pas).
+std::string HmiObjectList::heldTip(hmi::Id id) const {
+    if (!view_) return {};
+    const auto* h = sessionmarks::heldByOther(view_->id, id);
+    return h ? "tenu par " + (h->name.empty() ? std::string("un \xC3\xA9quipier") : h->name) : std::string{};
 }
 
 int HmiObjectList::rowAt(float y) const {
@@ -1111,6 +1125,15 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         const gfx::Rect eye{right - 18, y + (rowH_ - 16) / 2, 16, 16};
         const gfx::Rect lock{right - 40, y + (rowH_ - 16) / 2, 16, 16};
         const bool showIcons = i == hover_ || sel;
+        // 1.45.0 : EN SESSION, l'objet tenu par un equipier - ses initiales dans sa couleur, devant le cadenas.
+        const auto* holder = sessionmarks::heldByOther(view_->id, row.id);
+        const std::string heldBy = holder ? sessionmarks::initialsOf(holder->name) : std::string{};
+        const float heldW = holder ? ctx.r.measure(heldBy, small).width + 12.f : 0.f;
+        if (holder) {
+            const gfx::Rect pill{lock.x - 6.f - heldW, y + (rowH_ - 16.f) * 0.5f, heldW, 16.f};
+            ctx.r.fillRoundedRect(pill, gfx::Color::rgb(holder->color), 8.f);
+            ctx.r.drawText({pill.x + 6.f, pill.y + (pill.h - ctx.r.lineHeight(small)) * 0.5f}, heldBy, small, gfx::Color::rgb(0xFFFFFF));
+        }
         if (o->hidden || showIcons)
             drawHmiGlyph(ctx.r, o->hidden ? HmiGlyph::EyeOff : HmiGlyph::Eye, eye, o->hidden ? c.warning : fg.withAlpha(150));
         if (o->locked || showIcons)
@@ -1127,8 +1150,9 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         const auto* alarms = alarmNode(row.id);
         const std::string alarmCount = alarms ? std::to_string(alarms->count) : std::string{};
         const float bellW = alarms ? 26.f + ctx.r.measure(alarmCount, small).width : 0.f;
+        const float lockX = lock.x - (holder ? heldW + 6.f : 0.f);   // 1.45.0 : la pastille de qui le tient
         if (alarms) {
-            const float bx = lock.x - 6 - bellW;
+            const float bx = lockX - 6 - bellW;
             drawHmiGlyph(ctx.r, HmiGlyph::Bell, {bx, y + (rowH_ - 14) / 2, 14, 14}, sel ? fg : c.textMuted);
             textCentred(ctx, {bx + 17, y, bellW - 17, rowH_}, alarmCount, small, sel ? fg : c.textMuted);
         }
@@ -1140,19 +1164,19 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         const float dotW = pend ? 11.f : 0.f;
         float whenW = when.empty() ? 0.f : ctx.r.measure(when, small).width;
         if (whenW > 0.f) {
-            const float free = lock.x - x - 8 - badgeW - bellW;
+            const float free = lockX - x - 8 - badgeW - bellW;
             const float nameNeed = std::min(ctx.r.measure(o->name, f).width, 90.f);
             if (free - whenW - dotW - 8.f < nameNeed) { when.clear(); whenW = 0.f; }
         }
         const float markW = dotW + (whenW > 0.f ? whenW + 8.f : 0.f);
         if (markW > 0.f) {
-            const float mx = lock.x - 6 - bellW - markW;
+            const float mx = lockX - 6 - bellW - markW;
             if (pend) ctx.r.fillRoundedRect({mx + 1.f, y + (rowH_ - 7.f) * 0.5f, 7.f, 7.f}, c.warning, 3.5f);
             if (whenW > 0.f) textCentred(ctx, {mx + dotW, y, whenW + 2.f, rowH_}, when, small, sel ? fg.withAlpha(200) : c.textMuted);
         }
         // 1.11.24 : le nom d'abord, le genre prend ce qui reste (coupe, ou rien) - "Instance
         // de symbole" reduisait le nom d'une instance a "..." dans un explorateur etroit.
-        const float room = std::max(20.f, lock.x - x - 8 - badgeW - bellW - markW);
+        const float room = std::max(20.f, lockX - x - 8 - badgeW - bellW - markW);
         const float nameW = std::min(room, std::max(20.f, ctx.r.measure(o->name, f).width));
         const std::string name = fit(ctx.r, o->name, f, nameW);
         textCentred(ctx, {x, y, nameW, rowH_}, name, f, fg);
@@ -1161,7 +1185,7 @@ void HmiObjectList::onPaint(const ui::PaintContext& ctx) {
         const std::string kind = typeRoom >= 28.f ? fit(ctx.r, type, small, typeRoom) : std::string{};
         const float kindW = kind.empty() ? 0.f : ctx.r.measure(kind, small).width;
         if (!kind.empty()) textCentred(ctx, {nx, y, kindW + 4, rowH_}, kind, small, sel ? fg.withAlpha(200) : c.textMuted);
-        if (driven && nx + kindW + 32.f < lock.x) {
+        if (driven && nx + kindW + 32.f < lockX) {
             const gfx::Rect pill{nx + kindW + 8.f, y + (rowH_ - 15.f) * 0.5f, 22.f, 15.f};
             ctx.r.fillRoundedRect(pill, broken ? c.error : marked ? c.warning : c.accent, 7.f);
             const char* mark = marked ? "$" : "fx";

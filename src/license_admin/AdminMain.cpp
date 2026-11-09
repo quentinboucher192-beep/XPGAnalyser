@@ -49,6 +49,7 @@
 //    XPG-License-Admin service-refuser --numero N --raison TEXTE
 //    XPG-License-Admin service-publier-licence --licence F.xpglic
 //    XPG-License-Admin service-stats
+//    XPG-License-Admin service-deployer [--dossier-kit D] [--essai]   (1.45.0 : le kit installe avec l'Admin ; la sortie, son code)
 //    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
 //  1.44.0 : PLUSIEURS ADMINS, LES FICHIERS, LES VERSIONS, LA SAUVEGARDE COMPLETE (docs/ADMINS.md ; par le Workspace de
@@ -78,6 +79,7 @@
 #include "KeyBackup.hpp"
 #include "Mail.hpp"   // 1.37.0 : le mail au client
 #include "ServiceClient.hpp"
+#include "ServiceDeploy.hpp"   // 1.45.0 : service-deployer
 #include "gui/Workspace.hpp"   // 1.44.0 : les commandes des admins, des fichiers, des versions, de la sauvegarde
 
 #include "../core/SystemOpen.hpp"
@@ -184,6 +186,10 @@ std::string usage() {
            "  service-refuser --numero N --raison TEXTE      refuse cette demande (la raison scell\xC3\xA9" "e pour le PC)\n"
            "  service-publier-licence --licence F.xpglic     une licence li\xC3\xA9" "e \xC3\xA0 des PC : \xC3\xA0 chacun (sa demande en attente : accept\xC3\xA9" "e)\n"
            "  service-stats                                  les compteurs du service\n"
+           "  service-deployer [--dossier-kit D] [--essai]   1.45.0 : met le service en ligne, ou \xC3\xA0 jour, sur ton compte Cloudflare avec le\n"
+           "                                                 kit install\xC3\xA9 avec l'Admin (deployer.mjs ; Node.js) : sa sortie s'affiche, le\n"
+           "                                                 code de sortie est le sien ; --dossier-kit : un autre kit (le dossier de\n"
+           "                                                 deployer.bat) ; --essai : tout, sans rien envoyer \xC3\xA0 Cloudflare\n"
            "  licence-en-ligne ... --demande N                1.37.0 : en r\xC3\xA9ponse \xC3\xA0 la demande N : son code part scell\xC3\xA9 pour son PC (et le mail)\n"
            "  code-licence --licence ID                      1.37.0 : revoir le code d'activation d'une licence en ligne (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste)\n"
            "  mail-config --hote H --expediteur A [--port P] [--securite starttls|tls] [--nom N] [--identifiant I]\n"
@@ -588,6 +594,30 @@ int run(const std::vector<std::string>& argv) {
         if (!key) complain("Refus\xC3\xA9 : " + why + "\n(cr\xC3\xA9" "er la cl\xC3\xA9 : XPG-License-Admin creer-cle --dossier " + folder + ")");
         return key;
     };
+    // ---- 1.45.0 : mettre le service en ligne avec le kit installe (deployer::deploy : node deployer.mjs, sans fenetre) ----
+    if (a.command == "service-deployer") {
+        deployer::Options o;
+        o.kit = a.one("--dossier-kit");
+        o.dryRun = a.flag("--essai");
+        // cle-publique.txt manque dans le kit : la cle PUBLIQUE de l'editeur de ce poste l'ecrit (rien de secret).
+        deployer::Kit kit;
+        if (deployer::findKit(o.kit, kit, nullptr) && !kit.publicKey) {
+            std::string w;
+            if (auto key = loadPublisherKey(folder, &w)) {
+                const auto u8 = (std::filesystem::path(std::u8string(kit.folder.begin(), kit.folder.end())) / "cle-publique.txt").u8string();
+                const std::string path(u8.begin(), u8.end());
+                if (crypto::replaceFile(path, online::publicKeyText(*key), false, &w)) say("cle-publique.txt \xC3\xA9" "crite dans le kit : " + path + "\n");
+                else complain("cle-publique.txt n'est pas \xC3\xA9" "crite : " + w);
+            }
+        }
+        const deployer::Report r = deployer::deploy(o, [](const std::string& line) { say(line + "\n"); });
+        if (r.ok()) {
+            say("\n" + r.reason + "\n" + (o.dryRun ? std::string() : std::string("Ensuite : XPG-License-Admin service-verifier (sa version, ta cl\xC3\xA9, son certificat).\n")));
+            return 0;
+        }
+        complain("\n" + r.text());
+        return r.exitCode > 0 ? r.exitCode : 1;
+    }
     // Le registre des activations : les lignes d'une signature (un echec ne defait pas la signature : il est dit).
     const auto noteActivations = [&](const std::vector<ActivationRecord>& records) {
         if (records.empty()) return;

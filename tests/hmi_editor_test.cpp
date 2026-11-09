@@ -115,6 +115,8 @@
 #include "../src/app/hmi/HmiSimulation.hpp"
 #include "../src/ui/widgets/TabArea.hpp"             // 1.14.1 (lot N2) : la poignee entre deux groupes d'onglets
 #include "../src/app/hmi/HmiBuildPanes.hpp"         // 1.11.16 : le double-clic vers la source
+#include "../src/app/hmi/HmiSessionPane.hpp"        // 1.45.0 : l'onglet Session du panneau du bas
+#include "../src/app/SessionMarks.hpp"              // 1.45.0
 #include "../src/app/hmi/HmiSimVarTree.hpp"   // 1.11.5
 #include "../src/app/ExportTarget.hpp"                 // lot API 8 : les exports qui demandent ou
 #include "../src/app/hmi/HmiPaneKit.hpp"
@@ -37762,6 +37764,146 @@ void suivi11226() {
 }
 
 // 1.43.0 : en session, chaque objet signe par le PC de celui qui l'a modifie (son nom, son identifiant stable, la session)
+
+// 1.45.0 : LES SESSIONS DANS L'INTERFACE - l'onglet Session du panneau du bas (seulement pendant une session : la
+// discussion et le journal, le non lu, ecrire a l'equipe), le noeud Session de l'arbre du projet (les membres, leurs
+// initiales dans leur couleur, suivre), l'explorateur d'objets (<< tenu par Lea >>), l'equipier qui ne garde rien.
+void sessions145() {
+    std::printf("-- 1.45.0 : la session dans l'interface (l'onglet Session, l'arbre, l'explorateur d'objets)\n");
+    namespace sm = app::sessionmarks;
+    const auto theme = ui::Theme::dark();
+    sm::setActive(false);
+    // ---- l'onglet Session : absent hors session ----
+    app::HmiBuildOutputPane out("out145");
+    out.setBounds({0, 0, 1400, 320});
+    out.layout();
+    out.tick();
+    auto* tabs = out.tabs();
+    check(tabs && tabs->tabCount() == 4 && out.sessionTab() == static_cast<std::size_t>(-1) && !out.sessionPane(),
+          "hors session : pas d'onglet Session (Sorties, Console, Diagnostics, Performances)");
+    // ---- une session commence : l'onglet arrive, la discussion et le journal meles ----
+    std::string said;
+    sm::Hooks hooks;
+    hooks.say = [&said](const std::string& t) { said = t; };
+    int followed = -1;
+    hooks.follow = [&followed](int n) { followed = n; };
+    sm::setHooks(hooks);
+    sm::Board b;
+    b.sessionName = "Mise en service Armoire_Gaz";
+    b.hostName = "Camille";
+    b.host = true;
+    b.people.push_back({0, "Camille", "C", "PC-BUREAU-01", "M-1A2B", "Vue_Accueil", 1, 0xE67E22, true, true, false});
+    b.people.push_back({1, "L\xC3\xA9" "a", "L", "PC-ATELIER-02", "M-7F21", "Vue_Alarmes", 2, 0x2E86DE, false, false, false});
+    b.chat.push_back({"14:30", "", "L\xC3\xA9" "a est entr\xC3\xA9" "e (PC-ATELIER-02).", 0x2E86DE, true, false, 1});
+    b.chat.push_back({"14:31", "L\xC3\xA9" "a", "bonjour", 0x2E86DE, false, false, 1});
+    b.journal.push_back({"14:32", "L\xC3\xA9" "a", "Vue_Accueil \xE2\x80\xBA Texte_Etat d\xC3\xA9plac\xC3\xA9", 0x2E86DE, false, false, 3});
+    b.journal.push_back({"14:35", "Camille", "ressource logo.png ajout\xC3\xA9" "e", 0xE67E22, false, true, 1});
+    b.messages = 1;
+    sm::setActive(true);
+    sm::setBoard(b);
+    out.tick();
+    const auto at = out.sessionTab();
+    check(tabs && tabs->tabCount() == 5 && at == 4 && tabs->tab(at) && tabs->tab(at)->title == "Session" && out.sessionPane(),
+          "une session : l'onglet Session arrive (apr\xC3\xA8s Performances)");
+    auto* pane = out.sessionPane();
+    check(pane && pane->rowCount() == 4 && pane->rowText(0) == "14:30 Session : L\xC3\xA9" "a est entr\xC3\xA9" "e (PC-ATELIER-02)."
+              && pane->rowText(1) == "14:31 L\xC3\xA9" "a : bonjour"
+              && pane->rowText(2) == "14:32 L\xC3\xA9" "a : Vue_Accueil \xE2\x80\xBA Texte_Etat d\xC3\xA9plac\xC3\xA9 (\xC3\x97" "3)"
+              && pane->rowText(3) == "14:35 Camille : ressource logo.png ajout\xC3\xA9" "e",
+          "Tout : la discussion et le journal, dans l'ordre des heures (" + (pane ? pane->rowText(2) : std::string{}) + ")");
+    if (pane) {
+        pane->setFilter(app::HmiSessionPane::Filter::Journal);
+        check(pane->rowCount() == 2, "le filtre Journal : les changements seuls");
+        pane->setFilter(app::HmiSessionPane::Filter::Chat);
+        check(pane->rowCount() == 2 && pane->rowText(1).find("bonjour") != std::string::npos, "le filtre Discussion : les messages seuls");
+        pane->setFilter(app::HmiSessionPane::Filter::All);
+        // Ecrire a l'equipe, depuis l'onglet (comme la fenetre de la session).
+        if (auto* f = pane->field()) f->setText("on regarde la vue Alarmes ?");
+        check(pane->send(pane->field() ? pane->field()->text() : std::string{}) && said == "on regarde la vue Alarmes ?"
+                  && pane->field() && pane->field()->text().empty(),
+              "l'onglet Session : un message part \xC3\xA0 l'\xC3\xA9quipe (le champ se vide)");
+    }
+    // Le non lu : un message des autres arrive, l'onglet n'est pas montre -> sa pastille.
+    b.chat.push_back({"14:40", "L\xC3\xA9" "a", "oui", 0x2E86DE, false, false, 1});
+    b.messages = 2;
+    sm::setBoard(b);
+    out.showTab(app::HmiBuildOutputPane::kSorties);
+    out.tick();
+    check(out.sessionUnread() == 1 && tabs && tabs->tab(at) && tabs->tab(at)->badge == "1", "un message non lu : la pastille 1 sur l'onglet Session");
+    check(out.showSessionTab(), "montrer l'onglet Session");
+    out.layout();
+    Recorder rec;
+    out.render(ui::PaintContext{rec, theme, {0, 0, 1400, 320}, 0.0, nullptr});
+    out.tick();
+    check(out.currentTab() == at && out.sessionUnread() == 0 && tabs && tabs->tab(at) && tabs->tab(at)->badge.empty(), "montr\xC3\xA9 : lu (plus de pastille)");
+    // ---- l'arbre du projet : le noeud Session en tete, ses membres ----
+    {
+        auto plc = std::make_shared<domain::Project>();
+        app::ProjectTreeModel tree(plc);
+        auto doc = std::make_shared<Document>();
+        View v = makeView(doc->project, "Vue_Accueil");
+        doc->project.views.push_back(v);
+        tree.setHmi(doc);
+        const auto root = tree.root();
+        const auto before = tree.childCount(root);
+        std::vector<app::ProjectTreeModel::SessionRow> rows;
+        for (const auto& p : b.people)
+            rows.push_back({p.number, p.name, p.initials, p.machine + " \xC2\xB7 " + p.machineId, p.viewName, p.color, p.host, p.me, p.watch});
+        check(tree.setSession(rows, b.sessionName) && !tree.setSession(rows, b.sessionName), "setSession : vrai si change");
+        using NK = app::ProjectTreeModel::NodeKind;
+        const auto folder = tree.childAt(root, 0);
+        check(tree.childCount(root) == before + 1 && folder == app::ProjectTreeModel::sessionFolderNode() && tree.text(folder) == "Session"
+                  && tree.childCount(folder) == 2 && tree.style(folder).badge == "2",
+              "l'arbre : le noeud Session en t\xC3\xAAte de la racine, ses deux membres");
+        const auto lea = tree.childAt(folder, 1);
+        const auto st = tree.style(lea);
+        check(app::ProjectTreeModel::kindOf(lea) == NK::SessionMember && tree.text(lea) == "L\xC3\xA9" "a" && st.colorLead && st.colorLead->text == "L"
+                  && st.colorLead->fill.r == 0x2E && st.colorLead->fill.g == 0x86 && st.colorLead->fill.b == 0xDE && st.hint.find("\xC3\xA9quipier") != std::string::npos
+                  && st.hint.find("PC-ATELIER-02") != std::string::npos && st.hint.find("Vue_Alarmes") != std::string::npos
+                  && st.hint.find("Modifier") != std::string::npos,
+              "un membre : ses initiales dans sa couleur, \xC3\xA9quipier, son PC, sa vue, Modifier (" + st.hint + ")");
+        check(tree.text(tree.childAt(folder, 0)) == "Camille (toi)" && tree.style(tree.childAt(folder, 0)).hint.rfind("h\xC3\xB4te", 0) == 0,
+              "l'h\xC3\xB4te : (toi), h\xC3\xB4te");
+        check(tree.sessionMemberOf(lea) == 1 && tree.sessionMemberOf(folder) == -1, "un clic sur L\xC3\xA9" "a : le membre 1 (Suivre)");
+        sm::follow(tree.sessionMemberOf(lea));
+        check(followed == 1, "... le service le suit (sa vue s'ouvre)");
+        check(tree.setSession({}) && tree.childCount(root) == before && tree.childAt(root, 0) != app::ProjectTreeModel::sessionFolderNode(),
+              "la session finie : plus de noeud Session");
+    }
+    // ---- l'explorateur d'objets : << tenu par Lea >>, ses initiales ----
+    {
+        Project p;
+        View v = makeView(p, "Vue_Accueil");
+        v.objects.push_back(makeObject(Kind::Text, p.allocate(), "Texte_Etat", 40, 40, v.activeLayer));
+        const Id obj = v.objects[0].id;
+        app::HmiObjectList list("liste145");
+        list.setBounds({0, 0, 420, 300});
+        list.setView(&v);
+        sm::Held held;
+        held[{v.id, obj}] = sm::Holder{1, "L\xC3\xA9" "a", 0x2E86DE};
+        sm::setHeld(held);
+        check(list.heldTip(obj) == "tenu par L\xC3\xA9" "a" && list.hasTooltip(), "l'explorateur d'objets : << tenu par L\xC3\xA9" "a >>");
+        check(sm::initialsOf("L\xC3\xA9" "a Martin") == "LM" && sm::initialsOf("camille") == "C" && sm::initialsOf("\xC3\x89lodie") == "\xC3\x89",
+              "les initiales (LM, C, \xC3\x89)");
+        Recorder rec2;
+        list.render(ui::PaintContext{rec2, theme, {0, 0, 420, 300}, 0.0, nullptr});
+        sm::setHeld({});
+        check(list.heldTip(obj).empty(), "personne ne le tient : pas d'infobulle");
+    }
+    // ---- l'equipier ne garde rien : la raison des actions refusees ----
+    check(sm::keepRefusal().empty(), "l'h\xC3\xB4te : rien de refus\xC3\xA9");
+    sm::setGuest(true);
+    check(sm::keepRefusal() == "En session, le projet reste chez l'h\xC3\xB4te" && sm::keepAction("project.saveAs") && sm::keepAction("project.duplicate")
+              && sm::keepAction("project.exportArchive") && sm::keepAction("project.exportSources") && !sm::keepAction("project.save"),
+          "l'\xC3\xA9quipier : Enregistrer sous, Dupliquer, les exports refus\xC3\xA9s (\xC2\xAB En session, le projet reste chez l'h\xC3\xB4te \xC2\xBB)");
+    // ---- la session finit : l'onglet part ----
+    sm::setActive(false);
+    out.tick();
+    check(tabs && tabs->tabCount() == 4 && out.sessionTab() == static_cast<std::size_t>(-1) && !out.sessionPane() && sm::keepRefusal().empty(),
+          "la session finie : plus d'onglet Session, plus de refus");
+    sm::setHooks({});
+}
+
 void historiqueSession143() {
     std::printf("-- 1.43.0 : l'historique des objets en session (le PC de l'equipier, son poste)\n");
     namespace edits = hmi::edits;
@@ -50063,6 +50205,7 @@ int main(int argc, char** argv) {
     nouvelleFonction11224();                // 1.12.24 : Nouvelle fonction, la case Retour ouvre le selecteur de types
     historique11226();                      // 1.12.26 : la fenetre Historique des objets (liste, filtres, Revenir, Restaurer, CSV)
     historiqueSession143();                 // 1.43.0 : en session, le PC de l'equipier
+    sessions145();                          // 1.45.0 : l'onglet Session, le noeud Session de l'arbre, tenu par, l'equipier
     suivi11226();                           // 1.12.26 : Suivi, Explorateur, infobulle, point orange
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1

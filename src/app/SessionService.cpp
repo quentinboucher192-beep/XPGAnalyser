@@ -1,11 +1,14 @@
 // =============================================================================
 //  app/SessionService.cpp - 1.43.0 : voir SessionService.hpp
+//  1.45.0 : retirer un equipier, partir (l'accueil, la copie effacee), le journal.
 // =============================================================================
 #include "SessionService.hpp"
 
 #include "App.hpp"
+#include "Fenetres.hpp"           // 1.45.0 : une copie ouverte dans une autre fenetre n'est pas purgee
 #include "Licence.hpp"
 #include "LicenceService.hpp"     // 1.44.0 : l'adresse du service XPG (le relais des sessions par Internet)
+#include "Notices.hpp"            // 1.45.0 : les departs, le retrait (la cloche)
 #include "SessionMarks.hpp"
 #include "SessionRelayHttp.hpp"   // 1.44.0
 #include "Settings.hpp"
@@ -87,6 +90,13 @@ std::string mo(std::uint64_t bytes) {
     std::string s = b;
     std::replace(s.begin(), s.end(), '.', ',');
     return s;
+}
+
+// 1.45.0 : les chemins en UTF-8 (C++20 : u8string est d'un autre type).
+fs::path u8p(const std::string& s) { return fs::path(std::u8string(s.begin(), s.end())); }
+std::string u8s(const fs::path& p) {
+    const auto u = p.u8string();
+    return std::string(u.begin(), u.end());
 }
 
 // Le nom du projet tel que la barre du haut le montre : son dossier (le manifeste, faute de dossier).
@@ -234,16 +244,42 @@ struct SessionService::Impl {
     // la recherche
     std::future<std::vector<session::Found>> searching;
     std::string searchWhy;
+
+    // 1.45.0 : l'hote - l'empreinte de chaque membre (le retrait la retient), les PC retires, le journal a envoyer,
+    // le dossier du projet (le journal s'y enregistre a la fin, meme si le projet vient d'etre ferme), le debut.
+    std::map<int, std::string> printOf;
+    std::set<std::string> removed;
+    std::vector<std::uint64_t> journalDirty;
+    std::string hostFolder;
+    std::int64_t startedAt{0};
 };
 
 SessionService::SessionService(App& app) : d_(std::make_unique<Impl>()), app_(app) {
     sessionmarks::setRefusedNotice([this](const std::string& t) { app_.events().publish(StatusNotice{t, 5.0}); });
+    // 1.45.0 : ce que l'interface demande (le panneau du bas, l'arbre du projet).
+    sessionmarks::Hooks h;
+    h.say = [this](const std::string& t) { say(t); };
+    h.follow = [this](int n) { follow(n); };
+    h.exportJournal = [this](std::string* why) { return exportJournal(why); };
+    sessionmarks::setHooks(std::move(h));
+    // 1.45.0 : L'EQUIPIER NE GARDE RIEN - ce qu'un arret brutal a laisse dans le dossier des copies part au lancement
+    // (sauf une copie ouverte dans une autre fenetre de ce PC).
+    if (const auto n = session::purgeArea(guestArea(), [](const std::string& f) { return fenetres::autreFenetre(f).has_value(); }); n > 0)
+        log_.push_back("lancement : " + std::to_string(n) + " copie(s) de session effac\xC3\xA9" "e(s)");
 }
 
 SessionService::~SessionService() {
     if (mode_ == Mode::Host || mode_ == Mode::Guest || mode_ == Mode::Joining) stop();
+    // 1.45.0 : l'appli se ferme - la copie de l'equipier s'efface (sans fenetre : l'appli part).
+    if (!copySid_.empty()) (void)session::removeCopy(guestArea(), copySid_);
     sessionmarks::setRefusedNotice({});
+    sessionmarks::setHooks({});
 }
+
+// 1.45.0 : le dossier des copies des equipiers.
+std::string SessionService::guestArea() { return session::guestArea(Settings::sharedFolder()); }
+
+bool SessionService::inGuestArea(const std::string& folder) { return session::insideArea(guestArea(), folder); }
 
 const session::Member* SessionService::member(int number) const {
     for (const auto& m : members_)
@@ -354,6 +390,15 @@ bool SessionService::start(const StartOptions& o, std::string* why) {
     }
     internet_ = o.internet;
     relayOpen_ = false;
+    // 1.45.0 : le journal, les PC retires, le dossier du projet (le journal s'y enregistre a la fin).
+    journal_.clear();
+    savedJournal_.clear();
+    messagesIn_ = 0;
+    d_->removed.clear();
+    d_->printOf.clear();
+    d_->journalDirty.clear();
+    d_->hostFolder = app_.projectFolder();
+    d_->startedAt = static_cast<std::int64_t>(std::time(nullptr));
     members_.clear();
     session::Member me;
     me.number = 0;
@@ -511,6 +556,67 @@ struct SessionServiceAccess {
         return sig;
     }
 
+    // ---- 1.45.0 : le journal (l'hote) ----
+    static void journal(SessionService& s, int member, const std::vector<std::string>& lines) {
+        if (s.mode_ != SessionService::Mode::Host || lines.empty()) return;
+        const auto* m = s.member(member);
+        const std::string who = m ? m->name : std::string("?");
+        const std::uint32_t col = m ? m->color : 0x475569u;
+        for (const auto& l : session::trimmed(lines)) {
+            const auto& e = s.journal_.add(member, who, col, l);
+            if (std::find(s.d_->journalDirty.begin(), s.d_->journalDirty.end(), e.n) == s.d_->journalDirty.end())
+                s.d_->journalDirty.push_back(e.n);
+        }
+        ++s.revision_;
+    }
+
+    // Les entrees neuves (ou fondues) depuis la derniere image, a tous.
+    static void sendJournal(SessionService& s) {
+        if (s.d_->journalDirty.empty()) return;
+        core::json::Value h = op("JOURNAL");
+        core::json::Value list = core::json::Value::array();
+        for (const auto& e : s.journal_.entries())
+            if (std::find(s.d_->journalDirty.begin(), s.d_->journalDirty.end(), e.n) != s.d_->journalDirty.end()) list.push(session::toJson(e));
+        s.d_->journalDirty.clear();
+        if (list.items().empty()) return;
+        h.set("entrees", std::move(list));
+        broadcast(s, h, {});
+    }
+
+    // Tout le journal (un equipier qui entre).
+    static core::json::Value wholeJournal(const SessionService& s) {
+        core::json::Value h = op("JOURNAL");
+        h.set("tout", true);
+        core::json::Value list = core::json::Value::array();
+        for (const auto& e : s.journal_.entries()) list.push(session::toJson(e));
+        h.set("entrees", std::move(list));
+        return h;
+    }
+
+    // ---- 1.45.0 : une nouvelle de la session (un depart, un retrait) : la discussion, la barre d'etat, la cloche ----
+    static void tell(SessionService& s, const std::string& text, std::uint32_t color, const char* tone = "info") {
+        s.chat_.push_back({"", text + ".", clock(), color, true});
+        if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+        s.app_.events().publish(StatusNotice{text + ".", 8.0});
+        notices::Item n;
+        n.category = "Session";
+        n.title = text;
+        n.detail = s.name_.empty() ? std::string{} : "\xC2\xAB " + s.name_ + " \xC2\xBB";
+        n.tone = tone;
+        (void)notices::post(std::move(n));
+        ++s.revision_;
+    }
+
+    // L'hote : la nouvelle a tous les equipiers, puis chez lui.
+    static void tellAll(SessionService& s, const std::string& text, std::uint32_t color, const char* tone = "info") {
+        core::json::Value h = op("NOUVELLE");
+        h.set("texte", text);
+        h.set("couleur", static_cast<std::int64_t>(color));
+        h.set("ton", std::string(tone));
+        broadcast(s, h, {});
+        tell(s, text, color, tone);
+    }
+
     // ---- la sortie de ce PC : ses changements, son choix ----
     static void flush(SessionService& s, bool force) {
         auto doc = s.d_->doc.lock();
@@ -523,7 +629,28 @@ struct SessionServiceAccess {
         if (viewsDue) touched.swap(s.d_->touched);
         std::vector<session::ViewDelta> views;
         session::ProjectDelta pd;
-        s.d_->mirror.collect(doc->project, touched, projectDue, views, pd);
+        // 1.45.0 : l'hote - ce que ses changements remplacent (son journal).
+        session::Mirror::Previous prev;
+        const bool host = s.mode_ == SessionService::Mode::Host;
+        s.d_->mirror.collect(doc->project, touched, projectDue, views, pd, host ? &prev : nullptr);
+        if (host && (!views.empty() || !pd.empty())) {
+            std::vector<std::string> lines;
+            for (const auto& v : views) {
+                const auto it = prev.views.find(v.view);
+                const auto* now = doc->project.view(v.view);
+                for (auto& l : session::describeView(v, it == prev.views.end() ? nullptr : &it->second, now ? now->name : std::string{}))
+                    lines.push_back(std::move(l));
+            }
+            if (!pd.empty()) {
+                for (auto& l : session::describeFiles(pd, [&](const std::string& path) { return prev.files.count(path) > 0; }))
+                    lines.push_back(std::move(l));
+                for (const auto& v : doc->project.views)
+                    if (!prev.viewNames.count(v.id)) lines.push_back("vue " + v.name + " ajout\xC3\xA9" "e");
+                for (const auto& [id, name] : prev.viewNames)
+                    if (!doc->project.view(id)) lines.push_back("vue " + name + " supprim\xC3\xA9" "e");
+            }
+            journal(s, 0, lines);
+        }
         if (viewsDue) s.d_->lastViewSend = t;
         if (projectDue) {
             s.d_->projectTouched = false;
@@ -606,6 +733,10 @@ struct SessionServiceAccess {
         s.members_.push_back(m);
         s.d_->memberOfConn[conn] = n;
         s.d_->connOfMember[n] = conn;
+        // 1.45.0 : son empreinte (un retrait la retient) ; l'hote qui le fait entrer de nouveau le pardonne.
+        const std::string print = !k.fingerprint.empty() ? k.fingerprint : k.machineId;
+        s.d_->printOf[n] = print;
+        s.d_->removed.erase(print);
         // Ce qui n'est pas encore parti part d'abord : le projet envoye est l'etat partage.
         flush(s, true);
         core::json::Value e = op("ENTREE");
@@ -628,6 +759,7 @@ struct SessionServiceAccess {
         }
         e.set("messages", std::move(chat));
         s.d_->host.send(conn, e);
+        s.d_->host.send(conn, wholeJournal(s));   // 1.45.0 : tout le journal (un equipier qui entre tard l'a)
         // Le projet : le manifeste, puis les fichiers d'ihm/ (tels que l'enregistrement les ecrit), en morceaux.
         std::vector<std::pair<std::string, std::shared_ptr<const std::vector<std::uint8_t>>>> files;
         {
@@ -721,8 +853,11 @@ struct SessionServiceAccess {
                 s.log_.push_back("changement refuse (" + m->name + ") : " + (refused.empty() ? std::string("vue absente") : refused));
                 return;
             }
+            // 1.45.0 : les phrases du journal, avant (la vue d'avant).
+            auto lines = session::describeView(d, v, v->name);
             s.d_->applying = true;
             const bool ok = s.d_->mirror.applyView(doc->project, d, &why);
+            if (ok) journal(s, n, lines);
             if (ok) {
                 const auto sig = signatureOf(s, *m);
                 for (const auto id : d.touched()) doc->editAuthors[id] = sig;
@@ -763,10 +898,16 @@ struct SessionServiceAccess {
                 return;
             }
             const hmi::Project before = doc->project;
+            // 1.45.0 : les phrases du journal (les fichiers d'avant : l'etat partage).
+            auto lines = session::describeFiles(pd, [&](const std::string& path) { return s.d_->mirror.hasFile(path); });
             session::ProjectApplied done;
             s.d_->applying = true;
             const bool ok = s.d_->mirror.applyProject(doc->project, pd, done, &why);
             if (ok) {
+                for (const auto id : done.addedViews)
+                    if (const auto* nv = doc->project.view(id)) lines.push_back("vue " + nv->name + " ajout\xC3\xA9" "e");
+                for (const auto& gone : done.removed) lines.push_back("vue " + gone.name + " supprim\xC3\xA9" "e (dans la corbeille de l'h\xC3\xB4te)");
+                journal(s, n, lines);
                 // Ce qu'un equipier retire part dans la corbeille de l'hote (Ctrl+Z ne le rend pas : la corbeille, si).
                 (void)hmi::bin::capture(before, doc->project);
                 doc->touched(hmi::kNoId);
@@ -829,6 +970,7 @@ struct SessionServiceAccess {
             broadcast(s, out, {});
             s.chat_.push_back({m->name, text, clock(), m->color, false});
             if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+            ++s.messagesIn_;   // 1.45.0 : le non lu de l'onglet Session
             ++s.revision_;
             return;
         }
@@ -864,6 +1006,7 @@ struct SessionServiceAccess {
             return;
         }
         if (kind == "AUREVOIR") {
+            hostGone(s, conn, {});   // 1.45.0 : il part de lui-meme (<< Lea a quitte la session >>, sans raison)
             s.d_->host.close(conn);
             return;
         }
@@ -889,10 +1032,12 @@ struct SessionServiceAccess {
                 break;
             }
         for (auto it = s.d_->held.begin(); it != s.d_->held.end();) it = it->second == n ? s.d_->held.erase(it) : std::next(it);
-        s.chat_.push_back({"", who + " est parti" + std::string(why.empty() ? "" : " (" + why + ")") + ".", clock(), col, true});
+        s.d_->printOf.erase(n);
         s.log_.push_back("depart : " + who);
         sendMembers(s);
         sendHolds(s);
+        // 1.45.0 : les autres le savent (la discussion, une notification) ; un lien perdu le dit.
+        tellAll(s, who + " a quitt\xC3\xA9 la session" + std::string(why.empty() ? "" : " (" + why + ")"), col);
     }
 
     // 1.44.0 : la session par Internet perdue (le relais : elle ne s'ouvre pas, elle n'existe plus, plus de reseau).
@@ -901,6 +1046,7 @@ struct SessionServiceAccess {
         s.log_.push_back("relais : " + why);
         s.stop(opened ? "la session par Internet s'est arr\xC3\xAAt\xC3\xA9" "e (" + why + ")" : std::string{});
         s.progress_ = opened ? "La session par Internet s'est arr\xC3\xAAt\xC3\xA9" "e : " + why : "La session ne d\xC3\xA9marre pas : " + why;
+        if (!opened && session::relayTooOld(why)) s.progress_ = why;   // 1.45.0 : un service en 1.43 - la phrase seule
         if (!s.app_.scripted())
             s.app_.menus().ShowDialog(std::make_unique<MessageDialog>(opened ? "La session est termin\xC3\xA9" "e" : "D\xC3\xA9marrer une session",
                                                                       s.progress_ + ".", MessageDialog::Icon::Warning),
@@ -916,7 +1062,7 @@ struct SessionServiceAccess {
         const auto it = std::find_if(s.knocks_.begin(), s.knocks_.end(), [&](const SessionService::Knock& k) { return k.conn == conn; });
         if (it == s.knocks_.end()) return;
         s.d_->knockDialogOpen = true;
-        const std::string text = it->name + " veut entrer dans \xC2\xAB " + s.name_ + " \xC2\xBB.\n\n"
+        const std::string text = it->name + (it->removed ? " (retir\xC3\xA9 tout \xC3\xA0 l'heure) veut revenir dans \xC2\xAB " : " veut entrer dans \xC2\xAB ") + s.name_ + " \xC2\xBB.\n\n"
                                + "PC : " + it->machine + (it->machineId.empty() ? std::string{} : " \xC2\xB7 identifiant " + it->machineId) + "\n"
                                + it->app + " " + it->version + " \xC2\xB7 " + it->address + "\n\n"
                                + "En entrant, " + it->name + " " + (s.defaultRole_ == session::Role::Watch ? "regarde seulement" : "peut modifier")
@@ -995,6 +1141,28 @@ struct SessionServiceAccess {
             openProject(s, h.str("nom"));
             return;
         }
+        // 1.45.0 : le journal de l'hote (tout, a l'entree ; puis les entrees neuves ou fondues).
+        if (kind == "JOURNAL") {
+            std::vector<session::JournalEntry> all;
+            for (const auto& x : h.at("entrees").items()) {
+                session::JournalEntry e;
+                if (all.size() < session::kJournalMax * 2 && session::fromJson(x, e)) all.push_back(std::move(e));
+            }
+            if (h.flag("tout")) s.journal_.replace(std::move(all));
+            else
+                for (const auto& e : all) s.journal_.put(e);
+            ++s.revision_;
+            return;
+        }
+        // 1.45.0 : une nouvelle de la session (un depart, un retrait) : la discussion, la barre d'etat, la cloche.
+        if (kind == "NOUVELLE") {
+            const std::string text = h.str("texte").substr(0, 300);
+            if (!text.empty()) {
+                const std::string tone = h.str("ton");
+                tell(s, text, static_cast<std::uint32_t>(h.integer("couleur") & 0xFFFFFF), tone == "warning" ? "warning" : "info");
+            }
+            return;
+        }
         if (!s.d_->projectOpen) return;
         auto doc = s.d_->doc.lock();
         if (kind == "VUE" && doc) {
@@ -1056,6 +1224,7 @@ struct SessionServiceAccess {
         if (kind == "MESSAGE") {
             s.chat_.push_back({h.str("de"), h.str("texte"), h.str("heure"), static_cast<std::uint32_t>(h.integer("couleur")), false});
             if (s.chat_.size() > kChatMax) s.chat_.erase(s.chat_.begin());
+            if (h.str("de") != myName()) ++s.messagesIn_;   // 1.45.0 : le non lu de l'onglet Session
             ++s.revision_;
             return;
         }
@@ -1070,7 +1239,9 @@ struct SessionServiceAccess {
             return;
         }
         if (kind == "AUREVOIR") {
-            ended(s, h.str("raison").empty() ? s.hostName_ + " a arr\xC3\xAAt\xC3\xA9 la session" : h.str("raison"));
+            // 1.45.0 : retire par l'hote (<< Camille t'a retire de la session >>), ou la session arretee.
+            ended(s, h.str("raison").empty() ? s.hostName_ + " a arr\xC3\xAAt\xC3\xA9 la session" : h.str("raison").substr(0, 300),
+                  h.flag("retire"));
             return;
         }
     }
@@ -1097,6 +1268,9 @@ struct SessionServiceAccess {
         }
         s.d_->incoming.clear();
         s.d_->folder = folder.string();
+        // 1.45.0 : la copie de la session (fermee et effacee quand ce PC part).
+        s.copyFolder_ = folder.string();
+        s.copySid_ = s.sid_;
         s.progress_ = "Le projet est arriv\xC3\xA9 (" + name + ")";
         s.d_->projectOpen = false;
         s.app_.openProjectFolderChecked(folder.string());
@@ -1123,8 +1297,12 @@ struct SessionServiceAccess {
         hmi::edits::setLocalStation(s.d_->identity.machineId());
         hmi::edits::setCurrentSession(s.name_);
         sessionmarks::setActive(true);
+        sessionmarks::setGuest(true);   // 1.45.0 : l'equipier ne garde rien (Enregistrer sous, les exports : refuses)
         publishHolds(s);
-        s.chat_.push_back({"", "Tu es dans \xC2\xAB " + s.name_ + " \xC2\xBB. C'est " + s.hostName_ + " qui enregistre ; tes gestes partent tout seuls.", clock(), 0, true});
+        s.chat_.push_back({"", "Tu es dans \xC2\xAB " + s.name_ + " \xC2\xBB. C'est " + s.hostName_
+                                   + " qui enregistre ; tes gestes partent tout seuls. Le projet reste chez " + s.hostName_
+                                   + " : quand tu pars, sa copie s'efface de ce PC.",
+                           clock(), 0, true});
         s.log_.push_back("dans la session : " + s.name_ + " (membre " + std::to_string(s.me_) + ")");
         s.app_.events().publish(StatusNotice{"Tu es dans la session \xC2\xAB " + s.name_ + " \xC2\xBB : " + std::to_string(s.members_.size()) + " personnes.", 6.0});
         ++s.revision_;
@@ -1189,19 +1367,19 @@ struct SessionServiceAccess {
         broadcast(s, h, {});
     }
 
-    static void ended(SessionService& s, const std::string& why) {
+    // L'equipier : la session finit pour lui (l'hote l'arrete ou le retire, le lien est perdu). 1.45.0 : il revient a
+    // l'accueil, sa copie se ferme et s'efface (la prochaine image : leaveCopy) ; une notification le dit.
+    static void ended(SessionService& s, const std::string& why, bool removed = false) {
         const bool wasGuest = s.mode_ == SessionService::Mode::Guest;
         s.d_->guest.stop();
         teardown(s);
-        s.log_.push_back("fin : " + why);
-        if (wasGuest && !s.app_.scripted())
-            s.app_.menus().ShowDialog(
-                std::make_unique<MessageDialog>("La session est termin\xC3\xA9" "e",
-                                                why + ".\n\nLe projet reste ouvert ici, tel qu'il \xC3\xA9tait \xC3\xA0 la fin (une copie, dans le dossier des sessions). "
-                                                      "Pour le garder : Projet \xE2\x80\xBA Enregistrer sous\xE2\x80\xA6 ; sinon, ferme-le.",
-                                                MessageDialog::Icon::Info),
-                [](const menu::DialogResult&) {});
-        s.app_.events().publish(StatusNotice{"La session est termin\xC3\xA9" "e : " + why + ".", 8.0});
+        s.log_.push_back(std::string(removed ? "retiree : " : "fin : ") + why);
+        tell(s, why, 0, removed ? "warning" : "info");
+        if (wasGuest) {
+            s.leaving_ = true;
+            s.leaveWhy_ = why + ".\n\nTu reviens \xC3\xA0 l'accueil. Le projet reste chez " + (s.hostName_.empty() ? std::string("l'h\xC3\xB4te") : s.hostName_)
+                        + " : la copie re\xC3\xA7ue pour la session est effac\xC3\xA9" "e de ce PC.";
+        }
     }
 
     static void teardown(SessionService& s) {
@@ -1225,6 +1403,9 @@ struct SessionServiceAccess {
         s.members_.clear();
         s.code_.clear();
         s.relayOpen_ = false;
+        s.d_->printOf.clear();       // 1.45.0 (le journal reste lisible : session-journal, l'export)
+        s.d_->journalDirty.clear();
+        s.boardSeen_ = s.journalSeen_ = ~0ull;
         s.mode_ = SessionService::Mode::Off;
         hmi::edits::setCurrentSession({});
         sessionmarks::setActive(false);
@@ -1258,11 +1439,41 @@ void SessionService::setRole(int number, session::Role role) {
         }
 }
 
+// 1.45.0 : RETIRER UN EQUIPIER - il est coupe avec sa raison ; les autres le lisent (la discussion, une notification) ;
+// son PC (son empreinte) est retenu : il ne revient que si l'hote le fait entrer (meme avec le code).
+void SessionService::remove(int number) {
+    if (mode_ != Mode::Host || number == 0) return;
+    const auto cm = d_->connOfMember.find(number);
+    const auto* m = member(number);
+    if (cm == d_->connOfMember.end() || !m) return;
+    const int conn = cm->second;
+    const std::string who = m->name;
+    const std::uint32_t col = m->color;
+    if (const auto p = d_->printOf.find(number); p != d_->printOf.end() && !p->second.empty()) d_->removed.insert(p->second);
+    else if (!m->machineId.empty()) d_->removed.insert(m->machineId);
+    core::json::Value bye = op("AUREVOIR");
+    bye.set("retire", true);
+    bye.set("raison", hostName_ + " t'a retir\xC3\xA9 de la session");
+    d_->host.closeAfter(conn, bye);
+    // Il n'est plus membre tout de suite : ce qu'il enverrait encore ne compte plus (sa fermeture ne dit rien de plus).
+    d_->memberOfConn.erase(conn);
+    d_->connOfMember.erase(number);
+    d_->printOf.erase(number);
+    std::erase_if(members_, [&](const session::Member& x) { return x.number == number; });
+    for (auto it = d_->held.begin(); it != d_->held.end();) it = it->second == number ? d_->held.erase(it) : std::next(it);
+    log_.push_back("retrait : " + who + " (membre " + std::to_string(number) + ")");
+    SessionServiceAccess::sendMembers(*this);
+    SessionServiceAccess::sendHolds(*this);
+    SessionServiceAccess::tellAll(*this, hostName_ + " a retir\xC3\xA9 " + who + " de la session", col, "warning");
+}
+
 void SessionService::stop(const std::string& reason) {
     if (mode_ == Mode::Host) {
         SessionServiceAccess::flush(*this, true);
+        SessionServiceAccess::sendJournal(*this);
         core::json::Value bye = op("AUREVOIR");
         bye.set("fin", true);
+        // 1.45.0 : << Camille a arrete la session >> - le bouton, le projet ou l'appli fermes.
         bye.set("raison", reason.empty() ? hostName_ + " a arr\xC3\xAAt\xC3\xA9 la session" : reason);
         for (const auto& [conn, m] : d_->memberOfConn) {
             (void)m;
@@ -1271,19 +1482,133 @@ void SessionService::stop(const std::string& reason) {
         for (const auto& k : knocks_) d_->host.closeAfter(k.conn, bye);
         d_->host.stop();
         log_.push_back("session arretee");
+        // 1.45.0 : le journal enregistre avec le projet (ihm/historique/sessions/).
+        std::string saved, why;
+        if (session::saveJournal(d_->hostFolder, name_, d_->startedAt, journal_.entries(), &saved, &why)) {
+            savedJournal_ = saved;
+            if (!saved.empty()) log_.push_back("journal : " + saved);
+        } else {
+            log_.push_back("journal non enregistre : " + why);
+        }
         SessionServiceAccess::teardown(*this);
-        app_.events().publish(StatusNotice{"La session est arr\xC3\xAAt\xC3\xA9" "e. Pense \xC3\xA0 enregistrer.", 6.0});
+        app_.events().publish(StatusNotice{"La session est arr\xC3\xAAt\xC3\xA9" "e. Pense \xC3\xA0 enregistrer."
+                                               + std::string(savedJournal_.empty() ? "" : " Son journal : " + std::string(session::journalFolder()) + "/"
+                                                                                           + u8s(u8p(savedJournal_).filename())),
+                                           8.0});
         return;
     }
     if (mode_ == Mode::Guest || mode_ == Mode::Joining) {
-        if (mode_ == Mode::Guest) SessionServiceAccess::flush(*this, true);
+        const bool wasGuest = mode_ == Mode::Guest;
+        if (wasGuest) SessionServiceAccess::flush(*this, true);
         core::json::Value bye = op("AUREVOIR");
         d_->guest.closeAfter(bye);
         d_->guest.stop();
         log_.push_back("session quittee");
         progress_.clear();
         SessionServiceAccess::teardown(*this);
+        // 1.45.0 : l'equipier revient a l'accueil ; sa copie se ferme et s'efface (la prochaine image).
+        if (wasGuest) {
+            leaving_ = true;
+            leaveWhy_.clear();
+            app_.events().publish(StatusNotice{"Tu as quitt\xC3\xA9 la session \xC2\xAB " + name_ + " \xC2\xBB : sa copie s'efface de ce PC.", 6.0});
+        }
     }
+}
+
+// 1.45.0 : la copie de l'equipier se ferme (l'accueil) et s'efface ; ce que la fenetre dit (si la session a fini sans lui).
+void SessionService::leaveCopy() {
+    leaving_ = false;
+    const std::string folder = copyFolder_, sid = copySid_;
+    copyFolder_.clear();
+    copySid_.clear();
+    if (!folder.empty()) app_.closeSessionCopy(folder);
+    std::string why;
+    if (!sid.empty() && !session::removeCopy(guestArea(), sid, &why)) {
+        log_.push_back("copie non effacee : " + why);
+    } else if (!folder.empty()) {
+        lastCopy_ = folder;
+        log_.push_back("copie effacee : " + folder);
+    }
+    const std::string text = std::move(leaveWhy_);
+    leaveWhy_.clear();
+    if (!text.empty() && !app_.scripted())
+        app_.menus().ShowDialog(std::make_unique<MessageDialog>("La session est termin\xC3\xA9" "e", text, MessageDialog::Icon::Info),
+                                [](const menu::DialogResult&) {});
+    ++revision_;
+}
+
+void SessionService::flushNow() {
+    if (active()) SessionServiceAccess::flush(*this, true);
+}
+
+std::string SessionService::exportJournal(std::string* why) {
+    const auto fail = [&](std::string w) { if (why) *why = std::move(w); return std::string{}; };
+    if (!active()) return fail("pas de session en cours");
+    if (!host()) return fail("c'est " + hostName_ + " (l'h\xC3\xB4te) qui garde le journal : il l'exporte, et il l'enregistre avec le projet");
+    if (journal_.entries().empty()) return fail("le journal est vide : aucun changement depuis le d\xC3\xA9but de la session");
+    const std::string folder = d_->hostFolder.empty() ? app_.projectFolder() : d_->hostFolder;
+    if (folder.empty()) return fail("le projet n'a pas de dossier");
+    const fs::path dir = u8p(folder) / "exports";
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    const fs::path target = dir / u8p("journal-" + session::journalFileName(name_, d_->startedAt));
+    const std::string text = session::journalCsv(journal_.entries());
+    std::ofstream out(target, std::ios::binary | std::ios::trunc);
+    out.write(text.data(), static_cast<std::streamsize>(text.size()));
+    if (!out) return fail(u8s(target) + " ne s'\xC3\xA9" "crit pas");
+    log_.push_back("journal exporte : " + u8s(target));
+    return u8s(target);
+}
+
+// 1.45.0 : ce que l'interface montre (SessionMarks::Board) - quand quelque chose a change.
+void SessionService::publishBoard() {
+    if (!active()) return;
+    if (revision_ == boardSeen_ && journal_.revision() == journalSeen_) return;
+    boardSeen_ = revision_;
+    journalSeen_ = journal_.revision();
+    sessionmarks::Board b;
+    b.sessionName = name_;
+    b.hostName = hostName_;
+    b.host = host();
+    b.internet = internet_;
+    for (const auto& m : members_) {
+        sessionmarks::Person p;
+        p.number = m.number;
+        p.name = m.name;
+        p.initials = session::initials(m.name);
+        p.machine = m.machine;
+        p.machineId = m.machineId;
+        p.view = m.view;
+        p.viewName = viewName(m.view);
+        p.color = m.color;
+        p.host = m.number == 0;
+        p.me = m.number == me_;
+        p.watch = m.role == session::Role::Watch;
+        b.people.push_back(std::move(p));
+    }
+    const auto* mine = member(me_);
+    for (const auto& l : chat_) {
+        sessionmarks::Line x;
+        x.time = l.time;
+        x.from = l.from;
+        x.text = l.text;
+        x.color = l.color;
+        x.system = l.system;
+        x.mine = !l.system && mine && l.from == mine->name;
+        b.chat.push_back(std::move(x));
+    }
+    for (const auto& e : journal_.entries()) {
+        sessionmarks::Line x;
+        x.time = session::clockText(e.t);
+        x.from = e.who;
+        x.text = e.text;
+        x.color = e.color;
+        x.count = e.count;
+        x.mine = e.member == me_;
+        b.journal.push_back(std::move(x));
+    }
+    b.messages = messagesIn_;
+    sessionmarks::setBoard(std::move(b));
 }
 
 // ============================================================================================ l'equipier ===
@@ -1358,6 +1683,9 @@ bool SessionService::join(const JoinTarget& t, const std::string& code, std::str
     sid_ = t.sessionId;
     chat_.clear();
     log_.clear();
+    journal_.clear();       // 1.45.0 : celui de l'hote arrive a l'entree
+    savedJournal_.clear();
+    messagesIn_ = 0;
     resyncs_ = refusals_ = 0;
     progress_ = t.internet ? std::string("Recherche de la session sur le service XPG\xE2\x80\xA6")
                            : "Connexion \xC3\xA0 " + (t.machine.empty() ? t.address : t.machine) + "\xE2\x80\xA6";
@@ -1378,12 +1706,19 @@ void SessionService::tick() {
             fn();
         }
     }
+    // 1.45.0 : l'equipier est parti - sa copie se ferme (l'accueil) et s'efface.
+    if (leaving_ && mode_ == Mode::Off) leaveCopy();
     if (mode_ == Mode::Off) return;
+    // 1.45.0 : a la fin de l'image, ce que l'interface montre (les membres, la discussion, le journal).
+    struct Publish {
+        SessionService& s;
+        ~Publish() { s.publishBoard(); }
+    } publish{*this};
     // Le projet a change sous la session (ferme, un autre ouvert) : elle s'arrete.
     if (active()) {
         auto doc = d_->doc.lock();
         if (!doc || app_.hmi() != doc) {
-            stop(mode_ == Mode::Host ? hostName_ + " a ferm\xC3\xA9 le projet" : std::string{});
+            stop();   // 1.45.0 : << Camille a arrete la session >> (l'equipier : il part, sa copie s'efface)
             return;
         }
     }
@@ -1401,16 +1736,23 @@ void SessionService::tick() {
                     k.address = e.address;
                     k.codeOk = e.codeOk;
                     k.color = static_cast<std::uint32_t>(e.header.integer("couleur"));
+                    // 1.45.0 : un PC retire tout a l'heure ne rentre pas seul (meme avec le code) : l'hote decide.
+                    k.fingerprint = e.fingerprint;
+                    k.removed = d_->removed.count(!k.fingerprint.empty() ? k.fingerprint : k.machineId) > 0;
                     knocks_.push_back(k);
                     core::json::Value w = op("ATTENTE");
                     d_->host.send(e.conn, w);
-                    log_.push_back("frappe : " + k.name + (k.codeOk ? " (code bon)" : ""));
-                    if (entry_ == session::Entry::Code && k.codeOk) {
+                    log_.push_back("frappe : " + k.name + (k.codeOk ? " (code bon)" : "") + (k.removed ? " (retiree)" : ""));
+                    if (entry_ == session::Entry::Code && k.codeOk && !k.removed) {
                         accept(e.conn);
                     } else {
                         d_->knockQueue.push_back(e.conn);
-                        chat_.push_back({"", k.name + " veut entrer (" + k.machine + ").", clock(), 0, true});
-                        app_.events().publish(StatusNotice{k.name + " veut entrer dans la session.", 8.0});
+                        chat_.push_back({"", k.removed ? k.name + " (retir\xC3\xA9 tout \xC3\xA0 l'heure) veut revenir : \xC3\xA0 toi de d\xC3\xA9" "cider."
+                                                       : k.name + " veut entrer (" + k.machine + ").",
+                                         clock(), 0, true});
+                        app_.events().publish(StatusNotice{k.name + (k.removed ? " veut revenir dans la session (retir\xC3\xA9 tout \xC3\xA0 l'heure)."
+                                                                               : " veut entrer dans la session."),
+                                                           8.0});
                     }
                     ++revision_;
                     break;
@@ -1438,6 +1780,7 @@ void SessionService::tick() {
         SessionServiceAccess::askKnock(*this);
         SessionServiceAccess::presence(*this);
         SessionServiceAccess::flush(*this, false);
+        SessionServiceAccess::sendJournal(*this);   // 1.45.0
         SessionServiceAccess::sendState(*this);
         return;
     }
@@ -1471,12 +1814,12 @@ void SessionService::tick() {
             case session::LinkEvent::Kind::Closed:
                 if (mode_ == Mode::Guest) SessionServiceAccess::ended(*this, hostName_ + " n'est plus joignable (" + e.why + ")");
                 else if (mode_ == Mode::Joining) {
-                    progress_ = "Pas entr\xC3\xA9" "e : " + e.why;
                     log_.push_back("echec : " + e.why);
                     d_->guest.stop();
                     SessionServiceAccess::teardown(*this);
-                    progress_ = "Pas entr\xC3\xA9" "e : " + e.why;
-                    app_.events().publish(StatusNotice{"Session : " + e.why, 8.0});
+                    // 1.45.0 : un service des licences en 1.43 (pas de relais) : la phrase seule, qui dit quoi faire.
+                    progress_ = session::relayTooOld(e.why) ? e.why : "Pas entr\xC3\xA9" "e : " + e.why;
+                    app_.events().publish(StatusNotice{session::relayTooOld(e.why) ? e.why + "." : "Session : " + e.why, 8.0});
                 }
                 break;
             default: break;

@@ -105,6 +105,12 @@ Une seule fois :
    npx wrangler login, deployer.bat). Il lui faut ta clé PUBLIQUE :
    Service en ligne > Écrire cle-publique.txt... dans le dossier de deployer.bat.
    deployer.bat écrit l'adresse : https://xpg-licences.<ton compte>.workers.dev
+   1.45.0 : plus simple, dans l'Admin : Service en ligne > Déployer le service (le kit
+   installé avec l'Admin, sans fenêtre noire). Il écrit cle-publique.txt s'il manque,
+   te propose de te connecter à Cloudflare (Se connecter à Cloudflare...), règle
+   l'adresse si l'Admin n'en a pas, puis relit le service : « Service en ligne :
+   version ... ». Après une mise à jour de l'Admin, s'il dit « Service : ... · à mettre
+   à jour » (en haut, et sur le tableau de bord), un clic sur Déployer le service suffit.
 2. Service en ligne : colle l'adresse > Enregistrer l'adresse > Vérifier (il répond,
    il accepte ta clé).
 3. Certifier la clé du service... : l'outil lit la clé que ton service a créée et te
@@ -500,6 +506,7 @@ Une licence EN LIGNE (aucun PC lié : chaque PC l'active avec un code) :
    --nouveau-code quand le service répond. Prolonger (une autre fin, plus de postes) :
    --etendre (le même code), ou --etendre --nouveau-code (l'ancien ne marche plus).
 
+     XPG-License-Admin.exe service-deployer [--dossier-kit D] [--essai]   (1.45.0 : met le service en ligne, ou à jour)
      XPG-License-Admin.exe service-licences                (les licences en ligne, leurs PC, les jetons)
      XPG-License-Admin.exe service-retirer --licence ID --poste CLE_DU_PC
      XPG-License-Admin.exe service-desactiver --licence ID [--reactiver]

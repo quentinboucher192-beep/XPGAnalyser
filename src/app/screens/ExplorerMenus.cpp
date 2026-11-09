@@ -29,6 +29,7 @@
 //  menu de ce noeud (treeKey) - ou disent pourquoi elles sont grisees.
 // =============================================================================
 #include "Screens.hpp"
+#include "../SessionMarks.hpp"   // 1.45.0 : l'equipier d'une session ne garde rien
 #include "../ProjectExchange.hpp"   // 1.12.30 : la racine du projet - archive
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
 #include "../hmi/HmiNativesCards.hpp"   // 1.12.0 : ce qu'Inserer pose
@@ -2256,13 +2257,15 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         m.add("Cr\xC3\xA9" "er une version" + kDots, Icon::History, [this] { askCreateVersion(); }, "Ctrl+Alt+S",
               app_.projectFolder().empty() ? "enregistre d'abord le projet en dossier" : "");
         const std::string folder = app_.projectFolder();
+        // 1.45.0 : l'equipier d'une session ne garde rien (le dossier du projet, l'archive : refuses).
+        const std::string keep = sessionmarks::keepRefusal();
         m.add("Ouvrir le dossier du projet", Icon::FolderOpen, [refused, folder] { refused("Ouvrir le dossier", dossiers::ouvrirDansLeSysteme(folder)); }, {},
-              folder.empty() ? "le projet n'a pas encore de dossier" : "");
+              folder.empty() ? "le projet n'a pas encore de dossier" : keep);
         m.add("Rechercher dans le projet", Icon::Search, [this] { focusTreeFilter(); }, "Ctrl+Maj+F");
         // 1.12.30 : LES ECHANGES - tout le projet dans un seul fichier (.xihm, .xapi) et
         // l'inverse (app/ProjectExchange).
         m.separator();
-        const std::string unsaved = folder.empty() ? "enregistre d'abord le projet en dossier" : none;
+        const std::string unsaved = folder.empty() ? "enregistre d'abord le projet en dossier" : !keep.empty() ? keep : none;
         m.add((core::hasApi() ? std::string("Exporter en archive .xapi") : std::string("Exporter en archive .xihm")) + kDots, Icon::Export,
               [this] { exchange::askExportArchive(app_); }, {}, unsaved);
         m.add("Importer une archive" + kDots, Icon::Import, [this] { app_.confirmReplace([this] { exchange::askImportArchive(app_); }); });
@@ -2503,6 +2506,8 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
             break;
         default: break;
         }
+        // 1.45.0 : l'equipier d'une session n'ouvre pas le dossier de sa copie (elle s'efface quand il part).
+        if (!path.empty() && !folder.empty() && !sessionmarks::keepRefusal().empty() && path.rfind(folder, 0) == 0) path.clear();
         std::vector<Item> more;
         for (auto& it : path.empty() ? std::vector<Item>{} : ui::paths::menuItems(path, 0)) {
             const int id = it.id;

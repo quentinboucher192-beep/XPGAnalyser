@@ -485,6 +485,19 @@ bool Mirror::hasView(hmi::Id id) const { return views_.count(id) != 0; }
 
 void Mirror::collect(hmi::Project& p, const std::set<hmi::Id>& touched, bool projectTouched,
                      std::vector<ViewDelta>& out, ProjectDelta& project) {
+    collect(p, touched, projectTouched, out, project, nullptr);
+}
+
+// 1.45.0 : `previous` (non nul) recoit ce que les changements remplacent (le journal de la session).
+void Mirror::collect(hmi::Project& p, const std::set<hmi::Id>& touched, bool projectTouched,
+                     std::vector<ViewDelta>& out, ProjectDelta& project, Previous* previous) {
+    if (previous) {
+        for (const auto& [id, s] : views_) previous->viewNames[id] = s.shell.name;
+        for (const auto& [path, data] : files_) {
+            (void)data;
+            previous->files.insert(path);
+        }
+    }
     // Des vues apparues ou disparues : le reste du projet (l'index) change aussi.
     std::set<hmi::Id> present;
     for (const auto& v : p.views) present.insert(v.id);
@@ -530,6 +543,15 @@ void Mirror::collect(hmi::Project& p, const std::set<hmi::Id>& touched, bool pro
             d.order = order;
         }
         if (d.empty()) continue;
+        if (previous) {   // 1.45.0 : la vue d'avant, avec les seuls objets touches
+            hmi::View was = s.shell;
+            was.objects.clear();
+            for (const auto& o : d.objects)
+                if (const auto k = s.objects.find(o.id); k != s.objects.end()) was.objects.push_back(k->second);
+            for (const auto oid : d.removed)
+                if (const auto k = s.objects.find(oid); k != s.objects.end()) was.objects.push_back(k->second);
+            previous->views[id] = std::move(was);
+        }
         if (!d.shellChanged) {
             // Les calques du miroir peuvent etre vieux d'un changement : ceux d'aujourd'hui relisent les objets.
             d.shell.layers = shell.layers;

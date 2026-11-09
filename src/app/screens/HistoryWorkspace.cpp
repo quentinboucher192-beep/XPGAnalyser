@@ -520,6 +520,7 @@ void MainAnalysisScreen::Update(const menu::FrameContext& f) {
     // ---- fin Lot API 8 : le bandeau bas ----
     lap.to(XPG_PARTIE("ecran.build"));
     tickHmiBuild();                // 1.11.13 : le build de l'IHM (sa fin, la progression, l'analyse)
+    tickSessionTree();             // 1.45.0 : le noeud Session de l'arbre
     lap.to(XPG_PARTIE("ecran.recherche"));
     tickFileFinder();              // 1.14.0 (lot M5) : Chercher des fichiers - ce que la recherche a trouve
     lap.to(XPG_PARTIE("ia"));

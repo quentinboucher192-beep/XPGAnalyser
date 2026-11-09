@@ -282,7 +282,11 @@ public:
     [[nodiscard]] std::string modifiedText(hmi::Id) const;   // ce que montre la ligne
     [[nodiscard]] std::string modifiedTip(hmi::Id) const;    // son infobulle
     [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
-    [[nodiscard]] bool hasTooltip() const override { return !marks_.empty() || Widget::hasTooltip(); }
+    [[nodiscard]] bool hasTooltip() const override { return !marks_.empty() || sessionHeld() || Widget::hasTooltip(); }
+    // 1.45.0 : EN SESSION, un objet tenu par un equipier : ses initiales dans sa couleur, devant le cadenas ;
+    //  l'infobulle << tenu par Lea >> (app/SessionMarks). Vide : personne (ou hors session).
+    [[nodiscard]] std::string heldTip(hmi::Id id) const;
+    [[nodiscard]] static bool sessionHeld();
 protected:
     void            onPaint(const ui::PaintContext&) override;
     ui::EventResult onEvent(const ui::InputEvent&) override;

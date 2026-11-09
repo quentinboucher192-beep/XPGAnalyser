@@ -7,6 +7,7 @@
 #include "App.hpp"
 #include "BackgroundTasks.hpp"
 #include "Dossiers.hpp"
+#include "SessionMarks.hpp"   // 1.45.0 : l'equipier d'une session ne garde rien
 #include "screens/Screens.hpp"
 #include "../core/AtomicFile.hpp"
 #include "../core/Edition.hpp"
@@ -387,6 +388,11 @@ void askFile(App& app) {
 void askExportArchive(App& app) {
     const bool api = core::hasApi();
     const std::string ext(pa::extension(ownKind()));
+    // 1.45.0 : en session, l'equipier n'emporte pas le projet (le menu, l'arbre, le volet Echanges passent tous ici).
+    if (const std::string why = sessionmarks::keepRefusal(); !why.empty()) {
+        say(app, why + " : pas d'archive du projet depuis une session.", 6.0);
+        return;
+    }
     if (!ready(app, "l'archive")) return;
     withSaved(app, "L'archive", [&app, api, ext] {
         const std::string folder = app.projectFolder();

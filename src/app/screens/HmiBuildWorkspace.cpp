@@ -330,6 +330,15 @@ void MainAnalysisScreen::applyHmiBuildMarks() {
     if (explorer_) explorer_->invalidate();
 }
 
+// 1.45.0 : l'onglet Session du panneau du bas (le panneau s'ouvre).
+bool MainAnalysisScreen::showSessionTab() {
+    if (!bottomPanel_) return false;
+    bottomPanel_->tick();   // l'onglet suit la session
+    if (bottomPanel_->sessionTab() == static_cast<std::size_t>(-1)) return false;
+    showBottomPanel(true, bottomPanel_->sessionTab());
+    return bottomPanel_->showSessionTab();
+}
+
 HmiBuildOutputPane* MainAnalysisScreen::hmiBuildOutput(bool open) {
     // 1.11.14 : les sorties vivent dans le panneau du bas (plus d'onglet IHM . Sorties).
     if (open) showBottomPanel(true);

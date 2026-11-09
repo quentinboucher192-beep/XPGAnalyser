@@ -46,6 +46,9 @@
 namespace ui {
 class Widget;   // 1.44.0 : captureSpotCenter
 }
+namespace menu {
+class MenuManager;   // 1.45.0 : la fenetre Licence sur une pile de menus (les essais : sans App)
+}
 
 namespace licensing {
 struct RegistryView;
@@ -224,8 +227,13 @@ struct Answer {
     std::string mail, mailTo;
     std::string option;      // 1.43.0 : une demande d'option acceptee (son nom) ; vide : une licence
 };
+// 1.45.0 : LA MEME REPONSE UNE FOIS - une reponse deja dans la file (meme genre, meme licence, meme option, meme mot) n'y
+// entre pas une seconde fois ; et UNE FENETRE A LA FOIS : tant qu'une fenetre de reponse est ouverte (setAnswerOpen),
+// takeAnswer ne rend rien - la suivante vient a sa fermeture, jamais deux fenetres empilees a fermer l'une apres l'autre.
 void queueAnswer(Answer a);
 [[nodiscard]] std::optional<Answer> takeAnswer();
+void setAnswerOpen(bool open);
+[[nodiscard]] bool answerOpen() noexcept;
 // 1.39.0 : LA LICENCE PERDUE EN DIRECT - retiree de ce PC, revoquee ou desactivee par l'editeur (le service le dit au
 // regard des 2 minutes ou au lancement ; une liste de revocation adoptee) : une fenetre tout de suite (showLoss) et une
 // notification. Une fois par licence et par lancement ; seulement avec les avis (pas le poste d'exploitation).
@@ -278,6 +286,10 @@ struct CaptureShot {
     std::string              imagePath;
     std::string              caption;   // vide : pas de legende
     std::vector<CaptureSpot> spots;
+    // 1.45.0 : LE REPERE DES BULLES - la taille de l'image pour laquelle leurs x, y, l, h sont ecrits ("repere": {"l": 960,
+    // "h": 600}, par capture ou pour tout le fichier) ; 0 : les pixels de l'image elle-meme. Une capture refaite en plus grand
+    // (2x : 1920 x 1200, 3200 x 2000) garde ses bulles a leur place sans les recompter.
+    float                    refW{0.f}, refH{0.f};
 };
 struct FeaturePreview {
     std::string imagePath;     // vide : pas de capture (la premiere)
@@ -356,6 +368,12 @@ std::size_t check(bool force = false);
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
 // 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
 void showLicenceWindow(App& app, int tab = licence::kTabAuto);
+// 1.45.0 : UNE SEULE FENETRE LICENCE. Deja ouverte (sous la fenetre de la reponse de l'editeur : << Voir ma licence >>, une
+// notification...) : elle passe a l'onglet demande et se relit ; aucune autre ne s'empile par-dessus (avant : deux fenetres
+// identiques, deux clics sur la croix pour en sortir). La meme sur une pile de menus (les essais : sans App).
+void showLicenceWindow(menu::MenuManager& menus, int tab = licence::kTabAuto);
+// 1.45.0 : une fenetre Licence est-elle ouverte (et pas en train de se fermer) ?
+[[nodiscard]] bool licenceWindowOpen() noexcept;
 namespace licence {
 // 1.42.0 : l'option a choisir a l'ouverture de l'onglet Options (une action fermee qui la propose) ; prise une fois.
 void setWantedOption(std::string optionId);
@@ -378,6 +396,10 @@ bool gateProjects(App& app);
 // 1.36.0 : la fenetre de la reponse de l'editeur (answerView) ; son bouton : la fenetre Licence (Ma licence, ou une
 // nouvelle demande).
 void showAnswer(App& app, const Answer& a);
+void showAnswer(menu::MenuManager& menus, const Answer& a);   // 1.45.0 : la meme, sur une pile de menus (les essais)
+// 1.45.0 : la capture `shot` (0 : la premiere) d'une fonctionnalite en grand (ses fleches, sa legende, ses bulles) ; faux :
+// pas de capture. L'essai : licence-capture ID [N].
+bool showFeatureCapture(App& app, const std::string& feature, std::size_t shot = 0);
 // 1.39.0 : la fenetre de la licence perdue (Licence... : Ma licence).
 void showLoss(App& app, const Loss& l);
 // 1.44.0 : le bouton d'une notification (son action) : "licence:<onglet>", "detail:<cle>", "fichiers:<cle>" (la fenetre du

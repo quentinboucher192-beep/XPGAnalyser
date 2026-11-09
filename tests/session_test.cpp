@@ -12,9 +12,19 @@
 //    - le lien : un vrai hote et un vrai equipier sur la boucle locale (TLS 1.3) : la
 //      decouverte, l'entree sans code, le bon code, un code faux (3 essais), une
 //      empreinte qui ne correspond pas, des trames dans les deux sens, l'arret.
+//    - 1.45.0 : le journal (un objet deplace, ajoute, modifie, supprime ; une
+//      ressource ajoutee par un equipier qui arrive chez l'hote et chez les autres ;
+//      une variable ; la fusion d'un glisser ; la borne ; le CSV enregistre avec le
+//      projet) ; le dossier des copies des equipiers (effacee au depart, purgee au
+//      lancement) ; de vrais liens : l'hote retire un equipier (sa raison, les
+//      autres le savent, il revient avec la meme empreinte), un equipier part
+//      (l'hote le voit), l'hote arrete (tous coupes) ; le service trop vieux (404
+//      << route >> : la phrase qui dit de le redeployer), a l'ouverture et a l'entree.
 // =============================================================================
+#include "../src/session/SessionJournal.hpp"   // 1.45.0
 #include "../src/session/SessionLink.hpp"
 #include "../src/session/SessionProtocol.hpp"
+#include "../src/session/SessionRelay.hpp"     // 1.45.0 : le service trop vieux
 #include "../src/session/SessionSync.hpp"
 
 #include "../src/deploy/Crypto.hpp"
@@ -22,8 +32,11 @@
 #include "../src/hmi/HmiCommands.hpp"
 #include "../src/hmi/HmiStore.hpp"
 
+#include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <cstdlib>
 #include <functional>
 #include <string>
@@ -607,6 +620,431 @@ void lien() {
     check(sessionBinding("a") != sessionBinding("b") && sessionBinding("a").size() == 64, "le lien du code a la session");
 }
 
+
+// =================================================================================================== 1.45.0 ===
+void journal145() {
+    std::printf("-- 1.45.0 : le journal de la session\n");
+    const std::string sep = " \xE2\x80\xBA ";
+    // ---- un objet deplace (le geste de l'hote : collect et ce qu'il remplace) ----
+    hmi::Project host = sample();
+    host.views[0].name = "Vue_Accueil";
+    obj(host, 10, 30)->name = "Texte_Etat";
+    Mirror mh;
+    mh.reset(host);
+    setProp(obj(host, 10, 30), "x", "250");
+    std::vector<ViewDelta> views;
+    ProjectDelta pd;
+    Mirror::Previous prev;
+    mh.collect(host, {10}, false, views, pd, &prev);
+    check(views.size() == 1 && prev.views.count(10), "collect : la vue d'avant (son objet touche)");
+    std::vector<std::string> lines;
+    if (views.size() == 1) lines = describeView(views[0], &prev.views[10], "Vue_Accueil");
+    check(lines.size() == 1 && lines[0] == "Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9", "un objet deplace : << Vue_Accueil > Texte_Etat deplace >>");
+
+    // ---- le changement d'un equipier, decrit par l'hote avant de l'appliquer ----
+    hmi::Project lea = host;
+    Mirror ml;
+    ml.reset(lea);
+    mh.reset(host);
+    setProp(obj(lea, 10, 31), "w", "300");                 // redimensionne
+    setProp(obj(lea, 10, 32), "fill", "#AA0000");          // modifie
+    lea.views[0].objects.push_back(rect(0x10000005u, "Voyant_Gaz", 20, 400));   // ajoute
+    std::erase_if(lea.views[0].objects, [](const hmi::Object& o) { return o.id == 33; });   // supprime
+    views.clear();
+    pd = {};
+    ml.collect(lea, {10}, false, views, pd);
+    lines.clear();
+    if (views.size() == 1) lines = describeView(views[0], host.view(10), "Vue_Accueil");
+    const auto has = [&](const std::string& t) { return std::find(lines.begin(), lines.end(), t) != lines.end(); };
+    check(has("Vue_Accueil" + sep + "Objet_1 redimensionn\xC3\xA9"), "redimensionne");
+    check(has("Vue_Accueil" + sep + "Objet_2 modifi\xC3\xA9 (fill)"), "modifie (la propriete)");
+    check(has("Vue_Accueil" + sep + "Voyant_Gaz ajout\xC3\xA9"), "ajoute");
+    check(has("Vue_Accueil" + sep + "Objet_3 supprim\xC3\xA9"), "supprime (le nom d'avant)");
+    // Plus de 3 objets d'un meme geste : un compte.
+    hmi::Project many = host;
+    Mirror mm;
+    mm.reset(many);
+    for (auto& o : many.views[0].objects) setProp(&o, "y", "90");
+    views.clear();
+    mm.collect(many, {10}, false, views, pd, &prev);
+    lines.clear();
+    if (views.size() == 1) lines = describeView(views[0], &prev.views[10], "Vue_Accueil");
+    check(lines.size() == 1 && lines[0] == "Vue_Accueil" + sep + "4 objets d\xC3\xA9plac\xC3\xA9s", "4 objets deplaces d'un geste : un compte");
+
+    // ---- 1.45.0 (point 7) : UNE RESSOURCE AJOUTEE PAR UN EQUIPIER arrive chez l'hote (et repart aux autres) ----
+    hmi::Project h2 = sample(), l2 = sample(), o2 = sample();
+    Mirror mh2, ml2, mo2;
+    mh2.reset(h2);
+    ml2.reset(l2);
+    mo2.reset(o2);
+    hmi::Resource logo;
+    logo.id = 0x10000010u;
+    logo.name = "logo.png";
+    logo.format = "PNG";
+    auto png = std::make_shared<hmi::Bytes>();
+    const unsigned char sig[] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0, 0, 0, 13, 'I', 'H', 'D', 'R', 0, 0x0A, 0xFF, 0x00};
+    png->assign(std::begin(sig), std::end(sig));
+    logo.data = png;
+    logo.bytes = png->size();
+    l2.assets.resources.push_back(logo);
+    std::vector<ViewDelta> v2;
+    ProjectDelta p2;
+    ml2.collect(l2, {}, true, v2, p2);
+    bool whole = false;
+    for (const auto& f : p2.files) whole = whole || (f.path.rfind("ressources/", 0) == 0 && f.kind == FileDelta::Kind::Whole && f.whole.size() == png->size());
+    check(whole, "la ressource part entiere (ressources/..., ses octets)");
+    // L'hote : les phrases avant d'appliquer (les fichiers d'avant : l'etat partage), puis il applique.
+    const auto described = describeFiles(p2, [&](const std::string& path) { return mh2.hasFile(path); });
+    check(std::find(described.begin(), described.end(), "ressource logo.png ajout\xC3\xA9" "e") != described.end(),
+          "le journal : << ressource logo.png ajoutee >> (" + (described.empty() ? std::string("rien") : described[0]) + ")");
+    // En trames, comme sur le reseau : chez l'hote, puis de l'hote aux autres.
+    {
+        core::json::Value h;
+        std::string data;
+        encodeProject(p2, h, data);
+        ProjectDelta back;
+        std::string why;
+        core::json::Value h2b;
+        check(core::json::parse(core::json::write(h, false), h2b, nullptr) && decodeProject(h2b, data, back, &why), "la ressource : la trame se relit");
+        ProjectApplied done;
+        check(mh2.applyProject(h2, back, done, &why) && done.conflicts.empty(), "la ressource s'applique chez l'hote (" + why + ")");
+        ProjectApplied done2;
+        check(mo2.applyProject(o2, back, done2, &why), "... et chez un autre equipier (" + why + ")");
+    }
+    const auto found = [](const hmi::Project& p) -> const hmi::Resource* {
+        for (const auto& r : p.assets.resources)
+            if (r.name == "logo.png") return &r;
+        return nullptr;
+    };
+    check(found(h2) && found(h2)->data && *found(h2)->data == *png, "l'hote a l'image, octet pour octet");
+    check(found(o2) && found(o2)->data && *found(o2)->data == *png, "l'autre equipier aussi");
+    check(sameShared(mh2, h2, ml2, l2) && sameShared(mh2, h2, mo2, o2), "les empreintes egales (hote, Lea, l'autre)");
+    // La meme ressource remplacee : << remplacee >>.
+    ProjectDelta again;
+    FileDelta f;
+    for (const auto& x : p2.files)
+        if (x.path.rfind("ressources/", 0) == 0) f = x;
+    again.files.push_back(f);
+    const auto replaced = describeFiles(again, [&](const std::string& path) { return mh2.hasFile(path); });
+    check(replaced.size() == 1 && replaced[0] == "ressource logo.png remplac\xC3\xA9" "e", "une ressource qui existait : remplacee");
+
+    // ---- une variable ajoutee (l'index ihm.txt) ----
+    hmi::Project h3 = sample();
+    Mirror m3;
+    m3.reset(h3);
+    hmi::Variable dv;
+    dv.id = 0x10000020u;
+    dv.name = "Debit";
+    dv.type = "REAL";
+    h3.programs.variables.push_back(dv);
+    std::vector<ViewDelta> v3;
+    ProjectDelta p3;
+    Mirror::Previous prev3;
+    m3.collect(h3, {}, true, v3, p3, &prev3);
+    const auto vlines = describeFiles(p3, [&](const std::string& path) { return prev3.files.count(path) > 0; });
+    check(std::find(vlines.begin(), vlines.end(), "variable Debit ajout\xC3\xA9" "e") != vlines.end(), "une variable ajoutee : << variable Debit ajoutee >>");
+
+    // ---- le journal lui-meme : la fusion d'un glisser, la borne, le JSON, la ligne, le CSV ----
+    Journal j;
+    const std::int64_t t0 = 1800000000;
+    j.add(1, "L\xC3\xA9" "a", 0x2E86DE, "Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9", t0);
+    j.add(1, "L\xC3\xA9" "a", 0x2E86DE, "Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9", t0 + 1);
+    j.add(0, "Camille", 0xE67E22, "ressource logo.png ajout\xC3\xA9" "e", t0 + 2);
+    j.add(1, "L\xC3\xA9" "a", 0x2E86DE, "Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9", t0 + 3);   // fondue (parmi les 8 dernieres)
+    check(j.entries().size() == 2 && j.entries()[0].count == 3 && j.entries()[0].t == t0 + 3, "un glisser : une entree (x3), l'heure du dernier geste");
+    j.add(1, "L\xC3\xA9" "a", 0x2E86DE, "Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9", t0 + 400);   // plus tard : une autre
+    check(j.entries().size() == 3, "plus de 2 min apres : une entree neuve");
+    const std::string line = lineOf(j.entries()[0]);
+    check(line.find(" L\xC3\xA9" "a : Vue_Accueil" + sep + "Texte_Etat d\xC3\xA9plac\xC3\xA9 (\xC3\x97" "3)") != std::string::npos && line.size() > 5 && line[2] == ':',
+          "la ligne : << 14:32 Lea : Vue_Accueil > Texte_Etat deplace (x3) >>");
+    JournalEntry back;
+    check(fromJson(toJson(j.entries()[0]), back) && back == j.entries()[0], "une entree : aller-retour JSON");
+    Journal guest;
+    guest.replace({j.entries().begin(), j.entries().end()});
+    auto upd = j.entries()[2];
+    upd.count = 5;
+    guest.put(upd);
+    check(guest.entries().size() == 3 && guest.entries()[2].count == 5, "chez l'equipier : l'entree fondue remplace la sienne (meme numero)");
+    Journal big;
+    for (std::size_t i = 0; i < kJournalMax + 25; ++i) big.add(0, "Camille", 0, "objet " + std::to_string(i) + " modifi\xC3\xA9", t0 + static_cast<std::int64_t>(i) * 200);
+    check(big.entries().size() == kJournalMax && big.dropped() == 25 && big.entries().front().text == "objet 25 modifi\xC3\xA9", "borne : 2 000 entrees, les plus anciennes tombent");
+    const std::string csv = journalCsv(j.entries());
+    check(csv.rfind("\xEF\xBB\xBF" "Date;Heure;Auteur;Changement;Gestes\r\n", 0) == 0 && csv.find(";Camille;ressource logo.png ajout\xC3\xA9" "e;1\r\n") != std::string::npos,
+          "le CSV : la marque UTF-8, l'en-tete, une ligne par entree");
+    // Enregistre avec le projet (l'hote, a la fin) : ihm/historique/sessions/.
+    namespace fs = std::filesystem;
+    const fs::path proj = fs::temp_directory_path() / ("xpg-session145-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::remove_all(proj, ec);
+    fs::create_directories(proj, ec);
+    std::string saved, why;
+    check(saveJournal(proj.string(), "Mise en service Armoire_Gaz", t0, j.entries(), &saved, &why), "le journal s'enregistre (" + why + ")");
+    check(!saved.empty() && fs::exists(saved, ec) && saved.find("ihm/historique/sessions") != std::string::npos
+              && saved.find("Mise en service Armoire_Gaz.csv") != std::string::npos,
+          "dans ihm/historique/sessions/<date>_<nom>.csv (" + saved + ")");
+    std::string saved2;
+    check(saveJournal(proj.string(), "Mise en service Armoire_Gaz", t0, j.entries(), &saved2, &why) && saved2 != saved, "deux fois la meme minute : un autre fichier");
+    std::string none;
+    check(saveJournal(proj.string(), "Vide", t0, {}, &none, &why) && none.empty(), "un journal vide : rien d'ecrit");
+    fs::remove_all(proj, ec);
+}
+
+void copies145() {
+    std::printf("-- 1.45.0 : la copie de l'equipier (effacee au depart, purgee au lancement)\n");
+    namespace fs = std::filesystem;
+    const fs::path shared = fs::temp_directory_path() / ("xpg-commun145-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::error_code ec;
+    fs::remove_all(shared, ec);
+    const std::string area = guestArea(shared.string());
+    check(fs::path(area).filename() == "Sessions", "l'aire : <dossier commun>/Sessions");
+    const auto makeCopy = [&](const std::string& sid) {
+        const fs::path dir = fs::path(area) / sid / "Armoire_Gaz";
+        fs::create_directories(dir / "ihm" / "vues", ec);
+        std::ofstream(dir / "project.xpgproj") << "nom=Armoire_Gaz\n";
+        std::ofstream(dir / "ihm" / "ihm.txt") << "ihm\n";
+        return dir.string();
+    };
+    const std::string copy = makeCopy("00112233445566aa");
+    check(fs::exists(copy, ec) && insideArea(area, copy) && insideArea(area, area) && !insideArea(area, shared.string())
+              && !insideArea(area, (shared / "SessionsX").string()),
+          "insideArea : la copie oui, le dossier commun non, un voisin au nom proche non");
+    std::string why;
+    check(removeCopy(area, "00112233445566aa", &why) && !fs::exists(fs::path(area) / "00112233445566aa", ec), "l'equipier part : sa copie s'efface (" + why + ")");
+    check(removeCopy(area, "00112233445566aa", &why), "deja partie : rien a faire");
+    check(removeCopy(area, "../x", &why), "un identifiant qui remonte : refuse en silence (rien d'efface)");
+    // Un arret brutal : deux restes ; l'un est ouvert dans une autre fenetre (garde), l'autre part.
+    const std::string left1 = makeCopy("aaaaaaaaaaaaaaaa");
+    const std::string left2 = makeCopy("bbbbbbbbbbbbbbbb");
+    const auto purged = purgeArea(area, [&](const std::string& f) { return f == left2; });
+    check(purged == 1 && !fs::exists(left1, ec) && fs::exists(left2, ec), "au lancement : le reste purge, la copie ouverte ailleurs gardee");
+    check(purgeArea(area) == 1 && !fs::exists(left2, ec), "sans rien a garder : tout part");
+    check(purgeArea((shared / "absent").string()) == 0, "une aire absente : rien");
+    fs::remove_all(shared, ec);
+}
+
+void departs145() {
+    std::printf("-- 1.45.0 : retirer, partir, arreter (de vrais liens sur la boucle locale)\n");
+    deploy::TlsIdentity hostId, leaId, hugoId;
+    std::string why;
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-BUREAU-01", hostId, &why), "l'identite de l'hote");
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-ATELIER-02", leaId, &why), "l'identite de Lea");
+    check(deploy::TlsIdentity::generate("XPG-Studio PC-ATELIER-03", hugoId, &why), "l'identite de Hugo");
+    const auto wait = [](const std::function<bool()>& cond, int ms) {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (std::chrono::steady_clock::now() < end) {
+            if (cond()) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        return cond();
+    };
+    HostLink host;
+    HostConfig cfg;
+    cfg.bindAddress = "127.0.0.1";
+    cfg.port = 0;
+    cfg.discoveryPort = -1;
+    cfg.hostName = "Camille";
+    cfg.sessionId = "0123456789abcdef";
+    check(host.start(cfg, hostId, &why), "l'hote ecoute (" + why + ")");
+    std::vector<LinkEvent> hostEvents;
+    const auto pumpHost = [&] { for (auto& e : host.poll()) hostEvents.push_back(std::move(e)); };
+    // Frapper : la connexion et l'empreinte que l'hote voit.
+    const auto knock = [&](GuestLink& g, const deploy::TlsIdentity& who, const std::string& name, int& conn, std::string& print) {
+        GuestConfig c;
+        c.address = "127.0.0.1";
+        c.port = host.port();
+        c.fingerprint = hostId.fingerprintHex();
+        c.sessionId = cfg.sessionId;
+        c.hello = core::json::Value::object();
+        c.hello.set("nom", name);
+        std::string w;
+        if (!g.start(c, who, &w)) return false;
+        conn = 0;
+        const bool ok = wait([&] {
+            pumpHost();
+            for (auto it = hostEvents.begin(); it != hostEvents.end(); ++it)
+                if (it->kind == LinkEvent::Kind::Knock && it->header.str("nom") == name) {
+                    conn = it->conn;
+                    print = it->fingerprint;
+                    hostEvents.erase(it);
+                    return true;
+                }
+            return false;
+        }, 6000);
+        return ok;
+    };
+    GuestLink lea, hugo;
+    int leaConn = 0, hugoConn = 0;
+    std::string leaPrint, hugoPrint;
+    check(knock(lea, leaId, "L\xC3\xA9" "a", leaConn, leaPrint) && leaPrint == leaId.fingerprintHex(), "Lea frappe (son empreinte)");
+    check(knock(hugo, hugoId, "Hugo", hugoConn, hugoPrint), "Hugo frappe");
+    std::vector<LinkEvent> leaEvents, hugoEvents;
+    const auto pumpLea = [&] { for (auto& e : lea.poll()) leaEvents.push_back(std::move(e)); };
+    const auto pumpHugo = [&] { for (auto& e : hugo.poll()) hugoEvents.push_back(std::move(e)); };
+    const auto frameOf = [](const std::vector<LinkEvent>& evs, const std::string& op) -> const LinkEvent* {
+        for (const auto& e : evs)
+            if (e.kind == LinkEvent::Kind::Frame && e.header.str("op") == op) return &e;
+        return nullptr;
+    };
+    const auto closed = [](const std::vector<LinkEvent>& evs, int conn = -1) {
+        for (const auto& e : evs)
+            if (e.kind == LinkEvent::Kind::Closed && (conn < 0 || e.conn == conn)) return true;
+        return false;
+    };
+
+    // ---- L'HOTE RETIRE LEA : AUREVOIR {retire, raison} puis la connexion fermee ; les autres : NOUVELLE ----
+    core::json::Value bye = core::json::Value::object();
+    bye.set("op", "AUREVOIR");
+    bye.set("retire", true);
+    bye.set("raison", "Camille t'a retir\xC3\xA9 de la session");
+    host.closeAfter(leaConn, bye);
+    core::json::Value news = core::json::Value::object();
+    news.set("op", "NOUVELLE");
+    news.set("texte", "Camille a retir\xC3\xA9 L\xC3\xA9" "a de la session");
+    news.set("ton", "warning");
+    host.send(hugoConn, news);
+    check(wait([&] { pumpLea(); return closed(leaEvents); }, 8000), "Lea : coupee");
+    const auto* gone = frameOf(leaEvents, "AUREVOIR");
+    check(gone && gone->header.flag("retire") && gone->header.str("raison") == "Camille t'a retir\xC3\xA9 de la session",
+          "Lea recoit la raison avant la coupure (<< Camille t'a retire de la session >>)");
+    check(wait([&] { pumpHugo(); return frameOf(hugoEvents, "NOUVELLE") != nullptr; }, 5000)
+              && frameOf(hugoEvents, "NOUVELLE")->header.str("texte") == "Camille a retir\xC3\xA9 L\xC3\xA9" "a de la session",
+          "Hugo le lit (NOUVELLE : la discussion, une notification)");
+    check(wait([&] { pumpHost(); return closed(hostEvents, leaConn); }, 8000), "l'hote voit la connexion de Lea fermee");
+    lea.stop();
+    // Lea revient : la MEME empreinte (le retrait la retient : l'hote la fait entrer lui-meme, meme avec le code).
+    GuestLink lea2;
+    int lea2Conn = 0;
+    std::string lea2Print;
+    check(knock(lea2, leaId, "L\xC3\xA9" "a", lea2Conn, lea2Print) && lea2Print == leaPrint && lea2Conn != leaConn,
+          "Lea qui revient : une autre connexion, la meme empreinte (retenue par l'hote)");
+
+    // ---- UN EQUIPIER PART : AUREVOIR, l'hote le voit ----
+    hostEvents.clear();
+    core::json::Value leave = core::json::Value::object();
+    leave.set("op", "AUREVOIR");
+    hugo.closeAfter(leave);
+    check(wait([&] { pumpHost(); return frameOf(hostEvents, "AUREVOIR") != nullptr; }, 8000) && frameOf(hostEvents, "AUREVOIR")->conn == hugoConn,
+          "Hugo part : l'hote recoit son AUREVOIR (<< Hugo a quitte la session >>)");
+    hugo.stop();
+
+    // ---- L'HOTE ARRETE : AUREVOIR {fin, raison} a tous, puis tout se ferme ----
+    std::vector<LinkEvent> lea2Events;
+    core::json::Value end = core::json::Value::object();
+    end.set("op", "AUREVOIR");
+    end.set("fin", true);
+    end.set("raison", "Camille a arr\xC3\xAAt\xC3\xA9 la session");
+    host.closeAfter(lea2Conn, end);
+    host.stop();
+    check(wait([&] {
+              for (auto& e : lea2.poll()) lea2Events.push_back(std::move(e));
+              return closed(lea2Events);
+          }, 8000),
+          "l'hote arrete : Lea est coupee");
+    const auto* fin = frameOf(lea2Events, "AUREVOIR");
+    check(fin && fin->header.flag("fin") && fin->header.str("raison") == "Camille a arr\xC3\xAAt\xC3\xA9 la session",
+          "... avec << Camille a arrete la session >> (elle revient a l'accueil)");
+    lea2.stop();
+    check(!host.running(), "l'hote s'est arrete");
+}
+
+// Un service des licences d'avant la 1.44 : 404 << route >> sur tout ce qui est /v1/relais/...
+class OldService final : public RelayTransport {
+public:
+    explicit OldService(bool relay144) : relay144_(relay144) {}
+    RelayReply call(const RelayCall& c) override {
+        ++calls;
+        RelayReply r;
+        if (cancelled_) return r;
+        if (c.path == "/v1/etat") {
+            r.status = 200;
+            r.body = "{\"ok\":true,\"heure\":1800000000}";
+            return r;
+        }
+        r.status = 404;
+        r.body = relay144_ ? "{\"erreur\":\"absente\",\"message\":\"Aucune session ouverte avec ce code : v\xC3\xA9rifie-le (l'h\xC3\xB4te te le donne), ou la session est arr\xC3\xAAt\xC3\xA9" "e.\"}"
+                           : "{\"erreur\":\"route\",\"message\":\"Cette adresse n'existe pas sur le service des licences.\"}";
+        return r;
+    }
+    void cancel() override { cancelled_ = true; }
+    std::atomic<int> calls{0};
+
+private:
+    bool relay144_;
+    std::atomic<bool> cancelled_{false};
+};
+
+void serviceTropVieux() {
+    std::printf("-- 1.45.0 : le service des licences trop vieux (404 << route >>)\n");
+    check(relayTooOldText() == "Le service des licences n'est pas encore en 1.44 : l'\xC3\xA9" "diteur doit le red\xC3\xA9ployer (Admin \xE2\x80\xBA Service en ligne \xE2\x80\xBA D\xC3\xA9ployer)",
+          "la phrase");
+    const auto wait = [](const std::function<bool()>& cond, int ms) {
+        const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (std::chrono::steady_clock::now() < end) {
+            if (cond()) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        return cond();
+    };
+    std::string why;
+    // L'hote : POST /v1/relais/ouvrir -> 404 route.
+    {
+        RelayHostLink h;
+        RelayHostConfig rc;
+        rc.transport = std::make_shared<OldService>(false);
+        rc.code = newRelayCode();
+        rc.sessionName = "Mise en service Armoire_Gaz";
+        rc.hostName = "Camille";
+        check(h.start(rc, &why), "l'hote demarre sur un service 1.43 (" + why + ")");
+        std::string closedWhy;
+        check(wait([&] {
+                  for (const auto& e : h.poll())
+                      if (e.kind == LinkEvent::Kind::Closed && e.conn == 0) closedWhy = e.why;
+                  return !closedWhy.empty();
+              }, 20000),
+              "la session ne s'ouvre pas (Closed, conn 0)");
+        check(closedWhy == relayTooOldText() && relayTooOld(closedWhy), "l'hote : << le service des licences n'est pas encore en 1.44... >> (" + closedWhy + ")");
+        check(closedWhy.find("cette adresse n'existe pas") == std::string::npos, "plus << cette adresse n'existe pas sur le service des licences >>");
+        h.stop();
+    }
+    // L'equipier : POST /v1/relais/<localisateur>/frapper -> 404 route.
+    {
+        RelayGuestLink g;
+        RelayGuestConfig gc;
+        gc.transport = std::make_shared<OldService>(false);
+        gc.code = newRelayCode();
+        gc.hello = core::json::Value::object();
+        gc.hello.set("nom", "L\xC3\xA9" "a");
+        check(g.start(gc, &why), "l'equipier frappe sur un service 1.43 (" + why + ")");
+        std::string closedWhy;
+        check(wait([&] {
+                  for (const auto& e : g.poll())
+                      if (e.kind == LinkEvent::Kind::Closed) closedWhy = e.why;
+                  return !closedWhy.empty();
+              }, 20000),
+              "l'equipier n'entre pas");
+        check(closedWhy == relayTooOldText(), "l'equipier : la meme phrase (" + closedWhy + ")");
+        g.stop();
+    }
+    // Un service 1.44 qui ne trouve pas la session (un code faux) : sa phrase a lui, pas celle du service trop vieux.
+    {
+        RelayGuestLink g;
+        RelayGuestConfig gc;
+        gc.transport = std::make_shared<OldService>(true);
+        gc.code = newRelayCode();
+        gc.hello = core::json::Value::object();
+        check(g.start(gc, &why), "un code faux sur un service 1.44");
+        std::string closedWhy;
+        (void)wait([&] {
+            for (const auto& e : g.poll())
+                if (e.kind == LinkEvent::Kind::Closed) closedWhy = e.why;
+            return !closedWhy.empty();
+        }, 20000);
+        check(!relayTooOld(closedWhy) && closedWhy.find("aucune session ouverte avec ce code") != std::string::npos,
+              "un code faux : << aucune session ouverte avec ce code >> (" + closedWhy + ")");
+        g.stop();
+    }
+}
+
 } // namespace
 
 int main() {
@@ -615,6 +1053,10 @@ int main() {
     miroir();
     annuler();
     lien();
+    journal145();          // 1.45.0
+    copies145();
+    departs145();
+    serviceTropVieux();
     std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;
 }

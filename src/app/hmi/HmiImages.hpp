@@ -24,6 +24,7 @@
 #include "../../hmi/HmiDocument.hpp"       // 1.12.30 : la visionneuse de documents
 #include "../../platform/Renderer.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <map>
@@ -31,6 +32,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 namespace app {
 
@@ -58,6 +60,16 @@ public:
     // L'image d'une ressource image (PNG, JPEG, BMP, SVG, ICO). Invalide si ce
     // n'en est pas une, si son contenu manque, ou si le renderer n'a pas d'images.
     [[nodiscard]] Image resource(gfx::IRenderer&, const hmi::Resource&);
+    // 1.45.0 : UNE PHOTO, UNE CAPTURE NETTE A TOUTE TAILLE (la fenetre Licence : l'apercu, la capture en grand). Le
+    // renderer lisse (lineaire) mais ne lit que 2 x 2 pixels par point : une image reduite de plus de moitie (une capture
+    // 3200 x 2000 dans un volet de 450) saute des pixels - des textes en escalier, << pixelises >>. Ici, des copies
+    // reduites de moitie en moitie (chaque pixel la moyenne de quatre), faites une fois ; le dessin prend la plus petite
+    // qui reste au moins aussi grande que lui (`drawW` x `drawH`, pixels d'ecran) : le renderer ne reduit plus que d'un
+    // facteur 2 au plus. Agrandie (le zoom), l'image entiere. `tex` : la copie choisie ; width et height : la taille de
+    // l'image ELLE-MEME (le repere de ce qu'on place dessus - les bulles).
+    [[nodiscard]] Image smooth(gfx::IRenderer&, const hmi::Resource&, float drawW, float drawH);
+    // La copie que prend smooth (0 : l'image entiere, 1 : la moitie...) pour une image w x h dessinee drawW x drawH.
+    [[nodiscard]] static std::size_t smoothLevel(int w, int h, float drawW, float drawH) noexcept;
     // Lot 10 : un SVG rasterise a la taille ou il s'affiche (pixels d'ecran),
     // recolorie au besoin : net a tous les zooms. Les tailles se gardent
     // (les 192 dernieres) : un zoom qui revient ne redessine rien.
@@ -100,6 +112,8 @@ private:
         Image                          image;
         std::uint64_t                  used{0};
         bool                           failed{false};
+        std::vector<Image>             halves;          // 1.45.0 : smooth - les copies reduites (1/2, 1/4...)
+        bool                           halvesDone{false};
     };
     void adopt(gfx::IRenderer&);
     void purge(gfx::IRenderer&);

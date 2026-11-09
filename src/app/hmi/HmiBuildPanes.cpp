@@ -2,6 +2,8 @@
 //  app/hmi/HmiBuildPanes.cpp - 1.11.13 : voir HmiBuildPanes.hpp
 // =============================================================================
 #include "HmiBuildPanes.hpp"
+#include "HmiSessionPane.hpp"     // 1.45.0 : l'onglet Session
+#include "../SessionMarks.hpp"    // 1.45.0
 #include "../../ui/DialogFrame.hpp"   // 1.12.21 : la fenetre se deplace et s'agrandit
 #include "../../ui/widgets/ExprField.hpp"
 #include "../../ui/Commands.hpp"
@@ -623,16 +625,18 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     tools->add(7, HmiGlyph::EyeOff, "Replier le panneau du bas (Ctrl+J le rouvre)", "Replier");
     for (int k = 0; k < 4; ++k) {
         tools->setCheckedWhen(10 + k, [this, k] { return levels_[k]; });
-        tools->setVisibleWhen(10 + k, [this] { return currentTab() != kConsole && currentTab() != kPerformances; });
+        tools->setVisibleWhen(10 + k, [this] { return outputsTab(); });   // 1.45.0 : ni la Console, ni Performances, ni Session
     }
     for (int k = 0; k < hmi::kLogLevelCount; ++k) {
         tools->setCheckedWhen(20 + k, [this, k] { return consoleFilter_.levels[static_cast<std::size_t>(k)]; });
         tools->setVisibleWhen(20 + k, [this] { return currentTab() == kConsole; });
     }
     // 1.22.2 : Performances a ses boutons (Remettre a zero, Copier le rapport) ; Copier et Exporter : le rapport.
-    tools->setVisibleWhen(1, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
-    tools->setVisibleWhen(4, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
-    tools->setVisibleWhen(5, [this] { return currentTab() != kDiagnostics && currentTab() != kPerformances; });
+    tools->setVisibleWhen(1, [this] { return currentTab() == kSorties || currentTab() == kConsole; });   // 1.45.0 : pas sur Session
+    tools->setVisibleWhen(4, [this] { return currentTab() == kSorties || currentTab() == kConsole; });
+    tools->setVisibleWhen(5, [this] { return currentTab() == kSorties || currentTab() == kConsole; });
+    tools->setVisibleWhen(2, [this] { return currentTab() <= kPerformances; });   // 1.45.0 : Session a son export
+    tools->setVisibleWhen(3, [this] { return currentTab() <= kPerformances; });
     tools->setCheckedWhen(4, [this] { return !follow_; });
     tools->setVisibleWhen(6, [this] { return currentTab() == kConsole; });
     tools_ = &static_cast<HmiToolStrip&>(addChild(std::move(tools)));
@@ -669,6 +673,7 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
     // Effacer, Copier les lignes, Exporter en texte (la barre, pour lui) ; Disposition...
     ui::cmd::wireSubTabMenu(*tabs_, *this, links_, [](std::size_t tab) {
         std::vector<ui::PopupMenu::Item> items;
+        if (tab > kPerformances) return items;   // 1.45.0 : l'onglet Session (ses boutons a lui)
         const auto add = [&items](int itemId, std::string label, ui::Icon icon) {
             ui::PopupMenu::Item it;
             it.id = itemId;
@@ -687,7 +692,7 @@ HmiBuildOutputPane::HmiBuildOutputPane(std::string id) : ui::Widget(std::move(id
         add(3, "Exporter en texte", ui::Icon::Export);
         return items;
     }, [this](std::size_t, int choice) {
-        if (choice >= 1 && choice <= 3) tools_->triggered->emit(choice);
+        if (choice >= 1 && choice <= 3 && currentTab() <= kPerformances) tools_->triggered->emit(choice);
     });
     disposition::applyTabs(*tabs_, "bas", true);       // 1.12.3 : Projet > Disposition
     status_ = &static_cast<ui::StatusBar&>(addChild(std::make_unique<ui::StatusBar>(this->id() + ".status")));
@@ -950,6 +955,14 @@ void HmiBuildOutputPane::rebuildConsole() {
 
 void HmiBuildOutputPane::refreshStatus() {
     if (!status_) return;
+    if (session_ && currentTab() == sessionTab()) {   // 1.45.0 : la session, en une ligne
+        const auto& b = sessionmarks::board();
+        status_->setMessage("Session \xC2\xAB " + b.sessionName + " \xC2\xBB \xC2\xB7 " + std::to_string(b.people.size()) + " personne"
+                                + (b.people.size() > 1 ? "s" : "") + " \xC2\xB7 " + std::to_string(b.journal.size()) + " changement"
+                                + (b.journal.size() > 1 ? "s" : "") + " au journal" + (b.host ? std::string{} : " \xC2\xB7 le projet reste chez " + b.hostName),
+                            ui::StatusBar::Severity::Info);
+        return;
+    }
     if (currentTab() == kPerformances && perf_) {   // 1.22.2
         status_->setMessage(perf_->statusText(), ui::StatusBar::Severity::Info);
         return;
@@ -985,6 +998,7 @@ void HmiBuildOutputPane::refreshStatus() {
 
 void HmiBuildOutputPane::tick() {
     tickPerformances();
+    syncSession();   // 1.45.0
     if (console_.revision() == consoleSeen_) return;
     consoleSeen_ = console_.revision();
     rebuildConsole();
@@ -1289,6 +1303,68 @@ std::string HmiBuildOutputPane::copyText() const {
 void HmiBuildOutputPane::showTab(std::size_t tab) {
     if (tabs_ && tab < tabs_->tabCount()) tabs_->setCurrentIndex(tab);
     refreshStatus();
+}
+
+// ---- 1.45.0 : l'onglet Session ----
+bool HmiBuildOutputPane::outputsTab() const noexcept {
+    const auto t = currentTab();
+    return t == kSorties || t == kDiagnostics;
+}
+
+std::size_t HmiBuildOutputPane::sessionTab() const {
+    if (!session_ || !tabs_) return static_cast<std::size_t>(-1);
+    for (std::size_t i = 0; i < tabs_->tabCount(); ++i)
+        if (tabs_->page(i) == session_) return i;
+    return static_cast<std::size_t>(-1);
+}
+
+bool HmiBuildOutputPane::showSessionTab() {
+    syncSession();
+    const auto at = sessionTab();
+    if (at == static_cast<std::size_t>(-1)) return false;
+    showTab(at);
+    syncSession();   // montre : lu
+    return true;
+}
+
+void HmiBuildOutputPane::syncSession() {
+    if (!tabs_) return;
+    const bool on = sessionmarks::active();
+    if (on && !session_) {
+        auto pane = std::make_unique<HmiSessionPane>(id() + ".session");
+        session_ = pane.get();
+        session_->said = [this](const std::string& text, bool ok) {
+            if (status_) status_->setTransientMessage(text, 8.0, ok ? ui::StatusBar::Severity::Success : ui::StatusBar::Severity::Warning);
+        };
+        tabs_->addTab({"Session", ui::Icon::User, false, false}, std::move(pane));
+        sessionRead_ = sessionmarks::board().messages;   // ce qui precede l'onglet n'est pas du non lu
+        sessionUnread_ = 0;
+        invalidateLayout();
+    } else if (!on && session_) {
+        const auto at = sessionTab();
+        session_ = nullptr;
+        sessionUnread_ = 0;
+        if (at != static_cast<std::size_t>(-1)) tabs_->removeTab(at);
+        refreshStatus();
+        invalidateLayout();
+        return;
+    }
+    if (!session_) return;
+    session_->refresh();
+    const auto at = sessionTab();
+    // Lu : l'onglet est montre (le panneau ouvert, a l'ecran).
+    bool shown = currentTab() == at;
+    for (const ui::Widget* w = session_; shown && w; w = w->parent())
+        if (!w->visible()) shown = false;
+    shown = shown && session_->bounds().w > 1.f && session_->bounds().h > 1.f;
+    const auto msgs = sessionmarks::board().messages;
+    if (shown || msgs < sessionRead_) sessionRead_ = msgs;
+    const std::uint64_t unread = msgs - sessionRead_;
+    if (unread != sessionUnread_ || (unread == 0 && tabs_->tab(at) && !tabs_->tab(at)->badge.empty())) {
+        sessionUnread_ = unread;
+        tabs_->setTabBadge(at, unread ? std::to_string(unread) : std::string{}, ui::Tone::Accent);
+    }
+    if (currentTab() == at) refreshStatus();
 }
 
 } // namespace app

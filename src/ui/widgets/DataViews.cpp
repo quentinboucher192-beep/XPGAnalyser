@@ -809,6 +809,9 @@ void TreeView::onPaint(const PaintContext& ctx) {
                          iconColourOf(ctx.theme, st, selected));
             textX += side + 6.f;
         }
+        // 1.45.0 : une pastille de couleur devant le texte (les initiales d'un membre d'une session).
+        if (st.colorLead)
+            if (const float w = drawColorPill(ctx, textX, r, *st.colorLead, 64.f, selected ? c.selectionBg : c.panelBg); w > 0.f) textX += w + 6.f;
         float badge = 0.f;
         float statusLeft = r.right();                       // 1.11.22 : ou commence la colonne d'etat
         if (modern_ && st.chips.empty()) {

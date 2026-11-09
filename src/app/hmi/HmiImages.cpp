@@ -62,6 +62,8 @@ void HmiImageCache::purge(gfx::IRenderer& r) {
     for (auto it = images_.begin(); it != images_.end();) {
         if (it->second.blob.expired()) {
             if (it->second.image.tex.v) r.releaseImage(it->second.image.tex);
+            for (const auto& h : it->second.halves)   // 1.45.0 : ses copies reduites (smooth)
+                if (h.tex.v) r.releaseImage(h.tex);
             it = images_.erase(it);
         } else {
             ++it;
@@ -134,6 +136,81 @@ HmiImageCache::Image HmiImageCache::resource(gfx::IRenderer& r, const hmi::Resou
     e.image.height = px.height;
     if (!e.image.tex.v) e.failed = true;    // un renderer sans images : pas la peine de redecoder
     return e.image;
+}
+
+// ---- 1.45.0 : une photo, une capture nette a toute taille ------------------------------------
+namespace {
+// La moitie d'une image (arrondie au-dessus) : chaque pixel la moyenne de ses quatre (le bord impair repris), les
+// couleurs ponderees par leur opacite (un bord transparent ne noircit pas).
+hmi::Rgba halveImage(const hmi::Rgba& in) {
+    hmi::Rgba out;
+    out.width = std::max(1, (in.width + 1) / 2);
+    out.height = std::max(1, (in.height + 1) / 2);
+    out.pixels.assign(static_cast<std::size_t>(out.width) * static_cast<std::size_t>(out.height) * 4, 0);
+    const auto at = [&in](int x, int y) {
+        x = std::min(x, in.width - 1);
+        y = std::min(y, in.height - 1);
+        return in.pixels.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(in.width) + static_cast<std::size_t>(x)) * 4;
+    };
+    for (int y = 0; y < out.height; ++y)
+        for (int x = 0; x < out.width; ++x) {
+            const std::uint8_t* q[4] = {at(2 * x, 2 * y), at(2 * x + 1, 2 * y), at(2 * x, 2 * y + 1), at(2 * x + 1, 2 * y + 1)};
+            std::uint32_t a = 0, rgb[3] = {0, 0, 0};
+            for (const auto* p : q) {
+                a += p[3];
+                for (int c = 0; c < 3; ++c) rgb[c] += static_cast<std::uint32_t>(p[c]) * p[3];
+            }
+            std::uint8_t* o = out.pixels.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(out.width) + static_cast<std::size_t>(x)) * 4;
+            for (int c = 0; c < 3; ++c) o[c] = a ? static_cast<std::uint8_t>((rgb[c] + a / 2) / a) : 0;
+            o[3] = static_cast<std::uint8_t>((a + 2) / 4);
+        }
+    return out;
+}
+} // namespace
+
+std::size_t HmiImageCache::smoothLevel(int w, int h, float drawW, float drawH) noexcept {
+    if (w <= 0 || h <= 0 || drawW <= 0.f || drawH <= 0.f) return 0;
+    std::size_t level = 0;
+    int lw = w, lh = h;
+    // la copie suivante (la moitie) reste-t-elle au moins aussi grande que le dessin ? (16 pixels au moins)
+    while (level < 12) {
+        const int nw = std::max(1, (lw + 1) / 2), nh = std::max(1, (lh + 1) / 2);
+        if (nw < 16 || nh < 16 || static_cast<float>(nw) + 0.5f < drawW || static_cast<float>(nh) + 0.5f < drawH) break;
+        lw = nw;
+        lh = nh;
+        ++level;
+    }
+    return level;
+}
+
+HmiImageCache::Image HmiImageCache::smooth(gfx::IRenderer& r, const hmi::Resource& res, float drawW, float drawH) {
+    const Image base = resource(r, res);
+    if (!base.valid()) return base;
+    const std::size_t want = smoothLevel(base.width, base.height, drawW, drawH);
+    if (want == 0) return base;
+    auto& e = images_[res.data.get()];
+    if (!e.halvesDone) {
+        // Une fois par image : decodee de nouveau (les pixels ne sont pas gardes), puis reduite de moitie en moitie
+        // jusqu'a la plus petite qu'un dessin peut demander.
+        e.halvesDone = true;
+        hmi::Rgba px;
+        if (hmi::decodeImage(*res.data, res.format, px, 1024)) {
+            for (std::size_t k = 1; k <= 12 && px.width >= 32 && px.height >= 32; ++k) {
+                px = halveImage(px);
+                Image h;
+                h.tex = r.createImage(px.pixels.data(), px.width, px.height);
+                h.width = px.width;
+                h.height = px.height;
+                if (!h.tex.v) break;
+                e.halves.push_back(h);
+            }
+        }
+    }
+    if (e.halves.empty()) return base;
+    Image out = e.halves[std::min(want, e.halves.size()) - 1];
+    out.width = base.width;
+    out.height = base.height;
+    return out;
 }
 
 // ---- lot 16 : les GIF animes --------------------------------------------------------

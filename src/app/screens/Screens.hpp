@@ -455,6 +455,8 @@ private:
     // grafcets, macros, variables, appels) sont recales quand le centre en
     // insere ou en deplace un ; showPage montre une page ou qu'elle soit.
 public:
+    // 1.45.0 : l'onglet Session du panneau du bas (le panneau s'ouvre) ; faux : pas de session.
+    bool showSessionTab();
     bool setLayoutMode(const std::string& name);          // "onglets", "groupes", "mosaique"
     bool splitTab(std::size_t index, bool below);         // Diviser a droite / en bas
     bool detachTab(std::size_t index);                    // dans une fenetre a lui
@@ -564,6 +566,9 @@ private:
     std::vector<GoToPanel::Result>    treeFilterResults_;         // rang = index du FilterHit
     void noteTreeRecent(ui::NodeId node);
     void refreshTreeShortcuts();
+    // 1.45.0 : le noeud Session de l'arbre suit la session (app/SessionMarks) ; a chaque image.
+    void tickSessionTree();
+    std::uint64_t                     sessionTreeSeen_{~0ull};
     void loadTreePins();
     void saveTreePins() const;
     [[nodiscard]] std::string treePinsKey() const;

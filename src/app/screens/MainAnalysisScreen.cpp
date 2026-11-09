@@ -18,6 +18,7 @@
 //    entry. A workspace the user arranged should survive closing the program.
 // =============================================================================
 #include "Screens.hpp"
+#include "../SessionMarks.hpp"   // 1.45.0 : suivre un membre de la session (l'arbre)
 #include "../Licence.hpp"   // 1.30.0
 #include "../../ui/Commands.hpp"
 #include "../../ui/widgets/ExprField.hpp"
@@ -4010,6 +4011,12 @@ ui::EventResult MainAnalysisScreen::HandleEvent(const InputEvent& ev) {
 void MainAnalysisScreen::onTreeSelection(NodeId node) {
     using Kind = ProjectTreeModel::NodeKind;
     const auto kind = ProjectTreeModel::kindOf(node);
+    // 1.45.0 : un membre de la session - le suivre (sa vue s'ouvre), comme Suivre dans la fenetre de la session.
+    if (kind == Kind::SessionMember) {
+        if (const int m = treeModel_ ? treeModel_->sessionMemberOf(node) : -1; m >= 0) sessionmarks::follow(m);
+        return;
+    }
+    if (kind == Kind::SessionFolder) return;
     // Lot API 3 : une variable sous l'appui peut partir vers une table
     // d'animation ; son onglet s'ouvrira au lacher (voir HandleEvent).
     if (treePress_ && (kind == Kind::ListVariable || kind == Kind::HmiVariable)) {

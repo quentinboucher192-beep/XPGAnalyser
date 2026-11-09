@@ -1,5 +1,6 @@
 #include "App.hpp"
 #include "SessionDialogs.hpp"   // 1.43.0
+#include "SessionMarks.hpp"     // 1.45.0 : l'equipier ne garde rien (les actions refusees)
 #include "SessionService.hpp"   // 1.43.0
 #include "ai/AiPaths.hpp"   // 1.14.2 : la racine IA/ de l'Assistant
 #include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
@@ -426,6 +427,12 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->menuGlobal_ = std::make_unique<menu::MenuManager::ScopedInstance>(*a->menus_);
 
     a->session_ = std::make_unique<SessionService>(*a);   // 1.43.0 : avant les actions qui s'en servent
+    // 1.45.0 : une copie de session n'est jamais un projet recent (une version d'avant a pu en retenir une).
+    {
+        const auto before = a->recent_.size();
+        std::erase_if(a->recent_, [](const std::string& f) { return SessionService::inGuestArea(f); });
+        if (a->recent_.size() != before) a->settings_.setList("recent.projects", a->recent_);
+    }
     a->registerActions();
     a->installFilterMemory();      // Lot API 8 : les filtres retenus d'une seance a l'autre (avant tout ecran)
 
@@ -863,6 +870,15 @@ menu::MenuFactory App::buildMenuFactory() {
 
 void App::registerActions() {
     using core::Action;
+    // 1.45.0 : L'EQUIPIER D'UNE SESSION NE GARDE RIEN - Enregistrer sous, Dupliquer, les exports du projet : grises (la
+    // raison : << En session, le projet reste chez l'hote >>) ; declenches quand meme (un script) : refuses, dit.
+    const auto keeps = [] { return sessionmarks::keepRefusal().empty(); };
+    const auto refusedKeep = [this] {
+        const std::string why = sessionmarks::keepRefusal();
+        if (why.empty()) return false;
+        bus_.publish(StatusNotice{why + " : la copie re\xC3\xA7ue pour la session s'efface de ce PC quand tu pars.", 6.0});
+        return true;
+    };
 
     // LE CHEMIN DE SORTIE. Il n'y en avait aucun : une fois l'affaire ouverte,
     // revenir a l'accueil demandait de fermer la fenetre et de relancer.
@@ -997,8 +1013,11 @@ void App::registerActions() {
     // redevient un dossier de projet qui s'ouvre.
     actions_.add(Action{"project.exportArchive",
                         core::hasApi() ? "Exporter en archive .xapi\xE2\x80\xA6" : "Exporter en archive .xihm\xE2\x80\xA6", "",
-                        [this] { return project_ != nullptr || hmi_ != nullptr; }, {}, nullptr,
-                        [this] { exchange::askExportArchive(*this); }});
+                        [this, keeps] { return (project_ != nullptr || hmi_ != nullptr) && keeps(); }, {}, nullptr,
+                        [this, refusedKeep] {
+                            if (refusedKeep()) return;   // 1.45.0
+                            exchange::askExportArchive(*this);
+                        }});
     actions_.add(Action{"project.importArchive", "Importer une archive\xE2\x80\xA6", "", {}, {}, nullptr,
                         [this] { confirmReplace([this] { exchange::askImportArchive(*this); }); }});
     // 1.25.1 : LA CORBEILLE (le client : << fait une corbeille bien rangee avec recherche possible >>) - ce que le projet,
@@ -1071,8 +1090,9 @@ void App::registerActions() {
                         }});
 
     actions_.add(Action{"project.saveAs", "Enregistrer sous (dossier de projet)\xE2\x80\xA6", "",
-                        [this] { return project_ != nullptr; }, {}, nullptr,
-                        [this] {
+                        [this, keeps] { return project_ != nullptr && keeps(); }, {}, nullptr,
+                        [this, refusedKeep] {
+                            if (refusedKeep()) return;   // 1.45.0
                             namespace fs = std::filesystem;
                             std::vector<FormDialog::Field> f;
                             f.push_back({"Nom", project_ ? project_->header.projectName : "",
@@ -1106,8 +1126,9 @@ void App::registerActions() {
                         }});
 
     actions_.add(Action{"project.duplicate", "Dupliquer le projet\xE2\x80\xA6", "",
-                        [this] { return !projectFolder_.empty(); }, {}, nullptr,
-                        [this] {
+                        [this, keeps] { return !projectFolder_.empty() && keeps(); }, {}, nullptr,
+                        [this, refusedKeep] {
+                            if (refusedKeep()) return;   // 1.45.0
                             std::vector<FormDialog::Field> f;
                             f.push_back({"Nouveau nom", manifest_.name + " - variante", "", false, {}});
                             f.push_back({"Dossier de la copie", projectFolder_ + " - copie", "",
@@ -1544,9 +1565,10 @@ void App::registerActions() {
     }
 
     actions_.add(Action{"project.exportSources", "Exporter vers Control Expert", "",
-                        [this] { return project_ != nullptr && !projectFolder_.empty(); }, {},
+                        [this, keeps] { return project_ != nullptr && !projectFolder_.empty() && keeps(); }, {},
                         nullptr,
-                        [this] {
+                        [this, refusedKeep] {
+                            if (refusedKeep()) return;   // 1.45.0
                             // OU ECRIRE MAST.XPG (et CONFIG.XHW) : src/ du projet par defaut
                             // (Exporter, ou Entree dans le champ), ou un autre dossier - celui
                             // qu'importe Control Expert - choisi avec le bouton ... (l'explorateur).
@@ -2185,8 +2207,10 @@ core::Status App::saveProject() {
         return core::fail(core::ErrorCode::InvalidArgument, "the project has no folder yet");
     // 1.43.0 : en session, l'hote enregistre pour tout le monde ; l'equipier garde une copie a la fin (Enregistrer sous).
     if (session_ && session_->guest()) {
-        bus_.publish(StatusNotice{"En session, c'est " + session_->hostName() + " (l'h\xC3\xB4te) qui enregistre pour tout le monde. "
-                                  "\xC3\x80 la fin, Projet \xE2\x80\xBA Enregistrer sous\xE2\x80\xA6 garde ta copie.", 8.0});
+        // 1.45.0 : Ctrl+S envoie a l'hote (ce qui attend part tout de suite) ; l'equipier ne garde pas de copie.
+        session_->flushNow();
+        bus_.publish(StatusNotice{"En session, c'est " + session_->hostName() + " (l'h\xC3\xB4te) qui enregistre pour tout le monde : "
+                                  "tes changements lui sont partis. Le projet reste chez lui : sa copie s'efface de ce PC quand tu pars.", 8.0});
         return core::ok();
     }
     // Lot 15 : LOCK - personne ne modifie (Projet > Deverrouiller d'abord).
@@ -2551,7 +2575,8 @@ void App::openRequested(const std::vector<std::string>& paths, bool station) {
 //  dit que le projet se ferme ; l'enregistrement impossible : il reste ouvert.
 // =============================================================================
 void App::confirmReplace(std::function<void()> then, bool closing) {
-    const bool unsaved = project_ && !projectFolder_.empty() && commands_.isModified();
+    // 1.45.0 : l'equipier d'une session n'enregistre pas (l'hote le fait) : pas de question.
+    const bool unsaved = project_ && !projectFolder_.empty() && commands_.isModified() && !(session_ && session_->guest());
     if (!unsaved) {
         if (then) then();
         return;
@@ -2655,9 +2680,21 @@ void App::forgetPath(const std::string& path) {
 
 void App::rememberPath(std::string path) {
     if (path.empty()) return;
+    if (SessionService::inGuestArea(path)) return;   // 1.45.0 : la copie d'une session n'est pas un projet recent
     recent_.erase(std::remove(recent_.begin(), recent_.end(), path), recent_.end());
     recent_.insert(recent_.begin(), std::move(path));
     if (recent_.size() > 12) recent_.resize(12);
+}
+
+// 1.45.0 : LA COPIE D'UN EQUIPIER SE FERME - le projet ouvert, s'il est elle (l'accueil ; sans question : c'est
+// l'hote qui enregistre) ; la sauvegarde de reprise oubliee ; jamais dans les projets recents.
+void App::closeSessionCopy(const std::string& folder) {
+    if (folder.empty()) return;
+    if (projectFolder_ == folder) {
+        recovery_.clearAutosave();
+        (void)actions_.trigger("file.close", commands_);
+    }
+    forgetPath(folder);
 }
 
 // UN SEUL ENDROIT DECIDE. Le bouton de la barre d'outils et le raccourci
@@ -3027,7 +3064,7 @@ void App::pumpEvents(bool& running) {
         // Lot 19 : des modifications non enregistrees - la question d'abord.
         // (Aujourd'hui fermer la fenetre les perdait sans un mot.)
         if (!stationActive_ && project_ && !projectFolder_.empty() && commands_.isModified()
-            && !scripted()) {
+            && !scripted() && !(session_ && session_->guest())) {   // 1.45.0 : l'equipier n'enregistre pas
             requestClose();
             return;
         }
@@ -3423,7 +3460,8 @@ void App::frame(double dt) {
     if (auto answer = licence::takeAnswer()) licence::showAnswer(*this, *answer);
     // 1.39.0 : la licence perdue en direct (retiree, revoquee, desactivee par l'editeur) - une fenetre.
     else if (auto loss = licence::takeLoss()) licence::showLoss(*this, *loss);
-    if (!stationActive_ && project_ && !projectFolder_.empty() && recovery_.autosaveDue(commands_.isModified())) {
+    // 1.45.0 : pas de sauvegarde de reprise de la copie d'un equipier (il ne garde rien).
+    if (!stationActive_ && project_ && !projectFolder_.empty() && !(session_ && session_->guest()) && recovery_.autosaveDue(commands_.isModified())) {
         std::string why;
         (void)recovery_.autosave([this](const std::string& folder, std::string* reason) {
             if (auto ok = project::ProjectStore::save(*project_, manifest_, folder); !ok) {
@@ -3717,6 +3755,7 @@ void App::saveFromKeyboard() {
                            [](const menu::DialogResult&) {});
         return;
     }
+    if (session_ && session_->guest()) return;   // 1.45.0 : envoye a l'hote (saveProject l'a dit)
     bus_.publish(StatusNotice{"Enregistr\xC3\xA9 \xC3\xA0 " + historyClock(savedAtMs_) + " \xE2\x80\x94 " + projectFolder_, 6.0});
 }
 

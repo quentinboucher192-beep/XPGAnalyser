@@ -1,5 +1,9 @@
 {
   "format": "xpg-fonctions-apercu/1",
+  "repere": {
+    "l": 960,
+    "h": 600
+  },
   "fonctions": {
     "api_editor": "L'éditeur de code ST d'API Studio : la section Commande_Pompe du programme de démonstration, en coloration syntaxique, à côté de l'arbre du projet.",
     "api_compiler": "API › Statistiques : le programme analysé – lignes de code, variables, mémoire déclarée par type et points à regarder (lectures avant l'écriture).",
@@ -24,6 +28,1541 @@
     "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, sur le réseau du bureau. L'équipe (qui fait quoi, Suivre, Regarder seulement), la discussion, chacun son objet ; Ctrl+Z n'annule que tes gestes."
   },
   "captures": {
+    "api_editor": [
+      {
+        "legende": "la section Commande_Pompe, en ST",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 440,
+            "y": 110,
+            "l": 560,
+            "h": 262,
+            "texte": "Le code ST de la section, en couleurs : mots-clés, variables, valeurs, commentaires."
+          },
+          {
+            "x": 100,
+            "y": 416,
+            "l": 300,
+            "h": 24,
+            "texte": "La section dans l'arbre : 3e entrée de MAST, 17 lignes."
+          },
+          {
+            "x": 400,
+            "y": 80,
+            "l": 480,
+            "h": 26,
+            "texte": "Edit pour écrire (lecture seule sinon) ; le langage, replier ou déplier les blocs."
+          }
+        ]
+      },
+      {
+        "legende": "l'ordre d'exécution de MAST",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 6,
+            "y": 100,
+            "l": 880,
+            "h": 100,
+            "texte": "Les 4 sections de MAST dans l'ordre : leurs lignes, ce qu'elles écrivent et lisent."
+          },
+          {
+            "x": 796,
+            "y": 110,
+            "l": 100,
+            "h": 64,
+            "texte": "Lue avant d'être écrite plus loin dans MAST : à regarder."
+          },
+          {
+            "x": 900,
+            "y": 80,
+            "l": 300,
+            "h": 400,
+            "texte": "La section choisie : son rang, les variables qu'elle écrit et celles qu'elle lit."
+          }
+        ]
+      },
+      {
+        "legende": "les variables du programme",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 6,
+            "y": 210,
+            "l": 864,
+            "h": 300,
+            "texte": "Les variables situées : type, adresse (%M, %MW, %MD), combien de fois et où elles servent."
+          },
+          {
+            "x": 880,
+            "y": 80,
+            "l": 320,
+            "h": 300,
+            "texte": "La variable choisie : son commentaire, la section qui l'écrit, les tables qui la montrent."
+          },
+          {
+            "x": 250,
+            "y": 86,
+            "l": 420,
+            "h": 26,
+            "texte": "Filtrer : toutes, situées, instances de DFB, pas utilisées."
+          }
+        ]
+      }
+    ],
+    "api_compiler": [
+      {
+        "legende": "API › Statistiques",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 420,
+            "y": 180,
+            "l": 1160,
+            "h": 95,
+            "texte": "Le programme en chiffres : lignes de code, variables, mémoire déclarée, part commentée."
+          },
+          {
+            "x": 420,
+            "y": 550,
+            "l": 610,
+            "h": 210,
+            "texte": "La mémoire déclarée par type : ici, les 2 temporisations TON pèsent le plus."
+          },
+          {
+            "x": 1050,
+            "y": 550,
+            "l": 530,
+            "h": 210,
+            "texte": "À regarder : 2 lectures avant l'écriture dans l'ordre de MAST (Ordre y mène)."
+          }
+        ]
+      },
+      {
+        "legende": "le tableau de bord de l'API",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 20,
+            "y": 90,
+            "l": 1160,
+            "h": 150,
+            "texte": "L'automate et le programme analysés : le processeur, les sections, les lignes, les types, les variables."
+          },
+          {
+            "x": 20,
+            "y": 260,
+            "l": 670,
+            "h": 280,
+            "texte": "Ce que l'analyse a trouvé, chaque ligne avec son bouton."
+          },
+          {
+            "x": 700,
+            "y": 260,
+            "l": 480,
+            "h": 130,
+            "texte": "Le poids de chaque entrée de MAST, en lignes."
+          }
+        ]
+      }
+    ],
+    "api_simulation": [
+      {
+        "legende": "l'automate simulé en marche",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 10,
+            "y": 80,
+            "l": 800,
+            "h": 36,
+            "texte": "L'automate simulé tourne : le cycle, le temps simulé, la durée de MAST."
+          },
+          {
+            "x": 10,
+            "y": 160,
+            "l": 790,
+            "h": 440,
+            "texte": "Chaque variable : sa valeur en direct et la section qui l'écrit."
+          },
+          {
+            "x": 990,
+            "y": 86,
+            "l": 200,
+            "h": 30,
+            "texte": "La vitesse : x1, x10 ou au plus vite."
+          }
+        ]
+      },
+      {
+        "legende": "la vue d'ensemble de la simulation",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 20,
+            "y": 90,
+            "l": 1160,
+            "h": 90,
+            "texte": "Le bilan : tout tourne, ou ce qui mérite ton attention."
+          },
+          {
+            "x": 20,
+            "y": 220,
+            "l": 1160,
+            "h": 170,
+            "texte": "L'automate : son cycle, le temps de cycle, les forçages."
+          },
+          {
+            "x": 20,
+            "y": 540,
+            "l": 1160,
+            "h": 110,
+            "texte": "Les 30 dernières secondes, au fil du temps."
+          }
+        ]
+      }
+    ],
+    "api_debugger": [
+      {
+        "legende": "une table d'animation et sa courbe",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 620,
+            "y": 146,
+            "l": 680,
+            "h": 236,
+            "texte": "La table Pompe : 10 variables lues en direct (orange : vient de changer)."
+          },
+          {
+            "x": 620,
+            "y": 660,
+            "l": 680,
+            "h": 260,
+            "texte": "La ligne choisie (Niveau_Cuve) en courbe, sur ses derniers cycles."
+          },
+          {
+            "x": 1310,
+            "y": 126,
+            "l": 290,
+            "h": 320,
+            "texte": "La variable choisie : son adresse, qui l'écrit, si l'IHM la lit."
+          }
+        ]
+      },
+      {
+        "legende": "en pause sur un point d'arrêt",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 410,
+            "y": 126,
+            "l": 1170,
+            "h": 50,
+            "texte": "En pause au point d'arrêt : la section, la ligne, le cycle."
+          },
+          {
+            "x": 710,
+            "y": 282,
+            "l": 600,
+            "h": 28,
+            "texte": "La ligne 7 surlignée ; à droite de chaque ligne, les valeurs lues."
+          },
+          {
+            "x": 410,
+            "y": 420,
+            "l": 290,
+            "h": 100,
+            "texte": "Les espions : Niveau_Cuve, Pompe_En_Marche."
+          }
+        ]
+      }
+    ],
+    "api_library": [
+      {
+        "legende": "le bloc importé dans le projet",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 10,
+            "y": 100,
+            "l": 890,
+            "h": 30,
+            "texte": "DFB_CTL_LEVEL, venu de la bibliothèque partagée : version 1.00, entrées, sorties, sections."
+          },
+          {
+            "x": 100,
+            "y": 240,
+            "l": 210,
+            "h": 220,
+            "texte": "Son brochage : entrées à gauche, sorties à droite."
+          },
+          {
+            "x": 910,
+            "y": 80,
+            "l": 290,
+            "h": 480,
+            "texte": "Ses propriétés : version, à jour avec la bibliothèque, entrées et sorties."
+          }
+        ]
+      },
+      {
+        "legende": "la macro EnsureLibraryItem",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 830,
+            "y": 165,
+            "l": 740,
+            "h": 50,
+            "texte": "L'élément voulu : DFB_CTL_LEVEL existe dans la bibliothèque (v1.00)."
+          },
+          {
+            "x": 410,
+            "y": 190,
+            "l": 390,
+            "h": 570,
+            "texte": "Les macros du projet, rangées : importer, créer, bibliothèque…"
+          },
+          {
+            "x": 1426,
+            "y": 916,
+            "l": 150,
+            "h": 32,
+            "texte": "Aperçu : ce que la macro ferait, avant de l'appliquer."
+          }
+        ]
+      },
+      {
+        "legende": "l'aperçu avant d'appliquer",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 820,
+            "y": 165,
+            "l": 670,
+            "h": 60,
+            "texte": "Le bilan : 1 import de bibliothèque, rien d'autre ne change."
+          },
+          {
+            "x": 830,
+            "y": 278,
+            "l": 450,
+            "h": 84,
+            "texte": "Ce qui sera importé, et le journal de la macro."
+          },
+          {
+            "x": 1300,
+            "y": 914,
+            "l": 280,
+            "h": 36,
+            "texte": "Appliquer : le bloc arrive dans le projet (Ctrl+Z le reprend)."
+          }
+        ]
+      }
+    ],
+    "api_export": [
+      {
+        "legende": "vers Control Expert",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 130,
+            "y": 184,
+            "l": 840,
+            "h": 44,
+            "texte": "MAST.XPG et CONFIG.XHW, prêts à réimporter dans Control Expert."
+          },
+          {
+            "x": 190,
+            "y": 248,
+            "l": 770,
+            "h": 26,
+            "texte": "Le dossier : src/ du projet par défaut (… : un autre)."
+          },
+          {
+            "x": 882,
+            "y": 306,
+            "l": 92,
+            "h": 30,
+            "texte": "Exporter."
+          }
+        ]
+      },
+      {
+        "legende": "le fichier écrit",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 330,
+            "y": 260,
+            "l": 540,
+            "h": 30,
+            "texte": "1 fichier écrit dans src/ du projet : MAST.XPG."
+          },
+          {
+            "x": 795,
+            "y": 325,
+            "l": 70,
+            "h": 28,
+            "texte": "Fermer."
+          }
+        ]
+      },
+      {
+        "legende": "le programme lisible",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 180,
+            "y": 224,
+            "l": 760,
+            "h": 60,
+            "texte": "Trois formats : Excel (un onglet par groupe), PDF (sommaire, pages), texte."
+          },
+          {
+            "x": 180,
+            "y": 316,
+            "l": 760,
+            "h": 156,
+            "texte": "Ce qu'il contient : guide de lecture, rôle des sections, annexes (variables, DFB)."
+          },
+          {
+            "x": 786,
+            "y": 616,
+            "l": 160,
+            "h": 30,
+            "texte": "Exporter les 3 fichiers."
+          }
+        ]
+      }
+    ],
+    "hmi_editor": [
+      {
+        "legende": "Vue_Synoptique, la pompe P_101 choisie",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 1080,
+            "y": 384,
+            "l": 80,
+            "h": 76,
+            "texte": "P_101 choisie : ses poignées pour la déplacer, la tourner, la redimensionner."
+          },
+          {
+            "x": 1290,
+            "y": 200,
+            "l": 300,
+            "h": 400,
+            "texte": "Ses propriétés : nom, type, position, taille ; fx : pilotée par une expression."
+          },
+          {
+            "x": 410,
+            "y": 190,
+            "l": 220,
+            "h": 480,
+            "texte": "Les objets de la vue, avec leurs animations et leurs alarmes."
+          }
+        ]
+      },
+      {
+        "legende": "les vues du projet",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 406,
+            "y": 552,
+            "l": 774,
+            "h": 22,
+            "texte": "Vue_Graphiques : 1280 × 800, 8 objets."
+          },
+          {
+            "x": 1190,
+            "y": 120,
+            "l": 390,
+            "h": 290,
+            "texte": "Son aperçu, sans l'ouvrir."
+          },
+          {
+            "x": 406,
+            "y": 82,
+            "l": 1150,
+            "h": 26,
+            "texte": "Nouvelle vue, dupliquer, dossiers, vue de démarrage, modèles…"
+          }
+        ]
+      }
+    ],
+    "hmi_runtime": [
+      {
+        "legende": "le poste d'exploitation, en plein écran",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 0,
+            "y": 0,
+            "l": 1600,
+            "h": 26,
+            "texte": "Lectures simulées : le poste tourne ici sans les vrais équipements."
+          },
+          {
+            "x": 1200,
+            "y": 76,
+            "l": 280,
+            "h": 200,
+            "texte": "Niveaux, pression : lus et animés à chaque cycle."
+          },
+          {
+            "x": 870,
+            "y": 700,
+            "l": 320,
+            "h": 120,
+            "texte": "Les commandes de l'opérateur, en direct."
+          }
+        ]
+      },
+      {
+        "legende": "la simulation dans IHM Studio",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 406,
+            "y": 82,
+            "l": 120,
+            "h": 26,
+            "texte": "IHM en marche : la simulation, dans le Studio."
+          },
+          {
+            "x": 1074,
+            "y": 180,
+            "l": 506,
+            "h": 760,
+            "texte": "Les variables IHM et leur valeur en direct (Forcer : une case)."
+          },
+          {
+            "x": 414,
+            "y": 304,
+            "l": 640,
+            "h": 420,
+            "texte": "La vue simulée : ses boutons se cliquent comme au poste."
+          }
+        ]
+      },
+      {
+        "legende": "les commandes de l'opérateur",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 40,
+            "y": 140,
+            "l": 1520,
+            "h": 70,
+            "texte": "Marche, pas à pas, purge, arrêt : les commandes de la pompe."
+          },
+          {
+            "x": 40,
+            "y": 650,
+            "l": 900,
+            "h": 310,
+            "texte": "Le programmateur de la semaine : les plages du chauffage."
+          },
+          {
+            "x": 896,
+            "y": 902,
+            "l": 640,
+            "h": 62,
+            "texte": "La session : qui est connecté, à quel niveau."
+          }
+        ]
+      }
+    ],
+    "hmi_widgets": [
+      {
+        "legende": "graphiques en direct",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 40,
+            "y": 80,
+            "l": 1520,
+            "h": 390,
+            "texte": "Barres, anneau, radar : chacun suit ses expressions à chaque image."
+          },
+          {
+            "x": 40,
+            "y": 500,
+            "l": 550,
+            "h": 470,
+            "texte": "La courbe XY : la pression selon le débit, avec sa mémoire."
+          },
+          {
+            "x": 1140,
+            "y": 500,
+            "l": 420,
+            "h": 470,
+            "texte": "L'histogramme des pesées : moyenne, σ, Cp, Cpk."
+          }
+        ]
+      },
+      {
+        "legende": "afficheurs et cadrans",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 40,
+            "y": 100,
+            "l": 1080,
+            "h": 120,
+            "texte": "Afficheurs numériques et 7 segments."
+          },
+          {
+            "x": 40,
+            "y": 240,
+            "l": 700,
+            "h": 420,
+            "texte": "Bargraphe, thermomètre, cadran à zones colorées."
+          },
+          {
+            "x": 1360,
+            "y": 390,
+            "l": 200,
+            "h": 200,
+            "texte": "Un code QR qui suit l'état de la pompe."
+          }
+        ]
+      },
+      {
+        "legende": "alarmes, courbes, recettes",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 40,
+            "y": 100,
+            "l": 1020,
+            "h": 280,
+            "texte": "Les alarmes : apparue, acquittée, disparue, le message."
+          },
+          {
+            "x": 40,
+            "y": 400,
+            "l": 1020,
+            "h": 570,
+            "texte": "Les courbes : la pression des deux armoires, en direct."
+          },
+          {
+            "x": 1100,
+            "y": 620,
+            "l": 470,
+            "h": 80,
+            "texte": "Une recette d'un clic (le cadenas : réservée à un niveau d'accès)."
+          }
+        ]
+      }
+    ],
+    "hmi_animations": [
+      {
+        "legende": "les animations de la vanne V_101",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 190,
+            "y": 516,
+            "l": 200,
+            "h": 140,
+            "texte": "Les animations de la vue, une par objet animé : ici V_101."
+          },
+          {
+            "x": 1290,
+            "y": 380,
+            "l": 300,
+            "h": 230,
+            "texte": "Ses propriétés pilotées : fx et leur expression (Ouverture = Position_Verin…)."
+          }
+        ]
+      },
+      {
+        "legende": "les expressions en simulation",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 670,
+            "y": 150,
+            "l": 510,
+            "h": 600,
+            "texte": "Chaque expression de la vue et sa valeur en ce moment."
+          },
+          {
+            "x": 10,
+            "y": 260,
+            "l": 640,
+            "h": 430,
+            "texte": "La vue simulée : les animations jouent."
+          }
+        ]
+      }
+    ],
+    "hmi_scripts": [
+      {
+        "legende": "les scripts généraux",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 406,
+            "y": 190,
+            "l": 494,
+            "h": 390,
+            "texte": "Les scripts généraux : cycliques, au démarrage, sur changement, appelés."
+          },
+          {
+            "x": 910,
+            "y": 190,
+            "l": 670,
+            "h": 240,
+            "texte": "Le code ST du script choisi (Animation_Synoptique)."
+          },
+          {
+            "x": 406,
+            "y": 670,
+            "l": 494,
+            "h": 190,
+            "texte": "Son déclencheur, sa période, sa description."
+          }
+        ]
+      },
+      {
+        "legende": "une fonction IHM",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 410,
+            "y": 170,
+            "l": 490,
+            "h": 40,
+            "texte": "Les fonctions IHM : Moyenne_Pression, Tracer_Evenement."
+          },
+          {
+            "x": 910,
+            "y": 140,
+            "l": 540,
+            "h": 30,
+            "texte": "Paramètres, locales, constantes, tests : chacun son onglet."
+          },
+          {
+            "x": 410,
+            "y": 580,
+            "l": 490,
+            "h": 280,
+            "texte": "Sa signature, son retour, qui l'appelle."
+          }
+        ]
+      }
+    ],
+    "hmi_export": [
+      {
+        "legende": "exporter des vues",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 196,
+            "y": 200,
+            "l": 720,
+            "h": 232,
+            "texte": "Les vues à exporter : une case chacune (ici Vue_Accueil)."
+          },
+          {
+            "x": 560,
+            "y": 512,
+            "l": 368,
+            "h": 30,
+            "texte": "Ce qui part avec elle : sa popup, ses types IHM, ses variables."
+          },
+          {
+            "x": 220,
+            "y": 470,
+            "l": 680,
+            "h": 30,
+            "texte": "Le paquet .xpgvues, dans exports/ du projet."
+          }
+        ]
+      },
+      {
+        "legende": "l'archive du projet IHM",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 6,
+            "y": 40,
+            "l": 180,
+            "h": 30,
+            "texte": "Exporter tout le projet IHM dans une archive .xihm (Importer : la reconstruire)."
+          },
+          {
+            "x": 286,
+            "y": 40,
+            "l": 210,
+            "h": 30,
+            "texte": "Le dossier de l'IHM, en Word ou en PDF."
+          },
+          {
+            "x": 10,
+            "y": 84,
+            "l": 1170,
+            "h": 66,
+            "texte": "Ce que contient l'archive : vues, objets, ressources, scripts… avec leurs empreintes SHA-256."
+          }
+        ]
+      },
+      {
+        "legende": "le dossier de l'IHM en PDF",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 130,
+            "y": 174,
+            "l": 840,
+            "h": 60,
+            "texte": "Le dossier de l'IHM, à imprimer ou à remettre."
+          },
+          {
+            "x": 260,
+            "y": 244,
+            "l": 670,
+            "h": 32,
+            "texte": "Écrit dans exports/ du projet sous son nom habituel (… : ailleurs)."
+          },
+          {
+            "x": 886,
+            "y": 304,
+            "l": 90,
+            "h": 32,
+            "texte": "Exporter."
+          }
+        ]
+      }
+    ],
+    "ai_assistant": [
+      {
+        "legende": "une demande et la modification proposée",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 1028,
+            "y": 284,
+            "l": 236,
+            "h": 30,
+            "texte": "La demande, en français."
+          },
+          {
+            "x": 938,
+            "y": 331,
+            "l": 330,
+            "h": 105,
+            "texte": "La réponse : P_101 rouge clignotant quand Defaut_Filtre est vraie."
+          },
+          {
+            "x": 942,
+            "y": 451,
+            "l": 315,
+            "h": 265,
+            "texte": "La modification proposée : prévisualiser, appliquer ou refuser."
+          }
+        ]
+      },
+      {
+        "legende": "une question sur la vue",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 1055,
+            "y": 308,
+            "l": 210,
+            "h": 26,
+            "texte": "Une question sur la vue ouverte."
+          },
+          {
+            "x": 938,
+            "y": 351,
+            "l": 330,
+            "h": 120,
+            "texte": "La réponse : les variables que la vue utilise."
+          }
+        ]
+      }
+    ],
+    "ai_generation": [
+      {
+        "legende": "la prévisualisation de la vue créée",
+        "repere": {
+          "l": 1248,
+          "h": 780
+        },
+        "bulles": [
+          {
+            "x": 20,
+            "y": 60,
+            "l": 300,
+            "h": 32,
+            "texte": "11 objets à créer, rien à modifier ni à supprimer."
+          },
+          {
+            "x": 20,
+            "y": 162,
+            "l": 500,
+            "h": 580,
+            "texte": "Chaque objet créé, ses propriétés, et ce qui reste à faire (associer les variables)."
+          },
+          {
+            "x": 544,
+            "y": 232,
+            "l": 690,
+            "h": 390,
+            "texte": "La vue telle qu'elle sera : cuve, bargraphe, vanne, pompes, boutons."
+          }
+        ]
+      },
+      {
+        "legende": "le plan de l'Assistant",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 942,
+            "y": 171,
+            "l": 320,
+            "h": 24,
+            "texte": "La demande : un synoptique de station de pompage."
+          },
+          {
+            "x": 942,
+            "y": 286,
+            "l": 320,
+            "h": 40,
+            "texte": "Le plan d'action : 11 étapes, vérifiées."
+          },
+          {
+            "x": 942,
+            "y": 426,
+            "l": 320,
+            "h": 280,
+            "texte": "Les opérations proposées, avec l'aperçu de la vue."
+          }
+        ]
+      }
+    ],
+    "ai_learning": [
+      {
+        "legende": "ce qu'elle a appris",
+        "repere": {
+          "l": 1260,
+          "h": 788
+        },
+        "bulles": [
+          {
+            "x": 26,
+            "y": 118,
+            "l": 1206,
+            "h": 66,
+            "texte": "Ce qu'elle sait : 62 éléments en 5 thèmes, les demandes comprises, ce qu'il reste à lui apprendre."
+          },
+          {
+            "x": 236,
+            "y": 434,
+            "l": 600,
+            "h": 220,
+            "texte": "Les modèles métier qu'elle connaît : T_Capteur, T_Pompe, T_Vanne…"
+          },
+          {
+            "x": 852,
+            "y": 404,
+            "l": 380,
+            "h": 300,
+            "texte": "Le modèle choisi, ses mots et ses membres : à corriger à la main."
+          }
+        ]
+      },
+      {
+        "legende": "son vocabulaire",
+        "repere": {
+          "l": 1260,
+          "h": 788
+        },
+        "bulles": [
+          {
+            "x": 236,
+            "y": 434,
+            "l": 600,
+            "h": 220,
+            "texte": "Les mots qu'elle comprend et ce qu'ils désignent (bouton poussoir : un bouton à impulsion)."
+          },
+          {
+            "x": 852,
+            "y": 404,
+            "l": 380,
+            "h": 300,
+            "texte": "Le mot choisi et ce qu'il désigne : à corriger à la main."
+          },
+          {
+            "x": 30,
+            "y": 454,
+            "l": 190,
+            "h": 24,
+            "texte": "Vocabulaire et synonymes : 47 mots."
+          }
+        ]
+      },
+      {
+        "legende": "sa mémoire",
+        "repere": {
+          "l": 1260,
+          "h": 788
+        },
+        "bulles": [
+          {
+            "x": 26,
+            "y": 84,
+            "l": 1206,
+            "h": 125,
+            "texte": "Sa mémoire sur ce PC : conversations, messages, connaissances, genres d'objets connus."
+          },
+          {
+            "x": 638,
+            "y": 234,
+            "l": 600,
+            "h": 270,
+            "texte": "Ce que ses données occupent sur le disque."
+          },
+          {
+            "x": 30,
+            "y": 554,
+            "l": 600,
+            "h": 150,
+            "texte": "L'activité récente : les règles ajoutées, les conversations."
+          }
+        ]
+      }
+    ],
+    "ai_advanced_models": [
+      {
+        "legende": "le choix du fournisseur",
+        "repere": {
+          "l": 1000,
+          "h": 625
+        },
+        "bulles": [
+          {
+            "x": 190,
+            "y": 160,
+            "l": 300,
+            "h": 92,
+            "texte": "Le fournisseur : l'IA intégrée (sans connexion), la démonstration, Anthropic (Claude), un service compatible OpenAI."
+          },
+          {
+            "x": 510,
+            "y": 100,
+            "l": 450,
+            "h": 130,
+            "texte": "Le mode, la fenêtre de contexte, l'outil, le budget de jetons."
+          },
+          {
+            "x": 40,
+            "y": 380,
+            "l": 450,
+            "h": 140,
+            "texte": "La clé API, gardée protégée par Windows (aucune ici)."
+          }
+        ]
+      },
+      {
+        "legende": "un fournisseur, son modèle, son effort",
+        "repere": {
+          "l": 1000,
+          "h": 625
+        },
+        "bulles": [
+          {
+            "x": 190,
+            "y": 140,
+            "l": 300,
+            "h": 22,
+            "texte": "Anthropic (Claude) choisi."
+          },
+          {
+            "x": 190,
+            "y": 226,
+            "l": 300,
+            "h": 26,
+            "texte": "Le modèle (Lister les modèles : ceux du fournisseur)."
+          },
+          {
+            "x": 190,
+            "y": 292,
+            "l": 170,
+            "h": 128,
+            "texte": "L'effort : auto, bas, moyen, haut."
+          }
+        ]
+      }
+    ],
+    "advanced_import": [
+      {
+        "legende": "importer des vues",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 210,
+            "y": 226,
+            "l": 870,
+            "h": 120,
+            "texte": "Chaque élément du paquet comparé au projet : identique (gardé) ou déjà là."
+          },
+          {
+            "x": 210,
+            "y": 358,
+            "l": 870,
+            "h": 46,
+            "texte": "Un nom en conflit : renommer, remplacer ou garder celui du projet."
+          },
+          {
+            "x": 922,
+            "y": 736,
+            "l": 158,
+            "h": 30,
+            "texte": "Importer : seulement ce qui manque."
+          }
+        ]
+      },
+      {
+        "legende": "importer un .XPG dans l'API",
+        "repere": {
+          "l": 1280,
+          "h": 800
+        },
+        "bulles": [
+          {
+            "x": 186,
+            "y": 284,
+            "l": 590,
+            "h": 26,
+            "texte": "Gardé, changé, supprimé, nouveau, liens IHM perdus : tout est compté avant l'import."
+          },
+          {
+            "x": 186,
+            "y": 320,
+            "l": 460,
+            "h": 180,
+            "texte": "Nouveau : 2 variables et le bloc DFB_CTL_LEVEL."
+          },
+          {
+            "x": 176,
+            "y": 130,
+            "l": 930,
+            "h": 84,
+            "texte": "Ce qui sera remplacé, et ce qui reste (l'IHM, les versions)."
+          }
+        ]
+      },
+      {
+        "legende": "les traductions depuis Excel",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 406,
+            "y": 166,
+            "l": 314,
+            "h": 44,
+            "texte": "English et Deutsch : ajoutées par le classeur Excel."
+          },
+          {
+            "x": 1006,
+            "y": 80,
+            "l": 110,
+            "h": 28,
+            "texte": "Importer (Excel), Exporter (Excel) : les textes à traduire."
+          },
+          {
+            "x": 406,
+            "y": 942,
+            "l": 540,
+            "h": 26,
+            "texte": "Le bilan de l'import (Ctrl+Z l'annule)."
+          }
+        ]
+      }
+    ],
+    "advanced_export": [
+      {
+        "legende": "générer un rapport maintenant",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 220,
+            "y": 172,
+            "l": 470,
+            "h": 36,
+            "texte": "La période : la dernière, en cours, ou choisie."
+          },
+          {
+            "x": 220,
+            "y": 236,
+            "l": 150,
+            "h": 34,
+            "texte": "PDF ou Excel."
+          },
+          {
+            "x": 744,
+            "y": 166,
+            "l": 220,
+            "h": 300,
+            "texte": "L'aperçu de la mise en page."
+          }
+        ]
+      },
+      {
+        "legende": "la mise en page des rapports",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 410,
+            "y": 150,
+            "l": 226,
+            "h": 130,
+            "texte": "Les mises en page : Standard, Compacte, Synthèse."
+          },
+          {
+            "x": 644,
+            "y": 600,
+            "l": 346,
+            "h": 240,
+            "texte": "Ce que contient le rapport : synthèse, alarmes, mesures, production, événements."
+          },
+          {
+            "x": 1010,
+            "y": 150,
+            "l": 570,
+            "h": 760,
+            "texte": "L'aperçu, page par page, avec des données d'exemple."
+          }
+        ]
+      },
+      {
+        "legende": "les textes à traduire, en Excel",
+        "repere": {
+          "l": 1120,
+          "h": 700
+        },
+        "bulles": [
+          {
+            "x": 130,
+            "y": 174,
+            "l": 840,
+            "h": 60,
+            "texte": "Tous les textes de l'IHM dans un classeur Excel, une colonne par langue."
+          },
+          {
+            "x": 256,
+            "y": 244,
+            "l": 680,
+            "h": 32,
+            "texte": "Dans exports/ du projet par défaut (… : ailleurs)."
+          },
+          {
+            "x": 886,
+            "y": 304,
+            "l": 90,
+            "h": 32,
+            "texte": "Exporter."
+          }
+        ]
+      }
+    ],
+    "professional_tools": [
+      {
+        "legende": "l'outil Modbus",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 10,
+            "y": 140,
+            "l": 820,
+            "h": 232,
+            "texte": "10 registres lus (fonction 3) : décimal, hexadécimal, binaire."
+          },
+          {
+            "x": 840,
+            "y": 84,
+            "l": 360,
+            "h": 320,
+            "texte": "La cible : Centrale PM5560, son adresse, l'esclave, la requête."
+          },
+          {
+            "x": 6,
+            "y": 40,
+            "l": 60,
+            "h": 28,
+            "texte": "Lire, écrire, identifier, exporter en CSV."
+          }
+        ]
+      },
+      {
+        "legende": "les trames Modbus",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 10,
+            "y": 156,
+            "l": 810,
+            "h": 76,
+            "texte": "Les trames envoyée et reçue : l'hexadécimal et sa lecture en clair."
+          },
+          {
+            "x": 10,
+            "y": 116,
+            "l": 810,
+            "h": 30,
+            "texte": "La trame de la requête."
+          },
+          {
+            "x": 840,
+            "y": 80,
+            "l": 360,
+            "h": 320,
+            "texte": "Le même équipement (ici, son esclave simulé)."
+          }
+        ]
+      },
+      {
+        "legende": "les équipements du projet",
+        "repere": {
+          "l": 1200,
+          "h": 750
+        },
+        "bulles": [
+          {
+            "x": 4,
+            "y": 150,
+            "l": 824,
+            "h": 286,
+            "texte": "Les équipements : Modbus TCP, Ethernet, leur adresse, joignables ou non ; en violet, leurs esclaves simulés."
+          },
+          {
+            "x": 836,
+            "y": 222,
+            "l": 344,
+            "h": 194,
+            "texte": "Le vrai appareil : son adresse, son port, son ping."
+          },
+          {
+            "x": 836,
+            "y": 416,
+            "l": 344,
+            "h": 284,
+            "texte": "Son esclave simulé : l'IHM le lit quand le vrai ne répond pas (essais au bureau)."
+          }
+        ]
+      }
+    ],
+    "floating_licenses": [
+      {
+        "legende": "une licence ENTERPRISE : ses fonctionnalités",
+        "repere": {
+          "l": 1320,
+          "h": 825
+        },
+        "bulles": [
+          {
+            "x": 20,
+            "y": 698,
+            "l": 760,
+            "h": 24,
+            "texte": "Licences flottantes : ouvertes par l'édition ENTERPRISE (des postes en même temps plutôt que des PC fixes)."
+          },
+          {
+            "x": 20,
+            "y": 240,
+            "l": 760,
+            "h": 450,
+            "texte": "Les 21 fonctionnalités du registre : toutes ouvertes par cette licence."
+          },
+          {
+            "x": 16,
+            "y": 50,
+            "l": 1290,
+            "h": 80,
+            "texte": "La licence : ENTERPRISE, Entreprise Exemple (fictive), 5 PC autorisés, valide jusqu'au 08/11/2027."
+          }
+        ]
+      },
+      {
+        "legende": "Ma licence",
+        "repere": {
+          "l": 1320,
+          "h": 825
+        },
+        "bulles": [
+          {
+            "x": 20,
+            "y": 240,
+            "l": 1280,
+            "h": 142,
+            "texte": "Son état, son édition, son propriétaire, son identifiant, sa validité."
+          },
+          {
+            "x": 20,
+            "y": 383,
+            "l": 1280,
+            "h": 22,
+            "texte": "Ses PC : 1 lié sur 5 autorisés."
+          },
+          {
+            "x": 20,
+            "y": 408,
+            "l": 1280,
+            "h": 22,
+            "texte": "Sa signature, vérifiée hors ligne sur ce PC."
+          }
+        ]
+      },
+      {
+        "legende": "l'édition ENTERPRISE",
+        "repere": {
+          "l": 840,
+          "h": 525
+        },
+        "bulles": [
+          {
+            "x": 428,
+            "y": 320,
+            "l": 190,
+            "h": 118,
+            "texte": "ENTERPRISE : 20 PC, 1 an, les 21 fonctions (licences flottantes comprises)."
+          },
+          {
+            "x": 32,
+            "y": 320,
+            "l": 392,
+            "h": 205,
+            "texte": "Chaque édition : combien de PC, combien de temps, combien de fonctions."
+          }
+        ]
+      }
+    ],
     "multi_user": [
       {
         "legende": "le panneau de la session (l'hôte)",

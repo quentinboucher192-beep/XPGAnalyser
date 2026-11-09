@@ -3,3 +3,18 @@ Les aperçus des fonctionnalités (1.37.0) : la fenêtre Licence, onglet Éditio
 démonstration fictif (aucune donnée de client), sous Wine, avec les programmes Windows 1.36.0.
 Une fonctionnalité ajoutée au registre sans capture : l'onglet le dit (« Pas encore de capture »).
 1.43.0 : multi_user.png montre les sessions (le panneau de l'équipe et la discussion, capture de l'essai à deux PC sous Wine).
+1.45.0 : jusqu'à 4 captures par fonctionnalité (<identifiant>.png, <identifiant>-2.png … -4.png), chacune avec sa légende et ses
+bulles (descriptions.json, « captures »), dans l'aperçu, la boutique et la fenêtre en grand (flèches, ← → au clavier).
+Une capture peut être plus grande que 960 × 600 (2x : 1920 × 1200, ou 3200 × 2000 ; jusqu'à 32 Mo) : elle reste nette en petit
+(copies réduites de moitié en moitié) et en grand. Les bulles sont écrites dans le « repere » de descriptions.json (960 × 600 pour
+tout le fichier ; une capture peut avoir le sien : "repere": {"l": 1600, "h": 1000}) : une capture refaite en plus grand, aux mêmes
+proportions, garde ses bulles à leur place sans les recompter. Sans « repere » : les pixels de l'image elle-même.
+1.45.0, les captures refaites : 2 ou 3 par fonctionnalité (51 nouvelles images ; multi_user gardé), toutes au design actuel (Studios 1.44.0
+sous Wine, fenêtre 1600 × 1000). Chaque image est un morceau de la fenêtre à sa taille réelle - jamais réduite, en couleurs vraies
+(RGB, sans palette), PNG optimisé : 1600 × 1000 (la fenêtre entière), 1280 × 800, 1200 × 750 (la page sans l'arbre), 1120 × 700…
+toujours au rapport 1,6 ; de 33 à 270 Ko. Chaque capture a sa légende et 1 à 3 bulles, et son propre « repere » = sa taille :
+ses bulles sont en pixels de cette image (le repère 960 × 600 du fichier ne vaut plus que pour multi_user).
+Projets fictifs seulement : Demo_Pompe (API) et Armoire_Gaz (IHM, une copie de travail : les variables de l'automate qu'elle lit
+y sont déclarées en variables IHM et un script les fait vivre, pour la simulation et le poste sans automate). Licence : la
+Découverte (rien de réel), et pour les licences flottantes une licence ENTERPRISE fictive (« Entreprise Exemple ») signée par la
+clé d'ESSAI, ouverte par un Studio d'essai. L'IA : l'IA intégrée, sans clé ni connexion. Le service des licences : jamais joint.

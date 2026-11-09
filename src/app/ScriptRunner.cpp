@@ -8,6 +8,7 @@
 #include "../core/Version.hpp"           // 1.30.0
 #include "ScriptRunner.hpp"
 #include "SessionDialogs.hpp"   // 1.43.0
+#include "SessionMarks.hpp"   // 1.45.0 : l'onglet Session (session-onglet)
 #include "SessionService.hpp"   // 1.43.0
 #include "ProjectExchange.hpp"   // 1.12.30 : attendre-echanges
 #include "tutorial/TutorialApp.hpp"
@@ -6190,6 +6191,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         showLicenceWindow(app_, licence::kTabRequest);
         return Step::Yield;
     }
+    // 1.45.0 : licence-capture FONCTIONNALITE [N] - sa capture N (1 : la premiere) en grand (les fleches, la legende, les
+    // bulles : survol-bulle dialog.capture.image 1 ; clic-id dialog.capture.suivante).
+    if (cmd == "licence-capture") {
+        const int n = arg(2).empty() ? 1 : std::atoi(arg(2).c_str());
+        if (n < 1 || !licence::showFeatureCapture(app_, arg(1), static_cast<std::size_t>(n - 1))) fail("licence-capture : pas de capture pour " + arg(1));
+        return Step::Yield;
+    }
     // 1.39.0 : notification-detail CLE - la fenetre << Offre modifiee : avant / apres >> d'une notification (son bouton
     // Voir le detail) ; la cle : "offre:PERSONAL:319".
     if (cmd == "notification-detail") {
@@ -6446,6 +6454,20 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   session-annuler                                              Ctrl+Z
     //   session-verifier VUE OBJET CLE VALEUR                        la valeur d'une propriete (sinon : echec)
     //   session-message "texte" / session-role N modifier|regarder / session-etat / session-panneau / session-arreter
+    // 1.45.0 : retirer, partir, le journal, l'onglet Session.
+    //   session-retirer N                                            l'hote retire le membre N (coupe, << Camille t'a retire
+    //                                                                de la session >>) ; "[script] session-retirer N : Lea retire(e)"
+    //   session-quitter                                              l'equipier quitte (l'accueil, sa copie effacee)
+    //   session-attendre accueil                                     revenu a l'accueil : plus de session, la copie fermee et
+    //                                                                effacee ; "[script] session-attendre accueil : oui (copie
+    //                                                                effacee : <dossier>)"
+    //   session-attendre journal "texte"                             une ligne du journal contient le texte
+    //   session-attendre fin                                         plus de session (comme avant)
+    //   session-journal                                              "[script] session-journal : N entree(s)" puis une ligne par
+    //                                                                entree : "[script]   14:32 Lea : Vue_Accueil > Texte_Etat
+    //                                                                deplace (x3)" ; l'hote, a la fin : le fichier enregistre
+    //   session-onglet                                               l'onglet Session du panneau du bas (le panneau s'ouvre) ;
+    //                                                                "[script] session-onglet : N ligne(s) . M message(s) . K au journal"
     if (cmd.rfind("session-", 0) == 0) {
         auto& s = app_.session();
         const auto findObject = [&](const std::string& viewName, const std::string& objName, hmi::Id& view, hmi::Id& obj) {
@@ -6586,6 +6608,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             else if (what == "ouverte") ok = s.host() && (!s.internet() || s.relayOpen());   // 1.44.0 : ouverte sur le relais
             else if (what == "frappe") ok = !s.knocks().empty();
             else if (what == "fin") ok = s.mode() == SessionService::Mode::Off;
+            // 1.45.0 : revenu a l'accueil (la copie de l'equipier fermee et effacee).
+            else if (what == "accueil") ok = s.mode() == SessionService::Mode::Off && !s.leaving() && app_.projectFolder().empty()
+                                             && dynamic_cast<StartupScreen*>(app_.menus().top()) != nullptr;
+            else if (what == "journal") {
+                for (const auto& e : s.journal().entries()) ok = ok || e.text.find(arg(2)) != std::string::npos;
+            }
             else if (what == "membres") ok = s.members().size() >= static_cast<std::size_t>(std::max(1, std::atoi(arg(2).c_str())));
             else if (what == "message") {
                 for (const auto& l : s.chat()) ok = ok || l.text.find(arg(2)) != std::string::npos;
@@ -6608,7 +6636,54 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 fail("session-attendre " + what + " : pas venu");
                 return Step::Next;
             }
+            if (what == "accueil" && !s.lastCopy().empty()) {   // 1.45.0 : la copie est-elle partie ?
+                std::error_code ec;
+                const bool gone = !std::filesystem::exists(s.lastCopy(), ec);
+                std::printf("[script] session-attendre accueil : oui (copie %s : %s)\n", gone ? "effac\xC3\xA9" "e" : "TOUJOURS L\xC3\x80", s.lastCopy().c_str());
+                if (!gone) fail("session-attendre accueil : la copie de la session est toujours sur le disque : " + s.lastCopy());
+                return Step::Yield;
+            }
             std::printf("[script] session-attendre %s : oui\n", what.c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-retirer") {   // 1.45.0
+            const int n = std::atoi(arg(1).c_str());
+            const auto* m = s.member(n);
+            if (!s.host() || n <= 0 || !m) {
+                fail("session-retirer : pas de membre " + arg(1) + (s.host() ? std::string{} : " (ce PC n'est pas l'h\xC3\xB4te)"));
+                return Step::Next;
+            }
+            const std::string who = m->name;
+            s.remove(n);
+            std::printf("[script] session-retirer %d : %s retir\xC3\xA9(e)\n", n, who.c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-quitter") {   // 1.45.0
+            if (!s.guest() && s.mode() != SessionService::Mode::Joining) {
+                fail("session-quitter : ce PC n'est pas un \xC3\xA9quipier d'une session");
+                return Step::Next;
+            }
+            s.stop();
+            std::printf("[script] session-quitter\n");
+            return Step::Yield;
+        }
+        if (cmd == "session-journal") {   // 1.45.0
+            const auto& entries = s.journal().entries();
+            std::printf("[script] session-journal : %zu entr\xC3\xA9" "e(s)%s\n", entries.size(),
+                        s.journal().dropped() ? (" (" + std::to_string(s.journal().dropped()) + " tomb\xC3\xA9" "e(s))").c_str() : "");
+            for (const auto& e : entries) std::printf("[script]   %s\n", session::lineOf(e).c_str());
+            if (!s.savedJournal().empty()) std::printf("[script]   enregistr\xC3\xA9 : %s\n", s.savedJournal().c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-onglet") {   // 1.45.0
+            auto* screen = dynamic_cast<MainAnalysisScreen*>(app_.menus().top());
+            if (!screen || !screen->showSessionTab()) {
+                if (retries_ < 60) return Step::Retry;   // l'onglet arrive a la prochaine image
+                fail("session-onglet : pas d'onglet Session (pas de session, ou pas l'\xC3\xA9" "cran du projet)");
+                return Step::Next;
+            }
+            std::printf("[script] session-onglet : %zu ligne(s) \xC2\xB7 %zu message(s) \xC2\xB7 %zu au journal\n", sessionmarks::board().chat.size() + sessionmarks::board().journal.size(),
+                        sessionmarks::board().chat.size(), sessionmarks::board().journal.size());
             return Step::Yield;
         }
         if (cmd == "session-accepter" || cmd == "session-refuser") {

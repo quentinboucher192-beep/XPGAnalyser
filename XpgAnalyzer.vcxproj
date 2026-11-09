@@ -576,6 +576,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\Licence.cpp" />
     <ClCompile Include="src\app\LicenceService.cpp" />
+    <ClCompile Include="src\app\LicenceViews.cpp" />
     <ClCompile Include="src\app\LicenceWindow.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
     <ClCompile Include="src\app\PerfPane.cpp" />
@@ -628,6 +629,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\hmi\HmiQuickTrend.cpp" />
     <ClCompile Include="src\app\hmi\HmiReportLayoutPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiScanDialog.cpp" />
+    <ClCompile Include="src\app\hmi\HmiSessionPane.cpp" />
     <ClCompile Include="src\app\hmi\HmiSimMarks.cpp" />
     <ClCompile Include="src\app\hmi\HmiSimVarTree.cpp" />
     <ClCompile Include="src\app\hmi\HmiSlavePanes.cpp" />
@@ -805,6 +807,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\deploy\Net.cpp" />
     <ClCompile Include="src\deploy\Package.cpp" />
     <ClCompile Include="src\deploy\Pairing.cpp" />
+    <ClCompile Include="src\session\SessionJournal.cpp" />
     <ClCompile Include="src\session\SessionLink.cpp" />
     <ClCompile Include="src\session\SessionProtocol.cpp" />
     <ClCompile Include="src\session\SessionRelay.cpp" />
@@ -1194,6 +1197,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\Licence.hpp" />
     <ClInclude Include="src\app\LicenceService.hpp" />
+    <ClInclude Include="src\app\LicenceViews.hpp" />
     <ClInclude Include="src\app\LicenceWindow.hpp" />
     <ClInclude Include="src\app\Notices.hpp" />
     <ClInclude Include="src\app\NoveltyCenter.hpp" />
@@ -1242,6 +1246,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\hmi\HmiQuickTrend.hpp" />
     <ClInclude Include="src\app\hmi\HmiReportLayoutPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiScanDialog.hpp" />
+    <ClInclude Include="src\app\hmi\HmiSessionPane.hpp" />
     <ClInclude Include="src\app\hmi\HmiSimMarks.hpp" />
     <ClInclude Include="src\app\hmi\HmiSimVarTree.hpp" />
     <ClInclude Include="src\app\hmi\HmiSymbolPopupsPane.hpp" />
@@ -1414,6 +1419,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\Net.hpp" />
     <ClInclude Include="src\deploy\Package.hpp" />
     <ClInclude Include="src\deploy\Pairing.hpp" />
+    <ClInclude Include="src\session\SessionJournal.hpp" />
     <ClInclude Include="src\session\SessionLink.hpp" />
     <ClInclude Include="src\session\SessionProtocol.hpp" />
     <ClInclude Include="src\session\SessionRelay.hpp" />
@@ -1428,6 +1434,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\license_admin\KeyBackup.hpp" />
     <ClInclude Include="src\license_admin\Mail.hpp" />
     <ClInclude Include="src\license_admin\ServiceClient.hpp" />
+    <ClInclude Include="src\license_admin\ServiceDeploy.hpp" />
     <ClInclude Include="src\licensing\Admins.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\Gateway.hpp" />

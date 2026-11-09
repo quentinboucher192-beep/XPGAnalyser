@@ -14,7 +14,9 @@
 //    - les actions rapides : Nouvelle licence... (l'assistant), Noter des
 //      demandes... (des .xpgreq recus, pas encore signes), Service en ligne (la
 //      page du service : l'archive, le certificat) ;
-//    - le premier lancement (aucune cle) : comment commencer.
+//    - le premier lancement (aucune cle) : comment commencer ;
+//    - 1.45.0 : le service en ligne plus ancien que ce qu'il faut a l'Admin (ou que
+//      le kit qu'il porte) : un bandeau, avec << Deployer le service >>.
 //  Des demandes (.xpgreq) glissees sur la page ouvrent l'assistant avec elles.
 // =============================================================================
 #include "Page.hpp"
@@ -346,6 +348,21 @@ public:
         links_ += becomeAdmin_->clicked->connect([this] { host_.navigate("admins"); });
         links_ += myFingerprint_->clicked->connect([this] { host_.navigate("admins"); });
         links_ += toService_->clicked->connect([this] { host_.navigate("service"); });
+        // 1.45.0 : le service en ligne a mettre a jour - le deployer d'ici (le dialogue de Service en ligne).
+        deploy_ = addButton("D\xC3\xA9ployer le service", "tableau.deployer", ui::Button::Style::Primary, ui::Icon::ArrowUp);
+        deploy_->setTooltip("Lance le kit install\xC3\xA9 avec l'Admin : ton service part \xC3\xA0 jour sur ton compte Cloudflare (la sortie s'affiche en direct).");
+        deploy_->setVisibility(ui::Visibility::Collapsed);
+        links_ += deploy_->clicked->connect([this] {
+            if (host_.busy && host_.busy()) {
+                host_.report(OpResult::fail("un travail est en cours : attends qu'il finisse, puis D\xC3\xA9ployer le service"));
+                return;
+            }
+            if (deployer::running()) return;
+            std::weak_ptr<bool> alive = alive_;
+            if (host_.openDialog) host_.openDialog(makeDeployDialog(host_, [this, alive] {
+                if (!alive.expired()) refresh();
+            }));
+        });
 
         const struct {
             const char* id;
@@ -411,6 +428,13 @@ public:
         myFingerprint_->setVisibility(hintKind_ == 3 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toService_->setVisibility(hintKind_ == 5 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toEditions_->setVisibility(hintKind_ == 2 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        // 1.45.0 : le service en ligne a mettre a jour (l'etat lu au lancement, ou par Verifier)
+        {
+            const deployer::VersionCheck ver = serviceVersion(w);
+            serviceNote_ = ver.outdated ? deployer::outdatedMessage(ver) : std::string();
+            deploy_->setVisibility(serviceNote_.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
+            deploy_->setEnabled(!deployer::running());
+        }
         // 1.44.0 : le droit << licence_creer >> (un admin qui ne l'a pas : le bouton dit pourquoi).
         newLicence_->setEnabled(w.can("licence_creer") && w.hasRegistry());
         if (!w.can("licence_creer") && role != Role::None) newLicence_->setTooltip(w.whyNot("licence_creer"));
@@ -570,6 +594,20 @@ protected:
             y += h + 16.f;
         }
 
+        // 1.45.0 : le bandeau du service a mettre a jour (le texte, << Deployer le service >> a droite ou dessous).
+        serviceRect_ = {};
+        serviceLines_.clear();
+        if (!serviceNote_.empty()) {
+            const float bw = deploy_->sizeHint().preferred.w + 8.f;
+            const bool beside = w - bw - 64.f > 320.f;
+            serviceLines_ = wrap(serviceNote_, kF15, beside ? w - bw - 72.f : w - 64.f);
+            const float textH = static_cast<float>(serviceLines_.size()) * 20.f;
+            const float h = beside ? std::max(textH, 34.f) + 28.f : textH + 34.f + 28.f + 8.f;
+            serviceRect_ = {x0, y, w, h};
+            deploy_->setBounds(beside ? Rect{x0 + w - 14.f - bw, y + (h - 34.f) * 0.5f, bw, 34.f} : Rect{x0 + 44.f, y + 14.f + textH + 8.f, bw, 34.f});
+            y += h + 16.f;
+        }
+
         // Les quatre grandes tuiles, puis les quatre petites.
         const float gap = 16.f;
         const float bigH = compact ? 104.f : 126.f, smallH = compact ? 46.f : 52.f;
@@ -620,6 +658,18 @@ protected:
             float y = hintRect_.y + 14.f;
             for (const auto& l : hintLines_) {
                 ctx.r.drawText({hintRect_.x + 44.f, y}, l, kF15, c.text);
+                y += 20.f;
+            }
+        }
+
+        // 1.45.0 : le service a mettre a jour.
+        if (!serviceRect_.empty()) {
+            cardBox(ctx.r, th, serviceRect_, Color::rgb(0xFFFFFF), c.warning.withAlpha(140));
+            ctx.r.fillRoundedRect(serviceRect_.inset(1.f, 1.f), c.warning.withAlpha(18), 11.f);
+            ui::drawIcon(ctx.r, ui::Icon::Warning, {serviceRect_.x + 16.f, serviceRect_.y + 14.f, 18.f, 18.f}, c.warning);
+            float y = serviceRect_.y + 14.f;
+            for (const auto& l : serviceLines_) {
+                ctx.r.drawText({serviceRect_.x + 44.f, y}, l, kF15, c.text);
                 y += 20.f;
             }
         }
@@ -792,6 +842,11 @@ private:
     ui::Button*                  becomeAdmin_{nullptr};    // 1.44.0
     ui::Button*                  myFingerprint_{nullptr};  // 1.44.0
     ui::Button*                  toService_{nullptr};      // 1.44.0
+    ui::Button*                  deploy_{nullptr};         // 1.45.0 : Deployer le service (le bandeau)
+    std::string                  serviceNote_;             // 1.45.0 : la phrase du bandeau ("" : a jour)
+    std::vector<std::string>     serviceLines_;
+    Rect                         serviceRect_{};
+    std::shared_ptr<bool>        alive_{std::make_shared<bool>(true)};
     std::vector<StatTile*>       tiles_;
     ActivityFeed*                feed_{nullptr};
     Rect                         hintRect_{}, opsRect_{}, editionsRect_{}, posteRect_{};

@@ -2,6 +2,7 @@
 //  app/TopBar.cpp - lot API 2 : la barre du haut, repensee
 // =============================================================================
 #include "TopBar.hpp"
+#include "SessionMarks.hpp"   // 1.45.0 : la raison d'une action refusee a l'equipier
 #include "../core/Edition.hpp"   // 1.12.0 : le bandeau de chaque application
 #include "../core/CallTrail.hpp"   // 1.10.2 (CR) : le journal interne
 #include "NoveltyCenter.hpp"           // 1.10 (R2, menu Aide) : les reperes, ce qui n'a pas ete vu
@@ -656,7 +657,10 @@ void TopBar::openMenu(Menu m) {
         }
         it.enabled = en.enabled && (!enabled_ || en.action.rfind("version.", 0) == 0 || enabled_(en.action));
         if (!it.enabled) it.disabledReason = !en.disabledReason.empty() ? en.disabledReason
-                                           : en.action == "project.unlock" ? "le projet n'est pas verrouill\xC3\xA9" : "pas maintenant";
+                                           : en.action == "project.unlock" ? "le projet n'est pas verrouill\xC3\xA9"
+                                           // 1.45.0 : l'equipier d'une session ne garde rien
+                                           : sessionmarks::keepAction(en.action) && !sessionmarks::keepRefusal().empty() ? sessionmarks::keepRefusal()
+                                                                                                                         : "pas maintenant";
         it.locked = it.enabled && licence::lockedAction(en.action);   // 1.39.0 : barree ; le clic dit pourquoi
         it.id = static_cast<int>(popupActions_.size());
         popupActions_.push_back(en.action);

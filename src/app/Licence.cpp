@@ -561,8 +561,20 @@ PendingRequest pendingRequest() {
 void queueAnswer(Answer a) {
     if (!g_notices || a.kind.empty()) return;   // personne devant l'ecran (le poste d'exploitation qui tourne)
     std::lock_guard<std::mutex> lock(g_mutex);
+    // 1.45.0 : la meme reponse deja dans la file (le meme evenement releve deux fois) : une seule fenetre
+    const auto same = [&a](const Answer& b) {
+        return b.kind == a.kind && b.licenseId == a.licenseId && b.option == a.option && b.note == a.note && b.online == a.online;
+    };
+    if (std::any_of(g_answers.begin(), g_answers.end(), same)) return;
     if (g_answers.size() < 4) g_answers.push_back(std::move(a));
 }
+
+// 1.45.0 : une fenetre de reponse ouverte - la suivante attend sa fermeture (takeAnswer).
+namespace {
+std::atomic<bool> g_answerOpen{false};
+} // namespace
+void setAnswerOpen(bool open) { g_answerOpen = open; }
+bool answerOpen() noexcept { return g_answerOpen; }
 
 // ============================================================ 1.39.0 : la licence perdue en direct ==
 namespace {
@@ -614,6 +626,7 @@ void showLoss(App& app, const Loss& l) {
 }
 
 std::optional<Answer> takeAnswer() {
+    if (g_answerOpen) return std::nullopt;   // 1.45.0 : une fenetre de reponse est deja ouverte : la suivante a sa fermeture
     std::lock_guard<std::mutex> lock(g_mutex);
     if (g_answers.empty()) return std::nullopt;
     Answer a = std::move(g_answers.front());
@@ -850,6 +863,28 @@ FeaturePreview featurePreview(const std::string& featureId) {
         core::json::Value v;
         if (readAll(d / "descriptions.json", text, 256 * 1024) && core::json::parse(text, v, nullptr) && v.isObject()) {
             if (const auto* all = v.find("fonctions"); all && all->isObject()) out.description = trimmed(all->str(featureId));
+            // 1.45.0 : le repere des bulles - {"l": 960, "h": 600} ou [960, 600] ; pour tout le fichier, ou par capture
+            const auto repere = [](const core::json::Value* r, float& w, float& h) {
+                if (!r) return;
+                double l = 0.0, t = 0.0;
+                if (r->isObject()) {
+                    l = r->num("l");
+                    t = r->num("h");
+                } else if (r->isArray() && r->items().size() == 2) {
+                    l = r->items()[0].asNumber();
+                    t = r->items()[1].asNumber();
+                }
+                if (l >= 16.0 && t >= 16.0 && l <= 20000.0 && t <= 20000.0) {
+                    w = static_cast<float>(l);
+                    h = static_cast<float>(t);
+                }
+            };
+            float allW = 0.f, allH = 0.f;
+            repere(v.find("repere"), allW, allH);
+            for (auto& s : out.shots) {
+                s.refW = allW;
+                s.refH = allH;
+            }
             // les legendes et les bulles, capture par capture
             if (const auto* caps = v.find("captures"); caps && caps->isObject())
                 if (const auto* list = caps->find(featureId); list && list->isArray())
@@ -857,6 +892,7 @@ FeaturePreview featurePreview(const std::string& featureId) {
                         const auto& o = list->items()[i];
                         if (!o.isObject()) continue;
                         out.shots[i].caption = trimmed(o.str("legende"));
+                        repere(o.find("repere"), out.shots[i].refW, out.shots[i].refH);   // 1.45.0
                         if (const auto* spots = o.find("bulles"); spots && spots->isArray())
                             for (const auto& s : spots->items()) {
                                 if (!s.isObject() || s.str("texte").empty()) continue;

@@ -286,7 +286,8 @@ protected:
         ctx.r.fillRoundedRect(r, kNightLine, 12.f);
         ctx.r.fillRoundedRect(r.inset(1.f, 1.f), hovered() ? Color::rgb(0x15203A) : kNightCard, 11.f);
         const auto& s = shell_.workspace().service();
-        const bool  live = shell_.live();
+        const deployer::VersionCheck ver = serviceVersion(shell_.workspace());   // 1.45.0 : a mettre a jour
+        const bool  live = shell_.live() && !ver.outdated;
         const Color dot = live ? kLive : !s.problem.empty() ? Color::rgb(0xEF4444) : s.configured ? Color::rgb(0xF59E0B) : kNightFaint;
         const float x = r.x + 14.f;
         float       y = r.y + 12.f;
@@ -298,6 +299,7 @@ protected:
         std::string line;
         if (!s.problem.empty()) line = "R\xC3\xA9glage illisible";
         else if (!s.configured) line = "Pas encore r\xC3\xA9gl\xC3\xA9";
+        else if (ver.outdated) line = "En " + ver.online + " \xC2\xB7 \xC3\xA0 mettre \xC3\xA0 jour";   // 1.45.0
         else if (live) {
             const double ago = shell_.secondsSinceLive();
             line = "Connect\xC3\xA9 \xC2\xB7 relev\xC3\xA9 il y a " + std::to_string(static_cast<int>(std::max(0.0, ago))) + " s";
@@ -462,7 +464,13 @@ protected:
             ctx.r.fillRoundedRect({ic.x + 3.f, ic.y + 3.f, 8.f, 8.f}, kLive, 4.f);
         } else ui::drawIcon(ctx.r, icon_, ic, ink);
         const FontId f = live_ ? gfx::semibold(kF13) : kF13;
-        const std::string t = fit(ctx.r, text_, f, r.w - 44.f);
+        std::string t = fit(ctx.r, text_, f, r.w - 44.f);
+        // 1.45.0 : trop long - ce qui suit le dernier << . >> (a mettre a jour, en direct) reste lisible ; l'adresse se coupe.
+        if (const auto dot = text_.rfind(" \xC2\xB7 "); t != text_ && dot != std::string::npos) {
+            const std::string tail = text_.substr(dot);
+            const float tw = ctx.r.measure(tail, f).width;
+            if (tw + 40.f < r.w - 44.f) t = fit(ctx.r, text_.substr(0, dot), f, r.w - 44.f - tw) + tail;
+        }
         ctx.r.drawText({r.x + 32.f, r.y + (r.h - ctx.r.lineHeight(f)) * 0.5f}, t, f, text);
     }
 
@@ -519,9 +527,13 @@ public:
         } else {
             const auto& s = shell_.workspace().service();
             const bool certWarn = s.hasState && (!s.state.certOk || s.state.needsRenewal(shell_.workspace().now()));
-            const Tone t = !s.problem.empty() ? Tone::Error : s.configured && (!s.syncKey || certWarn) ? Tone::Warning : Tone::Info;
-            sync_->set(shell_.syncStatusText(), t, ui::Icon::Globe, false, !s.configured && s.problem.empty(), shell_.live() && s.problem.empty() && !certWarn);
+            // 1.45.0 : le service en ligne plus ancien que ce qu'il faut a l'Admin (ou que son kit) : << a mettre a jour >>.
+            const deployer::VersionCheck ver = serviceVersion(shell_.workspace());
+            const Tone t = !s.problem.empty() ? Tone::Error : s.configured && (!s.syncKey || certWarn || ver.outdated) ? Tone::Warning : Tone::Info;
+            sync_->set(shell_.syncStatusText(), t, ui::Icon::Globe, false, !s.configured && s.problem.empty(),
+                       shell_.live() && s.problem.empty() && !certWarn && !ver.outdated);
             sync_->setTooltip(!s.problem.empty() ? s.problem
+                              : ver.outdated   ? deployer::outdatedMessage(ver) + " Clic : la page Service en ligne (D\xC3\xA9ployer le service)."
                               : s.configured   ? "Le service des licences : " + s.config.url + (certWarn ? std::string(" ; sa cl\xC3\xA9 est \xC3\xA0 certifier ou \xC3\xA0 renouveler") : std::string()) +
                                                      ". Clic : la page Service en ligne."
                                                : std::string("Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9. Clic : la page Service en ligne."));
@@ -932,6 +944,7 @@ Shell::Shell(std::string folder, std::function<Seconds()> clock)
 
 Shell::~Shell() {
     // Le travail lent d'abord (il lit le Workspace), puis les pages (elles tiennent des ShellHost vers ici).
+    deployer::stopAll();   // 1.45.0 : une mise en ligne du service en cours s'arrete (sinon la fermeture l'attendrait)
     bg_.wait();
     pendingDone_ = nullptr;
     loose_.clear();
@@ -1219,6 +1232,7 @@ std::string Shell::syncStatusText() const {
     if (!s.configured) return "Service : non r\xC3\xA9gl\xC3\xA9";
     std::string host = s.config.url;
     if (const auto p = host.find("://"); p != std::string::npos) host.erase(0, p + 3);
+    if (serviceVersion(*ws_).outdated) return "Service : " + host + " \xC2\xB7 \xC3\xA0 mettre \xC3\xA0 jour";   // 1.45.0
     if (s.hasState && !s.state.certOk) return "Service : " + host + " (cl\xC3\xA9 \xC3\xA0 certifier)";
     return "Service : " + host + (live() ? " \xC2\xB7 en direct" : "");
 }
@@ -1296,6 +1310,13 @@ bool Shell::autoWatch() {
                      }
                      autoProblemSaid_ = false;
                      lastLive_ = steadyNow();
+                     // 1.45.0 : une autre version en ligne (deployee d'ailleurs : deployer.bat, un autre PC) - l'etat la suit.
+                     if (const auto& sv = ws_->service(); sv.hasState && sv.state.reached && !st->version.empty() && st->version != sv.state.version) {
+                         online::ServiceState now = sv.state;
+                         now.version = st->version;
+                         ws_->adoptServiceState(now);
+                         refreshPages();
+                     }
                      // 1.44.0 : les admins - une liste plus recente (un droit, un retrait), des lignes au journal.
                      const Role before = ws_->role();
                      if (st->adminRequests >= 0) pendingAdmins_ = static_cast<int>(st->adminRequests);
@@ -1322,6 +1343,27 @@ bool Shell::autoWatch() {
                      if (knownRequests_ >= 0 && st->requests != knownRequests_) wantRequests_ = true;
                      knownActivity_ = st->activity;
                      knownRequests_ = st->requests;
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
+// 1.45.0 : AU LANCEMENT, LA VERSION DU SERVICE (/v1/etat, sans bruit, sans rien bloquer) : plus ancienne que ce qu'il
+// faut a l'Admin (ou que le service de son kit) -> un avis une fois, la pastille du haut et le bandeau du tableau de bord
+// (Deployer le service). Hors ligne : rien (le regard le dit). Vrai : la lecture est partie.
+bool Shell::checkServiceVersion() {
+    if (bg_.running() || !ws_->service().ready() || !ws_->signer() || ws_->service().hasState) return false;
+    const Workspace* w = ws_.get();
+    auto st = std::make_shared<online::ServiceState>();
+    if (!runSlow("Service : sa version", [w, st] { return w->serviceVerify(st.get()); },
+                 [this, st](const OpResult&) {
+                     if (!st->reached || ws_->service().hasState) return;   // hors ligne, ou deja relu par Verifier
+                     ws_->adoptServiceState(*st);
+                     refreshPages();
+                     if (const deployer::VersionCheck v = serviceVersion(*ws_); v.outdated)
+                         flash(deployer::outdatedMessage(v) + " (Service en ligne \xE2\x80\xBA D\xC3\xA9ployer le service)", Tone::Warning);
+                     if (view_) static_cast<ShellView*>(view_)->update();
                  }))
         return false;
     quietSlow_ = true;
@@ -1495,8 +1537,12 @@ void Shell::Update(const menu::FrameContext& fc) {
         if (nextAutoFetch_ < 0) nextAutoFetch_ = now + kAutoFetchFirst;
         if (nextWatch_ < 0) nextWatch_ = now + kWatchFirst;
         if (nextBackupCheck_ < 0) nextBackupCheck_ = now + 30.0;   // 1.44.0 : la sauvegarde du jour, 30 s apres le lancement
+        if (versionCheckAt_ < 0) versionCheckAt_ = now + kVersionCheckFirst;   // 1.45.0
         const bool free = attached_ && manager().top() == this && !bg_.running() && !queued_;
-        if (free && wantLicences_) {
+        if (free && !versionChecked_ && now >= versionCheckAt_) {
+            versionChecked_ = true;   // 1.45.0 : une fois par lancement (Verifier relit ensuite)
+            (void)checkServiceVersion();
+        } else if (free && wantLicences_) {
             wantLicences_ = false;
             (void)autoRefreshLicences();
         } else if (free && wantRequests_) {

@@ -41,6 +41,7 @@
 namespace app {
 
 class PerfPane;   // 1.22.2 : l'onglet Performances (app/PerfPane.hpp)
+class HmiSessionPane;   // 1.45.0 : l'onglet Session (hmi/HmiSessionPane.hpp), seulement pendant une session
 
 class HmiBuildProgressDialog final : public menu::WidgetMenu {
 public:
@@ -103,6 +104,13 @@ class HmiBuildOutputPane final : public ui::Widget {
 public:
     // 1.11.14 : LE PANNEAU DU BAS - ses trois onglets. 1.22.2 : et Performances (ce qui consomme).
     static constexpr std::size_t kSorties = 0, kConsole = 1, kDiagnostics = 2, kPerformances = 3;
+    // 1.45.0 : L'ONGLET << SESSION >> (la discussion et le journal d'une session) - il n'existe QUE pendant une session
+    //  (app/SessionMarks : actif) ; tick() l'ajoute apres Performances et le retire a la fin. Sa pastille : les
+    //  messages des autres pas encore lus (lus : l'onglet montre). sessionTab : son rang (npos : pas de session).
+    [[nodiscard]] std::size_t sessionTab() const;
+    [[nodiscard]] HmiSessionPane* sessionPane() noexcept { return session_; }
+    bool showSessionTab();
+    [[nodiscard]] std::uint64_t sessionUnread() const noexcept { return sessionUnread_; }
 
     explicit HmiBuildOutputPane(std::string id);
     // Un build fini : son journal s'ajoute (a l'heure), ses diagnostics remplacent les precedents.
@@ -212,6 +220,10 @@ private:
     std::string                             summary_;
     HmiConsole                              console_;
     PerfPane*                               perf_{nullptr};      // 1.22.2 : l'onglet Performances
+    HmiSessionPane*                         session_{nullptr};   // 1.45.0 : l'onglet Session (pendant une session)
+    std::uint64_t                           sessionRead_{0}, sessionUnread_{0};
+    void syncSession();                                          // 1.45.0 : l'onglet suit la session
+    [[nodiscard]] bool outputsTab() const noexcept;              // 1.45.0 : Sorties ou Diagnostics (leurs filtres)
     double                                  perfBadgeAt_{-1.0};  // ... sa pastille, relue chaque seconde
     HmiConsole::Filter                      consoleFilter_;
     std::uint64_t                           consoleSeen_{~std::uint64_t{0}};

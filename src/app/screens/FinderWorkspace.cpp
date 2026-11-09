@@ -17,6 +17,7 @@
 // =============================================================================
 #include "Screens.hpp"
 
+#include "../SessionMarks.hpp"   // 1.45.0 : l'equipier d'une session ne garde rien
 #include "../App.hpp"
 #include "../FileFinder.hpp"
 #include "../FileFinderPane.hpp"
@@ -429,7 +430,10 @@ void MainAnalysisScreen::installPathLinks() {
     p.reveal = [this](const std::string& resolved) {
         std::error_code ec;
         std::string why;
-        if (resolved.empty() || !fs::exists(u8path(resolved), ec)) why = "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
+        std::string rest;
+        // 1.45.0 : l'equipier d'une session n'ouvre pas sa copie dans l'explorateur (elle s'efface quand il part).
+        if (const std::string keep = sessionmarks::keepRefusal(); !keep.empty() && under(app_.projectFolder(), resolved, rest)) why = keep;
+        else if (resolved.empty() || !fs::exists(u8path(resolved), ec)) why = "\xC2\xAB " + shown(resolved) + " \xC2\xBB n'existe pas";
         else if (fs::is_directory(u8path(resolved), ec)) why = dossiers::ouvrirDansLeSysteme(resolved);   // un dossier : ouvert
         else why = finder::revealInExplorer(resolved);                                                  // un fichier : choisi
         if (!why.empty() && status_) status_->setTransientMessage("Ouvrir dans l'explorateur : " + why, 6.0, ui::StatusBar::Severity::Warning);

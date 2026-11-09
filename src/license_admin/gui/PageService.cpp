@@ -18,6 +18,10 @@
 //    - LES LICENCES EN LIGNE : le dernier releve, Relever, les compteurs ;
 //    - METTRE LE SERVICE EN LIGNE : les etapes (outils/service/LISEZ-MOI-SERVICE.txt,
 //      resumees).
+//  1.45.0 : << Deployer le service >> (la carte << Le service >> et celle de la mise
+//  en ligne) lance le kit installe avec l'Admin, sa sortie en direct, puis l'etat
+//  relu (DeployDialog.cpp) ; un service en ligne plus ancien que ce qu'il faut a
+//  l'Admin (ou que le kit) : un bandeau en haut de la page, avec le meme bouton.
 //  Tout le reseau passe par runSlow ; pendant ce temps les boutons sont gris et
 //  la page le dit. Rien n'est simule : hors ligne, c'est dit.
 //
@@ -689,6 +693,8 @@ private:
     // 1.44.0 : les adresses de secours (le registre : fallback_services ; l'admin+ ou le droit << offres >>).
     void fallbackBlocks(Blocks& bl);
     void saveFallback();
+    // 1.45.0 : deployer le service (le dialogue, DeployDialog.cpp)
+    void openDeploy();
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -721,6 +727,10 @@ private:
     ui::Button*                     list_{nullptr};
     ui::Button*                     stats_{nullptr};
     ui::Button*                     publicKey_{nullptr};
+    // 1.45.0 : << Deployer le service >> (la carte << Le service >>, le bandeau, la carte de la mise en ligne)
+    ui::Button*                     deploy_{nullptr};
+    ui::Button*                     deployBanner_{nullptr};
+    ui::Button*                     deploySteps_{nullptr};
     // 1.37.0 : le mail
     ui::Button*                     mailGmail_{nullptr};
     ui::InputText*                  mailHost_{nullptr};
@@ -809,6 +819,20 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     stats_->setIcon(ui::Icon::Chart);
     publicKey_ = body_->make<ui::Button>("\xC3\x89" "crire cle-publique.txt\xE2\x80\xA6", "service.cle-publique");
     publicKey_->setIcon(ui::Icon::Export);
+    // 1.45.0 : deployer le service depuis l'Admin (le kit installe avec lui ; sans fenetre de console)
+    {
+        const char* const ids[] = {"service.deployer", "service.deployer.bandeau", "service.deployer.etapes"};
+        ui::Button** const slots[] = {&deploy_, &deployBanner_, &deploySteps_};
+        for (int i = 0; i < 3; ++i) {
+            ui::Button* b = body_->make<ui::Button>("D\xC3\xA9ployer le service", ids[i]);
+            b->setIcon(ui::Icon::ArrowUp);
+            b->setTooltip("Lance le kit install\xC3\xA9 avec l'Admin (Node.js, wrangler) : ton service part en ligne, ou \xC3\xA0 jour, sur ton compte "
+                          "Cloudflare. La sortie s'affiche en direct ; rien n'est perdu (les licences, les activations, l'archive restent chez Cloudflare).");
+            *slots[i] = b;
+        }
+        deployBanner_->setStyle(ui::Button::Style::Primary);
+        for (ui::Button* b : {deploy_, deployBanner_, deploySteps_}) links_ += b->clicked->connect([this] { openDeploy(); });
+    }
 
     // 1.37.0 : le mail au client
     mailGmail_ = body_->make<ui::Button>("Gmail", "service.mail.gmail");
@@ -1049,6 +1073,8 @@ void ServicePage::syncEnabled() {
     mailDisconnect_->setEnabled(!b && mail::microsoftConnected(ws().folder()));
     publicKey_->setEnabled(key);
     continue_->setEnabled(noted_->isChecked());
+    // 1.45.0 : deployer - pas pendant un travail lent (le deploiement en est un), un seul a la fois.
+    for (ui::Button* d : {deploy_, deployBanner_, deploySteps_}) d->setEnabled(!b && !deployer::running());
 }
 
 void ServicePage::note(Last& l, const std::string& what, const OpResult& r) {
@@ -1110,6 +1136,17 @@ void ServicePage::rebuild() {
         bl.end();
     }
 
+    // ---- 1.45.0 : le service en ligne est plus ancien que ce qu'il faut a cet Admin (ou que le kit qu'il porte) ----
+    const deployer::VersionCheck ver = serviceVersion(ws());
+    if (ver.outdated) {
+        bl.card("Ton service en ligne est \xC3\xA0 mettre \xC3\xA0 jour", ui::Tone::Warning);
+        bl.text(deployer::outdatedMessage(ver), ui::Tone::Warning);
+        bl.note("La mise en ligne remplace le programme du service, rien d'autre : les licences, les activations et ton archive restent chez "
+                "Cloudflare. Compte une minute (quelques-unes la premi\xC3\xA8re fois).");
+        bl.row({deployBanner_});
+        bl.end();
+    }
+
     // ---- l'etat ----
     const bool reached = s.hasState && s.state.reached;
     bl.card("Le service", !s.problem.empty() ? ui::Tone::Error : s.ready() && reached && s.state.adminOk ? ui::Tone::Ok : ui::Tone::Warning);
@@ -1123,8 +1160,11 @@ void ServicePage::rebuild() {
     } else if (!s.state.reached) {
         bl.pair("\xC3\x89tat", "le service n'a pas r\xC3\xA9pondu (" + dateTimeFr(s.stateAt) + ")", ui::Tone::Error);
     } else {
-        bl.pair("\xC3\x89tat", "il r\xC3\xA9pond (version " + (s.state.version.empty() ? std::string("?") : s.state.version) + ", v\xC3\xA9rifi\xC3\xA9 le " + dateTimeFr(s.stateAt) + ")",
-                ui::Tone::Ok);
+        // 1.45.0 : sa version, et s'il est a mettre a jour
+        bl.pair("\xC3\x89tat", "il r\xC3\xA9pond (version " + (s.state.version.empty() ? std::string("?") : s.state.version) +
+                                    (ver.outdated ? " \xE2\x80\x94 \xC3\xA0 mettre \xC3\xA0 jour : la " + ver.target + " est pr\xC3\xAAte" : std::string()) + ", v\xC3\xA9rifi\xC3\xA9 le " +
+                                    dateTimeFr(s.stateAt) + ")",
+                ver.outdated ? ui::Tone::Warning : ui::Tone::Ok);
         bl.pair("Ta cl\xC3\xA9 d'\xC3\xA9" "diteur", s.state.adminOk ? k.id + " : accept\xC3\xA9" "e par le service"
                                                     : std::string("REFUS\xC3\x89" "E : sa cl\xC3\xA9 publique doit \xC3\xAAtre dans PUBLISHER_KEYS du Worker (cle-publique.txt)"),
                 s.state.adminOk ? ui::Tone::None : ui::Tone::Error);
@@ -1139,7 +1179,7 @@ void ServicePage::rebuild() {
                 ui::Tone::Warning);
     if (service_.has)
         bl.pair("Dernier r\xC3\xA9sultat", service_.message + " (" + dateTimeFr(service_.at) + ")", service_.ok ? ui::Tone::Ok : ui::Tone::Error);
-    bl.row({verify_});
+    bl.row({verify_, deploy_});   // 1.45.0 : Deployer le service
     bl.end();
 
     mailBlocks(bl);   // 1.37.0
@@ -1225,14 +1265,17 @@ void ServicePage::rebuild() {
     bl.bullet("2. Cr\xC3\xA9" "e ton compte Cloudflare (gratuit) : dash.cloudflare.com/sign-up ; dans \xC2\xAB Workers et Pages \xC2\xBB, choisis ton sous-domaine.");
     bl.bullet("3. Le dossier du service, install\xC3\xA9 avec l'Admin (menu D\xC3\xA9marrer \xE2\x80\xBA D\xC3\xA9ployer le service en ligne), contient d\xC3\xA9j\xC3\xA0 "
               "tout ; le bouton ci-dessous y \xC3\xA9" "crit cle-publique.txt (ta cl\xC3\xA9 PUBLIQUE).");
-    bl.bullet("4. Dans un terminal ouvert dans le dossier service : npx wrangler login (une fois par PC).");
-    bl.bullet("5. Menu D\xC3\xA9marrer \xE2\x80\xBA D\xC3\xA9ployer le service en ligne (deployer.bat) : il \xC3\xA9" "crit l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e aussi dans "
-              "adresse-du-service.txt).");
+    // 1.45.0 : le bouton << Deployer le service >> fait la connexion et la mise en ligne (deployer.bat reste la).
+    bl.bullet("4. Une fois par PC, connecte-le \xC3\xA0 Cloudflare : \xC2\xAB D\xC3\xA9ployer le service \xC2\xBB te le propose (Se connecter \xC3\xA0 Cloudflare\xE2\x80\xA6) ; ou, dans "
+              "un terminal ouvert dans le dossier service : npx wrangler login.");
+    bl.bullet("5. \xC2\xAB D\xC3\xA9ployer le service \xC2\xBB (ci-dessous) le met en ligne, et \xC3\xA0 jour apr\xC3\xA8s chaque mise \xC3\xA0 jour de l'Admin ; c'est ce que fait le menu "
+              "D\xC3\xA9marrer \xE2\x80\xBA D\xC3\xA9ployer le service en ligne (deployer.bat). Il donne l'adresse https://xpg-licences.<ton-compte>.workers.dev (gard\xC3\xA9" "e "
+              "aussi dans adresse-du-service.txt) et la r\xC3\xA8gle ici si l'Admin n'en a pas.");
     bl.bullet("6. Colle-la plus haut, Enregistrer l'adresse, V\xC3\xA9rifier, puis Certifier la cl\xC3\xA9 du service (et Renouveler, chaque ann\xC3\xA9" "e).");
     bl.bullet("7. Signe le registre (\xC3\x89" "ditions : il part sur le service), synchronise l'archive, puis cr\xC3\xA9" "e tes licences en ligne (Licences).");
     bl.bullet("8. Pour les Studios livr\xC3\xA9s : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Pr\xC3\xA9parer les fichiers pour les Studios (ServiceAddress.hpp porte "
               "l'adresse), puis reconstruire les Studios.");
-    bl.row({publicKey_});
+    bl.row({deploySteps_, publicKey_});   // 1.45.0
     bl.note("Ce qui ne va jamais sur le service : ta cl\xC3\xA9 priv\xC3\xA9" "e, la cl\xC3\xA9 de synchro, son code de secours, un code d'activation (le service n'en "
             "garde que l'empreinte).");
     bl.end();
@@ -1665,6 +1708,20 @@ void ServicePage::listLicences() {
 void ServicePage::stats() {
     const Workspace* w = &ws();
     (void)slow("Service : les compteurs", [w] { return w->serviceStats(); }, [this](const OpResult& r) { note(licences_, "compteurs", r); });
+}
+
+// ---------------------------------------------------------------------------------------------------- 1.45.0 : deployer
+void ServicePage::openDeploy() {
+    if (refuseIfBusy()) return;
+    if (deployer::running()) {
+        refuse("une mise en ligne du service tourne d\xC3\xA9j\xC3\xA0 : attends qu'elle finisse");
+        return;
+    }
+    if (!host_.openDialog) return;
+    const auto alive = aliveCheck();
+    host_.openDialog(makeDeployDialog(host_, [this, alive] {
+        if (alive()) refresh();
+    }));
 }
 
 // 1.40.0 : le dossier du service installe avec l'Admin (l'installateur : %LOCALAPPDATA%\XPG\ServiceLicences, avec

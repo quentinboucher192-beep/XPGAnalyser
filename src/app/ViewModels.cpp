@@ -946,6 +946,8 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         if (kindOf(n) == NodeKind::PinsFolder) return pins_.size();
         if (kindOf(n) == NodeKind::RecentFolder) return recents_.size();
         if (kindOf(n) == NodeKind::PinItem || kindOf(n) == NodeKind::RecentItem) return 0;
+        if (kindOf(n) == NodeKind::SessionFolder) return session_.size();   // 1.45.0
+        if (kindOf(n) == NodeKind::SessionMember) return 0;
         // 2e partie : la portee du rail - la racine ne montre que ce domaine (Epingles : ses deux dossiers).
         if (kindOf(n) == NodeKind::Root && !rootDomainList(hmi_ != nullptr).empty() && scope_ != 0 && !rootGuard_) {
             if (scope_ == 1) return shortcutFolders();
@@ -1343,13 +1345,19 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         // Outil Modbus, Generer, Compiler n'y sont plus.
         if (kindOf(n) == NodeKind::PinsFolder) return k < pins_.size() ? pack(NodeKind::PinItem, static_cast<Index>(k)) : ui::kInvalidNode;
         if (kindOf(n) == NodeKind::RecentFolder) return k < recents_.size() ? pack(NodeKind::RecentItem, static_cast<Index>(k)) : ui::kInvalidNode;
+        if (kindOf(n) == NodeKind::SessionFolder)   // 1.45.0 : les membres de la session
+            return k < session_.size() ? pack(NodeKind::SessionMember, static_cast<Index>(k)) : ui::kInvalidNode;
         if (kindOf(n) == NodeKind::Root && !rootDomainList(hmi_ != nullptr).empty() && scope_ > 1 && !rootGuard_) {   // 2e partie : la portee du rail
             static constexpr NodeKind heads[] = {NodeKind::ApiFolder, NodeKind::HmiFolder, NodeKind::SimFolder, NodeKind::VersionsFolder};
             const auto& d = rootDomainList(hmi_ != nullptr);
             if (k != 0 || scope_ > 5 || std::find(d.begin(), d.end(), heads[scope_ - 2]) == d.end()) return ui::kInvalidNode;
             return pack(heads[scope_ - 2], 0);
         }
-        if (kindOf(n) == NodeKind::Root && !rootGuard_) {          // Epingles, Recents, puis la racine d'avant
+        if (kindOf(n) == NodeKind::Root && !rootGuard_) {          // Session (1.45.0), Epingles, Recents, puis la racine d'avant
+            if (!session_.empty()) {
+                if (k == 0) return sessionFolderNode();
+                --k;
+            }
             if (!pins_.empty()) {
                 if (k == 0) return pinsFolderNode();
                 --k;
@@ -2106,6 +2114,19 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         recents_ = std::move(recents);
     }
 
+    // 1.45.0 : la session en tete de la racine.
+    bool ProjectTreeModel::setSession(std::vector<SessionRow> people, std::string title) {
+        if (people == session_ && title == sessionTitle_) return false;
+        session_ = std::move(people);
+        sessionTitle_ = std::move(title);
+        return true;
+    }
+
+    int ProjectTreeModel::sessionMemberOf(ui::NodeId n) const {
+        if (kindOf(n) != NodeKind::SessionMember || indexOf(n) >= session_.size()) return -1;
+        return session_[indexOf(n)].number;
+    }
+
     ui::NodeId ProjectTreeModel::shortcutTarget(ui::NodeId n) const {
         const auto k = kindOf(n);
         if (k != NodeKind::PinItem && k != NodeKind::RecentItem) return ui::kInvalidNode;
@@ -2295,6 +2316,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         const auto k = kindOf(n);
         switch (k) {
         case NodeKind::Root: case NodeKind::PinsFolder: case NodeKind::RecentFolder: return 0;
+        case NodeKind::SessionFolder: case NodeKind::SessionMember: return 0;   // 1.45.0
         case NodeKind::PinItem: case NodeKind::RecentItem: {
             const auto t = shortcutTarget(n);
             return t == ui::kInvalidNode ? std::uint8_t{0} : domainOf(t);
@@ -2562,6 +2584,10 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             return "Voir les " + std::to_string(versions_.empty() ? 0 : versions_.size() - 1) + " versions\xE2\x80\xA6";
         if (kindOf(n) == NodeKind::PinsFolder) return "\xC3\x89pingl\xC3\xA9s";
         if (kindOf(n) == NodeKind::RecentFolder) return "R\xC3\xA9" "cents";
+        // 1.45.0 : la session - << Session >> ; un membre : << Lea >> (le reste en gris : style).
+        if (kindOf(n) == NodeKind::SessionFolder) return "Session";
+        if (kindOf(n) == NodeKind::SessionMember)
+            return indexOf(n) < session_.size() ? session_[indexOf(n)].name + (session_[indexOf(n)].me ? " (toi)" : "") : std::string{};
         if (kindOf(n) == NodeKind::PinItem || kindOf(n) == NodeKind::RecentItem) {
             const auto t = shortcutTarget(n);
             return t == ui::kInvalidNode ? std::string{} : text(t);
@@ -3447,6 +3473,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::ToolRow:         break;
         case NodeKind::VersionsMore:    break;
         case NodeKind::PinsFolder: case NodeKind::PinItem: case NodeKind::RecentFolder: case NodeKind::RecentItem: break;
+        case NodeKind::SessionFolder: case NodeKind::SessionMember: break;   // 1.45.0 (traites plus haut)
         }
         return {};
     }
@@ -3883,6 +3910,30 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
             s.iconTone = hmiRow ? ui::Tone::Info : ui::Tone::Accent;
             return s;
         }
+        // 1.45.0 : la session - le dossier (son nombre), un membre (ses initiales dans sa couleur, le reste en gris).
+        if (kindOf(n) == NodeKind::SessionFolder) {
+            s.bold = true;
+            s.icon = ui::Icon::User;
+            s.iconTone = ui::Tone::Accent;
+            s.badge = std::to_string(session_.size());
+            s.hint = sessionTitle_;
+            return s;
+        }
+        if (kindOf(n) == NodeKind::SessionMember) {
+            if (indexOf(n) >= session_.size()) return s;
+            const auto& m = session_[indexOf(n)];
+            ui::ColorPill p;
+            p.text = m.initials.empty() ? std::string("?") : m.initials;
+            p.fill = gfx::Color::rgb(m.color);
+            p.fillTo = gfx::Color::rgb(m.color);
+            p.border = gfx::Color::rgb(m.color);
+            p.ink = gfx::Color::rgb(0xFFFFFF);
+            s.colorLead = p;
+            s.bold = m.me;
+            s.hint = std::string(m.host ? "h\xC3\xB4te" : "\xC3\xA9quipier") + (m.machine.empty() ? std::string{} : " \xC2\xB7 " + m.machine)
+                   + (m.view.empty() ? std::string{} : " \xC2\xB7 " + m.view) + " \xC2\xB7 " + (m.watch ? "Regarder" : "Modifier");
+            return s;
+        }
         // Un raccourci (Epingles, Recents) : le style du noeud vise, son domaine en gris.
         if (kindOf(n) == NodeKind::PinItem || kindOf(n) == NodeKind::RecentItem) {
             const auto t = shortcutTarget(n);
@@ -4100,6 +4151,7 @@ std::string compte(std::size_t n, std::string_view un, std::string_view plusieur
         case NodeKind::PinsFolder:   s.bold = true; s.icon = ui::Icon::Star; s.iconTone = ui::Tone::Warning; break;
         case NodeKind::RecentFolder: s.bold = true; s.icon = ui::Icon::History; s.iconTone = ui::Tone::Muted; break;
         case NodeKind::PinItem: case NodeKind::RecentItem: break;   // traites plus haut
+        case NodeKind::SessionFolder: case NodeKind::SessionMember: break;   // 1.45.0 : traites plus haut
 
         case NodeKind::HmiFolder:        s.bold = true; s.icon = ui::Icon::Screen; break;
         // Lot 21 : les versions - une pastille de couleur par etat.

@@ -36,14 +36,24 @@
 #include "../src/hmi/HmiPackage.hpp"
 #include "../src/license_admin/Admin.hpp"
 #include "../src/licensing/Licensing.hpp"
+#include "../src/app/Capture.hpp"            // 1.45.0 : encodePng (les captures d'essai)
+#include "../src/app/LicenceViews.hpp"       // 1.45.0 : les licences de ce PC, la capture et ses bulles
+#include "../src/app/hmi/HmiImages.hpp"      // 1.45.0 : les copies reduites (smooth)
+#include "../src/menu/MenuManager.hpp"       // 1.45.0 : la fenetre Licence sur une pile de menus
+#include "../src/ui/DialogFrame.hpp"
+#include "../src/ui/widgets/Containers.hpp"
+#include "../src/ui/widgets/Controls.hpp"
+#include "../src/ui/widgets/DataViews.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <random>
 #include <set>
 #include <string>
@@ -106,6 +116,70 @@ struct Recorder final : gfx::IRenderer {
         return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(what) != std::string::npos; });
     }
 };
+
+// 1.45.0 : un renderer qui fait des images (un numero, sa taille) et retient les textes et les images dessinees.
+struct ImageRecorder final : gfx::IRenderer {
+    std::vector<std::string> texts;
+    std::map<std::uint32_t, std::pair<int, int>> sizes;
+    struct Drawn {
+        std::uint32_t id;
+        gfx::Rect     dst;
+    };
+    std::vector<Drawn> drawn;
+    std::uint32_t      next{1};
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId f) const override {
+        return {static_cast<float>(t.size()) * f.v * 0.5f, static_cast<float>(f.v), 0.8f * f.v, 0.2f * f.v};
+    }
+    float lineHeight(gfx::FontId f) const override { return static_cast<float>(f.v); }
+    gfx::Size surfaceSize() const override { return {1600.f, 900.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId f, float w) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w / (f.v * 0.5f))));
+    }
+    gfx::TextureId createImage(const std::uint8_t*, int w, int h) override {
+        sizes[next] = {w, h};
+        return gfx::TextureId{next++};
+    }
+    void drawImage(gfx::TextureId id, const gfx::Rect& dst, float, bool, bool, gfx::Color) override { drawn.push_back({id.v, dst}); }
+    [[nodiscard]] bool saw(std::string_view what) const {
+        return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(what) != std::string::npos; });
+    }
+    void clear() {
+        texts.clear();
+        drawn.clear();
+    }
+};
+
+// 1.45.0 : une capture d'essai (un degrade : rien de reel), en PNG.
+bool writeCapture(const fs::path& p, int w, int h) {
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 4);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            auto* q = rgba.data() + (static_cast<std::size_t>(y) * static_cast<std::size_t>(w) + static_cast<std::size_t>(x)) * 4;
+            q[0] = static_cast<std::uint8_t>(x * 255 / std::max(1, w - 1));
+            q[1] = static_cast<std::uint8_t>(y * 255 / std::max(1, h - 1));
+            q[2] = 90;
+            q[3] = 255;
+        }
+    std::vector<std::uint8_t> png;
+    if (!app::encodePng(rgba, w, h, png)) return false;
+    fs::create_directories(p.parent_path());
+    std::ofstream out(p, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(png.data()), static_cast<std::streamsize>(png.size()));
+    return out.good();
+}
+
+bool near(float a, float b, float eps = 1.5f) { return std::abs(a - b) <= eps; }
 
 lic::TrustedKey trustedOf(const lic::SigningKey& k) {
     lic::TrustedKey t;
@@ -464,6 +538,362 @@ int main(int argc, char** argv) {
                   "les reponses de l'editeur : une fenetre chacune, dans l'ordre");
             fs::remove(base / "pc-demande" / ls::kRecordFile, ec);
             ls::setAddressForTests(licensing::service::Address{});
+        }
+
+        // ---- 1.45.0 : la fenetre Licence - les licences de ce PC, une seule fenetre, les captures en grand ----
+        std::printf("-- 1.45.0 : les licences de ce PC (Regarder, Liberer), une seule fenetre Licence, les captures et leurs bulles\n");
+        {
+            namespace ls = app::licence::service;
+            namespace L = app::licence;
+            using K = L::PcLicence::Kind;
+            app::licence::start(o);   // le PC de la licence installee par fichier (la derniere importee plus haut)
+            const auto st45 = lic::getLicenseState();
+            const lic::Seconds t0 = lic::systemNow();
+            // -- le modele, sur le magasin d'essai
+            auto rows = L::pcLicences();
+            check(!st45.licenseId.empty() && rows.size() == 1 && rows[0].kind == K::File && rows[0].id == st45.licenseId && rows[0].edition == st45.licensedEdition &&
+                      rows[0].customer == "Client d'essai" && has(rows[0].state, "Valide") && has(rows[0].state, "fichier") && has(rows[0].until, "jusqu'au") &&
+                      rows[0].tab == L::kTabMine && rows[0].tone == 1,
+                  "les licences de ce PC : la licence li\xC3\xA9" "e par fichier (" + st45.licenseId + " : " + (rows.empty() ? std::string("aucune") : rows[0].state) + ")");
+            const auto filePlan = rows.empty() ? L::ReleasePlan{} : L::releasePlan(rows[0], st45, t0);
+            check(filePlan.action == L::ReleasePlan::Action::None && has(filePlan.text, st45.licenseId) && has(filePlan.text, "retirer ce PC"),
+                  "Lib\xC3\xA9rer une licence par fichier : rien d'ici, la phrase dit quoi faire");
+            // une licence en ligne, son poste flottant, une option en cours, une option finie, une activation d'avant
+            lic::LicenseState on = st45;
+            on.online = true;
+            on.floating = true;
+            on.activationUntil = t0 + 20 * lic::kDay;
+            on.activationDaysLeft = 20;
+            on.leaseUntil = t0 + 600;
+            lic::LicenseOption opt;
+            opt.id = "multi_user";
+            opt.label = "Travail \xC3\xA0 plusieurs";
+            opt.from = t0 - lic::kDay;
+            opt.until = t0 + 30 * lic::kDay;
+            lic::LicenseOption over = opt;
+            over.id = "advanced_export";
+            over.until = t0 - 3600;
+            on.options = {opt, over};
+            ls::Record rec;
+            rec.activatedLicense = "XPG-UI-0099";
+            rows = L::pcLicences(on, rec, false, t0);
+            check(rows.size() == 4 && rows[0].kind == K::Online && has(rows[0].state, "bail jusqu'au") && has(rows[0].state, "(20 j)") &&
+                      rows[1].kind == K::Floating && has(rows[1].state, "Poste pris") && rows[1].tab == L::kTabActivation &&
+                      rows[2].kind == K::Option && has(rows[2].title, "Travail") && rows[2].tab == L::kTabOptions && has(rows[2].state, "active") &&
+                      rows[3].kind == K::Renew && rows[3].id == "XPG-UI-0099",
+                  "en ligne : la licence et son bail, le poste flottant, l'option en cours (pas la finie), l'activation d'avant \xC3\xA0 rendre");
+            check(L::pcLicences(on, ls::Record{}, true, t0).size() == 2, "le poste flottant rendu (Rendre le poste) : plus dans la liste");
+            on.status = lic::LicenseStatus::LeaseExpired;
+            on.activationUntil = 0;
+            rows = L::pcLicences(on, ls::Record{}, false, t0);
+            check(!rows.empty() && rows[0].kind == K::Renew && rows[0].tone == 3 && has(rows[0].state, "bail expir") && rows[0].tab == L::kTabActivation,
+                  "le bail fini : la licence en ligne \xC3\xA0 renouveler (sa place est prise)");
+            lic::LicenseState none;
+            none.status = lic::LicenseStatus::NotConfigured;
+            check(L::pcLicences(none, ls::Record{}, false, t0).empty(), "licences pas actives : aucune ligne");
+            {   // Liberer : ce qui se passe (la Decouverte, ou plus de licence apres)
+                L::PcLicence onl;
+                onl.kind = K::Online;
+                onl.id = "XPG-UI-0001";
+                onl.edition = "PERSONAL";
+                lic::LicenseState ev = st45;
+                ev.evaluationStartedAt = t0 - 5 * lic::kDay;
+                ev.evaluationEndsAt = t0 + 10 * lic::kDay;
+                const auto p1 = L::releasePlan(onl, ev, t0);
+                ev.evaluationEndsAt = t0 - lic::kDay;
+                ev.evaluationOver = true;
+                const auto p2 = L::releasePlan(onl, ev, t0);
+                L::PcLicence seat = onl;
+                seat.kind = K::Floating;
+                L::PcLicence o2 = onl;
+                o2.kind = K::Option;
+                o2.title = "Option Travail";
+                check(p1.action == L::ReleasePlan::Action::Release && has(p1.text, "repasse en D\xC3\xA9" "couverte") && has(p1.text, "(10 jours)") &&
+                          has(p1.text, "XPG-UI-0001") && p1.confirm == "Lib\xC3\xA9rer ce poste" && p1.cancel == "Garder la licence ici",
+                      "Lib\xC3\xA9rer une licence en ligne : la question, et ce PC repasse en D\xC3\xA9" "couverte (" + p1.text.substr(0, 60) + ")");
+                check(has(p2.text, "plus de licence") && has(p2.text, "aucun projet"), "la D\xC3\xA9" "couverte finie : ce PC n'aura plus de licence");
+                check(L::releasePlan(seat, st45, t0).action == L::ReleasePlan::Action::ReturnSeat &&
+                          has(L::releasePlan(seat, st45, t0).text, "comme sans licence") &&
+                          L::releasePlan(o2, st45, t0).action == L::ReleasePlan::Action::None,
+                      "le poste flottant : rendu (ce PC comme sans licence) ; une option : elle suit sa licence");
+            }
+            {   // la vue : une ligne, Regarder, Liberer ; vide : la phrase
+                L::PcLicencesView view("pc-essai");
+                std::vector<L::PcLicence> got;
+                int looks = 0;
+                view.onLook = [&](const L::PcLicence& l) {
+                    ++looks;
+                    got.push_back(l);
+                };
+                view.onRelease = [&](const L::PcLicence& l) { got.push_back(l); };
+                view.setRows(L::pcLicences(), "vide");
+                view.setBounds({0, 0, 900, view.wantedHeight()});
+                view.layout();
+                auto* look = view.lookButton(0);
+                auto* release = view.releaseButton(0);
+                check(look && release && look->visible() && release->visible() && !view.lookButton(1)->visible() && look->bounds().w > 0.f &&
+                          release->bounds().x > look->bounds().x &&
+                          near(view.wantedHeight(), L::PcLicencesView::kHeader + L::PcLicencesView::kRow + L::PcLicencesView::kGap),
+                      "une ligne : Regarder, et Lib\xC3\xA9rer \xC3\xA0 sa droite");
+                const gfx::Point lp{look->bounds().x + 10.f, look->bounds().y + 10.f};
+                (void)view.dispatch(ui::MouseMove{lp, {}, {}});
+                (void)view.dispatch(ui::MouseDown{lp, ui::MouseButton::Left, 1, {}});
+                (void)view.dispatch(ui::MouseUp{lp, ui::MouseButton::Left, {}});
+                release->clicked->emit();
+                check(looks == 1 && got.size() == 2 && got[0].id == st45.licenseId && got[1].kind == K::File, "un clic sur Regarder, puis Lib\xC3\xA9rer : leur ligne");
+                Recorder r1;
+                view.render(ui::PaintContext{r1, ui::Theme::light(), view.bounds(), 0.0, nullptr});
+                check(r1.saw("Les licences de ce PC") && r1.saw(st45.licenseId) && r1.saw(st45.licensedEdition) && r1.saw("Client d'essai"),
+                      "dessin\xC3\xA9" "e : le titre, la licence, son \xC3\xA9" "dition, le client");
+                view.setRows({}, L::pcLicencesEmptyText(lic::LicenseState{}));
+                Recorder r2;
+                view.render(ui::PaintContext{r2, ui::Theme::light(), view.bounds(), 0.0, nullptr});
+                check(!view.lookButton(0)->visible() && r2.saw("Aucune licence sur ce PC"), "aucune licence : la phrase, pas de boutons");
+            }
+
+            // -- la fenetre Licence sur une pile de menus
+            const ui::Theme theme = ui::Theme::dark();
+            const menu::FrameContext fc{1.0 / 30.0, 1.0, &theme, {1600.f, 900.f}, 1.f};
+            menu::MenuManager mm{menu::MenuFactory{}};
+            const auto frame = [&] {
+                mm.applyPending();
+                mm.Update(fc);
+            };
+            const auto rootOf = [&]() -> ui::Widget* { return mm.top() ? mm.top()->widgetRoot() : nullptr; };
+            const auto button = [&](const char* id) -> ui::Button* {
+                auto* r = rootOf();
+                return r ? dynamic_cast<ui::Button*>(r->findById(id)) : nullptr;
+            };
+            const auto click = [&](gfx::Point p) {
+                (void)mm.HandleEvent(ui::MouseMove{p, {}, {}});
+                (void)mm.HandleEvent(ui::MouseDown{p, ui::MouseButton::Left, 1, {}});
+                (void)mm.HandleEvent(ui::MouseUp{p, ui::MouseButton::Left, {}});
+            };
+            app::showLicenceWindow(mm, L::kTabRequest);
+            frame();
+            ui::Widget* licRoot = rootOf();
+            auto* tabs = licRoot ? dynamic_cast<ui::TabControl*>(licRoot->findById("dialog.licence.onglets")) : nullptr;
+            auto* pcs = licRoot ? dynamic_cast<L::PcLicencesView*>(licRoot->findById("licence.demande.ce-pc")) : nullptr;
+            check(mm.depth() == 1 && app::licenceWindowOpen() && tabs && tabs->currentIndex() == static_cast<std::size_t>(L::kTabRequest) && pcs &&
+                      pcs->rows().size() == 1 && pcs->bounds().w > 0.f && pcs->bounds().h >= L::PcLicencesView::kHeader,
+                  "Demander ma licence : << Les licences de ce PC >> en t\xC3\xAAte (la licence de ce PC)");
+            if (!tabs || !pcs) {
+                std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
+                return 1;
+            }
+            if (auto* btn = button("licence.demande.ce-pc.regarder.1")) btn->clicked->emit();
+            check(tabs->currentIndex() == static_cast<std::size_t>(L::kTabMine), "Regarder : l'onglet Ma licence");
+            tabs->setCurrentIndex(static_cast<std::size_t>(L::kTabRequest));
+            frame();
+            if (auto* btn = button("licence.demande.ce-pc.liberer.1")) btn->clicked->emit();
+            frame();
+            check(mm.depth() == 2 && mm.top() && mm.top()->id() == "dialog.message",
+                  "Lib\xC3\xA9rer (une licence par fichier) : la fen\xC3\xAAtre qui dit pourquoi pas d'ici");
+            if (auto* btn = button("dialog.message.ok")) btn->clicked->emit();
+            frame();
+            check(mm.depth() == 1 && rootOf() == licRoot, "ferm\xC3\xA9" "e d'un clic");
+
+            // -- UNE SEULE FENETRE : la reponse de l'editeur arrive pendant que la fenetre Licence est ouverte ; << Voir ma
+            //    licence >> la ramene sur Ma licence (avant : une seconde par-dessus, deux clics sur la croix pour sortir)
+            const auto answer = [](const char* kind, const char* id, const char* note) {
+                L::Answer a;
+                a.kind = kind;
+                a.licenseId = id;
+                a.note = note;
+                return a;
+            };
+            L::queueAnswer(answer(ls::kAnswerAccepted, "XPG-UI-0001", "Bonne route"));
+            L::queueAnswer(answer(ls::kAnswerAccepted, "XPG-UI-0001", "Bonne route"));   // le meme evenement, releve deux fois
+            const auto accepted = L::takeAnswer();
+            check(accepted && !L::takeAnswer(), "la m\xC3\xAAme r\xC3\xA9ponse deux fois dans la file : une seule fen\xC3\xAAtre");
+            if (accepted) L::showAnswer(mm, *accepted);
+            frame();
+            L::queueAnswer(answer(ls::kAnswerRefused, "", "Raison d'essai"));
+            check(mm.depth() == 2 && L::answerOpen() && !L::takeAnswer(), "la r\xC3\xA9ponse ouverte : la suivante attend sa fermeture");
+            if (auto* btn = button("dialog.message.ok")) btn->clicked->emit();   // Voir ma licence
+            frame();
+            check(mm.depth() == 1 && !L::answerOpen() && rootOf() == licRoot && tabs->currentIndex() == static_cast<std::size_t>(L::kTabMine),
+                  "Voir ma licence : la fen\xC3\xAAtre Licence d\xC3\xA9j\xC3\xA0 ouverte passe \xC3\xA0 Ma licence - pas une seconde par-dessus (" +
+                      std::to_string(mm.depth()) + " fen\xC3\xAAtre(s))");
+            const auto refused = L::takeAnswer();
+            check(refused && refused->kind == ls::kAnswerRefused, "la r\xC3\xA9ponse suivante, une fois la premi\xC3\xA8re ferm\xC3\xA9" "e");
+            app::showLicenceWindow(mm, L::kTabEditions);
+            app::showLicenceWindow(mm, L::kTabFeatures);
+            frame();
+            check(mm.depth() == 1 && rootOf() == licRoot && tabs->currentIndex() == static_cast<std::size_t>(L::kTabFeatures),
+                  "redemand\xC3\xA9" "e deux fois : toujours une seule fen\xC3\xAAtre (sur le dernier onglet)");
+
+            // -- quatre captures (une 2x : 3200 x 2000), leurs legendes, leurs bulles dans le repere 1600 x 1000
+            const fs::path shots = base / "captures-1-45";
+            check(writeCapture(shots / "api_editor.png", 3200, 2000) && writeCapture(shots / "api_editor-2.png", 1600, 1000) &&
+                      writeCapture(shots / "api_editor-3.png", 320, 200) && writeCapture(shots / "api_editor-4.png", 320, 200),
+                  "quatre captures d'essai (la premi\xC3\xA8re en 2x : 3200 x 2000)");
+            writeFile(shots / "descriptions.json",
+                      "{\"format\": \"xpg-fonctions-apercu/1\", \"repere\": {\"l\": 1600, \"h\": 1000},"
+                      " \"fonctions\": {\"api_editor\": \"L'\xC3\xA9" "diteur d'essai.\"}, \"captures\": {\"api_editor\": ["
+                      "{\"legende\": \"la vue d'ensemble\", \"bulles\": [{\"x\": 100, \"y\": 50, \"l\": 200, \"h\": 100, \"texte\": \"Bulle un : la barre.\"}]},"
+                      "{\"legende\": \"le d\xC3\xA9tail\", \"bulles\": [{\"x\": 100, \"y\": 50, \"l\": 200, \"h\": 100, \"texte\": \"Bulle deux.\"}]},"
+                      "{\"legende\": \"en petit\", \"repere\": [320, 200], \"bulles\": [{\"x\": 160, \"y\": 100, \"l\": 80, \"h\": 50, \"texte\": \"Bulle trois.\"}]},"
+                      "{\"legende\": \"la fin\"}]}}");
+            app::licence::setFeatureImagesFolder(U(shots));
+            const auto pv = L::featurePreview("api_editor");
+            check(pv.shots.size() == 4 && pv.shots[0].refW == 1600.f && pv.shots[0].refH == 1000.f && pv.shots[1].refW == 1600.f && pv.shots[2].refW == 320.f &&
+                      pv.shots[2].refH == 200.f && pv.shots[3].caption == "la fin" && pv.shots[0].spots.size() == 1 && pv.shots[3].spots.empty(),
+                  "featurePreview : 4 captures, leurs l\xC3\xA9gendes, leurs bulles, leur rep\xC3\xA8re");
+            if (pv.shots.size() == 4) {
+                // une capture 2x et celle de taille normale : la bulle au meme endroit
+                L::CaptureView big("essai.2x"), normal("essai.1x");
+                big.setImage(L::capturePng(pv.shots[0].imagePath, "api_editor.png"));
+                normal.setImage(L::capturePng(pv.shots[1].imagePath, "api_editor-2.png"));
+                big.setSpots(pv.shots[0].spots, pv.shots[0].refW, pv.shots[0].refH);
+                normal.setSpots(pv.shots[1].spots, pv.shots[1].refW, pv.shots[1].refH);
+                big.setBounds({0, 0, 800, 500});
+                normal.setBounds({0, 0, 800, 500});
+                const auto ra = big.spotRect(0), rb = normal.spotRect(0);
+                check(big.imageWidth() == 3200.f && normal.imageWidth() == 1600.f && ra && rb && near(ra->x, rb->x, 0.01f) && near(ra->y, rb->y, 0.01f) &&
+                          near(ra->x, 50.f) && near(ra->y, 25.f) && near(ra->w, 100.f) && near(ra->h, 50.f),
+                      "une capture 2x : sa bulle \xC3\xA0 la m\xC3\xAAme place que sur la capture de taille normale (rep\xC3\xA8re 1600 x 1000)");
+                check(big.spotAt({100.f, 50.f}) == 0 && big.spotAt({20.f, 20.f}) == -1, "la bulle sous la souris, et rien \xC3\xA0 c\xC3\xB4t\xC3\xA9");
+                // le dessin : la copie reduite la plus proche (800 x 500 pour une case de 800 x 500), lissee
+                ImageRecorder ir;
+                big.render(ui::PaintContext{ir, theme, big.bounds(), 0.0, nullptr});
+                const auto drawnSize = [&ir]() {
+                    return ir.drawn.empty() ? std::pair<int, int>{0, 0} : ir.sizes[ir.drawn.back().id];
+                };
+                check(!ir.drawn.empty() && drawnSize() == std::pair<int, int>{800, 500} && near(ir.drawn.back().dst.w, 800.f, 0.5f),
+                      "la capture 3200 x 2000 dessin\xC3\xA9" "e en 800 : sa copie 800 x 500 (" + std::to_string(drawnSize().first) + ")");
+                for (int i = 0; i < 8; ++i) big.wheelAt({400.f, 250.f}, 1.f);
+                ir.clear();
+                big.render(ui::PaintContext{ir, theme, big.bounds(), 0.0, nullptr});
+                check(big.zoom() == 4.f && drawnSize() == std::pair<int, int>{3200, 2000}, "zoom\xC3\xA9" "e (x 4) : l'image enti\xC3\xA8re");
+                check(app::HmiImageCache::smoothLevel(3200, 2000, 450.f, 281.f) == 2 && app::HmiImageCache::smoothLevel(3200, 2000, 1600.f, 1000.f) == 1 &&
+                          app::HmiImageCache::smoothLevel(3200, 2000, 1700.f, 1062.f) == 0 && app::HmiImageCache::smoothLevel(960, 600, 1468.f, 917.f) == 0 &&
+                          app::HmiImageCache::smoothLevel(0, 0, 10.f, 10.f) == 0,
+                      "la copie choisie : la plus petite encore aussi grande que le dessin");
+            }
+            {   // l'apercu (onglet Fonctionnalites) : les quatre captures, les fleches ; un clic : la capture en grand
+                auto* table = dynamic_cast<ui::TableView*>(licRoot->findById("dialog.licence.fonctionnalites"));
+                std::size_t row = static_cast<std::size_t>(-1);
+                if (table && table->model())
+                    for (std::size_t r = 0; r < table->model()->rowCount(); ++r)
+                        if (table->model()->cellText(r, 1) == "api_editor") row = r;
+                check(row != static_cast<std::size_t>(-1), "l'onglet Fonctionnalit\xC3\xA9s : la ligne api_editor");
+                if (table && row != static_cast<std::size_t>(-1)) table->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+                frame();
+                auto* cap = dynamic_cast<L::CaptureView*>(licRoot->findById("dialog.licence.fonctionnalites.panneau.apercu.capture"));
+                check(cap && cap->hasImage() && cap->spotCount() == 1 && cap->imageWidth() == 3200.f && cap->bounds().w > 0.f,
+                      "l'aper\xC3\xA7u : la premi\xC3\xA8re capture (2x), sa bulle");
+                const auto next = [&] {
+                    if (auto* btn = button("dialog.licence.fonctionnalites.panneau.apercu.suivante")) btn->clicked->emit();
+                    frame();
+                };
+                next();
+                next();
+                ImageRecorder paint;
+                mm.Render(paint, fc);
+                check(cap && cap->imageWidth() == 320.f && cap->spotCount() == 1 && paint.saw("Capture 3/4 : en petit"), "la fl\xC3\xA8" "che : << Capture 3/4 : en petit >>");
+                next();
+                next();   // apres la quatrieme : la premiere
+                check(cap && cap->imageWidth() == 3200.f, "apr\xC3\xA8s la quatri\xC3\xA8me, la premi\xC3\xA8re");
+                if (cap) {
+                    const auto cb = cap->bounds();
+                    click({cb.x + cb.w * 0.3f, cb.y + cb.h * 0.8f});
+                }
+                frame();
+                auto* zoom = dynamic_cast<L::CaptureZoomBody*>(rootOf());
+                check(mm.depth() == 2 && mm.top()->id() == "dialog.capture" && zoom && zoom->shotCount() == 4 && zoom->shot() == 0 &&
+                          zoom->navText() == "Capture 1/4 : la vue d'ensemble" && zoom->image().spotCount() == 1,
+                      "un clic sur la capture : en grand, ses quatre captures, sa l\xC3\xA9gende, sa bulle");
+                if (zoom) {
+                    auto& zv = zoom->image();
+                    const auto c0 = zv.spotCenter(0);
+                    const auto ir0 = zv.imageRect();
+                    // la bulle, en grand : au survol de sa zone (le repere 1600 x 1000 sur l'image 3200 x 2000)
+                    check(c0 && near(c0->x, ir0.x + 200.f / 1600.f * ir0.w) && near(c0->y, ir0.y + 100.f / 1000.f * ir0.h),
+                          "en grand : la bulle \xC3\xA0 sa place (rep\xC3\xA8re 1600 x 1000, image 3200 x 2000)");
+                    if (c0) (void)mm.HandleEvent(ui::MouseMove{*c0, {}, {}});
+                    ImageRecorder z1;
+                    mm.Render(z1, fc);
+                    check(zv.hoveredSpot() == 0 && zv.hovered() && z1.saw("Bulle un : la barre."), "en grand : la souris sur la zone, sa bulle dite");
+                    // zoomee (la molette) puis deplacee (glisser) : toujours a sa place
+                    if (c0) {
+                        zv.wheelAt(*c0, 1.f);
+                        zv.wheelAt(*c0, 1.f);
+                    }
+                    const auto c1 = zv.spotCenter(0);
+                    if (c1) (void)mm.HandleEvent(ui::MouseMove{*c1, {}, {}});
+                    check(zv.zoom() > 1.5f && c1 && zv.spotAt(*c1) == 0 && zv.hoveredSpot() == 0, "zoom\xC3\xA9" "e : la bulle suit l'image (au survol de sa zone)");
+                    const auto ir1 = zv.imageRect();
+                    const gfx::Point from{ir1.x + ir1.w * 0.5f, ir1.y + ir1.h * 0.5f};
+                    const gfx::Point grab = zv.bounds().contains(from) ? from : gfx::Point{zv.bounds().x + 40.f, zv.bounds().y + 40.f};
+                    (void)mm.HandleEvent(ui::MouseMove{grab, {}, {}});
+                    (void)mm.HandleEvent(ui::MouseDown{grab, ui::MouseButton::Left, 1, {}});
+                    (void)mm.HandleEvent(ui::MouseMove{{grab.x + 60.f, grab.y + 40.f}, {}, {}});
+                    (void)mm.HandleEvent(ui::MouseUp{{grab.x + 60.f, grab.y + 40.f}, ui::MouseButton::Left, {}});
+                    const auto c2 = zv.spotCenter(0);
+                    const auto ir2 = zv.imageRect();
+                    check(c2 && near(c2->x - ir2.x, (c1 ? c1->x : 0.f) - ir1.x, 0.01f) && near(c2->y - ir2.y, (c1 ? c1->y : 0.f) - ir1.y, 0.01f) &&
+                              (ir2.x != ir1.x || ir2.y != ir1.y),
+                          "d\xC3\xA9plac\xC3\xA9" "e : la bulle reste sur sa zone de l'image");
+                    if (c2) (void)mm.HandleEvent(ui::MouseMove{*c2, {}, {}});
+                    ImageRecorder z2;
+                    mm.Render(z2, fc);
+                    check(zv.hoveredSpot() == 0 && z2.saw("Bulle un : la barre."), "zoom\xC3\xA9" "e et d\xC3\xA9plac\xC3\xA9" "e : sa bulle dite au survol");
+                    (void)mm.HandleEvent(ui::MouseMove{{zv.bounds().x + 2.f, zv.bounds().bottom() - 2.f}, {}, {}});
+                    check(zv.hoveredSpot() == -1, "hors de la zone : pas de bulle");
+                    // les fleches de la fenetre en grand (le bouton, le clavier)
+                    if (auto* btn = button("dialog.capture.suivante")) btn->clicked->emit();
+                    frame();
+                    check(zoom->shot() == 1 && zoom->navText() == "Capture 2/4 : le d\xC3\xA9tail" && zv.imageWidth() == 1600.f && zv.zoom() == 1.f &&
+                              zv.spotCount() == 1,
+                          "en grand, la suivante : << Capture 2/4 : le d\xC3\xA9tail >>, ajust\xC3\xA9" "e, sa bulle");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Right, {}, false});
+                    frame();
+                    const auto c3 = zv.spotCenter(0);
+                    const auto ir3 = zv.imageRect();
+                    check(zoom->shot() == 2 && zv.imageWidth() == 320.f && c3 && near(c3->x, ir3.x + 200.f / 320.f * ir3.w) && near(c3->y, ir3.y + 125.f / 200.f * ir3.h),
+                          "la fl\xC3\xA8" "che droite : la troisi\xC3\xA8me (son rep\xC3\xA8re \xC3\xA0 elle, 320 x 200)");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Right, {}, false});
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Right, {}, false});
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Left, {}, false});
+                    check(zoom->shot() == 3 && zv.spotCount() == 0 && zoom->navText() == "Capture 4/4 : la fin", "en boucle, dans les deux sens");
+                    // la croix : un clic la ferme
+                    const auto zf = ui::dialogframe::frameOf(*rootOf());
+                    click({zf.right() - 24.f, zf.y + 21.f});
+                    frame();
+                    check(mm.depth() == 1 && rootOf() == licRoot, "la croix de la capture en grand : un clic");
+                }
+            }
+            {   // la boutique (Demander ma licence, avec un service) : la meme capture, ses fleches
+                licensing::service::Address a;
+                a.url = "http://127.0.0.1:1";   // un service suppose (rien ne l'appelle ici)
+                ls::setAddressForTests(a);
+                app::showLicenceWindow(mm, L::kTabRequest);
+                frame();
+                auto* list = dynamic_cast<ui::TableView*>(licRoot->findById("licence.demande.offre.liste"));
+                std::size_t row = static_cast<std::size_t>(-1);
+                if (list && list->model())
+                    for (std::size_t r = 0; r < list->model()->rowCount(); ++r)
+                        if (list->model()->cellText(r, 0) == L::featureLabel("api_editor")) row = r;
+                if (list && row != static_cast<std::size_t>(-1)) list->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+                frame();
+                auto* shop = dynamic_cast<L::CaptureView*>(licRoot->findById("licence.demande.offre.apercu.capture"));
+                check(shop && shop->hasImage() && shop->spotCount() == 1 && shop->bounds().w > 0.f, "la boutique : l'aper\xC3\xA7u de la fonctionnalit\xC3\xA9 (la capture 2x, sa bulle)");
+                if (auto* btn = button("licence.demande.offre.apercu.precedente")) btn->clicked->emit();
+                frame();
+                ImageRecorder sp;
+                mm.Render(sp, fc);
+                check(shop && shop->imageWidth() == 320.f && sp.saw("Capture 4/4 : la fin") && sp.saw("Les licences de ce PC"),
+                      "la boutique : la pr\xC3\xA9" "c\xC3\xA9" "dente (la quatri\xC3\xA8me), et les licences de ce PC en t\xC3\xAAte");
+                ls::setAddressForTests(licensing::service::Address{});
+            }
+            // la croix de la fenetre Licence : un clic, et elle ne revient pas
+            const auto lf = ui::dialogframe::frameOf(*licRoot);
+            click({lf.right() - 24.f, lf.y + 21.f});
+            frame();
+            frame();
+            check(mm.depth() == 0 && !app::licenceWindowOpen() && !L::takeAnswer(), "la croix de la fen\xC3\xAAtre Licence : un clic, ferm\xC3\xA9" "e (et rien ne la rouvre)");
+            app::licence::setFeatureImagesFolder({});
         }
     }
 

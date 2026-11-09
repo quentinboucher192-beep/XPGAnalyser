@@ -22,10 +22,30 @@
 //  bout : le code (10 caracteres, "K7Q4-M2XP-T9") est le secret de l'echange CPace ;
 //  les appels au relais sont signes par la cle de ce PC (app/SessionRelayHttp).
 //  L'entree est celle << il faut le code >> : le code prouve, l'hote fait entrer.
+//
+//  1.45.0 : RETIRER, PARTIR, LE JOURNAL (docs/SESSIONS.md, § 8) -
+//  - l'hote RETIRE un equipier (remove) : coupe avec sa raison (<< Camille t'a
+//    retire de la session >>), les autres le lisent dans la discussion et une
+//    notification ; il ne revient pas sans que l'hote le fasse entrer (son PC est
+//    retenu : meme avec le code, il attend l'hote) ;
+//  - un equipier qui PART (Quitter, le projet ou l'appli fermes, le lien perdu,
+//    retire, l'hote qui arrete) revient a l'ACCUEIL : la copie recue est fermee
+//    et EFFACEE de son PC (<dossier commun>/Sessions/<identifiant>), jamais dans
+//    les projets recents ; un arret brutal : effacee au lancement suivant. Les
+//    autres : << Lea a quitte la session >>. L'hote qui ARRETE (le bouton, le
+//    projet ou l'appli fermes) coupe tout le monde : << Camille a arrete la
+//    session >> ; il reste sur son projet ;
+//  - L'EQUIPIER NE GARDE RIEN : Enregistrer sous, Dupliquer, les exports, le
+//    dossier du projet sont refuses (SessionMarks::keepRefusal) ; Ctrl+S envoie
+//    a l'hote ;
+//  - LE JOURNAL (session/SessionJournal) : chaque changement, signe, tenu par
+//    l'hote et envoye a tous (JOURNAL) ; exporte en CSV, enregistre avec le projet
+//    a la fin (<projet>/ihm/historique/sessions/).
 // =============================================================================
 #pragma once
 
 #include "../hmi/HmiModel.hpp"
+#include "../session/SessionJournal.hpp"   // 1.45.0
 #include "../session/SessionProtocol.hpp"
 
 #include <cstdint>
@@ -66,6 +86,8 @@ public:
         std::string   name, machine, machineId, app, version, address;
         bool          codeOk{false};
         std::uint32_t color{0};
+        std::string   fingerprint;   // 1.45.0 : son empreinte (le certificat ; par Internet : la cle de son PC)
+        bool          removed{false};   // 1.45.0 : retire tout a l'heure (l'hote le fait entrer lui-meme)
     };
     struct ChatLine {
         std::string   from, text, time;
@@ -88,7 +110,9 @@ public:
     void accept(int conn);
     void refuse(int conn, const std::string& reason);
     void setRole(int member, session::Role role);
-    // L'hote : la session s'arrete pour tous. L'equipier : il la quitte.
+    // 1.45.0 : retirer un equipier (coupe, sa raison ; il ne revient que si l'hote le fait entrer).
+    void remove(int member);
+    // L'hote : la session s'arrete pour tous. L'equipier : il la quitte (il revient a l'accueil, sa copie s'efface).
     void stop(const std::string& reason = {});
 
     // ---- l'equipier ----
@@ -105,6 +129,10 @@ public:
     void say(const std::string& text);
     // Ouvrir la vue d'un membre (Suivre).
     void follow(int member);
+    // 1.45.0 : ce qui attend part tout de suite (Ctrl+S chez l'equipier).
+    void flushNow();
+    // 1.45.0 : le journal en CSV dans exports/ du projet (l'hote) ; le chemin ecrit (vide : `why`).
+    std::string exportJournal(std::string* why);
 
     // ---- ce que l'interface montre ----
     [[nodiscard]] const std::vector<session::Member>& members() const noexcept { return members_; }
@@ -138,6 +166,16 @@ public:
     [[nodiscard]] const std::vector<std::string>& log() const noexcept { return log_; }
     [[nodiscard]] std::size_t resyncs() const noexcept { return resyncs_; }
     [[nodiscard]] std::size_t refusals() const noexcept { return refusals_; }
+    // 1.45.0 : le journal des changements (l'hote le tient, les equipiers en recoivent la copie).
+    [[nodiscard]] const session::Journal& journal() const noexcept { return journal_; }
+    // 1.45.0 : le journal enregistre avec le projet a la fin (l'hote) ; vide : pas encore, ou rien a ecrire.
+    [[nodiscard]] const std::string& savedJournal() const noexcept { return savedJournal_; }
+    // 1.45.0 : le dossier des copies des equipiers (<dossier commun>/Sessions) ; un dossier y est-il ?
+    [[nodiscard]] static std::string guestArea();
+    [[nodiscard]] static bool inGuestArea(const std::string& folder);
+    // 1.45.0 : la copie de l'equipier attend d'etre fermee et effacee (la prochaine image) ; le dernier dossier efface.
+    [[nodiscard]] bool leaving() const noexcept { return leaving_; }
+    [[nodiscard]] const std::string& lastCopy() const noexcept { return lastCopy_; }
 
     struct Impl;   // le reseau, le miroir, l'etat (SessionService.cpp)
 
@@ -157,6 +195,15 @@ private:
     std::uint64_t revision_{0};
     std::size_t resyncs_{0}, refusals_{0};
     bool internet_{false}, relayOpen_{false};   // 1.44.0
+    // 1.45.0
+    session::Journal journal_;
+    std::string savedJournal_;
+    bool leaving_{false};          // l'equipier part : sa copie se ferme et s'efface a la prochaine image
+    std::string leaveWhy_;         // ... ce que la fenetre dira (vide : rien)
+    std::string copyFolder_, copySid_, lastCopy_;
+    std::uint64_t boardSeen_{~0ull}, journalSeen_{~0ull}, messagesIn_{0};
+    void leaveCopy();
+    void publishBoard();
 
     friend struct SessionServiceAccess;
 };

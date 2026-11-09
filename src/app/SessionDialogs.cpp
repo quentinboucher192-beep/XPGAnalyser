@@ -6,6 +6,9 @@
 //  code seulement si la session le demande, une autre adresse repliee) ou << Par
 //  Internet >> (le code seul). La 1.43 (un formulaire) montrait toujours l'adresse
 //  et le code : l'utilisateur croyait devoir les remplir.
+//  1.45.0 : la fenetre de la session - << Retirer de la session... >> pour chaque
+//  equipier (l'hote, une question d'abord) ; la colonne de droite a deux vues :
+//  la Discussion et le Journal (qui a change quoi ; l'hote l'exporte en CSV).
 // =============================================================================
 #include "SessionDialogs.hpp"
 
@@ -73,7 +76,7 @@ std::string pcText(const session::Member& m) {
 class PanelBody final : public ui::Widget {
 public:
     explicit PanelBody(App& app) : app_(app) {}
-    struct Row { ui::Button* follow{nullptr}; ui::Button* role{nullptr}; int member{0}; };
+    struct Row { ui::Button* follow{nullptr}; ui::Button* role{nullptr}; ui::Button* remove{nullptr}; int member{0}; };
     struct KnockRow { ui::Button* yes{nullptr}; ui::Button* no{nullptr}; int conn{0}; };
     std::vector<Row> rows;
     std::vector<KnockRow> knockRows;
@@ -82,6 +85,11 @@ public:
     ui::Button* send{nullptr};
     ui::Button* stop{nullptr};
     ui::Button* close{nullptr};
+    // 1.45.0 : la colonne de droite - la Discussion ou le Journal ; Exporter le journal (l'hote).
+    ui::Button* chatView{nullptr};
+    ui::Button* journalView{nullptr};
+    ui::Button* exportJournal{nullptr};
+    bool showJournal{false};
 
 protected:
     void onLayout() override {
@@ -104,14 +112,22 @@ protected:
         textRight_.clear();
         for (auto& row : rows) {
             float bx = left_.right();
+            // 1.45.0 : avec << Retirer de la session... >>, deux lignes de boutons (Suivre et le role dessus).
+            const bool two = row.remove != nullptr;
             for (auto* b : {row.follow, row.role}) {
                 if (!b) continue;
                 const float bw = std::min(160.f, buttonWidth(b->text()) - 10.f);
                 bx -= bw;
-                b->setBounds({bx, y + 12.f, bw, 26.f});
+                b->setBounds({bx, two ? y + 2.f : y + 12.f, bw, two ? 23.f : 26.f});
                 bx -= 6.f;
             }
-            textRight_.push_back(bx - 6.f);   // le texte de la ligne s'arrete avant ses boutons
+            float left = bx;
+            if (row.remove) {
+                const float bw = std::min(200.f, buttonWidth(row.remove->text()) - 10.f);
+                row.remove->setBounds({left_.right() - bw, y + 27.f, bw, 23.f});
+                left = std::min(left, left_.right() - bw - 6.f);
+            }
+            textRight_.push_back(left - 6.f);   // le texte de la ligne s'arrete avant ses boutons
             y += 52.f;
         }
         knocksAt_ = y + 8.f;
@@ -125,6 +141,17 @@ protected:
                 bx -= 6.f;
             }
             y += 48.f;
+        }
+        // 1.45.0 : les deux vues de la colonne de droite (en tete), Exporter le journal.
+        {
+            float hx = right_.right();
+            for (auto* b : {exportJournal, journalView, chatView}) {
+                if (!b) continue;
+                const float bw = buttonWidth(b->text()) - 16.f;
+                hx -= bw;
+                b->setBounds({hx, right_.y - 4.f, bw, 24.f});
+                hx -= 4.f;
+            }
         }
         // La discussion : le champ et Envoyer en bas de la colonne de droite.
         const float fy = right_.bottom() - 32.f;
@@ -211,12 +238,24 @@ protected:
                 ky += 48.f;
             }
         }
-        // La discussion.
-        r.drawText({right_.x, right_.y}, "La discussion", bold, c.text);
+        // La discussion (1.45.0 : ou le journal).
+        r.drawText({right_.x, right_.y}, showJournal ? "Le journal" : "La discussion", bold, c.text);
         const gfx::Rect box{right_.x, right_.y + 24.f, right_.w, right_.h - 24.f - 40.f};
         r.fillRoundedRect(box, c.inputBg, 6.f);
         std::vector<std::pair<std::string, gfx::Color>> lines;
-        for (const auto& l : s.chat()) {
+        if (showJournal) {
+            const auto& entries = s.journal().entries();
+            if (entries.empty())
+                lines.emplace_back("Aucun changement encore : chaque changement de la session s'inscrit ici (qui, quand, quoi).", c.textMuted);
+            for (const auto& e : entries) {
+                bool first = true;
+                for (const auto& w : wrapWords(session::lineOf(e), kSmall, box.w - 20.f)) {
+                    lines.emplace_back(w, first && e.color ? gfx::Color::rgb(e.color) : c.text);
+                    first = false;
+                }
+            }
+        }
+        for (const auto& l : showJournal ? std::vector<SessionService::ChatLine>{} : s.chat()) {
             const std::string text = l.system ? l.text : l.from + " : " + l.text;
             const auto col = l.system ? c.textMuted : c.text;
             bool first = true;
@@ -235,7 +274,7 @@ protected:
         }
         // Le rappel en bas a gauche.
         const std::string hint = s.host() ? "Tu enregistres pour tout le monde (Ctrl+S). Fermer le projet arr\xC3\xAAte la session."
-                                          : "C'est " + s.hostName() + " qui enregistre. Ctrl+Z annule tes gestes, pas ceux des autres.";
+                                          : "C'est " + s.hostName() + " qui enregistre ; ta copie s'efface quand tu pars. Ctrl+Z annule tes gestes.";
         r.drawText({panel_.x + 16.f, panel_.bottom() - 36.f}, hint, kSmall, c.textMuted);
     }
 
@@ -293,7 +332,8 @@ private:
     // Ce qui change les boutons : les membres (leur role, s'ils sont dans une vue), ceux qui frappent, le mode.
     std::string structure() const {
         const auto& s = app_.session();
-        std::string k = std::to_string(static_cast<int>(s.mode())) + "|" + (s.code().empty() ? "" : "c") + (s.relayOpen() ? "o" : "");
+        std::string k = std::to_string(static_cast<int>(s.mode())) + "|" + (s.code().empty() ? "" : "c") + (s.relayOpen() ? "o" : "")
+                      + (journal_ ? "j" : "") + std::to_string(s.journal().entries().size());   // 1.45.0 : la vue de droite, le compte du journal
         for (const auto& m : s.members()) k += "|" + std::to_string(m.number) + session::roleKey(m.role) + (m.view ? "v" : "");
         for (const auto& kn : s.knocks()) k += "|k" + std::to_string(kn.conn);
         return k;
@@ -339,6 +379,10 @@ private:
                     links_ += row.role->clicked->connect([this, n, watching] {
                         app_.session().setRole(n, watching ? session::Role::Edit : session::Role::Watch);
                     });
+                    // 1.45.0 : RETIRER DE LA SESSION (une question d'abord).
+                    row.remove = button("Retirer de la session\xE2\x80\xA6", "retirer." + std::to_string(m.number), ui::Button::Style::Danger);
+                    const std::string who = m.name;
+                    links_ += row.remove->clicked->connect([this, n, who] { askRemove(n, who); });
                 }
                 body->rows.push_back(row);
             }
@@ -353,6 +397,21 @@ private:
                     links_ += kr.no->clicked->connect([this, conn] { app_.session().refuse(conn, app_.session().hostName() + " ne t'a pas fait entrer"); });
                     body->knockRows.push_back(kr);
                 }
+            // 1.45.0 : la Discussion ou le Journal ; Exporter le journal (l'hote).
+            body->chatView = button("Discussion", "vue.discussion", journal_ ? ui::Button::Style::Flat : ui::Button::Style::Primary);
+            body->journalView = button("Journal \xC2\xB7 " + std::to_string(s.journal().entries().size()), "vue.journal",
+                                       journal_ ? ui::Button::Style::Primary : ui::Button::Style::Flat);
+            body->showJournal = journal_;
+            links_ += body->chatView->clicked->connect([this] { journal_ = false; });
+            links_ += body->journalView->clicked->connect([this] { journal_ = true; });
+            if (s.host() && journal_) {
+                body->exportJournal = button("Exporter (CSV)", "journal.exporter", ui::Button::Style::Flat);
+                links_ += body->exportJournal->clicked->connect([this] {
+                    std::string why;
+                    const std::string path = app_.session().exportJournal(&why);
+                    app_.events().publish(StatusNotice{path.empty() ? "Le journal ne s'exporte pas : " + why + "." : "Journal export\xC3\xA9 : " + path, 8.0});
+                });
+            }
             auto f = std::make_unique<ui::InputText>("dialog.session.message");
             f->setPlaceholder("\xC3\x89" "cris \xC3\xA0 l'\xC3\xA9quipe\xE2\x80\xA6 (Entr\xC3\xA9" "e)");
             f->setText(typed);
@@ -390,12 +449,26 @@ private:
         field_->setText({});
     }
 
+    // 1.45.0 : retirer un equipier - la question, puis le retrait.
+    void askRemove(int member, const std::string& who) {
+        const std::string host = app_.session().hostName();
+        manager().ShowDialog(std::make_unique<MessageDialog>("Retirer " + who + " de la session ?",
+                                                             who + " est coup\xC3\xA9 tout de suite (\xC2\xAB " + host + " t'a retir\xC3\xA9 de la session \xC2\xBB) "
+                                                                   "et revient \xC3\xA0 son accueil ; la copie du projet s'efface de son PC. Les autres le lisent dans la discussion.\n\n"
+                                                                   "Il ne revient que si tu le fais entrer de nouveau (m\xC3\xAAme avec le code).",
+                                                             MessageDialog::Icon::Question, "Le retirer"),
+                             [this, member](const menu::DialogResult& r) {
+                                 if (r.accepted()) app_.session().remove(member);
+                             });
+    }
+
     App& app_;
     PanelBody* body_{nullptr};
     ui::InputText* field_{nullptr};
     core::ConnectionScope links_;
     std::string built_;
     std::uint64_t seen_{~0ull};
+    bool journal_{false};   // 1.45.0 : la vue de droite (le Journal)
 };
 
 std::string label(const session::Found& f) {

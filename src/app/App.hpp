@@ -169,6 +169,9 @@ public:
     [[nodiscard]] const std::vector<std::string>& recentPaths() const noexcept { return recent_; }
     void forgetPath(const std::string& path);
     void rememberPath(std::string path);
+    // 1.45.0 : la copie d'un equipier d'une session se ferme (le projet ouvert, s'il est elle : l'accueil) ; jamais
+    // dans les projets recents, sans sauvegarde de reprise. La session l'efface ensuite.
+    void closeSessionCopy(const std::string& folder);
 
     // Opening a hardware or dictionary export on its own would throw away the
     // program that is already loaded. openPath() merges instead: it re-imports

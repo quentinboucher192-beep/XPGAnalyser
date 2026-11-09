@@ -295,6 +295,13 @@ std::string said(const Answer& a) {
     return m;
 }
 
+// 1.45.0 : un service d'avant la 1.44 (pas de relais) : 404 << route >> sur le service des licences lui-meme (un
+// relais 1.44 dit << relais des sessions >> dans sa phrase : une adresse fausse du relais, pas un service trop vieux).
+bool serviceTooOld(const Answer& a) {
+    if (a.status != 404 || a.json.str("erreur") != "route") return false;
+    return a.json.str("message").find("relais") == std::string::npos;
+}
+
 int retryAfter(const Answer& a, int fallback) {
     const auto v = a.json.integer("reessayer_dans", fallback);
     return static_cast<int>(std::clamp<std::int64_t>(v, 1, 30));
@@ -693,7 +700,8 @@ struct RelayHostLink::Impl : Core {
                 continue;
             }
             std::lock_guard<std::mutex> lock(m);
-            closeSession("la session ne s'ouvre pas sur le service XPG : " + said(a));
+            // 1.45.0 : un service des licences en 1.43 (pas de relais) : la phrase qui dit quoi faire.
+            closeSession(serviceTooOld(a) ? relayTooOldText() : "la session ne s'ouvre pas sur le service XPG : " + said(a));
             return;
         }
         {
@@ -1122,7 +1130,7 @@ struct RelayGuestLink::Impl : Core {
         const auto c = a.json.integer("conn", 0);
         if (a.status != 200 || c <= 0 || c > 0x7FFFFFFF) {
             std::lock_guard<std::mutex> lock(m);
-            end(a.status == 0 ? "le service XPG ne r\xC3\xA9pond pas (" + said(a) + ")" : said(a));
+            end(a.status == 0 ? "le service XPG ne r\xC3\xA9pond pas (" + said(a) + ")" : serviceTooOld(a) ? relayTooOldText() : said(a));   // 1.45.0
             return;
         }
         {
@@ -1380,5 +1388,14 @@ void RelayGuestLink::closeAfter(const core::json::Value& header) {
     }
     d_->cv.notify_all();
 }
+
+// ==================================================================== 1.45.0 : le service trop vieux ===
+const std::string& relayTooOldText() {
+    static const std::string t = "Le service des licences n'est pas encore en 1.44 : l'\xC3\xA9" "diteur doit le red\xC3\xA9ployer "
+                                 "(Admin \xE2\x80\xBA Service en ligne \xE2\x80\xBA D\xC3\xA9ployer)";
+    return t;
+}
+
+bool relayTooOld(std::string_view why) { return why.find(relayTooOldText()) != std::string_view::npos; }
 
 } // namespace session

@@ -154,6 +154,12 @@ public:
     [[nodiscard]] double secondsSinceLive() const;
     static constexpr double kWatchFirst = 2.0, kWatchPeriod = 15.0, kWatchFallback = 30.0, kFetchWhenWatched = 600.0;
 
+    // 1.45.0 : AU LANCEMENT, la version du service (/v1/etat, sans bruit) : plus ancienne que ce qu'il faut a l'Admin (ou
+    // que son kit) -> un avis, << Service : ... - a mettre a jour >> en haut, le bandeau du tableau de bord. Une fois, une
+    // seconde apres le lancement ; pas si l'etat est deja lu. Vrai : la lecture est partie (les essais l'appellent).
+    bool checkServiceVersion();
+    static constexpr double kVersionCheckFirst = 1.0;
+
     // ---- ce qui se lit (les essais, la fenetre) ----
     [[nodiscard]] const std::string& currentPageId() const noexcept { return current_; }
     [[nodiscard]] Page* page(const std::string& pageId) const;   // nul : pas encore ouverte
@@ -218,6 +224,8 @@ private:
     int                        unseenAlerts_{0};
     int                        pendingAdmins_{0};
     double                     nextBackupCheck_{-1};     // la sauvegarde de secours du jour (l'admin+)
+    bool                       versionChecked_{false};   // 1.45.0 : la version du service, lue au lancement
+    double                     versionCheckAt_{-1};
     bool                       autoBackup();
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;

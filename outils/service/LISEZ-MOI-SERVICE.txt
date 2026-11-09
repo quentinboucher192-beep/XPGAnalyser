@@ -83,6 +83,12 @@ outil (étape 7).
 
        npx wrangler deploy --var PUBLISHER_KEYS:<ta clé publique>
 
+   Plus simple (1.45.0) : dans l'outil de l'éditeur, Service en ligne › Déployer le
+   service fait la même chose avec ce dossier, sans fenêtre noire : il écrit
+   cle-publique.txt s'il manque, te propose de te connecter à Cloudflare (étape 5),
+   montre ce qui se passe, puis relit le service. Après une mise à jour de l'outil,
+   s'il dit « à mettre à jour » : un clic sur Déployer le service suffit.
+
    Tu peux relancer deployer.bat quand tu veux (une nouvelle version du service,
    une nouvelle clé dans cle-publique.txt) : les licences, les activations et ton
    archive sont gardées chez Cloudflare. Donne TOUJOURS ta clé publique : sans

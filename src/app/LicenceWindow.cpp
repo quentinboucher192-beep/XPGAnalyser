@@ -37,6 +37,7 @@
 #include "App.hpp"
 #include "Dossiers.hpp"
 #include "LicenceService.hpp"   // 1.35.0 : le service des licences
+#include "LicenceViews.hpp"     // 1.45.0 : la capture qu'on agrandit, la capture en grand, les licences de ce PC
 #include "Settings.hpp"
 #include "hmi/HmiImages.hpp"    // 1.37.0 : la capture d'une fonctionnalite (onglet Editions)
 #include "hmi/HmiPaneKit.hpp"
@@ -175,7 +176,7 @@ std::string priceLine(const licensing::RegistryEditionView& e) {
 // ---- 1.35.0 : l'onglet Activation (le code, la licence en ligne, la flottante, la Decouverte) ----
 class ActivationPanel final : public ui::Widget {
 public:
-    ActivationPanel(LicenceBody& body, App& app);
+    ActivationPanel(LicenceBody& body, menu::MenuManager& menus);
     // L'etat, le releve, le travail en cours : relus (rien du reseau).
     void refresh();
 
@@ -199,7 +200,7 @@ private:
     ui::Button* button(const char* id, const std::string& text, ui::Button::Style style = ui::Button::Style::Default);
 
     LicenceBody&       body_;
-    App&               app_;
+    menu::MenuManager& menus_;   // 1.45.0 : la pile de la fenetre (avant : l'App, pour ses menus seulement)
     ui::InputText*     code_{nullptr};
     ui::InputText*     pc_{nullptr};
     ui::Button*        activate_{nullptr};
@@ -220,7 +221,7 @@ class FeatureTablePanel;   // 1.38.0 : l'offre choisie (la colonne de droite de 
 
 class OnlinePanel final : public ui::Widget {
 public:
-    OnlinePanel(LicenceBody& body, App& app);
+    OnlinePanel(LicenceBody& body, menu::MenuManager& menus);
     // Le releve, la disponibilite, le travail en cours : relus (rien du reseau).
     void refresh();
     // 1.37.0 : Mon profil remplit les champs vides (la societe, le nom, le courriel).
@@ -235,6 +236,7 @@ private:
     void doSend();
     void askCancel();
     void doCheck();
+    void askReleasePc(const licence::PcLicence& l);   // 1.45.0 : Liberer une licence de ce PC
     ui::InputText* field(const char* id, const std::string& placeholder, std::size_t maxLen);
     // 1.37.0 : la boutique - une carte par edition du registre (son prix, sa description, ce qu'elle donne).
     struct Card {
@@ -249,7 +251,8 @@ private:
     void buildOffer();
 
     LicenceBody&       body_;
-    App&               app_;
+    menu::MenuManager& menus_;
+    licence::PcLicencesView* pcs_{nullptr};   // 1.45.0 : les licences de ce PC, en tete
     std::vector<Card>  cards_;
     std::string        chosen_;   // l'edition choisie ; vide : l'editeur choisit
     float              shopY_{0};
@@ -344,7 +347,7 @@ private:
 // ---- 1.42.0 : Options - ajouter une fonction a sa licence pour un temps (le catalogue de l'editeur, sa demande) ----
 class OptionsPanel final : public ui::Widget {
 public:
-    OptionsPanel(LicenceBody& body, App& app);
+    OptionsPanel(LicenceBody& body, menu::MenuManager& menus);
     void refresh();
     // Choisir une option (une action fermee qui la propose, << Prolonger... >>).
     void choose(const std::string& optionId);
@@ -367,7 +370,7 @@ private:
     [[nodiscard]] std::string priceOf(int days) const;
 
     LicenceBody&     body_;
-    App&             app_;
+    menu::MenuManager& menus_;
     ui::TableView*   table_{nullptr};
     std::shared_ptr<ui::ITableModel> model_;
     ui::DropDown*    duration_{nullptr};
@@ -427,67 +430,13 @@ private:
 struct FeatureInfo {
     std::string id, label, product, editions;
 };
-// Lire une capture (PNG) en ressource d'image ; vide : rien a montrer.
-hmi::Resource capturePng(const std::string& path, const std::string& name);
-// La capture en grand (une fenetre au-dessus de la licence).
-void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const std::string& text);
-
-// ---- 1.38.0 : une capture qu'on agrandit - la molette zoome autour de la souris, glisser la deplace, double clic :
-// ajustee ; un clic simple (ajustee) : `onOpen` (la voir en grand). Rien ne deborde : le dessin est coupe a la case. ----
-class ZoomImage final : public ui::Widget {
-public:
-    explicit ZoomImage(std::string id) : ui::Widget(std::move(id)) {}
-    void setImage(hmi::Resource res) {
-        image_ = std::move(res);
-        fitAgain();
-    }
-    void fitAgain() {
-        zoom_ = 1.f;
-        ox_ = oy_ = 0.f;
-        invalidate();
-    }
-    [[nodiscard]] bool hasImage() const noexcept { return image_.data != nullptr; }
-    [[nodiscard]] float zoom() const noexcept { return zoom_; }
-    [[nodiscard]] const hmi::Resource& image() const noexcept { return image_; }
-    void setEmptyText(std::string t) { empty_ = std::move(t); }
-    void setHint(bool on) { hint_ = on; }
-    // 1.44.0 : les bulles de cette capture (en pixels de l'image) : au survol, les zones s'entourent, et celle sous la
-    // souris dit ce qu'on y voit.
-    void setSpots(std::vector<licence::CaptureSpot> s) {
-        spots_ = std::move(s);
-        hoverSpot_ = -1;
-        invalidate();
-    }
-    [[nodiscard]] std::size_t spotCount() const noexcept { return spots_.size(); }
-    // 1.44.0 : le centre de la bulle n (0 : la premiere), a l'ecran (au dernier dessin) - l'essai la survole.
-    [[nodiscard]] std::optional<gfx::Point> spotCenter(std::size_t n) const {
-        if (n >= spots_.size() || iw_ <= 0.f) return std::nullopt;
-        const gfx::Rect ir = imageRect();
-        const float k = ir.w / iw_;
-        const auto& s = spots_[n];
-        return gfx::Point{ir.x + (s.x + s.w * 0.5f) * k, ir.y + (s.y + s.h * 0.5f) * k};
-    }
-    std::function<void()> onOpen;
-    // Les essais : un pas de molette en (x, y).
-    void wheelAt(gfx::Point at, float dy) { wheel(at, dy); }
-
-protected:
-    void onPaint(const ui::PaintContext& ctx) override;
-    ui::EventResult onEvent(const ui::InputEvent& ev) override;
-
-private:
-    void wheel(gfx::Point at, float dy);
-    void clampOffset();
-    [[nodiscard]] gfx::Rect imageRect() const noexcept;   // 1.44.0 : ou l'image est dessinee (au dernier dessin)
-    hmi::Resource image_;
-    std::vector<licence::CaptureSpot> spots_;   // 1.44.0
-    int           hoverSpot_{-1};
-    std::string   empty_{"Pas encore de capture pour cette fonctionnalit\xC3\xA9."};
-    float         zoom_{1.f}, ox_{0.f}, oy_{0.f};
-    float         iw_{0.f}, ih_{0.f};   // la taille de l'image (au dernier dessin)
-    bool          dragging_{false}, moved_{false}, hint_{true};
-    gfx::Point    last_{};
-};
+// 1.45.0 : la capture qu'on agrandit et la capture en grand sont dans LicenceViews (les essais les construisent seules).
+using ZoomImage = licence::CaptureView;
+using licence::capturePng;
+// La capture en grand (une fenetre au-dessus de la licence) : toutes les captures de la fonctionnalite, celle-ci d'abord
+// (1.45.0 : ses fleches, sa legende, ses bulles).
+void showCapture(menu::MenuManager& menus, const FeatureInfo& f, const licence::FeaturePreview& preview, std::size_t shot,
+                 const std::vector<hmi::Resource>& loaded = {});
 
 // ---- 1.38.0 : l'apercu de la fonctionnalite choisie (sa capture qu'on agrandit, deux lignes, ses editions) ----
 class FeaturePreviewPane final : public ui::Widget {
@@ -498,11 +447,13 @@ public:
         waiting_ = std::move(t);
         invalidate();
     }
-    // La capture en grand (une fenetre au-dessus) : la fonctionnalite, sa capture, sa phrase.
-    std::function<void(const FeatureInfo&, const hmi::Resource&, const std::string&)> onEnlarge;
+    // La capture en grand (une fenetre au-dessus) : la fonctionnalite, ses captures, celle montree (1.45.0 : toutes, pour
+    // les fleches de la fenetre en grand ; et celles deja lues, pour ne pas les relire).
+    std::function<void(const FeatureInfo&, const licence::FeaturePreview&, std::size_t, const std::vector<hmi::Resource>&)> onEnlarge;
     [[nodiscard]] const FeatureInfo& shown() const noexcept { return shown_; }
     [[nodiscard]] const licence::FeaturePreview& preview() const noexcept { return preview_; }
     [[nodiscard]] ZoomImage& image() noexcept { return *image_; }
+    [[nodiscard]] std::size_t shot() const noexcept { return shot_; }
 
 protected:
     void onLayout() override;
@@ -518,6 +469,7 @@ private:
     core::ConnectionScope   links_;
     FeatureInfo             shown_;
     licence::FeaturePreview preview_;
+    std::vector<hmi::Resource> loaded_;   // 1.45.0 : les captures deja lues (la meme place que preview_.shots)
     std::string             waiting_{"Choisis une fonctionnalit\xC3\xA9 dans la liste : une capture et ce qu'elle fait s'affichent ici."};
     float                   textY_{0};
 };
@@ -555,8 +507,11 @@ using EditionsPanel = FeatureTablePanel;
 
 class LicenceBody final : public ui::Widget {
 public:
-    LicenceBody(LicenceWindow& owner, App& app, int tab);
+    LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab);
     void reload();
+    // 1.45.0 : montrer cet onglet (Regarder, une fenetre Licence deja ouverte qu'on redemande) ; kTabAuto : le plus utile.
+    void showTab(int tab);
+    [[nodiscard]] int autoTab() const;
     // 1.34.0 : chaque image (la fenetre) : un travail du service fini -> sa phrase, tout relu.
     void poll();
     void say(std::string text, int tone) {
@@ -580,7 +535,7 @@ private:
     void askRequest();
 
     LicenceWindow&    owner_;
-    App&              app_;
+    menu::MenuManager& menus_;
     ui::TabControl*   tabs_{nullptr};
     ui::PropertyGrid* mine_{nullptr};
     ui::TableView*    devices_{nullptr};
@@ -612,9 +567,15 @@ private:
     core::ConnectionScope links_;
 };
 
+// 1.45.0 : LA fenetre Licence ouverte (une seule a la fois : showLicenceWindow) - fil de l'interface.
+LicenceWindow* g_licenceWindow = nullptr;
+
 class LicenceWindow final : public menu::WidgetMenu {
 public:
-    LicenceWindow(App& app, int tab) : menu::WidgetMenu("dialog.licence"), app_(app), tab_(tab) {}
+    LicenceWindow(menu::MenuManager& menus, int tab) : menu::WidgetMenu("dialog.licence"), menus_(menus), tab_(tab) { g_licenceWindow = this; }
+    ~LicenceWindow() override {
+        if (g_licenceWindow == this) g_licenceWindow = nullptr;
+    }
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
     [[nodiscard]] std::string title() const override { return "Licence"; }
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
@@ -631,25 +592,36 @@ public:
     void fermer() {
         if (done_) return;
         done_ = true;
+        if (g_licenceWindow == this) g_licenceWindow = nullptr;   // 1.45.0 : elle part - une nouvelle peut s'ouvrir
         manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+    }
+    [[nodiscard]] bool closing() const noexcept { return done_; }
+    // 1.45.0 : redemandee alors qu'elle est ouverte - relue, sur l'onglet demande (kTabAuto : celui qu'elle montre).
+    void goTo(int tab) {
+        if (!body_) {   // pas encore construite (demandee deux fois dans la meme image)
+            if (tab != licence::kTabAuto) tab_ = tab;
+            return;
+        }
+        body_->reload();
+        if (tab != licence::kTabAuto) body_->showTab(tab);
     }
 
 protected:
     core::Status buildUi() override {
-        auto body = std::make_unique<LicenceBody>(*this, app_, tab_);
+        auto body = std::make_unique<LicenceBody>(*this, menus_, tab_);
         body_ = body.get();
         setRoot(std::move(body));
         return core::ok();
     }
 
 private:
-    App&         app_;
+    menu::MenuManager& menus_;
     int          tab_{0};
     bool         done_{false};
     LicenceBody* body_{nullptr};
 };
 
-LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("dialog.licence.body"), owner_(owner), app_(app) {
+LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab) : ui::Widget("dialog.licence.body"), owner_(owner), menus_(menus) {
     auto tabs = std::make_unique<ui::TabControl>("dialog.licence.onglets");
     auto mine = std::make_unique<ui::PropertyGrid>("dialog.licence.ma-licence");
     mine_ = mine.get();
@@ -666,7 +638,9 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     auto editions = std::make_unique<EditionsPanel>("dialog.licence.editions.panneau", "dialog.licence.editions");   // 1.37.0 : avec l'apercu
     editionsPanel_ = editions.get();
     editions_ = &editions->table();
-    const auto enlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
+    const auto enlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot, const std::vector<hmi::Resource>& loaded) {
+        showCapture(menus_, f, p, shot, loaded);
+    };
     featuresPanel_->pane().onEnlarge = enlarge;
     editionsPanel_->pane().onEnlarge = enlarge;
     auto history = std::make_unique<ui::TableView>("dialog.licence.historique");
@@ -674,13 +648,13 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     history_ = history.get();
     auto params = std::make_unique<ui::PropertyGrid>("dialog.licence.parametres");
     params_ = params.get();
-    auto online = std::make_unique<OnlinePanel>(*this, app);   // 1.34.0
+    auto online = std::make_unique<OnlinePanel>(*this, menus);   // 1.34.0
     online_ = online.get();
-    auto activation = std::make_unique<ActivationPanel>(*this, app);   // 1.35.0
+    auto activation = std::make_unique<ActivationPanel>(*this, menus);   // 1.35.0
     activation_ = activation.get();
     auto profile = std::make_unique<ProfilePanel>(*this);   // 1.37.0
     profile_ = profile.get();
-    auto options = std::make_unique<OptionsPanel>(*this, app);   // 1.42.0
+    auto options = std::make_unique<OptionsPanel>(*this, menus);   // 1.42.0
     options_ = options.get();
     auto purchases = std::make_unique<PurchasesPanel>(*this);    // 1.42.0
     purchases_ = purchases.get();
@@ -723,16 +697,24 @@ LicenceBody::LicenceBody(LicenceWindow& owner, App& app, int tab) : ui::Widget("
     seenRevision_ = licence::service::revision();
     wasBusy_ = licence::service::busy();
     reload();
-    if (tab < 0) {   // licence::kTabAuto : Ma licence pour une licence par fichier valable, sinon Activation
-        using S = licensing::LicenseStatus;
-        const bool valid = state_.status == S::Valid || state_.status == S::Grace;
-        const bool fileLicence = !state_.online && valid;
-        tab = fileLicence ? licence::kTabMine : licence::kTabActivation;
-        // 1.36.0 : sans licence valable (ni bail a renouveler, ni poste flottant a attendre), la demande en ligne
-        if (!valid && state_.status != S::LeaseExpired && state_.status != S::NoFloatingSeat && state_.status != S::NotConfigured &&
-            licence::onlineRequests())
-            tab = licence::kTabRequest;
-    }
+    showTab(tab);
+}
+
+int LicenceBody::autoTab() const {
+    // licence::kTabAuto : Ma licence pour une licence par fichier valable, sinon Activation
+    using S = licensing::LicenseStatus;
+    const bool valid = state_.status == S::Valid || state_.status == S::Grace;
+    const bool fileLicence = !state_.online && valid;
+    int tab = fileLicence ? licence::kTabMine : licence::kTabActivation;
+    // 1.36.0 : sans licence valable (ni bail a renouveler, ni poste flottant a attendre), la demande en ligne
+    if (!valid && state_.status != S::LeaseExpired && state_.status != S::NoFloatingSeat && state_.status != S::NotConfigured &&
+        licence::onlineRequests())
+        tab = licence::kTabRequest;
+    return tab;
+}
+
+void LicenceBody::showTab(int tab) {
+    if (tab < 0) tab = autoTab();
     tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabPurchases)));
 }
 
@@ -1069,7 +1051,7 @@ void LicenceBody::reload() {
 void LicenceBody::askImport() {
     std::vector<FormDialog::Field> fields;
     fields.push_back({"Fichier", "", "C:\\Users\\moi\\Downloads\\XPG-2026-00042.xpglic", false, {}});
-    app_.menus().ShowDialog(
+    menus_.ShowDialog(
         FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.licenceImport", "Activer par fichier de licence",
                                                             "Le fichier .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur (pi\xC3\xA8" "ce jointe, tel quel). La licence n'est "
                                                             "install\xC3\xA9" "e que si elle vaut pour ce PC, maintenant ; sinon rien ne change et la raison est dite.",
@@ -1093,7 +1075,7 @@ void LicenceBody::doImport(const std::string& path) {
                   : "Refus\xC3\xA9 : " + report.why,
         report.ok ? 1 : 3);
     reload();
-    app_.menus().ShowDialog(std::make_unique<MessageDialog>(report.ok ? "Licence import\xC3\xA9" "e" : "Licence refus\xC3\xA9" "e", std::move(text),
+    menus_.ShowDialog(std::make_unique<MessageDialog>(report.ok ? "Licence import\xC3\xA9" "e" : "Licence refus\xC3\xA9" "e", std::move(text),
                                                             report.ok ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning),
                             nullptr);
 }
@@ -1106,7 +1088,7 @@ void LicenceBody::askRequest() {
     fields.push_back({"Nom de ce PC", "", "Poste bureau d'\xC3\xA9tudes (le nom que tu lui donnes ; facultatif)", false, {}});
     fields.push_back({"Licence demand\xC3\xA9" "e", state_.licenseId, "XPG-2026-00042 (facultatif)", false, {}});
     fields.push_back({"Enregistrer sous", std::string(u8.begin(), u8.end()), "", false, {}});
-    app_.menus().ShowDialog(
+    menus_.ShowDialog(
         FormDialog::withBrowse(std::make_unique<FormDialog>("dialog.licenceRequest", "Demander une activation",
                                                             "La demande porte la cl\xC3\xA9 publique de ce PC (cr\xC3\xA9\xC3\xA9" "e ici la premi\xC3\xA8re fois, "
                                                             "prot\xC3\xA9g\xC3\xA9" "e par Windows), le nom que tu lui donnes et le logiciel ; elle est sign\xC3\xA9" "e par ce "
@@ -1295,7 +1277,7 @@ int daysLeft(std::int64_t now, std::int64_t until) { return until > now ? static
 } // namespace
 
 // ------------------------------------------------------------------ Options
-OptionsPanel::OptionsPanel(LicenceBody& body, App& app) : ui::Widget("licence.options"), body_(body), app_(app) {
+OptionsPanel::OptionsPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.options"), body_(body), menus_(menus) {
     table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.options.catalogue")));
     table_->setColumns({{"Option", 170.f}, {"Ce qu'elle ouvre", 180.f}, {"Prix (HT)", 330.f}, {"", 120.f}});
     table_->setSelectionMode(ui::SelectionMode::Single);
@@ -1881,7 +1863,7 @@ void PurchasesPanel::onPaint(const ui::PaintContext& ctx) {
 }
 
 // ============================================================ 1.35.0 : Activation ==
-ActivationPanel::ActivationPanel(LicenceBody& body, App& app) : ui::Widget("licence.activation"), body_(body), app_(app) {
+ActivationPanel::ActivationPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.activation"), body_(body), menus_(menus) {
     auto code = std::make_unique<ui::InputText>("licence.code.champ");
     code->setPlaceholder("XPG-XXXX-XXXX-XXXX-XXXX");
     code->setMaxLength(48);
@@ -2067,7 +2049,7 @@ void ActivationPanel::askRelease() {
         MessageDialog::Icon::Question, "Lib\xC3\xA9rer ce poste");
     dialog->setCancelLabel("Garder la licence ici");
     const std::string id = releaseId_;
-    app_.menus().ShowDialog(std::move(dialog), [this, id](const menu::DialogResult& r) {
+    menus_.ShowDialog(std::move(dialog), [this, id](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         if (!licence::service::startRelease(id)) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
         else body_.say("Lib\xC3\xA9ration de ce poste\xE2\x80\xA6", 0);
@@ -2209,7 +2191,7 @@ std::string editionFacts(const licensing::RegistryEditionView& e) {
     return t;
 }
 
-OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.demande"), body_(body), app_(app) {
+OnlinePanel::OnlinePanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.demande"), body_(body), menus_(menus) {
     customer_ = field("licence.demande.client", "le nom de ta soci\xC3\xA9t\xC3\xA9 (obligatoire)", licence::service::kMaxCustomer);
     contact_ = field("licence.demande.contact", "ton nom, ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::service::kMaxContact);
     email_ = field("licence.demande.courriel", "nom@societe.fr (facultatif : le mail de l'\xC3\xA9" "diteur quand il accepte)", licence::service::kMaxEmail);
@@ -2232,7 +2214,13 @@ OnlinePanel::OnlinePanel(LicenceBody& body, App& app) : ui::Widget("licence.dema
     offer_->setVertical(true);
     offer_->table().setColumns({{"Fonctionnalit\xC3\xA9", 230.f}, {"Logiciel", 110.f}});
     offer_->pane().setEmptyText("Clique une fonctionnalit\xC3\xA9 : sa capture et ce qu'elle fait s'affichent ici (molette : zoom, clic : en grand).");
-    offer_->pane().onEnlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
+    offer_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot, const std::vector<hmi::Resource>& loaded) {
+        showCapture(menus_, f, p, shot, loaded);
+    };
+    // 1.45.0 : LES LICENCES DE CE PC, en tete - Regarder (l'onglet qui la montre), Liberer (rendre la place de ce PC).
+    pcs_ = &static_cast<licence::PcLicencesView&>(addChild(std::make_unique<licence::PcLicencesView>("licence.demande.ce-pc")));
+    pcs_->onLook = [this](const licence::PcLicence& l) { body_.showTab(l.tab); };
+    pcs_->onRelease = [this](const licence::PcLicence& l) { askReleasePc(l); };
     prefill();   // 1.37.0 : Mon profil
     refresh();
 }
@@ -2300,6 +2288,12 @@ void OnlinePanel::refresh() {
     if (!ls::loadRecord(rec_, &recProblem_)) rec_ = ls::Record{};
     pending_ = ls::pending(rec_);
     busy_ = ls::busyJob();
+    {   // 1.45.0 : les licences de ce PC (l'etat, le releve qu'on vient de lire)
+        const auto st = licensing::getLicenseState();
+        pcs_->setRows(licence::pcLicences(st, rec_, ls::leaseHeldBack(), licensing::systemNow()), licence::pcLicencesEmptyText(st));
+        for (std::size_t i = 0; i < pcs_->rows().size(); ++i)
+            if (auto* b = pcs_->releaseButton(i)) b->setEnabled(busy_ == ls::Job::None);
+    }
     buildCards();
     const bool form = available_ && !pending_;
     for (auto* f : {customer_, contact_, email_, pcName_, licenseId_, message_}) {
@@ -2349,10 +2343,39 @@ void OnlinePanel::askCancel() {
             ") est retir\xC3\xA9" "e : l'\xC3\xA9" "diteur ne la verra plus en attente. Tu pourras en envoyer une nouvelle.",
         MessageDialog::Icon::Question, "Annuler la demande");
     dialog->setCancelLabel("Garder la demande");
-    app_.menus().ShowDialog(std::move(dialog), [this](const menu::DialogResult& r) {
+    menus_.ShowDialog(std::move(dialog), [this](const menu::DialogResult& r) {
         if (!r.accepted()) return;
         if (!licence::service::startCancelRequest()) body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
         else body_.say("Annulation de la demande\xE2\x80\xA6", 0);
+        refresh();
+    });
+}
+
+// 1.45.0 : Liberer une licence de ce PC - la question (ce qui se passe, la Decouverte ou plus de licence apres), puis le
+// travail du service (comme licence-liberer ; le poste flottant : rendu) ; une licence par fichier, une option : la phrase.
+void OnlinePanel::askReleasePc(const licence::PcLicence& l) {
+    namespace ls = licence::service;
+    const auto plan = licence::releasePlan(l, licensing::getLicenseState(), licensing::systemNow());
+    if (plan.action == licence::ReleasePlan::Action::None) {
+        menus_.ShowDialog(std::make_unique<MessageDialog>(plan.title, plan.text, MessageDialog::Icon::Info), nullptr);
+        return;
+    }
+    if (!available_) {
+        body_.say(why_.empty() ? std::string("Le service des licences n'est pas dans ce programme : rien ne se lib\xC3\xA8re d'ici.") : why_, 2);
+        return;
+    }
+    auto dialog = std::make_unique<MessageDialog>(plan.title, plan.text, MessageDialog::Icon::Question, plan.confirm);
+    dialog->setCancelLabel(plan.cancel);
+    dialog->setParagraphWidth(640.f);
+    const auto action = plan.action;
+    const std::string id = l.id;
+    menus_.ShowDialog(std::move(dialog), [this, action, id](const menu::DialogResult& r) {
+        if (!r.accepted()) return;
+        const bool seat = action == licence::ReleasePlan::Action::ReturnSeat;
+        if (!(seat ? ls::startReturnLease() : ls::startRelease(id)))
+            body_.say("Un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours : attends sa fin.", 2);
+        else
+            body_.say(seat ? std::string("Retour du poste flottant\xE2\x80\xA6") : "Lib\xC3\xA9ration de la licence " + id + "\xE2\x80\xA6", 0);
         refresh();
     });
 }
@@ -2466,6 +2489,11 @@ void OnlinePanel::onLayout() {
             offer_->setBounds({b.x, b.y, 0.f, 0.f});
     }
     leftW_ = W;
+    {   // 1.45.0 : les licences de ce PC, en tete (sous l'introduction ; la boutique et la demande en dessous)
+        const float ph = pcs_->wantedHeight();
+        pcs_->setBounds({x, rowsY_, W, ph});
+        rowsY_ += ph + 14.f;
+    }
     const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(620.f, W - labelW));
     float y = rowsY_;
     if (available_ && !pending_) {
@@ -2788,181 +2816,15 @@ void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x, fy + 48.f}, fit(r, "Enregistr\xC3\xA9 dans : " + licence::profilePath(), kSmall, W), kSmall, c.textMuted);
 }
 
-// ============================================================ 1.38.0 : la capture qu'on agrandit ==
-hmi::Resource capturePng(const std::string& path, const std::string& name) {
-    hmi::Resource res;
-    if (path.empty()) return res;
-    std::error_code ec;
-    const auto p = std::filesystem::path(std::u8string(path.begin(), path.end()));
-    const auto size = std::filesystem::file_size(p, ec);
-    if (ec || size == 0 || size >= 8u * 1024u * 1024u) return res;
-    std::ifstream in(p, std::ios::binary);
-    hmi::Bytes bytes(static_cast<std::size_t>(size));
-    if (!in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) return res;
-    res.name = name;
-    res.format = "PNG";
-    res.data = std::make_shared<const hmi::Bytes>(std::move(bytes));
-    return res;
-}
-
-void ZoomImage::clampOffset() {
-    const auto box = bounds();
-    if (iw_ <= 0.f || ih_ <= 0.f) return;
-    const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
-    const float dw = iw_ * k, dh = ih_ * k;
-    const float mx = std::max(0.f, (dw - box.w) * 0.5f), my = std::max(0.f, (dh - box.h) * 0.5f);
-    ox_ = std::clamp(ox_, -mx, mx);
-    oy_ = std::clamp(oy_, -my, my);
-}
-
-void ZoomImage::wheel(gfx::Point at, float dy) {
-    if (!hasImage() || dy == 0.f) return;
-    const auto box = bounds();
-    const float before = zoom_;
-    zoom_ = std::clamp(zoom_ * (dy > 0.f ? 1.25f : 0.8f), 1.f, 4.f);
-    if (zoom_ == before) return;
-    // Le point sous la souris reste sous la souris.
-    const float cx = box.x + box.w * 0.5f + ox_, cy = box.y + box.h * 0.5f + oy_;
-    const float f = zoom_ / before;
-    ox_ += (at.x - cx) * (1.f - f);
-    oy_ += (at.y - cy) * (1.f - f);
-    if (zoom_ <= 1.f) ox_ = oy_ = 0.f;
-    clampOffset();
-    invalidate();
-}
-
-ui::EventResult ZoomImage::onEvent(const ui::InputEvent& ev) {
-    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
-        if (!hasImage()) return ui::EventResult::Ignored;
-        wheel(w->pos, w->dy);
-        return ui::EventResult::Consumed;
-    }
-    if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && hasImage()) {
-        if (d->clickCount >= 2) {
-            fitAgain();
-            dragging_ = false;
-            return ui::EventResult::Consumed;
-        }
-        dragging_ = true;
-        moved_ = false;
-        last_ = d->pos;
-        return ui::EventResult::Consumed;
-    }
-    if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && !dragging_ && !spots_.empty() && iw_ > 0.f) {
-        // 1.44.0 : la bulle sous la souris
-        const gfx::Rect ir = imageRect();
-        const float k = ir.w / iw_;
-        int at = -1;
-        for (std::size_t i = 0; i < spots_.size(); ++i) {
-            const auto& s = spots_[i];
-            const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
-            if (sr.contains(m->pos)) at = static_cast<int>(i);
-        }
-        if (at != hoverSpot_) {
-            hoverSpot_ = at;
-            invalidate();
-        }
-        return ui::EventResult::Ignored;
-    }
-    if (const auto* m = std::get_if<ui::MouseMove>(&ev); m && dragging_) {
-        const float dx = m->pos.x - last_.x, dy = m->pos.y - last_.y;
-        if (std::abs(dx) + std::abs(dy) > 2.f) moved_ = true;
-        last_ = m->pos;
-        if (zoom_ > 1.f) {
-            ox_ += dx;
-            oy_ += dy;
-            clampOffset();
-            invalidate();
-        }
-        return ui::EventResult::Consumed;
-    }
-    if (const auto* u = std::get_if<ui::MouseUp>(&ev); u && dragging_) {
-        dragging_ = false;
-        if (!moved_ && zoom_ <= 1.f && onOpen) onOpen();
-        return ui::EventResult::Consumed;
-    }
-    return ui::EventResult::Ignored;
-}
-
-gfx::Rect ZoomImage::imageRect() const noexcept {
-    const auto box = bounds();
-    if (iw_ <= 0.f || ih_ <= 0.f) return {};
-    const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
-    const float w = iw_ * k, h = ih_ * k;
-    return {box.x + (box.w - w) * 0.5f + ox_, box.y + (box.h - h) * 0.5f + oy_, w, h};
-}
-
-void ZoomImage::onPaint(const ui::PaintContext& ctx) {
-    auto& r = ctx.r;
-    const auto& c = ctx.theme.color;
-    const auto box = bounds();
-    r.fillRect(box, c.inputBg);
-    bool drawn = false;
-    if (image_.data) {
-        const auto img = HmiImageCache::instance().resource(r, image_);
-        if (img.valid()) {
-            iw_ = static_cast<float>(img.width);
-            ih_ = static_cast<float>(img.height);
-            clampOffset();
-            const float k = std::min(box.w / iw_, box.h / ih_) * zoom_;
-            const float w = iw_ * k, h = ih_ * k;
-            r.pushClip(box);
-            r.drawImage(img.tex, {box.x + (box.w - w) * 0.5f + ox_, box.y + (box.h - h) * 0.5f + oy_, w, h});
-            // 1.44.0 : les zones qui ont une bulle, au survol de la capture ; celle sous la souris, et sa bulle
-            if (!spots_.empty() && hovered()) {
-                const gfx::Rect ir = imageRect();
-                for (std::size_t i = 0; i < spots_.size(); ++i) {
-                    const auto& s = spots_[i];
-                    const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
-                    const bool on = static_cast<int>(i) == hoverSpot_;
-                    ui::shapes::strokeRoundedRect(r, sr, c.accent.withAlpha(on ? 255 : 120), 5.f, on ? 2.f : 1.f);
-                }
-            }
-            r.popClip();
-            if (hoverSpot_ >= 0 && hoverSpot_ < static_cast<int>(spots_.size()) && hovered()) {
-                const auto& s = spots_[static_cast<std::size_t>(hoverSpot_)];
-                const gfx::Rect ir = imageRect();
-                const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
-                const float bw = std::min(box.w - 16.f, 300.f);
-                const auto lines = wrapText(r, s.tip, kSmall, bw - 20.f);
-                const float bh = static_cast<float>(std::min<std::size_t>(lines.size(), 6)) * 18.f + 14.f;
-                float bx = std::clamp(sr.x, box.x + 8.f, box.right() - bw - 8.f);
-                float by = sr.bottom() + 6.f;
-                if (by + bh > box.bottom() - 4.f) by = std::max(box.y + 4.f, sr.y - bh - 6.f);
-                r.fillRoundedRect({bx, by, bw, bh}, gfx::Color::rgb(0x111827), 8.f);
-                float ty = by + 7.f;
-                int n = 0;
-                for (const auto& l : lines) {
-                    if (++n > 6) break;
-                    r.drawText({bx + 10.f, ty}, fit(r, l, kSmall, bw - 20.f), kSmall, gfx::Color::rgb(0xFFFFFF));
-                    ty += 18.f;
-                }
-            }
-            drawn = true;
-        }
-    }
-    if (!drawn)
-        r.drawText({box.x + 12.f, box.y + (box.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, empty_, kSmall, box.w - 24.f), kSmall, c.textMuted);
-    else if (hint_) {
-        std::string t = zoom_ > 1.f ? "\xC3\x97" + std::to_string(static_cast<int>(std::lround(zoom_ * 100.f))) + " % \xC2\xB7 glisser : d\xC3\xA9placer \xC2\xB7 double clic : ajuster"
-                                    : onOpen ? "Molette : zoom \xC2\xB7 clic : en grand" : "Molette : zoom \xC2\xB7 glisser \xC2\xB7 double clic : ajuster";
-        if (!spots_.empty() && zoom_ <= 1.f) t = "Survole les zones : ce qu'on y voit \xC2\xB7 " + t;   // 1.44.0
-        const float tw = std::min(box.w - 8.f, r.measure(t, kSmall).width + 12.f);
-        const gfx::Rect tag{box.right() - tw - 4.f, box.bottom() - r.lineHeight(kSmall) - 8.f, tw, r.lineHeight(kSmall) + 4.f};
-        r.fillRect(tag, c.panelBg.withAlpha(215));
-        r.drawText({tag.x + 6.f, tag.y + 2.f}, fit(r, t, kSmall, tw - 12.f), kSmall, c.textMuted);
-    }
-    r.strokeRect(box, c.border, 1.f);
-}
+// 1.38.0 : la capture qu'on agrandit (capturePng, ZoomImage) : 1.45.0, dans LicenceViews.cpp (licence::CaptureView).
 
 // ============================================================ 1.38.0 : l'apercu d'une fonctionnalite ==
 FeaturePreviewPane::FeaturePreviewPane(std::string id) : ui::Widget(std::move(id)) {
     image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>(this->id() + ".capture")));
     image_->onOpen = [this] {
         if (!onEnlarge || !image_->hasImage()) return;
-        // 1.44.0 : la capture montree, sa legende avant la phrase de la fonctionnalite
-        const std::string caption = shot_ < preview_.shots.size() ? preview_.shots[shot_].caption : std::string();
-        onEnlarge(shown_, image_->image(), caption.empty() ? preview_.description : caption + " \xE2\x80\x94 " + preview_.description);
+        // 1.45.0 : toutes les captures (les fleches de la fenetre en grand), celle montree d'abord ; celles deja lues
+        onEnlarge(shown_, preview_, shot_, loaded_);
     };
     image_->setVisibility(ui::Visibility::Collapsed);
     // 1.44.0 : plusieurs captures - des fleches de part et d'autre de << Capture 2/3 : sa legende >>
@@ -2986,6 +2848,7 @@ void FeaturePreviewPane::show(const FeatureInfo& info) {
     if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
     shown_ = info;
     preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
+    loaded_.assign(preview_.shots.size(), hmi::Resource{});
     shot_ = 0;
     applyShot();
     image_->setVisibility(shown_.id.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
@@ -2994,8 +2857,11 @@ void FeaturePreviewPane::show(const FeatureInfo& info) {
 void FeaturePreviewPane::applyShot() {
     if (shot_ < preview_.shots.size()) {
         const auto& s = preview_.shots[shot_];
-        image_->setImage(capturePng(s.imagePath, shown_.id + (shot_ == 0 ? std::string(".png") : "-" + std::to_string(shot_ + 1) + ".png")));
-        image_->setSpots(s.spots);
+        // 1.45.0 : lue une fois (les fleches qui reviennent : rien a relire) ; ses bulles dans leur repere
+        if (shot_ >= loaded_.size()) loaded_.resize(preview_.shots.size());
+        if (!loaded_[shot_].data) loaded_[shot_] = capturePng(s.imagePath, licence::captureName(shown_.id, shot_));
+        image_->setImage(loaded_[shot_]);
+        image_->setSpots(s.spots, s.refW, s.refH);
     } else {
         image_->setImage(capturePng(preview_.imagePath, shown_.id + ".png"));
         image_->setSpots({});
@@ -3100,74 +2966,24 @@ void FeatureTablePanel::onLayout() {
 }
 
 // ============================================================ 1.38.0 : la capture en grand ==
-class ZoomBody final : public ui::Widget {
-public:
-    ZoomBody(std::string title, hmi::Resource img, std::string text, std::function<void()> close)
-        : ui::Widget("dialog.capture.corps"), title_(std::move(title)), text_(std::move(text)), close_(std::move(close)) {
-        image_ = &static_cast<ZoomImage&>(addChild(std::make_unique<ZoomImage>("dialog.capture.image")));
-        image_->setImage(std::move(img));
-        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.capture.fermer")));
-        closeButton_->setStyle(ui::Button::Style::Primary);
-        links_ += closeButton_->clicked->connect([this] {
-            if (close_) close_();
-        });
-    }
-
-protected:
-    void onLayout() override {
-        const auto r = bounds();
-        const float w = std::min(1500.f, std::max(480.f, r.w - 40.f)), h = std::min(980.f, std::max(360.f, r.h - 40.f));
-        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
-        closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
-        ui::dialogframe::keep(*this, closeBox_);
-        const float bottom = panel_.bottom() - 52.f;
-        image_->setBounds({panel_.x + 16.f, panel_.y + 52.f, panel_.w - 32.f, std::max(80.f, bottom - 46.f - (panel_.y + 52.f))});
-        const float cw = std::max(110.f, closeButton_->sizeHint().preferred.w);
-        closeButton_->setBounds({panel_.right() - 16.f - cw, panel_.bottom() - 44.f, cw, 32.f});
-    }
-    void onPaint(const ui::PaintContext& ctx) override {
-        auto& r = ctx.r;
-        const auto& c = ctx.theme.color;
-        r.fillRect(panel_, c.panelBg);
-        r.strokeRect(panel_, c.borderStrong, 1.f);
-        r.fillRect({panel_.x, panel_.y, panel_.w, 42.f}, c.headerBg);
-        r.drawText({panel_.x + 16.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, fit(r, title_, kTitle, panel_.w - 70.f), kTitle, c.text);
-        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
-        r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
-        const float y = image_->bounds().bottom() + 8.f, W = panel_.w - 32.f;
-        int n = 0;
-        for (const auto& l : wrapText(r, text_, kSmall, W)) {
-            if (++n > 2) break;
-            r.drawText({panel_.x + 16.f, y + static_cast<float>(n - 1) * 19.f}, fit(r, l, kSmall, W), kSmall, c.text);
-        }
-    }
-    ui::EventResult onEvent(const ui::InputEvent& ev) override {
-        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
-            if (close_) close_();
-            return ui::EventResult::Consumed;
-        }
-        return ui::EventResult::Ignored;
-    }
-
-private:
-    std::string           title_, text_;
-    std::function<void()> close_;
-    ZoomImage*            image_{nullptr};
-    ui::Button*           closeButton_{nullptr};
-    gfx::Rect             panel_{}, closeBox_{};
-    core::ConnectionScope links_;
-};
-
+// 1.45.0 : le corps est licence::CaptureZoomBody (LicenceViews) - les fleches, << Capture 2/3 : sa legende >>, les bulles.
 class ZoomWindow final : public menu::WidgetMenu {
 public:
-    ZoomWindow(std::string title, hmi::Resource img, std::string text)
-        : menu::WidgetMenu("dialog.capture"), title_(std::move(title)), img_(std::move(img)), text_(std::move(text)) {}
+    ZoomWindow(licence::CaptureSet set, std::size_t shot)
+        : menu::WidgetMenu("dialog.capture"), title_(set.title), set_(std::move(set)), shot_(shot) {}
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
     [[nodiscard]] std::string title() const override { return title_; }
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
-        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
-            fermer();
-            return ui::EventResult::Consumed;
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            if (k->key == ui::Key::Escape) {
+                fermer();
+                return ui::EventResult::Consumed;
+            }
+            // 1.45.0 : les fleches du clavier passent d'une capture a l'autre
+            if (body_ && (k->key == ui::Key::Left || k->key == ui::Key::Right) && body_->shotCount() > 1) {
+                body_->step(k->key == ui::Key::Left ? -1 : 1);
+                return ui::EventResult::Consumed;
+            }
         }
         return menu::WidgetMenu::HandleEvent(ev);
     }
@@ -3179,20 +2995,30 @@ public:
 
 protected:
     core::Status buildUi() override {
-        setRoot(std::make_unique<ZoomBody>(title_, std::move(img_), text_, [this] { fermer(); }));
+        auto body = std::make_unique<licence::CaptureZoomBody>(std::move(set_), shot_, [this] { fermer(); });
+        body_ = body.get();
+        setRoot(std::move(body));
         return core::ok();
     }
 
 private:
-    std::string   title_;
-    hmi::Resource img_;
-    std::string   text_;
-    bool          done_{false};
+    std::string               title_;
+    licence::CaptureSet       set_;
+    std::size_t               shot_{0};
+    licence::CaptureZoomBody* body_{nullptr};
+    bool                      done_{false};
 };
 
-void showCapture(App& app, const FeatureInfo& f, const hmi::Resource& img, const std::string& text) {
-    app.menus().ShowDialog(std::make_unique<ZoomWindow>(f.label + (f.product.empty() ? std::string() : " \xE2\x80\x94 " + f.product), img, text),
-                           [](const menu::DialogResult&) {});
+void showCapture(menu::MenuManager& menus, const FeatureInfo& f, const licence::FeaturePreview& preview, std::size_t shot,
+                 const std::vector<hmi::Resource>& loaded) {
+    licence::CaptureSet set;
+    set.feature = f.id;
+    set.title = f.label + (f.product.empty() ? std::string() : " \xE2\x80\x94 " + f.product);
+    set.description = preview.description;
+    set.shots = preview.shots;
+    if (set.shots.empty() && !preview.imagePath.empty()) set.shots.push_back({preview.imagePath, {}, {}});
+    set.images = loaded;
+    menus.ShowDialog(std::make_unique<ZoomWindow>(std::move(set), shot), [](const menu::DialogResult&) {});
 }
 
 // ============================================================ 1.39.0 : une action pas dans la licence ==
@@ -3228,6 +3054,11 @@ public:
         links_ += closeButton_->clicked->connect([this] {
             if (close_) close_();
         });
+    }
+
+    // 1.45.0 : les bulles de sa capture (la premiere), dans leur repere
+    void setSpots(const licence::CaptureShot& shot) {
+        if (image_) image_->setSpots(shot.spots, shot.refW, shot.refH);
     }
 
 protected:
@@ -3343,10 +3174,15 @@ public:
 
 protected:
     core::Status buildUi() override {
-        setRoot(std::make_unique<LockedBody>(action_, why_, offers_, description_, std::move(img_), hasImage_, [this] { fermer(true); },
-                                             [this] { fermer(false); }, optionLine_, [this] { fermer(false, true); }));
+        auto body = std::make_unique<LockedBody>(action_, why_, offers_, description_, std::move(img_), hasImage_, [this] { fermer(true); },
+                                                 [this] { fermer(false); }, optionLine_, [this] { fermer(false, true); });
+        body->setSpots(shot_);   // 1.45.0
+        setRoot(std::move(body));
         return core::ok();
     }
+
+public:
+    licence::CaptureShot shot_;   // 1.45.0 : la capture montree (ses bulles)
 
 private:
     App&          app_;
@@ -3418,8 +3254,10 @@ void showLocked(App& app, std::string_view feature, std::string actionLabel) {
     const auto pv = featurePreview(id);
     const bool hasImage = !pv.imagePath.empty();
     hmi::Resource img = hasImage ? capturePng(pv.imagePath, id + ".png") : hmi::Resource{};
-    app.menus().ShowDialog(std::make_unique<LockedWindow>(app, actionLabel.empty() ? name : std::move(actionLabel), std::move(why), std::move(offers),
-                                                          pv.description, std::move(img), hasImage, optionLine),
+    auto window = std::make_unique<LockedWindow>(app, actionLabel.empty() ? name : std::move(actionLabel), std::move(why), std::move(offers),
+                                                 pv.description, std::move(img), hasImage, optionLine);
+    if (!pv.shots.empty()) window->shot_ = pv.shots.front();   // 1.45.0 : ses bulles
+    app.menus().ShowDialog(std::move(window),
                            [&app, optionId](const menu::DialogResult& r) {
                                if (!r.accepted()) return;
                                if (r.payload == "option") {
@@ -3449,7 +3287,8 @@ public:
         allButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(
             "Toute l'offre (" + std::to_string(ch_.rows.size()) + ")", "dialog.offre-modifiee.tout")));
         panel_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("dialog.offre-modifiee.panneau", "dialog.offre-modifiee.table")));
-        panel_->pane().onEnlarge = [this](const FeatureInfo& f, const hmi::Resource& img, const std::string& t) { showCapture(app_, f, img, t); };
+        panel_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot,
+                                          const std::vector<hmi::Resource>& loaded) { showCapture(app_.menus(), f, p, shot, loaded); };
         compareButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Comparer toutes les offres\xE2\x80\xA6", "dialog.offre-modifiee.comparer")));
         closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.offre-modifiee.fermer")));
         closeButton_->setStyle(ui::Button::Style::Primary);
@@ -3759,9 +3598,19 @@ void showNoticesWindow(App& app, bool withFiles) {
     });
 }
 
-void showLicenceWindow(App& app, int tab) {
-    app.menus().ShowDialog(std::make_unique<LicenceWindow>(app, tab), nullptr);
+void showLicenceWindow(App& app, int tab) { showLicenceWindow(app.menus(), tab); }
+
+void showLicenceWindow(menu::MenuManager& menus, int tab) {
+    // 1.45.0 : UNE SEULE FENETRE LICENCE. Deja ouverte (sous la reponse de l'editeur, << Voir ma licence >>) : elle passe a
+    // l'onglet demande ; avant, une seconde s'empilait sur la premiere - deux clics sur la croix pour en sortir.
+    if (g_licenceWindow && !g_licenceWindow->closing()) {
+        g_licenceWindow->goTo(tab);
+        return;
+    }
+    menus.ShowDialog(std::make_unique<LicenceWindow>(menus, tab), nullptr);
 }
+
+bool licenceWindowOpen() noexcept { return g_licenceWindow && !g_licenceWindow->closing(); }
 
 namespace licence {
 
@@ -3796,7 +3645,9 @@ bool gateProjects(App& app) {
     return false;
 }
 
-void showAnswer(App& app, const Answer& a) {
+void showAnswer(App& app, const Answer& a) { showAnswer(app.menus(), a); }
+
+void showAnswer(menu::MenuManager& menus, const Answer& a) {
     const auto v = answerView(a, licensing::getLicenseState());
     auto dlg = std::make_unique<MessageDialog>(v.title, v.text, v.accepted ? MessageDialog::Icon::Info : MessageDialog::Icon::Warning, v.confirm);
     dlg->setCancelLabel(v.accepted ? "Fermer" : "Plus tard");
@@ -3805,9 +3656,24 @@ void showAnswer(App& app, const Answer& a) {
     if (!a.code.empty())
         dlg->setExtraButton("Copier le code", [code = a.code] { ui::setClipboardText(code); }, "Code copi\xC3\xA9 \xE2\x9C\x93");
     const int tab = v.tab;
-    app.menus().ShowDialog(std::move(dlg), [&app, tab](const menu::DialogResult& r) {
-        if (r.accepted()) showLicenceWindow(app, tab);
+    // 1.45.0 : une fenetre de reponse a la fois (la suivante attend sa fermeture : takeAnswer) ; << Voir ma licence >>
+    // ramene la fenetre Licence deja ouverte sur l'onglet (showLicenceWindow), sans en empiler une seconde.
+    setAnswerOpen(true);
+    menus.ShowDialog(std::move(dlg), [&menus, tab](const menu::DialogResult& r) {
+        setAnswerOpen(false);
+        if (r.accepted()) showLicenceWindow(menus, tab);
     });
+}
+
+bool showFeatureCapture(App& app, const std::string& feature, std::size_t shot) {
+    const auto pv = featurePreview(feature);
+    if (pv.shots.empty()) return false;
+    std::string product;
+    if (const auto reg = licensing::getRegistry())
+        for (const auto& f : reg->features)
+            if (f.id == feature) product = f.product;
+    showCapture(app.menus(), FeatureInfo{feature, featureLabel(feature), product, {}}, pv, std::min(shot, pv.shots.size() - 1));
+    return true;
 }
 
 } // namespace licence

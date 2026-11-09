@@ -26,6 +26,7 @@
 
 #include "Workspace.hpp"
 
+#include "../ServiceDeploy.hpp"   // 1.45.0 : deployer le service, sa version
 #include "../../menu/IMenu.hpp"
 #include "../../ui/Widget.hpp"
 
@@ -105,6 +106,7 @@ using PagePtr = std::unique_ptr<Page>;
 //                   d'Administrateurs ; l'admin+)
 //  "journal"        Journal des admins (l'admin+)            PageJournal.cpp
 //  "versions"       Versions (publier ; l'admin+)            PageVersions.cpp
+//  1.45.0 : le dialogue << Deployer le service >> (Service en ligne, le tableau de bord) DeployDialog.cpp
 PagePtr makeDashboardPage(ShellHost host);
 PagePtr makeClientsPage(ShellHost host);
 PagePtr makeLicencesPage(ShellHost host);
@@ -160,5 +162,17 @@ bool depositOnlineLicence(const ShellHost& host, ServiceJob job, std::string cod
 bool publishToService(const ShellHost& host, std::function<void(const OpResult&)> done = {});
 // Relever les licences en ligne (GET /admin/licences) par runSlow, et adopter le releve (`done` facultatif).
 bool refreshOnlineLicences(const ShellHost& host, std::function<void(const OpResult&)> done = {});
+
+// 1.45.0 : LA VERSION DU SERVICE EN LIGNE (l'etat lu : Verifier, ou au lancement de l'Admin) face a ce qu'il faut a cet
+// Admin (deployer::kServiceRequired) et au service de son kit (deployer::installedKit) - jamais face a la version de
+// l'Admin lui-meme. `outdated` : la pastille du haut (<< a mettre a jour >>), le bandeau du tableau de bord et de la page
+// Service en ligne, avec << Deployer le service >>.
+[[nodiscard]] deployer::VersionCheck serviceVersion(const Workspace& w);
+// 1.45.0 : LE DIALOGUE << Deployer le service >> (DeployDialog.cpp) : il lance tout de suite le kit installe
+// (deployer::deploy, par runSlow), montre sa sortie en direct (le journal qui defile, l'etape, Annuler), puis le
+// resultat : en ligne -> l'etat relu (/v1/etat) : << Service en ligne : version 1.44.0 >> ; sinon la raison en francais
+// et l'etape suivante (nodejs.org ; << Se connecter a Cloudflare... >> : npx wrangler login ; les dernieres lignes).
+// `done` (facultatif) : a chaque fin (la page se rafraichit).
+menu::MenuPtr makeDeployDialog(ShellHost host, std::function<void()> done = {});
 
 } // namespace license_admin::gui

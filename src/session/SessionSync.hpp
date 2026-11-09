@@ -95,6 +95,17 @@ public:
     // reste du projet si `projectTouched` (ou si des vues sont apparues / ont disparu). Le miroir les prend.
     void collect(hmi::Project&, const std::set<hmi::Id>& touched, bool projectTouched,
                  std::vector<ViewDelta>& views, ProjectDelta& project);
+    // 1.45.0 : ce que ces changements remplacent (le journal de la session) - chaque vue changee telle qu'elle etait
+    // (ses proprietes, ses objets changes ou supprimes), les vues et les fichiers d'avant.
+    struct Previous {
+        std::map<hmi::Id, hmi::View> views;        // la vue d'avant (seulement les objets que le changement touche)
+        std::map<hmi::Id, std::string> viewNames;  // toutes les vues d'avant : leur nom
+        std::set<std::string> files;               // les fichiers hors des vues d'avant
+    };
+    void collect(hmi::Project&, const std::set<hmi::Id>& touched, bool projectTouched,
+                 std::vector<ViewDelta>& views, ProjectDelta& project, Previous* previous);
+    // 1.45.0 : ce fichier hors des vues est-il dans l'etat partage ?
+    [[nodiscard]] bool hasFile(const std::string& path) const { return files_.count(path) > 0; }
     // Un changement d'un autre PC : au projet et au miroir. Faux : `why` (la vue n'existe pas...).
     bool applyView(hmi::Project&, const ViewDelta&, std::string* why);
     bool applyProject(hmi::Project&, const ProjectDelta&, ProjectApplied& done, std::string* why);

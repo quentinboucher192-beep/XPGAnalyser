@@ -76,6 +76,15 @@ bool relayCodeTyped(std::string_view text, std::string& code);
 // dans leur fil).
 [[nodiscard]] std::string relayLocator(std::string_view code);
 
+// 1.45.0 : LE SERVICE EST TROP VIEUX - un service des licences d'avant la 1.44 ne connait pas le relais : il repond
+// 404 << route >> (<< cette adresse n'existe pas sur le service des licences >>) a /v1/relais/ouvrir (l'hote) et a
+// /v1/relais/<localisateur>/frapper (l'equipier). Les liens le disent par cette phrase (Closed, conn 0) ; l'interface la
+// montre telle quelle : << Le service des licences n'est pas encore en 1.44 : l'editeur doit le redeployer (Admin >
+// Service en ligne > Deployer). >>
+[[nodiscard]] const std::string& relayTooOldText();
+// La phrase d'un lien ferme est-elle celle-la ?
+[[nodiscard]] bool relayTooOld(std::string_view why);
+
 // ---- le transport : un appel au relais (HTTP, signe par la cle du PC) ----
 struct RelayCall {
     std::string method;        // "GET", "POST"
