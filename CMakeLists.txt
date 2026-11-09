@@ -285,9 +285,17 @@ endif()
 #  chaque executable n'a en propre que main.cpp, compile avec XPG_EDITION_API ou
 #  XPG_EDITION_IHM (core/Edition.hpp), et sa ressource Windows (son nom, son
 #  icone). xpg_analyzer construit les deux.
+# --- session : 1.43.0, plusieurs PC sur le meme projet (docs/SESSIONS.md) ------------------------------
+#  Le protocole (la decouverte, le code), le lien (TLS 1.3 du deploiement, un fil par connexion) et les
+#  changements qui passent (objet par objet, lignes par lignes). Sans ecran : session_test tourne en CI.
+xpg_sources(SESSION_SOURCES session)
+add_library(xpg_session STATIC ${SESSION_SOURCES})
+target_link_libraries(xpg_session PUBLIC xpg_hmi xpg_deploy)
+
 xpg_sources(APP_SOURCES app)
 add_library(xpg_app OBJECT ${APP_SOURCES})
 target_link_libraries(xpg_app PUBLIC xpg_ui xpg_import xpg_help xpg_hmi xpg_deploy)   # 1.28.0 : + le deploiement
+target_link_libraries(xpg_app PUBLIC xpg_session)   # 1.43.0 : les sessions
 # 1.30.0 : les licences (app/Licence*, l'ecran Licence et les verrous des entrees). xpg_licensing lie lui-meme
 # xpg_deploy et xpg_core (PUBLIC) : CMake les remet apres lui sur la ligne de lien (l'ordre des .a de MinGW).
 target_link_libraries(xpg_app PUBLIC xpg_licensing)
@@ -772,6 +780,8 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_natives_test PRIVATE xpg_hmi)
     xpg_add_test_executable(hmi_objets_test tests/hmi_objets_test.cpp)        # 1.27.0 : les types de l'IHM (Object, Font...) et leurs natives
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
+    xpg_add_test_executable(session_test tests/session_test.cpp)              # 1.43.0 : les sessions (protocole, miroir, lien)
+    xpg_target_link_libraries(session_test PRIVATE xpg_session)
     xpg_add_test_executable(deploy_crypto_test tests/deploy_crypto_test.cpp)  # 1.28.0 : libsodium et mbedTLS integres
     xpg_target_link_libraries(deploy_crypto_test PRIVATE xpg_deploy)
     xpg_add_test_executable(deploy_ui_test tests/deploy_ui_test.cpp)          # 1.28.0 : le volet Deploiement reseau et un vrai agent
@@ -1237,6 +1247,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME hmiobjets    COMMAND hmi_objets_test ${CMAKE_CURRENT_SOURCE_DIR}/resources/polices)                  # 1.27.0 : les types de l'IHM et les natives des objets
     xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
+    xpg_add_test(NAME session      COMMAND session_test)                     # 1.43.0 : les sessions (vraies sockets sur la boucle locale)
     xpg_add_test(NAME deploynet    COMMAND deploy_net_test)                  # 1.28.0 : l'agent et le client sur la boucle locale (vraies sockets, vrai TLS)
     xpg_add_test(NAME deploypackage COMMAND deploy_package_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.28.0 : le paquet signe, ses refus, la cle d'editeur
     xpg_add_test(NAME deployinstall COMMAND deploy_install_test)            # 1.29.0 : envoi par blocs et reprise, installation, poste lance/arrete, retour en arriere

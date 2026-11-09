@@ -79,6 +79,12 @@ public:
     // 1.20.0 : change a chaque modification (touched) - qui relit le projet souvent (la carte d'une proposition de l'IA)
     // ne recalcule que s'il a change.
     std::uint64_t revision{0};
+    // 1.43.0 : EN SESSION (plusieurs PC sur le projet) : annuler / retablir ne remet que ce que la commande a change
+    //  (ses objets, ses vues) ; le reste - ce qu'un equipier a fait depuis - reste tel quel. `mergeShell` reporte le
+    //  changement du reste du projet (de `from` a `to`) sur l'etat courant, ligne par ligne (la session le donne) ;
+    //  faux, ou absent : le reste du projet est remis comme hors session.
+    bool shared{false};
+    std::function<bool(Project& current, const Project& from, const Project& to)> mergeShell;
 
     void touched(Id view) { dirty = true; ++revision; changed->emit(view); }
 };

@@ -56,6 +56,78 @@ bool rebuild(const ListDelta<T>& d, bool after, const std::vector<T>& current, s
     return true;
 }
 
+// 1.43.0 : EN SESSION, un cote refait PAR-DESSUS la liste courante : les elements que la commande a changes remis a
+// leur etat de ce cote (ou retires s'ils n'y existaient pas) ; les autres - ceux d'un equipier - laisses tels quels.
+// L'ordre : si la commande a reordonne, celui de ce cote pour les elements qu'elle connait ; sinon l'ordre courant.
+// Un element remis qui n'est plus dans la liste reprend sa place derriere son voisin d'avant.
+template <class T>
+std::vector<T> mergeSide(const ListDelta<T>& d, bool after, const std::vector<T>& current) {
+    const auto& order   = after ? d.orderAfter : d.orderBefore;
+    const auto& changed = after ? d.after : d.before;
+    const auto& other   = after ? d.before : d.after;
+    std::unordered_map<Id, const T*> kept;
+    for (const auto& x : changed) kept.emplace(x.id, &x);
+    std::unordered_map<Id, bool> touched;   // vrai : present de ce cote
+    for (const auto& x : other) touched[x.id] = false;
+    for (const auto& x : changed) touched[x.id] = true;
+    // La commande a-t-elle reordonne (au-dela de ce qu'elle cree ou retire) ?
+    std::vector<Id> common, commonAfter;
+    {
+        std::unordered_map<Id, int> inAfter;
+        for (const Id id : d.orderAfter) inAfter[id] = 1;
+        std::unordered_map<Id, int> inBefore;
+        for (const Id id : d.orderBefore) inBefore[id] = 1;
+        for (const Id id : d.orderBefore) if (inAfter.count(id)) common.push_back(id);
+        for (const Id id : d.orderAfter) if (inBefore.count(id)) commonAfter.push_back(id);
+    }
+    const bool reordered = common != commonAfter;
+    // Les elements de ce cote : les courants (remplaces ou retires s'ils sont touches), plus ceux a remettre.
+    std::vector<T> result;
+    result.reserve(current.size() + kept.size());
+    std::unordered_map<Id, std::size_t> at;
+    for (const auto& x : current) {
+        const auto t = touched.find(x.id);
+        if (t == touched.end()) { at[x.id] = result.size(); result.push_back(x); continue; }
+        if (!t->second) continue;                    // il n'existe pas de ce cote
+        at[x.id] = result.size();
+        result.push_back(*kept.at(x.id));
+    }
+    // Ceux a remettre qui ne sont plus la : derriere leur voisin d'avant (dans l'ordre de ce cote).
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        const Id id = order[i];
+        const auto k = kept.find(id);
+        if (k == kept.end() || at.count(id)) continue;
+        std::size_t pos = 0;
+        for (std::size_t j = i; j-- > 0;) {
+            if (const auto a = at.find(order[j]); a != at.end()) { pos = a->second + 1; break; }
+        }
+        result.insert(result.begin() + static_cast<long>(pos), *k->second);
+        at.clear();
+        for (std::size_t r = 0; r < result.size(); ++r) at[result[r].id] = r;
+    }
+    if (reordered) {
+        // L'ordre de ce cote pour les elements qu'il connait ; les autres derriere leur voisin courant.
+        std::unordered_map<Id, std::size_t> rank;
+        for (std::size_t i = 0; i < order.size(); ++i) rank[order[i]] = i;
+        std::vector<T> known, sorted;
+        std::vector<std::pair<Id, T>> unknown;   // (voisin connu d'avant, element)
+        Id lastKnown = kNoId;
+        for (auto& x : result) {
+            if (rank.count(x.id)) { lastKnown = x.id; known.push_back(std::move(x)); }
+            else unknown.emplace_back(lastKnown, std::move(x));
+        }
+        std::stable_sort(known.begin(), known.end(), [&](const T& a, const T& b) { return rank[a.id] < rank[b.id]; });
+        for (auto& [n, x] : unknown) if (n == kNoId) sorted.push_back(std::move(x));
+        for (auto& k : known) {
+            const Id id = k.id;
+            sorted.push_back(std::move(k));
+            for (auto& [n, x] : unknown) if (n == id) sorted.push_back(std::move(x));
+        }
+        result = std::move(sorted);
+    }
+    return result;
+}
+
 core::Status incoherent(const std::string& what) {
     return core::fail(core::ErrorCode::OutOfRange,
                       what + " ne correspond plus \xC3\xA0 ce que la commande a modifi\xC3\xA9 : commande ignor\xC3\xA9" "e");
@@ -80,6 +152,13 @@ core::Status ViewCommand::put(bool after) {
     if (!target)
         return core::fail(core::ErrorCode::OutOfRange,
                           "la vue " + std::to_string(viewId_) + " n'existe plus : commande ignor\xC3\xA9" "e");
+    if (doc_->shared) {   // 1.43.0 : en session, seulement ce que la commande a change
+        std::vector<Object> objects = mergeSide(objects_, after, target->objects);
+        if (!(shellBefore_ == shellAfter_)) *target = after ? shellAfter_ : shellBefore_;
+        target->objects = std::move(objects);
+        doc_->touched(viewId_);
+        return core::ok();
+    }
     std::vector<Object> objects;
     if (!rebuild(objects_, after, target->objects, objects)) return incoherent("la vue " + target->name);
     *target = after ? shellAfter_ : shellBefore_;
@@ -111,6 +190,38 @@ void ViewCommand::mergeFrom(const core::ICommand& other) {
     const auto& o = static_cast<const ViewCommand&>(other);
     const auto* now = doc_->project.view(viewId_);
     if (!now) return;
+    if (doc_->shared) {
+        // 1.43.0 : en session, la vue a pu recevoir entre deux images ce qu'un equipier a fait : la fusion ne garde
+        // que les objets que les deux commandes ont touches - avant : l'etat d'avant la premiere ; apres : l'etat courant.
+        std::unordered_map<Id, const Object*> b1, a1, b2;
+        for (const auto& x : objects_.before) b1.emplace(x.id, &x);
+        for (const auto& x : objects_.after) a1.emplace(x.id, &x);
+        for (const auto& x : o.objects_.before) b2.emplace(x.id, &x);
+        std::vector<Id> ids;
+        for (const auto& [id, x] : b1) { (void)x; ids.push_back(id); }
+        for (const auto& [id, x] : a1) { (void)x; ids.push_back(id); }
+        for (const auto& [id, x] : b2) { (void)x; ids.push_back(id); }
+        for (const auto& x : o.objects_.after) ids.push_back(x.id);
+        std::sort(ids.begin(), ids.end());
+        ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+        ListDelta<Object> d;
+        d.orderBefore = objects_.orderBefore;
+        d.orderAfter.reserve(now->objects.size());
+        for (const auto& x : now->objects) d.orderAfter.push_back(x.id);
+        for (const Id id : ids) {
+            const Object* before = nullptr;
+            if (const auto k = b1.find(id); k != b1.end()) before = k->second;
+            else if (a1.count(id)) before = nullptr;   // cree par la premiere
+            else if (const auto k2 = b2.find(id); k2 != b2.end()) before = k2->second;
+            const Object* after = now->object(id);
+            if ((!before && !after) || (before && after && *before == *after)) continue;
+            if (before) d.before.push_back(*before);
+            if (after) d.after.push_back(*after);
+        }
+        objects_ = std::move(d);
+        shellAfter_ = o.shellAfter_;
+        return;
+    }
     std::vector<Object> middle, start;
     if (!rebuild(o.objects_, false, now->objects, middle) || !rebuild(objects_, false, middle, start))
         return;   // impossible tant que tout passe par la pile ; ne rien casser
@@ -145,7 +256,8 @@ ProjectCommand::ProjectCommand(DocumentPtr doc, Project before, Project after, s
 
 core::Status ProjectCommand::put(bool after) {
     std::vector<View> views;
-    if (!rebuild(views_, after, doc_->project.views, views)) return incoherent("la liste des vues");
+    if (doc_->shared) views = mergeSide(views_, after, doc_->project.views);   // 1.43.0 : en session
+    else if (!rebuild(views_, after, doc_->project.views, views)) return incoherent("la liste des vues");
     const Id next = std::max(doc_->project.nextId, nextId_);   // jamais de reutilisation
     // 1.26.1 : la corbeille courante, a laquelle la commande ajoute ou retire les siens (l'instantane ne l'a pas).
     std::vector<TrashItem> trash = std::move(doc_->project.trash);
@@ -159,7 +271,21 @@ core::Status ProjectCommand::put(bool after) {
             const auto at = std::upper_bound(trash.begin(), trash.end(), t.id, [](Id id, const TrashItem& x) { return id < x.id; });
             trash.insert(at, t);   // par identifiant croissant : l'ordre ou ils sont entres
         }
-    if (shellAfter_) doc_->project = after ? *shellAfter_ : *shellBefore_;
+    if (shellAfter_) {
+        // 1.43.0 : en session, le changement du reste du projet reporte ligne par ligne sur l'etat courant (un
+        // equipier a pu y ajouter une variable) ; sinon, ou s'il ne passe pas, remis entier comme avant.
+        bool merged = false;
+        if (doc_->shared && doc_->mergeShell) {
+            Project current = doc_->project;
+            current.views = views;
+            if (doc_->mergeShell(current, after ? *shellBefore_ : *shellAfter_, after ? *shellAfter_ : *shellBefore_)) {
+                current.views.clear();
+                doc_->project = std::move(current);
+                merged = true;
+            }
+        }
+        if (!merged) doc_->project = after ? *shellAfter_ : *shellBefore_;
+    }
     doc_->project.views  = std::move(views);
     doc_->project.nextId = next;
     doc_->project.trash  = std::move(trash);

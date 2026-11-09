@@ -798,6 +798,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\deploy\Net.cpp" />
     <ClCompile Include="src\deploy\Package.cpp" />
     <ClCompile Include="src\deploy\Pairing.cpp" />
+    <ClCompile Include="src\session\SessionLink.cpp" />
+    <ClCompile Include="src\session\SessionProtocol.cpp" />
+    <ClCompile Include="src\session\SessionSync.cpp" />
     <ClCompile Include="src\deploy\Protocol.cpp" />
     <ClCompile Include="src\deploy\Station.cpp" />
     <ClCompile Include="src\deploy\Tls.cpp" />
@@ -1397,6 +1400,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\Net.hpp" />
     <ClInclude Include="src\deploy\Package.hpp" />
     <ClInclude Include="src\deploy\Pairing.hpp" />
+    <ClInclude Include="src\session\SessionLink.hpp" />
+    <ClInclude Include="src\session\SessionProtocol.hpp" />
+    <ClInclude Include="src\session\SessionSync.hpp" />
     <ClInclude Include="src\deploy\Paths.hpp" />
     <ClInclude Include="src\deploy\Protocol.hpp" />
     <ClInclude Include="src\deploy\Station.hpp" />

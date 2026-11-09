@@ -4,6 +4,9 @@
     <Filter Include="deploy">
       <UniqueIdentifier>{A0000009-0000-0000-0000-000000000000}</UniqueIdentifier>
     </Filter>
+    <Filter Include="session">
+      <UniqueIdentifier>{A0000043-0000-0000-0000-000000000000}</UniqueIdentifier>
+    </Filter>
     <Filter Include="licensing">
       <UniqueIdentifier>{f2b2a112-118a-4398-abdc-644c46f471f4}</UniqueIdentifier>
     </Filter>
@@ -1981,6 +1984,15 @@
     <ClCompile Include="src\deploy\Pairing.cpp">
       <Filter>deploy</Filter>
     </ClCompile>
+    <ClCompile Include="src\session\SessionLink.cpp">
+      <Filter>session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\session\SessionProtocol.cpp">
+      <Filter>session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\session\SessionSync.cpp">
+      <Filter>session</Filter>
+    </ClCompile>
     <ClCompile Include="src\deploy\Protocol.cpp">
       <Filter>deploy</Filter>
     </ClCompile>
@@ -3729,6 +3741,15 @@
     </ClInclude>
     <ClInclude Include="src\deploy\Pairing.hpp">
       <Filter>deploy</Filter>
+    </ClInclude>
+    <ClInclude Include="src\session\SessionLink.hpp">
+      <Filter>session</Filter>
+    </ClInclude>
+    <ClInclude Include="src\session\SessionProtocol.hpp">
+      <Filter>session</Filter>
+    </ClInclude>
+    <ClInclude Include="src\session\SessionSync.hpp">
+      <Filter>session</Filter>
     </ClInclude>
     <ClInclude Include="src\deploy\Paths.hpp">
       <Filter>deploy</Filter>
