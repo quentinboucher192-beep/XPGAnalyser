@@ -38,6 +38,9 @@ struct LinkEvent {
         Connected,   // (equipier) la poignee de main est faite (le code compris) : on attend l'hote
         Frame,       // une trame : `header`, `data`
         Closed,      // la connexion est fermee : `why`
+        // 1.44.0 : par Internet (SessionRelay) - l'hote : la session est ouverte sur le relais (conn 0) ; l'equipier :
+        // le relais connait la session (`header` : nom, hote, projet). Une fermeture de conn 0 : la session elle-meme.
+        Opened,
     };
     Kind kind{Kind::Frame};
     int conn{0};                    // (hote) la connexion
