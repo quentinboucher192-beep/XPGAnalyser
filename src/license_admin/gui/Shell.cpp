@@ -847,6 +847,7 @@ private:
     TopBar*               top_{nullptr};
     ui::Widget*           stack_{nullptr};
     Banner*               banner_{nullptr};
+    ToastView*            toast_{nullptr};
 };
 
 // Une page qui manque (une fabrique qui n'a rien rendu) : dit-le, ne simule rien.
@@ -885,6 +886,9 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
         {"commandes", "Commandes", ui::Icon::Mail, true},
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
+        // 1.44.0 : plusieurs admins (la maquette 1.43.0) ; << Versions >> viendra avec sa page.
+        {"admins", "Administrateurs", ui::Icon::User, false},
+        {"journal", "Journal des admins", ui::Icon::Task, false},         // l'admin+ seulement
         {"service", "Service en ligne", ui::Icon::Refresh, false},        // 1.35.0 : a la place de Synchronisation GitHub
         {"historique", "Historique", ui::Icon::History, false},
         {"securite", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9", ui::Icon::Lock, false},
@@ -895,8 +899,24 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
 const Shell::NavEntry* Shell::entry(const std::string& pageId) {
     for (const auto& e : entries())
         if (pageId == e.id) return &e;
+    for (const auto& e : subPages())
+        if (pageId == e.id) return &e;
     return nullptr;
 }
+
+// 1.44.0 : les sous-pages (pas dans le menu) et leur page parente.
+const std::vector<Shell::NavEntry>& Shell::subPages() {
+    static const std::vector<NavEntry> list = {
+        {"droits", "Droits", ui::Icon::Lock, false},   // Administrateurs > Droits (planche 08)
+    };
+    return list;
+}
+
+std::string Shell::parentOf(const std::string& pageId) { return pageId == "droits" ? std::string("admins") : std::string(); }
+
+bool Shell::plusOnly(const std::string& pageId) { return pageId == "journal" || pageId == "droits"; }
+
+bool Shell::pageAllowed(const std::string& pageId) const { return !plusOnly(pageId) || ws_->role() == Role::Plus; }
 
 Shell::Shell(std::string folder, std::function<Seconds()> clock)
     : menu::WidgetMenu("admin.shell"), ws_(std::make_unique<Workspace>(std::move(folder))) {
