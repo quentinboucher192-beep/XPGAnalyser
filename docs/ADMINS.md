@@ -226,3 +226,48 @@ Pages nouvelles (Sécurité) : **Administrateurs** (+ **Droits** ; en lecture se
 admins** (admin+), **Versions** (admin+). Un admin n'a pas les entrées réservées. Les actions qu'il n'a pas le droit
 de faire sont grisées (le bouton dit pourquoi). Chaque action écrit sa ligne au journal (hors ligne : gardée, envoyée
 au retour).
+
+## 9. La sauvegarde de secours (si le service tombe)
+
+**Une sauvegarde complète, au contenu exact** : de quoi tout remettre ailleurs — l'admin+, les admins, leurs droits,
+les profils, le journal, les licences, les PC activés, les demandes, les réglages. Faite par **l'Admin de l'admin+**,
+chaque jour d'elle-même (et « Sauvegarder maintenant »), dans un dossier qu'il choisit ; les 30 dernières sont gardées.
+
+Le fichier `sauvegarde-licences-AAAA-MM-JJ-HHMM.xpgsauve` :
+
+```
+XPG-SAUVEGARDE 1
+cle=<identifiant xpg-... de la clé de l'éditeur>
+creee=<heure> service=<adresse>
+argon2id ops=<n> mem=<octets> sel=<32 hexadécimaux>
+<le base64 : nonce (24 octets) + chiffré XChaCha20-Poly1305 du contenu>
+```
+
+Comme la sauvegarde de la clé (`KeyBackup.hpp`, 1.32.0) : la clé de chiffrement vient d'**une phrase de passe que
+l'éditeur choisit et tape lui-même** (Argon2id) ; les lignes d'en-tête sont liées au chiffré. Pour la sauvegarde de
+chaque jour sans retaper la phrase, la clé dérivée (et son sel) est gardée sur le PC de l'admin+, protégée par DPAPI
+(`sauvegarde.cle`) ; ailleurs, la phrase suffit (le sel est dans l'en-tête).
+
+Le contenu (JSON) : `{"format":1, "service":{"manifeste":…, "tables":{"<table>":[lignes…]}}, "poste":{"<chemin
+relatif>":"<base64>"…}, "cle_editeur":"<la sauvegarde .xpgcle de la clé, chiffrée par la même phrase>"}` :
+- **le service** : tout ce que rend `GET /admin/sauvegarde` (table par table, page par page, les lignes telles quelles :
+  la clé du service et son certificat, les licences, les PC, les demandes, la liste des admins, le trousseau, le
+  journal, les messages, les versions et le manifeste des fichiers — pas leurs octets, ni les compteurs anti-abus) ;
+- **le dossier du poste** : l'archive, les profils, la criticité, les invitations, `service.json`, `activations.jsonl`,
+  les listes des admins vues, le journal vérifié — pas les clés DPAPI de ce PC (`cle-synchro.cle` y est sous forme
+  scellée par la phrase) ;
+- **la clé de l'éditeur**, chiffrée par la même phrase.
+
+**Restaurer** (« Restaurer une sauvegarde… », dans un Admin neuf, ou Paramètres de sécurité) : le fichier, la phrase ;
+le dossier du poste revient, la clé de l'éditeur est réécrite pour CE compte (DPAPI). Option **« Remettre aussi le
+service »** : l'adresse du service à remplir (un nouveau déploiement : un autre compte Cloudflare, ou le même programme
+hébergé ailleurs — `outils/service/`), puis `POST /admin/restauration/debut`, `…/lot` (table par table), `…/fin` : il
+retrouve **la même clé et le même certificat**, les Studios le reconnaissent. Les installateurs des versions publiées
+ne sont pas dans la sauvegarde (trop gros) : la page Versions les redemande (`fichiers_a_renvoyer`).
+
+## 10. Les adresses de secours
+
+Le registre peut porter `fallback_services` : jusqu'à 3 adresses (https) de services de secours, signées avec le reste.
+Un Studio qui **ne joint pas** l'adresse principale (une panne réseau, pas une réponse d'erreur) essaie celles-ci, dans
+l'ordre ; un document de ce service n'est cru que si son certificat (signé par l'éditeur) nomme cette adresse. Une
+adresse de secours se règle dans Service en ligne (admin+) ; son service se certifie comme le principal.
