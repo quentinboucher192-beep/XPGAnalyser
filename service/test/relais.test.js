@@ -245,6 +245,35 @@ describe("frapper, envoyer, recevoir", () => {
     });
 });
 
+describe("l'hote et un equipier sur le meme PC (la meme cle : deux Studios cote a cote)", () => {
+    it("chacun sa boite : l'equipier par sa connexion, l'hote sans ; partir et renvoyer restent distincts", async () => {
+        const loc = hasard(16);
+        assert.equal((await ouvrir(hote, loc)).statut, 200);
+        const f = await frapper(hote, loc);
+        assert.equal(f.statut, 200, f.texte);
+        const c = f.json.conn;
+        assert.equal((await envoyer(hote, loc, { conn: c, a: "hote", donnees: b64("de l'equipier") })).statut, 200);
+        assert.equal((await envoyer(hote, loc, { a: c, donnees: b64("de l'hote") })).statut, 200);
+        const h = await recevoir(hote, loc);
+        assert.deepEqual(
+            h.json.messages.map((m) => [m.de, deB64(m.donnees)]),
+            [[c, "de l'equipier"]],
+        );
+        const e = await recevoir(hote, loc, { conn: c });
+        assert.deepEqual(
+            e.json.messages.map((m) => [m.de, deB64(m.donnees)]),
+            [["hote", "de l'hote"]],
+        );
+        // l'equipier part : l'hote le voit (partir : true), meme avec la cle de l'hote
+        assert.equal((await fermer(hote, loc, { conn: c, partir: true })).statut, 200);
+        const fin = await recevoir(hote, loc, { depuis: h.json.suivant });
+        assert.equal(fin.json.messages.length, 1);
+        assert.equal(fin.json.messages[0].de, c);
+        assert.equal(fin.json.messages[0].fin, true);
+        assert.equal((await fermer(hote, loc)).statut, 200);
+    });
+});
+
 describe("les limites", () => {
     it("12 connexions ouvertes au plus ; frapper : 10 fois en 10 min par cle", async () => {
         const loc = hasard(16);

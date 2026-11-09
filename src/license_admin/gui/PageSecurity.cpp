@@ -29,6 +29,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -582,6 +583,9 @@ public:
         clearSecret(phrase1_);
         clearSecret(phrase2_);
         clearSecret(checkPhrase_);
+        clearSecret(bkPhrase1_);   // 1.44.0
+        clearSecret(bkPhrase2_);
+        clearSecret(rsPhrase_);
     }
     [[nodiscard]] std::string title() const override { return "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"; }
     void refresh() override;
@@ -610,6 +614,11 @@ private:
     void askCheck();
     void askExport();
     void askKit();
+    // 1.44.0 : la sauvegarde complete (docs/ADMINS.md, par. 9)
+    void askBackupFolder();
+    void askEnableBackup();
+    void askBackupNow();
+    void askFullRestore();
     void launch(const std::string& label, std::function<OpResult()> work, bool reloadAfter);
     [[nodiscard]] std::function<bool()> aliveCheck() const {
         std::weak_ptr<bool> w = alive_;
@@ -632,6 +641,20 @@ private:
     ui::Checkbox*            keep_{nullptr};
     ui::Button*              export_{nullptr};
     ui::Button*              kit_{nullptr};
+    // 1.44.0 : la sauvegarde de secours (tout le service) et sa restauration
+    ui::InputText*           bkFolder_{nullptr};
+    ui::Button*              bkChoose_{nullptr};
+    ui::InputText*           bkPhrase1_{nullptr};
+    ui::InputText*           bkPhrase2_{nullptr};
+    ui::Button*              bkEnable_{nullptr};
+    ui::Button*              bkNow_{nullptr};
+    ui::InputText*           rsPhrase_{nullptr};
+    ui::Checkbox*            rsService_{nullptr};
+    ui::InputText*           rsUrl_{nullptr};
+    ui::Checkbox*            rsReplace_{nullptr};
+    ui::Button*              rsGo_{nullptr};
+    std::string              bkHint_;
+    ui::Tone                 bkHintTone_{ui::Tone::Muted};
     std::string              hint_;
     ui::Tone                 hintTone_{ui::Tone::Muted};
     std::string              running_;   // le travail lent lance d'ici ("" : aucun)
@@ -686,6 +709,40 @@ SecurityPage::SecurityPage(ShellHost host) : Page("securite", std::move(host)) {
     kit_ = body_->make<ui::Button>("Pr\xC3\xA9parer les fichiers pour les Studios\xE2\x80\xA6", "securite.kit-studios");
     kit_->setIcon(ui::Icon::FolderOpen);
 
+    // 1.44.0 : la sauvegarde de secours - le dossier, la phrase (deux fois, masquee ; jamais gardee), chaque jour.
+    bkFolder_ = body_->make<ui::InputText>("securite.sauvegarde.dossier");
+    bkFolder_->setPlaceholder("un dossier HORS de ce PC de pr\xC3\xA9" "f\xC3\xA9rence (un disque, un partage)");
+    bkChoose_ = body_->make<ui::Button>("Choisir le dossier\xE2\x80\xA6", "securite.sauvegarde.choisir");
+    bkChoose_->setIcon(ui::Icon::FolderOpen);
+    bkPhrase1_ = body_->make<ui::InputText>("securite.sauvegarde.phrase");
+    bkPhrase1_->setMasked(true);
+    bkPhrase1_->setPlaceholder("12 caract\xC3\xA8res au moins : une phrase de quelques mots");
+    bkPhrase2_ = body_->make<ui::InputText>("securite.sauvegarde.phrase2");
+    bkPhrase2_->setMasked(true);
+    bkPhrase2_->setPlaceholder("la m\xC3\xAAme, encore");
+    bkEnable_ = body_->make<ui::Button>("Activer la sauvegarde de chaque jour", "securite.sauvegarde.activer");
+    bkEnable_->setStyle(ui::Button::Style::Primary);
+    bkEnable_->setIcon(ui::Icon::Save);
+    bkNow_ = body_->make<ui::Button>("Sauvegarder maintenant", "securite.sauvegarde.maintenant");
+    bkNow_->setIcon(ui::Icon::Save);
+    rsPhrase_ = body_->make<ui::InputText>("securite.restauration.phrase");
+    rsPhrase_->setMasked(true);
+    rsPhrase_->setPlaceholder("la phrase de passe de la sauvegarde");
+    rsService_ = body_->make<ui::Checkbox>("Remettre aussi le service (un nouveau d\xC3\xA9ploiement)", "securite.restauration.service");
+    rsUrl_ = body_->make<ui::InputText>("securite.restauration.adresse");
+    rsUrl_->setPlaceholder("https://xpg-licences-secours.exemple.workers.dev (vide : celle de la sauvegarde)");
+    rsReplace_ = body_->make<ui::Checkbox>("Remplacer ce qu'il contient (s'il n'est pas vide)", "securite.restauration.remplacer");
+    rsGo_ = body_->make<ui::Button>("Restaurer une sauvegarde compl\xC3\xA8te\xE2\x80\xA6", "securite.restauration");
+    rsGo_->setIcon(ui::Icon::Open);
+    if (const auto s = ws().backupSettings(); !s.folder.empty()) bkFolder_->setText(s.folder);
+    links_ += bkChoose_->clicked->connect([this] { askBackupFolder(); });
+    links_ += bkEnable_->clicked->connect([this] { askEnableBackup(); });
+    links_ += bkNow_->clicked->connect([this] { askBackupNow(); });
+    links_ += rsGo_->clicked->connect([this] { askFullRestore(); });
+    links_ += rsService_->stateChanged->connect([this](ui::Checkbox::State) { rebuild(); });
+    links_ += bkPhrase1_->textChanged->connect([this](const std::string&) { updateHint(); });
+    links_ += bkPhrase2_->textChanged->connect([this](const std::string&) { updateHint(); });
+
     links_ += folder_->clicked->connect([this] {
         if (host_.openFolder) host_.openFolder(ws().folder());
     });
@@ -711,7 +768,9 @@ void SecurityPage::refresh() {
 
 void SecurityPage::syncEnabled() {
     const bool b = busy();
-    for (auto* w : std::initializer_list<ui::Widget*>{create_, restore_, backup_, check_, export_, test_, keep_, kit_}) w->setEnabled(!b);
+    for (auto* w : std::initializer_list<ui::Widget*>{create_, restore_, backup_, check_, export_, test_, keep_, kit_, bkChoose_, bkEnable_, bkNow_, rsGo_})
+        w->setEnabled(!b);
+    bkNow_->setEnabled(!b && ws().backupSettings().configured);   // 1.44.0
 }
 
 void SecurityPage::updateHint() {
@@ -733,6 +792,21 @@ void SecurityPage::updateHint() {
     } else {
         hint_ = "Phrase acceptable, la m\xC3\xAAme deux fois.";
         hintTone_ = ui::Tone::Ok;
+    }
+    // 1.44.0 : la phrase de la sauvegarde de secours, jugee de la meme facon.
+    if (bkPhrase1_) {
+        const std::string& c = bkPhrase1_->text();
+        const std::string& d = bkPhrase2_->text();
+        std::string w2;
+        const auto say = [this](std::string text, ui::Tone tone) {
+            bkHint_ = std::move(text);
+            bkHintTone_ = tone;
+        };
+        if (c.empty() && d.empty()) say({}, ui::Tone::Muted);
+        else if (!Workspace::acceptablePhrase(c, &w2)) say("Trop faible : " + w2 + ".", ui::Tone::Warning);
+        else if (d.empty()) say("Phrase acceptable : tape-la une seconde fois, \xC3\xA0 l'identique.", ui::Tone::Info);
+        else if (c != d) say("Les deux phrases ne sont pas les m\xC3\xAAmes.", ui::Tone::Warning);
+        else say("Phrase acceptable, la m\xC3\xAAme deux fois.", ui::Tone::Ok);
     }
     if (body_) rebuild();
 }
@@ -828,6 +902,50 @@ void SecurityPage::rebuild() {
         else
             bl.note("Rien de secret dedans : ni la cl\xC3\xA9 priv\xC3\xA9" "e, ni la cl\xC3\xA9 de synchro, ni un code.");
         bl.row({kit_});
+        bl.end();
+    }
+
+    // 1.44.0 : LA SAUVEGARDE DE SECOURS (docs/ADMINS.md, par. 9) - l'admin+ ; la restauration : un Admin neuf, ou l'admin+.
+    if (ws().role() == Role::Plus) {
+        const BackupSettings s = ws().backupSettings();
+        bl.card("Sauvegarde de secours (si le service tombe)", s.configured && s.problem.empty() ? ui::Tone::Ok : ui::Tone::Warning);
+        bl.text("Une sauvegarde compl\xC3\xA8te, au contenu exact : de quoi tout remettre ailleurs - les admins, leurs droits, les profils, le journal, les "
+                "licences, les PC activ\xC3\xA9s, les demandes, les r\xC3\xA9glages, la cl\xC3\xA9 de l'\xC3\xA9" "diteur. Chaque jour d'elle-m\xC3\xAAme, dans le dossier "
+                "choisi ; les 30 derni\xC3\xA8res gard\xC3\xA9" "es. Chiffr\xC3\xA9" "e par une phrase de passe que tu choisis (Argon2id) : sans elle, la sauvegarde "
+                "ne sert \xC3\xA0 rien.");
+        bl.pair("\xC3\x89tat", s.configured ? (s.problem.empty() ? std::string("r\xC3\xA9gl\xC3\xA9" "e : chaque jour, les 30 derni\xC3\xA8res gard\xC3\xA9" "es") : s.problem)
+                                               : std::string("pas encore r\xC3\xA9gl\xC3\xA9" "e"),
+                s.configured && s.problem.empty() ? ui::Tone::Ok : ui::Tone::Warning);
+        if (!s.folder.empty()) bl.pair("Dossier", s.folder);
+        if (s.last) {
+            std::error_code ec;
+            const auto size = s.lastPath.empty() ? 0 : std::filesystem::file_size(std::filesystem::path(std::u8string(s.lastPath.begin(), s.lastPath.end())), ec);
+            std::string last = dateTimeFr(s.last);
+            if (!ec && size) last += " \xC2\xB7 " + std::to_string((size + 1023) / 1024) + " Ko";
+            if (!s.lastPath.empty()) last += " \xC2\xB7 " + std::filesystem::path(std::u8string(s.lastPath.begin(), s.lastPath.end())).filename().string();
+            bl.pair("Derni\xC3\xA8re", last);
+        }
+        bl.field("Dossier", bkFolder_, 420.f, {bkChoose_});
+        bl.field("Phrase de passe", bkPhrase1_, 380.f);
+        bl.field("La m\xC3\xAAme, encore", bkPhrase2_, 380.f);
+        if (!bkHint_.empty()) bl.note(bkHint_, bkHintTone_);
+        bl.row({bkEnable_, bkNow_});
+        bl.note("La phrase n'est jamais gard\xC3\xA9" "e : seule la cl\xC3\xA9 qui en d\xC3\xA9rive, prot\xC3\xA9g\xC3\xA9" "e pour ce compte (sauvegarde de chaque jour sans la retaper). "
+                "Ailleurs, la phrase suffit.");
+        bl.end();
+    }
+    if (ws().role() == Role::Plus || ws().role() == Role::None) {
+        bl.card("Restaurer une sauvegarde compl\xC3\xA8te");
+        bl.text("Le service est tomb\xC3\xA9, ou ce PC remplace celui de l'admin+ : le fichier (.xpgsauve) et sa phrase redonnent le dossier du poste et la "
+                "cl\xC3\xA9 de l'\xC3\xA9" "diteur (prot\xC3\xA9g\xC3\xA9" "e pour CE compte). \xC2\xAB Remettre aussi le service \xC2\xBB remplit un nouveau d\xC3\xA9ploiement : il "
+                "retrouve la m\xC3\xAAme cl\xC3\xA9 et le m\xC3\xAAme certificat, les Studios le reconnaissent.");
+        bl.field("Phrase de passe", rsPhrase_, 380.f);
+        bl.row({rsService_});
+        if (rsService_->isChecked()) {
+            bl.field("Adresse du service", rsUrl_, 460.f);
+            bl.row({rsReplace_});
+        }
+        bl.row({rsGo_});
         bl.end();
     }
 
@@ -1044,6 +1162,124 @@ void SecurityPage::askExport() {
 }
 
 // ---------------------------------------------------------------------------------------------------- le kit des Studios
+// ---------------------------------------------------------------------------------------------------- 1.44.0 : la sauvegarde de secours
+void SecurityPage::askBackupFolder() {
+    ui::FilePick p;
+    p.title = "Le dossier des sauvegardes de secours";
+    p.folder = true;
+    p.start = bkFolder_->text();
+    const auto alive = aliveCheck();
+    if (host_.pickFile)
+        host_.pickFile(p, [this, alive](std::string path) {
+            if (!alive() || path.empty()) return;
+            bkFolder_->setText(path);
+            rebuild();
+        });
+}
+
+void SecurityPage::askEnableBackup() {
+    if (refuseIfBusy()) return;
+    const std::string folder = trimmed(bkFolder_->text());
+    if (folder.empty()) {
+        refuse("choisis d'abord le dossier des sauvegardes (Choisir le dossier\xE2\x80\xA6)");
+        return;
+    }
+    std::string why;
+    if (!Workspace::acceptablePhrase(bkPhrase1_->text(), &why)) {
+        refuse(why);
+        return;
+    }
+    if (bkPhrase2_->text() != bkPhrase1_->text()) {
+        refuse("les deux phrases ne sont pas les m\xC3\xAAmes : tape-la deux fois, \xC3\xA0 l'identique");
+        return;
+    }
+    std::string phrase = bkPhrase1_->text();
+    clearSecret(bkPhrase1_);
+    clearSecret(bkPhrase2_);
+    updateHint();
+    launch("R\xC3\xA9glage de la sauvegarde de secours",
+           [folder = ws().folder(), dir = folder, phrase = std::move(phrase)]() mutable {
+               Workspace w(folder);
+               OpResult r = w.configureBackup(dir, phrase);
+               wipe(phrase);
+               if (r.ok) {   // et la premiere, tout de suite
+                   std::string path;
+                   const OpResult n = w.backupNow(&path);
+                   r.details.push_back(n.ok ? "Premi\xC3\xA8re sauvegarde : " + path : "La premi\xC3\xA8re sauvegarde n'a pas pu se faire : " + n.message);
+                   if (!n.ok) r.ok = n.ok;
+               }
+               return r;
+           },
+           false);
+}
+
+void SecurityPage::askBackupNow() {
+    if (refuseIfBusy()) return;
+    launch("Sauvegarde de secours",
+           [folder = ws().folder()] {
+               Workspace w(folder);
+               std::string path;
+               OpResult r = w.backupNow(&path);
+               if (r.ok && !path.empty()) r.output = path;
+               return r;
+           },
+           false);
+}
+
+void SecurityPage::askFullRestore() {
+    if (refuseIfBusy()) return;
+    if (rsPhrase_->text().empty()) {
+        refuse("tape d'abord la phrase de passe de la sauvegarde, puis choisis le fichier");
+        return;
+    }
+    ui::FilePick p;
+    p.title = "Restaurer une sauvegarde compl\xC3\xA8te";
+    p.filters = {{"Sauvegarde compl\xC3\xA8te (.xpgsauve)", "xpgsauve"}, {"Tous les fichiers", "*"}};
+    const auto alive = aliveCheck();
+    if (!host_.pickFile) return;
+    host_.pickFile(p, [this, alive](std::string path) {
+        if (!alive() || path.empty()) return;
+        BackupInfo info;
+        const OpResult d = Workspace::describeBackup(path, &info);
+        if (!d.ok) {
+            refuse(d.message);
+            return;
+        }
+        RestoreOptions o;
+        o.restoreFolder = true;
+        o.replaceKey = false;
+        o.restoreService = rsService_->isChecked();
+        o.serviceUrl = trimmed(rsUrl_->text());
+        o.replaceService = rsReplace_->isChecked();
+        std::string text = d.message + "\n\n";
+        for (const auto& x : d.details) text += x + "\n";
+        text += "\nLe dossier du poste revient tel qu'il \xC3\xA9tait ce jour-l\xC3\xA0 ; la cl\xC3\xA9 de l'\xC3\xA9" "diteur est r\xC3\xA9\xC3\xA9" "crite pour ce compte.";
+        if (o.restoreService) text += "\n\nLe service " + (o.serviceUrl.empty() ? info.serviceUrl : o.serviceUrl) + " est rempli avec son contenu" +
+                                      (o.replaceService ? " (ce qu'il contient est remplac\xC3\xA9)." : " (il doit \xC3\xAAtre vide).");
+        const auto alive2 = aliveCheck();
+        if (host_.openDialog)
+            host_.openDialog(std::make_unique<ConfirmDialog>("securite.restauration.confirmation", "Restaurer la sauvegarde compl\xC3\xA8te", std::move(text), "Restaurer",
+                                                             true, [this, alive2, path, o] {
+                                                                 if (!alive2() || refuseIfBusy()) return;
+                                                                 std::string phrase = rsPhrase_->text();
+                                                                 clearSecret(rsPhrase_);
+                                                                 launch("Restauration compl\xC3\xA8te",
+                                                                        [folder = ws().folder(), path, o, phrase = std::move(phrase)]() mutable {
+                                                                            Workspace w(folder);
+                                                                            RestoreReport rep;
+                                                                            OpResult r = w.restoreBackup(path, phrase, o, &rep);
+                                                                            wipe(phrase);
+                                                                            if (rep.serviceNotEmpty)
+                                                                                r.details.push_back("Le service n'est pas vide : coche \xC2\xAB Remplacer ce qu'il contient \xC2\xBB pour le remplacer.");
+                                                                            if (rep.filesToResend)
+                                                                                r.details.push_back(std::to_string(rep.filesToResend) + " installateur(s) \xC3\xA0 renvoyer : la page Versions les demande.");
+                                                                            return r;
+                                                                        },
+                                                                        true);
+                                                             }));
+    });
+}
+
 void SecurityPage::askKit() {
     if (refuseIfBusy()) return;
     const KeyStatus& k = ws().key();

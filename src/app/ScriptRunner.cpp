@@ -6362,8 +6362,9 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     // 1.43.0 : LES SESSIONS (deux IHM Studio sur un projet) - pour l'essai de bout en bout.
     //   session-demarrer "Nom" [code|accepter] [modifier|regarder]   l'hote (le projet ouvert)
-    //   session-demarrer "Nom" internet [modifier|regarder]          1.44.0 : par Internet (le relais du service XPG) ; le code
-    //                                                                (K7Q4-M2XP-T9) ecrit dans code-session.txt (les captures)
+    //   session-demarrer "Nom" internet [modifier|regarder]          1.44.0 : par Internet (le relais du service XPG) ; attend
+    //                                                                qu'elle soit ouverte sur le relais, puis ecrit le code
+    //                                                                (K7Q4-M2XP-T9) dans code-session.txt (les captures)
     //   session-chercher                                             les sessions du reseau du bureau (et de ce PC)
     //   session-rejoindre [N|adresse] [code]                         l'equipier (la N-ieme trouvee ; 1 par defaut)
     //   session-rejoindre internet CODE|@fichier|@chemin             1.44.0 : par Internet (@fichier : code-session.txt des captures)
@@ -6404,9 +6405,16 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             o.entry = arg(2) == "code" || o.internet ? session::Entry::Code : session::Entry::Accept;
             o.role = arg(3) == "regarder" ? session::Role::Watch : session::Role::Edit;
             std::string why;
-            if (!s.start(o, &why)) {
+            if (retries_ == 0 && !s.start(o, &why)) {
                 std::printf("[script] session-demarrer : %s\n", why.c_str());
                 fail("session-demarrer : " + why);
+                return Step::Next;
+            }
+            // 1.44.0 : par Internet, le code n'est dit (et ecrit pour l'equipier) qu'une fois la session ouverte sur le relais.
+            if (o.internet && !(s.host() && s.relayOpen())) {
+                if (s.host() && retries_ < 1800) return Step::Retry;
+                std::printf("[script] session-demarrer : pas ouverte sur le service XPG (%s)\n", s.progress().c_str());
+                fail("session-demarrer : pas ouverte sur le service XPG : " + s.progress());
                 return Step::Next;
             }
             if (s.internet())

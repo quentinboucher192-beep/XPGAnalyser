@@ -217,6 +217,8 @@ private:
     std::vector<Toast>         toasts_;
     int                        unseenAlerts_{0};
     int                        pendingAdmins_{0};
+    double                     nextBackupCheck_{-1};     // la sauvegarde de secours du jour (l'admin+)
+    bool                       autoBackup();
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;
 };

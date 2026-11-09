@@ -162,12 +162,36 @@ Les fichiers des 3 dernières versions sont gardés ; les autres, 30 jours aprè
 
 - Corps : 2 Mio au plus (1.44.0 : un lot d'une restauration, 8 Mio). Un fichier de l'archive : 1,5 Mio au plus.
 - 1.44.0 : 32 admins, 512 empreintes gardées par admin ; 20 demandes d'admin en attente (une close est effacée après 7 jours) ; 200 000 lignes de journal ; 1 Gio de fichiers (1 000 fichiers, 200 Mio chacun) ; 50 messages par PC (30 jours) ; un lien de fichier : 48 h au plus. Par adresse et par heure : `admins/demande` 10 ; par clé : 5 par jour.
-- Devant le service (le limiteur de Cloudflare, `[[ratelimits]]` de `wrangler.toml`), par adresse IP et par minute : les routes publiques (`etat`, `heure`, `certificat`, `registre`) 60, les autres routes `/v1` 120. Un appel refusé là ne coûte rien au service.
+- Devant le service (le limiteur de Cloudflare, `[[ratelimits]]` de `wrangler.toml`), par adresse IP et par minute : les routes publiques (`etat`, `heure`, `certificat`, `registre`) 60, les autres routes `/v1` 120. Un appel refusé là ne coûte rien au service. 1.44.0 : le relais des sessions (`/v1/relais/*` sauf `ouvrir`) : 1 200 (§ 5 bis).
 - Par adresse IP et par heure : `activer` 10, `decouverte` 10, `demandes` 10.
 - Par PC : `activer` 5 par heure, `renouveler` 30 par heure, `flottante/jeton` 60 par heure, `demandes` 5 par jour (`renouveler` et `jeton` sont comptés en mémoire : aucune écriture).
 - Au-delà : 429 `trop` avec `"reessayer_dans":<secondes>`.
 - Au plus 1 000 demandes en attente et 20 Mio de demandes gardées (une demande close est effacée après 7 jours), 10 000 licences, 100 000 activations (et par licence, § 4 bis).
 - **Les lignes écrites** (le plan gratuit : 100 000 par jour) : une route publique n'écrit rien ; `renouveler` 3 (le nonce, le bail, le numéro ; +2 par licence de plus), `flottante/jeton` 2, `activer` 9 (un PC neuf) ; un appel refusé (signature, limite) : 0. Les appels du jour sont comptés en mémoire et écrits une fois par minute au plus. Sur 127.0.0.1 seulement, la réponse le dit : `X-XPG-Lignes-Ecrites`.
+
+## 5 bis. Le relais des sessions par Internet (1.44.0)
+
+IHM Studio fait des **sessions par Internet** (`docs/SESSIONS.md`, § 7) à travers ce service : **un autre Durable Object, un par session** (`Relais`, `service/src/relais.js`, `idFromName(<localisateur>)`, sa migration `v2` dans `wrangler.toml`). Le relais **ne fait que passer des octets chiffrés de bout en bout** : il ne voit ni le code de la session, ni le projet, ni les noms des équipiers (seulement le nom de la session, le nom de l'hôte et le nom du projet que l'hôte lui donne en l'ouvrant).
+
+- **Le localisateur** : les 16 premiers octets de SHA-256(code), en hexadécimal (32 caractères). Le code (10 caractères) ne passe jamais.
+- **Les appels sont signés** comme les autres `/v1` (§ 2), par la clé du PC (l'hôte, l'équipier) ; mais ils ne touchent pas à l'objet « principal » : **rien n'est écrit dans les tables des licences** (ni nonce, ni limite). Les nonces vus sont tenus en mémoire par l'objet de la session (20 min) ; un objet relancé refuse un appel daté de plus de 60 s avant son démarrage (401 `heure` : le Studio signe de nouveau, une fois).
+- **Ce qui est gardé** : en mémoire, les boîtes (une pour l'hôte, une par connexion) ; dans le stockage de l'objet, la session seulement (la clé de l'hôte, ses trois noms, le numéro de la connexion suivante, son activité : écrite à l'ouverture, à chaque `frapper`, puis une fois par heure au plus). Un message est effacé dès que son destinataire l'a lu. **12 h sans activité** : la session s'efface (l'alarme de l'objet, et à chaque appel).
+
+| Route | Signée par | Corps / requête | Réponse |
+|---|---|---|---|
+| `POST /v1/relais/ouvrir` | l'hôte | `{"locator":"<32 hexa>","nom":"<la session>","hote":"<son nom>","projet":"<le projet>"}` | 200 `{"ok":true,"garde":43200,"max_connexions":12}`. 409 `pris` : ce localisateur est celui d'une session d'une autre clé (l'hôte tire un autre code). Le même hôte rouvre : ses équipiers d'avant reçoivent la fin (« l'hôte a redémarré la session »). |
+| `POST /v1/relais/<loc>/frapper` | l'équipier | `{}` | 200 `{"conn":N,"nom","hote","projet"}` (une connexion, numérotée). 404 `absente` (aucune session ouverte avec ce code — un code faux arrive ici), 503 `hote_absent` (l'hôte ne lit plus depuis 120 s ; `reessayer_dans`), 409 `pleine` (12 connexions ouvertes), 429 `trop`. |
+| `POST /v1/relais/<loc>/envoyer` | l'hôte | `{"a":<conn>,"donnees":"<base64>"}` ou `{"envois":[{"a":<conn>,"donnees":"<base64>"},…]}` (64 au plus) | 200 `{"ok":true,"refuses":[conn…],"inconnues":[conn…],"reessayer_dans":s}` : `refuses` = boîte pleine (à refaire, dans l'ordre) ; `inconnues` = connexion fermée ou inconnue. |
+| `POST /v1/relais/<loc>/envoyer` | l'équipier | `{"conn":<la sienne>,"a":"hote","donnees":"<base64>"}` | 200 `{"ok":true}` ; 503 `pleine` (la boîte de l'hôte, `reessayer_dans`), 410 `fermee`, 403 `connexion` (pas la connexion de cette clé). |
+| `GET /v1/relais/<loc>/recevoir?depuis=N[&conn=C][&attente=S]` | l'hôte (sans `conn`), l'équipier (avec la sienne) | — | **Attente longue** : la réponse part dès qu'un message attend (ou après `attente` secondes, 25 au plus, par défaut 25) : 200 `{"messages":[{"n","de","donnees"?,"cle"?,"fin"?,"raison"?}],"suivant":N}`. `depuis=N` : tout ce qui est avant N est lu, donc effacé (un `depuis` plus loin que la boîte : l'objet a été relancé, tout est rendu). `de` : la connexion (pour l'hôte, avec `cle` : la clé du PC de l'équipier) ou `"hote"`. Une **fin** (`"fin":true`, `raison`) : la connexion est partie (pour l'hôte) ou fermée (pour l'équipier) ; ensuite 410 `fermee`. 4 Mio de base64 au plus par réponse. |
+| `POST /v1/relais/<loc>/fermer` | l'hôte | `{}` ou `{"conn":C,"raison"}` | `{}` : la session est fermée pour tous (chacun reçoit la fin), effacée du stockage ; `{"conn"}` : cet équipier est renvoyé (un refus, un code faux). |
+| `POST /v1/relais/<loc>/fermer` | l'équipier | `{"conn":C,"partir":true}` | il part : l'hôte reçoit la fin de C. |
+
+**Les silences** : un équipier qui ne lit plus depuis 90 s est parti (l'hôte reçoit sa fin) ; l'hôte qui ne lit plus depuis 120 s : ses équipiers reçoivent la fin (« l'hôte ne répond plus ») et `frapper` répond 503 tant qu'il n'est pas revenu.
+
+**Les limites du relais** : 1,5 Mio décodés par appel (le corps : 2,5 Mio au plus) ; 16 Mio en attente par boîte, 32 Mio pour la session (au-delà : refusé, à refaire) ; 12 connexions ouvertes (8 membres : l'hôte fait la règle) ; `frapper` 10 fois en 10 min par clé et 60 fois par heure pour la session ; 900 appels par minute et par clé ; devant le service, le limiteur `LIMITE_RELAIS` (1 200 appels par minute et par adresse ; `ouvrir` : `LIMITE_PC`). `LIMITES_ESSAI=sans` (127.0.0.1 seulement) les lève.
+
+**Le coût** (le plan gratuit) : chaque PC d'une session fait au plus un `recevoir` toutes les 25 s au calme, plus un appel par envoi groupé quand on travaille ; l'objet d'une session est actif tant qu'un `recevoir` attend (la durée de Durable Object est comptée pendant toute la session).
 
 ## 6. Le code d'activation
 

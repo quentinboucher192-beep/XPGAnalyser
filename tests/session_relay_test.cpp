@@ -8,8 +8,8 @@
 //      injectable : la meme semantique que service/src/relais.js) : 3 codes faux
 //      (refuses, puis refuse meme avec le bon), le bon code tape en minuscules,
 //      ATTENTE, une trame de 1 Mio, une de 2,5 Mio (en morceaux), la discussion, un
-//      envoi rejoue (ignore), un envoi modifie (la connexion fermee), le depart d'un
-//      equipier, l'arret de l'hote ; les octets passes par le relais ne contiennent
+//      envoi rejoue (ignore), un envoi modifie (la connexion fermee), un equipier
+//      sur le PC de l'hote (la meme cle), le depart d'un equipier, l'arret de l'hote ; les octets passes par le relais ne contiennent
 //      jamais le texte en clair (un marqueur connu, le code) ;
 //    - LE MEME SCENARIO contre le VRAI service sur ce poste (tests/service_local.hpp :
 //      workerd par wrangler dev ; le transport HTTP des Studios, signe par des cles
@@ -565,10 +565,10 @@ void scenario(const Net& net) {
     // ---- Marc ----
     RelayGuestLink marc;
     RelayGuestConfig mc;
-    mc.transport = net.make("marc");
+    mc.transport = net.make("hote");   // Marc sur le PC de l'hote : la meme cle (deux Studios cote a cote)
     mc.code = code;
     mc.hello = hello("Marc");
-    check(marc.start(mc, &why), "Marc frappe" + L);
+    check(marc.start(mc, &why), "Marc frappe (depuis le PC de l'hote : la meme cle)" + L);
     int conn2 = 0;
     check(waitFor([&] {
               he.pull(host);

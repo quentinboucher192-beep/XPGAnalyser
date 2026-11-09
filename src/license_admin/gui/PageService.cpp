@@ -686,9 +686,19 @@ private:
     void connectMicrosoft();
     void waitMicrosoft(mail::Config cfg, mail::DeviceCode dc);
     void disconnectMicrosoft();
+    // 1.44.0 : les adresses de secours (le registre : fallback_services ; l'admin+ ou le droit << offres >>).
+    void fallbackBlocks(Blocks& bl);
+    void saveFallback();
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
+    ui::InputText*                  fbShown_[3]{};      // 1.44.0 : les adresses de secours (lues)
+    ui::Button*                     fbRemove_[3]{};
+    ui::InputText*                  fbNew_{nullptr};
+    ui::Button*                     fbAdd_{nullptr};
+    ui::Button*                     fbSave_{nullptr};
+    std::vector<std::string>        fbDraft_;
+    bool                            fbDirty_{false};
     ui::InputText*                  url_{nullptr};
     ui::Button*                     saveUrl_{nullptr};
     ui::Button*                     verify_{nullptr};
@@ -903,6 +913,39 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     loadMail();
 
     links_ += saveUrl_->clicked->connect([this] { saveUrl(); });
+    // 1.44.0 : les adresses de secours
+    for (int i = 0; i < 3; ++i) {
+        fbShown_[i] = body_->make<ui::InputText>("service.secours." + std::to_string(i + 1));
+        fbShown_[i]->setReadOnly(true);
+        fbRemove_[i] = body_->make<ui::Button>("Retirer", "service.secours.retirer." + std::to_string(i + 1));
+        links_ += fbRemove_[i]->clicked->connect([this, i] {
+            if (static_cast<std::size_t>(i) < fbDraft_.size()) fbDraft_.erase(fbDraft_.begin() + i);
+            fbDirty_ = true;
+            rebuild();
+            syncEnabled();
+        });
+    }
+    fbNew_ = body_->make<ui::InputText>("service.secours.nouvelle");
+    fbNew_->setPlaceholder("https://xpg-licences-secours.ton-compte.workers.dev");
+    fbNew_->setMaxLength(220);
+    fbAdd_ = body_->make<ui::Button>("Ajouter\xE2\x80\xA6", "service.secours.ajouter");
+    fbAdd_->setIcon(ui::Icon::Plus);
+    fbSave_ = body_->make<ui::Button>("Enregistrer (signer le registre)", "service.secours.enregistrer");
+    fbSave_->setStyle(ui::Button::Style::Primary);
+    links_ += fbAdd_->clicked->connect([this] {
+        std::string u = trimmed(fbNew_->text());
+        if (u.empty()) return refuse("tape l'adresse du service de secours (https://...)");
+        if (u.rfind("https://", 0) != 0) return refuse("une adresse de secours commence par https://");
+        while (!u.empty() && u.back() == '/') u.pop_back();
+        if (std::find(fbDraft_.begin(), fbDraft_.end(), u) != fbDraft_.end()) return refuse("cette adresse est d\xC3\xA9j\xC3\xA0 dans la liste");
+        if (fbDraft_.size() >= 3) return refuse("3 adresses de secours au plus");
+        fbDraft_.push_back(u);
+        fbNew_->setText({});
+        fbDirty_ = true;
+        rebuild();
+        syncEnabled();
+    });
+    links_ += fbSave_->clicked->connect([this] { saveFallback(); });
     links_ += verify_->clicked->connect([this] { verify(); });
     links_ += certify_->clicked->connect([this] { askCertify(); });
     links_ += mode_->valueChanged->connect([this](int) {
@@ -942,6 +985,38 @@ void ServicePage::refresh() {
     syncEnabled();
 }
 
+// ---------------------------------------------------------------------------------------------------- 1.44.0 : les adresses de secours
+void ServicePage::fallbackBlocks(Blocks& bl) {
+    if (!fbDirty_) fbDraft_ = ws().fallbackServices();
+    const bool may = ws().can("offres");
+    if (!may && fbDraft_.empty()) return;   // un admin sans le droit : rien a montrer s'il n'y en a pas
+    bl.card("Les adresses de secours", fbDraft_.empty() ? ui::Tone::None : ui::Tone::Ok);
+    bl.text("Un Studio qui ne joint pas l'adresse principale essaie celles-ci ; chaque service de secours se certifie comme le principal. Les Studios 1.43 "
+            "et avant refusent un registre qui en contient : mets-en seulement quand tes clients sont en 1.44.");
+    for (int i = 0; i < 3; ++i) {
+        if (static_cast<std::size_t>(i) < fbDraft_.size()) {
+            if (fbShown_[i]->text() != fbDraft_[static_cast<std::size_t>(i)]) fbShown_[i]->setText(fbDraft_[static_cast<std::size_t>(i)]);
+            bl.field("Secours " + std::to_string(i + 1), fbShown_[i], 460.f, {fbRemove_[i]});
+        }
+    }
+    if (fbDraft_.empty()) bl.note("Aucune adresse de secours : un Studio qui ne joint pas le service attend qu'il revienne.");
+    if (fbDraft_.size() < 3 && may) bl.field("Nouvelle adresse", fbNew_, 460.f, {fbAdd_});
+    if (fbDirty_) bl.note("Pas encore enregistr\xC3\xA9" "es : \xC2\xAB Enregistrer \xC2\xBB signe un nouveau registre (n\xC2\xB0 + 1) et le publie.", ui::Tone::Warning);
+    if (!may) bl.note(ws().whyNot("offres"), ui::Tone::Warning);
+    bl.row({fbSave_});
+    bl.end();
+}
+
+void ServicePage::saveFallback() {
+    if (refuseIfBusy()) return;
+    const OpResult r = ws().setFallbackServices(fbDraft_);
+    if (r.ok) fbDirty_ = false;
+    if (host_.report) host_.report(r);
+    if (r.ok) (void)publishToService(host_);   // le registre signe part sur le service, comme toute signature du registre
+    rebuild();
+    syncEnabled();
+}
+
 void ServicePage::syncEnabled() {
     const bool b = busy();
     const auto& s = ws().service();
@@ -949,6 +1024,12 @@ void ServicePage::syncEnabled() {
     const bool key = ws().signer() != nullptr;
     const bool plus = ws().key().present;
     saveUrl_->setEnabled(!b);
+    // 1.44.0 : les adresses de secours - l'admin+ ou le droit << offres >> (le registre est signe).
+    const bool mayFallback = ws().can("offres");
+    for (int i = 0; i < 3; ++i) fbRemove_[i]->setEnabled(!b && mayFallback);
+    fbAdd_->setEnabled(!b && mayFallback);
+    fbSave_->setEnabled(!b && mayFallback && fbDirty_ && ws().hasRegistry());
+    if (!mayFallback) fbSave_->setTooltip(ws().whyNot("offres"));
     verify_->setEnabled(!b && s.ready() && key);
     certify_->setEnabled(!b && s.ready() && plus);
     if (!plus && key) certify_->setTooltip("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ : seule la cl\xC3\xA9 de l'\xC3\xA9" "diteur certifie le service.");
@@ -1081,6 +1162,8 @@ void ServicePage::rebuild() {
     bl.note("Certifier lit d'abord la cl\xC3\xA9 du service et te montre son empreinte : compare-la avec le champ cle_service de "
             "<adresse>/v1/etat ouvert dans ton navigateur. Rien n'est sign\xC3\xA9 sans ton accord.");
     bl.end();
+
+    fallbackBlocks(bl);   // 1.44.0
 
     // ---- l'archive en ligne ----
     const auto& last = s.lastSync;

@@ -349,6 +349,36 @@ public:
         }
         profile_->setItems(std::move(items));
         profile_->setSelectedIndex(pick);
+        // L'envoi de l'Admin (planche 02) : un PC parmi ceux que connait ce poste, ou un lien (48 h, une seule fois).
+        pc_ = &adopt(*this, std::make_unique<ui::DropDown>("admins.ajouter.pc"));
+        pcs_ = host_.workspace().pcsForMessages();
+        {
+            std::vector<ui::DropDown::Item> pcItems;
+            for (const auto& m : pcs_) {
+                ui::DropDown::Item it;
+                it.label = m.name.empty() ? m.deviceId.substr(0, 12) : m.name;
+                it.value = m.deviceId.empty() ? m.deviceKey : m.deviceId;
+                it.note = m.customer + (m.studio.empty() ? std::string() : " \xC2\xB7 " + m.studio);
+                it.keywords = m.customer + " " + m.licenseId;
+                pcItems.push_back(std::move(it));
+            }
+            pc_->setItems(std::move(pcItems));
+            if (!pcs_.empty()) pc_->setSelectedIndex(0);
+        }
+        send_ = &button(*this, "Envoyer l'Admin", "admins.ajouter.envoyer", ui::Button::Style::Default, ui::Icon::Mail);
+        makeLink_ = &button(*this, "Cr\xC3\xA9" "er le lien", "admins.ajouter.lien.creer", ui::Button::Style::Default, ui::Icon::Link);
+        copyLink_ = &button(*this, "Copier le lien", "admins.ajouter.lien.copier", ui::Button::Style::Default, ui::Icon::Copy);
+        chooseFile_ = &button(*this, "Choisir l'installateur\xE2\x80\xA6", "admins.ajouter.fichier", ui::Button::Style::Default, ui::Icon::Open);
+        chooseFile_->setTooltip("Aucune version publi\xC3\xA9" "e n'a l'installateur de l'Admin : choisis le fichier (XPG-License-Admin-Setup-....exe), il est d\xC3\xA9pos\xC3\xA9 pour l'occasion.");
+        links_ += send_->clicked->connect([this] { sendInstaller(false); });
+        links_ += makeLink_->clicked->connect([this] { sendInstaller(true); });
+        links_ += copyLink_->clicked->connect([this] {
+            if (url_.empty()) return;
+            ui::setClipboardText(url_);
+            host_.flash("Lien copi\xC3\xA9 : colle-le dans ton courriel au futur admin (valable 48 h, une seule fois).", Tone::Info);
+        });
+        links_ += chooseFile_->clicked->connect([this] { chooseInstaller(lastWasLink_); });
+        links_ += group_->valueChanged->connect([this](int) { update(); });
         refreshNow_ = &button(*this, "Relever maintenant", "admins.ajouter.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         checked_ = &adopt(*this, std::make_unique<ui::Checkbox>("J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte", "admins.empreinte.verifiee"));
         refuse_ = &button(*this, "Refuser la demande", "admins.refuser", ui::Button::Style::Danger);
@@ -381,15 +411,29 @@ protected:
         for (int i = 0; i < 3; ++i) cols_[i] = {x0 + static_cast<float>(i) * (colW + gap), top_ + 18.f, colW, p.bottom() - 86.f - (top_ + 18.f)};
         // Colonne 1
         const Rect& a = cols_[0];
-        float y = a.y + 82.f;
-        name_->setBounds({a.x + 16.f, y + 20.f, a.w - 32.f, 34.f});
-        y += 70.f;
-        email_->setBounds({a.x + 16.f, y + 20.f, a.w - 32.f, 34.f});
-        y += 78.f;
-        studio_->setBounds({a.x + 30.f, y + 24.f, a.w - 60.f, 26.f});
-        link_->setBounds({a.x + 30.f, y + 74.f, a.w - 60.f, 26.f});
-        y += 166.f;
-        profile_->setBounds({a.x + 16.f, y + 22.f, a.w - 32.f, 32.f});
+        const float y0 = a.y + 80.f;
+        name_->setBounds({a.x + 16.f, y0 + 20.f, a.w - 32.f, 34.f});
+        email_->setBounds({a.x + 16.f, y0 + 88.f, a.w - 32.f, 34.f});
+        studio_->setBounds({a.x + 30.f, y0 + 160.f, a.w - 60.f, 26.f});
+        link_->setBounds({a.x + 30.f, y0 + 212.f, a.w - 60.f, 26.f});
+        const float sy = y0 + 264.f;
+        const bool byLink = group_->value() == 1;
+        show(pc_, !byLink);
+        show(send_, !byLink);
+        show(makeLink_, byLink && url_.empty());
+        show(copyLink_, byLink && !url_.empty());
+        if (!byLink) {
+            const float bw = buttonWidth(*send_, 130.f);
+            send_->setBounds({a.right() - 16.f - bw, sy, bw, 32.f});
+            pc_->setBounds({a.x + 16.f, sy, std::max(80.f, send_->bounds().x - 8.f - (a.x + 16.f)), 32.f});
+        } else {
+            makeLink_->setBounds({a.x + 16.f, sy, buttonWidth(*makeLink_, 130.f), 32.f});
+            copyLink_->setBounds({a.x + 16.f, sy, buttonWidth(*copyLink_, 130.f), 32.f});
+        }
+        show(chooseFile_, needFile_);
+        chooseFile_->setBounds({a.x + 16.f, sy + 40.f, buttonWidth(*chooseFile_, 160.f), 30.f});
+        profileY_ = sy + (needFile_ ? 120.f : 92.f);
+        profile_->setBounds({a.x + 16.f, profileY_ + 22.f, a.w - 32.f, 32.f});
         // Colonne 2
         const Rect& b = cols_[1];
         refreshNow_->setBounds({b.x + 16.f, b.y + 334.f, buttonWidth(*refreshNow_, 160.f), 32.f});
@@ -437,17 +481,34 @@ protected:
                 const std::string sub = rb == studio_ ? std::string("un PC choisi parmi ses activations") : std::string("valable 48 h, une seule fois");
                 r.drawText({rb->bounds().x + 24.f, rb->bounds().bottom() - 2.f}, fit(r, sub, kF12, box.w - 60.f), kF12, c.textMuted);
             }
-            const float ny = link_->bounds().bottom() + 22.f;
-            (void)drawWrapped(r, a.x + 16.f, ny, a.w - 32.f,
-                              "L'envoi arrive avec la page Versions. En attendant, fais-lui installer l'Admin comme tu veux (une cl\xC3\xA9 USB, un partage) : "
-                              "il y choisit \xC2\xAB Demander \xC3\xA0 devenir admin \xC2\xBB.",
-                              kF12, c.textMuted, 17.f, 4);
+            // Ce qu'a donne l'envoi (ou ce qu'il faut).
+            const float ny = (pc_->visible() ? pc_->bounds().bottom() : std::max(makeLink_->bounds().bottom(), copyLink_->bounds().bottom())) + (needFile_ ? 44.f : 8.f);
+            std::string status;
+            Color ink = c.textMuted;
+            if (sending_) status = "Envoi en cours\xE2\x80\xA6";
+            else if (!sendProblem_.empty()) {
+                status = sendProblem_;
+                ink = c.error;
+            } else if (!url_.empty()) {
+                status = "Lien (48 h, une seule fois) : " + url_;
+                ink = c.text;
+            } else if (sentAt_) {
+                status = "\xE2\x9C\x93 Envoy\xC3\xA9 \xC3\xA0 " + clockFr(sentAt_) + " : " + sentWhat_;
+                ink = c.ok;
+            } else if (group_->value() == 0 && pcs_.empty())
+                status = "Aucun PC connu sur ce poste : choisis \xC2\xAB Par un lien \xC2\xBB, ou fais-lui installer l'Admin comme tu veux.";
+            else
+                status = group_->value() == 0 ? std::string("L'installateur arrive dans les notifications de son Studio, sign\xC3\xA9 par l'\xC3\xA9" "diteur.")
+                                              : std::string("Un lien \xC3\xA0 coller dans ton courriel : il l'ouvre dans son navigateur.");
+            (void)drawWrapped(r, a.x + 16.f, ny, a.w - 32.f, status, kF12, ink, 16.f, 2);
             r.drawText({a.x + 16.f, profile_->bounds().y - 22.f}, "Son profil", gfx::semibold(kF13), c.text);
             const Rect note{a.x + 16.f, a.bottom() - 70.f, a.w - 32.f, 56.f};
-            r.fillRoundedRect(note, c.accent.withAlpha(16), 10.f);
-            (void)drawWrapped(r, note.x + 12.f, note.y + 10.f, note.w - 24.f,
-                              "Il aura les droits du profil choisi (une copie : tu les ajustes ensuite pour lui seul). Ceux de l'admin+ restent \xC3\xA0 toi.", kF12,
-                              c.accent, 17.f, 2);
+            if (note.y > profile_->bounds().bottom() + 8.f) {
+                r.fillRoundedRect(note, c.accent.withAlpha(16), 10.f);
+                (void)drawWrapped(r, note.x + 12.f, note.y + 10.f, note.w - 24.f,
+                                  "Il aura les droits du profil choisi (une copie : tu les ajustes ensuite pour lui seul). Ceux de l'admin+ restent \xC3\xA0 toi.", kF12,
+                                  c.accent, 17.f, 2);
+            }
         }
         // ---- 2 : il installe l'Admin ----
         stepHead(r, th, cols_[1], 2, (who.empty() ? std::string("Il") : who) + " installe l'Admin",
@@ -463,7 +524,12 @@ protected:
                 if (!sub.empty()) r.drawText({b.x + 40.f, y + 19.f}, fit(r, sub, kF12, b.w - 60.f), kF12, c.textMuted);
                 y += 54.f;
             };
-            item(!trimmed(name_->text()).empty(), "Invitation pr\xC3\xA9par\xC3\xA9" "e", "son nom, son profil : " + selectedProfile(), clockFr(opened_));
+            if (sentAt_ && url_.empty())
+                item(true, "L'installateur est dans ses notifications", sentWhat_, clockFr(sentAt_));
+            else if (!url_.empty())
+                item(true, "Le lien est pr\xC3\xAAt (48 h, une seule fois)", "\xC3\xA0 coller dans ton courriel", clockFr(sentAt_));
+            else
+                item(!trimmed(name_->text()).empty(), "Invitation pr\xC3\xA9par\xC3\xA9" "e", "son nom, son profil : " + selectedProfile(), clockFr(opened_));
             item(q != nullptr, (who.empty() ? std::string("Il") : who) + " installe l'Admin sur son PC", q ? q->pc + " \xC2\xB7 " + q->software : std::string("le Studio, un lien ou une cl\xC3\xA9 USB"), {});
             item(q != nullptr, "Son Admin a cr\xC3\xA9\xC3\xA9 sa cl\xC3\xA9", "sur son PC ; elle n'en sortira jamais", {});
             item(q != nullptr, "Sa demande d'admin est arriv\xC3\xA9" "e", "avec l'empreinte de sa cl\xC3\xA9", q ? clockFr(q->received) : std::string());
@@ -622,9 +688,70 @@ private:
                             : !checked_->isChecked() ? std::string("Coche d'abord \xC2\xAB J'ai v\xC3\xA9rifi\xC3\xA9 l'empreinte \xC2\xBB, apr\xC3\xA8s l'avoir lue au t\xC3\xA9l\xC3\xA9phone.")
                                                      : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la nouvelle liste des admins, puis la publie."));
         refreshNow_->setEnabled(!polling_);
+        send_->setEnabled(!sending_ && !busy && pc_->selectedItem() != nullptr);
+        makeLink_->setEnabled(!sending_ && !busy);
+        chooseFile_->setEnabled(!sending_ && !busy);
         show(refreshNow_, q == nullptr);
         invalidateLayout();
         invalidate();
+    }
+
+    // Envoyer l'installateur de l'Admin : dans les notifications du Studio du PC choisi, ou un lien (48 h, une fois). Aucune
+    // version publiee n'a l'installateur : le fichier est demande, puis l'envoi repart.
+    void sendInstaller(bool byLink) {
+        if (sending_) return;
+        lastWasLink_ = byLink;
+        const auto* it = pc_->selectedItem();
+        if (!byLink && !it) {
+            sendProblem_ = "choisis le PC (ses activations, ses demandes)";
+            update();
+            return;
+        }
+        const Workspace* w = &host_.workspace();
+        const std::string device = it ? it->value : std::string(), name = trimmed(name_->text()), file = fallback_;
+        auto url = std::make_shared<std::string>();
+        auto alive = alive_;
+        sending_ = true;
+        sendProblem_.clear();
+        const auto work = [w, byLink, device, name, file, url] {
+            return byLink ? w->adminInstallerLink(file, *url) : w->sendAdminInstaller(device, name, file);
+        };
+        const auto done = [this, alive, url, byLink](const OpResult& r) {
+            if (!*alive) return;
+            sending_ = false;
+            if (r.ok) {
+                sentAt_ = host_.workspace().now();
+                sentWhat_ = r.details.empty() ? r.message : r.details.front();
+                if (sentWhat_.rfind("Fichier : ", 0) == 0) sentWhat_ = sentWhat_.substr(10);
+                if (byLink) url_ = *url;
+                needFile_ = false;
+            } else {
+                sendProblem_ = r.message;
+                if (r.message.find("choisis le fichier") != std::string::npos) {
+                    needFile_ = true;
+                    update();
+                    chooseInstaller(byLink);
+                    return;
+                }
+            }
+            update();
+        };
+        if (!host_.runSlow(byLink ? "Lien vers l'installateur de l'Admin" : "Envoyer l'Admin \xC3\xA0 un PC", work, done)) {
+            sending_ = false;
+            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+        }
+        update();
+    }
+    void chooseInstaller(bool byLink) {
+        ui::FilePick p;
+        p.title = "L'installateur de l'Admin (XPG-License-Admin-Setup-....exe)";
+        p.filters = {{"Installateur Windows (.exe)", "exe"}};
+        auto alive = alive_;
+        host_.pickFile(p, [this, alive, byLink](std::string path) {
+            if (!*alive || path.empty()) return;
+            fallback_ = path;
+            sendInstaller(byLink);
+        });
     }
 
     void poll(bool loud) {
@@ -731,6 +858,16 @@ private:
     ui::RadioButton*                 link_{nullptr};
     ui::DropDown*                    profile_{nullptr};
     ui::Button*                      refreshNow_{nullptr};
+    ui::DropDown*                    pc_{nullptr};
+    ui::Button*                      send_{nullptr};
+    ui::Button*                      makeLink_{nullptr};
+    ui::Button*                      copyLink_{nullptr};
+    ui::Button*                      chooseFile_{nullptr};
+    std::vector<MessagePc>           pcs_;
+    std::string                      fallback_, url_, sentWhat_, sendProblem_;
+    Seconds                          sentAt_{0};
+    bool                             sending_{false}, needFile_{false}, lastWasLink_{false};
+    float                            profileY_{0.f};
     ui::Checkbox*                    checked_{nullptr};
     ui::Button*                      refuse_{nullptr};
     ui::Button*                      later_{nullptr};

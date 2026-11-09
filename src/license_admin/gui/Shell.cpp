@@ -1364,6 +1364,28 @@ bool Shell::watchPending() {
     return true;
 }
 
+// 1.44.0 : LA SAUVEGARDE DE SECOURS DE CHAQUE JOUR (docs/ADMINS.md, par. 9) - l'admin+, reglee (Parametres de securite),
+// pas encore faite aujourd'hui : sans bruit, puis une ligne au journal de la seance (faite, ou pourquoi pas). Regardee toutes
+// les 10 minutes ; une panne : de nouveau dans l'heure.
+bool Shell::autoBackup() {
+    const double now = steadyNow();
+    nextBackupCheck_ = now + 600.0;
+    if (bg_.running() || ws_->role() != Role::Plus || !ws_->backupDueToday()) return false;
+    const Workspace* w = ws_.get();
+    auto path = std::make_shared<std::string>();
+    if (!runSlow("Sauvegarde de secours du jour", [w, path] { return w->backupNow(path.get()); },
+                 [this, path](const OpResult& r) {
+                     if (r.ok) flash("Sauvegarde de secours du jour faite : " + *path, Tone::Ok);
+                     else {
+                         flash("Sauvegarde de secours du jour : " + r.message + " (nouvel essai dans l'heure).", Tone::Warning);
+                         nextBackupCheck_ = steadyNow() + 3600.0;
+                     }
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
 void Shell::takeAlerts() {
     const Seconds now = ws_->now();
     for (const auto& row : ws_->newAlerts()) {
@@ -1470,6 +1492,7 @@ void Shell::Update(const menu::FrameContext& fc) {
         const double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
         if (nextAutoFetch_ < 0) nextAutoFetch_ = now + kAutoFetchFirst;
         if (nextWatch_ < 0) nextWatch_ = now + kWatchFirst;
+        if (nextBackupCheck_ < 0) nextBackupCheck_ = now + 30.0;   // 1.44.0 : la sauvegarde du jour, 30 s apres le lancement
         const bool free = attached_ && manager().top() == this && !bg_.running() && !queued_;
         if (free && wantLicences_) {
             wantLicences_ = false;
@@ -1481,6 +1504,8 @@ void Shell::Update(const menu::FrameContext& fc) {
         } else if (free && now >= nextAutoFetch_) {
             nextAutoFetch_ = now + (watchSupported_ && live() ? kFetchWhenWatched : kAutoFetchPeriod);
             (void)autoFetchRequests();
+        } else if (free && now >= nextBackupCheck_ && autoBackup()) {
+            // 1.44.0 : la sauvegarde de secours du jour est partie (l'admin+, reglee, pas encore faite aujourd'hui).
         } else if (free && wantArchive_) {
             // 1.44.0 : un admin tout juste accepte (la cle de synchro recue par le trousseau) : l'archive, tout de suite.
             wantArchive_ = false;
