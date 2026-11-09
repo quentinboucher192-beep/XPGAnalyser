@@ -21,6 +21,6 @@
   "advanced_export": "Rapports : générer maintenant le rapport journalier, en PDF ou Excel, avec sa mise en page et son aperçu.",
   "professional_tools": "L'outil Modbus : une lecture de registres sur un équipement, les valeurs en décimal, hexadécimal et binaire.",
   "floating_licenses": "Les licences flottantes : des postes en même temps plutôt que des PC fixes ; la fenêtre Licence d'une édition ENTERPRISE les montre ouvertes.",
-  "multi_user": "Les utilisateurs du projet IHM : plusieurs comptes, chacun avec son groupe, son niveau, sa protection, et la politique de sécurité."
+  "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, sur le réseau du bureau. L'équipe (qui fait quoi, Suivre, Regarder seulement), la discussion, chacun son objet ; Ctrl+Z n'annule que tes gestes."
  }
 }
