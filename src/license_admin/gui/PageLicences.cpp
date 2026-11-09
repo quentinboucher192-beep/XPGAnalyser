@@ -50,6 +50,7 @@ menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string t
 std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
 void rememberFolder(const std::string& filePath);
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId);   // 1.42.0
 } // namespace licdlg
 
 namespace {
@@ -246,6 +247,10 @@ public:
         active_->setTooltip("La licence en ligne ne s'active plus et ses PC ne sont plus renouvel\xC3\xA9s (chacun s'arr\xC3\xAAte \xC3\xA0 la fin de son bail)");
         addPc_ = &button(*this, "Ajouter un PC\xE2\x80\xA6", "licences.ajouter-pc", ui::Button::Style::Primary);   // 1.41.0 : l'action de la fiche
         addPc_->setTooltip("Lier de nouveaux PC \xC3\xA0 la licence choisie (ses PC li\xC3\xA9s sont gard\xC3\xA9s) ; la r\xC3\xA9-\xC3\xA9mettre");
+        // 1.42.0 : ajouter une option (le catalogue des options) - dans la fiche quand le catalogue en a
+        option_ = &button(*this, "Ajouter une option\xE2\x80\xA6", "licences.ajouter-option");
+        option_->setTooltip("Des fonctionnalit\xC3\xA9s en plus, pour un temps (1 semaine, 1 mois, jusqu'\xC3\xA0 la fin de la licence) : une nouvelle "
+                            "\xC3\xA9mission, l'option dedans ; \xC3\xA0 sa fin, elle s'arr\xC3\xAAte seule");
         export_ = &button(*this, "Exporter le fichier\xE2\x80\xA6", "licences.exporter");
         export_->setTooltip("Le .xpglic de la licence choisie, \xC3\xA0 renvoyer au client");
         revoke_ = &button(*holder_, "R\xC3\xA9voquer\xE2\x80\xA6", "licences.revoquer", ui::Button::Style::Danger);
@@ -304,6 +309,9 @@ public:
                 host_.openDialog(makeLicenceWizard(host_, {}, l->licence.licenseId, {}, Workspace::isOnlineLicence(l->licence)));
         });
         links_ += export_->clicked->connect([this] { exportSelected(); });
+        links_ += option_->clicked->connect([this] {   // 1.42.0
+            if (const LicenceEntry* l = selected()) host_.openDialog(licdlg::makeOptionDialog(host_, l->licence.licenseId));
+        });
         links_ += revoke_->clicked->connect([this] {
             if (const LicenceEntry* l = selected()) host_.openDialog(licdlg::makeRevokeDialog(host_, l->licence.licenseId));
         });
@@ -401,7 +409,7 @@ protected:
         std::vector<ui::Button*> row;
         std::vector<float> natural;
         float sum = 0.f;
-        for (ui::Button* b : {addPc_, export_, showCode_})
+        for (ui::Button* b : {addPc_, option_, export_, showCode_})
             if (b->visibility() != ui::Visibility::Collapsed) {
                 row.push_back(b);
                 natural.push_back(buttonWidth(*b, 80.f) + 8.f);
@@ -597,6 +605,12 @@ private:
             it.separator = true;
             items.push_back(std::move(it));
         };
+        if (exportInMenu_) {   // 1.42.0 : Exporter, rendu visible le temps de le nommer
+            export_->setVisibility(ui::Visibility::Visible);
+            add(export_, ui::Icon::Export);
+            export_->setVisibility(ui::Visibility::Collapsed);
+            separator();
+        }
         add(dropPc_, ui::Icon::Release);
         add(newCode_, ui::Icon::Refresh);
         add(refreshOnline_, ui::Icon::Refresh);
@@ -687,6 +701,13 @@ private:
         addPc_->setEnabled(e != nullptr);
         addPc_->setText(onlineLic ? std::string("Prolonger\xE2\x80\xA6") : std::string("Ajouter un PC\xE2\x80\xA6"));
         export_->setEnabled(e != nullptr);
+        // 1.42.0 : l'option dans la fiche quand le catalogue en a ; en ligne, Exporter passe alors dans << ... >>
+        const bool catalogue = ws().hasRegistry() && std::any_of(ws().registry().options.begin(), ws().registry().options.end(),
+                                                                  [](const licensing::OptionDef& o) { return !o.retired; });
+        option_->setVisibility(catalogue ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        option_->setEnabled(e != nullptr && Workspace::inForce(*e));
+        exportInMenu_ = catalogue && onlineLic;
+        export_->setVisibility(exportInMenu_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         revoke_->setEnabled(e != nullptr);
         delete_->setVisibility(e && e->revoked ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.38.0 : une revoquee seulement
         dropPc_->setText(onlineLic ? std::string("Retirer ce PC\xE2\x80\xA6") : std::string("Retirer un PC\xE2\x80\xA6"));
@@ -759,6 +780,40 @@ private:
             for (const auto& p : order) f.properties.push_back(prop(p, byProduct[p]));
             if (l.features.empty()) f.properties.push_back(prop("Aucune", "cette licence n'ouvre aucune fonctionnalit\xC3\xA9"));
             cats.push_back(std::move(f));
+
+            // 1.42.0 : les options de la licence (en cours, a venir, finies) et l'historique des achats du client.
+            if (!l.options.empty()) {
+                PG::Category op;
+                const Seconds tnow = ws().now();
+                int running = 0;
+                for (const auto& o : l.options) {
+                    const Seconds end = o.until ? o.until : l.expiresAt;
+                    std::string st;
+                    if (o.activeAt(tnow, l.expiresAt)) {
+                        ++running;
+                        st = end ? "en cours, encore " + std::to_string(std::max<Seconds>(1, (end - tnow + kDaySeconds - 1) / kDaySeconds)) + " j" : std::string("en cours");
+                    } else {
+                        st = tnow < o.from ? std::string("\xC3\xA0 venir") : std::string("finie");
+                    }
+                    std::string v = dateFr(o.from) + " \xE2\x86\x92 " + (o.until ? dateFr(o.until - 1) : std::string("fin de la licence")) + " \xC2\xB7 " + st;
+                    if (o.gift) v += " \xC2\xB7 offerte";
+                    else if (!o.price.empty()) v += " \xC2\xB7 " + o.price;
+                    op.properties.push_back(prop(o.label, v));
+                }
+                op.name = "Options (" + std::to_string(running) + " en cours)";
+                cats.push_back(std::move(op));
+            }
+            const auto history = ws().purchaseHistory(l.customer);
+            if (!history.empty()) {
+                PG::Category ac;
+                ac.name = "Achats du client (" + std::to_string(history.size()) + ")";
+                for (auto it = history.rbegin(); it != history.rend(); ++it) {
+                    const char* kind = it->kind == "option" ? "option" : it->kind == "extension" ? "prolongation" : "offre";
+                    ac.properties.push_back(prop(dateFr(it->at), it->label + " \xC2\xB7 " + kind + (it->price.empty() ? std::string() : " \xC2\xB7 " + it->price) +
+                                                                     (it->licenseId != l.licenseId ? " \xC2\xB7 " + it->licenseId : std::string())));
+                }
+                cats.push_back(std::move(ac));
+            }
 
             PG::Category rv;
             for (const auto& x : ws().revocations().revoked) {
@@ -1051,6 +1106,8 @@ private:
     ui::Widget*                 holder_{nullptr};    // 1.41.0 : les boutons du menu << ... >> (jamais dessines)
     ui::Button*                 more_{nullptr};
     ui::PopupMenu*              menu_{nullptr};
+    ui::Button*                 option_{nullptr};      // 1.42.0
+    bool                        exportInMenu_{false};
     std::vector<ui::Button*>    menuButtons_;
     gfx::Rect                   listRect_{}, cardRect_{};
     float                       headY_{0.f}, statsY_{0.f}, pcsTitleY_{0.f}, detailTitleY_{0.f};

@@ -1040,7 +1040,9 @@ bool findWaiting(const std::string& folder, const std::string& whichIn, Entry& o
                 out = e;
                 return true;
             }
-        return fail(why, "aucune demande relev\xC3\xA9" "e sous le n\xC2\xB0 " + which + " (rel\xC3\xA8ve d'abord les demandes)");
+        // 1.42.0 : aucun numero - le debut d'un identifiant de poste peut n'avoir que des chiffres (<< 40912337 >>)
+        const bool devicePrefix = which.size() >= 6 && std::any_of(all.begin(), all.end(), [&](const Entry& e) { return e.waiting() && e.device.rfind(which, 0) == 0; });
+        if (!devicePrefix) return fail(why, "aucune demande relev\xC3\xA9" "e sous le n\xC2\xB0 " + which + " (rel\xC3\xA8ve d'abord les demandes)");
     }
     if (which.size() < 6) return fail(why, "l'identifiant du poste est trop court (6 caract\xC3\xA8res au moins)");
     std::vector<const Entry*> hits;

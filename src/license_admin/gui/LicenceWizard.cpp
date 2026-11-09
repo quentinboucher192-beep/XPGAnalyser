@@ -50,11 +50,13 @@
 #include "../../ui/widgets/Containers.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "../../ui/widgets/DatePicker.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <set>
@@ -75,9 +77,13 @@ bool wizardTakeDrop(const std::vector<std::string>& paths);
 std::string fingerprintOfKey(const std::string& hex);
 std::string startFor(const std::string& fileName);
 void rememberFolder(const std::string& filePath);
+// 1.42.0 : ajouter une option a une licence de l'archive.
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId);
 } // namespace licdlg
 
 namespace {
+
+namespace lic = licensing;   // 1.42.0
 
 namespace fs = std::filesystem;
 using licensing::LicenseType;
@@ -2765,6 +2771,311 @@ private:
     std::string licenseId_, code_;
 };
 
+// ============================================================ 1.42.0 : ajouter une option a une licence (un dialogue)
+//  L'option (le catalogue du registre), sa duree (celles du catalogue, ou des dates dans le mini calendrier), le debut
+//  (aujourd'hui par defaut), le prix (celui du catalogue ; << Offerte >>), et ce que le client aura. Une licence en
+//  ligne : la nouvelle emission part sur le service ; une licence liee : le fichier a envoyer.
+class OptionBody final : public ui::Widget {
+public:
+    OptionBody(DialogMenu& owner, ShellHost host, std::string licenseId)
+        : ui::Widget("dialog.option.corps"), owner_(owner), host_(std::move(host)), licenseId_(std::move(licenseId)) {
+        choice_ = &adopt(*this, std::make_unique<ui::DropDown>("option.choix"));
+        duration_ = &adopt(*this, std::make_unique<ui::DropDown>("option.duree"));
+        from_ = &adopt(*this, std::make_unique<ui::DatePicker>("option.debut"));
+        from_->setShortcuts({{"Aujourd'hui", 1, 0, false}});
+        to_ = &adopt(*this, std::make_unique<ui::DatePicker>("option.fin"));
+        to_->setShortcuts({{"1 semaine", 7, 0, false}, {"2 semaines", 14, 0, false}, {"1 mois", 0, 1, false}});
+        price_ = &adopt(*this, std::make_unique<ui::InputText>("option.prix"));
+        price_->setMaxLength(60);
+        price_->setPlaceholder("19 \xE2\x82\xAC HT");
+        gift_ = &adopt(*this, std::make_unique<ui::Checkbox>("Offerte", "option.offerte"));
+        cancel_ = &button(*this, "Annuler", "option.annuler");
+        ok_ = &button(*this, "Ajouter l'option", "option.ok", ui::Button::Style::Primary);
+        const Workspace& ws = host_.workspace();
+        const lic::Seconds today = ui::DatePicker::dayOf(ws.now());
+        from_->setToday(today);
+        to_->setToday(today);
+        from_->setDate(today);
+        std::vector<ui::DropDown::Item> items;
+        const LicenceEntry* e = ws.licence(licenseId_);
+        for (const auto& o : ws.registry().options) {
+            if (o.retired) continue;
+            std::string note;
+            if (e) {
+                const auto* ed = ws.registry().edition(e->licence.edition);
+                bool has = ed && !o.features.empty();
+                if (has)
+                    for (const auto& g : o.features)
+                        if (!e->licence.grant(g.id)) has = false;
+                if (has) note = "d\xC3\xA9j\xC3\xA0 dans la licence";
+                else if (!o.offeredTo(e->licence.edition)) note = "pas propos\xC3\xA9" "e \xC3\xA0 " + e->licence.edition;
+            }
+            ui::DropDown::Item it{o.label, o.id};
+            it.note = note;
+            items.push_back(std::move(it));
+        }
+        choice_->setItems(items);
+        if (!items.empty()) choice_->setSelectedIndex(0);
+        links_ += choice_->selectionChanged->connect([this](int) { loadDurations(); });
+        links_ += duration_->selectionChanged->connect([this](int) { loadPrice(); });
+        links_ += from_->changed->connect([this](std::int64_t d) {
+            to_->setRangeStart(d);
+            invalidate();
+        });
+        links_ += to_->changed->connect([this](std::int64_t) { invalidate(); });
+        links_ += gift_->stateChanged->connect([this](ui::Checkbox::State) { invalidate(); });
+        links_ += cancel_->clicked->connect([this] { owner_.close(); });
+        links_ += ok_->clicked->connect([this] { accept(); });
+        loadDurations();
+    }
+
+protected:
+    void onLayout() override {
+        frame_.place(*this, 660.f, 500.f);
+        const auto& p = frame_.panel;
+        const float x = p.x + 20.f, w = p.w - 40.f, lw = 120.f;
+        float y = p.y + 43.f + 52.f;
+        rowY_[0] = y;
+        choice_->setBounds({x + lw, y, w - lw, 30.f});
+        y += 40.f;
+        rowY_[1] = y;
+        duration_->setBounds({x + lw, y, w - lw, 30.f});
+        y += 40.f;
+        rowY_[2] = y;
+        const bool dates = customDates();
+        const float dw = std::floor((w - lw - 26.f) * 0.5f);
+        from_->setBounds({x + lw, y, dw, 30.f});
+        to_->setVisibility(dates ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        to_->setBounds({x + lw + dw + 26.f, y, w - lw - dw - 26.f, 30.f});
+        y += 40.f;
+        rowY_[3] = y;
+        price_->setBounds({x + lw, y, 170.f, 30.f});
+        gift_->setBounds({x + lw + 186.f, y + 3.f, 120.f, 24.f});
+        y += 44.f;
+        previewY_ = y;
+        const float by = p.bottom() - 44.f;
+        const float okW = buttonWidth(*ok_, 140.f), caW = buttonWidth(*cancel_, 110.f);
+        ok_->setBounds({p.right() - 16.f - okW, by, okW, 32.f});
+        cancel_->setBounds({ok_->bounds().x - 8.f - caW, by, caW, 32.f});
+        ok_->setEnabled(choice_->selectedItem() != nullptr);
+    }
+
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& p = frame_.panel;
+        const auto& c = ctx.theme.color;
+        auto& r = ctx.r;
+        frame_.paint(r, ctx.theme, "Ajouter une option \xE2\x80\x94 " + licenseId_);
+        const Workspace& ws = host_.workspace();
+        const LicenceEntry* e = ws.licence(licenseId_);
+        const float x = p.x + 20.f, w = p.w - 40.f;
+        if (e) {
+            const auto& l = e->licence;
+            const std::string sub = l.customer + " \xC2\xB7 " + l.edition + (l.expiresAt ? " jusqu'au " + dateFr(l.expiresAt) : std::string(", sans fin"));
+            r.drawText({x, p.y + 43.f + 14.f}, fit(r, sub, ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
+        }
+        const char* labels[4] = {"L'option", "Pour combien de temps", "\xC3\x80 partir du", "Prix (HT)"};
+        for (int i = 0; i < 4; ++i)
+            r.drawText({x, rowY_[i] + (30.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, i == 2 && customDates() ? std::string("Du \xE2\x80\xA6 au") : labels[i], ctx.theme.font.caption, 116.f),
+                       ctx.theme.font.caption, c.textMuted);
+        if (customDates()) {   // la fleche entre les deux dates
+            const auto fb = from_->bounds();
+            const float ax = fb.right() + 7.f, ay = fb.y + 15.f;
+            r.line({ax, ay}, {ax + 11.f, ay}, c.textMuted, 1.4f);
+            r.line({ax + 6.f, ay - 4.f}, {ax + 11.f, ay}, c.textMuted, 1.4f);
+            r.line({ax + 6.f, ay + 4.f}, {ax + 11.f, ay}, c.textMuted, 1.4f);
+        }
+        // Ce que le client aura.
+        const gfx::Rect box{x, previewY_, w, p.bottom() - 57.f - 12.f - previewY_};
+        r.fillRoundedRect(box, c.windowBg, 8.f);
+        float y = box.y + 12.f;
+        for (const auto& line : preview()) {
+            y += drawWrapped(r, box.x + 14.f, y, box.w - 28.f, line, ctx.theme.font.ui, c.text, 2) + 6.f;
+            if (y > box.bottom() - 18.f) break;
+        }
+        r.fillRect({p.x, p.bottom() - 57.f, p.w, 1.f}, c.border);
+    }
+
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (frame_.hitClose(ev)) {
+            owner_.close();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    [[nodiscard]] const lic::OptionDef* option() const {
+        const auto* it = choice_->selectedItem();
+        return it ? host_.workspace().registry().option(it->value) : nullptr;
+    }
+    [[nodiscard]] bool customDates() const {
+        const auto* it = duration_->selectedItem();
+        return it && it->value == "dates";
+    }
+    [[nodiscard]] int days() const {
+        const auto* it = duration_->selectedItem();
+        if (!it || it->value == "dates") return -1;
+        return std::atoi(it->value.c_str());
+    }
+
+    static std::string durationText(int days) {
+        if (days == 0) return "Jusqu'\xC3\xA0 la fin de la licence";
+        if (days == 7) return "1 semaine";
+        if (days == 14) return "2 semaines";
+        if (days == 30) return "1 mois";
+        if (days == 365) return "1 an";
+        return std::to_string(days) + " jours";
+    }
+
+    void loadDurations() {
+        std::vector<ui::DropDown::Item> items;
+        if (const lic::OptionDef* o = option())
+            for (const auto& d : o->durations) {
+                ui::DropDown::Item it{durationText(d.days), std::to_string(d.days)};
+                it.note = d.price.empty() ? std::string("sur demande") : d.price;
+                items.push_back(std::move(it));
+            }
+        items.push_back({"Autres dates\xE2\x80\xA6", "dates"});
+        duration_->setItems(items);
+        duration_->setSelectedIndex(0);
+        loadPrice();
+    }
+
+    void loadPrice() {
+        std::string price;
+        if (const lic::OptionDef* o = option())
+            for (const auto& d : o->durations)
+                if (d.days == days()) price = d.price;
+        price_->setText(price);
+        if (customDates() && !to_->date()) to_->setDate(from_->date() + 6 * lic::kDay);
+        invalidateLayout();
+        invalidate();
+    }
+
+    // Le debut et la fin (exclue ; 0 : la fin de la licence).
+    void span(lic::Seconds& from, lic::Seconds& until) const {
+        const Workspace& ws = host_.workspace();
+        const lic::Seconds today = ui::DatePicker::dayOf(ws.now());
+        from = from_->date() && from_->date() != today ? from_->date() : ws.now();
+        until = 0;
+        if (customDates()) until = to_->date() ? to_->date() + lic::kDay : 0;
+        else if (days() > 0) until = from + static_cast<lic::Seconds>(days()) * lic::kDay;
+    }
+
+    [[nodiscard]] std::vector<std::string> preview() const {
+        std::vector<std::string> out;
+        const Workspace& ws = host_.workspace();
+        const LicenceEntry* e = ws.licence(licenseId_);
+        const lic::OptionDef* o = option();
+        if (!o) {
+            out.push_back("Aucune option au catalogue : cr\xC3\xA9" "e-en une dans Options, puis signe le registre.");
+            return out;
+        }
+        std::vector<std::string> names;
+        for (const auto& g : o->features) {
+            const auto* f = ws.registry().feature(g.id);
+            names.push_back(f ? f->label : g.id);
+        }
+        std::string opens;
+        for (const auto& n : names) opens += (opens.empty() ? "" : ", ") + n;
+        out.push_back("Elle ouvre : " + opens + ".");
+        lic::Seconds from = 0, until = 0;
+        span(from, until);
+        const lic::Seconds licEnd = e ? e->licence.expiresAt : 0;
+        if (until && licEnd && until > licEnd) until = licEnd;
+        std::string when = "Du " + dateFr(from) + (until ? " au " + dateFr(until - 1) : (licEnd ? " \xC3\xA0 la fin de la licence (le " + dateFr(licEnd) + ")" : std::string(", sans fin")));
+        if (until) when += " (" + std::to_string((until - from + lic::kDay - 1) / lic::kDay) + " j)";
+        out.push_back(when + " ; \xC3\xA0 sa fin, elle s'arr\xC3\xAAte seule, le reste ne bouge pas.");
+        if (e && Workspace::isOnlineLicence(e->licence)) out.push_back("Licence en ligne : la nouvelle \xC3\xA9mission part sur le service, ses PC la re\xC3\xA7oivent seuls.");
+        else out.push_back("Licence li\xC3\xA9" "e \xC3\xA0 ses PC : tu choisis o\xC3\xB9 \xC3\xA9" "crire le fichier, puis tu l'envoies au client.");
+        out.push_back("Les Studios de ce client doivent avoir la 1.42 ou plus.");
+        return out;
+    }
+
+    void accept() {
+        if (done_) return;
+        const lic::OptionDef* o = option();
+        if (!o) return;
+        OptionDraft d;
+        d.optionId = o->id;
+        lic::Seconds from = 0, until = 0;
+        span(from, until);
+        d.from = from;
+        if (customDates()) {
+            if (!until) return host_.flash("Choisis la fin de l'option (Au).", Tone::Warning);
+            d.until = until;
+        } else {
+            d.days = days();
+        }
+        d.gift = gift_->state() == ui::Checkbox::State::Checked;
+        std::string price = price_->text();
+        while (!price.empty() && price.back() == ' ') price.pop_back();
+        d.price = price;
+        done_ = true;
+        ShellHost host = host_;
+        const std::string id = licenseId_;
+        const LicenceEntry* e = host.workspace().licence(id);
+        const bool online = e && Workspace::isOnlineLicence(e->licence);
+        owner_.close();
+        if (online) {
+            const OpResult r = host.workspace().addOption(id, d, {});
+            host.report(r);
+            if (r.ok) (void)publishToService(host);
+            return;
+        }
+        ui::FilePick pick;
+        pick.title = "La nouvelle \xC3\xA9mission de la licence " + id + " (avec l'option)";
+        pick.filters = {{"Licences XPG (.xpglic)", "xpglic"}};
+        pick.save = true;
+        pick.start = licdlg::startFor(id + ".xpglic");
+        host.pickFile(pick, [host, id, d](const std::string& chosen) {
+            if (chosen.empty()) {
+                host.flash("Annul\xC3\xA9 : rien n'a \xC3\xA9t\xC3\xA9 sign\xC3\xA9.", Tone::Info);
+                return;
+            }
+            std::string path = chosen;
+            if (path.size() < 7 || path.substr(path.size() - 7) != ".xpglic") path += ".xpglic";
+            const OpResult r = host.workspace().addOption(id, d, path);
+            if (r.ok) licdlg::rememberFolder(path);
+            host.report(r);
+            if (r.ok) (void)publishToService(host);
+        });
+    }
+
+    DialogMenu&           owner_;
+    ShellHost             host_;
+    std::string           licenseId_;
+    ui::DropDown*         choice_{nullptr};
+    ui::DropDown*         duration_{nullptr};
+    ui::DatePicker*       from_{nullptr};
+    ui::DatePicker*       to_{nullptr};
+    ui::InputText*        price_{nullptr};
+    ui::Checkbox*         gift_{nullptr};
+    ui::Button*           cancel_{nullptr};
+    ui::Button*           ok_{nullptr};
+    float                 rowY_[4]{};
+    float                 previewY_{0};
+    bool                  done_{false};
+    Frame                 frame_;
+    core::ConnectionScope links_;
+};
+
+class OptionMenu final : public DialogMenu {
+public:
+    OptionMenu(ShellHost host, std::string licenseId) : DialogMenu("dialog.option"), host_(std::move(host)), licenseId_(std::move(licenseId)) {}
+    [[nodiscard]] std::string title() const override { return "Ajouter une option"; }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<OptionBody>(*this, host_, licenseId_));
+        return core::ok();
+    }
+
+private:
+    ShellHost   host_;
+    std::string licenseId_;
+};
+
 } // namespace
 
 // ============================================================================================ l'exterieur
@@ -2777,6 +3088,8 @@ menu::MenuPtr makeCodeDialog(std::string licenseId, std::string code) { return s
 namespace licdlg {
 
 menu::MenuPtr makeRevokeDialog(ShellHost host, std::string licenseId) { return std::make_unique<RevokeMenu>(std::move(host), std::move(licenseId)); }
+
+menu::MenuPtr makeOptionDialog(ShellHost host, std::string licenseId) { return std::make_unique<OptionMenu>(std::move(host), std::move(licenseId)); }
 
 menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger, std::function<void()> onOk) {
     return std::make_unique<ConfirmMenu>(std::move(id), std::move(title), std::move(text), std::move(okLabel), danger, std::move(onOk));

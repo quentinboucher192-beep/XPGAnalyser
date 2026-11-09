@@ -430,6 +430,26 @@ int main(int argc, char** argv) {
         check(on::findWaiting(U(f), a.device().substr(0, 8), w, &why) && w.number == 6, "trouvee par le debut de l'identifiant du poste");
         check(!on::findWaiting(U(f), "4", w, &why), "une ignoree n'attend pas de decision");
         check(on::isOnlineRequestPath(U(f), w.requestPath) && !on::isOnlineRequestPath(U(f), U(root / "x.xpgreq")), "un .xpgreq releve se reconnait");
+        // 1.42.0 : un identifiant de poste qui commence par 6 chiffres (2 fois sur 100 environ) : pas pris pour un numero
+        {
+            std::unique_ptr<Pc> digits;
+            for (int i = 0; i < 400 && !digits; ++i) {
+                auto pc = std::make_unique<Pc>(root / ("pc-chiffres-" + std::to_string(i)), "Poste essai chiffres");
+                const std::string d = pc->key ? pc->device() : std::string();
+                if (d.size() >= 6 && std::all_of(d.begin(), d.begin() + 6, [](char c) { return c >= '0' && c <= '9'; })) digits = std::move(pc);
+            }
+            check(digits != nullptr, "(un poste d'essai dont l'identifiant commence par 6 chiffres)");
+            if (digits) {
+                json::Value arr4 = arr3;
+                arr4.push(demande(7, *digits, e2.key->keyId(), sealedRequest(*e2.key, digits->request({}, t0 + 60), "Client d'essai C"), "attente"));
+                json::Value list4 = json::Value::object();
+                list4.set("demandes", arr4);
+                (void)on::processRequests(U(f), *e2.key, list4, "https://xpg-licences.essai.workers.dev", e2.options());
+                const std::string prefix = digits->device().substr(0, 6);
+                check(on::findWaiting(U(f), prefix, w, &why) && w.number == 7, "le debut << " + prefix + " >> (que des chiffres) : la demande de ce poste (" + why + ")");
+                check(on::findWaiting(U(f), "7", w, &why) && w.number == 7, "son numero marche toujours");
+            }
+        }
     }
 
     std::printf("-- le kit des Studios\n");

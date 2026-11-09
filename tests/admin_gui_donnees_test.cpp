@@ -457,17 +457,30 @@ int main(int argc, char** argv) {
         auto& p = *clients;
         check(p.title() == "Clients", "le titre");
         std::string t = paint(p, r);
-        check(rows(p, "clients.table") == 1 && cell(p, "clients.table", 0, 0) == "Client d'essai Alpha", "le client d'essai");
-        check(cell(p, "clients.table", 0, 1) == "1" && cell(p, "clients.table", 0, 2) == "1" && cell(p, "clients.table", 0, 3) == "1" && cell(p, "clients.table", 0, 4) == "1",
-              "1 licence, 1 active, 1 PC, 1 demande en attente");
-        check(!cell(p, "clients.table", 0, 5).empty(), "sa derniere activite");
-        check(has(t, "pas encore de fichier clients"), "l'explication : tire des licences et des demandes");
-        check(rows(p, "clients.licences") == 1 && cell(p, "clients.licences", 0, 0) == "XPG-2026-00001" && cell(p, "clients.licences", 0, 1) == "PROFESSIONAL"
-                  && cell(p, "clients.licences", 0, 2) == "active",
-              "ses licences");
-        check(rows(p, "clients.pc") == 2 && rowOf(p, "clients.pc", 0, "Poste essai A") >= 0 && rowOf(p, "clients.pc", 0, "Poste essai D") >= 0,
-              "ses PC (le lie, la demande)");
-        check(has(t, "Client d'essai Alpha") && has(t, "Ses licences"), "le panneau du client");
+        // 1.42.0 : le deballage en arbre - replie, une ligne par client
+        check(rows(p, "clients.table") == 1 && cell(p, "clients.table", 0, 0) == "Client d'essai Alpha", "le client d'essai (replie : une ligne)");
+        check(has(cell(p, "clients.table", 0, 1), "1 licence") && has(cell(p, "clients.table", 0, 1), "active") && cell(p, "clients.table", 0, 3) == "1",
+              "1 licence active, 1 PC");
+        check(!cell(p, "clients.table", 0, 4).empty(), "sa derniere activite");
+        check(has(t, "D\xC3\xA9plie-le"), "l'explication : deplier le client");
+        check(has(t, "1 demande en attente"), "la fiche : la demande en attente");
+        check(click(p, "clients.deplier") && rowOf(p, "clients.table", 0, "XPG-2026-00001") >= 0 && rowOf(p, "clients.table", 0, "PC (1)") >= 0 &&
+                  rowOf(p, "clients.table", 0, "Poste essai A") >= 0 && rowOf(p, "clients.table", 0, "Demande : Poste essai D") >= 0,
+              "Tout deplier : la licence, ses PC, la demande en attente");
+        {
+            const int lr = rowOf(p, "clients.table", 0, "XPG-2026-00001");
+            check(lr >= 0 && has(cell(p, "clients.table", static_cast<std::size_t>(lr), 1), "PROFESSIONAL") &&
+                      has(cell(p, "clients.table", static_cast<std::size_t>(lr), 1), "active"),
+                  "la ligne de la licence : son offre, son etat");
+        }
+        check(click(p, "clients.replier") && rows(p, "clients.table") == 1, "Tout replier : le client seul");
+        if (auto* tv = table(p, "clients.table")) tv->expanderClicked->emit(0);
+        check(rows(p, "clients.table") > 1 && rowOf(p, "clients.table", 0, "XPG-2026-00001") >= 0 && rowOf(p, "clients.table", 0, "Poste essai A") < 0,
+              "la fleche du client : ses licences (leurs PC restent replies)");
+        check(!click(p, "clients.supprimer") && has(paint(p, r), "Une licence en cours"), "Supprimer le client : grise tant qu'une licence court (dit pourquoi)");
+        const std::size_t reportsBefore = rig.reports.size();
+        check(click(p, "clients.actualiser") && rig.reports.size() == reportsBefore + 1 && has(rig.reports.back().message, "Clients relus"),
+              "Actualiser : tout est relu (le resultat le dit)");
         check(click(p, "clients.nouvelle-licence") && rig.dialogs.size() == 1 && rig.dialogs.back() != nullptr, "Nouvelle licence pour ce client... ouvre l'assistant");
         if (!rig.dialogs.empty() && rig.dialogs.back() && rig.dialogs.back()->widgetRoot()) {
             TextRenderer dr;
@@ -476,7 +489,10 @@ int main(int argc, char** argv) {
         check(click(p, "clients.voir-licences") && !rig.navigations.empty() && rig.navigations.back() == "licences", "Voir ses licences : la page Licences");
         check(type(p, "clients.recherche", "zzz") && rows(p, "clients.table") == 0 && has(paint(p, r), "Aucun client ne correspond"), "chercher : aucun");
         check(!click(p, "clients.nouvelle-licence") && !click(p, "clients.voir-licences"), "sans client choisi : boutons grises");
-        check(type(p, "clients.recherche", "ALPHA") && rows(p, "clients.table") == 1, "chercher sans tenir compte des majuscules");
+        check(type(p, "clients.recherche", "ALPHA") && rows(p, "clients.table") >= 1 && cell(p, "clients.table", 0, 0) == "Client d'essai Alpha",
+              "chercher sans tenir compte des majuscules");
+        check(type(p, "clients.recherche", "Poste essai A") && rows(p, "clients.table") >= 1 && cell(p, "clients.table", 0, 0) == "Client d'essai Alpha",
+              "chercher un PC : son client");
         Fixture empty(source, "donnees-sans-client");
         HostRig er(empty);
         auto ep = gui::makeClientsPage(er.host());

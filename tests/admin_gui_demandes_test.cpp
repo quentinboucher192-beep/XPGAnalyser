@@ -191,23 +191,30 @@ Reply call(const std::string& base, const std::string& method, const std::string
     return out;
 }
 
+// La cle publique de l'editeur, COPIEE : Workspace::reload() recharge sa cle (une reference vers l'ancienne pendrait).
+struct EditorId {
+    lic::crypto::PublicKey pub{};
+    std::string            keyId;
+};
+EditorId editorIdOf(const lic::SigningKey& k) { return {k.publicKey(), k.keyId()}; }
+
 // Le PC depose sa demande (POST /v1/demandes) ; son numero.
-bool post(const std::string& base, Pc& pc, const lic::SigningKey& editor, const std::string& licenseId, const std::string& customer) {
+bool post(const std::string& base, Pc& pc, const EditorId& editor, const std::string& licenseId, const std::string& customer) {
     json::Value b = json::Value::object();
-    b.set("cle", editor.keyId());
-    b.set("scelle", sealedRequest(editor.publicKey(), pc.request(licenseId, g_now - 30), customer, "Message d'essai de " + pc.name));
+    b.set("cle", editor.keyId);
+    b.set("scelle", sealedRequest(editor.pub, pc.request(licenseId, g_now - 30), customer, "Message d'essai de " + pc.name));
     const Reply d = call(base, "POST", "/v1/demandes", json::write(b, false), pc.key.get());
     pc.number = static_cast<int>(d.value.integer("numero"));
     return d.status == 201 && pc.number > 0;
 }
 
 // L'etat << poste >> d'un PC (GET /v1/poste) : le bloc signe par l'editeur, son contenu ouvert par le PC.
-bool posteState(const std::string& base, const Pc& pc, const lic::SigningKey& editor, gw::DeviceStatus& st, gw::StatusContent& content) {
+bool posteState(const std::string& base, const Pc& pc, const EditorId& editor, gw::DeviceStatus& st, gw::StatusContent& content) {
     const Reply r = call(base, "GET", "/v1/poste", {}, pc.key.get());
     if (r.status != 200 || !r.value.isObject() || !r.value.find("poste") || !r.value.at("poste").isString()) return false;
     std::vector<lic::SignedBlock> blocks;
     if (!lic::readBlocks(r.value.at("poste").asString(), blocks, nullptr) || blocks.size() != 1 || blocks[0].kind != lic::DocKind::DeviceStatus) return false;
-    if (!lic::verifyBlock(blocks[0], editor.publicKey())) return false;
+    if (!lic::verifyBlock(blocks[0], editor.pub)) return false;
     if (!gw::parseDeviceStatus(blocks[0].document, st, nullptr)) return false;
     content = gw::StatusContent{};
     if (st.sealed.empty()) return true;
@@ -414,10 +421,10 @@ int main(int argc, char** argv) {
     check(fx.ready(), "un second poste d'essai (cle d'essai, registre)");
     const lic::SigningKey* editorKey = fx.ws->signingKey();
     if (!editorKey) return finish();
-    const lic::SigningKey& editor = *editorKey;
+    const EditorId editor = editorIdOf(*editorKey);
     xpg_test::LocalService::Options so;
     so.sourceDir = source;
-    xpg_test::LocalService svc({editor.publicKeyHex()}, so);
+    xpg_test::LocalService svc({lic::crypto::hex(editor.pub)}, so);
     if (svc.skipped()) {
         std::printf("SAUTE : %s\n", svc.error().c_str());
         return finish();
