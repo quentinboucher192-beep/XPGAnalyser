@@ -1,0 +1,144 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - droits des admins</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.split{display:flex;gap:16px;margin-top:18px;height:812px;align-items:stretch}
+.pcard{width:290px;flex:none;display:flex;flex-direction:column;overflow:visible;position:relative}
+.ph{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.prof{display:flex;gap:11px;align-items:flex-start;padding:12px 14px;margin:8px 10px 0;border-radius:11px;border:1px solid transparent}
+.prof .pi{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--sunken);color:var(--ink2)}
+.prof .pi .ico{width:16px;height:16px}
+.prof.on{background:var(--violet-50);border-color:var(--violet-100)}
+.prof.on .pi{background:var(--violet);color:#fff}
+.prof b{font-weight:650;font-size:13.5px}
+.bar{height:5px;border-radius:99px;background:var(--sunken);margin-top:7px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--violet);border-radius:99px}
+.mini-av{display:flex;margin-top:7px}
+.mini-av .avatar{width:20px;height:20px;font-size:9px;border-radius:6px;box-shadow:0 0 0 2px #fff;margin-right:-4px}
+.mcard{flex:1;min-width:0;display:flex;flex-direction:column;overflow:visible;position:relative}
+.mh{padding:16px 18px 14px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:center}
+.colh{display:grid;grid-template-columns:1fr 150px 56px;padding:8px 18px;font:650 11px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);background:var(--surface2);border-bottom:1px solid var(--line)}
+.grp{padding:9px 18px 3px;font:650 12px Inter;color:var(--ink);display:flex;gap:8px;align-items:center}
+.grp .ico{width:14px;height:14px;color:var(--faint)}
+.ar{display:grid;grid-template-columns:1fr 150px 56px;align-items:center;padding:0 18px;height:34px;font-size:13px;color:var(--ink2)}
+.ar+.ar{border-top:1px solid #f1f4f8}
+.how{display:inline-flex;align-items:center;gap:5px;font:600 11px Inter;color:var(--muted)}
+.how .ico{width:12px;height:12px}
+.how.sg{color:#047857}
+.lockrow{display:flex;align-items:center;gap:9px;padding:0 18px;height:30px;font-size:12.5px;color:var(--muted)}
+.lockrow .ico{width:14px;height:14px}
+.lockrow .res{margin-left:auto;font:600 11px Inter;color:var(--violet-700);background:var(--violet-50);padding:2px 7px;border-radius:99px}
+.acard{width:410px;flex:none;display:flex;flex-direction:column;overflow:visible;position:relative;border:1.5px solid var(--violet-100)}
+.ah{padding:16px 18px 14px;border-bottom:1px solid var(--line)}
+.av{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;font:700 15px Inter;background:#db2777;box-shadow:0 6px 16px rgba(219,39,119,.25);flex:none}
+.from{display:flex;align-items:center;gap:8px;margin-top:12px;padding:9px 11px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);font-size:12.5px;color:var(--ink2)}
+.from .ico{width:15px;height:15px;color:var(--violet)}
+.br{display:grid;grid-template-columns:1fr 92px 40px;align-items:center;padding:0 18px;height:33px;font-size:13px;color:var(--ink2)}
+.br+.br{border-top:1px solid #f1f4f8}
+.br.ov{background:var(--amber-50)}
+.br.ov:first-child{box-shadow:inset 3px 0 0 #f59e0b}
+.ovt{font:600 10.5px Inter;color:#b45309;background:#fff;border:1px solid #fde68a;border-radius:99px;padding:1px 7px;justify-self:start;white-space:nowrap}
+.pf{margin-top:auto;border-top:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:0 0 12px 12px}
+.dd{position:absolute;width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh3);padding:6px;z-index:40}
+.dd .h{font:650 11px Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:8px 10px 4px}
+.dd .o{display:flex;gap:10px;align-items:center;height:36px;padding:0 10px;border-radius:8px;font-size:13px}
+.dd .o .avatar{width:24px;height:24px;font-size:10px;border-radius:7px}
+.dd .o .cb{width:16px;height:16px;border-radius:5px;border:1.5px solid var(--line2);margin-left:auto;display:grid;place-items:center}
+.dd .o .cb.on{background:var(--violet);border-color:var(--violet);color:#fff}
+.dd .o .cb .ico{width:11px;height:11px;stroke-width:3}
+.dd .o.on{background:var(--violet-50)}
+.dd .sep{height:1px;background:var(--line);margin:5px 4px}
+.dd .nt{font-size:11.5px;color:var(--muted);padding:4px 10px 6px;line-height:1.4}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:admins-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i>Administrateurs<i data-i="right"></i><b>Droits</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 2 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">2</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:22px">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Les droits des admins</div><div class="muted" style="margin-top:4px">Des profils que tu crées, copiés vers chaque admin, puis ajustés admin par admin · seul l'admin+ les change</div></div>
+    <div class="row gap8" style="margin-left:auto"><span class="btn"><i data-i="left"></i>Administrateurs</span></div></div>
+   <div class="split">
+
+    <div class="card pcard">
+     <div class="ph"><div class="row"><div class="h2">Profils</div><span class="btn sm" style="margin-left:auto"><i data-i="plus" class="sm"></i>Nouveau profil…</span></div><div class="cap" style="margin-top:4px">Un profil, c'est une liste de fonctions.</div></div>
+     <div class="prof"><span class="pi"><i data-i="crown"></i></span><div class="grow"><div class="row gap6"><b>Tous les droits</b><span class="ro" style="height:19px;padding:0 7px;border-radius:99px;font:600 10.5px Inter;background:var(--sunken);color:var(--muted)">de départ</span></div><div class="cap">13 fonctions sur 13 · ne se modifie pas</div><div class="bar"><i style="width:100%"></i></div></div></div>
+     <div class="prof"><span class="pi"><i data-i="layers"></i></span><div class="grow"><b>Admin LV2</b><div class="cap">10 fonctions sur 13 · 2 admins</div><div class="bar"><i style="width:77%"></i></div><div class="mini-av"><span class="avatar" style="background:#0e7490">L</span><span class="avatar" style="background:#ea580c">H</span></div></div></div>
+     <div class="prof on"><span class="pi"><i data-i="layers"></i></span><div class="grow"><b>Admin LV1</b><div class="cap">5 fonctions sur 13 · 1 admin</div><div class="bar"><i style="width:38%"></i></div><div class="mini-av"><span class="avatar" style="background:#db2777">N</span></div></div></div>
+     <div style="margin-top:auto;padding:12px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);line-height:1.45"><i data-i="info" style="width:13px;height:13px;vertical-align:-2px;margin-right:5px"></i>Un admin ajouté reçoit le profil que tu choisis (planche 02, « Son rôle »).</div>
+    </div>
+
+    <div class="card mcard">
+     <div class="mh"><div class="grow"><div class="row gap8"><div class="h2">Le profil « Admin LV1 »</div><span class="pill" style="background:var(--violet-50);color:var(--violet-700)">5 / 13</span></div><div class="cap" style="margin-top:3px">Modifié par toi le 02/11/2026 · utilisé par Nina</div></div>
+      <span class="btn sm"><i data-i="copy" class="sm"></i>Dupliquer</span><span class="btn sm">Renommer</span>
+      <span class="btn sm" style="border-color:var(--violet);color:var(--violet-700);background:var(--violet-50)"><i data-i="users" class="sm"></i>Copier vers un admin…<i data-i="down" class="sm"></i></span></div>
+     <div class="colh"><span>Fonction</span><span>Qui la vérifie</span><span>Permise</span></div>
+     <div class="grp"><i data-i="key"></i>Licences</div>
+     <div class="ar"><span>Créer et signer une licence</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle on"></span></div>
+     <div class="ar"><span>Prolonger une licence</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle on"></span></div>
+     <div class="ar"><span>Ajouter une option à une licence</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle on"></span></div>
+     <div class="ar"><span>Révoquer une licence</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle"></span></div>
+     <div class="ar"><span>Retirer un PC d'une licence</span><span class="how sg"><i data-i="shield"></i>service</span><span class="toggle"></span></div>
+     <div class="grp"><i data-i="layers"></i>Offres et options</div>
+     <div class="ar"><span>Modifier les offres (prix, fonctions)</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle"></span></div>
+     <div class="ar"><span>Créer, modifier une option</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle"></span></div>
+     <div class="ar"><span>Annonces (notifications générales)</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle"></span></div>
+     <div class="grp"><i data-i="users"></i>Clients et demandes</div>
+     <div class="ar"><span>Accepter, refuser une demande</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle on"></span></div>
+     <div class="ar"><span>Revoir le code d'activation</span><span class="how"><i data-i="laptop"></i>l'Admin</span><span class="toggle on"></span></div>
+     <div class="ar"><span>Supprimer un client</span><span class="how"><i data-i="laptop"></i>l'Admin</span><span class="toggle"></span></div>
+     <div class="ar"><span>Exporter les clients (CSV)</span><span class="how"><i data-i="laptop"></i>l'Admin</span><span class="toggle"></span></div>
+     <div class="ar"><span>Écrire aux clients (courriel)</span><span class="how"><i data-i="laptop"></i>l'Admin</span><span class="toggle"></span></div>
+     <div class="grp" style="margin-top:4px;border-top:1px solid var(--line);padding-top:10px"><i data-i="crown"></i>Toujours à toi, l'admin+</div>
+     <div class="lockrow"><i data-i="lock"></i>Ajouter, retirer un admin ; leurs droits et les profils<span class="res">réservé à l'admin+</span></div>
+     <div class="lockrow"><i data-i="lock"></i>Le journal des admins et sa criticité<span class="res">réservé à l'admin+</span></div>
+     <div class="lockrow"><i data-i="lock"></i>Publier une version<span class="res">réservé à l'admin+</span></div>
+     <div class="pf"><span class="btn sm ghost" style="color:#b91c1c"><i data-i="trash" class="sm"></i>Supprimer le profil</span><span class="cap" style="margin-left:6px">ses admins gardent leurs droits</span><span class="btn sm" style="margin-left:auto">Annuler</span><span class="btn sm primary"><i data-i="check" class="sm"></i>Enregistrer le profil</span></div>
+     <div class="dd" style="right:16px;top:58px">
+      <div class="h">Copier « Admin LV1 » vers</div>
+      <div class="o on"><span class="avatar" style="background:#db2777">N</span>Nina<span class="cap">PC-LABO-02</span><span class="cb on"><i data-i="check"></i></span></div>
+      <div class="o"><span class="avatar" style="background:#0e7490">L</span>Léa<span class="cap">Admin LV2</span><span class="cb"></span></div>
+      <div class="o"><span class="avatar" style="background:#ea580c">H</span>Hugo<span class="cap">Admin LV2</span><span class="cb"></span></div>
+      <div class="sep"></div>
+      <div class="nt">Une <b>copie</b> : ses droits deviennent ceux du profil, ses ajustements sont effacés. Changer le profil ensuite ne change pas ses droits.</div>
+      <div style="padding:4px 6px 4px"><span class="btn sm primary" style="width:100%;justify-content:center">Copier vers Nina</span></div>
+     </div>
+    </div>
+
+    <div class="card acard">
+     <div class="ah"><div class="row gap12"><span class="av">N</span><div class="grow"><div class="row gap8"><b style="font-size:16px;font-weight:650">Nina</b><span class="pill" style="background:var(--sunken);color:var(--ink2)">Admin</span></div><div class="cap">PC-LABO-02 · admin depuis le 09/11/2026</div></div></div>
+      <div class="from"><i data-i="layers"></i><span>Copiés de <b>Admin LV1</b> le 09/11 · <b style="color:#b45309">2 ajustements</b></span><span class="btn sm" style="margin-left:auto;height:26px">Recopier le profil</span></div></div>
+     <div style="padding:6px 0 4px;flex:1;overflow:hidden">
+      <div class="grp"><i data-i="key"></i>Licences</div>
+      <div class="br"><span>Créer et signer une licence</span><span></span><span class="toggle on"></span></div>
+      <div class="br ov"><span>Prolonger une licence</span><span class="ovt">retiré pour Nina</span><span class="toggle"></span></div>
+      <div class="br"><span>Ajouter une option</span><span></span><span class="toggle on"></span></div>
+      <div class="br"><span>Révoquer une licence</span><span></span><span class="toggle"></span></div>
+      <div class="br"><span>Retirer un PC d'une licence</span><span></span><span class="toggle"></span></div>
+      <div class="grp"><i data-i="layers"></i>Offres et options</div>
+      <div class="br"><span>Modifier les offres</span><span></span><span class="toggle"></span></div>
+      <div class="br"><span>Créer, modifier une option</span><span></span><span class="toggle"></span></div>
+      <div class="br"><span>Annonces</span><span></span><span class="toggle"></span></div>
+      <div class="grp"><i data-i="users"></i>Clients et demandes</div>
+      <div class="br"><span>Accepter, refuser une demande</span><span></span><span class="toggle on"></span></div>
+      <div class="br"><span>Revoir le code d'activation</span><span></span><span class="toggle on"></span></div>
+      <div class="br"><span>Supprimer un client</span><span></span><span class="toggle"></span></div>
+      <div class="br ov"><span>Exporter les clients (CSV)</span><span class="ovt">ajouté pour Nina</span><span class="toggle on"></span></div>
+      <div class="br"><span>Écrire aux clients</span><span></span><span class="toggle"></span></div>
+     </div>
+     <div style="margin:0 16px 12px;padding:10px 12px;border-radius:10px;background:var(--violet-50);font-size:12px;color:var(--violet-700);line-height:1.45"><i data-i="key" style="width:13px;height:13px;vertical-align:-2px;margin-right:5px"></i>En enregistrant, <b>la clé de l'éditeur signe la liste des admins</b> avec ses droits ; le service et les Studios l'ont dans la minute. Écrit dans le journal (Critique).</div>
+     <div class="pf"><span class="btn sm" style="margin-left:auto">Annuler</span><span class="btn sm primary"><i data-i="check" class="sm"></i>Signer et publier</span></div>
+    </div>
+
+   </div>
+  </div>
+  <div class="mk" style="left:470px;top:250px">1</div><div class="mk" style="left:1150px;top:166px">2</div><div class="mk" style="left:1262px;top:420px">3</div><div class="mk" style="left:820px;top:252px">4</div><div class="mk" style="left:600px;top:812px">5</div>
+  <div class="annot" data-n="1" style="left:286px;top:640px;width:262px"><b>Des profils</b> (Admin LV1, LV2…) : tu les crées, dupliques, renommes. « Tous les droits » est celui de départ.</div>
+  <div class="annot" data-n="2" style="left:286px;top:716px;width:262px"><b>Copier vers un admin</b> : ses droits deviennent ceux du profil (une copie, pas un lien).</div>
+  <div class="annot" data-n="3" style="left:286px;top:792px;width:262px">Puis <b>ajuster cet admin seulement</b> : ce qui diffère du profil est marqué ; « Recopier le profil » l'efface.</div>
+  <div class="annot" data-n="4" style="left:286px;top:868px;width:262px"><b>Studios et service</b> : une licence, une offre, une révocation signée par un admin qui n'en a pas le droit est <b>refusée partout</b>. <b>L'Admin</b> : bloqué dans l'Admin.</div>
+  <div class="annot" data-n="5" style="left:286px;top:944px;width:262px">Tes droits d'admin+ <b>ne se donnent pas</b>.</div>
+ </main>
+</div>
+</body></html>

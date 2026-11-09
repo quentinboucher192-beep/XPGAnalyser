@@ -880,6 +880,10 @@ core::Status HmiEditHistoryDialog::buildUi() {
     links_ += yes_->clicked->connect([this] { (void)confirmYes(); });
     no_ = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>("Non", base + ".no")));
     links_ += no_->clicked->connect([this] { confirmNo(); });
+    // 1.43.0 : caches des l'ouverture (avant, visibles jusqu'au premier evenement : une fenetre ouverte sans bouger la
+    // souris les montrait)
+    yes_->setVisibility(ui::Visibility::Collapsed);
+    no_->setVisibility(ui::Visibility::Collapsed);
     setRoot(std::move(body));
     refresh();
     return core::ok();
