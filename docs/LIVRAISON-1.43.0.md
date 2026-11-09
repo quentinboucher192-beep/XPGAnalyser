@@ -2,7 +2,7 @@
 
 Faite à partir de la maquette des sessions que tu as validée avec la 1.42.0 (« je valide tout, c'est parti ») et de ta demande : « l'historique des objets sur les vues doit prendre en compte quand c'est une modif dans les sessions avec l'id du PC qui a changé ».
 
-Elle se met à jour par-dessus la 1.42.0 et garde tes données. **Le service en ligne ne change pas** : rien à redéployer. **L'Admin ne change pas** (il reste en 1.42.0) : la maquette 1.43 de l'Admin (plusieurs admins, le journal, les fichiers dans les notifications, les mises à jour poussées) attend ta validation.
+Elle se met à jour par-dessus la 1.42.0 et garde tes données. **Le service en ligne ne change pas** : rien à redéployer. **L'Admin ne change pas** (il reste en 1.42.0) : la maquette 1.43 de l'Admin (plusieurs admins et l'admin+, le journal des admins, les fichiers dans les notifications, les mises à jour poussées), que tu as validée, sera la **1.44.0** : je l'enchaîne.
 
 ## 0. En bref
 
@@ -17,7 +17,7 @@ Elle se met à jour par-dessus la 1.42.0 et garde tes données. **Le service en 
 ## 1. Ce qu'il te reste à faire
 
 1. Installe la 1.43.0 **sur chaque PC** qui travaillera en session (une 1.42 ne voit pas les sessions).
-2. **Le pare-feu de Windows** : au premier « Démarrer une session », Windows demande s'il laisse IHM Studio recevoir sur le réseau : réponds **Autoriser** (réseau privé). Ports : **TCP 47863** (le lien), **UDP 47864** (la découverte).
+2. **Le pare-feu de Windows** : au premier « Démarrer une session », Windows demande s'il laisse IHM Studio recevoir sur le réseau : réponds **Autoriser** (réseau privé). Ports : **TCP 47863** (le lien), **UDP 47864** (la découverte). Si tu as coché « Laisser IHM Studio recevoir des connexions » à l'installation, la règle est déjà là (elle couvre aussi les sessions).
 3. Rien à redéployer : le service en ligne est le même ; l'Admin reste la 1.42.0.
 
 ## 2. Les essais
