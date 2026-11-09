@@ -1903,6 +1903,9 @@
     <ClCompile Include="src\app\SessionMarks.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\SessionRelayHttp.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\SessionService.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -2006,6 +2009,9 @@
       <Filter>session</Filter>
     </ClCompile>
     <ClCompile Include="src\session\SessionProtocol.cpp">
+      <Filter>session</Filter>
+    </ClCompile>
+    <ClCompile Include="src\session\SessionRelay.cpp">
       <Filter>session</Filter>
     </ClCompile>
     <ClCompile Include="src\session\SessionSync.cpp">
@@ -3676,6 +3682,9 @@
     <ClInclude Include="src\app\SessionMarks.hpp">
       <Filter>app</Filter>
     </ClInclude>
+    <ClInclude Include="src\app\SessionRelayHttp.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\SessionService.hpp">
       <Filter>app</Filter>
     </ClInclude>
@@ -3822,6 +3831,9 @@
     </ClInclude>
     <ClInclude Include="src\license_admin\ServiceClient.hpp">
       <Filter>license_admin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\AdminsKit.hpp">
+      <Filter>license_admin\gui</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

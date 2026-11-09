@@ -547,7 +547,10 @@ describe("les fichiers (§ 6)", () => {
         await envoyer(J.id, J.octets, { acces: "jeton", sorte: "autre", nom: "Notes 1.44.1.pdf" });
         erreur(await morceau(J.id, 0), 403, "acces");
         erreur(await appel(svc, "POST", "/admin/fichiers/jeton", { cle: lea, corps: { id: J.id, duree: 3600, une_fois: true } }), 403, "droit");
-        erreur(await appel(svc, "POST", "/admin/fichiers/jeton", { cle: editeur, corps: { id: J.id, duree: 200000 } }), 400, "champ");
+        // 1.44.0 : un lien d'une seule fois, 48 h au plus ; un fichier joint (plusieurs fois), 30 jours au plus
+        erreur(await appel(svc, "POST", "/admin/fichiers/jeton", { cle: editeur, corps: { id: J.id, duree: 200000, une_fois: true } }), 400, "champ");
+        erreur(await appel(svc, "POST", "/admin/fichiers/jeton", { cle: editeur, corps: { id: J.id, duree: 3000000 } }), 400, "champ");
+        assert.equal((await appel(svc, "POST", "/admin/fichiers/jeton", { cle: editeur, corps: { id: J.id, duree: 2592000 } })).statut, 201);
         const t = await appel(svc, "POST", "/admin/fichiers/jeton", { cle: editeur, corps: { id: J.id, duree: 3600, une_fois: true } });
         assert.equal(t.statut, 201, t.texte);
         assert.match(t.json.jeton, /^[0-9a-f]{32}$/);

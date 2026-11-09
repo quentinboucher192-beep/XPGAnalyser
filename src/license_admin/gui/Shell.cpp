@@ -6,6 +6,7 @@
 // =============================================================================
 #include "Shell.hpp"
 
+#include "../../core/Json.hpp"
 #include "../../core/SystemOpen.hpp"
 #include "../../menu/MenuManager.hpp"
 #include "../../ui/Icons.hpp"
@@ -886,9 +887,10 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
         {"commandes", "Commandes", ui::Icon::Mail, true},
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
-        // 1.44.0 : plusieurs admins (la maquette 1.43.0) ; << Versions >> viendra avec sa page.
+        // 1.44.0 : plusieurs admins (la maquette 1.43.0).
         {"admins", "Administrateurs", ui::Icon::User, false},
         {"journal", "Journal des admins", ui::Icon::Task, false},         // l'admin+ seulement
+        {"versions", "Versions", ui::Icon::Export, false},                // l'admin+ seulement (planche 07)
         {"service", "Service en ligne", ui::Icon::Refresh, false},        // 1.35.0 : a la place de Synchronisation GitHub
         {"historique", "Historique", ui::Icon::History, false},
         {"securite", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9", ui::Icon::Lock, false},
@@ -914,7 +916,7 @@ const std::vector<Shell::NavEntry>& Shell::subPages() {
 
 std::string Shell::parentOf(const std::string& pageId) { return pageId == "droits" ? std::string("admins") : std::string(); }
 
-bool Shell::plusOnly(const std::string& pageId) { return pageId == "journal" || pageId == "droits"; }
+bool Shell::plusOnly(const std::string& pageId) { return pageId == "journal" || pageId == "droits" || pageId == "versions"; }
 
 bool Shell::pageAllowed(const std::string& pageId) const { return !plusOnly(pageId) || ws_->role() == Role::Plus; }
 
@@ -949,7 +951,18 @@ ShellHost Shell::host() {
     h.openDialog = [this](menu::MenuPtr m) { openDialog(std::move(m)); };
     h.pickFile = [this](const ui::FilePick& p, std::function<void(std::string)> done) { pickFile(p, std::move(done)); };
     h.openFolder = [this](const std::string& f) { openFolder(f); };
+    h.runQuiet = [this](const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done) {
+        return runQuiet(label, std::move(work), std::move(done));
+    };
     return h;
+}
+
+bool Shell::runQuiet(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done) {
+    if (bg_.running()) return false;   // un releve sans bruit attend son tour (il recommencera)
+    if (!runSlow(label, std::move(work), std::move(done))) return false;
+    quietSlow_ = true;
+    if (view_) static_cast<ShellView*>(view_)->updateTop();
+    return true;
 }
 
 core::Status Shell::buildUi() {
@@ -985,6 +998,10 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "service") p = makeServicePage(h);
     else if (id == "historique") p = makeHistoryPage(h);
     else if (id == "securite") p = makeSecurityPage(h);
+    else if (id == "admins") p = makeAdminsPage(h);     // 1.44.0
+    else if (id == "droits") p = makeRightsPage(h);
+    else if (id == "journal") p = makeJournalPage(h);
+    else if (id == "versions") p = makeVersionsPage(h);
     if (!p) p = std::make_unique<MissingPage>(h, entry(id)->label);
     p->setVisibility(ui::Visibility::Collapsed);
     Page* raw = static_cast<Page*>(&stack_->addChild(std::move(p)));
@@ -994,6 +1011,7 @@ Page* Shell::ensurePage(const std::string& id) {
 
 void Shell::showCurrent() {
     if (!stack_) return;
+    if (current_ == "journal") unseenAlerts_ = 0;   // 1.44.0 : les alertes sont vues
     Page* shown = ensurePage(current_);
     for (auto& [id, p] : pages_) p->setVisibility(id == current_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     if (shown) shown->refresh();
@@ -1004,6 +1022,11 @@ void Shell::showCurrent() {
 void Shell::navigate(const std::string& pageId) {
     if (!entry(pageId)) {
         flash("Page inconnue : " + pageId, Tone::Warning);
+        return;
+    }
+    if (!pageAllowed(pageId)) {   // 1.44.0 : le journal des admins, les droits : l'admin+ seul
+        flash("\xC2\xAB " + std::string(entry(pageId)->label) + " \xC2\xBB est r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur).",
+              Tone::Warning);
         return;
     }
     current_ = pageId;
@@ -1155,6 +1178,14 @@ void Shell::setLogOpen(bool open) {
 
 std::string Shell::keyStatusText() const {
     const auto& k = ws_->key();
+    // 1.44.0 : un admin a SA cle (pas celle de l'editeur) ; en attente, retire : dit tel quel.
+    switch (ws_->role()) {
+        case Role::Admin: return "Admin : " + (ws_->me() ? ws_->me()->name : ws_->adminKey().id);
+        case Role::Pending: return "En attente d'acceptation";
+        case Role::Retired: return "Admin retir\xC3\xA9";
+        case Role::Plus:
+        case Role::None: break;
+    }
     if (!k.present) return "Pas de cl\xC3\xA9";
     if (k.test) return "CL\xC3\x89 D'ESSAI \xC2\xB7 " + k.id;
     return "Cl\xC3\xA9 : " + k.id;
@@ -1162,6 +1193,13 @@ std::string Shell::keyStatusText() const {
 
 Tone Shell::keyStatusTone() const {
     const auto& k = ws_->key();
+    switch (ws_->role()) {
+        case Role::Admin: return Tone::Ok;
+        case Role::Pending: return Tone::Warning;
+        case Role::Retired: return Tone::Error;
+        case Role::Plus:
+        case Role::None: break;
+    }
     if (!k.present) return Tone::Error;
     if (k.test) return Tone::Warning;
     return Tone::Ok;
@@ -1186,7 +1224,8 @@ std::string Shell::syncStatusText() const {
 int Shell::pendingRequests() const { return ws_->service().ready() ? ws_->service().pending : 0; }
 
 bool Shell::autoFetchRequests() {
-    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
+    // 1.44.0 : le droit << demandes >> (l'admin+, ou un admin qui l'a), plus seulement la cle de l'editeur.
+    if (bg_.running() || !ws_->service().ready() || !ws_->can("demandes")) return false;
     std::set<int> before;
     for (const auto& e : ws_->service().requests)
         if (e.waiting()) before.insert(e.number);
@@ -1229,11 +1268,24 @@ bool Shell::live() const { return lastLive_ >= 0 && steadyNow() - lastLive_ < 3.
 double Shell::secondsSinceLive() const { return lastLive_ >= 0 ? steadyNow() - lastLive_ : -1.0; }
 
 bool Shell::autoWatch() {
-    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
+    if (bg_.running() || !ws_->service().ready()) return false;
+    if (ws_->role() == Role::Pending) return watchPending();   // 1.44.0 : pas encore d'acces a /admin/etat
+    if (!ws_->signer()) return false;                           // 1.44.0 : l'admin+ ou un admin (sa cle signe)
     const Workspace* w = ws_.get();
     auto st = std::make_shared<online::AdminWatch>();
-    if (!runSlow("Service : en direct", [w, st] { return w->serviceWatch(*st); },
-                 [this, st](const OpResult& r) {
+    auto ar = std::make_shared<AdminRefresh>();
+    auto adminProblem = std::make_shared<std::string>();
+    // 1.44.0 : apres l'etat, la liste des admins (un droit change, un retrait) et le journal des admins (l'admin+).
+    if (!runSlow("Service : en direct",
+                 [w, st, ar, adminProblem] {
+                     OpResult r = w->serviceWatch(*st);
+                     if (r.ok && st->supported) {
+                         const OpResult a = w->refreshAdminState(st.get(), ar.get());
+                         if (!a.ok) *adminProblem = a.message;
+                     }
+                     return r;
+                 },
+                 [this, st, ar](const OpResult& r) {
                      if (!r.ok) {
                          lastLive_ = -1;
                          if (!autoProblemSaid_) flash("En direct : " + r.message, Tone::Warning);
@@ -1242,6 +1294,21 @@ bool Shell::autoWatch() {
                      }
                      autoProblemSaid_ = false;
                      lastLive_ = steadyNow();
+                     // 1.44.0 : les admins - une liste plus recente (un droit, un retrait), des lignes au journal.
+                     const Role before = ws_->role();
+                     if (st->adminRequests >= 0) pendingAdmins_ = static_cast<int>(st->adminRequests);
+                     if (ar->listAdopted || ar->journalNew > 0 || ar->syncKeyReceived) {
+                         ws_->reload();
+                         refreshPages();
+                         if (ws_->role() != before) {
+                             if (ws_->role() == Role::Retired) flash("Tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins : ta cl\xC3\xA9 ne signe plus rien.", Tone::Error);
+                             if (!pageAllowed(current_)) navigate("admins");
+                         } else if (ar->listAdopted && before == Role::Admin) {
+                             flash("Tes droits d'admin ont chang\xC3\xA9 : " + std::to_string(ws_->myRights().size()) + " sur 13 (Administrateurs).", Tone::Info);
+                         }
+                     }
+                     if (ar->journalNew > 0) takeAlerts();
+                     if (view_) static_cast<ShellView*>(view_)->update();
                      if (!st->supported) {   // un service d'avant la 1.40.0 : relire les licences elles-memes
                          watchSupported_ = false;
                          wantLicences_ = true;
@@ -1259,8 +1326,84 @@ bool Shell::autoWatch() {
     return true;
 }
 
+// 1.44.0 : EN ATTENTE - la demande d'admin, toutes les 15 s (GET /v1/admins/demande, signe par sa cle) ; acceptee : la
+// liste gardee, la cle de synchro recue par le trousseau (refreshAdminState), puis l'archive recue des que possible.
+bool Shell::watchPending() {
+    const Workspace* w = ws_.get();
+    auto x = std::make_shared<AdminRefresh>();
+    if (!runSlow("Ta demande d'admin", [w, x] { return w->refreshAdminState(nullptr, x.get()); },
+                 [this, x](const OpResult& r) {
+                     if (!r.ok && x->requestState.empty()) {
+                         lastLive_ = -1;
+                         if (!autoProblemSaid_) flash("Ta demande d'admin : " + r.message, Tone::Warning);
+                         autoProblemSaid_ = true;
+                         return;
+                     }
+                     autoProblemSaid_ = false;
+                     lastLive_ = steadyNow();
+                     if (x->accepted) {
+                         ws_->reload();
+                         refreshPages();
+                         flash("Ta demande est accept\xC3\xA9" "e : tu es admin (" + std::to_string(ws_->myRights().size()) + " droits sur 13)." +
+                                   (x->syncKeyReceived ? " L'archive arrive." : ""),
+                               Tone::Ok);
+                         wantArchive_ = x->syncKeyReceived || ws_->service().syncKey;
+                         pendingState_.clear();
+                         if (view_) static_cast<ShellView*>(view_)->update();
+                         return;
+                     }
+                     if (x->requestState != pendingState_ && (x->requestState == "refusee" || x->requestState == "aucune")) {
+                         flash(x->requestState == "refusee" ? "L'admin+ a refus\xC3\xA9 ta demande d'admin. Parle-lui, puis envoie-la de nouveau (Administrateurs)."
+                                                            : "Le service n'a plus ta demande d'admin : envoie-la de nouveau (Administrateurs).",
+                               Tone::Warning);
+                     }
+                     pendingState_ = x->requestState;
+                 }))
+        return false;
+    quietSlow_ = true;
+    return true;
+}
+
+void Shell::takeAlerts() {
+    const Seconds now = ws_->now();
+    for (const auto& row : ws_->newAlerts()) {
+        Toast t;
+        t.number = row.line.number;
+        t.level = static_cast<int>(row.level);
+        const auto& e = row.line.parsed;
+        std::string who = row.who == "admin+" ? (ws_->key().name.empty() ? std::string("L'admin+") : ws_->key().name)
+                          : row.who == "le service" ? std::string("Le service")
+                                                    : row.who;
+        const std::string what = e.summary.empty() ? e.action : e.summary;
+        t.title = licensing::admins::levelLabel(row.level) + " : " + who + " " + what;
+        std::string line = now - e.when < 120 ? std::string("\xC3\xA0 l'instant") : dateTimeFr(e.when);
+        if (!e.pc.empty()) line += " \xC2\xB7 " + e.pc;
+        core::json::Value d;
+        if (!e.detail.empty() && core::json::parse(e.detail, d, nullptr) && d.isObject() && !d.str("client").empty()) line += " \xC2\xB7 " + d.str("client");
+        t.line = line;
+        t.shownAt = steadyNow();
+        toasts_.push_back(std::move(t));
+        if (current_ != "journal") ++unseenAlerts_;
+    }
+    if (toasts_.size() > 20) toasts_.erase(toasts_.begin(), toasts_.begin() + static_cast<std::ptrdiff_t>(toasts_.size() - 20));
+    if (view_) static_cast<ShellView*>(view_)->update();
+}
+
+void Shell::dismissToasts() {
+    toasts_.clear();
+    if (view_) static_cast<ShellView*>(view_)->update();
+}
+
+void Shell::openToast() {
+    if (toasts_.empty()) return;
+    requestPageFocus("journal", "ligne:" + std::to_string(toasts_.back().number));
+    toasts_.clear();
+    navigate("journal");
+    if (view_) static_cast<ShellView*>(view_)->update();
+}
+
 bool Shell::autoRefreshLicences() {
-    if (bg_.running() || !ws_->service().ready() || !ws_->key().present) return false;
+    if (bg_.running() || !ws_->service().ready() || !ws_->signer()) return false;   // 1.44.0 : l'admin+ ou un admin
     const Workspace* w = ws_.get();
     auto snap = std::make_shared<online::Snapshot>();
     auto before = std::make_shared<online::Snapshot>(ws_->service().snapshot);
@@ -1338,10 +1481,28 @@ void Shell::Update(const menu::FrameContext& fc) {
         } else if (free && now >= nextAutoFetch_) {
             nextAutoFetch_ = now + (watchSupported_ && live() ? kFetchWhenWatched : kAutoFetchPeriod);
             (void)autoFetchRequests();
+        } else if (free && wantArchive_) {
+            // 1.44.0 : un admin tout juste accepte (la cle de synchro recue par le trousseau) : l'archive, tout de suite.
+            wantArchive_ = false;
+            const Workspace* w = ws_.get();
+            (void)runSlow("Archive : recevoir", [w] {
+                const archive::SyncReport s = w->archiveSync(true, false);
+                OpResult r;
+                r.ok = s.ok;
+                r.message = s.ok ? "Archive re\xC3\xA7ue : " + std::to_string(s.received.size()) + (s.received.size() > 1 ? " fichiers" : " fichier") + " (le registre, les licences)."
+                                 : "Archive : " + s.why;
+                for (const auto& x : s.warnings) r.details.push_back(x);
+                return r;
+            }, [this](const OpResult&) { ws_->reload(); refreshPages(); });
         } else if (free && now >= nextWatch_) {
             nextWatch_ = now + (watchSupported_ ? kWatchPeriod : kWatchFallback);
-            if (watchSupported_) (void)autoWatch();
+            if (watchSupported_ || ws_->role() == Role::Pending) (void)autoWatch();
             else (void)autoRefreshLicences();
+        }
+        // 1.44.0 : une alerte s'efface seule apres 30 s (le journal la garde).
+        if (!toasts_.empty() && now - toasts_.front().shownAt > kToastSeconds) {
+            std::erase_if(toasts_, [now](const Toast& x) { return now - x.shownAt > kToastSeconds; });
+            if (view_) static_cast<ShellView*>(view_)->update();
         }
     }
     if (!busy() && ws_->hasServiceJob()) (void)publishToService(host());   // 1.35.0 : une publication en attente

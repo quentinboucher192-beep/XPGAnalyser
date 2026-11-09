@@ -235,6 +235,15 @@ private:
     void updateButtons() {
         remove_->setEnabled(!table_->selectedModelRows().empty());
         export_->setEnabled(ws().hasRevocations());
+        // 1.44.0 : revoquer (et retirer une revocation) : le droit << licence_revoquer >> ; le bouton dit pourquoi.
+        if (!ws().can("licence_revoquer")) {
+            revoke_->setEnabled(false);
+            remove_->setEnabled(false);
+            revoke_->setTooltip(ws().whyNot("licence_revoquer"));
+            remove_->setTooltip(ws().whyNot("licence_revoquer"));
+        } else {
+            revoke_->setEnabled(true);
+        }
         invalidate();
     }
 

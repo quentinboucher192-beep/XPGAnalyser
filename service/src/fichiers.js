@@ -54,7 +54,8 @@ export const MAX_OCTETS_MORCEAUX = 1024 * 1024 * 1024; // tous les morceaux gard
 const MAX_FICHIERS = 1000;
 const GARDE_FICHIER = 30 * JOUR; // un fichier qu'aucune des 3 dernieres versions ne porte
 const VERSIONS_GARDEES = 3;
-const MAX_DUREE_LIEN = 48 * 3600;
+const MAX_DUREE_LIEN = 48 * 3600; // un lien << une seule fois >> (un courriel)
+const MAX_DUREE_JOINT = 30 * 24 * 3600; // 1.44.0 : un fichier joint a un message (plusieurs telechargements) : 30 jours
 const MAX_LIENS = 10000;
 const MAX_MESSAGES_PC = 50;
 export const GARDE_MESSAGE = 30 * JOUR;
@@ -321,8 +322,11 @@ export const RoutesFichiers = {
     async tirerJetonFichier(ctx) {
         const corps = this.corpsJson(ctx);
         if (!estHex(corps.id, 32)) throw mal("id");
-        if (!entier(corps.duree, 60, MAX_DUREE_LIEN)) throw mal("duree", "Le champ « duree » doit être un nombre de secondes, de 60 à 172800 (48 h).");
         if (corps.une_fois !== undefined && typeof corps.une_fois !== "boolean") throw mal("une_fois");
+        const max = corps.une_fois ? MAX_DUREE_LIEN : MAX_DUREE_JOINT;
+        if (!entier(corps.duree, 60, max))
+            throw mal("duree", corps.une_fois ? "Le champ « duree » doit être un nombre de secondes, de 60 à 172800 (48 h) pour un lien d'une seule fois."
+                                              : "Le champ « duree » doit être un nombre de secondes, de 60 à 2592000 (30 jours).");
         const f = this.ligne("SELECT complet FROM fichiers WHERE id = ?", corps.id);
         if (!f || !f.complet) throw pasDeFichier();
         if (this.nombre("SELECT COUNT(*) AS n FROM fichiers_jetons WHERE expire >= ?", ctx.now) >= MAX_LIENS)

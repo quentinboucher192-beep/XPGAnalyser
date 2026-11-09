@@ -91,7 +91,8 @@ constexpr const char* kBackupExtension = ".xpgsauve";
 constexpr const char* kBackupMarker = "XPG-SAUVEGARDE 1";
 constexpr const char* kDerivedFormat = "xpg-sauvegarde-cle-derivee/1";
 constexpr std::uint64_t kChunk = 1048576;
-constexpr int kLinkSeconds = 172800;            // 48 h : le plus long lien que donne le service
+constexpr int kLinkSeconds = 172800;            // 48 h : un lien << une seule fois >> (un courriel)
+constexpr int kAttachSeconds = 30 * 86400;      // 30 jours : un fichier joint a un message (le service le garde autant)
 constexpr std::size_t kKeptBackups = 30;
 constexpr std::size_t kLotBytes = 2u * 1024u * 1024u;   // un lot de la restauration (le service : 8 Mio au plus)
 constexpr std::size_t kMaxSentRecords = 200;
@@ -875,7 +876,7 @@ bool readVersions(online::Client& c, const detail::Caller& caller, const std::st
 bool drawToken(online::Client& c, const std::string& id, int seconds, bool once, std::string& token, Seconds* expires, std::string* why) {
     Value body = Value::object();
     body.set("id", id);
-    body.set("duree", std::clamp(seconds, 60, kLinkSeconds));
+    body.set("duree", std::clamp(seconds, 60, once ? kLinkSeconds : kAttachSeconds));   // 1.44.0 : 48 h une fois, 30 jours sinon
     body.set("une_fois", once);
     const online::Reply r = c.call("POST", "/admin/fichiers/jeton", core::json::write(body, false));
     if (r.status != 201 || !r.error.empty() || !r.json.isObject() || !isLowerHex(r.json.str("jeton"), 32))
@@ -1396,14 +1397,14 @@ OpResult Workspace::attachFile(const std::string& path, adm::MessageFile& out, c
     Uploaded up;
     if (!uploadWith(*c, folder_, *caller.key, now(), path, "autre", version, "jeton", progress, 0, 0, up, &why)) return OpResult::fail(why);
     std::string token;
-    if (!drawToken(*c, up.manifest.id, kLinkSeconds, false, token, nullptr, &why)) return OpResult::fail(why);
+    if (!drawToken(*c, up.manifest.id, kAttachSeconds, false, token, nullptr, &why)) return OpResult::fail(why);
     out.id = up.manifest.id;
     out.name = up.manifest.name;
     out.size = up.manifest.size;
     out.sha256 = up.manifest.sha256;
     out.version = version;
     out.token = token;
-    OpResult r = OpResult::done(out.name + " pr\xC3\xAAt \xC3\xA0 joindre (" + sizeText(out.size) + ", lien de 48 h).");
+    OpResult r = OpResult::done(out.name + " pr\xC3\xAAt \xC3\xA0 joindre (" + sizeText(out.size) + ", lien de 30 jours).");
     r.output = out.id;
     return r;
 }
@@ -1419,7 +1420,7 @@ OpResult Workspace::sendAdminInstaller(const std::string& device, const std::str
         std::unique_ptr<online::Client> c;
         if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
         if (!adminInstaller(*c, caller, folder_, now(), fallbackPath, progress, f, whence, &why)) return OpResult::fail(why);
-        if (!drawToken(*c, f.id, kLinkSeconds, false, f.token, nullptr, &why)) return OpResult::fail(why);
+        if (!drawToken(*c, f.id, kAttachSeconds, false, f.token, nullptr, &why)) return OpResult::fail(why);
     }
     const std::string name = trimmed(adminName);
     const std::string text = (name.empty() ? std::string("Bonjour,") : "Bonjour " + clip(name, 60) + ",") +

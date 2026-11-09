@@ -334,6 +334,12 @@ public:
     [[nodiscard]] std::string title() const override { return "Licences"; }
 
     void refresh() override {
+        // 1.44.0 : une autre page demande une licence (<< Voir la licence >> du journal des admins) : choisie, tous filtres levees.
+        if (const std::string f = takePageFocus("licences"); !f.empty() && ws().licence(f)) {
+            selectedId_ = f;
+            filter_ = Filter::All;
+            search_->setText({});
+        }
         // Les compteurs des filtres.
         int counts[4] = {0, 0, 0, 0};
         for (const auto& l : ws().licences())
@@ -582,6 +588,8 @@ private:
         const bool onlineLic = e && Workspace::isOnlineLicence(e->licence);
         // Une entree grisee dit pourquoi, en quelques mots (l'infobulle du bouton est trop longue pour un menu).
         const auto reasonOf = [&](ui::Button* b) -> std::string {
+            // 1.44.0 : le droit qui manque (son infobulle a ete remplacee par la phrase de Workspace::whyNot).
+            if (const auto it = tips_.find(b); it != tips_.end() && b->tooltip() != it->second) return b->tooltip();
             if (!e) return "choisis une licence";
             if (b == dropPc_) return onlineLic ? std::string("aucun PC activ\xC3\xA9") : std::string("un seul PC li\xC3\xA9");
             if (b == newCode_ || b == active_ || b == refreshOnline_) return "le service n'est pas r\xC3\xA9gl\xC3\xA9";
@@ -721,6 +729,18 @@ private:
         active_->setEnabled(onlineLic && ready);
         active_->setText(on && !on->active ? std::string("R\xC3\xA9" "activer\xE2\x80\xA6") : std::string("D\xC3\xA9sactiver\xE2\x80\xA6"));
         active_->setStyle(on && !on->active ? ui::Button::Style::Default : ui::Button::Style::Danger);
+        // 1.44.0 : ce qu'un admin n'a pas le droit de faire est grise, le bouton dit pourquoi (Workspace::whyNot) ;
+        // l'admin+ a tous les droits (rien ne change pour lui).
+        gateRight(new_, "licence_creer");
+        gateRight(newOnline_, "licence_creer");
+        gateRight(addPc_, "licence_prolonger");
+        gateRight(option_, "licence_option");
+        gateRight(revoke_, "licence_revoquer");
+        gateRight(delete_, "licence_revoquer");
+        gateRight(dropPc_, "poste_retirer");
+        gateRight(newCode_, "licence_creer");
+        gateRight(showCode_, "codes");
+        gateRight(active_, "licence_revoquer");
         invalidateLayout();
         selectedPc_ = -1;
         onlineKeys_.clear();
@@ -1024,13 +1044,28 @@ private:
             }));
     }
 
+    // 1.44.0 : un bouton dont le droit manque : grise, son infobulle dit pourquoi ; le droit revenu, l'infobulle d'avant.
+    void gateRight(ui::Button* b, const char* right) {
+        if (!b) return;
+        auto it = tips_.find(b);
+        if (it == tips_.end()) it = tips_.emplace(b, b->tooltip()).first;
+        if (ws().can(right)) {
+            b->setTooltip(it->second);
+            return;
+        }
+        b->setEnabled(false);
+        b->setTooltip(ws().whyNot(right));
+    }
+
     // 1.37.0 : le code garde chiffre sur ce poste, montre dans la fenetre du code (Afficher, Copier)
     void showCode() {
         const LicenceEntry* e = selected();
         if (!e || !Workspace::isOnlineLicence(e->licence)) return;
-        std::string code, why;
-        if (!online::readCode(ws().folder(), e->licence.licenseId, code, &why)) {
-            host_.report(OpResult::fail(why));
+        // 1.44.0 : par le Workspace - le droit << codes >> est verifie, et la lecture ecrite au journal des admins.
+        std::string code;
+        const OpResult r = ws().revealCode(e->licence.licenseId, code);
+        if (!r.ok) {
+            host_.report(r);
             return;
         }
         host_.openDialog(makeCodeDialog(e->licence.licenseId, code));
@@ -1117,6 +1152,7 @@ private:
     std::shared_ptr<Rows>       model_, pcsModel_;
     std::vector<std::string>    shownIds_;
     std::string                 selectedId_;
+    std::map<ui::Button*, std::string> tips_;   // 1.44.0 : l'infobulle de chaque bouton, avant qu'un droit manque
     Filter                      filter_{Filter::All};
     bool                        syncing_{false};
     float                       filterY_{0.f}, columnsFor_{-1.f}, pcsColumnsFor_{-1.f};

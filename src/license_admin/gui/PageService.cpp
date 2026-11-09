@@ -945,10 +945,13 @@ void ServicePage::refresh() {
 void ServicePage::syncEnabled() {
     const bool b = busy();
     const auto& s = ws().service();
-    const bool key = ws().key().present;
+    // 1.44.0 : un admin (sa cle signe ses appels) verifie, synchronise, releve ; certifier reste a l'admin+ (la cle de l'editeur).
+    const bool key = ws().signer() != nullptr;
+    const bool plus = ws().key().present;
     saveUrl_->setEnabled(!b);
     verify_->setEnabled(!b && s.ready() && key);
-    certify_->setEnabled(!b && s.ready() && key);
+    certify_->setEnabled(!b && s.ready() && plus);
+    if (!plus && key) certify_->setTooltip("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ : seule la cl\xC3\xA9 de l'\xC3\xA9" "diteur certifie le service.");
     for (auto* w : std::initializer_list<ui::Widget*>{firstPc_, otherPc_, replace_, keyButton_, showCode_}) w->setEnabled(!b);
     sync_->setEnabled(!b && s.ready() && key && s.syncKey);
     receive_->setEnabled(!b && s.ready() && key && s.syncKey);
@@ -1050,7 +1053,9 @@ void ServicePage::rebuild() {
                                                               : std::string("aucun (\xC3\x89" "ditions : signe le registre, il part sur le service)"),
                 s.state.registry ? ui::Tone::None : ui::Tone::Warning);
     }
-    if (!k.present) bl.text("Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9) : elle signe chaque appel au service.", ui::Tone::Warning);
+    if (!k.present && !ws().signer())   // 1.44.0 : un admin signe ses appels avec sa cle d'admin
+        bl.text("Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9), ou \xC3\xAAtre admin (Administrateurs) : elle signe chaque appel au service.",
+                ui::Tone::Warning);
     if (service_.has)
         bl.pair("Dernier r\xC3\xA9sultat", service_.message + " (" + dateTimeFr(service_.at) + ")", service_.ok ? ui::Tone::Ok : ui::Tone::Error);
     bl.row({verify_});

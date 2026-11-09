@@ -380,13 +380,13 @@ private:
         std::string t = "Service " + g.config.url + " \xC2\xB7 ";
         if (g.fetch.fetchedAt == 0) t += "jamais relev\xC3\xA9" "es sur ce poste";
         else t += "relev\xC3\xA9" "es le " + dateTimeFr(g.fetch.fetchedAt) + " : " + std::to_string(g.pending) + " en attente de ta d\xC3\xA9" "cision";
-        if (!ws().key().present) t += " \xC2\xB7 il manque la cl\xC3\xA9 de l'\xC3\xA9" "diteur";
+        if (!ws().can("demandes")) t += " \xC2\xB7 " + ws().whyNot("demandes");   // 1.44.0 : le droit << demandes >>
         return t;
     }
     [[nodiscard]] ui::Tone statusTone() const {
         const auto& g = ws().service();
         if (!g.problem.empty()) return ui::Tone::Error;
-        if (!g.configured || !ws().key().present) return ui::Tone::Warning;
+        if (!g.configured || !ws().can("demandes")) return ui::Tone::Warning;
         if (g.pending > 0) return ui::Tone::Warning;
         return ui::Tone::None;
     }
@@ -398,7 +398,8 @@ private:
             return "Le service des licences n'est pas encore r\xC3\xA9gl\xC3\xA9 : les clients ne peuvent pas demander une licence depuis leur logiciel. Mets-le en "
                    "ligne (Service en ligne : les \xC3\xA9tapes), puis donne son adresse. En attendant, les demandes arrivent par fichier (Activations \xE2\x80\xBA "
                    "Noter des demandes).";
-        if (!ws().key().present) return "Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur : les demandes sont scell\xC3\xA9" "es pour elle, et elle signe chaque appel au service.";
+        if (ws().role() == Role::None) return "Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur : les demandes sont scell\xC3\xA9" "es pour elle, et elle signe chaque appel au service.";
+        if (!ws().can("demandes")) return ws().whyNot("demandes");   // 1.44.0 : un admin sans le droit << demandes >>
         if (g.fetch.fetchedAt == 0) return "Pas encore relev\xC3\xA9" "es sur ce poste : clique \xC2\xAB Relever les demandes \xC2\xBB.";
         if (!g.requests.empty() && wantWaiting())
             return "Aucune demande n'attend ta d\xC3\xA9" "cision. \xC2\xAB Toutes \xC2\xBB montre celles d\xC3\xA9j\xC3\xA0 trait\xC3\xA9" "es.";
@@ -524,7 +525,7 @@ private:
         // 1.37.0 : une seule acceptation - acceptee ici (sa reponse pas partie) : on la renvoie, on ne la decide plus.
         const bool here = e && e->acceptedHere();
         resend_->setVisibility(on && here ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        fetch_->setEnabled(!b && ws().key().present);
+        fetch_->setEnabled(!b && ws().can("demandes"));   // 1.44.0 : le droit, plus seulement la cle de l'editeur
         resend_->setEnabled(!b && here);
         // 1.42.0 : une demande d'option - << Ajouter cette option... >> a la place d'Accepter
         const bool opt = e && e->optionRequest();
@@ -533,6 +534,12 @@ private:
         accept_->setEnabled(!b && e && e->waiting() && !here && !opt);
         acceptOnline_->setEnabled(!b && e && e->waiting() && !here && !opt);
         refuse_->setEnabled(!b && e && e->waiting() && !here);
+        // 1.44.0 : un admin sans le droit << demandes >> : tout est grise, chaque bouton dit pourquoi.
+        if (!ws().can("demandes"))
+            for (ui::Button* x : {fetch_, accept_, acceptOnline_, refuse_, addOption_, resend_}) {
+                x->setEnabled(false);
+                x->setTooltip(ws().whyNot("demandes"));
+            }
         invalidateLayout();
     }
 

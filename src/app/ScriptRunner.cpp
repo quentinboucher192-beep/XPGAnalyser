@@ -6362,9 +6362,13 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     // 1.43.0 : LES SESSIONS (deux IHM Studio sur un projet) - pour l'essai de bout en bout.
     //   session-demarrer "Nom" [code|accepter] [modifier|regarder]   l'hote (le projet ouvert)
+    //   session-demarrer "Nom" internet [modifier|regarder]          1.44.0 : par Internet (le relais du service XPG) ; le code
+    //                                                                (K7Q4-M2XP-T9) ecrit dans code-session.txt (les captures)
     //   session-chercher                                             les sessions du reseau du bureau (et de ce PC)
     //   session-rejoindre [N|adresse] [code]                         l'equipier (la N-ieme trouvee ; 1 par defaut)
-    //   session-attendre dedans|frappe|fin|membres N|message "texte"|objet VUE OBJET CLE VALEUR
+    //   session-rejoindre internet CODE|@fichier|@chemin             1.44.0 : par Internet (@fichier : code-session.txt des captures)
+    //   session-attendre dedans|frappe|fin|ouverte|membres N|message "texte"|objet VUE OBJET CLE VALEUR
+    //                                                                (ouverte, 1.44.0 : l'hote, ouverte sur le relais)
     //   session-accepter / session-refuser                           l'hote : la premiere entree demandee
     //   session-choisir VUE OBJET | session-choisir VUE (rien)        choisir dans la vue (elle s'ouvre)
     //   session-deplacer VUE OBJET DX DY                             un geste (par la pile : Ctrl+Z le reprend)
@@ -6396,7 +6400,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (cmd == "session-demarrer") {
             SessionService::StartOptions o;
             o.name = arg(1);
-            o.entry = arg(2) == "code" ? session::Entry::Code : session::Entry::Accept;
+            o.internet = arg(2) == "internet";   // 1.44.0 : par Internet (il faut le code)
+            o.entry = arg(2) == "code" || o.internet ? session::Entry::Code : session::Entry::Accept;
             o.role = arg(3) == "regarder" ? session::Role::Watch : session::Role::Edit;
             std::string why;
             if (!s.start(o, &why)) {
@@ -6404,13 +6409,17 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 fail("session-demarrer : " + why);
                 return Step::Next;
             }
-            std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e (port %d, d\xC3\xA9" "couverte %d)%s%s\n", s.sessionName().c_str(), s.port(),
-                        s.discoveryPort(), s.code().empty() ? "" : " ; code ", s.code().empty() ? "" : session::codeShown(s.code()).c_str());
-            // Le code pour l'equipier (l'essai le lit) : a cote des captures, jamais ailleurs.
+            if (s.internet())
+                std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e par Internet ; code %s\n", s.sessionName().c_str(), s.codeText().c_str());
+            else
+                std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e (port %d, d\xC3\xA9" "couverte %d)%s%s\n", s.sessionName().c_str(), s.port(),
+                            s.discoveryPort(), s.code().empty() ? "" : " ; code ", s.code().empty() ? "" : s.codeText().c_str());
+            // Le code pour l'equipier (l'essai le lit) : a cote des captures, jamais ailleurs. 1.44.0 : par Internet, montre
+            // ("K7Q4-M2XP-T9" : session-rejoindre internet @fichier le relit).
             if (!s.code().empty() && !capturesDir_.empty()) {
                 std::FILE* f = std::fopen((std::filesystem::path(capturesDir_) / "code-session.txt").string().c_str(), "wb");
                 if (f) {
-                    std::fputs(s.code().c_str(), f);
+                    std::fputs(s.internet() ? s.codeText().c_str() : s.code().c_str(), f);
                     std::fclose(f);
                 }
             }
@@ -6423,6 +6432,32 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             for (const auto& f : s.found())
                 std::printf("[script]   %s - h\xC3\xB4te %s, %s (%s), %d dedans%s\n", f.announce.session.c_str(), f.announce.host.c_str(), f.announce.machine.c_str(),
                             f.address.c_str(), f.announce.members, f.announce.needsCode ? ", avec code" : "");
+            return Step::Yield;
+        }
+        if (cmd == "session-rejoindre" && arg(1) == "internet") {   // 1.44.0 : par Internet, le code seul
+            std::string code = arg(2);
+            if (!code.empty() && code[0] == '@') {   // @fichier : code-session.txt des captures ; @chemin : ce fichier
+                const std::string path = code == "@fichier" ? (capturesDir_.empty() ? std::string{} : (std::filesystem::path(capturesDir_) / "code-session.txt").string())
+                                                            : code.substr(1);
+                char b[64] = {0};
+                if (std::FILE* f = path.empty() ? nullptr : std::fopen(path.c_str(), "rb")) {
+                    const auto n = std::fread(b, 1, sizeof b - 1, f);
+                    b[n] = 0;
+                    std::fclose(f);
+                }
+                code = b;
+            }
+            SessionService::JoinTarget t;
+            t.internet = true;
+            t.sessionName = "Session par Internet";
+            t.machine = "Internet";
+            std::string why;
+            if (!s.join(t, code, &why)) {
+                std::printf("[script] session-rejoindre internet : %s\n", why.c_str());
+                fail("session-rejoindre internet : " + why);
+                return Step::Next;
+            }
+            std::printf("[script] session-rejoindre : par Internet (le code donn\xC3\xA9 par l'h\xC3\xB4te)\n");
             return Step::Yield;
         }
         if (cmd == "session-rejoindre") {
@@ -6470,6 +6505,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             bool ok = false;
             const std::string what = arg(1);
             if (what == "dedans") ok = s.guest();
+            else if (what == "ouverte") ok = s.host() && (!s.internet() || s.relayOpen());   // 1.44.0 : ouverte sur le relais
             else if (what == "frappe") ok = !s.knocks().empty();
             else if (what == "fin") ok = s.mode() == SessionService::Mode::Off;
             else if (what == "membres") ok = s.members().size() >= static_cast<std::size_t>(std::max(1, std::atoi(arg(2).c_str())));
@@ -6483,7 +6519,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                 ok = !findObject(arg(2), arg(3), v, o) && v != hmi::kNoId;
             }
             if (!ok) {
-                if (s.mode() == SessionService::Mode::Off && what != "fin" && retries_ > 30 && !s.progress().empty() && s.progress().rfind("Pas entr", 0) == 0) {
+                if (s.mode() == SessionService::Mode::Off && what != "fin" && retries_ > 30 && !s.progress().empty()
+                    && (s.progress().rfind("Pas entr", 0) == 0 || s.progress().rfind("La session ne d", 0) == 0)) {   // 1.44.0 : le relais refuse
                     std::printf("[script] session-attendre %s : %s\n", what.c_str(), s.progress().c_str());
                     fail("session-attendre " + what + " : " + s.progress());
                     return Step::Next;
@@ -6591,8 +6628,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         if (cmd == "session-etat") {
             const char* mode = s.host() ? "h\xC3\xB4te" : s.guest() ? "\xC3\xA9quipier" : s.mode() == SessionService::Mode::Joining ? "on entre" : "aucune";
-            std::printf("[script] session-etat : %s \xC2\xB7 \xC2\xAB %s \xC2\xBB \xC2\xB7 %zu membre(s) \xC2\xB7 %zu message(s) \xC2\xB7 %zu rattrapage(s) \xC2\xB7 %zu refus\n", mode,
-                        s.sessionName().c_str(), s.members().size(), s.chat().size(), s.resyncs(), s.refusals());
+            std::printf("[script] session-etat : %s%s \xC2\xB7 \xC2\xAB %s \xC2\xBB \xC2\xB7 %zu membre(s) \xC2\xB7 %zu message(s) \xC2\xB7 %zu rattrapage(s) \xC2\xB7 %zu refus\n", mode,
+                        s.internet() ? " (par Internet)" : "", s.sessionName().c_str(), s.members().size(), s.chat().size(), s.resyncs(), s.refusals());
             for (const auto& m : s.members())
                 std::printf("[script]   %s%s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 vue %s \xC2\xB7 %zu choisi(s)\n", m.name.c_str(), m.number == s.me() ? " (moi)" : "", m.machine.c_str(),
                             m.machineId.c_str(), session::roleText(m.role).c_str(), s.viewName(m.view).c_str(), m.selection.size());

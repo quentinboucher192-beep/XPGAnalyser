@@ -175,8 +175,8 @@ tous les morceaux sont là. Le **manifeste** (genre `fichier`, signé par la cl�
 
 Lire : `GET /v1/fichiers/manifeste?id=…`, `GET /v1/fichiers/morceau?id=…&n=…` ; l'accès `public` : tout le monde ;
 `admins` : un appel signé par une clé d'admin (ou de l'éditeur), ou l'en-tête `X-XPG-Jeton` (le bloc `jetonadmin` en base64) d'un jeton d'admin (§ 7) ;
-`jeton` : `?jeton=…` (un jeton tiré par l'admin+, gardé haché ; 48 h ; « une seule fois » : utilisable pour un seul
-téléchargement complet). `GET /v1/fichiers/lien?jeton=…` rend le fichier entier (un navigateur). **Le Studio vérifie
+`jeton` : `?jeton=…` (un jeton tiré par l'admin+, gardé haché ; 30 jours au plus — un fichier joint à un message ; « une
+seule fois » : 48 h au plus, utilisable pour un seul téléchargement complet — un lien dans un courriel). `GET /v1/fichiers/lien?jeton=…` rend le fichier entier (un navigateur). **Le Studio vérifie
 toujours** la taille et le SHA-256 contre le manifeste signé ; un fichier qui ne correspond pas est **refusé**
 (jamais proposé, ni enregistré).
 
@@ -189,7 +189,7 @@ message, 30 jours.
 `GET /v1/messages?depuis=N` (signé par la clé du PC) : ses messages, numérotés par le service. Le bloc (genre `message`,
 signé par la clé de l'éditeur) : `{"format":1,"poste":"<deviceId>","titre","de","emis","scelle":"<base64>"}` ; le scellé
 (pour la clé du PC) : `{"texte","fichiers":[{"id","nom","taille","sha256","version","jeton"}],"action":"admin"}`. Le
-`jeton` d'un fichier joint vaut 48 h au plus (`POST /admin/fichiers/jeton`) : le Studio le télécharge dès le relevé.
+`jeton` d'un fichier joint vaut 30 jours (`POST /admin/fichiers/jeton`), comme le fichier lui-même.
 
 ### Les versions
 

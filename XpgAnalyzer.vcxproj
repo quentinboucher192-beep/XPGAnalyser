@@ -766,6 +766,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\ReportWindow.cpp" />
     <ClCompile Include="src\app\SessionDialogs.cpp" />
     <ClCompile Include="src\app\SessionMarks.cpp" />
+    <ClCompile Include="src\app\SessionRelayHttp.cpp" />
     <ClCompile Include="src\app\SessionService.cpp" />
     <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\app\Updates.cpp" />
@@ -806,6 +807,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\deploy\Pairing.cpp" />
     <ClCompile Include="src\session\SessionLink.cpp" />
     <ClCompile Include="src\session\SessionProtocol.cpp" />
+    <ClCompile Include="src\session\SessionRelay.cpp" />
     <ClCompile Include="src\session\SessionSync.cpp" />
     <ClCompile Include="src\deploy\Protocol.cpp" />
     <ClCompile Include="src\deploy\Station.cpp" />
@@ -1372,6 +1374,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\ReportWindow.hpp" />
     <ClInclude Include="src\app\SessionDialogs.hpp" />
     <ClInclude Include="src\app\SessionMarks.hpp" />
+    <ClInclude Include="src\app\SessionRelayHttp.hpp" />
     <ClInclude Include="src\app\SessionService.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\app\Updates.hpp" />
@@ -1438,6 +1441,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\licensing\Store.hpp" />
     <ClInclude Include="src\licensing\TestPublisherKey.hpp" />
     <ClInclude Include="src\licensing\Time.hpp" />
+    <ClInclude Include="src\license_admin\gui\AdminsKit.hpp" />
     <ClInclude Include="src\license_admin\gui\Page.hpp" />
     <ClInclude Include="src\license_admin\gui\Shell.hpp" />
     <ClInclude Include="src\license_admin\gui\Workspace.hpp" />

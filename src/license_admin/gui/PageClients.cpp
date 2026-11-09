@@ -629,7 +629,7 @@ private:
         std::vector<std::vector<std::string>> rows;
         for (const auto& d : deleted_) rows.push_back({d.name, dateFr(d.deletedAt), std::to_string(d.licenceIds.size())});
         trashModel_->set(std::move(rows), {}, [](RowIndex, std::size_t) { return ui::CellStyle{}; });
-        restoreBtn_->setEnabled(!deleted_.empty());
+        restoreBtn_->setEnabled(!deleted_.empty() && ws().can("client_supprimer"));   // 1.44.0 : le droit
     }
 
     void updateButtons() {
@@ -650,6 +650,17 @@ private:
                 canDelete = false;
                 deleteNote_ = "Une demande attend ta d\xC3\xA9" "cision (Demandes en ligne).";
             }
+        }
+        // 1.44.0 : les droits d'un admin - creer une licence, supprimer, restaurer un client ; le bouton dit pourquoi.
+        if (!ws().can("licence_creer")) {
+            newLicence_->setEnabled(false);
+            newLicence_->setTooltip(ws().whyNot("licence_creer"));
+        }
+        if (!ws().can("client_supprimer")) {
+            canDelete = false;
+            deleteNote_ = ws().whyNot("client_supprimer");
+            restoreBtn_->setEnabled(false);
+            restoreBtn_->setTooltip(ws().whyNot("client_supprimer"));
         }
         deleteBtn_->setEnabled(canDelete);
     }

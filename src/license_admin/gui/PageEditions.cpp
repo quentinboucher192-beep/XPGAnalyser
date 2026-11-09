@@ -562,7 +562,8 @@ protected:
         for (std::size_t i = 0; i < emptyLines_.size(); ++i)
             r.drawText({x, content_.y + 30.f + static_cast<float>(i) * kLineH}, fit(r, emptyLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
         std::string note;
-        if (!ws().key().present) note = "Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.";
+        if (ws().role() == Role::None) note = "Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.";
+        else if (!ws().can("offres")) note = ws().whyNot("offres");   // 1.44.0
         for (const auto& p : ws().archiveProblems())
             if (p.rfind("registre :", 0) == 0) note = "Le registre de l'archive ne se lit pas (" + p + ").";
         if (!note.empty()) r.drawText({x, firstBtn_->bounds().bottom() + 12.f}, fit(r, note, ctx.theme.font.ui, w), ctx.theme.font.ui, warn);
@@ -587,9 +588,14 @@ private:
         } else {
             signBtn_->setTooltip("Rien \xC3\xA0 signer : aucune modification.");
         }
-        signBtn_->setEnabled(d.dirty && !host_.busy());
+        // 1.44.0 : un admin signe le registre s'il a le droit de la partie qui change (offres, options, annonces : le
+        // Workspace verifie la partie exacte) ; sans aucun des trois, le bouton dit pourquoi.
+        const bool mayRegistry = ws().can("offres") || ws().can("options") || ws().can("annonces");
+        signBtn_->setEnabled(d.dirty && !host_.busy() && mayRegistry);
+        if (!mayRegistry) signBtn_->setTooltip(ws().whyNot("offres"));
         cancelBtn_->setEnabled(d.dirty);
-        firstBtn_->setEnabled(ws().key().present && !host_.busy());
+        firstBtn_->setEnabled(ws().can("offres") && !host_.busy());
+        if (!ws().can("offres")) firstBtn_->setTooltip(ws().whyNot("offres"));
     }
 
     void openNew(bool on) {
@@ -698,8 +704,9 @@ private:
             say(kBusy, Tone::Warning);
             return;
         }
-        if (!ws().key().present) {
-            host_.report(OpResult::fail(ws().key().problem.empty() ? std::string("pas de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste") : ws().key().problem));
+        if (!ws().can("offres")) {   // 1.44.0 : le droit << offres >> (l'admin+ l'a toujours)
+            host_.report(OpResult::fail(ws().role() == Role::None ? (ws().key().problem.empty() ? std::string("pas de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste") : ws().key().problem)
+                                                                  : ws().whyNot("offres")));
             return;
         }
         ui::FilePick pick;

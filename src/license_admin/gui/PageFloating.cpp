@@ -302,7 +302,7 @@ private:
     void syncButtons() {
         const bool b = busy();
         const bool on = ws().service().ready();
-        refresh_->setEnabled(!b && on && ws().key().present);
+        refresh_->setEnabled(!b && on && ws().signer() != nullptr);   // 1.44.0 : l'admin+ ou un admin (sa cle signe l'appel)
         create_->setEnabled(on);
         retire_->setEnabled(!b && on && selectedSeat() >= 0);
         settings_->setVisibility(on ? ui::Visibility::Collapsed : ui::Visibility::Visible);

@@ -104,6 +104,7 @@ using PagePtr = std::unique_ptr<Page>;
 //  "droits"         Droits des admins (une sous-page           PageRights.cpp
 //                   d'Administrateurs ; l'admin+)
 //  "journal"        Journal des admins (l'admin+)            PageJournal.cpp
+//  "versions"       Versions (publier ; l'admin+)            PageVersions.cpp
 PagePtr makeDashboardPage(ShellHost host);
 PagePtr makeClientsPage(ShellHost host);
 PagePtr makeLicencesPage(ShellHost host);
@@ -121,6 +122,7 @@ PagePtr makeSecurityPage(ShellHost host);
 PagePtr makeAdminsPage(ShellHost host);    // 1.44.0
 PagePtr makeRightsPage(ShellHost host);    // 1.44.0
 PagePtr makeJournalPage(ShellHost host);   // 1.44.0
+PagePtr makeVersionsPage(ShellHost host);  // 1.44.0
 
 // 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet
 // admin ; << Ses droits >> : cet admin choisi dans Droits ; << Voir la licence >> du journal : la licence choisie) - la page

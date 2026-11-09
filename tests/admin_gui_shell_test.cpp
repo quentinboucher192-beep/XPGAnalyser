@@ -55,8 +55,11 @@ struct Rig {
 // GitHub >> ; << Licences flottantes >> est une vraie page (seules Boutique et Commandes restent grisees).
 // 1.41.0 : les groupes de la maquette validee (Pilotage, Catalogue, la vente en ligne, Securite).
 // 1.42.0 : les editions s'appellent les Offres ; les Options a leur suite.
+// 1.44.0 : plusieurs admins - Administrateurs, Journal des admins et Versions dans Securite (ces deux-la : l'admin+ seul).
 const std::string kTitles[] = {"Tableau de bord", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
-                               "Boutique", "Commandes", "R\xC3\xA9vocations", "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
+                               "Boutique", "Commandes", "R\xC3\xA9vocations", "Administrateurs", "Journal des admins", "Versions", "Service en ligne", "Historique",
+                               "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
+constexpr std::size_t kEntries = sizeof(kTitles) / sizeof(kTitles[0]);
 
 } // namespace
 
@@ -73,11 +76,14 @@ int main(int argc, char** argv) {
         check(has(t, "XPG License Manager") && has(t, "Admin"), "le nom de l'application dans le menu");
         check(has(t, "\xC3\x89" "diteur seulement"), "<< Editeur seulement >>");
         const auto& entries = gui::Shell::entries();
-        check(entries.size() == 15, "15 entrees dans le menu");
-        for (std::size_t i = 0; i < entries.size() && i < 14; ++i) {
+        check(entries.size() == kEntries, std::to_string(kEntries) + " entrees dans le menu");
+        for (std::size_t i = 0; i < entries.size() && i < kEntries; ++i) {
             check(entries[i].label == kTitles[i], std::string("l'ordre de la maquette : ") + kTitles[i]);
-            check(has(t, kTitles[i]), std::string("le menu montre ") + kTitles[i]);
-            check(find<ui::Button>(rig.root(), std::string("nav.") + entries[i].id) != nullptr, std::string("nav.") + entries[i].id);
+            auto* nav = find<ui::Button>(rig.root(), std::string("nav.") + entries[i].id);
+            check(nav != nullptr, std::string("nav.") + entries[i].id);
+            // 1.44.0 : sans cle, les entrees de l'admin+ seul (le journal des admins, les versions) ne sont pas dans le menu.
+            if (gui::Shell::plusOnly(entries[i].id)) check(nav && !nav->visible(), std::string("le menu cache ") + kTitles[i] + " (l'admin+ seul)");
+            else check(has(t, kTitles[i]), std::string("le menu montre ") + kTitles[i]);
         }
         int online = 0;
         for (const auto& e : entries) online += e.online ? 1 : 0;

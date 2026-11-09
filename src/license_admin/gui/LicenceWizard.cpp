@@ -1653,7 +1653,13 @@ WizardBody::WizardBody(WizardMenu& owner, ShellHost host, std::vector<std::strin
     : ui::Widget("dialog.licence-assistant.corps"), owner_(owner), host_(std::move(host)) {
     const Workspace& w = ws();
     const LicenceEntry* ext = extendId.empty() ? nullptr : w.licence(extendId);
-    if (!w.key().present) {
+    // 1.44.0 : un admin signe avec SA cle s'il a le droit (creer, ou prolonger une licence) ; le Workspace verifie le droit exact.
+    const char* right = extendId.empty() ? "licence_creer" : "licence_prolonger";
+    if (w.role() != Role::None && w.role() != Role::Plus && !w.can(right)) {
+        blockedWhy_ = w.whyNot(right) + "\n\nLa page Administrateurs montre tes droits.";
+        blockedPage_ = "admins";
+        blockedLabel_ = "Aller \xC3\xA0 Administrateurs";
+    } else if (!w.signer()) {
         blockedWhy_ = "Il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur pour signer une licence" + (w.key().problem.empty() ? std::string() : " : " + w.key().problem)
                       + ".\n\nCr\xC3\xA9" "e-la, ou restaure ta sauvegarde, dans Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 ; puis reviens ici.";
         blockedPage_ = "securite";

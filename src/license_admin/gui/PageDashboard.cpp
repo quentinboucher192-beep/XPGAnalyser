@@ -338,6 +338,14 @@ public:
         links_ += createKey_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += restore_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += toEditions_->clicked->connect([this] { host_.navigate("editions"); });
+        // 1.44.0 : le second chemin d'un poste sans cle (devenir admin), et ce qu'attend un poste en attente.
+        becomeAdmin_ = addButton("Demander \xC3\xA0 devenir admin\xE2\x80\xA6", "tableau.devenir-admin", ui::Button::Style::Default, ui::Icon::User);
+        becomeAdmin_->setTooltip("L'admin+ t'a fait installer l'Admin : ton nom, ton courriel ; ta cl\xC3\xA9 na\xC3\xAEt sur ce PC, l'admin+ l'accepte.");
+        myFingerprint_ = addButton("Voir mon empreinte", "tableau.voir-empreinte", ui::Button::Style::Primary, ui::Icon::Lock);
+        toService_ = addButton("Recevoir l'archive", "tableau.aller-service", ui::Button::Style::Primary, ui::Icon::Globe);
+        links_ += becomeAdmin_->clicked->connect([this] { host_.navigate("admins"); });
+        links_ += myFingerprint_->clicked->connect([this] { host_.navigate("admins"); });
+        links_ += toService_->clicked->connect([this] { host_.navigate("service"); });
 
         const struct {
             const char* id;
@@ -380,18 +388,32 @@ public:
         const auto& k = w.key();
         hint_.clear();
         hintKind_ = 0;
-        if (!k.present) {
+        const Role role = w.role();
+        if (role == Role::None) {
+            // 1.44.0 : deux chemins - le premier PC (la cle de l'editeur, l'admin+) ou un admin que l'admin+ accepte.
             hintKind_ = 1;
             hint_ = "Pour commencer : cr\xC3\xA9" "e la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9), ou restaure la sauvegarde d'une "
-                    "cl\xC3\xA9 existante. Sans cl\xC3\xA9, rien ne se signe.";
+                    "cl\xC3\xA9 existante. L'admin+ t'a fait installer l'Admin ? Demande \xC3\xA0 devenir admin. Sans cl\xC3\xA9, rien ne se signe.";
+        } else if (role == Role::Pending) {
+            hintKind_ = 3;
+            hint_ = "Ta demande pour devenir admin attend l'admin+ : il va t'appeler, lis-lui ton empreinte. En attendant, l'Admin ne peut rien signer.";
+        } else if (role == Role::Retired) {
+            hintKind_ = 4;
+            hint_ = w.whyNot("licence_creer");
         } else if (!w.hasRegistry()) {
-            hintKind_ = 2;
-            hint_ = "Il manque le registre (les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s) : signe-le dans \xC3\x89" "ditions avant la premi\xC3\xA8re licence.";
+            hintKind_ = role == Role::Admin ? 5 : 2;
+            hint_ = role == Role::Admin ? "Il manque le registre (les offres) : il arrive avec l'archive de l'admin+ (Service en ligne \xE2\x80\xBA Recevoir l'archive)."
+                                        : "Il manque le registre (les \xC3\xA9" "ditions et les fonctionnalit\xC3\xA9s) : signe-le dans \xC3\x89" "ditions avant la premi\xC3\xA8re licence.";
         }
         createKey_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         restore_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        becomeAdmin_->setVisibility(hintKind_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        myFingerprint_->setVisibility(hintKind_ == 3 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        toService_->setVisibility(hintKind_ == 5 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         toEditions_->setVisibility(hintKind_ == 2 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
-        newLicence_->setEnabled(k.present && w.hasRegistry());
+        // 1.44.0 : le droit << licence_creer >> (un admin qui ne l'a pas : le bouton dit pourquoi).
+        newLicence_->setEnabled(w.can("licence_creer") && w.hasRegistry());
+        if (!w.can("licence_creer") && role != Role::None) newLicence_->setTooltip(w.whyNot("licence_creer"));
 
         const auto n = [](int v) { return std::to_string(v); };
         // Les places des licences actives liees (leurs PC au plus) : la barre de la tuile des PC.
@@ -440,6 +462,10 @@ public:
         poste_.clear();
         if (k.present)
             poste_.push_back({"Cl\xC3\xA9", k.id + (k.test ? std::string(" (essai)") : std::string()), k.test ? Tone::Warning : Tone::Ok});
+        else if (w.adminKey().present)   // 1.44.0 : la cle d'admin de ce poste, et ce qu'elle peut
+            poste_.push_back({"Cl\xC3\xA9 d'admin",
+                              w.adminKey().id + " \xC2\xB7 " + (role == Role::Admin ? std::to_string(w.myRights().size()) + " droits sur 13" : roleLabel(role)),
+                              role == Role::Admin ? Tone::Ok : role == Role::Pending ? Tone::Warning : Tone::Error});
         else
             poste_.push_back({"Cl\xC3\xA9", "aucune sur ce poste", Tone::Error});
         if (k.present) poste_.push_back({"Protection", k.protectedHere ? "chiffr\xC3\xA9" "e pour ce compte (DPAPI)" : "fichier r\xC3\xA9serv\xC3\xA9 \xC3\xA0 ce compte", Tone::Info});
@@ -481,8 +507,9 @@ public:
     bool dropFiles(const std::vector<std::string>& paths) override {
         if (paths.empty() || !std::all_of(paths.begin(), paths.end(), isRequest)) return false;   // la coquille les range
         if (licdlg::wizardTakeDrop(paths)) return true;   // l'assistant deja ouvert les prend
-        if (!ws().key().present || !ws().hasRegistry()) {
-            host_.report(OpResult::fail(!ws().key().present ? "pas de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste : cr\xC3\xA9" "e-la d'abord (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9), puis glisse \xC3\xA0 nouveau les demandes"
+        if (!ws().can("licence_creer") || !ws().hasRegistry()) {   // 1.44.0 : le droit, plus seulement la cle de l'editeur
+            host_.report(OpResult::fail(ws().role() == Role::None ? "pas de cl\xC3\xA9 de l'\xC3\xA9" "diteur sur ce poste : cr\xC3\xA9" "e-la d'abord (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9), puis glisse \xC3\xA0 nouveau les demandes"
+                                        : !ws().can("licence_creer") ? ws().whyNot("licence_creer")
                                                             : "pas encore de registre sign\xC3\xA9 : signe-le d'abord (\xC3\x89" "ditions), puis glisse \xC3\xA0 nouveau les demandes"));
             return true;
         }
@@ -520,8 +547,10 @@ protected:
         hintLines_.clear();
         if (hintKind_ != 0) {
             std::vector<ui::Button*> btns;
-            if (hintKind_ == 1) btns = {createKey_, restore_};
-            else btns = {toEditions_};
+            if (hintKind_ == 1) btns = {createKey_, restore_, becomeAdmin_};
+            else if (hintKind_ == 2) btns = {toEditions_};
+            else if (hintKind_ == 3) btns = {myFingerprint_};
+            else if (hintKind_ == 5) btns = {toService_};
             float bw = 0.f;
             for (auto* btn : btns) bw += btn->sizeHint().preferred.w + 8.f;
             const bool beside = w - bw - 64.f > 320.f;
@@ -682,6 +711,20 @@ private:
                 f.what = a.deviceKey.empty() ? "Licence r\xC3\xA9voqu\xC3\xA9" "e" : "PC r\xC3\xA9voqu\xC3\xA9";
                 f.icon = ui::Icon::Close;
                 f.tone = Tone::Error;
+            } else if (a.kind == "client") {
+                // 1.44.0 : un client supprime ou restaure (Clients) - ni PC ni licence a dire : son nom, ses licences.
+                const bool restored = a.action == "restaure";
+                f.what = (restored ? "Client restaur\xC3\xA9 : " : "Client supprim\xC3\xA9 : ") + a.customer;
+                f.icon = restored ? ui::Icon::Undo : ui::Icon::Delete;
+                f.tone = restored ? Tone::Ok : Tone::Warning;
+                f.who.clear();
+                f.detail = a.licences.empty() ? std::string("aucune licence")
+                                              : plural(static_cast<int>(a.licences.size()), "licence", "licences") + (restored ? " revenue(s) de la corbeille" : " dans la corbeille");
+                if (!a.by.empty()) f.detail += " \xC2\xB7 par " + a.by;
+                f.when = agoFr(now, a.at);
+                f.tip = dateTimeFr(a.at) + ". Double-clic : l'historique.";
+                rows.push_back(std::move(f));
+                continue;
             } else {
                 f.what = a.kind;
             }
@@ -709,8 +752,9 @@ private:
     }
 
     void openWizard(std::vector<std::string> requests) {
-        if (!ws().key().present || !ws().hasRegistry()) {
-            host_.report(OpResult::fail("il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur et le registre sign\xC3\xA9"));
+        if (!ws().can("licence_creer") || !ws().hasRegistry()) {   // 1.44.0 : le droit
+            host_.report(OpResult::fail(ws().role() != Role::None && !ws().can("licence_creer") ? ws().whyNot("licence_creer")
+                                                                                               : std::string("il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur et le registre sign\xC3\xA9")));
             return;
         }
         host_.openDialog(makeLicenceWizard(host_, std::move(requests)));
@@ -745,6 +789,9 @@ private:
     ui::Button*                  createKey_{nullptr};
     ui::Button*                  restore_{nullptr};
     ui::Button*                  toEditions_{nullptr};
+    ui::Button*                  becomeAdmin_{nullptr};    // 1.44.0
+    ui::Button*                  myFingerprint_{nullptr};  // 1.44.0
+    ui::Button*                  toService_{nullptr};      // 1.44.0
     std::vector<StatTile*>       tiles_;
     ActivityFeed*                feed_{nullptr};
     Rect                         hintRect_{}, opsRect_{}, editionsRect_{}, posteRect_{};
