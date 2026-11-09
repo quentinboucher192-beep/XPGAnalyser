@@ -7,7 +7,8 @@ licences doit se faire avec le contenu exact, plus qu'à importer et toutes les 
 « ajoute 'client supprimé' dans les historiques, journaux sur l'admin », et de l'image des sessions pour
 Multi-utilisateur.
 
-Elle se met à jour par-dessus la 1.43.0 (les Studios) et la 1.42.0 (l'Admin), et garde tes données. **Le service en
+Elle se met à jour par-dessus la 1.43.0 (les Studios) et la 1.42.0 (l'Admin), et garde tes données. Elle remplace la
+livraison intermédiaire de cet après-midi (même numéro : installe simplement celle-ci par-dessus). **Le service en
 ligne change** : il faut le redéployer (`deployer.bat`), voir § 1.
 
 ## 0. En bref
@@ -79,11 +80,79 @@ ligne change** : il faut le redéployer (`deployer.bat`), voir § 1.
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 170 suites sur 170 réussies** (`ctest`, sur la version livrée). Celles que cette version ajoute ou touche :
+  - `admins` (le cœur : la liste des admins signée par ta clé, les droits, ce qui reste valable après un retrait,
+    le journal chaîné), `adminsadmin` (contre le vrai service lancé sur ce poste : la demande d'un admin, son
+    empreinte, l'acceptation avec un profil, une licence signée par l'admin installée chez un client, ses droits
+    refusés par le service, le retrait), `adminsfichiers` (un fichier de 3,5 Mio envoyé par morceaux et repris
+    après une coupure, un lien à usage unique, un message lisible par un seul PC, une version publiée et une plus
+    ancienne refusée, **une sauvegarde restaurée sur un second service vide : les mêmes licences, la même liste des
+    admins, le même journal**), `service_fichiers` (les fichiers et les mises à jour côté Studio), `sessionrelais` (la
+    session par Internet : le code, le relais qui ne lit rien), `adminguiadmins` et `adminguiversions` (les pages
+    de l'Admin), et le service lui-même (`service_worker` : ses essais `npm test` contre `workerd`).
+- **Sous Wine, de bout en bout** : les programmes Windows (l'Admin installé par son installateur, deux IHM Studio
+  côte à côte), le **vrai service** lancé sur ce poste (`workerd`), deux Admin (deux dossiers : Camille, l'admin+
+  avec la clé d'essai de l'éditeur ; Léa, un PC qui devient admin). Journal : `essai-1.44.0-wine.txt` (codes
+  masqués) ; captures : `captures-1.44.0.zip`. Les Studios sont des copies avec la clé d'essai, jamais livrées.
+  - **Léa demande à devenir admin** (son poste en attente, `1440_20`) ; Camille voit sa demande avec **la même
+    empreinte** (`1440_21`, `1440_23` : Ajouter un admin en 3 étapes) et l'accepte avec le profil « Admin LV1 »
+    (4 droits sur 13). Léa reçoit la liste, la clé de synchro, l'archive (le registre).
+  - **Léa signe une licence en ligne ENTERPRISE avec sa clé d'admin** : les deux Studios s'activent avec son code,
+    **« Valide / ENTERPRISE »** (`1440_02`) ; son archive arrive chez Camille.
+  - **Camille publie la version 1.44.1** (deux faux installateurs de 1.44.1 : leur version lue dans le fichier) :
+    le Studio la voit (la notification et la bulle, `1440_05`), **Plus tard** met la pastille en haut (`1440_06`),
+    puis **Télécharger et installer** télécharge, vérifie (signé par l'éditeur, son empreinte), enregistre le projet
+    et lance l'installateur en silencieux avec la relance du Studio sur le projet (le faux installateur a noté :
+    `/SILENT … /RELANCER=…IHM-Studio.exe /RELANCERPROJET=…Armoire_Gaz`).
+  - **Un message avec un fichier, puis l'installateur de l'Admin** envoyés par Camille au PC B : ils arrivent dans
+    ses notifications (le filtre « Avec fichiers », `1440_09`) ; le fichier est **téléchargé et vérifié**.
+  - **La session par Internet** : A démarre (Où : Internet, `1440_07`) et reçoit le code (`1440_08`) ; B, **depuis
+    l'accueil** (sans projet ouvert), choisit « Par Internet » (`1440_10`) et entre (`1440_11`) ; la discussion
+    passe dans les deux sens (`1440_12`). Le relais du service ne voit que des échanges chiffrés.
+  - **Les notifications lues le restent** : Tout marquer comme lu, le projet fermé puis rouvert : 0 non lue (`1440_13`).
+  - **La fenêtre Licence** : une capture de Multi-utilisateur et **sa bulle au survol** (`1440_03`) ; PROFESSIONAL
+    choisie dans Demander ma licence : « 18/21 », ce qu'elle n'a pas **barré** (`1440_04`).
+  - **Le journal des admins** relevé par Camille : chaque action, son admin, sa criticité (l'ajout de Léa et son
+    retrait « Critique », sa licence « Moyenne », la version « Haute »), **« Chaîne vérifiée »** (`1440_25`, `1440_26`).
+  - **La sauvegarde de secours** : réglée avec une phrase de passe (lue dans un fichier, jamais affichée ni
+    écrite), une sauvegarde chiffrée (ni la phrase ni une licence en clair dedans) ; **restaurée sur un second
+    service vide** : 20 tables, 52 lignes remises, puis le poste restauré relié au second service : la même licence (XPG-2026-00440), la même liste des admins (n° 1, Léa), le journal qui continue (n° 8 la sauvegarde, n° 9 la restauration, Critique) ; les mêmes licences, la même liste des admins ; une mauvaise phrase est refusée.
+  - **Camille retire Léa** : sa clé ne peut plus rien faire sur le service (Léa le voit) ; la licence qu'elle a
+    signée reste sur le service (active) ; le journal le note (Critique).
+  - Les pages de l'Admin : Administrateurs (`1440_22`, `1440_32` : Léa retirée), Droits des admins (`1440_24`),
+    Versions (`1440_27`), Sauvegarde de secours (`1440_28`), Service en ligne (`1440_29`), le tableau de bord
+    (`1440_30`), l'Historique (`1440_31`), le poste de Léa admin (`1440_21b`).
+- **Les Studios** : l'installation en silencieux par-dessus la 1.43.0 passe, ta clé d'API est gardée, les programmes
+  installés sont ceux construits (1.44.0), le code laissé par `/CODEFICHIER=` n'est dans aucun journal. Le Studio livré
+  (ton service compilé) s'ouvre (`1440_00`), lancé avec une adresse locale où rien ne répond : **ton service n'a pas
+  été appelé**.
+- **L'Admin** : son installateur, en silencieux par-dessus la 1.42.0 : les programmes identiques à ceux construits,
+  le dossier de ta clé intact (avant, après une mise à jour, après une désinstallation), le menu Démarrer, les
+  fichiers d'un double-clic ; ses pages (`page-1` à `page-7`).
+- Corrigé en route : le texte tronqué coupait un caractère accentué en deux (« Service : non r▯… ») — 18 endroits,
+  Admin et Studios ; les tableaux ne barraient pas ce qui n'est pas dans l'offre ou la licence (seules les listes le
+  faisaient) ; « Léa est retiré » (le message ne s'accorde plus : « n'est plus dans la liste des admins ») ; en console,
+  la synchronisation de l'archive chez l'admin+ refusait une licence signée par un admin ; « LES NOUVEAUTéS » dans la
+  fenêtre de mise à jour ; le détail d'une ligne du journal des admins (« Cle », « Retire » et une date en secondes).
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.44.0.exe` (dans le zip) par-dessus la 1.43.0 (ou l'intermédiaire). Tes
+projets, tes réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.44.0.exe` | `58B0856EEADA752DB4F111857CBE5A5425449DEB5C4037C188F70091DED12F89` | 58 138 794 octets |
+| `API-Studio-1.44.0-portable.zip` | `3263C761EB92B792FCD117E654FA0B5885F7061C209A8ED7D79B6AF0DF56904E` | 218 fichiers |
+| `IHM-Studio-1.44.0-portable.zip` | `B941FCAD0DEB40EC690B85F0E269442B9CA60CA94850EC731D986D9871705D44` | 219 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.44.0-EDITEUR.exe` par-dessus la 1.42.0 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.44.0-EDITEUR.exe` | `E818112B394875F367C89206C9ADB984841E46D9B46EF381248FA56B5F405DF7` | 7 149 366 octets |
 
 ## 4. Limites
 
