@@ -273,9 +273,9 @@ private:
                     std::string line1, line2;
                     if (d_.isPending(i)) {
                         line1 = "Non enregistr\xC3\xA9";
-                        line2 = "sera sign\xC3\xA9 " + e.pc + (e.account.empty() ? std::string{} : kDot + e.account);
+                        line2 = "sera sign\xC3\xA9 " + edits::pcText(e) + (e.account.empty() ? std::string{} : kDot + e.account);
                     } else {
-                        line1 = edits::dateText(e.t).substr(11) + "  " + e.pc + (e.account.empty() ? std::string{} : kDot + e.account);
+                        line1 = edits::dateText(e.t).substr(11) + "  " + edits::pcText(e) + (e.account.empty() ? std::string{} : kDot + e.account);
                     }
                     std::string what;
                     if (e.what == edits::What::Created) what = "Cr\xC3\xA9" "ation";
@@ -287,6 +287,7 @@ private:
                     if (d_.spec_.objects.size() != 1) what = e.name + (what.empty() ? std::string{} : kDot + what);
                     if (!d_.isPending(i)) line2 = what;
                     else line2 = what + kDot + line2;
+                    if (!e.session.empty()) line2 += kDot + "en session \xC2\xAB " + e.session + " \xC2\xBB";   // 1.43.0
                     ctx.r.drawText({list_.x + 10.f, y + 6.f}, fit(line1, kText, list_.w - 20.f), kText, d_.isPending(i) && !sel ? c.warning : ink);
                     ctx.r.drawText({list_.x + 10.f, y + 26.f}, fit(line2, kSmall, list_.w - 20.f), kSmall, muted);
                 }
@@ -456,7 +457,7 @@ void HmiEditHistoryDialog::reload() {
     // en tete : ce qui n'est pas encore enregistre (la vue comparee a son fichier)
     if (const hmi::View* v = spec_.doc->project.view(spec_.view)) {
         const auto saved = folder.empty() ? std::nullopt : edits::savedView(folder, spec_.view);
-        auto pending = edits::compare(saved ? &*saved : nullptr, *v, edits::currentSignature(), spec_.doc->editNotes);
+        auto pending = edits::compare(saved ? &*saved : nullptr, *v, edits::currentSignature(), spec_.doc->editNotes, spec_.doc->editAuthors);
         for (auto& e : pending)
             if (wanted(e)) {
                 all_.push_back(std::move(e));
@@ -619,18 +620,18 @@ std::string HmiEditHistoryDialog::selectedText() const {
 }
 
 std::string HmiEditHistoryDialog::csv() const {
-    std::string s = "Date;PC;Compte;Version;Objet;Type;Sorte;Propri\xC3\xA9t\xC3\xA9;Avant;Apr\xC3\xA8s;Note\n";
+    std::string s = "Date;PC;Compte;Version;Objet;Type;Sorte;Propri\xC3\xA9t\xC3\xA9;Avant;Apr\xC3\xA8s;Note;Poste;Session\n";   // 1.43.0 : Poste, Session
     for (std::size_t i = 0; i < shown_.size(); ++i) {
         const auto& e = all_[shown_[i]];
         const std::string head = csvField(isPending(i) ? std::string("non enregistr\xC3\xA9") : edits::dateText(e.t)) + ";" + csvField(e.pc) + ";"
                                + csvField(e.account) + ";" + csvField(e.version) + ";" + csvField(e.name) + ";" + csvField(kindName(e)) + ";";
         if (e.changes.empty()) {
-            s += head + csvField(std::string(edits::whatLabel(e.what))) + ";;;;" + csvField(e.note) + "\n";
+            s += head + csvField(std::string(edits::whatLabel(e.what))) + ";;;;" + csvField(e.note) + ";" + csvField(e.station) + ";" + csvField(e.session) + "\n";
             continue;
         }
         for (const auto& c : e.changes)
             s += head + csvField(std::string(edits::sortLabel(c.sort))) + ";" + csvField(changeLabel(e, c)) + ";" + csvField(valueText(e, c, true)) + ";"
-               + csvField(valueText(e, c, false)) + ";" + csvField(e.note) + "\n";
+               + csvField(valueText(e, c, false)) + ";" + csvField(e.note) + ";" + csvField(e.station) + ";" + csvField(e.session) + "\n";
     }
     return s;
 }

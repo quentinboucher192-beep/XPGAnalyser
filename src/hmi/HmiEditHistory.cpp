@@ -218,8 +218,25 @@ std::optional<fs::path> viewFile(const std::string& projectFolder, Id view) {
 } // namespace
 
 // ================================================================== la signature ===
+namespace {
+std::string& stationSlot() {
+    static std::string s;
+    return s;
+}
+std::string& sessionSlot() {
+    static std::string s;
+    return s;
+}
+} // namespace
+
+void setLocalStation(std::string station) { stationSlot() = std::move(station); }
+void setCurrentSession(std::string session) { sessionSlot() = std::move(session); }
+std::string localStation() { return stationSlot(); }
+
 Signature currentSignature() {
     Signature s;
+    s.station = stationSlot();
+    s.session = sessionSlot();
     s.t = static_cast<std::int64_t>(std::time(nullptr));
     s.pc = netinfo::computerName();
     for (const char* var : {"USERNAME", "USER", "LOGNAME"})
@@ -290,16 +307,20 @@ std::vector<Change> diff(const Object& a, const Object& b) {
     return out;
 }
 
-std::vector<Entry> compare(const View* before, const View& after, const Signature& sig, const Notes& notes) {
+std::vector<Entry> compare(const View* before, const View& after, const Signature& sig, const Notes& notes, const Authors& authors) {
     std::vector<Entry> out;
     std::map<Id, const Object*> old;
     if (before) for (const auto& o : before->objects) old[o.id] = &o;
     const auto make = [&](const Object& o, What what) {
         Entry e;
+        const auto a = authors.find(o.id);
+        const Signature& who = a != authors.end() ? a->second : sig;   // 1.43.0 : le PC de l'equipier qui l'a modifie
         e.t = sig.t;
-        e.pc = sig.pc;
-        e.account = sig.account;
-        e.version = sig.version;
+        e.pc = who.pc;
+        e.account = who.account;
+        e.version = who.version;
+        e.station = who.station;
+        e.session = who.session;
         e.object = o.id;
         e.name = o.name;
         e.kind = std::string(kindKey(o.kind));
@@ -483,6 +504,8 @@ std::string serialize(const Log& log) {
            + fieldNum("objet", e.object) + field("nom", e.name) + " type=" + (e.kind.empty() ? std::string("-") : e.kind)
            + " quoi=" + std::string(whatKey(e.what));
         if (!e.note.empty()) s += field("note", e.note);
+        if (!e.station.empty()) s += field("poste", e.station);   // 1.43.0
+        if (!e.session.empty()) s += field("session", e.session);
         if (e.what == What::Merged) s += fieldNum("depuis", e.since) + fieldNum("nombre", e.count);
         s += "\n";
         for (const auto& c : e.changes) {
@@ -528,6 +551,8 @@ Log parse(std::string_view text, Id view) {
             if (e.kind == "-") e.kind.clear();
             e.what = whatFromKey(get(r, "quoi"));
             e.note = get(r, "note");
+            e.station = get(r, "poste");   // 1.43.0 (absent avant)
+            e.session = get(r, "session");
             e.since = getNum(r, "depuis");
             e.count = static_cast<int>(std::max(1LL, getNum(r, "nombre", 1)));
             log.entries.push_back(std::move(e));
@@ -571,8 +596,10 @@ std::optional<View> savedView(const std::string& projectFolder, Id view) {
     return std::move(*v);
 }
 
+std::string pcText(const Entry& e) { return e.station.empty() ? e.pc : e.pc + " (" + e.station + ")"; }
+
 core::Result<int> record(const Project& now, const std::string& baseFolder, const std::string& targetFolder,
-                         const Signature& sig, const Notes& notes) {
+                         const Signature& sig, const Notes& notes, const Authors& authors) {
     if (targetFolder.empty()) return 0;
     std::error_code ec;
     const fs::path target = fs::path(targetFolder) / "ihm";
@@ -601,7 +628,7 @@ core::Result<int> record(const Project& now, const std::string& baseFolder, cons
                 old = std::move(*parsed);
             }
         }
-        auto entries = compare(old ? &*old : nullptr, v, sig, notes);
+        auto entries = compare(old ? &*old : nullptr, v, sig, notes, authors);
         if (entries.empty()) continue;
         Log log = load(targetFolder, v.id);
         log.view = v.id;

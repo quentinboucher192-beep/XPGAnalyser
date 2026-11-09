@@ -37734,6 +37734,74 @@ void suivi11226() {
     fs::remove_all(root, ec);
 }
 
+// 1.43.0 : en session, chaque objet signe par le PC de celui qui l'a modifie (son nom, son identifiant stable, la session)
+void historiqueSession143() {
+    std::printf("-- 1.43.0 : l'historique des objets en session (le PC de l'equipier, son poste)\n");
+    namespace edits = hmi::edits;
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "xpg_hmieditor_session143";
+    std::error_code ec;
+    fs::remove_all(root, ec);
+    const std::string folder = (root / "P").string();
+    Project p;
+    View v0 = makeView(p, "Vue_Session");
+    const Id layer = v0.activeLayer;
+    v0.objects.push_back(makeObject(Kind::Damper, p.allocate(), "RG_1", 100, 200, layer));
+    v0.objects.push_back(makeObject(Kind::Text, p.allocate(), "TXT_1", 40, 40, layer));
+    const Id rg = v0.objects[0].id, txt = v0.objects[1].id, vid = v0.id;
+    p.views.push_back(std::move(v0));
+    check(static_cast<bool>(hmi::save(p, folder)), "session : le projet \xC3\xA9" "crit");
+    edits::Signature host;
+    host.t = 1762700000;
+    host.pc = "PC-BUREAU-01";
+    host.account = "camille";
+    host.version = "1.43.0";
+    host.station = "M-1A2B";
+    host.session = "Mise en service";
+    edits::Signature lea = host;
+    lea.pc = "PC-ATELIER-02";
+    lea.account = "lea";
+    lea.station = "M-7F21";
+    edits::Authors authors;
+    authors[rg] = lea;   // Lea a modifie RG_1 ; l'hote, TXT_1
+    p.view(vid)->object(rg)->set("fill", "#EEF1F5");
+    p.view(vid)->object(txt)->name = "TXT_TITRE";
+    auto r = edits::record(p, folder, folder, host, {}, authors);
+    check(r && *r == 2, "session : deux entrees");
+    const auto log = edits::load(folder, vid);
+    const auto* er = edits::lastOf(log, rg);
+    const auto* et = edits::lastOf(log, txt);
+    check(er && er->pc == "PC-ATELIER-02" && er->account == "lea" && er->station == "M-7F21" && er->session == "Mise en service",
+          "RG_1 : signe par le PC de Lea (son poste M-7F21, la session), pas par l'hote qui enregistre");
+    check(et && et->pc == "PC-BUREAU-01" && et->station == "M-1A2B", "TXT_1 : signe par l'hote (il l'a modifie lui-meme)");
+    check(er && edits::pcText(*er) == "PC-ATELIER-02 (M-7F21)", "le PC dit avec son identifiant : PC-ATELIER-02 (M-7F21)");
+    check(edits::serialize(log).find("poste=") != std::string::npos && edits::serialize(log).find("session=") != std::string::npos,
+          "le fichier : poste= et session=");
+    {   // un historique d'avant la 1.43 (sans poste) se relit
+        edits::Log old;
+        old.view = vid;
+        edits::Entry e;
+        e.t = 1760000000;
+        e.pc = "PC-ANCIEN";
+        e.object = rg;
+        e.name = "RG_1";
+        e.kind = "Damper";
+        old.entries.push_back(e);
+        const auto back = edits::parse(edits::serialize(old), vid);
+        check(back.entries.size() == 1 && back.entries[0].station.empty() && back.entries[0].session.empty() &&
+                  edits::pcText(back.entries[0]) == "PC-ANCIEN",
+              "un historique sans poste (avant la 1.43) : relu, le PC seul");
+    }
+    edits::setLocalStation("M-1A2B");
+    edits::setCurrentSession("Mise en service");
+    const auto cur = edits::currentSignature();
+    check(cur.station == "M-1A2B" && cur.session == "Mise en service", "currentSignature : le poste de ce PC et la session en cours");
+    edits::setLocalStation({});
+    edits::setCurrentSession({});
+    check(edits::currentSignature().station.empty() && edits::currentSignature().session.empty(), "hors session : rien");
+    fs::remove_all(root, ec);
+}
+
 void historique11226() {
     std::printf("-- 1.12.26 : la fenetre Historique des objets\n");
     namespace edits = hmi::edits;
@@ -49967,6 +50035,7 @@ int main(int argc, char** argv) {
     plumeCarres11223();                     // 1.12.23 : la plume lit sa formule, les carres du Contenu, selon K
     nouvelleFonction11224();                // 1.12.24 : Nouvelle fonction, la case Retour ouvre le selecteur de types
     historique11226();                      // 1.12.26 : la fenetre Historique des objets (liste, filtres, Revenir, Restaurer, CSV)
+    historiqueSession143();                 // 1.43.0 : en session, le PC de l'equipier
     suivi11226();                           // 1.12.26 : Suivi, Explorateur, infobulle, point orange
     v1101_tableaux_onglet_cache();          // 1.10.1 (chantier B1) : la vue suit les tableaux, onglet cache ou non
     v1101_journal_vider();                  // 1.10.1 (integration I1101) : le Journal se vide ; les nouveautes 1.10.0 -> 1.10.1

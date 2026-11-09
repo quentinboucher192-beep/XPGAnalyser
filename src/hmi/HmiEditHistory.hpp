@@ -56,6 +56,10 @@ enum class What : std::uint8_t { Created, Modified, Deleted, Merged };
 struct Entry {
     std::int64_t        t{0};              // secondes depuis 1970 (UTC)
     std::string         pc, account, version;
+    // 1.43.0 : l'identifiant STABLE du PC qui a fait la modification (<< M-7F21 >>, l'empreinte de sa cle ; vide : avant la
+    // 1.43, ou inconnu) et la session ou elle a ete faite (vide : hors session). En session, chaque objet est signe par le PC
+    // de celui qui l'a modifie, pas par l'hote qui enregistre.
+    std::string         station, session;
     Id                  object{kNoId};
     std::string         name;              // son nom a cet enregistrement
     std::string         kind;              // kindKey : "Damper"
@@ -78,8 +82,18 @@ struct Log {
 struct Signature {
     std::int64_t t{0};
     std::string  pc, account, version;
+    std::string  station, session;   // 1.43.0 : voir Entry
 };
 [[nodiscard]] Signature currentSignature();
+// 1.43.0 : l'identifiant stable de CE PC (<< M-7F21 >>) et la session en cours (vide : aucune) : currentSignature les reprend.
+void setLocalStation(std::string station);
+void setCurrentSession(std::string session);
+[[nodiscard]] std::string localStation();
+
+// 1.43.0 : QUI A MODIFIE CHAQUE OBJET depuis le dernier enregistrement (en session : le PC de l'equipier). Un objet qui y est :
+// son entree est signee par lui (son PC, son compte, sa version, son poste, la session) ; les autres : par la signature de
+// l'enregistrement.
+using Authors = std::map<Id, Signature>;
 
 // Ce que l'editeur a dit d'un objet depuis le dernier enregistrement (d'ou il vient,
 // un retour a une version) : l'entree du prochain enregistrement le reprend.
@@ -93,7 +107,7 @@ inline constexpr std::size_t kKeepPerObject = 100;   // au-dela, les plus ancien
 [[nodiscard]] std::vector<Change> diff(const Object& before, const Object& after);
 // Les entrees qu'un enregistrement ajoute a une vue : une par objet cree, modifie, supprime.
 // `before` : la vue a son dernier enregistrement (nul : elle n'existait pas).
-[[nodiscard]] std::vector<Entry> compare(const View* before, const View& after, const Signature&, const Notes& = {});
+[[nodiscard]] std::vector<Entry> compare(const View* before, const View& after, const Signature&, const Notes& = {}, const Authors& = {});
 
 // ---- revenir --------------------------------------------------------------------
 // Remet un changement dans l'objet : sa valeur d'avant (toBefore) ou d'apres. Faux : il ne s'applique pas.
@@ -119,7 +133,9 @@ void trim(Log&, std::size_t perObject = kKeepPerObject);
 // dans `targetFolder` (le meme, ou celui d'un Enregistrer sous : l'historique y est d'abord copie).
 // Rend le nombre d'entrees ecrites.
 [[nodiscard]] core::Result<int> record(const Project&, const std::string& baseFolder, const std::string& targetFolder,
-                                       const Signature&, const Notes& = {});
+                                       const Signature&, const Notes& = {}, const Authors& = {});
+// 1.43.0 : << PC-ATELIER-02 (M-7F21) >> - le nom du PC et son identifiant stable (s'il est connu).
+[[nodiscard]] std::string pcText(const Entry&);
 
 // ---- pour la fenetre Historique, Proprietes, l'Explorateur ----------------------------
 [[nodiscard]] std::string_view sortLabel(Sort) noexcept;   // "Position et taille"...

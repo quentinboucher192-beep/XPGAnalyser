@@ -32,6 +32,7 @@
 
 #include <cstdint>
 
+#include "HmiEditHistory.hpp"   // 1.43.0 : qui a modifie chaque objet (les sessions)
 #include "HmiHistory.hpp"
 #include "HmiModel.hpp"
 #include "HmiScenarios.hpp"      // lot 13 : les rapports des essais
@@ -68,6 +69,9 @@ public:
     // vient, un retour a une version). `editsRevision` change a chaque enregistrement : les volets relisent.
     std::string               savedFolder;
     std::map<Id, std::string> editNotes;
+    // 1.43.0 : en session, qui a modifie chaque objet depuis le dernier enregistrement (son PC, son poste, la session) :
+    // l'entree de l'objet est signee par lui. Vide hors session (tout est signe par ce PC).
+    edits::Authors            editAuthors;
     int                       editsRevision{0};
     // 1.12.26 : un Enregistrer a ecrit l'historique (les volets relisent : Suivi, Explorateur d'objets).
     const core::SignalPtr<>   editsSaved = core::Signal<>::create();

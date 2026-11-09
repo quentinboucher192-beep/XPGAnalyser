@@ -2138,9 +2138,11 @@ core::Status App::saveHmi(const std::string& folder) {
     // 1.12.25 : l'historique des objets - chaque vue comparee a son dernier enregistrement, avant d'etre
     // ecrite ; une entree signee (ce PC, ce compte) par objet change. Une erreur ici n'empeche pas d'enregistrer.
     if (auto rec = hmi::edits::record(hmi_->project, hmi_->savedFolder.empty() ? folder : hmi_->savedFolder, folder,
-                                      hmi::edits::currentSignature(), hmi_->editNotes);
-        rec && *rec >= 0)
+                                      hmi::edits::currentSignature(), hmi_->editNotes, hmi_->editAuthors);
+        rec && *rec >= 0) {
         hmi_->editNotes.clear();
+        hmi_->editAuthors.clear();   // 1.43.0
+    }
     if (auto st = hmi::save(hmi_->project, folder); !st) return st;
     hmi_->savedFolder = folder;
     ++hmi_->editsRevision;
