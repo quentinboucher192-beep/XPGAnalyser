@@ -989,8 +989,11 @@ int run(const std::vector<std::string>& argv) {
     if ((a.command == "licence-en-ligne" && a.flags.empty() && a.one("--demande").empty()) || a.command == "archive-synchroniser") {
         std::error_code ec;
         const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
-        if (!std::filesystem::exists(u8(publisherKeyPath(folder)), ec) && std::filesystem::exists(u8(adminKeyPath(folder)), ec))
-            return runWorkspaceCommand(a, folder);
+        const bool editor = std::filesystem::exists(u8(publisherKeyPath(folder)), ec);
+        const bool admin = std::filesystem::exists(u8(adminKeyPath(folder)), ec);
+        // archive-synchroniser : toujours comme l'application (la liste des admins : une licence signee par un admin est
+        // recue chez l'admin+ aussi) ; licence-en-ligne : par l'application chez un admin seulement.
+        if ((a.command == "archive-synchroniser" && (editor || admin)) || (!editor && admin)) return runWorkspaceCommand(a, folder);
     }
     if (a.command == "archive-synchroniser") {
         auto key = keyOrFail();

@@ -301,7 +301,7 @@ std::string Client::explain(const Reply& r, const std::string& what) const {
             if (r.code() == "code") return "le service refuse pour " + what + m;
             // 1.44.0 : un admin (docs/ADMINS.md, par. 6)
             if (r.code() == "retire")
-                return "tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins : ta cl\xC3\xA9 (" + key_.keyId() + ") ne peut plus rien faire sur le service (" + what + ")";
+                return "ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 : ta cl\xC3\xA9 (" + key_.keyId() + ") ne peut plus rien faire sur le service (" + what + ")";
             if (r.code() == "droit") return "tes droits d'admin ne permettent pas de " + what + m;
             return "le service ne reconna\xC3\xAEt pas la cl\xC3\xA9 de ce poste (" + key_.keyId() + ") pour " + what +
                    " : sa cl\xC3\xA9 publique doit \xC3\xAAtre dans PUBLISHER_KEYS du Worker (cle-publique.txt du kit, puis npx wrangler deploy)" + m;

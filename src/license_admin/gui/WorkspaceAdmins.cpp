@@ -292,7 +292,7 @@ std::string rightSentence(std::string_view right) {
 }
 const char* kPlusOnly = "r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (le poste qui a la cl\xC3\xA9 de l'\xC3\xA9" "diteur)";
 const char* kPendingWhy = "ta demande pour devenir admin attend l'acceptation de l'admin+";
-const char* kRetiredWhy = "tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins : ta cl\xC3\xA9 ne signe plus rien";
+const char* kRetiredWhy = "ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 : ta cl\xC3\xA9 ne signe plus rien";   // 1.44.0 : sans genre
 
 // La phrase d'un refus, en tete de bouton grise (une majuscule, un point).
 std::string sentence(std::string s) {
@@ -1453,7 +1453,7 @@ OpResult Workspace::retireAdmin(const std::string& keyHex, bool revokeLicencesTo
         r.details.push_back(sync.ok ? "Archive en ligne : les documents re-sign\xC3\xA9s envoy\xC3\xA9s."
                                     : "ATTENTION : l'archive en ligne n'est pas \xC3\xA0 jour (" + sync.why + ") : Synchroniser l'archive.");
     }
-    r.message = name + " est retir\xC3\xA9 de la liste des admins (liste n\xC2\xB0 " + std::to_string(number) + ") : sa cl\xC3\xA9 ne peut plus rien faire sur le service.";
+    r.message = name + " n'est plus dans la liste des admins (liste n\xC2\xB0 " + std::to_string(number) + ") : sa cl\xC3\xA9 ne peut plus rien faire sur le service.";
     r.details.push_back("Son trousseau est effac\xC3\xA9 par le service ; la cl\xC3\xA9 de synchro ne change pas (\xC2\xAB Changer la cl\xC3\xA9 de synchro \xC2\xBB si tu le souhaites).");
     Value d = Value::object();
     d.set("nom", name);

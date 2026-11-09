@@ -742,10 +742,12 @@ private:
             }
         }
         r.fillRect({mid_.x + 1.f, delete_->bounds().y - 12.f, mid_.w - 2.f, 1.f}, c.gridLine);
-        r.drawText({delete_->bounds().right() + 12.f, delete_->bounds().y + 2.f}, fit(r, "ses admins", kF12, cancel_->bounds().x - delete_->bounds().right() - 20.f),
-                   kF12, c.textMuted);
-        r.drawText({delete_->bounds().right() + 12.f, delete_->bounds().y + 18.f},
-                   fit(r, "gardent leurs droits", kF12, cancel_->bounds().x - delete_->bounds().right() - 20.f), kF12, c.textMuted);
+        // 1.44.0 : la note seulement si elle tient (sinon : << s... g... >> ; la fenetre de Supprimer le dit aussi)
+        const float room = cancel_->bounds().x - delete_->bounds().right() - 20.f;
+        if (room >= r.measure("gardent leurs droits", kF12).width) {
+            r.drawText({delete_->bounds().right() + 12.f, delete_->bounds().y + 2.f}, "ses admins", kF12, c.textMuted);
+            r.drawText({delete_->bounds().right() + 12.f, delete_->bounds().y + 18.f}, "gardent leurs droits", kF12, c.textMuted);
+        }
     }
 
     void paintAdmin(const ui::PaintContext& ctx) {

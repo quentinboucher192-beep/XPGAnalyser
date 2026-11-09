@@ -2256,7 +2256,13 @@ void TableView::onPaint(const PaintContext& ctx) {
                 drawMaybeBold(ctx, {tx, r.y + textY}, st.placeholder, font, selected ? c.selectionText : c.textMuted, avail, false);
             else
                 drawMaybeBold(ctx, {tx, r.y + textY}, text, font,
-                              textColourOf(ctx.theme, st, selected), avail, st.bold);
+                              st.locked && !selected ? c.textMuted : textColourOf(ctx.theme, st, selected), avail, st.bold);
+            // 1.44.0 : pas dans l'offre, pas dans la licence - le texte barre, grise (comme les listes et les arbres)
+            if (st.locked && !text.empty()) {
+                const float x1 = tx + std::min(avail, ctx.r.measure(text, font).width);
+                const float sy = std::floor(r.y + rowH * 0.5f) + 0.5f;
+                ctx.r.line({tx - 1.f, sy}, {x1 + 1.f, sy}, selected ? textColourOf(ctx.theme, st, selected) : c.textMuted, 1.f);
+            }
             // Lot 20 : une case refusee au collage - un cadre rouge.
             if (!marks_.empty() && markOf(row, static_cast<int>(col), MarkKind::Refused))
                 ctx.r.strokeRect({x + 1.f, r.y + 1.f, cellW - 2.f, rowH - 2.f}, c.error, 1.5f);

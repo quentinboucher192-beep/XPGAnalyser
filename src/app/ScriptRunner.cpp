@@ -6179,6 +6179,11 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         showNoticesWindow(app_);
         return Step::Yield;
     }
+    // 1.44.0 : maj-fenetre - la fenetre << Mise a jour disponible >> (ses nouveautes, Telecharger et installer, Plus tard).
+    if (cmd == "maj-fenetre") {
+        if (!licence::showUpdateWindow(app_)) fail("maj-fenetre : pas de mise a jour a montrer");
+        return Step::Yield;
+    }
     // 1.44.0 : licence-offre EDITION - Demander ma licence, cette offre choisie (son apercu : ce qu'elle a, ce qu'elle n'a pas).
     if (cmd == "licence-offre") {
         licence::setWantedOffer(arg(1));

@@ -557,7 +557,7 @@ int main(int argc, char** argv) {
     {
         check(click(*pp, "admins.relever") && lastOk(prig), "Relever : " + lastText(prig));
         const std::string t = draw(*pp);
-        check(has(t, "Nina Essai") && has(t, "En attente d'acceptation") && shown(*pp, "admins.verifier.1"), "la demande de Nina : en attente, Verifier et accepter...");
+        check(has(t, "Nina Essai") && has(t, "En attente") && shown(*pp, "admins.verifier.1"), "la demande de Nina : en attente, Verifier et accepter...");
         const std::size_t d0 = prig.dialogs.size();
         check(click(*pp, "admins.verifier.1") && prig.dialogs.size() == d0 + 1, "Verifier et accepter... : le dialogue");
         if (prig.dialogs.size() == d0 + 1) {

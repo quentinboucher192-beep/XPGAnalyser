@@ -1462,7 +1462,7 @@ private:
         std::string lead = "Les PC o\xC3\xB9 l'Admin est install\xC3\xA9 \xC2\xB7 " + count(static_cast<std::size_t>(active), "actif", "actifs");
         if (waiting) lead += ", " + std::to_string(waiting) + " en attente";
         if (gone) lead += ", " + count(static_cast<std::size_t>(gone), "retir\xC3\xA9", "retir\xC3\xA9s");
-        lead += plus ? std::string(" \xC2\xB7 tu es l'admin+") : w.role() == Role::Retired ? std::string(" \xC2\xB7 tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9") : std::string(" \xC2\xB7 tu es admin");
+        lead += plus ? std::string(" \xC2\xB7 tu es l'admin+") : w.role() == Role::Retired ? std::string(" \xC2\xB7 ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9") : std::string(" \xC2\xB7 tu es admin");
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
         else if (!fetched_.problem.empty()) lead += " \xC2\xB7 service : " + fetched_.problem;
         else if (!w.service().ready()) lead += " \xC2\xB7 service pas r\xC3\xA9gl\xC3\xA9 : la liste de ce poste";
@@ -1554,7 +1554,7 @@ private:
             // Etat
             const FontId fs = gfx::semibold(kF12);
             if (a.kind == AdminRow::Kind::Pending) {
-                (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "En attente d'acceptation", fs, rgb(0xC2410C), rgb(0xFFF4E5), 22.f);
+                (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "En attente", fs, rgb(0xC2410C), rgb(0xFFF4E5), 22.f);   // 1.44.0 : tient dans la colonne
             } else if (gone) {
                 (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "Retir\xC3\xA9", fs, c.error, c.error.withAlpha(22), 22.f);
                 r.drawText({colX_[5] - 4.f, l2 + 2.f}, "certificat r\xC3\xA9voqu\xC3\xA9", kF12, c.textMuted);
