@@ -1197,14 +1197,14 @@ void SecurityPage::askEnableBackup() {
     clearSecret(bkPhrase1_);
     clearSecret(bkPhrase2_);
     updateHint();
+    // Ces fonctions sont const (elles relisent le dossier) : le Workspace de la page, son heure aussi.
     launch("R\xC3\xA9glage de la sauvegarde de secours",
-           [folder = ws().folder(), dir = folder, phrase = std::move(phrase)]() mutable {
-               Workspace w(folder);
-               OpResult r = w.configureBackup(dir, phrase);
+           [w = static_cast<const Workspace*>(&ws()), dir = folder, phrase = std::move(phrase)]() mutable {
+               OpResult r = w->configureBackup(dir, phrase);
                wipe(phrase);
                if (r.ok) {   // et la premiere, tout de suite
                    std::string path;
-                   const OpResult n = w.backupNow(&path);
+                   const OpResult n = w->backupNow(&path);
                    r.details.push_back(n.ok ? "Premi\xC3\xA8re sauvegarde : " + path : "La premi\xC3\xA8re sauvegarde n'a pas pu se faire : " + n.message);
                    if (!n.ok) r.ok = n.ok;
                }
@@ -1216,10 +1216,9 @@ void SecurityPage::askEnableBackup() {
 void SecurityPage::askBackupNow() {
     if (refuseIfBusy()) return;
     launch("Sauvegarde de secours",
-           [folder = ws().folder()] {
-               Workspace w(folder);
+           [w = static_cast<const Workspace*>(&ws())] {
                std::string path;
-               OpResult r = w.backupNow(&path);
+               OpResult r = w->backupNow(&path);
                if (r.ok && !path.empty()) r.output = path;
                return r;
            },
@@ -1264,10 +1263,9 @@ void SecurityPage::askFullRestore() {
                                                                  std::string phrase = rsPhrase_->text();
                                                                  clearSecret(rsPhrase_);
                                                                  launch("Restauration compl\xC3\xA8te",
-                                                                        [folder = ws().folder(), path, o, phrase = std::move(phrase)]() mutable {
-                                                                            Workspace w(folder);
+                                                                        [w = static_cast<const Workspace*>(&ws()), path, o, phrase = std::move(phrase)]() mutable {
                                                                             RestoreReport rep;
-                                                                            OpResult r = w.restoreBackup(path, phrase, o, &rep);
+                                                                            OpResult r = w->restoreBackup(path, phrase, o, &rep);
                                                                             wipe(phrase);
                                                                             if (rep.serviceNotEmpty)
                                                                                 r.details.push_back("Le service n'est pas vide : coche \xC2\xAB Remplacer ce qu'il contient \xC2\xBB pour le remplacer.");

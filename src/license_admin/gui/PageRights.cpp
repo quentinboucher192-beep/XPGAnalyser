@@ -298,7 +298,7 @@ protected:
         publish_->setBounds({rx + rw - pw, pfy, pw, 36.f});
         adminCancel_->setBounds({publish_->bounds().x - 8.f - cw2, pfy, cw2, 36.f});
         adminTop_ = right_.y + 176.f;
-        const float avail2 = pfy - 80.f - adminTop_;
+        const float avail2 = pfy - 96.f - adminTop_;
         adminRowH_ = std::clamp(avail2 / 16.f, 20.f, 30.f);
         y = adminTop_;
         for (const char* g : kGroups) {
@@ -811,12 +811,12 @@ private:
                 yy += adminRowH_;
             }
         }
-        const Rect note{x, publish_->bounds().y - 74.f, w, 62.f};
+        const Rect note{x, publish_->bounds().y - 90.f, w, 78.f};
         r.fillRoundedRect(note, c.accent.withAlpha(16), 10.f);
         (void)drawWrapped(r, note.x + 12.f, note.y + 8.f, note.w - 24.f,
                           "En enregistrant, la cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la liste des admins avec ses droits ; le service et les Studios l'ont dans la minute. "
                           "\xC3\x89" "crit dans le journal (Critique).",
-                          kF12, c.accent, 16.f, 3);
+                          kF12, c.accent, 16.f, 4);
     }
 
     // --------------------------------------------------------------------- l'etat

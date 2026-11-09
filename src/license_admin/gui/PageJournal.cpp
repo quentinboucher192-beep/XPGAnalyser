@@ -288,12 +288,12 @@ protected:
         r.drawText({eb.right() + 12.f, eb.y - 3.f}, "Aussi par courriel", gfx::semibold(kF13), c.text);
         r.drawText({eb.right() + 12.f, eb.y + 15.f}, "l'adresse de l'\xC3\xA9" "diteur (Service en ligne \xE2\x80\xBA Courriel) \xC2\xB7 seulement Critique", kF12, c.textMuted);
         // La legende des niveaux, a droite du courriel.
-        float lx = p.x + p.w * 0.5f;
+        float lx = std::max(p.x + p.w * 0.5f - 120.f, eb.right() + 330.f);
         for (adm::Level l : kLevels) {
             const Tint t = levelTint(l);
             const float w = pill(r, lx, eb.y - 2.f, adm::levelLabel(l), gfx::semibold(kF11), t.fg, t.bg, 20.f);
-            r.drawText({lx, eb.y + 21.f}, fit(r, levelCaption(l), kF11, 120.f), kF11, c.textMuted);
-            lx += std::max(w, 120.f) + 8.f;
+            r.drawText({lx, eb.y + 21.f}, fit(r, levelCaption(l), kF11, 150.f), kF11, c.textMuted);
+            lx += std::max(w, 150.f) + 8.f;
         }
         r.fillRect({p.x + 1.f, p.bottom() - 72.f, p.w - 2.f, 1.f}, c.border);
     }

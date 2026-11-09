@@ -966,6 +966,7 @@ public:
             if (syncing_) return;
             if (!sel.empty() && sel.front() < rows_.size()) selectedKey_ = rows_[sel.front()].key;
             showButtons();
+            invalidateLayout();   // la fiche change de boutons (un admin retire : plus de Retirer)
             invalidate();
         });
         refresh();

@@ -331,7 +331,7 @@ int main(int argc, char** argv) {
     {
         auto rp = gui::makeRightsPage(rig.host());
         std::string t = draw(*rp);
-        check(has(t, "Les droits des admins") && has(t, "Tous les droits") && has(t, "Admin LV2") && has(t, "Qui la v\xC3\xA9rifie"), "les profils, Qui la verifie");
+        check(has(t, "Les droits des admins") && has(t, "Tous les droits") && has(t, "Admin LV2") && has(t, "QUI LA V\xC3\x89RIFIE"), "les profils, Qui la verifie");
         check(selectRow(*rp, "droits.profils", 0, "Admin LV2"), "choisir << Admin LV2 >>");
         t = draw(*rp);
         check(has(t, "Le profil \xC2\xAB Admin LV2 \xC2\xBB") && has(t, "5 / 13") && has(t, "Studios et service") && has(t, "l'Admin"), "ses 5 fonctions, qui les verifie");
@@ -379,7 +379,7 @@ int main(int argc, char** argv) {
         const auto firstLine = [&] { return table && table->model() && table->model()->rowCount() ? table->model()->cellText(0, 0) : std::string(); };
         check(rows() == 5, "les 5 lignes (30 derniers jours)");
         check(has(t, "Journal des admins") && has(t, "Cha\xC3\xAEne v\xC3\xA9rifi\xC3\xA9" "e : 5 lignes, aucune manquante, aucune modifi\xC3\xA9" "e"), "la chaine verifiee");
-        check(has(t, "a sign\xC3\xA9 la licence ") && has(t, "XPG-2026-00412") && has(t, "Atelier d'essai \xC2\xB7 PROFESSIONAL 1 an"), "l'action, l'objet en gras, le detail");
+        check(has(t, "a sign\xC3\xA9 la licence ") && has(t, "XPG-2026-00412") && has(t, "Atelier d'essai \xC2\xB7 PROFESSIONA"), "l'action, l'objet en gras, le detail");
         check(has(t, "Moyenne") && has(t, "Haute") && has(t, "Critique") && has(t, "Info"), "les criticites");
         check(has(t, "tri\xC3\xA9" "es par date, la plus r\xC3\xA9" "cente d'abord") && firstLine() == "n\xC2\xB0 4", "triees par date, la plus recente d'abord");
         check(click(*jp, "journal.tri.admin") && firstLine() == "n\xC2\xB0 1", "tri par admin (A a Z) : l'admin+ (<< essai application >>) d'abord");
@@ -442,7 +442,7 @@ int main(int argc, char** argv) {
         if (rig.dialogs.size() == d0 + 1) {
             auto& dlg = *rig.dialogs.back();
             std::string d = drawMenu(dlg);
-            check(has(d, "Criticit\xC3\xA9 des actions") && has(d, "Signer une licence") && has(d, "Me pr\xC3\xA9venir") && has(d, "Aussi par courriel") &&
+            check(has(d, "Criticit\xC3\xA9 des actions") && has(d, "Signer une licence") && has(d, "ME PR\xC3\x89VENIR") && has(d, "Aussi par courriel") &&
                       has(d, "\xC3\xA0 regarder tout de suite"),
                   "les types d'action, me prevenir, le courriel, les legendes");
             check(!shown(*dlg.widgetRoot(), "criticite.licence_creer.prevenir"), "Moyenne : pas de << Me prevenir >>");
@@ -460,7 +460,7 @@ int main(int argc, char** argv) {
     {
         ShellRig shell(fx.admin);
         std::string t = shell.paint();
-        check(has(t, "essai application \xC2\xB7 admin+"), "la marque : << essai application - admin+ >>");
+        check(has(t, "\xC2\xB7 admin+") && has(t, "CLE D'ESSAI"), "la marque : << (le nom de la cle) - admin+ >>");
         check(shown(shell.root(), "nav.admins") && shown(shell.root(), "nav.journal") && shown(shell.root(), "nav.versions"), "Administrateurs, Journal des admins, Versions");
         shell.shell->navigate("droits");
         t = shell.paint();

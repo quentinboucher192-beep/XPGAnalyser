@@ -318,7 +318,7 @@ public:
     [[nodiscard]] bool on() const noexcept { return on_; }
     [[nodiscard]] float wanted() const {
         const FontId fl = gfx::semibold(FontId{13}), fc{12};
-        float w = ui::measureWidth(label_, fl) + 24.f;
+        float w = std::min(kMaxLabel, ui::measureWidth(label_, fl)) + 24.f;
         if (count_ >= 0) w += ui::measureWidth(std::to_string(count_), fc) + 7.f;
         if (!note_.empty()) w += ui::measureWidth(" \xC2\xB7 " + note_, fc);
         if (avatar_) w += 24.f;
@@ -355,8 +355,9 @@ protected:
             kit::avatar(ctx.r, {x - 4.f, r.y + (r.h - 20.f) * 0.5f, 20.f, 20.f}, label_, muted_ ? rgb(0xA3ADBF) : avatarColor_, 10.f);
             x += 20.f;
         }
-        ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(fl)) * 0.5f}, label_, fl, ink);
-        x += ctx.r.measure(label_, fl).width + 7.f;
+        const std::string shownLabel = fit(ctx.r, label_, fl, kMaxLabel);   // un nom tres long (la cle d'essai) : coupe
+        ctx.r.drawText({x, r.y + (r.h - ctx.r.lineHeight(fl)) * 0.5f}, shownLabel, fl, ink);
+        x += ctx.r.measure(shownLabel, fl).width + 7.f;
         if (count_ >= 0) {
             std::string n = std::to_string(count_);
             if (!note_.empty()) n += " \xC2\xB7 " + note_;
@@ -365,6 +366,7 @@ protected:
     }
 
 private:
+    static constexpr float kMaxLabel = 150.f;
     std::string label_, note_;
     int         count_{-1};
     bool        on_{false}, avatar_{false}, tinted_{false}, muted_{false};

@@ -277,6 +277,7 @@ private:
         const bool ready = ws().service().ready();
         const bool busy = host_.busy && host_.busy();
         open_->setEnabled(plus);
+        for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, notes_, important_, cancel_, sign_}) show(wd, panel_);
         open_->setText(panel_ ? std::string("Fermer la publication") : std::string("Publier une version\xE2\x80\xA6"));
         reload_->setEnabled(plus && ready && !fetching_);
         bool ok = false;

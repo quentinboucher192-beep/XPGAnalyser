@@ -390,16 +390,18 @@ protected:
         const FontId fn = gfx::semibold(kF15);
         ctx.r.drawText({logo.right() + 12.f, logo.y + 1.f}, "XPG License Manager", fn, kNightWhite);
         // 1.44.0 : qui est sur ce poste (la maquette : << Camille - admin+ >>) ; sans cle : l'outil de l'editeur.
+        // Un nom trop long (une cle d'essai) se coupe ; le role reste lisible.
         const Workspace& w = shell_.workspace();
-        std::string who = "Admin \xC2\xB7 \xC3\x89" "diteur seulement";
+        std::string name, role;
         switch (w.role()) {
-            case Role::Plus: who = (w.key().name.empty() ? std::string("Toi") : w.key().name) + " \xC2\xB7 admin+"; break;
-            case Role::Admin: who = (w.me() ? w.me()->name : w.adminKey().name) + " \xC2\xB7 admin"; break;
-            case Role::Pending: who = (w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name) + " \xC2\xB7 en attente"; break;
-            case Role::Retired: who = (w.me() ? w.me()->name : w.adminKey().name) + " \xC2\xB7 admin retir\xC3\xA9"; break;
-            case Role::None: break;
+            case Role::Plus: name = w.key().name.empty() ? std::string("Toi") : w.key().name, role = " \xC2\xB7 admin+"; break;
+            case Role::Admin: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin"; break;
+            case Role::Pending: name = w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name, role = " \xC2\xB7 en attente"; break;
+            case Role::Retired: name = w.me() ? w.me()->name : w.adminKey().name, role = " \xC2\xB7 admin retir\xC3\xA9"; break;
+            case Role::None: name = "Admin \xC2\xB7 \xC3\x89" "diteur seulement"; break;
         }
-        ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, fit(ctx.r, who, kF12, b.right() - 14.f - (logo.right() + 12.f)), kF12, kNightMuted);
+        const float room = b.right() - 14.f - (logo.right() + 12.f) - ctx.r.measure(role, kF12).width;
+        ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, fit(ctx.r, name, kF12, room) + role, kF12, kNightMuted);
         const FontId fc = gfx::semibold(FontId{11});
         for (const auto& [y, text] : captions_) ctx.r.drawText({b.x + 24.f, y}, text, fc, kNightFaint);
         if (folder_->visible()) {

@@ -287,7 +287,9 @@ int main(int argc, char** argv) {
         nrig.picks.push_back(backupPath);
         const std::size_t d0 = nrig.dialogs.size();
         check(click(*sp, "securite.restauration") && nrig.dialogs.size() == d0 + 1, "le fichier choisi : ce qu'il contient, une confirmation");
+        menu::MenuManager menus{menu::MenuFactory{}};   // la confirmation de cette page veut un MenuManager
         if (nrig.dialogs.size() == d0 + 1) {
+            nrig.dialogs.back()->attach(&menus);
             const std::string d = drawMenu(*nrig.dialogs.back());
             check(has(d, "Sauvegarde compl\xC3\xA8te du") && has(d, fx.ws->key().id), "la confirmation : la date, la cle de l'editeur");
             check(click(*nrig.dialogs.back()->widgetRoot(), "securite.restauration.confirmation.oui") && lastOk(nrig), "restauree : " + lastText(nrig));
