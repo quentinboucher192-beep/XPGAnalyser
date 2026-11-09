@@ -1853,6 +1853,17 @@ Result sendRequest(const RequestForm& form0) {
     f.message = trim(form0.message);
     f.edition = trim(form0.edition);
     f.email = trim(form0.email);
+    f.option = trim(form0.option);   // 1.42.0 : la demande d'option (oubliee : elle partait comme une demande de licence)
+    f.optionDays = form0.optionDays;
+    f.optionFrom = form0.optionFrom;
+    f.optionLastDay = form0.optionLastDay;
+    f.optionText = trim(form0.optionText);
+    if (!f.option.empty() && (!lic::isFeatureId(f.option) || f.licenseId.empty() || f.optionDays < -1 || f.optionDays > 3660 ||
+                              (f.optionDays < 0 && !f.optionLastDay))) {
+        res.message = "La demande d'option n'est pas compl\xC3\xA8te (l'option, ta licence, sa dur\xC3\xA9" "e ou ses dates) : rien n'a \xC3\xA9t\xC3\xA9 envoy\xC3\xA9.";
+        return res;
+    }
+    if (f.optionText.size() > 160) f.optionText.resize(160);
     if (f.customer.empty()) {
         res.message = "Indique le nom de ta soci\xC3\xA9t\xC3\xA9 (ou le tien) : l'\xC3\xA9" "diteur en a besoin pour \xC3\xA9tablir la licence.";
         return res;

@@ -1270,7 +1270,7 @@ int daysLeft(std::int64_t now, std::int64_t until) { return until > now ? static
 // ------------------------------------------------------------------ Options
 OptionsPanel::OptionsPanel(LicenceBody& body, App& app) : ui::Widget("licence.options"), body_(body), app_(app) {
     table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.options.catalogue")));
-    table_->setColumns({{"Option", 190.f}, {"Ce qu'elle ouvre", 230.f}, {"Prix (HT)", 200.f}, {"", 130.f}});
+    table_->setColumns({{"Option", 170.f}, {"Ce qu'elle ouvre", 180.f}, {"Prix (HT)", 330.f}, {"", 120.f}});
     table_->setSelectionMode(ui::SelectionMode::Single);
     duration_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>("licence.options.duree")));
     start_ = &static_cast<ui::DropDown&>(addChild(std::make_unique<ui::DropDown>("licence.options.debut")));

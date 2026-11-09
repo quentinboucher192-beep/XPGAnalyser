@@ -885,6 +885,36 @@ int main(int argc, char** argv) {
         check(!v.accepted && has(v.title, "refus\xC3\xA9" "e") && has(v.text, no.message) && v.tab == app::licence::kTabRequest && has(v.confirm, "Nouvelle demande"),
               "la fenetre du refus : la raison, une nouvelle demande");
 
+        // 1.42.0 : une demande d'OPTION pour la licence de ce PC (Licence > Options) : l'option part dans le sceau
+        {
+            ls::RequestForm o;
+            o.customer = "Client d'essai Industrie";
+            o.licenseId = "XPG-2026-00501";
+            o.option = "ia_avancee";
+            o.optionDays = 30;
+            o.optionText = "Assistant IA avanc\xC3\xA9, 1 mois";
+            o.message = "Pour la mise en service (essai)";
+            ls::RequestForm incomplete = o;
+            incomplete.optionDays = -1;   // des dates sans fin
+            r = keep(ls::sendRequest(incomplete));
+            check(!r.ok && has(r.message, "pas compl\xC3\xA8te"), "1.42.0 : une demande d'option incomplete : rien ne part (" + r.message + ")");
+            r = keep(ls::sendRequest(o));
+            rec = record();
+            check(r.ok && ls::pending(rec) && rec.option == "ia_avancee" && has(rec.optionText, "1 mois") && has(r.message, "option"),
+                  "1.42.0 : la demande d'option part, le releve la garde (" + r.message + ")");
+            list = http("GET", "/admin/demandes", "", true);
+            sealed.clear();
+            if (const json::Value* d = list.v.find("demandes"); d && d->isArray())
+                for (const auto& x : d->items())
+                    if (static_cast<std::uint64_t>(x.num("numero")) == rec.number) sealed = x.str("scelle");
+            lgw::OnlineRequest oq;
+            check(lgw::openWith(*g_editor, sealed, plain, &why) && lgw::parseOnlineRequest(plain, oq, &why) && oq.option == "ia_avancee" &&
+                      oq.optionDays == 30 && oq.optionFrom == 0,
+                  "l'editeur lit l'option demandee, sa duree (" + why + ")");
+            r = keep(ls::cancelRequest());
+            check(r.ok && !ls::pending(record()), "annulee (une seule demande a la fois)");
+        }
+
         // 1.37.0 : l'edition choisie (la boutique) et le courriel partent avec la demande.
         ls::RequestForm f3 = f;
         f3.edition = "PROFESSIONAL";

@@ -288,8 +288,8 @@ std::vector<std::string> changesOf(const lic::Registry& a, const lic::Registry& 
         if (o->retired != e.retired) what.push_back(e.retired ? "retir\xC3\xA9" "e" : "remise en service");
         if (o->saleFrom != e.saleFrom || o->saleUntil != e.saleUntil)   // 1.42.0 : une offre temporaire
             what.push_back(!e.temporary() ? std::string("en vente toujours")
-                                          : "en vente " + (e.saleFrom ? "du " + lic::isoDate(e.saleFrom) : std::string()) +
-                                                (e.saleUntil ? " au " + lic::isoDate(e.saleUntil - lic::kDay) : std::string(" sans fin")));
+                                          : "en vente " + (e.saleFrom ? "du " + dateFr(e.saleFrom) : std::string()) +
+                                                (e.saleUntil ? " au " + dateFr(e.saleUntil - lic::kDay) : std::string(" sans fin")));
         if (!what.empty()) out.push_back("\xC3\xA9" "dition " + e.id + " : " + join(what, ", "));
     }
     for (const auto& o : a.editions)   // 1.42.0 : une offre supprimee

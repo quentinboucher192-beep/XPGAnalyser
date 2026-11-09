@@ -25,6 +25,7 @@
 //    --taper ID=TEXTE       (repetable) ecrire dans ce champ du menu du dessus
 //    --choisir ID=N         (repetable) choisir la ligne N (1 : la premiere) de ce tableau ou de
 //                           cette liste deroulante du menu du dessus
+//    --attendre S           (repetable) 1.42.0 : une pause de S secondes avant l'action suivante
 //    --glisser F            (repetable) glisser ce fichier sur la fenetre (plusieurs --glisser
 //                           qui se suivent : un seul geste)
 //                           (les actions dans l'ordre de la ligne de commande, une toutes les 0,3 s)
@@ -158,7 +159,7 @@ bool open(SDL_Window* window, const ui::FilePick& pick, std::function<void(std::
 
 // ---- la ligne de commande ----
 struct Action {
-    enum class Kind : std::uint8_t { Click, Type, Drop, Choose } kind{Kind::Click};
+    enum class Kind : std::uint8_t { Click, Type, Drop, Choose, Wait } kind{Kind::Click};   // 1.42.0 : Wait (--attendre S)
     std::string id, text;   // Drop : `id` est le fichier
 };
 
@@ -272,6 +273,15 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
                 return false;
             }
             o.actions.push_back({Action::Kind::Choose, t.substr(0, eq), std::to_string(n)});
+        } else if (a == "--attendre") {   // 1.42.0 : une pause entre deux actions (un releve a l'ouverture...)
+            if (!more) return need("les secondes");
+            const std::string t = args[++i];
+            const double sec = std::atof(t.c_str());
+            if (!(sec > 0.0) || sec > 600.0) {
+                why = "--attendre : " + t + " (attendu : des secondes, de 0,1 \xC3\xA0 600)";
+                return false;
+            }
+            o.actions.push_back({Action::Kind::Wait, {}, t});
         } else if (a == "--glisser") {
             if (!more) return need("le fichier");
             o.actions.push_back({Action::Kind::Drop, args[++i], {}});
@@ -517,16 +527,20 @@ int main(int argc, char** argv) {
             menus.Update(fc);
             renderer->beginFrame(theme.color.windowBg);
             menus.Render(*renderer, fc);
+            double pause = 0.0;   // 1.42.0 : --attendre
             if (nextAction < o.actions.size() && time >= nextActionAt) {
                 if (o.actions[nextAction].kind == Action::Kind::Drop) {
                     // Les --glisser qui se suivent : un seul geste, comme dans l'Explorateur.
                     while (nextAction < o.actions.size() && o.actions[nextAction].kind == Action::Kind::Drop) drops.push_back(o.actions[nextAction++].id);
                     deliverDrops();
+                } else if (o.actions[nextAction].kind == Action::Kind::Wait) {
+                    pause = std::atof(o.actions[nextAction++].text.c_str());
                 } else {
                     perform(menus, o.actions[nextAction++]);
                 }
-                nextActionAt = time + 0.3;
-                if (nextAction == o.actions.size()) captureAt = time + o.after;
+                nextActionAt = time + (pause > 0.0 ? pause : 0.3);
+                if (nextAction == o.actions.size()) captureAt = nextActionAt - (pause > 0.0 ? 0.0 : 0.3) + o.after;
+                pause = 0.0;
             }
             if (!o.capture.empty() && !captured && captureAt >= 0.0 && time >= captureAt) {
                 captured = true;

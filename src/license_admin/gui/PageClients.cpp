@@ -431,14 +431,20 @@ private:
             cl.expanded = isOpen(ck);
             Seconds lastEnd = 0;
             bool forever = false;
+            int pcsOf = 0;   // 1.42.0 : les PC lies, et ceux actives en ligne (le releve du service)
             for (const auto& id : c.licenceIds)
                 if (const LicenceEntry* l = ws().licence(id); l && Workspace::inForce(*l)) {
                     if (!l->licence.expiresAt) forever = true;
                     lastEnd = std::max(lastEnd, l->licence.expiresAt);
+                    if (Workspace::isOnlineLicence(l->licence)) {
+                        if (const auto* on = ws().service().snapshot.licence(id)) pcsOf += on->activeCount();
+                    } else {
+                        pcsOf += static_cast<int>(l->licence.devices.size());
+                    }
                 }
             const std::string state = c.activeLicences > 0 ? "active" : std::string("plus rien en cours");
             cl.cells = {c.name, count(c.licenceIds.size(), "licence", "licences") + " \xC2\xB7 " + state,
-                        forever ? std::string("sans fin") : (lastEnd ? dateFr(lastEnd) : std::string()), std::to_string(c.devices), dateFr(c.lastActivity)};
+                        forever ? std::string("sans fin") : (lastEnd ? dateFr(lastEnd) : std::string()), std::to_string(std::max(pcsOf, c.devices)), dateFr(c.lastActivity)};
             cl.tone = c.activeLicences > 0 ? 0 : 4;
             if (c.pendingRequests > 0) {
                 cl.badge = count(static_cast<std::size_t>(c.pendingRequests), "demande", "demandes");

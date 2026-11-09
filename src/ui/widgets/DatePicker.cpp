@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 
 namespace ui {
@@ -132,9 +133,30 @@ SizeHint DatePicker::sizeHint() const {
     return h;
 }
 
+// Les raccourcis, ligne par ligne (une ligne qui deborde passe a la suivante) : la position de chacun.
+static std::vector<gfx::Rect> chipLayout(const std::vector<DatePicker::Shortcut>& shortcuts, float x0, float y0, float width, float chipH, float gap,
+                                         gfx::FontId font) {
+    std::vector<gfx::Rect> out;
+    float x = x0, y = y0;
+    for (const auto& s : shortcuts) {
+        const float w = measureWidth(s.label, font) + 16.f;
+        if (x > x0 && x + w > x0 + width + 0.5f) {
+            x = x0;
+            y += chipH + gap;
+        }
+        out.push_back({x, y, w, chipH});
+        x += w + gap;
+    }
+    return out;
+}
+
 float DatePicker::footerHeight() const {
     float h = 0.f;
-    if (!shortcuts_.empty()) h += kChipH + 10.f + 1.f;   // la ligne des raccourcis et son trait
+    if (!shortcuts_.empty()) {   // les lignes des raccourcis et leur trait
+        const auto rows = chipLayout(shortcuts_, 0.f, 0.f, kPopupW - 2.f * kPad, kChipH, kChipGap, kSmall);
+        const float last = rows.empty() ? 0.f : rows.back().bottom();
+        h += last + 10.f + 1.f;
+    }
     if (clearable_) h += kChipH + 8.f;
     return h;
 }
@@ -197,14 +219,8 @@ DatePicker::Seconds DatePicker::dayAt(gfx::Point p) const {
 gfx::Rect DatePicker::shortcutRect(std::size_t i) const {
     if (i >= shortcuts_.size()) return {};
     const gfx::Rect g = gridRect();
-    float x = g.x;
-    const float y = g.bottom() + 6.f + 11.f;
-    for (std::size_t k = 0; k < shortcuts_.size(); ++k) {
-        const float w = measureWidth(shortcuts_[k].label, kSmall) + 16.f;
-        if (k == i) return {x, y, w, kChipH};
-        x += w + kChipGap;
-    }
-    return {};
+    const auto rows = chipLayout(shortcuts_, g.x, g.bottom() + 6.f + 11.f, g.w, kChipH, kChipGap, kSmall);
+    return rows[i];
 }
 
 gfx::Rect DatePicker::clearRect() const {
@@ -275,6 +291,18 @@ void DatePicker::onPaint(const PaintContext& ctx) {
     const std::string text = fieldText();
     float room = r.w - 34.f - 22.f;
     std::string shown = text;
+    if (day_ && measureWidth(shown, kFont) > room) {   // 1.42.0 : plus court plutot que coupe - << 10/11/2026 >>, << 10/11/26 >>, << 10/11 >>
+        int y = 0, m = 0, d = 0;
+        civilFromDay(day_, y, m, d);
+        char buf[3][16];
+        std::snprintf(buf[0], sizeof buf[0], "%02d/%02d/%04d", d, m, y);
+        std::snprintf(buf[1], sizeof buf[1], "%02d/%02d/%02d", d, m, y % 100);
+        std::snprintf(buf[2], sizeof buf[2], "%02d/%02d", d, m);
+        for (const char* v : {buf[0], buf[1], buf[2]}) {
+            shown = v;
+            if (measureWidth(shown, kFont) <= room) break;
+        }
+    }
     if (measureWidth(shown, kFont) > room) shown = shown.substr(0, ctx.r.fitCharacters(shown, kFont, std::max(0.f, room - 12.f))) + "...";
     ctx.r.drawText({r.x + 32.f, r.y + (r.h - lh) * 0.5f}, shown, kFont, !enabled() ? c.textDisabled : day_ ? c.text : c.textMuted);
     const float cx = r.right() - 13.f, cy = r.y + r.h * 0.5f;
@@ -350,7 +378,6 @@ void DatePicker::onPaintOverlay(const PaintContext& ctx) {
         ctx.r.fillRect({p.x + kPad, g.bottom() + 6.f, p.w - 2.f * kPad, 1.f}, c.border);
         for (std::size_t i = 0; i < shortcuts_.size(); ++i) {
             const gfx::Rect cr = shortcutRect(i);
-            if (cr.right() > p.right() - kPad + 0.5f) break;   // ce qui ne tient pas : pas montre
             const bool on = day_ && shortcutDay(i) == day_;
             shapes::fillFramedRect(ctx.r, cr, on ? c.accent.withAlpha(30) : c.panelBg, on ? c.accent.withAlpha(90) : c.border, kChipH * 0.5f);
             ctx.r.drawText({cr.x + 8.f, cr.y + (cr.h - lhs) * 0.5f}, shortcuts_[i].label, kSmall, on ? c.accent : c.text);
