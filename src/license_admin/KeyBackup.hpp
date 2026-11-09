@@ -54,4 +54,14 @@ bool checkKeyBackup(std::string_view backup, std::string_view phrase, std::strin
 [[nodiscard]] std::unique_ptr<licensing::SigningKey> restoreKeyBackup(const std::string& folder, std::string_view backup, std::string_view phrase,
                                                                       std::string* why);
 
+// ---- 1.44.0 : LA SAUVEGARDE COMPLETE (docs/ADMINS.md, par. 9 ; gui/WorkspaceVersions.cpp) ----
+//  La sauvegarde de chaque jour se fait sans retaper la phrase : la cle de l'editeur y est mise telle quelle (la meme
+//  charge utile que le .xpgcle : format, nom, essai, publique, secrete), DANS le contenu chiffre par la cle derivee de la
+//  phrase - jamais ecrite en clair ailleurs. `json` : a effacer (crypto::wipe) des qu'il a servi.
+bool keyBackupPayload(const licensing::SigningKey& key, std::string& json, std::string* why);
+// La relire (la paire verifiee : la secrete porte la publique et signe pour elle) : son identifiant et son nom.
+bool checkKeyBackupPayload(std::string_view json, std::string& keyId, std::string& name, std::string* why);
+// L'ecrire dans `folder` (le fichier de la cle de l'editeur, protegee pour CE compte) ; une cle deja la : refuse.
+[[nodiscard]] std::unique_ptr<licensing::SigningKey> restoreKeyBackupPayload(const std::string& folder, std::string_view json, std::string* why);
+
 } // namespace license_admin

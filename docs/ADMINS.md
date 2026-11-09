@@ -188,7 +188,8 @@ message, 30 jours.
 `PUT /admin/messages` (admin+) `{"poste":"<deviceId>","bloc":"<bloc message>"}` ; le Studio relève
 `GET /v1/messages?depuis=N` (signé par la clé du PC) : ses messages, numérotés par le service. Le bloc (genre `message`,
 signé par la clé de l'éditeur) : `{"format":1,"poste":"<deviceId>","titre","de","emis","scelle":"<base64>"}` ; le scellé
-(pour la clé du PC) : `{"texte","fichiers":[{"id","nom","taille","sha256","version","jeton"}],"action":"admin"}`.
+(pour la clé du PC) : `{"texte","fichiers":[{"id","nom","taille","sha256","version","jeton"}],"action":"admin"}`. Le
+`jeton` d'un fichier joint vaut 48 h au plus (`POST /admin/fichiers/jeton`) : le Studio le télécharge dès le relevé.
 
 ### Les versions
 
@@ -248,22 +249,31 @@ l'éditeur choisit et tape lui-même** (Argon2id) ; les lignes d'en-tête sont l
 chaque jour sans retaper la phrase, la clé dérivée (et son sel) est gardée sur le PC de l'admin+, protégée par DPAPI
 (`sauvegarde.cle`) ; ailleurs, la phrase suffit (le sel est dans l'en-tête).
 
-Le contenu (JSON) : `{"format":1, "service":{"manifeste":…, "tables":{"<table>":[lignes…]}}, "poste":{"<chemin
-relatif>":"<base64>"…}, "cle_editeur":"<la sauvegarde .xpgcle de la clé, chiffrée par la même phrase>"}` :
+Le contenu (JSON) : `{"format":1, "cree":…, "logiciel":…, "service_url":…, "service":{"manifeste":…, "tables":{"<table>":[lignes…]}},
+"poste":{"<chemin relatif>":"<base64>"…}, "cle_editeur":{"format":"xpg-sauvegarde-cle/1","nom","essai","publique","secrete"},
+"cle_synchro":"XPGS1-…", "codes":{"<licence>":"<code>"}}` (1.44.0, tel qu'écrit par l'Admin : la sauvegarde de chaque
+jour se fait sans la phrase, la clé de l'éditeur y est donc mise telle quelle — la même charge utile que le `.xpgcle` —
+**dans** le contenu chiffré par la clé tirée de la phrase ; jamais ailleurs en clair) :
 - **le service** : tout ce que rend `GET /admin/sauvegarde` (table par table, page par page, les lignes telles quelles :
   la clé du service et son certificat, les licences, les PC, les demandes, la liste des admins, le trousseau, le
   journal, les messages, les versions et le manifeste des fichiers — pas leurs octets, ni les compteurs anti-abus) ;
 - **le dossier du poste** : l'archive, les profils, la criticité, les invitations, `service.json`, `activations.jsonl`,
   les listes des admins vues, le journal vérifié — pas les clés DPAPI de ce PC (`cle-synchro.cle` y est sous forme
   scellée par la phrase) ;
-- **la clé de l'éditeur**, chiffrée par la même phrase.
+- **la clé de l'éditeur**, la clé de synchro et les codes d'activation gardés sur le poste (dans le contenu chiffré) ;
+  le mot de passe du mail n'y est pas (à retaper).
+
+Les lignes du service ne sont jamais relues ni réécrites par l'Admin : le texte JSON de chaque ligne passe tel quel de
+`GET /admin/sauvegarde` à `POST /admin/restauration/lot` (des lots de 2 Mio au plus ; une ligne plus grosse part seule).
 
 **Restaurer** (« Restaurer une sauvegarde… », dans un Admin neuf, ou Paramètres de sécurité) : le fichier, la phrase ;
 le dossier du poste revient, la clé de l'éditeur est réécrite pour CE compte (DPAPI). Option **« Remettre aussi le
 service »** : l'adresse du service à remplir (un nouveau déploiement : un autre compte Cloudflare, ou le même programme
 hébergé ailleurs — `outils/service/`), puis `POST /admin/restauration/debut`, `…/lot` (table par table), `…/fin` : il
 retrouve **la même clé et le même certificat**, les Studios le reconnaissent. Les installateurs des versions publiées
-ne sont pas dans la sauvegarde (trop gros) : la page Versions les redemande (`fichiers_a_renvoyer`).
+ne sont pas dans la sauvegarde (trop gros) : la page Versions les redemande (`fichiers_a_renvoyer`). Restaurer à une
+autre adresse que celle de la sauvegarde : le certificat de la même clé de service est signé de nouveau pour elle. Le poste
+de l'admin+ intact peut ne remettre **que le service** (son dossier, plus récent que la sauvegarde, ne recule pas).
 
 ## 10. Les adresses de secours
 

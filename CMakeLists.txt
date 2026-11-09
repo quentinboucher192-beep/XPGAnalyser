@@ -190,10 +190,10 @@ endif()
 # service (license_admin/ArchiveSync) passent par le transport HTTPS du systeme, celui de l'Assistant IA
 # (app/ai/AiHttp.cpp, sans rien d'autre de l'application) : WinHTTP sous Windows, libcurl chargee a la demande ailleurs.
 # 1.37.0 : + license_admin/Mail (le courriel de l'editeur par SMTP, TLS mbedTLS ; crypt32 : le magasin ROOT de Windows).
-add_executable(xpg_license_admin src/license_admin/AdminMain.cpp src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp
-                                 src/license_admin/KeyBackup.cpp src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp
-                                 src/license_admin/Mail.cpp)
-target_link_libraries(xpg_license_admin PRIVATE xpg_licensing)
+# 1.44.0 : la console relie xpg_admin_core (plus bas) : les memes sources, et le Workspace (les commandes admin-*, fichier-*,
+# version-*, sauvegarde-* et restaurer passent par lui, comme l'application).
+add_executable(xpg_license_admin src/license_admin/AdminMain.cpp)
+target_link_libraries(xpg_license_admin PRIVATE xpg_admin_core xpg_licensing)
 set_target_properties(xpg_license_admin PROPERTIES OUTPUT_NAME XPG-License-Admin)
 if(NOT WIN32)
     target_link_libraries(xpg_license_admin PRIVATE ${CMAKE_DL_LIBS})
@@ -331,7 +331,8 @@ endif()
 add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/ArchiveSync.cpp src/license_admin/KeyBackup.cpp
                                   src/license_admin/ServiceClient.cpp src/app/ai/AiHttp.cpp src/license_admin/gui/Workspace.cpp
                                   src/license_admin/Mail.cpp   # 1.37.0 : + Mail (le courriel de l'editeur)
-                                  src/license_admin/gui/WorkspaceAdmins.cpp)   # 1.44.0 : plusieurs admins (le role, les droits, le journal)
+                                  src/license_admin/gui/WorkspaceAdmins.cpp    # 1.44.0 : plusieurs admins (le role, les droits, le journal)
+                                  src/license_admin/gui/WorkspaceVersions.cpp)  # 1.44.0 : fichiers, messages, versions, sauvegarde complete
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -339,7 +340,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
@@ -783,6 +784,16 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(session_test tests/session_test.cpp)              # 1.43.0 : les sessions (protocole, miroir, lien)
     xpg_target_link_libraries(session_test PRIVATE xpg_session)
+    # 1.44.0 : les sessions par Internet (le relais, chiffre de bout en bout) : un relais en memoire, puis le VRAI service sur ce
+    # poste (workerd ; SAUTE sans Node.js ni wrangler) par le transport HTTP des Studios (app/SessionRelayHttp, app/ai/AiHttp)
+    xpg_add_test_executable(session_relay_test tests/session_relay_test.cpp src/app/SessionRelayHttp.cpp src/app/ai/AiHttp.cpp)
+    xpg_target_link_libraries(session_relay_test PRIVATE xpg_session xpg_licensing)
+    if(TARGET session_relay_test AND NOT WIN32)
+        target_link_libraries(session_relay_test PRIVATE ${CMAKE_DL_LIBS})
+    endif()
+    if(TARGET session_relay_test AND WIN32)
+        target_link_libraries(session_relay_test PRIVATE winhttp)
+    endif()
     xpg_add_test_executable(deploy_crypto_test tests/deploy_crypto_test.cpp)  # 1.28.0 : libsodium et mbedTLS integres
     xpg_target_link_libraries(deploy_crypto_test PRIVATE xpg_deploy)
     xpg_add_test_executable(deploy_ui_test tests/deploy_ui_test.cpp)          # 1.28.0 : le volet Deploiement reseau et un vrai agent
@@ -1143,6 +1154,14 @@ if(XPG_BUILD_TESTS)
     if(TEST adminsadmin)
         set_tests_properties(adminsadmin PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
     endif()
+    # 1.44.0 : les fichiers, les messages a un PC, les versions, les adresses de secours, la sauvegarde complete et sa
+    # restauration dans un SECOND service neuf (WorkspaceVersions.cpp), contre le VRAI Worker (SAUTE sans Node.js ni wrangler)
+    xpg_add_test_executable(admins_fichiers_test tests/admins_fichiers_test.cpp)
+    xpg_target_link_libraries(admins_fichiers_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminsfichiers COMMAND admins_fichiers_test ${CMAKE_SOURCE_DIR})
+    if(TEST adminsfichiers)
+        set_tests_properties(adminsfichiers PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 400)
+    endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
     # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
@@ -1274,6 +1293,10 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME session      COMMAND session_test)                     # 1.43.0 : les sessions (vraies sockets sur la boucle locale)
+    xpg_add_test(NAME sessionrelais COMMAND session_relay_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.44.0 : les sessions par Internet (le relais)
+    if(TEST sessionrelais)
+        set_tests_properties(sessionrelais PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     xpg_add_test(NAME deploynet    COMMAND deploy_net_test)                  # 1.28.0 : l'agent et le client sur la boucle locale (vraies sockets, vrai TLS)
     xpg_add_test(NAME deploypackage COMMAND deploy_package_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # 1.28.0 : le paquet signe, ses refus, la cle d'editeur
     xpg_add_test(NAME deployinstall COMMAND deploy_install_test)            # 1.29.0 : envoi par blocs et reprise, installation, poste lance/arrete, retour en arriere

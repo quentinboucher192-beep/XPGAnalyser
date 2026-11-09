@@ -50,7 +50,34 @@ public:
         bool        online;   // la vente en ligne (pas encore) : grisee, la page explique
     };
     [[nodiscard]] static const std::vector<NavEntry>& entries();
+    // 1.44.0 : une entree du menu, ou une SOUS-PAGE (<< droits >> : Administrateurs > Droits) - pas dans le menu, mais on
+    // y va (navigate, --page) ; le menu montre alors sa page parente choisie.
     [[nodiscard]] static const NavEntry* entry(const std::string& pageId);
+    [[nodiscard]] static const std::vector<NavEntry>& subPages();
+    [[nodiscard]] static std::string parentOf(const std::string& pageId);   // "" : une entree du menu
+    // 1.44.0 : les pages de l'admin+ seul (le journal des admins, les droits) : un autre role ne les voit pas dans le menu.
+    [[nodiscard]] static bool plusOnly(const std::string& pageId);
+    [[nodiscard]] bool pageAllowed(const std::string& pageId) const;
+
+    // 1.44.0 : UNE ALERTE EN DIRECT (planche 04, en bas a gauche) : une ligne du journal des admins dont la criticite dit
+    // << Me prevenir tout de suite >>, relevee par le regard ; montree meme quand la page n'est pas ouverte.
+    struct Toast {
+        std::uint64_t number{0};   // la ligne du journal
+        std::string   title;       // << Critique : Hugo a revoque XPG-2026-00377 >>
+        std::string   line;        // << a l'instant - PORTABLE-HUGO - Brasserie du Nord >>
+        int           level{0};    // licensing::admins::Level
+        double        shownAt{0};  // steady, secondes
+    };
+    [[nodiscard]] const std::vector<Toast>& toasts() const noexcept { return toasts_; }
+    void dismissToasts();
+    void openToast();   // << Voir >> : le journal, la ligne depliee
+    // Les alertes pas encore vues (le nombre du menu, << Journal des admins >>) ; le journal ouvert les remet a zero.
+    [[nodiscard]] int unseenAlerts() const noexcept { return unseenAlerts_; }
+    // Les demandes d'admin en attente (le nombre du menu, << Administrateurs >> ; l'admin+, d'apres le regard).
+    [[nodiscard]] int pendingAdminRequests() const noexcept { return pendingAdmins_; }
+    // Les essais : faire comme le regard quand il a releve de nouvelles lignes (les alertes -> les toasts).
+    void takeAlerts();
+    static constexpr double kToastSeconds = 30.0;
 
     // Une ligne du journal de la seance : un resultat (report) ou un message (flash).
     struct LogLine {
@@ -74,6 +101,8 @@ public:
     void report(const OpResult& r);
     void flash(const std::string& text, Tone tone);
     bool runSlow(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done);
+    // 1.44.0 : un travail lent sans bruit (ShellHost::runQuiet) : rien au journal de la seance, pas << occupe >>.
+    bool runQuiet(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done);
     // 1.40.0 : occupe POUR TOI - un travail que tu as lance, ou qui attend. Le regard en direct (un appel court, sans
     // bruit) n'occupe pas : un travail lance pendant qu'il tourne attend sa fin (une file d'une place) et part seul.
     [[nodiscard]] bool busy() const noexcept { return (bg_.running() && !quietSlow_) || queued_.has_value(); }
@@ -109,6 +138,9 @@ public:
     // deposee : les licences (ou les demandes) sont relues seules, les pages suivent, et un avis dit ce qui a change
     // (<< Atelier Meyer a libere le PC ... >>). Un service d'avant la 1.40.0 (sans /admin/etat) : les licences sont
     // relues toutes les 30 secondes. Sans bruit : la premiere panne est dite une fois. Vrai : un regard est parti.
+    // 1.44.0 : pour l'admin+ ET pour un admin (Workspace::signer, plus seulement la cle de l'editeur) ; apres l'etat, la
+    // liste des admins et le journal (Workspace::refreshAdminState) : un droit change, une ligne << Me prevenir >> (un
+    // toast) ; EN ATTENTE (pas encore d'acces a /admin/etat) : la demande d'admin, puis, acceptee, l'archive recue.
     bool autoWatch();
     // Relire les licences en ligne sans bruit, et dire ce qui a change depuis le dernier releve (les essais l'appellent).
     bool autoRefreshLicences();
@@ -178,6 +210,13 @@ private:
     bool                       wantLicences_{false}, wantRequests_{false};   // a relire des que possible
     double                     lastLive_{-1};            // la derniere fois que le service a repondu au regard
     bool                       autoProblemSaid_{false};  // 1.36.0 : la panne de la releve deja dite
+    // 1.44.0 : plusieurs admins
+    bool                       watchPending();           // en attente : la demande d'admin, toutes les 15 s
+    bool                       wantArchive_{false};      // accepte : recevoir l'archive des que possible
+    std::string                pendingState_;            // le dernier etat dit de la demande ("refusee"...)
+    std::vector<Toast>         toasts_;
+    int                        unseenAlerts_{0};
+    int                        pendingAdmins_{0};
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;
 };

@@ -44,7 +44,10 @@
 //  journal-a-envoyer.jsonl, envoyee par le prochain appel au service). L'admin+
 //  gere les admins (accepter, retirer, les droits, les profils), releve et
 //  verifie le journal (la chaine), regle sa criticite. Le code de ces fonctions :
-//  WorkspaceAdmins.cpp.
+//  WorkspaceAdmins.cpp. Les fichiers (deposes en morceaux, repris), les messages a
+//  un PC (scelles pour sa cle), les versions (lues dans les installateurs, publiees),
+//  les adresses de secours et la sauvegarde complete (le service, le dossier, la
+//  cle ; restauree ailleurs) : WorkspaceVersions.cpp.
 // =============================================================================
 #pragma once
 
@@ -373,6 +376,9 @@ struct BackupInfo {   // l'en-tete d'un .xpgsauve (sans la phrase)
     Seconds     created{0};
 };
 struct RestoreOptions {
+    // Faux : seulement le service (le poste de l'admin+ est intact, son dossier plus recent que la sauvegarde ne recule pas) ;
+    // la cle de l'editeur de ce poste doit etre celle de la sauvegarde.
+    bool        restoreFolder{true};
     bool        replaceKey{false};       // une AUTRE cle de l'editeur est deja dans le dossier : mise de cote (jamais effacee)
     bool        restoreService{false};   // << Remettre aussi le service >>
     std::string serviceUrl;              // son adresse (un nouveau deploiement) ; vide : celle de la sauvegarde
@@ -641,6 +647,78 @@ public:
     // jeton-admin.xpgjet, signe par signer() : {cle, poste, expire (30 jours), version, nom}. A chaque lancement et chaque jour
     // (`force` faux : seulement s'il manque ou date de plus d'un jour). Rien pour un poste sans role.
     OpResult writeAdminToken(bool force = true) const;
+
+    // ======================================= 1.44.0 : fichiers, messages, versions, sauvegarde (WorkspaceVersions.cpp) ==
+    // Tout ce qui parle au service est LENT (runSlow, puis reload) ; reserve a l'admin+ (docs/ADMINS.md, par. 1), sauf la
+    // restauration (un Admin neuf) et les adresses de secours (le droit << offres >>).
+    // ---- les fichiers ----
+    // Deposer un fichier (SHA-256 lu en flux, le manifeste << fichier >> signe par la cle de l'editeur, puis les morceaux de
+    // 1 Mio qui manquent). `kind` : "admin", "studios", "autre" ; `access` : "public", "admins", "jeton". Repris : le meme
+    // fichier (meme contenu, meme sorte, meme acces) reprend son manifeste et n'envoie que ce qui manque. `id` : l'identifiant.
+    [[nodiscard]] OpResult uploadFile(const std::string& path, const std::string& kind, const std::string& version, const std::string& access,
+                                      std::string& id, const Progress& progress = {}) const;
+    // Un lien vers un fichier entier (POST /admin/fichiers/jeton) : `seconds` de 60 a 172800 (48 h, le plus que permet le
+    // service) ; `once` : un seul telechargement. `token` : 32 hexadecimaux (le service n'en garde que l'empreinte).
+    [[nodiscard]] OpResult fileToken(const std::string& id, int seconds, bool once, std::string& token, Seconds* expires = nullptr) const;
+    // L'adresse a donner (un navigateur) : <service>/v1/fichiers/lien?jeton=...
+    [[nodiscard]] std::string fileLink(const std::string& token) const;
+    [[nodiscard]] std::vector<SentFile> sentFiles() const;
+
+    // ---- les messages a un PC ----
+    // Les PC connus de ce poste (le choix << Dans les notifications de son Studio >>), par client puis par nom.
+    [[nodiscard]] std::vector<MessagePc> pcsForMessages() const;
+    // Un message (genre << message >>, signe par la cle de l'editeur) a un PC connu (`device` : son identifiant ou sa cle) :
+    // le texte, les fichiers joints et l'action (<< admin >> : installer l'Admin pour devenir admin) scelles pour SA cle ;
+    // PUT /admin/messages. `number` : son numero sur le service.
+    [[nodiscard]] OpResult sendMessageToPc(const std::string& device, const std::string& title, const std::string& text,
+                                           const std::vector<licensing::admins::MessageFile>& attachments, const std::string& action,
+                                           int* number = nullptr) const;
+    // Un fichier a joindre a un message : depose (acces << jeton >>), un lien de 48 h (plusieurs telechargements).
+    [[nodiscard]] OpResult attachFile(const std::string& path, licensing::admins::MessageFile& out, const Progress& progress = {}) const;
+    // << Ajouter un admin >> : l'installateur de l'Admin de la derniere version publiee (sinon `fallbackPath`, depose pour
+    // l'occasion), envoye dans les notifications du Studio de ce PC (l'action << admin >>) ; ou par un LIEN (48 h, une fois).
+    [[nodiscard]] OpResult sendAdminInstaller(const std::string& device, const std::string& adminName, const std::string& fallbackPath,
+                                              const Progress& progress = {}) const;
+    [[nodiscard]] OpResult adminInstallerLink(const std::string& fallbackPath, std::string& url, const Progress& progress = {}) const;
+
+    // ---- les versions ----
+    // La version d'un installateur Windows (<< 1.44.1 >>) lue dans sa ressource VS_VERSIONINFO (ProductVersion, sinon
+    // FileVersion : VersionInfoProductVersion / VersionInfoVersion des .iss), sans jamais le lancer. Vide : `why`.
+    [[nodiscard]] static std::string readInstallerVersion(const std::string& path, std::string* why = nullptr);
+    // Les versions publiees et qui est a jour (GET /admin/versions).
+    [[nodiscard]] OpResult versions(VersionsView& out) const;
+    // Publier : les deux installateurs, de la meme version, plus recente que la derniere publiee ; deposes (les Studios :
+    // public ; l'Admin : les admins), puis le bloc << version >> signe (PUT /admin/versions). `notes` : 40 au plus.
+    [[nodiscard]] OpResult publishVersion(const std::string& studiosExe, const std::string& adminExe, const std::vector<std::string>& notes,
+                                          bool important, const Progress& progress = {}) const;
+    // Les notes de version a proposer pour cette version (vide : l'Admin n'embarque pas les notes des Studios ; a taper).
+    [[nodiscard]] std::vector<std::string> suggestedNotes(const std::string& version) const;
+    // Apres une restauration ailleurs : les fichiers des versions publiees dont le service n'a plus les octets, et les renvoyer.
+    [[nodiscard]] OpResult filesToResend(std::vector<FileToResend>& out) const;
+    [[nodiscard]] OpResult resendFile(const std::string& id, const std::string& path, const Progress& progress = {}) const;
+
+    // ---- les adresses de secours (le registre : fallback_services ; l'admin+ ou le droit << offres >>) ----
+    [[nodiscard]] std::vector<std::string> fallbackServices() const;
+    // Un registre numero + 1 avec ces adresses (3 au plus, https, sans doublon ni l'adresse principale), signe et range ; le
+    // depot sur le service part par takeServiceJob comme toute signature du registre.
+    OpResult setFallbackServices(const std::vector<std::string>& urls);
+
+    // ---- la sauvegarde complete (docs/ADMINS.md, par. 9 ; l'admin+) ----
+    [[nodiscard]] BackupSettings backupSettings() const;
+    // Le dossier des sauvegardes et la phrase (LENT : Argon2id) : la cle derivee et son sel gardes proteges pour ce compte
+    // (sauvegarde.cle) ; la phrase n'est jamais gardee. `strength` : les essais l'allegent.
+    [[nodiscard]] OpResult configureBackup(const std::string& folder, const std::string& passphrase, const KeyBackupOptions& strength = {}) const;
+    // Faut-il la sauvegarde du jour (reglee, l'admin+, pas encore faite aujourd'hui) ? L'application l'appelle.
+    [[nodiscard]] bool backupDueToday() const;
+    // LENT : sauvegarde-licences-AAAA-MM-JJ-HHMM.xpgsauve (le service entier, le dossier du poste, la cle de l'editeur),
+    // les 30 dernieres gardees. `path` : le fichier ecrit.
+    [[nodiscard]] OpResult backupNow(std::string* path = nullptr) const;
+    // L'en-tete (sans la phrase) : la cle, l'heure, le service.
+    [[nodiscard]] static OpResult describeBackup(const std::string& path, BackupInfo* info = nullptr);
+    // LENT : restaurer (la phrase ; le dossier du poste, la cle de l'editeur protegee pour CE compte, la cle de synchro, les
+    // codes ; puis, si demande, le service : debut, lots, fin). Ensuite reload().
+    [[nodiscard]] OpResult restoreBackup(const std::string& path, const std::string& passphrase, const RestoreOptions& options,
+                                         RestoreReport* report = nullptr) const;
 
 private:
     void loadKey();

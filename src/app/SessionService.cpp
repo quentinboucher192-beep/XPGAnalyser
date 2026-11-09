@@ -5,10 +5,13 @@
 
 #include "App.hpp"
 #include "Licence.hpp"
+#include "LicenceService.hpp"     // 1.44.0 : l'adresse du service XPG (le relais des sessions par Internet)
 #include "SessionMarks.hpp"
+#include "SessionRelayHttp.hpp"   // 1.44.0
 #include "Settings.hpp"
 #include "screens/Screens.hpp"
 
+#include "../core/Edition.hpp"
 #include "../core/Version.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../deploy/DevKey.hpp"
@@ -18,8 +21,10 @@
 #include "../hmi/HmiNetInfo.hpp"
 #include "../hmi/HmiStore.hpp"
 #include "../hmi/HmiTrash.hpp"
+#include "../licensing/Licensing.hpp"
 #include "../menu/MenuManager.hpp"
 #include "../session/SessionLink.hpp"
+#include "../session/SessionRelay.hpp"
 #include "../session/SessionSync.hpp"
 
 #include <algorithm>
@@ -111,11 +116,89 @@ bool safePath(const std::string& p) {
     return p == "project.xpgproj" || p.rfind("ihm/", 0) == 0;
 }
 
+// 1.44.0 : le transport du relais (le service XPG : l'adresse du service des licences), signe par la cle de ce PC.
+session::RelayTransportPtr relayTransport(std::string* why) {
+    const auto a = licence::service::address();
+    if (a.empty()) {
+        if (why) *why = "ce programme n'a pas de service XPG (les sessions par Internet passent par le service des licences)";
+        return nullptr;
+    }
+    sessionrelay::HttpOptions o;
+    o.baseUrl = a.url;
+    std::string product = core::productName();
+    for (char& ch : product)
+        if (ch == ' ') ch = '-';
+    o.software = product + "/" + XPG_ANALYZER_VERSION;
+    o.publicKey = [](deploy::crypto::PublicKey& pk, std::string& w) {
+        std::string hex;
+        deploy::crypto::Bytes b;
+        if (!licensing::deviceKeyHex(hex, &w)) return false;
+        if (!deploy::crypto::unhex(hex, b, pk.size())) {
+            w = "la cl\xC3\xA9 de ce PC est mal \xC3\xA9" "crite";
+            return false;
+        }
+        std::copy(b.begin(), b.end(), pk.begin());
+        return true;
+    };
+    o.sign = [](std::string_view m, deploy::crypto::Signature& sig, std::string& w) {
+        deploy::crypto::PublicKey pub{};
+        return licensing::deviceSignServiceMessage(m, sig, pub, &w);
+    };
+    return sessionrelay::httpTransport(std::move(o));
+}
+
+// 1.44.0 : l'hote et l'equipier, sur le reseau du bureau (TLS) ou par Internet (le relais) : les memes appels.
+struct HostAny {
+    session::HostLink lan;
+    session::RelayHostLink relay;
+    bool internet{false};
+    [[nodiscard]] std::vector<session::LinkEvent> poll() { return internet ? relay.poll() : lan.poll(); }
+    void send(int conn, const core::json::Value& h, std::string data = {}) {
+        if (internet) relay.send(conn, h, std::move(data));
+        else lan.send(conn, h, std::move(data));
+    }
+    void closeAfter(int conn, const core::json::Value& h) {
+        if (internet) relay.closeAfter(conn, h);
+        else lan.closeAfter(conn, h);
+    }
+    void close(int conn) {
+        if (internet) relay.close(conn);
+        else lan.close(conn);
+    }
+    void stop() {
+        lan.stop();
+        relay.stop();
+    }
+    [[nodiscard]] int port() const noexcept { return internet ? -1 : lan.port(); }
+    [[nodiscard]] int discoveryPort() const noexcept { return internet ? -1 : lan.discoveryPort(); }
+    void setAnnounce(const session::Announce& a) {
+        if (!internet) lan.setAnnounce(a);
+    }
+};
+struct GuestAny {
+    session::GuestLink lan;
+    session::RelayGuestLink relay;
+    bool internet{false};
+    [[nodiscard]] std::vector<session::LinkEvent> poll() { return internet ? relay.poll() : lan.poll(); }
+    void send(const core::json::Value& h, std::string data = {}) {
+        if (internet) relay.send(h, std::move(data));
+        else lan.send(h, std::move(data));
+    }
+    void closeAfter(const core::json::Value& h) {
+        if (internet) relay.closeAfter(h);
+        else lan.closeAfter(h);
+    }
+    void stop() {
+        lan.stop();
+        relay.stop();
+    }
+};
+
 } // namespace
 
 struct SessionService::Impl {
-    session::HostLink host;
-    session::GuestLink guest;
+    HostAny host;     // 1.44.0 : le reseau du bureau ou Internet
+    GuestAny guest;
     session::Mirror mirror;
     deploy::TlsIdentity identity;
     bool identityReady{false};
@@ -179,6 +262,19 @@ int SessionService::port() const { return d_->host.port(); }
 int SessionService::discoveryPort() const { return d_->host.discoveryPort(); }
 std::string SessionService::myFingerprint() const { return d_->identityReady ? d_->identity.fingerprintHex() : std::string{}; }
 
+std::string SessionService::codeText() const {
+    if (code_.empty()) return {};
+    return internet_ ? session::relayCodeShown(code_) : session::codeShown(code_);
+}
+
+bool SessionService::internetAvailable(std::string* why) {
+    if (licence::service::address().empty()) {
+        if (why) *why = "ce programme n'a pas de service XPG : seulement le r\xC3\xA9seau du bureau";
+        return false;
+    }
+    return true;
+}
+
 std::string SessionService::chipText() const {
     if (mode_ == Mode::Joining) return "Session \xC2\xB7 on entre\xE2\x80\xA6";
     if (!active()) return {};
@@ -187,7 +283,7 @@ std::string SessionService::chipText() const {
 
 std::string SessionService::chipTip() const {
     if (!active()) return progress_;
-    std::string t = "\xC2\xAB " + name_ + " \xC2\xBB \xE2\x80\x94 h\xC3\xB4te : " + hostName_ + ". ";
+    std::string t = "\xC2\xAB " + name_ + " \xC2\xBB \xE2\x80\x94 h\xC3\xB4te : " + hostName_ + (internet_ ? " \xC2\xB7 par Internet" : "") + ". ";
     for (const auto& m : members_) {
         t += "\n" + m.name + (m.number == me_ ? " (toi)" : std::string{}) + " \xC2\xB7 " + m.machine + " \xC2\xB7 " + session::roleText(m.role);
         if (const auto v = viewName(m.view); !v.empty()) t += " \xC2\xB7 " + v;
@@ -228,15 +324,36 @@ bool SessionService::start(const StartOptions& o, std::string* why) {
     name_ = o.name.empty() ? "Session " + projectLabel(app_) : o.name;
     entry_ = o.entry;
     defaultRole_ = o.role;
-    code_ = o.entry == session::Entry::Code ? session::newCode() : std::string{};
     hostName_ = myName();
-    session::HostConfig cfg;
-    cfg.port = o.port;
-    cfg.discoveryPort = o.discoveryPort;
-    cfg.hostName = hostName_;
-    cfg.sessionId = sid_;
-    cfg.code = code_;
-    if (!d_->host.start(cfg, d_->identity, why)) return false;
+    if (o.internet) {
+        // 1.44.0 : par Internet - le code (10 caracteres) est toujours demande : c'est le secret du chiffrement.
+        std::string code;
+        if (!session::relayCodeTyped(o.code, code)) code = session::newRelayCode();
+        auto transport = relayTransport(why);
+        if (!transport) return false;
+        session::RelayHostConfig rc;
+        rc.transport = std::move(transport);
+        rc.code = code;
+        rc.sessionName = name_;
+        rc.hostName = hostName_;
+        rc.project = projectLabel(app_);
+        d_->host.internet = true;
+        if (!d_->host.relay.start(rc, why)) return false;
+        entry_ = session::Entry::Code;
+        code_ = code;
+    } else {
+        code_ = o.entry == session::Entry::Code ? session::newCode() : std::string{};
+        session::HostConfig cfg;
+        cfg.port = o.port;
+        cfg.discoveryPort = o.discoveryPort;
+        cfg.hostName = hostName_;
+        cfg.sessionId = sid_;
+        cfg.code = code_;
+        d_->host.internet = false;
+        if (!d_->host.lan.start(cfg, d_->identity, why)) return false;
+    }
+    internet_ = o.internet;
+    relayOpen_ = false;
     members_.clear();
     session::Member me;
     me.number = 0;
@@ -286,8 +403,15 @@ bool SessionService::start(const StartOptions& o, std::string* why) {
     a.members = 1;
     a.needsCode = !code_.empty();
     d_->host.setAnnounce(a);
-    log_.push_back("session d\xC3\xA9marr\xC3\xA9" "e : " + name_ + " (port " + std::to_string(d_->host.port()) + ")");
-    chat_.push_back({"", "Session d\xC3\xA9marr\xC3\xA9" "e. " + std::string(code_.empty() ? "Tu acceptes chaque entr\xC3\xA9" "e." : "Le code : " + session::codeShown(code_) + "."), clock(), 0, true});
+    if (internet_) {
+        log_.push_back("session d\xC3\xA9marr\xC3\xA9" "e : " + name_ + " (par Internet)");
+        chat_.push_back({"", "Session d\xC3\xA9marr\xC3\xA9" "e par Internet (chiffr\xC3\xA9" "e de bout en bout). Le code : " + codeText()
+                                 + " \xE2\x80\x94 tes \xC3\xA9quipiers le tapent dans Rejoindre une session \xE2\x80\xBA Par Internet.",
+                         clock(), 0, true});
+    } else {
+        log_.push_back("session d\xC3\xA9marr\xC3\xA9" "e : " + name_ + " (port " + std::to_string(d_->host.port()) + ")");
+        chat_.push_back({"", "Session d\xC3\xA9marr\xC3\xA9" "e. " + std::string(code_.empty() ? "Tu acceptes chaque entr\xC3\xA9" "e." : "Le code : " + codeText() + "."), clock(), 0, true});
+    }
     ++revision_;
     return true;
 }
@@ -295,7 +419,7 @@ bool SessionService::start(const StartOptions& o, std::string* why) {
 namespace {
 
 // Ce que la decouverte annonce : le nombre de membres change.
-void announce(SessionService& s, session::HostLink& host, const std::string& project, const std::string& fp) {
+void announce(SessionService& s, HostAny& host, const std::string& project, const std::string& fp) {
     session::Announce a;
     a.session = s.sessionName();
     a.host = s.hostName();
@@ -771,6 +895,20 @@ struct SessionServiceAccess {
         sendHolds(s);
     }
 
+    // 1.44.0 : la session par Internet perdue (le relais : elle ne s'ouvre pas, elle n'existe plus, plus de reseau).
+    static void relayLost(SessionService& s, const std::string& why) {
+        const bool opened = s.relayOpen_;
+        s.log_.push_back("relais : " + why);
+        s.stop(opened ? "la session par Internet s'est arr\xC3\xAAt\xC3\xA9" "e (" + why + ")" : std::string{});
+        s.progress_ = opened ? "La session par Internet s'est arr\xC3\xAAt\xC3\xA9" "e : " + why : "La session ne d\xC3\xA9marre pas : " + why;
+        if (!s.app_.scripted())
+            s.app_.menus().ShowDialog(std::make_unique<MessageDialog>(opened ? "La session est termin\xC3\xA9" "e" : "D\xC3\xA9marrer une session",
+                                                                      s.progress_ + ".", MessageDialog::Icon::Warning),
+                                      [](const menu::DialogResult&) {});
+        s.app_.events().publish(StatusNotice{s.progress_ + ".", 8.0});
+        ++s.revision_;
+    }
+
     static void askKnock(SessionService& s) {
         if (s.d_->knockDialogOpen || s.d_->knockQueue.empty() || s.app_.scripted()) return;
         const int conn = s.d_->knockQueue.front();
@@ -795,8 +933,9 @@ struct SessionServiceAccess {
     static void guestFrame(SessionService& s, const core::json::Value& h, const std::string& data) {
         const std::string kind = h.str("op");
         if (kind == "ATTENTE") {
-            s.progress_ = "Connect\xC3\xA9" "e \xC3\xA0 " + s.d_->target.machine + " \xC2\xB7 chiffr\xC3\xA9. " + (s.d_->target.hostName.empty() ? std::string("L'h\xC3\xB4te") : s.d_->target.hostName)
-                        + " doit te faire entrer\xE2\x80\xA6";
+            s.progress_ = (s.internet_ ? std::string("Connect\xC3\xA9" "e par Internet \xC2\xB7 chiffr\xC3\xA9 de bout en bout. ")
+                                       : "Connect\xC3\xA9" "e \xC3\xA0 " + s.d_->target.machine + " \xC2\xB7 chiffr\xC3\xA9. ")
+                        + (s.d_->target.hostName.empty() ? std::string("L'h\xC3\xB4te") : s.d_->target.hostName) + " doit te faire entrer\xE2\x80\xA6";
             ++s.revision_;
             return;
         }
@@ -1085,6 +1224,7 @@ struct SessionServiceAccess {
         s.knocks_.clear();
         s.members_.clear();
         s.code_.clear();
+        s.relayOpen_ = false;
         s.mode_ = SessionService::Mode::Off;
         hmi::edits::setCurrentSession({});
         sessionmarks::setActive(false);
@@ -1175,21 +1315,43 @@ bool SessionService::join(const JoinTarget& t, const std::string& code, std::str
         return false;
     }
     if (!loadIdentity(*d_, why)) return false;
-    session::GuestConfig g;
-    g.address = t.address;
-    g.port = t.port;
-    g.fingerprint = t.fingerprint;
-    g.sessionId = t.sessionId;
-    g.code = code;
-    g.hello = core::json::Value::object();
-    g.hello.set("nom", myName());
-    g.hello.set("pc", hmi::netinfo::computerName());
-    g.hello.set("id_pc", d_->identity.machineId());
-    g.hello.set("logiciel", "IHM Studio");
-    g.hello.set("version", XPG_ANALYZER_VERSION);
-    g.hello.set("couleur", static_cast<std::int64_t>(session::palette()[1]));
-    if (!d_->guest.start(g, d_->identity, why)) return false;
+    core::json::Value hello = core::json::Value::object();
+    hello.set("nom", myName());
+    hello.set("pc", hmi::netinfo::computerName());
+    hello.set("id_pc", d_->identity.machineId());
+    hello.set("logiciel", "IHM Studio");
+    hello.set("version", XPG_ANALYZER_VERSION);
+    hello.set("couleur", static_cast<std::int64_t>(session::palette()[1]));
+    if (t.internet) {
+        // 1.44.0 : par Internet - le code seul (10 caracteres) : le relais trouve la session, l'echange le prouve.
+        std::string norm;
+        if (!session::relayCodeTyped(code, norm)) {
+            if (why) *why = "ce n'est pas le code d'une session par Internet (10 caract\xC3\xA8res, comme K7Q4-M2XP-T9)";
+            return false;
+        }
+        auto transport = relayTransport(why);
+        if (!transport) return false;
+        session::RelayGuestConfig g;
+        g.transport = std::move(transport);
+        g.code = norm;
+        g.hello = std::move(hello);
+        d_->guest.internet = true;
+        if (!d_->guest.relay.start(g, why)) return false;
+    } else {
+        session::GuestConfig g;
+        g.address = t.address;
+        g.port = t.port;
+        g.fingerprint = t.fingerprint;
+        g.sessionId = t.sessionId;
+        g.code = code;
+        g.hello = std::move(hello);
+        d_->guest.internet = false;
+        if (!d_->guest.lan.start(g, d_->identity, why)) return false;
+    }
+    internet_ = t.internet;
+    relayOpen_ = false;
     d_->target = t;
+    if (t.internet && d_->target.machine.empty()) d_->target.machine = "Internet";
     mode_ = Mode::Joining;
     name_ = t.sessionName;
     hostName_ = t.hostName;
@@ -1197,7 +1359,8 @@ bool SessionService::join(const JoinTarget& t, const std::string& code, std::str
     chat_.clear();
     log_.clear();
     resyncs_ = refusals_ = 0;
-    progress_ = "Connexion \xC3\xA0 " + (t.machine.empty() ? t.address : t.machine) + "\xE2\x80\xA6";
+    progress_ = t.internet ? std::string("Recherche de la session sur le service XPG\xE2\x80\xA6")
+                           : "Connexion \xC3\xA0 " + (t.machine.empty() ? t.address : t.machine) + "\xE2\x80\xA6";
     ++revision_;
     return true;
 }
@@ -1256,7 +1419,17 @@ void SessionService::tick() {
                     SessionServiceAccess::hostFrame(*this, e.conn, e.header, e.data);
                     break;
                 case session::LinkEvent::Kind::Closed:
+                    if (internet_ && e.conn == 0) {   // 1.44.0 : la session elle-meme (le relais)
+                        SessionServiceAccess::relayLost(*this, e.why);
+                        break;
+                    }
                     SessionServiceAccess::hostGone(*this, e.conn, e.why == "l'autre PC a ferm\xC3\xA9 la connexion" ? std::string{} : e.why);
+                    break;
+                case session::LinkEvent::Kind::Opened:   // 1.44.0 : ouverte sur le relais
+                    relayOpen_ = true;
+                    log_.push_back("ouverte sur le service XPG");
+                    chat_.push_back({"", "La session est ouverte sur le service XPG : tes \xC3\xA9quipiers peuvent entrer avec le code " + codeText() + ".", clock(), 0, true});
+                    ++revision_;
                     break;
                 default: break;
             }
@@ -1271,8 +1444,18 @@ void SessionService::tick() {
     // L'equipier.
     for (auto& e : d_->guest.poll()) {
         switch (e.kind) {
+            case session::LinkEvent::Kind::Opened:   // 1.44.0 : par Internet, le service connait la session
+                if (!e.header.str("nom").empty()) name_ = d_->target.sessionName = e.header.str("nom").substr(0, 200);
+                if (!e.header.str("hote").empty()) hostName_ = d_->target.hostName = e.header.str("hote").substr(0, 100);
+                relayOpen_ = true;
+                progress_ = "Session \xC2\xAB " + name_ + " \xC2\xBB trouv\xC3\xA9" "e" + (hostName_.empty() ? std::string{} : " (h\xC3\xB4te : " + hostName_ + ")")
+                          + ". V\xC3\xA9rification du code\xE2\x80\xA6";
+                log_.push_back("trouvee sur le service XPG : " + name_);
+                ++revision_;
+                break;
             case session::LinkEvent::Kind::Connected:
-                progress_ = "Connect\xC3\xA9" "e \xC3\xA0 " + (d_->target.machine.empty() ? d_->target.address : d_->target.machine) + " \xC2\xB7 chiffr\xC3\xA9";
+                progress_ = internet_ ? std::string("Connect\xC3\xA9" "e par Internet \xC2\xB7 chiffr\xC3\xA9 de bout en bout")
+                                      : "Connect\xC3\xA9" "e \xC3\xA0 " + (d_->target.machine.empty() ? d_->target.address : d_->target.machine) + " \xC2\xB7 chiffr\xC3\xA9";
                 log_.push_back("connectee" + std::string(e.codeOk ? " (code bon)" : ""));
                 ++revision_;
                 break;

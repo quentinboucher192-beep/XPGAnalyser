@@ -190,6 +190,22 @@ const char* sectionBefore(const std::string& id) {
     return nullptr;
 }
 
+// 1.44.0 : le groupe d'une page, pour le fil du haut (<< Admin > Securite > Administrateurs >>) ; une sous-page : celui de
+// sa page parente.
+std::string sectionTitle(const std::string& pageId) {
+    const std::string id = Shell::parentOf(pageId).empty() ? pageId : Shell::parentOf(pageId);
+    std::string current;
+    for (const auto& e : Shell::entries()) {
+        const std::string eid = e.id;
+        if (eid == "tableau") current = "Pilotage";
+        else if (eid == "editions") current = "Catalogue";
+        else if (eid == "boutique") current = "Vente en ligne";
+        else if (eid == "revocations") current = "S\xC3\xA9" "curit\xC3\xA9";
+        if (eid == id) return current;
+    }
+    return {};
+}
+
 class NavItem final : public ui::Button {
 public:
     NavItem(const Shell::NavEntry& e, const Shell& shell) : ui::Button(e.label, std::string("nav.") + e.id), e_(e), shell_(shell) {
@@ -201,7 +217,8 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const auto& c = ctx.theme.color;
         const Rect  r = bounds();
-        const bool  sel = shell_.currentPageId() == e_.id;
+        // 1.44.0 : une sous-page (Droits) garde sa page parente choisie (Administrateurs).
+        const bool  sel = shell_.currentPageId() == e_.id || Shell::parentOf(shell_.currentPageId()) == e_.id;
         if (sel) {
             ctx.r.fillRoundedRect(r, kNightActive, 8.f);
             ctx.r.fillRoundedRect({r.x - 8.f, r.y + 7.f, 3.f, r.h - 14.f}, c.accent, 1.5f);
@@ -211,9 +228,14 @@ protected:
         const Color ink = sel ? kNightWhite : e_.online ? kNightFaint : kNightInk;
         const Color iconInk = sel ? kVioletSoft : e_.online ? kNightFaint : kNightMuted;
         ui::drawIcon(ctx.r, e_.icon, {r.x + 10.f, r.y + (r.h - 17.f) * 0.5f, 17.f, 17.f}, iconInk);
-        // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre.
-        const bool demandes = std::string(e_.id) == "demandes";
-        const int  count = demandes ? shell_.pendingRequests() : count_;
+        // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre. 1.44.0 : les
+        // demandes d'admin (Administrateurs) et les alertes pas encore vues (Journal des admins), ambre aussi.
+        const std::string eid = e_.id;
+        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal";
+        const int  count = eid == "demandes" ? shell_.pendingRequests()
+                           : eid == "admins" ? shell_.pendingAdminRequests()
+                           : eid == "journal" ? shell_.unseenAlerts()
+                                              : count_;
         float badgeW = 0.f;
         if (count > 0) {
             const std::string n = count > 999 ? std::string("999+") : std::to_string(count);
@@ -303,12 +325,18 @@ public:
         links += folder_->clicked->connect([this] { shell_.openFolder(shell_.workspace().folder()); });
         update();
     }
-    // Les nombres du menu (apres chaque relecture du Workspace).
+    // Les nombres du menu (apres chaque relecture du Workspace). 1.44.0 : les entrees de l'admin+ seul (le journal des
+    // admins) ne sont montrees qu'a lui.
     void update() {
         const Dashboard d = shell_.workspace().dashboard();
         for (std::size_t i = 0; i < items_.size(); ++i) {
             const std::string id = Shell::entries()[i].id;
             items_[i]->setCount(id == "licences" ? d.licences : id == "clients" ? d.clients : id == "activations" ? d.devices + d.onlineDevices : 0);
+            const auto want = shell_.pageAllowed(id) ? ui::Visibility::Visible : ui::Visibility::Collapsed;
+            if (items_[i]->visibility() != want) {
+                items_[i]->setVisibility(want);
+                invalidateLayout();
+            }
         }
     }
 
@@ -316,9 +344,10 @@ protected:
     void onLayout() override {
         const Rect b = bounds();
         // La hauteur d'une entree : 36 (la maquette), moins si la fenetre est basse (toutes restent visibles).
-        int sections = 0;
+        int sections = 0, shown = 0;
         for (const auto& e : Shell::entries()) sections += sectionBefore(e.id) ? 1 : 0;
-        const float top = b.y + 84.f, n = static_cast<float>(items_.size());
+        for (auto* it : items_) shown += it->visibility() == ui::Visibility::Collapsed ? 0 : 1;   // 1.44.0 : selon le role
+        const float top = b.y + 84.f, n = static_cast<float>(std::max(1, shown));
         const float needFull = n * 36.f + static_cast<float>(sections) * 30.f;
         const float room = b.bottom() - 12.f - top;
         const bool  roomForCard = room >= needFull + 120.f;
@@ -332,6 +361,7 @@ protected:
                 captions_.push_back({y + capH - 18.f, cap});
                 y += capH;
             }
+            if (items_[i]->visibility() == ui::Visibility::Collapsed) continue;
             items_[i]->setBounds({b.x + 14.f, y, b.w - 28.f, rowH - 2.f});
             y += rowH;
         }
@@ -358,7 +388,17 @@ protected:
         drawKey(ctx.r, {logo.x + 9.f, logo.y + 9.f, 20.f, 20.f}, kNightWhite);
         const FontId fn = gfx::semibold(kF15);
         ctx.r.drawText({logo.right() + 12.f, logo.y + 1.f}, "XPG License Manager", fn, kNightWhite);
-        ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, "Admin \xC2\xB7 \xC3\x89" "diteur seulement", kF12, kNightMuted);
+        // 1.44.0 : qui est sur ce poste (la maquette : << Camille - admin+ >>) ; sans cle : l'outil de l'editeur.
+        const Workspace& w = shell_.workspace();
+        std::string who = "Admin \xC2\xB7 \xC3\x89" "diteur seulement";
+        switch (w.role()) {
+            case Role::Plus: who = (w.key().name.empty() ? std::string("Toi") : w.key().name) + " \xC2\xB7 admin+"; break;
+            case Role::Admin: who = (w.me() ? w.me()->name : w.adminKey().name) + " \xC2\xB7 admin"; break;
+            case Role::Pending: who = (w.adminKey().name.empty() ? std::string("Toi") : w.adminKey().name) + " \xC2\xB7 en attente"; break;
+            case Role::Retired: who = (w.me() ? w.me()->name : w.adminKey().name) + " \xC2\xB7 admin retir\xC3\xA9"; break;
+            case Role::None: break;
+        }
+        ctx.r.drawText({logo.right() + 12.f, logo.y + 21.f}, fit(ctx.r, who, kF12, b.right() - 14.f - (logo.right() + 12.f)), kF12, kNightMuted);
         const FontId fc = gfx::semibold(FontId{11});
         for (const auto& [y, text] : captions_) ctx.r.drawText({b.x + 24.f, y}, text, fc, kNightFaint);
         if (folder_->visible()) {
@@ -440,24 +480,36 @@ public:
         nl->setStyle(ui::Button::Style::Primary);
         nl->setIcon(ui::Icon::Plus);
         newLicence_ = &static_cast<ui::Button&>(addChild(std::move(nl)));
-        links += key_->clicked->connect([this] { shell_.navigate("securite"); });
+        // 1.44.0 : un admin (sa cle d'admin) va a Administrateurs, l'admin+ et un poste sans cle a Parametres de securite.
+        links += key_->clicked->connect([this] {
+            const Role r = shell_.workspace().role();
+            shell_.navigate(r == Role::Plus || r == Role::None ? "securite" : "admins");
+        });
         links += sync_->clicked->connect([this] { shell_.navigate("service"); });
         links += newLicence_->clicked->connect([this] {
-            if (shell_.workspace().key().present && shell_.workspace().hasRegistry()) shell_.openDialog(makeLicenceWizard(shell_.host(), {}));
+            if (shell_.workspace().can("licence_creer") && shell_.workspace().hasRegistry()) shell_.openDialog(makeLicenceWizard(shell_.host(), {}));
         });
         update();
     }
     // L'etat a montrer (a chaque image : un travail lent commence ou finit).
     void update() {
-        const auto& k = shell_.workspace().key();
-        key_->set(shell_.keyStatusText(), shell_.keyStatusTone(), k.present ? ui::Icon::Lock : ui::Icon::Unlock, false, false);
-        key_->setTooltip(k.present ? "La cl\xC3\xA9 de l'\xC3\xA9" "diteur : " + k.id + (k.name.empty() ? std::string() : " (" + k.name + ")") + ". Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9."
-                                   : (k.problem.empty() ? std::string("Aucune cl\xC3\xA9 sur ce poste.") : k.problem) + " Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.");
-        const bool canSign = k.present && shell_.workspace().hasRegistry();
+        const Workspace& w = shell_.workspace();
+        const auto& k = w.key();
+        const Role role = w.role();
+        key_->set(shell_.keyStatusText(), shell_.keyStatusTone(), role == Role::Plus || role == Role::Admin ? ui::Icon::Lock : ui::Icon::Unlock, false, false);
+        if (role == Role::Plus || role == Role::None)
+            key_->setTooltip(k.present ? "La cl\xC3\xA9 de l'\xC3\xA9" "diteur : " + k.id + (k.name.empty() ? std::string() : " (" + k.name + ")") + ". Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9."
+                                       : (k.problem.empty() ? std::string("Aucune cl\xC3\xA9 sur ce poste.") : k.problem) + " Clic : Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9.");
+        else   // 1.44.0 : un admin (ou en attente, ou retire) : sa cle d'admin
+            key_->setTooltip("Ta cl\xC3\xA9 d'admin : " + w.adminKey().id + (role == Role::Admin ? " \xC2\xB7 " + std::to_string(w.myRights().size()) + " droits sur 13" : std::string()) +
+                             ". Clic : Administrateurs.");
+        // 1.44.0 : le droit << licence_creer >> (un admin qui ne l'a pas : le bouton dit pourquoi).
+        const bool canSign = w.can("licence_creer") && w.hasRegistry();
         newLicence_->setEnabled(canSign);
         newLicence_->setTooltip(canSign ? std::string("L'assistant : le client, l'\xC3\xA9" "dition, les PC (ou une licence en ligne), la dur\xC3\xA9" "e, puis signer.")
-                                : !k.present ? std::string("Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9).")
-                                             : std::string("Il faut d'abord le registre sign\xC3\xA9 (\xC3\x89" "ditions)."));
+                                : role == Role::None ? std::string("Il faut d'abord la cl\xC3\xA9 de l'\xC3\xA9" "diteur (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9), ou devenir admin (Administrateurs).")
+                                : !w.can("licence_creer") ? w.whyNot("licence_creer")
+                                             : std::string("Il faut d'abord le registre sign\xC3\xA9 (\xC3\x89" "ditions ; un admin le re\xC3\xA7oit avec l'archive)."));
         if (shell_.busy()) {
             sync_->set(shell_.syncStatusText(), Tone::Info, ui::Icon::Refresh, true, false);
             sync_->setTooltip("Un travail lent tourne sur un autre fil : la fen\xC3\xAAtre reste utilisable. Les op\xC3\xA9rations qui \xC3\xA9" "crivent attendent sa fin.");
@@ -503,9 +555,23 @@ protected:
         x += ctx.r.measure(crumb, kF14).width + 10.f;
         // le chevron
         const float cy = b.y + b.h * 0.5f;
-        ctx.r.line({x, cy - 4.f}, {x + 4.f, cy}, c.textDisabled, 1.5f);
-        ctx.r.line({x + 4.f, cy}, {x, cy + 4.f}, c.textDisabled, 1.5f);
-        x += 14.f;
+        const auto chevron = [&] {
+            ctx.r.line({x, cy - 4.f}, {x + 4.f, cy}, c.textDisabled, 1.5f);
+            ctx.r.line({x + 4.f, cy}, {x, cy + 4.f}, c.textDisabled, 1.5f);
+            x += 14.f;
+        };
+        chevron();
+        // 1.44.0 : le fil de la maquette - le groupe (<< Securite >>), la page parente d'une sous-page (<< Administrateurs >>).
+        std::vector<std::string> trail;
+        if (const std::string s = sectionTitle(shell_.currentPageId()); !s.empty()) trail.push_back(s);
+        if (const std::string p = Shell::parentOf(shell_.currentPageId()); !p.empty())
+            if (const auto* e = Shell::entry(p)) trail.push_back(e->label);
+        for (const auto& t : trail) {
+            if (x + ctx.r.measure(t, kF14).width > titleRight_ - 80.f) break;
+            ctx.r.drawText({x, ty}, t, kF14, c.textMuted);
+            x += ctx.r.measure(t, kF14).width + 10.f;
+            chevron();
+        }
         const FontId fb = gfx::semibold(kF14);
         ctx.r.drawText({x, ty}, fit(ctx.r, shell_.pageTitle(), fb, titleRight_ - x), fb, c.text);
     }

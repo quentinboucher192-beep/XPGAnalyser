@@ -16,6 +16,12 @@
 //  part, et revient en RESERVATIONS : les objets tenus par les autres.
 //
 //  Ctrl+Z : la pile de ce PC (hmi::Document::shared : il n'annule que ses gestes).
+//
+//  1.44.0 : PAR INTERNET (session/SessionRelay) - la meme session, a travers le
+//  relais du service XPG (l'adresse du service des licences), chiffree de bout en
+//  bout : le code (10 caracteres, "K7Q4-M2XP-T9") est le secret de l'echange CPace ;
+//  les appels au relais sont signes par la cle de ce PC (app/SessionRelayHttp).
+//  L'entree est celle << il faut le code >> : le code prouve, l'hote fait entrer.
 // =============================================================================
 #pragma once
 
@@ -42,6 +48,9 @@ public:
         session::Role  role{session::Role::Edit};     // ce que font les equipiers en entrant
         int            port{session::kPort};          // les essais : 0 (un port libre)
         int            discoveryPort{session::kDiscoveryPort};
+        // 1.44.0 : par Internet (le relais du service XPG) ; `code` : celui montre dans la fenetre (vide : tire ici).
+        bool           internet{false};
+        std::string    code;
     };
     struct JoinTarget {
         std::string address;
@@ -50,6 +59,7 @@ public:
         std::string sessionId;
         std::string sessionName, hostName, machine;
         bool        needsCode{false};
+        bool        internet{false};   // 1.44.0 : par Internet (le code de join() : celui de 10 caracteres)
     };
     struct Knock {
         int           conn{0};
@@ -103,6 +113,13 @@ public:
     [[nodiscard]] const std::string& sessionName() const noexcept { return name_; }
     [[nodiscard]] const std::string& hostName() const noexcept { return hostName_; }
     [[nodiscard]] const std::string& code() const noexcept { return code_; }        // l'hote, "Il faut le code"
+    // 1.44.0 : le code tel qu'on le montre ("482 913" ; par Internet "K7Q4-M2XP-T9") ; vide : pas de code.
+    [[nodiscard]] std::string codeText() const;
+    // 1.44.0 : la session passe par Internet (le relais) ; l'hote : elle est ouverte sur le relais.
+    [[nodiscard]] bool internet() const noexcept { return internet_; }
+    [[nodiscard]] bool relayOpen() const noexcept { return relayOpen_; }
+    // 1.44.0 : ce programme peut-il faire une session par Internet ? (l'adresse du service XPG) Faux : `why`.
+    [[nodiscard]] static bool internetAvailable(std::string* why = nullptr);
     [[nodiscard]] session::Entry entry() const noexcept { return entry_; }
     [[nodiscard]] session::Role defaultRole() const noexcept { return defaultRole_; }
     [[nodiscard]] const std::string& progress() const noexcept { return progress_; } // l'equipier qui entre
@@ -139,6 +156,7 @@ private:
     std::vector<std::string> log_;
     std::uint64_t revision_{0};
     std::size_t resyncs_{0}, refusals_{0};
+    bool internet_{false}, relayOpen_{false};   // 1.44.0
 
     friend struct SessionServiceAccess;
 };

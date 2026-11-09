@@ -51,6 +51,22 @@
 //    XPG-License-Admin service-stats
 //    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
+//  1.44.0 : PLUSIEURS ADMINS, LES FICHIERS, LES VERSIONS, LA SAUVEGARDE COMPLETE (docs/ADMINS.md ; par le Workspace de
+//  l'application, gui/Workspace.hpp : les memes fonctions) - chacune ecrit une ligne de resultat :
+//    XPG-License-Admin admin-demander --nom N --courriel C
+//    XPG-License-Admin admin-etat
+//    XPG-License-Admin admin-accepter --cle HEX|--empreinte "B7E2 ..." [--profil P]
+//    XPG-License-Admin admin-retirer --cle HEX [--revoquer]
+//    XPG-License-Admin admin-droits --cle HEX --droits a,b,c [--profil P]
+//    XPG-License-Admin profil-enregistrer --nom P --droits a,b,c
+//    XPG-License-Admin journal-relever
+//    XPG-License-Admin fichier-envoyer --poste ID [--fichier F] --titre T [--texte T] [--admin]
+//    XPG-License-Admin version-publier --studios F --admin F [--notes "..."] [--importante]
+//    XPG-License-Admin sauvegarde-configurer --dossier D --phrase-fichier F   (ici --dossier : celui des sauvegardes ;
+//                      le dossier de la cle : --dossier-cle)
+//    XPG-License-Admin sauvegarder
+//    XPG-License-Admin restaurer --fichier F --phrase-fichier P [--service URL] [--remplacer] [--remplacer-cle] [--service-seulement]
+//  La phrase de passe de la sauvegarde est lue dans un FICHIER (jamais sur la ligne de commande), jamais affichee.
 //  Les commandes github-* et passerelle-* (1.31.0 a 1.34.0) n'existent plus : le service des licences les remplace.
 //  LE CODE D'ACTIVATION (licence-en-ligne) est montre UNE fois, a l'ecran, puis oublie : le service n'en garde que
 //  l'empreinte ; il n'est ecrit dans aucun fichier ni journal.
@@ -62,6 +78,7 @@
 #include "KeyBackup.hpp"
 #include "Mail.hpp"   // 1.37.0 : le mail au client
 #include "ServiceClient.hpp"
+#include "gui/Workspace.hpp"   // 1.44.0 : les commandes des admins, des fichiers, des versions, de la sauvegarde
 
 #include "../core/SystemOpen.hpp"
 #include "../deploy/Crypto.hpp"
@@ -180,6 +197,31 @@ std::string usage() {
            "  mail-microsoft-oublier                         oublie la connexion Microsoft de ce poste\n"
            "  kit-studios --sortie DOSSIER                   PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt\n"
            "                                                 (et LISEZ-MOI.txt) : les fichiers PUBLICS des Studios (cl\xC3\xA9 d'essai refus\xC3\xA9" "e)\n"
+           "\n1.44.0 : plusieurs admins, les fichiers, les versions, la sauvegarde compl\xC3\xA8te (une ligne de r\xC3\xA9sultat chacune) :\n"
+           "  admin-demander --nom N --courriel C            demande \xC3\xA0 devenir admin (la cl\xC3\xA9 d'admin na\xC3\xAEt sur ce poste) ; dit l'empreinte\n"
+           "  admin-etat                                     le r\xC3\xB4le de ce poste (rel\xC3\xA8ve la liste des admins, la demande, le journal)\n"
+           "  admin-accepter --cle HEX|--empreinte \"B7E2 ...\" [--profil P]\n"
+           "                                                 l'admin+ : accepte la demande (l'empreinte lue au t\xC3\xA9l\xC3\xA9phone) ;\n"
+           "                                                 le profil \"Tous les droits\" par d\xC3\xA9" "faut\n"
+           "  admin-retirer --cle HEX [--revoquer]           l'admin+ : retire un admin (--revoquer : ses licences en vigueur aussi)\n"
+           "  admin-droits --cle HEX --droits a,b,c [--profil P]\n"
+           "                                                 l'admin+ : les droits d'un admin (vide : aucun)\n"
+           "  profil-enregistrer --nom P --droits a,b,c      l'admin+ : un profil de droits\n"
+           "  journal-relever                                l'admin+ : rel\xC3\xA8ve le journal des admins et l'\xC3\xA9" "crit (une ligne chacune, sa criticit\xC3\xA9)\n"
+           "  fichier-envoyer --poste ID [--fichier F] --titre T [--texte T] [--admin]\n"
+           "                                                 l'admin+ : un message (et un fichier) au Studio de ce PC ; --admin :\n"
+           "                                                 l'installateur de l'Admin (sans --fichier : celui de la derni\xC3\xA8re version)\n"
+           "  version-publier --studios F --admin F [--notes \"...\"] [--importante]\n"
+           "                                                 l'admin+ : publie les deux installateurs (leur version lue dans le .exe)\n"
+           "  sauvegarde-configurer --dossier D --phrase-fichier F\n"
+           "                                                 l'admin+ : la sauvegarde compl\xC3\xA8te de chaque jour (ici --dossier : celui des\n"
+           "                                                 sauvegardes ; la cl\xC3\xA9 : --dossier-cle) ; la phrase lue dans F, jamais affich\xC3\xA9" "e\n"
+           "  sauvegarder                                    l'admin+ : une sauvegarde compl\xC3\xA8te maintenant\n"
+           "  restaurer --fichier F --phrase-fichier P [--service URL] [--remplacer] [--remplacer-cle] [--service-seulement]\n"
+           "                                                 remet le dossier du poste et la cl\xC3\xA9 ; --service : aussi le service (\xC3\xA0 cette\n"
+           "                                                 adresse) ; --remplacer : un service qui n'est pas vide ; --remplacer-cle : une\n"
+           "                                                 autre cl\xC3\xA9 de l'\xC3\xA9" "diteur d\xC3\xA9j\xC3\xA0 l\xC3\xA0 (mise de c\xC3\xB4t\xC3\xA9) ; --service-seulement : le\n"
+           "                                                 dossier de ce poste reste tel quel (sa cl\xC3\xA9 : celle de la sauvegarde)\n"
            "  --version\n\n"
            "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
@@ -246,6 +288,203 @@ struct Args {
     }
 };
 
+// ---- 1.44.0 : les commandes qui passent par le Workspace de l'application (une ligne de resultat chacune) ----
+// Une liste "a,b,c" (les espaces ignores, les vides sautes).
+std::vector<std::string> splitList(const std::string& text) {
+    std::vector<std::string> out;
+    std::string cur;
+    for (char c : text + ",") {
+        if (c == ',') {
+            if (!cur.empty()) out.push_back(cur);
+            cur.clear();
+        } else if (c != ' ' && c != '\t') {
+            cur += c;
+        }
+    }
+    return out;
+}
+
+// La phrase de passe lue dans un fichier (sa premiere ligne, sans la fin de ligne) ; jamais affichee.
+bool readPhraseFile(const std::string& path, std::string& phrase, std::string& why) {
+    phrase.clear();
+    crypto::Bytes raw;
+    if (!crypto::readFile(path, raw, &why, 4096)) return false;
+    std::size_t n = 0;
+    while (n < raw.size() && raw[n] != '\n' && raw[n] != '\r') ++n;
+    phrase.assign(raw.begin(), raw.begin() + static_cast<std::ptrdiff_t>(n));
+    crypto::wipe(raw.data(), raw.size());
+    if (phrase.empty()) {
+        why = "le fichier de la phrase est vide";
+        return false;
+    }
+    return true;
+}
+
+// Une empreinte lue au telephone : les hexadecimaux seulement, en majuscules.
+std::string fingerprintKey(const std::string& text) {
+    std::string out;
+    for (char c : text)
+        if (std::isxdigit(static_cast<unsigned char>(c))) out += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    return out;
+}
+
+int oneLine(const license_admin::gui::OpResult& r) {
+    if (r.ok) {
+        say(r.message + "\n");
+        return 0;
+    }
+    complain(r.message);
+    return 1;
+}
+
+int runWorkspaceCommand(const Args& a, const std::string& folder) {
+    namespace gui = license_admin::gui;
+    const auto need = [&](const std::string& opt) -> bool {
+        if (a.one(opt).empty()) {
+            complain(a.command + " : l'option " + opt + " manque (XPG-License-Admin aide)");
+            return false;
+        }
+        return true;
+    };
+    gui::Workspace ws(folder);
+    ws.reload();
+    if (a.command == "admin-demander") {
+        if (!need("--nom") || !need("--courriel")) return 2;
+        std::string fingerprint;
+        return oneLine(ws.requestAdmin(a.one("--nom"), a.one("--courriel"), &fingerprint));
+    }
+    if (a.command == "admin-etat") {
+        std::string state;
+        gui::AdminRefresh x;
+        gui::OpResult r = gui::OpResult::done("");
+        if (ws.role() != gui::Role::None && online::configured(folder)) r = ws.refreshAdminState(nullptr, &x);
+        ws.reload();
+        std::string line = "R\xC3\xB4le : " + gui::roleLabel(ws.role());
+        if (ws.role() == gui::Role::Plus || ws.role() == gui::Role::Admin) line += " (" + std::to_string(ws.myRights().size()) + " droits sur 13)";
+        if (ws.role() == gui::Role::Pending && !x.requestState.empty()) line += " ; demande : " + x.requestState;
+        if (ws.adminList()) line += " ; liste des admins n\xC2\xB0 " + std::to_string(ws.adminList()->number) + " (" + std::to_string(ws.adminList()->admins.size()) + ")";
+        if (ws.adminKey().present) line += " ; empreinte " + ws.adminKey().fingerprint;
+        line += " ; journal \xC3\xA0 envoyer : " + std::to_string(ws.journalWaiting());
+        if (!r.ok) line += " ; service : " + r.message;
+        say(line + "\n");
+        return r.ok ? 0 : 1;
+    }
+    if (a.command == "admin-accepter") {
+        std::string key = a.one("--cle");
+        if (key.empty()) {
+            if (!need("--empreinte")) return 2;
+            std::vector<gui::AdminRequest> list;
+            const auto p = ws.pendingAdminRequests(list);
+            if (!p.ok) return oneLine(p);
+            const std::string want = fingerprintKey(a.one("--empreinte"));
+            for (const auto& q : list)
+                if (!q.fingerprintMismatch && fingerprintKey(q.fingerprint) == want) key = q.key;
+            if (key.empty()) {
+                complain("Refus\xC3\xA9 : aucune demande d'admin en attente n'a cette empreinte.");
+                return 1;
+            }
+        }
+        const std::string profile = a.one("--profil").empty() ? std::string(licensing::admins::kAllRightsProfile) : a.one("--profil");
+        return oneLine(ws.acceptAdmin(key, profile, nullptr, true));
+    }
+    if (a.command == "admin-retirer") {
+        if (!need("--cle")) return 2;
+        return oneLine(ws.retireAdmin(a.one("--cle"), a.flag("--revoquer")));
+    }
+    if (a.command == "admin-droits") {
+        if (!need("--cle")) return 2;
+        if (a.options.find("--droits") == a.options.end()) {
+            complain("admin-droits : l'option --droits manque (une liste a,b,c ; \"\" : aucun droit)");
+            return 2;
+        }
+        return oneLine(ws.setAdminRights(a.one("--cle"), splitList(a.one("--droits")), a.one("--profil")));
+    }
+    if (a.command == "profil-enregistrer") {
+        if (!need("--nom")) return 2;
+        licensing::admins::Profile p;
+        p.name = a.one("--nom");
+        p.rights = splitList(a.one("--droits"));
+        return oneLine(ws.saveProfile(p));
+    }
+    if (a.command == "journal-relever") {
+        int added = 0;
+        const auto r = ws.fetchJournal(&added);
+        if (!r.ok) return oneLine(r);
+        const auto view = ws.journalLines();
+        for (const auto& row : view.rows)
+            say("n\xC2\xB0 " + std::to_string(row.line.number) + " [" + licensing::admins::levelLabel(row.level) + "] " +
+                (row.who.empty() ? std::string("?") : row.who) + " " + row.line.parsed.action + " : " + row.line.parsed.summary +
+                (row.verified ? std::string() : " (NON V\xC3\x89RIFI\xC3\x89" "E : " + row.problem + ")") + "\n");
+        for (const auto& p : view.problems) say("ATTENTION : " + p + "\n");
+        return oneLine(r);
+    }
+    if (a.command == "fichier-envoyer") {
+        if (!need("--poste")) return 2;
+        if (a.one("--fichier").empty() && a.flag("--admin")) return oneLine(ws.sendAdminInstaller(a.one("--poste"), a.one("--nom"), ""));
+        if (!need("--fichier") || !need("--titre")) return 2;
+        licensing::admins::MessageFile f;
+        const auto up = ws.attachFile(a.one("--fichier"), f);
+        if (!up.ok) return oneLine(up);
+        return oneLine(ws.sendMessageToPc(a.one("--poste"), a.one("--titre"), a.one("--texte"), {f}, a.flag("--admin") ? "admin" : ""));
+    }
+    if (a.command == "version-publier") {
+        if (!need("--studios") || !need("--admin")) return 2;
+        std::vector<std::string> notes;
+        if (const auto it = a.options.find("--notes"); it != a.options.end())
+            for (const auto& n : it->second) {
+                std::size_t pos = 0;   // une note par ligne (ou un | entre deux notes)
+                std::string text = n;
+                for (auto& c : text)
+                    if (c == '|') c = '\n';
+                while (pos <= text.size()) {
+                    const std::size_t end = text.find('\n', pos);
+                    notes.push_back(text.substr(pos, end == std::string::npos ? std::string::npos : end - pos));
+                    if (end == std::string::npos) break;
+                    pos = end + 1;
+                }
+            }
+        return oneLine(ws.publishVersion(a.one("--studios"), a.one("--admin"), notes, a.flag("--importante")));
+    }
+    if (a.command == "sauvegarde-configurer") {
+        if (!need("--dossier") || !need("--phrase-fichier")) return 2;
+        std::string phrase, w;
+        if (!readPhraseFile(a.one("--phrase-fichier"), phrase, w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        const auto r = ws.configureBackup(a.one("--dossier"), phrase);
+        crypto::wipe(phrase.data(), phrase.size());
+        return oneLine(r);
+    }
+    if (a.command == "sauvegarder") return oneLine(ws.backupNow());
+    if (a.command == "restaurer") {
+        if (!need("--fichier") || !need("--phrase-fichier")) return 2;
+        std::string phrase, w;
+        if (!readPhraseFile(a.one("--phrase-fichier"), phrase, w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        gui::RestoreOptions o;
+        o.restoreService = !a.one("--service").empty();
+        o.serviceUrl = a.one("--service");
+        o.replaceService = a.flag("--remplacer");
+        o.replaceKey = a.flag("--remplacer-cle");
+        o.restoreFolder = !a.flag("--service-seulement");
+        gui::RestoreReport rep;
+        auto r = ws.restoreBackup(a.one("--fichier"), phrase, o, &rep);
+        crypto::wipe(phrase.data(), phrase.size());
+        if (r.ok && rep.serviceRestored) {
+            std::uint64_t lines = 0;
+            for (const auto& t : rep.tables) lines += t.second;
+            r.message += " " + std::to_string(rep.tables.size()) + " tables, " + std::to_string(lines) + " lignes ; fichiers \xC3\xA0 renvoyer : " +
+                         std::to_string(rep.filesToResend) + ".";
+        }
+        return oneLine(r);
+    }
+    complain("commande inconnue : " + a.command);
+    return 2;
+}
+
 int run(const std::vector<std::string>& argv) {
     if (argv.empty() || argv[0] == "aide" || argv[0] == "--aide" || argv[0] == "-h" || argv[0] == "--help") {
         say(usage());
@@ -258,11 +497,13 @@ int run(const std::vector<std::string>& argv) {
     Args a;
     a.command = argv[0];
     static const std::vector<std::string> kFlags = {"--essai",     "--garder",    "--vide",     "--publier",     "--afficher", "--remplacer",
-                                                    "--recevoir-seulement", "--a-blanc", "--toutes", "--etendre", "--nouveau-code", "--reactiver"};
+                                                    "--recevoir-seulement", "--a-blanc", "--toutes", "--etendre", "--nouveau-code", "--reactiver",
+                                                    "--revoquer", "--importante", "--remplacer-cle", "--service-seulement"};   // 1.44.0
     for (std::size_t i = 1; i < argv.size(); ++i) {
         const std::string& x = argv[i];
         if (x.rfind("--", 0) == 0) {
-            if (std::find(kFlags.begin(), kFlags.end(), x) != kFlags.end()) {
+            // 1.44.0 : --admin est un drapeau pour fichier-envoyer (l'installateur de l'Admin), une valeur pour version-publier.
+            if (std::find(kFlags.begin(), kFlags.end(), x) != kFlags.end() || (a.command == "fichier-envoyer" && x == "--admin")) {
                 a.flags.push_back(x);
             } else if (i + 1 < argv.size()) {
                 a.options[x].push_back(argv[++i]);
@@ -274,7 +515,11 @@ int run(const std::vector<std::string>& argv) {
             a.positional.push_back(x);
         }
     }
-    const std::string folder = a.one("--dossier").empty() ? defaultKeyFolder() : a.one("--dossier");
+    // 1.44.0 : --dossier-cle nomme le dossier de la cle pour toutes les commandes ; sauvegarde-configurer prend --dossier
+    // pour celui des sauvegardes.
+    const std::string folder = !a.one("--dossier-cle").empty()                                  ? a.one("--dossier-cle")
+                               : (a.command == "sauvegarde-configurer" || a.one("--dossier").empty()) ? defaultKeyFolder()
+                                                                                                       : a.one("--dossier");
     const licensing::Seconds now = licensing::systemNow();
     std::string why;
     if (!crypto::init()) {
@@ -1061,6 +1306,12 @@ int run(const std::vector<std::string>& argv) {
         if (!key) return 1;
         return showResult(online::studioKit(folder, key.get(), a.one("--sortie"), licensing::systemNow()));
     }
+    // ---- 1.44.0 : les admins, les fichiers, les versions, la sauvegarde (le Workspace de l'application) ----
+    static const std::vector<std::string> kWorkspaceCommands = {"admin-demander", "admin-etat",      "admin-accepter",        "admin-retirer",
+                                                                "admin-droits",   "profil-enregistrer", "journal-relever",     "fichier-envoyer",
+                                                                "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer"};
+    if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
+        return runWorkspaceCommand(a, folder);
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {
         complain("La commande " + a.command + " (1.31 \xC3\xA0 1.34) n'existe plus. L'archive se synchronise par le service des licences "
                  "(archive-cle, archive-synchroniser) et les demandes des clients y arrivent (service-demandes).\n\n" + usage());

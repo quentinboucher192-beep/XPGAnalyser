@@ -55,6 +55,10 @@ struct ShellHost {
     std::function<void(const ui::FilePick& pick, std::function<void(std::string)> done)> pickFile;
     // Ouvrir un dossier dans l'explorateur (le dossier de l'archive, d'un fichier ecrit).
     std::function<void(const std::string& folder)> openFolder;
+    // 1.44.0 : un travail lent SANS BRUIT (un releve automatique : les admins, les demandes d'admin pendant que le
+    // dialogue << Ajouter un admin >> attend) - rien au journal de la seance, la coquille n'est pas << occupee >> ; `done`
+    // dit ce qu'il faut. Vide (les essais) : runSlow.
+    std::function<bool(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done)> runQuiet;
 };
 
 class Page : public ui::Widget {
@@ -94,6 +98,12 @@ using PagePtr = std::unique_ptr<Page>;
 //  "service"        Service en ligne (1.35)                  PageService.cpp
 //  "historique"     Historique                               PageHistory.cpp
 //  "securite"       Parametres de securite (la cle)          PageSecurity.cpp
+//  1.44.0 : plusieurs admins (docs/ADMINS.md, maquette 1.43.0)
+//  "admins"         Administrateurs (tous ; lecture seule      PageAdmins.cpp
+//                   pour un admin ; sans cle : devenir admin)
+//  "droits"         Droits des admins (une sous-page           PageRights.cpp
+//                   d'Administrateurs ; l'admin+)
+//  "journal"        Journal des admins (l'admin+)            PageJournal.cpp
 PagePtr makeDashboardPage(ShellHost host);
 PagePtr makeClientsPage(ShellHost host);
 PagePtr makeLicencesPage(ShellHost host);
@@ -108,6 +118,22 @@ PagePtr makeRevocationsPage(ShellHost host);
 PagePtr makeServicePage(ShellHost host);
 PagePtr makeHistoryPage(ShellHost host);
 PagePtr makeSecurityPage(ShellHost host);
+PagePtr makeAdminsPage(ShellHost host);    // 1.44.0
+PagePtr makeRightsPage(ShellHost host);    // 1.44.0
+PagePtr makeJournalPage(ShellHost host);   // 1.44.0
+
+// 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet
+// admin ; << Ses droits >> : cet admin choisi dans Droits ; << Voir la licence >> du journal : la licence choisie) - la page
+// le prend a son prochain refresh (la coquille l'appelle en la montrant). `what` : "admin:<cle>", "ligne:<numero>",
+// l'identifiant d'une licence... ; takePageFocus le rend une fois (vide : rien).
+void requestPageFocus(const std::string& pageId, const std::string& what);
+[[nodiscard]] std::string takePageFocus(const std::string& pageId);
+
+// 1.44.0 : le dialogue << Ajouter un admin >> (planche 02) ; `requestKey` non vide : ouvert sur cette demande recue, a
+// l'etape 3 (<< Verifier et accepter... >>). `done` (facultatif) : appele quand un admin a ete accepte ou refuse.
+menu::MenuPtr makeAddAdminDialog(ShellHost host, std::string requestKey = {}, std::function<void()> done = {});
+// 1.44.0 : le dialogue << Criticite des actions >> (planche 04) ; `done` : apres Enregistrer.
+menu::MenuPtr makeCriticalityDialog(ShellHost host, std::function<void()> done = {});
 
 // L'assistant de creation d'une licence (un dialogue) ; `requests` : des demandes deja choisies (glissees) ;
 // `extendLicenseId` : ajouter des PC a cette licence de l'archive (une licence en ligne : la prolonger) ; `customer` : le

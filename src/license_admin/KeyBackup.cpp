@@ -288,4 +288,81 @@ std::unique_ptr<licensing::SigningKey> restoreKeyBackup(const std::string& folde
     return key;
 }
 
+// ---- 1.44.0 : la cle dans la sauvegarde complete ----
+namespace {
+
+// Effacer la secrete d'une charge utile lue (la valeur du membre "secrete").
+void wipePayload(Value& payload) {
+    if (Value* s = payload.find("secrete"); s && s->isString()) {
+        std::string& v = const_cast<std::string&>(s->asString());
+        sodium_memzero(v.data(), v.size());
+    }
+}
+
+bool readPayload(std::string_view json, Value& payload, crypto::PublicKey& pub, crypto::SecretKey& secret, std::string* why) {
+    if (!core::json::parse(json, payload, nullptr) || !payload.isObject() || payload.str("format") != kPayloadFormat) {
+        wipePayload(payload);
+        if (why) *why = "la cl\xC3\xA9 de l'\xC3\xA9" "diteur de la sauvegarde est illisible";
+        return false;
+    }
+    Header h;
+    crypto::PublicKey p{};
+    crypto::Bytes raw;
+    if (crypto::unhex(payload.str("publique"), raw, 32) && raw.size() == 32) {
+        std::copy(raw.begin(), raw.end(), p.begin());
+        h.keyId = licensing::keyIdOf(p);
+    }
+    const bool ok = pairOf(payload, h, pub, secret, why);
+    wipePayload(payload);
+    return ok;
+}
+
+} // namespace
+
+bool keyBackupPayload(const licensing::SigningKey& key, std::string& json, std::string* why) {
+    if (!crypto::init()) {
+        if (why) *why = "libsodium ne d\xC3\xA9marre pas";
+        return false;
+    }
+    Value payload = Value::object();
+    payload.set("format", std::string(kPayloadFormat));
+    payload.set("nom", key.name());
+    payload.set("essai", key.test());
+    payload.set("publique", key.publicKeyHex());
+    const auto& secret = KeyBackupAccess::secret(key);
+    std::string secretHex = crypto::hex(secret.data(), secret.size());
+    payload.set("secrete", secretHex);
+    sodium_memzero(secretHex.data(), secretHex.size());
+    json = core::json::write(payload, false);
+    wipePayload(payload);
+    return true;
+}
+
+bool checkKeyBackupPayload(std::string_view json, std::string& keyId, std::string& name, std::string* why) {
+    Value payload;
+    crypto::PublicKey pub{};
+    crypto::SecretKey secret{};
+    const bool ok = readPayload(json, payload, pub, secret, why);
+    sodium_memzero(secret.data(), secret.size());
+    if (!ok) return false;
+    keyId = licensing::keyIdOf(pub);
+    name = payload.str("nom");
+    return true;
+}
+
+std::unique_ptr<licensing::SigningKey> restoreKeyBackupPayload(const std::string& folder, std::string_view json, std::string* why) {
+    Value payload;
+    crypto::PublicKey pub{};
+    crypto::SecretKey secret{};
+    if (!readPayload(json, payload, pub, secret, why)) {
+        sodium_memzero(secret.data(), secret.size());
+        return nullptr;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(std::u8string(folder.begin(), folder.end())), ec);
+    auto key = KeyBackupAccess::create(publisherKeyPath(folder), publisherKeySpec(), payload.str("nom"), payload.flag("essai"), pub, secret, why);
+    sodium_memzero(secret.data(), secret.size());
+    return key;
+}
+
 } // namespace license_admin
