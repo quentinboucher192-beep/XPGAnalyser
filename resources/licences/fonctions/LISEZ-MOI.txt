@@ -9,11 +9,11 @@ Une capture peut être plus grande que 960 × 600 (2x : 1920 × 1200, ou 3200 ×
 (copies réduites de moitié en moitié) et en grand. Les bulles sont écrites dans le « repere » de descriptions.json (960 × 600 pour
 tout le fichier ; une capture peut avoir le sien : "repere": {"l": 1600, "h": 1000}) : une capture refaite en plus grand, aux mêmes
 proportions, garde ses bulles à leur place sans les recompter. Sans « repere » : les pixels de l'image elle-même.
-1.45.0, les captures refaites : 2 ou 3 par fonctionnalité (51 nouvelles images ; multi_user gardé), toutes au design actuel (Studios 1.44.0
+1.45.0, les captures refaites : 2 ou 3 par fonctionnalité (54 images ; celles de multi_user viennent de l'essai de bout en bout de la 1.45.0 : deux IHM Studio 1.45.0 en session par Internet sous Wine, l'onglet Session, l'équipe dans l'arbre, le retour après un retrait), toutes au design actuel (Studios 1.44.0
 sous Wine, fenêtre 1600 × 1000). Chaque image est un morceau de la fenêtre à sa taille réelle - jamais réduite, en couleurs vraies
 (RGB, sans palette), PNG optimisé : 1600 × 1000 (la fenêtre entière), 1280 × 800, 1200 × 750 (la page sans l'arbre), 1120 × 700…
 toujours au rapport 1,6 ; de 33 à 270 Ko. Chaque capture a sa légende et 1 à 3 bulles, et son propre « repere » = sa taille :
-ses bulles sont en pixels de cette image (le repère 960 × 600 du fichier ne vaut plus que pour multi_user).
+ses bulles sont en pixels de cette image (le repère 960 × 600 du fichier ne sert plus qu'à une capture qui n'aurait pas le sien).
 Projets fictifs seulement : Demo_Pompe (API) et Armoire_Gaz (IHM, une copie de travail : les variables de l'automate qu'elle lit
 y sont déclarées en variables IHM et un script les fait vivre, pour la simulation et le poste sans automate). Licence : la
 Découverte (rien de réel), et pour les licences flottantes une licence ENTERPRISE fictive (« Entreprise Exemple ») signée par la

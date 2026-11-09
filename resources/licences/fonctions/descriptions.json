@@ -25,7 +25,7 @@
     "advanced_export": "Rapports : générer maintenant le rapport journalier, en PDF ou Excel, avec sa mise en page et son aperçu.",
     "professional_tools": "L'outil Modbus : une lecture de registres sur un équipement, les valeurs en décimal, hexadécimal et binaire.",
     "floating_licenses": "Les licences flottantes : des postes en même temps plutôt que des PC fixes ; la fenêtre Licence d'une édition ENTERPRISE les montre ouvertes.",
-    "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, sur le réseau du bureau. L'équipe (qui fait quoi, Suivre, Regarder seulement), la discussion, chacun son objet ; Ctrl+Z n'annule que tes gestes."
+    "multi_user": "Les sessions : plusieurs PC sur le même projet IHM, au bureau ou par Internet. L'équipe dans l'arbre du projet, l'onglet Session (la discussion, le journal de qui a changé quoi), chacun son objet ; l'hôte peut retirer quelqu'un, et rien ne reste chez l'équipier."
   },
   "captures": {
     "api_editor": [
@@ -1565,61 +1565,134 @@
     ],
     "multi_user": [
       {
-        "legende": "le panneau de la session (l'hôte)",
+        "legende": "l'onglet Session et l'équipe dans l'arbre (l'hôte)",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
         "bulles": [
           {
-            "x": 104,
-            "y": 78,
-            "l": 370,
-            "h": 112,
-            "texte": "L'équipe : qui est là, sur quel PC, sur quelle vue, et ce qu'il a choisi."
+            "x": 80,
+            "y": 132,
+            "l": 420,
+            "h": 70,
+            "texte": "L'équipe en tête de l'arbre du projet : chacun (hôte ou équipier), son PC, sa vue ; un clic le suit."
           },
           {
-            "x": 270,
-            "y": 153,
-            "l": 207,
-            "h": 32,
-            "texte": "Regarder seulement ou Laisser modifier, personne par personne ; Suivre : voir ce que voit l'équipier."
+            "x": 510,
+            "y": 250,
+            "l": 150,
+            "h": 24,
+            "texte": "Texte_Etat est tenu par Léa : ses initiales, à sa couleur."
           },
           {
-            "x": 484,
-            "y": 78,
-            "l": 374,
-            "h": 108,
-            "texte": "La discussion de la session : les entrées, les sorties, les messages."
+            "x": 776,
+            "y": 292,
+            "l": 380,
+            "h": 46,
+            "texte": "Ce que Léa a choisi, à sa couleur : personne d'autre ne peut le prendre tant qu'elle l'a."
           },
           {
-            "x": 484,
-            "y": 492,
-            "l": 372,
+            "x": 505,
+            "y": 715,
+            "l": 595,
+            "h": 58,
+            "texte": "L'onglet Session n'est là que pendant une session : la discussion et le journal, mêlés dans l'ordre (Tout, Discussion, Journal)."
+          },
+          {
+            "x": 720,
+            "y": 874,
+            "l": 290,
+            "h": 24,
+            "texte": "Le journal : qui a changé quoi, et quand ; enregistré avec le projet à la fin de la session."
+          },
+          {
+            "x": 1410,
+            "y": 749,
+            "l": 172,
+            "h": 24,
+            "texte": "L'hôte exporte le journal (CSV)."
+          },
+          {
+            "x": 505,
+            "y": 913,
+            "l": 1082,
             "h": 32,
             "texte": "Écrire à l'équipe (Entrée envoie)."
-          },
-          {
-            "x": 643,
-            "y": 533,
-            "l": 130,
-            "h": 34,
-            "texte": "Arrêter la session : chacun garde sa copie du projet ; l'hôte enregistre."
           }
         ]
       },
       {
-        "legende": "chacun son objet (chez l'équipière)",
+        "legende": "chez l'équipière : ses gestes partent chez l'hôte",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
         "bulles": [
           {
-            "x": 362,
-            "y": 134,
-            "l": 402,
-            "h": 60,
-            "texte": "Pris par Camille : son contour et son nom, à sa couleur. Personne d'autre ne peut le choisir tant qu'elle l'a choisi."
+            "x": 80,
+            "y": 132,
+            "l": 420,
+            "h": 70,
+            "texte": "L'équipe, chez l'équipière aussi : « (toi) » à côté de son nom."
           },
           {
-            "x": 30,
-            "y": 88,
-            "l": 240,
-            "h": 200,
-            "texte": "Les changements arrivent objet par objet : deux équipiers sur deux objets de la même vue ne s'écrasent pas."
+            "x": 776,
+            "y": 286,
+            "l": 378,
+            "h": 50,
+            "texte": "Le texte qu'elle déplace : chaque geste part tout seul chez l'hôte, objet par objet."
+          },
+          {
+            "x": 720,
+            "y": 802,
+            "l": 870,
+            "h": 24,
+            "texte": "Le projet reste chez l'hôte : quand elle part, sa copie est effacée de son PC."
+          },
+          {
+            "x": 720,
+            "y": 874,
+            "l": 290,
+            "h": 24,
+            "texte": "Son geste, au journal de la session."
+          }
+        ]
+      },
+      {
+        "legende": "retirée, elle frappe de nouveau : à l'hôte de décider",
+        "repere": {
+          "l": 1600,
+          "h": 1000
+        },
+        "bulles": [
+          {
+            "x": 720,
+            "y": 826,
+            "l": 330,
+            "h": 24,
+            "texte": "Camille a retiré Léa : elle revient à l'accueil, les autres le lisent."
+          },
+          {
+            "x": 720,
+            "y": 850,
+            "l": 420,
+            "h": 24,
+            "texte": "Elle frappe de nouveau : même avec le code, c'est l'hôte qui décide."
+          },
+          {
+            "x": 1290,
+            "y": 8,
+            "l": 170,
+            "h": 30,
+            "texte": "La pastille Session : 1 personne, 1 à faire entrer (Accepter ou Refuser)."
+          },
+          {
+            "x": 80,
+            "y": 132,
+            "l": 420,
+            "h": 46,
+            "texte": "L'équipe : Camille seule, le temps que Léa revienne."
           }
         ]
       }
