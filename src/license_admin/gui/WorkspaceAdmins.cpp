@@ -1437,6 +1437,19 @@ OpResult Workspace::retireAdmin(const std::string& keyHex, bool revokeLicencesTo
     a->rights.clear();
     int number = 0;
     if (!publishList(*c, folder_, editor, list, t, number, &why)) return OpResult::fail(why);
+    // Les documents re-signes (le registre, la liste de revocation) partent aussi dans l'archive en ligne : sinon les
+    // autres admins y trouveraient ceux de l'admin retire (refuses : ils ne les recevraient pas).
+    if ((registryDone || revocationsDone) && archive::hasSyncKey(folder_)) {
+        archive::SyncOptions so;
+        so.now = t;
+        so.tool = std::string(kAppName) + " " + kAppVersion;
+        so.editorKeys = caller.editorKeys;
+        so.admins = caller.admins;
+        so.software = o.software;
+        const archive::SyncReport sync = archive::synchronize(folder_, editor, so);
+        r.details.push_back(sync.ok ? "Archive en ligne : les documents re-sign\xC3\xA9s envoy\xC3\xA9s."
+                                    : "ATTENTION : l'archive en ligne n'est pas \xC3\xA0 jour (" + sync.why + ") : Synchroniser l'archive.");
+    }
     r.message = name + " est retir\xC3\xA9 de la liste des admins (liste n\xC2\xB0 " + std::to_string(number) + ") : sa cl\xC3\xA9 ne peut plus rien faire sur le service.";
     r.details.push_back("Son trousseau est effac\xC3\xA9 par le service ; la cl\xC3\xA9 de synchro ne change pas (\xC2\xAB Changer la cl\xC3\xA9 de synchro \xC2\xBB si tu le souhaites).");
     Value d = Value::object();

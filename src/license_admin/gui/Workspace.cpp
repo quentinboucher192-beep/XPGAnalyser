@@ -1220,6 +1220,9 @@ OpResult Workspace::serviceConfigure(const std::string& url) {
 
 OpResult Workspace::syncKeyCreate(std::string* recoveryCodeOut) {
     if (recoveryCodeOut) recoveryCodeOut->clear();
+    if (role_ != Role::Plus && role_ != Role::None)   // 1.44.0 : un admin recoit celle de l'admin+ (le trousseau), jamais une autre
+        return OpResult::fail("la cl\xC3\xA9 de synchro est celle de l'admin+ : tu la re\xC3\xA7ois par le trousseau d\xC3\xA8s que tu es admin "
+                              "(ou par son code de secours) ; une autre rendrait l'archive illisible");
     archive::SyncKey sk{};
     std::string why;
     if (!archive::createSyncKey(folder_, sk, &why)) return OpResult::fail(why);

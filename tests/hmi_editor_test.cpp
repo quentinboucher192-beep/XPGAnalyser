@@ -11963,7 +11963,7 @@ void lot19_historique_onglets() {
         paintAt(2100);
         check(tabs.fit() == ui::TabControl::Fit::ShortBadges && tabs.listButtonRect().w > 0.f && !tabs.compacted(0),
               "un peu serr\xC3\xA9 : les pastilles raccourcies, le bouton de la liste appara\xC3\xAEt");
-        paintAt(1500);   // 1.44.0 : plus large qu'avant (les titres restent lisibles : ils prennent de la place)
+        paintAt(1750);   // 1.44.0 : plus large qu'avant (les titres restent lisibles : ils prennent de la place)
         // 1.44.0 : jamais l'icone seule - les titres des onglets inactifs raccourcis (...), l'onglet ouvert en entier
         bool someShortened = false;
         for (std::size_t i = 0; i < tabs.tabCount(); ++i) someShortened = someShortened || tabs.compacted(i);

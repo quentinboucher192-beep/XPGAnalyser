@@ -1072,6 +1072,14 @@ if(XPG_BUILD_TESTS)
     if(TEST service_studios)
         set_tests_properties(service_studios PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :")
     endif()
+    # 1.44.0 : les fichiers (telecharges, verifies, repris, refuses), les messages a un PC, les versions et les adresses de
+    # secours cote Studio (app/FileDownload, app/LicenceService, app/Updates) - contre le VRAI Worker (SAUTE sans Node.js)
+    xpg_add_test_executable(licence_fichiers_test tests/licence_fichiers_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licence_fichiers_test PRIVATE xpg_app xpg_licensing)
+    xpg_add_test(NAME service_fichiers COMMAND licence_fichiers_test ${CMAKE_SOURCE_DIR})
+    if(TEST service_fichiers)
+        set_tests_properties(service_fichiers PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.34.0, 1.35.0 : les formats de la demande en ligne et de l'etat d'un poste (licensing/Gateway), que transporte
     # le service des licences, sans reseau
     xpg_add_test_executable(licensing_gateway_test tests/licensing_gateway_test.cpp)

@@ -2906,7 +2906,7 @@ void ZoomImage::onPaint(const ui::PaintContext& ctx) {
                     const auto& s = spots_[i];
                     const gfx::Rect sr{ir.x + s.x * k, ir.y + s.y * k, s.w * k, s.h * k};
                     const bool on = static_cast<int>(i) == hoverSpot_;
-                    r.strokeRoundedRect(sr, c.accent.withAlpha(on ? 255 : 120), 5.f, on ? 2.f : 1.f);
+                    ui::shapes::strokeRoundedRect(r, sr, c.accent.withAlpha(on ? 255 : 120), 5.f, on ? 2.f : 1.f);
                 }
             }
             r.popClip();

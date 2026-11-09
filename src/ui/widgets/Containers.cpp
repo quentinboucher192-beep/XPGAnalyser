@@ -546,7 +546,7 @@ void TabControl::onLayout() {
             // tient), jamais moins que kTabMinText ; l'onglet ouvert garde son titre.
             const auto totalFor = [&](float cap) {
                 float s = 0.f;
-                for (std::size_t i = 0; i < n; ++i) s += width(tabs_[i], true, i == current_ ? -1.f : cap);
+                for (std::size_t i = 0; i < n; ++i) s += width(tabs_[i], i != current_, i == current_ ? -1.f : cap);
                 return s;
             };
             float cap = kTabMinText;
@@ -565,10 +565,10 @@ void TabControl::onLayout() {
             total = 0.f;
             for (std::size_t i = 0; i < n; ++i) {
                 const bool shorten = i != current_;
-                tabs_[i].shortBadge = true;
+                tabs_[i].shortBadge = shorten;   // l'onglet ouvert garde sa pastille entiere
                 tabs_[i].textMax = shorten ? cap : 0.f;
                 tabs_[i].compact = shorten && measureWidth(tabs_[i].meta.title, tabFont_) > cap + 0.5f;
-                widths[i] = width(tabs_[i], true, shorten ? cap : -1.f);
+                widths[i] = width(tabs_[i], shorten, shorten ? cap : -1.f);
                 total += widths[i];
             }
             if (fit_ == Fit::Scroll) {

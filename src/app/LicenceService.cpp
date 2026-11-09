@@ -2522,9 +2522,12 @@ Result sync() {
                 if (l.rfind("Rien de nouveau", 0) != 0) lines.push_back(std::move(l));
         }
     }
-    // 5. 1.44.0 : les messages de ce PC ; 6. la version publiee (plus recente que ce programme : la mise a jour)
-    (void)stepMessages(c, rec, res);
-    stepVersion(c, res.publishedVersion, rec, res, false);
+    // 5. 1.44.0 : les messages de ce PC ; 6. la version publiee (plus recente que ce programme : la mise a jour) - avec
+    //    quelqu'un devant l'ecran seulement (le poste d'exploitation qui tourne ne les releve pas : ils restent au Studio).
+    if (licence::noticesShown()) {
+        (void)stepMessages(c, rec, res);
+        stepVersion(c, res.publishedVersion, rec, res, false);
+    }
     res.ok = allOk;
     if (lines.empty() && c.lines.empty()) lines.push_back("Licence synchronis\xC3\xA9" "e avec le service.");
     finish(res, c, rec, std::move(lines));
@@ -2559,6 +2562,7 @@ Result look(Job job) {
         res.message = why;
         return res;
     }
+    if (!licence::noticesShown() && job == Job::Watch) return res;   // le poste d'exploitation : le regard seul
     if (job != Job::Update) {
         if (!stepMessages(c, rec, res) && job == Job::Messages) {
             res.ok = false;

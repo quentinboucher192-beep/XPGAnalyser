@@ -31,6 +31,7 @@
 #include "../src/license_admin/gui/Workspace.hpp"
 #include "../src/licensing/Admins.hpp"
 #include "../src/licensing/Documents.hpp"
+#include "../src/licensing/Gateway.hpp"
 #include "../src/licensing/Service.hpp"
 #include "../src/licensing/SignedFile.hpp"
 #include "../src/licensing/Store.hpp"
@@ -186,18 +187,6 @@ int main(int argc, char** argv) {
         const auto r = plus.signRegistryJson(source + "/tests/fixtures/licences/registre-exemple.json");
         check(r.ok && plus.hasRegistry(), "le registre d'exemple signe (" + r.text() + ")");
         check(gui::detail::registryRights(&plus.registry(), plus.registry()).empty(), "le meme registre : aucune partie ne change");
-        {   // SCRATCH
-            std::vector<lic::SignedBlock> bl;
-            (void)lic::readBlocks(ar::archivedText(U(root / "plus"), "registre/registre.xpgreg"), bl, nullptr);
-            json::Value a, b;
-            (void)json::parse(bl[0].document, a, nullptr);
-            (void)json::parse(lic::writeRegistry(plus.registry()), b, nullptr);
-            for (const auto& [k, v] : a.members()) {
-                const json::Value* y = b.find(k);
-                if (!y || json::write(v, false) != json::write(*y, false)) std::printf("  DIFF %s\n", k.c_str());
-            }
-            for (const auto& [k, v] : b.members()) if (!a.find(k)) std::printf("  NEW %s\n", k.c_str());
-        }
         lic::Registry edited = plus.registry();
         edited.editions.front().price = "1 \xE2\x82\xAC HT (essai)";
         check(gui::detail::registryRights(&plus.registry(), edited) == std::vector<std::string>{"offres"}, "un prix change : le droit << offres >>");
@@ -264,7 +253,7 @@ int main(int argc, char** argv) {
         check(plus.serviceConfigure(svc.url()).ok, "l'adresse du service");
         const auto c = plus.serviceCertify({});
         check(c.ok, "la cle du service certifiee (" + c.text() + ")");
-        // Le registre ecrit par l'application (le premier, ecrit a la main, est ecrit autrement) : un admin le modifie ensuite
+        // Le registre re-signe par l'application (une nouvelle emission, numero + 1)
         auto r = plus.signRegistry(plus.registry());
         check(r.ok, "le registre re-signe par l'application (" + r.text() + ")");
         auto job = plus.takeServiceJob();
@@ -291,6 +280,7 @@ int main(int argc, char** argv) {
         check(fp.size() == 29 && fp == adm::fingerprint(leaWs.adminKey().keyHex), "l'empreinte : 6 groupes de 4 (" + fp + ")");
         check(!leaWs.signer() && has(leaWs.whyNot("licence_creer"), "attend"), "en attente : rien ne signe (" + leaWs.whyNot("licence_creer") + ")");
         check(!leaWs.createKey("essai", true).ok, "un poste qui a une cle d'admin ne cree pas la cle de l'editeur");
+        check(!leaWs.syncKeyCreate(nullptr).ok && !ar::hasSyncKey(U(root / "lea2")), "ni sa propre cle de synchro (celle de l'admin+ viendra)");
         std::string state;
         check(leaWs.adminRequestState(state).ok && state == "attente", "l'etat de la demande : attente");
         gui::AdminRefresh x;
@@ -581,6 +571,59 @@ int main(int argc, char** argv) {
         const auto rep = client.importBytes(list.body + out);
         check(!rep.ok && !rep.licenseInstalled, "le client la refuse : un admin retire (" + rep.why + ")");
         check(client.evaluate().status == lic::LicenseStatus::Valid && client.evaluate().licenseId == "XPG-ESSAI-LEA-1", "la licence gardee reste installee");
+    }
+
+    std::printf("-- un second admin, retire avec ses licences revoquees\n");
+    {
+        gui::Workspace hugo(U(root / "hugo"));
+        check(hugo.serviceConfigure(svc.url()).ok, "le poste de Hugo");
+        check(hugo.requestAdmin("Hugo Essai", "hugo@exemple.invalid", nullptr).ok, "sa demande");
+        hugo.reload();
+        const std::vector<std::string> rights{"licence_creer"};
+        const auto a = plus.acceptAdmin(hugo.adminKey().keyHex, "", &rights);
+        check(a.ok, "accepte avec des droits choisis (sans profil) (" + a.text() + ")");
+        (void)hugo.refreshAdminState(nullptr, nullptr);
+        hugo.reload();
+        check(hugo.role() == gui::Role::Admin && hugo.myRights() == rights && hugo.archiveSync(true, false).ok, "Hugo : admin, l'archive recue");
+        hugo.reload();
+        lic::LicenseStore client2(clientOptions(root / "pc-client-2", *plus.signingKey()));
+        std::string why;
+        check(client2.writeActivationRequest(U(root / "client-2.xpgreq"), "PC client essai 2", "", "IHM Studio 1.44.0 (essai)", &why), "la demande du second client");
+        gui::LicenceDraft d;
+        d.licenseId = "XPG-ESSAI-HUGO-1";
+        d.customer = "Atelier d'essai deux";
+        d.edition = "PROFESSIONAL";
+        d.requestPaths = {U(root / "client-2.xpgreq")};
+        const auto r = hugo.signLicence(d, U(root / "sortie" / "hugo-1.xpglic"));
+        auto job = hugo.takeServiceJob();
+        check(r.ok && job && hugo.serviceRun(*job).ok, "Hugo signe et publie une licence (" + r.text() + ")");
+        const auto rep = client2.importBytes(readFile(root / "sortie" / "hugo-1.xpglic"));
+        check(rep.ok && rep.state.status == lic::LicenseStatus::Valid, "le second client l'installe (" + rep.why + ")");
+        check(hugo.archiveSync(false, false).ok && plus.archiveSync(false, false).ok, "l'archive : sa licence chez l'admin+");
+        plus.reload();
+        const auto ret = plus.retireAdmin(hugo.adminKey().keyHex, true);
+        check(ret.ok && has(ret.text(), "r\xC3\xA9voqu"), "retire, ses licences revoquees (" + ret.text() + ")");
+        plus.reload();
+        const gui::LicenceEntry* e = plus.licence("XPG-ESSAI-HUGO-1");
+        std::vector<lic::SignedBlock> blocks;
+        check(e && e->revoked && lic::readBlocks(ar::archivedText(U(root / "plus"), "revocations/revocations.xpgrev"), blocks, nullptr) && blocks.size() == 1 &&
+                  blocks[0].keyId == plus.signingKey()->keyId(),
+              "la licence de Hugo revoquee par une liste signee de la cle de l'editeur");
+        const adm::Admin* h = plus.adminList() ? plus.adminList()->byKey(hugo.adminKey().keyHex) : nullptr;
+        check(h && !h->active() && h->kept.empty(), "Hugo retire, rien de garde");
+        // son PC prevenu : l'etat << revoquee >> (signe par la cle de l'editeur)
+        auto pcKey = lic::SigningKey::load(U(root / "pc-client-2" / lic::kDeviceKeyFile), lic::deviceKeySpec(), &why);
+        const Reply poste = pcKey ? call(svc.url(), "GET", "/v1/poste", {}, pcKey.get()) : Reply{};
+        std::vector<lic::SignedBlock> pb;
+        lic::gateway::DeviceStatus st;
+        check(poste.status == 200 && poste.value.isObject() && lic::readBlocks(poste.value.str("poste"), pb, nullptr) && pb.size() == 1 &&
+                  lic::verifyBlock(pb[0], plus.signingKey()->publicKey()) && lic::gateway::parseDeviceStatus(pb[0].document, st, nullptr) &&
+                  st.state == lic::gateway::State::Revoked,
+              "son PC : << revoquee >>, signe par l'editeur (" + std::to_string(poste.status) + " " + (pb.empty() ? poste.body : pb[0].document) + " ; " + ret.text() + ")");
+        const Reply list = call(svc.url(), "GET", "/v1/admins", {}, nullptr);
+        bool changed = false;
+        check(client2.adoptAdminList(list.body, &changed, &why) && client2.evaluate().status != lic::LicenseStatus::Valid,
+              "chez le client, avec la nouvelle liste : la licence n'est plus valable");
     }
 
     std::printf("-- le journal apres le retrait\n");
