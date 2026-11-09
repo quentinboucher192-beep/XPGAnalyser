@@ -208,6 +208,23 @@ bool post(const std::string& base, Pc& pc, const EditorId& editor, const std::st
     return d.status == 201 && pc.number > 0;
 }
 
+// 1.42.0 : une demande d'OPTION pour la licence de ce PC (Licence > Options du Studio).
+bool postOption(const std::string& base, Pc& pc, const EditorId& editor, const std::string& licenseId, const std::string& customer, const std::string& option,
+                int days) {
+    gw::OnlineRequest o;
+    o.request = pc.request(licenseId, g_now - 20);
+    o.customer = customer;
+    o.message = "Pour la mise en service (essai)";
+    o.option = option;
+    o.optionDays = days;
+    json::Value b = json::Value::object();
+    b.set("cle", editor.keyId);
+    b.set("scelle", gw::sealFor(editor.pub, gw::writeOnlineRequest(o)));
+    const Reply d = call(base, "POST", "/v1/demandes", json::write(b, false), pc.key.get());
+    pc.number = static_cast<int>(d.value.integer("numero"));
+    return d.status == 201 && pc.number > 0;
+}
+
 // L'etat << poste >> d'un PC (GET /v1/poste) : le bloc signe par l'editeur, son contenu ouvert par le PC.
 bool posteState(const std::string& base, const Pc& pc, const EditorId& editor, gw::DeviceStatus& st, gw::StatusContent& content) {
     const Reply r = call(base, "GET", "/v1/poste", {}, pc.key.get());
@@ -638,6 +655,58 @@ int main(int argc, char** argv) {
         check(rows(*page, "demandes.table") == 4 && has(t, "Accept\xC3\xA9" "e") && has(t, "Refus\xC3\xA9" "e"), "Toutes : acceptees et refusees");
         check(selectRow(*page, 1, "Client d'essai Gamma") && !find<ui::Button>(*page, "demandes.accepter")->enabled(), "une demande traitee : pas d'Accepter");
         filter->setSelectedIndex(0);
+    }
+
+    std::printf("-- 1.42.0 : une demande d'option (licence liee) : Ajouter cette option..., le PC lit << acceptee >> et sa licence avec l'option\n");
+    {
+        g_now += 60;
+        check(postOption(url, pcB, editor, shared, "Client d'essai Beta", "ia_avancee", 30), "B demande l'option Assistant IA avance, 1 mois");
+        check(click(*page, "demandes.relever") && rig.last() && rig.last()->ok, "Relever : " + lastText(rig));
+        page->refresh();
+        std::string t = paintPage(*page, 2000.f, 760.f);
+        {
+            auto* tv = find<ui::TableView>(*page, "demandes.table");
+            const std::string wanted = tv && tv->model() && tv->model()->rowCount() ? tv->model()->cellText(0, 2) : std::string();
+            const std::string lic = tv && tv->model() && tv->model()->rowCount() ? tv->model()->cellText(0, 6) : std::string();
+            check(rows(*page, "demandes.table") == 1 && has(wanted, "Option : Assistant IA avanc\xC3\xA9") && has(wanted, "1 mois") && has(wanted, "29") &&
+                      has(lic, shared + " (une option)"),
+                  "la demande : << Option : Assistant IA avance - 1 mois - 29 EUR HT >>, la licence (une option) : " + wanted + " | " + lic);
+        }
+        check(selectRow(*page, 1, "Client d'essai Beta"), "la demande de B choisie");
+        check(!find<ui::Button>(*page, "demandes.accepter")->enabled() && !find<ui::Button>(*page, "demandes.accepter-en-ligne")->enabled(),
+              "une option : ni Accepter ni Accepter en ligne");
+        const std::size_t before = rig.dialogs.size();
+        check(click(*page, "demandes.ajouter-option") && rig.dialogs.size() == before + 1, "Ajouter cette option... : la fenetre");
+        if (rig.dialogs.size() == before + 1) {
+            auto& d = *rig.dialogs.back();
+            ui::Widget& w = *d.widgetRoot();
+            t = paintDialog(d);
+            auto* choix = find<ui::DropDown>(w, "option.choix");
+            auto* duree = find<ui::DropDown>(w, "option.duree");
+            check(choix && choix->selectedItem() && choix->selectedItem()->value == "ia_avancee" && duree && duree->selectedItem() &&
+                      duree->selectedItem()->value == "30",
+                  "reglee sur la demande : l'option, 1 mois");
+            check(has(t, "En r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(pcB.number)), "elle dit a quelle demande elle repond");
+            rig.picks.push_back(U(fx.root / "sortie-option.xpglic"));
+            g_now += 60;
+            check(click(w, "option.ok") && rig.last() && rig.last()->ok, "Ajouter l'option : " + lastText(rig));
+        }
+        const gui::LicenceEntry* l = fx.ws->licence(shared);
+        check(l && l->licence.options.size() == 1 && l->licence.options.front().id == "ia_avancee", "la licence porte l'option");
+        gw::DeviceStatus st;
+        gw::StatusContent sc;
+        lic::License got;
+        {
+            std::vector<lic::SignedBlock> blocks;
+            if (posteState(url, pcB, editor, st, sc) && lic::readBlocks(sc.license, blocks, nullptr))
+                for (const auto& b : blocks)
+                    if (b.kind == lic::DocKind::License) (void)lic::parseLicense(b.document, got, nullptr);
+        }
+        check(st.state == gw::State::Accepted && st.requestNonce == pcB.nonce && got.licenseId == shared && got.options.size() == 1 && has(sc.message, "Option ajout"),
+              "B lit << acceptee >> et la nouvelle emission, avec l'option (scellee pour lui)");
+        fx.ws->reload();
+        page->refresh();
+        check(rows(*page, "demandes.table") == 0, "plus en attente");
     }
 
     std::printf("-- une revocation publiee (publishToService) : la liste scellee pour le PC\n");
