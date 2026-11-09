@@ -6281,7 +6281,8 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         if (!started) {
             std::string key, file;
             const auto all = notices::list();
-            const bool number = !arg(1).empty() && std::all_of(arg(1).begin(), arg(1).end(), [](char ch) { return ch >= '0' && ch <= '9'; }) && arg(1).size() < 6;
+            const std::string which = arg(1);   // 1.44.0 : une copie (arg rend une chaine neuve a chaque appel)
+            const bool number = !which.empty() && std::all_of(which.begin(), which.end(), [](char ch) { return ch >= '0' && ch <= '9'; }) && which.size() < 6;
             int seenFiles = 0;
             for (const auto& n : all) {
                 const auto d = updates::dataOf(n.data);

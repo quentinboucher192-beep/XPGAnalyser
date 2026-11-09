@@ -457,6 +457,18 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         return oneLine(r);
     }
     if (a.command == "sauvegarder") return oneLine(ws.backupNow());
+    if (a.command == "archive-synchroniser") {
+        // 1.44.0 : un ADMIN (sans la cle de l'editeur) : sa cle d'admin signe les appels, comme l'application.
+        const auto r = ws.archiveSync(a.flag("--recevoir-seulement"), a.flag("--a-blanc"));
+        std::string text = r.text();
+        if (r.ok) {
+            say(text);
+            return 0;
+        }
+        if (!text.empty() && text.back() == '\n') text.pop_back();
+        complain(text);
+        return 1;
+    }
     if (a.command == "licence-en-ligne") {
         // 1.44.0 : un ADMIN (sans la cle de l'editeur) : sa cle d'admin signe, comme l'application (Nouvelle licence).
         if (!need("--parametres")) return 2;
@@ -973,6 +985,13 @@ int run(const std::vector<std::string>& argv) {
         crypto::wipe(sk);
         return 0;
     }
+    // 1.44.0 : licence-en-ligne et archive-synchroniser chez un ADMIN (sa cle d'admin signe, pas celle de l'editeur)
+    if ((a.command == "licence-en-ligne" && a.flags.empty() && a.one("--demande").empty()) || a.command == "archive-synchroniser") {
+        std::error_code ec;
+        const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
+        if (!std::filesystem::exists(u8(publisherKeyPath(folder)), ec) && std::filesystem::exists(u8(adminKeyPath(folder)), ec))
+            return runWorkspaceCommand(a, folder);
+    }
     if (a.command == "archive-synchroniser") {
         auto key = keyOrFail();
         if (!key) return 1;
@@ -991,13 +1010,6 @@ int run(const std::vector<std::string>& argv) {
         (void)online::readConfig(folder, back, &why);
         say("Service des licences : " + back.url + "\n  (" + online::configPath(folder) + ")\nEnsuite : XPG-License-Admin service-verifier, puis service-certifier.\n");
         return 0;
-    }
-    // 1.44.0 : licence-en-ligne chez un ADMIN (sa cle d'admin signe, pas celle de l'editeur)
-    if (a.command == "licence-en-ligne" && a.flags.empty() && a.one("--demande").empty()) {
-        std::error_code ec;
-        const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
-        if (!std::filesystem::exists(u8(publisherKeyPath(folder)), ec) && std::filesystem::exists(u8(adminKeyPath(folder)), ec))
-            return runWorkspaceCommand(a, folder);
     }
     if (a.command == "service-verifier" || a.command == "service-certifier" || a.command == "service-registre" || a.command == "service-revocations" ||
         a.command == "service-licences" || a.command == "service-retirer" || a.command == "service-desactiver" || a.command == "service-demandes" ||
