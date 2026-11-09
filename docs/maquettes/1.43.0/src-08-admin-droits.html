@@ -32,7 +32,7 @@
 .av{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;font:700 15px Inter;background:#db2777;box-shadow:0 6px 16px rgba(219,39,119,.25);flex:none}
 .from{display:flex;align-items:center;gap:8px;margin-top:12px;padding:9px 11px;border-radius:10px;background:var(--surface2);border:1px solid var(--line);font-size:12.5px;color:var(--ink2)}
 .from .ico{width:15px;height:15px;color:var(--violet)}
-.br{display:grid;grid-template-columns:1fr 92px 40px;align-items:center;padding:0 18px;height:33px;font-size:13px;color:var(--ink2)}
+.br{display:grid;grid-template-columns:1fr 116px 40px;align-items:center;padding:0 18px;height:33px;font-size:13px;color:var(--ink2)}
 .br+.br{border-top:1px solid #f1f4f8}
 .br.ov{background:var(--amber-50)}
 .br.ov:first-child{box-shadow:inset 3px 0 0 #f59e0b}
@@ -70,9 +70,9 @@
     </div>
 
     <div class="card mcard">
-     <div class="mh"><div class="grow"><div class="row gap8"><div class="h2">Le profil « Admin LV1 »</div><span class="pill" style="background:var(--violet-50);color:var(--violet-700)">5 / 13</span></div><div class="cap" style="margin-top:3px">Modifié par toi le 02/11/2026 · utilisé par Nina</div></div>
-      <span class="btn sm"><i data-i="copy" class="sm"></i>Dupliquer</span><span class="btn sm">Renommer</span>
-      <span class="btn sm" style="border-color:var(--violet);color:var(--violet-700);background:var(--violet-50)"><i data-i="users" class="sm"></i>Copier vers un admin…<i data-i="down" class="sm"></i></span></div>
+     <div class="mh" style="flex-direction:column;align-items:stretch;gap:10px"><div><div class="row gap8"><div class="h2" style="white-space:nowrap">Le profil « Admin LV1 »</div><span class="pill" style="background:var(--violet-50);color:var(--violet-700)">5 / 13</span></div><div class="cap" style="margin-top:3px">Modifié par toi le 02/11/2026 · utilisé par Nina</div></div>
+      <div class="row gap8"><span class="btn sm"><i data-i="copy" class="sm"></i>Dupliquer</span><span class="btn sm">Renommer</span>
+      <span class="btn sm" style="margin-left:auto;border-color:var(--violet);color:var(--violet-700);background:var(--violet-50)"><i data-i="users" class="sm"></i>Copier vers un admin…<i data-i="down" class="sm"></i></span></div></div>
      <div class="colh"><span>Fonction</span><span>Qui la vérifie</span><span>Permise</span></div>
      <div class="grp"><i data-i="key"></i>Licences</div>
      <div class="ar"><span>Créer et signer une licence</span><span class="how sg"><i data-i="shield"></i>Studios et service</span><span class="toggle on"></span></div>
@@ -95,7 +95,7 @@
      <div class="lockrow"><i data-i="lock"></i>Le journal des admins et sa criticité<span class="res">réservé à l'admin+</span></div>
      <div class="lockrow"><i data-i="lock"></i>Publier une version<span class="res">réservé à l'admin+</span></div>
      <div class="pf"><span class="btn sm ghost" style="color:#b91c1c"><i data-i="trash" class="sm"></i>Supprimer le profil</span><span class="cap" style="margin-left:6px">ses admins gardent leurs droits</span><span class="btn sm" style="margin-left:auto">Annuler</span><span class="btn sm primary"><i data-i="check" class="sm"></i>Enregistrer le profil</span></div>
-     <div class="dd" style="right:16px;top:58px">
+     <div class="dd" style="right:16px;top:104px">
       <div class="h">Copier « Admin LV1 » vers</div>
       <div class="o on"><span class="avatar" style="background:#db2777">N</span>Nina<span class="cap">PC-LABO-02</span><span class="cb on"><i data-i="check"></i></span></div>
       <div class="o"><span class="avatar" style="background:#0e7490">L</span>Léa<span class="cap">Admin LV2</span><span class="cb"></span></div>
@@ -133,12 +133,12 @@
 
    </div>
   </div>
-  <div class="mk" style="left:470px;top:250px">1</div><div class="mk" style="left:1150px;top:166px">2</div><div class="mk" style="left:1262px;top:420px">3</div><div class="mk" style="left:820px;top:252px">4</div><div class="mk" style="left:600px;top:812px">5</div>
-  <div class="annot" data-n="1" style="left:286px;top:640px;width:262px"><b>Des profils</b> (Admin LV1, LV2…) : tu les crées, dupliques, renommes. « Tous les droits » est celui de départ.</div>
-  <div class="annot" data-n="2" style="left:286px;top:716px;width:262px"><b>Copier vers un admin</b> : ses droits deviennent ceux du profil (une copie, pas un lien).</div>
-  <div class="annot" data-n="3" style="left:286px;top:792px;width:262px">Puis <b>ajuster cet admin seulement</b> : ce qui diffère du profil est marqué ; « Recopier le profil » l'efface.</div>
-  <div class="annot" data-n="4" style="left:286px;top:868px;width:262px"><b>Studios et service</b> : une licence, une offre, une révocation signée par un admin qui n'en a pas le droit est <b>refusée partout</b>. <b>L'Admin</b> : bloqué dans l'Admin.</div>
-  <div class="annot" data-n="5" style="left:286px;top:944px;width:262px">Tes droits d'admin+ <b>ne se donnent pas</b>.</div>
+  <div class="mk" style="left:296px;top:470px">1</div><div class="mk" style="left:892px;top:233px">2</div><div class="mk" style="left:1318px;top:373px">3</div><div class="mk" style="left:652px;top:585px">4</div><div class="mk" style="left:336px;top:868px">5</div>
+  <div class="annot" data-n="1" style="left:40px;top:578px;width:258px"><b>Des profils</b> (Admin LV1, LV2…) : tu les crées, dupliques, renommes.</div>
+  <div class="annot" data-n="2" style="left:40px;top:640px;width:258px"><b>Copier vers un admin</b> : ses droits deviennent ceux du profil (une copie, pas un lien).</div>
+  <div class="annot" data-n="3" style="left:40px;top:718px;width:258px">Puis <b>ajuster cet admin seul</b> : la différence est marquée ; « Recopier le profil » l'efface.</div>
+  <div class="annot" data-n="4" style="left:40px;top:796px;width:258px"><b>Studios et service</b> : signé sans le droit = <b>refusé partout</b>. <b>L'Admin</b> : bloqué dans l'Admin.</div>
+  <div class="annot" data-n="5" style="left:40px;top:868px;width:258px">Tes droits d'admin+ <b>ne se donnent pas</b>.</div>
  </main>
 </div>
 </body></html>

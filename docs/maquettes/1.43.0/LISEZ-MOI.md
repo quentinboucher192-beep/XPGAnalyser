@@ -17,5 +17,7 @@ Rien de client : des prénoms et des sociétés d'essai.
 - `05` dans un Studio : une notification qui porte un fichier (l'installateur de l'Admin), signé et vérifié ;
 - `06` la mise à jour : la notification sur tous les PC, les 2 installateurs sur le PC d'un admin, le toast, l'Admin ;
 - `07` la page Versions : publier une version (les 2 installateurs, la version lue dans les fichiers), qui est à jour.
+- `08` (ajoutée après ta validation, à ta demande) les droits des admins : des profils (« Admin LV1 », « Admin LV2 »), copiés vers un admin,
+  puis ajustés pour lui seul ; ce que les Studios et le service vérifient (signé) et ce que l'Admin bloque.
 
 `maquette-1.43.0.html` : toutes les planches dans une seule page autonome (`python3 assembler.py <dossier> maquette-1.43.0.html`).
