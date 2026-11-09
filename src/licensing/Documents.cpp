@@ -499,6 +499,11 @@ std::string writeRegistry(const Registry& r) {
         }
         root.set("options", std::move(opts));
     }
+    if (!r.fallbackServices.empty()) {   // 1.44.0 : les adresses de secours (ecrites seulement s'il y en a)
+        Value urls = Value::array();
+        for (const auto& u : r.fallbackServices) urls.push(u);
+        root.set("fallback_services", std::move(urls));
+    }
     return finishText(root);
 }
 
@@ -678,6 +683,20 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
                 break;
             }
             r.options.push_back(std::move(o));
+        }
+    }
+    // 1.44.0 (docs/ADMINS.md, 10) : les adresses des services de secours - 3 au plus, chacune une adresse de service
+    // valable (https ; http vers ce poste seulement : les essais), sans doublon.
+    if (const Value* arr = f.array("fallback_services", false, 3)) {
+        for (std::size_t i = 0; i < arr->items().size() && f.ok(); ++i) {
+            const Value& item = arr->items()[i];
+            if (!item.isString() || !service::validUrl(item.asString())) {
+                f.fail("l'adresse de secours n\xC2\xB0 " + std::to_string(i + 1) + " n'est pas une adresse de service valable (https://h\xC3\xB4te[:port], sans chemin)");
+                break;
+            }
+            for (const auto& prev : r.fallbackServices)
+                if (service::sameUrl(prev, item.asString())) f.fail("l'adresse de secours " + cite(item.asString()) + " est deux fois");
+            r.fallbackServices.push_back(item.asString());
         }
     }
     if (!finishDocument(f, kWhat, why)) return false;

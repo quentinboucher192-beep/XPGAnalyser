@@ -162,6 +162,7 @@ struct RegistryView {
     std::vector<RegistryEditionView> editions;
     std::vector<RegistryAnnouncementView> announcements;   // 1.38.0
     std::vector<RegistryOptionView>       options;         // 1.42.0
+    std::vector<std::string>              fallbackServices;   // 1.44.0 : les adresses des services de secours (docs/ADMINS.md, 10)
     [[nodiscard]] const RegistryOptionView* option(std::string_view id) const {
         for (const auto& o : options)
             if (o.id == id) return &o;

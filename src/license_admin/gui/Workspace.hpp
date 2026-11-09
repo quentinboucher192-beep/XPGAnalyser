@@ -33,6 +33,18 @@
 //  (takeServiceJob : une licence liee a ses PC, une revocation, un PC retire, un
 //  registre, une licence en ligne prolongee) que l'application lance par runSlow
 //  (publishToService, Page.hpp).
+//
+//  1.44.0 : PLUSIEURS ADMINS (docs/ADMINS.md). Le poste a un ROLE : l'admin+ (la
+//  cle de l'editeur), un admin (sa cle, cle-admin.cle, nommee dans la liste des
+//  admins signee par l'editeur, avec ses DROITS), en attente (sa cle n'est pas
+//  encore dans la liste), retire, ou rien. Tout ce qui signe passe par signer() :
+//  la cle de l'editeur pour l'admin+, celle de l'admin sinon ; une operation sans
+//  le droit qu'il faut est refusee (whyNot : la phrase du bouton grise). Chaque
+//  operation ecrit sa ligne au JOURNAL DES ADMINS (journal : signee, gardee dans
+//  journal-a-envoyer.jsonl, envoyee par le prochain appel au service). L'admin+
+//  gere les admins (accepter, retirer, les droits, les profils), releve et
+//  verifie le journal (la chaine), regle sa criticite. Le code de ces fonctions :
+//  WorkspaceAdmins.cpp.
 // =============================================================================
 #pragma once
 
@@ -41,10 +53,12 @@
 #include "../KeyBackup.hpp"
 #include "../ServiceClient.hpp"
 #include "../../core/Version.hpp"
+#include "../../licensing/Admins.hpp"
 #include "../../licensing/Documents.hpp"
 
 #include <atomic>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -219,6 +233,75 @@ struct DeletedClient {
     std::vector<std::string> trashFiles;    // le fichier de chaque licence dans la corbeille (corbeille-licences/)
 };
 
+// ---- 1.44.0 : plusieurs admins (docs/ADMINS.md) ----
+// Le role de ce poste : l'admin+ (la cle de l'editeur) ; un admin de la liste (sa cle, active) ; en attente (sa cle
+// n'est pas encore dans la liste) ; retire (sa cle est dans la liste, retiree) ; rien (aucune cle).
+enum class Role : std::uint8_t { None, Plus, Admin, Pending, Retired };
+[[nodiscard]] const char* roleKey(Role r) noexcept;   // "aucun", "admin+", "admin", "attente", "retire"
+[[nodiscard]] std::string roleLabel(Role r);          // << Admin+ >>, << Admin >>, << En attente d'acceptation >>...
+
+struct AdminKeyStatus {
+    bool        present{false};
+    std::string id, keyHex, fingerprint, name, path;   // fingerprint : admins::fingerprint (lue au telephone)
+    std::string problem;
+};
+
+// Un admin de la liste, et ce que le service en dit (GET /admin/admins).
+struct AdminInfo {
+    licensing::admins::Admin admin;
+    std::string              fingerprint;
+    Seconds                  lastAction{0};   // sa derniere ligne au journal
+    std::string              software, version;
+    Seconds                  seen{0};         // son dernier appel signe
+};
+struct AdminsView {
+    int                    number{0};
+    std::vector<AdminInfo> admins;
+    std::vector<AdminInfo> editors;   // les cles de l'editeur (l'admin+) : admin.id, admin.key, et ce que le service en sait
+};
+// Une demande pour devenir admin (GET /admin/admins/demandes).
+struct AdminRequest {
+    std::string key, id, fingerprint, name, email, pc, machine, software;
+    Seconds     received{0};
+    bool        fingerprintMismatch{false};   // l'empreinte rendue par le service n'est pas celle calculee ici (jamais accepter)
+};
+// Ce qu'a fait refreshAdminState / refreshAdminList.
+struct AdminRefresh {
+    bool        listAdopted{false};     // une liste plus recente est gardee (admins.xpgadm)
+    int         listNumber{0};
+    int         journalNew{0};          // admin+ : les lignes du journal relevees
+    bool        accepted{false};        // en attente : la demande est acceptee (ce poste est admin)
+    bool        syncKeyReceived{false}; // la cle de synchro recue par le trousseau
+    std::string requestState;           // en attente : "attente", "acceptee", "refusee", "retire"
+};
+
+// Une ligne du journal des admins, verifiee (admin+).
+struct JournalRow {
+    licensing::admins::JournalLine line;
+    bool                           verified{false};   // la signature est celle de la cle, et cette cle est connue
+    std::string                    who;               // "admin+", le nom de l'admin, "le service"
+    std::string                    problem;           // vide : rien a dire
+    licensing::admins::Level       level{licensing::admins::Level::Info};   // la criticite en vigueur (la ligne, sinon son type)
+    bool                           notify{false};     // << Me prevenir tout de suite >>
+    bool                           overridden{false}; // la criticite changee a la main pour cette ligne
+    std::string                    overrideBy;
+    Seconds                        overrideAt{0};
+};
+struct JournalView {
+    std::vector<JournalRow>  rows;       // les plus anciennes d'abord
+    std::vector<std::string> problems;   // << chaine rompue >>, une signature fausse, la copie de ce poste modifiee...
+    std::uint64_t            last{0};
+    std::string              lastHash;
+};
+struct ActionSetting {
+    licensing::admins::Level level{licensing::admins::Level::Info};
+    bool                     notify{false};
+};
+struct Criticality {
+    std::map<std::string, ActionSetting> actions;   // chaque type d'action (admins::actionTypes)
+    bool                                 emailCritical{false};   // << Aussi par courriel >> (les critiques)
+};
+
 class Workspace {
 public:
     explicit Workspace(std::string folder);
@@ -382,6 +465,95 @@ public:
     // cle-publique.txt (la cle PUBLIQUE de l'editeur en hexadecimal : PUBLISHER_KEYS du service) dans ce dossier.
     OpResult writePublicKeyFile(const std::string& outDir) const;
 
+    // ======================================================== 1.44.0 : plusieurs admins (WorkspaceAdmins.cpp) ==
+    // ---- le role, la cle qui signe, les droits ----
+    [[nodiscard]] Role role() const noexcept { return role_; }
+    [[nodiscard]] const AdminKeyStatus& adminKey() const noexcept { return adminKey_; }
+    // La cle qui signe tout (licences, registre, revocations, etats des postes, journal, appels au service) : celle de
+    // l'editeur pour l'admin+, celle de l'admin pour un admin de la liste ; nul sinon.
+    [[nodiscard]] const licensing::SigningKey* signer() const noexcept;
+    [[nodiscard]] std::vector<std::string> myRights() const;   // les 13 pour l'admin+
+    [[nodiscard]] bool can(std::string_view right) const;
+    // Pourquoi ce droit manque (la phrase du bouton grise : << Tu n'as pas le droit << ... >> : demande-le a l'admin+. >>) ;
+    // vide : permis.
+    [[nodiscard]] std::string whyNot(std::string_view right) const;
+    // La liste des admins en vigueur sur ce poste (admins.xpgadm, verifiee : signee par une cle de l'editeur).
+    [[nodiscard]] const std::optional<licensing::admins::AdminList>& adminList() const noexcept { return adminList_; }
+    [[nodiscard]] const licensing::admins::Admin* me() const;   // l'entree de ce poste dans la liste (admin, retire)
+    // Les cles de l'editeur que ce poste croit : la sienne (admin+), celles compilees, celles retenues du service.
+    [[nodiscard]] const std::vector<licensing::crypto::PublicKey>& editorKeys() const noexcept { return editorKeys_; }
+
+    // ---- devenir admin (un poste sans cle de l'editeur ; LENT : par runSlow, puis reload) ----
+    // Cree la cle d'admin s'il le faut, depose la demande (POST /v1/admins/demande, signee par elle) ; `fingerprint` :
+    // l'empreinte a lire au telephone a l'admin+ (aussi dans le message).
+    [[nodiscard]] OpResult requestAdmin(const std::string& name, const std::string& email, std::string* fingerprint = nullptr) const;
+    // Ou en est la demande (GET /v1/admins/demande) : "attente", "acceptee", "refusee", "retire".
+    [[nodiscard]] OpResult adminRequestState(std::string& state) const;
+    // Relever la liste des admins (GET /v1/admins) et la garder si elle est plus recente ; un admin accepte : les cles de
+    // l'editeur retenues, la cle de synchro recue par le trousseau.
+    [[nodiscard]] OpResult refreshAdminList(AdminRefresh* out = nullptr) const;
+    // Le regard du service (Shell, toutes les 15 s) : `etat` (GET /admin/etat, serviceWatch) ou nul (en attente : la
+    // demande est regardee). Une liste plus recente est gardee, le journal releve (admin+), le journal a envoyer part.
+    [[nodiscard]] OpResult refreshAdminState(const online::AdminWatch* etat, AdminRefresh* out = nullptr) const;
+    // Prendre la cle de synchro dans le trousseau (GET /admin/trousseau, ouverte par la cle d'admin).
+    [[nodiscard]] OpResult receiveSyncKey() const;
+
+    // ---- gerer les admins (l'admin+ seulement ; LENT : par runSlow, puis reload) ----
+    [[nodiscard]] OpResult serviceAdmins(AdminsView& out) const;
+    [[nodiscard]] OpResult pendingAdminRequests(std::vector<AdminRequest>& out) const;
+    // Accepter : la liste numero + 1 (signee par la cle de l'editeur) avec cet admin, ses droits ceux du profil (ou
+    // `rights` s'ils sont donnes), le nom du profil note ; publiee ; la cle de synchro deposee dans son trousseau.
+    // `fingerprintConfirmed` : << J'ai verifie l'empreinte >> (sinon refuse).
+    [[nodiscard]] OpResult acceptAdmin(const std::string& keyHex, const std::string& profile, const std::vector<std::string>* rights = nullptr,
+                                       bool fingerprintConfirmed = true) const;
+    [[nodiscard]] OpResult refuseAdmin(const std::string& keyHex) const;
+    // Retirer : retire = maintenant, droits vides ; ses licences en vigueur gardees (gardes), ou revoquees
+    // (`revokeLicencesToo`, par la cle de l'editeur) ; le registre et la liste de revocation en place, s'il les a signes,
+    // re-signes par la cle de l'editeur (numero + 1) et publies.
+    [[nodiscard]] OpResult retireAdmin(const std::string& keyHex, bool revokeLicencesToo) const;
+    // Ses droits (et le profil d'origine note) ; un droit retire : ce qu'il a signe et qui court encore est garde.
+    [[nodiscard]] OpResult setAdminRights(const std::string& keyHex, const std::vector<std::string>& rights, const std::string& profile) const;
+    // Redeposer la cle de synchro dans le trousseau d'un admin (PUT /admin/trousseau).
+    [[nodiscard]] OpResult giveSyncKey(const std::string& keyHex) const;
+
+    // ---- les profils de droits (l'admin+ ; profils-admins.json, partage par l'archive) ----
+    [[nodiscard]] std::vector<licensing::admins::Profile> profiles() const;
+    OpResult saveProfile(const licensing::admins::Profile& profile);   // cree ou remplace (<< Tous les droits >> : refuse)
+    OpResult renameProfile(const std::string& from, const std::string& to);
+    OpResult deleteProfile(const std::string& name);
+    // Copier les droits d'un profil vers des admins (une liste signee ; LENT).
+    [[nodiscard]] OpResult copyProfileTo(const std::string& profile, const std::vector<std::string>& adminKeys) const;
+
+    // ---- le journal des admins ----
+    // Une ligne (docs/ADMINS.md, par. 6) : l'entree signee par signer(), gardee dans journal-a-envoyer.jsonl, envoyee
+    // par le prochain appel au service (flushJournal). `detailJson`, `beforeJson`, `afterJson` : des objets JSON (vides : {}).
+    OpResult journal(const std::string& action, const std::string& object, const std::string& summary, const std::string& detailJson = {},
+                     const std::string& beforeJson = {}, const std::string& afterJson = {}) const;
+    [[nodiscard]] int journalWaiting() const;   // les lignes pas encore envoyees
+    [[nodiscard]] OpResult flushJournal() const;   // LENT
+    // L'admin+ : relever le journal (GET /admin/journal), verifier chaque ligne (la signature, la cle, la chaine), le
+    // garder (journal-admins.jsonl). LENT. `added` : les lignes relevees.
+    [[nodiscard]] OpResult fetchJournal(int* added = nullptr) const;
+    [[nodiscard]] JournalView journalLines() const;
+    [[nodiscard]] Criticality criticality() const;
+    OpResult setCriticality(const std::string& action, licensing::admins::Level level, bool notify);
+    OpResult setEmailCritical(bool on);
+    // La criticite d'une ligne changee a la main (qui et quand sont notes) ; `reset` : revenir a celle de son type.
+    OpResult setLineLevel(std::uint64_t number, licensing::admins::Level level, bool reset = false);
+    // Les lignes relevees depuis le dernier appel dont la criticite dit << Me prevenir tout de suite >> (le toast).
+    [[nodiscard]] std::vector<JournalRow> newAlerts();
+
+    // ---- ce que l'Admin fait pour un admin (les droits << l'Admin >>) ----
+    // Revoir le code d'activation d'une licence en ligne (droit << codes >>) ; une ligne au journal.
+    OpResult revealCode(const std::string& licenseId, std::string& code) const;
+    // Ecrire a un client (droit << courriels >>) ; LENT (SMTP) ; une ligne au journal.
+    [[nodiscard]] OpResult sendClientMail(const std::string& to, const std::string& toName, const std::string& subject, const std::string& body) const;
+
+    // ---- le jeton d'admin (docs/ADMINS.md, par. 7 : le Studio du meme compte telecharge l'installateur de l'Admin) ----
+    // jeton-admin.xpgjet, signe par signer() : {cle, poste, expire (30 jours), version, nom}. A chaque lancement et chaque jour
+    // (`force` faux : seulement s'il manque ou date de plus d'un jour). Rien pour un poste sans role.
+    OpResult writeAdminToken(bool force = true) const;
+
 private:
     void loadKey();
     void loadArchive();
@@ -407,6 +579,25 @@ private:
     int                                    skipped_{0};
     ServiceStatus                          service_;
     std::optional<ServiceJob>              job_;
+    // 1.44.0 : plusieurs admins
+    void loadAdmins();
+    // Refuse (le droit manque, ou aucune cle) ; nullopt : permis.
+    [[nodiscard]] std::optional<OpResult> denied(std::string_view right) const;
+    // Ce que signLicence et prepareOnlineLicence demandent pour ce brouillon (licence_creer, _prolonger, _option, poste_retirer).
+    [[nodiscard]] std::string licenceRight(const LicenceDraft& d) const;
+    // Les entrees de signLicense, et ce que croit un admin (le registre, la licence a etendre d'un autre signataire).
+    [[nodiscard]] std::function<bool(const licensing::SignedBlock&)> alsoTrusted() const;
+    // Le fichier a donner au client : la liste des admins d'abord quand c'est un admin qui a signe (un Studio hors ligne
+    // la lit pour croire la licence), puis le reste.
+    [[nodiscard]] std::string withAdminList(const std::string& signedText) const;
+    [[nodiscard]] online::Options serviceOptions() const;
+    std::unique_ptr<licensing::SigningKey>      adminSigning_;
+    AdminKeyStatus                              adminKey_;
+    Role                                        role_{Role::None};
+    std::optional<licensing::admins::AdminList> adminList_;
+    std::vector<licensing::crypto::PublicKey>   editorKeys_;
+    std::uint64_t                               alertedUpTo_{0};   // newAlerts : la derniere ligne deja dite
+    bool                                        alertsPrimed_{false};
 };
 
 // ---- un travail lent sur un fil a part : l'interface le suit sans attendre (jamais bloquee) ----
@@ -432,6 +623,36 @@ private:
     std::string             label_;
     std::optional<OpResult> result_;
 };
+
+// ---- 1.44.0 : ce que partagent Workspace.cpp et WorkspaceAdmins.cpp (pas pour les ecrans) ----
+namespace detail {
+// La cle qui signe et ce qu'elle croit, RELUES DU DOSSIER : les fonctions LENTES tournent sur un fil a part et ne
+// lisent jamais l'etat du Workspace.
+struct Caller {
+    std::unique_ptr<licensing::SigningKey>      key;   // la cle de l'editeur (admin+) ou celle de l'admin
+    Role                                        role{Role::None};
+    std::optional<licensing::admins::AdminList> admins;
+    std::vector<licensing::crypto::PublicKey>   editorKeys;
+    [[nodiscard]] const licensing::admins::Admin* me() const;
+    [[nodiscard]] bool can(std::string_view right) const;
+};
+// Faux : aucune cle sur ce poste, ou elle ne se relit pas (`why`).
+bool loadCaller(const std::string& folder, Caller& out, std::string* why);
+// Refuse (`right` vide : l'admin+ seulement) ; nullopt : permis.
+[[nodiscard]] std::optional<OpResult> callerDenied(const Caller& c, std::string_view right);
+[[nodiscard]] online::Options optionsFor(const Caller& c, Seconds now);
+// Une ligne du journal des admins signee par `key`, gardee pour l'envoi (journal-a-envoyer.jsonl).
+bool queueJournal(const std::string& folder, const licensing::SigningKey& key, Seconds now, const std::string& action, const std::string& object,
+                  const std::string& summary, const std::string& detailJson, const std::string& beforeJson, const std::string& afterJson,
+                  std::string* why);
+// Envoyer les lignes gardees (POST /admin/journal) par ce client ; sans bruit (ce qui reste partira au prochain appel).
+int flushJournalWith(const std::string& folder, online::Client& client, std::string* why = nullptr);
+// Les memes, en ouvrant le client du service (rien a envoyer : aucun appel).
+int flushJournalQuiet(const std::string& folder, const Caller& c, Seconds now);
+// Les droits qu'il faut pour remplacer le registre `before` par `after` (la partie qui change : editions -> offres,
+// options, announcements -> annonces, une autre partie -> offres) ; vide : rien ne change.
+[[nodiscard]] std::vector<std::string> registryRights(const licensing::Registry* before, const licensing::Registry& after);
+} // namespace detail
 
 // "07/11/2026", "07/11/2026 14:05" (heure locale du PC), "" pour 0.
 [[nodiscard]] std::string dateFr(Seconds t);

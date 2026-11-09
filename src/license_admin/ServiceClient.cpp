@@ -11,6 +11,7 @@
 #include "ArchiveSync.hpp"
 
 #include "../app/ai/AiHttp.hpp"
+#include "../core/Version.hpp"   // 1.44.0 : X-XPG-Logiciel
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Paths.hpp"
 #include "../licensing/Documents.hpp"
@@ -116,28 +117,60 @@ std::string clean(std::string_view s, std::size_t max = 300) {
     return out;
 }
 
-// Le texte d'un fichier de l'archive, signe par CETTE cle ; `kind` : le genre attendu (un seul bloc).
-bool archiveSignedText(const std::string& folder, const char* relative, DocKind kind, const licensing::SigningKey& key, std::string& text,
-                       SignedBlock& block, std::string* why) {
+// 1.44.0 : un bloc est-il d'une cle que l'outil croit ? La cle qui signe les appels (celle de ce poste), une cle de
+// l'editeur (o.editorKeys), ou un admin de la liste (o.admins : sa signature, son droit pour ce genre ; retire : un
+// document garde). `who` : << ta cl\xC3\xA9 >>, << la cl\xC3\xA9 de l'\xC3\xA9diteur >>, ou le nom de l'admin.
+bool trustedBlock(const SignedBlock& b, const licensing::SigningKey& key, const Options& o, std::string* who = nullptr) {
+    if (licensing::verifyBlock(b, key.publicKey())) {
+        if (who) *who = "ta cl\xC3\xA9";
+        return true;
+    }
+    for (const auto& k : o.editorKeys)
+        if (licensing::keyIdOf(k) == b.keyId && licensing::verifyBlock(b, k)) {
+            if (who) *who = "la cl\xC3\xA9 de l'\xC3\xA9" "diteur";
+            return true;
+        }
+    const licensing::admins::Admin* a = nullptr;
+    if (o.admins && licensing::admins::verifyAdminBlock(*o.admins, b, nullptr, &a)) {
+        if (who) *who = a ? "l'admin " + a->name : std::string("un admin");
+        return true;
+    }
+    return false;
+}
+
+// Le texte d'un fichier de l'archive ; `kind` : le genre attendu (un seul bloc). 1.44.0 : signe par une cle que l'outil
+// croit (trustedBlock) ; `own` : par la cle de CE poste seulement (un depot : le service ne prend que ce que signe la
+// cle qui appelle).
+bool archiveSignedText(const std::string& folder, const char* relative, DocKind kind, const licensing::SigningKey& key, const Options& o, bool own,
+                       std::string& text, SignedBlock& block, std::string* why) {
     text = archive::archivedText(folder, relative);
     if (text.empty()) return fail(why, "");
     std::vector<SignedBlock> blocks;
     std::string w;
     if (!licensing::readBlocks(text, blocks, &w) || blocks.size() != 1 || blocks[0].kind != kind)
         return fail(why, std::string(relative) + " de l'archive est illisible" + (w.empty() ? std::string() : " (" + w + ")"));
-    if (!licensing::verifyBlock(blocks[0], key.publicKey()))
+    std::string who;
+    if (!trustedBlock(blocks[0], key, o, &who))
         return fail(why, std::string(relative) + " de l'archive n'est pas sign\xC3\xA9 par la cl\xC3\xA9 de ce poste (" + key.keyId() + ")");
+    if (own && blocks[0].keyId != key.keyId())
+        return fail(why, std::string(relative) + " de l'archive est sign\xC3\xA9 par " + who + " (" + blocks[0].keyId +
+                             "), pas par ta cl\xC3\xA9 : seul celui qui l'a sign\xC3\xA9 le d\xC3\xA9pose sur le service");
     block = std::move(blocks[0]);
     return true;
 }
 
-// La licence d'un fichier .xpglic, signee par CETTE cle ; `block` : son bloc tel quel.
-bool licenceOf(const std::string& licenceText, const licensing::SigningKey& key, licensing::License& out, SignedBlock* block, std::string* why) {
+// La licence d'un fichier .xpglic ; `block` : son bloc tel quel. 1.44.0 : signee par une cle que l'outil croit ; `own` :
+// par la cle de CE poste seulement (un depot).
+bool licenceOf(const std::string& licenceText, const licensing::SigningKey& key, const Options& o, bool own, licensing::License& out, SignedBlock* block,
+               std::string* why) {
     std::vector<SignedBlock> blocks;
     if (!licensing::readBlocks(licenceText, blocks, why)) return false;
     for (auto& b : blocks) {
         if (b.kind != DocKind::License) continue;
-        if (!licensing::verifyBlock(b, key.publicKey())) return fail(why, "la licence n'est pas sign\xC3\xA9" "e par la cl\xC3\xA9 de ce poste");
+        std::string who;
+        if (!trustedBlock(b, key, o, &who)) return fail(why, "la licence n'est pas sign\xC3\xA9" "e par la cl\xC3\xA9 de ce poste");
+        if (own && b.keyId != key.keyId())
+            return fail(why, "la licence est sign\xC3\xA9" "e par " + who + " (" + b.keyId + "), pas par ta cl\xC3\xA9 : le service ne prend que ce que signe la cl\xC3\xA9 qui la d\xC3\xA9pose (signe-en une nouvelle \xC3\xA9mission)");
         if (!licensing::parseLicense(b.document, out, why)) return false;
         if (block) *block = std::move(b);
         return true;
@@ -210,8 +243,11 @@ Reply Client::call(const std::string& method, const std::string& pathAndQuery, c
     req.url = url_ + pathAndQuery;
     req.headers = {{"Accept", "application/json"}, {"User-Agent", options_.tool}};
     if (!body.empty() || method != "GET") req.headers.emplace_back("Content-Type", "application/json; charset=utf-8");
-    if (signed_)
+    if (signed_) {
         for (auto& h : svc::signRequest(method, pathAndQuery, body, key_.publicKey(), signerOf(key_), serviceNow())) req.headers.push_back(std::move(h));
+        // 1.44.0 : le logiciel et sa version (le service les garde par cle : la page Versions de l'admin+)
+        req.headers.emplace_back("X-XPG-Logiciel", options_.software.empty() ? std::string("XPG-License-Admin/") + XPG_ANALYZER_VERSION : options_.software);
+    }
     req.body = body;
     req.connectTimeoutSeconds = 20;
     req.idleTimeoutSeconds = 60;
@@ -263,6 +299,10 @@ std::string Client::explain(const Reply& r, const std::string& what) const {
             return "le service refuse la signature de l'appel pour " + what + " (l'heure de ce poste ? un appel rejou\xC3\xA9 ?)" + m;
         case 403:
             if (r.code() == "code") return "le service refuse pour " + what + m;
+            // 1.44.0 : un admin (docs/ADMINS.md, par. 6)
+            if (r.code() == "retire")
+                return "tu as \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la liste des admins : ta cl\xC3\xA9 (" + key_.keyId() + ") ne peut plus rien faire sur le service (" + what + ")";
+            if (r.code() == "droit") return "tes droits d'admin ne permettent pas de " + what + m;
             return "le service ne reconna\xC3\xAEt pas la cl\xC3\xA9 de ce poste (" + key_.keyId() + ") pour " + what +
                    " : sa cl\xC3\xA9 publique doit \xC3\xAAtre dans PUBLISHER_KEYS du Worker (cle-publique.txt du kit, puis npx wrangler deploy)" + m;
         case 404: return "introuvable sur le service pour " + what + m;
@@ -299,7 +339,7 @@ std::string keyFingerprint(const std::string& keyHex) {
 namespace {
 
 // Lire la cle du service et son certificat (GET /admin/cle-service) dans `st`.
-bool readKeyAndCert(Client& c, const licensing::SigningKey& key, ServiceState& st, std::string* why) {
+bool readKeyAndCert(Client& c, const licensing::SigningKey& key, const Options& o, ServiceState& st, std::string* why) {
     const Reply r = c.call("GET", "/admin/cle-service");
     if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return fail(why, c.explain(r, "lire la cl\xC3\xA9 du service"));
     st.adminOk = true;
@@ -313,7 +353,10 @@ bool readKeyAndCert(Client& c, const licensing::SigningKey& key, ServiceState& s
     svc::ServiceCert sc;
     std::string w;
     // La date n'est pas regardee ici : l'expiration se dit a part (renouveler).
-    if (!svc::verifyCert(cert->asString(), {key.publicKey()}, 0, sc, &w)) {
+    std::vector<licensing::crypto::PublicKey> editors{key.publicKey()};   // 1.44.0 : un admin croit les cles de l'editeur
+    for (const auto& k : o.editorKeys)
+        if (std::find(editors.begin(), editors.end(), k) == editors.end()) editors.push_back(k);
+    if (!svc::verifyCert(cert->asString(), editors, 0, sc, &w)) {
         st.certProblem = "le certificat d\xC3\xA9pos\xC3\xA9 ne va pas : " + w;
         return true;
     }
@@ -355,7 +398,7 @@ Result verify(const std::string& folder, const licensing::SigningKey& key, const
     const Seconds drift = st.time - o.now;
     if (o.now > 0 && (drift > 300 || drift < -300))
         res.details.push_back("L'horloge de ce poste a " + std::to_string((drift < 0 ? -drift : drift) / 60) + " min d'\xC3\xA9" "cart avec le service : l'outil signe avec l'heure du service.");
-    if (!readKeyAndCert(c, key, st, &why)) {
+    if (!readKeyAndCert(c, key, o, st, &why)) {
         if (out) *out = st;
         return refused(why);
     }
@@ -380,7 +423,7 @@ Result readServiceKey(const std::string& folder, const licensing::SigningKey& ke
     std::string why;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     ServiceState st;
-    if (!readKeyAndCert(*c, key, st, &why)) return refused(why);
+    if (!readKeyAndCert(*c, key, o, st, &why)) return refused(why);
     keyHex = st.serviceKey;
     Result r;
     r.ok = true;
@@ -394,7 +437,7 @@ Result certify(const std::string& folder, const licensing::SigningKey& key, cons
     std::string why;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     ServiceState st;
-    if (!readKeyAndCert(*c, key, st, &why)) return refused(why);
+    if (!readKeyAndCert(*c, key, o, st, &why)) return refused(why);
     if (!expectedKey.empty() && expectedKey != st.serviceKey)
         return refused("la cl\xC3\xA9 du service a chang\xC3\xA9 depuis que tu l'as vue (" + keyFingerprint(expectedKey) + " -> " + keyFingerprint(st.serviceKey) +
                        ") : rien n'est sign\xC3\xA9 ; relis-la et compare son empreinte");
@@ -423,7 +466,7 @@ Result certify(const std::string& folder, const licensing::SigningKey& key, cons
 Result publishRegistry(const std::string& folder, const licensing::SigningKey& key, const Options& o) {
     std::string text, why;
     SignedBlock block;
-    if (!archiveSignedText(folder, "registre/registre.xpgreg", DocKind::Registry, key, text, block, &why))
+    if (!archiveSignedText(folder, "registre/registre.xpgreg", DocKind::Registry, key, o, true, text, block, &why))
         return refused(why.empty() ? std::string("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)") : why);
     licensing::Registry reg;
     if (!licensing::parseRegistry(block.document, reg, &why)) return refused(why);
@@ -447,7 +490,7 @@ Result publishRegistry(const std::string& folder, const licensing::SigningKey& k
 Result publishRevocations(const std::string& folder, const licensing::SigningKey& key, const Options& o) {
     std::string text, why;
     SignedBlock block;
-    if (!archiveSignedText(folder, "revocations/revocations.xpgrev", DocKind::Revocations, key, text, block, &why))
+    if (!archiveSignedText(folder, "revocations/revocations.xpgrev", DocKind::Revocations, key, o, true, text, block, &why))
         return refused(why.empty() ? std::string("pas de liste de r\xC3\xA9vocation dans l'archive") : why);
     licensing::RevocationList list;
     if (!licensing::parseRevocations(block.document, list, &why)) return refused(why);
@@ -601,7 +644,7 @@ Result putLicence(const std::string& folder, const licensing::SigningKey& key, c
     licensing::License lic;
     SignedBlock block;
     std::string why;
-    if (!licenceOf(licenceText, key, lic, &block, &why)) return refused(why);
+    if (!licenceOf(licenceText, key, o, true, lic, &block, &why)) return refused(why);
     if (lic.service.empty() || !lic.devices.empty())
         return refused("la licence " + lic.licenseId + " n'est pas une licence en ligne (elle est li\xC3\xA9" "e \xC3\xA0 des PC : elle part \xC3\xA0 ses PC, pas avec un code)");
     if (!codeHash.empty() && (codeHash.size() != 64 || !licensing::isKeyHex(codeHash))) return refused("l'empreinte du code est illisible");
@@ -680,6 +723,29 @@ Result setActive(const std::string& folder, const licensing::SigningKey& key, co
     return putLicence(folder, key, text, {}, leaseDays, active, o);
 }
 
+void readAdminWatch(const Value& reply, AdminWatch& out) {
+    if (!reply.isObject()) return;
+    const auto num = [&](const char* k) -> std::int64_t {
+        const Value* v = reply.find(k);
+        return v && v->isNumber() ? v->asInt(-1) : -1;
+    };
+    out.supported = true;
+    out.activity = num("activite");
+    out.requests = num("demandes");
+    out.pending = num("attente");
+    out.changes = num("changements");
+    // 1.44.0 : plusieurs admins
+    out.admins = num("admins");
+    out.journal = num("journal");
+    out.adminRequests = num("admins_demandes");
+    out.publishedVersion = clean(reply.str("version_publiee"), 40);
+    out.role = clean(reply.str("role"), 20);
+    out.rights.clear();
+    if (const Value* d = reply.find("droits"); d && d->isArray())
+        for (const auto& x : d->items())
+            if (x.isString() && licensing::admins::isRight(x.asString())) out.rights.push_back(x.asString());
+}
+
 Result watchState(const std::string& folder, const licensing::SigningKey& key, const Options& o, AdminWatch& out) {
     out = AdminWatch{};
     std::unique_ptr<Client> c;
@@ -694,15 +760,7 @@ Result watchState(const std::string& folder, const licensing::SigningKey& key, c
         return res;
     }
     if (r.status != 200 || !r.error.empty() || !r.json.isObject()) return refused(c->explain(r, "regarder ce qui change"));
-    const auto num = [&](const char* k) -> std::int64_t {
-        const Value* v = r.json.find(k);
-        return v && v->isNumber() ? v->asInt(-1) : -1;
-    };
-    out.supported = true;
-    out.activity = num("activite");
-    out.requests = num("demandes");
-    out.pending = num("attente");
-    out.changes = num("changements");
+    readAdminWatch(r.json, out);
     if (const std::string v = clean(r.json.str("version"), 40); !v.empty()) out.version = v;
     res.message = "Service regard\xC3\xA9 : activit\xC3\xA9 " + std::to_string(out.activity) + ", demandes " + std::to_string(out.requests) + ".";
     return res;
@@ -816,6 +874,7 @@ bool writeEntry(const std::string& folder, Entry& e, std::string* why) {
     if (!e.answer.empty()) v.set("reponse", e.answer);
     if (!e.requestPath.empty()) v.set("fichier", U(P(e.requestPath).filename()));
     if (!e.sealedHash.empty()) v.set("empreinte_sceau", e.sealedHash);
+    if (e.forOther) v.set("pour_un_autre", true);   // 1.44.0
     Value probs = Value::array();
     for (const auto& p : e.problems) probs.push(Value(p));
     v.set("problemes", std::move(probs));
@@ -862,6 +921,7 @@ bool readEntry(const std::string& folder, const std::string& path, Entry& e) {
     if (!file.empty() && file.find('/') == std::string::npos && file.find('\\') == std::string::npos && file != "." && file != "..")
         e.requestPath = deploy::joinPath(requestsFolder(folder), file);
     e.sealedHash = v.str("empreinte_sceau");
+    e.forOther = v.flag("pour_un_autre");   // 1.44.0
     if (const Value* p = v.find("problemes"); p && p->isArray())
         for (const auto& x : p->items())
             if (x.isString()) e.problems.push_back(x.asString());
@@ -1005,10 +1065,11 @@ bool markHandled(Client& c, int number, std::string* why) {
 }
 
 // La liste de revocation de l'archive, telle quelle (signee par CETTE cle) ; faux : aucune (`why` vide), ou illisible.
-bool archiveRevocations(const std::string& folder, const licensing::SigningKey& key, std::string& text, licensing::RevocationList& list, std::string* why) {
+bool archiveRevocations(const std::string& folder, const licensing::SigningKey& key, const Options& o, std::string& text, licensing::RevocationList& list,
+                        std::string* why) {
     list = licensing::RevocationList{};
     SignedBlock b;
-    if (!archiveSignedText(folder, "revocations/revocations.xpgrev", DocKind::Revocations, key, text, b, why)) {
+    if (!archiveSignedText(folder, "revocations/revocations.xpgrev", DocKind::Revocations, key, o, false, text, b, why)) {
         text.clear();
         return false;
     }
@@ -1134,6 +1195,12 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
         const std::string sealed = d.str("scelle");
         const std::string state = d.str("etat");
         const std::string hash = crypto::sha256Hex(sealed);
+        // 1.44.0 : relevee par un admin, une demande scellee pour un AUTRE admin vient sans scelle (pour_un_autre) ; si
+        // elle arrive plus tard avec le scelle de ce poste (un droit donne entre-temps), elle est ouverte cette fois.
+        const bool forOther = d.flag("pour_un_autre") || (d.find("scelle") && d.at("scelle").isNull());
+        if (const auto old = known.find(n); old != known.end() && old->second.forOther && !forOther && !sealed.empty() &&
+                                              old->second.state == RequestState::Unreadable)
+            known.erase(old);
         if (const auto old = known.find(n); old != known.end()) {
             Entry& e = old->second;
             e.serviceState = state;
@@ -1155,6 +1222,14 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
         e.seenAt = o.now;
         e.sealedHash = hash;
         touched.insert(n);
+        if (forOther) {
+            e.state = RequestState::Unreadable;
+            e.forOther = true;
+            e.problems.push_back("scell\xC3\xA9" "e pour un autre admin : ce poste ne peut pas la lire");
+            note("Demande n\xC2\xB0 " + std::to_string(n) + " : scell\xC3\xA9" "e pour un autre admin.");
+            known.emplace(n, std::move(e));
+            continue;
+        }
         const Opened op = openRequest(key, device, d.str("cle"), sealed, o.now);
         if (!op.ok) {
             e.state = RequestState::Unreadable;
@@ -1492,7 +1567,7 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
     if (mailer) {
         licensing::License lic;
         std::string w;
-        if (licenceText.empty() || !licenceOf(licenceText, key, lic, nullptr, &w)) lic.licenseId = licenseId;
+        if (licenceText.empty() || !licenceOf(licenceText, key, o, false, lic, nullptr, &w)) lic.licenseId = licenseId;
         const MailOutcome m = mailer(e, lic, code);
         content.mail = m.state;
         content.mailTo = m.to;
@@ -1521,7 +1596,7 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
     const auto entries = listRequests(folder);
     std::string revText, revWhy;
     licensing::RevocationList revList;
-    const bool hasRev = archiveRevocations(folder, key, revText, revList, &revWhy);
+    const bool hasRev = archiveRevocations(folder, key, c.options(), revText, revList, &revWhy);
     if (!hasRev && !revWhy.empty()) res.details.push_back("ATTENTION : " + revWhy + " : elle ne part pas avec la licence.");
     const bool withRev = hasRev && (withRevocations || namesLicence(revList, lic.licenseId));
     for (const auto& d : lic.devices) {
@@ -1573,7 +1648,7 @@ Result publishBoundLicence(const std::string& folder, const licensing::SigningKe
                            const Mailer& mailer) {
     licensing::License lic;
     std::string why;
-    if (!licenceOf(licenceText, key, lic, nullptr, &why)) return refused(why);
+    if (!licenceOf(licenceText, key, o, false, lic, nullptr, &why)) return refused(why);
     if (lic.devices.empty()) return refused("la licence " + lic.licenseId + " n'est li\xC3\xA9" "e \xC3\xA0 aucun PC (une licence en ligne : elle s'active avec son code)");
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
@@ -1596,7 +1671,7 @@ Result publishRevocation(const std::string& folder, const licensing::SigningKey&
                          const std::string& reason, const Options& o) {
     std::string revText, why;
     licensing::RevocationList revList;
-    if (!archiveRevocations(folder, key, revText, revList, &why))
+    if (!archiveRevocations(folder, key, o, revText, revList, &why))
         return refused(why.empty() ? std::string("pas de liste de r\xC3\xA9vocation dans l'archive : signe d'abord la r\xC3\xA9vocation") : why);
     Result res = publishRevocations(folder, key, o);
     if (!res.ok) return res;
@@ -1629,7 +1704,7 @@ Result publishRemoval(const std::string& folder, const licensing::SigningKey& ke
                       const Options& o) {
     licensing::License lic;
     std::string why;
-    if (!licenceOf(licenceText, key, lic, nullptr, &why)) return refused(why);
+    if (!licenceOf(licenceText, key, o, false, lic, nullptr, &why)) return refused(why);
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     Result res;
@@ -1639,7 +1714,7 @@ Result publishRemoval(const std::string& folder, const licensing::SigningKey& ke
     content.message = "Ce PC a \xC3\xA9t\xC3\xA9 retir\xC3\xA9 de la licence " + lic.licenseId + ".";
     std::string revText, revWhy;
     licensing::RevocationList revList;
-    if (archiveRevocations(folder, key, revText, revList, &revWhy) && namesLicence(revList, lic.licenseId)) content.revocations = revText;
+    if (archiveRevocations(folder, key, o, revText, revList, &revWhy) && namesLicence(revList, lic.licenseId)) content.revocations = revText;
     std::string line;
     if (publishStatus(*c, folder, key, removedDeviceKey, gw::State::Removed, {}, content, line, &why)) {
         res.details.push_back("PC retir\xC3\xA9 : " + line + ".");
@@ -1695,7 +1770,7 @@ Result studioKit(const std::string& folder, const licensing::SigningKey* key, co
     if (!exportPublisherKeys(key, {}, kPublisherHeaderName, false, false, now, header, &why, &summary)) return refused(why);
     std::string registry;
     SignedBlock regBlock;
-    if (!archiveSignedText(folder, "registre/registre.xpgreg", DocKind::Registry, *key, registry, regBlock, &why))
+    if (!archiveSignedText(folder, "registre/registre.xpgreg", DocKind::Registry, *key, Options{}, true, registry, regBlock, &why))
         return refused(why.empty() ? std::string("pas de registre sign\xC3\xA9 dans l'archive : signe-le d'abord (\xC3\x89" "ditions), puis recommence")
                                    : why + " : les Studios ne le croiraient pas. Signe un nouveau registre (\xC3\x89" "ditions), puis recommence");
     licensing::Registry reg;

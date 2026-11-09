@@ -46,6 +46,9 @@ std::uint64_t post(Item n);
 [[nodiscard]] std::size_t unread();
 [[nodiscard]] bool unreadError();
 bool markRead(std::uint64_t id, bool read = true);
+// 1.44.0 : les donnees d'une notification (Item::data) remplacees, sans la faire remonter ni la rendre non lue (un
+// fichier joint verifie, ou refuse). Faux : inconnue, ou les memes donnees.
+bool setData(std::uint64_t id, std::string data);
 std::size_t markAllRead();
 bool remove(std::uint64_t id);
 std::size_t clearRead();

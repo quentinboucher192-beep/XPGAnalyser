@@ -76,6 +76,7 @@ RegistryView viewOf(const Registry& r) {
         ov.retired = o.retired;
         v.options.push_back(std::move(ov));
     }
+    v.fallbackServices = r.fallbackServices;   // 1.44.0
     return v;
 }
 

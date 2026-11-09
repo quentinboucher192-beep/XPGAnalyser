@@ -247,6 +247,20 @@ bool markReadIn(Journal& j, std::uint64_t id, bool read) {
     return false;
 }
 
+// 1.44.0 : les donnees d'une notification changent (un fichier joint verifie ou refuse) - sans la faire remonter, ni la
+// rendre non lue, ni compter une apparition de plus.
+bool setDataIn(Journal& j, std::uint64_t id, std::string data) {
+    std::lock_guard<std::mutex> lk(j.m);
+    for (auto& x : j.items)
+        if (x.id == id) {
+            if (x.data == data) return false;
+            x.data = std::move(data);
+            touched(j);
+            return true;
+        }
+    return false;
+}
+
 std::size_t markAllReadIn(Journal& j) {
     std::lock_guard<std::mutex> lk(j.m);
     std::size_t n = 0;
@@ -542,6 +556,7 @@ std::size_t size() { return nf::sizeIn(nf::journal(1)); }
 std::size_t unread() { return nf::unreadIn(nf::journal(1)); }
 bool unreadError() { return nf::unreadErrorIn(nf::journal(1)); }
 bool markRead(std::uint64_t id, bool read) { return nf::markReadIn(nf::journal(1), id, read); }
+bool setData(std::uint64_t id, std::string data) { return nf::setDataIn(nf::journal(1), id, std::move(data)); }   // 1.44.0
 std::size_t markAllRead() { return nf::markAllReadIn(nf::journal(1)); }
 bool remove(std::uint64_t id) { return nf::removeIn(nf::journal(1), id); }
 std::size_t clearRead() { return nf::clearReadIn(nf::journal(1)); }

@@ -399,6 +399,11 @@ std::string safeName(std::string_view id) {
     return out.substr(0, 120);
 }
 
+const std::vector<std::string>& sharedSettingsFiles() {
+    static const std::vector<std::string> files = {kProfilesFile, kCriticalityFile, kJournalNotesFile};
+    return files;
+}
+
 std::vector<licensing::crypto::PublicKey> trustedKeys(const licensing::SigningKey* key) {
     std::vector<crypto::PublicKey> out;
     if (key) out.push_back(key->publicKey());
@@ -423,8 +428,10 @@ struct Entry {
     std::string   local;         // le fichier du poste (vide : pas sur le poste)
 };
 
-// Ce que dit un fichier signe : son genre, son numero ou sa licence, sa date ; `verified` : signe par une cle de confiance.
-bool describeSigned(std::string_view bytes, const std::vector<crypto::PublicKey>& trusted, Entry& e, bool& verified, std::string* why) {
+// Ce que dit un fichier signe : son genre, son numero ou sa licence, sa date ; `verified` : signe par une cle de confiance
+// (1.44.0 : ou par un admin de la liste `admins`, avec son droit).
+bool describeSigned(std::string_view bytes, const std::vector<crypto::PublicKey>& trusted, const licensing::admins::AdminList* admins, Entry& e,
+                    bool& verified, std::string* why) {
     std::vector<licensing::SignedBlock> blocks;
     if (!licensing::readBlocks(bytes, blocks, why)) return false;
     const licensing::SignedBlock* main = nullptr;
@@ -453,6 +460,7 @@ bool describeSigned(std::string_view bytes, const std::vector<crypto::PublicKey>
     verified = false;
     for (const auto& k : trusted)
         if (licensing::verifyBlock(*main, k)) verified = true;
+    if (!verified && admins && admins->byKeyId(main->keyId)) verified = licensing::admins::verifyAdminBlock(*admins, *main, nullptr);
     if (main->kind == DocKind::License) {
         licensing::License l;
         if (!licensing::parseLicense(main->document, l, why)) return false;
@@ -481,9 +489,32 @@ bool describeSigned(std::string_view bytes, const std::vector<crypto::PublicKey>
     return true;
 }
 
+// 1.44.0 : un reglage partage dans le depot : "reglages/<nom>.chiffre" (scelle par la cle de synchro).
+std::string settingPath(const std::string& name) { return "reglages/" + name + ".chiffre"; }
+
+// Ce que dit un reglage partage (un objet JSON qui porte "maj", l'heure de sa derniere ecriture).
+bool describeSetting(const std::string& path, std::string_view text, Entry& e, std::string* why) {
+    Value v;
+    if (!core::json::parse(text, v, nullptr) || !v.isObject()) {
+        if (why) *why = "ce n'est pas un JSON lisible";
+        return false;
+    }
+    e.kind = "reglage";
+    e.path = path;
+    e.encrypted = true;
+    e.date = static_cast<Seconds>(v.integer("maj"));
+    e.sha256 = crypto::sha256Hex(text);
+    return true;
+}
+
 // Le fichier de l'archive locale pour une entree du depot.
 std::string localPathOf(const std::string& folder, const Entry& e) {
     if (e.kind == "activations") return activationsPath(folder);
+    if (e.kind == "reglage") {   // 1.44.0 : seulement un des reglages connus, dans le dossier de la cle
+        for (const auto& name : sharedSettingsFiles())
+            if (e.path == settingPath(name)) return deploy::joinPath(folder, name);
+        return {};
+    }
     std::string rel = e.path;
     const std::string sealedExt = ".chiffre";
     if (rel.size() > sealedExt.size() && rel.compare(rel.size() - sealedExt.size(), sealedExt.size(), sealedExt) == 0)
@@ -522,7 +553,7 @@ std::vector<Entry> localEntries(const std::string& folder, std::vector<std::stri
         std::string bytes, w;
         Entry e;
         bool verified = false;
-        if (!readText(f, bytes, &w) || !describeSigned(bytes, {}, e, verified, &w)) {
+        if (!readText(f, bytes, &w) || !describeSigned(bytes, {}, nullptr, e, verified, &w)) {
             warnings.push_back("archive : " + f + " ignor\xC3\xA9 (" + w + ")");
             continue;
         }
@@ -550,6 +581,19 @@ std::vector<Entry> localEntries(const std::string& folder, std::vector<std::stri
             warnings.push_back("le registre des activations ne se lit pas (" + w + ")");
         }
     }
+    // 1.44.0 : les reglages partages de l'admin+ (les profils, la criticite du journal)
+    for (const auto& name : sharedSettingsFiles()) {
+        const std::string f = deploy::joinPath(folder, name);
+        if (!isFile(f)) continue;
+        std::string text, w;
+        Entry e;
+        if (!readText(f, text, &w) || !describeSetting(settingPath(name), text, e, &w)) {
+            warnings.push_back(name + " ignor\xC3\xA9 (" + w + ")");
+            continue;
+        }
+        e.local = f;
+        out.push_back(std::move(e));
+    }
     return out;
 }
 
@@ -558,6 +602,11 @@ std::string describeEntry(const Entry& e) {
     if (e.kind == "revocations")
         return "liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(e.number) + (e.date ? " du " + licensing::isoDate(e.date) : std::string());
     if (e.kind == "licence") return "licence " + e.licenseId + (e.date ? " (sign\xC3\xA9" "e le " + licensing::isoDate(e.date) + ")" : std::string());
+    if (e.kind == "reglage") {   // 1.44.0
+        std::string name = e.path.substr(e.path.find('/') + 1);
+        if (name.size() > 8 && name.compare(name.size() - 8, 8, ".chiffre") == 0) name.resize(name.size() - 8);
+        return "r\xC3\xA9glages " + name + (e.date ? " du " + licensing::isoTime(e.date) : std::string());
+    }
     return "registre des activations (" + std::to_string(e.lines) + " ligne(s))";
 }
 
@@ -634,13 +683,18 @@ bool writeDeleted(const std::string& folder, const std::vector<DeletedLicence>& 
 
 bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<crypto::PublicKey>& trusted, std::string* what,
                    std::string* why) {
-    if (trusted.empty()) {
+    return archiveSigned(folder, bytes, trusted, nullptr, what, why);
+}
+
+bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<crypto::PublicKey>& trusted,
+                   const licensing::admins::AdminList* admins, std::string* what, std::string* why) {
+    if (trusted.empty() && !admins) {
         if (why) *why = "aucune cl\xC3\xA9 d'\xC3\xA9" "diteur sur ce poste pour v\xC3\xA9rifier la signature";
         return false;
     }
     Entry e;
     bool verified = false;
-    if (!describeSigned(bytes, trusted, e, verified, why)) return false;
+    if (!describeSigned(bytes, trusted, admins, e, verified, why)) return false;
     if (!verified) {
         if (why) *why = "la signature n'est pas celle de la cl\xC3\xA9 de l'\xC3\xA9" "diteur";
         return false;
@@ -650,7 +704,7 @@ bool archiveSigned(const std::string& folder, std::string_view bytes, const std:
         std::string old, w;
         Entry o;
         bool v = false;
-        const bool readable = readText(path, old, &w) && describeSigned(old, {}, o, v, &w);
+        const bool readable = readText(path, old, &w) && describeSigned(old, {}, nullptr, o, v, &w);
         if (readable) {
             if (old == bytes) {
                 if (what) *what = "d\xC3\xA9j\xC3\xA0 dans l'archive";
@@ -767,7 +821,7 @@ bool safeRelPath(std::string_view p) {
     }
     return true;
 }
-bool knownKind(const std::string& k) { return k == "registre" || k == "revocations" || k == "licence" || k == "activations"; }
+bool knownKind(const std::string& k) { return k == "registre" || k == "revocations" || k == "licence" || k == "activations" || k == "reglage"; }
 
 // L'index : "XPG-INDEX 1 <cle> <code>\n" puis le JSON. Faux : `why` ; `foreignKey` : l'index vient d'une autre cle.
 bool readIndex(const SyncKey& key, std::string_view text, Remote& out, bool& foreignKey, std::string* why) {
@@ -967,11 +1021,17 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey& k
     online::Options o;
     o.now = opt.now;
     o.tool = opt.tool;
+    o.editorKeys = opt.editorKeys;   // 1.44.0
+    o.admins = opt.admins;
+    o.software = opt.software;
     std::unique_ptr<online::Client> client;
     if (!online::openClient(folder, key, o, client, &rep.why)) return rep;
     online::Client& svc = *client;
     const std::string url = svc.url();
-    const auto trusted = trustedKeys(&key);
+    auto trusted = trustedKeys(&key);
+    for (const auto& k : opt.editorKeys)   // 1.44.0 : un admin croit les cles de l'editeur
+        if (std::find(trusted.begin(), trusted.end(), k) == trusted.end()) trusted.push_back(k);
+    const licensing::admins::AdminList* admins = opt.admins ? &*opt.admins : nullptr;
     const std::string by = (opt.tool.empty() ? std::string("XPG-License-Admin") : opt.tool) + " ; cl\xC3\xA9 " + key.keyId();
     const bool writeLocal = !opt.dryRun;
     const bool writeRemote = !opt.dryRun && !opt.receiveOnly;
@@ -1070,9 +1130,29 @@ SyncReport synchronize(const std::string& folder, const licensing::SigningKey& k
                 rep.received.push_back("registre des activations : " + std::to_string(missing.size()) + " ligne(s) d'un autre poste");
                 continue;
             }
+            if (e.kind == "reglage") {   // 1.44.0 : un reglage partage - le plus recent gagne
+                Entry got;
+                if (localPathOf(folder, e).empty() || !describeSetting(e.path, plain, got, &w)) {
+                    rep.warnings.push_back(e.path + " refus\xC3\xA9 : " + (w.empty() ? std::string("un r\xC3\xA9glage inconnu") : w));
+                    rejected.insert(e.path);
+                    continue;
+                }
+                if (l) {
+                    const int cmp = newer(got, *l);
+                    if (cmp < 0) continue;
+                    if (cmp == 0) {
+                        rep.warnings.push_back(describeEntry(got) + " : l'archive en ligne et ce poste en ont deux versions diff\xC3\xA9rentes de m\xC3\xAAme heure ; ce poste garde la sienne");
+                        keepLocal.insert(e.path);
+                        continue;
+                    }
+                }
+                if (writeLocal && !writeFileAt(localPathOf(folder, got), plain, &rep.why)) return rep;
+                rep.received.push_back(describeEntry(got));
+                continue;
+            }
             Entry got;
             bool verified = false;
-            if (!describeSigned(plain, trusted, got, verified, &w) || got.path != e.path || got.kind != e.kind) {
+            if (!describeSigned(plain, trusted, admins, got, verified, &w) || got.path != e.path || got.kind != e.kind) {
                 rep.warnings.push_back(e.path + " refus\xC3\xA9 : " + (w.empty() ? std::string("il ne contient pas ce que dit l'index") : w));
                 rejected.insert(e.path);
                 continue;

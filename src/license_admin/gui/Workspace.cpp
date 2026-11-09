@@ -140,12 +140,14 @@ Workspace::Workspace(std::string folder) : folder_(folder.empty() ? defaultKeyFo
     (void)mark;
     (void)crypto::init();
     reload();
+    (void)writeAdminToken(false);   // 1.44.0 : le jeton d'admin, a chaque lancement (s'il manque ou date d'hier)
 }
 
 Seconds Workspace::now() const { return clock_ ? clock_() : licensing::systemNow(); }
 
 void Workspace::reload() {
     loadKey();
+    loadAdmins();   // 1.44.0 : la cle d'admin, la liste des admins, le role
     loadArchive();
     loadActivations();
     loadService();
@@ -379,6 +381,9 @@ Dashboard Workspace::dashboard() const {
 
 // ------------------------------------------------------------------------------------------------------ la cle
 OpResult Workspace::createKey(const std::string& name, bool test) {
+    if (adminKey_.present)   // 1.44.0 : un admin (ou en attente) ne devient pas l'admin+ d'une autre cle de l'editeur
+        return OpResult::fail("ce poste a d\xC3\xA9j\xC3\xA0 une cl\xC3\xA9 d'admin (" + adminKey_.id +
+                              ") : il signe avec elle ce que ses droits permettent ; la cl\xC3\xA9 de l'\xC3\xA9" "diteur reste sur le poste de l'admin+");
     if (key_.present) return OpResult::fail("une cl\xC3\xA9 de l'\xC3\xA9" "diteur existe d\xC3\xA9j\xC3\xA0 sur ce poste (" + key_.id + ") : elle n'est jamais remplac\xC3\xA9" "e");
     std::string why;
     auto k = createPublisherKey(folder_, name, test, &why);
@@ -450,6 +455,15 @@ OpResult Workspace::restoreKey(const std::string& path, const std::string& phras
 }
 
 // ---------------------------------------------------------------------------------------------------- l'archive
+namespace {
+// 1.44.0 : les cles qui rangent un document dans l'archive : celles de l'editeur que ce poste croit, et la cle qui signe.
+std::vector<crypto::PublicKey> archiveTrust(const std::vector<crypto::PublicKey>& editors, const licensing::SigningKey* signer) {
+    std::vector<crypto::PublicKey> out = editors;
+    if (signer && std::find(out.begin(), out.end(), signer->publicKey()) == out.end()) out.push_back(signer->publicKey());
+    return out;
+}
+} // namespace
+
 OpResult Workspace::archiveAndNote(const std::string& bytes, const std::vector<ActivationRecord>& records, OpResult r) {
     if (!records.empty()) {
         std::string why;
@@ -459,7 +473,7 @@ OpResult Workspace::archiveAndNote(const std::string& bytes, const std::vector<A
             r.details.push_back("ATTENTION : le registre des activations n'a pas \xC3\xA9t\xC3\xA9 mis \xC3\xA0 jour (" + why + ") ; le fichier sign\xC3\xA9 est bien \xC3\xA9" "crit.");
     }
     std::string what, why;
-    if (archive::archiveSigned(folder_, bytes, archive::trustedKeys(signing_.get()), &what, &why))
+    if (archive::archiveSigned(folder_, bytes, archiveTrust(editorKeys_, signer()), adminList_ ? &*adminList_ : nullptr, &what, &why))
         // Une emission de la meme seconde que celle de l'archive n'y entre pas : c'est dit en clair.
         r.details.push_back((what.rfind("plus ancien", 0) == 0 ? std::string("ATTENTION : archive : ") : std::string("Archive : ")) + what + ".");
     else
@@ -501,7 +515,7 @@ OpResult Workspace::importFiles(const std::vector<std::string>& paths) {
             continue;
         }
         std::string what;
-        if (archive::archiveSigned(folder_, text, archive::trustedKeys(signing_.get()), &what, &why)) {
+        if (archive::archiveSigned(folder_, text, archiveTrust(editorKeys_, signer()), adminList_ ? &*adminList_ : nullptr, &what, &why)) {
             r.details.push_back(name + " : " + what + ".");
             ++stored;
         } else {
@@ -533,7 +547,7 @@ OpResult Workspace::exportLicence(const std::string& licenseId, const std::strin
     if (!l) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
     if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier ?");
     std::string text, why;
-    if (!readText(l->path, text, &why) || !writeText(outPath, text, &why)) return OpResult::fail(why);
+    if (!readText(l->path, text, &why) || !writeText(outPath, withAdminList(text), &why)) return OpResult::fail(why);   // 1.44.0
     OpResult r = OpResult::done("Fichier de licence \xC3\xA9" "crit : " + outPath);
     r.details.push_back("Envoie-le \xC3\xA0 " + l->licence.customer + " : Aide \xE2\x80\xBA Licence\xE2\x80\xA6 \xE2\x80\xBA Activer par fichier de licence.");
     r.output = outPath;
@@ -668,15 +682,17 @@ static bool inputsOf(const Workspace& w, const LicenceDraft& d, const std::strin
 }
 
 OpResult Workspace::preview(const LicenceDraft& d) const {
-    if (!signing_) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
+    if (!signer() && role_ == Role::None) return OpResult::fail(key_.problem + " (Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9 \xE2\x80\xBA Cr\xC3\xA9" "er la cl\xC3\xA9)");
+    if (const auto deny = denied(licenceRight(d))) return *deny;   // 1.44.0
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     LicenseInputs in;
     std::string why;
     if (!inputsOf(*this, d, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
     in.options = d.options;            // 1.42.0
     in.purchases = purchasesToWrite(d);
+    in.alsoTrusted = alsoTrusted();    // 1.44.0
     std::string out, summary;
-    if (!signLicense(*signing_, in, now(), out, &why, &summary)) return OpResult::fail(why);
+    if (!signLicense(*signer(), in, now(), out, &why, &summary)) return OpResult::fail(why);
     OpResult r = OpResult::done("La licence " + d.licenseId + " est pr\xC3\xAAte \xC3\xA0 \xC3\xAAtre sign\xC3\xA9" "e :");
     addSummary(r, summary);
     if (d.online)
@@ -685,8 +701,52 @@ OpResult Workspace::preview(const LicenceDraft& d) const {
     return r;
 }
 
+namespace {
+
+// 1.44.0 : la ligne du journal des admins d'une licence signee (creee, prolongee, une option, un PC retire), et celle de
+// chaque demande en ligne acceptee par elle. Une ligne qui ne s'ecrit pas est dite (la licence, elle, est signee).
+void noteLicence(const Workspace& w, OpResult& r, const std::string& action, const LicenceDraft& d, Seconds beforeEnd, Seconds afterEnd,
+                 const std::vector<std::pair<int, std::string>>& accepted) {
+    std::string summary;
+    if (action == "licence_creer") summary = "a sign\xC3\xA9 la licence " + d.licenseId;
+    else if (action == "licence_prolonger") summary = "a prolong\xC3\xA9 la licence " + d.licenseId;
+    else if (action == "licence_option") summary = "a ajout\xC3\xA9 une option \xC3\xA0 la licence " + d.licenseId;
+    else summary = "a retir\xC3\xA9 un PC de la licence " + d.licenseId;
+    core::json::Value detail = core::json::Value::object();
+    detail.set("client", d.customer);
+    detail.set("offre", d.edition);
+    if (d.online) detail.set("en_ligne", true);
+    if (!d.dropDevices.empty()) detail.set("pc", d.dropDevices.front().substr(0, 16));
+    if (d.options && !d.options->empty()) detail.set("option", d.options->back().label);
+    core::json::Value before = core::json::Value::object(), after = core::json::Value::object();
+    if (action == "licence_prolonger") {
+        before.set("fin", beforeEnd ? licensing::isoDate(beforeEnd) : std::string("sans fin"));
+        after.set("fin", afterEnd ? licensing::isoDate(afterEnd) : std::string("sans fin"));
+    }
+    OpResult j = w.journal(action, d.licenseId, summary, core::json::write(detail, false), core::json::write(before, false), core::json::write(after, false));
+    if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    for (const auto& [number, customer] : accepted) {
+        core::json::Value a = core::json::Value::object();
+        a.set("demande", number);
+        a.set("client", customer);
+        a.set("licence", d.licenseId);
+        j = w.journal("demande_accepter", "demande " + std::to_string(number), "a accept\xC3\xA9 la demande n\xC2\xB0 " + std::to_string(number) + " (" + customer + ")",
+                      core::json::write(a, false));
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
+}
+
+} // namespace
+
 OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPath) {
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (const auto deny = denied(licenceRight(d))) return *deny;   // 1.44.0 : creer, prolonger, une option, un PC retire
+    // 1.44.0 : repondre a une demande en ligne demande aussi le droit << demandes >>
+    const bool answers = std::any_of(d.requestPaths.begin(), d.requestPaths.end(), [this](const std::string& p) {
+        const online::Entry* e = onlineRequestAt(p);
+        return e && e->waiting();
+    });
+    if (answers)
+        if (const auto deny = denied("demandes")) return *deny;
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier de licence ?");
     LicenceDraft bound = d;
@@ -696,15 +756,22 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     if (!inputsOf(*this, bound, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
     in.options = d.options;            // 1.42.0
     in.purchases = purchasesToWrite(d);
+    in.alsoTrusted = alsoTrusted();    // 1.44.0
     std::string out, summary;
     std::vector<ActivationRecord> records;
-    if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
+    const LicenceEntry* before = d.extend ? licence(d.licenseId) : nullptr;
+    const Seconds beforeEnd = before ? before->licence.expiresAt : 0;
+    const std::string action = licenceRight(d);
+    if (!signLicense(*signer(), in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
     {
         std::error_code ec;   // 1.34.0 : demandes-en-ligne/licences/ (une demande en ligne : le fichier sans rien demander)
         fs::create_directories(P(outPath).parent_path(), ec);
     }
-    if (!writeText(outPath, out, &why)) return OpResult::fail(why);
+    if (!writeText(outPath, withAdminList(out), &why)) return OpResult::fail(why);   // 1.44.0 : un admin : la liste d'abord
     OpResult r = OpResult::done("Licence " + d.licenseId + " sign\xC3\xA9" "e : " + outPath);
+    std::vector<std::pair<int, std::string>> accepted;   // 1.44.0 : le journal (les demandes acceptees)
+    for (const auto& p : d.requestPaths)
+        if (const online::Entry* e = onlineRequestAt(p); e && e->waiting()) accepted.emplace_back(e->number, e->customer);
     // 1.37.0 : UNE SEULE ACCEPTATION - les demandes en ligne auxquelles elle repond sont << acceptees ici >> des maintenant,
     // meme si la reponse ne part pas tout de suite (Demandes en ligne : Renvoyer la reponse).
     for (const auto& p : d.requestPaths)
@@ -713,10 +780,12 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
             if (!online::markAcceptedHere(folder_, e->number, d.licenseId, &w)) r.details.push_back("ATTENTION : " + w);
         }
     addSummary(r, summary);
-    if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
+    if (signer()->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
+    if (role_ == Role::Admin) r.details.push_back("Sign\xC3\xA9" "e par ta cl\xC3\xA9 d'admin : le fichier porte aussi la liste des admins (un Studio hors ligne la lit pour la croire).");
     licensing::License signedLicence;
     SignedBlock lb;
     const bool online = blockOf(out, DocKind::License, lb, nullptr) && licensing::parseLicense(lb.document, signedLicence, nullptr) && isOnlineLicence(signedLicence);
+    noteLicence(*this, r, action, d, beforeEnd, signedLicence.expiresAt, accepted);
     if (service_.ready() && online) {
         // Une licence en ligne prolongee : deposee sur le service, le code reste le meme.
         r.details.push_back("Service : la nouvelle \xC3\xA9mission part sur le service ; le code d'activation reste le m\xC3\xAAme.");
@@ -749,7 +818,9 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
 
 OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::string& outPath, ServiceJob& job, std::string& code, int requestNumber) {
     code.clear();
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (const auto deny = denied(licenceRight(draft))) return *deny;   // 1.44.0
+    if (requestNumber > 0)
+        if (const auto deny = denied("demandes")) return *deny;
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (\xC3\x89" "ditions \xE2\x80\xBA Signer le registre)");
     if (!draft.online) return OpResult::fail("ce n'est pas une licence en ligne");
     if (draft.leaseDays < 1 || draft.leaseDays > 366) return OpResult::fail("le bail d'une activation va de 1 \xC3\xA0 366 jours");
@@ -760,13 +831,17 @@ OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::s
     if (!inputsOf(*this, draft, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
     in.options = draft.options;        // 1.42.0
     in.purchases = purchasesToWrite(draft);
+    in.alsoTrusted = alsoTrusted();    // 1.44.0
     std::string out, summary;
     std::vector<ActivationRecord> records;
-    if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
+    const LicenceEntry* before = draft.extend ? licence(draft.licenseId) : nullptr;
+    const Seconds beforeEnd = before ? before->licence.expiresAt : 0;
+    const std::string action = licenceRight(draft);
+    if (!signLicense(*signer(), in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
     if (!outPath.empty()) {
         std::error_code ec;
         fs::create_directories(P(outPath).parent_path(), ec);
-        if (!writeText(outPath, out, &why)) return OpResult::fail(why);
+        if (!writeText(outPath, withAdminList(out), &why)) return OpResult::fail(why);
     }
     job = ServiceJob{};
     job.kind = ServiceJob::Kind::OnlineLicence;
@@ -786,19 +861,37 @@ OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::s
     OpResult r = OpResult::done(draft.extend ? "Licence en ligne " + draft.licenseId + " prolong\xC3\xA9" "e : la nouvelle \xC3\xA9mission part sur le service (le code reste le m\xC3\xAAme)."
                                              : "Licence en ligne " + draft.licenseId + " sign\xC3\xA9" "e : elle part sur le service avec l'empreinte d'un code d'activation neuf.");
     addSummary(r, summary);
-    if (signing_->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
+    if (signer()->test()) r.details.push_back("!!! sign\xC3\xA9" "e avec une CL\xC3\x89 D'ESSAI : jamais pour un client !!!");
     if (!outPath.empty()) r.output = outPath;
+    {
+        licensing::License signedLicence;
+        SignedBlock lb;
+        if (blockOf(out, DocKind::License, lb, nullptr)) (void)licensing::parseLicense(lb.document, signedLicence, nullptr);
+        std::vector<std::pair<int, std::string>> accepted;
+        if (requestNumber > 0) {
+            const online::Entry* e = onlineRequest(requestNumber);
+            accepted.emplace_back(requestNumber, e ? e->customer : draft.customer);
+        }
+        noteLicence(*this, r, action, draft, beforeEnd, signedLicence.expiresAt, accepted);
+    }
     return archiveAndNote(out, records, std::move(r));
 }
 
 OpResult Workspace::prepareNewCode(const std::string& licenseId, ServiceJob& job, std::string& code) {
     code.clear();
+    if (const auto deny = denied("licence_creer")) return *deny;   // 1.44.0 : un code neuf (ce que la creation donne)
     const LicenceEntry* l = licence(licenseId);
     if (!l) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
     if (!isOnlineLicence(l->licence)) return OpResult::fail("la licence " + licenseId + " est li\xC3\xA9" "e \xC3\xA0 des PC : elle n'a pas de code d'activation");
     if (!service_.ready()) return OpResult::fail("le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne)");
     std::string text, why;
     if (!readText(l->path, text, &why)) return OpResult::fail(why);
+    {   // 1.44.0 : le service ne prend que la licence signee par la cle qui la depose
+        SignedBlock b;
+        if (blockOf(text, DocKind::License, b, nullptr) && signer() && b.keyId != signer()->keyId())
+            return OpResult::fail("la licence " + licenseId + " est sign\xC3\xA9" "e par une autre cl\xC3\xA9 (" + b.keyId +
+                                  ") : prolonge-la d'abord (une nouvelle \xC3\xA9mission sign\xC3\xA9" "e par ta cl\xC3\xA9), puis tire un code neuf");
+    }
     code = licensing::service::newActivationCode();
     std::string normalized;
     (void)licensing::service::normalizeCode(code, normalized);
@@ -809,10 +902,12 @@ OpResult Workspace::prepareNewCode(const std::string& licenseId, ServiceJob& job
     job.licenceText = std::move(text);
     job.codeHash = licensing::service::codeHash(normalized);   // leaseDays 0 : le bail du service garde
     crypto::wipe(normalized.data(), normalized.size());
+    (void)journal("licence_creer", licenseId, "a tir\xC3\xA9 un code d'activation neuf pour la licence " + licenseId);   // 1.44.0
     return OpResult::done("Un code neuf pour la licence " + licenseId + " : il remplace l'ancien d\xC3\xA8s qu'il est d\xC3\xA9pos\xC3\xA9.");
 }
 
 OpResult Workspace::deleteRevokedLicence(const std::string& licenseId) {
+    if (const auto deny = denied("licence_revoquer")) return *deny;   // 1.44.0
     const LicenceEntry* e = licence(licenseId);
     if (!e) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
     if (!e->revoked)
@@ -897,7 +992,7 @@ OpResult Workspace::recordRequests(const std::vector<std::string>& paths) {
 
 // ------------------------------------------------------------------------------------------------ revocations
 OpResult Workspace::signRevocationList(licensing::RevocationList list, const std::string& what) {
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (const auto deny = denied("licence_revoquer")) return *deny;   // 1.44.0
     core::json::Value root = core::json::Value::object();
     root.set("number", static_cast<std::uint64_t>(hasRevocations_ ? revocations_.number + 1 : 1));
     core::json::Value arr = core::json::Value::array();
@@ -913,7 +1008,7 @@ OpResult Workspace::signRevocationList(licensing::RevocationList list, const std
     root.set("revoked", std::move(arr));
     std::string out, why;
     std::vector<ActivationRecord> records;
-    if (!signRevocations(*signing_, core::json::write(root), now(), out, &why, &records)) return OpResult::fail(why);
+    if (!signRevocations(*signer(), core::json::write(root), now(), out, &why, &records)) return OpResult::fail(why);
     OpResult r = OpResult::done(what);
     r.details.push_back("Liste de r\xC3\xA9vocation n\xC2\xB0 " + std::to_string(hasRevocations_ ? revocations_.number + 1 : 1) + " sign\xC3\xA9" "e ("
                         + plural(static_cast<int>(list.revoked.size()), "entr\xC3\xA9" "e", "entr\xC3\xA9" "es") + ").");
@@ -946,6 +1041,17 @@ OpResult Workspace::revoke(const std::string& licenseId, const std::string& devi
     } else if (const LicenceEntry* l = licence(licenseId); l && !onlyThisIssue)
         for (const auto& dv : l->licence.devices) keys.push_back(dv.key);   // une licence en ligne n'en a pas : le service suffit
     OpResult r = signRevocationList(std::move(list), what);
+    if (r.ok) {   // 1.44.0 : le journal des admins
+        core::json::Value detail = core::json::Value::object();
+        detail.set("raison", reason);
+        if (!deviceKey.empty()) detail.set("pc", deviceKey.substr(0, 16));
+        if (onlyThisIssue) detail.set("emissions", "jusqu'ici");
+        if (const LicenceEntry* l = licence(licenseId)) detail.set("client", l->licence.customer);
+        const OpResult j = journal("licence_revoquer", licenseId,
+                                   deviceKey.empty() ? "a r\xC3\xA9voqu\xC3\xA9 la licence " + licenseId : "a r\xC3\xA9voqu\xC3\xA9 un PC de la licence " + licenseId,
+                                   core::json::write(detail, false));
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
     if (r.ok && service_.ready()) {
         ServiceJob job;
         job.kind = ServiceJob::Kind::Revocation;
@@ -964,6 +1070,10 @@ OpResult Workspace::unrevoke(std::size_t index) {
     const auto removed = list.revoked[index];
     list.revoked.erase(list.revoked.begin() + static_cast<std::ptrdiff_t>(index));
     OpResult r = signRevocationList(std::move(list), "R\xC3\xA9vocation retir\xC3\xA9" "e : " + removed.licenseId + (removed.device.empty() ? "" : " (un PC)") + ".");
+    if (r.ok) {   // 1.44.0
+        const OpResult j = journal("licence_revoquer", removed.licenseId, "a retir\xC3\xA9 la r\xC3\xA9vocation de la licence " + removed.licenseId);
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
     if (r.ok && service_.ready()) {
         ServiceJob job;
         job.kind = ServiceJob::Kind::Unrevoke;
@@ -992,16 +1102,38 @@ OpResult Workspace::exportRevocations(const std::string& outPath) const {
 }
 
 // --------------------------------------------------------------------------------------------------- registre
+namespace {
+// 1.44.0 : les lignes du journal d'un registre signe (une par partie qui change : offres, options, annonces).
+void noteRegistry(const Workspace& w, OpResult& r, const std::vector<std::string>& parts, std::uint64_t number) {
+    const std::vector<std::string> list = parts.empty() ? std::vector<std::string>{"offres"} : parts;
+    for (const auto& part : list) {
+        const std::string what = part == "options" ? "les options" : part == "annonces" ? "les annonces" : "les offres";
+        core::json::Value detail = core::json::Value::object();
+        detail.set("registre", static_cast<std::uint64_t>(number));
+        const OpResult j = w.journal(part, "registre " + std::to_string(number), "a modifi\xC3\xA9 " + what + " (registre n\xC2\xB0 " + std::to_string(number) + ")",
+                                     core::json::write(detail, false));
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
+}
+} // namespace
+
 OpResult Workspace::signRegistry(const licensing::Registry& edited) {
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (!signer() && role_ == Role::None) return OpResult::fail(key_.problem);
+    // 1.44.0 : le droit de chaque partie qui change (offres, options, annonces), comme le service le verifie
+    const std::vector<std::string> parts = detail::registryRights(hasRegistry_ ? &registry_ : nullptr, edited);
+    for (const auto& right : parts)
+        if (const auto deny = denied(right)) return *deny;
+    if (parts.empty() && !can("offres") && !can("options") && !can("annonces"))
+        if (const auto deny = denied("offres")) return *deny;
     licensing::Registry reg = edited;
     reg.number = hasRegistry_ ? registry_.number + 1 : std::max<std::uint64_t>(1, edited.number);
     reg.issuedAt = now();
     std::string out, why;
-    if (!license_admin::signRegistry(*signing_, licensing::writeRegistry(reg), now(), out, &why)) return OpResult::fail(why);
+    if (!license_admin::signRegistry(*signer(), licensing::writeRegistry(reg), now(), out, &why)) return OpResult::fail(why);
     OpResult r = OpResult::done("Registre n\xC2\xB0 " + std::to_string(reg.number) + " sign\xC3\xA9 (" + plural(static_cast<int>(reg.editions.size()), "\xC3\xA9" "dition", "\xC3\xA9" "ditions")
                                 + ", " + plural(static_cast<int>(reg.features.size()), "fonctionnalit\xC3\xA9", "fonctionnalit\xC3\xA9s") + ").");
     r.details.push_back("Il part avec chaque licence sign\xC3\xA9" "e ensuite ; un client l'a \xC3\xA0 sa prochaine licence.");
+    noteRegistry(*this, r, parts, reg.number);   // 1.44.0
     OpResult done = archiveAndNote(out, {}, std::move(r));
     if (done.ok && service_.ready()) {
         ServiceJob job;
@@ -1013,17 +1145,23 @@ OpResult Workspace::signRegistry(const licensing::Registry& edited) {
 }
 
 OpResult Workspace::signRegistryJson(const std::string& path) {
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (!signer() && role_ == Role::None) return OpResult::fail(key_.problem);
+    if (!signer()) return *denied("offres");
     std::string text, out, why;
     if (!readText(path, text, &why)) return OpResult::fail(why);
-    if (!license_admin::signRegistry(*signing_, text, now(), out, &why)) return OpResult::fail(why);
+    if (!license_admin::signRegistry(*signer(), text, now(), out, &why)) return OpResult::fail(why);
     SignedBlock b;
     licensing::Registry reg;
     if (blockOf(out, DocKind::Registry, b, &why)) (void)licensing::parseRegistry(b.document, reg, &why);
+    // 1.44.0 : le droit de chaque partie qui change
+    const std::vector<std::string> parts = detail::registryRights(hasRegistry_ ? &registry_ : nullptr, reg);
+    for (const auto& right : parts)
+        if (const auto deny = denied(right)) return *deny;
     if (hasRegistry_ && reg.number <= registry_.number)
         return OpResult::fail("ce registre porte le n\xC2\xB0 " + std::to_string(reg.number) + ", pas plus que celui de l'archive (n\xC2\xB0 " + std::to_string(registry_.number)
                               + ") : augmente \"number\"");
     OpResult r = OpResult::done("Registre n\xC2\xB0 " + std::to_string(reg.number) + " sign\xC3\xA9 depuis " + U(P(path).filename()) + ".");
+    noteRegistry(*this, r, parts, reg.number);   // 1.44.0
     OpResult done = archiveAndNote(out, {}, std::move(r));
     if (done.ok && service_.ready()) {
         ServiceJob job;
@@ -1036,10 +1174,18 @@ OpResult Workspace::signRegistryJson(const std::string& path) {
 
 // ------------------------------------------------------------------------------------------------- activations
 OpResult Workspace::exportCsv(const std::vector<KnownDevice>& list, const std::string& path) const {
+    if (const auto deny = denied("clients_exporter")) return *deny;   // 1.44.0
     if (path.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le tableau ?");
     std::string why;
     if (!writeText(path, devicesCsv(list), &why)) return OpResult::fail(why);
     OpResult r = OpResult::done("Tableau \xC3\xA9" "crit pour Excel : " + path + " (" + plural(static_cast<int>(list.size()), "PC", "PC") + ").");
+    {   // 1.44.0
+        core::json::Value detail = core::json::Value::object();
+        detail.set("lignes", static_cast<int>(list.size()));
+        const OpResult j = journal("clients_exporter", "CSV", "a export\xC3\xA9 les clients (" + plural(static_cast<int>(list.size()), "PC", "PC") + ")",
+                                   core::json::write(detail, false));
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
     r.output = path;
     return r;
 }
@@ -1053,13 +1199,6 @@ OpResult fromResult(const online::Result& x) {
     r.message = x.message;
     r.details = x.details;
     return r;
-}
-
-online::Options optionsAt(Seconds now) {
-    online::Options o;
-    o.now = now;
-    o.tool = std::string("XPG-License-Manager-Admin/") + kAppVersion;
-    return o;
 }
 
 } // namespace
@@ -1111,25 +1250,32 @@ std::string Workspace::syncRecoveryCode(std::string* why) const {
     return code;
 }
 
-// Les fonctions lentes relisent la cle (une copie a ce fil : le Workspace n'est pas partage).
-#define XPG_SERVICE_KEY_OR_FAIL                                  \
-    std::string why;                                             \
-    auto key = loadPublisherKey(folder_, &why);                  \
-    if (!key) return OpResult::fail("il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (elle signe chaque appel au service) : " + why)
+// Les fonctions lentes relisent la cle (une copie a ce fil : le Workspace n'est pas partage). 1.44.0 : la cle qui signe
+// (celle de l'editeur pour l'admin+, celle de l'admin sinon) et ce qu'elle croit (detail::loadCaller).
+#define XPG_SERVICE_KEY_OR_FAIL                                                           \
+    std::string why;                                                                      \
+    detail::Caller caller;                                                                \
+    if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);           \
+    const licensing::SigningKey* const key = caller.key.get()
+// 1.44.0 : le droit qu'il faut (vide : l'admin+ seulement)
+#define XPG_SERVICE_RIGHT(right)                                                          \
+    if (const auto deny_ = detail::callerDenied(caller, right)) return *deny_
 
 OpResult Workspace::serviceVerify(online::ServiceState* state) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::verify(folder_, *key, optionsAt(now()), state));
+    return fromResult(online::verify(folder_, *key, detail::optionsFor(caller, now()), state));
 }
 
 OpResult Workspace::serviceReadKey(std::string& keyHex) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::readServiceKey(folder_, *key, optionsAt(now()), keyHex));
+    XPG_SERVICE_RIGHT({});   // 1.44.0 : le certificat du service est a l'admin+
+    return fromResult(online::readServiceKey(folder_, *key, detail::optionsFor(caller, now()), keyHex));
 }
 
 OpResult Workspace::serviceCertify(const std::string& expectedKey) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::certify(folder_, *key, optionsAt(now()), expectedKey));
+    XPG_SERVICE_RIGHT({});
+    return fromResult(online::certify(folder_, *key, detail::optionsFor(caller, now()), expectedKey));
 }
 
 archive::SyncReport Workspace::archiveSync(bool receiveOnly, bool dryRun) const {
@@ -1139,79 +1285,133 @@ archive::SyncReport Workspace::archiveSync(bool receiveOnly, bool dryRun) const 
     o.now = now();
     o.tool = std::string(kAppName) + " " + kAppVersion;
     std::string why;
-    auto key = loadPublisherKey(folder_, &why);
-    if (!key) {
-        archive::SyncReport r;
-        r.why = "il faut la cl\xC3\xA9 de l'\xC3\xA9" "diteur (elle signe chaque appel au service) : " + why;
+    detail::Caller caller;
+    archive::SyncReport r;
+    if (!detail::loadCaller(folder_, caller, &why)) {
+        r.why = why;
         return r;
     }
-    return archive::synchronize(folder_, *key, o);
+    if (caller.role != Role::Plus && caller.role != Role::Admin) {   // 1.44.0 : l'admin+ ou un admin de la liste
+        const auto deny = detail::callerDenied(caller, "demandes");
+        r.why = deny ? deny->message.substr(deny->message.find(':') + 2) : std::string("ce poste n'est pas admin");
+        return r;
+    }
+    o.editorKeys = caller.editorKeys;
+    o.admins = caller.admins;
+    r = archive::synchronize(folder_, *caller.key, o);
+    if (r.ok) (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : le journal a envoyer part aussi
+    return r;
 }
 
 OpResult Workspace::serviceListLicences(online::Snapshot& out) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::listLicences(folder_, *key, optionsAt(now()), out));
+    return fromResult(online::listLicences(folder_, *key, detail::optionsFor(caller, now()), out));
 }
 
 OpResult Workspace::serviceRetire(const std::string& licenseId, const std::string& deviceKey) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::retireDevice(folder_, *key, licenseId, deviceKey, optionsAt(now())));
+    XPG_SERVICE_RIGHT("poste_retirer");
+    OpResult r = fromResult(online::retireDevice(folder_, *key, licenseId, deviceKey, detail::optionsFor(caller, now())));
+    if (r.ok) {   // 1.44.0
+        core::json::Value d = core::json::Value::object();
+        d.set("pc", deviceKey.substr(0, 16));
+        (void)detail::queueJournal(folder_, *key, now(), "poste_retirer", licenseId, "a retir\xC3\xA9 un PC de la licence en ligne " + licenseId,
+                                   core::json::write(d, false), {}, {}, nullptr);
+        (void)detail::flushJournalQuiet(folder_, caller, now());
+    }
+    return r;
 }
 
 OpResult Workspace::serviceSetActive(const std::string& licenseId, bool active) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::setActive(folder_, *key, licenseId, active, 0, optionsAt(now())));
+    XPG_SERVICE_RIGHT("licence_revoquer");   // 1.44.0 : desactiver une licence en ligne, c'est la revoquer
+    OpResult r = fromResult(online::setActive(folder_, *key, licenseId, active, 0, detail::optionsFor(caller, now())));
+    if (r.ok) {
+        (void)detail::queueJournal(folder_, *key, now(), "licence_revoquer", licenseId,
+                                   (active ? "a r\xC3\xA9" "activ\xC3\xA9" " la licence en ligne " : "a d\xC3\xA9" "sactiv\xC3\xA9" " la licence en ligne ") + licenseId, {}, {}, {},
+                                   nullptr);
+        (void)detail::flushJournalQuiet(folder_, caller, now());
+    }
+    return r;
 }
 
 OpResult Workspace::serviceFetch() const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::fetchRequests(folder_, *key, optionsAt(now())));
+    XPG_SERVICE_RIGHT("demandes");
+    return fromResult(online::fetchRequests(folder_, *key, detail::optionsFor(caller, now())));
 }
 
 OpResult Workspace::serviceRefuse(const std::string& which, const std::string& reason) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::refuse(folder_, *key, which, reason, optionsAt(now())));
+    XPG_SERVICE_RIGHT("demandes");
+    online::Entry e;
+    std::string w;
+    const bool found = online::findWaiting(folder_, which, e, &w);
+    OpResult r = fromResult(online::refuse(folder_, *key, which, reason, detail::optionsFor(caller, now())));
+    if (r.ok) {   // 1.44.0
+        core::json::Value d = core::json::Value::object();
+        d.set("raison", reason.substr(0, 300));
+        if (found) d.set("client", e.customer);
+        const std::string object = found ? "demande " + std::to_string(e.number) : "demande " + which;
+        (void)detail::queueJournal(folder_, *key, now(), "demande_refuser", object,
+                                   "a refus\xC3\xA9 la " + object + (found && !e.customer.empty() ? " (" + e.customer + ")" : std::string()),
+                                   core::json::write(d, false), {}, {}, nullptr);
+        (void)detail::flushJournalQuiet(folder_, caller, now());
+    }
+    return r;
 }
 
 OpResult Workspace::serviceAnswerOption(const std::string& which, const std::string& licenseId, const std::string& message) const {   // 1.42.0
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::answerOption(folder_, *key, which, licenseId, message, optionsAt(now())));
+    XPG_SERVICE_RIGHT("demandes");
+    OpResult r = fromResult(online::answerOption(folder_, *key, which, licenseId, message, detail::optionsFor(caller, now())));
+    if (r.ok) {   // 1.44.0
+        (void)detail::queueJournal(folder_, *key, now(), "demande_accepter", "demande " + which,
+                                   "a accept\xC3\xA9 la demande d'option " + which + " (licence " + licenseId + ")", {}, {}, {}, nullptr);
+        (void)detail::flushJournalQuiet(folder_, caller, now());
+    }
+    return r;
 }
 
 OpResult Workspace::serviceStats() const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::stats(folder_, *key, optionsAt(now())));
+    return fromResult(online::stats(folder_, *key, detail::optionsFor(caller, now())));
 }
 
 OpResult Workspace::serviceWatch(online::AdminWatch& out) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    return fromResult(online::watchState(folder_, *key, optionsAt(now()), out));
+    OpResult r = fromResult(online::watchState(folder_, *key, detail::optionsFor(caller, now()), out));
+    if (r.ok) (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : toutes les 15 s, le journal a envoyer part
+    return r;
 }
 
 OpResult Workspace::serviceRun(const ServiceJob& job) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    const online::Options o = optionsAt(now());
+    const online::Options o = detail::optionsFor(caller, now());
+    OpResult r = OpResult::fail("publication inconnue");
     switch (job.kind) {
-        case ServiceJob::Kind::Licence: return fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o, mailer()));
-        case ServiceJob::Kind::Removal: return fromResult(online::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o));
-        case ServiceJob::Kind::Revocation: return fromResult(online::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o));
-        case ServiceJob::Kind::Registry: return fromResult(online::publishRegistry(folder_, *key, o));
+        case ServiceJob::Kind::Licence: r = fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o, mailer())); break;
+        case ServiceJob::Kind::Removal: r = fromResult(online::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o)); break;
+        case ServiceJob::Kind::Revocation: r = fromResult(online::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o)); break;
+        case ServiceJob::Kind::Registry: r = fromResult(online::publishRegistry(folder_, *key, o)); break;
         case ServiceJob::Kind::Unrevoke: {
-            OpResult r = fromResult(online::publishRevocations(folder_, *key, o));
-            if (!r.ok || job.licenceText.empty()) return r;
+            r = fromResult(online::publishRevocations(folder_, *key, o));
+            if (!r.ok || job.licenceText.empty()) break;
             // La liste qui ne revoque plus cette licence part scellee a chacun de ses PC lies.
             OpResult l = fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, true, o));
             l.details.insert(l.details.begin(), r.message);
-            return l;
+            r = std::move(l);
+            break;
         }
         case ServiceJob::Kind::OnlineLicence: return serviceRunOnline(job, {});
     }
-    return OpResult::fail("publication inconnue");
+    (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : la ligne du journal de l'operation part avec elle
+    return r;
 }
 
 OpResult Workspace::serviceRunOnline(const ServiceJob& job, const std::string& code) const {
     XPG_SERVICE_KEY_OR_FAIL;
-    const online::Options o = optionsAt(now());
+    const online::Options o = detail::optionsFor(caller, now());
     OpResult r = fromResult(online::putLicence(folder_, *key, job.licenceText, job.codeHash, job.leaseDays, true, o));
     if (!r.ok) return r;
     if (!code.empty()) {
@@ -1229,11 +1429,13 @@ OpResult Workspace::serviceRunOnline(const ServiceJob& job, const std::string& c
         for (const auto& d : a.details) r.details.push_back(d);
         if (!a.ok) r.ok = false;
     }
+    (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0
     return r;
 }
 
 OpResult Workspace::serviceResendAnswer(int number) const {
     XPG_SERVICE_KEY_OR_FAIL;
+    XPG_SERVICE_RIGHT("demandes");
     const online::Entry* e = onlineRequest(number);
     if (!e || !e->acceptedHere())
         return OpResult::fail("la demande n\xC2\xB0 " + std::to_string(number) + " n'a pas de r\xC3\xA9ponse en attente sur ce poste (rel\xC3\xA8ve les demandes)");
@@ -1243,7 +1445,7 @@ OpResult Workspace::serviceResendAnswer(int number) const {
     why.clear();
     if (!l || !readText(l->path, text, &why))
         return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive de ce poste" + (why.empty() ? std::string() : " (" + why + ")"));
-    const online::Options o = optionsAt(now());
+    const online::Options o = detail::optionsFor(caller, now());
     if (!isOnlineLicence(l->licence)) return fromResult(online::publishBoundLicence(folder_, *key, text, false, o, mailer()));
     std::string code;
     if (!online::readCode(folder_, licenseId, code, &why)) return OpResult::fail(why);
@@ -1256,6 +1458,7 @@ OpResult Workspace::serviceResendAnswer(int number) const {
 online::Mailer Workspace::mailer() const { return online::smtpMailer(folder_, hasRegistry_ ? &registry_ : nullptr); }
 
 #undef XPG_SERVICE_KEY_OR_FAIL
+#undef XPG_SERVICE_RIGHT
 
 void Workspace::adoptServiceState(const online::ServiceState& state) {
     service_.state = state;
@@ -1419,6 +1622,7 @@ Seconds Workspace::lastLicenceEnd(const std::string& edition) const {
 std::vector<DeletedClient> Workspace::deletedClients() const { return readDeletedClients(folder_); }
 
 OpResult Workspace::deleteClient(const std::string& name) {
+    if (const auto deny = denied("client_supprimer")) return *deny;   // 1.44.0
     const std::string k = lower(name);
     std::vector<const LicenceEntry*> mine;
     for (const auto& l : licences_)
@@ -1461,6 +1665,12 @@ OpResult Workspace::deleteClient(const std::string& name) {
     if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail("le client n'a pas pu \xC3\xAAtre not\xC3\xA9 supprim\xC3\xA9 : " + why);
     loadArchive();
     OpResult r = OpResult::done("Client " + name + " supprim\xC3\xA9.");
+    {   // 1.44.0
+        core::json::Value detail = core::json::Value::object();
+        detail.set("licences", static_cast<int>(d.licenceIds.size()));
+        const OpResult j = journal("client_supprimer", name, "a supprim\xC3\xA9 le client " + name, core::json::write(detail, false));
+        if (!j.ok) r.details.push_back("ATTENTION : journal des admins : " + j.message);
+    }
     if (!d.licenceIds.empty())
         r.details.push_back(plural(static_cast<int>(d.licenceIds.size()), "licence", "licences") + " dans la corbeille de l'outil (rien n'est effac\xC3\xA9) ; la synchro ne les ram\xC3\xA8ne pas.");
     r.details.push_back("Pour le remettre : Clients \xE2\x80\xBA Corbeille \xE2\x80\xBA Restaurer.");
@@ -1468,6 +1678,7 @@ OpResult Workspace::deleteClient(const std::string& name) {
 }
 
 OpResult Workspace::restoreClient(const std::string& name) {
+    if (const auto deny = denied("client_supprimer")) return *deny;   // 1.44.0
     const std::string k = lower(name);
     auto list = readDeletedClients(folder_);
     auto it = std::find_if(list.begin(), list.end(), [&](const DeletedClient& x) { return lower(x.name) == k; });
@@ -1491,6 +1702,8 @@ OpResult Workspace::restoreClient(const std::string& name) {
     if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail(why);
     loadArchive();
     OpResult r = OpResult::done("Client " + name + " restaur\xC3\xA9.");
+    if (const OpResult j = journal("client_supprimer", name, "a restaur\xC3\xA9 le client " + name); !j.ok)   // 1.44.0
+        r.details.push_back("ATTENTION : journal des admins : " + j.message);
     if (back) r.details.push_back(plural(back, "licence revenue", "licences revenues") + " dans l'archive (la copie reste dans la corbeille).");
     return r;
 }
@@ -1596,7 +1809,7 @@ std::optional<std::vector<licensing::Purchase>> Workspace::purchasesToWrite(cons
 }
 
 OpResult Workspace::addOption(const std::string& licenseId, const OptionDraft& od, const std::string& outPath) {
-    if (!signing_) return OpResult::fail(key_.problem);
+    if (const auto deny = denied("licence_option")) return *deny;   // 1.44.0
     if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (Offres \xE2\x80\xBA Signer le registre)");
     const LicenceEntry* e = licence(licenseId);
     if (!e) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");

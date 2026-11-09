@@ -183,6 +183,11 @@ struct Registry {
     std::vector<EditionDef> editions;
     std::vector<Announcement> announcements;         // 1.38.0 (facultatif, 20 au plus ; ecrit seulement s'il y en a)
     std::vector<OptionDef>  options;                 // 1.42.0 (facultatif, 64 au plus ; ecrit seulement s'il y en a)
+    // 1.44.0 (docs/ADMINS.md, 10) : les adresses des services de secours (3 au plus, service::validUrl), essayees dans
+    // l'ordre quand l'adresse principale ne repond pas (une panne reseau) ; un document d'un de ces services n'est cru
+    // que si son certificat (signe par l'editeur) nomme cette adresse. Ecrites seulement s'il y en a : un registre
+    // sans elles reste octet pour octet celui d'avant (un Studio d'avant la 1.44 refuse un registre qui les porte).
+    std::vector<std::string> fallbackServices;
 
     [[nodiscard]] const FeatureDef* feature(std::string_view id) const noexcept;
     [[nodiscard]] const EditionDef* edition(std::string_view id) const noexcept;

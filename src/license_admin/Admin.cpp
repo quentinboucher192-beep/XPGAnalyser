@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <functional>
 #include <set>
 
 namespace license_admin {
@@ -52,8 +53,9 @@ std::string cppString(std::string_view s) {
     return out + "\"";
 }
 
-// Le seul bloc d'un genre donne, signe par `key`.
-bool readOwnBlock(std::string_view bytes, DocKind kind, const SigningKey& key, SignedBlock& out, std::string* why) {
+// Le seul bloc d'un genre donne, signe par `key` (1.44.0 : ou par une cle que `also` croit : l'editeur, un admin).
+bool readOwnBlock(std::string_view bytes, DocKind kind, const SigningKey& key, SignedBlock& out, std::string* why,
+                  const std::function<bool(const SignedBlock&)>& also = {}) {
     std::vector<SignedBlock> blocks;
     if (!readBlocks(bytes, blocks, why)) return false;
     const SignedBlock* found = nullptr;
@@ -69,7 +71,7 @@ bool readOwnBlock(std::string_view bytes, DocKind kind, const SigningKey& key, S
         if (why) *why = "le fichier ne contient pas " + docKindLabel(kind);
         return false;
     }
-    if (!verifyBlock(*found, key.publicKey())) {
+    if (!verifyBlock(*found, key.publicKey()) && !(also && also(*found))) {
         if (why) *why = "la signature de " + docKindLabel(kind) + " n'est pas celle de cette cl\xC3\xA9 d'\xC3\xA9" "diteur (" + key.keyId() + ")";
         return false;
     }
@@ -160,6 +162,30 @@ std::unique_ptr<SigningKey> createPublisherKey(const std::string& folder, const 
 std::unique_ptr<SigningKey> loadPublisherKey(const std::string& folder, std::string* why) {
     return SigningKey::load(publisherKeyPath(folder), publisherKeySpec(), why);
 }
+
+// ---- 1.44.0 : la cle d'un admin ----
+const KeyFileSpec& adminKeySpec() {
+    static const KeyFileSpec spec{
+        "xpg-cle-admin-licences/1", /*machine=*/false,
+        std::string(kAdminMarker) + "\n"
+            "XPG - la cl\xC3\xA9 de signature d'un ADMIN des licences (docs/ADMINS.md). Ed25519.\n"
+            "N\xC3\xA9" "e sur ce poste, elle ne le quitte JAMAIS : la liste des admins, sign\xC3\xA9" "e par l'\xC3\xA9" "diteur, la nomme avec ses droits.",
+        "la cl\xC3\xA9 d'admin"};
+    return spec;
+}
+
+std::string adminKeyPath(const std::string& folder) { return deploy::joinPath(folder, kAdminKeyFile); }
+
+std::unique_ptr<SigningKey> createAdminKey(const std::string& folder, const std::string& name, std::string* why) {
+    std::string n = name.empty() ? std::string("Admin XPG") : name;
+    if (n.find(kTestKeyMarker) != std::string::npos) {
+        if (why) *why = "ce nom est r\xC3\xA9serv\xC3\xA9 aux cl\xC3\xA9s d'essai";
+        return nullptr;
+    }
+    return SigningKey::create(adminKeyPath(folder), adminKeySpec(), n, false, why);
+}
+
+std::unique_ptr<SigningKey> loadAdminKey(const std::string& folder, std::string* why) { return SigningKey::load(adminKeyPath(folder), adminKeySpec(), why); }
 
 ExportedKey exportedKeyOf(const SigningKey& key) {
     ExportedKey e;
@@ -507,11 +533,11 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     Registry reg;
     RevocationList rev;
     if (in.registry.empty()) return fail("le registre sign\xC3\xA9 est obligatoire (--registre)");
-    if (!readOwnBlock(in.registry, DocKind::Registry, key, regB, &err)) return fail("registre : " + err);
+    if (!readOwnBlock(in.registry, DocKind::Registry, key, regB, &err, in.alsoTrusted)) return fail("registre : " + err);
     if (!parseRegistry(regB.document, reg, &err)) return fail(err);
     const bool hasRev = !in.revocations.empty();
     if (hasRev) {
-        if (!readOwnBlock(in.revocations, DocKind::Revocations, key, revB, &err)) return fail("r\xC3\xA9vocations : " + err);
+        if (!readOwnBlock(in.revocations, DocKind::Revocations, key, revB, &err, in.alsoTrusted)) return fail("r\xC3\xA9vocations : " + err);
         if (!parseRevocations(revB.document, rev, &err)) return fail(err);
     }
     // ---- les parametres.
@@ -539,7 +565,7 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     if (service.empty() && !in.existing.empty()) {
         SignedBlock ob;
         License o;
-        if (readOwnBlock(in.existing, DocKind::License, key, ob, &err) && parseLicense(ob.document, o, &err)) service = o.service;
+        if (readOwnBlock(in.existing, DocKind::License, key, ob, &err, in.alsoTrusted) && parseLicense(ob.document, o, &err)) service = o.service;
     }
     const bool online = !service.empty();
     if (online && !licensing::service::validUrl(service)) return fail("l'adresse du service " + cite(service) + " n'est pas valide (https://...)");
@@ -605,7 +631,7 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     if (!in.existing.empty()) {
         SignedBlock b;
         License old;
-        if (!readOwnBlock(in.existing, DocKind::License, key, b, &err)) return fail("licence \xC3\xA0 \xC3\xA9tendre : " + err);
+        if (!readOwnBlock(in.existing, DocKind::License, key, b, &err, in.alsoTrusted)) return fail("licence \xC3\xA0 \xC3\xA9tendre : " + err);
         if (!parseLicense(b.document, old, &err)) return fail(err);
         if (old.licenseId != l.licenseId)
             return fail("la licence \xC3\xA0 \xC3\xA9tendre est " + cite(old.licenseId) + ", pas " + cite(l.licenseId));

@@ -52,12 +52,14 @@
 // =============================================================================
 #pragma once
 
+#include "../licensing/Admins.hpp"   // 1.44.0 : un document signe par un admin de la liste
 #include "../licensing/KeyFile.hpp"
 #include "../licensing/Time.hpp"
 
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -102,6 +104,11 @@ bool openSealed(const SyncKey& key, std::string_view path, std::string_view seal
 // "plus ancien que celui de l'archive : garde l'actuel"). Faux : `why`.
 bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<licensing::crypto::PublicKey>& trusted,
                    std::string* what, std::string* why);
+// 1.44.0 : la meme, et un document signe par un admin de la liste `admins` (sa signature, son droit pour ce genre ;
+// retire : un document garde) est aussi range (docs/ADMINS.md, par. 5 : << l'archive accepte les documents signes par la
+// cle de l'editeur ou un admin de la liste >>).
+bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<licensing::crypto::PublicKey>& trusted,
+                   const licensing::admins::AdminList* admins, std::string* what, std::string* why);
 // Les cles de confiance de l'outil : celle de `key` (si elle est la) et celles compilees (PublisherKey.hpp).
 [[nodiscard]] std::vector<licensing::crypto::PublicKey> trustedKeys(const licensing::SigningKey* key);
 // Le nom de fichier d'un identifiant de licence (lettres, chiffres, . _ - ; le reste devient _).
@@ -128,6 +135,17 @@ bool forgetDeleted(const std::string& folder, const std::string& licenseId, std:
 // Cette emission d'une licence a-t-elle ete supprimee sur ce poste ?
 [[nodiscard]] bool isDeleted(const std::vector<DeletedLicence>& list, const std::string& licenseId, Seconds issuedAt);
 
+// ---- 1.44.0 : LES REGLAGES PARTAGES DE L'ADMIN+ (docs/ADMINS.md, par. 2, 5, 6) ----
+//  Des fichiers JSON du dossier de la cle, synchronises avec l'archive (scelles par la cle de synchro, comme les
+//  licences) : les profils de droits, la criticite du journal des admins, les criticites changees a la main par ligne.
+//  Chacun porte "maj" (l'heure de sa derniere ecriture, secondes Unix) : le plus recent gagne ; deux versions
+//  differentes de la meme heure : celle du poste reste, et c'est dit. Une version d'avant la 1.44.0 les laisse tels
+//  quels dans l'archive en ligne (un genre qu'elle ne connait pas).
+inline constexpr const char* kProfilesFile = "profils-admins.json";
+inline constexpr const char* kCriticalityFile = "criticite.json";
+inline constexpr const char* kJournalNotesFile = "journal-notes.json";
+[[nodiscard]] const std::vector<std::string>& sharedSettingsFiles();
+
 // ---- la synchro (le service : /admin/archive) ----
 struct SyncOptions {
     bool        receiveOnly{false};    // recevoir sans rien envoyer (un poste neuf, une restauration)
@@ -137,6 +155,12 @@ struct SyncOptions {
     // Les essais seulement : appele juste avant le premier envoi de chaque tentative (un autre poste envoie
     // entre-temps : le 409, puis la relecture et la fusion).
     std::function<void()> beforeSend;
+    // 1.44.0 : plusieurs admins - les cles de l'editeur que ce poste croit (un admin n'a pas la cle de l'editeur : il
+    // croit celles compilees et celles retenues) et la liste des admins en vigueur : un document signe par un admin de
+    // la liste (avec son droit) est recu comme un document de l'editeur.
+    std::vector<licensing::crypto::PublicKey>   editorKeys;
+    std::optional<licensing::admins::AdminList> admins;
+    std::string                                 software;   // X-XPG-Logiciel des appels (vide : celui de cette version)
 };
 struct SyncReport {
     bool                     ok{false};
@@ -152,7 +176,8 @@ struct SyncReport {
     [[nodiscard]] std::string text() const;
 };
 // Lit l'archive en ligne, fusionne dans le poste ce qui est plus recent, puis envoie ce qu'elle n'a pas.
-// `key` : la cle de l'editeur (elle signe les appels au service ; ses signatures sont aussi verifiees).
+// `key` : la cle de l'editeur (elle signe les appels au service ; ses signatures sont aussi verifiees). 1.44.0 : ou la
+// cle d'un admin de la liste (options.editorKeys, options.admins : ce qu'il croit en plus de sa cle).
 [[nodiscard]] SyncReport synchronize(const std::string& folder, const licensing::SigningKey& key, const SyncOptions& options);
 
 // La derniere synchro reussie de ce poste (archive-vu.json) : 0 si jamais.

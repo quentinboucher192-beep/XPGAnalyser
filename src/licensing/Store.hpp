@@ -137,8 +137,9 @@
 //  suivante (l'heure signee recale) ; la fin et la grace d'une licence en ligne
 //  se comparent a l'heure retenue. Le certificat de chaque document du service
 //  doit nommer l'adresse du service de CE programme (StoreOptions::serviceUrl,
-//  par defaut service::compiledAddress()) ; sans adresse, aucun document du
-//  service n'est cru. Une activation sans empreinte du poste (station) est
+//  par defaut service::compiledAddress()) - 1.44.0 : ou l'une des adresses de
+//  secours du registre en vigueur (fallback_services, docs/ADMINS.md 10) ;
+//  sans adresse, aucun document du service n'est cru. Une activation sans empreinte du poste (station) est
 //  refusee (Autre PC) quand cette installation en a une. Le code laisse par
 //  l'installateur n'est lu que s'il a ete ecrit par les administrateurs (ou
 //  SYSTEM ; ailleurs root), ou par ce compte quand aucune licence valable n'est

@@ -393,18 +393,32 @@ struct ActivationCheck {
     SignedBlock          activationBlock, certBlock;
 };
 
+// 1.44.0 (docs/ADMINS.md, 10) : les adresses dont ce programme croit les documents - celle de SON service, et les
+// adresses de secours du registre en vigueur (signe : l'editeur les a choisies). Sans adresse principale : aucune.
+struct ServiceUrls {
+    std::string              main;
+    std::vector<std::string> fallbacks;
+};
+ServiceUrls serviceUrlsOf(const std::string& main, const Registry* reg) {
+    ServiceUrls u;
+    u.main = main;
+    if (!main.empty() && reg) u.fallbacks = reg->fallbackServices;
+    return u;
+}
+ServiceUrls serviceUrlsOf(const std::string& main, const std::optional<Registry>& reg) { return serviceUrlsOf(main, reg ? &*reg : nullptr); }
+
 // 1.35.0 (revue 6) : le certificat nomme-t-il le service de CE programme ? `expected` vide : ce programme n'a pas de
-// service, il ne croit aucun document du service.
-bool certForService(const service::ServiceCert& c, const std::string& expected, std::string* why) {
-    if (expected.empty()) {
+// service, il ne croit aucun document du service. 1.44.0 : ou l'une des adresses de secours du registre.
+bool certForService(const service::ServiceCert& c, const ServiceUrls& expected, std::string* why) {
+    if (expected.main.empty()) {
         if (why) *why = "ce programme n'a pas de service des licences : il ne croit aucun document du service";
         return false;
     }
-    if (!service::sameUrl(c.url, expected)) {
-        if (why) *why = "le certificat du service est pour une autre adresse (" + c.url + ") que celle du service de ce programme (" + expected + ")";
-        return false;
-    }
-    return true;
+    if (service::sameUrl(c.url, expected.main)) return true;
+    for (const auto& f : expected.fallbacks)
+        if (service::sameUrl(c.url, f)) return true;
+    if (why) *why = "le certificat du service est pour une autre adresse (" + c.url + ") que celle du service de ce programme (" + expected.main + ")";
+    return false;
 }
 
 std::string certExpiredText(Seconds expiresAt) { return "le certificat du service a expir\xC3\xA9 le " + frenchDate(expiresAt); }
@@ -412,7 +426,7 @@ std::string certExpiredText(Seconds expiresAt) { return "le certificat du servic
 // L'activation (et son certificat) pour cette licence et ce PC. Ni le bail (jusqu_a) ni la fin du certificat ne sont
 // compares ici : l'appelant les compare a l'heure retenue (au moins l'emission de cette activation, revue 1).
 ActivationCheck checkActivation(std::string_view activationText, std::string_view certText, const std::vector<crypto::PublicKey>& keys,
-                                const std::string& expectedUrl, const License& lic, const std::string& deviceKeyHex, const std::string& station) {
+                                const ServiceUrls& expectedUrl, const License& lic, const std::string& deviceKeyHex, const std::string& station) {
     ActivationCheck r;
     std::string why;
     const auto fail = [&](ActivationFault f, std::string text) {
@@ -448,7 +462,7 @@ ActivationCheck checkActivation(std::string_view activationText, std::string_vie
 
 // Le jeton d'une licence flottante pour cette licence et ce PC (sa fin n'est pas comparee ici ; la fin du certificat
 // l'est si `trustedNow` > 0, et rendue dans `certExpiresAt`). Faux : `why`.
-bool checkLease(std::string_view leaseText, std::string_view certText, const std::vector<crypto::PublicKey>& keys, const std::string& expectedUrl,
+bool checkLease(std::string_view leaseText, std::string_view certText, const std::vector<crypto::PublicKey>& keys, const ServiceUrls& expectedUrl,
                 Seconds trustedNow, const std::string& licenseId, const std::string& deviceKeyHex, service::Lease& out, SignedBlock* leaseBlock,
                 SignedBlock* certBlock, Seconds* certExpiresAt, std::string* why) {
     service::ServiceCert cert;
@@ -476,7 +490,7 @@ bool checkLease(std::string_view leaseText, std::string_view certText, const std
 }
 
 // La Decouverte de cette machine selon le service, pour cette machine et ce PC. Faux : `why`.
-bool checkTrial(std::string_view trialText, std::string_view certText, const std::vector<crypto::PublicKey>& keys, const std::string& expectedUrl,
+bool checkTrial(std::string_view trialText, std::string_view certText, const std::vector<crypto::PublicKey>& keys, const ServiceUrls& expectedUrl,
                 Seconds trustedNow, const std::string& machine, const std::string& deviceKeyHex, service::Trial& out, SignedBlock* trialBlock, SignedBlock* certBlock,
                 std::string* why) {
     service::ServiceCert cert;
@@ -1041,6 +1055,7 @@ LicenseState LicenseStore::evaluate() {
     in.wallSeen = clock.wallSeen;
     Counter counterNow = clock.counter;   // le compteur garde (revue 1 : recale en avant par une emission signee plus recente)
     const std::vector<crypto::PublicKey> pubKeys = publisherKeys();
+    const ServiceUrls evalUrls = serviceUrlsOf(serviceUrl_, in.hasRegistry ? &in.registry : nullptr);   // 1.44.0 : et les adresses de secours
     if (in.licenseRead && !in.license.service.empty()) {
         // une licence en ligne : l'activation de ce PC (activation.xpgact : l'activation et le certificat)
         const std::string ap = deploy::joinPath(dir, kActivationFile);
@@ -1052,7 +1067,7 @@ LicenseState LicenseStore::evaluate() {
             in.activationFault = ActivationFault::Invalid;
             in.activationProblem = "l'activation de ce PC ne se lit pas (" + why + ")";
         } else {
-            ActivationCheck c = checkActivation(text, text, pubKeys, serviceUrl_, in.license, in.deviceKeyHex, in.station);
+            ActivationCheck c = checkActivation(text, text, pubKeys, evalUrls, in.license, in.deviceKeyHex, in.station);
             in.activationFault = c.fault;
             in.activationProblem = c.problem;
             in.activation = std::move(c.activation);
@@ -1070,7 +1085,7 @@ LicenseState LicenseStore::evaluate() {
             } else if (!readAll(lp, text, &why)) {
                 in.leaseProblem = "le jeton ne se lit pas (" + why + ")";
             } else {
-                in.leaseOk = checkLease(text, text, pubKeys, serviceUrl_, 0, in.license.licenseId, in.deviceKeyHex, in.lease, nullptr, nullptr,
+                in.leaseOk = checkLease(text, text, pubKeys, evalUrls, 0, in.license.licenseId, in.deviceKeyHex, in.lease, nullptr, nullptr,
                                         &leaseCertExpiresAt, &in.leaseProblem);
                 // le jeton se compte a l'heure du service ; jamais avant son emission (une heure signee lui aussi)
                 if (in.leaseOk) signedFloor = std::max(signedFloor, in.lease.issuedAt);
@@ -1135,7 +1150,7 @@ LicenseState LicenseStore::evaluate() {
         if (const std::string tp = deploy::joinPath(dir, kTrialFile); fileExists(tp) && in.hasDeviceKey) {
             std::string text, why;
             service::Trial trial;
-            if (readAll(tp, text, &why) && checkTrial(text, text, pubKeys, serviceUrl_, 0, service::machineHash(opt_.machineId), in.deviceKeyHex, trial, nullptr, nullptr, &why)
+            if (readAll(tp, text, &why) && checkTrial(text, text, pubKeys, evalUrls, 0, service::machineHash(opt_.machineId), in.deviceKeyHex, trial, nullptr, nullptr, &why)
                 && trial.start > 0) {
                 const bool earlier = in.evaluationStarted == 0 || trial.start < in.evaluationStarted;
                 take(trial.start, 0);
@@ -2082,7 +2097,7 @@ ImportReport LicenseStore::activationChecked(std::string_view licenceText, std::
     const Seconds t = now();
     const CounterRead clock = readCounter(t, Counter{st.serviceTime, st.serviceElapsed, st.serviceWall});
     const std::vector<crypto::PublicKey> keys = publisherKeys();
-    ActivationCheck c = checkActivation(activationText, certText, keys, serviceUrl_, lic, keyHex, station);
+    ActivationCheck c = checkActivation(activationText, certText, keys, serviceUrlsOf(serviceUrl_, registry_), lic, keyHex, station);
     if (c.fault != ActivationFault::None) return refuse(pre + c.problem + ".");
     const service::Activation& a = c.activation;
     const Seconds tn = std::max({clock.trustedNow, clock.counter.serviceTime, a.issuedAt});
@@ -2110,7 +2125,7 @@ ImportReport LicenseStore::activationChecked(std::string_view licenceText, std::
     if (fileExists(ap)) {
         std::string text, w;
         if (readAll(ap, text, &w)) {
-            const ActivationCheck old = checkActivation(text, text, keys, serviceUrl_, lic, keyHex, station);
+            const ActivationCheck old = checkActivation(text, text, keys, serviceUrlsOf(serviceUrl_, registry_), lic, keyHex, station);
             if (old.fault == ActivationFault::None && old.activation.number == a.number) {
                 renewal = true;
                 keepOld = old.activation.until > a.until;
@@ -2218,7 +2233,7 @@ bool LicenseStore::noteServiceTime(std::string_view timeText, std::string_view e
     std::string w;
     service::ServiceCert cert;
     if (!service::verifyCert(certText, publisherKeys(), 0, cert, &w)) return fail(w);
-    if (!certForService(cert, serviceUrl_, &w)) return fail(w);   // revue 6
+    if (!certForService(cert, serviceUrlsOf(serviceUrl_, registry_), &w)) return fail(w);   // revue 6 ; 1.44.0 : les adresses de secours
     SignedBlock tb;
     if (!service::findBlock(timeText, DocKind::Time, tb, &w)) return fail("l'heure du service est illisible (" + w + ")");
     if (!service::verifyServiceBlock(tb, DocKind::Time, cert, service::kRightTime, &w)) return fail(w);
@@ -2280,7 +2295,7 @@ bool LicenseStore::installLease(std::string_view leaseText, std::string_view cer
     const CounterRead clock = readCounter(t, Counter{state.serviceTime, state.serviceElapsed, state.serviceWall});
     service::Lease lease;
     SignedBlock leaseBlock, certBlock;
-    if (!checkLease(leaseText, certText, publisherKeys(), serviceUrl_, clock.trustedNow, lic.licenseId, key->publicKeyHex(), lease, &leaseBlock, &certBlock, nullptr, &w))
+    if (!checkLease(leaseText, certText, publisherKeys(), serviceUrlsOf(serviceUrl_, registry_), clock.trustedNow, lic.licenseId, key->publicKeyHex(), lease, &leaseBlock, &certBlock, nullptr, &w))
         return fail(w);
     if (lease.until <= std::max(clock.serviceNow, lease.issuedAt)) return fail("ce jeton a d\xC3\xA9j\xC3\xA0 pris fin (" + isoTime(lease.until) + ")");
     std::error_code ec;
@@ -2312,13 +2327,13 @@ bool LicenseStore::installTrialRecord(std::string_view trialText, std::string_vi
     const std::string machine = thisMachineHash();
     service::Trial trial;
     SignedBlock trialBlock, certBlock;
-    if (!checkTrial(trialText, certText, keys, serviceUrl_, clock.trustedNow, machine, keyHex, trial, &trialBlock, &certBlock, &w)) return fail(w);
+    if (!checkTrial(trialText, certText, keys, serviceUrlsOf(serviceUrl_, registry_), clock.trustedNow, machine, keyHex, trial, &trialBlock, &certBlock, &w)) return fail(w);
     // Un debut plus ancien deja garde reste (le plus ancien gagne).
     const std::string tp = deploy::joinPath(dir, kTrialFile);
     if (fileExists(tp)) {
         std::string text;
         service::Trial old;
-        if (readAll(tp, text, &w) && checkTrial(text, text, keys, serviceUrl_, 0, machine, keyHex, old, nullptr, nullptr, &w) && old.start <= trial.start) return true;
+        if (readAll(tp, text, &w) && checkTrial(text, text, keys, serviceUrlsOf(serviceUrl_, registry_), 0, machine, keyHex, old, nullptr, nullptr, &w) && old.start <= trial.start) return true;
     }
     std::error_code ec;
     std::filesystem::create_directories(P(dir), ec);

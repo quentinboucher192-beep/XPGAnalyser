@@ -53,6 +53,25 @@
 //  DEUX STUDIOS SUR LE MEME DOSSIER (API Studio et IHM Studio) : le releve est
 //  RELU juste avant chaque ecriture et fusionne (mergeRecords), comme en 1.34.
 //
+//  1.44.0 (docs/ADMINS.md, 6, 7 et 10) :
+//    LES MESSAGES A CE PC (genre << message >>, signes par la cle de l'editeur,
+//    leur contenu scelle pour la cle de ce PC) : GET /v1/messages?depuis=N (signe
+//    par la cle du PC), au lancement et a chaque regard (2 minutes) ; chacun
+//    verifie (la cle de l'editeur seulement, ce poste, le sceau ouvert), le
+//    manifeste de ses fichiers verifie aussi ; un message refuse : une ligne de
+//    l'historique, rien d'autre. Le dernier numero vu : dans le releve, par
+//    logiciel (chaque Studio a ses notifications).
+//    LES MISES A JOUR : `version_publiee` de GET /v1/etat plus recente que ce
+//    programme -> GET /v1/version (genre << version >>, la cle de l'editeur), le
+//    manifeste de ses fichiers ; annoncee une fois par version et par logiciel
+//    (le releve), << importante >> : a chaque lancement. app/Updates en fait les
+//    notifications, le toast, la pastille et l'installation.
+//    LES ADRESSES DE SECOURS (fallback_services du registre) : l'adresse
+//    principale ne repond pas (une panne reseau, pas une erreur) -> chacune, dans
+//    l'ordre, pour toute la suite du travail ; le certificat d'un service de
+//    secours doit nommer SON adresse (le magasin, lui, croit les documents des
+//    adresses du registre).
+//
 //  LES FONCTIONS BLOQUANTES font du reseau : un fil de travail seulement (le fil
 //  de fond ci-dessous, un essai).
 //
@@ -129,8 +148,14 @@ struct Record {
     std::string        activatedLicense;
     std::string        activatedPcName;
     licensing::Seconds activatedAt{0};
+    // 1.44.0 : par logiciel ("IHM-Studio", "API-Studio") - le dernier message releve (son numero), la derniere version
+    // annoncee (sa notification postee).
+    std::vector<std::pair<std::string, std::uint64_t>> messagesSeen;
+    std::vector<std::pair<std::string, std::string>>   versionsAnnounced;
 };
 [[nodiscard]] std::string recordPath();
+// 1.44.0 : "IHM-Studio", "API-Studio" (le logiciel, comme l'en-tete X-XPG-Logiciel) - la cle de ce Studio dans le releve.
+[[nodiscard]] std::string productKey();
 
 // ---- 1.38.0 : LES PC D'UNE LICENCE EN LIGNE (Mes appareils) ----
 //  A chaque renouvellement, le service donne, pour chaque licence renouvelee, ses PC (ce PC d'abord) : << 3 PC sur 20 >>.
@@ -191,7 +216,43 @@ inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage 
 
 // ---- ce qu'a donne un travail ----
 // 1.39.0 : Watch - le regard toutes les 2 minutes sur GET /v1/etat (rien d'ecrit, rien de dit : busyJob() ne le montre pas).
-enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device, Watch };
+// 1.44.0 : Messages (releve les messages de ce PC tout de suite), Update (regarde la version publiee tout de suite).
+enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device, Watch,
+                                Messages, Update };
+// ---- 1.44.0 : un fichier annonce (un message, une version), ce qu'on en sait ----
+struct AnnouncedFile {
+    std::string   id, name, sha256;
+    std::uint64_t size{0};
+    std::string   version;            // facultatif (un message)
+    std::string   kind;               // "studios", "admin", "autre" ; vide : pas dit (un message)
+    std::string   audience;           // une version : "tous", "admins"
+    std::string   token;              // un message : le jeton du lien (32 hexadecimaux) ; vide : aucun
+    bool          manifestOk{false};  // son manifeste (signe par l'editeur) dit la meme chose
+    std::string   refused;            // vide : pas refuse ; sinon pourquoi (son manifeste ne correspond pas)
+};
+// Un message de l'editeur a CE PC, verifie et ouvert.
+struct InboxMessage {
+    std::uint64_t              number{0};   // le numero du service
+    std::string                title, from, text, action;   // action : "admin" (l'installateur de l'Admin pour devenir admin)
+    licensing::Seconds         issued{0};
+    std::vector<AnnouncedFile> files;
+};
+// La version publiee, plus recente que ce programme (verifiee).
+struct UpdateOffer {
+    std::string                version;
+    licensing::Seconds         published{0};
+    bool                       important{false};
+    std::vector<std::string>   notes;
+    std::vector<AnnouncedFile> files;
+    bool                       announce{false};   // a annoncer (la notification, le toast) : une fois par version, << importante >> a chaque lancement
+};
+// Verifier et ouvrir un message (le texte du bloc) pour ce poste (`device` : son identifiant) : la cle de l'editeur
+// seulement, ce poste, le sceau ouvert par la cle de ce PC. Faux : `why` (une phrase sans point).
+bool openMessage(std::string_view blockText, const std::string& device, InboxMessage& out, std::string& why);
+// La version (le texte du bloc << version >>), signee par la cle de l'editeur. Faux : `why`.
+bool openVersion(std::string_view blockText, UpdateOffer& out, std::string& why);
+// Les adresses de secours du registre en vigueur (fallback_services ; vide : aucune).
+[[nodiscard]] std::vector<std::string> fallbackAddresses();
 struct Notice {
     std::string key;     // "licence:activation"...
     std::string title;
@@ -230,6 +291,14 @@ struct Result {
     // changements chez les clients (une revocation, une licence desactivee, un PC retire) et le numero du registre.
     long long           serviceChanges{-1};
     long long           serviceRegistry{-1};
+    // 1.44.0 : les messages releves par ce travail (verifies, ouverts), la version publiee plus recente (verifiee), et
+    // ce que dit le service de la derniere version ("" : aucune publiee ; versionLooked : regardee par ce travail).
+    std::vector<InboxMessage> messages;
+    bool                      messagesLooked{false};
+    std::optional<UpdateOffer> update;
+    bool                      versionLooked{false};
+    std::string               publishedVersion;
+    std::string               fallbackUsed;      // l'adresse de secours qui a repondu ("" : la principale)
 };
 // 1.39.0 : LA LICENCE PERDUE EN DIRECT - tant qu'une licence est sur ce PC, le fil de fond regarde GET /v1/etat toutes
 // les kWatchPeriod secondes (un appel public, rien d'ecrit) ; le compteur des changements ou le registre a bouge :
@@ -255,8 +324,12 @@ inline constexpr const char* kAnswerRefused = "refusee";
 [[nodiscard]] Result checkDevice();
 // Le lancement : heure -> renouveler -> Decouverte -> code de l'installateur -> poste.
 [[nodiscard]] Result sync();
-// 1.39.0 : GET /v1/etat seulement (le compteur des changements, le registre) ; rien d'ecrit sur ce PC.
+// 1.39.0 : GET /v1/etat seulement (le compteur des changements, le registre) ; rien d'ecrit sur ce PC. 1.44.0 : et les
+// messages de ce PC (le releve note le dernier vu), la version publiee.
 [[nodiscard]] Result watchState();
+// 1.44.0 : les messages de ce PC tout de suite ; la version publiee tout de suite (relue meme si elle est connue).
+[[nodiscard]] Result pollMessages();
+[[nodiscard]] Result checkUpdate();
 
 // ---- le fil de fond (le fil de l'interface appelle) ----
 void startRunner();
@@ -272,6 +345,8 @@ bool startRequest(const RequestForm& form);
 bool startCancelRequest();
 bool startCheckDevice();
 bool startWatch();   // 1.39.0
+bool startMessages();   // 1.44.0
+bool startUpdateCheck();   // 1.44.0
 [[nodiscard]] bool busy() noexcept;
 [[nodiscard]] Job  busyJob() noexcept;
 // Chaque image : releve un travail fini (les avis, la revaluation) ; lance ce que le fil de fond a a faire.

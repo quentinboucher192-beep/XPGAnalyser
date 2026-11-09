@@ -49,6 +49,7 @@
 #pragma once
 
 #include "../licensing/Documents.hpp"   // 1.37.0 : licensing::License (le mail a l'acceptation)
+#include "../licensing/Admins.hpp"      // 1.44.0 : plusieurs admins (la liste, qui croire)
 #include "../core/Json.hpp"
 #include "../licensing/Gateway.hpp"
 #include "../licensing/KeyFile.hpp"
@@ -57,6 +58,7 @@
 #include <cstdint>
 #include <memory>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -98,6 +100,15 @@ struct Result {
 struct Options {
     Seconds     now{0};       // l'heure de ce poste (les essais la fixent) ; l'ecart avec le service est corrige
     std::string tool;         // "XPG-License-Admin/1.3.0" (l'User-Agent)
+    // 1.44.0 : PLUSIEURS ADMINS (docs/ADMINS.md). La cle qui signe les appels est celle de l'admin+ (la cle de l'editeur)
+    // ou celle d'un admin de la liste. Ce que l'outil croit d'un document de l'archive (le relire, le sceller pour un
+    // PC, le mail) : la cle qui signe, les cles de l'editeur (`editorKeys`), un admin de la liste (`admins`, avec son
+    // droit ; retire : un document garde). Deposer un document (registre, revocations, licence) : le service ne prend
+    // que celui signe par la cle qui appelle (l'editeur pour l'admin+). Vides : la cle qui signe seulement (comme avant).
+    std::vector<licensing::crypto::PublicKey>   editorKeys;
+    std::optional<licensing::admins::AdminList> admins;
+    // X-XPG-Logiciel de chaque appel signe ("XPG-License-Admin/1.44.0") ; vide : celui de cette version.
+    std::string software;
 };
 
 // ============================================================================ le client (BLOQUANT)
@@ -120,6 +131,8 @@ public:
     [[nodiscard]] const core::json::Value& state() const noexcept { return state_; }   // la reponse de /v1/etat
     [[nodiscard]] Seconds serviceNow() const noexcept { return options_.now + offset_; }
     [[nodiscard]] const std::string& url() const noexcept { return url_; }
+    [[nodiscard]] const Options& options() const noexcept { return options_; }   // 1.44.0 : qui croire (editorKeys, admins)
+    [[nodiscard]] const licensing::SigningKey& key() const noexcept { return key_; }
     // Un appel ; `signed_` : avec les quatre en-tetes X-XPG-* (toutes les routes /admin et celles d'un PC).
     Reply call(const std::string& method, const std::string& pathAndQuery, const std::string& body = {}, bool signed_ = true);
     // Une reponse refusee, en francais : ce qui a ete refuse et pourquoi.
@@ -228,7 +241,16 @@ struct AdminWatch {
     bool          supported{false};
     std::int64_t  activity{-1}, requests{-1}, pending{-1}, changes{-1};
     std::string   version;
+    // 1.44.0 (docs/ADMINS.md, par. 6) : le numero de la liste des admins, le dernier numero du journal des admins, les
+    // demandes d'admin en attente, la derniere version publiee ; qui appelle : son role ("admin+", "admin") et ses droits.
+    // -1 / vide : un service d'avant la 1.44.0.
+    std::int64_t             admins{-1}, journal{-1}, adminRequests{-1};
+    std::string              publishedVersion;
+    std::string              role;
+    std::vector<std::string> rights;
 };
+// 1.44.0 : lire la reponse de GET /admin/etat (ses compteurs et, en 1.44.0, le role et les droits de qui appelle).
+void readAdminWatch(const core::json::Value& reply, AdminWatch& out);
 [[nodiscard]] Result watchState(const std::string& folder, const licensing::SigningKey& key, const Options& o, AdminWatch& out);
 // GET /admin/stats : les compteurs, une ligne chacun.
 [[nodiscard]] Result stats(const std::string& folder, const licensing::SigningKey& key, const Options& o);
@@ -273,6 +295,9 @@ struct Entry {
     std::string              sidecarPath;      // le .json
     std::string              sealedHash;       // SHA-256 du sceau a sa premiere lecture
     std::vector<std::string> problems;
+    // 1.44.0 : relevee par un admin, la demande est scellee pour un AUTRE admin (ou l'editeur) : listee sans contenu,
+    // elle ne s'ouvre pas sur ce poste (Unreadable).
+    bool                     forOther{false};
     [[nodiscard]] bool waiting() const noexcept { return state == RequestState::Pending; }
     [[nodiscard]] bool joinRequest() const noexcept { return !licenseId.empty() && state != RequestState::Unreadable; }
     // 1.37.0 : << acceptee ici >> - une licence est signee pour elle sur ce poste (answer : laquelle), sa reponse n'est pas

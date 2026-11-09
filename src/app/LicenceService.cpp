@@ -5,7 +5,9 @@
 #include "LicenceService.hpp"
 
 #include "BackgroundTasks.hpp"
+#include "FileDownload.hpp"   // 1.44.0 : le manifeste d'un fichier annonce (checkManifest)
 #include "Licence.hpp"
+#include "Updates.hpp"        // 1.44.0 : les messages et la mise a jour, rendus a l'interface
 #include "ai/AiHttp.hpp"
 
 #include "../core/Edition.hpp"
@@ -13,6 +15,7 @@
 #include "../core/Version.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Paths.hpp"
+#include "../licensing/Admins.hpp"
 #include "../licensing/Gateway.hpp"
 #include "../licensing/Licensing.hpp"
 
@@ -27,6 +30,7 @@
 #include <functional>
 #include <future>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -269,6 +273,8 @@ struct Conn {
     bool                     timeNoted{false};
     int                      timeLine{-1};         // la phrase de l'heure pas notee (retiree si un second essai la note)
     bool                     offline{false};       // /v1/etat n'a pas repondu (why : la phrase, sans point)
+    bool                     unreachable{false};   // 1.44.0 : ... par une panne reseau (pas une reponse d'erreur)
+    bool                     fallback{false};      // 1.44.0 : c.a est une adresse de secours du registre
 };
 
 // Des octets signes recus (un registre, une liste de revocation) : importes s'ils sont plus recents que ceux du
@@ -317,7 +323,9 @@ Got getPublic(const Conn& c, const std::string& pathAndQuery) {
 bool readState(Conn& c, json::Value& etat, std::string& why) {
     const Got g = getPublic(c, "/v1/etat");
     if (!g.reached()) {
+        using F = ai::HttpResponse::Failure;
         c.offline = true;
+        c.unreachable = g.failure == F::Resolve || g.failure == F::Connect || g.failure == F::Timeout || g.failure == F::Cut;   // 1.44.0
         why = offlineText(g, c.host);
         return false;
     }
@@ -450,9 +458,10 @@ Got callSigned(Conn& c, const std::string& method, const std::string& path, cons
 // Le certificat du service (garde en memoire tant que la cle du service ne change pas), verifie : signe par une cle
 // de l'editeur que ce programme croit, pour la cle que le service annonce, pas expire.
 bool fetchCert(Conn& c, const std::string& serviceKey, std::string& why, const std::vector<lic::TrustedKey>* trusted = nullptr) {
+    const std::string cacheKey = serviceKey + " " + c.a.url;   // 1.44.0 : la cle ET l'adresse (un service de secours)
     {
         std::lock_guard<std::mutex> lock(certMutex());
-        if (!certCache().empty() && certKeyCache() == serviceKey) {
+        if (!certCache().empty() && certKeyCache() == cacheKey) {
             c.cert = certCache();
             c.serviceKey = serviceKey;
             return true;
@@ -476,11 +485,16 @@ bool fetchCert(Conn& c, const std::string& serviceKey, std::string& why, const s
         why = "Le certificat du service des licences est refus\xC3\xA9 : il est pour une autre cl\xC3\xA9 que celle du service. Rien n'a chang\xC3\xA9.";
         return false;
     }
+    // 1.44.0 (docs/ADMINS.md, 10) : un service de secours n'est cru que si son certificat nomme SON adresse.
+    if (c.fallback && !lsv::sameUrl(cert.url, c.a.url)) {
+        why = "Le service de secours (" + c.host + ") est refus\xC3\xA9 : son certificat est pour une autre adresse (" + cert.url + "). Rien n'a chang\xC3\xA9.";
+        return false;
+    }
     c.cert = g.body;
     c.serviceKey = cert.key;
     std::lock_guard<std::mutex> lock(certMutex());
     certCache() = g.body;
-    certKeyCache() = cert.key;
+    certKeyCache() = cert.key + " " + c.a.url;
     return true;
 }
 
@@ -491,11 +505,12 @@ void adoptCert(Conn& c, const std::string& text) {
     for (const auto& k : lic::trustedPublisherKeys()) keys.push_back(k.key);
     lsv::ServiceCert cert;
     if (!lsv::verifyCert(text, keys, serviceNow(), cert, nullptr)) return;
+    if (c.fallback && !lsv::sameUrl(cert.url, c.a.url)) return;   // 1.44.0 : un service de secours, pour SON adresse
     c.cert = text;
     c.serviceKey = cert.key;
     std::lock_guard<std::mutex> lock(certMutex());
     certCache() = text;
-    certKeyCache() = cert.key;
+    certKeyCache() = cert.key + " " + c.a.url;
 }
 
 // L'heure signee (un nonce frais) : le compteur du bail est recale. `say` : une panne est dite (sinon, en silence : un
@@ -526,14 +541,48 @@ bool noteTime(Conn& c, Record& rec, bool say) {
     return true;
 }
 
+// 1.44.0 (docs/ADMINS.md, 10) : GET /v1/etat a l'adresse du service ; elle ne repond pas (une panne reseau, pas une
+// reponse d'erreur) : les adresses de secours du registre, dans l'ordre - la premiere qui repond sert a toute la suite du
+// travail (c.a, c.fallback). Faux : `why` (la phrase de l'adresse principale).
+bool reachState(Conn& c, json::Value& etat, std::string& why) {
+    c.a = address();
+    c.host = hostOf(c.a.url);
+    c.fallback = false;
+    if (readState(c, etat, why)) return true;
+    if (!c.unreachable) return false;
+    const lsv::Address main = c.a;
+    for (const auto& url : fallbackAddresses()) {
+        if (lsv::sameUrl(url, main.url)) continue;
+        Conn t;
+        t.a.url = lsv::normalizeUrl(url);
+        t.host = hostOf(t.a.url);
+        if (t.a.url.empty()) continue;
+        std::string w;
+        if (readState(t, etat, w)) {
+            c.a = t.a;
+            c.host = t.host;
+            c.fallback = true;
+            c.offline = false;
+            c.unreachable = false;
+            return true;
+        }
+    }
+    c.a = main;
+    c.host = hostOf(main.url);
+    return false;
+}
+
 // A CHAQUE CONNEXION : l'etat du service (l'ecart d'heure, certifie, le registre), le certificat, l'heure signee.
 // Faux : `why` (une phrase ; hors ligne, pas certifie...). `rec` : les dates des connexions.
 bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
-    c.a = address();
-    c.host = hostOf(c.a.url);
     json::Value etat;
-    if (!readState(c, etat, why)) return false;
+    if (!reachState(c, etat, why)) return false;
     res.reached = true;
+    if (c.fallback) {   // 1.44.0 : dit une fois par travail (l'historique, la phrase)
+        res.fallbackUsed = c.a.url;
+        c.lines.push_back("Le service des licences ne r\xC3\xA9pond pas : le service de secours (" + c.host + ") a r\xC3\xA9pondu.");
+    }
+    res.publishedVersion = etat.str("version_publiee");   // 1.44.0 : regardee par sync()
     res.serviceChanges = etat.integer("changements", -1);   // 1.39.0 : -1 : un service d'avant
     res.serviceRegistry = etat.integer("registre", -1);
     rec.lastSync = lic::systemNow();
@@ -1324,6 +1373,174 @@ bool stepDevice(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
     return true;
 }
 
+// ============================================================ 1.44.0 : les messages, les versions ==
+// Un seul bloc de ce genre, signe par une cle DE L'EDITEUR que ce programme croit (les genres << message >>,
+// << version >>, << fichier >> : jamais un admin).
+bool verifyEditorBlock(std::string_view bytes, lic::DocKind kind, lic::SignedBlock& out, std::string& why) {
+    std::vector<lic::SignedBlock> blocks;
+    std::string w;
+    if (!lic::readBlocks(bytes, blocks, &w)) {
+        why = "le bloc est illisible (" + w + ")";
+        return false;
+    }
+    if (blocks.size() != 1 || blocks[0].kind != kind) {
+        why = "ce n'est pas un seul bloc \xC2\xAB " + std::string(lic::docKindKey(kind)) + " \xC2\xBB";
+        return false;
+    }
+    const auto keys = lic::trustedPublisherKeys();
+    const lic::TrustedKey* signer = findKey(keys, blocks[0].keyId);
+    if (!signer) {
+        why = "il n'est pas sign\xC3\xA9 par la cl\xC3\xA9 de l'\xC3\xA9" "diteur (" + blocks[0].keyId + ")";
+        return false;
+    }
+    if (!lic::verifyBlock(blocks[0], signer->key)) {
+        why = "sa signature est fausse";
+        return false;
+    }
+    out = std::move(blocks[0]);
+    return true;
+}
+
+std::uint64_t seenFor(const Record& rec) {
+    for (const auto& [k, n] : rec.messagesSeen)
+        if (k == productKey()) return n;
+    return 0;
+}
+void setSeen(Record& rec, std::uint64_t n) {
+    for (auto& [k, v] : rec.messagesSeen)
+        if (k == productKey()) {
+            v = std::max(v, n);
+            return;
+        }
+    rec.messagesSeen.emplace_back(productKey(), n);
+}
+std::string announcedFor(const Record& rec) {
+    for (const auto& [k, v] : rec.versionsAnnounced)
+        if (k == productKey()) return v;
+    return {};
+}
+void setAnnounced(Record& rec, const std::string& version) {
+    for (auto& [k, v] : rec.versionsAnnounced)
+        if (k == productKey()) {
+            v = version;
+            return;
+        }
+    rec.versionsAnnounced.emplace_back(productKey(), version);
+}
+
+// Le manifeste de chaque fichier annonce (public : GET /v1/fichiers/manifeste) : il doit dire la meme chose que le
+// document signe qui l'annonce. Ne correspond pas : le fichier est refuse (jamais propose) ; pas de reponse : rien n'est
+// su (le telechargement le verifiera).
+void checkFiles(Conn& c, std::vector<AnnouncedFile>& files) {
+    for (auto& f : files) {
+        filedl::Want w;
+        w.id = f.id;
+        w.name = f.name;
+        w.size = f.size;
+        w.sha256 = f.sha256;
+        w.kind = f.kind;
+        const Got g = getPublic(c, "/v1/fichiers/manifeste?id=" + f.id);
+        if (!g.reached() || g.status != 200) continue;
+        lic::admins::FileManifest m;
+        std::string why;
+        if (filedl::checkManifest(g.body, w, m, why)) {
+            f.manifestOk = true;
+            if (f.version.empty()) f.version = m.version;
+            if (f.kind.empty()) f.kind = m.kind;
+        } else {
+            f.refused = why;
+            note(false, "Fichier refus\xC3\xA9 : " + f.name + " (" + why + ").");
+        }
+    }
+}
+
+// Les messages de ce PC apres le dernier releve (par ce logiciel) : chacun verifie et ouvert (un message refuse : une
+// ligne de l'historique, rien d'autre), le manifeste de ses fichiers verifie. Faux : le service n'a pas repondu.
+bool stepMessages(Conn& c, Record& rec, Result& res) {
+    std::string id, why;
+    if (!existingDevice(id, why)) return why.empty();   // pas de cle : aucun message ne peut etre pour ce PC
+    const std::uint64_t since = seenFor(rec);
+    const Got g = callSigned(c, "GET", "/v1/messages?depuis=" + std::to_string(since), "", why);
+    if (!g.reached() || g.status != 200) return false;
+    res.messagesLooked = true;
+    json::Value v;
+    const json::Value* list = nullptr;
+    if (!json::parse(g.body, v) || !v.isObject() || !(list = v.find("messages")) || !list->isArray()) return false;
+    std::uint64_t last = since;
+    for (const auto& item : list->items()) {
+        if (!item.isObject()) continue;
+        const double num = item.num("numero");
+        if (num <= 0) continue;
+        const auto number = static_cast<std::uint64_t>(num);
+        if (number <= since) continue;
+        last = std::max(last, number);
+        InboxMessage m;
+        std::string w;
+        if (!openMessage(item.str("bloc"), id, m, w)) {
+            note(false, "Un message du service pour ce PC est ignor\xC3\xA9 (n\xC2\xB0 " + std::to_string(number) + ") : " + sentence(w));
+            continue;
+        }
+        m.number = number;
+        checkFiles(c, m.files);
+        note(true, "Message de l'\xC3\xA9" "diteur re\xC3\xA7u : \xC2\xAB " + m.title + " \xC2\xBB" +
+                       (m.files.empty() ? std::string(".") : " (" + std::to_string(m.files.size()) + (m.files.size() > 1 ? " fichiers joints)." : " fichier joint).")));
+        res.messages.push_back(std::move(m));
+    }
+    setSeen(rec, last);
+    return true;
+}
+
+// La version publiee (GET /v1/etat : `published`) plus recente que ce programme : la version verifiee (gardee en memoire
+// tant que le service n'en publie pas une autre ; `force` : relue), ses fichiers verifies ; annoncee une fois par
+// version et par logiciel, << importante >> a chaque lancement.
+std::mutex& offerMutex() {
+    static std::mutex m;
+    return m;
+}
+std::optional<UpdateOffer>& offerCache() {
+    static std::optional<UpdateOffer> o;
+    return o;
+}
+std::set<std::string>& importantShown() {
+    static std::set<std::string> s;
+    return s;
+}
+
+void stepVersion(Conn& c, const std::string& published, Record& rec, Result& res, bool force) {
+    res.versionLooked = true;
+    res.publishedVersion = published;
+    if (published.empty() || lic::admins::compareSemver(published, XPG_ANALYZER_VERSION) <= 0) return;
+    std::optional<UpdateOffer> known;
+    {
+        std::lock_guard<std::mutex> lock(offerMutex());
+        if (!force && offerCache() && offerCache()->version == published) known = offerCache();
+    }
+    if (!known) {
+        const Got g = getPublic(c, "/v1/version");
+        if (!g.reached() || g.status != 200) return;   // le prochain regard reessaie
+        UpdateOffer o;
+        std::string why;
+        if (!openVersion(g.body, o, why)) {
+            note(false, "La version publi\xC3\xA9" "e " + published + " est refus\xC3\xA9" "e : " + sentence(why));
+            return;
+        }
+        if (lic::admins::compareSemver(o.version, XPG_ANALYZER_VERSION) <= 0) return;
+        checkFiles(c, o.files);
+        known = o;
+        std::lock_guard<std::mutex> lock(offerMutex());
+        offerCache() = o;
+    }
+    UpdateOffer o = *known;
+    bool importantFirst = false;
+    if (o.important) {
+        std::lock_guard<std::mutex> lock(offerMutex());
+        importantFirst = importantShown().insert(o.version).second;
+    }
+    o.announce = announcedFor(rec) != o.version || importantFirst;
+    if (o.announce) setAnnounced(rec, o.version);
+    res.update = std::move(o);
+}
+
 // Le debut commun des travaux : disponible, le releve lu, la connexion. Faux : `res.message` dit pourquoi (hors
 // ligne : UNE phrase, finie par `offlineTail`).
 bool begin(Result& res, Conn& c, Record& rec, const char* offlineTail = "rien n'a chang\xC3\xA9") {
@@ -1393,6 +1610,92 @@ bool available(std::string* why) {
 }
 
 lic::Seconds clockOffset() noexcept { return g_offsetKnown ? static_cast<lic::Seconds>(g_offset.load()) : 0; }
+
+// ============================================================ 1.44.0 ==
+std::string productKey() {
+    std::string name = core::productName();
+    for (char& ch : name)
+        if (ch == ' ') ch = '-';
+    return name;
+}
+
+std::vector<std::string> fallbackAddresses() {
+    std::vector<std::string> out;
+    if (const auto reg = lic::getRegistry())
+        for (const auto& u : reg->fallbackServices)
+            if (std::string n = lsv::normalizeUrl(u); !n.empty()) out.push_back(std::move(n));
+    return out;
+}
+
+bool openMessage(std::string_view blockText, const std::string& device, InboxMessage& out, std::string& why) {
+    lic::SignedBlock block;
+    if (!verifyEditorBlock(blockText, lic::DocKind::Message, block, why)) return false;
+    lic::admins::Message m;
+    std::string w;
+    if (!lic::admins::parseMessage(block.document, m, &w)) {
+        why = w;
+        return false;
+    }
+    if (device.empty() || m.device != device) {
+        why = "il est pour un autre poste (" + m.device.substr(0, 12) + "\xE2\x80\xA6)";
+        return false;
+    }
+    lic::admins::MessageContent content;
+    std::string plain;
+    if (m.sealed.empty() || !lic::deviceOpenSeal(m.sealed, plain, &w) || !lic::admins::parseMessageContent(plain, content, &w)) {
+        crypto::wipe(plain.data(), plain.size());
+        why = "son contenu ne s'ouvre pas avec la cl\xC3\xA9 de ce PC" + (w.empty() ? std::string() : " (" + w + ")");
+        return false;
+    }
+    crypto::wipe(plain.data(), plain.size());
+    InboxMessage r;
+    r.title = m.title;
+    r.from = m.from;
+    r.issued = m.issued;
+    r.text = content.text;
+    r.action = content.action;
+    for (const auto& f : content.files) {
+        AnnouncedFile a;
+        a.id = f.id;
+        a.name = f.name;
+        a.sha256 = f.sha256;
+        a.size = f.size;
+        a.version = f.version;
+        a.token = f.token;
+        r.files.push_back(std::move(a));
+    }
+    out = std::move(r);
+    return true;
+}
+
+bool openVersion(std::string_view blockText, UpdateOffer& out, std::string& why) {
+    lic::SignedBlock block;
+    if (!verifyEditorBlock(blockText, lic::DocKind::Version, block, why)) return false;
+    lic::admins::VersionManifest v;
+    std::string w;
+    if (!lic::admins::parseVersion(block.document, v, &w)) {
+        why = w;
+        return false;
+    }
+    UpdateOffer o;
+    o.version = v.version;
+    o.published = v.published;
+    o.important = v.important;
+    o.notes = v.notes;
+    for (const auto& f : v.files) {
+        AnnouncedFile a;
+        a.id = f.id;
+        a.name = f.name;
+        a.sha256 = f.sha256;
+        a.size = f.size;
+        a.kind = f.kind;
+        a.audience = f.audience;
+        a.version = v.version;
+        o.files.push_back(std::move(a));
+    }
+    out = std::move(o);
+    return true;
+}
 
 // ============================================================ le releve ==
 std::string recordPath() { return deploy::joinPath(lic::getLicenseFolder(), kRecordFile); }
@@ -1525,6 +1828,13 @@ bool loadRecord(Record& out, std::string* why) {
     r.activatedLicense = v.str("licence_activee");
     r.activatedPcName = v.str("nom_pc_active");
     r.activatedAt = time("activee_le");
+    // 1.44.0 : par logiciel, le dernier message releve et la derniere version annoncee
+    if (const json::Value* m = v.find("messages_vus"); m && m->isObject())
+        for (const auto& [k, n] : m->members())
+            if (n.isNumber() && n.asNumber(0) > 0) r.messagesSeen.emplace_back(k, static_cast<std::uint64_t>(n.asNumber(0)));
+    if (const json::Value* m = v.find("versions_annoncees"); m && m->isObject())
+        for (const auto& [k, x] : m->members())
+            if (x.isString()) r.versionsAnnounced.emplace_back(k, x.asString());
     if (r.local != kLocalSent && r.local != kLocalCancelled) r.local.clear();
     out = std::move(r);
     return true;
@@ -1570,6 +1880,16 @@ bool saveRecord(const Record& r, std::string* why) {
     text("licence_activee", r.activatedLicense);
     text("nom_pc_active", r.activatedPcName);
     time("activee_le", r.activatedAt);
+    if (!r.messagesSeen.empty()) {   // 1.44.0
+        json::Value m = json::Value::object();
+        for (const auto& [k, n] : r.messagesSeen) m.set(k, n);
+        v.set("messages_vus", std::move(m));
+    }
+    if (!r.versionsAnnounced.empty()) {
+        json::Value m = json::Value::object();
+        for (const auto& [k, x] : r.versionsAnnounced) m.set(k, x);
+        v.set("versions_annoncees", std::move(m));
+    }
     std::string w;
     if (!crypto::replaceFile(recordPath(), json::write(v) + "\n", false, &w)) {
         if (why) *why = "Le relev\xC3\xA9 du service des licences n'a pas pu \xC3\xAAtre \xC3\xA9" "crit : " + w;
@@ -1634,6 +1954,15 @@ Record mergeRecords(const Record& disk, const Record& mine) {
         out.activatedPcName = disk.activatedPcName;
         out.activatedAt = disk.activatedAt;
     }
+    // 1.44.0 : par logiciel - le plus grand numero de message vu ; la version annoncee par ce travail, sinon celle du disque.
+    for (const auto& [k, n] : disk.messagesSeen) {
+        auto it = std::find_if(out.messagesSeen.begin(), out.messagesSeen.end(), [&k](const auto& x) { return x.first == k; });
+        if (it == out.messagesSeen.end()) out.messagesSeen.emplace_back(k, n);
+        else it->second = std::max(it->second, n);
+    }
+    for (const auto& [k, x] : disk.versionsAnnounced)
+        if (std::none_of(out.versionsAnnounced.begin(), out.versionsAnnounced.end(), [&k](const auto& y) { return y.first == k; }))
+            out.versionsAnnounced.emplace_back(k, x);
     return out;
 }
 
@@ -2193,29 +2522,64 @@ Result sync() {
                 if (l.rfind("Rien de nouveau", 0) != 0) lines.push_back(std::move(l));
         }
     }
+    // 5. 1.44.0 : les messages de ce PC ; 6. la version publiee (plus recente que ce programme : la mise a jour)
+    (void)stepMessages(c, rec, res);
+    stepVersion(c, res.publishedVersion, rec, res, false);
     res.ok = allOk;
     if (lines.empty() && c.lines.empty()) lines.push_back("Licence synchronis\xC3\xA9" "e avec le service.");
     finish(res, c, rec, std::move(lines));
     return res;
 }
 
-// 1.39.0 : le regard toutes les 2 minutes - GET /v1/etat seulement (public, rien d'ecrit sur ce PC ni au service).
-Result watchState() {
+// 1.39.0 : le regard toutes les 2 minutes - GET /v1/etat (public, rien d'ecrit sur ce PC ni au service). 1.44.0 : et les
+// messages de ce PC (un appel signe ; le releve note le dernier vu), la version publiee (relue si elle change). `job` :
+// Watch (le regard), Messages ou Update (demandes tout de suite : la version relue meme connue).
+namespace {
+Result look(Job job) {
     Result res;
-    res.job = Job::Watch;
-    if (!available()) return res;
-    Conn c;
-    c.a = address();
-    c.host = hostOf(c.a.url);
-    json::Value etat;
+    res.job = job;
     std::string why;
-    if (!readState(c, etat, why)) return res;   // hors ligne : rien a dire (le prochain regard reessaie)
+    if (!available(&why)) {
+        res.message = why;
+        return res;
+    }
+    Conn c;
+    json::Value etat;
+    if (!reachState(c, etat, why)) {   // hors ligne : rien a dire au regard (le prochain reessaie)
+        if (job != Job::Watch) res.message = sentence(why);
+        return res;
+    }
     res.reached = true;
     res.ok = true;
+    if (c.fallback) res.fallbackUsed = c.a.url;
     res.serviceChanges = etat.integer("changements", -1);
     res.serviceRegistry = etat.integer("registre", -1);
+    Record rec;
+    if (!loadRecord(rec, &why)) {
+        res.message = why;
+        return res;
+    }
+    if (job != Job::Update) {
+        if (!stepMessages(c, rec, res) && job == Job::Messages) {
+            res.ok = false;
+            res.message = "Les messages de ce PC n'ont pas pu \xC3\xAAtre relev\xC3\xA9s (le service n'a pas r\xC3\xA9pondu comme pr\xC3\xA9vu).";
+        }
+    }
+    if (job != Job::Messages) stepVersion(c, etat.str("version_publiee"), rec, res, job == Job::Update);
+    if (res.messagesLooked || res.update) (void)storeRecord(rec, nullptr);
+    if (job == Job::Messages && res.ok)
+        res.message = res.messages.empty() ? std::string("Aucun nouveau message pour ce PC.")
+                                           : std::to_string(res.messages.size()) + (res.messages.size() > 1 ? " messages re\xC3\xA7us." : " message re\xC3\xA7u.");
+    if (job == Job::Update)
+        res.message = res.update ? "Mise \xC3\xA0 jour " + res.update->version + " disponible."
+                                 : std::string("Ce programme est \xC3\xA0 jour (") + XPG_ANALYZER_VERSION + ").";
     return res;
 }
+} // namespace
+
+Result watchState() { return look(Job::Watch); }
+Result pollMessages() { return look(Job::Messages); }
+Result checkUpdate() { return look(Job::Update); }
 
 // ============================================================ le fil de fond ==
 namespace {
@@ -2354,6 +2718,8 @@ bool startRequest(const RequestForm& form) {
 bool startCancelRequest() { return launch(Job::CancelRequest, [] { return cancelRequest(); }); }
 bool startCheckDevice() { return launch(Job::Device, [] { return checkDevice(); }); }
 bool startWatch() { return launch(Job::Watch, [] { return watchState(); }); }
+bool startMessages() { return launch(Job::Messages, [] { return pollMessages(); }); }   // 1.44.0
+bool startUpdateCheck() { return launch(Job::Update, [] { return checkUpdate(); }); }
 
 bool busy() noexcept { return runner().running; }
 
@@ -2379,6 +2745,8 @@ std::string jobText(Job j) {
         case Job::Request: return "Envoi de la demande\xE2\x80\xA6";
         case Job::CancelRequest: return "Annulation de la demande\xE2\x80\xA6";
         case Job::Device: return "V\xC3\xA9rification aupr\xC3\xA8s du service\xE2\x80\xA6";
+        case Job::Messages: return "Relev\xC3\xA9 des messages de ce PC\xE2\x80\xA6";   // 1.44.0
+        case Job::Update: return "Recherche d'une mise \xC3\xA0 jour\xE2\x80\xA6";
         case Job::Watch:
         case Job::None: break;
     }
@@ -2405,6 +2773,8 @@ bool collect() {
     r.running = false;
     r.job = Job::None;
     const double now = steadyNow();
+    // 1.44.0 : les messages de ce PC et la mise a jour - les notifications, le toast, la pastille (app/Updates).
+    if (!res.messages.empty() || res.update || res.versionLooked) updates::received(res.messages, res.update, res.versionLooked);
     // 1.39.0 : le regard - rien a dire, rien a revaluer ; le compteur des changements (ou le registre) a bouge depuis
     // le dernier vu : la synchronisation complete tout de suite (la licence perdue en direct, les offres changees).
     if (res.job == Job::Watch) {
@@ -2506,7 +2876,8 @@ void poll() {
     }
     const auto st = lic::getLicenseState();
     // 1.39.0 : une licence sur ce PC (en ligne, par fichier, flottante) : un regard sur GET /v1/etat toutes les 2 minutes.
-    if (!st.licenseId.empty() && now >= r.nextWatch) {
+    // 1.44.0 : chaque Studio (les mises a jour, les messages a ce PC) : avec ou sans licence, apres la synchro du lancement.
+    if (r.nextWatch > 0 && now >= r.nextWatch) {
         r.nextWatch = now + kWatchPeriod;
         (void)startWatch();
         return;

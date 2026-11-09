@@ -25,6 +25,7 @@
 #include "../licensing/KeyFile.hpp"
 #include "../licensing/SignedFile.hpp"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,6 +54,17 @@ inline constexpr const char* kPublisherKeyFile = "cle-editeur-licences.cle";
 // Creer la cle (refuse s'il y en a deja une). `test` : une cle d'ESSAI (son nom le dit, partout).
 [[nodiscard]] std::unique_ptr<SigningKey> createPublisherKey(const std::string& folder, const std::string& name, bool test, std::string* why);
 [[nodiscard]] std::unique_ptr<SigningKey> loadPublisherKey(const std::string& folder, std::string* why);
+
+// ---- 1.44.0 : LA CLE D'UN ADMIN (docs/ADMINS.md, par. 1) ----------------------------------------------
+//  Un admin qui n'est pas l'admin+ a SA cle (Ed25519), nee sur son PC, protegee comme celle de l'editeur (DPAPI
+//  pour ce compte ; ailleurs un fichier 0600) ; elle n'en sort jamais. La liste des admins (signee par la cle de
+//  l'editeur) la nomme, avec ses droits.
+inline constexpr const char* kAdminKeyFile = "cle-admin.cle";
+[[nodiscard]] const licensing::KeyFileSpec& adminKeySpec();
+[[nodiscard]] std::string adminKeyPath(const std::string& folder);
+// Creer la cle d'admin (refuse s'il y en a deja une) ; `name` : le nom de l'admin (<< Lea >>).
+[[nodiscard]] std::unique_ptr<SigningKey> createAdminKey(const std::string& folder, const std::string& name, std::string* why);
+[[nodiscard]] std::unique_ptr<SigningKey> loadAdminKey(const std::string& folder, std::string* why);
 
 // ---- les cles publiques en C++ (exporter-cle) ----------------------------------------
 //  src/licensing/PublisherKey.hpp      les VRAIES cles (kKeys) ; vide : aucune cle, les
@@ -119,6 +131,10 @@ struct LicenseInputs {
     // etendue (`existing`), sinon aucun. Une liste vide n'ecrit rien (le document reste lisible par la 1.41).
     std::optional<std::vector<licensing::LicenseOption>> options;
     std::optional<std::vector<licensing::Purchase>>      purchases;
+    // 1.44.0 : le registre, les revocations et la licence a etendre peuvent etre signes par une AUTRE cle que celle qui
+    // signe (un admin signe avec sa cle une licence dont le registre vient de l'editeur) : vrai si ce bloc est d'une
+    // cle de confiance (l'editeur, un admin de la liste). Vide : la cle qui signe seulement (comme avant).
+    std::function<bool(const licensing::SignedBlock&)> alsoTrusted;
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
 // `summary` : ce qui a ete signe, en une ligne par fait. 1.32.0 (H2) : l'empreinte du poste de chaque demande
