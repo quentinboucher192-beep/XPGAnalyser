@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(xpg_analyzer VERSION 1.42.0 LANGUAGES C CXX)
+project(xpg_analyzer VERSION 1.43.0 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # C++23 is requested, C++20 is the floor. The one feature that needs C++23 is
@@ -1026,7 +1026,8 @@ if(XPG_BUILD_TESTS)
                    src/app/FileFinder.cpp src/app/FileFinderPane.cpp    # 1.14.0 (lot M5) : Chercher des fichiers sur ce PC
                    src/app/FileView.cpp src/app/FileViewer.cpp src/app/FilePreview.cpp   # 1.21.0 : l'apercu de tous les fichiers
                    src/app/PerfPane.cpp    # 1.22.2 : l'onglet Performances du panneau du bas (hmi/HmiBuildPanes.cpp)
-                   src/app/Corbeille.cpp)  # 1.25.1 : la Corbeille (son volet, hmi/HmiCorbeillePane.cpp)
+                   src/app/Corbeille.cpp   # 1.25.1 : la Corbeille (son volet, hmi/HmiCorbeillePane.cpp)
+                   src/app/SessionMarks.cpp)   # 1.43.0 : les objets tenus en session (le canevas)
     # 1.11 (I111, decision 16) : l'editeur et ses essais appellent le centre
     # d'aide (help::center, news, notes, keys, f1, report, Tutorial) : xpg_help,
     # comme l'appli et la construction des essais (outils/hmitests).

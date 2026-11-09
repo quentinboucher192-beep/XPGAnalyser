@@ -207,6 +207,10 @@ public:
     };
     void setLicence(LicenceChip chip);
     [[nodiscard]] const LicenceChip& licence() const noexcept { return licence_; }
+    // 1.43.0 : LA SESSION EN COURS ("Session \xC2\xB7 3", a cote de la licence) ; vide : la partie disparait. Un clic :
+    //  "session.panel" (l'equipe, la discussion).
+    void setSession(LicenceChip chip);
+    [[nodiscard]] const LicenceChip& session() const noexcept { return session_; }
 
 protected:
     void            onLayout() override;
@@ -270,7 +274,8 @@ private:
     void paintBell(const ui::PaintContext&, const Part&, bool hot) const;
     void paintTasks(const ui::PaintContext&, const Part&, bool hot) const;
     void paintSparkline(const ui::PaintContext&, const gfx::Rect&, gfx::Color) const;
-    void paintLicence(const ui::PaintContext&, const Part&, bool hot) const;   // 1.35.0
+    void paintLicence(const ui::PaintContext&, const Part&, bool hot) const;
+    void paintSessionChip(const ui::PaintContext& ctx, const Part& p, bool hot) const;   // 1.43.0   // 1.35.0
     std::vector<std::string> recents_;
     std::vector<UndoItem>    undoList_;
     std::vector<Notice>      notices_;
@@ -282,6 +287,7 @@ private:
     double                   pressedAt_{0.0};      // le clic long sur Annuler (secondes)
     // ---- fin Lot API 8 : bandeau haut ----
     LicenceChip              licence_;             // 1.35.0 : la licence active (setLicence)
+    LicenceChip              session_;             // 1.43.0 : la session en cours (setSession)
 };
 
 } // namespace app

@@ -184,6 +184,8 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
          "files.drop", ui::Icon::Open, Menu::None, true);
     // 1.35.0 : la licence active (setLicence) ; un clic : la fenetre Licence.
     part("licence", "Licence", "La licence de ce PC : un clic ouvre la fen\xC3\xAAtre Licence", "help.licence", ui::Icon::Lock);
+    // 1.43.0 : la session en cours (setSession) ; un clic : l'equipe et la discussion.
+    part("session", "Session", "La session en cours : un clic ouvre l'\xC3\xA9quipe et la discussion", "session.panel", ui::Icon::User);
     for (auto& p : parts_)
         if (p.key == "simuler" || p.key == "nouveau" || p.key == "affichage" || p.key == "aide") p.iconOnly = true;
     // ---- fin Lot API 8 : bandeau haut ----
@@ -238,6 +240,12 @@ TopBar::TopBar(std::string id) : ui::Widget(std::move(id)) {
     // 1.25.1 : la Corbeille (ce qui a ete supprime : Restaurer, chercher).
     e(project_, "Corbeille\xE2\x80\xA6", "", ui::Icon::Delete, "project.trash");
     sep(project_);
+    // 1.43.0 : LES SESSIONS - plusieurs PC sur le meme projet (IHM Studio, le reseau du bureau).
+    if (!core::hasApi()) {
+    e(project_, "D\xC3\xA9marrer une session\xE2\x80\xA6", "", ui::Icon::Network, "session.start");
+    e(project_, "Rejoindre une session\xE2\x80\xA6", "", ui::Icon::User, "session.join");
+    sep(project_);
+    }
     e(project_, "Fermer le projet", "", ui::Icon::Close, "file.close");    // Lot API 8 : bandeau haut
     // 1.12.27 : un deuxieme projet a cote (copier de l'un a l'autre, glisser d'une fenetre a l'autre).
     e(project_, "Nouvelle fen\xC3\xAAtre", "Ctrl+Maj+N", ui::Icon::Window, "app.newWindow");
@@ -950,6 +958,7 @@ void TopBar::onPaint(const ui::PaintContext& ctx) {
         if (p.key == "ihm") { paintHmi(ctx, p, hot); continue; }   // 1.10
         if (p.key == "taches") { paintTasks(ctx, p, hot); continue; }
         if (p.key == "licence") { paintLicence(ctx, p, hot); continue; }   // 1.35.0
+        if (p.key == "session") { paintSessionChip(ctx, p, hot); continue; }   // 1.43.0
         if (p.key == "annuler-liste") {
             if (hot || opened_ == Menu::UndoList) ctx.r.fillRoundedRect(p.rect, c.text.withAlpha(opened_ == Menu::UndoList ? 30 : 22), 5.f);
             chevron(ctx.r, p.rect.x + p.rect.w * 0.5f, p.rect.y + p.rect.h * 0.5f, undoList_.empty() ? c.textDisabled : c.textMuted);
@@ -1036,6 +1045,7 @@ std::string TopBar::tipAt(gfx::Point p) const {
                                           : std::string{});
         }
         if (part.key == "licence") return licence_.tip.empty() ? part.tip : licence_.tip;   // 1.35.0
+        if (part.key == "session") return session_.tip.empty() ? part.tip : session_.tip;   // 1.43.0
         if (part.key == "taches")
             return tasks_.empty() ? std::string("Aucune t\xC3\xA2" "che de fond en cours")
                                   : tasks_.front().label + (tasks_.size() > 1 ? " (+" + std::to_string(tasks_.size() - 1) + ")" : std::string{})

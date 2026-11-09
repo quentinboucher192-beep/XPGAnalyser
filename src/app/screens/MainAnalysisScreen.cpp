@@ -3449,6 +3449,8 @@ void MainAnalysisScreen::onEnter() {
     // Lot API 7 : F9, Ctrl+1, Ctrl+5 (sim.open, view.variables, view.statistics)
     // ouvraient des ecrans pleins ; ils ouvrent des onglets de l'API.
     links_ += app_.events().subscribe<OpenApiTab>([this](const OpenApiTab& e) { openApiTabFromAction(e.key); });
+    // 1.43.0 : Suivre un equipier d'une session : sa vue s'ouvre.
+    links_ += app_.events().subscribe<OpenHmiView>([this](const OpenHmiView& e) { if (e.view) openHmiView(e.view); });
 
     links_ += explorer_->selectionChanged->connect([this](NodeId n) { onTreeSelection(n); });
     // ---- Lot API 8 : l'arbre du projet (le filtre suit le champ) ----

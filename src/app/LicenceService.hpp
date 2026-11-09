@@ -224,6 +224,7 @@ struct Result {
     std::string         answerCode;               // "XPG-XXXX-..." ; vide : rien a montrer
     std::string         answerMail;               // gateway::kMailSent, kMailFailed ; vide : pas de mail
     std::string         answerMailTo;
+    std::string         answerOption;             // 1.43.0 : une demande d'OPTION acceptee (son nom) : "Ton option est arrivee"
     licensing::Seconds  requestSentAt{0};         // une demande attend encore : envoyee le (0 : aucune)
     // 1.39.0 : ce que GET /v1/etat a dit en se connectant (-1 : pas lu, ou un service d'avant la 1.39) - le compteur des
     // changements chez les clients (une revocation, une licence desactivee, un PC retire) et le numero du registre.

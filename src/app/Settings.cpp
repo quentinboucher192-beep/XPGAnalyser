@@ -48,6 +48,12 @@ std::string envOr(const char* name, const char* fallback) {
 
 std::string Settings::sharedFolder() {
     namespace fs = std::filesystem;
+    // 1.43.0 : un dossier commun impose (les essais : deux IHM Studio cote a cote, chacun le sien - deux PC).
+    if (const char* forced = std::getenv("XPG_DOSSIER_COMMUN"); forced && *forced) {
+        std::error_code ec;
+        fs::create_directories(forced, ec);
+        return forced;
+    }
 #if defined(_WIN32)
     const auto base = envOr("APPDATA", ".");
     const auto dir  = fs::path(base) / "XpgAnalyzer";

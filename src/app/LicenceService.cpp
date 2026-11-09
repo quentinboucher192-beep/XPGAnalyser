@@ -739,6 +739,7 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                 res.licenseId = lid;
                 res.answer = kAnswerAccepted;
                 res.answerNote = trim(content.message);
+                res.answerOption = what;   // 1.43.0 : << Ton option est arrivee >>
                 text = renewed ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle est sur ce PC."
                                : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle arrive au prochain renouvellement de ta licence "
                                  "(Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Renouveler maintenant).";
@@ -767,6 +768,7 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     rec.receivedLicense = lid;
                     res.answer = updated ? kAnswerUpdated : kAnswerAccepted;   // 1.36.0 : la fenetre qui le confirme
                     res.answerNote = trim(content.message);
+                    if (!rec.option.empty()) res.answerOption = rec.optionText.empty() ? rec.option : rec.optionText;   // 1.43.0
                     text = updated ? "Ta licence " + lid + " est mise \xC3\xA0 jour (re\xC3\xA7ue de l'\xC3\xA9" "diteur)."
                                    : "Ta licence " + lid + " est install\xC3\xA9" "e (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
                     notice = text;
@@ -2415,6 +2417,7 @@ bool collect() {
         a.code = res.answerCode;
         a.mail = res.answerMail;
         a.mailTo = res.answerMailTo;
+        a.option = res.answerOption;   // 1.43.0
         if (res.answerMail == lgw::kMailSent) licence::noteEmailReached(res.answerMailTo);   // 1.38.0 : Mon profil, verifie
         licence::queueAnswer(std::move(a));
         crypto::wipe(res.answerCode.data(), res.answerCode.size());   // le code : dans la fenetre seulement

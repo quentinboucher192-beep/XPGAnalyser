@@ -135,6 +135,7 @@ const std::vector<Gate>& gates() {
         {Where::HmiPane, "rapports", "advanced_export", "IHM \xE2\x80\xBA Rapports (PDF, Excel)"},
         {Where::HmiPane, "deploiement", "professional_tools", "IHM \xE2\x80\xBA D\xC3\xA9ploiement r\xC3\xA9seau"},
         {Where::HmiPane, "outil", "professional_tools", "IHM \xE2\x80\xBA Outil Modbus"},
+        {Where::Action, "session.start", "multi_user", "D\xC3\xA9marrer une session (travail \xC3\xA0 plusieurs)"},   // 1.43.0
     };
     return g;
 }
@@ -628,14 +629,20 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
         return v;
     }
     const bool updated = a.kind == service::kAnswerUpdated;
-    v.title = updated ? "Ta licence est mise \xC3\xA0 jour" : a.online ? "Ta licence en ligne est activ\xC3\xA9" "e" : "Ta licence est activ\xC3\xA9" "e";
+    const bool option = !a.option.empty();   // 1.43.0 : une option acceptee, pas une licence
+    v.title = option   ? "Ton option est arriv\xC3\xA9" "e"
+            : updated  ? "Ta licence est mise \xC3\xA0 jour"
+            : a.online ? "Ta licence en ligne est activ\xC3\xA9" "e"
+                       : "Ta licence est activ\xC3\xA9" "e";
     v.confirm = "Voir ma licence";
     v.tab = kTabMine;
     const std::string id = !st.licenseId.empty() ? st.licenseId : a.licenseId;
-    std::string text = updated    ? "L'\xC3\xA9" "diteur a mis \xC3\xA0 jour ta licence : elle est install\xC3\xA9" "e sur ce PC."
-                       : a.online ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence en ligne est activ\xC3\xA9" "e sur ce PC (avec son code, re\xC3\xA7u "
-                                    "scell\xC3\xA9 pour lui), tu peux travailler."
-                                  : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.";
+    std::string text = option     ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option : \xC2\xAB " + a.option + " \xC2\xBB est sur ce PC, tu peux "
+                                    "t'en servir. Elle s'arr\xC3\xAAte seule \xC3\xA0 sa date ; le reste de ta licence ne bouge pas."
+                       : updated  ? std::string("L'\xC3\xA9" "diteur a mis \xC3\xA0 jour ta licence : elle est install\xC3\xA9" "e sur ce PC.")
+                       : a.online ? std::string("L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence en ligne est activ\xC3\xA9" "e sur ce PC (avec son code, re\xC3\xA7u "
+                                    "scell\xC3\xA9 pour lui), tu peux travailler.")
+                                  : std::string("L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.");
     text += "\n\nLicence : " + id + (st.editionLabel.empty() && st.licensedEdition.empty() ? std::string() : " \xC2\xB7 " + editionOf(st));
     if (!st.customer.empty()) text += "\nClient : " + st.customer;
     // La duree : jusqu'a quand, et les jours qui restent.

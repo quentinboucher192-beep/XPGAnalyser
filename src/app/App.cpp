@@ -1,4 +1,6 @@
 #include "App.hpp"
+#include "SessionDialogs.hpp"   // 1.43.0
+#include "SessionService.hpp"   // 1.43.0
 #include "ai/AiPaths.hpp"   // 1.14.2 : la racine IA/ de l'Assistant
 #include "../sim/Value.hpp"        // 1.12.19 : la valeur initiale d'une variable de l'automate, lue dans son type
 #include "../sim/ValueText.hpp"
@@ -411,6 +413,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
     a->menus_      = std::make_unique<menu::MenuManager>(a->buildMenuFactory());
     a->menuGlobal_ = std::make_unique<menu::MenuManager::ScopedInstance>(*a->menus_);
 
+    a->session_ = std::make_unique<SessionService>(*a);   // 1.43.0 : avant les actions qui s'en servent
     a->registerActions();
     a->installFilterMemory();      // Lot API 8 : les filtres retenus d'une seance a l'autre (avant tout ecran)
 
@@ -583,6 +586,7 @@ core::Result<std::unique_ptr<App>> App::create(AppOptions options) {
 
 App::~App() {
     if (auto* instance = core::instance::current()) instance->setWake({});   // 1.11.2 (UNI) : avant SDL_Quit
+    session_.reset();   // 1.43.0 : la session s'arrete (AUREVOIR aux equipiers), ses fils attendus
     licence::shutdown();   // 1.35.0 : la requete du service en cours est coupee, son fil attendu, le jeton flottant rendu
     exchange::shutdown();   // 1.12.30 : une archive en cours d'ecriture se termine
     fenetres::retirer(announcedFolder_);   // 1.12.27 : ce projet n'est plus ouvert ici
@@ -1642,6 +1646,14 @@ void App::registerActions() {
     actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
     // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet.
     actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this, licence::kTabProfile); }});
+    // 1.43.0 : LES SESSIONS (IHM Studio) - Projet > Demarrer une session..., Rejoindre une session... ; la pastille du haut.
+    actions_.add(Action{"session.start", "D\xC3\xA9marrer une session\xE2\x80\xA6", {},
+                        [this] { return !core::hasApi() && hmi_ && !projectFolder_.empty() && !session_->active(); }, {}, nullptr,
+                        [this] { showSessionStart(*this); }});
+    actions_.add(Action{"session.join", "Rejoindre une session\xE2\x80\xA6", {}, [this] { return !core::hasApi() && !session_->active(); }, {}, nullptr,
+                        [this] { showSessionJoin(*this); }});
+    actions_.add(Action{"session.panel", "La session\xE2\x80\xA6", {},
+                        [this] { return session_->mode() != SessionService::Mode::Off; }, {}, nullptr, [this] { showSessionPanel(*this); }});
     // 1.38.0 : les notifications generales (la licence, les offres, les annonces de l'editeur).
     actions_.add(Action{"help.notifications", "Notifications\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showNoticesWindow(*this); }});
     // 1.30.0 : LES ACTIONS D'UNE FONCTIONNALITE (licence::gates) passent par le controle : fermee, la fenetre
@@ -2157,6 +2169,12 @@ core::Status App::saveProject() {
         return core::fail(core::ErrorCode::InvalidArgument, "no project to save");
     if (projectFolder_.empty())
         return core::fail(core::ErrorCode::InvalidArgument, "the project has no folder yet");
+    // 1.43.0 : en session, l'hote enregistre pour tout le monde ; l'equipier garde une copie a la fin (Enregistrer sous).
+    if (session_ && session_->guest()) {
+        bus_.publish(StatusNotice{"En session, c'est " + session_->hostName() + " (l'h\xC3\xB4te) qui enregistre pour tout le monde. "
+                                  "\xC3\x80 la fin, Projet \xE2\x80\xBA Enregistrer sous\xE2\x80\xA6 garde ta copie.", 8.0});
+        return core::ok();
+    }
     // Lot 15 : LOCK - personne ne modifie (Projet > Deverrouiller d'abord).
     if (manifest_.state == project::State::Lock)
         return core::fail(core::ErrorCode::InvalidArgument,
@@ -3381,6 +3399,7 @@ void App::frame(double dt) {
     lap.to(XPG_PARTIE("enregistrement-auto"));
     recovery_.tick(dt);
     licence::tick();   // 1.30.0 : une revaluation par heure (une licence peut prendre fin pendant le travail)
+    if (session_) session_->tick();   // 1.43.0 : la session (le reseau, les changements qui partent et arrivent)
     // 1.34.0 : ce qu'apporte la passerelle (une licence installee, un refus) - la barre d'etat (et la cloche).
     for (auto& m : licence::takeMessages()) bus_.publish(StatusNotice{std::move(m), 20.0});
     // 1.36.0 : la reponse de l'editeur a la demande de ce PC (acceptee : la licence installee ; refusee) - une fenetre.

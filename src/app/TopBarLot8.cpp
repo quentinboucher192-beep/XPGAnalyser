@@ -87,6 +87,14 @@ void TopBar::setLicence(LicenceChip chip) {
     invalidate();
 }
 
+void TopBar::setSession(LicenceChip chip) {
+    if (chip == session_) return;
+    const bool relayout = chip.text != session_.text;
+    session_ = std::move(chip);
+    if (relayout) invalidateLayout();
+    invalidate();
+}
+
 void TopBar::setTasks(std::vector<Task> tasks) {
     if (tasks == tasks_) return;
     const bool relayout = tasks.empty() != tasks_.empty();
@@ -169,6 +177,11 @@ void TopBar::layoutLot8() const {
         // serre : Deposer un fichier tombe (le glisser-deposer et la palette ">deposer" restent)
         if (!tight) putR("deposer", 34.f);
         rx -= 8.f;
+        // 1.43.0 : la session en cours - son texte, ou la personne seule si c'est serre.
+        if (!session_.text.empty()) {
+            putR("session", tight ? 34.f : std::min(compact ? 160.f : 260.f, 9.f + 16.f + 7.f + ui::measureWidth(session_.text, kSmall8) + 12.f));
+            rx -= 8.f;
+        }
         // 1.35.0 : la licence active - le texte entier, puis la forme courte, puis le cadenas seul.
         if (!licence_.text.empty()) {
             const std::string& t = compact ? (licence_.shortText.empty() ? licence_.text : licence_.shortText) : licence_.text;
@@ -423,6 +436,23 @@ void TopBar::paintLicence(const ui::PaintContext& ctx, const Part& p, bool hot) 
     const auto n = ctx.r.fitCharacters(t, kSmall8, maxW);
     std::string shown = n >= t.size() ? t : t.substr(0, n);
     while (!shown.empty() && shown.size() < t.size() && (static_cast<unsigned char>(t[shown.size()]) & 0xC0) == 0x80) shown.pop_back();
+    ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kSmall8)) * 0.5f}, shown, kSmall8, c.text);
+}
+
+// 1.43.0 : la session en cours - la couleur du logiciel, la personne, le texte.
+void TopBar::paintSessionChip(const ui::PaintContext& ctx, const Part& p, bool hot) const {
+    const auto& c = ctx.theme.color;
+    const auto r = p.rect;
+    const gfx::Color tone = session_.tone == 2 ? c.warning : c.accent;
+    ctx.r.fillRoundedRect({r.x + 1.f, r.y + 3.f, r.w - 2.f, r.h - 6.f}, tone.withAlpha(hot ? (ctx.theme.isDark() ? 60 : 46) : (ctx.theme.isDark() ? 38 : 26)), 6.f);
+    const bool iconOnly = r.w <= 36.f;
+    const gfx::Rect ib{r.x + (iconOnly ? (r.w - 16.f) * 0.5f : 9.f), r.y + (r.h - 16.f) * 0.5f, 16.f, 16.f};
+    ui::drawIcon(ctx.r, ui::Icon::User, ib, ctx.theme.onSurface(tone));
+    if (iconOnly) return;
+    const float tx = ib.right() + 7.f, maxW = r.right() - tx - 8.f;
+    const auto n = ctx.r.fitCharacters(session_.text, kSmall8, maxW);
+    std::string shown = n >= session_.text.size() ? session_.text : session_.text.substr(0, n);
+    while (!shown.empty() && shown.size() < session_.text.size() && (static_cast<unsigned char>(session_.text[shown.size()]) & 0xC0) == 0x80) shown.pop_back();
     ctx.r.drawText({tx, r.y + (r.h - ctx.r.lineHeight(kSmall8)) * 0.5f}, shown, kSmall8, c.text);
 }
 

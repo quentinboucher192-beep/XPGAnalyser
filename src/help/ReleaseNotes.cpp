@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.42.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.43.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.42.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 12 h 37"},
     {"1.41.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 21 h 34"},
     {"1.40.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 19 h 23"},
     {"1.39.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 17 h 20"},
@@ -186,6 +187,23 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.43.0 : les sessions (plusieurs PC sur le meme projet, le reseau du bureau)
+        note("1.43.0", "IHM", Kind::New,
+         "LES SESSIONS : Projet \xE2\x80\xBA D\xC3\xA9marrer une session\xE2\x80\xA6 ouvre le projet \xC3\xA0 tes \xC3\xA9quipiers, sur le r\xC3\xA9seau du bureau : "
+         "tu es l'h\xC3\xB4te (ton PC garde le projet et l'enregistre). Tu acceptes chaque entr\xC3\xA9" "e, ou il faut le code (6 chiffres, "
+         "jamais transmis : il se prouve) ; ils modifient, ou regardent seulement. La pastille Session, en haut : l'\xC3\xA9quipe, o\xC3\xB9 "
+         "chacun est (Suivre), la discussion. Il faut \xC2\xAB Travail \xC3\xA0 plusieurs \xC2\xBB dans la licence (l'offre ENTERPRISE, ou l'option).",
+         "editeur", ""),
+        note("1.43.0", "IHM", Kind::New,
+         "REJOINDRE UNE SESSION : Projet \xE2\x80\xBA Rejoindre une session\xE2\x80\xA6 montre celles du r\xC3\xA9seau du bureau (ou une adresse). Le projet "
+         "arrive une fois, \xC3\xA0 part de tes projets, puis seulement les changements, objet par objet : deux \xC3\xA9quipiers sur deux objets "
+         "de la m\xC3\xAAme vue ne s'\xC3\xA9" "crasent pas. Un objet choisi par l'un est pris pour lui (son contour et son nom, \xC3\xA0 sa couleur) ; "
+         "Ctrl+Z annule tes gestes, pas ceux des autres. \xC3\x80 la fin, Enregistrer sous\xE2\x80\xA6 garde ta copie.",
+         "editeur", ""),
+        note("1.43.0", "IHM", Kind::Changed,
+         "L'HISTORIQUE DES OBJETS signe chaque objet par le PC qui l'a modifi\xC3\xA9 : en session, celui de l'\xC3\xA9quipier (son nom, son PC, "
+         "son identifiant stable \xC2\xAB M-7F21 \xC2\xBB, la session), dans la fen\xC3\xAAtre et dans son export CSV.",
+         "historique", ""),
         // 1.42.0 : les options, Mes achats, les offres temporaires
         note("1.42.0", "Projet", Kind::New,
          "LES OPTIONS : Licence\xE2\x80\xA6 \xE2\x80\xBA Options ajoute une fonction \xC3\xA0 ta licence pour un temps (1 semaine, 1 mois, jusqu'\xC3\xA0 la fin, "

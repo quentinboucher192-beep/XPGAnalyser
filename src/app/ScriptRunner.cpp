@@ -5,6 +5,8 @@
 #include "../core/Edition.hpp"           // 1.30.0 : le nom de l'application (licence-demande)
 #include "../core/Version.hpp"           // 1.30.0
 #include "ScriptRunner.hpp"
+#include "SessionDialogs.hpp"   // 1.43.0
+#include "SessionService.hpp"   // 1.43.0
 #include "ProjectExchange.hpp"   // 1.12.30 : attendre-echanges
 #include "tutorial/TutorialApp.hpp"
 #include "tutorial/TutorialStageApp.hpp"
@@ -6187,6 +6189,233 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         }
         std::printf("[script] licence-attendre : %s\n", ls::lastResult().message.c_str());
         return Step::Yield;
+    }
+    // 1.43.0 : LES SESSIONS (deux IHM Studio sur un projet) - pour l'essai de bout en bout.
+    //   session-demarrer "Nom" [code|accepter] [modifier|regarder]   l'hote (le projet ouvert)
+    //   session-chercher                                             les sessions du reseau du bureau (et de ce PC)
+    //   session-rejoindre [N|adresse] [code]                         l'equipier (la N-ieme trouvee ; 1 par defaut)
+    //   session-attendre dedans|frappe|fin|membres N|message "texte"|objet VUE OBJET CLE VALEUR
+    //   session-accepter / session-refuser                           l'hote : la premiere entree demandee
+    //   session-choisir VUE OBJET | session-choisir VUE (rien)        choisir dans la vue (elle s'ouvre)
+    //   session-deplacer VUE OBJET DX DY                             un geste (par la pile : Ctrl+Z le reprend)
+    //   session-annuler                                              Ctrl+Z
+    //   session-verifier VUE OBJET CLE VALEUR                        la valeur d'une propriete (sinon : echec)
+    //   session-message "texte" / session-role N modifier|regarder / session-etat / session-panneau / session-arreter
+    if (cmd.rfind("session-", 0) == 0) {
+        auto& s = app_.session();
+        const auto findObject = [&](const std::string& viewName, const std::string& objName, hmi::Id& view, hmi::Id& obj) {
+            view = obj = hmi::kNoId;
+            const auto doc = app_.hmi();
+            if (!doc) return false;
+            const auto* v = doc->project.viewByName(viewName);
+            if (!v) return false;
+            view = v->id;
+            if (objName.empty()) return true;
+            if (const auto* o = v->objectByName(objName)) obj = o->id;
+            return obj != hmi::kNoId;
+        };
+        const auto propOf = [&](hmi::Id view, hmi::Id obj, const std::string& key) -> std::string {
+            const auto doc = app_.hmi();
+            const auto* v = doc ? doc->project.view(view) : nullptr;
+            const auto* o = v ? v->object(obj) : nullptr;
+            if (!o) return "(absent)";
+            for (const auto& pr : o->props)
+                if (pr.key == key) return pr.value;
+            return "";
+        };
+        if (cmd == "session-demarrer") {
+            SessionService::StartOptions o;
+            o.name = arg(1);
+            o.entry = arg(2) == "code" ? session::Entry::Code : session::Entry::Accept;
+            o.role = arg(3) == "regarder" ? session::Role::Watch : session::Role::Edit;
+            std::string why;
+            if (!s.start(o, &why)) {
+                std::printf("[script] session-demarrer : %s\n", why.c_str());
+                fail("session-demarrer : " + why);
+                return Step::Next;
+            }
+            std::printf("[script] session-demarrer : \xC2\xAB %s \xC2\xBB d\xC3\xA9marr\xC3\xA9" "e (port %d, d\xC3\xA9" "couverte %d)%s%s\n", s.sessionName().c_str(), s.port(),
+                        s.discoveryPort(), s.code().empty() ? "" : " ; code ", s.code().empty() ? "" : session::codeShown(s.code()).c_str());
+            // Le code pour l'equipier (l'essai le lit) : a cote des captures, jamais ailleurs.
+            if (!s.code().empty() && !capturesDir_.empty()) {
+                std::FILE* f = std::fopen((std::filesystem::path(capturesDir_) / "code-session.txt").string().c_str(), "wb");
+                if (f) {
+                    std::fputs(s.code().c_str(), f);
+                    std::fclose(f);
+                }
+            }
+            return Step::Yield;
+        }
+        if (cmd == "session-chercher") {
+            if (retries_ == 0) s.search();
+            if (s.searching()) return retries_ < 600 ? Step::Retry : (fail("session-chercher : la recherche ne finit pas"), Step::Next);
+            std::printf("[script] session-chercher : %zu session(s)%s\n", s.found().size(), s.searchProblem().empty() ? "" : (" (" + s.searchProblem() + ")").c_str());
+            for (const auto& f : s.found())
+                std::printf("[script]   %s - h\xC3\xB4te %s, %s (%s), %d dedans%s\n", f.announce.session.c_str(), f.announce.host.c_str(), f.announce.machine.c_str(),
+                            f.address.c_str(), f.announce.members, f.announce.needsCode ? ", avec code" : "");
+            return Step::Yield;
+        }
+        if (cmd == "session-rejoindre") {
+            std::string code = arg(2);
+            if (code == "@fichier" && !capturesDir_.empty()) {   // le code ecrit par l'hote (meme dossier de captures)
+                std::FILE* f = std::fopen((std::filesystem::path(capturesDir_) / "code-session.txt").string().c_str(), "rb");
+                char b[32] = {0};
+                if (f) {
+                    const auto n = std::fread(b, 1, sizeof b - 1, f);
+                    b[n] = 0;
+                    std::fclose(f);
+                }
+                code = b;
+            }
+            const std::string target = arg(1).empty() ? std::string("1") : arg(1);
+            const bool byIndex = std::all_of(target.begin(), target.end(), [](char c) { return c >= '0' && c <= '9'; });
+            if (retries_ == 0) s.search(byIndex ? std::vector<std::string>{} : std::vector<std::string>{target});
+            if (s.searching()) return retries_ < 600 ? Step::Retry : (fail("session-rejoindre : la recherche ne finit pas"), Step::Next);
+            const std::size_t i = byIndex ? static_cast<std::size_t>(std::max(1, std::atoi(target.c_str()))) - 1 : 0;
+            if (i >= s.found().size()) {
+                std::printf("[script] session-rejoindre : aucune session trouv\xC3\xA9" "e (%zu)\n", s.found().size());
+                fail("session-rejoindre : aucune session");
+                return Step::Next;
+            }
+            const auto& f = s.found()[i];
+            SessionService::JoinTarget t;
+            t.address = f.address;
+            t.port = f.announce.port;
+            t.fingerprint = f.announce.fingerprint;
+            t.sessionId = f.announce.sessionId;
+            t.sessionName = f.announce.session;
+            t.hostName = f.announce.host;
+            t.machine = f.announce.machine;
+            t.needsCode = f.announce.needsCode;
+            std::string why;
+            if (!s.join(t, code, &why)) {
+                fail("session-rejoindre : " + why);
+                return Step::Next;
+            }
+            std::printf("[script] session-rejoindre : \xC2\xAB %s \xC2\xBB (h\xC3\xB4te %s, %s:%d)%s\n", t.sessionName.c_str(), t.hostName.c_str(), t.address.c_str(), t.port,
+                        code.empty() ? "" : " avec le code");
+            return Step::Yield;
+        }
+        if (cmd == "session-attendre") {
+            bool ok = false;
+            const std::string what = arg(1);
+            if (what == "dedans") ok = s.guest();
+            else if (what == "frappe") ok = !s.knocks().empty();
+            else if (what == "fin") ok = s.mode() == SessionService::Mode::Off;
+            else if (what == "membres") ok = s.members().size() >= static_cast<std::size_t>(std::max(1, std::atoi(arg(2).c_str())));
+            else if (what == "message") {
+                for (const auto& l : s.chat()) ok = ok || l.text.find(arg(2)) != std::string::npos;
+            } else if (what == "objet") {
+                hmi::Id v, o;
+                ok = findObject(arg(2), arg(3), v, o) && propOf(v, o, arg(4)) == arg(5);
+            } else if (what == "absent") {
+                hmi::Id v, o;
+                ok = !findObject(arg(2), arg(3), v, o) && v != hmi::kNoId;
+            }
+            if (!ok) {
+                if (s.mode() == SessionService::Mode::Off && what != "fin" && retries_ > 30 && !s.progress().empty() && s.progress().rfind("Pas entr", 0) == 0) {
+                    std::printf("[script] session-attendre %s : %s\n", what.c_str(), s.progress().c_str());
+                    fail("session-attendre " + what + " : " + s.progress());
+                    return Step::Next;
+                }
+                if (retries_ < 4000) return Step::Retry;
+                std::printf("[script] session-attendre %s : pas venu (%s)\n", what.c_str(), s.progress().c_str());
+                fail("session-attendre " + what + " : pas venu");
+                return Step::Next;
+            }
+            std::printf("[script] session-attendre %s : oui\n", what.c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-accepter" || cmd == "session-refuser") {
+            if (s.knocks().empty()) {
+                if (retries_ < 4000) return Step::Retry;
+                fail(cmd + " : personne ne frappe");
+                return Step::Next;
+            }
+            const auto k = s.knocks().front();
+            if (cmd == "session-accepter") s.accept(k.conn);
+            else s.refuse(k.conn, s.hostName() + " ne t'a pas fait entrer");
+            std::printf("[script] %s : %s (%s \xC2\xB7 %s)\n", cmd.c_str(), k.name.c_str(), k.machine.c_str(), k.machineId.c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-choisir") {
+            hmi::Id v, o;
+            if (!findObject(arg(1), arg(2), v, o) && v == hmi::kNoId) {
+                fail("session-choisir : vue ou objet introuvable : " + arg(1) + " " + arg(2));
+                return Step::Next;
+            }
+            auto* ed = currentEditor();
+            if (!ed || ed->viewId() != v) {
+                if (retries_ == 0) app_.events().publish(OpenHmiView{v});
+                if (retries_ < 300) return Step::Retry;
+                fail("session-choisir : la vue ne s'ouvre pas");
+                return Step::Next;
+            }
+            ed->canvas().setSelection(o == hmi::kNoId ? std::vector<hmi::Id>{} : std::vector<hmi::Id>{o});
+            const auto& sel = ed->canvas().selection();
+            std::printf("[script] session-choisir %s %s : %s\n", arg(1).c_str(), arg(2).c_str(),
+                        o == hmi::kNoId ? "rien" : (std::find(sel.begin(), sel.end(), o) != sel.end() ? "choisi" : "refus\xC3\xA9 (pris par un autre)"));
+            return Step::Yield;
+        }
+        if (cmd == "session-deplacer") {
+            hmi::Id v, o;
+            if (!findObject(arg(1), arg(2), v, o)) {
+                fail("session-deplacer : introuvable : " + arg(1) + " " + arg(2));
+                return Step::Next;
+            }
+            const double dx = std::atof(arg(3).c_str()), dy = std::atof(arg(4).c_str());
+            auto c = hmi::changeView(app_.hmi(), v, "D\xC3\xA9placer " + arg(2), [&](hmi::Project&, hmi::View& view) {
+                if (auto* ob = view.object(o)) {
+                    ob->setNumber("x", ob->number("x") + dx);
+                    ob->setNumber("y", ob->number("y") + dy);
+                }
+            });
+            if (c) app_.apply(std::move(c), false);
+            std::printf("[script] session-deplacer %s : x=%s y=%s\n", arg(2).c_str(), propOf(v, o, "x").c_str(), propOf(v, o, "y").c_str());
+            return Step::Yield;
+        }
+        if (cmd == "session-annuler") {
+            app_.undo();
+            std::printf("[script] session-annuler\n");
+            return Step::Yield;
+        }
+        if (cmd == "session-verifier") {
+            hmi::Id v, o;
+            const std::string got = findObject(arg(1), arg(2), v, o) ? propOf(v, o, arg(3)) : std::string("(absent)");
+            std::printf("[script] session-verifier %s.%s = %s (attendu %s)\n", arg(2).c_str(), arg(3).c_str(), got.c_str(), arg(4).c_str());
+            if (got != arg(4)) fail("session-verifier " + arg(2) + "." + arg(3) + " = " + got + ", attendu " + arg(4));
+            return Step::Yield;
+        }
+        if (cmd == "session-message") {
+            s.say(arg(1));
+            return Step::Yield;
+        }
+        if (cmd == "session-role") {
+            s.setRole(std::atoi(arg(1).c_str()), arg(2) == "regarder" ? session::Role::Watch : session::Role::Edit);
+            return Step::Yield;
+        }
+        if (cmd == "session-panneau") {
+            showSessionPanel(app_);
+            return Step::Yield;
+        }
+        if (cmd == "session-arreter") {
+            s.stop();
+            std::printf("[script] session-arreter\n");
+            return Step::Yield;
+        }
+        if (cmd == "session-etat") {
+            const char* mode = s.host() ? "h\xC3\xB4te" : s.guest() ? "\xC3\xA9quipier" : s.mode() == SessionService::Mode::Joining ? "on entre" : "aucune";
+            std::printf("[script] session-etat : %s \xC2\xB7 \xC2\xAB %s \xC2\xBB \xC2\xB7 %zu membre(s) \xC2\xB7 %zu message(s) \xC2\xB7 %zu rattrapage(s) \xC2\xB7 %zu refus\n", mode,
+                        s.sessionName().c_str(), s.members().size(), s.chat().size(), s.resyncs(), s.refusals());
+            for (const auto& m : s.members())
+                std::printf("[script]   %s%s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 vue %s \xC2\xB7 %zu choisi(s)\n", m.name.c_str(), m.number == s.me() ? " (moi)" : "", m.machine.c_str(),
+                            m.machineId.c_str(), session::roleText(m.role).c_str(), s.viewName(m.view).c_str(), m.selection.size());
+            const auto& log = s.log();
+            for (std::size_t i = log.size() > 8 ? log.size() - 8 : 0; i < log.size(); ++i) std::printf("[script]   . %s\n", log[i].c_str());
+            return Step::Yield;
+        }
+        fail("commande inconnue : " + cmd);
+        return Step::Next;
     }
     if (cmd == "licence-code" || cmd == "licence-renouveler" || cmd == "licence-liberer" || cmd == "licence-flottante-prendre" ||
         cmd == "licence-flottante-rendre" || cmd == "licence-decouverte" || cmd == "licence-heure" || cmd == "licence-demande-en-ligne" ||

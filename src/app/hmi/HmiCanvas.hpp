@@ -373,6 +373,7 @@ private:
     double                 paintTime_{0};
     double                 hoverSince_{-1};             // -1 : a poser au prochain dessin
     void paintPendingDots(const ui::PaintContext&, const HmiViewport&);
+    void paintSessionHolds(const ui::PaintContext&, const HmiViewport&);   // 1.43.0 : les objets tenus en session
 
     // 1.12.12 (lot H) : les sommets.
     void traceClick(gfx::Point screen, int clicks, bool free);

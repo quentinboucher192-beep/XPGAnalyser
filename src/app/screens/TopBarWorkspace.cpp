@@ -14,6 +14,7 @@
 //    - les taches de fond (bgtasks::begin / progress / end) ;
 //    - Deposer un fichier... : l'explorateur, puis la question du depot.
 // =============================================================================
+#include "../SessionService.hpp"   // 1.43.0
 #include "Screens.hpp"
 #include "../Licence.hpp"   // 1.30.0
 #include "../../core/Edition.hpp"   // 1.12.14 : IHM Studio - sans automate
@@ -112,6 +113,12 @@ void MainAnalysisScreen::refreshTopBarLot8() {
             undo.push_back({it->info.label.empty() ? std::string("Action sans nom") : it->info.label, ago(it->last)});
         topBar_->setUndoList(std::move(undo));
         topBar_->setRecentProjects(app_.recentPaths());
+    }
+    // 1.43.0 : la session en cours (a chaque image : une entree demandee se voit tout de suite).
+    {
+        auto& sess = app_.session();
+        const std::string t = sess.chipText();
+        topBar_->setSession({t, t, t.empty() ? std::string{} : sess.chipTip(), sess.knocks().empty() ? 4 : 2});
     }
     if (!tick) return;
     topBarNoticesAt_ = now;

@@ -763,6 +763,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\Zoom.cpp" />
     <ClCompile Include="src\ui\widgets\CrashReport.cpp" />
     <ClCompile Include="src\app\ReportWindow.cpp" />
+    <ClCompile Include="src\app\SessionDialogs.cpp" />
+    <ClCompile Include="src\app\SessionMarks.cpp" />
+    <ClCompile Include="src\app\SessionService.cpp" />
     <ClCompile Include="src\app\SvgRenderer.cpp" />
     <ClCompile Include="src\help\Trails.cpp" />
     <ClCompile Include="src\app\ai\AiKnowledge.cpp" />
@@ -1363,6 +1366,9 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp" />
     <ClInclude Include="src\ui\widgets\CrashReport.hpp" />
     <ClInclude Include="src\app\ReportWindow.hpp" />
+    <ClInclude Include="src\app\SessionDialogs.hpp" />
+    <ClInclude Include="src\app\SessionMarks.hpp" />
+    <ClInclude Include="src\app\SessionService.hpp" />
     <ClInclude Include="src\app\SvgRenderer.hpp" />
     <ClInclude Include="src\app\ZoomMemory.hpp" />
     <ClInclude Include="src\help\Trails.hpp" />

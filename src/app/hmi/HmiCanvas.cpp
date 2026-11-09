@@ -2,6 +2,7 @@
 #include "HmiImages.hpp"           // 1.14.1 (lot N6) : le dessin de l'image a poser
 #include "../../hmi/HmiGuide.hpp"   // 1.14.1 (lot N6) : fold (le nom de l'Image posee)
 #include "HmiPartage.hpp"   // 1.12.27 : copier dans une fenetre, coller dans l'autre
+#include "../SessionMarks.hpp"   // 1.43.0 : les objets tenus par les equipiers d'une session
 #include "../TablePaste.hpp"
 #include "../../hmi/HmiNavigation.hpp"
 #include "HmiIcons.hpp"
@@ -183,9 +184,18 @@ Pt HmiCanvas::toView(gfx::Point s) const {
 // ---------------------------------------------------------------- selection -
 void HmiCanvas::setSelection(std::vector<Id> ids, bool notify) {
     std::vector<Id> clean;
+    std::string taken;   // 1.43.0 : en session, un objet tenu par un equipier ne se choisit pas
     if (const auto* v = view())
-        for (Id id : ids)
-            if (v->object(id) && std::find(clean.begin(), clean.end(), id) == clean.end()) clean.push_back(id);
+        for (Id id : ids) {
+            if (!v->object(id) || std::find(clean.begin(), clean.end(), id) != clean.end()) continue;
+            if (const auto* h = sessionmarks::heldByOther(viewId_, id)) {
+                if (taken.empty()) taken = "\xC2\xAB " + v->object(id)->name + " \xC2\xBB est pris par " + h->name + " : il le garde tant qu'il l'a choisi.";
+                continue;
+            }
+            clean.push_back(id);
+        }
+    if (!taken.empty()) sessionmarks::refused(taken);
+    if (sessionmarks::active()) sessionmarks::mine(viewId_, clean);
     if (clean == selection_) return;
     selection_ = std::move(clean);
     // 1.12.12 (lot H) : le sommet choisi est celui d'un objet ; une autre selection l'oublie.
@@ -1278,6 +1288,29 @@ void HmiCanvas::paintPendingDots(const ui::PaintContext& ctx, const HmiViewport&
     }
 }
 
+// 1.43.0 : EN SESSION, les objets qu'un equipier tient (il les a choisis) : un contour de sa couleur et son nom au-dessus.
+void HmiCanvas::paintSessionHolds(const ui::PaintContext& ctx, const HmiViewport& vp) {
+    if (!sessionmarks::active()) return;
+    sessionmarks::seen(viewId_);
+    const auto* v = view();
+    if (!v) return;
+    const auto font = ctx.theme.font.smallUi;
+    for (const auto& [id, h] : sessionmarks::heldIn(viewId_)) {
+        const auto* o = v->object(id);
+        if (!o || (!showHidden_ && v->effectivelyHidden(*o))) continue;
+        const Box b = hmi::edit::rotatedBounds(*o);
+        const gfx::Point a = vp.toScreen(b.x, b.y), z = vp.toScreen(b.right(), b.bottom());
+        const gfx::Rect r{std::min(a.x, z.x) - 3.f, std::min(a.y, z.y) - 3.f, std::abs(z.x - a.x) + 6.f, std::abs(z.y - a.y) + 6.f};
+        const auto col = gfx::Color::rgb(h->color);
+        ui::shapes::strokeRoundedRect(ctx.r, r, col, 5.f, 2.f);
+        const std::string tag = h->name.empty() ? std::string("?") : h->name;
+        const float tw = ctx.r.measure(tag, font).width + 14.f, th = 20.f;
+        const gfx::Rect t{r.x, r.y - th - 1.f, tw, th};
+        ctx.r.fillRoundedRect(t, col, 5.f);
+        ctx.r.drawText({t.x + 7.f, t.y + (th - ctx.r.lineHeight(font)) * 0.5f}, tag, font, gfx::Color::rgb(0xFFFFFF));
+    }
+}
+
 std::string HmiCanvas::editTipAt(gfx::Point screen) const {
     const auto* v = view();
     if (!v || !editTip_) return {};
@@ -1561,6 +1594,7 @@ void HmiCanvas::onPaint(const ui::PaintContext& ctx) {
     }
 
     paintPendingDots(ctx, vp);   // 1.12.26
+    paintSessionHolds(ctx, vp);  // 1.43.0 : les objets tenus par les equipiers
     paintSelection(ctx, vp);
     paintDimensions(ctx, vp);    // 1.12.30 : les cotes (Alt au survol, un deplacement)
 

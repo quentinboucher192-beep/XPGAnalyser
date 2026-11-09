@@ -24,7 +24,7 @@ import re
 import sys
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
-DOSSIERS = ["core", "xls", "domain", "import", "export", "project", "sim", "ui", "menu", "help", "hmi", "deploy", "app"]
+DOSSIERS = ["core", "xls", "domain", "import", "export", "project", "sim", "ui", "menu", "help", "hmi", "deploy", "session", "app"]   # 1.43.0 : session
 
 
 def attendus():

@@ -388,7 +388,7 @@ fr.Lancer=Lancer {#NomApi}
 fr.LancerIhm=Lancer {#NomIhm}
 fr.LancerPoste=Lancer le poste d'exploitation
 fr.EpinglerBarre=Épingler à la barre des tâches (au premier lancement de chaque application : Windows te demande de confirmer)
-fr.Parefeu=Laisser IHM Studio recevoir des connexions (une règle du pare-feu Windows) : les esclaves Modbus simulés et le poste ne déclenchent pas l'alerte au premier lancement
+fr.Parefeu=Laisser IHM Studio recevoir des connexions (une règle du pare-feu Windows) : les sessions (plusieurs PC sur un projet), les esclaves Modbus simulés et le poste ne déclenchent pas l'alerte au premier lancement
 
 ; 1.14.0 : ce qu'on installe. Leur page est sautée : la page « Que veux-tu installer ? » les règle (ses
 ; quatre profils : deux = api + ihm ; api ; ihm ; poste = IHM-Studio.exe sans l'éditeur dans le menu).

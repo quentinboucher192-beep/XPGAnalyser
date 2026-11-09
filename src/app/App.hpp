@@ -42,6 +42,7 @@ struct SDL_Window;
 namespace app {
 
 class ScriptRunner;
+class SessionService;   // 1.43.0 : les sessions (plusieurs PC sur un projet)
 
 struct AppOptions {
     std::string title{"PLC Project Analyzer"};
@@ -104,6 +105,8 @@ struct StatusNotice { std::string text; double seconds{6.0}; };
 // Lot 21 : le projet vient d'etre enregistre ; `autoVersion` : la version
 // automatique creee dans la foulee ("V7"), vide sinon.
 struct ProjectSaved { std::string autoVersion; };
+// 1.43.0 : une vue IHM a ouvrir (Suivre un equipier d'une session) ; l'ecran d'analyse l'ouvre.
+struct OpenHmiView { std::uint32_t view{0}; };
 
 class App {
 public:
@@ -387,6 +390,8 @@ public:
     //  fichier importe. Un .XHW qui complete l'import en cours ne le remplace
     //  donc pas ; un autre .XPG, si.
     [[nodiscard]] std::shared_ptr<hmi::Document> hmi() const noexcept { return hmi_; }
+    // 1.43.0 : LES SESSIONS - plusieurs PC sur le projet ouvert (app/SessionService ; docs/SESSIONS.md).
+    [[nodiscard]] SessionService& session() noexcept { return *session_; }
     // Ce que le chargement a lu de travers (cles inconnues, references
     // cassees...). Vide quand tout s'est bien passe.
     [[nodiscard]] const std::vector<std::string>& hmiWarnings() const noexcept { return hmiWarnings_; }
@@ -483,6 +488,7 @@ private:
     // Les captures et les sessions rejouees (--script).
     std::string                                captureRequest_;
     std::unique_ptr<ScriptRunner>              script_;
+    std::unique_ptr<SessionService>            session_;   // 1.43.0
     // Lot 7 : les fichiers deposes de cette image (dropFile), donnes ensemble a
     // l'ecran d'analyse au debut de la suivante ; `dropWait_` : les images deja
     // attendues pendant que l'ecran du dessus rend la main.

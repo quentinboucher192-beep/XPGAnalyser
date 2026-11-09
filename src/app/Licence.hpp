@@ -216,6 +216,7 @@ struct Answer {
     bool        online{false};
     std::string code;
     std::string mail, mailTo;
+    std::string option;      // 1.43.0 : une demande d'option acceptee (son nom) ; vide : une licence
 };
 void queueAnswer(Answer a);
 [[nodiscard]] std::optional<Answer> takeAnswer();
