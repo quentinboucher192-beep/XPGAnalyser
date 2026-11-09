@@ -3781,6 +3781,9 @@
     <ClInclude Include="src\session\SessionProtocol.hpp">
       <Filter>session</Filter>
     </ClInclude>
+    <ClInclude Include="src\session\SessionRelay.hpp">
+      <Filter>session</Filter>
+    </ClInclude>
     <ClInclude Include="src\session\SessionSync.hpp">
       <Filter>session</Filter>
     </ClInclude>

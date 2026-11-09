@@ -58,7 +58,6 @@ export const DROITS_ADMINS = [
     "demandes",
     "codes",
     "client_supprimer",
-    "client_restaurer", // 1.44.0 : un client restaure (l'historique et le journal de l'Admin)
     "clients_exporter",
     "courriels",
 ];
@@ -78,6 +77,7 @@ export const ACTIONS_JOURNAL = [
     "demande_refuser",
     "code_revoir",
     "client_supprimer",
+    "client_restaurer", // 1.44.0 : un client restaure (l'historique et le journal de l'Admin)
     "clients_exporter",
     "courriel",
     "admin_ajouter",

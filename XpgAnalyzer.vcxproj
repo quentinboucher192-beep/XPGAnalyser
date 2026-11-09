@@ -1413,6 +1413,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\Pairing.hpp" />
     <ClInclude Include="src\session\SessionLink.hpp" />
     <ClInclude Include="src\session\SessionProtocol.hpp" />
+    <ClInclude Include="src\session\SessionRelay.hpp" />
     <ClInclude Include="src\session\SessionSync.hpp" />
     <ClInclude Include="src\deploy\Paths.hpp" />
     <ClInclude Include="src\deploy\Protocol.hpp" />
