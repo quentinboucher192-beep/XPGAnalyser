@@ -1,0 +1,87 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>IHM Studio - notification avec fichier</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="licwin.css">
+<style>
+.nl{width:390px;flex:none;background:var(--surface2);border-right:1px solid var(--line);display:flex;flex-direction:column}
+.nl .hd3{display:flex;align-items:center;gap:11px;padding:20px 18px 14px}
+.nl .lg{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;background:linear-gradient(140deg,#2dd4bf,#0d9488 55%,#0f766e);flex:none}
+.it{display:flex;gap:11px;padding:12px 14px;margin:0 10px;border-radius:12px;position:relative}
+.it+.it{margin-top:2px}
+.it.on{background:#fff;border:1px solid var(--line);box-shadow:var(--sh1)}
+.it .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.it .ic .ico{width:16px;height:16px}
+.it .t2{font-weight:600;font-size:13px;line-height:1.35}
+.it .s2{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}
+.it .w{font-size:11.5px;color:var(--faint);white-space:nowrap}
+.it .un{position:absolute;left:3px;top:24px;width:7px;height:7px;border-radius:50%;background:var(--teal)}
+.fl{display:inline-flex;align-items:center;gap:5px;margin-top:6px;height:22px;padding:0 8px;border-radius:7px;background:var(--sunken);font:600 11.5px Inter;color:var(--ink2)}
+.fl .ico{width:12px;height:12px}
+.att{border:1.5px solid var(--line);border-radius:16px;background:#fff;box-shadow:var(--sh2);overflow:hidden}
+.att .top3{display:flex;gap:14px;align-items:center;padding:16px 18px}
+.att .fi{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;color:#fff;background:linear-gradient(140deg,#8b6dff,#6d4aff 45%,#4b2fd6);box-shadow:0 6px 16px rgba(109,74,255,.35);flex:none}
+.att .fi .ico{width:24px;height:24px}
+.att .chk{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 14px}
+.att .sha{display:flex;align-items:center;gap:10px;padding:10px 18px;background:var(--surface2);border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.st4{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink2)}
+.st4 .n{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:var(--acc-50);color:var(--acc-700);font:700 11.5px Inter;flex:none}
+.bad{display:flex;gap:12px;align-items:center;padding:12px 14px;border-radius:12px;border:1px dashed #f3c7c7;background:#fffafa}
+.bad .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--red-50);color:var(--red);flex:none}
+.lbl3{position:absolute;z-index:26;font:700 12px Inter;letter-spacing:.08em;text-transform:uppercase;color:#e2e8f0;display:flex;align-items:center;gap:8px}
+</style></head><body><script src="icons.js"></script>
+<div class="bgimg"></div><div class="veil"></div>
+<div class="dlg" style="left:60px;top:110px;width:1200px;height:780px">
+ <div class="nl">
+  <div class="hd3"><span class="lg"><i data-i="bell"></i></span><div class="grow"><b style="font:650 15px Inter;display:block">Notifications</b><span class="cap">IHM Studio 1.43.0 · PC-LABO-02</span></div></div>
+  <div style="padding:0 18px 12px"><div class="seg" style="width:100%"><span class="on">Toutes <b style="font-weight:600;color:var(--faint)">6</b></span><span>Non lues <b style="font-weight:600;color:var(--faint)">2</b></span><span><i data-i="clip"></i>Avec fichiers</span></div></div>
+  <div class="it on"><span class="un"></span><span class="ic" style="background:var(--violet-50);color:var(--violet)"><i data-i="userplus"></i></span><div class="grow"><div class="row gap8"><span class="t2">Camille t'a ajoutée comme admin</span><span class="w" style="margin-left:auto">il y a 2 min</span></div><div class="s2">Installe l'Admin : il crée ta clé sur ce PC.</div><span class="fl"><i data-i="clip"></i>1 fichier · 6,5 Mo</span></div></div>
+  <div class="it"><span class="un"></span><span class="ic" style="background:var(--green-50);color:var(--green)"><i data-i="refresh"></i></span><div class="grow"><div class="row gap8"><span class="t2">Licence renouvelée</span><span class="w" style="margin-left:auto">hier</span></div><div class="s2">XPG-2026-00007 · jusqu'au 08/11/2027</div></div></div>
+  <div class="it"><span class="ic" style="background:var(--blue-50);color:var(--blue)"><i data-i="msg"></i></span><div class="grow"><div class="row gap8"><span class="t2">Annonce de l'éditeur</span><span class="w" style="margin-left:auto">3 j</span></div><div class="s2">Nouvelle option : Travail à plusieurs</div></div></div>
+  <div class="it"><span class="ic" style="background:var(--red-50);color:var(--red)"><i data-i="filex"></i></span><div class="grow"><div class="row gap8"><span class="t2">Fichier refusé</span><span class="w" style="margin-left:auto">5 j</span></div><div class="s2">Outil-Diagnostic.exe : la signature ne correspond pas. Il n'a pas été proposé.</div></div></div>
+  <div class="it"><span class="ic" style="background:var(--acc-50);color:var(--acc)"><i data-i="sparkles"></i></span><div class="grow"><div class="row gap8"><span class="t2">IHM Studio 1.43.0 est installé</span><span class="w" style="margin-left:auto">6 j</span></div><div class="s2">Voir les nouveautés</div></div></div>
+  <div class="it"><span class="ic" style="background:var(--sunken);color:var(--muted)"><i data-i="key"></i></span><div class="grow"><div class="row gap8"><span class="t2">Licence installée sur ce PC</span><span class="w" style="margin-left:auto">12/10</span></div><div class="s2">PROFESSIONAL · XPG-2026-00007</div></div></div>
+  <div style="margin-top:auto;padding:12px 18px;border-top:1px solid var(--line)" class="cap row gap6"><i data-i="info" class="sm"></i>Accueil › Notifications, ou la cloche du projet</div>
+ </div>
+ <div class="mc">
+  <div class="mh">
+   <span class="avatar" style="width:44px;height:44px;border-radius:12px;font-size:15px;background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span>
+   <div><div class="h1" style="font-size:22px">Camille t'a ajoutée comme admin</div>
+    <div class="muted row gap8" style="margin-top:4px">De Camille, l'éditeur · aujourd'hui 11:02<span class="pill p-green" style="height:22px"><i data-i="shield" style="width:12px;height:12px"></i>message signé par l'éditeur</span></div></div>
+   <span class="x"><i data-i="x"></i></span>
+  </div>
+  <div class="scroll" style="display:flex;flex-direction:column">
+   <div style="font-size:14px;line-height:1.55;color:var(--ink2);max-width:700px">Tu vas pouvoir gérer les licences, les offres et les clients avec l'Admin, comme les autres admins. Installe-le sur ce PC : il crée ta clé. Ensuite, Camille t'appelle pour lire avec toi l'empreinte de ta clé.</div>
+   <div class="over" style="margin:20px 0 8px">1 fichier joint</div>
+   <div class="att">
+    <div class="top3"><span class="fi"><i data-i="key"></i></span>
+     <div class="grow"><div class="mono" style="font-size:14px;font-weight:600">XPG-License-Admin-Setup-1.43.0.exe</div><div class="cap" style="margin-top:3px">6,5 Mo · l'Admin 1.43.0 · installateur Windows</div></div>
+     <span class="btn"><i data-i="save" class="sm"></i>Enregistrer…</span><span class="btn teal"><i data-i="download" class="sm"></i>Installer</span></div>
+    <div class="chk"><span class="pill p-green"><i data-i="check" style="width:12px;height:12px;stroke-width:3"></i>Signé par l'éditeur</span><span class="pill p-green"><i data-i="check" style="width:12px;height:12px;stroke-width:3"></i>Empreinte vérifiée</span><span class="pill p-gray">reçu du service XPG · chiffré</span></div>
+    <div class="sha"><i data-i="fp" class="sm"></i><span>SHA-256</span><span class="mono" style="color:var(--ink2);font-size:12px">3F9A 0C4E 81D2 77B0 … 5E63 7B21 C21E</span><span style="margin-left:auto">la même que celle publiée par l'éditeur ✓</span></div>
+   </div>
+   <div class="over" style="margin:22px 0 10px">Ce qui va se passer</div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 22px">
+    <div class="st4"><span class="n">1</span><div>Tu installes l'Admin (2 min). Tes Studios ne changent pas.</div></div>
+    <div class="st4"><span class="n">2</span><div>Il crée <b style="font-weight:650">ta clé</b>, sur ce PC. Elle n'en sort jamais.</div></div>
+    <div class="st4"><span class="n">3</span><div>Camille t'appelle : vous lisez <b style="font-weight:650">l'empreinte</b> ensemble.</div></div>
+    <div class="st4"><span class="n">4</span><div>Camille accepte : tu es admin, l'Admin te le dit.</div></div>
+   </div>
+   <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px">
+    <div class="note i"><i data-i="laptop"></i><div><b>Envoyé à ce PC seulement</b> : Camille l'a choisi. Les autres PC ne le voient pas.</div></div>
+    <div class="note v" style="background:var(--acc-50);color:var(--acc-700)"><i data-i="box"></i><div>Les mises à jour de l'Admin arriveront ici aussi, avec celles des Studios.</div></div>
+   </div>
+   <div class="over" style="margin:auto 0 8px">Et si un fichier n'est pas sûr</div>
+   <div class="bad"><span class="ic"><i data-i="filex"></i></span><div class="grow"><div class="h3">Outil-Diagnostic.exe · refusé</div><div class="cap" style="margin-top:2px">La signature ne correspond pas : il a été modifié en route. Il n'est ni proposé, ni enregistré. La notification du 04/11 le dit.</div></div><span class="pill p-red">Refusé</span></div>
+  </div>
+  <div class="foot">
+   <span class="cap row gap6"><i data-i="lock" class="sm"></i>Un fichier joint est gardé 30 jours, puis il faut le redemander.</span>
+   <span class="btn sm ghost" style="margin-left:auto"><i data-i="trash" class="sm"></i>Supprimer</span>
+   <span class="btn">Fermer</span>
+  </div>
+ </div>
+</div>
+<div class="mk" style="left:584px;top:262px">1</div><div class="mk" style="left:992px;top:374px">2</div><div class="mk" style="left:1238px;top:320px">3</div><div class="mk" style="left:1238px;top:756px">4</div>
+<div class="annot" data-n="1" style="left:1280px;top:236px;width:300px">Une notification peut <b>porter des fichiers</b>. Ici, l'installateur de l'Admin : ce PC passe admin.</div>
+<div class="annot" data-n="2" style="left:1280px;top:376px;width:300px">Les fichiers sont <b>toujours signés par la clé de l'éditeur</b> et vérifiés (SHA-256) avant d'être proposés.</div>
+<div class="annot" data-n="3" style="left:1280px;top:306px;width:300px"><b>Installer</b> lance l'installateur vérifié ; <b>Enregistrer…</b> le garde où tu veux.</div>
+<div class="annot" data-n="4" style="left:1280px;top:744px;width:300px">Un fichier <b>non signé ou modifié est refusé</b>, et la notification le dit.</div>
+<div class="lbl3" style="left:62px;top:72px"><i data-i="laptop" class="sm"></i>Chez Nina, sur PC-LABO-02 : juste après l'étape 1 de la planche 02</div>
+</body></html>

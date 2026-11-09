@@ -1,0 +1,143 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Plusieurs admins - le principe</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css">
+<style>
+body{background:radial-gradient(1200px 700px at 30% 45%,#f3f0ff 0%,var(--bg) 60%)}
+.hd2{position:absolute;left:48px;top:40px;width:1000px}
+.hd2 .o{font:700 12px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-700)}
+.hd2 h1{font:750 30px/1.15 Inter;letter-spacing:-.02em;margin:8px 0 8px}
+.pcn{position:absolute;width:300px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);padding:13px 14px;z-index:2}
+.pcn .r{display:flex;align-items:center;gap:10px}
+.pcn .nm{font:650 14px Inter}
+.pcn .s{font-size:12px;color:var(--muted)}
+.pcn .wk{margin-top:8px;display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:9px;background:var(--surface2);font-size:12px;color:var(--ink2);line-height:1.4}
+.pcn .wk .ico{width:14px;height:14px;color:var(--faint);flex:none;margin-top:1px}
+.plus{border:2px solid var(--violet);box-shadow:0 0 0 6px rgba(109,74,255,.10),var(--sh2)}
+.big2{width:44px;height:44px;font-size:15px}
+.vault{margin-top:10px;display:flex;gap:10px;align-items:flex-start;padding:10px 11px;border-radius:11px;background:linear-gradient(140deg,#1e1b4b,#111827);color:#e2e8f0;font-size:12px;line-height:1.4}
+.vault .k{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(250,204,21,.16);color:#facc15;flex:none}
+.vault .k .ico{width:16px;height:16px}
+.vault b{color:#fff;font-weight:650;font-size:12.5px}
+.svc2{position:absolute;width:270px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh2);padding:44px 14px 12px;z-index:2;text-align:left}
+.svc2 .c{position:absolute;left:50%;top:-30px;transform:translateX(-50%);width:60px;height:60px;border-radius:18px;display:grid;place-items:center;background:linear-gradient(140deg,#93c5fd,#2563eb);color:#fff;box-shadow:0 8px 22px rgba(37,99,235,.35)}
+.svc2 .c .ico{width:28px;height:28px}
+.svc2 .ln2{display:flex;gap:8px;align-items:flex-start;padding:7px 0;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
+.svc2 .ln2 .ico{width:14px;height:14px;flex:none;margin-top:1px}
+.studio{position:absolute;width:300px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);padding:13px 14px;z-index:2}
+.ok{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--ink2);padding:4px 0}
+.ok .ico{width:14px;height:14px;flex:none;margin-top:1px;stroke-width:2.4}
+svg.wires{position:absolute;left:0;top:0;width:1600px;height:1000px;z-index:1}
+.lbl{position:absolute;font:600 11.5px Inter;color:var(--ink2);background:#fff;border:1px solid var(--line);padding:3px 9px;border-radius:99px;box-shadow:var(--sh1);z-index:3;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.lbl .ico{width:13px;height:13px}
+.msg{position:absolute;font:600 11px "JetBrains Mono";padding:3px 8px;border-radius:7px;z-index:3;white-space:nowrap}
+.rules{position:absolute;left:1070px;top:40px;width:490px;display:flex;flex-direction:column;gap:10px}
+.rule{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--sh1)}
+.rule .n{width:26px;height:26px;border-radius:8px;background:var(--violet-50);color:var(--violet-700);display:grid;place-items:center;font:750 12.5px Inter;flex:none}
+.rule b{font-weight:650}
+.rule .t{font-size:13px;line-height:1.45;color:var(--ink2)}
+.pow{position:absolute;left:48px;top:806px;width:1512px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh1);display:flex;overflow:hidden}
+.pow .c1{flex:1.4;padding:14px 18px}
+.pow .c2{flex:1;padding:14px 18px;background:var(--violet-50);border-left:1px solid var(--violet-100)}
+.pow .it{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--ink2);padding:3px 0}
+.pow .it .ico{width:14px;height:14px;flex:none;stroke-width:2.4}
+.pow .g2{display:grid;grid-template-columns:1fr 1fr;column-gap:14px;margin-top:8px}
+.pow .c1 .g2{grid-template-columns:1fr 1fr 1fr}
+.dimc{opacity:.78}
+</style></head><body><script src="icons.js"></script>
+<div class="hd2"><div class="o">Proposition · plusieurs admins</div><h1>Plusieurs admins : le principe</h1>
+ <div class="muted" style="max-width:960px;font-size:14px">L'Admin s'installe sur plusieurs PC. Chaque admin a <b style="color:var(--ink)">sa propre clé</b>, que tu certifies. Tous ont les mêmes pouvoirs, sauf quatre que tu gardes : tu es <b style="color:var(--ink)">l'admin+</b>. La clé de l'éditeur ne quitte jamais ton PC.</div></div>
+
+<svg class="wires" viewBox="0 0 1600 1000">
+ <g fill="none" stroke-width="2.5" stroke-linecap="round">
+  <path d="M348 300 C 420 300, 400 420, 448 420" stroke="#6d4aff"/>
+  <path d="M348 640 C 410 640, 400 520, 448 520" stroke="#0e7490"/>
+  <path d="M718 420 C 760 420, 730 300, 772 300" stroke="#2563eb"/>
+  <path d="M718 520 C 760 520, 740 640, 772 650" stroke="#ea580c" stroke-dasharray="7 6"/>
+  <path d="M583 640 L 583 712" stroke="#dc2626" stroke-dasharray="5 6"/>
+ </g>
+</svg>
+
+<!-- Camille : l'admin+ -->
+<div class="pcn plus" style="left:48px;top:186px">
+ <div class="r"><span class="av2 big2" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span><div class="grow"><div class="nm row gap6">Camille <span class="pill p-violet" style="height:20px;font-size:11px"><i data-i="crown" style="width:11px;height:11px"></i>admin+</span></div><div class="s">toi · PC-BUREAU-01</div></div></div>
+ <div class="vault"><span class="k"><i data-i="key"></i></span><div><b>La clé de l'éditeur</b><div style="color:#a5b4fc;margin-top:2px">ne quitte jamais ce PC · elle ne sert qu'à certifier : les admins, les versions</div></div></div>
+ <div class="wk"><i data-i="fp"></i><span>Sa clé d'admin, pour le reste : licences, offres, clients…</span></div>
+</div>
+
+<!-- Léa -->
+<div class="pcn" style="left:48px;top:556px">
+ <div class="r"><span class="av2 big2" style="background:#0e7490">L</span><div class="grow"><div class="nm row gap6">Léa <span class="pill p-gray" style="height:20px;font-size:11px">admin</span></div><div class="s">PC-COMMERCIAL-02 · au bureau</div></div></div>
+ <div class="wk"><i data-i="fp"></i><span>Sa clé d'admin, <b style="font-weight:650;color:var(--ink)">créée sur ce PC</b>. Elle n'en sort jamais.</span></div>
+ <div class="wk"><i data-i="shield" style="color:var(--violet)"></i><span>Son certificat d'admin, signé par la clé de l'éditeur</span></div>
+</div>
+
+<!-- le service -->
+<div class="svc2" style="left:448px;top:368px">
+ <span class="c"><i data-i="cloud"></i></span>
+ <div class="h3" style="text-align:center;font-size:14px">Le service XPG</div>
+ <div class="cap" style="text-align:center;margin:2px 0 8px">chiffré · il ne voit aucune clé privée</div>
+ <div class="ln2"><i data-i="shield" style="color:var(--violet)"></i><div><b style="font-weight:650">Certificats publiés</b> : Camille, Léa, Hugo</div></div>
+ <div class="ln2"><i data-i="shieldx" style="color:var(--red)"></i><div><b style="font-weight:650">Révoqué</b> : Paul, le 02/10/2026</div></div>
+ <div class="ln2"><i data-i="scroll" style="color:var(--amber)"></i><div><b style="font-weight:650">Journal des admins</b> : 248 lignes, signées, chaînées</div></div>
+</div>
+
+<!-- Paul, retire -->
+<div class="pcn dimc" style="left:448px;top:712px;width:270px;padding:10px 12px">
+ <div class="r"><span class="av2" style="background:#94a3b8">P</span><div class="grow"><div class="nm row gap6" style="font-size:13px">Paul <span class="pill p-red" style="height:20px;font-size:11px">retiré</span></div><div class="s">certificat révoqué : ses nouvelles signatures sont refusées</div></div></div>
+</div>
+
+<!-- les Studios des clients -->
+<div class="studio" style="left:772px;top:186px">
+ <div class="r row gap10"><span class="alogo" style="width:38px;height:38px;border-radius:11px;background:linear-gradient(140deg,#2dd4bf,#0d9488 55%,#0f766e);color:#fff;display:grid;place-items:center"><i data-i="monitor"></i></span><div><div class="h3" style="font-size:14px">Les Studios des clients</div><div class="cap">reçoivent une licence signée par Léa</div></div></div>
+ <div style="margin-top:10px;padding:9px 11px;border-radius:10px;background:var(--surface2)">
+  <div class="ok"><i data-i="check" style="color:var(--green)"></i><div>signée par <b style="font-weight:650">la clé de Léa</b></div></div>
+  <div class="ok"><i data-i="check" style="color:var(--green)"></i><div>son certificat est signé par <b style="font-weight:650">la clé de l'éditeur</b></div></div>
+  <div class="ok"><i data-i="check" style="color:var(--green)"></i><div>son certificat n'est pas révoqué</div></div>
+ </div>
+ <div class="row gap8" style="margin-top:10px"><span class="pill p-green"><span class="d"></span>Licence acceptée</span><span class="cap">rien ne change pour le client</span></div>
+</div>
+
+<!-- Hugo -->
+<div class="pcn" style="left:772px;top:600px;width:270px">
+ <div class="r"><span class="av2 big2" style="background:#ea580c">H</span><div class="grow"><div class="nm row gap6">Hugo <span class="pill p-gray" style="height:20px;font-size:11px">admin</span></div><div class="s">portable · à distance</div></div></div>
+ <div class="wk"><i data-i="fp"></i><span>Sa clé d'admin, créée sur ce portable</span></div>
+ <div class="wk"><i data-i="scroll" style="color:var(--amber)"></i><span>Chacune de ses actions part au journal, signée par sa clé</span></div>
+</div>
+
+<div class="msg" style="left:356px;top:262px;background:var(--violet-50);color:var(--violet-700)">↓ certificats d'admin</div>
+<div class="msg" style="left:356px;top:336px;background:#fff7e6;color:#b45309;border:1px solid #fde7c2">↑ le journal, pour toi</div>
+<div class="msg" style="left:356px;top:654px;background:#e6f6fa;color:#0e7490">↑ licence XPG-2026-00412</div>
+<div class="msg" style="left:594px;top:652px;background:var(--red-50);color:#b91c1c">✗ refusé</div>
+<div class="msg" style="left:726px;top:436px;background:var(--blue-50);color:#1d4ed8">→ licence + certificat</div>
+<div class="msg" style="left:732px;top:560px;background:#fff1e8;color:#c2410c">← journal</div>
+<div class="lbl" style="left:822px;top:557px"><i data-i="globe" style="color:var(--blue)"></i>par Internet · chiffré</div>
+
+<div class="rules">
+ <div class="rule"><span class="n">1</span><div class="t"><b>La clé de l'éditeur reste chez toi.</b> Elle ne quitte jamais PC-BUREAU-01 (chiffrée, avec ton mot de passe). Elle ne sert qu'à certifier : <b>les admins</b> et <b>les versions</b>.</div></div>
+ <div class="rule"><span class="n">2</span><div class="t"><b>Chaque admin a sa clé.</b> Elle naît sur son PC et n'en sort jamais. Tu la certifies : un <b>certificat d'admin</b>, signé par la clé de l'éditeur, publié sur le service.</div></div>
+ <div class="rule"><span class="n">3</span><div class="t"><b>Les Studios vérifient seuls.</b> Ce qu'un admin signe porte son certificat. Signé par l'éditeur et pas révoqué : <b>accepté</b>. Pour les clients, rien ne change.</div></div>
+ <div class="rule"><span class="n">4</span><div class="t"><b>Retirer un admin = révoquer son certificat.</b> Dès lors, ses signatures sont refusées partout. Les licences qu'il a signées avant <b>restent valides</b> ; « Révoquer aussi ses licences » est une option.</div></div>
+ <div class="rule"><span class="n">5</span><div class="t"><b>Tout est écrit.</b> Chaque action d'un admin part au service, signée par sa clé et chaînée à la précédente : une ligne ne s'efface pas, ne se réécrit pas. Ce journal, <b>personne d'autre que toi</b> ne le lit.</div></div>
+ <div class="rule"><span class="n">6</span><div class="t"><b>Et si ton PC tombe en panne ?</b> La copie de secours de la clé de l'éditeur (clé USB chiffrée, au coffre) réinstalle l'admin+ ailleurs. Les admins continuent de travailler en attendant.</div></div>
+ <div class="rule" style="background:var(--violet-50);border-color:var(--violet-100)"><span class="n" style="background:#fff"><i data-i="userplus" class="sm"></i></span><div class="t"><b>Ajouter un admin, en 3 étapes</b> (planche 02) : tu le nommes ; son PC reçoit l'Admin dans ses notifications et crée sa clé ; vous lisez <b>l'empreinte au téléphone</b>, tu acceptes.</div></div>
+ <div class="rule" style="background:var(--violet-50);border-color:var(--violet-100)"><span class="n" style="background:#fff"><i data-i="box" class="sm"></i></span><div class="t"><b>Les mises à jour</b> (planches 06 et 07) : tu publies une version ; chaque PC pas à jour reçoit la notification, <b>les admins avec les 2 installateurs</b>. Toi aussi, en direct.</div></div>
+</div>
+
+<div class="pow">
+ <div class="c1"><div class="row gap8"><i data-i="users" class="sm" style="color:var(--ink2)"></i><span class="h3">Tous les admins (et toi) : les mêmes pouvoirs</span></div>
+  <div class="g2">
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Licences : créer, signer, prolonger</div>
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Offres et options</div>
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Clients</div>
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Demandes en ligne</div>
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Révoquer une licence</div>
+   <div class="it"><i data-i="check" style="color:var(--green)"></i>Voir la liste des admins</div>
+  </div></div>
+ <div class="c2"><div class="row gap8"><i data-i="crown" class="sm" style="color:var(--violet)"></i><span class="h3" style="color:var(--violet-700)">L'admin+ seulement : toi</span></div>
+  <div class="g2">
+   <div class="it"><i data-i="lock" style="color:var(--violet)"></i>Ajouter, retirer un admin</div>
+   <div class="it"><i data-i="lock" style="color:var(--violet)"></i>Lire le journal des admins</div>
+   <div class="it"><i data-i="lock" style="color:var(--violet)"></i>Changer la criticité</div>
+   <div class="it"><i data-i="lock" style="color:var(--violet)"></i>Publier une version</div>
+  </div></div>
+</div>
+</body></html>

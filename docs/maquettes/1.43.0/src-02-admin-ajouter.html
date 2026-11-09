@@ -1,0 +1,98 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - ajouter un admin</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.steps{display:flex;gap:16px;padding:18px 22px;flex:1;min-height:0}
+.stp{border:1px solid var(--line);border-radius:14px;background:#fff;display:flex;flex-direction:column;min-width:0}
+.stp.now2{border:2px solid var(--violet);box-shadow:0 0 0 5px rgba(109,74,255,.10)}
+.stp .sh{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+.stp .sn{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font:750 12.5px Inter;flex:none}
+.stp .sn.ok{background:var(--green-50);color:#15803d}
+.stp .sn.ok .ico{width:14px;height:14px;stroke-width:3}
+.stp .sn.now{background:var(--violet);color:#fff}
+.stp .sb{padding:14px 16px;flex:1;min-height:0;display:flex;flex-direction:column}
+.wc{display:flex;gap:11px;padding:11px 12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;align-items:center}
+.wc.on{border-color:var(--violet);background:var(--violet-50)}
+.wc+.wc{margin-top:8px}
+.wc .wi{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;background:#fff;border:1px solid var(--line)}
+.wc .wi .ico{width:16px;height:16px}
+.tl{position:relative;padding-left:30px}
+.tl:before{content:"";position:absolute;left:10px;top:8px;bottom:8px;width:2px;background:var(--green-50)}
+.ti{position:relative;padding:0 0 14px}
+.ti .b{position:absolute;left:-30px;top:0;width:22px;height:22px;border-radius:50%;background:var(--green-50);color:#15803d;display:grid;place-items:center;border:2px solid #fff}
+.ti .b .ico{width:12px;height:12px;stroke-width:3}
+.ti .t1{font-weight:600;font-size:13px;display:flex;gap:8px}
+.ti .t1 .h{margin-left:auto;font:500 12px Inter;color:var(--faint)}
+.scr{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface2)}
+.scr .bar2{display:flex;align-items:center;gap:8px;padding:8px 12px;background:linear-gradient(180deg,#101833,#0b1222);color:#e2e8f0;font:600 12px Inter}
+.scr .bar2 .lg{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;background:linear-gradient(140deg,#8b6dff,#4b2fd6)}
+.scr .bar2 .lg .ico{width:12px;height:12px;color:#fff}
+.fpk{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.fpk span{height:58px;border-radius:12px;border:1.5px solid var(--line2);display:grid;place-items:center;font:700 26px "JetBrains Mono";letter-spacing:.04em;color:var(--ink);background:#fff}
+.fpk.sm span{height:30px;font-size:13px;border-radius:7px;border-width:1px}
+.ckl{display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:12px;border:1.5px solid var(--violet);background:var(--violet-50);font-weight:600}
+</style></head><body><script src="icons.js"></script>
+<div class="bgshot" style="background-image:url(v/fond-01-admin-admins.png)"></div>
+<div class="scrim"></div>
+
+<div class="dlgx" style="left:150px;top:112px;width:1300px;height:800px">
+ <div class="dh" style="padding-bottom:16px;border-bottom:1px solid var(--line)"><span class="di" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6);color:#fff;box-shadow:0 6px 16px rgba(109,74,255,.3)"><i data-i="userplus"></i></span>
+  <div class="grow"><div class="h2" style="font-size:19px">Ajouter un admin</div><div class="muted" style="margin-top:3px">Trois étapes. Sa clé naît sur son PC ; toi, tu la certifies avec <b style="color:var(--ink)">la clé de l'éditeur</b>.</div></div>
+  <span class="pill p-amber" style="margin-top:4px"><span class="d"></span>Demande reçue · à vérifier</span><span style="color:var(--muted);margin-left:8px;margin-top:4px"><i data-i="x"></i></span></div>
+ <div class="steps">
+  <!-- 1 -->
+  <div class="stp" style="width:370px;flex:none">
+   <div class="sh"><span class="sn ok"><i data-i="check"></i></span><div class="grow"><div class="h3">1 · Son nom et son courriel</div><div class="cap">fait à 11:02</div></div></div>
+   <div class="sb">
+    <div class="flab">Prénom et nom</div><div class="field">Nina Perret</div>
+    <div class="flab" style="margin-top:14px">Courriel</div><div class="field"><i data-i="mail"></i>nina@exemple.fr</div>
+    <div class="flab" style="margin-top:14px">Comment lui envoyer l'Admin</div>
+    <div class="wc on"><span class="wi" style="color:var(--teal)"><i data-i="bell"></i></span><div class="grow"><div class="h3">Dans les notifications de son Studio</div><div class="cap" style="margin-top:2px">PC-LABO-02 · IHM Studio 1.43.0</div></div><span class="radio on"></span></div>
+    <div class="wc"><span class="wi" style="color:var(--blue)"><i data-i="link"></i></span><div class="grow"><div class="h3">Par un lien, dans un courriel</div><div class="cap" style="margin-top:2px">valable 48 h, une seule fois</div></div><span class="radio"></span></div>
+    <div class="flab" style="margin-top:14px">Son rôle</div>
+    <div class="row gap10"><div class="seg"><span class="on"><i data-i="shuser"></i>Admin</span><span style="color:var(--faint)"><i data-i="crown"></i>Admin+</span></div><span class="cap">un seul admin+ : toi</span></div>
+    <div class="note v" style="margin-top:auto"><i data-i="crown"></i><div>Elle aura les mêmes droits que les autres admins. Les 4 droits de l'admin+ restent à toi.</div></div>
+   </div>
+  </div>
+  <!-- 2 -->
+  <div class="stp" style="width:380px;flex:none">
+   <div class="sh"><span class="sn ok"><i data-i="check"></i></span><div class="grow"><div class="h3">2 · Elle installe l'Admin</div><div class="cap">fait à 11:10</div></div></div>
+   <div class="sb">
+    <div class="tl">
+     <div class="ti"><span class="b"><i data-i="check"></i></span><div class="t1">L'installateur est dans ses notifications<span class="h">11:02</span></div><div class="cap">XPG-License-Admin-Setup-1.43.0.exe · signé par l'éditeur</div></div>
+     <div class="ti"><span class="b"><i data-i="check"></i></span><div class="t1">Nina l'a installé sur PC-LABO-02<span class="h">11:08</span></div></div>
+     <div class="ti"><span class="b"><i data-i="check"></i></span><div class="t1">Son Admin a créé sa clé<span class="h">11:09</span></div><div class="cap">sur son PC ; elle n'en sortira jamais</div></div>
+     <div class="ti" style="padding-bottom:0"><span class="b"><i data-i="check"></i></span><div class="t1">Sa demande d'admin est arrivée<span class="h">11:10</span></div><div class="cap">avec l'empreinte de sa clé</div></div>
+    </div>
+    <div style="margin-top:auto"><div class="over" style="margin:18px 0 8px">Ce que voit Nina en ce moment</div>
+    <div class="scr">
+     <div class="bar2"><span class="lg"><i data-i="key"></i></span>License Manager<span style="margin-left:auto;color:#7c89a3;font-weight:500">Nina · admin en attente</span></div>
+     <div style="padding:12px 14px">
+      <div class="h3">Camille doit accepter ta clé</div>
+      <div class="cap" style="margin-top:2px">Camille va t'appeler. Lis-lui ton empreinte :</div>
+      <div class="fpk sm" style="margin-top:10px"><span>B7E2</span><span>48A9</span><span>1D3C</span><span>90F6</span><span>5A2E</span><span>C471</span></div>
+      <div class="cap" style="margin-top:10px">En attendant, l'Admin ne peut rien signer.</div>
+     </div>
+    </div></div>
+   </div>
+  </div>
+  <!-- 3 -->
+  <div class="stp now2" style="flex:1">
+   <div class="sh"><span class="sn now">3</span><div class="grow"><div class="h3">3 · Tu vérifies l'empreinte avec elle, et tu acceptes</div><div class="cap">au téléphone, pas par courriel</div></div><i data-i="phone" style="color:var(--violet)"></i></div>
+   <div class="sb">
+    <div style="font-size:13px;color:var(--ink2)">Appelle Nina et lisez l'empreinte ensemble, groupe par groupe. Elle la voit sur son écran.</div>
+    <div class="over" style="margin:16px 0 8px">L'empreinte de la clé de Nina, reçue ici</div>
+    <div class="fpk"><span>B7E2</span><span>48A9</span><span>1D3C</span><span>90F6</span><span>5A2E</span><span>C471</span></div>
+    <div class="row gap8 cap" style="margin-top:10px"><i data-i="fp" class="sm"></i>clé créée sur PC-LABO-02 à 11:09 · demande n° 4</div>
+    <div class="ckl" style="margin-top:18px"><span class="check on"><i data-i="check"></i></span>J'ai vérifié l'empreinte avec Nina</div>
+    <div class="note w" style="margin-top:12px"><i data-i="alert"></i><div><b>Un seul caractère diffère ?</b> Refuse la demande : quelqu'un s'est glissé entre vous.</div></div>
+    <div class="note v" style="margin-top:auto"><i data-i="key"></i><div>En acceptant, <b>la clé de l'éditeur signe son certificat d'admin</b>, ici, sur ton PC, puis le publie sur le service. Nina devient admin dans la minute.</div></div>
+   </div>
+  </div>
+ </div>
+ <div class="df"><span class="btn danger"><i data-i="x" class="sm"></i>Refuser la demande</span><span class="cap" style="margin-left:12px">Tout est écrit dans le journal des admins.</span><span class="btn" style="margin-left:auto">Plus tard</span><span class="btn primary"><i data-i="usercheck" class="sm"></i>Accepter Nina comme admin</span></div>
+</div>
+
+<div class="annot" data-n="1" style="left:150px;top:28px;width:370px">Son PC reçoit <b>l'installateur de l'Admin dans ses notifications</b> (planche 05), ou par un lien.</div>
+<div class="annot" data-n="2" style="left:536px;top:28px;width:380px">Sa clé <b>naît sur son PC et n'en sort jamais</b> : seule son empreinte voyage.</div>
+<div class="annot" data-n="3" style="left:932px;top:28px;width:518px"><b>Pourquoi au téléphone ?</b> Si quelqu'un se glissait entre vous (le service, un courriel), l'empreinte ne serait pas la même. Lire 24 caractères suffit.</div>
+</body></html>

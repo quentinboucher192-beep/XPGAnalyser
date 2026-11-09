@@ -1,0 +1,106 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - versions</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.pub{margin-top:18px;display:flex;overflow:hidden;border:1.5px solid var(--violet-100)}
+.pub .l{flex:1;min-width:0;padding:18px 20px}
+.pub .r{width:400px;flex:none;border-left:1px solid var(--line);background:var(--surface2);padding:18px 20px;display:flex;flex-direction:column}
+.dz{flex:1;min-width:0;border:2px dashed var(--line2);border-radius:14px;padding:14px;background:#fff}
+.dz.ok{border-color:#a7e3d9;background:#fbfffe}
+.dz.okv{border-color:var(--violet-100);background:#fdfcff}
+.dz .fi{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;color:#fff;flex:none}
+.dz .fi .ico{width:20px;height:20px}
+.dz .nm{font:600 12.5px "JetBrains Mono";white-space:nowrap}
+.dz .hint{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--faint);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line2)}
+.dz .hint .ico{width:13px;height:13px}
+.pl{height:21px;font-size:11px;padding:0 7px}
+.ta{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;background:#fff;font-size:13px;line-height:1.6;color:var(--ink2)}
+.wl{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13px;color:var(--ink2)}
+.wl .n{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:var(--violet-50);color:var(--violet-700);font:700 11.5px Inter;flex:none}
+table.t td{padding:12px 14px;vertical-align:middle} table.t th{padding:10px 14px}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.pcb{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--sunken);width:200px}
+.pcb i{display:block;height:100%}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:versions-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i><b>Versions</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">2</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:22px">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Versions</div><div class="muted" style="margin-top:4px">Ce que les Studios et les Admins installent · 54 PC suivis, dont 3 admins · seul l'admin+ publie</div></div>
+    <span class="btn" style="margin-left:auto;border-color:var(--violet);color:var(--violet-700);background:var(--violet-50)"><i data-i="upload"></i>Publier une version…</span></div>
+
+   <div class="card pub">
+    <div class="l">
+     <div class="row gap10"><span class="h2">Publier une version</span><span class="pill p-violet pl"><i data-i="crown" style="width:11px;height:11px"></i>admin+</span><span class="cap" style="margin-left:auto">glisse les 2 installateurs, ou Choisir…</span></div>
+     <div class="row gap12" style="margin-top:14px;align-items:stretch">
+      <div class="dz ok">
+       <div class="over" style="margin-bottom:10px">L'installateur des Studios</div>
+       <div class="row gap12"><span class="fi" style="background:linear-gradient(140deg,#2dd4bf,#0d9488)"><i data-i="download"></i></span><div class="grow" style="min-width:0"><div class="nm">API-IHM-Studio-Setup-1.43.1.exe</div><div class="cap" style="margin-top:2px">57 Mo · version <b style="color:var(--ink);font-weight:650">1.43.1</b> lue dans le fichier ✓</div></div></div>
+       <div class="flab" style="margin-top:12px">Qui le reçoit</div>
+       <div class="row gap10"><div class="seg"><span class="on"><i data-i="users"></i>Tout le monde</span><span>Les admins seulement</span></div><span class="cap">54 PC</span></div>
+       <div class="hint"><i data-i="upload"></i>Glisse un autre fichier ici pour le remplacer</div>
+      </div>
+      <div class="dz okv">
+       <div class="over" style="margin-bottom:10px">L'installateur de l'Admin</div>
+       <div class="row gap12"><span class="fi" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)"><i data-i="key"></i></span><div class="grow" style="min-width:0"><div class="nm">XPG-License-Admin-Setup-1.43.1.exe</div><div class="cap" style="margin-top:2px">6,6 Mo · version <b style="color:var(--ink);font-weight:650">1.43.1</b> lue dans le fichier ✓</div></div></div>
+       <div class="flab" style="margin-top:12px">Qui le reçoit</div>
+       <div class="row gap10"><span class="pill p-violet" style="height:36px;padding:0 12px;border-radius:10px"><i data-i="shuser" style="width:14px;height:14px"></i>Les admins</span><span class="cap">3 PC : toi, Léa, Hugo · jamais les clients</span></div>
+       <div class="hint"><i data-i="upload"></i>Glisse un autre fichier ici pour le remplacer</div>
+      </div>
+     </div>
+     <div class="row gap16" style="margin-top:16px;align-items:flex-end">
+      <div><div class="flab">Version</div><div class="field" style="width:150px;background:var(--surface2)"><i data-i="lock"></i><b style="font-weight:650">1.43.1</b></div></div>
+      <div class="note g" style="flex:1;padding:9px 12px"><i data-i="check"></i><div>Lue dans les 2 fichiers : <b>elles concordent</b>. Plus récente que la 1.43.0 publiée.</div></div>
+     </div>
+     <div class="flab" style="margin-top:14px">Les notes <span>· préremplies depuis les notes de version (LIVRAISON-1.43.1.md) ; tu peux les changer</span></div>
+     <div class="ta">• Exports PDF : les grandes vues ne sont plus coupées.<br>• Simulation : elle démarre deux fois plus vite.<br>• Admin : le journal se trie aussi par criticité.</div>
+    </div>
+    <div class="r">
+     <div class="h3" style="font-size:14px">Ce qui va se passer</div>
+     <div class="wl" style="margin-top:6px"><span class="n">1</span><div><b style="font-weight:650">La clé de l'éditeur signe</b> les 2 fichiers, ici, sur ton PC.</div></div>
+     <div class="wl"><span class="n">2</span><div>Le service les garde, avec leur empreinte (SHA-256).</div></div>
+     <div class="wl"><span class="n">3</span><div>Chaque PC pas à jour est prévenu <b style="font-weight:650">dans les 2 minutes</b> : 51 Studios, 3 Admins.</div></div>
+     <div class="wl"><span class="n">4</span><div><b style="font-weight:650">Toi aussi</b>, en direct, dans l'Admin et tes Studios.</div></div>
+     <div class="row gap10" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)"><span class="toggle"></span><div><div class="h3">Importante</div><div class="cap">la rappeler à chaque lancement</div></div></div>
+     <div class="over" style="margin:16px 0 8px">Ce qu'ils verront (planche 06)</div>
+     <div style="background:#0f172a;color:#e2e8f0;border-radius:12px;padding:11px 12px;display:flex;gap:10px;align-items:center"><span style="width:30px;height:30px;border-radius:9px;background:rgba(45,212,191,.18);color:#5eead4;display:grid;place-items:center;flex:none"><i data-i="sparkles" class="sm"></i></span><div class="grow"><b style="color:#fff;font-weight:600;font-size:13px">Mise à jour 1.43.1 disponible</b><div style="font-size:12px;color:#94a3b8;margin-top:1px">57 Mo · signée par l'éditeur ✓</div></div></div>
+     <div class="row gap8" style="margin-top:auto"><span class="btn" style="margin-left:auto">Annuler</span><span class="btn primary"><i data-i="key" class="sm"></i>Signer et publier la 1.43.1</span></div>
+    </div>
+   </div>
+
+   <div class="card" style="margin-top:16px;overflow:hidden">
+    <div class="row gap10" style="padding:14px 18px 10px"><span class="h3" style="font-size:14px">Versions publiées</span><span class="cap">la plus récente d'abord</span></div>
+    <table class="t">
+     <tr><th>Version</th><th>Publiée</th><th>Fichiers</th><th>Pour qui</th><th>Les PC</th><th></th></tr>
+     <tr><td><div class="row gap8"><b style="font:700 14px Inter">1.43.0</b><span class="pill p-green pl"><span class="d"></span>actuelle</span></div></td>
+      <td>02/11/2026<div class="cap">par Camille</div></td>
+      <td><div class="cap" style="color:var(--ink2)">Studios · 56 Mo</div><div class="cap" style="color:var(--ink2)">Admin · 6,5 Mo</div></td>
+      <td><div class="cap" style="color:var(--ink2)">tout le monde</div><div class="cap" style="color:var(--ink2)">les admins</div></td>
+      <td><div class="row gap10"><div class="pcb"><i style="width:76%;background:var(--green)"></i><i style="width:24%;background:#f59e0b"></i></div><span style="font-size:12.5px"><b style="font-weight:650;color:#15803d">à jour : 41 PC</b> · <b style="font-weight:650;color:#b45309">pas à jour : 13 PC</b></span></div>
+       <div class="cap" style="margin-top:4px">Admins : 2 sur 3 à jour · Hugo a encore l'Admin 1.42.0, il est prévenu</div></td>
+      <td style="text-align:right;padding-right:18px"><span class="btn sm ghost"><i data-i="bell" class="sm"></i>Prévenir à nouveau</span></td></tr>
+     <tr><td><b style="font:700 14px Inter;color:var(--ink2)">1.42.0</b></td>
+      <td>20/10/2026<div class="cap">par Camille</div></td>
+      <td><div class="cap">Studios · 55 Mo</div><div class="cap">Admin · 6,4 Mo</div></td>
+      <td><div class="cap">tout le monde</div><div class="cap">les admins</div></td>
+      <td><div class="row gap10"><div class="pcb"><i style="width:22%;background:#94a3b8"></i></div><span class="cap">encore sur 12 PC</span></div></td>
+      <td></td></tr>
+     <tr><td><b style="font:700 14px Inter;color:var(--ink2)">1.41.0</b></td>
+      <td>08/10/2026<div class="cap">par Camille</div></td>
+      <td><div class="cap">Studios · 55 Mo</div><div class="cap">Admin · 6,0 Mo</div></td>
+      <td><div class="cap">tout le monde</div><div class="cap">les admins</div></td>
+      <td><div class="row gap10"><div class="pcb"><i style="width:2%;background:#94a3b8"></i></div><span class="cap">encore sur 1 PC</span></div></td>
+      <td></td></tr>
+    </table>
+   </div>
+  </div>
+  <div class="mk" style="left:284px;top:177px">1</div><div class="mk" style="left:202px;top:428px">2</div><div class="mk" style="left:1024px;top:734px">3</div>
+  <div class="annot" data-n="1" style="left:760px;top:54px;width:420px"><b>Seul l'admin+ publie</b> : les 2 fichiers sont signés par la clé de l'éditeur, sur ton PC.</div>
+  <div class="annot" data-n="2" style="left:28px;top:952px;white-space:nowrap">La version <b>se lit dans les fichiers</b> ; les notes viennent des notes de version.</div>
+  <div class="annot" data-n="3" style="left:620px;top:952px;white-space:nowrap">Les PC pas à jour <b>reçoivent la notification seuls</b> (planche 06) ; les admins, avec les 2 installateurs.</div>
+ </main>
+</div>
+</body></html>

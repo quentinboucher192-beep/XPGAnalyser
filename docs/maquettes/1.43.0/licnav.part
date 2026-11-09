@@ -1,0 +1,22 @@
+<div class="ln">
+  <div class="prod"><div class="lg"><i data-i="shield"></i></div><div><b>Licence</b><span>IHM Studio 1.43.0</span></div></div>
+  <div class="state">
+   <div class="r1"><span class="pill p-green" style="height:22px"><span class="d"></span>PROFESSIONAL</span><span class="pill p-blue" style="height:22px">+ 1 option</span></div>
+   <div class="big">364 jours <small>restants</small></div>
+   <div class="bar" style="margin-top:8px"><i style="width:99%;background:linear-gradient(90deg,#2dd4bf,#0d9488)"></i></div>
+   <div class="cap" style="margin-top:7px">jusqu'au 08/11/2027</div>
+  </div>
+  <div class="ni@ma"><i data-i="shield"></i>Ma licence</div>
+  <div class="ni@dem"><i data-i="send"></i>Demander ma licence</div>
+  <div class="ni@opt"><i data-i="puzzle"></i>Options<span class="new">1 active</span></div>
+  <div class="ni@code"><i data-i="key"></i>J'ai un code</div>
+  <div class="ni@app"><i data-i="laptop"></i>Mes appareils<span class="n">2</span></div>
+  <div class="ni@fon"><i data-i="blocks"></i>Fonctionnalités<span class="n">19</span></div>
+  <div class="ni@off"><i data-i="layers"></i>Offres</div>
+  <div class="ni@ach"><i data-i="receipt"></i>Mes achats<span class="n">5</span></div>
+  <div class="ni@his"><i data-i="history"></i>Historique</div>
+  <div style="height:1px;background:var(--line);margin:10px 8px"></div>
+  <div class="ni@pro"><i data-i="user"></i>Mon profil</div>
+  <div class="ni@par"><i data-i="sliders"></i>Paramètres</div>
+  <div style="margin-top:auto" class="cap">Registre n° 320 · service connecté</div>
+ </div>

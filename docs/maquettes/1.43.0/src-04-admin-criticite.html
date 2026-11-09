@@ -1,0 +1,136 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - criticite des actions</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.split{display:flex;gap:16px;margin-top:18px;height:806px;align-items:flex-start}
+.cr{height:24px;padding:0 9px;border-radius:99px;display:inline-flex;align-items:center;gap:6px;font:600 12px Inter;white-space:nowrap}
+.cr .ico{width:12px;height:12px}
+.c-info{background:var(--sunken);color:var(--ink2)}.c-moy{background:var(--blue-50);color:#1d4ed8}.c-haute{background:var(--amber-50);color:#b45309}.c-crit{background:var(--red-50);color:#b91c1c}
+.dt{width:8px;height:8px;border-radius:50%;flex:none}
+.d-info{background:#94a3b8}.d-moy{background:#3b82f6}.d-haute{background:#f59e0b}.d-crit{background:#ef4444}
+.jcard{flex:1;min-width:0;overflow:visible;position:relative}
+table.t{table-layout:fixed}
+table.t th{white-space:nowrap}
+table.t th .ico{width:12px;height:12px;vertical-align:-2px;margin-left:4px;color:#cbd5e1}
+table.t th.srt{color:var(--violet-700)} table.t th.srt .ico{color:var(--violet)}
+table.t td{padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.who{display:flex;align-items:center;gap:8px;font-weight:600}
+.who .avatar{width:24px;height:24px;font-size:10px;border-radius:7px}
+.act b{font-weight:650}
+tr.flash td{background:#fff5f5}
+tr.flash td:first-child{box-shadow:inset 3px 0 0 var(--red)}
+tr.rc td{background:var(--violet-50)}
+.ctx{position:absolute;width:270px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh3);padding:6px;z-index:30}
+.ctx .h{font:650 11px Inter;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:8px 10px 4px}
+.ctx .o{display:flex;align-items:center;gap:10px;height:32px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.ctx .o .ico{width:15px;height:15px;color:var(--faint)}
+.ctx .o .ck{margin-left:auto;color:var(--violet)}
+.ctx .o.hov{background:var(--amber-50);color:#92400e}
+.ctx .sep{height:1px;background:var(--line);margin:5px 4px}
+.ctx .nt{font-size:11.5px;color:var(--muted);padding:6px 10px 4px;line-height:1.4}
+.panel{width:600px;flex:none;height:806px;display:flex;flex-direction:column;overflow:visible;position:relative;border:1.5px solid var(--violet-100)}
+.ph2{padding:16px 18px 14px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+.ph2 .pi{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:var(--violet-50);color:var(--violet);flex:none}
+.colh{display:grid;grid-template-columns:1fr 146px 132px;padding:8px 18px;font:650 11px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);background:var(--surface2);border-bottom:1px solid var(--line)}
+.grp{padding:9px 18px 3px;font:650 12px Inter;color:var(--ink);display:flex;gap:8px;align-items:center}
+.grp .ico{width:14px;height:14px;color:var(--faint)}
+.ar{display:grid;grid-template-columns:1fr 146px 132px;align-items:center;padding:0 18px;height:36px;font-size:13px;color:var(--ink2)}
+.ar+.ar{border-top:1px solid #f1f4f8}
+.sel2{height:28px;width:132px;border:1px solid var(--line2);border-radius:8px;display:flex;align-items:center;gap:7px;padding:0 8px;font:600 12.5px Inter;background:#fff}
+.sel2 .ico{width:13px;height:13px;color:var(--faint);margin-left:auto}
+.sel2.open{border-color:var(--violet);box-shadow:0 0 0 4px var(--acc-ring)}
+.na{color:#cbd5e1;font-size:12px;padding-left:8px}
+.dd{position:absolute;width:300px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh3);padding:6px;z-index:40}
+.dd .o{display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-radius:8px}
+.dd .o .dt{margin-top:5px}
+.dd .o b{font-weight:650;font-size:13px}
+.dd .o .cap{margin-top:1px}
+.dd .o.on{background:var(--amber-50)}
+.dd .o .ico{width:15px;height:15px;color:var(--violet);margin-left:auto;margin-top:2px}
+.pf{margin-top:auto;border-top:1px solid var(--line);padding:12px 18px;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:0 0 12px 12px}
+.toast{position:absolute;width:450px;background:#0f172a;color:#e2e8f0;border-radius:14px;padding:14px 14px 14px 16px;display:flex;gap:12px;box-shadow:0 20px 50px rgba(15,23,42,.35);z-index:45}
+.toast .ti{width:34px;height:34px;border-radius:10px;background:rgba(239,68,68,.22);color:#fca5a5;display:grid;place-items:center;flex:none}
+.toast b{color:#fff;font-weight:600}
+.toast .s{font-size:12.5px;color:#94a3b8;margin-top:2px}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:journal-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i>Journal des admins<i data-i="right"></i><b>Criticité</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 1 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge" style="background:var(--red)">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:22px">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Journal des admins</div><div class="muted" style="margin-top:4px">Tous les admins · 249 actions · triées par date</div></div>
+    <div class="row gap8" style="margin-left:auto"><span class="btn" style="border-color:var(--violet);color:var(--violet-700);background:var(--violet-50)"><i data-i="sliders"></i>Criticité des actions…</span><span class="btn"><i data-i="download"></i>Exporter (CSV)</span></div></div>
+   <div class="split">
+    <div class="card jcard">
+     <table class="t">
+      <colgroup><col style="width:124px"><col style="width:114px"><col><col style="width:114px"></colgroup>
+      <tr><th class="srt">Quand<i data-i="arrowd"></i></th><th>Admin<i data-i="sort"></i></th><th>Action<i data-i="sort"></i></th><th>Criticité<i data-i="sort"></i></th></tr>
+      <tr class="flash"><td><b style="font-weight:650;color:#b91c1c">à l'instant</b></td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="act">a révoqué la licence <b>XPG-2026-00377</b></td><td><span class="cr c-crit">Critique</span></td></tr>
+      <tr><td>auj. 11:42</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="act">a signé la licence <b>XPG-2026-00412</b></td><td><span class="cr c-moy">Moyenne</span></td></tr>
+      <tr><td>auj. 11:31</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="act">s'est connecté depuis <b>un nouveau PC</b></td><td><span class="cr c-haute">Haute</span></td></tr>
+      <tr><td>auj. 11:05</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="act">a modifié l'offre <b>PROFESSIONAL</b> (prix)</td><td><span class="cr c-haute">Haute</span></td></tr>
+      <tr><td>auj. 10:48</td><td><span class="who"><span class="avatar" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span>Camille</span></td><td class="act">a révoqué la licence <b>XPG-2025-00131</b></td><td><span class="cr c-crit">Critique</span></td></tr>
+      <tr><td>hier 17:52</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="act">a refusé la demande <b>n° 57</b></td><td><span class="cr c-info">Info</span></td></tr>
+      <tr class="rc"><td>hier 09:03</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="act">a supprimé le client <b>Client d'essai 14</b></td><td><span class="cr c-moy">Moyenne</span></td></tr>
+      <tr><td>07/11 15:40</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="act">a prolongé la licence <b>XPG-2026-00148</b></td><td><span class="cr c-info">Info</span></td></tr>
+      <tr><td style="border-bottom:0">07/11 11:16</td><td style="border-bottom:0"><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="act" style="border-bottom:0">a accepté la demande <b>n° 55</b></td><td style="border-bottom:0"><span class="cr c-info">Info</span></td></tr>
+     </table>
+     <span style="position:absolute;left:640px;top:330px;z-index:31;color:#111827"><i data-i="pointer" style="width:20px;height:20px;fill:#fff"></i></span>
+     <div class="ctx" style="left:400px;top:342px">
+      <div class="h">Criticité de cette ligne</div>
+      <div class="o"><span class="dt d-info"></span>Info</div>
+      <div class="o"><span class="dt d-moy"></span>Moyenne<span class="cap" style="margin-left:6px">celle du type</span><i data-i="check" class="ck"></i></div>
+      <div class="o hov"><span class="dt d-haute"></span>Haute</div>
+      <div class="o"><span class="dt d-crit"></span>Critique</div>
+      <div class="sep"></div>
+      <div class="o"><i data-i="eye"></i>Voir le détail</div>
+      <div class="o"><i data-i="filter"></i>Seulement « Supprimer un client »</div>
+      <div class="o"><i data-i="copy"></i>Copier la ligne</div>
+      <div class="sep"></div>
+      <div class="nt">Ta note, à côté du journal : la ligne signée ne change pas. Le changement est écrit (qui, quand).</div>
+     </div>
+    </div>
+
+    <div class="card panel">
+     <div class="ph2"><span class="pi"><i data-i="sliders"></i></span><div class="grow"><div class="h2">Criticité des actions</div><div class="cap" style="margin-top:2px">Par type d'action. Chaque nouvelle ligne du journal prend la criticité de son type.</div></div><span style="color:var(--muted)"><i data-i="x"></i></span></div>
+     <div class="colh"><span>Action</span><span>Criticité</span><span>Me prévenir tout de suite</span></div>
+     <div class="grp"><i data-i="key"></i>Licences</div>
+     <div class="ar"><span>Signer une licence</span><span class="sel2"><span class="dt d-moy"></span>Moyenne<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="ar"><span>Prolonger une licence</span><span class="sel2"><span class="dt d-info"></span>Info<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="ar"><span>Révoquer une licence</span><span class="sel2"><span class="dt d-crit"></span>Critique<i data-i="down"></i></span><span class="toggle on"></span></div>
+     <div class="ar"><span>Ajouter une option à une licence</span><span class="sel2"><span class="dt d-moy"></span>Moyenne<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="grp"><i data-i="layers"></i>Offres et options</div>
+     <div class="ar"><span>Modifier une offre (prix, fonctions)</span><span class="sel2 open"><span class="dt d-haute"></span>Haute<i data-i="down"></i></span><span class="toggle on"></span></div>
+     <div class="ar"><span>Supprimer, retirer une offre</span><span class="sel2"><span class="dt d-haute"></span>Haute<i data-i="down"></i></span><span class="toggle"></span></div>
+     <div class="ar"><span>Créer, modifier une option</span><span class="sel2"><span class="dt d-info"></span>Info<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="grp"><i data-i="users"></i>Clients et demandes</div>
+     <div class="ar"><span>Supprimer un client</span><span class="sel2"><span class="dt d-moy"></span>Moyenne<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="ar"><span>Accepter, refuser une demande</span><span class="sel2"><span class="dt d-info"></span>Info<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="ar"><span>Exporter les clients (CSV)</span><span class="sel2"><span class="dt d-moy"></span>Moyenne<i data-i="down"></i></span><span class="na">—</span></div>
+     <div class="grp"><i data-i="shuser"></i>Admins et sécurité</div>
+     <div class="ar"><span>Connexion depuis un nouveau PC</span><span class="sel2"><span class="dt d-haute"></span>Haute<i data-i="down"></i></span><span class="toggle on"></span></div>
+     <div class="ar"><span>Ajouter, retirer un admin</span><span class="sel2"><span class="dt d-crit"></span>Critique<i data-i="down"></i></span><span class="toggle on"></span></div>
+     <div class="ar"><span>Signature refusée (certificat révoqué)</span><span class="sel2"><span class="dt d-crit"></span>Critique<i data-i="down"></i></span><span class="toggle on"></span></div>
+     <div class="row gap10" style="padding:10px 18px 0;margin-top:4px;border-top:1px solid var(--line)"><span class="toggle"></span><div><div class="h3">Aussi par courriel</div><div class="cap">camille@exemple.fr · seulement Critique</div></div></div>
+     <div class="pf"><span class="btn sm ghost"><i data-i="undo" class="sm"></i>Valeurs de départ</span><span class="btn sm" style="margin-left:auto">Fermer</span><span class="btn sm primary"><i data-i="check" class="sm"></i>Enregistrer</span></div>
+     <div class="dd" style="left:290px;top:354px">
+      <div class="o"><span class="dt d-info"></span><div><b>Info</b><div class="cap">pour mémoire</div></div></div>
+      <div class="o"><span class="dt d-moy"></span><div><b>Moyenne</b><div class="cap">à relire de temps en temps</div></div></div>
+      <div class="o on"><span class="dt d-haute"></span><div><b>Haute</b><div class="cap">à regarder dans la journée</div></div><i data-i="check"></i></div>
+      <div class="o"><span class="dt d-crit"></span><div><b>Critique</b><div class="cap">à regarder tout de suite</div></div></div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="toast" style="left:28px;top:900px"><span class="ti"><i data-i="alert"></i></span><div class="grow"><b>Critique : Hugo a révoqué XPG-2026-00377</b><div class="s">à l'instant · PORTABLE-HUGO · Brasserie du Nord</div></div><span class="btn sm" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#fff;box-shadow:none">Voir</span></div>
+  <div class="mk" style="left:958px;top:175px">1</div><div class="mk" style="left:1226px;top:382px">2</div>
+  <div class="annot" data-n="1" style="left:28px;top:618px;width:390px"><b>Une criticité par type d'action</b> ; chaque nouvelle ligne du journal la prend.</div>
+  <div class="annot" data-n="2" style="left:28px;top:684px;width:390px"><b>« Me prévenir tout de suite »</b> pour Haute et Critique : une notification en direct, chez toi seulement.</div>
+  <div class="annot" data-n="3" style="left:28px;top:768px;width:390px">La criticité d'une ligne peut aussi <b>se changer à la main (clic droit)</b>.</div>
+  <div class="annot" data-n="4" style="left:496px;top:906px;width:206px">L'alerte arrive <b>en direct</b>, même Admin réduit.</div>
+ </main>
+</div>
+</body></html>

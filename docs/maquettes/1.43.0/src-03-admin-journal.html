@@ -1,0 +1,110 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - journal des admins</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.tb{display:flex;align-items:center;gap:8px;margin-top:16px}
+.fsearch{display:flex;align-items:center;gap:9px;height:36px;width:270px;padding:0 12px;border-radius:9px;background:#fff;border:1px solid var(--line2);color:var(--faint);box-shadow:var(--sh1)}
+.fsearch .ico{width:16px;height:16px}
+.chip{height:34px;padding:0 12px 0 6px;border-radius:99px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px Inter;color:var(--ink2);border:1px solid var(--line2);background:#fff;white-space:nowrap}
+.chip.tx{padding-left:12px}
+.chip i{font-style:normal;color:var(--faint);font-weight:600}
+.chip .a{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:#fff;font:700 10.5px Inter}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}.chip.on i{color:#94a3b8}
+.cr{height:30px;padding:0 10px;border-radius:99px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px Inter;border:1.5px solid transparent;white-space:nowrap}
+.cr i{font-style:normal;opacity:.7}
+.cr .ico{width:13px;height:13px;stroke-width:3}
+.c-info{background:var(--sunken);color:var(--ink2)}.c-moy{background:var(--blue-50);color:#1d4ed8}.c-haute{background:var(--amber-50);color:#b45309}.c-crit{background:var(--red-50);color:#b91c1c}
+.cr.sel.c-info{border-color:#cbd5e1}.cr.sel.c-moy{border-color:#bfd3fe}.cr.sel.c-haute{border-color:#fcd9a0}.cr.sel.c-crit{border-color:#f7b4b4}
+.jcard{margin-top:12px;overflow:hidden;display:flex;flex-direction:column}
+table.t{table-layout:fixed}
+table.t th{white-space:nowrap}
+table.t th .ico{width:12px;height:12px;vertical-align:-2px;margin-left:4px;color:#cbd5e1}
+table.t th.srt{color:var(--violet-700)} table.t th.srt .ico{color:var(--violet)}
+table.t td{padding:10px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.who{display:flex;align-items:center;gap:8px;font-weight:600}
+.who .avatar{width:24px;height:24px;font-size:10px;border-radius:7px}
+.act b{font-weight:650}
+.obj{color:var(--muted);font-size:12.5px}
+.cv{width:15px;height:15px;color:var(--faint);vertical-align:-3px;margin-right:6px;stroke-width:2.2}
+tr.open>td{background:#fffaf0;border-bottom-color:transparent}
+tr.open td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+.exp>td{background:#fffaf0;padding:0 18px 16px 18px!important;white-space:normal}
+.exbox{display:flex;gap:14px}
+.ba{flex:1.2;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.ba table{width:100%;border-collapse:collapse;font-size:12.5px}
+.ba th{font:650 11px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);text-align:left;padding:8px 12px;background:var(--surface2);border-bottom:1px solid var(--line)}
+.ba td{padding:8px 12px!important;border-bottom:1px solid #eef1f5;background:#fff;white-space:normal}
+.ba tr:last-child td{border-bottom:0}
+.old{color:#b91c1c;text-decoration:line-through;text-decoration-thickness:1.5px}
+.new{color:#15803d;font-weight:650}
+.sig{flex:1;border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px 14px}
+.sig .l{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:12.5px;color:var(--ink2)}
+.sig .l .ico{width:14px;height:14px;flex:none;margin-top:2px}
+.jfoot{display:flex;align-items:center;gap:12px;padding:10px 18px;border-top:1px solid var(--line);background:var(--surface2);font-size:12.5px;color:var(--muted)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:journal-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i><b>Journal des admins</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">2</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:22px">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Journal des admins</div><div class="muted" style="margin-top:4px">Chaque action de chaque admin, signée par sa clé et chaînée à la précédente : rien ne s'efface · 248 actions depuis le 12/10/2025</div></div>
+    <div class="row gap8" style="margin-left:auto"><span class="btn"><i data-i="sliders"></i>Criticité des actions…</span><span class="btn"><i data-i="download"></i>Exporter (CSV)</span></div></div>
+   <div class="tb">
+    <span class="chip tx on">Tous <i>248</i></span>
+    <span class="chip"><span class="a" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span>Camille <i>112</i></span>
+    <span class="chip"><span class="a" style="background:#0e7490">L</span>Léa <i>96</i></span>
+    <span class="chip"><span class="a" style="background:#ea580c">H</span>Hugo <i>32</i></span>
+    <span class="chip" style="color:var(--muted)"><span class="a" style="background:#94a3b8">P</span>Paul <i>8 · retiré</i></span>
+    <span class="field" style="margin-left:auto;width:200px"><i data-i="calendar"></i>30 derniers jours<i data-i="down" style="margin-left:auto"></i></span>
+    <div class="fsearch"><i data-i="search"></i>Action, licence, client, PC…</div>
+   </div>
+   <div class="tb" style="margin-top:12px">
+    <span class="over" style="margin-right:4px">Criticité</span>
+    <span class="cr c-info sel"><i data-i="check"></i>Info <i>171</i></span>
+    <span class="cr c-moy sel"><i data-i="check"></i>Moyenne <i>52</i></span>
+    <span class="cr c-haute sel"><i data-i="check"></i>Haute <i>19</i></span>
+    <span class="cr c-crit sel"><i data-i="check"></i>Critique <i>6</i></span>
+   </div>
+   <div class="card jcard">
+    <table class="t">
+     <colgroup><col style="width:150px"><col style="width:132px"><col style="width:168px"><col><col style="width:250px"><col style="width:124px"></colgroup>
+     <tr><th class="srt">Quand<i data-i="arrowd"></i></th><th>Admin<i data-i="sort"></i></th><th>PC<i data-i="sort"></i></th><th>Action<i data-i="sort"></i></th><th>Objet<i data-i="sort"></i></th><th>Criticité<i data-i="sort"></i></th></tr>
+     <tr><td>auj. 11:42</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="mono" style="font-size:12px">PC-COMMERCIAL-02</td><td class="act"><i data-i="right" class="cv"></i>a signé la licence <b>XPG-2026-00412</b></td><td class="obj">Atelier Meyer · PROFESSIONAL 1 an</td><td><span class="cr c-moy" style="height:24px">Moyenne</span></td></tr>
+     <tr><td>auj. 11:31</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="mono" style="font-size:12px;color:#b45309"><i data-i="alert" style="width:13px;height:13px;vertical-align:-2px;margin-right:5px"></i>PC-MAISON-07</td><td class="act"><i data-i="right" class="cv"></i>s'est connecté depuis <b>un nouveau PC</b></td><td class="obj">pas son PC d'admin · refusé</td><td><span class="cr c-haute" style="height:24px">Haute</span></td></tr>
+     <tr class="open"><td>auj. 11:05</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="mono" style="font-size:12px">PC-COMMERCIAL-02</td><td class="act"><i data-i="down" class="cv"></i>a modifié l'offre <b>PROFESSIONAL</b> (prix)</td><td class="obj">Offre PROFESSIONAL · 62 licences</td><td><span class="cr c-haute" style="height:24px">Haute</span></td></tr>
+     <tr class="exp"><td colspan="6">
+      <div class="exbox">
+       <div class="ba"><table><tr><th>Ce qui change</th><th>Avant</th><th>Après</th></tr>
+        <tr><td>Prix HT · 1 an</td><td class="old">490 €</td><td class="new">520 €</td></tr>
+        <tr><td>Prix HT · 1 mois</td><td class="old">49 €</td><td class="new">52 €</td></tr>
+        <tr><td style="color:var(--muted)">Fonctionnalités, PC, durée</td><td colspan="2" style="color:var(--muted)">inchangés</td></tr></table></div>
+       <div class="sig">
+        <div class="l"><i data-i="fp" style="color:var(--violet)"></i><div>Signée par <b style="font-weight:650">la clé de Léa</b> (A41C 0E7B…) · certificat valide ✓</div></div>
+        <div class="l"><i data-i="link" style="color:var(--muted)"></i><div>Ligne n° 246, chaînée à la n° 245 ✓ · rien n'a été retiré</div></div>
+        <div class="l"><i data-i="info" style="color:var(--blue)"></i><div>Prend effet avec le registre n° 321, pas encore signé</div></div>
+        <div class="row gap8" style="margin-top:6px"><span class="btn sm"><i data-i="layers" class="sm"></i>Voir l'offre</span><span class="btn sm ghost"><i data-i="scroll" class="sm"></i>Tout le journal de Léa</span></div>
+       </div>
+       <div style="width:300px;flex:none"></div>
+      </div></td></tr>
+     <tr><td>auj. 10:48</td><td><span class="who"><span class="avatar" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span>Camille</span></td><td class="mono" style="font-size:12px">PC-BUREAU-01</td><td class="act"><i data-i="right" class="cv"></i>a révoqué la licence <b>XPG-2025-00131</b></td><td class="obj">Transports Royer · ENTERPRISE</td><td><span class="cr c-crit" style="height:24px">Critique</span></td></tr>
+     <tr><td>auj. 10:12</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="mono" style="font-size:12px">PC-COMMERCIAL-02</td><td class="act"><i data-i="right" class="cv"></i>a ajouté l'option <b>Exports avancés</b> à XPG-2026-00391</td><td class="obj">Atelier Meyer · 1 semaine</td><td><span class="cr c-moy" style="height:24px">Moyenne</span></td></tr>
+     <tr><td>hier 17:52</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="mono" style="font-size:12px">PORTABLE-HUGO</td><td class="act"><i data-i="right" class="cv"></i>a refusé la demande <b>n° 57</b></td><td class="obj">Hydro Vallée · prolonger d'un an</td><td><span class="cr c-info" style="height:24px">Info</span></td></tr>
+     <tr><td>hier 16:20</td><td><span class="who"><span class="avatar" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6)">C</span>Camille</span></td><td class="mono" style="font-size:12px">PC-BUREAU-01</td><td class="act"><i data-i="right" class="cv"></i>a ajouté l'admin <b>Nina</b></td><td class="obj">PC-LABO-02 · en attente</td><td><span class="cr c-haute" style="height:24px">Haute</span></td></tr>
+     <tr><td>hier 09:03</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="mono" style="font-size:12px">PC-COMMERCIAL-02</td><td class="act"><i data-i="right" class="cv"></i>a supprimé le client <b>Client d'essai 14</b></td><td class="obj">aucune licence en cours</td><td><span class="cr c-moy" style="height:24px">Moyenne</span></td></tr>
+     <tr><td>07/11 15:40</td><td><span class="who"><span class="avatar" style="background:#ea580c">H</span>Hugo</span></td><td class="mono" style="font-size:12px">PORTABLE-HUGO</td><td class="act"><i data-i="right" class="cv"></i>a prolongé la licence <b>XPG-2026-00148</b></td><td class="obj">Hydro Vallée · + 1 an</td><td><span class="cr c-info" style="height:24px">Info</span></td></tr>
+     <tr><td>07/11 11:16</td><td><span class="who"><span class="avatar" style="background:#0e7490">L</span>Léa</span></td><td class="mono" style="font-size:12px">PC-COMMERCIAL-02</td><td class="act"><i data-i="right" class="cv"></i>a accepté la demande <b>n° 55</b></td><td class="obj">Studio Lumen · option 1 mois</td><td><span class="cr c-info" style="height:24px">Info</span></td></tr>
+    </table>
+    <div class="jfoot"><i data-i="link" class="sm"></i>Chaîne vérifiée : 248 lignes, aucune manquante, aucune modifiée<span style="margin-left:auto">10 sur 248 · triées par date, la plus récente d'abord</span><span class="btn sm" style="padding:0 8px"><i data-i="left" class="sm"></i></span><span class="btn sm" style="padding:0 8px"><i data-i="right" class="sm"></i></span></div>
+   </div>
+  </div>
+  <div class="mk" style="left:110px;top:253px">2</div><div class="mk" style="left:608px;top:163px">1</div>
+  <div class="annot" data-n="1" style="left:562px;top:203px;white-space:nowrap">Un historique <b>par admin</b> (ses pastilles) et un <b>global</b> : « Tous ».</div>
+  <div class="annot" data-n="2" style="left:28px;top:954px;white-space:nowrap"><b>Trie par n'importe quelle colonne</b> : un clic sur l'en-tête ; un 2<sup>e</sup> clic inverse.</div>
+  <div class="annot" data-n="3" style="left:1012px;top:440px;width:290px">Une ligne se déplie : <b>l'avant / l'après</b>, la signature de l'admin, le chaînage.</div>
+  <div class="annot" data-n="4" style="left:560px;top:58px;width:300px"><b>Seul l'admin+ voit ce journal</b>. Les admins savent que tout y est écrit.</div>
+ </main>
+</div>
+</body></html>
