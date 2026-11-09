@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.44.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.45.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.44.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 18 h 28"},
     {"1.43.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 14 h 22"},
     {"1.42.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 12 h 37"},
     {"1.41.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 21 h 34"},
@@ -188,6 +189,51 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.45.0 : les sessions (retirer, partir, le journal, l'onglet Session, les gens dans l'explorateur), la fenetre Licence
+        note("1.45.0", "IHM", Kind::New,
+         "RETIRER QUELQU'UN D'UNE SESSION : dans le panneau Session, chaque \xC3\xA9quipier a \xC2\xAB Retirer de la session\xE2\x80\xA6 \xC2\xBB ; il revient \xC3\xA0 "
+         "l'accueil (\xC2\xAB Camille t'a retir\xC3\xA9 de la session \xC2\xBB) et les autres le lisent. S'il frappe de nouveau, m\xC3\xAAme avec le code, "
+         "c'est toi qui d\xC3\xA9" "cides.",
+         "editeur", ""),
+        note("1.45.0", "IHM", Kind::New,
+         "PARTIR D'UNE SESSION : un \xC3\xA9quipier qui part (Quitter la session, fermer le projet ou le Studio) revient \xC3\xA0 l'accueil et "
+         "les autres sont pr\xC3\xA9venus (\xC2\xAB L\xC3\xA9" "a a quitt\xC3\xA9 la session \xC2\xBB) ; quand l'h\xC3\xB4te arr\xC3\xAAte, tout le monde revient \xC3\xA0 l'accueil. Rien "
+         "ne reste chez l'\xC3\xA9quipier : sa copie du projet est effac\xC3\xA9" "e en partant, elle n'entre pas dans les projets r\xC3\xA9" "cents, et "
+         "Enregistrer sous, Dupliquer, Exporter l'archive sont refus\xC3\xA9s pendant la session (le projet reste chez l'h\xC3\xB4te).",
+         "editeur", ""),
+        note("1.45.0", "IHM", Kind::New,
+         "L'ONGLET SESSION : \xC3\xA0 c\xC3\xB4t\xC3\xA9 de Sorties, Performances et Erreurs, un onglet \xC2\xAB Session \xC2\xBB appara\xC3\xAEt seulement pendant une "
+         "session : la discussion et le journal m\xC3\xAAl\xC3\xA9s dans l'ordre (filtres Tout, Discussion, Journal), un message avec Entr\xC3\xA9" "e, "
+         "une pastille pour les messages non lus.",
+         "editeur", ""),
+        note("1.45.0", "IHM", Kind::New,
+         "LE JOURNAL DE LA SESSION : qui a chang\xC3\xA9 quoi, et quand (\xC2\xAB 14:32 L\xC3\xA9" "a : Vue_Accueil \xE2\x80\xBA Texte_Etat d\xC3\xA9plac\xC3\xA9 \xC2\xBB) - les "
+         "objets, les vues, les variables, les scripts, les ressources. L'h\xC3\xB4te le tient et l'envoie \xC3\xA0 tous (celui qui arrive en "
+         "retard le re\xC3\xA7oit en entier) ; \xC3\xA0 la fin il est enregistr\xC3\xA9 avec le projet (ihm/historique/sessions/), et l'h\xC3\xB4te peut "
+         "l'exporter en CSV.",
+         "editeur", ""),
+        note("1.45.0", "IHM", Kind::New,
+         "LES GENS DANS L'EXPLORATEUR : pendant une session, l'arbre du projet commence par \xC2\xAB Session \xC2\xBB : chaque membre (ses "
+         "initiales dans sa couleur, h\xC3\xB4te ou \xC3\xA9quipier, sa vue, Modifier ou Regarder) ; un clic le suit. Dans l'explorateur "
+         "d'objets de la vue, un objet tenu par quelqu'un montre ses initiales (\xC2\xAB tenu par L\xC3\xA9" "a \xC2\xBB).",
+         "editeur", ""),
+        note("1.45.0", "IHM", Kind::Changed,
+         "SESSION PAR INTERNET ET SERVICE PAS \xC3\x80 JOUR : si le service des licences n'est pas encore en 1.44, le Studio le dit (\xC2\xAB "
+         "l'\xC3\xA9" "diteur doit le red\xC3\xA9ployer : Admin \xE2\x80\xBA Service en ligne \xE2\x80\xBA D\xC3\xA9ployer \xC2\xBB) au lieu d'une adresse introuvable. Les fichiers "
+         "ajout\xC3\xA9s aux Ressources par un \xC3\xA9quipier arrivent chez tous, \xC3\xA0 l'identique (jusqu'\xC3\xA0 32 Mo par fichier par Internet).",
+         "editeur", ""),
+        note("1.45.0", "Projet", Kind::New,
+         "LES LICENCES DE CE PC : Demander ma licence montre d'abord les licences actives sur ce PC, avec Regarder (l'onglet qui "
+         "la montre) et Lib\xC3\xA9rer (rendre la place de ce PC, apr\xC3\xA8s une question qui dit ce qui se passera).",
+         "licence", ""),
+        note("1.45.0", "Projet", Kind::Changed,
+         "LES CAPTURES DES FONCTIONNALIT\xC3\x89S : deux ou trois par fonctionnalit\xC3\xA9, refaites en pleine r\xC3\xA9solution (nettes une fois "
+         "agrandies) ; en grand, les fl\xC3\xA8" "ches (ou \xE2\x86\x90 \xE2\x86\x92) passent de l'une \xC3\xA0 l'autre, avec leur l\xC3\xA9gende et leurs bulles au survol.",
+         "licence", ""),
+        note("1.45.0", "Projet", Kind::Fixed,
+         "UNE SEULE FEN\xC3\x8ATRE LICENCE : quand une licence se valide, la notification ne rouvre plus la fen\xC3\xAAtre par-dessus celle "
+         "qui est ouverte (il ne faut plus fermer deux fois) ; redemand\xC3\xA9" "e, elle se relit et montre l'onglet voulu.",
+         "licence", ""),
         // 1.44.0 : les mises a jour, les fichiers de l'editeur, les sessions par Internet, la fenetre Licence
         note("1.44.0", "Projet", Kind::New,
          "LES MISES \xC3\x80 JOUR ARRIVENT SEULES : quand l'\xC3\xA9" "diteur publie une version, une notification \xC2\xAB Mise \xC3\xA0 jour disponible \xC2\xBB "
