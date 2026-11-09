@@ -44,7 +44,10 @@ namespace crypto = deploy::crypto;
 // Time << heure >>, Trial << decouverte >>. Ceux-la ne s'importent jamais comme un fichier (licence, registre...).
 // (Les genres << passerelle >> et << annulation >> de la 1.34.0 ont disparu en 1.35.0 avec la passerelle : un tel
 // bloc est un genre inconnu.)
-enum class DocKind : std::uint8_t { License, Registry, Revocations, Request, DeviceStatus, ServiceCert, Activation, Lease, Time, Trial };
+// 1.44.0 (docs/ADMINS.md) : Admins << admins >> (la liste des admins, signee par l'editeur), FileManifest << fichier >>,
+// Version << version >>, Message << message >> (signes par l'editeur), AdminToken << jetonadmin >> (signe par un admin).
+enum class DocKind : std::uint8_t { License, Registry, Revocations, Request, DeviceStatus, ServiceCert, Activation, Lease, Time, Trial,
+                                    Admins, FileManifest, Version, Message, AdminToken };
 
 // "licence", "registre", "revocations", "demande" (le mot de l'en-tete).
 [[nodiscard]] const char* docKindKey(DocKind) noexcept;

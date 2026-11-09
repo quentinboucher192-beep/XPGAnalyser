@@ -3775,6 +3775,9 @@
     <ClInclude Include="src\deploy\Protocol.hpp">
       <Filter>deploy</Filter>
     </ClInclude>
+    <ClInclude Include="src\licensing\Admins.hpp">
+      <Filter>licensing</Filter>
+    </ClInclude>
     <ClInclude Include="src\licensing\Gateway.hpp">
       <Filter>licensing</Filter>
     </ClInclude>

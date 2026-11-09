@@ -15,7 +15,8 @@ constexpr std::string_view kContext = "XPG-LICENSING-1\n";
 
 bool kindFromKey(std::string_view key, DocKind& out) noexcept {
     for (DocKind k : {DocKind::License, DocKind::Registry, DocKind::Revocations, DocKind::Request, DocKind::DeviceStatus, DocKind::ServiceCert,
-                       DocKind::Activation, DocKind::Lease, DocKind::Time, DocKind::Trial})
+                       DocKind::Activation, DocKind::Lease, DocKind::Time, DocKind::Trial, DocKind::Admins, DocKind::FileManifest, DocKind::Version,
+                       DocKind::Message, DocKind::AdminToken})
         if (key == docKindKey(k)) {
             out = k;
             return true;
@@ -51,6 +52,11 @@ const char* docKindKey(DocKind k) noexcept {
         case DocKind::Lease: return "jeton";
         case DocKind::Time: return "heure";
         case DocKind::Trial: return "decouverte";
+        case DocKind::Admins: return "admins";
+        case DocKind::FileManifest: return "fichier";
+        case DocKind::Version: return "version";
+        case DocKind::Message: return "message";
+        case DocKind::AdminToken: return "jetonadmin";
     }
     return "?";
 }
@@ -67,6 +73,11 @@ std::string docKindLabel(DocKind k) {
         case DocKind::Lease: return "le jeton de la licence flottante";
         case DocKind::Time: return "l'heure du service";
         case DocKind::Trial: return "la D\xC3\xA9" "couverte";
+        case DocKind::Admins: return "la liste des admins";
+        case DocKind::FileManifest: return "le manifeste du fichier";
+        case DocKind::Version: return "la version";
+        case DocKind::Message: return "le message";
+        case DocKind::AdminToken: return "le jeton d'admin";
     }
     return "le document";
 }
@@ -83,6 +94,11 @@ std::size_t docKindMaxBytes(DocKind k) noexcept {
         case DocKind::Lease: return 2u * 1024u;
         case DocKind::Time: return 1024u;
         case DocKind::Trial: return 2u * 1024u;
+        case DocKind::Admins: return 64u * 1024u;
+        case DocKind::FileManifest: return 4u * 1024u;
+        case DocKind::Version: return 64u * 1024u;
+        case DocKind::Message: return 64u * 1024u;
+        case DocKind::AdminToken: return 2u * 1024u;
     }
     return 0;
 }
