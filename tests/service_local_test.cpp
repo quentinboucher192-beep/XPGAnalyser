@@ -171,7 +171,7 @@ int main(int argc, char** argv) {
     std::printf("-- GET /v1/etat\n");
     const Reply etat = call(base, "GET", "/v1/etat", "", nullptr, 0);
     check(etat.failure.empty() && etat.status == 200, "etat : " + etat.failure + " " + std::to_string(etat.status));
-    check(etat.value.str("service") == "xpg-licences" && etat.value.str("version") == "1.40.0", "le service et sa version");
+    check(etat.value.str("service") == "xpg-licences" && etat.value.str("version") == "1.44.0", "le service et sa version");
     const std::string serviceKey = etat.value.str("cle_service");
     check(sv::isKeyHex(serviceKey), "la cle du service");
     check(!etat.value.flag("certifie", true), "pas encore certifie");

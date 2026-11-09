@@ -245,6 +245,13 @@ void note(bool ok, const std::string& text) {
 }
 
 std::string software() { return core::productName() + " " + XPG_ANALYZER_VERSION; }
+// 1.44.0 : "IHM-Studio/1.44.0" (l'en-tete X-XPG-Logiciel)
+std::string softwareTag() {
+    std::string name = core::productName();
+    for (char& ch : name)
+        if (ch == ' ') ch = '-';
+    return name + "/" + XPG_ANALYZER_VERSION;
+}
 
 // "07/11/2027" (UTC, comme les dates des licences).
 std::string isoDay(lic::Seconds at) {
@@ -413,6 +420,8 @@ Got callSigned(Conn& c, const std::string& method, const std::string& path, cons
         req.url = c.a.url + path;
         req.headers = {{"User-Agent", userAgent()}, {"Content-Type", "application/json"}};
         for (const auto& h : headers) req.headers.push_back(h);
+        // 1.44.0 : le logiciel et sa version (la page Versions de l'Admin : qui est a jour)
+        req.headers.emplace_back("X-XPG-Logiciel", softwareTag());
         req.body = body;
         req.connectTimeoutSeconds = connectTimeout;
         req.idleTimeoutSeconds = idleTimeout;
@@ -532,6 +541,20 @@ bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
         why = "Le service des licences n'est pas encore pr\xC3\xAAt : l'\xC3\xA9" "diteur ne l'a pas encore certifi\xC3\xA9.";
         return false;
     }
+    // 1.44.0 : la liste des admins d'abord (le registre, une licence, un etat peuvent etre signes par un admin)
+    const double admNumber = etat.num("admins");
+    if (admNumber > 0 && static_cast<int>(admNumber) > lic::adminListNumber()) {
+        const Got g = getPublic(c, "/v1/admins");
+        if (g.reached() && g.status == 200) {
+            bool adopted = false;
+            std::string w;
+            if (lic::adoptAdminList(g.body, &adopted, &w)) {
+                if (adopted) c.lines.push_back("La liste des admins n\xC2\xB0 " + std::to_string(lic::adminListNumber()) + " est install\xC3\xA9" "e.");
+            } else {
+                c.lines.push_back("La liste des admins est refus\xC3\xA9" "e : " + sentence(w));
+            }
+        }
+    }
     // Le registre publie : adopte s'il est plus recent que celui du PC.
     const double regNumber = etat.num("registre");
     if (regNumber > 0 && static_cast<std::uint64_t>(regNumber) > lic::getLicenseState().registryNumber) {
@@ -582,7 +605,13 @@ bool verifyPublisherBlock(std::string_view bytes, lic::DocKind kind, lic::Signed
     }
     const lic::TrustedKey* signer = findKey(keys, blocks[0].keyId);
     if (!signer) {
-        why = "il est sign\xC3\xA9 par une cl\xC3\xA9 que ce programme ne conna\xC3\xAEt pas (" + blocks[0].keyId + ")";
+        // 1.44.0 : un admin de la liste, avec le droit de ce genre
+        std::string w2;
+        if (lic::verifyPublishedBlock(blocks[0], &w2)) {
+            out = std::move(blocks[0]);
+            return true;
+        }
+        why = w2.empty() ? "il est sign\xC3\xA9 par une cl\xC3\xA9 que ce programme ne conna\xC3\xAEt pas (" + blocks[0].keyId + ")" : w2;
         return false;
     }
     if (!lic::verifyBlock(blocks[0], signer->key)) {
@@ -1967,6 +1996,25 @@ Result sendRequest(const RequestForm& form0) {
     json::Value body = json::Value::object();
     body.set("cle", key->id);
     body.set("scelle", sealed);
+    // 1.44.0 : scellee aussi pour chaque admin qui accepte les demandes (la liste des admins de ce PC)
+    if (const auto admins = lic::getAdminList()) {
+        json::Value more = json::Value::array();
+        const std::string plainRequest = lgw::writeOnlineRequest(q);
+        for (const auto& a : admins->admins) {
+            if (!a.has("demandes")) continue;
+            crypto::Bytes raw;
+            crypto::PublicKey pk{};
+            if (!crypto::unhex(a.key, raw, 32)) continue;
+            std::copy(raw.begin(), raw.end(), pk.begin());
+            const std::string s = lgw::sealFor(pk, plainRequest);
+            if (s.empty()) continue;
+            json::Value one = json::Value::object();
+            one.set("cle", a.id);
+            one.set("scelle", s);
+            more.push(std::move(one));
+        }
+        if (!more.items().empty()) body.set("scelles", std::move(more));
+    }
     std::vector<std::string> lines;
     const Got g = callSigned(c, "POST", "/v1/demandes", json::write(body, false), why);
     if (!g.reached() || (g.status != 201 && g.status != 200)) {

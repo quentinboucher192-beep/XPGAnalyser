@@ -102,6 +102,7 @@ struct State {
     Seconds       latestSeen{0};
     std::uint64_t registryMax{0};
     std::uint64_t revocationsMax{0};
+    std::uint64_t adminsMax{0};               // 1.44.0 : la liste des admins la plus recente vue
     std::map<std::string, Seconds> issued;   // 1.32.0 : par licence, l'emission la plus recente installee (M2)
     Seconds       evaluationStarted{0};      // 1.34.0 : le debut de l'evaluation de ce PC (0 : pas commencee)
     int           evaluationDays{0};         // 1.34.0 : ses jours, notes a son debut (0 : pas dits)
@@ -135,6 +136,7 @@ State readState(const std::string& path, std::string* note) {
     if (parseIsoTime(v.str("latest_seen"), t)) s.latestSeen = t;
     s.registryMax = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("registry", 0)));
     s.revocationsMax = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("revocations", 0)));
+    s.adminsMax = static_cast<std::uint64_t>(std::max<std::int64_t>(0, v.integer("admins", 0)));   // 1.44.0
     if (const core::json::Value* m = v.find("issued"); m && m->isObject())
         for (const auto& [id, x] : m->members()) {
             Seconds at = 0;
@@ -162,6 +164,7 @@ bool writeState(const std::string& path, const State& s, std::string* why) {
     v.set("latest_seen", isoTime(s.latestSeen));
     v.set("registry", static_cast<std::uint64_t>(s.registryMax));
     v.set("revocations", static_cast<std::uint64_t>(s.revocationsMax));
+    if (s.adminsMax > 0) v.set("admins", static_cast<std::uint64_t>(s.adminsMax));   // 1.44.0 : ignore par la 1.43
     if (!s.issued.empty()) {
         // la 1.31 ignore ce champ : l'etat reste lisible dans les deux sens
         std::vector<std::pair<Seconds, std::string>> keep;
@@ -668,6 +671,9 @@ LicenseStore::LicenseStore(StoreOptions options) : opt_(std::move(options)) {
     evaluation_ = opt_.evaluationPeriod.value_or(compiledTrust);
     // 1.35.0 (revue 6) : l'adresse du service que ce magasin croit (celle du programme, sauf un essai)
     serviceUrl_ = opt_.serviceUrl ? service::normalizeUrl(*opt_.serviceUrl) : service::compiledAddress().url;
+    // 1.44.0 : la liste des admins gardee (ce que signent les admins se verifie des le depart : un import, une activation)
+    if (!opt_.trustedKeys.empty() && !opt_.folder.empty())
+        loadAdmins(readState(deploy::joinPath(opt_.folder, kStateFile), nullptr).adminsMax);
 }
 
 // 1.34.0 : la copie de l'evaluation dans le registre de Windows (HKCU) - seulement pour le dossier par defaut (le
@@ -756,6 +762,8 @@ const TrustedKey* LicenseStore::trusted(std::string_view keyId) const noexcept {
 bool LicenseStore::verifyTrusted(const SignedBlock& b, std::string* why) const {
     const TrustedKey* k = trusted(b.keyId);
     if (!k) {
+        // 1.44.0 : un admin de la liste (sa cle, son droit pour ce genre ; retire : un document garde)
+        if (admins_ && admins_->byKeyId(b.keyId)) return admins::verifyAdminBlock(*admins_, b, why);
         if (why) *why = "la signature de " + docKindLabel(b.kind) + " vient d'une cl\xC3\xA9 inconnue de ce programme (" + b.keyId + ")";
         return false;
     }
@@ -783,6 +791,88 @@ bool readStoredBlock(const std::string& path, DocKind kind, SignedBlock& out, st
 }
 
 } // namespace
+
+// ======================================================================= 1.44.0 : les admins ==
+namespace {
+
+// La liste des admins d'un bloc : signee par une cle de l'editeur que ce PC croit (jamais par un admin).
+bool readAdminBlock(const SignedBlock& b, const std::vector<TrustedKey>& keys, admins::AdminList& out, std::string* why) {
+    if (b.kind != DocKind::Admins) {
+        if (why) *why = "ce n'est pas la liste des admins";
+        return false;
+    }
+    const TrustedKey* k = nullptr;
+    for (const auto& t : keys)
+        if (t.id == b.keyId) k = &t;
+    if (!k || !verifyBlock(b, k->key)) {
+        if (why) *why = "la liste des admins n'est pas sign\xC3\xA9" "e par la cl\xC3\xA9 de l'\xC3\xA9" "diteur";
+        return false;
+    }
+    return admins::parseAdminList(b.document, out, why);
+}
+
+} // namespace
+
+void LicenseStore::loadAdmins(std::uint64_t minNumber) {
+    admins_.reset();
+    const std::string path = deploy::joinPath(opt_.folder, kAdminsFile);
+    if (!fileExists(path)) return;
+    SignedBlock b;
+    admins::AdminList l;
+    if (readStoredBlock(path, DocKind::Admins, b, nullptr) && readAdminBlock(b, opt_.trustedKeys, l, nullptr)
+        && static_cast<std::uint64_t>(l.number) >= minNumber)
+        admins_ = std::move(l);
+}
+
+bool LicenseStore::adoptAdminList(std::string_view blockText, bool* changed, std::string* why) {
+    if (changed) *changed = false;
+    std::vector<SignedBlock> blocks;
+    if (!readBlocks(blockText, blocks, why)) return false;
+    if (blocks.size() != 1) {
+        if (why) *why = "la liste des admins doit \xC3\xAAtre seule";
+        return false;
+    }
+    admins::AdminList l;
+    if (!readAdminBlock(blocks[0], opt_.trustedKeys, l, why)) return false;
+    const std::string dir = opt_.folder;
+    const std::string statePath = deploy::joinPath(dir, kStateFile);
+    State st = readState(statePath, nullptr);
+    const std::uint64_t best = std::max<std::uint64_t>(st.adminsMax, admins_ ? static_cast<std::uint64_t>(admins_->number) : 0);
+    const auto n = static_cast<std::uint64_t>(l.number);
+    if (n < best) {
+        if (why) *why = "cette liste des admins (n\xC2\xB0 " + std::to_string(n) + ") est plus ancienne que le n\xC2\xB0 " + std::to_string(best) + " d\xC3\xA9j\xC3\xA0 vu";
+        return false;
+    }
+    const std::string path = deploy::joinPath(dir, kAdminsFile);
+    if (admins_ && n == static_cast<std::uint64_t>(admins_->number)) {
+        SignedBlock cur;
+        if (readStoredBlock(path, DocKind::Admins, cur, nullptr) && cur.document == blocks[0].document) return true;   // a jour
+        if (why) *why = "deux listes des admins diff\xC3\xA9rentes portent le n\xC2\xB0 " + std::to_string(n);
+        return false;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(P(dir), ec);
+    std::string w;
+    if (!writeAll(path, writeBlock(blocks[0]), &w)) {
+        if (why) *why = "la liste des admins ne s'\xC3\xA9" "crit pas : " + notWritable(w);
+        return false;
+    }
+    if (n > st.adminsMax) {
+        st.adminsMax = n;
+        (void)writeState(statePath, st, nullptr);
+    }
+    admins_ = std::move(l);
+    if (changed) *changed = true;
+    return true;
+}
+
+bool LicenseStore::verifyPublished(const SignedBlock& b, std::string* why, std::string* signer) const {
+    if (signer) signer->clear();
+    if (!verifyTrusted(b, why)) return false;
+    if (signer && !trusted(b.keyId) && admins_)
+        if (const admins::Admin* a = admins_->byKeyId(b.keyId)) *signer = a->name;
+    return true;
+}
 
 std::string LicenseStore::notWritable(const std::string& why) const {
     return "ce compte ne peut pas \xC3\xA9" "crire dans le dossier des licences de ce PC (" + opt_.folder + ") : " + why
@@ -818,6 +908,9 @@ LicenseState LicenseStore::evaluate() {
     const std::string statePath = deploy::joinPath(dir, kStateFile);
     in.state = readState(statePath, &in.stateNote);
     const State before = in.state;
+    // 1.44.0 : la liste des admins (ce qu'un admin a signe se verifie avec elle)
+    loadAdmins(in.state.adminsMax);
+    if (admins_) in.state.adminsMax = std::max<std::uint64_t>(in.state.adminsMax, static_cast<std::uint64_t>(admins_->number));
 
     // ---- le registre : celui du magasin, ou celui livre avec le programme s'il est plus recent.
     {
@@ -1122,6 +1215,7 @@ LicenseState LicenseStore::evaluate() {
     after.serviceElapsed = counterNow.elapsed;
     after.serviceWall = counterNow.wall;
     const bool changed = !before.found || after.registryMax != before.registryMax || after.revocationsMax != before.revocationsMax
+                         || after.adminsMax != before.adminsMax
                          || after.latestSeen >= before.latestSeen + 60 || after.issued != before.issued
                          || after.evaluationStarted != before.evaluationStarted || after.evaluationDays != before.evaluationDays
                          || after.serviceTime != before.serviceTime || after.serviceElapsed != before.serviceElapsed || after.serviceWall != before.serviceWall;
@@ -1647,7 +1741,19 @@ ImportReport LicenseStore::importChecked(std::string_view bytes) {
     std::string why;
     if (!readBlocks(bytes, blocks, &why)) return refuse("Ce fichier est refus\xC3\xA9 : " + why + ".");
     const SignedBlock *licB = nullptr, *regB = nullptr, *revB = nullptr;
+    // 1.44.0 : la liste des admins d'abord (un fichier exporte par un admin la porte avant sa licence)
     for (const auto& b : blocks) {
+        if (b.kind != DocKind::Admins) continue;
+        bool adopted = false;
+        if (!adoptAdminList(writeBlock(b), &adopted, &why)) {
+            // plus ancienne que celle de ce PC : la plus recente reste (ce qu'elle dit vaut)
+            if (why.find("plus ancienne") == std::string::npos) return refuse("Ce fichier est refus\xC3\xA9 : " + why + ".");
+        } else if (adopted) {
+            rep.lines.push_back("Liste des admins n\xC2\xB0 " + std::to_string(admins_ ? admins_->number : 0) + " : install\xC3\xA9" "e.");
+        }
+    }
+    for (const auto& b : blocks) {
+        if (b.kind == DocKind::Admins) continue;
         const SignedBlock** slot = b.kind == DocKind::License ? &licB : b.kind == DocKind::Registry ? &regB : b.kind == DocKind::Revocations ? &revB : nullptr;
         if (!slot && b.kind != DocKind::Request)   // 1.34.0 / 1.35.0 : les documents en ligne ne s'importent pas en fichier
             return refuse("Ce fichier est refus\xC3\xA9 : c'est un document du service des licences (" + docKindLabel(b.kind)

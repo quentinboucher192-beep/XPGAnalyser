@@ -42,8 +42,8 @@ l'un de `offres`, `options`, `annonces` ; une liste de révocation, `licence_rev
 
 **Le service vérifie au plus près** (il voit chaque dépôt) : une licence d'un identifiant inconnu demande
 `licence_creer`, une licence déjà déposée `licence_prolonger` ou `licence_option` (ou `licence_creer`) ; un registre,
-le droit de chaque partie qui change (`editions`, `options`, `annonces` comparées au registre en place ; une autre
-partie qui change : `offres`) ; etc. (§ 6).
+le droit de chaque partie qui change (`editions` : `offres`, `options` : `options`, `announcements` : `annonces`,
+comparées au registre en place ; une autre partie qui change : `offres` ; rien ne change : l'un des trois) ; etc. (§ 6).
 
 **Les profils** (« Admin LV1 », « Admin LV2 ») sont une commodité de l'admin+ : une liste de droits nommée. Copier un
 profil vers un admin **copie** ses droits (pas un lien) ; l'admin+ ajuste ensuite cet admin seul. Les profils et
@@ -69,7 +69,9 @@ Un bloc `XPG-LICENSING 1 admins <taille>` (l'enveloppe de `SignedFile.hpp`), au 
 - **Retirer** un admin : `retire` = l'heure, `droits` vidés ; il reste dans la liste (ses anciennes signatures se
   reconnaissent). `gardes` : les empreintes (SHA-256 hexa du JSON signé, octet pour octet) des documents qu'il a signés et
   qui **restent valides** (ses licences, sauf si l'admin+ choisit de les révoquer aussi). Un document signé par un admin
-  retiré n'est valide que si son empreinte est dans `gardes`.
+  retiré n'est valide que si son empreinte est dans `gardes`. Un document gardé vaut aussi quand l'admin, toujours là,
+  a perdu le droit qui le permettait : **retirer un droit à un admin ne casse pas ce qu'il a déjà signé** (l'Admin de
+  l'admin+ met dans `gardes` ce que l'admin a signé et qui court encore).
 - Au retrait, l'admin+ **re-signe avec sa clé** le registre et la liste de révocation en place s'ils étaient signés par
   l'admin retiré (numéro + 1), pour qu'ils restent valides.
 - Au plus 32 admins, 512 empreintes gardées par admin.
@@ -90,7 +92,7 @@ récente. Elle est gardée dans le dossier des licences (`admins.xpgadm`), comme
    majuscules du SHA-256 de la clé publique, en 6 groupes de 4 (`B7E2 48A9 1D3C 90F6 5A2E C471`).
 3. **L'admin+** voit la demande (« En attente d'acceptation » dans Administrateurs, `GET /admin/admins/demandes`) ;
    ils lisent l'empreinte **au téléphone**, il coche « J'ai vérifié l'empreinte », accepte : la clé de l'éditeur signe
-   la nouvelle liste (numéro + 1, avec ses droits), `PUT /admin/admins` la publie ; **le trousseau** (§ 5) lui est
+   la nouvelle liste (numéro + 1, avec ses droits), `PUT /admin/admins` `{"admins":"<bloc>"}` la publie ; **le trousseau** (§ 5) lui est
    déposé ; la demande est close. Refuser : `POST /admin/admins/demande/refuser`.
 4. L'Admin du nouvel admin relève `GET /v1/admins` (toutes les 15 s tant qu'il attend) : sa clé y est → il est admin.
    Il prend le trousseau, la clé de synchro, et relève l'archive.
@@ -166,13 +168,13 @@ Types d'action : `licence_creer`, `licence_prolonger`, `licence_option`, `licenc
 ### Les fichiers
 
 Un fichier est déposé en morceaux (1 Mio au plus) par l'admin+ : `POST /admin/fichiers` `{"manifeste":"<bloc fichier>"}`
-→ `{"id"}` ; puis `PUT /admin/fichiers/morceau?id=…&n=…` (le corps : les octets) ; le service le marque complet quand
+→ `{"id"}` ; puis `PUT /admin/fichiers/morceau?id=…&n=…` (`n` compte depuis 0 ; le corps : les octets, 1 Mio pile sauf le dernier) ; le service le marque complet quand
 tous les morceaux sont là. Le **manifeste** (genre `fichier`, signé par la clé de l'éditeur) :
 `{"format":1,"id":"<32 hexa>","nom":"XPG-License-Admin-Setup-1.44.0.exe","taille":6595615,"sha256":"<64 hexa>",
 "sorte":"admin|studios|autre","version":"1.44.0","acces":"public|admins|jeton","morceau":1048576,"emis":…}`.
 
 Lire : `GET /v1/fichiers/manifeste?id=…`, `GET /v1/fichiers/morceau?id=…&n=…` ; l'accès `public` : tout le monde ;
-`admins` : un appel signé par une clé d'admin (ou de l'éditeur), ou l'en-tête `X-XPG-Jeton` d'un jeton d'admin (§ 8) ;
+`admins` : un appel signé par une clé d'admin (ou de l'éditeur), ou l'en-tête `X-XPG-Jeton` (le bloc `jetonadmin` en base64) d'un jeton d'admin (§ 7) ;
 `jeton` : `?jeton=…` (un jeton tiré par l'admin+, gardé haché ; 48 h ; « une seule fois » : utilisable pour un seul
 téléchargement complet). `GET /v1/fichiers/lien?jeton=…` rend le fichier entier (un navigateur). **Le Studio vérifie
 toujours** la taille et le SHA-256 contre le manifeste signé ; un fichier qui ne correspond pas est **refusé**
@@ -191,7 +193,7 @@ signé par la clé de l'éditeur) : `{"format":1,"poste":"<deviceId>","titre","d
 ### Les versions
 
 `PUT /admin/versions` (admin+) `{"bloc":"<bloc version>"}` ; `GET /v1/version` (publique) : la plus récente ;
-`GET /v1/etat` rend `version` (« 1.44.1 »). Le bloc (genre `version`, signé par la clé de l'éditeur) :
+`GET /v1/etat` rend `version_publiee` (« 1.44.1 » ; `version` y est déjà celle du service). Le bloc (genre `version`, signé par la clé de l'éditeur) :
 
 ```json
 {"format":1,"version":"1.44.1","publiee":1762700000,"importante":false,"notes":["Exports PDF : …"],

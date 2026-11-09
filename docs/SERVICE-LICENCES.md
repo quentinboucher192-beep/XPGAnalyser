@@ -33,7 +33,9 @@ Un corps vide a l'empreinte de la chaîne vide. Le Worker refuse (401) :
 - un nonce déjà vu dans les 20 dernières minutes ;
 - une signature fausse.
 
-Pour `/admin/…`, la clé doit en plus être dans `PUBLISHER_KEYS` (sinon 403). Un Studio dont l'horloge est fausse lit d'abord l'heure du service (`GET /v1/etat`) et signe avec l'heure corrigée.
+Pour `/admin/…`, la clé doit en plus être dans `PUBLISHER_KEYS` (sinon 403). **1.44.0** : ou celle d'un admin de la liste signée par l'éditeur, non retiré, pour les routes qui le permettent et avec le droit qu'il faut (`docs/ADMINS.md`, § 6) ; une route de l'admin+ seul : 403 `droit` pour un admin ; une clé inconnue : 403 `editeur` ; une clé d'admin retiré : 403 `retire` (et une ligne `signature_refusee` au journal des admins). Un Studio dont l'horloge est fausse lit d'abord l'heure du service (`GET /v1/etat`) et signe avec l'heure corrigée.
+
+**1.44.0** : tout appel signé peut porter `X-XPG-Logiciel` (`IHM-Studio/1.44.0`, `API-Studio/1.44.0`, `XPG-License-Admin/1.44.0`) ; le service garde, par clé, le logiciel, la version et l'heure (une écriture seulement s'ils changent, ou une fois par heure ; un en-tête illisible est ignoré).
 
 L'**identifiant d'un poste** : `deviceId(clé)` = les 32 premiers hexadécimaux de SHA-256(`"xpg-poste-passerelle/1"` ‖ clé publique), comme en 1.34.
 
@@ -76,10 +78,15 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 
 | Route | Réponse |
 |---|---|
-| `GET /v1/etat` | `{"service":"xpg-licences","version":"1.39.0","heure":<unix>,"cle_service":"<hexa>"\|null,"certifie":true\|false,"registre":<numéro>\|0,"revocations":<numéro>\|0,"changements":N}`. **1.39.0** : `revocations` = le numéro de la liste de révocation déposée ; `changements` = un compteur qui monte à chaque changement chez les clients (une liste de révocation, une licence déposée ou désactivée, un PC retiré, l'état d'un poste). Un Studio qui a une licence regarde cette route **toutes les 2 minutes** : le compteur (ou le registre) a bougé, il se resynchronise tout de suite (renouveler, son état « poste », le registre) - la licence révoquée, désactivée ou retirée est perdue en direct, et une fenêtre le dit. Le compteur ne dit ni quelle licence ni quel PC. |
+| `GET /v1/etat` | `{"service":"xpg-licences","version":"1.39.0","heure":<unix>,"cle_service":"<hexa>"\|null,"certifie":true\|false,"registre":<numéro>\|0,"revocations":<numéro>\|0,"changements":N}`. **1.39.0** : `revocations` = le numéro de la liste de révocation déposée ; `changements` = un compteur qui monte à chaque changement chez les clients (une liste de révocation, une licence déposée ou désactivée, un PC retiré, l'état d'un poste). Un Studio qui a une licence regarde cette route **toutes les 2 minutes** : le compteur (ou le registre) a bougé, il se resynchronise tout de suite (renouveler, son état « poste », le registre) - la licence révoquée, désactivée ou retirée est perdue en direct, et une fenêtre le dit. Le compteur ne dit ni quelle licence ni quel PC. **1.44.0** : `admins` (le numéro de la liste des admins) et `version_publiee` (la dernière version publiée des logiciels, `"1.44.1"`, ou `""`) ; `version` reste celle du service. |
 | `GET /v1/heure?n=<32 hexa>` | le bloc `heure` (texte) ; 503 sans certificat |
 | `GET /v1/certificat` | le bloc `service` (texte) ; 404 sans certificat |
 | `GET /v1/registre` | le bloc du registre (texte) ; 404 s'il n'y en a pas |
+| `GET /v1/admins` | 1.44.0 : le bloc de la liste des admins (genre `admins`) ; 404 s'il n'y en a pas |
+| `GET /v1/version` | 1.44.0 : le bloc de la dernière version publiée (genre `version`) ; 404 s'il n'y en a pas |
+| `GET /v1/fichiers/manifeste?id=…` | 1.44.0 : le manifeste d'un fichier entier (genre `fichier`) ; 404 sinon |
+| `GET /v1/fichiers/morceau?id=…&n=…` | 1.44.0 : les octets du morceau `n` (0 à `morceaux` − 1, 1 Mio chacun, le dernier le reste), `application/octet-stream`. Selon l'accès du manifeste : `public` ; `admins` : un appel signé par un admin ou l'éditeur, ou l'en-tête `X-XPG-Jeton` (le bloc `jetonadmin` **en base64**, signé par un admin de la liste ou l'éditeur : `{"cle","poste","expire"}`, 31 jours au plus) ; `jeton` (et tout accès) : `&jeton=<32 hexa>`. 403 `acces` ou `jeton` sinon. Un jeton « une seule fois » sert jusqu'au dernier morceau. |
+| `GET /v1/fichiers/lien?jeton=…` | 1.44.0 : le fichier entier (`Content-Disposition: attachment`), pour un navigateur ; un jeton « une seule fois » est effacé dès le début |
 
 ### Le PC (signées par la clé du PC)
 
@@ -91,11 +98,16 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 | `POST /v1/decouverte` | `{"machine":"<32 hexa>"}` | 200 : le bloc `decouverte` (texte). `debut` = la première fois que cette machine a été vue ; `jours` = `DECOUVERTE_JOURS` (30) |
 | `POST /v1/flottante/jeton` | `{"licence":"<id>","station":"<32 hexa>"}` | 200 `{"jeton":"<bloc>"}` (15 min) ; 409 `complet` avec `"libre_dans":<secondes>` ; 403 `activation` si ce PC n'a pas d'activation flottante pour cette licence, ou depuis une autre station ; 400 `champ` sans station |
 | `POST /v1/flottante/rendre` | `{"licence":"<id>","station":"<32 hexa>"}` | 200 `{}` ; 403 `activation` depuis une autre station |
-| `POST /v1/demandes` | `{"cle":"<id de la clé de l'éditeur>","scelle":"<base64, 64 Kio au plus>"}` | 201 `{"numero":N}` ; une seule demande en attente par PC (l'ancienne passe « remplacée ») ; 507 `limite` quand le service garde déjà 20 Mio de demandes |
+| `POST /v1/demandes` | `{"cle":"<id de la clé de l'éditeur>","scelle":"<base64, 64 Kio au plus>"}` ; 1.44.0 : et `"scelles":[{"cle":"<id xpg-… d'une clé>","scelle":"<base64>"}]` (33 au plus ; chaque clé : une clé de l'éditeur, ou un admin de la liste qui a le droit `demandes`) | 201 `{"numero":N}` ; une seule demande en attente par PC (l'ancienne passe « remplacée ») ; 507 `limite` quand le service garde déjà 20 Mio de demandes (tous les scellés comptés) |
 | `POST /v1/demandes/annuler` | `{"numero":N}` | 200 `{}` |
 | `GET /v1/poste` | — | 200 `{"poste":"<bloc poste>"\|null}` |
+| `GET /v1/messages?depuis=N` | — | 1.44.0 : 200 `{"messages":[{"numero":N,"bloc":"<bloc message>"}]}` : ceux de CE poste (`deviceId` de la clé qui signe) après N ; 50 au plus par PC, 30 jours |
+| `POST /v1/admins/demande` | `{"nom","courriel","pc","poste":"<32 hexa>","logiciel"}` | 1.44.0 : la demande d'admin de la clé qui signe (une par clé, 20 en attente au plus) : 201 `{"etat":"attente","empreinte":"B7E2 48A9 …"}` ; 409 `deja` (déjà admin, ou la clé de l'éditeur) |
+| `GET /v1/admins/demande?cle=<la clé qui signe>` | — | 1.44.0 : `{"etat":"attente"\|"acceptee"\|"refusee"\|"retire"}` ; 404 sans demande |
 
 ### L'éditeur (signées par sa clé)
+
+**1.44.0** : l'admin+ (la clé de l'éditeur) fait tout ; un admin de la liste appelle les routes que permet `docs/ADMINS.md` (§ 6), avec ses droits : `PUT /admin/registre` (le droit de chaque partie qui change : `editions` → `offres`, `options`, `announcements` → `annonces`, une autre partie → `offres`), `PUT /admin/revocations` (`licence_revoquer`), `PUT /admin/licences` (`licence_creer` pour une licence nouvelle ; sinon l'un de `licence_creer`, `licence_prolonger`, `licence_option`), `POST /admin/activations/retirer` (`poste_retirer`), `GET /admin/demandes` et `POST /admin/demandes/traiter` (`demandes`), `PUT /admin/postes` (`demandes` ou un droit de licence ou `poste_retirer`), et sans droit : `GET /admin/cle-service`, `GET /admin/licences`, `GET /admin/etat`, `GET /admin/stats`, l'archive, `GET /admin/trousseau`, `POST /admin/journal`, `GET /admin/admins`. Un document déposé par un admin est signé par **sa** clé (sinon 400 `signature`) ; un droit qui manque : 403 `droit` (`"droits"` : ceux qu'il faut).
 
 | Route | Corps | Réponse |
 |---|---|---|
@@ -106,18 +118,50 @@ Les réponses JSON ont `Content-Type: application/json`. Une erreur rend `{"erre
 | `PUT /admin/licences` | `{"licence":"<bloc>","code_hash":"<64 hexa>"\|absent,"bail_jours":30,"active":true}` | 200 : la licence en ligne (ses postes = `max_devices`, flottante si son type l'est). Désactivée : les places gardées par des PC libérés reviennent. |
 | `GET /admin/licences` | — | `{"licences":[{"licence":"<id>","emission":"…","type":"…","postes_max":N,"bail_jours":N,"active":bool,"code":bool,"activations":[{"poste":"<64 hexa>","nom":"…","station":"…","activee":"…","vue":"…","jusqu_a":"…","etat":"active"\|"liberee"\|"retiree"\|"revoquee","place_jusqu_a":"…"\|null}],"jetons":[{"poste":"…","jusqu_a":"…"}]}]}` (`place_jusqu_a` : un PC libéré au-delà des changements permis garde sa place jusque-là) |
 | `POST /admin/activations/retirer` | `{"licence":"<id>","poste":"<64 hexa>"}` | 200 : la place revient tout de suite, même gardée |
-| `GET /admin/demandes?depuis=N` | — | `{"demandes":[{"numero":N,"poste":"<32 hexa>","cle":"<id>","scelle":"<base64>","etat":"attente"\|"annulee"\|"remplacee"\|"traitee","cree":"…","maj":"…"}]}` |
+| `GET /admin/demandes?depuis=N` | — | `{"demandes":[{"numero":N,"poste":"<32 hexa>","cle":"<id>","scelle":"<base64>","etat":"attente"\|"annulee"\|"remplacee"\|"traitee","cree":"…","maj":"…"}]}`. 1.44.0, appelée par un admin : son scellé (`cle` = son identifiant) ; sans scellé pour lui : `"scelle":null,"pour_un_autre":true` |
 | `POST /admin/demandes/traiter` | `{"numero":N}` | 200 |
 | `PUT /admin/postes` | `{"poste":"<32 hexa>","etat":"<bloc poste>"}` | 200 (lu par `GET /v1/poste`) |
 | `GET /admin/archive` | — | `{"version":V,"fichiers":[{"chemin":"…","sha256":"…","taille":N}]}` |
 | `GET /admin/archive/fichier?chemin=…` | — | le texte du fichier (chiffré par l'éditeur avec sa clé de synchro) |
 | `POST /admin/archive` | `{"base":V,"fichiers":{"<chemin>":"<texte>"\|null}}` | 200 `{"version":V+1}` ; 409 `{"version":<actuelle>}` si `base` n'est pas la version actuelle |
 | `GET /admin/stats` | — | les compteurs (licences, activations et leurs `lignes`, demandes et leurs `octets`, Découvertes, postes, appels du jour) |
-| `GET /admin/etat` | — | 1.40.0 : `{"version":"…","heure":T,"activite":N,"demandes":N,"attente":N,"changements":N,"registre":N}` — des compteurs qui montent à chaque changement : `activite` (un PC activé — pas un renouvellement, ni le même PC qui s'active de nouveau —, libéré par son client, retiré à son renouvellement quand sa place a été reprise), `demandes` (une demande déposée ou annulée par un client), `attente` (les demandes en attente). Jamais public (le compteur public des Studios, `/v1/etat`, n'en dit rien). L'outil de l'éditeur, ouvert, le regarde toutes les 15 secondes et ne relit les licences (ou les demandes) que s'ils ont bougé ; un service d'avant (404) : il relit les licences toutes les 30 secondes. |
+| `GET /admin/etat` | — | 1.40.0 : `{"version":"…","heure":T,"activite":N,"demandes":N,"attente":N,"changements":N,"registre":N}` — des compteurs qui montent à chaque changement : `activite` (un PC activé — pas un renouvellement, ni le même PC qui s'active de nouveau —, libéré par son client, retiré à son renouvellement quand sa place a été reprise), `demandes` (une demande déposée ou annulée par un client), `attente` (les demandes en attente). Jamais public (le compteur public des Studios, `/v1/etat`, n'en dit rien). L'outil de l'éditeur, ouvert, le regarde toutes les 15 secondes et ne relit les licences (ou les demandes) que s'ils ont bougé ; un service d'avant (404) : il relit les licences toutes les 30 secondes. **1.44.0** : aussi `admins` (le numéro de la liste), `journal` (le dernier numéro du journal des admins), `admins_demandes` (les demandes d'admin en attente), `version_publiee`, `role` (`"admin+"` ou `"admin"`) et `droits` (ceux de qui appelle : les 13 pour l'admin+). |
+
+**1.44.0, les routes des admins, du journal, des fichiers, des versions** (le détail : `docs/ADMINS.md`, § 3 à 6). Les dates de ces routes sont des secondes Unix.
+
+| Route | Qui | Corps | Réponse |
+|---|---|---|---|
+| `PUT /admin/admins` | admin+ | `{"admins":"<bloc admins>"}` | 200 `{"admins":N,"demandes_acceptees":n}` ; le numéro monte (le même texte : 200), sinon 409 `ancien`. Un admin retiré (ou absent) perd son scellé du trousseau ; la demande d'admin d'une clé de la liste est close (acceptée). |
+| `GET /admin/admins` | admin+, admin | — | `{"numero":N,"admins":[{"id","cle","nom","pc","poste","depuis","profil","droits","retire","derniere","logiciel","version","vu"}],"editeurs":[{"id","cle","derniere","logiciel","version","vu"}]}` (`derniere` : l'heure de sa dernière ligne au journal) |
+| `GET /admin/admins/demandes` | admin+ | — | `{"demandes":[{"cle","id","empreinte","nom","courriel","pc","poste","logiciel","recue"}]}` (en attente) |
+| `POST /admin/admins/demande/refuser` | admin+ | `{"cle":"<64 hexa>"}` | 200 ; 404 `demande` |
+| `PUT /admin/trousseau` | admin+ | `{"cle":"<clé d'un admin de la liste>","scelle":"<base64, 4 Kio au plus>"}` | 200 ; 409 `admin` si la clé n'est pas un admin non retiré |
+| `GET /admin/trousseau` | admin+, admin | — | `{"scelle":"…"}` : celui de la clé qui appelle ; 404 `trousseau` |
+| `POST /admin/journal` | admin+, admin | `{"entree":"<JSON, 16 Kio au plus>","signature":"<128 hexa : \"XPG-JOURNAL-1\\n\" + entree>"}` | 201 `{"numero":N}` ; la même entrée (même clé, même `nonce`) : 200 et le même numéro ; une entrée d'un admin dont `poste` n'est pas celui de la liste : une ligne `autre_pc` du service suit. 507 `limite` au-delà de 200 000 lignes. |
+| `GET /admin/journal?depuis=N` | admin+ | — | `{"lignes":["<texte de la ligne>",…],"dernier":N}` (500 lignes au plus ; chaque ligne : `{"numero","precedent","recu","cle","entree","signature"}`, `precedent` = SHA-256 de la ligne d'avant) |
+| `POST /admin/fichiers` | admin+ | `{"manifeste":"<bloc fichier>"}` | 201 `{"id","morceaux","recus","complet","manquants":[n…]}` ; le même manifeste : 200 (un envoi repris) ; 507 au-delà de 1 Gio de fichiers |
+| `PUT /admin/fichiers/morceau?id=…&n=…` | admin+ | les octets (1 Mio ; le dernier : le reste) | 200 (la même réponse) ; complet au dernier, si le SHA-256 du fichier est celui du manifeste (sinon 409 `empreinte`, ses morceaux effacés) |
+| `POST /admin/fichiers/jeton` | admin+ | `{"id","duree":<60 à 172800 s>,"une_fois":bool}` | 201 `{"jeton":"<32 hexa>","expire":T}` (le service n'en garde que le SHA-256) |
+| `PUT /admin/messages` | admin+ | `{"poste":"<deviceId>","bloc":"<bloc message>"}` | 201 `{"numero":N}` |
+| `PUT /admin/versions` | admin+ | `{"bloc":"<bloc version>"}` | 201 `{"version"}` ; plus récente que la dernière (comparée en nombres), sinon 409 `ancien` ; chaque fichier entier, de la taille et du SHA-256 dits, sinon 409 `fichier` |
+| `GET /admin/versions` | admin+ | — | `{"versions":[{"version","publiee","fichiers":[{…,"present"}],"bloc"}],"logiciels":{"par_version":{"1.44.0":N},"par_logiciel":{"IHM-Studio":{"1.44.0":N}},"admins":[{"cle","logiciel","version","vu"}],"total":N}}` |
+
+Les fichiers des 3 dernières versions sont gardés ; les autres, 30 jours après leur dépôt.
+
+**1.44.0, la sauvegarde et la restauration** (admin+ seul ; si Cloudflare tombe, tout revient ailleurs, à l'identique). La sauvegarde porte **la clé privée du service** : c'est un secret, à garder chiffré.
+
+| Route | Corps | Réponse |
+|---|---|---|
+| `GET /admin/sauvegarde` | — | le sommaire `{"schema":3,"service_version":"1.44.0","tables":[{"nom","lignes"}],"heure":T}` ; une ligne `sauvegarde` au journal des admins |
+| `GET /admin/sauvegarde?table=<t>&depuis=<curseur>` | — | `{"table","lignes":[{"<colonne>":<valeur>}],"suivant":"<curseur>"\|null,"schema":3}` : les lignes EXACTES, dans l'ordre de la clé de la table, par pages de 1,5 Mio au plus (une ligne plus grosse part seule) ; une valeur binaire : `{"$b64":"…"}`. Les tables : `config` (la clé du service, le certificat, le registre, les révocations, la liste des admins, les compteurs), `licences`, `activations`, `liberations`, `jetons`, `decouvertes`, `demandes`, `demandes_scelles`, `postes`, `archive`, `stats_jour`, `admins`, `admins_demandes`, `trousseau`, `journal`, `fichiers` (les manifestes, pas les octets), `fichiers_jetons`, `messages`, `versions`, `logiciels`. Jamais `nonces`, `debits`, `morceaux`. |
+| `POST /admin/restauration/debut` | `{"schema":3,"remplacer":bool}` | 200 : les tables sauvegardées sont vidées, et le service ne répond plus qu'à la restauration et à la sauvegarde (le reste : 503 `restauration`). 409 `schema` (une sauvegarde d'un autre schéma), 409 `pas_vide` (des licences, des activations ou une liste des admins, sans `"remplacer":true`). |
+| `POST /admin/restauration/lot` | `{"table","lignes":[…]}` (8 Mio au plus) | 200 `{"table","lignes":n}` : les lignes, telles quelles (la même clé : remplacée) ; 400 `table`, `colonnes`, `valeur` |
+| `POST /admin/restauration/fin` | — | 200 `{"tables":[{"nom","lignes"}],"fichiers_a_renvoyer":n,"cle_service":"…"}` : la clé du service relue, une ligne `restauration` au journal. Les fichiers sans leurs octets sont « incomplets » : l'admin+ renvoie le même manifeste (`POST /admin/fichiers` rend `manquants`), puis les morceaux. |
 
 ### Les limites (le plan gratuit, et les abus)
 
-- Corps : 2 Mio au plus. Un fichier de l'archive : 1,5 Mio au plus.
+- Corps : 2 Mio au plus (1.44.0 : un lot d'une restauration, 8 Mio). Un fichier de l'archive : 1,5 Mio au plus.
+- 1.44.0 : 32 admins, 512 empreintes gardées par admin ; 20 demandes d'admin en attente (une close est effacée après 7 jours) ; 200 000 lignes de journal ; 1 Gio de fichiers (1 000 fichiers, 200 Mio chacun) ; 50 messages par PC (30 jours) ; un lien de fichier : 48 h au plus. Par adresse et par heure : `admins/demande` 10 ; par clé : 5 par jour.
 - Devant le service (le limiteur de Cloudflare, `[[ratelimits]]` de `wrangler.toml`), par adresse IP et par minute : les routes publiques (`etat`, `heure`, `certificat`, `registre`) 60, les autres routes `/v1` 120. Un appel refusé là ne coûte rien au service.
 - Par adresse IP et par heure : `activer` 10, `decouverte` 10, `demandes` 10.
 - Par PC : `activer` 5 par heure, `renouveler` 30 par heure, `flottante/jeton` 60 par heure, `demandes` 5 par jour (`renouveler` et `jeton` sont comptés en mémoire : aucune écriture).

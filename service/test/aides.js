@@ -178,30 +178,36 @@ export async function lancerService({ cles = [], decalage = 0, jours, etat, sans
 export const reponses = [];
 
 // Un appel ; signe si `cle` est donnee. `ip` : CF-Connecting-IP (une neuve a chaque appel par defaut : les limites
-// par adresse ne genent pas les essais qui ne les visent pas).
-export async function appel(svc, methode, chemin, { corps, cle, date, nonce, ip, signeChemin, signeCorps, signature } = {}) {
-    const texte = corps === undefined ? "" : typeof corps === "string" ? corps : JSON.stringify(corps);
-    const entetes = { "CF-Connecting-IP": ip || "198.51." + crypto.randomInt(0, 256) + "." + crypto.randomInt(1, 255) };
+// par adresse ne genent pas les essais qui ne les visent pas). 1.44.0 : `corps` peut etre des octets (un Buffer : un
+// morceau de fichier, envoye tel quel), `entetes` des en-tetes de plus (X-XPG-Logiciel, X-XPG-Jeton), `binaire` :
+// la reponse est aussi rendue en octets (`octets`).
+export async function appel(svc, methode, chemin, { corps, cle, date, nonce, ip, signeChemin, signeCorps, signature, entetes: plus, binaire } = {}) {
+    const octets = Buffer.isBuffer(corps) ? corps : null;
+    const texte = octets ? "" : corps === undefined ? "" : typeof corps === "string" ? corps : JSON.stringify(corps);
+    const entetes = { "CF-Connecting-IP": ip || "198.51." + crypto.randomInt(0, 256) + "." + crypto.randomInt(1, 255), ...(plus || {}) };
     if (texte) entetes["Content-Type"] = "application/json";
+    if (octets) entetes["Content-Type"] = "application/octet-stream";
     if (cle) {
         const d = date !== undefined ? String(date) : String(Math.floor(Date.now() / 1000) + svc.ecart);
         const n = nonce || hasard(16);
-        const message = "XPG-SERVICE-1\n" + methode + "\n" + (signeChemin || chemin) + "\n" + d + "\n" + n + "\n" + sha256Hex(signeCorps !== undefined ? signeCorps : texte);
+        const message =
+            "XPG-SERVICE-1\n" + methode + "\n" + (signeChemin || chemin) + "\n" + d + "\n" + n + "\n" + sha256Hex(signeCorps !== undefined ? signeCorps : octets || texte);
         entetes["X-XPG-Cle"] = cle.hex;
         entetes["X-XPG-Date"] = d;
         entetes["X-XPG-Nonce"] = n;
         entetes["X-XPG-Signature"] = signature || cle.signer(message).toString("hex");
     }
-    const r = await fetch(svc.base + chemin, { method: methode, headers: entetes, body: texte || undefined });
-    const brut = await r.text();
+    const r = await fetch(svc.base + chemin, { method: methode, headers: entetes, body: octets || texte || undefined });
+    const recu = Buffer.from(await r.arrayBuffer());
+    const brut = binaire ? "" : recu.toString("utf8");
     reponses.push(brut);
     let json = null;
     try {
-        json = JSON.parse(brut);
+        json = JSON.parse(binaire ? recu.toString("utf8") : brut);
     } catch {
         json = null;
     }
-    return { statut: r.status, json, texte: brut, type: r.headers.get("content-type") || "", entetes: r.headers };
+    return { statut: r.status, json, texte: brut, type: r.headers.get("content-type") || "", entetes: r.headers, octets: binaire ? recu : null };
 }
 
 // Le certificat de service, signe par l'editeur.

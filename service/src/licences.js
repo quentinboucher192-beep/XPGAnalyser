@@ -11,6 +11,14 @@
 //  (le numero de la liste) et `changements` (un compteur qui monte a chaque
 //  revocation, licence deposee ou desactivee, PC retire, etat de poste depose) ;
 //  les Studios le regardent toutes les 2 minutes et se resynchronisent s'il bouge.
+//  1.44.0 : PLUSIEURS ADMINS (docs/ADMINS.md) - les routes /admin acceptent la
+//  cle de l'editeur (<< admin+ >>) ou la cle d'un admin de la liste signee par
+//  l'editeur, non retire (<< admin >>, avec ses droits) ; un document depose par
+//  un admin est signe par SA cle, et il faut le droit de ce qu'il change. La
+//  liste, les demandes d'admin, le trousseau, le journal : admins.js ; les
+//  fichiers, les messages a un PC, les versions : fichiers.js ; la sauvegarde
+//  et la restauration du service entier : sauvegarde.js. Le logiciel de chaque
+//  cle (X-XPG-Logiciel de ses appels signes) est garde (logiciels).
 // -----------------------------------------------------------------------------
 //  LES TABLES
 //    config        la cle du service (creee ici au premier appel ; la partie
@@ -30,8 +38,15 @@
 //    jetons        les jetons des licences flottantes (15 min), par (licence, PC,
 //                  station)
 //    decouvertes   la premiere fois qu'une machine a ete vue (gardee a vie)
-//    demandes      les demandes manuelles (scellees pour l'editeur)
+//    demandes      les demandes manuelles (scellees pour l'editeur) ; 1.44.0 :
+//                  `autres` = les octets des scelles pour d'autres cles
+//    demandes_scelles  1.44.0 : une demande scellee aussi pour d'autres cles
+//                  (un admin qui a le droit << demandes >>, une autre cle de
+//                  l'editeur) : (numero, cle, scelle)
 //    postes        l'etat d'un PC (bloc << poste >> signe par l'editeur)
+//    admins, admins_demandes, trousseau, journal          1.44.0 : admins.js
+//    fichiers, morceaux, fichiers_jetons, messages,
+//    versions, logiciels                                  1.44.0 : fichiers.js
 //    archive       l'archive privee de l'editeur (chiffree par lui) et sa version
 //    nonces        les nonces vus (20 min : un appel rejoue est refuse)
 //    debits        les compteurs des limites (par adresse, par PC)
@@ -54,7 +69,10 @@
 // =============================================================================
 import { DurableObject } from "cloudflare:workers";
 
-import { BlocIllisible, ecrireBlocLu, lireBlocs, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
+import { DROITS_ADMINS, DROITS_LICENCE, DROITS_REGISTRE, GARDE_DEMANDES_ADMINS, RoutesAdmins, droitsDuRegistre } from "./admins.js";
+import { BlocIllisible, ecrireBlocLu, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
+import { GARDE_MESSAGE, RoutesFichiers } from "./fichiers.js";
+import { CONFIG_RESTAURATION, RoutesSauvegarde } from "./sauvegarde.js";
 import {
     DocumentIllisible,
     estIdLicence,
@@ -74,10 +92,12 @@ import {
     dec,
     egalConstant,
     enc,
+    estBase64,
     estHex,
     hex,
     iso,
     jourDe,
+    mal,
     posteDe,
     reponseErreur,
     reponseJson,
@@ -87,8 +107,10 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.40.0";
-const SCHEMA = 2;
+const VERSION = "1.44.0";
+// 3 (1.44.0) : les admins, le journal, les fichiers, les messages, les versions, les logiciels ; les demandes
+// scellees pour plusieurs cles.
+const SCHEMA = 3;
 const JOUR = 86400;
 const HEURE = 3600;
 const FENETRE_APPEL = 600; // +-600 s
@@ -100,6 +122,11 @@ const MAX_LICENCES = 10000;
 const MAX_ACTIVATIONS = 100000;
 const MAX_DEMANDES_ATTENTE = 1000;
 const MAX_SCELLE = 64 * 1024;
+// 1.44.0 : une demande scellee aussi pour d'autres cles (les admins qui ont le droit << demandes >>, 32 au plus, et
+// une autre cle de l'editeur).
+const MAX_SCELLES = 33;
+const MAX_LOGICIELS = 200000; // les cles dont le logiciel est garde, au plus
+const GARDE_LOGICIEL = 365 * JOUR; // une cle qui n'appelle plus depuis un an est oubliee
 const MAX_OCTETS_DEMANDES = 20 * 1024 * 1024; // toutes les demandes gardees (scellees), au plus
 const GARDE_DEMANDES = 7 * JOUR; // une demande close (annulee, remplacee, traitee) est effacee apres 7 jours
 const MAX_DECOUVERTES = 1000000;
@@ -134,20 +161,33 @@ const PAR_IP = {
     activer: ["activer", 10, HEURE],
     decouverte: ["decouverte", 10, HEURE],
     demandes: ["demandes", 10, HEURE],
+    admins: ["admins_demande", 10, HEURE],
 };
 const PAR_PC = {
     activer: ["activer", 5, HEURE],
     renouveler: ["renouveler", 30, HEURE, "memoire"],
     jeton: ["jeton", 60, HEURE, "memoire"],
     demandes: ["demandes", 5, JOUR],
+    admins: ["admins_demande", 5, JOUR],
 };
 
-// signe : "pc" (la cle du PC), "editeur" (une cle de PUBLISHER_KEYS) ; absent : public.
+// signe : "pc" (n'importe quelle cle : celle du PC), "admin" (une cle de PUBLISHER_KEYS - l'admin+ - ou celle d'un
+// admin de la liste, non retire), "plus" (une cle de PUBLISHER_KEYS seulement) ; absent : public.
+// droit (1.44.0) : un admin doit avoir l'un de ces droits (l'admin+ les a tous) ; les documents deposes demandent en
+// plus le droit de ce qu'ils changent (deposerRegistre, deposerLicence).
+// restauration : la route repond aussi pendant une restauration (les autres : 503).
+const DROITS_POSTE = ["demandes", "licence_creer", "licence_prolonger", "licence_option", "licence_revoquer", "poste_retirer"];
 const ROUTES = {
     "GET /v1/etat": { f: "etat" },
     "GET /v1/heure": { f: "heure" },
     "GET /v1/certificat": { f: "lireCertificat" },
     "GET /v1/registre": { f: "lireRegistre" },
+    "GET /v1/admins": { f: "lireAdminsPublic" },
+    "GET /v1/version": { f: "lireVersionPublique" },
+    "GET /v1/fichiers/manifeste": { f: "lireManifesteFichier" },
+    // publique, ou signee par un admin (l'acces du fichier), ou avec un jeton
+    "GET /v1/fichiers/morceau": { f: "lireMorceauFichier" },
+    "GET /v1/fichiers/lien": { f: "lienFichier" },
     "POST /v1/activer": { f: "activer", signe: "pc", ip: PAR_IP.activer, pc: PAR_PC.activer },
     "POST /v1/renouveler": { f: "renouveler", signe: "pc", pc: PAR_PC.renouveler },
     "POST /v1/liberer": { f: "liberer", signe: "pc" },
@@ -157,26 +197,45 @@ const ROUTES = {
     "POST /v1/demandes": { f: "deposerDemande", signe: "pc", ip: PAR_IP.demandes, pc: PAR_PC.demandes },
     "POST /v1/demandes/annuler": { f: "annulerDemande", signe: "pc" },
     "GET /v1/poste": { f: "lirePoste", signe: "pc" },
-    "GET /admin/cle-service": { f: "cleService", signe: "editeur" },
-    "PUT /admin/certificat": { f: "deposerCertificat", signe: "editeur" },
-    "PUT /admin/registre": { f: "deposerRegistre", signe: "editeur" },
-    "PUT /admin/revocations": { f: "deposerRevocations", signe: "editeur" },
-    "PUT /admin/licences": { f: "deposerLicence", signe: "editeur" },
-    "GET /admin/licences": { f: "listerLicences", signe: "editeur" },
-    "POST /admin/activations/retirer": { f: "retirerActivation", signe: "editeur" },
-    "GET /admin/demandes": { f: "listerDemandes", signe: "editeur" },
-    "POST /admin/demandes/traiter": { f: "traiterDemande", signe: "editeur" },
-    "PUT /admin/postes": { f: "deposerPoste", signe: "editeur" },
-    "GET /admin/archive": { f: "listerArchive", signe: "editeur" },
-    "GET /admin/archive/fichier": { f: "lireFichier", signe: "editeur" },
-    "POST /admin/archive": { f: "ecrireArchive", signe: "editeur" },
-    "GET /admin/stats": { f: "stats", signe: "editeur" },
-    "GET /admin/etat": { f: "etatAdmin", signe: "editeur" },
+    "GET /v1/messages": { f: "lireMessages", signe: "pc" },
+    "POST /v1/admins/demande": { f: "deposerDemandeAdmin", signe: "pc", ip: PAR_IP.admins, pc: PAR_PC.admins },
+    "GET /v1/admins/demande": { f: "etatDemandeAdmin", signe: "pc" },
+    "GET /admin/cle-service": { f: "cleService", signe: "admin" },
+    "PUT /admin/certificat": { f: "deposerCertificat", signe: "plus" },
+    "PUT /admin/registre": { f: "deposerRegistre", signe: "admin", droit: DROITS_REGISTRE },
+    "PUT /admin/revocations": { f: "deposerRevocations", signe: "admin", droit: ["licence_revoquer"] },
+    "PUT /admin/licences": { f: "deposerLicence", signe: "admin", droit: DROITS_LICENCE },
+    "GET /admin/licences": { f: "listerLicences", signe: "admin" },
+    "POST /admin/activations/retirer": { f: "retirerActivation", signe: "admin", droit: ["poste_retirer"] },
+    "GET /admin/demandes": { f: "listerDemandes", signe: "admin", droit: ["demandes"] },
+    "POST /admin/demandes/traiter": { f: "traiterDemande", signe: "admin", droit: ["demandes"] },
+    "PUT /admin/postes": { f: "deposerPoste", signe: "admin", droit: DROITS_POSTE },
+    "GET /admin/archive": { f: "listerArchive", signe: "admin" },
+    "GET /admin/archive/fichier": { f: "lireFichier", signe: "admin" },
+    "POST /admin/archive": { f: "ecrireArchive", signe: "admin" },
+    "GET /admin/stats": { f: "stats", signe: "admin" },
+    "GET /admin/etat": { f: "etatAdmin", signe: "admin" },
+    // 1.44.0 (docs/ADMINS.md, § 6)
+    "PUT /admin/admins": { f: "deposerAdmins", signe: "plus" },
+    "GET /admin/admins": { f: "listerAdmins", signe: "admin" },
+    "GET /admin/admins/demandes": { f: "listerDemandesAdmins", signe: "plus" },
+    "POST /admin/admins/demande/refuser": { f: "refuserDemandeAdmin", signe: "plus" },
+    "PUT /admin/trousseau": { f: "deposerTrousseau", signe: "plus" },
+    "GET /admin/trousseau": { f: "lireTrousseau", signe: "admin" },
+    "POST /admin/journal": { f: "ecrireJournal", signe: "admin" },
+    "GET /admin/journal": { f: "lireJournal", signe: "plus" },
+    "POST /admin/fichiers": { f: "deposerManifeste", signe: "plus" },
+    "PUT /admin/fichiers/morceau": { f: "deposerMorceau", signe: "plus" },
+    "POST /admin/fichiers/jeton": { f: "tirerJetonFichier", signe: "plus" },
+    "PUT /admin/messages": { f: "deposerMessage", signe: "plus" },
+    "PUT /admin/versions": { f: "deposerVersion", signe: "plus" },
+    "GET /admin/versions": { f: "listerVersions", signe: "plus" },
+    "GET /admin/sauvegarde": { f: "sauvegarde", signe: "plus", restauration: true },
+    "POST /admin/restauration/debut": { f: "debutRestauration", signe: "plus", restauration: true },
+    "POST /admin/restauration/lot": { f: "lotRestauration", signe: "plus", restauration: true },
+    "POST /admin/restauration/fin": { f: "finRestauration", signe: "plus", restauration: true },
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
-
-// ---- les erreurs courantes ----
-const mal = (champ, phrase) => new Erreur(400, "champ", phrase || "Le champ « " + champ + " » manque ou est mal écrit.");
 
 // La station d'un appel (l'empreinte de l'installation de Windows du PC, stationHash : 32 hexadecimaux).
 function stationDe(corps) {
@@ -251,10 +310,25 @@ export class Licences extends DurableObject {
         this.ecrites = 0; // les lignes ecrites par l'appel en cours
         this.debitsMem = new Map(); // les limites tenues en memoire (renouveler, jeton) : aucune ecriture
         this.statsMem = null; // les appels du jour, en memoire : {jour, routes, sale, ecrit}
+        this.schema = SCHEMA; // (sauvegarde.js)
+        this.versionService = VERSION;
+        this.enRestauration = false; // 1.44.0 : une restauration en cours (sauvegarde.js) : tout le reste repond 503
         ctx.blockConcurrencyWhile(async () => {
             this.creerTables();
+            this.enRestauration = !!this.config(CONFIG_RESTAURATION);
             await this.chargerCle();
         });
+    }
+
+    // Les caches en memoire (apres une restauration : tout est relu des tables).
+    oublierCaches() {
+        this.certCache = null;
+        this.revCache = null;
+        this.statsMem = null;
+        this.menageJour = null;
+        this.dernierMenage = 0;
+        this.debitsMem.clear();
+        this.refusesMem = null;
     }
 
     // ================================================================ la base ==
@@ -276,6 +350,9 @@ export class Licences extends DurableObject {
             this.x("DROP TABLE IF EXISTS jetons");
             this.x("DROP TABLE IF EXISTS stats");
         }
+        // 2 -> 3 (1.44.0) : les octets des scelles d'une demande pour d'autres cles ; les tables neuves sont creees
+        // ci-dessous. Rien n'est efface.
+        if (avant >= 1 && avant < 3) this.x("ALTER TABLE demandes ADD COLUMN autres INTEGER NOT NULL DEFAULT 0");
         this.x(`
             CREATE TABLE IF NOT EXISTS licences (
                 id TEXT PRIMARY KEY, bloc TEXT NOT NULL, emission INTEGER NOT NULL, type TEXT NOT NULL,
@@ -293,15 +370,41 @@ export class Licences extends DurableObject {
             CREATE TABLE IF NOT EXISTS decouvertes (machine TEXT PRIMARY KEY, debut INTEGER NOT NULL, poste TEXT NOT NULL, vue INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS demandes (
                 numero INTEGER PRIMARY KEY, poste TEXT NOT NULL, cle TEXT NOT NULL, scelle TEXT NOT NULL,
-                etat TEXT NOT NULL, cree INTEGER NOT NULL, maj INTEGER NOT NULL);
+                etat TEXT NOT NULL, cree INTEGER NOT NULL, maj INTEGER NOT NULL, autres INTEGER NOT NULL DEFAULT 0);
             CREATE INDEX IF NOT EXISTS demandes_poste ON demandes (poste, etat);
             CREATE INDEX IF NOT EXISTS demandes_etat ON demandes (etat);
+            CREATE TABLE IF NOT EXISTS demandes_scelles (numero INTEGER NOT NULL, cle TEXT NOT NULL, scelle TEXT NOT NULL, PRIMARY KEY (numero, cle)) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS demandes_scelles_cle ON demandes_scelles (cle, numero);
             CREATE TABLE IF NOT EXISTS postes (poste TEXT PRIMARY KEY, bloc TEXT NOT NULL, numero INTEGER NOT NULL, maj INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS archive (
                 chemin TEXT PRIMARY KEY, contenu TEXT NOT NULL, sha256 TEXT NOT NULL, taille INTEGER NOT NULL, version INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS nonces (nonce TEXT PRIMARY KEY, vu INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS debits (cle TEXT NOT NULL, fin INTEGER NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (cle, fin)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS stats_jour (jour TEXT PRIMARY KEY, routes TEXT NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS admins (
+                cle TEXT PRIMARY KEY, id TEXT NOT NULL, nom TEXT NOT NULL, pc TEXT NOT NULL, poste TEXT NOT NULL, depuis INTEGER NOT NULL,
+                profil TEXT NOT NULL, droits TEXT NOT NULL, retire INTEGER NOT NULL, gardes TEXT NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS admins_demandes (
+                cle TEXT PRIMARY KEY, nom TEXT NOT NULL, courriel TEXT NOT NULL, pc TEXT NOT NULL, poste TEXT NOT NULL, logiciel TEXT NOT NULL,
+                etat TEXT NOT NULL, recue INTEGER NOT NULL, maj INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS trousseau (cle TEXT PRIMARY KEY, scelle TEXT NOT NULL, maj INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS journal (
+                numero INTEGER PRIMARY KEY, texte TEXT NOT NULL, empreinte TEXT NOT NULL, cle TEXT NOT NULL, nonce TEXT NOT NULL, recu INTEGER NOT NULL);
+            CREATE UNIQUE INDEX IF NOT EXISTS journal_nonce ON journal (cle, nonce);
+            CREATE INDEX IF NOT EXISTS journal_cle ON journal (cle, numero);
+            CREATE TABLE IF NOT EXISTS fichiers (
+                id TEXT PRIMARY KEY, manifeste TEXT NOT NULL, nom TEXT NOT NULL, taille INTEGER NOT NULL, sha256 TEXT NOT NULL,
+                sorte TEXT NOT NULL, version TEXT NOT NULL, acces TEXT NOT NULL, morceau INTEGER NOT NULL, morceaux INTEGER NOT NULL,
+                recus INTEGER NOT NULL, complet INTEGER NOT NULL, cree INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS morceaux (fichier TEXT NOT NULL, n INTEGER NOT NULL, octets BLOB NOT NULL, PRIMARY KEY (fichier, n));
+            CREATE TABLE IF NOT EXISTS fichiers_jetons (
+                hash TEXT PRIMARY KEY, fichier TEXT NOT NULL, expire INTEGER NOT NULL, une_fois INTEGER NOT NULL, cree INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS messages (numero INTEGER PRIMARY KEY, poste TEXT NOT NULL, bloc TEXT NOT NULL, recu INTEGER NOT NULL);
+            CREATE INDEX IF NOT EXISTS messages_poste ON messages (poste, numero);
+            CREATE TABLE IF NOT EXISTS versions (
+                version TEXT PRIMARY KEY, x INTEGER NOT NULL, y INTEGER NOT NULL, z INTEGER NOT NULL, bloc TEXT NOT NULL,
+                publiee INTEGER NOT NULL, fichiers TEXT NOT NULL, recue INTEGER NOT NULL) WITHOUT ROWID;
+            CREATE TABLE IF NOT EXISTS logiciels (cle TEXT PRIMARY KEY, logiciel TEXT NOT NULL, version TEXT NOT NULL, vu INTEGER NOT NULL) WITHOUT ROWID;
         `);
         if (avant < SCHEMA) {
             // Les compteurs des grandes tables : comptes UNE fois (une base d'avant), puis tenus a chaque ecriture.
@@ -312,7 +415,7 @@ export class Licences extends DurableObject {
                 this.ecrireConfig("n_decouvertes", n("SELECT COUNT(*) AS n FROM decouvertes"));
                 this.ecrireConfig("n_postes", n("SELECT COUNT(*) AS n FROM postes"));
                 this.ecrireConfig("n_attente", n("SELECT COUNT(*) AS n FROM demandes WHERE etat = 'attente'"));
-                this.ecrireConfig("octets_demandes", n("SELECT COALESCE(SUM(LENGTH(scelle)), 0) AS n FROM demandes"));
+                this.ecrireConfig("octets_demandes", n("SELECT COALESCE(SUM(LENGTH(scelle) + autres), 0) AS n FROM demandes"));
             }
             this.ecrireConfig("schema", String(SCHEMA));
         }
@@ -421,6 +524,22 @@ export class Licences extends DurableObject {
         return bloc;
     }
 
+    // 1.44.0 : un document depose (licence, registre, revocations, poste) - par l'admin+ : signe par une cle de
+    // l'editeur (comme avant) ; par un admin : signe par SA cle (il depose ce qu'il a signe).
+    async blocDepose(ctx, texte, genre, quoi) {
+        if (ctx.appelant.role !== "admin") return this.blocEditeur(texte, genre, quoi);
+        if (typeof texte !== "string" || !texte) throw mal(quoi);
+        let bloc;
+        try {
+            bloc = trouverBloc(texte, genre);
+        } catch (e) {
+            throw new Erreur(400, "document", "Le document « " + genre + " » est illisible : " + e.message + ".");
+        }
+        if (!(await verifierBloc(bloc, ctx.appelant.octets, await cleIdDe(ctx.appelant.octets))))
+            throw new Erreur(400, "signature", "Le document « " + genre + " » n'est pas signé par la clé qui l'envoie : un admin dépose ce qu'il a signé.");
+        return bloc;
+    }
+
     // Le certificat en vigueur (signe par l'editeur, pour la cle de ce service, pas expire), ou null.
     async certificat(now) {
         const bloc = this.config("certificat");
@@ -495,8 +614,13 @@ export class Licences extends DurableObject {
                 if (CHEMINS.has(url.pathname)) throw new Erreur(405, "methode", "Cette méthode n'est pas permise sur " + url.pathname + ".");
                 throw new Erreur(404, "route", "Cette adresse n'existe pas sur le service des licences.");
             }
-            this.menage(now);
-            this.compter(now, methode + " " + url.pathname);
+            // 1.44.0 : une restauration en cours (sauvegarde.js) - rien d'autre ne repond (les tables sont a moitie la).
+            if (this.enRestauration && !route.restauration)
+                throw new Erreur(503, "restauration", "Le service est en cours de restauration : réessaie dans quelques minutes.", { reessayer_dans: 60 });
+            if (!this.enRestauration) {
+                this.menage(now);
+                this.compter(now, methode + " " + url.pathname);
+            }
             // Les lignes ecrites par CET appel (sans les menages, ni la statistique : une fois par minute au plus).
             this.ecrites = 0;
             compte = true;
@@ -505,11 +629,16 @@ export class Licences extends DurableObject {
             // LIMITES_ESSAI = "sans" : les limites levees, SEULEMENT sur ce poste (les essais qui enchainent les appels).
             const limites = !(local && this.env.LIMITES_ESSAI === "sans");
             const ctx = { request, url, methode, corps, ip, now, appelant: null };
-            // L'ordre : la signature (rien n'est ecrit), puis les limites, puis le nonce. Un appel refuse n'ecrit rien.
-            if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe === "editeur");
+            // L'ordre : la signature (rien n'est ecrit), puis les limites, puis le nonce. Un appel refuse n'ecrit rien
+            // (sauf la ligne du journal d'une cle d'admin retire, 1.44.0).
+            if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe);
+            if (route.droit) this.exigerDroit(ctx, route.droit);
             if (route.ip && limites) this.debit("ip", route.ip, ip, now);
             if (route.pc && limites) this.debit("pc", route.pc, ctx.appelant.cle, now);
-            if (ctx.appelant) this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, now);
+            if (ctx.appelant) {
+                this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, now);
+                this.noterLogiciel(ctx);
+            }
             reponse = await this[route.f](ctx);
         } catch (e) {
             if (e instanceof Erreur) reponse = reponseErreur(e);
@@ -553,12 +682,23 @@ export class Licences extends DurableObject {
     grandMenage(now) {
         this.x("DELETE FROM stats_jour WHERE jour < ?", jourDe(now - 60 * JOUR));
         const d = this.ligne(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(scelle)), 0) AS o FROM demandes WHERE etat != 'attente' AND maj < ?",
+            "SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(scelle) + autres), 0) AS o FROM demandes WHERE etat != 'attente' AND maj < ?",
             now - GARDE_DEMANDES,
         );
         if (d && d.n) {
+            this.x("DELETE FROM demandes_scelles WHERE numero IN (SELECT numero FROM demandes WHERE etat != 'attente' AND maj < ?)", now - GARDE_DEMANDES);
             this.x("DELETE FROM demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES);
             this.ajouter("octets_demandes", -Number(d.o));
+        }
+        // 1.44.0 : les demandes d'admin closes (7 jours), les messages (30 jours), les fichiers qu'aucune des 3
+        // dernieres versions ne porte (30 jours), les liens finis, les logiciels des cles qui n'appellent plus (un an).
+        this.x("DELETE FROM admins_demandes WHERE etat != 'attente' AND maj < ?", now - GARDE_DEMANDES_ADMINS);
+        this.x("DELETE FROM messages WHERE recu < ?", now - GARDE_MESSAGE);
+        this.purgerFichiers(now);
+        const vieux = this.nombre("SELECT COUNT(*) AS n FROM logiciels WHERE vu < ?", now - GARDE_LOGICIEL);
+        if (vieux) {
+            this.x("DELETE FROM logiciels WHERE vu < ?", now - GARDE_LOGICIEL);
+            this.ajouter("n_logiciels", -vieux);
         }
         const finies = "(etat != 'active' AND jusqu_a < ?) OR (etat = 'active' AND jusqu_a < ?)";
         const n = this.nombre("SELECT COUNT(*) AS n FROM activations WHERE " + finies, now - GARDE_FINIE, now - GARDE_ACTIVE);
@@ -622,8 +762,12 @@ export class Licences extends DurableObject {
     }
 
     // L'appel signe : X-XPG-Cle, X-XPG-Date, X-XPG-Nonce, X-XPG-Signature (Service.hpp, verifyRequest). Rien n'est
-    // ecrit ici : le nonce l'est par traiter(), une fois les limites passees.
-    async verifierAppel(ctx, admin) {
+    // ecrit ici (le nonce l'est par traiter(), une fois les limites passees), sauf la ligne du journal d'une cle
+    // d'admin retire (1.44.0).
+    // `signe` : "pc" (toute cle), "admin" (la cle de l'editeur - role << admin+ >>, tous les droits - ou celle d'un
+    // admin de la liste, non retire - role << admin >>, ses droits), "plus" (la cle de l'editeur seulement).
+    // Rend {cle, octets, nonce, poste, role ("pc", "admin+", "admin"), droits, admin (sa ligne de la liste)}.
+    async verifierAppel(ctx, signe) {
         const h = ctx.request.headers;
         const cle = h.get("X-XPG-Cle");
         const date = h.get("X-XPG-Date");
@@ -635,8 +779,23 @@ export class Licences extends DurableObject {
         if (!estHex(nonce, 32)) throw new Erreur(401, "signature", "Le nonce de l'appel est illisible (32 hexadécimaux minuscules).");
         const sig = unhex(signature, 64);
         if (!sig) throw new Erreur(401, "signature", "La signature de l'appel est illisible.");
-        if (admin && !(await this.clesEditeur()).some((k) => k.hex === cle))
-            throw new Erreur(403, "editeur", "Cette clé n'est pas une clé de l'éditeur de ce service (PUBLISHER_KEYS).");
+        let role = "pc";
+        let admin = null;
+        if (signe === "admin" || signe === "plus") {
+            if ((await this.clesEditeur()).some((k) => k.hex === cle)) role = "admin+";
+            else {
+                admin = this.admin(cle);
+                if (!admin)
+                    throw new Erreur(
+                        403,
+                        "editeur",
+                        signe === "plus"
+                            ? "Cette clé n'est pas une clé de l'éditeur de ce service (PUBLISHER_KEYS)."
+                            : "Cette clé n'est ni une clé de l'éditeur de ce service (PUBLISHER_KEYS), ni celle d'un admin de la liste.",
+                    );
+                role = "admin";
+            }
+        }
         const t = Number(date);
         if (Math.abs(t - ctx.now) > FENETRE_APPEL)
             throw new Erreur(401, "heure", "L'heure de l'appel est trop loin de celle du service : lis l'heure du service (GET /v1/etat) et signe avec elle.", { heure: ctx.now });
@@ -645,7 +804,52 @@ export class Licences extends DurableObject {
         const octets = unhex(cle);
         if (!(await verifierEd25519(octets, enc.encode(message), sig))) throw new Erreur(401, "signature", "La signature de l'appel est fausse.");
         if (this.ligne("SELECT 1 AS x FROM nonces WHERE nonce = ?", nonce)) throw new Erreur(401, "rejeu", "Cet appel a déjà été reçu (nonce déjà vu) : il est refusé.");
-        return { cle, octets, nonce, poste: await posteDe(octets) };
+        const appelant = { cle, octets, nonce, poste: await posteDe(octets), role, droits: role === "admin+" ? DROITS_ADMINS.slice() : [], admin: null };
+        if (admin) {
+            // Un admin retire : refuse, et le journal le dit (la signature est la sienne : verifiee ci-dessus).
+            if (admin.retire) {
+                await this.signatureRefusee(ctx, admin);
+                throw new Erreur(403, "retire", "Cette clé est celle d'un admin retiré : elle ne peut plus rien faire sur ce service.");
+            }
+            if (signe === "plus") throw new Erreur(403, "droit", "Cette action est réservée à l'admin+ (la clé de l'éditeur).");
+            appelant.droits = JSON.parse(admin.droits);
+            appelant.admin = admin;
+        }
+        return appelant;
+    }
+
+    // Un admin doit avoir l'un de ces droits (`tous` : chacun) ; l'admin+ les a tous. Leve 403 << droit >>.
+    exigerDroit(ctx, droits, tous) {
+        const a = ctx.appelant;
+        if (!a || a.role !== "admin") return;
+        const ok = tous ? droits.every((d) => a.droits.includes(d)) : droits.some((d) => a.droits.includes(d));
+        if (!ok)
+            throw new Erreur(
+                403,
+                "droit",
+                "Tes droits d'admin ne permettent pas cette action (il faut " +
+                    (droits.length > 1 ? (tous ? "les droits " : "l'un des droits ") : "le droit ") +
+                    droits.map((d) => "« " + d + " »").join(", ") +
+                    ").",
+                { droits },
+            );
+    }
+
+    // 1.44.0 : le logiciel d'un appel signe (X-XPG-Logiciel : "IHM-Studio/1.44.0"), garde par cle. Une ecriture
+    // seulement s'il change, ou une fois par heure (l'heure vue) ; un en-tete illisible est ignore.
+    noterLogiciel(ctx) {
+        const v = ctx.request.headers.get("X-XPG-Logiciel");
+        if (!v || !ctx.appelant) return;
+        const m = /^([A-Za-z-]{1,30})\/(\d{1,6}\.\d{1,6}\.\d{1,6})$/.exec(v);
+        if (!m) return;
+        const cle = ctx.appelant.cle;
+        const r = this.ligne("SELECT logiciel, version, vu FROM logiciels WHERE cle = ?", cle);
+        if (!r) {
+            if (this.compte("n_logiciels") >= MAX_LOGICIELS) return;
+            this.x("INSERT INTO logiciels (cle, logiciel, version, vu) VALUES (?, ?, ?, ?)", cle, m[1], m[2], ctx.now);
+            this.ajouter("n_logiciels", 1);
+        } else if (r.logiciel !== m[1] || r.version !== m[2] || r.vu < ctx.now - HEURE)
+            this.x("UPDATE logiciels SET logiciel = ?, version = ?, vu = ? WHERE cle = ?", m[1], m[2], ctx.now, cle);
     }
 
     // Le corps JSON d'un appel (un objet) ; vide : {}.
@@ -790,6 +994,10 @@ export class Licences extends DurableObject {
             // Studio qui le voit bouger se resynchronise tout de suite (la licence perdue en direct).
             revocations: Number(this.config("revocations_numero") || "0"),
             changements: Number(this.config("changements") || "0"),
+            // 1.44.0 : le numero de la liste des admins (GET /v1/admins), et la derniere version publiee des logiciels
+            // (GET /v1/version ; "" : aucune). `version`, lui, reste celle du service.
+            admins: Number(this.config("admins_numero") || "0"),
+            version_publiee: this.config("version_derniere") || "",
         });
     }
 
@@ -1082,18 +1290,44 @@ export class Licences extends DurableObject {
         return reponseJson(200, {});
     }
 
+    // 1.44.0 : une cle (son identifiant, xpg-…) pour qui une demande peut etre scellee : une cle de l'editeur, ou un
+    // admin de la liste (non retire) qui a le droit << demandes >>.
+    async clePourDemandes(id) {
+        if ((await this.clesEditeur()).some((k) => k.id === id)) return true;
+        const a = this.ligne("SELECT droits FROM admins WHERE id = ? AND retire = 0", id);
+        return !!a && JSON.parse(a.droits).includes("demandes");
+    }
+
+    // `cle`/`scelle` : pour une cle de l'editeur (comme avant). 1.44.0 : `scelles` [{cle, scelle}], la meme demande
+    // scellee pour d'autres cles (les admins qui ont le droit << demandes >>, une autre cle de l'editeur) ; un Studio
+    // d'avant n'envoie que cle/scelle.
     async deposerDemande(ctx) {
         const corps = this.corpsJson(ctx);
         if (typeof corps.cle !== "string" || !/^xpg-[0-9a-f]{16}$/.test(corps.cle)) throw mal("cle");
         if (!(await this.clesEditeur()).some((k) => k.id === corps.cle))
             throw new Erreur(400, "cle", "Cette demande est scellée pour une clé que l'éditeur n'emploie pas sur ce service.");
-        if (typeof corps.scelle !== "string" || !corps.scelle || corps.scelle.length > MAX_SCELLE || !/^[A-Za-z0-9+/=\r\n]+$/.test(corps.scelle))
-            throw mal("scelle", "Le champ « scelle » doit être du base64 (64 Kio au plus).");
+        if (!estBase64(corps.scelle, MAX_SCELLE)) throw mal("scelle", "Le champ « scelle » doit être du base64 (64 Kio au plus).");
+        const autres = [];
+        if (corps.scelles !== undefined) {
+            if (!Array.isArray(corps.scelles) || corps.scelles.length > MAX_SCELLES)
+                throw mal("scelles", "Le champ « scelles » doit être une liste de {cle, scelle} (" + MAX_SCELLES + " au plus).");
+            const vues = new Set([corps.cle]);
+            for (const s of corps.scelles) {
+                if (!s || typeof s !== "object" || typeof s.cle !== "string" || !/^xpg-[0-9a-f]{16}$/.test(s.cle) || vues.has(s.cle))
+                    throw mal("scelles", "Une entrée de « scelles » n'a pas l'identifiant d'une clé (xpg-…), ou il y est deux fois.");
+                vues.add(s.cle);
+                if (!estBase64(s.scelle, MAX_SCELLE)) throw mal("scelles", "Un scellé de « scelles » doit être du base64 (64 Kio au plus).");
+                if (!(await this.clePourDemandes(s.cle)))
+                    throw new Erreur(400, "cle", "Cette demande est scellée pour une clé qui n'est ni celle de l'éditeur, ni celle d'un admin qui traite les demandes.");
+                autres.push(s);
+            }
+        }
+        const octetsAutres = autres.reduce((n, s) => n + s.scelle.length, 0);
         const poste = ctx.appelant.poste;
         // Les demandes en attente et leur taille : des compteurs (config), jamais un COUNT(*) de la table.
         const miennes = this.nombre("SELECT COUNT(*) AS n FROM demandes WHERE poste = ? AND etat = 'attente'", poste);
         if (this.compte("n_attente") - miennes >= MAX_DEMANDES_ATTENTE) throw new Erreur(507, "limite", "Trop de demandes attendent l'éditeur : réessaie plus tard.");
-        if (this.compte("octets_demandes") + corps.scelle.length > MAX_OCTETS_DEMANDES)
+        if (this.compte("octets_demandes") + corps.scelle.length + octetsAutres > MAX_OCTETS_DEMANDES)
             throw new Erreur(
                 507,
                 "limite",
@@ -1102,16 +1336,18 @@ export class Licences extends DurableObject {
         if (miennes) this.x("UPDATE demandes SET etat = 'remplacee', maj = ? WHERE poste = ? AND etat = 'attente'", ctx.now, poste);
         const numero = this.suivant("numero_demande");
         this.x(
-            "INSERT INTO demandes (numero, poste, cle, scelle, etat, cree, maj) VALUES (?, ?, ?, ?, 'attente', ?, ?)",
+            "INSERT INTO demandes (numero, poste, cle, scelle, etat, cree, maj, autres) VALUES (?, ?, ?, ?, 'attente', ?, ?, ?)",
             numero,
             poste,
             corps.cle,
             corps.scelle,
             ctx.now,
             ctx.now,
+            octetsAutres,
         );
+        for (const s of autres) this.x("INSERT INTO demandes_scelles (numero, cle, scelle) VALUES (?, ?, ?)", numero, s.cle, s.scelle);
         this.ajouter("n_attente", 1 - miennes);
-        this.ajouter("octets_demandes", corps.scelle.length);
+        this.ajouter("octets_demandes", corps.scelle.length + octetsAutres);
         this.signalerDemande();
         return reponseJson(201, { numero });
     }
@@ -1158,12 +1394,27 @@ export class Licences extends DurableObject {
 
     async deposerRegistre(ctx) {
         const corps = this.corpsJson(ctx);
-        const bloc = await this.blocEditeur(corps.registre, "registre", "registre");
+        const bloc = await this.blocDepose(ctx, corps.registre, "registre", "registre");
         let r;
         try {
             r = lireRegistre(bloc.json);
         } catch (e) {
             throw new Erreur(400, "document", "Le registre est illisible : " + e.message + ".");
+        }
+        // 1.44.0 : un admin a le droit de chaque partie qui change (editions : << offres >>, options, annonces ; une
+        // autre partie : << offres >>) ; rien ne change : l'un des trois.
+        if (ctx.appelant.role === "admin") {
+            let ancien = null;
+            const enPlace = this.config("registre");
+            if (enPlace)
+                try {
+                    ancien = JSON.parse(trouverBloc(enPlace, "registre").json);
+                } catch {
+                    ancien = null;
+                }
+            const requis = droitsDuRegistre(ancien, JSON.parse(bloc.json));
+            if (requis.length) this.exigerDroit(ctx, requis, true);
+            else this.exigerDroit(ctx, DROITS_REGISTRE);
         }
         const texte = ecrireBlocLu(bloc);
         const actuel = Number(this.config("registre_numero") || "0");
@@ -1176,7 +1427,7 @@ export class Licences extends DurableObject {
 
     async deposerRevocations(ctx) {
         const corps = this.corpsJson(ctx);
-        const bloc = await this.blocEditeur(corps.revocations, "revocations", "revocations");
+        const bloc = await this.blocDepose(ctx, corps.revocations, "revocations", "revocations");
         let liste;
         try {
             liste = lireRevocations(bloc.json);
@@ -1204,13 +1455,15 @@ export class Licences extends DurableObject {
 
     async deposerLicence(ctx) {
         const corps = this.corpsJson(ctx);
-        const bloc = await this.blocEditeur(corps.licence, "licence", "licence");
+        const bloc = await this.blocDepose(ctx, corps.licence, "licence", "licence");
         let doc;
         try {
             doc = lireLicence(bloc.json);
         } catch (e) {
             throw new Erreur(400, "document", "La licence est illisible : " + e.message + ".");
         }
+        // 1.44.0 : un admin - une licence nouvelle demande << licence_creer >> ; une licence deja la, l'un des trois.
+        this.exigerDroit(ctx, this.licence(doc.id) ? DROITS_LICENCE : ["licence_creer"]);
         if (corps.code_hash !== undefined && corps.code_hash !== null && !estHex(corps.code_hash, 64))
             throw mal("code_hash", "Le champ « code_hash » doit être l'empreinte du code (64 hexadécimaux minuscules), ou null.");
         if (corps.bail_jours !== undefined && !(Number.isInteger(corps.bail_jours) && corps.bail_jours >= 1 && corps.bail_jours <= 3660))
@@ -1301,15 +1554,29 @@ export class Licences extends DurableObject {
         const d = ctx.url.searchParams.get("depuis");
         if (d !== null && !/^\d{1,15}$/.test(d)) throw new Erreur(400, "champ", "« depuis » doit être un numéro de demande.");
         const depuis = d === null ? 0 : Number(d);
-        const demandes = this.lignes("SELECT * FROM demandes WHERE numero > ? ORDER BY numero LIMIT 1000", depuis).map((r) => ({
-            numero: r.numero,
-            poste: r.poste,
-            cle: r.cle,
-            scelle: r.scelle,
-            etat: r.etat,
-            cree: iso(r.cree),
-            maj: iso(r.maj),
-        }));
+        // 1.44.0 : a chaque cle SON scelle. L'admin+ : celui de l'editeur (comme avant). Un admin : le sien
+        // (`cle` dit alors son identifiant) ; sans scelle pour lui, la demande est listee sans contenu (scelle null,
+        // pour_un_autre : scellee pour un autre admin).
+        let miens = null;
+        if (ctx.appelant.role === "admin") {
+            miens = new Map();
+            const id = await cleIdDe(ctx.appelant.octets);
+            for (const s of this.lignes("SELECT numero, scelle FROM demandes_scelles WHERE cle = ? AND numero > ?", id, depuis)) miens.set(s.numero, { id, scelle: s.scelle });
+        }
+        const demandes = this.lignes("SELECT * FROM demandes WHERE numero > ? ORDER BY numero LIMIT 1000", depuis).map((r) => {
+            const o = { numero: r.numero, poste: r.poste, cle: r.cle, scelle: r.scelle, etat: r.etat, cree: iso(r.cree), maj: iso(r.maj) };
+            if (miens) {
+                const m = miens.get(r.numero);
+                if (m) {
+                    o.cle = m.id;
+                    o.scelle = m.scelle;
+                } else {
+                    o.scelle = null;
+                    o.pour_un_autre = true;
+                }
+            }
+            return o;
+        });
         return reponseJson(200, { demandes });
     }
 
@@ -1329,7 +1596,7 @@ export class Licences extends DurableObject {
     async deposerPoste(ctx) {
         const corps = this.corpsJson(ctx);
         if (!estHex(corps.poste, 32)) throw mal("poste", "Le champ « poste » doit être l'identifiant du poste (32 hexadécimaux minuscules).");
-        const bloc = await this.blocEditeur(corps.etat, "poste", "etat");
+        const bloc = await this.blocDepose(ctx, corps.etat, "poste", "etat");
         let p;
         try {
             p = lirePoste(bloc.json);
@@ -1421,6 +1688,14 @@ export class Licences extends DurableObject {
             attente: this.compte("n_attente"),
             changements: this.compte("changements"),
             registre: Number(this.config("registre_numero") || "0"),
+            // 1.44.0 : la liste des admins (son numero), le journal (son dernier numero), les demandes d'admin en
+            // attente, et qui appelle : son role (<< admin+ >>, << admin >>) et ses droits.
+            admins: Number(this.config("admins_numero") || "0"),
+            journal: this.dernierNumeroJournal(),
+            admins_demandes: this.nombre("SELECT COUNT(*) AS n FROM admins_demandes WHERE etat = 'attente'"),
+            version_publiee: this.config("version_derniere") || "",
+            role: ctx.appelant.role,
+            droits: ctx.appelant.droits,
         });
     }
 
@@ -1467,3 +1742,7 @@ export class Licences extends DurableObject {
         });
     }
 }
+
+// 1.44.0 : les routes des admins, des fichiers (et des messages, des versions), de la sauvegarde - des methodes de
+// l'objet, ecrites a part (admins.js, fichiers.js, sauvegarde.js).
+Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde);

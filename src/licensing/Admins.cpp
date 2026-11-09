@@ -279,11 +279,14 @@ bool verifyAdminBlock(const AdminList& list, const SignedBlock& block, std::stri
     if (!verifyBlock(block, pk))
         return fail(why, "la signature de " + docKindLabel(block.kind) + " est fausse : le document a \xC3\xA9t\xC3\xA9 modifi\xC3\xA9");
     if (who) *who = a;
-    if (!a->active()) {
+    // Un document garde reste valable quoi qu'il arrive a son admin (retire, droits retires) : l'admin+ y met ce qu'il
+    // a signe et qui court encore, quand il retire l'admin ou lui retire un droit.
+    if (!a->kept.empty()) {
         const std::string h = documentHash(block.document);
         if (std::find(a->kept.begin(), a->kept.end(), h) != a->kept.end()) return true;
-        return fail(why, docKindLabel(block.kind) + " est sign\xC3\xA9" "e par " + a->name + ", un admin retir\xC3\xA9 : elle n'est plus valable");
     }
+    if (!a->active())
+        return fail(why, docKindLabel(block.kind) + " est sign\xC3\xA9" "e par " + a->name + ", un admin retir\xC3\xA9 : elle n'est plus valable");
     const auto need = rightsForKind(block.kind);
     if (need.empty()) return fail(why, docKindLabel(block.kind) + " ne peut \xC3\xAAtre sign\xC3\xA9" "e que par la cl\xC3\xA9 de l'\xC3\xA9" "diteur");
     for (const auto& r : need)

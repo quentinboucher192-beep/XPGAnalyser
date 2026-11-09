@@ -6,14 +6,18 @@
 //  passe tout a UN Durable Object, << principal >>, qui tient les tables SQLite
 //  (src/licences.js). Un seul objet : les appels sont traites l'un apres
 //  l'autre, les numeros et les places ne se croisent jamais.
+//  1.44.0 : le corps passe tel quel (des octets : aussi un morceau de fichier,
+//  PUT /admin/fichiers/morceau) ; un lot d'une restauration : 8 Mio au plus.
 // =============================================================================
-import { CORPS_MAX, Erreur, reponseErreur } from "./outils.js";
+import { CORPS_MAX, CORPS_MAX_RESTAURATION, Erreur, reponseErreur } from "./outils.js";
 
 export { Licences } from "./licences.js";
 
-async function lireCorps(request) {
+// Le corps, tel quel (des octets : un JSON, ou les octets d'un morceau de fichier, 1.44.0), `max` octets au plus.
+async function lireCorps(request, max) {
+    const trop = () => new Erreur(413, "taille", "Le corps de l'appel est trop gros (" + max / (1024 * 1024) + " Mio au plus).");
     const annonce = request.headers.get("Content-Length");
-    if (annonce !== null && Number(annonce) > CORPS_MAX) throw new Erreur(413, "taille", "Le corps de l'appel est trop gros (2 Mio au plus).");
+    if (annonce !== null && Number(annonce) > max) throw trop();
     if (!request.body) return new Uint8Array(0);
     const lecteur = request.body.getReader();
     const morceaux = [];
@@ -22,13 +26,13 @@ async function lireCorps(request) {
         const { done, value } = await lecteur.read();
         if (done) break;
         n += value.length;
-        if (n > CORPS_MAX) {
+        if (n > max) {
             try {
                 await lecteur.cancel();
             } catch {
                 // rien
             }
-            throw new Erreur(413, "taille", "Le corps de l'appel est trop gros (2 Mio au plus).");
+            throw trop();
         }
         morceaux.push(value);
     }
@@ -41,8 +45,9 @@ async function lireCorps(request) {
     return out;
 }
 
-// Les routes publiques (sans signature) : LIMITE_PUBLIQUE ; les autres routes /v1 : LIMITE_PC.
-const PUBLIQUES = new Set(["/v1/etat", "/v1/heure", "/v1/certificat", "/v1/registre"]);
+// Les routes publiques (sans signature) : LIMITE_PUBLIQUE ; les autres routes /v1 : LIMITE_PC (1.44.0 : les morceaux
+// et le lien d'un fichier aussi - un telechargement fait un appel par Mio).
+const PUBLIQUES = new Set(["/v1/etat", "/v1/heure", "/v1/certificat", "/v1/registre", "/v1/admins", "/v1/version", "/v1/fichiers/manifeste"]);
 
 // Le limiteur de Cloudflare (par adresse, par minute ; une liaison absente : rien). Faux : trop d'appels.
 async function passe(env, url, ip) {
@@ -69,7 +74,9 @@ export default {
             if (!(await passe(env, url, ip)))
                 throw new Erreur(429, "trop", "Trop d'appels de ton adresse : réessaie dans une minute.", { reessayer_dans: 60 });
             const methode = request.method.toUpperCase();
-            const corps = methode === "GET" || methode === "HEAD" ? null : await lireCorps(request);
+            // 1.44.0 : un lot d'une restauration peut porter une ligne plus grosse qu'une page de la sauvegarde.
+            const max = url.pathname === "/admin/restauration/lot" ? CORPS_MAX_RESTAURATION : CORPS_MAX;
+            const corps = methode === "GET" || methode === "HEAD" ? null : await lireCorps(request, max);
             const entetes = new Headers(request.headers);
             // L'adresse de l'appelant : celle que Cloudflare donne (jamais un en-tete pose par le client).
             entetes.set("X-XPG-IP", ip);

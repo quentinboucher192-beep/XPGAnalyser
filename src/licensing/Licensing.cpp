@@ -275,6 +275,40 @@ bool deviceKeyHex(std::string& hex, std::string* why) {
     return m.store->deviceKey(hex, why);
 }
 
+// 1.44.0 : plusieurs admins
+bool adoptAdminList(std::string_view blockText, bool* changed, std::string* why) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    return m.store->adoptAdminList(blockText, changed, why);
+}
+
+int adminListNumber() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    return m.store && m.store->adminList() ? m.store->adminList()->number : 0;
+}
+
+std::optional<admins::AdminList> getAdminList() {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) return std::nullopt;
+    return m.store->adminList();
+}
+
+bool verifyPublishedBlock(const SignedBlock& block, std::string* why, std::string* signer) {
+    Module& m = module();
+    std::lock_guard<std::mutex> lock(m.mutex);
+    if (!m.store) {
+        if (why) *why = "les licences ne sont pas encore configur\xC3\xA9" "es (initialize)";
+        return false;
+    }
+    return m.store->verifyPublished(block, why, signer);
+}
+
 std::vector<TrustedKey> trustedPublisherKeys() {
     Module& m = module();
     std::lock_guard<std::mutex> lock(m.mutex);

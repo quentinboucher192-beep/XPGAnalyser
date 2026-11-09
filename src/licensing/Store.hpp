@@ -151,6 +151,7 @@
 // =============================================================================
 #pragma once
 
+#include "Admins.hpp"     // 1.44.0 : plusieurs admins
 #include "Documents.hpp"
 #include "Service.hpp"
 #include "SignedFile.hpp"
@@ -347,6 +348,7 @@ public:
     static constexpr const char* kTrialFile = "decouverte.xpgdec";        // 1.35.0 : la Decouverte selon le service + le certificat
     static constexpr const char* kClockFile = "horloge.bin";              // 1.35.0 : une copie du compteur du bail
     static constexpr const char* kPendingCodeFile = "code-activation.txt";   // 1.35.0 : le code laisse par l'installateur
+    static constexpr const char* kAdminsFile = "admins.xpgadm";            // 1.44.0 : la liste des admins (signee par l'editeur)
     static constexpr std::size_t kHistoryMaxLines = 500;
 
     [[nodiscard]] const std::string& folder() const noexcept { return opt_.folder; }
@@ -403,6 +405,17 @@ public:
     bool deviceOpenSeal(std::string_view sealedBase64, std::string& plain, std::string* why);
     // Les cles de l'editeur que ce PC croit (pour verifier ce que publie l'editeur : l'etat du poste, la licence).
     [[nodiscard]] const std::vector<TrustedKey>& trustedKeys() const noexcept { return opt_.trustedKeys; }
+
+    // ---- 1.44.0 : plusieurs admins (docs/ADMINS.md) ----
+    // La liste des admins en vigueur (admins.xpgadm, signee par une cle de l'editeur) ; vide : aucune.
+    [[nodiscard]] const std::optional<admins::AdminList>& adminList() const noexcept { return admins_; }
+    // Garder une liste des admins recue (le texte du bloc << admins >> : GET /v1/admins, ou un fichier) : signee par une
+    // cle de l'editeur que ce PC croit, plus recente que la plus recente deja vue (la meme : rien a faire, vrai).
+    // `changed` : elle a ete ecrite.
+    bool adoptAdminList(std::string_view blockText, bool* changed, std::string* why);
+    // Un document publie (licence, registre, revocations, etat du poste) : signe par une cle de l'editeur, ou par un
+    // admin de la liste qui en a le droit (Admins.hpp : verifyAdminBlock). `signer` : le nom de l'admin (vide : l'editeur).
+    bool verifyPublished(const SignedBlock& b, std::string* why, std::string* signer = nullptr) const;
 
     // ---- 1.35.0 : le service des licences (aucun reseau ici : l'application appelle, le magasin verifie et garde) ----
     // Signer le message d'un appel au service (Service.hpp : requestMessage) avec la cle de ce PC, creee si besoin.
@@ -470,7 +483,9 @@ private:
     [[nodiscard]] FileOwner ownerOf(const std::string& path) const;
     [[nodiscard]] bool validLicenseInstalled() const;
 
+    void loadAdmins(std::uint64_t minNumber);   // 1.44.0 : lit admins.xpgadm (au moins ce numero)
     StoreOptions            opt_;
+    std::optional<admins::AdminList> admins_;  // 1.44.0 : la liste des admins en vigueur
     std::optional<Registry> registry_;
     std::optional<License>  license_;
     std::string             deviceKeyHex_;

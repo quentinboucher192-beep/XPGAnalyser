@@ -16,6 +16,8 @@ const CONTEXTE = "XPG-LICENSING-1\n";
 
 // Les genres connus et la taille maximale de leur JSON (docKindMaxBytes ; les genres << passerelle >> et
 // << annulation >> de la 1.34 ont disparu en 1.35.0).
+// 1.44.0 (docs/ADMINS.md) : la liste des admins, le manifeste d'un fichier, un message a un PC, une version, et le
+// jeton d'un admin (<< jetonadmin >> : << jeton >> reste le jeton d'une licence flottante, signe par le service).
 const GENRES = {
     licence: 256 * 1024,
     registre: 2 * 1024 * 1024,
@@ -27,6 +29,11 @@ const GENRES = {
     jeton: 2 * 1024,
     heure: 1024,
     decouverte: 2 * 1024,
+    admins: 64 * 1024,
+    fichier: 4 * 1024,
+    message: 64 * 1024,
+    version: 64 * 1024,
+    jetonadmin: 2 * 1024,
 };
 const FICHIER_MAX = 16 * 1024 * 1024;
 const BLOCS_MAX = 8;

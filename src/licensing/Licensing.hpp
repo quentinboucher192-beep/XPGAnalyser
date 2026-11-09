@@ -244,6 +244,16 @@ bool installTrialRecord(std::string_view trialText, std::string_view certText, s
 [[nodiscard]] std::string pendingActivationCode();
 bool clearPendingActivationCode(std::string* why);
 
+// ---- 1.44.0 : plusieurs admins (docs/ADMINS.md) ----
+// Garder la liste des admins recue (GET /v1/admins) : voir LicenseStore::adoptAdminList.
+bool adoptAdminList(std::string_view blockText, bool* changed, std::string* why);
+// Le numero de la liste des admins gardee (0 : aucune).
+[[nodiscard]] int adminListNumber();
+// La liste des admins gardee (vide : aucune).
+[[nodiscard]] std::optional<admins::AdminList> getAdminList();
+// Un document publie signe par l'editeur ou par un admin de la liste qui en a le droit (`signer` : le nom de l'admin).
+bool verifyPublishedBlock(const SignedBlock& block, std::string* why, std::string* signer = nullptr);
+
 // Pour les essais : oublier la configuration (retour a << avant initialize() >>).
 void resetForTests();
 
