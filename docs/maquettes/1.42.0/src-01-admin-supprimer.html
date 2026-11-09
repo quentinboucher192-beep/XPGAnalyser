@@ -1,0 +1,63 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - supprimer</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.lbl3{position:absolute;z-index:26;font:700 12px Inter;letter-spacing:.08em;text-transform:uppercase;color:#e2e8f0;display:flex;align-items:center;gap:8px}
+.lbl3 b{width:22px;height:22px;border-radius:50%;background:#facc15;color:#111827;display:grid;place-items:center;font:800 11.5px Inter;letter-spacing:0}
+.li{display:flex;gap:10px;padding:7px 0;font-size:13px;color:var(--ink2)}
+.li .ico{width:16px;height:16px;flex:none;margin-top:2px}
+.lic2{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.lic2+.lic2{margin-top:8px}
+.opt{display:flex;gap:12px;padding:12px;border:1.5px solid var(--line);border-radius:12px}
+.opt.on{border-color:var(--violet);background:var(--violet-50)}
+.opt+.opt{margin-top:8px}
+</style></head><body><script src="icons.js"></script>
+<div class="bgshot" style="background-image:url(v/fond-00-admin-offres.png)"></div>
+<div class="scrim"></div>
+
+<div class="lbl3" style="left:70px;top:104px"><b>1</b>Une offre que plus personne n'utilise</div>
+<div class="dlgx" style="left:70px;top:136px;width:460px">
+ <div class="dh"><span class="di" style="background:var(--red-50);color:var(--red)"><i data-i="trash"></i></span>
+  <div><div class="h2" style="font-size:17px">Supprimer l'offre ÉTÉ 2026 ?</div><div class="muted" style="margin-top:4px">Plus aucune licence en cours ne l'utilise : ses 3 licences sont finies depuis le 31/08.</div></div></div>
+ <div class="db">
+  <div class="li"><i data-i="check" style="color:var(--green)"></i><div>Elle quitte le catalogue avec le <b>prochain registre signé</b> (n° 320).</div></div>
+  <div class="li"><i data-i="check" style="color:var(--green)"></i><div>Les 3 licences finies restent lisibles dans l'archive et dans l'historique de leurs clients.</div></div>
+  <div class="li"><i data-i="check" style="color:var(--green)"></i><div>Les anciens registres la gardent : rien n'est réécrit, tout reste vérifiable.</div></div>
+  <div class="note i" style="margin-top:10px"><i data-i="info"></i><div>Tu peux encore changer d'avis : tant que le registre n'est pas signé, « Annuler » dans la barre du haut la remet.</div></div>
+ </div>
+ <div class="df"><span class="btn" style="margin-left:auto">Annuler</span><span class="btn red"><i data-i="trash" class="sm"></i>Supprimer l'offre</span></div>
+</div>
+
+<div class="lbl3" style="left:570px;top:104px"><b>2</b>Une offre encore utilisée</div>
+<div class="dlgx" style="left:570px;top:136px;width:460px">
+ <div class="dh"><span class="di" style="background:var(--amber-50);color:var(--amber)"><i data-i="lock"></i></span>
+  <div><div class="h2" style="font-size:17px">PROFESSIONAL ne peut pas être supprimée maintenant</div><div class="muted" style="margin-top:4px">62 licences en cours l'utilisent.</div></div></div>
+ <div class="db">
+  <div class="note w"><i data-i="alert"></i><div>Les Studios de ces clients lisent leur offre dans le registre. La supprimer <b>couperait leurs 62 licences</b>.</div></div>
+  <div class="over" style="margin:16px 0 8px">À la place</div>
+  <div class="opt on"><span class="radio on"></span><div><div class="h3">Retirer de la vente</div><div class="cap" style="margin-top:2px">Plus vendue, plus montrée dans la boutique. Les 62 licences continuent jusqu'à leur fin.</div>
+   <div class="row gap8" style="margin-top:10px"><span class="check on"><i data-i="check"></i></span><span style="font-size:12.5px">et la supprimer toute seule après la dernière (le 14/03/2028)</span></div></div></div>
+  <div class="opt"><span class="radio"></span><div><div class="h3">Voir les 62 licences</div><div class="cap" style="margin-top:2px">Pour les passer à une autre offre à leur prochaine prolongation.</div></div></div>
+ </div>
+ <div class="df"><span class="btn" style="margin-left:auto">Annuler</span><span class="btn primary"><i data-i="archive" class="sm"></i>Retirer de la vente</span></div>
+</div>
+
+<div class="lbl3" style="left:1070px;top:104px"><b>3</b>Un client</div>
+<div class="dlgx" style="left:1070px;top:136px;width:460px">
+ <div class="dh"><span class="di" style="background:var(--red-50);color:var(--red)"><i data-i="users"></i></span>
+  <div><div class="h2" style="font-size:17px">Supprimer le client Transports Royer ?</div><div class="muted" style="margin-top:4px">Client depuis 03/2025 · 2 licences, toutes finies.</div></div></div>
+ <div class="db">
+  <div class="over" style="margin:2px 0 8px">Ses licences partent avec lui</div>
+  <div class="lic2"><span class="pill p-gray" style="height:22px">PERSONAL</span><div class="grow"><div class="mono" style="font-size:12.5px;font-weight:600">XPG-2026-00199</div><div class="cap">expirée le 01/02/2026</div></div><span class="cap row gap6"><i data-i="archive" class="sm"></i>corbeille</span></div>
+  <div class="lic2"><span class="pill p-teal" style="height:22px">EVALUATION</span><div class="grow"><div class="mono" style="font-size:12.5px;font-weight:600">XPG-2025-00088</div><div class="cap">finie le 14/04/2025</div></div><span class="cap row gap6"><i data-i="archive" class="sm"></i>corbeille</span></div>
+  <div class="note i" style="margin-top:12px"><i data-i="info"></i><div>Rien n'est perdu : le client, ses licences et son historique vont dans <b>la corbeille de l'archive</b>. Clients › Corbeille › Restaurer.</div></div>
+ </div>
+ <div class="df"><span class="btn" style="margin-left:auto">Annuler</span><span class="btn red"><i data-i="trash" class="sm"></i>Supprimer le client</span></div>
+</div>
+
+<div class="dlgx" style="left:1070px;top:668px;width:460px">
+ <div class="dh" style="padding-bottom:18px"><span class="di" style="background:var(--amber-50);color:var(--amber)"><i data-i="lock"></i></span>
+  <div><div class="h3" style="font-size:14px">Et si le client a une licence en cours ?</div><div class="muted" style="margin-top:4px;font-size:13px">« Hydro Vallée a 1 licence en cours (ENTERPRISE, jusqu'au 27/11/2026). Révoque-la, ou attends sa fin, pour supprimer le client. » Le bouton est grisé, avec cette phrase.</div></div></div>
+</div>
+
+<div class="dlgx" style="left:70px;top:668px;width:960px;flex-direction:row;gap:14px;padding:18px 22px;align-items:flex-start"><span class="di" style="background:var(--violet-50);color:var(--violet)"><i data-i="shield"></i></span><div style="font-size:14px;line-height:1.55;color:var(--ink2)"><b style="color:var(--ink)">La règle, partout : on ne supprime jamais ce qu'un client utilise encore</b> (sa licence s'arrêterait chez lui). Ce qui est fini se supprime, et va d'abord dans la corbeille de l'archive ; ce qui est en cours se retire de la vente, ou se révoque.</div></div>
+</body></html>

@@ -1,0 +1,100 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - offres</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.split{display:flex;gap:16px;margin-top:18px;height:806px}
+.tablecard{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+table.t td{padding:10px 12px} table.t th{padding:10px 12px}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.on2{font-weight:650}
+.oi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;font:750 12px Inter;color:#fff}
+.det{width:500px;flex:none;display:flex;flex-direction:column;overflow:visible;position:relative}
+.dh2{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.dbody{flex:1;overflow:hidden}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dft{display:flex;align-items:center;gap:8px;padding:14px 20px;border-top:1px solid var(--line);background:var(--surface2);border-radius:0 0 12px 12px}
+.drow{display:flex;align-items:center;gap:10px}
+.arrow{color:var(--faint)}
+.chg{font:700 11px Inter;color:#b45309;background:var(--amber-50);padding:2px 8px;border-radius:99px}
+.rowdim td{color:var(--muted)}
+.rowdim .on2{color:var(--muted)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:offres-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Catalogue<i data-i="right"></i><b>Offres</b></div>
+   <div style="margin-left:auto" class="row gap10">
+    <span class="pill p-amber"><span class="d"></span>Brouillon · 2 changements</span>
+    <span class="btn">Annuler</span>
+    <span class="btn primary"><i data-i="shield"></i>Signer le registre n° 320</span>
+   </div>
+  </div>
+  <div class="content">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Offres</div><div class="muted" style="margin-top:4px">7 offres · 5 en vente dont 1 temporaire · 128 licences vendues</div></div>
+    <div class="row gap8" style="margin-left:auto"><span class="btn"><i data-i="copy"></i>Dupliquer</span><span class="btn primary"><i data-i="plus"></i>Nouvelle offre</span></div></div>
+   <div class="split">
+    <div class="card tablecard">
+     <table class="t">
+      <tr><th>Offre</th><th>Prix HT</th><th>PC</th><th>Licence</th><th>En vente</th><th style="text-align:right;padding-right:18px">Licences</th></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:#64748b">P</span><div><div class="on2">PERSONAL</div><div class="cap">Un poste, IHM Studio</div></div></div></td><td>190 € <span class="faint">/ an</span></td><td>2</td><td>1 an</td><td><span class="pill p-gray">Toujours</span></td><td style="text-align:right;padding-right:18px;font-weight:600">31</td></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:var(--violet)">P</span><div><div class="on2">PROFESSIONAL</div><div class="cap">API + IHM Studio</div></div></div></td><td>490 € <span class="faint">/ an</span><div class="row gap6" style="margin-top:3px"><span class="pill p-violet" style="height:20px;font-size:11px"><i data-i="percent" style="width:11px;height:11px"></i>−10 % → 30/11</span></div></td><td>5</td><td>1 an</td><td><span class="pill p-gray">Toujours</span></td><td style="text-align:right;padding-right:18px;font-weight:600">62</td></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:#1e1b4b">E</span><div><div class="on2">ENTERPRISE</div><div class="cap">Tout, 20 PC, flottantes</div></div></div></td><td>1 290 € <span class="faint">/ an</span></td><td>20</td><td>1 an</td><td><span class="pill p-gray">Toujours</span></td><td style="text-align:right;padding-right:18px;font-weight:600">18</td></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:var(--teal)">E</span><div><div class="on2">EVALUATION</div><div class="cap">Pour essayer</div></div></div></td><td>Gratuit</td><td>1</td><td>30 jours</td><td><span class="pill p-gray">Toujours</span></td><td style="text-align:right;padding-right:18px;font-weight:600">14</td></tr>
+      <tr class="sel"><td><div class="row gap10"><span class="oi" style="background:linear-gradient(140deg,#60a5fa,#2563eb)">S</span><div><div class="on2 row gap6" style="white-space:nowrap">PRO SEMAINE<span class="chg">nouvelle</span></div><div class="cap">Pour un chantier</div></div></div></td><td>49 € <span class="faint">/ 7 j</span></td><td>2</td><td><b style="font-weight:650">1 semaine</b></td><td><span class="pill p-blue"><i data-i="hourglass" style="width:12px;height:12px"></i>10/11 → 16/11</span><div class="cap" style="margin-top:3px">commence demain</div></td><td style="text-align:right;padding-right:18px;font-weight:600">0</td></tr>
+      <tr class="rowdim"><td><div class="row gap10"><span class="oi" style="background:#f59e0b">É</span><div><div class="on2">ÉTÉ 2026</div><div class="cap">Offre d'été</div></div></div></td><td>290 € <span class="faint">/ an</span></td><td>3</td><td>1 an</td><td><span class="pill p-gray"><i data-i="check" style="width:12px;height:12px"></i>Vente finie le 31/08</span><div class="cap" style="margin-top:3px">retirée seule</div></td><td style="text-align:right;padding-right:18px;font-weight:600">3</td></tr>
+      <tr class="rowdim"><td><div class="row gap10"><span class="oi" style="background:#cbd5e1">C</span><div><div class="on2">CUSTOM</div><div class="cap">Sur devis</div></div></div></td><td>—</td><td>—</td><td>—</td><td><span class="pill p-gray">Retirée</span></td><td style="text-align:right;padding-right:18px;font-weight:600">0</td></tr>
+     </table>
+     <div style="margin-top:auto;padding:14px 18px;border-top:1px solid var(--line)" class="row gap10 cap"><i data-i="info" class="sm"></i>Une offre arrive chez les clients avec le prochain registre signé. Les licences déjà vendues gardent leur offre jusqu'à leur fin.</div>
+    </div>
+
+    <div class="card det">
+     <div class="dh2">
+      <div class="row gap12"><span class="oi" style="width:46px;height:46px;border-radius:13px;font-size:17px;background:linear-gradient(140deg,#60a5fa,#2563eb);box-shadow:0 6px 16px rgba(37,99,235,.3)">S</span>
+       <div class="grow"><div class="h2" style="font-size:17px">PRO SEMAINE</div><div class="mono muted" style="font-size:12px;margin-top:2px">pro-semaine</div></div>
+       <span class="pill p-blue"><i data-i="hourglass" style="width:12px;height:12px"></i>Temporaire</span></div>
+     </div>
+     <div class="dbody">
+      <div class="secx"><div class="grid2">
+       <div><div class="flab">Nom affiché</div><div class="field">PRO SEMAINE</div></div>
+       <div><div class="flab">Prix <span>· HT</span></div><div class="field">49<span class="suf">€ pour la licence</span></div></div>
+      </div></div>
+      <div class="secx"><div class="st"><span class="h3">Durée de la licence</span><span class="cap">à partir de son activation</span></div>
+       <div class="seg"><span class="on">1 semaine</span><span>1 mois</span><span>1 an</span><span>Sans fin</span><span><i data-i="calendar"></i>Autre…</span></div>
+      </div>
+      <div class="secx"><div class="st"><span class="h3">En vente</span><span class="cap">dans la boutique des Studios</span></div>
+       <div class="seg"><span>Toujours</span><span class="on"><i data-i="hourglass"></i>Pendant une période</span></div>
+       <div class="drow" style="margin-top:12px">
+        <div class="grow"><div class="flab">Du</div><div class="field"><i data-i="calendar"></i>mar. 10/11/2026</div></div>
+        <i data-i="right" class="arrow" style="margin-top:20px"></i>
+        <div class="grow"><div class="flab">Au <span>· inclus</span></div><div class="field focus"><i data-i="calendar" style="color:var(--violet)"></i>lun. 16/11/2026<i data-i="down" class="sm" style="margin-left:auto;color:var(--faint)"></i></div></div>
+       </div>
+       <div class="cap" style="margin-top:8px">Le 16/11 au soir, elle quitte seule la boutique. Les licences vendues vont jusqu'à leur fin.</div>
+      </div>
+      <div class="secx"><div class="grid2">
+       <div><div class="flab">PC par licence</div><div class="field">2</div></div>
+       <div><div class="flab">Hors ligne</div><div class="field">7<span class="suf">jours de grâce</span></div></div>
+      </div></div>
+      <div class="secx"><div class="st"><span class="h3">Fonctionnalités</span><span class="cap">18 sur 21 · comme PROFESSIONAL</span><span style="margin-left:auto;font:600 12.5px Inter;color:var(--violet-700)">Choisir…</span></div>
+       <div class="row gap6" style="flex-wrap:wrap"><span class="tag">Éditeur</span><span class="tag">Compilation</span><span class="tag">Simulation</span><span class="tag">Éditeur de vues</span><span class="tag">Animations</span><span class="tag">Exports</span><span class="tag faint">+ 12</span></div>
+      </div>
+      <div class="secx"><div class="row gap10"><span class="toggle"></span><span class="h3">Réduction</span><span class="cap">aucune</span></div></div>
+     </div>
+     <div class="dft">
+      <span class="btn sm"><i data-i="archive" class="sm"></i>Retirer de la vente</span>
+      <span class="btn sm danger"><i data-i="trash" class="sm"></i>Supprimer l'offre…</span>
+      <span class="cap" style="margin-left:auto">aucune licence ne l'utilise</span>
+     </div>
+     <div class="cal" style="position:absolute;left:176px;top:392px;width:304px"><!--CAL:2026-11:10:16:9-->
+      <div class="qk"><span class="on">1 semaine</span><span>2 semaines</span><span>1 mois</span><span>Fin du mois</span></div>
+      <div class="ft"><span class="cap">7 jours · 10 → 16/11</span><span class="btn sm" style="margin-left:auto">Effacer</span><span class="btn sm primary">OK</span></div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:48px;top:668px;width:360px"><b>Offre temporaire</b> : en vente du 10 au 16/11, puis elle quitte la boutique des Studios toute seule. Rien à retirer à la main ; les licences vendues vont jusqu'à leur fin.</div>
+  <div class="annot" data-n="2" style="left:428px;top:668px;width:360px">Ou bien <b>une licence qui ne dure qu'une semaine</b> : c'est l'autre réglage, juste au-dessus. Les deux se combinent (ici : PRO pendant 7 jours, vendue pendant 7 jours).</div>
+  <div class="annot" data-n="3" style="left:48px;top:790px;width:740px">Toutes les dates (une période de vente, une réduction, une option) se choisissent dans <b>un mini calendrier</b> : un clic le début, un clic la fin, ou un raccourci (1 semaine, 1 mois…). Plus de date AAAA-MM-JJ à taper : c'était le bug des réductions.</div>
+  <span class="mk" style="left:818px;top:331px">2</span><span class="mk" style="left:818px;top:410px">1</span><span class="mk" style="left:994px;top:552px">3</span>
+ </main>
+</div>
+</body></html>

@@ -1,0 +1,84 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Sessions - le principe</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css">
+<style>
+:root{--acc:#0d9488;--acc-50:#e8f8f6;--acc-100:#c9efea;--acc-700:#0f766e;--acc-ring:rgba(13,148,136,.15)}
+body{background:radial-gradient(1200px 700px at 30% 40%,#eefaf8 0%,var(--bg) 60%)}
+.hd2{position:absolute;left:48px;top:40px;width:1000px}
+.hd2 .o{font:700 12px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--acc-700)}
+.hd2 h1{font:750 30px/1.15 Inter;letter-spacing:-.02em;margin:8px 0 8px}
+.pcn{position:absolute;width:250px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:var(--sh2);padding:13px 14px;z-index:2}
+.pcn .r{display:flex;align-items:center;gap:10px}
+.pcn .nm{font:650 14px Inter}
+.pcn .s{font-size:12px;color:var(--muted)}
+.pcn .wk{margin-top:10px;display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:9px;background:var(--surface2);font-size:12px;color:var(--ink2)}
+.pcn .wk .ico{width:14px;height:14px;color:var(--faint)}
+.host{width:300px;border:2px solid var(--acc);box-shadow:0 0 0 6px rgba(13,148,136,.10),var(--sh2)}
+.big2{width:44px;height:44px;font-size:15px}
+.cloud{position:absolute;width:210px;text-align:center;z-index:2}
+.cloud .c{width:64px;height:64px;border-radius:18px;margin:0 auto;display:grid;place-items:center;background:linear-gradient(140deg,#93c5fd,#2563eb);color:#fff;box-shadow:0 8px 22px rgba(37,99,235,.35)}
+.cloud .c .ico{width:30px;height:30px}
+svg.wires{position:absolute;left:0;top:0;width:1600px;height:1000px;z-index:1}
+.lbl{position:absolute;font:600 11.5px Inter;color:var(--ink2);background:#fff;border:1px solid var(--line);padding:3px 9px;border-radius:99px;box-shadow:var(--sh1);z-index:3;white-space:nowrap;display:flex;gap:6px;align-items:center}
+.lbl .ico{width:13px;height:13px}
+.msg{position:absolute;font:600 11px "JetBrains Mono";padding:3px 8px;border-radius:7px;z-index:3;white-space:nowrap}
+.rules{position:absolute;left:1070px;top:40px;width:490px;display:flex;flex-direction:column;gap:10px}
+.rule{display:flex;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--sh1)}
+.rule .n{width:26px;height:26px;border-radius:8px;background:var(--acc-50);color:var(--acc-700);display:grid;place-items:center;font:750 12.5px Inter;flex:none}
+.rule b{font-weight:650}
+.rule .t{font-size:13px;line-height:1.45;color:var(--ink2)}
+.bot{position:absolute;left:48px;top:842px;width:990px;display:flex;gap:12px}
+.bot .rule{flex:1}
+</style></head><body><script src="icons.js"></script>
+<div class="hd2"><div class="o">Proposition · travailler à plusieurs</div><h1>Une session : un projet ouvert sur plusieurs PC, en même temps</h1>
+ <div class="muted" style="max-width:900px;font-size:14px">Un PC <b style="color:var(--ink)">démarre</b> la session (l'hôte), les autres la <b style="color:var(--ink)">rejoignent</b>. Chacun voit ses équipiers : où ils sont, ce qu'ils touchent. Tout passe par l'hôte, qui garde le projet et l'enregistre.</div></div>
+
+<svg class="wires" viewBox="0 0 1600 1000">
+ <defs><marker id="ar" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10z" fill="#0d9488"/></marker></defs>
+ <g fill="none" stroke-width="2.5" stroke-linecap="round">
+  <path d="M300 300 C 380 300, 380 470, 420 470" stroke="#0d9488"/>
+  <path d="M300 690 C 380 690, 380 540, 420 540" stroke="#0d9488"/>
+  <path d="M720 470 C 780 470, 790 330, 830 300" stroke="#2563eb" stroke-dasharray="7 6"/>
+  <path d="M900 380 C 900 520, 880 600, 850 640" stroke="#2563eb" stroke-dasharray="7 6"/>
+ </g>
+</svg>
+
+<div class="pcn host" style="left:420px;top:420px">
+ <div class="r"><span class="av2 big2" style="background:linear-gradient(140deg,#2dd4bf,#0d9488)">C</span><div class="grow"><div class="nm row gap6">Camille <span class="pill p-teal" style="height:20px;font-size:11px"><i data-i="crown" style="width:11px;height:11px"></i>hôte</span></div><div class="s">PC-BUREAU-01 · IHM Studio</div></div></div>
+ <div class="wk"><i data-i="save"></i><span>Garde le projet <b style="font-weight:650;color:var(--ink)">Armoire_Gaz V4</b> et l'enregistre</span></div>
+ <div class="wk" style="margin-top:6px"><i data-i="layers"></i><span>Range les modifications dans l'ordre et les renvoie à tous</span></div>
+</div>
+
+<div class="pcn" style="left:50px;top:240px">
+ <div class="r"><span class="av2" style="background:#7c3aed">L</span><div class="grow"><div class="nm">Léa</div><div class="s">PC-ATELIER-02 · même bureau</div></div><span class="pill p-violet" style="height:22px">modifie</span></div>
+ <div class="wk"><i data-i="monitor"></i><span>IHM Studio · Vue_Supervision · « Courbe niveau »</span></div>
+</div>
+<div class="pcn" style="left:50px;top:630px">
+ <div class="r"><span class="av2" style="background:#db2777">N</span><div class="grow"><div class="nm">Nina</div><div class="s">PC-LABO-2 · même bureau</div></div><span class="pill p-gray" style="height:22px"><i data-i="eye" style="width:12px;height:12px"></i>regarde</span></div>
+ <div class="wk"><i data-i="monitor"></i><span>IHM Studio · Vue_Alarmes</span></div>
+</div>
+<div class="cloud" style="left:800px;top:236px"><div class="c"><i data-i="cloud"></i></div><div class="h3" style="margin-top:8px">Le service XPG</div><div class="cap">un relais chiffré : il passe les messages, ne garde rien</div></div>
+<div class="pcn" style="left:720px;top:640px">
+ <div class="r"><span class="av2" style="background:#ea580c">H</span><div class="grow"><div class="nm">Hugo</div><div class="s">chez lui · par Internet</div></div><span class="pill p-amber" style="height:22px">modifie</span></div>
+ <div class="wk"><i data-i="cpu"></i><span>API Studio · section Pompes · ligne 42</span></div>
+</div>
+
+<div class="lbl" style="left:96px;top:392px"><i data-i="wifi" style="color:var(--acc)"></i>réseau du bureau · direct, chiffré</div>
+<div class="lbl" style="left:96px;top:594px"><i data-i="wifi" style="color:var(--acc)"></i>réseau du bureau</div>
+<div class="lbl" style="left:870px;top:520px"><i data-i="globe" style="color:var(--blue)"></i>Internet · avec le code</div>
+<div class="msg" style="left:318px;top:318px;background:var(--violet-50);color:#6d28d9">Courbe niveau → x 412</div>
+<div class="msg" style="left:330px;top:650px;background:var(--acc-50);color:var(--acc-700)">↓ P101 renommée</div>
+<div class="msg" style="left:760px;top:420px;background:var(--blue-50);color:#1d4ed8">Pompes : ligne 42</div>
+
+<div class="rules">
+ <div class="rule"><span class="n">1</span><div class="t"><b>Démarrer.</b> L'hôte clique « Démarrer une session » : il nomme la session, choisit le réseau du bureau ou aussi Internet, et reçoit <b>un code</b> (K7M-4QX).</div></div>
+ <div class="rule"><span class="n">2</span><div class="t"><b>Rejoindre.</b> Au bureau, la session apparaît seule dans « Rejoindre » ; de loin, on tape le code. L'hôte <b>accepte chaque entrée</b>. Le projet arrive une fois, puis seulement les changements.</div></div>
+ <div class="rule"><span class="n">3</span><div class="t"><b>Voir ses équipiers.</b> Leur pastille en haut, leur curseur sur la vue, leur nom sur la vue ou la ligne de code où ils sont. « Suivre » montre ce que voit un équipier.</div></div>
+ <div class="rule"><span class="n">4</span><div class="t"><b>Chacun son objet.</b> Ce qu'un équipier modifie est <b>réservé</b> tant qu'il le touche (un objet, une ligne de code, une variable) : les autres le voient à sa couleur et attendent ou lui écrivent. Pas de conflit à démêler.</div></div>
+ <div class="rule"><span class="n">5</span><div class="t"><b>Annuler, enregistrer.</b> Ctrl+Z annule <b>tes</b> gestes, pas ceux des autres. L'hôte enregistre pour tout le monde ; les versions gardent qui a fait quoi.</div></div>
+ <div class="rule"><span class="n">6</span><div class="t"><b>Coupures.</b> Un équipier qui perd le réseau garde son travail et le renvoie au retour. Si l'hôte arrête, la session se ferme proprement et chacun peut garder une copie.</div></div>
+</div>
+<div class="bot">
+ <div class="rule"><span class="n" style="background:var(--violet-50);color:var(--violet-700)"><i data-i="key" class="sm"></i></span><div class="t"><b>La licence</b> (à décider) : <b>démarrer</b> une session demande « Multi-utilisateur » (ENTERPRISE, ou l'option Travail à plusieurs) ; <b>rejoindre</b> demande seulement sa propre licence du Studio.</div></div>
+ <div class="rule"><span class="n" style="background:var(--blue-50);color:var(--blue)"><i data-i="lock" class="sm"></i></span><div class="t"><b>La sécurité</b> : tout est chiffré (comme le déploiement réseau d'aujourd'hui) ; le code change à chaque session ; le service ne voit que des messages chiffrés.</div></div>
+</div>
+</body></html>

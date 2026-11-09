@@ -1,0 +1,111 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - ajouter une option</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.split{display:flex;gap:16px;margin-top:18px;height:806px}
+.tablecard{flex:1;min-width:0;overflow:hidden}
+table.t td{padding:10px 12px} table.t th{padding:10px 12px}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.cl{font-weight:600}
+.det{width:476px;flex:none;display:flex;flex-direction:column;overflow:hidden}
+.dh2{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.av{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;color:#fff;font:700 16px Inter;background:linear-gradient(140deg,#8b6dff,#4b2fd6);box-shadow:0 6px 16px rgba(109,74,255,.3)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.fact{background:#fff;padding:11px 16px}.fact .k{font-size:11.5px;color:var(--faint);font-weight:550}.fact .v{font-weight:600;margin-top:2px}
+.sec{padding:14px 20px 6px;display:flex;align-items:center;gap:8px}
+.optc{margin:0 16px;border:1px solid #c7d7fe;background:linear-gradient(180deg,#f5f8ff,#fff);border-radius:12px;padding:12px 14px}
+.tl{padding:2px 20px 0;position:relative}
+.tl:before{content:"";position:absolute;left:24px;top:12px;bottom:6px;width:1.5px;background:var(--line)}
+.tli{display:flex;gap:12px;padding:6px 0;position:relative;font-size:13px}
+.tli .b{width:9px;height:9px;border-radius:50%;margin-top:5px;flex:none;box-shadow:0 0 0 3px #fff;position:relative;z-index:1}
+.tli .s{font-size:12px;color:var(--muted)}
+.tli .pr{margin-left:auto;font-weight:600;white-space:nowrap}
+.ocard{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1.5px solid var(--line);border-radius:12px}
+.ocard.on{border-color:var(--violet);background:var(--violet-50)}
+.ocard .oi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none}
+.ocard .oi .ico{width:17px;height:17px}
+.tlbar{position:relative;height:46px;margin-top:6px}
+.tlbar .lic{position:absolute;left:0;right:0;top:8px;height:12px;border-radius:99px;background:var(--violet-100)}
+.tlbar .op{position:absolute;left:0;width:22px;top:4px;height:20px;border-radius:6px;background:var(--blue);box-shadow:0 2px 6px rgba(37,99,235,.35)}
+.tlbar .t1{position:absolute;top:28px;font-size:11.5px;color:var(--muted)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:licences-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i><b>Licences</b></div>
+   <div style="margin-left:auto" class="row gap12"><span class="live"><i></i>En direct · il y a 3 s</span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+   <div class="h1">Licences</div><div class="muted" style="margin-top:4px">128 licences · 21 options en cours</div>
+   <div class="split">
+    <div class="card tablecard" style="opacity:.55">
+     <table class="t"><tr><th>Client · licence</th><th>Offre</th><th>Options</th><th>Fin</th><th>État</th></tr>
+      <tr class="sel"><td><div class="cl">Atelier Meyer</div><div class="mono muted" style="font-size:12px">XPG-2026-00391</div></td><td><span class="pill p-violet">PROFESSIONAL</span></td><td><span class="pill p-blue" style="height:22px">+ Exports avancés</span></td><td>08/11/2027</td><td><span class="pill p-green"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="cl">Brasserie du Nord</div><div class="mono muted" style="font-size:12px">XPG-2026-00377</div></td><td><span class="pill p-gray">ENTERPRISE</span></td><td class="faint">—</td><td>14/03/2027</td><td><span class="pill p-green"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="cl">Laiterie des Prés</div><div class="mono muted" style="font-size:12px">XPG-2026-00301</div></td><td><span class="pill p-violet">PROFESSIONAL</span></td><td><span class="pill p-blue" style="height:22px">+ Exports avancés</span></td><td>19/01/2027</td><td><span class="pill p-green"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="cl">Studio Lumen</div><div class="mono muted" style="font-size:12px">XPG-2026-00402</div></td><td><span class="pill p-violet">PROFESSIONAL</span></td><td><span class="pill p-blue" style="height:22px">+ 2 options</span></td><td>08/11/2027</td><td><span class="pill p-green"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="cl">Menuiserie Arnaud</div><div class="mono muted" style="font-size:12px">XPG-2026-00355</div></td><td><span class="pill p-gray">PERSONAL</span></td><td class="faint">—</td><td>02/05/2027</td><td><span class="pill p-green"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="cl">Hydro Vallée</div><div class="mono muted" style="font-size:12px">XPG-2026-00148</div></td><td><span class="pill p-gray">ENTERPRISE</span></td><td class="faint">—</td><td>27/11/2026</td><td><span class="pill p-amber"><span class="d"></span>Finit bientôt</span></td></tr>
+     </table>
+    </div>
+    <div class="card det">
+     <div class="dh2">
+      <div class="row gap12"><div class="av">AM</div><div class="grow"><div class="h2" style="font-size:17px">Atelier Meyer</div><div class="mono muted" style="font-size:12px;margin-top:2px">XPG-2026-00391</div></div><span class="pill p-green"><span class="d"></span>Active</span></div>
+      <div class="row gap8" style="margin-top:14px"><span class="btn sm"><i data-i="calendar" class="sm"></i>Prolonger…</span><span class="btn sm primary"><i data-i="puzzle" class="sm"></i>Ajouter une option…</span><span class="btn sm"><i data-i="download" class="sm"></i>Fichier</span><span class="btn sm" style="margin-left:auto;padding:0 8px"><i data-i="more" class="sm"></i></span></div>
+     </div>
+     <div class="facts"><div class="fact"><div class="k">Offre</div><div class="v">PROFESSIONAL</div></div><div class="fact"><div class="k">Fin</div><div class="v">08/11/2027</div></div><div class="fact"><div class="k">PC</div><div class="v">2 sur 5</div></div></div>
+     <div class="sec"><span class="h3">Options</span><span class="cap">1 en cours</span></div>
+     <div class="optc">
+      <div class="row gap10"><span class="oi" style="width:30px;height:30px;border-radius:9px;background:var(--blue);color:#fff;display:grid;place-items:center"><i data-i="download" class="sm"></i></span>
+       <div class="grow"><div class="h3">Exports avancés</div><div class="cap">1 semaine · du 09/11 au 15/11 · 19 € HT</div></div><span class="pill p-blue" style="height:22px">encore 7 j</span><i data-i="more" class="sm faint"></i></div>
+      <div class="bar" style="margin-top:10px;height:5px"><i style="width:6%;background:var(--blue)"></i></div>
+      <div class="cap" style="margin-top:6px">reçue par le PC-ATELIER-01 à 10:42 · le client est prévenu 2 jours avant la fin</div>
+     </div>
+     <div class="sec" style="padding-top:16px"><span class="h3">Achats</span><span class="cap">5 · 1 028 € HT depuis le 12/10/2025</span><span style="margin-left:auto;font:600 12.5px Inter;color:var(--violet-700)">Tout voir</span></div>
+     <div class="tl">
+      <div class="tli"><span class="b" style="background:var(--blue)"></span><div><div>Option <b style="font-weight:600">Exports avancés</b> · 1 semaine</div><div class="s">09/11/2026 · en cours</div></div><span class="pr">19 €</span></div>
+      <div class="tli"><span class="b" style="background:var(--violet)"></span><div><div>PROFESSIONAL prolongée · 1 an</div><div class="s">12/10/2026 · jusqu'au 08/11/2027</div></div><span class="pr">490 €</span></div>
+      <div class="tli"><span class="b" style="background:#cbd5e1"></span><div><div>Option <b style="font-weight:600">Assistant IA avancé</b> · 1 mois</div><div class="s">03/09/2026 · finie le 02/10</div></div><span class="pr">29 €</span></div>
+      <div class="tli"><span class="b" style="background:#cbd5e1"></span><div><div>PROFESSIONAL · 1 an</div><div class="s">08/11/2025 · depuis EVALUATION</div></div><span class="pr">490 €</span></div>
+      <div class="tli"><span class="b" style="background:#cbd5e1"></span><div><div>EVALUATION · 30 jours</div><div class="s">12/10/2025 · la première</div></div><span class="pr faint">offerte</span></div>
+     </div>
+    </div>
+   </div>
+  </div>
+
+  <div class="dlgx" style="left:28px;top:150px;width:780px">
+   <div class="dh"><span class="di" style="background:var(--violet-50);color:var(--violet)"><i data-i="puzzle"></i></span>
+    <div class="grow"><div class="h2" style="font-size:18px">Ajouter une option</div><div class="muted" style="margin-top:3px">Atelier Meyer · <span class="mono" style="font-size:12.5px">XPG-2026-00391</span> · PROFESSIONAL jusqu'au 08/11/2027</div></div><span style="color:var(--muted)"><i data-i="x"></i></span></div>
+   <div class="db" style="padding-top:18px">
+    <div class="flab">L'option <span>· celles que PROFESSIONAL n'a pas</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+     <div class="ocard on"><span class="oi" style="background:var(--blue);color:#fff"><i data-i="download"></i></span><div class="grow"><div class="h3">Exports avancés</div><div class="cap">dès 19 € la semaine</div></div><span class="radio on"></span></div>
+     <div class="ocard"><span class="oi" style="background:var(--violet-50);color:var(--violet)"><i data-i="sparkles"></i></span><div class="grow"><div class="h3">Assistant IA avancé</div><div class="cap">29 € le mois · essai déjà pris</div></div><span class="radio"></span></div>
+     <div class="ocard"><span class="oi" style="background:var(--teal-50);color:var(--teal)"><i data-i="users"></i></span><div class="grow"><div class="h3">Travail à plusieurs</div><div class="cap">39 € le mois</div></div><span class="radio"></span></div>
+    </div>
+    <div style="display:flex;gap:18px;margin-top:18px;align-items:flex-end">
+     <div><div class="flab">Pour combien de temps</div><div class="seg"><span class="on">1 semaine</span><span>1 mois</span><span>Jusqu'à la fin de la licence</span><span><i data-i="calendar"></i>Dates…</span></div></div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:14px;align-items:flex-end">
+     <div style="width:244px"><div class="flab">Du</div><div class="field"><i data-i="calendar"></i>lun. 09/11/2026<span class="suf">aujourd'hui</span></div></div>
+     <i data-i="right" style="color:var(--faint);margin-bottom:9px"></i>
+     <div style="width:210px"><div class="flab">Au <span>· inclus</span></div><div class="field"><i data-i="calendar"></i>dim. 15/11/2026</div></div>
+     <div style="width:150px;margin-left:auto"><div class="flab">Prix <span>· HT</span></div><div class="field">19<span class="suf">€</span></div></div>
+     <div class="row gap8" style="margin-bottom:9px"><span class="check"></span><span style="font-size:13px">Offerte</span></div>
+    </div>
+    <div style="margin-top:18px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--surface2)">
+     <div class="row gap8"><span class="h3">Ce que le client aura</span><span class="cap">aperçu</span></div>
+     <div class="tlbar"><div class="lic"></div><div class="op"></div><span class="t1" style="left:0">09/11 · Exports avancés 7 j</span><span class="t1" style="right:0">08/11/2027 · fin de PROFESSIONAL</span></div>
+     <div class="row gap16" style="margin-top:8px;font-size:12.5px;color:var(--ink2)">
+      <div class="row gap6"><i data-i="cloud" class="sm" style="color:var(--green)"></i>Licence en ligne : son PC la reçoit seul, d'ici 2 min.</div>
+      <div class="row gap6"><i data-i="hourglass" class="sm" style="color:var(--blue)"></i>Le 15/11 au soir, elle s'arrête seule ; le reste ne bouge pas.</div>
+     </div>
+    </div>
+   </div>
+   <div class="df"><span class="cap">Elle s'inscrit dans ses achats, chez toi et chez lui.</span><span class="btn" style="margin-left:auto">Annuler</span><span class="btn primary"><i data-i="puzzle" class="sm"></i>Ajouter l'option · 19 €</span></div>
+  </div>
+  <div class="annot" data-n="1" style="left:28px;top:770px;width:380px">Une <b>option temporaire</b> sur une licence dont l'offre ne l'a pas : on choisit, on règle la durée (ou des dates, dans le calendrier), c'est parti.</div>
+  <div class="annot" data-n="2" style="left:428px;top:770px;width:380px">À droite, la fiche : l'option <b>en cours</b>, avec ses jours restants, et <b>tous les achats</b> du client (offres, prolongations, options).</div>
+ </main>
+</div>
+</body></html>

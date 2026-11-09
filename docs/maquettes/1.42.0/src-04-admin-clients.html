@@ -1,0 +1,103 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - clients</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.tb{display:flex;align-items:center;gap:10px;margin-top:18px}
+.fsearch{display:flex;align-items:center;gap:9px;height:36px;width:280px;padding:0 12px;border-radius:9px;background:#fff;border:1px solid var(--line2);color:var(--faint);box-shadow:var(--sh1)}
+.fsearch .ico{width:16px;height:16px}
+.chip{height:32px;padding:0 12px;border-radius:99px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px Inter;color:var(--ink2);border:1px solid var(--line2);background:#fff}
+.chip i{font-style:normal;color:var(--faint);font-weight:600}
+.chip.on{background:var(--ink);border-color:var(--ink);color:#fff}.chip.on i{color:#94a3b8}
+.split{display:flex;gap:16px;margin-top:14px;height:766px}
+.tree{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+.th{display:grid;grid-template-columns:1fr 150px 108px 70px 120px;padding:0 16px;height:38px;align-items:center;border-bottom:1px solid var(--line);background:var(--surface2);font:650 11.5px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.tn{display:grid;grid-template-columns:1fr 150px 108px 70px 120px;padding:0 16px;height:40px;align-items:center;border-bottom:1px solid #eef1f5;font-size:13px}
+.tn .nm{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
+.tn .cv{width:16px;height:16px;color:var(--faint);flex:none;stroke-width:2.2}
+.tn .sp{width:16px;flex:none}
+.tn .ic{width:16px;height:16px;color:var(--faint);flex:none}
+.tn.cl{height:48px;background:#fff}
+.tn.cl .nm b{font-weight:650;font-size:13.5px}
+.tn.sel{background:var(--violet-50);box-shadow:inset 3px 0 0 var(--violet)}
+.tn .ct{font:600 11px Inter;color:var(--faint);background:var(--sunken);padding:1px 7px;border-radius:99px}
+.tn.dim{color:var(--muted)}
+.tn .mono{font-size:12px}
+.guide{position:relative}
+.det{width:420px;flex:none;display:flex;flex-direction:column;overflow:visible;position:relative}
+.dh2{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.av{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;color:#fff;font:700 16px Inter;background:linear-gradient(140deg,#8b6dff,#4b2fd6);box-shadow:0 6px 16px rgba(109,74,255,.3)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.fact{background:#fff;padding:11px 16px}.fact .k{font-size:11.5px;color:var(--faint);font-weight:550}.fact .v{font-weight:650;margin-top:2px;font-size:15px}
+.kv{display:flex;padding:7px 0;font-size:13px}.kv span:first-child{width:120px;color:var(--muted)}
+.menu{position:absolute;right:16px;top:118px;width:250px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh3);padding:6px;z-index:30}
+.menu div{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.menu div .ico{width:15px;height:15px;color:var(--faint)}
+.menu .hr2{height:1px;background:var(--line);margin:5px 4px;padding:0}
+.menu .red{color:var(--red)} .menu .red .ico{color:var(--red)}
+.menu .hov{background:var(--red-50)}
+.spin{animation:none}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:clients-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i><b>Clients</b></div>
+   <div style="margin-left:auto" class="row gap12"><span class="live"><i></i>En direct · il y a 3 s</span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Clients</div><div class="muted" style="margin-top:4px">54 clients · 128 licences · 342 PC · 3 demandes en attente</div></div>
+    <div class="row gap10" style="margin-left:auto"><span class="cap">relu il y a 2 min</span><span class="btn"><i data-i="refresh"></i>Actualiser<span class="kbd" style="margin-left:2px">F5</span></span></div></div>
+   <div class="tb">
+    <div class="fsearch"><i data-i="search"></i>Client, licence, PC, courriel…</div>
+    <span class="chip on">Tous <i>54</i></span><span class="chip">Licence active <i>47</i></span><span class="chip">Demande en attente <i>3</i></span><span class="chip">Plus rien en cours <i>4</i></span>
+    <span class="btn sm ghost" style="margin-left:auto"><i data-i="plus" class="sm"></i>Tout déplier</span><span class="btn sm ghost"><i data-i="minus" class="sm"></i>Tout replier</span>
+   </div>
+   <div class="split">
+    <div class="card tree">
+     <div class="th"><span>Client · licence · PC</span><span>Offre · état</span><span>Fin</span><span>PC</span><span>Activité</span></div>
+     <div class="tn cl sel"><span class="nm"><i data-i="down" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:linear-gradient(140deg,#8b6dff,#4b2fd6)">AM</span><b>Atelier Meyer</b><span class="ct">2 licences</span></span><span><span class="pill p-green" style="height:22px"><span class="d"></span>Active</span></span><span>08/11/2027</span><span>2 / 6</span><span class="cap">il y a 1 min</span></div>
+     <div class="tn"><span class="nm" style="padding-left:24px"><i data-i="down" class="cv"></i><i data-i="key" class="ic" style="color:var(--violet)"></i><span class="mono" style="font-weight:600">XPG-2026-00391</span></span><span><span class="pill p-violet" style="height:22px">PROFESSIONAL</span></span><span>08/11/2027</span><span>2 / 5</span><span class="cap">il y a 1 min</span></div>
+     <div class="tn"><span class="nm" style="padding-left:48px"><i data-i="down" class="cv"></i><i data-i="laptop" class="ic"></i>PC<span class="ct">2</span></span><span></span><span></span><span></span><span></span></div>
+     <div class="tn"><span class="nm" style="padding-left:72px"><span class="sp"></span><span class="dot" style="background:#22c55e"></span><span class="mono">PC-ATELIER-01</span></span><span class="cap">en ligne</span><span></span><span></span><span class="cap">il y a 1 min</span></div>
+     <div class="tn"><span class="nm" style="padding-left:72px"><span class="sp"></span><span class="dot" style="background:#f59e0b"></span><span class="mono">PC-BUREAU-03</span></span><span class="cap">hors ligne</span><span class="cap">bail → 02/12</span><span></span><span class="cap">il y a 3 j</span></div>
+     <div class="tn"><span class="nm" style="padding-left:48px"><i data-i="down" class="cv"></i><i data-i="puzzle" class="ic" style="color:var(--blue)"></i>Options<span class="ct">1</span></span><span></span><span></span><span></span><span></span></div>
+     <div class="tn"><span class="nm" style="padding-left:72px"><span class="sp"></span>Exports avancés</span><span><span class="pill p-blue" style="height:22px">encore 6 j</span></span><span>15/11/2026</span><span></span><span class="cap">09/11</span></div>
+     <div class="tn"><span class="nm" style="padding-left:48px"><i data-i="right" class="cv"></i><i data-i="receipt" class="ic"></i>Achats<span class="ct">5</span></span><span class="cap">1 028 € HT</span><span></span><span></span><span></span></div>
+     <div class="tn dim"><span class="nm" style="padding-left:24px"><i data-i="right" class="cv"></i><i data-i="key" class="ic"></i><span class="mono">XPG-2025-00088</span></span><span><span class="pill p-gray" style="height:22px">EVALUATION · finie</span></span><span>10/11/2025</span><span>0 / 1</span><span></span></div>
+     <div class="tn cl"><span class="nm"><i data-i="right" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:#1e1b4b">BN</span><b>Brasserie du Nord</b><span class="ct">1 licence</span></span><span><span class="pill p-green" style="height:22px"><span class="d"></span>Active</span></span><span>14/03/2027</span><span>12 / 20</span><span class="cap">il y a 6 min</span></div>
+     <div class="tn cl"><span class="nm"><i data-i="down" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:#0e7490">HV</span><b>Hydro Vallée</b><span class="ct">1 licence</span><span class="pill p-amber" style="height:20px;font-size:11px">1 demande</span></span><span><span class="pill p-amber" style="height:22px"><span class="d"></span>Finit bientôt</span></span><span>27/11/2026</span><span>18 / 20</span><span class="cap">il y a 12 min</span></div>
+     <div class="tn"><span class="nm" style="padding-left:24px"><i data-i="right" class="cv"></i><i data-i="key" class="ic" style="color:var(--violet)"></i><span class="mono" style="font-weight:600">XPG-2026-00148</span></span><span><span class="pill p-gray" style="height:22px;background:#1e1b4b;color:#e0e7ff">ENTERPRISE</span></span><span>27/11/2026</span><span>18 / 20</span><span class="cap">il y a 12 min</span></div>
+     <div class="tn"><span class="nm" style="padding-left:24px"><i data-i="right" class="cv"></i><i data-i="inbox" class="ic" style="color:var(--amber)"></i>Demande : prolonger d'un an</span><span><span class="pill p-amber" style="height:22px">à décider</span></span><span></span><span></span><span class="cap">hier 17:40</span></div>
+     <div class="tn cl"><span class="nm"><i data-i="right" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:#0d9488">LP</span><b>Laiterie des Prés</b><span class="ct">1 licence</span></span><span><span class="pill p-gray" style="height:22px">Désactivée</span></span><span>19/01/2027</span><span>4 / 5</span><span class="cap">il y a 2 j</span></div>
+     <div class="tn cl"><span class="nm"><i data-i="right" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:#d97706">SL</span><b>Studio Lumen</b><span class="ct">1 licence</span></span><span><span class="pill p-blue" style="height:22px">Nouvelle</span></span><span>—</span><span>0 / 3</span><span class="cap">pas encore</span></div>
+     <div class="tn cl dim"><span class="nm"><i data-i="right" class="cv"></i><span class="avatar" style="width:26px;height:26px;font-size:10.5px;border-radius:8px;background:#94a3b8">TR</span><b style="color:var(--muted)">Transports Royer</b><span class="ct">2 licences</span></span><span><span class="pill p-red" style="height:22px">Expirée</span></span><span>01/02/2026</span><span>0 / 2</span><span class="cap">il y a 9 mois</span></div>
+     <div class="tn" style="border:0;color:var(--faint);justify-content:center;display:flex">+ 47 autres clients</div>
+    </div>
+    <div class="card det">
+     <div class="dh2">
+      <div class="row gap12"><div class="av">AM</div><div class="grow"><div class="h2" style="font-size:17px">Atelier Meyer</div><div class="cap" style="margin-top:2px">client depuis le 12/10/2025</div></div><span class="btn sm" style="padding:0 8px;background:var(--sunken)"><i data-i="more" class="sm"></i></span></div>
+      <div class="row gap8" style="margin-top:14px"><span class="btn sm primary"><i data-i="plus" class="sm"></i>Nouvelle licence pour lui…</span><span class="btn sm"><i data-i="key" class="sm"></i>Voir ses licences</span></div>
+     </div>
+     <div class="facts"><div class="fact"><div class="k">Licences</div><div class="v">1 active</div></div><div class="fact"><div class="k">PC</div><div class="v">2 sur 6</div></div><div class="fact"><div class="k">Achats</div><div class="v">1 028 €</div></div></div>
+     <div style="padding:14px 20px">
+      <div class="kv"><span>Contact</span><b style="font-weight:600">Camille Essai</b></div>
+      <div class="kv"><span>Courriel</span>camille.essai@exemple.fr</div>
+      <div class="kv"><span>Offre en cours</span>PROFESSIONAL + Exports avancés</div>
+      <div class="kv"><span>Dernière activité</span>PC-ATELIER-01 · il y a 1 min</div>
+      <div class="kv"><span>Demandes</span>aucune en attente</div>
+     </div>
+     <div class="menu">
+      <div><i data-i="edit"></i>Renommer…</div>
+      <div><i data-i="users"></i>Fusionner avec un autre client…</div>
+      <div><i data-i="download"></i>Exporter sa fiche (CSV)</div>
+      <div class="hr2"></div>
+      <div class="red hov"><i data-i="trash"></i>Supprimer le client…</div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:690px;top:60px;width:400px"><b>Actualiser</b> (ou F5) relit l'archive et le service tout de suite ; sinon la page se met à jour seule toutes les 15 s.</div>
+  <div class="annot" data-n="2" style="left:930px;top:640px;width:350px">Le <b>déballage en arbre</b> : client › licences › PC, options, achats, demandes. Un clic sur la flèche déplie ; « Tout déplier » ouvre tout.</div>
+  <div class="annot" data-n="3" style="left:930px;top:760px;width:350px">« Supprimer le client… » est dans le menu « … », en rouge (voir la planche 01).</div>
+ </main>
+</div>
+</body></html>

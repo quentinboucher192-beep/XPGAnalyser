@@ -1,0 +1,70 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>IHM Studio - rejoindre une session</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css">
+<style>
+:root{--acc:#0d9488;--acc-50:#e8f8f6;--acc-100:#c9efea;--acc-700:#0f766e;--acc-ring:rgba(13,148,136,.15)}
+.bgimg{position:absolute;inset:0;background:url(v/fond-ihm.png) center/cover;filter:blur(2px) saturate(.9);transform:scale(1.01)}
+.veil{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+.ss{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+.ss+.ss{margin-top:8px}
+.ss.on{border-color:var(--acc);background:var(--acc-50)}
+.ss .si{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;background:linear-gradient(140deg,#2dd4bf,#0d9488);color:#fff}
+.ss .si .ico{width:18px;height:18px}
+.kin{display:flex;gap:6px}
+.kin span{width:40px;height:48px;border-radius:10px;border:1.5px solid var(--line2);display:grid;place-items:center;font:700 21px "JetBrains Mono";background:#fff;color:var(--faint)}
+.kin span.f{color:var(--ink)}
+.kin span.c{border-color:var(--acc);box-shadow:0 0 0 4px var(--acc-ring)}
+.kin i{width:12px;display:grid;place-items:center;color:var(--faint);font-style:normal;font-weight:700}
+.right{width:400px;flex:none;border-left:1px solid var(--line);background:var(--surface2);padding:20px 22px;display:flex;flex-direction:column}
+.stp{display:flex;gap:12px;padding:10px 0;position:relative}
+.stp .b{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;flex:none;position:relative;z-index:1}
+.stp .b .ico{width:13px;height:13px;stroke-width:3}
+.stp.done .b{background:var(--acc);color:#fff}
+.stp.now .b{background:#fff;border:2px solid var(--acc);box-shadow:0 0 0 4px var(--acc-ring)}
+.stp.now .b:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--acc)}
+.stp.todo .b{background:#fff;border:2px solid var(--line2)}
+.stp.todo{color:var(--faint)}
+.stps{position:relative}
+.stps:before{content:"";position:absolute;left:12px;top:24px;bottom:24px;width:2px;background:var(--line2)}
+.colr{display:flex;gap:8px}
+.colr span{width:22px;height:22px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line2)}
+.colr span.on{box-shadow:0 0 0 2px #7c3aed}
+</style></head><body><script src="icons.js"></script>
+<div class="bgimg"></div><div class="veil"></div>
+<div class="dlgx" style="left:260px;top:96px;width:1080px;height:808px">
+ <div class="dh" style="padding-bottom:16px;border-bottom:1px solid var(--line)"><span class="di" style="background:var(--acc-50);color:var(--acc)"><i data-i="enter"></i></span>
+  <div class="grow"><div class="h2" style="font-size:19px">Rejoindre une session</div><div class="muted" style="margin-top:3px">Ouvre le projet d'un équipier, avec lui, en même temps.</div></div><span style="color:var(--muted)"><i data-i="x"></i></span></div>
+ <div style="display:flex;flex:1;min-height:0">
+  <div style="flex:1;padding:20px 24px;min-width:0">
+   <div class="row gap8"><span class="h3">Sur le réseau du bureau</span><span class="cap">trouvées seules · 2</span><span class="cap row gap6" style="margin-left:auto"><i data-i="refresh" class="sm"></i>cherche encore…</span></div>
+   <div style="margin-top:10px">
+    <div class="ss on"><span class="si"><i data-i="users"></i></span><div class="grow"><div class="h3" style="font-size:14px">Mise en service Armoire_Gaz</div><div class="cap" style="margin-top:2px">hôte : Camille · PC-BUREAU-01 · IHM Studio 1.42</div></div>
+     <span class="stack"><span class="av2" style="background:#0d9488">C</span><span class="av2" style="background:#db2777">N</span><span class="av2" style="background:#ea580c">H</span></span><span class="pill p-teal" style="height:22px">3 dedans</span></div>
+    <div class="ss"><span class="si" style="background:linear-gradient(140deg,#60a5fa,#2563eb)"><i data-i="cpu"></i></span><div class="grow"><div class="h3" style="font-size:14px">Recette Station_Nord</div><div class="cap" style="margin-top:2px">hôte : Paul · PC-ATELIER-04 · API Studio 1.42</div></div>
+     <span class="stack"><span class="av2" style="background:#64748b">P</span></span><span class="pill p-gray" style="height:22px">1 dedans</span></div>
+   </div>
+   <div class="row gap10" style="margin:22px 0 12px"><span style="flex:1;height:1px;background:var(--line)"></span><span class="cap">ou, de loin</span><span style="flex:1;height:1px;background:var(--line)"></span></div>
+   <div class="h3">Avec le code que l'hôte t'a donné</div>
+   <div class="kin" style="margin-top:10px"><span class="f">K</span><span class="f">7</span><span class="f">M</span><i>-</i><span class="f">4</span><span class="f c">Q</span><span></span></div>
+   <div class="cap" style="margin-top:8px">Le code passe par le service XPG ; il ne sert que tant que la session est ouverte.</div>
+   <div class="h3" style="margin-top:22px">Toi, dans la session</div>
+   <div class="row gap16" style="margin-top:10px">
+    <div style="width:260px"><div class="flab">Ton nom</div><div class="field">Léa<span class="suf">depuis Mon profil</span></div></div>
+    <div><div class="flab">Ta couleur</div><div class="colr"><span class="on" style="background:#7c3aed"></span><span style="background:#ea580c"></span><span style="background:#db2777"></span><span style="background:#2563eb"></span><span style="background:#16a34a"></span></div></div>
+   </div>
+  </div>
+  <div class="right">
+   <div class="over">Mise en service Armoire_Gaz</div>
+   <div class="stps" style="margin-top:10px">
+    <div class="stp done"><span class="b"><i data-i="check"></i></span><div><div class="h3">Connectée à PC-BUREAU-01</div><div class="cap">réseau du bureau · chiffré</div></div></div>
+    <div class="stp done"><span class="b"><i data-i="check"></i></span><div><div class="h3">Camille t'a fait entrer</div><div class="cap">tu peux modifier</div></div></div>
+    <div class="stp now"><span class="b"></span><div class="grow"><div class="h3">Le projet arrive</div><div class="cap">Armoire_Gaz V4 · 7,9 Mo sur 12,4 Mo</div><div class="bar" style="margin-top:8px"><i style="width:64%;background:var(--acc)"></i></div></div></div>
+    <div class="stp todo"><span class="b"></span><div><div class="h3" style="color:var(--faint)">Ouverture</div><div class="cap">sur la vue où est l'hôte</div></div></div>
+   </div>
+   <div class="note i" style="margin-top:16px"><i data-i="folder"></i><div>Le projet arrive dans <b>un dossier de session</b>, à part de tes projets. À la fin, tu choisis : <b>garder une copie</b> ou la laisser.</div></div>
+   <div class="note w" style="margin-top:10px"><i data-i="clock"></i><div>Si Camille n'a pas encore accepté : « En attente de Camille… » et un bouton Annuler. S'il refuse, tu le sais tout de suite.</div></div>
+  </div>
+ </div>
+ <div class="df"><span class="cap">Ta licence d'IHM Studio suffit pour entrer.</span><span class="btn" style="margin-left:auto">Annuler</span><span class="btn acc" style="opacity:.6"><i data-i="enter" class="sm"></i>Rejoindre</span></div>
+</div>
+<div class="annot" data-n="1" style="left:260px;top:28px;width:470px">Un menu <b>Projet › Rejoindre une session…</b>, et sur l'accueil du Studio. Au bureau, rien à taper : la session apparaît seule.</div>
+</body></html>

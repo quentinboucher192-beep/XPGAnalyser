@@ -1,0 +1,50 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>IHM Studio - demarrer une session</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css">
+<style>
+:root{--acc:#0d9488;--acc-50:#e8f8f6;--acc-100:#c9efea;--acc-700:#0f766e;--acc-ring:rgba(13,148,136,.15)}
+.bgimg{position:absolute;inset:0;background:url(v/fond-ihm.png) center/cover;filter:blur(2px) saturate(.9);transform:scale(1.01)}
+.veil{position:absolute;inset:0;background:rgba(15,23,42,.45)}
+.wc{display:flex;gap:12px;padding:13px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+.wc.on{border-color:var(--acc);background:var(--acc-50)}
+.wc+.wc{margin-top:8px}
+.wc .wi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;background:#fff;border:1px solid var(--line)}
+.wc .wi .ico{width:17px;height:17px}
+.tg{display:flex;align-items:center;gap:12px;padding:9px 0}
+.tg+.tg{border-top:1px solid var(--line)}
+.prev{width:380px;flex:none;border-left:1px solid var(--line);background:var(--surface2);padding:20px 22px;display:flex;flex-direction:column}
+.ck{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13px}
+.ck .ico{width:16px;height:16px;flex:none;margin-top:2px}
+</style></head><body><script src="icons.js"></script>
+<div class="bgimg"></div><div class="veil"></div>
+<div class="dlgx" style="left:290px;top:96px;width:1020px;height:808px">
+ <div class="dh" style="padding-bottom:16px;border-bottom:1px solid var(--line)"><span class="di" style="background:linear-gradient(140deg,#2dd4bf,#0d9488);color:#fff;box-shadow:0 6px 16px rgba(13,148,136,.3)"><i data-i="users"></i></span>
+  <div class="grow"><div class="h2" style="font-size:19px">Démarrer une session</div><div class="muted" style="margin-top:3px">Tes équipiers ouvrent <b style="color:var(--ink)">Armoire_Gaz</b> avec toi et vous travaillez en même temps. Tu es l'hôte : ton PC garde le projet.</div></div><span style="color:var(--muted)"><i data-i="x"></i></span></div>
+ <div style="display:flex;flex:1;min-height:0">
+  <div style="flex:1;padding:20px 24px;min-width:0">
+   <div class="flab">Nom de la session</div><div class="field focus">Mise en service Armoire_Gaz</div>
+   <div class="flab" style="margin-top:18px">Comment ils te rejoignent</div>
+   <div class="wc on"><span class="wi" style="color:var(--acc)"><i data-i="wifi"></i></span><div class="grow"><div class="h3">Sur le réseau du bureau</div><div class="cap" style="margin-top:2px">Les PC du même réseau la voient seuls dans « Rejoindre ». Rien ne sort du bureau.</div></div><span class="radio on"></span></div>
+   <div class="wc"><span class="wi" style="color:var(--blue)"><i data-i="globe"></i></span><div class="grow"><div class="h3">Aussi par Internet</div><div class="cap" style="margin-top:2px">Pour un équipier à distance, avec le code, à travers le service XPG (chiffré de bout en bout).</div></div><span class="radio"></span></div>
+   <div class="flab" style="margin-top:18px">Qui peut entrer</div>
+   <div class="tg"><span class="toggle on"></span><div class="grow"><div class="h3">J'accepte chaque entrée</div><div class="cap">une fenêtre te demande « Léa veut entrer »</div></div></div>
+   <div class="tg"><span class="toggle on"></span><div class="grow"><div class="h3">Il faut le code</div><div class="cap">même sur le réseau du bureau</div></div></div>
+   <div class="flab" style="margin-top:14px">Ce qu'ils peuvent faire en entrant</div>
+   <div class="row gap12"><div class="seg"><span class="on"><i data-i="edit"></i>Modifier</span><span><i data-i="eye"></i>Regarder seulement</span></div><span class="cap">se change personne par personne, pendant la session</span></div>
+  </div>
+  <div class="prev">
+   <div class="over">Le code de la session</div>
+   <div class="kbig" style="margin-top:12px"><span>K</span><span>7</span><span>M</span><i>-</i><span>4</span><span>Q</span><span>X</span></div>
+   <div class="row gap8" style="margin-top:12px"><span class="btn sm"><i data-i="copy" class="sm"></i>Copier le code</span><span class="btn sm"><i data-i="link" class="sm"></i>Copier le lien</span></div>
+   <div class="cap" style="margin-top:8px">Il change à chaque session et ne sert plus quand elle s'arrête.</div>
+   <div class="over" style="margin-top:22px">Avant de démarrer</div>
+   <div class="ck"><i data-i="check" style="color:var(--green)"></i><div>Projet enregistré · <b style="font-weight:600">V4</b>, il y a 2 min</div></div>
+   <div class="ck"><i data-i="check" style="color:var(--green)"></i><div>Licence : <b style="font-weight:600">Travail à plusieurs</b> (option, jusqu'au 08/11/2027)</div></div>
+   <div class="ck"><i data-i="check" style="color:var(--green)"></i><div>Pare-feu : IHM Studio peut recevoir sur le réseau du bureau</div></div>
+   <div class="ck"><i data-i="info" style="color:var(--blue)"></i><div>Tu restes l'hôte : si tu fermes IHM Studio, la session s'arrête pour tout le monde (chacun peut garder une copie).</div></div>
+   <div style="margin-top:auto" class="note v"><i data-i="users"></i><div><b>Jusqu'à 8 personnes</b> par session. Les équipiers ont besoin de leur propre licence d'IHM Studio.</div></div>
+  </div>
+ </div>
+ <div class="df"><span class="cap">Les versions garderont qui a fait quoi.</span><span class="btn" style="margin-left:auto">Annuler</span><span class="btn acc"><i data-i="play" class="sm"></i>Démarrer la session</span></div>
+</div>
+<div class="annot" data-n="1" style="left:290px;top:28px;width:440px">Un menu <b>Projet › Démarrer une session…</b> (et un bouton dans la barre du haut). Trois choix, un code.</div>
+</body></html>

@@ -1,0 +1,99 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - options</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css">
+<style>
+.split{display:flex;gap:16px;margin-top:18px;height:806px}
+.tablecard{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+table.t td{padding:12px 12px;vertical-align:top} table.t th{padding:10px 12px}
+table.t td:first-child,table.t th:first-child{padding-left:18px}
+.oi{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.oi .ico{width:18px;height:18px}
+.on2{font-weight:650}
+.price{font-size:12.5px;line-height:1.7}
+.price b{font-weight:650}
+.det{width:500px;flex:none;display:flex;flex-direction:column;overflow:hidden}
+.dh2{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.dur{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1px solid var(--line);border-radius:10px}
+.dur+.dur{margin-top:6px}
+.dur .w{width:170px;font-weight:600;font-size:13px}
+.dur .field{height:30px;width:110px;font-size:13px}
+.offr{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px}
+.who{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:12.5px}
+.who+.who{border-top:1px solid var(--line)}
+.dim{opacity:.55}
+.tag{white-space:nowrap}
+table.t th:nth-child(1){width:236px}table.t th:nth-child(2){width:150px}table.t th:nth-child(4){width:150px}
+.on2{white-space:nowrap}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:options-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Catalogue<i data-i="right"></i><b>Options</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+   <div class="row" style="align-items:flex-end"><div><div class="h1">Options</div><div class="muted" style="margin-top:4px">Des fonctionnalités vendues à part, pour un temps, même sur une offre qui ne les a pas · 21 en cours chez tes clients</div></div>
+    <span class="btn primary" style="margin-left:auto"><i data-i="plus"></i>Nouvelle option</span></div>
+   <div class="split">
+    <div class="card tablecard">
+     <table class="t">
+      <tr><th>Option</th><th>Ouvre</th><th>Durées et prix HT</th><th>Proposée à</th><th style="text-align:right;padding-right:18px">En cours</th></tr>
+      <tr class="sel"><td><div class="row gap10"><span class="oi" style="background:var(--blue-50);color:var(--blue)"><i data-i="download"></i></span><div><div class="on2">Exports avancés</div><div class="cap">PDF et Excel multi-pages, modèles</div></div></div></td>
+       <td><span class="tag">Exports avancés</span></td>
+       <td class="price"><b>19 €</b> la semaine<br><b>49 €</b> le mois<br><b>290 €</b> l'an <span class="faint">· jusqu'à la fin</span></td>
+       <td><div class="row gap4" style="flex-wrap:wrap;max-width:170px"><span class="pill p-gray" style="height:22px">PERSONAL</span><span class="pill p-violet" style="height:22px">PROFESSIONAL</span><span class="pill p-blue" style="height:22px">PRO SEMAINE</span></div></td>
+       <td style="text-align:right;padding-right:18px"><b style="font-weight:650">6</b><div class="cap">2 à la semaine</div></td></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:var(--violet-50);color:var(--violet)"><i data-i="sparkles"></i></span><div><div class="on2">Assistant IA avancé</div><div class="cap">Les modèles avancés, la génération</div></div></div></td>
+       <td><div class="col gap4" style="align-items:flex-start"><span class="tag">Modèles avancés</span><span class="tag">Génération</span></div></td>
+       <td class="price"><b>29 €</b> le mois<br><span class="pill p-green" style="height:20px;font-size:11px;margin-top:3px"><i data-i="gift" style="width:11px;height:11px"></i>7 jours offerts, une fois</span></td>
+       <td><div class="row gap4" style="flex-wrap:wrap;max-width:170px"><span class="pill p-gray" style="height:22px">PERSONAL</span><span class="pill p-violet" style="height:22px">PROFESSIONAL</span></div></td>
+       <td style="text-align:right;padding-right:18px"><b style="font-weight:650">11</b><div class="cap">dont 3 essais</div></td></tr>
+      <tr><td><div class="row gap10"><span class="oi" style="background:var(--teal-50);color:var(--teal)"><i data-i="users"></i></span><div><div class="on2">Travail à plusieurs</div><div class="cap">Les sessions : un projet, plusieurs PC</div></div></div></td>
+       <td><span class="tag">Multi-utilisateur</span></td>
+       <td class="price"><b>39 €</b> le mois<br><b>390 €</b> l'an <span class="faint">· jusqu'à la fin</span></td>
+       <td><div class="row gap4" style="flex-wrap:wrap;max-width:170px"><span class="pill p-violet" style="height:22px">PROFESSIONAL</span></div><div class="cap" style="margin-top:4px">déjà dans ENTERPRISE</div></td>
+       <td style="text-align:right;padding-right:18px"><b style="font-weight:650">4</b></td></tr>
+      <tr class="dim"><td><div class="row gap10"><span class="oi" style="background:var(--sunken);color:var(--ink2)"><i data-i="upload"></i></span><div><div class="on2">Imports avancés</div><div class="cap">Les anciens projets, en masse</div></div></div></td>
+       <td><span class="tag">Imports avancés</span></td>
+       <td class="price"><b>15 €</b> la semaine</td>
+       <td><span class="pill p-gray" style="height:22px">Pas en vente</span></td>
+       <td style="text-align:right;padding-right:18px"><b style="font-weight:650">0</b></td></tr>
+     </table>
+     <div style="margin-top:auto;padding:14px 18px;border-top:1px solid var(--line)" class="row gap10 cap"><i data-i="info" class="sm"></i>Une option ne change pas l'offre du client : elle s'ajoute à sa licence, puis s'arrête seule à sa date. Elle voyage avec la licence, comme l'offre.</div>
+    </div>
+
+    <div class="card det">
+     <div class="dh2"><div class="row gap12"><span class="oi" style="width:46px;height:46px;border-radius:13px;background:linear-gradient(140deg,#60a5fa,#2563eb);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.3)"><i data-i="download"></i></span>
+      <div class="grow"><div class="h2" style="font-size:17px">Exports avancés</div><div class="mono muted" style="font-size:12px;margin-top:2px">opt-exports-avances</div></div><span class="pill p-green"><span class="d"></span>En vente</span></div></div>
+     <div class="secx"><div class="st"><span class="h3">Ce qu'elle ouvre</span><span style="margin-left:auto;font:600 12.5px Inter;color:var(--violet-700)">Choisir…</span></div>
+      <div class="row gap6"><span class="tag"><i data-i="check" style="width:12px;height:12px;margin-right:4px;color:var(--green)"></i>Exports avancés</span><span class="cap">1 fonctionnalité</span></div></div>
+     <div class="secx"><div class="st"><span class="h3">Durées et prix</span><span class="cap">HT · le client choisit</span></div>
+      <div class="dur"><span class="toggle on"></span><span class="w">1 semaine</span><span class="field">19<span class="suf">€</span></span></div>
+      <div class="dur"><span class="toggle on"></span><span class="w">1 mois</span><span class="field">49<span class="suf">€</span></span></div>
+      <div class="dur"><span class="toggle on"></span><span class="w">Jusqu'à la fin de la licence</span><span class="field">290<span class="suf">€ / an</span></span><span class="cap">au prorata</span></div>
+      <div class="dur"><span class="toggle"></span><span class="w" style="color:var(--muted)">D'autres dates</span><span class="cap">sur demande, dans le calendrier</span></div>
+     </div>
+     <div class="secx"><div class="st"><span class="h3">Proposée aux offres</span></div>
+      <div class="grid2" style="display:grid;grid-template-columns:1fr 1fr;column-gap:16px">
+       <div class="offr"><span class="check on"><i data-i="check"></i></span>PERSONAL</div>
+       <div class="offr"><span class="check on"><i data-i="check"></i></span>PROFESSIONAL</div>
+       <div class="offr"><span class="check on"><i data-i="check"></i></span>PRO SEMAINE</div>
+       <div class="offr"><span class="check"></span>EVALUATION <span class="cap">pas en essai</span></div>
+       <div class="offr dim"><span class="check" style="background:var(--sunken)"></span>ENTERPRISE <span class="cap">l'a déjà</span></div>
+      </div></div>
+     <div class="secx"><div class="row gap10"><span class="toggle on"></span><div><div class="h3">Dans la boutique des Studios</div><div class="cap">Licence › Options, et quand une action est bloquée</div></div></div>
+      <div class="row gap10" style="margin-top:10px"><span class="toggle"></span><div><div class="h3">7 jours offerts</div><div class="cap">une fois par client</div></div></div></div>
+     <div class="secx" style="padding-bottom:6px"><div class="st"><span class="h3">En cours</span><span class="cap">6 licences</span></div>
+      <div class="who"><span class="avatar" style="background:linear-gradient(140deg,#8b6dff,#4b2fd6);width:26px;height:26px;font-size:10.5px">AM</span><div class="grow"><b style="font-weight:600">Atelier Meyer</b> · 1 semaine</div><span class="pill p-blue" style="height:22px">encore 7 j</span></div>
+      <div class="who"><span class="avatar" style="background:#0d9488;width:26px;height:26px;font-size:10.5px">LP</span><div class="grow"><b style="font-weight:600">Laiterie des Prés</b> · 1 mois</div><span class="cap">jusqu'au 02/12</span></div>
+      <div class="who"><span class="avatar" style="background:#d97706;width:26px;height:26px;font-size:10.5px">SL</span><div class="grow"><b style="font-weight:600">Studio Lumen</b> · jusqu'à la fin</div><span class="cap">jusqu'au 08/11/2027</span></div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:48px;top:640px;width:350px"><b>Une option</b>, ce sont des fonctionnalités vendues à part, pour un temps : <b>1 semaine, 1 mois</b>, ou jusqu'à la fin de la licence.</div>
+  <div class="annot" data-n="2" style="left:418px;top:640px;width:380px">Elle s'ajoute à une licence <b>dont l'offre ne l'a pas</b> (ici : les exports avancés sur PROFESSIONAL). L'offre ne change pas ; à sa date, l'option s'arrête seule.</div>
+  <div class="annot" data-n="3" style="left:48px;top:740px;width:750px">Chez le client, une action bloquée (« Exporter en Excel multi-pages ») propose <b>l'option qui l'ouvre</b>, avec ses prix : il la demande en un clic, tu l'acceptes ici comme une demande en ligne.</div>
+ </main>
+</div>
+</body></html>

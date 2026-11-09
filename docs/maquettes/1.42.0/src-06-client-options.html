@@ -1,0 +1,81 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Licence - Options</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="licwin.css">
+<style>
+.body2{display:flex;gap:18px;height:100%}
+.left2{flex:1;min-width:0}
+.active{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:12px;border:1px solid #c7d7fe;background:linear-gradient(90deg,#eef4ff,#f8fbff)}
+.active .oi{width:40px;height:40px;border-radius:11px;background:var(--blue);color:#fff;display:grid;place-items:center;flex:none;box-shadow:0 4px 12px rgba(37,99,235,.3)}
+.cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+.oc{border:1.5px solid var(--line);border-radius:14px;padding:14px 15px;background:#fff;position:relative}
+.oc.sel{border-color:var(--acc);box-shadow:0 0 0 4px var(--acc-ring)}
+.oc .oi{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.oc .oi .ico{width:18px;height:18px}
+.oc ul{list-style:none;margin-top:10px;display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink2)}
+.oc li{display:flex;gap:7px;align-items:center}.oc li .ico{width:13px;height:13px;color:var(--acc);stroke-width:2.6}
+.oc .pr{margin-top:10px;font-size:12.5px;color:var(--muted)}.oc .pr b{color:var(--ink);font:700 15px Inter}
+.oc.dim{background:var(--surface2)}
+.panel{width:340px;flex:none;border:1px solid var(--line);border-radius:14px;background:#fff;display:flex;flex-direction:column;overflow:hidden}
+.panel .ph2{padding:16px 18px;border-bottom:1px solid var(--line);background:var(--surface2)}
+.durc{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1.5px solid var(--line);border-radius:11px}
+.durc+.durc{margin-top:8px}
+.durc.on{border-color:var(--acc);background:var(--acc-50)}
+.durc b{margin-left:auto;font-weight:650}
+.blk{position:absolute;left:478px;top:700px;width:536px;background:#fff;border-radius:14px;box-shadow:var(--sh3);border:1px solid var(--line);padding:14px 16px;z-index:40}
+</style></head><body><script src="icons.js"></script>
+<div class="bgimg"></div><div class="veil"></div>
+<div class="dlg">
+ <!--LICNAV:opt-->
+ <div class="mc">
+  <div class="mh">
+   <div><div class="h1" style="font-size:24px">Options</div>
+    <div class="muted" style="margin-top:5px;max-width:700px">Ajoute une fonction à ta licence pour un temps, sans changer d'offre. Elle arrive toute seule, puis s'arrête à sa date.</div></div>
+   <span class="x"><i data-i="x"></i></span>
+  </div>
+  <div class="scroll">
+   <div class="body2">
+    <div class="left2">
+     <div class="active"><span class="oi"><i data-i="download"></i></span><div class="grow"><div class="row gap8"><span class="h3" style="font-size:14px">Exports avancés</span><span class="pill p-blue" style="height:22px">active · encore 6 j</span></div><div class="cap" style="margin-top:2px">jusqu'au dim. 15/11/2026 au soir · tu seras prévenu 2 jours avant</div></div><span class="btn sm"><i data-i="calendar" class="sm"></i>Prolonger…</span></div>
+     <div class="over" style="margin:18px 0 0">Pour ta licence PROFESSIONAL</div>
+     <div class="cards">
+      <div class="oc"><div class="row gap10"><span class="oi" style="background:var(--violet-50);color:var(--violet)"><i data-i="sparkles"></i></span><div class="grow"><div class="h3" style="font-size:14px">Assistant IA avancé</div><div class="cap">les modèles avancés</div></div></div>
+       <ul><li><i data-i="check"></i>Génération de vues et de code</li><li><i data-i="check"></i>Modèles avancés</li></ul>
+       <div class="pr"><b>29 €</b> le mois · essai déjà utilisé</div></div>
+      <div class="oc sel"><div class="row gap10"><span class="oi" style="background:var(--teal-50);color:var(--teal)"><i data-i="users"></i></span><div class="grow"><div class="h3" style="font-size:14px">Travail à plusieurs</div><div class="cap">les sessions</div></div><span class="radio on"></span></div>
+       <ul><li><i data-i="check"></i>Un projet, plusieurs PC en même temps</li><li><i data-i="check"></i>Tes équipiers en direct</li></ul>
+       <div class="pr"><b>39 €</b> le mois · <b>390 €</b> l'an</div></div>
+      <div class="oc dim"><div class="row gap10"><span class="oi" style="background:var(--blue-50);color:var(--blue)"><i data-i="download"></i></span><div class="grow"><div class="h3" style="font-size:14px">Exports avancés</div><div class="cap">PDF et Excel multi-pages</div></div><span class="pill p-blue" style="height:22px">active</span></div>
+       <div class="pr" style="margin-top:12px"><b>19 €</b> la semaine · <b>49 €</b> le mois · <b>290 €</b> l'an</div></div>
+      <div class="oc dim"><div class="row gap10"><span class="oi" style="background:var(--sunken);color:var(--muted)"><i data-i="network"></i></span><div class="grow"><div class="h3" style="font-size:14px;color:var(--muted)">Licences flottantes</div><div class="cap">dans ENTERPRISE seulement</div></div></div>
+       <div class="pr" style="margin-top:12px">pas en option · <span style="color:var(--acc-700);font-weight:600">voir les offres →</span></div></div>
+     </div>
+    </div>
+    <div class="panel">
+     <div class="ph2"><div class="over">Ta demande</div><div class="h2" style="margin-top:4px">Travail à plusieurs</div></div>
+     <div style="padding:16px 18px;flex:1">
+      <div class="flab">Pour combien de temps</div>
+      <div class="durc"><span class="radio"></span>1 mois<b>39 €</b></div>
+      <div class="durc on"><span class="radio on"></span><div>Jusqu'à la fin de ta licence<div class="cap">jusqu'au 08/11/2027</div></div><b>389 €</b></div>
+      <div class="durc"><span class="radio"></span>D'autres dates…<i data-i="calendar" class="sm" style="margin-left:auto;color:var(--faint)"></i></div>
+      <div class="flab" style="margin-top:16px">À partir de</div>
+      <div class="seg"><span class="on">Dès qu'elle est acceptée</span><span><i data-i="calendar"></i>Le…</span></div>
+      <div class="flab" style="margin-top:16px">Un mot <span>· facultatif</span></div>
+      <div class="field ph" style="height:58px;align-items:flex-start;padding-top:9px;white-space:normal">Pour la mise en service de la station (3 PC).</div>
+      <div class="note v" style="margin-top:14px"><i data-i="info"></i><div>Aucun paiement ici : l'éditeur reçoit ta demande et l'accepte. L'option arrive toute seule sur tes PC.</div></div>
+     </div>
+     <div style="padding:14px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px"><div><div class="cap">Total HT</div><div style="font:700 18px Inter">389 €</div></div><span class="btn teal" style="margin-left:auto"><i data-i="send" class="sm"></i>Envoyer la demande</span></div>
+    </div>
+   </div>
+  </div>
+  <div class="foot">
+   <span class="cap row gap6"><i data-i="receipt" class="sm"></i>Tes options passées sont dans <b style="color:var(--acc-700);font-weight:600">Mes achats</b></span>
+   <span class="btn" style="margin-left:auto">Fermer</span>
+  </div>
+ </div>
+</div>
+<div class="blk">
+ <div class="row gap10"><span class="di" style="width:34px;height:34px;border-radius:10px;background:var(--amber-50);color:var(--amber);display:grid;place-items:center;flex:none"><i data-i="lock" class="sm"></i></span><div class="grow"><div class="h3">« Exporter en Excel multi-pages » est fermé</div><div class="cap" style="margin-top:2px">Ta licence PROFESSIONAL ne l'a pas.</div></div></div>
+ <div class="row gap10" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--blue-50)"><i data-i="puzzle" class="sm" style="color:var(--blue)"></i><div class="grow" style="font-size:12.5px"><b style="font-weight:650">Option Exports avancés</b> · dès 19 € la semaine</div><span class="btn sm teal">Voir l'option</span></div>
+</div>
+<div class="annot" data-n="1" style="left:1080px;top:18px;width:330px">Le client choisit <b>l'option et sa durée</b> ; l'éditeur accepte, l'option arrive seule.</div>
+<div class="annot" data-n="2" style="left:478px;top:648px;width:536px">Une action fermée propose <b>l'option qui l'ouvre</b> (la fenêtre d'aujourd'hui, avec une ligne en plus).</div>
+</body></html>
