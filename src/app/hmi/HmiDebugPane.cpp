@@ -829,8 +829,8 @@ void HmiDebugPane::onPaint(const ui::PaintContext& ctx) {
     const auto fit = [&](std::string t) {
         if (room <= 40.f || ctx.r.measure(t, font).width <= room) return t;
         while (!t.empty() && ctx.r.measure(t + "\xE2\x80\xA6", font).width > room) {
-            t.pop_back();
-            while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+            while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();   // 1.44.0 : un caractere entier
+            if (!t.empty()) t.pop_back();
         }
         return t + "\xE2\x80\xA6";
     };

@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.43.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.44.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.43.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 14 h 22"},
     {"1.42.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 12 h 37"},
     {"1.41.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 21 h 34"},
     {"1.40.0", "08/11/2026", "livr\xC3\xA9" "e le 08/11 \xC3\xA0 19 h 23"},
@@ -187,6 +188,37 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.44.0 : les mises a jour, les fichiers de l'editeur, les sessions par Internet, la fenetre Licence
+        note("1.44.0", "Projet", Kind::New,
+         "LES MISES \xC3\x80 JOUR ARRIVENT SEULES : quand l'\xC3\xA9" "diteur publie une version, une notification \xC2\xAB Mise \xC3\xA0 jour disponible \xC2\xBB "
+         "(ses nouveaut\xC3\xA9s) et une bulle le disent ; T\xC3\xA9l\xC3\xA9" "charger et installer v\xC3\xA9rifie le fichier (sign\xC3\xA9 par l'\xC3\xA9" "diteur, son "
+         "empreinte), enregistre ton projet, installe et rouvre le Studio dessus. Plus tard : une pastille en haut le rappelle.",
+         "licence", ""),
+        note("1.44.0", "Projet", Kind::New,
+         "LES FICHIERS DE L'\xC3\x89" "DITEUR : une notification peut porter un fichier (l'installateur de l'Admin pour un PC qui devient admin) ; "
+         "il est v\xC3\xA9rifi\xC3\xA9 avant d'\xC3\xAAtre propos\xC3\xA9 (Installer, Enregistrer\xE2\x80\xA6), et refus\xC3\xA9 s'il ne correspond pas. Le filtre "
+         "\xC2\xAB Avec fichiers \xC2\xBB des notifications les montre.",
+         "licence", ""),
+        note("1.44.0", "IHM", Kind::New,
+         "LES SESSIONS PAR INTERNET : D\xC3\xA9marrer une session\xE2\x80\xA6 \xE2\x80\xBA O\xC3\xB9 : Internet donne un code (\xC2\xAB K7Q4-M2XP-T9 \xC2\xBB) \xC3\xA0 "
+         "transmettre ; Rejoindre une session\xE2\x80\xA6 (aussi depuis l'accueil, sans projet ouvert) \xE2\x80\xBA Par Internet, ce code. Le service "
+         "XPG fait passer les \xC3\xA9" "changes sans pouvoir les lire (chiffr\xC3\xA9s de bout en bout). Sur le r\xC3\xA9seau du bureau, les sessions "
+         "trouv\xC3\xA9" "es sont list\xC3\xA9" "es ; le code n'est demand\xC3\xA9 que si la session l'exige.",
+         "editeur", ""),
+        note("1.44.0", "Projet", Kind::Changed,
+         "LA FEN\xC3\x8ATRE LICENCE : une offre choisie montre aussi ce qu'elle n'a pas, barr\xC3\xA9 (\xC2\xAB 18/21 \xC2\xBB) ; une fonctionnalit\xC3\xA9 "
+         "peut avoir plusieurs captures (les fl\xC3\xA8" "ches), avec des bulles au survol qui disent ce qu'on y voit ; Multi-utilisateur "
+         "montre les sessions.",
+         "licence", ""),
+        note("1.44.0", "Projet", Kind::Changed,
+         "LES ONGLETS lisibles : quand la place manque, chaque onglet garde le d\xC3\xA9" "but de son titre (\xC2\xAB Fonctionn\xE2\x80\xA6 \xC2\xBB), jamais "
+         "son ic\xC3\xB4ne seule ; des fl\xC3\xA8" "ches seulement en dernier recours.",
+         "licence", ""),
+        note("1.44.0", "Projet", Kind::Fixed,
+         "LES NOTIFICATIONS lues le restent (apr\xC3\xA8s Tout marquer comme lu, d'un projet \xC3\xA0 l'autre et d'un lancement \xC3\xA0 l'autre) ; "
+         "\xC2\xAB Licence r\xC3\xA9voqu\xC3\xA9" "e \xC2\xBB et \xC2\xAB Licence perdue sur ce PC \xC2\xBB ne font plus qu'une. Demander ma licence : la barre de "
+         "d\xC3\xA9" "filement ne passe plus sur le texte du haut.",
+         "licence", ""),
         // 1.43.0 : les sessions (plusieurs PC sur le meme projet, le reseau du bureau)
         note("1.43.0", "IHM", Kind::New,
          "LES SESSIONS : Projet \xE2\x80\xBA D\xC3\xA9marrer une session\xE2\x80\xA6 ouvre le projet \xC3\xA0 tes \xC3\xA9quipiers, sur le r\xC3\xA9seau du bureau : "

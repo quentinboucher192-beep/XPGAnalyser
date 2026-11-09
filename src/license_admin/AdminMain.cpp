@@ -457,6 +457,44 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         return oneLine(r);
     }
     if (a.command == "sauvegarder") return oneLine(ws.backupNow());
+    if (a.command == "licence-en-ligne") {
+        // 1.44.0 : un ADMIN (sans la cle de l'editeur) : sa cle d'admin signe, comme l'application (Nouvelle licence).
+        if (!need("--parametres")) return 2;
+        std::string text, w;
+        if (!readText(a.one("--parametres"), text, w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        core::json::Value p;
+        if (!core::json::parse(text, p, nullptr) || !p.isObject()) {
+            complain("Refus\xC3\xA9 : " + a.one("--parametres") + " n'est pas un objet JSON");
+            return 1;
+        }
+        gui::LicenceDraft d;
+        d.online = true;
+        d.licenseId = p.str("license_id");
+        d.customer = p.str("customer");
+        d.edition = p.str("edition");
+        d.maxDevices = static_cast<int>(p.integer("max_devices", 0));
+        d.durationDays = static_cast<int>(p.integer("duration_days", -1));
+        if (!a.one("--bail-jours").empty()) d.leaseDays = std::atoi(a.one("--bail-jours").c_str());
+        gui::ServiceJob job;
+        std::string code;
+        const auto s = ws.prepareOnlineLicence(d, {}, job, code);
+        if (!s.ok) {
+            crypto::wipe(code.data(), code.size());
+            return oneLine(s);
+        }
+        say("Sign\xC3\xA9" "e (en ligne) par " + ws.adminKey().fingerprint + " : " + s.message + "\n");
+        const auto r = ws.serviceRunOnline(job, code);
+        if (!r.ok) {
+            crypto::wipe(code.data(), code.size());
+            return oneLine(r);
+        }
+        say(r.message + "\n\n  CODE D'ACTIVATION :\n\n      " + code + "\n\n");
+        crypto::wipe(code.data(), code.size());
+        return 0;
+    }
     if (a.command == "restaurer") {
         if (!need("--fichier") || !need("--phrase-fichier")) return 2;
         std::string phrase, w;
@@ -953,6 +991,13 @@ int run(const std::vector<std::string>& argv) {
         (void)online::readConfig(folder, back, &why);
         say("Service des licences : " + back.url + "\n  (" + online::configPath(folder) + ")\nEnsuite : XPG-License-Admin service-verifier, puis service-certifier.\n");
         return 0;
+    }
+    // 1.44.0 : licence-en-ligne chez un ADMIN (sa cle d'admin signe, pas celle de l'editeur)
+    if (a.command == "licence-en-ligne" && a.flags.empty() && a.one("--demande").empty()) {
+        std::error_code ec;
+        const auto u8 = [](const std::string& s) { return std::filesystem::path(std::u8string(s.begin(), s.end())); };
+        if (!std::filesystem::exists(u8(publisherKeyPath(folder)), ec) && std::filesystem::exists(u8(adminKeyPath(folder)), ec))
+            return runWorkspaceCommand(a, folder);
     }
     if (a.command == "service-verifier" || a.command == "service-certifier" || a.command == "service-registre" || a.command == "service-revocations" ||
         a.command == "service-licences" || a.command == "service-retirer" || a.command == "service-desactiver" || a.command == "service-demandes" ||

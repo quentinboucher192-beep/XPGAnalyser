@@ -132,6 +132,7 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -364,7 +365,7 @@ bool ScriptRunner::afterRender(gfx::IRenderer& renderer) {
         if (w.empty() || w.front().front() == '#') { ++pc_; continue; }
         const Step step = run(w, renderer);
         if (step == Step::Retry) {
-            if (++retries_ > 3000) { fail("toujours pas pret apres 3000 images : " + shownLine(lines_[pc_])); retries_ = 0; ++pc_; }
+            if (++retries_ > 3000 && w.front() != "attendre-fichier" && w.front() != "session-attendre") { fail("toujours pas pret apres 3000 images : " + shownLine(lines_[pc_])); retries_ = 0; ++pc_; }
             return true;
         }
         retries_ = 0;
@@ -915,6 +916,22 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
         return Step::Yield;
     }
     if (cmd == "attendre-projet") return app_.project() ? Step::Yield : Step::Retry;
+    // 1.44.0 : attendre-fichier CHEMIN [S] - attendre qu'un fichier existe (un signal de l'essai de bout en bout : l'Admin a
+    // publie, envoye...), S secondes au plus (300 par defaut) ; sinon : echec.
+    if (cmd == "attendre-fichier") {
+        static std::chrono::steady_clock::time_point since;
+        if (retries_ == 0) since = std::chrono::steady_clock::now();
+        std::error_code ec;
+        const std::string want = arg(1);
+        if (!want.empty() && std::filesystem::exists(std::filesystem::path(std::u8string(want.begin(), want.end())), ec)) {
+            std::printf("[script] attendre-fichier : %s\n", want.c_str());
+            return Step::Yield;
+        }
+        const int limit = arg(2).empty() ? 300 : std::max(1, std::atoi(arg(2).c_str()));
+        if (std::chrono::steady_clock::now() - since < std::chrono::seconds(limit)) return Step::Retry;
+        fail("attendre-fichier : " + want + " n'est pas venu en " + std::to_string(limit) + " s");
+        return Step::Next;
+    }
     // 1.12.30 : les echanges de projets (une archive) tournent sur un autre fil.
     // Les images continuent ; 120 s au plus.
     if (cmd == "attendre-echanges") {
@@ -1398,6 +1415,47 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     if (cmd == "survol") { moveTo({num(1), num(2)}, mods()); return Step::Yield; }
     // 1.38.0 : clic-id ID [double] | molette-id ID DY - au centre d'un widget visible par son identifiant (le menu du
     // dessus) : la capture qu'on agrandit (dialog.licence.fonctionnalites.panneau.apercu.capture), une ligne...
+    // 1.44.0 : ligne-id ID TEXTE - choisir la ligne d'un tableau (par son identifiant) dont une cellule contient TEXTE ;
+    // survol-bulle ID N - la souris sur la bulle N (1 : la premiere) d'une capture de la fenetre Licence.
+    if (cmd == "ligne-id" || cmd == "survol-bulle") {
+        ui::Widget* found = nullptr;
+        if (auto* root = top()) {
+            found = root->findById(arg(1));
+            if (found && !shown(*found)) found = nullptr;
+        }
+        if (!found) {
+            if (retries_ < 60) return Step::Retry;
+            fail(cmd + " : " + arg(1) + " introuvable (ou cache)");
+            return Step::Next;
+        }
+        if (cmd == "survol-bulle") {
+            const int n = std::atoi(arg(2).c_str());
+            float px = 0.f, py = 0.f;
+            if (n < 1 || !licence::captureSpotCenter(*found, static_cast<std::size_t>(n - 1), px, py)) {
+                if (retries_ < 60) return Step::Retry;
+                fail("survol-bulle : pas de bulle " + arg(2) + " sur " + arg(1));
+                return Step::Next;
+            }
+            moveTo({px, py}, mods());
+            std::printf("[script] survol-bulle %s %s : %d, %d\n", arg(1).c_str(), arg(2).c_str(), static_cast<int>(px), static_cast<int>(py));
+            return Step::Yield;
+        }
+        auto* table = dynamic_cast<ui::TableView*>(found);
+        const auto& model = table ? table->model() : nullptr;
+        if (!model) {
+            fail("ligne-id : " + arg(1) + " n'est pas un tableau");
+            return Step::Next;
+        }
+        for (std::size_t r = 0; r < model->rowCount(); ++r)
+            for (std::size_t c = 0; c < model->columnCount(); ++c)
+                if (model->cellText(r, c).find(arg(2)) != std::string::npos) {
+                    table->selectModelRows({r}, true);
+                    std::printf("[script] ligne-id %s : ligne %zu (%s)\n", arg(1).c_str(), r + 1, model->cellText(r, 0).c_str());
+                    return Step::Yield;
+                }
+        fail("ligne-id : aucune ligne de " + arg(1) + " ne contient " + arg(2));
+        return Step::Next;
+    }
     if (cmd == "clic-id" || cmd == "molette-id") {
         ui::Widget* found = nullptr;
         if (auto* root = top()) {
@@ -6119,6 +6177,12 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     // (non lue d'abord, sa categorie, son titre, son detail) apres un regard tout de suite sur la licence et le registre.
     if (cmd == "notifications") {
         showNoticesWindow(app_);
+        return Step::Yield;
+    }
+    // 1.44.0 : licence-offre EDITION - Demander ma licence, cette offre choisie (son apercu : ce qu'elle a, ce qu'elle n'a pas).
+    if (cmd == "licence-offre") {
+        licence::setWantedOffer(arg(1));
+        showLicenceWindow(app_, licence::kTabRequest);
         return Step::Yield;
     }
     // 1.39.0 : notification-detail CLE - la fenetre << Offre modifiee : avant / apres >> d'une notification (son bouton

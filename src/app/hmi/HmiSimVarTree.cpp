@@ -64,8 +64,8 @@ std::string fit(gfx::IRenderer& r, const std::string& text, gfx::FontId f, float
     if (r.measure(text, f).width <= w) return text;
     std::string t = text;
     while (!t.empty() && r.measure(t + "\xE2\x80\xA6", f).width > w) {
-        t.pop_back();
-        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();   // 1.44.0 : un caractere entier
+        if (!t.empty()) t.pop_back();
     }
     return t + "\xE2\x80\xA6";
 }

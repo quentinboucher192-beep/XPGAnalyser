@@ -43,6 +43,10 @@
 #include <string_view>
 #include <vector>
 
+namespace ui {
+class Widget;   // 1.44.0 : captureSpotCenter
+}
+
 namespace licensing {
 struct RegistryView;
 }
@@ -356,6 +360,11 @@ namespace licence {
 // 1.42.0 : l'option a choisir a l'ouverture de l'onglet Options (une action fermee qui la propose) ; prise une fois.
 void setWantedOption(std::string optionId);
 [[nodiscard]] std::string takeWantedOption();
+// 1.44.0 : l'offre a choisir a l'ouverture de Demander ma licence (l'essai : licence-offre ID) ; prise une fois.
+void setWantedOffer(std::string edition);
+[[nodiscard]] std::string takeWantedOffer();
+// 1.44.0 : le centre (a l'ecran) de la bulle n d'une capture de la fenetre Licence (false : pas une capture, pas de bulle n).
+[[nodiscard]] bool captureSpotCenter(const ui::Widget& w, std::size_t n, float& x, float& y);
 } // namespace licence
 // 1.38.0 : la fenetre Notifications (le carnet general, Notices.hpp) ; le bouton d'une notification de licence ouvre la
 // fenetre Licence sur son onglet.

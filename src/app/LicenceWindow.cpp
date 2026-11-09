@@ -85,8 +85,8 @@ std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w)
     if (r.measure(s, f).width <= w) return s;
     std::string t = s;
     while (!t.empty() && r.measure(t + "\xE2\x80\xA6", f).width > w) {
-        t.pop_back();
-        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
+        while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();   // 1.44.0 : un caractere entier
+        if (!t.empty()) t.pop_back();
     }
     return t + "\xE2\x80\xA6";
 }
@@ -459,6 +459,14 @@ public:
         invalidate();
     }
     [[nodiscard]] std::size_t spotCount() const noexcept { return spots_.size(); }
+    // 1.44.0 : le centre de la bulle n (0 : la premiere), a l'ecran (au dernier dessin) - l'essai la survole.
+    [[nodiscard]] std::optional<gfx::Point> spotCenter(std::size_t n) const {
+        if (n >= spots_.size() || iw_ <= 0.f) return std::nullopt;
+        const gfx::Rect ir = imageRect();
+        const float k = ir.w / iw_;
+        const auto& s = spots_[n];
+        return gfx::Point{ir.x + (s.x + s.w * 0.5f) * k, ir.y + (s.y + s.h * 0.5f) * k};
+    }
     std::function<void()> onOpen;
     // Les essais : un pas de molette en (x, y).
     void wheelAt(gfx::Point at, float dy) { wheel(at, dy); }
@@ -2287,6 +2295,7 @@ std::string OnlinePanel::futureText(const std::string& id) const {
 void OnlinePanel::refresh() {
     namespace ls = licence::service;
     available_ = ls::available(&why_);
+    if (std::string w = licence::takeWantedOffer(); !w.empty()) chosen_ = w;   // 1.44.0 : l'offre a montrer (l'essai)
     recProblem_.clear();
     if (!ls::loadRecord(rec_, &recProblem_)) rec_ = ls::Record{};
     pending_ = ls::pending(rec_);
@@ -3352,9 +3361,20 @@ private:
 namespace licence {
 namespace {
 std::string g_wantedOption;   // 1.42.0 : l'option a montrer a l'ouverture de l'onglet Options (fil de l'interface)
+std::string g_wantedOffer;    // 1.44.0 : l'offre a choisir a l'ouverture de Demander ma licence
 } // namespace
 void setWantedOption(std::string optionId) { g_wantedOption = std::move(optionId); }
 std::string takeWantedOption() { return std::exchange(g_wantedOption, std::string()); }
+void setWantedOffer(std::string edition) { g_wantedOffer = std::move(edition); }
+bool captureSpotCenter(const ui::Widget& w, std::size_t n, float& x, float& y) {
+    const auto* z = dynamic_cast<const ZoomImage*>(&w);
+    const auto p = z ? z->spotCenter(n) : std::nullopt;
+    if (!p) return false;
+    x = p->x;
+    y = p->y;
+    return true;
+}
+std::string takeWantedOffer() { return std::exchange(g_wantedOffer, std::string()); }
 
 void showLocked(App& app, std::string_view feature, std::string actionLabel) {
     const std::string id(feature);
