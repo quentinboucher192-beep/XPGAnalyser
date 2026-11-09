@@ -6374,6 +6374,22 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
             std::printf("[script] session-deplacer %s : x=%s y=%s\n", arg(2).c_str(), propOf(v, o, "x").c_str(), propOf(v, o, "y").c_str());
             return Step::Yield;
         }
+        if (cmd == "session-historique") {   // l'historique des objets (la fenetre) d'un objet d'une vue
+            hmi::Id v, o;
+            if (!findObject(arg(1), arg(2), v, o)) {
+                fail("session-historique : introuvable : " + arg(1) + " " + arg(2));
+                return Step::Next;
+            }
+            auto* ed = currentEditor();
+            if (!ed || ed->viewId() != v) {
+                if (retries_ == 0) app_.events().publish(OpenHmiView{v});
+                if (retries_ < 300) return Step::Retry;
+                fail("session-historique : la vue ne s'ouvre pas");
+                return Step::Next;
+            }
+            if (!ed->requestHistory({o})) fail("session-historique : pas de fen\xC3\xAAtre Historique ici");
+            return Step::Yield;
+        }
         if (cmd == "session-annuler") {
             app_.undo();
             std::printf("[script] session-annuler\n");
