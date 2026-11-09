@@ -596,10 +596,27 @@ bool isDeleted(const std::vector<DeletedLicence>& list, const std::string& licen
     return false;
 }
 
+namespace {
+bool writeDeleted(const std::string& folder, const std::vector<DeletedLicence>& list, std::string* why);
+} // namespace
+
 bool noteDeleted(const std::string& folder, const DeletedLicence& d, std::string* why) {
     auto list = deletedLicences(folder);
     std::erase_if(list, [&](const DeletedLicence& x) { return x.id == d.id; });
     list.push_back(d);
+    return writeDeleted(folder, list, why);
+}
+
+bool forgetDeleted(const std::string& folder, const std::string& licenseId, std::string* why) {
+    auto list = deletedLicences(folder);
+    const auto before = list.size();
+    std::erase_if(list, [&](const DeletedLicence& x) { return x.id == licenseId; });
+    if (list.size() == before) return true;
+    return writeDeleted(folder, list, why);
+}
+
+namespace {
+bool writeDeleted(const std::string& folder, const std::vector<DeletedLicence>& list, std::string* why) {
     Value root = Value::object();
     root.set("format", "xpg-licences-supprimees/1");
     Value arr = Value::array();
@@ -613,6 +630,7 @@ bool noteDeleted(const std::string& folder, const DeletedLicence& d, std::string
     root.set("licences", std::move(arr));
     return writeFileAt(deploy::joinPath(folder, kDeletedFile), core::json::write(root) + "\n", why);
 }
+} // namespace
 
 bool archiveSigned(const std::string& folder, std::string_view bytes, const std::vector<crypto::PublicKey>& trusted, std::string* what,
                    std::string* why) {

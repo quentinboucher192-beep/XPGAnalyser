@@ -46,6 +46,19 @@
 //      signees AVANT cette date sont revoquees (une emission precise).
 //  Un programme d'avant la 1.32.0 refuse un document qui les porte (champ
 //  inconnu) : c'est voulu (un champ qui restreint ne s'ignore pas).
+//
+//  1.42.0 - LES OFFRES TEMPORAIRES, LES OPTIONS, LES ACHATS (facultatifs, ecrits
+//  seulement s'ils servent : tant que l'editeur ne s'en sert pas, le registre et
+//  les licences restent ceux de la 1.41, lisibles par elle) :
+//    - registre, une edition : "sale_from" / "sale_until" - en vente pendant une
+//      periode (la boutique des Studios ne la montre qu'alors) ;
+//    - registre : "options" - le catalogue des options (des fonctionnalites
+//      vendues a part, pour un temps : leurs durees et leurs prix) ;
+//    - licence : "options" - les options de CETTE licence (leurs fonctionnalites,
+//      du ... au ...) : ouvertes en plus de celles de la licence pendant leur
+//      periode ; "purchases" - l'historique des achats du client (Mes achats).
+//  Un programme d'avant la 1.42.0 refuse un document qui les porte : l'Admin le
+//  dit avant le premier usage (mettre les Studios des clients en 1.42).
 // =============================================================================
 #pragma once
 
@@ -117,6 +130,38 @@ struct EditionDef {
     // passee, la carte de la boutique reprend le prix normal). Le prix reduit sans date : refuse.
     std::string               promoPrice;
     Seconds                   promoUntil{0};
+    // 1.42.0 (facultatifs) : une offre TEMPORAIRE - en vente du saleFrom (compris) au saleUntil (exclu) ; 0 : sans debut,
+    // sans fin. Hors de cette periode, la boutique des Studios ne la montre pas ; les licences deja vendues vont jusqu'a
+    // leur fin (la periode de vente ne touche jamais une licence).
+    Seconds                   saleFrom{0};
+    Seconds                   saleUntil{0};
+    // En vente a cette heure (pas retiree, dans sa periode).
+    [[nodiscard]] bool onSale(Seconds now) const noexcept {
+        return !retired && (saleFrom == 0 || now >= saleFrom) && (saleUntil == 0 || now < saleUntil);
+    }
+    [[nodiscard]] bool temporary() const noexcept { return saleFrom != 0 || saleUntil != 0; }
+};
+// 1.42.0 : une OPTION du catalogue - des fonctionnalites vendues a part, pour un temps, a ajouter a une licence dont l'offre
+// ne les a pas. Ses durees : 7 jours, 30 jours... ou 0 (jusqu'a la fin de la licence), chacune avec son prix (un texte,
+// comme celui d'une offre : "19 \xE2\x82\xAC HT").
+struct OptionDuration {
+    int         days{0};      // 1..3660 ; 0 : jusqu'a la fin de la licence
+    std::string price;        // 60 au plus ; vide : sur demande
+    bool operator==(const OptionDuration&) const = default;
+};
+struct OptionDef {
+    std::string                 id;            // "exports_avances" : [a-z0-9_], 64 au plus, commence par une lettre
+    std::string                 label;         // "Exports avanc\xC3\xA9s" (200 au plus)
+    std::string                 description;   // une phrase (200 au plus, facultative)
+    std::vector<FeatureGrant>   features;      // ce qu'elle ouvre (au moins une, declarees)
+    std::vector<std::string>    editions;      // les offres a qui elle est proposee ; vide : toutes
+    std::vector<OptionDuration> durations;     // 1 a 8
+    int                         trialDays{0};  // 0 : pas d'essai ; sinon : ces jours offerts, une fois par client
+    bool                        shop{true};    // montree dans la boutique des Studios (Licence > Options)
+    bool                        retired{false};
+    bool operator==(const OptionDef&) const = default;
+    // Proposee a cette offre ?
+    [[nodiscard]] bool offeredTo(std::string_view edition) const noexcept;
 };
 // 1.38.0 : une annonce de l'editeur (<< Prevenir mes clients >>) - une notification dans les Studios, jamais un mail. Elle
 // voyage dans le registre signe : un client hors connexion la recoit a sa prochaine connexion, une seule fois (son id).
@@ -137,9 +182,13 @@ struct Registry {
     std::vector<FeatureDef> features;
     std::vector<EditionDef> editions;
     std::vector<Announcement> announcements;         // 1.38.0 (facultatif, 20 au plus ; ecrit seulement s'il y en a)
+    std::vector<OptionDef>  options;                 // 1.42.0 (facultatif, 64 au plus ; ecrit seulement s'il y en a)
 
     [[nodiscard]] const FeatureDef* feature(std::string_view id) const noexcept;
     [[nodiscard]] const EditionDef* edition(std::string_view id) const noexcept;
+    [[nodiscard]] const OptionDef* option(std::string_view id) const noexcept;   // 1.42.0
+    // 1.42.0 : porte-t-il un champ de la 1.42 (une offre temporaire, des options) ? Un Studio d'avant ne le lit plus.
+    [[nodiscard]] bool usesFormat142() const noexcept;
 };
 
 // ---- la licence -------------------------------------------------------------------
@@ -150,6 +199,37 @@ struct BoundDevice {
     std::string station;      // 1.32.0 : facultatif, 32 hexadecimaux (stationHash) ; vide : pas controle
     bool operator==(const BoundDevice&) const = default;
 };
+// 1.42.0 : une option ajoutee a CETTE licence : ses fonctionnalites s'ouvrent en plus de celles de la licence, du `from`
+// (compris) au `until` (exclu ; 0 : jusqu'a la fin de la licence). Copiees a l'ajout (changer le catalogue ne touche pas
+// une option deja vendue). Une option finie reste dans la licence (son historique) jusqu'a ce que l'Admin l'en retire.
+struct LicenseOption {
+    std::string               id;          // l'option du catalogue ([a-z0-9_])
+    std::string               label;       // son nom a l'ajout
+    std::vector<FeatureGrant> features;    // triees
+    Seconds                   from{0};
+    Seconds                   until{0};    // 0 : jusqu'a la fin de la licence
+    std::string               price;       // "19 \xE2\x82\xAC HT" (60 au plus) ; vide : rien a dire
+    bool                      gift{false}; // offerte (un geste, un essai)
+    bool operator==(const LicenseOption&) const = default;
+    // Ouverte a cette heure (`licenseEnd` : la fin de la licence, 0 : jamais) ?
+    [[nodiscard]] bool activeAt(Seconds now, Seconds licenseEnd) const noexcept {
+        const Seconds end = until ? until : licenseEnd;
+        return now >= from && (end == 0 || now < end);
+    }
+};
+// 1.42.0 : un achat de l'historique du client (Mes achats) : une offre, une prolongation, une option.
+struct Purchase {
+    Seconds     at{0};          // quand l'editeur l'a signe
+    std::string kind;           // "offer", "extension", "option"
+    std::string label;          // "PROFESSIONAL \xC2\xB7 1 an", "Exports avanc\xC3\xA9s \xC2\xB7 1 semaine" (120 au plus)
+    std::string licenseId;      // la licence (un client a pu en avoir plusieurs)
+    Seconds     from{0};
+    Seconds     until{0};       // 0 : sans fin (ou jusqu'a la fin de la licence pour une option)
+    std::string price;          // 60 au plus ; vide : rien a dire ; "offerte"...
+    bool operator==(const Purchase&) const = default;
+};
+[[nodiscard]] bool isPurchaseKind(std::string_view k) noexcept;
+
 struct License {
     int                       version{kFormatVersion};
     std::string               licenseId;        // "XPG-2026-00042"
@@ -165,6 +245,8 @@ struct License {
     std::vector<BoundDevice>  devices;
     std::uint64_t             manifest{0};      // le numero du registre en vigueur a l'emission
     std::string               nonce;            // 32 hexadecimaux : deux emissions ne se ressemblent jamais
+    std::vector<LicenseOption> options;         // 1.42.0 (facultatif, 64 au plus)
+    std::vector<Purchase>     purchases;        // 1.42.0 (facultatif, 400 au plus) : l'historique des achats du client
 
     [[nodiscard]] const FeatureGrant* grant(std::string_view id) const noexcept;
     [[nodiscard]] bool boundTo(std::string_view deviceKeyHex) const noexcept;
@@ -212,6 +294,10 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why);
 bool parseLicense(std::string_view json, License& out, std::string* why);
 bool parseRevocations(std::string_view json, RevocationList& out, std::string* why);
 bool parseRequest(std::string_view json, ActivationRequest& out, std::string* why);
+
+// 1.42.0 : les fonctionnalites OUVERTES a cette heure : celles de la licence, plus celles de ses options en cours
+// (une fonctionnalite deja dans la licence garde ses limites). Triees.
+[[nodiscard]] std::vector<FeatureGrant> effectiveGrants(const License& license, Seconds now);
 
 // La licence tient-elle avec ce registre ? Son edition et chacune de ses
 // fonctionnalites y sont declarees, et chaque limite aussi. Faux : `why` (avec

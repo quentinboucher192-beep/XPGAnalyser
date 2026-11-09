@@ -25,6 +25,7 @@
 #include "../../ui/Theme.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "../../ui/widgets/DatePicker.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -37,6 +38,12 @@
 #include <vector>
 
 namespace license_admin::gui {
+
+namespace licdlg {
+// Defini dans LicenceWizard.cpp.
+menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger,
+                                std::function<void()> onOk);
+} // namespace licdlg
 
 namespace {
 
@@ -279,8 +286,21 @@ std::vector<std::string> changesOf(const lic::Registry& a, const lic::Registry& 
         plus.insert(plus.end(), minus.begin(), minus.end());
         if (!plus.empty()) what.push_back("fonctionnalit\xC3\xA9s " + join(plus, " "));
         if (o->retired != e.retired) what.push_back(e.retired ? "retir\xC3\xA9" "e" : "remise en service");
+        if (o->saleFrom != e.saleFrom || o->saleUntil != e.saleUntil)   // 1.42.0 : une offre temporaire
+            what.push_back(!e.temporary() ? std::string("en vente toujours")
+                                          : "en vente " + (e.saleFrom ? "du " + lic::isoDate(e.saleFrom) : std::string()) +
+                                                (e.saleUntil ? " au " + lic::isoDate(e.saleUntil - lic::kDay) : std::string(" sans fin")));
         if (!what.empty()) out.push_back("\xC3\xA9" "dition " + e.id + " : " + join(what, ", "));
     }
+    for (const auto& o : a.editions)   // 1.42.0 : une offre supprimee
+        if (!b.edition(o.id)) out.push_back("offre " + o.id + " supprim\xC3\xA9" "e");
+    for (const auto& op : b.options) {   // 1.42.0 : les options
+        const lic::OptionDef* o = a.option(op.id);
+        if (!o) out.push_back("option " + op.id + " ajout\xC3\xA9" "e");
+        else if (!(*o == op)) out.push_back("option " + op.id + " modifi\xC3\xA9" "e");
+    }
+    for (const auto& o : a.options)
+        if (!b.option(o.id)) out.push_back("option " + o.id + " supprim\xC3\xA9" "e");
     return out;
 }
 
@@ -319,6 +339,20 @@ bool checkDraft(const lic::Registry& r, std::string* why) {
                     return no("l'\xC3\xA9" "dition " + e.id + " fixe la limite " + name + " de " + g.id + ", qui n'est plus d\xC3\xA9" "clar\xC3\xA9" "e");
             }
         }
+    }
+    for (const auto& e : r.editions)   // 1.42.0 : une vente qui finit apres avoir commence
+        if (e.saleFrom && e.saleUntil && e.saleUntil <= e.saleFrom) return no("la vente de " + e.id + " finit avant de commencer (Au)");
+    for (const auto& o : r.options) {   // 1.42.0 : les options
+        if (o.label.empty()) return no("l'option " + o.id + " n'a pas de nom");
+        if (o.label.size() > 200 || !plain(o.label)) return no("le nom de l'option " + o.id + " est trop long ou contient des caract\xC3\xA8res interdits");
+        if (o.features.empty()) return no("l'option " + o.label + " n'ouvre aucune fonctionnalit\xC3\xA9 (coche-en une)");
+        if (o.durations.empty()) return no("l'option " + o.label + " n'a aucune dur\xC3\xA9" "e (coche-en une)");
+        for (const auto& g : o.features)
+            if (!r.feature(g.id)) return no("l'option " + o.label + " ouvre " + g.id + ", qui n'est pas d\xC3\xA9" "clar\xC3\xA9" "e");
+        for (const auto& e : o.editions)
+            if (!r.edition(e)) return no("l'option " + o.label + " est propos\xC3\xA9" "e \xC3\xA0 " + e + ", qui n'est plus dans le registre");
+        for (const auto& d : o.durations)
+            if (d.price.size() > 60 || !plain(d.price)) return no("un prix de l'option " + o.label + " est trop long (60 octets au plus)");
     }
     const lic::EditionDef* free = r.edition(r.unlicensedEdition);
     if (!free) return no("l'\xC3\xA9" "dition sans licence " + r.unlicensedEdition + " n'est pas dans le registre");
@@ -411,6 +445,20 @@ protected:
     void say(const std::string& text, Tone tone) {
         if (host_.flash) host_.flash(text, tone);
     }
+    [[nodiscard]] std::weak_ptr<bool> alive() const { return life_; }
+    // 1.42.0 : le brouillon se sert d'un champ de la 1.42 (une offre temporaire, une option) et le registre signe pas
+    // encore : dit une fois (les Studios d'avant la 1.42 ne liront plus le registre).
+    void warnFormat142() {
+        const bool now142 = draft().reg.usesFormat142();
+        const bool signed142 = ws().hasRegistry() && ws().registry().usesFormat142();
+        if (now142 && !signed142 && !warned142_) {
+            warned142_ = true;
+            say("Offre temporaire ou option : le prochain registre sign\xC3\xA9 ne se lira qu'avec la 1.42 ou plus. Mets d'abord les Studios "
+                "de tes clients en 1.42.",
+                Tone::Warning);
+        }
+    }
+    bool warned142_{false};
 
     void onLayout() final {
         const gfx::Rect b = bounds();
@@ -716,15 +764,15 @@ void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::st
 class EditionsPage final : public RegistryPage {
 public:
     explicit EditionsPage(ShellHost host)
-        : RegistryPage("page.editions", std::move(host), "editions", "\xC3\x89" "ditions",
-                       "Ce qu'ouvre chaque \xC3\xA9" "dition et ses valeurs par d\xC3\xA9" "faut pour une licence neuve. Un changement arrive chez un client "
-                       "avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
-                       "Nouvelle \xC3\xA9" "dition\xE2\x80\xA6") {
+        : RegistryPage("page.editions", std::move(host), "editions", "Offres",
+                       "Ce qu'ouvre chaque offre (une \xC3\xA9" "dition), ses valeurs pour une licence neuve, sa p\xC3\xA9riode de vente. Un changement arrive "
+                       "chez un client avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
+                       "Nouvelle offre\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("editions.table"));
-        table_->setColumns({{"Identifiant", 160.f}, {"Libell\xC3\xA9", 160.f}, {"Type", 110.f}, {"PC", 56.f}, {"Dur\xC3\xA9" "e", 84.f}, {"Gr\xC3\xA2" "ce", 76.f},
-                            {"Fonctionnalit\xC3\xA9s", 150.f}, {"Retir\xC3\xA9" "e", 90.f}});
+        table_->setColumns({{"Identifiant", 150.f}, {"Libell\xC3\xA9", 150.f}, {"Type", 100.f}, {"PC", 50.f}, {"Dur\xC3\xA9" "e", 80.f}, {"Gr\xC3\xA2" "ce", 66.f},
+                            {"Fonctionnalit\xC3\xA9s", 110.f}, {"En vente", 150.f}, {"Licences", 76.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
-        model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Libell\xC3\xA9", "Type", "PC", "Dur\xC3\xA9" "e", "Gr\xC3\xA2" "ce", "Fonctionnalit\xC3\xA9s", "Retir\xC3\xA9" "e"});
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Libell\xC3\xA9", "Type", "PC", "Dur\xC3\xA9" "e", "Gr\xC3\xA2" "ce", "Fonctionnalit\xC3\xA9s", "En vente", "Licences"});
         table_->setModel(model_);
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
             if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
@@ -754,10 +802,27 @@ public:
         promo_->setMaxLength(60);
         promo_->setTooltip("Le prix r\xC3\xA9" "duit : dans la boutique des Studios, l'ancien prix est barr\xC3\xA9, le nouveau montr\xC3\xA9 avec sa fin ; apr\xC3\xA8s cette "
                            "date, la carte reprend le prix normal d'elle-m\xC3\xAAme.");
-        promoEnd_ = add(*this, std::make_unique<ui::InputText>("editions.reduction-fin"));
-        promoEnd_->setPlaceholder("jusqu'au AAAA-MM-JJ");
-        promoEnd_->setTooltip("Le dernier jour de la r\xC3\xA9" "duction (AAAA-MM-JJ) : apr\xC3\xA8s, la boutique reprend le prix normal d'elle-m\xC3\xAAme.");
-        promoEnd_->setMaxLength(10);
+        // 1.42.0 : la fin de la reduction dans un mini calendrier (avant : une date AAAA-MM-JJ tapee)
+        promoEnd_ = add(*this, std::make_unique<ui::DatePicker>("editions.reduction-fin"));
+        promoEnd_->setPlaceholder("jusqu'au\xE2\x80\xA6");
+        promoEnd_->setClearable(true);
+        promoEnd_->setShortcuts({{"1 semaine", 7, 0, false}, {"1 mois", 0, 1, false}, {"Fin du mois", 0, 0, true}});
+        promoEnd_->setTooltip("Le dernier jour de la r\xC3\xA9" "duction (compris) : apr\xC3\xA8s, la boutique reprend le prix normal d'elle-m\xC3\xAAme.");
+        // 1.42.0 : UNE OFFRE TEMPORAIRE - en vente pendant une periode (du ... au ..., compris), puis hors de la boutique seule
+        sale_ = add(*this, std::make_unique<ui::DropDown>("editions.vente"));
+        sale_->setItems({{"Toujours", "toujours"}, {"Pendant une p\xC3\xA9riode", "periode"}});
+        sale_->setTooltip("Une offre temporaire : la boutique des Studios ne la montre que pendant sa p\xC3\xA9riode, puis elle en sort seule. Les "
+                          "licences d\xC3\xA9j\xC3\xA0 vendues vont jusqu'\xC3\xA0 leur fin.");
+        saleFrom_ = add(*this, std::make_unique<ui::DatePicker>("editions.vente-debut"));
+        saleFrom_->setShortcuts({{"Aujourd'hui", 1, 0, false}});
+        saleTo_ = add(*this, std::make_unique<ui::DatePicker>("editions.vente-fin"));
+        saleTo_->setPlaceholder("sans fin");
+        saleTo_->setClearable(true);
+        saleTo_->setShortcuts({{"1 semaine", 7, 0, false}, {"2 semaines", 14, 0, false}, {"1 mois", 0, 1, false}, {"Fin du mois", 0, 0, true}});
+        deleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer l'offre\xE2\x80\xA6", "editions.supprimer"));
+        deleteBtn_->setStyle(ui::Button::Style::Danger);
+        deleteBtn_->setTooltip("Une offre que plus aucune licence en cours n'utilise se supprime ; une offre encore utilis\xC3\xA9" "e se retire de la vente "
+                               "(sa suppression couperait les licences de ces clients).");
         announce_ = add(*this, std::make_unique<ui::Checkbox>("Pr\xC3\xA9venir mes clients", "editions.prevenir"));
         announce_->setTooltip("La r\xC3\xA9" "duction annonc\xC3\xA9" "e \xC3\xA0 tes clients : \xC3\xA0 la signature du registre, une annonce part avec lui ; chaque "
                               "Studio la montre une fois dans ses notifications (jamais un mail), m\xC3\xAA" "me un client hors connexion (\xC3\xA0 sa prochaine connexion).");
@@ -808,12 +873,9 @@ public:
                 edited();
             }
         });
-        links_ += promoEnd_->textChanged->connect([this](const std::string& t) {
+        links_ += promoEnd_->changed->connect([this](std::int64_t day) {   // 1.42.0 : le dernier jour, compris (23:59:59)
             if (loading_) return;
-            const std::string v = trim(t);
-            lic::Seconds when = 0;
-            if (!v.empty() && !lic::parseIsoTime(v + "T23:59:59Z", when))
-                return fieldError("reduction-fin", "la fin de la r\xC3\xA9" "duction : une date AAAA-MM-JJ (le dernier jour)");
+            const lic::Seconds when = day ? day + lic::kDay - 1 : 0;
             fieldError("reduction-fin", {});
             if (auto* e = current(); e && e->promoUntil != when) {
                 e->promoUntil = when;
@@ -821,6 +883,44 @@ public:
                 edited();
             }
         });
+        links_ += sale_->selectionChanged->connect([this](int i) {   // 1.42.0
+            if (loading_ || i < 0) return;
+            auto* e = current();
+            if (!e) return;
+            const bool period = i == 1;
+            if (period && !e->temporary()) {
+                const lic::Seconds today = lic::Seconds(ui::DatePicker::dayOf(ws().now()));
+                e->saleFrom = today;
+                e->saleUntil = today + 7 * lic::kDay;   // une semaine : du jour au jour + 6, compris
+            } else if (!period) {
+                e->saleFrom = e->saleUntil = 0;
+            }
+            loadSale();
+            edited();
+            warnFormat142();
+        });
+        links_ += saleFrom_->changed->connect([this](std::int64_t day) {
+            if (loading_) return;
+            auto* e = current();
+            if (!e) return;
+            e->saleFrom = day;
+            if (e->saleUntil && e->saleUntil <= e->saleFrom) e->saleUntil = e->saleFrom + 7 * lic::kDay;
+            if (!e->temporary()) e->saleUntil = 0;
+            loadSale();
+            edited();
+            warnFormat142();
+        });
+        links_ += saleTo_->changed->connect([this](std::int64_t day) {
+            if (loading_) return;
+            auto* e = current();
+            if (!e) return;
+            e->saleUntil = day ? day + lic::kDay : 0;   // le dernier jour compris : la vente finit le lendemain a 00:00
+            fieldError("vente", e->saleFrom && e->saleUntil && e->saleUntil <= e->saleFrom ? std::string("la vente finit avant de commencer (Au)") : std::string());
+            loadSale();
+            edited();
+            warnFormat142();
+        });
+        links_ += deleteBtn_->clicked->connect([this] { deleteOffer(); });
         links_ += announce_->stateChanged->connect([this](ui::Checkbox::State st) {
             if (loading_) return;
             auto* e = current();
@@ -868,6 +968,7 @@ public:
             }
             if (e->retired != on) {
                 e->retired = on;
+                if (!on) (void)ws().setDeleteWhenUnused(e->id, false);   // 1.42.0 : remise en vente, elle reste
                 edited();
             }
         });
@@ -883,6 +984,7 @@ public:
 
 protected:
     void reloadContent() override {
+        autoDelete();
         const lic::Registry& reg = draft().reg;
         if (selected_.empty() || !reg.edition(selected_)) selected_ = reg.editions.empty() ? std::string() : reg.editions.front().id;
         rebuildTable();
@@ -902,24 +1004,48 @@ protected:
         table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 128.f;
-        float y = panel_.y + 32.f + 10.f;
+        // 1.42.0 : une petite fenetre - les lignes plus serrees (la liste des fonctionnalites garde de la place).
+        const bool compact = panel_.h < 520.f;
+        const float g = compact ? 3.f : kGap;
+        float y = panel_.y + 32.f + (compact ? 4.f : 10.f);
         rows_.clear();
         const auto row = [&](const char* text, ui::Widget* w) {
             rows_.push_back({text, {px, y, lw, kFieldH}});
             w->setBounds({px + lw, y, pw2 - lw, kFieldH});
-            y += kFieldH + kGap;
+            y += kFieldH + g;
         };
         row("Libell\xC3\xA9", label_);
         row("Type par d\xC3\xA9" "faut", type_);
         row("Prix (boutique)", price_);          // 1.37.0
         row("Description", description_);
-        // 1.38.0 : la reduction - le prix reduit et sa fin sur une ligne (comme Prix).
+        // 1.38.0 : la reduction - le prix reduit et sa fin sur une ligne (comme Prix) ; 1.42.0 : la fin au calendrier, et
+        // << Prevenir mes clients >> dessous.
         {
-            const float room = pw2 - lw, wa = std::floor((room - kGap) * 0.58f), wb = room - kGap - wa;
+            const float room = pw2 - lw, wa = std::floor((room - kGap) * 0.5f), wb = room - kGap - wa;
             rows_.push_back({"R\xC3\xA9" "duction", {px, y, lw, kFieldH}});
             promo_->setBounds({px + lw, y, wa, kFieldH});
             promoEnd_->setBounds({px + lw + wa + kGap, y, wb, kFieldH});
-            y += kFieldH + kGap;
+            y += kFieldH + g;
+        }
+        // 1.42.0 : la periode de vente
+        {
+            rows_.push_back({"En vente", {px, y, lw, kFieldH}});
+            const lic::EditionDef* e = draft().reg.edition(selected_);
+            const bool period = e && e->temporary();
+            sale_->setBounds({px + lw, y, std::min(pw2 - lw, 220.f), kFieldH});
+            y += kFieldH + (compact ? 2.f : 4.f);
+            const auto v = period ? ui::Visibility::Visible : ui::Visibility::Collapsed;
+            saleFrom_->setVisibility(v);
+            saleTo_->setVisibility(v);
+            if (period) {
+                const float room = pw2 - lw, w = std::floor((room - 22.f) * 0.5f);
+                saleFrom_->setBounds({px + lw, y, w, kFieldH});
+                saleTo_->setBounds({px + lw + w + 22.f, y, room - w - 22.f, kFieldH});
+                saleArrowAt_ = {px + lw + w + 6.f, y + kFieldH * 0.5f};
+                y += kFieldH + 2.f;
+            }
+            saleNoteY_ = y;
+            y += saleNote_.empty() ? (compact ? 0.f : 2.f) : 18.f + g;
         }
         // PC, duree, grace : une ligne, leur libelle au-dessus.
         const float inner = pw2 - 2.f * kGap;
@@ -931,11 +1057,18 @@ protected:
         pcs_->setBounds({px, fy, w1, kFieldH});
         days_->setBounds({px + w1 + kGap, fy, w2, kFieldH});
         grace_->setBounds({px + w1 + w2 + 2.f * kGap, fy, w3, kFieldH});
-        y = fy + kFieldH + kGap;
-        // Retiree, et 1.38.0 : Prevenir mes clients (la reduction), sur la meme ligne.
+        y = fy + kFieldH + g;
+        // Retiree, et 1.38.0 : Prevenir mes clients (la reduction), sur la meme ligne ; 1.42.0 : Supprimer l'offre... en tete de
+        // la carte, a droite.
         retired_->setBounds({px, y, std::floor(pw2 * 0.52f), 24.f});
         announce_->setBounds({px + std::floor(pw2 * 0.52f) + kGap, y, pw2 - std::floor(pw2 * 0.52f) - kGap, 24.f});
-        y += 24.f + kGap;
+        y += 24.f + (compact ? 0.f : 2.f);
+        deleteNoteY_ = y;
+        y += deleteNote_.empty() ? g : 18.f + g;
+        {
+            const float bw = std::ceil(std::max(140.f, deleteBtn_->sizeHint().preferred.w));
+            deleteBtn_->setBounds({panel_.right() - 12.f - bw, panel_.y + 4.f, bw, 26.f});
+        }
         featsHeadY_ = y;
         y += 22.f;
         feats_->setBounds({px, y, pw2, std::max(48.f, panel_.bottom() - 10.f - y)});
@@ -946,7 +1079,7 @@ protected:
         const lic::EditionDef* e = reg.edition(selected_);
         if (!e) return;
         const bool free = e->id == reg.unlicensedEdition;
-        paintCard(ctx, panel_, "\xC3\x89" "dition " + e->id, free ? "\xC3\xA9" "dition sans licence" : (e->retired ? "retir\xC3\xA9" "e" : ""));
+        paintCard(ctx, panel_, "Offre " + e->id, free ? "l'offre sans licence" : (e->retired ? "retir\xC3\xA9" "e" : (e->temporary() ? "temporaire" : "")));
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         for (const auto& fr : rows_)
@@ -957,6 +1090,16 @@ protected:
             if (!f.retired) ++offered;
             if (grants(*e, f.id)) ++on;
         }
+        if (saleFrom_->visible()) {   // 1.42.0 : la fleche entre Du et Au
+            const gfx::Point a = saleArrowAt_;
+            r.line({a.x, a.y}, {a.x + 9.f, a.y}, c.textMuted, 1.4f);
+            r.line({a.x + 5.f, a.y - 4.f}, {a.x + 9.f, a.y}, c.textMuted, 1.4f);
+            r.line({a.x + 5.f, a.y + 4.f}, {a.x + 9.f, a.y}, c.textMuted, 1.4f);
+        }
+        if (!saleNote_.empty())
+            r.drawText({panel_.x + 12.f + 128.f, saleNoteY_}, fit(r, saleNote_, ctx.theme.font.caption, panel_.w - 24.f - 128.f), ctx.theme.font.caption, c.textMuted);
+        if (!deleteNote_.empty())
+            r.drawText({panel_.x + 12.f, deleteNoteY_}, fit(r, deleteNote_, ctx.theme.font.caption, panel_.w - 24.f), ctx.theme.font.caption, c.textMuted);
         const std::string head = "Fonctionnalit\xC3\xA9s accord\xC3\xA9" "es : " + std::to_string(on) + " sur " + std::to_string(offered) + (free ? " (sans licence)" : "");
         r.drawText({panel_.x + 12.f, featsHeadY_}, fit(r, head, ctx.theme.font.ui, panel_.w - 24.f), ctx.theme.font.ui, c.text);
     }
@@ -1019,7 +1162,135 @@ protected:
     }
 
 private:
-    std::vector<ui::Widget*> panelWidgets() { return {label_, type_, price_, description_, promo_, promoEnd_, announce_, pcs_, days_, grace_, retired_, feats_}; }
+    std::vector<ui::Widget*> panelWidgets() {
+        return {label_, type_, price_, description_, promo_, promoEnd_, announce_, sale_, saleFrom_, saleTo_, pcs_, days_, grace_, retired_, deleteBtn_, feats_};
+    }
+
+    // 1.42.0 : << 10/11 -> 16/11 >> (la fin est le lendemain du dernier jour, a 00:00).
+    static std::string ddmm(lic::Seconds t) {
+        std::string d = lic::isoDate(t);   // AAAA-MM-JJ
+        return d.size() == 10 ? d.substr(8, 2) + "/" + d.substr(5, 2) : d;
+    }
+    // L'etat de vente d'une offre : la case du tableau, et la phrase du panneau.
+    std::string saleCell(const lic::EditionDef& e) const {
+        if (e.retired) return "retir\xC3\xA9" "e";
+        if (!e.temporary()) return "toujours";
+        const lic::Seconds t = ws().now();
+        if (e.saleUntil && t >= e.saleUntil) return "vente finie le " + ddmm(e.saleUntil - lic::kDay);
+        const std::string range = (e.saleFrom ? ddmm(e.saleFrom) : std::string("\xE2\x80\xA6")) + " \xE2\x86\x92 " + (e.saleUntil ? ddmm(e.saleUntil - lic::kDay) : std::string("sans fin"));
+        if (e.saleFrom && t < e.saleFrom) return range + " (\xC3\xA0 venir)";
+        if (e.saleUntil) {
+            const long long left = (e.saleUntil - t + lic::kDay - 1) / lic::kDay;
+            return range + " \xC2\xB7 encore " + std::to_string(left) + " j";
+        }
+        return range;
+    }
+    std::string saleSentence(const lic::EditionDef& e) const {
+        if (!e.temporary()) return {};
+        const lic::Seconds t = ws().now();
+        if (e.saleUntil && t >= e.saleUntil)
+            return "Vente finie le " + dateFr(e.saleUntil - lic::kDay) + " : elle n'est plus dans la boutique (les licences vendues continuent).";
+        std::string s;
+        if (e.saleFrom && t < e.saleFrom) s = "Elle entre dans la boutique le " + dateFr(e.saleFrom) + ". ";
+        if (e.saleUntil) s += "Le " + dateFr(e.saleUntil - lic::kDay) + " au soir, elle en sort seule. ";
+        return s + "Les licences vendues vont jusqu'\xC3\xA0 leur fin.";
+    }
+    // Les champs de la vente, depuis le brouillon.
+    void loadSale() {
+        const lic::EditionDef* e = draft().reg.edition(selected_);
+        const bool was = loading_;
+        loading_ = true;
+        const lic::Seconds today = ui::DatePicker::dayOf(ws().now());
+        for (ui::DatePicker* p : {promoEnd_, saleFrom_, saleTo_}) p->setToday(today);
+        if (e) {
+            sale_->setSelectedIndex(e->temporary() ? 1 : 0);
+            saleFrom_->setDate(e->saleFrom);
+            saleTo_->setDate(e->saleUntil ? e->saleUntil - lic::kDay : 0);
+            saleTo_->setRangeStart(e->saleFrom ? e->saleFrom : today);
+            saleNote_ = saleSentence(*e);
+            const auto list = ws().offersToDelete();
+            deleteNote_.clear();
+            if (e->retired && std::find(list.begin(), list.end(), e->id) != list.end()) {
+                const lic::Seconds last = ws().lastLicenceEnd(e->id);
+                deleteNote_ = last > 0 ? "Supprim\xC3\xA9" "e d'elle-m\xC3\xAAme apr\xC3\xA8s sa derni\xC3\xA8re licence (le " + dateFr(last) + ")."
+                                       : std::string("Supprim\xC3\xA9" "e d'elle-m\xC3\xAAme quand plus aucune licence ne l'utilisera.");
+            }
+        }
+        loading_ = was;
+        invalidateLayout();
+        invalidate();
+    }
+
+    // 1.42.0 : SUPPRIMER une offre - jamais l'offre sans licence ; une offre encore utilisee (une licence en cours) se retire de
+    // la vente a la place (et se supprime d'elle-meme apres la derniere).
+    void deleteOffer() {
+        const lic::EditionDef* e = draft().reg.edition(selected_);
+        if (!e) return;
+        const std::string id = e->id;
+        if (id == draft().reg.unlicensedEdition)
+            return setProblem("Refus\xC3\xA9 : l'offre sans licence (" + id + ") ne se supprime pas ; c'est ce qu'ouvre le logiciel sans licence valide.");
+        std::weak_ptr<bool> life = alive();
+        const auto using_ = ws().licencesInForce(id);
+        if (!using_.empty()) {
+            const lic::Seconds last = ws().lastLicenceEnd(id);
+            const std::string n = std::to_string(using_.size()) + (using_.size() > 1 ? " licences en cours l'utilisent" : " licence en cours l'utilise");
+            std::string text = n + " (" + using_.front() + (using_.size() > 1 ? "\xE2\x80\xA6" : "") + "). Les Studios de ces clients lisent leur offre dans "
+                               "le registre : la supprimer couperait leurs licences.\n\n\xC3\x80 la place : la retirer de la vente (plus vendue, plus montr\xC3\xA9" "e dans la "
+                               "boutique ; les licences continuent jusqu'\xC3\xA0 leur fin), et la supprimer d'elle-m\xC3\xAAme apr\xC3\xA8s la derni\xC3\xA8re" +
+                               (last > 0 ? " (le " + dateFr(last) + ")." : last < 0 ? " (une licence est sans fin : elle reste alors retir\xC3\xA9" "e)." : ".");
+            host_.openDialog(licdlg::makeConfirmDialog("dialog.offre-utilisee", id + " ne peut pas \xC3\xAAtre supprim\xC3\xA9" "e maintenant", text,
+                                                       "Retirer de la vente", false, [this, life, id] {
+                                                           if (life.expired()) return;
+                                                           for (auto& x : draft().reg.editions)
+                                                               if (x.id == id) x.retired = true;
+                                                           (void)ws().setDeleteWhenUnused(id, true);
+                                                           edited();
+                                                           loadPanel();
+                                                           say("Offre " + id + " retir\xC3\xA9" "e de la vente (\xC3\xA0 signer) ; supprim\xC3\xA9" "e d'elle-m\xC3\xAAme apr\xC3\xA8s sa derni\xC3\xA8re licence.", Tone::Info);
+                                                       }));
+            return;
+        }
+        const std::string text = "Plus aucune licence en cours ne l'utilise. Elle quitte le catalogue avec le prochain registre sign\xC3\xA9 ; les licences "
+                                 "finies restent lisibles dans l'archive, et les anciens registres la gardent (rien n'est r\xC3\xA9\xC3\xA9" "crit).\n\nTant que le "
+                                 "registre n'est pas sign\xC3\xA9, \xC2\xAB Annuler les modifications \xC2\xBB la remet.";
+        host_.openDialog(licdlg::makeConfirmDialog("dialog.supprimer-offre", "Supprimer l'offre " + id + " ?", text, "Supprimer l'offre", true, [this, life, id] {
+            if (life.expired()) return;
+            removeOffer(id);
+            say("Offre " + id + " supprim\xC3\xA9" "e du brouillon : signe le registre pour qu'elle quitte le catalogue.", Tone::Info);
+        }));
+    }
+
+    // Oter une offre du brouillon : ses annonces partent avec elle ; une option qui n'etait proposee qu'a elle est retiree.
+    void removeOffer(const std::string& id) {
+        lic::Registry& reg = draft().reg;
+        std::erase_if(reg.editions, [&](const lic::EditionDef& e) { return e.id == id; });
+        std::erase_if(reg.announcements, [&](const lic::Announcement& a) { return a.edition == id; });
+        draft().announce.erase(id);
+        for (auto& o : reg.options) {
+            const bool had = std::find(o.editions.begin(), o.editions.end(), id) != o.editions.end();
+            std::erase(o.editions, id);
+            if (had && o.editions.empty()) o.retired = true;   // vide voudrait dire << toutes >> : retiree plutot
+        }
+        (void)ws().setDeleteWhenUnused(id, false);
+        if (selected_ == id) selected_ = reg.editions.empty() ? std::string() : reg.editions.front().id;
+        errors_.clear();
+        edited();
+        loadPanel();
+    }
+
+    // 1.42.0 : les offres retirees a supprimer d'elles-memes (offres-a-supprimer.json) dont la derniere licence est finie.
+    void autoDelete() {
+        for (const auto& id : ws().offersToDelete()) {
+            const lic::EditionDef* e = draft().reg.edition(id);
+            if (!e) {
+                if (!(ws().hasRegistry() && ws().registry().edition(id))) (void)ws().setDeleteWhenUnused(id, false);   // deja partie
+                continue;
+            }
+            if (!e->retired || !ws().licencesInForce(id).empty() || id == draft().reg.unlicensedEdition) continue;
+            removeOffer(id);
+            say("L'offre " + id + " n'a plus de licence en cours : supprim\xC3\xA9" "e d'elle-m\xC3\xAAme (\xC3\xA0 signer).", Tone::Info);
+        }
+    }
 
     // 1.38.0 : un prix reduit sans fin - dit tout de suite ; la case << Prevenir >> suit le prix reduit.
     void checkPromo() {
@@ -1075,10 +1346,11 @@ private:
         ids_.clear();
         for (const auto& e : reg.editions) {
             ids_.push_back(e.id);
+            const long long used = static_cast<long long>(ws().licencesInForce(e.id).size());   // 1.42.0
             rows.push_back({e.id, e.label, lic::licenseTypeLabel(e.type), std::to_string(e.maxDevices), daysText(e.durationDays),
-                            std::to_string(e.offlineGraceDays) + " j", std::to_string(e.features.size()), e.retired ? "retir\xC3\xA9" "e" : ""});
+                            std::to_string(e.offlineGraceDays) + " j", std::to_string(e.features.size()), saleCell(e), std::to_string(used)});
             keys.push_back({"", "", "", padKey(e.maxDevices), padKey(e.durationDays > 0 ? e.durationDays : 999999), padKey(e.offlineGraceDays),
-                            padKey(static_cast<long long>(e.features.size())), ""});
+                            padKey(static_cast<long long>(e.features.size())), "", padKey(used)});
             const lic::EditionDef* o = signedReg ? signedReg->edition(e.id) : nullptr;
             int mark = 0;
             if (!o) mark = 2;
@@ -1092,11 +1364,14 @@ private:
         }
         const std::string free = reg.unlicensedEdition;
         const std::vector<std::string> idsCopy = ids_;
-        std::vector<bool> retired;
-        for (const auto& e : reg.editions) retired.push_back(e.retired);
+        std::vector<bool> retired, temporary;
+        for (const auto& e : reg.editions) {
+            retired.push_back(e.retired);
+            temporary.push_back(e.temporary() && !e.retired);
+        }
         const float scroll = table_->scrollOffset();
         loading_ = true;
-        model_->set(std::move(rows), std::move(keys), [idsCopy, free, marks, retired](RowIndex r, std::size_t c) {
+        model_->set(std::move(rows), std::move(keys), [idsCopy, free, marks, retired, temporary](RowIndex r, std::size_t c) {
             ui::CellStyle s;
             if (r >= idsCopy.size()) return s;
             if (c == 0) {
@@ -1109,6 +1384,10 @@ private:
             if (c == 1 && marks[r]) {
                 s.badge = marks[r] == 2 ? "nouvelle" : "modifi\xC3\xA9" "e";
                 s.badgeTone = ui::Tone::Warning;
+            }
+            if (c == 7 && temporary[r]) {   // 1.42.0 : une offre temporaire
+                s.badge = "temporaire";
+                s.badgeTone = ui::Tone::Info;
             }
             if (retired[r]) s.fgTone = ui::Tone::Muted;
             return s;
@@ -1179,12 +1458,15 @@ private:
             price_->setText(e->price);               // 1.37.0
             description_->setText(e->description);
             promo_->setText(e->promoPrice);          // 1.38.0
-            promoEnd_->setText(e->promoUntil ? lic::isoDate(e->promoUntil) : std::string());
+            promoEnd_->setToday(ui::DatePicker::dayOf(ws().now()));
+            promoEnd_->setDate(e->promoUntil);   // 1.42.0 : le dernier jour (23:59:59 ramene a son jour)
             announce_->setState(draft().announce.count(e->id) ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
             retired_->setState(e->retired ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
         }
         for (ui::Widget* w : panelWidgets()) w->setEnabled(e != nullptr);
+        if (e) deleteBtn_->setEnabled(e->id != draft().reg.unlicensedEdition);
         loading_ = false;
+        loadSale();   // 1.42.0
     }
 
     void toggleFeature(RowIndex row) {
@@ -1223,8 +1505,15 @@ private:
     ui::InputText*        grace_{nullptr};
     ui::InputText*        price_{nullptr};         // 1.37.0
     ui::InputText*        promo_{nullptr};         // 1.38.0
-    ui::InputText*        promoEnd_{nullptr};
+    ui::DatePicker*       promoEnd_{nullptr};      // 1.42.0 : un mini calendrier
     ui::Checkbox*         announce_{nullptr};
+    ui::DropDown*         sale_{nullptr};          // 1.42.0 : la periode de vente
+    ui::DatePicker*       saleFrom_{nullptr};
+    ui::DatePicker*       saleTo_{nullptr};
+    ui::Button*           deleteBtn_{nullptr};
+    std::string           saleNote_, deleteNote_;
+    float                 saleNoteY_{0}, deleteNoteY_{0};
+    gfx::Point            saleArrowAt_{};
     ui::InputText*        description_{nullptr};
     ui::Checkbox*         retired_{nullptr};
     ui::TableView*        feats_{nullptr};
@@ -1656,9 +1945,589 @@ private:
     bool                  loading_{false};
 };
 
+// ====================================================================== 1.42.0 : la page Options
+//  Le catalogue des OPTIONS (Registry::options) : des fonctionnalites vendues a part, pour un temps, a ajouter a une licence
+//  dont l'offre ne les a pas (Licences > Ajouter une option...). Chaque option : ce qu'elle ouvre, ses durees (1 semaine,
+//  1 mois, jusqu'a la fin de la licence, une autre) et leurs prix, les offres a qui elle est proposee, la boutique des
+//  Studios, un essai offert. Le meme brouillon que les offres : << Signer le registre >> les signe ensemble.
+class OptionsPage final : public RegistryPage {
+public:
+    explicit OptionsPage(ShellHost host)
+        : RegistryPage("page.options", std::move(host), "options", "Options",
+                       "Des fonctionnalit\xC3\xA9s vendues \xC3\xA0 part, pour un temps, m\xC3\xAA" "me sur une offre qui ne les a pas. Elles s'ajoutent \xC3\xA0 une "
+                       "licence depuis Licences \xE2\x80\xBA Ajouter une option\xE2\x80\xA6 ; \xC3\xA0 leur date, elles s'arr\xC3\xAA" "tent seules.",
+                       "Nouvelle option\xE2\x80\xA6") {
+        table_ = add(*this, std::make_unique<ui::TableView>("options.table"));
+        table_->setColumns({{"Identifiant", 150.f}, {"Nom", 170.f}, {"Ouvre", 170.f}, {"Dur\xC3\xA9" "es et prix", 230.f}, {"Propos\xC3\xA9" "e \xC3\xA0", 150.f},
+                            {"En cours", 76.f}});
+        table_->setSelectionMode(ui::SelectionMode::Single);
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Nom", "Ouvre", "Dur\xC3\xA9" "es et prix", "Propos\xC3\xA9" "e \xC3\xA0", "En cours"});
+        table_->setModel(model_);
+        links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
+            if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
+            select(ids_[rows.front()]);
+        });
+        label_ = add(*this, std::make_unique<ui::InputText>("options.nom"));
+        description_ = add(*this, std::make_unique<ui::InputText>("options.description"));
+        description_->setPlaceholder("PDF et Excel multi-pages (facultatif)");
+        description_->setMaxLength(200);
+        for (int k = 0; k < 4; ++k) {
+            static const char* const labels[] = {"1 semaine", "1 mois", "Jusqu'\xC3\xA0 la fin de la licence", "Autre (jours)"};
+            static const char* const keys[] = {"7", "30", "0", "autre"};
+            slot_[k].on = add(*this, std::make_unique<ui::Checkbox>(labels[k], std::string("options.duree-") + keys[k]));
+            slot_[k].price = add(*this, std::make_unique<ui::InputText>(std::string("options.prix-") + keys[k]));
+            slot_[k].price->setPlaceholder(k == 2 ? "290 \xE2\x82\xAC HT / an" : k == 1 ? "49 \xE2\x82\xAC HT" : "19 \xE2\x82\xAC HT");
+            slot_[k].price->setMaxLength(60);
+            links_ += slot_[k].on->stateChanged->connect([this, k](ui::Checkbox::State st) { toggleSlot(k, st == ui::Checkbox::State::Checked); });
+            links_ += slot_[k].price->textChanged->connect([this, k](const std::string& t) { slotPrice(k, t); });
+        }
+        otherDays_ = add(*this, std::make_unique<ui::InputText>("options.jours-autre"));
+        otherDays_->setPlaceholder("14");
+        links_ += otherDays_->textChanged->connect([this](const std::string& t) {
+            if (loading_) return;
+            int v = 0;
+            if (!parseCount(t, 1, 3660, v)) return fieldError("autre", "l'autre dur\xC3\xA9" "e : un nombre de jours de 1 \xC3\xA0 3660");
+            fieldError("autre", {});
+            auto* o = current();
+            if (!o) return;
+            for (auto& d : o->durations)
+                if (isOther(d.days)) {
+                    if (d.days != v && std::none_of(o->durations.begin(), o->durations.end(), [&](const lic::OptionDuration& x) { return x.days == v; })) {
+                        d.days = v;
+                        edited();
+                    }
+                    return;
+                }
+        });
+        shop_ = add(*this, std::make_unique<ui::Checkbox>("Dans la boutique des Studios", "options.boutique"));
+        shop_->setTooltip("Montr\xC3\xA9" "e au client dans Licence \xE2\x80\xBA Options, et propos\xC3\xA9" "e quand une action qu'elle ouvre est ferm\xC3\xA9" "e.");
+        trial_ = add(*this, std::make_unique<ui::InputText>("options.essai"));
+        trial_->setTooltip("Des jours offerts, une fois par client (0 : pas d'essai).");
+        retired_ = add(*this, std::make_unique<ui::Checkbox>("Retir\xC3\xA9" "e (plus propos\xC3\xA9" "e)", "options.retiree"));
+        deleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer l'option\xE2\x80\xA6", "options.supprimer"));
+        deleteBtn_->setStyle(ui::Button::Style::Danger);
+        feats_ = add(*this, std::make_unique<ui::TableView>("options.fonctionnalites"));
+        feats_->setColumns({{"Ce qu'elle ouvre", 200.f}, {"Identifiant", 150.f}});
+        feats_->setSelectionMode(ui::SelectionMode::Single);
+        featsModel_ = std::make_shared<Rows>(std::vector<std::string>{"Ce qu'elle ouvre", "Identifiant"});
+        feats_->setModel(featsModel_);
+        eds_ = add(*this, std::make_unique<ui::TableView>("options.offres"));
+        eds_->setColumns({{"Propos\xC3\xA9" "e aux offres", 200.f}, {"", 150.f}});
+        eds_->setSelectionMode(ui::SelectionMode::Single);
+        edsModel_ = std::make_shared<Rows>(std::vector<std::string>{"Propos\xC3\xA9" "e aux offres", ""});
+        eds_->setModel(edsModel_);
+
+        links_ += label_->textChanged->connect([this](const std::string& t) {
+            if (loading_) return;
+            const std::string v = trim(t);
+            if (v.empty()) return fieldError("nom", "le nom de l'option ne peut pas \xC3\xAAtre vide");
+            if (v.size() > 200 || !plain(v)) return fieldError("nom", "le nom est trop long (200 octets au plus) ou contient un caract\xC3\xA8re interdit");
+            fieldError("nom", {});
+            if (auto* o = current(); o && o->label != v) {
+                o->label = v;
+                edited();
+            }
+        });
+        links_ += description_->textChanged->connect([this](const std::string& t) {
+            if (loading_) return;
+            const std::string v = trim(t);
+            if (v.size() > 200 || !plain(v)) return fieldError("description", "la description : 200 octets au plus");
+            fieldError("description", {});
+            if (auto* o = current(); o && o->description != v) {
+                o->description = v;
+                edited();
+            }
+        });
+        links_ += trial_->textChanged->connect([this](const std::string& t) {
+            if (loading_) return;
+            int v = 0;
+            if (!parseCount(t, 0, 366, v)) return fieldError("essai", "l'essai : un nombre de jours de 0 \xC3\xA0 366");
+            fieldError("essai", {});
+            if (auto* o = current(); o && o->trialDays != v) {
+                o->trialDays = v;
+                edited();
+            }
+        });
+        links_ += shop_->stateChanged->connect([this](ui::Checkbox::State st) {
+            if (loading_) return;
+            if (auto* o = current(); o && o->shop != (st == ui::Checkbox::State::Checked)) {
+                o->shop = st == ui::Checkbox::State::Checked;
+                edited();
+            }
+        });
+        links_ += retired_->stateChanged->connect([this](ui::Checkbox::State st) {
+            if (loading_) return;
+            if (auto* o = current(); o && o->retired != (st == ui::Checkbox::State::Checked)) {
+                o->retired = st == ui::Checkbox::State::Checked;
+                edited();
+            }
+        });
+        links_ += feats_->checkClicked->connect([this](RowIndex row) { toggleFeature(row); });
+        links_ += eds_->checkClicked->connect([this](RowIndex row) { toggleEdition(row); });
+        links_ += deleteBtn_->clicked->connect([this] { deleteOption(); });
+
+        newId_ = add(*this, std::make_unique<ui::InputText>("options.nouvelle.id"));
+        newId_->setPlaceholder("exports_avances");
+        newId_->setMaxLength(64);
+        newLabel_ = add(*this, std::make_unique<ui::InputText>("options.nouvelle.nom"));
+        newLabel_->setPlaceholder("Exports avanc\xC3\xA9s");
+        refresh();
+    }
+
+protected:
+    void reloadContent() override {
+        const lic::Registry& reg = draft().reg;
+        if (selected_.empty() || !reg.option(selected_)) selected_ = reg.options.empty() ? std::string() : reg.options.front().id;
+        rebuildTable();
+        loadPanel();
+    }
+
+    void contentEdited() override { rebuildTable(); }
+
+    void showContent(bool on) override {
+        const auto v = on ? ui::Visibility::Visible : ui::Visibility::Collapsed;
+        for (ui::Widget* w : panelWidgets()) w->setVisibility(v);
+        table_->setVisibility(v);
+    }
+
+    void layoutContent(const gfx::Rect& area) override {
+        const float pw = std::clamp(area.w * 0.38f, 380.f, 520.f);
+        table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
+        panel_ = {area.right() - pw, area.y, pw, area.h};
+        const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 110.f;
+        float y = panel_.y + 32.f + 10.f;
+        rows_.clear();
+        rows_.push_back({"Nom", {px, y, lw, kFieldH}});
+        label_->setBounds({px + lw, y, pw2 - lw, kFieldH});
+        y += kFieldH + kGap;
+        rows_.push_back({"Description", {px, y, lw, kFieldH}});
+        description_->setBounds({px + lw, y, pw2 - lw, kFieldH});
+        y += kFieldH + kGap;
+        durationsY_ = y;
+        y += 18.f;
+        const float priceW = std::min(150.f, pw2 * 0.34f);
+        for (int k = 0; k < 4; ++k) {
+            float cw = pw2 - priceW - kGap;
+            if (k == 3) {
+                slot_[k].on->setBounds({px, y + 2.f, 120.f, 24.f});
+                otherDays_->setBounds({px + 124.f, y, std::max(50.f, cw - 124.f), kFieldH});
+            } else {
+                slot_[k].on->setBounds({px, y + 2.f, cw, 24.f});
+            }
+            slot_[k].price->setBounds({px + pw2 - priceW, y, priceW, kFieldH});
+            y += kFieldH + 4.f;
+        }
+        y += kGap;
+        shop_->setBounds({px, y + 2.f, pw2 * 0.6f, 24.f});
+        trialLabel_ = {px + pw2 * 0.6f + kGap, y, 60.f, kFieldH};
+        trial_->setBounds({trialLabel_.right(), y, std::max(40.f, pw2 - (trialLabel_.right() - px)), kFieldH});
+        y += kFieldH + kGap;
+        const float bw = std::ceil(std::max(150.f, deleteBtn_->sizeHint().preferred.w));
+        retired_->setBounds({px, y + 2.f, std::max(80.f, pw2 - bw - kGap), 24.f});
+        deleteBtn_->setBounds({px + pw2 - bw, y, bw, kFieldH});
+        y += kFieldH + kGap;
+        const float rest = std::max(96.f, panel_.bottom() - 10.f - y);
+        const float h1 = std::floor(rest * 0.55f);
+        feats_->setBounds({px, y, pw2, h1 - 4.f});
+        eds_->setBounds({px, y + h1 + 4.f, pw2, rest - h1 - 4.f});
+    }
+
+    void paintContent(const ui::PaintContext& ctx) override {
+        const lic::OptionDef* o = draft().reg.option(selected_);
+        if (!o) return;
+        paintCard(ctx, panel_, "Option " + o->label, o->retired ? "retir\xC3\xA9" "e" : "");
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        for (const auto& fr : rows_)
+            r.drawText({fr.at.x, fr.at.y + (fr.at.h - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, fr.label, ctx.theme.font.caption, fr.at.w - 4.f),
+                       ctx.theme.font.caption, c.textMuted);
+        r.drawText({panel_.x + 12.f, durationsY_}, "Dur\xC3\xA9" "es et prix (HT) : le client choisit", ctx.theme.font.caption, c.textMuted);
+        r.drawText({trialLabel_.x, trialLabel_.y + (trialLabel_.h - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, "Essai (j)", ctx.theme.font.caption, c.textMuted);
+    }
+
+    std::vector<ui::Widget*> newWidgets() override { return {newId_, newLabel_}; }
+
+    void layoutNew(const gfx::Rect& row) override {
+        const float idW = std::min(220.f, row.w * 0.35f);
+        newLabels_ = {{"Identifiant", {row.x, row.y, 86.f, kFieldH}}, {"Nom", {row.x + 86.f + idW + 12.f, row.y, 40.f, kFieldH}}};
+        newId_->setBounds({row.x + 86.f, row.y, idW, kFieldH});
+        const float lx = row.x + 86.f + idW + 12.f + 40.f;
+        newLabel_->setBounds({lx, row.y, std::max(80.f, row.right() - lx), kFieldH});
+    }
+
+    void paintNew(const ui::PaintContext& ctx) override {
+        for (const auto& fr : newLabels_)
+            ctx.r.drawText({fr.at.x, fr.at.y + (kFieldH - ctx.r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fr.label, ctx.theme.font.caption,
+                           ctx.theme.color.textMuted);
+    }
+
+    std::string newHint() const override {
+        return "Identifiant : des minuscules, des chiffres et _, commen\xC3\xA7" "ant par une lettre (64 au plus). Elle part avec une dur\xC3\xA9" "e d'une semaine : "
+               "coche ce qu'elle ouvre, ses dur\xC3\xA9" "es et leurs prix ensuite.";
+    }
+
+    bool create(std::string* why) override {
+        lic::Registry& reg = draft().reg;
+        const std::string id = trim(newId_->text());
+        std::string label = trim(newLabel_->text());
+        if (id.empty()) return *why = "donne un identifiant \xC3\xA0 la nouvelle option (exports_avances)", false;
+        if (!lic::isFeatureId(id))
+            return *why = "\xC2\xAB " + id + " \xC2\xBB n'est pas un identifiant d'option : des minuscules, des chiffres et _, commen\xC3\xA7" "ant par une lettre", false;
+        if (reg.option(id)) return *why = "l'option " + id + " existe d\xC3\xA9j\xC3\xA0", false;
+        if (reg.options.size() >= 64) return *why = "64 options au plus", false;
+        if (label.empty()) label = id;
+        if (label.size() > 200 || !plain(label)) return *why = "le nom est trop long ou contient un caract\xC3\xA8re interdit", false;
+        lic::OptionDef o;
+        o.id = id;
+        o.label = label;
+        o.durations = {{7, ""}};
+        reg.options.push_back(o);
+        selected_ = id;
+        errors_.clear();
+        warnFormat142();
+        return true;
+    }
+
+    void clearNew() override {
+        newId_->setText({});
+        newLabel_->setText({});
+    }
+
+    std::string fieldProblem() const override {
+        for (const auto& [k, v] : errors_) {
+            (void)k;
+            if (!v.empty()) return v;
+        }
+        return {};
+    }
+
+private:
+    struct Slot {
+        ui::Checkbox*  on{nullptr};
+        ui::InputText* price{nullptr};
+    };
+    static constexpr int kSlotDays[3] = {7, 30, 0};
+    static bool isOther(int days) { return days != 7 && days != 30 && days != 0; }
+
+    std::vector<ui::Widget*> panelWidgets() {
+        std::vector<ui::Widget*> v = {label_, description_, otherDays_, shop_, trial_, retired_, deleteBtn_, feats_, eds_};
+        for (const auto& s : slot_) {
+            v.push_back(s.on);
+            v.push_back(s.price);
+        }
+        return v;
+    }
+
+    lic::OptionDef* current() {
+        for (auto& o : draft().reg.options)
+            if (o.id == selected_) return &o;
+        return nullptr;
+    }
+
+    void fieldError(const std::string& key, std::string text) {
+        auto it = std::find_if(errors_.begin(), errors_.end(), [&](const auto& p) { return p.first == key; });
+        if (text.empty()) {
+            if (it != errors_.end()) errors_.erase(it);
+        } else if (it == errors_.end()) {
+            errors_.emplace_back(key, std::move(text));
+        } else {
+            it->second = std::move(text);
+        }
+        invalidateLayout();
+        invalidate();
+    }
+
+    void select(const std::string& id) {
+        if (id == selected_) return;
+        selected_ = id;
+        errors_.clear();
+        loadPanel();
+        invalidateLayout();
+        invalidate();
+    }
+
+    lic::OptionDuration* slotDuration(lic::OptionDef& o, int k) {
+        for (auto& d : o.durations)
+            if (k < 3 ? d.days == kSlotDays[k] : isOther(d.days)) return &d;
+        return nullptr;
+    }
+
+    void toggleSlot(int k, bool on) {
+        if (loading_) return;
+        auto* o = current();
+        if (!o) return;
+        lic::OptionDuration* d = slotDuration(*o, k);
+        if (on && !d) {
+            lic::OptionDuration x;
+            int days = 14;
+            if (k < 3) days = kSlotDays[k];
+            else if (int v = 0; parseCount(otherDays_->text(), 1, 3660, v) && !(v == 7 || v == 30)) days = v;
+            x.days = days;
+            x.price = trim(slot_[k].price->text());
+            if (o->durations.size() >= 8) return setProblem("Refus\xC3\xA9 : 8 dur\xC3\xA9" "es au plus.");
+            o->durations.push_back(x);
+            std::sort(o->durations.begin(), o->durations.end(), [](const lic::OptionDuration& a, const lic::OptionDuration& b) {
+                return (a.days == 0 ? 1000000 : a.days) < (b.days == 0 ? 1000000 : b.days);
+            });
+            edited();
+            loadPanel();
+        } else if (!on && d) {
+            const int days = d->days;
+            std::erase_if(o->durations, [&](const lic::OptionDuration& x) { return x.days == days; });
+            edited();
+            loadPanel();
+        }
+    }
+
+    void slotPrice(int k, const std::string& t) {
+        if (loading_) return;
+        auto* o = current();
+        if (!o) return;
+        const std::string v = trim(t);
+        if (v.size() > 60 || !plain(v)) return fieldError("prix", "un prix : 60 octets au plus");
+        fieldError("prix", {});
+        if (lic::OptionDuration* d = slotDuration(*o, k); d && d->price != v) {
+            d->price = v;
+            edited();
+        }
+    }
+
+    void toggleFeature(RowIndex row) {
+        if (row >= featRows_.size() || featRows_[row].empty()) return;
+        auto* o = current();
+        if (!o) return;
+        const std::string& id = featRows_[row];
+        auto it = std::find_if(o->features.begin(), o->features.end(), [&](const lic::FeatureGrant& g) { return g.id == id; });
+        if (it != o->features.end()) o->features.erase(it);
+        else {
+            lic::FeatureGrant g;
+            g.id = id;
+            o->features.push_back(g);
+            lic::normalizeGrants(o->features);
+        }
+        edited();
+        rebuildChecks();
+    }
+
+    // Les offres : une liste vide veut dire << toutes >> ; decocher l'une d'elles garde toutes les autres.
+    void toggleEdition(RowIndex row) {
+        if (row >= edRows_.size()) return;
+        auto* o = current();
+        if (!o) return;
+        const std::string& id = edRows_[row];
+        if (o->editions.empty()) {
+            for (const auto& e : draft().reg.editions)
+                if (e.id != id) o->editions.push_back(e.id);
+        } else if (std::find(o->editions.begin(), o->editions.end(), id) != o->editions.end()) {
+            std::erase(o->editions, id);
+            if (o->editions.empty()) return setProblem("Refus\xC3\xA9 : une option est propos\xC3\xA9" "e \xC3\xA0 au moins une offre (retire-la plut\xC3\xB4t).");
+        } else {
+            o->editions.push_back(id);
+            if (o->editions.size() == draft().reg.editions.size()) o->editions.clear();   // toutes
+        }
+        edited();
+        rebuildChecks();
+    }
+
+    void deleteOption() {
+        const lic::OptionDef* o = draft().reg.option(selected_);
+        if (!o) return;
+        const std::string id = o->id, label = o->label;
+        std::weak_ptr<bool> life = alive();
+        const std::string text = "Elle quitte le catalogue avec le prochain registre sign\xC3\xA9 : plus propos\xC3\xA9" "e, plus montr\xC3\xA9" "e dans la boutique. "
+                                 "Les options d\xC3\xA9j\xC3\xA0 ajout\xC3\xA9" "es \xC3\xA0 des licences y restent jusqu'\xC3\xA0 leur fin (chaque licence en garde la copie).";
+        host_.openDialog(licdlg::makeConfirmDialog("dialog.supprimer-option", "Supprimer l'option " + label + " ?", text, "Supprimer l'option", true, [this, life, id] {
+            if (life.expired()) return;
+            std::erase_if(draft().reg.options, [&](const lic::OptionDef& x) { return x.id == id; });
+            selected_.clear();
+            errors_.clear();
+            edited();
+            reloadContent();
+            say("Option supprim\xC3\xA9" "e du brouillon : signe le registre.", Tone::Info);
+        }));
+    }
+
+    // Les licences en cours qui ont cette option en ce moment.
+    int inUse(const std::string& id) const {
+        int n = 0;
+        const lic::Seconds t = ws().now();
+        for (const auto& l : ws().licences())
+            if (Workspace::inForce(l))
+                for (const auto& o : l.licence.options)
+                    if (o.id == id && o.activeAt(t, l.licence.expiresAt)) {
+                        ++n;
+                        break;
+                    }
+        return n;
+    }
+
+    static std::string durationLabel(int days) {
+        if (days == 0) return "fin de licence";
+        if (days == 7) return "la semaine";
+        if (days == 30) return "le mois";
+        return std::to_string(days) + " j";
+    }
+
+    void rebuildTable() {
+        const lic::Registry& reg = draft().reg;
+        const lic::Registry* signedReg = ws().hasRegistry() ? &ws().registry() : nullptr;
+        std::vector<std::vector<std::string>> rows, keys;
+        std::vector<int> marks;
+        std::vector<bool> retired;
+        ids_.clear();
+        for (const auto& o : reg.options) {
+            ids_.push_back(o.id);
+            std::vector<std::string> fl;
+            for (const auto& g : o.features) {
+                const lic::FeatureDef* f = reg.feature(g.id);
+                fl.push_back(f ? f->label : g.id);
+            }
+            std::vector<std::string> dl;
+            for (const auto& d : o.durations) dl.push_back((d.price.empty() ? std::string("sur demande") : d.price) + " " + durationLabel(d.days));
+            const int n = inUse(o.id);
+            rows.push_back({o.id, o.label, join(fl, ", "), join(dl, " \xC2\xB7 "), o.editions.empty() ? std::string("toutes") : join(o.editions, ", "),
+                            std::to_string(n)});
+            keys.push_back({"", "", "", "", "", padKey(n)});
+            const lic::OptionDef* s = signedReg ? signedReg->option(o.id) : nullptr;
+            marks.push_back(!s ? 2 : (*s == o ? 0 : 1));
+            retired.push_back(o.retired);
+        }
+        const float scroll = table_->scrollOffset();
+        loading_ = true;
+        model_->set(std::move(rows), std::move(keys), [marks, retired](RowIndex r, std::size_t c) {
+            ui::CellStyle s;
+            if (r >= marks.size()) return s;
+            if (c == 0) s.monospace = true;
+            if (c == 1 && marks[r]) {
+                s.badge = marks[r] == 2 ? "nouvelle" : "modifi\xC3\xA9" "e";
+                s.badgeTone = ui::Tone::Warning;
+            }
+            if (retired[r]) s.fgTone = ui::Tone::Muted;
+            return s;
+        });
+        for (std::size_t i = 0; i < ids_.size(); ++i)
+            if (ids_[i] == selected_) table_->selectModelRows({static_cast<RowIndex>(i)}, false);
+        table_->setScrollOffset(scroll);
+        loading_ = false;
+        rebuildChecks();
+    }
+
+    void rebuildChecks() {
+        const lic::Registry& reg = draft().reg;
+        const lic::OptionDef* o = reg.option(selected_);
+        {
+            std::vector<std::vector<std::string>> rows;
+            std::vector<int> kind;
+            featRows_.clear();
+            for (const auto& product : productsOf(reg)) {
+                rows.push_back({product, ""});
+                kind.push_back(-1);
+                featRows_.push_back({});
+                for (const auto& f : reg.features) {
+                    if (f.product != product || f.retired) continue;
+                    const bool on = o && std::any_of(o->features.begin(), o->features.end(), [&](const lic::FeatureGrant& g) { return g.id == f.id; });
+                    rows.push_back({f.label, f.id});
+                    kind.push_back(on ? 1 : 0);
+                    featRows_.push_back(f.id);
+                }
+            }
+            const float scroll = feats_->scrollOffset();
+            featsModel_->set(std::move(rows), {}, [kind](RowIndex r, std::size_t c) {
+                ui::CellStyle s;
+                if (r >= kind.size()) return s;
+                if (kind[r] < 0) {
+                    if (c == 0) s.spanRow = true;
+                    s.bold = true;
+                    return s;
+                }
+                if (c == 0) s.check = static_cast<std::int8_t>(kind[r]);
+                if (c == 1) s.monospace = true;
+                return s;
+            });
+            feats_->setScrollOffset(scroll);
+        }
+        {
+            std::vector<std::vector<std::string>> rows;
+            std::vector<int> kind;
+            std::vector<bool> retired;
+            edRows_.clear();
+            for (const auto& e : reg.editions) {
+                const bool on = o && o->offeredTo(e.id);
+                bool has = o && !o->features.empty();   // l'offre ouvre deja tout ce que l'option ouvre
+                if (has)
+                    for (const auto& g : o->features)
+                        if (!grants(e, g.id)) has = false;
+                rows.push_back({e.label.empty() ? e.id : e.label, has ? std::string("l'a d\xC3\xA9j\xC3\xA0") : std::string()});
+                kind.push_back(on ? 1 : 0);
+                retired.push_back(e.retired);
+                edRows_.push_back(e.id);
+            }
+            edsModel_->set(std::move(rows), {}, [kind, retired](RowIndex r, std::size_t c) {
+                ui::CellStyle s;
+                if (r >= kind.size()) return s;
+                if (c == 0) s.check = static_cast<std::int8_t>(kind[r]);
+                if (c == 1 || retired[r]) s.fgTone = ui::Tone::Muted;
+                return s;
+            });
+        }
+    }
+
+    void loadPanel() {
+        lic::OptionDef* o = current();
+        errors_.clear();
+        loading_ = true;
+        if (o) {
+            label_->setText(o->label);
+            description_->setText(o->description);
+            for (int k = 0; k < 4; ++k) {
+                const lic::OptionDuration* d = slotDuration(*o, k);
+                slot_[k].on->setState(d ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+                slot_[k].price->setText(d ? d->price : std::string());
+                slot_[k].price->setEnabled(d != nullptr);
+                if (k == 3) otherDays_->setText(d ? std::to_string(d->days) : std::string());
+            }
+            shop_->setState(o->shop ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+            trial_->setText(std::to_string(o->trialDays));
+            retired_->setState(o->retired ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
+        }
+        for (ui::Widget* w : panelWidgets()) w->setEnabled(o != nullptr);
+        if (o)
+            for (int k = 0; k < 4; ++k) slot_[k].price->setEnabled(slotDuration(*o, k) != nullptr);
+        loading_ = false;
+        rebuildChecks();
+    }
+
+    ui::TableView*        table_{nullptr};
+    std::shared_ptr<Rows> model_;
+    std::vector<std::string> ids_;
+    std::string           selected_;
+    gfx::Rect             panel_{}, trialLabel_{};
+    std::vector<FieldRow> rows_, newLabels_;
+    float                 durationsY_{0};
+    ui::InputText*        label_{nullptr};
+    ui::InputText*        description_{nullptr};
+    Slot                  slot_[4];
+    ui::InputText*        otherDays_{nullptr};
+    ui::Checkbox*         shop_{nullptr};
+    ui::InputText*        trial_{nullptr};
+    ui::Checkbox*         retired_{nullptr};
+    ui::Button*           deleteBtn_{nullptr};
+    ui::TableView*        feats_{nullptr};
+    std::shared_ptr<Rows> featsModel_;
+    std::vector<std::string> featRows_;
+    ui::TableView*        eds_{nullptr};
+    std::shared_ptr<Rows> edsModel_;
+    std::vector<std::string> edRows_;
+    ui::InputText*        newId_{nullptr};
+    ui::InputText*        newLabel_{nullptr};
+    std::vector<std::pair<std::string, std::string>> errors_;
+    bool                  loading_{false};
+};
+
 } // namespace
 
 PagePtr makeEditionsPage(ShellHost host) { return std::make_unique<EditionsPage>(std::move(host)); }
+PagePtr makeOptionsPage(ShellHost host) { return std::make_unique<OptionsPage>(std::move(host)); }   // 1.42.0
 PagePtr makeFeaturesPage(ShellHost host) { return std::make_unique<FeaturesPage>(std::move(host)); }
 
 } // namespace license_admin::gui

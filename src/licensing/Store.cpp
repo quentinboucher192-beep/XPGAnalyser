@@ -1398,6 +1398,8 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
         s.boundDevices = static_cast<int>(l.devices.size());
         s.issuedAt = l.issuedAt;
         s.expiresAt = l.expiresAt;
+        s.options = l.options;       // 1.42.0 : ses options (en cours ou finies) et l'historique des achats
+        s.purchases = l.purchases;
     }
     const auto invalid = [&](const std::string& detail, const std::string& head = std::string()) {
         s.status = LicenseStatus::Invalid;
@@ -1504,7 +1506,7 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
         // licence en ligne meme apres la connexion.
         if (in.wallSeen > 0 && t + opt_.clockTolerance < in.wallSeen)
             return clockRolledBack(in.wallSeen, "remets-la \xC3\xA0 l'heure, ou connecte ce PC \xC3\xA0 Internet pour la recaler");
-    } else if (timed && clockBack) {
+    } else if ((timed || !l.options.empty()) && clockBack) {   // 1.42.0 : une option a une fin aussi
         return clockRolledBack(anchor, kFixClock);
     }
     // revue 10 : la fin (et la grace) d'une licence en ligne se compare a l'heure retenue, pas a l'horloge du PC
@@ -1542,7 +1544,7 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
             s.graceDaysLeft = static_cast<int>((graceEnd - tEnd + kDay - 1) / kDay);
             s.edition = l.edition;
             s.editionLabel = edLabel;
-            s.features = l.features;
+            s.features = effectiveGrants(l, tEnd);   // 1.42.0 : les options en cours aussi
             s.message = "Ta licence " + edLabel + " a pris fin le " + isoDate(l.expiresAt) + " : ses fonctionnalit\xC3\xA9s restent ouvertes encore "
                         + plural(s.graceDaysLeft, "jour", "jours")
                         + (online ? std::string(", le temps que son renouvellement arrive (connecte ce PC \xC3\xA0 Internet). Ensuite, ")
@@ -1564,7 +1566,7 @@ LicenseState LicenseStore::judge(const Loaded& in, Seconds t) const {
     s.status = LicenseStatus::Valid;
     s.edition = l.edition;
     s.editionLabel = edLabel;
-    s.features = l.features;
+    s.features = effectiveGrants(l, tEnd);   // 1.42.0 : la licence, plus ses options en cours
     if (s.floating) s.message = "Licence flottante " + edLabel + (timed ? ", valide jusqu'au " + isoDate(l.expiresAt) : std::string()) + " : ce PC a un poste en ce moment.";
     else if (!timed) s.message = "Licence " + edLabel + " perp\xC3\xA9tuelle, valide sur ce PC.";
     else if (l.type == LicenseType::Evaluation) s.message = "Licence d'\xC3\xA9valuation " + edLabel + ", valide jusqu'au " + isoDate(l.expiresAt) + ".";

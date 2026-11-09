@@ -610,6 +610,16 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
         if (old.licenseId != l.licenseId)
             return fail("la licence \xC3\xA0 \xC3\xA9tendre est " + cite(old.licenseId) + ", pas " + cite(l.licenseId));
         l.devices = old.devices;
+        l.options = old.options;       // 1.42.0 : ses options et son historique, sauf s'ils sont donnes
+        l.purchases = old.purchases;
+    }
+    if (in.options) l.options = *in.options;
+    if (in.purchases) l.purchases = *in.purchases;
+    for (auto& o : l.options) {
+        normalizeGrants(o.features);
+        if (o.features.empty()) return fail("l'option " + cite(o.id) + " n'ouvre aucune fonctionnalit\xC3\xA9");
+        for (const auto& g : o.features)
+            if (!reg.feature(g.id)) return fail("l'option " + cite(o.id) + " ouvre " + cite(g.id) + ", qui n'est pas dans le registre n\xC2\xB0 " + std::to_string(reg.number));
     }
     std::string added;
     // 1.33.0 : retirer des PC de la licence etendue (un PC remplace, un PC rendu).
@@ -667,6 +677,9 @@ bool signLicense(const SigningKey& key, const LicenseInputs& in, Seconds now, st
     }
     l.manifest = reg.number;
     l.nonce = newNonce();
+    for (const auto& o : l.options)   // 1.42.0
+        added += "  Option : " + o.label + " (" + isoDate(o.from) + " \xE2\x86\x92 " + (o.until ? isoDate(o.until) : std::string("fin de la licence")) + ")" +
+                 (o.price.empty() ? std::string() : ", " + o.price) + "\n";
     const std::string text = writeLicense(l);
     License back;
     if (!parseLicense(text, back, &err)) return fail(err);   // ce qui part se relit

@@ -123,6 +123,8 @@ struct DeletedLicence {
 };
 [[nodiscard]] std::vector<DeletedLicence> deletedLicences(const std::string& folder);
 bool noteDeleted(const std::string& folder, const DeletedLicence& d, std::string* why);
+// 1.42.0 : ne plus retenir une licence supprimee (un client restaure : ses licences reviennent dans l'archive).
+bool forgetDeleted(const std::string& folder, const std::string& licenseId, std::string* why);
 // Cette emission d'une licence a-t-elle ete supprimee sur ce poste ?
 [[nodiscard]] bool isDeleted(const std::vector<DeletedLicence>& list, const std::string& licenseId, Seconds issuedAt);
 

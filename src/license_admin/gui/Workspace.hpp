@@ -185,6 +185,28 @@ struct LicenceDraft {
     std::vector<std::string> dropDevices;          // 1.33.0 : les PC (cles) a retirer de la licence etendue
     bool                     online{false};        // 1.35.0 : une licence EN LIGNE (aucun PC : un code d'activation)
     int                      leaseDays{online::kDefaultLeaseDays};   // son bail (jours)
+    // 1.42.0 : les options de la licence (nullopt : celles de la licence etendue) ; l'achat que cette signature ajoute a
+    // l'historique (vide : celui qu'elle est - une licence neuve, une prolongation ; rien pour un PC retire).
+    std::optional<std::vector<licensing::LicenseOption>> options;
+    std::optional<licensing::Purchase>                    purchase;
+};
+
+// ---- 1.42.0 : une option a ajouter a une licence (Licences > Ajouter une option...) ----
+struct OptionDraft {
+    std::string optionId;     // une option du catalogue (registre)
+    int         days{7};      // sa duree (0 : jusqu'a la fin de la licence) ; ignoree si `until` est donne
+    Seconds     from{0};      // 0 : maintenant
+    Seconds     until{0};     // 0 : from + days (days 0 : la fin de la licence)
+    std::string price;        // vide : celui du catalogue pour cette duree ; "offerte" si gift
+    bool        gift{false};
+};
+
+// ---- 1.42.0 : un client supprime (Clients > Supprimer le client...) : ses licences, toutes finies, dans la corbeille ----
+struct DeletedClient {
+    std::string              name;
+    Seconds                  deletedAt{0};
+    std::vector<std::string> licenceIds;
+    std::vector<std::string> trashFiles;    // le fichier de chaque licence dans la corbeille (corbeille-licences/)
 };
 
 class Workspace {
@@ -251,6 +273,29 @@ public:
     // liste signee (les Studios la refusent toujours) et le registre des activations garde son histoire. Une licence
     // pas revoquee : refuse (revoque-la d'abord).
     OpResult deleteRevokedLicence(const std::string& licenseId);
+    // 1.42.0 : une licence est-elle EN VIGUEUR (ni finie, ni revoquee) ? Un client ou une offre qui en ont une ne se
+    // suppriment pas (un Studio s'arreterait chez le client).
+    [[nodiscard]] static bool inForce(const LicenceEntry& e) noexcept { return !e.revoked && !e.expired; }
+    // Les licences en vigueur de cette offre (la suppression d'une offre : refusee s'il y en a).
+    [[nodiscard]] std::vector<std::string> licencesInForce(const std::string& edition) const;
+    // La fin de la derniere licence en vigueur de cette offre (0 : aucune ; une perpetuelle : jamais, -1).
+    [[nodiscard]] Seconds lastLicenceEnd(const std::string& edition) const;
+    // 1.42.0 : SUPPRIMER un client (aucune licence en vigueur) : ses licences vont dans la corbeille (corbeille-licences/, la
+    // synchro ne les ramene pas), le client est retenu dans clients-supprimes.json (il ne revient pas par le registre des
+    // activations) ; RESTAURER le remet (ses fichiers reviennent dans l'archive).
+    OpResult deleteClient(const std::string& name);
+    OpResult restoreClient(const std::string& name);
+    [[nodiscard]] std::vector<DeletedClient> deletedClients() const;
+    // 1.42.0 : l'HISTORIQUE DES ACHATS d'un client (Mes achats, la fiche) : chaque licence signee (une offre), chaque
+    // prolongation, chaque option, des licences de l'archive et du registre des activations ; les plus anciens d'abord.
+    [[nodiscard]] std::vector<licensing::Purchase> purchaseHistory(const std::string& customer) const;
+    // 1.42.0 : AJOUTER UNE OPTION a une licence : une nouvelle emission (memes PC, meme fin), l'option en plus. Une licence en
+    // ligne : sa nouvelle emission part sur le service (le code reste) ; une licence liee : le fichier `outPath` (a envoyer)
+    // et le service s'il est regle.
+    OpResult addOption(const std::string& licenseId, const OptionDraft& draft, const std::string& outPath);
+    // 1.42.0 : les offres a supprimer d'elles-memes quand plus aucune licence ne les utilise (offres-a-supprimer.json).
+    [[nodiscard]] std::vector<std::string> offersToDelete() const;
+    OpResult setDeleteWhenUnused(const std::string& edition, bool on);
     // La liste signee a envoyer aux clients (.xpgrev ; ils l'importent comme une licence).
     OpResult exportRevocations(const std::string& outPath) const;
 
@@ -333,6 +378,8 @@ private:
     OpResult archiveAndNote(const std::string& bytes, const std::vector<ActivationRecord>& records, OpResult r);
     [[nodiscard]] std::string archivedText(const std::string& relative) const;
     OpResult signRevocationList(licensing::RevocationList list, const std::string& what);
+    // 1.42.0 : l'historique a ecrire dans une licence signee maintenant (rien tant que le registre n'a pas de champ 1.42).
+    [[nodiscard]] std::optional<std::vector<licensing::Purchase>> purchasesToWrite(const LicenceDraft& d) const;
 
     std::string                            folder_;
     std::function<Seconds()>               clock_;

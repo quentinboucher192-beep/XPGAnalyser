@@ -83,6 +83,7 @@ using PagePtr = std::unique_ptr<Page>;
 //  "clients"        Clients                                  PageClients.cpp
 //  "licences"       Licences (et l'assistant de creation)    PageLicences.cpp, LicenceWizard.cpp
 //  "editions"       Editions                                 PageEditions.cpp
+//  "options"        Options (1.42.0)                         PageEditions.cpp
 //  "fonctionnalites" Fonctionnalites                         PageEditions.cpp
 //  "activations"    Activations                              PageActivations.cpp
 //  "demandes"       Demandes en ligne (le service, 1.35)     PageRequests.cpp
@@ -98,6 +99,7 @@ PagePtr makeClientsPage(ShellHost host);
 PagePtr makeLicencesPage(ShellHost host);
 PagePtr makeEditionsPage(ShellHost host);
 PagePtr makeFeaturesPage(ShellHost host);
+PagePtr makeOptionsPage(ShellHost host);   // 1.42.0
 PagePtr makeActivationsPage(ShellHost host);
 PagePtr makeRequestsPage(ShellHost host);
 PagePtr makeFloatingPage(ShellHost host);

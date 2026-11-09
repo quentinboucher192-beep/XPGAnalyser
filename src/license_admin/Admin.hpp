@@ -26,6 +26,7 @@
 #include "../licensing/SignedFile.hpp"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -114,6 +115,10 @@ struct LicenseInputs {
     // (son champ << service >> le nomme) ; pas de demande ; elle peut etre flottante (type floating). Etendre une licence
     // en ligne (existing) garde son service.
     std::string              service;
+    // 1.42.0 : les OPTIONS de la licence et l'historique des ACHATS du client a y ecrire. nullopt : ceux de la licence
+    // etendue (`existing`), sinon aucun. Une liste vide n'ecrit rien (le document reste lisible par la 1.41).
+    std::optional<std::vector<licensing::LicenseOption>> options;
+    std::optional<std::vector<licensing::Purchase>>      purchases;
 };
 // Signer une licence. `out` : le fichier .xpglic (licence + registre [+ revocations]) ;
 // `summary` : ce qui a ete signe, en une ligne par fait. 1.32.0 (H2) : l'empreinte du poste de chaque demande

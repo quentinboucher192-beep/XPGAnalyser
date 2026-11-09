@@ -349,7 +349,7 @@ protected:
         const auto& c = ctx.theme.color;
         const Rect  b = bounds();
         fillVertical(ctx.r, b, kNightTop, kNightBottom);
-        // La marque : la cle sur un carre de l'accent ; le nom, puis << Admin · Editeur seulement >> (l'outil n'est
+        // La marque : la cle sur un carre de l'accent ; le nom, puis << Admin - Editeur seulement >> (l'outil n'est
         // jamais livre a un client).
         const Rect logo{b.x + 18.f, b.y + 20.f, 38.f, 38.f};
         ctx.r.fillRoundedRect({logo.x, logo.y + 4.f, logo.w, logo.h}, c.accent.withAlpha(60), 11.f);
@@ -747,7 +747,8 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"clients", "Clients", ui::Icon::User, false},
         {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
         {"activations", "Activations", ui::Icon::Station, false},
-        {"editions", "\xC3\x89" "ditions", ui::Icon::Layers, false},
+        {"editions", "Offres", ui::Icon::Layers, false},                  // 1.42.0 : les editions s'appellent les offres
+        {"options", "Options", ui::Icon::Star, false},                    // 1.42.0
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
         {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
@@ -824,6 +825,7 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "licences") p = makeLicencesPage(h);
     else if (id == "editions") p = makeEditionsPage(h);
     else if (id == "fonctionnalites") p = makeFeaturesPage(h);
+    else if (id == "options") p = makeOptionsPage(h);
     else if (id == "activations") p = makeActivationsPage(h);
     else if (id == "demandes") p = makeRequestsPage(h);
     else if (id == "flottantes") p = makeFloatingPage(h);
@@ -916,7 +918,7 @@ void Shell::startQueued() {
     Queued q = std::move(*queued_);
     queued_.reset();
     if (!bg_.start(q.label, std::move(q.work))) {
-        report(OpResult::fail("Â« " + q.label + " Â» n'a pas pu partir : recommence"));
+        report(OpResult::fail("\xC2\xAB " + q.label + " \xC2\xBB n'a pas pu partir : recommence"));
         return;
     }
     pendingDone_ = std::move(q.done);

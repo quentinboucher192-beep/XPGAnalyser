@@ -211,6 +211,9 @@
     <ClCompile Include="src\ui\widgets\ColorPalette.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\DatePicker.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\widgets\FilterChain.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
@@ -2123,6 +2126,9 @@
       <Filter>menu</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\ColorPalette.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\DatePicker.hpp">
       <Filter>ui\widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\HelpArticleView.hpp">

@@ -377,6 +377,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\Widget.cpp" />
     <ClCompile Include="src\ui\widgets\CodeCommands.cpp" />
     <ClCompile Include="src\ui\widgets\ColorPalette.cpp" />
+    <ClCompile Include="src\ui\widgets\DatePicker.cpp" />
     <ClCompile Include="src\ui\widgets\Containers.cpp" />
     <ClCompile Include="src\ui\widgets\Controls.cpp" />
     <ClCompile Include="src\ui\widgets\DataViews.cpp" />
@@ -1026,6 +1027,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\Theme.hpp" />
     <ClInclude Include="src\ui\Widget.hpp" />
     <ClInclude Include="src\ui\widgets\ColorPalette.hpp" />
+    <ClInclude Include="src\ui\widgets\DatePicker.hpp" />
     <ClInclude Include="src\ui\widgets\Containers.hpp" />
     <ClInclude Include="src\ui\widgets\Controls.hpp" />
     <ClInclude Include="src\ui\widgets\DataViews.hpp" />

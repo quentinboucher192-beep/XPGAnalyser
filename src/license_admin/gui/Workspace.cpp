@@ -291,6 +291,10 @@ const LicenceEntry* Workspace::licence(const std::string& licenseId) const {
 
 std::vector<KnownDevice> Workspace::devices() const { return knownDevices(records_, now()); }
 
+namespace {
+std::vector<DeletedClient> readDeletedClients(const std::string& folder);   // 1.42.0 (plus bas)
+} // namespace
+
 std::vector<ClientEntry> Workspace::clients() const {
     std::map<std::string, ClientEntry> byKey;   // le nom sans casse
     std::map<std::string, std::string> customerOf;   // licence -> cle du client
@@ -322,6 +326,10 @@ std::vector<ClientEntry> Workspace::clients() const {
             if (auto it = customerOf.find(d.licenseId); it != customerOf.end()) k = it->second;
         if (k.empty()) continue;
         ++byKey[k].pendingRequests;
+    }
+    for (const auto& d : readDeletedClients(folder_)) {   // 1.42.0 : un client supprime ne revient que par une activite plus recente
+        auto it = byKey.find(lower(d.name));
+        if (it != byKey.end() && it->second.lastActivity <= d.deletedAt) byKey.erase(it);
     }
     std::vector<ClientEntry> out;
     for (auto& [k, c] : byKey) {
@@ -665,6 +673,8 @@ OpResult Workspace::preview(const LicenceDraft& d) const {
     LicenseInputs in;
     std::string why;
     if (!inputsOf(*this, d, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
+    in.options = d.options;            // 1.42.0
+    in.purchases = purchasesToWrite(d);
     std::string out, summary;
     if (!signLicense(*signing_, in, now(), out, &why, &summary)) return OpResult::fail(why);
     OpResult r = OpResult::done("La licence " + d.licenseId + " est pr\xC3\xAAte \xC3\xA0 \xC3\xAAtre sign\xC3\xA9" "e :");
@@ -684,6 +694,8 @@ OpResult Workspace::signLicence(const LicenceDraft& d, const std::string& outPat
     std::string why;
     if (d.online && !d.extend) return OpResult::fail("une licence en ligne se signe avec son code (Nouvelle licence en ligne)");
     if (!inputsOf(*this, bound, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
+    in.options = d.options;            // 1.42.0
+    in.purchases = purchasesToWrite(d);
     std::string out, summary;
     std::vector<ActivationRecord> records;
     if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
@@ -746,6 +758,8 @@ OpResult Workspace::prepareOnlineLicence(const LicenceDraft& draft, const std::s
     LicenseInputs in;
     std::string why;
     if (!inputsOf(*this, draft, archivedText(kRegistryRel), archivedText(kRevocationsRel), in, &why)) return OpResult::fail(why);
+    in.options = draft.options;        // 1.42.0
+    in.purchases = purchasesToWrite(draft);
     std::string out, summary;
     std::vector<ActivationRecord> records;
     if (!signLicense(*signing_, in, now(), out, &why, &summary, &records)) return OpResult::fail(why);
@@ -1295,6 +1309,381 @@ OpResult Workspace::writePublicKeyFile(const std::string& outDir) const {
 
 // ---------------------------------------------------------------------------------------------------- Background
 Background::~Background() { wait(); }
+
+// ======================================================== 1.42.0 : offres, clients, options, achats ==
+namespace {
+
+constexpr const char* kDeletedClientsFile = "clients-supprimes.json";
+constexpr const char* kOffersToDeleteFile = "offres-a-supprimer.json";
+
+// "1 semaine", "1 mois", "1 an", "45 jours" ; until 0 : "sans fin".
+std::string durationText(Seconds from, Seconds until) {
+    if (!until) return "sans fin";
+    const long long days = static_cast<long long>((until - from + licensing::kDay / 2) / licensing::kDay);
+    if (days == 7) return "1 semaine";
+    if (days > 7 && days < 28 && days % 7 == 0) return std::to_string(days / 7) + " semaines";
+    if (days >= 28 && days <= 31) return "1 mois";
+    if (days >= 365 && days <= 366) return "1 an";
+    if (days >= 730 && days <= 731) return "2 ans";
+    if (days >= 1095 && days <= 1096) return "3 ans";
+    return std::to_string(days) + (days == 1 ? " jour" : " jours");
+}
+
+const char* const kDot = " \xC2\xB7 ";
+
+// La meme ligne d'achat (a la journee pres : une ligne derivee du registre des activations et celle ecrite dans la licence).
+std::string purchaseKey(const licensing::Purchase& p) {
+    return p.licenseId + "|" + p.kind + "|" + (p.kind == "option" ? p.label : std::string()) + "|" + std::to_string(p.from / licensing::kDay) + "|" +
+           std::to_string(p.until / licensing::kDay);
+}
+
+licensing::Purchase optionPurchase(const licensing::LicenseOption& o, const licensing::License& l, Seconds at) {
+    licensing::Purchase p;
+    p.at = at;
+    p.kind = "option";
+    p.licenseId = l.licenseId;
+    p.from = o.from;
+    p.until = o.until ? o.until : l.expiresAt;
+    p.label = o.label + kDot + (o.until ? durationText(o.from, o.until) : std::string("jusqu'\xC3\xA0 la fin de la licence"));
+    p.price = o.gift ? (o.price.empty() ? std::string("offerte") : o.price) : o.price;
+    if (p.label.size() > 120) p.label.resize(120);
+    return p;
+}
+
+std::vector<DeletedClient> readDeletedClients(const std::string& folder) {
+    std::vector<DeletedClient> out;
+    std::string text, w;
+    if (!readText(deploy::joinPath(folder, kDeletedClientsFile), text, &w)) return out;
+    core::json::Value v;
+    if (!core::json::parse(text, v, nullptr) || !v.isObject()) return out;
+    if (const core::json::Value* arr = v.find("clients"); arr && arr->isArray())
+        for (const auto& x : arr->items()) {
+            DeletedClient d;
+            d.name = x.str("nom");
+            (void)licensing::parseIsoTime(x.str("supprime_le"), d.deletedAt);
+            if (const core::json::Value* l = x.find("licences"); l && l->isArray())
+                for (const auto& i : l->items())
+                    if (i.isString()) d.licenceIds.push_back(i.asString());
+            if (const core::json::Value* f = x.find("fichiers"); f && f->isArray())
+                for (const auto& i : f->items())
+                    if (i.isString()) d.trashFiles.push_back(i.asString());
+            if (!d.name.empty()) out.push_back(std::move(d));
+        }
+    return out;
+}
+
+bool writeDeletedClients(const std::string& folder, const std::vector<DeletedClient>& list, std::string* why) {
+    core::json::Value root = core::json::Value::object();
+    root.set("format", "xpg-clients-supprimes/1");
+    core::json::Value arr = core::json::Value::array();
+    for (const auto& d : list) {
+        core::json::Value o = core::json::Value::object();
+        o.set("nom", d.name);
+        o.set("supprime_le", licensing::isoTime(d.deletedAt));
+        core::json::Value l = core::json::Value::array();
+        for (const auto& id : d.licenceIds) l.push(id);
+        o.set("licences", std::move(l));
+        core::json::Value f = core::json::Value::array();
+        for (const auto& p : d.trashFiles) f.push(p);
+        o.set("fichiers", std::move(f));
+        arr.push(std::move(o));
+    }
+    root.set("clients", std::move(arr));
+    return writeText(deploy::joinPath(folder, kDeletedClientsFile), core::json::write(root) + "\n", why);
+}
+
+} // namespace
+
+std::vector<std::string> Workspace::licencesInForce(const std::string& edition) const {
+    std::vector<std::string> out;
+    for (const auto& l : licences_)
+        if (l.licence.edition == edition && inForce(l)) out.push_back(l.licence.licenseId);
+    return out;
+}
+
+Seconds Workspace::lastLicenceEnd(const std::string& edition) const {
+    Seconds end = 0;
+    for (const auto& l : licences_) {
+        if (l.licence.edition != edition || !inForce(l)) continue;
+        if (l.licence.expiresAt == 0) return -1;
+        end = std::max(end, l.licence.expiresAt);
+    }
+    return end;
+}
+
+std::vector<DeletedClient> Workspace::deletedClients() const { return readDeletedClients(folder_); }
+
+OpResult Workspace::deleteClient(const std::string& name) {
+    const std::string k = lower(name);
+    std::vector<const LicenceEntry*> mine;
+    for (const auto& l : licences_)
+        if (lower(l.licence.customer) == k) mine.push_back(&l);
+    for (const LicenceEntry* l : mine)
+        if (inForce(*l))
+            return OpResult::fail(name + " a une licence en cours (" + l->licence.licenseId + ", " + l->licence.edition +
+                                  (l->licence.expiresAt ? ", jusqu'au " + dateFr(l->licence.expiresAt) : std::string(", sans fin")) +
+                                  ") : r\xC3\xA9voque-la, ou attends sa fin, pour supprimer le client");
+    for (const auto& c : clients())
+        if (lower(c.name) == k && c.pendingRequests > 0)
+            return OpResult::fail(name + " a une demande qui attend ta d\xC3\xA9" "cision (Demandes) : accepte-la ou refuse-la d'abord");
+    const Seconds t = now();
+    DeletedClient d;
+    d.name = name;
+    d.deletedAt = t;
+    const fs::path trash = P(deploy::joinPath(folder_, archive::kTrashDir));
+    std::error_code ec;
+    fs::create_directories(trash, ec);
+    std::string stamp = licensing::isoTime(t);
+    for (char& ch : stamp)
+        if (ch == ':') ch = '-';
+    std::string why;
+    for (const LicenceEntry* l : mine) {
+        const fs::path to = trash / P(archive::safeName(l->licence.licenseId) + "-" + stamp + ".xpglic");
+        if (!archive::noteDeleted(folder_, {l->licence.licenseId, l->licence.issuedAt, t}, &why))
+            return OpResult::fail("la suppression n'a pas pu \xC3\xAAtre not\xC3\xA9" "e : " + why);
+        fs::rename(P(l->path), to, ec);
+        if (ec) {
+            fs::copy_file(P(l->path), to, fs::copy_options::overwrite_existing, ec);
+            if (!ec) fs::remove(P(l->path), ec);
+        }
+        if (ec) return OpResult::fail("le fichier " + l->path + " n'a pas pu aller dans la corbeille : " + ec.message());
+        d.licenceIds.push_back(l->licence.licenseId);
+        d.trashFiles.push_back(U(to));
+    }
+    auto list = readDeletedClients(folder_);
+    std::erase_if(list, [&](const DeletedClient& x) { return lower(x.name) == k; });
+    list.push_back(d);
+    if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail("le client n'a pas pu \xC3\xAAtre not\xC3\xA9 supprim\xC3\xA9 : " + why);
+    loadArchive();
+    OpResult r = OpResult::done("Client " + name + " supprim\xC3\xA9.");
+    if (!d.licenceIds.empty())
+        r.details.push_back(plural(static_cast<int>(d.licenceIds.size()), "licence", "licences") + " dans la corbeille de l'outil (rien n'est effac\xC3\xA9) ; la synchro ne les ram\xC3\xA8ne pas.");
+    r.details.push_back("Pour le remettre : Clients \xE2\x80\xBA Corbeille \xE2\x80\xBA Restaurer.");
+    return r;
+}
+
+OpResult Workspace::restoreClient(const std::string& name) {
+    const std::string k = lower(name);
+    auto list = readDeletedClients(folder_);
+    auto it = std::find_if(list.begin(), list.end(), [&](const DeletedClient& x) { return lower(x.name) == k; });
+    if (it == list.end()) return OpResult::fail(name + " n'est pas dans la corbeille des clients");
+    const fs::path dir = P(archive::archiveFolder(folder_)) / kLicencesDir;
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    std::string why;
+    int back = 0;
+    for (std::size_t i = 0; i < it->trashFiles.size(); ++i) {
+        const std::string id = i < it->licenceIds.size() ? it->licenceIds[i] : std::string();
+        if (id.empty()) continue;
+        const fs::path to = dir / P(archive::safeName(id) + ".xpglic");
+        if (fs::exists(to, ec)) continue;   // une emission plus recente est revenue entre-temps : elle reste
+        fs::copy_file(P(it->trashFiles[i]), to, fs::copy_options::none, ec);
+        if (ec) return OpResult::fail("la licence " + id + " n'a pas pu revenir de la corbeille : " + ec.message());
+        if (!archive::forgetDeleted(folder_, id, &why)) return OpResult::fail(why);
+        ++back;
+    }
+    list.erase(it);
+    if (!writeDeletedClients(folder_, list, &why)) return OpResult::fail(why);
+    loadArchive();
+    OpResult r = OpResult::done("Client " + name + " restaur\xC3\xA9.");
+    if (back) r.details.push_back(plural(back, "licence revenue", "licences revenues") + " dans l'archive (la copie reste dans la corbeille).");
+    return r;
+}
+
+std::vector<licensing::Purchase> Workspace::purchaseHistory(const std::string& customer) const {
+    const std::string want = lower(customer);
+    std::vector<licensing::Purchase> out;
+    std::set<std::string> seen;
+    const auto add = [&](licensing::Purchase p) {
+        if (seen.insert(purchaseKey(p)).second) out.push_back(std::move(p));
+    };
+    // 1. ce que les licences portent deja (les prix d'alors)
+    for (const auto& l : licences_)
+        if (lower(l.licence.customer) == want)
+            for (const auto& p : l.licence.purchases) add(p);
+    // 2. le registre des activations : chaque signature d'une licence (une offre ; une prolongation quand la fin change)
+    std::map<std::string, std::vector<const ActivationRecord*>> byLicence;
+    for (const auto& r : records_)
+        if (r.kind == "licence" && !r.licenseId.empty() && lower(r.customer) == want) byLicence[r.licenseId].push_back(&r);
+    for (auto& [id, recs] : byLicence) {
+        const auto signedOf = [](const ActivationRecord* r) { return r->signedAt ? r->signedAt : r->at; };
+        std::stable_sort(recs.begin(), recs.end(), [&](const ActivationRecord* a, const ActivationRecord* b) { return signedOf(a) < signedOf(b); });
+        std::string prevEdition;
+        Seconds prevExpires = 0, lastSigned = -1;
+        bool first = true;
+        for (const ActivationRecord* r : recs) {
+            const Seconds at = signedOf(r);
+            if (at == lastSigned) continue;   // une ligne par PC lie : la meme signature
+            lastSigned = at;
+            const licensing::EditionDef* ed = registry_.edition(r->edition);
+            const std::string edLabel = ed && !ed->label.empty() ? ed->label : r->edition;
+            licensing::Purchase p;
+            p.at = at;
+            p.licenseId = id;
+            p.until = r->expiresAt;
+            p.price = ed ? ed->price : std::string();
+            if (first || r->edition != prevEdition) {
+                p.kind = "offer";
+                p.from = r->issuedAt ? r->issuedAt : at;
+                p.label = edLabel + kDot + durationText(p.from, p.until);
+            } else if (r->expiresAt != prevExpires) {
+                p.kind = "extension";
+                p.from = prevExpires > at ? prevExpires : at;
+                p.label = edLabel + " prolong\xC3\xA9" "e" + kDot + durationText(p.from, p.until);
+            } else {
+                continue;   // un PC retire, une option ajoutee : pas un achat de l'offre
+            }
+            first = false;
+            prevEdition = r->edition;
+            prevExpires = r->expiresAt;
+            add(std::move(p));
+        }
+    }
+    // 3. les options des licences
+    for (const auto& l : licences_)
+        if (lower(l.licence.customer) == want)
+            for (const auto& o : l.licence.options) add(optionPurchase(o, l.licence, o.from));
+    std::stable_sort(out.begin(), out.end(), [](const licensing::Purchase& a, const licensing::Purchase& b) { return a.at < b.at; });
+    return out;
+}
+
+std::optional<std::vector<licensing::Purchase>> Workspace::purchasesToWrite(const LicenceDraft& d) const {
+    if (!hasRegistry_ || !registry_.usesFormat142()) return std::nullopt;   // la 1.41 relit la licence (rien de nouveau)
+    std::vector<licensing::Purchase> list = purchaseHistory(d.customer);
+    std::optional<licensing::Purchase> line = d.purchase;
+    if (!line) {
+        const LicenceEntry* old = d.extend ? licence(d.licenseId) : nullptr;
+        const licensing::EditionDef* ed = registry_.edition(d.edition);
+        const Seconds t = now();
+        const licensing::LicenseType type = d.type ? *d.type : (ed ? ed->type : licensing::LicenseType::Temporary);
+        Seconds expires = 0;
+        if (type != licensing::LicenseType::Perpetual) {
+            if (d.expiresAt > 0) expires = d.expiresAt;
+            else if (d.durationDays > 0) expires = t + static_cast<Seconds>(d.durationDays) * licensing::kDay;
+            else if (d.durationDays < 0 && ed && ed->durationDays > 0) expires = t + static_cast<Seconds>(ed->durationDays) * licensing::kDay;
+        }
+        const std::string edLabel = ed && !ed->label.empty() ? ed->label : d.edition;
+        licensing::Purchase p;
+        p.at = t;
+        p.licenseId = d.licenseId;
+        p.until = expires;
+        p.price = ed ? (!ed->promoPrice.empty() && t < ed->promoUntil ? ed->promoPrice : ed->price) : std::string();
+        if (!old || old->licence.edition != d.edition) {
+            p.kind = "offer";
+            p.from = t;
+            p.label = edLabel + kDot + durationText(p.from, p.until);
+            line = p;
+        } else if (expires != old->licence.expiresAt) {
+            p.kind = "extension";
+            p.from = old->licence.expiresAt > t ? old->licence.expiresAt : t;
+            p.label = edLabel + " prolong\xC3\xA9" "e" + kDot + durationText(p.from, p.until);
+            line = p;
+        }
+    }
+    if (line) {
+        if (line->label.size() > 120) line->label.resize(120);
+        const std::string key = purchaseKey(*line);
+        if (std::none_of(list.begin(), list.end(), [&](const licensing::Purchase& x) { return purchaseKey(x) == key; })) list.push_back(*line);
+    }
+    std::stable_sort(list.begin(), list.end(), [](const licensing::Purchase& a, const licensing::Purchase& b) { return a.at < b.at; });
+    if (list.size() > 400) list.erase(list.begin(), list.begin() + static_cast<std::ptrdiff_t>(list.size() - 400));
+    return list;
+}
+
+OpResult Workspace::addOption(const std::string& licenseId, const OptionDraft& od, const std::string& outPath) {
+    if (!signing_) return OpResult::fail(key_.problem);
+    if (!hasRegistry_) return OpResult::fail("pas de registre sign\xC3\xA9 dans l'archive (Offres \xE2\x80\xBA Signer le registre)");
+    const LicenceEntry* e = licence(licenseId);
+    if (!e) return OpResult::fail("la licence " + licenseId + " n'est pas dans l'archive");
+    if (!inForce(*e)) return OpResult::fail("la licence " + licenseId + " est " + e->stateLabel() + " : une option s'ajoute \xC3\xA0 une licence en cours");
+    const licensing::OptionDef* opt = registry_.option(od.optionId);
+    if (!opt) return OpResult::fail("l'option " + od.optionId + " n'est pas dans le registre sign\xC3\xA9 (Options \xE2\x80\xBA Signer le registre)");
+    if (opt->retired) return OpResult::fail("l'option " + opt->label + " est retir\xC3\xA9" "e du catalogue");
+    const licensing::License& L = e->licence;
+    const Seconds t = now();
+    if (t <= L.issuedAt) return OpResult::fail("la licence " + licenseId + " vient d'\xC3\xAAtre sign\xC3\xA9" "e : r\xC3\xA9" "essaie dans une seconde");
+    licensing::LicenseOption o;
+    o.id = opt->id;
+    o.label = opt->label;
+    o.features = opt->features;
+    o.from = od.from ? od.from : t;
+    o.until = od.until ? od.until : (od.days > 0 ? o.from + static_cast<Seconds>(od.days) * licensing::kDay : 0);
+    o.gift = od.gift;
+    if (o.until && o.until <= o.from) return OpResult::fail("l'option finirait avant de commencer : choisis d'autres dates");
+    std::string note;
+    if (L.expiresAt && o.from >= L.expiresAt) return OpResult::fail("la licence " + licenseId + " finit le " + dateFr(L.expiresAt) + " : l'option commencerait apr\xC3\xA8s (prolonge d'abord la licence)");
+    if (L.expiresAt && o.until > L.expiresAt) {
+        o.until = L.expiresAt;
+        note = "L'option s'arr\xC3\xAAte avec la licence, le " + dateFr(L.expiresAt) + " (prolonge la licence pour aller plus loin).";
+    }
+    if (!od.price.empty()) o.price = od.price;
+    else if (!od.gift) {
+        const int days = od.until ? -1 : od.days;
+        for (const auto& dur : opt->durations)
+            if (dur.days == days) o.price = dur.price;
+    }
+    if (o.price.size() > 60) o.price.resize(60);
+    LicenceDraft d;
+    d.licenseId = L.licenseId;
+    d.customer = L.customer;
+    d.edition = L.edition;
+    d.type = L.type;
+    d.maxDevices = L.maxDevices;
+    d.offlineGraceDays = L.offlineGraceDays;
+    d.expiresAt = L.expiresAt;
+    d.durationDays = L.expiresAt ? -1 : 0;
+    for (const auto& g : L.features) d.features.push_back(g.id);
+    d.extend = true;
+    d.online = isOnlineLicence(L);
+    std::vector<licensing::LicenseOption> opts = L.options;
+    opts.push_back(o);
+    d.options = opts;
+    d.purchase = optionPurchase(o, L, t);
+    OpResult r;
+    if (d.online) {
+        ServiceJob job;
+        std::string code;
+        r = prepareOnlineLicence(d, outPath, job, code);
+        if (r.ok) {
+            if (service_.ready()) queueServiceJob(std::move(job));
+            r.message = "Option " + o.label + " ajout\xC3\xA9" "e \xC3\xA0 la licence " + licenseId + " : la nouvelle \xC3\xA9mission part sur le service (ses PC la re\xC3\xA7oivent seuls).";
+        }
+    } else {
+        if (outPath.empty()) return OpResult::fail("o\xC3\xB9 \xC3\xA9" "crire le fichier de licence \xC3\xA0 envoyer au client ?");
+        r = signLicence(d, outPath);
+        if (r.ok) r.message = "Option " + o.label + " ajout\xC3\xA9" "e \xC3\xA0 la licence " + licenseId + " : " + outPath;
+    }
+    if (r.ok && !note.empty()) r.details.insert(r.details.begin(), note);
+    if (r.ok) r.details.push_back("Les Studios de ce client doivent avoir la 1.42 ou plus pour lire une licence avec des options.");
+    return r;
+}
+
+std::vector<std::string> Workspace::offersToDelete() const {
+    std::vector<std::string> out;
+    std::string text, w;
+    if (!readText(deploy::joinPath(folder_, kOffersToDeleteFile), text, &w)) return out;
+    core::json::Value v;
+    if (!core::json::parse(text, v, nullptr) || !v.isObject()) return out;
+    if (const core::json::Value* arr = v.find("offres"); arr && arr->isArray())
+        for (const auto& x : arr->items())
+            if (x.isString() && licensing::isEditionId(x.asString())) out.push_back(x.asString());
+    return out;
+}
+
+OpResult Workspace::setDeleteWhenUnused(const std::string& edition, bool on) {
+    auto list = offersToDelete();
+    std::erase(list, edition);
+    if (on) list.push_back(edition);
+    core::json::Value root = core::json::Value::object();
+    root.set("format", "xpg-offres-a-supprimer/1");
+    core::json::Value arr = core::json::Value::array();
+    for (const auto& e : list) arr.push(e);
+    root.set("offres", std::move(arr));
+    std::string why;
+    if (!writeText(deploy::joinPath(folder_, kOffersToDeleteFile), core::json::write(root) + "\n", &why)) return OpResult::fail(why);
+    return OpResult::done(on ? "L'offre " + edition + " sera supprim\xC3\xA9" "e d'elle-m\xC3\xAAme quand plus aucune licence ne l'utilisera."
+                             : "L'offre " + edition + " ne sera plus supprim\xC3\xA9" "e d'elle-m\xC3\xAAme.");
+}
 
 bool Background::start(std::string label, std::function<OpResult()> work) {
     if (running_.load()) return false;

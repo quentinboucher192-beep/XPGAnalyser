@@ -278,6 +278,10 @@ struct LicenseState {
     Seconds       leaseUntil{0};          // la fin du jeton de la licence flottante (0 : pas de jeton valable)
     Seconds       lastServiceSync{0};     // la derniere heure signee recue du service (0 : jamais)
     Seconds       trustedNow{0};          // l'heure retenue : max(horloge du PC, derniere heure signee + temps ecoule)
+    // 1.42.0 - LES OPTIONS ET LES ACHATS de la licence installee (lisible, meme finie) : ses options (en cours ou finies ;
+    // leurs fonctionnalites sont dans `features` pendant leur periode) et l'historique des achats du client (Mes achats).
+    std::vector<LicenseOption> options;
+    std::vector<Purchase>      purchases;
 
     // Ouverte ? (NotConfigured : toujours vrai, rien n'est verrouille.)
     [[nodiscard]] bool hasFeature(std::string_view id) const noexcept;

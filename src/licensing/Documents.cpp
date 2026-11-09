@@ -220,6 +220,19 @@ void readGrants(Fields& parent, std::string_view key, std::vector<FeatureGrant>&
     std::sort(out.begin(), out.end(), [](const FeatureGrant& a, const FeatureGrant& b) { return a.id < b.id; });
 }
 
+// 1.42.0 : une liste de textes (identifiants d'offres) : chacun valide par `ok`.
+void readIds(Fields& parent, std::string_view key, std::vector<std::string>& out, std::size_t maxItems, bool (*ok)(std::string_view) noexcept,
+             const char* what) {
+    out.clear();
+    const Value* arr = parent.array(key, false, maxItems);
+    if (!arr) return;
+    for (const auto& item : arr->items()) {
+        if (!item.isString() || !ok(item.asString())) return parent.fail(std::string(what) + " de " + parent.name(key) + " n'est pas valide");
+        if (std::find(out.begin(), out.end(), item.asString()) != out.end()) return parent.fail(std::string(what) + " " + cite(item.asString()) + " est deux fois dans " + parent.name(key));
+        out.push_back(item.asString());
+    }
+}
+
 Value grantsValue(const std::vector<FeatureGrant>& grants) {
     Value arr = Value::array();
     for (const auto& g : grants) {
@@ -336,6 +349,33 @@ void normalizeGrants(std::vector<FeatureGrant>& grants) {
     grants.erase(std::unique(grants.begin(), grants.end(), [](const FeatureGrant& a, const FeatureGrant& b) { return a.id == b.id; }), grants.end());
 }
 
+bool isPurchaseKind(std::string_view k) noexcept { return k == "offer" || k == "extension" || k == "option"; }
+
+bool OptionDef::offeredTo(std::string_view ed) const noexcept {
+    return editions.empty() || std::find(editions.begin(), editions.end(), ed) != editions.end();
+}
+
+const OptionDef* Registry::option(std::string_view id) const noexcept {
+    for (const auto& o : options)
+        if (o.id == id) return &o;
+    return nullptr;
+}
+
+bool Registry::usesFormat142() const noexcept {
+    return !options.empty() || std::any_of(editions.begin(), editions.end(), [](const EditionDef& e) { return e.temporary(); });
+}
+
+std::vector<FeatureGrant> effectiveGrants(const License& l, Seconds now) {
+    std::vector<FeatureGrant> out = l.features;
+    for (const auto& o : l.options) {
+        if (!o.activeAt(now, l.expiresAt)) continue;
+        for (const auto& g : o.features)
+            if (std::none_of(out.begin(), out.end(), [&](const FeatureGrant& x) { return x.id == g.id; })) out.push_back(g);
+    }
+    normalizeGrants(out);
+    return out;
+}
+
 const FeatureDef* Registry::feature(std::string_view id) const noexcept {
     for (const auto& f : features)
         if (f.id == id) return &f;
@@ -412,6 +452,8 @@ std::string writeRegistry(const Registry& r) {
             o.set("promo_price", e.promoPrice);
             o.set("promo_until", isoTime(e.promoUntil));
         }
+        if (e.saleFrom) o.set("sale_from", isoTime(e.saleFrom));     // 1.42.0 : une offre temporaire
+        if (e.saleUntil) o.set("sale_until", isoTime(e.saleUntil));
         eds.push(std::move(o));
     }
     root.set("editions", std::move(eds));
@@ -428,6 +470,34 @@ std::string writeRegistry(const Registry& r) {
             ann.push(std::move(o));
         }
         root.set("announcements", std::move(ann));
+    }
+    if (!r.options.empty()) {   // 1.42.0
+        Value opts = Value::array();
+        for (const auto& op : r.options) {
+            Value o = Value::object();
+            o.set("id", op.id);
+            o.set("label", op.label);
+            if (!op.description.empty()) o.set("description", op.description);
+            o.set("features", grantsValue(op.features));
+            if (!op.editions.empty()) {
+                Value e = Value::array();
+                for (const auto& id : op.editions) e.push(id);
+                o.set("editions", std::move(e));
+            }
+            Value d = Value::array();
+            for (const auto& x : op.durations) {
+                Value y = Value::object();
+                y.set("days", x.days);
+                if (!x.price.empty()) y.set("price", x.price);
+                d.push(std::move(y));
+            }
+            o.set("durations", std::move(d));
+            if (op.trialDays) o.set("trial_days", op.trialDays);
+            if (!op.shop) o.set("in_shop", false);
+            if (op.retired) o.set("retired", true);
+            opts.push(std::move(o));
+        }
+        root.set("options", std::move(opts));
     }
     return finishText(root);
 }
@@ -513,6 +583,9 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
             g.text("description", e.description, false, 200);
             g.text("promo_price", e.promoPrice, false, 60);   // 1.38.0 : une reduction (avec sa fin)
             if (g.ok() && !e.promoPrice.empty()) g.time("promo_until", e.promoUntil, true);
+            g.time("sale_from", e.saleFrom, false);           // 1.42.0 : une offre temporaire
+            g.time("sale_until", e.saleUntil, false);
+            if (g.ok() && e.saleFrom && e.saleUntil && e.saleUntil <= e.saleFrom) g.fail("la vente de " + cite(e.id) + " finit avant de commencer");
             g.finish();
             if (!g.ok()) {
                 f.fail(g.error());
@@ -555,6 +628,58 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
             r.announcements.push_back(std::move(a));
         }
     }
+    // 1.42.0 : le catalogue des options.
+    if (const Value* arr = f.array("options", false, 64)) {
+        for (std::size_t i = 0; i < arr->items().size() && f.ok(); ++i) {
+            const Value& item = arr->items()[i];
+            const std::string where = "options[" + std::to_string(i) + "].";
+            if (!item.isObject()) {
+                f.fail("l'\xC3\xA9l\xC3\xA9ment " + cite(where.substr(0, where.size() - 1)) + " n'est pas un objet");
+                break;
+            }
+            Fields g(item, where);
+            OptionDef o;
+            g.text("id", o.id, true, 64);
+            if (g.ok() && !isFeatureId(o.id)) g.fail("l'identifiant d'option " + cite(o.id) + " n'est pas valide");
+            g.text("label", o.label, true, 200);
+            g.text("description", o.description, false, 200);
+            readGrants(g, "features", o.features, true);
+            if (g.ok() && o.features.empty()) g.fail("l'option " + cite(o.id) + " n'ouvre aucune fonctionnalit\xC3\xA9");
+            readIds(g, "editions", o.editions, 256, isEditionId, "une offre");
+            if (const Value* d = g.array("durations", true, 8)) {
+                if (d->items().empty()) g.fail("l'option " + cite(o.id) + " n'a aucune dur\xC3\xA9" "e");
+                for (std::size_t k = 0; k < d->items().size() && g.ok(); ++k) {
+                    const Value& di = d->items()[k];
+                    if (!di.isObject()) {
+                        g.fail("une dur\xC3\xA9" "e de " + cite(o.id) + " n'est pas un objet");
+                        break;
+                    }
+                    Fields h(di, where + "durations[" + std::to_string(k) + "].");
+                    OptionDuration od;
+                    h.count("days", od.days, 0, 3660, true);
+                    h.text("price", od.price, false, 60);
+                    h.finish();
+                    if (!h.ok()) g.fail(h.error());
+                    for (const auto& prev : o.durations)
+                        if (prev.days == od.days) g.fail("la dur\xC3\xA9" "e de " + std::to_string(od.days) + " jours de " + cite(o.id) + " est deux fois");
+                    o.durations.push_back(std::move(od));
+                }
+            }
+            g.count("trial_days", o.trialDays, 0, 366, false);
+            g.boolean("in_shop", o.shop, false);
+            g.boolean("retired", o.retired, false);
+            g.finish();
+            if (!g.ok()) {
+                f.fail(g.error());
+                break;
+            }
+            if (r.option(o.id)) {
+                f.fail("l'option " + cite(o.id) + " est d\xC3\xA9" "clar\xC3\xA9" "e deux fois");
+                break;
+            }
+            r.options.push_back(std::move(o));
+        }
+    }
     if (!finishDocument(f, kWhat, why)) return false;
     // La coherence : l'edition sans licence existe ; chaque edition n'accorde que des fonctionnalites et limites declarees.
     const auto bad = [&](const std::string& text) {
@@ -564,6 +689,19 @@ bool parseRegistry(std::string_view json, Registry& out, std::string* why) {
     if (!r.edition(r.unlicensedEdition)) return bad("l'\xC3\xA9" "dition sans licence " + cite(r.unlicensedEdition) + " n'y est pas");
     for (const auto& a : r.announcements)   // 1.38.0
         if (!a.edition.empty() && !r.edition(a.edition)) return bad("l'annonce " + cite(a.id) + " parle de " + cite(a.edition) + ", qui n'y est pas");
+    for (const auto& o : r.options) {   // 1.42.0 : chaque option n'ouvre que des fonctionnalites declarees, pour des offres declarees
+        for (const auto& e : o.editions)
+            if (!r.edition(e)) return bad("l'option " + cite(o.id) + " est propos\xC3\xA9" "e \xC3\xA0 " + cite(e) + ", qui n'y est pas");
+        for (const auto& g : o.features) {
+            const FeatureDef* d = r.feature(g.id);
+            if (!d) return bad("l'option " + cite(o.id) + " ouvre " + cite(g.id) + ", qui n'est pas d\xC3\xA9" "clar\xC3\xA9" "e");
+            for (const auto& [name, n] : g.limits) {
+                (void)n;
+                if (std::none_of(d->limits.begin(), d->limits.end(), [&](const LimitDef& l) { return l.id == name; }))
+                    return bad("l'option " + cite(o.id) + " fixe la limite " + cite(name) + " de " + cite(g.id) + ", qui n'est pas d\xC3\xA9" "clar\xC3\xA9" "e");
+            }
+        }
+    }
     for (const auto& e : r.editions)
         for (const auto& g : e.features) {
             const FeatureDef* d = r.feature(g.id);
@@ -603,6 +741,36 @@ std::string writeLicense(const License& l) {
     root.set("devices", std::move(devs));
     root.set("manifest", static_cast<std::uint64_t>(l.manifest));
     root.set("nonce", l.nonce);
+    if (!l.options.empty()) {   // 1.42.0 : seulement s'il y en a (la 1.41 relit le reste)
+        Value arr = Value::array();
+        for (const auto& o : l.options) {
+            Value x = Value::object();
+            x.set("id", o.id);
+            x.set("label", o.label);
+            x.set("features", grantsValue(o.features));
+            x.set("from", isoTime(o.from));
+            x.set("until", o.until ? Value(isoTime(o.until)) : Value());
+            if (!o.price.empty()) x.set("price", o.price);
+            if (o.gift) x.set("gift", true);
+            arr.push(std::move(x));
+        }
+        root.set("options", std::move(arr));
+    }
+    if (!l.purchases.empty()) {   // 1.42.0
+        Value arr = Value::array();
+        for (const auto& pu : l.purchases) {
+            Value x = Value::object();
+            x.set("at", isoTime(pu.at));
+            x.set("kind", pu.kind);
+            x.set("label", pu.label);
+            x.set("license_id", pu.licenseId);
+            x.set("from", isoTime(pu.from));
+            x.set("until", pu.until ? Value(isoTime(pu.until)) : Value());
+            if (!pu.price.empty()) x.set("price", pu.price);
+            arr.push(std::move(x));
+        }
+        root.set("purchases", std::move(arr));
+    }
     return finishText(root);
 }
 
@@ -664,6 +832,62 @@ bool parseLicense(std::string_view json, License& out, std::string* why) {
     f.text("nonce", l.nonce, true, 64);
     if (f.ok() && (l.nonce.size() != 32 || !std::all_of(l.nonce.begin(), l.nonce.end(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); })))
         f.fail("le champ \xC2\xAB nonce \xC2\xBB n'est pas valide");
+    // 1.42.0 : les options de cette licence et l'historique des achats.
+    if (const Value* arr = f.array("options", false, 64)) {
+        for (std::size_t i = 0; i < arr->items().size() && f.ok(); ++i) {
+            const Value& item = arr->items()[i];
+            const std::string where = "options[" + std::to_string(i) + "].";
+            if (!item.isObject()) {
+                f.fail("l'\xC3\xA9l\xC3\xA9ment " + cite(where.substr(0, where.size() - 1)) + " n'est pas un objet");
+                break;
+            }
+            Fields g(item, where);
+            LicenseOption o;
+            g.text("id", o.id, true, 64);
+            if (g.ok() && !isFeatureId(o.id)) g.fail("l'identifiant d'option " + cite(o.id) + " n'est pas valide");
+            g.text("label", o.label, true, 200);
+            readGrants(g, "features", o.features, true);
+            if (g.ok() && o.features.empty()) g.fail("l'option " + cite(o.id) + " n'ouvre aucune fonctionnalit\xC3\xA9");
+            g.time("from", o.from, true);
+            g.time("until", o.until, true, /*nullable=*/true);
+            if (g.ok() && o.until && o.until <= o.from) g.fail("l'option " + cite(o.id) + " finit avant de commencer");
+            g.text("price", o.price, false, 60);
+            g.boolean("gift", o.gift, false);
+            g.finish();
+            if (!g.ok()) {
+                f.fail(g.error());
+                break;
+            }
+            l.options.push_back(std::move(o));
+        }
+    }
+    if (const Value* arr = f.array("purchases", false, 400)) {
+        for (std::size_t i = 0; i < arr->items().size() && f.ok(); ++i) {
+            const Value& item = arr->items()[i];
+            const std::string where = "purchases[" + std::to_string(i) + "].";
+            if (!item.isObject()) {
+                f.fail("l'\xC3\xA9l\xC3\xA9ment " + cite(where.substr(0, where.size() - 1)) + " n'est pas un objet");
+                break;
+            }
+            Fields g(item, where);
+            Purchase pu;
+            g.time("at", pu.at, true);
+            g.text("kind", pu.kind, true, 16);
+            if (g.ok() && !isPurchaseKind(pu.kind)) g.fail("le genre d'achat " + cite(pu.kind) + " est inconnu (offer, extension, option)");
+            g.text("label", pu.label, true, 120);
+            g.text("license_id", pu.licenseId, true, 64);
+            if (g.ok() && !isLicenseId(pu.licenseId)) g.fail("l'identifiant de licence " + cite(pu.licenseId) + " n'est pas valide");
+            g.time("from", pu.from, true);
+            g.time("until", pu.until, true, /*nullable=*/true);
+            g.text("price", pu.price, false, 60);
+            g.finish();
+            if (!g.ok()) {
+                f.fail(g.error());
+                break;
+            }
+            l.purchases.push_back(std::move(pu));
+        }
+    }
     if (!finishDocument(f, kWhat, why)) return false;
     // Les regles du format.
     const auto bad = [&](const std::string& text) {
@@ -800,7 +1024,7 @@ bool checkAgainstRegistry(const License& l, const Registry& r, std::string* why)
         return false;
     };
     if (!r.edition(l.edition)) return fail("l'\xC3\xA9" "dition " + cite(l.edition) + " est inconnue du registre");
-    for (const auto& g : l.features) {
+    const auto known = [&](const FeatureGrant& g) {
         const FeatureDef* d = r.feature(g.id);
         if (!d) return fail("la fonctionnalit\xC3\xA9 " + cite(g.id) + " est inconnue du registre");
         for (const auto& [name, n] : g.limits) {
@@ -808,7 +1032,13 @@ bool checkAgainstRegistry(const License& l, const Registry& r, std::string* why)
             if (std::none_of(d->limits.begin(), d->limits.end(), [&](const LimitDef& x) { return x.id == name; }))
                 return fail("la limite " + cite(name) + " de " + cite(g.id) + " est inconnue du registre");
         }
-    }
+        return true;
+    };
+    for (const auto& g : l.features)
+        if (!known(g)) return false;
+    for (const auto& o : l.options)   // 1.42.0 : les fonctionnalites des options aussi
+        for (const auto& g : o.features)
+            if (!known(g)) return false;
     return true;
 }
 

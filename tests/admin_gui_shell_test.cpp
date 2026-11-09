@@ -54,7 +54,8 @@ struct Rig {
 // 1.34.0 : << Demandes en ligne >> apres Activations. 1.35.0 : << Service en ligne >> a la place de << Synchronisation
 // GitHub >> ; << Licences flottantes >> est une vraie page (seules Boutique et Commandes restent grisees).
 // 1.41.0 : les groupes de la maquette validee (Pilotage, Catalogue, la vente en ligne, Securite).
-const std::string kTitles[] = {"Tableau de bord", "Licences", "Clients", "Demandes en ligne", "Activations", "\xC3\x89" "ditions", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
+// 1.42.0 : les editions s'appellent les Offres ; les Options a leur suite.
+const std::string kTitles[] = {"Tableau de bord", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
                                "Boutique", "Commandes", "R\xC3\xA9vocations", "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 
 } // namespace
@@ -72,7 +73,7 @@ int main(int argc, char** argv) {
         check(has(t, "XPG License Manager") && has(t, "Admin"), "le nom de l'application dans le menu");
         check(has(t, "\xC3\x89" "diteur seulement"), "<< Editeur seulement >>");
         const auto& entries = gui::Shell::entries();
-        check(entries.size() == 14, "14 entrees dans le menu");
+        check(entries.size() == 15, "15 entrees dans le menu");
         for (std::size_t i = 0; i < entries.size() && i < 14; ++i) {
             check(entries[i].label == kTitles[i], std::string("l'ordre de la maquette : ") + kTitles[i]);
             check(has(t, kTitles[i]), std::string("le menu montre ") + kTitles[i]);
