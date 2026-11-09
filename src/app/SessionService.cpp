@@ -1506,11 +1506,13 @@ void SessionService::stop(const std::string& reason) {
         log_.push_back("session quittee");
         progress_.clear();
         SessionServiceAccess::teardown(*this);
-        // 1.45.0 : l'equipier revient a l'accueil ; sa copie se ferme et s'efface (la prochaine image).
-        if (wasGuest) {
+        // 1.45.0 : l'equipier revient a l'accueil ; sa copie se ferme et s'efface (la prochaine image) - aussi une copie
+        // recue qui ne s'est pas ouverte.
+        if (wasGuest || !copySid_.empty()) {
             leaving_ = true;
             leaveWhy_.clear();
-            app_.events().publish(StatusNotice{"Tu as quitt\xC3\xA9 la session \xC2\xAB " + name_ + " \xC2\xBB : sa copie s'efface de ce PC.", 6.0});
+            if (wasGuest)
+                app_.events().publish(StatusNotice{"Tu as quitt\xC3\xA9 la session \xC2\xAB " + name_ + " \xC2\xBB : sa copie s'efface de ce PC.", 6.0});
         }
     }
 }

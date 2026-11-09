@@ -23,7 +23,7 @@
 //  les appels au relais sont signes par la cle de ce PC (app/SessionRelayHttp).
 //  L'entree est celle << il faut le code >> : le code prouve, l'hote fait entrer.
 //
-//  1.45.0 : RETIRER, PARTIR, LE JOURNAL (docs/SESSIONS.md, § 8) -
+//  1.45.0 : RETIRER, PARTIR, LE JOURNAL (docs/SESSIONS.md, paragraphe 8) -
 //  - l'hote RETIRE un equipier (remove) : coupe avec sa raison (<< Camille t'a
 //    retire de la session >>), les autres le lisent dans la discussion et une
 //    notification ; il ne revient pas sans que l'hote le fasse entrer (son PC est

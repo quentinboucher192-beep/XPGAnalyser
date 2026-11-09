@@ -2240,8 +2240,9 @@ void MainAnalysisScreen::buildExplorerMenu(NodeId clicked, std::vector<PopupMenu
         }
         m.add("Comparer avec le travail en cours", Icon::Search, [this, number] { openVersionCompare(number, 0); });
         m.add("Restaurer" + kDots, Icon::History, [this, number] { askRestoreVersion(number); });
-        m.add("Exporter (.zip)" + kDots, Icon::Export, [this, number] { exportVersion(number); });
-        m.add("Extraire dans un dossier" + kDots, Icon::Folder, [this, number] { askExtractVersion(number); });
+        // 1.45.0 : l'equipier d'une session n'emporte pas le projet (une version exportee ou extraite en est une copie).
+        m.add("Exporter (.zip)" + kDots, Icon::Export, [this, number] { exportVersion(number); }, {}, sessionmarks::keepRefusal());
+        m.add("Extraire dans un dossier" + kDots, Icon::Folder, [this, number] { askExtractVersion(number); }, {}, sessionmarks::keepRefusal());
         m.separator();
         addRename("Renommer" + kDots, [this, number] { askRenameVersion(number); });   // 1.12.18 (planche 19)
         addRemove("Supprimer" + kDots, [this, number] { askDeleteVersion(number); });
