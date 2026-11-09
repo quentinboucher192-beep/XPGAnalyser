@@ -302,6 +302,94 @@ struct Criticality {
     bool                                 emailCritical{false};   // << Aussi par courriel >> (les critiques)
 };
 
+// ---- 1.44.0 : les fichiers, les messages a un PC, les versions, la sauvegarde complete (WorkspaceVersions.cpp) ----
+// L'avancement d'un envoi (les octets deja sur le service, sur le total) ; faux : arreter (l'envoi reprend ensuite la ou il
+// s'est arrete : le meme manifeste, les morceaux qui manquent).
+using Progress = std::function<bool(std::uint64_t done, std::uint64_t total)>;
+
+// Un fichier depose sur le service par ce poste (fichiers-envoyes.json : reprendre un envoi, renvoyer apres une restauration).
+struct SentFile {
+    licensing::admins::FileManifest manifest;
+    std::string                     block;      // le manifeste signe (le meme texte reprend l'envoi)
+    std::string                     path;       // le fichier sur ce poste
+    bool                            complete{false};
+    Seconds                         sentAt{0};
+};
+
+// Un PC a qui ecrire (les activations, les demandes, les licences en ligne que connait ce poste).
+struct MessagePc {
+    std::string deviceId;      // l'identifiant du poste sur le service (32 hexadecimaux : service::deviceId)
+    std::string deviceKey;     // sa cle (64 hexadecimaux) : le message est scelle pour elle
+    std::string name, customer, licenseId;
+    std::string studio;        // << IHM Studio 1.43.0 >> (sa derniere demande) ; vide : inconnu
+    std::string studioVersion; // << 1.43.0 >> ; vide : inconnue
+    Seconds     lastSeen{0};
+};
+
+// Une version publiee (GET /admin/versions) et ses fichiers (encore sur le service ? connus sur ce poste ?).
+struct VersionFileState {
+    licensing::admins::VersionFile file;
+    bool                           present{false};   // entier sur le service
+    std::string                    localPath;        // le fichier envoye par ce poste (fichiers-envoyes.json) ; vide : inconnu
+};
+struct PublishedVersion {
+    std::string                   version;
+    Seconds                       published{0};
+    bool                          important{false};
+    std::vector<std::string>      notes;
+    std::vector<VersionFileState> files;
+};
+struct SoftwareSeen {   // un admin (ou l'admin+) et l'Admin qu'il a
+    std::string key, name, software, version;
+    Seconds     seen{0};
+    bool        upToDate{false};   // la derniere version publiee (ou plus recente)
+};
+struct VersionsView {
+    std::vector<PublishedVersion>                             versions;     // la plus recente d'abord
+    std::map<std::string, int>                                byVersion;    // "1.44.0" -> nombre de cles (PC et admins)
+    std::map<std::string, std::map<std::string, int>>         bySoftware;   // "IHM-Studio" -> "1.44.0" -> nombre
+    std::vector<SoftwareSeen>                                 admins;
+    int                                                       total{0};
+    int                                                       upToDate{0};  // ceux de la derniere version (ou plus recente)
+    [[nodiscard]] std::string latest() const { return versions.empty() ? std::string() : versions.front().version; }
+};
+// Un fichier d'une version publiee dont le service n'a plus les octets (une restauration ailleurs) : a renvoyer.
+struct FileToResend {
+    licensing::admins::VersionFile file;
+    std::string                    version;
+    std::string                    localPath;    // le fichier envoye par ce poste, s'il est encore la ; vide : a choisir
+};
+
+// La sauvegarde complete (docs/ADMINS.md, par. 9).
+struct BackupSettings {
+    bool        configured{false};   // un dossier et la cle derivee de la phrase (sauvegarde.cle, protegee pour ce compte)
+    std::string folder;
+    Seconds     last{0};
+    std::string lastPath;
+    std::string problem;             // pourquoi elle n'est pas prete (vide : prete)
+};
+struct BackupInfo {   // l'en-tete d'un .xpgsauve (sans la phrase)
+    std::string keyId, serviceUrl, params;
+    Seconds     created{0};
+};
+struct RestoreOptions {
+    bool        replaceKey{false};       // une AUTRE cle de l'editeur est deja dans le dossier : mise de cote (jamais effacee)
+    bool        restoreService{false};   // << Remettre aussi le service >>
+    std::string serviceUrl;              // son adresse (un nouveau deploiement) ; vide : celle de la sauvegarde
+    bool        replaceService{false};   // le service n'est pas vide (409 pas_vide) : le remplacer
+};
+struct RestoreReport {
+    int                                                files{0};          // les fichiers du dossier remis
+    bool                                               editorKey{false};  // la cle de l'editeur remise (ou deja la, la meme)
+    bool                                               syncKey{false};
+    int                                                codes{0};          // les codes d'activation gardes de nouveau
+    bool                                               serviceRestored{false};
+    bool                                               serviceNotEmpty{false};   // 409 pas_vide : recommencer avec replaceService
+    std::vector<std::pair<std::string, std::uint64_t>> tables;            // les lignes remises, table par table (le service)
+    int                                                filesToResend{0};  // fichiers_a_renvoyer
+    std::string                                        serviceKey;
+};
+
 class Workspace {
 public:
     explicit Workspace(std::string folder);
