@@ -729,6 +729,56 @@ private:
     float                       messageRight_{0.f};
 };
 
+// ============================================================ l'alerte ====
+// 1.44.0 : L'ALERTE EN DIRECT (planche 04, en bas a gauche) - une ligne du journal des admins que tu as demande a voir
+// tout de suite (<< Critique : Hugo a revoque XPG-2026-00377 >>), sur la nuit, avec << Voir >> (le journal, la ligne
+// depliee) et << Fermer >>. Montree quelle que soit la page ; la plus recente, et combien d'autres.
+class ToastView final : public ui::Widget {
+public:
+    ToastView(Shell& shell, core::ConnectionScope& links) : ui::Widget("shell.toast"), shell_(shell) {
+        see_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Voir", "shell.toast.voir")));
+        close_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "shell.toast.fermer")));
+        see_->setTooltip("Le journal des admins, cette ligne d\xC3\xA9pli\xC3\xA9" "e.");
+        links += see_->clicked->connect([this] { shell_.openToast(); });
+        links += close_->clicked->connect([this] { shell_.dismissToasts(); });
+    }
+
+protected:
+    void onLayout() override {
+        const Rect b = bounds();
+        const float cw = std::max(76.f, close_->sizeHint().preferred.w + 8.f), sw = std::max(64.f, see_->sizeHint().preferred.w + 8.f);
+        close_->setBounds({b.right() - 14.f - cw, b.y + (b.h - 32.f) * 0.5f, cw, 32.f});
+        see_->setBounds({close_->bounds().x - 8.f - sw, b.y + (b.h - 32.f) * 0.5f, sw, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const auto& list = shell_.toasts();
+        if (list.empty()) return;
+        const Rect b = bounds();
+        const auto& t = list.back();
+        ctx.r.fillRoundedRect({b.x, b.y + 3.f, b.w, b.h + 2.f}, Color::rgb(0x000000).withAlpha(50), 14.f);
+        ctx.r.fillRoundedRect(b, Color::rgb(0x111827), 14.f);
+        const Color tone = t.level >= 3 ? Color::rgb(0xEF4444) : Color::rgb(0xF59E0B);
+        const Rect ib{b.x + 16.f, b.y + (b.h - 36.f) * 0.5f, 36.f, 36.f};
+        ctx.r.fillRoundedRect(ib, tone.withAlpha(40), 10.f);
+        ui::drawIcon(ctx.r, ui::Icon::Warning, {ib.x + 9.f, ib.y + 9.f, 18.f, 18.f}, tone);
+        const float x = ib.right() + 14.f, w = see_->bounds().x - 12.f - x;
+        const FontId ft = gfx::semibold(kF14);
+        ctx.r.drawText({x, b.y + 15.f}, fit(ctx.r, t.title, ft, w), ft, kNightWhite);
+        std::string line = t.line;
+        if (list.size() > 1) line += " \xC2\xB7 + " + std::to_string(list.size() - 1) + (list.size() > 2 ? " autres alertes" : " autre alerte");
+        ctx.r.drawText({x, b.y + 38.f}, fit(ctx.r, line, kF12, w), kF12, kNightMuted);
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && bounds().contains(d->pos)) return ui::EventResult::Consumed;
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    Shell&      shell_;
+    ui::Button* see_{nullptr};
+    ui::Button* close_{nullptr};
+};
+
 // ============================================================ la pile ====
 class PageStack final : public ui::Widget {
 public:
@@ -750,15 +800,27 @@ public:
         top_ = &static_cast<TopBar&>(addChild(std::make_unique<TopBar>(shell, links_)));
         stack_ = &addChild(std::make_unique<PageStack>());
         banner_ = &static_cast<Banner&>(addChild(std::make_unique<Banner>(shell, links_)));
+        toast_ = &static_cast<ToastView&>(addChild(std::make_unique<ToastView>(shell, links_)));   // 1.44.0 : par-dessus tout
+        toast_->setVisibility(ui::Visibility::Collapsed);
     }
     [[nodiscard]] ui::Widget& stack() { return *stack_; }
     void update() {
         rail_->update();
         top_->update();
         banner_->update();
+        updateToast();
         invalidateLayout();
     }
     void updateTop() { top_->update(); }
+    void updateToast() {
+        const auto want = shell_.toasts().empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible;
+        if (toast_->visibility() != want) {
+            toast_->setVisibility(want);
+            invalidateLayout();
+        }
+        toast_->invalidate();
+        rail_->invalidate();
+    }
 
 protected:
     void onLayout() override {
@@ -772,6 +834,9 @@ protected:
         stack_->setBounds({x, b.y + kTopH, w, std::max(0.f, b.h - kTopH - bh)});
         // Le bandeau change de hauteur sans changer de cadre (les details) : il se refait quand meme.
         banner_->invalidateLayout();
+        // 1.44.0 : l'alerte, en bas a gauche de la page (au-dessus du bandeau).
+        const float tw = std::min(620.f, std::max(320.f, w - 48.f));
+        toast_->setBounds({x + 24.f, b.bottom() - bh - 16.f - 68.f, tw, 68.f});
     }
     void onPaint(const ui::PaintContext& ctx) override { ctx.r.fillRect(bounds(), ctx.theme.color.windowBg); }
 
