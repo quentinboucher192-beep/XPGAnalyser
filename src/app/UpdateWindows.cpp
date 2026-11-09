@@ -161,8 +161,17 @@ void fileTile(gfx::IRenderer& r, const gfx::Rect& b, gfx::Color tone, ui::Icon i
 }
 
 void overline(gfx::IRenderer& r, float x, float y, const std::string& text, gfx::Color c) {
-    std::string up;
-    for (char ch : text) up += (ch >= 'a' && ch <= 'z') ? static_cast<char>(ch - 32) : ch;
+    std::string up = text;
+    for (std::size_t i = 0; i < up.size(); ++i) {
+        const auto ch = static_cast<unsigned char>(up[i]);
+        if (ch >= 'a' && ch <= 'z') up[i] = static_cast<char>(ch - 32);
+        // 1.44.0 : les lettres accentuees aussi (e aigu -> E aigu : << LES NOUVEAUTES >>), pas le signe divise
+        if (ch == 0xC3 && i + 1 < up.size()) {
+            const auto n = static_cast<unsigned char>(up[i + 1]);
+            if (n >= 0xA0 && n <= 0xBE && n != 0xB7) up[i + 1] = static_cast<char>(n - 0x20);
+            ++i;
+        }
+    }
     r.drawText({x, y}, up, kTiny, c);
 }
 

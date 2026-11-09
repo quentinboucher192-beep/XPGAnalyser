@@ -80,7 +80,21 @@ std::string valueText(const json::Value& v) {
     if (v.isNull()) return "\xE2\x80\x94";
     return json::write(v, false);
 }
+// 1.44.0 : les cles du detail qui disent une date (en secondes) ; leur nom en francais.
+bool isTimeKey(std::string_view k) {
+    static const char* const kTimes[] = {"retire", "emis", "emise", "expire", "depuis", "recu", "quand", "jusqu_a", "activee", "vue", "le", "publiee", "cree", "creee"};
+    for (const char* x : kTimes)
+        if (k == x) return true;
+    return false;
+}
 std::string keyText(std::string k) {
+    static const std::pair<const char*, const char*> kNames[] = {
+        {"cle", "Cl\xC3\xA9"}, {"retire", "Retir\xC3\xA9 le"}, {"emis", "\xC3\x89mis le"}, {"emise", "\xC3\x89mise le"},
+        {"expire", "Expire le"}, {"depuis", "Depuis le"}, {"recu", "Re\xC3\xA7u le"}, {"jusqu_a", "Jusqu'au"},
+        {"poste", "PC"}, {"numero", "N\xC2\xB0"}, {"activee", "Activ\xC3\xA9" "e le"}, {"publiee", "Publi\xC3\xA9" "e le"},
+        {"cree", "Cr\xC3\xA9\xC3\xA9 le"}, {"creee", "Cr\xC3\xA9\xC3\xA9" "e le"}, {"precedent", "Pr\xC3\xA9" "c\xC3\xA9" "dent"}};
+    for (const auto& [from, to] : kNames)
+        if (k == from) return to;
     for (auto& c : k)
         if (c == '_') c = ' ';
     if (!k.empty() && k[0] >= 'a' && k[0] <= 'z') k[0] = static_cast<char>(k[0] - 'a' + 'A');
@@ -1238,7 +1252,8 @@ private:
                 if (yy > left.bottom() - 22.f) break;
                 r.fillRect({left.x + 1.f, yy - 4.f, left.w - 2.f, 1.f}, c.gridLine);
                 r.drawText({c1, yy + 2.f}, fit(r, keyText(k), kF13, c2 - c1 - 8.f), kF13, c.textMuted);
-                r.drawText({c2, yy + 2.f}, fit(r, valueText(v), kF13, left.right() - c2 - 10.f), kF13, c.text);
+                const bool when = isTimeKey(k) && v.isNumber() && v.asNumber() > 1e9 && v.asNumber() < 1e10;   // 1.44.0 : une date, pas des secondes
+                r.drawText({c2, yy + 2.f}, fit(r, when ? dateTimeFr(static_cast<Seconds>(v.asNumber())) : valueText(v), kF13, left.right() - c2 - 10.f), kF13, c.text);
                 yy += 28.f;
             }
         } else {
