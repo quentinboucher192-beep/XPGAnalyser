@@ -619,7 +619,7 @@ int main(int argc, char** argv) {
         check(poste.status == 200 && poste.value.isObject() && lic::readBlocks(poste.value.str("poste"), pb, nullptr) && pb.size() == 1 &&
                   lic::verifyBlock(pb[0], plus.signingKey()->publicKey()) && lic::gateway::parseDeviceStatus(pb[0].document, st, nullptr) &&
                   st.state == lic::gateway::State::Revoked,
-              "son PC : << revoquee >>, signe par l'editeur (" + std::to_string(poste.status) + " " + (pb.empty() ? poste.body : pb[0].document) + " ; " + ret.text() + ")");
+              "son PC : << revoquee >>, signe par l'editeur (" + std::to_string(poste.status) + " ; " + ret.text() + ")");
         const Reply list = call(svc.url(), "GET", "/v1/admins", {}, nullptr);
         bool changed = false;
         check(client2.adoptAdminList(list.body, &changed, &why) && client2.evaluate().status != lic::LicenseStatus::Valid,

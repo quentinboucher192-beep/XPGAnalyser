@@ -1,4 +1,5 @@
-# Le service des licences XPG (1.35.0) : un Worker Cloudflare et UN Durable Object (SQLite).
+# Le service des licences XPG (1.35.0) : un Worker Cloudflare et UN Durable Object (SQLite) ; 1.44.0 : plus un objet
+# par session par Internet (le relais).
 # Le contrat : docs/SERVICE-LICENCES.md. La mise en ligne : outils/service/LISEZ-MOI-SERVICE.txt
 # (npx wrangler deploy --var PUBLISHER_KEYS:<la cle publique de l'editeur>).
 name = "xpg-licences"
@@ -28,10 +29,26 @@ name = "LIMITE_PC"
 namespace_id = "13502"
 simple = { limit = 120, period = 60 }
 
+# 1.44.0 : le relais des sessions par Internet (/v1/relais/*) : les envois et l'attente longue (25 s) de chaque PC d'une
+# session ; par adresse et par minute.
+[[ratelimits]]
+name = "LIMITE_RELAIS"
+namespace_id = "13503"
+simple = { limit = 1200, period = 60 }
+
 [[durable_objects.bindings]]
 name = "LICENCES"
 class_name = "Licences"
 
+# 1.44.0 : le relais des sessions par Internet (src/relais.js) : un objet par session (idFromName(localisateur)).
+[[durable_objects.bindings]]
+name = "RELAIS"
+class_name = "Relais"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Licences"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Relais"]

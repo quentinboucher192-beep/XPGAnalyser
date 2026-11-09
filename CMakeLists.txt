@@ -852,6 +852,10 @@ if(XPG_BUILD_TESTS)
         xpg_target_sources(${t} PRIVATE tests/noveltycenter_stub.cpp)
         xpg_target_link_libraries(${t} PRIVATE xpg_help)
     endforeach()
+    # 1.44.0 : TopBar.cpp lit les avis lus (bgtasks::isRead, markRead : pour ce compte, plus pour la barre)
+    foreach(t api2_test lot8tutorials_test)
+        xpg_target_sources(${t} PRIVATE src/app/BackgroundTasks.cpp)
+    endforeach()
     # ---- Lot API 8 : l'explorateur de fichiers de l'appli (les familles, lister, trier,
     # filtrer, chercher, le fil d'Ariane, le nom a enregistrer, la memoire) - sans ecran ----
     # Lot API 8, 2e partie : l'apercu (src/app/FilePreview.cpp : hmi::decodeImage, xls::Workbook)

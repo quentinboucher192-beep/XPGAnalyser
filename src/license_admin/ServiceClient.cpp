@@ -1045,11 +1045,20 @@ bool publishStatus(Client& c, const std::string& folder, const licensing::Signin
         s.sealed = gw::sealFor(pc, gw::writeStatusContent(content));
         if (s.sealed.empty()) return fail(why, "impossible de sceller le contenu pour ce PC (sa cl\xC3\xA9 est refus\xC3\xA9" "e)");
     }
-    const SignedBlock block = licensing::signBlock(DocKind::DeviceStatus, gw::writeDeviceStatus(s), key.publicKey(), signerOf(key));
-    Value body = Value::object();
-    body.set("poste", device);
-    body.set("etat", licensing::writeBlock(block));
-    const Reply r = c.call("PUT", "/admin/postes", core::json::write(body, false));
+    const auto put = [&]() {
+        const SignedBlock block = licensing::signBlock(DocKind::DeviceStatus, gw::writeDeviceStatus(s), key.publicKey(), signerOf(key));
+        Value body = Value::object();
+        body.set("poste", device);
+        body.set("etat", licensing::writeBlock(block));
+        return c.call("PUT", "/admin/postes", core::json::write(body, false));
+    };
+    Reply r = put();
+    // 1.44.0 : un AUTRE poste Admin (un autre admin) a publie l'etat de ce PC dans la meme seconde, ou avec un numero
+    // plus grand : le service dit le sien (409 ancien) ; une fois, au-dessus de lui.
+    if (r.error.empty() && r.status == 409 && r.code() == "ancien" && r.json.isObject() && r.json.integer("numero") > 0) {
+        s.number = static_cast<std::uint64_t>(r.json.integer("numero")) + 1;
+        r = put();
+    }
     if (r.status != 200 || !r.error.empty()) return fail(why, c.explain(r, "publier l'\xC3\xA9tat du poste " + device.substr(0, 12)));
     rememberStatusNumber(folder, device, s.number);
     line = "poste " + device.substr(0, 12) + " : " + gw::stateKey(state) + " (n\xC2\xB0 " + std::to_string(s.number) + ")";

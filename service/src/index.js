@@ -8,10 +8,15 @@
 //  l'autre, les numeros et les places ne se croisent jamais.
 //  1.44.0 : le corps passe tel quel (des octets : aussi un morceau de fichier,
 //  PUT /admin/fichiers/morceau) ; un lot d'une restauration : 8 Mio au plus.
+//  1.44.0 : LE RELAIS DES SESSIONS PAR INTERNET (/v1/relais/*, src/relais.js) :
+//  un AUTRE Durable Object, un par session (idFromName(localisateur)) ; le corps
+//  d'un envoi : 2,5 Mio au plus ; son limiteur : LIMITE_RELAIS (ouvrir : LIMITE_PC).
 // =============================================================================
-import { CORPS_MAX, CORPS_MAX_RESTAURATION, Erreur, reponseErreur } from "./outils.js";
+import { CORPS_MAX, CORPS_MAX_RESTAURATION, Erreur, dec, reponseErreur } from "./outils.js";
+import { CORPS_MAX_RELAIS, localisateurDe } from "./relais.js";
 
 export { Licences } from "./licences.js";
+export { Relais } from "./relais.js";
 
 // Le corps, tel quel (des octets : un JSON, ou les octets d'un morceau de fichier, 1.44.0), `max` octets au plus.
 async function lireCorps(request, max) {
@@ -56,6 +61,9 @@ async function passe(env, url, ip) {
     if (local && env.LIMITES_ESSAI === "sans") return true;
     let limiteur = null;
     if (PUBLIQUES.has(url.pathname)) limiteur = env.LIMITE_PUBLIQUE;
+    // 1.44.0 : le relais des sessions (une attente longue et des envois frequents) a son propre limiteur ; ouvrir une
+    // session reste sous celui des PC.
+    else if (url.pathname.startsWith("/v1/relais/") && url.pathname !== "/v1/relais/ouvrir") limiteur = env.LIMITE_RELAIS || env.LIMITE_PC;
     else if (url.pathname.startsWith("/v1/")) limiteur = env.LIMITE_PC;
     if (!limiteur || typeof limiteur.limit !== "function") return true;
     try {
@@ -74,12 +82,34 @@ export default {
             if (!(await passe(env, url, ip)))
                 throw new Erreur(429, "trop", "Trop d'appels de ton adresse : réessaie dans une minute.", { reessayer_dans: 60 });
             const methode = request.method.toUpperCase();
-            // 1.44.0 : un lot d'une restauration peut porter une ligne plus grosse qu'une page de la sauvegarde.
-            const max = url.pathname === "/admin/restauration/lot" ? CORPS_MAX_RESTAURATION : CORPS_MAX;
+            const relais = url.pathname.startsWith("/v1/relais/");
+            // 1.44.0 : un lot d'une restauration peut porter une ligne plus grosse qu'une page de la sauvegarde ; un envoi
+            // du relais, 1,5 Mio en base64.
+            const max = url.pathname === "/admin/restauration/lot" ? CORPS_MAX_RESTAURATION : relais ? CORPS_MAX_RELAIS : CORPS_MAX;
             const corps = methode === "GET" || methode === "HEAD" ? null : await lireCorps(request, max);
             const entetes = new Headers(request.headers);
             // L'adresse de l'appelant : celle que Cloudflare donne (jamais un en-tete pose par le client).
             entetes.set("X-XPG-IP", ip);
+            if (relais) {
+                // 1.44.0 : l'objet de CETTE session (le localisateur : dans l'adresse, ou dans le corps pour ouvrir).
+                let json = null;
+                if (url.pathname === "/v1/relais/ouvrir" && corps && corps.length) {
+                    try {
+                        json = JSON.parse(dec.decode(corps));
+                    } catch {
+                        throw new Erreur(400, "json", "Le corps de l'appel n'est pas un JSON lisible.");
+                    }
+                }
+                const loc = localisateurDe(url, json);
+                if (!loc) {
+                    if (url.pathname === "/v1/relais/ouvrir")
+                        throw new Erreur(400, "champ", "Le champ « locator » manque ou est mal écrit (32 hexadécimaux minuscules).");
+                    throw new Erreur(404, "route", "Cette adresse n'existe pas sur le relais des sessions.");
+                }
+                if (!env.RELAIS) throw new Erreur(503, "relais", "Le relais des sessions par Internet n'est pas en service sur ce service des licences.");
+                const objetRelais = env.RELAIS.get(env.RELAIS.idFromName(loc));
+                return await objetRelais.fetch(new Request(request.url, { method: methode, headers: entetes, body: corps }));
+            }
             const objet = env.LICENCES.get(env.LICENCES.idFromName("principal"));
             return await objet.fetch(new Request(request.url, { method: methode, headers: entetes, body: corps }));
         } catch (e) {

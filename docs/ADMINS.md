@@ -162,7 +162,7 @@ par l'archive. Les lignes signées ne changent jamais.
 
 Types d'action : `licence_creer`, `licence_prolonger`, `licence_option`, `licence_revoquer`, `poste_retirer`,
 `offres`, `options`, `annonces`, `demande_accepter`, `demande_refuser`, `code_revoir`, `client_supprimer`,
-`clients_exporter`, `courriel`, `admin_ajouter`, `admin_retirer`, `admin_droits`, `admin_profil`, `version_publier`,
+`client_restaurer`, `clients_exporter`, `courriel`, `admin_ajouter`, `admin_retirer`, `admin_droits`, `admin_profil`, `version_publier`,
 `fichier_envoyer`, `criticite`, `connexion`, et ceux du service (`signature_refusee`, `autre_pc`, `demande_admin`).
 
 ### Les fichiers

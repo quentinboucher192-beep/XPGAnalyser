@@ -1429,7 +1429,10 @@ OpResult Workspace::retireAdmin(const std::string& keyHex, bool revokeLicencesTo
         for (const auto& d : licences)   // les PC lies prevenus (<< revoquee >>)
             if (std::find(revokedIds.begin(), revokedIds.end(), d.licenseId) != revokedIds.end() && !d.devices.empty()) {
                 const OpResult q = fromResult(online::publishRevocation(folder_, editor, d.licenseId, d.devices, "admin retir\xC3\xA9 : " + name, o));
-                if (!q.ok) r.details.push_back(q.message);
+                if (!q.ok) {
+                    r.details.push_back(q.message);
+                    for (const auto& x : q.details) r.details.push_back(x);
+                }
             }
     }
     const std::vector<std::string> before = a->rights;
