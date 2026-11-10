@@ -18,8 +18,12 @@
 //  lignes} (les lignes, telles quelles), POST /admin/restauration/fin (la cle du
 //  service relue, les fichiers sans octets marques incomplets, une ligne
 //  << restauration >> au journal).
+//  1.47.0 : les tables des statistiques et du globe (stats.js : les faits, les
+//  releves, les compteurs, les versions vues, les lieux). Une sauvegarde du schema
+//  3 ou 4 : elles restent vides, les versions vues sont recopiees des logiciels.
 // =============================================================================
 import { TABLES_SAUVEGARDE_BOUTIQUE } from "./boutique.js";
+import { TABLES_SAUVEGARDE_STATS } from "./stats.js";
 import { Erreur, depuisBase64, enc, entier, mal, reponseJson, versBase64 } from "./outils.js";
 
 // Les tables sauvegardees et leur cle (l'ordre des pages). L'ordre de la liste : celui de la restauration.
@@ -47,6 +51,8 @@ export const TABLES_SAUVEGARDE = [
     // 1.46.0 : la boutique (le catalogue), les commandes et leurs scelles, les evenements de Stripe deja traites - jamais
     // les secrets de Stripe (des secrets du Worker, dans aucune table).
     ...TABLES_SAUVEGARDE_BOUTIQUE,
+    // 1.47.0 : les statistiques et le globe (jamais une adresse IP : il n'y en a dans aucune table).
+    ...TABLES_SAUVEGARDE_STATS,
 ];
 const CLES = new Map(TABLES_SAUVEGARDE);
 
@@ -252,6 +258,10 @@ export const RoutesSauvegarde = {
             const o = String(this.nombre("SELECT COALESCE(SUM(LENGTH(octets)), 0) AS o FROM morceaux"));
             if (o !== (this.config("octets_morceaux") || "0")) this.ecrireConfig("octets_morceaux", o);
             // 1.46.0 : une sauvegarde d'un schema plus ancien : le schema de ce service (ses tables sont deja la).
+            // 1.47.0 : d'avant le schema 5 : les versions vues recopiees des logiciels (comme la migration) ; le debut des
+            // releves sera note au prochain appel.
+            if (Number(this.config("schema") || "0") < 5)
+                this.x("INSERT INTO versions_vues (cle, version, logiciel, premiere) SELECT cle, version, logiciel, vu FROM logiciels WHERE true ON CONFLICT DO NOTHING");
             if (Number(this.config("schema") || "0") < this.schema) this.ecrireConfig("schema", String(this.schema));
         });
         this.enRestauration = false;

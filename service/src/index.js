@@ -11,10 +11,14 @@
 //  1.44.0 : LE RELAIS DES SESSIONS PAR INTERNET (/v1/relais/*, src/relais.js) :
 //  un AUTRE Durable Object, un par session (idFromName(localisateur)) ; le corps
 //  d'un envoi : 2,5 Mio au plus ; son limiteur : LIMITE_RELAIS (ouvrir : LIMITE_PC).
+//  1.47.0 : LE LIEU DE L'APPEL (le globe, stats.js) : la ville que Cloudflare donne (request.cf : ville, region, pays,
+//  latitude et longitude arrondies, centre de donnees) passe a l'objet dans X-XPG-Lieu, que le Worker efface toujours de
+//  l'appel recu ; jamais l'adresse IP. En local, seul X-XPG-Lieu-Essai (127.0.0.1, localhost) place un appel.
 // =============================================================================
 import { CORPS_MAX, CORPS_MAX_RESTAURATION, Erreur, dec, reponseErreur } from "./outils.js";
 import { CORPS_MAX_RELAIS, localisateurDe } from "./relais.js";
 import { MAX_CORPS_WEBHOOK } from "./boutique.js";
+import { lieuDeLAppel } from "./stats.js";
 
 export { Licences } from "./licences.js";
 export { Relais } from "./relais.js";
@@ -132,6 +136,11 @@ export default {
                 const objetRelais = env.RELAIS.get(env.RELAIS.idFromName(loc));
                 return await objetRelais.fetch(new Request(request.url, { method: methode, headers: entetes, body: corps }));
             }
+            // 1.47.0 : le lieu de l'appel (le globe) - pose ici seulement, jamais par le client.
+            entetes.delete("X-XPG-Lieu");
+            const lieu = lieuDeLAppel(request, url);
+            entetes.delete("X-XPG-Lieu-Essai");
+            if (lieu) entetes.set("X-XPG-Lieu", lieu);
             const objet = env.LICENCES.get(env.LICENCES.idFromName("principal"));
             return await objet.fetch(new Request(request.url, { method: methode, headers: entetes, body: corps }));
         } catch (e) {

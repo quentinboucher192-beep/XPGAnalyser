@@ -78,7 +78,7 @@ describe("l'etat public, avant tout certificat", () => {
         assert.ok(r.type.startsWith("application/json"));
         assert.deepEqual(Object.keys(r.json), ["service", "version", "heure", "cle_service", "certifie", "registre", "revocations", "changements", "admins", "version_publiee", "boutique"]);
         assert.equal(r.json.service, "xpg-licences");
-        assert.equal(r.json.version, "1.46.0");
+        assert.equal(r.json.version, "1.47.0");
         assert.equal(r.json.revocations, 0);
         assert.equal(r.json.changements, 0);
         assert.ok(Math.abs(r.json.heure - now()) < 30);
@@ -1205,7 +1205,8 @@ describe("les lignes ecrites par appel (le plan gratuit : 100 000 par jour)", ()
         assert.equal((await deposerLicence({ ...W, emission: now() - 60 }, { code_hash: CW.hash })).statut, 200);
         const a = await activer(p, CW.code);
         assert.equal(a.statut, 200);
-        assert.ok(lignesEcrites(a) <= 10, "activer : " + lignesEcrites(a)); // 1.40.0 : + le compteur << activite >>
+        // 1.40.0 : + le compteur << activite >> ; 1.47.0 : + le fait << pc_active >> (sa ligne et son index : stats.js)
+        assert.ok(lignesEcrites(a) <= 12, "activer : " + lignesEcrites(a));
         const r = await renouveler(p);
         assert.equal(r.json.activations.length, 1);
         assert.equal(lignesEcrites(r), 3);
@@ -1297,7 +1298,7 @@ describe("ce que l'outil de l'editeur voit bouger (GET /admin/etat)", () => {
         codes.push(c);
         assert.equal((await deposerLicence(L, { code_hash: c.hash })).statut, 200);
         let e = await etatAdmin();
-        assert.equal(e.version, "1.46.0");
+        assert.equal(e.version, "1.47.0");
         let n = e.activite;
         const x = pc();
         assert.equal((await activer(x, c.code)).statut, 200);

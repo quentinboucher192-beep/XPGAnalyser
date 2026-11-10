@@ -708,6 +708,16 @@ export const RoutesBoutique = {
             throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'est pas à livrer (« " + c.etat + " »).", { etat: c.etat, licence: c.licence || null });
         if (this.priseParUnAutre(ctx, c)) throw new Erreur(409, "prise", "Un autre Admin livre la commande n° " + c.numero + ".", { etat: c.etat });
         this.x("UPDATE commandes SET etat = 'livree', licence = ?, erreur = '', maj = ?, prise = 0, prise_par = '' WHERE numero = ?", corps.licence, ctx.now, c.numero);
+        // 1.47.0 : le fait (stats.js) - qui l'a livree (les ventes par admin)
+        this.fait(ctx.now, "commande_livree", {
+            licence: corps.licence,
+            offre: c.genre === "edition" ? c.edition : "options",
+            client: c.societe,
+            admin: await this.idAppelant(ctx),
+            poste: c.cle_pc,
+            valeur: c.montant,
+            detail: { numero: c.numero, genre: c.genre },
+        });
         this.signalerCommande();
         return reponseJson(200, { numero: c.numero, etat: "livree", licence: corps.licence });
     },

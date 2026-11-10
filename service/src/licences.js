@@ -19,6 +19,11 @@
 //  fichiers, les messages a un PC, les versions : fichiers.js ; la sauvegarde
 //  et la restauration du service entier : sauvegarde.js. Le logiciel de chaque
 //  cle (X-XPG-Logiciel de ses appels signes) est garde (logiciels).
+//  1.47.0 : LES STATISTIQUES ET LE GLOBE (docs/STATISTIQUES.md, stats.js) - les
+//  faits (une licence deposee, un PC active...), le releve de chaque jour (une
+//  alarme de l'objet), les compteurs du jour, les versions vues, le lieu de la
+//  derniere connexion de chaque cle (jamais son adresse IP) ; les routes
+//  /admin/stats/* et /admin/globe*.
 // -----------------------------------------------------------------------------
 //  LES TABLES
 //    config        la cle du service (creee ici au premier appel ; la partie
@@ -71,6 +76,7 @@ import { DurableObject } from "cloudflare:workers";
 
 import { DROITS_ADMINS, DROITS_LICENCE, DROITS_REGISTRE, GARDE_DEMANDES_ADMINS, RoutesAdmins, droitsDuRegistre } from "./admins.js";
 import { RoutesBoutique, TABLES_BOUTIQUE_SQL } from "./boutique.js";
+import { RoutesStats, TABLES_STATS_SQL, prochainReleve } from "./stats.js";
 import { BlocIllisible, ecrireBlocLu, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
 import { GARDE_MESSAGE, RoutesFichiers } from "./fichiers.js";
 import { CONFIG_RESTAURATION, RoutesSauvegarde } from "./sauvegarde.js";
@@ -108,11 +114,13 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.46.0";
+const VERSION = "1.47.0";
 // 3 (1.44.0) : les admins, le journal, les fichiers, les messages, les versions, les logiciels ; les demandes
 // scellees pour plusieurs cles. 4 (1.46.0) : la boutique et les commandes (boutique.js) - des tables en plus ; une
-// sauvegarde du schema 3 se restaure encore (ses tables de la boutique restent vides).
-const SCHEMA = 4;
+// sauvegarde du schema 3 se restaure encore (ses tables de la boutique restent vides). 5 (1.47.0) : les statistiques et
+// le globe (stats.js) - des tables en plus, deux index sur decouvertes ; une sauvegarde du schema 3 ou 4 se restaure
+// encore (ses tables de statistiques restent vides).
+const SCHEMA = 5;
 const JOUR = 86400;
 const HEURE = 3600;
 const FENETRE_APPEL = 600; // +-600 s
@@ -254,6 +262,13 @@ const ROUTES = {
     "POST /admin/commandes/livree": { f: "commandeLivree", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/a-revoir": { f: "commandeARevoir", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/rembourser": { f: "rembourserCommande", signe: "plus" },
+    // 1.47.0 : les statistiques et le globe (stats.js, docs/STATISTIQUES.md)
+    "GET /admin/stats/serie": { f: "serieStats", signe: "admin" },
+    "GET /admin/stats/mises-a-jour": { f: "misesAJourStats", signe: "admin" },
+    "GET /admin/stats/admins": { f: "adminsStats", signe: "admin" },
+    "POST /admin/stats/releve": { f: "releveStats", signe: "plus" },
+    "GET /admin/globe": { f: "globeStats", signe: "admin" },
+    "GET /admin/globe/direct": { f: "globeDirect", signe: "admin" },
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
 
@@ -333,10 +348,12 @@ export class Licences extends DurableObject {
         this.schema = SCHEMA; // (sauvegarde.js)
         this.versionService = VERSION;
         this.enRestauration = false; // 1.44.0 : une restauration en cours (sauvegarde.js) : tout le reste repond 503
+        this.dernierLocal = false; // 1.47.0 : le dernier appel visait 127.0.0.1 (l'alarme prend alors l'heure des essais)
         ctx.blockConcurrencyWhile(async () => {
             this.creerTables();
             this.enRestauration = !!this.config(CONFIG_RESTAURATION);
             await this.chargerCle();
+            await this.programmerReleve(); // 1.47.0 : le releve du jour (stats.js)
         });
     }
 
@@ -349,6 +366,24 @@ export class Licences extends DurableObject {
         this.dernierMenage = 0;
         this.debitsMem.clear();
         this.refusesMem = null;
+        this.stMem = null; // 1.47.0 : les statistiques en memoire (stats.js)
+        this.statsDebut = null;
+    }
+
+    // 1.47.0 : l'alarme de l'objet (vers 00:05 UTC) - le releve du jour (stats.js), dans la file des appels, puis la
+    // suivante.
+    async alarm() {
+        const suite = this.file.then(async () => {
+            if (!this.enRestauration)
+                try {
+                    this.releverJour(this.maintenant(this.dernierLocal));
+                } catch {
+                    // le premier appel du jour le prendra
+                }
+            await this.ctx.storage.setAlarm(prochainReleve(Date.now()));
+        });
+        this.file = suite.catch(() => {});
+        return suite;
     }
 
     // ================================================================ la base ==
@@ -428,6 +463,12 @@ export class Licences extends DurableObject {
         `);
         // 1.46.0 (schema 4) : la boutique et les commandes - des tables neuves, rien d'autre ne change.
         this.x(TABLES_BOUTIQUE_SQL);
+        // 1.47.0 (schema 5) : les statistiques et le globe - des tables neuves, deux index sur decouvertes. Les versions
+        // deja vues (logiciels) sont recopiees dans versions_vues, datees de leur derniere connexion (une approximation :
+        // le debut des releves, stats_debut, le dit).
+        this.x(TABLES_STATS_SQL);
+        if (avant >= 1 && avant < 5)
+            this.x("INSERT INTO versions_vues (cle, version, logiciel, premiere) SELECT cle, version, logiciel, vu FROM logiciels WHERE true ON CONFLICT DO NOTHING");
         if (avant < SCHEMA) {
             // Les compteurs des grandes tables : comptes UNE fois (une base d'avant), puis tenus a chaque ecriture.
             if (avant) {
@@ -639,7 +680,9 @@ export class Licences extends DurableObject {
             // 1.44.0 : une restauration en cours (sauvegarde.js) - rien d'autre ne repond (les tables sont a moitie la).
             if (this.enRestauration && !route.restauration)
                 throw new Erreur(503, "restauration", "Le service est en cours de restauration : réessaie dans quelques minutes.", { reessayer_dans: 60 });
+            this.dernierLocal = local;
             if (!this.enRestauration) {
+                this.debutStats(now); // 1.47.0 : le debut des releves (une fois)
                 this.menage(now);
                 this.compter(now, methode + " " + url.pathname);
             }
@@ -660,6 +703,8 @@ export class Licences extends DurableObject {
             if (ctx.appelant) {
                 this.x("INSERT INTO nonces (nonce, vu) VALUES (?, ?)", ctx.appelant.nonce, now);
                 this.noterLogiciel(ctx);
+                // 1.47.0 : le lieu, << actif maintenant >>, les heures des admins (rien pendant une restauration)
+                if (!this.enRestauration) await this.noterAppelStats(ctx);
             }
             reponse = await this[route.f](ctx);
         } catch (e) {
@@ -674,6 +719,7 @@ export class Licences extends DurableObject {
         if (local && compte) reponse.headers.set("X-XPG-Lignes-Ecrites", String(this.ecrites));
         try {
             this.ecrireStats(now, false);
+            if (!this.enRestauration) this.ecrireCompteursStats(now, false); // 1.47.0 : les compteurs du jour (stats.js)
         } catch {
             // la statistique attendra l'appel suivant
         }
@@ -696,6 +742,12 @@ export class Licences extends DurableObject {
             this.grandMenage(now);
             this.menageJour = jour;
             this.ecrireConfig("menage_jour", jour);
+            // 1.47.0 : le releve du jour, si l'alarme ne l'a pas encore pris (stats.js)
+            try {
+                this.releverJour(now);
+            } catch {
+                // l'alarme, ou POST /admin/stats/releve
+            }
         }
     }
 
@@ -731,6 +783,7 @@ export class Licences extends DurableObject {
         }
         this.x("DELETE FROM liberations WHERE t < ?", now - FENETRE_TRANSFERTS);
         this.grandMenageBoutique(now); // 1.46.0
+        this.grandMenageStats(now); // 1.47.0 : les faits, releves, compteurs, versions vues (2 ans), les lieux (un an)
     }
 
     // Les appels du jour : comptes en memoire, ecrits (une ligne) une fois par minute au plus. Un objet arrete entre
@@ -872,8 +925,11 @@ export class Licences extends DurableObject {
             if (this.compte("n_logiciels") >= MAX_LOGICIELS) return;
             this.x("INSERT INTO logiciels (cle, logiciel, version, vu) VALUES (?, ?, ?, ?)", cle, m[1], m[2], ctx.now);
             this.ajouter("n_logiciels", 1);
-        } else if (r.logiciel !== m[1] || r.version !== m[2] || r.vu < ctx.now - HEURE)
+            this.noterVersionVue(cle, m[1], m[2], ctx.now); // 1.47.0 : la premiere fois avec cette version (stats.js)
+        } else if (r.logiciel !== m[1] || r.version !== m[2] || r.vu < ctx.now - HEURE) {
             this.x("UPDATE logiciels SET logiciel = ?, version = ?, vu = ? WHERE cle = ?", m[1], m[2], ctx.now, cle);
+            if (r.version !== m[2] || r.logiciel !== m[1]) this.noterVersionVue(cle, m[1], m[2], ctx.now);
+        }
     }
 
     // Le corps JSON d'un appel (un objet) ; vide : {}.
@@ -1120,7 +1176,12 @@ export class Licences extends DurableObject {
             ctx.now,
         );
         if (!avant) this.ajouter("n_activations", 1);
-        if (!avant || avant.etat !== "active") this.signalerActivite();
+        if (!avant || avant.etat !== "active") {
+            this.signalerActivite();
+            // 1.47.0 : le fait (stats.js) - un PC active (neuf, ou repris apres une liberation) ; sa Decouverte convertie
+            this.faitPc(ctx.now, "pc_active", lic, cle);
+            this.faitConversion(ctx.now, lic, cle);
+        }
         const a = await this.signerActivation(lic, cle, demande.station, ctx.now);
         const message =
             lic.type === "floating"
@@ -1182,6 +1243,7 @@ export class Licences extends DurableObject {
             if (r.jusqu_a <= ctx.now && lic.type !== "floating" && this.places(lic, ctx.now, { cle, station }).n >= lic.postesMax) {
                 this.x("UPDATE activations SET etat = 'retiree', vue = ? WHERE licence = ? AND poste = ?", ctx.now, r.licence, cle);
                 this.signalerActivite();
+                this.faitPc(ctx.now, "pc_retire", lic, cle, ""); // 1.47.0 : sa place reprise par un autre PC
                 retirer(r.licence, "retiree");
                 continue;
             }
@@ -1221,6 +1283,7 @@ export class Licences extends DurableObject {
             }
             this.x("UPDATE activations SET etat = 'liberee', vue = ?, place_jusqu = ? WHERE licence = ? AND poste = ?", ctx.now, garde, corps.licence, cle);
             this.signalerActivite();
+            this.faitPc(ctx.now, "pc_libere", this.licence(corps.licence), cle); // 1.47.0 (stats.js)
         } else if (r && r.etat === "liberee" && r.place_jusqu > ctx.now) {
             garde = r.place_jusqu;
         }
@@ -1300,6 +1363,7 @@ export class Licences extends DurableObject {
             ctx.now,
             jusqu,
         );
+        this.noterJetons(ctx.now, lic.id, autres.length + 1); // 1.47.0 : le pic des jetons (en memoire : stats.js)
         // vu : une fois par heure au plus (le jeton est repris toutes les 5 minutes)
         this.x("UPDATE activations SET vue = ? WHERE licence = ? AND poste = ? AND vue < ?", ctx.now, lic.id, cle, ctx.now - HEURE);
         const jeton = await this.signer("jeton", { version: 1, licence: lic.id, poste: cle, emis: iso(ctx.now), jusqu_a: iso(jusqu) });
@@ -1372,6 +1436,9 @@ export class Licences extends DurableObject {
             octetsAutres,
         );
         for (const s of autres) this.x("INSERT INTO demandes_scelles (numero, cle, scelle) VALUES (?, ?, ?)", numero, s.cle, s.scelle);
+        // 1.47.0 : le fait (stats.js) - le client du PC (d'apres ses licences), s'il en a un
+        const cl = this.clientDuPc(ctx.appelant.cle);
+        this.fait(ctx.now, "demande_recue", { licence: cl.licence, offre: cl.offre, client: cl.client, poste, valeur: numero });
         this.ajouter("n_attente", 1 - miennes);
         this.ajouter("octets_demandes", corps.scelle.length + octetsAutres);
         this.signalerDemande();
@@ -1464,12 +1531,14 @@ export class Licences extends DurableObject {
         const actuel = Number(this.config("revocations_numero") || "0");
         if (liste.numero < actuel || (liste.numero === actuel && texte !== this.config("revocations")))
             throw new Erreur(409, "ancien", "Cette liste (n° " + liste.numero + ") n'est pas plus récente que celle du service (n° " + actuel + ").", { numero: actuel });
+        const ancienne = this.revocations(); // 1.47.0 : les entrees neuves font chacune un fait (stats.js)
         this.ctx.storage.transactionSync(() => {
             this.ecrireConfig("revocations", texte);
             this.ecrireConfig("revocations_liste", JSON.stringify(liste));
             this.ecrireConfig("revocations_numero", String(liste.numero));
         });
         this.revCache = null;
+        this.faitsRevocations(ctx.now, ancienne, liste, await this.idAppelant(ctx));
         // Les jetons des PC revoques sont rendus tout de suite (leurs activations ne sont plus renouvelees).
         for (const j of this.lignes("SELECT DISTINCT licence, poste FROM jetons")) {
             const lic = this.licence(j.licence);
@@ -1523,6 +1592,8 @@ export class Licences extends DurableObject {
             ctx.now,
         );
         if (!avant) this.ajouter("n_licences", 1);
+        // 1.47.0 : les faits (stats.js) - nouvelle, prolongee, une option ajoutee ; par la cle qui la depose
+        this.faitsLicence(ctx.now, avant, ecrireBlocLu(bloc), doc, await this.idAppelant(ctx));
         // Desactivee par l'editeur : les places gardees par des PC liberes reviennent (sa decision).
         if (!active) this.x("UPDATE activations SET place_jusqu = 0 WHERE licence = ? AND etat = 'liberee' AND place_jusqu > 0", doc.id);
         this.signalerChangement();
@@ -1572,6 +1643,8 @@ export class Licences extends DurableObject {
         // Retire par l'editeur : la place revient tout de suite (sa decision), meme celle d'un PC libere qui la gardait.
         this.x("UPDATE activations SET etat = 'retiree', place_jusqu = 0 WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
         this.x("DELETE FROM jetons WHERE licence = ? AND poste = ?", corps.licence, corps.poste);
+        // 1.47.0 : le fait (stats.js) - retire par cet admin
+        if (r.etat !== "retiree") this.faitPc(ctx.now, "pc_retire", this.licence(corps.licence), corps.poste, await this.idAppelant(ctx));
         this.signalerChangement();
         return reponseJson(200, {});
     }
@@ -1606,14 +1679,28 @@ export class Licences extends DurableObject {
         return reponseJson(200, { demandes });
     }
 
+    // 1.47.0 : `issue` (facultatif) : "acceptee" ou "refusee" - pour les statistiques (stats.js : le fait demande_traitee,
+    // son delai, qui l'a traitee).
     async traiterDemande(ctx) {
         const corps = this.corpsJson(ctx);
         if (!entierPositif(corps.numero) || corps.numero < 1) throw mal("numero");
-        const r = this.ligne("SELECT etat FROM demandes WHERE numero = ?", corps.numero);
+        if (corps.issue !== undefined && corps.issue !== "acceptee" && corps.issue !== "refusee")
+            throw mal("issue", "Le champ « issue » vaut « acceptee » ou « refusee » (ou il est absent).");
+        const r = this.ligne("SELECT etat, cree, poste FROM demandes WHERE numero = ?", corps.numero);
         if (!r) throw new Erreur(404, "demande", "Cette demande n'existe pas.");
         if (r.etat === "attente") {
             this.x("UPDATE demandes SET etat = 'traitee', maj = ? WHERE numero = ?", ctx.now, corps.numero);
             this.ajouter("n_attente", -1);
+            const f = this.ligne("SELECT licence, offre, client FROM stats_faits WHERE genre = 'demande_recue' AND valeur = ? AND poste = ? LIMIT 1", corps.numero, r.poste);
+            this.fait(ctx.now, "demande_traitee", {
+                licence: f ? f.licence : "",
+                offre: f ? f.offre : "",
+                client: f ? f.client : "",
+                admin: await this.idAppelant(ctx),
+                poste: r.poste,
+                valeur: Math.max(0, ctx.now - r.cree),
+                detail: corps.issue ? { issue: corps.issue, numero: corps.numero } : { numero: corps.numero },
+            });
         } else if (r.etat !== "traitee")
             throw new Erreur(409, "etat", r.etat === "annulee" ? "Le PC a annulé cette demande." : "Le PC a remplacé cette demande par une plus récente.", { etat: r.etat });
         return reponseJson(200, {});
@@ -1774,4 +1861,5 @@ export class Licences extends DurableObject {
 
 // 1.44.0 : les routes des admins, des fichiers (et des messages, des versions), de la sauvegarde - des methodes de
 // l'objet, ecrites a part (admins.js, fichiers.js, sauvegarde.js).
-Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique);
+// 1.47.0 : les statistiques et le globe (stats.js).
+Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique, RoutesStats);

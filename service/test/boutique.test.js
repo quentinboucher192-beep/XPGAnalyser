@@ -111,7 +111,7 @@ describe("la boutique sans Stripe (B)", () => {
 
 describe("le catalogue (A)", () => {
     it("la version 1.46.0 ; PUT /admin/boutique : l'admin+ seul, les montants et les identifiants verifies", async () => {
-        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.46.0");
+        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.47.0");
         assert.equal((await appel(A, "GET", "/v1/boutique")).json.active, false, "pas encore de catalogue : fermee");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: lea, corps: CATALOGUE }), 403, "droit");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: pc1, corps: CATALOGUE }), 403, "editeur");
@@ -404,7 +404,7 @@ describe("la sauvegarde", () => {
     it("porte la boutique, les commandes, leurs scelles, les evenements - jamais les secrets de Stripe", async () => {
         const s = await appel(A, "GET", "/admin/sauvegarde", { cle: editeur });
         assert.equal(s.statut, 200, s.texte);
-        assert.equal(s.json.schema, 4);
+        assert.equal(s.json.schema, 5); // 1.47.0 : les statistiques
         const t = Object.fromEntries(s.json.tables.map((x) => [x.nom, x.lignes]));
         assert.ok(t.boutique >= 2, "le reglage et le dernier evenement");
         assert.ok(t.commandes >= 4);

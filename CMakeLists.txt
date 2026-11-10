@@ -724,6 +724,11 @@ if(XPG_BUILD_TESTS)
     # ---- Lot API 8 : le bandeau bas (le journal des messages, la rangee des pastilles) - sans ecran ----
     xpg_add_test_executable(statusstrip_test tests/statusstrip_test.cpp src/app/StatusStrip.cpp)
     xpg_target_link_libraries(statusstrip_test PRIVATE xpg_ui)
+    # 1.47.0 : le globe pointille (ui/widgets/Globe) - le masque des terres, la projection, turnTo, les groupes, le
+    # survol, les calques, ce que coute le dessin (un faux renderer) ; sans ecran
+    xpg_add_test_executable(globe_test tests/globe_test.cpp)
+    xpg_target_link_libraries(globe_test PRIVATE xpg_ui)
+    xpg_add_test(NAME globe COMMAND globe_test)
     # ---- fin Lot API 8 : le bandeau bas ----
 
     # -- l'ordre d'execution ---------------------------------------------------
@@ -793,6 +798,9 @@ if(XPG_BUILD_TESTS)
     xpg_target_link_libraries(hmi_objets_test PRIVATE xpg_hmi)
     xpg_add_test_executable(session_test tests/session_test.cpp)              # 1.43.0 : les sessions (protocole, miroir, lien)
     xpg_target_link_libraries(session_test PRIVATE xpg_session)
+    # 1.47.0 : le texte dans son cadre a toutes les tailles (la fenetre de la session, l'onglet Session, l'encart de l'accueil)
+    xpg_add_test_executable(session_ui_test tests/session_ui_test.cpp)
+    xpg_target_link_libraries(session_ui_test PRIVATE xpg_app)
     # 1.44.0 : les sessions par Internet (le relais, chiffre de bout en bout) : un relais en memoire, puis le VRAI service sur ce
     # poste (workerd ; SAUTE sans Node.js ni wrangler) par le transport HTTP des Studios (app/SessionRelayHttp, app/ai/AiHttp)
     xpg_add_test_executable(session_relay_test tests/session_relay_test.cpp src/app/SessionRelayHttp.cpp src/app/ai/AiHttp.cpp)
@@ -1339,6 +1347,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME deploycrypto COMMAND deploy_crypto_test)               # 1.28.0 : le socle du deploiement (libsodium, mbedTLS)
     xpg_add_test(NAME deployui     COMMAND deploy_ui_test)                   # 1.28.0 : le volet Deploiement reseau, de bout en bout
     xpg_add_test(NAME session      COMMAND session_test)                     # 1.43.0 : les sessions (vraies sockets sur la boucle locale)
+    xpg_add_test(NAME sessionui    COMMAND session_ui_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.47.0 : le texte dans son cadre (session, accueil)
     xpg_add_test(NAME sessionrelais COMMAND session_relay_test ${CMAKE_CURRENT_SOURCE_DIR})   # 1.44.0 : les sessions par Internet (le relais)
     if(TEST sessionrelais)
         set_tests_properties(sessionrelais PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
