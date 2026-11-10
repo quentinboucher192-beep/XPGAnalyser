@@ -1124,6 +1124,11 @@ SizeHint FilterBar::sizeHint() const {
     return h;
 }
 
+bool FilterBar::hintFits() const {
+    const float kw = measureWidth("Ctrl+F", gfx::FontId{10}) + 10.f;
+    return search_->bounds().w >= 34.f + measureWidth(search_->placeholder(), kSmall) + 12.f + kw + 8.f;
+}
+
 void FilterBar::onLayout() {
     std::vector<Placed> placed;
     float h = 0.f;
@@ -1141,6 +1146,11 @@ void FilterBar::onLayout() {
         }
         p.widget->setVisibility(Visibility::Visible);
         p.widget->setBounds(p.rect);
+    }
+    // 1.47.0 : un champ etroit - sans l'indice << Ctrl+F >>, le texte du champ prend sa place.
+    if (const float pr = state_.search.empty() && !hintFits() ? 8.f : 74.f; pr != searchPadR_) {
+        searchPadR_ = pr;
+        search_->setPadding({3.f, pr, 3.f, 30.f});
     }
     // La croix de la recherche, dans le champ.
     for (const auto& ch : children())
@@ -1179,7 +1189,7 @@ void FilterBar::onPaintOverlay(const PaintContext& ctx) {
         const gfx::FontId fk = gfx::FontId{10};
         const float kw = r.measure("Ctrl+F", fk).width + 10.f;
         // 1.47.0 : un champ etroit - l'indice << Ctrl+F >> s'efface d'abord (il resterait sur << Chercher... >>).
-        if (s.w < 34.f + r.measure("Chercher\xE2\x80\xA6", kSmall).width + 12.f + kw + 8.f) return;
+        if (!hintFits()) return;
         const gfx::Rect k{s.right() - kw - 8.f, s.y + (s.h - 18.f) * 0.5f, kw, 18.f};
         shapes::fillFramedRect(r, k, c.panelBg, c.border, 4.f);
         r.drawText({k.x + 5.f, k.y + (k.h - r.lineHeight(fk)) * 0.5f}, "Ctrl+F", fk, c.textMuted);

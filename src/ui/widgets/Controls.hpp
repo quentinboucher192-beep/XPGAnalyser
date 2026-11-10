@@ -84,6 +84,7 @@ namespace ui {
 
         void setText(std::string t);
         void setPlaceholder(std::string p) { placeholder_ = std::move(p); invalidate(); }
+        [[nodiscard]] const std::string& placeholder() const noexcept { return placeholder_; }   // 1.47.0
         void setReadOnly(bool ro) { readOnly_ = ro; }
         void setMaxLength(std::size_t n) { maxLength_ = n; }
         // Rejects keystrokes that would make the text invalid (used by the address

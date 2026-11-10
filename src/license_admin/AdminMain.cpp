@@ -952,7 +952,7 @@ int run(const std::vector<std::string>& argv) {
             if (role == license_admin::gui::Role::Admin || role == license_admin::gui::Role::Retired || role == license_admin::gui::Role::Pending) {
                 const auto u = ws.useDerogation("deployer", o.dryRun ? "service-deployer --essai" : "service-deployer");
                 if (!u.ok) {
-                    complain("Refus\xC3\xA9 : " + u.message);
+                    complain(u.message);
                     return 1;
                 }
                 say(u.message + "\n");
@@ -961,7 +961,7 @@ int run(const std::vector<std::string>& argv) {
                 if (deployer::findKit(o.kit, k, &kw)) {
                     const auto w2 = ws.writeEditorKeysFile(k.folder);
                     if (!w2.ok) {
-                        complain("Refus\xC3\xA9 : " + w2.message);
+                        complain(w2.message);
                         return 1;
                     }
                     say(w2.message + "\n");

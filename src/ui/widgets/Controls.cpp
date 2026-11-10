@@ -776,8 +776,19 @@ namespace ui {
             ctx.r.fillRect({ inner.x + a - scrollX_, inner.y, b - a, inner.h }, c.selectionBg);
         }
 
-        if (text_.empty() && !focused())
-            ctx.r.drawText({ inner.x, baseY }, placeholder_, f, c.textDisabled);
+        if (text_.empty() && !focused()) {
+            // 1.47.0 : un champ trop etroit raccourcit son indice (<< ... >>) au lieu de le couper.
+            std::string hint = placeholder_;
+            if (!hint.empty() && ctx.r.measure(hint, f).width > inner.w) {
+                const std::string dots = "\xE2\x80\xA6";
+                while (!hint.empty() && ctx.r.measure(hint + dots, f).width > inner.w) {
+                    while (!hint.empty() && (static_cast<unsigned char>(hint.back()) & 0xC0) == 0x80) hint.pop_back();
+                    if (!hint.empty()) hint.pop_back();
+                }
+                hint = hint.empty() ? std::string() : hint + dots;
+            }
+            ctx.r.drawText({ inner.x, baseY }, hint, f, c.textDisabled);
+        }
         else
             ctx.r.drawText({ inner.x - scrollX_, baseY }, shown(text_.size()), f, enabled() ? c.text : c.textDisabled);
 

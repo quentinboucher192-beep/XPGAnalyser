@@ -831,20 +831,25 @@ struct FieldRow {
     gfx::Rect   at{};
 };
 
-void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::string& heading, const std::string& sub) {
+// 1.47.0 : `reserve` - la place d'un bouton pose a droite du titre (Supprimer l'offre...) : ni le titre ni sa note dessous.
+void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::string& heading, const std::string& sub, float reserve = 0.f) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
     r.fillRect(card, c.windowBg);
     r.strokeRect(card, c.border, 1.f);
     r.fillRect({card.x, card.y, card.w, 32.f}, c.headerBg);
     float subW = 0.f;
+    const float right = card.right() - 12.f - reserve;
     if (!sub.empty()) {
-        subW = std::min(card.w * 0.45f - 16.f, r.measure(sub, ctx.theme.font.caption).width);
-        r.drawText({card.right() - 12.f - subW, card.y + (32.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, sub, ctx.theme.font.caption, subW + 1.f),
+        // la note prend ce que le titre laisse (le titre garde au moins la moitie de la place)
+        const float room = right - card.x - 24.f;
+        const float headW = std::min(r.measure(heading, ctx.theme.font.heading).width, room * 0.5f);
+        subW = std::max(0.f, std::min(r.measure(sub, ctx.theme.font.caption).width, room - headW - 12.f));
+        r.drawText({right - subW, card.y + (32.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, sub, ctx.theme.font.caption, subW + 1.f),
                    ctx.theme.font.caption, ctx.theme.tone(ui::Tone::Info, c.text));
     }
     r.drawText({card.x + 12.f, card.y + (32.f - r.lineHeight(ctx.theme.font.heading)) * 0.5f},
-               fit(r, heading, ctx.theme.font.heading, card.w - 36.f - (subW > 0.f ? subW + 12.f : 0.f)), ctx.theme.font.heading, c.text);
+               fit(r, heading, ctx.theme.font.heading, right - card.x - 24.f - (subW > 0.f ? subW + 12.f : 0.f)), ctx.theme.font.heading, c.text);
 }
 
 // ============================================================================ la page Editions
@@ -1172,7 +1177,8 @@ protected:
         const lic::EditionDef* e = reg.edition(selected_);
         if (!e) return;
         const bool free = e->id == reg.unlicensedEdition;
-        paintCard(ctx, panel_, "Offre " + e->id, free ? "l'offre sans licence" : (e->retired ? "retir\xC3\xA9" "e" : (e->temporary() ? "temporaire" : "")));
+        paintCard(ctx, panel_, "Offre " + e->id, free ? "l'offre sans licence" : (e->retired ? "retir\xC3\xA9" "e" : (e->temporary() ? "temporaire" : "")),
+                  deleteBtn_->visible() ? deleteBtn_->bounds().w + 8.f : 0.f);   // 1.47.0 : a gauche de << Supprimer l'offre... >>
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         for (const auto& fr : rows_)

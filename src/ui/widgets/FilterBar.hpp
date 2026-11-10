@@ -209,6 +209,7 @@ private:
     [[nodiscard]] std::size_t rowCount() const;
     [[nodiscard]] std::string cell(std::size_t row, std::size_t field) const;
     [[nodiscard]] std::vector<std::string> valuesOf(std::size_t row, std::size_t field) const;   // Field::split
+    [[nodiscard]] bool hintFits() const;   // 1.47.0 : << Ctrl+F >> tient dans le champ, a cote de << Chercher... >>
     void edited(bool remember = true);                     // la table, les puces, la memoire, `changed`
     void syncChips();
     void layoutRow(float width, std::vector<Placed>* out, float* height) const;
@@ -233,6 +234,7 @@ private:
     std::string                        memoryKey_, noun_;
     bool                               loading_{false};
     std::vector<std::size_t>           chipOrder_;   // 1.47.0 : setChipOrder
+    float                              searchPadR_{74.f};   // 1.47.0 : la marge droite du champ (l'indice Ctrl+F, ou rien)
     mutable std::size_t                shownCache_{0};
     mutable bool                       countDirty_{true};
     SearchQuery                        query_;

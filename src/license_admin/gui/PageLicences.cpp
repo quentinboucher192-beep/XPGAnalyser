@@ -381,6 +381,14 @@ protected:
         float by = headY_ + 58.f;
         // Les trois boutons de la fiche, a leur largeur ; serres ensemble s'il le faut (jamais sur << ... >>).
         const float moreW = 38.f;
+        // 1.47.0 : une fiche etroite - des libelles courts (l'infobulle dit le reste) plutot que trois boutons raccourcis.
+        {
+            const bool narrow = cw0 < 520.f;
+            const std::string opt = narrow ? "Option\xE2\x80\xA6" : "Ajouter une option\xE2\x80\xA6";
+            const std::string exp = narrow ? "Exporter\xE2\x80\xA6" : "Exporter le fichier\xE2\x80\xA6";
+            if (option_->text() != opt) option_->setText(opt);
+            if (export_->text() != exp) export_->setText(exp);
+        }
         std::vector<ui::Button*> row;
         std::vector<float> natural;
         float sum = 0.f;
@@ -1070,7 +1078,7 @@ private:
             m.action({.label = addPc_->text(), .icon = onlineLic ? ui::Icon::Refresh : ui::Icon::Plus,
                       .why = reasonOf(addPc_, "choisis une licence"), .run = [this] { addPc_->clicked->emit(); }});
             if (option_->visible())
-                m.action({.label = option_->text(), .icon = ui::Icon::Star,
+                m.action({.label = "Ajouter une option\xE2\x80\xA6", .icon = ui::Icon::Star,
                           .why = reasonOf(option_, done ? std::string("la licence n'est plus en cours") : std::string()), .run = [this] { option_->clicked->emit(); }});
             if (onlineLic) {
                 m.action({.label = showCode_->text(), .icon = ui::Icon::Eye, .why = reasonOf(showCode_, "pas pour cette licence"), .run = [this] { showCode(); }});
@@ -1182,7 +1190,7 @@ private:
             addPc_->clicked->emit();
         }, ws().can("licence_prolonger") ? std::string() : ws().whyNot("licence_prolonger"));
         if (option_->visible())
-            card->addButton(option_->text(), "licences.depliage.option", ui::Icon::Star, [this, id = l.licenseId] {
+            card->addButton("Ajouter une option\xE2\x80\xA6", "licences.depliage.option", ui::Icon::Star, [this, id = l.licenseId] {
                 selectOnly(id);
                 option_->clicked->emit();
             }, !ws().can("licence_option") ? ws().whyNot("licence_option") : Workspace::inForce(*e) ? std::string() : std::string("la licence n'est plus en cours"));

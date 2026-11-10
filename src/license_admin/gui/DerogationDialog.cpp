@@ -116,7 +116,7 @@ DerogationBody::DerogationBody(DerogationDialog& owner, ShellHost host, std::str
         }
     admin_->setItems(std::move(items));
     if (!keys_.empty()) admin_->setSelectedIndex(chosen);
-    const char* const labels[] = {"1 heure", "4 heures", "24 heures", "72 heures (le plus long)"};
+    const char* const labels[] = {"1 heure", "4 heures", "24 heures", "72 heures"};
     const char* const ids[] = {"derogation.duree.1", "derogation.duree.4", "derogation.duree.24", "derogation.duree.72"};
     for (int i = 0; i < 4; ++i) hour_[i] = &adopt(*this, std::make_unique<ui::RadioButton>(labels[i], hours_, i, ids[i]));
     hours_->setValue(0);
@@ -246,7 +246,7 @@ void DerogationBody::onPaint(const ui::PaintContext& ctx) {
     r.fillRoundedRect({x, y, w, hc}, c.warning.withAlpha(30), 8.f);
     (void)drawWrapped(r, x + 12.f, y + 9.f, w - 24.f, kCloudflare, kF13, c.text, 18.f);
     y += hc + 12.f;
-    y = drawWrapped(r, x, y, w, kService, kF13, c.textMuted, 18.f) + 10.f;
+    y += drawWrapped(r, x, y, w, kService, kF13, c.textMuted, 18.f) + 10.f;   // (drawWrapped rend la hauteur)
     // la derogation en place
     const auto& d = ws().derogation();
     if (d.exists()) {
