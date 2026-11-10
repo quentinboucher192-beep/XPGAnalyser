@@ -1063,19 +1063,25 @@ void FilterBar::syncChips() {
 
 void FilterBar::layoutRow(float width, std::vector<Placed>* out, float* height) const {
     const float x0 = bounds().x, y0 = bounds().y;
-    const float searchW = std::clamp(width * 0.2f, 170.f, 250.f);
     // A droite : le compte, Effacer, Mes filtres.
-    const float savedW = std::clamp(static_cast<const Chip*>(savedBtn_)->width(), 120.f, 230.f);
-    const bool clearShown = state_.active();
+    float savedW = std::clamp(static_cast<const Chip*>(savedBtn_)->width(), 120.f, 230.f);
+    bool clearShown = state_.active();
     const float clearW = static_cast<const Chip*>(clear_)->width();
-    const float countW = measureWidth(countText(), gfx::semibold(kSmall)) + 8.f;
+    float countW = measureWidth(countText(), gfx::semibold(kSmall)) + 8.f;
+    // 1.47.0 : etroite (la liste des PC d'une fiche), rien ne se chevauche - la recherche cede d'abord (jusqu'a 120 px),
+    // puis le compte s'en va, puis Effacer (chaque puce garde sa croix), puis Mes filtres se raccourcit.
+    const auto room = [&] { return width - savedW - (clearShown ? clearW + 8.f : 0.f) - (countW > 0.f ? countW + 8.f : 0.f) - 10.f; };
+    if (room() < 120.f) countW = 0.f;
+    if (room() < 120.f) clearShown = false;
+    if (room() < 120.f) savedW = std::max(40.f, width - 130.f);
+    const float searchW = std::max(std::min(100.f, width), std::min(std::clamp(width * 0.2f, 170.f, 250.f), room()));
     float right = x0 + width - savedW;
     if (out) out->push_back({savedBtn_, {right, y0 + 1.f, savedW, kRowH - 2.f}});
     if (clearShown) {
         right -= clearW + 8.f;
         if (out) out->push_back({clear_, {right, y0 + 2.f, clearW, kRowH - 4.f}});
     }
-    right -= countW + 8.f;
+    if (countW > 0.f) right -= countW + 8.f;
     const float countX = right;
     float x = x0;
     if (out) out->push_back({search_, {x, y0, searchW, kRowH}});
@@ -1172,6 +1178,8 @@ void FilterBar::onPaintOverlay(const PaintContext& ctx) {
     if (state_.search.empty()) {
         const gfx::FontId fk = gfx::FontId{10};
         const float kw = r.measure("Ctrl+F", fk).width + 10.f;
+        // 1.47.0 : un champ etroit - l'indice << Ctrl+F >> s'efface d'abord (il resterait sur << Chercher... >>).
+        if (s.w < 34.f + r.measure("Chercher\xE2\x80\xA6", kSmall).width + 12.f + kw + 8.f) return;
         const gfx::Rect k{s.right() - kw - 8.f, s.y + (s.h - 18.f) * 0.5f, kw, 18.f};
         shapes::fillFramedRect(r, k, c.panelBg, c.border, 4.f);
         r.drawText({k.x + 5.f, k.y + (k.h - r.lineHeight(fk)) * 0.5f}, "Ctrl+F", fk, c.textMuted);
@@ -1179,6 +1187,7 @@ void FilterBar::onPaintOverlay(const PaintContext& ctx) {
         const std::size_t n = shownCount();
         const std::string t = std::to_string(n) + (n > 1 ? " trouv\xC3\xA9" "es" : " trouv\xC3\xA9" "e");
         const float tw = r.measure(t, kTiny).width;
+        if (s.w < 34.f + r.measure(state_.search, kSmall).width + 12.f + tw + 28.f) return;   // 1.47.0 : il cacherait la recherche
         r.drawText({s.right() - 28.f - tw, s.y + (s.h - r.lineHeight(kTiny)) * 0.5f}, t, kTiny, c.textMuted);
     }
 }

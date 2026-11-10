@@ -665,7 +665,8 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         std::string url;
         const auto r = ws.adminInstallerLink(a.one("--fichier"), url);
         if (!r.ok) return oneLine(r);
-        say(r.text() + "\n");
+        say(r.message + "\n" + r.output + "\n");   // le lien de l'installateur, puis le detail (le lien de la connexion)
+        for (const auto& d : r.details) say(d + "\n");
         return 0;
     }
     if (a.command == "fichier-envoyer") {

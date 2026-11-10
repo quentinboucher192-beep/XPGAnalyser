@@ -231,7 +231,8 @@ int main(int argc, char** argv) {
         check(has(card, "LE R\xC3\x89SUM\xC3\x89") && has(card, "PROFESSIONAL") && has(card, "PC : 2 sur") && has(card, "SON HISTOIRE") && has(card, "Ajouter un PC"),
               "la ligne depliee : le resume, son histoire, Ajouter un PC");
         t = draw(*page);
-        check(has(t, "LE R\xC3\x89SUM\xC3\x89") && has(t, "clic droit : le menu"), "dessinee sous la ligne ; << clic droit : le menu >>");
+        // (la rangee trop longue pour cette largeur d'essai : chaque morceau raccourci, rien ne deborde)
+        check(has(t, "LE R\xC3\x89SUM\xC3\x89") && has(t, "clic droit"), "dessinee sous la ligne ; << clic droit : le menu >>");
         // << Le client >> : la page Clients, lui choisi et ouvert (son resume).
         items = rightClick(*table, {static_cast<ui::RowIndex>(ra)});
         const int cl = idOf(items, "Aller \xC3\xA0", "Le client : Atelier");

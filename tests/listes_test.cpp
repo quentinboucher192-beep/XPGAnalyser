@@ -464,6 +464,25 @@ void testSplit() {
     check(chips == std::vector<std::size_t>{1, 3, 0, 4}, "setChipOrder : Type, Qui, Periode, puis les autres dans l'ordre des colonnes");
     order.filterOn(2, "XPG-2026-00412");
     check(order.chipFields() == std::vector<std::size_t>{1, 3, 0, 4, 2}, "une puce ajoutee (Filtrer sur) : a la fin");
+    // Etroite (la liste des PC d'une fiche) : rien ne se chevauche, tout reste dans la barre.
+    for (const float w : {300.f, 420.f, 900.f}) {
+        order.setValues(1, {"R\xC3\xA9vocation"});
+        order.setBounds({0.f, 0.f, w, order.heightFor(w)});
+        order.layout();
+        std::vector<gfx::Rect> boxes;
+        for (const auto& ch : order.children())
+            if (ch->visible() && !ch->bounds().empty() && ch->id() != "historique.menu" && ch->id() != "historique.recherche.effacer") boxes.push_back(ch->bounds());
+        bool ok = true;
+        for (std::size_t i = 0; i < boxes.size(); ++i) {
+            ok = ok && boxes[i].x >= -0.5f && boxes[i].right() <= w + 0.5f;
+            for (std::size_t j = i + 1; j < boxes.size(); ++j) {
+                const float ox = std::min(boxes[i].right(), boxes[j].right()) - std::max(boxes[i].x, boxes[j].x);
+                const float oy = std::min(boxes[i].bottom(), boxes[j].bottom()) - std::max(boxes[i].y, boxes[j].y);
+                ok = ok && !(ox > 0.5f && oy > 0.5f);
+            }
+        }
+        check(ok, "barre de " + std::to_string(static_cast<int>(w)) + " px : la recherche, les puces, Effacer, Mes filtres sans chevauchement");
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ 4
