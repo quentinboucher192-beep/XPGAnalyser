@@ -480,7 +480,7 @@ std::vector<double> niceTicks(double lo, double hi, int target, bool integral) {
         if (integral && std::fabs(s - std::round(s)) > 1e-9) s = std::floor(s);
         const double span = (std::ceil(hi / s - 1e-9) - std::floor(lo / s + 1e-9)) * s;
         const double count = span / s + 1.0;
-        if (st > 0.0 && count > target + 3) continue;
+        if (st > 0.0 && count > target + 2) continue;
         if (span < bestSpan - 1e-9 * std::max(1.0, std::fabs(span))) {
             bestSpan = span;
             st = s;

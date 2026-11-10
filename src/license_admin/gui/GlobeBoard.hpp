@@ -119,6 +119,8 @@ public:
     void setLiveLabel(std::string text);                     // << En direct - releve toutes les 6 s >> (l'en-tete)
     void setTicker(std::string city, std::string what, std::string when);   // la derniere connexion (au-dessus des villes)
     void setActiveTotal(int n);                              // En direct : les PC connectes maintenant (-1 : inconnu)
+    [[nodiscard]] const std::string& tickerCity() const noexcept { return tickCity_; }   // les essais
+    [[nodiscard]] const std::string& emptyTitle() const noexcept { return emptyTitle_; }  // les essais
 
     // ---- choisir, plein ecran, figer ----
     void choose(int place);                                  // -1 : aucune ; le globe y va, sa carte s'ouvre

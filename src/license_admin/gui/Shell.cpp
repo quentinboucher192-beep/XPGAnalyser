@@ -249,6 +249,14 @@ protected:
             ctx.r.drawText({pill.x + (pill.w - nw) * 0.5f, pill.y + (20.f - ctx.r.lineHeight(kF12)) * 0.5f}, n, kF12,
                            demandes ? Color::rgb(0xFBBF24) : sel ? kNightWhite : kNightMuted);
             badgeW += 8.f;
+        } else if (eid == "statistiques") {   // 1.47.0 : la page nouvelle (la maquette : << nouveau >>)
+            const std::string n = "nouveau";
+            const float nw = ctx.r.measure(n, kF12).width;
+            badgeW = nw + 16.f;
+            const Rect pill{r.right() - 8.f - badgeW, r.y + (r.h - 20.f) * 0.5f, badgeW, 20.f};
+            ctx.r.fillRoundedRect(pill, kVioletSoft.withAlpha(sel ? 60 : 38), 10.f);
+            ctx.r.drawText({pill.x + 8.f, pill.y + (20.f - ctx.r.lineHeight(kF12)) * 0.5f}, n, kF12, sel ? kNightWhite : kVioletSoft);
+            badgeW += 8.f;
         }
         const FontId f = sel ? gfx::semibold(kF14) : kF14;
         const std::string t = fit(ctx.r, e_.label, f, r.w - 44.f - badgeW);
@@ -892,6 +900,7 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         // 1.41.0 : les groupes de la maquette - Pilotage (le tableau, les licences, les clients, les demandes, les PC),
         // Catalogue (les editions, les fonctionnalites, les flottantes), la vente en ligne, Securite.
         {"tableau", "Tableau de bord", ui::Icon::Chart, false},
+        {"statistiques", "Statistiques", ui::Icon::Chart, false},         // 1.47.0 : les courbes (planches 08, 09 ; PageStats.cpp)
         {"licences", "Licences", ui::Icon::Document, false},
         {"clients", "Clients", ui::Icon::User, false},
         {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
@@ -927,12 +936,18 @@ const std::vector<Shell::NavEntry>& Shell::subPages() {
     static const std::vector<NavEntry> list = {
         {"droits", "Droits", ui::Icon::Lock, false},   // Administrateurs > Droits (planche 08)
         {"globe-essai", "Le globe (essai)", ui::Icon::Globe, false},   // 1.47.0 : la page d'essai du globe (--page seulement)
+        {"client", "Un client", ui::Icon::User, false},   // 1.47.0 : Clients > la fiche d'un client et ses courbes (planche 10)
+        {"globe", "Le globe", ui::Icon::Globe, false},   // 1.47.0 : Statistiques > Le globe (PageStatsGlobe.cpp ; la petite carte du tableau de bord y mene)
         {"graphes-essai", "Graphiques (essai)", ui::Icon::Chart, false},   // 1.47.0 : la galerie des graphiques (--page seulement)
     };
     return list;
 }
 
-std::string Shell::parentOf(const std::string& pageId) { return pageId == "droits" ? std::string("admins") : std::string(); }
+std::string Shell::parentOf(const std::string& pageId) {
+    if (pageId == "globe") return "statistiques";   // 1.47.0 : Statistiques > Le globe
+    if (pageId == "client") return "clients";       // 1.47.0 : Clients > un client (planche 10)
+    return pageId == "droits" ? std::string("admins") : std::string();
+}
 
 bool Shell::plusOnly(const std::string& pageId) { return pageId == "journal" || pageId == "droits" || pageId == "versions"; }
 
@@ -1030,6 +1045,9 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "journal") p = makeJournalPage(h);
     else if (id == "versions") p = makeVersionsPage(h);
     else if (id == "globe-essai") p = makeGlobeTestPage(h);   // 1.47.0 : cachee (PageGlobeTest.cpp)
+    else if (id == "statistiques") p = makeStatsPage(h);   // 1.47.0 : PageStats.cpp
+    else if (id == "client") p = makeClientCardPage(h);    // 1.47.0 : PageClientCard.cpp
+    else if (id == "globe") p = makeGlobePage(h);             // 1.47.0 : Statistiques > Le globe (PageStatsGlobe.cpp)
     else if (id == "graphes-essai") p = makeChartsGalleryPage(h);   // 1.47.0 : cachee (PageChartsGallery.cpp)
     if (!p) p = std::make_unique<MissingPage>(h, entry(id)->label);
     p->setVisibility(ui::Visibility::Collapsed);

@@ -14,7 +14,8 @@
 //    5. a part, en rouge, avec << ... >> : Retirer, Revoquer, Supprimer
 //
 //  Une section vide disparait (et ses traits). Un droit qui manque : l'entree
-//  est grisee, sa raison dessous (Entry::why). PLUSIEURS LIGNES CHOISIES
+//  est grisee, sa raison dessous (Entry::why ; une ligne : au-dela de 64
+//  caracteres, ce qui precede << : >> ou les premiers mots). PLUSIEURS LIGNES CHOISIES
 //  (Selection::count > 1) : en tete << 3 LICENCES CHOISIES >> ; ni Ouvrir, ni
 //  Aller a, ni Filtrer sur (ils visent une ligne) ; << Deplier les 3 >>,
 //  << Exporter 3 lignes (CSV) >> ; seules les entrees qui ont un libelle pour

@@ -107,6 +107,9 @@ using PagePtr = std::unique_ptr<Page>;
 //  "journal"        Journal des admins (l'admin+)            PageJournal.cpp
 //  "versions"       Versions (publier ; l'admin+)            PageVersions.cpp
 //  1.47.0 : "globe-essai" la page d'essai du globe (cachee : --page seulement ; des villes d'essai) PageGlobeTest.cpp
+//  1.47.0 : "statistiques" Statistiques (sous Pilotage ; les courbes, planches 08 et 09) PageStats.cpp, PageStatsUpdates.cpp
+//  1.47.0 : "client"      Clients > la fiche d'un client et ses courbes (une sous-page, planche 10) PageClientCard.cpp
+//  1.47.0 : "globe"       Statistiques > Le globe (une sous-page ; le service) PageStatsGlobe.cpp
 //  1.47.0 : "graphes-essai" la galerie des graphiques (cachee : --page seulement ; donnees d'essai) PageChartsGallery.cpp
 //  1.45.0 : le dialogue << Deployer le service >> (Service en ligne, le tableau de bord) DeployDialog.cpp
 PagePtr makeDashboardPage(ShellHost host);
@@ -129,6 +132,9 @@ PagePtr makeRightsPage(ShellHost host);    // 1.44.0
 PagePtr makeJournalPage(ShellHost host);   // 1.44.0
 PagePtr makeVersionsPage(ShellHost host);  // 1.44.0
 PagePtr makeGlobeTestPage(ShellHost host); // 1.47.0 : cachee (--page globe-essai)
+PagePtr makeGlobePage(ShellHost host);     // 1.47.0 : "globe", Statistiques > Le globe (PageStatsGlobe.cpp)
+PagePtr makeStatsPage(ShellHost host);     // 1.47.0 : "statistiques" (planches 08, 09 ; PageStats.cpp)
+PagePtr makeClientCardPage(ShellHost host);   // 1.47.0 : "client", Clients > un client et ses courbes (planche 10 ; PageClientCard.cpp)
 PagePtr makeChartsGalleryPage(ShellHost host);   // 1.47.0 : cachee (--page graphes-essai)
 
 // 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet

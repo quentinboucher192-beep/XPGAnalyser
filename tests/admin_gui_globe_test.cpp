@@ -4,7 +4,10 @@
 // (l'infobulle), << En direct >> et << Une connexion >>, un clic dans la liste des villes (le globe y va), un calque decoche.
 #include "admin_gui_harness.hpp"
 
+#include "../src/license_admin/gui/GlobeBoard.hpp"
+#include "../src/license_admin/gui/GlobeStats.hpp"
 #include "../src/license_admin/gui/Shell.hpp"
+#include "../src/ui/widgets/FilterBar.hpp"
 #include "../src/ui/widgets/Globe.hpp"
 #include "../src/ui/widgets/GlobeLists.hpp"
 
@@ -66,7 +69,8 @@ int main(int argc, char** argv) {
     auto* globe = find<ui::GlobeView>(*page, "globe-essai.globe");
     auto* layers = find<ui::GlobeLayerList>(*page, "globe-essai.calques");
     auto* cities = find<ui::GlobeCityList>(*page, "globe-essai.villes");
-    auto* mini = find<ui::GlobeView>(*page, "globe-essai.petite");
+    auto* miniCard = find<gui::GlobeMiniCard>(*page, "globe-essai.petite");
+    ui::GlobeView* mini = miniCard ? &miniCard->globe() : nullptr;
     CHECK(globe && layers && cities && mini);
     if (!globe || !layers || !cities || !mini) {
         std::printf("%d verifications, %d echec(s)\n", checks, fails);
@@ -127,10 +131,161 @@ int main(int argc, char** argv) {
     CHECK(click(*page, "globe-essai.recentrer"));
     CHECK(click(*page, "globe-essai.plein"));
     t = paint(*page, r, 1141.f, 853.f);
-    CHECK(globe->bounds().h > 700.f && !mini->visible());   // la carte prend la page
+    CHECK(globe->bounds().h > 700.f && !miniCard->visible());   // la carte prend la page
     CHECK(click(*page, "globe-essai.plein"));
     t = paint(*page, r, 1141.f, 853.f);
-    CHECK(mini->visible());
+    CHECK(miniCard->visible());
+
+    // ---- 3. LA VRAIE VUE (Statistiques > Le globe) : des reponses d'essai a la place du service (un faux).
+    namespace gs = gui::globestats;
+    CHECK(gui::Shell::entry("globe") != nullptr && gui::Shell::parentOf("globe") == "statistiques" && !gui::Shell::plusOnly("globe"));
+    stats::GlobeReply fake = gs::sampleReply(30, g_now);
+    int globeCalls = 0, liveCalls = 0, lastDays = 0;
+    Seconds lastSince = -1;
+    bool sameLive = false;
+    const auto fakeGlobe = [&](int days, stats::GlobeReply& out) {
+        ++globeCalls;
+        lastDays = days;
+        out = fake;
+        out.periodDays = days;
+        return gui::OpResult::done({});
+    };
+    const auto fakeLive = [&](Seconds since, stats::LiveReply& out) {
+        ++liveCalls;
+        lastSince = since;
+        out.at = 5000 + liveCalls;
+        out.active = 40 + liveCalls;
+        out.pings = {{sameLive ? 4999 : 4990 + liveCalls, sameLive ? "FR|Lyon" : "FR|Paris", "studio"}};
+        return gui::OpResult::done({});
+    };
+    gs::setFetchersForTests({fakeGlobe, fakeLive});
+    {
+        Fixture fx3(source, "globe-vue");
+        HostRig rig3(fx3);
+        auto view = gui::statskit::makeStatsGlobeView(rig3.host());
+        auto* v = dynamic_cast<gs::GlobeStatsView*>(view.get());
+        CHECK(v != nullptr);
+        if (v) {
+            t = paint(*v, r, 1093.f, 760.f);   // la peinture (t = 0) : le premier releve part
+            CHECK(globeCalls == 1 && lastDays == 30 && v->hasReply() && v->board().places().size() == 21 && v->problem().empty());
+            t = paint(*v, r, 1093.f, 760.f);
+            CHECK(t.find("54 clients, 342 PC, 21 villes, 9 pays") != std::string::npos && t.find("3 PC sans lieu") != std::string::npos);
+            CHECK(t.find("P\xC3\xA9riode") != std::string::npos && t.find("Relev\xC3\xA9 le ") != std::string::npos);
+            CHECK(v->board().globe().findPlace("FR|Lyon") >= 0 && v->board().emptyTitle().empty());
+            CHECK(globeCalls == 1);
+            v->tick(100.0);
+            CHECK(globeCalls == 1);   // pas encore vieux
+            v->tick(301.0);
+            CHECK(globeCalls == 2);   // 5 minutes : relu
+            // La periode : 90 j, relu tout de suite.
+            CHECK(click(*v, "globe.periode.90j"));
+            CHECK(globeCalls == 3 && lastDays == 90 && v->periodDays() == 90);
+            // En direct : un releve toutes les 6 s, seulement quand la vue est dessinee (tick) ; la connexion pulse sa ville.
+            CHECK(click(*v, "globe.direct") && v->board().live());
+            v->tick(310.0);
+            CHECK(v->livePolls() == 1 && liveCalls == 1 && lastSince == fake.at);
+            CHECK(v->board().tickerCity() == "Paris, FR");
+            v->tick(313.0);
+            CHECK(liveCalls == 1);
+            v->tick(316.5);
+            CHECK(liveCalls == 2 && lastSince == 5001);   // depuis l'heure du service du releve d'avant
+            // ... la vue cachee (plus de tick) : rien ne part, meme longtemps apres.
+            CHECK(liveCalls == 2);
+            // Une connexion deja vue n'est pas redite.
+            sameLive = true;
+            v->tick(323.0);
+            CHECK(v->board().tickerCity() == "Lyon, FR");
+            const int before = liveCalls;
+            v->tick(329.5);
+            CHECK(liveCalls == before + 1 && v->board().tickerCity() == "Lyon, FR");
+            sameLive = false;
+            // Compte : le direct s'arrete.
+            CHECK(click(*v, "globe.compte") && !v->board().live());
+            const int polls = liveCalls;
+            v->tick(400.0);
+            v->tick(410.0);
+            CHECK(liveCalls == polls);
+            // Aucune ville : la carte le dit au milieu du globe.
+            const auto keep = fake;
+            fake.cities.clear();
+            fake.unplacedPcs = 4;
+            v->reload();
+            CHECK(v->board().places().empty() && v->board().emptyTitle() == "Aucune ville pour l'instant");
+            fake = keep;
+            // Un service d'avant la 1.47.0 : le bandeau et << Deployer le service >>.
+            gs::setFetchersForTests({[](int, stats::GlobeReply&) { return gui::OpResult::fail(stats::serviceTooOldText("1.46.0")); }, {}});
+            v->reload();
+            auto* deploy = v->findById("globe.deployer");
+            CHECK(v->tooOld() && deploy && deploy->visible());
+            t = paint(*v, r, 1093.f, 760.f);
+            CHECK(t.find("d\xC3\xA9ploie la 1.47.0") != std::string::npos);
+            // Un refus : sa phrase et << Reessayer >>.
+            gs::setFetchersForTests({[](int, stats::GlobeReply&) { return gui::OpResult::fail("le service ne r\xC3\xA9pond pas"); }, {}});
+            v->reload();
+            auto* retry = v->findById("globe.reessayer");
+            CHECK(!v->tooOld() && retry && retry->visible() && deploy && !deploy->visible());
+            // Le service pas regle (le vrai chemin, sans reponses d'essai) : << Regler le service >>.
+            gs::setFetchersForTests({});
+            v->reload();
+            auto* settings = v->findById("globe.regler");
+            CHECK(v->problem().find("pas r\xC3\xA9gl\xC3\xA9") != std::string::npos && settings && settings->visible());
+            CHECK(click(*v, "globe.regler") && !rig3.navigations.empty() && rig3.navigations.back() == "service");
+            gs::setFetchersForTests({fakeGlobe, fakeLive});
+        }
+        // La petite carte du tableau de bord : les PC actifs, les 3 premieres villes ; un clic : le globe.
+        auto card = gui::statskit::makeDashboardGlobe(rig3.host());
+        t = paint(*card, r, 476.f, 150.f);
+        t = paint(*card, r, 476.f, 150.f);
+        CHECK(t.find("42 PC actifs maintenant") != std::string::npos && t.find("Lyon, FR") != std::string::npos);
+        card->dispatch(ui::MouseDown{{200.f, 75.f}, ui::MouseButton::Left, 1, {}});
+        CHECK(!rig3.navigations.empty() && rig3.navigations.back() == "globe");
+    }
+
+    // ---- 4. La carte d'une ville dans la vraie coquille : Clients et Activations filtrees sur la ville.
+    {
+        Fixture fx4(source, "globe-listes");
+        menu::MenuManager menus{menu::MenuFactory{}};
+        auto owned = std::make_unique<gui::Shell>(U(fx4.admin), [] { return g_now; });
+        gui::Shell* shell = owned.get();
+        menus.PushMenu(std::move(owned));
+        menus.applyPending();
+        shell->navigate("globe");
+        CHECK(shell->currentPageId() == "globe" && shell->pageTitle() == "Le globe");
+        auto* pg = shell->page("globe");
+        auto* v = pg ? find<gs::GlobeStatsView>(*pg, "globe.page-vue") : nullptr;
+        CHECK(v != nullptr);
+        if (v) {
+            v->tick(0.0);
+            (void)shell->finishSlow();   // le releve (un travail sans bruit de la coquille)
+            CHECK(v->hasReply());
+            const int lyon = v->board().globe().findPlace("FR|Lyon");
+            const auto& customers = fake.cities[static_cast<std::size_t>(lyon)].customers;
+            const std::string said = v->openClients(lyon);
+            CHECK(shell->currentPageId() == "clients" && said.find("les 9 clients de Lyon, FR") != std::string::npos && said.find("pas pris") == std::string::npos);
+            ui::FilterBar* bar = shell->page("clients") ? find<ui::FilterBar>(*shell->page("clients"), "clients") : nullptr;
+            CHECK(bar != nullptr);
+            if (bar) {
+                const int f = bar->fieldByTitle("Client");
+                bool kept = false;
+                for (const auto& p : bar->state().picks)
+                    if (static_cast<int>(p.field) == f) kept = p.values == customers;
+                CHECK(f >= 0 && kept);
+            }
+            // Les PC : l'archive de ce poste ne les connait pas -> les PC des clients de la ville (la colonne Client).
+            const std::string said2 = v->openPcs(lyon);
+            CHECK(shell->currentPageId() == "activations" && said2.find("les PC des clients de Lyon, FR") != std::string::npos);
+            ui::FilterBar* bar2 = shell->page("activations") ? find<ui::FilterBar>(*shell->page("activations"), "activations") : nullptr;
+            CHECK(bar2 != nullptr);
+            if (bar2) {
+                const int f = bar2->fieldByTitle("Client");
+                bool kept = false;
+                for (const auto& p : bar2->state().picks)
+                    if (static_cast<int>(p.field) == f) kept = p.values == customers;
+                CHECK(f >= 0 && kept);
+            }
+        }
+    }
+    gs::setFetchersForTests({});
 
     std::printf("%d verifications, %d echec(s)\n", checks, fails);
     return fails == 0 ? 0 : 1;

@@ -461,6 +461,20 @@ void testMenuRule() {
     }
     check(prolong && !prolong->enabled && prolong->note == "droit retir\xC3\xA9 le 02/11", "un droit qui manque : grise, la raison dessous");
     check(revoke && revoke->danger, "Revoquer : en rouge, avec << ... >>");
+    {   // une raison trop longue pour une ligne du menu : ce qui precede << : >>, sinon les premiers mots
+        ui::ListMenu longWhy;
+        longWhy.danger({.label = "Supprimer le client", .why = "Une licence en cours (XPG-2025-00031, jusqu'au 06/11/2027) : r\xC3\xA9voque-la ou attends sa fin pour le supprimer.",
+                        .run = runner("supprimer")});
+        longWhy.action({.label = "Accepter\xE2\x80\xA6", .why = "il manque le droit d'accepter les demandes en ligne de ce poste ; demande-le \xC3\xA0 Camille Essai, l'admin+",
+                        .run = runner("accepter")});
+        std::string a, b;
+        for (const auto& it : longWhy.items()) {
+            if (it.label == "Supprimer le client\xE2\x80\xA6") a = it.note;
+            if (it.label == "Accepter\xE2\x80\xA6") b = it.note;
+        }
+        check(a == "Une licence en cours (XPG-2025-00031, jusqu'au 06/11/2027)", "raison longue : avant << : >> (" + a + ")");
+        check(b.size() > 3 && b.size() < 80 && b.compare(b.size() - 3, 3, "\xE2\x80\xA6") == 0 && b.rfind("il manque le droit", 0) == 0, "raison longue : les premiers mots et ... (" + b + ")");
+    }
     check(items[0].shortcut == "Entr\xC3\xA9" "e" && items[1].shortcut == "\xE2\x86\x92", "Entree, ->");
     check(m.runLabel("Aller \xC3\xA0 > Son PC") && ran.back() == "pc-aller", "Aller a > Son PC");
     check(!m.runLabel("Prolonger\xE2\x80\xA6"), "une entree grisee ne se lance pas");

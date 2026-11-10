@@ -33,6 +33,28 @@ std::string upperAscii(std::string s) {
     return s;
 }
 
+// La raison d'une entree grisee tient sur une ligne du menu (le menu ne passe pas a la ligne) : au-dela de
+// kNoteMax caracteres, ce qui precede << : >> (<< Une licence en cours (XPG-2026-00031, jusqu'au 06/11/2027) >>), sinon
+// les premiers mots et << ... >>. La raison entiere reste ou elle est ecrite (le bouton, la fiche).
+constexpr std::size_t kNoteMax = 64;
+std::size_t glyphs(const std::string& s, std::size_t end) {
+    std::size_t n = 0;
+    for (std::size_t i = 0; i < end && i < s.size(); ++i)
+        if ((static_cast<unsigned char>(s[i]) & 0xC0) != 0x80) ++n;
+    return n;
+}
+std::string shortNote(const std::string& s) {
+    if (glyphs(s, s.size()) <= kNoteMax) return s;
+    const auto colon = s.find(" : ");
+    if (colon != std::string::npos && colon > 8 && glyphs(s, colon) <= kNoteMax) return s.substr(0, colon);
+    std::size_t cut = 0;
+    for (std::size_t p = s.find(' '); p != std::string::npos && glyphs(s, p) <= kNoteMax - 1; p = s.find(' ', p + 1)) cut = p;
+    if (cut == 0) return s;
+    std::string out = s.substr(0, cut);
+    while (!out.empty() && (out.back() == ',' || out.back() == ':' || out.back() == ';' || out.back() == ' ' || out.back() == '(')) out.pop_back();
+    return out + kEllipsis;
+}
+
 } // namespace
 
 // ------------------------------------------------------------------------------------------- ajouter
@@ -177,7 +199,7 @@ std::vector<PopupMenu::Item> ListMenu::items(int firstId) const {
         it.shortcut = e.shortcut;
         it.enabled = e.why.empty();
         // La raison sous le libelle (planche 06 : << droit retire le 02/11 - demande-le a Camille Essai >>).
-        it.note = e.why.empty() ? e.note : (e.why == " " ? std::string() : e.why);
+        it.note = shortNote(e.why.empty() ? e.note : (e.why == " " ? std::string() : e.why));
         for (const auto& c : e.children) it.children.push_back(make(c, false));
         it.id = e.children.empty() && it.enabled && e.run ? addRun(e.run) : -1;
         return it;

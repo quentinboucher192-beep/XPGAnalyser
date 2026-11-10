@@ -1173,6 +1173,7 @@ private:
             r.fillRect(row, c.error.withAlpha(14));
             r.fillRect({row.x, row.y, 3.f, row.h}, c.error);
         }
+        if (!open && menu_ && menu_->isOpen() && l.number == menuLine_) r.fillRect(row, c.accent.withAlpha(12));   // la ligne du clic droit
         r.fillRect({row.x, (open ? row.y + kRowH + expandH_ : row.bottom()) - 1.f, row.w, 1.f}, c.gridLine);
         const float ty = y + (kRowH - r.lineHeight(kF13)) * 0.5f;
         // Quand (1.47.0 : le chevron du depliage devant, planche 07)
