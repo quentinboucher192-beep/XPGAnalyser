@@ -72,6 +72,9 @@ public:
         src.rows = [this] { return d_->ov.shares.size(); };
         src.text = [this](std::size_t row, std::size_t field) { return cellText(row, field); };
         bar_->setSource(std::move(src));
+        toBefore_ = &adoptIn(*this, std::make_unique<LinkButton>("Cette p\xC3\xA9riode et celle d'avant, toi l'admin+", "admins.qui.dessous"));
+        toBefore_->setVisibility(ui::Visibility::Collapsed);
+        links_ += toBefore_->clicked->connect([this] { scrollTo(beforeTop_ - 8.f); });
         links_ += bar_->changed->connect([this] {
             invalidateLayout();
             invalidate();
@@ -146,7 +149,8 @@ protected:
         float ly = y + 18.f;
         ly += 46.f;   // le titre, le sous-titre
         legendY_ = ly;
-        ly += legendHeight(leftW - 36.f) + 8.f;
+        legendW_ = leftW - 36.f - (w >= 1180.f ? 0.f : toBefore_->naturalWidth() + 20.f);
+        ly += legendHeight(legendW_) + 8.f;
         const float bh = bar_->heightFor(leftW - 36.f);
         put(bar_, {x0 + 18.f, ly, leftW - 36.f, bh});
         ly += bh + 10.f;
@@ -176,6 +180,11 @@ protected:
         share_.h = ly - share_.y;
         // ---- la colonne de droite ----
         float ry = side ? y : share_.bottom() + 16.f;
+        beforeTop_ = ry - area.y;
+        {   // empiles : un lien sur la ligne de la legende y mene
+            const float lw = toBefore_->naturalWidth();
+            put(toBefore_, {x0 + leftW - 18.f - lw, legendY_, lw, 20.f}, !side && lw < leftW * 0.45f);
+        }
         const float rx = side ? x0 + leftW + 16.f : x0;
         before_ = {rx, ry, rightW, 0.f};
         float by = ry + 18.f + 46.f;
@@ -303,7 +312,7 @@ private:
                     if (idx++ == k) p = &q;
                 ++k;
                 const float iw = 24.f + ui::measureWidth(it.first, kF13) + ui::measureWidth(it.second, kF13) + 18.f;
-                if (lx + iw > x + w && lx > x) {
+                if (lx + iw > x + legendW_ && lx > x) {
                     lx = x;
                     ly += 24.f;
                 }
@@ -482,6 +491,9 @@ private:
     ShellHost              host_;
     ui::FilterBar*         bar_{nullptr};
     ch::Dumbbell*          dumbbells_[4]{};
+    LinkButton*            toBefore_{nullptr};
+    float                  legendW_{0.f};
+    float                  beforeTop_{0.f};
     Rect                   cells_[4]{};
     std::string            titles_[4], asides_[4];
     Rect                   share_{}, before_{}, plus_{};

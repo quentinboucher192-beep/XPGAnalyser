@@ -126,7 +126,10 @@ const std::vector<std::string> kOverviewCharts = {"montant", "cumul", "commandes
 class WideRenderer final : public gfx::IRenderer {
 public:
     static constexpr float kFactor = 0.52f;   // Inter mesure : 0,39 a 0,52 de la taille par caractere (les capitales), le demi-gras ~0,47
-    void beginFrame(gfx::Color) override { lines.clear(); }
+    void beginFrame(gfx::Color) override {
+        lines.clear();
+        rects.clear();
+    }
     void endFrame() override {}
     void pushClip(const gfx::Rect& r) override { clips_.push_back(clips_.empty() ? r : clips_.back().intersect(r)); }
     void popClip() override {
@@ -137,9 +140,11 @@ public:
     void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
     void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
-    void drawText(gfx::Point, std::string_view s, gfx::FontId, gfx::Color) override {
+    void drawText(gfx::Point p, std::string_view s, gfx::FontId f, gfx::Color) override {
         if (!clips_.empty() && clips_.back().empty()) return;
         lines.emplace_back(s);
+        const gfx::TextMetrics m = measure(s, f);
+        rects.push_back({p.x, p.y, m.width, m.height});
     }
     [[nodiscard]] gfx::TextMetrics measure(std::string_view s, gfx::FontId f) const override {
         const float h = f.v ? static_cast<float>(f.v) : 16.f;
@@ -153,6 +158,7 @@ public:
         return std::min(static_cast<std::size_t>(std::max(0.f, w / (h * kFactor))), s.size());
     }
     std::vector<std::string> lines;
+    std::vector<gfx::Rect>   rects;   // la place de chaque ligne dessinee (les chevauchements)
     gfx::Size                size{1280.f, 800.f};
 
 private:
@@ -189,6 +195,37 @@ std::string cutLines(ui::Widget& w, float width, float height) {
         for (const char* a : kAllowed) ok = ok || l == a;
         if (!ok) out += "[" + l + "] ";
     }
+    return out;
+}
+
+// Les textes qui se chevauchent dans le cadre du widget `id` (vide : aucun) - dessines comme cutLines.
+std::string overlapLines(ui::Widget& w, const std::string& id, float width, float height) {
+    static const ui::Theme theme = ui::Theme::byName("Light");
+    WideRenderer r;
+    r.size = {width, height};
+    for (int pass = 0; pass < 2; ++pass) {
+        w.setBounds({0.f, 0.f, width, height});
+        w.layout();
+        r.beginFrame(theme.color.windowBg);
+        ui::PaintContext ctx{r, theme, w.bounds(), 0.0, nullptr};
+        w.render(ctx);
+        r.endFrame();
+    }
+    const ui::Widget* part = w.findById(id);
+    if (!part) return "[" + id + " introuvable]";
+    const gfx::Rect area = part->bounds();
+    std::vector<std::size_t> in;
+    for (std::size_t i = 0; i < r.rects.size(); ++i) {
+        const gfx::Rect& t = r.rects[i];
+        if (t.w > 0.f && t.x >= area.x - 1.f && t.y >= area.y - 1.f && t.right() <= area.right() + 1.f && t.bottom() <= area.bottom() + 1.f) in.push_back(i);
+    }
+    std::string out;
+    for (std::size_t a = 0; a < in.size(); ++a)
+        for (std::size_t b = a + 1; b < in.size(); ++b) {
+            const gfx::Rect &p = r.rects[in[a]], &q = r.rects[in[b]];
+            const float ox = std::min(p.right(), q.right()) - std::max(p.x, q.x), oy = std::min(p.bottom(), q.bottom()) - std::max(p.y, q.y);
+            if (ox > 1.f && oy > 2.f) out += "[" + r.lines[in[a]] + " / " + r.lines[in[b]] + "] ";
+        }
     return out;
 }
 
@@ -603,6 +640,13 @@ int main(int argc, char** argv) {
                 const std::string cut = cutLines(*wp, sz.w, sz.h);
                 check(cut.empty(), std::string("Statistiques, ") + tab + " a " + sz.window + " : aucun texte coupe " + cut);
             }
+            check(click(*wp, "stats.onglet.mises-a-jour"), "Mises a jour");
+            for (const char* part : {"stats.maj.versions", "stats.maj.retard", "stats.maj.tuiles"}) {
+                const std::string over = overlapLines(*wp, part, sz.w, sz.h);
+                check(over.empty(), std::string("Mises a jour, ") + part + " a " + sz.window + " : aucun texte sur un autre " + over);
+            }
+            auto* segs = find<sk::SegGroup>(*wp, "stats.maj.retard.filtre");
+            check(segs && segs->preferredWidth() <= segs->bounds().w + 0.5f, std::string("Mises a jour a ") + sz.window + " : les filtres des PC en retard en entier (des mots plus courts si etroit)");
             check(click(*wp, "stats.onglet.vue"), "retour");
             const std::string cut = cutLines(*wc, sz.w, sz.h);
             check(cut.empty(), std::string("la fiche d'un client a ") + sz.window + " : aucun texte coupe " + cut);

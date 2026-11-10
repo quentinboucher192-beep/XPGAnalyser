@@ -974,6 +974,9 @@ public:
         cardJournal_ = &button(*this, "Son journal", "admins.fiche.journal", ui::Button::Style::Default, ui::Icon::History);
         cardRights_ = &button(*this, "Ses droits\xE2\x80\xA6", "admins.fiche.droits", ui::Button::Style::Default, ui::Icon::Lock);
         cardRetire_ = &button(*this, "Retirer\xE2\x80\xA6", "admins.fiche.retirer", ui::Button::Style::Danger, ui::Icon::User);
+        // 1.47.0 (agent S) : la derogation << Gerer le service >> a cet admin (DerogationDialog.cpp)
+        cardDerog_ = &button(*this, "D\xC3\xA9rogation\xE2\x80\xA6", "admins.fiche.derogation", ui::Button::Style::Default, ui::Icon::Lock);
+        cardDerog_->setTooltip("G\xC3\xA9rer le service : \xC3\xA0 cet admin, pour un temps court (1 h \xC3\xA0 72 h), r\xC3\xA9vocable");
         for (int i = 0; i < 7; ++i) {
             anchors_[i] = &adopt(*this, std::make_unique<statskit::TabButton>(kAnchorLabels[i], "admins.fiche.ancre." + std::to_string(i), ui::Icon::None));
             links_ += anchors_[i]->clicked->connect([this, i] {
@@ -1033,6 +1036,9 @@ public:
         links_ += cardRetire_->clicked->connect([this] {
             if (!cardKey_.empty()) askRetire(cardKey_);
         });
+        links_ += cardDerog_->clicked->connect([this] {   // 1.47.0 (agent S)
+            if (!cardKey_.empty() && host_.openDialog) host_.openDialog(makeDerogationDialog(host_, cardKey_));
+        });
         links_ += myCard_->clicked->connect([this] {
             if (!ws().adminKey().keyHex.empty()) openCard(ws().adminKey().keyHex, true);
         });
@@ -1091,6 +1097,7 @@ protected:
                                static_cast<ui::Widget*>(range_), static_cast<ui::Widget*>(from_), static_cast<ui::Widget*>(to_),
                                static_cast<ui::Widget*>(deploy_), static_cast<ui::Widget*>(back_), static_cast<ui::Widget*>(cardJournal_),
                                static_cast<ui::Widget*>(cardRights_), static_cast<ui::Widget*>(cardRetire_), static_cast<ui::Widget*>(myCard_),
+                               static_cast<ui::Widget*>(cardDerog_),
                                static_cast<ui::Widget*>(overview_), static_cast<ui::Widget*>(who_), static_cast<ui::Widget*>(createKey_),
                                static_cast<ui::Widget*>(restore_), static_cast<ui::Widget*>(reqName_), static_cast<ui::Widget*>(reqEmail_),
                                static_cast<ui::Widget*>(send_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(check_)})
@@ -1530,7 +1537,7 @@ private:
         float right = x0_ + w_;
         const bool plus = shownRole_ == Role::Plus && !cardOwn_;
         const bool admin = p && p->kind == ab::Person::Kind::Admin && p->active();
-        for (ui::Button* btn : {cardRetire_, cardRights_, cardJournal_}) {
+        for (ui::Button* btn : {cardRetire_, cardDerog_, cardRights_, cardJournal_}) {
             const bool on = plus && (btn == cardJournal_ ? (p && p->key.size() == 64) : admin);
             if (!on) continue;
             const float w = buttonWidth(*btn, 96.f);
@@ -2273,6 +2280,7 @@ private:
     ui::Button*            cardJournal_{nullptr};
     ui::Button*            cardRights_{nullptr};
     ui::Button*            cardRetire_{nullptr};
+    ui::Button*            cardDerog_{nullptr};   // 1.47.0 (agent S) : la derogation << Gerer le service >>
     statskit::TabButton*   anchors_[7]{};
     ui::Button*            myCard_{nullptr};
     ab::ScrolledView*      overview_{nullptr};

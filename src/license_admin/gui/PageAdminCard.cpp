@@ -513,7 +513,7 @@ protected:
         const float rq0 = reqCard_.x + 16.f, rqW = reqCard_.w - 32.f;
         const float figsW = std::min(260.f, rqW * 0.32f);
         const float chartW = (rqW - figsW - 2.f * gap) * 0.55f;
-        put(delay_, {rq0 + figsW + gap, reqCard_.y + 64.f, chartW, reqCard_.h - 76.f});
+        put(delay_, {rq0 + figsW + gap, reqCard_.y + 86.f, chartW, reqCard_.h - 98.f});
         put(weeksReq_, {rq0 + figsW + gap + chartW + gap, reqCard_.y + 64.f, rqW - figsW - chartW - 2.f * gap, reqCard_.h - 76.f});
         y = reqCard_.bottom() + 24.f;
         // ======== 4 BOUTIQUE ========
@@ -1367,6 +1367,8 @@ private:
         }
         fig("D\xC3\xA9lai moyen \xC2\xB7 m\xC3\xA9" "dian \xC2\xB7 le plus long", f ? hoursText(f->meanDelay) + " \xC2\xB7 " + hoursText(f->medianDelay) : num(kNaN),
             f ? hoursText(f->maxDelay) : std::string());
+        if (delay_->visibility() != ui::Visibility::Collapsed)
+            (void)text(r, delay_->bounds().x, reqCard_.y + 64.f, "Son d\xC3\xA9lai moyen, semaine apr\xC3\xA8s semaine (12 semaines)", kB13, kInk, delay_->bounds().w);
         fig("En attente (tous les admins)", num(d_->totals.pending), known(d_->totals.oldest) && d_->totals.oldest > 0 ? "la plus ancienne : " + hoursText(d_->totals.oldest) : std::string(),
             kAmber);
         (void)p;

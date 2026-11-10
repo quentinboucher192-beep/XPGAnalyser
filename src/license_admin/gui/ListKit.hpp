@@ -26,8 +26,12 @@
 //    3. le clic droit : links_ += ui::ListMenu::bind(*table_, [this] { ... }) (l'ordre : ListMenu.hpp).
 //    4. le depliage : table_->setUnfold([this](ui::RowIndex r) { auto c = std::make_unique<ui::UnfoldCard>(...); ...
 //       return c; }) ; table_->setEnterActivates(true) ; activated -> la fiche.
+//  Une case a plusieurs valeurs (les offres d'une option) : Field::split ; un titre de colonne entier a cote de son
+//  entonnoir (la table defile plutot que de le couper) : sa largeur = le titre + 46 px.
 //  Les pages faites ainsi : Commandes (PageShop.cpp), Journal des admins (une liste peinte : PageJournal.cpp), Licences,
-//  Clients, Demandes en ligne, Activations.
+//  Clients, Demandes en ligne, Activations, Offres, Options, Fonctionnalites (PageEditions.cpp : la base RegistryPage
+//  les partage), Licences flottantes (PageFloating.cpp). Aller d'une liste a l'autre : requestPageFocus(page,
+//  "offre:<id>" | "option:<id ou nom>" | "fonction:<libelle>" | "client:<nom>" | "licence:<id>").
 // =============================================================================
 #pragma once
 
