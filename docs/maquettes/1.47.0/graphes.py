@@ -230,7 +230,7 @@ def hbars(rows, color, maxv, cols="150px 1fr 34px", extra=None):
         if v:
             o.append('<div class="tr"><i style="width:%.1f%%;background:%s"></i></div>' % (v * 100.0 / maxv, color))
         else:
-            o.append('<div class="tr">%s</div>' % (note or ""))
+            o.append('<div class="tr nt">%s</div>' % (note or ""))
         o.append('<div class="n%s">%s</div>' % (" off" if off and not v else "", "—" if off and not v else fr(v)))
     o.append("</div>")
     return "".join(o)
@@ -265,14 +265,13 @@ def g_rank_spark(k):
 
 # ------------------------------------------------------------------ 02 : la fiche (vue d'ensemble) ----
 def g_lea_days():
-    p = Plot(596, 196, 30, 20, [0, 5, 10, 15, 20], pl=26, pr=4, pt=10, pb=20, band=True)
+    p = Plot(574, 246, 30, 20, [0, 5, 10, 15, 20], pl=26, pr=4, pt=12, pb=20, band=True)
     p.grid()
     # les fins de semaine : une bande tres claire
     for i in sorted(WEEKEND):
         x = p.X(i) - p.bw() / 2
         p.p.insert(0, '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#f8fafc"/>' % (x, p.y1, p.bw(), p.y0 - p.y1))
     p.cols(DAILY["L"], AD["L"], frac=0.6)
-    pp = Plot(596, 196, 30, 20, [0], pl=26, pr=4, pt=10, pb=20, band=True)
     p.line(DAILY_P["L"], CMP, width=1.5, dot=False)
     p.xlab([(0, "lun. 12/10"), (7, "19/10"), (14, "26/10"), (21, "02/11"), (29, "auj.")])
     p.mark(18, 19, "19 actions · 3,4× sa moyenne", dy=-6, anchor="end", size=10.5, color=INK2)
@@ -292,7 +291,7 @@ def g_lea_types():
             off = True
             note = '<span class="cap" style="font-size:11px">pas ce droit</span>'
         elif has and not v:
-            note = '<span class="warn2" style="font-size:11px;display:inline-flex;gap:4px;align-items:center"><i data-i="alert" style="width:12px;height:12px"></i>jamais utilisé · 90 j</span>'
+            note = '<span class="warn2" style="font-size:11px;display:inline-flex;gap:4px;align-items:center"><i data-i="alert" style="width:12px;height:12px"></i>jamais (90 j)</span>'
         lab = t
         rows.append((lab, v, note, off))
     out = hbars(rows, AD["L"], 34, cols="182px 1fr 26px")

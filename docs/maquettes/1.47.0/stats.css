@@ -1,0 +1,104 @@
+/* 1.47.0 - planches 08, 09, 10 : les statistiques (vue generale, mises a jour, fiche d'un client).
+   Les couleurs : celles d'extra.css (en tete). Les graphiques sont dessines par stats.js (SVG, survol : regle + bulle). */
+
+/* l'en-tete de la page Statistiques : titre + onglets, puis la periode commune */
+.sh{display:flex;align-items:center;gap:26px}
+.sh .h1{flex:none}
+.sh .tabs{flex:1;border-bottom:0;gap:20px;padding-top:9px}
+.sh .tabs span{padding-bottom:7px}
+.fbar{display:flex;align-items:center;gap:10px;margin-top:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.fbar .lab{font:600 11.5px Inter;color:var(--faint);white-space:nowrap}
+.fbar .seg span{height:28px;padding:0 10px;font-size:12px}
+.fbar .seg span .ico{width:13px;height:13px}
+.fbar .vs{width:1px;height:22px;background:var(--line);flex:none;margin:0 2px}
+.fbar .hint{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap}
+.fbar .hint .ico{width:15px;height:15px;color:var(--violet)}
+.fbar .hint b{color:var(--ink);font-weight:600}
+.chipd{display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 11px;border:1px solid var(--line2);border-radius:9px;background:#fff;font-size:12.5px;color:var(--ink);white-space:nowrap}
+.chipd .ico{width:14px;height:14px;color:var(--faint)}
+.chipd.on{border-color:var(--violet);box-shadow:0 0 0 3px var(--acc-ring)}
+
+/* la grille des cartes, avec le rail des themes a gauche */
+.sgrid{display:grid;grid-template-columns:20px repeat(5,minmax(0,1fr));gap:12px;margin-top:12px}
+.rail{display:flex;align-items:center;justify-content:center;border-radius:8px;background:var(--surface2);border:1px solid var(--line)}
+.rail span{writing-mode:vertical-rl;transform:rotate(180deg);font:700 10.5px Inter;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+.s2{grid-column:span 2}
+
+/* une carte de graphique (en plus de .gc, planches.css) */
+.gc.x{display:flex;flex-direction:column;padding:11px 13px 9px;overflow:visible}
+.gc.x .ch{display:flex;align-items:center;gap:8px;min-width:0}
+.gc.x .ct{font:650 13px/1.25 Inter;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gc.x .ct small{font:500 11.5px Inter;color:var(--faint);margin-left:5px;letter-spacing:0}
+.gc.x .tv{margin-left:auto;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:#b4bdca;flex:none}
+.gc.x .tv .ico{width:14px;height:14px}
+.gc.x .cv{display:flex;align-items:baseline;gap:8px;margin-top:3px;min-width:0;white-space:nowrap}
+.gc.x .cv b{font:650 19px/1.2 Inter;letter-spacing:-.02em;font-feature-settings:"cv11","ss01"}
+.gc.x .cv b small{font:600 12px Inter;color:var(--muted);letter-spacing:0;margin-left:2px}
+.gc.x .cv .cc{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gc.x .cv .cc .ico{width:13px;height:13px;vertical-align:-2px}
+.gc.x .lg{margin-top:5px;gap:10px;font-size:11px;row-gap:3px}
+.gc.x .lg i{width:9px;height:9px;border-radius:2.5px}
+.gc.x .lg i.ln{width:12px;height:2px}
+.gc.x .lg b{font-weight:650;color:var(--ink)}
+.gc.x .plot{flex:1;min-height:0;position:relative;margin-top:6px}
+.gc.x .row2{flex:1;min-height:0;display:flex;gap:14px;margin-top:6px}
+.gc.x .row2 .plot{margin-top:0;flex:1;min-width:0}
+.dl .ico{width:12px;height:12px;stroke-width:2.4}
+
+/* les valeurs a cote d'un graphique (la legende avec ses chiffres) */
+.vl{width:168px;flex:none;display:flex;flex-direction:column;justify-content:center;gap:0}
+.vl .r{display:grid;grid-template-columns:10px 1fr auto;align-items:center;column-gap:7px;padding:4px 0;border-bottom:1px solid #f1f4f8;font-size:11.5px;color:var(--ink2);white-space:nowrap}
+.vl .r:last-child{border-bottom:0}
+.vl .r i{width:9px;height:9px;border-radius:2.5px}
+.vl .r i.ln{height:2px;width:10px}
+.vl .r b{font-weight:650;color:var(--ink);font-feature-settings:"cv11","ss01","tnum"}
+.vl .r em{font-style:normal;color:var(--faint);font-size:11px;margin-left:5px;font-weight:500}
+.vl .r.t{color:var(--muted)}
+.vl .r.t b{color:var(--ink)}
+
+/* la bulle du survol (et l'exemple montre) */
+.xtip{position:absolute;z-index:30;pointer-events:none;background:#fff;border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.16),0 2px 6px rgba(15,23,42,.06);padding:8px 11px 8px;min-width:150px;display:none;white-space:nowrap}
+.xtip .tt{font:600 11.5px Inter;color:var(--muted);margin-bottom:5px}
+.xtip .tr{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);padding:1.5px 0}
+.xtip .tr b{font:650 12.5px Inter;color:var(--ink);min-width:54px;font-feature-settings:"cv11","ss01","tnum"}
+.xtip .tr i{width:12px;height:2px;border-radius:1px;flex:none}
+.xtip .tr i.bx{height:8px;width:8px;border-radius:2px}
+.xtip .ex{font-size:11.5px;color:var(--ink2);margin-top:4px;padding-top:5px;border-top:1px solid var(--line)}
+.xtip .ck{display:flex;align-items:center;gap:6px;font:600 11.5px Inter;color:var(--violet-700);margin-top:5px;padding-top:6px;border-top:1px solid var(--line)}
+.xtip .ck .ico{width:13px;height:13px}
+.plot svg{cursor:pointer}
+
+/* une petite liste de barres (un classement) */
+.rk{display:grid;grid-template-columns:auto 1fr auto;column-gap:9px;row-gap:7px;align-items:center;font-size:11.5px}
+.rk .l{color:var(--ink2);white-space:nowrap}
+.rk .tr{height:10px;position:relative}
+.rk .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0}
+.rk .tr:before{content:"";position:absolute;left:-1px;top:-3px;bottom:-3px;width:1px;background:var(--line2)}
+.rk .n{font:600 11.5px Inter;color:var(--ink);white-space:nowrap;font-feature-settings:"cv11","ss01","tnum";text-align:right}
+.rk .n em{font-style:normal;color:var(--faint);font-weight:500;margin-left:4px}
+
+/* les tableaux compacts */
+table.t.c th{padding:8px 10px;font-size:10.5px;white-space:nowrap}
+table.t.c td{padding:7px 10px;font-size:12.5px;white-space:nowrap}
+table.t.c td:first-child,table.t.c th:first-child{padding-left:14px}
+table.t.c tr:last-child td{border-bottom:0}
+.vp{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:6px;font:600 11.5px "JetBrains Mono";letter-spacing:-.02em;white-space:nowrap}
+.vp.ok{background:var(--green-50);color:#15803d}
+.vp.w{background:var(--amber-50);color:#b45309}
+.vp.g{background:var(--sunken);color:var(--ink2)}
+.vsw{display:inline-block;width:9px;height:9px;border-radius:2.5px;vertical-align:0;margin-right:6px}
+.pcb2{display:flex;align-items:center;gap:8px}
+.pcb2 .bar{width:90px;height:6px}
+.pcb2 .bar i{background:#2a78d6}
+.st{display:inline-flex;align-items:center;gap:5px;font:600 11.5px Inter;white-space:nowrap}
+.st .ico{width:13px;height:13px;stroke-width:2.3}
+.st.w{color:#b45309}.st.w .ico{color:#d97706}
+.st.r{color:#b91c1c}.st.r .ico{color:#dc2626}
+.st.g{color:#15803d}.st.g .ico{color:#16a34a}
+.flt{display:flex;gap:6px}
+.flt span{height:26px;padding:0 10px;border-radius:99px;border:1px solid var(--line2);font:600 11.5px Inter;color:var(--ink2);display:flex;align-items:center;gap:6px;white-space:nowrap;background:#fff}
+.flt span.on{background:var(--violet-50);border-color:var(--violet-100);color:var(--violet-700)}
+.flt span em{font-style:normal;color:var(--faint);font-weight:600}
+.flt span.on em{color:var(--violet)}
+.cardh{display:flex;align-items:center;gap:10px;padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.cardh .h3{font-size:13px}

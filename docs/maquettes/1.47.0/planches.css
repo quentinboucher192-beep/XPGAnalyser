@@ -45,10 +45,12 @@
 .tJ{background:var(--violet-50);color:var(--violet-700)}.tS{background:var(--blue-50);color:#1d4ed8}.tN{background:var(--amber-50);color:#b45309}
 
 /* les barres en HTML (une liste de mesures) */
-.hb{display:grid;align-items:center;column-gap:10px;row-gap:5px}
+.hb{display:grid;align-items:center;column-gap:10px;row-gap:7px}
 .hb .l{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hb .l.off{color:var(--faint)}
 .hb .tr{height:10px;position:relative}
+.hb .tr.nt{height:auto;line-height:1.1;white-space:nowrap}
+.hb .tr.nt:before{display:none}
 .hb .tr i{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;display:block}
 .hb .tr:before{content:"";position:absolute;left:-1px;top:-3px;bottom:-3px;width:1px;background:var(--line2)}
 .hb .n{font:600 12px Inter;color:var(--ink);white-space:nowrap;font-feature-settings:"cv11","ss01","tnum"}
