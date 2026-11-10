@@ -80,7 +80,9 @@ bool Shell::autoDeliver() {
                      ws_->reload();   // la licence signee par l'autre Workspace (l'archive, le registre des activations)
                      wantOrders_ = true;
                      wantLicences_ = true;
-                     if (!r.ok || rep->skipped > 0) nextDelivery_ = steadyClock() + kDeliveryRetry;
+                     // une panne qui passera (le reseau, le service) : de nouveau dans 5 minutes ; une commande qu'un autre Admin
+                     // livrera (un droit qui manque ici) ne fait pas recommencer.
+                     if (!r.ok && rep->review == 0) nextDelivery_ = steadyClock() + kDeliveryRetry;
                      for (const auto& l : rep->lines) {
                          if (l.delivered)
                              flash("Commande n\xC2\xB0 " + std::to_string(l.number) + " livr\xC3\xA9" "e : licence " + l.licence + " (" + l.customer + ", " + l.article + ").", Tone::Ok);

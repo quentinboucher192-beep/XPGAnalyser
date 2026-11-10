@@ -100,10 +100,12 @@ bool fetchShop(const ShellHost& h, std::shared_ptr<bool> alive, std::function<vo
     auto s = std::make_shared<shop::Settings>();
     auto v = std::make_shared<shop::OrdersView>();
     auto okOrders = std::make_shared<bool>(false);
+    auto okSettings = std::make_shared<bool>(false);
     return runQuietly(
         h, "Boutique : relev\xC3\xA9",
-        [wp, s, v, orders, okOrders] {
+        [wp, s, v, orders, okOrders, okSettings] {
             OpResult r = wp->shopSettings(*s);
+            *okSettings = r.ok;
             if (r.ok && orders) {
                 const OpResult o = wp->shopOrders(*v);
                 *okOrders = o.ok;
@@ -111,10 +113,10 @@ bool fetchShop(const ShellHost& h, std::shared_ptr<bool> alive, std::function<vo
             }
             return r;
         },
-        [h, alive, s, v, okOrders, done](const OpResult& r) {
+        [h, alive, s, v, okOrders, okSettings, done](const OpResult& r) {
             if (!*alive) return;
             Workspace& w = h.workspace();
-            if (!r.message.empty() && (r.ok || *okOrders || !s->articles.empty() || s->number > 0)) w.adoptShop(*s);
+            if (*okSettings) w.adoptShop(*s);
             if (*okOrders) w.adoptOrders(*v);
             if (done) done(r);
         });

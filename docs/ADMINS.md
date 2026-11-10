@@ -127,6 +127,16 @@ refusée », écrite par le service). Les documents déposés (licence, registre
 | `POST /admin/activations/retirer` | admin+ ou admin | `poste_retirer` |
 | `GET /admin/demandes`, `POST /admin/demandes/traiter`, `PUT /admin/postes` | admin+ ou admin | `demandes` (ou un droit de licence pour un poste) |
 | `GET /admin/licences`, `GET /admin/etat`, `GET /admin/stats`, `GET /admin/archive*`, `POST /admin/archive`, `GET /admin/trousseau`, `POST /admin/journal`, `GET /admin/admins` | admin+ ou admin | — |
+| 1.46.0 (la boutique, `docs/BOUTIQUE.md`) : `PUT /admin/boutique`, `POST /admin/commandes/rembourser` | admin+ | — |
+| `GET /admin/boutique` | admin+ ou admin | — |
+| `GET /admin/commandes`, `POST /admin/commandes/prendre`, `POST /admin/commandes/livree`, `POST /admin/commandes/a-revoir` | admin+ ou admin | `demandes` |
+
+**La boutique (1.46.0)** : livrer une commande payée demande le droit `demandes` (la commande, son scellé) **et** le
+droit de la licence qu'elle signe : `licence_creer` pour une offre, `licence_option` pour une option (le dépôt de la
+licence, `PUT /admin/licences`, le vérifie) ; la livraison automatique ne tourne que dans un Admin qui les a (l'admin+,
+ou un admin avec `demandes` et `licence_creer`), un admin sans `licence_option` laisse les options à un autre. Régler la
+boutique, Brancher Stripe et rembourser : l'admin+ seul. Les actions du journal : `boutique`, `stripe_brancher`,
+`commande_livrer`, `commande_revoir`, `commande_rembourser`.
 
 ### La demande en ligne scellée pour plusieurs clés
 

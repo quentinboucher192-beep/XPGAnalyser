@@ -193,6 +193,30 @@ IHM Studio fait des **sessions par Internet** (`docs/SESSIONS.md`, § 7) à trav
 
 **Le coût** (le plan gratuit) : chaque PC d'une session fait au plus un `recevoir` toutes les 25 s au calme, plus un appel par envoi groupé quand on travaille ; l'objet d'une session est actif tant qu'un `recevoir` attend (la durée de Durable Object est comptée pendant toute la session).
 
+## 5 ter. La boutique et les commandes (1.46.0)
+
+Le contrat entier : [BOUTIQUE.md](BOUTIQUE.md). Le service (`service/src/boutique.js`) garde le catalogue de la boutique
+(les montants encaissés, en centimes TTC) et les commandes ; **Stripe** encaisse sur sa page de paiement hébergée (la
+carte n'est jamais vue par le service, jamais gardée : ni client Stripe, ni `setup_future_usage`, la carte seulement) ;
+l'Admin de l'éditeur livre les commandes payées. `GET /v1/etat` gagne `boutique` ; `GET /admin/etat` gagne `commandes`
+et `a_livrer` ; la version passe à **1.46.0** (le schéma du Durable Object : 4 ; une sauvegarde du schéma 3 se restaure
+encore).
+
+| Route | Qui | Ce qu'elle fait |
+|---|---|---|
+| `GET /v1/boutique` | public | ce qui s'achète (fermée sans Stripe) |
+| `GET /v1/boutique/merci`, `/annule` | public | les deux petites pages où Stripe renvoie le navigateur |
+| `POST /v1/boutique/stripe` | Stripe (signé par lui : `Stripe-Signature`, HMAC-SHA256, 5 min, 256 Kio) | le webhook : payée, expirée, refusée, remboursée ; chaque événement une fois |
+| `POST /v1/boutique/commande`, `GET /v1/boutique/commandes`, `POST /v1/boutique/annuler` | le PC | commander (la page de paiement), ses commandes, annuler |
+| `PUT /admin/boutique` | admin+ | le catalogue, la vente, la livraison automatique |
+| `GET /admin/boutique` | admin+, admin | le réglage et l'état de Stripe (jamais la clé) |
+| `GET /admin/commandes`, `POST /admin/commandes/prendre`, `/livree`, `/a-revoir` | admin+, admin (`demandes`) | lister (le scellé de la clé qui appelle), livrer une fois, à revoir |
+| `POST /admin/commandes/rembourser` | admin+ | le remboursement demandé à Stripe |
+
+Les secrets de Stripe (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) sont des **secrets du Worker** (`wrangler secret
+put`, posés par l'Admin : Boutique › Brancher Stripe…) : jamais dans une table, une sauvegarde, une réponse ou un
+journal. `STRIPE_API_BASE` (un faux Stripe des essais) n'est écouté que pour un appel à 127.0.0.1.
+
 ## 6. Le code d'activation
 
 - Sa forme : `XPG-XXXX-XXXX-XXXX-XXXX`, 16 caractères en base32 de Crockford, soit 80 bits tirés au hasard par l'outil de l'éditeur.

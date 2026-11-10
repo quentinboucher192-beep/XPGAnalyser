@@ -7,8 +7,8 @@
 //      seulement >>, puis les 13 entrees de la maquette (1.34.0 : 14, avec
 //      << Demandes en ligne >>, Page.hpp ; 1.35.0 : << Service en ligne >> a la
 //      place de << Synchronisation GitHub >>, << Licences flottantes >> une vraie
-//      page) ; les deux de la vente en ligne (Boutique, Commandes : un paiement,
-//      pas encore fait) sont grisees mais ouvrent leur page d'explication ;
+//      page) ; 1.46.0 : la vente en ligne (Boutique, Commandes : Stripe,
+//      PageShop.cpp) est faite - plus aucune entree grisee ;
 //    - en haut de la page : son titre ; a droite l'etat de la cle (un clic :
 //      Parametres de securite) et du service des licences (un clic : la page
 //      Service en ligne) - pendant un travail lent, ce qu'il fait, avec un

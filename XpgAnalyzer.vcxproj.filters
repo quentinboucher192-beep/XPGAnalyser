@@ -3853,6 +3853,9 @@
     <ClInclude Include="src\license_admin\ServiceDeploy.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\Shop.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\gui\AdminsKit.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
