@@ -12,6 +12,7 @@
 //  service d'avant la 1.47.0 : le tableau de bord le dit deja) : la rangee n'est
 //  pas montree (shown() faux).
 // =============================================================================
+#include "ListKit.hpp"
 #include "StatsKit.hpp"
 
 #include "../../core/Json.hpp"
@@ -159,7 +160,7 @@ private:
             const stats::Series* s = reply_.find(names[i]);
             ch::TimeChartData t;
             if (!s || s->refused) {
-                t.emptyText = !problem_.empty() ? problem_
+                t.emptyText = !problem_.empty() ? listkit::shortError(problem_)   // 1.47.0 : une ligne
                               : s && s->refused ? std::string("Il te manque un droit pour ces chiffres.")
                                                 : std::string("Lecture des chiffres\xE2\x80\xA6");
                 charts_[i]->setData(t);

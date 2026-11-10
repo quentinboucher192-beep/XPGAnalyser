@@ -166,6 +166,13 @@ public:
 
 class VersionsPage final : public Page {
 public:
+    // 1.47.0 : l'erreur du service tient sur une ligne (listkit::shortError) ; sous la souris, son texte entier.
+    [[nodiscard]] bool hasTooltip() const override { return !problem_.empty() || Page::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point m) const override {
+        if (!problem_.empty() && m.y >= (titleY_ + 40.f) - 4.f && m.y <= (titleY_ + 40.f) + 22.f) return problem_;
+        return Page::liveTooltip(m);
+    }
+
     explicit VersionsPage(ShellHost host) : Page("versions", std::move(host)) {
         open_ = &button(*this, "Publier une version\xE2\x80\xA6", "versions.publier", ui::Button::Style::Default, ui::Icon::Export);
         open_->setTooltip("Les deux installateurs (les Studios, l'Admin) de la m\xC3\xAA" "me version : sign\xC3\xA9s ici, d\xC3\xA9pos\xC3\xA9s sur le service, chaque PC pas \xC3\xA0 jour pr\xC3\xA9venu.");
@@ -378,7 +385,7 @@ protected:
         if (have_) lead += " \xC2\xB7 " + std::to_string(view_.total) + " PC suivis, dont " + std::to_string(view_.admins.size()) + " admins";
         lead += " \xC2\xB7 seul l'admin+ publie";
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
-        else if (!problem_.empty()) lead += " \xC2\xB7 service : " + problem_;
+        else if (!problem_.empty()) lead += " \xC2\xB7 service : " + listkit::shortError(problem_);   // 1.47.0 : l'infobulle dit tout
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, problem_.empty() ? c.textMuted : c.warning);
         if (panel_) paintPanel(ctx);
         if (!resend_.empty()) paintResend(ctx);

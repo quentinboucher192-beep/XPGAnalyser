@@ -93,6 +93,12 @@ private:
 // l'explorateur (Enregistrer sous), puis le fichier ; le resultat au bandeau. `what` : << commandes >>.
 void exportRows(const ShellHost& host, const ui::TableView& table, std::vector<ui::RowIndex> rows, const std::string& fileName, const std::string& what);
 
+// ---- une erreur du service, en une ligne ----
+// 1.47.0 : << Refuse : pas de reponse du service (http://...) pour lire l'etat du service : Connexion impossible... >>
+// devient << Le service ne repond pas >> (<< Refuse : droit manquant >>, << Le service refuse la signature de l'appel >>...) ;
+// le texte entier va dans l'infobulle. Un message deja court est rendu tel quel (sans << Refuse : >>).
+[[nodiscard]] std::string shortError(const std::string& full);
+
 // Les jours (pour les periodes) : une date du Workspace telle quelle (secondes).
 [[nodiscard]] inline std::int64_t seconds(Seconds t) { return static_cast<std::int64_t>(t); }
 

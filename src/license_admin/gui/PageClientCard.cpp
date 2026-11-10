@@ -922,7 +922,8 @@ private:
         else if (s->refused) why = s->rights.empty() ? std::string("Cette mesure ne se filtre pas par client.") : "Il te manque le droit \xC2\xAB " + s->rights.front() + " \xC2\xBB.";
         if (why.empty()) return false;
         ch::TimeChartData t;
-        t.emptyText = why;
+        t.emptyText = listkit::shortError(why);   // 1.47.0 : une ligne ; l'infobulle dit tout
+        chart->setTooltip(t.emptyText != why ? why : std::string());
         chart->setData(t);
         card->setText(std::string());
         return true;

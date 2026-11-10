@@ -214,6 +214,42 @@ std::vector<Did> WhoDid::history(const std::string& object) const {
     return out;
 }
 
+// ------------------------------------------------------------------------------------------ une erreur du service
+std::string shortError(const std::string& full) {
+    std::string s = full;
+    for (const char* p : {"En direct : ", "Refus\xC3\xA9 : ", "Service : "})
+        if (s.rfind(p, 0) == 0) s = s.substr(std::string(p).size());
+    std::size_t glyphs = 0;
+    for (const char ch : s) glyphs += (static_cast<unsigned char>(ch) & 0xC0) != 0x80 ? 1 : 0;
+    if (glyphs <= 56) return s;
+    struct Rule {
+        const char* needle;
+        const char* say;
+    };
+    static const Rule kRules[] = {
+        {"pas de r\xC3\xA9ponse du service", "Le service ne r\xC3\xA9pond pas"},
+        {"refuse la signature", "Le service refuse la signature de l'appel"},
+        {"ne reconna\xC3\xAEt pas la cl\xC3\xA9", "Le service ne reconna\xC3\xAEt pas la cl\xC3\xA9 de ce poste"},
+        {"droits d'admin ne permettent pas", "Refus\xC3\xA9 : droit manquant"},
+        {"manque le droit", "Refus\xC3\xA9 : droit manquant"},
+        {"acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9", "Ton acc\xC3\xA8s d'admin est retir\xC3\xA9"},
+        {"limite les appels", "Le service limite les appels pour l'instant"},
+        {"a eu une erreur", "Erreur du service"},
+        {"n'est pas r\xC3\xA9gl\xC3\xA9", "Le service n'est pas r\xC3\xA9gl\xC3\xA9"},
+        {"introuvable sur le service", "Introuvable sur le service"},
+        {"trop gros pour le service", "Trop gros pour le service"},
+        {"conflit sur le service", "Conflit sur le service"},
+    };
+    for (const auto& r : kRules)
+        if (s.find(r.needle) != std::string::npos) return r.say;
+    // Autre chose : sa premiere proposition (avant << : >> ou << ( >>), sinon les premiers mots.
+    for (const char* stop : {" : ", " ("})
+        if (const auto at = s.find(stop); at != std::string::npos && at > 12 && at < 80) return s.substr(0, at);
+    std::string out;
+    for (std::size_t p = s.find(' '); p != std::string::npos && p < 70; p = s.find(' ', p + 1)) out = s.substr(0, p);
+    return (out.empty() ? s.substr(0, 60) : out) + "\xE2\x80\xA6";
+}
+
 // ------------------------------------------------------------------------------------------ exporter
 void exportRows(const ShellHost& host, const ui::TableView& table, std::vector<ui::RowIndex> rows, const std::string& fileName, const std::string& what) {
     const auto& m = table.model();

@@ -660,6 +660,8 @@ public:
         details_->setText(shell_.detailsOpen() ? std::string("Masquer les d\xC3\xA9tails")
                                                : "D\xC3\xA9tails (" + std::to_string(hasDetails ? m->result.details.size() : 0) + ")");
         folder_->setVisibility(m && !m->result.output.empty() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        // 1.47.0 : un message raccourci (une erreur du service) : son texte entier en infobulle
+        setTooltip(m && m->result.details.size() == 1 && m->result.message.rfind("En direct : ", 0) == 0 ? m->result.details.front() : std::string());
         if (m && !m->result.output.empty()) folder_->setTooltip(m->result.output);
         log_->setText(shell_.logOpen() ? std::string("Fermer le journal") : "Journal (" + std::to_string(shell_.sessionLog().size()) + ")");
         table_->setVisibility(shell_.logOpen() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
@@ -1359,7 +1361,13 @@ bool Shell::autoWatch() {
                  [this, st, ar](const OpResult& r) {
                      if (!r.ok) {
                          lastLive_ = -1;
-                         if (!autoProblemSaid_) flash("En direct : " + r.message, Tone::Warning);
+                         if (!autoProblemSaid_) {   // 1.47.0 : une ligne ; le texte entier dans les details et l'infobulle
+                             OpResult w;
+                             w.ok = true;
+                             w.message = "En direct : " + listkit::shortError(r.message);
+                             if (w.message != "En direct : " + r.message) w.details.push_back(r.message);
+                             pushLog(Tone::Warning, std::move(w));
+                         }
                          autoProblemSaid_ = true;
                          return;
                      }

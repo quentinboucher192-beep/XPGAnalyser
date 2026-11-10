@@ -494,6 +494,13 @@ private:
 // =================================================================================== la page
 class AdminRequestsPage final : public Page {
 public:
+    // 1.47.0 : l'erreur du service tient sur une ligne (listkit::shortError) ; sous la souris, son texte entier.
+    [[nodiscard]] bool hasTooltip() const override { return !problem_.empty() || Page::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point m) const override {
+        if (!problem_.empty() && m.y >= statusY_ - 4.f && m.y <= statusY_ + 22.f) return problem_;
+        return Page::liveTooltip(m);
+    }
+
     explicit AdminRequestsPage(ShellHost host) : Page("page.demandes-admins", std::move(host)) {
         fetch_ = &kit::button(*this, "Relever", "demandes-admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         fetch_->setTooltip("Relire les demandes d'admin du service (en attente, et celles closes depuis 7 jours).");
@@ -644,7 +651,7 @@ private:
     [[nodiscard]] std::string status() const {
         if (!allowed()) return "R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.";
         if (loading_) return "Relev\xC3\xA9 des demandes d'admin en cours\xE2\x80\xA6";
-        if (!problem_.empty()) return "Le service n'a pas r\xC3\xA9pondu : " + problem_;
+        if (!problem_.empty()) return listkit::shortError(problem_);   // 1.47.0 : une ligne ; l'infobulle dit tout
         if (!ws().service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
         if (loadedAt_ == 0) return "Pas encore relev\xC3\xA9" "es.";
         const std::size_t n = waitingCount();

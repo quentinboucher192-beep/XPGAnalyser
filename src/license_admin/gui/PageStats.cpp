@@ -27,6 +27,7 @@
 //  un seul avertissement et << Deployer le service >>. Avant le premier releve de
 //  la 1.47 (releves_depuis), des chiffres sont reconstitues : c'est dit.
 // =============================================================================
+#include "ListKit.hpp"   // 1.47.0 : shortError
 #include "StatsKit.hpp"
 
 #include "../../ui/widgets/DatePicker.hpp"
@@ -363,15 +364,19 @@ bool missing(Slot& s, const Data& d, const std::string& group, const stats::Seri
     }
     if (why.empty()) return false;
     s.card->setText(kNone);
+    // 1.47.0 : une erreur du service en une ligne ; l'infobulle du graphique dit tout.
+    const std::string shortWhy = listkit::shortError(why);
     if (s.time) {
         ch::TimeChartData t;
-        t.emptyText = why;
+        t.emptyText = shortWhy;
         s.time->setData(std::move(t));
+        s.time->setTooltip(shortWhy != why ? why : std::string());
     }
     if (s.bars) {
         ch::BarListData b;
-        b.emptyText = why;
+        b.emptyText = shortWhy;
         s.bars->setData(std::move(b));
+        s.bars->setTooltip(shortWhy != why ? why : std::string());
     }
     return true;
 }

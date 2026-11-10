@@ -146,12 +146,6 @@ void openUrl(const ShellHost& h, const std::string& url) {
     if (!why.empty() && h.flash) h.flash(why, Tone::Warning);
 }
 
-std::string problemText(std::string m) {
-    const std::string pre = "Refus\xC3\xA9 : ";
-    if (m.rfind(pre, 0) == 0) m = m.substr(pre.size());
-    if (!m.empty() && m.back() == '.') m.pop_back();
-    return m;
-}
 
 // Relever le reglage de la boutique (et les commandes, si ce poste a le droit << demandes >>) sans bruit ; adopte sur le
 // fil de l'interface. Faux : rien n'est parti (le service n'est pas regle, un travail tourne).
@@ -383,6 +377,13 @@ public:
 // =================================================================================== la page Boutique
 class ShopPage final : public Page {
 public:
+    // 1.47.0 : l'erreur du service tient sur une ligne (listkit::shortError) ; sous la souris, son texte entier.
+    [[nodiscard]] bool hasTooltip() const override { return !problem_.empty() || Page::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point m) const override {
+        if (!problem_.empty() && m.y >= (titleY_ + 40.f) - 4.f && m.y <= (titleY_ + 40.f) + 22.f) return problem_;
+        return Page::liveTooltip(m);
+    }
+
     explicit ShopPage(ShellHost host) : Page("page.boutique", std::move(host)) {
         reload_ = &button(*this, "Relever", "boutique.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         reload_->setTooltip("Relire tout de suite le r\xC3\xA9glage de la boutique et l'\xC3\xA9tat de Stripe sur le service.");
@@ -534,7 +535,7 @@ protected:
         // Un service trop ancien : le bandeau le dit, une seule fois (pas aussi la panne du releve).
         const bool showProblem = !problem_.empty() && note_.empty();
         if (fetching_) lead = "Relev\xC3\xA9 en cours\xE2\x80\xA6";
-        else if (showProblem) lead = "Service : " + problemText(problem_) + ".";
+        else if (showProblem) lead = "Service : " + listkit::shortError(problem_) + ".";
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, showProblem ? c.warning : c.textMuted);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
@@ -938,6 +939,13 @@ private:
 // =================================================================================== la page Commandes
 class OrdersPage final : public Page {
 public:
+    // 1.47.0 : l'erreur du service tient sur une ligne (listkit::shortError) ; sous la souris, son texte entier.
+    [[nodiscard]] bool hasTooltip() const override { return !problem_.empty() || Page::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point m) const override {
+        if (!problem_.empty() && m.y >= (titleY_ + 40.f) - 4.f && m.y <= (titleY_ + 40.f) + 22.f) return problem_;
+        return Page::liveTooltip(m);
+    }
+
     explicit OrdersPage(ShellHost host) : Page("page.commandes", std::move(host)) {
         reload_ = &button(*this, "Relever", "commandes.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         deploy_ = &button(*this, "D\xC3\xA9ployer le service", "commandes.deployer", ui::Button::Style::Primary, ui::Icon::Export);
@@ -1100,7 +1108,7 @@ private:
 
     [[nodiscard]] std::string status() const {
         if (fetching_) return "Relev\xC3\xA9 des commandes en cours\xE2\x80\xA6";
-        if (!problem_.empty() && note_.empty()) return "Service : " + problemText(problem_) + ".";
+        if (!problem_.empty() && note_.empty()) return "Service : " + listkit::shortError(problem_) + ".";
         const auto& w = ws();
         if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");
