@@ -619,6 +619,8 @@ protected:
         if (r.measure(lead, kF14).width > leadRight_ - x0_ - 12.f) {
             const std::string head = "Chaque action de chaque admin, sign\xC3\xA9" "e par sa cl\xC3\xA9 et cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : ";
             lead = "Sign\xC3\xA9" "es et cha\xC3\xAEn\xC3\xA9" "es : " + lead.substr(head.size());
+            if (const auto d = lead.find(" depuis le "); d != std::string::npos && r.measure(lead, kF14).width > leadRight_ - x0_ - 12.f)
+                lead.erase(d, lead.find(" \xC2\xB7 ", d) == std::string::npos ? std::string::npos : lead.find(" \xC2\xB7 ", d) - d);
         }
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, leadRight_ - x0_ - 12.f), kF14, c.textMuted);
         cardBox(r, th, card_);

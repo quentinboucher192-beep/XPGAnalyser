@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.46.0", "10/11/2026", "\xC3\xA0 venir"},
+    {"1.47.0", "10/11/2026", "\xC3\xA0 venir"},
+    {"1.46.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 12 h 15"},
     {"1.45.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 23 h 44"},
     {"1.44.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 18 h 28"},
     {"1.43.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 14 h 22"},
@@ -190,6 +191,24 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.47.0 : la fenetre et l onglet Session lisibles a toutes les tailles, Mon profil entier, l erreur de paiement, Acheter suit la reduction
+        note("1.47.0", "IHM", Kind::Fixed,
+         "L'ONGLET SESSION ET LA FEN\xC3\x8ATRE SESSION se lisent \xC3\xA0 toutes les tailles de fen\xC3\xAAtre : les textes passent \xC3\xA0 la ligne dans "
+         "leur cadre, un nom trop long se termine par \xC2\xAB \xE2\x80\xA6 \xC2\xBB et se lit en entier au survol, les boutons ne se chevauchent plus ; "
+         "de m\xC3\xAAme dans les fen\xC3\xAAtres D\xC3\xA9marrer une session, Rejoindre une session et Retirer de la session.",
+         "editeur", ""),
+        note("1.47.0", "Projet", Kind::Fixed,
+         "L'ENCART LICENCE DE L'ACCUEIL montre toujours \xC2\xAB Mon profil\xE2\x80\xA6 \xC2\xBB en entier (sur sa propre ligne quand la place manque), "
+         "au lieu de \xC2\xAB Mon pr\xE2\x80\xA6 \xC2\xBB.",
+         "licence", ""),
+        note("1.47.0", "Projet", Kind::Fixed,
+         "DEMANDER MA LICENCE : une erreur de paiement passe \xC3\xA0 la ligne dans son bandeau, au lieu d'\xC3\xAAtre coup\xC3\xA9" "e et de recouvrir "
+         "le reste de la page.",
+         "licence", ""),
+        note("1.47.0", "Projet", Kind::Changed,
+         "\xC2\xAB ACHETER \xC2\xBB SUIT LA R\xC3\x89" "DUCTION EN COURS : le montant pay\xC3\xA9 en ligne suit le prix de l'offre au registre et sa r\xC3\xA9" "duction "
+         "jusqu'\xC3\xA0 sa date de fin, comme le prix affich\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9.",
+         "licence", ""),
         // 1.46.0 : la boutique, la fenetre Licence sans onglets empiles, Mon profil a part, les images en grand, les barres de defilement
         note("1.46.0", "Projet", Kind::New,
          "LA BOUTIQUE : une offre (ou une option) en vente en ligne a \xC2\xAB Acheter \xC2\xBB avec son montant TTC ; tu paies sur la page "

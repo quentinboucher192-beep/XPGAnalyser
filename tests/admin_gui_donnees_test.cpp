@@ -202,7 +202,8 @@ int main(int argc, char** argv) {
         check(cell(p, "editions.table", 0, 4) == "sans fin", "FREE : sans fin");
         check(has(t, "Registre n\xC2\xB0 318") && has(t, "\xC3\xA0 jour"), "le numero du registre, a jour");
         check(has(t, "prochaine"), "l'explication : le registre part avec la prochaine licence");
-        check(has(t, "Offre FREE") && has(t, "l'offre sans licence"), "le panneau : FREE, l'offre sans licence (1.42.0 : les offres)");
+        // 1.47.0 : a cote de << Supprimer l'offre... >>, la forme courte quand la longue ne tient pas (jamais par-dessus le bouton)
+        check(has(t, "Offre FREE") && (has(t, "l'offre sans licence") || has(t, "sans licence\n")), "le panneau : FREE, l'offre sans licence (1.42.0 : les offres)");
         check(!enabledBtn(p, "editions.signer") && !enabledBtn(p, "editions.annuler"), "rien a signer : Signer et Annuler grises");
         check(btnText(p, "editions.signer") == "Signer le registre n\xC2\xB0 319", "le bouton dit le numero suivant");
 

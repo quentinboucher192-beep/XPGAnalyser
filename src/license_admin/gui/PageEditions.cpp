@@ -832,7 +832,8 @@ struct FieldRow {
 };
 
 // 1.47.0 : `reserve` - la place d'un bouton pose a droite du titre (Supprimer l'offre...) : ni le titre ni sa note dessous.
-void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::string& heading, const std::string& sub, float reserve = 0.f) {
+void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::string& heading, std::string sub, float reserve = 0.f,
+               const std::string& shortSub = {}) {
     auto& r = ctx.r;
     const auto& c = ctx.theme.color;
     r.fillRect(card, c.windowBg);
@@ -844,6 +845,7 @@ void paintCard(const ui::PaintContext& ctx, const gfx::Rect& card, const std::st
         // la note prend ce que le titre laisse (le titre garde au moins la moitie de la place)
         const float room = right - card.x - 24.f;
         const float headW = std::min(r.measure(heading, ctx.theme.font.heading).width, room * 0.5f);
+        if (!shortSub.empty() && r.measure(sub, ctx.theme.font.caption).width > room - headW - 12.f) sub = shortSub;   // la forme courte, entiere
         subW = std::max(0.f, std::min(r.measure(sub, ctx.theme.font.caption).width, room - headW - 12.f));
         r.drawText({right - subW, card.y + (32.f - r.lineHeight(ctx.theme.font.caption)) * 0.5f}, fit(r, sub, ctx.theme.font.caption, subW + 1.f),
                    ctx.theme.font.caption, ctx.theme.tone(ui::Tone::Info, c.text));
@@ -886,20 +888,20 @@ public:
         days_->setTooltip("La dur\xC3\xA9" "e d'une licence neuve, en jours ; 0 : sans fin (une licence perp\xC3\xA9tuelle).");
         // 1.37.0 : la << boutique >> des Studios - le prix (tel que tu l'ecris) et une phrase, montres au client qui choisit
         price_ = add(*this, std::make_unique<ui::InputText>("editions.prix"));
-        price_->setPlaceholder("490 \xE2\x82\xAC HT / an (vide : pas de prix montr\xC3\xA9)");
+        price_->setPlaceholder("490 \xE2\x82\xAC HT / an");   // 1.47.0 : court (vide : pas de prix montre - l'infobulle le dit)
         price_->setMaxLength(60);
         price_->setTooltip("Le prix montr\xC3\xA9 au client dans la boutique de sa demande de licence (Studio \xE2\x80\xBA Demander ma licence), tel que tu "
-                           "l'\xC3\xA9" "cris. Aucun paiement en ligne : il se r\xC3\xA8gle avec toi.");
+                           "l'\xC3\xA9" "cris. Aucun paiement en ligne : il se r\xC3\xA8gle avec toi. Vide : pas de prix montr\xC3\xA9.");
         description_ = add(*this, std::make_unique<ui::InputText>("editions.description"));
         description_->setPlaceholder("Pour un bureau d'\xC3\xA9tudes (facultatif)");
         description_->setMaxLength(200);
         // 1.38.0 : une reduction - le nouveau prix et sa fin ; la carte de la boutique barre l'ancien. << Prevenir mes
         // clients >> : une notification dans leurs Studios a la signature (jamais un mail).
         promo_ = add(*this, std::make_unique<ui::InputText>("editions.prix-reduit"));
-        promo_->setPlaceholder("390 \xE2\x82\xAC HT / an (vide : pas de r\xC3\xA9" "duction)");
+        promo_->setPlaceholder("390 \xE2\x82\xAC HT / an");   // 1.47.0 : court (vide : pas de reduction)
         promo_->setMaxLength(60);
         promo_->setTooltip("Le prix r\xC3\xA9" "duit : dans la boutique des Studios, l'ancien prix est barr\xC3\xA9, le nouveau montr\xC3\xA9 avec sa fin ; apr\xC3\xA8s cette "
-                           "date, la carte reprend le prix normal d'elle-m\xC3\xAAme.");
+                           "date, la carte reprend le prix normal d'elle-m\xC3\xAAme. Vide : pas de r\xC3\xA9" "duction.");
         // 1.42.0 : la fin de la reduction dans un mini calendrier (avant : une date AAAA-MM-JJ tapee)
         promoEnd_ = add(*this, std::make_unique<ui::DatePicker>("editions.reduction-fin"));
         promoEnd_->setPlaceholder("jusqu'au\xE2\x80\xA6");
@@ -1178,7 +1180,7 @@ protected:
         if (!e) return;
         const bool free = e->id == reg.unlicensedEdition;
         paintCard(ctx, panel_, "Offre " + e->id, free ? "l'offre sans licence" : (e->retired ? "retir\xC3\xA9" "e" : (e->temporary() ? "temporaire" : "")),
-                  deleteBtn_->visible() ? deleteBtn_->bounds().w + 8.f : 0.f);   // 1.47.0 : a gauche de << Supprimer l'offre... >>
+                  deleteBtn_->visible() ? deleteBtn_->bounds().w + 8.f : 0.f, free ? "sans licence" : "");   // 1.47.0 : a gauche du bouton
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         for (const auto& fr : rows_)
