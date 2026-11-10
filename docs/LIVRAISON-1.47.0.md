@@ -102,11 +102,68 @@ d'admin)
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 190 suites sur 190 réussies** (`ctest`, sur la version livrée). Celles que cette version ajoute ou touche, entre autres :
+  `charts` (217 contrôles : échelles, formats en français, couleurs stables, survol, clic, cas limites) et
+  `chartsgallery` (56) ; `globe` (139 : le masque des terres, la projection, la rotation, les groupes de villes, le coût
+  quand il ne tourne pas) et `adminguiglobe` (99) ; `listes` (103 : la barre de filtres, Mes filtres, le menu dans le
+  même ordre, les lignes dépliées) et `adminguilistes` / `adminguilistes2` (les 14 listes) ; `adminguistats` (247 : les
+  17 courbes, la période, la comparaison, un clic qui filtre, aucun texte coupé à 1373 × 917 ni à 1100 × 700) ;
+  `adminguiadminsvue` (109) et `adminjournalstats` (67 : les chiffres du journal, l'heure de Paris, le changement
+  d'heure) ; `adminguicompte` (123 : Mon compte pour chaque rôle ; contre le vrai service local, 2 demandes d'admin
+  acceptées d'un coup dans une seule liste signée, une case vide qui bloque tout) ; `adminderogation` (68 : la connexion
+  signée acceptée, modifiée ou non signée refusée ; la dérogation accordée, utilisée, révoquée, finie à l'heure du
+  service) et `adminguiservice` (37) ; `adminstats` (62, contre le vrai service local) ; `sessionui` (le panneau Session
+  de 200 × 60 à 2400 × 600, aucun texte hors de son cadre) ; les essais du service (`npm test`, dont 18 sur les
+  statistiques et 7 sur la dérogation).
+- **Sous Wine, de bout en bout** : le **vrai service 1.47.0** lancé sur ce poste et un **faux Stripe** ; **six mois
+  d'histoire fictive** passés par les routes normales du service, l'horloge du service reculée semaine après semaine
+  (1 216 gestes : Camille l'admin+, Léa, Hugo et Nina Essai, des licences, des PC dans 21 villes, des demandes, des
+  commandes payées et une remboursée, des Découvertes, les versions 1.44 à 1.47 publiées et installées) ; puis l'Admin
+  Windows (`XPG-License-Manager-Admin.exe`) photographié page par page. **69 contrôles réussis, 0 échec** (journal
+  `essai-1.47.0-wine.txt`, captures `captures-1.47.0.zip`, `1470_01` à `1470_46`) : le service rend chaque mesure
+  (17 licences créées, 32 PC actifs, 10 demandes, 6 commandes payées, 13 Découvertes dont 4 converties, 170 mises à
+  jour…) ; le tableau de bord, Statistiques et ses onglets, Mises à jour, le globe (Compte, une ville, En direct), la
+  fiche d'un client, toutes les listes avec leur barre, Administrateurs (vue d'ensemble, qui fait quoi), la fiche de Léa,
+  Mon compte (Camille, Léa, Léa sous dérogation), **Demandes d'admin** (deux demandes, les deux acceptées d'un coup),
+  **Service en ligne** (Camille ; la dérogation de 4 h accordée à Léa : sa page s'ouvre, puis révoquée : de nouveau en
+  lecture seule). Aucun code ni jeton en clair dans les journaux. Les versions publiées dans l'essai sont de petits
+  installateurs factices (ils portent un numéro, n'installent rien).
+- **Le service qui voyage avec l'Admin** (un essai à part, sous Wine) : le lien de l'installateur et de la connexion
+  (48 h, une seule fois) ; l'Admin installé démarre relié au service ; une connexion modifiée est refusée ; la demande
+  de Léa, acceptée ; sa page du service en lecture seule ; une dérogation d'1 h : la page s'ouvre, `service-deployer
+  --essai` passe et va au journal ; l'horloge du service avancée d'1 h 02 : « a pris fin », la page repasse en lecture
+  seule. Sous Linux, un admin sous dérogation a lancé le vrai `wrangler deploy --dry-run` (rien n'est parti vers
+  Cloudflare).
+- **Les Studios** : l'installation en silencieux par-dessus la 1.46.0 passe, ta clé d'API est gardée, les programmes
+  installés sont ceux construits (1.47.0). Le Studio livré (ton service compilé) s'ouvre (`1470_00`), lancé avec une
+  adresse locale où rien ne répond : **ton service n'a pas été appelé**.
+- **L'Admin** : son installateur, en silencieux par-dessus la 1.46.1 : la mise à jour, une désinstallation (le dossier
+  de ta clé intact), une réinstallation ; le kit du service toujours installé ; ses pages d'installation (`page-1` à
+  `page-7`).
+- **Aucun texte coupé** : un outil a mesuré chaque texte de chaque page de l'Admin (et ses onglets) à 1373 × 917 et
+  1100 × 700 : de 65 et 83 textes coupés ou chevauchés au départ à 6 et 13, tous des cellules raccourcies avec
+  « … » dont la bulle donne le texte entier.
+- Corrigé en route : un caractère (⇅) que la police de Windows n'a pas ; la liste des fichiers du projet Visual Studio ;
+  dans mon essai, le disque plein puis l'écran virtuel arrêté (la chaîne a été relancée sans rien reconstruire).
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.47.0.exe` (dans le zip) par-dessus la 1.46.0. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.47.0.exe` | `09D089FEAB0DCD0EF2DD3411E595C1141B0FD043DA954C57AF03E44A0E40A9AF` | 63 767 131 octets |
+| `API-Studio-1.47.0-portable.zip` | `0BD518F0204BF996A8333871FDBAC192036A33138C81E18D356B0AA554029605` | 250 fichiers |
+| `IHM-Studio-1.47.0-portable.zip` | `1C5D573D9598D7406978BD1C3379AA1709B070263C04062E003B94CD1619F03D` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.47.0-EDITEUR.exe` par-dessus la 1.46.1 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.47.0-EDITEUR.exe` | `718729D209DCFB88A14B23148196C5EAD52670852575D431843817304FCE0BE8` | 8 719 288 octets |
 
 ## 4. Limites
 
