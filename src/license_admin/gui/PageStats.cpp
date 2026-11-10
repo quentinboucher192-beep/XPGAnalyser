@@ -999,7 +999,8 @@ public:
             r.city = a.city.empty() ? kNone : a.city + (a.country.empty() ? "" : ", " + a.country);
             rows_.push_back(r);
         }
-        empty_ = d.hasAdmins ? "Aucun admin sur la p\xC3\xA9riode" : (d.error("admins").empty() ? "Lecture des admins\xE2\x80\xA6" : d.error("admins"));
+        empty_ = d.hasAdmins ? "Aucun admin sur la p\xC3\xA9riode" : (d.error("admins").empty() ? "Lecture des admins\xE2\x80\xA6" : listkit::shortError(d.error("admins")));
+        setTooltip(!d.hasAdmins && empty_ != d.error("admins") && !d.error("admins").empty() ? d.error("admins") : std::string());   // 1.47.0 : l'erreur entiere
         invalidate();
     }
     [[nodiscard]] std::size_t rows() const { return rows_.size(); }

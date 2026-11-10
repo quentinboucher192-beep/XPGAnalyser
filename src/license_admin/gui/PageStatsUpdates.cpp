@@ -21,6 +21,7 @@
 //      versions de retard ou plus, pas vus depuis 30 j) ; un clic : le PC dans
 //      Activations ; << Voir les 119 dans Activations >>.
 // =============================================================================
+#include "ListKit.hpp"   // 1.47.0 : shortError
 #include "StatsKit.hpp"
 
 #include <algorithm>
@@ -457,7 +458,7 @@ protected:
         // les colonnes a la mesure de ce qu'elles montrent ; trop large : le client passe sous le nom du PC (deux lignes),
         // jamais coupe
         const FontId pf = gfx::semibold(FontId{12}), cf = FontId{13}, sf = FontId{12};
-        float pcW = ctx.r.measure("PC", gFont()).width, whoW = ctx.r.measure("CLIENT", gFont()).width, verW = 0.f, seenW = ctx.r.measure("VU", gFont()).width;
+        float pcW = ctx.r.measure("PC", gFont()).width, whoW = ctx.r.measure("CLIENT", gFont()).width, verW = ctx.r.measure("VERSION", gFont()).width, seenW = ctx.r.measure("VU", gFont()).width;
         const auto whoOf = [this](const stats::BehindPc* p) { return p->admin.empty() ? p->customer : adminName_ ? adminName_(p->admin) : p->admin; };
         for (const auto* p : rows) {
             pcW = std::max(pcW, ctx.r.measure(p->name.empty() ? p->key.substr(0, 12) : p->name, pf).width);
@@ -702,7 +703,7 @@ private:
     void fill() {
         const Seconds now = host_.workspace().now();
         const std::string waiting = !note_.empty() ? (tooOld_ ? std::string("D\xC3\xA9ploie la 1.47.0 du service pour ces chiffres.") : note_)
-                                    : !problem_.empty() ? problem_
+                                    : !problem_.empty() ? listkit::shortError(problem_)   // 1.47.0 : une ligne (le bandeau dit tout)
                                                         : std::string("Lecture des versions\xE2\x80\xA6");
         if (!has_) {
             tiles_->set({{ui::Icon::Ok, "PC \xC3\xA0 jour", kDash, "", "", 0, ""},

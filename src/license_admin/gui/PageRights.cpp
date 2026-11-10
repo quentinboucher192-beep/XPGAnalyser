@@ -252,7 +252,7 @@ protected:
         // fenetre basse - la page defile (molette) : rien ne se serre jusqu'a passer sous un bouton. Les boutons qui ne
         // tiennent pas sur leur rangee passent a la suivante (jamais l'un sur l'autre).
         const bool narrow = w_ < 1000.f;
-        const float leftW = narrow ? std::clamp(w_ * 0.27f, 220.f, 300.f) : std::clamp(w_ * 0.22f, 200.f, 300.f);
+        const float leftW = narrow ? std::clamp(w_ * 0.30f, 240.f, 300.f) : std::clamp(w_ * 0.22f, 200.f, 300.f);
         const float rightW = narrow ? w_ : std::clamp(w_ * 0.29f, 260.f, 410.f);
         const float midW = narrow ? w_ - leftW - 16.f : std::max(300.f, w_ - leftW - rightW - 32.f);
         // ce qui passe a la rangee suivante (les boutons du profil, Supprimer, Annuler de l'admin) ; la hauteur qu'il faut
@@ -274,7 +274,17 @@ protected:
             invalidateLayout();
         }
         // A gauche
-        const float nw = buttonWidth(*newProfile_, 120.f);
+        {   // 1.47.0 : a cote du titre << Profils >> ; etroit : << Nouveau... >> (le libelle entier en infobulle)
+            const std::string full = "Nouveau profil\xE2\x80\xA6", brief = "Nouveau\xE2\x80\xA6";
+            const float pad2 = buttonWidth(*newProfile_, 0.f) - ui::measureWidth(newProfile_->text(), gfx::FontId{16});
+            const float room = leftW - 36.f - ui::measureWidth("Profils", gfx::semibold(kF16)) - 12.f;
+            const std::string want = pad2 + ui::measureWidth(full, gfx::FontId{16}) <= room ? full : brief;
+            if (newProfile_->text() != want) {
+                newProfile_->setText(want);
+                newProfile_->setTooltip(want == full ? std::string() : full);
+            }
+        }
+        const float nw = buttonWidth(*newProfile_, 90.f);
         newProfile_->setBounds({left_.right() - 16.f - nw, left_.y + 16.f, nw, 34.f});
         // Au milieu : l'en-tete, les boutons, les lignes, le pied.
         const float mx = mid_.x + 18.f, mw = mid_.w - 36.f;

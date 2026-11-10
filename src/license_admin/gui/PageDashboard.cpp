@@ -519,7 +519,7 @@ public:
             tiles_[2]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
             tiles_[2]->setTooltip({});
         }
-        tiles_[3]->set(n(d_.expiringSoon), d_.expiringSoon ? std::string("licences actives \xC3\xA0 prolonger") : std::string("licences actives"),
+        tiles_[3]->set(n(d_.expiringSoon), d_.expiringSoon ? std::string("licences \xC3\xA0 prolonger") : std::string("licences actives"),
                        d_.expiringSoon ? Tone::Error : Tone::Info, false);
         tiles_[4]->set(n(d_.clients), "dans l'archive", Tone::Info, false);
         const std::string seen = d_.snapshotAt ? "relev\xC3\xA9 " + shortWhen(d_.snapshotAt) : std::string();

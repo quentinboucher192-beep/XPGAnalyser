@@ -160,13 +160,16 @@ private:
             const stats::Series* s = reply_.find(names[i]);
             ch::TimeChartData t;
             if (!s || s->refused) {
-                t.emptyText = !problem_.empty() ? listkit::shortError(problem_)   // 1.47.0 : une ligne
+                t.emptyText = !problem_.empty() ? (listkit::shortError(problem_) == "Le service ne r\xC3\xA9pond pas" ? std::string("Pas de r\xC3\xA9ponse")
+                                                                                                                 : listkit::shortError(problem_))   // 1.47.0 : une ligne
                               : s && s->refused ? std::string("Il te manque un droit pour ces chiffres.")
                                                 : std::string("Lecture des chiffres\xE2\x80\xA6");
                 charts_[i]->setData(t);
+                charts_[i]->setTooltip(problem_);   // 1.47.0 : l'erreur entiere sous la souris (vide : rien)
                 cards_[i]->setText("\xE2\x80\x94");
                 continue;
             }
+            charts_[i]->setTooltip({});
             const bool money = i == 0, level = i == 1 || i == 2;
             t.kind = bars_[i] ? ch::Kind::Bars : ch::Kind::Line;
             t.x = axisOf(reply_.buckets, reply_.step, level);
