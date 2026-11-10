@@ -443,7 +443,7 @@ protected:
     void onLayout() override {
         const Rect b = bounds();
         // les filtres : leurs mots en entier, ou plus courts quand la carte est etroite (jamais l'un sur l'autre)
-        for (int level = 0; level < 3; ++level) {
+        for (int level = 0; level < 4; ++level) {
             applyLabels(level);
             if (filter_->preferredWidth() <= b.w) break;
         }
@@ -527,11 +527,13 @@ private:
     void applyLabels(int level) {
         if (level == labelLevel_ || counts_.size() < 3) return;
         labelLevel_ = level;
-        const char* late[3] = {"2 versions de retard ou plus", "2 versions ou plus", "2 de retard"};
-        const char* away[3] = {"pas vus depuis 30 j", "pas vus 30 j", "absents"};
-        filter_->setLabel("tous", "Tous \xC2\xB7 " + std::to_string(counts_[0]));
-        filter_->setLabel("retard", std::string(late[level]) + " \xC2\xB7 " + std::to_string(counts_[1]));
-        filter_->setLabel("absents", std::string(away[level]) + " \xC2\xB7 " + std::to_string(counts_[2]));
+        // du plus long au plus court ; le dernier sans les nombres (la liste les montre)
+        const char* late[4] = {"2 versions de retard ou plus", "2 versions ou plus", "2 de retard", "2 de retard"};
+        const char* away[4] = {"pas vus depuis 30 j", "pas vus 30 j", "absents", "absents"};
+        const auto with = [level](const char* t, int n) { return level < 3 ? std::string(t) + " \xC2\xB7 " + std::to_string(n) : std::string(t); };
+        filter_->setLabel("tous", with("Tous", counts_[0]));
+        filter_->setLabel("retard", with(late[level], counts_[1]));
+        filter_->setLabel("absents", with(away[level], counts_[2]));
     }
 
     ShellHost                                  host_;

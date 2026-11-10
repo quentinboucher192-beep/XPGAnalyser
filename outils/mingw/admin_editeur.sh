@@ -18,6 +18,10 @@
 #                                         service-licences/ (1.35.0 : le kit de mise en ligne du service des
 #                                           licences - service/ sans node_modules, deployer.bat/.sh/.mjs,
 #                                           LISEZ-MOI-SERVICE.txt ; l'editeur y ajoute cle-publique.txt)
+#                                         connexion-service.xpgsvc (1.47.0, s'il y en a une : la connexion au
+#                                           service - le certificat signe par l'editeur, rien de secret ;
+#                                           l'installateur la copie a cote du programme, l'Admin d'un futur
+#                                           admin demarre connecte ; docs/ADMINS.md, par. 11)
 #      -> DOSSIER/XPG-License-Admin-Setup-<version>-EDITEUR.exe  1.40.0 : L'INSTALLATEUR (un seul .exe, a la
 #                                         place du zip : installateur/XPG-License-Admin.iss) - avec ISCC=...
 #      -> DOSSIER/XPG-License-Admin-<version>-EDITEUR.zip   (seulement avec ZIP=1 : l'ancien paquet)
@@ -27,6 +31,8 @@
 #    OUT=build-mingw      le dossier de construction MinGW (configure par cross_mingw.sh)
 #    JOBS=2               les compilations a la fois
 #    XPG_NINJA_LOCK=...   un verrou (flock) partage avec d'autres constructions
+#    CONNEXION=F.xpgsvc   1.47.0 : la connexion au service a porter (par defaut ressources-licences/connexion-service.xpgsvc,
+#                         ecrite par kit-studios ou Service en ligne > Exporter la connexion ; aucune : rien n'est porte)
 #
 #  Seules les cibles de l'editeur sont construites (ninja ... xpg_license_admin xpg_license_manager_admin).
 # =============================================================================
@@ -94,6 +100,17 @@ cp -f service/wrangler.toml service/package.json service/package-lock.json servi
 cp -f service/src/*.js "$KIT/service/src/"
 cp -f outils/service/deployer.bat outils/service/deployer.mjs outils/service/LISEZ-MOI-SERVICE.txt "$KIT/"
 cp -f outils/service/deployer.sh "$KIT/deployer.sh" && chmod 755 "$KIT/deployer.sh"
+# 1.47.0 : la connexion au service (le certificat du service signe par la cle de l'editeur : son adresse et sa cle ; rien de
+# secret). L'installateur la copie a cote du programme ; l'Admin la verifie au premier lancement (ServiceConnection.hpp).
+CONN=${CONNEXION:-$ROOT/ressources-licences/connexion-service.xpgsvc}
+if [ -f "$CONN" ]; then
+    grep -q "^XPG-LICENSING 1 service " "$CONN" || { echo "$CONN n'est pas une connexion au service (le bloc << service >> signe)" >&2; exit 1; }
+    if grep -q -i -E "PRIVATE|secret|sk_live|sk_test|whsec_" "$CONN"; then echo "$CONN porte autre chose qu'un certificat public : refuse" >&2; exit 1; fi
+    cp -f "$CONN" "$DEST/connexion-service.xpgsvc"
+    echo "connexion au service : $(basename "$CONN") (portee par l'installateur)"
+else
+    echo "(pas de connexion au service a porter : ressources-licences/connexion-service.xpgsvc ou CONNEXION=... ; l'Admin la prendra a cote de l'installateur ou du Studio du PC)"
+fi
 # Le pas a pas : UTF-8 avec BOM, fins de ligne CRLF (le Bloc-notes), la version mise.
 python3 - "$ROOT/outils/mingw/LISEZ-MOI-EDITEUR.txt" "$DEST/LISEZ-MOI-EDITEUR.txt" "$VERSION" <<'PY'
 import sys
