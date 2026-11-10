@@ -57,6 +57,8 @@
 #include "../ServiceClient.hpp"
 #include "../Shop.hpp"   // 1.46.0 : la boutique et les commandes
 #include "../Stats.hpp"  // 1.47.0 : les statistiques et le globe
+#include "../ServiceConnection.hpp"   // 1.47.0 : la connexion au service qui voyage avec l'installateur
+#include "Derogation.hpp"             // 1.47.0 : la derogation << Gerer le service >>
 #include "../../core/Version.hpp"
 #include "../../licensing/Admins.hpp"
 #include "../../licensing/Documents.hpp"
@@ -155,6 +157,11 @@ struct ServiceStatus {
     bool                       hasState{false};   // l'etat du service lu dans cette seance (Verifier)
     online::ServiceState       state;
     Seconds                    stateAt{0};
+    // 1.47.0 : la connexion signee adoptee (connexion-service.json : d'ou vient l'adresse, la cle du service attendue) et
+    // les fichiers refuses a la derniere recherche (une adresse modifiee, une cle inconnue...).
+    bool                                hasConnection{false};
+    connexion::Connection               connection;
+    std::vector<connexion::Refused>     connectionRefused;
     [[nodiscard]] bool ready() const { return configured && problem.empty(); }
 };
 
@@ -277,7 +284,7 @@ struct AdminRequest {
 // 1.47.0 : une demande d'admin a accepter (<< Accepter 3 demandes... >>) : son profil, et << J'ai verifie l'empreinte >>.
 struct AdminAccept {
     std::string key;                     // la cle du demandeur (64 hexadecimaux)
-    std::string profile;                 // le profil (ses droits) ; vide : << Admin LV1 >> s'il existe, sinon aucun droit
+    std::string profile;                 // le profil (ses droits) ; vide : aucun droit (la page propose celui de l'invitation, sinon LV1)
     bool        fingerprintChecked{false};   // lue au telephone : sans elle, rien n'est signe
 };
 // 1.47.0 : une invitation de l'admin+ (<< Ajouter un admin... >> ; invitations-admins.json, sur son poste) - le nom, le
@@ -847,7 +854,41 @@ public:
     [[nodiscard]] bool serviceKnowsStats() const;
     [[nodiscard]] std::string statsServiceNote() const;
 
+    // ============================ 1.47.0 : gerer le service (l'admin+ seul ; la derogation) - WorkspaceDerogation.cpp ==
+    // (docs/ADMINS.md, par. 11) Gerer le service : le mettre en ligne ou a jour, changer son adresse, ses adresses de
+    // secours, brancher Stripe, le releve du jour ; certifier, la sauvegarde et la restauration restent a l'admin+ (sa cle).
+    // L'admin+, ou un admin dont la derogation court (a l'heure du service estimee).
+    [[nodiscard]] bool mayManageService() const;
+    // Vide : permis ; sinon la phrase (<< L'admin+ seul gere le service (derogation possible). >>).
+    [[nodiscard]] std::string whyNotService() const;
+    [[nodiscard]] const Derogation& derogation() const noexcept { return derogation_; }
+    // Ce que l'application a relu (GET /admin/etat, GET /admin/derogation) ; la coquille l'adopte sur le fil de l'interface.
+    void adoptDerogation(const Derogation& d);
+    void adoptDerogation(const online::AdminWatch& watch);
+    // LENT. L'admin+ : accorder a un admin de la liste (`hours` : 1, 4, 24 ou 72 ; une nouvelle remplace l'ancienne),
+    // revoquer celle en place. Une ligne au journal (derogation_accorder, derogation_revoquer).
+    [[nodiscard]] OpResult grantDerogation(const std::string& adminKeyHex, int hours, Derogation* out = nullptr) const;
+    [[nodiscard]] OpResult revokeDerogation(Derogation* out = nullptr) const;
+    // LENT. Relire (l'admin+ : celle en place ; un admin : la sienne) ; son document verifie (la cle de l'editeur).
+    [[nodiscard]] OpResult readDerogation(Derogation& out) const;
+    // LENT. Un admin, AVANT un geste qui gere le service (`action` : deployer, connexion_cloudflare, adresse, stripe,
+    // secours, releve) : le service dit si sa derogation court (il l'ecrit au journal ; l'admin+ est prevenu). L'admin+ :
+    // toujours permis, sans appel. Refuse : la phrase du service (finie, revoquee, aucune).
+    [[nodiscard]] OpResult useDerogation(const std::string& action, const std::string& detail = {}) const;
+    // Les cles PUBLIQUES de l'editeur que le service croit (PUBLISHER_KEYS, GET /admin/admins) : ce que deployer.mjs passe
+    // au Worker ; un admin sous derogation les ecrit dans cle-publique.txt (jamais la sienne). LENT.
+    [[nodiscard]] OpResult serviceEditorKeys(std::vector<std::string>& out) const;
+    [[nodiscard]] OpResult writeEditorKeysFile(const std::string& kitFolder) const;   // LENT : cle-publique.txt (un admin sous derogation)
+    // ---- la connexion au service (ServiceConnection.hpp) ----
+    // << Utiliser une connexion... >> : ce fichier (verifie : signe par l'editeur) devient l'adresse du service de ce poste.
+    OpResult useConnectionFile(const std::string& path);
+    // << Exporter la connexion... >> : le dernier certificat verifie (Verifier) dans ce fichier ; rien de secret.
+    [[nodiscard]] OpResult exportConnection(const std::string& path) const;
+
 private:
+    // 1.47.0 : au chargement, aucune adresse reglee et pas l'admin+ : la connexion signee cherchee (connexion::places()).
+    void discoverConnection();
+    Derogation derogation_;
     // 1.46.0 : une commande livree par CE Workspace (deliverOrders le cree neuf).
     OpResult deliverHere(int number, bool automatic, DeliveryReport* report);
     bool     deliverOne(online::Client& c, const shop::Order& order, const shop::Settings& settings, bool automatic, DeliveryReport& rep);

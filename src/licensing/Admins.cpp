@@ -117,6 +117,12 @@ const std::vector<ActionType> kActions = {
     {"commande_rembourser", "Rembourser une commande", "clients", Level::High, true, false},
     {"sauvegarde", "Sauvegarde compl\xC3\xA8te", "admins", Level::Info, false, false},
     {"restauration", "Restauration d'une sauvegarde", "admins", Level::Critical, true, false},
+    // 1.47.0 : la derogation << Gerer le service >> (docs/ADMINS.md, par. 11) - accordee, revoquee par l'admin+ ; utilisee
+    // et finie : le service les ecrit (signees par sa cle), l'admin+ est prevenu tout de suite d'un usage.
+    {"derogation_accorder", "Accorder une d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", "admins", Level::Critical, true, false},
+    {"derogation_revoquer", "R\xC3\xA9voquer une d\xC3\xA9rogation", "admins", Level::High, false, false},
+    {"derogation_utilisee", "D\xC3\xA9rogation utilis\xC3\xA9" "e (g\xC3\xA9rer le service)", "admins", Level::Critical, true, true},
+    {"derogation_expiree", "D\xC3\xA9rogation termin\xC3\xA9" "e", "admins", Level::Medium, false, true},
     {"signature_refusee", "Signature refus\xC3\xA9" "e (certificat r\xC3\xA9voqu\xC3\xA9)", "admins", Level::Critical, true, true},
     {"autre_pc", "Connexion depuis un nouveau PC", "admins", Level::High, true, true},
     {"demande_admin", "Demande pour devenir admin", "admins", Level::High, true, true},

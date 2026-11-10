@@ -524,8 +524,7 @@ public:
         loading_ = true;
         problem_.clear();
         std::weak_ptr<bool> alive = alive_;
-        const bool started = runQuietly(
-            host_, "Statistiques : les mises \xC3\xA0 jour",
+        const bool started = job_.start("Statistiques : les mises \xC3\xA0 jour",
             [wp, q, out, admins] {
                 OpResult r = fetchUpdates(*wp, q, *out);
                 if (r.ok) (void)fetchAdmins(*wp, q.period, *admins);
@@ -591,6 +590,7 @@ protected:
         behindPanel_->setBounds({b.x + wa + wb + 2 * gap, y, b.w - wa - wb - 2 * gap, h3});
     }
     void onPaint(const ui::PaintContext& ctx) override {
+        (void)job_.poll();
         if (!bannerRect_.empty())
             paintBanner(ctx.r, ctx.theme, bannerRect_, !note_.empty() ? note_ : "Les mises \xC3\xA0 jour ne se lisent pas : " + problem_, true,
                         tooOld_ ? deploy_->bounds().w + 28.f : 0.f);
@@ -869,6 +869,7 @@ private:
     Rect                          bannerRect_{};
     std::shared_ptr<bool>         alive_{std::make_shared<bool>(true)};
     core::ConnectionScope         links_;
+    StatsJob                    job_;   // le releve a part (StatsKit.hpp)
 };
 
 std::unique_ptr<ui::Widget> makeUpdatesView(ShellHost host, std::function<Choice()> getChoice, std::function<std::string()> getSoftware) {

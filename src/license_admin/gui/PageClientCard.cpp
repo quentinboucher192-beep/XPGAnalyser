@@ -422,6 +422,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        (void)job_.poll();
         const Rect b = bounds();
         ctx.r.fillRect(b, kPageBg);
         const float pad = b.w < 1000.f ? 20.f : 28.f;
@@ -798,8 +799,7 @@ private:
         const std::string name = name_;
         loading_ = true;
         std::weak_ptr<bool> alive = alive_;
-        const bool started = runQuietly(
-            host_, "Client : ses courbes",
+        const bool started = job_.start("Client : ses courbes",
             [w, qs, out, errs, admins, city, name, p] {
                 OpResult last = OpResult::done({});
                 for (const auto& q : qs) {
@@ -1196,6 +1196,7 @@ private:
     Rect                        bannerRect_{};
     std::shared_ptr<bool>       alive_{std::make_shared<bool>(true)};
     core::ConnectionScope       links_;
+    StatsJob                    job_;   // le releve a part (StatsKit.hpp)
 };
 
 } // namespace

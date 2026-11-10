@@ -346,6 +346,7 @@ bool readKeyAndCert(Client& c, const licensing::SigningKey& key, const Options& 
     st.serviceKey = r.json.str("cle");
     if (!licensing::isKeyHex(st.serviceKey)) return fail(why, "le service a rendu une cl\xC3\xA9 illisible");
     const Value* cert = r.json.find("certificat");
+    if (cert && cert->isString()) st.certBlock = cert->asString();   // 1.47.0 : la connexion a exporter (ServiceConnection.hpp)
     if (!cert || !cert->isString() || cert->asString().empty()) {
         st.certProblem = "aucun certificat d\xC3\xA9pos\xC3\xA9 : la cl\xC3\xA9 du service n'est pas encore certifi\xC3\xA9" "e";
         return true;
@@ -742,6 +743,22 @@ void readAdminWatch(const Value& reply, AdminWatch& out) {
     out.orders = num("commandes");   // 1.46.0 : la boutique
     out.toDeliver = num("a_livrer");
     out.role = clean(reply.str("role"), 20);
+    // 1.47.0 : la derogation << Gerer le service >> (null : aucune ; absente : un service d'avant)
+    out.serverTime = num("heure");
+    if (const Value* d = reply.find("derogation")) {
+        out.derogationSaid = true;
+        if (d->isObject() && licensing::isKeyHex(d->str("admin"))) {
+            out.derogationId = clean(d->str("id"), 32);
+            out.derogationAdmin = d->str("admin");
+            out.derogationName = clean(d->str("nom"), 60);
+            out.derogationState = clean(d->str("etat"), 20);
+            out.derogationBy = licensing::isKeyHex(d->str("par")) ? d->str("par") : std::string();
+            out.derogationStart = d->integer("debut");
+            out.derogationEnd = d->integer("fin");
+            out.derogationRevoked = d->integer("revoquee");
+            out.derogationUses = d->integer("usages");
+        }
+    }
     out.rights.clear();
     if (const Value* d = reply.find("droits"); d && d->isArray())
         for (const auto& x : d->items())

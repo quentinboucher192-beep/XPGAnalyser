@@ -125,7 +125,7 @@ const std::vector<std::string> kOverviewCharts = {"montant", "cumul", "commandes
 // libelles qui en ont une par nature (<< Exporter... >>, << Deux dates... >>, << Lecture des chiffres... >>).
 class WideRenderer final : public gfx::IRenderer {
 public:
-    static constexpr float kFactor = 0.58f;
+    static constexpr float kFactor = 0.52f;   // Inter mesure : 0,39 a 0,52 de la taille par caractere (les capitales), le demi-gras ~0,47
     void beginFrame(gfx::Color) override { lines.clear(); }
     void endFrame() override {}
     void pushClip(const gfx::Rect& r) override { clips_.push_back(clips_.empty() ? r : clips_.back().intersect(r)); }

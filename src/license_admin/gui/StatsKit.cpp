@@ -66,10 +66,10 @@ bool hooked() {
     return static_cast<bool>(f.series) || static_cast<bool>(f.updates);
 }
 
-OpResult fetchSeries(const Workspace& w, const stats::SeriesQuery& q, stats::SeriesReply& out) {
+OpResult fetchSeries(const Workspace& w, const stats::SeriesQuery& q, stats::SeriesReply& out, std::string* raw) {
     const Fetchers f = current();
     if (f.series) return f.series(q, out);
-    return w.statsSeries(q, out);
+    return w.statsSeries(q, out, raw);
 }
 OpResult fetchUpdates(const Workspace& w, const stats::UpdatesQuery& q, stats::UpdatesReply& out) {
     const Fetchers f = current();
@@ -115,6 +115,63 @@ bool saysTooOld(const std::string& message) {
 bool runQuietly(const ShellHost& h, const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done) {
     if (h.runQuiet) return h.runQuiet(label, std::move(work), std::move(done));
     return h.runSlow && h.runSlow(label, std::move(work), std::move(done));
+}
+
+// ============================================================================ StatsJob
+namespace {
+std::vector<StatsJob*>& jobs() {
+    static std::vector<StatsJob*> j;
+    return j;
+}
+} // namespace
+
+StatsJob::StatsJob() { jobs().push_back(this); }
+StatsJob::~StatsJob() {
+    auto& j = jobs();
+    j.erase(std::remove(j.begin(), j.end(), this), j.end());
+    bg_.wait();
+}
+
+bool StatsJob::start(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done) {
+    if (running()) return false;
+    if (hooked()) {   // les reponses d'essai : sur place
+        const OpResult r = work();
+        if (done) done(r);
+        return true;
+    }
+    if (!bg_.start(label, std::move(work))) return false;
+    done_ = std::move(done);
+    pending_ = true;
+    return true;
+}
+
+bool StatsJob::poll() {
+    if (!pending_) return false;
+    auto r = bg_.take();
+    if (!r) return false;
+    pending_ = false;
+    auto done = std::move(done_);
+    done_ = nullptr;
+    if (done) done(*r);
+    return true;
+}
+
+void StatsJob::wait() {
+    bg_.wait();
+    (void)poll();
+}
+
+void finishJobsForTests() {
+    for (int round = 0; round < 8; ++round) {
+        bool any = false;
+        const auto copy = jobs();
+        for (StatsJob* j : copy)
+            if (j->running()) {
+                j->wait();
+                any = true;
+            }
+        if (!any) return;
+    }
 }
 
 // ============================================================================ la periode

@@ -163,6 +163,7 @@ struct ServiceState {
     std::string   certUrl;
     std::string   certProblem;         // pourquoi le certificat ne va pas (vide : il va)
     std::uint64_t registry{0};         // le numero du registre depose (0 : aucun)
+    std::string   certBlock;           // 1.47.0 : le certificat tel que depose (le bloc << service >>, signe par l'editeur)
     [[nodiscard]] bool needsRenewal(Seconds now) const;   // pas de certificat valable, ou il finit dans kRenewBeforeDays
 };
 // L'empreinte lisible d'une cle de service (64 hexadecimaux) : "1A2B 3C4D ..." ; vide si illisible.
@@ -251,6 +252,12 @@ struct AdminWatch {
     // 1.46.0 (docs/BOUTIQUE.md) : le compteur des changements des commandes et celles a livrer (payees) ; -1 : un service
     // d'avant la 1.46.0 (sans boutique).
     std::int64_t             orders{-1}, toDeliver{-1};
+    // 1.47.0 (docs/ADMINS.md, par. 11) : la derogation << Gerer le service >> - la sienne (l'admin+ : celle en place).
+    // derogationSaid : le service a repondu sur ce point (1.47.0) ; derogationId vide : aucune.
+    bool                     derogationSaid{false};
+    std::string              derogationId, derogationAdmin, derogationName, derogationState, derogationBy;
+    std::int64_t             derogationStart{0}, derogationEnd{0}, derogationRevoked{0}, derogationUses{0};
+    std::int64_t             serverTime{0};   // l'heure du service (heure)
 };
 // 1.44.0 : lire la reponse de GET /admin/etat (ses compteurs et, en 1.44.0, le role et les droits de qui appelle).
 void readAdminWatch(const core::json::Value& reply, AdminWatch& out);

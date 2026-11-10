@@ -307,13 +307,17 @@ int main(int argc, char** argv) {
         const std::string t = draw(*page);
         auto* table = find<ui::TableView>(*page, "admins.table");
         check(table && table->model() && table->model()->rowCount() == 4, "le tableau : l'admin+, Lea, Hugo, Paul");
-        check(has(t, "Administrateurs") && has(t, "tu es l'admin+") && has(t, "3 actifs") && has(t, "1 retir\xC3\xA9"), "la ligne du titre : 3 actifs (l'admin+ compris), 1 retire");
+        // 1.47.0 : la vue d'ensemble des admins (planche 01) : le classement, une ligne depliee ; la fiche d'un admin.
+        check(has(t, "Administrateurs") && has(t, "3 actifs") && has(t, "1 retir\xC3\xA9") && has(t, "compar\xC3\xA9 aux 30 jours d'avant"),
+              "la ligne du titre : 3 actifs (l'admin+ compris), 1 retire, la periode");
         check(has(t, "Admin+") && has(t, kLea) && has(t, "Hugo") && has(t, "Paul"), "chaque admin, l'admin+ en tete");
-        check(has(t, kit_short(adm::fingerprint(leaKey->publicKeyHex()))), "sa cle : les deux premiers groupes de l'empreinte");
-        check(has(t, "Retir\xC3\xA9") && has(t, "certificat r\xC3\xA9voqu\xC3\xA9") && has(t, "certifi\xC3\xA9" "e \xE2\x9C\x93"), "Retire (certificat revoque), certifiee");
-        check(has(t, "Ses droits") && has(t, "Licences sign\xC3\xA9" "es") && has(t, "profil Admin LV2"), "la fiche de Lea (la premiere) : ses chiffres, ses droits");
-        check(has(t, "r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+") && has(t, "Certificat d'admin sign\xC3\xA9 par la cl\xC3\xA9 de l'\xC3\xA9" "diteur"),
-              "ce que l'admin+ garde ; le certificat");
+        check(has(t, "Retir\xC3\xA9") && has(t, "Actif"), "Retire, Actif");
+        check(has(t, "Ses droits") && has(t, "Licences sign\xC3\xA9" "es") && has(t, "Admin LV2"), "la ligne de Lea (la premiere) depliee : ses chiffres, ses droits");
+        check(click(*page, "admins.fiche"), "Ouvrir sa fiche");
+        const std::string f = draw(*page);
+        check(has(f, kit_short(adm::fingerprint(leaKey->publicKeyHex()))) && has(f, "certifi\xC3\xA9" "e \xE2\x9C\x93"), "sa fiche : sa cle (les deux premiers groupes), certifiee");
+        check(click(*page, "admins.fiche.retour"), "retour a la liste");
+        (void)draw(*page);
         check(shown(*page, "admins.retirer") && !enabledBtn(*page, "admins.retirer"), "Retirer cet admin... : grise sans le service");
         check(shown(*page, "admins.ajouter") && !enabledBtn(*page, "admins.ajouter"), "Ajouter un admin... : grise sans le service");
         check(click(*page, "admins.voir-journal") && rig.navigations.back() == "journal", "Voir son journal -> le journal");
@@ -322,7 +326,7 @@ int main(int argc, char** argv) {
               "Ses droits... -> Droits, Lea choisie");
         check(selectRow(*page, "admins.table", 0, "Paul"), "choisir Paul");
         const std::string p = draw(*page);
-        check(has(p, "Certificat r\xC3\xA9voqu\xC3\xA9 le") && !shown(*page, "admins.retirer"), "Paul : retire, plus de Retirer");
+        check(has(p, "certificat r\xC3\xA9voqu\xC3\xA9") && !shown(*page, "admins.retirer"), "Paul : retire (certificat revoque), plus de Retirer");
     }
 
     // ------------------------------------------------------------------------------------------------

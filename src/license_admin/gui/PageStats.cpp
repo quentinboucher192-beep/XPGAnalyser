@@ -1298,6 +1298,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        (void)job_.poll();   // le releve fini : rendu ici, sur le fil de l'interface
         const Rect b = bounds();
         ctx.r.fillRect(b, kPageBg);
         const float pad = b.w < 1000.f ? 20.f : 28.f;
@@ -1583,8 +1584,7 @@ private:
             if (std::find(want.begin(), want.end(), g.key) != want.end()) todo.push_back(g);
         loading_ = true;
         std::weak_ptr<bool> alive = alive_;
-        const bool started = runQuietly(
-            host_, "Statistiques : relev\xC3\xA9",
+        const bool started = job_.start("Statistiques : relev\xC3\xA9",
             [w, out, todo, c, period, now, wantAdmins] {
                 OpResult last = OpResult::done({});
                 for (const auto& g : todo) {
@@ -1864,6 +1864,7 @@ private:
     Rect                             bannerRect_{};
     std::shared_ptr<bool>            alive_{std::make_shared<bool>(true)};
     core::ConnectionScope            links_;
+    StatsJob                    job_;   // le releve a part (StatsKit.hpp)
 };
 
 } // namespace

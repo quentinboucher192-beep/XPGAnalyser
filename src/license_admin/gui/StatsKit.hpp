@@ -71,7 +71,7 @@ void installSamplesFromEnvironment(std::function<Seconds()> now);
 [[nodiscard]] std::string sampleUpdatesJson(const stats::UpdatesQuery& q, Seconds now);
 [[nodiscard]] std::string sampleAdminsJson(const stats::Period& p, Seconds now);
 // Les appels eux-memes (LENTS : sur le fil d'un travail). `w` n'est lu que pour ses appels au service.
-OpResult fetchSeries(const Workspace& w, const stats::SeriesQuery& q, stats::SeriesReply& out);
+OpResult fetchSeries(const Workspace& w, const stats::SeriesQuery& q, stats::SeriesReply& out, std::string* raw = nullptr);
 OpResult fetchUpdates(const Workspace& w, const stats::UpdatesQuery& q, stats::UpdatesReply& out);
 OpResult fetchAdmins(const Workspace& w, const stats::Period& p, stats::AdminsReply& out);
 OpResult fetchGlobe(const Workspace& w, int periodDays, stats::GlobeReply& out);
@@ -85,6 +85,30 @@ OpResult fetchSnapshot(const Workspace& w, stats::SnapshotReply& out);
 
 // Un travail sans bruit (runQuiet ; les essais : runSlow).
 bool runQuietly(const ShellHost& h, const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done);
+
+// LE RELEVE DES CHIFFRES A PART : les pages des statistiques lisent le service sur LEUR fil (un Background a elles), pas
+// dans la file de la coquille - sinon elles attendraient derriere le regard, la version, les demandes (10 a 20 s au
+// lancement). Des LECTURES seulement (GET /admin/stats/..., /admin/globe) : rien n'est ecrit dans le Workspace sur ce
+// fil. Un a la fois par vue ; `done` est rendu sur le fil de l'interface par poll() (la vue l'appelle en se dessinant).
+// Les reponses d'essai (hooked) : sur place, tout de suite.
+class StatsJob {
+public:
+    StatsJob();
+    ~StatsJob();
+    StatsJob(const StatsJob&) = delete;
+    StatsJob& operator=(const StatsJob&) = delete;
+    bool start(const std::string& label, std::function<OpResult()> work, std::function<void(const OpResult&)> done);
+    bool poll();   // vrai : un resultat a ete rendu
+    [[nodiscard]] bool running() const noexcept { return bg_.running() || pending_; }
+    void wait();
+
+private:
+    Background                           bg_;
+    std::function<void(const OpResult&)> done_;
+    bool                                 pending_{false};
+};
+// Les essais : attendre la fin de tous les releves en cours et rendre leurs resultats.
+void finishJobsForTests();
 
 // ============================================================================ la periode
 enum class Range : std::uint8_t { Days7, Days30, Days90, Months12, All, Dates };

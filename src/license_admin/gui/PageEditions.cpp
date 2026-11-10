@@ -856,7 +856,8 @@ public:
                        "chez un client avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
                        "Nouvelle offre\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("editions.table"));
-        table_->setColumns({{"Identifiant", 150.f}, {"Libell\xC3\xA9", 150.f}, {"Type", 100.f}, {"PC", 50.f}, {"Dur\xC3\xA9" "e", 80.f}, {"Gr\xC3\xA2" "ce", 66.f},
+        // 1.47.0 : l'identifiant plus large (le chevron du depliage devant lui)
+        table_->setColumns({{"Identifiant", 176.f}, {"Libell\xC3\xA9", 136.f}, {"Type", 100.f}, {"PC", 50.f}, {"Dur\xC3\xA9" "e", 80.f}, {"Gr\xC3\xA2" "ce", 66.f},
                             {"Fonctionnalit\xC3\xA9s", 110.f}, {"En vente", 150.f}, {"Licences", 76.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Libell\xC3\xA9", "Type", "PC", "Dur\xC3\xA9" "e", "Gr\xC3\xA2" "ce", "Fonctionnalit\xC3\xA9s", "En vente", "Licences"});

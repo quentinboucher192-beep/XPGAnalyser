@@ -2040,12 +2040,11 @@ OpResult Workspace::acceptAdmins(const std::vector<AdminAccept>& items) const {
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
     if (const auto deny = detail::callerDenied(caller, {})) return *deny;
-    // Les droits de chacun : son profil (vide : << Admin LV1 >> s'il existe, sinon aucun droit).
+    // Les droits de chacun : son profil (vide : aucun droit, a regler ensuite dans Droits).
     const auto all = profiles();
     std::vector<std::pair<std::string, std::vector<std::string>>> chosen;   // profil, droits
     for (const auto& it : items) {
-        std::string profile = trimmed(it.profile);
-        if (profile.empty() && std::any_of(all.begin(), all.end(), [](const adm::Profile& p) { return p.name == "Admin LV1"; })) profile = "Admin LV1";
+        const std::string profile = trimmed(it.profile);
         std::vector<std::string> rights;
         if (!profile.empty()) {
             const auto p = std::find_if(all.begin(), all.end(), [&](const adm::Profile& x) { return x.name == profile; });

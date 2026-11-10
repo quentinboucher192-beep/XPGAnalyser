@@ -7,15 +7,21 @@
 //  demandes recues - leur valeur, l'ecart, leur courbe et sa bulle. Un clic sur
 //  une carte (ou un point) : la page Statistiques. Les chiffres : un seul appel
 //  (GET /admin/stats/serie, par runQuiet), relu toutes les 10 minutes tant que le
-//  tableau de bord est montre. Sans service regle (ou sans cle qui signe, ou un
+//  tableau de bord est montre ; LE DERNIER RELEVE est garde dans le dossier du poste (statistiques-tableau.json) et
+//  montre des l'ouverture (<< 30 j \xC2\xB7 au 10/11 09:12 >>) en attendant le nouveau. Sans service regle (ou sans cle qui signe, ou un
 //  service d'avant la 1.47.0 : le tableau de bord le dit deja) : la rangee n'est
 //  pas montree (shown() faux).
 // =============================================================================
 #include "StatsKit.hpp"
 
+#include "../../core/Json.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,6 +53,7 @@ public:
             charts_.push_back(chart);
             bars_.push_back(c.bars);
         }
+        readCache();
         fill();
     }
 
@@ -68,6 +75,7 @@ protected:
         for (std::size_t i = 0; i < cards_.size(); ++i) cards_[i]->setBounds({b.x + static_cast<float>(i) * (w + gap), b.y, w, b.h});
     }
     void onPaint(const ui::PaintContext&) override {
+        (void)job_.poll();
         if (steadyNow() - lastLoad_ > kReloadSeconds || again_) start();
     }
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -93,15 +101,17 @@ private:
         loading_ = true;
         lastLoad_ = steadyNow();
         std::weak_ptr<bool> alive = alive_;
-        const bool started = runQuietly(
-            host_, "Tableau de bord : les courbes", [wp, q, out] { return fetchSeries(*wp, q, *out); },
-            [this, alive, out](const OpResult& r) {
+        auto raw = std::make_shared<std::string>();
+        const bool started = job_.start("Tableau de bord : les courbes", [wp, q, out, raw] { return fetchSeries(*wp, q, *out, raw.get()); },
+            [this, alive, out, raw](const OpResult& r) {
                 if (alive.expired()) return;
                 loading_ = false;
                 if (r.ok) {
                     reply_ = *out;
                     problem_.clear();
-                } else {
+                    fromCache_ = false;
+                    writeCache(*raw);
+                } else if (!fromCache_) {
                     problem_ = r.message;
                 }
                 fill();
@@ -112,8 +122,38 @@ private:
         }
     }
 
+    // ---- le dernier releve, garde sur ce poste ----
+    [[nodiscard]] std::filesystem::path cacheFile() const {
+        const std::string f = host_.workspace().folder();
+        return std::filesystem::path(std::u8string(f.begin(), f.end())) / "statistiques-tableau.json";
+    }
+    void readCache() {
+        if (hooked()) return;
+        std::ifstream in(cacheFile(), std::ios::binary);
+        if (!in) return;
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        core::json::Value v;
+        stats::SeriesReply r;
+        if (!core::json::parse(text, v, nullptr) || !stats::parseSeries(v, r, nullptr)) return;
+        reply_ = std::move(r);
+        fromCache_ = true;
+    }
+    void writeCache(const std::string& raw) const {
+        if (raw.empty() || hooked()) return;
+        std::error_code ec;
+        const auto path = cacheFile();
+        const auto tmp = path.string() + ".tmp";
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            if (!out) return;
+            out << raw;
+        }
+        std::filesystem::rename(tmp, path, ec);
+    }
+
     void fill() {
         const char* names[4] = {"ventes_montant", "licences_actives", "pc_actifs", "demandes_recues"};
+        const char* titles[4] = {"Montant encaiss\xC3\xA9", "Licences actives", "PC actifs", "Demandes"};
         const std::string today = stats::dayOf(host_.workspace().now());
         for (std::size_t i = 0; i < 4; ++i) {
             const stats::Series* s = reply_.find(names[i]);
@@ -159,6 +199,8 @@ private:
             t.clickHint = "Clic : la page Statistiques";
             charts_[i]->setData(t);
             const std::string value = money ? stats::euros(s->total) : stats::isNumber(s->total) ? ch::fr::integer(s->total) : std::string("\xE2\x80\x94");
+            cards_[i]->setSmalls(titles[i], fromCache_ && reply_.at > 0 ? std::vector<std::string>{"30 j \xC2\xB7 au " + dateTimeFr(reply_.at).substr(0, 5) + dateTimeFr(reply_.at).substr(10), "30 j"}
+                                                                         : std::vector<std::string>{"30 j"});
             cards_[i]->setText(value, s->hasComparison() ? ch::deltaOf(s->total, s->beforeTotal) : ch::Delta{},
                                 s->hasComparison() ? (money ? "contre " + stats::euros(s->beforeTotal) : "contre " + ch::fr::integer(s->beforeTotal)) : std::string());
         }
@@ -172,9 +214,10 @@ private:
     std::vector<bool>           bars_;
     stats::SeriesReply          reply_;
     std::string                 problem_;
-    bool                        loading_{false}, again_{false};
+    bool                        loading_{false}, again_{false}, fromCache_{false};
     double                      lastLoad_{-1e9};
     std::shared_ptr<bool>       alive_{std::make_shared<bool>(true)};
+    StatsJob                    job_;   // le releve a part (StatsKit.hpp)
 };
 
 } // namespace

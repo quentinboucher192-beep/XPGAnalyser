@@ -652,7 +652,8 @@ protected:
         y += bigH + 12.f + smallH + gap;
 
         // 1.47.0 : la rangee de courbes (a gauche) et la petite carte du globe (a droite), si la place et le service le permettent.
-        const bool curves = !compact && strip_->shown() && b.bottom() - 18.f - y > 150.f + gap + 220.f;
+        stripShown_ = strip_->shown();
+        const bool curves = !compact && stripShown_ && b.bottom() - 18.f - y > 150.f + gap + 220.f;
         strip_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         globe_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         if (curves) {
@@ -680,6 +681,7 @@ protected:
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
+        if (strip_ && strip_->shown() != stripShown_) invalidateLayout();   // 1.47.0 : le service lu (ou regle) depuis : la rangee suit
         const auto& th = ctx.theme;
         const auto& c = th.color;
         const Rect  b = bounds();
@@ -892,6 +894,7 @@ private:
     std::vector<StatTile*>       tiles_;
     ActivityFeed*                feed_{nullptr};
     statskit::DashboardStrip*    strip_{nullptr};           // 1.47.0 : la rangee de courbes
+    bool                         stripShown_{false};       // 1.47.0 : ce que la mise en page a vu (le service lu ensuite : refaite)
     ui::Widget*                  globe_{nullptr};           // 1.47.0 : la petite carte du globe (PageStatsGlobe.cpp)
     Rect                         hintRect_{}, opsRect_{}, editionsRect_{}, posteRect_{};
     float                        barH_{46.f}, lineH_{22.f};

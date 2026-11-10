@@ -257,7 +257,9 @@ void Workspace::loadService() {
     const online::ServiceState state = service_.state;
     const Seconds stateAt = service_.stateAt;
     service_ = ServiceStatus{};
+    discoverConnection();   // 1.47.0 : aucune adresse et pas l'admin+ : la connexion signee qui voyage avec l'installateur
     service_.configured = online::configured(folder_);
+    service_.hasConnection = connexion::readState(folder_, &service_.connection, &service_.connectionRefused);
     if (service_.configured) {
         std::string why;
         if (!online::readConfig(folder_, service_.config, &why)) service_.problem = why;
@@ -1205,6 +1207,9 @@ OpResult fromResult(const online::Result& x) {
 } // namespace
 
 OpResult Workspace::serviceConfigure(const std::string& url) {
+    // 1.47.0 : changer l'adresse, c'est gerer le service (l'admin+, ou une derogation) ; un poste sans role ou en attente
+    // la tape encore s'il n'a recu aucune connexion signee (sa demande d'admin en a besoin).
+    if ((role_ == Role::Admin || role_ == Role::Retired) && !mayManageService()) return OpResult::fail(whyNotService());
     online::Config c;
     c.url = url;
     std::string why;
@@ -1465,6 +1470,8 @@ online::Mailer Workspace::mailer() const { return online::smtpMailer(folder_, ha
 #undef XPG_SERVICE_RIGHT
 
 void Workspace::adoptServiceState(const online::ServiceState& state) {
+    // 1.47.0 : le certificat verifie (signe par l'editeur, cette adresse, cette cle) : la connexion a exporter
+    if (state.certOk && !state.certBlock.empty()) (void)connexion::keepCertificate(folder_, state.certBlock, nullptr);
     service_.state = state;
     service_.hasState = true;
     service_.stateAt = now();
