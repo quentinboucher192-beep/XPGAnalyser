@@ -28,8 +28,16 @@ bool endsWithEllipsis(const std::string& s) {
 }
 
 std::string upperAscii(std::string s) {
-    for (auto& c : s)
-        if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        const auto c = static_cast<unsigned char>(s[i]);
+        if (c >= 'a' && c <= 'z') s[i] = static_cast<char>(c - 'a' + 'A');
+        // 1.47.0 : les lettres accentuees du francais (UTF-8 C3 A0..BE, sauf C3 B7) : << 2 REVOCATIONS >> avec son E accent aigu
+        else if (c == 0xC3 && i + 1 < s.size()) {
+            const auto d = static_cast<unsigned char>(s[i + 1]);
+            if (d >= 0xA0 && d <= 0xBE && d != 0xB7) s[i + 1] = static_cast<char>(d - 0x20);
+            ++i;
+        }
+    }
     return s;
 }
 

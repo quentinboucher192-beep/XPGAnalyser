@@ -425,7 +425,7 @@ int main(int argc, char** argv) {
         check(has(t, "PC actifs") && has(t, "Mouvements des PC") && has(t, "Flottantes") && has(t, "D\xC3\xA9" "couvertes"), "PC : ses quatre cartes");
         check(click(*page, "stats.onglet.demandes"), "Demandes");
         t = draw(*page);
-        check(has(t, "Trait\xC3\xA9" "es par") && has(t, "Accept\xC3\xA9" "es, refus\xC3\xA9" "es") && has(t, "La plus ancienne qui attend"), "Demandes : traitees par, issue, la plus ancienne");
+        check(has(t, "Trait\xC3\xA9" "es par") && has(t, "Accept\xC3\xA9" "es, refus\xC3\xA9" "es") && has(t, "Attente la plus longue"), "Demandes : traitees par, issue, l'attente la plus longue");
         check(click(*page, "stats.onglet.admins"), "Admins");
         t = draw(*page);
         check(has(t, "Camille Essai") && has(t, "L\xC3\xA9" "a Essai") && has(t, "Hugo Essai") && has(t, "Nina Essai"), "Admins : les quatre admins d'essai");
@@ -665,15 +665,18 @@ int main(int argc, char** argv) {
         HostRig lrig(fx);
         auto lp = gui::makeStatsPage(lrig.host());
         lp->refresh();
+        (void)draw(*lp);
+        sk::finishJobsForTests();   // le releve tourne sur son fil (StatsJob) : l'attendre
         const std::string t = draw(*lp);
-        bool ok = !lrig.reports.empty();
-        for (const auto& r : lrig.reports) ok = ok && r.ok;
-        check(ok, "les courbes lues sur le vrai service : " + (lrig.reports.empty() ? std::string("rien") : lrig.reports.back().text()));
+        check(hasValues(tchart(*lp, "stats.vue.commandes")) || (tchart(*lp, "stats.vue.commandes") && !tchart(*lp, "stats.vue.commandes")->data().series.empty()),
+              "les courbes lues sur le vrai service (des series, meme a zero)");
         auto* m = tchart(*lp, "stats.vue.montant");
         check(m && m->data().x.size() >= 13, "le montant : une colonne par semaine (le service local)");
         std::printf("  le montant (le service local) : %zu semaines\n", m ? m->data().x.size() : std::size_t{0});
         check(!has(t, "ne se lisent pas") && !has(t, "Lecture des chiffres"), "aucune carte en panne ni en attente");
         check(click(*lp, "stats.onglet.mises-a-jour"), "Mises a jour (le service local)");
+        (void)draw(*lp);
+        sk::finishJobsForTests();
         const std::string u = draw(*lp);
         check(has(u, "L'adoption de chaque version") && !has(u, "ne se lisent pas"), "Mises a jour lues sur le vrai service");
     }

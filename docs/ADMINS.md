@@ -97,6 +97,27 @@ récente. Elle est gardée dans le dossier des licences (`admins.xpgadm`), comme
 4. L'Admin du nouvel admin relève `GET /v1/admins` (toutes les 15 s tant qu'il attend) : sa clé y est → il est admin.
    Il prend le trousseau, la clé de synchro, et relève l'archive.
 
+**Une ou plusieurs demandes à la fois (1.47.0).** Les demandes ont leur liste, comme les demandes de licence :
+**Sécurité › Demandes d'admin** (l'admin+ seul ; le nombre en attente sur l'entrée du menu). Elle relève
+`GET /admin/admins/demandes?toutes=1` : celles en attente **et** celles closes depuis 7 jours, chacune avec son `etat`
+(`attente`, `acceptee`, `refusee`) et `maj` (sans `?toutes=1`, la réponse reste celle d'avant : en attente seulement).
+Colonnes : reçue le, nom, courriel, PC, logiciel et sa version, l'empreinte courte, **l'invitation** qui va avec (le même
+courriel, sinon le même nom, dans `invitations-admins.json` : « invité le … (profil) » / « sans invitation »), l'état ;
+la barre de filtres, le clic droit (Ouvrir / Accepter… / Aller à › / Filtrer sur › / Copier › l'empreinte / Exporter… /
+Refuser… en rouge), la ligne dépliée (l'empreinte en grand, la demande, l'invitation).
+
+- **Accepter plusieurs** : choisir les demandes → « Accepter 3 demandes… » ouvre **une** fenêtre qui les liste, chacune
+  avec son empreinte en 6 groupes, sa case **« J'ai vérifié l'empreinte (lue au téléphone) »** et son profil (celui de
+  l'invitation, sinon « Admin LV1 », sinon aucun droit). Une case vide : le bouton reste grisé — on la coche, ou on retire
+  la demande du lot. Confirmer : la clé de l'éditeur signe **une seule** nouvelle liste (numéro + 1) avec tous ;
+  `PUT /admin/admins` la publie, et le service **close d'un coup toutes les demandes dont la clé est dans la liste**
+  (`demandes_acceptees`) ; le trousseau est déposé pour chacun ; **une ligne `admin_ajouter` au journal par nouvel admin**
+  (son détail dit la liste et la taille du lot). L'Admin le refait de son côté : une case non cochée, ou une demande qui
+  n'attend plus, et rien n'est signé (`Workspace::acceptAdmins`).
+- **Refuser plusieurs** : « Refuser 2 demandes… », une raison facultative ; `POST /admin/admins/demande/refuser` pour
+  chacune, une ligne `demande_refuser` chacune (la raison y est ; le demandeur voit seulement « refusée »).
+- Aucune route ni table de plus côté service : la limite de 20 demandes en attente reste.
+
 ## 5. Le trousseau (partager la clé de synchro)
 
 L'archive partagée (`ArchiveSync`) est scellée par la clé de synchro. L'admin+ la donne à chaque admin, **scellée pour sa
@@ -237,6 +258,30 @@ Pages nouvelles (Sécurité) : **Administrateurs** (+ **Droits** ; en lecture se
 admins** (admin+), **Versions** (admin+). Un admin n'a pas les entrées réservées. Les actions qu'il n'a pas le droit
 de faire sont grisées (le bouton dit pourquoi). Chaque action écrit sa ligne au journal (hors ligne : gardée, envoyée
 au retour).
+
+**Mon compte (1.47.0)** — la première entrée de Sécurité, pour tous les rôles (admin+, admin, admin retiré, en attente,
+pas encore de clé) ; le bloc d'identité en haut à gauche (« Camille · admin+ ») y mène aussi. Tout se lit sur le poste,
+sans réseau :
+
+- **Qui** : le nom (la liste, sinon la clé), le courriel (celui de sa demande d'admin), le rôle.
+- **L'identifiant** : l'identifiant de la clé (`xpg-…`), l'empreinte en 6 groupes (celle qui se lit au téléphone),
+  « Copier » l'un et l'autre.
+- **L'état du compte** : actif depuis, ajouté par l'admin+ dans la liste signée n° (la première liste vue sur ce poste
+  qui porte sa clé), la liste en vigueur ici ; en attente (la demande envoyée le …) ; retiré le … par l'admin+ ; le
+  certificat du service (s'il a été lu) ; ce PC (et celui que la liste lui connaît) ; la version de l'Admin et celle du
+  service ; **Gérer le service** : « l'admin+ seul gère le service », ou la dérogation en cours et ce qu'il en reste (§ 11).
+- **Les pouvoirs** : les 13 droits et la boutique (livrer, revoir une commande : « Accepter une demande » et « Créer et
+  signer »), permis ou non, ce que chacun permet, sa criticité (celle en vigueur), le profil (LV1, LV2…) et les écarts au
+  profil (« en plus du profil », « retiré du profil »), la dernière fois qu'il a servi (le journal des admins de ce
+  poste : chez l'admin+ ; un admin lit « il est chez l'admin+ »). L'admin+ : les 13, et ce qu'il fait seul (§ 1).
+- **L'histoire des droits** : les listes signées vues sur le poste (`admins-vus.jsonl`), l'une après l'autre : ce qui a
+  été ajouté ou retiré, par l'admin+.
+- Les gestes qui existent : Copier ; « Sauvegarder ma clé… » (l'admin+ : Paramètres de sécurité) ; « Demander à devenir
+  admin… » et « Créer la clé de l'éditeur… » (sans clé) ; « Voir ma demande » (en attente : l'écran d'attente).
+
+**Demandes d'admin (1.47.0)** — la liste des demandes pour devenir admin, l'admin+ seul (§ 4). Les invitations de
+« Ajouter un admin… » sont notées sur le poste de l'admin+ (`invitations-admins.json` : `{"format":"xpg-invitations-admins/1",
+"invitations":[{"nom","courriel","profil","par","le"}]}`, les 100 dernières).
 
 ## 9. La sauvegarde de secours (si le service tombe)
 

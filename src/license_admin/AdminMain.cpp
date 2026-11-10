@@ -260,6 +260,15 @@ std::string usage() {
            "  stats-releve                                   l'admin+ : le relev\xC3\xA9 du jour (s'il n'est pas encore pris)\n"
            "  globe [--periode N]                            les villes des clients, des PC, des admins (la derni\xC3\xA8re connexion)\n"
            "  globe-direct [--depuis T]                      les connexions des 15 derni\xC3\xA8res minutes (T : secondes Unix)\n"
+           "\n1.47.0 : la connexion au service et la d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB (docs/ADMINS.md, par. 11) :\n"
+           "  service-connexion [--fichier F.xpgsvc]         la connexion sign\xC3\xA9" "e par l'\xC3\xA9" "diteur (le certificat du service) : d'o\xC3\xB9 vient\n"
+           "                                                 l'adresse de ce poste ; sans adresse, la cherche (\xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme, le\n"
+           "                                                 Studio de ce PC) ; --fichier : celle-ci (un fichier modifi\xC3\xA9 est refus\xC3\xA9)\n"
+           "  service-connexion-exporter --sortie F.xpgsvc   le certificat v\xC3\xA9rifi\xC3\xA9 du service (\xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'installateur de l'Admin)\n"
+           "  derogation-accorder --cle HEX --heures 1|4|24|72\n"
+           "                                                 l'admin+ : \xC2\xAB G\xC3\xA9rer le service \xC2\xBB \xC3\xA0 cet admin, pour un temps court\n"
+           "  derogation-revoquer                            l'admin+ : la d\xC3\xA9rogation en cours s'arr\xC3\xAAte tout de suite\n"
+           "  derogation-etat                                la d\xC3\xA9rogation (l'admin+ : celle en place ; un admin : la sienne)\n"
            "  --version\n\n"
            "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
@@ -547,8 +556,39 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         }
         return true;
     };
+    // 1.47.0 : chercher la connexion signee comme l'application au lancement (a cote du programme, le Studio de ce PC)
+    if (a.command == "service-connexion")
+        license_admin::connexion::setPlaces(license_admin::connexion::defaultPlaces(license_admin::connexion::programFolder(), {}));
     gui::Workspace ws(folder);
     ws.reload();
+    if (a.command == "service-connexion") {
+        gui::OpResult r = gui::OpResult::done("");
+        if (!a.one("--fichier").empty()) r = ws.useConnectionFile(a.one("--fichier"));
+        const auto& s = ws.service();
+        if (!r.ok) complain(r.message);
+        if (s.hasConnection && s.configured && s.connection.url == s.config.url)
+            say("Connexion au service : " + s.connection.url + "\n  re\xC3\xA7ue : " + s.connection.source + "\n  sign\xC3\xA9" "e par la cl\xC3\xA9 de l'\xC3\xA9" "diteur " +
+                s.connection.editorKeyId + "\n  cl\xC3\xA9 du service : " + online::keyFingerprint(s.connection.serviceKey) + "\n");
+        else if (s.configured)
+            say("Adresse du service : " + s.config.url + " (r\xC3\xA9gl\xC3\xA9" "e \xC3\xA0 la main, sans connexion sign\xC3\xA9" "e)\n");
+        else
+            say("Aucune connexion sign\xC3\xA9" "e trouv\xC3\xA9" "e : ni \xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme, ni dans le dossier des licences du Studio de ce PC.\n");
+        for (const auto& x : s.connectionRefused) say("Refus\xC3\xA9" "e : " + x.source + " : " + x.why + "\n");
+        return r.ok && s.configured ? 0 : 1;
+    }
+    if (a.command == "service-connexion-exporter") {
+        if (!need("--sortie")) return 2;
+        return oneLine(ws.exportConnection(a.one("--sortie")));
+    }
+    if (a.command == "derogation-accorder") {
+        if (!need("--cle") || !need("--heures")) return 2;
+        return oneLine(ws.grantDerogation(a.one("--cle"), std::atoi(a.one("--heures").c_str())));
+    }
+    if (a.command == "derogation-revoquer") return oneLine(ws.revokeDerogation());
+    if (a.command == "derogation-etat") {
+        gui::Derogation d;
+        return oneLine(ws.readDerogation(d));
+    }
     if (a.command == "admin-demander") {
         if (!need("--nom") || !need("--courriel")) return 2;
         std::string fingerprint;
@@ -891,6 +931,31 @@ int run(const std::vector<std::string>& argv) {
         deployer::Options o;
         o.kit = a.one("--dossier-kit");
         o.dryRun = a.flag("--essai");
+        // 1.47.0 : gerer le service est a l'admin+ ; un admin, seulement sous derogation - le service dit d'abord si elle court
+        // (et l'ecrit au journal), puis le kit recoit les cles PUBLIQUES de l'editeur que le service croit (jamais la sienne).
+        {
+            license_admin::gui::Workspace ws(folder);
+            const auto role = ws.role();
+            if (role == license_admin::gui::Role::Admin || role == license_admin::gui::Role::Retired || role == license_admin::gui::Role::Pending) {
+                const auto u = ws.useDerogation("deployer", o.dryRun ? "service-deployer --essai" : "service-deployer");
+                if (!u.ok) {
+                    complain("Refus\xC3\xA9 : " + u.message);
+                    return 1;
+                }
+                say(u.message + "\n");
+                deployer::Kit k;
+                std::string kw;
+                if (deployer::findKit(o.kit, k, &kw)) {
+                    const auto w2 = ws.writeEditorKeysFile(k.folder);
+                    if (!w2.ok) {
+                        complain("Refus\xC3\xA9 : " + w2.message);
+                        return 1;
+                    }
+                    say(w2.message + "\n");
+                }
+                say("Cloudflare : connecte-toi avec TON compte (membre du compte de l'\xC3\xA9" "diteur), jamais un jeton partag\xC3\xA9.\n");
+            }
+        }
         // cle-publique.txt manque dans le kit : la cle PUBLIQUE de l'editeur de ce poste l'ecrit (rien de secret).
         deployer::Kit kit;
         if (deployer::findKit(o.kit, kit, nullptr) && !kit.publicKey) {
@@ -1696,7 +1761,10 @@ int run(const std::vector<std::string>& argv) {
                                                                 "boutique-etat", "boutique-config", "stripe-brancher", "commandes", "commande-livrer",
                                                                 "commande-revoir", "commande-rembourser",
                                                                 // 1.47.0 : les statistiques et le globe
-                                                                "stats-serie", "stats-mises-a-jour", "stats-admins", "stats-releve", "globe", "globe-direct"};
+                                                                "stats-serie", "stats-mises-a-jour", "stats-admins", "stats-releve", "globe", "globe-direct",
+                                                                // 1.47.0 : la connexion au service, la derogation << Gerer le service >>
+                                                                "service-connexion", "service-connexion-exporter", "derogation-accorder",
+                                                                "derogation-revoquer", "derogation-etat"};
     if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
         return runWorkspaceCommand(a, folder);
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {

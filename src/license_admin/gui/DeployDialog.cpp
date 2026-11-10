@@ -333,6 +333,10 @@ void DeployBody::finished(const deployer::Report& rep) {
         add(c.ok ? "Adresse du service enregistr\xC3\xA9" "e dans l'Admin : " + w.service().config.url : "L'adresse n'est pas enregistr\xC3\xA9" "e : " + c.message);
     } else if (!rep.url.empty() && w.service().ready() && online::normalizeUrl(rep.url) != w.service().config.url) {
         add("Attention : la mise en ligne a donn\xC3\xA9 " + rep.url + ", et l'Admin parle \xC3\xA0 " + w.service().config.url + " (Service en ligne \xE2\x80\xBA Adresse).");
+        // 1.47.0 : un admin sous derogation connecte a SON compte Cloudflare, pas a celui de l'editeur : un autre service
+        if (w.role() != Role::Plus)
+            add("Tu as mis le service en ligne sur un AUTRE compte Cloudflare que celui de l'\xC3\xA9" "diteur : ce n'est pas son service. Connecte-toi "
+                "avec le compte o\xC3\xB9 l'admin+ t'a invit\xC3\xA9 (membre), puis recommence ; ne donne jamais cette adresse aux clients.");
     }
     if (!w.service().ready() || !w.signer()) {
         verifyProblem_ = !w.service().ready() ? std::string("son adresse n'est pas r\xC3\xA9gl\xC3\xA9" "e dans l'Admin : colle-la dans Service en ligne, puis V\xC3\xA9rifier")

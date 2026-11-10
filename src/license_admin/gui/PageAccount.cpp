@@ -12,7 +12,7 @@
 //      signee n°, en attente depuis, retire le, la liste en vigueur ici, le
 //      certificat du service (s'il a ete lu), ce PC, la version de l'Admin et
 //      celle du service, et << Gerer le service >> (l'admin+ seul, ou une
-//      derogation de courte duree : l'emplacement de l'agent S, plus bas) ;
+//      derogation de courte duree en cours et ce qu'il en reste : Derogation.hpp) ;
 //    - LES POUVOIRS : les 13 droits et la boutique - permis ou non, ce que
 //      chacun permet, sa criticite (celle en vigueur), le profil (Admin LV1,
 //      LV2...) et les ecarts au profil, la derniere fois qu'il a servi (le
@@ -57,23 +57,7 @@ using kit::fit;
 constexpr float kPad = 24.f;
 constexpr float kGap = 16.f;
 constexpr float kRowH = 26.f;
-constexpr float kPowerH = 30.f;
-
-// ------------------------------------------------------------ [EMPLACEMENT agent S]
-// LA DEROGATION << Gerer le service >> (l'admin+ l'accorde a un admin, 72 h au plus, signee, tenue par le service) :
-// l'agent S l'ecrit. Quand son API existe, la brancher ICI (et seulement ici) : rendre la derogation en cours (a qui,
-// jusqu'a quand). Tant qu'elle n'y est pas, `known` reste faux et la page dit << l'admin+ seul gere le service >>.
-struct Derogation {
-    bool        known{false};    // l'API de S est branchee
-    bool        active{false};   // une derogation court
-    std::string who, whoKey;     // l'admin qui l'a
-    Seconds     until{0};        // la fin (l'heure du service)
-};
-Derogation derogationOf(const Workspace& w) {
-    (void)w;   // [EMPLACEMENT agent S] : ex. w.serviceDerogation() -> {known=true, active, who, whoKey, until}
-    return {};
-}
-// ------------------------------------------------------------ [fin de l'emplacement]
+constexpr float kPowerH = 42.f;   // un pouvoir : son nom, ce qu'il permet dessous
 
 // Ce que chaque droit permet (une phrase), et les actions du journal qui le disent (sa criticite, sa derniere fois).
 struct PowerInfo {
@@ -413,17 +397,19 @@ private:
             versions += "service " + sv.state.version + (sv.stateAt ? " (lu " + kit::whenFr(now, sv.stateAt) + ")" : std::string());
         else versions += sv.configured ? std::string("service pas encore lu") : std::string("service pas r\xC3\xA9gl\xC3\xA9");
         state_.push_back({"Versions", versions});
-        // [EMPLACEMENT agent S] la derogation << Gerer le service >>
-        const Derogation d = derogationOf(w);
-        if (d.known && d.active && d.until > now) {
-            const Seconds left = d.until - now;
-            const std::string rest = left >= 3600 ? std::to_string(left / 3600) + " h " + std::to_string(left % 3600 / 60) + " min" : std::to_string(std::max<Seconds>(1, left / 60)) + " min";
-            const bool mine = !a.keyHex.empty() && d.whoKey == a.keyHex;
-            state_.push_back({"G\xC3\xA9rer le service", (mine ? std::string("d\xC3\xA9rogation en cours pour toi") : "d\xC3\xA9rogation en cours pour " + d.who) +
-                                                           " : encore " + rest + " (jusqu'\xC3\xA0 " + kit::clockFr(d.until) + ")", ui::Tone::Warning});
+        // la derogation << Gerer le service >> (Derogation.hpp, l'agent S : celle que ce poste a relue du service)
+        const Derogation& d = w.derogation();
+        if (d.exists() && d.activeAt(now)) {
+            const bool mine = d.forKey(a.keyHex);
+            state_.push_back({"G\xC3\xA9rer le service",
+                              (mine ? std::string("d\xC3\xA9rogation en cours pour toi : ") : "d\xC3\xA9rogation en cours pour " + (d.adminName.empty() ? std::string("un admin") : d.adminName) + " : ") +
+                                  derogationText(d, now),
+                              ui::Tone::Warning});
         } else {
-            state_.push_back({"G\xC3\xA9rer le service", a.role == Role::Plus ? std::string("toi : l'admin+ seul g\xC3\xA8re le service (aucune d\xC3\xA9rogation en cours)")
-                                                                               : std::string("l'admin+ seul g\xC3\xA8re le service")});
+            std::string t = a.role == Role::Plus ? std::string("toi : l'admin+ seul g\xC3\xA8re le service (aucune d\xC3\xA9rogation en cours)")
+                                                 : std::string("l'admin+ seul g\xC3\xA8re le service");
+            if (d.exists() && (a.role == Role::Plus || d.forKey(a.keyHex))) t += " \xC2\xB7 la derni\xC3\xA8re d\xC3\xA9rogation : " + derogationText(d, now);
+            state_.push_back({"G\xC3\xA9rer le service", t});
         }
         buildPowers(now);
         buildHistory(now);
@@ -516,7 +502,7 @@ private:
         }
         if (plus) {
             for (const auto& s : kit::plusOnly()) reserved_.push_back(s);
-            reserved_.push_back("G\xC3\xA9rer le service : d\xC3\xA9ployer, certifier, brancher Stripe, sauvegarder et restaurer");
+            reserved_.push_back("G\xC3\xA9rer le service : le d\xC3\xA9ployer, son adresse, Stripe (une d\xC3\xA9rogation courte possible) ; certifier, sauvegarder, restaurer");
         }
         if (!journal && (a.role == Role::Admin || a.role == Role::Retired))
             lastNote_ = "La derni\xC3\xA8re utilisation se lit au journal des admins : il est chez l'admin+ (pas sur ce poste).";
@@ -670,12 +656,11 @@ private:
         r.drawText({b.x + 20.f, b.y + 42.f}, fit(r, profileLine_, FontId{13}, b.w - 40.f), FontId{13}, c.text);
         // les colonnes
         const float x0 = b.x + 20.f, wAll = b.w - 40.f;
-        const float cLabel = x0 + 26.f, cAllows = x0 + 26.f + std::min(300.f, wAll * 0.27f);
+        const float cLabel = x0 + 26.f;
         const float cLast = b.right() - 20.f - 130.f, cProfile = cLast - 170.f, cLevel = cProfile - 112.f;
         float y = b.y + 70.f;
         const FontId fh = gfx::semibold(FontId{11});
-        r.drawText({cLabel, y}, "POUVOIR", fh, c.textMuted);
-        r.drawText({cAllows, y}, "CE QU'IL PERMET", fh, c.textMuted);
+        r.drawText({cLabel, y}, "POUVOIR \xC2\xB7 CE QU'IL PERMET", fh, c.textMuted);
         r.drawText({cLevel, y}, "CRITICIT\xC3\x89", fh, c.textMuted);
         r.drawText({cProfile, y}, "PROFIL", fh, c.textMuted);
         r.drawText({cLast, y}, "DERNI\xC3\x88RE FOIS", fh, c.textMuted);
@@ -683,16 +668,16 @@ private:
         for (std::size_t i = 0; i < powers_.size(); ++i) {
             const PowerRow& p = powers_[i];
             if (i == powers_.size() - 1) r.fillRect({x0, y - 1.f, wAll, 1.f}, c.border);   // la boutique, a part
-            if (p.held) kit::drawTick(r, x0 + 2.f, y + 7.f, c.ok);
-            else kit::drawCross(r, x0 + 3.f, y + 8.f, c.textMuted);
+            if (p.held) kit::drawTick(r, x0 + 2.f, y + 9.f, c.ok);
+            else kit::drawCross(r, x0 + 3.f, y + 10.f, c.textMuted);
             const FontId fl = p.held ? gfx::semibold(FontId{13}) : FontId{13};
-            r.drawText({cLabel, y + 5.f}, fit(r, p.label, fl, cAllows - cLabel - 10.f), fl, p.held ? c.text : c.textMuted);
-            r.drawText({cAllows, y + 5.f}, fit(r, p.allows, FontId{13}, cLevel - cAllows - 10.f), FontId{13}, c.textMuted);
+            r.drawText({cLabel, y + 3.f}, fit(r, p.label, fl, cLevel - cLabel - 12.f), fl, p.held ? c.text : c.textMuted);
+            r.drawText({cLabel, y + 21.f}, fit(r, p.allows, FontId{12}, cLevel - cLabel - 12.f), FontId{12}, c.textMuted);
             const kit::Tint t = kit::levelTint(p.level);
-            kit::pill(r, cLevel, y + 3.f, adm::levelLabel(p.level), FontId{12}, t.fg, t.bg, 22.f);
-            r.drawText({cProfile, y + 5.f}, fit(r, p.profile, p.deviation ? gfx::semibold(FontId{13}) : FontId{13}, cLast - cProfile - 10.f),
+            kit::pill(r, cLevel, y + 9.f, adm::levelLabel(p.level), FontId{12}, t.fg, t.bg, 22.f);
+            r.drawText({cProfile, y + 11.f}, fit(r, p.profile, p.deviation ? gfx::semibold(FontId{13}) : FontId{13}, cLast - cProfile - 10.f),
                        p.deviation ? gfx::semibold(FontId{13}) : FontId{13}, p.deviation ? c.warning : c.textMuted);
-            r.drawText({cLast, y + 5.f}, fit(r, p.lastUse, FontId{13}, b.right() - 20.f - cLast), FontId{13}, c.text);
+            r.drawText({cLast, y + 11.f}, fit(r, p.lastUse, FontId{13}, b.right() - 20.f - cLast), FontId{13}, c.text);
             y += kPowerH;
         }
         if (!reserved_.empty()) {

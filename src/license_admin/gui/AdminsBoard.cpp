@@ -185,8 +185,11 @@ OpResult fetchService(const Workspace& w, const ServiceAsk& ask, ServiceReply& o
         f.serviceId = u.id;
         idToKey[u.id] = k;
     }
+    // les admins que le service n'a pas nommes : leur identifiant (une cle deja trouvee garde celui du service)
+    std::set<std::string> found;
+    for (const auto& [id, key] : idToKey) found.insert(key);
     for (std::size_t i = 0; i < ask.keys.size() && i < ask.ids.size(); ++i)
-        if (!ask.ids[i].empty() && !idToKey.count(ask.ids[i])) idToKey[ask.ids[i]] = ask.keys[i];
+        if (!ask.ids[i].empty() && !found.count(ask.keys[i]) && !idToKey.count(ask.ids[i])) idToKey[ask.ids[i]] = ask.keys[i];
     // 2. ce que chacun a produit : la periode, puis celle d'avant (par admin)
     stats::SeriesQuery q;
     q.measures = {"licences_nouvelles", "demandes_traitees", "demandes_acceptees", "demandes_refusees", "ventes_montant", "ventes_commandes",
@@ -224,7 +227,9 @@ OpResult fetchService(const Workspace& w, const ServiceAsk& ask, ServiceReply& o
             f.ordersBefore = partTotal(before.find("ventes_commandes"), id);
         }
     }
-    // l'en-tete : les totaux
+    // l'en-tete : les totaux ; les licences de l'admin+ (le premier de la liste)
+    if (!ask.keys.empty())
+        if (const auto it = out.figures.find(ask.keys.front()); it != out.figures.end()) out.totals.licencesPlus = it->second.licences;
     const auto total = [](const stats::Series* s) { return s && !s->refused ? s->total : kNaN; };
     const auto beforeTotal = [](const stats::Series* s) { return s && !s->refused && s->hasComparison() ? s->beforeTotal : kNaN; };
     out.totals.pending = total(now.find("demandes_attente"));

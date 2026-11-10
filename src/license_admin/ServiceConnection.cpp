@@ -13,10 +13,23 @@
 #include "../licensing/Store.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace license_admin::connexion {
 
@@ -139,6 +152,23 @@ Places defaultPlaces(const std::string& exeDir, const std::string& explicitFile)
     p.studioFolder = licensing::LicenseStore::defaultFolder();
 #endif
     return p;
+}
+
+std::string programFolder() {
+#if defined(_WIN32)
+    std::wstring self(32768, L'\0');
+    const DWORD n = GetModuleFileNameW(nullptr, self.data(), static_cast<DWORD>(self.size()));
+    if (n == 0 || n >= self.size()) return {};
+    self.resize(n);
+    return U(fs::path(self).parent_path());
+#elif defined(__linux__)
+    char buf[PATH_MAX];
+    const ssize_t n = readlink("/proc/self/exe", buf, sizeof buf - 1);
+    if (n <= 0) return {};
+    return U(P(std::string(buf, static_cast<std::size_t>(n))).parent_path());
+#else
+    return {};
+#endif
 }
 
 void setPlaces(Places p) {

@@ -49,23 +49,38 @@ struct Rich {
     FontId      font;
     Color       color;
 };
-// Couper en lignes des morceaux de styles differents ; rend la hauteur.
+// Couper en lignes des morceaux de styles differents (aux espaces ; un mot plus long que la ligne est raccourci) ; rend la
+// hauteur. `r` nul : mesurer seulement. Chaque bout de ligne d'un meme style est dessine d'un coup.
 float paintRich(gfx::IRenderer* r, float x, float y, float w, const std::vector<Rich>& parts, float lineH) {
     float cx = x, cy = y;
     for (const auto& p : parts) {
+        std::string run;
+        float runX = cx;
+        const auto flush = [&] {
+            if (!run.empty() && r) r->drawText({runX, cy}, run, p.font, p.color);
+            run.clear();
+        };
         std::size_t i = 0;
         while (i < p.text.size()) {
-            std::size_t j = p.text.find(' ', i);
-            const std::string word = p.text.substr(i, j == std::string::npos ? std::string::npos : j - i + 1);
+            const std::size_t j = p.text.find(' ', i);
+            std::string word = p.text.substr(i, j == std::string::npos ? std::string::npos : j - i + 1);
             i = j == std::string::npos ? p.text.size() : j + 1;
-            const float ww = ui::measureWidth(word, p.font);
+            float ww = ui::measureWidth(word, p.font);
             if (cx + ww > x + w + 0.5f && cx > x) {
+                flush();
                 cx = x;
                 cy += lineH;
+                runX = cx;
             }
-            if (r) r->drawText({cx, cy}, word, p.font, p.color);
+            if (ww > w) {   // un mot plus long que la ligne
+                word = r ? kit::fit(*r, word, p.font, w) : word;
+                ww = w;
+            }
+            if (run.empty()) runX = cx;
+            run += word;
             cx += ww;
         }
+        flush();
     }
     return cy - y + lineH;
 }
@@ -116,6 +131,9 @@ public:
         verify_ = &makeButton(*this, "V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.detail.verifier", ui::Button::Style::Primary);
         refuse_ = &makeButton(*this, "Refuser la demande", "admins.detail.refuser", ui::Button::Style::Danger);
         regler_ = &adoptIn(*this, std::make_unique<LinkButton>("R\xC3\xA9gler les alertes\xE2\x80\xA6", "admins.alertes.regler", false));
+        toAlerts_ = &adoptIn(*this, std::make_unique<LinkButton>("Les voir", "admins.vue.alertes"));
+        toAlerts_->setVisibility(ui::Visibility::Collapsed);
+        links_ += toAlerts_->clicked->connect([this] { scrollTo(alertsTop_ - 8.f); });
         menu_ = &adoptIn(*this, std::make_unique<ui::PopupMenu>("admins.menu"));
         links_ += menu_->itemChosen->connect([this](int id) { (void)menuList_.run(id); });
         links_ += open_->clicked->connect([this] { openSelected(); });
@@ -211,7 +229,7 @@ protected:
         const float x0 = area.x + 2.f, w = area.w - 4.f;
         float y = area.y + 4.f;
         // ---- les tuiles ----
-        const int perRow = w >= 900.f ? 6 : 3;
+        const int perRow = (w - 60.f) / 6.f >= 160.f ? 6 : (w - 24.f) / 3.f >= 160.f ? 3 : 2;
         const float gap = 12.f;
         const float tw = (w - gap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow);
         tiles_.clear();
@@ -219,9 +237,9 @@ protected:
             const int row = i / perRow, col = i % perRow;
             tiles_.push_back({x0 + static_cast<float>(col) * (tw + gap), y + static_cast<float>(row) * (108.f + gap), tw, 108.f});
         }
-        y += (perRow == 6 ? 1.f : 2.f) * (108.f + gap) + 4.f;
+        y += static_cast<float>((6 + perRow - 1) / perRow) * (108.f + gap) + 4.f;
         // ---- le classement et les alertes ----
-        const bool side = w >= 1040.f;
+        const bool side = w >= 1240.f;   // les alertes a cote du classement (sinon dessous : ses colonnes gardent leur place)
         const float alertsW = side ? std::clamp(w * 0.27f, 290.f, 380.f) : w;
         const float rankW = side ? w - alertsW - 16.f : w;
         rank_ = {x0, y, rankW, 0.f};
@@ -275,8 +293,14 @@ protected:
         if (!unfoldedShown) hidePanel();
         if (rows_.empty()) ry += 70.f;   // << Aucun admin ne correspond >>
         rank_.h = ry + 10.f - rank_.y;
-        // ---- les alertes ----
+        // ---- les alertes (dessous : la tuile << Alertes >> y mene) ----
+        put(toAlerts_, {tiles_[5].x + 16.f, tiles_[5].y + 10.f, tiles_[5].w - 32.f, 20.f}, !side && !d_->ov.alerts.empty());
+        if (!side && !d_->ov.alerts.empty()) {
+            const float tw = toAlerts_->naturalWidth();
+            put(toAlerts_, {tiles_[5].right() - 12.f - tw, tiles_[5].y + 10.f, tw, 20.f});
+        }
         float ay = side ? y : rank_.bottom() + 16.f;
+        alertsTop_ = ay - area.y;
         const float ax = side ? x0 + rankW + 16.f : x0;
         alerts_ = {ax, ay, alertsW, 0.f};
         ay += 16.f;
@@ -493,109 +517,125 @@ protected:
         r.popClip();
     }
 
+    // Une tuile : son libelle, sa valeur et son ecart, une petite courbe a droite si la place y est, puis deux lignes au
+    // plus de ce qu'elle dit en plus (coupees aux mots, jamais hors du cadre).
     void paintTile(const ui::PaintContext& ctx, int i, const Rect& b) {
         auto& r = ctx.r;
         card(r, ctx.theme, b, 12.f);
-        const float x = b.x + 16.f, w = b.w - 32.f;
-        float y = b.y + 14.f;
+        const float pad = b.w < 200.f ? 12.f : 16.f;
+        const float x = b.x + pad, w = b.w - 2.f * pad;
+        const float y = b.y + 12.f;
         const Data& d = *d_;
+        const FontId big = gfx::semibold(FontId{static_cast<std::uint16_t>(b.w < 200.f ? 22 : 26)});
         const auto label = [&](ui::Icon icon, const std::string& t) {
             ui::drawIcon(r, icon, {x, y + 1.f, 14.f, 14.f}, kMuted);
-            (void)text(r, x + 20.f, y, t, kF13, kInk2, w - 20.f);
+            (void)text(r, x + 19.f, y, t, kF13, kInk2, w - 19.f);
         };
-        const auto big = [&](const std::string& v, float yy) {
-            r.drawText({x, yy}, v, gfx::semibold(FontId{26}), kInk);
-            return ui::measureWidth(v, gfx::semibold(FontId{26}));
+        const auto value = [&](const std::string& v, float room) { return text(r, x, y + 22.f, v, big, kInk, room); };
+        const auto sub = [&](const std::vector<Rich>& parts) { (void)paintRich(&r, x, y + 60.f, w, parts, 17.f); };
+        const auto spark = [&](const std::vector<double>& v, Color c, float valueW) {
+            const float sw = std::min(110.f, w - valueW - 70.f);
+            if (sw < 40.f || v.size() < 2) return;
+            ch::SparkStyle st;
+            st.color = c;
+            ch::paintSparkline(r, ctx.theme, {x + w - sw, y + 24.f, sw, 26.f}, v, nullptr, st);
         };
         const std::string svc = d.serviceLoading ? std::string("lecture du service\xE2\x80\xA6")
                                 : d.serviceTooOld ? std::string("le service est trop ancien")
-                                : !d.serviceNote.empty() ? std::string("le service ne r\xC3\xA9pond pas") : std::string();
+                                : !d.serviceNote.empty() ? std::string("le service : pas de chiffres") : std::string();
         switch (i) {
             case 0: {   // les admins
                 label(ui::Icon::User, "Admins");
-                const float bw = big(std::to_string(d.activeCount()), y + 22.f);
-                r.drawText({x + bw + 6.f, y + 34.f}, d.activeCount() > 1 ? "actifs" : "actif", kB14, kInk2);
+                const float vw = value(std::to_string(d.activeCount()), w * 0.4f);
+                r.drawText({x + vw + 6.f, y + 33.f}, d.activeCount() > 1 ? "actifs" : "actif", kB14, kInk2);
                 float ax = x + w;
+                const float left = x + vw + 6.f + ui::measureWidth("actifs", kB14) + 8.f;
                 for (auto it = d.people.rbegin(); it != d.people.rend(); ++it) {
+                    if (ax - 20.f < left) break;
                     ax -= 20.f;
-                    if (ax < x + w * 0.45f) break;
-                    avatarOf(r, {ax, y - 2.f, 18.f, 18.f}, *it);
+                    avatarOf(r, {ax, y + 30.f, 18.f, 18.f}, *it);
                     ax -= 2.f;
                 }
                 const int pend = d.pendingCount(), ret = d.retiredCount();
-                std::string sub = std::to_string(pend) + " en attente \xC2\xB7 " + std::to_string(ret) + (ret > 1 ? " retir\xC3\xA9s" : " retir\xC3\xA9");
-                (void)text(r, x, y + 66.f, sub, kF12, kMuted, w);
+                sub({{std::to_string(pend) + " en attente \xC2\xB7 " + std::to_string(ret) + (ret > 1 ? " retir\xC3\xA9s" : " retir\xC3\xA9"), kF12, kMuted}});
                 break;
             }
             case 1: {   // les actions
                 label(ui::Icon::Chart, "Actions");
-                const float bw = big(num(d.ov.actions), y + 22.f);
-                (void)delta(r, x + bw + 6.f, y + 34.f, d.ov.actions, d.ov.actionsBefore);
+                const float vw = value(num(d.ov.actions), w * 0.5f);
+                const float dw = delta(r, x + vw + 6.f, y + 33.f, d.ov.actions, d.ov.actionsBefore);
                 std::vector<double> sum;
                 for (const auto& a : d.ov.admins) {
                     if (sum.size() < a.perDay.size()) sum.resize(a.perDay.size(), 0.0);
                     for (std::size_t k = 0; k < a.perDay.size(); ++k) sum[k] += a.perDay[k];
                 }
-                if (w > 150.f && sum.size() > 1) ch::paintSparkline(r, ctx.theme, {x + w - std::min(110.f, w * 0.42f), y + 26.f, std::min(110.f, w * 0.42f), 28.f}, sum, nullptr, {.color = kViolet});
-                (void)text(r, x, y + 66.f, num(d.ov.actionsBefore) + " avant \xC2\xB7 tous les admins", kF12, kMuted, w);
+                spark(sum, kViolet, vw + dw);
+                sub({{num(d.ov.actionsBefore) + " avant \xC2\xB7 tous les admins", kF12, kMuted}});
                 break;
             }
             case 2: {   // les demandes en attente
                 label(ui::Icon::Mail, "Demandes en attente");
-                (void)big(num(d.totals.pending), y + 22.f);
+                (void)value(num(d.totals.pending), w);
                 if (!svc.empty() && !known(d.totals.pending)) {
-                    (void)text(r, x, y + 66.f, svc, kF12, kMuted, w);
+                    sub({{svc, kF12, kMuted}});
                     break;
                 }
-                float sx = x + text(r, x, y + 60.f, "r\xC3\xA9ponse en " + hoursText(d.totals.meanDelay), kF12, kMuted, w) + 6.f;
-                (void)delta(r, sx, y + 60.f, d.totals.meanDelay, d.totals.meanDelayBefore, false, kB12);
-                if (known(d.totals.oldest) && d.totals.oldest > 0)
-                    (void)text(r, x, y + 78.f, "la plus ancienne attend " + hoursText(d.totals.oldest), kF12, kMuted, w);
+                std::vector<Rich> parts{{"r\xC3\xA9ponse en " + hoursText(d.totals.meanDelay) + " ", kF12, kMuted}};
+                const std::string dl = pct(d.totals.meanDelay, d.totals.meanDelayBefore);
+                if (!dl.empty()) parts.push_back({dl + " ", kB12, d.totals.meanDelay <= d.totals.meanDelayBefore ? kGreen : kRed});
+                if (known(d.totals.oldest) && d.totals.oldest > 0) parts.push_back({"\xC2\xB7 la plus ancienne : " + hoursText(d.totals.oldest), kF12, kMuted});
+                sub(parts);
                 break;
             }
             case 3: {   // les licences signees
                 label(ui::Icon::Document, "Licences sign\xC3\xA9" "es");
-                const float bw = big(num(d.totals.licences), y + 22.f);
-                (void)delta(r, x + bw + 6.f, y + 34.f, d.totals.licences, d.totals.licencesBefore);
+                const float vw = value(num(d.totals.licences), w * 0.5f);
+                (void)delta(r, x + vw + 6.f, y + 33.f, d.totals.licences, d.totals.licencesBefore);
                 if (!svc.empty() && !known(d.totals.licences)) {
-                    (void)text(r, x, y + 66.f, svc, kF12, kMuted, w);
+                    sub({{svc, kF12, kMuted}});
                     break;
                 }
                 const double plus = known(d.totals.licencesPlus) ? d.totals.licencesPlus : 0.0;
                 const double all = known(d.totals.licences) ? d.totals.licences : 0.0;
                 if (all > 0) {
-                    ch::paintSegments(r, ctx.theme, {x, y + 62.f, w, 8.f}, {all - plus, plus}, {Color::rgb(0x0B7FA3), kViolet});
+                    ch::paintSegments(r, ctx.theme, {x, y + 62.f, w, 7.f}, {all - plus, plus}, {Color::rgb(0x0B7FA3), kViolet});
                     float lx = x;
+                    const std::string a = "les admins " + num(all - plus), t = "toi " + num(plus);
                     r.fillRoundedRect({lx, y + 80.f, 8.f, 8.f}, Color::rgb(0x0B7FA3), 4.f);
-                    lx += 12.f + text(r, lx + 12.f, y + 76.f, "les admins " + num(all - plus), kF12, kMuted, w * 0.55f);
-                    r.fillRoundedRect({lx + 10.f, y + 80.f, 8.f, 8.f}, kViolet, 4.f);
-                    (void)text(r, lx + 22.f, y + 76.f, "toi " + num(plus), kF12, kMuted, x + w - lx - 22.f);
+                    lx += 12.f + text(r, lx + 12.f, y + 76.f, a, kF12, kMuted, w - 12.f);
+                    if (lx + 22.f + ui::measureWidth(t, kF12) <= x + w) {
+                        r.fillRoundedRect({lx + 10.f, y + 80.f, 8.f, 8.f}, kViolet, 4.f);
+                        (void)text(r, lx + 22.f, y + 76.f, t, kF12, kMuted, x + w - lx - 22.f);
+                    }
                 }
                 break;
             }
             case 4: {   // le montant
                 label(ui::Icon::Chart, "Montant encaiss\xC3\xA9");
-                (void)big(euros(d.totals.amount), y + 22.f);
+                const float vw = value(euros(d.totals.amount), w);
                 if (!svc.empty() && !known(d.totals.amount)) {
-                    (void)text(r, x, y + 66.f, svc, kF12, kMuted, w);
+                    sub({{svc, kF12, kMuted}});
                     break;
                 }
-                if (w > 170.f && d.totals.amountPoints.size() > 1)
-                    ch::paintSparkline(r, ctx.theme, {x + w - std::min(90.f, w * 0.36f), y + 26.f, std::min(90.f, w * 0.36f), 26.f}, d.totals.amountPoints, nullptr, {});
-                float sx = x + delta(r, x, y + 64.f, d.totals.amount, d.totals.amountBefore);
-                (void)text(r, sx + 6.f, y + 64.f, num(d.totals.orders) + " commandes livr\xC3\xA9" "es", kF12, kMuted, x + w - sx - 6.f);
+                spark(d.totals.amountPoints, Color::rgb(0x2A78D6), vw);
+                std::vector<Rich> parts;
+                const std::string dl = pct(d.totals.amount, d.totals.amountBefore);
+                if (!dl.empty()) parts.push_back({dl + " ", kB12, d.totals.amount >= d.totals.amountBefore ? kGreen : kRed});
+                parts.push_back({std::string(parts.empty() ? "" : "\xC2\xB7 ") + num(d.totals.orders) + " commandes livr\xC3\xA9" "es", kF12, kMuted});
+                sub(parts);
                 break;
             }
             default: {   // les alertes
                 label(ui::Icon::Warning, "Alertes");
-                (void)big(std::to_string(d.ov.alerts.size()), y + 22.f);
+                (void)value(std::to_string(d.ov.alerts.size()), w * 0.4f);
                 int c = 0, h = 0, s = 0;
                 for (const auto& a : d.ov.alerts) (a.severity == js::Severity::Critical ? c : a.severity == js::Severity::High ? h : s)++;
-                float sx = x;
-                if (c) sx += text(r, sx, y + 66.f, std::to_string(c) + (c > 1 ? " critiques" : " critique"), kB12, kRed, w) + 4.f;
-                const std::string rest = (c ? std::string("\xC2\xB7 ") : std::string()) + std::to_string(h) + (h > 1 ? " hautes" : " haute") + " \xC2\xB7 " +
-                                         std::to_string(s) + " \xC3\xA0 voir";
-                (void)text(r, sx, y + 66.f, rest, kF12, kMuted, x + w - sx);
+                std::vector<Rich> parts;
+                if (c) parts.push_back({std::to_string(c) + (c > 1 ? " critiques " : " critique "), kB12, kRed});
+                parts.push_back({(c ? std::string("\xC2\xB7 ") : std::string()) + std::to_string(h) + (h > 1 ? " hautes" : " haute") + " \xC2\xB7 " + std::to_string(s) +
+                                     " \xC3\xA0 voir",
+                                 kF12, kMuted});
+                sub(parts);
                 break;
             }
         }
@@ -877,6 +917,8 @@ private:
     ch::TimeChart*            curve_{nullptr};
     LinkButton*               allJournal_{nullptr};
     LinkButton*               regler_{nullptr};
+    LinkButton*               toAlerts_{nullptr};
+    float                     alertsTop_{0.f};
     ui::Button*               open_{nullptr};
     ui::Button*               journal_{nullptr};
     ui::Button*               rights_{nullptr};

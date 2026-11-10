@@ -395,31 +395,49 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const Rect b = bounds();
         const float top = b.y + 42.f;
-        const char* heads[] = {"PC", "CLIENT", "VERSION", "VU"};
-        const float cx[] = {0.f, 0.36f, 0.66f, 0.84f};
-        for (int i = 0; i < 4; ++i) ctx.r.drawText({b.x + b.w * cx[i], top}, heads[i], gfx::semibold(FontId{10}), kFaint);
-        ctx.r.fillRect({b.x, top + 18.f, b.w, 1.f}, kLine);
         const auto rows = shown();
-        const float rowH = 30.f;
+        // les colonnes a la mesure de ce qu'elles montrent ; trop large : le client passe sous le nom du PC (deux lignes),
+        // jamais coupe
+        const FontId pf = gfx::semibold(FontId{12}), cf = FontId{13}, sf = FontId{12};
+        float pcW = ctx.r.measure("PC", gFont()).width, whoW = ctx.r.measure("CLIENT", gFont()).width, verW = 0.f, seenW = ctx.r.measure("VU", gFont()).width;
+        const auto whoOf = [this](const stats::BehindPc* p) { return p->admin.empty() ? p->customer : adminName_ ? adminName_(p->admin) : p->admin; };
+        for (const auto* p : rows) {
+            pcW = std::max(pcW, ctx.r.measure(p->name.empty() ? p->key.substr(0, 12) : p->name, pf).width);
+            whoW = std::max(whoW, ctx.r.measure(whoOf(p), cf).width + (p->admin.empty() ? 0.f : 22.f));
+            verW = std::max(verW, ctx.r.measure(p->version, FontId{12}).width + 14.f);
+            seenW = std::max(seenW, ctx.r.measure(seenText(now_, p->seen), sf).width);
+        }
+        const float gap = 14.f;
+        const bool twoLines = pcW + whoW + verW + seenW + 3.f * gap > b.w;
+        const float xVer = b.right() - seenW - gap - verW, xSeen = b.right() - seenW;
+        const float xWho = twoLines ? b.x : b.x + pcW + gap;
+        ctx.r.drawText({b.x, top}, twoLines ? "PC \xC2\xB7 CLIENT" : "PC", gFont(), kFaint);
+        if (!twoLines) ctx.r.drawText({xWho, top}, "CLIENT", gFont(), kFaint);
+        ctx.r.drawText({xVer, top}, "VERSION", gFont(), kFaint);
+        ctx.r.drawText({xSeen, top}, "VU", gFont(), kFaint);
+        ctx.r.fillRect({b.x, top + 18.f, b.w, 1.f}, kLine);
+        const float rowH = twoLines ? 38.f : 30.f;
+        rowH_ = rowH;
         float y = top + 22.f;
         std::size_t drawn = 0;
         rowTops_.clear();
         for (const auto* p : rows) {
             if (y + rowH > b.bottom() - 30.f) break;
             const float cy = y + rowH * 0.5f;
-            ctx.r.drawText({b.x, cy - 8.f}, ch::detail::fit(ctx.r, p->name.empty() ? p->key.substr(0, 12) : p->name, gfx::semibold(FontId{12}), b.w * 0.35f),
-                           gfx::semibold(FontId{12}), kInk);
-            std::string who = p->customer;
-            if (!p->admin.empty()) who = adminName_ ? adminName_(p->admin) : p->admin;
-            float wx = b.x + b.w * cx[1];
+            const std::string name = p->name.empty() ? p->key.substr(0, 12) : p->name;
+            const std::string who = whoOf(p);
+            ctx.r.drawText({b.x, twoLines ? y + 3.f : cy - 8.f}, ch::detail::fit(ctx.r, name, pf, xVer - gap - b.x), pf, kInk);
+            float wx = xWho;
+            const float wy = twoLines ? y + 19.f : cy - 8.f;
             if (!p->admin.empty()) {
-                ctx.r.fillRoundedRect({wx, cy - 8.f, 16.f, 16.f}, ch::colors::kAdmins[2], 4.f);
-                ctx.r.drawText({wx + 4.f, cy - 7.f}, who.substr(0, 1), gfx::semibold(FontId{10}), Color::rgb(0xFFFFFF));
+                ctx.r.fillRoundedRect({wx, wy, 16.f, 16.f}, ch::colors::kAdmins[2], 4.f);
+                ctx.r.drawText({wx + 4.f, wy + 1.f}, who.substr(0, 1), gfx::semibold(FontId{10}), Color::rgb(0xFFFFFF));
                 wx += 22.f;
             }
-            ctx.r.drawText({wx, cy - 8.f}, ch::detail::fit(ctx.r, who, FontId{13}, b.x + b.w * cx[2] - 8.f - wx), FontId{13}, kInk);
-            versionBadge(ctx.r, b.x + b.w * cx[2], cy, p->version, p->behind >= 2 ? -1 : 0);
-            ctx.r.drawText({b.x + b.w * cx[3], cy - 8.f}, ch::detail::fit(ctx.r, seenText(now_, p->seen), FontId{12}, b.w * 0.16f), FontId{12}, kMuted);
+            const FontId wf = twoLines ? FontId{12} : cf;
+            ctx.r.drawText({wx, wy}, ch::detail::fit(ctx.r, who, wf, xVer - gap - wx), wf, twoLines ? kMuted : kInk);
+            versionBadge(ctx.r, xVer, cy, p->version, p->behind >= 2 ? -1 : 0);
+            ctx.r.drawText({xSeen, cy - 8.f}, seenText(now_, p->seen), sf, kMuted);
             rowTops_.push_back(y);
             ctx.r.fillRect({b.x, y + rowH - 0.5f, b.w, 1.f}, Color::rgb(0xF1F4F8));
             y += rowH;
@@ -433,7 +451,7 @@ protected:
         if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
             const auto rows = shown();
             for (std::size_t i = 0; i < rowTops_.size() && i < rows.size(); ++i)
-                if (m->pos.y >= rowTops_[i] && m->pos.y < rowTops_[i] + 30.f && m->pos.x >= bounds().x && m->pos.x <= bounds().right()) {
+                if (m->pos.y >= rowTops_[i] && m->pos.y < rowTops_[i] + rowH_ && m->pos.x >= bounds().x && m->pos.x <= bounds().right()) {
                     ListFilter f;
                     f.page = "activations";
                     f.search = rows[i]->name;
@@ -454,6 +472,8 @@ private:
     Seconds                                    now_{0};
     std::vector<int>                           counts_;
     std::vector<float>                         rowTops_;
+    float                                      rowH_{30.f};
+    static FontId gFont() { return gfx::semibold(FontId{10}); }
     std::function<std::string(const std::string&)> adminName_;
     core::ConnectionScope                      links_;
 };
@@ -815,8 +835,11 @@ private:
                 row.tip = x->version + " : m\xC3\xA9" "dian " + daysText(x->median) + ", moyen " + daysText(x->mean) + " (" + std::to_string(x->count) + " PC)";
                 d.rows.push_back(row);
             }
+            float lw = 0.f;
+            for (const auto& row : d.rows) lw = std::max({lw, ui::measureWidth(row.label, FontId{12}), ui::measureWidth(row.sub, FontId{11})});
+            d.labelWidth = lw + 6.f;   // le libelle et << en cours >> entiers
             d.clickHint = "Clic : les PC de cette version";
-            d.emptyText = "Aucun d\xC3\xA9lai mesur\xC3\xA9 sur la p\xC3\xA9riode";
+            d.emptyText = "Aucun d\xC3\xA9lai mesur\xC3\xA9";
             delays_->setData(d);
         }
         versions_->set(r, now);

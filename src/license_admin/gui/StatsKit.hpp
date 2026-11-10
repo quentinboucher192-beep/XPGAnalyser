@@ -245,6 +245,9 @@ public:
     }
     void setSmalls(std::string title, std::vector<std::string> smalls);
     void setSmalls(std::string title, std::string small) { setSmalls(std::move(title), std::vector<std::string>{std::move(small)}); }
+    // Les valeurs a cote du graphique, a la largeur de leur plus longue ligne ; `narrow` (facultatif) : les memes en plus
+    // court, si la carte est trop etroite pour les premieres (la moitie de la carte au plus).
+    void setSideRows(std::vector<ch::SideRow> rows, std::vector<ch::SideRow> narrow = {});
     // Ce qui est montre (les essais).
     [[nodiscard]] const std::string& shownCompare() const noexcept { return shownCompare_; }
     [[nodiscard]] bool deltaShown() const noexcept { return deltaShown_; }
@@ -257,6 +260,8 @@ private:
     std::string              text_, heading_;
     ch::Delta                delta_{};
     std::vector<std::string> compares_, smalls_;
+    std::vector<ch::SideRow> side_, sideNarrow_;
+    int                      sideShown_{-1};
     std::string              applied_, shownCompare_;
     bool                     deltaShown_{false};
 };
@@ -277,6 +282,9 @@ private:
     ch::BarListData full_{};
     int             extras_{-1};   // -1 pas encore pose, 1 montrees, 0 effacees
 };
+
+// La largeur des valeurs a cote d'un graphique (ChartCard::setSide) : leur plus longue ligne entiere.
+[[nodiscard]] float sideWidthOf(const std::vector<ch::SideRow>& rows);
 
 // Une carte simple (le fond blanc, le trait, l'ombre de la maquette).
 void paintCard(gfx::IRenderer& r, const ui::Theme& th, const gfx::Rect& b);

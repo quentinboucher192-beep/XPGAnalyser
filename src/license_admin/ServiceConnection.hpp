@@ -78,6 +78,8 @@ struct Places {
 // 1.47.0 : les lieux de CE processus (l'application et la console les donnent au lancement ; les essais non : un
 // Workspace d'essai ne cherche rien). Le Workspace les lit quand aucune adresse n'est reglee.
 void setPlaces(Places p);
+// Le dossier de ce programme (l'executable) ; vide : inconnu.
+[[nodiscard]] std::string programFolder();
 [[nodiscard]] const Places* places();
 
 struct Discovery {

@@ -315,8 +315,7 @@ int main(int argc, char** argv) {
     // ================================================================================== sans reseau
     Fixture f0(source, "demandes-0");
     check(f0.ready(), "le poste d'essai est pret (cle d'essai, registre)");
-    const lic::SigningKey* editor0 = f0.ws->signingKey();
-    if (!editor0) return finish();
+    if (!f0.ws->signingKey()) return finish();
     const std::string shared = "XPG-2026-00201";
     check(f0.licence(shared, "Client d'essai Beta", "PROFESSIONAL", {f0.request("pc-x", "Poste essai X")}).ok, "une licence existante (par fichier) pour Beta");
     HostRig rig0(f0);
@@ -348,6 +347,10 @@ int main(int argc, char** argv) {
     std::printf("-- des demandes rangees (processRequests, comme un releve) : la table, a verifier, illisible, le filtre\n");
     Pc a0(f0.root / "pc-a", "Poste essai A"), b0(f0.root / "pc-b", "Poste essai B"), x0(f0.root / "pc-z", "Poste essai Z");
     {
+        // 1.47.0 : la cle de l'editeur prise ICI - Workspace::reload() (apres une signature, serviceConfigure...) la refait ;
+        // un pointeur pris plus haut pendrait (selon le tas : un dossier temporaire plus long, et les demandes deviennent
+        // illisibles, puis l'assistant ne s'ouvre pas).
+        const lic::SigningKey* editor0 = f0.ws->signingKey();
         // Z scelle pour une autre cle que celle de l'editeur (la sienne) : illisible ici.
         const lic::crypto::PublicKey other = x0.key ? x0.key->publicKey() : lic::crypto::PublicKey{};
         json::Value arr = json::Value::array();

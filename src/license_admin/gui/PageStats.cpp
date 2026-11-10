@@ -197,12 +197,29 @@ protected:
             std::vector<const Cell*> order;
             for (const auto& c : cells_) order.push_back(&c);
             std::stable_sort(order.begin(), order.end(), [](const Cell* a, const Cell* x) { return a->row != x->row ? a->row < x->row : a->col < x->col; });
-            for (const Cell* c : order) {
-                const int span = std::min(c->cs, flow_);
-                if (col + span > flow_) {
-                    col = 0;
-                    ++row;
+            // dans l'ordre de lecture ; une carte large qui ne tient plus sur la rangee laisse sa place a la suivante qui y
+            // tient (pas de trou)
+            std::vector<const Cell*> todo = order;
+            order.clear();
+            while (!todo.empty()) {
+                std::size_t pick = 0;
+                if (col + std::min(todo[0]->cs, flow_) > flow_) {
+                    pick = todo.size();
+                    for (std::size_t k = 1; k < todo.size(); ++k)
+                        if (col + std::min(todo[k]->cs, flow_) <= flow_) {
+                            pick = k;
+                            break;
+                        }
+                    if (pick == todo.size()) {
+                        col = 0;
+                        ++row;
+                        pick = 0;
+                    }
                 }
+                const Cell* c = todo[pick];
+                todo.erase(todo.begin() + static_cast<std::ptrdiff_t>(pick));
+                const int span = std::min(c->cs, flow_);
+                order.push_back(c);
                 at.push_back({col, row});
                 col += span;
             }
@@ -360,6 +377,14 @@ bool missing(Slot& s, const Data& d, const std::string& group, const stats::Seri
 }
 
 std::string euroText(double cents) { return stats::euros(cents); }
+// Les valeurs a cote en plus court (une carte etroite) : sans les parts en %, << Decouverte >> sans << (l'essai) >>.
+std::vector<ch::SideRow> narrowSide(std::vector<ch::SideRow> rows) {
+    for (auto& r : rows) {
+        r.faint.clear();
+        if (const auto p = r.label.find(" ("); p != std::string::npos) r.label = r.label.substr(0, p);
+    }
+    return rows;
+}
 // << contre 23 000 \xE2\x82\xAC l'an dernier >>, sinon << contre 23 000 \xE2\x82\xAC >> (la place manque).
 std::vector<std::string> against(Compare c, const std::string& value) { return {againstText(c, value), "contre " + value}; }
 std::string intText(double v) { return stats::isNumber(v) ? ch::fr::integer(v) : kNone; }
@@ -505,7 +530,7 @@ void fillParOffre(Slot& s, const Data& d) {
     t.clickHint = "Clic : les commandes de cette offre";
     s.time->setData(std::move(t));
     s.card->setSmalls("Ventes par offre", "montant " + stepSmall(r.step));
-    s.card->setSide(side);
+    s.card->setSideRows(side, narrowSide(side));
     const bool withOptions = m->part("options") != nullptr;
     s.card->setText(euroText(tot), {},
                      std::to_string(offers - (withOptions ? 1 : 0)) + (offers - (withOptions ? 1 : 0) > 1 ? " offres" : " offre") + (withOptions ? " et options" : ""));
@@ -737,7 +762,7 @@ void fillPcActifs(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces PC (Activations)";
     s.time->setData(std::move(t));
     s.card->setSmalls("PC actifs", {"par offre, \xC3\xA0 la fin de chaque " + std::string(stepLabel(r.step)), "par offre"});
-    s.card->setSide(side);
+    s.card->setSideRows(side, narrowSide(side));
     if (total && !total->refused && total->hasComparison()) {
         const double before = total->beforeTotal + (disc && disc->hasComparison() ? disc->beforeTotal : 0);
         s.card->setText(intText(all), ch::deltaOf(all, before), against(d.compare, intText(before)));
@@ -940,7 +965,7 @@ void fillLicencesParOffre(Slot& s, const Data& d) {
     t.legend = ch::LegendMode::None;
     t.clickHint = "Clic : les licences de cette offre";
     s.time->setData(std::move(t));
-    s.card->setSide(side);
+    s.card->setSideRows(side, narrowSide(side));
     s.card->setText(intText(m->total), {}, "\xC3\xA0 la fin de la p\xC3\xA9riode");
 }
 
@@ -979,28 +1004,52 @@ protected:
             ctx.r.drawText({b.x + 4.f, b.y + 8.f}, empty_, FontId{12}, kMuted);
             return;
         }
+        // les colonnes a la mesure de leur contenu ; la place manque : la ville, puis la version s'effacent (jamais coupees) ;
+        // le role sous le nom
         const char* heads[] = {"ADMIN", "JOURS", "SES HEURES (HEURE DU PC)", "VU", "VERSION", "VILLE"};
-        const float cols[] = {0.f, 0.27f, 0.37f, 0.6f, 0.75f, 0.87f};
-        for (int c = 0; c < 6; ++c) ctx.r.drawText({b.x + b.w * cols[c], b.y}, heads[c], gfx::semibold(FontId{10}), kFaint);
+        const FontId hf = gfx::semibold(FontId{10}), f = FontId{12};
+        float cw[6];
+        for (int c = 0; c < 6; ++c) cw[c] = ctx.r.measure(heads[c], hf).width;
+        for (const auto& r : rows_) {
+            cw[0] = std::max({cw[0], ctx.r.measure(r.name, f).width + 26.f, ctx.r.measure(r.role, FontId{10}).width + 26.f});
+            cw[1] = std::max(cw[1], ctx.r.measure(r.days, f).width);
+            cw[2] = std::max(cw[2], ctx.r.measure(r.hours, f).width);
+            cw[3] = std::max(cw[3], ctx.r.measure(r.seen, f).width);
+            cw[4] = std::max(cw[4], ctx.r.measure(r.version, f).width);
+            cw[5] = std::max(cw[5], ctx.r.measure(r.city, f).width);
+        }
+        const float gap = 18.f;
+        int cols = 6;
+        const auto total = [&](int n) {
+            float t = 0.f;
+            for (int c = 0; c < n; ++c) t += cw[c] + (c ? gap : 0.f);
+            return t;
+        };
+        while (cols > 3 && total(cols) > b.w) --cols;
+        float xs[6];
+        float x = b.x;
+        const float extra = cols > 1 ? std::max(0.f, (b.w - total(cols)) / static_cast<float>(cols - 1)) : 0.f;
+        for (int c = 0; c < cols; ++c) {
+            xs[c] = x;
+            x += cw[c] + gap + extra;
+        }
+        for (int c = 0; c < cols; ++c) ctx.r.drawText({xs[c], b.y}, heads[c], hf, kFaint);
         float y = b.y + 22.f;
         for (const auto& r : rows_) {
-            if (y + 26.f > b.bottom()) break;
+            if (y + 34.f > b.bottom()) break;
             const Color col = ch::colors::admin(std::min(r.order, 3));
-            ctx.r.fillRoundedRect({b.x, y + 3.f, 18.f, 18.f}, col, 9.f);
-            ctx.r.drawText({b.x + 5.f, y + 5.f}, r.name.substr(0, 1), gfx::semibold(FontId{11}), Color::rgb(0xFFFFFF));
-            ctx.r.drawText({b.x + 26.f, y + 5.f}, detailFit(ctx, r.name + " \xC2\xB7 " + r.role, b.w * 0.26f - 30.f), FontId{12}, kInk);
-            ctx.r.drawText({b.x + b.w * cols[1], y + 5.f}, r.days, FontId{12}, kInk);
-            ctx.r.drawText({b.x + b.w * cols[2], y + 5.f}, r.hours, FontId{12}, kInk);
-            ctx.r.drawText({b.x + b.w * cols[3], y + 5.f}, r.seen, FontId{12}, kMuted);
-            ctx.r.drawText({b.x + b.w * cols[4], y + 5.f}, r.version, gfx::FontId{12}, kInk);
-            ctx.r.drawText({b.x + b.w * cols[5], y + 5.f}, detailFit(ctx, r.city, b.w * 0.13f), FontId{12}, kMuted);
-            ctx.r.fillRect({b.x, y + 25.f, b.w, 1.f}, Color::rgb(0xF1F4F8));
-            y += 27.f;
+            ctx.r.fillRoundedRect({b.x, y + 7.f, 18.f, 18.f}, col, 9.f);
+            ctx.r.drawText({b.x + 5.f, y + 9.f}, r.name.substr(0, 1), gfx::semibold(FontId{11}), Color::rgb(0xFFFFFF));
+            ctx.r.drawText({b.x + 26.f, y + 2.f}, r.name, f, kInk);
+            ctx.r.drawText({b.x + 26.f, y + 18.f}, r.role, FontId{10}, kFaint);
+            const std::string* cells[6] = {nullptr, &r.days, &r.hours, &r.seen, &r.version, &r.city};
+            for (int c = 1; c < cols; ++c) ctx.r.drawText({xs[c], y + 9.f}, *cells[c], f, c == 3 || c == 5 ? kMuted : kInk);
+            ctx.r.fillRect({b.x, y + 33.f, b.w, 1.f}, Color::rgb(0xF1F4F8));
+            y += 35.f;
         }
     }
 
 private:
-    static std::string detailFit(const ui::PaintContext& ctx, const std::string& s, float w) { return ch::detail::fit(ctx.r, s, FontId{12}, w); }
     struct Row {
         int         order{0};
         std::string name, role, days, hours, seen, version, city;
@@ -1289,7 +1338,26 @@ protected:
         rebuiltY_ = -1.f;
         if (banner.empty() && !globe && !upd && !rebuiltText().empty()) {
             rebuiltY_ = y - 4.f;
-            y += 18.f;
+            // la note sur une ou deux lignes (jamais coupee)
+            rebuiltLines_.clear();
+            std::string line, word;
+            const std::string text = rebuiltText() + " ";
+            for (const char c : text) {
+                if (c != ' ') {
+                    word += c;
+                    continue;
+                }
+                const std::string next = line.empty() ? word : line + " " + word;
+                if (!line.empty() && ui::measureWidth(next, FontId{12}) > w - 20.f) {
+                    rebuiltLines_.push_back(line);
+                    line = word;
+                } else {
+                    line = next;
+                }
+                word.clear();
+            }
+            if (!line.empty()) rebuiltLines_.push_back(line);
+            y += 18.f * static_cast<float>(std::max<std::size_t>(1, rebuiltLines_.size()));
         }
         const Rect area{x0, y, w, std::max(120.f, b.bottom() - 10.f - y)};
         for (auto* g : grids_) g->setBounds(area);
@@ -1334,7 +1402,7 @@ protected:
         }
         if (rebuiltY_ >= 0.f) {
             ui::drawIcon(ctx.r, ui::Icon::Info, {x0, rebuiltY_ + 1.f, 13.f, 13.f}, kFaint);
-            ctx.r.drawText({x0 + 18.f, rebuiltY_}, ch::detail::fit(ctx.r, rebuiltText(), FontId{12}, w - 20.f), FontId{12}, kMuted);
+            for (std::size_t i = 0; i < rebuiltLines_.size(); ++i) ctx.r.drawText({x0 + 18.f, rebuiltY_ + 17.f * static_cast<float>(i)}, rebuiltLines_[i], FontId{12}, kMuted);
         }
         // un travail qui n'a pas pu partir (un autre tournait) : il part des que possible
         if (wantLoad_ && !loading_) load();
@@ -1497,7 +1565,7 @@ private:
         slot(g, t, "traitees", "Trait\xC3\xA9" "es par", "", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "demandes_traitees", 1.0, false, "Clic : ses demandes"); }, 0, 1, 2);
         slot(g, t, "issue", "Accept\xC3\xA9" "es, refus\xC3\xA9" "es", "", 0, "principal", fillAcceptRefuse, 2, 1, 2);
-        slot(g, t, "ancienne", "La plus ancienne qui attend", "", 0, "pc",
+        slot(g, t, "ancienne", "Attente la plus longue", "", 0, "pc",
              [](Slot& s, const Data& d) {
                  fillSimpleLine(s, d, "pc", "demandes_plus_ancienne", 1.0 / 3600.0, hoursF(), true, "Clic : les demandes en attente",
                                 [](double v) { return stats::duration(v); });
@@ -1855,6 +1923,7 @@ private:
     std::string                      sig_, note_, lastNote_, failed_;
     bool                             tooOld_{false}, loading_{false}, wantLoad_{false};
     float                            titleY_{0}, tabsBottom_{0}, barY_{0}, barBottom_{0}, periodRight_{0}, hintX_{0}, rebuiltY_{-1};
+    std::vector<std::string>         rebuiltLines_;
     bool                             periodInTabs_{true}, periodInBar_{false};
     std::string                      hint_;
     std::vector<gfx::Point>          seps_;

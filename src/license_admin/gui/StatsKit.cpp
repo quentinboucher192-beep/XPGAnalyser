@@ -623,6 +623,21 @@ void FitCard::setSmalls(std::string title, std::vector<std::string> smalls) {
     apply();
 }
 
+float sideWidthOf(const std::vector<ch::SideRow>& rows) {
+    float w = 0.f;
+    for (const auto& r : rows)
+        w = std::max(w, 17.f + ui::measureWidth(r.label, FontId{12}) + 8.f + ui::measureWidth(r.value, gfx::semibold(FontId{12})) +
+                            (r.faint.empty() ? 0.f : 5.f + ui::measureWidth(r.faint, FontId{11})) + 6.f);
+    return w;
+}
+
+void FitCard::setSideRows(std::vector<ch::SideRow> rows, std::vector<ch::SideRow> narrow) {
+    side_ = std::move(rows);
+    sideNarrow_ = std::move(narrow);
+    sideShown_ = -1;
+    apply();
+}
+
 void FitCard::onLayout() {
     apply();
     ch::ChartCard::onLayout();
@@ -663,6 +678,15 @@ void FitCard::apply() {
         }
     } else if (!smalls_.empty()) {
         small = smalls_.front();
+    }
+    if (!side_.empty()) {
+        const float half = bounds().w * 0.5f - 14.f;
+        const int want = (bounds().w <= 0.f || sideWidthOf(side_) <= half || sideNarrow_.empty()) ? 0 : 1;
+        if (want != sideShown_) {
+            sideShown_ = want;
+            const auto& rows = want == 0 ? side_ : sideNarrow_;
+            setSide(rows, sideWidthOf(rows));
+        }
     }
     const std::string sig = heading_ + "|" + small + "|" + text_ + "|" + delta.text + "|" + compare;
     shownCompare_ = compare;

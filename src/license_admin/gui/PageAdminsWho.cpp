@@ -138,7 +138,7 @@ protected:
     float place(const Rect& area) override {
         const float x0 = area.x + 2.f, w = area.w - 4.f;
         float y = area.y + 4.f;
-        const bool side = w >= 980.f;
+        const bool side = w >= 1180.f;   // a cote : assez de place pour les libelles des types
         const float leftW = side ? std::floor(w * 0.56f) : w;
         const float rightW = side ? w - leftW - 16.f : w;
         // ---- la part de chacun ----
@@ -154,9 +154,9 @@ protected:
         ly += 28.f;
         const float inner = leftW - 36.f;
         cols_[0] = x0 + 18.f;
-        colW_[0] = inner * 0.30f;
+        colW_[0] = inner * 0.31f;
         cols_[1] = cols_[0] + colW_[0];
-        colW_[1] = inner * 0.34f;
+        colW_[1] = inner * 0.33f;
         cols_[2] = cols_[1] + colW_[1] + 8.f;
         colW_[2] = inner * 0.09f;
         cols_[3] = cols_[2] + colW_[2];

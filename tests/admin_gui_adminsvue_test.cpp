@@ -455,6 +455,7 @@ int main(int argc, char** argv) {
         page->refresh();
     });
     std::string t = draw(*page);
+    if (std::getenv("XPG_ESSAI_TEXTE")) std::printf("%s\n", t.c_str());
     auto* ov = view(*page, "admins.vue");
     check(ov && ov->visible(), "la vue d'ensemble est montree");
     check(has(t, "Administrateurs") && has(t, "3 actifs, 1 retir\xC3\xA9") && has(t, "compar\xC3\xA9 aux 30 jours d'avant"), "le titre : 3 actifs, 1 retire ; compares aux 30 jours d'avant");
@@ -466,7 +467,7 @@ int main(int argc, char** argv) {
     check(has(t, "Admins") && has(t, "actifs") && has(t, "Actions") && has(t, "Demandes en attente") && has(t, "Licences sign\xC3\xA9" "es") &&
               has(t, "Montant encaiss\xC3\xA9") && has(t, "Alertes"),
           "les six tuiles");
-    check(has(t, "les admins ") && has(t, "toi ") && has(t, "commandes livr\xC3\xA9" "es"), "les tuiles du service (les reponses d'essai) : les admins et toi, les commandes");
+    check(has(t, "les admins ") && has(t, "toi ") && has(t, "commandes"), "les tuiles du service (les reponses d'essai) : les admins et toi, les commandes");
     check(has(t, "ADMIN") && has(t, "ACTIONS") && has(t, "LICENCES") && has(t, "DEMANDES") && has(t, "D\xC3\x89LAI MOY.") && has(t, "MONTANT") && has(t, "DERNI\xC3\x88RE ACTION") &&
               has(t, "\xC3\x89TAT"),
           "le classement : ses colonnes");
@@ -485,7 +486,7 @@ int main(int argc, char** argv) {
     const auto& alerts = [&]() -> std::vector<std::string> {
         std::vector<std::string> out;
         for (int i = 1; i <= 12; ++i)
-            if (auto* b = find<ui::Button>(*page, "admins.alerte." + std::to_string(i)); b && b->visible()) out.push_back(b->text());
+            if (auto* b = find<ui::Button>(*page, "admins.alerte." + std::to_string(i)); b && b->visibility() != ui::Visibility::Collapsed) out.push_back(b->text());
         return out;
     }();
     check(has(t, "Nina Essai") && has(t, "signatures refus"), "une alerte critique : les signatures refusees de Nina");
@@ -576,6 +577,7 @@ int main(int argc, char** argv) {
     {
         check(click(*page, "admins.onglet.qui"), "l'onglet Qui fait quoi");
         t = draw(*page);
+        if (std::getenv("XPG_ESSAI_TEXTE")) std::printf("%s\n", t.c_str());
         auto* who = view(*page, "admins.qui");
         check(who && who->visible() && ov && !ov->visible(), "qui fait quoi montre, la vue d'ensemble cachee");
         check(has(t, "La part de chacun, par type d'action") && has(t, "Toutes (hors r\xC3\xA9serv\xC3\xA9" "es)") && has(t, "Cr\xC3\xA9" "er et signer une licence") &&
@@ -603,6 +605,7 @@ int main(int argc, char** argv) {
     {
         check(click(*page, "admins.fiche"), "Ouvrir sa fiche (Lea)");
         t = draw(*page);
+        if (std::getenv("XPG_ESSAI_TEXTE")) std::printf("%s\n", t.c_str());
         auto* card = view(*page, "admins.fiche.vue");
         check(card && card->visible() && ov && !ov->visible(), "la fiche remplace la vue d'ensemble");
         check(shown(*page, "admins.fiche.retour") && shown(*page, "admins.fiche.journal") && shown(*page, "admins.fiche.droits") && shown(*page, "admins.fiche.retirer"),
@@ -613,8 +616,19 @@ int main(int argc, char** argv) {
               "qui et ou : son PC, sa cle certifiee, son profil et ses ecarts");
         check(has(t, "Paris") || has(t, "Vue"), "vue : la ville (le service)");
         check(has(t, "S\xC3\xA9rie en cours") && has(t, "Derni\xC3\xA8re action") && has(t, "D\xC3\xA9lai de r\xC3\xA9ponse") && has(t, "jours ouvr\xC3\xA9s"), "les huit tuiles");
-        check(has(t, "Ses actions par type") && has(t, "pas ce droit") && has(t, "Par criticit\xC3\xA9") && has(t, "Critique : sa") && has(t, "L\xC3\xA9" "a parmi les admins"),
-              "par type (pas ce droit), par criticite (ses revocations), parmi les admins");
+        {
+            auto* types = find<ui::charts::BarList>(*page, "admins.fiche.types");
+            bool notHeld = false, never = false;
+            if (types)
+                for (const auto& row : types->data().rows) {
+                    notHeld = notHeld || row.note == "pas ce droit";
+                    never = never || (row.warn && has(row.note, "jamais"));
+                }
+            check(types && types->data().rows.size() == 14 && types->data().rows.back().label == "Boutique : livrer, revoir" && notHeld && never,
+                  "par type : les 14 dans l'ordre (la boutique a la fin), << pas ce droit >>, << jamais >>");
+        }
+        check(has(t, "Ses actions par type") && has(t, "Par criticit\xC3\xA9") && has(t, "Critique : ses 2 r\xC3\xA9vocations") && has(t, "L\xC3\xA9" "a parmi les admins"),
+              "par criticite (ses revocations), parmi les admins");
         check(has(t, "Quand L\xC3\xA9" "a travaille") && has(t, "Ses jours") && has(t, "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es"), "l'activite : jour x heure, ses jours, ses journees");
         check(has(t, "Ses droits : utilis\xC3\xA9s ou non") && has(t, "DONN\xC3\x89") && has(t, "jamais"), "ses droits utilises ou non");
         check(has(t, "Sa s\xC3\xA9" "curit\xC3\xA9") && has(t, "Signatures refus\xC3\xA9" "es") && has(t, "droit manquant") && has(t, "Depuis un autre PC que le sien") &&
@@ -631,6 +645,8 @@ int main(int argc, char** argv) {
         check(card && click(*page, "admins.fiche.ancre.1") && card->offset() > 100.f, "l'ancre Activite fait defiler");
         check(click(*page, "admins.fiche.ancre.0") && card && card->offset() < 1.f, "l'ancre Vue d'ensemble : en haut");
         // << Retirer ce droit ? >>
+        check(click(*page, "admins.fiche.ancre.6"), "l'ancre Droits");
+        (void)draw(*page);
         const std::string unusedBtn = shown(*page, "admins.fiche.retirer.poste_retirer") ? "admins.fiche.retirer.poste_retirer" : "admins.fiche.retirer.annonces";
         const std::size_t n0 = rig.navigations.size();
         check(shown(*page, unusedBtn) && click(*page, unusedBtn) && rig.navigations.size() == n0 + 1 && rig.navigations.back() == "droits" &&

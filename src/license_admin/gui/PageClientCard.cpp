@@ -520,9 +520,9 @@ private:
             const float vx = b.x + 16.f + b.w * 0.34f;
             const std::string vv = ch::detail::fit(ctx.r, v, FontId{13}, b.right() - 16.f - vx);
             ctx.r.drawText({vx, y}, vv, FontId{13}, kInk);
-            if (!faint.empty()) {
+            if (!faint.empty()) {   // la precision : entiere ou pas du tout
                 const float fx = vx + ctx.r.measure(vv, FontId{13}).width;
-                ctx.r.drawText({fx, y + 1.f}, ch::detail::fit(ctx.r, faint, FontId{12}, b.right() - 16.f - fx), FontId{12}, kMuted);
+                if (fx + ctx.r.measure(faint, FontId{12}).width <= b.right() - 16.f) ctx.r.drawText({fx, y + 1.f}, faint, FontId{12}, kMuted);
             }
             ctx.r.fillRect({b.x + 16.f, y + 23.f, b.w - 32.f, 1.f}, Color::rgb(0xF1F4F8));
             y += 30.f;
@@ -728,7 +728,7 @@ private:
         std::sort(bl.rows.begin(), bl.rows.end(), [](const auto& a, const auto& b) { return a.value > b.value; });
         bl.rowHeight = 40.f;
         bl.clickHint = "Clic : ses lignes du journal";
-        bl.emptyText = "Aucune ligne du journal des admins sur ses licences";
+        bl.emptyText = "Aucune action";
         served_->setData(bl);
         std::string last1;
         if (!local_.journal.empty()) {
@@ -762,7 +762,10 @@ private:
         }
         const stats::Period p = period();
         const std::string sig = name_ + "|" + p.from + "|" + p.to;
-        if (sig == sig_) return;
+        if (sig == sig_) {   // deja lus : les cartes du service redessinees (fillLocal vient de refaire celles de l'archive)
+            fillService();
+            return;
+        }
         if (loading_) {
             wantLoad_ = true;
             return;
@@ -963,7 +966,7 @@ private:
             }
             t.legend = ch::LegendMode::Top;
             t.clickHint = "Clic : ses PC sur cette version";
-            t.emptyText = "Aucun PC vu ces 20 semaines";
+            t.emptyText = "Aucun PC vu";
             updates_->setData(t);
             std::string late;
             const KnownDevice* worst = nullptr;
@@ -994,7 +997,7 @@ private:
             t.valueFormat = [](double x) { return ch::fr::euros(x); };
             t.yTickCount = 2;
             t.clickHint = "Clic : ses commandes";
-            t.emptyText = "Aucun achat en ligne sur la p\xC3\xA9riode";
+            t.emptyText = "Aucun achat en ligne";
             purchases_->setData(t);
             purchasesCard_->setSmalls("Ses achats", quarters ? "par trimestre" : stepSmall(r.step));
             const auto* n = series("achats", "ventes_commandes");
@@ -1067,7 +1070,7 @@ private:
             t.tipForward = true;
             t.yTickCount = 2;
             t.clickHint = "Clic : ses demandes";
-            t.emptyText = "Aucune demande trait\xC3\xA9" "e sur la p\xC3\xA9riode";
+            t.emptyText = "Aucune demande";
             requests_->setData(t);
             requestsCard_->setSmalls("Ses demandes", quarters ? "par trimestre" : stepSmall(r.step));
             const auto* in = series("demandes", "demandes_recues");
@@ -1106,7 +1109,7 @@ private:
             std::sort(bl.rows.begin(), bl.rows.end(), [](const auto& a, const auto& b) { return a.value > b.value; });
             bl.rowHeight = 40.f;
             bl.clickHint = "Clic : ses lignes du journal";
-            bl.emptyText = data_.count("demandes") ? "Aucune licence ni demande sur la p\xC3\xA9riode" : "Lecture des chiffres\xE2\x80\xA6";
+            bl.emptyText = data_.count("demandes") ? "Aucune action" : "Lecture des chiffres\xE2\x80\xA6";
             served_->setData(bl);
             if (total > 0) servedCard_->setText(ch::fr::integer(total) + (total > 1 ? " actions" : " action"), {}, "licences et demandes, d'apr\xC3\xA8s le service");
         }

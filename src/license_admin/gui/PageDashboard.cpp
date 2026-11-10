@@ -653,7 +653,7 @@ protected:
 
         // 1.47.0 : la rangee de courbes (a gauche) et la petite carte du globe (a droite), si la place et le service le permettent.
         stripShown_ = strip_->shown();
-        const bool curves = !compact && stripShown_ && b.bottom() - 18.f - y > 150.f + gap + 220.f;
+        const bool curves = !compact && stripShown_ && b.bottom() - 18.f - y > 150.f + gap + 200.f;
         strip_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         globe_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         if (curves) {

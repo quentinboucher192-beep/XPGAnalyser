@@ -166,6 +166,7 @@ struct Action {
 
 struct Options {
     std::string              folder, page, capture;
+    std::string              connexion;   // 1.47.0 : --connexion F (la connexion au service signee par l'editeur)
     double                   after{1.0};
     int                      width{1400}, height{900};
     bool                     version{false}, help{false};
@@ -203,6 +204,8 @@ void usage(std::FILE* to) {
                  "                        options, activations, demandes, flottantes, boutique, commandes, revocations, admins,\n"
                  "                        droits, journal, versions, service, historique, securite)\n"
                  "  --version             le nom et la version\n"
+                 "  --connexion F.xpgsvc  la connexion au service (le certificat sign\xC3\xA9 par l'\xC3\xA9" "diteur) : l'adresse de ce poste\n"
+                 "                        s'il n'en a pas (sinon : \xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme, puis le dossier des licences du Studio)\n"
                  "  FICHIER               une demande (.xpgreq) : l'assistant ; .xpglic, .xpgreg, .xpgrev : rang\xC3\xA9s dans l'archive\n"
                  "  --taille LxH          la taille de la fen\xC3\xAAtre\n"
                  "  --assistant F.xpgreq  ouvrir l'assistant de licence avec cette demande (r\xC3\xA9p\xC3\xA9table)\n"
@@ -228,6 +231,9 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
         else if (a == "--dossier") {
             if (!more) return need("le dossier");
             o.folder = args[++i];
+        } else if (a == "--connexion") {   // 1.47.0 : connexion-service.xpgsvc (ServiceConnection.hpp)
+            if (!more) return need("le fichier de la connexion (.xpgsvc)");
+            o.connexion = args[++i];
         } else if (a == "--page") {
             if (!more) return need("la page");
             o.page = args[++i];
@@ -273,7 +279,8 @@ bool parse(const std::vector<std::string>& args, Options& o, std::string& why) {
                 why = "--choisir : " + t + " (attendu : ID=N, N \xE2\x89\xA5 1)";
                 return false;
             }
-            o.actions.push_back({Action::Kind::Choose, t.substr(0, eq), std::to_string(n)});
+            // 1.47.0 : ID=1,2,3 - plusieurs lignes d'un tableau (Demandes d'admin : << Accepter 3 demandes... >>)
+            o.actions.push_back({Action::Kind::Choose, t.substr(0, eq), t.find(',', eq) == std::string::npos ? std::to_string(n) : t.substr(eq + 1)});
         } else if (a == "--attendre") {   // 1.42.0 : une pause entre deux actions (un releve a l'ouverture...)
             if (!more) return need("les secondes");
             const std::string t = args[++i];
@@ -323,7 +330,13 @@ void perform(menu::MenuManager& menus, const Action& a) {
     }
     if (a.kind == Action::Kind::Choose) {
         const int row = std::atoi(a.text.c_str()) - 1;
-        if (auto* t = dynamic_cast<ui::TableView*>(w)) t->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+        std::vector<ui::RowIndex> rows;   // 1.47.0 : << 1,2,3 >> - plusieurs lignes
+        for (std::size_t p = 0; p < a.text.size();) {
+            const std::size_t c = std::min(a.text.find(',', p), a.text.size());
+            if (const int n = std::atoi(a.text.substr(p, c - p).c_str()); n >= 1) rows.push_back(static_cast<ui::RowIndex>(n - 1));
+            p = c + 1;
+        }
+        if (auto* t = dynamic_cast<ui::TableView*>(w)) t->selectModelRows(rows, true);
         else if (auto* d = dynamic_cast<ui::DropDown*>(w)) d->setSelectedIndex(row);
         else if (auto* g = dynamic_cast<ui::GlobeCityList*>(w); g && row >= 0 && row < static_cast<int>(g->order().size()))
             g->placeChosen->emit(g->order()[static_cast<std::size_t>(row)]);   // 1.47.0 : une ville de la liste du globe (sa carte s'ouvre)
@@ -466,6 +479,9 @@ int main(int argc, char** argv) {
     services.pickFile = [window](const ui::FilePick& pick, std::function<void(std::string)> done) { return filepick::open(window, pick, std::move(done)); };
     ui::installPlatformServices(std::move(services));
 
+    // 1.47.0 : LA CONNEXION AU SERVICE QUI VOYAGE AVEC L'INSTALLATEUR (docs/ADMINS.md, par. 11) - un poste sans adresse
+    // (et sans la cle de l'editeur) la prend, signee par l'editeur : --connexion, a cote du programme, le Studio de ce PC.
+    license_admin::connexion::setPlaces(license_admin::connexion::defaultPlaces(license_admin::connexion::programFolder(), o.connexion));
     {
         menu::MenuManager menus{menu::MenuFactory{}};
         auto owned = std::make_unique<gui::Shell>(o.folder);

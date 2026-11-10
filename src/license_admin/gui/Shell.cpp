@@ -1365,6 +1365,26 @@ bool Shell::autoWatch() {
                      }
                      autoProblemSaid_ = false;
                      lastLive_ = steadyNow();
+                     // 1.47.0 : la derogation << Gerer le service >> (la sienne ; l'admin+ : celle en place) - accordee, finie,
+                     // revoquee : l'Admin le dit et les pages le montrent (docs/ADMINS.md, par. 11).
+                     if (st->derogationSaid) {
+                         const bool manageBefore = ws_->mayManageService();
+                         const std::string idBefore = ws_->derogation().id, stateBefore = ws_->derogation().state;
+                         ws_->adoptDerogation(*st);
+                         const bool manageAfter = ws_->mayManageService();
+                         if (manageAfter != manageBefore || idBefore != ws_->derogation().id || stateBefore != ws_->derogation().state) {
+                             if (ws_->role() == Role::Admin && manageAfter && !manageBefore)
+                                 flash("D\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB accord\xC3\xA9" "e par l'admin+ : " +
+                                           derogationText(ws_->derogation(), ws_->now()) + " (Service en ligne).",
+                                       Tone::Warning);
+                             else if (ws_->role() == Role::Admin && manageBefore && !manageAfter)
+                                 flash("Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB est " +
+                                           std::string(ws_->derogation().state == "revoquee" ? "r\xC3\xA9voqu\xC3\xA9" "e" : "termin\xC3\xA9" "e") +
+                                           " : le service repasse en lecture seule.",
+                                       Tone::Info);
+                             refreshPages();
+                         }
+                     }
                      // 1.45.0 : une autre version en ligne (deployee d'ailleurs : deployer.bat, un autre PC) - l'etat la suit.
                      if (const auto& sv = ws_->service(); sv.hasState && sv.state.reached && !st->version.empty() && st->version != sv.state.version) {
                          online::ServiceState now = sv.state;

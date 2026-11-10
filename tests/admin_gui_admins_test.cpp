@@ -282,9 +282,10 @@ int main(int argc, char** argv) {
     check(fx.ws->saveProfile(lv2).ok, "le profil << Admin LV2 >>");
     fx.ws->reload();
     check(fx.ws->adminList() && fx.ws->adminList()->admins.size() == 3, "la liste des admins signee, lue sur ce poste");
-    // Le journal : 5 lignes signees, chainees.
+    // Le journal : 5 lignes signees, chainees. 1.47.0 : la cle de l'editeur relue - reload() la refait, `editor` (prise
+    // avant) pendrait (selon le tas : un dossier temporaire plus long, et la chaine ne se verifie plus).
     Chain chain;
-    addLine(chain, editor, "admin_ajouter", kLea, "a ajout\xC3\xA9 l'admin " + kLea, g_now - 5 * 86400, "PC-BUREAU-01");
+    addLine(chain, *fx.ws->signingKey(), "admin_ajouter", kLea, "a ajout\xC3\xA9 l'admin " + kLea, g_now - 5 * 86400, "PC-BUREAU-01");
     addLine(chain, *leaKey, "licence_creer", "XPG-2026-00412", "a sign\xC3\xA9 la licence XPG-2026-00412", g_now - 3 * 3600, "PC-COMMERCIAL-02",
             "{\"client\":\"Atelier d'essai\",\"offre\":\"PROFESSIONAL 1 an\"}");
     addLine(chain, *hugoKey, "offres", "PROFESSIONAL", "a modifi\xC3\xA9 l'offre PROFESSIONAL (prix)", g_now - 2 * 3600, "PORTABLE-HUGO", {},
@@ -510,7 +511,7 @@ int main(int argc, char** argv) {
     std::printf("-- un admin (Lea) : la lecture seule, ses droits, ce qui est grise\n");
     {
         writeFile(lf.admin / "admins.xpgadm", block);
-        pinEditor(lf.admin, editor);
+        pinEditor(lf.admin, *fx.ws->signingKey());   // 1.47.0 : relue (voir le journal plus haut)
         lf.ws->reload();
         check(lf.ws->role() == gui::Role::Admin && lf.ws->can("licence_creer") && !lf.ws->can("offres"), "Lea : admin, ses droits");
         HostRig lrig(lf);

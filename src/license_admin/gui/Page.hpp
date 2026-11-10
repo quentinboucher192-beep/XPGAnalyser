@@ -196,5 +196,8 @@ menu::MenuPtr makeStripeDialog(ShellHost host, std::function<void()> done = {});
 // et l'etape suivante (nodejs.org ; << Se connecter a Cloudflare... >> : npx wrangler login ; les dernieres lignes).
 // `done` (facultatif) : a chaque fin (la page se rafraichit).
 menu::MenuPtr makeDeployDialog(ShellHost host, std::function<void()> done = {});
+// 1.47.0 : la derogation << Gerer le service >> (l'admin+ ; DerogationDialog.cpp) - a un admin, 1, 4, 24 ou 72 h ; `adminKey`
+// (facultatif) : l'admin choisi d'avance ; `done` : apres Accorder, Revoquer ou Fermer.
+menu::MenuPtr makeDerogationDialog(ShellHost host, std::string adminKey = {}, std::function<void()> done = {});
 
 } // namespace license_admin::gui

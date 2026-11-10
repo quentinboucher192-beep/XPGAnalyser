@@ -141,6 +141,14 @@ struct Fetched {
     std::string               problem;
 };
 
+// 1.47.0 : le nom de l'admin+ sans la marque d'une cle d'essai (<< CLE D'ESSAI ... (Camille Essai) >> -> << Camille Essai >>).
+std::string keyOwnerName(const std::string& keyName) {
+    if (keyName.rfind("CLE D'ESSAI", 0) != 0) return keyName;
+    const auto a = keyName.rfind('('), b = keyName.rfind(')');
+    if (a != std::string::npos && b != std::string::npos && b > a + 1) return keyName.substr(a + 1, b - a - 1);
+    return "admin+ (cl\xC3\xA9 d'essai)";
+}
+
 std::string thisPc() {
     std::string n = deploy::DevKey::computerName();
     return n.empty() ? std::string("ce PC") : n;
@@ -724,6 +732,8 @@ private:
             if (!*alive) return;
             sending_ = false;
             if (r.ok) {
+                // 1.47.0 (agent A) : l'invitation notee (invitations-admins.json) - la liste << Demandes d'admin >> la rapproche
+                (void)host_.workspace().noteAdminInvitation({trimmed(name_->text()), trimmed(email_->text()), selectedProfile(), byLink ? "lien" : "studio", 0});
                 sentAt_ = host_.workspace().now();
                 sentWhat_ = r.details.empty() ? r.message : r.details.front();
                 if (sentWhat_.rfind("Fichier : ", 0) == 0) sentWhat_ = sentWhat_.substr(10);
@@ -934,6 +944,9 @@ public:
         rightsPage_ = &adopt(*this, std::make_unique<statskit::TabButton>("Droits", "admins.droits-page", ui::Icon::Lock));
         rightsPage_->setTooltip("Les profils de droits (Admin LV1, LV2\xE2\x80\xA6), copi\xC3\xA9s vers un admin puis ajust\xC3\xA9s pour lui seul.");
         tabJournal_ = &adopt(*this, std::make_unique<statskit::TabButton>("Journal des admins", "admins.onglet.journal", ui::Icon::History));
+        // 1.47.0 (agent A) : << N demandes d'admin en attente : Voir la liste >> -> Demandes d'admin (PageAdminRequests.cpp)
+        requestsLink_ = &adopt(*this, std::make_unique<ab::LinkButton>("Voir la liste", "admins.demandes-liste"));
+        links_ += requestsLink_->clicked->connect([this] { host_.navigate("demandes-admins"); });
         reload_ = &button(*this, "Relever", "admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         reload_->setTooltip("Relire tout de suite la liste des admins, les demandes et les chiffres du service (l'Admin le fait seul en arrivant sur la page).");
         range_ = &adopt(*this, std::make_unique<statskit::SegGroup>(
@@ -1077,6 +1090,7 @@ protected:
             wd->setVisibility(ui::Visibility::Collapsed);
         for (auto* a : anchors_) a->setVisibility(ui::Visibility::Collapsed);
         if (card_) card_->setVisibility(ui::Visibility::Collapsed);
+        requestsLink_->setVisibility(ui::Visibility::Collapsed);   // 1.47.0 (agent A)
         if (role == Role::None) layoutNone(b);
         else if (role == Role::Pending) layoutPending(b);
         else if (card_ && !cardKey_.empty()) layoutCard(b);
@@ -1449,6 +1463,14 @@ private:
             from_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
             to_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         }
+        // 1.47.0 (agent A) : les demandes d'admin en attente -> leur liste (s'il y a la place apres les onglets)
+        if (const std::size_t n = fetched_.haveRequests ? fetched_.requests.size() : 0; n > 0) {
+            requestsLink_->setText(std::to_string(n) + (n > 1 ? " demandes d'admin en attente : Voir la liste" : " demande d'admin en attente : Voir la liste"));
+            const float lw2 = requestsLink_->naturalWidth();
+            const float limit = from_->visible() ? from_->bounds().x - 12.f : tr;
+            requestsLink_->setBounds({tx, y + 6.f, lw2, 22.f});
+            requestsLink_->setVisibility(tx + lw2 <= limit ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        }
         y += 42.f;
         tabsBottom_ = y;
         y = placeBanner(y + 12.f);
@@ -1605,7 +1627,7 @@ private:
             if (role == Role::Plus && w.signingKey()) {
                 p.key = w.signingKey()->publicKeyHex();
                 p.id = w.signingKey()->keyId();
-                p.name = w.key().name.empty() ? std::string("admin+") : w.key().name;
+                p.name = w.key().name.empty() ? std::string("admin+") : keyOwnerName(w.key().name);
                 p.pc = thisPc();
                 p.me = true;
             } else if (fetched_.haveView && !fetched_.view.editors.empty()) {
@@ -2240,6 +2262,7 @@ private:
     ui::DatePicker*        to_{nullptr};
     ui::Button*            deploy_{nullptr};
     ab::LinkButton*        back_{nullptr};
+    ab::LinkButton*        requestsLink_{nullptr};   // 1.47.0 (agent A) : << N demandes d'admin en attente : Voir la liste >>
     ui::Button*            cardJournal_{nullptr};
     ui::Button*            cardRights_{nullptr};
     ui::Button*            cardRetire_{nullptr};
