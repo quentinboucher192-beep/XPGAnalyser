@@ -16,7 +16,12 @@
 //  << Retirer ce PC >> : son activation n'est plus renouvelee (sa place se
 //  libere ; son jeton tombe a sa fin). << Nouvelle licence flottante... >> :
 //  l'assistant d'une licence en ligne (choisir le type << flottante >>).
+//
+//  1.47.0 (planches 06, 07, 12) : la barre << Filtrer et chercher >> (le client,
+//  l'etat, le bail, emise le, l'offre), le clic droit (ses deux listes), une
+//  licence se deplie (ses postes, ses jetons, la licence de l'archive).
 // =============================================================================
+#include "ListKit.hpp"
 #include "Page.hpp"
 
 #include "../../ui/Theme.hpp"
@@ -117,6 +122,23 @@ public:
             showSeats();
         });
         links_ += seats_->selectionChanged->connect([this](const std::vector<RowIndex>&) { syncButtons(); });
+        // 1.47.0 : la barre (toutes les licences flottantes du releve : all_, texts_), le clic droit, le depliage.
+        bar_ = add(*this, std::make_unique<ui::FilterBar>("flottantes", barFields()));
+        bar_->setNoun("licences flottantes");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return texts_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t { return r < all_.size() && f == 5 ? listkit::seconds(all_[r].issuedAt) : 0; };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*licences_);
+        bar_->setMemoryKey("flottantes");
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        links_ += ui::ListMenu::bind(*licences_, [this] { return menuFor(); });
+        links_ += ui::ListMenu::bind(*seats_, [this] { return seatMenuFor(); });
+        licences_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
         refresh();
     }
     ~FloatingPage() override {
@@ -128,6 +150,7 @@ public:
 
     void refresh() override {
         if (!busy()) fetching_ = false;
+        who_.reset();
         rebuild();
         invalidateLayout();
         invalidate();
@@ -155,6 +178,9 @@ protected:
         y += 40.f;
         statusY_ = y;
         y += kLineH + 8.f;
+        const float bh = bar_->heightFor(w);   // 1.47.0 : la barre << Filtrer et chercher >>
+        bar_->setBounds({x, y, w, bh});
+        y += bh + 8.f;
         const float avail = std::max(120.f, b.bottom() - kPad - y);
         const float top = std::floor(avail * 0.5f);
         licences_->setBounds({x, y, w, top});
@@ -190,7 +216,7 @@ protected:
     }
 
     void onPaintOverlay(const ui::PaintContext& ctx) override {
-        if (!ids_.empty()) return;
+        if (!ids_.empty() || !all_.empty()) return;
         const gfx::Rect t = licences_->bounds();
         ctx.r.drawText({t.x + 16.f, t.y + 40.f}, fit(ctx.r, empty(), ctx.theme.font.ui, t.w - 32.f), ctx.theme.font.ui, ctx.theme.color.textMuted);
     }
@@ -222,21 +248,51 @@ private:
         return "Aucune licence flottante sur le service : \xC2\xAB Nouvelle licence flottante\xE2\x80\xA6 \xC2\xBB pour en cr\xC3\xA9" "er une.";
     }
 
+    // 1.47.0 : les colonnes vues par la barre (les 6 de la table, puis l'offre de la licence de l'archive).
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(7);
+        f[0] = {.title = "Licence", .kind = K::Text};
+        f[1] = {.title = "Client", .chip = true, .noun = "un client"};
+        f[2] = {.title = "Postes pris", .kind = K::Text};
+        f[3] = {.title = "Bail", .noun = "un bail"};
+        f[4] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat", .order = {"active", "pleine", "d\xC3\xA9sactiv\xC3\xA9" "e"}};
+        f[5] = {.title = "\xC3\x89mise le", .kind = K::Period, .chip = true, .chipLabel = "\xC3\x89mise"};
+        f[6] = {.title = "Offre", .noun = "une offre", .searchable = false};
+        return f;
+    }
+    static int toneOf(const online::OnlineLicence& l) {
+        const int used = static_cast<int>(l.leases.size());
+        return !l.active ? 2 : used >= l.seats && l.seats > 0 ? 1 : 0;
+    }
+    std::vector<std::string> cellsOf(const online::OnlineLicence& l) const {
+        const LicenceEntry* a = ws().licence(l.licenseId);
+        static const char* const kStates[3] = {"active", "pleine", "d\xC3\xA9sactiv\xC3\xA9" "e"};
+        return {l.licenseId, a ? a->licence.customer : std::string("(pas dans l'archive)"), std::to_string(l.leases.size()) + " / " + std::to_string(l.seats),
+                std::to_string(l.leaseDays) + " j", kStates[toneOf(l)], dateFr(l.issuedAt), a ? a->licence.edition : std::string()};
+    }
+
     void rebuild() {
         const auto& s = ws().service();
         ids_.clear();
+        // 1.47.0 : toutes les licences flottantes du releve pour la barre, puis la table : celles qu'elle garde.
+        all_.clear();
+        texts_.clear();
+        for (const auto& l : s.snapshot.licences)
+            if (l.floating()) {
+                all_.push_back(l);
+                texts_.push_back(cellsOf(l));
+            }
+        bar_->refreshCounts();
         std::vector<std::vector<std::string>> rows;
         std::vector<int> tones;   // 0 ok, 1 pleine, 2 desactivee
-        for (const auto& l : s.snapshot.licences) {
-            if (!l.floating()) continue;
-            const LicenceEntry* a = ws().licence(l.licenseId);
-            const int used = static_cast<int>(l.leases.size());
-            ids_.push_back(l.licenseId);
-            rows.push_back({l.licenseId, a ? a->licence.customer : std::string("(pas dans l'archive)"), std::to_string(used) + " / " + std::to_string(l.seats),
-                            std::to_string(l.leaseDays) + " j",
-                            !l.active ? std::string("d\xC3\xA9sactiv\xC3\xA9" "e") : used >= l.seats && l.seats > 0 ? std::string("pleine") : std::string("active"),
-                            dateFr(l.issuedAt)});
-            tones.push_back(!l.active ? 2 : used >= l.seats && l.seats > 0 ? 1 : 0);
+        for (std::size_t i = 0; i < all_.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            ids_.push_back(all_[i].licenseId);
+            auto cells = texts_[i];
+            cells.resize(6);
+            rows.push_back(std::move(cells));
+            tones.push_back(toneOf(all_[i]));
         }
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Licence", "Client", "Postes pris", "Bail", "\xC3\x89tat", "\xC3\x89mise le"}, std::move(rows),
                                         [tones](RowIndex r, std::size_t c) {
@@ -357,8 +413,151 @@ private:
             }));
     }
 
+    // ---- 1.47.0 (planche 06) : le clic droit d'une licence, dans l'ordre de la regle ----
+    ui::ListMenu menuFor() {
+        const auto sel = licences_->selectedModelRows();
+        ui::ListMenu m({sel.size(), "licences", true});
+        if (sel.empty() || sel.front() >= ids_.size()) return m;
+        const RowIndex row = sel.front();
+        const std::string id = ids_[row];
+        const auto* l = ws().service().snapshot.licence(id);
+        const LicenceEntry* a = ws().licence(id);
+        m.unfold(*licences_);
+        m.goTo({.label = "La licence " + id, .icon = ui::Icon::Document, .why = a ? std::string() : std::string("pas dans l'archive de ce poste"), .run = [this, id] {
+                    requestPageFocus("licences", id);
+                    host_.navigate("licences");
+                }});
+        if (a) {
+            const std::string c = a->licence.customer;
+            m.goTo({.label = "Le client : " + c, .icon = ui::Icon::User, .run = [this, c] {
+                        requestPageFocus("clients", "client:" + c);
+                        host_.navigate("clients");
+                    }});
+        }
+        const auto cells = row < licences_->model()->rowCount() ? texts_[indexOf(id)] : std::vector<std::string>{};
+        const auto on = [&](std::size_t f, const std::string& label) {
+            if (f < cells.size() && !cells[f].empty() && cells[f] != "(pas dans l'archive)")
+                m.filterOn({.label = label + " : " + cells[f], .run = [this, f, v = cells[f]] { bar_->filterOn(f, v); }});
+        };
+        on(1, "Ce client");
+        on(4, "Cet \xC3\xA9tat");
+        on(3, "Ce bail");
+        on(6, "Cette offre");
+        if (l && l->issuedAt > 0)
+            m.filterOn({.label = "Ce jour : " + dateFr(l->issuedAt), .run = [this, when = listkit::seconds(l->issuedAt)] { bar_->filterOnDay(5, when); }});
+        m.copy("L'identifiant", id, ui::Icon::Copy);
+        m.copy("La ligne", lineOf(*licences_, row), ui::Icon::Copy);
+        m.exportRows([this, sel] { listkit::exportRows(host_, *licences_, sel, "licences-flottantes.csv", "licences flottantes"); });
+        return m;
+    }
+    // Le clic droit d'un PC (la liste du bas) : copier, le retirer.
+    ui::ListMenu seatMenuFor() {
+        const auto sel = seats_->selectedModelRows();
+        ui::ListMenu m({sel.size(), "PC", false});
+        if (sel.empty() || sel.front() >= seatKeys_.size()) return m;
+        const std::string key = seatKeys_[sel.front()];
+        m.copy("L'empreinte", licdlg::fingerprintOfKey(key), ui::Icon::Copy);
+        m.copy("La cl\xC3\xA9 du PC", key, ui::Icon::Lock);
+        m.copy("La ligne", lineOf(*seats_, sel.front()), ui::Icon::Copy);
+        std::string why;
+        if (busy()) why = "un travail est en cours";
+        else if (!ws().service().ready()) why = "le service n'est pas r\xC3\xA9gl\xC3\xA9";
+        m.danger({.label = "Retirer ce PC", .icon = ui::Icon::Close, .why = why, .run = [this] { askRetire(); }});
+        return m;
+    }
+    static std::string lineOf(const ui::TableView& t, RowIndex r) {
+        std::string line;
+        const auto& m = t.model();
+        for (std::size_t c = 0; m && c < m->columnCount(); ++c) line += (c ? "\t" : "") + m->cellText(r, c);
+        return line;
+    }
+    [[nodiscard]] std::size_t indexOf(const std::string& id) const {
+        for (std::size_t i = 0; i < all_.size(); ++i)
+            if (all_[i].licenseId == id) return i;
+        return 0;
+    }
+
+    // ---- 1.47.0 (planche 07) : la ligne depliee - ses postes (pris, libres), ses jetons, la licence de l'archive ----
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= ids_.size()) return nullptr;
+        const std::string id = ids_[r];
+        const auto* l = ws().service().snapshot.licence(id);
+        if (!l) return nullptr;
+        auto card = std::make_unique<ui::UnfoldCard>("flottantes.depliage");
+        {
+            ui::UnfoldCard::Box b{.title = "SES POSTES"};
+            const int used = static_cast<int>(l->leases.size()), seats = l->seats;
+            b.lines.push_back({.icon = ui::Icon::Station, .text = "**" + std::to_string(used) + "** pris sur **" + std::to_string(seats) + "** \xC2\xB7 bail **" +
+                                                                   std::to_string(l->leaseDays) + " j**",
+                               .tone = toneOf(*l) == 1 ? ui::Tone::Warning : toneOf(*l) == 2 ? ui::Tone::Error : ui::Tone::None});
+            b.lines.push_back({.icon = ui::Icon::Network, .text = "**" + std::to_string(l->activeCount()) + "** PC activ\xC3\xA9" "s avec le code"});
+            if (!l->active) b.lines.push_back({.icon = ui::Icon::Error, .text = "d\xC3\xA9sactiv\xC3\xA9" "e sur le service", .tone = ui::Tone::Error});
+            card->addBox(std::move(b));
+            // Les postes, un carre chacun : pris (violet), libres.
+            card->setCurve("PRIS / LIBRES", [used, seats](const ui::PaintContext& ctx, gfx::Rect box) {
+                const int n = std::min(seats, 40);
+                const float side = 14.f, gap = 4.f;
+                float x = box.x + 4.f, y = box.y + 6.f;
+                for (int i = 0; i < n; ++i) {
+                    const gfx::Rect sq{x, y, side, side};
+                    if (i < used) ctx.r.fillRoundedRect(sq, ctx.theme.color.accent, 3.f);
+                    else ctx.r.strokeRect(sq, ctx.theme.color.borderStrong, 1.f);
+                    x += side + gap;
+                    if (x + side > box.right()) {
+                        x = box.x + 4.f;
+                        y += side + gap;
+                    }
+                }
+            }, 56.f, 0.8f);
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "LES JETONS EN COURS", .timeline = true};
+            for (const auto& t : l->leases) {
+                const auto* act = l->activation(t.deviceKey);
+                const std::string name = act && !act->name.empty() ? act->name : std::string("(PC retir\xC3\xA9)");
+                const std::string until = dateTimeFr(t.until);   // << 10/11/2026 10:45 >> : l'heure
+                b.lines.push_back({.time = "\xE2\x86\x92 " + until.substr(until.size() > 5 ? until.size() - 5 : 0),
+                                   .text = "**" + name + "** " + licdlg::fingerprintOfKey(t.deviceKey)});
+                if (b.lines.size() == 5) break;
+            }
+            if (b.lines.empty()) b.lines.push_back({.text = "aucun : personne ne travaille en ce moment"});
+            card->addBox(std::move(b));
+        }
+        if (const LicenceEntry* a = ws().licence(id)) {
+            ui::UnfoldCard::Box b{.title = "LA LICENCE"};
+            const std::string c = a->licence.customer;
+            ui::UnfoldCard::Line client{.icon = ui::Icon::User, .text = "**" + c + "**"};
+            client.link = [this, c] {
+                requestPageFocus("clients", "client:" + c);
+                host_.navigate("clients");
+            };
+            b.lines.push_back(std::move(client));
+            b.lines.push_back({.icon = ui::Icon::Layers, .text = "offre **" + a->licence.edition + "**"});
+            b.lines.push_back({.icon = ui::Icon::History, .text = "\xC3\xA9mise le " + dateFr(a->licence.issuedAt) +
+                                                                  (a->licence.expiresAt ? ", fin le " + dateFr(a->licence.expiresAt) : std::string(", sans fin"))});
+            ui::UnfoldCard::Line by{.icon = ui::Icon::Lock, .text = "sign\xC3\xA9" "e"};
+            if (const auto d = who_.last({"licence_creer", "licence_prolonger"}, id)) {
+                by.text += " par";
+                by.person = listkit::person(host_, d->key, d->who);
+            } else {
+                by.text += " sur ce poste";
+            }
+            b.lines.push_back(std::move(by));
+            card->addBox(std::move(b));
+            card->addButton("Voir la licence", "flottantes.depliage.licence", ui::Icon::GoTo, [this, id] {
+                requestPageFocus("licences", id);
+                host_.navigate("licences");
+            });
+        }
+        return card;
+    }
+
     std::shared_ptr<bool>    life_{std::make_shared<bool>(true)};
     core::ConnectionScope    links_;
+    ui::FilterBar*           bar_{nullptr};                         // 1.47.0
+    std::vector<online::OnlineLicence>    all_;                     // 1.47.0 : toutes les licences flottantes du releve
+    std::vector<std::vector<std::string>> texts_;                   // ... ce que la barre en lit
+    listkit::WhoDid          who_{host_.workspace()};               // 1.47.0 : qui a signe la licence
     ui::Button*              refresh_{nullptr};
     ui::Button*              create_{nullptr};
     ui::Button*              retire_{nullptr};

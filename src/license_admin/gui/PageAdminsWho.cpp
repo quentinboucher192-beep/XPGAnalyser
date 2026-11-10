@@ -83,7 +83,7 @@ public:
         refreshData();
     }
 
-    void refreshData() {
+    void refreshData() override {
         bar_->refreshCounts();
         // les petits graphiques
         static const char* const titles[4] = {"Actions", "Licences sign\xC3\xA9" "es", "Demandes trait\xC3\xA9" "es", "Montant encaiss\xC3\xA9"};

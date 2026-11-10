@@ -463,28 +463,40 @@ std::string GlobeStatsView::openClients(int place) {
     return said;
 }
 
-// << Les N PC >> (Activations) : leurs empreintes, d'apres les cles que le service donne ; une cle que l'archive de ce
-// poste ne connait pas : les PC des clients de la ville.
+// << Les N PC >> : Activations (les PC notes sur ce poste : activations.jsonl) filtree sur leurs empreintes, d'apres les
+// cles que le service donne ; aucune de ces cles dans l'archive : les autres PC de ces clients que l'archive connait
+// (la colonne Client) ; aucun : Clients filtree sur les clients de la ville (les PC actives en ligne y sont, sous la
+// licence de leur client).
 std::string GlobeStatsView::openPcs(int place) {
     if (place < 0 || place >= static_cast<int>(reply_.cities.size())) return {};
     const auto& c = reply_.cities[static_cast<std::size_t>(place)];
     const std::string label = labelOfId(c.id);
-    std::set<std::string> keys;
+    std::set<std::string> keys, names;
     for (const auto& k : c.devices) keys.insert(lowerAscii(k));
+    for (const auto& n : c.customers) names.insert(lowerAscii(n));
     std::vector<std::string> prints;
-    for (const auto& d : host_.workspace().devices())
+    bool knownCustomer = false;
+    for (const auto& d : host_.workspace().devices()) {
         if (!d.deviceKey.empty() && keys.count(lowerAscii(d.deviceKey)) && !d.fingerprint.empty() &&
             std::find(prints.begin(), prints.end(), d.fingerprint) == prints.end())
             prints.push_back(d.fingerprint);
+        knownCustomer = knownCustomer || (!d.customer.empty() && names.count(lowerAscii(d.customer)));
+    }
     std::string said;
     if (!prints.empty()) {
         const bool ok = openFiltered(host_, *this, "activations", "Empreinte", prints);
-        said = "Activations : les " + std::to_string(prints.size()) + " PC de " + label;
-        if (static_cast<int>(prints.size()) < c.pcs) said += " que l'archive de ce poste conna\xC3\xAEt (le service en compte " + std::to_string(c.pcs) + ")";
+        const bool some = static_cast<int>(prints.size()) < c.pcs;
+        said = "Activations : " + (prints.size() > 1 ? "les " + std::to_string(prints.size()) + " PC" : some ? std::string("1 PC") : std::string("le PC")) + " de " + label;
+        if (some) said += " que l'archive de ce poste conna\xC3\xAEt (le service en compte " + std::to_string(c.pcs) + ")";
         said += ok ? "." : " (la liste n'a pas pris le filtre).";
-    } else if (!c.customers.empty()) {
+    } else if (knownCustomer) {
         const bool ok = openFiltered(host_, *this, "activations", "Client", c.customers);
         said = "Activations : les PC des clients de " + label + " (l'archive de ce poste ne conna\xC3\xAEt pas les PC que le service y place)";
+        said += ok ? "." : " (la liste n'a pas pris le filtre).";
+    } else if (!c.customers.empty()) {
+        const bool ok = openFiltered(host_, *this, "clients", "Client", c.customers);
+        said = "Clients : " + (c.pcs == 1 ? "le PC de " + label + " est activ\xC3\xA9" : "les " + std::to_string(c.pcs) + " PC de " + label + " sont activ\xC3\xA9s") +
+               " en ligne, sous la licence de leur client (Activations ne montre que les PC not\xC3\xA9s sur ce poste)";
         said += ok ? "." : " (la liste n'a pas pris le filtre).";
     } else {
         said = "Activations : l'archive de ce poste ne conna\xC3\xAEt pas les PC de " + label + ".";

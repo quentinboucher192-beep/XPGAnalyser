@@ -166,7 +166,7 @@ public:
         for (int i : sortedRows()) out.push_back(d_->people[static_cast<std::size_t>(i)].key);
         return out;
     }
-    void refreshData() {
+    void refreshData() override {
         bar_->refreshCounts();
         // une ligne par demande : << Verifier et accepter... >>
         std::size_t pending = 0;

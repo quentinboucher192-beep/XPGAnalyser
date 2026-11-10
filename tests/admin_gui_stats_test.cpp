@@ -235,8 +235,8 @@ int main(int argc, char** argv) {
         check(has(draw(*page, 1688.f, 976.f), "filtre la liste correspondante"), "a 1920 px : << Un clic sur un point filtre la liste correspondante >>");
         for (const auto& id : kOverviewCharts) check(hasValues(tchart(*page, "stats.vue." + id)), "le graphique " + id + " a des valeurs");
         // la liste des options (comme la planche : le libelle, le montant et les commandes, la barre dessous)
-        check(has(t, "Exports avanc\xC3\xA9s") && has(t, "Travail \xC3\xA0 plusieurs") && has(t, "Imports avanc\xC3\xA9s") && has(t, " cmd"),
-              "Options vendues : les trois options, leur montant et leurs commandes");
+        check(has(t, "Exports avanc\xC3\xA9s") && has(t, "Travail \xC3\xA0 plusieurs") && has(t, "Imports avanc\xC3\xA9s"), "Options vendues : les trois options, entieres");
+        check(has(draw(*page, 1688.f, 976.f), " cmd"), "Options vendues a 1920 px : le nombre de commandes de chacune");
         check(has(t, "Exports avanc\xC3\xA9s") && t.find("Exports avanc\xC3\xA9s") < t.find("Imports avanc\xC3\xA9s"), "la plus vendue d'abord");
         auto* m = tchart(*page, "stats.vue.montant");
         check(m && m->data().x.size() >= 13 && m->data().x.size() <= 15, "Montant encaisse : une colonne par semaine (" + std::to_string(m ? m->data().x.size() : 0) + ")");

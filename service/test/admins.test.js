@@ -335,6 +335,32 @@ describe("devenir admin : la demande d'admin (§ 4)", () => {
         assert.equal((await appel(svc, "GET", "/admin/etat", { cle: zoe })).json.role, "admin", "Zoe est admin");
         erreur(await appel(svc, "POST", "/v1/admins/demande", { cle: zoe, corps: corps("Zoé") }), 409, "deja");
     });
+
+    // 1.47.0 : la liste << Demandes d'admin >> de l'Admin (docs/ADMINS.md, par. 4) - les closes aussi ; plusieurs acceptees
+    // d'un coup : UNE liste (numero + 1) qui les porte toutes, chaque demande close.
+    it("?toutes=1 : les closes aussi (etat, maj) ; deux acceptees par une seule liste", async () => {
+        const t = await appel(svc, "GET", "/admin/admins/demandes?toutes=1", { cle: editeur });
+        assert.equal(t.statut, 200, t.texte);
+        const etats = Object.fromEntries(t.json.demandes.map((d) => [d.cle, d.etat]));
+        assert.equal(etats[yan.hex], "refusee");
+        assert.equal(etats[zoe.hex], "acceptee");
+        assert.ok(t.json.demandes.every((d) => Number.isInteger(d.maj) && Number.isInteger(d.recue)));
+        assert.deepEqual((await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur })).json.demandes, [], "sans ?toutes : les seules en attente");
+        erreur(await appel(svc, "GET", "/admin/admins/demandes?toutes=1", { cle: lea }), 403, "droit");
+        const [a1, a2] = [nouvelleCle(), nouvelleCle()];
+        for (const [k, n] of [
+            [a1, "Hugo"],
+            [a2, "Nina"],
+        ])
+            assert.equal((await appel(svc, "POST", "/v1/admins/demande", { cle: k, corps: corps(n) })).statut, 201);
+        const avant = (await appel(svc, "GET", "/v1/etat")).json.admins;
+        const r = await publier(liste([fiche(zoe, "Zoé", ["demandes"]), fiche(a1, "Hugo", ["licence_creer"]), fiche(a2, "Nina", [])]));
+        assert.equal(r.statut, 200, r.texte);
+        assert.equal(r.json.demandes_acceptees, 2, "les deux closes par la meme liste");
+        assert.equal((await appel(svc, "GET", "/v1/etat")).json.admins, avant + 1, "une seule liste de plus");
+        for (const k of [a1, a2]) assert.equal((await appel(svc, "GET", "/v1/admins/demande?cle=" + k.hex, { cle: k })).json.etat, "acceptee");
+        assert.deepEqual((await appel(svc, "GET", "/admin/admins/demandes", { cle: editeur })).json.demandes, []);
+    });
 });
 
 describe("la demande en ligne scellee pour plusieurs cles (§ 6)", () => {

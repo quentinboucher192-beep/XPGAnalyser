@@ -429,6 +429,26 @@ void testMemory() {
     ui::FilterMemory::install({});
 }
 
+// Une case a plusieurs valeurs (Field::split : les offres d'une option) ; une liste que sa page remplit (setSource).
+void testSplit() {
+    std::printf("-- une case a plusieurs valeurs (les offres d'une option), une liste remplie par sa page\n");
+    const std::vector<std::vector<std::string>> rows = {{"exports_avances", "PERSONAL\nPROFESSIONAL"}, {"ia_avancee", "ENTERPRISE"}, {"travail", "PROFESSIONAL\nENTERPRISE"}, {"vide", ""}};
+    ui::FilterBar bar("options", {{.title = "Identifiant", .kind = ui::FilterBar::Kind::Text}, {.title = "Propos\xC3\xA9" "e \xC3\xA0", .chip = true, .split = "\n"}});
+    ui::FilterBar::Source src;
+    src.rows = [&rows] { return rows.size(); };
+    src.text = [&rows](std::size_t r, std::size_t f) { return rows[r][f]; };
+    bar.setSource(std::move(src));
+    std::string counts;
+    for (const auto& [v, n] : bar.valueCounts(1)) counts += (v.empty() ? std::string("(vide)") : v) + "=" + std::to_string(n) + ";";
+    check(counts == "ENTERPRISE=2;PERSONAL=1;PROFESSIONAL=2;(vide)=1;", "chaque valeur comptee une fois par ligne : " + counts);
+    bar.filterOn(1, "PROFESSIONAL");
+    check(bar.accepts(0) && !bar.accepts(1) && bar.accepts(2) && !bar.accepts(3) && bar.countText() == "2 sur 4", "PROFESSIONAL : les deux lignes qui l'ont");
+    bar.setValues(1, {"ENTERPRISE", "PERSONAL"});
+    check(bar.accepts(0) && bar.accepts(1) && bar.accepts(2) && !bar.accepts(3), "deux valeurs : l'une ou l'autre");
+    bar.setValues(1, {""});
+    check(!bar.accepts(0) && bar.accepts(3), "(vide) : la case vide");
+}
+
 // ------------------------------------------------------------------------------------------------ 4
 void testMenuRule() {
     std::printf("-- le clic droit : le meme ordre partout, les raisons, plusieurs lignes, Copier, une table\n");
@@ -629,6 +649,7 @@ int main() {
     testBar();
     testMenus();
     testMemory();
+    testSplit();
     testMenuRule();
     testUnfold();
     testCard();

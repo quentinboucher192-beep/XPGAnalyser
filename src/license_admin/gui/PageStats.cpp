@@ -260,7 +260,7 @@ public:
     std::function<void(int)> onPick;
 
 protected:
-    [[nodiscard]] float rowH() const { return std::clamp(bounds().h / static_cast<float>(std::max<std::size_t>(3, rows_.size())), 30.f, 48.f); }
+    [[nodiscard]] float rowH() const { return std::clamp(bounds().h / static_cast<float>(std::max<std::size_t>(3, rows_.size())), 20.f, 48.f); }
     void onPaint(const ui::PaintContext& ctx) override {
         const Rect b = bounds();
         if (rows_.empty()) {
@@ -272,15 +272,19 @@ protected:
         for (const auto& r : rows_) {
             if (y + h > b.bottom() + 2.f) break;
             const FontId vf = gfx::semibold(FontId{12});
-            const float ew = r.extra.empty() ? 0.f : ctx.r.measure(r.extra, FontId{11}).width + 6.f;
+            const float lw = ctx.r.measure(r.label, FontId{12}).width;
             const float vw = ctx.r.measure(r.value, vf).width;
-            const bool oneLine = ctx.r.measure(r.label, FontId{12}).width <= b.w - ew - vw - 10.f;
+            float ew = r.extra.empty() ? 0.f : ctx.r.measure(r.extra, FontId{11}).width + 6.f;
+            // la place manque : le nombre de commandes s'efface d'abord (le libelle reste entier)
+            const std::string extra = lw > b.w - ew - vw - 10.f && lw <= b.w - vw - 10.f ? std::string() : r.extra;
+            if (extra.empty()) ew = 0.f;
+            const bool oneLine = h < 38.f || lw <= b.w - ew - vw - 10.f;
             // le libelle trop long pour la carte : seul sur sa ligne, le montant a droite de la barre
             const float vy = oneLine ? y : y + 16.f;
-            ctx.r.drawText({b.right() - ew + 6.f, vy + 1.f}, r.extra, FontId{11}, kFaint);
+            if (!extra.empty()) ctx.r.drawText({b.right() - ew + 6.f, vy + 1.f}, extra, FontId{11}, kFaint);
             ctx.r.drawText({b.right() - ew - vw, vy}, r.value, vf, kInk);
             ctx.r.drawText({b.x, y}, ch::detail::fit(ctx.r, r.label, FontId{12}, oneLine ? b.w - ew - vw - 10.f : b.w), FontId{12}, Color::rgb(0x334155));
-            const Rect track = oneLine ? Rect{b.x, y + 19.f, b.w, 6.f} : Rect{b.x, y + 21.f, std::max(20.f, b.w - ew - vw - 10.f), 6.f};
+            const Rect track = oneLine ? Rect{b.x, y + std::min(19.f, h - 6.f), b.w, h < 24.f ? 4.f : 5.f} : Rect{b.x, y + 21.f, std::max(20.f, b.w - ew - vw - 10.f), 6.f};
             ctx.r.fillRoundedRect(track, Color::rgb(0xEEF2F7), 3.f);
             if (r.fraction > 0) ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * static_cast<float>(std::min(1.0, r.fraction))), track.h}, ch::colors::kOptions, 3.f);
             y += h;

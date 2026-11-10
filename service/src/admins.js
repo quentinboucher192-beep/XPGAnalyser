@@ -357,9 +357,14 @@ export const RoutesAdmins = {
     },
 
     // GET /admin/admins/demandes (admin+) : les demandes en attente (et l'empreinte de chaque cle, a lire au telephone).
-    async listerDemandesAdmins() {
+    // 1.47.0 : `?toutes=1` - aussi les demandes closes (acceptees, refusees : gardees 7 jours), avec leur `etat` et `maj`
+    // (la liste << Demandes d'admin >> de l'Admin) ; sans lui, comme avant (les seules en attente).
+    async listerDemandesAdmins(ctx) {
+        const toutes = ctx.url.searchParams.get("toutes") === "1";
         const demandes = [];
-        for (const r of this.lignes("SELECT * FROM admins_demandes WHERE etat = 'attente' ORDER BY recue, cle"))
+        for (const r of this.lignes(
+            toutes ? "SELECT * FROM admins_demandes ORDER BY recue, cle" : "SELECT * FROM admins_demandes WHERE etat = 'attente' ORDER BY recue, cle",
+        ))
             demandes.push({
                 cle: r.cle,
                 id: await cleIdDe(unhex(r.cle)),
@@ -370,6 +375,8 @@ export const RoutesAdmins = {
                 poste: r.poste,
                 logiciel: r.logiciel,
                 recue: r.recue,
+                etat: r.etat,
+                maj: r.maj,
             });
         return reponseJson(200, { demandes });
     },

@@ -304,9 +304,21 @@ public:
             bar_->clearAll();   // 1.47.0 : la barre (tous les filtres leves)
         } else if (f.rfind("client:", 0) == 0) {
             client = f.substr(7);   // 1.47.0 : << Ses licences >> d'un client
+        } else if (f.rfind("offre:", 0) == 0 || f.rfind("option:", 0) == 0) {
+            client = f;   // 1.47.0 : << Ses licences >> d'une offre (Offres), << Les licences qui l'ont >> (Options)
         }
         reloadAll();
-        if (!client.empty()) {
+        if (client.rfind("offre:", 0) == 0) {   // la puce Offre : le libelle de l'offre, comme la colonne
+            const std::string id = client.substr(6);
+            const auto* ed = ws().hasRegistry() ? ws().registry().edition(id) : nullptr;
+            bar_->clearAll();
+            bar_->filterOn(2, ed && !ed->label.empty() ? ed->label : id);
+        } else if (client.rfind("option:", 0) == 0) {   // le champ Options : le nom de l'option du catalogue
+            const std::string id = client.substr(7);
+            const auto* o = ws().hasRegistry() ? ws().registry().option(id) : nullptr;
+            bar_->clearAll();
+            bar_->filterOn(10, o && !o->label.empty() ? o->label : id);
+        } else if (!client.empty()) {
             bar_->clearAll();
             bar_->filterOn(1, client);
         }
@@ -623,16 +635,30 @@ private:
             ids_.push_back(l.licenseId);
             texts_.push_back({l.licenseId, l.customer, edLabel, typeLabel(l.type) + (Workspace::isOnlineLicence(l) ? std::string(" (en ligne)") : std::string()), pcs,
                               dateFr(l.issuedAt), l.expiresAt ? dateFr(l.expiresAt) : std::string("sans fin"), state,
-                              e.revoked ? std::string("R\xC3\xA9voqu\xC3\xA9" "e") : e.expired ? std::string("Expir\xC3\xA9" "e") : std::string("Active"), by});
+                              e.revoked ? std::string("R\xC3\xA9voqu\xC3\xA9" "e") : e.expired ? std::string("Expir\xC3\xA9" "e") : std::string("Active"), by,
+                              optionsOf(e)});
             tones_.push_back(tone);
         }
         bar_->refreshCounts();
     }
 
-    // 1.47.0 (planche 12) : les colonnes vues par la barre (les 8 du modele, puis l'etat seul et signee par).
+    // Les options en cours d'une licence en cours (leur nom du catalogue), une par ligne : le champ << Options >>.
+    std::string optionsOf(const LicenceEntry& e) const {
+        if (!Workspace::inForce(e)) return {};
+        std::string out;
+        const Seconds now = ws().now();
+        for (const auto& o : e.licence.options) {
+            if (!o.activeAt(now, e.licence.expiresAt)) continue;
+            const auto* def = ws().hasRegistry() ? ws().registry().option(o.id) : nullptr;
+            out += (out.empty() ? "" : "\n") + (def && !def->label.empty() ? def->label : o.label.empty() ? o.id : o.label);
+        }
+        return out;
+    }
+
+    // 1.47.0 (planche 12) : les colonnes vues par la barre (les 8 du modele, puis l'etat seul, signee par, ses options).
     static std::vector<ui::FilterBar::Field> barFields() {
         using K = ui::FilterBar::Kind;
-        std::vector<ui::FilterBar::Field> f(10);
+        std::vector<ui::FilterBar::Field> f(11);
         f[0] = {.title = "ID", .kind = K::Text};
         f[1] = {.title = "Client", .chip = true, .noun = "un client"};
         f[2] = {.title = "\xC3\x89" "dition", .chip = true, .chipLabel = "Offre", .noun = "une offre"};
@@ -643,6 +669,7 @@ private:
         f[7] = {.title = "\xC3\x89tat (d\xC3\xA9tail)", .kind = K::Text};
         f[8] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat", .order = {"Active", "Expir\xC3\xA9" "e", "R\xC3\xA9voqu\xC3\xA9" "e"}};
         f[9] = {.title = "Sign\xC3\xA9" "e par", .chip = true, .noun = "un admin"};
+        f[10] = {.title = "Options", .noun = "une option", .searchable = false, .split = "\n"};
         return f;
     }
 

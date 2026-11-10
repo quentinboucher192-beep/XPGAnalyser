@@ -19,8 +19,9 @@
 //    - la carte d'une ville : << Voir les N clients >> ouvre Clients filtree sur
 //      ses clients (la colonne Client), << Les N PC >> ouvre Activations filtree
 //      sur leurs empreintes (les cles des PC que le service donne, retrouvees dans
-//      l'archive de ce poste ; sinon sur les clients de la ville) - la barre de
-//      filtres des listes (ui::FilterBar::setValues) ;
+//      l'archive de ce poste ; sinon les PC de ces clients qu'elle connait ; sinon
+//      Clients filtree sur ces clients : les PC actives en ligne y sont, sous leur
+//      licence) - la barre de filtres des listes (ui::FilterBar::setValues) ;
 //    - EN DIRECT : GET /admin/globe/direct toutes les 6 secondes TANT QUE LA VUE EST
 //      DESSINEE (une autre page, la fenetre reduite : rien ne part) ; chaque
 //      nouvelle connexion fait pulser sa ville et s'ecrit au-dessus des villes ; le

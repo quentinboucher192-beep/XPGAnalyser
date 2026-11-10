@@ -218,6 +218,9 @@ public:
         } else if (f.rfind("client:", 0) == 0) {   // << Ses PC >> d'un client
             bar_->clearAll();
             bar_->filterOn(2, f.substr(7));
+        } else if (f.rfind("offre:", 0) == 0) {    // << Ses PC >> d'une offre (Offres)
+            bar_->clearAll();
+            bar_->filterOn(4, f.substr(6));
         }
         rebuild();
         invalidateLayout();

@@ -129,6 +129,7 @@ struct Data {
     std::map<std::string, AdminFigures> figures;    // par cle
     std::map<std::string, CardFigures>  cards;      // par cle (la fiche ouverte)
     Totals              totals;
+    int                 unusedDays{90};             // << jamais utilise >> : sur tant de jours (JournalStats::Options)
     std::string         latestAdmin;                // la derniere version de l'Admin (ce programme)
 
     [[nodiscard]] const Person*          person(const std::string& key) const;
@@ -176,6 +177,8 @@ public:
     [[nodiscard]] float offset() const noexcept { return offset_; }
     [[nodiscard]] float contentHeight() const noexcept { return content_; }
     void scrollTo(float y);   // le contenu a cette hauteur (depuis son haut) en haut du cadre
+    // Les donnees ont change (Data) : refaire les graphiques, les barres de filtres.
+    virtual void refreshData() {}
 
 protected:
     // Poser le contenu dans `area` (son haut : le haut du cadre moins le decalage) ; rendre sa hauteur.
@@ -278,6 +281,7 @@ void        overviewSort(ScrolledView& v, int column);   // un clic sur un titre
 bool overviewMenuRun(const ScrolledView& v, const std::string& key, const std::string& label);
 // La fiche : aller a une ancre (0 Vue d'ensemble, 1 Activite, 2 Licences et clients, 3 Demandes, 4 Boutique, 5 Securite, 6 Droits).
 void        cardAnchor(ScrolledView& v, int anchor);
+[[nodiscard]] int cardCurrentAnchor(const ScrolledView& v);
 // Les donnees ont change : refaire (les barres de filtres, les graphiques).
 void        refreshView(ScrolledView& v);
 

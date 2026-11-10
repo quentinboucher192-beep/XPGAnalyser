@@ -275,18 +275,74 @@ int main(int argc, char** argv) {
                     if (static_cast<int>(p.field) == f) kept = p.values == customers;
                 CHECK(f >= 0 && kept);
             }
-            // Les PC : l'archive de ce poste ne les connait pas -> les PC des clients de la ville (la colonne Client).
+            // Les PC : l'archive de ce poste n'en connait aucun (actives en ligne) -> Clients, filtree sur les clients de la ville.
+            shell->navigate("globe");
             const std::string said2 = v->openPcs(lyonIdx);
-            CHECK(shell->currentPageId() == "activations" && said2.find("les PC des clients de Lyon, FR") != std::string::npos);
-            ui::FilterBar* bar2 = shell->page("activations") ? find<ui::FilterBar>(*shell->page("activations"), "activations") : nullptr;
-            CHECK(bar2 != nullptr);
-            if (bar2) {
-                const int f = bar2->fieldByTitle("Client");
+            CHECK(shell->currentPageId() == "clients" && said2.find("les 64 PC de Lyon, FR sont activ\xC3\xA9s en ligne") != std::string::npos &&
+                  said2.find("pas pris") == std::string::npos);
+            if (bar) {
+                const int f = bar->fieldByTitle("Client");
                 bool kept = false;
-                for (const auto& p : bar2->state().picks)
+                for (const auto& p : bar->state().picks)
                     if (static_cast<int>(p.field) == f) kept = p.values == customers;
                 CHECK(f >= 0 && kept);
             }
+        }
+    }
+    // ---- 4 bis. L'archive connait un PC d'un client de Lyon (une demande notee, une licence signee ici).
+    {
+        Fixture fx5(source, "globe-pc");
+        CHECK(fx5.ready());
+        int lyonRow = -1;
+        for (std::size_t i = 0; i < fake.cities.size(); ++i)
+            if (fake.cities[i].id == "FR|Lyon") lyonRow = static_cast<int>(i);
+        CHECK(lyonRow >= 0 && !fake.cities[static_cast<std::size_t>(lyonRow)].customers.empty());
+        const std::string who = lyonRow >= 0 && !fake.cities[static_cast<std::size_t>(lyonRow)].customers.empty() ? fake.cities[static_cast<std::size_t>(lyonRow)].customers[0] : "?";
+        CHECK(fx5.licence("XPG-ESSAI-0101", who, "PROFESSIONAL", {fx5.request("pc-lyon", "Poste essai Lyon")}).ok);
+        fx5.ws->reload();
+        std::string key, print;
+        for (const auto& d : fx5.ws->devices())
+            if (d.customer == who) {
+                key = d.deviceKey;
+                print = d.fingerprint;
+            }
+        CHECK(!key.empty() && !print.empty());
+        menu::MenuManager menus{menu::MenuFactory{}};
+        auto owned = std::make_unique<gui::Shell>(U(fx5.admin), [] { return g_now; });
+        gui::Shell* shell = owned.get();
+        menus.PushMenu(std::move(owned));
+        menus.applyPending();
+        const auto pcsField = [shell](const std::string& title) {
+            ui::FilterBar* b = shell->page("activations") ? find<ui::FilterBar>(*shell->page("activations"), "activations") : nullptr;
+            std::vector<std::string> out;
+            if (!b) return out;
+            const int f = b->fieldByTitle(title);
+            for (const auto& p : b->state().picks)
+                if (static_cast<int>(p.field) == f) out = p.values;
+            return out;
+        };
+        shell->navigate("globe");
+        auto* pg = shell->page("globe");
+        auto* v = pg ? find<gs::GlobeStatsView>(*pg, "globe.page-vue") : nullptr;
+        CHECK(v != nullptr);
+        if (v && lyonRow >= 0) {
+            v->tick(0.0);
+            (void)shell->finishSlow();
+            const int lyonIdx = v->board().globe().findPlace("FR|Lyon");
+            // Les cles du service ne sont pas dans l'archive, mais un client de Lyon y a un PC -> Activations, la colonne Client.
+            const std::string said = v->openPcs(lyonIdx);
+            CHECK(shell->currentPageId() == "activations" && said.find("les PC des clients de Lyon, FR") != std::string::npos);
+            CHECK(pcsField("Client") == fake.cities[static_cast<std::size_t>(lyonRow)].customers);
+            // Le service donne la cle de ce PC -> Activations, son empreinte.
+            const auto keep = fake;
+            fake.cities[static_cast<std::size_t>(lyonRow)].devices = {key};
+            shell->navigate("globe");
+            v->reload();
+            (void)shell->finishSlow();
+            const std::string said2 = v->openPcs(v->board().globe().findPlace("FR|Lyon"));
+            CHECK(shell->currentPageId() == "activations" && said2.find("Activations : 1 PC de Lyon, FR que l'archive de ce poste conna\xC3\xAEt (le service en compte 64)") != std::string::npos);
+            CHECK(pcsField("Empreinte") == std::vector<std::string>{print});
+            fake = keep;
         }
     }
     gs::setFetchersForTests({});

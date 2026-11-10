@@ -379,6 +379,8 @@ OpResult fetchCard(const Workspace& w, const CardAsk& ask, CardFigures& out) {
 }
 
 // ============================================================================ la vue qui defile
+void refreshView(ScrolledView& v) { v.refreshData(); }
+
 void ScrolledView::scrollTo(float y) {
     offset_ = std::max(0.f, y);
     invalidateLayout();
