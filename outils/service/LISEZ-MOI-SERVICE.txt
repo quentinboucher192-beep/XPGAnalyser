@@ -95,6 +95,13 @@ outil (étape 7).
    elle, le service refuse tous les appels de ton outil.
 
 
+   1.46.0 : LA BOUTIQUE (vendre en ligne). Le service 1.46.0 garde le catalogue et
+   les commandes ; l'outil de l'éditeur 1.46 demande un service 1.46.0 pour elle
+   (sinon : « Ton service en ligne est en 1.44.0 : déploie la 1.46.0 pour la
+   boutique ») : après la mise à jour de l'outil, Déployer le service (ou relance
+   deployer.bat). Tout le reste marche encore avec un service 1.44.
+
+
 7. LE RELIER À TON OUTIL D'ÉDITEUR
 ----------------------------------
    Dans l'outil de l'éditeur : Service en ligne › colle l'adresse du service ›
@@ -106,6 +113,29 @@ outil (étape 7).
    code d'activation) et, s'il y en a, ta liste de révocation.
    Pour les Studios livrés : l'adresse est compilée dedans (le kit de l'outil,
    ServiceAddress.hpp) ; donne-la à ton intégrateur.
+
+
+8. BRANCHER STRIPE (1.46.0 : la boutique, facultatif)
+-----------------------------------------------------
+   Pour vendre en ligne, le service encaisse par STRIPE (sa page de paiement : la
+   carte de ton client n'est ni vue ni gardée, ni par le service, ni par tes outils ;
+   elle est redemandée à chaque achat). Il te faut un compte Stripe (stripe.com).
+   Dans l'outil de l'éditeur : Boutique › Brancher Stripe... : colle ta clé SECRÈTE
+   (dashboard.stripe.com › Développeurs › Clés API ; sk_test_... pour essayer, sans
+   carte réelle ; sk_live_... pour vendre). L'outil crée le webhook chez Stripe
+   (l'adresse du service + /v1/boutique/stripe) et pose deux SECRETS sur ton service
+   avec ce dossier (npx wrangler secret put STRIPE_SECRET_KEY, puis
+   STRIPE_WEBHOOK_SECRET, la valeur passée sans être affichée). Ils restent chez
+   Cloudflare : jamais dans un fichier, un journal, une sauvegarde. Il faut Node.js et
+   la connexion à Cloudflare (étapes 1 et 5), comme pour Déployer. À la main (si tu
+   préfères) : npx wrangler secret put STRIPE_SECRET_KEY dans le dossier du service
+   (colle la clé quand il la demande), et de même STRIPE_WEBHOOK_SECRET (le secret
+   whsec_... d'un point d'arrivée que tu crées toi-même dans Stripe, avec les
+   événements checkout.session.completed, checkout.session.async_payment_succeeded,
+   checkout.session.async_payment_failed, checkout.session.expired et
+   charge.refunded).
+   Une clé restreinte (rk_...) doit pouvoir écrire les Webhook Endpoints, les
+   Checkout Sessions et les Refunds, et lire les Invoices.
 
 
 SI QUELQUE CHOSE NE VA PAS

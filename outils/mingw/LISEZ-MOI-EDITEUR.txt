@@ -131,6 +131,31 @@ de secours, un code d'activation (le service n'en garde que l'empreinte). Tout c
 nomme un client (licences, révocations, registre des activations) y part chiffré par
 ta clé de synchro : Cloudflare ne lit rien.
 
+LA BOUTIQUE ET LES COMMANDES (1.46.0 : vendre en ligne, payé par Stripe)
+Tes clients achètent depuis leur Studio : ils paient sur la page sécurisée de Stripe
+(leur carte n'est ni vue ni gardée, ni par le service, ni par tes outils ; elle est
+redemandée à chaque achat) et ton Admin, OUVERT, signe et livre la licence tout seul.
+1. D'abord : ton service doit être en 1.46.0. Si l'Admin dit « Ton service en ligne
+   est en 1.44.0 : déploie la 1.46.0 pour la boutique » : Déployer le service.
+2. Boutique > Brancher Stripe... : colle ta clé SECRÈTE Stripe (sk_test_... pour
+   essayer : aucune carte réelle n'est débitée ; sk_live_... pour vendre). L'Admin crée
+   le webhook chez Stripe et pose la clé et le secret du webhook sur ton service (des
+   secrets Cloudflare, par le kit du service : il faut Node.js et la connexion à
+   Cloudflare, comme pour Déployer). La clé n'est jamais écrite sur ce PC.
+3. Boutique : « Vendre en ligne », « Livrer seul les commandes payées » (par défaut),
+   et le catalogue : pour chaque offre et chaque durée d'une option, « En vente », le
+   MONTANT encaissé (TTC, en euros) et le libellé de la facture (double-clic sur la
+   case). Un écart avec le prix affiché du registre est signalé. Enregistrer.
+4. Commandes : chaque achat (payé, livré, à revoir, remboursé). Livrer seul coché :
+   l'Admin ouvert livre dès le paiement (une licence en ligne de l'offre, son code
+   scellé pour le PC du client, qui s'active seul ; une option : la licence du client
+   émise de nouveau). Sinon : Délivrer maintenant. « À revoir » : l'Admin dit pourquoi
+   (une licence introuvable, un montant qui ne va pas) ; Rembourser... (Stripe, en
+   entier ; la licence n'est pas révoquée d'office, à toi de voir).
+La console : boutique-etat, boutique-config, stripe-brancher --cle-variable NOM (la
+clé dans une variable d'environnement, jamais en argument), commandes, commande-livrer,
+commande-revoir, commande-rembourser (XPG-License-Admin aide).
+
 UNE LICENCE EN LIGNE (aucun fichier, aucune demande à attendre)
 Licences > Nouvelle licence en ligne... : l'assistant, choix « En ligne : code
 d'activation ». Le nombre de PC (ou, pour une licence FLOTTANTE, de postes en même
