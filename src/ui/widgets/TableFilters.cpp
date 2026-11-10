@@ -988,7 +988,7 @@ gfx::Rect TableView::headerCellRect(std::size_t column) const {
 }
 
 gfx::Rect TableView::filterIconRect(std::size_t column) const {
-    if (!filtersEnabled_ || column >= columns_.size() || !columns_[column].filterable || columns_[column].headerIcon != 0) return {};
+    if ((!filtersEnabled_ && !barHooks_.open) || column >= columns_.size() || !columns_[column].filterable || columns_[column].headerIcon != 0) return {};
     const auto cell = headerCellRect(column);
     if (cell.w < 44.f) return {};
     return {cell.right() - 21.f, cell.y + (cell.h - 14.f) * 0.5f, 14.f, 14.f};

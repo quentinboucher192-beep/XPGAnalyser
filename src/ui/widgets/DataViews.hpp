@@ -846,6 +846,45 @@ public:
     void recallColumnFilters();            // relire (et poser) ce qui est retenu - un autre projet
     // ---- fin Lot API 8 ----
 
+    // ---- 1.47.0 (planches 01, 07) : LE DEPLIAGE - une ligne s'ouvre sur place ----
+    //  setUnfold(fabrique) : chaque ligne a un chevron devant sa premiere case ; un clic dessus, ou -> / <- sur la
+    //  ligne choisie, la deplie ou la replie ; Entree (setEnterActivates) et le double-clic restent `activated` (la
+    //  fiche). Depliee, la ligne est suivie du widget que la fabrique rend pour elle (ui::UnfoldCard, UnfoldCard.hpp),
+    //  pose a la largeur de la table, de la hauteur qu'il demande (sizeHint().preferred.h, sa largeur deja posee) ; il
+    //  defile avec les lignes, coupe au bord du corps. La table peint le fond de la ligne depliee et de son depliage
+    //  (un violet tres pale, une barre a gauche).
+    //  UNE LIGNE EST REPEREE PAR LE TEXTE DE SA COLONNE `keyColumn` (la premiere par defaut) : depliee, elle le reste
+    //  quand le volet refait son modele (son widget est refait) ; disparue, elle est oubliee. Une ligne d'une table en
+    //  arbre (CellStyle::expander >= 0) garde sa fleche, sans chevron : l'hote la deplie par setUnfolded.
+    using UnfoldMaker = std::function<WidgetPtr(RowIndex modelRow)>;
+    void setUnfold(UnfoldMaker maker, int keyColumn = 0);
+    [[nodiscard]] bool unfoldEnabled() const noexcept { return static_cast<bool>(unfoldMaker_); }
+    bool setUnfolded(RowIndex modelRow, bool on);          // faux : rien n'a change
+    bool toggleUnfolded(RowIndex modelRow) { return setUnfolded(modelRow, !isUnfolded(modelRow)); }
+    [[nodiscard]] bool isUnfolded(RowIndex modelRow) const noexcept;
+    [[nodiscard]] std::vector<RowIndex> unfoldedRows() const;   // dans l'ordre ou elles ont ete depliees
+    void foldAll();
+    void unfoldAll(std::size_t max = 50);                  // les lignes montrees (50 au plus)
+    void refreshUnfolded();                                // refaire les widgets (les donnees ont change, pas le modele)
+    [[nodiscard]] Widget* unfoldWidget(RowIndex modelRow) const;
+    // Le chevron d'une ligne de VUE, et la place de son depliage, a l'ecran (faux : pas montre).
+    [[nodiscard]] bool chevronRect(std::size_t viewRowIndex, gfx::Rect& out) const;
+    [[nodiscard]] bool unfoldRect(std::size_t viewRowIndex, gfx::Rect& out) const;
+    const core::SignalPtr<RowIndex, bool> unfoldChanged = core::Signal<RowIndex, bool>::create();
+
+    // ---- 1.47.0 (planche 12) : LA BARRE « FILTRER ET CHERCHER » (ui::FilterBar) au-dessus de la table ----
+    //  L'entonnoir de chaque titre ouvre le menu de la barre pour cette colonne (open) ; il est violet quand la barre
+    //  la filtre (active). Le menu d'un titre : « Filtrer la colonne... » et « Effacer les filtres » vont a la barre.
+    struct FilterBarHooks {
+        std::function<bool(std::size_t column)>            active;
+        std::function<void(std::size_t column, gfx::Rect)> open;
+        std::function<bool()>                              any;
+        std::function<void()>                              clear;
+    };
+    void setFilterBarHooks(FilterBarHooks hooks);
+    [[nodiscard]] bool hasFilterBar() const noexcept { return static_cast<bool>(barHooks_.open); }
+    [[nodiscard]] gfx::Rect headerRect(std::size_t column) const { return headerCellRect(column); }
+
 protected:
     void        onLayout() override;
     void        onPaint(const PaintContext&) override;
@@ -967,6 +1006,36 @@ private:
     std::vector<std::pair<std::size_t, std::string>> pathColumns_;   // (colonne, base)
     RowIndex                     contextRow_{kNoRow};     // la ligne du modele du dernier clic droit
     std::string                  menuPath_, menuPathBase_;   // le chemin du menu ouvert
+    // ---- 1.47.0 : le depliage (TableView, DataViews.cpp), la barre de filtres ----
+    struct Unfolded {
+        std::string key;                 // le texte de la colonne cle
+        RowIndex    row{kNoRow};         // la ligne du modele (kNoRow : disparue)
+        Widget*     slot{nullptr};       // le cadre coupe au corps (un enfant de la table) ; le widget est son enfant
+        Widget*     widget{nullptr};
+        float       height{0.f};
+    };
+    [[nodiscard]] std::string unfoldKeyOf(RowIndex row) const;
+    [[nodiscard]] bool chevronFor(RowIndex row) const;               // un chevron devant la premiere case
+    void makeUnfoldWidget(Unfolded& u);
+    void dropUnfoldWidget(Unfolded& u);
+    void remapUnfolded();                                            // apres un modele refait
+    void placeUnfolded(float bodyWidth);                             // la hauteur et la place des widgets
+    // La geometrie des lignes : le haut de la ligne de VUE i (hors defilement), la hauteur de tout, la ligne sous
+    // une ordonnee (du haut du corps, defilement compris ; -1 : aucune) - un depliage compte dans la ligne qu'il suit.
+    [[nodiscard]] float rowTop(std::size_t viewRowIndex) const;
+    [[nodiscard]] float rowsHeight() const;
+    [[nodiscard]] int   viewRowAtY(float y, bool* inUnfold = nullptr) const;
+    [[nodiscard]] float unfoldHeightAt(std::size_t viewRowIndex) const;
+    void                refreshUnfoldSpots() const;
+    UnfoldMaker                  unfoldMaker_;
+    int                          unfoldKeyColumn_{0};
+    std::vector<Unfolded>        unfolded_;
+    std::vector<WidgetPtr>       unfoldGrave_;            // retires pendant un evenement : detruits au dessin suivant
+    bool                         unfoldStale_{false};     // le modele a ete refait : les widgets aussi
+    mutable std::vector<std::pair<std::size_t, float>> unfoldSpots_;   // (ligne de vue, hauteur), triees
+    mutable bool                 spotsDirty_{true};
+    float                        unfoldWidth_{0.f};
+    FilterBarHooks               barHooks_;
 };
 
 // ========================================================== PropertyGrid ====

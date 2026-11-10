@@ -1478,9 +1478,13 @@ TableView::TableView(std::string id) : Widget(std::move(id)) {
             case 9: if (lastClickColumn_ >= 0) setColumnVisible(static_cast<std::size_t>(lastClickColumn_), false); break;
             case 10: exportCsvNow(); break;
             // Lot recherche : "Effacer les filtres des colonnes", "Filtrer la colonne X".
-            case 99: clearColumnFilters(); break;
+            case 99:
+                if (barHooks_.clear) barHooks_.clear();   // 1.47.0 : la barre de filtres
+                clearColumnFilters();
+                break;
             default:
                 if (action >= 1000) contextAction->emit(action);          // 1.11.14 : une entree du proprietaire
+                else if (action >= 100 && barHooks_.open) barHooks_.open(static_cast<std::size_t>(action - 100), headerCellRect(static_cast<std::size_t>(action - 100)));
                 else if (action >= 100) (void)openColumnFilter(static_cast<std::size_t>(action - 100));
                 else if (action >= 11 && static_cast<std::size_t>(action - 11) < columns_.size())   // Colonnes > une colonne
                     setColumnVisible(static_cast<std::size_t>(action - 11), !columns_[static_cast<std::size_t>(action - 11)].visible);
@@ -1810,9 +1814,9 @@ void TableView::openHeaderMenu(gfx::Point at, std::size_t column) {
     }
     if (columns_.size() > 1) items.push_back(std::move(cols));
     items.push_back(rule());
-    const bool filterable = filtersEnabled_ && c.filterable && c.headerIcon == 0;
+    const bool filterable = (filtersEnabled_ || barHooks_.open) && c.filterable && c.headerIcon == 0;   // 1.47.0 : ou la barre
     items.push_back(entry("Filtrer la colonne\xE2\x80\xA6", 100 + static_cast<int>(column), filterable, "pas de filtre dans ce tableau", Icon::Filter));
-    const bool filtered = !columnFilters_.empty();
+    const bool filtered = !columnFilters_.empty() || (barHooks_.any && barHooks_.any());
     items.push_back(entry("Effacer les filtres", 99, filtered, "aucun filtre"));
     items.push_back(rule());
     items.push_back(entry("Exporter en CSV\xE2\x80\xA6", 10, gCsvExporter && model_ && !view_.empty(),
@@ -1828,9 +1832,13 @@ void TableView::setModel(std::shared_ptr<ITableModel> m) {
     modelConnections_.clear();
     model_ = std::move(m);
     if (model_)
-        modelConnections_ += model_->modelReset->connect([this] { rebuildView(); });
+        modelConnections_ += model_->modelReset->connect([this] {
+            unfoldStale_ = true;   // 1.47.0 : les lignes depliees sont refaites (leurs donnees ont change)
+            rebuildView();
+        });
     selection_.clear();
     scrollX_ = scrollY_ = 0.f;
+    unfoldStale_ = true;
     rebuildView();
 }
 
@@ -1893,10 +1901,10 @@ void TableView::revealSelection() {
     // suit : les autres lignes collees, creees) plutot que collee au bord.
     for (std::size_t i = 0; i < view_.size(); ++i)
         if (view_[i] == selection_.front()) {
-            const float top = static_cast<float>(i) * rowHeight_;
+            const float top = rowTop(i);   // 1.47.0 : les depliages d'avant comptent
             if (top < scrollY_ || top + rowHeight_ > scrollY_ + visible)
                 scrollY_ = std::max(0.f, top - std::floor(visible / 3.f / rowHeight_) * rowHeight_);
-            const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowHeight_ - visible);
+            const float maxScroll = std::max(0.f, rowsHeight() - visible);
             scrollY_ = std::min(scrollY_, maxScroll);
             break;
         }
@@ -1923,6 +1931,9 @@ void TableView::rebuildView() {
         });
     }
     scrollY_ = 0.f;
+    spotsDirty_ = true;
+    if (!unfolded_.empty()) remapUnfolded();   // 1.47.0 : les lignes depliees, retrouvees par leur cle
+    unfoldStale_ = false;
     invalidate();
 }
 
@@ -1968,6 +1979,10 @@ void TableView::onLayout() {
     const float maxScroll = std::max(0.f, ch - va.h);
     scrollY_ = std::clamp(scrollY_, 0.f, maxScroll);
     scrollX_ = std::clamp(scrollX_, 0.f, std::max(0.f, cw - ha.w));
+    if (!unfolded_.empty()) {   // 1.47.0 : les depliages a la largeur du corps
+        unfoldWidth_ = ha.w;
+        placeUnfolded(ha.w);
+    }
     // Lot 16 : le champ d'une case suit sa case (la colonne elargie, la table deplacee).
     if (cellEditor_) {
         const auto it = std::find(view_.begin(), view_.end(), editRow_);
@@ -2028,7 +2043,7 @@ bool TableView::cellCheckRect(std::size_t viewRowIndex, std::size_t col, gfx::Re
 bool TableView::rowRect(std::size_t i, gfx::Rect& out) const {
     if (i >= view_.size()) return false;
     const auto area = contentRect();
-    const float y = area.y + headerHeight_ + static_cast<float>(i) * rowHeight_ - scrollY_;
+    const float y = area.y + headerHeight_ + rowTop(i) - scrollY_;
     if (y < area.y + headerHeight_ || y + rowHeight_ > area.bottom()) return false;
     out = {area.x, y, area.w, rowHeight_};
     return true;
@@ -2037,7 +2052,7 @@ bool TableView::rowRect(std::size_t i, gfx::Rect& out) const {
 void TableView::barAreas(gfx::Rect& vArea, gfx::Rect& hArea, float& contentW, float& contentH) const {
     const auto area = contentRect();
     const gfx::Rect body{area.x, area.y + headerHeight_, area.w, std::max(0.f, area.h - headerHeight_)};
-    contentH = static_cast<float>(view_.size()) * rowHeight_;
+    contentH = rowsHeight();   // 1.47.0 : les depliages compris
     contentW = 0.f;
     for (const auto& col : columns_)
         if (col.visible) contentW += col.width;
@@ -2045,6 +2060,260 @@ void TableView::barAreas(gfx::Rect& vArea, gfx::Rect& hArea, float& contentW, fl
     const float hspace = hbar_.space({body.x, body.y, body.w - vspace, body.h}, contentW, body.w - vspace);
     vArea = {body.x, body.y, body.w, body.h - hspace};
     hArea = {body.x, body.y, body.w - vspace, body.h};
+}
+
+// ---- 1.47.0 (planches 01, 07) : le depliage ---------------------------------------------
+namespace {
+// Le cadre d'un depliage : coupe au corps de la table, ses enfants aussi (le widget depliage, son enfant, garde sa
+// place entiere : il defile sous les titres sans les couvrir, et ne recoit la souris que dans la partie montree).
+class UnfoldSlot final : public Widget {
+public:
+    explicit UnfoldSlot(std::string id) : Widget(std::move(id)) {}
+};
+} // namespace
+
+void TableView::setUnfold(UnfoldMaker maker, int keyColumn) {
+    foldAll();
+    unfoldMaker_ = std::move(maker);
+    unfoldKeyColumn_ = std::max(0, keyColumn);
+    spotsDirty_ = true;
+    invalidate();
+}
+
+std::string TableView::unfoldKeyOf(RowIndex row) const {
+    if (!model_ || row >= model_->rowCount()) return {};
+    return model_->cellText(row, static_cast<std::size_t>(unfoldKeyColumn_));
+}
+
+bool TableView::chevronFor(RowIndex row) const {
+    if (!unfoldMaker_ || !model_ || row >= model_->rowCount()) return false;
+    const auto st = model_->cellStyle(row, firstVisibleColumn());
+    return st.expander < 0 && !st.spanRow;
+}
+
+bool TableView::isUnfolded(RowIndex modelRow) const noexcept {
+    for (const auto& u : unfolded_)
+        if (u.row == modelRow) return true;
+    return false;
+}
+
+std::vector<RowIndex> TableView::unfoldedRows() const {
+    std::vector<RowIndex> out;
+    for (const auto& u : unfolded_)
+        if (u.row != kNoRow) out.push_back(u.row);
+    return out;
+}
+
+Widget* TableView::unfoldWidget(RowIndex modelRow) const {
+    for (const auto& u : unfolded_)
+        if (u.row == modelRow) return u.widget;
+    return nullptr;
+}
+
+void TableView::dropUnfoldWidget(Unfolded& u) {
+    // Retire pendant un evenement (un bouton du depliage qui replie sa ligne) : detruit au dessin suivant.
+    if (u.slot) unfoldGrave_.push_back(removeChild(*u.slot));
+    u.slot = nullptr;
+    u.widget = nullptr;
+    u.height = 0.f;
+}
+
+void TableView::makeUnfoldWidget(Unfolded& u) {
+    dropUnfoldWidget(u);
+    if (!unfoldMaker_ || u.row == kNoRow) return;
+    WidgetPtr w = unfoldMaker_(u.row);
+    if (!w) return;
+    auto slot = std::make_unique<UnfoldSlot>(id() + ".depliage");
+    u.widget = &slot->addChild(std::move(w));
+    slot->setVisibility(Visibility::Hidden);   // pose au prochain placement
+    u.slot = &addChild(std::move(slot));
+    spotsDirty_ = true;
+}
+
+bool TableView::setUnfolded(RowIndex modelRow, bool on) {
+    if (!unfoldMaker_ || !model_ || modelRow >= model_->rowCount()) return false;
+    const auto it = std::find_if(unfolded_.begin(), unfolded_.end(), [&](const Unfolded& u) { return u.row == modelRow; });
+    if (on == (it != unfolded_.end())) return false;
+    if (on) {
+        Unfolded u;
+        u.key = unfoldKeyOf(modelRow);
+        u.row = modelRow;
+        unfolded_.push_back(std::move(u));
+        makeUnfoldWidget(unfolded_.back());
+    } else {
+        dropUnfoldWidget(*it);
+        unfolded_.erase(it);
+    }
+    spotsDirty_ = true;
+    invalidateLayout();
+    invalidate();
+    unfoldChanged->emit(modelRow, on);
+    return true;
+}
+
+void TableView::foldAll() {
+    if (unfolded_.empty()) return;
+    const auto rows = unfoldedRows();
+    for (auto& u : unfolded_) dropUnfoldWidget(u);
+    unfolded_.clear();
+    spotsDirty_ = true;
+    invalidateLayout();
+    invalidate();
+    for (const RowIndex r : rows) unfoldChanged->emit(r, false);
+}
+
+void TableView::unfoldAll(std::size_t max) {
+    std::size_t n = 0;
+    for (std::size_t i = 0; i < view_.size() && n < max; ++i)
+        if (chevronFor(view_[i])) {
+            (void)setUnfolded(view_[i], true);
+            ++n;
+        }
+}
+
+void TableView::refreshUnfolded() {
+    for (auto& u : unfolded_) makeUnfoldWidget(u);
+    spotsDirty_ = true;
+    invalidateLayout();
+    invalidate();
+}
+
+void TableView::remapUnfolded() {
+    const std::size_t n = model_ ? model_->rowCount() : 0;
+    for (auto& u : unfolded_) {
+        RowIndex found = kNoRow;
+        if (u.row != kNoRow && u.row < n && unfoldKeyOf(u.row) == u.key) {
+            found = u.row;
+        } else {
+            for (RowIndex r = 0; r < n; ++r)
+                if (unfoldKeyOf(r) == u.key) {
+                    found = r;
+                    break;
+                }
+        }
+        const bool moved = found != u.row;
+        u.row = found;
+        if (found == kNoRow) dropUnfoldWidget(u);
+        else if (moved || unfoldStale_ || !u.widget) makeUnfoldWidget(u);
+    }
+    std::erase_if(unfolded_, [](const Unfolded& u) { return u.row == kNoRow; });
+    spotsDirty_ = true;
+}
+
+void TableView::refreshUnfoldSpots() const {
+    if (!spotsDirty_) return;
+    spotsDirty_ = false;
+    unfoldSpots_.clear();
+    if (unfolded_.empty()) return;
+    for (std::size_t i = 0; i < view_.size(); ++i)
+        for (const auto& u : unfolded_)
+            if (u.row == view_[i]) {
+                if (u.widget && u.height > 0.f) unfoldSpots_.emplace_back(i, u.height);
+                break;
+            }
+}
+
+float TableView::rowTop(std::size_t viewRowIndex) const {
+    refreshUnfoldSpots();
+    float y = static_cast<float>(viewRowIndex) * rowHeight_;
+    for (const auto& [vi, h] : unfoldSpots_) {
+        if (vi >= viewRowIndex) break;
+        y += h;
+    }
+    return y;
+}
+
+float TableView::rowsHeight() const {
+    refreshUnfoldSpots();
+    float y = static_cast<float>(view_.size()) * rowHeight_;
+    for (const auto& spot : unfoldSpots_) y += spot.second;
+    return y;
+}
+
+float TableView::unfoldHeightAt(std::size_t viewRowIndex) const {
+    refreshUnfoldSpots();
+    for (const auto& [vi, h] : unfoldSpots_)
+        if (vi == viewRowIndex) return h;
+    return 0.f;
+}
+
+int TableView::viewRowAtY(float y, bool* inUnfold) const {
+    if (inUnfold) *inUnfold = false;
+    if (y < 0.f || rowHeight_ <= 0.f) return -1;
+    refreshUnfoldSpots();
+    float extra = 0.f;   // les depliages au-dessus
+    for (const auto& [vi, h] : unfoldSpots_) {
+        const float rowEnd = static_cast<float>(vi + 1) * rowHeight_ + extra;
+        if (y < rowEnd) break;                       // une ligne jusqu'a celle-ci (son depliage pas compris)
+        if (y < rowEnd + h) {
+            if (inUnfold) *inUnfold = true;
+            return static_cast<int>(vi);
+        }
+        extra += h;
+    }
+    const int i = static_cast<int>((y - extra) / rowHeight_);
+    return i >= 0 && static_cast<std::size_t>(i) < view_.size() ? i : -1;
+}
+
+void TableView::placeUnfolded(float bodyWidth) {
+    if (unfolded_.empty()) return;
+    bool changed = false;
+    for (auto& u : unfolded_) {
+        if (!u.widget) continue;
+        const gfx::Rect b = u.widget->bounds();
+        if (std::fabs(b.w - bodyWidth) > 0.5f) u.widget->setBounds({b.x, b.y, bodyWidth, std::max(1.f, b.h)});
+        const float h = std::max(0.f, std::ceil(u.widget->sizeHint().preferred.h));
+        if (std::fabs(h - u.height) > 0.5f) {
+            u.height = h;
+            changed = true;
+        }
+    }
+    if (changed) spotsDirty_ = true;
+    refreshUnfoldSpots();
+    gfx::Rect va, ha;
+    float cw = 0.f, ch = 0.f;
+    barAreas(va, ha, cw, ch);
+    const gfx::Rect body{va.x, va.y, bodyWidth, va.h};
+    for (auto& u : unfolded_) {
+        if (!u.slot) continue;
+        std::size_t vi = view_.size();
+        for (const auto& spot : unfoldSpots_)
+            if (view_[spot.first] == u.row) {
+                vi = spot.first;
+                break;
+            }
+        const gfx::Rect full{body.x, body.y + rowTop(vi) + rowHeight_ - scrollY_, bodyWidth, u.height};
+        const gfx::Rect shown = vi < view_.size() ? full.intersect(body) : gfx::Rect{};
+        if (shown.empty()) {
+            u.slot->setVisibility(Visibility::Hidden);
+            continue;
+        }
+        u.slot->setVisibility(Visibility::Visible);
+        u.slot->setBounds(shown);
+        u.widget->setBounds(full);
+        u.slot->layout();   // le depliage suit le defilement dans la meme image
+    }
+}
+
+bool TableView::chevronRect(std::size_t viewRowIndex, gfx::Rect& out) const {
+    if (viewRowIndex >= view_.size() || !chevronFor(view_[viewRowIndex])) return false;
+    gfx::Rect cell;
+    if (!cellRect(viewRowIndex, firstVisibleColumn(), cell)) return false;
+    out = {cell.x + 2.f, cell.y, 22.f, cell.h};
+    return true;
+}
+
+bool TableView::unfoldRect(std::size_t viewRowIndex, gfx::Rect& out) const {
+    const float h = viewRowIndex < view_.size() ? unfoldHeightAt(viewRowIndex) : 0.f;
+    gfx::Rect row;
+    if (h <= 0.f || !rowRect(viewRowIndex, row)) return false;
+    out = {row.x, row.bottom(), row.w, h};
+    return true;
+}
+
+void TableView::setFilterBarHooks(FilterBarHooks hooks) {
+    barHooks_ = std::move(hooks);
+    invalidate();
 }
 
 // 1.14.1 (N2) : le bord droit d'une colonne qu'on peut elargir (le meme test que l'appui).
@@ -2083,7 +2352,16 @@ void TableView::onPaint(const PaintContext& ctx) {
 
     ctx.r.fillRect(bounds(), c.panelBg);
     paintFrame(ctx, bounds(), focused());
+    unfoldGrave_.clear();   // 1.47.0 : les depliages retires pendant un evenement
     if (!model_ || rowH <= 0.f) return;
+    // 1.47.0 : les depliages a leur place (avant leurs enfants, dessines apres la table).
+    if (!unfolded_.empty()) {
+        gfx::Rect va0, ha0;
+        float cw0 = 0.f, ch0 = 0.f;
+        barAreas(va0, ha0, cw0, ch0);
+        unfoldWidth_ = ha0.w;
+        placeUnfolded(ha0.w);
+    }
 
     // ---- lot 20 : le bandeau du collage -----------------------------------
     if (bannerH > 0.f) {
@@ -2123,7 +2401,7 @@ void TableView::onPaint(const PaintContext& ctx) {
                           i == sortColumn_ && sortOrder_ != SortOrder::None ? c.text : c.textMuted,
                           cell.w - 26.f - funnelW, true);
             if (funnel.w > 0.f) {
-                const bool on = columnFilter(i) != nullptr;
+                const bool on = barHooks_.active ? barHooks_.active(i) : columnFilter(i) != nullptr;   // 1.47.0 : la barre
                 if (on) ctx.r.fillRoundedRect({funnel.x - 3.f, funnel.y - 3.f, funnel.w + 6.f, funnel.h + 6.f}, c.accent.withAlpha(60), 3.f);
                 drawIcon(ctx.r, Icon::Filter, funnel, on ? c.accent : c.textMuted.withAlpha(150));
             }
@@ -2143,16 +2421,28 @@ void TableView::onPaint(const PaintContext& ctx) {
     const gfx::Rect body{area.x, area.y + headerH, area.w, std::max(0.f, area.h - headerH)};
     ctx.r.pushClip(body);
 
-    const auto first = static_cast<std::size_t>(std::max(0.f, scrollY_ / rowH));
-    const auto last  = std::min(view_.size(), first + static_cast<std::size_t>(body.h / rowH) + 1);
+    // 1.47.0 : la premiere ligne montree (un depliage compte dans la ligne qu'il suit), puis jusqu'au bas du corps.
+    const int firstShown = viewRowAtY(std::max(0.f, scrollY_));
+    const auto first = firstShown < 0 ? view_.size() : static_cast<std::size_t>(firstShown);
     const float textY = (rowH - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f;
 
-    for (auto i = first; i < last; ++i) {
+    for (auto i = first; i < view_.size(); ++i) {
         const RowIndex row = view_[i];
-        const gfx::Rect r{body.x, body.y + static_cast<float>(i) * rowH - scrollY_, body.w, rowH};
+        const float rowY = body.y + rowTop(i) - scrollY_;
+        if (rowY >= body.bottom()) break;
+        const gfx::Rect r{body.x, rowY, body.w, rowH};
         const bool selected = std::find(selection_.begin(), selection_.end(), row) != selection_.end();
+        // 1.47.0 : depliee - la ligne et son depliage sur un violet tres pale, une barre a gauche (planche 07).
+        const float unfoldH = unfolded_.empty() ? 0.f : unfoldHeightAt(i);
+        if (unfoldH > 0.f) {
+            const gfx::Rect panel{body.x, r.bottom(), unfoldWidth_ > 0.f ? unfoldWidth_ : body.w, unfoldH};
+            ctx.r.fillRect(panel, c.accent.withAlpha(8));
+            ctx.r.line({panel.x, panel.bottom() - 0.5f}, {panel.right(), panel.bottom() - 0.5f}, c.accent.withAlpha(40), 1.f);
+            if (!selected) ctx.r.fillRect(r, c.accent.withAlpha(18));
+            ctx.r.fillRect({r.x, r.y, 3.f, rowH + unfoldH}, c.accent);
+        }
 
-        if (!selected && altRows_ && (i % 2) == 1) ctx.r.fillRect(r, c.rowAltBg);
+        if (!selected && unfoldH <= 0.f && altRows_ && (i % 2) == 1) ctx.r.fillRect(r, c.rowAltBg);
         if (selected) {
             // Pleine largeur : une table se lit ligne a ligne, une selection
             // en retrait couperait la premiere colonne.
@@ -2180,6 +2470,13 @@ void TableView::onPaint(const PaintContext& ctx) {
 
             float tx = x + 6.f;
             float avail = cellW - 12.f;
+            // 1.47.0 : le chevron du depliage (vers le bas : depliee), devant la premiere case.
+            if (col == firstCol && unfoldMaker_ && chevronFor(row)) {
+                drawChevron(ctx, {tx + 6.f, r.y + rowH * 0.5f}, unfoldH > 0.f,
+                            unfoldH > 0.f ? c.accent : (selected ? c.text : c.textMuted.withAlpha(170)));
+                tx += 18.f;
+                avail -= 18.f;
+            }
             // Lot 16 : la table en arbre - le retrait, puis la fleche.
             if (col == firstCol && (st.indent > 0.f || st.expander >= 0)) {
                 tx += st.indent;
@@ -2309,7 +2606,7 @@ void TableView::onPaint(const PaintContext& ctx) {
             }
         } else if (dropValid_) {
             // Sous les lignes : a la racine.
-            const float y = std::min(area.bottom() - 2.f, area.y + headerHeight_ + static_cast<float>(view_.size()) * rowHeight_ - scrollY_ + 2.f);
+            const float y = std::min(area.bottom() - 2.f, area.y + headerHeight_ + rowsHeight() - scrollY_ + 2.f);
             ctx.r.fillRect({area.x + 4.f, y, area.w - 8.f, 2.f}, c.accent);
         }
         std::string label = model_ && dragFrom_ < model_->rowCount() ? model_->cellText(dragFrom_, firstVisibleColumn()) : std::string{};
@@ -2416,10 +2713,11 @@ EventResult TableView::onEvent(const InputEvent& ev) {
         // Lot recherche : la bande des filtres (une pastille, sa croix, + Filtre,
         // Tout effacer), puis l'entonnoir d'un titre.
         if (d->button == MouseButton::Left && filterStripClick(d->pos)) return EventResult::Consumed;
-        if (d->button == MouseButton::Left && filtersEnabled_ && d->pos.y < area.y + headerH)
+        if (d->button == MouseButton::Left && (filtersEnabled_ || barHooks_.open) && d->pos.y < area.y + headerH)
             for (std::size_t i = 0; i < columns_.size(); ++i)
                 if (columns_[i].visible && filterIconRect(i).contains(d->pos)) {
-                    (void)openColumnFilter(i);
+                    if (barHooks_.open) barHooks_.open(i, headerCellRect(i));   // 1.47.0 : le menu de la barre
+                    else (void)openColumnFilter(i);
                     return EventResult::Consumed;
                 }
         // Lot 20 : le clic droit - la ligne sous la souris (gardee si elle est
@@ -2441,7 +2739,8 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             }
             contextRow_ = kNoRow;   // 1.24.0 : la ligne du clic droit (son chemin)
             if (d->pos.y >= area.y + headerH) {
-                const int vi = static_cast<int>((d->pos.y - area.y - headerH + scrollY_) / rowH);
+                // 1.47.0 : sur un depliage, le clic droit vaut pour sa ligne.
+                const int vi = viewRowAtY(d->pos.y - area.y - headerH + scrollY_);
                 lastClickColumn_ = columnAtX(d->pos.x);
                 if (vi >= 0 && vi < static_cast<int>(view_.size())) contextRow_ = view_[static_cast<std::size_t>(vi)];
                 if (vi >= 0 && vi < static_cast<int>(view_.size()) && selectionMode_ != SelectionMode::None) {
@@ -2481,11 +2780,23 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             if (auto* f = activeCellField()) finishCellEdit(true, f->text());
             else finishCellEdit(false, {});
         }
-        const int vi = static_cast<int>((d->pos.y - area.y - headerH + scrollY_) / rowH);
+        bool inUnfold = false;
+        const int vi = viewRowAtY(d->pos.y - area.y - headerH + scrollY_, &inUnfold);
+        if (inUnfold) return EventResult::Consumed;      // 1.47.0 : le fond d'un depliage (ses boutons l'ont deja pris)
         lastClickColumn_ = columnAtX(d->pos.x);          // lot 20 : la case d'ou coller
         if (d->button == MouseButton::Left) cellClickColumn_ = lastClickColumn_;   // 1.13.0 (D3b) : la case que F2 tape
         if (vi >= 0 && vi < static_cast<int>(view_.size())) {
             const RowIndex row = view_[static_cast<std::size_t>(vi)];
+            // 1.47.0 : le chevron - deplier ou replier la ligne (elle devient la ligne choisie).
+            if (gfx::Rect cv; d->button == MouseButton::Left && d->clickCount == 1 && chevronRect(static_cast<std::size_t>(vi), cv) && cv.contains(d->pos)) {
+                if (selectionMode_ != SelectionMode::None && (selection_.size() != 1 || selection_.front() != row)) {
+                    selection_.assign(1, row);
+                    selectionChanged->emit(selection_);
+                }
+                (void)toggleUnfolded(row);
+                invalidate();
+                return EventResult::Consumed;
+            }
             // Lot 16 : la fleche d'une table en arbre - deplier ou replier.
             gfx::Rect er;
             if (d->button == MouseButton::Left && expanderRect(static_cast<std::size_t>(vi), er) && er.contains(d->pos)) {
@@ -2592,11 +2903,11 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             }
             // Lot 21 : pres du haut ou du bas, la table defile (une longue liste).
             const float bodyTop = area.y + headerH;           // (le bandeau du collage compris)
-            const float maxScroll = std::max(0.f, static_cast<float>(view_.size()) * rowH - (area.h - headerH));
+            const float maxScroll = std::max(0.f, rowsHeight() - (area.h - headerH));
             if (m->pos.y < bodyTop + 14.f) scrollY_ = std::max(0.f, scrollY_ - rowH * 0.5f);
             else if (m->pos.y > area.bottom() - 14.f) scrollY_ = std::min(maxScroll, scrollY_ + rowH * 0.5f);
             const float localY = m->pos.y - area.y - headerH + scrollY_;
-            const int vi = localY >= 0.f ? static_cast<int>(localY / rowH) : -1;
+            const int vi = localY >= 0.f ? viewRowAtY(localY) : -1;
             const auto dragged = [&](RowIndex r) { return std::find(dragRows_.begin(), dragRows_.end(), r) != dragRows_.end(); };
             dropValid_ = false;
             dropWhere_ = DropWhere::Into;
@@ -2604,7 +2915,7 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 dropTo_ = view_[static_cast<std::size_t>(vi)];
                 // Le quart haut propose AVANT, le quart bas APRES, le milieu DANS ;
                 // refuse, on essaie le cote le plus proche.
-                const float frac = (localY - static_cast<float>(vi) * rowH) / rowH;
+                const float frac = std::clamp((localY - rowTop(static_cast<std::size_t>(vi))) / rowH, 0.f, 1.f);
                 DropWhere order[3] = {DropWhere::Into, frac < 0.5f ? DropWhere::Before : DropWhere::After,
                                       frac < 0.5f ? DropWhere::After : DropWhere::Before};
                 if (frac < 0.25f) { order[0] = DropWhere::Before; order[1] = DropWhere::Into; order[2] = DropWhere::After; }
@@ -2652,8 +2963,9 @@ EventResult TableView::onEvent(const InputEvent& ev) {
     if (const auto* m = std::get_if<MouseMove>(&ev); m && resizingColumn_ < 0) {
         int h = -1;
         if (bounds().contains(m->pos) && m->pos.y >= area.y + headerH) {
-            const int vi = static_cast<int>((m->pos.y - area.y - headerH + scrollY_) / rowH);
-            if (vi >= 0 && vi < static_cast<int>(view_.size())) h = vi;
+            bool inUnfold = false;
+            const int vi = viewRowAtY(m->pos.y - area.y - headerH + scrollY_, &inUnfold);
+            if (vi >= 0 && vi < static_cast<int>(view_.size()) && !inUnfold) h = vi;
         }
         // Lot 20 : sur une case refusee au collage, sa raison en infobulle.
         if (!marks_.empty()) {
@@ -2778,6 +3090,17 @@ EventResult TableView::onEvent(const InputEvent& ev) {
                 invalidate();
                 return EventResult::Consumed;
             }
+            // 1.47.0 : -> deplie, <- replie (les lignes choisies).
+            if (unfoldMaker_ && st.expander < 0 && (k->key == Key::Right || k->key == Key::Left)) {
+                bool changed = false;
+                for (const RowIndex r : std::vector<RowIndex>(selection_))
+                    if (chevronFor(r) || isUnfolded(r)) changed = setUnfolded(r, k->key == Key::Right) || changed;
+                if (changed) {
+                    revealSelection();
+                    invalidate();
+                }
+                return EventResult::Consumed;
+            }
         }
         if (k->key == Key::A && k->mods.ctrl && selectionMode_ != SelectionMode::Single) {
             selection_ = view_;
@@ -2794,7 +3117,7 @@ EventResult TableView::onEvent(const InputEvent& ev) {
             index = (k->key == Key::Down) ? std::min(view_.size() - 1, index + 1)
                                           : (index ? index - 1 : 0);
             selection_.assign(1, view_[index]);
-            const float y = static_cast<float>(index) * rowH;
+            const float y = rowTop(index);   // 1.47.0 : les depliages d'avant comptent
             const float h = area.h - headerH;
             if (y < scrollY_) scrollY_ = y;
             else if (y + rowH > scrollY_ + h) scrollY_ = y + rowH - h;
@@ -3753,7 +4076,7 @@ bool TableView::beginCellEdit(RowIndex modelRow, std::size_t col) {
     if (it == view_.end()) return false;
     const auto vi = static_cast<std::size_t>(it - view_.begin());
     // La ligne amenee en vue, pour que la case ait une place a l'ecran.
-    const float y = static_cast<float>(vi) * rowHeight_;
+    const float y = rowTop(vi);   // 1.47.0 : les depliages d'avant comptent
     const float h = contentRect().h - headerHeight_;
     if (y < scrollY_) scrollY_ = y;
     else if (y + rowHeight_ > scrollY_ + h) scrollY_ = std::max(0.f, y + rowHeight_ - h);
