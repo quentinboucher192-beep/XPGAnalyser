@@ -531,3 +531,61 @@ G.update({
     "w_lic": g_w_lic, "w_dem": g_w_dem, "w_eur": g_w_eur, "delay_hist": g_delay_hist,
     "share": g_share, "db_act": g_db_act, "db_lic": g_db_lic, "db_dem": g_db_dem, "db_eur": g_db_eur,
 })
+
+
+# ------------------------------------------------------------------ la fiche : l'en-tete commun (02, 03, 04) ----
+ANCRES = ["Vue d'ensemble", "Activité", "Licences et clients", "Demandes", "Boutique", "Sécurité", "Droits"]
+
+
+def fiche_head(on):
+    tabs = "".join('<span class="%s">%s</span>' % ("on" if a in on else "", a) for a in ANCRES)
+    return ('''<div class="fh">
+  <div class="big cL">L</div>
+  <div class="grow"><div class="row gap8"><span class="nm2">Léa Essai</span><span class="pill p-gray pl">Admin</span><span class="pill p-green pl"><span class="d"></span>Active</span>
+   <span class="pill p-violet pl">Admin LV2 · 2 écarts</span></div>
+   <div class="muted" style="margin-top:3px;font-size:12.5px">lea@exemple.fr · PC-COMMERCIAL-02 · admin depuis le 14/09/2026, ajoutée par Camille Essai · <span class="ok2">en ligne</span>, vue il y a 2 min à Lyon, FR</div></div>
+  <span class="btn sm"><i data-i="scroll" class="sm"></i>Son journal</span><span class="btn sm"><i data-i="lock" class="sm"></i>Ses droits…</span><span class="btn sm"><i data-i="mail" class="sm"></i>Lui écrire…</span><span class="btn sm" style="padding:0 8px"><i data-i="more" class="sm"></i></span>
+ </div>
+ <div class="row" style="margin-top:12px;align-items:flex-end;gap:16px;border-bottom:1px solid var(--line)">
+  <div class="tabs" style="border-bottom:0">%s</div>
+  <div class="per" style="margin-left:auto;padding-bottom:7px"><div class="seg"><span>7 j</span><span class="on">30 j</span><span>90 j</span><span>12 mois</span><span>Tout</span><span><i data-i="calendar"></i>Dates…</span></div>
+   <div class="cmp">comparé à <b>la période d'avant</b><i data-i="down"></i></div></div>
+ </div>''' % tabs)
+
+
+W_ACT_L = [0, 0, 0, 0, 9, 18, 22, 25, 24, 18, 39, 24]
+G.update({
+    "fh_vue": lambda: fiche_head(["Vue d'ensemble"]),
+    "fh_act": lambda: fiche_head(["Activité"]),
+    "fh_lic": lambda: fiche_head(["Licences et clients"]),
+    "sp_act": lambda: spark(W_ACT_L, AD["L"], w=70, h=26),
+    "sp_lic": lambda: spark(W_LIC_L, AD["L"], w=70, h=26),
+    "sp_dem": lambda: spark(W_DEM_L, AD["L"], w=70, h=26),
+    "sp_eur": lambda: spark(W_EUR_L, AD["L"], w=70, h=26),
+})
+
+
+def g_lea_share():
+    rows = [("Actions", 117, 263, "1re sur 4"), ("Licences signées", 41, 76, "1re"), ("Demandes traitées", 34, 72, "1re"),
+            ("Montant encaissé", 4870, 8690, "1re"), ("Délai de réponse", None, None, "2e plus rapide")]
+    o = ['<div style="display:grid;grid-template-columns:132px 1fr 46px 86px;align-items:center;column-gap:12px;row-gap:12px">']
+    for lab, a, b, rk in rows:
+        o.append('<div style="font-size:12.5px;color:var(--ink2)">%s</div>' % lab)
+        if a is None:
+            # le delai : un point par admin sur une echelle de temps (plus a gauche = plus rapide)
+            pts = {"C": 2.08, "L": 4.08, "H": 9.67, "N": 5.5}
+            svg = ['<svg width="100%%" height="18" viewBox="0 0 300 18" preserveAspectRatio="none">']
+            svg.append('<line x1="0" x2="300" y1="9" y2="9" stroke="%s"/>' % GRID)
+            o.append('<div style="position:relative;height:18px"><div style="position:absolute;left:0;right:0;top:8px;height:2px;background:#eef1f5;border-radius:1px"></div>%s</div>'
+                     % "".join('<i style="position:absolute;left:calc(%.1f%% - 6px);top:3px;width:12px;height:12px;border-radius:50%%;background:%s;border:2px solid #fff;%s"></i>'
+                               % (v / 10.0 * 100, AD[k], "" if k == "L" else "opacity:.35") for k, v in pts.items()))
+            o.append('<div class="nofig" style="font:650 13px Inter">4 h 05</div><div class="cap">%s</div>' % rk)
+            continue
+        p = a * 100.0 / b
+        o.append('<div class="seg2" style="height:10px"><i style="width:%.1f%%;background:%s"></i><i style="width:%.1f%%;background:#dfe5ee"></i></div>' % (p, AD["L"], 100 - p))
+        o.append('<div class="nofig" style="font:650 13px Inter">%d %%</div><div class="cap">%s</div>' % (round(p), rk))
+    o.append("</div>")
+    return "".join(o)
+
+
+G["lea_share"] = g_lea_share

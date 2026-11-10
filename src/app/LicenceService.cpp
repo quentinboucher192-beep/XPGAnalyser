@@ -3192,6 +3192,7 @@ struct Runner {
     // 1.46.0 : la boutique - les commandes de ce PC (le releve, puis ce que les travaux rapportent), leur cadence
     std::vector<shop::Order> orders;
     std::string        ordersPath;         // le releve d'ou elles ont ete lues (vide : pas encore)
+    std::filesystem::file_time_type ordersStamp{};   // ... et quand il a ete ecrit (l'autre Studio, un essai : relu)
     std::atomic<unsigned long long> ordersRev{0};
     double             nextOrders{0};
     double             ordersFastUntil{0}; // toutes les 10 secondes jusque-la (apres un achat, une page rouverte)
@@ -3322,11 +3323,16 @@ namespace {
 bool followed(const std::vector<shop::Order>& list) {
     return std::any_of(list.begin(), list.end(), [](const shop::Order& o) { return shop::open(o.state) || (o.state == shop::kDelivered && !o.applied); });
 }
-// Les commandes du releve (une premiere fois, ou le dossier des licences a change : les essais).
+// Les commandes du releve (une premiere fois ; le dossier des licences a change : les essais ; le releve reecrit : l'autre
+// Studio, un essai).
 void loadOrders(Runner& r) {
     const std::string path = recordPath();
-    if (r.ordersPath == path) return;
+    std::error_code ec;
+    const auto stamp = std::filesystem::last_write_time(std::filesystem::path(std::u8string(path.begin(), path.end())), ec);
+    const auto when = ec ? std::filesystem::file_time_type{} : stamp;
+    if (r.ordersPath == path && r.ordersStamp == when) return;
     r.ordersPath = path;
+    r.ordersStamp = when;
     Record rec;
     if (loadRecord(rec, nullptr)) r.orders = rec.orders;
     else r.orders.clear();
@@ -3341,8 +3347,9 @@ std::vector<shop::Order> orders() {
     return r.orders;
 }
 
-unsigned long long ordersRevision() noexcept {
+unsigned long long ordersRevision() {
     Runner& r = runner();
+    loadOrders(r);
     return r.ordersRev;
 }
 
@@ -3471,8 +3478,8 @@ bool collect() {
     // ouverte dans le navigateur, et les commandes regardees toutes les 10 secondes pendant 30 minutes.
     if (res.ordersLooked) {
         r.orders = res.orders;
-        r.ordersPath = recordPath();
         ++r.ordersRev;
+        loadOrders(r);   // le releve ecrit par ce travail : ce qu'il dit, une fois
     }
     if (res.job == Job::Order || res.job == Job::Orders || res.job == Job::CancelOrder || res.job == Job::Sync) {
         loadOrders(r);

@@ -402,7 +402,7 @@ bool startShopRefresh();
 // 1.46.0 : les commandes de ce PC (le releve, relu au lancement ; puis ce que les travaux en rapportent) - le fil de
 // l'interface ; ordersRevision monte a chaque changement.
 [[nodiscard]] std::vector<shop::Order> orders();
-[[nodiscard]] unsigned long long ordersRevision() noexcept;
+[[nodiscard]] unsigned long long ordersRevision();
 // 1.46.0 : la page de paiement rouverte (Rouvrir la page de paiement) : les commandes regardees toutes les 10 secondes
 // pendant 30 minutes de nouveau. Vide : ouverte ; sinon la phrase.
 [[nodiscard]] std::string reopenPayment(const shop::Order& o);
