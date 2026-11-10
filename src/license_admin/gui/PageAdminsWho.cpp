@@ -395,6 +395,11 @@ private:
             return out;
         };
         const auto count = [](std::size_t n) { return std::to_string(n); };
+        // l'objet d'une ligne sur un admin : l'identifiant de sa cle -> son nom
+        const auto who = [this](const js::Ref& r) {
+            if (const Person* q = d_->personById(r.object)) return q->name;
+            return r.object.empty() ? r.summary : r.object;
+        };
         std::vector<PlusLine> out;
         out.push_back({ui::Icon::Module, "Versions publi\xC3\xA9" "es", "", list(p.versions, 3), count(p.versions.size())});
         {
@@ -405,13 +410,13 @@ private:
         }
         {
             std::string sub;
-            for (const auto& r : p.adminsAdded) sub += (sub.empty() ? "" : " \xC2\xB7 ") + std::string("+ ") + (r.object.empty() ? r.summary : r.object) + " (" + dayMonth(r.when) + ")";
-            for (const auto& r : p.adminsRemoved) sub += (sub.empty() ? "" : " \xC2\xB7 ") + std::string(ch::fr::kMinus) + " " + (r.object.empty() ? r.summary : r.object) + " (" + dayMonth(r.when) + ")";
+            for (const auto& r : p.adminsAdded) sub += (sub.empty() ? "" : " \xC2\xB7 ") + std::string("+ ") + who(r) + " (" + dayMonth(r.when) + ")";
+            for (const auto& r : p.adminsRemoved) sub += (sub.empty() ? "" : " \xC2\xB7 ") + std::string(ch::fr::kMinus) + " " + who(r) + " (" + dayMonth(r.when) + ")";
             out.push_back({ui::Icon::User, "Admins ajout\xC3\xA9s, retir\xC3\xA9s", "", sub, count(p.adminsAdded.size() + p.adminsRemoved.size())});
         }
         {
             std::map<std::string, int> by;
-            for (const auto& r : p.rights) ++by[r.object.empty() ? r.summary : r.object];
+            for (const auto& r : p.rights) ++by[who(r)];
             std::string sub;
             for (const auto& [k, n] : by) sub += (sub.empty() ? "" : " \xC2\xB7 ") + k + " \xC3\x97" + std::to_string(n);
             out.push_back({ui::Icon::Lock, "Droits et profils chang\xC3\xA9s", "", sub, count(p.rights.size())});

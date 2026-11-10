@@ -77,8 +77,10 @@ struct Article {
     std::int64_t amount{0};   // en centimes, TTC (1.46.1 : le montant de base)
     std::string  label;       // le nom sur la page de paiement et la facture
     // 1.46.1 : le montant suit le registre (faux) ou il est LIBRE (tape par l'editeur) ; une reduction : le montant reduit
-    // jusqu'a sa fin (comprise jusqu'a la seconde d'avant : comme le registre, now < reducedUntil).
-    bool         free{false};
+    // jusqu'a sa fin (comprise jusqu'a la seconde d'avant : comme le registre, now < reducedUntil). Un article fait dans le
+    // code (sans le dire) est libre : son montant est celui qu'on lui donne ; le catalogue de l'Admin (un article mis en
+    // vente) et << libre : false >> le font suivre.
+    bool         free{true};
     std::int64_t reduced{0};        // 0 : pas de reduction
     Seconds      reducedUntil{0};
     bool         legacy{false};     // lu d'un reglage d'avant la 1.46.1 (ni libre, ni suivi) : followRegistry decide

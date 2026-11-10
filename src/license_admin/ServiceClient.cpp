@@ -9,6 +9,7 @@
 
 #include "Admin.hpp"
 #include "ArchiveSync.hpp"
+#include "ServiceConnection.hpp"   // 1.47.0 : la connexion au service (kit-studios la joint)
 
 #include "../app/ai/AiHttp.hpp"
 #include "../core/Version.hpp"   // 1.44.0 : X-XPG-Logiciel
@@ -1912,6 +1913,15 @@ Result studioKit(const std::string& folder, const licensing::SigningKey* key, co
     for (const auto& f : files) {
         const std::string path = U(P(outDir) / P(f.name));
         if (!crypto::replaceFile(path, f.text, false, &why)) return refused(why);
+    }
+    // 1.47.0 : la connexion au service (le certificat verifie, signe par la cle de l'editeur) : l'installateur de l'Admin la
+    // porte (outils/mingw/admin_editeur.sh : ressources-licences/connexion-service.xpgsvc).
+    const std::string connexionText = connexion::exportText(folder);
+    if (!connexionText.empty() && !url.empty()) {
+        const std::string path = U(P(outDir) / P(connexion::kFileName));
+        if (!crypto::replaceFile(path, connexionText, false, &why)) return refused(why);
+        res.details.push_back(std::string(connexion::kFileName) + " -> ressources-licences/ : la connexion au service (le certificat sign\xC3\xA9 par ta cl\xC3\xA9) "
+                              "que porte l'installateur de l'Admin : l'Admin d'un futur admin d\xC3\xA9marre connect\xC3\xA9 \xC3\xA0 ton service.");
     }
     res.ok = true;
     res.message = "Fichiers pour les Studios \xC3\xA9" "crits dans " + outDir + " : PublisherKey.hpp, registre.xpgreg, ServiceAddress.hpp, cle-publique.txt (et LISEZ-MOI.txt).";

@@ -278,6 +278,73 @@ int main(int argc, char** argv) {
         bp->refresh();
     }
 
+    // 1.46.1 : le montant SUIT le prix affiche et sa reduction (<< 12,00 EUR TTC (reduit jusqu'au 22/12, puis 60,00 EUR) >>), un
+    // montant tape est libre (vide : il suit de nouveau), Enregistrer quand le registre a change ; les produits chez Stripe.
+    std::printf("-- 1.46.1 : le montant suit le registre (une reduction), le montant libre, les produits chez Stripe\n");
+    {
+        const lic::Seconds until = g_now + 42 * 86400;
+        licensing::Registry reg = ws.registry();
+        for (auto& e : reg.editions)
+            if (e.id == "ENTERPRISE") {
+                e.price = "50 \xE2\x82\xAC HT /par an";
+                e.promoPrice = "10 \xE2\x82\xAC";
+                e.promoUntil = until;
+            }
+        check(ws.signRegistry(reg).ok, "le registre : ENTERPRISE 50 EUR HT, reduite a 10 EUR");
+        (void)ws.takeServiceJob();
+        shop::Settings s = ws.shop();
+        shop::Article a{"ed:ENTERPRISE", "edition", "ENTERPRISE", "", 0, 6000, "Licence ENTERPRISE - 1 an"};
+        a.free = false;   // suit le registre ; le service ne sait pas encore la reduction
+        s.articles.push_back(a);
+        s.catalog.state = "ok";
+        s.catalog.products = 2;
+        ws.adoptShop(s);
+        bp->refresh();
+        std::string t = draw(*bp);
+        auto* cat = find<ui::TableView>(*bp, "boutique.catalogue");
+        auto& m = *cat->model();
+        const int ent = rowOf(m, 0, "ENTERPRISE - 1 an");
+        const auto R = static_cast<ui::RowIndex>(ent < 0 ? 0 : ent);
+        const std::string d = lic::isoDate(until);
+        const std::string reduced = "12,00\xC2\xA0\xE2\x82\xAC TTC (r\xC3\xA9" "duit jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + ", puis 60,00\xC2\xA0\xE2\x82\xAC)";
+        check(ent >= 0 && m.cellText(R, 3) == reduced, "le montant suit la reduction : " + m.cellText(R, 3));
+        check(m.cellText(R, 2) == "10 \xE2\x82\xAC (au lieu de 50)" && m.cellText(R, 5).empty(), "le prix du moment, aucun ecart (" + m.cellText(R, 2) + " | " + m.cellText(R, 5) + ")");
+        check(has(t, "Les montants suivent le registre") && enabledBtn(*bp, "boutique.enregistrer") && !visibleBtn(*bp, "boutique.annuler"),
+              "le registre a change : a enregistrer (sans changement a la main : rien a annuler)");
+        check(has(t, "Produits chez Stripe : 2 \xC3\xA0 jour"), "la carte Stripe : les produits chez Stripe");
+        for (const auto& sz : kSizes) {
+            (void)draw(*bp, sz.w, sz.h);
+            std::string why;
+            check(columnsFit(*cat, "\xC3\x89" "cart", why) || sz.w < 1150.f, std::string("le catalogue (un montant reduit) a ") + sz.window + " : l'ecart en vue (" + why + ")");
+        }
+        (void)draw(*bp);
+        check(m.setCellText(R, 3, "15") && m.cellText(R, 3) == "15,00\xC2\xA0\xE2\x82\xAC TTC (montant libre)" && m.cellText(R, 5) == "\xE2\x89\xA0 affich\xC3\xA9 (12,00\xC2\xA0\xE2\x82\xAC TTC)",
+              "un montant tape : libre, l'ecart au prix du moment (" + m.cellText(R, 3) + " | " + m.cellText(R, 5) + ")");
+        check(m.setCellText(R, 3, "") && m.cellText(R, 3) == reduced, "vide : il suit de nouveau le registre");
+        check(click(*bp, "boutique.annuler"), "Annuler les changements");
+        // la fin de la reduction passee : le montant de base, sans rien faire
+        const lic::Seconds keep = g_now;
+        g_now = until + 3600;
+        bp->refresh();
+        (void)draw(*bp);
+        check(m.cellText(R, 3) == "60,00\xC2\xA0\xE2\x82\xAC TTC" && m.cellText(R, 5).empty(), "la reduction finie : 60,00 EUR TTC (" + m.cellText(R, 3) + ")");
+        g_now = keep;
+        // Stripe refuse les produits (une cle restreinte) : le bandeau le dit, la vente marche quand meme
+        s = ws.shop();
+        s.catalog.state = "refus";
+        s.catalog.message = "Stripe refuse (cr\xC3\xA9" "er le prix) : The provided key does not have the required permissions. \xE2\x80\x94 Ta cl\xC3\xA9 restreinte doit avoir "
+                            "\xC2\xAB Products : \xC3\xA9" "criture \xC2\xBB et \xC2\xAB Prices : \xC3\xA9" "criture \xC2\xBB.";
+        ws.adoptShop(s);
+        bp->refresh();
+        t = draw(*bp);
+        check(has(t, "Tes produits ne se voient pas dans Stripe") && has(t, "Products : \xC3\xA9" "criture") && has(t, "la vente marche quand m\xC3\xAAme"),
+              "Stripe refuse les produits : le bandeau dit pourquoi et que la vente marche");
+        s.catalog = {};
+        s.articles.pop_back();
+        ws.adoptShop(s);
+        bp->refresh();
+    }
+
     std::printf("-- un service 1.44.0 : deploie la 1.46.0 pour la boutique\n");
     {
         license_admin::online::ServiceState st;

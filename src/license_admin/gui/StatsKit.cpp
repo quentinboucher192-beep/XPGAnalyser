@@ -538,10 +538,17 @@ void SegGroup::setCurrent(const std::string& key) {
 void SegGroup::setLabel(const std::string& key, std::string label) {
     for (std::size_t i = 0; i < items_.size(); ++i)
         if (items_[i].key == key) {
+            if (items_[i].label == label) return;
             items_[i].label = label;
             static_cast<Seg*>(buttons_[i])->setLabel(std::move(label));
             invalidateLayout();
         }
+}
+
+float SegGroup::widthOf(const std::vector<std::string>& labels) {
+    float w = 6.f;
+    for (const auto& l : labels) w += std::ceil(ui::measureWidth(l, gfx::semibold(FontId{12}))) + 20.f + 2.f;
+    return w;
 }
 
 float SegGroup::preferredWidth() const {

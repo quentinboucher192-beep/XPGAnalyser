@@ -192,6 +192,8 @@ public:
     void setCurrent(const std::string& key);
     [[nodiscard]] const std::string& current() const noexcept { return current_; }
     [[nodiscard]] float preferredWidth() const;
+    // La largeur que prendraient ces libelles (sans icone) : choisir des mots plus courts avant de les poser.
+    [[nodiscard]] static float widthOf(const std::vector<std::string>& labels);
     [[nodiscard]] ui::Button* button(const std::string& key) const;
     // Changer le libelle d'un choix (un nombre : << Tous 119 >>).
     void setLabel(const std::string& key, std::string label);

@@ -70,7 +70,8 @@ describe("la derogation << Gerer le service >> (1.47.0)", () => {
         erreur(r, 403, "derogation");
         assert.match(r.json.message, /admin\+ seul gère le service/);
         const s = await appel(svc, "POST", "/admin/stats/releve", { cle: lea, corps: {} });
-        erreur(s, 403, "derogation");
+        erreur(s, 403, "droit"); // le code d'avant la 1.47.0 ; la phrase dit la derogation
+        assert.match(s.json.message, /dérogation/);
         const g = await appel(svc, "GET", "/admin/derogation", { cle: lea });
         assert.equal(g.statut, 200);
         assert.equal(g.json.derogation, null);
@@ -125,7 +126,7 @@ describe("la derogation << Gerer le service >> (1.47.0)", () => {
         // une route de l'admin+ marquee << derogation >> s'ouvre a elle
         const s = await appel(svc, "POST", "/admin/stats/releve", { cle: lea, corps: {} });
         assert.equal(s.statut, 200, s.texte);
-        erreur(await appel(svc, "POST", "/admin/stats/releve", { cle: marc, corps: {} }), 403, "derogation");
+        erreur(await appel(svc, "POST", "/admin/stats/releve", { cle: marc, corps: {} }), 403, "droit");
         const lignes = (await journal()).filter((l) => l.e.action === "derogation_utilisee");
         assert.equal(lignes.length, 2, "deux usages, deux lignes");
         assert.equal(lignes[0].e.detail.geste, "deployer");
@@ -164,7 +165,9 @@ describe("la derogation << Gerer le service >> (1.47.0)", () => {
         const u = await appel(svc, "POST", "/admin/derogation/utiliser", { cle: lea, corps: { action: "deployer" } });
         erreur(u, 403, "derogation");
         assert.match(u.json.message, /pris fin/);
-        erreur(await appel(svc, "POST", "/admin/stats/releve", { cle: lea, corps: {} }), 403, "derogation");
+        const s = await appel(svc, "POST", "/admin/stats/releve", { cle: lea, corps: {} });
+        erreur(s, 403, "droit");
+        assert.match(s.json.message, /pris fin/);
         const e = await appel(svc, "GET", "/admin/etat", { cle: lea });
         assert.equal(e.json.derogation.etat, "expiree");
         assert.equal(e.json.derogation.reste, 0);

@@ -904,7 +904,8 @@ export class Licences extends DurableObject {
             if (signe === "plus") {
                 const d = derogation ? this.derogationDe(cle, ctx.now) : null;
                 if (!d) {
-                    if (derogation) throw this.refusDerogation(cle, ctx.now);
+                    // (le code reste << droit >>, comme avant la 1.47.0 ; la phrase dit la derogation)
+                    if (derogation) throw new Erreur(403, "droit", this.refusDerogation(cle, ctx.now).message);
                     throw new Erreur(403, "droit", "Cette action est réservée à l'admin+ (la clé de l'éditeur).");
                 }
                 appelant.derogation = d; // l'usage est ecrit au journal une fois l'appel accepte (traiter)

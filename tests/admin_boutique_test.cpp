@@ -15,6 +15,11 @@
 //  BRANCHER STRIPE avec un faux kit (un faux wrangler qui garde l'empreinte de ce
 //  qu'il recoit sur son entree standard) : le webhook cree chez le faux Stripe, les
 //  deux secrets poses, rien d'ecrit ni d'affiche ; la console (argv[2]).
+//  1.46.1 : le montant suit le registre (le prix affiche HT + 20 %, la reduction
+//  et sa fin, un montant libre, un reglage d'avant) ; la page de paiement de
+//  l'API de Stripe d'aujourd'hui (le faux Stripe refuse payment_method_types) ;
+//  Stripe-Version et api_version ; les produits et les prix chez Stripe (crees
+//  par le service) ; la boutique qui suit un registre depose.
 //  Les valeurs des secrets : essai_jeton_... ; des noms d'essai.
 //
 //    admin_boutique_test SOURCE [XPG-License-Admin]
@@ -357,6 +362,87 @@ int main(int argc, char** argv) {
         shop::setStripeApiBaseForTests({});
     }
 
+    std::printf("-- 1.46.1 : le montant suit le registre, la reduction, le montant libre (sans reseau)\n");
+    {
+        std::int64_t c = 0;
+        check(shop::shownPriceTtc("50 \xE2\x82\xAC HT /par an", c) && c == 6000, "50 EUR HT : 60,00 EUR TTC");
+        check(shop::shownPriceTtc("10 \xE2\x82\xAC", c, "50 \xE2\x82\xAC HT /par an") && c == 1200, "un prix reduit << 10 EUR >> sous un prix HT : HT aussi, 12,00 EUR TTC");
+        check(shop::shownPriceTtc("10 \xE2\x82\xAC TTC", c, "50 \xE2\x82\xAC HT") && c == 1000 && shop::shownPriceTtc("10 \xE2\x82\xAC", c) && c == 1000,
+              "<< 10 EUR TTC >> reste TTC ; << 10 EUR >> seul : TTC");
+        const lic::Seconds now = lic::systemNow(), until = now + 40 * 86400;
+        lic::Registry reg;
+        lic::EditionDef ent;
+        ent.id = "ENTERPRISE";
+        ent.price = "50 \xE2\x82\xAC HT /par an";
+        ent.promoPrice = "10 \xE2\x82\xAC";
+        ent.promoUntil = until;
+        lic::EditionDef per;
+        per.id = "PERSONAL";
+        per.price = "5 \xE2\x82\xAC HT / an";
+        lic::EditionDef cus;
+        cus.id = "CUSTOM";
+        cus.price = "sur devis";
+        lic::OptionDef ia;
+        ia.id = "ia_avancee";
+        ia.durations = {{30, "29 \xE2\x82\xAC HT"}};
+        reg.editions = {ent, per, cus};
+        reg.options = {ia};
+        // un reglage d'avant la 1.46.1 (sans << libre >>), comme le service 1.46.0 le rend
+        json::Value v;
+        check(json::parse("{\"active\":true,\"devise\":\"eur\",\"articles\":["
+                          "{\"id\":\"ed:ENTERPRISE\",\"genre\":\"edition\",\"edition\":\"ENTERPRISE\",\"montant\":6000,\"libelle\":\"Licence ENTERPRISE\"},"
+                          "{\"id\":\"ed:PERSONAL\",\"genre\":\"edition\",\"edition\":\"PERSONAL\",\"montant\":600,\"libelle\":\"Licence PERSONAL\"},"
+                          "{\"id\":\"opt:ia_avancee:30\",\"genre\":\"option\",\"option\":\"ia_avancee\",\"jours\":30,\"montant\":3000,\"libelle\":\"Option IA\"},"
+                          "{\"id\":\"ed:CUSTOM\",\"genre\":\"edition\",\"edition\":\"CUSTOM\",\"montant\":5000,\"libre\":false,\"libelle\":\"Licence CUSTOM\"}]}",
+                          v, nullptr),
+              "un reglage d'avant (JSON)");
+        shop::Settings s;
+        check(shop::parseSettings(v, s, nullptr) && s.articles.size() == 4 && s.articles[0].legacy && s.articles[1].legacy && s.articles[2].legacy && !s.articles[3].legacy &&
+                  !s.articles[3].free,
+              "lu : trois articles d'avant (ni libres, ni suivis), un qui suit");
+        check(shop::followRegistry(s, reg, now) > 0, "le registre suivi");
+        const shop::Article& E = s.articles[0];
+        check(!E.free && !E.legacy && E.amount == 6000 && E.reduced == 1200 && E.reducedUntil == until && E.amountAt(now) == 1200 && E.amountAt(until) == 6000,
+              "ENTERPRISE (son montant etait le prix du registre) : suivi - 60,00 EUR, 12,00 EUR jusqu'a la fin de la reduction, puis 60,00");
+        const std::string d = lic::isoDate(until);
+        check(shop::articleAmountText(E, now) == "12,00\xC2\xA0\xE2\x82\xAC TTC (r\xC3\xA9" "duit jusqu'au " + d.substr(8, 2) + "/" + d.substr(5, 2) + ", puis 60,00\xC2\xA0\xE2\x82\xAC)" &&
+                  shop::articleAmountText(E, until) == "60,00\xC2\xA0\xE2\x82\xAC TTC",
+              "<< 12,00 EUR TTC (reduit jusqu'au JJ/MM, puis 60,00 EUR) >> (" + shop::articleAmountText(E, now) + ")");
+        check(!s.articles[1].free && s.articles[1].amount == 600 && s.articles[1].reduced == 0, "PERSONAL : suivi, 6,00 EUR TTC");
+        check(s.articles[2].free && s.articles[2].amount == 3000 && shop::articleAmountText(s.articles[2], now) == "30,00\xC2\xA0\xE2\x82\xAC TTC (montant libre)",
+              "l'option (30,00 EUR, pas le prix du registre : 34,80) : un montant libre, garde");
+        check(s.articles[3].free && s.articles[3].amount == 5000, "CUSTOM (<< sur devis >> : rien a suivre) : libre, son montant garde");
+        check(shop::followRegistry(s, reg, now) == 0, "suivi de nouveau : rien ne change");
+        std::string why;
+        check(shop::validSettings(s, &why), "valable (" + why + ")");
+        const std::string w = shop::writeSettings(s);
+        check(has(w, "\"libre\":false") && has(w, "\"montant_reduit\":1200") && has(w, "\"fin_reduction\":" + std::to_string(until)) && has(w, "\"libre\":true"),
+              "ecrit : libre ou suivi, la reduction et sa fin (" + w.substr(0, 160) + ")");
+        shop::Settings old;
+        old.articles.push_back({"", "edition", "PERSONAL", "", 0, 600, "Licence PERSONAL"});
+        old.articles.back().legacy = true;
+        check(!has(shop::writeSettings(old), "libre"), "un article d'avant (la console) part sans << libre >>");
+        // un reglage d'avant au montant REDUIT : suivi tant que la reduction court, libre apres
+        shop::Settings r1, r2;
+        (void)json::parse("{\"articles\":[{\"id\":\"ed:ENTERPRISE\",\"genre\":\"edition\",\"edition\":\"ENTERPRISE\",\"montant\":1200,\"libelle\":\"x\"}]}", v, nullptr);
+        (void)shop::parseSettings(v, r1, nullptr);
+        r2 = r1;
+        (void)shop::followRegistry(r1, reg, now);
+        (void)shop::followRegistry(r2, reg, until + 10);
+        check(!r1.articles[0].free && r1.articles[0].amount == 6000 && r2.articles[0].free && r2.articles[0].amount == 1200,
+              "un reglage d'avant a 12,00 EUR : suivi pendant la reduction, libre apres (rien ne change pour lui)");
+        // ce que le service 1.46.1 rend : le montant du moment, le produit Stripe, les produits
+        (void)json::parse("{\"articles\":[{\"id\":\"ed:ENTERPRISE\",\"genre\":\"edition\",\"edition\":\"ENTERPRISE\",\"montant\":6000,\"libre\":false,\"montant_reduit\":1200,"
+                          "\"fin_reduction\":" + std::to_string(until) + ",\"montant_actuel\":1200,\"stripe_produit\":\"xpg-ed-ENTERPRISE\",\"libelle\":\"x\"}],"
+                          "\"stripe_catalogue\":{\"etat\":\"refus\",\"message\":\"Stripe refuse (cle " + kKey + ") : Products\",\"quand\":5,\"produits\":0}}",
+                          v, nullptr);
+        shop::Settings sv1;
+        check(shop::parseSettings(v, sv1, nullptr) && sv1.articles[0].current == 1200 && sv1.articles[0].stripeProduct == "xpg-ed-ENTERPRISE" && sv1.articles[0].reduced == 1200 &&
+                  sv1.catalog.state == "refus" && !sv1.catalog.ok() && !has(sv1.catalog.message, kKey) && has(sv1.catalog.message, "Products"),
+              "lu du service : le montant du moment, le produit Stripe, l'etat des produits (sans secret)");
+        check(std::string(shop::kStripeVersion) == "2026-09-30.endive", "la version de l'API de Stripe : 2026-09-30.endive");
+    }
+
     gui::Workspace plus(U(root / "plus"));
     {
         const auto c = plus.createKey("essai boutique", true);
@@ -405,6 +491,11 @@ int main(int argc, char** argv) {
         s.articles = {{"", "edition", "PROFESSIONAL", "", 0, 49000, "Licence PROFESSIONAL - 1 an"}, {"", "option", "", "ia_avancee", 30, 2900, "Option IA avanc\xC3\xA9" "e - 1 mois"}};
         const auto w = plus.saveShop(s);
         check(w.ok && has(w.message, "n\xC2\xB0 1"), "la boutique enregistree (" + w.text() + ")");
+        // 1.46.1 : les produits chez Stripe, crees par le service
+        check(has(w.text(), "Stripe : 2 produit(s) \xC3\xA0 jour chez Stripe"), "les 2 produits chez Stripe (" + w.text() + ")");
+        const Reply pr = call(stripe.base(), "GET", "/__essai/produits", {}, nullptr);
+        check(has(pr.body, "\"xpg-ed-PROFESSIONAL\"") && has(pr.body, "\"xpg-opt-ia_avancee-30\"") && has(pr.body, "\"unit_amount\":49000"),
+              "le faux Stripe : les produits xpg-ed-PROFESSIONAL, xpg-opt-ia_avancee-30 et leurs prix");
         shop::Settings back;
         check(plus.shopSettings(back).ok && back.open && back.articles.size() == 2 && back.number == 1, "relue : ouverte, 2 articles");
         const Reply pub = call(svc.url(), "GET", "/v1/boutique", {}, nullptr);
@@ -419,6 +510,26 @@ int main(int argc, char** argv) {
         const Reply o = call(svc.url(), "POST", "/v1/boutique/commande", pc1.order(*plus.signingKey(), "ed:PROFESSIONAL", "Client d'essai", {}, &nonce1), pc1.key.get());
         n1 = static_cast<int>(o.value.integer("numero"));
         check(o.status == 201 && n1 > 0 && has(o.value.str("url"), "checkout.stripe.invalid"), "le PC commande : la page de Stripe (" + o.body.substr(0, 120) + ")");
+        // 1.46.1 : la page de paiement de l'API d'aujourd'hui (le faux Stripe refuserait payment_method_types), le prix du produit
+        {
+            std::string keys, version, price;
+            if (const json::Value* a = stripe.requests().find("requetes"); a && a->isArray())
+                for (const auto& x : a->items()) {
+                    if (x.str("chemin") != "/v1/checkout/sessions" || x.str("methode") != "POST") continue;
+                    keys.clear();
+                    version = x.str("version");
+                    if (const json::Value* p = x.find("params"); p && p->isArray())
+                        for (const auto& kv : p->items()) {
+                            if (!kv.isArray() || kv.items().size() != 2) continue;
+                            keys += kv.items()[0].asString() + "=" + kv.items()[1].asString() + ";";
+                            if (kv.items()[0].asString() == "line_items[0][price]") price = kv.items()[1].asString();
+                        }
+                }
+            check(version == shop::kStripeVersion && has(keys, "allowed_payment_method_types[0]=card;") && has(keys, "wallet_options[link][display]=never;") &&
+                      !has(keys, ";payment_method_types") && !has(keys, "customer=") && !has(keys, "customer_creation") && !has(keys, "setup_future_usage") &&
+                      !has(keys, "saved_payment_method_options") && !price.empty(),
+                  "la page : Stripe-Version, la carte seule (allowed_payment_method_types), Link cache, le prix du produit, jamais de carte gardee (" + keys.substr(0, 200) + ")");
+        }
         on::AdminWatch w;
         check(plus.serviceWatch(w).ok && w.orders >= 1 && w.toDeliver == 0, "le regard : le compteur des commandes, rien a livrer");
         gui::DeliveryReport rep;
@@ -540,6 +651,50 @@ int main(int argc, char** argv) {
         check(plus.shopOrders(v).ok && orderOf(v, n1) && orderOf(v, n1)->state == "remboursee" && plus.licence(licence1), "remboursee ; la licence reste (pas revoquee d'office)");
     }
 
+    std::printf("-- 1.46.1 : la boutique suit le registre (une reduction), les produits chez Stripe\n");
+    {
+        const lic::Seconds until = lic::systemNow() + 30 * 86400;
+        lic::Registry reg = plus.registry();
+        for (auto& e : reg.editions)
+            if (e.id == "ENTERPRISE") {
+                e.price = "50 \xE2\x82\xAC HT /par an";
+                e.promoPrice = "10 \xE2\x82\xAC";
+                e.promoUntil = until;
+            }
+        auto r = plus.signRegistry(reg);
+        auto job = plus.takeServiceJob();
+        check(r.ok && job && plus.serviceRun(*job).ok, "le registre : ENTERPRISE 50 EUR HT, reduite a 10 EUR (depose)");
+        shop::Settings s;
+        check(plus.shopSettings(s).ok, "la boutique relue");
+        shop::Article a{"", "edition", "ENTERPRISE", "", 0, 100, "Licence ENTERPRISE - 1 an"};
+        a.free = false;   // suit le registre (le catalogue de l'Admin le fait ainsi)
+        s.articles.push_back(a);
+        const auto w = plus.saveShop(s);
+        check(w.ok && has(w.text(), "produit(s) \xC3\xA0 jour chez Stripe"), "enregistree : ENTERPRISE suit le registre (" + w.text() + ")");
+        Reply pub = call(svc.url(), "GET", "/v1/boutique", {}, nullptr);
+        const auto amountOf = [](const Reply& p, const std::string& id, const char* field) -> long long {
+            if (const json::Value* a = p.value.find("articles"); a && a->isArray())
+                for (const auto& x : a->items())
+                    if (x.str("id") == id) return x.integer(field, -1);
+            return -1;
+        };
+        check(amountOf(pub, "ed:ENTERPRISE", "montant") == 1200 && amountOf(pub, "ed:ENTERPRISE", "montant_base") == 6000 && amountOf(pub, "ed:ENTERPRISE", "fin_reduction") == until,
+              "les Studios lisent 12,00 EUR (60,00 de base, la fin) : << Acheter - 12,00 EUR TTC >>");
+        const Reply pr = call(stripe.base(), "GET", "/__essai/produits", {}, nullptr);
+        check(has(pr.body, "\"xpg-ed-ENTERPRISE\"") && has(pr.body, "\"unit_amount\":6000") && has(pr.body, "\"unit_amount\":1200"),
+              "chez Stripe : le produit ENTERPRISE, son prix (60,00) et son prix reduit (12,00)");
+        // une autre reduction dans le registre : la boutique la suit au depot (l'admin+), sans Enregistrer
+        reg = plus.registry();
+        for (auto& e : reg.editions)
+            if (e.id == "ENTERPRISE") e.promoPrice = "8 \xE2\x82\xAC";
+        r = plus.signRegistry(reg);
+        job = plus.takeServiceJob();
+        const auto run = job ? plus.serviceRun(*job) : gui::OpResult::fail("pas de travail");
+        check(r.ok && run.ok && has(run.text(), "La boutique suit le registre"), "le registre depose : la boutique suit (" + run.text().substr(0, 200) + ")");
+        pub = call(svc.url(), "GET", "/v1/boutique", {}, nullptr);
+        check(amountOf(pub, "ed:ENTERPRISE", "montant") == 960, "les Studios lisent 9,60 EUR (8 EUR HT) sans rien faire de plus");
+    }
+
     std::printf("-- Brancher Stripe (un faux kit, un faux wrangler)\n");
     {
         const fs::path kit = root / "kit";
@@ -584,6 +739,18 @@ int main(int argc, char** argv) {
                           has(events, "checkout.session.expired") && has(events, "checkout.session.async_payment_failed") && has(events, "checkout.session.async_payment_succeeded");
             }
         check(created, "le point d'arrivee du webhook cree chez Stripe : l'adresse du service, les 5 evenements");
+        // 1.46.1 : la version de l'API fixee (l'en-tete), et celle des evenements (api_version)
+        bool pinned = true, apiVersion = false;
+        if (const json::Value* a = q.find("requetes"); a && a->isArray())
+            for (const auto& x : a->items()) {
+                if (x.str("chemin").rfind("/v1/webhook_endpoints", 0) != 0) continue;
+                if (x.str("version") != shop::kStripeVersion) pinned = false;
+                if (const json::Value* p = x.find("params"); p && p->isArray())
+                    for (const auto& kv : p->items())
+                        if (kv.isArray() && kv.items().size() == 2 && kv.items()[0].asString() == "api_version" && kv.items()[1].asString() == shop::kStripeVersion) apiVersion = true;
+            }
+        check(pinned && apiVersion, "Stripe-Version sur chaque appel de l'Admin ; le webhook cree en api_version=2026-09-30.endive");
+        check(has(r.text(), "produit(s) \xC3\xA0 jour chez Stripe"), "apres Brancher : le service met les produits a jour chez Stripe (" + r.text().substr(0, 300) + ")");
         std::string all = r.text();
         for (const auto& l : lines) all += l + "\n";
         for (const auto& d : r.details) all += d + "\n";

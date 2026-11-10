@@ -269,6 +269,8 @@ std::string usage() {
            "                                                 l'admin+ : \xC2\xAB G\xC3\xA9rer le service \xC2\xBB \xC3\xA0 cet admin, pour un temps court\n"
            "  derogation-revoquer                            l'admin+ : la d\xC3\xA9rogation en cours s'arr\xC3\xAAte tout de suite\n"
            "  derogation-etat                                la d\xC3\xA9rogation (l'admin+ : celle en place ; un admin : la sienne)\n"
+           "  admin-lien [--fichier SETUP.exe]               l'admin+ : un lien de 48 h vers l'installateur de l'Admin (celui de la\n"
+           "                                                 derni\xC3\xA8re version publi\xC3\xA9" "e, sinon ce fichier) et un vers la connexion au service\n"
            "  --version\n\n"
            "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
@@ -658,6 +660,13 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
                 (row.verified ? std::string() : " (NON V\xC3\x89RIFI\xC3\x89" "E : " + row.problem + ")") + "\n");
         for (const auto& p : view.problems) say("ATTENTION : " + p + "\n");
         return oneLine(r);
+    }
+    if (a.command == "admin-lien") {   // 1.47.0 : << Ajouter un admin... par un lien >> (48 h, une fois) et la connexion au service
+        std::string url;
+        const auto r = ws.adminInstallerLink(a.one("--fichier"), url);
+        if (!r.ok) return oneLine(r);
+        say(r.text() + "\n");
+        return 0;
     }
     if (a.command == "fichier-envoyer") {
         if (!need("--poste")) return 2;
@@ -1415,7 +1424,13 @@ int run(const std::vector<std::string>& argv) {
         auto key = keyOrFail();
         if (!key) return 1;
         const online::Options o = serviceOptions();
-        if (a.command == "service-verifier") return showResult(online::verify(folder, *key, o));
+        if (a.command == "service-verifier") {
+            // 1.47.0 : le certificat verifie est garde (la connexion a exporter : service-connexion-exporter)
+            online::ServiceState st;
+            const online::Result r = online::verify(folder, *key, o, &st);
+            if (r.ok && st.certOk && !st.certBlock.empty()) (void)license_admin::connexion::keepCertificate(folder, st.certBlock, nullptr);
+            return showResult(r);
+        }
         if (a.command == "service-registre") return showResult(online::publishRegistry(folder, *key, o));
         if (a.command == "service-stats") return showResult(online::stats(folder, *key, o));
         if (a.command == "service-retirer") return showResult(online::retireDevice(folder, *key, a.one("--licence"), a.one("--poste"), o));
@@ -1766,7 +1781,7 @@ int run(const std::vector<std::string>& argv) {
                                                                 // 1.47.0 : les statistiques et le globe
                                                                 "stats-serie", "stats-mises-a-jour", "stats-admins", "stats-releve", "globe", "globe-direct",
                                                                 // 1.47.0 : la connexion au service, la derogation << Gerer le service >>
-                                                                "service-connexion", "service-connexion-exporter", "derogation-accorder",
+                                                                "service-connexion", "service-connexion-exporter", "derogation-accorder", "admin-lien",
                                                                 "derogation-revoquer", "derogation-etat"};
     if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
         return runWorkspaceCommand(a, folder);

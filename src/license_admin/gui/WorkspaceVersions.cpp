@@ -1453,6 +1453,24 @@ OpResult Workspace::adminInstallerLink(const std::string& fallbackPath, std::str
     OpResult r = OpResult::done("Lien vers " + f.name + " : valable jusqu'au " + dateTimeFr(exp) + ", pour un seul t\xC3\xA9l\xC3\xA9" "chargement.");
     r.details.push_back("Fichier : " + whence + ".");
     r.details.push_back("Envoie-le au futur admin (un courriel) : il l'ouvre dans son navigateur.");
+    // 1.47.0 (docs/ADMINS.md, par. 11) : la connexion au service (le certificat verifie, signe par la cle de l'editeur ; rien
+    // de secret), un second lien : enregistree a cote de l'installateur, l'Admin installe demarre connecte a ce service.
+    const std::string conn = deploy::joinPath(folder_, connexion::kFileName);
+    if (!connexion::exportText(folder_).empty()) {
+        Uploaded cu;
+        std::string ctoken, cw;
+        Seconds cexp = 0;
+        if (uploadWith(*c, folder_, *caller.key, now(), conn, "autre", "", "jeton", {}, 0, 0, cu, &cw) &&
+            drawToken(*c, cu.manifest.id, kLinkSeconds, false, ctoken, &cexp, &cw)) {
+            r.details.push_back("La connexion au service (" + std::string(connexion::kFileName) + ", sign\xC3\xA9" "e par ta cl\xC3\xA9) : " + c->url() +
+                                "/v1/fichiers/lien?jeton=" + ctoken + " - \xC3\xA0 enregistrer dans le m\xC3\xAA" "me dossier que l'installateur.");
+        } else {
+            r.details.push_back("La connexion au service n'est pas partie (" + cw + ") : Service en ligne \xE2\x80\xBA Exporter la connexion\xE2\x80\xA6");
+        }
+    } else {
+        r.details.push_back("Pas de connexion au service \xC3\xA0 joindre : V\xC3\xA9rifier (Service en ligne) la garde ; l'Admin du futur admin la "
+                            "prendra sinon du Studio de son PC, ou de l'installateur publi\xC3\xA9.");
+    }
     r.output = url;
     (void)detail::flushJournalWith(folder_, *c);
     return r;

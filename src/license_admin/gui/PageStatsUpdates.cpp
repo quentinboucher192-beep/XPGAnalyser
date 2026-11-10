@@ -443,10 +443,9 @@ protected:
     void onLayout() override {
         const Rect b = bounds();
         // les filtres : leurs mots en entier, ou plus courts quand la carte est etroite (jamais l'un sur l'autre)
-        for (int level = 0; level < 4; ++level) {
-            applyLabels(level);
-            if (filter_->preferredWidth() <= b.w) break;
-        }
+        int level = 0;
+        while (level < 3 && widthOf(level) > b.w) ++level;
+        applyLabels(level);   // ne change les boutons que si le niveau change (pas de mise en page sans fin)
         filter_->setBounds({b.x, b.y, std::min(b.w, filter_->preferredWidth() + 60.f), 32.f});
         const float w = all_->sizeHint().preferred.w + 8.f;
         all_->setBounds({b.right() - w, b.bottom() - 26.f, w, 26.f});
@@ -527,14 +526,20 @@ private:
     void applyLabels(int level) {
         if (level == labelLevel_ || counts_.size() < 3) return;
         labelLevel_ = level;
-        // du plus long au plus court ; le dernier sans les nombres (la liste les montre)
+        const auto l = labelsOf(level);
+        filter_->setLabel("tous", l[0]);
+        filter_->setLabel("retard", l[1]);
+        filter_->setLabel("absents", l[2]);
+    }
+    // du plus long au plus court ; le dernier sans les nombres (la liste les montre)
+    [[nodiscard]] std::vector<std::string> labelsOf(int level) const {
         const char* late[4] = {"2 versions de retard ou plus", "2 versions ou plus", "2 de retard", "2 de retard"};
         const char* away[4] = {"pas vus depuis 30 j", "pas vus 30 j", "absents", "absents"};
         const auto with = [level](const char* t, int n) { return level < 3 ? std::string(t) + " \xC2\xB7 " + std::to_string(n) : std::string(t); };
-        filter_->setLabel("tous", with("Tous", counts_[0]));
-        filter_->setLabel("retard", with(late[level], counts_[1]));
-        filter_->setLabel("absents", with(away[level], counts_[2]));
+        if (counts_.size() < 3) return {"Tous", late[0], away[0]};
+        return {with("Tous", counts_[0]), with(late[level], counts_[1]), with(away[level], counts_[2])};
     }
+    [[nodiscard]] float widthOf(int level) const { return SegGroup::widthOf(labelsOf(level)); }
 
     ShellHost                                  host_;
     SegGroup*                                  filter_{nullptr};

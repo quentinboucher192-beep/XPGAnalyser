@@ -14,7 +14,9 @@ Ce document est le contrat entre l'Admin, le service (`service/`) et les Studios
   comme avant) ou **demander à devenir admin** (§ 4).
 
 Réservé à l'admin+, jamais donné : ajouter / retirer un admin, leurs droits et les profils ; le journal des admins et
-sa criticité ; publier une version ; envoyer un fichier ; le certificat du service.
+sa criticité ; publier une version ; envoyer un fichier ; le certificat du service. **Gérer le service** (1.47.0, § 11 :
+le mettre en ligne ou à jour, son adresse, ses adresses de secours, le relevé du jour) est aussi à l'admin+ seul, mais il
+peut le confier à **un** admin pour un temps court (une dérogation : 72 h au plus, jamais permanente).
 
 ## 2. Les droits (13 fonctions)
 
@@ -85,7 +87,9 @@ récente. Elle est gardée dans le dossier des licences (`admins.xpgadm`), comme
 1. **L'admin+** ouvre « Ajouter un admin… » : son nom, son courriel, comment lui envoyer l'Admin (**dans les
    notifications de son Studio** — un PC choisi parmi les activations — ou **par un lien** valable 48 h, une seule fois),
    son profil. L'invitation est gardée chez l'admin+ (`invitations-admins.json`).
-2. **Le futur admin** installe l'Admin. Sans clé, l'Admin propose « Demander à devenir admin » : son nom, son courriel ;
+2. **Le futur admin** installe l'Admin. Il démarre **connecté** au service de l'éditeur (1.47.0, § 11 : la connexion
+   signée qui voyage avec l'installateur, ou que le Studio de son PC a déjà) ; aucune adresse à taper.
+   Sans clé, l'Admin propose « Demander à devenir admin » : son nom, son courriel ;
    il crée sa clé (`cle-admin.cle`) et dépose sa **demande d'admin** : `POST /v1/admins/demande`, signée par **sa clé**
    (les en-têtes habituels), corps `{"nom","courriel","pc","poste","logiciel"}`. Le service la garde (une par clé ; au
    plus 20 en attente) et l'écrit au journal. L'Admin montre **l'empreinte** : les 24 premiers hexadécimaux en
@@ -151,6 +155,10 @@ refusée », écrite par le service). Les documents déposés (licence, registre
 | 1.46.0 (la boutique, `docs/BOUTIQUE.md`) : `PUT /admin/boutique`, `POST /admin/commandes/rembourser` | admin+ | — |
 | `GET /admin/boutique` | admin+ ou admin | — |
 | `GET /admin/commandes`, `POST /admin/commandes/prendre`, `POST /admin/commandes/livree`, `POST /admin/commandes/a-revoir` | admin+ ou admin | `demandes` |
+| 1.47.0 (§ 11) : `PUT /admin/derogation`, `POST /admin/derogation/revoquer` | admin+ | — |
+| `GET /admin/derogation` | admin+ (celle en place) ou admin (la sienne) | — |
+| `POST /admin/derogation/utiliser` | admin (sa dérogation en cours) | — |
+| `POST /admin/stats/releve` | admin+, ou l'admin dont la dérogation court | — |
 
 **La boutique (1.46.0)** : livrer une commande payée demande le droit `demandes` (la commande, son scellé) **et** le
 droit de la licence qu'elle signe : `licence_creer` pour une offre, `licence_option` pour une option (le dépôt de la
@@ -335,4 +343,98 @@ de l'admin+ intact peut ne remettre **que le service** (son dossier, plus récen
 Le registre peut porter `fallback_services` : jusqu'à 3 adresses (https) de services de secours, signées avec le reste.
 Un Studio qui **ne joint pas** l'adresse principale (une panne réseau, pas une réponse d'erreur) essaie celles-ci, dans
 l'ordre ; un document de ce service n'est cru que si son certificat (signé par l'éditeur) nomme cette adresse. Une
-adresse de secours se règle dans Service en ligne (admin+) ; son service se certifie comme le principal.
+adresse de secours se règle dans Service en ligne (admin+ ; 1.47.0 : ou l'admin qui a le droit `offres` pendant sa
+dérogation, § 11) ; son service se certifie comme le principal.
+
+## 11. Gérer le service : l'admin+ seul, la dérogation courte ; la connexion qui voyage avec l'installateur (1.47.0)
+
+### Le constat (10/11)
+
+L'admin+ envoyait l'Admin à un futur admin (« Ajouter un admin… » : les notifications de son Studio, ou un lien de
+48 h) ; installé sur l'autre PC, l'Admin n'avait **pas l'adresse du service** (`service.json` absent) : « Envoyer ma
+demande » restait gris (« Il faut d'abord l'adresse du service… »), Service en ligne disait « pas encore réglé », la
+pastille « Service : non réglé » ; il fallait taper une adresse à la main, et la croire sur parole. La console créait
+même la clé d'admin avant de voir qu'il n'y avait pas de service (le poste se disait « en attente » sans rien avoir
+envoyé). Le kit du service était installé, mais sans `cle-publique.txt`.
+
+### La connexion au service (`connexion-service.xpgsvc`)
+
+C'est **le certificat du service** lui-même : le bloc `service` signé par la clé de l'éditeur (l'adresse, la clé du
+service, ses dates ; `licensing/Service.hpp`, `ServiceCert`). Aucun format neuf, rien de secret (`GET /v1/certificat`
+le donne à tous) : jamais un jeton Cloudflare, une clé Stripe, une clé privée. Un fichier `connexion-service.xpgsvc`
+= ce bloc (`license_admin/ServiceConnection.hpp`).
+
+L'Admin la cherche au lancement, **seulement s'il n'a pas d'adresse et n'a pas la clé de l'éditeur** (l'admin+ règle
+son service lui-même), dans l'ordre :
+
+1. `--connexion F.xpgsvc` (la ligne de commande) ;
+2. **à côté du programme** : `connexion-service*.xpgsvc` (un navigateur peut l'avoir renommé « connexion-service (1)
+   .xpgsvc »). L'installateur l'y copie : celle qu'il **porte** (construit avec `ressources-licences/connexion-service.xpgsvc`,
+   `outils/mingw/admin_editeur.sh`), puis celle **posée à côté de lui** (`{src}`, la plus précise : elle remplace l'autre) ;
+3. **le dossier des licences du Studio de ce PC** (`%ProgramData%\XPG\Licences`) : `activation.xpgact`,
+   `decouverte.xpgdec`, `jeton.xpgjet` portent ce certificat dès que le Studio a parlé au service. C'est le cas du PC qui
+   reçoit l'Admin **dans les notifications de son Studio** : aucun Studio n'a à changer (un Studio 1.35 ou plus suffit).
+
+La première **valable** est prise : signée par une clé de l'éditeur que cet Admin croit (celle compilée, `PublisherKey.hpp`,
+et celles retenues du service), l'adresse valable. Elle devient `service.json` (l'adresse) et `connexion-service.json`
+(d'où elle vient, la clé du service attendue, la date). **Refusées, et dites** (Service en ligne › « La connexion au
+service », en rouge ; la console `service-connexion`) : une adresse ou une clé modifiée (la signature ne va plus), un
+fichier sans signature, une clé inconnue. « Vérifier » compare ensuite la clé du service à celle que nommait la connexion.
+
+Pourquoi ces trois chemins : le Studio du PC couvre la notification et l'installateur lancé à la main sur un PC qui a un
+Studio, **sans changer les Studios** ; le fichier à côté de l'installateur couvre tout le reste (le lien de 48 h, une
+clé USB) ; l'installateur publié la porte quand l'éditeur l'a mise dans `ressources-licences/` (« Préparer les fichiers
+pour les Studios » / `kit-studios` l'y écrit, ou Service en ligne › « Exporter la connexion… »). Sans rien de tout cela :
+« Aucune connexion signée sur ce PC », « Utiliser une connexion… » (le fichier envoyé par l'admin+), ou l'adresse tapée
+à la main (un poste sans rôle ou en attente seulement ; elle est dite « tapée ici, sans connexion signée »).
+L'admin+ : Service en ligne › « Exporter la connexion… » (le certificat vérifié par « Vérifier », gardé dans son dossier).
+Les installateurs (`installateur/XPG-License-Admin.iss`) : **le kit du service est toujours installé** (le composant
+« service » est fixe : une dérogation sert sans réinstaller) ; la connexion portée ou posée à côté va dans `{app}`.
+
+### Gérer le service : ce qui est à l'admin+
+
+| Geste | Où | Qui |
+|---|---|---|
+| Mettre le service en ligne ou à jour (le Worker) | Service en ligne › Déployer le service ; `service-deployer` | admin+, ou l'admin sous dérogation |
+| Changer l'adresse du service | Service en ligne › Adresse ; « Utiliser une connexion… » | admin+, ou l'admin sous dérogation |
+| Les adresses de secours (le registre) | Service en ligne | admin+, ou l'admin sous dérogation qui a `offres` |
+| `cle-publique.txt` du kit | Service en ligne | admin+ (sa clé) ; l'admin sous dérogation : les clés de l'éditeur que le service croit (`GET /admin/admins`, `editeurs`), jamais la sienne |
+| Le relevé du jour (`POST /admin/stats/releve`) | (l'alarme, ou à la main) | admin+, ou l'admin sous dérogation |
+| Certifier la clé du service | Service en ligne | admin+ seul (sa clé signe) |
+| Brancher Stripe, régler la boutique, rembourser | Boutique | admin+ seul (sa clé Stripe ne se partage pas) |
+| La sauvegarde complète, la restauration | Paramètres de sécurité | admin+ seul (sa clé d'éditeur y est) |
+
+Un admin voit l'état du service **en lecture seule** : une carte « L'admin+ seul gère le service (dérogation
+possible) », l'adresse non modifiable, les boutons gris (ils disent pourquoi) ; « Vérifier » et les relevés restent.
+
+### La dérogation « Gérer le service »
+
+- **L'admin+ l'accorde** à UN admin de la liste (Service en ligne › « Accorder une dérogation… », ou la fiche de
+  l'admin › « Dérogation… », ou `derogation-accorder --cle HEX --heures N`) : **1 h, 4 h, 24 h ou 72 h**, jamais plus,
+  jamais permanente. Une nouvelle remplace celle en cours.
+- **Le document**, signé par la clé de l'éditeur (la signature porte sur `"XPG-DEROGATION-1\n" + texte`) :
+  `{"format":1,"id":"<32 hexa>","droit":"service","admin":"<64 hexa>","nom","debut","fin","emise"}` ; `debut` = l'heure
+  du service (à 10 min près), `fin - debut` entre 10 min et 72 h. `PUT /admin/derogation` `{"derogation","signature"}` ;
+  le service la garde dans `config` (une ligne `derogation` : elle part avec la sauvegarde ; pas de table neuve,
+  schéma 5 inchangé).
+- **Le service en est l'arbitre, à SON heure** : `POST /admin/derogation/utiliser` `{"action","detail"}` (`deployer`,
+  `connexion_cloudflare`, `adresse`, `secours`, `releve`, `verifier`) — l'Admin le demande **avant** chaque geste ; 200
+  tant qu'elle court, sinon 403 `derogation` et la phrase (« Ta dérogation … a pris fin », « … a été révoquée », « L'admin+
+  seul gère le service : tu n'as pas de dérogation … en cours »). Une route réservée à l'admin+ marquée « dérogation »
+  (`POST /admin/stats/releve`) s'ouvre aussi à lui. `GET /admin/derogation` (l'admin+ : celle en place ; un admin : la
+  sienne, avec son document signé, que l'Admin vérifie) ; `GET /admin/etat` dit `derogation` (sans le document) à chaque
+  regard (15 s). `POST /admin/derogation/revoquer` `{"id"}` (admin+) : finie tout de suite.
+- **L'Admin** : la carte « Ta dérogation « Gérer le service » : il reste 52 min (jusqu'à 15:42) », les boutons rouverts ;
+  le compte à rebours se fait à l'heure du service (l'écart vu à la lecture) ; **à la fin, la page repasse d'elle-même en
+  lecture seule** (même hors ligne), et le regard des 15 s le confirme (accordée, finie, révoquée : un avis).
+  `Workspace::mayManageService()`, `whyNotService()`, `derogation()` (`gui/Derogation.hpp` : `activeAt`, `remaining`,
+  `derogationText`) — Mon compte les montre.
+- **Le journal** : `derogation_accorder` et `derogation_revoquer` (l'Admin de l'admin+, signées par sa clé),
+  `derogation_utilisee` (le service, à chaque geste ; 200 lignes au plus par dérogation) et `derogation_expiree` (le
+  service, une fois, au premier appel qui la voit finie). `derogation_utilisee` est « Critique, me prévenir tout de suite » :
+  **l'admin+ est prévenu** (l'alerte) dès que son Admin relève le journal.
+- **Cloudflare** : l'admin sous dérogation met le Worker en ligne **avec son propre compte Cloudflare, sur son PC** —
+  l'admin+ l'invite comme **membre** de son compte Cloudflare (tableau de bord › Gérer le compte › Membres) ; **jamais un
+  jeton partagé**, jamais le mot de passe de l'admin+. Le kit reçoit les clés publiques de l'éditeur que le service croit
+  (`cle-publique.txt`, `PUBLISHER_KEYS`), jamais la sienne ; une mise en ligne qui donne une autre adresse (un autre
+  compte Cloudflare) est signalée : ce n'est pas le service de l'éditeur.
