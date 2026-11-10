@@ -10,6 +10,7 @@
 #include "../licensing/Licensing.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <filesystem>
 #include <mutex>
@@ -414,5 +415,116 @@ const Order* waitingOrder(const std::vector<Order>& list) noexcept {
     }
     return best;
 }
+
+// ============================================================ 1.48.0 : le panier ==
+namespace {
+std::atomic<unsigned long long> g_cartRev{1};
+}
+
+std::int64_t Cart::total() const noexcept {
+    std::int64_t t = 0;
+    for (const auto& l : lines)
+        if (!l.request) t += l.amount;
+    return t;
+}
+std::size_t Cart::toPay() const noexcept {
+    std::size_t n = 0;
+    for (const auto& l : lines) n += l.request ? 0 : 1;
+    return n;
+}
+std::size_t Cart::requests() const noexcept { return lines.size() - toPay(); }
+bool Cart::hasOffer() const noexcept {
+    for (const auto& l : lines)
+        if (l.kind == "edition") return true;
+    return false;
+}
+
+std::string cartPath() { return deploy::joinPath(lic::getLicenseFolder(), "panier.json"); }
+
+Cart loadCart() {
+    Cart c;
+    const std::string path = cartPath();
+    deploy::crypto::Bytes bytes;
+    std::error_code ec;
+    if (path.empty() || !std::filesystem::exists(std::filesystem::path(std::u8string(path.begin(), path.end())), ec) ||
+        !deploy::crypto::readFile(path, bytes, nullptr, 256u * 1024u))
+        return c;
+    json::Value v;
+    if (!json::parse(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()), v) || !v.isObject()) return c;
+    c.currency = v.str("devise", "eur");
+    if (const json::Value* list = v.find("lignes"); list && list->isArray())
+        for (const auto& x : list->items()) {
+            if (!x.isObject()) continue;
+            CartLine l;
+            l.article = clean(x.str("article"), 120);
+            l.kind = x.str("genre");
+            l.edition = clean(x.str("edition"), 60);
+            l.option = clean(x.str("option"), 60);
+            l.days = static_cast<int>(x.integer("jours"));
+            l.label = clean(x.str("libelle"), 200);
+            l.gives = clean(x.str("donne"), 300);
+            l.amount = std::max<std::int64_t>(0, x.integer("montant"));
+            l.request = x.flag("demande");
+            l.licence = clean(x.str("licence"), 64);
+            if (l.article.empty() || (l.kind != "edition" && l.kind != "option")) continue;
+            c.lines.push_back(std::move(l));
+            if (c.lines.size() >= 50) break;
+        }
+    return c;
+}
+
+bool saveCart(const Cart& c, std::string* why) {
+    json::Value v = json::Value::object();
+    v.set("version", 1);
+    v.set("devise", c.currency);
+    json::Value list = json::Value::array();
+    for (const auto& l : c.lines) {
+        json::Value x = json::Value::object();
+        x.set("article", l.article);
+        x.set("genre", l.kind);
+        if (!l.edition.empty()) x.set("edition", l.edition);
+        if (!l.option.empty()) {
+            x.set("option", l.option);
+            x.set("jours", l.days);
+        }
+        x.set("libelle", l.label);
+        if (!l.gives.empty()) x.set("donne", l.gives);
+        x.set("montant", l.amount);
+        if (l.request) x.set("demande", true);
+        if (!l.licence.empty()) x.set("licence", l.licence);
+        list.push(std::move(x));
+    }
+    v.set("lignes", std::move(list));
+    std::string w;
+    if (!deploy::crypto::replaceFile(cartPath(), json::write(v) + "\n", false, &w)) {
+        if (why) *why = "Le panier n'a pas pu \xC3\xAAtre \xC3\xA9" "crit : " + w;
+        return false;
+    }
+    ++g_cartRev;
+    return true;
+}
+
+bool addToCart(Cart& c, CartLine line, const std::string& currentLicence, std::string* why) {
+    for (const auto& l : c.lines)
+        if (l.article == line.article && l.request == line.request) {
+            if (why) *why = "\xC2\xAB " + line.label + " \xC2\xBB est d\xC3\xA9j\xC3\xA0 dans le panier.";
+            return false;
+        }
+    if (line.kind == "option" && line.licence.empty()) {
+        if (!currentLicence.empty()) line.licence = currentLicence;
+        else if (!c.hasOffer()) {
+            if (why) *why = "Une option s'ajoute \xC3\xA0 une licence : active ta licence, ou mets d'abord une offre dans le panier.";
+            return false;
+        }
+    }
+    if (c.lines.size() >= 50) {
+        if (why) *why = "Le panier est plein (50 lignes).";
+        return false;
+    }
+    c.lines.push_back(std::move(line));
+    return true;
+}
+
+unsigned long long cartRevision() noexcept { return g_cartRev.load(); }
 
 } // namespace app::licence::shop

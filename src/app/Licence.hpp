@@ -173,7 +173,8 @@ struct Card {
 inline constexpr int kTabHome = -2;
 inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevices = 2, kTabFeatures = 3, kTabEditions = 4, kTabHistory = 5,
                      kTabSettings = 6, kTabRequest = 7, kTabProfile = 8,   // 1.37.0 : Mon profil
-                     kTabOptions = 9, kTabPurchases = 10;                     // 1.42.0 : Options, Mes achats
+                     kTabOptions = 9, kTabPurchases = 10,                     // 1.42.0 : Options, Mes achats
+                     kTabCart = 11;                                           // 1.48.0 : le Panier (la boutique)
 
 // ---- 1.34.0 / 1.35.0 : LES AVIS DE LA LICENCE ET LE SERVICE DES LICENCES (app/LicenceService) ----
 //  App, apres start(), SAUF le poste d'exploitation (--ihm : personne devant l'ecran) : startNotices(true).

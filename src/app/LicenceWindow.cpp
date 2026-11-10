@@ -474,6 +474,36 @@ private:
     core::ConnectionScope links_;
 };
 
+// ---- 1.48.0 : le Panier - ses lignes (a payer, ou sans paiement), Retirer, Vider le panier, le total ; Payer (le
+// recapitulatif, puis UNE page de paiement) et Envoyer la demande (les lignes sans paiement) ----
+class CartPanel final : public ui::Widget {
+public:
+    CartPanel(LicenceBody& body, menu::MenuManager& menus);
+    void refresh();   // relu du disque (panier.json)
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    void removeSelected();
+    void emptyCart();
+    void ask(bool all);
+
+    LicenceBody&                     body_;
+    menu::MenuManager&               menus_;
+    ui::TableView*                   table_{nullptr};
+    std::shared_ptr<ui::ITableModel> model_;
+    ui::Button*                      remove_{nullptr};
+    ui::Button*                      empty_{nullptr};
+    ui::Button*                      pay_{nullptr};
+    ui::Button*                      ask_{nullptr};
+    ui::Button*                      askAll_{nullptr};
+    licence::shop::Cart              cart_;
+    float                            leadY_{0}, totalY_{0};
+    core::ConnectionScope            links_;
+};
+
 // ---- 1.42.0 : Mes achats - l'historique complet du client (offres, prolongations, options ; fini ou en cours) ----
 class PurchasesPanel final : public ui::Widget {
 public:
@@ -656,7 +686,12 @@ private:
     // 1.46.0 : plus de bande d'onglets - l'accueil, le fil d'Ariane, une page par rubrique (son numero : licence::kTab*)
     licence::LicenceHome*   home_{nullptr};
     licence::LicenceCrumbs* crumbs_{nullptr};
-    std::array<ui::Widget*, static_cast<std::size_t>(licence::kTabPurchases) + 1> pages_{};
+    std::array<ui::Widget*, static_cast<std::size_t>(licence::kTabCart) + 1> pages_{};
+    // 1.48.0 : la boutique en trois onglets - Licence (les offres), Options, Panier (son compte)
+    ui::Button*       shopTabs_[3]{};
+    CartPanel*        cart_{nullptr};
+    unsigned long long seenCart_{0};
+    void              styleShopTabs();
     int               current_{licence::kTabHome};
     ui::PropertyGrid* mine_{nullptr};
     ui::TableView*    devices_{nullptr};
@@ -813,6 +848,8 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     options_ = options.get();
     auto purchases = std::make_unique<PurchasesPanel>(*this, menus);    // 1.42.0
     purchases_ = purchases.get();
+    auto cartPage = std::make_unique<CartPanel>(*this, menus);   // 1.48.0
+    cart_ = cartPage.get();
     (void)addPage(licence::kTabActivation, std::move(activation));   // 1.35.0
     (void)addPage(licence::kTabMine, std::move(mine));
     (void)addPage(licence::kTabDevices, std::move(devices));
@@ -823,6 +860,17 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     (void)addPage(licence::kTabRequest, std::move(online));   // 1.34.0 ; 1.36.0 : Demander ma licence
     (void)addPage(licence::kTabOptions, std::move(options));   // 1.42.0
     (void)addPage(licence::kTabPurchases, std::move(purchases));
+    (void)addPage(licence::kTabCart, std::move(cartPage));   // 1.48.0
+    {   // 1.48.0 : les onglets de la boutique
+        const char* ids[3] = {"licence.boutique.licence", "licence.boutique.options", "licence.boutique.panier"};
+        const char* names[3] = {"Licence", "Options", "Panier"};
+        const int tabs[3] = {licence::kTabRequest, licence::kTabOptions, licence::kTabCart};
+        for (int i = 0; i < 3; ++i) {
+            shopTabs_[i] = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(names[i], ids[i])));
+            const int t = tabs[i];
+            links_ += shopTabs_[i]->clicked->connect([this, t] { showTab(t); });
+        }
+    }
     // (1.37.0 : Mon profil etait l'onglet 8 ; 1.46.0 : sa fenetre a part, showProfileWindow)
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
@@ -886,8 +934,23 @@ void LicenceBody::showTab(int tab) {
         if (pages_[i]) pages_[i]->setVisibility(static_cast<int>(i) == tab ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     crumbs_->setSection(tab);
     if (tab == licence::kTabHome) refreshHome();
+    if (tab == licence::kTabCart) cart_->refresh();
+    styleShopTabs();
     invalidateLayout();
     invalidate();
+}
+
+// 1.48.0 : les onglets de la boutique - celui montre en principal, << Panier (n) >>.
+void LicenceBody::styleShopTabs() {
+    const int tabs[3] = {licence::kTabRequest, licence::kTabOptions, licence::kTabCart};
+    const std::size_t n = licence::shop::loadCart().lines.size();
+    for (int i = 0; i < 3; ++i) {
+        if (!shopTabs_[i]) continue;
+        shopTabs_[i]->setStyle(current_ == tabs[i] ? ui::Button::Style::Primary : ui::Button::Style::Default);
+        shopTabs_[i]->setVisibility(current_ == licence::kTabRequest || current_ == licence::kTabOptions || current_ == licence::kTabCart
+                                        ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    }
+    if (shopTabs_[2]) shopTabs_[2]->setText(n ? "Panier (" + std::to_string(n) + ")" : std::string("Panier"));
 }
 
 bool LicenceBody::back() {
@@ -970,6 +1033,12 @@ void LicenceBody::poll() {
         purchases_->refreshOrders();
         online_->refresh();
         refreshHome();
+    }
+    if (const auto rev = licence::shop::cartRevision(); rev != seenCart_) {   // 1.48.0 : le panier a change
+        seenCart_ = rev;
+        styleShopTabs();
+        if (current_ == licence::kTabCart) cart_->refresh();
+        invalidateLayout();
     }
     if (const auto rev = licence::shop::catalogueRevision(); rev != seenShop_) {
         seenShop_ = rev;
@@ -1399,6 +1468,16 @@ void LicenceBody::onLayout() {
     const std::size_t n = bandLines(bandText(), kSmall, W - 16.f).size();
     bandH_ = n <= 1 ? 28.f : std::ceil(10.f + lh * static_cast<float>(n));
     pageTop_ = messageY_ + bandH_ + 8.f;
+    // 1.48.0 : la boutique - ses trois onglets au-dessus de la page
+    if (shopTabs_[0] && shopTabs_[0]->visibility() == ui::Visibility::Visible) {
+        float tx = x;
+        for (auto* b : shopTabs_) {
+            const float bw = std::ceil(std::max(110.f, b->sizeHint().preferred.w + 16.f));
+            b->setBounds({tx, pageTop_, bw, 30.f});
+            tx += bw + 6.f;
+        }
+        pageTop_ += 38.f;
+    }
     const float bottom = panel_.bottom() - 52.f;
     const gfx::Rect page{x, pageTop_, W, std::max(60.f, bottom - pageTop_ - 6.f)};
     home_->setBounds(page);
@@ -1596,8 +1675,23 @@ OptionsPanel::OptionsPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Wi
     buy_->setVisibility(ui::Visibility::Collapsed);
     buy_->setTooltip("Paiement par carte sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe (ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG) : l'option arrive "
                      "d'elle-m\xC3\xAAme d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e.");
-    links_ += buy_->clicked->connect([this] {
-        if (!buyArticle_.empty()) licence::showPurchase(menus_, buyArticle_, buyText_);
+    links_ += buy_->clicked->connect([this] {   // 1.48.0 : la duree choisie, au panier (une option achetee n'est jamais une demande)
+        const auto reg = licensing::getRegistry();
+        const auto* o = reg ? reg->option(chosen_) : nullptr;
+        const auto cat = licence::shop::catalogue();
+        const auto* a = o ? cat.find(buyArticle_) : nullptr;
+        if (!o || !a) return;
+        licence::shop::CartLine l;
+        l.kind = "option";
+        l.option = o->id;
+        l.days = a->days;
+        l.article = a->id;
+        l.label = buyText_;
+        l.amount = a->amount;
+        std::string opens;
+        for (const auto& f : o->features) opens += (opens.empty() ? "" : ", ") + featureNameOf(*reg, f);
+        l.gives = opens.empty() ? std::string() : "Ouvre : " + opens;
+        (void)putInCart(body_, std::move(l));
     });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& r) {
         if (loading_ || r.empty() || r.front() >= rows_.size()) return;
@@ -2614,6 +2708,39 @@ std::string editionFacts(const licensing::RegistryEditionView& e) {
     return t;
 }
 
+// 1.48.0 : LE PANIER - une offre (son article en vente ; ou sans paiement), une duree d'option ; mise dans panier.json.
+licence::shop::CartLine offerLine(const std::string& editionId, bool request) {
+    licence::shop::CartLine l;
+    l.kind = "edition";
+    l.edition = editionId;
+    l.article = "ed:" + editionId;
+    l.label = editionId;
+    l.request = request;
+    if (const auto reg = licensing::getRegistry())
+        for (const auto& e : reg->editions)
+            if (e.id == editionId) {
+                l.label = e.label.empty() ? e.id : e.label;
+                l.gives = editionFacts(e);
+            }
+    const auto cat = licence::shop::catalogue();
+    if (const auto* a = cat.edition(editionId); a && !request) l.amount = a->amount;
+    return l;
+}
+bool putInCart(LicenceBody& body, licence::shop::CartLine line) {
+    auto cart = licence::shop::loadCart();
+    std::string why;
+    const std::string label = line.label;
+    const bool request = line.request;
+    if (!licence::shop::addToCart(cart, std::move(line), licensing::getLicenseState().licenseId, &why) || !licence::shop::saveCart(cart, &why)) {
+        body.say(why, 2);
+        return false;
+    }
+    body.say("\xC2\xAB " + label + " \xC2\xBB" + (request ? std::string(" (sans paiement)") : std::string()) + " est dans le panier (" +
+                 std::to_string(cart.lines.size()) + (cart.lines.size() > 1 ? " lignes" : " ligne") + ") : Panier pour payer ou demander.",
+             1);
+    return true;
+}
+
 OnlinePanel::OnlinePanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.demande"), body_(body), menus_(menus) {
     customer_ = field("licence.demande.client", "le nom de ta soci\xC3\xA9t\xC3\xA9 (obligatoire)", licence::service::kMaxCustomer);
     contact_ = field("licence.demande.contact", "ton nom, ou un t\xC3\xA9l\xC3\xA9phone (facultatif)", licence::service::kMaxContact);
@@ -2731,11 +2858,12 @@ void OnlinePanel::syncBuyButtons() {
             buy->setTooltip("Paiement par carte sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe (ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG) : ta licence "
                             "arrive d'elle-m\xC3\xAAme d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e.");
             const std::string article = k.article;
-            links_ += buy->clicked->connect([this, article] { licence::showPurchase(menus_, article); });
+            const std::string edition = k.id;
+            links_ += buy->clicked->connect([this, edition] { (void)putInCart(body_, offerLine(edition, false)); });   // 1.48.0 : au panier
             auto* ask = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("ou la demander sans paiement", "licence.demande.demander." + k.id)));
             ask->setStyle(ui::Button::Style::Flat);
             const std::string id = k.id;
-            links_ += ask->clicked->connect([this, id] { askWithoutPayment(id); });
+            links_ += ask->clicked->connect([this, id] { (void)putInCart(body_, offerLine(id, true)); });   // 1.48.0 : au panier, sans paiement
             buyBtns_.emplace_back(k.id, buy);
             askBtns_.emplace_back(k.id, ask);
         }

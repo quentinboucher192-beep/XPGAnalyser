@@ -606,6 +606,7 @@ const std::vector<Section>& sections() {
         {kTabRequest, 1, "demande", "Demander ma licence", "La boutique : choisis une offre et demande-la \xC3\xA0 l'\xC3\xA9" "diteur", I::Mail},
         {kTabActivation, 1, "activation", "Activation", "Un code ou un fichier de l'\xC3\xA9" "diteur ; le bail, le poste flottant", I::Unlock},
         {kTabOptions, 1, "options", "Options", "Ajouter une fonction \xC3\xA0 ta licence pour un temps", I::Plus},
+        {kTabCart, 1, "panier", "Panier", "Ce que tu as choisi : le payer en une fois, ou le demander sans paiement", I::Columns},   // 1.48.0
         {kTabPurchases, 1, "achats", "Mes achats", "Tout ce que tu as pris : offres, prolongations, options", I::Document},
         {kTabFeatures, 2, "fonctionnalites", "Fonctionnalit\xC3\xA9s", "Chaque fonction, ouverte ou non, et ses captures", I::Eye},
         {kTabEditions, 2, "editions", "\xC3\x89" "ditions", "Comparer les offres : ce qu'ouvre chacune, leur prix", I::Layers},

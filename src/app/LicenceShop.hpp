@@ -144,4 +144,36 @@ bool mergeOrders(std::vector<Order>& mine, const std::vector<Order>& fresh);
 // La commande qui attend (a payer, puis payee, puis a revoir ; la plus recente) ; nul : aucune.
 [[nodiscard]] const Order* waitingOrder(const std::vector<Order>& list) noexcept;
 
+// ---- 1.48.0 : LE PANIER (une seule boutique : les achats et les demandes) ----
+//  Chaque offre et chaque duree d'option : << Acheter >> (une ligne a payer) ; << ou la demander sans paiement >> (une
+//  ligne de demande). Le panier se garde dans le dossier des licences (panier.json, commun aux deux Studios) : il
+//  survit a la fermeture de la fenetre. Payer : UNE page de paiement pour toutes les lignes a payer ; Envoyer la
+//  demande : les lignes sans paiement. Une option demande sa licence : celle de ce PC, ou une offre du panier.
+struct CartLine {
+    std::string  article;          // l'article du catalogue ("ed:PROFESSIONAL", "opt:travail_a_plusieurs:30")
+    std::string  kind;             // "edition", "option"
+    std::string  edition, option;
+    int          days{0};          // une option : sa duree (0 : jusqu'a la fin de la licence)
+    std::string  label;            // << PROFESSIONAL >>, << Travail a plusieurs, 1 mois >>
+    std::string  gives;            // ce qu'elle donne (une ligne)
+    std::int64_t amount{0};        // centimes TTC (une ligne a payer) ; 0 : sur demande
+    bool         request{false};   // sans paiement (une demande)
+    std::string  licence;          // une option : la licence qu'elle etend ; vide : l'offre du panier
+};
+struct Cart {
+    std::vector<CartLine> lines;
+    std::string           currency{"eur"};
+    [[nodiscard]] std::int64_t total() const noexcept;      // les lignes a payer (TTC)
+    [[nodiscard]] std::size_t  toPay() const noexcept;      // les lignes a payer
+    [[nodiscard]] std::size_t  requests() const noexcept;   // les lignes sans paiement
+    [[nodiscard]] bool         hasOffer() const noexcept;   // une offre (sa licence pour une option du panier)
+};
+[[nodiscard]] std::string cartPath();
+[[nodiscard]] Cart loadCart();
+bool saveCart(const Cart& c, std::string* why = nullptr);
+// Ajouter une ligne : faux, `why` (deja dans le panier ; une option sans licence ni offre dans le panier).
+bool addToCart(Cart& c, CartLine line, const std::string& currentLicence, std::string* why);
+// Un numero qui monte a chaque panier ecrit (la fenetre se refait).
+[[nodiscard]] unsigned long long cartRevision() noexcept;
+
 } // namespace app::licence::shop

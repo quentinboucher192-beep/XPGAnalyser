@@ -374,3 +374,68 @@ dans Stripe › Catalogue de produits ; Versions qui refusait un `.zip`.
 5. **Les versions** : l'Admin 1.46.1, le service 1.46.1 (`shop::kServiceRequired` reste 1.46.0 : la boutique marche avec
    un service 1.46.0 - qui garde le refus de Stripe tant qu'il n'est pas redéployé ; l'Admin dit « la 1.46.1 est prête
    dans l'Admin : déploie-la »). Les Studios restent en 1.46.0 (ils lisent `montant`, rien d'autre ne change pour eux).
+
+## 10. Le panier (1.48.0) : les commandes et les demandes ne font plus qu'un
+
+Demandé par l'éditeur : « un bouton ACHETER pour les options comme pour les licences ; des onglets Licence, Options et
+Panier ; payer tout le panier, le vider, retirer des articles ; les demandes en ligne aussi, mais chaque article se
+valide dans les commandes ; une seule fonctionnalité, comme une vraie boutique avec un panier ». **Une commande a des
+LIGNES** (les articles du panier) ; elle est **payée** (une seule page de Stripe pour toutes ses lignes) **ou une
+demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide à part** dans l'Admin
+(« Commandes et demandes »). Une option achetée ne passe plus jamais par `POST /v1/demandes`.
+
+### Le PC : `POST /v1/boutique/commande` (1.48)
+```json
+{"paiement": true,
+ "lignes": [{"article": "ed:PROFESSIONAL"},
+            {"article": "opt:ia_avancee:30", "avec_ligne": 1},
+            {"article": "opt:exports_avances:7", "licence_existante": "XPG-2026-00042"}],
+ "societe": "...", "nom": "...", "courriel": "...", "cle": "xpg-...", "scelle": "<base64>", "scelles": [...]}
+```
+- `lignes` : 1 à 20 articles, chacun une fois ; `article` : `ed:<EDITION>` ou `opt:<option>:<jours>`. Une option dit à
+  quelle licence elle s'ajoute : `licence_existante` (une licence du client) **ou** `avec_ligne` (le n° - à partir de 1 -
+  d'une ligne `ed:` de la même commande : l'option s'ajoute à la licence que cette ligne livre).
+- `paiement: true` (par défaut) : chaque article doit être **en vente** (le catalogue, boutique ouverte) ; le montant
+  de chaque ligne est son montant du moment (§ 3) ; **une** page de paiement Stripe avec une `line_items[i]` par ligne
+  (le prix Stripe de l'article, sinon `price_data`) ; 409 `en_cours` comme avant (une commande à payer à la fois par PC).
+- `paiement: false` : **une demande** - aucun Stripe ; la boutique peut être fermée ; les articles n'ont pas à être en
+  vente (une offre « sur demande ») ; montant 0 ; chaque ligne peut porter `libelle` (une ligne de 120 caractères au
+  plus ; sinon le libellé du catalogue, sinon l'identifiant). La commande naît `a_valider`.
+- Le scellé (`scelle`, `scelles`) est la demande du PC (comme en 1.46 : `gateway::OnlineRequest`), **une pour tout le
+  panier** : l'Admin lit la société, le courriel, la demande d'activation ; les articles sont les lignes (les champs
+  `edition`/`option` du scellé ne servent plus).
+- Réponse 201 : `{"numero","url"?,"expire"?,"montant","devise","mode","etat","lignes":[…]}` (`url`, `expire` : payée).
+- **L'ancien corps** (`"article"` seul, les Studios 1.46/1.47) : une commande payée d'une ligne, comme avant.
+
+### Les états
+- La commande (`etat`) : `a_payer` → `payee` (le webhook) ; ou `a_valider` (une demande) ; puis `livree` quand toutes
+  ses lignes sont finies (au moins une livrée) ou `refusee` (toutes refusées) ; `expiree`, `annulee`, `echec_paiement`,
+  `remboursee` comme avant (les lignes en attente suivent).
+- **Chaque ligne** (`etat`) : `a_payer`, `payee`, `a_valider`, `a_revoir` (la livraison a échoué : l'Admin dit pourquoi),
+  `livree` (avec `licence`), `refusee` (avec `erreur` : la raison), `remboursee`, `expiree`, `annulee`, `echec_paiement`.
+- Une ligne (JSON) : `{"ligne":1,"article","genre","edition"|"option"+"jours","libelle","montant","etat","licence"?,
+  "erreur"?,"licence_existante"?,"avec_ligne"?}`.
+
+### Le PC lit, annule
+- `GET /v1/boutique/commandes` : chaque commande gagne `paiement` (bool) et `lignes`.
+- `POST /v1/boutique/annuler` : une commande `a_payer` (comme avant) ou `a_valider` dont aucune ligne n'est encore
+  livrée → `annulee`.
+- La livraison arrive comme avant (l'état « poste » `acceptee`, `requestNonce` = le nonce du scellé) : **une réponse par
+  ligne livrée**. Une ligne `ed:` : son code ; une option `avec_ligne` : le code de la licence de cette ligne de nouveau
+  (et la licence avec l'option) ; une option sur une `licence_existante` : comme en 1.46 (sans code : le Studio
+  renouvelle).
+
+### L'Admin
+- `GET /admin/commandes` : chaque commande gagne `paiement` et `lignes` (une commande d'avant la 1.48 : une ligne,
+  déduite) ; la réponse gagne `a_valider` (les lignes `a_valider` ou `a_revoir`).
+- `POST /admin/commandes/prendre {"numero","lignes":true}` : comme avant ; **sans `lignes:true`**, une commande de
+  plusieurs lignes ou une demande est refusée (409 `lignes` : un Admin d'avant la 1.48 ne la livre pas à moitié).
+- `POST /admin/commandes/ligne {"numero","ligne","action","licence"?,"raison"?}` (droit `demandes`) : `action`
+  `livree` (avec `licence` ; une ligne `payee`, `a_valider` ou `a_revoir`), `refusee` (avec `raison`) ou `a_revoir`
+  (avec `raison`). 200 `{"numero","ligne","etat","etat_commande"}` ; 409 `etat` (`{"etat","licence"}`) si la ligne
+  n'est pas à valider (une seconde livraison : refusée), 409 `prise` (prise par un autre Admin).
+- Les anciennes routes `livree` / `a-revoir` marchent pour une commande payée d'une ligne (les Admins 1.46/1.47).
+- **Livrer seul** : l'Admin ouvert livre les lignes `payee` d'elle-même ; une ligne `a_valider` (une demande) attend
+  « Délivrer » ; **Refuser** dit la raison. Une option `avec_ligne` attend que sa ligne de licence soit livrée.
+- La table `commande_lignes` (`numero`, `ligne`, …) est dans la sauvegarde de secours ; le schéma reste 5.
+- Les anciennes demandes (`POST /v1/demandes`, les Studios 1.47 et avant) gardent leur page « Demandes en ligne ».
