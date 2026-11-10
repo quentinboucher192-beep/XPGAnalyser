@@ -438,6 +438,7 @@ public:
         // d'office), le PC, + Filtre ; << Mes filtres >>. Elle remplace les pastilles des admins et de la criticite.
         bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("journal.barre", barFields(), "journal.recherche"));
         bar_->setNoun("lignes du journal");
+        bar_->setChipOrder({6, 1, 0, 5});   // 1.47.0 : les planches - Type, Qui (l'admin), Periode, puis la criticite
         bar_->setClock([this] { return listkit::seconds(ws().now()); });
         {
             ui::FilterBar::Source src;

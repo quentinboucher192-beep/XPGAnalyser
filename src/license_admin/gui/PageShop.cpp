@@ -516,7 +516,7 @@ protected:
             fitColumns(*table_,
                        {{"Article", 0.f, 3.f, 150.f, false},
                         {"En vente", 84.f, 0.f, 0.f, false},
-                        {"Prix affich\xC3\xA9", promo ? 240.f : 130.f, 0.f, 0.f, false},
+                        {"Prix affich\xC3\xA9", promo ? 270.f : 130.f, 0.f, 0.f, false},
                         {"Montant encaiss\xC3\xA9 (TTC)", red ? 330.f : 210.f, 0.f, 0.f, false},
                         {"Libell\xC3\xA9 de la facture", 0.f, 3.f, 130.f, false},
                         {"\xC3\x89" "cart", 0.f, 2.f, 120.f, true}},

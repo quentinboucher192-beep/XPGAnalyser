@@ -253,6 +253,7 @@ public:
         // 1.47.0 (planche 12) : LA BARRE - chercher (historique.recherche, comme avant), le type, qui, la periode.
         bar_ = add(*this, std::make_unique<ui::FilterBar>("historique", barFields()));
         bar_->setNoun("lignes");
+        bar_->setChipOrder({1, 6, 0});   // 1.47.0 (planches) : Type, Qui, Periode - l'ordre des puces, pas celui des colonnes
         bar_->setClock([this] { return listkit::seconds(ws().now()); });
         {
             ui::FilterBar::Source src;

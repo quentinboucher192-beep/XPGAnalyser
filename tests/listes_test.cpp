@@ -456,6 +456,14 @@ void testSplit() {
     check(bar.accepts(0) && bar.accepts(1) && bar.accepts(2) && !bar.accepts(3), "deux valeurs : l'une ou l'autre");
     bar.setValues(1, {""});
     check(!bar.accepts(0) && bar.accepts(3), "(vide) : la case vide");
+    // L'ordre des puces donne par la page (les planches : Type, Qui, Periode - la date est la premiere colonne).
+    ui::FilterBar order("historique", {{.title = "Date", .kind = ui::FilterBar::Kind::Period, .chip = true}, {.title = "Type", .chip = true},
+                                       {.title = "Licence"}, {.title = "Qui", .chip = true}, {.title = "Criticit\xC3\xA9", .chip = true}});
+    order.setChipOrder({1, 3, 0});
+    const auto chips = order.chipFields();
+    check(chips == std::vector<std::size_t>{1, 3, 0, 4}, "setChipOrder : Type, Qui, Periode, puis les autres dans l'ordre des colonnes");
+    order.filterOn(2, "XPG-2026-00412");
+    check(order.chipFields() == std::vector<std::size_t>{1, 3, 0, 4, 2}, "une puce ajoutee (Filtrer sur) : a la fin");
 }
 
 // ------------------------------------------------------------------------------------------------ 4

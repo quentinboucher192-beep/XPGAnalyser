@@ -135,6 +135,9 @@ public:
     [[nodiscard]] std::string chipText(std::size_t field) const;
     // Les puces montrees, dans l'ordre (d'office, puis ajoutees).
     [[nodiscard]] std::vector<std::size_t> chipFields() const;
+    // 1.47.0 : l'ordre des puces d'office, donne par la page (les planches : << Type, Qui, Periode >> alors que la date est
+    // la premiere colonne) ; les champs qui n'y sont pas suivent, dans l'ordre des colonnes.
+    void setChipOrder(std::vector<std::size_t> fields);
 
     // ---- les gestes (la souris, le clic droit, les essais) ----
     void setSearch(std::string text);
@@ -229,6 +232,7 @@ private:
     std::function<std::int64_t()>      now_;
     std::string                        memoryKey_, noun_;
     bool                               loading_{false};
+    std::vector<std::size_t>           chipOrder_;   // 1.47.0 : setChipOrder
     mutable std::size_t                shownCache_{0};
     mutable bool                       countDirty_{true};
     SearchQuery                        query_;

@@ -549,10 +549,19 @@ std::string FilterBar::chipText(std::size_t field) const {
     return name + " : " + v;
 }
 
+void FilterBar::setChipOrder(std::vector<std::size_t> fields) {
+    chipOrder_ = std::move(fields);
+    invalidateLayout();
+    invalidate();
+}
+
 std::vector<std::size_t> FilterBar::chipFields() const {
     std::vector<std::size_t> out;
+    // 1.47.0 : l'ordre donne par la page (setChipOrder), puis les autres puces d'office dans l'ordre des colonnes.
+    for (const std::size_t f : chipOrder_)
+        if (f < fields_.size() && fields_[f].chip && std::find(out.begin(), out.end(), f) == out.end()) out.push_back(f);
     for (std::size_t i = 0; i < fields_.size(); ++i)
-        if (fields_[i].chip) out.push_back(i);
+        if (fields_[i].chip && std::find(out.begin(), out.end(), i) == out.end()) out.push_back(i);
     for (const auto& p : state_.picks)
         if (std::find(out.begin(), out.end(), p.field) == out.end() && p.field < fields_.size()) out.push_back(p.field);
     return out;

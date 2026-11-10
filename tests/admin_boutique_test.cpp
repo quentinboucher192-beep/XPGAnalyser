@@ -517,7 +517,8 @@ int main(int argc, char** argv) {
         // 1.46.1 : la page de paiement de l'API d'aujourd'hui (le faux Stripe refuserait payment_method_types), le prix du produit
         {
             std::string keys, version, price;
-            if (const json::Value* a = stripe.requests().find("requetes"); a && a->isArray())
+            const json::Value all = stripe.requests();   // garde : find() rend un pointeur dans cette valeur
+            if (const json::Value* a = all.find("requetes"); a && a->isArray())
                 for (const auto& x : a->items()) {
                     if (x.str("chemin") != "/v1/checkout/sessions" || x.str("methode") != "POST") continue;
                     keys.clear();
