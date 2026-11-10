@@ -100,6 +100,18 @@ void writeStarted(const std::string& folder, const std::map<int, Started>& m) {
 
 std::string articleText(const shop::Order& o) { return o.label.empty() ? o.article : o.label; }
 
+// Une raison << a revoir >> lisible : une majuscule en tete (a-z, et a accentue en UTF-8 : \xC3\xA0..\xC3\xBE), un
+// point a la fin (elle s'affiche telle quelle dans Commandes et dans le journal).
+std::string sentence(std::string t) {
+    while (!t.empty() && (t.back() == ' ' || t.back() == '\n' || t.back() == '\r')) t.pop_back();
+    if (t.empty()) return t;
+    const auto u = [&t](std::size_t i) { return static_cast<unsigned char>(t[i]); };
+    if (u(0) >= 'a' && u(0) <= 'z') t[0] = static_cast<char>(u(0) - 'a' + 'A');
+    else if (t.size() > 1 && u(0) == 0xC3 && u(1) >= 0xA0 && u(1) <= 0xBE && u(1) != 0xB7) t[1] = static_cast<char>(u(1) - 0x20);
+    if (t.back() != '.' && t.back() != '!' && t.back() != '?') t += '.';
+    return t;
+}
+
 } // namespace
 
 // ============================================================================ ce que les pages lisent
@@ -159,8 +171,7 @@ OpResult Workspace::reviewOrder(int number, const std::string& reason) const {
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
     if (const auto deny = detail::callerDenied(caller, "demandes")) return *deny;
-    std::string text = reason;
-    while (!text.empty() && (text.back() == ' ' || text.back() == '\n')) text.pop_back();
+    const std::string text = sentence(reason);
     if (text.empty()) return OpResult::fail("dis pourquoi la commande est \xC3\xA0 revoir");
     std::unique_ptr<online::Client> c;
     if (!online::openClient(folder_, *caller.key, detail::optionsFor(caller, now()), c, &why)) return OpResult::fail(why);
@@ -309,14 +320,6 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         if (ok) ++rep.delivered;
         rep.lines.push_back(line);
         return ok;
-    };
-    // Une raison lisible : une majuscule en tete, un point a la fin (elle s'affiche telle quelle dans Commandes).
-    const auto sentence = [](std::string t) {
-        while (!t.empty() && t.back() == ' ') t.pop_back();
-        if (!t.empty() && t[0] >= 'a' && t[0] <= 'z') t[0] = static_cast<char>(t[0] - 'a' + 'A');
-        if (!t.empty() && t.back() != '.' && t.back() != '!' && t.back() != '?' && t.back() != ')') t += '.';
-        else if (!t.empty() && t.back() == ')') t += '.';
-        return t;
     };
     const auto review = [&](const std::string& reasonIn) {
         const std::string reason = sentence(reasonIn);

@@ -1913,7 +1913,7 @@ void OptionsPanel::onPaint(const ui::PaintContext& ctx) {
 PurchasesPanel::PurchasesPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.achats"), body_(body), menus_(menus) {
     // 1.46.0 : les commandes en ligne de ce PC (au-dessus de l'historique des licences)
     orders_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.achats.commandes")));
-    orders_->setColumns({{"N\xC2\xB0", 60.f}, {"Date", 130.f}, {"Article", 280.f}, {"Montant TTC", 120.f}, {"\xC3\x89tat", 190.f}, {"Re\xC3\xA7u", 120.f}});
+    orders_->setColumns({{"N\xC2\xB0", 60.f}, {"Date", 130.f}, {"Article", 280.f}, {"Montant TTC", 180.f}, {"\xC3\x89tat", 190.f}, {"Re\xC3\xA7u", 130.f}});
     orders_->setSelectionMode(ui::SelectionMode::Single);
     receipt_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir le re\xC3\xA7u", "licence.achats.recu")));
     receipt_->setIcon(ui::Icon::Document);

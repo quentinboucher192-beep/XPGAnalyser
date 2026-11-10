@@ -206,15 +206,21 @@ qui perd retire ce qu'il a déposé ou ne dépose qu'après avoir « pris » la 
 ## 6. Les pages de l'Admin
 
 - **Boutique** (Vente en ligne) : l'état de Stripe (branché, mode test ou réel, le webhook reçu pour la dernière fois
-  le…), **Brancher Stripe…**, **Ouvrir mon tableau de bord Stripe** ; « Vendre en ligne » (marche/arrêt) ; « Livrer
-  seul les commandes payées » ; le **catalogue** : chaque offre du registre (en vente, son prix affiché, le montant
-  encaissé en € TTC, le libellé de la facture), chaque option et chacune de ses durées ; un écart entre le prix affiché
-  et le montant est signalé. Enregistrer → `PUT /admin/boutique`.
-- **Commandes** : le tableau (n°, date, client, société, article, montant, état ; filtres par état), le détail (le
-  courriel, le PC, la licence livrée, les identifiants Stripe, le reçu), **Délivrer maintenant** (payée, ou à revoir
-  après revue), **Voir dans Stripe**, **Ouvrir le reçu**, **Revoir…** (une payée : la mettre à revoir, avec la raison),
-  **Rembourser…** (admin+, avec une question qui rappelle que la licence n'est pas révoquée d'office). Le tableau de
-  bord montre « N commandes payées à livrer » ; le menu de gauche compte les commandes à livrer (Commandes).
+  le…), **Brancher Stripe…** (déjà branché : **Rebrancher Stripe…**, la nouvelle clé remplace l'ancienne),
+  **Ouvrir mon tableau de bord Stripe** ; « Vendre en ligne » (marche/arrêt) ; « Livrer seul les commandes payées » ;
+  le **catalogue** : chaque offre du registre (en vente, son prix affiché, le montant encaissé en € TTC, le libellé de
+  la facture), chaque option et chacune de ses durées ; un écart entre le prix affiché et le montant est signalé
+  (« ≠ affiché (588,00 € TTC) »). Enregistrer → `PUT /admin/boutique`. Un service plus ancien que la 1.46.0 : un seul
+  avertissement (« déploie la 1.46.0 pour la boutique » et **Déployer le service**), rien n'est relevé, les deux
+  interrupteurs sont grisés.
+- **Commandes** : le tableau (n°, date, société, article, montant, état, client ; filtres par état), le détail (le
+  courriel, le PC - son nom lu dans la demande scellée, puis son identifiant court -, la licence livrée, les
+  identifiants Stripe, le reçu), **Délivrer maintenant** (payée, ou à revoir après revue), **Voir dans Stripe**,
+  **Ouvrir le reçu**, **Revoir…** (une payée : la mettre à revoir, avec la raison), **Rembourser…** (admin+, avec une
+  question qui rappelle que la licence n'est pas révoquée d'office). Les colonnes suivent la largeur de la fenêtre
+  (l'état toujours en vue ; le client, aussi dans le détail, cède le premier). Le tableau de bord : des commandes
+  payées à livrer, la tuile des demandes devient « Commandes à livrer » (leur nombre ; son clic ouvre Commandes) ; le
+  menu de gauche compte les commandes à livrer (Commandes).
 - **La console** (`XPG-License-Admin`) : `boutique-etat`, `boutique-config --parametres F.json` (le JSON de `PUT
   /admin/boutique`), `stripe-brancher --cle-variable NOM [--dossier-kit D]` (la clé lue dans une variable
   d'environnement, jamais sur la ligne de commande ni affichée), `commandes [--etat E]`, `commande-livrer [--numero N]`,

@@ -628,9 +628,14 @@ protected:
         const float iw = w - 40.f;
         textL_ = wrap(view_.text, kSmall, iw);
         if (textL_.size() > 8) textL_.resize(8);
+        flashL_ = flash_.empty() ? std::vector<std::string>{} : wrap(flash_, kSmall, iw);   // entiere (deux lignes au plus)
+        if (flashL_.size() > 2) {
+            flashL_.resize(2);
+            flashL_.back() += " \xE2\x80\xA6";
+        }
         const float lh = 20.f;
         float h = 42.f + 16.f + 34.f + 10.f + static_cast<float>(textL_.size()) * lh + 14.f + static_cast<float>(view_.facts.size()) * 24.f + 10.f;
-        if (!flash_.empty()) h += 28.f;
+        if (!flashL_.empty()) h += 20.f * static_cast<float>(flashL_.size()) + 8.f;
         h += 22.f + 56.f;   // la derniere verification ; les boutons
         frame_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, std::ceil(std::min(h, r.h - 20.f))});
         closeBox_ = {frame_.right() - 36.f, frame_.y + 9.f, 24.f, 24.f};
@@ -698,10 +703,11 @@ protected:
             y += 24.f;
         }
         y += 10.f;
-        if (!flash_.empty()) {
-            r.drawText({x, y}, fit(r, flash_, kSmall, iw), kSmall, toneColor(ctx, tone_, c.text));
-            y += 28.f;
+        for (const auto& l : flashL_) {
+            r.drawText({x, y}, fit(r, l, kSmall, iw), kSmall, toneColor(ctx, tone_, c.text));
+            y += 20.f;
         }
+        if (!flashL_.empty()) y += 8.f;
         // la derniere verification (le fil du service la refait seul)
         std::string foot;
         if (ls::busyJob() == ls::Job::Order) foot = ls::jobText(ls::Job::Order);
@@ -761,7 +767,7 @@ private:
     ui::Button*              licence_{nullptr};
     ui::Button*              check_{nullptr};
     ui::Button*              closeButton_{nullptr};
-    std::vector<std::string> textL_;
+    std::vector<std::string> textL_, flashL_;
     std::string              flash_;
     int                      tone_{0};
     unsigned long long       seenResult_{0}, seenOrders_{0};

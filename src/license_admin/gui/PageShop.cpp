@@ -596,7 +596,7 @@ private:
         auto_->setEnabled(plus && ready && known);
         reload_->setEnabled(ready && !fetching_);
         connect_->setEnabled(plus && ready && !bz && note_.empty());
-        connect_->setText(ws().hasShop() && view().stripe.connected ? std::string("Rebrancher Stripe\xE2\x80\xA6") : std::string("Brancher Stripe\xE2\x80\xA6"));
+        connect_->setText(known && view().stripe.connected ? std::string("Rebrancher Stripe\xE2\x80\xA6") : std::string("Brancher Stripe\xE2\x80\xA6"));
         connect_->setTooltip(!plus ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+ (la cl\xC3\xA9 de l'\xC3\xA9" "diteur).")
                                    : std::string("Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe : l'Admin cr\xC3\xA9" "e le webhook chez Stripe et pose les deux secrets sur ton service "
                                                  "(jamais gard\xC3\xA9s sur ce PC)."));
@@ -902,11 +902,11 @@ protected:
             fitW_ = tw;
             fitColumns(*table_,
                        {{"N\xC2\xB0", 44.f, 0.f, 0.f, false},
-                        {"Date", 118.f, 0.f, 0.f, false},
+                        {"Date", 120.f, 0.f, 0.f, false},
                         {"Soci\xC3\xA9t\xC3\xA9", 0.f, 3.f, 120.f, false},
                         {"Article", 0.f, 4.f, 170.f, false},
-                        {"Montant", 100.f, 0.f, 0.f, false},
-                        {"\xC3\x89tat", 140.f, 0.f, 0.f, false},
+                        {"Montant", 104.f, 0.f, 0.f, false},
+                        {"\xC3\x89tat", 150.f, 0.f, 0.f, false},
                         {"Client", 0.f, 2.f, 100.f, true}},
                        tw);
         }

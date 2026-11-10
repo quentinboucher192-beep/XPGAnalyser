@@ -502,7 +502,17 @@ int main(int argc, char** argv) {
               "une licence inconnue : a revoir, la raison dite (" + d.text() + ")");
         shop::OrdersView v;
         check(plus.shopOrders(v).ok && orderOf(v, n) && orderOf(v, n)->state == "a_revoir" && has(orderOf(v, n)->error, "XPG-INCONNUE-1"), "sur le service : a_revoir");
-        check(plus.reviewOrder(n, "Vu avec le client : rembourser").ok, "Revoir... : la raison de l'editeur");
+        {   // 1.46.0 : la raison, une phrase (une majuscule en tete, un point a la fin)
+            const std::string& p = rep.lines.empty() ? std::string() : rep.lines[0].problem;
+            check(!p.empty() && p[0] >= 'A' && p[0] <= 'Z' && p.back() == '.' && orderOf(v, n) && orderOf(v, n)->error == p,
+                  "la raison a revoir : une majuscule, un point, la meme sur le service (" + p + ")");
+        }
+        check(plus.reviewOrder(n, "vu avec le client : rembourser").ok, "Revoir... : la raison de l'editeur");
+        {
+            shop::OrdersView v2;
+            check(plus.shopOrders(v2).ok && orderOf(v2, n) && orderOf(v2, n)->error == "Vu avec le client : rembourser.",
+                  "la raison de l'editeur : une majuscule, un point (" + (orderOf(v2, n) ? orderOf(v2, n)->error : std::string()) + ")");
+        }
         // << Livrer seul >> decoche : la commande payee attend
         shop::Settings s;
         (void)plus.shopSettings(s);

@@ -242,6 +242,7 @@ int main(int argc, char** argv) {
               "Boutique : la phrase et Deployer le service");
         check(count(t, "1.46.0 pour la boutique") == 1 && !has(t, "Service : ") && !has(t, "Refus\xC3\xA9"), "un seul avertissement (pas de << Service : Refuse : >> en plus)");
         check(!has(t, "pas encore lu") && !has(t, "(Relever)") && has(t, "service 1.44.0"), "la carte de Stripe : ni << pas encore lu >>, ni << (Relever) >> ; la version du service");
+        check(!has(t, "Rebrancher") && has(t, "Brancher Stripe\xE2\x80\xA6"), "le bouton ne dit pas un branchement d'avant (pas lu sur ce service)");
         {
             auto* sell = find<ui::ToggleButton>(*bp, "boutique.vendre");
             auto* alone = find<ui::ToggleButton>(*bp, "boutique.livrer-seul");

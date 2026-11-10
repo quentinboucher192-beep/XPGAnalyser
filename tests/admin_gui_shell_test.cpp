@@ -177,6 +177,26 @@ int main(int argc, char** argv) {
         rig.shell->navigate("commandes");
         b = rig.paint(1100.f, 700.f);
         check(has(b, "Commandes") && has(b, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9") && !has(b, "Pas encore fait"), "commandes : une vraie page ; sans service, c'est dit");
+        // 1.46.0 : aux tailles de la fenetre du client (1373x917, 1400x900) et en 1920x1080 : aucune colonne hors de la
+        // vue (les colonnes tiennent dans la table, sa barre de defilement comprise ; la table dans la fenetre).
+        const struct {
+            float       w, h;
+            const char* name;
+        } sizes[] = {{1373.f, 917.f, "1373x917"}, {1400.f, 900.f, "1400x900"}, {1920.f, 1080.f, "1920x1080"}};
+        for (const std::string page : {"boutique", "commandes"}) {
+            rig.shell->navigate(page);
+            for (const auto& sz : sizes) {
+                (void)rig.paint(sz.w, sz.h);
+                auto* table = find<ui::TableView>(rig.root(), page == "boutique" ? "boutique.catalogue" : "commandes.table");
+                float sum = 0.f;
+                if (table)
+                    for (const auto& c : table->columns())
+                        if (c.visible) sum += c.width;
+                check(table && sum + 12.f <= table->bounds().w && table->bounds().right() <= sz.w,
+                      page + " a " + sz.name + " : toutes les colonnes dans la table, la table dans la fenetre (" + std::to_string(static_cast<int>(sum)) + " px de colonnes, " +
+                          std::to_string(table ? static_cast<int>(table->bounds().w) : 0) + " px de table)");
+            }
+        }
         rig.shell->navigate("flottantes");
         std::string t = rig.paint();
         check(has(t, "EN M\xC3\x8AME TEMPS") && has(t, "pas de licence flottante sans lui") && !has(t, "Pas encore fait"),
