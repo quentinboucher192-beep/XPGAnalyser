@@ -12,7 +12,18 @@
 ;    la console       XPG-License-Admin.exe (les memes commandes, pour les scripts)
 ;    le service       le kit de mise en ligne du service des licences, dans
 ;                     %LOCALAPPDATA%\XPG\ServiceLicences (un dossier ou l'on ecrit :
-;                     cle-publique.txt, node_modules ; garde d'une version a l'autre)
+;                     cle-publique.txt, node_modules ; garde d'une version a l'autre).
+;                     1.47.0 : TOUJOURS installe (comme l'application) : l'admin+
+;                     s'en sert, et un admin pendant une derogation courte << Gerer
+;                     le service >> sans reinstaller (docs/ADMINS.md, par. 11)
+;    la connexion     1.47.0 : connexion-service.xpgsvc (le certificat du service,
+;                     signe par la cle de l'editeur : son adresse et sa cle ; rien de
+;                     secret) copie a cote du programme - celui que porte
+;                     l'installateur (admin_editeur.sh : ressources-licences/), puis
+;                     celui pose a cote de l'installateur ({src}, un navigateur
+;                     peut l'avoir renomme << connexion-service (1).xpgsvc >>).
+;                     L'Admin le lit au premier lancement et le verifie : l'Admin
+;                     d'un futur admin demarre connecte au service de l'editeur.
 ;    les notes        LISEZ-MOI-EDITEUR.txt
 ;  Les options (<< Les options >>) : un raccourci sur le Bureau, ouvrir les .xpgreq,
 ;  .xpglic, .xpgreg, .xpgrev d'un double-clic, la console dans le PATH.
@@ -43,6 +54,10 @@
 #define ProgIdLicence "XPG.LicenseAdmin.Licence"
 #define ProgIdRegistre "XPG.LicenseAdmin.Registre"
 #define ProgIdRevocations "XPG.LicenseAdmin.Revocations"
+; 1.47.0 : l'installateur porte-t-il la connexion au service (admin_editeur.sh l'a mise dans le dossier) ?
+#if FileExists(AddBackslash(Source) + "connexion-service.xpgsvc")
+  #define AvecConnexion
+#endif
 
 [Setup]
 AppId={{6F1C2B7E-4A9D-4E51-9C3B-2D8A40E1F5A7}
@@ -136,7 +151,7 @@ Name: "choix"; Description: "Un choix"; Flags: iscustom
 [Components]
 Name: "app"; Description: "L'application : licences, clients, demandes, PC en direct"; Types: tout choix; Flags: fixed
 Name: "console"; Description: "La console : les mêmes commandes pour tes scripts (XPG-License-Admin.exe)"; Types: tout
-Name: "service"; Description: "Le service en ligne : de quoi le mettre en ligne ou à jour (menu Démarrer › Déployer le service en ligne)"; Types: tout
+Name: "service"; Description: "Le service en ligne : de quoi le mettre en ligne ou à jour (l'admin+, ou un admin sous dérogation ; menu Démarrer › Déployer le service en ligne)"; Types: tout choix; Flags: fixed
 Name: "notes"; Description: "Les notes à lire (LISEZ-MOI-EDITEUR.txt)"; Types: tout
 
 [Tasks]
@@ -155,6 +170,12 @@ Source: "{#Source}\{#Console}"; DestDir: "{app}"; Components: console; Flags: ig
 Source: "{#Source}\LISEZ-MOI-EDITEUR.txt"; DestDir: "{app}"; Components: notes; Flags: ignoreversion
 ; le kit du service : un dossier ou l'on ecrit (cle-publique.txt, node_modules de npx) - jamais Program Files
 Source: "{#Source}\service-licences\*"; DestDir: "{localappdata}\XPG\ServiceLicences"; Components: service; Flags: ignoreversion recursesubdirs createallsubdirs
+; 1.47.0 : la connexion au service (le certificat signe par l'editeur) - celle que porte l'installateur, puis celle posee a
+; cote de lui (la plus precise : elle remplace l'autre) ; l'Admin la verifie au premier lancement (ServiceConnection.hpp)
+#ifdef AvecConnexion
+Source: "{#Source}\connexion-service.xpgsvc"; DestDir: "{app}"; Components: app; Flags: ignoreversion
+#endif
+Source: "{src}\connexion-service*.xpgsvc"; DestDir: "{app}"; Components: app; Flags: external skipifsourcedoesntexist ignoreversion
 ; l'habillage de l'assistant (lu par lui seul, rien n'est installe)
 Source: "polices\Barlow-Regular.ttf"; Flags: dontcopy
 Source: "polices\Barlow-Medium.ttf"; Flags: dontcopy
@@ -162,6 +183,10 @@ Source: "polices\Barlow-SemiBold.ttf"; Flags: dontcopy
 Source: "polices\Barlow-Bold.ttf"; Flags: dontcopy
 Source: "admin\logo.bmp"; Flags: dontcopy
 Source: "admin\logo-2x.bmp"; Flags: dontcopy
+
+[InstallDelete]
+; 1.47.0 : une connexion au service d'une installation d'avant ne reste pas (celle de cette installation la remplace)
+Type: files; Name: "{app}\connexion-service*.xpgsvc"
 
 [Icons]
 Name: "{group}\{#Nom}"; Filename: "{app}\{#App}"; WorkingDir: "{app}"; Comment: "Les licences, les clients, les demandes, les PC en direct"
@@ -331,6 +356,21 @@ begin
     end;
 end;
 
+// 1.47.0 : la connexion au service : portee par l'installateur, ou posee a cote de lui.
+function ConnexionPresente: Boolean;
+var R: TFindRec;
+begin
+#ifdef AvecConnexion
+  Result := True;
+#else
+  Result := False;
+  if FindFirst(ExpandConstant('{src}\connexion-service*.xpgsvc'), R) then begin
+    Result := True;
+    FindClose(R);
+  end;
+#endif
+end;
+
 function TexteDonnees: String;
 var D: String;
     N: Integer;
@@ -354,6 +394,10 @@ begin
   if WizardIsComponentSelected('service') then
     Result := Result + #13#10 + #13#10 + 'Le service en ligne s''installe dans ' + ExpandConstant('{localappdata}\XPG\ServiceLicences') +
               ' : ton fichier cle-publique.txt y reste d''une version à l''autre.';
+  // 1.47.0 : la connexion au service de l'editeur (signee par sa cle) : l'Admin demarre connecte
+  if ConnexionPresente then
+    Result := Result + #13#10 + #13#10 + 'La connexion au service de l''éditeur vient avec cette installation (signée par sa clé) : ' +
+              'l''Admin démarre connecté à son service, sans adresse à taper.';
   Result := Result + #13#10 + #13#10 + 'Une clé gardée ailleurs (l''option --dossier) : elle n''est pas touchée non plus.';
 end;
 

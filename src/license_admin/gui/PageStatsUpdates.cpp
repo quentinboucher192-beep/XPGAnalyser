@@ -287,11 +287,20 @@ protected:
         std::string heads[5] = {"VERSION", "PUBLI\xC3\x89" "E LE", "STUDIOS", "ADMINS", "PART DES PC"};
         const FontId hf = gfx::semibold(FontId{10}), nf = gfx::semibold(FontId{13});
         const auto mw = [&](const std::string& t, FontId f) { return ctx.r.measure(t, f).width; };
-        float badgeW = mw(heads[0], hf), numW = mw("0", nf);
-        for (const auto& v : reply_.versions) {
+        float badgeW = mw(heads[0], hf), numW = mw("0", nf), withTagW = badgeW;
+        std::vector<std::string> tags;
+        for (std::size_t i = 0; i < reply_.versions.size(); ++i) {
+            const auto& v = reply_.versions[i];
             badgeW = std::max(badgeW, mw(v.version, FontId{12}) + 14.f);
             numW = std::max({numW, mw(std::to_string(v.studios), nf), mw(std::to_string(v.admins), nf)});
+            std::string tag;
+            if (v.version == reply_.latest) tag = "actuelle";
+            else if (v.published == 0 || i + 1 == reply_.versions.size()) tag = "et avant";
+            else if (v.version.size() > 2 && v.version.substr(v.version.rfind('.') + 1) != "0") tag = "correctif";
+            withTagW = std::max(withTagW, mw(v.version, FontId{12}) + 20.f + (tag.empty() ? 0.f : mw(tag, FontId{12})));
+            tags.push_back(std::move(tag));
         }
+        bool showTags = true;
         const float dateW = std::max(mw(heads[1], hf), mw("00/00/0000", FontId{13})), pctW = mw("100 %", nf);
         float x[5], r2 = 0.f, r3 = 0.f, barX = 0.f, barW = 0.f;
         bool bar = true;
@@ -303,16 +312,21 @@ protected:
             barX = x[4];
             barW = b.w * 0.19f;
         }
-        const bool wide = badgeW + 6.f <= x[1] - x[0] && dateW + 6.f <= x[2] - x[1] && mw(heads[2], hf) + 4.f <= x[3] - x[2] &&
+        const bool wide = withTagW + 6.f <= x[1] - x[0] && dateW + 6.f <= x[2] - x[1] && mw(heads[2], hf) + 4.f <= x[3] - x[2] &&
                           mw(heads[3], hf) + 4.f <= x[4] - x[3] && barW + 10.f + pctW <= b.right() - x[4] && mw(heads[4], hf) <= b.right() - x[4];
         if (!wide) {
             float gap = 12.f;
-            const float c0 = badgeW, c1 = dateW, c2 = std::max(mw(heads[2], hf), numW), c3 = std::max(mw(heads[3], hf), numW);
+            float c0 = withTagW;
+            const float c1 = dateW, c2 = std::max(mw(heads[2], hf), numW), c3 = std::max(mw(heads[3], hf), numW);
             float c4 = std::max(mw(heads[4], hf), 36.f + 10.f + pctW);
             if (c0 + c1 + c2 + c3 + c4 + 4.f * gap > b.w) {
                 bar = false;
                 heads[4] = "PART";
                 c4 = std::max(mw(heads[4], hf), pctW);
+            }
+            if (c0 + c1 + c2 + c3 + c4 + 4.f * gap > b.w) {
+                showTags = false;
+                c0 = badgeW;
             }
             const float slack = b.w - (c0 + c1 + c2 + c3 + c4) - 4.f * gap;
             if (slack < 0.f) gap = std::max(6.f, gap + slack / 4.f);
@@ -348,11 +362,8 @@ protected:
             const bool latest = v.version == reply_.latest;
             versionBadge(ctx.r, b.x, cy, v.version, latest ? 1 : (behind >= 2 || v.published == 0) ? -1 : 0);
             const float bx = b.x + ctx.r.measure(v.version, FontId{12}).width + 20.f;
-            std::string tag;
-            if (latest) tag = "actuelle";
-            else if (v.published == 0 || i + 1 == reply_.versions.size()) tag = "et avant";
-            else if (v.version.size() > 2 && v.version.substr(v.version.rfind('.') + 1) != "0") tag = "correctif";
-            if (!tag.empty() && bx + mw(tag, FontId{12}) + 6.f < x[1]) ctx.r.drawText({bx, cy - 7.f}, tag, FontId{12}, kMuted);
+            const std::string& tag = tags[i];
+            if (showTags && !tag.empty() && bx + mw(tag, FontId{12}) <= x[1]) ctx.r.drawText({bx, cy - 7.f}, tag, FontId{12}, kMuted);
             if (v.published > 0) {
                 const bool two = rowH >= 38.f && (latest || i < 2) && mw(ageText(now_, v.published), FontId{12}) + 4.f < x[2] - x[1];
                 ctx.r.drawText({x[1], two ? cy - 16.f : cy - 8.f}, dateFr(v.published), FontId{13}, kInk);
