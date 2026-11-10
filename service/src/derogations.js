@@ -2,8 +2,9 @@
 //  service/src/derogations.js - 1.47.0 : LA DEROGATION << Gerer le service >>
 //  (docs/ADMINS.md, § 11)
 // -----------------------------------------------------------------------------
-//  Gerer le service (le mettre en ligne ou a jour, changer son adresse, brancher
-//  Stripe, le releve du jour) est a l'admin+ seul. Il peut le DONNER a UN admin
+//  Gerer le service (le mettre en ligne ou a jour, changer son adresse et ses
+//  adresses de secours, le releve du jour) est a l'admin+ seul (brancher Stripe,
+//  certifier, la sauvegarde, la restauration : toujours lui seul). Il peut le DONNER a UN admin
 //  pour un temps COURT : une derogation signee par la cle de l'editeur,
 //  de 10 minutes a 72 heures (jamais << permanente >>), revocable avant la fin.
 //
@@ -20,7 +21,7 @@
 //    POST /admin/derogation/revoquer  (admin+)  {"id"}
 //    GET  /admin/derogation           (admin+ : la derogation en cours ; un admin : la sienne seulement)
 //    POST /admin/derogation/utiliser  (admin)   {"action","detail"} : l'Admin le demande AVANT chaque geste qui
-//         gere le service (deployer, changer l'adresse, brancher Stripe...) ; 200 tant qu'elle court, 403
+//         gere le service (deployer, changer l'adresse, les adresses de secours...) ; 200 tant qu'elle court, 403
 //         << derogation >> sinon (finie, revoquee, pas la sienne) ; une ligne << derogation_utilisee >> au journal
 //         (le service l'ecrit, signee par SA cle : l'admin+ est prevenu).
 //    Une route reservee a l'admin+ marquee << derogation >> (licences.js : POST /admin/stats/releve) s'ouvre aussi a
@@ -41,7 +42,7 @@ const ECART_DEBUT = 600; // le debut a +-10 min de l'heure du service
 const MAX_DOCUMENT = 2048;
 const MAX_LIGNES_USAGE = 200; // les lignes << derogation_utilisee >> d'une derogation, au plus
 // Ce qu'un Admin dit faire avec sa derogation (la ligne du journal le nomme).
-export const GESTES_DEROGATION = ["deployer", "connexion_cloudflare", "adresse", "stripe", "secours", "releve", "verifier"];
+export const GESTES_DEROGATION = ["deployer", "connexion_cloudflare", "adresse", "secours", "releve", "verifier"];
 
 function texteCourt(v, max) {
     return typeof v === "string" && !/[\u0000-\u001f\u007f]/.test(v) && Array.from(v).length <= max;

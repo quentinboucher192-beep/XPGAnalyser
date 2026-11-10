@@ -165,9 +165,10 @@ public:
         table_ = &adopt(*this, std::make_unique<ui::TableView>("revocations.table"));
         table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs (Exporter, Copier)
         table_->setAlternatingRowColors(true);
-        table_->setColumns({{"Licence", 140.f}, {"Client", 170.f}, {"PC", 240.f}, {"Raison", 200.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 115.f},
-                            {"\xC3\x89missions", 190.f}, {"Par", 130.f}});
-        model_ = std::make_shared<Rows>(std::vector<std::string>{"Licence", "Client", "PC", "Raison", "R\xC3\xA9voqu\xC3\xA9" "e le", "\xC3\x89missions", "Par", "Cl\xC3\xA9"});
+        // 1.47.0 : << Par >> (qui l'a revoquee) apres la raison - les puces dans l'ordre de la planche 12 (Raison, Par qui, Periode).
+        table_->setColumns({{"Licence", 130.f}, {"Client", 165.f}, {"PC", 220.f}, {"Raison", 180.f}, {"Par", 150.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 105.f},
+                            {"\xC3\x89missions", 150.f}});
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"Licence", "Client", "PC", "Raison", "Par", "R\xC3\xA9voqu\xC3\xA9" "e le", "\xC3\x89missions", "Cl\xC3\xA9"});
         table_->setModel(model_);
         // 1.47.0 (planche 12) : LA BARRE - chercher (revocations.recherche), la raison, par qui, la periode.
         bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("revocations.barre", barFields(), "revocations.recherche"));
@@ -178,7 +179,7 @@ public:
             src.rows = [this] { return all_.size(); };
             src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
             src.time = [this](std::size_t r, std::size_t f) -> std::int64_t {
-                return r < all_.size() && f == 4 ? listkit::seconds(all_[r].x.revokedAt) : 0;
+                return r < all_.size() && f == 5 ? listkit::seconds(all_[r].x.revokedAt) : 0;
             };
             src.extra = [this](std::size_t r) { return r < all_.size() ? all_[r].x.device + " " + all_[r].fingerprint : std::string(); };
             bar_->setSource(std::move(src));
@@ -234,8 +235,8 @@ public:
             }
             it.emissions = it.x.issuedBefore ? "avant le " + dateTimeFr(it.x.issuedBefore) : std::string("toutes");
             it.by = revokedBy(it.x);
-            texts_.push_back({it.x.licenseId, l ? it.customer : std::string("(pas dans l'archive)"), it.pc, it.x.reason, dateFr(it.x.revokedAt),
-                              it.emissions, it.by ? it.by->who : std::string()});
+            texts_.push_back({it.x.licenseId, l ? it.customer : std::string("(pas dans l'archive)"), it.pc, it.x.reason, it.by ? it.by->who : std::string(),
+                              dateFr(it.x.revokedAt), it.emissions});
             all_.push_back(std::move(it));
         }
         bar_->refreshCounts();
@@ -317,9 +318,9 @@ private:
         f[1] = {.title = "Client", .noun = "un client"};
         f[2] = {.title = "PC", .kind = K::Text};
         f[3] = {.title = "Raison", .chip = true, .noun = "une raison"};
-        f[4] = {.title = "R\xC3\xA9voqu\xC3\xA9" "e le", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
-        f[5] = {.title = "\xC3\x89missions", .noun = "des \xC3\xA9missions"};
-        f[6] = {.title = "Par", .chip = true, .chipLabel = "Par qui", .noun = "un admin"};
+        f[4] = {.title = "Par", .chip = true, .chipLabel = "Par qui", .noun = "un admin"};
+        f[5] = {.title = "R\xC3\xA9voqu\xC3\xA9" "e le", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
+        f[6] = {.title = "\xC3\x89missions", .noun = "des \xC3\xA9missions"};
         return f;
     }
 
@@ -360,7 +361,7 @@ private:
             auto cells = texts_[shown_[k]];
             cells.push_back(keyOf(it));
             rows.push_back(std::move(cells));
-            keys.push_back({"", "", "", "", padKey(it.x.revokedAt), "", "", ""});
+            keys.push_back({"", "", "", "", "", padKey(it.x.revokedAt), "", ""});
             whole.push_back(it.x.device.empty());
             if (std::find(keep.begin(), keep.end(), keyOf(it)) != keep.end()) again.push_back(static_cast<ui::RowIndex>(k));
         }
@@ -442,10 +443,10 @@ private:
             on(3, "Cette raison");
             on(1, "Ce client");
             on(0, "Cette licence");
-            on(6, "R\xC3\xA9voqu\xC3\xA9" "e par");
+            on(4, "R\xC3\xA9voqu\xC3\xA9" "e par");
             if (x.x.revokedAt > 0) {
                 const std::int64_t when = listkit::seconds(x.x.revokedAt);
-                m.filterOn({.label = "Ce jour : " + dateFr(x.x.revokedAt), .run = [this, when] { bar_->filterOnDay(4, when); }});
+                m.filterOn({.label = "Ce jour : " + dateFr(x.x.revokedAt), .run = [this, when] { bar_->filterOnDay(5, when); }});
             }
             m.copy("La licence", id, ui::Icon::Document);
             if (!x.x.device.empty()) {

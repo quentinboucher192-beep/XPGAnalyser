@@ -593,6 +593,11 @@ protected:
             lastBusy_ = bz;
             syncButtons();
         }
+        // le releve de l'arrivee n'a pas pu partir (un autre travail tournait) : des que la coquille est libre
+        if (!tried_ && !lastBusy_ && allowed() && loadedAt_ == 0 && !loading_ && ws().service().ready()) {
+            tried_ = true;
+            fetch(false);
+        }
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         const Rect b = bounds();
@@ -792,6 +797,7 @@ private:
         if (!started) {
             loading_ = false;
             if (loud && host_.flash) host_.flash(kBusy, Tone::Warning);
+            if (!loud && loadedAt_ == 0) tried_ = false;   // reessaye quand la coquille sera libre (onPaint)
         }
         if (!alive.expired()) syncButtons();
     }

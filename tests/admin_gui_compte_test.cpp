@@ -11,7 +11,7 @@
 //   - l'admin+ : les 13 pouvoirs, ce qu'il fait seul, la derniere fois (le
 //     journal de ce poste), Sauvegarder ma cle ; une derogation en cours (un FAUX
 //     adopte : l'etat que la coquille relit du service) ;
-//   - un admin (Lea) : actif, ajoute dans la liste n° 2, la liste n° 3 en
+//   - un admin (Lea) : actif, ajoute dans la liste no 2, la liste no 3 en
 //     vigueur, son profil et ses ecarts, l'histoire de ses droits (les listes
 //     vues sur son poste), sa derogation ;
 //   - un admin retire (Nina) : retire le ..., plus aucun pouvoir ;
@@ -315,7 +315,7 @@ int main(int argc, char** argv) {
     lv1.name = "Admin LV1";
     lv1.rights = {"licence_creer", "licence_prolonger", "demandes"};
     check(fx.ws->saveProfile(lv1).ok, "le profil << Admin LV1 >>");
-    // la liste n° 2 : Lea (le profil LV1 tel quel) ; la n° 3 : Lea ajustee (+ codes, - prolonger), Hugo, Nina retiree
+    // la liste no 2 : Lea (le profil LV1 tel quel) ; la no 3 : Lea ajustee (+ codes, - prolonger), Hugo, Nina retiree
     adm::AdminList l2;
     l2.number = 2;
     l2.issued = g_now - 10 * 86400;

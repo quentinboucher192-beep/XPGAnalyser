@@ -268,11 +268,12 @@ int main(int argc, char** argv) {
                   find<ui::InputText>(*page, "revocations.recherche"),
               "les puces de la planche 12 : Raison, Par qui, P\xC3\xA9riode ; revocations.recherche");
         check(has(t, "Raison") && has(t, "Par qui") && has(t, "P\xC3\xA9riode") && has(t, "Mes filtres"), "elles se dessinent ; Mes filtres");
+        check(bar->chipFields() == std::vector<std::size_t>{3, 4, 5}, "dans l'ordre de la planche : Raison, Par qui, P\xC3\xA9riode");
         const int ra = rowOf(*table, 0, idA), rb = rowOf(*table, 0, idB), rc = rowOf(*table, 0, idC);
         check(ra >= 0 && rb >= 0 && rc >= 0, "les trois lignes");
-        check(cell(*table, ra, 6) == plus && cell(*table, rb, 6) == plus && has(plus, "Camille Essai") && has(cell(*table, ra, 2), pcName),
+        check(cell(*table, ra, 4) == plus && cell(*table, rb, 4) == plus && has(plus, "Camille Essai") && has(cell(*table, ra, 2), pcName),
               "<< Par >> : lu dans le journal (Camille Essai) ; le PC nomm\xC3\xA9");
-        check(valueCount(*bar, 3, "Fin de contrat") == 2 && valueCount(*bar, 3, "PC remplac\xC3\xA9") == 1 && valueCount(*bar, 6, plus) == 3,
+        check(valueCount(*bar, 3, "Fin de contrat") == 2 && valueCount(*bar, 3, "PC remplac\xC3\xA9") == 1 && valueCount(*bar, 4, plus) == 3,
               "les nombres des puces : Fin de contrat 2, PC remplac\xC3\xA9 1 ; Camille Essai 3");
         bar->setValues(3, {"Fin de contrat"});
         check(rows(*page, "revocations.table") == 2 && bar->countText() == "2 sur 3", "Raison : Fin de contrat - 2 sur 3");
@@ -300,8 +301,8 @@ int main(int argc, char** argv) {
         check(has(copies, "La licence") && has(copies, "L'empreinte du PC") && has(copies, "La cl\xC3\xA9 du PC") && has(copies, "La ligne"), "Copier : " + copies);
         const int byWho = idOf(items, "Filtrer sur", "R\xC3\xA9voqu\xC3\xA9" "e par");
         if (byWho >= 0) table->contextAction->emit(byWho);
-        check(byWho >= 0 && bar->fieldActive(6) && bar->chipText(6) == "Par qui : " + plus && rows(*page, "revocations.table") == 3,
-              "Filtrer sur > R\xC3\xA9voqu\xC3\xA9" "e par : la puce << " + bar->chipText(6) + " >>");
+        check(byWho >= 0 && bar->fieldActive(4) && bar->chipText(4) == "Par qui : " + plus && rows(*page, "revocations.table") == 3,
+              "Filtrer sur > R\xC3\xA9voqu\xC3\xA9" "e par : la puce << " + bar->chipText(4) + " >>");
         bar->clearAll();
         const int reason = idOf(items, "Filtrer sur", "Cette raison");
         table->selectModelRows({static_cast<ui::RowIndex>(rowOf(*table, 0, idA))});

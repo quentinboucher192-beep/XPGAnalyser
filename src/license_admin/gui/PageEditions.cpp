@@ -856,9 +856,10 @@ public:
                        "chez un client avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
                        "Nouvelle offre\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("editions.table"));
-        // 1.47.0 : l'identifiant plus large (le chevron du depliage devant lui)
-        table_->setColumns({{"Identifiant", 176.f}, {"Libell\xC3\xA9", 136.f}, {"Type", 100.f}, {"PC", 50.f}, {"Dur\xC3\xA9" "e", 80.f}, {"Gr\xC3\xA2" "ce", 66.f},
-                            {"Fonctionnalit\xC3\xA9s", 110.f}, {"En vente", 150.f}, {"Licences", 76.f}});
+        // 1.47.0 : l'identifiant plus large (le chevron du depliage devant lui) ; chaque titre entier a cote de son entonnoir
+        // (la table defile plutot que de couper un titre).
+        table_->setColumns({{"Identifiant", 176.f}, {"Libell\xC3\xA9", 136.f}, {"Type", 100.f}, {"PC", 72.f}, {"Dur\xC3\xA9" "e", 92.f}, {"Gr\xC3\xA2" "ce", 92.f},
+                            {"Fonctionnalit\xC3\xA9s", 160.f}, {"En vente", 150.f}, {"Licences", 112.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Libell\xC3\xA9", "Type", "PC", "Dur\xC3\xA9" "e", "Gr\xC3\xA2" "ce", "Fonctionnalit\xC3\xA9s", "En vente", "Licences"});
         table_->setModel(model_);
@@ -1821,7 +1822,8 @@ public:
                        "avec sa prochaine licence : le registre sign\xC3\xA9 voyage dans chaque fichier de licence.",
                        "Nouvelle fonctionnalit\xC3\xA9\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("fonctionnalites.table"));
-        table_->setColumns({{"Identifiant", 170.f}, {"Produit", 104.f}, {"Libell\xC3\xA9", 150.f}, {"Limites", 110.f}, {"Retir\xC3\xA9" "e", 90.f}, {"\xC3\x89" "ditions", 96.f}});
+        table_->setColumns({{"Identifiant", 170.f}, {"Produit", 112.f}, {"Libell\xC3\xA9", 150.f}, {"Limites", 110.f}, {"Retir\xC3\xA9" "e", 108.f},
+                            {"\xC3\x89" "ditions", 112.f}});   // 1.47.0 : chaque titre entier a cote de son entonnoir
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Produit", "Libell\xC3\xA9", "Limites", "Retir\xC3\xA9" "e", "\xC3\x89" "ditions"});
         table_->setModel(model_);
@@ -2400,7 +2402,7 @@ public:
                        "Nouvelle option\xE2\x80\xA6") {
         table_ = add(*this, std::make_unique<ui::TableView>("options.table"));
         table_->setColumns({{"Identifiant", 150.f}, {"Nom", 170.f}, {"Ouvre", 170.f}, {"Dur\xC3\xA9" "es et prix", 230.f}, {"Propos\xC3\xA9" "e \xC3\xA0", 150.f},
-                            {"En cours", 76.f}});
+                            {"En cours", 112.f}});   // 1.47.0 : le titre entier a cote de son entonnoir
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Identifiant", "Nom", "Ouvre", "Dur\xC3\xA9" "es et prix", "Propos\xC3\xA9" "e \xC3\xA0", "En cours"});
         table_->setModel(model_);

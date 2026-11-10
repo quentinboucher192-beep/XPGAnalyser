@@ -856,7 +856,8 @@ public:
 
     // ============================ 1.47.0 : gerer le service (l'admin+ seul ; la derogation) - WorkspaceDerogation.cpp ==
     // (docs/ADMINS.md, par. 11) Gerer le service : le mettre en ligne ou a jour, changer son adresse, ses adresses de
-    // secours, brancher Stripe, le releve du jour ; certifier, la sauvegarde et la restauration restent a l'admin+ (sa cle).
+    // secours, le releve du jour ; certifier, brancher Stripe (sa cle Stripe), la sauvegarde et la restauration restent a
+    // l'admin+ (sa cle).
     // L'admin+, ou un admin dont la derogation court (a l'heure du service estimee).
     [[nodiscard]] bool mayManageService() const;
     // Vide : permis ; sinon la phrase (<< L'admin+ seul gere le service (derogation possible). >>).
@@ -871,8 +872,8 @@ public:
     [[nodiscard]] OpResult revokeDerogation(Derogation* out = nullptr) const;
     // LENT. Relire (l'admin+ : celle en place ; un admin : la sienne) ; son document verifie (la cle de l'editeur).
     [[nodiscard]] OpResult readDerogation(Derogation& out) const;
-    // LENT. Un admin, AVANT un geste qui gere le service (`action` : deployer, connexion_cloudflare, adresse, stripe,
-    // secours, releve) : le service dit si sa derogation court (il l'ecrit au journal ; l'admin+ est prevenu). L'admin+ :
+    // LENT. Un admin, AVANT un geste qui gere le service (`action` : deployer, connexion_cloudflare, adresse, secours,
+    // releve) : le service dit si sa derogation court (il l'ecrit au journal ; l'admin+ est prevenu). L'admin+ :
     // toujours permis, sans appel. Refuse : la phrase du service (finie, revoquee, aucune).
     [[nodiscard]] OpResult useDerogation(const std::string& action, const std::string& detail = {}) const;
     // Les cles PUBLIQUES de l'editeur que le service croit (PUBLISHER_KEYS, GET /admin/admins) : ce que deployer.mjs passe

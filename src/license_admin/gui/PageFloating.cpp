@@ -103,7 +103,8 @@ public:
         settings_->setIcon(ui::Icon::Settings);
         licences_ = add(*this, std::make_unique<ui::TableView>("flottantes.table"));
         licences_->setSelectionMode(ui::SelectionMode::Single);
-        licences_->setColumns({{"Licence", 150.f}, {"Client", 200.f}, {"Postes pris", 120.f}, {"Bail", 80.f}, {"\xC3\x89tat", 150.f}, {"\xC3\x89mise le", 110.f}});
+        // 1.47.0 : chaque titre entier a cote de son entonnoir (la barre)
+        licences_->setColumns({{"Licence", 150.f}, {"Client", 200.f}, {"Postes pris", 136.f}, {"Bail", 88.f}, {"\xC3\x89tat", 150.f}, {"\xC3\x89mise le", 120.f}});
         seats_ = add(*this, std::make_unique<ui::TableView>("flottantes.postes"));
         seats_->setSelectionMode(ui::SelectionMode::Single);
         seats_->setColumns({{"PC", 180.f}, {"Empreinte", 220.f}, {"Jeton jusqu'\xC3\xA0", 150.f}, {"Activation", 150.f}, {"Vu le", 130.f}});

@@ -5,9 +5,9 @@
 //  L'admin+ seul gere le service. Ce dialogue le donne a UN admin pour un temps
 //  COURT : 1 h, 4 h, 24 h ou 72 h (jamais plus, jamais << permanente >>). Il dit
 //  ce que la derogation ouvre (mettre le service en ligne ou a jour, changer son
-//  adresse et ses adresses de secours, brancher Stripe, le releve du jour) et ce
-//  qu'elle n'ouvre jamais (certifier, la sauvegarde, la restauration : la cle de
-//  l'editeur) ; que l'admin se connecte a Cloudflare avec SON propre compte
+//  adresse et ses adresses de secours, le releve du jour) et ce qu'elle n'ouvre
+//  jamais (certifier, la sauvegarde, la restauration : la cle de l'editeur ;
+//  brancher Stripe : sa cle Stripe ne se partage pas) ; que l'admin se connecte a Cloudflare avec SON propre compte
 //  (membre du compte de l'editeur), jamais un jeton partage ; que le service la
 //  tient a son heure et que chaque usage est ecrit au journal (l'admin+ prevenu).
 //  << Accorder >> : Workspace::grantDerogation (runSlow) ; une derogation en cours :
@@ -93,8 +93,8 @@ private:
 
 const char* const kWhat =
     "Pour un temps court, l'admin choisi peut g\xC3\xA9rer le service comme toi : le mettre en ligne ou \xC3\xA0 jour (D\xC3\xA9ployer le service), "
-    "changer son adresse et ses adresses de secours, brancher Stripe, le relev\xC3\xA9 du jour. Jamais : certifier la cl\xC3\xA9 du service, la "
-    "sauvegarde, la restauration (ta cl\xC3\xA9 d'\xC3\xA9" "diteur ne quitte jamais ce PC).";
+    "changer son adresse et ses adresses de secours, le relev\xC3\xA9 du jour. Jamais : certifier la cl\xC3\xA9 du service, la sauvegarde, la "
+    "restauration (ta cl\xC3\xA9 d'\xC3\xA9" "diteur ne quitte jamais ce PC), Brancher Stripe (ta cl\xC3\xA9 Stripe ne se partage pas).";
 const char* const kCloudflare =
     "Cloudflare : il se connecte avec SON propre compte, sur son PC (invite-le comme membre de ton compte Cloudflare : tableau de bord \xE2\x80\xBA "
     "G\xC3\xA9rer le compte \xE2\x80\xBA Membres). Jamais un jeton partag\xC3\xA9, jamais ton mot de passe.";

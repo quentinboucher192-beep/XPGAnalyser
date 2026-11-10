@@ -9,7 +9,7 @@
 //    - L'IDENTIFIANT : l'identifiant de la cle (xpg-...), l'empreinte en 6
 //      groupes (celle qui se lit au telephone), << Copier >> l'un et l'autre ;
 //    - L'ETAT DU COMPTE : actif depuis, ajoute par l'admin+ dans la liste
-//      signee n°, en attente depuis, retire le, la liste en vigueur ici, le
+//      signee no, en attente depuis, retire le, la liste en vigueur ici, le
 //      certificat du service (s'il a ete lu), ce PC, la version de l'Admin et
 //      celle du service, et << Gerer le service >> (l'admin+ seul, ou une
 //      derogation de courte duree en cours et ce qu'il en reste : Derogation.hpp) ;
@@ -471,10 +471,10 @@ private:
             if (shop) row.profile = "d'apr\xC3\xA8s tes droits";
             else if (plus) row.profile = "tous les droits";
             else if (inProfile) {
-                const bool in = inProfile->count(p.id) > 0;
-                if (in && has) row.profile = "dans le profil";
-                else if (!in && has) row.profile = "en plus du profil", row.deviation = true;
-                else if (in && !has) row.profile = "retir\xC3\xA9 du profil", row.deviation = true;
+                const bool listed = inProfile->count(p.id) > 0;
+                if (listed && has) row.profile = "dans le profil";
+                else if (!listed && has) row.profile = "en plus du profil", row.deviation = true;
+                else if (listed && !has) row.profile = "retir\xC3\xA9 du profil", row.deviation = true;
                 else row.profile = "pas dans le profil";
             } else row.profile = "\xE2\x80\x94";
             if (row.deviation) ++deviations;

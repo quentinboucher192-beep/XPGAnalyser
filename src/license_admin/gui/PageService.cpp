@@ -863,15 +863,15 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
         for (ui::Button* b : {deploy_, deployBanner_, deploySteps_}) links_ += b->clicked->connect([this] { openDeploy(); });
     }
     // 1.47.0 : la connexion signee au service ; la derogation << Gerer le service >> (l'admin+)
-    useConnection_ = body_->make<ui::Button>("Utiliser une connexionâ¦", "service.connexion.utiliser");
+    useConnection_ = body_->make<ui::Button>("Utiliser une connexion\xE2\x80\xA6", "service.connexion.utiliser");
     useConnection_->setIcon(ui::Icon::Import);
-    useConnection_->setTooltip("Un fichier connexion-service.xpgsvc reÃ§u de l'admin+ : le certificat de son service, signÃ© par sa clÃ© (un fichier modifiÃ© est refusÃ©)");
-    exportConnection_ = body_->make<ui::Button>("Exporter la connexionâ¦", "service.connexion.exporter");
+    useConnection_->setTooltip("Un fichier connexion-service.xpgsvc re\xC3\xA7u de l'admin+ : le certificat de son service, sign\xC3\xA9 par sa cl\xC3\xA9 (un fichier modifi\xC3\xA9 est refus\xC3\xA9)");
+    exportConnection_ = body_->make<ui::Button>("Exporter la connexion\xE2\x80\xA6", "service.connexion.exporter");
     exportConnection_->setIcon(ui::Icon::Export);
-    exportConnection_->setTooltip("Le certificat de ton service (signÃ© par ta clÃ©, rien de secret) : Ã  poser Ã  cÃ´tÃ© de l'installateur de l'Admin");
-    grantDerogation_ = body_->make<ui::Button>("Accorder une dÃ©rogationâ¦", "service.derogation.accorder");
+    exportConnection_->setTooltip("Le certificat de ton service (sign\xC3\xA9 par ta cl\xC3\xA9, rien de secret) : \xC3\xA0 poser \xC3\xA0 c\xC3\xB4t\xC3\xA9 de l'installateur de l'Admin");
+    grantDerogation_ = body_->make<ui::Button>("Accorder une d\xC3\xA9rogation\xE2\x80\xA6", "service.derogation.accorder");
     grantDerogation_->setIcon(ui::Icon::Lock);
-    revokeDerogation_ = body_->make<ui::Button>("RÃ©voquer maintenant", "service.derogation.revoquer");
+    revokeDerogation_ = body_->make<ui::Button>("R\xC3\xA9voquer maintenant", "service.derogation.revoquer");
     revokeDerogation_->setStyle(ui::Button::Style::Danger);
     links_ += useConnection_->clicked->connect([this] { useConnection(); });
     links_ += exportConnection_->clicked->connect([this] { exportConnection(); });
@@ -1809,9 +1809,9 @@ void ServicePage::openDeploy() {
         const Workspace* w = &ws();
         const deployer::Kit* k = deployer::installedKit(true);
         const std::string kitFolder = k ? k->folder : std::string();
-        (void)slow("Service : ta dÃ©rogation",
+        (void)slow("Service : ta d\xC3\xA9rogation",
                    [w, kitFolder] {
-                       OpResult r = w->useDerogation("deployer", "DÃ©ployer le service (l'Admin)");
+                       OpResult r = w->useDerogation("deployer", "D\xC3\xA9ployer le service (l'Admin)");
                        if (!r.ok || kitFolder.empty()) return r;
                        const OpResult k2 = w->writeEditorKeysFile(kitFolder);
                        if (!k2.ok) return k2;
@@ -1850,11 +1850,11 @@ void ServicePage::writePublicKey() {
     if (!ws().key().present && ws().role() == Role::Admin) {   // 1.47.0 : sous derogation - les cles de l'editeur lues sur le service
         if (!ws().mayManageService()) return refuse(ws().whyNotService());
         const deployer::Kit* k = deployer::installedKit(true);
-        if (!k) return refuse("le kit du service n'est pas installÃ© (rÃ©installe l'Admin : il vient avec lui)");
+        if (!k) return refuse("le kit du service n'est pas install\xC3\xA9 (r\xC3\xA9installe l'Admin : il vient avec lui)");
         const Workspace* w = &ws();
         const std::string folder = k->folder;
         managed("deployer", "cle-publique.txt", [this, w, folder] {
-            (void)slow("Service : les clÃ©s de l'Ã©" "diteur", [w, folder] { return w->writeEditorKeysFile(folder); }, {});
+            (void)slow("Service : les cl\xC3\xA9s de l'\xC3\xA9" "diteur", [w, folder] { return w->writeEditorKeysFile(folder); }, {});
         });
         return;
     }
@@ -1941,21 +1941,21 @@ void ServicePage::manageBlocks(Blocks& bl) {
     const auto& d = ws().derogation();
     const Seconds now = ws().now();
     if (ws().mayManageService()) {
-        bl.card("Ta dÃ©rogation Â« GÃ©rer le service Â»", ui::Tone::Warning);
-        bl.pair("DÃ©rogation", derogationText(d, now) + ", accordÃ©" "e par l'admin+", ui::Tone::Warning);
-        bl.text("Tu peux gÃ©rer le service comme l'admin+ : DÃ©ployer le service, son adresse, ses adresses de secours, Brancher Stripe. "
-                "Chaque geste est d'abord demandÃ© au service (il tient la dÃ©rogation Ã  son heure), Ã©" "crit au journal, et l'admin+ est prÃ©venu. "
-                "Ã la fin, cette page repasse d'elle-mÃªme en lecture seule.");
-        bl.note("Cloudflare : connecte-toi avec TON compte (l'admin+ t'invite comme membre du sien), jamais avec un jeton partagÃ©. Certifier, "
-                "la sauvegarde et la restauration restent Ã  l'admin+ (sa clÃ©).",
+        bl.card("Ta d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", ui::Tone::Warning);
+        bl.pair("D\xC3\xA9rogation", derogationText(d, now) + ", accord\xC3\xA9" "e par l'admin+", ui::Tone::Warning);
+        bl.text("Tu peux g\xC3\xA9rer le service comme l'admin+ : D\xC3\xA9ployer le service, son adresse, ses adresses de secours. "
+                "Chaque geste est d'abord demand\xC3\xA9 au service (il tient la d\xC3\xA9rogation \xC3\xA0 son heure), \xC3\xA9" "crit au journal, et l'admin+ est pr\xC3\xA9venu. "
+                "\xC3\x80 la fin, cette page repasse d'elle-m\xC3\xAAme en lecture seule.");
+        bl.note("Cloudflare : connecte-toi avec TON compte (l'admin+ t'invite comme membre du sien), jamais avec un jeton partag\xC3\xA9. Certifier, "
+                "Brancher Stripe, la sauvegarde et la restauration restent \xC3\xA0 l'admin+ (sa cl\xC3\xA9, sa cl\xC3\xA9 Stripe).",
                 ui::Tone::Warning);
         bl.end();
         return;
     }
-    bl.card("L'admin+ seul gÃ¨re le service (dÃ©rogation possible)", ui::Tone::Info);
-    bl.text("Tu vois l'Ã©tat du service en lecture seule. Le mettre en ligne ou Ã  jour, changer son adresse ou ses adresses de secours, "
-            "brancher Stripe : l'admin+, ou toi pendant une dÃ©rogation courte qu'il t'accorde (1 h, 4 h, 24 h ; 72 h au plus).");
-    if (d.exists() && d.forKey(ws().adminKey().keyHex)) bl.pair("Ta derniÃ¨re dÃ©rogation", derogationText(d, now), ui::Tone::Muted);
+    bl.card("L'admin+ seul g\xC3\xA8re le service (d\xC3\xA9rogation possible)", ui::Tone::Info);
+    bl.text("Tu vois l'\xC3\xA9tat du service en lecture seule. Le mettre en ligne ou \xC3\xA0 jour, changer son adresse ou ses adresses de secours, "
+            "le relev\xC3\xA9 du jour : l'admin+, ou toi pendant une d\xC3\xA9rogation courte qu'il t'accorde (1 h, 4 h, 24 h ; 72 h au plus).");
+    if (d.exists() && d.forKey(ws().adminKey().keyHex)) bl.pair("Ta derni\xC3\xA8re d\xC3\xA9rogation", derogationText(d, now), ui::Tone::Muted);
     bl.end();
 }
 
@@ -1967,10 +1967,10 @@ void ServicePage::connectionBlocks(Blocks& bl) {
     if (plus) {
         if (!s.configured) return;
         bl.card("La connexion au service (pour tes admins)");
-        bl.text("Le certificat de ton service, signÃ© par ta clÃ© : l'adresse et la clÃ© du service, rien de secret. PosÃ© Ã  cÃ´tÃ© de "
-                "l'installateur de l'Admin (ou dans ressources-licences/ pour l'installateur publiÃ©), il fait dÃ©marrer l'Admin d'un futur admin "
-                "connectÃ© Ã  ton service. Celui dont le Studio parle dÃ©jÃ  Ã  ton service le trouve aussi tout seul.");
-        if (!exportable) bl.note("VÃ©rifier d'abord : le certificat vÃ©rifiÃ© est gardÃ© sur ce poste, prÃªt Ã  exporter.", ui::Tone::Muted);
+        bl.text("Le certificat de ton service, sign\xC3\xA9 par ta cl\xC3\xA9 : l'adresse et la cl\xC3\xA9 du service, rien de secret. Pos\xC3\xA9 \xC3\xA0 c\xC3\xB4t\xC3\xA9 de "
+                "l'installateur de l'Admin (ou dans ressources-licences/ pour l'installateur publi\xC3\xA9), il fait d\xC3\xA9marrer l'Admin d'un futur admin "
+                "connect\xC3\xA9 \xC3\xA0 ton service. Celui dont le Studio parle d\xC3\xA9j\xC3\xA0 \xC3\xA0 ton service le trouve aussi tout seul.");
+        if (!exportable) bl.note("V\xC3\xA9rifier d'abord : le certificat v\xC3\xA9rifi\xC3\xA9 est gard\xC3\xA9 sur ce poste, pr\xC3\xAAt \xC3\xA0 exporter.", ui::Tone::Muted);
         bl.row({exportConnection_});
         bl.end();
         return;
@@ -1979,30 +1979,30 @@ void ServicePage::connectionBlocks(Blocks& bl) {
     bl.card("La connexion au service", !s.connectionRefused.empty() && !ok ? ui::Tone::Error : ok ? ui::Tone::Ok : ui::Tone::Warning);
     if (ok) {
         const auto& c = s.connection;
-        bl.pair("ReÃ§ue", c.source + (c.adoptedAt ? ", le " + dateTimeFr(c.adoptedAt) : std::string()));
-        bl.pair("SignÃ©" "e par", "la clÃ© de l'Ã©" "diteur (" + c.editorKeyId + ")", ui::Tone::Ok);
+        bl.pair("Re\xC3\xA7ue", c.source + (c.adoptedAt ? ", le " + dateTimeFr(c.adoptedAt) : std::string()));
+        bl.pair("Sign\xC3\xA9" "e par", "la cl\xC3\xA9 de l'\xC3\xA9" "diteur (" + c.editorKeyId + ")", ui::Tone::Ok);
         bl.pair("Adresse", c.url);
-        bl.pair("ClÃ© du service", online::keyFingerprint(c.serviceKey));
+        bl.pair("Cl\xC3\xA9 du service", online::keyFingerprint(c.serviceKey));
         if (s.hasState && s.state.reached && !s.state.serviceKey.empty()) {
-            if (s.state.serviceKey == c.serviceKey) bl.pair("VÃ©rifiÃ©", "le service Ã  cette adresse a bien la clÃ© certifiÃ©" "e par l'Ã©" "diteur", ui::Tone::Ok);
+            if (s.state.serviceKey == c.serviceKey) bl.pair("V\xC3\xA9rifi\xC3\xA9", "le service \xC3\xA0 cette adresse a bien la cl\xC3\xA9 certifi\xC3\xA9" "e par l'\xC3\xA9" "diteur", ui::Tone::Ok);
             else
-                bl.pair("VÃ©rifiÃ©", "le service Ã  cette adresse a une AUTRE clÃ© que celle certifiÃ©" "e : ne lui fais pas confiance, prÃ©viens l'admin+",
+                bl.pair("V\xC3\xA9rifi\xC3\xA9", "le service \xC3\xA0 cette adresse a une AUTRE cl\xC3\xA9 que celle certifi\xC3\xA9" "e : ne lui fais pas confiance, pr\xC3\xA9viens l'admin+",
                         ui::Tone::Error);
         }
         if (c.expiresAt && ws().now() > c.expiresAt)
-            bl.note("Ce certificat a passÃ© sa date (" + dateFr(c.expiresAt) + ") : l'adresse reste celle de l'Ã©" "diteur ; il le renouvelle.", ui::Tone::Warning);
+            bl.note("Ce certificat a pass\xC3\xA9 sa date (" + dateFr(c.expiresAt) + ") : l'adresse reste celle de l'\xC3\xA9" "diteur ; il le renouvelle.", ui::Tone::Warning);
     } else if (s.configured) {
-        bl.pair("Adresse", s.config.url + " (tapÃ©" "e ici, sans connexion signÃ©" "e)", ui::Tone::Warning);
+        bl.pair("Adresse", s.config.url + " (tap\xC3\xA9" "e ici, sans connexion sign\xC3\xA9" "e)", ui::Tone::Warning);
     } else {
-        bl.text("Aucune connexion signÃ©" "e sur ce PC : ni Ã  cÃ´tÃ© du programme (l'installateur l'y copie), ni dans le dossier des licences du "
-                "Studio de ce PC. Demande Ã  l'admin+ le fichier connexion-service.xpgsvc (Service en ligne âº Exporter la connexionâ¦), puis "
-                "Â« Utiliser une connexionâ¦ Â».",
+        bl.text("Aucune connexion sign\xC3\xA9" "e sur ce PC : ni \xC3\xA0 c\xC3\xB4t\xC3\xA9 du programme (l'installateur l'y copie), ni dans le dossier des licences du "
+                "Studio de ce PC. Demande \xC3\xA0 l'admin+ le fichier connexion-service.xpgsvc (Service en ligne \xE2\x80\xBA Exporter la connexion\xE2\x80\xA6), puis "
+                "\xC2\xAB Utiliser une connexion\xE2\x80\xA6 \xC2\xBB.",
                 ui::Tone::Warning);
     }
     for (std::size_t i = 0; i < s.connectionRefused.size() && i < 4; ++i)
-        bl.bullet("RefusÃ©" "e : " + s.connectionRefused[i].source + " â " + s.connectionRefused[i].why, ui::Tone::Error);
+        bl.bullet("Refus\xC3\xA9" "e : " + s.connectionRefused[i].source + " \xE2\x80\x94 " + s.connectionRefused[i].why, ui::Tone::Error);
     if (!s.connectionRefused.empty())
-        bl.note("Un fichier modifiÃ© ou sans la signature de l'Ã©" "diteur n'est jamais pris : seule une connexion signÃ©" "e par sa clÃ© rÃ¨gle l'adresse.");
+        bl.note("Un fichier modifi\xC3\xA9 ou sans la signature de l'\xC3\xA9" "diteur n'est jamais pris : seule une connexion sign\xC3\xA9" "e par sa cl\xC3\xA9 r\xC3\xA8gle l'adresse.");
     bl.row(exportable ? std::vector<ui::Widget*>{useConnection_, exportConnection_} : std::vector<ui::Widget*>{useConnection_});
     bl.end();
 }
@@ -2013,19 +2013,19 @@ void ServicePage::derogationBlocks(Blocks& bl) {
     const auto& d = ws().derogation();
     const Seconds now = ws().now();
     const bool active = d.activeAt(now);
-    bl.card("La dÃ©rogation Â« GÃ©rer le service Â»", active ? ui::Tone::Warning : ui::Tone::None);
-    bl.text("Toi seul gÃ¨res le service. Pour un temps court (1 h, 4 h, 24 h ; 72 h au plus, jamais permanente), tu peux le confier Ã  UN admin : "
-            "le mettre en ligne ou Ã  jour, son adresse, ses adresses de secours, Brancher Stripe. Jamais certifier, la sauvegarde ni la restauration. "
-            "Le service la tient Ã  son heure ; chaque usage est Ã©" "crit au journal et tu es prÃ©venu.");
+    bl.card("La d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", active ? ui::Tone::Warning : ui::Tone::None);
+    bl.text("Toi seul g\xC3\xA8res le service. Pour un temps court (1 h, 4 h, 24 h ; 72 h au plus, jamais permanente), tu peux le confier \xC3\xA0 UN admin : "
+            "le mettre en ligne ou \xC3\xA0 jour, son adresse, ses adresses de secours, le relev\xC3\xA9 du jour. Jamais certifier, Brancher Stripe, la sauvegarde ni la restauration. "
+            "Le service la tient \xC3\xA0 son heure ; chaque usage est \xC3\xA9" "crit au journal et tu es pr\xC3\xA9venu.");
     if (d.exists())
-        bl.pair(active ? "En cours" : "La derniÃ¨re", d.adminName + " â " + derogationText(d, now) +
-                                                             (d.uses ? " Â· utilisÃ©" "e " + std::to_string(d.uses) + " fois" : std::string()),
+        bl.pair(active ? "En cours" : "La derni\xC3\xA8re", d.adminName + " \xE2\x80\x94 " + derogationText(d, now) +
+                                                             (d.uses ? " \xC2\xB7 utilis\xC3\xA9" "e " + std::to_string(d.uses) + " fois" : std::string()),
                 active ? ui::Tone::Warning : ui::Tone::Muted);
     else
         bl.pair("En cours", d.known ? std::string("aucune") : std::string("aucune connue (le regard du service la relit toutes les 15 s)"), ui::Tone::Muted);
     if (active) bl.row({grantDerogation_, revokeDerogation_});
     else bl.row({grantDerogation_});
-    bl.note("L'admin se connecte Ã  Cloudflare avec SON compte (invite-le comme membre du tien) : jamais un jeton partagÃ©.");
+    bl.note("L'admin se connecte \xC3\xA0 Cloudflare avec SON compte (invite-le comme membre du tien) : jamais un jeton partag\xC3\xA9.");
     bl.end();
 }
 
@@ -2037,7 +2037,7 @@ void ServicePage::managed(const std::string& action, const std::string& detail, 
     if (!ws().mayManageService()) return refuse(ws().whyNotService());
     const Workspace* w = &ws();
     const auto alive = aliveCheck();
-    (void)slow("Service : ta dÃ©rogation", [w, action, detail] { return w->useDerogation(action, detail); },
+    (void)slow("Service : ta d\xC3\xA9rogation", [w, action, detail] { return w->useDerogation(action, detail); },
                [alive, then](const OpResult& r) {
                    if (alive() && r.ok && then) then();
                });
@@ -2045,7 +2045,7 @@ void ServicePage::managed(const std::string& action, const std::string& detail, 
 
 void ServicePage::useConnection() {
     ui::FilePick p;
-    p.title = "La connexion au service (connexion-service.xpgsvc, reÃ§ue de l'admin+)";
+    p.title = "La connexion au service (connexion-service.xpgsvc, re\xC3\xA7ue de l'admin+)";
     p.filters = {{"Connexion au service", "xpgsvc"}, {"Tous les fichiers", "*"}};
     const auto alive = aliveCheck();
     if (host_.pickFile)
@@ -2073,7 +2073,7 @@ void ServicePage::exportConnection() {
 }
 
 void ServicePage::openDerogation() {
-    if (ws().role() != Role::Plus) return refuse("seul l'admin+ accorde une dÃ©rogation");
+    if (ws().role() != Role::Plus) return refuse("seul l'admin+ accorde une d\xC3\xA9rogation");
     if (!host_.openDialog) return;
     const auto alive = aliveCheck();
     host_.openDialog(makeDerogationDialog(host_, {}, [this, alive] {
@@ -2084,10 +2084,10 @@ void ServicePage::openDerogation() {
 }
 
 void ServicePage::revokeDerogation() {
-    if (ws().role() != Role::Plus) return refuse("seul l'admin+ rÃ©voque une dÃ©rogation");
+    if (ws().role() != Role::Plus) return refuse("seul l'admin+ r\xC3\xA9voque une d\xC3\xA9rogation");
     const Workspace* w = &ws();
     auto out = std::make_shared<Derogation>();
-    (void)slow("Service : dÃ©rogation rÃ©voquÃ©" "e", [w, out] { return w->revokeDerogation(out.get()); }, [this, out](const OpResult&) {
+    (void)slow("Service : d\xC3\xA9rogation r\xC3\xA9voqu\xC3\xA9" "e", [w, out] { return w->revokeDerogation(out.get()); }, [this, out](const OpResult&) {
         if (!out->id.empty()) ws().adoptDerogation(*out);
     });
 }
