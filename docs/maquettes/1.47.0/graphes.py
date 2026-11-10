@@ -341,7 +341,7 @@ HEAT = heat_lea()
 
 
 def g_heat():
-    cw, ch, gap = 21, 20, 2
+    cw, ch, gap = 23, 24, 2
     x0, y0 = 38, 20
     o = []
     # la bande des heures habituelles (8 h 40 -> 17 h 50)
@@ -634,7 +634,7 @@ RANGE = [(8.7, 17.6), (8.5, 18.0), (9.1, 17.2), (8.6, 17.9), (8.9, 16.4), None, 
 
 
 def g_range():
-    p = Plot(596, 128, 30, 24, [6, 12, 18, 24], fmt=lambda v: "%d h" % v, pl=34, pr=4, pt=6, pb=18, band=True, ymin=6)
+    p = Plot(570, 166, 30, 24, [6, 12, 18, 24], fmt=lambda v: "%d h" % v, pl=34, pr=4, pt=6, pb=18, band=True, ymin=6)
     # la bande habituelle
     p.p.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#f1f6fd"/>' % (p.x0, p.Y(17.83), p.x1 - p.x0, p.Y(8.67) - p.Y(17.83)))
     p.grid()

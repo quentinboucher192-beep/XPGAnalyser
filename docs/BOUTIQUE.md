@@ -231,6 +231,26 @@ qui perd retire ce qu'il a déposé ou ne dépose qu'après avoir « pris » la 
 - **Mes achats** : les commandes de ce PC (date, article, montant, état, le reçu Stripe).
 - Le mode test se voit (« Paiement d'essai : aucune carte réelle n'est débitée »).
 
+**Construit en 1.46.0 (le Studio)** : `app/LicenceShop` (le catalogue, les commandes, les textes : « 490,00 € TTC »),
+`app/LicenceService` (`placeOrder`, `cancelOrder`, `refreshOrders`, `refreshShop` et la cadence du fil de fond),
+`app/LicenceShopWindows.cpp` (le récapitulatif « Acheter », la fenêtre « Commande n° N »), les cartes de Demander ma
+licence, Options (« Acheter » pour la durée choisie) et Mes achats (« Mes commandes en ligne » : le reçu, la commande).
+- Le catalogue n'est lu que d'un service **1.46.0 ou plus** dont `GET /v1/etat` dit `boutique` (à la synchronisation,
+  puis au regard des 2 minutes s'il a plus de 10 minutes) ; gardé dans `boutique.json` (le dossier des licences, commun
+  aux deux Studios). Un service plus ancien, une boutique fermée : aucun bouton « Acheter », sans un mot.
+- La commande : la demande de ce PC scellée exactement comme une demande en ligne (`gateway::OnlineRequest`, pour la clé
+  de l'éditeur et chaque admin qui a le droit `demandes`) ; le relevé du service (`service-licences.json`, `commandes`)
+  garde chaque commande avec le nonce de sa demande : la livraison d'une **option** (l'état « poste » `acceptee` sans
+  code) se reconnaît à lui et fait renouveler la licence ; une **offre** s'active par son code scellé, comme une demande
+  acceptée. La fenêtre de la réponse dit « Ta commande est livrée ».
+- La page de paiement s'ouvre dans le navigateur par `core::openWebPage` (une adresse `https` seulement, aucun shell).
+  **Les essais** : la variable d'environnement `XPG_NAVIGATEUR_ESSAI_JOURNAL=<fichier>` y ajoute l'adresse (une ligne)
+  au lieu d'ouvrir un navigateur — seulement cela.
+- Les commandes du script (le bloc de `ScriptRunner.cpp`) : `boutique-etat`, `acheter ARTICLE|EDITION [JOURS]`,
+  `commande-attendre ETAT [N] [SECONDES]`, `commande-annuler [N]`, `commande-fenetre [N]`, `mes-achats`.
+- L'essai : `tests/licence_boutique_test.cpp` (`service_boutique`, le vrai Worker et le faux Stripe : la commande, 409
+  `en_cours`, l'annulation, le 502 de Stripe, le paiement, la livraison d'une offre et d'une option).
+
 ## 8. Ce qui a été précisé en construisant (1.46.0)
 
 Pour qui construit le Studio d'après ce contrat (la première version de ce document disait moins, ou autrement) :

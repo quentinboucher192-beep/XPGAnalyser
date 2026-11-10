@@ -128,7 +128,7 @@ function grille(pas) {
 const CALQUES = [
   { k: 'clients', nom: 'Clients', court: 'Clients', c: '#2a78d6', f: 'rond', d: 'la ville de leurs PC' },
   { k: 'actifs', nom: 'PC actifs maintenant', court: 'PC actifs', c: '#1baf7a', f: 'pouls', d: 'vus il y a moins de 15 min' },
-  { k: 'retard', nom: 'Clients pas à jour', court: 'Pas à jour', c: '#eb6834', f: 'tri', d: 'un PC sur une version d\'avant' },
+  { k: 'retard', nom: 'Clients pas à jour', court: 'Pas à jour', c: '#eb6834', f: 'tri', d: 'un PC pas en 1.47.0' },
   { k: 'admins', nom: 'Admins', court: 'Admins', c: '#6d4aff', f: 'etoile', d: 'leur dernière connexion' },
   { k: 'decouv', nom: 'Découvertes en cours', court: 'Découvertes', c: '#008300', f: 'anneau', d: 'l\'essai, pas encore acheté' },
   { k: 'cmd', nom: 'Commandes', court: 'Commandes', c: '#eda100', f: 'carre', d: 'payées dans la période' },
@@ -346,12 +346,36 @@ class Globe {
       g.globalAlpha = 1;
     }
     for (const it of items) marque(g, it.c, it.x, it.y, it.r, it.al);
-    if (!mini) for (const q of grp) if (q.villes.length > 1 && q.z > 0.1) {   // le badge d'un groupe : combien de villes
-      const t = String(q.villes.length), bx = q.x - q.r * 0.8 - 7, by = q.y - q.r * 0.8 - 6;
-      g.font = '700 9px Inter, sans-serif'; const tw = Math.max(13, g.measureText(t).width + 7);
-      g.globalAlpha = Math.min(1, q.z * 4); g.fillStyle = '#fff'; g.strokeStyle = '#94a3b8'; g.lineWidth = 1;
-      g.beginPath(); g.roundRect ? g.roundRect(bx - tw / 2, by - 6.5, tw, 13, 6.5) : g.rect(bx - tw / 2, by - 6.5, tw, 13); g.fill(); g.stroke();
-      g.fillStyle = '#334155'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, bx, by + 0.5); g.globalAlpha = 1;
+    // les noms des villes (« Paris +6 » pour un groupe), sans chevauchement ; sinon un badge : combien de villes
+    if (!mini) {
+      const pris = [];
+      for (const it of items) pris.push([it.x - it.r - 2, it.y - it.r - 2, it.x + it.r + 2, it.y + it.r + 2]);
+      if (this.cible && this.sel) { const c = document.getElementById('gcard'); if (c && !c.hidden) pris.push([c.offsetLeft - 6, c.offsetTop - 6, c.offsetLeft + c.offsetWidth + 6, c.offsetTop + c.offsetHeight + 6]); }
+      const libre = b => b[0] > 2 && b[2] < w - 2 && b[1] > 34 && b[3] < h - 50 && !pris.some(p => b[0] < p[2] && b[2] > p[0] && b[1] < p[3] && b[3] > p[1]);
+      g.font = '600 11px Inter, sans-serif'; g.textBaseline = 'middle';
+      const ext = q => { let e = q.r; for (const it of items) if (it.q === q) e = Math.max(e, Math.hypot(it.x - q.x, it.y - q.y) + it.r); return e; };
+      for (const q of grp) {
+        if (q.z < 0.25 || q.v === this.sel) continue;
+        const t = q.v.nom + (q.villes.length > 1 ? ' +' + (q.villes.length - 1) : ''), tw = g.measureText(t).width, e = ext(q) + 5;
+        let ok = null;
+        for (const [sx, al] of [[1, 'left'], [-1, 'right']]) {
+          const x0 = sx > 0 ? q.x + e : q.x - e - tw, b = [x0 - 3, q.y - 8, x0 + tw + 3, q.y + 8];
+          if (libre(b)) { ok = [sx > 0 ? q.x + e : q.x - e, al, b]; break; }
+        }
+        g.globalAlpha = Math.min(1, (q.z - 0.2) * 5);
+        if (ok) {
+          pris.push(ok[2]); g.textAlign = ok[1];
+          g.lineWidth = 3.5; g.strokeStyle = 'rgba(255,255,255,.92)'; g.lineJoin = 'round'; g.strokeText(t, ok[0], q.y);
+          g.fillStyle = '#334155'; g.fillText(t, ok[0], q.y);
+        } else if (q.villes.length > 1) {
+          const bt = String(q.villes.length), bx = q.x - q.r * 0.8 - 7, by = q.y - q.r * 0.8 - 6;
+          g.font = '700 9px Inter, sans-serif'; const bw = Math.max(13, g.measureText(bt).width + 7);
+          g.fillStyle = '#fff'; g.strokeStyle = '#94a3b8'; g.lineWidth = 1;
+          g.beginPath(); g.roundRect ? g.roundRect(bx - bw / 2, by - 6.5, bw, 13, 6.5) : g.rect(bx - bw / 2, by - 6.5, bw, 13); g.fill(); g.stroke();
+          g.fillStyle = '#334155'; g.textAlign = 'center'; g.fillText(bt, bx, by + 0.5); g.font = '600 11px Inter, sans-serif';
+        }
+        g.globalAlpha = 1;
+      }
     }
     // en direct : une bouffee a chaque connexion d'un PC
     for (const b of this.bouffees) {
