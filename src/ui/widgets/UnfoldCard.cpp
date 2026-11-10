@@ -78,18 +78,29 @@ void arrowOut(gfx::IRenderer& r, float x, float y, gfx::Color c) {   // le petit
 } // namespace
 
 // ============================================================================ la pastille d'un admin
-float personWidth(const UnfoldCard::Person& p, gfx::FontId font) {
+// 1.47.0 : la place d'une pastille autour de son nom (l'initiale, la fleche).
+constexpr float kPersonMin = 4.f + 18.f + 6.f + 8.f;
+
+float personWidth(const UnfoldCard::Person& p, gfx::FontId font, float maxW) {
     std::string label = p.name;
     if (!p.count.empty()) label += " \xC2\xB7 " + p.count;
-    return 4.f + 18.f + 6.f + measureWidth(label, font) + (p.open ? 14.f : 0.f) + 8.f;
+    return std::min(maxW, kPersonMin + measureWidth(label, font) + (p.open ? 14.f : 0.f));
 }
 
-float paintPerson(const PaintContext& ctx, float x, float y, float h, const UnfoldCard::Person& p, bool hovered) {
+float paintPerson(const PaintContext& ctx, float x, float y, float h, const UnfoldCard::Person& p, bool hovered, float maxW, bool* cut) {
     const auto& c = ctx.theme.color;
     const gfx::FontId f = gfx::semibold(kSmall);
     std::string label = p.name;
     if (!p.count.empty()) label += " \xC2\xB7 " + p.count;
-    const float w = 4.f + 18.f + 6.f + ctx.r.measure(label, f).width + (p.open ? 14.f : 0.f) + 8.f;
+    const float extra = kPersonMin + (p.open ? 14.f : 0.f);
+    float w = extra + ctx.r.measure(label, f).width;
+    if (cut) *cut = false;
+    if (w > maxW) {   // 1.47.0 : le nom raccourci, la pastille tient dans sa place
+        const std::string full = label;
+        label = elide(ctx.r, label, f, std::max(8.f, maxW - extra));
+        if (cut) *cut = label != full;
+        w = std::min(maxW, extra + ctx.r.measure(label, f).width);
+    }
     const gfx::Rect box{x, y, w, h};
     ctx.r.fillRoundedRect(box, c.accent.withAlpha(hovered ? 40 : 22), 7.f);
     const gfx::Rect av{x + 4.f, y + (h - 18.f) * 0.5f, 18.f, 18.f};
@@ -112,6 +123,12 @@ PersonChip::PersonChip(UnfoldCard::Person person, std::string id) : Button(perso
     setTooltip(person_.open ? "Sa fiche" : std::string());
 }
 
+std::string PersonChip::liveTooltip(gfx::Point mouse) const {
+    const std::string t = Widget::liveTooltip(mouse);
+    if (!cut_) return t;
+    return t.empty() ? person_.name : person_.name + " \xE2\x80\x94 " + t;
+}
+
 SizeHint PersonChip::sizeHint() const {
     SizeHint h = Button::sizeHint();
     h.preferred.w = personWidth(person_, gfx::semibold(kSmall));
@@ -121,7 +138,24 @@ SizeHint PersonChip::sizeHint() const {
 
 void PersonChip::onPaint(const PaintContext& ctx) {
     const gfx::Rect b = bounds();
-    (void)paintPerson(ctx, b.x, b.y + (b.h - 26.f) * 0.5f, 26.f, person_, hovered());
+    bool cut = false;
+    (void)paintPerson(ctx, b.x, b.y + (b.h - 26.f) * 0.5f, 26.f, person_, hovered(), b.w, &cut);
+    cut_ = cut;
+}
+
+float UnfoldCard::drawFitted(const PaintContext& ctx, gfx::Point at, const std::string& text, gfx::FontId f, gfx::Color ink, float w) const {
+    if (w <= 6.f || text.empty()) return 0.f;
+    const std::string shown = elide(ctx.r, text, f, w);
+    ctx.r.drawText(at, shown, f, ink);
+    const float sw = ctx.r.measure(shown, f).width;
+    if (shown != text) tips_.push_back({{at.x, at.y - 2.f, sw, ctx.r.lineHeight(f) + 4.f}, text});
+    return sw;
+}
+
+std::string UnfoldCard::liveTooltip(gfx::Point mouse) const {
+    for (const auto& t : tips_)
+        if (t.rect.contains(mouse)) return t.text;
+    return Widget::liveTooltip(mouse);
 }
 
 // ============================================================================ la carte
@@ -221,10 +255,25 @@ void UnfoldCard::onLayout() {
     for (const auto& bx : boxes_) boxes = std::max(boxes, boxHeight(bx));
     const float y = b.y + kPadTop + boxes + (boxes > 0.f ? 10.f : 0.f);
     float left = b.x + kPadX, right = b.right() - kPadX;
-    for (auto& it : items_) {
+    // 1.47.0 : la rangee tient dans la carte - trop longue, chaque morceau cede de sa largeur (jusqu'a un minimum), en
+    // proportion de ce qu'il a de trop ; un bouton, une pastille, des mots raccourcis le disent en infobulle.
+    std::vector<float> want, least;
+    float total = 0.f, slack = 0.f;
+    for (const auto& it : items_) {
         float w = 0.f;
         if (it.widget) w = std::max(30.f, it.widget->sizeHint().preferred.w + (it.kind == 0 ? 6.f : 0.f));
         else w = measureWidth(it.text, kSmall) + 4.f;
+        const float lo = std::min(w, it.kind == 2 ? 40.f : 64.f);
+        want.push_back(w);
+        least.push_back(lo);
+        total += w + 8.f;
+        slack += w - lo;
+    }
+    const float over = total - 8.f - (right - left);
+    for (std::size_t i = 0; i < items_.size(); ++i) {
+        auto& it = items_[i];
+        float w = want[i];
+        if (over > 0.f && slack > 0.f) w = std::max(least[i], w - over * (want[i] - least[i]) / slack);
         if (it.right) {
             right -= w;
             it.rect = {right, y, w, kActionsH - 2.f};
@@ -252,8 +301,9 @@ float UnfoldCard::paintLine(const PaintContext& ctx, const Line& l, float x, flo
         x += 14.f;
     }
     if (!l.time.empty()) {
-        r.drawText({x, y + (kLineH - r.lineHeight(kSmall)) * 0.5f}, l.time, kSmall, c.textMuted);
-        x += std::max(38.f, r.measure(l.time, kSmall).width + 8.f);
+        const float tw = std::min(r.measure(l.time, kSmall).width, std::max(20.f, (right - x) * 0.35f));
+        (void)drawFitted(ctx, {x, y + (kLineH - r.lineHeight(kSmall)) * 0.5f}, l.time, kSmall, c.textMuted, tw + 1.f);
+        x += std::max(38.f, tw + 8.f);
     }
     if (l.icon != Icon::None) {
         drawIcon(r, l.icon, {x, cy - 7.f, 14.f, 14.f}, c.textMuted);
@@ -262,19 +312,29 @@ float UnfoldCard::paintLine(const PaintContext& ctx, const Line& l, float x, flo
     // Ce qui suit le texte (la coche, les pastilles, le texte d'apres) : sa place est gardee.
     std::vector<Person> people = l.people;
     if (l.person) people.insert(people.begin(), *l.person);
-    float tail = (l.check ? 18.f : 0.f) + (l.after.empty() ? 0.f : r.measure(l.after, kText).width + 8.f);
-    for (const auto& p : people) tail += personWidth(p, gfx::semibold(kSmall)) + 6.f;
+    // 1.47.0 : les pastilles ne prennent jamais plus que la moitie de la ligne (a parts egales), le texte d'apres un quart.
+    const float avail = std::max(20.f, right - x);
+    const float personMax = people.empty() ? 0.f : std::max(kPersonMin + 24.f, avail * 0.5f / static_cast<float>(people.size()) - 6.f);
+    const float afterW = l.after.empty() ? 0.f : std::min(r.measure(l.after, kText).width, avail * 0.25f) + 8.f;
+    float tail = (l.check ? 18.f : 0.f) + afterW;
+    for (const auto& p : people) tail += personWidth(p, gfx::semibold(kSmall), personMax) + 6.f;
     const gfx::Color ink = ctx.theme.tone(l.tone, c.text);
     float tx = x;
     const float textRoom = std::max(20.f, right - x - tail);
+    bool textCut = false;
     for (const auto& seg : segmentsOf(l.text)) {
         const gfx::FontId f = l.mono ? ctx.theme.font.mono : seg.bold ? gfx::semibold(kText) : kText;
         const float room = x + textRoom - tx;
-        if (room <= 8.f) break;
+        if (room <= 8.f) {
+            textCut = true;
+            break;
+        }
         const std::string shown = elide(r, seg.text, f, room);
+        textCut = textCut || shown != seg.text;
         r.drawText({tx, textY}, shown, f, ink);
         tx += r.measure(shown, f).width;
     }
+    if (textCut) tips_.push_back({{x, y, std::max(10.f, tx - x), kLineH}, plainOf(l.text)});
     if (l.check) {
         tick(r, tx + 6.f, cy - 5.f, c.ok);
         tx += 18.f;
@@ -282,14 +342,13 @@ float UnfoldCard::paintLine(const PaintContext& ctx, const Line& l, float x, flo
         tx += 6.f;
     }
     for (const auto& p : people) {
-        const float pw = paintPerson(ctx, tx, cy - 11.f, 22.f, p);
+        bool cut = false;
+        const float pw = paintPerson(ctx, tx, cy - 11.f, 22.f, p, false, std::min(personMax, std::max(kPersonMin + 8.f, right - tx)), &cut);
         if (p.open) hits_.push_back({{tx, cy - 11.f, pw, 22.f}, p.open});
+        if (cut) tips_.push_back({{tx, cy - 11.f, pw, 22.f}, p.name});
         tx += pw + 6.f;
     }
-    if (!l.after.empty() && tx < right - 8.f) {
-        const std::string shown = elide(r, l.after, kText, right - tx);
-        r.drawText({tx, textY}, shown, kText, c.textMuted);
-    }
+    if (!l.after.empty() && tx < right - 8.f) (void)drawFitted(ctx, {tx, textY}, l.after, kText, c.textMuted, right - tx);
     if (l.link) {
         arrowOut(r, x0 + w - 12.f, cy - 6.f, c.accent);
         hits_.push_back({{x0 - 2.f, y, std::max(10.f, w + 4.f), kLineH}, l.link});
@@ -303,6 +362,7 @@ void UnfoldCard::onPaint(const PaintContext& ctx) {
     const auto& c = th.color;
     const gfx::Rect b = bounds();
     hits_.clear();
+    tips_.clear();
     if (ownBackground_) {
         r.fillRect(b, c.accent.withAlpha(8));
         r.fillRect({b.x, b.y, 3.f, b.h}, c.accent);
@@ -316,7 +376,7 @@ void UnfoldCard::onPaint(const PaintContext& ctx) {
             shapes::fillFramedRect(r, rc, c.panelBg, c.border, 10.f);
             x += 14.f;
             w -= 28.f;
-            r.drawText({x, y + 11.f}, elide(r, bx.title, gfx::semibold(kTitle), w), gfx::semibold(kTitle), c.textMuted);
+            (void)drawFitted(ctx, {x, y + 11.f}, bx.title, gfx::semibold(kTitle), c.textMuted, w);
             y += kTitleH;
         }
         if (bx.paint) {
@@ -332,7 +392,7 @@ void UnfoldCard::onPaint(const PaintContext& ctx) {
             const auto colW = [&](std::size_t k) { return (k == 0 ? c0 : rest) - 8.f; };
             if (!bx.head.empty()) {
                 for (std::size_t k = 0; k < bx.head.size(); ++k)
-                    r.drawText({colX(k), y + 4.f}, elide(r, bx.head[k], gfx::semibold(kTitle), colW(k)), gfx::semibold(kTitle), c.textMuted);
+                    (void)drawFitted(ctx, {colX(k), y + 4.f}, bx.head[k], gfx::semibold(kTitle), c.textMuted, colW(k));
                 y += 24.f;
             }
             for (const auto& row : bx.table) {
@@ -340,7 +400,7 @@ void UnfoldCard::onPaint(const PaintContext& ctx) {
                 for (std::size_t k = 0; k < row.size() && k < cols; ++k) {
                     const gfx::FontId f = k + 1 == cols && cols > 1 ? gfx::semibold(kText) : kText;
                     const gfx::Color ink = k == 0 ? c.text : (k + 1 == cols ? c.text : c.textMuted);
-                    r.drawText({colX(k), y + (kTableRowH - r.lineHeight(f)) * 0.5f}, elide(r, row[k], f, colW(k)), f, ink);
+                    (void)drawFitted(ctx, {colX(k), y + (kTableRowH - r.lineHeight(f)) * 0.5f}, row[k], f, ink, colW(k));
                 }
                 y += kTableRowH;
             }
@@ -350,9 +410,9 @@ void UnfoldCard::onPaint(const PaintContext& ctx) {
             y += paintLine(ctx, l, x, y, w, bx.timeline);
         }
     }
-    // Les mots de la rangee d'actions (les boutons se dessinent seuls).
+    // Les mots de la rangee d'actions (les boutons se dessinent seuls) : raccourcis a leur place.
     for (const auto& it : items_)
-        if (it.kind == 2) r.drawText({it.rect.x, it.rect.y + (it.rect.h - r.lineHeight(kSmall)) * 0.5f}, it.text, kSmall, c.textMuted);
+        if (it.kind == 2) (void)drawFitted(ctx, {it.rect.x, it.rect.y + (it.rect.h - r.lineHeight(kSmall)) * 0.5f}, it.text, kSmall, c.textMuted, it.rect.w);
 }
 
 EventResult UnfoldCard::onEvent(const InputEvent& ev) {

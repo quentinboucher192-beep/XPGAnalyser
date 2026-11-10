@@ -95,6 +95,10 @@ public:
     // Les essais : cliquer le lien de la ligne `line` de la boite `box` ; tout le texte des boites (une ligne chacun).
     bool clickLink(std::size_t box, std::size_t line);
     [[nodiscard]] std::string text() const;
+    // 1.47.0 : rien ne deborde - un morceau trop long (un texte, une pastille, un titre) est raccourci (<< ... >>) ; sous la
+    // souris, l'infobulle le dit en entier.
+    [[nodiscard]] bool        hasTooltip() const override { return !tips_.empty() || Widget::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
 
 protected:
     void        onLayout() override;
@@ -113,6 +117,10 @@ private:
         gfx::Rect             rect;
         std::function<void()> run;
     };
+    struct Tip {
+        gfx::Rect   rect;
+        std::string text;
+    };
     [[nodiscard]] float boxHeight(const Box& b) const;
     [[nodiscard]] float actionsHeight() const;
     [[nodiscard]] std::vector<gfx::Rect> boxRects(float width, float top) const;
@@ -122,6 +130,9 @@ private:
     std::vector<RowItem> items_;
     bool                 ownBackground_{false};
     mutable std::vector<Hit> hits_;
+    mutable std::vector<Tip> tips_;   // 1.47.0 : ce qui est raccourci, et son texte entier
+    // Dessiner un texte sur une ligne, raccourci a `w` (son texte entier en infobulle s'il l'est) ; rend sa largeur.
+    float drawFitted(const PaintContext& ctx, gfx::Point at, const std::string& text, gfx::FontId f, gfx::Color ink, float w) const;
 };
 
 // Une pastille d'admin seule (la rangee d'actions, une ligne) : son initiale sur sa couleur, son nom, << > >>.
@@ -130,16 +141,22 @@ public:
     PersonChip(UnfoldCard::Person person, std::string id);
     [[nodiscard]] SizeHint sizeHint() const override;
     [[nodiscard]] const UnfoldCard::Person& person() const noexcept { return person_; }
+    // 1.47.0 : plus etroite que son nom (sa place), le nom raccourci ; l'infobulle le dit en entier.
+    [[nodiscard]] bool        hasTooltip() const override { return true; }
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
 
 protected:
     void onPaint(const PaintContext&) override;
 
 private:
     UnfoldCard::Person person_;
+    mutable bool       cut_{false};
 };
 
-// Dessiner une pastille d'admin a (x, y) ; rend sa largeur. Pour les listes peintes (le journal) et les cartes.
-float paintPerson(const PaintContext& ctx, float x, float y, float h, const UnfoldCard::Person& p, bool hovered = false);
-[[nodiscard]] float personWidth(const UnfoldCard::Person& p, gfx::FontId font);
+// Dessiner une pastille d'admin a (x, y) ; rend sa largeur. Pour les listes peintes (le journal) et les cartes. 1.47.0 :
+// `maxW` - jamais plus large : le nom raccourci (<< ... >>) ; `cut` (facultatif) : vrai s'il l'a ete.
+float paintPerson(const PaintContext& ctx, float x, float y, float h, const UnfoldCard::Person& p, bool hovered = false, float maxW = 1e9f,
+                  bool* cut = nullptr);
+[[nodiscard]] float personWidth(const UnfoldCard::Person& p, gfx::FontId font, float maxW = 1e9f);
 
 } // namespace ui

@@ -266,14 +266,35 @@ namespace ui {
         }
 
         const auto  m = ctx.r.measure(text_, ctx.theme.font.ui);
-        const float total = m.width + (iconSide > 0.f ? iconSide + 6.f : 0.f);
+        // 1.47.0 : trop etroit - le texte raccourci (<< ... >>, l'infobulle dit le reste), jamais coupe aux deux bouts.
+        const float room = r.w - 12.f - (iconSide > 0.f ? iconSide + 6.f : 0.f);
+        std::string shown = text_;
+        elided_ = false;
+        if (m.width > room && room > 10.f) {
+            const std::string dots = "\xE2\x80\xA6";
+            while (!shown.empty() && ctx.r.measure(shown + dots, ctx.theme.font.ui).width > room) {
+                while (!shown.empty() && (static_cast<unsigned char>(shown.back()) & 0xC0) == 0x80) shown.pop_back();
+                if (!shown.empty()) shown.pop_back();
+            }
+            while (!shown.empty() && shown.back() == ' ') shown.pop_back();
+            shown += dots;
+            elided_ = true;
+        }
+        const float shownW = elided_ ? ctx.r.measure(shown, ctx.theme.font.ui).width : m.width;
+        const float total = shownW + (iconSide > 0.f ? iconSide + 6.f : 0.f);
         float x = r.x + (r.w - total) * 0.5f;
 
         if (iconSide > 0.f) {
             drawIcon(ctx.r, icon_, { x, r.y + (r.h - iconSide) * 0.5f, iconSide, iconSide }, text);
             x += iconSide + 6.f;
         }
-        ctx.r.drawText({ x, r.y + (r.h - m.height) * 0.5f }, text_, ctx.theme.font.ui, text);
+        ctx.r.drawText({ x, r.y + (r.h - m.height) * 0.5f }, shown, ctx.theme.font.ui, text);
+    }
+
+    std::string Button::liveTooltip(gfx::Point mouse) const {
+        std::string t = Widget::liveTooltip(mouse);
+        if (!elided_ || t == text_) return t;
+        return t.empty() ? text_ : text_ + "\n" + t;
     }
 
     EventResult Button::onEvent(const InputEvent& ev) {

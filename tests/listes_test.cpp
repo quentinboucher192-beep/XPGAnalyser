@@ -52,7 +52,10 @@ void check(bool ok, const std::string& what) {
 // ---- dessiner a blanc ----
 class TextRenderer final : public gfx::IRenderer {
 public:
-    void beginFrame(gfx::Color) override { texts.clear(); }
+    void beginFrame(gfx::Color) override {
+        texts.clear();
+        drawn.clear();
+    }
     void endFrame() override {}
     void pushClip(const gfx::Rect& r) override { clips_.push_back(clips_.empty() ? r : clips_.back().intersect(r)); }
     void popClip() override {
@@ -63,9 +66,10 @@ public:
     void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
     void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
     void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
-    void drawText(gfx::Point, std::string_view s, gfx::FontId, gfx::Color) override {
+    void drawText(gfx::Point p, std::string_view s, gfx::FontId f, gfx::Color) override {
         if (!clips_.empty() && clips_.back().empty()) return;
         texts += std::string(s) + "\n";
+        drawn.push_back({p.x, measure(s, f).width, std::string(s)});
     }
     [[nodiscard]] gfx::TextMetrics measure(std::string_view s, gfx::FontId f) const override {
         const float h = f.v ? static_cast<float>(f.v) : 16.f;
@@ -85,6 +89,11 @@ public:
         return n;
     }
     std::string texts;
+    struct Drawn {
+        float       x{0}, w{0};
+        std::string text;
+    };
+    std::vector<Drawn> drawn;   // 1.47.0 : ou chaque texte est dessine, et sa largeur (rien ne deborde)
 
 private:
     std::vector<gfx::Rect> clips_;
@@ -640,6 +649,65 @@ void testCard() {
     if (chip) chip->clicked->emit();
     check(open && chip && person == 2, "les boutons de la rangee : des id, cliquables");
     check(has(card.text(), "Licence XPG-2026-00391") && has(card.text(), "Ouvrir la licence"), "text() : sans les **");
+
+    // 1.47.0 : rien ne deborde - un nom d'admin tres long (la cle d'essai), une carte etroite : raccourcis, l'infobulle dit tout.
+    const std::string longName = "CLE D'ESSAI XPG-CLE-ESSAI-LICENCES - NE PAS LIVRER (Camille Essai)";
+    ui::UnfoldCard narrow("liste.depliage");
+    ui::UnfoldCard::Box nb;
+    nb.title = "LA SIGNATURE ET TOUT CE QUI VA AVEC, UN TITRE TRES LONG";
+    nb.lines.push_back({.text = "sign\xC3\xA9" "e par", .person = ui::UnfoldCard::Person{longName, gfx::Color::rgb(0x5B4BDB), [] {}}, .after = "le 06/11/2026 sur PC-BUREAU-01"});
+    nb.lines.push_back({.icon = ui::Icon::Document, .text = "un texte bien trop long pour une boite de cette largeur, vraiment"});
+    narrow.addBox(std::move(nb));
+    narrow.addButton("Voir tout le journal de cet admin", "liste.voir", ui::Icon::GoTo, [] {});
+    narrow.addPerson({longName, gfx::Color::rgb(0x5B4BDB), [] {}}, "liste.admin");
+    narrow.addText("registre n\xC2\xB0 318 sign\xC3\xA9 le 06/11/2026 par", true);
+    const float nw = 340.f, nh = narrow.heightFor(nw);
+    TextRenderer nr;
+    nr.beginFrame({});
+    narrow.setBounds({0.f, 0.f, nw, nh});
+    narrow.layout();
+    {
+        ui::PaintContext ctx{nr, theme(), {0.f, 0.f, nw, nh}, 0.0};
+        narrow.render(ctx);
+    }
+    bool inside = true, chipCut = false, lineCut = false;
+    std::string out;
+    for (const auto& d : nr.drawn) {
+        if (d.x < -0.5f || d.x + d.w > nw + 0.5f) {
+            inside = false;
+            out += d.text + " ; ";
+        }
+        if (d.text.rfind("CLE D'ESSAI", 0) == 0 && d.text != longName && d.text.size() >= 3 && d.text.compare(d.text.size() - 3, 3, "\xE2\x80\xA6") == 0) chipCut = true;
+        if (d.text.rfind("un texte bien", 0) == 0 && d.text.find("vraiment") == std::string::npos) lineCut = true;
+    }
+    check(inside, "carte etroite : aucun texte hors de la carte (" + out + ")");
+    check(chipCut && lineCut, "le nom de l'admin et la ligne trop longue : raccourcis par << ... >>");
+    bool tipName = false, tipLine = false;
+    for (float x = 0.f; x < nw; x += 4.f)
+        for (float y = 0.f; y < nh; y += 4.f) {
+            const std::string tip = narrow.liveTooltip({x, y});
+            tipName = tipName || tip == longName;
+            tipLine = tipLine || tip == "un texte bien trop long pour une boite de cette largeur, vraiment";
+        }
+    check(tipName && tipLine, "sous la souris : le nom entier, la ligne entiere");
+    auto* rowChip = dynamic_cast<ui::Button*>(narrow.findById("liste.admin"));
+    auto* rowBtn = dynamic_cast<ui::Button*>(narrow.findById("liste.voir"));
+    const float rowRight = rowChip && rowBtn ? std::max(rowChip->bounds().right(), rowBtn->bounds().right()) : 1e9f;
+    check(rowChip && rowBtn && rowRight <= nw && rowBtn->bounds().right() <= rowChip->bounds().x + 0.5f, "la rangee d'actions tient dans la carte, sans chevauchement");
+    check(rowChip && rowChip->hasTooltip() && has(rowChip->liveTooltip({rowChip->bounds().x + 4.f, rowChip->bounds().y + 4.f}), longName),
+          "la pastille raccourcie : son nom entier en infobulle");
+    // Un bouton trop etroit : raccourci (jamais coupe aux deux bouts), le texte entier en infobulle.
+    ui::Button btn("Exporter le fichier de licence\xE2\x80\xA6", "b");
+    TextRenderer br;
+    br.beginFrame({});
+    btn.setBounds({0.f, 0.f, 120.f, 30.f});
+    {
+        ui::PaintContext ctx{br, theme(), {0.f, 0.f, 120.f, 30.f}, 0.0};
+        btn.render(ctx);
+    }
+    check(!br.drawn.empty() && br.drawn.back().x >= 0.f && br.drawn.back().x + br.drawn.back().w <= 120.5f && btn.elided() &&
+              btn.liveTooltip({10.f, 10.f}) == "Exporter le fichier de licence\xE2\x80\xA6",
+          "un bouton trop etroit : son texte raccourci, entier en infobulle");
 }
 
 } // namespace

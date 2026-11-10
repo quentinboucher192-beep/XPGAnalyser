@@ -41,6 +41,11 @@ namespace ui {
         [[nodiscard]] SizeHint sizeHint() const override;
         // 1.14.1 (N2) : un bouton garde la fleche, meme pose dans un champ ou un separateur.
         [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point) const override { return cursor::Shape::Default; }
+        // 1.47.0 : un bouton trop etroit pour son texte le raccourcit (<< ... >>) au lieu de le couper aux deux bouts ;
+        // son infobulle dit alors le texte entier.
+        [[nodiscard]] bool        elided() const noexcept { return elided_; }
+        [[nodiscard]] bool        hasTooltip() const override { return Widget::hasTooltip() || elided_; }
+        [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
 
         const core::SignalPtr<> clicked = core::Signal<>::create();
 
@@ -55,6 +60,7 @@ namespace ui {
         Style                        style_{ Style::Default };
         core::ActionId               action_{};
         bool                         pressed_{ false };
+        mutable bool                 elided_{ false };   // 1.47.0 : le dernier dessin a raccourci le texte
     };
 
     // ---------------------------------------------------- une ligne d'action ---
