@@ -94,7 +94,10 @@ struct CardFigures {
     double prolonged{kNaN}, options{kNaN}, active{kNaN}, expired{kNaN}, revoked{kNaN}, pcs{kNaN};
     double basket{kNaN}, basketBefore{kNaN}, refunds{kNaN}, refundsCount{kNaN};
     double clients{kNaN}, clientsBefore{kNaN};
-    std::vector<std::pair<std::string, double>> byOffer, topClients;   // licences_nouvelles par offre, par client
+    double orders{kNaN}, ordersBefore{kNaN}, amount{kNaN}, amountBefore{kNaN};   // ses commandes livrees (la periode)
+    std::vector<std::pair<std::string, double>> byOffer, topClients;   // licences_nouvelles par offre ; ventes_montant par client (centimes)
+    std::vector<std::pair<std::string, double>> topClientLicences;    // ... ses licences chez ces clients
+    std::vector<std::pair<std::string, double>> byArticle;            // ventes_commandes par article
     double topShare{kNaN};                                             // la part de ses 5 premiers (du montant)
     std::vector<stats::Bucket> weeks;                                  // 12 semaines
     std::vector<double> weekLicences, weekLicencesOthers, weekRequests, weekRequestsOthers, weekAmount, weekAmountOthers, weekDelay;
@@ -116,6 +119,7 @@ struct Data {
     std::vector<Person> people;                     // l'admin+, puis les admins de la liste, puis les demandes
     js::Overview        ov;                         // les chiffres du journal
     std::vector<js::Line> lines;                    // le journal lu (les plus anciennes d'abord)
+    std::vector<std::string> editorKeys;            // les cles de l'editeur (l'admin+), en hexadecimal
     bool                journal{false};             // le journal est lu (l'admin+)
     int                 journalLines{0};
     int                 profiles{0};
@@ -269,6 +273,9 @@ void        overviewSelect(ScrolledView& v, const std::string& key);
 [[nodiscard]] std::string overviewSelected(const ScrolledView& v);
 void        overviewSort(ScrolledView& v, int column);   // un clic sur un titre (le meme : l'ordre inverse)
 [[nodiscard]] std::vector<std::string> overviewOrder(const ScrolledView& v);   // les cles, dans l'ordre montre (filtre compris)
+// Le clic droit sur la ligne de cet admin : ses libelles dans l'ordre (les essais) ; en lancer un.
+[[nodiscard]] std::vector<std::string> overviewMenu(const ScrolledView& v, const std::string& key);
+bool overviewMenuRun(const ScrolledView& v, const std::string& key, const std::string& label);
 // La fiche : aller a une ancre (0 Vue d'ensemble, 1 Activite, 2 Licences et clients, 3 Demandes, 4 Boutique, 5 Securite, 6 Droits).
 void        cardAnchor(ScrolledView& v, int anchor);
 // Les donnees ont change : refaire (les barres de filtres, les graphiques).

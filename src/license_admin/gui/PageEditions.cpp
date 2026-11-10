@@ -20,9 +20,11 @@
 //  signature est refusee (elle effacerait l'autre) ; << Annuler les
 //  modifications >> repart du nouveau.
 // =============================================================================
+#include "ListKit.hpp"
 #include "Page.hpp"
 
 #include "../../ui/Theme.hpp"
+#include "../../ui/widgets/Charts.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
 #include "../../ui/widgets/DatePicker.hpp"
@@ -389,6 +391,7 @@ public:
 
     void refresh() override {
         syncDraft(ws());
+        who_.reset();
         hasRegistry_ = ws().hasRegistry();
         if (!hasRegistry_) newOpen_ = false;
         updateBar();
@@ -399,12 +402,79 @@ public:
         createBtn_->setVisibility(newOpen_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         closeNewBtn_->setVisibility(newOpen_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         showContent(hasRegistry_);
+        if (bar_) bar_->setVisibility(vis);
         if (hasRegistry_) reloadContent();
+        // 1.47.0 : une autre liste y mene (<< Aller a > Ses options >>...) : la barre filtree sur ce qu'elle demande.
+        if (const std::string f = takePageFocus(prefix_); !f.empty() && hasRegistry_) applyFocus(f);
         invalidateLayout();
         invalidate();
     }
 
 protected:
+    // ---- 1.47.0 (planches 06, 07, 12) : la barre, le clic droit, le depliage - ce que les trois listes partagent ----
+    //  La barre lit texts_ : TOUTES les lignes du brouillon (les colonnes de la table, puis les champs en plus) ; la
+    //  page ne met dans sa table que celles que bar_->accepts(i) garde.
+    virtual void applyFocus(const std::string& what) { (void)what; }
+    void setupBar(ui::TableView& table, std::vector<ui::FilterBar::Field> fields, const std::string& memoryKey, const std::string& noun,
+                  std::function<void()> rebuild) {
+        bar_ = add(*this, std::make_unique<ui::FilterBar>(prefix_, std::move(fields)));
+        bar_->setNoun(noun);
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        ui::FilterBar::Source src;
+        src.rows = [this] { return texts_.size(); };
+        src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+        bar_->setSource(std::move(src));
+        bar_->linkTable(table);
+        bar_->setMemoryKey(memoryKey);
+        links_ += bar_->changed->connect(std::move(rebuild));
+    }
+    // Une autre page, filtree sur `focus` (requestPageFocus).
+    void goTo(const std::string& page, const std::string& focus) {
+        requestPageFocus(page, focus);
+        if (host_.navigate) host_.navigate(page);
+    }
+    // Les lignes du brouillon : << signee >>, << modifiee >>, << nouvelle >> (0, 1, 2).
+    static std::string markText(int mark) { return mark == 2 ? "nouvelle" : mark == 1 ? "modifi\xC3\xA9" "e" : "sign\xC3\xA9" "e"; }
+    // La ligne d'une table, ses cases separees par des tabulations (Copier > La ligne).
+    static std::string lineOf(const ui::TableView& t, RowIndex r) {
+        std::string line;
+        const auto& m = t.model();
+        for (std::size_t c = 0; m && c < m->columnCount(); ++c) line += (c ? "\t" : "") + m->cellText(r, c);
+        return line;
+    }
+    // Les licences de l'archive (hors revoquees) en cours chaque semaine des 12 derniers mois, d'apres leurs dates : la
+    // petite courbe d'une ligne depliee. `has` : celle-ci compte-t-elle a cette heure ?
+    std::vector<double> weekly(const std::function<bool(const LicenceEntry&, Seconds)>& has) const {
+        std::vector<double> out;
+        const Seconds now = ws().now();
+        for (int k = 52; k >= 0; --k) {
+            const Seconds t = now - static_cast<Seconds>(k) * 7 * lic::kDay;
+            double n = 0;
+            for (const auto& l : ws().licences())
+                if (!l.revoked && l.licence.issuedAt <= t && (l.licence.expiresAt == 0 || t < l.licence.expiresAt) && has(l, t)) n += 1;
+            out.push_back(n);
+        }
+        return out;
+    }
+    void addCurve(ui::UnfoldCard& card, std::string title, std::vector<double> values) {
+        card.setCurve(std::move(title), [values](const ui::PaintContext& ctx, gfx::Rect box) {
+            ui::charts::paintSparkline(ctx.r, ctx.theme, box.inset(4.f, 6.f), values);
+            const std::string last = std::to_string(static_cast<long long>(values.empty() ? 0 : values.back()));
+            ctx.r.drawText({box.right() - 4.f - ctx.r.measure(last, ctx.theme.font.uiBold).width, box.y - 2.f}, last, ctx.theme.font.uiBold, ctx.theme.color.text);
+        });
+    }
+    // Qui a signe le registre en vigueur (le journal des admins : << registre N >>), au bas d'une ligne depliee.
+    void addSigner(ui::UnfoldCard& card) {
+        if (!ws().hasRegistry()) return;
+        const std::uint64_t n = ws().registry().number;
+        const auto d = who_.last({"offres", "options", "annonces"}, "registre " + std::to_string(n));
+        card.addText("registre n\xC2\xB0 " + std::to_string(n) + " sign\xC3\xA9 le " + dateFr(ws().registry().issuedAt) + (d ? " par" : ""), true);
+        if (d) card.addPerson(listkit::person(host_, d->key, d->who), prefix_ + ".depliage.signe", true);
+    }
+
+    ui::FilterBar*                        bar_{nullptr};    // 1.47.0
+    std::vector<std::vector<std::string>> texts_;           // ce que la barre lit : toutes les lignes du brouillon
+    listkit::WhoDid                       who_{host_.workspace()};
     // ---- ce que chaque page fournit ----
     virtual void reloadContent() = 0;                        // relire le brouillon (tables ET champs du panneau)
     virtual void contentEdited() = 0;                        // apres une modification : les tables (pas les champs tapes)
@@ -504,6 +574,11 @@ protected:
         }
         problemY_ = y;
         if (!problemText().empty()) y += kLineH + 4.f;
+        if (bar_ && bar_->visible()) {   // 1.47.0 : la barre << Filtrer et chercher >>, au-dessus de la table et de la fiche
+            const float bh = bar_->heightFor(w);
+            bar_->setBounds({x, y, w, bh});
+            y += bh + kGap;
+        }
         const gfx::Rect content{x, y, w, std::max(60.f, b.bottom() - kPad - y)};
         content_ = content;
         layoutContent(content);
@@ -785,6 +860,10 @@ public:
             if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
             select(ids_[rows.front()]);
         });
+        // 1.47.0 (planches 06, 07, 12) : la barre (le type, l'etat de vente, ce qu'elle ouvre...), le clic droit, le depliage.
+        setupBar(*table_, barFields(), "offres", "offres", [this] { rebuildTable(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
 
         label_ = add(*this, std::make_unique<ui::InputText>("editions.libelle"));
         type_ = add(*this, std::make_unique<ui::DropDown>("editions.type"));
@@ -1347,35 +1426,37 @@ private:
 
     void rebuildTable() {
         const lic::Registry& reg = draft().reg;
-        const lic::Registry* signedReg = ws().hasRegistry() ? &ws().registry() : nullptr;
         std::vector<std::vector<std::string>> rows, keys;
         std::vector<int> marks;   // 0 pareille, 1 modifiee, 2 nouvelle
+        std::vector<bool> retired, temporary;
         ids_.clear();
+        // 1.47.0 : toutes les offres pour la barre (texts_), puis la table : celles qu'elle garde.
+        texts_.clear();
+        std::vector<int> allMarks;
         for (const auto& e : reg.editions) {
+            const int mark = markOf(e);
+            auto t = cellsOf(e);
+            t.push_back(stateOf(e));
+            t.push_back(opensOf(e));
+            t.push_back(markText(mark));
+            texts_.push_back(std::move(t));
+            allMarks.push_back(mark);
+        }
+        bar_->refreshCounts();
+        for (std::size_t i = 0; i < reg.editions.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            const lic::EditionDef& e = reg.editions[i];
             ids_.push_back(e.id);
             const long long used = static_cast<long long>(ws().licencesInForce(e.id).size());   // 1.42.0
-            rows.push_back({e.id, e.label, lic::licenseTypeLabel(e.type), std::to_string(e.maxDevices), daysText(e.durationDays),
-                            std::to_string(e.offlineGraceDays) + " j", std::to_string(e.features.size()), saleCell(e), std::to_string(used)});
+            rows.push_back(cellsOf(e));
             keys.push_back({"", "", "", padKey(e.maxDevices), padKey(e.durationDays > 0 ? e.durationDays : 999999), padKey(e.offlineGraceDays),
                             padKey(static_cast<long long>(e.features.size())), "", padKey(used)});
-            const lic::EditionDef* o = signedReg ? signedReg->edition(e.id) : nullptr;
-            int mark = 0;
-            if (!o) mark = 2;
-            else {
-                lic::Registry a, b;
-                a.editions = {*o};
-                b.editions = {e};
-                if (!changesOf(a, b).empty()) mark = 1;
-            }
-            marks.push_back(mark);
-        }
-        const std::string free = reg.unlicensedEdition;
-        const std::vector<std::string> idsCopy = ids_;
-        std::vector<bool> retired, temporary;
-        for (const auto& e : reg.editions) {
+            marks.push_back(allMarks[i]);
             retired.push_back(e.retired);
             temporary.push_back(e.temporary() && !e.retired);
         }
+        const std::string free = reg.unlicensedEdition;
+        const std::vector<std::string> idsCopy = ids_;
         const float scroll = table_->scrollOffset();
         loading_ = true;
         model_->set(std::move(rows), std::move(keys), [idsCopy, free, marks, retired, temporary](RowIndex r, std::size_t c) {
@@ -1404,6 +1485,198 @@ private:
         table_->setScrollOffset(scroll);
         loading_ = false;
         rebuildFeatures();
+    }
+
+    // ---- 1.47.0 : la barre, le clic droit, le depliage ----
+    std::vector<std::string> cellsOf(const lic::EditionDef& e) const {
+        const long long used = static_cast<long long>(ws().licencesInForce(e.id).size());
+        return {e.id, e.label, lic::licenseTypeLabel(e.type), std::to_string(e.maxDevices), daysText(e.durationDays), std::to_string(e.offlineGraceDays) + " j",
+                std::to_string(e.features.size()), saleCell(e), std::to_string(used)};
+    }
+    // 0 pareille que le registre signe, 1 modifiee, 2 nouvelle.
+    int markOf(const lic::EditionDef& e) const {
+        const lic::EditionDef* o = ws().hasRegistry() ? ws().registry().edition(e.id) : nullptr;
+        if (!o) return 2;
+        lic::Registry a, b;
+        a.editions = {*o};
+        b.editions = {e};
+        return changesOf(a, b).empty() ? 0 : 1;
+    }
+    // L'etat de vente (la puce Etat).
+    std::string stateOf(const lic::EditionDef& e) const {
+        if (e.retired) return "retir\xC3\xA9" "e";
+        if (!e.temporary()) return "en vente";
+        const lic::Seconds t = ws().now();
+        if (e.saleUntil && t >= e.saleUntil) return "vente finie";
+        if (e.saleFrom && t < e.saleFrom) return "\xC3\xA0 venir";
+        return "temporaire";
+    }
+    // Ce qu'elle ouvre (les libelles, un par ligne : Field::split).
+    std::string opensOf(const lic::EditionDef& e) const {
+        std::string out;
+        for (const auto& g : e.features) {
+            const lic::FeatureDef* f = draft().reg.feature(g.id);
+            out += (out.empty() ? "" : "\n") + (f && !f->label.empty() ? f->label : g.id);
+        }
+        return out;
+    }
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(12);
+        f[0] = {.title = "Identifiant", .kind = K::Text};
+        f[1] = {.title = "Libell\xC3\xA9", .kind = K::Text};
+        f[2] = {.title = "Type", .chip = true, .noun = "un type"};
+        f[3] = {.title = "PC", .noun = "un nombre de PC"};
+        f[4] = {.title = "Dur\xC3\xA9" "e", .noun = "une dur\xC3\xA9" "e"};
+        f[5] = {.title = "Gr\xC3\xA2" "ce", .noun = "une gr\xC3\xA2" "ce"};
+        f[6] = {.title = "Fonctionnalit\xC3\xA9s", .kind = K::Text};
+        f[7] = {.title = "En vente", .kind = K::Text};
+        f[8] = {.title = "Licences", .kind = K::Text};
+        f[9] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat",
+                .order = {"en vente", "temporaire", "\xC3\xA0 venir", "vente finie", "retir\xC3\xA9" "e"}};
+        f[10] = {.title = "Ouvre", .chip = true, .noun = "une fonctionnalit\xC3\xA9", .searchable = false, .split = "\n"};
+        f[11] = {.title = "Brouillon", .noun = "un \xC3\xA9tat", .order = {"sign\xC3\xA9" "e", "modifi\xC3\xA9" "e", "nouvelle"}};
+        return f;
+    }
+    void applyFocus(const std::string& what) override {
+        if (what.rfind("fonction:", 0) == 0) {   // << Les offres qui l'accordent >> (Fonctionnalites)
+            bar_->clearAll();
+            bar_->filterOn(10, what.substr(9));
+        }
+    }
+    // Retiree / remise en vente : le brouillon (comme la case << Retiree >>).
+    void setRetired(const std::string& id, bool on) {
+        for (auto& e : draft().reg.editions)
+            if (e.id == id && e.retired != on) {
+                e.retired = on;
+                if (!on) (void)ws().setDeleteWhenUnused(id, false);
+                edited();
+                if (id == selected_) loadPanel();
+            }
+    }
+
+    ui::ListMenu menuFor() {
+        const auto sel = table_->selectedModelRows();
+        ui::ListMenu m({sel.size(), "offres", true});
+        if (sel.empty() || sel.front() >= ids_.size()) return m;
+        const RowIndex row = sel.front();
+        const std::string id = ids_[row];
+        const lic::Registry& reg = draft().reg;
+        const lic::EditionDef* e = reg.edition(id);
+        if (!e) return m;
+        const bool free = id == reg.unlicensedEdition;
+        m.unfold(*table_);
+        if (e->retired)
+            m.action({.label = "Remettre en vente", .icon = ui::Icon::Undo, .run = [this, id] { setRetired(id, false); }, .note = "dans le brouillon, \xC3\xA0 signer"});
+        else
+            m.action({.label = "Retirer de la vente", .icon = ui::Icon::Close, .why = free ? std::string("l'offre sans licence ne se retire pas") : std::string(),
+                      .run = [this, id] { setRetired(id, true); }, .note = "dans le brouillon, \xC3\xA0 signer"});
+        std::size_t all = 0;
+        for (const auto& l : ws().licences()) all += l.licence.edition == id ? 1 : 0;
+        const std::size_t inForce = ws().licencesInForce(id).size();
+        m.goTo({.label = "Ses licences (" + std::to_string(inForce) + " en cours)", .icon = ui::Icon::Document,
+                .why = all ? std::string() : std::string("aucune licence de cette offre"), .run = [this, id] { goTo("licences", "offre:" + id); }});
+        m.goTo({.label = "Ses PC (Activations)", .icon = ui::Icon::Station, .why = all ? std::string() : std::string("aucune licence de cette offre"),
+                .run = [this, id] { goTo("activations", "offre:" + id); }});
+        m.goTo({.label = "Ses fonctionnalit\xC3\xA9s (" + std::to_string(e->features.size()) + ")", .icon = ui::Icon::Module,
+                .why = e->features.empty() ? std::string("elle n'en ouvre aucune") : std::string(), .run = [this, id] { goTo("fonctionnalites", "offre:" + id); }});
+        std::size_t options = 0;
+        for (const auto& o : reg.options) options += o.offeredTo(id) && !o.retired ? 1 : 0;
+        m.goTo({.label = "Ses options (" + std::to_string(options) + ")", .icon = ui::Icon::Star,
+                .why = options ? std::string() : std::string("aucune option propos\xC3\xA9" "e"), .run = [this, id] { goTo("options", "offre:" + id); }});
+        const auto on = [&](std::size_t f, const std::string& label, const std::string& v) {
+            if (!v.empty()) m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+        };
+        on(2, "Ce type", lic::licenseTypeLabel(e->type));
+        on(9, "Cet \xC3\xA9tat", stateOf(*e));
+        on(3, "Ces PC", std::to_string(e->maxDevices));
+        on(4, "Cette dur\xC3\xA9" "e", daysText(e->durationDays));
+        if (const int mark = markOf(*e)) on(11, "Le brouillon", markText(mark));
+        m.copy("L'identifiant", id, ui::Icon::Copy);
+        m.copy("Le libell\xC3\xA9", e->label, ui::Icon::Copy);
+        m.copy("La ligne", lineOf(*table_, row), ui::Icon::Copy);
+        m.exportRows([this, sel] { listkit::exportRows(host_, *table_, sel, "offres.csv", "offres"); });
+        m.danger({.label = "Supprimer l'offre", .icon = ui::Icon::Delete, .why = free ? std::string("l'offre sans licence ne se supprime pas") : std::string(),
+                  .run = [this, id] {
+                      select(id);
+                      deleteOffer();
+                  }});
+        return m;
+    }
+
+    // La ligne depliee : ce qu'elle ouvre, sa vente, ses licences (et leur courbe), le brouillon, qui a signe le registre.
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= ids_.size()) return nullptr;
+        const lic::Registry& reg = draft().reg;
+        const lic::EditionDef* e = reg.edition(ids_[r]);
+        if (!e) return nullptr;
+        const std::string id = e->id;
+        auto card = std::make_unique<ui::UnfoldCard>("editions.depliage");
+        {
+            ui::UnfoldCard::Box b{.title = "CE QU'ELLE OUVRE"};
+            for (const auto& product : productsOf(reg)) {
+                std::vector<std::string> labels;
+                for (const auto& f : reg.features)
+                    if (f.product == product && grants(*e, f.id)) labels.push_back(f.label.empty() ? f.id : f.label);
+                if (labels.empty()) continue;
+                std::string t = "**" + product + "** (" + std::to_string(labels.size()) + ") : " + join(labels, ", ");
+                b.lines.push_back({.icon = ui::Icon::Module, .text = t});
+                if (b.lines.size() == 4) break;
+            }
+            if (b.lines.empty()) b.lines.push_back({.icon = ui::Icon::Info, .text = "rien : coche ses fonctionnalit\xC3\xA9s dans la fiche"});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "SA VENTE"};
+            b.lines.push_back({.icon = ui::Icon::Document, .text = "**" + e->price + "**", .tone = ui::Tone::None});
+            if (e->price.empty()) b.lines.back().text = "pas de prix montr\xC3\xA9";
+            if (!e->promoPrice.empty())
+                b.lines.push_back({.icon = ui::Icon::Star, .text = "r\xC3\xA9" "duction **" + e->promoPrice + "**" + (e->promoUntil ? " jusqu'au " + dateFr(e->promoUntil) : std::string())});
+            b.lines.push_back({.icon = ui::Icon::History, .text = "en vente : **" + saleCell(*e) + "**", .tone = e->retired ? ui::Tone::Muted : ui::Tone::None});
+            b.lines.push_back({.icon = ui::Icon::Settings, .text = "**" + std::to_string(e->maxDevices) + "** PC \xC2\xB7 " + daysText(e->durationDays) + " \xC2\xB7 gr\xC3\xA2" "ce " +
+                                                                std::to_string(e->offlineGraceDays) + " j \xC2\xB7 " + lic::licenseTypeLabel(e->type)});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "SES LICENCES"};
+            const auto used = ws().licencesInForce(id);
+            std::set<std::string> clients;
+            for (const auto& lid : used)
+                if (const LicenceEntry* l = ws().licence(lid)) clients.insert(l->licence.customer);
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document,
+                                   .text = "**" + std::to_string(used.size()) + "** en cours chez **" + std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")};
+            l.link = [this, id] { goTo("licences", "offre:" + id); };
+            b.lines.push_back(std::move(l));
+            const lic::Seconds last = ws().lastLicenceEnd(id);
+            if (last > 0) b.lines.push_back({.icon = ui::Icon::History, .text = "la derni\xC3\xA8re finit le " + dateFr(last)});
+            else if (last < 0) b.lines.push_back({.icon = ui::Icon::History, .text = "une licence est sans fin"});
+            std::size_t options = 0;
+            for (const auto& o : reg.options) options += o.offeredTo(id) && !o.retired ? 1 : 0;
+            ui::UnfoldCard::Line o{.icon = ui::Icon::Star, .text = "**" + std::to_string(options) + "** option" + (options > 1 ? "s" : "") + " propos\xC3\xA9" "e" + (options > 1 ? "s" : "")};
+            if (options) o.link = [this, id] { goTo("options", "offre:" + id); };
+            b.lines.push_back(std::move(o));
+            card->addBox(std::move(b));
+        }
+        if (const lic::EditionDef* o = ws().hasRegistry() ? ws().registry().edition(id) : nullptr; o && markOf(*e) == 1) {
+            ui::UnfoldCard::Box b{.title = "TON BROUILLON (PAS ENCORE SIGN\xC3\x89)", .head = {"ce qui change", "sign\xC3\xA9", "brouillon"}, .weight = 1.3f};
+            const auto pair = [&](const char* what, const std::string& a, const std::string& z) {
+                if (a != z) b.table.push_back({what, a.empty() ? std::string("\xE2\x80\x94") : a, z.empty() ? std::string("\xE2\x80\x94") : z});
+            };
+            pair("Libell\xC3\xA9", o->label, e->label);
+            pair("Prix", o->price, e->price);
+            pair("R\xC3\xA9" "duction", o->promoPrice, e->promoPrice);
+            pair("En vente", saleCell(*o), saleCell(*e));
+            pair("PC", std::to_string(o->maxDevices), std::to_string(e->maxDevices));
+            pair("Dur\xC3\xA9" "e", daysText(o->durationDays), daysText(e->durationDays));
+            pair("Gr\xC3\xA2" "ce", std::to_string(o->offlineGraceDays) + " j", std::to_string(e->offlineGraceDays) + " j");
+            pair("Fonctionnalit\xC3\xA9s", std::to_string(o->features.size()), std::to_string(e->features.size()));
+            pair("Retir\xC3\xA9" "e", o->retired ? "oui" : "non", e->retired ? "oui" : "non");
+            if (!b.table.empty()) card->addBox(std::move(b));
+        }
+        addCurve(*card, "EN COURS, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.edition == id; }));
+        card->addButton("Voir ses licences", "editions.depliage.licences", ui::Icon::GoTo, [this, id] { goTo("licences", "offre:" + id); });
+        addSigner(*card);
+        return card;
     }
 
     void rebuildFeatures() {

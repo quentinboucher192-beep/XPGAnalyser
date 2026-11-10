@@ -213,6 +213,8 @@ int main(int argc, char** argv) {
             fake.unplacedPcs = 4;
             v->reload();
             CHECK(v->board().places().empty() && v->board().emptyTitle() == "Aucune ville pour l'instant");
+            t = paint(*v, r, 1600.f, 760.f);   // pas de << 0 client, 0 PC, 0 ville >> en haut ; les PC sans lieu, oui
+            CHECK(t.find("connexion au service \xC2\xB7 0 client") == std::string::npos && t.find("connexion au service \xC2\xB7 4 PC sans lieu") != std::string::npos);
             fake = keep;
             // Un service d'avant la 1.47.0 : le bandeau et << Deployer le service >>.
             gs::setFetchersForTests({[](int, stats::GlobeReply&) { return gui::OpResult::fail(stats::serviceTooOldText("1.46.0")); }, {}});

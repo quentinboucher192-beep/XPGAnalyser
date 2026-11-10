@@ -789,7 +789,7 @@ std::string sampleUpdatesJson(const stats::UpdatesQuery& q, Seconds now) {
         for (const Day x : pubs)
             if (e >= x) lastPub = x;
         const double t = static_cast<double>(e - lastPub);
-        const double share = lastPub < 0 ? 0.84 : 0.04 + 0.9 * (1.0 - std::exp(-0.1 * t));
+        const double share = lastPub < 0 ? 0.84 : 0.04 + 0.9 * (1.0 - std::exp(-0.17 * t));
         sUp.push(static_cast<int>(std::round(286 * share)));
         sSeen.push(286);
         aUp.push(lastPub < 0 ? 3 : t < 2 ? 1 : t < 9 ? 2 : 3);
@@ -884,6 +884,46 @@ std::string sampleAdminsJson(const stats::Period& p, Seconds now) {
     return json::write(v, false);
 }
 
+// Le globe d'essai (pour la ville d'un client dans sa fiche : << Lyon, FR >>) ; le globe lui-meme a ses villes d'essai a lui.
+std::string sampleGlobeJson(int periodDays, Seconds now) {
+    json::Value v = json::Value::object();
+    v.set("version", "1.47.0");
+    v.set("heure", static_cast<std::int64_t>(now));
+    v.set("periode", periodDays);
+    v.set("version_derniere", "1.47.0");
+    const struct {
+        const char* city;
+        const char* region;
+        double      lat, lon;
+        const char* customers[2];
+        int         pcs;
+    } cities[] = {{"Lyon", "Auvergne-Rh\xC3\xB4ne-Alpes", 45.8, 4.8, {"Atelier Exemple", "Imprimerie Exemple"}, 64},
+                  {"Paris", "\xC3\x8Ele-de-France", 48.9, 2.4, {"Soci\xC3\xA9t\xC3\xA9 d'essai", "Cabinet Exemple"}, 58},
+                  {"Lille", "Hauts-de-France", 50.6, 3.1, {"Usine Exemple Nord", nullptr}, 21},
+                  {"Toulouse", "Occitanie", 43.6, 1.4, {"Bureau d'\xC3\xA9tudes Exemple", nullptr}, 17},
+                  {"Nantes", "Pays de la Loire", 47.2, -1.6, {"Laboratoire Exemple", "Menuiserie Exemple"}, 15},
+                  {"Bordeaux", "Nouvelle-Aquitaine", 44.8, -0.6, {"Garage d'essai", "Ferme d'essai"}, 12}};
+    json::Value a = json::Value::array();
+    for (const auto& c : cities) {
+        json::Value o = json::Value::object();
+        o.set("id", std::string("FR|") + c.city);
+        o.set("ville", c.city);
+        o.set("region", c.region);
+        o.set("pays", "FR");
+        o.set("lat", c.lat);
+        o.set("lon", c.lon);
+        o.set("pc", c.pcs);
+        o.set("clients", c.customers[1] ? 2 : 1);
+        json::Value n = json::Value::array();
+        for (const char* x : c.customers)
+            if (x) n.push(x);
+        o.set("noms_clients", n);
+        a.push(o);
+    }
+    v.set("villes", a);
+    return json::write(v, false);
+}
+
 Fetchers sampleFetchers(std::function<Seconds()> now) {
     Fetchers f;
     const auto clock = [now] { return now ? now() : static_cast<Seconds>(std::time(nullptr)); };
@@ -904,6 +944,12 @@ Fetchers sampleFetchers(std::function<Seconds()> now) {
         std::string why;
         const stats::Period pp = p.empty() ? stats::lastDays(clock(), 30) : p;
         if (!json::parse(sampleAdminsJson(pp, clock()), v, &why) || !stats::parseAdmins(v, out, &why)) return OpResult::fail(why);
+        return OpResult::done({});
+    };
+    f.globe = [clock](int days, stats::GlobeReply& out) {
+        json::Value v;
+        std::string why;
+        if (!json::parse(sampleGlobeJson(days, clock()), v, &why) || !stats::parseGlobe(v, out, &why)) return OpResult::fail(why);
         return OpResult::done({});
     };
     f.snapshot = [clock](stats::SnapshotReply& out) {

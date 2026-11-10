@@ -86,6 +86,7 @@ void computeLocal(const Workspace& w, Data& d) {
     in.lines = js::linesOf(view);
     std::vector<std::string> editors;
     for (const auto& k : w.editorKeys()) editors.push_back(deploy::crypto::hex(k));
+    d.editorKeys = editors;
     for (const auto& p : d.people) {
         if (p.kind == Person::Kind::Pending) {
             in.pending.push_back({p.name, p.received});
@@ -261,7 +262,7 @@ OpResult fetchCard(const Workspace& w, const CardAsk& ask, CardFigures& out) {
     // 1. ce qu'il a produit sur la periode (admin=<id>)
     stats::SeriesQuery q;
     q.measures = {"licences_prolongees", "licences_options", "licences_actives", "licences_expirees", "licences_revoquees", "pc_actifs",
-                  "ventes_panier", "ventes_remboursements", "ventes_remboursements_nombre"};
+                  "ventes_panier", "ventes_remboursements", "ventes_remboursements_nombre", "ventes_commandes", "ventes_montant"};
     q.period = ask.period;
     q.step = statskit::fitStep(ask.period, stats::Step::Day);
     q.compare = stats::Compare::Previous;
@@ -282,6 +283,21 @@ OpResult fetchCard(const Workspace& w, const CardAsk& ask, CardFigures& out) {
     out.basketBefore = beforeTotal(r1.find("ventes_panier"));
     out.refunds = total(r1.find("ventes_remboursements"));
     out.refundsCount = total(r1.find("ventes_remboursements_nombre"));
+    out.orders = total(r1.find("ventes_commandes"));
+    out.ordersBefore = beforeTotal(r1.find("ventes_commandes"));
+    out.amount = total(r1.find("ventes_montant"));
+    out.amountBefore = beforeTotal(r1.find("ventes_montant"));
+    {
+        stats::SeriesQuery qa = q;
+        qa.measures = {"ventes_commandes"};
+        qa.split = "article";
+        qa.compare = stats::Compare::None;
+        stats::SeriesReply ra;
+        if (statskit::fetchSeries(w, qa, ra).ok)
+            if (const auto* s = ra.find("ventes_commandes"))
+                for (const auto& p : s->parts)
+                    if (p.key != "\xE2\x80\xA6" && !p.key.empty() && p.total > 0) out.byArticle.push_back({p.key, p.total});
+    }
     // 2. par offre, par client
     stats::SeriesQuery qo = q;
     qo.measures = {"licences_nouvelles"};
@@ -311,9 +327,14 @@ OpResult fetchCard(const Workspace& w, const CardAsk& ask, CardFigures& out) {
                 }
             }
         }
-        if (const auto* s = rc.find("licences_nouvelles"))
+        if (const auto* s = rc.find("licences_nouvelles")) {
             for (const auto& p : s->parts)
                 if (p.key != "\xE2\x80\xA6" && !p.key.empty() && p.total > 0) served.insert(p.key);
+            for (const auto& [name, cents] : out.topClients) {
+                const stats::Part* p = s->part(name);
+                out.topClientLicences.push_back({name, p ? p->total : 0.0});
+            }
+        }
         out.clients = static_cast<double>(served.size());
         out.topShare = all > 0 ? top / all : kNaN;
     }

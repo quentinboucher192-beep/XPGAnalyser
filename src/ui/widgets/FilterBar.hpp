@@ -37,6 +37,7 @@
 //
 //  Les champs (Field) suivent les colonnes du modele, dans le meme ordre (le
 //  champ i est la colonne i) ; une colonne cachee peut rester un champ. Une
+//  case a plusieurs valeurs (les offres d'une option) : Field::split. Une
 //  liste peinte par sa page (le journal) : setSource (ses lignes), accepts(i)
 //  en faisant ses lignes, `changed` pour les refaire, refreshCounts.
 //  Les identifiants (les scripts) : <id>.recherche (le champ), <id>.puce.<titre>
@@ -69,6 +70,8 @@ public:
         std::string              noun{};             // << une offre >> : << Chercher une offre... >> dans son menu
         bool                     searchable{true};   // la recherche la lit
         std::vector<std::string> order{};            // l'ordre des valeurs dans le menu (Info, Moyenne...) ; le reste ensuite
+        std::string              split{};            // non vide : une case a PLUSIEURS valeurs, separees ainsi (<< , >> :
+                                                     // << PERSONAL, PROFESSIONAL >>) ; la ligne passe si l'une est cochee
     };
     // Ce que la barre retient d'une colonne.
     struct Pick {
@@ -202,6 +205,7 @@ private:
     [[nodiscard]] std::int64_t now() const;
     [[nodiscard]] std::size_t rowCount() const;
     [[nodiscard]] std::string cell(std::size_t row, std::size_t field) const;
+    [[nodiscard]] std::vector<std::string> valuesOf(std::size_t row, std::size_t field) const;   // Field::split
     void edited(bool remember = true);                     // la table, les puces, la memoire, `changed`
     void syncChips();
     void layoutRow(float width, std::vector<Placed>* out, float* height) const;

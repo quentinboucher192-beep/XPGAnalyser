@@ -66,9 +66,18 @@ bool sameClient(const std::string& a, const std::string& b) { return lowerAscii(
 
 // La version d'un logiciel dit par la demande (<< IHM Studio 1.30.0 >> -> << 1.30.0 >>).
 std::string versionOf(const std::string& software) {
-    const auto sp = software.rfind(' ');
-    std::string v = sp == std::string::npos ? software : software.substr(sp + 1);
-    return (!v.empty() && v[0] >= '0' && v[0] <= '9') ? v : std::string();
+    // le dernier mot qui commence par un chiffre (<< IHM Studio 1.33.0 (essai) >> -> << 1.33.0 >>)
+    std::string best, word;
+    for (std::size_t i = 0; i <= software.size(); ++i) {
+        const char c = i < software.size() ? software[i] : ' ';
+        if (c == ' ') {
+            if (!word.empty() && word[0] >= '0' && word[0] <= '9') best = word;
+            word.clear();
+        } else {
+            word += c;
+        }
+    }
+    return best;
 }
 // Comparer deux versions (1.45.2 < 1.46.0).
 int versionCompare(const std::string& a, const std::string& b) {
@@ -123,7 +132,14 @@ Local readLocal(const Workspace& w, const std::string& name) {
             for (const auto& p : e.licence.purchases)
                 if (p.at > 0 && (l.since == 0 || p.at < l.since)) l.since = p.at;
         }
-    std::sort(l.licences.begin(), l.licences.end(), [](const LicenceEntry* a, const LicenceEntry* b) { return a->licence.issuedAt < b->licence.issuedAt; });
+    // la licence la plus ancienne d'abord : son premier achat (l'emission en place peut etre une prolongation)
+    const auto firstOf = [](const LicenceEntry* e) {
+        Seconds t = e->licence.issuedAt;
+        for (const auto& p : e->licence.purchases)
+            if (p.licenseId == e->licence.licenseId && p.at > 0) t = std::min(t, p.at);
+        return t;
+    };
+    std::sort(l.licences.begin(), l.licences.end(), [&](const LicenceEntry* a, const LicenceEntry* b) { return firstOf(a) < firstOf(b); });
     for (const auto& d : w.devices()) {
         const std::string v = versionOf(d.software);
         if (!v.empty() && (l.latestVersion.empty() || versionCompare(v, l.latestVersion) > 0)) l.latestVersion = v;
@@ -474,6 +490,8 @@ private:
         std::vector<std::string> names;
         for (const auto& d : local_.journal)
             if (!d.who.empty() && std::find(names.begin(), names.end(), d.who) == names.end()) names.push_back(d.who);
+        if (names.empty() && served_)   // le journal de ce poste n'a rien : ce que le service compte (la carte << Qui l'a servi >>)
+            for (const auto& r : served_->data().rows) names.push_back(r.label);
         return names;
     }
     [[nodiscard]] std::string subline() const {
@@ -632,8 +650,8 @@ private:
             const std::string key = "offre:" + l.edition;
             offers.insert(l.edition);
             std::vector<licensing::Purchase> ps;
-            for (const auto& p : l.purchases)
-                if ((p.kind == "offer" || p.kind == "extension") && p.from > 0) ps.push_back(p);
+            for (const auto& p : l.purchases)   // l'historique est celui du client : les achats de CETTE licence seulement
+                if ((p.kind == "offer" || p.kind == "extension") && p.from > 0 && p.licenseId == l.licenseId) ps.push_back(p);
             std::sort(ps.begin(), ps.end(), [](const auto& a, const auto& b) { return a.from < b.from; });
             if (ps.empty()) {
                 row.segments.push_back({l.issuedAt / 86400, (l.expiresAt ? l.expiresAt : last) / 86400, key, "sign\xC3\xA9" "e le " + dateFr(l.issuedAt)});
@@ -771,7 +789,7 @@ private:
         stats::Period weeks = stats::lastDays(now, 7 * 19 + 1 + ch::fr::weekday(now / 86400));
         make("maj", {"pc_vus"}, "version", weeks, stats::Step::Week);
         make("achats", {"ventes_montant", "ventes_commandes"}, "", p, step);
-        make("demandes", {"demandes_recues", "demandes_traitees"}, "admin", p, step);
+        make("demandes", {"demandes_recues", "demandes_traitees", "licences_nouvelles"}, "admin", p, step);
         auto out = std::make_shared<std::map<std::string, stats::SeriesReply>>();
         auto errs = std::make_shared<std::map<std::string, std::string>>();
         auto admins = std::make_shared<stats::AdminsReply>();
@@ -1054,6 +1072,43 @@ private:
             requestsCard_->setTitle("Ses demandes", quarters ? "par trimestre" : stepSmall(r.step));
             const auto* in = series("demandes", "demandes_recues");
             requestsCard_->setValue(in && !in->refused ? ch::fr::integer(in->total) : kDash, {}, std::to_string(local_.pending) + " en attente");
+        }
+        // ---- qui l'a servi : sans ligne du journal de ce poste sur ses licences, ce que le service compte par admin ----
+        if (local_.journal.empty()) {
+            const auto* dem = series("demandes", "demandes_traitees");
+            const auto* lic = series("demandes", "licences_nouvelles");
+            std::map<std::string, std::pair<double, double>> by;   // admin -> (licences, demandes)
+            if (dem && !dem->refused)
+                for (const auto& p : dem->parts) by[p.key].second += p.total;
+            if (lic && !lic->refused)
+                for (const auto& p : lic->parts) by[p.key].first += p.total;
+            ch::BarListData bl;
+            bl.mode = ch::BarMode::Ranking;
+            double total = 0;
+            for (const auto& [k, v] : by) total += v.first + v.second;
+            for (const auto& [k, v] : by) {
+                if (v.first + v.second <= 0) continue;
+                ch::BarRow r;
+                int order = 99;
+                for (std::size_t i = 0; i < admins_.admins.size(); ++i)
+                    if (admins_.admins[i].id == k) order = static_cast<int>(i);
+                const stats::AdminUsage* a = admins_.find(k);
+                r.label = a && !a->name.empty() ? a->name : k.empty() ? std::string("sans admin connu") : k;
+                r.key = order < 99 ? "admin:" + std::to_string(std::min(order, 3)) : std::string();
+                std::string sub;
+                if (v.first > 0) sub += ch::fr::integer(v.first) + (v.first > 1 ? " licences" : " licence");
+                if (v.second > 0) sub += (sub.empty() ? "" : ", ") + ch::fr::integer(v.second) + (v.second > 1 ? " demandes" : " demande");
+                r.sub = sub;
+                r.value = v.first + v.second;
+                r.extra = total > 0 ? ch::fr::percent(r.value * 100.0 / total) : std::string();
+                bl.rows.push_back(r);
+            }
+            std::sort(bl.rows.begin(), bl.rows.end(), [](const auto& a, const auto& b) { return a.value > b.value; });
+            bl.rowHeight = 40.f;
+            bl.clickHint = "Clic : ses lignes du journal";
+            bl.emptyText = data_.count("demandes") ? "Aucune licence ni demande sur la p\xC3\xA9riode" : "Lecture des chiffres\xE2\x80\xA6";
+            served_->setData(bl);
+            if (total > 0) servedCard_->setValue(ch::fr::integer(total) + (total > 1 ? " actions" : " action"), {}, "licences et demandes, d'apr\xC3\xA8s le service");
         }
         (void)today;
     }

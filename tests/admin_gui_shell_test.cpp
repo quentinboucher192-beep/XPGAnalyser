@@ -56,7 +56,8 @@ struct Rig {
 // 1.41.0 : les groupes de la maquette validee (Pilotage, Catalogue, la vente en ligne, Securite).
 // 1.42.0 : les editions s'appellent les Offres ; les Options a leur suite.
 // 1.44.0 : plusieurs admins - Administrateurs, Journal des admins et Versions dans Securite (ces deux-la : l'admin+ seul).
-const std::string kTitles[] = {"Tableau de bord", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
+// 1.47.0 : << Statistiques >> sous le Tableau de bord (Pilotage), comme la barre laterale des planches 08 a 11.
+const std::string kTitles[] = {"Tableau de bord", "Statistiques", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
                                "Boutique", "Commandes", "R\xC3\xA9vocations", "Administrateurs", "Journal des admins", "Versions", "Service en ligne", "Historique",
                                "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 constexpr std::size_t kEntries = sizeof(kTitles) / sizeof(kTitles[0]);

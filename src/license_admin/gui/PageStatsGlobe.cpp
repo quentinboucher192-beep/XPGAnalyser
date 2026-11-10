@@ -520,10 +520,12 @@ void GlobeStatsView::syncState() {
 
 std::string GlobeStatsView::topLine() const {
     std::string s = "O\xC3\xB9 sont vos clients et leurs PC, d'apr\xC3\xA8s la ville de leur derni\xC3\xA8re connexion au service";
-    if (hasReply_) {
+    if (hasReply_ && !reply_.cities.empty()) {   // aucune ville : le message du globe le dit (pas de << 0 client, 0 PC... >>)
         s += " \xC2\xB7 " + std::to_string(reply_.totals.clients) + " client" + (reply_.totals.clients > 1 ? "s" : "") + ", " + std::to_string(reply_.totals.pcs) +
              " PC, " + std::to_string(reply_.cityCount) + " ville" + (reply_.cityCount > 1 ? "s" : "") + ", " + std::to_string(reply_.countries) + " pays";
         if (reply_.unplacedPcs > 0) s += " \xC2\xB7 " + std::to_string(reply_.unplacedPcs) + " PC sans lieu";
+    } else if (hasReply_ && reply_.unplacedPcs > 0) {
+        s += " \xC2\xB7 " + std::to_string(reply_.unplacedPcs) + " PC sans lieu";
     }
     return s;
 }

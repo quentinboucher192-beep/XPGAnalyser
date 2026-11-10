@@ -396,8 +396,28 @@ bool FilterBar::fieldAccepts(const Pick& p, std::size_t row) const {
         if (p.days == 1) return t >= startOfDay(now());
         return t >= now() - static_cast<std::int64_t>(p.days) * kDay;
     }
-    const std::string v = cell(row, p.field);
-    return std::find(p.values.begin(), p.values.end(), v) != p.values.end();
+    for (const auto& v : valuesOf(row, p.field))
+        if (std::find(p.values.begin(), p.values.end(), v) != p.values.end()) return true;
+    return false;
+}
+
+// Les valeurs d'une case : elle-meme, ou ses parties (Field::split : << PERSONAL, PROFESSIONAL >>) ; vide : une valeur vide.
+std::vector<std::string> FilterBar::valuesOf(std::size_t row, std::size_t field) const {
+    std::string v = cell(row, field);
+    const std::string& sep = field < fields_.size() ? fields_[field].split : std::string();
+    if (sep.empty() || v.find(sep) == std::string::npos) return {std::move(v)};
+    std::vector<std::string> out;
+    for (std::size_t i = 0; i <= v.size();) {
+        std::size_t j = v.find(sep, i);
+        if (j == std::string::npos) j = v.size();
+        std::string part = v.substr(i, j - i);
+        while (!part.empty() && part.front() == ' ') part.erase(part.begin());
+        while (!part.empty() && part.back() == ' ') part.pop_back();
+        if (!part.empty() && std::find(out.begin(), out.end(), part) == out.end()) out.push_back(std::move(part));
+        i = j + sep.size();
+    }
+    if (out.empty()) out.emplace_back();
+    return out;
 }
 
 bool FilterBar::matchesSearch(std::size_t row, const SearchQuery& q) const {
@@ -469,7 +489,8 @@ std::vector<std::pair<std::string, std::size_t>> FilterBar::valueCounts(std::siz
     std::map<std::string, std::size_t> counts;
     const std::size_t rows = rowCount();
     for (std::size_t i = 0; i < rows; ++i)
-        if (acceptsExcept(i, static_cast<int>(field))) ++counts[cell(i, field)];
+        if (acceptsExcept(i, static_cast<int>(field)))
+            for (const auto& v : valuesOf(i, field)) ++counts[v];
     if (const Pick* p = pickOf(field))
         for (const auto& v : p->values) (void)counts[v];   // une valeur cochee reste (meme a 0)
     for (const auto& o : fields_[field].order)
