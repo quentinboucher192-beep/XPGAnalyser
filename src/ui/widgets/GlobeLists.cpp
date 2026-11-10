@@ -183,7 +183,7 @@ GlobeCityList::GlobeCityList(std::string id) : Widget(std::move(id)) {}
 
 void GlobeCityList::setPlaces(const std::vector<globe::Place>& places) {
     entries_.clear();
-    for (const auto& p : places) entries_.push_back({p.label(), p.counts, p.country});
+    for (const auto& p : places) entries_.push_back({p.label(), p.counts, p.country, p.pcs});
     if (selected_ >= static_cast<int>(entries_.size())) selected_ = -1;
     rebuild();
 }
@@ -206,8 +206,8 @@ void GlobeCityList::rebuild() {
             order_.push_back(static_cast<int>(i));
             countries.insert(entries_[i].country);
         }
-    // La plus grande d'abord ; a egalite, la plus grande en tout (tous les calques : un client par ville, la ville
-    // de 7 PC avant celle d'un seul), puis par nom.
+    // La plus grande d'abord ; a egalite, la plus grande ville (ses PC : un client par ville, la ville de 7 PC avant
+    // celle d'un seul), puis la plus grande en tout (tous les calques), puis par nom.
     const auto all = [this](int i) {
         int n = 0;
         for (int c : entries_[static_cast<std::size_t>(i)].counts) n += c;
@@ -216,6 +216,8 @@ void GlobeCityList::rebuild() {
     std::stable_sort(order_.begin(), order_.end(), [&](int a, int b) {
         const int na = entries_[static_cast<std::size_t>(a)].counts[k], nb = entries_[static_cast<std::size_t>(b)].counts[k];
         if (na != nb) return na > nb;
+        const int pa = entries_[static_cast<std::size_t>(a)].pcs, pb = entries_[static_cast<std::size_t>(b)].pcs;
+        if (pa != pb) return pa > pb;
         const int ta = all(a), tb = all(b);
         if (ta != tb) return ta > tb;
         return entries_[static_cast<std::size_t>(a)].label < entries_[static_cast<std::size_t>(b)].label;

@@ -107,6 +107,9 @@ public:
             });
             removeOne_[i] = &b;
         }
+        for (auto* w : {static_cast<ui::Widget*>(removeUnused_), static_cast<ui::Widget*>(dayJournal_), static_cast<ui::Widget*>(lines_)})
+            w->setVisibility(ui::Visibility::Collapsed);
+        for (auto* b : removeOne_) b->setVisibility(ui::Visibility::Collapsed);
         refreshData();
     }
 

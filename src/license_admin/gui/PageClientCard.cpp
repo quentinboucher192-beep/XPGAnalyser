@@ -290,7 +290,7 @@ public:
         pcsChart_ = chart<ch::TimeChart>("client.pc-actifs", "Ses PC actifs", "\xC3\xA0 la fin de chaque mois", pcsCard_);
         updates_ = chart<ch::TimeChart>("client.maj", "Ses mises \xC3\xA0 jour", "la version de ses PC, chaque semaine", updatesCard_);
         // ses achats et le montant cumule : DEUX graphiques dans la meme carte (jamais deux axes)
-        purchasesCard_ = &static_cast<ch::ChartCard&>(addChild(std::make_unique<ch::ChartCard>("client.achats.carte", "Ses achats", "par trimestre")));
+        purchasesCard_ = &static_cast<FitCard&>(addChild(std::make_unique<FitCard>("client.achats.carte", "Ses achats", "par trimestre")));
         purchases_ = &static_cast<ch::TimeChart&>(addChild(std::make_unique<ch::TimeChart>("client.achats")));
         cumul_ = &static_cast<ch::TimeChart&>(addChild(std::make_unique<ch::TimeChart>("client.cumul")));
         requests_ = chart<ch::TimeChart>("client.demandes", "Ses demandes", "par trimestre", requestsCard_);
@@ -468,10 +468,10 @@ private:
         return p;
     }
     template <class T>
-    T* chart(const std::string& id, const std::string& title, const std::string& small, ch::ChartCard*& card) {
-        auto c = std::make_unique<ch::ChartCard>(id + ".carte", title, small);
+    T* chart(const std::string& id, const std::string& title, const std::string& small, FitCard*& card) {
+        auto c = std::make_unique<FitCard>(id + ".carte", title, small);
         T* ref = &c->setChartAs(std::make_unique<T>(id));
-        card = &static_cast<ch::ChartCard&>(addChild(std::move(c)));
+        card = &static_cast<FitCard&>(addChild(std::move(c)));
         return ref;
     }
 
@@ -734,7 +734,7 @@ private:
             const auto& d = local_.journal.back();
             last1 = "derni\xC3\xA8re : " + d.who + ", " + seenText(now, d.when);
         }
-        servedCard_->setValue(std::to_string(local_.journal.size()) + (local_.journal.size() > 1 ? " actions" : " action"), {},
+        servedCard_->setText(std::to_string(local_.journal.size()) + (local_.journal.size() > 1 ? " actions" : " action"), {},
                               last1.empty() ? std::string("dans le journal des admins") : last1);
     }
 
@@ -866,7 +866,7 @@ private:
         }
     }
 
-    bool missingChart(ch::ChartCard* card, ch::TimeChart* chart, const std::string& group, const stats::Series* s) {
+    bool missingChart(FitCard* card, ch::TimeChart* chart, const std::string& group, const stats::Series* s) {
         std::string why;
         if (!note_.empty()) why = tooOld_ ? "D\xC3\xA9ploie la 1.47.0 du service pour ces courbes." : note_;
         else if (const auto it = errors_.find(group); it != errors_.end()) why = it->second;
@@ -877,7 +877,7 @@ private:
         ch::TimeChartData t;
         t.emptyText = why;
         chart->setData(t);
-        card->setValue({}, {}, {});
+        card->setText(std::string());
         return true;
     }
 
@@ -915,7 +915,7 @@ private:
             t.yMin = 0;
             t.clickHint = "Clic : ses PC";
             pcsChart_->setData(t);
-            pcsCard_->setTitle("Ses PC actifs", std::string("\xC3\xA0 la fin de chaque ") + stepLabel(r.step));
+            pcsCard_->setSmalls("Ses PC actifs", std::string("\xC3\xA0 la fin de chaque ") + stepLabel(r.step));
             const double last = lastOf(m->points);
             double prev = ch::kNone;
             if (m->points.size() >= 2) prev = m->points[m->points.size() - 2];
@@ -923,7 +923,7 @@ private:
             if (stats::isNumber(last) && stats::isNumber(prev) && last != prev)
                 d = {ch::fr::signedInteger(last - prev) + (r.step == stats::Step::Day ? " aujourd'hui" : " ce " + std::string(stepLabel(r.step))), last > prev ? 1 : -1,
                      last > prev ? 1 : -1};
-            pcsCard_->setValue(stats::isNumber(last) ? ch::fr::integer(last) : kDash, d, "sur " + std::to_string(local_.places) + (local_.places > 1 ? " places" : " place"));
+            pcsCard_->setText(stats::isNumber(last) ? ch::fr::integer(last) : kDash, d, "sur " + std::to_string(local_.places) + (local_.places > 1 ? " places" : " place"));
         }
         // ---- ses mises a jour (la version de ses PC, chaque semaine) ----
         if (const auto* m = series("maj", "pc_vus"); !missingChart(updatesCard_, updates_, "maj", m)) {
@@ -971,7 +971,7 @@ private:
                 if (d.state == "active" && !versionOf(d.software).empty() && (!worst || versionCompare(versionOf(d.software), versionOf(worst->software)) < 0)) worst = &d;
             if (worst && !local_.latestVersion.empty() && versionOf(worst->software) != local_.latestVersion)
                 late = "\xE2\x9A\xA0 " + (worst->name.empty() ? worst->fingerprint : worst->name) + " : " + versionOf(worst->software);
-            updatesCard_->setValue(std::to_string(up) + " sur " + std::to_string(all) + " \xC3\xA0 jour", {}, late);
+            updatesCard_->setText(std::to_string(up) + " sur " + std::to_string(all) + " \xC3\xA0 jour", {}, late);
         }
         // ---- ses achats, puis le montant cumule (deux graphiques) ----
         if (const auto* m = series("achats", "ventes_montant"); !missingChart(purchasesCard_, purchases_, "achats", m)) {
@@ -996,9 +996,9 @@ private:
             t.clickHint = "Clic : ses commandes";
             t.emptyText = "Aucun achat en ligne sur la p\xC3\xA9riode";
             purchases_->setData(t);
-            purchasesCard_->setTitle("Ses achats", quarters ? "par trimestre" : stepSmall(r.step));
+            purchasesCard_->setSmalls("Ses achats", quarters ? "par trimestre" : stepSmall(r.step));
             const auto* n = series("achats", "ventes_commandes");
-            purchasesCard_->setValue(stats::euros(m->total), {},
+            purchasesCard_->setText(stats::euros(m->total), {},
                                      std::to_string(local_.purchases.size()) + (local_.purchases.size() > 1 ? " achats" : " achat") +
                                          (n && !n->refused ? " \xC2\xB7 " + ch::fr::integer(n->total) + " en ligne" : std::string()));
             ch::TimeChartData c;
@@ -1069,9 +1069,9 @@ private:
             t.clickHint = "Clic : ses demandes";
             t.emptyText = "Aucune demande trait\xC3\xA9" "e sur la p\xC3\xA9riode";
             requests_->setData(t);
-            requestsCard_->setTitle("Ses demandes", quarters ? "par trimestre" : stepSmall(r.step));
+            requestsCard_->setSmalls("Ses demandes", quarters ? "par trimestre" : stepSmall(r.step));
             const auto* in = series("demandes", "demandes_recues");
-            requestsCard_->setValue(in && !in->refused ? ch::fr::integer(in->total) : kDash, {}, std::to_string(local_.pending) + " en attente");
+            requestsCard_->setText(in && !in->refused ? ch::fr::integer(in->total) : kDash, {}, std::to_string(local_.pending) + " en attente");
         }
         // ---- qui l'a servi : sans ligne du journal de ce poste sur ses licences, ce que le service compte par admin ----
         if (local_.journal.empty()) {
@@ -1108,7 +1108,7 @@ private:
             bl.clickHint = "Clic : ses lignes du journal";
             bl.emptyText = data_.count("demandes") ? "Aucune licence ni demande sur la p\xC3\xA9riode" : "Lecture des chiffres\xE2\x80\xA6";
             served_->setData(bl);
-            if (total > 0) servedCard_->setValue(ch::fr::integer(total) + (total > 1 ? " actions" : " action"), {}, "licences et demandes, d'apr\xC3\xA8s le service");
+            if (total > 0) servedCard_->setText(ch::fr::integer(total) + (total > 1 ? " actions" : " action"), {}, "licences et demandes, d'apr\xC3\xA8s le service");
         }
         (void)today;
     }
@@ -1179,12 +1179,12 @@ private:
     Box*                        numbers_{nullptr};
     Box*                        pcs_{nullptr};
     ui::FilterBar*              bar_{nullptr};
-    ch::ChartCard*              timelineCard_{nullptr};
-    ch::ChartCard*              pcsCard_{nullptr};
-    ch::ChartCard*              updatesCard_{nullptr};
-    ch::ChartCard*              purchasesCard_{nullptr};
-    ch::ChartCard*              requestsCard_{nullptr};
-    ch::ChartCard*              servedCard_{nullptr};
+    FitCard*                    timelineCard_{nullptr};
+    FitCard*                    pcsCard_{nullptr};
+    FitCard*                    updatesCard_{nullptr};
+    FitCard*                    purchasesCard_{nullptr};
+    FitCard*                    requestsCard_{nullptr};
+    FitCard*                    servedCard_{nullptr};
     ch::Timeline*               timeline_{nullptr};
     ch::TimeChart*              pcsChart_{nullptr};
     ch::TimeChart*              updates_{nullptr};

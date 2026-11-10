@@ -16,6 +16,10 @@
 //    la page Licences filtree sur lui ; << Le client >> d'une licence : le client
 //    choisi et ouvert ;
 //  - Demandes en ligne : la puce Etat d'office (En attente) ;
+//  - Offres, Options, Fonctionnalites : la barre (une case a plusieurs valeurs :
+//    les offres d'une option), le clic droit, la ligne depliee, << Aller a >>
+//    d'une liste a l'autre (Ses licences, Ce qu'elle ouvre, Les offres qui
+//    l'accordent) ; Licences flottantes : un FAUX releve adopte (aucun service) ;
 //  - la memoire des listes (une coquille ouverte : listes-filtres.txt) : un filtre
 //    de << Mes filtres >> retrouve par une page neuve ; Ctrl+F.
 // =============================================================================
@@ -112,6 +116,10 @@ int rowOf(ui::TableView& t, std::size_t col, const std::string& text) {
 std::string cardText(ui::TableView& t, ui::RowIndex r) {
     auto* card = dynamic_cast<ui::UnfoldCard*>(t.unfoldWidget(r));
     return card ? card->text() : std::string();
+}
+bool enabledBtn(ui::Widget& root, std::string_view id) {
+    auto* b = find<ui::Button>(root, id);
+    return b && b->enabled();
 }
 
 } // namespace
@@ -272,6 +280,171 @@ int main(int argc, char** argv) {
         const std::string t = draw(*page);
         auto* bar = find<ui::FilterBar>(*page, "demandes");
         check(bar && bar->chipText(9) == "\xC3\x89tat : En attente" && has(t, "Logiciel") && has(t, "R\xC3\xA9pondue par"), "la puce Etat (En attente) d'office ; Logiciel, Repondue par");
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- Offres : la barre, le clic droit, Aller a > Ses licences, la ligne depliee, Retirer de la vente\n");
+    {
+        auto page = gui::makeEditionsPage(h);
+        const std::string t = draw(*page);
+        auto* bar = find<ui::FilterBar>(*page, "editions");
+        auto* table = find<ui::TableView>(*page, "editions.table");
+        check(bar && table && rows(*page, "editions.table") == 6 && bar->countText() == "6 sur 6" && has(t, "Type") && has(t, "Ouvre") && has(t, "Mes filtres"),
+              "Offres : la barre (Type, Etat, Ouvre ; Mes filtres), 6 sur 6");
+        check(type(*page, "editions.recherche", "enterprise") && rows(*page, "editions.table") == 1 && type(*page, "editions.recherche", ""), "chercher << enterprise >> : 1 offre");
+        const int pro = table ? rowOf(*table, 0, "PROFESSIONAL") : -1;
+        auto items = pro >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(pro)}) : std::vector<ui::PopupMenu::Item>{};
+        const std::string o = topLabels(items);
+        check(o == "D\xC3\xA9plier;|Retirer de la vente;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Supprimer l'offre\xE2\x80\xA6;", "Offres : l'ordre de la regle : " + o);
+        check(idOf(items, "Aller \xC3\xA0", "Ses licences (1 en cours)") >= 0 && idOf(items, "Aller \xC3\xA0", "Ses options (2)") >= 0 &&
+                  idOf(items, "Filtrer sur", "Ce type") >= 0,
+              "Aller a : ses licences (1 en cours), ses options (2) ; Filtrer sur > Ce type");
+        check(table && table->setUnfolded(static_cast<ui::RowIndex>(pro), true) && has(cardText(*table, static_cast<ui::RowIndex>(pro)), "CE QU'ELLE OUVRE") &&
+                  has(cardText(*table, static_cast<ui::RowIndex>(pro)), "1 en cours\nchez 1 client") && has(cardText(*table, static_cast<ui::RowIndex>(pro)), "EN COURS \xC2\xB7 12 MOIS"),
+              "la ligne depliee : ce qu'elle ouvre, ses licences (1 en cours chez 1 client), la courbe");
+        const int sl = idOf(items, "Aller \xC3\xA0", "Ses licences");
+        if (sl >= 0) table->contextAction->emit(sl);
+        check(sl >= 0 && !rig.navigations.empty() && rig.navigations.back() == "licences", "Aller a > Ses licences : la page Licences");
+        {
+            auto lic = gui::makeLicencesPage(h);
+            (void)draw(*lic);
+            auto* lbar = find<ui::FilterBar>(*lic, "licences.barre");
+            check(rows(*lic, "licences.table") == 1 && lbar && lbar->chipText(2) == "Offre : PROFESSIONAL", "Licences filtree sur l'offre (1 licence)");
+        }
+        // Le premier : l'offre sans licence ne se retire pas (grisee, la raison dessous).
+        const int free = table ? rowOf(*table, 0, "FREE") : -1;
+        items = free >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(free)}) : items;
+        const auto* ret = itemOf(items, "Retirer de la vente");
+        const auto* del = itemOf(items, "Supprimer l'offre");
+        check(ret && !ret->enabled && has(ret->note, "sans licence") && del && !del->enabled, "FREE : Retirer et Supprimer grises (l'offre sans licence)");
+        const int ent = table ? rowOf(*table, 0, "ENTERPRISE") : -1;
+        items = ent >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(ent)}) : items;
+        const int retire = idOf(items, "", "Retirer de la vente");
+        if (retire >= 0) table->contextAction->emit(retire);
+        check(retire >= 0 && table->model()->cellText(static_cast<ui::RowIndex>(rowOf(*table, 0, "ENTERPRISE")), 7) == "retir\xC3\xA9" "e" && enabledBtn(*page, "editions.signer"),
+              "Retirer de la vente (ENTERPRISE) : dans le brouillon, a signer");
+        if (bar) bar->filterOn(9, "retir\xC3\xA9" "e");
+        check(rows(*page, "editions.table") == 1 && bar->fieldActive(9), "la puce Etat : retiree (1 offre)");
+        check(click(*page, "editions.annuler") && rows(*page, "editions.table") == 0, "Annuler les modifications : plus aucune offre retiree");
+        bar->clearAll();
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- Options : la barre (une case a plusieurs offres), le clic droit, Aller a > Ce qu'elle ouvre, la ligne depliee\n");
+    {
+        auto page = gui::makeOptionsPage(h);
+        (void)draw(*page);
+        auto* bar = find<ui::FilterBar>(*page, "options");
+        auto* table = find<ui::TableView>(*page, "options.table");
+        check(bar && table && rows(*page, "options.table") == 3 && bar->countText() == "3 sur 3", "Options : 3 sur 3");
+        if (bar) bar->filterOn(4, "PERSONAL");
+        check(rows(*page, "options.table") == 2 && bar->chipText(4) == "Offre : PERSONAL", "la puce Offre : PERSONAL (2 options : une case a plusieurs offres)");
+        bar->clearAll();
+        const int ex = table ? rowOf(*table, 0, "exports_avances") : -1;
+        auto items = ex >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(ex)}) : std::vector<ui::PopupMenu::Item>{};
+        const std::string o = topLabels(items);
+        check(o == "D\xC3\xA9plier;|\xC3\x94ter de la boutique des Studios;Retirer (plus propos\xC3\xA9" "e);|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|"
+                   "Supprimer l'option\xE2\x80\xA6;",
+              "Options : l'ordre de la regle : " + o);
+        const auto* lic = items.empty() ? nullptr : &items[0];
+        for (const auto& it : items)
+            if (it.label == "Aller \xC3\xA0")
+                for (const auto& c : it.children)
+                    if (c.label.rfind("Les licences", 0) == 0) lic = &c;
+        check(lic && !lic->enabled && has(lic->note, "aucune licence"), "Les licences qui l'ont : grisee (aucune), la raison dessous");
+        check(table && table->setUnfolded(static_cast<ui::RowIndex>(ex), true) && has(cardText(*table, static_cast<ui::RowIndex>(ex)), "SES DUR\xC3\x89" "ES ET PRIX") &&
+                  has(cardText(*table, static_cast<ui::RowIndex>(ex)), "offre PERSONAL"),
+              "la ligne depliee : ses durees et prix, ou elle est proposee");
+        const int opens = idOf(items, "Aller \xC3\xA0", "Ce qu'elle ouvre");
+        if (opens >= 0) table->contextAction->emit(opens);
+        check(opens >= 0 && rig.navigations.back() == "fonctionnalites", "Aller a > Ce qu'elle ouvre : la page Fonctionnalites");
+        auto feats = gui::makeFeaturesPage(h);
+        (void)draw(*feats);
+        auto* fbar = find<ui::FilterBar>(*feats, "fonctionnalites");
+        check(rows(*feats, "fonctionnalites.table") == 1 && fbar && fbar->fieldActive(8), "Fonctionnalites filtree sur l'option (1 : ce qu'elle ouvre)");
+        fbar->clearAll();
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- Fonctionnalites : la barre (le produit, l'offre qui l'accorde), le clic droit, la ligne depliee\n");
+    {
+        auto page = gui::makeFeaturesPage(h);
+        (void)draw(*page);
+        auto* bar = find<ui::FilterBar>(*page, "fonctionnalites");
+        auto* table = find<ui::TableView>(*page, "fonctionnalites.table");
+        check(bar && table && rows(*page, "fonctionnalites.table") == 21 && bar->countText() == "21 sur 21", "Fonctionnalites : 21 sur 21");
+        if (bar) bar->filterOn(1, "IA");
+        check(rows(*page, "fonctionnalites.table") == 4, "la puce Produit : IA (4)");
+        bar->clearAll();
+        std::size_t granted = 0;
+        for (const auto& f : ws.registry().features)
+            if (const auto* e = ws.registry().edition("PERSONAL"))
+                for (const auto& g : e->features) granted += g.id == f.id ? 1 : 0;
+        bar->filterOn(7, "PERSONAL");
+        check(rows(*page, "fonctionnalites.table") == granted && granted > 0, "la puce Offre : ce qu'accorde PERSONAL (" + std::to_string(granted) + ")");
+        bar->clearAll();
+        const int hmi = table ? rowOf(*table, 0, "hmi_editor") : -1;
+        auto items = hmi >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(hmi)}) : std::vector<ui::PopupMenu::Item>{};
+        const std::string o = topLabels(items);
+        check(o == "D\xC3\xA9plier;|Retirer (plus accord\xC3\xA9" "e);|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Rien ne se supprime;",
+              "Fonctionnalites : l'ordre de la regle (rien en rouge : une fonctionnalite se retire) : " + o);
+        check(table && table->setUnfolded(static_cast<ui::RowIndex>(hmi), true) && has(cardText(*table, static_cast<ui::RowIndex>(hmi)), "QUI L'ACCORDE") &&
+                  has(cardText(*table, static_cast<ui::RowIndex>(hmi)), "limite max_views"),
+              "la ligne depliee : qui l'accorde, ses limites");
+        const int offers = idOf(items, "Aller \xC3\xA0", "Les offres qui l'accordent");
+        if (offers >= 0) table->contextAction->emit(offers);
+        auto eds = gui::makeEditionsPage(h);
+        (void)draw(*eds);
+        auto* ebar = find<ui::FilterBar>(*eds, "editions");
+        std::size_t by = 0;
+        for (const auto& e : ws.registry().editions)
+            for (const auto& g : e.features) by += g.id == "hmi_editor" ? 1 : 0;
+        check(offers >= 0 && rig.navigations.back() == "editions" && ebar && ebar->fieldActive(10) && rows(*eds, "editions.table") == by,
+              "Aller a > Les offres qui l'accordent : Offres filtree (" + std::to_string(by) + ")");
+        ebar->clearAll();
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    std::printf("-- Licences flottantes : la barre (le dernier releve, un FAUX releve adopte), le clic droit, la ligne depliee\n");
+    {
+        license_admin::online::Snapshot s;   // un releve d'essai : rien ne vient du service
+        s.at = g_now - 60;
+        s.url = "http://127.0.0.1:9";
+        license_admin::online::OnlineLicence a;
+        a.licenseId = idA;
+        a.issuedAt = g_now - 10 * 86400;
+        a.type = "floating";
+        a.seats = 2;
+        a.leaseDays = 30;
+        a.activations = {{std::string(64, 'b'), "ATELIER-PC1", "", "active", g_now - 9 * 86400, g_now - 120, 0}, {std::string(64, 'c'), "ATELIER-PC2", "", "active", g_now - 8 * 86400, g_now - 60, 0}};
+        a.leases = {{std::string(64, 'b'), g_now + 600}, {std::string(64, 'c'), g_now + 900}};
+        license_admin::online::OnlineLicence b = a;
+        b.licenseId = "XPG-2026-00099";
+        b.seats = 5;
+        b.leaseDays = 7;
+        b.activations.resize(1);
+        b.leases.resize(1);
+        s.licences = {a, b};
+        ws.adoptSnapshot(s);
+        auto page = gui::makeFloatingPage(h);
+        (void)draw(*page);
+        auto* bar = find<ui::FilterBar>(*page, "flottantes");
+        auto* table = find<ui::TableView>(*page, "flottantes.table");
+        check(bar && table && rows(*page, "flottantes.table") == 2 && bar->countText() == "2 sur 2", "Licences flottantes : 2 sur 2");
+        if (bar) bar->filterOn(4, "pleine");
+        check(rows(*page, "flottantes.table") == 1 && table->model()->cellText(0, 0) == idA, "la puce Etat : pleine (" + idA + ")");
+        bar->clearAll();
+        auto items = rightClick(*table, {0});
+        const std::string o = topLabels(items);
+        check(o == "D\xC3\xA9plier;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);", "Licences flottantes : l'ordre de la regle : " + o);
+        check(idOf(items, "Aller \xC3\xA0", "Le client : Atelier Exemple") >= 0 && idOf(items, "Filtrer sur", "Ce bail : 30 j") >= 0, "Aller a > Le client ; Filtrer sur > Ce bail");
+        check(table->setUnfolded(0, true) && has(cardText(*table, 0), "2 pris sur 2") && has(cardText(*table, 0), "ATELIER-PC1") && has(cardText(*table, 0), "LA LICENCE"),
+              "la ligne depliee : ses postes (2 pris sur 2), ses jetons, la licence de l'archive");
+        auto* seats = find<ui::TableView>(*page, "flottantes.postes");
+        items = seats ? rightClick(*seats, {0}) : items;
+        const auto* retire = itemOf(items, "Retirer ce PC");
+        check(retire && !retire->enabled && has(retire->note, "service"), "un PC : Retirer ce PC... grise (le service n'est pas regle), la raison dessous");
+        ws.adoptSnapshot({});
     }
 
     // ------------------------------------------------------------------------------------------------

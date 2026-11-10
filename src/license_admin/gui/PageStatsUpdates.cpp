@@ -111,7 +111,7 @@ protected:
         if (!small_.empty()) {
             const float x = b.x + 16.f + ctx.r.measure(title_, tf).width + 9.f;
             const float room = (action_ ? action_->bounds().x - 8.f : b.right() - 16.f) - x;
-            ctx.r.drawText({x, b.y + 17.f}, ch::detail::fit(ctx.r, small_, FontId{12}, room), FontId{12}, kFaint);
+            if (ctx.r.measure(small_, FontId{12}).width <= room) ctx.r.drawText({x, b.y + 17.f}, small_, FontId{12}, kFaint);   // entiere ou rien
         }
         if (!note_.empty()) {
             const float nh = noteHeight(b.w - 32.f);
@@ -161,6 +161,7 @@ struct Tile {
     std::string label, value, valueSmall, sub;
     int         subTone{0};   // 0 discret, 1 bien (vert, une fleche), -1 attention (ambre, un triangle)
     std::string subStrong;     // le debut de la ligne en gras (<< +6 pts >>)
+    std::vector<std::string> shorter{};   // la ligne du bas plus courte, si `sub` ne tient pas (jamais d'ellipse)
 };
 class Tiles final : public ui::Widget {
 public:
@@ -181,30 +182,76 @@ protected:
             const Tile& t = tiles_[i];
             const Rect r{b.x + static_cast<float>(i) * (w + gap), b.y, w, b.h};
             paintCard(ctx.r, ctx.theme, r);
-            float x = r.x + 16.f;
-            ui::drawIcon(ctx.r, t.icon, {x, r.y + 13.f, 14.f, 14.f}, kMuted);
-            ctx.r.drawText({x + 20.f, r.y + 12.f}, ch::detail::fit(ctx.r, t.label, FontId{13}, r.w - 52.f), FontId{13}, kInk2);
+            const float x = r.x + 14.f, room = r.w - 28.f;
+            ui::drawIcon(ctx.r, t.icon, {x, r.y + 12.f, 14.f, 14.f}, kMuted);
+            // le libelle : sur deux lignes s'il ne tient pas sur une (jamais coupe)
+            std::vector<std::string> label = {t.label};
+            if (ctx.r.measure(t.label, FontId{13}).width > room - 20.f) {
+                label.clear();
+                std::string line, word;
+                const auto flush = [&] {
+                    if (word.empty()) return;
+                    const std::string next = line.empty() ? word : line + " " + word;
+                    if (!line.empty() && ctx.r.measure(next, FontId{13}).width > (label.empty() ? room - 20.f : room)) {
+                        label.push_back(line);
+                        line = word;
+                    } else {
+                        line = next;
+                    }
+                    word.clear();
+                };
+                for (const char c : t.label) {
+                    if (c == ' ') flush();
+                    else word += c;
+                }
+                flush();
+                if (!line.empty()) label.push_back(line);
+            }
+            float ly = r.y + 11.f;
+            for (std::size_t k = 0; k < label.size() && k < 2; ++k) {
+                ctx.r.drawText({k == 0 ? x + 20.f : x, ly}, label[k], FontId{13}, kInk2);
+                ly += 16.f;
+            }
             const FontId vf = gfx::semibold(FontId{24});
-            const float vy = r.y + 34.f;
+            const float vy = label.size() > 1 ? r.y + 44.f : r.y + 33.f;
             ctx.r.drawText({x, vy}, t.value, vf, kInk);
             if (!t.valueSmall.empty()) {
                 const float vx = x + ctx.r.measure(t.value, vf).width + 8.f;
-                ctx.r.drawText({vx, vy + 9.f}, ch::detail::fit(ctx.r, t.valueSmall, FontId{14}, r.right() - 12.f - vx), FontId{14}, kInk2);
+                if (ctx.r.measure(t.valueSmall, FontId{14}).width <= r.right() - 12.f - vx) ctx.r.drawText({vx, vy + 9.f}, t.valueSmall, FontId{14}, kInk2);
             }
-            const float sy = r.y + r.h - 26.f;
+            const float sy = r.y + r.h - 24.f;
             float sx = x;
             if (t.subTone < 0) {
                 ui::drawIcon(ctx.r, ui::Icon::Warning, {sx, sy + 1.f, 13.f, 13.f}, kAmber);
                 sx += 18.f;
             }
-            if (!t.subStrong.empty()) {
+            const FontId sf = t.subTone < 0 ? gfx::semibold(FontId{12}) : FontId{12};
+            float strongW = 0.f;
+            if (!t.subStrong.empty()) strongW = ctx.r.measure(t.subStrong, gfx::semibold(FontId{12})).width + 5.f;
+            // la ligne du bas : la plus longue qui tient (avec son debut en gras, sinon sans)
+            std::string sub;
+            bool withStrong = true;
+            std::vector<std::string> options = {t.sub};
+            options.insert(options.end(), t.shorter.begin(), t.shorter.end());
+            for (const auto& o : options)
+                if (sx + strongW + ctx.r.measure(o, sf).width <= r.right() - 10.f) {
+                    sub = o;
+                    break;
+                }
+            if (sub.empty() && !t.subStrong.empty() && sx + strongW <= r.right() - 10.f) sub.clear();
+            if (sub.empty() && t.subStrong.empty())
+                for (const auto& o : options)
+                    if (sx + ctx.r.measure(o, sf).width <= r.right() - 10.f) {
+                        sub = o;
+                        break;
+                    }
+            if (withStrong && !t.subStrong.empty() && sx + strongW <= r.right() - 10.f) {
                 const Color c = t.subTone > 0 ? kGreen : t.subTone < 0 ? kAmber : kInk2;
                 ctx.r.drawText({sx, sy}, t.subStrong, gfx::semibold(FontId{12}), c);
-                sx += ctx.r.measure(t.subStrong, gfx::semibold(FontId{12})).width + 5.f;
+                sx += strongW;
             }
             const Color sc = t.subTone < 0 ? Color::rgb(0xB45309) : kMuted;
-            ctx.r.drawText({sx, sy}, ch::detail::fit(ctx.r, t.sub, t.subTone < 0 ? gfx::semibold(FontId{12}) : FontId{12}, r.right() - 10.f - sx),
-                           t.subTone < 0 ? gfx::semibold(FontId{12}) : FontId{12}, sc);
+            if (!sub.empty()) ctx.r.drawText({sx, sy}, sub, sf, sc);
         }
     }
 
@@ -603,6 +650,7 @@ private:
                     t.subStrong = (diff >= 0 ? "\xE2\x86\x97 " : "\xE2\x86\x98 ") + ch::fr::signedPoints(diff);
                     t.subTone = diff >= 0 ? 1 : 0;
                     t.sub = "contre la " + pub[pub.size() - 2].version + " \xC3\xA0 J+" + std::to_string(std::max(0, k));
+                    t.shorter = {"contre la " + pub[pub.size() - 2].version};
                 }
             }
             tiles.push_back(t);
@@ -627,6 +675,7 @@ private:
                     d.subStrong = (diff <= 0 ? "\xE2\x86\x98 " : "\xE2\x86\x97 ") + (diff == 0 ? std::string("=") : ch::fr::signedInteger(diff) + "\xC2\xA0j");
                     d.subTone = diff <= 0 ? 1 : 0;
                     d.sub = "contre la " + prev->version + " (" + daysText(prev->median) + ")";
+                    d.shorter = {"contre la " + prev->version};
                 }
             }
             tiles.push_back(d);
@@ -636,6 +685,7 @@ private:
             if (two > 0) {
                 b.subTone = -1;
                 b.sub = std::to_string(two) + " ont 2 versions de retard ou plus";
+                b.shorter = {std::to_string(two) + " avec 2 versions de retard", std::to_string(two) + " tr\xC3\xA8s en retard"};
             } else {
                 b.sub = r.behindTotal ? "1 version de retard" : "tous \xC3\xA0 jour";
             }
@@ -645,6 +695,8 @@ private:
                 if (!p.admin.empty()) {
                     a.subTone = -1;
                     a.sub = adminName(p.admin) + " : Admin " + p.version;
+                    const std::string first = adminName(p.admin).substr(0, adminName(p.admin).find(' '));
+                    a.shorter = {first + " : Admin " + p.version, first + " : " + p.version};
                     break;
                 }
             if (a.sub.empty()) a.sub = r.seenAdmins ? "tous \xC3\xA0 jour" : "aucun Admin vu";

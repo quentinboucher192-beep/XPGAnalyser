@@ -77,6 +77,7 @@ import { DurableObject } from "cloudflare:workers";
 import { DROITS_ADMINS, DROITS_LICENCE, DROITS_REGISTRE, GARDE_DEMANDES_ADMINS, RoutesAdmins, droitsDuRegistre } from "./admins.js";
 import { RoutesBoutique, TABLES_BOUTIQUE_SQL } from "./boutique.js";
 import { RoutesStats, TABLES_STATS_SQL, prochainReleve } from "./stats.js";
+import { RoutesDerogations } from "./derogations.js";
 import { BlocIllisible, ecrireBlocLu, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
 import { GARDE_MESSAGE, RoutesFichiers } from "./fichiers.js";
 import { CONFIG_RESTAURATION, RoutesSauvegarde } from "./sauvegarde.js";
@@ -266,9 +267,14 @@ const ROUTES = {
     "GET /admin/stats/serie": { f: "serieStats", signe: "admin" },
     "GET /admin/stats/mises-a-jour": { f: "misesAJourStats", signe: "admin" },
     "GET /admin/stats/admins": { f: "adminsStats", signe: "admin" },
-    "POST /admin/stats/releve": { f: "releveStats", signe: "plus" },
+    "POST /admin/stats/releve": { f: "releveStats", signe: "plus", derogation: true },
     "GET /admin/globe": { f: "globeStats", signe: "admin" },
     "GET /admin/globe/direct": { f: "globeDirect", signe: "admin" },
+    // 1.47.0 : la derogation << Gerer le service >> (derogations.js, docs/ADMINS.md § 11)
+    "PUT /admin/derogation": { f: "deposerDerogation", signe: "plus" },
+    "POST /admin/derogation/revoquer": { f: "revoquerDerogation", signe: "plus" },
+    "GET /admin/derogation": { f: "lireDerogation", signe: "admin" },
+    "POST /admin/derogation/utiliser": { f: "utiliserDerogation", signe: "admin" },
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
 
@@ -696,7 +702,7 @@ export class Licences extends DurableObject {
             const ctx = { request, url, methode, corps, ip, now, local, appelant: null };
             // L'ordre : la signature (rien n'est ecrit), puis les limites, puis le nonce. Un appel refuse n'ecrit rien
             // (sauf la ligne du journal d'une cle d'admin retire, 1.44.0).
-            if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe);
+            if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe, route.derogation);
             if (route.droit) this.exigerDroit(ctx, route.droit);
             if (route.ip && limites) this.debit("ip", route.ip, ip, now);
             if (route.pc && limites) this.debit("pc", route.pc, ctx.appelant.cle, now);
@@ -705,6 +711,8 @@ export class Licences extends DurableObject {
                 this.noterLogiciel(ctx);
                 // 1.47.0 : le lieu, << actif maintenant >>, les heures des admins (rien pendant une restauration)
                 if (!this.enRestauration) await this.noterAppelStats(ctx);
+                // 1.47.0 : une route de l'admin+ ouverte par une derogation : le journal le dit (derogations.js)
+                if (ctx.appelant.derogation) await this.noterUsageDerogation(ctx, ctx.appelant.derogation, "route " + methode + " " + url.pathname);
             }
             reponse = await this[route.f](ctx);
         } catch (e) {
@@ -844,7 +852,9 @@ export class Licences extends DurableObject {
     // `signe` : "pc" (toute cle), "admin" (la cle de l'editeur - role << admin+ >>, tous les droits - ou celle d'un
     // admin de la liste, non retire - role << admin >>, ses droits), "plus" (la cle de l'editeur seulement).
     // Rend {cle, octets, nonce, poste, role ("pc", "admin+", "admin"), droits, admin (sa ligne de la liste)}.
-    async verifierAppel(ctx, signe) {
+    // 1.47.0 : `derogation` - une route << plus >> qui s'ouvre aussi a l'admin qui a une derogation << Gerer le service >>
+    // en cours (derogations.js) ; son usage est ecrit au journal.
+    async verifierAppel(ctx, signe, derogation) {
         const h = ctx.request.headers;
         const cle = h.get("X-XPG-Cle");
         const date = h.get("X-XPG-Date");
@@ -888,9 +898,16 @@ export class Licences extends DurableObject {
                 await this.signatureRefusee(ctx, admin);
                 throw new Erreur(403, "retire", "Cette clé est celle d'un admin retiré : elle ne peut plus rien faire sur ce service.");
             }
-            if (signe === "plus") throw new Erreur(403, "droit", "Cette action est réservée à l'admin+ (la clé de l'éditeur).");
             appelant.droits = JSON.parse(admin.droits);
             appelant.admin = admin;
+            if (signe === "plus") {
+                const d = derogation ? this.derogationDe(cle, ctx.now) : null;
+                if (!d) {
+                    if (derogation) throw this.refusDerogation(cle, ctx.now);
+                    throw new Erreur(403, "droit", "Cette action est réservée à l'admin+ (la clé de l'éditeur).");
+                }
+                appelant.derogation = d; // l'usage est ecrit au journal une fois l'appel accepte (traiter)
+            }
         }
         return appelant;
     }
@@ -1812,6 +1829,8 @@ export class Licences extends DurableObject {
             // 1.46.0 : les commandes - un compteur qui monte a chaque changement d'une commande, et celles a livrer (payees).
             commandes: this.compte("commandes_changements"),
             a_livrer: this.nombre("SELECT COUNT(*) AS n FROM commandes WHERE etat = 'payee'"),
+            // 1.47.0 : la derogation << Gerer le service >> (la sienne ; l'admin+ : celle en place), sans son document
+            derogation: await this.derogationPourEtat(ctx),
         });
     }
 
@@ -1862,4 +1881,4 @@ export class Licences extends DurableObject {
 // 1.44.0 : les routes des admins, des fichiers (et des messages, des versions), de la sauvegarde - des methodes de
 // l'objet, ecrites a part (admins.js, fichiers.js, sauvegarde.js).
 // 1.47.0 : les statistiques et le globe (stats.js).
-Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique, RoutesStats);
+Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique, RoutesStats, RoutesDerogations);

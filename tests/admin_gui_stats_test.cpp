@@ -120,6 +120,78 @@ const std::vector<std::string> kOverviewTitles = {
 const std::vector<std::string> kOverviewCharts = {"montant", "cumul", "commandes", "panier", "offres", "vendues", "remboursements", "actives", "mouvements",
                                                   "echeances", "demandes", "delai", "pc", "mouvements-pc", "flottantes", "decouvertes"};
 
+// LE TEXTE COUPE (<< le texte sort du cadre >>) : un renderer qui mesure comme la police de l'Admin (Inter : ~0,58 de la
+// taille par caractere, plus large que le harnais), et les lignes dessinees qui finissent par une ellipse - hors des
+// libelles qui en ont une par nature (<< Exporter... >>, << Deux dates... >>, << Lecture des chiffres... >>).
+class WideRenderer final : public gfx::IRenderer {
+public:
+    static constexpr float kFactor = 0.58f;
+    void beginFrame(gfx::Color) override { lines.clear(); }
+    void endFrame() override {}
+    void pushClip(const gfx::Rect& r) override { clips_.push_back(clips_.empty() ? r : clips_.back().intersect(r)); }
+    void popClip() override {
+        if (!clips_.empty()) clips_.pop_back();
+    }
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    void drawText(gfx::Point, std::string_view s, gfx::FontId, gfx::Color) override {
+        if (!clips_.empty() && clips_.back().empty()) return;
+        lines.emplace_back(s);
+    }
+    [[nodiscard]] gfx::TextMetrics measure(std::string_view s, gfx::FontId f) const override {
+        const float h = f.v ? static_cast<float>(f.v) : 16.f;
+        return {static_cast<float>(TextRenderer::chars(s)) * h * kFactor, h, h * 0.8f, h * 0.2f};
+    }
+    [[nodiscard]] float lineHeight(gfx::FontId f) const override { return f.v ? static_cast<float>(f.v) : 16.f; }
+    [[nodiscard]] gfx::Size surfaceSize() const override { return size; }
+    [[nodiscard]] float dpiScale() const override { return 1.f; }
+    [[nodiscard]] std::size_t fitCharacters(std::string_view s, gfx::FontId f, float w) const override {
+        const float h = f.v ? static_cast<float>(f.v) : 16.f;
+        return std::min(static_cast<std::size_t>(std::max(0.f, w / (h * kFactor))), s.size());
+    }
+    std::vector<std::string> lines;
+    gfx::Size                size{1280.f, 800.f};
+
+private:
+    std::vector<gfx::Rect> clips_;
+};
+void installWideMetrics() {
+    ui::PlatformServices s;
+    s.measureWidth = [](std::string_view t, gfx::FontId f) { return static_cast<float>(TextRenderer::chars(t)) * (f.v ? static_cast<float>(f.v) : 16.f) * WideRenderer::kFactor; };
+    s.lineHeight = [](gfx::FontId f) { return f.v ? static_cast<float>(f.v) : 16.f; };
+    s.clipboardGet = [] { return std::string(); };
+    s.clipboardSet = [](std::string_view) {};
+    s.surfaceSize = [] { return gfx::Size{1280.f, 800.f}; };
+    ui::installPlatformServices(std::move(s));
+}
+// Les lignes coupees d'un dessin (vide : aucune).
+std::string cutLines(ui::Widget& w, float width, float height) {
+    static const ui::Theme theme = ui::Theme::byName("Light");
+    WideRenderer r;
+    r.size = {width, height};
+    for (int pass = 0; pass < 2; ++pass) {   // deux passes : les cartes choisissent leurs textes a la mise en page
+        w.setBounds({0.f, 0.f, width, height});
+        w.layout();
+        r.beginFrame(theme.color.windowBg);
+        ui::PaintContext ctx{r, theme, w.bounds(), 0.0, nullptr};
+        w.render(ctx);
+        r.endFrame();
+    }
+    static const char* const kAllowed[] = {"Exporter\xE2\x80\xA6", "Deux dates\xE2\x80\xA6", "Lecture des chiffres\xE2\x80\xA6", "Lecture des versions\xE2\x80\xA6",
+                                           "Nouvelle licence\xE2\x80\xA6", "Prolonger\xE2\x80\xA6", "Chercher\xE2\x80\xA6", "Relev\xC3\xA9 en cours\xE2\x80\xA6"};
+    std::string out;
+    for (const auto& l : r.lines) {
+        if (l.find("\xE2\x80\xA6") == std::string::npos) continue;
+        bool ok = false;
+        for (const char* a : kAllowed) ok = ok || l == a;
+        if (!ok) out += "[" + l + "] ";
+    }
+    return out;
+}
+
 // LES CAPTURES (XPG_STATS_DOSSIER=<dossier>) : un poste Admin d'essai plus fourni, garde dans ce dossier - des licences
 // FICTIVES signees a des dates passees (l'horloge des essais reculee), pour que la fiche d'<< Atelier Exemple >> ressemble a
 // la planche 10 : la PROFESSIONAL du 12/03/2024 prolongee deux fois, la PERSONAL du 05/12/2024 (finit dans un mois), une
@@ -512,6 +584,33 @@ int main(int argc, char** argv) {
         check(has(t, "Montant encaiss\xC3\xA9") && has(t, "30 j"), "<< Montant encaisse >> sur 30 jours");
         (void)draw(*dp, 1100.f, 640.f);
         check(!visibleW(*dp, "tableau.courbes"), "une fenetre basse : pas de rangee (les tuiles et l'activite d'abord)");
+    }
+
+    std::printf("-- aucun texte coupe : 1373 x 917 et 1100 x 700 (les pages : 1141 x 813, 868 x 596)\n");
+    {
+        installWideMetrics();
+        auto wp = gui::makeStatsPage(rig.host());
+        wp->refresh();
+        gui::requestPageFocus("client", "client:Atelier Exemple");
+        auto wc = gui::makeClientCardPage(rig.host());
+        const struct {
+            const char* window;
+            float       w, h;
+        } sizes[] = {{"1373x917", 1141.f, 813.f}, {"1100x700", 868.f, 596.f}};
+        for (const auto& sz : sizes) {
+            for (const char* tab : {"vue", "ventes", "licences", "pc", "mises-a-jour", "demandes", "admins"}) {
+                check(click(*wp, std::string("stats.onglet.") + tab), std::string("onglet ") + tab);
+                const std::string cut = cutLines(*wp, sz.w, sz.h);
+                check(cut.empty(), std::string("Statistiques, ") + tab + " a " + sz.window + " : aucun texte coupe " + cut);
+            }
+            check(click(*wp, "stats.onglet.vue"), "retour");
+            const std::string cut = cutLines(*wc, sz.w, sz.h);
+            check(cut.empty(), std::string("la fiche d'un client a ") + sz.window + " : aucun texte coupe " + cut);
+        }
+        auto* g = find<ui::Widget>(*wp, "stats.grille.vue");
+        (void)cutLines(*wp, 868.f, 596.f);
+        check(g && g->bounds().w > 0, "la grille a 1100 x 700");
+        installMetrics();
     }
 
     std::printf("-- la vraie coquille : un clic sur un point filtre la liste de Commandes\n");

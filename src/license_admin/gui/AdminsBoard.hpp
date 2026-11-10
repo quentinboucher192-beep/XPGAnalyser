@@ -134,6 +134,9 @@ struct Data {
 
     [[nodiscard]] const Person*          person(const std::string& key) const;
     [[nodiscard]] const js::AdminStats*  stats(const std::string& key) const;   // vide : pas dans le journal
+    // Le journal nomme un admin par l'identifiant de sa cle (xpg-...) : sa cle (inconnu : l'identifiant tel quel), lui.
+    [[nodiscard]] std::string            keyOf(const std::string& id) const;
+    [[nodiscard]] const Person*          personById(const std::string& id) const;
     [[nodiscard]] const AdminFigures*    fig(const std::string& key) const;
     [[nodiscard]] int activeCount() const;
     [[nodiscard]] int retiredCount() const;

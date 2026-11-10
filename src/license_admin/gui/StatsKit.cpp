@@ -544,6 +544,110 @@ void TabButton::onPaint(const ui::PaintContext& ctx) {
     if (selected_) ctx.r.fillRect({b.x, b.bottom() - 2.f, b.w, 2.f}, kViolet);
 }
 
+// ============================================================================ FitCard
+FitCard::FitCard(std::string id, std::string title, std::string small) : ch::ChartCard(std::move(id), title, small), heading_(std::move(title)) {
+    if (!small.empty()) smalls_ = {std::move(small)};
+}
+
+void FitCard::setText(std::string value, ch::Delta delta, std::vector<std::string> compares) {
+    text_ = std::move(value);
+    delta_ = std::move(delta);
+    compares_.clear();
+    for (auto& c : compares)
+        if (!c.empty()) compares_.push_back(std::move(c));
+    apply();
+}
+
+void FitCard::setSmalls(std::string title, std::vector<std::string> smalls) {
+    heading_ = std::move(title);
+    smalls_.clear();
+    for (auto& c : smalls)
+        if (!c.empty()) smalls_.push_back(std::move(c));
+    apply();
+}
+
+void FitCard::onLayout() {
+    apply();
+    ch::ChartCard::onLayout();
+}
+
+void FitCard::apply() {
+    // les mesures de ChartCard (ChartsMore.cpp) : 14 px de chaque cote ; le titre en 13 demi-gras, sa precision en 11 ; la
+    // valeur en 19 demi-gras puis 7 px, l'ecart puis 6 px, la comparaison en 12.
+    const float w = bounds().w - 28.f;
+    std::string small;
+    std::string compare = compares_.empty() ? std::string() : compares_.front();
+    ch::Delta delta = delta_;
+    if (w > 40.f) {
+        const float tw = ui::measureWidth(heading_, gfx::semibold(FontId{13})) + 6.f;
+        for (const auto& c : smalls_)
+            if (tw + ui::measureWidth(c, FontId{11}) <= w) {
+                small = c;
+                break;
+            }
+        compare.clear();
+        if (!text_.empty()) {
+            const float used = ui::measureWidth(text_, gfx::semibold(FontId{19})) + 7.f;
+            const float dw = delta.text.empty() ? 0.f : ch::deltaWidth(delta) + 6.f;
+            bool found = false;
+            for (const auto& c : compares_)   // avec l'ecart
+                if (used + dw + ui::measureWidth(c, FontId{12}) <= w) {
+                    compare = c;
+                    found = true;
+                    break;
+                }
+            if (!found && used + dw > w) delta = {};   // l'ecart ne tient pas : la valeur seule, puis une comparaison
+            if (!found && delta.text.empty())
+                for (const auto& c : compares_)
+                    if (used + ui::measureWidth(c, FontId{12}) <= w) {
+                        compare = c;
+                        break;
+                    }
+        }
+    } else if (!smalls_.empty()) {
+        small = smalls_.front();
+    }
+    const std::string sig = heading_ + "|" + small + "|" + text_ + "|" + delta.text + "|" + compare;
+    shownCompare_ = compare;
+    deltaShown_ = !delta.text.empty();
+    if (sig == applied_) return;
+    applied_ = sig;
+    setTitle(heading_, small);
+    setValue(text_, delta, compare);
+}
+
+// ============================================================================ FitBarList
+void FitBarList::setData(ch::BarListData data) {
+    full_ = std::move(data);
+    extras_ = -1;
+    apply();
+}
+
+void FitBarList::onLayout() { apply(); }
+
+void FitBarList::apply() {
+    const float w = bounds().w;
+    int want = 1;
+    if (w > 20.f) {
+        for (const auto& r : full_.rows) {
+            if (r.extra.empty()) continue;
+            const std::string v = !r.valueText.empty() ? r.valueText : full_.format ? full_.format(r.value) : ch::fr::integer(r.value);
+            const float need = ui::measureWidth(r.label, FontId{12}) + ui::measureWidth(v, gfx::semibold(FontId{12})) +
+                               ui::measureWidth(r.extra, FontId{11}) + 22.f;
+            if (need > w) want = 0;
+        }
+    }
+    if (want == extras_) return;
+    extras_ = want;
+    ch::BarListData d = full_;
+    if (!want)
+        for (auto& r : d.rows) {
+            if (r.tip.empty() && !r.extra.empty()) r.tip = r.label + " : " + (!r.valueText.empty() ? r.valueText : d.format ? d.format(r.value) : ch::fr::integer(r.value)) + ", " + r.extra;
+            r.extra.clear();
+        }
+    ch::BarList::setData(std::move(d));
+}
+
 // ============================================================================ les cartes, les bandeaux
 void paintCard(gfx::IRenderer& r, const ui::Theme& th, const Rect& b) {
     r.fillRoundedRect({b.x, b.y + 1.f, b.w, b.h + 1.f}, th.brand.cardShadow, 12.f);

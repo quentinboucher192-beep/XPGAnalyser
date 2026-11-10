@@ -38,12 +38,12 @@ public:
             bool        bars;
         } cards[4] = {{"montant", "Montant encaiss\xC3\xA9", true}, {"licences", "Licences actives", false}, {"pc", "PC actifs", false}, {"demandes", "Demandes", false}};
         for (const auto& c : cards) {
-            auto card = std::make_unique<ch::ChartCard>(std::string("tableau.courbes.") + c.id + ".carte", c.title, "30 j");
+            auto card = std::make_unique<FitCard>(std::string("tableau.courbes.") + c.id + ".carte", c.title, "30 j");
             ch::TimeChart* chart = &card->setChartAs(std::make_unique<ch::TimeChart>(std::string("tableau.courbes.") + c.id));
             chart->setOnPick([this](const ch::Pick&) {
                 if (host_.navigate) host_.navigate("statistiques");
             });
-            cards_.push_back(&static_cast<ch::ChartCard&>(addChild(std::move(card))));
+            cards_.push_back(&static_cast<FitCard&>(addChild(std::move(card))));
             charts_.push_back(chart);
             bars_.push_back(c.bars);
         }
@@ -123,7 +123,7 @@ private:
                               : s && s->refused ? std::string("Il te manque un droit pour ces chiffres.")
                                                 : std::string("Lecture des chiffres\xE2\x80\xA6");
                 charts_[i]->setData(t);
-                cards_[i]->setValue("\xE2\x80\x94");
+                cards_[i]->setText("\xE2\x80\x94");
                 continue;
             }
             const bool money = i == 0, level = i == 1 || i == 2;
@@ -159,7 +159,7 @@ private:
             t.clickHint = "Clic : la page Statistiques";
             charts_[i]->setData(t);
             const std::string value = money ? stats::euros(s->total) : stats::isNumber(s->total) ? ch::fr::integer(s->total) : std::string("\xE2\x80\x94");
-            cards_[i]->setValue(value, s->hasComparison() ? ch::deltaOf(s->total, s->beforeTotal) : ch::Delta{},
+            cards_[i]->setText(value, s->hasComparison() ? ch::deltaOf(s->total, s->beforeTotal) : ch::Delta{},
                                 s->hasComparison() ? (money ? "contre " + stats::euros(s->beforeTotal) : "contre " + ch::fr::integer(s->beforeTotal)) : std::string());
         }
         invalidateLayout();
@@ -167,7 +167,7 @@ private:
     }
 
     ShellHost                   host_;
-    std::vector<ch::ChartCard*> cards_;
+    std::vector<FitCard*>       cards_;
     std::vector<ch::TimeChart*> charts_;
     std::vector<bool>           bars_;
     stats::SeriesReply          reply_;

@@ -93,6 +93,22 @@ bool pickDrop(ui::Widget& page, std::string_view id, const std::string& value) {
     return false;
 }
 
+// 1.47.0 : la puce Type de la barre de l'historique (avant : la liste deroulante historique.type) ; "" : la puce effacee.
+bool pickType(ui::Widget& page, const std::string& kind) {
+    auto* bar = find<ui::FilterBar>(page, "historique");
+    if (!bar) return false;
+    const int f = bar->fieldByTitle("Type");
+    if (f < 0) return false;
+    if (kind.empty()) bar->clearField(static_cast<std::size_t>(f));
+    else if (kind == "demande") bar->setValues(static_cast<std::size_t>(f), {"Demande"});
+    else if (kind == "licence") bar->setValues(static_cast<std::size_t>(f), {"Licence"});
+    else if (kind == "extension") bar->setValues(static_cast<std::size_t>(f), {"Extension"});
+    else if (kind == "revocation") bar->setValues(static_cast<std::size_t>(f), {"R\xC3\xA9vocation"});
+    else if (kind == "client") bar->setValues(static_cast<std::size_t>(f), {"Client supprim\xC3\xA9", "Client restaur\xC3\xA9"});
+    else return false;
+    return true;
+}
+
 // Un travail lent qui dure (pour essayer les refus pendant qu'il tourne).
 bool startSlow(HostRig& rig, gui::ShellHost& h) {
     rig.slowOnThread = true;
@@ -543,17 +559,17 @@ int main(int argc, char** argv) {
         check(cell(p, "historique.table", n - 1, 1) == "Demande" && cell(p, "historique.table", n - 1, 4) == "Poste essai A", "la plus ancienne a la fin");
         check(cell(p, "historique.table", 0, 3) == "Client d'essai Beta", "une revocation : le client de sa licence");
         check(has(cell(p, "historique.table", 0, 5), "raison : Essai") && cell(p, "historique.table", 0, 4) == "toute la licence", "son detail");
-        check(pickDrop(p, "historique.type", "licence") && rows(p, "historique.table") == 2, "filtre : licences (A, B)");
+        check(pickType(p, "licence") && rows(p, "historique.table") == 2, "filtre : licences (A, B)");
         const int la = rowOf(p, "historique.table", 2, "XPG-2026-00001");
         check(la >= 0 && has(cell(p, "historique.table", static_cast<std::size_t>(la), 5), "\xC3\xA9" "dition PROFESSIONAL")
                   && cell(p, "historique.table", static_cast<std::size_t>(la), 3) == "Client d'essai Alpha",
               "la licence d'Alpha : edition, client");
-        check(pickDrop(p, "historique.type", "extension") && rows(p, "historique.table") == 2 && cell(p, "historique.table", 0, 1) == "Extension",
+        check(pickType(p, "extension") && rows(p, "historique.table") == 2 && cell(p, "historique.table", 0, 1) == "Extension",
               "filtre : extensions (B garde, C ajoute)");
-        check(pickDrop(p, "historique.type", "demande") && rows(p, "historique.table") == 4, "filtre : demandes");
+        check(pickType(p, "demande") && rows(p, "historique.table") == 4, "filtre : demandes");
         check(has(paint(p, r), "4 lignes sur 10"), "le compte dit le filtre");
-        check(pickDrop(p, "historique.type", "revocation") && rows(p, "historique.table") == 2, "filtre : revocations");
-        check(pickDrop(p, "historique.type", "") && type(p, "historique.recherche", "\"Poste essai D\"") && rows(p, "historique.table") == 1
+        check(pickType(p, "revocation") && rows(p, "historique.table") == 2, "filtre : revocations");
+        check(pickType(p, "") && type(p, "historique.recherche", "\"Poste essai D\"") && rows(p, "historique.table") == 1
                   && cell(p, "historique.table", 0, 1) == "Demande",
               "chercher un PC");
         check(type(p, "historique.recherche", "") && rows(p, "historique.table") == 10, "recherche videe");
@@ -615,11 +631,11 @@ int main(int argc, char** argv) {
         check(license_admin::appendActivations(fx.ws->folder(), {gone, back}, nullptr), "deux lignes << client >> dans le registre");
         fx.ws->reload();
         p.refresh();
-        check(pickDrop(p, "historique.type", "client") && rows(p, "historique.table") == 2 && cell(p, "historique.table", 0, 1) == "Client restaur\xC3\xA9" &&
+        check(pickType(p, "client") && rows(p, "historique.table") == 2 && cell(p, "historique.table", 0, 1) == "Client restaur\xC3\xA9" &&
                   cell(p, "historique.table", 1, 1) == "Client supprim\xC3\xA9" && cell(p, "historique.table", 1, 3) == "Client d'essai Gamma" &&
                   has(cell(p, "historique.table", 1, 5), "(2 licences)"),
               "filtre : clients (supprime, restaure)");
-        check(pickDrop(p, "historique.type", ""), "le filtre remis");
+        check(pickType(p, ""), "le filtre remis");
     }
 
     // ------------------------------------------------------------------------------------------------

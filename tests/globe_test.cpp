@@ -477,10 +477,10 @@ int main() {
         ui::GlobeCityList C("villes");
         C.setBounds({0.f, 0.f, 326.f, 300.f});
         C.setPlaces(sample);
-        // La plus grande d'abord, puis la plus grande en tout, puis par nom (la planche : Lyon 9, Paris 8, Bruxelles 4,
-        // Toulouse 4, Geneve 3...).
+        // La plus grande d'abord, puis celle qui a le plus de PC, puis la plus grande en tout, puis par nom (Lyon 9,
+        // Paris 8, Toulouse 4 et 29 PC, Bruxelles 4 et 24 PC, Geneve 3... ; la maquette, a egalite : par nom).
         CHECK(C.order().size() == 21 && C.order()[0] == iLyon && C.order()[1] == iParis && C.countries() == 9);
-        CHECK(C.order()[2] == findCity(sample, "Bruxelles") && C.order()[3] == iToulouse);
+        CHECK(C.order()[2] == iToulouse && C.order()[3] == findCity(sample, "Bruxelles"));
         C.setLayer(Layer::Admins);   // Lyon, Paris, Grenoble : 1 chacune -> la plus grande en tout d'abord (pas par nom)
         CHECK(C.order().size() == 3 && C.countries() == 1 && C.order()[0] == iLyon && C.order()[1] == iParis && C.order()[2] == iGrenoble);
         int chosen = -1;
@@ -489,6 +489,19 @@ int main() {
         CHECK(chosen == iParis);
         C.setLayer(Layer::Requests);   // Lyon, Paris, Casablanca, Liege, Dakar
         CHECK(C.order().size() == 5 && C.countries() == 4);
+        // Un client par ville, personne de connecte : la ville de 7 PC d'abord, pas celle d'une Decouverte.
+        std::vector<ui::globe::Place> tie(3);
+        tie[0].city = "Casablanca";
+        tie[0].pcs = 2;
+        tie[0].setCount(Layer::Discoveries, 1);
+        tie[1].city = "Lyon";
+        tie[1].pcs = 7;
+        tie[2].city = "Abidjan";
+        tie[2].pcs = 1;
+        for (auto& p : tie) p.setCount(Layer::Clients, 1);
+        C.setLayer(Layer::Clients);
+        C.setPlaces(tie);
+        CHECK(C.order().size() == 3 && C.order()[0] == 1 && C.order()[1] == 0 && C.order()[2] == 2);
     }
 
     std::printf("%d verifications, %d echec(s)\n", checks, fails);

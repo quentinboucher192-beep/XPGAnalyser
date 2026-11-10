@@ -25,11 +25,14 @@
 //  un tableau cache (<< admins.table >>) porte la meme liste pour les scripts
 //  (--choisir admins.table=N) et les essais.
 // =============================================================================
+#include "AdminsBoard.hpp"   // 1.47.0 : les pages des admins (planches 01 a 05)
 #include "AdminsKit.hpp"
+#include "ListKit.hpp"
 #include "Page.hpp"
 
 #include "../../deploy/DevKey.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "../../ui/widgets/DatePicker.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -119,13 +122,14 @@ std::string shortRight(const std::string& id) {
 // Une ligne du tableau : l'admin+, un admin de la liste (actif ou retire), une demande recue.
 struct AdminRow {
     enum class Kind { Plus, Admin, Pending } kind{Kind::Admin};
-    std::string              key, name, pc, fingerprint, profile, email, software, version;
+    std::string              key, id, name, pc, machine, fingerprint, profile, email, software, version;
     Seconds                  since{0}, retired{0}, lastAction{0}, seen{0}, received{0};
     std::vector<std::string> rights;
     std::string              lastSummary;
     int                      actions30{0}, licences{0};
     bool                     me{false}, mismatch{false};
     int                      color{0};
+    int                      order{0};   // 1.47.0 : son rang dans la liste (retires compris) : sa couleur dans les pages des admins
     [[nodiscard]] bool active() const { return kind != Kind::Pending && retired == 0; }
 };
 
@@ -904,21 +908,62 @@ private:
 };
 
 // ===================================================================== la page ====
+//  1.47.0 (maquette 1.47.0, planches 01 a 05) : L'ADMIN+ voit LE TABLEAU DES ADMINS - la periode commune et la
+//  periode d'avant, les onglets (Vue d'ensemble, Qui fait quoi, Droits, Journal des admins) ; la vue d'ensemble et
+//  qui fait quoi sont dans PageAdminsOverview.cpp et PageAdminsWho.cpp ; la fiche d'un admin (double-clic, Entree,
+//  << Ouvrir sa fiche >>) remplace la vue sous son propre en-tete (PageAdminCard.cpp). UN ADMIN garde la liste en
+//  lecture seule, et << Ma fiche >> : la sienne, la seule qu'il voit. Les chiffres : AdminsBoard.hpp.
+namespace ab = adminsboard;
+namespace js = license_admin::journalstats;
+namespace ch = ui::charts;
+
+const char* const kAnchorLabels[7] = {"Vue d'ensemble", "Activit\xC3\xA9", "Licences et clients", "Demandes", "Boutique", "S\xC3\xA9" "curit\xC3\xA9", "Droits"};
+
 class AdminsPage final : public Page {
 public:
     explicit AdminsPage(ShellHost host) : Page("admins", std::move(host)) {
-        // L'admin+ : les gestes de l'en-tete et de la fiche.
+        statskit::installSamplesFromEnvironment([this] { return ws().now(); });
+        data_ = std::make_shared<ab::Data>();
+        choice_.range = statskit::Range::Days30;
+        choice_.compare = stats::Compare::Previous;
+        choice_.step = stats::Step::Day;
+        // L'admin+ : l'en-tete, les onglets.
         add_ = &button(*this, "Ajouter un admin\xE2\x80\xA6", "admins.ajouter", ui::Button::Style::Primary, ui::Icon::Plus);
-        add_->setTooltip("Trois \xC3\xA9tapes : son nom ; il installe l'Admin et envoie sa demande ; vous lisez l'empreinte au t\xC3\xA9l\xC3\xA9phone, tu acceptes.");
-        rightsPage_ = &button(*this, "Droits des admins", "admins.droits-page", ui::Button::Style::Default, ui::Icon::Lock);
+        tabVue_ = &adopt(*this, std::make_unique<statskit::TabButton>("Vue d'ensemble", "admins.onglet.vue", ui::Icon::Chart));
+        tabQui_ = &adopt(*this, std::make_unique<statskit::TabButton>("Qui fait quoi", "admins.onglet.qui", ui::Icon::User));
+        rightsPage_ = &adopt(*this, std::make_unique<statskit::TabButton>("Droits", "admins.droits-page", ui::Icon::Lock));
         rightsPage_->setTooltip("Les profils de droits (Admin LV1, LV2\xE2\x80\xA6), copi\xC3\xA9s vers un admin puis ajust\xC3\xA9s pour lui seul.");
+        tabJournal_ = &adopt(*this, std::make_unique<statskit::TabButton>("Journal des admins", "admins.onglet.journal", ui::Icon::History));
         reload_ = &button(*this, "Relever", "admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
-        reload_->setTooltip("Relire tout de suite la liste des admins et les demandes sur le service (l'Admin le fait seul en arrivant sur la page).");
-        journal_ = &button(*this, "Voir son journal", "admins.voir-journal", ui::Button::Style::Default, ui::Icon::History);
-        rightsOf_ = &button(*this, "Ses droits\xE2\x80\xA6", "admins.droits", ui::Button::Style::Default, ui::Icon::Lock);
-        retire_ = &button(*this, "Retirer cet admin\xE2\x80\xA6", "admins.retirer", ui::Button::Style::Danger, ui::Icon::User);
-        verify_ = &button(*this, "V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.detail.verifier", ui::Button::Style::Primary);
-        refuseReq_ = &button(*this, "Refuser la demande", "admins.detail.refuser", ui::Button::Style::Danger);
+        reload_->setTooltip("Relire tout de suite la liste des admins, les demandes et les chiffres du service (l'Admin le fait seul en arrivant sur la page).");
+        range_ = &adopt(*this, std::make_unique<statskit::SegGroup>(
+                                   "admins.periode", std::vector<statskit::SegGroup::Item>{{statskit::rangeKey(statskit::Range::Days7), statskit::rangeLabel(statskit::Range::Days7)},
+                                                                                          {statskit::rangeKey(statskit::Range::Days30), statskit::rangeLabel(statskit::Range::Days30)},
+                                                                                          {statskit::rangeKey(statskit::Range::Days90), statskit::rangeLabel(statskit::Range::Days90)},
+                                                                                          {statskit::rangeKey(statskit::Range::Months12), statskit::rangeLabel(statskit::Range::Months12)},
+                                                                                          {statskit::rangeKey(statskit::Range::All), statskit::rangeLabel(statskit::Range::All)},
+                                                                                          {statskit::rangeKey(statskit::Range::Dates), statskit::rangeLabel(statskit::Range::Dates),
+                                                                                           ui::Icon::History}}));
+        range_->onPick = [this](const std::string& k) { pickRange(k); };
+        from_ = &adopt(*this, std::make_unique<ui::DatePicker>("admins.du"));
+        to_ = &adopt(*this, std::make_unique<ui::DatePicker>("admins.au"));
+        deploy_ = &button(*this, "D\xC3\xA9ployer le service", "admins.deployer", ui::Button::Style::Primary, ui::Icon::ArrowUp);
+        deploy_->setTooltip("Lance le kit install\xC3\xA9 avec l'Admin : ton service part \xC3\xA0 jour sur ton compte Cloudflare (la sortie s'affiche en direct).");
+        // La fiche : son en-tete.
+        back_ = &adopt(*this, std::make_unique<ab::LinkButton>("\xE2\x80\xB9 Tous les admins", "admins.fiche.retour", false));
+        cardJournal_ = &button(*this, "Son journal", "admins.fiche.journal", ui::Button::Style::Default, ui::Icon::History);
+        cardRights_ = &button(*this, "Ses droits\xE2\x80\xA6", "admins.fiche.droits", ui::Button::Style::Default, ui::Icon::Lock);
+        cardRetire_ = &button(*this, "Retirer\xE2\x80\xA6", "admins.fiche.retirer", ui::Button::Style::Danger, ui::Icon::User);
+        for (int i = 0; i < 7; ++i) {
+            anchors_[i] = &adopt(*this, std::make_unique<statskit::TabButton>(kAnchorLabels[i], "admins.fiche.ancre." + std::to_string(i), ui::Icon::None));
+            links_ += anchors_[i]->clicked->connect([this, i] {
+                if (card_) ab::cardAnchor(*card_, i);
+                for (int k = 0; k < 7; ++k) anchors_[k]->setSelected(k == i);
+            });
+        }
+        // Un admin : sa fiche.
+        myCard_ = &button(*this, "Ma fiche", "admins.ma-fiche", ui::Button::Style::Default, ui::Icon::User);
+        myCard_->setTooltip("Tes chiffres : tes actions, tes jours, tes droits utilis\xC3\xA9s ou non, ce que tu produis. Tu ne vois que ta fiche.");
         // Pas encore admin : les deux chemins.
         createKey_ = &button(*this, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur\xE2\x80\xA6", "admins.creer-cle", ui::Button::Style::Primary, ui::Icon::Lock);
         restore_ = &button(*this, "Restaurer une sauvegarde\xE2\x80\xA6", "admins.restaurer", ui::Button::Style::Default, ui::Icon::Open);
@@ -937,26 +982,40 @@ public:
         table_->setSelectionMode(ui::SelectionMode::Single);
         table_->setVisibility(ui::Visibility::Collapsed);   // le tableau des scripts : la page dessine le sien
 
+        // Les vues de l'admin+ (la vue d'ensemble, qui fait quoi).
+        actions_ = makeActions();
+        overview_ = &adopt(*this, ab::makeOverview(data_, actions_, host_));
+        who_ = &adopt(*this, ab::makeWho(data_, actions_, host_));
+
         links_ += add_->clicked->connect([this] { openAdd({}); });
+        links_ += tabVue_->clicked->connect([this] { showTab(0); });
+        links_ += tabQui_->clicked->connect([this] { showTab(1); });
         links_ += rightsPage_->clicked->connect([this] { host_.navigate("droits"); });
-        links_ += reload_->clicked->connect([this] { fetch(true); });
-        links_ += journal_->clicked->connect([this] {
-            if (const AdminRow* r = selected()) {
-                requestPageFocus("journal", "admin:" + r->key);
-                host_.navigate("journal");
-            }
+        links_ += tabJournal_->clicked->connect([this] { host_.navigate("journal"); });
+        links_ += reload_->clicked->connect([this] {
+            fetch(true);
+            serviceSig_.clear();
+            data_->cards.clear();
+            loadService();
         });
-        links_ += rightsOf_->clicked->connect([this] {
-            if (const AdminRow* r = selected()) {
-                requestPageFocus("droits", "admin:" + r->key);
-                host_.navigate("droits");
-            }
+        links_ += from_->changed->connect([this](ui::DatePicker::Seconds) { datesChanged(); });
+        links_ += to_->changed->connect([this](ui::DatePicker::Seconds) { datesChanged(); });
+        links_ += deploy_->clicked->connect([this] {
+            if (actions_.deploy) actions_.deploy();
         });
-        links_ += retire_->clicked->connect([this] { askRetire(); });
-        links_ += verify_->clicked->connect([this] {
-            if (const AdminRow* r = selected(); r && r->kind == AdminRow::Kind::Pending) openAdd(r->key);
+        links_ += back_->clicked->connect([this] { closeCard(); });
+        links_ += cardJournal_->clicked->connect([this] {
+            if (actions_.journalOf && !cardKey_.empty()) actions_.journalOf(cardKey_);
         });
-        links_ += refuseReq_->clicked->connect([this] { refuseSelected(); });
+        links_ += cardRights_->clicked->connect([this] {
+            if (actions_.rightsOf && !cardKey_.empty()) actions_.rightsOf(cardKey_);
+        });
+        links_ += cardRetire_->clicked->connect([this] {
+            if (!cardKey_.empty()) askRetire(cardKey_);
+        });
+        links_ += myCard_->clicked->connect([this] {
+            if (!ws().adminKey().keyHex.empty()) openCard(ws().adminKey().keyHex, true);
+        });
         links_ += createKey_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += restore_->clicked->connect([this] { host_.navigate("securite"); });
         links_ += service_->clicked->connect([this] { host_.navigate("service"); });
@@ -965,10 +1024,13 @@ public:
         links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
             if (syncing_) return;
             if (!sel.empty() && sel.front() < rows_.size()) selectedKey_ = rows_[sel.front()].key;
+            if (overview_) ab::overviewSelect(*overview_, selectedKey_);
             showButtons();
-            invalidateLayout();   // la fiche change de boutons (un admin retire : plus de Retirer)
+            invalidateLayout();   // la ligne depliee change
             invalidate();
         });
+        syncBar();
+        showTab(0);
         refresh();
     }
     ~AdminsPage() override { *alive_ = false; }
@@ -976,18 +1038,22 @@ public:
     [[nodiscard]] std::string title() const override { return "Administrateurs"; }
 
     void refresh() override {
-        if (const std::string f = takePageFocus("admins"); f.rfind("admin:", 0) == 0) selectedKey_ = f.substr(6);
+        const std::string f = takePageFocus("admins");
+        if (f.rfind("admin:", 0) == 0) selectedKey_ = f.substr(6);
         const Role role = ws().role();
         if (role != shownRole_) {
             shownRole_ = role;
             fetched_ = Fetched{};
             lastFetch_ = -1;
+            closeCard();
         }
         if (role == Role::None && reqName_->text().empty() && !ws().adminKey().name.empty()) reqName_->setText(ws().adminKey().name);
         rebuild();
+        if (f.rfind("fiche:", 0) == 0 && role == Role::Plus) openCard(f.substr(6), false);
         // Arriver sur la page : relire ce que le service sait (sans bruit ; au plus une fois par minute).
         if ((role == Role::Plus || role == Role::Admin) && ws().service().ready() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 60.0))
             fetch(false);
+        loadService();
     }
 
     // Les essais.
@@ -1001,31 +1067,54 @@ protected:
         w_ = std::max(300.f, b.w - 2.f * pad);
         const Role role = shownRole_;
         for (ui::Widget* wd : {static_cast<ui::Widget*>(add_), static_cast<ui::Widget*>(rightsPage_), static_cast<ui::Widget*>(reload_),
-                               static_cast<ui::Widget*>(journal_), static_cast<ui::Widget*>(rightsOf_), static_cast<ui::Widget*>(retire_),
-                               static_cast<ui::Widget*>(verify_), static_cast<ui::Widget*>(refuseReq_), static_cast<ui::Widget*>(createKey_),
+                               static_cast<ui::Widget*>(tabVue_), static_cast<ui::Widget*>(tabQui_), static_cast<ui::Widget*>(tabJournal_),
+                               static_cast<ui::Widget*>(range_), static_cast<ui::Widget*>(from_), static_cast<ui::Widget*>(to_),
+                               static_cast<ui::Widget*>(deploy_), static_cast<ui::Widget*>(back_), static_cast<ui::Widget*>(cardJournal_),
+                               static_cast<ui::Widget*>(cardRights_), static_cast<ui::Widget*>(cardRetire_), static_cast<ui::Widget*>(myCard_),
+                               static_cast<ui::Widget*>(overview_), static_cast<ui::Widget*>(who_), static_cast<ui::Widget*>(createKey_),
                                static_cast<ui::Widget*>(restore_), static_cast<ui::Widget*>(reqName_), static_cast<ui::Widget*>(reqEmail_),
                                static_cast<ui::Widget*>(send_), static_cast<ui::Widget*>(service_), static_cast<ui::Widget*>(check_)})
             wd->setVisibility(ui::Visibility::Collapsed);
-        for (auto* v : verifyRow_) v->setVisibility(ui::Visibility::Collapsed);
+        for (auto* a : anchors_) a->setVisibility(ui::Visibility::Collapsed);
+        if (card_) card_->setVisibility(ui::Visibility::Collapsed);
         if (role == Role::None) layoutNone(b);
         else if (role == Role::Pending) layoutPending(b);
-        else layoutList(b, role == Role::Plus);
+        else if (card_ && !cardKey_.empty()) layoutCard(b);
+        else if (role == Role::Plus) layoutBoard(b);
+        else layoutList(b);
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
         auto& r = ctx.r;
-        const auto& th = ctx.theme;
-        const auto& c = th.color;
         const Rect b = bounds();
-        r.fillRect(b, c.windowBg);
+        r.fillRect(b, ctx.theme.color.windowBg);
         const Role role = shownRole_;
         if (role == Role::None) paintNone(ctx);
         else if (role == Role::Pending) paintPending(ctx);
-        else paintList(ctx, role == Role::Plus);
-        (void)c;
+        else if (card_ && !cardKey_.empty()) paintCardHead(ctx);
+        else if (role == Role::Plus) paintBoard(ctx);
+        else paintList(ctx);
+        if (!bannerRect_.empty()) statskit::paintBanner(r, ctx.theme, bannerRect_, bannerText(), data_->serviceTooOld, deploy_->visible() ? deploy_->bounds().w + 28.f : 0.f);
+        // un travail qui n'a pas pu partir (un autre tournait) : il part des que possible
+        if (wantService_ && !serviceBusy_) loadService();
+        if (wantCard_ && !cardKey_.empty()) {
+            wantCard_ = false;
+            loadCard(cardKey_);
+        }
+        // l'ancre de la fiche suit le defilement
+        if (card_ && !cardKey_.empty()) {
+            const int cur = ab::cardCurrentAnchor(*card_);
+            for (int k = 0; k < 7; ++k)
+                if (anchors_[k]->selected() != (k == cur)) anchors_[k]->setSelected(k == cur);
+        }
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape && !cardKey_.empty()) {
+            closeCard();
+            return ui::EventResult::Consumed;
+        }
+        if (shownRole_ == Role::Plus || !cardKey_.empty()) return ui::EventResult::Ignored;
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left && rowsRect_.contains(d->pos)) {
             const int i = rowAt(d->pos);
             if (i >= 0) {
@@ -1046,6 +1135,450 @@ protected:
     }
 
 private:
+    // ------------------------------------------------------------------ les gestes des vues
+    ab::Actions makeActions() {
+        ab::Actions a;
+        a.openCard = [this](const std::string& key) { openCard(key, false); };
+        a.journalOf = [this](const std::string& key) {
+            requestPageFocus("journal", "admin:" + key);
+            host_.navigate("journal");
+        };
+        a.journalLines = [this](std::vector<std::uint64_t> lines, const std::string& key) {
+            if (!lines.empty()) requestPageFocus("journal", "ligne:" + std::to_string(lines.back()));
+            else if (!key.empty()) requestPageFocus("journal", "admin:" + key);
+            host_.navigate("journal");
+        };
+        a.rightsOf = [this](const std::string& key) {
+            requestPageFocus("droits", "admin:" + key);
+            host_.navigate("droits");
+        };
+        a.retire = [this](const std::string& key) { askRetire(key); };
+        a.verify = [this](const std::string& key) {
+            selectedKey_ = key;
+            openAdd(key);
+        };
+        a.refuse = [this](const std::string& key) { refuseRequest(key); };
+        a.select = [this](const std::string& key) { syncTable(key); };
+        a.addAdmin = [this] { openAdd({}); };
+        a.criticality = [this] {
+            auto alive = alive_;
+            host_.openDialog(makeCriticalityDialog(host_, [this, alive] {
+                if (*alive) rebuild();
+            }));
+        };
+        a.deploy = [this] {
+            if (host_.busy && host_.busy()) {
+                host_.report(OpResult::fail("un travail est en cours : attends qu'il finisse, puis D\xC3\xA9ployer le service"));
+                return;
+            }
+            if (deployer::running()) return;
+            auto alive = alive_;
+            if (host_.openDialog) host_.openDialog(makeDeployDialog(host_, [this, alive] {
+                if (*alive) refresh();
+            }));
+        };
+        a.versions = [this] { host_.navigate("versions"); };
+        a.removeRights = [this](const std::string& key, std::vector<std::string> rights) {
+            std::string names;
+            for (const auto& r : rights) names += (names.empty() ? "" : ", ") + ab::rightShort(r);
+            const ab::Person* p = data_->person(key);
+            host_.flash("Droits des admins : d\xC3\xA9" "coche " + names + (p ? " pour " + p->name : std::string()) + ", puis Signer et publier.", Tone::Info);
+            requestPageFocus("droits", "admin:" + key);
+            host_.navigate("droits");
+        };
+        a.whyNotRetire = [this](const std::string&) -> std::string {
+            if (!ws().service().ready()) return "Il faut le service des licences (Service en ligne) : la nouvelle liste y est publi\xC3\xA9" "e.";
+            if (host_.busy && host_.busy()) return "Un travail est en cours : attends qu'il finisse.";
+            return {};
+        };
+        a.exportRows = [this](std::vector<std::string> keys) {
+            std::vector<ui::RowIndex> rows;
+            for (const auto& k : keys)
+                for (std::size_t i = 0; i < rows_.size(); ++i)
+                    if (rows_[i].key == k) rows.push_back(static_cast<ui::RowIndex>(i));
+            listkit::exportRows(host_, *table_, rows, "administrateurs.csv", "les admins");
+        };
+        a.busy = [this] { return host_.busy && host_.busy(); };
+        return a;
+    }
+
+    // ------------------------------------------------------------------ la periode
+    [[nodiscard]] std::string allFrom() const {
+        const js::TimeZone tz = js::TimeZone::paris();
+        if (!data_->lines.empty()) return js::dayText(js::localDay(data_->lines.front().at(), tz));
+        return statskit::allFromOf(ws());
+    }
+    void pickRange(const std::string& k) {
+        for (statskit::Range r : {statskit::Range::Days7, statskit::Range::Days30, statskit::Range::Days90, statskit::Range::Months12, statskit::Range::All, statskit::Range::Dates})
+            if (k == statskit::rangeKey(r)) choice_.range = r;
+        if (choice_.range == statskit::Range::Dates) {
+            const stats::Period p = stats::lastDays(ws().now(), 30);
+            if (choice_.from.empty()) choice_.from = p.from;
+            if (choice_.to.empty()) choice_.to = p.to;
+            from_->setDate(stats::dayStart(choice_.from));
+            to_->setDate(stats::dayStart(choice_.to));
+            to_->setRangeStart(stats::dayStart(choice_.from));
+        }
+        periodChanged();
+    }
+    void datesChanged() {
+        if (from_->date() > 0) choice_.from = stats::dayOf(from_->date());
+        if (to_->date() > 0) choice_.to = stats::dayOf(to_->date());
+        to_->setRangeStart(from_->date());
+        choice_.range = statskit::Range::Dates;
+        periodChanged();
+    }
+    void periodChanged() {
+        syncBar();
+        data_->cards.clear();
+        rebuild();
+        loadService();
+    }
+    void syncBar() { range_->setCurrent(statskit::rangeKey(choice_.range)); }
+    void showTab(int t) {
+        tab_ = t;
+        tabVue_->setSelected(t == 0);
+        tabQui_->setSelected(t == 1);
+        invalidateLayout();
+        invalidate();
+    }
+    // Le texte de la comparaison (<< compares aux 30 jours d'avant >>).
+    [[nodiscard]] std::string compareText() const {
+        switch (choice_.range) {
+            case statskit::Range::Days7: return "compar\xC3\xA9 aux 7 jours d'avant";
+            case statskit::Range::Days30: return "compar\xC3\xA9 aux 30 jours d'avant";
+            case statskit::Range::Days90: return "compar\xC3\xA9 aux 90 jours d'avant";
+            case statskit::Range::Months12: return "compar\xC3\xA9 aux 12 mois d'avant";
+            default: return "compar\xC3\xA9 \xC3\xA0 la p\xC3\xA9riode d'avant";
+        }
+    }
+
+    // ------------------------------------------------------------------ la fiche
+    void openCard(const std::string& key, bool own) {
+        const ab::Person* p = data_->person(key);
+        if (!p || p->kind == ab::Person::Kind::Pending) return;
+        if (shownRole_ != Role::Plus && !(own && key == ws().adminKey().keyHex)) return;   // un admin : sa fiche seulement
+        if (card_) {
+            (void)removeChild(*card_);
+            card_ = nullptr;
+        }
+        cardKey_ = key;
+        cardOwn_ = own;
+        selectedKey_ = key;
+        card_ = &adopt(*this, ab::makeCard(data_, actions_, host_, key, own));
+        for (int k = 0; k < 7; ++k) anchors_[k]->setSelected(k == 0);
+        loadCard(key);
+        invalidateLayout();
+        invalidate();
+    }
+    void closeCard() {
+        if (!card_ && cardKey_.empty()) return;
+        cardKey_.clear();
+        if (card_) {
+            (void)removeChild(*card_);
+            card_ = nullptr;
+        }
+        if (overview_) ab::overviewSelect(*overview_, selectedKey_);
+        invalidateLayout();
+        invalidate();
+    }
+
+    // ------------------------------------------------------------------ les chiffres du service (en arriere-plan)
+    void loadService() {
+        const Role role = ws().role();
+        if (role != Role::Plus && role != Role::Admin) return;
+        bool old = false;
+        const std::string note = statskit::blocked(ws(), &old);
+        if (!note.empty()) {
+            data_->serviceNote = note;
+            data_->serviceTooOld = old;
+            data_->serviceLoading = false;
+            data_->serviceLoaded = false;
+            refreshViews();
+            return;
+        }
+        ab::ServiceAsk ask;
+        ask.period = data_->statsPeriod;
+        ask.before = data_->statsBefore;
+        std::string sig = ask.period.from + ">" + ask.period.to;
+        for (const auto& p : data_->people) {
+            if (p.kind == ab::Person::Kind::Pending || p.key.size() != 64) continue;
+            ask.keys.push_back(p.key);
+            ask.ids.push_back(p.id);
+            ask.names.push_back(p.name);
+            sig += "|" + p.key;
+        }
+        if (sig == serviceSig_ && (data_->serviceLoaded || serviceBusy_ || !data_->serviceNote.empty())) return;
+        if (serviceBusy_) {
+            wantService_ = true;
+            return;
+        }
+        wantService_ = false;
+        serviceBusy_ = true;
+        serviceSig_ = sig;
+        data_->serviceLoading = true;
+        auto out = std::make_shared<ab::ServiceReply>();
+        const Workspace* w = &ws();
+        auto alive = alive_;
+        const bool started = statskit::runQuietly(
+            host_, "Administrateurs : les chiffres du service", [w, ask, out] { return ab::fetchService(*w, ask, *out); },
+            [this, alive, out, sig](const OpResult& r) {
+                if (!*alive) return;
+                serviceBusy_ = false;
+                if (sig == serviceSig_) {
+                    if (!r.ok && out->note.empty()) out->note = r.message;
+                    ab::applyService(*data_, std::move(*out));
+                    ab::computeLocal(ws(), *data_);
+                    fillTable();
+                    refreshViews();
+                    if (!cardKey_.empty()) loadCard(cardKey_);
+                }
+                if (wantService_) loadService();
+            });
+        if (!started) {
+            serviceBusy_ = false;
+            data_->serviceLoading = false;
+            serviceSig_.clear();
+            wantService_ = true;
+        }
+        refreshViews();
+    }
+    void loadCard(const std::string& key) {
+        if (!data_->serviceLoaded || key.empty()) return;
+        ab::CardFigures& c = data_->cards[key];
+        if (c.loaded || c.loading || !c.problem.empty()) return;
+        const ab::AdminFigures* f = data_->fig(key);
+        const ab::Person* p = data_->person(key);
+        ab::CardAsk ask;
+        ask.period = data_->statsPeriod;
+        ask.before = data_->statsBefore;
+        ask.key = key;
+        ask.serviceId = f && !f->serviceId.empty() ? f->serviceId : p ? p->id : std::string();
+        ask.now = ws().now();
+        c.loading = true;
+        auto out = std::make_shared<ab::CardFigures>();
+        const Workspace* w = &ws();
+        auto alive = alive_;
+        const std::string sig = serviceSig_;
+        const bool started = statskit::runQuietly(
+            host_, "Administrateurs : sa fiche", [w, ask, out] { return ab::fetchCard(*w, ask, *out); },
+            [this, alive, out, key, sig](const OpResult& r) {
+                if (!*alive) return;
+                if (sig != serviceSig_) return;   // la periode a change : une autre lecture viendra
+                if (!r.ok && out->problem.empty()) out->problem = r.message;
+                out->loading = false;
+                data_->cards[key] = std::move(*out);
+                refreshViews();
+            });
+        if (!started) {
+            data_->cards[key].loading = false;
+            wantCard_ = true;
+        }
+        refreshViews();
+    }
+    void refreshViews() {
+        if (overview_) ab::refreshView(*overview_);
+        if (who_) ab::refreshView(*who_);
+        if (card_) ab::refreshView(*card_);
+        invalidateLayout();
+        invalidate();
+    }
+    [[nodiscard]] std::string bannerText() const {
+        if (data_->serviceTooOld) return data_->serviceNote;
+        if (!data_->serviceNote.empty() && shownRole_ == Role::Plus)
+            return "Les chiffres du service (licences, demandes, montant) ne se lisent pas : " + data_->serviceNote +
+                   ". Ceux du journal des admins sont l\xC3\xA0.";
+        return {};
+    }
+    // Le bandeau sous l'en-tete ; rend le haut de la vue.
+    float placeBanner(float y) {
+        bannerRect_ = {};
+        const std::string text = bannerText();
+        if (text.empty()) return y;
+        const bool old = data_->serviceTooOld;
+        const float bw = old ? buttonWidth(*deploy_, 150.f) : 0.f;
+        const float bh = statskit::bannerHeight(text, w_, old ? bw + 16.f : 0.f);
+        bannerRect_ = {x0_, y, w_, bh};
+        if (old) {
+            deploy_->setBounds({x0_ + w_ - bw - 12.f, y + (bh - 32.f) * 0.5f, bw, 32.f});
+            deploy_->setVisibility(ui::Visibility::Visible);
+        }
+        return y + bh + 10.f;
+    }
+
+    // ------------------------------------------------------------------ l'admin+ : le tableau
+    void layoutBoard(const Rect& b) {
+        titleY_ = b.y + 18.f;
+        float right = x0_ + w_;
+        const float aw = buttonWidth(*add_, 150.f);
+        add_->setBounds({right - aw, titleY_ + 2.f, aw, 38.f});
+        add_->setVisibility(ui::Visibility::Visible);
+        right -= aw + 12.f;
+        const float rw = range_->preferredWidth();
+        const bool roomy = right - x0_ - rw > 280.f;
+        range_->setVisibility(ui::Visibility::Visible);
+        if (roomy) {
+            range_->setBounds({right - rw, titleY_ + 4.f, rw, 34.f});
+            right -= rw + 10.f;
+        }
+        titleRight_ = right;
+        float y = titleY_ + 72.f;
+        // les onglets ; a droite : les dates, Relever
+        float tx = x0_;
+        for (statskit::TabButton* t : {tabVue_, tabQui_, static_cast<statskit::TabButton*>(rightsPage_), tabJournal_}) {
+            const float tw = t->preferredWidth();
+            t->setBounds({tx, y, tw, 34.f});
+            t->setVisibility(ui::Visibility::Visible);
+            tx += tw + 22.f;
+        }
+        float tr = x0_ + w_;
+        const float lw = buttonWidth(*reload_, 90.f);
+        reload_->setBounds({tr - lw, y, lw, 32.f});
+        reload_->setVisibility(ui::Visibility::Visible);
+        tr -= lw + 10.f;
+        if (!roomy) {
+            range_->setBounds({std::max(tx, tr - rw), y, std::min(rw, tr - tx), 32.f});
+            tr -= rw + 10.f;
+        }
+        if (choice_.range == statskit::Range::Dates) {
+            const float dw = 136.f;
+            to_->setBounds({tr - dw, y + 1.f, dw, 30.f});
+            from_->setBounds({tr - 2.f * dw - 22.f, y + 1.f, dw, 30.f});
+            arrowX_ = tr - dw - 17.f;
+            const bool fits = tr - 2.f * dw - 22.f > tx;
+            from_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+            to_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        }
+        y += 42.f;
+        tabsBottom_ = y;
+        y = placeBanner(y + 12.f);
+        const Rect area{x0_, y, w_, std::max(120.f, b.bottom() - 6.f - y)};
+        overview_->setBounds(area);
+        who_->setBounds(area);
+        overview_->setVisibility(tab_ == 0 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        who_->setVisibility(tab_ == 1 ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        rightsPage_->setEnabled(true);
+        add_->setEnabled(ws().service().ready() && !(host_.busy && host_.busy()));
+        const int profiles = static_cast<int>(ws().profiles().size());
+        static_cast<statskit::TabButton*>(rightsPage_)->setCount(profiles ? std::to_string(profiles) + (profiles > 1 ? " profils" : " profil") : std::string());
+        tabJournal_->setCount(data_->journalLines ? ch::fr::integer(data_->journalLines) : std::string());
+    }
+
+    void paintBoard(const ui::PaintContext& ctx) {
+        auto& r = ctx.r;
+        r.drawText({x0_, titleY_}, "Administrateurs", gfx::semibold(kF28), ab::kInk);
+        int active = 0, waiting = 0, gone = 0;
+        for (const auto& row : rows_) {
+            if (row.kind == AdminRow::Kind::Pending) ++waiting;
+            else if (row.retired) ++gone;
+            else ++active;
+        }
+        std::string lead = count(static_cast<std::size_t>(active), "actif", "actifs");
+        if (waiting) lead += ", " + std::to_string(waiting) + " en attente";
+        if (gone) lead += ", " + count(static_cast<std::size_t>(gone), "retir\xC3\xA9", "retir\xC3\xA9s");
+        lead += " \xC2\xB7 du " + ch::fr::ddmm(data_->period.first) + " au " + ch::fr::ddmm(data_->period.last) + ", " + compareText();
+        Color lc = ab::kMuted;
+        if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
+        else if (data_->serviceLoading) lead += " \xC2\xB7 lecture du service\xE2\x80\xA6";
+        else if (!fetched_.problem.empty()) {
+            lead += " \xC2\xB7 service : " + fetched_.problem;
+            lc = ab::kAmber;
+        }
+        r.drawText({x0_, titleY_ + 42.f}, fit(r, lead, kF14, w_), kF14, lc);
+        r.fillRect({x0_, tabsBottom_ - 1.f, w_, 1.f}, ab::kLine);
+        if (choice_.range == statskit::Range::Dates && from_->visible()) r.drawText({arrowX_, tabsBottom_ - 33.f}, ch::fr::kArrow, kF13, ab::kMuted);
+    }
+
+    // ------------------------------------------------------------------ la fiche : son en-tete
+    void layoutCard(const Rect& b) {
+        const ab::Person* p = data_->person(cardKey_);
+        titleY_ = b.y + 14.f;
+        const float bw = back_->naturalWidth();
+        back_->setBounds({x0_, titleY_, bw, 20.f});
+        back_->setVisibility(ui::Visibility::Visible);
+        float y = titleY_ + 28.f;
+        cardTop_ = y;
+        float right = x0_ + w_;
+        const bool plus = shownRole_ == Role::Plus && !cardOwn_;
+        const bool admin = p && p->kind == ab::Person::Kind::Admin && p->active();
+        for (ui::Button* btn : {cardRetire_, cardRights_, cardJournal_}) {
+            const bool on = plus && (btn == cardJournal_ ? (p && p->key.size() == 64) : admin);
+            if (!on) continue;
+            const float w = buttonWidth(*btn, 96.f);
+            if (right - w < x0_ + w_ * 0.45f) break;
+            right -= w;
+            btn->setBounds({right, y + 8.f, w, 36.f});
+            btn->setVisibility(ui::Visibility::Visible);
+            right -= 8.f;
+        }
+        const std::string why = actions_.whyNotRetire ? actions_.whyNotRetire(cardKey_) : std::string();
+        cardRetire_->setEnabled(why.empty());
+        cardRetire_->setTooltip(why.empty() ? std::string("Son certificat est r\xC3\xA9voqu\xC3\xA9. Ce qu'il a sign\xC3\xA9 reste valide, sauf si tu choisis de r\xC3\xA9voquer aussi ses licences.") : why);
+        cardHeadRight_ = right - 12.f;
+        y += 70.f;
+        // les ancres ; a droite la periode
+        const float rw = range_->preferredWidth();
+        range_->setVisibility(ui::Visibility::Visible);
+        const float tabsRoom = w_ - rw - 16.f;
+        float natural = 0.f;
+        for (auto* a : anchors_) natural += a->preferredWidth() + 18.f;
+        const float k = natural > tabsRoom && natural > 0.f ? std::max(0.55f, tabsRoom / natural) : 1.f;
+        float tx = x0_;
+        for (auto* a : anchors_) {
+            const float tw = a->preferredWidth() * k;
+            a->setBounds({tx, y, tw, 34.f});
+            a->setVisibility(ui::Visibility::Visible);
+            tx += tw + 18.f * k;
+        }
+        range_->setBounds({x0_ + w_ - rw, y, rw, 32.f});
+        if (choice_.range == statskit::Range::Dates) {
+            const float dw = 130.f;
+            const float dy = y - 40.f;
+            to_->setBounds({x0_ + w_ - dw, dy, dw, 30.f});
+            from_->setBounds({x0_ + w_ - 2.f * dw - 22.f, dy, dw, 30.f});
+            const bool fits = !cardJournal_->visible() || cardJournal_->bounds().x > x0_ + w_ - 2.f * dw - 30.f;
+            from_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+            to_->setVisibility(fits ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        }
+        y += 42.f;
+        tabsBottom_ = y;
+        y = placeBanner(y + 12.f);
+        card_->setBounds({x0_, y, w_, std::max(120.f, b.bottom() - 6.f - y)});
+        card_->setVisibility(ui::Visibility::Visible);
+    }
+    void paintCardHead(const ui::PaintContext& ctx) {
+        auto& r = ctx.r;
+        const ab::Person* p = data_->person(cardKey_);
+        r.fillRect({x0_, tabsBottom_ - 1.f, w_, 1.f}, ab::kLine);
+        if (!p) return;
+        const Rect av{x0_, cardTop_, 56.f, 56.f};
+        ab::avatarOf(r, av, *p);
+        float x = av.right() + 16.f;
+        const float room = cardHeadRight_ - x;
+        const FontId fn = gfx::semibold(FontId{24});
+        x += ab::text(r, x, cardTop_ + 2.f, p->name, fn, ab::kInk, std::max(80.f, room * 0.5f)) + 12.f;
+        const auto chip = [&](const std::string& t, Color fg, Color bg, bool dot) {
+            if (x + kit::pillWidth(r, t, kF13, dot) > cardHeadRight_) return;
+            x += pill(r, x, cardTop_ + 6.f, t, kF13, fg, bg, 24.f, dot) + 8.f;
+        };
+        chip(p->kind == ab::Person::Kind::Plus ? "Admin+" : "Admin", p->kind == ab::Person::Kind::Plus ? ab::kVioletInk : ab::kInk2,
+             p->kind == ab::Person::Kind::Plus ? ab::kVioletPale : ab::kSunken, false);
+        chip(p->retired ? "Retir\xC3\xA9" : "Actif", p->retired ? ab::kRed : ab::kGreen, p->retired ? ab::kRedPale : ab::kGreenPale, !p->retired);
+        if (p->kind == ab::Person::Kind::Admin && !p->profile.empty())
+            chip(p->profile + (p->gaps > 0 ? " \xC2\xB7 " + std::to_string(p->gaps) + (p->gaps > 1 ? " \xC3\xA9" "carts" : " \xC3\xA9" "cart") : std::string()), ab::kVioletInk,
+                 ab::kVioletPale, false);
+        if (cardOwn_) chip("ta fiche", ab::kInk2, ab::kSunken, false);
+        // la ligne sous le nom
+        std::string sub = p->pc.empty() ? std::string() : p->pc;
+        if (p->since > 0) sub += (sub.empty() ? "" : " \xC2\xB7 ") + std::string(p->kind == ab::Person::Kind::Plus ? "admin+ depuis le " : "admin depuis le ") + dateFr(p->since);
+        if (p->kind == ab::Person::Kind::Admin && !p->addedBy.empty()) sub += ", ajout\xC3\xA9 par " + p->addedBy;
+        if (const ab::AdminFigures* f = data_->fig(cardKey_); f && f->hasUsage && f->usage.lastSeen > 0) {
+            sub += " \xC2\xB7 vu " + ab::ago(data_->now, f->usage.lastSeen);
+            if (!f->usage.city.empty()) sub += " \xC3\xA0 " + f->usage.city + (f->usage.country.empty() ? "" : ", " + f->usage.country);
+        }
+        (void)ab::text(r, av.right() + 16.f, cardTop_ + 38.f, sub, kF14, ab::kMuted, cardHeadRight_ - av.right() - 16.f);
+    }
+
     // ------------------------------------------------------------------ les donnees
     [[nodiscard]] const AdminRow* selected() const {
         for (const auto& r : rows_)
@@ -1071,12 +1604,14 @@ private:
             p.rights = adm::allRights();
             if (role == Role::Plus && w.signingKey()) {
                 p.key = w.signingKey()->publicKeyHex();
+                p.id = w.signingKey()->keyId();
                 p.name = w.key().name.empty() ? std::string("admin+") : w.key().name;
                 p.pc = thisPc();
                 p.me = true;
             } else if (fetched_.haveView && !fetched_.view.editors.empty()) {
                 const auto& e = fetched_.view.editors.front();
                 p.key = e.admin.key;
+                p.id = e.admin.id;
                 p.name = e.admin.name.empty() ? std::string("L'admin+") : e.admin.name;
                 p.pc = e.admin.pc;
             } else {
@@ -1091,6 +1626,8 @@ private:
                         p.seen = e.seen;
                         p.lastAction = e.lastAction;
                         if (p.pc.empty()) p.pc = e.admin.pc;
+                        if (p.id.empty()) p.id = e.admin.id;
+                        if (p.since == 0) p.since = e.admin.since;
                     }
             p.fingerprint = p.key.size() == 64 ? adm::fingerprint(p.key) : std::string();
             p.color = 0;
@@ -1107,14 +1644,16 @@ private:
             admins.clear();
             for (const auto& i : fetched_.view.admins) admins.push_back(i.admin);
         }
-        int color = 1;
+        int color = 1, order = 1;
         std::vector<AdminRow> retired;
         for (const auto& a : admins) {
             AdminRow r;
             r.kind = AdminRow::Kind::Admin;
             r.key = a.key;
+            r.id = a.id;
             r.name = a.name;
             r.pc = a.pc;
+            r.machine = a.machine;
             r.since = a.since;
             r.profile = a.profile;
             r.rights = adm::normalizeRights(a.rights);
@@ -1128,6 +1667,7 @@ private:
                 r.seen = i->seen;
             }
             r.color = a.active() ? color++ : -1;
+            r.order = order++;
             (a.active() ? rows_ : retired).push_back(std::move(r));
         }
         // Les demandes recues (l'admin+).
@@ -1136,33 +1676,20 @@ private:
                 AdminRow r;
                 r.kind = AdminRow::Kind::Pending;
                 r.key = q.key;
+                r.id = q.id;
                 r.name = q.name;
                 r.email = q.email;
                 r.pc = q.pc;
+                r.machine = q.machine;
                 r.software = q.software;
                 r.received = q.received;
                 r.fingerprint = q.fingerprint;
                 r.mismatch = q.fingerprintMismatch;
                 r.color = color++;
+                r.order = order++;
                 rows_.push_back(std::move(r));
             }
         for (auto& r : retired) rows_.push_back(std::move(r));
-        // Les chiffres du journal (l'admin+ : il le releve et le garde).
-        if (role == Role::Plus) {
-            const JournalView v = w.journalLines();
-            for (auto& r : rows_) {
-                for (const auto& j : v.rows) {
-                    if (j.line.key != r.key) continue;
-                    const Seconds t = j.line.parsed.when ? j.line.parsed.when : j.line.received;
-                    if (t >= now - 30 * 86400) ++r.actions30;
-                    if (j.line.parsed.action == "licence_creer") ++r.licences;
-                    if (t >= r.lastAction) {
-                        r.lastAction = t;
-                        r.lastSummary = j.line.parsed.object.empty() ? j.line.parsed.summary : j.line.parsed.object;
-                    }
-                }
-            }
-        }
         // Le choix : garde, sinon le premier admin (la maquette), sinon l'admin+.
         if (!selected()) {
             selectedKey_.clear();
@@ -1173,36 +1700,82 @@ private:
                 }
             if (selectedKey_.empty() && !rows_.empty()) selectedKey_ = rows_.front().key;
         }
-        // Le tableau des scripts.
+        // 1.47.0 : les chiffres des pages des admins (le journal : sur ce poste ; le service : en arriere-plan).
+        {
+            std::map<std::string, std::vector<std::string>> profileRights;
+            for (const auto& pr : w.profiles()) profileRights[pr.name] = adm::normalizeRights(pr.rights);
+            std::vector<ab::Person> people;
+            for (const auto& r : rows_) {
+                ab::Person p;
+                p.kind = r.kind == AdminRow::Kind::Plus ? ab::Person::Kind::Plus : r.kind == AdminRow::Kind::Pending ? ab::Person::Kind::Pending : ab::Person::Kind::Admin;
+                p.key = r.key;
+                p.id = r.id;
+                p.name = r.name;
+                p.pc = r.pc;
+                p.machine = r.machine;
+                p.profile = r.profile;
+                p.fingerprint = r.fingerprint;
+                p.email = r.email;
+                p.software = r.software;
+                p.version = r.version;
+                p.since = r.since;
+                p.retired = r.retired;
+                p.received = r.received;
+                p.seen = r.seen;
+                p.rights = r.rights;
+                p.color = r.kind == AdminRow::Kind::Plus ? 0 : r.order;
+                p.me = r.me;
+                p.mismatch = r.mismatch;
+                p.addedBy = r.kind == AdminRow::Kind::Admin ? (role == Role::Plus ? std::string("toi") : std::string("l'admin+")) : std::string();
+                if (const auto it = profileRights.find(r.profile); r.kind == AdminRow::Kind::Admin && it != profileRights.end()) {
+                    int gaps = 0;
+                    for (const auto& x : r.rights) gaps += std::find(it->second.begin(), it->second.end(), x) == it->second.end() ? 1 : 0;
+                    for (const auto& x : it->second) gaps += std::find(r.rights.begin(), r.rights.end(), x) == r.rights.end() ? 1 : 0;
+                    p.gaps = gaps;
+                }
+                people.push_back(std::move(p));
+            }
+            data_->people = std::move(people);
+            data_->latestAdmin = kAppVersion;
+            ab::setPeriod(*data_, choice_, now, allFrom());
+            if (role == Role::Plus || role == Role::Admin || role == Role::Retired) ab::computeLocal(w, *data_);
+            if (choice_.range == statskit::Range::All) ab::setPeriod(*data_, choice_, now, allFrom());   // le debut du journal, maintenant lu
+        }
+        fillTable();
+        if (overview_) ab::overviewSelect(*overview_, selectedKey_);
+        if (!cardKey_.empty() && !data_->person(cardKey_)) closeCard();
+        scroll_ = std::clamp(scroll_, 0, std::max(0, static_cast<int>(rows_.size()) - 1));
+        showButtons();
+        refreshViews();
+    }
+
+    // Le tableau des scripts (et de l'export CSV) : une ligne par admin, dans l'ordre de rows_.
+    void fillTable() {
         std::vector<std::vector<std::string>> t;
-        for (const auto& r : rows_) t.push_back({r.name, stateText(r)});
+        for (const auto& r : rows_) {
+            const js::AdminStats* s = data_->stats(r.key);
+            const ab::AdminFigures* f = data_->fig(r.key);
+            t.push_back({r.name, stateText(r), r.kind == AdminRow::Kind::Plus ? std::string("Admin+") : r.profile, r.pc, s ? std::to_string(s->actions) : std::string(),
+                         s ? ab::num(s->licences) : std::string(), s ? ab::num(s->requests) : std::string(), f ? ab::hoursText(f->meanDelay) : std::string(),
+                         f ? ab::euros(f->amount) : std::string(), s && s->last.number ? dateFr(s->last.when) + " " + ab::shortSummary(s->last) : std::string()});
+        }
         syncing_ = true;
-        table_->setModel(std::make_shared<TextRows>(std::vector<std::string>{"Admin", "\xC3\x89tat"}, std::move(t)));
+        table_->setModel(std::make_shared<TextRows>(std::vector<std::string>{"Admin", "\xC3\x89tat", "Profil", "PC", "Actions", "Licences", "Demandes", "D\xC3\xA9lai moyen",
+                                                                              "Montant", "Derni\xC3\xA8re action"},
+                                                    std::move(t)));
         for (std::size_t i = 0; i < rows_.size(); ++i)
             if (rows_[i].key == selectedKey_) table_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
         syncing_ = false;
-        // Une ligne << Verifier et accepter... >> par demande.
-        std::size_t pending = 0;
-        for (const auto& r : rows_) pending += r.kind == AdminRow::Kind::Pending ? 1 : 0;
-        while (verifyRow_.size() < pending) {
-            const std::size_t n = verifyRow_.size() + 1;
-            ui::Button& v = button(*this, "V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.verifier." + std::to_string(n), ui::Button::Style::Flat);
-            v.setVisibility(ui::Visibility::Collapsed);
-            links_ += v.clicked->connect([this, n] {
-                std::size_t k = 0;
-                for (const auto& r : rows_)
-                    if (r.kind == AdminRow::Kind::Pending && ++k == n) {
-                        selectedKey_ = r.key;
-                        openAdd(r.key);
-                        return;
-                    }
-            });
-            verifyRow_.push_back(&v);
-        }
-        scroll_ = std::clamp(scroll_, 0, std::max(0, static_cast<int>(rows_.size()) - 1));
+    }
+    void syncTable(const std::string& key) {
+        selectedKey_ = key;
+        syncing_ = true;
+        std::vector<ui::RowIndex> sel;
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+            if (rows_[i].key == key) sel.push_back(static_cast<ui::RowIndex>(i));
+        table_->selectModelRows(sel, false);
+        syncing_ = false;
         showButtons();
-        invalidateLayout();
-        invalidate();
     }
 
     void select(std::size_t i) {
@@ -1223,16 +1796,8 @@ private:
     }
 
     void showButtons() {
-        const AdminRow* s = selected();
         const bool busy = host_.busy && host_.busy();
         const bool ready = ws().service().ready();
-        journal_->setEnabled(s && s->key.size() == 64);
-        rightsOf_->setEnabled(s && s->kind == AdminRow::Kind::Admin && s->active());
-        retire_->setEnabled(s && s->kind == AdminRow::Kind::Admin && s->active() && ready && !busy);
-        retire_->setTooltip(!ready ? std::string("Il faut le service des licences (Service en ligne) : la nouvelle liste y est publi\xC3\xA9" "e.")
-                                   : "Son certificat est r\xC3\xA9voqu\xC3\xA9. Ce qu'il a sign\xC3\xA9 reste valide, sauf si tu choisis de r\xC3\xA9voquer aussi ses licences.");
-        verify_->setEnabled(s && s->kind == AdminRow::Kind::Pending && !busy);
-        refuseReq_->setEnabled(s && s->kind == AdminRow::Kind::Pending && !busy);
         add_->setEnabled(ready && !busy);
         add_->setTooltip(ready ? std::string("Trois \xC3\xA9tapes : son nom ; il installe l'Admin et envoie sa demande ; vous lisez l'empreinte au t\xC3\xA9l\xC3\xA9phone, tu acceptes.")
                                : std::string("Il faut d'abord le service des licences (Service en ligne) : la demande du futur admin y arrive."));
@@ -1275,6 +1840,7 @@ private:
             fetched_ = std::move(*out);
             fetchedAt_ = ws().now();
             rebuild();
+            loadService();
         };
         const bool started = loud ? host_.runSlow("Admins : relev\xC3\xA9", work, done) : runQuietly(host_, "Admins : relev\xC3\xA9", work, done);
         if (!started) {
@@ -1291,20 +1857,27 @@ private:
         }));
     }
 
-    void askRetire() {
-        const AdminRow* s = selected();
+    void askRetire(const std::string& key) {
+        const AdminRow* s = nullptr;
+        for (const auto& r : rows_)
+            if (r.key == key) s = &r;
         if (!s || s->kind != AdminRow::Kind::Admin || !s->active()) return;
+        if (actions_.whyNotRetire && !actions_.whyNotRetire(key).empty()) {
+            host_.flash(actions_.whyNotRetire(key), Tone::Warning);
+            return;
+        }
         auto alive = alive_;
         host_.openDialog(std::make_unique<RetireDialog>(host_, s->key, s->name, [this, alive] {
             if (*alive) fetch(false);
         }));
     }
 
-    void refuseSelected() {
-        const AdminRow* s = selected();
+    void refuseRequest(const std::string& key) {
+        const AdminRow* s = nullptr;
+        for (const auto& r : rows_)
+            if (r.key == key) s = &r;
         if (!s || s->kind != AdminRow::Kind::Pending) return;
         const Workspace* w = &ws();
-        const std::string key = s->key;
         auto alive = alive_;
         if (!host_.runSlow("Refuser la demande de " + s->name, [w, key] { return w->refuseAdmin(key); },
                            [this, alive](const OpResult& r) {
@@ -1354,38 +1927,38 @@ private:
         showButtons();
     }
 
+
     [[nodiscard]] int rowAt(gfx::Point p) const {
         if (!rowsRect_.contains(p)) return -1;
         const int i = static_cast<int>((p.y - rowsRect_.y) / rowH_) + scroll_;
         return i >= 0 && static_cast<std::size_t>(i) < rows_.size() && i < scroll_ + visibleRows_ ? i : -1;
     }
 
-    // ------------------------------------------------------------------ la liste
-    void layoutList(const Rect& b, bool plus) {
+    // ------------------------------------------------------------------ un admin : la liste en lecture seule
+    void layoutList(const Rect& b) {
         const bool compact = b.h < 680.f;
         titleY_ = b.y + (compact ? 18.f : 26.f);
         float bx = x0_ + w_;
-        if (plus) {
-            for (ui::Button* btn : {add_, rightsPage_, reload_}) {
-                const float bw = buttonWidth(*btn, 100.f);
-                bx -= bw;
-                btn->setBounds({bx, titleY_ + 4.f, bw, 38.f});
-                btn->setVisibility(ui::Visibility::Visible);
-                bx -= 10.f;
-            }
-        } else {
-            const float bw = buttonWidth(*reload_, 100.f);
-            reload_->setBounds({bx - bw, titleY_ + 4.f, bw, 38.f});
-            reload_->setVisibility(ui::Visibility::Visible);
+        const float bw = buttonWidth(*reload_, 100.f);
+        reload_->setBounds({bx - bw, titleY_ + 4.f, bw, 38.f});
+        reload_->setVisibility(ui::Visibility::Visible);
+        bx -= bw + 10.f;
+        // 1.47.0 : sa fiche (un admin de la liste, pas retire : ses chiffres)
+        const bool mine = ws().role() == Role::Admin && data_->person(ws().adminKey().keyHex);
+        if (mine) {
+            const float mw = buttonWidth(*myCard_, 100.f);
+            myCard_->setBounds({bx - mw, titleY_ + 4.f, mw, 38.f});
+            myCard_->setVisibility(ui::Visibility::Visible);
+            bx -= mw + 10.f;
         }
+        listRight_ = bx;
         const float top = titleY_ + (compact ? 74.f : 84.f), bottom = b.bottom() - 18.f;
         const float rightW = std::clamp(w_ * 0.32f, 330.f, 420.f);
         const float leftW = std::max(360.f, w_ - rightW - 16.f);
         listRect_ = {x0_, top, leftW, std::max(160.f, bottom - top)};
         cardRect_ = {x0_ + leftW + 16.f, top, rightW, std::max(160.f, bottom - top)};
-        rowH_ = plus ? (compact ? 56.f : 64.f) : 48.f;
-        const float headH = plus ? 40.f : 50.f;
-        const float footH = plus ? 44.f : 64.f;
+        rowH_ = 48.f;
+        const float headH = 50.f, footH = 64.f;
         const float avail = listRect_.h - headH - footH;
         visibleRows_ = std::max(1, static_cast<int>(avail / rowH_));
         scroll_ = std::clamp(scroll_, 0, std::max(0, static_cast<int>(rows_.size()) - visibleRows_));
@@ -1393,64 +1966,13 @@ private:
         const float listH = headH + static_cast<float>(std::max(0, shown)) * rowH_ + footH;
         listRect_.h = std::min(listRect_.h, std::max(listH, 160.f));
         rowsRect_ = {listRect_.x, listRect_.y + headH, listRect_.w, static_cast<float>(std::max(0, shown)) * rowH_};
-        // Les colonnes (l'admin+) : Admin, PC, Sa cle, Ajoute le, Derniere action, Etat.
-        const float cw = listRect_.w - 32.f;
-        const float frac[6] = {0.25f, 0.17f, 0.14f, 0.13f, 0.16f, 0.15f};
-        float cx = listRect_.x + 16.f;
-        for (int i = 0; i < 6; ++i) {
-            colX_[i] = cx;
-            colW_[i] = cw * frac[i];
-            cx += colW_[i];
-        }
-        // << Verifier et accepter... >> sous la pastille de chaque demande montree.
-        if (plus) {
-            std::size_t n = 0;
-            for (std::size_t i = 0; i < rows_.size(); ++i) {
-                if (rows_[i].kind != AdminRow::Kind::Pending) continue;
-                ui::Button* v = n < verifyRow_.size() ? verifyRow_[n] : nullptr;
-                ++n;
-                const int vi = static_cast<int>(i) - scroll_;
-                if (!v || vi < 0 || vi >= shown) continue;
-                const float ry = rowsRect_.y + static_cast<float>(vi) * rowH_;
-                v->setBounds({colX_[5] - 6.f, ry + rowH_ * 0.5f + 2.f, std::min(colW_[5] + 10.f, buttonWidth(*v, 120.f)), 26.f});
-                v->setVisibility(ui::Visibility::Visible);
-            }
-        }
-        // La fiche.
-        const AdminRow* s = selected();
-        if (!plus || !s) return;
-        const float fx = cardRect_.x + 20.f, fw = cardRect_.w - 40.f;
-        float y = cardRect_.y + 92.f;
-        if (s->kind == AdminRow::Kind::Pending) {
-            const float bw1 = buttonWidth(*verify_, 150.f);
-            verify_->setBounds({fx, y, std::min(fw, bw1), 36.f});
-            verify_->setVisibility(ui::Visibility::Visible);
-            refuseReq_->setBounds({fx, cardRect_.bottom() - 60.f, fw, 38.f});
-            refuseReq_->setVisibility(ui::Visibility::Visible);
-            return;
-        }
-        if (s->key.size() == 64) {
-            const float bw1 = buttonWidth(*journal_, 120.f);
-            journal_->setBounds({fx, y, bw1, 34.f});
-            journal_->setVisibility(ui::Visibility::Visible);
-            if (s->kind == AdminRow::Kind::Admin && s->active()) {
-                const float bw2 = buttonWidth(*rightsOf_, 110.f);
-                rightsOf_->setBounds({fx + bw1 + 8.f, y, std::min(bw2, fw - bw1 - 8.f), 34.f});
-                rightsOf_->setVisibility(ui::Visibility::Visible);
-            }
-        }
-        if (s->kind == AdminRow::Kind::Admin && s->active()) {
-            retire_->setBounds({fx, cardRect_.bottom() - 78.f, fw, 38.f});
-            retire_->setVisibility(ui::Visibility::Visible);
-        }
     }
 
-    void paintList(const ui::PaintContext& ctx, bool plus) {
+    void paintList(const ui::PaintContext& ctx) {
         auto& r = ctx.r;
         const auto& th = ctx.theme;
         const auto& c = th.color;
         const Workspace& w = ws();
-        const Seconds now = w.now();
         // Le titre et sa ligne.
         r.drawText({x0_, titleY_}, "Administrateurs", gfx::semibold(kF28), c.text);
         int active = 0, waiting = 0, gone = 0;
@@ -1462,204 +1984,17 @@ private:
         std::string lead = "Les PC o\xC3\xB9 l'Admin est install\xC3\xA9 \xC2\xB7 " + count(static_cast<std::size_t>(active), "actif", "actifs");
         if (waiting) lead += ", " + std::to_string(waiting) + " en attente";
         if (gone) lead += ", " + count(static_cast<std::size_t>(gone), "retir\xC3\xA9", "retir\xC3\xA9s");
-        lead += plus ? std::string(" \xC2\xB7 tu es l'admin+") : w.role() == Role::Retired ? std::string(" \xC2\xB7 ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9") : std::string(" \xC2\xB7 tu es admin");
+        lead += w.role() == Role::Retired ? std::string(" \xC2\xB7 ton acc\xC3\xA8s d'admin a \xC3\xA9t\xC3\xA9 retir\xC3\xA9") : std::string(" \xC2\xB7 tu es admin");
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
         else if (!fetched_.problem.empty()) lead += " \xC2\xB7 service : " + fetched_.problem;
         else if (!w.service().ready()) lead += " \xC2\xB7 service pas r\xC3\xA9gl\xC3\xA9 : la liste de ce poste";
-        r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, std::max(100.f, reload_->bounds().x - 16.f - x0_)), kF14,
-                   !fetched_.problem.empty() ? c.warning : c.textMuted);
-        if (!plus) {
-            const float tw = r.measure("Administrateurs", gfx::semibold(kF28)).width;
-            (void)pill(r, x0_ + tw + 14.f, titleY_ + 8.f, "lecture seule", gfx::semibold(kF12), c.textMuted, c.rowAltBg, 24.f);
-        }
+        r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, std::max(100.f, listRight_ - 16.f - x0_)), kF14, !fetched_.problem.empty() ? c.warning : c.textMuted);
+        const float tw = r.measure("Administrateurs", gfx::semibold(kF28)).width;
+        (void)pill(r, x0_ + tw + 14.f, titleY_ + 8.f, "lecture seule", gfx::semibold(kF12), c.textMuted, c.rowAltBg, 24.f);
         cardBox(r, th, listRect_);
         cardBox(r, th, cardRect_);
-        if (plus) paintTable(ctx, now);
-        else paintReadOnly(ctx);
-        // La fiche (l'admin+) ou tes droits (un admin).
-        if (plus) paintDetail(ctx, now);
-        else paintMine(ctx);
-    }
-
-    void paintTable(const ui::PaintContext& ctx, Seconds now) {
-        auto& r = ctx.r;
-        const auto& th = ctx.theme;
-        const auto& c = th.color;
-        const FontId fh = gfx::semibold(kF11);
-        const char* heads[6] = {"ADMIN", "PC", "SA CL\xC3\x89", "AJOUT\xC3\x89 LE", "DERNI\xC3\x88RE ACTION", "\xC3\x89TAT"};
-        const float hy = listRect_.y + 14.f;
-        for (int i = 0; i < 6; ++i) r.drawText({colX_[i] + (i == 0 ? 4.f : 0.f), hy}, heads[i], fh, c.textMuted);
-        r.fillRect({listRect_.x + 1.f, rowsRect_.y - 1.f, listRect_.w - 2.f, 1.f}, c.gridLine);
-        r.pushClip(rowsRect_);
-        for (int vi = 0; vi < visibleRows_; ++vi) {
-            const std::size_t i = static_cast<std::size_t>(vi + scroll_);
-            if (i >= rows_.size()) break;
-            const AdminRow& a = rows_[i];
-            const float y = rowsRect_.y + static_cast<float>(vi) * rowH_;
-            const Rect row{listRect_.x + 1.f, y, listRect_.w - 2.f, rowH_};
-            if (a.key == selectedKey_) {
-                r.fillRect(row, c.accent.withAlpha(16));
-                r.fillRect({row.x, row.y, 3.f, row.h}, c.accent);
-            }
-            r.fillRect({row.x, row.bottom() - 1.f, row.w, 1.f}, c.gridLine);
-            const float l1 = y + rowH_ * 0.5f - 18.f, l2 = y + rowH_ * 0.5f + 2.f;
-            const bool gone = a.retired != 0;
-            // Admin : l'avatar, le nom, le role ; dessous : toi, son profil, son courriel.
-            avatar(r, {colX_[0] + 4.f, y + (rowH_ - 32.f) * 0.5f, 32.f, 32.f}, a.name, avatarColor(th, gone ? -1 : a.color), 9.f);
-            const float nx = colX_[0] + 46.f;
-            const FontId fn = gfx::semibold(kF14);
-            const std::string nm = fit(r, a.name, fn, colW_[0] - 110.f);
-            r.drawText({nx, l1}, nm, fn, gone ? c.textMuted : c.text);
-            const float px = nx + r.measure(nm, fn).width + 8.f;
-            if (a.kind == AdminRow::Kind::Plus) (void)pill(r, px, l1 - 2.f, "Admin+", gfx::semibold(kF11), c.accent, c.accent.withAlpha(22), 20.f);
-            else (void)pill(r, px, l1 - 2.f, "Admin", gfx::semibold(kF11), c.textMuted, c.rowAltBg, 20.f);
-            std::string sub = a.kind == AdminRow::Kind::Plus ? std::string(a.me ? "toi" : "la cl\xC3\xA9 de l'\xC3\xA9" "diteur")
-                              : a.kind == AdminRow::Kind::Pending ? a.email
-                              : a.profile.empty() ? std::string() : "profil " + a.profile;
-            r.drawText({nx, l2}, fit(r, sub, kF12, colW_[0] - 50.f), kF12, c.textMuted);
-            // PC
-            r.drawText({colX_[1], l1}, fit(r, a.pc.empty() ? std::string("\xE2\x80\x94") : a.pc, th.font.mono, colW_[1] - 8.f), th.font.mono, gone ? c.textMuted : c.text);
-            std::string pcSub = a.software.empty() ? std::string() : a.software;
-            if (a.seen) pcSub = (pcSub.empty() ? std::string("vu ") : pcSub + " \xC2\xB7 vu ") + agoFr(now, a.seen);
-            r.drawText({colX_[1], l2}, fit(r, pcSub, kF12, colW_[1] - 8.f), kF12, c.textMuted);
-            // Sa cle
-            const std::string fp = a.fingerprint.empty() ? std::string("\xE2\x80\x94") : shortFingerprint(a.fingerprint);
-            r.drawText({colX_[2], l1}, fp, th.font.mono, gone ? c.textMuted : c.text);
-            if (gone) r.fillRect({colX_[2], l1 + r.lineHeight(th.font.mono) * 0.55f, r.measure(fp, th.font.mono).width, 1.f}, c.error);
-            std::string keySub;
-            Color keyInk = c.textMuted;
-            if (a.kind == AdminRow::Kind::Plus) keySub = "+ cl\xC3\xA9 de l'\xC3\xA9" "diteur";
-            else if (a.kind == AdminRow::Kind::Pending) {
-                keySub = a.mismatch ? "ne correspond pas" : "\xC3\xA0 v\xC3\xA9rifier";
-                keyInk = a.mismatch ? c.error : rgb(0xC2410C);
-            } else if (gone) keySub = "r\xC3\xA9voqu\xC3\xA9" "e";
-            else keySub = "certifi\xC3\xA9" "e \xE2\x9C\x93";
-            r.drawText({colX_[2], l2}, fit(r, keySub, kF12, colW_[2] - 6.f), kF12, keyInk);
-            // Ajoute le
-            const Seconds added = a.kind == AdminRow::Kind::Pending ? a.received : a.since;
-            r.drawText({colX_[3], l1}, added ? dateFr(added) : std::string("\xE2\x80\x94"), kF13, gone ? c.textMuted : c.text);
-            r.drawText({colX_[3], l2}, a.kind == AdminRow::Kind::Pending ? std::string("demande re\xC3\xA7ue") : a.kind == AdminRow::Kind::Plus ? std::string("la 1re") : std::string("par toi"),
-                       kF12, c.textMuted);
-            // Derniere action
-            if (gone) {
-                r.drawText({colX_[4], l1}, dateFr(a.retired), kF13, c.textMuted);
-                r.drawText({colX_[4], l2}, "retir\xC3\xA9 par toi", kF12, c.textMuted);
-            } else if (a.kind == AdminRow::Kind::Pending) {
-                r.drawText({colX_[4], l1}, agoFr(now, a.received), kF13, c.text);
-                r.drawText({colX_[4], l2}, "demande re\xC3\xA7ue", kF12, c.textMuted);
-            } else {
-                r.drawText({colX_[4], l1}, agoFr(now, a.lastAction), kF13, c.text);
-                r.drawText({colX_[4], l2}, fit(r, a.lastSummary, kF12, colW_[4] - 8.f), kF12, c.textMuted);
-            }
-            // Etat
-            const FontId fs = gfx::semibold(kF12);
-            if (a.kind == AdminRow::Kind::Pending) {
-                (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "En attente", fs, rgb(0xC2410C), rgb(0xFFF4E5), 22.f);   // 1.44.0 : tient dans la colonne
-            } else if (gone) {
-                (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "Retir\xC3\xA9", fs, c.error, c.error.withAlpha(22), 22.f);
-                r.drawText({colX_[5] - 4.f, l2 + 2.f}, "certificat r\xC3\xA9voqu\xC3\xA9", kF12, c.textMuted);
-            } else {
-                (void)pill(r, colX_[5] - 4.f, l1 - 4.f, "Actif", fs, c.ok, c.ok.withAlpha(24), 22.f, true);
-                if (!a.version.empty() && adm::compareSemver(a.version, kAppVersion) < 0)
-                    r.drawText({colX_[5] - 4.f, l2 + 2.f}, fit(r, "Admin " + a.version + " \xC2\xB7 pas \xC3\xA0 jour", kF12, colW_[5]), kF12, rgb(0xC2410C));
-            }
-        }
-        r.popClip();
-        // Le pied : la regle d'un admin, un PC.
-        const float fy = rowsRect_.bottom() + 12.f;
-        ui::drawIcon(r, ui::Icon::Info, {listRect_.x + 18.f, fy + 1.f, 14.f, 14.f}, c.textMuted);
-        std::string foot = "Un admin n'a qu'un PC. Nouveau PC ? Tu le retires, puis tu l'ajoutes \xC3\xA0 nouveau (une nouvelle cl\xC3\xA9).";
-        if (scroll_ > 0 || scroll_ + visibleRows_ < static_cast<int>(rows_.size()))
-            foot = std::to_string(scroll_ + 1) + "\xE2\x80\x93" + std::to_string(std::min(static_cast<int>(rows_.size()), scroll_ + visibleRows_)) + " sur " +
-                   std::to_string(rows_.size()) + " (la molette) \xC2\xB7 " + foot;
-        r.drawText({listRect_.x + 40.f, fy}, fit(r, foot, kF13, listRect_.w - 60.f), kF13, c.textMuted);
-    }
-
-    void paintDetail(const ui::PaintContext& ctx, Seconds now) {
-        auto& r = ctx.r;
-        const auto& th = ctx.theme;
-        const auto& c = th.color;
-        const AdminRow* s = selected();
-        const float fx = cardRect_.x + 20.f, fw = cardRect_.w - 40.f;
-        if (!s) {
-            r.drawText({fx, cardRect_.y + 24.f}, "Choisis un admin dans la liste.", kF14, c.textMuted);
-            return;
-        }
-        const bool gone = s->retired != 0;
-        // Qui
-        avatar(r, {fx, cardRect_.y + 20.f, 48.f, 48.f}, s->name, avatarColor(th, gone ? -1 : s->color), 12.f);
-        const float nx = fx + 60.f;
-        const FontId fn = gfx::semibold(FontId{18});
-        const std::string nm = fit(r, s->name, fn, fw - 200.f);
-        r.drawText({nx, cardRect_.y + 20.f}, nm, fn, c.text);
-        float px = nx + r.measure(nm, fn).width + 10.f;
-        const FontId fp = gfx::semibold(kF11);
-        px += pill(r, px, cardRect_.y + 22.f, s->kind == AdminRow::Kind::Plus ? "Admin+" : "Admin", fp, s->kind == AdminRow::Kind::Plus ? c.accent : c.textMuted,
-                   s->kind == AdminRow::Kind::Plus ? c.accent.withAlpha(22) : c.rowAltBg, 20.f) +
-              6.f;
-        if (s->kind == AdminRow::Kind::Pending) (void)pill(r, px, cardRect_.y + 22.f, "En attente", fp, rgb(0xC2410C), rgb(0xFFF4E5), 20.f, true);
-        else if (gone) (void)pill(r, px, cardRect_.y + 22.f, "Retir\xC3\xA9", fp, c.error, c.error.withAlpha(22), 20.f, true);
-        else (void)pill(r, px, cardRect_.y + 22.f, "Actif", fp, c.ok, c.ok.withAlpha(24), 20.f, true);
-        std::string sub;
-        if (s->kind == AdminRow::Kind::Plus) sub = "la cl\xC3\xA9 de l'\xC3\xA9" "diteur \xC2\xB7 " + s->pc;
-        else if (s->kind == AdminRow::Kind::Pending) sub = s->email + " \xC2\xB7 demande re\xC3\xA7ue le " + dateTimeFr(s->received);
-        else sub = (s->profile.empty() ? std::string() : "profil " + s->profile + " \xC2\xB7 ") + "admin depuis le " + dateFr(s->since);
-        r.drawText({nx, cardRect_.y + 48.f}, fit(r, sub, kF13, fw - 60.f), kF13, c.textMuted);
-        float y = cardRect_.y + 140.f;
-        if (s->kind == AdminRow::Kind::Pending) {
-            // Une demande : son empreinte, ce qu'il faut faire.
-            r.drawText({fx, y}, "Sa cl\xC3\xA9", gfx::semibold(kF14), c.text);
-            r.drawText({fx + 60.f, y + 1.f}, fit(r, "cr\xC3\xA9\xC3\xA9" "e sur " + s->pc, kF12, fw - 60.f), kF12, c.textMuted);
-            paintFingerprint(r, th, {fx, y + 26.f, fw, 70.f}, s->fingerprint, 3, 31.f, gfx::semibold(kF14));
-            y += 112.f;
-            y += drawWrapped(r, fx, y, fw,
-                             s->name + " a install\xC3\xA9 l'Admin et envoy\xC3\xA9 sa demande. Appelle-le, lisez son empreinte ensemble, puis accepte-le avec un profil : "
-                                       "\xC2\xAB V\xC3\xA9rifier et accepter\xE2\x80\xA6 \xC2\xBB.",
-                             kF13, c.text, 19.f, 6) +
-                 10.f;
-            if (s->mismatch)
-                (void)drawWrapped(r, fx, y, fw, "L'empreinte rendue par le service n'est pas celle calcul\xC3\xA9" "e ici : refuse la demande.", kF13, c.error, 19.f, 3);
-            return;
-        }
-        // Les chiffres (le journal : l'admin+ le releve).
-        const Rect grid{cardRect_.x + 1.f, cardRect_.y + 138.f, cardRect_.w - 2.f, 62.f};
-        r.fillRect({grid.x, grid.y, grid.w, 1.f}, c.gridLine);
-        r.fillRect({grid.x, grid.bottom(), grid.w, 1.f}, c.gridLine);
-        const float colW = grid.w / 3.f;
-        for (int i = 1; i < 3; ++i) r.fillRect({grid.x + colW * static_cast<float>(i), grid.y, 1.f, grid.h}, c.gridLine);
-        const std::string cells[3][2] = {{"Actions \xC2\xB7 30 j", std::to_string(s->actions30)},
-                                         {"Licences sign\xC3\xA9" "es", std::to_string(s->licences)},
-                                         {"Derni\xC3\xA8re", agoFr(now, s->lastAction)}};
-        for (int i = 0; i < 3; ++i) {
-            const float gx = grid.x + colW * static_cast<float>(i) + 16.f;
-            r.drawText({gx, grid.y + 10.f}, cells[i][0], kF12, c.textMuted);
-            r.drawText({gx, grid.y + 30.f}, fit(r, cells[i][1], gfx::semibold(kF15), colW - 24.f), gfx::semibold(kF15), c.text);
-        }
-        y = grid.bottom() + 16.f;
-        // Sa cle
-        r.drawText({fx, y}, "Sa cl\xC3\xA9", gfx::semibold(kF14), c.text);
-        r.drawText({fx + 60.f, y + 1.f}, fit(r, s->kind == AdminRow::Kind::Plus ? "la cl\xC3\xA9 de l'\xC3\xA9" "diteur, sur ce PC" : "cr\xC3\xA9\xC3\xA9" "e sur " + s->pc, kF12, fw - 60.f), kF12,
-                   c.textMuted);
-        y += 24.f;
-        paintFingerprint(r, th, {fx, y, fw, 26.f}, s->fingerprint, 6, 26.f, gfx::semibold(kF12));
-        y += 34.f;
-        const std::string cert = s->kind == AdminRow::Kind::Plus ? std::string("Elle certifie les admins ; elle ne quitte jamais ce PC.")
-                                 : gone ? "Certificat r\xC3\xA9voqu\xC3\xA9 le " + dateFr(s->retired) + " : ses nouvelles signatures sont refus\xC3\xA9" "es."
-                                        : "Certificat d'admin sign\xC3\xA9 par la cl\xC3\xA9 de l'\xC3\xA9" "diteur le " + dateFr(s->since);
-        y += drawWrapped(r, fx, y, fw, cert, kF12, gone ? c.error : c.textMuted, 17.f, 2) + 12.f;
-        // Ses droits
-        r.drawText({fx, y}, "Ses droits", gfx::semibold(kF14), c.text);
-        const std::string rs = s->kind == AdminRow::Kind::Plus ? std::string("tous, et ceux de l'admin+")
-                                                                : std::to_string(s->rights.size()) + " sur 13" + (s->profile.empty() ? std::string() : " \xC2\xB7 " + s->profile);
-        r.drawText({fx + 84.f, y + 1.f}, fit(r, rs, kF12, fw - 84.f), kF12, c.textMuted);
-        y += 26.f;
-        const float bottom = retire_->visible() ? retire_->bounds().y - 10.f : cardRect_.bottom() - 14.f;
-        r.pushClip({cardRect_.x, y, cardRect_.w, std::max(0.f, bottom - y)});
-        (void)paintRights(r, th, fx, y, fw, s->rights, s->kind == AdminRow::Kind::Plus);
-        r.popClip();
-        if (retire_->visible())
-            (void)drawWrapped(r, fx, retire_->bounds().bottom() + 6.f, fw, "Son certificat est r\xC3\xA9voqu\xC3\xA9 ; ses licences restent valides, sauf si tu choisis de les r\xC3\xA9voquer aussi.",
-                              kF12, c.textMuted, 16.f, 2);
+        paintReadOnly(ctx);
+        paintMine(ctx);
     }
 
     // Un admin : la liste en lecture seule (la maquette, en bas de la planche 01).
@@ -1886,15 +2221,33 @@ private:
     Role                   shownRole_{Role::None};
     std::string            lastState_;
     Seconds                lastCheck_{0};
+    // 1.47.0 : les pages des admins (la periode, les chiffres, la fiche ouverte)
+    std::shared_ptr<ab::Data> data_;
+    statskit::Choice       choice_;
+    ab::Actions            actions_;
+    int                    tab_{0};
+    std::string            cardKey_, serviceSig_;
+    bool                   cardOwn_{false}, serviceBusy_{false}, wantService_{false}, wantCard_{false};
     // les widgets
     ui::Button*            add_{nullptr};
     ui::Button*            rightsPage_{nullptr};
     ui::Button*            reload_{nullptr};
-    ui::Button*            journal_{nullptr};
-    ui::Button*            rightsOf_{nullptr};
-    ui::Button*            retire_{nullptr};
-    ui::Button*            verify_{nullptr};
-    ui::Button*            refuseReq_{nullptr};
+    statskit::TabButton*   tabVue_{nullptr};
+    statskit::TabButton*   tabQui_{nullptr};
+    statskit::TabButton*   tabJournal_{nullptr};
+    statskit::SegGroup*    range_{nullptr};
+    ui::DatePicker*        from_{nullptr};
+    ui::DatePicker*        to_{nullptr};
+    ui::Button*            deploy_{nullptr};
+    ab::LinkButton*        back_{nullptr};
+    ui::Button*            cardJournal_{nullptr};
+    ui::Button*            cardRights_{nullptr};
+    ui::Button*            cardRetire_{nullptr};
+    statskit::TabButton*   anchors_[7]{};
+    ui::Button*            myCard_{nullptr};
+    ab::ScrolledView*      overview_{nullptr};
+    ab::ScrolledView*      who_{nullptr};
+    ab::ScrolledView*      card_{nullptr};
     ui::Button*            createKey_{nullptr};
     ui::Button*            restore_{nullptr};
     ui::InputText*         reqName_{nullptr};
@@ -1902,13 +2255,12 @@ private:
     ui::Button*            send_{nullptr};
     ui::Button*            service_{nullptr};
     ui::Button*            check_{nullptr};
-    std::vector<ui::Button*> verifyRow_;
     ui::TableView*         table_{nullptr};
     // la mise en page
-    float                  x0_{0.f}, w_{0.f}, titleY_{0.f}, rowH_{64.f};
+    float                  x0_{0.f}, w_{0.f}, titleY_{0.f}, rowH_{64.f}, titleRight_{0.f}, tabsBottom_{0.f}, arrowX_{0.f};
+    float                  cardTop_{0.f}, cardHeadRight_{0.f}, listRight_{0.f};
     int                    visibleRows_{1}, scroll_{0};
-    float                  colX_[6]{}, colW_[6]{};
-    Rect                   listRect_{}, cardRect_{}, rowsRect_{}, noneA_{}, noneB_{}, pendingCard_{};
+    Rect                   listRect_{}, cardRect_{}, rowsRect_{}, noneA_{}, noneB_{}, pendingCard_{}, bannerRect_{};
     std::shared_ptr<bool>  alive_ = std::make_shared<bool>(true);
     core::ConnectionScope  links_;
 };

@@ -334,7 +334,7 @@ private:
             std::vector<double> v;
             std::vector<Color> colors;
             for (std::size_t i = 0; i < s.perAdmin.size() && i < d_->ov.admins.size(); ++i) {
-                const Person* p = d_->person(d_->ov.admins[i].id);
+                const Person* p = d_->personById(d_->ov.admins[i].id);
                 v.push_back(s.perAdmin[i]);
                 colors.push_back(p ? personColor(*p) : kFaint);
             }
@@ -358,7 +358,7 @@ private:
             r.drawText({cols_[3] + colW_[3] - dw - 4.f, cy}, dl, kB13, dc);
             // en tete
             if (s.leader >= 0 && static_cast<std::size_t>(s.leader) < d_->ov.admins.size()) {
-                const Person* p = d_->person(d_->ov.admins[static_cast<std::size_t>(s.leader)].id);
+                const Person* p = d_->personById(d_->ov.admins[static_cast<std::size_t>(s.leader)].id);
                 if (p) avatarOf(r, {cols_[4], g.r.y + (g.r.h - 20.f) * 0.5f, 20.f, 20.f}, *p);
                 const std::string who = firstName(d_->ov.admins[static_cast<std::size_t>(s.leader)].name) +
                                         (s.alone ? (p && p->kind == Person::Kind::Plus ? std::string(" seule") : std::string(" seul(e)"))
@@ -467,7 +467,7 @@ private:
                 for (std::size_t i = 0; i < s.perAdmin.size() && i < d_->ov.admins.size(); ++i) {
                     acc += s.perAdmin[i];
                     if (at <= acc && s.perAdmin[i] > 0) {
-                        if (a_.journalOf) a_.journalOf(d_->ov.admins[i].id);
+                        if (a_.journalOf) a_.journalOf(d_->keyOf(d_->ov.admins[i].id));
                         break;
                     }
                 }

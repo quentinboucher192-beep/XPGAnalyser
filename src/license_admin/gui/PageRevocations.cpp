@@ -11,7 +11,18 @@
 //    Exporter la liste...        le .xpgrev a envoyer aux clients.
 //  Sans service en ligne, une revocation n'arrive chez un client qu'avec un
 //  fichier qu'il importe : la page le dit.
+//
+//  1.47.0 (planches 06, 07, 12) : la barre << Filtrer et chercher >> (les puces
+//  Raison, Par qui, Periode), le clic droit dans l'ordre de la regle (Ouvrir la
+//  licence, Deplier ; Aller a ; Filtrer sur ; Copier ; Exporter ; en rouge :
+//  Retirer la revocation..., Revoquer toute la licence...), la ligne depliee
+//  (la licence, ce qui est revoque et par qui, son histoire). << Par >> : la
+//  ligne du journal des admins qui l'a revoquee (vide : le journal ne la
+//  connait pas). Plusieurs lignes se choisissent (Exporter, Copier) ; Retirer
+//  vise une ligne.
 // =============================================================================
+#include "AdminsKit.hpp"   // 1.47.0 : les dates (<< hier 17:20 >>)
+#include "ListKit.hpp"     // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../../ui/widgets/Controls.hpp"
@@ -19,8 +30,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -84,11 +97,23 @@ std::vector<std::string> wrapText(const std::string& text, gfx::FontId f, float 
     return out;
 }
 
+std::string padKey(long long v) {
+    char b[32];
+    std::snprintf(b, sizeof b, "%012lld", v);
+    return b;
+}
+
+// 1.47.0 : le modele refait en place (la barre filtre, la selection et les lignes depliees restent).
 class Rows final : public ui::ITableModel {
 public:
     using Style = std::function<ui::CellStyle(ui::RowIndex, std::size_t)>;
-    Rows(std::vector<std::string> headers, std::vector<std::vector<std::string>> rows, Style style = {})
-        : headers_(std::move(headers)), rows_(std::move(rows)), style_(std::move(style)) {}
+    explicit Rows(std::vector<std::string> headers) : headers_(std::move(headers)) {}
+    void set(std::vector<std::vector<std::string>> rows, std::vector<std::vector<std::string>> keys, Style style) {
+        rows_ = std::move(rows);
+        keys_ = std::move(keys);
+        style_ = std::move(style);
+        modelReset->emit();
+    }
     [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return headers_.size(); }
     [[nodiscard]] std::string headerText(std::size_t c) const override { return c < headers_.size() ? headers_[c] : std::string(); }
@@ -96,11 +121,15 @@ public:
         return r < rows_.size() && c < rows_[r].size() ? rows_[r][c] : std::string();
     }
     [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override { return style_ ? style_(r, c) : ui::CellStyle{}; }
-    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return cellText(a, c) < cellText(b, c); }
+    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t c) const override { return key(a, c) < key(b, c); }
 
 private:
+    [[nodiscard]] std::string key(ui::RowIndex r, std::size_t c) const {
+        if (r < keys_.size() && c < keys_[r].size() && !keys_[r][c].empty()) return keys_[r][c];
+        return cellText(r, c);
+    }
     std::vector<std::string>              headers_;
-    std::vector<std::vector<std::string>> rows_;
+    std::vector<std::vector<std::string>> rows_, keys_;
     Style                                 style_;
 };
 
@@ -118,6 +147,11 @@ ui::Button& button(ui::Widget& parent, std::string text, std::string id, ui::But
 const char* const kExplain =
     "Une r\xC3\xA9vocation n'arrive chez un client qu'avec un fichier qu'il importe : sa prochaine licence (la liste y est jointe), ou la liste "
     "export\xC3\xA9" "e ici. Il n'y a pas de service en ligne : rien n'est envoy\xC3\xA9 tout seul.";
+constexpr const char* kBusy = "Un travail est en cours : attends qu'il finisse.";
+
+// Les colonnes du modele : les 7 montrees, puis la cle d'une ligne (le depliage la suit ; une licence peut avoir
+// plusieurs PC revoques).
+constexpr std::size_t kKeyColumn = 7;
 
 class RevocationsPage final : public Page {
 public:
@@ -129,10 +163,36 @@ public:
         export_ = &button(*this, "Exporter la liste\xE2\x80\xA6", "revocations.exporter");
         export_->setTooltip("La liste sign\xC3\xA9" "e (.xpgrev) \xC3\xA0 envoyer aux clients : ils l'importent comme une licence");
         table_ = &adopt(*this, std::make_unique<ui::TableView>("revocations.table"));
-        table_->setSelectionMode(ui::SelectionMode::Single);
+        table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs (Exporter, Copier)
         table_->setAlternatingRowColors(true);
-        table_->setColumns({{"Licence", 140.f}, {"Client", 170.f}, {"PC", 260.f}, {"Raison", 220.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 115.f},
-                            {"\xC3\x89missions", 215.f}});
+        table_->setColumns({{"Licence", 140.f}, {"Client", 170.f}, {"PC", 240.f}, {"Raison", 200.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 115.f},
+                            {"\xC3\x89missions", 190.f}, {"Par", 130.f}});
+        model_ = std::make_shared<Rows>(std::vector<std::string>{"Licence", "Client", "PC", "Raison", "R\xC3\xA9voqu\xC3\xA9" "e le", "\xC3\x89missions", "Par", "Cl\xC3\xA9"});
+        table_->setModel(model_);
+        // 1.47.0 (planche 12) : LA BARRE - chercher (revocations.recherche), la raison, par qui, la periode.
+        bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("revocations.barre", barFields(), "revocations.recherche"));
+        bar_->setNoun("r\xC3\xA9vocations");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return all_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t {
+                return r < all_.size() && f == 4 ? listkit::seconds(all_[r].x.revokedAt) : 0;
+            };
+            src.extra = [this](std::size_t r) { return r < all_.size() ? all_[r].x.device + " " + all_[r].fingerprint : std::string(); };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*table_);
+        bar_->setMemoryKey("revocations");
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });                // 1.47.0 (planche 06)
+        table_->setUnfold([this](ui::RowIndex r) { return unfoldFor(r); }, static_cast<int>(kKeyColumn));   // (planche 07)
+        table_->setEnterActivates(true);
+        links_ += table_->activated->connect([this](ui::RowIndex r) {   // Entree, le double-clic : la licence
+            if (const Item* it = itemAt(r); it && it->inArchive) openLicence(it->x.licenseId);
+        });
+
         links_ += revoke_->clicked->connect([this] {
             if (ws().licences().empty()) {
                 host_.flash("Aucune licence dans l'archive \xC3\xA0 r\xC3\xA9voquer.", Tone::Warning);
@@ -152,35 +212,39 @@ public:
     void refresh() override {
         const Workspace& w = ws();
         const auto& list = w.revocations().revoked;
-        std::vector<std::vector<std::string>> rows;
-        std::vector<bool> whole;
-        for (const auto& x : list) {
-            const LicenceEntry* l = w.licence(x.licenseId);
-            std::string pc = "toute la licence";
-            if (!x.device.empty()) {
-                pc = licdlg::fingerprintOfKey(x.device);
+        who_.reset();
+        all_.clear();
+        texts_.clear();
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            Item it;
+            it.index = i;
+            it.x = list[i];
+            const LicenceEntry* l = w.licence(it.x.licenseId);
+            it.inArchive = l != nullptr;
+            it.customer = l ? l->licence.customer : std::string();
+            it.pc = "toute la licence";
+            if (!it.x.device.empty()) {
+                it.fingerprint = licdlg::fingerprintOfKey(it.x.device);
+                it.pc = it.fingerprint;
                 if (l)
-                    if (const auto* d = l->licence.device(x.device); d && !d->name.empty()) pc = d->name + " \xE2\x80\x94 " + pc;
+                    if (const auto* d = l->licence.device(it.x.device); d && !d->name.empty()) {
+                        it.pcName = d->name;
+                        it.pc = d->name + " \xE2\x80\x94 " + it.fingerprint;
+                    }
             }
-            rows.push_back({x.licenseId, l ? l->licence.customer : std::string("(pas dans l'archive)"), pc, x.reason, dateFr(x.revokedAt),
-                            x.issuedBefore ? "avant le " + dateTimeFr(x.issuedBefore) : std::string("toutes")});
-            whole.push_back(x.device.empty());
+            it.emissions = it.x.issuedBefore ? "avant le " + dateTimeFr(it.x.issuedBefore) : std::string("toutes");
+            it.by = revokedBy(it.x);
+            texts_.push_back({it.x.licenseId, l ? it.customer : std::string("(pas dans l'archive)"), it.pc, it.x.reason, dateFr(it.x.revokedAt),
+                              it.emissions, it.by ? it.by->who : std::string()});
+            all_.push_back(std::move(it));
         }
-        model_ = std::make_shared<Rows>(
-            std::vector<std::string>{"Licence", "Client", "PC", "Raison", "R\xC3\xA9voqu\xC3\xA9" "e le", "\xC3\x89missions"}, std::move(rows),
-            [whole](ui::RowIndex r, std::size_t c) {
-                ui::CellStyle s;
-                if (c == 0) s.monospace = true;
-                if (c == 2 && r < whole.size()) {
-                    s.icon = whole[r] ? ui::Icon::Lock : ui::Icon::Screen;
-                    s.iconTone = ui::Tone::Error;
-                }
-                return s;
-            });
-        const auto keep = table_->selectedModelRows();
-        table_->setModel(model_);
-        if (!keep.empty() && keep.front() < list.size()) table_->selectModelRows({keep.front()}, false);
-        updateButtons();
+        bar_->refreshCounts();
+        // 1.47.0 : << La revocation >> d'une autre page (l'Historique) : la barre filtree sur sa licence.
+        if (const std::string f = takePageFocus("revocations"); f.rfind("licence:", 0) == 0) {
+            bar_->clearAll();
+            bar_->filterOn(0, f.substr(8));
+        }
+        rebuild();
         invalidateLayout();
     }
 
@@ -197,7 +261,10 @@ protected:
             b->setBounds({bx, actionsY_, bw, 32.f});
             bx += bw + 8.f;
         }
-        const float top = actionsY_ + 46.f;
+        float top = actionsY_ + 42.f;
+        const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres, au-dessus de la table
+        bar_->setBounds({x, top, w, bh});
+        top += bh + 8.f;
         table_->setBounds({x, top, w, std::max(120.f, r.bottom() - kPad - top)});
     }
 
@@ -225,15 +292,94 @@ protected:
     }
 
     void onPaintOverlay(const ui::PaintContext& ctx) override {
-        if (!ws().revocations().revoked.empty()) return;
+        if (!shown_.empty()) return;
         const auto t = table_->bounds();
-        const std::string text = "Rien n'est r\xC3\xA9voqu\xC3\xA9. R\xC3\xA9voquer\xE2\x80\xA6 pour retirer une licence ou un PC (fin de contrat, PC remplac\xC3\xA9\xE2\x80\xA6).";
+        const std::string text = ws().revocations().revoked.empty()
+                                     ? "Rien n'est r\xC3\xA9voqu\xC3\xA9. R\xC3\xA9voquer\xE2\x80\xA6 pour retirer une licence ou un PC (fin de contrat, PC remplac\xC3\xA9\xE2\x80\xA6)."
+                                     : "Aucune r\xC3\xA9vocation ne correspond \xC3\xA0 la recherche ou aux filtres.";
         ctx.r.drawText({t.x + 16.f, t.y + 44.f}, fit(ctx.r, text, ctx.theme.font.ui, t.w - 32.f), ctx.theme.font.ui, ctx.theme.color.textMuted);
     }
 
 private:
+    struct Item {
+        std::size_t                 index{0};      // sa place dans la liste signee (Retirer la vise)
+        licensing::Revocation       x;
+        std::string                 customer, pc, pcName, fingerprint, emissions;
+        std::optional<listkit::Did> by;            // la ligne du journal des admins qui l'a revoquee
+        bool                        inArchive{false};
+    };
+
+    // 1.47.0 (planche 12) : les colonnes vues par la barre (dans l'ordre du modele).
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(7);
+        f[0] = {.title = "Licence", .noun = "une licence"};
+        f[1] = {.title = "Client", .noun = "un client"};
+        f[2] = {.title = "PC", .kind = K::Text};
+        f[3] = {.title = "Raison", .chip = true, .noun = "une raison"};
+        f[4] = {.title = "R\xC3\xA9voqu\xC3\xA9" "e le", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
+        f[5] = {.title = "\xC3\x89missions", .noun = "des \xC3\xA9missions"};
+        f[6] = {.title = "Par", .chip = true, .chipLabel = "Par qui", .noun = "un admin"};
+        return f;
+    }
+
+    // La ligne du journal des admins de cette revocation : << a revoque (un PC de) la licence ... >>, la plus proche de sa date.
+    [[nodiscard]] std::optional<listkit::Did> revokedBy(const licensing::Revocation& x) const {
+        std::optional<listkit::Did> best;
+        Seconds gap = 0;
+        for (const auto& d : who_.history(x.licenseId)) {
+            if (d.action != "licence_revoquer" || d.summary.rfind("a r\xC3\xA9voqu\xC3\xA9", 0) != 0) continue;   // pas << a retire la revocation >>
+            if ((d.summary.find("un PC") != std::string::npos) != !x.device.empty()) continue;
+            const Seconds g = d.when > x.revokedAt ? d.when - x.revokedAt : x.revokedAt - d.when;
+            if (!best || g < gap) {
+                best = d;
+                gap = g;
+            }
+        }
+        return best;
+    }
+
+    [[nodiscard]] const Item* itemAt(ui::RowIndex r) const { return r < shown_.size() && shown_[r] < all_.size() ? &all_[shown_[r]] : nullptr; }
+
+    [[nodiscard]] static std::string keyOf(const Item& it) {
+        return it.x.licenseId + "|" + it.x.device + "|" + std::to_string(static_cast<long long>(it.x.revokedAt));
+    }
+
+    void rebuild() {
+        std::vector<std::string> keep;   // la selection, retrouvee par sa cle
+        for (const ui::RowIndex r : table_->selectedModelRows())
+            if (const Item* it = itemAt(r)) keep.push_back(keyOf(*it));
+        shown_.clear();
+        for (std::size_t i = 0; i < all_.size(); ++i)
+            if (bar_->accepts(i)) shown_.push_back(i);
+        std::vector<std::vector<std::string>> rows, keys;
+        std::vector<bool> whole;
+        std::vector<ui::RowIndex> again;
+        for (std::size_t k = 0; k < shown_.size(); ++k) {
+            const Item& it = all_[shown_[k]];
+            auto cells = texts_[shown_[k]];
+            cells.push_back(keyOf(it));
+            rows.push_back(std::move(cells));
+            keys.push_back({"", "", "", "", padKey(it.x.revokedAt), "", "", ""});
+            whole.push_back(it.x.device.empty());
+            if (std::find(keep.begin(), keep.end(), keyOf(it)) != keep.end()) again.push_back(static_cast<ui::RowIndex>(k));
+        }
+        model_->set(std::move(rows), std::move(keys), [whole](ui::RowIndex r, std::size_t c) {
+            ui::CellStyle s;
+            if (c == 0) s.monospace = true;
+            if (c == 2 && r < whole.size()) {
+                s.icon = whole[r] ? ui::Icon::Lock : ui::Icon::Screen;
+                s.iconTone = ui::Tone::Error;
+            }
+            return s;
+        });
+        table_->selectModelRows(again, false);
+        updateButtons();
+        invalidate();
+    }
+
     void updateButtons() {
-        remove_->setEnabled(!table_->selectedModelRows().empty());
+        remove_->setEnabled(table_->selectedModelRows().size() == 1);   // 1.47.0 : une ligne (plusieurs : Exporter, Copier)
         export_->setEnabled(ws().hasRevocations());
         // 1.44.0 : revoquer (et retirer une revocation) : le droit << licence_revoquer >> ; le bouton dit pourquoi.
         if (!ws().can("licence_revoquer")) {
@@ -247,15 +393,174 @@ private:
         invalidate();
     }
 
+    // Pourquoi Retirer / Revoquer ne se peut pas (vide : il se peut).
+    [[nodiscard]] std::string revokeWhy() const {
+        if (!ws().can("licence_revoquer")) return ws().whyNot("licence_revoquer");
+        if (host_.busy && host_.busy()) return "un travail est en cours";
+        return {};
+    }
+
+    void openLicence(const std::string& id) {
+        requestPageFocus("licences", id);
+        host_.navigate("licences");
+    }
+    void goTo(const std::string& page, const std::string& focus) {
+        requestPageFocus(page, focus);
+        host_.navigate(page);
+    }
+
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle ----
+    ui::ListMenu menuFor() {
+        const auto rows = table_->selectedModelRows();
+        ui::ListMenu m({rows.size(), "r\xC3\xA9vocations", true});
+        if (rows.empty()) return m;
+        const Item* it = itemAt(rows.front());
+        if (rows.size() == 1 && it) {
+            const std::string id = it->x.licenseId;
+            if (it->inArchive) m.open("Ouvrir la licence", [this, id] { openLicence(id); });
+        }
+        m.unfold(*table_);
+        if (rows.size() == 1 && it) {
+            const Item x = *it;
+            const std::string id = x.x.licenseId;
+            if (x.inArchive) m.goTo({.label = "La licence " + id, .icon = ui::Icon::Document, .run = [this, id] { openLicence(id); }});
+            if (!x.customer.empty())
+                m.goTo({.label = "Le client : " + x.customer, .icon = ui::Icon::User, .run = [this, c = x.customer] { goTo("clients", "client:" + c); }});
+            m.goTo({.label = "Ses PC (Activations)", .icon = ui::Icon::Station, .run = [this, id] { goTo("activations", "licence:" + id); }});
+            if (x.by && !x.by->key.empty())
+                m.goTo({.label = "R\xC3\xA9voqu\xC3\xA9" "e par " + x.by->who, .icon = ui::Icon::User, .run = [this, k = x.by->key] { goTo("admins", "admin:" + k); }});
+            if (x.by && x.by->number && ws().role() == Role::Plus)   // le journal : l'admin+ seulement
+                m.goTo({.label = "Sa ligne du journal (n\xC2\xB0 " + std::to_string(x.by->number) + ")", .icon = ui::Icon::Task,
+                        .run = [this, n = x.by->number] { goTo("journal", "ligne:" + std::to_string(n)); }});
+            m.goTo({.label = "Son historique", .icon = ui::Icon::History, .run = [this, id] { goTo("historique", "licence:" + id); }});
+            const auto& t = texts_[shown_[rows.front()]];
+            const auto on = [&](std::size_t f, const std::string& label) {
+                if (f >= t.size() || t[f].empty()) return;
+                const std::string v = t[f];
+                m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+            };
+            on(3, "Cette raison");
+            on(1, "Ce client");
+            on(0, "Cette licence");
+            on(6, "R\xC3\xA9voqu\xC3\xA9" "e par");
+            if (x.x.revokedAt > 0) {
+                const std::int64_t when = listkit::seconds(x.x.revokedAt);
+                m.filterOn({.label = "Ce jour : " + dateFr(x.x.revokedAt), .run = [this, when] { bar_->filterOnDay(4, when); }});
+            }
+            m.copy("La licence", id, ui::Icon::Document);
+            if (!x.x.device.empty()) {
+                m.copy("L'empreinte du PC", x.fingerprint, ui::Icon::Copy);
+                m.copy("La cl\xC3\xA9 du PC", x.x.device, ui::Icon::Lock);
+            }
+        }
+        std::string lines;
+        for (const ui::RowIndex r : rows) {
+            if (r >= shown_.size()) continue;
+            const auto& t = texts_[shown_[r]];
+            std::string line;
+            for (std::size_t c = 0; c < t.size(); ++c) line += (c ? "\t" : "") + t[c];
+            lines += line + "\n";
+        }
+        m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
+        m.exportRows([this, rows] { listkit::exportRows(host_, *table_, rows, "revocations.csv", "r\xC3\xA9vocations"); });
+        m.exportEntry({.label = "Exporter la liste sign\xC3\xA9" "e (.xpgrev)\xE2\x80\xA6", .many = "Exporter la liste sign\xC3\xA9" "e (.xpgrev)\xE2\x80\xA6", .icon = ui::Icon::Export,
+                       .why = ws().hasRevocations() ? std::string() : std::string("aucune liste sign\xC3\xA9" "e"), .run = [this] { exportList(); }});
+        if (rows.size() == 1 && it) {
+            const std::size_t index = it->index;
+            m.danger({.label = "Retirer la r\xC3\xA9vocation\xE2\x80\xA6", .icon = ui::Icon::Undo, .why = revokeWhy(), .run = [this, index] { askRemoveAt(index); }});
+            const LicenceEntry* l = ws().licence(it->x.licenseId);
+            if (l && !l->revoked && !it->x.device.empty()) {   // un PC revoque : la licence entiere reste a revoquer
+                const std::string id = it->x.licenseId;
+                m.danger({.label = "R\xC3\xA9voquer toute la licence\xE2\x80\xA6", .icon = ui::Icon::Close, .why = revokeWhy(),
+                          .run = [this, id] { host_.openDialog(licdlg::makeRevokeDialog(host_, id)); }});
+            }
+        }
+        return m;
+    }
+
+    // ---- 1.47.0 (planche 07) : la ligne depliee - la licence, ce qui est revoque et par qui, son histoire ----
+    ui::WidgetPtr unfoldFor(ui::RowIndex r) {
+        const Item* p = itemAt(r);
+        if (!p) return nullptr;
+        const Item it = *p;
+        const Seconds now = ws().now();
+        const std::string id = it.x.licenseId;
+        auto card = std::make_unique<ui::UnfoldCard>("revocations.depliage");
+        ui::UnfoldCard::Box lic;
+        lic.title = "LA LICENCE";
+        if (const LicenceEntry* e = ws().licence(id)) {
+            const auto& l = e->licence;
+            lic.lines.push_back({.icon = ui::Icon::Document, .text = "**" + id + "** \xC2\xB7 " + l.edition,
+                                 .link = [this, id] { openLicence(id); }});
+            lic.lines.push_back({.icon = ui::Icon::User, .text = l.customer.empty() ? std::string("(client inconnu)") : l.customer,
+                                 .link = l.customer.empty() ? std::function<void()>() : std::function<void()>([this, c = l.customer] { goTo("clients", "client:" + c); })});
+            lic.lines.push_back({.icon = ui::Icon::Station, .text = "PC : **" + std::to_string(l.devices.size()) + "** sur " + std::to_string(l.maxDevices)
+                                                                     + (l.expiresAt ? " \xC2\xB7 fin le " + dateFr(l.expiresAt) : std::string(" \xC2\xB7 sans fin"))});
+            lic.lines.push_back({.icon = ui::Icon::Info, .text = "\xC3\xA9tat : **" + e->stateLabel() + "**",
+                                 .tone = e->revoked ? ui::Tone::Error : e->expired ? ui::Tone::Warning : ui::Tone::Ok});
+        } else {
+            lic.lines.push_back({.icon = ui::Icon::Document, .text = "**" + id + "**"});
+            lic.lines.push_back({.icon = ui::Icon::Warning, .text = "pas dans l'archive de ce poste", .tone = ui::Tone::Warning});
+        }
+        card->addBox(std::move(lic));
+
+        ui::UnfoldCard::Box what;
+        what.title = "CE QUI EST R\xC3\x89VOQU\xC3\x89";
+        if (it.x.device.empty())
+            what.lines.push_back({.icon = ui::Icon::Lock, .text = "**toute la licence**", .tone = ui::Tone::Error});
+        else
+            what.lines.push_back({.icon = ui::Icon::Screen, .text = "le PC **" + (it.pcName.empty() ? it.fingerprint : it.pcName) + "**"
+                                                                    + (it.pcName.empty() ? std::string() : " (" + it.fingerprint + ")"),
+                                  .tone = ui::Tone::Error});
+        what.lines.push_back({.icon = ui::Icon::Comment, .text = "raison : **" + (it.x.reason.empty() ? std::string("(aucune)") : it.x.reason) + "**"});
+        what.lines.push_back({.icon = ui::Icon::Layers,
+                              .text = it.x.issuedBefore ? "les \xC3\xA9missions sign\xC3\xA9" "es avant le " + dateTimeFr(it.x.issuedBefore) : std::string("toutes ses \xC3\xA9missions")});
+        ui::UnfoldCard::Line when{.icon = ui::Icon::History, .text = "r\xC3\xA9voqu\xC3\xA9" "e " + kit::whenFr(now, it.x.revokedAt)};
+        if (it.by) {
+            when.text += ", par";
+            when.person = listkit::person(host_, it.by->key, it.by->who);
+        }
+        what.lines.push_back(std::move(when));
+        card->addBox(std::move(what));
+
+        ui::UnfoldCard::Box story;
+        story.title = "SON HISTOIRE";
+        story.timeline = true;
+        story.weight = 1.3f;
+        const auto history = who_.history(id);
+        const std::size_t from = history.size() > 4 ? history.size() - 4 : 0;
+        for (std::size_t k = from; k < history.size(); ++k) {
+            const auto& d = history[k];
+            ui::UnfoldCard::Line line{.time = kit::whenFr(now, d.when), .text = d.summary};
+            if (!d.key.empty()) line.person = listkit::person(host_, d.key, d.who);
+            story.lines.push_back(std::move(line));
+        }
+        if (!story.lines.empty()) card->addBox(std::move(story));
+
+        if (it.inArchive) card->addButton("Ouvrir la licence", "revocations.depliage.ouvrir", ui::Icon::GoTo, [this, id] { openLicence(id); });
+        const std::size_t index = it.index;
+        card->addButton("Retirer la r\xC3\xA9vocation\xE2\x80\xA6", "revocations.depliage.retirer", ui::Icon::Undo, [this, index] { askRemoveAt(index); }, revokeWhy());
+        card->addText("clic droit : le menu", true);
+        return card;
+    }
+
     void askRemove() {
         const auto sel = table_->selectedModelRows();
+        if (sel.size() != 1) return;
+        if (const Item* it = itemAt(sel.front())) askRemoveAt(it->index);
+    }
+
+    void askRemoveAt(std::size_t index) {
         const auto& list = ws().revocations();
-        if (sel.empty() || sel.front() >= list.revoked.size()) return;
-        if (host_.busy && host_.busy()) {
-            host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+        if (index >= list.revoked.size()) return;
+        if (!ws().can("licence_revoquer")) {
+            host_.flash(ws().whyNot("licence_revoquer"), Tone::Warning);
             return;
         }
-        const std::size_t index = sel.front();
+        if (host_.busy && host_.busy()) {
+            host_.flash(kBusy, Tone::Warning);
+            return;
+        }
         const licensing::Revocation x = list.revoked[index];
         const std::uint64_t number = list.number;
         std::string what = "la licence " + x.licenseId;
@@ -277,7 +582,7 @@ private:
                     return;
                 }
                 if (host_.busy && host_.busy()) {
-                    host_.flash("Un travail est en cours : attends qu'il finisse.", Tone::Warning);
+                    host_.flash(kBusy, Tone::Warning);
                     return;
                 }
                 const OpResult r = ws().unrevoke(index);
@@ -312,15 +617,20 @@ private:
         });
     }
 
-    ui::Button*           revoke_{nullptr};
-    ui::Button*           remove_{nullptr};
-    ui::Button*           export_{nullptr};
-    ui::TableView*        table_{nullptr};
-    std::shared_ptr<Rows> model_;
-    std::size_t           explainLines_{1};
-    float                 statusY_{0.f}, actionsY_{0.f};
-    std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
-    core::ConnectionScope links_;
+    ui::Button*                           revoke_{nullptr};
+    ui::Button*                           remove_{nullptr};
+    ui::Button*                           export_{nullptr};
+    ui::TableView*                        table_{nullptr};
+    ui::FilterBar*                        bar_{nullptr};            // 1.47.0
+    std::shared_ptr<Rows>                 model_;
+    std::vector<Item>                     all_;                     // 1.47.0 : toutes les revocations (la barre les lit)
+    std::vector<std::vector<std::string>> texts_;                   // ... leurs cases
+    std::vector<std::size_t>              shown_;                   // ... celles que la barre garde (ligne du modele -> all_)
+    listkit::WhoDid                       who_{host_.workspace()};  // 1.47.0 : qui l'a revoquee
+    std::size_t                           explainLines_{1};
+    float                                 statusY_{0.f}, actionsY_{0.f};
+    std::shared_ptr<bool>                 alive_ = std::make_shared<bool>(true);
+    core::ConnectionScope                 links_;
 };
 
 } // namespace

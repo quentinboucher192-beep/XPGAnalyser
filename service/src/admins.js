@@ -94,8 +94,12 @@ export const ACTIONS_JOURNAL = [
     "commande_livrer", // une commande payee livree (sa licence)
     "commande_revoir", // une commande que l'Admin n'a pas pu livrer (a revoir)
     "commande_rembourser", // un remboursement demande a Stripe
+    // 1.47.0 : la derogation << Gerer le service >> (derogations.js) - accordee, revoquee par l'admin+
+    "derogation_accorder",
+    "derogation_revoquer",
 ];
-export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration"];
+// 1.47.0 : derogation_utilisee, derogation_expiree (derogations.js)
+export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree"];
 
 // Ce que signe la cle qui ecrit une entree du journal : ce prefixe, puis le texte de l'entree.
 export const PREFIXE_JOURNAL = "XPG-JOURNAL-1\n";

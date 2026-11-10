@@ -140,6 +140,8 @@ public:
         links_ += regler_->clicked->connect([this] {
             if (a_.criticality) a_.criticality();
         });
+        hidePanel();   // jusqu'a la premiere mise en page : rien de montre
+        regler_->setVisibility(ui::Visibility::Collapsed);
         refreshData();
     }
 
@@ -174,6 +176,7 @@ public:
         while (verifyRow_.size() < pending) {
             const std::size_t n = verifyRow_.size() + 1;
             auto& v = adoptIn(*this, std::make_unique<LinkButton>("V\xC3\xA9rifier et accepter\xE2\x80\xA6", "admins.verifier." + std::to_string(n)));
+            v.setVisibility(ui::Visibility::Collapsed);
             links_ += v.clicked->connect([this, n] {
                 std::size_t k = 0;
                 for (const auto& p : d_->people)
@@ -189,6 +192,7 @@ public:
         while (gestures_.size() < d_->ov.alerts.size()) {
             const std::size_t n = gestures_.size();
             auto& g = adoptIn(*this, std::make_unique<LinkButton>("", "admins.alerte." + std::to_string(n + 1)));
+            g.setVisibility(ui::Visibility::Collapsed);
             links_ += g.clicked->connect([this, n] { gesture(n); });
             gestures_.push_back(&g);
         }
@@ -823,13 +827,13 @@ private:
         const js::Alert& al = d_->ov.alerts[i];
         const std::string& g = al.gestureId;
         if (g == "journal") {
-            if (a_.journalLines) a_.journalLines(al.lines, al.adminId);
+            if (a_.journalLines) a_.journalLines(al.lines, d_->keyOf(al.adminId));
         } else if (g == "envoyer-maj") {
             if (a_.versions) a_.versions();
         } else if (g == "retirer-droits") {
-            if (a_.removeRights) a_.removeRights(al.adminId, al.rights);
+            if (a_.removeRights) a_.removeRights(d_->keyOf(al.adminId), al.rights);
         } else if (g == "fiche") {
-            if (a_.openCard) a_.openCard(al.adminId);
+            if (a_.openCard) a_.openCard(d_->keyOf(al.adminId));
         } else if (g == "accepter") {
             for (const auto& p : d_->people)
                 if (p.kind == Person::Kind::Pending && p.name == al.adminName) {

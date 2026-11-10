@@ -93,6 +93,7 @@ private:
         std::string label;
         std::array<int, globe::kLayerCount> counts{};
         std::string country;
+        int         pcs{0};   // tous ses PC (globe::Place::pcs) : a egalite, la plus grande ville d'abord
     };
     std::vector<Entry> entries_;
     std::vector<int>   order_;

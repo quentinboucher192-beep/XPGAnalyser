@@ -30,10 +30,24 @@ const Person* Data::person(const std::string& key) const {
         if (p.key == key) return &p;
     return nullptr;
 }
+namespace {
+std::string journalId(const Person& p) { return p.id.empty() ? p.key : p.id; }
+} // namespace
 const js::AdminStats* Data::stats(const std::string& key) const {
+    const Person* p = person(key);
+    const std::string id = p ? journalId(*p) : key;
     for (const auto& a : ov.admins)
-        if (a.id == key) return &a;
+        if (a.id == id) return &a;
     return nullptr;
+}
+std::string Data::keyOf(const std::string& id) const {
+    const Person* p = personById(id);
+    return p ? p->key : id;
+}
+const Person* Data::personById(const std::string& id) const {
+    for (const auto& p : people)
+        if (p.kind != Person::Kind::Pending && journalId(p) == id) return &p;
+    return person(id);
 }
 const AdminFigures* Data::fig(const std::string& key) const {
     const auto it = figures.find(key);
@@ -93,7 +107,7 @@ void computeLocal(const Workspace& w, Data& d) {
             continue;
         }
         js::Admin a;
-        a.id = p.key;
+        a.id = journalId(p);   // l'identifiant de sa cle : le journal le cite (admin_droits, les lignes du service)
         a.name = p.name;
         a.keys = {p.key};
         if (p.kind == Person::Kind::Plus)
@@ -127,7 +141,8 @@ void computeLocal(const Workspace& w, Data& d) {
             s.adminVersion = f.usage.softwareVersion;
             s.lastSeen = f.usage.lastSeen;
         }
-        in.service[key] = s;
+        const Person* who = d.person(key);
+        in.service[who ? journalId(*who) : key] = s;
     }
     d.ov = js::overview(in);
     d.journalLines = static_cast<int>(in.lines.size());

@@ -172,13 +172,52 @@ public:
     void rail(std::string label, int row0, int row1) { rails_.push_back({std::move(label), row0, row1}); }
     [[nodiscard]] float scroll() const noexcept { return scroll_; }
     [[nodiscard]] float contentHeight() const noexcept { return content_; }
+    [[nodiscard]] int flowColumns() const noexcept { return flow_; }
 
 protected:
     void onLayout() override {
         const Rect b = bounds();
         const float gap = 12.f;
-        const float x0 = b.x + (railW_ > 0 ? railW_ + gap : 0.f);
-        const float cw = (b.right() - 10.f - x0 - gap * static_cast<float>(cols_ - 1)) / static_cast<float>(cols_);
+        float x0 = b.x + (railW_ > 0 ? railW_ + gap : 0.f);
+        float cw = (b.right() - 10.f - x0 - gap * static_cast<float>(cols_ - 1)) / static_cast<float>(cols_);
+        // UNE FENETRE ETROITE (1100 x 700) : des cartes trop etroites pour leurs textes - elles se rangent dans l'ordre de
+        // lecture sur moins de colonnes (3, puis 2), sans les bandes des sections ; la grille defile.
+        flow_ = 0;
+        if (cw < kMinCard && cells_.size() > 1) {
+            x0 = b.x;
+            for (int n = std::min(cols_ - 1, 3); n >= 1; --n) {
+                flow_ = n;
+                cw = (b.right() - 10.f - x0 - gap * static_cast<float>(n - 1)) / static_cast<float>(n);
+                if (cw >= kMinCard) break;
+            }
+        }
+        if (flow_ > 0) {
+            int col = 0, row = 0;
+            std::vector<std::pair<int, int>> at;   // (colonne, rangee) de chaque cellule, dans l'ordre de lecture
+            std::vector<const Cell*> order;
+            for (const auto& c : cells_) order.push_back(&c);
+            std::stable_sort(order.begin(), order.end(), [](const Cell* a, const Cell* x) { return a->row != x->row ? a->row < x->row : a->col < x->col; });
+            for (const Cell* c : order) {
+                const int span = std::min(c->cs, flow_);
+                if (col + span > flow_) {
+                    col = 0;
+                    ++row;
+                }
+                at.push_back({col, row});
+                col += span;
+            }
+            const int rows = row + 1;
+            rowH_ = std::max(minRow_, (b.h - 4.f - gap * static_cast<float>(rows - 1)) / static_cast<float>(rows));
+            content_ = rowH_ * static_cast<float>(rows) + gap * static_cast<float>(rows - 1) + 4.f;
+            scroll_ = std::clamp(scroll_, 0.f, std::max(0.f, content_ - b.h));
+            for (std::size_t i = 0; i < order.size(); ++i) {
+                const int span = std::min(order[i]->cs, flow_);
+                const float x = x0 + static_cast<float>(at[i].first) * (cw + gap);
+                const float y = b.y + 2.f - scroll_ + static_cast<float>(at[i].second) * (rowH_ + gap);
+                order[i]->w->setBounds({x, y, cw * static_cast<float>(span) + gap * static_cast<float>(span - 1), rowH_});
+            }
+            return;
+        }
         const float fit = (b.h - 4.f - gap * static_cast<float>(rows_ - 1)) / static_cast<float>(rows_);
         rowH_ = std::max(minRow_, fit);
         content_ = rowH_ * static_cast<float>(rows_) + gap * static_cast<float>(rows_ - 1) + 4.f;
@@ -194,7 +233,7 @@ protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const Rect b = bounds();
         const float gap = 12.f;
-        for (const auto& r : rails_) {
+        for (const auto& r : flow_ > 0 ? std::vector<Rail>{} : rails_) {
             const float y0 = b.y + 2.f - scroll_ + static_cast<float>(r.row0) * (rowH_ + gap);
             const float y1 = b.y + 2.f - scroll_ + static_cast<float>(r.row1 + 1) * (rowH_ + gap) - gap;
             const Rect rr{b.x, y0, railW_, y1 - y0};
@@ -234,84 +273,22 @@ private:
         std::string label;
         int         row0, row1;
     };
+    static constexpr float kMinCard = 172.f;   // une carte plus etroite ne tient pas sa ligne de valeur
     int               cols_, rows_;
+    int               flow_{0};   // 0 : la grille de la planche ; n : rangees dans l'ordre de lecture sur n colonnes
     float             minRow_, railW_;
     float             rowH_{160.f}, content_{0.f}, scroll_{0.f};
     std::vector<Cell> cells_;
     std::vector<Rail> rails_;
 };
 
-// ============================================================================ les options vendues
-// La liste de la planche : le libelle a gauche, le montant et le nombre de commandes a droite, la barre dessous (la teinte
-// des options). Un clic sur une ligne : ses commandes.
-class OptionList final : public ui::Widget {
-public:
-    struct Row {
-        std::string label, value, extra;
-        double      fraction{0};
-    };
-    explicit OptionList(std::string id) : ui::Widget(std::move(id)) {}
-    void set(std::vector<Row> rows, std::string empty) {
-        rows_ = std::move(rows);
-        empty_ = std::move(empty);
-        invalidate();
-    }
-    [[nodiscard]] const std::vector<Row>& rows() const noexcept { return rows_; }
-    std::function<void(int)> onPick;
-
-protected:
-    [[nodiscard]] float rowH() const { return std::clamp(bounds().h / static_cast<float>(std::max<std::size_t>(3, rows_.size())), 20.f, 48.f); }
-    void onPaint(const ui::PaintContext& ctx) override {
-        const Rect b = bounds();
-        if (rows_.empty()) {
-            ctx.r.drawText({b.x, b.y + b.h * 0.4f}, ch::detail::fit(ctx.r, empty_, FontId{12}, b.w), FontId{12}, kMuted);
-            return;
-        }
-        const float h = rowH();
-        float y = b.y + 2.f;
-        for (const auto& r : rows_) {
-            if (y + h > b.bottom() + 2.f) break;
-            const FontId vf = gfx::semibold(FontId{12});
-            const float lw = ctx.r.measure(r.label, FontId{12}).width;
-            const float vw = ctx.r.measure(r.value, vf).width;
-            float ew = r.extra.empty() ? 0.f : ctx.r.measure(r.extra, FontId{11}).width + 6.f;
-            // la place manque : le nombre de commandes s'efface d'abord (le libelle reste entier)
-            const std::string extra = lw > b.w - ew - vw - 10.f && lw <= b.w - vw - 10.f ? std::string() : r.extra;
-            if (extra.empty()) ew = 0.f;
-            const bool oneLine = h < 38.f || lw <= b.w - ew - vw - 10.f;
-            // le libelle trop long pour la carte : seul sur sa ligne, le montant a droite de la barre
-            const float vy = oneLine ? y : y + 16.f;
-            if (!extra.empty()) ctx.r.drawText({b.right() - ew + 6.f, vy + 1.f}, extra, FontId{11}, kFaint);
-            ctx.r.drawText({b.right() - ew - vw, vy}, r.value, vf, kInk);
-            ctx.r.drawText({b.x, y}, ch::detail::fit(ctx.r, r.label, FontId{12}, oneLine ? b.w - ew - vw - 10.f : b.w), FontId{12}, Color::rgb(0x334155));
-            const Rect track = oneLine ? Rect{b.x, y + std::min(19.f, h - 6.f), b.w, h < 24.f ? 4.f : 5.f} : Rect{b.x, y + 21.f, std::max(20.f, b.w - ew - vw - 10.f), 6.f};
-            ctx.r.fillRoundedRect(track, Color::rgb(0xEEF2F7), 3.f);
-            if (r.fraction > 0) ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * static_cast<float>(std::min(1.0, r.fraction))), track.h}, ch::colors::kOptions, 3.f);
-            y += h;
-        }
-    }
-    ui::EventResult onEvent(const ui::InputEvent& ev) override {
-        if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos) && !rows_.empty()) {
-            const int i = static_cast<int>((m->pos.y - bounds().y - 2.f) / rowH());
-            if (i >= 0 && static_cast<std::size_t>(i) < rows_.size() && onPick) onPick(i);
-            return ui::EventResult::Consumed;
-        }
-        return ui::EventResult::Ignored;
-    }
-
-private:
-    std::vector<Row> rows_;
-    std::string      empty_;
-};
-
 // ============================================================================ les cartes
 // Une carte : son id, sa carte et son graphique (un TimeChart ou un BarList), et ce qui la remplit.
 struct Slot {
     std::string   id;
-    ch::ChartCard* card{nullptr};
+    FitCard*       card{nullptr};
     ch::TimeChart* time{nullptr};
-    ch::BarList*   bars{nullptr};
-    OptionList*    list{nullptr};
+    FitBarList*    bars{nullptr};
     std::string   group;   // le groupe dont viennent ses periodes (le clic)
     std::function<void(Slot&, const Data&)> fill;
 };
@@ -368,7 +345,7 @@ bool missing(Slot& s, const Data& d, const std::string& group, const stats::Seri
         }
     }
     if (why.empty()) return false;
-    s.card->setValue(kNone, {}, {});
+    s.card->setText(kNone);
     if (s.time) {
         ch::TimeChartData t;
         t.emptyText = why;
@@ -383,6 +360,8 @@ bool missing(Slot& s, const Data& d, const std::string& group, const stats::Seri
 }
 
 std::string euroText(double cents) { return stats::euros(cents); }
+// << contre 23 000 \xE2\x82\xAC l'an dernier >>, sinon << contre 23 000 \xE2\x82\xAC >> (la place manque).
+std::vector<std::string> against(Compare c, const std::string& value) { return {againstText(c, value), "contre " + value}; }
 std::string intText(double v) { return stats::isNumber(v) ? ch::fr::integer(v) : kNone; }
 
 // ---- les cartes de la planche 08 ----
@@ -410,9 +389,9 @@ void fillMontant(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces commandes";
     if (const char* e = std::getenv("XPG_STATS_ESSAI"); e && std::string(e) == "1" && hooked() && t.x.size() > 3) t.exampleTip = static_cast<int>(t.x.size()) - 3;
     s.time->setData(std::move(t));
-    s.card->setTitle("Montant encaiss\xC3\xA9", stepSmall(r.step));
-    s.card->setValue(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
-                     m->hasComparison() ? againstText(d.compare, euroText(m->beforeTotal)) : std::string());
+    s.card->setSmalls("Montant encaiss\xC3\xA9", stepSmall(r.step));
+    s.card->setText(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
+                     m->hasComparison() ? against(d.compare, euroText(m->beforeTotal)) : std::vector<std::string>{});
 }
 
 void fillCumul(Slot& s, const Data& d) {
@@ -447,7 +426,7 @@ void fillCumul(Slot& s, const Data& d) {
         t.notes.push_back({static_cast<int>(a.values.size()) - 1, a.values.back(), ch::fr::eurosCompact(a.values.back()), ch::Note::Anchor::End, -10.f});
     t.clickHint = "Clic : les commandes jusqu'\xC3\xA0 ce jour";
     s.time->setData(std::move(t));
-    s.card->setValue(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{}, "au " + ddmm(r.period.to));
+    s.card->setText(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{}, "au " + ddmm(r.period.to));
 }
 
 void fillCommandes(Slot& s, const Data& d) {
@@ -462,7 +441,7 @@ void fillCommandes(Slot& s, const Data& d) {
     t.tipForward = true;
     t.clickHint = "Clic : ces commandes";
     s.time->setData(std::move(t));
-    s.card->setValue(intText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
+    s.card->setText(intText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
                      m->hasComparison() ? "contre " + intText(m->beforeTotal) : std::string());
 }
 
@@ -485,7 +464,7 @@ void fillPanier(Slot& s, const Data& d) {
     t.tipForward = true;
     t.clickHint = "Clic : les commandes de la p\xC3\xA9riode";
     s.time->setData(std::move(t));
-    s.card->setValue(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
+    s.card->setText(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
                      m->hasComparison() ? "contre " + euroText(m->beforeTotal) : std::string());
 }
 
@@ -525,42 +504,41 @@ void fillParOffre(Slot& s, const Data& d) {
     t.valueFormat = eurosF();
     t.clickHint = "Clic : les commandes de cette offre";
     s.time->setData(std::move(t));
-    s.card->setTitle("Ventes par offre", "montant " + stepSmall(r.step));
+    s.card->setSmalls("Ventes par offre", "montant " + stepSmall(r.step));
     s.card->setSide(side);
     const bool withOptions = m->part("options") != nullptr;
-    s.card->setValue(euroText(tot), {},
+    s.card->setText(euroText(tot), {},
                      std::to_string(offers - (withOptions ? 1 : 0)) + (offers - (withOptions ? 1 : 0) > 1 ? " offres" : " offre") + (withOptions ? " et options" : ""));
 }
 
 void fillOptions(Slot& s, const Data& d) {
     const auto* m = d.series("option", "ventes_montant");
-    std::string why;
-    if (const std::string e = d.error("option"); !e.empty()) why = e;
-    else if (!d.reply("option")) why = "Lecture des chiffres\xE2\x80\xA6";
-    else if (!m) why = "Le service n'a pas rendu cette mesure.";
-    else if (m->refused) why = m->rights.empty() ? std::string("Cette mesure ne se filtre pas ainsi.") : "Il te manque le droit \xC2\xAB " + m->rights.front() + " \xC2\xBB pour ces chiffres.";
-    if (!why.empty()) {
-        s.card->setValue(kNone, {}, {});
-        s.list->set({}, why);
-        return;
-    }
+    if (missing(s, d, "option", m)) return;
     const auto* c = d.series("option", "ventes_commandes");
-    std::vector<OptionList::Row> rows;
+    ch::BarListData b;
+    b.mode = ch::BarMode::Track;
+    b.labelsAbove = true;   // la planche : le libelle et le montant au-dessus de la barre (jamais coupes)
+    b.color = ch::colors::kOptions;
+    b.format = eurosF();
     double sum = 0, orders = 0, max = 0;
     for (const auto& p : m->parts) {
         if (p.key.empty() || p.key == "\xE2\x80\xA6" || p.total <= 0) continue;
-        max = std::max(max, p.total);
-    }
-    for (const auto& p : m->parts) {
-        if (p.key.empty() || p.key == "\xE2\x80\xA6" || p.total <= 0) continue;
         const stats::Part* pc = c ? c->part(p.key) : nullptr;
-        rows.push_back({partLabel("option", p.key), stats::euros(p.total), pc ? ch::fr::integer(pc->total) + " cmd" : std::string(), max > 0 ? p.total / max : 0.0});
+        ch::BarRow row;
+        row.label = partLabel("option", p.key);
+        row.value = p.total / 100.0;
+        row.extra = pc ? ch::fr::integer(pc->total) + " cmd" : std::string();
+        b.rows.push_back(row);
         sum += p.total;
         orders += pc ? pc->total : 0;
+        max = std::max(max, p.total / 100.0);
     }
-    std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.fraction > b.fraction; });
-    s.list->set(std::move(rows), "Aucune option vendue sur la p\xC3\xA9riode");
-    s.card->setValue(euroText(sum), {}, ch::fr::integer(orders) + (orders > 1 ? " commandes" : " commande"));
+    std::sort(b.rows.begin(), b.rows.end(), [](const auto& x, const auto& y) { return x.value > y.value; });
+    b.maxValue = max;
+    b.clickHint = "Clic : les commandes de cette option";
+    b.emptyText = "Aucune option vendue sur la p\xC3\xA9riode";
+    s.bars->setData(std::move(b));
+    s.card->setText(euroText(sum), {}, ch::fr::integer(orders) + (orders > 1 ? " commandes" : " commande"));
 }
 
 void fillVendues(Slot& s, const Data& d) {
@@ -579,7 +557,7 @@ void fillVendues(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces licences";
     s.time->setData(std::move(t));
     const double tot = on->total + hand->total, before = on->beforeTotal + hand->beforeTotal;
-    s.card->setValue(intText(tot), on->hasComparison() ? ch::deltaOf(tot, before) : ch::Delta{},
+    s.card->setText(intText(tot), on->hasComparison() ? ch::deltaOf(tot, before) : ch::Delta{},
                      tot > 0 ? ch::fr::percent(on->total * 100.0 / tot) + " en ligne" : std::string());
 }
 
@@ -599,7 +577,7 @@ void fillRemboursements(Slot& s, const Data& d) {
     t.emptyText = "Aucun remboursement sur la p\xC3\xA9riode";
     s.time->setData(std::move(t));
     const double nb = n && !n->refused ? n->total : 0;
-    s.card->setValue(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal, false) : ch::Delta{},
+    s.card->setText(euroText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal, false) : ch::Delta{},
                      ch::fr::integer(nb) + (nb > 1 ? " commandes" : " commande"));
 }
 
@@ -622,7 +600,7 @@ void fillActives(Slot& s, const Data& d) {
     if (lo < 1e17) t.yMin = niceFloor(lo);
     t.clickHint = "Clic : les licences actives";
     s.time->setData(std::move(t));
-    s.card->setValue(intText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
+    s.card->setText(intText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
                      m->hasComparison() ? "contre " + intText(m->beforeTotal) : std::string());
 }
 
@@ -648,7 +626,7 @@ void fillMouvements(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces licences";
     s.time->setData(std::move(t));
     const double net = nw->total - ex->total - rv->total;
-    s.card->setValue(ch::fr::signedInteger(net) + " net", {}, "entr\xC3\xA9" "es \xE2\x88\x92 sorties");
+    s.card->setText(ch::fr::signedInteger(net) + " net", {}, "entr\xC3\xA9" "es \xE2\x88\x92 sorties");
 }
 
 void fillEcheances(Slot& s, const Data& d) {
@@ -682,7 +660,7 @@ void fillEcheances(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces licences, \xC3\xA0 renouveler";
     t.emptyText = "Aucune licence ne finit dans les 90 jours";
     s.time->setData(std::move(t));
-    s.card->setValue(intText(m->total), {}, eur && !eur->refused ? stats::euros(eur->total) + " \xC3\xA0 renouveler" : std::string());
+    s.card->setText(intText(m->total), {}, eur && !eur->refused ? stats::euros(eur->total) + " \xC3\xA0 renouveler" : std::string());
 }
 
 void fillDemandes(Slot& s, const Data& d) {
@@ -707,7 +685,7 @@ void fillDemandes(Slot& s, const Data& d) {
     t.tipForward = true;
     t.clickHint = "Clic : ces demandes";
     s.time->setData(std::move(t));
-    s.card->setValue(intText(in->total) + " re\xC3\xA7ues", in->hasComparison() ? ch::deltaOf(in->total, in->beforeTotal) : ch::Delta{},
+    s.card->setText(intText(in->total) + " re\xC3\xA7ues", in->hasComparison() ? ch::deltaOf(in->total, in->beforeTotal) : ch::Delta{},
                      wait && !wait->refused && stats::isNumber(wait->total) ? ch::fr::integer(wait->total) + " en attente" : std::string());
 }
 
@@ -727,7 +705,7 @@ void fillDelai(Slot& s, const Data& d) {
     t.partialFrom = -1;
     t.clickHint = "Clic : les demandes de la p\xC3\xA9riode";
     s.time->setData(std::move(t));
-    s.card->setValue(stats::duration(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal, false) : ch::Delta{},
+    s.card->setText(stats::duration(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal, false) : ch::Delta{},
                      mean && !mean->refused && stats::isNumber(mean->total) ? "moyen " + stats::duration(mean->total) : std::string());
 }
 
@@ -758,13 +736,13 @@ void fillPcActifs(Slot& s, const Data& d) {
     t.legend = ch::LegendMode::None;
     t.clickHint = "Clic : ces PC (Activations)";
     s.time->setData(std::move(t));
-    s.card->setTitle("PC actifs", "par offre, \xC3\xA0 la fin de chaque " + std::string(stepLabel(r.step)));
+    s.card->setSmalls("PC actifs", {"par offre, \xC3\xA0 la fin de chaque " + std::string(stepLabel(r.step)), "par offre"});
     s.card->setSide(side);
     if (total && !total->refused && total->hasComparison()) {
         const double before = total->beforeTotal + (disc && disc->hasComparison() ? disc->beforeTotal : 0);
-        s.card->setValue(intText(all), ch::deltaOf(all, before), againstText(d.compare, intText(before)));
+        s.card->setText(intText(all), ch::deltaOf(all, before), against(d.compare, intText(before)));
     } else {
-        s.card->setValue(intText(all));
+        s.card->setText(intText(all));
     }
 }
 
@@ -791,7 +769,7 @@ void fillMouvementsPc(Slot& s, const Data& d) {
     const double net = ac->total - li->total - re->total;
     std::string cmp;
     if (lvl && !lvl->refused && stats::isNumber(lvl->total)) cmp = ch::fr::integer(lvl->total - net) + " " + ch::fr::kArrow + " " + ch::fr::integer(lvl->total);
-    s.card->setValue(ch::fr::signedInteger(net) + " net", {}, cmp);
+    s.card->setText(ch::fr::signedInteger(net) + " net", {}, cmp);
 }
 
 void fillFlottantes(Slot& s, const Data& d) {
@@ -819,8 +797,11 @@ void fillFlottantes(Slot& s, const Data& d) {
     for (const double v : m->points)
         if (stats::isNumber(v)) peak = std::max(peak, v);
     const double days = full && !full->refused ? full->total : 0;
-    s.card->setValue(ch::fr::integer(peak) + (stats::isNumber(ceiling) ? " / " + ch::fr::integer(ceiling) + " jetons" : std::string()), {},
-                     days > 0 ? "\xE2\x9A\xA0 " + ch::fr::integer(days) + (days > 1 ? " jours au plafond" : " jour au plafond") : std::string("jamais au plafond"));
+    const std::string n = ch::fr::integer(days);
+    s.card->setText(ch::fr::integer(peak) + (stats::isNumber(ceiling) ? " / " + ch::fr::integer(ceiling) + " jetons" : std::string()), {},
+                    days > 0 ? std::vector<std::string>{"\xE2\x9A\xA0 " + n + (days > 1 ? " jours au plafond" : " jour au plafond"), "\xE2\x9A\xA0 " + n + "\xC2\xA0j au plafond",
+                                                        "\xE2\x9A\xA0 " + n + "\xC2\xA0j"}
+                             : std::vector<std::string>{"jamais au plafond"});
 }
 
 void fillDecouvertes(Slot& s, const Data& d) {
@@ -847,7 +828,7 @@ void fillDecouvertes(Slot& s, const Data& d) {
         const double diff = std::round(pct) - std::round(before);
         delta = {ch::fr::signedPoints(diff), diff > 0 ? 1 : diff < 0 ? -1 : 0, diff > 0 ? 1 : diff < 0 ? -1 : 0};
     }
-    s.card->setValue(stats::isNumber(pct) ? ch::fr::percent(pct) + " converties" : kNone, delta, {});
+    s.card->setText(stats::isNumber(pct) ? ch::fr::percent(pct) + " converties" : kNone, delta);
 }
 
 // ---- les cartes des onglets ----
@@ -877,7 +858,7 @@ void fillByAdmin(Slot& s, const Data& d, const std::string& measure, double scal
     t.clickHint = clickHint;
     const std::size_t admins = t.series.size();
     s.time->setData(std::move(t));
-    s.card->setValue(euros ? stats::euros(m->total) : intText(m->total), {}, std::to_string(admins) + (admins > 1 ? " admins" : " admin"));
+    s.card->setText(euros ? stats::euros(m->total) : intText(m->total), {}, std::to_string(admins) + (admins > 1 ? " admins" : " admin"));
 }
 
 void fillTopClients(Slot& s, const Data& d) {
@@ -898,11 +879,11 @@ void fillTopClients(Slot& s, const Data& d) {
         sum += p.total;
     }
     b.color = ch::colors::kOne;
-    b.rowHeight = 24.f;
+    b.labelsAbove = true;   // le nom entier du client, au-dessus de sa barre
     b.clickHint = "Clic : ses commandes";
     b.emptyText = "Aucune vente sur la p\xC3\xA9riode";
     s.bars->setData(std::move(b));
-    s.card->setValue(euroText(m->total), {}, "les " + std::to_string(std::min<std::size_t>(8, m->parts.size())) + " premiers clients");
+    s.card->setText(euroText(m->total), {}, "les " + std::to_string(std::min<std::size_t>(8, m->parts.size())) + " premiers clients");
 }
 
 void fillSimpleLine(Slot& s, const Data& d, const std::string& group, const std::string& measure, double scale, const ch::Format& valueF, bool level,
@@ -920,7 +901,7 @@ void fillSimpleLine(Slot& s, const Data& d, const std::string& group, const std:
     t.partialFrom = -1;
     t.clickHint = clickHint;
     s.time->setData(std::move(t));
-    s.card->setValue(valueText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
+    s.card->setText(valueText(m->total), m->hasComparison() ? ch::deltaOf(m->total, m->beforeTotal) : ch::Delta{},
                      m->hasComparison() ? "contre " + valueText(m->beforeTotal) : std::string());
 }
 
@@ -940,7 +921,7 @@ void fillAcceptRefuse(Slot& s, const Data& d) {
     t.clickHint = "Clic : ces demandes";
     s.time->setData(std::move(t));
     const double tot = a->total + r->total;
-    s.card->setValue(tot > 0 ? ch::fr::percent(a->total * 100.0 / tot) + " accept\xC3\xA9" "es" : kNone, {}, "sur " + ch::fr::integer(tot) + " d\xC3\xA9" "cid\xC3\xA9" "es");
+    s.card->setText(tot > 0 ? ch::fr::percent(a->total * 100.0 / tot) + " accept\xC3\xA9" "es" : kNone, {}, "sur " + ch::fr::integer(tot) + " d\xC3\xA9" "cid\xC3\xA9" "es");
 }
 
 void fillLicencesParOffre(Slot& s, const Data& d) {
@@ -960,7 +941,7 @@ void fillLicencesParOffre(Slot& s, const Data& d) {
     t.clickHint = "Clic : les licences de cette offre";
     s.time->setData(std::move(t));
     s.card->setSide(side);
-    s.card->setValue(intText(m->total), {}, "\xC3\xA0 la fin de la p\xC3\xA9riode");
+    s.card->setText(intText(m->total), {}, "\xC3\xA0 la fin de la p\xC3\xA9riode");
 }
 
 // Les admins : leurs jours, leurs heures habituelles (a l'heure du PC), leur dernier passage, leur version.
@@ -1179,7 +1160,7 @@ protected:
         export_->setBounds({right - ew, y + 2.f, ew, 32.f});
         right -= ew + 8.f;
         float natural = 0.f;
-        for (auto* t : tabs_) natural += t->preferredWidth() + 20.f;
+        for (auto* t : tabs_) natural += t->preferredWidth() + 12.f;
         const float periodW = ui::measureWidth(periodText(periodNow()), FontId{13}) + 12.f;
         if (snapshot_->visible()) {
             // << Relever maintenant >> : son icone seule (l'infobulle) si la place manque
@@ -1193,17 +1174,30 @@ protected:
             right -= sw + 8.f;
         }
         periodRight_ = right - 6.f;
-        float tx = x0 + titleW;
-        const float tabsRoom = periodRight_ - tx;
-        const float k = natural > tabsRoom && natural > 0.f ? std::max(0.6f, tabsRoom / natural) : 1.f;
-        // la periode en tete si elle tient a cote des onglets ; sinon au bout de la barre des choix
-        periodInTabs_ = natural * k + periodW <= tabsRoom + 1.f;
-        for (auto* t : tabs_) {
-            const float tw = t->preferredWidth() * k;
-            t->setBounds({tx, y + 6.f, tw, 30.f});
-            tx += tw + 20.f * k;
+        float tx = x0 + titleW, ty = y + 6.f;
+        float tabsRoom = periodRight_ - tx;
+        // les onglets a cote du titre (la planche), l'espace entre eux resserre s'il le faut ; une fenetre etroite : sur leur
+        // propre rangee, sous le titre (jamais l'un sur l'autre, jamais coupes)
+        float labels = 0.f;
+        for (auto* t : tabs_) labels += t->preferredWidth();
+        float tabGap = 20.f;
+        while (tabGap > 10.f && labels + tabGap * static_cast<float>(tabs_.size()) > tabsRoom) tabGap -= 2.f;
+        const bool ownRow = labels + tabGap * static_cast<float>(tabs_.size()) > tabsRoom + 1.f;
+        if (ownRow) {
+            tx = x0;
+            ty = y + 44.f;
+            tabsRoom = x0 + w - tx;
+            tabGap = 20.f;
+            while (tabGap > 10.f && labels + tabGap * static_cast<float>(tabs_.size()) > tabsRoom) tabGap -= 2.f;
         }
-        y += 44.f;
+        // la periode en tete si elle tient a cote des onglets ; sinon au bout de la barre des choix
+        periodInTabs_ = !ownRow && labels + tabGap * static_cast<float>(tabs_.size()) + periodW <= tabsRoom + 1.f;
+        for (auto* t : tabs_) {
+            const float tw = t->preferredWidth();
+            t->setBounds({tx, ty, tw, 30.f});
+            tx += tw + tabGap;
+        }
+        y += ownRow ? 82.f : 44.f;
         tabsBottom_ = y;
         // la barre commune
         y += 10.f;
@@ -1213,46 +1207,51 @@ protected:
         const bool globe = tab_ == Tab::Globe;
         const bool upd = tab_ == Tab::Updates;
         range_->setVisibility(globe ? ui::Visibility::Collapsed : ui::Visibility::Visible);
-        const float rw = std::min(range_->preferredWidth(), w * 0.42f);
-        range_->setBounds({bx, y, rw, segH});
+        // une fenetre etroite : ce qui ne tient plus sur la rangee passe a la suivante (jamais l'un sur l'autre)
+        float rowY = y;
+        const auto wrapIf = [&](float need) {
+            if (bx > x0 && bx + need > x0 + w) {
+                bx = x0;
+                rowY += segH + 8.f;
+            }
+        };
+        const float rw = std::min(range_->preferredWidth(), w);
+        range_->setBounds({bx, rowY, rw, segH});
         bx += rw + 10.f;
         const bool dates = choice_.range == Range::Dates && !globe;
         from_->setVisibility(dates ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         to_->setVisibility(dates ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         if (dates) {
             const float dw = 150.f;
-            from_->setBounds({bx, y + 1.f, dw, segH - 2.f});
-            arrowX_ = bx + dw + 4.f;
-            to_->setBounds({bx + dw + 20.f, y + 1.f, dw, segH - 2.f});
+            wrapIf(2.f * dw + 30.f);
+            from_->setBounds({bx, rowY + 1.f, dw, segH - 2.f});
+            arrow_ = {bx + dw + 4.f, rowY + 9.f};
+            to_->setBounds({bx + dw + 20.f, rowY + 1.f, dw, segH - 2.f});
             bx += 2.f * dw + 30.f;
         }
         labels_.clear();
+        seps_.clear();
         compare_->setVisibility(!globe && !upd ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         step_->setVisibility(!globe && !upd ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         software_->setVisibility(upd ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        // un groupe : un trait, son libelle discret, ses choix
+        const auto group = [&](const char* label, SegGroup* g) {
+            const float lw = ui::measureWidth(label, gfx::semibold(FontId{11}));
+            const float gw = g->preferredWidth();
+            wrapIf(14.f + lw + 8.f + gw);
+            if (bx > x0) seps_.push_back({bx, rowY});
+            labels_.push_back({{bx > x0 ? bx + 10.f : bx, rowY}, label});
+            bx += (bx > x0 ? 14.f : 0.f) + lw + 8.f;
+            g->setBounds({bx, rowY, gw, segH});
+            bx += gw + 10.f;
+        };
         if (upd) {
-            seps_ = {bx};
-            labels_.push_back({bx + 10.f, "les PC"});
-            bx += 14.f + ui::measureWidth("les PC", gfx::semibold(FontId{11})) + 8.f;
-            const float sw = software_->preferredWidth();
-            software_->setBounds({bx, y, sw, segH});
-            bx += sw + 10.f;
+            group("les PC", software_);
         } else if (!globe) {
-            seps_ = {bx};
-            labels_.push_back({bx + 10.f, "compar\xC3\xA9 \xC3\xA0"});
-            bx += 14.f + ui::measureWidth("compar\xC3\xA9 \xC3\xA0", gfx::semibold(FontId{11})) + 8.f;
-            const float cw = compare_->preferredWidth();
-            compare_->setBounds({bx, y, cw, segH});
-            bx += cw + 10.f;
-            seps_.push_back(bx);
-            labels_.push_back({bx + 10.f, "par"});
-            bx += 14.f + ui::measureWidth("par", gfx::semibold(FontId{11})) + 8.f;
-            const float sw = step_->preferredWidth();
-            step_->setBounds({bx, y, sw, segH});
-            bx += sw + 10.f;
-        } else {
-            seps_.clear();
+            group("compar\xC3\xA9 \xC3\xA0", compare_);
+            group("par", step_);
         }
+        y = rowY;
         hintX_ = bx;
         {
             float room = x0 + w - bx;
@@ -1267,6 +1266,7 @@ protected:
                     }
             }
         }
+        barLastY_ = y;
         y += segH + 12.f;
         barBottom_ = y;
         // le bandeau : le service trop ancien (Deployer), une panne (Reessayer), les chiffres reconstitues
@@ -1309,21 +1309,21 @@ protected:
         float hintRight = x0 + w;
         if (periodInBar_ && tab_ != Tab::Globe) {
             const float pw = ctx.r.measure(period, FontId{13}).width;
-            ctx.r.drawText({hintRight - pw, barY_ + 9.f}, period, FontId{13}, kMuted);
+            ctx.r.drawText({hintRight - pw, barLastY_ + 9.f}, period, FontId{13}, kMuted);
             hintRight -= pw + 24.f;
         }
         if (tab_ != Tab::Globe) {
-            for (const float x : seps_) ctx.r.fillRect({x, barY_ + 6.f, 1.f, 22.f}, kLine);
-            for (const auto& [x, t] : labels_) ctx.r.drawText({x, barY_ + 10.f}, t, gfx::semibold(FontId{11}), kFaint);
-            if (choice_.range == Range::Dates) ctx.r.drawText({arrowX_, barY_ + 9.f}, ch::fr::kArrow, FontId{13}, kMuted);
+            for (const auto& p : seps_) ctx.r.fillRect({p.x, p.y + 6.f, 1.f, 22.f}, kLine);
+            for (const auto& [p, t] : labels_) ctx.r.drawText({p.x, p.y + 10.f}, t, gfx::semibold(FontId{11}), kFaint);
+            if (choice_.range == Range::Dates) ctx.r.drawText(arrow_, ch::fr::kArrow, FontId{13}, kMuted);
             if (!hint_.empty()) {
                 const std::string a = "Un clic sur un point ", c = hint_.substr(a.size());
                 const float wa = ctx.r.measure(a, FontId{12}).width, wc = ctx.r.measure(c, gfx::semibold(FontId{12})).width;
                 float x = hintRight - wa - wc;
-                ui::drawIcon(ctx.r, ui::Icon::GoTo, {x - 22.f, barY_ + 9.f, 15.f, 15.f}, kViolet);
-                ctx.r.drawText({x, barY_ + 10.f}, a, FontId{12}, kMuted);
+                ui::drawIcon(ctx.r, ui::Icon::GoTo, {x - 22.f, barLastY_ + 9.f, 15.f, 15.f}, kViolet);
+                ctx.r.drawText({x, barLastY_ + 10.f}, a, FontId{12}, kMuted);
                 x += wa;
-                ctx.r.drawText({x, barY_ + 10.f}, c, gfx::semibold(FontId{12}), kInk);
+                ctx.r.drawText({x, barLastY_ + 10.f}, c, gfx::semibold(FontId{12}), kInk);
             }
             ctx.r.fillRect({x0, barBottom_ - 1.f, w, 1.f}, kLine);
         }
@@ -1400,17 +1400,16 @@ private:
         gridTabs_.push_back(t);
         return ref;
     }
-    // `bars` : 0 un TimeChart, 1 un BarList, 2 la liste des options.
+    // `bars` : 0 un TimeChart, 1 un BarList (les options vendues : libelles au-dessus des barres).
     Slot& slot(CardGrid& g, Tab t, const std::string& id, const std::string& title, const std::string& small, int bars, const std::string& group,
                std::function<void(Slot&, const Data&)> fill, int col, int row, int cs = 1, int rs = 1) {
         const std::string full = std::string("stats.") + kTabs[static_cast<int>(t)].key + "." + id;
-        auto card = std::make_unique<ch::ChartCard>(full + ".carte", title, small);
+        auto card = std::make_unique<FitCard>(full + ".carte", title, small);
         Slot s;
         s.id = id;
         s.group = group;
         s.fill = std::move(fill);
-        if (bars == 1) s.bars = &card->setChartAs(std::make_unique<ch::BarList>(full));
-        else if (bars == 2) s.list = &card->setChartAs(std::make_unique<OptionList>(full));
+        if (bars) s.bars = &card->setChartAs(std::make_unique<FitBarList>(full));
         else s.time = &card->setChartAs(std::make_unique<ch::TimeChart>(full));
         s.card = &g.put(std::move(card), col, row, cs, rs);
         slots_.push_back(std::make_unique<Slot>(std::move(s)));
@@ -1419,7 +1418,6 @@ private:
         const auto pick = [this, raw](const ch::Pick& p) { picked(*raw, p); };
         if (raw->time) raw->time->setOnPick(pick);
         if (raw->bars) raw->bars->setOnPick(pick);
-        if (raw->list) raw->list->onPick = [this, raw](int i) { picked(*raw, ch::Pick{i, -1, {}, ch::kNone}); };
         return *raw;
     }
 
@@ -1434,7 +1432,7 @@ private:
         slot(g, t, "commandes", "Commandes", "", 0, "principal", fillCommandes, 3, 0);
         slot(g, t, "panier", "Panier moyen", "", 0, "principal", fillPanier, 4, 0);
         slot(g, t, "offres", "Ventes par offre", "montant par semaine", 0, "offre", fillParOffre, 0, 1, 2);
-        slot(g, t, "options", "Options vendues", "", 2, "option", fillOptions, 2, 1);
+        slot(g, t, "options", "Options vendues", "", 1, "option", fillOptions, 2, 1);
         slot(g, t, "vendues", "Licences vendues", "", 0, "principal", fillVendues, 3, 1);
         slot(g, t, "remboursements", "Remboursements", "", 0, "principal", fillRemboursements, 4, 1);
         slot(g, t, "actives", "Licences actives", "", 0, "principal", fillActives, 0, 2);
@@ -1455,9 +1453,9 @@ private:
         slot(g, t, "commandes", "Commandes", "", 0, "principal", fillCommandes, 3, 0);
         slot(g, t, "offres", "Ventes par offre", "montant par semaine", 0, "offre", fillParOffre, 0, 1, 2);
         slot(g, t, "panier", "Panier moyen", "", 0, "principal", fillPanier, 2, 1);
-        slot(g, t, "options", "Options vendues", "", 2, "option", fillOptions, 3, 1);
+        slot(g, t, "options", "Options vendues", "", 1, "option", fillOptions, 3, 1);
         slot(g, t, "clients", "Les meilleurs clients", "montant encaiss\xC3\xA9", 1, "client", fillTopClients, 0, 2);
-        slot(g, t, "livrees", "Livr\xC3\xA9" "es par", "le montant des commandes que chacun a livr\xC3\xA9" "es", 0, "admin",
+        slot(g, t, "livrees", "Livr\xC3\xA9" "es par", "le montant que chacun a livr\xC3\xA9", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "ventes_montant", 0.01, true, "Clic : ses commandes"); }, 1, 2);
         slot(g, t, "vendues", "Licences vendues", "", 0, "principal", fillVendues, 2, 2);
         slot(g, t, "remboursements", "Remboursements", "", 0, "principal", fillRemboursements, 3, 2);
@@ -1700,7 +1698,6 @@ private:
         } else if (id == "options" || id == "clients") {
             f.page = "commandes";
             if (s.bars && p.index >= 0 && static_cast<std::size_t>(p.index) < s.bars->data().rows.size()) f.search = s.bars->data().rows[static_cast<std::size_t>(p.index)].label;
-            if (s.list && p.index >= 0 && static_cast<std::size_t>(p.index) < s.list->rows().size()) f.search = s.list->rows()[static_cast<std::size_t>(p.index)].label;
             f.periodField = "Date";
             f.from = data_.period.from;
             f.to = data_.period.to;
@@ -1857,11 +1854,13 @@ private:
     Data                             data_;
     std::string                      sig_, note_, lastNote_, failed_;
     bool                             tooOld_{false}, loading_{false}, wantLoad_{false};
-    float                            titleY_{0}, tabsBottom_{0}, barY_{0}, barBottom_{0}, periodRight_{0}, hintX_{0}, arrowX_{0}, rebuiltY_{-1};
+    float                            titleY_{0}, tabsBottom_{0}, barY_{0}, barBottom_{0}, periodRight_{0}, hintX_{0}, rebuiltY_{-1};
     bool                             periodInTabs_{true}, periodInBar_{false};
     std::string                      hint_;
-    std::vector<float>               seps_;
-    std::vector<std::pair<float, std::string>> labels_;
+    std::vector<gfx::Point>          seps_;
+    std::vector<std::pair<gfx::Point, std::string>> labels_;
+    gfx::Point                       arrow_{};
+    float                            barLastY_{0};
     Rect                             bannerRect_{};
     std::shared_ptr<bool>            alive_{std::make_shared<bool>(true)};
     core::ConnectionScope            links_;

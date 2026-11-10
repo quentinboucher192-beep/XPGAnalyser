@@ -269,6 +269,39 @@ struct AdminRequest {
     std::string key, id, fingerprint, name, email, pc, machine, software;
     Seconds     received{0};
     bool        fingerprintMismatch{false};   // l'empreinte rendue par le service n'est pas celle calculee ici (jamais accepter)
+    // 1.47.0 (adminRequests, toutes) : "attente", "acceptee", "refusee" ; son dernier changement (une close : 7 jours au plus).
+    std::string state{"attente"};
+    Seconds     changed{0};
+    [[nodiscard]] bool waiting() const noexcept { return state == "attente"; }
+};
+// 1.47.0 : une demande d'admin a accepter (<< Accepter 3 demandes... >>) : son profil, et << J'ai verifie l'empreinte >>.
+struct AdminAccept {
+    std::string key;                     // la cle du demandeur (64 hexadecimaux)
+    std::string profile;                 // le profil (ses droits) ; vide : << Admin LV1 >> s'il existe, sinon aucun droit
+    bool        fingerprintChecked{false};   // lue au telephone : sans elle, rien n'est signe
+};
+// 1.47.0 : une invitation de l'admin+ (<< Ajouter un admin... >> ; invitations-admins.json, sur son poste) - le nom, le
+// courriel, le profil prevu, comment l'Admin est parti (<< studio >>, << lien >>), quand.
+struct AdminInvitation {
+    std::string name, email, profile, via;
+    Seconds     at{0};
+};
+// L'invitation qui va avec une demande (le meme courriel, sinon le meme nom ; la plus recente) ; nul : sans invitation.
+[[nodiscard]] const AdminInvitation* invitationFor(const std::vector<AdminInvitation>& invitations, const AdminRequest& request);
+// 1.47.0 : << Mon compte >> (PageAccount.cpp) - qui est ce poste, sans reseau.
+struct AccountInfo {
+    Role                     role{Role::None};
+    std::string              name, email;            // le nom (la liste, sinon la cle) ; le courriel (sa demande d'admin)
+    std::string              keyId, keyHex, fingerprint;   // la cle qui signe (l'editeur, ou l'admin) ; vides : aucune
+    bool                     testKey{false};          // une cle d'ESSAI de l'editeur
+    int                      listNumber{0};           // la liste des admins en vigueur sur ce poste (0 : aucune)
+    int                      addedInList{0};          // la premiere liste vue qui porte sa cle (0 : inconnue)
+    Seconds                  since{0}, retired{0};    // admin depuis ; retire le (0 : non)
+    std::string              profile;                 // son profil d'origine (la liste)
+    std::vector<std::string> rights;                  // ses droits (l'admin+ : les 13)
+    std::string              listPc;                  // le PC que la liste lui connait
+    Seconds                  requestSent{0};          // sa demande d'admin, envoyee le (demande-admin.json)
+    std::string              pc, machine;             // CE PC : son nom, l'identifiant de la machine
 };
 // Ce qu'a fait refreshAdminState / refreshAdminList.
 struct AdminRefresh {
@@ -617,6 +650,21 @@ public:
     [[nodiscard]] OpResult acceptAdmin(const std::string& keyHex, const std::string& profile, const std::vector<std::string>* rights = nullptr,
                                        bool fingerprintConfirmed = true) const;
     [[nodiscard]] OpResult refuseAdmin(const std::string& keyHex) const;
+    // 1.47.0 : LES DEMANDES D'ADMIN EN LISTE (PageAdminRequests.cpp ; l'admin+). `all` : aussi les closes (acceptees,
+    // refusees, 7 jours ; GET /admin/admins/demandes?toutes=1 - un service d'avant ne rend que celles en attente).
+    [[nodiscard]] OpResult adminRequests(std::vector<AdminRequest>& out, bool all) const;
+    // Plusieurs d'un coup : la cle de l'editeur signe UNE liste (numero + 1) qui les porte toutes, la publie (chaque demande
+    // est close), depose le trousseau de chacun, une ligne au journal par nouvel admin. Une seule empreinte pas cochee, une
+    // demande qui n'attend plus, un profil inconnu : rien n'est signe.
+    [[nodiscard]] OpResult acceptAdmins(const std::vector<AdminAccept>& items) const;
+    // Refuser plusieurs demandes ; `reason` (facultative) va au journal des admins (le demandeur voit << refusee >>).
+    [[nodiscard]] OpResult refuseAdmins(const std::vector<std::string>& keys, const std::string& reason) const;
+    // Les invitations de l'admin+ (invitations-admins.json, les plus recentes d'abord) ; en noter une (<< Ajouter un
+    // admin... >>, a l'envoi de l'Admin ; 100 gardees).
+    [[nodiscard]] std::vector<AdminInvitation> adminInvitations() const;
+    OpResult noteAdminInvitation(const AdminInvitation& invitation) const;
+    // 1.47.0 : << Mon compte >> : qui est ce poste (sans reseau).
+    [[nodiscard]] AccountInfo account() const;
     // Retirer : retire = maintenant, droits vides ; ses licences en vigueur gardees (gardes), ou revoquees
     // (`revokeLicencesToo`, par la cle de l'editeur) ; le registre et la liste de revocation en place, s'il les a signes,
     // re-signes par la cle de l'editeur (numero + 1) et publies.

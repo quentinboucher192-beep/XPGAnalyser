@@ -428,6 +428,13 @@ protected:
         bar_->setMemoryKey(memoryKey);
         links_ += bar_->changed->connect(std::move(rebuild));
     }
+    // La barre au-dessus de la table (la fiche, a droite, garde toute sa hauteur) : la place qui reste a la table.
+    gfx::Rect placeBar(gfx::Rect table) {
+        if (!bar_ || !bar_->visible()) return table;
+        const float bh = bar_->heightFor(table.w);
+        bar_->setBounds({table.x, table.y, table.w, bh});
+        return {table.x, table.y + bh + kGap, table.w, std::max(60.f, table.h - bh - kGap)};
+    }
     // Une autre page, filtree sur `focus` (requestPageFocus).
     void goTo(const std::string& page, const std::string& focus) {
         requestPageFocus(page, focus);
@@ -458,18 +465,21 @@ protected:
     }
     void addCurve(ui::UnfoldCard& card, std::string title, std::vector<double> values) {
         card.setCurve(std::move(title), [values](const ui::PaintContext& ctx, gfx::Rect box) {
-            ui::charts::paintSparkline(ctx.r, ctx.theme, box.inset(4.f, 6.f), values);
             const std::string last = std::to_string(static_cast<long long>(values.empty() ? 0 : values.back()));
-            ctx.r.drawText({box.right() - 4.f - ctx.r.measure(last, ctx.theme.font.uiBold).width, box.y - 2.f}, last, ctx.theme.font.uiBold, ctx.theme.color.text);
-        });
+            const gfx::FontId f = ctx.theme.font.uiBold;
+            ctx.r.drawText({box.x + 4.f, box.y}, last + " aujourd'hui", f, ctx.theme.color.text);
+            const float top = ctx.r.lineHeight(f) + 6.f;
+            ui::charts::paintSparkline(ctx.r, ctx.theme, {box.x + 4.f, box.y + top, box.w - 8.f, std::max(16.f, box.h - top - 4.f)}, values);
+        }, 70.f, 0.8f);
     }
     // Qui a signe le registre en vigueur (le journal des admins : << registre N >>), au bas d'une ligne depliee.
     void addSigner(ui::UnfoldCard& card) {
         if (!ws().hasRegistry()) return;
         const std::uint64_t n = ws().registry().number;
         const auto d = who_.last({"offres", "options", "annonces"}, "registre " + std::to_string(n));
-        card.addText("registre n\xC2\xB0 " + std::to_string(n) + " sign\xC3\xA9 le " + dateFr(ws().registry().issuedAt) + (d ? " par" : ""), true);
+        // a droite, de droite a gauche : la pastille, puis le texte devant elle
         if (d) card.addPerson(listkit::person(host_, d->key, d->who), prefix_ + ".depliage.signe", true);
+        card.addText("registre n\xC2\xB0 " + std::to_string(n) + " sign\xC3\xA9 le " + dateFr(ws().registry().issuedAt) + (d ? " par" : ""), true);
     }
 
     ui::FilterBar*                        bar_{nullptr};    // 1.47.0
@@ -574,11 +584,6 @@ protected:
         }
         problemY_ = y;
         if (!problemText().empty()) y += kLineH + 4.f;
-        if (bar_ && bar_->visible()) {   // 1.47.0 : la barre << Filtrer et chercher >>, au-dessus de la table et de la fiche
-            const float bh = bar_->heightFor(w);
-            bar_->setBounds({x, y, w, bh});
-            y += bh + kGap;
-        }
         const gfx::Rect content{x, y, w, std::max(60.f, b.bottom() - kPad - y)};
         content_ = content;
         layoutContent(content);
@@ -1087,7 +1092,7 @@ protected:
 
     void layoutContent(const gfx::Rect& area) override {
         const float pw = std::clamp(area.w * 0.36f, 360.f, 500.f);
-        table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
+        table_->setBounds(placeBar({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h}));   // 1.47.0 : la barre dessus
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 128.f;
         // 1.42.0 : une petite fenetre - les lignes plus serrees (la liste des fonctionnalites garde de la place).
@@ -1619,8 +1624,9 @@ private:
                 for (const auto& f : reg.features)
                     if (f.product == product && grants(*e, f.id)) labels.push_back(f.label.empty() ? f.id : f.label);
                 if (labels.empty()) continue;
-                std::string t = "**" + product + "** (" + std::to_string(labels.size()) + ") : " + join(labels, ", ");
-                b.lines.push_back({.icon = ui::Icon::Module, .text = t});
+                std::size_t all = 0;
+                for (const auto& f : reg.features) all += f.product == product && !f.retired ? 1 : 0;
+                b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + product + "** " + std::to_string(labels.size()) + " sur " + std::to_string(all)});
                 if (b.lines.size() == 4) break;
             }
             if (b.lines.empty()) b.lines.push_back({.icon = ui::Icon::Info, .text = "rien : coche ses fonctionnalit\xC3\xA9s dans la fiche"});
@@ -1633,8 +1639,8 @@ private:
             if (!e->promoPrice.empty())
                 b.lines.push_back({.icon = ui::Icon::Star, .text = "r\xC3\xA9" "duction **" + e->promoPrice + "**" + (e->promoUntil ? " jusqu'au " + dateFr(e->promoUntil) : std::string())});
             b.lines.push_back({.icon = ui::Icon::History, .text = "en vente : **" + saleCell(*e) + "**", .tone = e->retired ? ui::Tone::Muted : ui::Tone::None});
-            b.lines.push_back({.icon = ui::Icon::Settings, .text = "**" + std::to_string(e->maxDevices) + "** PC \xC2\xB7 " + daysText(e->durationDays) + " \xC2\xB7 gr\xC3\xA2" "ce " +
-                                                                std::to_string(e->offlineGraceDays) + " j \xC2\xB7 " + lic::licenseTypeLabel(e->type)});
+            b.lines.push_back({.icon = ui::Icon::Station, .text = "**" + std::to_string(e->maxDevices) + "** PC \xC2\xB7 " + daysText(e->durationDays)});
+            b.lines.push_back({.icon = ui::Icon::Settings, .text = lic::licenseTypeLabel(e->type) + " \xC2\xB7 gr\xC3\xA2" "ce " + std::to_string(e->offlineGraceDays) + " j"});
             card->addBox(std::move(b));
         }
         {
@@ -1643,16 +1649,16 @@ private:
             std::set<std::string> clients;
             for (const auto& lid : used)
                 if (const LicenceEntry* l = ws().licence(lid)) clients.insert(l->licence.customer);
-            ui::UnfoldCard::Line l{.icon = ui::Icon::Document,
-                                   .text = "**" + std::to_string(used.size()) + "** en cours chez **" + std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")};
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "**" + std::to_string(used.size()) + "** en cours"};
             l.link = [this, id] { goTo("licences", "offre:" + id); };
             b.lines.push_back(std::move(l));
+            b.lines.push_back({.icon = ui::Icon::User, .text = "chez **" + std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")});
             const lic::Seconds last = ws().lastLicenceEnd(id);
-            if (last > 0) b.lines.push_back({.icon = ui::Icon::History, .text = "la derni\xC3\xA8re finit le " + dateFr(last)});
-            else if (last < 0) b.lines.push_back({.icon = ui::Icon::History, .text = "une licence est sans fin"});
+            if (last > 0) b.lines.push_back({.icon = ui::Icon::History, .text = "jusqu'au " + dateFr(last)});
+            else if (last < 0) b.lines.push_back({.icon = ui::Icon::History, .text = "une est sans fin"});
             std::size_t options = 0;
             for (const auto& o : reg.options) options += o.offeredTo(id) && !o.retired ? 1 : 0;
-            ui::UnfoldCard::Line o{.icon = ui::Icon::Star, .text = "**" + std::to_string(options) + "** option" + (options > 1 ? "s" : "") + " propos\xC3\xA9" "e" + (options > 1 ? "s" : "")};
+            ui::UnfoldCard::Line o{.icon = ui::Icon::Star, .text = "**" + std::to_string(options) + "** option" + (options > 1 ? "s" : "")};
             if (options) o.link = [this, id] { goTo("options", "offre:" + id); };
             b.lines.push_back(std::move(o));
             card->addBox(std::move(b));
@@ -1673,7 +1679,7 @@ private:
             pair("Retir\xC3\xA9" "e", o->retired ? "oui" : "non", e->retired ? "oui" : "non");
             if (!b.table.empty()) card->addBox(std::move(b));
         }
-        addCurve(*card, "EN COURS, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.edition == id; }));
+        addCurve(*card, "EN COURS \xC2\xB7 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.edition == id; }));
         card->addButton("Voir ses licences", "editions.depliage.licences", ui::Icon::GoTo, [this, id] { goTo("licences", "offre:" + id); });
         addSigner(*card);
         return card;
@@ -1917,7 +1923,7 @@ protected:
 
     void layoutContent(const gfx::Rect& area) override {
         const float pw = std::clamp(area.w * 0.36f, 360.f, 500.f);
-        table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
+        table_->setBounds(placeBar({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h}));   // 1.47.0 : la barre dessus
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 110.f;
         float y = panel_.y + 32.f + 10.f;
@@ -2237,9 +2243,9 @@ private:
         auto card = std::make_unique<ui::UnfoldCard>("fonctionnalites.depliage");
         {
             ui::UnfoldCard::Box b{.title = "CE QU'ELLE EST"};
-            b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + f->label + "** \xC2\xB7 " + f->product, .tone = f->retired ? ui::Tone::Muted : ui::Tone::None});
-            b.lines.push_back({.icon = ui::Icon::Code, .text = id, .mono = true});
-            for (const auto& l : f->limits) b.lines.push_back({.icon = ui::Icon::Settings, .text = "limite **" + l.id + "** : " + l.label});
+            b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + f->label + "**", .tone = f->retired ? ui::Tone::Muted : ui::Tone::None});
+            b.lines.push_back({.icon = ui::Icon::Layers, .text = f->product});
+            for (const auto& l : f->limits) b.lines.push_back({.icon = ui::Icon::Settings, .text = "limite **" + l.id + "**"});
             if (f->limits.empty()) b.lines.push_back({.icon = ui::Icon::Settings, .text = "sans limite nomm\xC3\xA9" "e"});
             card->addBox(std::move(b));
         }
@@ -2270,13 +2276,12 @@ private:
                     ++n;
                     clients.insert(l.licence.customer);
                 }
-            b.lines.push_back({.icon = ui::Icon::Document,
-                               .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s" : "") + " en cours l'" + (n > 1 ? "ont" : "a") + ", chez **" +
-                                       std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")});
-            if (f->retired) b.lines.push_back({.icon = ui::Icon::Info, .text = "retir\xC3\xA9" "e : les licences sign\xC3\xA9" "es la gardent jusqu'\xC3\xA0 leur fin", .tone = ui::Tone::Muted});
+            b.lines.push_back({.icon = ui::Icon::Document, .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s" : "") + " en cours"});
+            b.lines.push_back({.icon = ui::Icon::User, .text = "chez **" + std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")});
+            if (f->retired) b.lines.push_back({.icon = ui::Icon::Info, .text = "retir\xC3\xA9" "e : elles la gardent", .tone = ui::Tone::Muted});
             card->addBox(std::move(b));
         }
-        addCurve(*card, "LICENCES QUI L'ONT, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.grant(id) != nullptr; }));
+        addCurve(*card, "LICENCES \xC2\xB7 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.grant(id) != nullptr; }));
         addSigner(*card);
         return card;
     }
@@ -2531,7 +2536,7 @@ protected:
 
     void layoutContent(const gfx::Rect& area) override {
         const float pw = std::clamp(area.w * 0.38f, 380.f, 520.f);
-        table_->setBounds({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h});
+        table_->setBounds(placeBar({area.x, area.y, std::max(120.f, area.w - pw - 12.f), area.h}));   // 1.47.0 : la barre dessus
         panel_ = {area.right() - pw, area.y, pw, area.h};
         const float px = panel_.x + 12.f, pw2 = panel_.w - 24.f, lw = 110.f;
         float y = panel_.y + 32.f + 10.f;
@@ -2965,7 +2970,8 @@ private:
                     b.lines.push_back({.icon = ui::Icon::Module, .text = "et " + std::to_string(o->features.size() - 4) + " autre(s)"});
                     break;
                 }
-                b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + (f ? f->label : g.id) + "**" + (f ? " \xC2\xB7 " + f->product : std::string())});
+                b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + (f ? f->label : g.id) + "**"});
+                if (f) b.lines.push_back({.icon = ui::Icon::Layers, .text = f->product});
             }
             if (b.lines.empty()) b.lines.push_back({.icon = ui::Icon::Info, .text = "rien : coche ce qu'elle ouvre dans la fiche", .tone = ui::Tone::Warning});
             card->addBox(std::move(b));
@@ -2974,22 +2980,23 @@ private:
             ui::UnfoldCard::Box b{.title = "SES DUR\xC3\x89" "ES ET PRIX"};
             for (const auto& d : o->durations)
                 b.lines.push_back({.icon = ui::Icon::History, .text = "**" + (d.price.empty() ? std::string("sur demande") : d.price) + "** \xC2\xB7 " + durationLabel(d.days)});
-            b.lines.push_back({.icon = ui::Icon::Star, .text = o->trialDays > 0 ? "essai offert : **" + std::to_string(o->trialDays) + " j** (une fois par client)" : std::string("pas d'essai")});
+            b.lines.push_back({.icon = ui::Icon::Star, .text = o->trialDays > 0 ? "essai offert : **" + std::to_string(o->trialDays) + " j**" : std::string("pas d'essai")});
             card->addBox(std::move(b));
         }
         {
             ui::UnfoldCard::Box b{.title = "O\xC3\x99 ELLE EST PROPOS\xC3\x89" "E"};
-            b.lines.push_back({.icon = ui::Icon::Layers, .text = "aux offres : **" + (o->editions.empty() ? std::string("toutes") : join(o->editions, ", ")) + "**"});
-            b.lines.push_back({.icon = ui::Icon::Globe, .text = o->shop ? std::string("dans la boutique des Studios") : std::string("hors de la boutique des Studios"),
-                               .check = o->shop});
+            if (o->editions.empty()) b.lines.push_back({.icon = ui::Icon::Layers, .text = "**toutes** les offres"});
+            for (std::size_t k = 0; k < o->editions.size() && k < 3; ++k)
+                b.lines.push_back({.icon = ui::Icon::Layers, .text = "offre **" + o->editions[k] + "**" + (k == 2 && o->editions.size() > 3 ? " +" + std::to_string(o->editions.size() - 3) : std::string())});
+            b.lines.push_back({.icon = ui::Icon::Globe, .text = o->shop ? std::string("en boutique") : std::string("hors boutique"), .check = o->shop});
             const int n = inUse(id);
-            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s l'ont" : " l'a") + " en ce moment"};
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s" : "") + " l'" + (n > 1 ? "ont" : "a")};
             if (n) l.link = [this, id] { goTo("licences", "option:" + id); };
             b.lines.push_back(std::move(l));
             if (o->retired) b.lines.push_back({.icon = ui::Icon::Info, .text = "retir\xC3\xA9" "e : plus propos\xC3\xA9" "e", .tone = ui::Tone::Muted});
             card->addBox(std::move(b));
         }
-        addCurve(*card, "LICENCES AVEC L'OPTION, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds t) {
+        addCurve(*card, "LICENCES \xC2\xB7 12 MOIS", weekly([id](const LicenceEntry& l, Seconds t) {
                      for (const auto& x : l.licence.options)
                          if (x.id == id && x.activeAt(t, l.licence.expiresAt)) return true;
                      return false;

@@ -209,6 +209,51 @@ private:
     bool        selected_{false};
 };
 
+// LA CARTE D'UN GRAPHIQUE DONT LES LIGNES TIENNENT (jamais d'ellipse, << le texte sort du cadre >>) : la valeur, l'ecart, puis
+// la premiere des comparaisons proposees qui tient sur la ligne (la plus longue d'abord) ; sinon sans l'ecart ; sinon sans
+// comparaison. La precision du titre : la premiere qui tient, sinon aucune. Choisi a chaque mise en page (sa largeur).
+class FitCard : public ch::ChartCard {
+public:
+    FitCard(std::string id, std::string title, std::string small = {});
+    void setText(std::string value, ch::Delta delta = {}, std::vector<std::string> compares = {});
+    void setText(std::string value, ch::Delta delta, std::string compare) {
+        setText(std::move(value), delta, std::vector<std::string>{std::move(compare)});
+    }
+    void setSmalls(std::string title, std::vector<std::string> smalls);
+    void setSmalls(std::string title, std::string small) { setSmalls(std::move(title), std::vector<std::string>{std::move(small)}); }
+    // Ce qui est montre (les essais).
+    [[nodiscard]] const std::string& shownCompare() const noexcept { return shownCompare_; }
+    [[nodiscard]] bool deltaShown() const noexcept { return deltaShown_; }
+
+protected:
+    void onLayout() override;
+
+private:
+    void apply();
+    std::string              text_, heading_;
+    ch::Delta                delta_{};
+    std::vector<std::string> compares_, smalls_;
+    std::string              applied_, shownCompare_;
+    bool                     deltaShown_{false};
+};
+
+// UNE LISTE DE BARRES DONT LES LIBELLES NE SONT JAMAIS COUPES : la place manque pour le libelle, la valeur et la colonne
+// discrete (<< 21 cmd >>, << 14 % >>) - la colonne discrete s'efface (de toutes les lignes) ; le reste comme BarList.
+class FitBarList : public ch::BarList {
+public:
+    using ch::BarList::BarList;
+    void setData(ch::BarListData data);   // cache celui de BarList : les donnees entieres
+    [[nodiscard]] bool extrasShown() const noexcept { return extras_ == 1; }
+
+protected:
+    void onLayout() override;
+
+private:
+    void            apply();
+    ch::BarListData full_{};
+    int             extras_{-1};   // -1 pas encore pose, 1 montrees, 0 effacees
+};
+
 // Une carte simple (le fond blanc, le trait, l'ombre de la maquette).
 void paintCard(gfx::IRenderer& r, const ui::Theme& th, const gfx::Rect& b);
 // Un bandeau (avertissement : ambre ; info : bleu) avec son icone et ses lignes ; rend sa hauteur.
