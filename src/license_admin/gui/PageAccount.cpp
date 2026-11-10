@@ -83,7 +83,7 @@ const std::vector<PowerInfo>& powerInfos() {
     };
     return v;
 }
-const PowerInfo kShopPower{"boutique", "livrer une commande pay\xC3\xA9" "e, la marquer \xC3\xA0 revoir (il faut Accepter une demande et Cr\xC3\xA9" "er une licence)",
+const PowerInfo kShopPower{"boutique", "livrer, revoir une commande pay\xC3\xA9" "e (avec Accepter et Cr\xC3\xA9" "er)",
                            {"commande_livrer", "commande_revoir"}};
 
 // Une ligne de l'etat du compte.

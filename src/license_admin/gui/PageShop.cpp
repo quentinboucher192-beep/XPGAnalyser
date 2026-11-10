@@ -483,6 +483,15 @@ protected:
         // 1.46.1 : une ligne de plus dans la carte Stripe (les produits chez Stripe)
         stripeRect_ = {x0_, y, cardW, 170.f};
         saleRect_ = {x0_ + cardW + 16.f, y, cardW, 170.f};
+        {   // 1.47.0 : a 1100 px, << Tableau de bord Stripe >> (le libelle entier en infobulle)
+            const std::string full = "Ouvrir mon tableau de bord Stripe", brief = "Tableau de bord Stripe";
+            const float pad = buttonWidth(*dashboard_, 0.f) - ui::measureWidth(dashboard_->text(), gfx::FontId{16});
+            const std::string want = pad + ui::measureWidth(full, gfx::FontId{16}) <= cardW - buttonWidth(*connect_, 150.f) - 48.f ? full : brief;
+            if (dashboard_->text() != want) {
+                dashboard_->setText(want);
+                dashboard_->setTooltip(want == full ? std::string() : full);
+            }
+        }
         const float cw = buttonWidth(*connect_, 150.f), dbw = std::min(cardW - cw - 48.f, buttonWidth(*dashboard_, 200.f));
         connect_->setBounds({stripeRect_.x + 18.f, stripeRect_.bottom() - 50.f, cw, 34.f});
         dashboard_->setBounds({stripeRect_.x + 18.f + cw + 10.f, stripeRect_.bottom() - 50.f, std::max(120.f, dbw), 34.f});
@@ -630,6 +639,10 @@ private:
         return "Tes produits ne se voient pas dans Stripe : " + k.message;
     }
 
+    // 1.47.0 : la phrase entiere si elle tient, sinon sa forme courte (raccourcie s'il le faut).
+    static std::string fitOr(const gfx::IRenderer& r, const std::string& full, const std::string& brief, gfx::FontId f, float w) {
+        return r.measure(full, f).width <= w ? full : fit(r, brief, f, w);
+    }
     void paintSale(const ui::PaintContext& ctx) {
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
@@ -638,9 +651,11 @@ private:
         r.drawText({x, saleRect_.y + 16.f}, "Vente en ligne", gfx::semibold(kF16), c.text);
         const float tx = x + 52.f, tw = saleRect_.right() - 18.f - tx;
         r.drawText({tx, saleRect_.y + 44.f}, "Vendre en ligne", gfx::semibold(kF14), c.text);
-        r.drawText({tx, saleRect_.y + 63.f}, fit(r, "Les Studios montrent \xC2\xAB Acheter \xE2\x80\x94 montant TTC \xC2\xBB sur ce qui est en vente.", kF12, tw), kF12, c.textMuted);
+        r.drawText({tx, saleRect_.y + 63.f}, fitOr(r, "Les Studios montrent \xC2\xAB Acheter \xE2\x80\x94 montant TTC \xC2\xBB sur ce qui est en vente.",
+                                                              "Les Studios montrent \xC2\xAB Acheter \xE2\x80\x94 montant TTC \xC2\xBB.", kF12, tw), kF12, c.textMuted);
         r.drawText({tx, saleRect_.y + 86.f}, "Livrer seul les commandes pay\xC3\xA9" "es", gfx::semibold(kF14), c.text);
-        r.drawText({tx, saleRect_.y + 105.f}, fit(r, "L'Admin ouvert signe et d\xC3\xA9pose la licence d\xC3\xA8s le paiement (sinon : Commandes \xE2\x80\xBA D\xC3\xA9livrer).", kF12, tw), kF12,
+        r.drawText({tx, saleRect_.y + 105.f}, fitOr(r, "L'Admin ouvert signe et d\xC3\xA9pose la licence d\xC3\xA8s le paiement (sinon : Commandes \xE2\x80\xBA D\xC3\xA9livrer).",
+                                                               "L'Admin ouvert livre d\xC3\xA8s le paiement (sinon : Commandes).", kF12, tw), kF12,
                    c.textMuted);
         std::string st;
         Color sc = c.textMuted;

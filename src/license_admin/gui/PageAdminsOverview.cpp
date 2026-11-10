@@ -35,7 +35,7 @@ constexpr FontId kF11{11}, kF12{12}, kF13{13}, kF14{14};
 const FontId kB12 = gfx::semibold(kF12), kB13 = gfx::semibold(kF13), kB14 = gfx::semibold(kF14);
 
 const char* const kHeads[8] = {"ADMIN", "ACTIONS", "LICENCES", "DEMANDES", "D\xC3\x89LAI MOY.", "MONTANT", "DERNI\xC3\x88RE ACTION", "\xC3\x89TAT"};
-const float kColShare[8] = {0.21f, 0.17f, 0.075f, 0.095f, 0.09f, 0.11f, 0.15f, 0.10f};
+const float kColShare[8] = {0.20f, 0.15f, 0.095f, 0.095f, 0.09f, 0.11f, 0.16f, 0.10f};   // 1.47.0 : LICENCES entier a 1100 px
 
 std::string stateOf(const Person& p) {
     if (p.kind == Person::Kind::Pending) return "En attente";
@@ -108,7 +108,7 @@ public:
         };
         bar_ = &adoptIn(*this, std::make_unique<ui::FilterBar>("admins.barre", std::move(fields), "admins.recherche"));
         bar_->setNoun("admins");
-        bar_->searchField().setPlaceholder("Chercher un admin, un PC, une cl\xC3\xA9\xE2\x80\xA6");
+        bar_->searchField().setPlaceholder("Admin, PC ou cl\xC3\xA9\xE2\x80\xA6");
         ui::FilterBar::Source src;
         src.rows = [this] { return d_->people.size(); };
         src.text = [this](std::size_t row, std::size_t field) { return cellText(row, field); };
@@ -487,10 +487,26 @@ protected:
         return cy - y + lineH;
     }
 
+    // 1.47.0 : un texte raccourci (une derniere action, un en-tete a 1100 px) se lit en entier sous la souris. Les
+    // dessins de la vue passent par ce text() (il cache celui d'AdminsBoard) : il note la place du texte coupe.
+    float text(gfx::IRenderer& r, float x, float y, const std::string& s, FontId f, Color c, float w = 1e9f) const {
+        const float tw = adminsboard::text(r, x, y, s, f, c, w);
+        if (w < 1e8f && !s.empty() && r.measure(s, f).width > w + 0.5f) cut_.push_back({Rect{x, y - 3.f, std::max(tw, 8.f), 20.f}, s});
+        return tw;
+    }
+    [[nodiscard]] bool hasTooltip() const override { return !cut_.empty() || ScrolledView::hasTooltip(); }
+    [[nodiscard]] std::string liveTooltip(gfx::Point m) const override {
+        if (viewport().contains(m))
+            for (auto it = cut_.rbegin(); it != cut_.rend(); ++it)
+                if (it->first.contains(m)) return it->second;
+        return ScrolledView::liveTooltip(m);
+    }
+
     // ======================================================================== le dessin
     void draw(const ui::PaintContext& ctx) override {
         auto& r = ctx.r;
         const auto& th = ctx.theme;
+        cut_.clear();
         r.pushClip(viewport());
         for (int i = 0; i < 6 && i < static_cast<int>(tiles_.size()); ++i) paintTile(ctx, i, tiles_[static_cast<std::size_t>(i)]);
         // ---- le classement ----
@@ -938,6 +954,7 @@ private:
     Rect                      panelFigs_{}, chartBox_{}, recentBox_{};
     float                     rightsTop_{-1.f}, buttonsY_{0}, hintX_{0}, noteY_{0};
     bool                      showHint_{false};
+    mutable std::vector<std::pair<Rect, std::string>> cut_;   // les textes raccourcis du dernier dessin (l'infobulle)
     core::ConnectionScope     links_;
 };
 

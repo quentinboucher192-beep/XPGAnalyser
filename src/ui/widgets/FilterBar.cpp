@@ -1059,6 +1059,8 @@ void FilterBar::syncChips() {
     }
     const std::string current = currentSavedName();
     savedBtn_->setText(current.empty() ? std::string("Mes filtres") : current);
+    savedBtn_->setTooltip(current.empty() ? std::string("Tes filtres de cette liste, enregistr\xC3\xA9s sur ce PC")
+                                          : "Mes filtres : \xC2\xAB " + current + " \xC2\xBB");
 }
 
 void FilterBar::layoutRow(float width, std::vector<Placed>* out, float* height) const {
@@ -1068,12 +1070,12 @@ void FilterBar::layoutRow(float width, std::vector<Placed>* out, float* height) 
     bool clearShown = state_.active();
     const float clearW = static_cast<const Chip*>(clear_)->width();
     float countW = measureWidth(countText(), gfx::semibold(kSmall)) + 8.f;
-    // 1.47.0 : etroite (la liste des PC d'une fiche), rien ne se chevauche - la recherche cede d'abord (jusqu'a 120 px),
-    // puis le compte s'en va, puis Effacer (chaque puce garde sa croix), puis Mes filtres se raccourcit.
+    // 1.47.0 : etroite (la liste des PC d'une fiche), rien ne se chevauche - la recherche cede d'abord (jusqu'a 150 px),
+    // puis le compte s'en va, puis Effacer (chaque puce garde sa croix), puis Mes filtres n'est plus que l'etoile.
     const auto room = [&] { return width - savedW - (clearShown ? clearW + 8.f : 0.f) - (countW > 0.f ? countW + 8.f : 0.f) - 10.f; };
-    if (room() < 120.f) countW = 0.f;
-    if (room() < 120.f) clearShown = false;
-    if (room() < 120.f) savedW = std::max(40.f, width - 130.f);
+    if (room() < 150.f) countW = 0.f;
+    if (room() < 150.f) clearShown = false;
+    if (room() < 150.f) savedW = 44.f;   // l'etoile seule (son nom en infobulle)
     const float searchW = std::max(std::min(100.f, width), std::min(std::clamp(width * 0.2f, 170.f, 250.f), room()));
     float right = x0 + width - savedW;
     if (out) out->push_back({savedBtn_, {right, y0 + 1.f, savedW, kRowH - 2.f}});
