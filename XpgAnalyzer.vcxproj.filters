@@ -208,6 +208,12 @@
     <ClCompile Include="src\menu\MenuManager.cpp">
       <Filter>menu</Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\Charts.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\ChartsMore.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\ui\widgets\CodeCommands.cpp">
       <Filter>ui\widgets</Filter>
     </ClCompile>
@@ -1909,6 +1915,21 @@
     <ClCompile Include="src\ui\widgets\CrashReport.cpp">
       <Filter></Filter>
     </ClCompile>
+    <ClCompile Include="src\ui\widgets\FilterBar.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\Globe.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\GlobeLists.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\ListMenu.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ui\widgets\UnfoldCard.cpp">
+      <Filter>ui\widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\ReportWindow.cpp">
       <Filter></Filter>
     </ClCompile>
@@ -2181,6 +2202,9 @@
     </ClInclude>
     <ClInclude Include="src\menu\MenuManager.hpp">
       <Filter>menu</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\Charts.hpp">
+      <Filter>ui\widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\ui\widgets\ColorPalette.hpp">
       <Filter>ui\widgets</Filter>
@@ -3706,6 +3730,21 @@
     <ClInclude Include="src\ui\widgets\CrashReport.hpp">
       <Filter></Filter>
     </ClInclude>
+    <ClInclude Include="src\ui\widgets\FilterBar.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\Globe.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\GlobeLists.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\ListMenu.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\ui\widgets\UnfoldCard.hpp">
+      <Filter>ui\widgets</Filter>
+    </ClInclude>
     <ClInclude Include="src\app\ReportWindow.hpp">
       <Filter></Filter>
     </ClInclude>
@@ -3862,6 +3901,9 @@
     <ClInclude Include="src\license_admin\ArchiveSync.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\JournalStats.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\KeyBackup.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
@@ -3871,13 +3913,37 @@
     <ClInclude Include="src\license_admin\ServiceClient.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\ServiceConnection.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\ServiceDeploy.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
     <ClInclude Include="src\license_admin\Shop.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\Stats.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\AdminsBoard.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\gui\AdminsKit.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\Derogation.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\GlobeBoard.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\GlobeStats.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\ListKit.hpp">
+      <Filter>license_admin\gui</Filter>
+    </ClInclude>
+    <ClInclude Include="src\license_admin\gui\StatsKit.hpp">
       <Filter>license_admin\gui</Filter>
     </ClInclude>
   </ItemGroup>

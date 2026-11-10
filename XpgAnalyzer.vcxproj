@@ -375,6 +375,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\Syntax.cpp" />
     <ClCompile Include="src\ui\Theme.cpp" />
     <ClCompile Include="src\ui\Widget.cpp" />
+    <ClCompile Include="src\ui\widgets\Charts.cpp" />
+    <ClCompile Include="src\ui\widgets\ChartsMore.cpp" />
     <ClCompile Include="src\ui\widgets\CodeCommands.cpp" />
     <ClCompile Include="src\ui\widgets\ColorPalette.cpp" />
     <ClCompile Include="src\ui\widgets\DatePicker.cpp" />
@@ -768,6 +770,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\ui\NoveltyMarks.cpp" />
     <ClCompile Include="src\ui\Zoom.cpp" />
     <ClCompile Include="src\ui\widgets\CrashReport.cpp" />
+    <ClCompile Include="src\ui\widgets\FilterBar.cpp" />
+    <ClCompile Include="src\ui\widgets\Globe.cpp" />
+    <ClCompile Include="src\ui\widgets\GlobeLists.cpp" />
+    <ClCompile Include="src\ui\widgets\ListMenu.cpp" />
+    <ClCompile Include="src\ui\widgets\UnfoldCard.cpp" />
     <ClCompile Include="src\app\ReportWindow.cpp" />
     <ClCompile Include="src\app\SessionDialogs.cpp" />
     <ClCompile Include="src\app\SessionMarks.cpp" />
@@ -1044,6 +1051,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\Syntax.hpp" />
     <ClInclude Include="src\ui\Theme.hpp" />
     <ClInclude Include="src\ui\Widget.hpp" />
+    <ClInclude Include="src\ui\widgets\Charts.hpp" />
     <ClInclude Include="src\ui\widgets\ColorPalette.hpp" />
     <ClInclude Include="src\ui\widgets\DatePicker.hpp" />
     <ClInclude Include="src\ui\widgets\Containers.hpp" />
@@ -1382,6 +1390,11 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\ui\widgets\ScrollBar.hpp" />
     <ClInclude Include="src\ui\widgets\TrailSymbols.hpp" />
     <ClInclude Include="src\ui\widgets\CrashReport.hpp" />
+    <ClInclude Include="src\ui\widgets\FilterBar.hpp" />
+    <ClInclude Include="src\ui\widgets\Globe.hpp" />
+    <ClInclude Include="src\ui\widgets\GlobeLists.hpp" />
+    <ClInclude Include="src\ui\widgets\ListMenu.hpp" />
+    <ClInclude Include="src\ui\widgets\UnfoldCard.hpp" />
     <ClInclude Include="src\app\ReportWindow.hpp" />
     <ClInclude Include="src\app\SessionDialogs.hpp" />
     <ClInclude Include="src\app\SessionMarks.hpp" />
@@ -1438,11 +1451,14 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\deploy\TlsIdentity.hpp" />
     <ClInclude Include="src\license_admin\Admin.hpp" />
     <ClInclude Include="src\license_admin\ArchiveSync.hpp" />
+    <ClInclude Include="src\license_admin\JournalStats.hpp" />
     <ClInclude Include="src\license_admin\KeyBackup.hpp" />
     <ClInclude Include="src\license_admin\Mail.hpp" />
     <ClInclude Include="src\license_admin\ServiceClient.hpp" />
+    <ClInclude Include="src\license_admin\ServiceConnection.hpp" />
     <ClInclude Include="src\license_admin\ServiceDeploy.hpp" />
     <ClInclude Include="src\license_admin\Shop.hpp" />
+    <ClInclude Include="src\license_admin\Stats.hpp" />
     <ClInclude Include="src\licensing\Admins.hpp" />
     <ClInclude Include="src\licensing\Documents.hpp" />
     <ClInclude Include="src\licensing\Gateway.hpp" />
@@ -1456,9 +1472,15 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\licensing\Store.hpp" />
     <ClInclude Include="src\licensing\TestPublisherKey.hpp" />
     <ClInclude Include="src\licensing\Time.hpp" />
+    <ClInclude Include="src\license_admin\gui\AdminsBoard.hpp" />
     <ClInclude Include="src\license_admin\gui\AdminsKit.hpp" />
+    <ClInclude Include="src\license_admin\gui\Derogation.hpp" />
+    <ClInclude Include="src\license_admin\gui\GlobeBoard.hpp" />
+    <ClInclude Include="src\license_admin\gui\GlobeStats.hpp" />
+    <ClInclude Include="src\license_admin\gui\ListKit.hpp" />
     <ClInclude Include="src\license_admin\gui\Page.hpp" />
     <ClInclude Include="src\license_admin\gui\Shell.hpp" />
+    <ClInclude Include="src\license_admin\gui\StatsKit.hpp" />
     <ClInclude Include="src\license_admin\gui\Workspace.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
