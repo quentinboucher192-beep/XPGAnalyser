@@ -615,6 +615,11 @@ protected:
                            std::to_string(view_.rows.size()) + (view_.rows.size() > 1 ? " actions" : " action");
         if (since) lead += " depuis le " + dateFr(since);
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
+        // 1.47.0 : trop long pour la place (les boutons a droite) - la phrase courte, plutot qu'un << ... >> sur le compte.
+        if (r.measure(lead, kF14).width > leadRight_ - x0_ - 12.f) {
+            const std::string head = "Chaque action de chaque admin, sign\xC3\xA9" "e par sa cl\xC3\xA9 et cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : ";
+            lead = "Sign\xC3\xA9" "es et cha\xC3\xAEn\xC3\xA9" "es : " + lead.substr(head.size());
+        }
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, leadRight_ - x0_ - 12.f), kF14, c.textMuted);
         cardBox(r, th, card_);
         r.fillRect({card_.x + 1.f, rowsTop_ - 1.f, card_.w - 2.f, 1.f}, c.gridLine);
