@@ -112,6 +112,8 @@ using PagePtr = std::unique_ptr<Page>;
 //  1.47.0 : "globe"       Statistiques > Le globe (une sous-page ; le service) PageStatsGlobe.cpp
 //  1.47.0 : "graphes-essai" la galerie des graphiques (cachee : --page seulement ; donnees d'essai) PageChartsGallery.cpp
 //  1.45.0 : le dialogue << Deployer le service >> (Service en ligne, le tableau de bord) DeployDialog.cpp
+//  1.47.0 : "compte"          Mon compte (tous les roles : la cle, l'etat, les pouvoirs) PageAccount.cpp
+//  1.47.0 : "demandes-admins" Demandes d'admin (l'admin+ : la liste, en accepter plusieurs d'un coup) PageAdminRequests.cpp
 PagePtr makeDashboardPage(ShellHost host);
 PagePtr makeClientsPage(ShellHost host);
 PagePtr makeLicencesPage(ShellHost host);
@@ -136,6 +138,8 @@ PagePtr makeGlobePage(ShellHost host);     // 1.47.0 : "globe", Statistiques > L
 PagePtr makeStatsPage(ShellHost host);     // 1.47.0 : "statistiques" (planches 08, 09 ; PageStats.cpp)
 PagePtr makeClientCardPage(ShellHost host);   // 1.47.0 : "client", Clients > un client et ses courbes (planche 10 ; PageClientCard.cpp)
 PagePtr makeChartsGalleryPage(ShellHost host);   // 1.47.0 : cachee (--page graphes-essai)
+PagePtr makeAccountPage(ShellHost host);         // 1.47.0 : "compte", Mon compte (Securite ; PageAccount.cpp)
+PagePtr makeAdminRequestsPage(ShellHost host);   // 1.47.0 : "demandes-admins", Demandes d'admin (l'admin+ ; PageAdminRequests.cpp)
 
 // 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet
 // admin ; << Ses droits >> : cet admin choisi dans Droits ; << Voir la licence >> du journal : la licence choisie) - la page

@@ -188,7 +188,7 @@ const char* sectionBefore(const std::string& id) {
     if (id == "tableau") return "PILOTAGE";
     if (id == "editions") return "CATALOGUE";
     if (id == "boutique") return "VENTE EN LIGNE";   // 1.46.0 : la boutique et les commandes (Stripe)
-    if (id == "revocations") return "S\xC3\x89" "CURIT\xC3\x89";
+    if (id == "compte") return "S\xC3\x89" "CURIT\xC3\x89";   // 1.47.0 : << Mon compte >> en tete de Securite
     return nullptr;
 }
 
@@ -202,7 +202,7 @@ std::string sectionTitle(const std::string& pageId) {
         if (eid == "tableau") current = "Pilotage";
         else if (eid == "editions") current = "Catalogue";
         else if (eid == "boutique") current = "Vente en ligne";
-        else if (eid == "revocations") current = "S\xC3\xA9" "curit\xC3\xA9";
+        else if (eid == "compte") current = "S\xC3\xA9" "curit\xC3\xA9";   // 1.47.0
         if (eid == id) return current;
     }
     return {};
@@ -233,10 +233,10 @@ protected:
         // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre. 1.44.0 : les
         // demandes d'admin (Administrateurs) et les alertes pas encore vues (Journal des admins), ambre aussi.
         const std::string eid = e_.id;
-        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal" || eid == "commandes";   // 1.46.0 : a livrer
+        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal" || eid == "commandes" || eid == "demandes-admins";   // 1.46.0 : a livrer ; 1.47.0
         const int  count = eid == "demandes" ? shell_.pendingRequests()
                            : eid == "commandes" ? shell_.ordersToDeliver()
-                           : eid == "admins" ? shell_.pendingAdminRequests()
+                           : eid == "admins" || eid == "demandes-admins" ? shell_.pendingAdminRequests()
                            : eid == "journal" ? shell_.unseenAlerts()
                                               : count_;
         float badgeW = 0.f;
@@ -280,6 +280,18 @@ protected:
         if (hovered()) ctx.r.fillRoundedRect(r, kNightWhite.withAlpha(12), 8.f);
         ui::drawIcon(ctx.r, ui::Icon::Folder, {r.x + 8.f, r.y + (r.h - 15.f) * 0.5f, 15.f, 15.f}, kNightMuted);
         ctx.r.drawText({r.x + 30.f, r.y + (r.h - ctx.r.lineHeight(kF12)) * 0.5f}, fit(ctx.r, text(), kF12, r.w - 34.f), kF12, kNightMuted);
+    }
+};
+
+// 1.47.0 : le bloc d'identite du haut (le logo, << Camille - admin+ >>), cliquable : << Mon compte >>. Le Rail le dessine ;
+// le bouton ne montre que le survol.
+class IdentityButton final : public ui::Button {
+public:
+    IdentityButton() : ui::Button("Mon compte", "shell.compte") { setTooltip("Mon compte : ta cl\xC3\xA9, l'\xC3\xA9tat de ton compte, tes pouvoirs."); }
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        if (hovered()) ctx.r.fillRoundedRect(bounds(), kNightWhite.withAlpha(10), 10.f);
     }
 };
 
@@ -335,6 +347,9 @@ public:
         card_ = &static_cast<ServiceCard&>(addChild(std::make_unique<ServiceCard>(shell)));
         links += card_->clicked->connect([this] { shell_.navigate("service"); });
         folder_ = &static_cast<NightButton&>(addChild(std::make_unique<NightButton>("Dossier du poste", "shell.dossier")));
+        // 1.47.0 : le bloc d'identite (le logo, le nom, le role) mene a << Mon compte >>.
+        identity_ = &static_cast<IdentityButton&>(addChild(std::make_unique<IdentityButton>()));
+        links += identity_->clicked->connect([this] { shell_.navigate("compte"); });
         links += folder_->clicked->connect([this] { shell_.openFolder(shell_.workspace().folder()); });
         update();
     }
@@ -360,6 +375,7 @@ protected:
         int sections = 0, shown = 0;
         for (const auto& e : Shell::entries()) sections += sectionBefore(e.id) ? 1 : 0;
         for (auto* it : items_) shown += it->visibility() == ui::Visibility::Collapsed ? 0 : 1;   // 1.44.0 : selon le role
+        identity_->setBounds({b.x + 10.f, b.y + 14.f, b.w - 20.f, 52.f});   // 1.47.0 : le bloc d'identite
         const float top = b.y + 84.f, n = static_cast<float>(std::max(1, shown));
         const float needFull = n * 36.f + static_cast<float>(sections) * 30.f;
         const float room = b.bottom() - 12.f - top;
@@ -428,6 +444,7 @@ private:
     std::vector<NavItem*>  items_;
     ServiceCard*           card_{nullptr};
     NightButton*           folder_{nullptr};
+    IdentityButton*        identity_{nullptr};   // 1.47.0
     std::vector<std::pair<float, std::string>> captions_;
     float                  footerY_{0.f};
 };
@@ -911,9 +928,11 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
         {"boutique", "Boutique", ui::Icon::Globe, false},                 // 1.46.0 : Stripe, le catalogue (PageShop.cpp)
         {"commandes", "Commandes", ui::Icon::Mail, false},                // 1.46.0 : livrer, rembourser
+        {"compte", "Mon compte", ui::Icon::User, false},                  // 1.47.0 : qui je suis, ma cle, mes pouvoirs (PageAccount.cpp)
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
         // 1.44.0 : plusieurs admins (la maquette 1.43.0).
         {"admins", "Administrateurs", ui::Icon::User, false},
+        {"demandes-admins", "Demandes d'admin", ui::Icon::Import, false}, // 1.47.0 : l'admin+ seulement (PageAdminRequests.cpp)
         {"journal", "Journal des admins", ui::Icon::Task, false},         // l'admin+ seulement
         {"versions", "Versions", ui::Icon::Export, false},                // l'admin+ seulement (planche 07)
         {"service", "Service en ligne", ui::Icon::Refresh, false},        // 1.35.0 : a la place de Synchronisation GitHub
@@ -949,7 +968,9 @@ std::string Shell::parentOf(const std::string& pageId) {
     return pageId == "droits" ? std::string("admins") : std::string();
 }
 
-bool Shell::plusOnly(const std::string& pageId) { return pageId == "journal" || pageId == "droits" || pageId == "versions"; }
+bool Shell::plusOnly(const std::string& pageId) {
+    return pageId == "journal" || pageId == "droits" || pageId == "versions" || pageId == "demandes-admins";   // 1.47.0 : les demandes d'admin
+}
 
 bool Shell::pageAllowed(const std::string& pageId) const { return !plusOnly(pageId) || ws_->role() == Role::Plus; }
 
@@ -1041,6 +1062,8 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "historique") p = makeHistoryPage(h);
     else if (id == "securite") p = makeSecurityPage(h);
     else if (id == "admins") p = makeAdminsPage(h);     // 1.44.0
+    else if (id == "compte") p = makeAccountPage(h);           // 1.47.0 : PageAccount.cpp
+    else if (id == "demandes-admins") p = makeAdminRequestsPage(h);   // 1.47.0 : PageAdminRequests.cpp
     else if (id == "droits") p = makeRightsPage(h);
     else if (id == "journal") p = makeJournalPage(h);
     else if (id == "versions") p = makeVersionsPage(h);
