@@ -717,6 +717,7 @@ private:
     void revokeDerogation();
     // Un geste de gestion : l'admin+ tout de suite ; un admin, apres l'accord du service (sa derogation court).
     void managed(const std::string& action, const std::string& detail, std::function<void()> then);
+    void tickDerogation();
 
     ui::ScrollablePanel*            scroll_{nullptr};
     FlowBody*                       body_{nullptr};
@@ -2093,7 +2094,17 @@ void ServicePage::revokeDerogation() {
 }
 
 // ---------------------------------------------------------------------------------------------------- dessin
+// 1.47.0 : la derogation - le compte a rebours (chaque minute) ; finie : la page repasse d'elle-meme en lecture seule.
+void ServicePage::tickDerogation() {
+    const Seconds t = ws().now();
+    if (!ws().derogation().exists() || (ws().mayManageService() == lastManage_ && t / 60 == lastMinute_ / 60)) return;
+    lastMinute_ = t;
+    syncEnabled();
+    rebuild();
+}
+
 void ServicePage::onLayout() {
+    tickDerogation();   // 1.47.0 : avant de poser le corps (la page relue a la bonne heure)
     const auto r = bounds();
     const ui::Fonts f{};
     subtitle_ = wrapText("Ton service des licences (un Worker Cloudflare \xC3\xA0 ton nom) : il active les licences en ligne par un code, tient les licences "
@@ -2110,12 +2121,7 @@ void ServicePage::onPaint(const ui::PaintContext& ctx) {
         syncEnabled();
         rebuild();
     }
-    // 1.47.0 : la derogation - le compte a rebours (chaque minute) ; finie : la page repasse d'elle-meme en lecture seule.
-    if (const Seconds t = ws().now(); ws().derogation().exists() && (ws().mayManageService() != lastManage_ || t / 60 != lastMinute_ / 60)) {
-        lastMinute_ = t;
-        syncEnabled();
-        rebuild();
-    }
+    tickDerogation();   // 1.47.0
     auto& r = ctx.r;
     const auto& th = ctx.theme;
     const auto b = bounds();
