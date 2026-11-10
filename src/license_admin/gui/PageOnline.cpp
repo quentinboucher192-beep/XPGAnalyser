@@ -209,6 +209,7 @@ protected:
             items_[at].r = {x0, cardY, w, y - cardY};
         }
         contentH_ = y + scroll_ - b.y + 20.f;
+        bar_.place(b, contentH_);   // 1.46.0 : au bord droit de la page ; la molette sur toute la page
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -243,24 +244,15 @@ protected:
                 case Kind::Line: ctx.r.drawText({it.r.x, it.r.y}, it.text, it.font, ink(it.ink)); break;
             }
         }
-        // Plus bas que la page : une barre fine dit qu'on peut descendre (la molette).
-        const Rect b = bounds();
-        if (contentH_ > b.h + 1.f) {
-            const float frac = b.h / contentH_;
-            const float barH = std::max(30.f, b.h * frac);
-            const float barY = b.y + (b.h - barH) * (scroll_ / std::max(1.f, contentH_ - b.h));
-            ctx.r.fillRoundedRect({b.right() - 6.f, barY, 4.f, barH}, c.scrollbar, 2.f);
-        }
+        // Plus bas que la page : la barre dit qu'on peut descendre (1.46.0 : ui::ScrollArea - elle se tire et sa gouttiere
+        // se clique ; avant, elle ne suivait que la molette).
+        bar_.paint(ctx, scroll_);
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
-        if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
-            const float maxScroll = std::max(0.f, contentH_ - bounds().h);
-            const float next = std::clamp(scroll_ - w->dy * 48.f, 0.f, maxScroll);
-            if (next != scroll_) {
-                scroll_ = next;
-                invalidateLayout();
-            }
+        // La molette, le pouce tire (la souris tenue), la gouttiere cliquee.
+        if (bool moved = false; bar_.handle(*this, ev, scroll_, &moved)) {
+            if (moved) invalidateLayout();
             return ui::EventResult::Consumed;
         }
         return ui::EventResult::Ignored;
@@ -271,6 +263,7 @@ private:
     ui::Button*           go_{nullptr};
     std::vector<Item>     items_;
     float                 scroll_{0.f}, contentH_{0.f};
+    ui::ScrollArea        bar_;   // 1.46.0
     core::ConnectionScope links_;
 };
 

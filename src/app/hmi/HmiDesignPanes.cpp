@@ -877,17 +877,17 @@ void HmiStyleChooser::onPaint(const ui::PaintContext& ctx) {
                        ctx.theme.font.ui, ink);
     }
     ctx.r.popClip();
-    // Plus de lignes que de place : la position, a droite.
-    const float total = static_cast<float>(lines_.size()) * kChooserRow;
-    if (total > list.h + 0.5f && list.h > 0.f) {
-        const float th = std::max(16.f, list.h * list.h / total);
-        const float ty = list.y + (list.h - th) * (scroll_ / std::max(1.f, total - list.h));
-        ctx.r.fillRoundedRect({list.right() - 5.f, ty, 3.f, th}, c.scrollbar, 1.5f);
-    }
+    // Plus de lignes que de place : la position, a droite (1.46.0 : ui::ScrollArea - la barre se tire, sa gouttiere se clique).
+    bar_.wheel = false;   // la molette : trois lignes par cran (onEvent)
+    bar_.place(list, static_cast<float>(lines_.size()) * kChooserRow, list.h);
+    bar_.paint(ctx, scroll_);
 }
 
 ui::EventResult HmiStyleChooser::onEvent(const ui::InputEvent& ev) {
     if (!open_) return ui::EventResult::Ignored;
+    // 1.46.0 : la barre de la liste - le pouce tire (la souris tenue), la gouttiere cliquee.
+    bar_.place(listRect(), static_cast<float>(lines_.size()) * kChooserRow, listRect().h);
+    if (bar_.handle(*this, ev, scroll_)) return ui::EventResult::Consumed;
     const auto b = bounds();
     if (const auto* d = std::get_if<ui::MouseDown>(&ev)) {
         if (!b.contains(d->pos)) {         // un clic ailleurs : la liste se ferme, rien d'autre

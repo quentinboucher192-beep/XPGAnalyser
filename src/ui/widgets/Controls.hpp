@@ -118,6 +118,9 @@ namespace ui {
         [[nodiscard]] bool suggestionsOpen() const noexcept { return !suggestions_.empty(); }
         [[nodiscard]] const std::vector<Suggestion>& suggestions() const noexcept { return suggestions_; }
         [[nodiscard]] std::size_t suggestionIndex() const noexcept { return suggestionIndex_; }
+        // 1.46.0 (les essais) : la premiere ligne montree, et la barre de la liste (sa place au dernier dessin).
+        [[nodiscard]] std::size_t suggestionFirst() const noexcept { return suggestionFirst_; }
+        [[nodiscard]] const ScrollArea& suggestionBar() const noexcept { return suggestionBar_; }
         void openSuggestions();                      // Ctrl+Espace
         void closeSuggestions();
         bool acceptSuggestion(std::size_t index);
@@ -202,6 +205,7 @@ namespace ui {
         std::size_t             suggestionFirst_{ 0 };     // la premiere ligne montree
         mutable gfx::Rect       suggestionBox_{};
         mutable float           suggestionLegendH_{ 0.f };  // 1.11.2 : le pied de la liste (la legende)
+        ScrollArea              suggestionBar_;             // 1.46.0 : la barre de la liste (elle se tire)
         std::shared_ptr<char>   alive_{ std::make_shared<char>(0) };   // 1.12.16 : le choix rendu apres coup
         // 1.12.18 : le menu du clic droit (cree au premier clic droit) ; ouvert, la perte du
         // clavier (le menu le prend) n'est pas la fin de la saisie.

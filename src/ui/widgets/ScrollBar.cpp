@@ -6,6 +6,7 @@
 #include "../Theme.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace ui {
 
@@ -133,6 +134,56 @@ bool PaintedScrollBar::handle(Widget& owner, const InputEvent& ev, float& offset
     if (area_.w <= 0.f || area_.h <= 0.f) return false;
     return bar_.handle(owner, ev, area_, content_, viewport_, offset);
 }
+
+// ---- 1.46.0 : un volet qui defile lui-meme ----------------------------------------
+void ScrollArea::place(gfx::Rect area, float content, float viewport, gfx::Rect track) noexcept {
+    area_ = area;
+    content_ = std::max(0.f, content);
+    viewport_ = viewport > 0.f ? viewport : area.h;
+    track_ = (track.w > 0.f && track.h > 0.f) ? track : gfx::Rect{area.right() - kScrollBarThickness, area.y, kScrollBarThickness, area.h};
+}
+
+ScrollAxis ScrollArea::axis() const noexcept {
+    ScrollAxis a;
+    a.track = track_;
+    a.content = content_;
+    a.viewport = viewport_;
+    return a;
+}
+
+float ScrollArea::clamp(float offset) const noexcept { return std::clamp(offset, 0.f, maxOffset()); }
+
+bool ScrollArea::handle(Widget& owner, const InputEvent& ev, float& offset, bool* changed) {
+    const float was = offset;
+    const ScrollAxis a = axis();
+    // La souris rendue sans nous (le volet cache pendant le glisser, Widget::routeCapturedMouse) : le glisser est fini.
+    if (drag_.active() && !owner.holdsMouse()) (void)drag_.release(owner);
+    const auto done = [&](bool taken) {
+        if (changed) *changed = std::abs(offset - was) > 0.001f;
+        if (taken) owner.invalidate();
+        return taken;
+    };
+    if (const auto* m = std::get_if<MouseMove>(&ev)) {
+        const bool hot = drag_.active() || overThumb(a, offset, m->pos);
+        if (hot != hot_) {
+            hot_ = hot;
+            owner.invalidate();
+        }
+    }
+    // Le pouce et la gouttiere d'abord : pendant un glisser, la souris tenue arrive ici
+    // meme hors du volet (Widget::routeCapturedMouse).
+    if (drag_.handle(owner, a, ev, offset)) {
+        offset = clamp(offset);
+        return done(true);
+    }
+    if (const auto* w = std::get_if<MouseWheel>(&ev); w && wheel && w->dy != 0.f && area_.contains(w->pos) && a.needed()) {
+        offset = clamp(offset - w->dy * wheelStep);
+        return done(true);
+    }
+    return done(false);
+}
+
+void ScrollArea::paint(const PaintContext& ctx, float offset) const { paintScrollBar(ctx, axis(), clamp(offset), hot_, drag_.active()); }
 
 // ---- le widget --------------------------------------------------------------------
 ScrollBar::ScrollBar(std::string id, bool horizontal) : Widget(std::move(id)), horizontal_(horizontal) {}

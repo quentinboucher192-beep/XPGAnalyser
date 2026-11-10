@@ -36,6 +36,7 @@
 #include "../src/hmi/HmiPackage.hpp"
 #include "../src/license_admin/Admin.hpp"
 #include "../src/licensing/Licensing.hpp"
+#include "../src/licensing/Time.hpp"         // 1.46.0 : la fin d'une reduction (isoTime)
 #include "../src/app/Capture.hpp"            // 1.45.0 : encodePng (les captures d'essai)
 #include "../src/app/LicenceViews.hpp"       // 1.45.0 : les licences de ce PC, la capture et ses bulles
 #include "../src/app/hmi/HmiImages.hpp"      // 1.45.0 : les copies reduites (smooth)
@@ -180,6 +181,50 @@ bool writeCapture(const fs::path& p, int w, int h) {
 }
 
 bool near(float a, float b, float eps = 1.5f) { return std::abs(a - b) <= eps; }
+
+// 1.46.0 : un renderer qui mesure comme l'interface (ui::measureWidth) : la mise en page (sans renderer) et le dessin disent
+// la meme largeur - ce qui tient a la mise en page tient au dessin (les cartes des offres).
+struct UiRecorder final : gfx::IRenderer {
+    std::vector<std::string> texts;
+    void beginFrame(gfx::Color) override {}
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect&, gfx::Color, float) override {}
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view t, gfx::FontId, gfx::Color) override { texts.emplace_back(t); }
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId f) const override {
+        return {ui::measureWidth(t, f), ui::lineHeight(f), 0.8f * f.v, 0.2f * f.v};
+    }
+    float lineHeight(gfx::FontId f) const override { return ui::lineHeight(f); }
+    gfx::Size surfaceSize() const override { return {1600.f, 1000.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId f, float w) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w / (f.v * 0.5f))));
+    }
+    [[nodiscard]] bool saw(std::string_view what) const {
+        return std::any_of(texts.begin(), texts.end(), [&](const std::string& t) { return t.find(what) != std::string::npos; });
+    }
+    // Les textes dessines, a la suite (une ligne coupee en deux se relit entiere).
+    [[nodiscard]] std::string joined() const {
+        std::string all;
+        for (const auto& t : texts) all += t + " ";
+        return all;
+    }
+};
+
+// 1.46.0 : une variable d'environnement (vide : retiree).
+void setEnvVar(const char* name, const std::string& value) {
+#ifdef _WIN32
+    (void)_putenv_s(name, value.c_str());
+#else
+    if (value.empty()) unsetenv(name);
+    else setenv(name, value.c_str(), 1);
+#endif
+}
 
 lic::TrustedKey trustedOf(const lic::SigningKey& k) {
     lic::TrustedKey t;
@@ -672,18 +717,18 @@ int main(int argc, char** argv) {
             app::showLicenceWindow(mm, L::kTabRequest);
             frame();
             ui::Widget* licRoot = rootOf();
-            auto* tabs = licRoot ? dynamic_cast<ui::TabControl*>(licRoot->findById("dialog.licence.onglets")) : nullptr;
             auto* pcs = licRoot ? dynamic_cast<L::PcLicencesView*>(licRoot->findById("licence.demande.ce-pc")) : nullptr;
-            check(mm.depth() == 1 && app::licenceWindowOpen() && tabs && tabs->currentIndex() == static_cast<std::size_t>(L::kTabRequest) && pcs &&
+            // 1.46.0 : plus d'onglets - la rubrique montree (son fil d'Ariane)
+            check(mm.depth() == 1 && app::licenceWindowOpen() && app::licenceWindowSection() == L::kTabRequest && pcs &&
                       pcs->rows().size() == 1 && pcs->bounds().w > 0.f && pcs->bounds().h >= L::PcLicencesView::kHeader,
                   "Demander ma licence : << Les licences de ce PC >> en t\xC3\xAAte (la licence de ce PC)");
-            if (!tabs || !pcs) {
+            if (!pcs) {
                 std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
                 return 1;
             }
             if (auto* btn = button("licence.demande.ce-pc.regarder.1")) btn->clicked->emit();
-            check(tabs->currentIndex() == static_cast<std::size_t>(L::kTabMine), "Regarder : l'onglet Ma licence");
-            tabs->setCurrentIndex(static_cast<std::size_t>(L::kTabRequest));
+            check(app::licenceWindowSection() == L::kTabMine, "Regarder : la rubrique Ma licence");
+            app::showLicenceWindow(mm, L::kTabRequest);
             frame();
             if (auto* btn = button("licence.demande.ce-pc.liberer.1")) btn->clicked->emit();
             frame();
@@ -712,7 +757,7 @@ int main(int argc, char** argv) {
             check(mm.depth() == 2 && L::answerOpen() && !L::takeAnswer(), "la r\xC3\xA9ponse ouverte : la suivante attend sa fermeture");
             if (auto* btn = button("dialog.message.ok")) btn->clicked->emit();   // Voir ma licence
             frame();
-            check(mm.depth() == 1 && !L::answerOpen() && rootOf() == licRoot && tabs->currentIndex() == static_cast<std::size_t>(L::kTabMine),
+            check(mm.depth() == 1 && !L::answerOpen() && rootOf() == licRoot && app::licenceWindowSection() == L::kTabMine,
                   "Voir ma licence : la fen\xC3\xAAtre Licence d\xC3\xA9j\xC3\xA0 ouverte passe \xC3\xA0 Ma licence - pas une seconde par-dessus (" +
                       std::to_string(mm.depth()) + " fen\xC3\xAAtre(s))");
             const auto refused = L::takeAnswer();
@@ -720,8 +765,8 @@ int main(int argc, char** argv) {
             app::showLicenceWindow(mm, L::kTabEditions);
             app::showLicenceWindow(mm, L::kTabFeatures);
             frame();
-            check(mm.depth() == 1 && rootOf() == licRoot && tabs->currentIndex() == static_cast<std::size_t>(L::kTabFeatures),
-                  "redemand\xC3\xA9" "e deux fois : toujours une seule fen\xC3\xAAtre (sur le dernier onglet)");
+            check(mm.depth() == 1 && rootOf() == licRoot && app::licenceWindowSection() == L::kTabFeatures,
+                  "redemand\xC3\xA9" "e deux fois : toujours une seule fen\xC3\xAAtre (sur la derni\xC3\xA8re rubrique)");
 
             // -- quatre captures (une 2x : 3200 x 2000), leurs legendes, leurs bulles dans le repere 1600 x 1000
             const fs::path shots = base / "captures-1-45";
@@ -887,12 +932,423 @@ int main(int argc, char** argv) {
                       "la boutique : la pr\xC3\xA9" "c\xC3\xA9" "dente (la quatri\xC3\xA8me), et les licences de ce PC en t\xC3\xAAte");
                 ls::setAddressForTests(licensing::service::Address{});
             }
+            // ---- 1.46.0 : LE FIL D'ARIANE (plus d'onglets), L'ACCUEIL, MON PROFIL A PART, CHANGER DE FONCTIONNALITE EN GRAND (LES
+            //      BARREES COMPRISES), LES CARTES DES OFFRES SANS RIEN DE COUPE ----
+            std::printf("-- 1.46.0 : l'accueil et le fil d'Ariane, Mon profil a part, changer de fonctionnalite en grand, les cartes des offres\n");
+            {
+                // -- le modele : dix rubriques en quatre groupes ; Mon profil n'en est plus une
+                std::set<int> tabsSeen;
+                for (const auto& s : L::sections()) tabsSeen.insert(s.tab);
+                check(L::sections().size() == 10 && L::sectionGroups().size() == 4 && !L::sectionOf(L::kTabProfile) && tabsSeen.size() == 10 &&
+                          !tabsSeen.count(L::kTabProfile) && !tabsSeen.count(L::kTabHome),
+                      "dix rubriques en quatre groupes (Ma licence, Obtenir ou \xC3\xA9tendre, D\xC3\xA9" "couvrir, R\xC3\xA9glages) ; Mon profil n'en est plus une");
+                check(L::sectionByName("demander") == L::kTabRequest && L::sectionByName("Mes achats") == L::kTabPurchases &&
+                          L::sectionByName("mes-achats") == L::kTabPurchases && L::sectionByName("fonctionnalit\xC3\xA9s") == L::kTabFeatures &&
+                          L::sectionByName("\xC3\x89" "ditions") == L::kTabEditions && L::sectionByName("accueil") == L::kTabHome &&
+                          L::sectionByName("-2") == L::kTabHome && L::sectionByName("7") == L::kTabRequest && L::sectionByName("profil") == L::kTabProfile &&
+                          L::sectionByName("Ma licence") == L::kTabMine && L::sectionByName("achats") == L::kTabPurchases &&
+                          L::sectionByName("nulle part") == L::kTabAuto && L::sectionByName("42") == L::kTabAuto,
+                      "une rubrique par son nom (sans accents, le d\xC3\xA9" "but suffit), son num\xC3\xA9ro, l'accueil, le profil");
+                check(L::crumbText(L::kTabRequest) == "Licence \xE2\x80\xBA Demander ma licence" && L::crumbText(L::kTabHome) == "Licence",
+                      "le fil : << Licence > Demander ma licence >>");
+
+                // -- l'accueil : le resume, les rubriques en groupes
+                app::showLicenceWindow(mm, L::kTabHome);
+                frame();
+                auto* home = dynamic_cast<L::LicenceHome*>(licRoot->findById("licence.accueil"));
+                auto* fil = dynamic_cast<L::LicenceCrumbs*>(licRoot->findById("dialog.licence.fil"));
+                bool allLinks = home != nullptr;
+                for (const auto& s : L::sections()) {
+                    auto* l = dynamic_cast<L::SectionLink*>(licRoot->findById(std::string("licence.accueil.") + s.slug));
+                    allLinks = allLinks && l && l->visible() && l->tab == s.tab && l->bounds().w > 200.f &&
+                               home->groupRect(static_cast<std::size_t>(s.group)).contains({l->bounds().x + 2.f, l->bounds().y + 2.f});
+                }
+                check(app::licenceWindowSection() == L::kTabHome && home && home->visible() && fil && fil->text() == "Licence" && allLinks &&
+                          !licRoot->findById("licence.accueil.profil") && !licRoot->findById("dialog.licence.onglets") && !licRoot->findById("licence.profil"),
+                      "l'accueil : les dix rubriques dans leurs groupes, << Licence >> seul dans le fil ; ni bande d'onglets ni Mon profil");
+                if (!home || !fil) {
+                    std::printf("%d controles, %d echec(s)\n", g_checks, g_failures);
+                    return 1;
+                }
+                check(home->columns() == 2 && home->contentHeight() <= home->bounds().h + 0.5f,
+                      "1600 x 900 : deux colonnes de groupes, tout tient sans d\xC3\xA9" "filer (" + std::to_string(static_cast<int>(home->contentHeight())) + " sur " +
+                          std::to_string(static_cast<int>(home->bounds().h)) + ")");
+                {
+                    ImageRecorder hr;
+                    mm.Render(hr, fc);
+                    check(hr.saw("Ma licence") && hr.saw("Obtenir ou \xC3\xA9tendre") && hr.saw("D\xC3\xA9" "couvrir") && hr.saw("R\xC3\xA9glages") &&
+                              hr.saw("Demander ma licence") && hr.saw("Mes achats") && hr.saw("Client d'essai") && hr.saw(st45.licenseId) && !hr.saw("Mon profil"),
+                          "dessin\xC3\xA9 : le r\xC3\xA9sum\xC3\xA9 (le client, la licence), les groupes et leurs rubriques ; pas Mon profil");
+                }
+                check(has(home->hint(L::kTabFeatures), "/21") && has(home->hint(L::kTabMine), "CUSTOM") && has(home->hint(L::kTabSettings), "registre"),
+                      "ce que dit d\xC3\xA9j\xC3\xA0 chaque rubrique : " + home->hint(L::kTabFeatures) + " ; " + home->hint(L::kTabMine));
+
+                // -- chaque numero d'onglet (les notifications, Regarder, les scripts) ouvre sa rubrique, avec son fil
+                const std::map<int, const char*> pageIds = {
+                    {L::kTabActivation, "licence.activation"},       {L::kTabMine, "dialog.licence.ma-licence"},
+                    {L::kTabDevices, "dialog.licence.appareils.panneau"}, {L::kTabFeatures, "dialog.licence.fonctionnalites.panneau"},
+                    {L::kTabEditions, "dialog.licence.editions.panneau"}, {L::kTabHistory, "dialog.licence.historique"},
+                    {L::kTabSettings, "dialog.licence.parametres"},  {L::kTabRequest, "licence.demande"},
+                    {L::kTabOptions, "licence.options"},              {L::kTabPurchases, "licence.achats"}};
+                bool each = true;
+                std::string bad;
+                for (const auto& [tab, id] : pageIds) {
+                    app::showLicenceWindow(mm, tab);
+                    frame();
+                    bool ok = mm.depth() == 1 && app::licenceWindowSection() == tab && !home->visible() && fil->section() == tab &&
+                              fil->text() == L::crumbText(tab) && fil->current().visible();
+                    for (const auto& [other, otherId] : pageIds) {
+                        auto* w = licRoot->findById(otherId);
+                        ok = ok && w && w->visible() == (other == tab) && (other != tab || w->bounds().h > 500.f);
+                    }
+                    if (!ok) {
+                        each = false;
+                        bad += " " + std::to_string(tab);
+                    }
+                }
+                check(each, "chaque num\xC3\xA9ro (kTab*) ouvre sa rubrique seule, << Licence > sa rubrique >> en haut, plus haute qu'un onglet d'avant" + bad);
+
+                // -- le fil : << Licence >> revient a l'accueil ; une ligne de l'accueil ouvre sa rubrique
+                app::showLicenceWindow(mm, L::kTabRequest);
+                frame();
+                const auto hb = fil->home().bounds();
+                click({hb.x + hb.w * 0.5f, hb.y + hb.h * 0.5f});
+                frame();
+                const bool toHome = app::licenceWindowSection() == L::kTabHome && home->visible();
+                if (auto* link = licRoot->findById("licence.accueil.options")) {
+                    const auto lb = link->bounds();
+                    click({lb.x + 40.f, lb.y + lb.h * 0.5f});
+                }
+                frame();
+                check(toHome && app::licenceWindowSection() == L::kTabOptions && fil->text() == "Licence \xE2\x80\xBA Options",
+                      "un clic sur << Licence >> du fil : l'accueil ; un clic sur la ligne Options : sa rubrique et son fil");
+                // le dernier segment : le menu des rubriques de son groupe, et l'accueil
+                {
+                    const auto cb = fil->current().bounds();
+                    click({cb.x + cb.w * 0.5f, cb.y + cb.h * 0.5f});
+                    frame();
+                    ImageRecorder mr;
+                    mm.Render(mr, fc);
+                    const auto& items = fil->siblings().items();
+                    std::vector<std::string> labels;
+                    std::size_t purchasesAt = items.size();
+                    for (std::size_t i = 0; i < items.size(); ++i) {
+                        if (items[i].separator || items[i].heading) continue;
+                        labels.push_back(items[i].label);
+                        if (items[i].id == L::kTabPurchases) purchasesAt = i;
+                    }
+                    check(fil->siblingsOpen() && !items.empty() && items[0].heading && items[0].label == "Obtenir ou \xC3\xA9tendre" && labels.size() == 5 &&
+                              labels[0] == "Demander ma licence" && labels[2] == "Options" && labels[3] == "Mes achats" && has(labels[4], "accueil"),
+                          "le menu du fil : son groupe, ses quatre rubriques, l'accueil");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+                    frame();
+                    check(!fil->siblingsOpen() && mm.depth() == 1 && app::licenceWindowSection() == L::kTabOptions, "\xC3\x89" "chap : le menu se ferme, la fen\xC3\xAAtre reste");
+                    click({cb.x + cb.w * 0.5f, cb.y + cb.h * 0.5f});
+                    frame();
+                    mm.Render(mr, fc);
+                    if (purchasesAt < items.size()) {
+                        const auto ir = fil->siblings().itemRect(purchasesAt);
+                        click({ir.x + 30.f, ir.y + ir.h * 0.5f});
+                    }
+                    frame();
+                    check(!fil->siblingsOpen() && app::licenceWindowSection() == L::kTabPurchases, "un clic dans le menu : Mes achats");
+                }
+                // Retour arriere, Alt+gauche : l'accueil ; dans un champ, Retour arriere efface (on reste)
+                (void)mm.HandleEvent(ui::KeyDown{ui::Key::Backspace, {}, false});
+                frame();
+                const bool backspace = app::licenceWindowSection() == L::kTabHome;
+                app::showLicenceWindow(mm, L::kTabEditions);
+                frame();
+                ui::KeyMods alt;
+                alt.alt = true;
+                (void)mm.HandleEvent(ui::KeyDown{ui::Key::Left, alt, false});
+                frame();
+                check(backspace && app::licenceWindowSection() == L::kTabHome, "Retour arri\xC3\xA8re, Alt+gauche : l'accueil");
+                {
+                    licensing::service::Address a;
+                    a.url = "http://127.0.0.1:1";   // un service suppose (rien ne l'appelle ici) : le champ du code
+                    ls::setAddressForTests(a);
+                    app::showLicenceWindow(mm, L::kTabActivation);
+                    frame();
+                    auto* code = dynamic_cast<ui::InputText*>(licRoot->findById("licence.code.champ"));
+                    if (code) {
+                        const auto cr = code->bounds();
+                        click({cr.x + 20.f, cr.y + cr.h * 0.5f});
+                        (void)mm.HandleEvent(ui::TextInput{"AB"});
+                        (void)mm.HandleEvent(ui::KeyDown{ui::Key::Backspace, {}, false});
+                        frame();
+                    }
+                    check(code && code->text() == "A" && app::licenceWindowSection() == L::kTabActivation,
+                          "dans le champ du code, Retour arri\xC3\xA8re efface (la rubrique reste) : " + (code ? code->text() : std::string("pas de champ")));
+                    if (code) code->setText({});
+                }
+
+                // -- MON PROFIL : sa fenetre a part (les appels d'avant : kTabProfile), << Modifier mon profil... >> dans la demande
+                app::showLicenceWindow(mm, L::kTabProfile);
+                frame();
+                check(mm.depth() == 2 && mm.top() && mm.top()->id() == "dialog.profil" && app::profileWindowOpen() && app::licenceWindowSection() == L::kTabActivation,
+                      "kTabProfile : la fen\xC3\xAAtre Mon profil, par-dessus ; la fen\xC3\xAAtre Licence reste sur sa rubrique");
+                app::showProfileWindow(mm);
+                frame();
+                check(mm.depth() == 2, "une seule fen\xC3\xAAtre Mon profil");
+                (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+                frame();
+                check(mm.depth() == 1 && !app::profileWindowOpen() && app::licenceWindowOpen() && rootOf() == licRoot, "\xC3\x89" "chap : Mon profil se ferme, la fen\xC3\xAAtre Licence reste");
+                {
+                    const std::string commun = U(base / "commun-146");
+                    setEnvVar("XPG_DOSSIER_COMMUN", commun);   // le profil d'essai (jamais celui de ce PC)
+                    app::showLicenceWindow(mm, L::kTabRequest);
+                    frame();
+                    auto* customer = dynamic_cast<ui::InputText*>(licRoot->findById("licence.demande.client"));
+                    auto* contact = dynamic_cast<ui::InputText*>(licRoot->findById("licence.demande.contact"));
+                    auto* link = button("licence.demande.profil");
+                    if (customer) customer->setText({});
+                    if (contact) contact->setText({});
+                    check(link && link->visible() && link->bounds().w > 0.f && has(link->text(), "Modifier mon profil"),
+                          "la demande : << Modifier mon profil... >> pr\xC3\xA8s du formulaire");
+                    if (link) link->clicked->emit();
+                    frame();
+                    const auto field = [&](const char* id) { return rootOf() ? dynamic_cast<ui::InputText*>(rootOf()->findById(id)) : nullptr; };
+                    const bool opened = mm.depth() == 2 && mm.top()->id() == "dialog.profil";
+                    if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Atelier");
+                    if (auto* f = field("licence.profil.nom")) f->setText("Camille Essai");
+                    if (auto* f = field("licence.profil.courriel")) f->setText("camille.essai@exemple.fr");
+                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    frame();
+                    check(opened && customer && contact && customer->text() == "Client d'essai Atelier" && contact->text() == "Camille Essai" &&
+                              has(L::loadProfile().email, "camille.essai"),
+                          "Modifier mon profil... : sa fen\xC3\xAAtre ; enregistr\xC3\xA9, il remplit la demande (" + (customer ? customer->text() : std::string()) + ")");
+                    if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Bis");
+                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    frame();
+                    const bool followed = customer && customer->text() == "Client d'essai Bis";
+                    if (customer) customer->setText("Ma soci\xC3\xA9t\xC3\xA9 d'essai");
+                    if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Ter");
+                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    frame();
+                    check(followed && customer && customer->text() == "Ma soci\xC3\xA9t\xC3\xA9 d'essai",
+                          "le profil modifi\xC3\xA9 suit dans la demande ; ce que tu y as tap\xC3\xA9 toi-m\xC3\xAAme reste");
+                    if (auto* b = button("dialog.profil.fermer")) b->clicked->emit();
+                    frame();
+                    check(mm.depth() == 1 && !app::profileWindowOpen(), "Fermer : Mon profil se ferme");
+                    setEnvVar("XPG_DOSSIER_COMMUN", {});
+                }
+
+                // -- LES BARREES : leurs captures (l'apercu, en grand) ; en grand, on change de fonctionnalite
+                check(writeCapture(shots / "hmi_editor.png", 640, 400) && writeCapture(shots / "hmi_editor-2.png", 320, 200) &&
+                          writeCapture(shots / "ai_generation.png", 480, 300),
+                      "des captures d'essai pour deux fonctionnalit\xC3\xA9s que CUSTOM n'ouvre pas");
+                ls::setAddressForTests(licensing::service::Address{});
+                app::showLicenceWindow(mm, L::kTabFeatures);
+                frame();
+                auto* table = dynamic_cast<ui::TableView*>(licRoot->findById("dialog.licence.fonctionnalites"));
+                std::size_t row = static_cast<std::size_t>(-1), rows = 0;
+                if (table && table->model()) {
+                    rows = table->model()->rowCount();
+                    for (std::size_t r = 0; r < rows; ++r)
+                        if (table->model()->cellText(r, 1) == "hmi_editor") row = r;
+                }
+                const bool struck = row < rows && table->model()->cellStyle(static_cast<ui::RowIndex>(row), 0).locked;
+                if (row < rows) table->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+                frame();
+                auto* cap = dynamic_cast<L::CaptureView*>(licRoot->findById("dialog.licence.fonctionnalites.panneau.apercu.capture"));
+                check(struck && cap && cap->hasImage() && cap->imageWidth() == 640.f && cap->bounds().w > 0.f,
+                      "une fonctionnalit\xC3\xA9 barr\xC3\xA9" "e (pas dans ta licence) : sa capture dans l'aper\xC3\xA7u");
+                if (cap) {
+                    const auto cb = cap->bounds();
+                    click({cb.x + cb.w * 0.3f, cb.y + cb.h * 0.8f});
+                }
+                frame();
+                auto* zoom = dynamic_cast<L::CaptureZoomBody*>(rootOf());
+                check(mm.depth() == 2 && zoom && zoom->feature() == "hmi_editor" && zoom->locked() && zoom->lockedText() == "pas dans ta licence" &&
+                          zoom->shotCount() == 2 && zoom->image().imageWidth() == 640.f && zoom->featureCount() == rows &&
+                          zoom->featureIndex() == static_cast<int>(row),
+                      "en grand : la barr\xC3\xA9" "e, ses deux captures, << pas dans ta licence >>, et toute la liste du tableau (" +
+                          std::to_string(zoom ? zoom->featureCount() : 0) + ")");
+                if (zoom) {
+                    ImageRecorder zr;
+                    mm.Render(zr, fc);
+                    check(zr.saw("pas dans ta licence") && zr.saw("Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(rows)) &&
+                              zoom->featureList() && zoom->featureList()->visible() && zoom->featureList()->items().size() == rows &&
+                              zoom->featureList()->selectedIndex() == static_cast<int>(row),
+                          "en grand : la liste des fonctionnalit\xC3\xA9s, << Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(rows) +
+                              " >>, la marque << pas dans ta licence >>");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::PageDown, {}, false});
+                    frame();
+                    const bool down = zoom->featureIndex() == static_cast<int>((row + 1) % rows);
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::PageUp, {}, false});
+                    frame();
+                    check(down && zoom->feature() == "hmi_editor" && mm.depth() == 2, "Page suivante, Page pr\xC3\xA9" "c\xC3\xA9" "dente : la fonctionnalit\xC3\xA9 d'\xC3\xA0 c\xC3\xB4t\xC3\xA9, sans fermer");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Right, {}, false});
+                    check(zoom->shot() == 1 && zoom->image().imageWidth() == 320.f, "les fl\xC3\xA8" "ches : toujours les captures de la fonctionnalit\xC3\xA9");
+                    check(zoom->showFeature("api_editor") && !zoom->locked() && zoom->shotCount() == 4 && zoom->shot() == 0 && zoom->image().imageWidth() == 3200.f &&
+                              zoom->title().find(L::featureLabel("api_editor")) == 0,
+                          "une autre (dans la licence) : ses quatre captures, sans la marque");
+                    const int at = zoom->featureIndex();
+                    if (auto* btn = button("dialog.capture.fonction-precedente")) btn->clicked->emit();
+                    frame();
+                    const bool prev = zoom->featureIndex() == static_cast<int>((static_cast<std::size_t>(at) + rows - 1) % rows);
+                    if (auto* btn = button("dialog.capture.fonction-suivante")) btn->clicked->emit();
+                    if (zoom->featureList()) zoom->featureList()->pick(static_cast<int>(row));
+                    frame();
+                    check(prev && zoom->feature() == "hmi_editor" && zoom->locked() && zoom->featureList()->selectedIndex() == static_cast<int>(row),
+                          "ses fl\xC3\xA8" "ches et la liste : la pr\xC3\xA9" "c\xC3\xA9" "dente, la suivante, une au choix (la barr\xC3\xA9" "e : ses captures)");
+                    check(!zoom->showFeature("pas_une_fonction"), "une fonctionnalit\xC3\xA9 hors de la liste : rien");
+                    (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+                    frame();
+                    check(mm.depth() == 1 && rootOf() == licRoot, "\xC3\x89" "chap : la capture en grand se ferme");
+                }
+                // la boutique : une offre choisie, ce qu'elle n'a pas (barre) - sa capture, et en grand << pas dans PERSONAL >>
+                {
+                    licensing::service::Address a;
+                    a.url = "http://127.0.0.1:1";
+                    ls::setAddressForTests(a);
+                    L::setWantedOffer("PERSONAL");
+                    app::showLicenceWindow(mm, L::kTabRequest);
+                    frame();
+                    auto* list = dynamic_cast<ui::TableView*>(licRoot->findById("licence.demande.offre.liste"));
+                    std::size_t r2 = static_cast<std::size_t>(-1);
+                    if (list && list->model())
+                        for (std::size_t r = 0; r < list->model()->rowCount(); ++r)
+                            if (list->model()->cellText(r, 0) == L::featureLabel("ai_generation")) r2 = r;
+                    const bool out = list && r2 < list->model()->rowCount() && list->model()->cellStyle(static_cast<ui::RowIndex>(r2), 0).locked;
+                    if (out) list->selectModelRows({static_cast<ui::RowIndex>(r2)}, true);
+                    frame();
+                    auto* shop = dynamic_cast<L::CaptureView*>(licRoot->findById("licence.demande.offre.apercu.capture"));
+                    check(out && shop && shop->hasImage() && shop->imageWidth() == 480.f, "la boutique : une fonctionnalit\xC3\xA9 pas dans l'offre (barr\xC3\xA9" "e) - sa capture");
+                    if (shop) {
+                        const auto sb = shop->bounds();
+                        click({sb.x + sb.w * 0.4f, sb.y + sb.h * 0.6f});
+                    }
+                    frame();
+                    auto* z2 = dynamic_cast<L::CaptureZoomBody*>(rootOf());
+                    check(z2 && z2->feature() == "ai_generation" && z2->locked() && z2->lockedText() == "pas dans PERSONAL" && z2->featureCount() == rows,
+                          "en grand : << pas dans PERSONAL >>, toute l'offre \xC3\xA0 c\xC3\xB4t\xC3\xA9 (" + (z2 ? z2->lockedText() : std::string()) + ")");
+                    if (z2) (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+                    frame();
+                }
+
+                // -- LES CARTES DES OFFRES : rien de coupe (le prix, la reduction et sa fin, << 1 PC . 40 jours . 10/21 fonctions >>), a la
+                //    taille de la fenetre du client (1302 x 807) et a 1600 x 1000. Un registre plus recent : PERSONAL a 50 EUR, reduit.
+                {
+                    std::string json = readFile(repo / "tests" / "fixtures" / "licences" / "registre-exemple.json");
+                    const lic::Seconds until = now + 40 * lic::kDay;
+                    const auto at = json.find("\"label\": \"PERSONAL\",");
+                    const auto num = json.find("\"number\": 318");
+                    check(at != std::string::npos && num != std::string::npos, "le registre d'exemple : PERSONAL, n\xC2\xB0 318");
+                    if (at != std::string::npos && num != std::string::npos) {
+                        json.insert(at + std::string("\"label\": \"PERSONAL\",").size(),
+                                    " \"price\": \"50 \xE2\x82\xAC HT / par an\", \"promo_price\": \"40 \xE2\x82\xAC HT / par an\", \"promo_until\": \"" + lic::isoTime(until) +
+                                        "\", \"description\": \"Pour un poste : l'\xC3\xA9" "diteur, la simulation, l'IHM et ses scripts, l'assistant.\",");
+                        json.replace(json.find("\"number\": 318"), 13, "\"number\": 319");
+                        const auto ed = json.find("\"max_devices\": 2", at);
+                        if (ed != std::string::npos) json.replace(ed, 16, "\"max_devices\": 1");
+                        const auto du = json.find("\"duration_days\": 365", at);
+                        if (du != std::string::npos) json.replace(du, 20, "\"duration_days\": 40");
+                    }
+                    std::string reg2, why2;
+                    check(adm::signRegistry(*key, json, now, reg2, &why2), "le registre n\xC2\xB0 319 sign\xC3\xA9 (" + why2 + ")");
+                    writeFile(base / "livre" / "registre.xpgreg", reg2);
+                    app::licence::start(o);
+                    check(lic::getLicenseState().registryNumber == 319, "le registre n\xC2\xB0 319 adopt\xC3\xA9");
+                    // une mesure proche d'une vraie police (0,52 em par caractere) : la mise en page et le dessin disent la meme
+                    ui::PlatformServices svc;
+                    svc.measureWidth = [](std::string_view t, gfx::FontId f) {
+                        std::size_t glyphs = 0;
+                        for (char ch : t)
+                            if ((static_cast<unsigned char>(ch) & 0xC0) != 0x80) ++glyphs;
+                        return static_cast<float>(glyphs) * static_cast<float>(f.v) * 0.52f;
+                    };
+                    svc.lineHeight = [](gfx::FontId f) { return static_cast<float>(f.v) + 4.f; };
+                    ui::installPlatformServices(svc);
+                    const std::string end = "R\xC3\xA9" "duction jusqu'au " + ls::dayText(static_cast<std::int64_t>(until));
+                    for (const gfx::Size size : {gfx::Size{1302.f, 807.f}, gfx::Size{1600.f, 1000.f}}) {
+                        const menu::FrameContext fs{1.0 / 30.0, 1.0, &theme, size, 1.f};
+                        app::showLicenceWindow(mm, L::kTabRequest);
+                        mm.applyPending();
+                        mm.Update(fs);
+                        mm.Update(fs);
+                        UiRecorder cr;
+                        mm.Render(cr, fs);
+                        const std::string all = cr.joined();
+                        bool cut = false;
+                        for (const auto& t : cr.texts)
+                            if (has(t, "\xE2\x80\xA6") && (has(t, "\xE2\x82\xAC") || has(t, "fonctions") || has(t, "duction") || has(t, "40 jours")))
+                                cut = true;
+                        const std::string tag = std::to_string(static_cast<int>(size.w)) + " x " + std::to_string(static_cast<int>(size.h));
+                        check(cr.saw("50 \xE2\x82\xAC HT / par an") && cr.saw("40 \xE2\x82\xAC HT / par an") && has(all, end) && cr.saw("1 PC") &&
+                                  cr.saw("40 jours") && cr.saw("10/21 fonctions") && !cut,
+                              tag + " : les cartes des offres enti\xC3\xA8res - le prix, la r\xC3\xA9" "duction, << " + end + " >>, << 1 PC . 40 jours . 10/21 fonctions >>" +
+                                  (cut ? std::string(" (COUP\xC3\x89" "ES)") : std::string()));
+                    }
+                    ui::installPlatformServices(ui::PlatformServices{});
+                    ls::setAddressForTests(licensing::service::Address{});
+                    mm.applyPending();
+                    mm.Update(fc);
+                }
+            }
             // la croix de la fenetre Licence : un clic, et elle ne revient pas
             const auto lf = ui::dialogframe::frameOf(*licRoot);
             click({lf.right() - 24.f, lf.y + 21.f});
             frame();
             frame();
             check(mm.depth() == 0 && !app::licenceWindowOpen() && !L::takeAnswer(), "la croix de la fen\xC3\xAAtre Licence : un clic, ferm\xC3\xA9" "e (et rien ne la rouvre)");
+            // 1.46.0 : kTabAuto avec une licence valable : l'accueil ; Echap ferme la fenetre, comme avant
+            app::showLicenceWindow(mm, L::kTabAuto);
+            frame();
+            check(mm.depth() == 1 && app::licenceWindowSection() == L::kTabHome, "1.46.0 : kTabAuto, une licence valable : l'accueil (le r\xC3\xA9sum\xC3\xA9, les rubriques)");
+            (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
+            frame();
+            frame();
+            check(mm.depth() == 0 && !app::licenceWindowOpen() && app::licenceWindowSection() == L::kTabAuto, "1.46.0 : \xC3\x89" "chap ferme la fen\xC3\xAAtre Licence");
+            {   // 1.46.0 : l'accueil seul - etroit, une colonne ; plus haut que sa case, la molette le fait defiler (les lignes cachees : pas de clic)
+                L::LicenceHome h("essai.accueil");
+                int opened = L::kTabAuto;
+                h.onOpen = [&opened](int t) { opened = t; };
+                h.setBounds({0.f, 0.f, 1200.f, 520.f});
+                h.layout();
+                const bool wide = h.columns() == 2 && h.contentHeight() <= 520.f;
+                h.setBounds({0.f, 0.f, 600.f, 300.f});
+                h.layout();
+                std::size_t hidden = 0;
+                for (const auto& s : L::sections())
+                    if (auto* l = h.link(s.tab); l && !l->visible()) ++hidden;
+                const bool narrow = h.columns() == 1 && h.contentHeight() > 300.f && hidden > 0;
+                (void)h.dispatch(ui::MouseWheel{{100.f, 100.f}, 0.f, -20.f, {}});
+                h.layout();
+                auto* last = h.link(L::kTabSettings);
+                check(wide && narrow && h.scroll() > 0.f && last && last->visible() && last->bounds().bottom() <= 300.f + 0.5f,
+                      "l'accueil \xC3\xA9troit : une colonne, la molette le fait d\xC3\xA9" "filer jusqu'\xC3\xA0 Param\xC3\xA8tres");
+                if (last) last->clicked->emit();
+                check(opened == L::kTabSettings, "une ligne : sa rubrique");
+            }
+            {   // 1.46.0 : la capture en grand seule - changer de fonctionnalite (ses captures lues a la demande), les barrees comprises
+                L::CaptureSet set;
+                set.feature = "a";
+                set.title = "Alpha";
+                L::CaptureZoomBody z(set, 0, [] {});
+                std::vector<std::string> loaded;
+                z.setChoices({{"a", "Alpha", "API Studio", false, {}}, {"b", "Beta", "IHM Studio", true, "pas dans ta licence"}, {"c", "Gamma", "", false, {}}},
+                             [&loaded](const L::CaptureChoice& c) {
+                                 loaded.push_back(c.id);
+                                 L::CaptureSet s;
+                                 s.feature = c.id;
+                                 s.title = c.label;
+                                 return s;
+                             });
+                const bool first = z.featureCount() == 3 && z.featureIndex() == 0 && !z.locked() && z.featureNavText() == "Fonctionnalit\xC3\xA9 1/3";
+                z.stepFeature(1);
+                const bool second = z.feature() == "b" && z.locked() && z.lockedText() == "pas dans ta licence" && z.title() == "Beta" &&
+                                    z.featureList() && z.featureList()->selectedIndex() == 1;
+                z.stepFeature(-2);
+                const bool wrapped = z.feature() == "c" && !z.locked() && z.featureNavText() == "Fonctionnalit\xC3\xA9 3/3";
+                if (z.featureList()) z.featureList()->pick(0);
+                check(first && second && wrapped && z.feature() == "a" && loaded == std::vector<std::string>{"b", "c", "a"} && !z.showFeature("zz"),
+                      "la capture en grand : la suivante (barr\xC3\xA9" "e : << pas dans ta licence >>), en boucle, la liste ; chacune lue \xC3\xA0 la demande");
+                L::CaptureZoomBody alone(set, 0, [] {});
+                alone.setChoices({{"a", "Alpha", "", false, {}}});
+                check(alone.featureList() && !alone.featureList()->visible() && alone.featureNavText().empty(), "une seule fonctionnalit\xC3\xA9 : pas de liste");
+            }
             app::licence::setFeatureImagesFolder({});
         }
     }

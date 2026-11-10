@@ -109,6 +109,12 @@ const std::vector<ActionType> kActions = {
     {"fichier_envoyer", "Envoyer un fichier \xC3\xA0 un PC", "admins", Level::Medium, false, false},
     {"criticite", "Changer la criticit\xC3\xA9", "admins", Level::Medium, false, false},
     {"connexion", "Connexion de l'Admin", "admins", Level::Info, false, false},
+    // 1.46.0 : la boutique (docs/BOUTIQUE.md)
+    {"boutique", "R\xC3\xA9gler la boutique (vente en ligne, montants)", "offres", Level::High, true, false},
+    {"stripe_brancher", "Brancher Stripe", "admins", Level::Critical, true, false},
+    {"commande_livrer", "Livrer une commande de la boutique", "clients", Level::Medium, false, false},
+    {"commande_revoir", "Commande de la boutique \xC3\xA0 revoir", "clients", Level::High, true, false},
+    {"commande_rembourser", "Rembourser une commande", "clients", Level::High, true, false},
     {"sauvegarde", "Sauvegarde compl\xC3\xA8te", "admins", Level::Info, false, false},
     {"restauration", "Restauration d'une sauvegarde", "admins", Level::Critical, true, false},
     {"signature_refusee", "Signature refus\xC3\xA9" "e (certificat r\xC3\xA9voqu\xC3\xA9)", "admins", Level::Critical, true, true},

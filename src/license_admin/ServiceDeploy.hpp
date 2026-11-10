@@ -123,6 +123,11 @@ using LineSink = std::function<void(const std::string& line)>;
 // Connecter ce PC a Cloudflare : `npx wrangler login` dans le dossier du service (wrangler ouvre le navigateur ; il rend
 // la main quand la connexion est faite, refusee, ou trop longue). BLOQUANT.
 [[nodiscard]] Report login(const Options& o, const LineSink& onLine = {}, const std::atomic<bool>* cancel = nullptr);
+// 1.46.0 : POSER UN SECRET DU WORKER (Brancher Stripe : STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) - `wrangler secret put
+// NOM` dans le dossier du service du kit, LA VALEUR SUR L'ENTREE STANDARD (jamais sur la ligne de commande, jamais dans la
+// sortie : scrub), sans fenetre de console. Les memes refus que deploy (Node.js, la connexion a Cloudflare). BLOQUANT.
+[[nodiscard]] Report putSecret(const Options& o, const std::string& name, const std::string& value, const LineSink& onLine = {},
+                               const std::atomic<bool>* cancel = nullptr);
 // Un deploiement (ou une connexion) tourne dans ce processus.
 [[nodiscard]] bool running() noexcept;
 // Arreter ce qui tourne (la fenetre se ferme) : comme Annuler.

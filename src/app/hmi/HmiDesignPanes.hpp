@@ -140,6 +140,7 @@ private:
     std::set<std::string> closedInSearch_;                      // ... pendant une recherche (vide a chaque frappe)
     int                hot_{-1};
     float              scroll_{0.f};
+    ui::ScrollArea     bar_;   // 1.46.0 : la barre de la liste se tire (avant : seulement dessinee)
     bool               open_{false};
     gfx::Rect          area_{};
     ui::InputText*     field_{nullptr};

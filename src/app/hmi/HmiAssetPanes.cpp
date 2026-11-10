@@ -139,7 +139,7 @@ void HmiResourcePreview::show(const hmi::Project* project, hmi::Id resource) {
 ui::EventResult HmiResourcePreview::onEvent(const ui::InputEvent& ev) {
     if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos)) grabFocus();
     if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
-    if (area_.w > 0 && viewer_->event(ev, area_)) {
+    if (area_.w > 0 && viewer_->event(ev, area_, this)) {   // 1.46.0 : this - la barre de defilement se tire
         invalidate();
         return ui::EventResult::Consumed;
     }
@@ -704,7 +704,7 @@ ui::EventResult HmiFilePreview::onEvent(const ui::InputEvent& ev) {
     if (!docView_ || viewArea_.w <= 0) return ui::EventResult::Ignored;
     if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && viewArea_.contains(m->pos)) grabFocus();
     if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
-    if (viewer_->event(ev, viewArea_)) {
+    if (viewer_->event(ev, viewArea_, this)) {   // 1.46.0 : this - la barre de defilement se tire
         invalidate();
         return ui::EventResult::Consumed;
     }

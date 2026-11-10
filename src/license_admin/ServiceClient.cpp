@@ -739,6 +739,8 @@ void readAdminWatch(const Value& reply, AdminWatch& out) {
     out.journal = num("journal");
     out.adminRequests = num("admins_demandes");
     out.publishedVersion = clean(reply.str("version_publiee"), 40);
+    out.orders = num("commandes");   // 1.46.0 : la boutique
+    out.toDeliver = num("a_livrer");
     out.role = clean(reply.str("role"), 20);
     out.rights.clear();
     if (const Value* d = reply.find("droits"); d && d->isArray())
@@ -1592,6 +1594,62 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
     if (!writeEntry(folder, e, &why)) res.details.push_back("ATTENTION : " + why);
     res.ok = true;
     res.message = "Demande n\xC2\xB0 " + std::to_string(e.number) + " accept\xC3\xA9" "e : licence en ligne " + licenseId + " (le PC l'active avec le code).";
+    return res;
+}
+
+// ============================================================================ 1.46.0 : la boutique
+bool openSealedRequest(const licensing::SigningKey& key, const std::string& device, const std::string& keyId, const std::string& sealed, Seconds now,
+                       Entry& e, std::string* why) {
+    e = Entry{};
+    if (!svc::isDeviceId(device)) return fail(why, "l'identifiant du poste de la commande est illisible");
+    if (sealed.empty()) return fail(why, "la commande n'a pas de demande scell\xC3\xA9" "e pour ce poste");
+    const Opened op = openRequest(key, device, keyId, sealed, now);
+    if (!op.ok) return fail(why, op.problem);
+    e.device = device;
+    e.deviceKey = op.request.deviceKey;
+    e.nonce = op.request.nonce;
+    e.customer = op.online.customer;
+    e.contact = op.online.contact;
+    e.edition = op.online.edition;
+    e.email = op.online.email;
+    e.option = op.online.option;
+    e.optionDays = op.online.optionDays;
+    e.optionFrom = op.online.optionFrom;
+    e.optionLastDay = op.online.optionLastDay;
+    e.message = op.online.message;
+    e.deviceName = op.record.deviceName;
+    e.fingerprint = op.record.fingerprint;
+    e.software = op.record.software;
+    e.licenseId = op.record.licenseId;
+    e.requestedAt = op.request.createdAt;
+    return true;
+}
+
+Result answerOrder(const std::string& folder, const licensing::SigningKey& key, const Entry& e, const std::string& licenseId, const std::string& code,
+                   const std::string& licenceText, const std::string& message, const Mailer& mailer, const Options& o) {
+    std::unique_ptr<Client> c;
+    std::string why;
+    if (!openClient(folder, key, o, c, &why)) return refused(why);
+    gw::StatusContent content;
+    content.message = message.size() > 1500 ? message.substr(0, 1500) : message;
+    content.code = code;               // scelle pour CE PC (le service n'en voit rien) ; vide : une option
+    content.onlineLicense = licenseId;
+    Result res;
+    if (mailer && !code.empty()) {
+        licensing::License lic;
+        std::string w;
+        if (licenceText.empty() || !licenceOf(licenceText, key, o, false, lic, nullptr, &w)) lic.licenseId = licenseId;
+        const MailOutcome m = mailer(e, lic, code);
+        content.mail = m.state;
+        content.mailTo = m.to;
+        if (!m.note.empty()) res.details.push_back("Mail : " + m.note);
+    }
+    std::string line;
+    if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
+    res.details.push_back("Publi\xC3\xA9 : " + line + (code.empty() ? std::string(" (son Studio renouvelle et re\xC3\xA7oit l'option).")
+                                                                    : std::string(" (le code scell\xC3\xA9 pour ce PC : son Studio s'active tout seul).")));
+    res.ok = true;
+    res.message = "R\xC3\xA9ponse partie au PC de la commande : licence " + licenseId + ".";
     return res;
 }
 

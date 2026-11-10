@@ -1680,8 +1680,8 @@ void App::registerActions() {
     actions_.add(Action{"help.licence", "Licence\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this); }});
     // 1.44.0 : la mise a jour disponible (la pastille de la barre du haut, le toast) - sa fenetre.
     actions_.add(Action{"update.open", "Mise \xC3\xA0 jour\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { (void)licence::showUpdateWindow(*this); }});
-    // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet.
-    actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showLicenceWindow(*this, licence::kTabProfile); }});
+    // 1.37.0 : Mon profil (courriel, nom, societe) - la fenetre Licence, sur son onglet. 1.46.0 : sa fenetre a part.
+    actions_.add(Action{"help.profile", "Mon profil\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showProfileWindow(*this); }});
     // 1.43.0 : LES SESSIONS (IHM Studio) - Projet > Demarrer une session..., Rejoindre une session... ; la pastille du haut.
     actions_.add(Action{"session.start", "D\xC3\xA9marrer une session\xE2\x80\xA6", {},
                         [this] { return !core::hasApi() && hmi_ && !projectFolder_.empty() && !session_->active(); }, {}, nullptr,

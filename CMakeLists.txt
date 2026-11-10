@@ -333,7 +333,9 @@ add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/
                                   src/license_admin/Mail.cpp   # 1.37.0 : + Mail (le courriel de l'editeur)
                                   src/license_admin/gui/WorkspaceAdmins.cpp    # 1.44.0 : plusieurs admins (le role, les droits, le journal)
                                   src/license_admin/gui/WorkspaceVersions.cpp   # 1.44.0 : fichiers, messages, versions, sauvegarde complete
-                                  src/license_admin/ServiceDeploy.cpp)          # 1.45.0 : deployer le service depuis l'Admin (le kit, Node.js)
+                                  src/license_admin/ServiceDeploy.cpp           # 1.45.0 : deployer le service depuis l'Admin (le kit, Node.js)
+                                  src/license_admin/Shop.cpp                    # 1.46.0 : la boutique et les commandes (Stripe)
+                                  src/license_admin/gui/WorkspaceShop.cpp)      # 1.46.0 : livrer les commandes payees
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -341,7 +343,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
@@ -524,6 +526,12 @@ if(XPG_BUILD_TESTS)
     if(TARGET zoom_test)
         target_include_directories(zoom_test PRIVATE ${CMAKE_SOURCE_DIR}/third_party/SDL3/include)
     endif()
+    # 1.46.0 : << ces scrollbars ne bougent pas avec la souris >> - chaque barre de la boite a outils (listes, arbres,
+    # tableaux, l'editeur, un panneau, la liste des suggestions d'un champ, ui::ScrollArea : un volet qui defile lui-meme)
+    # se tire en proportion (la souris tenue, hors du widget), se clique dans sa gouttiere, suit la molette - par le vrai
+    # chemin d'une fenetre (MenuManager, WidgetMenu).
+    xpg_add_test_executable(scrollbars_test tests/scrollbars_test.cpp)
+    xpg_target_link_libraries(scrollbars_test PRIVATE xpg_ui)
 
     # Lot 16 : ViewModels.cpp montre les types et les dossiers des variables IHM
     # (hmi::types, dans xpg_hmi) : les trois tests qui le compilent lient xpg_hmi.
@@ -1221,6 +1229,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME layout     COMMAND layout_test)
     xpg_add_test(NAME popup      COMMAND popup_test)
     xpg_add_test(NAME zoom       COMMAND zoom_test)        # 1.12.30 : le contrat du zoom
+    xpg_add_test(NAME scrollbars COMMAND scrollbars_test)  # 1.46.0 : les barres de defilement a la souris
     xpg_add_test(NAME sharedlib  COMMAND sharedlib_test)
     xpg_add_test(NAME settings   COMMAND settings_test)
     xpg_add_test(NAME dossiers   COMMAND dossiers_test)   # 1.8.0

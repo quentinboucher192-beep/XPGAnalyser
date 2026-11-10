@@ -1,6 +1,7 @@
 #include "CrashDialogs.hpp"   // 1.12.28 : rapport-dialogue
 #include "Licence.hpp"                 // 1.30.0
 #include "LicenceService.hpp"          // 1.35.0 : licence-code, licence-renouveler... (le service des licences)
+#include "LicenceViews.hpp"            // 1.46.0 : licence-fil, licence-capture-fonction (le fil d'Ariane, la capture en grand)
 #include "FileDownload.hpp"           // 1.44.0 : fichier-telecharger
 #include "Updates.hpp"                // 1.44.0 : messages-relever, maj-verifier, maj-plus-tard...
 #include "../licensing/Licensing.hpp"   // 1.30.0
@@ -6164,8 +6165,117 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     //   licence-importer FICHIER    importer un .xpglic (comme Activer par fichier de licence), puis l'etat
     //   licence-demande NOM FICHIER ecrire la demande d'activation de ce PC
     //   licence-etat                l'etat (edition, statut, la phrase)
+    // 1.46.0 : LA FENETRE LICENCE PAR UN FIL D'ARIANE (l'accueil, les rubriques ; Mon profil a part) -
+    //   licence [ONGLET]            ONGLET : un numero (-2 l'accueil, 8 la fenetre Mon profil) ou le nom d'une rubrique, sans
+    //                               accents, le debut suffit (accueil, demander, mes-achats, options, fonctionnalites...)
+    //   licence-rubrique [NOM]      la fenetre Licence sur cette rubrique (ouverte : elle y passe) ; sans NOM : ecrit celle
+    //                               montree (<< Licence > Demander ma licence >>) - un echec sans fenetre Licence
+    //   licence-fil accueil|menu|NOM  le fil d'Ariane : un clic sur << Licence >> (l'accueil), sur la rubrique (le menu des
+    //                               rubriques de son groupe, ouvert), ou une rubrique de ce menu
+    //   licence-retour              Alt+gauche : l'accueil (Retour arriere aussi, hors d'un champ)
+    //   licence-capture-fonction suivante|precedente|ID|NOM   la capture en grand : une autre fonctionnalite (Page suivante /
+    //                               Page precedente ; son identifiant ou le debut de son nom) ; ecrit laquelle, et << pas dans
+    //                               ta licence >> si elle y est barree
+    //   profil                      la fenetre Mon profil (Aide > Mon profil...)
     if (cmd == "licence") {
-        showLicenceWindow(app_, arg(1).empty() ? licence::kTabAuto : std::atoi(arg(1).c_str()));
+        int tab = licence::kTabAuto;
+        if (!arg(1).empty()) {
+            tab = licence::sectionByName(arg(1));
+            if (tab == licence::kTabAuto && arg(1) != "-1") {
+                fail("licence : pas de rubrique " + arg(1));
+                return Step::Next;
+            }
+        }
+        showLicenceWindow(app_, tab);
+        return Step::Yield;
+    }
+    if (cmd == "profil") {
+        showProfileWindow(app_);
+        return Step::Yield;
+    }
+    if (cmd == "licence-rubrique") {
+        if (arg(1).empty()) {
+            const int s = licenceWindowSection();
+            if (s == licence::kTabAuto) {
+                if (retries_ < 30) return Step::Retry;
+                fail("licence-rubrique : pas de fen\xC3\xAAtre Licence");
+                return Step::Next;
+            }
+            std::printf("[script] licence-rubrique : %s\n", licence::crumbText(s).c_str());
+            return Step::Next;
+        }
+        const int tab = licence::sectionByName(arg(1));
+        if (tab == licence::kTabAuto) {
+            fail("licence-rubrique : pas de rubrique " + arg(1));
+            return Step::Next;
+        }
+        showLicenceWindow(app_, tab);
+        std::printf("[script] licence-rubrique %s : %s\n", arg(1).c_str(), licence::crumbText(tab).c_str());
+        return Step::Yield;
+    }
+    if (cmd == "licence-fil") {
+        licence::LicenceCrumbs* fil = nullptr;
+        if (auto* root = top()) fil = dynamic_cast<licence::LicenceCrumbs*>(root->findById("dialog.licence.fil"));
+        if (!fil || fil->bounds().w <= 0.f) {
+            if (retries_ < 60) return Step::Retry;
+            fail("licence-fil : pas de fen\xC3\xAAtre Licence au premier plan");
+            return Step::Next;
+        }
+        const std::string what = arg(1).empty() ? std::string("accueil") : arg(1);
+        if (what == "accueil" || what == "licence") {
+            const auto r = fil->home().bounds();
+            click({r.x + r.w / 2.f, r.y + r.h / 2.f}, MouseButton::Left, 1, {});
+        } else if (what == "menu") {
+            if (fil->section() == licence::kTabHome) {
+                fail("licence-fil menu : l'accueil n'a pas de rubrique");
+                return Step::Next;
+            }
+            const auto r = fil->current().bounds();
+            click({r.x + r.w / 2.f, r.y + r.h / 2.f}, MouseButton::Left, 1, {});
+        } else {
+            const int tab = licence::sectionByName(what);
+            if (tab == licence::kTabAuto || !fil->choose(tab)) {
+                fail("licence-fil : " + what + " n'est pas dans le menu de " + licence::crumbText(fil->section()));
+                return Step::Next;
+            }
+        }
+        std::printf("[script] licence-fil %s\n", what.c_str());
+        return Step::Yield;
+    }
+    if (cmd == "licence-retour") {
+        KeyMods alt;
+        alt.alt = true;
+        send(ui::KeyDown{Key::Left, alt, false});
+        send(ui::KeyUp{Key::Left, alt});
+        return Step::Yield;
+    }
+    if (cmd == "licence-capture-fonction") {
+        licence::CaptureZoomBody* z = nullptr;
+        if (auto* root = top()) z = dynamic_cast<licence::CaptureZoomBody*>(root->findById("dialog.capture.corps"));
+        if (!z) {
+            if (retries_ < 60) return Step::Retry;
+            fail("licence-capture-fonction : pas de capture en grand au premier plan");
+            return Step::Next;
+        }
+        const std::string what = arg(1);
+        bool ok = true;
+        if (what == "suivante" || what == "+1" || what.empty()) z->stepFeature(1);
+        else if (what == "precedente" || what == "-1") z->stepFeature(-1);
+        else if (!z->showFeature(what)) {
+            ok = false;
+            const auto lower = [](std::string t) {
+                for (auto& ch : t) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                return t;
+            };
+            for (const auto& c : z->choices())
+                if (lower(c.label).rfind(lower(what), 0) == 0) {
+                    ok = z->showFeature(c.id);
+                    break;
+                }
+        }
+        std::printf("[script] licence-capture-fonction %s : %s%s (%s, %zu capture(s))\n", what.c_str(), z->title().c_str(),
+                    z->locked() ? (" - " + z->lockedText()).c_str() : "", z->featureNavText().c_str(), z->shotCount());
+        if (!ok) fail("licence-capture-fonction : pas de fonctionnalit\xC3\xA9 " + what + " dans la liste");
         return Step::Yield;
     }
     // 1.42.0 : licence-bloquee FONCTIONNALITE [ACTION] - la fenetre << Ta licence ne permet pas cette action >> (avec l'option

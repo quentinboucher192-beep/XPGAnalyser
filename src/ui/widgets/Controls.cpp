@@ -484,6 +484,7 @@ namespace ui {
         suggestionFrom_ = std::min(from, caret_);
         suggestionIndex_ = 0;
         suggestionFirst_ = 0;
+        suggestionBar_.place({}, 0.f);   // 1.46.0 : la barre se replace au prochain dessin
         invalidate();
     }
 
@@ -654,12 +655,14 @@ namespace ui {
         if (suggestionLegendH_ > 0.f && suggestionIndex_ < suggestions_.size() && suggestions_[suggestionIndex_].badge.set())
             drawBadgeLegend(ctx.r, ctx.theme, suggestions_[suggestionIndex_].badge,
                             { x + 2.f, y + height - 2.f - suggestionLegendH_, width - 4.f, suggestionLegendH_ });
-        // Plus de lignes que la liste n'en montre : une barre a droite.
-        if (suggestions_.size() > shownRows) {
+        // Plus de lignes que la liste n'en montre : une barre a droite. 1.46.0 : elle se tire et sa gouttiere se clique
+        // (ui::ScrollArea ; avant, seulement dessinee - et un clic dessus choisissait la ligne d'a cote).
+        {
             const float track = height - 4.f - suggestionLegendH_;
-            const float thumb = std::max(12.f, track * static_cast<float>(shownRows) / static_cast<float>(suggestions_.size()));
-            const float t = static_cast<float>(suggestionFirst_) / static_cast<float>(suggestions_.size() - shownRows);
-            ctx.r.fillRoundedRect({ x + width - 6.f, y + 2.f + t * (track - thumb), 4.f, thumb }, c.scrollbar, 2.f);
+            suggestionBar_.wheel = false;   // la molette deplace la ligne choisie (onEvent)
+            suggestionBar_.place({ x + 2.f, y + 2.f, width - 4.f, track }, rowH * static_cast<float>(suggestions_.size()), rowH * static_cast<float>(shownRows),
+                                 { x + width - 2.f - kScrollBarThickness, y + 2.f, kScrollBarThickness, track });
+            suggestionBar_.paint(ctx, rowH * static_cast<float>(suggestionFirst_));
         }
     }
 
@@ -760,6 +763,22 @@ namespace ui {
         // La liste ouverte d'abord : elle deborde du champ, et ses touches sont
         // les siennes (fleches, Entree, Tab, Echap).
         if (!suggestions_.empty()) {
+            // 1.46.0 : la barre de la liste - le pouce tire (la souris tenue), la gouttiere cliquee ; la ligne choisie
+            // reste dans ce qu'on voit (le dessin ramene sinon la liste sur elle).
+            if (suggestionBar_.needed()) {
+                const std::size_t shown = std::max<std::size_t>(1, std::min<std::size_t>(10, suggestions_.size()));
+                const float rowH = std::max(1.f, (suggestionBox_.h - 4.f - suggestionLegendH_) / static_cast<float>(shown));
+                float off = rowH * static_cast<float>(suggestionFirst_);
+                bool  moved = false;
+                if (suggestionBar_.handle(*this, ev, off, &moved)) {
+                    if (moved) {
+                        const std::size_t most = suggestions_.size() - shown;
+                        suggestionFirst_ = std::min(most, static_cast<std::size_t>(std::max(0.f, std::round(off / rowH))));
+                        suggestionIndex_ = std::clamp(suggestionIndex_, suggestionFirst_, suggestionFirst_ + shown - 1);
+                    }
+                    return EventResult::Consumed;
+                }
+            }
             if (const auto* d = std::get_if<MouseDown>(&ev)) {
                 if (suggestionBox_.contains(d->pos)) {
                     // 1.11.2 : la legende du pied n'est pas une ligne (un clic dessus ne choisit rien).

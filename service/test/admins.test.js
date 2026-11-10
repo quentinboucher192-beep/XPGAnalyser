@@ -82,7 +82,7 @@ describe("la liste des admins (genre admins, signee par la cle de l'editeur)", (
         const e = (await appel(svc, "GET", "/v1/etat")).json;
         assert.equal(e.admins, 0);
         assert.equal(e.version_publiee, "");
-        assert.equal(e.version, "1.44.0", "`version` reste celle du service");
+        assert.equal(e.version, "1.46.0", "`version` reste celle du service");
     });
 
     it("publier : 200 ; GET /v1/admins rend le bloc tel quel ; l'etat dit son numero", async () => {

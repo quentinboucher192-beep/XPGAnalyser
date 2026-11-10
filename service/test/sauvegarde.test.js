@@ -138,8 +138,8 @@ describe("la sauvegarde (GET /admin/sauvegarde, admin+)", () => {
         const r = await appel(A, "GET", "/admin/sauvegarde", { cle: editeur });
         assert.equal(r.statut, 200, r.texte);
         assert.deepEqual(Object.keys(r.json), ["schema", "service_version", "tables", "heure"]);
-        assert.equal(r.json.schema, 3);
-        assert.equal(r.json.service_version, "1.44.0");
+        assert.equal(r.json.schema, 4); // 1.46.0 : la boutique
+        assert.equal(r.json.service_version, "1.46.0");
         sommaire = r.json;
         const n = Object.fromEntries(r.json.tables.map((t) => [t.nom, t.lignes]));
         for (const t of ["nonces", "debits", "morceaux"]) assert.equal(n[t], undefined, t + " n'est pas sauvegardee");
@@ -166,7 +166,7 @@ describe("la sauvegarde (GET /admin/sauvegarde, admin+)", () => {
         const config = Object.fromEntries(sauvegardeA.lignes.config.map((l) => [l.cle, l.valeur]));
         assert.equal(config.cle_publique, cleServiceA);
         assert.match(config.cle_privee, /^[0-9a-f]+$/);
-        assert.equal(config.schema, "3");
+        assert.equal(config.schema, "4");
         erreur(await appel(A, "GET", "/admin/sauvegarde?table=nonces", { cle: editeur }), 400, "table");
         erreur(await appel(A, "GET", "/admin/sauvegarde?table=archive&depuis=pas-un-curseur", { cle: editeur }), 400, "champ");
     });
@@ -176,11 +176,13 @@ describe("la restauration dans un service B neuf (la meme cle de l'editeur)", ()
     it("B a deja une licence : 409 pas_vide, sauf << remplacer >> ; un autre schema : 409 schema", async () => {
         const r = await appel(B, "PUT", "/admin/licences", { cle: editeur, corps: { licence: bloc("licence", licenceJson({ id: "XPG-2026-B0001", emission: now() - 5 }), editeur) } });
         assert.equal(r.statut, 200, r.texte);
-        erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 3 } }), 409, "pas_vide");
+        erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 4 } }), 409, "pas_vide");
         erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 2, remplacer: true } }), 409, "schema");
+        // 1.46.0 : une sauvegarde d'un service plus recent (schema 5) : refusee ; du schema 3 (1.44, sans la boutique) : prise.
+        erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 5, remplacer: true } }), 409, "schema");
         erreur(await appel(B, "POST", "/admin/restauration/lot", { cle: editeur, corps: { table: "config", lignes: [] } }), 409, "restauration");
-        erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: lea, corps: { schema: 3, remplacer: true } }), 403, "editeur");
-        const d = await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 3, remplacer: true } });
+        erreur(await appel(B, "POST", "/admin/restauration/debut", { cle: lea, corps: { schema: 4, remplacer: true } }), 403, "editeur");
+        const d = await appel(B, "POST", "/admin/restauration/debut", { cle: editeur, corps: { schema: 4, remplacer: true } });
         assert.equal(d.statut, 200, d.texte);
     });
 

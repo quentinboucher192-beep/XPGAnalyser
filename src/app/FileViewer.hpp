@@ -82,7 +82,9 @@ public:
 
     // Dessiner dans `area` ; les gestes dans le meme rectangle. Vrai : pris (a redessiner).
     void paint(gfx::IRenderer&, const gfx::Rect& area, const Palette&, const Fonts&);
-    bool event(const ui::InputEvent&, const gfx::Rect& area);
+    // 1.46.0 : `holder` - le widget qui le montre : la barre de defilement se tire (il tient la souris pendant le
+    // glisser) ; sans lui (le poste d'exploitation), un clic dans la gouttiere avance d'une page.
+    bool event(const ui::InputEvent&, const gfx::Rect& area, ui::Widget* holder = nullptr);
     // A redessiner sans geste : un chargement, un son ou une video qui joue, un GIF anime, une page de PDF qui arrive.
     [[nodiscard]] bool animating() const;
 

@@ -248,6 +248,9 @@ struct AdminWatch {
     std::string              publishedVersion;
     std::string              role;
     std::vector<std::string> rights;
+    // 1.46.0 (docs/BOUTIQUE.md) : le compteur des changements des commandes et celles a livrer (payees) ; -1 : un service
+    // d'avant la 1.46.0 (sans boutique).
+    std::int64_t             orders{-1}, toDeliver{-1};
 };
 // 1.44.0 : lire la reponse de GET /admin/etat (ses compteurs et, en 1.44.0, le role et les droits de qui appelle).
 void readAdminWatch(const core::json::Value& reply, AdminWatch& out);
@@ -368,6 +371,16 @@ struct MailText {
 // et l'etat du mail (`mailer` : nul, pas de mail). `licenceText` : la licence deposee (pour le mail).
 [[nodiscard]] Result answerOnline(const std::string& folder, const licensing::SigningKey& key, int number, const std::string& licenseId,
                                   const std::string& code, const std::string& licenceText, const Mailer& mailer, const Options& o);
+// 1.46.0 : LA BOUTIQUE (docs/BOUTIQUE.md, par. 5) - la demande scellee d'une COMMANDE (comme une demande en ligne :
+// scellee pour la cle de ce poste, la signature du PC verifiee, son poste) ouverte en une Entry (sans numero de demande :
+// deviceKey, nonce, customer, email, edition, option, deviceName...). Faux : `why`.
+bool openSealedRequest(const licensing::SigningKey& key, const std::string& device, const std::string& keyId, const std::string& sealed, Seconds now,
+                       Entry& out, std::string* why);
+// Repondre au PC d'une commande livree : << acceptee >> - comme answerOnline (le code scelle pour CE PC, la licence en
+// ligne, le mail), sans demande a marquer traitee. `code` vide : une option ajoutee a sa licence en ligne (le PC
+// renouvelle et la recoit) ; `message` : le mot que lit le Studio.
+[[nodiscard]] Result answerOrder(const std::string& folder, const licensing::SigningKey& key, const Entry& request, const std::string& licenseId,
+                                 const std::string& code, const std::string& licenceText, const std::string& message, const Mailer& mailer, const Options& o);
 // 1.37.0 : UNE SEULE ACCEPTATION - la demande n (en attente) est marquee << acceptee ici >> par la licence `licenseId`,
 // des sa signature, avant que la reponse parte (Entry::acceptedHere). Faux : elle n'attend plus, ou l'ecriture echoue.
 bool markAcceptedHere(const std::string& folder, int number, const std::string& licenseId, std::string* why);

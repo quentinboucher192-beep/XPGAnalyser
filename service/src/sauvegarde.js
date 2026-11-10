@@ -19,6 +19,7 @@
 //  service relue, les fichiers sans octets marques incomplets, une ligne
 //  << restauration >> au journal).
 // =============================================================================
+import { TABLES_SAUVEGARDE_BOUTIQUE } from "./boutique.js";
 import { Erreur, depuisBase64, enc, entier, mal, reponseJson, versBase64 } from "./outils.js";
 
 // Les tables sauvegardees et leur cle (l'ordre des pages). L'ordre de la liste : celui de la restauration.
@@ -43,6 +44,9 @@ export const TABLES_SAUVEGARDE = [
     ["messages", ["numero"]],
     ["versions", ["version"]],
     ["logiciels", ["cle"]],
+    // 1.46.0 : la boutique (le catalogue), les commandes et leurs scelles, les evenements de Stripe deja traites - jamais
+    // les secrets de Stripe (des secrets du Worker, dans aucune table).
+    ...TABLES_SAUVEGARDE_BOUTIQUE,
 ];
 const CLES = new Map(TABLES_SAUVEGARDE);
 
@@ -52,6 +56,9 @@ export const CONFIG_RESTAURATION = "restauration";
 const PAGE_MAX = 1.5 * 1024 * 1024; // une page de la sauvegarde (octets du JSON), au plus
 const LOT_SQL = 256; // les lignes lues d'un coup
 const LIGNES_LOT_MAX = 100000;
+// 1.46.0 : le plus ancien schema qu'un service de ce schema restaure (une sauvegarde 1.44 dans un service 1.46 : ses
+// tables de la boutique restent vides).
+const SCHEMA_RESTAURABLE = 3;
 
 // Une valeur de SQLite -> JSON (un binaire : {"$b64"}) ; et l'inverse (undefined : illisible).
 function versJson(v) {
@@ -180,7 +187,7 @@ export const RoutesSauvegarde = {
         const corps = this.corpsJson(ctx);
         if (!entier(corps.schema, 1, 1000)) throw mal("schema", "Le champ « schema » doit être le numéro du schéma de la sauvegarde.");
         if (corps.remplacer !== undefined && typeof corps.remplacer !== "boolean") throw mal("remplacer");
-        if (corps.schema !== this.schema)
+        if (corps.schema > this.schema || corps.schema < SCHEMA_RESTAURABLE)
             throw new Erreur(409, "schema", "Cette sauvegarde est du schéma " + corps.schema + " ; ce service est du schéma " + this.schema + " : restaure-la dans un service de la même version.", {
                 schema: this.schema,
             });
@@ -244,6 +251,8 @@ export const RoutesSauvegarde = {
             // le compteur des octets, juste (reecrit seulement s'il change : une restauration a l'identique ne touche rien)
             const o = String(this.nombre("SELECT COALESCE(SUM(LENGTH(octets)), 0) AS o FROM morceaux"));
             if (o !== (this.config("octets_morceaux") || "0")) this.ecrireConfig("octets_morceaux", o);
+            // 1.46.0 : une sauvegarde d'un schema plus ancien : le schema de ce service (ses tables sont deja la).
+            if (Number(this.config("schema") || "0") < this.schema) this.ecrireConfig("schema", String(this.schema));
         });
         this.enRestauration = false;
         this.oublierCaches();

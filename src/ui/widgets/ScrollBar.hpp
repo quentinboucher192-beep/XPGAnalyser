@@ -103,6 +103,48 @@ private:
     float         content_{0.f}, viewport_{0.f};
 };
 
+// ---- 1.46.0 : UN VOLET QUI DEFILE LUI-MEME ------------------------------------------
+//  « ces scrollbars ne bougent pas avec la souris » (la fenetre Licence, onglet
+//  Demander ma licence) : les volets qui dessinent tout et defilent a la molette
+//  (la partie gauche de cet onglet, les pages Boutique et Commandes de l'Admin, la
+//  fenetre d'une mise a jour, la liste des suggestions d'un champ...) dessinaient
+//  chacun << une barre fine >> (un fillRoundedRect) : elle suivait la molette mais
+//  ne se prenait pas, et un clic dans sa gouttiere ne faisait rien. ScrollArea les
+//  rassemble sous la meme regle que les listes : la molette sur la zone, le pouce
+//  qu'on tire (la souris tenue : le glisser continue hors du volet), un clic dans
+//  la gouttiere avance d'une page, le pouce s'eclaire au survol et pendant le glisser.
+//  Le volet garde son decalage (il s'en sert dans toute sa mise en page) : place()
+//  dans onLayout (ou au dessin), handle() en tete de onEvent, paint() dans onPaint.
+class ScrollArea {
+public:
+    // `area` : la zone qui defile (la molette y agit) ; `content` : la hauteur du
+    // contenu ; `viewport` : celle qu'on en voit (<= 0 : la hauteur de `area`) ;
+    // `track` : la gouttiere (vide : le bord droit de `area`, kScrollBarThickness de large).
+    void place(gfx::Rect area, float content, float viewport = 0.f, gfx::Rect track = {}) noexcept;
+    [[nodiscard]] ScrollAxis axis() const noexcept;
+    [[nodiscard]] bool       needed() const noexcept { return axis().needed(); }
+    [[nodiscard]] float      maxOffset() const noexcept { return axis().maxOffset(); }
+    [[nodiscard]] float      clamp(float offset) const noexcept;
+    [[nodiscard]] gfx::Rect  track() const noexcept { return axis().track; }
+    [[nodiscard]] gfx::Rect  thumb(float offset) const noexcept { return axis().thumb(offset); }
+    // En tete de onEvent : vrai si l'evenement est pris (la molette sur la zone, le
+    // pouce tire, la gouttiere cliquee) ; `offset` est alors borne, et `changed` dit
+    // s'il a bouge (le volet refait sa mise en page). Le volet est invalide.
+    bool handle(Widget& owner, const InputEvent& ev, float& offset, bool* changed = nullptr);
+    void paint(const PaintContext& ctx, float offset) const;
+    [[nodiscard]] bool dragging() const noexcept { return drag_.active(); }
+    [[nodiscard]] bool hot() const noexcept { return hot_; }
+
+    float wheelStep{48.f};   // les pixels d'un cran de molette
+    bool  wheel{true};       // faux : le volet garde la molette pour lui (un zoom)
+
+private:
+    gfx::Rect     area_{}, track_{};
+    float         content_{0.f}, viewport_{0.f};
+    ScrollBarDrag drag_;
+    bool          hot_{false};
+};
+
 // ---- le widget (un enfant) -----------------------------------------------------
 class ScrollBar : public Widget {
 public:

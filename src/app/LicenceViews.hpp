@@ -16,6 +16,17 @@
 //  PcLicencesView   << Les licences de ce PC >> (en tete de Demander ma licence) :
 //                   une ligne par licence que ce PC utilise, Regarder, Liberer.
 //
+//  1.46.0 : LA FENETRE LICENCE PAR UN FIL D'ARIANE (plus de bande de onze onglets) :
+//  LicenceHome      l'accueil - les rubriques en quatre groupes (Ma licence ;
+//                   Obtenir ou etendre ; Decouvrir ; Reglages), une ligne chacune :
+//                   son icone, son nom, ce qu'on y trouve, ce qu'elle dit deja.
+//  LicenceCrumbs    << Licence > Demander ma licence v >> en haut de chaque rubrique :
+//                   << Licence >> revient a l'accueil ; la rubrique ouvre le menu des
+//                   rubriques de son groupe.
+//  CaptureZoomBody  1.46.0 : on y CHANGE DE FONCTIONNALITE (la liste, les fleches
+//                   de part et d'autre ; Page precedente / Page suivante), celles
+//                   qui ne sont pas dans la licence comprises (<< pas dans ta licence >>).
+//
 //  Le modele des licences de ce PC (pcLicences, releasePlan) : sans reseau, sans
 //  fenetre - ce que l'etat de la licence et le releve du service disent.
 // =============================================================================
@@ -25,17 +36,22 @@
 
 #include "../core/Signal.hpp"
 #include "../hmi/HmiModel.hpp"
+#include "../ui/Icons.hpp"
 #include "../ui/Widget.hpp"
+#include "../ui/widgets/Controls.hpp"   // 1.46.0 : les liens de l'accueil et du fil (des boutons), le menu du fil
 
 #include <array>
 #include <cstddef>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ui {
 class Button;
+class DropDown;
+class PopupMenu;
 }
 
 namespace app::licence {
@@ -102,7 +118,23 @@ struct CaptureSet {
     std::string              description;   // sa phrase
     std::vector<CaptureShot> shots;
     std::vector<hmi::Resource> images;      // celles deja lues (la meme place que shots ; les autres : lues a la demande)
+    // 1.46.0 : PAS DANS LA LICENCE (ou pas dans l'offre choisie) - ses captures se montrent quand meme, et la fenetre le dit.
+    bool                     locked{false};
+    std::string              lockedText;    // << pas dans ta licence >>, << pas dans PERSONAL >>
 };
+
+// 1.46.0 : une fonctionnalite qu'on peut choisir dans la fenetre en grand (la liste du tableau d'ou elle a ete ouverte :
+// Fonctionnalites, Editions, la boutique), barree comme dans son tableau.
+struct CaptureChoice {
+    std::string id, label, product;
+    bool        locked{false};
+    std::string lockedText;
+};
+// Toutes les fonctionnalites du registre (pas les retirees), barrees si la licence ne les ouvre pas (<< licence-capture >>,
+// la fenetre << Ta licence ne permet pas cette action >>).
+[[nodiscard]] std::vector<CaptureChoice> registryChoices();
+// Les captures d'une fonctionnalite (featurePreview) : son titre, sa phrase, ses captures (rien encore de lu).
+[[nodiscard]] CaptureSet captureSetOf(const CaptureChoice& c);
 
 class CaptureZoomBody final : public ui::Widget {
 public:
@@ -118,12 +150,34 @@ public:
     // La phrase sous la capture : sa legende, puis celle de la fonctionnalite.
     [[nodiscard]] std::string text() const;
 
+    // ---- 1.46.0 : CHANGER DE FONCTIONNALITE sans fermer la fenetre ----
+    // Les fonctionnalites qu'on peut choisir (la montree : celle de la capture, sinon la premiere). Moins de deux : pas de
+    // liste. `load` : ses captures (vide : captureSetOf).
+    void setChoices(std::vector<CaptureChoice> choices, std::function<CaptureSet(const CaptureChoice&)> load = {});
+    [[nodiscard]] const std::vector<CaptureChoice>& choices() const noexcept { return choices_; }
+    [[nodiscard]] std::size_t featureCount() const noexcept { return choices_.size(); }
+    // Son rang dans la liste (-1 : pas dans la liste).
+    [[nodiscard]] int featureIndex() const noexcept { return featureAt_; }
+    [[nodiscard]] const std::string& feature() const noexcept { return set_.feature; }
+    [[nodiscard]] const std::string& title() const noexcept { return set_.title; }
+    [[nodiscard]] bool locked() const noexcept { return set_.locked; }
+    [[nodiscard]] const std::string& lockedText() const noexcept { return set_.lockedText; }
+    // La precedente (-1), la suivante (+1), en boucle (Page precedente, Page suivante, ses fleches).
+    void stepFeature(int delta);
+    // Par son identifiant (ou son rang) : faux s'il n'est pas dans la liste.
+    bool showFeature(const std::string& id);
+    bool showFeatureAt(std::size_t index);
+    // << Fonctionnalite 3/21 >> ; vide : pas de liste.
+    [[nodiscard]] std::string featureNavText() const;
+    [[nodiscard]] ui::DropDown* featureList() const noexcept { return list_; }
+
 protected:
     void onLayout() override;
     void onPaint(const ui::PaintContext& ctx) override;
     ui::EventResult onEvent(const ui::InputEvent& ev) override;
 
 private:
+    void syncList();
     CaptureSet            set_;
     std::size_t           shot_{0};
     std::function<void()> close_;
@@ -131,9 +185,131 @@ private:
     ui::Button*           prev_{nullptr};
     ui::Button*           next_{nullptr};
     ui::Button*           closeButton_{nullptr};
-    gfx::Rect             panel_{}, closeBox_{};
-    float                 navY_{0.f}, textY_{0.f};
+    ui::DropDown*         list_{nullptr};          // 1.46.0 : les fonctionnalites
+    ui::Button*           prevFeature_{nullptr};
+    ui::Button*           nextFeature_{nullptr};
+    std::vector<CaptureChoice> choices_;
+    std::function<CaptureSet(const CaptureChoice&)> load_;
+    int                   featureAt_{-1};
+    bool                  syncing_{false};
+    gfx::Rect             panel_{}, closeBox_{}, badge_{};
+    float                 navY_{0.f}, textY_{0.f}, barY_{0.f};
     core::ConnectionScope links_;
+};
+
+// ---- 1.46.0 : les rubriques de la fenetre Licence (l'accueil, le fil d'Ariane) -----------------------------------------
+struct SectionGroup {
+    const char* title;   // << Obtenir ou etendre >>
+    const char* line;    // ce qu'on y trouve, en une ligne
+};
+struct Section {
+    int         tab;     // licence::kTab*
+    int         group;   // son rang dans sectionGroups()
+    const char* slug;    // << demande >> : sa ligne sur l'accueil (licence.accueil.demande)
+    const char* title;   // << Demander ma licence >>
+    const char* line;    // ce qu'on y trouve, en une ligne
+    ui::Icon    icon;
+};
+[[nodiscard]] const std::vector<SectionGroup>& sectionGroups();
+// Les rubriques, groupe par groupe (Mon profil n'en est plus une).
+[[nodiscard]] const std::vector<Section>& sections();
+[[nodiscard]] const Section* sectionOf(int tab);
+// Une rubrique par son nom : son titre ou son identifiant court, sans accents ni majuscules (le debut suffit : << demander >>,
+// << mes achats >>, << achats >>), son numero (<< 7 >>), << accueil >> ou << licence >> (kTabHome), << profil >> (kTabProfile) ;
+// kTabAuto : aucune.
+[[nodiscard]] int sectionByName(std::string_view name);
+// << Licence > Demander ma licence >> (kTabHome : << Licence >>).
+[[nodiscard]] std::string crumbText(int tab);
+
+// Un lien de l'accueil (une rubrique) ou du fil : un bouton dessine en ligne de liste (son icone, son nom, sa phrase, ce
+// qu'elle dit deja, un chevron) ou en segment du fil.
+class SectionLink final : public ui::Button {
+public:
+    enum class Look : unsigned char { Row, Crumb, CrumbCurrent };
+    SectionLink(std::string text, std::string id, Look look);
+    void setLine(std::string line) { line_ = std::move(line); invalidate(); }
+    void setHint(std::string hint, int tone) {
+        hint_ = std::move(hint);
+        tone_ = tone;
+        invalidate();
+    }
+    void setRowIcon(ui::Icon icon) { icon_ = icon; invalidate(); }
+    void setMenuMark(bool on) { menuMark_ = on; invalidate(); }
+    void setLook(Look look) { look_ = look; invalidate(); }
+    [[nodiscard]] const std::string& hint() const noexcept { return hint_; }
+    [[nodiscard]] const std::string& line() const noexcept { return line_; }
+    // La largeur qu'il lui faut (un segment du fil).
+    [[nodiscard]] float naturalWidth() const;
+    int tab{kTabAuto};
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    Look        look_{Look::Row};
+    std::string line_, hint_;
+    int         tone_{0};
+    ui::Icon    icon_{ui::Icon::None};
+    bool        menuMark_{false};
+};
+
+class LicenceHome final : public ui::Widget {
+public:
+    explicit LicenceHome(std::string id);
+    // Ce que dit deja une rubrique (<< 1 PC sur 2 >>, << demande n. 12 en attente >>) ; ton : 0 discret, 1 bon, 2 attention, 3 erreur.
+    void setHint(int tab, std::string hint, int tone = 0);
+    [[nodiscard]] std::string hint(int tab) const;
+    [[nodiscard]] SectionLink* link(int tab) const;
+    // La hauteur de tout l'accueil a cette largeur (plus haute que sa case : la molette le fait defiler).
+    [[nodiscard]] float contentHeight() const noexcept { return contentH_; }
+    [[nodiscard]] float scroll() const noexcept { return scroll_; }
+    [[nodiscard]] int columns() const noexcept { return columns_; }
+    [[nodiscard]] gfx::Rect groupRect(std::size_t group) const { return group < boxes_.size() ? boxes_[group] : gfx::Rect{}; }
+    std::function<void(int tab)> onOpen;
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+    ui::EventResult onEvent(const ui::InputEvent& ev) override;
+
+private:
+    std::vector<SectionLink*> links_;
+    std::vector<gfx::Rect>    boxes_;
+    float                     scroll_{0.f}, contentH_{0.f};
+    int                       columns_{2};
+    bool                      relayout_{false};
+    core::ConnectionScope     conns_;
+};
+
+class LicenceCrumbs final : public ui::Widget {
+public:
+    explicit LicenceCrumbs(std::string id);
+    void setSection(int tab);   // kTabHome : << Licence >> seul
+    [[nodiscard]] int section() const noexcept { return section_; }
+    [[nodiscard]] std::string text() const { return crumbText(section_); }
+    [[nodiscard]] SectionLink& home() noexcept { return *home_; }
+    [[nodiscard]] SectionLink& current() noexcept { return *current_; }
+    // Le menu des rubriques du groupe (le dernier segment) ; ses entrees : leur onglet (kTabHome : l'accueil).
+    void openSiblings();
+    [[nodiscard]] bool siblingsOpen() const;
+    [[nodiscard]] ui::PopupMenu& siblings() noexcept { return *menu_; }
+    // Choisir dans le menu (comme d'un clic) : faux si `tab` n'y est pas.
+    bool choose(int tab);
+    std::function<void()>    onHome;
+    std::function<void(int)> onSection;
+
+protected:
+    void onLayout() override;
+    void onPaint(const ui::PaintContext& ctx) override;
+
+private:
+    int                   section_{kTabHome};
+    SectionLink*          home_{nullptr};
+    SectionLink*          current_{nullptr};
+    ui::PopupMenu*        menu_{nullptr};
+    std::vector<int>      menuTabs_;
+    float                 chevronX_{0.f};
+    core::ConnectionScope conns_;
 };
 
 // ---- les licences de ce PC -------------------------------------------------------------------------------------------

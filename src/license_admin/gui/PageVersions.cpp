@@ -97,6 +97,13 @@ public:
         pickStudios_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.studios.choisir", ui::Button::Style::Default, ui::Icon::Open);
         pickAdmin_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.admin.choisir", ui::Button::Style::Default, ui::Icon::Open);
         notes_ = &adopt(*this, std::make_unique<ui::MultiLineText>("versions.notes"));
+        // 1.46.0 : « je ne peux pas ecrire dans Notes » - un MultiLineText nait en lecture seule (l'apercu d'un code) : les
+        // notes sont un texte a taper, une note par ligne (Entree : la suivante), sans numeros de ligne, repliees a la largeur.
+        notes_->setReadOnly(false);
+        notes_->setShowLineNumbers(false);
+        notes_->setWordWrap(true);
+        notes_->setLanguage(ui::Language::PlainText);
+        notes_->setZoomSupport(ui::ZoomSupport::None);   // un champ du formulaire, pas un document
         important_ = &adopt(*this, std::make_unique<Switch>("Importante", "versions.importante"));
         cancel_ = &button(*this, "Annuler", "versions.annuler");
         sign_ = &button(*this, "Signer et publier", "versions.signer", ui::Button::Style::Primary, ui::Icon::Lock);
@@ -170,9 +177,16 @@ protected:
         float y = titleY_ + 80.f;
         for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, notes_, important_, cancel_, sign_}) show(wd, panel_);
         if (panel_) {
-            const float panelH = std::clamp(b.bottom() - y - 230.f, 380.f, 470.f);
+            // 1.46.0 : << Annuler >> passait sur le coin des notes (il commencait a gauche de la colonne de droite : les deux
+            // boutons cote a cote n'y tenaient pas). Les boutons restent dans la colonne de droite : elle s'elargit pour eux
+            // quand la partie gauche garde sa place, sinon ils s'empilent (Annuler au-dessus) ; le panneau est alors plus haut.
+            const float sw = buttonWidth(*sign_, 180.f), cw = buttonWidth(*cancel_, 90.f);
+            const float rowNeed = sw + 8.f + cw + 40.f;
+            float rightW = std::clamp(w_ * 0.27f, 280.f, 380.f);
+            if (rowNeed > rightW && w_ - rowNeed >= 600.f) rightW = rowNeed;
+            stacked_ = rowNeed > rightW;
+            const float panelH = std::clamp(b.bottom() - y - 230.f, stacked_ ? 400.f : 380.f, 470.f);
             panelRect_ = {x0_, y, w_, panelH};
-            const float rightW = std::clamp(w_ * 0.27f, 280.f, 380.f);
             leftRect_ = {panelRect_.x, panelRect_.y, panelRect_.w - rightW, panelRect_.h};
             rightRect_ = {leftRect_.right(), panelRect_.y, rightW, panelRect_.h};
             const float zx = leftRect_.x + 20.f, zw = (leftRect_.w - 56.f) * 0.5f;
@@ -184,9 +198,14 @@ protected:
             const float ny = versionRow_ + 70.f;
             notes_->setBounds({zx, ny, leftRect_.w - 40.f, std::max(60.f, leftRect_.bottom() - 16.f - ny)});
             important_->setBounds({rightRect_.x + 20.f, rightRect_.y + 214.f, 40.f, 22.f});
-            const float sw = buttonWidth(*sign_, 180.f), cw = buttonWidth(*cancel_, 90.f);
-            sign_->setBounds({rightRect_.right() - 20.f - sw, rightRect_.bottom() - 56.f, sw, 38.f});
-            cancel_->setBounds({sign_->bounds().x - 8.f - cw, rightRect_.bottom() - 56.f, cw, 38.f});
+            if (!stacked_) {
+                sign_->setBounds({rightRect_.right() - 20.f - sw, rightRect_.bottom() - 56.f, sw, 38.f});
+                cancel_->setBounds({sign_->bounds().x - 8.f - cw, rightRect_.bottom() - 56.f, cw, 38.f});
+            } else {
+                const float bw = rightRect_.w - 40.f;
+                sign_->setBounds({rightRect_.x + 20.f, rightRect_.bottom() - 56.f, bw, 38.f});
+                cancel_->setBounds({rightRect_.x + 20.f, rightRect_.bottom() - 102.f, bw, 38.f});
+            }
             y = panelRect_.bottom() + 16.f;
         } else {
             panelRect_ = {};
@@ -486,20 +505,26 @@ private:
         r.fillRect({rx, ib.y - 14.f, rw, 1.f}, c.gridLine);
         r.drawText({ib.right() + 12.f, ib.y - 2.f}, "Importante", gfx::semibold(kF13), c.text);
         r.drawText({ib.right() + 12.f, ib.y + 16.f}, "la rappeler \xC3\xA0 chaque lancement", kF12, c.textMuted);
+        // 1.46.0 : ce qu'ils verront, s'il tient au-dessus des boutons (et de l'avancement pendant l'envoi) - un panneau bas
+        // (1280 x 800) le posait sous << Signer et publier >>.
+        const float buttonsTop = std::min(sign_->bounds().y, cancel_->bounds().y);
+        const bool  sending = publishing_ && progress_;
         y = ib.bottom() + 30.f;
-        r.drawText({rx, y}, "CE QU'ILS VERRONT", gfx::semibold(kF11), c.textMuted);
-        y += 20.f;
-        const Rect toast{rx, y, rw, 58.f};
-        r.fillRoundedRect(toast, rgb(0x111827), 12.f);
-        r.drawText({toast.x + 16.f, toast.y + 11.f}, fit(r, "Mise \xC3\xA0 jour " + (v.empty() ? std::string("X.Y.Z") : v) + " disponible", gfx::semibold(kF13), toast.w - 32.f),
-                   gfx::semibold(kF13), rgb(0xFFFFFF));
-        r.drawText({toast.x + 16.f, toast.y + 32.f}, fit(r, (studios_.size ? sizeFr(studios_.size) + " \xC2\xB7 " : std::string()) + "sign\xC3\xA9" "e par l'\xC3\xA9" "diteur \xE2\x9C\x93", kF12, toast.w - 32.f),
-                   kF12, rgb(0xC7D0E0));
-        // L'avancement
-        if (publishing_ && progress_) {
+        if (y + 20.f + 58.f <= buttonsTop - (sending ? 46.f : 0.f) - 10.f) {
+            r.drawText({rx, y}, "CE QU'ILS VERRONT", gfx::semibold(kF11), c.textMuted);
+            y += 20.f;
+            const Rect toast{rx, y, rw, 58.f};
+            r.fillRoundedRect(toast, rgb(0x111827), 12.f);
+            r.drawText({toast.x + 16.f, toast.y + 11.f}, fit(r, "Mise \xC3\xA0 jour " + (v.empty() ? std::string("X.Y.Z") : v) + " disponible", gfx::semibold(kF13), toast.w - 32.f),
+                       gfx::semibold(kF13), rgb(0xFFFFFF));
+            r.drawText({toast.x + 16.f, toast.y + 32.f}, fit(r, (studios_.size ? sizeFr(studios_.size) + " \xC2\xB7 " : std::string()) + "sign\xC3\xA9" "e par l'\xC3\xA9" "diteur \xE2\x9C\x93", kF12, toast.w - 32.f),
+                       kF12, rgb(0xC7D0E0));
+        }
+        // L'avancement (au-dessus du premier bouton)
+        if (sending) {
             const std::uint64_t d = progress_->done, t = progress_->total;
             const float f = t ? static_cast<float>(static_cast<double>(d) / static_cast<double>(t)) : 0.f;
-            const Rect bar{rx, sign_->bounds().y - 26.f, rw, 8.f};
+            const Rect bar{rx, buttonsTop - 26.f, rw, 8.f};
             r.fillRoundedRect(bar, c.gridLine, 4.f);
             r.fillRoundedRect({bar.x, bar.y, std::max(8.f, bar.w * f), bar.h}, c.accent, 4.f);
             r.drawText({rx, bar.y - 20.f}, "Envoi : " + sizeFr(d) + " sur " + sizeFr(t), kF12, c.textMuted);
@@ -603,6 +628,7 @@ private:
 
     // --------------------------------------------------------------------- l'etat
     bool                          panel_{false}, have_{false}, fetching_{false}, publishing_{false};
+    bool                          stacked_{false};   // 1.46.0 : les deux boutons l'un sur l'autre (une colonne etroite)
     double                        lastFetch_{-1};
     VersionsView                  view_;
     std::vector<FileToResend>     resend_;

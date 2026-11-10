@@ -874,7 +874,7 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                 res.answerMail = content.mail;
                 res.answerMailTo = content.mailTo;
                 std::string m = "Le mail de l'\xC3\xA9" "diteur n'est pas parti" + (content.mailTo.empty() ? std::string() : " (vers " + content.mailTo + ")") +
-                                " : v\xC3\xA9rifie ton adresse (Licence\xE2\x80\xA6 \xE2\x80\xBA Mon profil).";
+                                " : v\xC3\xA9rifie ton adresse (Aide \xE2\x80\xBA Mon profil\xE2\x80\xA6).";   // 1.46.0 : sa fenetre a part
                 if (!res.answerCode.empty()) m += " Ton code d'activation est dans la fen\xC3\xAAtre de confirmation.";
                 res.notices.push_back({"licence:mail", m, "warning"});
                 text += " " + m;

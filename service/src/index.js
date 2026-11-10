@@ -14,6 +14,7 @@
 // =============================================================================
 import { CORPS_MAX, CORPS_MAX_RESTAURATION, Erreur, dec, reponseErreur } from "./outils.js";
 import { CORPS_MAX_RELAIS, localisateurDe } from "./relais.js";
+import { MAX_CORPS_WEBHOOK } from "./boutique.js";
 
 export { Licences } from "./licences.js";
 export { Relais } from "./relais.js";
@@ -52,7 +53,20 @@ async function lireCorps(request, max) {
 
 // Les routes publiques (sans signature) : LIMITE_PUBLIQUE ; les autres routes /v1 : LIMITE_PC (1.44.0 : les morceaux
 // et le lien d'un fichier aussi - un telechargement fait un appel par Mio).
-const PUBLIQUES = new Set(["/v1/etat", "/v1/heure", "/v1/certificat", "/v1/registre", "/v1/admins", "/v1/version", "/v1/fichiers/manifeste"]);
+// 1.46.0 : la boutique (le catalogue) et les deux petites pages ou Stripe renvoie le navigateur ; le webhook de Stripe
+// (/v1/boutique/stripe) reste sous LIMITE_PC.
+const PUBLIQUES = new Set([
+    "/v1/etat",
+    "/v1/heure",
+    "/v1/certificat",
+    "/v1/registre",
+    "/v1/admins",
+    "/v1/version",
+    "/v1/fichiers/manifeste",
+    "/v1/boutique",
+    "/v1/boutique/merci",
+    "/v1/boutique/annule",
+]);
 
 // Le limiteur de Cloudflare (par adresse, par minute ; une liaison absente : rien). Faux : trop d'appels.
 async function passe(env, url, ip) {
@@ -85,7 +99,15 @@ export default {
             const relais = url.pathname.startsWith("/v1/relais/");
             // 1.44.0 : un lot d'une restauration peut porter une ligne plus grosse qu'une page de la sauvegarde ; un envoi
             // du relais, 1,5 Mio en base64.
-            const max = url.pathname === "/admin/restauration/lot" ? CORPS_MAX_RESTAURATION : relais ? CORPS_MAX_RELAIS : CORPS_MAX;
+            // 1.46.0 : un evenement de Stripe (le webhook), 256 Kio au plus.
+            const max =
+                url.pathname === "/admin/restauration/lot"
+                    ? CORPS_MAX_RESTAURATION
+                    : relais
+                      ? CORPS_MAX_RELAIS
+                      : url.pathname === "/v1/boutique/stripe"
+                        ? MAX_CORPS_WEBHOOK
+                        : CORPS_MAX;
             const corps = methode === "GET" || methode === "HEAD" ? null : await lireCorps(request, max);
             const entetes = new Headers(request.headers);
             // L'adresse de l'appelant : celle que Cloudflare donne (jamais un en-tete pose par le client).

@@ -441,7 +441,7 @@ core::Status StartupScreen::buildUi() {
     uiLinks_ += rail.swatches().chosen->connect([this](const std::string& key) { chooseTheme(key); });
     uiLinks_ += rail.autostartButton().clicked->connect([this] { askAutostart(); });
     uiLinks_ += rail.licenceButton().clicked->connect([this] { showLicenceWindow(app_, licenceTab_); });   // 1.35.0 : l'onglet de l'encart
-    uiLinks_ += rail.profileButton().clicked->connect([this] { showLicenceWindow(app_, licence::kTabProfile); });   // 1.37.0
+    uiLinks_ += rail.profileButton().clicked->connect([this] { showProfileWindow(app_); });   // 1.37.0 ; 1.46.0 : sa fenetre a part
     // Le bouton ... du champ du chemin : l'explorateur part du dossier des
     // projets ; le project.xpgproj choisi designe son dossier ; puis comme Entree.
     {

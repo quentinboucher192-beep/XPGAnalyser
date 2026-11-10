@@ -88,6 +88,12 @@ export const ACTIONS_JOURNAL = [
     "fichier_envoyer",
     "criticite",
     "connexion",
+    // 1.46.0 : la boutique (docs/BOUTIQUE.md)
+    "boutique", // le catalogue, la vente en ligne, la livraison automatique
+    "stripe_brancher", // Brancher Stripe (la cle secrete et le webhook passes au Worker)
+    "commande_livrer", // une commande payee livree (sa licence)
+    "commande_revoir", // une commande que l'Admin n'a pas pu livrer (a revoir)
+    "commande_rembourser", // un remboursement demande a Stripe
 ];
 export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration"];
 

@@ -48,7 +48,7 @@ protected:
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
         if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos)) grabFocus();
         if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
-        if (area_.w > 0 && viewer_->event(ev, area_)) {
+        if (area_.w > 0 && viewer_->event(ev, area_, this)) {   // 1.46.0 : this - la barre de defilement se tire
             invalidate();
             return ui::EventResult::Consumed;
         }

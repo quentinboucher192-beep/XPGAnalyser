@@ -70,6 +70,7 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { DROITS_ADMINS, DROITS_LICENCE, DROITS_REGISTRE, GARDE_DEMANDES_ADMINS, RoutesAdmins, droitsDuRegistre } from "./admins.js";
+import { RoutesBoutique, TABLES_BOUTIQUE_SQL } from "./boutique.js";
 import { BlocIllisible, ecrireBlocLu, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
 import { GARDE_MESSAGE, RoutesFichiers } from "./fichiers.js";
 import { CONFIG_RESTAURATION, RoutesSauvegarde } from "./sauvegarde.js";
@@ -107,10 +108,11 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.44.0";
+const VERSION = "1.46.0";
 // 3 (1.44.0) : les admins, le journal, les fichiers, les messages, les versions, les logiciels ; les demandes
-// scellees pour plusieurs cles.
-const SCHEMA = 3;
+// scellees pour plusieurs cles. 4 (1.46.0) : la boutique et les commandes (boutique.js) - des tables en plus ; une
+// sauvegarde du schema 3 se restaure encore (ses tables de la boutique restent vides).
+const SCHEMA = 4;
 const JOUR = 86400;
 const HEURE = 3600;
 const FENETRE_APPEL = 600; // +-600 s
@@ -162,6 +164,7 @@ const PAR_IP = {
     decouverte: ["decouverte", 10, HEURE],
     demandes: ["demandes", 10, HEURE],
     admins: ["admins_demande", 10, HEURE],
+    commande: ["boutique_commande", 10, HEURE], // 1.46.0
 };
 const PAR_PC = {
     activer: ["activer", 5, HEURE],
@@ -169,6 +172,8 @@ const PAR_PC = {
     jeton: ["jeton", 60, HEURE, "memoire"],
     demandes: ["demandes", 5, JOUR],
     admins: ["admins_demande", 5, JOUR],
+    commande: ["boutique_commande", 10, JOUR], // 1.46.0 : une commande refusee par Stripe, une annulee : on recommence
+    commandes: ["boutique_commandes", 400, HEURE, "memoire"], // 1.46.0 : le Studio regarde sa commande toutes les 10 s
 };
 
 // signe : "pc" (n'importe quelle cle : celle du PC), "admin" (une cle de PUBLISHER_KEYS - l'admin+ - ou celle d'un
@@ -234,6 +239,21 @@ const ROUTES = {
     "POST /admin/restauration/debut": { f: "debutRestauration", signe: "plus", restauration: true },
     "POST /admin/restauration/lot": { f: "lotRestauration", signe: "plus", restauration: true },
     "POST /admin/restauration/fin": { f: "finRestauration", signe: "plus", restauration: true },
+    // 1.46.0 : la boutique et les commandes (boutique.js, docs/BOUTIQUE.md)
+    "GET /v1/boutique": { f: "lireBoutiquePublique" },
+    "GET /v1/boutique/merci": { f: "pageMerci" },
+    "GET /v1/boutique/annule": { f: "pageAnnule" },
+    "POST /v1/boutique/stripe": { f: "webhookStripe" },
+    "POST /v1/boutique/commande": { f: "passerCommande", signe: "pc", ip: PAR_IP.commande, pc: PAR_PC.commande },
+    "GET /v1/boutique/commandes": { f: "commandesDuPc", signe: "pc", pc: PAR_PC.commandes },
+    "POST /v1/boutique/annuler": { f: "annulerCommande", signe: "pc" },
+    "PUT /admin/boutique": { f: "deposerBoutique", signe: "plus" },
+    "GET /admin/boutique": { f: "lireBoutiqueAdmin", signe: "admin" },
+    "GET /admin/commandes": { f: "listerCommandes", signe: "admin", droit: ["demandes"] },
+    "POST /admin/commandes/prendre": { f: "prendreCommande", signe: "admin", droit: ["demandes"] },
+    "POST /admin/commandes/livree": { f: "commandeLivree", signe: "admin", droit: ["demandes"] },
+    "POST /admin/commandes/a-revoir": { f: "commandeARevoir", signe: "admin", droit: ["demandes"] },
+    "POST /admin/commandes/rembourser": { f: "rembourserCommande", signe: "plus" },
 };
 const CHEMINS = new Set(Object.keys(ROUTES).map((r) => r.slice(r.indexOf(" ") + 1)));
 
@@ -406,6 +426,8 @@ export class Licences extends DurableObject {
                 publiee INTEGER NOT NULL, fichiers TEXT NOT NULL, recue INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS logiciels (cle TEXT PRIMARY KEY, logiciel TEXT NOT NULL, version TEXT NOT NULL, vu INTEGER NOT NULL) WITHOUT ROWID;
         `);
+        // 1.46.0 (schema 4) : la boutique et les commandes - des tables neuves, rien d'autre ne change.
+        this.x(TABLES_BOUTIQUE_SQL);
         if (avant < SCHEMA) {
             // Les compteurs des grandes tables : comptes UNE fois (une base d'avant), puis tenus a chaque ecriture.
             if (avant) {
@@ -628,7 +650,7 @@ export class Licences extends DurableObject {
             const ip = request.headers.get("X-XPG-IP") || "inconnue";
             // LIMITES_ESSAI = "sans" : les limites levees, SEULEMENT sur ce poste (les essais qui enchainent les appels).
             const limites = !(local && this.env.LIMITES_ESSAI === "sans");
-            const ctx = { request, url, methode, corps, ip, now, appelant: null };
+            const ctx = { request, url, methode, corps, ip, now, local, appelant: null };
             // L'ordre : la signature (rien n'est ecrit), puis les limites, puis le nonce. Un appel refuse n'ecrit rien
             // (sauf la ligne du journal d'une cle d'admin retire, 1.44.0).
             if (route.signe) ctx.appelant = await this.verifierAppel(ctx, route.signe);
@@ -666,6 +688,7 @@ export class Licences extends DurableObject {
             this.x("DELETE FROM jetons WHERE jusqu_a < ?", now - HEURE);
             this.x("DELETE FROM debits WHERE fin < ?", now);
             for (const [cle, d] of this.debitsMem) if (d.fin < now) this.debitsMem.delete(cle);
+            this.menageBoutique(now); // 1.46.0 : une page de paiement finie sans nouvelle de Stripe : expiree
         }
         const jour = jourDe(now);
         if (this.menageJour === null) this.menageJour = this.config("menage_jour") || "";
@@ -707,6 +730,7 @@ export class Licences extends DurableObject {
             this.ajouter("n_activations", -n);
         }
         this.x("DELETE FROM liberations WHERE t < ?", now - FENETRE_TRANSFERTS);
+        this.grandMenageBoutique(now); // 1.46.0
     }
 
     // Les appels du jour : comptes en memoire, ecrits (une ligne) une fois par minute au plus. Un objet arrete entre
@@ -998,6 +1022,8 @@ export class Licences extends DurableObject {
             // (GET /v1/version ; "" : aucune). `version`, lui, reste celle du service.
             admins: Number(this.config("admins_numero") || "0"),
             version_publiee: this.config("version_derniere") || "",
+            // 1.46.0 : la boutique en ligne est ouverte (des articles s'achetent : GET /v1/boutique).
+            boutique: this.boutiqueOuverte(),
         });
     }
 
@@ -1696,6 +1722,9 @@ export class Licences extends DurableObject {
             version_publiee: this.config("version_derniere") || "",
             role: ctx.appelant.role,
             droits: ctx.appelant.droits,
+            // 1.46.0 : les commandes - un compteur qui monte a chaque changement d'une commande, et celles a livrer (payees).
+            commandes: this.compte("commandes_changements"),
+            a_livrer: this.nombre("SELECT COUNT(*) AS n FROM commandes WHERE etat = 'payee'"),
         });
     }
 
@@ -1745,4 +1774,4 @@ export class Licences extends DurableObject {
 
 // 1.44.0 : les routes des admins, des fichiers (et des messages, des versions), de la sauvegarde - des methodes de
 // l'objet, ecrites a part (admins.js, fichiers.js, sauvegarde.js).
-Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde);
+Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique);

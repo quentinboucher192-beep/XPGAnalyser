@@ -443,8 +443,11 @@ std::wstring environmentBlock(const std::vector<std::pair<std::string, std::stri
     return block;
 }
 
+// 1.46.0 : `input` (facultatif) : ce que l'enfant lit sur son entree standard (un secret : wrangler secret put), puis la
+// fin ; jamais sur la ligne de commande. Sans lui, l'entree est fermee tout de suite.
 RunResult runChild(const std::string& program, const std::vector<std::string>& args, const std::string& dir, const std::string& path, bool killTree,
-                   double timeout, std::vector<std::string>& lines, const LineSink& onLine, const std::atomic<bool>* cancel) {
+                   double timeout, std::vector<std::string>& lines, const LineSink& onLine, const std::atomic<bool>* cancel,
+                   const std::string* input = nullptr) {
     RunResult r;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof sa;
@@ -508,6 +511,10 @@ RunResult runChild(const std::string& program, const std::vector<std::string>& a
     if (attrs) DeleteProcThreadAttributeList(attrs);
     CloseHandle(outW);
     CloseHandle(inR);
+    if (okStart && input && !input->empty()) {   // 1.46.0 : un secret, quelques octets (le tube les garde : l'enfant est suspendu)
+        DWORD wrote = 0;
+        (void)WriteFile(inW, input->data(), static_cast<DWORD>(input->size()), &wrote, nullptr);
+    }
     CloseHandle(inW);
     if (!okStart) {
         r.error = "Windows refuse de le lancer (erreur " + std::to_string(startError) + ") : " + program;
@@ -591,8 +598,11 @@ void closeInherited(int keep) {
         if (fd != keep) (void)close(fd);
 }
 
+// 1.46.0 : `input` (facultatif) : ce que l'enfant lit sur son entree standard (un secret : wrangler secret put), puis la
+// fin ; jamais sur la ligne de commande. Sans lui, l'entree est fermee tout de suite.
 RunResult runChild(const std::string& program, const std::vector<std::string>& args, const std::string& dir, const std::string& path, bool killTree,
-                   double timeout, std::vector<std::string>& lines, const LineSink& onLine, const std::atomic<bool>* cancel) {
+                   double timeout, std::vector<std::string>& lines, const LineSink& onLine, const std::atomic<bool>* cancel,
+                   const std::string* input = nullptr) {
     RunResult r;
     // Tout ce que l'enfant emploie est pret AVANT fork (apres : seulement des appels surs).
     std::vector<std::string> argStore{program};
@@ -620,7 +630,24 @@ RunResult runChild(const std::string& program, const std::vector<std::string>& a
             if (fd >= 0) close(fd);
         return r;
     }
-    const int devnull = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    int devnull = -1;
+    if (input) {
+        // 1.46.0 : l'entree dans un tube rempli AVANT fork (quelques octets : le tube les garde), puis fermee de ce cote ;
+        // jamais d'ecriture vers un enfant deja parti (SIGPIPE).
+        int in[2] = {-1, -1};
+        if (pipe2(in, O_CLOEXEC) == 0) {
+            std::size_t off = 0;
+            while (off < input->size()) {
+                const ssize_t w = write(in[1], input->data() + off, input->size() - off);
+                if (w <= 0) break;
+                off += static_cast<std::size_t>(w);
+            }
+            close(in[1]);
+            devnull = in[0];
+        }
+    } else {
+        devnull = open("/dev/null", O_RDONLY | O_CLOEXEC);
+    }
     const pid_t pid = fork();
     if (pid < 0) {
         r.error = "fork refus\xC3\xA9";
@@ -1149,6 +1176,83 @@ Report login(const Options& o, const LineSink& onLine, const std::atomic<bool>* 
     r.reason = run.timedOut ? std::string("La connexion \xC3\xA0 Cloudflare a attendu trop longtemps : elle a \xC3\xA9t\xC3\xA9 arr\xC3\xAAt\xC3\xA9" "e.")
                             : "La connexion \xC3\xA0 Cloudflare n'a pas abouti (code " + std::to_string(run.exitCode) + ").";
     r.next = "Recommence \xC2\xAB Se connecter \xC3\xA0 Cloudflare\xE2\x80\xA6 \xC2\xBB : dans ton navigateur, connecte-toi \xC3\xA0 ton compte Cloudflare puis clique \xC2\xAB Allow \xC2\xBB.";
+    return r;
+}
+
+// ============================================================================================ 1.46.0 : un secret du Worker
+Report putSecret(const Options& o, const std::string& name, const std::string& value, const LineSink& onLine, const std::atomic<bool>* cancel) {
+    Report r;
+    RunGuard guard;
+    if (!guard.ok) {
+        r.outcome = Outcome::Busy;
+        r.reason = "Une mise en ligne tourne d\xC3\xA9j\xC3\xA0 : attends qu'elle finisse.";
+        return r;
+    }
+    const double t0 = steady();
+    std::vector<std::string> lines;
+    const auto say = [&](const std::string& l) {
+        const std::string c = scrub(l);
+        lines.push_back(c);
+        if (onLine) onLine(c);
+    };
+    if (name.empty() || name.size() > 64 || !std::all_of(name.begin(), name.end(), [](char c) { return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'; })) {
+        r.reason = "Le nom du secret est illisible.";
+        return r;
+    }
+    if (value.empty() || value.size() > 4096 || value.find_first_of("\r\n") != std::string::npos) {
+        r.reason = "La valeur du secret " + name + " est vide ou illisible.";
+        return r;
+    }
+    Kit kit;
+    NodeTools tools;
+    if (!prepare(o, r, kit, tools, say)) {
+        r.tail = tailOf(lines, 12);
+        r.seconds = steady() - t0;
+        return r;
+    }
+    // wrangler du kit (le premier deploiement l'y a mis), sinon npx (comme login).
+    std::string program = tools.node;
+    std::vector<std::string> args;
+    const fs::path wrangler = P(kit.service) / "node_modules" / "wrangler" / "bin" / "wrangler.js";
+    const fs::path npxCli = P(tools.node).parent_path() / "node_modules" / "npm" / "bin" / "npx-cli.js";
+    if (isFile(wrangler)) {
+        args = {U(wrangler), "secret", "put", name};
+    } else if (isFile(npxCli)) {
+        args = {U(npxCli), "--yes", "wrangler", "secret", "put", name};
+    } else {
+#if defined(_WIN32)
+        std::wstring comspec = envW(L"ComSpec");
+        if (comspec.empty()) comspec = L"C:\\Windows\\System32\\cmd.exe";
+        program = narrow(comspec);
+        args = {"/d", "/c", tools.npx, "--yes", "wrangler", "secret", "put", name};
+#else
+        program = tools.npx;
+        args = {"--yes", "wrangler", "secret", "put", name};
+#endif
+    }
+    say("npx wrangler secret put " + name + " (dans " + kit.service + ") : la valeur passe par l'entr\xC3\xA9" "e standard, jamais affich\xC3\xA9" "e.");
+    const RunResult run = runChild(program, args, kit.service, tools.path, true, std::max(60.0, std::min(o.timeoutSeconds, 600.0)), lines, onLine, cancel, &value);
+    r.seconds = steady() - t0;
+    r.kit = kit.folder;
+    if (!run.started) {
+        r.outcome = Outcome::StartFailed;
+        r.reason = "wrangler ne se lance pas : " + run.error + ".";
+        r.next = "R\xC3\xA9installe Node.js (la version LTS) depuis nodejs.org, puis recommence.";
+        r.link = kNodeLink;
+        r.tail = tailOf(lines, 12);
+        return r;
+    }
+    r.exitCode = run.exitCode;
+    if (run.exitCode == 0 && !run.timedOut && !run.cancelled) {
+        r.outcome = Outcome::Ok;
+        r.tail = tailOf(lines, 12);
+        r.reason = "Le secret " + name + " est pos\xC3\xA9 sur ton service.";
+        return r;
+    }
+    classify(r, lines, run.cancelled, false);
+    if (r.outcome == Outcome::Failed)
+        r.reason = "wrangler n'a pas pos\xC3\xA9 le secret " + name + " (code " + std::to_string(run.exitCode) + ").";
+    if (run.timedOut) r.reason = "wrangler a pris trop de temps pour poser le secret " + name + " : arr\xC3\xAAt\xC3\xA9.";
     return r;
 }
 

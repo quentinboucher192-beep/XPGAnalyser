@@ -122,11 +122,16 @@ export function nouveauCode() {
 
 // ---- le service local ----
 // Lance lancer-local.sh (un port libre, un dossier d'etat) ; {base, arreter(), etat}.
-export async function lancerService({ cles = [], decalage = 0, jours, etat, sansLimites = false } = {}) {
+// 1.46.0 : `stripe` {cle, webhook, base} - un FAUX Stripe (tests/outils/faux_stripe.mjs) : des valeurs essai_jeton_...
+export async function lancerService({ cles = [], decalage = 0, jours, etat, sansLimites = false, stripe } = {}) {
     const dossier = etat || fs.mkdtempSync(path.join(os.tmpdir(), "xpg-service-essai-"));
     const env = { ...process.env, XPG_DECALAGE_HORLOGE_ESSAI: String(decalage) };
     if (jours) env.XPG_DECOUVERTE_JOURS = String(jours);
     if (sansLimites) env.XPG_LIMITES_ESSAI = "sans";
+    for (const k of ["XPG_STRIPE_SECRET_KEY", "XPG_STRIPE_WEBHOOK_SECRET", "XPG_STRIPE_API_BASE"]) delete env[k];
+    if (stripe && stripe.cle) env.XPG_STRIPE_SECRET_KEY = stripe.cle;
+    if (stripe && stripe.webhook) env.XPG_STRIPE_WEBHOOK_SECRET = stripe.webhook;
+    if (stripe && stripe.base) env.XPG_STRIPE_API_BASE = stripe.base;
     const p = spawn("bash", [LANCEUR, "0", dossier, cles.join(",")], { env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let sortie = "";
     let erreurs = "";

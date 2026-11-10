@@ -16,6 +16,7 @@
 #include "../ui/Theme.hpp"
 #include "../ui/Zoom.hpp"
 #include "../ui/widgets/PropertyGridHooks.hpp"   // 1.24.1 : l'en-tete, un chemin (Ouvrir dans l'explorateur, Aller a)
+#include "../ui/widgets/ScrollBar.hpp"           // 1.46.0 : la barre de defilement se tire
 
 #include <algorithm>
 #include <atomic>
@@ -214,6 +215,9 @@ struct FileViewer::Impl {
     };
     std::vector<Hit> hits;
     bool             animating{false};
+    // 1.46.0 : la barre de defilement du dernier dessin (en unites de `top` : des lignes, ou des pixels pour un document) -
+    // elle se tire et sa gouttiere se clique (avant : montree seulement).
+    ui::ScrollArea   bar;
 
     ~Impl() {
         stopSound();
@@ -647,12 +651,16 @@ gfx::TextureId textureFor(const Ctx& c, const std::string& slot, const std::shar
     return t.id;
 }
 
-// Une barre de defilement (montree seulement) : `first` sur `total`, `shown` a la fois.
+// Une barre de defilement : `first` sur `total`, `shown` a la fois. 1.46.0 : elle se tire et sa gouttiere se clique
+// (FileViewer::event lit sa place, notee ici) ; plus sombre au survol et pendant le glisser.
 void scrollbar(const Ctx& c, const gfx::Rect& area, double first, double shown, double total) {
+    c.d.bar.wheel = false;   // la molette : FileViewer::event (des lignes, un zoom, de cote)
+    c.d.bar.place(area, static_cast<float>(total), static_cast<float>(shown),
+                  {area.right() - ui::kScrollBarThickness, area.y, ui::kScrollBarThickness, area.h});
     if (total <= shown || total <= 0) return;
-    const float h = std::max(18.f, static_cast<float>(area.h * shown / total));
-    const float y = area.y + static_cast<float>((area.h - h) * std::clamp(first / std::max(1.0, total - shown), 0.0, 1.0));
-    c.r.fillRoundedRect({area.x + area.w - 6.f, y, 4.f, h}, mix(c.pal.back, c.pal.text, 0.35f), 2.f);
+    const gfx::Rect th = c.d.bar.thumb(static_cast<float>(first));
+    const bool lit = c.d.bar.hot() || c.d.bar.dragging();
+    c.r.fillRoundedRect({area.x + area.w - (lit ? 7.f : 6.f), th.y, lit ? 6.f : 4.f, th.h}, mix(c.pal.back, c.pal.text, lit ? 0.55f : 0.35f), 2.f);
 }
 
 // Un texte replie a la largeur (les mots ; un mot trop long, coupe).
@@ -1123,6 +1131,7 @@ void FileViewer::paint(gfx::IRenderer& r, const gfx::Rect& area, const Palette& 
     auto& d = *impl_;
     d.poll();
     d.hits.clear();
+    d.bar.place({}, 0.f);   // 1.46.0 : pas de barre tant que le dessin n'en pose pas (une image, un son)
     d.animating = false;
     // Les textures : celles du renderer de la surface (sous un zoom de page) ; un autre renderer : on repart de zero.
     gfx::IRenderer& base = ui::unzoomed(r);
@@ -1272,9 +1281,25 @@ void FileViewer::paint(gfx::IRenderer& r, const gfx::Rect& area, const Palette& 
     d.retired.clear();
 }
 
-bool FileViewer::event(const ui::InputEvent& ev, const gfx::Rect& area) {
+bool FileViewer::event(const ui::InputEvent& ev, const gfx::Rect& area, ui::Widget* holder) {
     auto& d = *impl_;
     const fv::Preview* p = current();
+    // 1.46.0 : la barre de defilement (un texte, un tableau, une archive, un document) - le pouce tire (la souris tenue par
+    // `holder`), la gouttiere cliquee ; sans `holder`, la gouttiere seulement.
+    if (d.bar.needed() && p) {
+        float off = static_cast<float>(d.top);
+        if (holder) {
+            if (d.bar.handle(*holder, ev, off)) {
+                d.top = off;
+                return true;
+            }
+        } else if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && m->button == ui::MouseButton::Left && d.bar.track().contains(m->pos)) {
+            const gfx::Rect th = d.bar.thumb(off);
+            const float page = std::max(1.f, d.bar.axis().viewport * 0.9f);
+            if (!th.contains(m->pos)) d.top = d.bar.clamp(off + (m->pos.y < th.y ? -page : page));
+            return true;
+        }
+    }
     if (const auto* m = std::get_if<ui::MouseDown>(&ev)) {
         if (!area.contains(m->pos)) return false;
         if (m->button != ui::MouseButton::Left) return true;
@@ -1392,7 +1417,7 @@ ui::EventResult FileViewPane::onEvent(const ui::InputEvent& ev) {
         }
     }
     if (std::holds_alternative<ui::KeyDown>(ev) && !focused()) return ui::EventResult::Ignored;
-    if (viewer_.event(ev, bounds())) {
+    if (viewer_.event(ev, bounds(), this)) {   // 1.46.0 : this - la barre de defilement se tire
         invalidate();
         return ui::EventResult::Consumed;
     }

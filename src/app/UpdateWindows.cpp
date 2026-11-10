@@ -251,6 +251,9 @@ protected:
         body_ = {panel_.x, panel_.y + 76.f, panel_.w, panel_.h - 76.f - 60.f};
         maxScroll_ = std::max(0.f, contentHeight(w) - body_.h);
         scroll_ = std::clamp(scroll_, 0.f, maxScroll_);
+        // 1.46.0 : la barre au bord droit du panneau (elle se tire, sa gouttiere se clique) ; la molette sur le corps.
+        bar_.wheelStep = 40.f;
+        bar_.place(body_, body_.h + maxScroll_, body_.h, {panel_.right() - 11.f, body_.y, ui::kScrollBarThickness, body_.h});
         // les boutons de chaque carte (a droite du nom)
         float y = body_.y + 20.f - scroll_ + textH_ + 44.f;
         for (auto& c : cards_) {
@@ -365,11 +368,7 @@ protected:
             y += 78.f;
         }
         r.popClip();
-        if (maxScroll_ > 0.f) {   // la barre de defilement, discrete
-            const float th = std::max(30.f, body_.h * body_.h / (body_.h + maxScroll_));
-            const float ty = body_.y + (body_.h - th) * (scroll_ / maxScroll_);
-            r.fillRoundedRect({panel_.right() - 8.f, ty, 4.f, th}, c.scrollbar, 2.f);
-        }
+        bar_.paint(ctx, scroll_);   // la barre de defilement, discrete (1.46.0 : ui::ScrollArea, qu'on tire)
         // ---- le pied
         r.fillRect({panel_.x, panel_.bottom() - 60.f, panel_.w, 1.f}, c.border);
         ui::drawIcon(r, ui::Icon::Lock, {panel_.x + 22.f, panel_.bottom() - 38.f, 14.f, 14.f}, c.textMuted);
@@ -385,10 +384,9 @@ protected:
             if (close_) close_();
             return ui::EventResult::Consumed;
         }
-        if (const auto* wh = std::get_if<ui::MouseWheel>(&ev); wh && body_.contains(wh->pos) && maxScroll_ > 0.f) {
-            scroll_ = std::clamp(scroll_ - wh->dy * 40.f, 0.f, maxScroll_);
-            invalidateLayout();
-            invalidate();
+        // La molette sur le corps, le pouce tire (la souris tenue), la gouttiere cliquee (1.46.0 : ui::ScrollArea).
+        if (bool moved = false; bar_.handle(*this, ev, scroll_, &moved)) {
+            if (moved) invalidateLayout();
             return ui::EventResult::Consumed;
         }
         return ui::EventResult::Ignored;
@@ -479,6 +477,7 @@ private:
     std::function<void()>    close_;
     gfx::Rect                panel_{}, closeBox_{}, body_{};
     float                    scroll_{0.f}, maxScroll_{0.f}, frac_{0.f};
+    ui::ScrollArea           bar_;   // 1.46.0
     std::uint64_t            seenRev_{0};
     std::string              seenFetch_;
     core::ConnectionScope    links_;

@@ -31,6 +31,15 @@
 #    XPG_SERVICE_DOSSIER=<dossier>          le dossier du Worker (defaut : service/
 #                                           a la racine du depot)
 #    XPG_SERVICE_ATTENTE=<secondes>         le delai de demarrage (60)
+#    1.46.0, LA BOUTIQUE (docs/BOUTIQUE.md) - un FAUX Stripe des essais seulement :
+#    XPG_STRIPE_SECRET_KEY=essai_jeton_...  STRIPE_SECRET_KEY du Worker (une valeur d'essai : elle
+#                                           DOIT commencer par essai_jeton_ ; une vraie cle est refusee)
+#    XPG_STRIPE_WEBHOOK_SECRET=essai_jeton_...  STRIPE_WEBHOOK_SECRET (idem)
+#    XPG_STRIPE_API_BASE=http://127.0.0.1:N  l'adresse du faux Stripe (127.0.0.1 ou localhost seulement ;
+#                                           le Worker ne l'ecoute que pour un appel a 127.0.0.1)
+#                                           Ces trois-la passent par un fichier du dossier d'etat
+#                                           (stripe-essai.env, 0600 ; --env-file), jamais par la ligne
+#                                           de commande ; wrangler ne les affiche pas.
 #
 #  Codes de sortie : 2 mauvais arguments ; 3 Node.js ou wrangler manquent
 #  (`npm ci` dans service/) ; 4 le service n'a pas demarre (le journal le dit).
@@ -59,6 +68,14 @@ ATTENTE="${XPG_SERVICE_ATTENTE:-60}"
 LIMITES="${XPG_LIMITES_ESSAI:-}"
 [ -z "$LIMITES" ] || [ "$LIMITES" = "sans" ] || { echo "lancer-local.sh : XPG_LIMITES_ESSAI vaut \"sans\" ou rien" >&2; exit 2; }
 [[ "$ATTENTE" =~ ^[0-9]{1,4}$ ]] || { echo "lancer-local.sh : XPG_SERVICE_ATTENTE doit etre un nombre de secondes" >&2; exit 2; }
+# 1.46.0 : le faux Stripe des essais (jamais une vraie cle, jamais le vrai Stripe).
+STRIPE_CLE="${XPG_STRIPE_SECRET_KEY:-}"
+STRIPE_WEBHOOK="${XPG_STRIPE_WEBHOOK_SECRET:-}"
+STRIPE_BASE="${XPG_STRIPE_API_BASE:-}"
+for v in "$STRIPE_CLE" "$STRIPE_WEBHOOK"; do
+    [ -z "$v" ] || [[ "$v" =~ ^essai_jeton_[A-Za-z0-9_]{1,200}$ ]] || { echo "lancer-local.sh : XPG_STRIPE_SECRET_KEY et XPG_STRIPE_WEBHOOK_SECRET : des valeurs d'essai seulement (essai_jeton_...)" >&2; exit 2; }
+done
+[ -z "$STRIPE_BASE" ] || [[ "$STRIPE_BASE" =~ ^http://(127\.0\.0\.1|localhost)(:[0-9]{1,5})?$ ]] || { echo "lancer-local.sh : XPG_STRIPE_API_BASE : http://127.0.0.1:PORT (un faux Stripe sur ce poste) seulement" >&2; exit 2; }
 
 ICI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE="${XPG_SERVICE_DOSSIER:-$ICI/../../service}"
@@ -82,6 +99,16 @@ fi
 mkdir -p "$ETAT" || { echo "lancer-local.sh : impossible de creer $ETAT" >&2; exit 2; }
 ETAT="$(cd "$ETAT" && pwd)"
 JOURNAL="$ETAT/journal-wrangler.txt"
+# 1.46.0 : les valeurs du faux Stripe, dans un fichier (jamais sur la ligne de commande).
+ENV_STRIPE=()
+if [ -n "$STRIPE_CLE$STRIPE_WEBHOOK$STRIPE_BASE" ]; then
+    FICHIER_STRIPE="$ETAT/stripe-essai.env"
+    ( umask 077; : >"$FICHIER_STRIPE" )
+    [ -z "$STRIPE_CLE" ] || echo "STRIPE_SECRET_KEY=$STRIPE_CLE" >>"$FICHIER_STRIPE"
+    [ -z "$STRIPE_WEBHOOK" ] || echo "STRIPE_WEBHOOK_SECRET=$STRIPE_WEBHOOK" >>"$FICHIER_STRIPE"
+    [ -z "$STRIPE_BASE" ] || echo "STRIPE_API_BASE=$STRIPE_BASE" >>"$FICHIER_STRIPE"
+    ENV_STRIPE=(--env-file "$FICHIER_STRIPE")
+fi
 
 port_libre() {
     "$NODE" -e 'const s=require("net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
@@ -127,6 +154,7 @@ for essai in 1 2 3 4 5; do
     (cd "$SERVICE" && exec "$NODE" --no-warnings "$CLI" dev --local --ip 127.0.0.1 --port "$PORT" \
         --persist-to "$ETAT/etat" \
         --var "PUBLISHER_KEYS:$CLES" --var "DECOUVERTE_JOURS:$JOURS" --var "DECALAGE_HORLOGE_ESSAI:$DECALAGE" --var "LIMITES_ESSAI:$LIMITES" \
+        ${ENV_STRIPE[@]+"${ENV_STRIPE[@]}"} \
         --log-level info --show-interactive-dev-session=false) >>"$JOURNAL" 2>&1 </dev/null &
     WPID=$!
     pret=0

@@ -55,6 +55,7 @@
 #include "../ArchiveSync.hpp"
 #include "../KeyBackup.hpp"
 #include "../ServiceClient.hpp"
+#include "../Shop.hpp"   // 1.46.0 : la boutique et les commandes
 #include "../../core/Version.hpp"
 #include "../../licensing/Admins.hpp"
 #include "../../licensing/Documents.hpp"
@@ -396,6 +397,20 @@ struct RestoreReport {
     std::string                                        serviceKey;
 };
 
+// ---- 1.46.0 : la boutique et les commandes (WorkspaceShop.cpp ; docs/BOUTIQUE.md) ----
+// Une commande livree (ou pas) par deliverOrders.
+struct OrderDelivery {
+    int         number{0};
+    bool        delivered{false};
+    bool        review{false};      // mise << a revoir >> (la raison : problem)
+    std::string licence, customer, article, problem;
+};
+struct DeliveryReport {
+    std::vector<OrderDelivery> lines;
+    int                        delivered{0}, review{0}, skipped{0};
+    bool                       autoOff{false};   // automatique : << Livrer seul >> est decoche (rien n'a ete livre)
+};
+
 class Workspace {
 public:
     explicit Workspace(std::string folder);
@@ -720,7 +735,46 @@ public:
     [[nodiscard]] OpResult restoreBackup(const std::string& path, const std::string& passphrase, const RestoreOptions& options,
                                          RestoreReport* report = nullptr) const;
 
+    // ======================================================== 1.46.0 : la boutique et les commandes (WorkspaceShop.cpp) ==
+    // LENT (le service, signe par la cle qui signe) : le reglage de la boutique (l'admin+ et un admin le lisent ; seul
+    // l'admin+ l'enregistre) ; les commandes (le droit << demandes >>).
+    [[nodiscard]] OpResult shopSettings(shop::Settings& out) const;
+    [[nodiscard]] OpResult saveShop(const shop::Settings& settings) const;
+    [[nodiscard]] OpResult shopOrders(shop::OrdersView& out) const;
+    // LENT : LIVRER - `number` 0 : toutes les commandes payees (`automatic` : seulement si << Livrer seul >> est coche, et
+    // celles que cet Admin a le droit de livrer) ; sinon cette commande (payee, ou a revoir). Chaque commande : prise sur le
+    // service, son scelle ouvert (la demande du PC), la licence en ligne de l'offre signee ici (ou l'option ajoutee a la
+    // licence du client), deposee, le code scelle pour le PC, le journal, puis << livree >> ; un echec qui ne passera pas
+    // seul : << a revoir >> et la raison. Le travail se fait dans un Workspace neuf relu du dossier (ce Workspace-ci n'est
+    // pas touche : reload() ensuite). Les livraisons commencees sont gardees (boutique-livraisons.json) : une reprise ne
+    // signe pas une seconde licence.
+    [[nodiscard]] OpResult deliverOrders(int number, bool automatic, DeliveryReport* report = nullptr) const;
+    // LENT : << a revoir >> avec la raison (le droit << demandes >>) ; rembourser (l'admin+ : Stripe, par le service).
+    [[nodiscard]] OpResult reviewOrder(int number, const std::string& reason) const;
+    [[nodiscard]] OpResult refundOrder(int number) const;
+    // LENT : BRANCHER STRIPE (l'admin+) - `secretKey` (collee par l'editeur) est effacee quoi qu'il arrive ; le webhook cree
+    // chez Stripe, les deux secrets poses sur le Worker par le kit (deployer::putSecret). Jamais ecrite ici.
+    [[nodiscard]] OpResult connectStripe(std::string& secretKey, const deployer::Options& kit = {}, const deployer::LineSink& onLine = {},
+                                         const std::atomic<bool>* cancel = nullptr) const;
+    // Pourquoi cet Admin ne peut pas livrer une commande de ce genre ("edition", "option") ; vide : il peut.
+    [[nodiscard]] std::string whyNotDeliver(const std::string& kind) const;
+    // Ce que l'application a releve en dernier (sur le fil de l'interface) : le reglage, les commandes, celles a livrer
+    // (GET /admin/etat : a_livrer ; -1 : inconnu).
+    void adoptShop(const shop::Settings& settings) { shop_ = settings; hasShop_ = true; }
+    void adoptOrders(shop::OrdersView view) { orders_ = std::move(view); hasOrders_ = true; ordersToDeliver_ = orders_.toDeliver; }
+    void setOrdersToDeliver(int n) { ordersToDeliver_ = n; }
+    [[nodiscard]] bool hasShop() const noexcept { return hasShop_; }
+    [[nodiscard]] const shop::Settings& shop() const noexcept { return shop_; }
+    [[nodiscard]] bool hasOrders() const noexcept { return hasOrders_; }
+    [[nodiscard]] const shop::OrdersView& orders() const noexcept { return orders_; }
+    [[nodiscard]] int ordersToDeliver() const noexcept { return ordersToDeliver_; }
+    // La version du service sait-elle la boutique (l'etat lu) ? Faux aussi quand elle n'est pas encore lue.
+    [[nodiscard]] bool serviceKnowsShop() const;
+
 private:
+    // 1.46.0 : une commande livree par CE Workspace (deliverOrders le cree neuf).
+    OpResult deliverHere(int number, bool automatic, DeliveryReport* report);
+    bool     deliverOne(online::Client& c, const shop::Order& order, const shop::Settings& settings, bool automatic, DeliveryReport& rep);
     void loadKey();
     void loadArchive();
     void loadActivations();
@@ -764,6 +818,12 @@ private:
     std::vector<licensing::crypto::PublicKey>   editorKeys_;
     std::uint64_t                               alertedUpTo_{0};   // newAlerts : la derniere ligne deja dite
     bool                                        alertsPrimed_{false};
+    // 1.46.0 : la boutique (adoptee par l'application ; reload() n'y touche pas)
+    shop::Settings                              shop_;
+    bool                                        hasShop_{false};
+    shop::OrdersView                            orders_;
+    bool                                        hasOrders_{false};
+    int                                         ordersToDeliver_{-1};
 };
 
 // ---- un travail lent sur un fil a part : l'interface le suit sans attendre (jamais bloquee) ----

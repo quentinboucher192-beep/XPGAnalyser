@@ -31,6 +31,18 @@
 //  En bas : Activer par fichier de licence..., Demander une activation...,
 //  Ouvrir le dossier, Fermer. L'en-tete dit la Decouverte (les jours qui restent)
 //  et, pour une licence en ligne, la fin du bail.
+//
+//  1.46.0 : UN FIL D'ARIANE A LA PLACE DES ONZE ONGLETS (<< un paquet empile
+//  incomprehensible >>, le client). L'ACCUEIL (kTabHome) : le resume de la licence
+//  et les rubriques en quatre groupes (LicenceViews : LicenceHome) - Ma licence
+//  (Ma licence, Mes appareils, Historique), Obtenir ou etendre (Demander ma
+//  licence, Activation, Options, Mes achats), Decouvrir (Fonctionnalites,
+//  Editions), Reglages (Parametres). Chaque rubrique : << Licence > sa rubrique v >>
+//  en haut (Licence : l'accueil ; la rubrique : le menu de son groupe), Retour
+//  arriere ou Alt+gauche : l'accueil, Echap : la fenetre se ferme. MON PROFIL :
+//  sa petite fenetre a part (ProfileWindow ; << Modifier mon profil... >> dans la
+//  demande). La capture en grand : on y change de fonctionnalite (les barrees
+//  aussi, << pas dans ta licence >>). Les cartes des offres : rien de coupe.
 // =============================================================================
 #include "Licence.hpp"
 
@@ -60,10 +72,12 @@
 #include "../ui/Shapes.hpp"
 
 #include <algorithm>
+#include <array>      // 1.46.0 : les pages des rubriques
 #include <cmath>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <optional>
@@ -243,8 +257,14 @@ private:
         std::string id, label, price, description, facts;
         std::string promo, promoEnd;   // 1.38.0 : la reduction en cours (le prix reduit, "jusqu'au 30/11/2026")
         gfx::Rect   box{};
+        // 1.46.0 : RIEN DE COUPE (<< 50 EUR HT /pa... >>, << Reduction jusqu'au 22/12/20... >>, << 18/21 fonctio... >>) - les
+        // lignes a la largeur de la carte (onLayout), la carte aussi haute qu'il le faut (la rangee : la plus haute).
+        std::vector<std::string> titleL, priceL, promoL, endL, descL, factsL;
+        bool        priceInline{false};   // l'ancien prix et le nouveau sur une ligne
     };
     void buildCards();
+    // 1.46.0 : les lignes d'une carte a la largeur `w`, et sa hauteur.
+    [[nodiscard]] float layoutCard(Card& k, float w) const;
     // Ce que contiendra la licence d'une edition (le rappel pendant l'attente) ; vide : inconnue.
     [[nodiscard]] std::string futureText(const std::string& editionId) const;
     // 1.38.0 : la colonne de droite - les fonctionnalites de l'offre choisie (ou demandee), et l'apercu qu'on agrandit.
@@ -265,6 +285,8 @@ private:
     ui::Button*        send_{nullptr};
     ui::Button*        cancel_{nullptr};
     ui::Button*        check_{nullptr};
+    ui::Button*        profile_{nullptr};   // 1.46.0 : << Modifier mon profil... >> (sa fenetre : Mon profil n'est plus une rubrique)
+    licence::Profile   filled_;             // 1.46.0 : ce que le profil a mis dans les champs (un profil modifie les remplace)
     bool               available_{false};
     std::string        why_;
     licence::service::Record rec_;
@@ -275,6 +297,7 @@ private:
     // 1.42.0 : LA PARTIE GAUCHE DEFILE (une fenetre basse : le formulaire et ses boutons ne passent plus sous le bas de
     // l'onglet). scroll_ : le decalage ; contentH_ : la hauteur de ce qu'elle montre ; la molette, et une barre fine.
     float              scroll_{0}, contentH_{0};
+    ui::ScrollArea     leftBar_;   // 1.46.0 : sa barre se tire, sa gouttiere se clique (avant : seulement dessinee)
     bool               relayout_{false};
     FeatureTablePanel* offer_{nullptr};          // 1.38.0
     std::shared_ptr<ui::ITableModel> offerModel_;
@@ -286,9 +309,10 @@ private:
 };
 
 // ---- 1.37.0 : l'onglet Mon profil (tout facultatif : il remplit la demande ; le courriel recoit le mail de l'editeur) ----
+// 1.46.0 : plus un onglet - le corps de sa petite fenetre (ProfileWindow) ; `say` : sa phrase, `saved` : apres Enregistrer.
 class ProfilePanel final : public ui::Widget {
 public:
-    explicit ProfilePanel(LicenceBody& body);
+    ProfilePanel(std::function<void(std::string, int)> say, std::function<void()> saved);
     void refresh();   // relu du disque
 
 protected:
@@ -297,7 +321,8 @@ protected:
 
 private:
     void doSave();
-    LicenceBody&          body_;
+    std::function<void(std::string, int)> say_;
+    std::function<void()> saved_;
     ui::InputText*        email_{nullptr};
     ui::InputText*        name_{nullptr};
     ui::InputText*        company_{nullptr};
@@ -429,14 +454,18 @@ private:
 // ---- 1.38.0 : la fonctionnalite d'une ligne (Editions, Fonctionnalites, la boutique) : id vide, une ligne de resume ----
 struct FeatureInfo {
     std::string id, label, product, editions;
+    // 1.46.0 : barree dans son tableau (pas dans ta licence, pas dans l'offre choisie) - ses captures se montrent quand meme
+    bool        locked{false};
+    std::string lockedText;
 };
 // 1.45.0 : la capture qu'on agrandit et la capture en grand sont dans LicenceViews (les essais les construisent seules).
 using ZoomImage = licence::CaptureView;
 using licence::capturePng;
 // La capture en grand (une fenetre au-dessus de la licence) : toutes les captures de la fonctionnalite, celle-ci d'abord
-// (1.45.0 : ses fleches, sa legende, ses bulles).
+// (1.45.0 : ses fleches, sa legende, ses bulles). 1.46.0 : `choices` - les fonctionnalites du tableau d'ou elle est
+// ouverte : on y change de fonctionnalite sans la fermer (les barrees comprises).
 void showCapture(menu::MenuManager& menus, const FeatureInfo& f, const licence::FeaturePreview& preview, std::size_t shot,
-                 const std::vector<hmi::Resource>& loaded = {});
+                 const std::vector<hmi::Resource>& loaded = {}, std::vector<licence::CaptureChoice> choices = {});
 
 // ---- 1.38.0 : l'apercu de la fonctionnalite choisie (sa capture qu'on agrandit, deux lignes, ses editions) ----
 class FeaturePreviewPane final : public ui::Widget {
@@ -491,6 +520,13 @@ public:
     // Les essais : ce que montre l'apercu.
     [[nodiscard]] const std::string& shownFeature() const noexcept { return pane_->shown().id; }
     [[nodiscard]] const licence::FeaturePreview& preview() const noexcept { return pane_->preview(); }
+    // 1.46.0 : les fonctionnalites du tableau (dans son ordre, les barrees comprises) : la liste de la capture en grand.
+    [[nodiscard]] std::vector<licence::CaptureChoice> choices() const {
+        std::vector<licence::CaptureChoice> out;
+        for (const auto& r : rows_)
+            if (!r.id.empty()) out.push_back({r.id, r.label, r.product, r.locked, r.lockedText});
+        return out;
+    }
 
 protected:
     void onLayout() override;
@@ -510,8 +546,14 @@ public:
     LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab);
     void reload();
     // 1.45.0 : montrer cet onglet (Regarder, une fenetre Licence deja ouverte qu'on redemande) ; kTabAuto : le plus utile.
+    // 1.46.0 : une RUBRIQUE (son fil d'Ariane en haut) ; kTabHome : l'accueil ; kTabProfile : la fenetre Mon profil par-dessus.
     void showTab(int tab);
     [[nodiscard]] int autoTab() const;
+    // 1.46.0 : la rubrique montree (kTabHome : l'accueil).
+    [[nodiscard]] int section() const noexcept { return current_; }
+    // 1.46.0 : revenir a l'accueil (<< Licence >> du fil, Retour arriere, Alt+gauche) ; faux : deja a l'accueil.
+    bool back();
+    [[nodiscard]] licence::LicenceCrumbs& crumbs() noexcept { return *crumbs_; }
     // 1.34.0 : chaque image (la fenetre) : un travail du service fini -> sa phrase, tout relu.
     void poll();
     void say(std::string text, int tone) {
@@ -533,10 +575,16 @@ private:
     void askImport();
     void doImport(const std::string& path);
     void askRequest();
+    void refreshHome();   // 1.46.0 : ce que dit deja chaque rubrique, sur l'accueil
+    ui::Widget* addPage(int tab, ui::WidgetPtr page);
 
     LicenceWindow&    owner_;
     menu::MenuManager& menus_;
-    ui::TabControl*   tabs_{nullptr};
+    // 1.46.0 : plus de bande d'onglets - l'accueil, le fil d'Ariane, une page par rubrique (son numero : licence::kTab*)
+    licence::LicenceHome*   home_{nullptr};
+    licence::LicenceCrumbs* crumbs_{nullptr};
+    std::array<ui::Widget*, static_cast<std::size_t>(licence::kTabPurchases) + 1> pages_{};
+    int               current_{licence::kTabHome};
     ui::PropertyGrid* mine_{nullptr};
     ui::TableView*    devices_{nullptr};
     DevicesPanel*     devicesPanel_{nullptr};    // 1.38.0 : << 3 PC sur 20 >>
@@ -548,7 +596,6 @@ private:
     ui::PropertyGrid* params_{nullptr};
     OnlinePanel*      online_{nullptr};      // 1.34.0
     ActivationPanel*  activation_{nullptr};  // 1.35.0
-    ProfilePanel*     profile_{nullptr};     // 1.37.0
     OptionsPanel*     options_{nullptr};     // 1.42.0
     PurchasesPanel*   purchases_{nullptr};   // 1.42.0
     unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
@@ -563,7 +610,7 @@ private:
     std::string       flash_;
     int               flashTone_{0};
     gfx::Rect         panel_{}, closeBox_{};
-    float             headerY_{0}, messageY_{0};
+    float             headerY_{0}, messageY_{0}, pageTop_{0};
     core::ConnectionScope links_;
 };
 
@@ -579,9 +626,22 @@ public:
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
     [[nodiscard]] std::string title() const override { return "Licence"; }
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
-        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
-            fermer();
-            return ui::EventResult::Consumed;
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            if (k->key == ui::Key::Escape) {
+                if (body_ && body_->crumbs().siblingsOpen()) {   // le menu du fil ouvert : il se ferme d'abord
+                    body_->crumbs().siblings().close();
+                    return ui::EventResult::Consumed;
+                }
+                fermer();
+                return ui::EventResult::Consumed;
+            }
+            // 1.46.0 : Alt+gauche - l'accueil (comme un navigateur) ; Retour arriere aussi, hors d'un champ (il y efface)
+            if (body_ && k->key == ui::Key::Left && k->mods.alt && !k->mods.ctrl && !k->mods.shift && body_->back()) return ui::EventResult::Consumed;
+            if (body_ && k->key == ui::Key::Backspace && k->mods.none()) {
+                if (menu::WidgetMenu::HandleEvent(ev) == ui::EventResult::Consumed) return ui::EventResult::Consumed;
+                (void)body_->back();
+                return ui::EventResult::Consumed;
+            }
         }
         return menu::WidgetMenu::HandleEvent(ev);
     }
@@ -597,13 +657,24 @@ public:
     }
     [[nodiscard]] bool closing() const noexcept { return done_; }
     // 1.45.0 : redemandee alors qu'elle est ouverte - relue, sur l'onglet demande (kTabAuto : celui qu'elle montre).
+    // 1.46.0 : kTabProfile - la fenetre Mon profil, par-dessus (ce n'est plus une rubrique).
     void goTo(int tab) {
+        if (tab == licence::kTabProfile) {
+            showProfileWindow(menus_);
+            return;
+        }
         if (!body_) {   // pas encore construite (demandee deux fois dans la meme image)
             if (tab != licence::kTabAuto) tab_ = tab;
             return;
         }
         body_->reload();
         if (tab != licence::kTabAuto) body_->showTab(tab);
+    }
+    // 1.46.0 : la rubrique montree (kTabHome : l'accueil ; pas encore construite : celle demandee).
+    [[nodiscard]] int section() const noexcept { return body_ ? body_->section() : tab_; }
+    // 1.46.0 : Mon profil enregistre (sa fenetre) : la demande reprend ce qui y manque.
+    void profileSaved() {
+        if (body_) body_->profileSaved();
     }
 
 protected:
@@ -622,7 +693,12 @@ private:
 };
 
 LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab) : ui::Widget("dialog.licence.body"), owner_(owner), menus_(menus) {
-    auto tabs = std::make_unique<ui::TabControl>("dialog.licence.onglets");
+    // 1.46.0 : l'accueil (les rubriques en groupes) et le fil d'Ariane, puis une page par rubrique (une seule montree)
+    home_ = &static_cast<licence::LicenceHome&>(addChild(std::make_unique<licence::LicenceHome>("licence.accueil")));
+    home_->onOpen = [this](int t) { showTab(t); };
+    crumbs_ = &static_cast<licence::LicenceCrumbs&>(addChild(std::make_unique<licence::LicenceCrumbs>("dialog.licence.fil")));
+    crumbs_->onHome = [this] { showTab(licence::kTabHome); };
+    crumbs_->onSection = [this](int t) { showTab(t); };
     auto mine = std::make_unique<ui::PropertyGrid>("dialog.licence.ma-licence");
     mine_ = mine.get();
     auto devices = std::make_unique<DevicesPanel>();   // 1.38.0 : le resume au-dessus du tableau
@@ -638,11 +714,15 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     auto editions = std::make_unique<EditionsPanel>("dialog.licence.editions.panneau", "dialog.licence.editions");   // 1.37.0 : avec l'apercu
     editionsPanel_ = editions.get();
     editions_ = &editions->table();
-    const auto enlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot, const std::vector<hmi::Resource>& loaded) {
-        showCapture(menus_, f, p, shot, loaded);
+    // 1.46.0 : en grand, la liste du tableau a cote (changer de fonctionnalite sans fermer, les barrees comprises)
+    featuresPanel_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot,
+                                              const std::vector<hmi::Resource>& loaded) {
+        showCapture(menus_, f, p, shot, loaded, featuresPanel_->choices());
     };
-    featuresPanel_->pane().onEnlarge = enlarge;
-    editionsPanel_->pane().onEnlarge = enlarge;
+    editionsPanel_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot,
+                                              const std::vector<hmi::Resource>& loaded) {
+        showCapture(menus_, f, p, shot, loaded, editionsPanel_->choices());
+    };
     auto history = std::make_unique<ui::TableView>("dialog.licence.historique");
     history->setColumns({{"Quand (UTC)", 150.f}, {"Quoi", 120.f}, {"R\xC3\xA9sultat", 90.f}, {"D\xC3\xA9tail", 620.f}});
     history_ = history.get();
@@ -652,34 +732,31 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     online_ = online.get();
     auto activation = std::make_unique<ActivationPanel>(*this, menus);   // 1.35.0
     activation_ = activation.get();
-    auto profile = std::make_unique<ProfilePanel>(*this);   // 1.37.0
-    profile_ = profile.get();
     auto options = std::make_unique<OptionsPanel>(*this, menus);   // 1.42.0
     options_ = options.get();
     auto purchases = std::make_unique<PurchasesPanel>(*this);    // 1.42.0
     purchases_ = purchases.get();
-    tabs->addTab({"Activation", ui::Icon::Network}, std::move(activation));   // 1.35.0 : licence::kTabActivation
-    tabs->addTab({"Ma licence", ui::Icon::Lock}, std::move(mine));
-    tabs->addTab({"Mes appareils", ui::Icon::Screen}, std::move(devices));
-    tabs->addTab({"Fonctionnalit\xC3\xA9s", ui::Icon::Ok}, std::move(features));
-    tabs->addTab({"\xC3\x89" "ditions", ui::Icon::Layers}, std::move(editions));
-    tabs->addTab({"Historique", ui::Icon::History}, std::move(history));
-    tabs->addTab({"Param\xC3\xA8tres", ui::Icon::Settings}, std::move(params));
-    tabs->addTab({"Demander ma licence", ui::Icon::Open}, std::move(online));   // 1.34.0 ; licence::kTabRequest (1.36.0 : son nom)
-    tabs->addTab({"Mon profil", ui::Icon::User}, std::move(profile));            // 1.37.0 : licence::kTabProfile
-    tabs->addTab({"Options", ui::Icon::Star}, std::move(options));               // 1.42.0 : licence::kTabOptions
-    tabs->addTab({"Mes achats", ui::Icon::History}, std::move(purchases));       // 1.42.0 : licence::kTabPurchases
-    tabs_ = &static_cast<ui::TabControl&>(addChild(std::move(tabs)));
+    (void)addPage(licence::kTabActivation, std::move(activation));   // 1.35.0
+    (void)addPage(licence::kTabMine, std::move(mine));
+    (void)addPage(licence::kTabDevices, std::move(devices));
+    (void)addPage(licence::kTabFeatures, std::move(features));
+    (void)addPage(licence::kTabEditions, std::move(editions));
+    (void)addPage(licence::kTabHistory, std::move(history));
+    (void)addPage(licence::kTabSettings, std::move(params));
+    (void)addPage(licence::kTabRequest, std::move(online));   // 1.34.0 ; 1.36.0 : Demander ma licence
+    (void)addPage(licence::kTabOptions, std::move(options));   // 1.42.0
+    (void)addPage(licence::kTabPurchases, std::move(purchases));
+    // (1.37.0 : Mon profil etait l'onglet 8 ; 1.46.0 : sa fenetre a part, showProfileWindow)
     import_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Activer par fichier de licence\xE2\x80\xA6", "dialog.licence.importer")));
     import_->setStyle(ui::Button::Style::Primary);
     request_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Demander une activation\xE2\x80\xA6", "dialog.licence.demander")));
-    // 1.36.0 : avec le service des licences, la demande en ligne est le chemin principal (onglet Demander ma licence) ;
+    // 1.36.0 : avec le service des licences, la demande en ligne est le chemin principal (Demander ma licence) ;
     // les fichiers restent pour un PC sans Internet - en second.
     if (licence::onlineRequests()) {
         import_->setText("Fichier de licence\xE2\x80\xA6");
         import_->setStyle(ui::Button::Style::Default);
         import_->setTooltip("Un fichier .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur (un PC sans Internet). Avec Internet, demande plut\xC3\xB4t ta licence "
-                            "(onglet Demander ma licence) : elle s'installe d'elle-m\xC3\xAAme.");
+                            "(Licence \xE2\x80\xBA Demander ma licence) : elle s'installe d'elle-m\xC3\xAAme.");
         request_->setText("Demande par fichier (sans Internet)\xE2\x80\xA6");
         request_->setTooltip("\xC3\x89" "crit une demande (.xpgreq) \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur toi-m\xC3\xAAme : seulement pour un PC sans Internet.");
     }
@@ -697,25 +774,111 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     seenRevision_ = licence::service::revision();
     wasBusy_ = licence::service::busy();
     reload();
-    showTab(tab);
+    showTab(tab == licence::kTabProfile ? licence::kTabAuto : tab);   // Mon profil : sa fenetre (showLicenceWindow l'ouvre)
+}
+
+ui::Widget* LicenceBody::addPage(int tab, ui::WidgetPtr page) {
+    ui::Widget* w = &addChild(std::move(page));
+    w->setVisibility(ui::Visibility::Collapsed);
+    if (tab >= 0 && static_cast<std::size_t>(tab) < pages_.size()) pages_[static_cast<std::size_t>(tab)] = w;
+    return w;
 }
 
 int LicenceBody::autoTab() const {
-    // licence::kTabAuto : Ma licence pour une licence par fichier valable, sinon Activation
+    // 1.46.0 : kTabAuto - l'accueil (le resume de la licence, toutes les rubriques), sauf la ou une rubrique est plus utile :
+    // sans licence valable, la demande en ligne (ou l'activation sans service) ; un bail fini, un poste flottant a prendre :
+    // l'activation. (1.35.0 : Ma licence pour une licence par fichier valable, sinon Activation.)
     using S = licensing::LicenseStatus;
     const bool valid = state_.status == S::Valid || state_.status == S::Grace;
-    const bool fileLicence = !state_.online && valid;
-    int tab = fileLicence ? licence::kTabMine : licence::kTabActivation;
-    // 1.36.0 : sans licence valable (ni bail a renouveler, ni poste flottant a attendre), la demande en ligne
-    if (!valid && state_.status != S::LeaseExpired && state_.status != S::NoFloatingSeat && state_.status != S::NotConfigured &&
-        licence::onlineRequests())
-        tab = licence::kTabRequest;
-    return tab;
+    if (valid || state_.status == S::NotConfigured) return licence::kTabHome;
+    if (state_.status == S::LeaseExpired || state_.status == S::NoFloatingSeat) return licence::kTabActivation;
+    return licence::onlineRequests() ? licence::kTabRequest : licence::kTabActivation;   // 1.36.0 : la demande en ligne
 }
 
 void LicenceBody::showTab(int tab) {
-    if (tab < 0) tab = autoTab();
-    tabs_->setCurrentIndex(static_cast<std::size_t>(std::clamp(tab, 0, licence::kTabPurchases)));
+    if (tab == licence::kTabAuto) tab = autoTab();
+    if (tab == licence::kTabProfile) {   // 1.46.0 : plus une rubrique - sa fenetre, par-dessus celle-ci
+        showProfileWindow(menus_);
+        return;
+    }
+    if (tab != licence::kTabHome && (tab < 0 || static_cast<std::size_t>(tab) >= pages_.size() || !pages_[static_cast<std::size_t>(tab)]))
+        tab = licence::kTabHome;
+    current_ = tab;
+    home_->setVisibility(tab == licence::kTabHome ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    for (std::size_t i = 0; i < pages_.size(); ++i)
+        if (pages_[i]) pages_[i]->setVisibility(static_cast<int>(i) == tab ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    crumbs_->setSection(tab);
+    if (tab == licence::kTabHome) refreshHome();
+    invalidateLayout();
+    invalidate();
+}
+
+bool LicenceBody::back() {
+    if (current_ == licence::kTabHome) return false;
+    showTab(licence::kTabHome);
+    return true;
+}
+
+void LicenceBody::refreshHome() {
+    namespace L = licence;
+    const auto& st = state_;
+    using S = licensing::LicenseStatus;
+    const bool hasLicence = !st.licenseId.empty();
+    const auto reg = licensing::getRegistry();
+    const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
+    // Ma licence : son edition et son etat ; Mes appareils : ses PC
+    {
+        const std::string edition = !st.licensedEdition.empty() ? st.licensedEdition : st.edition;
+        const bool good = st.status == S::Valid;
+        const int tone = good ? 1 : (st.status == S::Grace || st.status == S::Evaluation || st.status == S::Absent) ? 2 : st.status == S::NotConfigured ? 0 : 3;
+        home_->setHint(L::kTabMine, (hasLicence && !edition.empty() ? edition + " \xC2\xB7 " : std::string()) + licensing::statusLabel(st.status), tone);
+        home_->setHint(L::kTabDevices, hasLicence && st.maxDevices > 0 ? std::to_string(std::max(1, st.boundDevices)) + " PC sur " + std::to_string(st.maxDevices)
+                                                                       : std::string(), 0);
+        const std::size_t events = licensing::getHistory(200).size();
+        home_->setHint(L::kTabHistory, events ? std::to_string(events) + (events > 1 ? " \xC3\xA9v\xC3\xA9nements" : " \xC3\xA9v\xC3\xA9nement") : std::string(), 0);
+    }
+    // Demander ma licence : la demande qui attend, ou les offres en vente ; Activation : le bail, la Decouverte
+    {
+        const auto pr = L::pendingRequest();
+        std::size_t onSale = 0;
+        if (reg)
+            for (const auto& e : reg->editions)
+                if (!e.retired && e.id != reg->unlicensedEdition && e.onSale(now)) ++onSale;
+        if (pr.pending) home_->setHint(L::kTabRequest, "demande n\xC2\xB0 " + std::to_string(pr.number) + " en attente", 2);
+        else if (L::onlineRequests() && onSale) home_->setHint(L::kTabRequest, std::to_string(onSale) + (onSale > 1 ? " offres" : " offre"), 0);
+        else home_->setHint(L::kTabRequest, {}, 0);
+        if (st.online && st.activationUntil)
+            home_->setHint(L::kTabActivation, "bail jusqu'au " + L::dayOf(st.activationUntil), st.activationWarning ? 2 : 0);
+        else if (st.status == S::LeaseExpired) home_->setHint(L::kTabActivation, "bail expir\xC3\xA9", 3);
+        else if (st.status == S::Evaluation)
+            home_->setHint(L::kTabActivation, "D\xC3\xA9" "couverte : " + std::to_string(std::max(0, st.evaluationDaysLeft)) + " j", st.evaluationDaysLeft <= 7 ? 2 : 0);
+        else home_->setHint(L::kTabActivation, {}, 0);
+    }
+    // Options : celles en cours ; Mes achats : combien
+    {
+        int active = 0;
+        for (const auto& o : st.options)
+            if (o.activeAt(st.trustedNow ? st.trustedNow : static_cast<licensing::Seconds>(now), st.expiresAt)) ++active;
+        home_->setHint(L::kTabOptions, active ? std::to_string(active) + (active > 1 ? " actives" : " active") : std::string(), active ? 1 : 0);
+        const std::size_t bought = !st.purchases.empty() ? st.purchases.size() : (hasLicence ? 1u + st.options.size() : 0u);
+        home_->setHint(L::kTabPurchases, bought ? std::to_string(bought) + (bought > 1 ? " achats" : " achat") : std::string(), 0);
+    }
+    // Fonctionnalites : celles ouvertes ; Editions : les offres ; Parametres : le registre
+    {
+        std::size_t all = 0, open = 0, editions = 0;
+        if (reg) {
+            for (const auto& f : reg->features)
+                if (!f.retired) {
+                    ++all;
+                    if (L::allows(f.id)) ++open;
+                }
+            for (const auto& e : reg->editions)
+                if (!e.retired && e.id != reg->unlicensedEdition && e.onSale(now)) ++editions;
+        }
+        home_->setHint(L::kTabFeatures, all ? std::to_string(open) + "/" + std::to_string(all) + (open > 1 ? " ouvertes" : " ouverte") : std::string(), 0);
+        home_->setHint(L::kTabEditions, editions ? std::to_string(editions) + (editions > 1 ? " offres" : " offre") : std::string(), 0);
+        home_->setHint(L::kTabSettings, st.registryNumber ? "registre n\xC2\xB0 " + std::to_string(st.registryNumber) : std::string("aucun registre"), 0);
+    }
 }
 
 void LicenceBody::poll() {
@@ -738,7 +901,7 @@ void LicenceBody::poll() {
     // 1.38.0 : Mes appareils ouvert sur une licence en ligne - les PC de la licence relus au service s'ils ont plus de
     // 10 minutes (un renouvellement du bail, au plus toutes les 10 minutes) : << N PC sur 20 >> suit les autres PC
     // sans attendre le renouvellement automatique (7 jours avant la fin du bail).
-    if (tabs_->currentIndex() == static_cast<std::size_t>(licence::kTabDevices) && state_.online && !state_.licenseId.empty() && !lg::busy()) {
+    if (current_ == licence::kTabDevices && state_.online && !state_.licenseId.empty() && !lg::busy()) {
         constexpr licensing::Seconds kDevicesMaxAge = 600;
         const licensing::Seconds now = licensing::systemNow();
         if (now - devicesCheckedAt_ >= kDevicesMaxAge) {
@@ -805,7 +968,7 @@ void LicenceBody::reload() {
         {
             std::string why;   // 1.35.0 : le code, par le service des licences
             if (licence::service::available(&why))
-                a.properties.push_back(prop("Avec un code", "l'onglet Activation (le code XPG-XXXX-XXXX-XXXX-XXXX re\xC3\xA7u de l'\xC3\xA9" "diteur)",
+                a.properties.push_back(prop("Avec un code", "Licence \xE2\x80\xBA Activation (le code XPG-XXXX-XXXX-XXXX-XXXX re\xC3\xA7u de l'\xC3\xA9" "diteur)",
                                             "Le service des licences v\xC3\xA9rifie le code et active la licence sur ce PC, tout de suite, sans fichier."));
             else a.properties.push_back(prop("Avec un code", "pas dans ce programme", why));
         }
@@ -817,7 +980,7 @@ void LicenceBody::reload() {
         {
             std::string why;   // 1.34.0 ; 1.35.0 : par le service des licences
             if (licence::service::available(&why))
-                a.properties.push_back(prop("Sans code", "l'onglet Demande \xC3\xA0 l'\xC3\xA9" "diteur (par le service des licences)",
+                a.properties.push_back(prop("Sans code", "Licence \xE2\x80\xBA Demander ma licence (par le service des licences)",
                                             "La demande part chez l'\xC3\xA9" "diteur, scell\xC3\xA9" "e pour lui ; sa r\xC3\xA9ponse revient ici : une licence "
                                             "accept\xC3\xA9" "e s'installe d'elle-m\xC3\xAA" "me, sans fichier."));
             else a.properties.push_back(prop("Sans code", "pas dans ce programme", why));
@@ -859,7 +1022,7 @@ void LicenceBody::reload() {
                                              " \xE2\x80\x94 ce PC compris";
             sum += " \xC2\xB7 licence " + st.licenseId;
             std::string note = "Relev\xC3\xA9 au service le " + ls::dateText(online->receivedAt) +
-                               " (\xC3\xA0 l'ouverture de cet onglet, toutes les 10 minutes au plus), sans les PC lib\xC3\xA9r\xC3\xA9s ni retir\xC3\xA9s.";
+                               " (\xC3\xA0 l'ouverture de cette rubrique, toutes les 10 minutes au plus), sans les PC lib\xC3\xA9r\xC3\xA9s ni retir\xC3\xA9s.";
             if (online->total > static_cast<int>(online->list.size()))
                 note += " Les " + std::to_string(online->list.size()) + " plus r\xC3\xA9" "cents sont montr\xC3\xA9s.";
             devicesPanel_->setSummary(std::move(sum), std::move(note));
@@ -899,7 +1062,8 @@ void LicenceBody::reload() {
                     std::string in;
                     for (const auto& e : reg->editions)
                         if (std::find(e.features.begin(), e.features.end(), f.id) != e.features.end()) in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
-                    infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+                    // 1.46.0 : barree (pas dans ta licence) - sa capture se montre quand meme, en grand aussi
+                    infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in, !on, on ? std::string() : std::string("pas dans ta licence")});
                 }
                 std::string limits;
                 for (const auto& [lid, llabel] : f.limits)
@@ -941,7 +1105,7 @@ void LicenceBody::reload() {
             // 1.42.0 : les offres EN VENTE (une offre temporaire hors de sa periode, une offre retiree : plus montrees), et la tienne
             std::vector<licensing::RegistryEditionView> eds;
             const std::int64_t now = static_cast<std::int64_t>(std::time(nullptr));
-            for (const auto& e : eds) {
+            for (const auto& e : reg->editions) {   // 1.46.0 : celles du registre (avant : la liste vide elle-meme - aucune colonne)
                 const bool isMine = !st.licensedEdition.empty() ? e.id == st.licensedEdition : e.id == st.edition;
                 if (isMine || e.id == reg->unlicensedEdition || e.onSale(now)) eds.push_back(e);
             }
@@ -977,14 +1141,18 @@ void LicenceBody::reload() {
                     if (has) in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
                 }
                 rows.push_back(std::move(line));
-                infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+                const bool on = licence::allows(f.id);
+                infos.push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in, !on, on ? std::string() : std::string("pas dans ta licence")});
             }
         }
+        std::vector<bool> lockedRows;   // 1.46.0 : pas dans ta licence - barree, comme dans Fonctionnalites
+        for (const auto& i : infos) lockedRows.push_back(i.locked);
         editions_->setColumns(cols);
-        editionsModel_ = std::make_shared<Rows>(std::move(headers), std::move(rows), [mineCol, summary](ui::RowIndex r, std::size_t c) {
+        editionsModel_ = std::make_shared<Rows>(std::move(headers), std::move(rows), [mineCol, summary, lockedRows](ui::RowIndex r, std::size_t c) {
             ui::CellStyle s;
             if (r < summary) s.bold = true;
             if (c > 0 && c == mineCol) s.bold = true;
+            if (c == 0 && r < lockedRows.size() && lockedRows[r]) s.locked = true;
             return s;
         });
         editions_->setModel(editionsModel_);
@@ -1042,6 +1210,7 @@ void LicenceBody::reload() {
     activation_->refresh();   // 1.35.0
     options_->refresh();      // 1.42.0
     purchases_->refresh();
+    refreshHome();            // 1.46.0 : ce que dit deja chaque rubrique
     import_->setEnabled(configured);
     import_->setTooltip(configured ? std::string("Le .xpglic re\xC3\xA7u de l'\xC3\xA9" "diteur")
                                    : std::string("Ce programme ne peut pas encore v\xC3\xA9rifier une licence : il n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur"));
@@ -1121,11 +1290,23 @@ void LicenceBody::onLayout() {
     closeBox_ = {panel_.right() - 36.f, panel_.y + 9.f, 24.f, 24.f};
     ui::dialogframe::keep(*this, closeBox_);
     const float x = panel_.x + 16.f, W = panel_.w - 32.f;
-    headerY_ = panel_.y + 52.f;
-    messageY_ = headerY_ + 2.f * 44.f + 6.f;
-    const float tabsY = messageY_ + 34.f;
+    // 1.46.0 : le fil d'Ariane sous le titre ; l'accueil : le resume (deux lignes de quatre cases) puis la phrase de l'etat ;
+    // une rubrique : la phrase de l'etat (les gestes s'y disent) puis sa page, plus haute qu'un onglet d'avant.
+    const float crumbsY = panel_.y + 50.f;
+    crumbs_->setBounds({x, crumbsY, W, 30.f});
+    if (current_ == licence::kTabHome) {
+        headerY_ = crumbsY + 40.f;
+        messageY_ = headerY_ + 2.f * 44.f + 2.f;
+    } else {
+        headerY_ = 0.f;
+        messageY_ = crumbsY + 38.f;
+    }
+    pageTop_ = messageY_ + 36.f;
     const float bottom = panel_.bottom() - 52.f;
-    tabs_->setBounds({x, tabsY, W, std::max(60.f, bottom - tabsY - 6.f)});
+    const gfx::Rect page{x, pageTop_, W, std::max(60.f, bottom - pageTop_ - 6.f)};
+    home_->setBounds(page);
+    for (auto* p : pages_)
+        if (p) p->setBounds(page);
     float bx = x;
     for (auto* b : {import_, request_, folder_}) {
         const float bw = std::ceil(std::max(110.f, b->sizeHint().preferred.w));   // 1.42.0 : des pixels entiers (des bords nets)
@@ -1178,12 +1359,20 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
     const gfx::Color statusColor = st.status == S::Valid ? (st.online && st.activationWarning ? warn : good)
                                  : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation || st.status == S::NoFloatingSeat) ? warn
                                  : st.status == S::NotConfigured ? c.textMuted : bad;
-    for (int i = 0; i < 8; ++i) {
-        const float cx = x + cw * static_cast<float>(i % 4);
-        const float cy = headerY_ + 44.f * static_cast<float>(i / 4);
-        r.drawText({cx, cy}, cells[i].label, kSmall, c.textMuted);
-        r.drawText({cx, cy + r.lineHeight(kSmall) + 1.f}, fit(r, cells[i].value, kValue, cw - 12.f), kValue, cells[i].status ? statusColor : c.text);
+    // 1.46.0 : le resume sur l'accueil seulement (une rubrique a son fil et la phrase de l'etat : plus de place pour elle)
+    if (current_ == licence::kTabHome) {
+        const gfx::Rect box{x, headerY_ - 8.f, W, 2.f * 44.f + 6.f};
+        r.fillRoundedRect(box, c.windowBg, 8.f);
+        ui::shapes::strokeRoundedRect(r, box, c.border, 8.f, 1.f);
+        const float iw = (W - 28.f) / 4.f;
+        for (int i = 0; i < 8; ++i) {
+            const float cx = x + 14.f + iw * static_cast<float>(i % 4);
+            const float cy = headerY_ + 44.f * static_cast<float>(i / 4);
+            r.drawText({cx, cy}, cells[i].label, kSmall, c.textMuted);
+            r.drawText({cx, cy + r.lineHeight(kSmall) + 1.f}, fit(r, cells[i].value, kValue, iw - 12.f), kValue, cells[i].status ? statusColor : c.text);
+        }
     }
+    (void)cw;
     // La phrase de l'etat (ou le dernier geste).
     const std::string line = flash_.empty() ? licence::stateText(st) : flash_;
     const int tone = flash_.empty() ? (st.status == S::Valid ? 1 : st.status == S::NotConfigured ? 0
@@ -1446,7 +1635,7 @@ void OptionsPanel::refresh() {
     if (!ls::loadRecord(rec, &recProblem)) rec = ls::Record{};
     if (!licensing::isConfigured()) blocked_ = "Ce programme n'a pas de licence \xC3\xA0 g\xC3\xA9rer : tout y est ouvert.";
     else if (licenseId_.empty() || (st.status != S::Valid && st.status != S::Grace))
-        blocked_ = "Une option s'ajoute \xC3\xA0 une licence en cours : active d'abord ta licence (onglet Activation ou Demander ma licence).";
+        blocked_ = "Une option s'ajoute \xC3\xA0 une licence en cours : active d'abord ta licence (Licence \xE2\x80\xBA Activation ou Demander ma licence).";
     else if (rows_.empty())
         blocked_ = "L'\xC3\xA9" "diteur ne propose pas encore d'option pour ton offre" + (edition_.empty() ? std::string(".") : " " + edition_ + ".");
     else if (!ls::available(&why))
@@ -2206,16 +2395,23 @@ OnlinePanel::OnlinePanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widg
     check_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("V\xC3\xA9rifier maintenant", "licence.demande.verifier")));
     check_->setTooltip("Demande au service des licences ce que l'\xC3\xA9" "diteur a r\xC3\xA9pondu (le Studio le fait aussi tout seul : \xC3\xA0 chaque lancement, "
                        "puis toutes les minutes tant qu'une demande attend - toutes les 5 minutes apr\xC3\xA8s deux heures).");
+    // 1.46.0 : Mon profil n'est plus une rubrique - sa petite fenetre, d'ici (il remplit ces champs)
+    profile_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Modifier mon profil\xE2\x80\xA6", "licence.demande.profil")));
+    profile_->setStyle(ui::Button::Style::Flat);
+    profile_->setIcon(ui::Icon::User);
+    profile_->setTooltip("Ton courriel, ton nom, ta soci\xC3\xA9t\xC3\xA9 (facultatifs) : ils remplissent cette demande ; le courriel re\xC3\xA7oit le mail "
+                         "de l'\xC3\xA9" "diteur quand il accepte.");
     links_ += send_->clicked->connect([this] { doSend(); });
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });
+    links_ += profile_->clicked->connect([this] { showProfileWindow(menus_); });
     // 1.38.0 : l'offre choisie - ses fonctionnalites et la capture de celle qu'on clique (zoom, en grand).
     offer_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("licence.demande.offre", "licence.demande.offre.liste")));
     offer_->setVertical(true);
     offer_->table().setColumns({{"Fonctionnalit\xC3\xA9", 230.f}, {"Logiciel", 110.f}});
     offer_->pane().setEmptyText("Clique une fonctionnalit\xC3\xA9 : sa capture et ce qu'elle fait s'affichent ici (molette : zoom, clic : en grand).");
     offer_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot, const std::vector<hmi::Resource>& loaded) {
-        showCapture(menus_, f, p, shot, loaded);
+        showCapture(menus_, f, p, shot, loaded, offer_->choices());   // 1.46.0 : l'offre entiere a cote (ce qu'elle n'a pas : barre)
     };
     // 1.45.0 : LES LICENCES DE CE PC, en tete - Regarder (l'onglet qui la montre), Liberer (rendre la place de ce PC).
     pcs_ = &static_cast<licence::PcLicencesView&>(addChild(std::make_unique<licence::PcLicencesView>("licence.demande.ce-pc")));
@@ -2233,10 +2429,18 @@ ui::InputText* OnlinePanel::field(const char* id, const std::string& placeholder
 }
 
 void OnlinePanel::prefill() {
+    // 1.46.0 : un champ vide, ou encore tel que le profil l'avait rempli, suit le profil (modifie dans sa fenetre) ; ce que
+    // tu y as tape toi-meme reste.
     const auto p = licence::loadProfile();
-    if (customer_->text().empty()) customer_->setText(!p.company.empty() ? p.company : p.name);
-    if (contact_->text().empty() && !p.company.empty()) contact_->setText(p.name);
-    if (email_->text().empty()) email_->setText(p.email);
+    const auto follow = [](ui::InputText* f, const std::string& before, const std::string& now) {
+        if (f->text().empty() || f->text() == before) f->setText(now);
+    };
+    const auto customerOf = [](const licence::Profile& q) { return !q.company.empty() ? q.company : q.name; };
+    const auto contactOf = [](const licence::Profile& q) { return !q.company.empty() ? q.name : std::string(); };
+    follow(customer_, customerOf(filled_), customerOf(p));
+    follow(contact_, contactOf(filled_), contactOf(p));
+    follow(email_, filled_.email, p.email);
+    filled_ = p;
 }
 
 void OnlinePanel::buildCards() {
@@ -2305,6 +2509,7 @@ void OnlinePanel::refresh() {
         if (!st.licenseId.empty()) licenseId_->setText(st.licenseId);
     }
     send_->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    profile_->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.46.0
     cancel_->setVisibility(available_ && pending_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     check_->setVisibility(available_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     for (auto* b : {send_, cancel_, check_}) b->setEnabled(busy_ == ls::Job::None);
@@ -2415,7 +2620,9 @@ void OnlinePanel::buildOffer() {
             if (!e.retired && e.id != reg->unlicensedEdition && std::find(e.features.begin(), e.features.end(), f.id) != e.features.end())
                 in += (in.empty() ? "" : ", ") + (e.label.empty() ? e.id : e.label);
         (inOffer ? rows : outRows).push_back({f.label.empty() ? f.id : f.label, f.product});
-        (inOffer ? infos : outInfos).push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in});
+        // 1.46.0 : pas dans cette offre - barree, ses captures quand meme (l'apercu, et en grand avec toute l'offre a cote)
+        const std::string offerName = ed ? (ed->label.empty() ? ed->id : ed->label) : std::string();
+        (inOffer ? infos : outInfos).push_back({f.id, f.label.empty() ? f.id : f.label, f.product, in, !inOffer, inOffer ? std::string() : "pas dans " + offerName});
     }
     const std::size_t included = rows.size();
     for (auto& r : outRows) rows.push_back(std::move(r));
@@ -2438,16 +2645,11 @@ void OnlinePanel::buildOffer() {
 }
 
 ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
-    // 1.42.0 : la molette fait defiler la partie gauche (pas la colonne de l'offre : elle a sa liste).
-    if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
-        const auto b = bounds();
-        const bool overOffer = offerBox_.w > 0.f && w->pos.x >= offerBox_.x;
-        if (b.contains(w->pos) && !overOffer && contentH_ > b.h + 1.f) {
-            const float before = scroll_;
-            scroll_ = std::clamp(scroll_ - w->dy * 48.f, 0.f, contentH_ - b.h);
-            if (scroll_ != before) invalidateLayout();
-            return ui::EventResult::Consumed;
-        }
+    // 1.42.0 : la molette fait defiler la partie gauche (pas la colonne de l'offre : elle a sa liste). 1.46.0 : sa barre se
+    // tire (la souris tenue) et un clic dans sa gouttiere avance d'une page (ui::ScrollArea, placee par onLayout).
+    if (bool moved = false; leftBar_.handle(*this, ev, scroll_, &moved)) {
+        if (moved) invalidateLayout();
+        return ui::EventResult::Consumed;
     }
     // 1.37.0 : la boutique - un clic choisit une edition, un second clic la rend (l'editeur choisira).
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && available_ && !pending_)
@@ -2466,8 +2668,97 @@ ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
 }
 
 namespace {
-constexpr float kCardH = 116.f, kCardGap = 10.f, kIntroLines = 3.f;
+constexpr float kCardGap = 10.f, kIntroLines = 3.f;   // 1.46.0 : plus de hauteur fixe (kCardH 116) - la carte suit ses lignes
+
+// 1.46.0 : des lignes coupees a la largeur, a la mesure de l'interface (la mise en page n'a pas de renderer) ; les mots entiers.
+std::vector<std::string> wrapMeasured(const std::string& text, gfx::FontId f, float w) {
+    std::vector<std::string> out;
+    std::string line, word;
+    const auto flush = [&] {
+        if (word.empty()) return;
+        const std::string t = line.empty() ? word : line + " " + word;
+        if (!line.empty() && ui::measureWidth(t, f) > w) {
+            out.push_back(line);
+            line = word;
+        } else {
+            line = t;
+        }
+        word.clear();
+    };
+    for (const char ch : text) {
+        if (ch == ' ') flush();
+        else word += ch;
+    }
+    flush();
+    if (!line.empty()) out.push_back(line);
+    return out;
+}
+// << 1 PC . 40 jours . 18/21 fonctions >> : coupee entre ses morceaux (<< . >>) plutot qu'au milieu de l'un d'eux.
+std::vector<std::string> wrapDotted(const std::string& text, gfx::FontId f, float w) {
+    const std::string dot = " \xC2\xB7 ";
+    std::vector<std::string> parts, out;
+    for (std::size_t from = 0;;) {
+        const auto at = text.find(dot, from);
+        parts.push_back(text.substr(from, at == std::string::npos ? std::string::npos : at - from));
+        if (at == std::string::npos) break;
+        from = at + dot.size();
+    }
+    std::string line;
+    for (const auto& part : parts) {
+        const std::string t = line.empty() ? part : line + dot + part;
+        if (line.empty() || ui::measureWidth(t, f) <= w) {
+            line = t;
+            continue;
+        }
+        out.push_back(line);
+        line = part;
+    }
+    if (!line.empty()) out.push_back(line);
+    // un morceau plus large que la carte a lui seul : coupe a ses mots
+    std::vector<std::string> fitted;
+    for (const auto& l : out) {
+        if (ui::measureWidth(l, f) <= w) fitted.push_back(l);
+        else
+            for (auto& x : wrapMeasured(l, f, w)) fitted.push_back(std::move(x));
+    }
+    return fitted;
+}
 } // namespace
+
+float OnlinePanel::layoutCard(Card& k, float w) const {
+    const float iw = std::max(40.f, w - 20.f);
+    const bool on = k.id == chosen_;
+    k.titleL = wrapMeasured(k.label, kValue, iw - (on ? 22.f : 0.f));
+    if (k.titleL.size() > 2) k.titleL.resize(2);
+    k.priceL.clear();
+    k.promoL.clear();
+    k.endL.clear();
+    k.priceInline = false;
+    if (!k.promo.empty()) {
+        // une reduction : l'ancien prix barre et le nouveau sur une ligne s'ils tiennent, sinon l'un sous l'autre ; sa fin, entiere
+        if (!k.price.empty() && ui::measureWidth(k.price, kSmall) + 8.f + ui::measureWidth(k.promo, gfx::semibold(kSmall)) <= iw) {
+            k.priceInline = true;
+            k.priceL = {k.price};
+            k.promoL = {k.promo};
+        } else {
+            if (!k.price.empty()) k.priceL = wrapMeasured(k.price, kSmall, iw);
+            k.promoL = wrapMeasured(k.promo, gfx::semibold(kSmall), iw);
+        }
+        k.endL = wrapMeasured("R\xC3\xA9" "duction " + k.promoEnd, kSmall, iw);
+    } else {
+        k.priceL = wrapMeasured(k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw);
+    }
+    k.descL = wrapMeasured(k.description, kSmall, iw);
+    if (k.descL.size() > 3) {   // la phrase : trois lignes au plus (la suite : dans Editions)
+        k.descL.resize(3);
+        k.descL.back() += " \xE2\x80\xA6";
+    }
+    k.factsL = wrapDotted(k.facts, kSmall, iw);
+    const float lhTitle = ui::lineHeight(kValue) + 2.f;
+    const std::size_t priceLines = k.priceInline ? 1 : k.priceL.size() + k.promoL.size();
+    return 8.f + static_cast<float>(k.titleL.size()) * lhTitle + static_cast<float>(priceLines) * 19.f + static_cast<float>(k.endL.size()) * 18.f +
+           static_cast<float>(k.descL.size()) * 18.f + 4.f + static_cast<float>(k.factsL.size()) * 18.f + 8.f;
+}
 
 void OnlinePanel::onLayout() {
     const auto b = bounds();
@@ -2502,14 +2793,19 @@ void OnlinePanel::onLayout() {
         if (!cards_.empty()) {
             y += 24.f;
             const std::size_t n = cards_.size();
-            const std::size_t perRow = std::max<std::size_t>(1, std::min<std::size_t>(n, static_cast<std::size_t>((W + kCardGap) / (180.f + kCardGap))));
-            const float cw = std::min(260.f, (W - kCardGap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow));
-            for (std::size_t i = 0; i < n; ++i) {
-                const float cx = x + static_cast<float>(i % perRow) * (cw + kCardGap);
-                const float cy = y + static_cast<float>(i / perRow) * (kCardH + kCardGap);
-                cards_[i].box = {cx, cy, cw, kCardH};
+            // 1.46.0 : des cartes de 210 px au moins (avant 180 : leurs lignes coupees), aussi hautes que leurs lignes ; une rangee
+            // a la hauteur de sa plus haute carte
+            const std::size_t perRow = std::max<std::size_t>(1, std::min<std::size_t>(n, static_cast<std::size_t>((W + kCardGap) / (210.f + kCardGap))));
+            const float cw = std::floor(std::min(300.f, (W - kCardGap * static_cast<float>(perRow - 1)) / static_cast<float>(perRow)));
+            for (std::size_t row = 0; row * perRow < n; ++row) {
+                float rowH = 0.f;
+                for (std::size_t i = row * perRow; i < std::min(n, (row + 1) * perRow); ++i) rowH = std::max(rowH, layoutCard(cards_[i], cw));
+                rowH = std::ceil(rowH);
+                for (std::size_t i = row * perRow; i < std::min(n, (row + 1) * perRow); ++i)
+                    cards_[i].box = {x + static_cast<float>(i % perRow) * (cw + kCardGap), y, cw, rowH};
+                y += rowH + kCardGap;
             }
-            y += static_cast<float>((n + perRow - 1) / perRow) * (kCardH + kCardGap) + 4.f;
+            y += 4.f;
         }
         fieldsY_ = y;
         for (auto* f : {customer_, contact_, email_, licenseId_, pcName_, message_}) {
@@ -2522,6 +2818,15 @@ void OnlinePanel::onLayout() {
             const float bw = std::max(150.f, btn->sizeHint().preferred.w);
             btn->setBounds({bx, y, bw, 32.f});
             bx += bw + 8.f;
+        }
+        {   // 1.46.0 : << Modifier mon profil... >> a la suite (ou dessous, si la place manque)
+            const float pw = std::ceil(profile_->sizeHint().preferred.w + 8.f);
+            if (bx + pw <= x + W) {
+                profile_->setBounds({bx + 4.f, y, pw, 32.f});
+            } else {
+                y += 38.f;
+                profile_->setBounds({fieldX, y, pw, 32.f});
+            }
         }
         y += 44.f;
     } else if (available_) {
@@ -2545,6 +2850,10 @@ void OnlinePanel::onLayout() {
         onLayout();
         relayout_ = false;
     }
+    // 1.46.0 : la barre de la partie gauche - sous l'introduction, entre la partie gauche et l'offre ; la molette sur la
+    // partie gauche seulement (l'offre a sa liste).
+    leftBar_.place({b.x, b.y, (offerBox_.w > 0.f ? offerBox_.x : b.right()) - b.x, b.h}, contentH_, b.h,
+                   {x + leftW_ + 5.f, fixedRowsY, ui::kScrollBarThickness, std::max(40.f, b.bottom() - 4.f - fixedRowsY)});
 }
 
 void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
@@ -2562,22 +2871,15 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         ? std::string("Ta demande attend l'\xC3\xA9" "diteur. Le Studio regarde tout seul, toutes les minutes, s'il a r\xC3\xA9pondu : d\xC3\xA8s qu'il "
                       "l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et une fen\xC3\xAAtre te le confirme (ce qu'elle ouvre, jusqu'\xC3\xA0 quand). "
                       "Tu peux fermer cette fen\xC3\xAAtre, et m\xC3\xAAme le Studio : la r\xC3\xA9ponse t'attendra au prochain lancement.")
-        : std::string("Choisis ta licence et demande-la \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9 suffit, le reste est facultatif (Mon profil remplit "
-                      "les champs). Ta demande part scell\xC3\xA9" "e : lui seul la lit. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et "
+        : std::string("Choisis ta licence et demande-la \xC3\xA0 l'\xC3\xA9" "diteur : ta soci\xC3\xA9t\xC3\xA9 suffit, le reste est facultatif (ton profil remplit "
+                      "les champs : Modifier mon profil\xE2\x80\xA6). Ta demande part scell\xC3\xA9" "e : lui seul la lit. D\xC3\xA8s qu'il l'accepte, ta licence s'installe d'elle-m\xC3\xAAme et "
                       "une fen\xC3\xAAtre te le confirme - aucun fichier, aucun code \xC3\xA0 taper. Une seule demande \xC3\xA0 la fois pour ce PC.");
     const std::string introOff = why_ + " Utilise les boutons du bas : Demander une activation\xE2\x80\xA6 (un fichier \xC3\xA0 envoyer \xC3\xA0 l'\xC3\xA9" "diteur), "
                                  "puis Activer par fichier de licence\xE2\x80\xA6 avec sa r\xC3\xA9ponse.";
     float y = b.y + 16.f - scroll_;   // 1.42.0 : la partie gauche defile
-    // La barre de defilement de la partie gauche (fine, a son bord droit) quand elle est plus haute que l'onglet.
-    if (contentH_ > b.h + 1.f) {
-        // 1.44.0 : la barre commence SOUS l'introduction (qui prend toute la largeur) : elle ne la barre plus
-        const float colRight = (leftW_ > 0.f ? x + std::min(leftW_, W) : x + W) + 8.f;
-        const float trackTop = b.y + 16.f + kIntroLines * 20.f + 10.f;
-        const float trackH = std::max(40.f, b.bottom() - 4.f - trackTop), thumbH = std::max(30.f, trackH * b.h / contentH_);
-        const float thumbY = trackTop + (trackH - thumbH) * (scroll_ / std::max(1.f, contentH_ - b.h));
-        r.fillRoundedRect({colRight, trackTop, 4.f, trackH}, c.gridLine, 2.f);
-        r.fillRoundedRect({colRight, thumbY, 4.f, thumbH}, c.scrollbarHover, 2.f);
-    }
+    // La barre de defilement de la partie gauche quand elle est plus haute que l'onglet (1.44.0 : SOUS l'introduction, qui
+    // prend toute la largeur ; 1.46.0 : ui::ScrollArea - elle se tire et se clique, comme celle d'une liste).
+    leftBar_.paint(ctx, scroll_);
     int n = 0;
     for (const auto& l : wrapText(r, available_ ? intro : introOff, kSmall, W)) {
         if (++n > 3) break;
@@ -2603,45 +2905,58 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
                 const bool on = k.id == chosen_;
                 r.fillRect(k.box, on ? c.headerBg : c.inputBg);
                 r.strokeRect(k.box, on ? c.accent : c.border, on ? 2.f : 1.f);
-                const float ix = k.box.x + 10.f, iw = k.box.w - 20.f;
+                // 1.46.0 : les lignes de la mise en page (layoutCard), entieres - plus rien de coupe par << ... >>
+                const float ix = k.box.x + 10.f;
                 float ty = k.box.y + 8.f;
-                const std::string title = fit(r, k.label, kValue, iw - (on ? 22.f : 0.f));
-                r.drawText({ix, ty}, title, kValue, c.text);
-                r.drawText({ix + 1.f, ty}, title, kValue, c.text);   // gras
                 if (on) r.drawText({k.box.right() - 26.f, ty}, "\xE2\x9C\x93", kValue, c.accent);
-                ty += r.lineHeight(kValue) + 2.f;
+                for (const auto& l : k.titleL) {
+                    r.drawText({ix, ty}, l, kValue, c.text);
+                    r.drawText({ix + 1.f, ty}, l, kValue, c.text);   // gras
+                    ty += r.lineHeight(kValue) + 2.f;
+                }
+                const auto struck = [&](const std::string& l, float px, float py) {
+                    const float ow = r.measure(l, kSmall).width;
+                    r.drawText({px, py}, l, kSmall, c.textMuted);
+                    r.fillRect({px, std::round(py + r.lineHeight(kSmall) * 0.5f), ow, 1.f}, c.textMuted);
+                    return ow;
+                };
                 if (!k.promo.empty()) {
                     // 1.38.0 : une reduction - l'ancien prix barre, le nouveau, et sa fin.
-                    float px = ix;
-                    if (!k.price.empty()) {
-                        const std::string old = fit(r, k.price, kSmall, iw * 0.45f);
-                        const float ow = r.measure(old, kSmall).width;
-                        r.drawText({px, ty}, old, kSmall, c.textMuted);
-                        r.fillRect({px, ty + r.lineHeight(kSmall) * 0.5f, ow, 1.f}, c.textMuted);
-                        px += ow + 8.f;
-                    }
                     const gfx::Color hot = ctx.theme.tone(ui::Tone::Ok, c.accent);
-                    const std::string now = fit(r, k.promo, kSmall, std::max(20.f, ix + iw - px));
-                    r.drawText({px, ty}, now, kSmall, hot);
-                    r.drawText({px + 1.f, ty}, now, kSmall, hot);
-                    // Sa fin, entiere, sur la ligne suivante (a la place de la premiere ligne de la phrase).
-                    r.drawText({ix, ty + 19.f}, fit(r, "R\xC3\xA9" "duction " + k.promoEnd, kSmall, iw), kSmall, hot);
-                } else
-                    r.drawText({ix, ty}, fit(r, k.price.empty() ? std::string("prix sur demande") : k.price, kSmall, iw), kSmall,
-                               k.price.empty() ? c.textMuted : c.accent);
-                ty += 19.f;
-                int dl = 0;   // la phrase : deux lignes (une avec une reduction : sa fin prend la premiere)
-                const int maxLines = k.promo.empty() ? 2 : 1;
-                const float dy = k.promo.empty() ? 0.f : 18.f;
-                const auto lines = wrapText(r, k.description, kSmall, iw);
-                for (std::size_t li = 0; li < lines.size(); ++li) {
-                    if (++dl > maxLines) break;
-                    std::string l = lines[li];
-                    if (dl == maxLines && li + 1 < lines.size()) l += " \xE2\x80\xA6";   // la suite ne tient pas
-                    r.drawText({ix, ty + dy + static_cast<float>(dl - 1) * 18.f}, fit(r, l, kSmall, iw), kSmall, c.textMuted);
+                    const gfx::FontId bold = gfx::semibold(kSmall);
+                    if (k.priceInline) {
+                        const float ow = struck(k.priceL.front(), ix, ty);
+                        r.drawText({ix + ow + 8.f, ty}, k.promoL.front(), bold, hot);
+                        ty += 19.f;
+                    } else {
+                        for (const auto& l : k.priceL) {
+                            (void)struck(l, ix, ty);
+                            ty += 19.f;
+                        }
+                        for (const auto& l : k.promoL) {
+                            r.drawText({ix, ty}, l, bold, hot);
+                            ty += 19.f;
+                        }
+                    }
+                    for (const auto& l : k.endL) {   // sa fin, entiere
+                        r.drawText({ix, ty}, l, kSmall, hot);
+                        ty += 18.f;
+                    }
+                } else {
+                    for (const auto& l : k.priceL) {
+                        r.drawText({ix, ty}, l, kSmall, k.price.empty() ? c.textMuted : c.accent);
+                        ty += 19.f;
+                    }
                 }
-                ty += 37.f;
-                r.drawText({ix, ty}, fit(r, k.facts, kSmall, iw), kSmall, c.text);
+                for (const auto& l : k.descL) {
+                    r.drawText({ix, ty}, l, kSmall, c.textMuted);
+                    ty += 18.f;
+                }
+                ty += 4.f;
+                for (const auto& l : k.factsL) {
+                    r.drawText({ix, ty}, l, kSmall, c.text);
+                    ty += 18.f;
+                }
             }
         }
         const char* labels[6] = {"Soci\xC3\xA9t\xC3\xA9 / client *", "Ton nom", "Courriel", "Licence existante", "Nom de ce PC", "Message"};
@@ -2718,7 +3033,8 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
 }
 
 // ============================================================ 1.37.0 : Mon profil ==
-ProfilePanel::ProfilePanel(LicenceBody& body) : ui::Widget("licence.profil"), body_(body) {
+ProfilePanel::ProfilePanel(std::function<void(std::string, int)> say, std::function<void()> saved)
+    : ui::Widget("licence.profil"), say_(std::move(say)), saved_(std::move(saved)) {
     const auto mk = [this](const char* id, const char* placeholder) {
         auto f = std::make_unique<ui::InputText>(id);
         f->setPlaceholder(placeholder);
@@ -2751,12 +3067,12 @@ void ProfilePanel::doSave() {
     p.verified = licence::loadProfile().verified;   // 1.38.0 : gardee si le courriel ne change pas
     std::string why;
     if (!licence::saveProfile(p, &why)) {
-        body_.say("Profil non enregistr\xC3\xA9 : " + why + ".", 3);
+        if (say_) say_("Profil non enregistr\xC3\xA9 : " + why + ".", 3);
         return;
     }
     refresh();
-    body_.say("Profil enregistr\xC3\xA9 : il remplit ta demande de licence ; ton courriel recevra le mail de l'\xC3\xA9" "diteur.", 1);
-    body_.profileSaved();
+    if (say_) say_("Profil enregistr\xC3\xA9 : il remplit ta demande de licence ; ton courriel recevra le mail de l'\xC3\xA9" "diteur.", 1);
+    if (saved_) saved_();
 }
 
 void ProfilePanel::onLayout() {
@@ -2779,7 +3095,7 @@ void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
     const auto b = bounds();
     const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
     const std::string intro =
-        "Tout est facultatif. Ton profil remplit ta demande de licence (onglet Demander ma licence) ; ton courriel re\xC3\xA7oit le mail de l'\xC3\xA9" "diteur "
+        "Tout est facultatif. Ton profil remplit ta demande de licence (Licence\xE2\x80\xA6 \xE2\x80\xBA Demander ma licence) ; ton courriel re\xC3\xA7oit le mail de l'\xC3\xA9" "diteur "
         "quand il accepte ta demande (avec le code d'une licence en ligne). Il reste sur ce PC, pour API Studio et IHM Studio ; rien ne part tant que "
         "tu n'envoies pas une demande.";
     float y = b.y + 16.f;
@@ -2815,6 +3131,112 @@ void ProfilePanel::onPaint(const ui::PaintContext& ctx) {
     }
     r.drawText({x, fy + 48.f}, fit(r, "Enregistr\xC3\xA9 dans : " + licence::profilePath(), kSmall, W), kSmall, c.textMuted);
 }
+
+// ============================================================ 1.46.0 : la fenetre Mon profil ==
+// Mon profil n'est plus une rubrique de la fenetre Licence (<< mets-le ailleurs >>) : sa petite fenetre, ouverte de l'accueil
+// du Studio, d'Aide > Mon profil..., de << Modifier mon profil... >> (la demande) et de showLicenceWindow(kTabProfile).
+class ProfileWindow;
+ProfileWindow* g_profileWindow = nullptr;
+
+class ProfileBody final : public ui::Widget {
+public:
+    explicit ProfileBody(std::function<void()> close) : ui::Widget("dialog.profil.corps"), close_(std::move(close)) {
+        panel_ = &static_cast<ProfilePanel&>(addChild(std::make_unique<ProfilePanel>(
+            [this](std::string t, int tone) {
+                flash_ = std::move(t);
+                tone_ = tone;
+                invalidate();
+            },
+            [] {
+                // la demande de licence ouverte reprend ce qui y manque
+                if (g_licenceWindow) g_licenceWindow->profileSaved();
+            })));
+        closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.profil.fermer")));
+        links_ += closeButton_->clicked->connect([this] {
+            if (close_) close_();
+        });
+    }
+    [[nodiscard]] const std::string& flash() const noexcept { return flash_; }
+
+protected:
+    void onLayout() override {
+        const auto r = bounds();
+        const float w = std::min(780.f, std::max(520.f, r.w - 40.f)), h = std::min(440.f, std::max(360.f, r.h - 40.f));
+        frame_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
+        closeBox_ = {frame_.right() - 36.f, frame_.y + 9.f, 24.f, 24.f};
+        ui::dialogframe::keep(*this, closeBox_);
+        panel_->setBounds({frame_.x, frame_.y + 46.f, frame_.w, std::max(200.f, frame_.h - 46.f - 92.f)});
+        const float cw = std::max(110.f, closeButton_->sizeHint().preferred.w);
+        closeButton_->setBounds({frame_.right() - 16.f - cw, frame_.bottom() - 44.f, cw, 32.f});
+    }
+    void onPaint(const ui::PaintContext& ctx) override {
+        auto& r = ctx.r;
+        const auto& c = ctx.theme.color;
+        r.fillRect(frame_, c.panelBg);
+        r.strokeRect(frame_, c.borderStrong, 1.f);
+        r.fillRect({frame_.x, frame_.y, frame_.w, 42.f}, c.headerBg);
+        ui::drawIcon(r, ui::Icon::User, {frame_.x + 14.f, frame_.y + 13.f, 16.f, 16.f}, c.text);
+        r.drawText({frame_.x + 38.f, frame_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, "Mon profil", kTitle, c.text);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
+        r.fillRect({frame_.x, frame_.y + 42.f, frame_.w, 1.f}, c.border);
+        if (!flash_.empty()) {
+            const gfx::Color ink = tone_ == 1 ? ctx.theme.tone(ui::Tone::Ok, c.text) : tone_ == 3 ? ctx.theme.tone(ui::Tone::Error, c.text) : c.text;
+            const gfx::Rect band{frame_.x + 16.f, frame_.bottom() - 86.f, frame_.w - 32.f, 28.f};
+            r.fillRect(band, c.headerBg);
+            r.fillRect({band.x, band.y, 3.f, band.h}, ink);
+            r.drawText({band.x + 10.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, flash_, kSmall, band.w - 16.f), kSmall, c.text);
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
+            if (close_) close_();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::function<void()> close_;
+    ProfilePanel*         panel_{nullptr};
+    ui::Button*           closeButton_{nullptr};
+    std::string           flash_;
+    int                   tone_{0};
+    gfx::Rect             frame_{}, closeBox_{};
+    core::ConnectionScope links_;
+};
+
+class ProfileWindow final : public menu::WidgetMenu {
+public:
+    ProfileWindow() : menu::WidgetMenu("dialog.profil") { g_profileWindow = this; }
+    ~ProfileWindow() override {
+        if (g_profileWindow == this) g_profileWindow = nullptr;
+    }
+    [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
+    [[nodiscard]] std::string title() const override { return "Mon profil"; }
+    ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::Escape) {
+            fermer();
+            return ui::EventResult::Consumed;
+        }
+        return menu::WidgetMenu::HandleEvent(ev);
+    }
+    void fermer() {
+        if (done_) return;
+        done_ = true;
+        if (g_profileWindow == this) g_profileWindow = nullptr;
+        manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Cancel, {}});
+    }
+    [[nodiscard]] bool closing() const noexcept { return done_; }
+
+protected:
+    core::Status buildUi() override {
+        setRoot(std::make_unique<ProfileBody>([this] { fermer(); }));
+        return core::ok();
+    }
+
+private:
+    bool done_{false};
+};
 
 // 1.38.0 : la capture qu'on agrandit (capturePng, ZoomImage) : 1.45.0, dans LicenceViews.cpp (licence::CaptureView).
 
@@ -2972,16 +3394,23 @@ public:
     ZoomWindow(licence::CaptureSet set, std::size_t shot)
         : menu::WidgetMenu("dialog.capture"), title_(set.title), set_(std::move(set)), shot_(shot) {}
     [[nodiscard]] menu::MenuTraits traits() const override { return dialogTraits(); }
-    [[nodiscard]] std::string title() const override { return title_; }
+    [[nodiscard]] std::string title() const override { return body_ ? body_->title() : title_; }   // 1.46.0 : la fonctionnalite montree
     ui::EventResult HandleEvent(const ui::InputEvent& ev) override {
         if (const auto* k = std::get_if<ui::KeyDown>(&ev)) {
+            // la liste des fonctionnalites ouverte : ses touches d'abord (Echap la ferme, les fleches s'y deplacent)
+            if (body_ && body_->featureList() && body_->featureList()->isOpen()) return menu::WidgetMenu::HandleEvent(ev);
             if (k->key == ui::Key::Escape) {
                 fermer();
                 return ui::EventResult::Consumed;
             }
             // 1.45.0 : les fleches du clavier passent d'une capture a l'autre
-            if (body_ && (k->key == ui::Key::Left || k->key == ui::Key::Right) && body_->shotCount() > 1) {
+            if (body_ && (k->key == ui::Key::Left || k->key == ui::Key::Right) && !k->mods.alt && body_->shotCount() > 1) {
                 body_->step(k->key == ui::Key::Left ? -1 : 1);
+                return ui::EventResult::Consumed;
+            }
+            // 1.46.0 : Page precedente / Page suivante : une autre fonctionnalite (celles de la liste, les barrees comprises)
+            if (body_ && (k->key == ui::Key::PageUp || k->key == ui::Key::PageDown) && body_->featureCount() > 1) {
+                body_->stepFeature(k->key == ui::Key::PageUp ? -1 : 1);
                 return ui::EventResult::Consumed;
             }
         }
@@ -2997,9 +3426,13 @@ protected:
     core::Status buildUi() override {
         auto body = std::make_unique<licence::CaptureZoomBody>(std::move(set_), shot_, [this] { fermer(); });
         body_ = body.get();
+        if (!choices_.empty()) body_->setChoices(std::move(choices_));   // 1.46.0 : changer de fonctionnalite
         setRoot(std::move(body));
         return core::ok();
     }
+
+public:
+    std::vector<licence::CaptureChoice> choices_;   // 1.46.0 : les fonctionnalites qu'on peut y choisir
 
 private:
     std::string               title_;
@@ -3010,7 +3443,7 @@ private:
 };
 
 void showCapture(menu::MenuManager& menus, const FeatureInfo& f, const licence::FeaturePreview& preview, std::size_t shot,
-                 const std::vector<hmi::Resource>& loaded) {
+                 const std::vector<hmi::Resource>& loaded, std::vector<licence::CaptureChoice> choices) {
     licence::CaptureSet set;
     set.feature = f.id;
     set.title = f.label + (f.product.empty() ? std::string() : " \xE2\x80\x94 " + f.product);
@@ -3018,7 +3451,11 @@ void showCapture(menu::MenuManager& menus, const FeatureInfo& f, const licence::
     set.shots = preview.shots;
     if (set.shots.empty() && !preview.imagePath.empty()) set.shots.push_back({preview.imagePath, {}, {}});
     set.images = loaded;
-    menus.ShowDialog(std::make_unique<ZoomWindow>(std::move(set), shot), [](const menu::DialogResult&) {});
+    set.locked = f.locked;   // 1.46.0 : une ligne barree - ses captures, et la fenetre le dit
+    set.lockedText = f.lockedText;
+    auto window = std::make_unique<ZoomWindow>(std::move(set), shot);
+    window->choices_ = std::move(choices);
+    menus.ShowDialog(std::move(window), [](const menu::DialogResult&) {});
 }
 
 // ============================================================ 1.39.0 : une action pas dans la licence ==
@@ -3059,6 +3496,10 @@ public:
     // 1.45.0 : les bulles de sa capture (la premiere), dans leur repere
     void setSpots(const licence::CaptureShot& shot) {
         if (image_) image_->setSpots(shot.spots, shot.refW, shot.refH);
+    }
+    // 1.46.0 : un clic sur la capture : en grand (toutes ses captures ; les autres fonctionnalites a cote)
+    void setZoom(std::function<void()> zoom) {
+        if (image_ && zoom) image_->onOpen = std::move(zoom);
     }
 
 protected:
@@ -3177,12 +3618,15 @@ protected:
         auto body = std::make_unique<LockedBody>(action_, why_, offers_, description_, std::move(img_), hasImage_, [this] { fermer(true); },
                                                  [this] { fermer(false); }, optionLine_, [this] { fermer(false, true); });
         body->setSpots(shot_);   // 1.45.0
+        if (!feature_.empty())   // 1.46.0 : la capture en grand, par-dessus
+            body->setZoom([this] { (void)licence::showFeatureCapture(app_, feature_, 0); });
         setRoot(std::move(body));
         return core::ok();
     }
 
 public:
     licence::CaptureShot shot_;   // 1.45.0 : la capture montree (ses bulles)
+    std::string          feature_;   // 1.46.0 : sa fonctionnalite (la capture en grand)
 
 private:
     App&          app_;
@@ -3257,6 +3701,7 @@ void showLocked(App& app, std::string_view feature, std::string actionLabel) {
     auto window = std::make_unique<LockedWindow>(app, actionLabel.empty() ? name : std::move(actionLabel), std::move(why), std::move(offers),
                                                  pv.description, std::move(img), hasImage, optionLine);
     if (!pv.shots.empty()) window->shot_ = pv.shots.front();   // 1.45.0 : ses bulles
+    if (!pv.shots.empty()) window->feature_ = id;               // 1.46.0 : un clic, en grand
     app.menus().ShowDialog(std::move(window),
                            [&app, optionId](const menu::DialogResult& r) {
                                if (!r.accepted()) return;
@@ -3288,7 +3733,9 @@ public:
             "Toute l'offre (" + std::to_string(ch_.rows.size()) + ")", "dialog.offre-modifiee.tout")));
         panel_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("dialog.offre-modifiee.panneau", "dialog.offre-modifiee.table")));
         panel_->pane().onEnlarge = [this](const FeatureInfo& f, const licence::FeaturePreview& p, std::size_t shot,
-                                          const std::vector<hmi::Resource>& loaded) { showCapture(app_.menus(), f, p, shot, loaded); };
+                                          const std::vector<hmi::Resource>& loaded) {
+            showCapture(app_.menus(), f, p, shot, loaded, panel_->choices());   // 1.46.0 : les autres lignes a cote
+        };
         compareButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Comparer toutes les offres\xE2\x80\xA6", "dialog.offre-modifiee.comparer")));
         closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.offre-modifiee.fermer")));
         closeButton_->setStyle(ui::Button::Style::Primary);
@@ -3320,7 +3767,8 @@ public:
             if (onlyChanges_ && !changed) continue;
             const std::string what = !changed ? std::string("inchang\xC3\xA9" "e") : r.after ? std::string("\xE2\x9C\x93 ajout\xC3\xA9" "e") : std::string("\xE2\x9C\x97 retir\xC3\xA9" "e");
             rows.push_back({r.label, r.product, r.before ? yes : no, r.after ? yes : no, what});
-            infos.push_back({r.id, r.label, r.product, {}});
+            // 1.46.0 : retiree de l'offre - barree en grand aussi, ses captures quand meme
+            infos.push_back({r.id, r.label, r.product, {}, !r.after, r.after ? std::string() : std::string("retir\xC3\xA9" "e de l'offre")});
             tone.push_back(!changed ? 0 : r.after ? 1 : -1);
         }
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Fonctionnalit\xC3\xA9", "Logiciel", "Avant", "Apr\xC3\xA8s", "Changement"}, std::move(rows),
@@ -3601,6 +4049,11 @@ void showNoticesWindow(App& app, bool withFiles) {
 void showLicenceWindow(App& app, int tab) { showLicenceWindow(app.menus(), tab); }
 
 void showLicenceWindow(menu::MenuManager& menus, int tab) {
+    // 1.46.0 : Mon profil n'est plus une rubrique - sa fenetre (les appels d'avant : l'accueil, Aide, << Verifier mon adresse >>)
+    if (tab == licence::kTabProfile) {
+        showProfileWindow(menus);
+        return;
+    }
     // 1.45.0 : UNE SEULE FENETRE LICENCE. Deja ouverte (sous la reponse de l'editeur, << Voir ma licence >>) : elle passe a
     // l'onglet demande ; avant, une seconde s'empilait sur la premiere - deux clics sur la croix pour en sortir.
     if (g_licenceWindow && !g_licenceWindow->closing()) {
@@ -3611,6 +4064,17 @@ void showLicenceWindow(menu::MenuManager& menus, int tab) {
 }
 
 bool licenceWindowOpen() noexcept { return g_licenceWindow && !g_licenceWindow->closing(); }
+
+int licenceWindowSection() noexcept { return licenceWindowOpen() ? g_licenceWindow->section() : licence::kTabAuto; }
+
+void showProfileWindow(App& app) { showProfileWindow(app.menus()); }
+
+void showProfileWindow(menu::MenuManager& menus) {
+    if (g_profileWindow && !g_profileWindow->closing()) return;   // deja ouverte : une seule
+    menus.ShowDialog(std::make_unique<ProfileWindow>(), nullptr);
+}
+
+bool profileWindowOpen() noexcept { return g_profileWindow && !g_profileWindow->closing(); }
 
 namespace licence {
 
@@ -3672,7 +4136,10 @@ bool showFeatureCapture(App& app, const std::string& feature, std::size_t shot) 
     if (const auto reg = licensing::getRegistry())
         for (const auto& f : reg->features)
             if (f.id == feature) product = f.product;
-    showCapture(app.menus(), FeatureInfo{feature, featureLabel(feature), product, {}}, pv, std::min(shot, pv.shots.size() - 1));
+    // 1.46.0 : toutes les fonctionnalites du registre dans sa liste (celles que la licence n'ouvre pas : barrees, avec leurs captures)
+    const bool locked = !allows(feature);
+    showCapture(app.menus(), FeatureInfo{feature, featureLabel(feature), product, {}, locked, locked ? "pas dans ta licence" : ""}, pv,
+                std::min(shot, pv.shots.size() - 1), {}, registryChoices());
     return true;
 }
 

@@ -164,6 +164,12 @@ struct Card {
 
 // Les onglets de la fenetre Licence (1.35.0 : Activation en tete ; -1 : le plus utile - Ma licence pour une licence
 // par fichier valable, sinon Activation).
+// 1.46.0 : PLUS D'ONGLETS - un accueil (kTabHome : le resume de la licence, les rubriques en quatre groupes) et, sur chaque
+// rubrique, un fil d'Ariane (<< Licence > Demander ma licence >>). Les numeros restent ceux des rubriques (les notifications,
+// les scripts, Regarder) ; kTabAuto : l'accueil, sauf la ou une rubrique est plus utile (sans licence : la demande, ou
+// l'activation ; un bail fini, un poste flottant a prendre : l'activation). kTabProfile : MON PROFIL N'EST PLUS UNE
+// RUBRIQUE - sa petite fenetre a part (showProfileWindow ; l'accueil du Studio, Aide > Mon profil..., la demande).
+inline constexpr int kTabHome = -2;
 inline constexpr int kTabAuto = -1, kTabActivation = 0, kTabMine = 1, kTabDevices = 2, kTabFeatures = 3, kTabEditions = 4, kTabHistory = 5,
                      kTabSettings = 6, kTabRequest = 7, kTabProfile = 8,   // 1.37.0 : Mon profil
                      kTabOptions = 9, kTabPurchases = 10;                     // 1.42.0 : Options, Mes achats
@@ -367,6 +373,7 @@ std::size_t check(bool force = false);
 
 // La fenetre Licence (le License Manager du client) ; `tab` : licence::kTab* (1.35.0 : 0 Activation, 1 Ma licence,
 // 2 Mes appareils, 3 Fonctionnalites, 4 Editions, 5 Historique, 6 Parametres, 7 Demande a l'editeur ; -1 : le plus utile).
+// 1.46.0 : -2 (kTabHome) : son accueil ; 8 (kTabProfile) : la fenetre Mon profil (showProfileWindow), pas la fenetre Licence.
 void showLicenceWindow(App& app, int tab = licence::kTabAuto);
 // 1.45.0 : UNE SEULE FENETRE LICENCE. Deja ouverte (sous la fenetre de la reponse de l'editeur : << Voir ma licence >>, une
 // notification...) : elle passe a l'onglet demande et se relit ; aucune autre ne s'empile par-dessus (avant : deux fenetres
@@ -374,6 +381,14 @@ void showLicenceWindow(App& app, int tab = licence::kTabAuto);
 void showLicenceWindow(menu::MenuManager& menus, int tab = licence::kTabAuto);
 // 1.45.0 : une fenetre Licence est-elle ouverte (et pas en train de se fermer) ?
 [[nodiscard]] bool licenceWindowOpen() noexcept;
+// 1.46.0 : la rubrique que montre la fenetre Licence ouverte (licence::kTabHome : son accueil) ; kTabAuto : aucune fenetre.
+[[nodiscard]] int licenceWindowSection() noexcept;
+// 1.46.0 : MON PROFIL, A PART (plus une rubrique de la fenetre Licence) : sa petite fenetre - le courriel, le nom, la
+// societe, Enregistrer. Ouverte par l'accueil du Studio, Aide > Mon profil..., << Modifier mon profil... >> de la demande,
+// et showLicenceWindow(kTabProfile) (les appels d'avant). Une seule a la fois ; par-dessus la fenetre Licence s'il y en a une.
+void showProfileWindow(App& app);
+void showProfileWindow(menu::MenuManager& menus);
+[[nodiscard]] bool profileWindowOpen() noexcept;
 namespace licence {
 // 1.42.0 : l'option a choisir a l'ouverture de l'onglet Options (une action fermee qui la propose) ; prise une fois.
 void setWantedOption(std::string optionId);
