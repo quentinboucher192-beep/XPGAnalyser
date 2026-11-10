@@ -288,6 +288,15 @@ struct AdminInvitation {
 };
 // L'invitation qui va avec une demande (le meme courriel, sinon le meme nom ; la plus recente) ; nul : sans invitation.
 [[nodiscard]] const AdminInvitation* invitationFor(const std::vector<AdminInvitation>& invitations, const AdminRequest& request);
+// 1.47.0 : une liste des admins vue sur ce poste (admins-vus.jsonl) et ce qu'elle disait de cette cle : l'histoire de
+// ses droits (une liste sur l'autre).
+struct AccountStep {
+    int                      number{0};
+    Seconds                  issued{0};
+    bool                     listed{false}, active{false};   // la cle y est ; active (pas retiree)
+    std::string              profile;
+    std::vector<std::string> rights;
+};
 // 1.47.0 : << Mon compte >> (PageAccount.cpp) - qui est ce poste, sans reseau.
 struct AccountInfo {
     Role                     role{Role::None};
@@ -302,6 +311,7 @@ struct AccountInfo {
     std::string              listPc;                  // le PC que la liste lui connait
     Seconds                  requestSent{0};          // sa demande d'admin, envoyee le (demande-admin.json)
     std::string              pc, machine;             // CE PC : son nom, l'identifiant de la machine
+    std::vector<AccountStep> steps;                   // un admin : les listes vues ici, de la plus ancienne a la plus recente
 };
 // Ce qu'a fait refreshAdminState / refreshAdminList.
 struct AdminRefresh {

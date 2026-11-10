@@ -45,6 +45,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <set>
 #include <system_error>
@@ -2245,15 +2246,40 @@ AccountInfo Workspace::account() const {
             a.listPc = m->pc;
             if (m->active()) a.rights = adm::normalizeRights(m->rights);
         }
-        // la premiere liste vue qui porte sa cle
+        // les listes vues ici (la premiere qui porte sa cle ; l'histoire de ses droits)
         std::string text;
+        std::map<int, AccountStep> steps;
         if (isFile(at(folder_, kAdminsSeenFile)) && readText(at(folder_, kAdminsSeenFile), text, nullptr))
             for (const auto& line : linesOf(text)) {
                 Value v;
                 adm::AdminList l;
                 if (!core::json::parse(line, v, nullptr) || !v.isObject() || !readListBlock(v.str("bloc"), editorKeys_, l, nullptr, nullptr)) continue;
-                if (l.byKey(a.keyHex) && (a.addedInList == 0 || l.number < a.addedInList)) a.addedInList = l.number;
+                AccountStep st;
+                st.number = l.number;
+                st.issued = l.issued;
+                if (const adm::Admin* m = l.byKey(a.keyHex)) {
+                    st.listed = true;
+                    st.active = m->active();
+                    st.profile = m->profile;
+                    st.rights = adm::normalizeRights(m->rights);
+                    if (a.addedInList == 0 || l.number < a.addedInList) a.addedInList = l.number;
+                }
+                steps[l.number] = std::move(st);
             }
+        if (adminList_ && !steps.count(adminList_->number)) {   // la liste en vigueur, si elle n'est pas notee
+            AccountStep st;
+            st.number = adminList_->number;
+            st.issued = adminList_->issued;
+            if (const adm::Admin* m = adminList_->byKey(a.keyHex)) {
+                st.listed = true;
+                st.active = m->active();
+                st.profile = m->profile;
+                st.rights = adm::normalizeRights(m->rights);
+                if (a.addedInList == 0 || st.number < a.addedInList) a.addedInList = st.number;
+            }
+            steps[st.number] = std::move(st);
+        }
+        for (auto& [n, st] : steps) a.steps.push_back(std::move(st));
         // sa demande d'admin (le courriel qu'il a donne)
         Value note;
         if (isFile(at(folder_, kAdminRequestFile)) && readText(at(folder_, kAdminRequestFile), text, nullptr) && core::json::parse(text, note, nullptr) &&
