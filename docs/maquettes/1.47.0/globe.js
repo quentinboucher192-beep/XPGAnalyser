@@ -317,7 +317,7 @@ class Globe {
     for (const v of VILLES) { v._e = this.proj(v.x, v.y, v.z); if (v._e[2] > -0.02 && ks.some(c => this.n(v, c.k) > 0)) vus.push(v); }
     const poids = v => ks.reduce((s, c) => s + this.n(v, c.k), 0);
     vus.sort((a, b) => poids(b) - poids(a) || b.n.pc - a.n.pc);
-    const grp = [], seuil = mini ? 9 : 22;
+    const grp = [], seuil = mini ? 9 : 28;
     for (const v of vus) {
       const g0 = grp.find(q => Math.hypot(q.x - v._e[0], q.y - v._e[1]) < seuil);
       if (g0) { g0.villes.push(v); ks.forEach(c => (g0.n[c.k] += this.n(v, c.k))); }
@@ -331,7 +331,7 @@ class Globe {
       const r0 = m.length ? m[0].r : 0; q.r = r0;
       m.forEach((it, i) => {   // le premier calque au centre, les autres a leur place fixe autour (toujours la meme)
         let ox = 0, oy = 0;
-        if (i > 0) { const a = SLOT[it.c.k] * RAD, d = r0 * 0.72 + it.r * 0.5; ox = d * Math.cos(a); oy = d * Math.sin(a); }
+        if (i > 0) { const a = SLOT[it.c.k] * RAD, d = (r0 + it.r) * 0.72; ox = d * Math.cos(a); oy = d * Math.sin(a); }
         items.push({ v: q.v, q, c: it.c, x: q.x + ox, y: q.y + oy, r: it.r, al, i });
       });
     }

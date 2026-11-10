@@ -174,7 +174,7 @@
     ['BE-CALCUL-02', 'Bureau d\'études Exemple', 'Studio', '1.44.0', 'il y a 3 h', 'w'], ['ESSAI-PORTABLE', 'Client d\'essai', 'Studio', '1.45.0', 'il y a 12 j', 'w'],
     ['PORTABLE-HUGO', 'Hugo Essai', 'Admin', '1.45.2', 'il y a 20 min', 'w'], ['ATELIER-PC5', 'Atelier Exemple', 'Studio', '1.46.0', 'auj. 09:12', 'g']];
   document.getElementById('nt').innerHTML = NT.map(function (r) {
-    return '<tr><td><span class="pcn">' + r[0] + '</span></td><td><div style="overflow:hidden;text-overflow:ellipsis">' + (r[2] === 'Admin' ? '<span class="av3 cH" style="width:18px;height:18px;font-size:9px;border-radius:5px;display:inline-grid;vertical-align:-4px;margin-right:6px">H</span>' : '') + r[1] + '</div></td>' +
+    return '<tr><td><span class="pcn">' + r[0] + '</span></td><td><div style="overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px">' + (r[2] === 'Admin' ? '<span class="av3 cH" style="width:18px;height:18px;font-size:9px;border-radius:5px">H</span>' : '') + r[1] + '</div></td>' +
       '<td><span class="vp ' + r[5] + '">' + r[3] + '</span></td><td class="muted">' + r[4] + '</td></tr>';
   }).join('');
 })();
