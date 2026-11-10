@@ -824,6 +824,11 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                                                                                    : (rec.optionText.empty() ? rec.option : rec.optionText);
                 bool renewed = false;
                 if (conn) {
+                    // 1.46.0 : le renouvellement rapporte aussi l'etat << poste >> - CET etat : il est note avant (sinon il serait
+                    // traite de nouveau, et le renouvellement redemande, sans fin)
+                    rec.lastNumber = std::max(rec.lastNumber, s.number);
+                    rec.lastState = lgw::stateKey(s.state);
+                    rec.lastNonce = s.requestNonce;
                     Result one;
                     std::vector<std::string> act;
                     bool devicePart = false;

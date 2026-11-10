@@ -264,7 +264,7 @@ class Globe {
     }
     return best;
   }
-  rayon(v) { let r = 0; for (const k of this.couches) r = Math.max(r, this.n(v, k) ? taille(this.n(v, k)) : 0); return r * (this.o.mini ? 0.55 : 1) * Math.pow(this.zoom, 0.35); }
+  rayon(v) { let r = 0; for (const k of this.couches) r = Math.max(r, this.n(v, k) ? taille(this.n(v, k)) : 0); return r * (this.o.mini ? 0.55 : 1) * Math.pow(this.zoom, 0.2); }
   n(v, k) { return v.n[k] || 0; }
   bouffee(v) { this.bouffees.push({ v, t: this.t }); }
   pas(dt) {
@@ -312,14 +312,14 @@ class Globe {
     }
     // les villes : chaque calque coche, sa forme et sa couleur. Les villes trop proches a ce zoom se groupent
     // (la plus grande porte le groupe, les nombres s'additionnent, un badge dit combien de villes) ; en zoomant, elles se separent.
-    const ks = CALQUES.filter(c => this.couches.has(c.k)), sc = (mini ? 0.55 : 1) * Math.pow(this.zoom, 0.35), items = [];
+    const ks = CALQUES.filter(c => this.couches.has(c.k)), sc = (mini ? 0.55 : 1) * Math.pow(this.zoom, 0.2), items = [];
     const vus = [];
     for (const v of VILLES) { v._e = this.proj(v.x, v.y, v.z); if (v._e[2] > -0.02 && ks.some(c => this.n(v, c.k) > 0)) vus.push(v); }
     const poids = v => ks.reduce((s, c) => s + this.n(v, c.k), 0);
     vus.sort((a, b) => poids(b) - poids(a) || b.n.pc - a.n.pc);
-    const grp = [], seuil = mini ? 9 : 28;
+    const grp = [], seuil = mini ? 9 : 20;
     for (const v of vus) {
-      const g0 = grp.find(q => Math.hypot(q.x - v._e[0], q.y - v._e[1]) < seuil);
+      const g0 = v === this.sel ? null : grp.find(q => q.v !== this.sel && Math.hypot(q.x - v._e[0], q.y - v._e[1]) < seuil);   // la ville choisie reste seule
       if (g0) { g0.villes.push(v); ks.forEach(c => (g0.n[c.k] += this.n(v, c.k))); }
       else grp.push({ v, villes: [v], x: v._e[0], y: v._e[1], z: v._e[2], n: Object.fromEntries(ks.map(c => [c.k, this.n(v, c.k)])) });
     }
@@ -331,7 +331,7 @@ class Globe {
       const r0 = m.length ? m[0].r : 0; q.r = r0;
       m.forEach((it, i) => {   // le premier calque au centre, les autres a leur place fixe autour (toujours la meme)
         let ox = 0, oy = 0;
-        if (i > 0) { const a = SLOT[it.c.k] * RAD, d = (r0 + it.r) * 0.72; ox = d * Math.cos(a); oy = d * Math.sin(a); }
+        if (i > 0) { const a = SLOT[it.c.k] * RAD, d = (r0 + it.r) * 0.66; ox = d * Math.cos(a); oy = d * Math.sin(a); }
         items.push({ v: q.v, q, c: it.c, x: q.x + ox, y: q.y + oy, r: it.r, al, i });
       });
     }
@@ -347,7 +347,7 @@ class Globe {
     }
     for (const it of items) marque(g, it.c, it.x, it.y, it.r, it.al);
     if (!mini) for (const q of grp) if (q.villes.length > 1 && q.z > 0.1) {   // le badge d'un groupe : combien de villes
-      const t = String(q.villes.length), bx = q.x - q.r * 0.75 - 6, by = q.y - q.r * 0.75 - 5;
+      const t = String(q.villes.length), bx = q.x - q.r * 0.8 - 7, by = q.y - q.r * 0.8 - 6;
       g.font = '700 9px Inter, sans-serif'; const tw = Math.max(13, g.measureText(t).width + 7);
       g.globalAlpha = Math.min(1, q.z * 4); g.fillStyle = '#fff'; g.strokeStyle = '#94a3b8'; g.lineWidth = 1;
       g.beginPath(); g.roundRect ? g.roundRect(bx - tw / 2, by - 6.5, tw, 13, 6.5) : g.rect(bx - tw / 2, by - 6.5, tw, 13); g.fill(); g.stroke();

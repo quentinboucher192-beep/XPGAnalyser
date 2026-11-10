@@ -125,7 +125,7 @@
     click: 'Clic : les commandes de cette offre' });
 
   // les options : un classement (une seule teinte, celle des options)
-  var OPTS = [['Assistant IA avancé', 21, 1450], ['Travail à plusieurs', 10, 860], ['Un PC de plus', 5, 290]];
+  var OPTS = [['Exports avancés', 21, 1450], ['Travail à plusieurs', 10, 860], ['Imports avancés', 5, 290]];
   p = X.card('c-opt', { t: 'Options vendues', v: e(sO), dl: X.dl(sO, 2210, true), cc: '36 commandes' });
   p.innerHTML = '<div class="ml">' + OPTS.map(function (o) {
     return '<div class="mr"><span class="l">' + o[0] + '</span><span class="n">' + e(o[2]) + '<em>' + o[1] + ' cmd</em></span><span class="tr"><i style="width:' + (o[2] * 100 / 1450) + '%;background:' + OFF.O + '"></i></span></div>';
@@ -169,7 +169,7 @@
     s: [{ n: 'licences qui finissent', c: function (k) { return k < 4 ? BL : GR; }, v: ECH, zero: true }], click: 'Clic : ces licences, à renouveler' });
 
   // ---- les demandes (les memes semaines que la planche 04) ----
-  var DR = [17, 18, 16, 18, 16, 18, 17, 20, 18, 15, 20, 19, 7], DT = [16, 18, 15, 17, 16, 17, 17, 19, 18, 14, 19, 19, 5];
+  var DR = [17, 18, 16, 18, 16, 18, 17, 19, 18, 15, 19, 19, 5], DT = [16, 18, 15, 17, 16, 17, 17, 19, 18, 14, 19, 19, 5];
   var DRl = DR.slice(0, LAST).concat([null]), DTl = DT.slice(0, LAST).concat([null]); // la courbe s'arrete a la derniere semaine entiere
   p = X.card('c-dem', { t: 'Demandes', v: n(sum(DR)) + '<small>reçues</small>', dl: X.dl(sum(DR), 175, true), cc: (sum(DR) - sum(DT)) + ' en attente',
     lg: [['ln', BL, 'reçues'], ['ln', OR, 'traitées <b>' + sum(DT) + '</b>']] });

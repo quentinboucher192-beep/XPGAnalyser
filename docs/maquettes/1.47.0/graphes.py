@@ -548,7 +548,7 @@ def fiche_head(on):
   <div class="big cL">L</div>
   <div class="grow"><div class="row gap8"><span class="nm2">Léa Essai</span><span class="pill p-gray pl">Admin</span><span class="pill p-green pl"><span class="d"></span>Active</span>
    <span class="pill p-violet pl">Admin LV2 · 2 écarts</span></div>
-   <div class="muted" style="margin-top:3px;font-size:12.5px">lea@exemple.fr · PC-COMMERCIAL-02 · admin depuis le 14/09/2026, ajoutée par Camille Essai · <span class="ok2">en ligne</span>, vue il y a 2 min à Lyon, FR</div></div>
+   <div class="muted" style="margin-top:3px;font-size:12.5px">lea@exemple.fr · PC-COMMERCIAL-02 · admin depuis le 14/09/2026, ajoutée par Camille Essai · <span class="ok2">en ligne</span>, vue il y a 2 min à Paris, FR</div></div>
   <span class="btn sm"><i data-i="scroll" class="sm"></i>Son journal</span><span class="btn sm"><i data-i="lock" class="sm"></i>Ses droits…</span><span class="btn sm"><i data-i="mail" class="sm"></i>Lui écrire…</span><span class="btn sm" style="padding:0 8px"><i data-i="more" class="sm"></i></span>
  </div>
  <div class="row" style="margin-top:12px;align-items:flex-end;gap:16px;border-bottom:1px solid var(--line)">
@@ -662,7 +662,7 @@ def g_lic_offre():
 
 
 def g_top_clients():
-    rows = [("Atelier Exemple", 6, 1470), ("Bureau d'études Exemple", 5, 1190), ("Client d'essai", 4, 780), ("Studio Exemple", 3, 560), ("Laboratoire d'essai", 3, 390)]
+    rows = [("Bureau d'études Exemple", 5, 1470), ("Client d'essai", 4, 1190), ("Studio Exemple", 3, 780), ("Laboratoire d'essai", 3, 560), ("Usine Exemple Nord", 2, 390)]
     o = ['<div class="hb" style="grid-template-columns:150px 1fr 58px 52px">']
     for n, lic, eur in rows:
         o.append('<div class="l">%s</div><div class="tr"><i style="width:%.1f%%;background:%s"></i></div><div class="n" style="text-align:right">%s €</div><div class="cap" style="white-space:nowrap">%d lic.</div>'

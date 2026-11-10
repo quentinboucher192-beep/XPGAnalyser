@@ -108,7 +108,7 @@
   var TODAY = new Date(2026, 10, 10);
 
   // ---- ses PC ----
-  var PCS = [['ATELIER-PC1', '1.47.0', 'auj. 11:40'], ['ATELIER-PC2', '1.47.0', 'auj. 10:02'], ['BUREAU-MARC', '1.47.0', 'auj. 09:31'], ['ATELIER-PC4', '1.47.0', 'hier'],
+  var PCS = [['ATELIER-PC1', '1.47.0', 'auj. 11:40'], ['ATELIER-PC2', '1.47.0', 'auj. 10:02'], ['ATELIER-PC6', '1.47.0', 'auj. 09:31'], ['ATELIER-PC4', '1.47.0', 'hier'],
     ['ATELIER-PC7', '1.47.0', 'auj. 11:44', 'nouveau'], ['ATELIER-PC8', '1.47.0', 'auj. 11:51', 'nouveau'], ['ATELIER-PC5', '1.46.0', 'auj. 09:12'], ['PORTABLE-JULIE', '1.46.0', 'il y a 9 j'], ['ATELIER-PC3', '1.43.2', 'il y a 41 j']];
   document.getElementById('pcs').innerHTML = PCS.map(function (r) {
     var c = r[1] === '1.47.0' ? 'ok' : r[1] === '1.46.0' ? 'g' : 'w';
@@ -119,7 +119,7 @@
   // ---- ses licences et leurs echeances (une ligne par licence, ses periodes, aujourd'hui) ----
   var LIC = [
     { k: 'XPG-2024-00031', o: 'PROFESSIONAL', s: '5 PC', seg: [['R', '12/03/2024', '11/03/2025', 'signée par Camille Essai'], ['R', '12/03/2025', '11/03/2026', 'prolongée par Camille Essai'], ['R', '12/03/2026', '11/03/2027', 'prolongée par Camille Essai']], end: '11/03/2027' },
-    { k: 'IA avancée', o: 'Assistant IA avancé', s: 'option, sur la 00031', seg: [['O', '15/03/2026', '14/03/2027', 'achetée en ligne (1 an)']], end: '14/03/2027' },
+    { k: 'Exports avancés', o: 'Exports avancés', s: 'option · 00031', seg: [['O', '15/03/2026', '14/03/2027', 'achetée en ligne (1 an)']], end: '14/03/2027' },
     { k: 'XPG-2025-00188', o: 'PERSONAL', s: '2 PC', seg: [['D', '05/11/2024', '05/12/2024', 'Découverte (30 jours)'], ['P', '06/12/2024', '05/12/2025', 'convertie en ligne'], ['P', '06/12/2025', '05/12/2026', 'prolongée en ligne']], end: '05/12/2026', warn: 'dans 25 j' },
     { k: 'XPG-2026-00412', o: 'PROFESSIONAL', s: '3 PC', seg: [['R', '10/11/2026', '09/11/2027', 'signée par Léa Essai aujourd\'hui']], end: '09/11/2027', nw: 1 },
     { k: 'XPG-2024-00102', o: 'PERSONAL', s: '1 PC', seg: [['P', '20/06/2024', '19/06/2025', 'achetée en ligne']], end: '19/06/2025', gone: 'expirée' }
@@ -148,7 +148,7 @@
       if (i) S('line', { x1: 0, x2: W, y1: Math.round(TOP + rowH * i) + 0.5, y2: Math.round(TOP + rowH * i) + 0.5, stroke: '#f1f4f8' }, g);
       var kt = T(g, 0, yc + 4, l.k, { fill: l.gone ? '#94a3b8' : '#0f172a', weight: 600, size: 11.5 });
       if (l.k.indexOf('XPG') === 0) kt.setAttribute('font-family', 'JetBrains Mono, monospace');
-      T(g, l.k.indexOf('XPG') === 0 ? 112 : 70, yc + 4, l.s, { fill: '#64748b', size: 11 });
+      T(g, l.k.indexOf('XPG') === 0 ? 112 : 100, yc + 4, l.s, { fill: '#64748b', size: 11 });
       l.seg.forEach(function (sg, j) {
         var x0 = xs(D(sg[1])) + (j ? 1 : 0), x1 = xs(D(sg[2])) - (j < l.seg.length - 1 ? 1 : 0);
         var r = S('rect', { x: x0, y: yc - 6, width: Math.max(2, x1 - x0), height: 12, rx: 4, fill: OFF[sg[0]], opacity: l.gone ? 0.45 : 1 }, g);
@@ -221,7 +221,7 @@
   var ah = X.card('c-ach', { t: 'Ses achats', ts: 'par trimestre', v: X.e(c), cc: '8 commandes · 3 en ligne' });
   ah.innerHTML = '<div style="height:50%;position:relative"></div><div class="cap" style="margin:2px 0 0;font-weight:600;color:var(--ink2)">Le montant cumulé</div><div style="height:calc(50% - 18px);position:relative"></div>';
   X.chart(ah.children[0], { kind: 'col', x: QX, xl: QL, xt: [], pl: 40, pb: 4, ticks: [0, 500, 1000], s: [{ n: 'commandes', c: BL, v: ACH, f: X.e, zero: true }],
-    tipx: function (k) { return ['PROFESSIONAL (5 PC)', 'PERSONAL', '', 'PERSONAL (la Découverte convertie)', 'prolongation PROFESSIONAL', '', '', 'prolongation PERSONAL', 'prolongation PRO + option IA', '', '', 'PROFESSIONAL (3 PC), par Léa'][k]; },
+    tipx: function (k) { return ['PROFESSIONAL (5 PC)', 'PERSONAL', '', 'PERSONAL (la Découverte convertie)', 'prolongation PROFESSIONAL', '', '', 'prolongation PERSONAL', 'prolongation PRO + Exports avancés', '', '', 'PROFESSIONAL (3 PC), par Léa'][k]; },
     click: 'Clic : ces commandes' });
   X.chart(ah.children[2], { kind: 'line', band: true, x: QX, xl: QL, xt: QXT, pl: 40, ticks: [0, 1500, 3000], yf: function (v) { return v ? X.n1(v / 1000) + ' k' : '0'; },
     s: [{ n: 'cumul', c: BL, v: CUM, step: true, area: true, dot: true, f: X.e }], click: 'Clic : ses commandes jusque-là' });
