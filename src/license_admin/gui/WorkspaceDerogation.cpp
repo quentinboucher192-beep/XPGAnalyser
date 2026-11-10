@@ -345,7 +345,10 @@ void Workspace::discoverConnection() {
     const connexion::Discovery d = connexion::discover(*p, editorKeys_, now());
     if (d.found) {
         std::string why;
-        if (connexion::adopt(folder_, d.connection, false, now(), &why)) return;
+        if (connexion::adopt(folder_, d.connection, false, now(), &why)) {
+            if (!d.refused.empty()) connexion::noteRefused(folder_, d.refused, now());   // ce qui a ete refuse avant reste dit
+            return;
+        }
         connexion::noteRefused(folder_, {{d.connection.path, d.connection.source, why}}, now());
         return;
     }

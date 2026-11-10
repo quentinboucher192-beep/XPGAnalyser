@@ -26,10 +26,12 @@
 
 #include "../src/ui/widgets/Controls.hpp"
 #include "../src/ui/widgets/DataViews.hpp"
+#include "../third_party/miniz.h"   // 1.46.1 : des .zip d'essai (Versions)
 
 #include <array>
 #include <cstdio>
 #include <fstream>
+#include <iterator>
 #include <random>
 #include <string>
 #include <vector>
@@ -229,6 +231,34 @@ std::string buildPe(const std::array<std::uint16_t, 4>& fixed, const std::string
     put32(pe, sec + 36, 0x40000040u);
     return pe + rsrc + overlay;
 }
+// 1.46.1 : un .zip d'essai - chaque entree (son nom dans le zip, ses octets) ; vrai : ecrit.
+bool writeZip(const fs::path& zip, const std::vector<std::pair<std::string, std::string>>& entries) {
+    std::error_code ec;
+    fs::create_directories(zip.parent_path(), ec);
+    fs::remove(zip, ec);
+    mz_zip_archive z{};
+    if (!mz_zip_writer_init_heap(&z, 0, 0)) return false;
+    bool ok = true;
+    for (const auto& [name, bytes] : entries)
+        ok = ok && mz_zip_writer_add_mem(&z, name.c_str(), bytes.data(), bytes.size(), MZ_BEST_SPEED);
+    void* buf = nullptr;
+    size_t size = 0;
+    ok = ok && mz_zip_writer_finalize_heap_archive(&z, &buf, &size);
+    if (ok) writeFile(zip, std::string(static_cast<const char*>(buf), size));
+    mz_zip_writer_end(&z);
+    return ok;
+}
+// Change le repertoire central d'un zip : `at` octets apres la signature de la premiere entree (0x02014b50), `n` octets.
+void patchCentral(const fs::path& zip, std::size_t at, std::uint32_t value, int n) {
+    std::ifstream in(zip, std::ios::binary);
+    std::string b((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+    const std::size_t k = b.find(std::string("PK\x01\x02", 4));
+    if (k == std::string::npos) return;
+    for (int i = 0; i < n; ++i) b[k + at + static_cast<std::size_t>(i)] = static_cast<char>((value >> (8 * i)) & 0xFF);
+    writeFile(zip, b);
+}
+
 std::string randomBytes(std::size_t n, std::mt19937_64& rng) {
     std::string s(n, '\0');
     for (auto& c : s) c = static_cast<char>(rng() & 0xFF);
@@ -321,6 +351,69 @@ int main(int argc, char** argv) {
               "tape au clavier (Entree : la note suivante) : << " + notes->text() + " >>");
         t = draw(*vp, 1141.f, 813.f);
         check(has(t, "Exports") && has(t, "journal"), "les deux notes se dessinent dans le champ");
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // 1.46.1 : << si j'envoie un zip avec le .exe dedans, il extrait automatiquement le .exe >> - l'installateur attendu
+    // seul, dans un dossier temporaire ; refuses : un chemin qui sort, chiffre, une taille absurde, plusieurs.
+    std::printf("-- 1.46.1 : Versions accepte un .zip (l'installateur en est extrait)\n");
+    {
+        const std::string pe146 = buildPe({1, 46, 0, 0}, "1.46.0", randomBytes(200000, rng));
+        const std::string adm146 = buildPe({1, 46, 0, 0}, "1.46.0", randomBytes(90000, rng));
+        const fs::path zips = fx.root / "zips";
+        const fs::path zs = zips / "API-IHM-Studio-Setup-1.46.0.zip", za = zips / "XPG-License-Admin-Setup-1.46.0-EDITEUR.zip", zb = zips / "les-deux.zip";
+        check(writeZip(zs, {{"LISEZ-MOI.txt", "un fichier a cote"}, {"API-IHM-Studio-Setup-1.46.0.exe", pe146}}) &&
+                  writeZip(za, {{"editeur/XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}}) &&
+                  writeZip(zb, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}, {"XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}}),
+              "des .zip d'essai");
+        std::string out, why;
+        check(gui::Workspace::installerFromZip(U(zs), false, out, &why) && fs::path(out).filename() == "API-IHM-Studio-Setup-1.46.0.exe" &&
+                  gui::Workspace::readInstallerVersion(out) == "1.46.0" && fs::file_size(out) == pe146.size() &&
+                  fs::path(out).parent_path().filename().string().rfind("xpg-versions-zip-", 0) == 0,
+              "extrait : l'installateur des Studios seul, dans un dossier temporaire, sa version lue (" + why + ")");
+        std::error_code ec;
+        fs::remove_all(fs::path(out).parent_path(), ec);
+        check(!gui::Workspace::installerFromZip(U(zs), true, out, &why) && has(why, "XPG-License-Admin-Setup"), "pas d'installateur de l'Admin dans ce zip : dit (" + why + ")");
+        bool st = false, ad = false;
+        check(gui::Workspace::installerKindsInZip(U(zb), st, ad, &why) && st && ad, "les deux sortes dans un zip");
+        const fs::path z2 = zips / "deux.zip", zt = zips / "sortie.zip", zc = zips / "chiffre.zip", zg = zips / "enorme.zip", zn = zips / "pas-un-zip.zip";
+        (void)writeZip(z2, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}, {"vieux/API-IHM-Studio-Setup-1.45.0.exe", pe146}});
+        check(!gui::Workspace::installerFromZip(U(z2), false, out, &why) && has(why, "plusieurs"), "deux installateurs des Studios : refuse (" + why + ")");
+        (void)writeZip(zt, {{"../API-IHM-Studio-Setup-1.46.0.exe", pe146}});
+        check(!gui::Workspace::installerFromZip(U(zt), false, out, &why) && has(why, "sort du dossier"), "un chemin qui sort du dossier (..) : refuse (" + why + ")");
+        (void)writeZip(zc, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}});
+        patchCentral(zc, 8, 1, 2);   // le drapeau << chiffre >> (bit 0)
+        check(!gui::Workspace::installerFromZip(U(zc), false, out, &why) && has(why, "chiffr"), "une entree chiffree : refusee (" + why + ")");
+        (void)writeZip(zg, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}});
+        patchCentral(zg, 24, 0x80000000u, 4);   // la taille decompressee : 2 Gio
+        check(!gui::Workspace::installerFromZip(U(zg), false, out, &why) && has(why, "taille absurde"), "une taille absurde : refusee (" + why + ")");
+        writeFile(zn, randomBytes(4000, rng));
+        check(!gui::Workspace::installerFromZip(U(zn), false, out, &why) && has(why, "pas un zip"), "pas un zip : refuse (" + why + ")");
+        // la page : glisser un zip ; Choisir... un zip
+        check(click(*vp, "versions.annuler") && click(*vp, "versions.publier"), "le panneau vide");
+        check(vp->dropFiles({U(zs)}), "un .zip glisse sur la page");
+        std::string t = draw(*vp);
+        check(has(t, "API-IHM-Studio-Setup-1.46.0.exe") && has(t, "version 1.46.0 lue dans le fichier") && has(t, "extrait de API-IHM-Studio-Setup-1.46.0.zip"),
+              "l'installateur des Studios extrait du .zip : << extrait de API-IHM-Studio-Setup-1.46.0.zip >>");
+        rig.picks.push_back(U(zs));
+        check(click(*vp, "versions.admin.choisir"), "Choisir... (l'Admin) : un .zip sans l'installateur de l'Admin");
+        t = draw(*vp);
+        check(has(t, "ne porte pas XPG-License-Admin-Setup"), "l'Admin : ce zip ne le porte pas, dit dans sa zone");
+        rig.picks.push_back(U(za));
+        check(click(*vp, "versions.admin.choisir"), "Choisir... (l'Admin) : son .zip");
+        t = draw(*vp);
+        check(has(t, "extrait de XPG-License-Admin-Setup-1.46.0-EDITEUR.zip") && has(t, "elles concordent") && has(t, "Signer et publier la 1.46.0"),
+              "les deux extraits : elles concordent, Signer et publier la 1.46.0");
+        std::size_t temps = 0;
+        for (const auto& e : fs::directory_iterator(fs::temp_directory_path(), ec))
+            if (e.path().filename().string().rfind("xpg-versions-zip-", 0) == 0) ++temps;
+        check(click(*vp, "versions.annuler"), "Annuler");
+        std::size_t after = 0;
+        for (const auto& e : fs::directory_iterator(fs::temp_directory_path(), ec))
+            if (e.path().filename().string().rfind("xpg-versions-zip-", 0) == 0) ++after;
+        check(temps >= 2 && after + 2 <= temps, "Annuler : les dossiers temporaires des fichiers extraits s'en vont (" + std::to_string(temps) + " -> " + std::to_string(after) + ")");
+        check(vp->dropFiles({U(z2)}), "un .zip refuse glisse : pris en charge (dit)");
+        check(!rig.flashes.empty() && has(rig.flashes.back(), "plusieurs"), "le refus est dit (" + (rig.flashes.empty() ? std::string() : rig.flashes.back()) + ")");
     }
 
     // ------------------------------------------------------------------------------------------------

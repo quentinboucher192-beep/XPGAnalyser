@@ -221,7 +221,7 @@ Les Studios livrés portent la clé publique de l'éditeur et l'adresse de son s
 Code : `src/app/Licence*.cpp` (la fenêtre et ses vues), `src/app/LicenceService.cpp` (le client du service, sur un fil de travail), `src/app/LicenceShop*.cpp` (la boutique), `src/licensing/` (vérification et magasin du PC).
 
 <a id="admin-editeur"></a>
-### 2.6 L'Admin de l'éditeur : XPG License Manager Admin — [docs/ADMINS.md](docs/ADMINS.md), [docs/LICENCES.md](docs/LICENCES.md#11-loutil-de-léditeur--xpg-license-admin)
+### 2.6 L'Admin de l'éditeur : XPG License Manager Admin — [docs/ADMINS.md](docs/ADMINS.md), [docs/LICENCES.md](docs/LICENCES.md)
 
 Application à fenêtres de l'éditeur et de ses admins, avec une console qui fait les mêmes gestes ; elle signe avec une clé Ed25519 qui ne quitte pas son PC (dossier `%LOCALAPPDATA%\XPG\LicenseAdmin`). Elle est livrée à part, par son propre installateur ([§ 5](#installer-admin)).
 
@@ -333,9 +333,11 @@ flowchart LR
     ihm -->|"HTTP : image de la vue"| nav
     ihm -->|"HTTPS"| ia
     ihm ---|"session : réseau du bureau,<br/>ou relais du service"| equipe
-    api & ihm -->|"HTTPS signé : licence, demandes,<br/>notifications, mises à jour, commandes"| svc
+    api -->|"HTTPS signé : licence, demandes,<br/>notifications, mises à jour, commandes"| svc
+    ihm -->|"HTTPS signé"| svc
     adm -->|"HTTPS signé"| svc
-    api & ihm -.->|"paiement dans le navigateur"| stripe
+    api -.->|"paiement dans le navigateur"| stripe
+    ihm -.->|"paiement dans le navigateur"| stripe
     stripe -->|"événements signés"| svc
 ```
 
@@ -511,7 +513,7 @@ rem Sous Windows, avec MSVC : build\Release\API-Studio.exe et IHM-Studio.exe
 outils\build.bat
 ```
 
-Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). La version de `resources/windows/xpg_analyzer.rc` est alignée sur les trois autres depuis la 1.22.0 (elle était restée à 1.12.0) ; `build.bat` la vérifie ([détail](docs/GUIDE-COMPILATION.md#version)). Aucune compilation MSVC n'a été faite dans les sessions de la 1.22.0 à la 1.46.0 (aucune note de livraison n'en rapporte) : les exécutables livrés viennent de MinGW.
+Dans Visual Studio, `XpgAnalyzer.sln` construit l'édition choisie par la propriété `XpgEdition` (`API` par défaut, ou `IHM`). La version de `resources/windows/xpg_analyzer.rc` est alignée sur les trois autres depuis la 1.22.0 (elle était restée à 1.12.0) ; `build.bat` la vérifie ([détail](docs/GUIDE-COMPILATION.md#version)). Aucune note de livraison de la 1.22.0 à la 1.46.0 ne rapporte de compilation MSVC : les exécutables livrés viennent de la compilation croisée MinGW.
 
 ### Installateur et versions portables
 
