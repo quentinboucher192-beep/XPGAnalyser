@@ -99,23 +99,40 @@ struct ColSpec {
 void fitColumns(ui::TableView& t, const std::vector<ColSpec>& specs, float total) {
     const float avail = std::max(120.f, total - 18.f);   // la barre de defilement verticale, les bords
     std::vector<bool> shown(specs.size(), true);
+    // Les largeurs des colonnes montrees ; vrai : tout tient. Une part (selon le poids) sous son minimum prend le
+    // minimum, le reste se repartit entre les autres souples : la somme ne depasse jamais la place quand tout tient.
     const auto plan = [&](std::vector<float>& w) {
-        float fixed = 0.f, weights = 0.f, mins = 0.f;
+        w.assign(specs.size(), 0.f);
+        float flex = avail, mins = 0.f;
+        std::vector<std::size_t> free;
         for (std::size_t i = 0; i < specs.size(); ++i) {
             if (!shown[i]) continue;
-            if (specs[i].weight <= 0.f) fixed += specs[i].width;
-            else {
-                weights += specs[i].weight;
+            if (specs[i].weight <= 0.f) {
+                w[i] = specs[i].width;
+                flex -= specs[i].width;
+            } else {
+                free.push_back(i);
                 mins += specs[i].min;
             }
         }
-        const float flex = avail - fixed;
-        w.assign(specs.size(), 0.f);
-        for (std::size_t i = 0; i < specs.size(); ++i) {
-            if (!shown[i]) continue;
-            w[i] = specs[i].weight <= 0.f ? specs[i].width : std::max(specs[i].min, weights > 0.f ? std::floor(flex * specs[i].weight / weights) : specs[i].min);
+        const bool fits = flex >= mins;
+        for (bool again = true; again && !free.empty();) {
+            again = false;
+            float weights = 0.f;
+            for (std::size_t i : free) weights += specs[i].weight;
+            for (auto it = free.begin(); it != free.end(); ++it)
+                if (std::max(0.f, flex) * specs[*it].weight / weights < specs[*it].min) {
+                    w[*it] = specs[*it].min;
+                    flex -= specs[*it].min;
+                    free.erase(it);
+                    again = true;
+                    break;
+                }
         }
-        return flex >= mins;
+        float weights = 0.f;
+        for (std::size_t i : free) weights += specs[i].weight;
+        for (std::size_t i : free) w[i] = std::floor(std::max(0.f, flex) * specs[i].weight / weights);
+        return fits;
     };
     std::vector<float> w;
     if (!plan(w))
@@ -173,9 +190,9 @@ bool fetchShop(const ShellHost& h, std::shared_ptr<bool> alive, std::function<vo
         },
         [h, alive, s, v, okOrders, okSettings, done](const OpResult& r) {
             if (!*alive) return;
-            Workspace& w = h.workspace();
-            if (*okSettings) w.adoptShop(*s);
-            if (*okOrders) w.adoptOrders(*v);
+            Workspace& here = h.workspace();
+            if (*okSettings) here.adoptShop(*s);
+            if (*okOrders) here.adoptOrders(*v);
             if (done) done(r);
         });
 }
@@ -417,7 +434,7 @@ protected:
                        {{"Article", 0.f, 3.f, 180.f, false},
                         {"En vente", 84.f, 0.f, 0.f, false},
                         {"Prix affich\xC3\xA9", 130.f, 0.f, 0.f, false},
-                        {"Montant encaiss\xC3\xA9 (TTC)", 160.f, 0.f, 0.f, false},
+                        {"Montant encaiss\xC3\xA9 (TTC)", 170.f, 0.f, 0.f, false},
                         {"Libell\xC3\xA9 de la facture", 0.f, 3.f, 150.f, false},
                         {"\xC3\x89" "cart", 0.f, 2.f, 150.f, false}},
                        w_);
@@ -886,8 +903,8 @@ protected:
             fitColumns(*table_,
                        {{"N\xC2\xB0", 44.f, 0.f, 0.f, false},
                         {"Date", 118.f, 0.f, 0.f, false},
-                        {"Soci\xC3\xA9t\xC3\xA9", 0.f, 3.f, 110.f, false},
-                        {"Article", 0.f, 4.f, 130.f, false},
+                        {"Soci\xC3\xA9t\xC3\xA9", 0.f, 3.f, 120.f, false},
+                        {"Article", 0.f, 4.f, 170.f, false},
                         {"Montant", 100.f, 0.f, 0.f, false},
                         {"\xC3\x89tat", 140.f, 0.f, 0.f, false},
                         {"Client", 0.f, 2.f, 100.f, true}},

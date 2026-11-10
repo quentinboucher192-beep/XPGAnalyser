@@ -13,13 +13,23 @@
 //  tableau de bord (<< a livrer >>) ; le dialogue : la cle dans un champ masque,
 //  son mode lu, le champ vide des le clic, jamais dans un message. Aucun reseau :
 //  l'adresse de Stripe des essais est 127.0.0.1:9 (rien n'y repond).
+//  Les tailles de la fenetre du client (1373x917, 1400x900) et 1920x1080 : aucune
+//  colonne hors de la vue (le catalogue : l'ecart ; les commandes : l'etat) ; un
+//  service 1.44.0 : un seul avertissement, les interrupteurs grises ; Stripe deja
+//  branche : << Rebrancher Stripe >> ; le nom du PC (de la demande scellee).
 // =============================================================================
 #include "admin_gui_harness.hpp"
 
 #include "../src/license_admin/Shop.hpp"
+#include "../src/licensing/Documents.hpp"
+#include "../src/licensing/Gateway.hpp"
+#include "../src/licensing/KeyFile.hpp"
+#include "../src/licensing/Service.hpp"
+#include "../src/licensing/SignedFile.hpp"
 #include "../src/ui/widgets/Controls.hpp"
 #include "../src/ui/widgets/DataViews.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -27,6 +37,8 @@
 
 using namespace admintest;
 namespace shop = license_admin::shop;
+namespace gw = licensing::gateway;
+namespace sv = licensing::service;
 
 namespace {
 
@@ -48,6 +60,46 @@ bool visibleBtn(ui::Widget& root, std::string_view id) {
     auto* b = root.findById(id);
     return b && b->visible();
 }
+// Les tailles de la page (la fenetre moins le menu de gauche, 232 px, la barre du haut, 64, et celle du bas, 40) :
+// la fenetre du client (1373x917), 1400x900 et 1920x1080.
+struct PageSize {
+    const char* window;
+    float       w, h;
+};
+constexpr PageSize kSizes[] = {{"1373x917", 1141.f, 813.f}, {"1400x900", 1168.f, 796.f}, {"1920x1080", 1688.f, 976.f}};
+
+// Aucune colonne hors de la vue : les colonnes montrees tiennent dans la table (sa barre de defilement comprise) et
+// `must` en est.
+bool columnsFit(const ui::TableView& t, const std::string& must, std::string& why) {
+    float sum = 0.f;
+    bool  seen = false;
+    for (const auto& c : t.columns()) {
+        if (!c.visible) continue;
+        sum += c.width;
+        if (c.title == must) seen = true;
+    }
+    why = std::to_string(static_cast<int>(sum)) + " px de colonnes, " + std::to_string(static_cast<int>(t.bounds().w)) + " px de table";
+    return seen && sum + 12.f <= t.bounds().w;
+}
+bool columnShown(const ui::TableView& t, const std::string& title) {
+    for (const auto& c : t.columns())
+        if (c.title == title) return c.visible;
+    return false;
+}
+std::size_t count(const std::string& s, const std::string& part) {
+    std::size_t n = 0;
+    for (std::size_t at = s.find(part); at != std::string::npos; at = s.find(part, at + part.size())) ++n;
+    return n;
+}
+// Le texte dessine dans le cadre d'un widget (une tuile du tableau de bord).
+std::vector<std::string> drawnIn(const TextRenderer& r, const ui::Widget& w) {
+    std::vector<std::string> out;
+    const gfx::Rect b = w.bounds();
+    for (const auto& d : r.draws)
+        if (b.contains(d.at)) out.push_back(d.text);
+    return out;
+}
+
 int rowOf(const ui::ITableModel& m, std::size_t col, const std::string& text) {
     for (std::size_t i = 0; i < m.rowCount(); ++i)
         if (m.cellText(static_cast<ui::RowIndex>(i), col).find(text) != std::string::npos) return static_cast<int>(i);
@@ -141,9 +193,16 @@ int main(int argc, char** argv) {
         {
             auto* cat = find<ui::TableView>(*bp, "boutique.catalogue");
             const int pr = cat ? rowOf(*cat->model(), 0, "PROFESSIONAL - 1 an") : -1;
-            check(pr >= 0 && cat->model()->cellText(static_cast<ui::RowIndex>(pr), 5) == "affich\xC3\xA9 490 \xE2\x82\xAC HT / an (588,00\xC2\xA0\xE2\x82\xAC TTC), encaiss\xC3\xA9 490,00\xC2\xA0\xE2\x82\xAC" &&
-                      has(t, "affich\xC3\xA9 490 \xE2\x82\xAC HT / an"),
-                  "l'ecart entre le prix affiche (HT) et le montant (TTC) est dit");
+            check(pr >= 0 && cat->model()->cellText(static_cast<ui::RowIndex>(pr), 5) == "\xE2\x89\xA0 affich\xC3\xA9 (588,00\xC2\xA0\xE2\x82\xAC TTC)" &&
+                      has(t, "\xE2\x89\xA0 affich\xC3\xA9 (588,00"),
+                  "l'ecart entre le prix affiche (HT, 588 EUR TTC) et le montant (490 EUR TTC) est dit, court");
+            // Aucune colonne hors de la vue (l'ecart compris), a chaque taille.
+            for (const auto& sz : kSizes) {
+                (void)draw(*bp, sz.w, sz.h);
+                std::string why;
+                check(cat && columnsFit(*cat, "\xC3\x89" "cart", why), std::string("le catalogue a ") + sz.window + " : toutes les colonnes en vue, l'ecart compris (" + why + ")");
+            }
+            (void)draw(*bp);
         }
         check(enabledBtn(*bp, "boutique.brancher") && has(t, "Rebrancher Stripe"), "l'admin+ : Rebrancher Stripe");
         check(!enabledBtn(*bp, "boutique.enregistrer"), "rien de change : Enregistrer grise");
@@ -181,6 +240,14 @@ int main(int argc, char** argv) {
         std::string t = draw(*bp);
         check(has(t, "Ton service en ligne est en 1.44.0 : d\xC3\xA9ploie la 1.46.0 pour la boutique") && visibleBtn(*bp, "boutique.deployer"),
               "Boutique : la phrase et Deployer le service");
+        check(count(t, "1.46.0 pour la boutique") == 1 && !has(t, "Service : ") && !has(t, "Refus\xC3\xA9"), "un seul avertissement (pas de << Service : Refuse : >> en plus)");
+        check(!has(t, "pas encore lu") && !has(t, "(Relever)") && has(t, "service 1.44.0"), "la carte de Stripe : ni << pas encore lu >>, ni << (Relever) >> ; la version du service");
+        {
+            auto* sell = find<ui::ToggleButton>(*bp, "boutique.vendre");
+            auto* alone = find<ui::ToggleButton>(*bp, "boutique.livrer-seul");
+            check(sell && alone && !sell->enabled() && !alone->enabled() && !sell->checked() && !alone->checked(),
+                  "Vendre en ligne, Livrer seul : grises et decoches (le reglage d'avant n'est pas montre)");
+        }
         check(!enabledBtn(*bp, "boutique.brancher"), "Brancher Stripe attend le service 1.46.0");
         check(click(*bp, "boutique.deployer") && !rig.dialogs.empty(), "Deployer le service : le dialogue");
         rig.dialogs.clear();
@@ -189,6 +256,10 @@ int main(int argc, char** argv) {
         bp->refresh();
         t = draw(*bp);
         check(!has(t, "d\xC3\xA9ploie la 1.46.0") && !visibleBtn(*bp, "boutique.deployer"), "un service 1.46.0 : plus rien a dire");
+        {
+            auto* sell = find<ui::ToggleButton>(*bp, "boutique.vendre");
+            check(sell && sell->enabled() && sell->checked(), "un service 1.46.0 : Vendre en ligne de nouveau permis, coche (le reglage releve)");
+        }
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -198,6 +269,30 @@ int main(int argc, char** argv) {
         v.orders = {order(4, "a_revoir", "Atelier d'essai"), order(3, "payee", "Client d'essai"), order(2, "livree", "Bureau d'essai"), order(1, "a_payer", "Client d'essai")};
         v.orders[0].error = "Le montant pay\xC3\xA9 (1,00 \xE2\x82\xAC) n'est pas celui de la commande";
         v.orders[2].licence = "XPG-2026-00007";
+        {   // la n° 3 : la demande scellee d'un vrai PC d'essai (son nom se lit dans le detail)
+            std::error_code ec;
+            fs::create_directories(fx.root / "pc-camille", ec);
+            std::string why;
+            auto pc = lic::SigningKey::create(U(fx.root / "pc-camille" / "identite-pc.cle"), lic::deviceKeySpec(), "Poste de Camille", false, &why);
+            check(pc != nullptr && ws.signer() != nullptr, "la cle du PC d'essai (" + why + ")");
+            if (pc && ws.signer()) {
+                lic::ActivationRequest r;
+                r.deviceKey = pc->publicKeyHex();
+                r.deviceName = "Poste de Camille";
+                r.software = "IHM Studio 1.46.0 (essai)";
+                r.createdAt = g_now - 3 * 3600;
+                r.nonce = "0123456789abcdef0123456789abcdef";
+                gw::OnlineRequest o;
+                o.request = lic::writeBlock(lic::signBlock(lic::DocKind::Request, lic::writeRequest(r), pc->publicKey(), [&pc](std::string_view m) { return pc->sign(m); }));
+                o.customer = "Client d'essai";
+                o.contact = "Camille Essai";
+                o.email = "camille@exemple.invalid";
+                v.orders[1].device = sv::deviceId(pc->publicKey());
+                v.orders[1].deviceKey = pc->publicKeyHex();
+                v.orders[1].keyId = ws.signer()->keyId();
+                v.orders[1].sealed = gw::sealFor(ws.signer()->publicKey(), gw::writeOnlineRequest(o));
+            }
+        }
         v.counter = 9;
         v.toDeliver = 1;
         ws.adoptOrders(v);
@@ -207,10 +302,27 @@ int main(int argc, char** argv) {
         op->refresh();   // de nouveau (le releve ne repart pas avant 20 s) : ce qui a ete adopte
         t = draw(*op);
         check(has(t, "4 commande(s) \xC2\xB7 1 \xC3\xA0 livrer") || has(t, "pas de r\xC3\xA9ponse du service"), "le tableau, ce qui est a livrer");
-        check(has(t, "Client d'essai") && has(t, "490,00\xC2\xA0\xE2\x82\xAC (essai)") && has(t, "pay\xC3\xA9" "e, \xC3\xA0 livrer") && has(t, "livr\xC3\xA9" "e"),
-              "les lignes : la societe, le montant (essai), l'etat");
+        check(has(t, "Client d'essai") && has(t, "490,00\xC2\xA0\xE2\x82\xAC") && !has(t, "\xE2\x82\xAC (essai)") && has(t, "pay\xC3\xA9" "e, \xC3\xA0 livrer") &&
+                  has(t, "livr\xC3\xA9" "e"),
+              "les lignes : la societe, le montant (sans << (essai) >> : le mode est dans le detail), l'etat");
         check(has(t, "Choisis une commande"), "rien de choisi : le detail le dit");
         auto* table = find<ui::TableView>(*op, "commandes.table");
+        // Aucune colonne hors de la vue, l'etat toujours la ; le client (aussi dans le detail) cede le premier.
+        for (const auto& sz : kSizes) {
+            (void)draw(*op, sz.w, sz.h);
+            std::string why;
+            check(table && columnsFit(*table, "\xC3\x89tat", why), std::string("les commandes a ") + sz.window + " : toutes les colonnes en vue, l'etat compris (" + why + ")");
+        }
+        check(table && columnShown(*table, "Client") && columnShown(*table, "Soci\xC3\xA9t\xC3\xA9"), "1920x1080 : le client et la societe");
+        {
+            const auto& m = *table->model();
+            const int r4 = rowOf(m, 0, "4");
+            check(r4 >= 0 && m.cellText(static_cast<ui::RowIndex>(r4), 4) == "490,00\xC2\xA0\xE2\x82\xAC" && m.cellText(static_cast<ui::RowIndex>(r4), 5) == "\xC3\xA0 revoir",
+                  "les cases : le montant seul, l'etat");
+            const ui::CellStyle st = m.cellStyle(static_cast<ui::RowIndex>(r4), 5);
+            check(st.keepFgSelected && (st.fg || st.fgTone != ui::Tone::None), "l'etat garde sa couleur dans la ligne choisie");
+        }
+        t = draw(*op);
         const auto pick = [&](int number) {
             for (std::size_t i = 0; i < table->model()->rowCount(); ++i)
                 if (table->model()->cellText(static_cast<ui::RowIndex>(i), 0) == std::to_string(number)) {
@@ -223,6 +335,7 @@ int main(int argc, char** argv) {
         t = draw(*op);
         check(has(t, "Commande n\xC2\xB0 3") && has(t, "camille@exemple.invalid") && has(t, "pi_essai3") && has(t, "paiement d'essai"),
               "le detail : le courriel, le paiement Stripe, << paiement d'essai >>");
+        check(has(t, "Poste de Camille \xC2\xB7 " + v.orders[1].device.substr(0, 8)), "le detail : le nom du PC (de la demande scellee), puis son identifiant court");
         check(enabledBtn(*op, "commandes.delivrer") && enabledBtn(*op, "commandes.stripe") && enabledBtn(*op, "commandes.recu") && enabledBtn(*op, "commandes.revoir"),
               "payee : Delivrer maintenant, Voir dans Stripe, Ouvrir le recu, Revoir...");
         check(click(*op, "commandes.revoir") && !rig.dialogs.empty(), "Revoir... : une question (la raison)");
@@ -242,6 +355,7 @@ int main(int argc, char** argv) {
         rig.dialogs.clear();
         check(pick(4), "choisir la n° 4 (a revoir)");
         t = draw(*op);
+        check(has(t, "01234567") && !has(t, "Poste de Camille"), "sans demande scellee lisible : l'identifiant court du PC");
         check(has(t, "n'est pas celui de la commande") && enabledBtn(*op, "commandes.delivrer"), "a revoir : la raison ; Delivrer maintenant (apres revue)");
         check(pick(1), "choisir la n° 1 (a payer)");
         check(!enabledBtn(*op, "commandes.delivrer") && !enabledBtn(*op, "commandes.rembourser"), "a payer : ni livrer ni rembourser");
@@ -258,6 +372,13 @@ int main(int argc, char** argv) {
         op->refresh();
         t = draw(*op);
         check(has(t, "d\xC3\xA9ploie la 1.46.0 pour la boutique") && visibleBtn(*op, "commandes.deployer"), "Commandes : un service 1.44.0, c'est dit");
+        check(count(t, "1.46.0 pour la boutique") == 1 && !has(t, "Service : ") && !enabledBtn(*op, "commandes.delivrer"),
+              "Commandes : un seul avertissement ; Delivrer attend le service 1.46.0");
+        for (const auto& sz : kSizes) {
+            (void)draw(*op, sz.w, sz.h);
+            std::string why;
+            check(columnsFit(*table, "\xC3\x89tat", why), std::string("les commandes (avec l'avertissement) a ") + sz.window + " : toutes les colonnes en vue (" + why + ")");
+        }
         st.version = "1.46.0";
         ws.adoptServiceState(st);
     }
@@ -266,22 +387,56 @@ int main(int argc, char** argv) {
     {
         ws.setOrdersToDeliver(2);
         auto dp = gui::makeDashboardPage(rig.host());
-        const std::string t = draw(*dp);
-        check(has(t, "2 commandes pay\xC3\xA9" "es \xC3\xA0 livrer"), "<< 2 commandes payees a livrer >>");
+        TextRenderer r;
+        (void)paint(*dp, r, 1141.f, 813.f);
+        auto* tile = find<ui::Button>(*dp, "tableau.tuile.demandes");
+        std::vector<std::string> in = tile ? drawnIn(r, *tile) : std::vector<std::string>{};
+        const auto shows = [&](const std::string& s) { return std::find(in.begin(), in.end(), s) != in.end(); };
+        check(tile && tile->text() == "Commandes \xC3\xA0 livrer" && shows("Commandes \xC3\xA0 livrer") && shows("2"), "la tuile : << Commandes a livrer >>, 2 en grand");
+        check(!shows("0"), "jamais un 0 (ambre) dans la tuile des commandes a livrer");
+        bool sub = false;
+        for (const auto& s : in)
+            if (has(s, "pay\xC3\xA9" "es dans la boutique")) sub = true;
+        check(sub, "dessous : << payees dans la boutique >>");
+        check(click(*dp, "tableau.tuile.demandes") && !rig.navigations.empty() && rig.navigations.back() == "commandes", "son clic : Commandes");
         ws.setOrdersToDeliver(0);
         dp->refresh();
-        check(!has(draw(*dp), "\xC3\xA0 livrer"), "rien a livrer : rien n'est dit");
+        (void)paint(*dp, r, 1141.f, 813.f);
+        in = drawnIn(r, *tile);
+        check(tile->text() == "Demandes en attente" && !has(r.all(), "\xC3\xA0 livrer"), "rien a livrer : la tuile des demandes, rien n'est dit");
     }
 
     std::printf("-- Brancher Stripe... : la cle masquee, jamais gardee\n");
-    {
+    {   // pas encore branche : << Brancher Stripe >>
+        shop::Settings s = ws.shop();
+        s.stripe = shop::StripeState{};
+        ws.adoptShop(s);
+        auto d = gui::makeStripeDialog(rig.host());
+        (void)d->Initialize();
+        const std::string t = drawMenu(*d);
+        auto* wm = dynamic_cast<menu::WidgetMenu*>(d.get());
+        ui::Widget& root = *wm->widgetRoot();
+        auto* go = find<ui::Button>(root, "stripe.brancher");
+        check(has(t, "Brancher Stripe") && !has(t, "Rebrancher") && go && go->text() == "Brancher" && !has(t, "remplace l'ancienne"), "pas encore branche : Brancher Stripe, Brancher");
+        auto* key = find<ui::InputText>(root, "stripe.cle");
+        check(key && go && go->bounds().y - key->bounds().bottom() <= 90.f, "le cadre suit son contenu (pas de vide sous le champ)");
+    }
+    {   // deja branche (mode test) : << Rebrancher Stripe >>, la nouvelle cle remplace l'ancienne
+        shop::Settings s = ws.shop();
+        s.stripe.connected = true;
+        s.stripe.webhook = true;
+        s.stripe.mode = "test";
+        ws.adoptShop(s);
         auto d = gui::makeStripeDialog(rig.host());
         (void)d->Initialize();
         std::string t = drawMenu(*d);
         auto* wm = dynamic_cast<menu::WidgetMenu*>(d.get());
         ui::Widget& root = *wm->widgetRoot();
         auto* key = find<ui::InputText>(root, "stripe.cle");
-        check(has(t, "Brancher Stripe") && has(t, "Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe") && key && key->masked(), "le dialogue : la cle dans un champ masque");
+        auto* go = find<ui::Button>(root, "stripe.brancher");
+        check(has(t, "Rebrancher Stripe") && has(t, "D\xC3\xA9j\xC3\xA0 branch\xC3\xA9 (mode test) : la nouvelle cl\xC3\xA9 remplace l'ancienne") && go && go->text() == "Rebrancher",
+              "deja branche : Rebrancher Stripe, le mode, la nouvelle cle remplace l'ancienne ; le bouton Rebrancher");
+        check(has(t, "Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe") && key && key->masked(), "le dialogue : la cle dans un champ masque");
         key->setText("pk_test_" + std::string(24, 'x'));
         t = drawMenu(*d);
         check(has(t, "C'est la cl\xC3\xA9 publiable"), "une cle publiable : dit tout de suite");
