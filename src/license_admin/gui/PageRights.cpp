@@ -248,8 +248,10 @@ protected:
         const float bw = buttonWidth(*back_, 140.f);
         back_->setBounds({x0_ + w_ - bw, titleY_ + 4.f, bw, 38.f});
         const float top = titleY_ + 80.f, bottom = b.bottom() - 16.f;
-        const float leftW = std::clamp(w_ * 0.22f, 240.f, 300.f), rightW = std::clamp(w_ * 0.29f, 300.f, 410.f);
-        const float midW = std::max(360.f, w_ - leftW - rightW - 32.f);
+        // 1.47.0 : une fenetre etroite (1100) - les trois colonnes tiennent dans la page (rien hors du bord) ; les boutons qui
+        // ne tiennent pas sur leur rangee passent a la suivante (jamais l'un sur l'autre).
+        const float leftW = std::clamp(w_ * 0.22f, 200.f, 300.f), rightW = std::clamp(w_ * 0.29f, 260.f, 410.f);
+        const float midW = std::max(300.f, w_ - leftW - rightW - 32.f);
         left_ = {x0_, top, leftW, std::max(300.f, bottom - top)};
         mid_ = {left_.right() + 16.f, top, midW, left_.h};
         right_ = {mid_.right() + 16.f, top, rightW, left_.h};
@@ -265,14 +267,22 @@ protected:
             bx += w + 8.f;
         }
         const float cw = buttonWidth(*copyTo_, 160.f);
-        copyTo_->setBounds({mx + mw - cw, mid_.y + 72.f, cw, 32.f});
+        float extra = 0.f;
+        if (bx + cw > mx + mw) {   // a la rangee suivante
+            extra = 40.f;
+            copyTo_->setBounds({mx, mid_.y + 72.f + extra, std::min(cw, mw), 32.f});
+        } else {
+            copyTo_->setBounds({mx + mw - cw, mid_.y + 72.f, cw, 32.f});
+        }
         const float fy = mid_.bottom() - 54.f;
-        delete_->setBounds({mx, fy, buttonWidth(*delete_, 140.f), 36.f});
-        const float sw = buttonWidth(*save_, 170.f), aw = buttonWidth(*cancel_, 90.f);
+        const float sw = buttonWidth(*save_, 170.f), aw = buttonWidth(*cancel_, 90.f), dw = buttonWidth(*delete_, 140.f);
         save_->setBounds({mx + mw - sw, fy, sw, 36.f});
         cancel_->setBounds({save_->bounds().x - 8.f - aw, fy, aw, 36.f});
-        tableTop_ = mid_.y + 122.f;
-        const float avail = fy - 12.f - tableTop_ - 28.f;
+        // << Supprimer le profil >> (et sa note) au-dessus quand la rangee est trop courte
+        const bool deleteAbove = mx + dw + 160.f > cancel_->bounds().x;
+        delete_->setBounds({mx, deleteAbove ? fy - 46.f : fy, dw, 36.f});
+        tableTop_ = mid_.y + 122.f + extra;
+        const float avail = (deleteAbove ? fy - 46.f : fy) - 12.f - tableTop_ - 28.f;
         // 13 fonctions et 3 groupes ; puis ce que l'admin+ garde (4 lignes et leur titre) s'il reste la place.
         rowH_ = std::clamp(avail / 16.f, 20.f, 30.f);
         plusRows_ = avail - 16.f * rowH_ >= 26.f + 4.f * 20.f;
@@ -292,13 +302,14 @@ protected:
         // A droite : le choix de l'admin, ses droits.
         const float rx = right_.x + 18.f, rw = right_.w - 36.f;
         admin_->setBounds({rx, right_.y + 16.f, rw, 32.f});
-        recopy_->setBounds({right_.right() - 18.f - buttonWidth(*recopy_, 120.f), right_.y + 128.f, buttonWidth(*recopy_, 120.f), 30.f});
+        recopy_->setBounds({right_.right() - 18.f - std::min(rw, buttonWidth(*recopy_, 120.f)), right_.y + 128.f, std::min(rw, buttonWidth(*recopy_, 120.f)), 30.f});
         const float pfy = right_.bottom() - 54.f;
-        const float pw = buttonWidth(*publish_, 150.f), cw2 = buttonWidth(*adminCancel_, 90.f);
+        const float pw = std::min(rw, buttonWidth(*publish_, 150.f)), cw2 = buttonWidth(*adminCancel_, 90.f);
         publish_->setBounds({rx + rw - pw, pfy, pw, 36.f});
-        adminCancel_->setBounds({publish_->bounds().x - 8.f - cw2, pfy, cw2, 36.f});
+        if (pw + 8.f + cw2 > rw) adminCancel_->setBounds({rx + rw - cw2, pfy - 44.f, cw2, 36.f});   // au-dessus : jamais l'un sur l'autre
+        else adminCancel_->setBounds({publish_->bounds().x - 8.f - cw2, pfy, cw2, 36.f});
         adminTop_ = right_.y + 176.f;
-        const float avail2 = pfy - 96.f - adminTop_;
+        const float avail2 = std::min(pfy, adminCancel_->bounds().y) - 96.f - adminTop_;
         adminRowH_ = std::clamp(avail2 / 16.f, 20.f, 30.f);
         y = adminTop_;
         for (const char* g : kGroups) {
@@ -813,7 +824,7 @@ private:
                 yy += adminRowH_;
             }
         }
-        const Rect note{x, publish_->bounds().y - 90.f, w, 78.f};
+        const Rect note{x, std::min(publish_->bounds().y, adminCancel_->bounds().y) - 90.f, w, 78.f};   // 1.47.0 : au-dessus des deux boutons
         r.fillRoundedRect(note, c.accent.withAlpha(16), 10.f);
         (void)drawWrapped(r, note.x + 12.f, note.y + 8.f, note.w - 24.f,
                           "En enregistrant, la cl\xC3\xA9 de l'\xC3\xA9" "diteur signe la liste des admins avec ses droits ; le service et les Studios l'ont dans la minute. "

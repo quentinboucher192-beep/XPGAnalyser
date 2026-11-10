@@ -72,6 +72,12 @@ std::string fitTail(const gfx::IRenderer& r, const std::string& s, FontId f, flo
     return "\xE2\x80\xA6" + s.substr(from);
 }
 
+// 1.47.0 : un texte en morceaux (<< a \xC2\xB7 b \xC2\xB7 c >>) qui ne tient pas : les derniers morceaux s'en vont d'abord, entiers.
+std::string fitParts(const gfx::IRenderer& r, std::string s, FontId f, float w) {
+    for (std::size_t at = s.rfind(" \xC2\xB7 "); r.measure(s, f).width > w && at != std::string::npos; at = s.rfind(" \xC2\xB7 ")) s.erase(at);
+    return fit(r, s, f, w);
+}
+
 std::vector<std::string> wrap(const std::string& text, FontId f, float w) {
     std::vector<std::string> out;
     std::string line;
@@ -195,8 +201,10 @@ protected:
             // Le libelle, et dessous ce que compte le chiffre (ou pourquoi il n'y en a pas) ; le chiffre a droite.
             const bool two = !sub_.empty() && r.h >= 44.f;
             const float ly = two ? r.y + r.h * 0.5f - ctx.r.lineHeight(kF14) + 1.f : r.y + (r.h - ctx.r.lineHeight(kF14)) * 0.5f;
-            ctx.r.drawText({x + 26.f, ly}, fit(ctx.r, label_, kF14, r.w - 64.f - vw), kF14, dim_ ? c.textDisabled : c.text);
-            if (two) ctx.r.drawText({x + 26.f, r.y + r.h * 0.5f + 2.f}, fit(ctx.r, sub_, kF12, r.w - 64.f - vw), kF12, value_.empty() ? c.textDisabled : c.textMuted);
+            // 1.47.0 : etroite, le libelle en plus petit plutot que raccourci
+            const FontId lf = ctx.r.measure(label_, kF14).width > r.w - 64.f - vw ? FontId{12} : kF14;
+            ctx.r.drawText({x + 26.f, ly}, fit(ctx.r, label_, lf, r.w - 64.f - vw), lf, dim_ ? c.textDisabled : c.text);
+            if (two) ctx.r.drawText({x + 26.f, r.y + r.h * 0.5f + 2.f}, fitParts(ctx.r, sub_, kF12, r.w - 64.f - vw), kF12, value_.empty() ? c.textDisabled : c.textMuted);
             if (!value_.empty())
                 ctx.r.drawText({r.right() - 18.f - vw, r.y + (r.h - ctx.r.lineHeight(vf)) * 0.5f}, value_, vf, marked ? ink : c.text);
             return;
@@ -205,7 +213,17 @@ protected:
         const Rect ic{x, r.y + 18.f, 30.f, 30.f};
         ctx.r.fillRoundedRect(ic, ink.withAlpha(dim_ ? 18 : 26), 9.f);
         ui::drawIcon(ctx.r, icon_, {ic.x + 7.f, ic.y + 7.f, 16.f, 16.f}, ink);
-        ctx.r.drawText({ic.right() + 10.f, ic.y + (ic.h - ctx.r.lineHeight(kF14)) * 0.5f}, fit(ctx.r, label_, kF14, r.w - 76.f), kF14, c.textMuted);
+        // 1.47.0 : etroite, le libelle sur deux lignes (plus petit) a cote de l'icone plutot que raccourci
+        if (ctx.r.measure(label_, kF14).width <= r.w - 76.f) {
+            ctx.r.drawText({ic.right() + 10.f, ic.y + (ic.h - ctx.r.lineHeight(kF14)) * 0.5f}, label_, kF14, c.textMuted);
+        } else {
+            const auto ls = wrap(label_, FontId{12}, r.w - 76.f);
+            const float lh12 = ctx.r.lineHeight(FontId{12});
+            float ly = ic.y + (ic.h - lh12 * static_cast<float>(std::min<std::size_t>(2, ls.size()))) * 0.5f;
+            for (std::size_t i = 0; i < ls.size() && i < 2; ++i, ly += lh12)
+                ctx.r.drawText({ic.right() + 10.f, ly}, fit(ctx.r, i == 1 && ls.size() > 2 ? ls[1] + " " + ls[2] : ls[i], FontId{12}, r.w - 76.f), FontId{12},
+                               c.textMuted);
+        }
         const float vy = ic.bottom() + 12.f;
         if (value_.empty()) {   // pas de chiffre (le service en ligne) : la phrase
             float ly = vy + 4.f;
@@ -216,10 +234,15 @@ protected:
             }
             return;
         }
-        const FontId vf = gfx::semibold(r.h < 110.f ? FontId{28} : FontId{34});
+        const FontId vf = gfx::semibold(r.h < 100.f ? FontId{24} : r.h < 110.f ? FontId{28} : FontId{34});
         ctx.r.drawText({x, vy}, value_, vf, marked ? ink : c.text);
         const float vw = ctx.r.measure(value_, vf).width;
         const float lh = ctx.r.lineHeight(vf);
+        // 1.47.0 : pas de place sous le chiffre (une fenetre basse) : la phrase a sa droite, jamais par-dessus lui.
+        if (progress_ < 0.f && more_.empty() && vy + lh + 6.f + ctx.r.lineHeight(kF13) > r.bottom() - 6.f) {
+            ctx.r.drawText({x + vw + 10.f, vy + lh - ctx.r.lineHeight(kF13) - 4.f}, fitParts(ctx.r, sub_, kF13, r.w - 36.f - vw - 10.f), kF13, c.textMuted);
+            return;
+        }
         if (!more_.empty()) {
             const FontId fm = gfx::semibold(kF14);
             ctx.r.drawText({x + vw + 8.f, vy + lh - ctx.r.lineHeight(fm) - 4.f}, fit(ctx.r, more_, fm, r.w - 36.f - vw), fm, c.textDisabled);
@@ -230,7 +253,7 @@ protected:
             ctx.r.fillRoundedRect(track, c.gridLine, 3.f);
             ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * std::clamp(progress_, 0.f, 1.f)), track.h}, c.ok, 3.f);
         } else {
-            ctx.r.drawText({x, sy}, fit(ctx.r, sub_, kF13, r.w - 36.f), kF13, c.textMuted);
+            ctx.r.drawText({x, sy}, fitParts(ctx.r, sub_, kF13, r.w - 36.f), kF13, c.textMuted);
         }
     }
 
