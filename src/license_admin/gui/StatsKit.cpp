@@ -44,13 +44,6 @@ ListFilter& opened() {
 
 void civilOf(ch::fr::Day d, int& y, int& m, int& dd) { ch::fr::civil(d, y, m, dd); }
 
-std::string dayString(ch::fr::Day d) {
-    int y = 0, m = 0, dd = 0;
-    civilOf(d, y, m, dd);
-    char b[16];
-    std::snprintf(b, sizeof b, "%04d-%02d-%02d", y, m, dd);
-    return b;
-}
 
 // La premiere FilterBar sous un widget (la liste d'une page).
 ui::FilterBar* findBar(ui::Widget& w) {

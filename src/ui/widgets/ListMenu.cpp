@@ -58,13 +58,13 @@ std::string shortNote(const std::string& s) {
 } // namespace
 
 // ------------------------------------------------------------------------------------------- ajouter
-ListMenu& ListMenu::open(std::string label, std::function<void()> run, std::string why) {
+ListMenu& ListMenu::open(std::string label, std::function<void()> run, std::string why, bool enterOpens) {
     Entry e;
     e.label = std::move(label);
     e.run = std::move(run);
     e.why = std::move(why);
     e.icon = Icon::Open;
-    e.shortcut = "Entr\xC3\xA9" "e";
+    if (enterOpens) e.shortcut = "Entr\xC3\xA9" "e";
     added_.push_back({Sec::Open, std::move(e)});
     return *this;
 }

@@ -496,7 +496,7 @@ std::string GlobeStatsView::openPcs(int place) {
 
 // L'etat montre : le bandeau (le service a deployer, pas regle, un refus), l'etat du globe, le message au milieu.
 void GlobeStatsView::syncState() {
-    const bool notSet = !problem_.empty() && !tooOld_ && !hasReply_ &&
+    const bool notSet = !problem_.empty() && !tooOld_ &&
                         (problem_.find("pas r\xC3\xA9gl\xC3\xA9") != std::string::npos || problem_.find("illisible") != std::string::npos ||
                          problem_.find("cl\xC3\xA9 qui signe") != std::string::npos);
     deploy_->setVisibility(tooOld_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);

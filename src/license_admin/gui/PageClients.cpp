@@ -162,6 +162,10 @@ public:
         newLicence_->setIcon(ui::Icon::Plus);
         seeLicences_ = add(*this, std::make_unique<ui::Button>("Voir ses licences", "clients.voir-licences"));
         seeLicences_->setIcon(ui::Icon::GoTo);
+        // 1.47.0 (planche 10) : la fiche du client et ses courbes (une sous-page : PageClientCard.cpp)
+        curves_ = add(*this, std::make_unique<ui::Button>("Sa fiche et ses courbes", "clients.fiche"));
+        curves_->setIcon(ui::Icon::Chart);
+        curves_->setTooltip("Ses licences et leurs \xC3\xA9" "ch\xC3\xA9" "ances, ses PC actifs dans le temps, ses mises \xC3\xA0 jour, ses achats, ses demandes, qui l'a servi");
         deleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer le client\xE2\x80\xA6", "clients.supprimer"));
         deleteBtn_->setStyle(ui::Button::Style::Danger);
         deleteBtn_->setTooltip("Un client dont aucune licence n'est en cours : ses licences vont dans la corbeille de l'outil (rien n'est effac\xC3\xA9 ; "
@@ -233,6 +237,12 @@ public:
         links_ += seeLicences_->clicked->connect([this] {
             if (current() && host_.navigate) host_.navigate("licences");
         });
+        links_ += curves_->clicked->connect([this] {
+            const ClientEntry* c = current();
+            if (!c || !host_.navigate) return;
+            requestPageFocus("client", "client:" + c->name);
+            host_.navigate("client");
+        });
         links_ += deleteBtn_->clicked->connect([this] { askDelete(); });
         links_ += restoreBtn_->clicked->connect([this] { restoreSelected(); });
         refresh();
@@ -298,6 +308,8 @@ protected:
         summaryY_ = cy;
         cy += 4.f * kLineH + 10.f;
         const float bw = card_.w - 24.f;
+        curves_->setBounds({card_.x + 12.f, cy, bw, kButtonH});   // 1.47.0
+        cy += kButtonH + 6.f;
         newLicence_->setBounds({card_.x + 12.f, cy, bw, kButtonH});
         cy += kButtonH + 6.f;
         const float half = std::floor((bw - 6.f) * 0.5f);
@@ -725,6 +737,7 @@ private:
         const ClientEntry* c = current();
         newLicence_->setEnabled(c != nullptr);
         seeLicences_->setEnabled(c != nullptr);
+        curves_->setEnabled(c != nullptr);   // 1.47.0
         deleteNote_.clear();
         bool canDelete = c != nullptr;
         if (c) {
@@ -763,6 +776,8 @@ private:
         const ClientEntry* c = nullptr;
         for (const auto& x : all_)
             if (x.name == line.client) c = &x;
+        if (rows.size() == 1 && c && line.depth == 0 && curves_)   // la fiche du client (planche 10 : le bouton de la fiche de droite)
+            m.open("Sa fiche et ses courbes", [this] { curves_->clicked->emit(); }, {}, false);   // Entree : deplier (l'arbre)
         if (rows.size() == 1 && line.expandable) {
             const std::string key = line.key;
             m.unfold(line.expanded, [this, key] { toggle(key); });
@@ -910,6 +925,7 @@ private:
     ui::Button*              collapseBtn_{nullptr};
     ui::Button*              newLicence_{nullptr};
     ui::Button*              seeLicences_{nullptr};
+    ui::Button*              curves_{nullptr};   // 1.47.0 : << Sa fiche et ses courbes >> (planche 10)
     ui::Button*              deleteBtn_{nullptr};
     ui::Button*              restoreBtn_{nullptr};
     ui::TableView*           table_{nullptr};

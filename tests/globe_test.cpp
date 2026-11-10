@@ -477,15 +477,16 @@ int main() {
         ui::GlobeCityList C("villes");
         C.setBounds({0.f, 0.f, 326.f, 300.f});
         C.setPlaces(sample);
-        // La plus grande d'abord, puis par nom (la planche : Lyon 9, Paris 8, Bruxelles 4, Toulouse 4, Geneve 3...).
+        // La plus grande d'abord, puis la plus grande en tout, puis par nom (la planche : Lyon 9, Paris 8, Bruxelles 4,
+        // Toulouse 4, Geneve 3...).
         CHECK(C.order().size() == 21 && C.order()[0] == iLyon && C.order()[1] == iParis && C.countries() == 9);
         CHECK(C.order()[2] == findCity(sample, "Bruxelles") && C.order()[3] == iToulouse);
-        C.setLayer(Layer::Admins);   // Lyon, Paris, Grenoble : 1 chacune -> par nom
-        CHECK(C.order().size() == 3 && C.countries() == 1 && C.order()[0] == iGrenoble);
+        C.setLayer(Layer::Admins);   // Lyon, Paris, Grenoble : 1 chacune -> la plus grande en tout d'abord (pas par nom)
+        CHECK(C.order().size() == 3 && C.countries() == 1 && C.order()[0] == iLyon && C.order()[1] == iParis && C.order()[2] == iGrenoble);
         int chosen = -1;
         auto c2 = C.placeChosen->connect([&](int i) { chosen = i; });
         C.dispatch(ui::MouseDown{{50.f, ui::GlobeCityList::kRow + 5.f}, ui::MouseButton::Left, 1, {}});
-        CHECK(chosen == iLyon);
+        CHECK(chosen == iParis);
         C.setLayer(Layer::Requests);   // Lyon, Paris, Casablanca, Liege, Dakar
         CHECK(C.order().size() == 5 && C.countries() == 4);
     }

@@ -322,6 +322,9 @@ AdminStats compute(const Prepared& p, int idx) {
     const int nDays = p.period.days();
     s.perDay.assign(static_cast<std::size_t>(nDays), 0);
     s.perDayBefore.assign(static_cast<std::size_t>(nDays), 0);
+    s.dayFirst.assign(static_cast<std::size_t>(nDays), -1);
+    s.dayLast.assign(static_cast<std::size_t>(nDays), -1);
+    std::vector<std::size_t> gestures;   // ses gestes (les indices des lignes), pour les 5 dernieres
     std::set<std::int64_t> activeAll, activeNow, activeBefore;
     std::array<Seconds, kTypes> lastOfType{};
     // La fenetre des habitudes, et celle de << jamais utilise >>.
@@ -393,6 +396,8 @@ AdminStats compute(const Prepared& p, int idx) {
             // ---- ses lignes : la chaine ----
             ++s.chain.lines;
             if (l.verified) ++s.chain.verified;
+            if (!s.chain.first || l.at() < s.chain.first) s.chain.first = l.at();
+            if (l.number >= s.chain.last) s.chain.lastHash = l.hash;
             if (!l.chainOk && !broken) {
                 broken = true;
                 s.chain.firstBreak = l.number;
@@ -402,6 +407,7 @@ AdminStats compute(const Prepared& p, int idx) {
         if (l.action == "connexion") continue;   // une connexion n'est pas un geste
         const int t = typeOf(l.action);
         activeAll.insert(d);
+        gestures.push_back(i);
         if (l.at() >= s.last.when) s.last = refOf(l);
         if (t >= 0 && t < 13) lastOfType[static_cast<std::size_t>(t)] = std::max(lastOfType[static_cast<std::size_t>(t)], l.at());
         if (t == kShop) lastOfType[kShop] = std::max(lastOfType[kShop], l.at());
@@ -418,7 +424,11 @@ AdminStats compute(const Prepared& p, int idx) {
             ++s.actions;
             activeNow.insert(d);
             ++nowCount[d];
-            s.perDay[static_cast<std::size_t>(d - p.period.first)]++;
+            const auto k = static_cast<std::size_t>(d - p.period.first);
+            s.perDay[k]++;
+            const int mn = p.minute[i];
+            if (s.dayFirst[k] < 0 || mn < s.dayFirst[k]) s.dayFirst[k] = mn;
+            if (mn > s.dayLast[k]) s.dayLast[k] = mn;
             s.dayHour[static_cast<std::size_t>(weekday(d))][static_cast<std::size_t>(p.minute[i] / 60)]++;
             s.byLevel[static_cast<std::size_t>(l.level)]++;
             if (t >= 0) {
@@ -443,6 +453,9 @@ AdminStats compute(const Prepared& p, int idx) {
             if (l.action == "demande_accepter" || l.action == "demande_refuser") ++requestsBefore;
         }
     }
+    // Ses 5 dernieres actions (tout le journal), la plus recente d'abord.
+    std::stable_sort(gestures.begin(), gestures.end(), [&](std::size_t x, std::size_t y) { return in.lines[x].at() > in.lines[y].at(); });
+    for (std::size_t k = 0; k < gestures.size() && k < 5; ++k) s.recent.push_back(refOf(in.lines[gestures[k]]));
     s.activeDays = static_cast<int>(activeNow.size());
     s.activeDaysBefore = static_cast<int>(activeBefore.size());
     s.change = s.actionsBefore > 0 ? (static_cast<double>(s.actions) - s.actionsBefore) * 100.0 / s.actionsBefore : kUnknown;
@@ -656,8 +669,8 @@ Overview overview(const Inputs& in) {
                 const auto days = static_cast<int>((in.now - ref) / kDay);
                 al.text = lastWhen ? s.name + " : aucune action depuis " + std::to_string(days) + " jours (la derni\xC3\xA8re le " + dayMonth(localDay(lastWhen, tz)) + ")"
                                    : s.name + " : aucune action depuis son arriv\xC3\xA9" "e (" + std::to_string(days) + " jours)";
-                al.gesture = "Lui \xC3\xA9" "crire\xE2\x80\xA6";
-                al.gestureId = "ecrire";
+                al.gesture = "Voir sa fiche";
+                al.gestureId = "fiche";
                 v.alerts.push_back(std::move(al));
             }
             if (!s.unused.empty()) {
@@ -832,6 +845,7 @@ std::vector<Line> linesOf(const gui::JournalView& view) {
         l.level = r.level;
         l.verified = r.verified;
         l.chainOk = !broken;
+        l.hash = L.hash;
         out.push_back(std::move(l));
     }
     return out;

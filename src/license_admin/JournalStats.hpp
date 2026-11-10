@@ -130,6 +130,7 @@ struct Line {
     Level         level{Level::Info};      // la criticite en vigueur (la ligne, sinon son type)
     bool          verified{true};          // la signature est bonne, la cle connue
     bool          chainOk{true};           // la chaine est intacte jusqu'a elle (aucune ligne manquante ou modifiee avant)
+    std::string   hash;                    // l'empreinte de la ligne (SHA-256 hexa ; vide : inconnue)
     [[nodiscard]] Seconds at() const noexcept { return when ? when : received; }
 };
 
@@ -231,6 +232,8 @@ struct Chain {
     int           lines{0}, verified{0};
     std::uint64_t firstBreak{0};      // le numero de la premiere ligne dont la chaine est rompue (0 : aucune)
     std::uint64_t last{0};            // sa derniere ligne
+    std::string   lastHash;           // son empreinte (vide : inconnue)
+    Seconds       first{0};           // la premiere ligne (l'heure)
     [[nodiscard]] bool ok() const noexcept { return lines == verified && firstBreak == 0; }
 };
 
@@ -248,6 +251,9 @@ struct AdminStats {
     int         activeDays{0}, activeDaysBefore{0};
     int         streak{0}, bestStreak{0};             // jours ouvres d'affilee avec une action (le samedi et le dimanche ne coupent pas)
     Ref         last;                                 // sa derniere action (tout le journal ; number 0 : aucune)
+    std::vector<Ref> recent;                          // ses 5 dernieres actions (tout le journal), la plus recente d'abord
+    std::vector<int> dayFirst, dayLast;               // chaque jour de la periode : la minute (Paris) de sa premiere et de sa
+                                                      // derniere action ; -1 : aucune ce jour-la
     std::vector<RightUse>     rights;                 // les 13, dans l'ordre
     std::vector<std::string>  unused;                 // les droits jamais utilises (ids)
     std::vector<Refusal>      refused;
@@ -296,7 +302,7 @@ struct Alert {
     std::string                adminId, adminName;
     std::string                text;          // << Hugo Essai : 4 actions a une heure inhabituelle pour lui, dim. 08/11 de 23:40 a 23:58 >>
     std::string                gesture;       // le geste propose : << Voir ces 4 actions >>
-    std::string                gestureId;     // "journal", "envoyer-maj", "retirer-droits", "ecrire", "accepter"
+    std::string                gestureId;     // "journal", "envoyer-maj", "retirer-droits", "fiche", "accepter"
     std::vector<std::uint64_t> lines;         // les lignes du journal concernees
     std::vector<std::string>   rights;        // retirer-droits : lesquels
     Seconds                    when{0};

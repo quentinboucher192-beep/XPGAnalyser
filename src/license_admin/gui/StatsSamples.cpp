@@ -120,7 +120,7 @@ std::vector<Ev> eventsOf(Day d) {
             e.cents = kOfferCents[o];
         } else {
             const double r2 = h01(d, 5, k);
-            const int o = r2 < 0.55 ? 0 : r2 < 0.85 ? 1 : 2;
+            const int o = r2 < 0.62 ? 0 : r2 < 0.86 ? 1 : 2;
             e.offer = "options";
             e.option = kOptions[o];
             e.cents = kOptionCents[o];

@@ -674,14 +674,18 @@ void GlobeMiniCard::onPaint(const ui::PaintContext& ctx) {
     ui::drawIcon(r, ui::Icon::Globe, {m.x + 14.f, m.y + 11.f, 15.f, 15.f}, kBlue);
     const FontId ft = gfx::semibold(FontId{13});
     r.drawText({m.x + 36.f, m.y + 9.f}, "Le globe", ft, kInk);
-    const std::string link = "Ouvrir le globe \xE2\x80\xBA";
+    // Etroite (la colonne de droite du tableau de bord : 300 a 440 px) : le lien se reduit a sa fleche, le nombre a l'essentiel.
+    const std::string link = m.w >= 420.f ? "Ouvrir le globe \xE2\x80\xBA" : "\xE2\x80\xBA";
     const float lw = r.measure(link, FontId{12}).width;
     r.drawText({m.right() - 16.f - lw, m.y + 11.f}, link, FontId{12}, Color{109, 74, 255, 255});
     if (active_ >= 0) {
         const float lx = m.x + 36.f + r.measure("Le globe", ft).width + 14.f;
+        const FontId fa = gfx::semibold(FontId{12});
+        const float room = m.right() - 24.f - lw - lx - 14.f;
+        std::string a = std::to_string(active_) + " PC actifs maintenant";
+        if (r.measure(a, fa).width > room) a = std::to_string(active_) + " PC actifs";
         r.fillRoundedRect({lx, m.y + 15.f, 8.f, 8.f}, kGreen, 4.f);
-        r.drawText({lx + 14.f, m.y + 10.f}, fitText(r, std::to_string(active_) + " PC actifs maintenant", gfx::semibold(FontId{12}), m.right() - 30.f - lw - lx - 14.f),
-                   gfx::semibold(FontId{12}), kGreenInk);
+        r.drawText({lx + 14.f, m.y + 10.f}, fitText(r, a, fa, room), fa, kGreenInk);
     }
     const float x0 = globe_->bounds().right() + 14.f, x1 = m.right() - 16.f;
     if (!message_.empty()) {

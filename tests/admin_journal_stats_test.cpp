@@ -403,6 +403,18 @@ int main() {
           "L\xC3\xA9" "a : le d\xC3\xA9tail - 2 clients supprim\xC3\xA9s, 2 r\xC3\xA9vocations, les codes revus");
     check(lea->chain.ok() && lea->chain.lines > 0 && lea->last.when == paris(11, 10, 11, 30), "L\xC3\xA9" "a : la cha\xC3\xAEne v\xC3\xA9rifi\xC3\xA9" "e pour ses lignes ; sa derni\xC3\xA8re action (10/11 11:30)");
     check(!lea->licencesFromJournal && lea->licences == 41 && lea->requests == 34, "L\xC3\xA9" "a : licences et demandes : les chiffres du service quand il les donne");
+    {
+        const auto k30 = static_cast<std::size_t>(civil(2026, 10, 30) - civil(2026, 10, 12));
+        const auto k19 = static_cast<std::size_t>(civil(2026, 10, 19) - civil(2026, 10, 12));
+        const auto k01 = static_cast<std::size_t>(civil(2026, 11, 1) - civil(2026, 10, 12));
+        check(lea->dayFirst.size() == 30 && lea->dayFirst[k30] == 9 * 60 + 15 && lea->dayLast[k30] == 16 * 60 + 45 && lea->dayFirst[k19] == -1 &&
+                  lea->dayFirst[k01] == 30 && lea->dayLast[k01] == 30,
+              "L\xC3\xA9" "a : le d\xC3\xA9" "but et la fin de ses journ\xC3\xA9" "es (30/10 : 09:15 -> 16:45 ; 01/11 : 00:30 ; absente le 19/10)");
+        check(lea->recent.size() == 5 && lea->recent[0].when == paris(11, 10, 11, 30) && lea->recent[0].when >= lea->recent[1].when &&
+                  lea->recent[1].when >= lea->recent[4].when,
+              "L\xC3\xA9" "a : ses 5 derni\xC3\xA8res actions, la plus r\xC3\xA9" "cente d'abord");
+        check(lea->chain.first == paris(9, 15, 9, 15), "L\xC3\xA9" "a : sa premi\xC3\xA8re ligne (15/09 09:15)");
+    }
 
     // ---- Hugo ----
     const auto& th = w.t["hugo"];

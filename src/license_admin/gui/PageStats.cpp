@@ -809,8 +809,9 @@ void fillByAdmin(Slot& s, const Data& d, const std::string& measure, double scal
     if (euros) t.valueFormat = eurosF();
     t.tipForward = true;
     t.clickHint = clickHint;
+    const std::size_t admins = t.series.size();
     s.time->setData(std::move(t));
-    s.card->setValue(euros ? stats::euros(m->total) : intText(m->total), {}, std::to_string(t.series.size()) + (t.series.size() > 1 ? " admins" : " admin"));
+    s.card->setValue(euros ? stats::euros(m->total) : intText(m->total), {}, std::to_string(admins) + (admins > 1 ? " admins" : " admin"));
 }
 
 void fillTopClients(Slot& s, const Data& d) {
@@ -1111,19 +1112,26 @@ protected:
         const float ew = export_->sizeHint().preferred.w + 10.f;
         export_->setBounds({right - ew, y + 2.f, ew, 32.f});
         right -= ew + 8.f;
+        float natural = 0.f;
+        for (auto* t : tabs_) natural += t->preferredWidth() + 20.f;
+        const float periodW = ui::measureWidth(periodText(periodNow()), FontId{13}) + 12.f;
         if (snapshot_->visible()) {
-            const float sw = snapshot_->sizeHint().preferred.w + 10.f;
+            // << Relever maintenant >> : son icone seule (l'infobulle) si la place manque
+            snapshot_->setCompact(false);
+            float sw = snapshot_->sizeHint().preferred.w + 10.f;
+            if (x0 + titleW + natural + sw + 8.f > right) {
+                snapshot_->setCompact(true);
+                sw = 34.f;
+            }
             snapshot_->setBounds({right - sw, y + 2.f, sw, 32.f});
             right -= sw + 8.f;
         }
         periodRight_ = right - 6.f;
-        const float periodW = ui::measureWidth(periodText(periodNow()), FontId{13}) + 12.f;
         float tx = x0 + titleW;
-        const float tabsRoom = periodRight_ - periodW - tx;
-        float natural = 0.f;
-        for (auto* t : tabs_) natural += t->preferredWidth() + 20.f;
+        const float tabsRoom = periodRight_ - tx;
         const float k = natural > tabsRoom && natural > 0.f ? std::max(0.6f, tabsRoom / natural) : 1.f;
-        showPeriod_ = natural * k <= tabsRoom + 1.f;
+        // la periode en tete si elle tient a cote des onglets ; sinon au bout de la barre des choix
+        periodInTabs_ = natural * k + periodW <= tabsRoom + 1.f;
         for (auto* t : tabs_) {
             const float tw = t->preferredWidth() * k;
             t->setBounds({tx, y + 6.f, tw, 30.f});
@@ -1180,7 +1188,19 @@ protected:
             seps_.clear();
         }
         hintX_ = bx;
-        showHint_ = !globe && x0 + w - bx > ui::measureWidth("Un clic sur un point filtre la liste correspondante", FontId{12}) + 40.f;
+        {
+            float room = x0 + w - bx;
+            periodInBar_ = !globe && !periodInTabs_ && room >= periodW + 16.f;
+            if (periodInBar_) room -= periodW + 24.f;
+            hint_.clear();
+            if (!globe) {
+                for (const char* h : {"Un clic sur un point filtre la liste correspondante", "Un clic sur un point filtre la liste"})
+                    if (room >= ui::measureWidth(h, FontId{12}) + 40.f) {
+                        hint_ = h;
+                        break;
+                    }
+            }
+        }
         y += segH + 12.f;
         barBottom_ = y;
         // le bandeau : le service trop ancien (Deployer), une panne (Reessayer), les chiffres reconstitues
@@ -1188,7 +1208,7 @@ protected:
         deploy_->setVisibility(ui::Visibility::Collapsed);
         retry_->setVisibility(ui::Visibility::Collapsed);
         const std::string banner = bannerText();
-        if (!banner.empty() && !globe) {
+        if (!banner.empty() && !globe && !upd) {
             ui::Button* btn = tooOld_ ? deploy_ : (!note_.empty() || failed_.empty()) ? nullptr : retry_;
             const float bw = btn ? btn->sizeHint().preferred.w + 12.f : 0.f;
             const float bh = bannerHeight(banner, w, bw + 16.f);
@@ -1201,7 +1221,7 @@ protected:
         }
         // la note des chiffres reconstitues
         rebuiltY_ = -1.f;
-        if (banner.empty() && !globe && !rebuiltText().empty()) {
+        if (banner.empty() && !globe && !upd && !rebuiltText().empty()) {
             rebuiltY_ = y - 4.f;
             y += 18.f;
         }
@@ -1218,18 +1238,22 @@ protected:
         const float x0 = b.x + pad, w = std::max(300.f, b.w - 2.f * pad);
         ctx.r.drawText({x0, titleY_}, "Statistiques", gfx::semibold(FontId{26}), kInk);
         ctx.r.fillRect({x0, tabsBottom_ - 1.f, w, 1.f}, kLine);
-        if (showPeriod_ && tab_ != Tab::Globe) {
-            const std::string p = periodText(periodNow());
-            ctx.r.drawText({periodRight_ - ctx.r.measure(p, FontId{13}).width, titleY_ + 10.f}, p, FontId{13}, kMuted);
+        const std::string period = periodText(periodNow());
+        if (periodInTabs_ && tab_ != Tab::Globe) ctx.r.drawText({periodRight_ - ctx.r.measure(period, FontId{13}).width, titleY_ + 10.f}, period, FontId{13}, kMuted);
+        float hintRight = x0 + w;
+        if (periodInBar_ && tab_ != Tab::Globe) {
+            const float pw = ctx.r.measure(period, FontId{13}).width;
+            ctx.r.drawText({hintRight - pw, barY_ + 9.f}, period, FontId{13}, kMuted);
+            hintRight -= pw + 24.f;
         }
         if (tab_ != Tab::Globe) {
             for (const float x : seps_) ctx.r.fillRect({x, barY_ + 6.f, 1.f, 22.f}, kLine);
             for (const auto& [x, t] : labels_) ctx.r.drawText({x, barY_ + 10.f}, t, gfx::semibold(FontId{11}), kFaint);
             if (choice_.range == Range::Dates) ctx.r.drawText({arrowX_, barY_ + 9.f}, ch::fr::kArrow, FontId{13}, kMuted);
-            if (showHint_) {
-                const std::string a = "Un clic sur un point ", c = "filtre la liste correspondante";
+            if (!hint_.empty()) {
+                const std::string a = "Un clic sur un point ", c = hint_.substr(a.size());
                 const float wa = ctx.r.measure(a, FontId{12}).width, wc = ctx.r.measure(c, gfx::semibold(FontId{12})).width;
-                float x = x0 + w - wa - wc;
+                float x = hintRight - wa - wc;
                 ui::drawIcon(ctx.r, ui::Icon::GoTo, {x - 22.f, barY_ + 9.f, 15.f, 15.f}, kViolet);
                 ctx.r.drawText({x, barY_ + 10.f}, a, FontId{12}, kMuted);
                 x += wa;
@@ -1728,7 +1752,7 @@ private:
                         for (std::size_t i = 0; i < p.points.size(); ++i) row(i, p.key.empty() ? std::string("(sans)") : p.key, p.points, nullptr);
                 }
             }
-            std::ofstream f(std::filesystem::u8path(path), std::ios::binary);
+            std::ofstream f(std::filesystem::path(std::u8string(path.begin(), path.end())), std::ios::binary);
             f << csv;
             if (!f) {
                 h.report(OpResult::fail("le fichier ne s'\xC3\xA9" "crit pas : " + path));
@@ -1764,7 +1788,8 @@ private:
     std::string                      sig_, note_, lastNote_, failed_;
     bool                             tooOld_{false}, loading_{false}, wantLoad_{false};
     float                            titleY_{0}, tabsBottom_{0}, barY_{0}, barBottom_{0}, periodRight_{0}, hintX_{0}, arrowX_{0}, rebuiltY_{-1};
-    bool                             showPeriod_{true}, showHint_{true};
+    bool                             periodInTabs_{true}, periodInBar_{false};
+    std::string                      hint_;
     std::vector<float>               seps_;
     std::vector<std::pair<float, std::string>> labels_;
     Rect                             bannerRect_{};

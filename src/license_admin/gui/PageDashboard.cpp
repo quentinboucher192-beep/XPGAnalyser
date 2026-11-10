@@ -20,6 +20,7 @@
 //  Des demandes (.xpgreq) glissees sur la page ouvrent l'assistant avec elles.
 // =============================================================================
 #include "Page.hpp"
+#include "StatsKit.hpp"   // 1.47.0 : la rangee de courbes et la petite carte du globe
 
 #include "../../ui/Icons.hpp"
 #include "../../ui/widgets/Controls.hpp"
@@ -406,6 +407,10 @@ public:
         tiles_.back()->setTooltip("Les jetons flottants en cours, au dernier relev\xC3\xA9 du service (Licences flottantes \xE2\x80\xBA Relever).");
 
         feed_ = &static_cast<ActivityFeed&>(addChild(std::make_unique<ActivityFeed>()));
+        // 1.47.0 : le resume des statistiques (4 petites courbes sur 30 jours : un clic, la page Statistiques) et la place de la
+        // petite carte du globe (planche 11 : PageStatsGlobe.cpp) - montres quand le service donne ses chiffres.
+        strip_ = &static_cast<statskit::DashboardStrip&>(addChild(statskit::makeDashboardStrip(host_)));
+        globe_ = &addChild(statskit::makeDashboardGlobe(host_));
         links_ += feed_->activated->connect([this](int) { host_.navigate("historique"); });
         refresh();
     }
@@ -646,6 +651,17 @@ protected:
         }
         y += bigH + 12.f + smallH + gap;
 
+        // 1.47.0 : la rangee de courbes (a gauche) et la petite carte du globe (a droite), si la place et le service le permettent.
+        const bool curves = !compact && strip_->shown() && b.bottom() - 18.f - y > 150.f + gap + 220.f;
+        strip_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        globe_->setVisibility(curves ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        if (curves) {
+            const float rw = std::clamp(w * 0.34f, 300.f, 440.f);
+            strip_->setBounds({x0, y, w - rw - gap, 150.f});
+            globe_->setBounds({x0 + w - rw, y, rw, 150.f});
+            y += 150.f + gap;
+        }
+
         // En bas : l'activite a gauche ; a droite, les editions puis l'etat du poste.
         const float bottom = b.bottom() - 18.f;
         const float rightW = std::clamp(w * 0.34f, 300.f, 440.f);
@@ -875,6 +891,8 @@ private:
     std::shared_ptr<bool>        alive_{std::make_shared<bool>(true)};
     std::vector<StatTile*>       tiles_;
     ActivityFeed*                feed_{nullptr};
+    statskit::DashboardStrip*    strip_{nullptr};           // 1.47.0 : la rangee de courbes
+    ui::Widget*                  globe_{nullptr};           // 1.47.0 : la petite carte du globe (PageStatsGlobe.cpp)
     Rect                         hintRect_{}, opsRect_{}, editionsRect_{}, posteRect_{};
     float                        barH_{46.f}, lineH_{22.f};
     float                        titleY_{0.f}, leadY_{0.f}, titleRight_{0.f};

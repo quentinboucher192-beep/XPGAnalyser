@@ -44,6 +44,7 @@
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
 #include "../../ui/widgets/DataViews.hpp"
+#include "../../ui/widgets/GlobeLists.hpp"   // 1.47.0 : --choisir une ville du globe
 
 #include <SDL3/SDL.h>
 
@@ -324,6 +325,8 @@ void perform(menu::MenuManager& menus, const Action& a) {
         const int row = std::atoi(a.text.c_str()) - 1;
         if (auto* t = dynamic_cast<ui::TableView*>(w)) t->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
         else if (auto* d = dynamic_cast<ui::DropDown*>(w)) d->setSelectedIndex(row);
+        else if (auto* g = dynamic_cast<ui::GlobeCityList*>(w); g && row >= 0 && row < static_cast<int>(g->order().size()))
+            g->placeChosen->emit(g->order()[static_cast<std::size_t>(row)]);   // 1.47.0 : une ville de la liste du globe (sa carte s'ouvre)
         else std::fprintf(stderr, "attention : \xC2\xAB %s \xC2\xBB n'est ni un tableau ni une liste (%s)\n", a.id.c_str(), where.c_str());
         return;
     }

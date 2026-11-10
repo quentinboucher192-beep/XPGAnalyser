@@ -168,9 +168,9 @@ int main(int argc, char** argv) {
         auto* v = dynamic_cast<gs::GlobeStatsView*>(view.get());
         CHECK(v != nullptr);
         if (v) {
-            t = paint(*v, r, 1093.f, 760.f);   // la peinture (t = 0) : le premier releve part
+            t = paint(*v, r, 1600.f, 760.f);   // la peinture (t = 0) : le premier releve part
             CHECK(globeCalls == 1 && lastDays == 30 && v->hasReply() && v->board().places().size() == 21 && v->problem().empty());
-            t = paint(*v, r, 1093.f, 760.f);
+            t = paint(*v, r, 1600.f, 760.f);
             CHECK(t.find("54 clients, 342 PC, 21 villes, 9 pays") != std::string::npos && t.find("3 PC sans lieu") != std::string::npos);
             CHECK(t.find("P\xC3\xA9riode") != std::string::npos && t.find("Relev\xC3\xA9 le ") != std::string::npos);
             CHECK(v->board().globe().findPlace("FR|Lyon") >= 0 && v->board().emptyTitle().empty());
@@ -235,11 +235,11 @@ int main(int argc, char** argv) {
             gs::setFetchersForTests({fakeGlobe, fakeLive});
         }
         // La petite carte du tableau de bord : les PC actifs, les 3 premieres villes ; un clic : le globe.
-        auto card = gui::statskit::makeDashboardGlobe(rig3.host());
-        t = paint(*card, r, 476.f, 150.f);
-        t = paint(*card, r, 476.f, 150.f);
+        auto dashCard = gui::statskit::makeDashboardGlobe(rig3.host());
+        t = paint(*dashCard, r, 476.f, 150.f);
+        t = paint(*dashCard, r, 476.f, 150.f);
         CHECK(t.find("42 PC actifs maintenant") != std::string::npos && t.find("Lyon, FR") != std::string::npos);
-        card->dispatch(ui::MouseDown{{200.f, 75.f}, ui::MouseButton::Left, 1, {}});
+        dashCard->dispatch(ui::MouseDown{{200.f, 75.f}, ui::MouseButton::Left, 1, {}});
         CHECK(!rig3.navigations.empty() && rig3.navigations.back() == "globe");
     }
 
@@ -260,9 +260,9 @@ int main(int argc, char** argv) {
             v->tick(0.0);
             (void)shell->finishSlow();   // le releve (un travail sans bruit de la coquille)
             CHECK(v->hasReply());
-            const int lyon = v->board().globe().findPlace("FR|Lyon");
-            const auto& customers = fake.cities[static_cast<std::size_t>(lyon)].customers;
-            const std::string said = v->openClients(lyon);
+            const int lyonIdx = v->board().globe().findPlace("FR|Lyon");
+            const auto& customers = fake.cities[static_cast<std::size_t>(lyonIdx)].customers;
+            const std::string said = v->openClients(lyonIdx);
             CHECK(shell->currentPageId() == "clients" && said.find("les 9 clients de Lyon, FR") != std::string::npos && said.find("pas pris") == std::string::npos);
             ui::FilterBar* bar = shell->page("clients") ? find<ui::FilterBar>(*shell->page("clients"), "clients") : nullptr;
             CHECK(bar != nullptr);
@@ -274,7 +274,7 @@ int main(int argc, char** argv) {
                 CHECK(f >= 0 && kept);
             }
             // Les PC : l'archive de ce poste ne les connait pas -> les PC des clients de la ville (la colonne Client).
-            const std::string said2 = v->openPcs(lyon);
+            const std::string said2 = v->openPcs(lyonIdx);
             CHECK(shell->currentPageId() == "activations" && said2.find("les PC des clients de Lyon, FR") != std::string::npos);
             ui::FilterBar* bar2 = shell->page("activations") ? find<ui::FilterBar>(*shell->page("activations"), "activations") : nullptr;
             CHECK(bar2 != nullptr);

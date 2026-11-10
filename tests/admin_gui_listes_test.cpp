@@ -248,8 +248,15 @@ int main(int argc, char** argv) {
         // Clients : Aller a > Ses licences -> Licences filtree sur lui.
         items = rightClick(*ct, {static_cast<ui::RowIndex>(crow)});
         const std::string corder = topLabels(items);
-        check(corder.rfind("Replier;|Nouvelle licence pour ce client\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|Supprimer le client\xE2\x80\xA6;", 0) == 0,
+        check(corder.rfind("Sa fiche et ses courbes;Replier;|Nouvelle licence pour ce client\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|"
+                           "Supprimer le client\xE2\x80\xA6;",
+                           0) == 0,
               "Clients : l'ordre de la regle : " + corder);
+        const int sheet = idOf(items, "", "Sa fiche et ses courbes");
+        if (sheet >= 0) ct->contextAction->emit(sheet);
+        check(sheet >= 0 && !rig.navigations.empty() && rig.navigations.back() == "client" && itemOf(items, "Sa fiche")->shortcut.empty(),
+              "Clients : Sa fiche et ses courbes (la sous-page du client ; Entree deplie ici)");
+        items = rightClick(*ct, {static_cast<ui::RowIndex>(crow)});
         const auto* del = itemOf(items, "Supprimer le client");
         check(del && !del->enabled && !del->note.empty(), "Supprimer le client grise (une licence en cours), la raison dessous");
         const int sl = idOf(items, "Aller \xC3\xA0", "Ses licences");

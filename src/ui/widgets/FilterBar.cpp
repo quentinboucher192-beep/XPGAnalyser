@@ -898,7 +898,7 @@ void FilterBar::refreshMenu() {
                 rows.push_back(std::move(r));
                 menuValues_.push_back(v);
             }
-            note = "sur les " + std::to_string(rowCount());
+            note = rowCount() == 0 ? std::string("la liste est vide") : "sur les " + std::to_string(rowCount());
         }
     } else if (menu_ == Menu::Add) {
         const auto shown = chipFields();

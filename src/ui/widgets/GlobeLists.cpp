@@ -206,10 +206,18 @@ void GlobeCityList::rebuild() {
             order_.push_back(static_cast<int>(i));
             countries.insert(entries_[i].country);
         }
-    // La plus grande d'abord ; a egalite, par nom.
+    // La plus grande d'abord ; a egalite, la plus grande en tout (tous les calques : un client par ville, la ville
+    // de 7 PC avant celle d'un seul), puis par nom.
+    const auto all = [this](int i) {
+        int n = 0;
+        for (int c : entries_[static_cast<std::size_t>(i)].counts) n += c;
+        return n;
+    };
     std::stable_sort(order_.begin(), order_.end(), [&](int a, int b) {
         const int na = entries_[static_cast<std::size_t>(a)].counts[k], nb = entries_[static_cast<std::size_t>(b)].counts[k];
         if (na != nb) return na > nb;
+        const int ta = all(a), tb = all(b);
+        if (ta != tb) return ta > tb;
         return entries_[static_cast<std::size_t>(a)].label < entries_[static_cast<std::size_t>(b)].label;
     });
     countries_ = static_cast<int>(countries.size());

@@ -81,7 +81,8 @@ public:
     explicit ListMenu(Selection selection) : sel_(std::move(selection)) {}
 
     // ---- les sections (dans n'importe quel ordre : items() les range) ----
-    ListMenu& open(std::string label, std::function<void()> run, std::string why = {});
+    // << Ouvrir... >> ; `enterOpens` faux : Entree fait autre chose dans cette liste (le raccourci n'est pas montre).
+    ListMenu& open(std::string label, std::function<void()> run, std::string why = {}, bool enterOpens = true);
     ListMenu& unfold(bool unfolded, std::function<void()> run);   // << Deplier >> (->) / << Replier >> (<-) ; plusieurs : << Deplier les 3 >>
     ListMenu& unfold(TableView& table);                            // les lignes choisies de cette table, d'apres leur etat
     ListMenu& action(Entry e);
