@@ -200,7 +200,7 @@ class Globe {
   constructor(cv, o) {
     this.cv = cv; this.g = cv.getContext('2d'); this.o = Object.assign({ pas: 1.1, point: 1.3, marges: 26, vitesse: 4, mini: false }, o);
     this.lon = this.o.lon; this.lat = this.o.lat; this.zoom = 1; this.auto = !FIGE; this.survol = false;
-    this.glisse = null; this.vlon = 0; this.vlat = 0; this.anim = null; this.sel = null; this.couches = new Set(this.o.couches);
+    this.glisse = null; this.vlon = 0; this.vlat = 0; this.anim = null; this.sel = null; this.couches = this.o.couches instanceof Set ? this.o.couches : new Set(this.o.couches);
     this.bouffees = []; this.pts = grille(this.o.pas); this.t = 0; this.cible = null;
     this.mesure(); new ResizeObserver(() => { this.mesure(); this.dessine(); }).observe(cv.parentElement);
     if (!this.o.mini) this.souris();
@@ -294,7 +294,7 @@ class Globe {
     g.strokeStyle = 'rgba(15,23,42,0.06)'; g.lineWidth = 1; g.stroke();
     // les points de la terre (3 paquets d'opacite selon la distance au bord)
     const P = this.pts, cl = Math.cos(this.lon * RAD), sl = Math.sin(this.lon * RAD), cp = Math.cos(this.lat * RAD), sp = Math.sin(this.lat * RAD);
-    const pr = this.o.point * Math.pow(this.zoom, 0.6), paq = [[], [], []];
+    const pr = this.o.point * (mini ? 1 : Math.max(1, this.R0 / 250)) * Math.pow(this.zoom, 0.6), paq = [[], [], []];
     for (let i = 0; i < P.length; i += 3) {
       const x = P[i], y = P[i + 1], z = P[i + 2];
       const x1 = x * cl - z * sl, z1 = x * sl + z * cl, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
@@ -501,7 +501,10 @@ function page() {
     Promise.resolve(p).catch(() => carteG.classList.toggle('plein'));
   };
   document.addEventListener('fullscreenchange', () => carteG.classList.toggle('plein', document.fullscreenElement === carteG));
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { carteG.classList.remove('plein'); choisir(null); } });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.fullscreenElement) document.exitFullscreen(); else if (carteG.classList.contains('plein')) carteG.classList.remove('plein'); else choisir(null);
+  });
 
   function tout() { calques(); liste(); carte(); G.dessine(); }
   // le direct : un PC se connecte de temps en temps (tire au sort, selon les PC de chaque ville)
@@ -515,7 +518,7 @@ function page() {
     prochain -= dt; if (prochain > 0) return; prochain = 0.7 + Math.random() * 1.3;
     const v = tirage(); G.bouffee(v);
     const d = new Date(), h = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
-    $('#gtick').innerHTML = '<i></i><b>' + v.nom + ', ' + v.pays + '</b> · ' + NOMS[Math.floor(Math.random() * NOMS.length)] + ' vient de se connecter <span>' + h + '</span>';
+    $('#gtick').innerHTML = '<i></i><b>' + v.nom + ', ' + v.pays + '</b> · ' + NOMS[Math.floor(Math.random() * NOMS.length)] + ' connecté <span>' + h + '</span>';
     if (Math.random() < 0.5 && v.n.actifs < v.n.pc) { v.n.actifs++; } else { const w = VILLES[Math.floor(Math.random() * VILLES.length)]; if (w.n.actifs > 0 && w !== v) w.n.actifs--; }
     liste(); calques(); if (S.sel) carte();
   }
