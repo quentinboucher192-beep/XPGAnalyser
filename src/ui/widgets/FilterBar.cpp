@@ -1127,8 +1127,8 @@ SizeHint FilterBar::sizeHint() const {
 }
 
 bool FilterBar::hintFits() const {
-    const float kw = measureWidth("Ctrl+F", gfx::FontId{10}) + 10.f;
-    return search_->bounds().w >= 34.f + measureWidth(search_->placeholder(), kSmall) + 12.f + kw + 8.f;
+    // le champ garde 30 px a gauche (la loupe) et 74 a droite (l'indice) ; son texte : la police du theme (16)
+    return search_->bounds().w >= 30.f + 74.f + measureWidth(search_->placeholder(), gfx::FontId{16}) + 8.f;
 }
 
 void FilterBar::onLayout() {

@@ -57,6 +57,11 @@ using gfx::Color;
 using gfx::FontId;
 using gfx::Rect;
 using RowIndex = ui::RowIndex;
+// 1.47.0 : l'erreur du service en une ligne (<< Le service ne r\xC3\xA9pond pas. >>, << Service : Refus\xC3\xA9 : droit manquant. >>).
+std::string serviceLine(const std::string& problem) {
+    const std::string e = listkit::shortError(problem);
+    return (e.rfind("Le service", 0) == 0 ? e : "Service : " + e) + ".";
+}
 
 constexpr FontId kF28{28}, kF16{16}, kF15{15}, kF14{14}, kF13{13}, kF12{12};
 constexpr const char* kBusy = "Un travail est en cours : attends qu'il finisse.";
@@ -544,7 +549,7 @@ protected:
         // Un service trop ancien : le bandeau le dit, une seule fois (pas aussi la panne du releve).
         const bool showProblem = !problem_.empty() && note_.empty();
         if (fetching_) lead = "Relev\xC3\xA9 en cours\xE2\x80\xA6";
-        else if (showProblem) lead = "Service : " + listkit::shortError(problem_) + ".";
+        else if (showProblem) lead = serviceLine(problem_);
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, showProblem ? c.warning : c.textMuted);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
@@ -1123,7 +1128,7 @@ private:
 
     [[nodiscard]] std::string status() const {
         if (fetching_) return "Relev\xC3\xA9 des commandes en cours\xE2\x80\xA6";
-        if (!problem_.empty() && note_.empty()) return "Service : " + listkit::shortError(problem_) + ".";
+        if (!problem_.empty() && note_.empty()) return serviceLine(problem_);
         const auto& w = ws();
         if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");

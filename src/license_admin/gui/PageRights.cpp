@@ -244,17 +244,35 @@ protected:
         const float pad = b.w < 900.f ? 20.f : 28.f;
         x0_ = b.x + pad;
         w_ = std::max(600.f, b.w - 2.f * pad);
-        titleY_ = b.y + (b.h < 680.f ? 18.f : 26.f);
+        titleY_ = b.y + (b.h < 680.f ? 18.f : 26.f) - scroll_;
         const float bw = buttonWidth(*back_, 140.f);
         back_->setBounds({x0_ + w_ - bw, titleY_ + 4.f, bw, 38.f});
-        const float top = titleY_ + 80.f, bottom = b.bottom() - 16.f;
-        // 1.47.0 : une fenetre etroite (1100) - les trois colonnes tiennent dans la page (rien hors du bord) ; les boutons qui
-        // ne tiennent pas sur leur rangee passent a la suivante (jamais l'un sur l'autre).
-        const float leftW = std::clamp(w_ * 0.22f, 200.f, 300.f), rightW = std::clamp(w_ * 0.29f, 260.f, 410.f);
-        const float midW = std::max(300.f, w_ - leftW - rightW - 32.f);
-        left_ = {x0_, top, leftW, std::max(300.f, bottom - top)};
-        mid_ = {left_.right() + 16.f, top, midW, left_.h};
-        right_ = {mid_.right() + 16.f, top, rightW, left_.h};
+        const float top = titleY_ + 80.f, bottom = b.bottom() - 16.f - scroll_;
+        // 1.47.0 : une fenetre etroite (1100) - la carte de l'admin passe sous les deux autres (chacune a sa largeur) ; une
+        // fenetre basse - la page defile (molette) : rien ne se serre jusqu'a passer sous un bouton. Les boutons qui ne
+        // tiennent pas sur leur rangee passent a la suivante (jamais l'un sur l'autre).
+        const bool narrow = w_ < 1000.f;
+        const float leftW = narrow ? std::clamp(w_ * 0.27f, 220.f, 300.f) : std::clamp(w_ * 0.22f, 200.f, 300.f);
+        const float rightW = narrow ? w_ : std::clamp(w_ * 0.29f, 260.f, 410.f);
+        const float midW = narrow ? w_ - leftW - 16.f : std::max(300.f, w_ - leftW - rightW - 32.f);
+        // ce qui passe a la rangee suivante (les boutons du profil, Supprimer, Annuler de l'admin) ; la hauteur qu'il faut
+        const float mw0 = midW - 36.f, rw0 = rightW - 36.f;
+        const float sw = buttonWidth(*save_, 170.f), aw = buttonWidth(*cancel_, 90.f), dw = buttonWidth(*delete_, 140.f);
+        const bool copyBelow = buttonWidth(*duplicate_, 90.f) + buttonWidth(*rename_, 90.f) + 16.f + buttonWidth(*copyTo_, 160.f) > mw0;
+        const bool deleteAbove = dw + 12.f > mw0 - sw - 8.f - aw;   // sa note (<< ses admins gardent... >>) : si elle tient
+        const float pw = std::min(rw0, buttonWidth(*publish_, 150.f)), cw2 = buttonWidth(*adminCancel_, 90.f);
+        const bool cancelAbove = pw + 8.f + cw2 > rw0;
+        const float needMid = 122.f + (copyBelow ? 40.f : 0.f) + 28.f + 16.f * 20.f + 12.f + (deleteAbove ? 46.f : 0.f) + 54.f;
+        const float needRight = 176.f + 16.f * 20.f + 96.f + 54.f + (cancelAbove ? 44.f : 0.f);
+        const float h1 = std::max({300.f, bottom - top, needMid, narrow ? 0.f : needRight});
+        left_ = {x0_, top, leftW, h1};
+        mid_ = {left_.right() + 16.f, top, midW, h1};
+        right_ = narrow ? Rect{x0_, top + h1 + 16.f, rightW, needRight} : Rect{mid_.right() + 16.f, top, rightW, h1};
+        content_ = right_.bottom() + 16.f + scroll_ - b.y;
+        if (const float most = std::max(0.f, content_ - b.h); scroll_ > most) {   // la fenetre a grandi
+            scroll_ = most;
+            invalidateLayout();
+        }
         // A gauche
         const float nw = buttonWidth(*newProfile_, 120.f);
         newProfile_->setBounds({left_.right() - 16.f - nw, left_.y + 16.f, nw, 34.f});
@@ -268,18 +286,16 @@ protected:
         }
         const float cw = buttonWidth(*copyTo_, 160.f);
         float extra = 0.f;
-        if (bx + cw > mx + mw) {   // a la rangee suivante
+        if (copyBelow) {   // a la rangee suivante
             extra = 40.f;
             copyTo_->setBounds({mx, mid_.y + 72.f + extra, std::min(cw, mw), 32.f});
         } else {
             copyTo_->setBounds({mx + mw - cw, mid_.y + 72.f, cw, 32.f});
         }
         const float fy = mid_.bottom() - 54.f;
-        const float sw = buttonWidth(*save_, 170.f), aw = buttonWidth(*cancel_, 90.f), dw = buttonWidth(*delete_, 140.f);
         save_->setBounds({mx + mw - sw, fy, sw, 36.f});
         cancel_->setBounds({save_->bounds().x - 8.f - aw, fy, aw, 36.f});
-        // << Supprimer le profil >> (et sa note) au-dessus quand la rangee est trop courte
-        const bool deleteAbove = mx + dw + 160.f > cancel_->bounds().x;
+        // << Supprimer le profil >> au-dessus quand la rangee est trop courte
         delete_->setBounds({mx, deleteAbove ? fy - 46.f : fy, dw, 36.f});
         tableTop_ = mid_.y + 122.f + extra;
         const float avail = (deleteAbove ? fy - 46.f : fy) - 12.f - tableTop_ - 28.f;
@@ -301,12 +317,11 @@ protected:
         (void)k;
         // A droite : le choix de l'admin, ses droits.
         const float rx = right_.x + 18.f, rw = right_.w - 36.f;
-        admin_->setBounds({rx, right_.y + 16.f, rw, 32.f});
+        admin_->setBounds({rx, right_.y + 16.f, std::min(rw, 420.f), 32.f});
         recopy_->setBounds({right_.right() - 18.f - std::min(rw, buttonWidth(*recopy_, 120.f)), right_.y + 128.f, std::min(rw, buttonWidth(*recopy_, 120.f)), 30.f});
         const float pfy = right_.bottom() - 54.f;
-        const float pw = std::min(rw, buttonWidth(*publish_, 150.f)), cw2 = buttonWidth(*adminCancel_, 90.f);
         publish_->setBounds({rx + rw - pw, pfy, pw, 36.f});
-        if (pw + 8.f + cw2 > rw) adminCancel_->setBounds({rx + rw - cw2, pfy - 44.f, cw2, 36.f});   // au-dessus : jamais l'un sur l'autre
+        if (cancelAbove) adminCancel_->setBounds({rx + rw - cw2, pfy - 44.f, cw2, 36.f});   // au-dessus : jamais l'un sur l'autre
         else adminCancel_->setBounds({publish_->bounds().x - 8.f - cw2, pfy, cw2, 36.f});
         adminTop_ = right_.y + 176.f;
         const float avail2 = std::min(pfy, adminCancel_->bounds().y) - 96.f - adminTop_;
@@ -353,9 +368,18 @@ protected:
         paintProfiles(ctx);
         paintProfile(ctx);
         paintAdmin(ctx);
+        if (const Rect b = bounds(); content_ > b.h + 1.f) {   // 1.47.0 : la page defile - sa barre
+            const float th2 = std::max(30.f, b.h * b.h / content_);
+            r.fillRoundedRect({b.right() - 6.f, b.y + (b.h - th2) * (scroll_ / std::max(1.f, content_ - b.h)), 4.f, th2}, c.textMuted.withAlpha(110), 2.f);
+        }
     }
 
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseWheel>(&ev); m && content_ > bounds().h + 1.f && bounds().contains(m->pos)) {   // 1.47.0
+            scroll_ = std::clamp(scroll_ - m->dy * 48.f, 0.f, content_ - bounds().h);
+            invalidateLayout();
+            return ui::EventResult::Consumed;
+        }
         if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && d->button == ui::MouseButton::Left) {
             for (std::size_t i = 0; i < profileRects_.size() && i < profiles_.size(); ++i)
                 if (profileRects_[i].contains(d->pos)) {
@@ -643,7 +667,11 @@ private:
         const auto& c = th.color;
         const float x = left_.x + 18.f, w = left_.w - 36.f;
         r.drawText({x, left_.y + 20.f}, "Profils", gfx::semibold(kF16), c.text);
-        r.drawText({x, left_.y + 58.f}, fit(r, "Un profil, c'est une liste de fonctions.", kF12, w), kF12, c.textMuted);
+        {   // 1.47.0 : sur deux lignes si la colonne est etroite
+            const std::string intro = "Un profil, c'est une liste de fonctions.";
+            if (r.measure(intro, kF12).width <= w) r.drawText({x, left_.y + 58.f}, intro, kF12, c.textMuted);
+            else (void)drawWrapped(r, x, left_.y + 52.f, w, intro, kF12, c.textMuted, 15.f, 2);
+        }
         r.fillRect({left_.x + 1.f, left_.y + 84.f, left_.w - 2.f, 1.f}, c.gridLine);
         profileRects_.clear();
         float y = left_.y + 96.f;
@@ -666,12 +694,15 @@ private:
             ui::drawIcon(r, p.builtin ? ui::Icon::Star : ui::Icon::Layers, {ib.x + 8.f, ib.y + 8.f, 16.f, 16.f}, sel ? rgb(0xFFFFFF) : c.textMuted);
             const float nx = ib.right() + 12.f;
             const FontId fn = gfx::semibold(kF14);
-            const std::string nm = fit(r, p.name, fn, row.right() - nx - (p.builtin ? 76.f : 8.f));
+            // 1.47.0 : << de depart >> seulement si le nom tient a cote (l'etoile le dit aussi)
+            const bool tag = p.builtin && r.measure(p.name, fn).width <= row.right() - nx - 76.f;
+            const std::string nm = fit(r, p.name, fn, row.right() - nx - (tag ? 76.f : 8.f));
             r.drawText({nx, row.y + 10.f}, nm, fn, c.text);
-            if (p.builtin) (void)pill(r, nx + r.measure(nm, fn).width + 8.f, row.y + 9.f, "de d\xC3\xA9part", gfx::semibold(kF11), c.textMuted, c.rowAltBg, 18.f);
+            if (tag) (void)pill(r, nx + r.measure(nm, fn).width + 8.f, row.y + 9.f, "de d\xC3\xA9part", gfx::semibold(kF11), c.textMuted, c.rowAltBg, 18.f);
             const auto users = usersOf(p.name);
-            std::string sub = std::to_string(p.rights.size()) + " fonctions sur 13";
-            sub += p.builtin && users.empty() ? std::string(" \xC2\xB7 ne se modifie pas") : " \xC2\xB7 " + std::to_string(users.size()) + (users.size() > 1 ? " admins" : " admin");
+            const std::string tail = p.builtin && users.empty() ? std::string(" \xC2\xB7 ne se modifie pas") : " \xC2\xB7 " + std::to_string(users.size()) + (users.size() > 1 ? " admins" : " admin");
+            std::string sub = std::to_string(p.rights.size()) + " fonctions sur 13" + tail;
+            if (r.measure(sub, kF12).width > row.right() - nx - 8.f) sub = std::to_string(p.rights.size()) + "/13" + tail;   // 1.47.0 : etroit
             r.drawText({nx, row.y + 30.f}, fit(r, sub, kF12, row.right() - nx - 8.f), kF12, c.textMuted);
             const Rect track{nx, row.y + 52.f, row.right() - nx - 12.f, 5.f};
             r.fillRoundedRect(track, c.gridLine, 2.5f);
@@ -703,12 +734,17 @@ private:
         r.drawText({x, mid_.y + 18.f}, head, ft, c.text);
         (void)pill(r, x + r.measure(head, ft).width + 10.f, mid_.y + 18.f, std::to_string(draft_.size()) + " / 13", gfx::semibold(kF12), c.accent, c.accent.withAlpha(22), 22.f);
         std::string sub;
-        if (p->builtin) sub = "Le profil de d\xC3\xA9part : toutes les fonctions, ne se modifie pas";
+        if (p->builtin) sub = "Toutes les fonctions, ne se modifie pas";
         else sub = p->changed ? "Modifi\xC3\xA9 par toi le " + dateFr(p->changed) : std::string("Jamais modifi\xC3\xA9");
         const auto users = usersOf(p->name);
         if (!users.empty()) {
-            sub += " \xC2\xB7 utilis\xC3\xA9 par ";
-            for (std::size_t i = 0; i < users.size(); ++i) sub += (i ? ", " : "") + users[i]->name;
+            std::string names;
+            for (std::size_t i = 0; i < users.size(); ++i) names += (i ? ", " : "") + users[i]->name;
+            // 1.47.0 : les noms s'ils tiennent, sinon leur nombre
+            const std::string tail = dirty_ ? std::string(" \xC2\xB7 pas encore enregistr\xC3\xA9") : std::string();
+            sub += r.measure(sub + " \xC2\xB7 utilis\xC3\xA9 par " + names + tail, kF13).width <= w
+                       ? " \xC2\xB7 utilis\xC3\xA9 par " + names
+                       : " \xC2\xB7 " + std::to_string(users.size()) + (users.size() > 1 ? " admins" : " admin");
         }
         if (dirty_) sub += " \xC2\xB7 pas encore enregistr\xC3\xA9";
         r.drawText({x, mid_.y + 46.f}, fit(r, sub, kF13, w), kF13, dirty_ ? c.warning : c.textMuted);
@@ -779,7 +815,12 @@ private:
         const std::string nm = fit(r, a->name, fn, w - 120.f);
         r.drawText({x + 52.f, y + 1.f}, nm, fn, c.text);
         (void)pill(r, x + 52.f + r.measure(nm, fn).width + 8.f, y, "Admin", gfx::semibold(kF11), c.textMuted, c.rowAltBg, 20.f);
-        r.drawText({x + 52.f, y + 22.f}, fit(r, a->pc + " \xC2\xB7 admin depuis le " + dateFr(a->since), kF12, w - 52.f), kF12, c.textMuted);
+        if (const std::string line = a->pc + " \xC2\xB7 admin depuis le " + dateFr(a->since); r.measure(line, kF12).width <= w - 52.f) {
+            r.drawText({x + 52.f, y + 22.f}, line, kF12, c.textMuted);
+        } else {   // 1.47.0 : sur deux lignes
+            r.drawText({x + 52.f, y + 21.f}, fit(r, a->pc, kF12, w - 52.f), kF12, c.textMuted);
+            r.drawText({x + 52.f, y + 36.f}, fit(r, "admin depuis le " + dateFr(a->since), kF12, w - 52.f), kF12, c.textMuted);
+        }
         y += 56.f;
         // L'origine : son profil, et combien de differences.
         const adm::Profile* origin = profileOf(a->profile);
@@ -795,7 +836,8 @@ private:
         const float tw = recopy_->bounds().x - box.x - 40.f;
         if (a->profile.empty()) r.drawText({box.x + 32.f, box.y + 14.f}, fit(r, "Aucun profil d'origine", kF12, tw), kF12, c.textMuted);
         else {
-            r.drawText({box.x + 32.f, box.y + 6.f}, fit(r, "Copi\xC3\xA9s de " + a->profile + (origin ? std::string() : " (supprim\xC3\xA9)"), gfx::semibold(kF12), tw), gfx::semibold(kF12), c.text);
+            const std::string from = "Copi\xC3\xA9s de " + a->profile + (origin ? std::string() : " (supprim\xC3\xA9)");
+            r.drawText({box.x + 32.f, box.y + 6.f}, fit(r, r.measure(from, gfx::semibold(kF12)).width <= tw ? from : a->profile, gfx::semibold(kF12), tw), gfx::semibold(kF12), c.text);
             r.drawText({box.x + 32.f, box.y + 24.f}, diffs ? std::to_string(diffs) + (diffs > 1 ? " ajustements" : " ajustement") : std::string("aucun ajustement"), kF12,
                        diffs ? c.accent : c.textMuted);
         }
@@ -840,6 +882,7 @@ private:
     bool                        dirty_{false}, adminDirty_{false}, syncing_{false};
     std::vector<Rect>           profileRects_;
     std::map<std::string, float> rowY_, adminRowY_;
+    float                       scroll_{0.f}, content_{0.f};   // 1.47.0 : une fenetre basse, la page defile
     // les widgets
     ui::Button*                 back_{nullptr};
     ui::Button*                 newProfile_{nullptr};

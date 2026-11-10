@@ -415,10 +415,10 @@ int main(int argc, char** argv) {
         ws.adoptOrders(v);
         auto op = gui::makeOrdersPage(rig.host());
         std::string t = draw(*op);
-        check(has(t, "Commandes") && has(t, "pas de r\xC3\xA9ponse du service"), "le releve en arrivant : le service ne repond pas, c'est dit");
+        check(has(t, "Commandes") && (has(t, "pas de r\xC3\xA9ponse du service") || has(t, "Le service ne r\xC3\xA9pond pas")), "le releve en arrivant : le service ne repond pas, c'est dit");
         op->refresh();   // de nouveau (le releve ne repart pas avant 20 s) : ce qui a ete adopte
         t = draw(*op);
-        check(has(t, "4 commande(s) \xC2\xB7 1 \xC3\xA0 livrer") || has(t, "pas de r\xC3\xA9ponse du service"), "le tableau, ce qui est a livrer");
+        check(has(t, "4 commande(s) \xC2\xB7 1 \xC3\xA0 livrer") || has(t, "pas de r\xC3\xA9ponse du service") || has(t, "Le service ne r\xC3\xA9pond pas"), "le tableau, ce qui est a livrer");
         check(has(t, "Client d'essai") && has(t, "490,00\xC2\xA0\xE2\x82\xAC") && !has(t, "\xE2\x82\xAC (essai)") && has(t, "pay\xC3\xA9" "e, \xC3\xA0 livrer") &&
                   has(t, "livr\xC3\xA9" "e"),
               "les lignes : la societe, le montant (sans << (essai) >> : le mode est dans le detail), l'etat");

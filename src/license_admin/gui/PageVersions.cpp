@@ -385,7 +385,10 @@ protected:
         if (have_) lead += " \xC2\xB7 " + std::to_string(view_.total) + " PC suivis, dont " + std::to_string(view_.admins.size()) + " admins";
         lead += " \xC2\xB7 seul l'admin+ publie";
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
-        else if (!problem_.empty()) lead += " \xC2\xB7 service : " + listkit::shortError(problem_);   // 1.47.0 : l'infobulle dit tout
+        else if (!problem_.empty()) {   // 1.47.0 : une ligne ; l'infobulle dit tout
+            const std::string e = listkit::shortError(problem_);
+            lead += " \xC2\xB7 " + (e.rfind("Le service", 0) == 0 ? e : "service : " + e);
+        }
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, problem_.empty() ? c.textMuted : c.warning);
         if (panel_) paintPanel(ctx);
         if (!resend_.empty()) paintResend(ctx);
