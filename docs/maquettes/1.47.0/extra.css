@@ -1,3 +1,31 @@
+/* ============================================================================================================
+   1.47.0 - LES COULEURS DES GRAPHIQUES (la methode dataviz ; palettes passees par validate_palette.js, surface #ffffff)
+   A reprendre telles quelles dans toutes les planches : une couleur suit son entite, d'une planche a l'autre.
+   - LES ADMINS (identite ; l'ordre est toujours celui-ci, dans les legendes, les piles, les listes) :
+       Camille Essai (admin+) #6d4aff · Lea Essai #0b7fa3 · Hugo Essai #ea580c · Nina Essai (retiree) #db2777
+       (adjacents ET toutes paires : PASS ; #0b7fa3 = le #0e7490 de l'Admin un peu plus sature pour le plancher de chroma).
+       Un admin retire garde sa couleur dans les graphiques ; son avatar est pali (opacity .55) + la pastille « Retiree ».
+       Ines Essai : en attente (pas de donnees, avatar gris #94a3b8).
+   - LES TYPES D'ACTION (ordre fixe partout = les 13 droits de docs/ADMINS.md, puis la boutique) :
+       Creer et signer une licence · Prolonger une licence · Ajouter une option · Revoquer une licence · Retirer un PC ·
+       Modifier les offres · Creer, modifier une option · Annonces · Accepter, refuser une demande · Revoir le code ·
+       Supprimer un client · Exporter les clients · Ecrire aux clients · Boutique (livrer, revoir)
+       Un graphique d'UNE serie par type = une seule teinte (celle de l'admin dans sa fiche, sinon #2a78d6), pas une couleur par type.
+   - LA CRITICITE (etat, avec son libelle) : Info #94a3b8 · Moyenne #2563eb · Haute #d97706 · Critique #dc2626
+   - LES OFFRES (identite) : PERSONAL #1baf7a · PROFESSIONAL #6250d6 · ENTERPRISE #eda100 · Options (toutes) #e87ba4
+       (adjacents PASS ; aqua, jaune, rose sous 3:1 : toujours une legende + des etiquettes directes ou les valeurs a cote)
+       Decouverte (l'essai) : gris #a3adbf.
+   - UNE MESURE seule : #2a78d6 (trait 2 px, aire a 10 %) ; DEUX mesures sur le meme axe : #2a78d6 puis #eb6834.
+   - LA COMPARAISON (periode d'avant, l'an dernier) : gris #a3adbf, trait 1,5 px, toujours dans la legende.
+   - SEQUENTIEL (carte jour x heure, intensite) : #cde2fb #9ec5f4 #6da7ec #3987e5 #256abf #184f95 (0 = #f1f4f8).
+   - ORDINAL (les versions, de la plus ancienne a la plus recente) : #86b6ef #5598e7 #256abf #104281 (--ordinal PASS).
+   - DIVERGENT (entrees / sorties) : bleu #256abf #86b6ef au-dessus, rouge #f4a3a2 #e34948 en dessous, autour de 0.
+   - ETATS (alertes seulement, toujours avec icone + libelle) : bon #16a34a · attention #d97706 · grave #dc2626.
+   - Grille : traits fins #eef1f5 ; ligne de base #d5dce6 ; textes des axes #94a3b8 11 px ; jamais de pointilles.
+   - La barre laterale : <!--SIDE:stats--> (Pilotage > Statistiques), admins, journal, clients, commandes, boutique, dash...
+   Les composants des planches 00-07 (tuiles .kpi, cartes .gc, legendes .lg, periode .per, menus .cm, lignes depliees .unf)
+   sont dans planches.css (a lier si utile, sans le modifier).
+   ============================================================================================================ */
 /* 1.42 : les pieces en plus (champs, segments, bascules, calendrier, dialogues, presence) */
 :root{--acc:#6d4aff;--acc-50:#f1edff;--acc-100:#e4dcff;--acc-700:#4b2fd6;--acc-ring:rgba(109,74,255,.14)}
 .seg{display:inline-flex;background:var(--sunken);border-radius:10px;padding:3px;gap:2px}

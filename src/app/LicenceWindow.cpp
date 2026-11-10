@@ -261,8 +261,16 @@ private:
         // lignes a la largeur de la carte (onLayout), la carte aussi haute qu'il le faut (la rangee : la plus haute).
         std::vector<std::string> titleL, priceL, promoL, endL, descL, factsL;
         bool        priceInline{false};   // l'ancien prix et le nouveau sur une ligne
+        // 1.46.0 : LA BOUTIQUE - en vente en ligne : << Acheter -- 490,00 EUR TTC >> (l'article du catalogue) et << ou la
+        // demander sans paiement >> (la demande, comme avant) ; pas en vente : ni l'un ni l'autre (un clic la choisit).
+        std::string article, buy;
+        ui::Button* buyBtn{nullptr};
+        ui::Button* askBtn{nullptr};
     };
     void buildCards();
+    // 1.46.0 : les boutons << Acheter >> des cartes (refaits quand les articles en vente changent).
+    void syncBuyButtons();
+    void askWithoutPayment(const std::string& editionId);
     // 1.46.0 : les lignes d'une carte a la largeur `w`, et sa hauteur.
     [[nodiscard]] float layoutCard(Card& k, float w) const;
     // Ce que contiendra la licence d'une edition (le rappel pendant l'attente) ; vide : inconnue.
@@ -305,6 +313,14 @@ private:
     std::string        offerTitle_;
     float              leftW_{0};                // la largeur de la partie gauche (0 : tout)
     gfx::Rect          offerBox_{};
+    // 1.46.0 : la boutique - le catalogue (les articles en vente, le mode), les boutons des cartes, la commande qui attend
+    licence::shop::Catalogue cat_;
+    std::string        buyKey_{"\x01"};
+    std::vector<std::pair<std::string, ui::Button*>> buyBtns_, askBtns_;
+    ui::Button*        order_{nullptr};
+    std::uint64_t      orderNumber_{0};
+    std::string        orderText_;
+    float              orderY_{0}, testY_{0};
     core::ConnectionScope links_;
 };
 

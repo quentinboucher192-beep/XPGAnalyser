@@ -3226,6 +3226,18 @@ bool collect();
 bool launch(Job kind, std::function<Result()> fn) {
     Runner& r = runner();
     (void)collect();
+    // 1.46.0 : un regard en cours (GET /v1/etat toutes les 2 minutes, les commandes toutes les 10 secondes apres un achat) ne
+    // fait pas refuser un geste de l'utilisateur : il est attendu (3 secondes au plus), puis le geste part.
+    if (r.running && (r.job == Job::Watch || r.job == Job::Orders) && kind != Job::Watch && kind != Job::Orders && !g_stopping) {
+        for (int i = 0; i < 300 && r.running; ++i) {
+            {
+                std::lock_guard<std::mutex> lock(r.mutex);
+                if (r.finished) break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        (void)collect();
+    }
     if (r.running || g_stopping) return false;
     if (r.worker.joinable()) r.worker.join();
     r.running = true;
@@ -3352,7 +3364,8 @@ bool busy() noexcept { return runner().running; }
 
 Job busyJob() noexcept {
     const Job j = runner().running ? runner().job.load() : Job::None;
-    return j == Job::Watch ? Job::None : j;   // 1.39.0 : le regard ne se montre pas (les boutons restent permis)
+    // 1.39.0 : le regard ne se montre pas (les boutons restent permis) ; 1.46.0 : la lecture des commandes non plus
+    return j == Job::Watch || j == Job::Orders ? Job::None : j;
 }
 
 bool leaseHeldBack() noexcept { return runner().heldBack; }
