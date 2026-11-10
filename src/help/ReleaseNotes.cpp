@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.45.0", "09/11/2026", "\xC3\xA0 venir"},
+    {"1.46.0", "10/11/2026", "\xC3\xA0 venir"},
+    {"1.45.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 23 h 44"},
     {"1.44.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 18 h 28"},
     {"1.43.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 14 h 22"},
     {"1.42.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 12 h 37"},
@@ -189,6 +190,35 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.46.0 : la boutique, la fenetre Licence sans onglets empiles, Mon profil a part, les images en grand, les barres de defilement
+        note("1.46.0", "Projet", Kind::New,
+         "LA BOUTIQUE : une offre (ou une option) en vente en ligne a \xC2\xAB Acheter \xC2\xBB avec son montant TTC ; tu paies sur la page "
+         "s\xC3\xA9" "curis\xC3\xA9" "e de Stripe, dans ton navigateur : ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG, elle est redemand\xC3\xA9" "e \xC3\xA0 chaque "
+         "achat. La fen\xC3\xAAtre de la commande suit le paiement, puis ta licence arrive et s'installe d'elle-m\xC3\xAAme d\xC3\xA8s que l'\xC3\xA9" "diteur "
+         "la d\xC3\xA9livre ; Mes achats garde tes commandes et leurs re\xC3\xA7us. Si le paiement ne peut pas commencer (pas de r\xC3\xA9seau, "
+         "boutique ferm\xC3\xA9" "e), la fen\xC3\xAAtre le dit : rien n'est d\xC3\xA9" "bit\xC3\xA9.",
+         "licence", ""),
+        note("1.46.0", "Projet", Kind::Changed,
+         "LA FEN\xC3\x8ATRE LICENCE SANS ONGLETS EMPIL\xC3\x89S : elle s'ouvre sur un accueil (ton r\xC3\xA9sum\xC3\xA9, puis les rubriques en quatre "
+         "groupes : Ma licence, Obtenir ou \xC3\xA9tendre, D\xC3\xA9" "couvrir, R\xC3\xA9glages) ; chaque rubrique a son fil d'Ariane (\xC2\xAB Licence \xE2\x80\xBA "
+         "Demander ma licence \xC2\xBB : un clic sur Licence revient \xC3\xA0 l'accueil, la fl\xC3\xA8" "che montre les rubriques voisines ; Retour "
+         "arri\xC3\xA8re ou Alt+\xE2\x86\x90 aussi).",
+         "licence", ""),
+        note("1.46.0", "Projet", Kind::Changed,
+         "MON PROFIL a sa propre fen\xC3\xAAtre : l'accueil du Studio (Mon profil\xE2\x80\xA6), Aide \xE2\x80\xBA Mon profil\xE2\x80\xA6, et \xC2\xAB Modifier mon profil\xE2\x80\xA6 \xC2\xBB \xC3\xA0 "
+         "c\xC3\xB4t\xC3\xA9 du formulaire de Demander ma licence (qui se met \xC3\xA0 jour).",
+         "licence", ""),
+        note("1.46.0", "Projet", Kind::Changed,
+         "LES IMAGES EN GRAND : on change de fonctionnalit\xC3\xA9 sans fermer (\xE2\x80\xB9 la liste \xE2\x80\xBA, Page pr\xC3\xA9" "c. et Page suiv.) ; une "
+         "fonctionnalit\xC3\xA9 barr\xC3\xA9" "e (pas dans ta licence, ou pas dans l'offre choisie) montre aussi ses captures, avec \xC2\xAB pas dans ta "
+         "licence \xC2\xBB.",
+         "licence", ""),
+        note("1.46.0", "Projet", Kind::Fixed,
+         "LES BARRES DE D\xC3\x89" "FILEMENT se tirent \xC3\xA0 la souris (et un clic dans la piste avance d'une page) l\xC3\xA0 o\xC3\xB9 seule la molette "
+         "marchait : Demander ma licence, la fen\xC3\xAAtre de mise \xC3\xA0 jour, la liste des styles de l'IHM, la visionneuse de fichiers, "
+         "les suggestions d'un champ. Les cartes des offres ne coupent plus leur prix ni leur r\xC3\xA9" "duction ; l'onglet \xC3\x89" "ditions "
+         "retrouve ses colonnes.",
+         "licence", ""),
         // 1.45.0 : les sessions (retirer, partir, le journal, l'onglet Session, les gens dans l'explorateur), la fenetre Licence
         note("1.45.0", "IHM", Kind::New,
          "RETIRER QUELQU'UN D'UNE SESSION : dans le panneau Session, chaque \xC3\xA9quipier a \xC2\xAB Retirer de la session\xE2\x80\xA6 \xC2\xBB ; il revient \xC3\xA0 "

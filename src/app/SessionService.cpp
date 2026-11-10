@@ -1547,7 +1547,7 @@ std::string SessionService::exportJournal(std::string* why) {
     const auto fail = [&](std::string w) { if (why) *why = std::move(w); return std::string{}; };
     if (!active()) return fail("pas de session en cours");
     if (!host()) return fail("c'est " + hostName_ + " (l'h\xC3\xB4te) qui garde le journal : il l'exporte, et il l'enregistre avec le projet");
-    if (journal_.entries().empty()) return fail("le journal est vide : aucun changement depuis le d\xC3\xA9but de la session");
+    if (journal_.entries().empty()) return fail("le journal est vide : aucun changement depuis le d\xC3\xA9" "but de la session");
     const std::string folder = d_->hostFolder.empty() ? app_.projectFolder() : d_->hostFolder;
     if (folder.empty()) return fail("le projet n'a pas de dossier");
     const fs::path dir = u8p(folder) / "exports";
