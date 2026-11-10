@@ -7001,6 +7001,240 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
                     rec.lastMessage.empty() ? "-" : rec.lastMessage.c_str());
         return Step::Yield;
     }
+    // 1.46.0 : LA BOUTIQUE (docs/BOUTIQUE.md ; app/LicenceShop, les fenetres : LicenceShopWindows.cpp). Jamais de vraie carte :
+    // la page de paiement de Stripe ne s'ouvre pas dans un navigateur pendant un essai - la variable d'environnement
+    // XPG_NAVIGATEUR_ESSAI_JOURNAL=<fichier> y ecrit son adresse (une ligne ajoutee) a la place (core::openWebPage).
+    //   boutique-etat                   relit le catalogue (GET /v1/boutique) et ecrit ce que voit le Studio : ouverte ou
+    //                                   fermee, le mode (test, reel), le service, chaque article et son montant TTC
+    //   acheter ARTICLE|EDITION [JOURS]  le chemin du clic : une offre (ed:PROFESSIONAL ou PROFESSIONAL) - la fenetre Licence,
+    //                                   Demander ma licence, le bouton << Acheter -- ... TTC >> de sa carte ; une option
+    //                                   (opt:ai_advanced:365, ou ai_advanced 365) - son achat depuis Options ; puis le
+    //                                   recapitulatif, << Payer ... sur Stripe... >>, la commande ; ecrit son numero et
+    //                                   l'adresse de sa page de paiement (ouverte, ou ecrite dans le journal ci-dessus)
+    //   commande-attendre ETAT [N] [SECONDES]   attend que la commande N (la derniere sans N) soit dans cet etat (payee,
+    //                                   livree, expiree, annulee, echec_paiement, remboursee, a_revoir ; livree : sa livraison
+    //                                   appliquee ici - la licence activee, l'option renouvelee) ; 120 s par defaut
+    //   commande-annuler [N]            annule la commande a payer N (celle qui attend sans N)
+    //   commande-fenetre [N]            la fenetre << Commande n. N >> (la derniere sans N)
+    //   mes-achats                      relit les commandes de ce PC et les ecrit (n., date, article, montant, etat, recu)
+    if (cmd == "boutique-etat" || cmd == "mes-achats") {
+        namespace ls = licence::service;
+        namespace shop = licence::shop;
+        static bool               started = false;
+        static unsigned long long seen = 0, seenOrders = 0;
+        if (retries_ == 0) started = false;
+        if (!started) {
+            ls::poll();
+            if (ls::busy()) {
+                if (retries_ < 3000) return Step::Retry;
+                fail(cmd + " : un travail du service des licences ne finit pas");
+                return Step::Next;
+            }
+            if (std::string why; !ls::available(&why)) {
+                fail(cmd + " : " + why);
+                return Step::Next;
+            }
+            seen = ls::revision();
+            seenOrders = ls::ordersRevision();
+            started = cmd == "boutique-etat" ? ls::startShopRefresh() : ls::startOrders();
+            if (!started) {
+                fail(cmd + " : un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours");
+                return Step::Next;
+            }
+            return Step::Retry;
+        }
+        ls::poll();
+        if (ls::busy() || (cmd == "boutique-etat" ? ls::revision() == seen : ls::ordersRevision() == seenOrders)) {
+            if (retries_ < 3000) return Step::Retry;
+            fail(cmd + " : pas fini");
+            return Step::Next;
+        }
+        if (cmd == "boutique-etat") {
+            const auto r = ls::lastResult();
+            const shop::Catalogue cat = shop::catalogue();
+            std::printf("[script] boutique-etat : %s \xC2\xB7 mode %s \xC2\xB7 %zu article(s) \xC2\xB7 service %s \xC2\xB7 %s\n",
+                        !cat.known ? "sans boutique (service trop ancien)" : cat.selling() ? "ouverte" : "ferm\xC3\xA9" "e",
+                        cat.mode.empty() ? "-" : cat.mode.c_str(), cat.articles.size(), cat.serviceVersion.empty() ? "?" : cat.serviceVersion.c_str(),
+                        r.message.c_str());
+            for (const auto& a : cat.articles)
+                std::printf("[script]   %s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %s\n", a.id.c_str(), a.label.c_str(), shop::amountTtc(a.amount, cat.currency).c_str(),
+                            shop::buyLabel(a, cat.currency).c_str());
+            if (cat.test()) std::printf("[script]   %s\n", shop::testModeText().c_str());
+            if (!r.ok) fail("boutique-etat : " + r.message);
+            return Step::Yield;
+        }
+        const auto list = ls::orders();
+        std::printf("[script] mes-achats : %zu commande(s)\n", list.size());
+        for (const auto& o : list)
+            std::printf("[script]   n\xC2\xB0 %llu \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 %s \xC2\xB7 re\xC3\xA7u : %s%s\n", static_cast<unsigned long long>(o.number),
+                        ls::dateText(o.created).c_str(), o.label.c_str(), shop::amountTtc(o.amount, o.currency).c_str(), shop::stateLabel(o.state).c_str(),
+                        o.receiptUrl.empty() ? "-" : o.receiptUrl.c_str(), o.licence.empty() ? "" : (" \xC2\xB7 licence " + o.licence).c_str());
+        return Step::Yield;
+    }
+    if (cmd == "acheter") {
+        namespace ls = licence::service;
+        namespace shop = licence::shop;
+        static int                stage = 0;
+        static std::string        article;
+        static unsigned long long seen = 0;
+        if (retries_ == 0) stage = 0;
+        ls::poll();
+        if (stage == 0) {   // l'article (le catalogue relu par la synchro du lancement, ou boutique-etat)
+            if (ls::busy()) {
+                if (retries_ < 3000) return Step::Retry;
+                fail("acheter : un travail du service des licences ne finit pas");
+                return Step::Next;
+            }
+            const shop::Catalogue cat = shop::catalogue();
+            const std::string want = arg(1);
+            const shop::Article* a = cat.find(want);
+            if (!a && !want.empty() && arg(2).empty()) a = cat.edition(want);
+            if (!a && !arg(2).empty()) a = cat.option(want, std::atoi(arg(2).c_str()));
+            if (!cat.selling() || !a) {
+                fail("acheter : " + want + " n'est pas en vente en ligne (boutique " + (cat.known ? (cat.selling() ? "ouverte" : "ferm\xC3\xA9" "e") : "inconnue") + ")");
+                return Step::Next;
+            }
+            article = a->id;
+            if (a->kind == "edition") {   // le clic sur << Acheter >> de sa carte (Demander ma licence)
+                showLicenceWindow(app_, licence::kTabRequest);
+                stage = 1;
+                return Step::Retry;
+            }
+            // une option : son achat depuis Options (la duree en vente), le meme recapitulatif
+            showLicenceWindow(app_, licence::kTabOptions);
+            std::string text = a->label;
+            if (const auto reg = licensing::getRegistry())
+                if (const auto* o = reg->option(a->option)) text = (o->label.empty() ? o->id : o->label) + ", " + std::to_string(a->days) + " j";
+            licence::showPurchase(app_.menus(), article, text);
+            stage = 2;
+            return Step::Retry;
+        }
+        if (stage == 1) {
+            const std::string id = "licence.demande.acheter." + article.substr(3);
+            auto* b = top() ? dynamic_cast<ui::Button*>(top()->findById(id)) : nullptr;
+            if (!b || !shown(*b)) {
+                if (retries_ < 120) return Step::Retry;
+                fail("acheter : le bouton " + id + " n'est pas \xC3\xA0 l'\xC3\xA9" "cran");
+                return Step::Next;
+            }
+            std::printf("[script] acheter %s : %s\n", article.c_str(), b->text().c_str());
+            b->clicked->emit();
+            stage = 2;
+            return Step::Retry;
+        }
+        if (stage == 2) {   // le recapitulatif : << Payer ... sur Stripe... >>
+            if (!licence::purchaseWindowOpen()) {
+                if (retries_ < 120) return Step::Retry;
+                fail("acheter : le r\xC3\xA9" "capitulatif ne s'ouvre pas");
+                return Step::Next;
+            }
+            seen = ls::revision();
+            if (!licence::confirmPurchaseForTests()) {
+                fail("acheter : la commande ne part pas (le profil : la soci\xC3\xA9t\xC3\xA9, le courriel ?)");
+                return Step::Next;
+            }
+            stage = 3;
+            return Step::Retry;
+        }
+        if (ls::busy() || ls::revision() == seen) {
+            if (retries_ < 3000) return Step::Retry;
+            fail("acheter : la commande ne finit pas");
+            return Step::Next;
+        }
+        const auto r = ls::lastResult();
+        std::printf("[script] acheter %s : commande n\xC2\xB0 %llu \xC2\xB7 %s \xC2\xB7 %s\n", article.c_str(), static_cast<unsigned long long>(r.orderNumber),
+                    r.orderUrl.empty() ? "-" : r.orderUrl.c_str(), r.message.c_str());
+        if (!r.orderNumber || r.orderUrl.empty()) fail("acheter : " + r.message);
+        return Step::Yield;
+    }
+    if (cmd == "commande-attendre") {
+        namespace ls = licence::service;
+        namespace shop = licence::shop;
+        using clock = std::chrono::steady_clock;
+        static clock::time_point since, kicked;
+        if (retries_ == 0) since = kicked = clock::now();
+        const std::string want = arg(1);
+        const std::uint64_t n = arg(2).empty() ? 0 : std::strtoull(arg(2).c_str(), nullptr, 10);
+        const int limit = arg(3).empty() ? 120 : std::max(1, std::atoi(arg(3).c_str()));
+        ls::poll();
+        const auto list = ls::orders();
+        const shop::Order* o = n ? shop::findOrder(list, n) : (list.empty() ? nullptr : &list.front());
+        const bool reached = o && o->state == want && (want != shop::kDelivered || o->applied);
+        if (reached) {
+            const auto st = licensing::getLicenseState();
+            std::printf("[script] commande-attendre %s : n\xC2\xB0 %llu %s%s \xC2\xB7 licence de ce PC : %s %s\n", want.c_str(), static_cast<unsigned long long>(o->number),
+                        shop::stateLabel(o->state).c_str(), o->licence.empty() ? "" : (" (" + o->licence + ")").c_str(), st.licenseId.empty() ? "-" : st.licenseId.c_str(),
+                        licensing::statusLabel(st.status).c_str());
+            return Step::Yield;
+        }
+        if (clock::now() - since > std::chrono::seconds(limit)) {
+            fail("commande-attendre " + want + " : " + (o ? "la commande n\xC2\xB0 " + std::to_string(o->number) + " est " + shop::stateLabel(o->state) +
+                                                              (o->state == shop::kDelivered ? " (sa livraison pas encore appliqu\xC3\xA9" "e)" : "")
+                                                        : std::string("aucune commande")));
+            return Step::Next;
+        }
+        // relue toutes les 2 secondes (sans attendre la cadence du fil de fond)
+        if (!ls::busy() && clock::now() - kicked > std::chrono::seconds(2)) {
+            kicked = clock::now();
+            (void)ls::startOrders();
+        }
+        return Step::Retry;
+    }
+    if (cmd == "commande-annuler") {
+        namespace ls = licence::service;
+        namespace shop = licence::shop;
+        static bool               started = false;
+        static unsigned long long seen = 0;
+        if (retries_ == 0) started = false;
+        ls::poll();
+        if (!started) {
+            if (ls::busy()) {
+                if (retries_ < 3000) return Step::Retry;
+                fail("commande-annuler : un travail du service des licences ne finit pas");
+                return Step::Next;
+            }
+            std::uint64_t n = arg(1).empty() ? 0 : std::strtoull(arg(1).c_str(), nullptr, 10);
+            if (!n) {
+                const auto list = ls::orders();
+                if (const shop::Order* wo = shop::waitingOrder(list); wo && wo->state == shop::kToPay) n = wo->number;
+            }
+            if (!n) {
+                fail("commande-annuler : aucune commande \xC3\xA0 payer");
+                return Step::Next;
+            }
+            seen = ls::revision();
+            started = ls::startCancelOrder(n);
+            if (!started) {
+                fail("commande-annuler : un travail du service des licences est d\xC3\xA9j\xC3\xA0 en cours");
+                return Step::Next;
+            }
+            return Step::Retry;
+        }
+        if (ls::busy() || ls::revision() == seen) {
+            if (retries_ < 3000) return Step::Retry;
+            fail("commande-annuler : pas fini");
+            return Step::Next;
+        }
+        const auto r = ls::lastResult();
+        std::printf("[script] commande-annuler : %s\n", r.message.c_str());
+        if (!r.ok) fail("commande-annuler : " + r.message);
+        return Step::Yield;
+    }
+    if (cmd == "commande-fenetre") {
+        namespace ls = licence::service;
+        std::uint64_t n = arg(1).empty() ? 0 : std::strtoull(arg(1).c_str(), nullptr, 10);
+        if (!n) {
+            const auto list = ls::orders();
+            if (list.empty()) {
+                fail("commande-fenetre : aucune commande");
+                return Step::Next;
+            }
+            n = list.front().number;
+        }
+        licence::showOrder(app_.menus(), n);
+        std::printf("[script] commande-fenetre : n\xC2\xB0 %llu\n", static_cast<unsigned long long>(n));
+        return Step::Yield;
+    }
     // 1.27.0 : la section Execution des scripts d'une vue (l'onglet courant : les scripts de la vue).
     //   cycle-ajouter               un clic sur + Script de cycle (un nouveau script, apres l'etape 4, choisi)
     //   cycle-glisser N [tenir]     la pastille du script choisi tiree sous l'etape N (1..9) ; tenir : la souris

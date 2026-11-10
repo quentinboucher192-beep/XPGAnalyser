@@ -3349,7 +3349,7 @@ unsigned long long ordersRevision() noexcept {
 std::string openPage(const std::string& url) { return core::openWebPage(url); }
 
 std::string reopenPayment(const shop::Order& o) {
-    if (o.state != shop::kToPay || o.payUrl.empty()) return "La commande nÂ° " + std::to_string(o.number) + " n'attend plus son paiement.";
+    if (o.state != shop::kToPay || o.payUrl.empty()) return "La commande n\xC2\xB0 " + std::to_string(o.number) + " n'attend plus son paiement.";
     const std::string w = core::openWebPage(o.payUrl);
     if (!w.empty()) return w;
     Runner& r = runner();

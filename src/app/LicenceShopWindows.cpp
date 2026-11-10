@@ -54,11 +54,11 @@ std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w)
     if (w <= 8.f) return {};
     if (r.measure(s, f).width <= w) return s;
     std::string t = s;
-    while (!t.empty() && r.measure(t + "…", f).width > w) {
+    while (!t.empty() && r.measure(t + "\xE2\x80\xA6", f).width > w) {
         while (!t.empty() && (static_cast<unsigned char>(t.back()) & 0xC0) == 0x80) t.pop_back();
         if (!t.empty()) t.pop_back();
     }
-    return t + "…";
+    return t + "\xE2\x80\xA6";
 }
 
 // Des lignes coupees a la largeur (les mots entiers ; << \n >> : une nouvelle ligne).
@@ -114,7 +114,7 @@ gfx::Color toneColor(const ui::PaintContext& ctx, int tone, gfx::Color base) {
 
 // << 1 an >>, << 1 mois >>, << jusqu'a la fin de ta licence >>.
 std::string durationText(int days) {
-    if (days == 0) return "jusqu'à la fin de ta licence";
+    if (days == 0) return "jusqu'\xC3\xA0 la fin de ta licence";
     if (days == 7) return "1 semaine";
     if (days == 14) return "2 semaines";
     if (days == 30) return "1 mois";
@@ -169,13 +169,13 @@ PurchaseView purchaseView(const shop::Catalogue& cat, const std::string& article
             for (const auto& f : reg->features)
                 if (!f.retired) ++all;
             const int pcs = std::max(1, e->maxDevices);
-            std::string facts = e->type == "floating" ? std::to_string(pcs) + " postes en même temps" : std::to_string(pcs) + " PC";
-            facts += " · " + (e->type == "perpetual" || e->durationDays <= 0 ? std::string("sans fin") : durationText(e->durationDays));
-            facts += " · " + std::to_string(e->features.size()) + (all ? "/" + std::to_string(all) : std::string()) +
-                     (e->features.size() > 1 ? " fonctionnalités" : " fonctionnalité");
+            std::string facts = e->type == "floating" ? std::to_string(pcs) + " postes en m\xC3\xAAme temps" : std::to_string(pcs) + " PC";
+            facts += " \xC2\xB7 " + (e->type == "perpetual" || e->durationDays <= 0 ? std::string("sans fin") : durationText(e->durationDays));
+            facts += " \xC2\xB7 " + std::to_string(e->features.size()) + (all ? "/" + std::to_string(all) : std::string()) +
+                     (e->features.size() > 1 ? " fonctionnalit\xC3\xA9s" : " fonctionnalit\xC3\xA9");
             v.gives.push_back(facts);
         }
-        v.gives.push_back("Une licence en ligne à ton nom : elle s'active seule sur ce PC dès que l'éditeur l'a délivrée (aucun code à taper).");
+        v.gives.push_back("Une licence en ligne \xC3\xA0 ton nom : elle s'active seule sur ce PC d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e (aucun code \xC3\xA0 taper).");
     } else {
         const licensing::RegistryOptionView* o = reg ? reg->option(a->option) : nullptr;
         v.what = o && !o->label.empty() ? o->label : a->option;
@@ -192,31 +192,31 @@ PurchaseView purchaseView(const shop::Catalogue& cat, const std::string& article
             }
             v.gives.push_back("Ouvre : " + names);
         }
-        v.gives.push_back("Pour " + durationText(a->days) + (st.licenseId.empty() ? std::string() : ", ajoutée à ta licence " + st.licenseId) +
-                          " : elle arrive seule sur ce PC dès que l'éditeur l'a délivrée, puis s'arrête à sa date.");
-        if (st.licenseId.empty()) v.missing = "Une option s'ajoute à ta licence : active d'abord ta licence sur ce PC.";
+        v.gives.push_back("Pour " + durationText(a->days) + (st.licenseId.empty() ? std::string() : ", ajout\xC3\xA9" "e \xC3\xA0 ta licence " + st.licenseId) +
+                          " : elle arrive seule sur ce PC d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e, puis s'arr\xC3\xAAte \xC3\xA0 sa date.");
+        if (st.licenseId.empty()) v.missing = "Une option s'ajoute \xC3\xA0 ta licence : active d'abord ta licence sur ce PC.";
     }
     if (v.missing.empty()) {
-        if (v.company.empty()) v.missing = "Ta société manque : la licence achetée est à son nom (Modifier mon profil…).";
-        else if (v.email.empty()) v.missing = "Ton courriel manque : Stripe y envoie ta facture (Modifier mon profil…).";
+        if (v.company.empty()) v.missing = "Ta soci\xC3\xA9t\xC3\xA9 manque : la licence achet\xC3\xA9" "e est \xC3\xA0 son nom (Modifier mon profil\xE2\x80\xA6).";
+        else if (v.email.empty()) v.missing = "Ton courriel manque : Stripe y envoie ta facture (Modifier mon profil\xE2\x80\xA6).";
         else if (!licensing::gateway::plausibleEmail(v.email))
-            v.missing = "Ton courriel « " + v.email + " » ne ressemble pas à une adresse : corrige-le (Modifier mon profil…).";
+            v.missing = "Ton courriel \xC2\xAB " + v.email + " \xC2\xBB ne ressemble pas \xC3\xA0 une adresse : corrige-le (Modifier mon profil\xE2\x80\xA6).";
     }
-    v.confirm = "Payer " + v.amount + " sur Stripe…";
+    v.confirm = "Payer " + v.amount + " sur Stripe\xE2\x80\xA6";
     return v;
 }
 
 OrderView orderView(const shop::Order& o, licensing::Seconds now) {
     OrderView v;
-    v.title = o.number ? "Commande n° " + std::to_string(o.number) : std::string("Ta commande");
+    v.title = o.number ? "Commande n\xC2\xB0 " + std::to_string(o.number) : std::string("Ta commande");
     v.state = capitalized(shop::stateLabel(o.state));
     v.text = shop::stateText(o, now);
     v.tone = shop::stateTone(o.state);
     if (!o.label.empty()) v.facts.emplace_back("Article", o.label);
     if (o.amount > 0) v.facts.emplace_back("Montant", shop::amountTtc(o.amount, o.currency));
-    if (o.created) v.facts.emplace_back("Passée le", ls::dateText(o.created));
-    if (o.mode == "test") v.facts.emplace_back("Paiement", "d'essai : aucune carte réelle n'est débitée");
-    else if (o.mode == "reel") v.facts.emplace_back("Paiement", "par carte, sur la page sécurisée de Stripe");
+    if (o.created) v.facts.emplace_back("Pass\xC3\xA9" "e le", ls::dateText(o.created));
+    if (o.mode == "test") v.facts.emplace_back("Paiement", "d'essai : aucune carte r\xC3\xA9" "elle n'est d\xC3\xA9" "bit\xC3\xA9" "e");
+    else if (o.mode == "reel") v.facts.emplace_back("Paiement", "par carte, sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe");
     if (o.state == shop::kToPay && o.expires) v.facts.emplace_back("Page de paiement", "ouverte jusqu'au " + ls::dateText(o.expires));
     if (!o.licence.empty()) v.facts.emplace_back("Licence", o.licence);
     if (o.updated && o.updated != o.created) v.facts.emplace_back("Dernier changement", ls::dateText(o.updated));
@@ -232,10 +232,10 @@ std::string orderHint(const std::vector<shop::Order>& orders, int* tone) {
     if (tone) *tone = 0;
     if (!o) return {};
     if (tone) *tone = 2;
-    const std::string n = "commande n° " + std::to_string(o->number);
+    const std::string n = "commande n\xC2\xB0 " + std::to_string(o->number);
     if (o->state == shop::kToPay) return n + " : paiement en attente";
-    if (o->state == shop::kPaid) return n + " payée : licence en route";
-    return n + " : en revue chez l'éditeur";
+    if (o->state == shop::kPaid) return n + " pay\xC3\xA9" "e : licence en route";
+    return n + " : en revue chez l'\xC3\xA9" "diteur";
 }
 
 } // namespace licence
@@ -249,9 +249,9 @@ public:
         : ui::Widget("dialog.achat.corps"), menus_(menus), article_(std::move(article)), optionText_(std::move(optionText)), close_(std::move(close)) {
         pay_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Payer", "dialog.achat.payer")));
         pay_->setStyle(ui::Button::Style::Primary);
-        pay_->setTooltip("La page sécurisée de Stripe s'ouvre dans ton navigateur : tu y tapes ta carte (ni vue ni gardée par XPG).");
+        pay_->setTooltip("La page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe s'ouvre dans ton navigateur : tu y tapes ta carte (ni vue ni gard\xC3\xA9" "e par XPG).");
         cancel_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Annuler", "dialog.achat.annuler")));
-        profile_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Modifier mon profil…", "dialog.achat.profil")));
+        profile_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Modifier mon profil\xE2\x80\xA6", "dialog.achat.profil")));
         profile_->setStyle(ui::Button::Style::Flat);
         profile_->setIcon(ui::Icon::User);
         links_ += pay_->clicked->connect([this] { (void)pay(); });
@@ -287,7 +287,7 @@ public:
         f.licenseId = view_.licenseId;
         f.optionText = view_.optionText;
         if (!ls::startOrder(f)) {
-            say("Un travail du service des licences est en cours : réessaie dans un instant.", 2);
+            say("Un travail du service des licences est en cours : r\xC3\xA9" "essaie dans un instant.", 2);
             return false;
         }
         if (close_) close_(true);
@@ -311,7 +311,7 @@ protected:
         // les lignes, a la largeur
         givesL_.clear();
         for (const auto& g : view_.gives)
-            for (auto& l : wrap("· " + g, kSmall, iw)) givesL_.push_back(std::move(l));
+            for (auto& l : wrap("\xC2\xB7 " + g, kSmall, iw)) givesL_.push_back(std::move(l));
         missingL_ = view_.missing.empty() ? std::vector<std::string>{} : wrap(view_.missing, kSmall, iw - 20.f);
         cardL_ = wrap(view_.card, kSmall, iw - 34.f);
         const float lh = 20.f;
@@ -345,7 +345,7 @@ protected:
         r.fillRect({frame_.x, frame_.y, frame_.w, 42.f}, c.headerBg);
         ui::drawIcon(r, ui::Icon::Lock, {frame_.x + 14.f, frame_.y + 13.f, 16.f, 16.f}, c.text);
         r.drawText({frame_.x + 38.f, frame_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, fit(r, view_.title, kTitle, frame_.w - 90.f), kTitle, c.text);
-        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "×", kTitle, c.textMuted);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
         r.fillRect({frame_.x, frame_.y + 42.f, frame_.w, 1.f}, c.border);
         const float x = frame_.x + 20.f, iw = frame_.w - 40.f, lh = 20.f;
         float y = frame_.y + 42.f + 16.f;
@@ -369,16 +369,16 @@ protected:
         r.fillRect({x, y - 7.f, iw, 1.f}, c.border);
         y += 1.f + 14.f - 7.f + 7.f;
         // Facture a
-        r.drawText({x, billY_}, "Facturé à (ton profil)", kSmall, c.textMuted);
+        r.drawText({x, billY_}, "Factur\xC3\xA9 \xC3\xA0 (ton profil)", kSmall, c.textMuted);
         float by = billY_ + 26.f;
         const struct {
             const char* label;
             std::string value;
-        } rows[3] = {{"Société", view_.company}, {"Nom", view_.name}, {"Courriel", view_.email}};
+        } rows[3] = {{"Soci\xC3\xA9t\xC3\xA9", view_.company}, {"Nom", view_.name}, {"Courriel", view_.email}};
         for (const auto& row : rows) {
             r.drawText({x, by}, row.label, kSmall, c.textMuted);
             const bool none = row.value.empty();
-            r.drawText({x + 110.f, by}, fit(r, none ? std::string("—") : row.value, kSmall, iw - 110.f), kSmall, none ? c.textMuted : c.text);
+            r.drawText({x + 110.f, by}, fit(r, none ? std::string("\xE2\x80\x94") : row.value, kSmall, iw - 110.f), kSmall, none ? c.textMuted : c.text);
             by += 24.f;
         }
         y = by + 10.f;
@@ -399,7 +399,7 @@ protected:
             const gfx::Rect band{x, y, iw, 34.f};
             r.fillRoundedRect(band, warn.withAlpha(36), 6.f);
             ui::shapes::strokeRoundedRect(r, band, warn, 6.f, 1.f);
-            const std::string t = "ESSAI · " + view_.testMode;
+            const std::string t = "ESSAI \xC2\xB7 " + view_.testMode;
             r.drawText({band.x + 12.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, t, kSmall, band.w - 24.f), kSmall, c.text);
             y += band.h + 8.f;
         }
@@ -512,10 +512,10 @@ public:
         pay_ = mk("Rouvrir la page de paiement", "dialog.commande.payer", ui::Button::Style::Primary);
         pay_->setIcon(ui::Icon::Export);
         cancel_ = mk("Annuler la commande", "dialog.commande.annuler", ui::Button::Style::Danger);
-        receipt_ = mk("Ouvrir le reçu", "dialog.commande.recu", ui::Button::Style::Default);
+        receipt_ = mk("Ouvrir le re\xC3\xA7u", "dialog.commande.recu", ui::Button::Style::Default);
         receipt_->setIcon(ui::Icon::Document);
         licence_ = mk("Voir ma licence", "dialog.commande.licence", ui::Button::Style::Primary);
-        check_ = mk("Vérifier maintenant", "dialog.commande.verifier", ui::Button::Style::Flat);
+        check_ = mk("V\xC3\xA9rifier maintenant", "dialog.commande.verifier", ui::Button::Style::Flat);
         check_->setIcon(ui::Icon::Refresh);
         closeButton_ = mk("Fermer", "dialog.commande.fermer", ui::Button::Style::Default);
         links_ += pay_->clicked->connect([this] { reopen(); });
@@ -523,7 +523,7 @@ public:
         links_ += receipt_->clicked->connect([this] {
             if (const auto* o = order(); o && !o->receiptUrl.empty()) {
                 const std::string w = ls::openPage(o->receiptUrl);
-                say(w.empty() ? std::string("Le reçu s'ouvre dans ton navigateur.") : "Le reçu ne s'ouvre pas : " + w, w.empty() ? 1 : 3);
+                say(w.empty() ? std::string("Le re\xC3\xA7u s'ouvre dans ton navigateur.") : "Le re\xC3\xA7u ne s'ouvre pas : " + w, w.empty() ? 1 : 3);
             }
         });
         links_ += licence_->clicked->connect([this] {
@@ -532,8 +532,8 @@ public:
             showLicenceWindow(m, licence::kTabMine);
         });
         links_ += check_->clicked->connect([this] {
-            if (ls::startOrders()) say("Lecture de ta commande auprès du service…", 0);
-            else say("Un travail du service des licences est en cours : la commande est relue juste après.", 0);
+            if (ls::startOrders()) say("Lecture de ta commande aupr\xC3\xA8s du service\xE2\x80\xA6", 0);
+            else say("Un travail du service des licences est en cours : la commande est relue juste apr\xC3\xA8s.", 0);
         });
         links_ += closeButton_->clicked->connect([this] {
             if (close_) close_();
@@ -554,11 +554,11 @@ public:
             if (number_ == 0 && res.job == ls::Job::Order) {
                 if (res.orderNumber) {
                     number_ = res.orderNumber;
-                    say(res.orderReopened ? "Une commande de ce PC attendait déjà son paiement : sa page est rouverte dans ton navigateur."
+                    say(res.orderReopened ? "Une commande de ce PC attendait d\xC3\xA9j\xC3\xA0 son paiement : sa page est rouverte dans ton navigateur."
                                           : "La page de paiement de Stripe s'ouvre dans ton navigateur.",
                         res.orderReopened ? 2 : 1);
                 } else {
-                    failed_ = res.message.empty() ? std::string("La commande n'a pas pu être passée.") : res.message;
+                    failed_ = res.message.empty() ? std::string("La commande n'a pas pu \xC3\xAAtre pass\xC3\xA9" "e.") : res.message;
                 }
                 refresh();
             } else if (res.job == ls::Job::CancelOrder || res.job == ls::Job::Orders) {
@@ -583,14 +583,14 @@ public:
             view_ = licence::orderView(*o, now);
         } else {
             view_ = licence::OrderView{};
-            view_.title = number_ ? "Commande n° " + std::to_string(number_) : std::string("Ta commande");
+            view_.title = number_ ? "Commande n\xC2\xB0 " + std::to_string(number_) : std::string("Ta commande");
             if (!failed_.empty()) {
-                view_.state = "Commande non passée";
+                view_.state = "Commande non pass\xC3\xA9" "e";
                 view_.text = failed_;
                 view_.tone = 3;
             } else if (number_ == 0) {
-                view_.state = "Création de la commande…";
-                view_.text = "Le service des licences crée ta commande et demande sa page de paiement à Stripe. Elle s'ouvrira dans ton navigateur.";
+                view_.state = "Cr\xC3\xA9" "ation de la commande\xE2\x80\xA6";
+                view_.text = "Le service des licences cr\xC3\xA9" "e ta commande et demande sa page de paiement \xC3\xA0 Stripe. Elle s'ouvrira dans ton navigateur.";
                 view_.tone = 2;
             } else {
                 view_.state = "Inconnue";
@@ -605,7 +605,7 @@ public:
         show(licence_, view_.licence);
         show(check_, number_ != 0 && (view_.pay || view_.cancel || (order() && shop::open(order()->state))));
         for (auto* b : {cancel_, check_}) b->setEnabled(idle);
-        cancel_->setText(ls::busyJob() == ls::Job::CancelOrder ? std::string("Annulation…") : std::string("Annuler la commande"));
+        cancel_->setText(ls::busyJob() == ls::Job::CancelOrder ? std::string("Annulation\xE2\x80\xA6") : std::string("Annuler la commande"));
         invalidateLayout();
         invalidate();
     }
@@ -660,7 +660,7 @@ protected:
         r.fillRect({frame_.x, frame_.y, frame_.w, 42.f}, c.headerBg);
         ui::drawIcon(r, ui::Icon::Document, {frame_.x + 14.f, frame_.y + 13.f, 16.f, 16.f}, c.text);
         r.drawText({frame_.x + 38.f, frame_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, view_.title, kTitle, c.text);
-        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "×", kTitle, c.textMuted);
+        r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
         r.fillRect({frame_.x, frame_.y + 42.f, frame_.w, 1.f}, c.border);
         const float x = frame_.x + 20.f, iw = frame_.w - 40.f, lh = 20.f;
         float y = frame_.y + 42.f + 16.f;
@@ -701,7 +701,7 @@ protected:
         std::string foot;
         if (ls::busyJob() == ls::Job::Order) foot = ls::jobText(ls::Job::Order);
         else if (const shop::Order* o = order(); o && shop::open(o->state))
-            foot = (checkedAt_ ? "Vérifiée à " + ls::dateText(checkedAt_).substr(11) + " · " : std::string()) +
+            foot = (checkedAt_ ? "V\xC3\xA9rifi\xC3\xA9" "e \xC3\xA0 " + ls::dateText(checkedAt_).substr(11) + " \xC2\xB7 " : std::string()) +
                    (o->state == shop::kToPay ? "le Studio regarde toutes les 10 secondes" : "le Studio regarde toutes les 5 minutes");
         if (!foot.empty()) r.drawText({x, y}, fit(r, foot, kSmall, iw), kSmall, c.textMuted);
     }
@@ -732,14 +732,14 @@ private:
         if (!o) return;
         const std::uint64_t n = o->number;
         auto dialog = std::make_unique<MessageDialog>("Annuler la commande",
-                                                      "La commande n° " + std::to_string(n) + " (" + o->label + ") est annulée et sa page de paiement fermée : "
-                                                      "rien n'est débité. Tu pourras en passer une autre.",
+                                                      "La commande n\xC2\xB0 " + std::to_string(n) + " (" + o->label + ") est annul\xC3\xA9" "e et sa page de paiement ferm\xC3\xA9" "e : "
+                                                      "rien n'est d\xC3\xA9" "bit\xC3\xA9. Tu pourras en passer une autre.",
                                                       MessageDialog::Icon::Question, "Annuler la commande");
         dialog->setCancelLabel("Garder la commande");
         menus_.ShowDialog(std::move(dialog), [this, n](const menu::DialogResult& r) {
             if (!r.accepted()) return;
-            if (!ls::startCancelOrder(n)) say("Un travail du service des licences est en cours : réessaie dans un instant.", 2);
-            else say("Annulation de la commande…", 0);
+            if (!ls::startCancelOrder(n)) say("Un travail du service des licences est en cours : r\xC3\xA9" "essaie dans un instant.", 2);
+            else say("Annulation de la commande\xE2\x80\xA6", 0);
             refresh();
         });
     }

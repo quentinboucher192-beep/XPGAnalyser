@@ -199,12 +199,14 @@ public:
         int fds[2];
         if (::pipe(fds) != 0) return;
         const std::string script = source + "/tests/outils/faux_stripe.mjs";
+        const pid_t parent = ::getpid();
         const pid_t pid = ::fork();
         if (pid == 0) {
             ::setsid();
             ::dup2(fds[1], 1);
             ::close(fds[0]);
             ::close(fds[1]);
+            xpg_test::childHygiene(parent);   // 1.46.0 : il meurt avec l'essai, sans heriter du verrou de la construction
             ::execlp("node", "node", script.c_str(), "--cle", key.c_str(), static_cast<char*>(nullptr));
             ::_exit(127);
         }

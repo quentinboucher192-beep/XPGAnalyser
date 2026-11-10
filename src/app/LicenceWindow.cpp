@@ -73,6 +73,7 @@
 
 #include <algorithm>
 #include <array>      // 1.46.0 : les pages des rubriques
+#include <cctype>
 #include <cmath>
 #include <ctime>
 #include <filesystem>
@@ -406,6 +407,7 @@ private:
     };
     void loadForm();
     void send();
+    void updateBuy();   // 1.46.0 : << Acheter -- 99,00 EUR TTC >> pour la duree choisie (en vente en ligne)
     [[nodiscard]] std::int64_t now() const;
     [[nodiscard]] int days() const;   // -1 : des dates
     [[nodiscard]] std::string priceOf(int days) const;
@@ -421,6 +423,9 @@ private:
     ui::InputText*   message_{nullptr};
     ui::Button*      send_{nullptr};
     ui::Button*      extend_{nullptr};
+    ui::Button*      buy_{nullptr};       // 1.46.0 : acheter la duree choisie en ligne
+    std::string      buyArticle_, buyText_;
+    bool             buyTest_{false};
     std::vector<Row> rows_;
     std::string      chosen_, edition_, licenseId_, customer_;
     std::vector<std::string> activeLines_;   // << Exports avances - active, encore 6 j - jusqu'au dim. 15/11/2026 au soir >>
@@ -436,8 +441,12 @@ private:
 // ---- 1.42.0 : Mes achats - l'historique complet du client (offres, prolongations, options ; fini ou en cours) ----
 class PurchasesPanel final : public ui::Widget {
 public:
-    explicit PurchasesPanel(LicenceBody& body);
+    PurchasesPanel(LicenceBody& body, menu::MenuManager& menus);
     void refresh();
+    // 1.46.0 : les commandes en ligne de ce PC (la boutique) relues (le fil du service) - le tableau des commandes seul.
+    void refreshOrders();
+    [[nodiscard]] std::size_t orderCount() const noexcept { return orderRows_.size(); }
+    [[nodiscard]] const std::vector<licence::shop::Order>& orderRows() const noexcept { return orderRows_; }
     // Les lignes montrees (le filtre) : les essais et le CSV.
     [[nodiscard]] std::size_t shownCount() const noexcept { return shown_.size(); }
     [[nodiscard]] std::string csv() const;
@@ -449,9 +458,20 @@ protected:
 private:
     void rebuild();
     void exportCsv();
+    void openReceipt();
+    void openOrder();
+    [[nodiscard]] const licence::shop::Order* selectedOrder() const;
     [[nodiscard]] std::int64_t now() const;
 
     LicenceBody&                     body_;
+    menu::MenuManager&               menus_;
+    // 1.46.0 : Mes commandes en ligne - le tableau (n., date, article, montant, etat, recu), Ouvrir le recu, Voir la commande
+    ui::TableView*                   orders_{nullptr};
+    std::shared_ptr<ui::ITableModel> ordersModel_;
+    ui::Button*                      receipt_{nullptr};
+    ui::Button*                      order_{nullptr};
+    std::vector<licence::shop::Order> orderRows_;
+    float                            ordersY_{0};
     ui::TableView*                   table_{nullptr};
     std::shared_ptr<ui::ITableModel> model_;
     ui::Button*                      all_{nullptr};
@@ -615,6 +635,8 @@ private:
     OptionsPanel*     options_{nullptr};     // 1.42.0
     PurchasesPanel*   purchases_{nullptr};   // 1.42.0
     unsigned long long seenRevision_{0};     // 1.34.0 : le dernier travail du service releve
+    unsigned long long seenOrders_{0};       // 1.46.0 : les commandes de ce PC (la boutique)
+    unsigned long long seenShop_{0};         // 1.46.0 : le catalogue de la boutique
     bool              wasBusy_{false};
     licensing::Seconds devicesCheckedAt_{0};  // 1.38.0 : la derniere fois que Mes appareils a regarde l'age de sa liste
     ui::Button*       import_{nullptr};
@@ -750,7 +772,7 @@ LicenceBody::LicenceBody(LicenceWindow& owner, menu::MenuManager& menus, int tab
     activation_ = activation.get();
     auto options = std::make_unique<OptionsPanel>(*this, menus);   // 1.42.0
     options_ = options.get();
-    auto purchases = std::make_unique<PurchasesPanel>(*this);    // 1.42.0
+    auto purchases = std::make_unique<PurchasesPanel>(*this, menus);    // 1.42.0
     purchases_ = purchases.get();
     (void)addPage(licence::kTabActivation, std::move(activation));   // 1.35.0
     (void)addPage(licence::kTabMine, std::move(mine));
@@ -877,7 +899,9 @@ void LicenceBody::refreshHome() {
             if (o.activeAt(st.trustedNow ? st.trustedNow : static_cast<licensing::Seconds>(now), st.expiresAt)) ++active;
         home_->setHint(L::kTabOptions, active ? std::to_string(active) + (active > 1 ? " actives" : " active") : std::string(), active ? 1 : 0);
         const std::size_t bought = !st.purchases.empty() ? st.purchases.size() : (hasLicence ? 1u + st.options.size() : 0u);
-        home_->setHint(L::kTabPurchases, bought ? std::to_string(bought) + (bought > 1 ? " achats" : " achat") : std::string(), 0);
+        int orderTone = 0;   // 1.46.0 : la commande qui attend (a payer, payee) passe devant le compte
+        if (const std::string hint = L::orderHint(L::service::orders(), &orderTone); !hint.empty()) home_->setHint(L::kTabPurchases, hint, orderTone);
+        else home_->setHint(L::kTabPurchases, bought ? std::to_string(bought) + (bought > 1 ? " achats" : " achat") : std::string(), 0);
     }
     // Fonctionnalites : celles ouvertes ; Editions : les offres ; Parametres : le registre
     {
@@ -900,6 +924,19 @@ void LicenceBody::refreshHome() {
 void LicenceBody::poll() {
     namespace lg = licence::service;
     lg::poll();
+    // 1.46.0 : les commandes relues (toutes les 10 secondes apres un achat), le catalogue change : Mes achats, la commande
+    // qui attend, les boutons << Acheter >> et l'accueil - sans tout relire.
+    if (const auto rev = lg::ordersRevision(); rev != seenOrders_) {
+        seenOrders_ = rev;
+        purchases_->refreshOrders();
+        online_->refresh();
+        refreshHome();
+    }
+    if (const auto rev = licence::shop::catalogueRevision(); rev != seenShop_) {
+        seenShop_ = rev;
+        online_->refresh();
+        options_->refresh();
+    }
     if (const auto rev = lg::revision(); rev != seenRevision_) {
         seenRevision_ = rev;
         wasBusy_ = lg::busy();
@@ -1500,6 +1537,15 @@ OptionsPanel::OptionsPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Wi
     send_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Envoyer la demande", "licence.options.envoyer")));
     send_->setStyle(ui::Button::Style::Primary);
     extend_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Prolonger\xE2\x80\xA6", "licence.options.prolonger")));
+    // 1.46.0 : la boutique en ligne - la duree choisie, si elle est en vente
+    buy_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Acheter", "licence.options.acheter")));
+    buy_->setStyle(ui::Button::Style::Primary);
+    buy_->setVisibility(ui::Visibility::Collapsed);
+    buy_->setTooltip("Paiement par carte sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe (ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG) : l'option arrive "
+                     "d'elle-m\xC3\xAAme d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e.");
+    links_ += buy_->clicked->connect([this] {
+        if (!buyArticle_.empty()) licence::showPurchase(menus_, buyArticle_, buyText_);
+    });
     links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& r) {
         if (loading_ || r.empty() || r.front() >= rows_.size()) return;
         chosen_ = rows_[r.front()].id;
@@ -1507,6 +1553,7 @@ OptionsPanel::OptionsPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Wi
     });
     links_ += duration_->selectionChanged->connect([this](int) {
         if (loading_) return;
+        updateBuy();   // 1.46.0
         if (days() < 0 && !to_->date()) {
             const std::int64_t start = from_->date() ? from_->date() : ui::DatePicker::dayOf(now());
             to_->setRangeStart(start);
@@ -1671,10 +1718,12 @@ void OptionsPanel::loadForm() {
     const auto reg = licensing::getRegistry();
     const auto* o = reg ? reg->option(chosen_) : nullptr;
     std::vector<ui::DropDown::Item> items;
+    const auto cat = licence::shop::catalogue();   // 1.46.0 : ce qui s'achete en ligne
     if (o)
         for (const auto& d : o->durations) {
             ui::DropDown::Item it{optionDurationText(d.first), std::to_string(d.first)};
             it.note = d.second.empty() ? std::string("sur demande") : d.second;
+            if (const auto* a = cat.option(o->id, d.first)) it.note += " \xC2\xB7 en ligne " + licence::shop::amountTtc(a->amount, cat.currency);
             items.push_back(std::move(it));
         }
     items.push_back({optionDurationText(-1), "dates"});
@@ -1691,6 +1740,26 @@ void OptionsPanel::loadForm() {
     send_->setText(licence::service::busyJob() == licence::service::Job::Request ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer la demande"));
     extend_->setVisibility(activeId_.empty() ? ui::Visibility::Collapsed : ui::Visibility::Visible);
     loading_ = false;
+    updateBuy();
+    invalidateLayout();
+    invalidate();
+}
+
+void OptionsPanel::updateBuy() {
+    const auto cat = licence::shop::catalogue();
+    const auto reg = licensing::getRegistry();
+    const auto* o = reg ? reg->option(chosen_) : nullptr;
+    const int d = days();
+    const licence::shop::Article* a = o && d >= 0 ? cat.option(o->id, d) : nullptr;
+    // une demande manuelle qui attend n'empeche pas d'acheter (une commande est a part)
+    const bool can = a && (blocked_.empty() || blocked_ == pendingText_);
+    buyArticle_ = can ? a->id : std::string();
+    buyText_ = o ? (o->label.empty() ? o->id : o->label) + ", " + optionDurationText(d) : std::string();
+    buyTest_ = can && cat.test();
+    buy_->setText(a ? licence::shop::buyLabel(*a, cat.currency) : std::string("Acheter"));
+    buy_->setVisibility(can ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    buy_->setEnabled(can && licence::service::busyJob() == licence::service::Job::None);
+    send_->setStyle(can ? ui::Button::Style::Default : ui::Button::Style::Primary);   // un seul bouton principal
     invalidateLayout();
     invalidate();
 }
@@ -1779,6 +1848,11 @@ void OptionsPanel::onLayout() {
     message_->setBounds({fx, fy + 18.f, fw, 30.f});
     const float bw = std::max(170.f, send_->sizeHint().preferred.w + 12.f);
     send_->setBounds({formBox_.right() - 14.f - bw, formBox_.bottom() - 14.f - 32.f, bw, 32.f});
+    if (buy_->visibility() == ui::Visibility::Visible) {   // 1.46.0 : Acheter, au-dessus (ou a cote s'il y a la place)
+        const float aw = std::max(170.f, buy_->sizeHint().preferred.w + 12.f);
+        if (aw + 8.f + bw <= fw) buy_->setBounds({send_->bounds().x - 8.f - aw, send_->bounds().y, aw, 32.f});
+        else buy_->setBounds({formBox_.right() - 14.f - aw, send_->bounds().y - 40.f, aw, 32.f});
+    }
 }
 
 void OptionsPanel::onPaint(const ui::PaintContext& ctx) {
@@ -1819,18 +1893,39 @@ void OptionsPanel::onPaint(const ui::PaintContext& ctx) {
         r.drawText({fx + fw - pw, fy - 2.f}, price, kValue, c.text);
         fy += 26.f;
     }
-    const std::string note = !blocked_.empty() ? blocked_
-                                               : "Aucun paiement ici : l'\xC3\xA9" "diteur re\xC3\xA7oit ta demande et l'accepte. L'option arrive toute seule sur tes PC.";
+    const bool buyable = buy_->visibility() == ui::Visibility::Visible;
+    std::string note = !blocked_.empty() && !buyable ? blocked_
+                                                     : "Aucun paiement ici : l'\xC3\xA9" "diteur re\xC3\xA7oit ta demande et l'accepte. L'option arrive toute seule sur tes PC.";
+    if (buyable)   // 1.46.0 : la boutique en ligne
+        note = "Ach\xC3\xA8te-la en ligne (par carte, sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe), ou envoie ta demande \xC3\xA0 l'\xC3\xA9" "diteur sans paiement. "
+               "Elle arrive toute seule sur tes PC." + (buyTest_ ? " " + licence::shop::testModeText() + "." : std::string());
+    const float buttonsTop = buyable ? std::min(send_->bounds().y, buy_->bounds().y) : send_->bounds().y;
     for (const auto& l : wrapText(r, note, kSmall, fw)) {
-        if (fy > send_->bounds().y - 20.f) break;
-        r.drawText({fx, fy}, l, kSmall, !blocked_.empty() ? ctx.theme.tone(ui::Tone::Warning, c.text) : c.textMuted);
+        if (fy > buttonsTop - 20.f) break;
+        r.drawText({fx, fy}, l, kSmall, !blocked_.empty() && !buyable ? ctx.theme.tone(ui::Tone::Warning, c.text) : c.textMuted);
         fy += 18.f;
     }
     r.drawText({x, footY_}, "Tes options pass\xC3\xA9" "es sont dans Mes achats.", kSmall, c.textMuted);
 }
 
 // ------------------------------------------------------------------ Mes achats
-PurchasesPanel::PurchasesPanel(LicenceBody& body) : ui::Widget("licence.achats"), body_(body) {
+PurchasesPanel::PurchasesPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.achats"), body_(body), menus_(menus) {
+    // 1.46.0 : les commandes en ligne de ce PC (au-dessus de l'historique des licences)
+    orders_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.achats.commandes")));
+    orders_->setColumns({{"N\xC2\xB0", 60.f}, {"Date", 130.f}, {"Article", 280.f}, {"Montant TTC", 120.f}, {"\xC3\x89tat", 190.f}, {"Re\xC3\xA7u", 120.f}});
+    orders_->setSelectionMode(ui::SelectionMode::Single);
+    receipt_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Ouvrir le re\xC3\xA7u", "licence.achats.recu")));
+    receipt_->setIcon(ui::Icon::Document);
+    receipt_->setTooltip("Le re\xC3\xA7u de Stripe (sa facture), dans ton navigateur.");
+    order_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Voir la commande", "licence.achats.commande")));
+    links_ += receipt_->clicked->connect([this] { openReceipt(); });
+    links_ += order_->clicked->connect([this] { openOrder(); });
+    links_ += orders_->activated->connect([this](ui::RowIndex) { openOrder(); });
+    links_ += orders_->selectionChanged->connect([this](const std::vector<ui::RowIndex>&) {
+        const auto* o = selectedOrder();
+        receipt_->setEnabled(o && !o->receiptUrl.empty());
+        order_->setEnabled(o != nullptr);
+    });
     table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.achats.table")));
     table_->setColumns({{"Date", 110.f}, {"Achat", 330.f}, {"P\xC3\xA9riode", 220.f}, {"Prix HT", 110.f}, {"\xC3\x89tat", 150.f}});
     table_->setSelectionMode(ui::SelectionMode::Single);
@@ -1918,6 +2013,59 @@ void PurchasesPanel::refresh() {
     tile_[2][1] = std::to_string(all__.size()) + (all__.size() > 1 ? " achats" : " achat");
     tile_[2][2] = priced ? euros(total) + " HT en tout" : std::string();
     rebuild();
+    refreshOrders();
+}
+
+void PurchasesPanel::refreshOrders() {
+    namespace shop = licence::shop;
+    const std::uint64_t keep = selectedOrder() ? selectedOrder()->number : 0;
+    orderRows_ = licence::service::orders();
+    std::vector<std::vector<std::string>> cells;
+    std::vector<int> tones;
+    for (const auto& o : orderRows_) {
+        cells.push_back({std::to_string(o.number), licence::service::dateText(o.created), o.label.empty() ? o.article : o.label,
+                         shop::amountTtc(o.amount, o.currency) + (o.mode == "test" ? " (essai)" : ""), shop::stateLabel(o.state),
+                         o.receiptUrl.empty() ? std::string("\xE2\x80\x94") : std::string("Ouvrir le re\xC3\xA7u")});
+        tones.push_back(shop::stateTone(o.state));
+    }
+    ordersModel_ = std::make_shared<Rows>(std::vector<std::string>{"N\xC2\xB0", "Date", "Article", "Montant TTC", "\xC3\x89tat", "Re\xC3\xA7u"}, std::move(cells),
+                                          [tones](ui::RowIndex r, std::size_t c) {
+                                              ui::CellStyle st;
+                                              if (c == 4 && r < tones.size()) {
+                                                  st.fgTone = tones[r] == 1 ? ui::Tone::Ok : tones[r] == 2 ? ui::Tone::Warning : tones[r] == 3 ? ui::Tone::Error : ui::Tone::None;
+                                                  st.bold = tones[r] != 0;
+                                              }
+                                              if (c == 5 && r < tones.size()) st.fgTone = ui::Tone::Info;
+                                              return st;
+                                          });
+    orders_->setModel(ordersModel_);
+    for (std::size_t i = 0; i < orderRows_.size(); ++i)
+        if (orderRows_[i].number == keep) orders_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    const auto* o = selectedOrder();
+    receipt_->setEnabled(o && !o->receiptUrl.empty());
+    order_->setEnabled(o != nullptr);
+    const bool any = !orderRows_.empty();
+    for (ui::Widget* w : std::initializer_list<ui::Widget*>{orders_, receipt_, order_}) w->setVisibility(any ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    invalidateLayout();
+    invalidate();
+}
+
+const licence::shop::Order* PurchasesPanel::selectedOrder() const {
+    const auto rows = orders_->selectedModelRows();
+    if (rows.empty() || rows.front() >= orderRows_.size()) return nullptr;
+    return &orderRows_[rows.front()];
+}
+
+void PurchasesPanel::openReceipt() {
+    const auto* o = selectedOrder();
+    if (!o || o->receiptUrl.empty()) return body_.say("Choisis une commande qui a un re\xC3\xA7u (pay\xC3\xA9" "e).", 2);
+    const std::string w = licence::service::openPage(o->receiptUrl);
+    if (!w.empty()) return body_.say("Le re\xC3\xA7u ne s'ouvre pas : " + w, 3);
+    body_.say("Le re\xC3\xA7u de la commande n\xC2\xB0 " + std::to_string(o->number) + " s'ouvre dans ton navigateur.", 1);
+}
+
+void PurchasesPanel::openOrder() {
+    if (const auto* o = selectedOrder()) licence::showOrder(menus_, o->number);
 }
 
 void PurchasesPanel::rebuild() {
@@ -2012,6 +2160,18 @@ void PurchasesPanel::onLayout() {
     y += 80.f;
     timeline_ = {x, y, w, 44.f};
     y += 54.f;
+    // 1.46.0 : Mes commandes en ligne (s'il y en a) : le titre et ses boutons, le tableau (4 lignes au plus a la fois)
+    ordersY_ = 0.f;
+    if (!orderRows_.empty()) {
+        ordersY_ = y;
+        const float ow = order_->sizeHint().preferred.w + 12.f, rw = receipt_->sizeHint().preferred.w + 16.f;
+        order_->setBounds({x + w - ow, y - 2.f, ow, 28.f});
+        receipt_->setBounds({x + w - ow - 6.f - rw, y - 2.f, rw, 28.f});
+        y += 32.f;
+        const float th = 30.f + 26.f * static_cast<float>(std::min<std::size_t>(4, orderRows_.size())) + 4.f;
+        orders_->setBounds({x, y, w, th});
+        y += th + 12.f;
+    }
     float bx = x;
     for (ui::Button* btn : {all_, offers_, options_}) {
         const float bw = btn->sizeHint().preferred.w + 10.f;
@@ -2032,6 +2192,11 @@ void PurchasesPanel::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x, b.y + 10.f}, "Mes achats", gfx::semibold(kTitle), c.text);
     r.drawText({x, leadY_}, fit(r, "Tout ce que tu as pris depuis ta premi\xC3\xA8re licence : les offres, les prolongations, les options. M\xC3\xAAme ce qui est fini.", kSmall, w),
                kSmall, c.textMuted);
+    if (ordersY_ > 0.f) {   // 1.46.0
+        const std::string t = "Mes commandes en ligne (" + std::to_string(orderRows_.size()) + ")";
+        r.drawText({x, ordersY_ + 2.f}, t, kSmall, c.text);
+        r.drawText({x + 1.f, ordersY_ + 2.f}, t, kSmall, c.text);
+    }
     for (int i = 0; i < 3; ++i) {
         const auto& t = tiles_[i];
         r.fillRoundedRect(t, c.windowBg, 8.f);
@@ -2421,6 +2586,13 @@ OnlinePanel::OnlinePanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widg
     links_ += cancel_->clicked->connect([this] { askCancel(); });
     links_ += check_->clicked->connect([this] { doCheck(); });
     links_ += profile_->clicked->connect([this] { showProfileWindow(menus_); });
+    // 1.46.0 : la commande qui attend (a payer, payee) : sa fenetre
+    order_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Voir la commande", "licence.demande.commande")));
+    order_->setIcon(ui::Icon::Document);
+    order_->setVisibility(ui::Visibility::Collapsed);
+    links_ += order_->clicked->connect([this] {
+        if (orderNumber_) licence::showOrder(menus_, orderNumber_);
+    });
     // 1.38.0 : l'offre choisie - ses fonctionnalites et la capture de celle qu'on clique (zoom, en grand).
     offer_ = &static_cast<FeatureTablePanel&>(addChild(std::make_unique<FeatureTablePanel>("licence.demande.offre", "licence.demande.offre.liste")));
     offer_->setVertical(true);
@@ -2479,6 +2651,64 @@ void OnlinePanel::buildCards() {
         if (cards_.size() >= 8) break;   // une boutique lisible
     }
     if (std::none_of(cards_.begin(), cards_.end(), [this](const Card& k) { return k.id == chosen_; })) chosen_.clear();
+    // 1.46.0 : la boutique en ligne - le montant TTC du catalogue (un service 1.46.0 ou plus, la boutique ouverte)
+    cat_ = licence::shop::catalogue();
+    for (auto& k : cards_)
+        if (const auto* a = cat_.edition(k.id)) {
+            k.article = a->id;
+            k.buy = licence::shop::buyLabel(*a, cat_.currency);
+        }
+    syncBuyButtons();
+}
+
+void OnlinePanel::syncBuyButtons() {
+    std::string key;
+    for (const auto& k : cards_)
+        if (!k.article.empty()) key += k.id + "=" + k.buy + ";";
+    if (key != buyKey_) {
+        buyKey_ = key;
+        for (auto& [id, b] : buyBtns_) (void)removeChild(*b);
+        for (auto& [id, b] : askBtns_) (void)removeChild(*b);
+        buyBtns_.clear();
+        askBtns_.clear();
+        for (const auto& k : cards_) {
+            if (k.article.empty()) continue;
+            auto* buy = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(k.buy, "licence.demande.acheter." + k.id)));
+            buy->setStyle(ui::Button::Style::Primary);
+            buy->setTooltip("Paiement par carte sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe (ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG) : ta licence "
+                            "arrive d'elle-m\xC3\xAAme d\xC3\xA8s que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e.");
+            const std::string article = k.article;
+            links_ += buy->clicked->connect([this, article] { licence::showPurchase(menus_, article); });
+            auto* ask = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("ou la demander sans paiement", "licence.demande.demander." + k.id)));
+            ask->setStyle(ui::Button::Style::Flat);
+            const std::string id = k.id;
+            links_ += ask->clicked->connect([this, id] { askWithoutPayment(id); });
+            buyBtns_.emplace_back(k.id, buy);
+            askBtns_.emplace_back(k.id, ask);
+        }
+    }
+    for (auto& k : cards_) {
+        k.buyBtn = nullptr;
+        k.askBtn = nullptr;
+        for (auto& [id, b] : buyBtns_)
+            if (id == k.id) k.buyBtn = b;
+        for (auto& [id, b] : askBtns_)
+            if (id == k.id) k.askBtn = b;
+    }
+}
+
+// 1.46.0 : << ou la demander sans paiement >> - l'offre choisie, la demande en dessous (la partie gauche y defile).
+void OnlinePanel::askWithoutPayment(const std::string& editionId) {
+    chosen_ = editionId;
+    buildOffer();
+    const auto b = bounds();
+    scroll_ = std::max(0.f, scroll_ + (fieldsY_ - (b.y + 70.f)));
+    std::string label = editionId;
+    for (const auto& k : cards_)
+        if (k.id == editionId) label = k.label;
+    body_.say("\xC3\x89" "dition choisie : " + label + ". Remplis ta demande ci-dessous, puis Envoyer \xC3\xA0 l'\xC3\xA9" "diteur (sans paiement).", 0);
+    invalidateLayout();
+    invalidate();
 }
 
 std::string OnlinePanel::futureText(const std::string& id) const {
@@ -2530,6 +2760,21 @@ void OnlinePanel::refresh() {
     check_->setVisibility(available_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     for (auto* b : {send_, cancel_, check_}) b->setEnabled(busy_ == ls::Job::None);
     buildOffer();
+    for (const auto& k : cards_)   // 1.46.0 : la boutique en ligne
+        for (ui::Button* btn : {k.buyBtn, k.askBtn})
+            if (btn) {
+                btn->setVisibility(form ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+                btn->setEnabled(busy_ == ls::Job::None);
+            }
+    {   // 1.46.0 : la commande qui attend (a payer, payee, a revoir)
+        const auto orders = ls::orders();
+        const auto* w = licence::shop::waitingOrder(orders);
+        orderNumber_ = w ? w->number : 0;
+        orderText_ = w ? licence::orderHint(orders) : std::string();
+        if (!orderText_.empty()) orderText_[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(orderText_[0])));
+        order_->setVisibility(available_ && w ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        order_->setText(w ? "Voir la commande n\xC2\xB0 " + std::to_string(w->number) : std::string("Voir la commande"));
+    }
     send_->setText(busy_ == ls::Job::Request ? std::string("Envoi en cours\xE2\x80\xA6") : std::string("Envoyer \xC3\xA0 l'\xC3\xA9" "diteur"));
     cancel_->setText(busy_ == ls::Job::CancelRequest ? std::string("Annulation en cours\xE2\x80\xA6") : std::string("Annuler la demande"));
     check_->setText(busy_ == ls::Job::Device ? std::string("V\xC3\xA9rification en cours\xE2\x80\xA6") : std::string("V\xC3\xA9rifier maintenant"));
@@ -2670,7 +2915,7 @@ ui::EventResult OnlinePanel::onEvent(const ui::InputEvent& ev) {
     // 1.37.0 : la boutique - un clic choisit une edition, un second clic la rend (l'editeur choisira).
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && available_ && !pending_)
         for (const auto& k : cards_)
-            if (k.box.contains(d->pos)) {
+            if (k.box.contains(d->pos) && !(k.buyBtn && k.buyBtn->bounds().contains(d->pos)) && !(k.askBtn && k.askBtn->bounds().contains(d->pos))) {
                 chosen_ = chosen_ == k.id ? std::string() : k.id;
                 buildOffer();   // 1.38.0 : la colonne de droite suit l'offre choisie
                 body_.say(chosen_.empty() ? std::string("Aucune \xC3\xA9" "dition choisie : l'\xC3\xA9" "diteur la choisira avec toi.")
@@ -2772,8 +3017,9 @@ float OnlinePanel::layoutCard(Card& k, float w) const {
     k.factsL = wrapDotted(k.facts, kSmall, iw);
     const float lhTitle = ui::lineHeight(kValue) + 2.f;
     const std::size_t priceLines = k.priceInline ? 1 : k.priceL.size() + k.promoL.size();
+    const float buttons = k.buyBtn ? 8.f + 32.f + 2.f + 26.f : 0.f;   // 1.46.0 : Acheter, ou la demander sans paiement
     return 8.f + static_cast<float>(k.titleL.size()) * lhTitle + static_cast<float>(priceLines) * 19.f + static_cast<float>(k.endL.size()) * 18.f +
-           static_cast<float>(k.descL.size()) * 18.f + 4.f + static_cast<float>(k.factsL.size()) * 18.f + 8.f;
+           static_cast<float>(k.descL.size()) * 18.f + 4.f + static_cast<float>(k.factsL.size()) * 18.f + 8.f + buttons;
 }
 
 void OnlinePanel::onLayout() {
@@ -2803,11 +3049,20 @@ void OnlinePanel::onLayout() {
     }
     const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(620.f, W - labelW));
     float y = rowsY_;
+    // 1.46.0 : la commande qui attend : une ligne et son bouton (sa fenetre)
+    orderY_ = y;
+    if (order_->visibility() == ui::Visibility::Visible) {
+        const float ow = std::ceil(order_->sizeHint().preferred.w + 14.f);
+        order_->setBounds({x + W - ow, y, ow, 30.f});
+        y += 40.f;
+    }
     if (available_ && !pending_) {
         // 1.37.0 : la boutique - les cartes des editions, sur une ou deux rangees.
         shopY_ = y;
         if (!cards_.empty()) {
             y += 24.f;
+            testY_ = y;   // 1.46.0 : le paiement d'essai (une ligne)
+            if (cat_.selling() && cat_.test() && std::any_of(cards_.begin(), cards_.end(), [](const Card& k) { return k.buyBtn != nullptr; })) y += 30.f;
             const std::size_t n = cards_.size();
             // 1.46.0 : des cartes de 210 px au moins (avant 180 : leurs lignes coupees), aussi hautes que leurs lignes ; une rangee
             // a la hauteur de sa plus haute carte
@@ -2817,8 +3072,14 @@ void OnlinePanel::onLayout() {
                 float rowH = 0.f;
                 for (std::size_t i = row * perRow; i < std::min(n, (row + 1) * perRow); ++i) rowH = std::max(rowH, layoutCard(cards_[i], cw));
                 rowH = std::ceil(rowH);
-                for (std::size_t i = row * perRow; i < std::min(n, (row + 1) * perRow); ++i)
-                    cards_[i].box = {x + static_cast<float>(i % perRow) * (cw + kCardGap), y, cw, rowH};
+                for (std::size_t i = row * perRow; i < std::min(n, (row + 1) * perRow); ++i) {
+                    auto& k = cards_[i];
+                    k.box = {x + static_cast<float>(i % perRow) * (cw + kCardGap), y, cw, rowH};
+                    if (k.buyBtn && k.askBtn) {   // 1.46.0 : au bas de la carte
+                        k.askBtn->setBounds({k.box.x + 8.f, k.box.bottom() - 6.f - 26.f, k.box.w - 16.f, 26.f});
+                        k.buyBtn->setBounds({k.box.x + 8.f, k.box.bottom() - 6.f - 26.f - 2.f - 32.f, k.box.w - 16.f, 32.f});
+                    }
+                }
                 y += rowH + kCardGap;
             }
             y += 4.f;
@@ -2855,7 +3116,7 @@ void OnlinePanel::onLayout() {
         }
         y += 44.f;
     }
-    infoY_ = rowsY_;
+    infoY_ = orderY_ + (order_->visibility() == ui::Visibility::Visible ? 40.f : 0.f);   // 1.46.0 : sous la commande qui attend
     footY_ = y;
     // 1.42.0 : la hauteur de la partie gauche (avec les lignes du bas : la derniere reponse, la verification) ; plus
     // basse que l'onglet, elle defile.
@@ -2912,11 +3173,30 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
         r.drawText({offerBox_.x + 1.f, offerBox_.y}, t, kSmall, c.text);
     }
     if (leftW_ > 0.f) W = std::min(leftW_, W);
+    // 1.46.0 : la commande qui attend (son bouton a droite : sa fenetre)
+    if (order_->visibility() == ui::Visibility::Visible && !orderText_.empty()) {
+        const gfx::Rect band{x, orderY_, W, 30.f};
+        r.fillRect(band, c.headerBg);
+        r.fillRect({band.x, band.y, 3.f, band.h}, warn);
+        r.drawText({band.x + 12.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, orderText_, kSmall, W - order_->bounds().w - 30.f), kSmall, c.text);
+    }
     if (!pending_) {
         // 1.37.0 : la boutique.
         if (!cards_.empty()) {
-            r.drawText({x, shopY_}, "Choisis ta licence (facultatif : sinon l'\xC3\xA9" "diteur la choisit avec toi) - aucun paiement ici, l'\xC3\xA9" "diteur te contacte.",
+            const bool selling = std::any_of(cards_.begin(), cards_.end(), [](const Card& k) { return k.buyBtn != nullptr; });
+            // 1.46.0 : une offre en vente en ligne s'achete (la carte, sur la page de Stripe) ; toutes se demandent sans paiement
+            r.drawText({x, shopY_},
+                       fit(r, selling ? std::string("Ach\xC3\xA8te ta licence en ligne (par carte, sur la page de Stripe : elle arrive seule), ou demande-la \xC3\xA0 l'\xC3\xA9" "diteur sans paiement.")
+                                      : std::string("Choisis ta licence (facultatif : sinon l'\xC3\xA9" "diteur la choisit avec toi) - aucun paiement ici, l'\xC3\xA9" "diteur te contacte."),
+                           kSmall, W),
                        kSmall, c.textMuted);
+            if (selling && cat_.test()) {   // 1.46.0 : le paiement d'essai se voit
+                const gfx::Color hot = ctx.theme.tone(ui::Tone::Warning, c.accent);
+                const gfx::Rect band{x, testY_, W, 24.f};
+                r.fillRoundedRect(band, hot.withAlpha(36), 4.f);
+                r.drawText({band.x + 10.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, "ESSAI \xC2\xB7 " + licence::shop::testModeText(), kSmall, W - 20.f), kSmall,
+                           c.text);
+            }
             for (const auto& k : cards_) {
                 const bool on = k.id == chosen_;
                 r.fillRect(k.box, on ? c.headerBg : c.inputBg);

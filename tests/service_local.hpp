@@ -29,6 +29,23 @@
 //  Ou est le depot : le parametre `sourceDir`, sinon la variable XPG_SOURCE_DIR,
 //  sinon le dossier de ce fichier (__FILE__ : .../tests/service_local.hpp).
 //  XPG_SERVICE_LANCEUR peut nommer un autre lancer-local.sh.
+//
+//  1.46.0 : RIEN NE RESTE APRES L'ESSAI, MEME EN ECHEC. Avant, un essai qui partait
+//  sans son destructeur (abort, exception non attrapee, std::exit, un signal)
+//  laissait tourner le lanceur, wrangler et workerd - et ils gardaient les
+//  descripteurs de l'essai, dont le verrou d'une construction (flock) : la suivante
+//  attendait sans fin. Maintenant (childHygiene, dans l'enfant, avant exec) :
+//    - PR_SET_PDEATHSIG (Linux) : le lanceur recoit SIGTERM des que l'essai meurt,
+//      quelle qu'en soit la cause ; son piege (lancer-local.sh) arrete wrangler et
+//      ses workerd ;
+//    - aucun descripteur au-dela de 0, 1, 2 n'est herite (close_range, sinon une
+//      boucle) : ni le verrou, ni les tubes d'un autre service ou du faux Stripe ;
+//    - le tube que l'essai garde est FD_CLOEXEC (une console lancee par popen ne
+//      l'herite pas).
+//  Le meme pour tout programme qu'un essai lance a part (le faux Stripe : FakeStripe).
+//  `flock -o` (le verrou ferme avant la commande) suffit aussi pour le verrou : il
+//  n'est alors tenu que par flock, qui le rend a la fin de la commande, meme si un
+//  descendant reste.
 // =============================================================================
 #pragma once
 
@@ -49,9 +66,109 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#if defined(__linux__)
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#endif
 #endif
 
 namespace xpg_test {
+
+#if !defined(_WIN32)
+// 1.46.0 : DANS L'ENFANT, apres fork et la mise en place de 0, 1, 2, avant exec (voir plus haut) : il meurt avec l'essai
+// (`parent` : le pid de l'essai, lu AVANT fork) et n'herite d'aucun autre descripteur. Seulement des appels permis
+// apres fork (prctl, getppid, close, syscall, sysconf, kill).
+inline void childHygiene(pid_t parent) noexcept {
+#if defined(__linux__)
+    (void)::prctl(PR_SET_PDEATHSIG, SIGTERM);
+    if (::getppid() != parent) ::_exit(126);   // l'essai est deja parti (entre fork et prctl)
+#else
+    (void)parent;
+#endif
+#if defined(__linux__) && defined(SYS_close_range)
+    if (::syscall(SYS_close_range, 3U, ~0U, 0U) == 0) return;
+#endif
+    long max = ::sysconf(_SC_OPEN_MAX);
+    if (max < 0 || max > 65536) max = 65536;
+    for (int fd = 3; fd < static_cast<int>(max); ++fd) (void)::close(fd);
+}
+
+// 1.46.0 : LE FAUX STRIPE (tests/outils/faux_stripe.mjs) lance a part pour un essai : node, son port lu de sa sortie
+// (<< faux stripe pret sur le port N >>), arrete a la fin (et avec l'essai : childHygiene). Les appels (__essai/...) :
+// l'essai, avec son propre client HTTP.
+class FakeStripeProcess {
+public:
+    FakeStripeProcess(const std::string& sourceDir, const std::string& key) {
+        int fds[2];
+        if (::pipe(fds) != 0) return;
+        const std::string script = sourceDir + "/tests/outils/faux_stripe.mjs";
+        const pid_t parent = ::getpid();
+        const pid_t pid = ::fork();
+        if (pid < 0) {
+            ::close(fds[0]);
+            ::close(fds[1]);
+            return;
+        }
+        if (pid == 0) {
+            ::setsid();
+            ::dup2(fds[1], 1);
+            const int nul = ::open("/dev/null", O_RDWR);
+            if (nul >= 0) {
+                ::dup2(nul, 0);
+                ::dup2(nul, 2);
+            }
+            childHygiene(parent);
+            ::execlp("node", "node", script.c_str(), "--cle", key.c_str(), static_cast<char*>(nullptr));
+            ::_exit(127);
+        }
+        ::close(fds[1]);
+        pid_ = pid;
+        std::string out;
+        for (int i = 0; i < 150 && port_ == 0; ++i) {
+            struct pollfd p{fds[0], POLLIN, 0};
+            if (::poll(&p, 1, 100) > 0) {
+                char buf[256];
+                const ssize_t n = ::read(fds[0], buf, sizeof buf);
+                if (n <= 0) break;
+                out.append(buf, static_cast<std::size_t>(n));
+                const auto at = out.find("port ");
+                if (at != std::string::npos && out.find('\n', at) != std::string::npos) port_ = std::atoi(out.c_str() + at + 5);
+            }
+        }
+        ::close(fds[0]);
+    }
+    ~FakeStripeProcess() { stop(); }
+    FakeStripeProcess(const FakeStripeProcess&) = delete;
+    FakeStripeProcess& operator=(const FakeStripeProcess&) = delete;
+    void stop() {
+        if (pid_ <= 0) return;
+        ::kill(-pid_, SIGTERM);
+        int st = 0;
+        bool gone = false;
+        for (int i = 0; i < 60 && !gone; ++i) {
+            const pid_t r = ::waitpid(pid_, &st, WNOHANG);
+            if (r == pid_ || (r < 0 && errno == ECHILD)) gone = true;
+            else {
+                struct timespec ts{0, 50 * 1000000L};
+                ::nanosleep(&ts, nullptr);
+            }
+        }
+        if (!gone) {
+            ::kill(-pid_, SIGKILL);
+            ::waitpid(pid_, &st, 0);
+        }
+        pid_ = -1;
+        port_ = 0;
+    }
+    [[nodiscard]] bool ready() const noexcept { return port_ > 0; }
+    [[nodiscard]] int port() const noexcept { return port_; }
+    [[nodiscard]] std::string base() const { return "http://127.0.0.1:" + std::to_string(port_); }
+
+private:
+    int   port_{0};
+    pid_t pid_{-1};
+};
+#endif
 
 class LocalService {
 public:
@@ -237,6 +354,7 @@ private:
         }
         const std::string portArg = std::to_string(wantedPort > 0 ? wantedPort : 0);   // avant fork : rien n'est alloue dans l'enfant
         const double t0 = nowSeconds();
+        const pid_t parent = ::getpid();   // 1.46.0 : childHygiene
         const pid_t pid = ::fork();
         if (pid < 0) {
             ::close(fds[0]);
@@ -266,12 +384,14 @@ private:
             if (opt_.contractLimits) ::unsetenv("XPG_LIMITES_ESSAI");
             else ::setenv("XPG_LIMITES_ESSAI", "sans", 1);
             for (const auto& [k, v] : opt_.env) ::setenv(k.c_str(), v.c_str(), 1);   // 1.46.0
+            childHygiene(parent);   // 1.46.0 : il meurt avec l'essai, sans heriter du verrou ni des tubes
             ::execl("/bin/bash", "bash", script_.c_str(), portArg.c_str(), stateDir_.c_str(), keysCsv_.c_str(), static_cast<char*>(nullptr));
             ::_exit(127);
         }
         ::close(fds[1]);
         pid_ = pid;
         outFd_ = fds[0];
+        (void)::fcntl(outFd_, F_SETFD, FD_CLOEXEC);   // 1.46.0 : pas herite par une console lancee par l'essai
         std::string out;
         const std::string marker = "service pret sur le port ";
         const double deadline = t0 + opt_.timeoutSeconds + 5;

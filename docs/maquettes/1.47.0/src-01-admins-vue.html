@@ -1,0 +1,157 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - administrateurs, la vue d'ensemble</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:12px}
+.kpis .kpi{padding:10px 13px 9px}
+.split{display:flex;gap:16px;margin-top:12px;height:690px}
+.tablecard{flex:1;min-width:0;overflow:hidden;display:flex;flex-direction:column}
+table.t{table-layout:fixed}
+table.t th{padding:9px 10px;font-size:11px;white-space:nowrap}
+table.t th .ico{width:12px;height:12px;vertical-align:-2px;margin-left:2px;color:#cbd5e1}
+table.t th.srt{color:var(--violet-700)} table.t th.srt .ico{color:var(--violet)}
+table.t td{padding:5px 8px;vertical-align:middle;height:47px;white-space:nowrap}
+table.t th{padding:9px 8px;letter-spacing:.01em;font-size:10.5px}
+table.t th .ico{margin-left:1px}
+table.t td:first-child,table.t th:first-child{padding-left:14px}
+.nmc{display:flex;align-items:center;gap:9px}
+.nmc b{font-weight:650;white-space:nowrap}
+.nmc .cap{font-size:11.5px;white-space:nowrap}
+.big{font:650 15px Inter;font-feature-settings:"cv11","ss01"}
+.actc{display:flex;align-items:center;gap:8px}
+tr.dim td{color:var(--muted)}
+.unfp{padding:12px 16px 12px 16px}
+.figs{display:grid;grid-template-columns:repeat(6,1fr);gap:0;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+.figs>div{padding:8px 12px;border-left:1px solid var(--line)}
+.figs>div:first-child{border-left:0}
+.figs .k{font-size:11px;color:var(--muted);white-space:nowrap}
+.figs .v{font:650 15px Inter;margin-top:1px;font-feature-settings:"cv11","ss01";white-space:nowrap}
+.figs .v small{font:600 11px Inter;margin-left:4px}
+.r2{display:grid;grid-template-columns:276px 1fr;gap:12px;margin-top:10px}
+.rch{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:10px;align-items:center;font-size:11.5px}
+.rch span{display:inline-flex;align-items:center;gap:4px;color:var(--ink2);white-space:nowrap}
+.rch span .ico{width:12px;height:12px;stroke-width:2.6}
+.rch .no{color:var(--faint)}.rch .wa{color:#b45309;font-weight:600}
+.blk{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.blk .bt{font:650 12px Inter;display:flex;align-items:center;gap:8px;margin-bottom:6px;white-space:nowrap}
+.blk .bt .cap{font-weight:500;font-size:11px}
+.la{display:flex;gap:8px;align-items:baseline;font-size:12px;padding:2.5px 0;border-bottom:1px solid #f1f4f8;white-space:nowrap;overflow:hidden}
+.la:last-child{border-bottom:0}
+.la .w{color:var(--faint);width:62px;flex:none;font-size:11.5px}
+.la b{font-weight:600}
+.rg{display:grid;grid-template-columns:1fr 1fr;column-gap:8px;row-gap:3px}
+.rg span{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink2);white-space:nowrap}
+.rg span .ico{width:12px;height:12px;stroke-width:2.6;flex:none}
+.rg span.no{color:var(--faint)}
+.rg span.wa{color:#b45309}
+.alc{width:372px;flex:none;display:flex;flex-direction:column;overflow:hidden}
+.alc .hh{display:flex;align-items:center;gap:8px;padding:11px 14px 9px;border-bottom:1px solid var(--line)}
+.alc .al{padding:8px 12px}.alc .al .t{font-size:12px;line-height:1.35}.alc .al .a{margin-top:2px;font-size:11.5px}
+.stk{display:flex}.stk .av3{width:22px;height:22px;font-size:10px;border-radius:7px;border:2px solid #fff}.stk .av3+.av3{margin-left:-6px}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:admins-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i><b>Administrateurs</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+   <div class="row" style="align-items:flex-end;gap:14px">
+    <div><div class="h1">Administrateurs</div><div class="muted" style="margin-top:3px">3 actifs, 1 en attente, 1 retirée · du 12/10 au 10/11, comparé aux 30 jours d'avant</div></div>
+    <div class="per" style="margin-left:auto"><div class="seg"><span>7 j</span><span class="on">30 j</span><span>90 j</span><span>12 mois</span><span>Tout</span><span><i data-i="calendar"></i>Dates…</span></div>
+     <div class="cmp">comparé à <b>la période d'avant</b><i data-i="down"></i></div></div>
+    <span class="btn primary"><i data-i="userplus"></i>Ajouter un admin…</span>
+   </div>
+   <div class="tabs" style="margin-top:12px"><span class="on"><i data-i="chart" class="sm"></i>Vue d'ensemble</span><span><i data-i="users" class="sm"></i>Qui fait quoi</span><span><i data-i="lock" class="sm"></i>Droits <span class="c">2 profils</span></span><span><i data-i="scroll" class="sm"></i>Journal des admins <span class="c">263</span></span></div>
+
+   <div class="kpis">
+    <div class="kpi"><div class="k"><i data-i="shuser"></i>Admins</div><div class="v">3 <small>actifs</small></div><div class="s">1 en attente · 1 retirée</div>
+     <div class="stk" style="position:absolute;right:12px;top:12px"><span class="av3 cC">C</span><span class="av3 cL">L</span><span class="av3 cH">H</span><span class="av3 cI">I</span><span class="av3 cN gone">N</span></div></div>
+    <div class="kpi"><div class="k"><i data-i="activity"></i>Actions</div><div class="v"><!--V:act--> <span class="dl neu" style="font-size:12px">−1 %</span></div><div class="s">267 avant · tous les admins</div><div class="sp" style="top:34px"><!--G:kpi_actions--></div></div>
+    <div class="kpi"><div class="k"><i data-i="inbox"></i>Demandes en attente</div><div class="v">5</div><div class="s">réponse en 5 h 35 <span class="dl good"><i data-i="trenddown"></i>−18 %</span></div><div class="s" style="margin-top:1px">la plus ancienne attend 1 j 3 h</div></div>
+    <div class="kpi"><div class="k"><i data-i="key"></i>Licences signées</div><div class="v"><!--V:lic--> <span class="dl good" style="font-size:12px"><i data-i="trend"></i>+7 %</span></div>
+     <div class="seg2" style="height:8px;margin-top:7px"><i style="width:73.7%;background:#0b7fa3"></i><i style="width:26.3%;background:#6d4aff"></i></div>
+     <div class="lg" style="margin-top:5px;font-size:11px;gap:10px"><span><i style="background:#0b7fa3;width:8px;height:8px"></i>les admins 56</span><span><i style="background:#6d4aff;width:8px;height:8px"></i>toi 20</span></div></div>
+    <div class="kpi"><div class="k"><i data-i="cart"></i>Montant encaissé</div><div class="v"><!--V:eur--></div><div class="s"><span class="dl good"><i data-i="trend"></i>+17 %</span> · 39 commandes livrées</div><div class="sp" style="top:34px"><!--G:kpi_eur--></div></div>
+    <div class="kpi"><div class="k"><i data-i="alert"></i>Alertes</div><div class="v">7</div><div class="s"><span class="bad2">1 critique</span> · 3 hautes · 3 à voir</div></div>
+   </div>
+
+   <div class="split">
+    <div class="card tablecard">
+     <table class="t">
+      <colgroup><col style="width:196px"><col style="width:166px"><col style="width:72px"><col style="width:90px"><col style="width:84px"><col style="width:96px"><col style="width:122px"><col></colgroup>
+      <tr><th>Admin<i data-i="sort"></i></th><th class="srt">Actions<i data-i="arrowd"></i></th><th>Licences<i data-i="sort"></i></th><th>Demandes<i data-i="sort"></i></th><th>Délai moy.<i data-i="sort"></i></th><th>Montant<i data-i="sort"></i></th><th>Dernière action<i data-i="sort"></i></th><th>État</th></tr>
+      <tr class="opn"><td><div class="nmc"><i data-i="down" class="chev"></i><span class="av3 cL">L</span><div><b>Léa Essai</b><div class="cap">Admin LV2 · 2 écarts</div></div></div></td>
+       <td><div class="actc"><div><div class="big">117</div><div class="dl good"><i data-i="trend"></i>+22 %</div></div><!--G:rk_L--></div></td>
+       <td><div class="big">41</div><div class="dl good">+7</div></td><td><div class="big">34</div><div class="cap">29 ✓ · 5 ✗</div></td><td><div class="big">4 h 05</div><div class="cap">méd. 1 h 10</div></td><td><div class="big">4 870 €</div><div class="cap">22 commandes</div></td>
+       <td>il y a 12 min<div class="cap">a signé XPG-…412</div></td><td><span class="pill p-green pl"><span class="d"></span>Active</span></td></tr>
+      <tr class="unf"><td colspan="8"><div class="unfp">
+       <div class="figs">
+        <div><div class="k">Licences signées</div><div class="v">41 <small class="ok2">+7</small></div></div>
+        <div><div class="k">Demandes traitées</div><div class="v">34 <small class="cap">29 ✓ · 5 ✗</small></div></div>
+        <div><div class="k">Délai de réponse</div><div class="v">4 h 05 <small class="ok2">−1 h 20</small></div></div>
+        <div><div class="k">Montant encaissé</div><div class="v">4 870 € <small class="ok2">+31 %</small></div></div>
+        <div><div class="k">Jours actifs</div><div class="v">21 <small class="cap">sur 30 · série 7 j</small></div></div>
+        <div><div class="k">Signature refusée</div><div class="v">1 <small class="warn2">droit manquant</small></div></div>
+       </div>
+       <div class="r2">
+        <div class="blk"><div class="bt">Ses actions par jour <span class="cap">117 · avant en gris</span></div><!--G:spark_lea--></div>
+        <div class="blk"><div class="bt">Ses 5 dernières actions <span class="cap" style="margin-left:auto" ><span class="lk">Tout son journal ›</span></span></div>
+         <div class="la"><span class="w">auj. 11:42</span>a signé <b>XPG-2026-00412</b><span class="cap">Atelier Exemple</span><span class="cr m" style="margin-left:auto;height:18px;font-size:10.5px">Moyenne</span></div>
+         <div class="la"><span class="w">auj. 11:05</span>a accepté la <b>demande n° 66</b><span class="cap">Client d'essai</span><span class="cr i" style="margin-left:auto;height:18px;font-size:10.5px">Info</span></div>
+         <div class="la"><span class="w">auj. 09:31</span>a livré la <b>commande n° 212</b><span class="cap">490 €</span><span class="cr i" style="margin-left:auto;height:18px;font-size:10.5px">Info</span></div>
+         <div class="la"><span class="w">hier 17:20</span>a revu le code de <b>XPG-2026-00398</b><span class="cr h" style="margin-left:auto;height:18px;font-size:10.5px">Haute</span></div>
+         <div class="la"><span class="w">hier 15:02</span>a ajouté <b>Exports avancés</b> à XPG-2026-00391<span class="cr m" style="margin-left:auto;height:18px;font-size:10.5px">Moyenne</span></div>
+        </div>
+       </div>
+       <div class="rch"><b style="font-weight:650;color:var(--ink)">Ses droits</b><span class="cap">10 sur 13</span>
+        <span><i data-i="check" style="color:var(--green)"></i>Créer et signer</span><span><i data-i="check" style="color:var(--green)"></i>Ajouter une option</span><span><i data-i="check" style="color:var(--green)"></i>Révoquer</span>
+        <span class="wa"><i data-i="alert"></i>Retirer un PC : jamais</span><span class="wa"><i data-i="alert"></i>Annonces : jamais</span>
+        <span><i data-i="check" style="color:var(--green)"></i>Demandes</span><span><i data-i="check" style="color:var(--green)"></i>Revoir le code</span><span><i data-i="check" style="color:var(--green)"></i>Supprimer un client</span>
+        <span><i data-i="check" style="color:var(--green)"></i>Exporter les clients <span class="cap">(ajouté)</span></span><span><i data-i="check" style="color:var(--green)"></i>Écrire aux clients</span>
+        <span class="no"><i data-i="x"></i>Prolonger (retiré)</span><span class="no"><i data-i="x"></i>Offres</span><span class="no"><i data-i="x"></i>Options</span>
+       </div>
+       <div class="row gap8" style="margin-top:10px"><span class="btn sm primary"><i data-i="user" class="sm"></i>Ouvrir sa fiche</span><span class="cap">ou double-clic, ou Entrée</span><span class="btn sm" style="margin-left:auto"><i data-i="scroll" class="sm"></i>Son journal</span><span class="btn sm"><i data-i="lock" class="sm"></i>Ses droits…</span><span class="btn sm"><i data-i="mail" class="sm"></i>Lui écrire…</span></div>
+      </div></td></tr>
+      <tr><td><div class="nmc"><i data-i="right" class="chev"></i><span class="av3 cC">C</span><div><b>Camille Essai</b><div class="cap"><span class="lk" style="font-weight:600">Admin+</span> · toi</div></div></div></td>
+       <td><div class="actc"><div><div class="big">80</div><div class="dl good"><i data-i="trend"></i>+14 %</div></div><!--G:rk_C--></div></td>
+       <td><div class="big">20</div><div class="dl good">+3</div></td><td><div class="big">9</div><div class="cap">9 ✓ · 0 ✗</div></td><td><div class="big">2 h 05</div><div class="cap">méd. 0 h 50</div></td><td><div class="big">2 760 €</div><div class="cap">12 commandes</div></td>
+       <td>il y a 2 min<div class="cap">sauvegarde</div></td><td><span class="pill p-green pl"><span class="d"></span>Active</span></td></tr>
+      <tr><td><div class="nmc"><i data-i="right" class="chev"></i><span class="av3 cH">H</span><div><b>Hugo Essai</b><div class="cap">Admin LV2 · <span class="warn2" style="font-weight:600">1.45.2</span></div></div></div></td>
+       <td><div class="actc"><div><div class="big">48</div><div class="dl bad"><i data-i="trenddown"></i>−16 %</div></div><!--G:rk_H--></div></td>
+       <td><div class="big">11</div><div class="dl bad">−3</div></td><td><div class="big">21</div><div class="cap">16 ✓ · 5 ✗</div></td><td><div class="big warn2" style="font-weight:650">9 h 40</div><div class="cap">méd. 6 h 15</div></td><td><div class="big">1 060 €</div><div class="cap">5 commandes</div></td>
+       <td>hier 18:20<div class="cap">demande n° 63</div></td><td><span class="pill p-green pl"><span class="d"></span>Actif</span></td></tr>
+      <tr class="dim"><td><div class="nmc"><i data-i="right" class="chev"></i><span class="av3 cN gone">N</span><div><b style="color:var(--muted)">Nina Essai</b><div class="cap">retirée le 28/10 par toi</div></div></div></td>
+       <td><div class="actc"><div><div class="big" style="color:var(--muted)">18</div><div class="cap">avant : 44</div></div><!--G:rk_N--></div></td>
+       <td><div class="big" style="color:var(--muted)">4</div></td><td><div class="big" style="color:var(--muted)">8</div></td><td><div class="big" style="color:var(--muted)">5 h 30</div></td><td><div class="big" style="color:var(--muted)">0 €</div></td>
+       <td>28/10 16:02<div class="cap">avant son retrait</div></td><td><span class="pill p-red pl">Retirée</span></td></tr>
+      <tr><td style="border-bottom:0"><div class="nmc"><i data-i="right" class="chev" style="opacity:0"></i><span class="av3 cI">I</span><div><b>Inès Essai</b><div class="cap">invitée hier par toi</div></div></div></td>
+       <td style="border-bottom:0" colspan="6"><span class="cap">Pas encore de chiffres : sa demande d'admin attend ton accord (empreinte à vérifier au téléphone).</span></td>
+       <td style="border-bottom:0"><span class="pill p-amber pl">En attente</span></td></tr>
+     </table>
+     <div style="margin-top:auto;padding:10px 14px;border-top:1px solid var(--line)" class="row gap10 cap"><i data-i="mouse" class="sm"></i>Clic sur ▸ : déplier · double-clic ou Entrée : sa fiche · clic droit : le menu (planche 06) · un clic sur un en-tête : trier (2<sup>e</sup> clic : inverser)<span style="margin-left:auto" class="lk"><i data-i="download" class="sm" style="vertical-align:-3px"></i> Exporter (CSV)</span></div>
+    </div>
+
+    <div class="card alc">
+     <div class="hh"><i data-i="alert" class="sm" style="color:#d97706"></i><span class="h3">Alertes</span><span class="tag" style="height:20px">7</span><span class="lk" style="margin-left:auto;font-size:12px">Régler les alertes…</span></div>
+     <div class="al"><span class="ic c"><i data-i="shieldx"></i></span><div class="grow"><div class="t"><b>Nina Essai</b> (retirée) : <b>3 signatures refusées</b> depuis son retrait, la dernière auj. 08:12 (clé retirée).</div><div class="a">Voir dans le journal<i data-i="right"></i></div></div><span class="q">Critique</span></div>
+     <div class="al"><span class="ic h"><i data-i="download"></i></span><div class="grow"><div class="t"><b>Hugo Essai</b> : son Admin est en <b>1.45.2</b>, pas à jour (1.47.0 publiée le 04/11).</div><div class="a">Lui envoyer la mise à jour<i data-i="right"></i></div></div><span class="q">Haute</span></div>
+     <div class="al"><span class="ic h"><i data-i="moon2"></i></span><div class="grow"><div class="t"><b>Hugo Essai</b> : <b>4 actions à une heure inhabituelle</b> pour lui, dim. 08/11 de 23:40 à 23:58.</div><div class="a">Voir ces 4 actions<i data-i="right"></i></div></div><span class="q">Haute</span></div>
+     <div class="al"><span class="ic h"><i data-i="laptop"></i></span><div class="grow"><div class="t"><b>Hugo Essai</b> : une action <b>depuis un autre PC</b> (PC-MAISON-07), refusée, le 03/11.</div><div class="a">Voir la ligne<i data-i="right"></i></div></div><span class="q">Haute</span></div>
+     <div class="al"><span class="ic m"><i data-i="lock"></i></span><div class="grow"><div class="t"><b>Léa Essai</b> : <b>2 droits jamais utilisés</b> en 90 jours (Retirer un PC, Annonces) ; Hugo Essai : 1.</div><div class="a">Retirer ces droits ?<i data-i="right"></i></div></div><span class="q">À voir</span></div>
+     <div class="al"><span class="ic m"><i data-i="ban"></i></span><div class="grow"><div class="t">Action critique récente : <b>Camille Essai</b> a révoqué <b>XPG-2026-00377</b> (auj. 10:48).</div><div class="a">Voir la ligne<i data-i="right"></i></div></div><span class="q">À voir</span></div>
+     <div class="al" style="border-bottom:0"><span class="ic m"><i data-i="userplus"></i></span><div class="grow"><div class="t"><b>Inès Essai</b> attend depuis hier 17:40 : son empreinte à lire avec elle.</div><div class="a">Vérifier et accepter…<i data-i="right"></i></div></div><span class="q">À voir</span></div>
+     <div style="margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface2)">
+      <div class="cap" style="font-weight:600;color:var(--ink2);margin-bottom:4px">Rien à signaler</div>
+      <div class="row gap6 cap"><i data-i="check" class="sm" style="color:var(--green)"></i>Aucun admin inactif depuis 30 jours</div>
+      <div class="row gap6 cap"><i data-i="check" class="sm" style="color:var(--green)"></i>Aucune signature refusée d'un admin actif · pas de pic</div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:300px;top:6px;width:600px;padding:4px 10px">Une <b>période pour toute la page</b>, comparée à la période d'avant : chaque chiffre dit son écart.</div>
+  <div class="annot" data-n="2" style="left:300px;top:34px;width:600px;padding:4px 10px"><b>Le classement</b>, trié par colonne ; <b>une ligne dépliée</b> (Léa) ; <b>les alertes</b>, chacune avec son geste.</div>
+  <div class="mk" style="left:16px;top:330px">2</div><div class="mk" style="left:1088px;top:330px">2</div><div class="mk" style="left:626px;top:86px">1</div>
+ </main>
+</div>
+</body></html>
