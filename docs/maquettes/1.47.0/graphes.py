@@ -588,3 +588,53 @@ def g_lea_share():
 
 
 G["lea_share"] = g_lea_share
+
+
+# ------------------------------------------------------------------ 03 : ses jours ----
+def g_streak1():
+    """Les 30 jours sur une ligne : un carre par jour (son nombre d'actions), la serie en cours soulignee."""
+    o = []
+    cw, gap = 16, 3
+    mx = max(DAILY["L"])
+    for i, v in enumerate(DAILY["L"]):
+        x = i * (cw + gap)
+        c = SEQ[0] if v == 0 else SEQ[1 + min(5, int((v - 1) * 6 / mx * 1.6))]
+        o.append('<rect x="%d" y="0" width="%d" height="%d" rx="3" fill="%s"/>' % (x, cw, cw, c))
+        if i in (13,):
+            o.append('<rect x="%d" y="-2" width="%d" height="%d" rx="4" fill="none" stroke="%s" stroke-width="2"/>' % (x - 2, cw + 4, cw + 4, RED))
+        if i in (0, 7, 14, 21, 29):
+            o.append(txt(x + cw / 2, 30, DAYS[i] if i != 29 else "auj.", anchor="middle", size=10))
+    x0 = 21 * (cw + gap)
+    o.append('<rect x="%d" y="%d" width="%d" height="3" rx="1.5" fill="%s"/>' % (x0, cw + 3, 9 * (cw + gap) - gap, AD["L"]))
+    w = 30 * (cw + gap)
+    return '<svg width="%d" height="36" viewBox="0 -3 %d 36">%s</svg>' % (w, w, "".join(o))
+
+
+# debut et fin de chaque jour actif (heures decimales) ; None : pas d'action
+RANGE = [(8.7, 17.6), (8.5, 18.0), (9.1, 17.2), (8.6, 17.9), (8.9, 16.4), None, None, None, None, (9.0, 21.05), (8.8, 17.5), (8.6, 17.1), None, (22.2, 22.4),
+         (8.7, 17.8), (8.9, 17.4), (8.4, 18.1), (8.6, 17.7), (8.2, 19.7), None, None, (8.7, 17.9), (8.8, 17.6), (8.6, 17.3), (8.5, 18.0), (9.0, 16.2), None, None,
+         (8.6, 17.8), (8.4, 11.7)]
+
+
+def g_range():
+    p = Plot(586, 150, 30, 24, [6, 9, 12, 15, 18, 21, 24], fmt=lambda v: "%d h" % v, pl=34, pr=4, pt=6, pb=18, band=True, ymin=6)
+    # la bande habituelle
+    p.p.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#f1f6fd"/>' % (p.x0, p.Y(17.83), p.x1 - p.x0, p.Y(8.67) - p.Y(17.83)))
+    p.grid()
+    w = 7
+    for i, r in enumerate(RANGE):
+        if not r:
+            continue
+        a, b = r
+        odd = b > 20 or a > 20
+        c = RED if odd else AD["L"]
+        x = p.X(i) - w / 2
+        h = max(4, p.Y(a) - p.Y(b))
+        p.p.append('<rect x="%.1f" y="%.1f" width="%d" height="%.1f" rx="3.5" fill="%s"/>' % (x, p.Y(b), w, h, c))
+    p.xlab([(0, "12/10"), (7, "19/10"), (14, "26/10"), (21, "02/11"), (29, "auj.")])
+    p.p.append(txt(p.X(13) + 8, p.Y(22.3) + 4, "dim. 25/10, 22 h 14", fill=INK, weight=600, size=10.5))
+    p.p.append(txt(p.X(9) + 8, p.Y(21.05) + 4, "21 h 03", fill=INK, weight=600, size=10.5))
+    return p.svg()
+
+
+G.update({"streak1": g_streak1, "range": g_range})
