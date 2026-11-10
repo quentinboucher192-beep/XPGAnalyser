@@ -263,6 +263,7 @@ const ROUTES = {
     "POST /admin/commandes/prendre": { f: "prendreCommande", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/livree": { f: "commandeLivree", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/a-revoir": { f: "commandeARevoir", signe: "admin", droit: ["demandes"] },
+    "POST /admin/commandes/ligne": { f: "commandeLigne", signe: "admin", droit: ["demandes"] }, // 1.48.0 : le panier
     "POST /admin/commandes/rembourser": { f: "rembourserCommande", signe: "plus" },
     // 1.47.0 : les statistiques et le globe (stats.js, docs/STATISTIQUES.md)
     "GET /admin/stats/serie": { f: "serieStats", signe: "admin" },

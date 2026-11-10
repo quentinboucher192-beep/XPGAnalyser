@@ -181,6 +181,19 @@ struct Pc {
         b.set("scelle", gw::sealFor(editor.publicKey(), gw::writeOnlineRequest(o)));
         return json::write(b, false);
     }
+    // 1.48.0 : un panier - des lignes (`lignes` : le JSON de la liste), paye ou une demande sans paiement.
+    [[nodiscard]] std::string cart(const lic::SigningKey& editor, const std::string& lignes, bool paid, const std::string& company, std::string* nonce = nullptr) const {
+        json::Value v;
+        (void)json::parse(order(editor, "ed:X", company, {}, nonce), v, nullptr);
+        json::Value l;
+        (void)json::parse(lignes, l, nullptr);
+        json::Value b = json::Value::object();
+        for (const auto& [k, x] : v.members())
+            if (k != "article") b.set(k, x);
+        b.set("lignes", l);
+        b.set("paiement", paid);
+        return json::write(b, false);
+    }
 };
 
 bool readPosteState(const std::string& base, const Pc& pc, const lic::SigningKey& editor, gw::DeviceStatus& st, gw::StatusContent& content) {
@@ -605,6 +618,67 @@ int main(int argc, char** argv) {
         body.set("station", pc1.station());
         const Reply rn = call(svc.url(), "POST", "/v1/renouveler", json::write(body, false), pc1.key.get());
         check(rn.status == 200 && has(rn.body, "ia_avancee"), "le renouvellement porte la licence avec l'option");
+    }
+
+    // 1.48.0 : LE PANIER - une licence et son option payees ensemble (une page de Stripe), livrees seules ligne par ligne
+    // (l'option sur la licence que sa ligne vient de livrer) ; une demande sans paiement : une ligne refusee, une livree.
+    std::printf("-- 1.48.0 : un panier paye (une licence et son option), une demande validee ligne par ligne\n");
+    {
+        Pc pc3(root / "pc-3", "PC d'essai 3");
+        std::string nonce;
+        const Reply o = call(svc.url(), "POST", "/v1/boutique/commande",
+                             pc3.cart(*plus.signingKey(), "[{\"article\":\"ed:PROFESSIONAL\"},{\"article\":\"opt:ia_avancee:30\",\"avec_ligne\":1}]", true, "Atelier Exemple", &nonce),
+                             pc3.key.get());
+        const int n = static_cast<int>(o.value.integer("numero"));
+        check(o.status == 201 && o.value.integer("montant") == 49000 + 2900, "le panier : une page de Stripe pour les 2 lignes (" + o.body.substr(0, 160) + ")");
+        check(stripe.event(svc.url(), kHook, "checkout.session.completed", stripe.sessionOf(n)).value.integer("statut") == 200, "Stripe : paye");
+        shop::OrdersView v;
+        check(plus.shopOrders(v).ok && orderOf(v, n) && orderOf(v, n)->linesKnown && orderOf(v, n)->lines.size() == 2 && orderOf(v, n)->lines[1].withLine == 1 &&
+                  orderOf(v, n)->lines[0].state == "payee",
+              "l'Admin lit les 2 lignes (l'option : avec la ligne 1), payees");
+        gui::DeliveryReport rep;
+        auto d = plus.deliverOrders(0, true, &rep);
+        plus.reload();
+        check(d.ok && rep.delivered == 2, "livrees seules, les deux lignes (" + d.text() + ")");
+        check(plus.shopOrders(v).ok && orderOf(v, n) && orderOf(v, n)->state == "livree" && orderOf(v, n)->lines[0].state == "livree" &&
+                  orderOf(v, n)->lines[1].state == "livree" && orderOf(v, n)->lines[0].licence == orderOf(v, n)->lines[1].licence,
+              "la commande livree ; l'option sur la licence de la ligne 1");
+        const std::string lic3 = orderOf(v, n) ? orderOf(v, n)->lines[0].licence : std::string();
+        const gui::LicenceEntry* L = plus.licence(lic3);
+        bool withOpt = false;
+        if (L)
+            for (const auto& x : L->licence.options) withOpt = withOpt || x.id == "ia_avancee";
+        check(L && L->licence.edition == "PROFESSIONAL" && withOpt, "la licence PROFESSIONAL porte l'option ia_avancee (" + lic3 + ")");
+        gw::DeviceStatus st;
+        gw::StatusContent content;
+        check(readPosteState(svc.url(), pc3, *plus.signingKey(), st, content) && st.state == gw::State::Accepted && st.requestNonce == nonce && !content.code.empty() &&
+                  content.onlineLicense == lic3,
+              "le PC : << acceptee >>, le code de sa licence (avec l'option)");
+        json::Value act = json::Value::object();   // le PC s'active avec ce code, comme son Studio
+        act.set("code", content.code);
+        act.set("demande", pc3.request());
+        act.set("nom", pc3.name);
+        check(call(svc.url(), "POST", "/v1/activer", json::write(act, false), pc3.key.get()).status == 200, "le PC s'active");
+        // une demande sans paiement : deux lignes, chacune validee a part
+        const Reply q = call(svc.url(), "POST", "/v1/boutique/commande",
+                             pc3.cart(*plus.signingKey(), "[{\"article\":\"ed:ENTERPRISE\",\"libelle\":\"Licence ENTERPRISE\"},{\"article\":\"opt:travail_a_plusieurs:30\",\"licence_existante\":\"" + lic3 + "\"}]",
+                                      false, "Atelier Exemple"),
+                             pc3.key.get());
+        const int m = static_cast<int>(q.value.integer("numero"));
+        check(q.status == 201 && q.value.str("etat") == "a_valider" && q.value.str("url").empty(), "une demande : a valider, sans Stripe");
+        rep = {};
+        d = plus.deliverOrders(0, true, &rep);
+        check(rep.delivered == 0, "une demande ne se livre pas seule");
+        check(plus.shopOrders(v).ok && v.toValidate == 2 && orderOf(v, m) && !orderOf(v, m)->payment, "2 lignes a valider");
+        const auto r1 = plus.refuseLine(m, 1, "pas d'offre ENTERPRISE pour ce client");
+        check(r1.ok, "ligne 1 refusee (" + r1.text() + ")");
+        rep = {};
+        d = plus.deliverOrders(m, 2, false, &rep);
+        plus.reload();
+        check(d.ok && rep.delivered == 1, "ligne 2 delivree (" + d.text() + ")");
+        check(plus.shopOrders(v).ok && orderOf(v, m) && orderOf(v, m)->state == "livree" && orderOf(v, m)->lines[0].state == "refusee" &&
+                  has(orderOf(v, m)->lines[0].error, "ENTERPRISE") && orderOf(v, m)->lines[1].state == "livree",
+              "la demande finie : une ligne refusee (sa raison), une livree");
     }
 
     std::printf("-- a revoir, << Livrer seul >> decoche, rembourser\n");

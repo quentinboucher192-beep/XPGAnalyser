@@ -767,6 +767,21 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     lid = onlineId;
                     if (rec.receivedLicense.empty()) rec.receivedLicense = lid;
                     text = "Ta licence en ligne " + lid + " est d\xC3\xA9j\xC3\xA0 activ\xC3\xA9" "e sur ce PC.";
+                    if (order && conn) {   // 1.48.0 : une option du panier livree avec cette licence : sa nouvelle emission
+                        rec.lastNumber = std::max(rec.lastNumber, s.number);
+                        rec.lastState = lgw::stateKey(s.state);
+                        rec.lastNonce = s.requestNonce;
+                        Result one;
+                        std::vector<std::string> act;
+                        bool devicePart = false;
+                        if (stepRenew(*conn, rec, one, act, devicePart)) {
+                            res.changed = true;
+                            res.answer = kAnswerAccepted;
+                            res.answerOrder = order->number;
+                            if (!order->optionText.empty()) res.answerOption = order->optionText;
+                            text = "Ta licence " + lid + " est \xC3\xA0 jour sur ce PC (commande n\xC2\xB0 " + std::to_string(order->number) + ").";
+                        }
+                    }
                 } else if (!lsv::normalizeCode(content.code, normalized)) {
                     settled = true;
                     text = "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande (licence en ligne " + onlineId + "), mais son code d'activation est illisible : demande-le-lui.";
@@ -1715,7 +1730,11 @@ bool stepOrders(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
 
 // Une commande livree dont la livraison n'est pas encore appliquee ici (son etat << poste >>).
 bool deliveryWaiting(const Record& rec) {
-    return std::any_of(rec.orders.begin(), rec.orders.end(), [](const shop::Order& o) { return o.state == shop::kDelivered && !o.applied; });
+    // 1.48.0 : aussi une ligne livree d'une commande pas encore finie (le panier : chaque ligne se valide a part)
+    return std::any_of(rec.orders.begin(), rec.orders.end(), [](const shop::Order& o) {
+        return !o.applied && (o.state == shop::kDelivered ||
+                              std::any_of(o.lines.begin(), o.lines.end(), [](const shop::OrderLine& l) { return l.state == shop::kDelivered; }));
+    });
 }
 
 // L'etat << poste >> lu pour les commandes livrees (la connexion complete : le certificat, l'heure) ; fait : chacune
@@ -2014,6 +2033,20 @@ bool loadRecord(Record& out, std::string* why) {
             o.option = c.str("option");
             o.optionText = c.str("option_texte");
             o.applied = c.flag("appliquee");
+            o.payment = c.flag("paiement", true);   // 1.48.0 : le panier
+            if (const json::Value* ls = c.find("lignes"); ls && ls->isArray())
+                for (const auto& x : ls->items()) {
+                    shop::OrderLine l;
+                    l.index = static_cast<int>(x.integer("ligne"));
+                    l.article = x.str("article");
+                    l.kind = x.str("genre");
+                    l.label = x.str("libelle");
+                    l.state = x.str("etat");
+                    l.licence = x.str("licence");
+                    l.error = x.str("erreur");
+                    l.amount = x.integer("montant");
+                    o.lines.push_back(std::move(l));
+                }
             if (!shop::findOrder(r.orders, o.number)) r.orders.push_back(std::move(o));
             if (r.orders.size() >= shop::kMaxOrders) break;
         }
@@ -2099,6 +2132,23 @@ bool saveRecord(const Record& r, std::string* why) {
             put("option", o.option);
             put("option_texte", o.optionText);
             if (o.applied) c.set("appliquee", true);
+            if (!o.payment) c.set("paiement", false);   // 1.48.0
+            if (!o.lines.empty()) {
+                json::Value ls = json::Value::array();
+                for (const auto& l : o.lines) {
+                    json::Value x = json::Value::object();
+                    x.set("ligne", l.index);
+                    x.set("article", l.article);
+                    x.set("genre", l.kind);
+                    x.set("libelle", l.label);
+                    x.set("etat", l.state);
+                    if (!l.licence.empty()) x.set("licence", l.licence);
+                    if (!l.error.empty()) x.set("erreur", l.error);
+                    x.set("montant", l.amount);
+                    ls.push(std::move(x));
+                }
+                c.set("lignes", std::move(ls));
+            }
             list.push(std::move(c));
         }
         v.set("commandes", std::move(list));
@@ -2674,14 +2724,39 @@ Result placeOrder(const OrderForm& form0) {
     f.pcName = trim(form0.pcName);
     f.optionText = trim(form0.optionText);
     if (f.optionText.size() > 160) f.optionText.resize(160);
+    // 1.48.0 : le panier - ses lignes ; une demande sans paiement n'a pas besoin de la boutique ouverte
+    const bool cart = !form0.lines.empty();
+    const bool pay = !cart || form0.payment;
+    if (cart && form0.lines.size() > 20) {
+        res.message = "Le panier a trop de lignes (20 au plus par commande). Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    if (cart) f.article = form0.lines.front().article;
     const shop::Catalogue cat = shop::catalogue();
     const shop::Article* found = cat.find(f.article);
-    if (!cat.selling() || !found) {
+    bool onSale = cat.selling() && found;
+    if (cart && pay)
+        for (const auto& l : form0.lines) onSale = onSale && cat.find(l.article) != nullptr;
+    if (pay && !onSale) {
         res.message = "Cet article n'est pas (ou plus) en vente en ligne : demande ta licence sans paiement (Demander). Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
         return res;
     }
-    const shop::Article art = *found;
-    const bool option = art.kind == "option";
+    shop::Article art;
+    if (found) art = *found;
+    else {   // une demande : l'article de la ligne, sans le catalogue
+        const auto& l0 = form0.lines.front();
+        art.id = l0.article;
+        art.kind = l0.kind;
+        art.edition = l0.edition;
+        art.option = l0.option;
+        art.days = l0.days;
+        art.label = l0.label;
+    }
+    std::string cartLicence;   // une option du panier sur une licence existante (la demande d'activation la nomme)
+    for (const auto& l : form0.lines)
+        if (l.kind == "option" && !l.licence.empty() && cartLicence.empty()) cartLicence = l.licence;
+    if (cart) f.licenseId = cartLicence;
+    const bool option = !cart && art.kind == "option";
     if (f.customer.empty()) {
         res.message = "Indique le nom de ta soci\xC3\xA9t\xC3\xA9 (Modifier mon profil\xE2\x80\xA6) : la licence achet\xC3\xA9" "e est \xC3\xA0 son nom. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
         return res;
@@ -2718,7 +2793,7 @@ Result placeOrder(const OrderForm& form0) {
     }
     std::string block;
     lic::ActivationRequest parsed;
-    if (!lic::activationRequestText(f.pcName, option ? f.licenseId : std::string(), software(), block, &parsed, &why)) {
+    if (!lic::activationRequestText(f.pcName, option || cart ? f.licenseId : std::string(), software(), block, &parsed, &why)) {
         res.message = "La demande de ce PC n'a pas pu \xC3\xAAtre pr\xC3\xA9par\xC3\xA9" "e : " + sentence(why) + " Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
         return res;
     }
@@ -2758,11 +2833,30 @@ Result placeOrder(const OrderForm& form0) {
         }
     }
     json::Value body = json::Value::object();
-    body.set("article", art.id);
+    if (cart) {   // 1.48.0 : les lignes du panier ; une option : sa licence existante, ou la ligne de l'offre qui la livre
+        body.set("paiement", pay);
+        json::Value lines = json::Value::array();
+        int firstOffer = 0;
+        for (std::size_t i = 0; i < form0.lines.size(); ++i)
+            if (form0.lines[i].kind == "edition" && !firstOffer) firstOffer = static_cast<int>(i) + 1;
+        for (const auto& l : form0.lines) {
+            json::Value x = json::Value::object();
+            x.set("article", l.article);
+            if (l.kind == "option") {
+                if (!l.licence.empty()) x.set("licence_existante", l.licence);
+                else if (firstOffer) x.set("avec_ligne", firstOffer);
+            }
+            if (!pay && !l.label.empty()) x.set("libelle", l.label.substr(0, 120));
+            lines.push(std::move(x));
+        }
+        body.set("lignes", std::move(lines));
+    } else {
+        body.set("article", art.id);
+    }
     body.set("societe", f.customer);
     if (!f.name.empty()) body.set("nom", f.name);
     body.set("courriel", f.email);
-    if (option) body.set("licence_existante", f.licenseId);
+    if (option) body.set("licence_existante", f.licenseId);   // (le panier : par ligne, plus haut)
     body.set("cle", key->id);
     body.set("scelle", sealed);
     if (json::Value more = adminSeals(plain); !more.items().empty()) body.set("scelles", std::move(more));
@@ -2774,7 +2868,7 @@ Result placeOrder(const OrderForm& form0) {
     if (g.reached() && (g.status == 201 || g.status == 200)) {
         const double n = readable ? answer.num("numero") : 0;
         const std::string url = readable ? answer.str("url") : std::string();
-        if (n <= 0 || url.empty()) {
+        if (n <= 0 || (pay && url.empty())) {
             lines.push_back("Le service a re\xC3\xA7u ta commande, mais sa r\xC3\xA9ponse est illisible : regarde Mes achats dans un moment.");
             finish(res, c, rec, std::move(lines));
             return res;
@@ -2785,7 +2879,22 @@ Result placeOrder(const OrderForm& form0) {
         o.label = art.label;
         o.amount = answer.integer("montant", art.amount);
         o.currency = answer.str("devise", cat.currency);
-        o.state = shop::kToPay;
+        o.state = pay ? shop::kToPay : shop::kToValidate;
+        o.payment = pay;
+        if (cart) {   // 1.48.0 : les lignes rendues par le service (leur etat), le libelle de la commande
+            std::vector<shop::Order> one;
+            if (shop::parseOrders("{\"commandes\":[" + json::write(answer, false) + "]}", one, nullptr) && !one.empty()) {
+                o.lines = one.front().lines;
+                o.label = one.front().label;
+                o.amount = one.front().amount;
+            }
+            if (!answer.str("etat").empty()) o.state = answer.str("etat");
+            for (const auto& l : form0.lines)
+                if (l.kind == "option") {
+                    if (o.option.empty()) o.option = l.option;
+                    o.optionText += (o.optionText.empty() ? "" : ", ") + l.label;
+                }
+        }
         o.mode = answer.str("mode", cat.mode);
         o.created = now;
         o.updated = now;
@@ -2796,6 +2905,7 @@ Result placeOrder(const OrderForm& form0) {
             o.option = art.option;
             o.optionText = f.optionText.empty() ? art.label : f.optionText;
         }
+        if (!pay) o.amount = 0;
         if (shop::Order* m = shop::findOrder(rec.orders, o.number)) *m = o;
         else rec.orders.insert(rec.orders.begin(), o);
         if (rec.orders.size() > shop::kMaxOrders) rec.orders.resize(shop::kMaxOrders);
@@ -2805,6 +2915,13 @@ Result placeOrder(const OrderForm& form0) {
         res.orderUrl = url;
         res.ordersLooked = true;
         res.orders = rec.orders;
+        if (!pay) {   // 1.48.0 : une demande sans paiement (le panier)
+            note(true, "Demande n\xC2\xB0 " + std::to_string(o.number) + " envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur, sans paiement (" + o.label + ").");
+            lines.push_back("Demande n\xC2\xB0 " + std::to_string(o.number) + " envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur, sans paiement : il valide chaque ligne ; ce qu'il "
+                            "accepte arrive tout seul sur ce PC.");
+            finish(res, c, rec, std::move(lines));
+            return res;
+        }
         note(true, "Commande n\xC2\xB0 " + std::to_string(o.number) + " pass\xC3\xA9" "e (" + o.label + ", " + shop::amountTtc(o.amount, o.currency) +
                        ") : le paiement sur la page de Stripe" + (o.mode == "test" ? std::string(" (paiement d'essai)") : std::string()) + ".");
         lines.push_back("Commande n\xC2\xB0 " + std::to_string(o.number) + " : la page de paiement de Stripe s'ouvre dans ton navigateur. " +

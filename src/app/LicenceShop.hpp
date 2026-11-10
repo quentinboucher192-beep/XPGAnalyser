@@ -105,12 +105,22 @@ inline constexpr const char* kCancelled = "annulee";
 inline constexpr const char* kFailed = "echec_paiement";
 inline constexpr const char* kRefunded = "remboursee";
 inline constexpr const char* kReview = "a_revoir";
+inline constexpr const char* kToValidate = "a_valider";   // 1.48.0 : une demande sans paiement
+inline constexpr const char* kRefused = "refusee";
 // La page de paiement : 30 minutes ; la commande regardee toutes les 10 secondes pendant ce temps, puis toutes les
 // 5 minutes tant qu'elle est payee (ou encore a payer).
 inline constexpr double kFastPeriod = 10.0, kFastFor = 30.0 * 60.0, kSlowPeriod = 300.0;
 inline constexpr std::size_t kMaxOrders = 50;
 
+// 1.48.0 : une ligne d'une commande (un article du panier), son etat a elle.
+struct OrderLine {
+    int          index{0};          // a partir de 1
+    std::string  article, kind, label, state, licence, error;
+    std::int64_t amount{0};
+};
 struct Order {
+    std::vector<OrderLine> lines;   // 1.48.0 : vide (une commande d'avant) : l'article seul
+    bool               payment{true};   // 1.48.0 : faux : une demande sans paiement
     std::uint64_t      number{0};
     std::string        article, label, currency{"eur"}, state, mode;
     std::int64_t       amount{0};

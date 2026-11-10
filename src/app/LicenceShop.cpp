@@ -298,6 +298,28 @@ bool parseOrders(std::string_view text, std::vector<Order>& out, std::string* wh
         o.licence = clean(c.str("licence"), 64);
         o.receiptUrl = webUrl(c.str("recu_url"));
         o.payUrl = webUrl(c.str("url"));
+        o.payment = c.flag("paiement", true);   // 1.48.0
+        if (const json::Value* ls = c.find("lignes"); ls && ls->isArray())
+            for (const auto& x : ls->items()) {
+                if (!x.isObject()) continue;
+                OrderLine l;
+                l.index = static_cast<int>(x.integer("ligne"));
+                l.article = clean(x.str("article"), 120);
+                l.kind = x.str("genre");
+                l.label = clean(x.str("libelle"), 240);
+                l.state = clean(x.str("etat"), 40);
+                l.licence = clean(x.str("licence"), 64);
+                l.error = clean(x.str("erreur"), 300);
+                l.amount = x.integer("montant");
+                if (l.label.empty()) l.label = l.article;
+                o.lines.push_back(std::move(l));
+                if (o.lines.size() >= 20) break;
+            }
+        if (o.article.empty() && !o.lines.empty()) o.article = o.lines.front().article;
+        if (o.label.empty() && !o.lines.empty()) {
+            for (const auto& l : o.lines) o.label += (o.label.empty() ? "" : ", ") + l.label;
+            o.label = clean(o.label, 240);
+        }
         if (o.label.empty()) o.label = o.article;
         got.push_back(std::move(o));
         if (got.size() >= kMaxOrders) break;
@@ -334,7 +356,10 @@ bool mergeOrders(std::vector<Order>& mine, const std::vector<Order>& fresh) {
         next.optionText = m->optionText;
         next.applied = m->applied;
         if (next.label.empty()) next.label = m->label;
-        const bool differs = next.state != m->state || next.updated != m->updated || next.receiptUrl != m->receiptUrl || next.licence != m->licence ||
+        bool linesDiffer = next.lines.size() != m->lines.size();
+        for (std::size_t i = 0; !linesDiffer && i < next.lines.size(); ++i)
+            linesDiffer = next.lines[i].state != m->lines[i].state || next.lines[i].licence != m->lines[i].licence;
+        const bool differs = linesDiffer || next.state != m->state || next.updated != m->updated || next.receiptUrl != m->receiptUrl || next.licence != m->licence ||
                              next.payUrl != m->payUrl || next.expires != m->expires || next.label != m->label || next.amount != m->amount;
         if (differs) {
             *m = std::move(next);
@@ -353,7 +378,7 @@ bool closed(const std::string& s) noexcept {
     return s == kDelivered || s == kExpired || s == kCancelled || s == kFailed || s == kRefunded;
 }
 
-bool open(const std::string& s) noexcept { return s == kToPay || s == kPaid || s == kReview; }
+bool open(const std::string& s) noexcept { return s == kToPay || s == kPaid || s == kReview || s == kToValidate; }
 
 std::string stateLabel(const std::string& s) {
     if (s == kToPay) return "en attente du paiement";
@@ -364,12 +389,15 @@ std::string stateLabel(const std::string& s) {
     if (s == kFailed) return "paiement refus\xC3\xA9";
     if (s == kRefunded) return "rembours\xC3\xA9" "e";
     if (s == kReview) return "en revue chez l'\xC3\xA9" "diteur";
+    if (s == kToValidate) return "\xC3\xA0 valider par l'\xC3\xA9" "diteur";   // 1.48.0
+    if (s == kRefused) return "refus\xC3\xA9" "e";
     return s.empty() ? std::string("inconnu") : s;
 }
 
 int stateTone(const std::string& s) noexcept {
     if (s == kDelivered) return 1;
-    if (s == kToPay || s == kPaid || s == kReview) return 2;
+    if (s == kToPay || s == kPaid || s == kReview || s == kToValidate) return 2;
+    if (s == kRefused) return 3;
     if (s == kFailed) return 3;
     return 0;
 }
@@ -401,13 +429,17 @@ std::string stateText(const Order& o, lic::Seconds now) {
     if (o.state == kCancelled) return "Commande annul\xC3\xA9" "e : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.";
     if (o.state == kFailed) return "Ta banque a refus\xC3\xA9 le paiement : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9. Tu peux acheter de nouveau (avec une autre carte).";
     if (o.state == kRefunded) return "Commande rembours\xC3\xA9" "e : Stripe a rendu le montant sur ta carte.";
+    if (o.state == kToValidate)   // 1.48.0
+        return "Demande envoy\xC3\xA9" "e, sans paiement : l'\xC3\xA9" "diteur valide chaque ligne. Ce qu'il accepte arrive tout seul sur ce PC ; le Studio regarde "
+               "toutes les 5 minutes.";
+    if (o.state == kRefused) return "L'\xC3\xA9" "diteur a refus\xC3\xA9 cette commande (le d\xC3\xA9tail : chaque ligne). Rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.";
     if (o.state == kReview) return "Paiement re\xC3\xA7u, mais l'\xC3\xA9" "diteur doit revoir la livraison avant de te d\xC3\xA9livrer ta licence : il te contacte si besoin.";
     return "\xC3\x89tat de la commande : " + stateLabel(o.state) + ".";
 }
 
 const Order* waitingOrder(const std::vector<Order>& list) noexcept {
     const Order* best = nullptr;
-    const auto rank = [](const std::string& s) { return s == kToPay ? 3 : s == kPaid ? 2 : s == kReview ? 1 : 0; };
+    const auto rank = [](const std::string& s) { return s == kToPay ? 3 : s == kPaid ? 2 : (s == kReview || s == kToValidate) ? 1 : 0; };
     for (const auto& o : list) {
         const int r = rank(o.state);
         if (r == 0) continue;

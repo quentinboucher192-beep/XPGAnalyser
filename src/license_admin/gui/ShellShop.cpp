@@ -43,7 +43,7 @@ bool Shell::autoOrders() {
                      if (*gotSettings) ws_->adoptShop(*s);
                      if (!r.ok) return;
                      ws_->adoptOrders(*v);
-                     toDeliver_ = v->toDeliver;
+                     toDeliver_ = v->toDeliver + v->toValidate;   // 1.48.0 : et les lignes a valider (les demandes)
                      refreshPages();
                      std::vector<const shop::Order*> fresh;
                      for (const auto& o : v->orders)

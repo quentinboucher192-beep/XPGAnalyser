@@ -448,6 +448,11 @@ struct PurchaseView {
     std::string              optionText;      // une option : << Assistant IA avance, 1 an >>
 };
 [[nodiscard]] PurchaseView purchaseView(const shop::Catalogue& cat, const std::string& article, const Profile& p, const licensing::LicenseState& st);
+// 1.48.0 : le recapitulatif du PANIER (ses lignes a payer, le total) - showPurchase avec un article vide.
+[[nodiscard]] PurchaseView cartView(const shop::Catalogue& cat, const shop::Cart& cart, const Profile& p);
+// 1.48.0 : le panier part - `payment` : ses lignes a payer (UNE page de paiement), sinon ses lignes sans paiement (une
+// demande ; `all` : tout le panier, sans paiement) ; la fenetre << Commande >> suit. Faux : `why`.
+bool startCartOrder(menu::MenuManager& menus, bool payment, bool all, std::string* why, bool showWindow = true);
 // La fenetre << Commande n. N >> : son etat, ce qui se passe, ses boutons.
 struct OrderView {
     std::string                                      title;   // "Commande n. 12"

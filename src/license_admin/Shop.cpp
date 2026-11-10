@@ -412,6 +412,12 @@ std::string articleAmountText(const Article& a, Seconds now, const std::string& 
 }
 
 // ============================================================================ les commandes
+const OrderLine* Order::findLine(int n) const {
+    for (const auto& l : lines)
+        if (l.line == n) return &l;
+    return nullptr;
+}
+
 const Order* OrdersView::find(int number) const {
     for (const auto& o : orders)
         if (o.number == number) return &o;
@@ -427,6 +433,7 @@ bool parseOrders(const Value& v, OrdersView& out, std::string* why) {
     }
     out.counter = v.integer("numero", -1);
     out.toDeliver = static_cast<int>(v.integer("a_livrer"));
+    out.toValidate = static_cast<int>(v.integer("a_valider"));   // 1.48.0
     for (const auto& x : list->items()) {
         if (!x.isObject() || x.integer("numero") <= 0) continue;
         Order o;
@@ -461,6 +468,46 @@ bool parseOrders(const Value& v, OrdersView& out, std::string* why) {
         o.receiptUrl = clean(x.str("recu_url"), 2000);
         o.licence = clean(x.str("licence"), 64);
         o.error = clean(x.str("erreur"), 500);
+        // 1.48.0 : les lignes (un service d'avant : une ligne, la commande elle-meme)
+        o.payment = x.flag("paiement", true);
+        if (const Value* ls = x.find("lignes"); ls && ls->isArray()) {
+            o.linesKnown = true;
+            for (const auto& y : ls->items()) {
+                if (!y.isObject() || y.integer("ligne") <= 0) continue;
+                OrderLine l;
+                l.line = static_cast<int>(y.integer("ligne"));
+                l.article = clean(y.str("article"), 80);
+                l.kind = clean(y.str("genre"), 20);
+                l.edition = clean(y.str("edition"), 40);
+                l.option = clean(y.str("option"), 40);
+                l.days = static_cast<int>(y.integer("jours"));
+                l.amount = y.integer("montant");
+                l.label = clean(y.str("libelle"), 200);
+                l.existingLicence = clean(y.str("licence_existante"), 64);
+                l.withLine = static_cast<int>(y.integer("avec_ligne"));
+                l.state = clean(y.str("etat"), 20);
+                l.licence = clean(y.str("licence"), 64);
+                l.error = clean(y.str("erreur"), 500);
+                o.lines.push_back(std::move(l));
+            }
+        }
+        if (o.lines.empty()) {
+            OrderLine l;
+            l.line = 1;
+            l.article = o.article;
+            l.kind = o.kind;
+            l.edition = o.edition;
+            l.option = o.option;
+            l.days = o.days;
+            l.amount = o.amount;
+            l.label = o.label;
+            l.existingLicence = o.existingLicence;
+            l.state = o.state;
+            l.licence = o.licence;
+            l.error = o.error;
+            o.lines.push_back(std::move(l));
+        }
+        o.lineCount = static_cast<int>(o.lines.size());
         out.orders.push_back(std::move(o));
     }
     std::sort(out.orders.begin(), out.orders.end(), [](const Order& a, const Order& b) { return a.number > b.number; });
@@ -532,6 +579,8 @@ std::string stateLabel(const std::string& s) {
     if (s == "echec_paiement") return "paiement refus\xC3\xA9";
     if (s == "remboursee") return "rembours\xC3\xA9" "e";
     if (s == "a_revoir") return "\xC3\xA0 revoir";
+    if (s == "a_valider") return "\xC3\xA0 valider";   // 1.48.0 : une demande
+    if (s == "refusee") return "refus\xC3\xA9" "e";
     return s;
 }
 
@@ -651,6 +700,7 @@ online::Result listOrders(const std::string& folder, const licensing::SigningKey
 online::Result takeOrder(online::Client& c, int number, int* status) {
     Value b = Value::object();
     b.set("numero", number);
+    b.set("lignes", true);   // 1.48.0 : cet Admin valide ligne par ligne
     online::Reply r;
     online::Result res = call(c, "POST", "/admin/commandes/prendre", &b, "prendre la commande n\xC2\xB0 " + std::to_string(number), &r);
     if (status) *status = r.error.empty() ? r.status : 0;
@@ -666,6 +716,19 @@ online::Result markDelivered(online::Client& c, int number, const std::string& l
     b.set("licence", licenseId);
     online::Reply r;
     online::Result res = call(c, "POST", "/admin/commandes/livree", &b, "marquer la commande n\xC2\xB0 " + std::to_string(number) + " livr\xC3\xA9" "e", &r);
+    if (!res.ok && r.error.empty() && r.status == 409 && alreadyLicence) *alreadyLicence = r.json.str("licence");
+    return res;
+}
+
+online::Result markLine(online::Client& c, int number, int line, const std::string& action, const std::string& value, std::string* alreadyLicence) {
+    Value b = Value::object();
+    b.set("numero", number);
+    b.set("ligne", line);
+    b.set("action", action);
+    if (action == "livree") b.set("licence", value);
+    else b.set("raison", clean(value, 480));
+    online::Reply r;
+    online::Result res = call(c, "POST", "/admin/commandes/ligne", &b, "la ligne " + std::to_string(line) + " de la commande n\xC2\xB0 " + std::to_string(number), &r);
     if (!res.ok && r.error.empty() && r.status == 409 && alreadyLicence) *alreadyLicence = r.json.str("licence");
     return res;
 }

@@ -934,7 +934,7 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
         {"boutique", "Boutique", ui::Icon::Globe, false},                 // 1.46.0 : Stripe, le catalogue (PageShop.cpp)
-        {"commandes", "Commandes", ui::Icon::Mail, false},                // 1.46.0 : livrer, rembourser
+        {"commandes", "Commandes et demandes", ui::Icon::Mail, false},   // 1.48.0 : le panier (une seule page)                // 1.46.0 : livrer, rembourser
         {"compte", "Mon compte", ui::Icon::User, false},                  // 1.47.0 : qui je suis, ma cle, mes pouvoirs (PageAccount.cpp)
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
         // 1.44.0 : plusieurs admins (la maquette 1.43.0).

@@ -179,20 +179,28 @@ export async function lancerFauxStripe({ port = 0, cle = "", versionCompte = VER
                     // 1.46.1 : comme le vrai Stripe depuis 2026-09-30.endive
                     if (form.paires.some(([k]) => /^payment_method_types(\[|$)/.test(k)) && dateDe(versionAppel) >= dateDe(VERSION_SANS_PMT))
                         return erreur(res, 400, MESSAGE_PMT, "", "payment_method_types");
-                    let montant, devise, libelle, prixId;
-                    if (p["line_items[0][price]"]) {
-                        const pr = prix.get(p["line_items[0][price]"]);
-                        if (!pr) return erreur(res, 400, "No such price: '" + p["line_items[0][price]"] + "'", "resource_missing", "line_items[0][price]");
-                        if (!pr.active) return erreur(res, 400, "The price specified is inactive. This field only accepts active prices.", "", "line_items[0][price]");
-                        montant = pr.unit_amount;
-                        devise = pr.currency;
-                        libelle = (produits.get(pr.product) || {}).name;
-                        prixId = pr.id;
-                    } else {
-                        montant = Number(p["line_items[0][price_data][unit_amount]"]);
-                        devise = p["line_items[0][price_data][currency]"];
-                        libelle = p["line_items[0][price_data][product_data][name]"];
+                    // 1.48.0 : plusieurs line_items (un panier) : le montant est leur somme
+                    let montant = 0, devise, libelle, prixId = "";
+                    const elements = [];
+                    for (let i = 0; p["line_items[" + i + "][price]"] !== undefined || p["line_items[" + i + "][price_data][unit_amount]"] !== undefined; i++) {
+                        const k = "line_items[" + i + "]";
+                        let e;
+                        if (p[k + "[price]"] !== undefined) {
+                            const pr = prix.get(p[k + "[price]"]);
+                            if (!pr) return erreur(res, 400, "No such price: '" + p[k + "[price]"] + "'", "resource_missing", k + "[price]");
+                            if (!pr.active) return erreur(res, 400, "The price specified is inactive. This field only accepts active prices.", "", k + "[price]");
+                            e = { montant: pr.unit_amount, devise: pr.currency, libelle: (produits.get(pr.product) || {}).name, prix: pr.id };
+                        } else {
+                            e = { montant: Number(p[k + "[price_data][unit_amount]"]), devise: p[k + "[price_data][currency]"], libelle: p[k + "[price_data][product_data][name]"], prix: "" };
+                        }
+                        e.quantite = Number(p[k + "[quantity]"] || 1);
+                        elements.push(e);
+                        montant += e.montant * e.quantite;
                     }
+                    if (!elements.length) return erreur(res, 400, "Missing required param: line_items.", "parameter_missing", "line_items");
+                    devise = elements[0].devise;
+                    libelle = elements.map((e) => e.libelle).join(" + ");
+                    prixId = elements.map((e) => e.prix).join(",");
                     n++;
                     const id = "cs_test_essai" + n;
                     const s = {
@@ -204,6 +212,7 @@ export async function lancerFauxStripe({ port = 0, cle = "", versionCompte = VER
                         devise,
                         libelle,
                         prix: prixId || "",
+                        elements,
                         moyens: form.paires.filter(([k]) => /^allowed_payment_method_types\[\d*\]$/.test(k)).map(([, v]) => v),
                         link: p["wallet_options[link][display]"] || "auto",
                         version: versionAppel,

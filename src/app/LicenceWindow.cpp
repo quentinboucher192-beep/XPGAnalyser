@@ -306,7 +306,6 @@ private:
     void buildCards();
     // 1.46.0 : les boutons << Acheter >> des cartes (refaits quand les articles en vente changent).
     void syncBuyButtons();
-    void askWithoutPayment(const std::string& editionId);
     // 1.46.0 : les lignes d'une carte a la largeur `w`, et sa hauteur.
     [[nodiscard]] float layoutCard(Card& k, float w) const;
     // Ce que contiendra la licence d'une edition (le rappel pendant l'attente) ; vide : inconnue.
@@ -537,6 +536,7 @@ private:
     ui::Button*                      receipt_{nullptr};
     ui::Button*                      order_{nullptr};
     std::vector<licence::shop::Order> orderRows_;
+    std::vector<std::size_t>         rowOrder_;   // 1.48.0 : la commande de chaque ligne du tableau (une ligne par article)
     float                            ordersY_{0};
     ui::TableView*                   table_{nullptr};
     std::shared_ptr<ui::ITableModel> model_;
@@ -2172,11 +2172,24 @@ void PurchasesPanel::refreshOrders() {
     orderRows_ = licence::service::orders();
     std::vector<std::vector<std::string>> cells;
     std::vector<int> tones;
-    for (const auto& o : orderRows_) {
+    rowOrder_.clear();
+    for (std::size_t i = 0; i < orderRows_.size(); ++i) {
+        const auto& o = orderRows_[i];
+        const std::string receipt = o.receiptUrl.empty() ? std::string("\xE2\x80\x94") : std::string("Ouvrir le re\xC3\xA7u");
+        const std::string essai = o.mode == "test" && o.payment ? " (essai)" : "";
+        if (o.lines.size() > 1 || (!o.lines.empty() && !o.payment)) {   // 1.48.0 : une ligne par article, son etat a elle
+            for (const auto& l : o.lines) {
+                cells.push_back({std::to_string(o.number) + " \xC2\xB7 " + std::to_string(l.index), licence::service::dateText(o.created), l.label,
+                                 o.payment ? shop::amountTtc(l.amount, o.currency) + essai : std::string("sans paiement"), shop::stateLabel(l.state), receipt});
+                tones.push_back(shop::stateTone(l.state));
+                rowOrder_.push_back(i);
+            }
+            continue;
+        }
         cells.push_back({std::to_string(o.number), licence::service::dateText(o.created), o.label.empty() ? o.article : o.label,
-                         shop::amountTtc(o.amount, o.currency) + (o.mode == "test" ? " (essai)" : ""), shop::stateLabel(o.state),
-                         o.receiptUrl.empty() ? std::string("\xE2\x80\x94") : std::string("Ouvrir le re\xC3\xA7u")});
+                         shop::amountTtc(o.amount, o.currency) + essai, shop::stateLabel(o.state), receipt});
         tones.push_back(shop::stateTone(o.state));
+        rowOrder_.push_back(i);
     }
     ordersModel_ = std::make_shared<Rows>(std::vector<std::string>{"N\xC2\xB0", "Date", "Article", "Montant TTC", "\xC3\x89tat", "Re\xC3\xA7u"}, std::move(cells),
                                           [tones](ui::RowIndex r, std::size_t c) {
@@ -2189,8 +2202,11 @@ void PurchasesPanel::refreshOrders() {
                                               return st;
                                           });
     orders_->setModel(ordersModel_);
-    for (std::size_t i = 0; i < orderRows_.size(); ++i)
-        if (orderRows_[i].number == keep) orders_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+    for (std::size_t i = 0; i < rowOrder_.size(); ++i)
+        if (orderRows_[rowOrder_[i]].number == keep) {
+            orders_->selectModelRows({static_cast<ui::RowIndex>(i)}, false);
+            break;
+        }
     const auto* o = selectedOrder();
     receipt_->setEnabled(o && !o->receiptUrl.empty());
     order_->setEnabled(o != nullptr);
@@ -2202,8 +2218,8 @@ void PurchasesPanel::refreshOrders() {
 
 const licence::shop::Order* PurchasesPanel::selectedOrder() const {
     const auto rows = orders_->selectedModelRows();
-    if (rows.empty() || rows.front() >= orderRows_.size()) return nullptr;
-    return &orderRows_[rows.front()];
+    if (rows.empty() || rows.front() >= rowOrder_.size() || rowOrder_[rows.front()] >= orderRows_.size()) return nullptr;
+    return &orderRows_[rowOrder_[rows.front()]];
 }
 
 void PurchasesPanel::openReceipt() {
@@ -2318,7 +2334,7 @@ void PurchasesPanel::onLayout() {
         order_->setBounds({x + w - ow, y - 2.f, ow, 28.f});
         receipt_->setBounds({x + w - ow - 6.f - rw, y - 2.f, rw, 28.f});
         y += 32.f;
-        const float th = 30.f + 26.f * static_cast<float>(std::min<std::size_t>(4, orderRows_.size())) + 4.f;
+        const float th = 30.f + 26.f * static_cast<float>(std::min<std::size_t>(5, rowOrder_.size())) + 4.f;
         orders_->setBounds({x, y, w, th});
         y += th + 12.f;
     }
@@ -2380,6 +2396,131 @@ void PurchasesPanel::onPaint(const ui::PaintContext& ctx) {
         const std::string end = licence::service::dayText(hi);
         r.drawText({bx + bw - r.measure(end, kSmall).width, tl.y + 33.f}, end, kSmall, c.textMuted);
     }
+}
+
+// ------------------------------------------------------------------ 1.48.0 : le Panier
+CartPanel::CartPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.panier"), body_(body), menus_(menus) {
+    table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.panier.lignes")));
+    table_->setColumns({{"Article", 260.f}, {"Ce qu'il donne", 380.f}, {"Pour", 160.f}, {"Prix TTC", 150.f}});
+    table_->setSelectionMode(ui::SelectionMode::Single);
+    const auto mk = [this](const char* text, const char* id, ui::Button::Style st) {
+        auto* b = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>(text, id)));
+        b->setStyle(st);
+        return b;
+    };
+    remove_ = mk("Retirer", "licence.panier.retirer", ui::Button::Style::Default);
+    empty_ = mk("Vider le panier", "licence.panier.vider", ui::Button::Style::Danger);
+    ask_ = mk("Envoyer la demande", "licence.panier.demander", ui::Button::Style::Default);
+    askAll_ = mk("Tout demander sans paiement", "licence.panier.tout-demander", ui::Button::Style::Flat);
+    pay_ = mk("Payer", "licence.panier.payer", ui::Button::Style::Primary);
+    links_ += remove_->clicked->connect([this] { removeSelected(); });
+    links_ += empty_->clicked->connect([this] { emptyCart(); });
+    links_ += ask_->clicked->connect([this] { ask(false); });
+    links_ += askAll_->clicked->connect([this] { ask(true); });
+    links_ += pay_->clicked->connect([this] {
+        if (cart_.toPay() == 0) return body_.say("Aucune ligne \xC3\xA0 payer dans le panier.", 2);
+        licence::showPurchase(menus_, std::string());   // le recapitulatif du panier
+    });
+    refresh();
+}
+
+void CartPanel::refresh() {
+    cart_ = licence::shop::loadCart();
+    const auto cat = licence::shop::catalogue();
+    std::vector<std::vector<std::string>> cells;
+    for (const auto& l : cart_.lines) {
+        std::string price = "sur demande";
+        if (!l.request) {
+            const auto* a = cat.find(l.article);
+            price = a ? licence::shop::amountTtc(a->amount, cat.currency) : licence::shop::amountTtc(l.amount, cart_.currency);
+        }
+        const std::string what = l.kind == "option" ? (l.licence.empty() ? std::string("l'offre du panier") : "la licence " + l.licence) : std::string("une licence neuve");
+        cells.push_back({l.label + (l.request ? " (sans paiement)" : ""), l.gives, what, price});
+    }
+    model_ = std::make_shared<Rows>(std::vector<std::string>{"Article", "Ce qu'il donne", "Pour", "Prix TTC"}, std::move(cells));
+    table_->setModel(model_);
+    const bool any = !cart_.lines.empty();
+    remove_->setEnabled(any);
+    empty_->setEnabled(any);
+    pay_->setEnabled(cart_.toPay() > 0);
+    pay_->setText(cart_.toPay() ? "Payer \xE2\x80\x94 " + licence::shop::amountTtc(cart_.total(), cat.currency) : std::string("Payer"));
+    ask_->setVisibility(cart_.requests() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    askAll_->setVisibility(cart_.toPay() ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    invalidateLayout();
+    invalidate();
+}
+
+void CartPanel::removeSelected() {
+    const auto rows = table_->selectedModelRows();
+    if (rows.empty() || rows.front() >= cart_.lines.size()) return body_.say("Choisis d'abord une ligne du panier.", 2);
+    const std::string label = cart_.lines[rows.front()].label;
+    cart_.lines.erase(cart_.lines.begin() + static_cast<std::ptrdiff_t>(rows.front()));
+    std::string why;
+    if (!licence::shop::saveCart(cart_, &why)) return body_.say(why, 3);
+    body_.say("\xC2\xAB " + label + " \xC2\xBB est retir\xC3\xA9 du panier.", 0);
+    refresh();
+}
+
+void CartPanel::emptyCart() {
+    cart_.lines.clear();
+    std::string why;
+    if (!licence::shop::saveCart(cart_, &why)) return body_.say(why, 3);
+    body_.say("Le panier est vide.", 0);
+    refresh();
+}
+
+void CartPanel::ask(bool all) {
+    std::string why;
+    if (!licence::startCartOrder(menus_, false, all, &why)) return body_.say(why, 2);
+    body_.say("Envoi de ta demande \xC3\xA0 l'\xC3\xA9" "diteur (sans paiement)\xE2\x80\xA6", 0);
+}
+
+void CartPanel::onLayout() {
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    leadY_ = b.y + 10.f + 26.f;
+    float y = leadY_ + 26.f;
+    const float bh = 32.f;
+    const float listH = std::max(80.f, b.bottom() - y - bh - 60.f);
+    table_->setBounds({x, y, w, listH});
+    y += listH + 8.f;
+    float bx = x;
+    for (ui::Button* btn : {remove_, empty_}) {
+        const float bw = btn->sizeHint().preferred.w + 16.f;
+        btn->setBounds({bx, y, bw, bh});
+        bx += bw + 8.f;
+    }
+    totalY_ = y + 6.f;
+    float rx = x + w;
+    for (ui::Button* btn : {pay_, ask_, askAll_}) {
+        if (btn->visibility() != ui::Visibility::Visible) continue;
+        const float bw = std::max(150.f, btn->sizeHint().preferred.w + 16.f);
+        rx -= bw;
+        btn->setBounds({rx, y + bh + 8.f, bw, bh});
+        rx -= 8.f;
+    }
+}
+
+void CartPanel::onPaint(const ui::PaintContext& ctx) {
+    auto& r = ctx.r;
+    const auto& c = ctx.theme.color;
+    const auto b = bounds();
+    const float x = b.x + 12.f, w = std::max(200.f, b.w - 24.f);
+    r.drawText({x, b.y + 10.f}, "Panier", gfx::semibold(kTitle), c.text);
+    r.drawText({x, leadY_},
+               fit(r, "Ce que tu as choisi dans Licence et Options : paie les lignes \xC3\xA0 payer en une fois (une page de Stripe), et envoie les autres \xC3\xA0 l'\xC3\xA9" "diteur sans paiement.",
+                   kSmall, w),
+               kSmall, c.textMuted);
+    const auto cat = licence::shop::catalogue();
+    std::string t = cart_.lines.empty() ? std::string("Le panier est vide : Acheter, dans Licence ou Options, y met un article.")
+                                        : "Total TTC : " + licence::shop::amountTtc(cart_.total(), cat.currency) + " (" + std::to_string(cart_.toPay()) +
+                                              (cart_.toPay() > 1 ? " lignes \xC3\xA0 payer" : " ligne \xC3\xA0 payer") + ")" +
+                                              (cart_.requests() ? " \xC2\xB7 " + std::to_string(cart_.requests()) + " sans paiement" : std::string());
+    const float tw = r.measure(t, kValue).width;
+    r.drawText({x + w - tw, totalY_}, t, kValue, c.text);
+    if (cat.test() && cart_.toPay())
+        r.drawText({x, pay_->bounds().y + 8.f}, fit(r, licence::shop::testModeText(), kSmall, pay_->bounds().x - x - 20.f), kSmall,
+                   ctx.theme.tone(ui::Tone::Warning, c.text));
 }
 
 // ============================================================ 1.35.0 : Activation ==
@@ -2881,19 +3022,6 @@ void OnlinePanel::syncBuyButtons() {
     }
 }
 
-// 1.46.0 : << ou la demander sans paiement >> - l'offre choisie, la demande en dessous (la partie gauche y defile).
-void OnlinePanel::askWithoutPayment(const std::string& editionId) {
-    chosen_ = editionId;
-    buildOffer();
-    const auto b = bounds();
-    scroll_ = std::max(0.f, scroll_ + (fieldsY_ - (b.y + 70.f)));
-    std::string label = editionId;
-    for (const auto& k : cards_)
-        if (k.id == editionId) label = k.label;
-    body_.say("\xC3\x89" "dition choisie : " + label + ". Remplis ta demande ci-dessous, puis Envoyer \xC3\xA0 l'\xC3\xA9" "diteur (sans paiement).", 0);
-    invalidateLayout();
-    invalidate();
-}
 
 std::string OnlinePanel::futureText(const std::string& id) const {
     const auto reg = licensing::getRegistry();

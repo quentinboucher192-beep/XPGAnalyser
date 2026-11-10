@@ -452,6 +452,7 @@ struct RestoreReport {
 // Une commande livree (ou pas) par deliverOrders.
 struct OrderDelivery {
     int         number{0};
+    int         line{0};            // 1.48.0 : la ligne de la commande
     bool        delivered{false};
     bool        review{false};      // mise << a revoir >> (la raison : problem)
     std::string licence, customer, article, problem;
@@ -823,6 +824,11 @@ public:
     // pas touche : reload() ensuite). Les livraisons commencees sont gardees (boutique-livraisons.json) : une reprise ne
     // signe pas une seconde licence.
     [[nodiscard]] OpResult deliverOrders(int number, bool automatic, DeliveryReport* report = nullptr) const;
+    // 1.48.0 : le panier - chaque ligne se valide a part : `line` 0, toutes les lignes a valider de la commande (automatique :
+    // les payees seulement) ; une ligne, elle seule. Une option << avec_ligne >> attend que sa ligne de licence soit livree.
+    [[nodiscard]] OpResult deliverOrders(int number, int line, bool automatic, DeliveryReport* report = nullptr) const;
+    // LENT : une ligne refusee (la raison, lue par le client dans Mes achats ; le droit << demandes >>).
+    [[nodiscard]] OpResult refuseLine(int number, int line, const std::string& reason) const;
     // LENT : << a revoir >> avec la raison (le droit << demandes >>) ; rembourser (l'admin+ : Stripe, par le service).
     [[nodiscard]] OpResult reviewOrder(int number, const std::string& reason) const;
     [[nodiscard]] OpResult refundOrder(int number) const;
@@ -899,8 +905,12 @@ private:
     void discoverConnection();
     Derogation derogation_;
     // 1.46.0 : une commande livree par CE Workspace (deliverOrders le cree neuf).
-    OpResult deliverHere(int number, bool automatic, DeliveryReport* report);
-    bool     deliverOne(online::Client& c, const shop::Order& order, const shop::Settings& settings, bool automatic, DeliveryReport& rep);
+    OpResult deliverHere(int number, int line, bool automatic, DeliveryReport* report);
+    bool     deliverOne(online::Client& c, const shop::Order& order, const shop::Settings& settings, bool automatic, int line, DeliveryReport& rep);
+    // 1.48.0 : une ligne (`ord` : la commande, ses champs d'article pris de la ligne ; `req` : son scelle ouvert ;
+    // `cartLicence` : une option << avec_ligne >> - la licence livree par cette ligne). Faux : pas livree (dit dans rep).
+    bool     deliverLine(online::Client& c, const shop::Order& ord, int line, const online::Entry& req, const std::string& cartLicence, DeliveryReport& rep,
+                         std::string& licenseOut);
     void loadKey();
     void loadArchive();
     void loadActivations();

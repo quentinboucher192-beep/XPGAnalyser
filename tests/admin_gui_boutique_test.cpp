@@ -458,7 +458,7 @@ int main(int argc, char** argv) {
         check(click(*op, "commandes.revoir") && !rig.dialogs.empty(), "Revoir... : une question (la raison)");
         if (!rig.dialogs.empty()) {
             const std::string q = drawMenu(*rig.dialogs.back());
-            check(has(q, "Mettre la commande n\xC2\xB0 3 \xC3\xA0 revoir"), "la question de Revoir...");
+            check(has(q, "Refuser") && has(q, "ne sera pas livr"), "la question : refuser l'article (1.48.0 : une ligne, la raison)");
         }
         rig.dialogs.clear();
         check(pick(2), "choisir la n° 2 (livree)");

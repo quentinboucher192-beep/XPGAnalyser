@@ -1063,9 +1063,9 @@ int main(int argc, char** argv) {
                 // -- le modele : dix rubriques en quatre groupes ; Mon profil n'en est plus une
                 std::set<int> tabsSeen;
                 for (const auto& s : L::sections()) tabsSeen.insert(s.tab);
-                check(L::sections().size() == 10 && L::sectionGroups().size() == 4 && !L::sectionOf(L::kTabProfile) && tabsSeen.size() == 10 &&
+                check(L::sections().size() == 11 && L::sectionGroups().size() == 4 && !L::sectionOf(L::kTabProfile) && tabsSeen.size() == 11 &&
                           !tabsSeen.count(L::kTabProfile) && !tabsSeen.count(L::kTabHome),
-                      "dix rubriques en quatre groupes (Ma licence, Obtenir ou \xC3\xA9tendre, D\xC3\xA9" "couvrir, R\xC3\xA9glages) ; Mon profil n'en est plus une");
+                      "onze rubriques (1.48.0 : le Panier) en quatre groupes (Ma licence, Obtenir ou \xC3\xA9tendre, D\xC3\xA9" "couvrir, R\xC3\xA9glages) ; Mon profil n'en est plus une");
                 check(L::sectionByName("demander") == L::kTabRequest && L::sectionByName("Mes achats") == L::kTabPurchases &&
                           L::sectionByName("mes-achats") == L::kTabPurchases && L::sectionByName("fonctionnalit\xC3\xA9s") == L::kTabFeatures &&
                           L::sectionByName("\xC3\x89" "ditions") == L::kTabEditions && L::sectionByName("accueil") == L::kTabHome &&
@@ -1161,10 +1161,11 @@ int main(int argc, char** argv) {
                         labels.push_back(items[i].label);
                         if (items[i].id == L::kTabPurchases) purchasesAt = i;
                     }
-                    check(fil->siblingsOpen() && !items.empty() && items[0].heading && items[0].label == "Obtenir ou \xC3\xA9tendre" && labels.size() == 5 &&
-                              labels[0] == "Demander ma licence" && labels[2] == "Options" && labels[3] == "Mes achats" && has(labels[4], "accueil") &&
+                    check(fil->siblingsOpen() && !items.empty() && items[0].heading && items[0].label == "Obtenir ou \xC3\xA9tendre" && labels.size() == 6 &&
+                              labels[0] == "Demander ma licence" && labels[2] == "Options" && labels[3] == "Panier" && labels[4] == "Mes achats" &&
+                              has(labels[5], "accueil") &&
                               mr.saw("Obtenir ou \xC3\xA9tendre") && mr.saw("Toutes les rubriques"),
-                          "le menu du fil : son groupe, ses quatre rubriques, l'accueil (dessin\xC3\xA9 par-dessus)");
+                          "le menu du fil : son groupe, ses cinq rubriques (le Panier), l'accueil (dessin\xC3\xA9 par-dessus)");
                     (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
                     frame();
                     check(!fil->siblingsOpen() && mm.depth() == 1 && app::licenceWindowSection() == L::kTabOptions, "\xC3\x89" "chap : le menu se ferme, la fen\xC3\xAAtre reste");
@@ -1558,12 +1559,16 @@ int main(int argc, char** argv) {
                               has(all, "Ach\xC3\xA8te ta licence en ligne (par carte, sur la page de Stripe : elle arrive seule), ou demande-la") && !cut,
                           "le paiement d'essai se voit (le mode test du catalogue), entier ; la phrase de la boutique, enti\xC3\xA8re");
                 }
+                // 1.48.0 : LE PANIER - << ou la demander sans paiement >> y met une ligne de demande ; Acheter, une ligne a payer
+                fs::remove(fs::path(shop::cachePath()).parent_path() / "panier.json", ec);
                 if (auto* ask = button("licence.demande.demander.PROFESSIONAL")) ask->clicked->emit();
                 frame();
                 {
-                    UiRecorder ur;
-                    mm.Render(ur, fc);
-                    check(ur.saw("Ce que contient PROFESSIONAL"), "<< ou la demander sans paiement >> : l'offre choisie pour la demande (sans paiement)");
+                    const auto c1 = shop::loadCart();
+                    auto* tab = button("licence.boutique.panier");
+                    check(c1.lines.size() == 1 && c1.lines[0].request && c1.lines[0].article == "ed:PROFESSIONAL" && c1.requests() == 1 && tab && tab->visible() &&
+                              tab->text() == "Panier (1)" && button("licence.boutique.licence") && button("licence.boutique.options"),
+                          "1.48.0 : << ou la demander sans paiement >> : une ligne de demande au panier ; les onglets Licence, Options, Panier (1)");
                 }
                 // un service trop ancien, une boutique fermee : plus de bouton, sans un mot
                 shop::Catalogue oldSvc;
@@ -1578,19 +1583,62 @@ int main(int argc, char** argv) {
                 check(goneOld && goneShut, "un service d'avant la 1.46.0, une boutique ferm\xC3\xA9" "e : aucun bouton << Acheter >>, la demande sans paiement reste");
                 shop::setCatalogue(cat);
                 frame();
-                // -- Acheter : le recapitulatif
+                // -- Acheter : au panier ; le Panier : ses lignes, le total ; Payer : le recapitulatif
                 if (auto* b = button("licence.demande.acheter.PROFESSIONAL")) b->clicked->emit();
+                if (auto* b = button("licence.demande.acheter.ENTERPRISE")) b->clicked->emit();
+                if (auto* b = button("licence.demande.acheter.ENTERPRISE")) b->clicked->emit();   // deja dans le panier : refuse
+                frame();
+                if (auto* b = button("licence.boutique.panier")) b->clicked->emit();
+                frame();
+                {
+                    const auto c2 = shop::loadCart();
+                    auto* lines = dynamic_cast<ui::TableView*>(licRoot->findById("licence.panier.lignes"));
+                    check(c2.lines.size() == 3 && c2.toPay() == 2 && c2.total() == 49000 + 149000 && app::licenceWindowSection() == L::kTabCart && lines &&
+                              lines->model() && lines->model()->rowCount() == 3 && lines->model()->cellText(2, 3) == "1\xC2\xA0" "490,00" + eur + " TTC" &&
+                              lines->model()->cellText(0, 3) == "sur demande" && button("licence.panier.payer") &&
+                              has(button("licence.panier.payer")->text(), "1\xC2\xA0" "980,00") && button("licence.panier.demander")->visible(),
+                          "1.48.0 : le Panier - trois lignes (une demande, deux \xC3\xA0 payer ; un article une fois), le total TTC, Payer, Envoyer la demande");
+                    // retirer une ligne, puis la remettre
+                    if (lines) lines->selectModelRows({2}, true);
+                    if (auto* b = button("licence.panier.retirer")) b->clicked->emit();
+                    frame();
+                    check(shop::loadCart().lines.size() == 2 && shop::loadCart().total() == 49000, "Retirer : la ligne choisie quitte le panier, le total suit");
+                    if (auto* b = button("licence.panier.vider")) b->clicked->emit();
+                    frame();
+                    check(shop::loadCart().lines.empty() && button("licence.boutique.panier")->text() == "Panier", "Vider le panier : vide");
+                    auto again = shop::loadCart();
+                    std::string w;
+                    shop::CartLine pro;
+                    pro.article = "ed:PROFESSIONAL";
+                    pro.kind = "edition";
+                    pro.edition = "PROFESSIONAL";
+                    pro.label = "PROFESSIONAL";
+                    pro.amount = 49000;
+                    shop::CartLine opt;
+                    opt.article = "opt:ia_avancee:30";
+                    opt.kind = "option";
+                    opt.option = "ia_avancee";
+                    opt.days = 30;
+                    opt.label = "Assistant IA avanc\xC3\xA9, 1 mois";
+                    opt.amount = 2900;
+                    shop::Cart lone;
+                    check(!shop::addToCart(lone, opt, "", &w) && has(w, "licence") && shop::addToCart(again, pro, "", &w) && shop::addToCart(again, opt, "", &w) &&
+                              again.lines.back().licence.empty() && shop::saveCart(again, &w),
+                          "une option sans licence ni offre au panier : refus\xC3\xA9" "e ; avec une offre au panier : sa licence (" + w + ")");
+                    frame();
+                }
+                if (auto* b = button("licence.panier.payer")) b->clicked->emit();
                 frame();
                 frame();
-                check(mm.depth() == 2 && mm.top() && mm.top()->id() == "dialog.achat" && L::purchaseWindowOpen(), "Acheter : le r\xC3\xA9" "capitulatif s'ouvre");
+                check(mm.depth() == 2 && mm.top() && mm.top()->id() == "dialog.achat" && L::purchaseWindowOpen(), "Payer : le r\xC3\xA9" "capitulatif du panier s'ouvre");
                 {
                     UiRecorder ur;
                     mm.Render(ur, fc);
                     const std::string all = ur.joined();
                     auto* payB = button("dialog.achat.payer");
-                    check(ur.saw("Acheter PROFESSIONAL") && ur.saw("490,00" + eur + " TTC") && has(all, "5 PC") && ur.saw("Client d'essai") && ur.saw("Camille Essai") &&
+                    check(ur.saw("Payer le panier") && ur.saw("519,00" + eur + " TTC") && has(all, "PROFESSIONAL") && has(all, "Assistant IA") && ur.saw("Client d'essai") && ur.saw("Camille Essai") &&
                               ur.saw(pf.email) && has(all, "ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG") && has(all, "redemand\xC3\xA9" "e \xC3\xA0 chaque achat") &&
-                              ur.saw("Paiement d'essai") && button("dialog.achat.profil") && payB && payB->enabled() && has(payB->text(), "Payer 490,00"),
+                              ur.saw("Paiement d'essai") && button("dialog.achat.profil") && payB && payB->enabled() && has(payB->text(), "Payer 519,00"),
                           "le r\xC3\xA9" "capitulatif dessin\xC3\xA9 : l'offre, le montant TTC, la soci\xC3\xA9t\xC3\xA9, le nom, le courriel, Modifier mon profil..., la phrase de la carte");
                 }
                 // -- Payer : la commande part ; le service ne repond pas : << Commande non passee >>, rien de debite

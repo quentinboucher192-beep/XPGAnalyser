@@ -840,7 +840,7 @@ public:
         if (r >= rows.size()) return {};
         const auto& o = rows[r];
         switch (c) {
-            case 0: return std::to_string(o.number);
+            case 0: return o.lineCount > 1 ? std::to_string(o.number) + "-" + std::to_string(o.line) : std::to_string(o.number);   // 1.48.0 : une ligne
             case 1: return dateTimeFr(o.created);
             case 2: return o.company;
             case 3: return o.label.empty() ? o.article : o.label;
@@ -855,7 +855,7 @@ public:
         ui::CellStyle s;
         if (r < rows.size() && c == 5) {
             s.fg = stateInk(rows[r].state);
-            s.bold = rows[r].state == "payee" || rows[r].state == "a_revoir";
+            s.bold = rows[r].state == "payee" || rows[r].state == "a_revoir" || rows[r].state == "a_valider";
             s.keepFgSelected = true;   // l'etat garde sa couleur sur la ligne choisie
         }
         if (c == 0) s.monospace = true;
@@ -995,7 +995,7 @@ public:
         deliver_ = &button(*this, "D\xC3\xA9livrer maintenant", "commandes.delivrer", ui::Button::Style::Primary, ui::Icon::Ok);
         stripe_ = &button(*this, "Voir dans Stripe", "commandes.stripe", ui::Button::Style::Default, ui::Icon::GoTo);
         receipt_ = &button(*this, "Ouvrir le re\xC3\xA7u", "commandes.recu", ui::Button::Style::Default, ui::Icon::Document);
-        review_ = &button(*this, "Revoir\xE2\x80\xA6", "commandes.revoir");
+        review_ = &button(*this, "Refuser\xE2\x80\xA6", "commandes.revoir");   // 1.48.0 : refuser une ligne (la raison)
         refund_ = &button(*this, "Rembourser\xE2\x80\xA6", "commandes.rembourser", ui::Button::Style::Danger);
         links_ += reload_->clicked->connect([this] { fetch(); });
         links_ += deploy_->clicked->connect([this] {
@@ -1020,7 +1020,7 @@ public:
         *alive_ = false;
     }
 
-    [[nodiscard]] std::string title() const override { return "Commandes"; }
+    [[nodiscard]] std::string title() const override { return "Commandes et demandes"; }   // 1.48.0 : le panier
 
     void refresh() override {
         if (ws().service().ready() && ws().can("demandes") && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0))
@@ -1101,7 +1101,7 @@ protected:
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         r.fillRect(bounds(), c.windowBg);
-        r.drawText({x0_, titleY_}, "Commandes", gfx::semibold(kF28), c.text);
+        r.drawText({x0_, titleY_}, "Commandes et demandes", gfx::semibold(kF28), c.text);
         r.drawText({x0_, titleY_ + 40.f}, fit(r, status(), kF14, reload_->bounds().x - 16.f - x0_), kF14, problem_.empty() || !note_.empty() ? c.textMuted : c.warning);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
@@ -1154,11 +1154,35 @@ private:
         all_->by.clear();
         if (ws().hasOrders())
             for (const auto& o : ws().orders().orders) {
-                all_->rows.push_back(o);
-                std::string by;
-                if (o.state == "livree" || o.state == "remboursee")
-                    if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
-                all_->by.push_back(by);
+                if (o.lines.empty()) {   // une commande sans lignes (faite a la main, les essais) : elle-meme
+                    std::string by;
+                    if (o.state == "livree" || o.state == "remboursee")
+                        if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
+                    all_->rows.push_back(o);
+                    all_->by.push_back(by);
+                    continue;
+                }
+                for (const auto& l : o.lines) {   // 1.48.0 : une rangee par ligne (chacune se valide a part)
+                    shop::Order x = o;
+                    x.line = l.line;
+                    x.orderState = o.state;
+                    x.state = l.state;
+                    x.article = l.article;
+                    x.kind = l.kind;
+                    x.edition = l.edition;
+                    x.option = l.option;
+                    x.days = l.days;
+                    x.amount = l.amount;
+                    x.label = l.label;
+                    x.existingLicence = l.existingLicence;
+                    x.licence = l.licence;
+                    x.error = l.error;
+                    std::string by;
+                    if (x.state == "livree" || x.state == "remboursee")
+                        if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
+                    all_->rows.push_back(std::move(x));
+                    all_->by.push_back(by);
+                }
             }
         bar_->refreshCounts();
         rebuild();
@@ -1340,7 +1364,7 @@ private:
                                                 : std::string("Signer la licence et la d\xC3\xA9poser tout de suite (le code part scell\xC3\xA9 au PC du client)."));
             stripe_->setEnabled(!o->stripePayment.empty() || !o->stripeSession.empty());
             receipt_->setEnabled(o->receiptUrl.rfind("https://", 0) == 0);
-            review_->setEnabled(o->state == "payee" && ws().can("demandes") && !bz);
+            review_->setEnabled(o->deliverable() && ws().can("demandes") && !bz);   // 1.48.0 : refuser une ligne a valider
             refund_->setEnabled(o->refundable() && ws().role() == Role::Plus && !bz);
             refund_->setTooltip(ws().role() != Role::Plus ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.")
                                                           : std::string("Stripe rembourse le client en entier ; la licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office."));
@@ -1434,10 +1458,10 @@ private:
             if (host_.flash) host_.flash(kBusy, Tone::Warning);
             return;
         }
-        const int n = o->number;
+        const int n = o->number, ln = o->line;
         const Workspace* wp = &ws();
         auto alive = alive_;
-        (void)host_.runSlow("Boutique : livraison de la commande n\xC2\xB0 " + std::to_string(n), [wp, n] { return wp->deliverOrders(n, false); },
+        (void)host_.runSlow("Boutique : livraison de la commande n\xC2\xB0 " + std::to_string(n), [wp, n, ln] { return wp->deliverOrders(n, ln, false); },
                             [this, alive](const OpResult&) {
                                 if (!*alive) return;
                                 lastFetch_ = -1;
@@ -1445,18 +1469,21 @@ private:
                             });
     }
 
+    // 1.48.0 : refuser UNE ligne (une demande, ou une ligne payee : rembourse-la ensuite), la raison lue par le client.
     void askReview() {
         const shop::Order* o = selected();
         if (!o || !host_.openDialog) return;
-        const int n = o->number;
+        const int n = o->number, ln = o->line > 0 ? o->line : 1;
+        const bool linesKnown = o->linesKnown;
         auto alive = alive_;
         host_.openDialog(std::make_unique<AskDialog>(
-            "boutique.revoir", "Mettre la commande n\xC2\xB0 " + std::to_string(n) + " \xC3\xA0 revoir",
-            "Elle ne sera pas livr\xC3\xA9" "e seule : dis pourquoi (l'Admin et les autres admins le lisent). Tu pourras la d\xC3\xA9livrer plus tard, ou la rembourser.", true,
-            "Mettre \xC3\xA0 revoir", false, [this, alive, n](const std::string& reason) {
+            "boutique.revoir", "Refuser \xC2\xAB " + (o->label.empty() ? o->article : o->label) + " \xC2\xBB (commande n\xC2\xB0 " + std::to_string(n) + ")",
+            std::string("Cet article ne sera pas livr\xC3\xA9 : dis pourquoi (le client le lit dans Mes achats).") +
+                (o->payment ? " Il est pay\xC3\xA9 : rembourse la commande ensuite si tu le d\xC3\xA9" "cides." : ""),
+            true, "Refuser", true, [this, alive, n, ln, linesKnown](const std::string& reason) {
                 if (!*alive) return;
                 const Workspace* wp = &ws();
-                (void)host_.runSlow("Boutique : commande \xC3\xA0 revoir", [wp, n, reason] { return wp->reviewOrder(n, reason); },
+                (void)host_.runSlow("Boutique : article refus\xC3\xA9", [wp, n, ln, linesKnown, reason] { return linesKnown ? wp->refuseLine(n, ln, reason) : wp->reviewOrder(n, reason); },
                                     [this, alive](const OpResult&) {
                                         if (!*alive) return;
                                         lastFetch_ = -1;

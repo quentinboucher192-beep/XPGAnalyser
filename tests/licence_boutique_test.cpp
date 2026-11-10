@@ -584,6 +584,57 @@ int main(int argc, char** argv) {
               "trois commandes (la plus r\xC3\xA9" "cente d'abord), les re\xC3\xA7us des pay\xC3\xA9" "es");
     }
 
+    std::printf("-- 1.48.0 : le panier - une commande de plusieurs lignes (une page de paiement), une demande sans paiement (chaque ligne se valide)\n");
+    {
+        shop::CartLine pro;
+        pro.article = "ed:PROFESSIONAL";
+        pro.kind = "edition";
+        pro.edition = "PROFESSIONAL";
+        pro.label = "PROFESSIONAL";
+        shop::CartLine opt;
+        opt.article = "opt:ia_avancee:30";
+        opt.kind = "option";
+        opt.option = "ia_avancee";
+        opt.days = 30;
+        opt.label = "Assistant IA avanc\xC3\xA9, 1 mois";   // avec l'offre du panier (avec_ligne)
+        ls::OrderForm f = form;
+        f.lines = {pro, opt};
+        f.payment = true;
+        auto r = ls::placeOrder(f);
+        const json::Value c = orderAtService(static_cast<long long>(r.orderNumber));
+        const json::Value* cl = c.find("lignes");
+        check(r.ok && r.orderNumber > 0 && has(r.orderUrl, "https://checkout.stripe.invalid/pay/") && cl && cl->isArray() && cl->items().size() == 2 &&
+                  cl->items()[1].integer("avec_ligne") == 1 && c.integer("montant") == 49000 + 2900,
+              "un panier pay\xC3\xA9 : une commande de deux lignes, une page de paiement, l'option avec la ligne de l'offre (" + r.message + ")");
+        auto rec = record();
+        const shop::Order* o = orderIn(rec, r.orderNumber);
+        check(o && o->lines.size() == 2 && o->state == shop::kToPay && o->payment, "le relev\xC3\xA9 garde ses lignes");
+        const auto cancel = ls::cancelOrder(r.orderNumber);
+        check(cancel.ok, "annul\xC3\xA9" "e (" + cancel.message + ")");
+        // une demande sans paiement : une offre << sur demande >> (pas dans le catalogue) ; l'editeur refuse la ligne
+        shop::CartLine ent;
+        ent.article = "ed:ENTERPRISE";
+        ent.kind = "edition";
+        ent.edition = "ENTERPRISE";
+        ent.label = "ENTERPRISE (sur demande)";
+        ent.request = true;
+        f.lines = {ent};
+        f.payment = false;
+        r = ls::placeOrder(f);
+        const std::uint64_t nd = r.orderNumber;
+        rec = record();
+        o = orderIn(rec, nd);
+        check(r.ok && nd > 0 && r.orderUrl.empty() && o && o->state == shop::kToValidate && !o->payment && o->lines.size() == 1,
+              "une demande sans paiement : << \xC3\xA0 valider >>, aucune page de paiement (" + r.message + ")");
+        const Http refuse = editor("POST", "/admin/commandes/ligne", jsonBody({{"numero", nd}, {"ligne", 1}, {"action", "refusee"}, {"raison", "Essai : pas pour ce poste"}}));
+        r = ls::refreshOrders();
+        rec = record();
+        o = orderIn(rec, nd);
+        check(refuse.status == 200 && r.ok && o && o->lines.size() == 1 && o->lines[0].state == shop::kRefused && has(o->lines[0].error, "Essai") &&
+                  o->state == shop::kRefused,
+              "l'\xC3\xA9" "diteur refuse la ligne : le Studio la voit refus\xC3\xA9" "e, avec sa raison (" + std::to_string(refuse.status) + " " + refuse.body.substr(0, 120) + ")");
+    }
+
     std::printf("-- le service ne repond plus : une phrase, rien ne change\n");
     {
         lsv::Address dead;
@@ -594,7 +645,7 @@ int main(int argc, char** argv) {
         const auto r = ls::placeOrder(f);
         const auto o = ls::refreshOrders();
         check(!r.ok && !r.reached && has(r.message, "Hors ligne") && has(r.message, "rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9") && !o.ok && !o.reached &&
-                  record().orders.size() == 3,
+                  record().orders.size() == 5,
               "hors ligne : << " + r.message + " >>");
         ls::setAddressForTests(address);
     }

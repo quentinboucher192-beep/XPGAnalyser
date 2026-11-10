@@ -136,6 +136,8 @@ OrderWindow*    g_order = nullptr;
 // Le numero des resultats du service juste avant << Payer >> : la fenetre << Commande >> (0) prend le resultat de CE travail,
 // meme s'il est releve avant qu'elle soit construite (un service qui ne repond pas : tout de suite).
 unsigned long long g_orderSince = 0;
+// 1.48.0 : les lignes du panier parties avec la commande en cours (retirees du panier quand le service l'a recue).
+std::vector<std::pair<std::string, bool>> g_sentLines;
 
 } // namespace
 
@@ -209,6 +211,40 @@ PurchaseView purchaseView(const shop::Catalogue& cat, const std::string& article
     return v;
 }
 
+PurchaseView cartView(const shop::Catalogue& cat, const shop::Cart& cart, const Profile& p) {
+    PurchaseView v;
+    v.card = shop::cardSentence();
+    v.company = !p.company.empty() ? p.company : p.name;
+    v.name = !p.company.empty() ? p.name : std::string();
+    v.email = p.email;
+    v.title = "Payer le panier";
+    std::int64_t total = 0;
+    std::size_t n = 0;
+    for (const auto& l : cart.lines) {
+        if (l.request) continue;
+        const shop::Article* a = cat.find(l.article);
+        if (!cat.selling() || !a) {
+            v.missing = "\xC2\xAB " + l.label + " \xC2\xBB n'est plus en vente en ligne : retire-le du panier, ou demande-le sans paiement.";
+            continue;
+        }
+        total += a->amount;
+        ++n;
+        v.gives.push_back(l.label + " \xE2\x80\x94 " + shop::amountTtc(a->amount, cat.currency) + (l.gives.empty() ? std::string() : " \xC2\xB7 " + l.gives));
+    }
+    v.ok = n > 0;
+    v.what = std::to_string(n) + (n > 1 ? " articles" : " article");
+    v.label = "le panier";
+    v.amount = shop::amountTtc(total, cat.currency);
+    if (cat.test()) v.testMode = shop::testModeText();
+    if (n == 0 && v.missing.empty()) v.missing = "Aucune ligne \xC3\xA0 payer dans le panier.";
+    if (v.missing.empty()) {
+        if (v.company.empty()) v.missing = "Ta soci\xC3\xA9t\xC3\xA9 manque : la licence achet\xC3\xA9" "e est \xC3\xA0 son nom (Modifier mon profil\xE2\x80\xA6).";
+        else if (v.email.empty()) v.missing = "Ton courriel manque : Stripe y envoie ta facture (Modifier mon profil\xE2\x80\xA6).";
+    }
+    v.confirm = "Payer " + v.amount + " sur Stripe\xE2\x80\xA6";
+    return v;
+}
+
 OrderView orderView(const shop::Order& o, licensing::Seconds now) {
     OrderView v;
     v.title = o.number ? "Commande n\xC2\xB0 " + std::to_string(o.number) : std::string("Ta commande");
@@ -223,8 +259,14 @@ OrderView orderView(const shop::Order& o, licensing::Seconds now) {
     if (o.state == shop::kToPay && o.expires) v.facts.emplace_back("Page de paiement", "ouverte jusqu'au " + ls::dateText(o.expires));
     if (!o.licence.empty()) v.facts.emplace_back("Licence", o.licence);
     if (o.updated && o.updated != o.created) v.facts.emplace_back("Dernier changement", ls::dateText(o.updated));
+    for (const auto& l : o.lines)   // 1.48.0 : chaque ligne et son etat
+        v.facts.emplace_back("Ligne " + std::to_string(l.index), l.label + " \xE2\x80\x94 " + shop::stateLabel(l.state) +
+                                                                     (l.licence.empty() ? std::string() : " (" + l.licence + ")") +
+                                                                     (l.error.empty() ? std::string() : " : " + l.error));
+    if (!o.payment) v.facts.emplace_back("Paiement", "aucun (une demande \xC3\xA0 valider par l'\xC3\xA9" "diteur)");
     v.pay = o.state == shop::kToPay && !o.payUrl.empty();
-    v.cancel = o.state == shop::kToPay;
+    v.cancel = o.state == shop::kToPay || (o.state == shop::kToValidate &&
+                                           std::none_of(o.lines.begin(), o.lines.end(), [](const shop::OrderLine& l) { return l.state == shop::kDelivered; }));
     v.receipt = !o.receiptUrl.empty();
     v.licence = o.state == shop::kDelivered;
     return v;
@@ -268,7 +310,8 @@ public:
         reload();
     }
     void reload() {
-        view_ = licence::purchaseView(shop::catalogue(), article_, licence::loadProfile(), licensing::getLicenseState());
+        view_ = article_.empty() ? licence::cartView(shop::catalogue(), shop::loadCart(), licence::loadProfile())   // 1.48.0
+                                 : licence::purchaseView(shop::catalogue(), article_, licence::loadProfile(), licensing::getLicenseState());
         if (!optionText_.empty() && !view_.optionText.empty()) view_.optionText = optionText_;
         pay_->setText(view_.ok ? view_.confirm : std::string("Payer"));
         pay_->setEnabled(view_.ok && view_.missing.empty());
@@ -282,7 +325,17 @@ public:
             say(view_.missing.empty() ? std::string("Cet article n'est pas en vente en ligne.") : view_.missing, 3);
             return false;
         }
+        if (article_.empty()) {   // 1.48.0 : le panier, ses lignes a payer
+            std::string w;
+            if (!licence::startCartOrder(menus_, true, false, &w, false)) {
+                say(w, 2);
+                return false;
+            }
+            if (close_) close_(true);   // la fenetre << Commande >> prend la suite
+            return true;
+        }
         g_orderSince = ls::revision();
+        g_sentLines.clear();
         ls::OrderForm f;
         f.article = view_.article;
         f.customer = view_.company;
@@ -556,10 +609,19 @@ public:
             seenResult_ = rev;
             const auto res = ls::lastResult();
             if (number_ == 0 && res.job == ls::Job::Order) {
+                if (res.orderNumber && res.ok && !g_sentLines.empty()) {   // 1.48.0 : recue - ces lignes quittent le panier
+                    auto cart = shop::loadCart();
+                    std::erase_if(cart.lines, [](const shop::CartLine& l) {
+                        return std::any_of(g_sentLines.begin(), g_sentLines.end(), [&l](const auto& s) { return s.first == l.article && s.second == l.request; });
+                    });
+                    (void)shop::saveCart(cart, nullptr);
+                    g_sentLines.clear();
+                }
                 if (res.orderNumber) {
                     number_ = res.orderNumber;
                     say(res.orderReopened ? "Une commande de ce PC attendait d\xC3\xA9j\xC3\xA0 son paiement : sa page est rouverte dans ton navigateur."
-                                          : "La page de paiement de Stripe s'ouvre dans ton navigateur.",
+                                          : res.orderUrl.empty() ? "Ta demande est envoy\xC3\xA9" "e \xC3\xA0 l'\xC3\xA9" "diteur (sans paiement)."   // 1.48.0
+                                                                 : "La page de paiement de Stripe s'ouvre dans ton navigateur.",
                         res.orderReopened ? 2 : 1);
                 } else {
                     failed_ = res.message.empty() ? std::string("La commande n'a pas pu \xC3\xAAtre pass\xC3\xA9" "e.") : res.message;
@@ -837,6 +899,40 @@ void showOrder(menu::MenuManager& menus, std::uint64_t number) {
 bool purchaseWindowOpen() noexcept { return g_purchase != nullptr; }
 bool orderWindowOpen() noexcept { return g_order != nullptr; }
 std::uint64_t orderWindowNumber() noexcept { return g_order ? g_order->number() : 0; }
+
+bool startCartOrder(menu::MenuManager& menus, bool payment, bool all, std::string* why, bool showWindow) {
+    const auto cart = shop::loadCart();
+    const auto p = loadProfile();
+    ls::OrderForm f;
+    f.customer = !p.company.empty() ? p.company : p.name;
+    f.name = !p.company.empty() ? p.name : std::string();
+    f.email = p.email;
+    f.payment = payment;
+    std::vector<std::pair<std::string, bool>> sent;
+    for (const auto& l : cart.lines) {
+        if (payment ? l.request : (!all && !l.request)) continue;
+        shop::CartLine x = l;
+        x.request = !payment;
+        f.lines.push_back(std::move(x));
+        sent.emplace_back(l.article, l.request);
+    }
+    if (f.lines.empty()) {
+        if (why) *why = payment ? "Aucune ligne \xC3\xA0 payer dans le panier." : "Aucune ligne sans paiement dans le panier.";
+        return false;
+    }
+    if (f.customer.empty() || f.email.empty()) {
+        if (why) *why = "Ton profil n'a pas ta soci\xC3\xA9t\xC3\xA9 ou ton courriel (Modifier mon profil\xE2\x80\xA6) : l'\xC3\xA9" "diteur en a besoin.";
+        return false;
+    }
+    g_orderSince = ls::revision();
+    if (!ls::startOrder(f)) {
+        if (why) *why = "Un travail du service des licences est en cours : r\xC3\xA9" "essaie dans un instant.";
+        return false;
+    }
+    g_sentLines = std::move(sent);
+    if (showWindow) showOrder(menus, 0);
+    return true;
+}
 
 bool confirmPurchaseForTests() {
     if (!g_purchase || !g_purchase->body()) return false;

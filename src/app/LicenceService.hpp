@@ -241,6 +241,10 @@ struct OrderForm {
     std::string licenseId;    // une option : la licence de ce PC (obligatoire)
     std::string pcName;       // facultatif : le nom de ce PC (la licence livree)
     std::string optionText;   // une option : ce qu'en dit l'ecran (<< Assistant IA avance, 1 an >>)
+    // 1.48.0 : LE PANIER (docs/BOUTIQUE.md, par. 10) - ses lignes (article vide ci-dessus) ; `payment` faux : une demande
+    // sans paiement (aucune page de Stripe ; la commande nait << a valider >>).
+    std::vector<shop::CartLine> lines;
+    bool                        payment{true};
 };
 inline constexpr std::size_t kMaxShopField = 120;
 inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage = 2000, kMaxPcName = 80, kMaxLicenseId = 64, kMaxEdition = 40,

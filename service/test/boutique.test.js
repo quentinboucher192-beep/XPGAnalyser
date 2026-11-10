@@ -578,6 +578,101 @@ describe("1.46.1 : la reduction suivie, les produits refuses, un prix disparu", 
     });
 });
 
+describe("1.48.0 : le panier (des lignes, payees ou demandees, validees une a une)", () => {
+    const pc3 = nouvelleCle();
+    const panier = (lignes, extra = {}) => ({ ...commande(), article: undefined, lignes, ...extra });
+    const ligneAdmin = (corps, cle = editeur) => appel(A, "POST", "/admin/commandes/ligne", { cle, corps });
+    const deAdmin = async (n) => (await appel(A, "GET", "/admin/commandes", { cle: editeur })).json.commandes.find((x) => x.numero === n);
+
+    it("les lignes verifiees : un article deux fois, avec_ligne qui ne vise pas une licence, une option sans licence", async () => {
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "ed:PROFESSIONAL" }]) }), 400, "champ");
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "opt:ai_advanced:365", avec_ligne: 1 }]) }), 400, "champ");
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "opt:ai_advanced:365" }]) }), 400, "champ");
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:ENTERPRISE" }]) }), 404, "article");
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier(Array.from({ length: 21 }, (_, i) => ({ article: "ed:E" + i }))) }), 400, "champ");
+    });
+
+    it("un panier paye : UNE page de Stripe, une line_items par ligne ; paye : chaque ligne payee ; livree ligne par ligne", async () => {
+        const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "opt:ai_advanced:365", avec_ligne: 1 }]) });
+        assert.equal(r.statut, 201, r.texte);
+        const n = r.json.numero;
+        assert.equal(r.json.montant, 49000 + 9900);
+        assert.equal(r.json.etat, "a_payer");
+        assert.match(r.json.url, /^https:\/\//);
+        assert.deepEqual(r.json.lignes.map((l) => [l.ligne, l.article, l.montant, l.etat]), [[1, "ed:PROFESSIONAL", 49000, "a_payer"], [2, "opt:ai_advanced:365", 9900, "a_payer"]]);
+        assert.equal(r.json.lignes[1].avec_ligne, 1);
+        const q = derniere();
+        sansCarteGardee(q);
+        const p = parametres(q);
+        assert.ok(p["line_items[0][price]"] && p["line_items[1][price]"], "les deux prix Stripe");
+        assert.equal(sessionDe(n).montant, 58900, "la page : la somme des lignes");
+        // un Admin d'avant la 1.48 ne la livre pas a moitie
+        assert.equal((await evenement("checkout.session.completed", sessionDe(n).id)).statut, 200);
+        let c = await deAdmin(n);
+        assert.equal(c.etat, "payee");
+        assert.equal(c.paiement, true);
+        assert.deepEqual(c.lignes.map((l) => l.etat), ["payee", "payee"]);
+        erreur(await appel(A, "POST", "/admin/commandes/prendre", { cle: editeur, corps: { numero: n } }), 409, "lignes");
+        erreur(await appel(A, "POST", "/admin/commandes/livree", { cle: editeur, corps: { numero: n, licence: "XPG-2026-C0001" } }), 409, "lignes");
+        assert.equal((await appel(A, "POST", "/admin/commandes/prendre", { cle: editeur, corps: { numero: n, lignes: true } })).statut, 200);
+        erreur(await ligneAdmin({ numero: n, ligne: 3, action: "livree", licence: "XPG-2026-C0001" }), 404, "ligne");
+        let l = await ligneAdmin({ numero: n, ligne: 1, action: "livree", licence: "XPG-2026-C0001" });
+        assert.equal(l.statut, 200, l.texte);
+        assert.deepEqual([l.json.etat, l.json.etat_commande], ["livree", "payee"]);
+        l = await ligneAdmin({ numero: n, ligne: 2, action: "livree", licence: "XPG-2026-C0001" });
+        assert.deepEqual([l.json.etat, l.json.etat_commande], ["livree", "livree"]);
+        erreur(await ligneAdmin({ numero: n, ligne: 2, action: "livree", licence: "XPG-2026-C0002" }), 409, "etat");
+        c = (await commandesDe(A, pc3)).find((x) => x.numero === n);
+        assert.equal(c.etat, "livree");
+        assert.deepEqual(c.lignes.map((x) => [x.etat, x.licence]), [["livree", "XPG-2026-C0001"], ["livree", "XPG-2026-C0001"]]);
+    });
+
+    it("une demande sans paiement : la meme commande, a valider ; ni Stripe ni boutique en vente ; refusee ou livree ligne par ligne", async () => {
+        const avant = stripe.requetes.length;
+        const r = await appel(A, "POST", "/v1/boutique/commande", {
+            cle: pc3,
+            corps: panier([{ article: "ed:ENTERPRISE", libelle: "Licence ENTERPRISE - 1 an" }, { article: "opt:ai_advanced:365", licence_existante: "XPG-2026-C0001" }], { paiement: false }),
+        });
+        assert.equal(r.statut, 201, r.texte);
+        const n = r.json.numero;
+        assert.equal(r.json.etat, "a_valider");
+        assert.equal(r.json.url, undefined);
+        assert.equal(r.json.montant, 0);
+        assert.equal(stripe.requetes.length, avant, "aucun appel a Stripe");
+        let c = await deAdmin(n);
+        assert.equal(c.paiement, false);
+        assert.deepEqual(c.lignes.map((l) => [l.article, l.libelle, l.etat]), [["ed:ENTERPRISE", "Licence ENTERPRISE - 1 an", "a_valider"], ["opt:ai_advanced:365", "Option Assistant IA avancé - 1 an", "a_valider"]]);
+        assert.equal((await appel(A, "GET", "/admin/commandes", { cle: editeur })).json.a_valider, 2);
+        erreur(await appel(A, "POST", "/admin/commandes/prendre", { cle: editeur, corps: { numero: n } }), 409, "lignes");
+        erreur(await ligneAdmin({ numero: n, ligne: 1, action: "refusee" }), 400, "champ");
+        let l = await ligneAdmin({ numero: n, ligne: 1, action: "refusee", raison: "Pas d'offre ENTERPRISE pour ce client" }, lea);
+        assert.equal(l.statut, 200, l.texte);
+        assert.equal(l.json.etat_commande, "a_valider");
+        l = await ligneAdmin({ numero: n, ligne: 2, action: "livree", licence: "XPG-2026-C0001" }, lea);
+        assert.equal(l.json.etat_commande, "livree");
+        erreur(await ligneAdmin({ numero: n, ligne: 2, action: "livree", licence: "XPG-2026-C0001" }, hugo), 403, "droit");
+        c = (await commandesDe(A, pc3)).find((x) => x.numero === n);
+        assert.equal(c.paiement, false);
+        assert.deepEqual(c.lignes.map((x) => [x.etat, x.erreur || x.licence]), [["refusee", "Pas d'offre ENTERPRISE pour ce client"], ["livree", "XPG-2026-C0001"]]);
+        // une autre demande, annulee par le PC avant d'etre validee
+        const d = await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:PROFESSIONAL" }], { paiement: false }) });
+        assert.equal(d.statut, 201, d.texte);
+        assert.equal((await appel(A, "POST", "/v1/boutique/annuler", { cle: pc3, corps: { numero: d.json.numero } })).statut, 200);
+        c = (await commandesDe(A, pc3)).find((x) => x.numero === d.json.numero);
+        assert.deepEqual([c.etat, c.lignes[0].etat], ["annulee", "annulee"]);
+    });
+
+    it("une commande d'avant la 1.48 (un article) : une ligne, livree par la route des lignes aussi", async () => {
+        const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: commande() });
+        assert.equal(r.statut, 201, r.texte);
+        assert.equal(r.json.lignes.length, 1);
+        assert.equal((await evenement("checkout.session.completed", sessionDe(r.json.numero).id)).statut, 200);
+        const l = await ligneAdmin({ numero: r.json.numero, ligne: 1, action: "livree", licence: "XPG-2026-C0003" });
+        assert.equal(l.json.etat_commande, "livree");
+        assert.equal((await deAdmin(r.json.numero)).licence, "XPG-2026-C0003");
+    });
+});
+
 describe("la sauvegarde", () => {
     it("porte la boutique, les commandes, leurs scelles, les evenements - jamais les secrets de Stripe", async () => {
         const s = await appel(A, "GET", "/admin/sauvegarde", { cle: editeur });

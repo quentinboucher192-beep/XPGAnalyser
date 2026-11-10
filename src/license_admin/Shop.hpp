@@ -147,6 +147,18 @@ int followRegistry(Settings& s, const licensing::Registry& reg, Seconds now, boo
 [[nodiscard]] std::string articleAmountText(const Article& a, Seconds now, const std::string& currency = "eur");
 
 // ---- les commandes ----
+// 1.48.0 : une ligne d'une commande (le panier, docs/BOUTIQUE.md par. 10) - chacune se valide a part.
+struct OrderLine {
+    int          line{0};       // 1, 2...
+    std::string  article, kind, edition, option, label;
+    int          days{0};
+    std::int64_t amount{0};
+    std::string  existingLicence;   // une option : la licence du client ...
+    int          withLine{0};       // ... ou la ligne de licence de la meme commande
+    std::string  state;             // a_payer, payee, a_valider, a_revoir, livree, refusee, remboursee, expiree, annulee...
+    std::string  licence, error;
+    [[nodiscard]] bool toValidate() const noexcept { return state == "payee" || state == "a_valider" || state == "a_revoir"; }
+};
 struct Order {
     int          number{0};
     std::string  device;        // l'identifiant du poste (32 hexa)
@@ -162,14 +174,24 @@ struct Order {
     std::string  mode;          // test, reel
     Seconds      created{0}, updated{0}, expires{0}, paid{0}, takenAt{0};
     std::string  stripeSession, stripePayment, stripeRefund, receiptUrl, licence, error;
+    // 1.48.0 : payee (Stripe) ou une demande sans paiement ; ses lignes (un service d'avant : une ligne, deduite) ; dans le
+    // tableau de l'Admin, une rangee par ligne : `line` (0 : la commande entiere), `lineCount`, `orderState`.
+    bool                   payment{true};
+    bool                   linesKnown{false};   // le service dit les lignes (1.48 ou plus) : elles se valident une a une
+    std::vector<OrderLine> lines;
+    int                    line{0}, lineCount{1};
+    std::string            orderState;
+    [[nodiscard]] const std::string& paidState() const noexcept { return orderState.empty() ? state : orderState; }
     [[nodiscard]] bool toDeliver() const noexcept { return state == "payee"; }
-    [[nodiscard]] bool deliverable() const noexcept { return state == "payee" || state == "a_revoir"; }
-    [[nodiscard]] bool refundable() const noexcept { return (state == "payee" || state == "livree" || state == "a_revoir") && !stripePayment.empty(); }
+    [[nodiscard]] bool deliverable() const noexcept { return state == "payee" || state == "a_revoir" || state == "a_valider"; }
+    [[nodiscard]] bool refundable() const noexcept { return (paidState() == "payee" || paidState() == "livree" || paidState() == "a_revoir") && !stripePayment.empty(); }
+    [[nodiscard]] const OrderLine* findLine(int n) const;
 };
 struct OrdersView {
     std::vector<Order> orders;      // les plus recentes d'abord
     std::int64_t       counter{-1}; // le compteur des changements (GET /admin/etat : commandes)
     int                toDeliver{0};
+    int                toValidate{0};   // 1.48.0 : les lignes a valider (les demandes, celles a revoir)
     [[nodiscard]] const Order* find(int number) const;
 };
 bool parseOrders(const core::json::Value& v, OrdersView& out, std::string* why);
@@ -192,6 +214,8 @@ bool parseAmount(std::string_view text, std::int64_t& cents);
 [[nodiscard]] online::Result listOrders(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, OrdersView& out);
 // Avec un client deja ouvert (la livraison) : prendre, livree, a-revoir. `status` : le code HTTP (409 : prise, etat).
 [[nodiscard]] online::Result takeOrder(online::Client& c, int number, int* status = nullptr);
+// 1.48.0 : une ligne livree (`value` : la licence), refusee ou a revoir (`value` : la raison) - POST /admin/commandes/ligne.
+[[nodiscard]] online::Result markLine(online::Client& c, int number, int line, const std::string& action, const std::string& value, std::string* alreadyLicence = nullptr);
 [[nodiscard]] online::Result markDelivered(online::Client& c, int number, const std::string& licenseId, std::string* alreadyLicence = nullptr);
 [[nodiscard]] online::Result markReview(online::Client& c, int number, const std::string& reason);
 [[nodiscard]] online::Result readSettings(online::Client& c, Settings& out);

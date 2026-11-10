@@ -77,7 +77,10 @@ export const EVENEMENTS_STRIPE = [
 ];
 
 // Les etats d'une commande (docs/BOUTIQUE.md, par. 4).
-export const ETATS_COMMANDE = ["a_payer", "payee", "livree", "expiree", "annulee", "echec_paiement", "remboursee", "a_revoir"];
+export const ETATS_COMMANDE = ["a_payer", "payee", "livree", "expiree", "annulee", "echec_paiement", "remboursee", "a_revoir", "a_valider", "refusee"];
+// 1.48.0 : le panier (docs/BOUTIQUE.md, par. 10) - les lignes d'une commande, et ce qui est fini pour une ligne.
+const MAX_LIGNES = 20;
+const LIGNE_FINIE = ["livree", "refusee", "remboursee", "expiree", "annulee", "echec_paiement"];
 
 export const TABLES_BOUTIQUE_SQL = `
     CREATE TABLE IF NOT EXISTS boutique (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL) WITHOUT ROWID;
@@ -95,6 +98,11 @@ export const TABLES_BOUTIQUE_SQL = `
     CREATE INDEX IF NOT EXISTS commandes_paiement ON commandes (stripe_paiement);
     CREATE TABLE IF NOT EXISTS commandes_scelles (numero INTEGER NOT NULL, cle TEXT NOT NULL, scelle TEXT NOT NULL, PRIMARY KEY (numero, cle)) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS stripe_evenements (id TEXT PRIMARY KEY, recu INTEGER NOT NULL, type TEXT NOT NULL) WITHOUT ROWID;
+    CREATE TABLE IF NOT EXISTS commande_lignes (
+        numero INTEGER NOT NULL, ligne INTEGER NOT NULL, article TEXT NOT NULL, genre TEXT NOT NULL, edition TEXT NOT NULL,
+        option TEXT NOT NULL, jours INTEGER NOT NULL, montant INTEGER NOT NULL, libelle TEXT NOT NULL, licence_existante TEXT NOT NULL,
+        avec_ligne INTEGER NOT NULL, etat TEXT NOT NULL, licence TEXT NOT NULL, erreur TEXT NOT NULL, maj INTEGER NOT NULL,
+        PRIMARY KEY (numero, ligne)) WITHOUT ROWID;
 `;
 
 // Les tables de la boutique dans la sauvegarde (sauvegarde.js) : jamais les secrets de Stripe (ils ne sont pas en table).
@@ -103,6 +111,7 @@ export const TABLES_SAUVEGARDE_BOUTIQUE = [
     ["commandes", ["numero"]],
     ["commandes_scelles", ["numero", "cle"]],
     ["stripe_evenements", ["id"]],
+    ["commande_lignes", ["numero", "ligne"]], // 1.48.0 : les lignes d'une commande (le panier)
 ];
 
 // Un texte d'une ligne, sans caractere de controle, entre min et max caracteres.
@@ -583,8 +592,60 @@ export const RoutesBoutique = {
 
     // ============================================================ le PC ==
     // Une commande -> ce que le PC en voit.
+    // 1.48.0 : les lignes d'une commande ; une commande d'avant la 1.48 (sans lignes) : une ligne, deduite de la commande.
+    lignesDe(c) {
+        const l = this.lignes("SELECT * FROM commande_lignes WHERE numero = ? ORDER BY ligne", c.numero);
+        if (l.length) return l;
+        const etat = c.etat === "a_revoir" ? "a_revoir" : c.etat;
+        return [
+            {
+                numero: c.numero,
+                ligne: 1,
+                article: c.article,
+                genre: c.genre,
+                edition: c.edition,
+                option: c.option,
+                jours: c.jours,
+                montant: c.montant,
+                libelle: c.libelle,
+                licence_existante: c.licence_existante,
+                avec_ligne: 0,
+                etat,
+                licence: c.licence,
+                erreur: c.erreur,
+                maj: c.maj,
+                deduite: true,
+            },
+        ];
+    },
+    ligneJson(l) {
+        const o = { ligne: l.ligne, article: l.article, genre: l.genre };
+        if (l.genre === "edition") o.edition = l.edition;
+        else {
+            o.option = l.option;
+            o.jours = l.jours;
+            if (l.licence_existante) o.licence_existante = l.licence_existante;
+            if (l.avec_ligne) o.avec_ligne = l.avec_ligne;
+        }
+        o.libelle = l.libelle;
+        o.montant = l.montant;
+        o.etat = l.etat;
+        if (l.licence) o.licence = l.licence;
+        if (l.erreur) o.erreur = l.erreur;
+        return o;
+    },
+    // L'etat d'une commande d'apres ses lignes (toutes finies : livree, ou refusee si aucune n'est livree) ; null : pas fini.
+    etatFini(numero) {
+        const l = this.lignes("SELECT etat, licence FROM commande_lignes WHERE numero = ?", numero);
+        if (!l.length || !l.every((x) => LIGNE_FINIE.includes(x.etat))) return null;
+        const livree = l.find((x) => x.etat === "livree");
+        return livree ? { etat: "livree", licence: livree.licence } : { etat: "refusee", licence: "" };
+    },
+
     commandePourPc(c) {
         const o = { numero: c.numero, article: c.article, libelle: c.libelle, montant: c.montant, devise: c.devise, etat: c.etat, mode: c.mode, cree: c.cree, maj: c.maj };
+        o.paiement = c.mode !== "demande"; // 1.48.0
+        o.lignes = this.lignesDe(c).map((l) => this.ligneJson(l));
         if (c.licence) o.licence = c.licence;
         if (c.recu_url) o.recu_url = c.recu_url;
         if (c.etat === "a_payer") {
@@ -597,21 +658,66 @@ export const RoutesBoutique = {
     // POST /v1/boutique/commande (le PC) : la commande, puis la page de paiement de Stripe.
     async passerCommande(ctx) {
         const corps = this.corpsJson(ctx);
-        if (!this.boutiqueOuverte())
+        // 1.48.0 : le panier - des lignes, payees (une page de Stripe) ou une demande sans paiement ; l'ancien corps
+        // (<< article >> seul, les Studios 1.46/1.47) : une commande payee d'une ligne.
+        if (corps.paiement !== undefined && typeof corps.paiement !== "boolean") throw mal("paiement");
+        const paye = corps.paiement !== false;
+        if (paye && !this.boutiqueOuverte())
             throw new Erreur(409, "boutique", "La boutique en ligne est fermée (l'éditeur ne vend pas en ligne pour l'instant) : demande ta licence sans paiement.");
         const reglages = this.reglagesBoutique();
-        if (typeof corps.article !== "string") throw mal("article");
-        const art = reglages.articles.find((a) => a.id === corps.article);
-        if (!art) throw new Erreur(404, "article", "Cet article n'est pas (ou plus) en vente en ligne : relis la boutique.");
+        let demandees;
+        if (corps.lignes !== undefined) {
+            if (!Array.isArray(corps.lignes) || !corps.lignes.length || corps.lignes.length > MAX_LIGNES)
+                throw mal("lignes", "Le champ « lignes » doit être une liste de 1 à " + MAX_LIGNES + " articles.");
+            demandees = corps.lignes;
+        } else {
+            if (typeof corps.article !== "string") throw mal("article");
+            demandees = [{ article: corps.article, licence_existante: corps.licence_existante }];
+        }
+        const vus = new Set();
+        const lignesCmd = demandees.map((d, i) => {
+            const quoi = "La ligne n° " + (i + 1);
+            if (!d || typeof d !== "object" || typeof d.article !== "string") throw mal("lignes", quoi + " n'a pas d'« article ».");
+            if (vus.has(d.article)) throw mal("lignes", quoi + " : « " + d.article + " » est deux fois dans la commande.");
+            vus.add(d.article);
+            let m = /^ed:([A-Z][A-Z0-9_]{0,31})$/.exec(d.article);
+            const l = { ligne: i + 1, article: d.article, genre: "", edition: "", option: "", jours: 0, montant: 0, libelle: "", licence_existante: "", avec_ligne: 0, art: null };
+            if (m) {
+                l.genre = "edition";
+                l.edition = m[1];
+            } else if ((m = /^opt:([a-z0-9_]{1,40}):(\d{1,4})$/.exec(d.article)) && Number(m[2]) <= 3660) {
+                l.genre = "option";
+                l.option = m[1];
+                l.jours = Number(m[2]);
+            } else throw mal("lignes", quoi + " : « article » vaut ed:<OFFRE> ou opt:<option>:<jours>.");
+            const art = reglages.articles.find((a) => a.id === d.article);
+            if (paye) {
+                if (!art) throw new Erreur(404, "article", "« " + d.article + " » n'est pas (ou plus) en vente en ligne : relis la boutique.", { article: d.article });
+                l.art = art;
+                l.montant = montantActuel(art, ctx.now);
+                l.libelle = art.libelle;
+            } else {
+                if (d.libelle !== undefined && !texteLigne(d.libelle, 1, 120)) throw mal("lignes", quoi + " : « libelle » : une ligne, 120 caractères au plus.");
+                l.libelle = d.libelle || (art ? art.libelle : d.article);
+            }
+            if (l.genre === "option") {
+                if (d.avec_ligne !== undefined) {
+                    if (!entier(d.avec_ligne, 1, demandees.length) || d.avec_ligne === i + 1 || !/^ed:/.test(String((demandees[d.avec_ligne - 1] || {}).article)))
+                        throw mal("lignes", quoi + " : « avec_ligne » doit être le n° d'une ligne de licence (ed:…) de la commande.");
+                    l.avec_ligne = d.avec_ligne;
+                } else if (estIdLicence(d.licence_existante)) {
+                    l.licence_existante = d.licence_existante;
+                } else {
+                    throw mal(corps.lignes === undefined ? "licence_existante" : "lignes", quoi + " : une option s'ajoute à une licence : « licence_existante » (son identifiant) ou « avec_ligne ».");
+                }
+            }
+            return l;
+        });
         if (!texteLigne(corps.societe, 1, 120) || !corps.societe.trim()) throw mal("societe", "Le nom de ta société (une ligne, 120 caractères au plus) manque.");
         if (corps.nom !== undefined && !texteLigne(corps.nom, 0, 120)) throw mal("nom", "Le nom : une ligne, 120 caractères au plus.");
         if (!courrielLisible(corps.courriel)) throw mal("courriel", "Ton courriel est illisible : Stripe y envoie la facture.");
-        let existante = "";
-        if (art.genre === "option") {
-            if (!estIdLicence(corps.licence_existante))
-                throw mal("licence_existante", "Une option s'ajoute à ta licence : « licence_existante » doit être son identifiant.");
-            existante = corps.licence_existante;
-        }
+        const art = lignesCmd[0].art || { id: lignesCmd[0].article, genre: lignesCmd[0].genre, edition: lignesCmd[0].edition, option: lignesCmd[0].option, jours: lignesCmd[0].jours, libelle: lignesCmd[0].libelle };
+        const existante = lignesCmd[0].licence_existante;
         // La demande du PC, scellee pour la cle de l'editeur (et les admins qui ont le droit << demandes >>), comme
         // POST /v1/demandes.
         if (typeof corps.cle !== "string" || !/^xpg-[0-9a-f]{16}$/.test(corps.cle)) throw mal("cle");
@@ -635,7 +741,7 @@ export const RoutesBoutique = {
         }
         const poste = ctx.appelant.poste;
         // Une commande a payer de ce PC, pas encore expiree : la meme page de paiement (pas deux achats en meme temps).
-        const enCours = this.ligne("SELECT * FROM commandes WHERE poste = ? AND etat = 'a_payer' AND expire > ? ORDER BY numero DESC LIMIT 1", poste, ctx.now);
+        const enCours = paye ? this.ligne("SELECT * FROM commandes WHERE poste = ? AND etat = 'a_payer' AND expire > ? ORDER BY numero DESC LIMIT 1", poste, ctx.now) : null;
         if (enCours)
             throw new Erreur(409, "en_cours", "Une commande de ce PC attend déjà son paiement (n° " + enCours.numero + ") : termine-la ou annule-la.", {
                 numero: enCours.numero,
@@ -647,45 +753,18 @@ export const RoutesBoutique = {
         if (this.nombre("SELECT COUNT(*) AS n FROM commandes WHERE etat = 'a_payer'") >= MAX_A_PAYER)
             throw new Erreur(507, "limite", "Trop de commandes attendent leur paiement : réessaie dans une demi-heure.");
         if (this.compte("octets_commandes") + octets > MAX_OCTETS_COMMANDES) throw new Erreur(507, "limite", "Le service garde déjà trop de commandes : réessaie plus tard.");
-        const mode = modeStripe(this.env.STRIPE_SECRET_KEY);
+        const mode = paye ? modeStripe(this.env.STRIPE_SECRET_KEY) || "test" : "demande"; // 1.48.0 : << demande >> : sans paiement
         const numero = this.suivant("numero_commande");
-        const expire = ctx.now + DUREE_PAIEMENT;
+        const expire = paye ? ctx.now + DUREE_PAIEMENT : 0;
         const base = ctx.url.origin;
-        // 1.46.1 : le montant du moment (une reduction en cours : le reduit) ; le prix Stripe de ce montant s'il est cree.
-        const montant = montantActuel(art, ctx.now);
-        const prix = this.prixStripe(art, reglages.devise, montant);
-        const ligneDonnee = [
-            ["line_items[0][price_data][currency]", reglages.devise],
-            ["line_items[0][price_data][unit_amount]", montant],
-            ["line_items[0][price_data][product_data][name]", art.libelle],
-        ];
-        // La page de paiement (docs/BOUTIQUE.md, par. 4) : la carte seulement, jamais de client Stripe ni de carte gardee.
-        // 1.46.1 : payment_method_types n'existe plus (Stripe 2026-09-30.endive : 400) ; allowed_payment_method_types filtre
-        // les moyens de paiement du compte (la carte seulement : ni Link, ni prelevement, ni porte-monnaie a garder) et
-        // wallet_options[link][display]=never cache Link, qui propose d'enregistrer la carte. Jamais customer,
-        // customer_creation=always, setup_future_usage, saved_payment_method_options.
-        const params = (ligne) => [
-            ["mode", "payment"],
-            ...ligne,
-            ["line_items[0][quantity]", 1],
-            ["allowed_payment_method_types[0]", "card"],
-            ["wallet_options[link][display]", "never"],
-            ["customer_email", corps.courriel],
-            ["client_reference_id", numero],
-            ["metadata[commande]", numero],
-            ["metadata[article]", art.id],
-            ["invoice_creation[enabled]", "true"],
-            ["locale", "fr"],
-            ["expires_at", expire],
-            ["success_url", base + "/v1/boutique/merci?c=" + numero],
-            ["cancel_url", base + "/v1/boutique/annule?c=" + numero],
-        ];
-        // La ligne d'abord (le numero est pris), puis Stripe ; un refus de Stripe : la ligne s'en va.
+        const montant = lignesCmd.reduce((n, l) => n + l.montant, 0);
+        const libelle = lignesCmd.length === 1 ? lignesCmd[0].libelle : lignesCmd[0].libelle + " + " + (lignesCmd.length - 1) + " article(s)";
+        // La commande d'abord (le numero est pris), puis Stripe ; un refus de Stripe : elle s'en va.
         this.x(
             `INSERT INTO commandes (numero, poste, cle_pc, article, genre, edition, option, jours, montant, devise, libelle, societe, nom, courriel,
                 licence_existante, scelle_cle, scelle, octets, etat, mode, cree, maj, expire, paye, stripe_session, stripe_url, stripe_paiement,
                 stripe_remboursement, recu_url, licence, erreur, prise, prise_par)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'a_payer', ?, ?, ?, ?, 0, '', '', '', '', '', '', '', 0, '')`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, '', '', '', '', '', '', '', 0, '')`,
             numero,
             poste,
             ctx.appelant.cle,
@@ -696,7 +775,7 @@ export const RoutesBoutique = {
             art.genre === "option" ? art.jours : 0,
             montant,
             reglages.devise,
-            art.libelle,
+            libelle.slice(0, 200),
             corps.societe.trim(),
             (corps.nom || "").trim(),
             corps.courriel,
@@ -704,40 +783,85 @@ export const RoutesBoutique = {
             corps.cle,
             corps.scelle,
             octets,
-            mode || "test",
+            paye ? "a_payer" : "a_valider",
+            mode,
             ctx.now,
             ctx.now,
             expire,
         );
-        let session;
-        try {
-            const page = (ligne, idem) => this.appelStripe(ctx, "POST", "/v1/checkout/sessions", params(ligne), idem, "la page de paiement");
-            if (prix) {
+        for (const l of lignesCmd)
+            this.x(
+                `INSERT INTO commande_lignes (numero, ligne, article, genre, edition, option, jours, montant, libelle, licence_existante, avec_ligne, etat, licence, erreur, maj)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', ?)`,
+                numero, l.ligne, l.article, l.genre, l.edition, l.option, l.jours, l.montant, l.libelle, l.licence_existante, l.avec_ligne, paye ? "a_payer" : "a_valider", ctx.now,
+            );
+        let session = null;
+        if (paye) {
+            // La page de paiement (docs/BOUTIQUE.md, par. 4 et 10) : une line_items[i] par ligne (le prix Stripe de son
+            // montant, sinon price_data) ; la carte seulement, jamais de client Stripe ni de carte gardee (1.46.1).
+            const elements = (sansPrix) => {
+                const out = [];
+                lignesCmd.forEach((l, i) => {
+                    const prix = sansPrix ? "" : this.prixStripe(l.art, reglages.devise, l.montant);
+                    if (prix) out.push(["line_items[" + i + "][price]", prix]);
+                    else
+                        out.push(
+                            ["line_items[" + i + "][price_data][currency]", reglages.devise],
+                            ["line_items[" + i + "][price_data][unit_amount]", l.montant],
+                            ["line_items[" + i + "][price_data][product_data][name]", l.libelle],
+                        );
+                    out.push(["line_items[" + i + "][quantity]", 1]);
+                });
+                return out;
+            };
+            const params = (sansPrix) => [
+                ["mode", "payment"],
+                ...elements(sansPrix),
+                ["allowed_payment_method_types[0]", "card"],
+                ["wallet_options[link][display]", "never"],
+                ["customer_email", corps.courriel],
+                ["client_reference_id", numero],
+                ["metadata[commande]", numero],
+                ["metadata[article]", lignesCmd.map((l) => l.article).join(",").slice(0, 490)],
+                ["invoice_creation[enabled]", "true"],
+                ["locale", "fr"],
+                ["expires_at", expire],
+                ["success_url", base + "/v1/boutique/merci?c=" + numero],
+                ["cancel_url", base + "/v1/boutique/annule?c=" + numero],
+            ];
+            try {
+                const page = (sansPrix, idem) => this.appelStripe(ctx, "POST", "/v1/checkout/sessions", params(sansPrix), idem, "la page de paiement");
+                const avecPrix = lignesCmd.some((l) => this.prixStripe(l.art, reglages.devise, l.montant));
                 try {
-                    session = (await page([["line_items[0][price]", prix]], "commande-" + numero)).json;
+                    session = (await page(false, "commande-" + numero)).json;
                 } catch (e) {
-                    // 1.46.1 : le prix n'est plus chez Stripe (archive a la main, un autre compte) : la page se refait avec le
-                    // montant donne, et ce prix est oublie (le prochain enregistrement du catalogue le recree).
+                    // 1.46.1 : un prix qui n'est plus chez Stripe : la page se refait avec les montants donnes, les prix oublies.
                     const x = e instanceof Erreur && e.extra ? e.extra : null;
-                    if (!x || !(x.stripe_statut >= 400 && x.stripe_statut < 500) || !(x.stripe_code === "resource_missing" || /^line_items/.test(x.stripe_champ || ""))) throw e;
-                    this.oublierPrixStripe(art, reglages.devise, montant);
-                    session = (await page(ligneDonnee, "commande-" + numero + "-montant")).json;
+                    if (!avecPrix || !x || !(x.stripe_statut >= 400 && x.stripe_statut < 500) || !(x.stripe_code === "resource_missing" || /^line_items/.test(x.stripe_champ || "")))
+                        throw e;
+                    for (const l of lignesCmd) this.oublierPrixStripe(l.art, reglages.devise, l.montant);
+                    session = (await page(true, "commande-" + numero + "-montant")).json;
                 }
-            } else {
-                session = (await page(ligneDonnee, "commande-" + numero)).json;
+                if (typeof session.id !== "string" || typeof session.url !== "string" || !/^https?:\/\//.test(session.url))
+                    throw new Erreur(502, "stripe", "Stripe a rendu une page de paiement illisible.");
+            } catch (e) {
+                this.x("DELETE FROM commande_lignes WHERE numero = ?", numero);
+                this.x("DELETE FROM commandes WHERE numero = ?", numero);
+                throw e;
             }
-            if (typeof session.id !== "string" || typeof session.url !== "string" || !/^https?:\/\//.test(session.url))
-                throw new Erreur(502, "stripe", "Stripe a rendu une page de paiement illisible.");
-        } catch (e) {
-            this.x("DELETE FROM commandes WHERE numero = ?", numero);
-            throw e;
+            this.x("UPDATE commandes SET stripe_session = ?, stripe_url = ? WHERE numero = ?", session.id.slice(0, 255), session.url.slice(0, 2000), numero);
         }
-        this.x("UPDATE commandes SET stripe_session = ?, stripe_url = ? WHERE numero = ?", session.id.slice(0, 255), session.url.slice(0, 2000), numero);
         for (const s of autres) this.x("INSERT INTO commandes_scelles (numero, cle, scelle) VALUES (?, ?, ?)", numero, s.cle, s.scelle);
         this.ajouter("n_commandes", 1);
         this.ajouter("octets_commandes", octets);
         this.signalerCommande();
-        return reponseJson(201, { numero, url: session.url, expire, montant, devise: reglages.devise, mode: mode || "test" });
+        const r = { numero, montant, devise: reglages.devise, mode: paye ? mode : modeStripe(this.env.STRIPE_SECRET_KEY) || "test", etat: paye ? "a_payer" : "a_valider" };
+        if (session) {
+            r.url = session.url;
+            r.expire = expire;
+        }
+        r.lignes = this.lignesDe({ numero }).map((l) => this.ligneJson(l));
+        return reponseJson(201, r);
     },
 
     // GET /v1/boutique/commandes (le PC) : les siennes, les plus recentes d'abord (50 au plus).
@@ -756,6 +880,13 @@ export const RoutesBoutique = {
         const c = this.ligne("SELECT * FROM commandes WHERE numero = ? AND poste = ?", corps.numero, ctx.appelant.poste);
         if (!c) throw new Erreur(404, "commande", "Cette commande n'existe pas, ou n'est pas celle de ce PC.");
         if (c.etat === "annulee") return reponseJson(200, {});
+        // 1.48.0 : une demande (sans paiement) dont aucune ligne n'est encore livree s'annule aussi
+        if (c.etat === "a_valider" && !this.lignes("SELECT 1 AS x FROM commande_lignes WHERE numero = ? AND etat = 'livree'", c.numero).length) {
+            this.x("UPDATE commandes SET etat = 'annulee', maj = ? WHERE numero = ?", ctx.now, c.numero);
+            this.x("UPDATE commande_lignes SET etat = 'annulee', maj = ? WHERE numero = ? AND etat IN ('a_valider', 'a_revoir')", ctx.now, c.numero);
+            this.signalerCommande();
+            return reponseJson(200, {});
+        }
         if (c.etat !== "a_payer") throw new Erreur(409, "etat", "Cette commande n'attend plus son paiement (« " + c.etat + " ») : elle ne s'annule plus ici.", { etat: c.etat });
         if (c.stripe_session) {
             try {
@@ -767,6 +898,7 @@ export const RoutesBoutique = {
             }
         }
         this.x("UPDATE commandes SET etat = 'annulee', maj = ? WHERE numero = ? AND etat = 'a_payer'", ctx.now, c.numero);
+        this.x("UPDATE commande_lignes SET etat = 'annulee', maj = ? WHERE numero = ? AND etat = 'a_payer'", ctx.now, c.numero); // 1.48.0
         this.signalerCommande();
         return reponseJson(200, {});
     },
@@ -868,6 +1000,8 @@ export const RoutesBoutique = {
             erreur,
             c.numero,
         );
+        // 1.48.0 : les lignes a payer (ou closes sans paiement) : payees (ou a revoir avec la commande)
+        this.x("UPDATE commande_lignes SET etat = ?, erreur = ?, maj = ? WHERE numero = ? AND etat IN ('a_payer', 'expiree', 'annulee', 'echec_paiement')", bon ? "payee" : "a_revoir", erreur, ctx.now, c.numero);
         this.signalerCommande();
     },
 
@@ -875,6 +1009,7 @@ export const RoutesBoutique = {
         const c = this.commandeDeSession(obj);
         if (!c || c.etat !== "a_payer") return;
         this.x("UPDATE commandes SET etat = ?, maj = ? WHERE numero = ?", etat, ctx.now, c.numero);
+        this.x("UPDATE commande_lignes SET etat = ?, maj = ? WHERE numero = ? AND etat = 'a_payer'", etat, ctx.now, c.numero); // 1.48.0
         this.signalerCommande();
     },
 
@@ -887,6 +1022,7 @@ export const RoutesBoutique = {
         const c = this.ligne("SELECT * FROM commandes WHERE stripe_paiement = ? LIMIT 1", obj.payment_intent);
         if (!c || !["payee", "livree", "a_revoir"].includes(c.etat)) return;
         this.x("UPDATE commandes SET etat = 'remboursee', maj = ?, prise = 0, prise_par = '' WHERE numero = ?", ctx.now, c.numero);
+        this.x("UPDATE commande_lignes SET etat = 'remboursee', maj = ? WHERE numero = ? AND etat <> 'refusee'", ctx.now, c.numero); // 1.48.0
         this.signalerCommande();
     },
 
@@ -934,6 +1070,8 @@ export const RoutesBoutique = {
             o.cle = c.scelle_cle;
             o.scelle = c.scelle || null;
         }
+        o.paiement = c.mode !== "demande"; // 1.48.0
+        o.lignes = this.lignesDe(c).map((l) => this.ligneJson(l));
         return o;
     },
 
@@ -953,6 +1091,7 @@ export const RoutesBoutique = {
             suite,
             numero: this.compte("commandes_changements"),
             a_livrer: this.nombre("SELECT COUNT(*) AS n FROM commandes WHERE etat = 'payee'"),
+            a_valider: this.nombre("SELECT COUNT(*) AS n FROM commande_lignes WHERE etat IN ('a_valider', 'a_revoir')"), // 1.48.0
         });
     },
 
@@ -971,7 +1110,15 @@ export const RoutesBoutique = {
 
     // POST /admin/commandes/prendre {"numero"} : cet Admin la livre (5 minutes) ; une payee (ou a revoir) seulement.
     async prendreCommande(ctx) {
-        const { c } = this.commandeOuErreur(ctx);
+        const { corps, c } = this.commandeOuErreur(ctx);
+        // 1.48.0 : une commande de plusieurs lignes, ou une demande, ne se prend que ligne par ligne (un Admin 1.48)
+        if (corps.lignes !== true && (c.mode === "demande" || this.nombre("SELECT COUNT(*) AS n FROM commande_lignes WHERE numero = ?", c.numero) > 1))
+            throw new Erreur(409, "lignes", "La commande n° " + c.numero + " a plusieurs articles (ou est une demande) : livre-la avec l'Admin 1.48.", { etat: c.etat });
+        if (corps.lignes === true && c.etat === "a_valider") {
+            if (this.priseParUnAutre(ctx, c)) throw new Erreur(409, "prise", "Un autre Admin valide la commande n° " + c.numero + " en ce moment.", { etat: c.etat });
+            this.x("UPDATE commandes SET prise = ?, prise_par = ? WHERE numero = ?", ctx.now, ctx.appelant.cle, c.numero);
+            return reponseJson(200, { numero: c.numero, prise: ctx.now, etat: c.etat });
+        }
         if (c.etat !== "payee" && c.etat !== "a_revoir")
             throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'est pas à livrer (« " + c.etat + " »).", { etat: c.etat, licence: c.licence || null });
         if (this.priseParUnAutre(ctx, c)) throw new Erreur(409, "prise", "Un autre Admin livre la commande n° " + c.numero + " en ce moment.", { etat: c.etat });
@@ -986,7 +1133,10 @@ export const RoutesBoutique = {
         if (c.etat !== "payee" && c.etat !== "a_revoir")
             throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'est pas à livrer (« " + c.etat + " »).", { etat: c.etat, licence: c.licence || null });
         if (this.priseParUnAutre(ctx, c)) throw new Erreur(409, "prise", "Un autre Admin livre la commande n° " + c.numero + ".", { etat: c.etat });
+        if (c.mode === "demande" || this.nombre("SELECT COUNT(*) AS n FROM commande_lignes WHERE numero = ?", c.numero) > 1)
+            throw new Erreur(409, "lignes", "La commande n° " + c.numero + " a plusieurs articles : chacun se livre (POST /admin/commandes/ligne).", { etat: c.etat });
         this.x("UPDATE commandes SET etat = 'livree', licence = ?, erreur = '', maj = ?, prise = 0, prise_par = '' WHERE numero = ?", corps.licence, ctx.now, c.numero);
+        this.x("UPDATE commande_lignes SET etat = 'livree', licence = ?, erreur = '', maj = ? WHERE numero = ?", corps.licence, ctx.now, c.numero); // 1.48.0
         // 1.47.0 : le fait (stats.js) - qui l'a livree (les ventes par admin)
         this.fait(ctx.now, "commande_livree", {
             licence: corps.licence,
@@ -1008,8 +1158,62 @@ export const RoutesBoutique = {
         if (c.etat !== "payee" && c.etat !== "a_revoir") throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'est pas à livrer (« " + c.etat + " »).", { etat: c.etat });
         const texte = Array.from(corps.erreur.replace(/[\u0000-\u001f\u007f]/g, " ").trim()).slice(0, 500).join("");
         this.x("UPDATE commandes SET etat = 'a_revoir', erreur = ?, maj = ?, prise = 0, prise_par = '' WHERE numero = ?", texte, ctx.now, c.numero);
+        this.x("UPDATE commande_lignes SET etat = 'a_revoir', erreur = ?, maj = ? WHERE numero = ? AND etat IN ('payee', 'a_revoir')", texte, ctx.now, c.numero); // 1.48.0
         this.signalerCommande();
         return reponseJson(200, { numero: c.numero, etat: "a_revoir" });
+    },
+
+    // 1.48.0 : POST /admin/commandes/ligne {"numero","ligne","action","licence"?,"raison"?} (droit << demandes >>) - une
+    // ligne livree (sa licence), refusee ou a revoir (la raison) ; la commande finie quand toutes ses lignes le sont.
+    async commandeLigne(ctx) {
+        const { corps, c } = this.commandeOuErreur(ctx);
+        if (!entier(corps.ligne, 1, MAX_LIGNES)) throw mal("ligne");
+        if (!["livree", "refusee", "a_revoir"].includes(corps.action)) throw mal("action", "« action » vaut livree, refusee ou a_revoir.");
+        // une commande d'avant la 1.48 (sans lignes) : sa ligne 1 est creee d'apres elle
+        if (!this.nombre("SELECT COUNT(*) AS n FROM commande_lignes WHERE numero = ?", c.numero)) {
+            const l = this.lignesDe(c)[0];
+            this.x(
+                `INSERT INTO commande_lignes (numero, ligne, article, genre, edition, option, jours, montant, libelle, licence_existante, avec_ligne, etat, licence, erreur, maj)
+                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+                c.numero, l.article, l.genre, l.edition, l.option, l.jours, l.montant, l.libelle, l.licence_existante, l.etat, l.licence || "", l.erreur || "", ctx.now,
+            );
+        }
+        const l = this.ligne("SELECT * FROM commande_lignes WHERE numero = ? AND ligne = ?", c.numero, corps.ligne);
+        if (!l) throw new Erreur(404, "ligne", "La commande n° " + c.numero + " n'a pas de ligne n° " + corps.ligne + ".");
+        const aValider = ["payee", "a_valider", "a_revoir"].includes(l.etat) && ["payee", "a_valider", "a_revoir"].includes(c.etat);
+        if (!aValider)
+            throw new Erreur(409, "etat", "La ligne n° " + l.ligne + " de la commande n° " + c.numero + " n'est pas à valider (« " + l.etat + " »).", { etat: l.etat, licence: l.licence || null });
+        if (this.priseParUnAutre(ctx, c)) throw new Erreur(409, "prise", "Un autre Admin valide la commande n° " + c.numero + " en ce moment.", { etat: l.etat });
+        let etat = corps.action;
+        if (corps.action === "livree") {
+            if (!estIdLicence(corps.licence)) throw mal("licence", "Le champ « licence » doit être l'identifiant de la licence livrée.");
+            this.x("UPDATE commande_lignes SET etat = 'livree', licence = ?, erreur = '', maj = ? WHERE numero = ? AND ligne = ?", corps.licence, ctx.now, c.numero, l.ligne);
+            this.fait(ctx.now, "commande_livree", {
+                licence: corps.licence,
+                offre: l.genre === "edition" ? l.edition : "options",
+                client: c.societe,
+                admin: await this.idAppelant(ctx),
+                poste: c.cle_pc,
+                valeur: l.montant,
+                detail: { numero: c.numero, ligne: l.ligne, genre: l.genre },
+            });
+        } else {
+            if (typeof corps.raison !== "string" || !corps.raison.trim()) throw mal("raison", "Dis pourquoi (« raison »).");
+            const texte = Array.from(corps.raison.replace(/[\u0000-\u001f\u007f]/g, " ").trim()).slice(0, 500).join("");
+            this.x("UPDATE commande_lignes SET etat = ?, erreur = ?, maj = ? WHERE numero = ? AND ligne = ?", etat, texte, ctx.now, c.numero, l.ligne);
+            // une commande payee a revoir : la commande aussi (comme avant la 1.48 : l'Admin et la liste le disent)
+            if (etat === "a_revoir" && c.etat === "payee") this.x("UPDATE commandes SET etat = 'a_revoir', erreur = ? WHERE numero = ?", texte, c.numero);
+        }
+        const fini = this.etatFini(c.numero);
+        let etatCommande = c.etat;
+        if (fini) {
+            etatCommande = fini.etat;
+            this.x("UPDATE commandes SET etat = ?, licence = ?, erreur = '', maj = ?, prise = 0, prise_par = '' WHERE numero = ?", fini.etat, fini.licence, ctx.now, c.numero);
+        } else {
+            this.x("UPDATE commandes SET maj = ? WHERE numero = ?", ctx.now, c.numero);
+        }
+        this.signalerCommande();
+        return reponseJson(200, { numero: c.numero, ligne: l.ligne, etat, etat_commande: etatCommande });
     },
 
     // POST /admin/commandes/rembourser {"numero"} (admin+) : le remboursement demande a Stripe ; la commande passe
@@ -1030,6 +1234,7 @@ export const RoutesBoutique = {
     menageBoutique(now) {
         const n = this.nombre("SELECT COUNT(*) AS n FROM commandes WHERE etat = 'a_payer' AND expire < ?", now - 300);
         if (!n) return;
+        this.x("UPDATE commande_lignes SET etat = 'expiree', maj = ? WHERE etat = 'a_payer' AND numero IN (SELECT numero FROM commandes WHERE etat = 'a_payer' AND expire < ?)", now, now - 300); // 1.48.0
         this.x("UPDATE commandes SET etat = 'expiree', maj = ? WHERE etat = 'a_payer' AND expire < ?", now, now - 300);
         this.signalerCommande();
     },
@@ -1042,6 +1247,7 @@ export const RoutesBoutique = {
         const d = this.ligne("SELECT COUNT(*) AS n, COALESCE(SUM(octets), 0) AS o FROM commandes WHERE " + closes, now - GARDE_CLOSES);
         if (d && d.n) {
             this.x("DELETE FROM commandes_scelles WHERE numero IN (SELECT numero FROM commandes WHERE " + closes + ")", now - GARDE_CLOSES);
+            this.x("DELETE FROM commande_lignes WHERE numero IN (SELECT numero FROM commandes WHERE " + closes + ")", now - GARDE_CLOSES); // 1.48.0
             this.x("DELETE FROM commandes WHERE " + closes, now - GARDE_CLOSES);
             this.ajouter("n_commandes", -Number(d.n));
             this.ajouter("octets_commandes", -Number(d.o));
