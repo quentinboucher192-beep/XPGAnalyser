@@ -2656,6 +2656,354 @@ Result checkDevice() {
     return res;
 }
 
+// ============================================================ 1.46.0 : la boutique ==
+Result placeOrder(const OrderForm& form0) {
+    Result res;
+    res.job = Job::Order;
+    OrderForm f;
+    f.article = trim(form0.article);
+    f.customer = trim(form0.customer);
+    f.name = trim(form0.name);
+    f.email = trim(form0.email);
+    f.licenseId = trim(form0.licenseId);
+    f.pcName = trim(form0.pcName);
+    f.optionText = trim(form0.optionText);
+    if (f.optionText.size() > 160) f.optionText.resize(160);
+    const shop::Catalogue cat = shop::catalogue();
+    const shop::Article* found = cat.find(f.article);
+    if (!cat.selling() || !found) {
+        res.message = "Cet article n'est pas (ou plus) en vente en ligne : demande ta licence sans paiement (Demander). Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    const shop::Article art = *found;
+    const bool option = art.kind == "option";
+    if (f.customer.empty()) {
+        res.message = "Indique le nom de ta soci\xC3\xA9t\xC3\xA9 (Modifier mon profil\xE2\x80\xA6) : la licence achet\xC3\xA9" "e est \xC3\xA0 son nom. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    if (f.customer.size() > kMaxShopField || f.name.size() > kMaxShopField || f.email.size() > kMaxEmail || f.pcName.size() > kMaxPcName ||
+        f.licenseId.size() > kMaxLicenseId) {
+        res.message = "Un champ est trop long (la soci\xC3\xA9t\xC3\xA9 et le nom : " + std::to_string(kMaxShopField) + " caract\xC3\xA8res). Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    if (f.email.empty()) {
+        res.message = "Indique ton courriel (Modifier mon profil\xE2\x80\xA6) : Stripe y envoie ta facture. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    if (!lgw::plausibleEmail(f.email)) {
+        res.message = "Le courriel \xC2\xAB " + f.email + " \xC2\xBB ne ressemble pas \xC3\xA0 une adresse (nom@domaine.fr) : corrige-le dans ton profil. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    if (option && f.licenseId.empty()) {
+        res.message = "Une option s'ajoute \xC3\xA0 ta licence : active d'abord ta licence sur ce PC. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    std::string why;
+    if (!available(&why)) {
+        res.message = why;
+        return res;
+    }
+    // La demande de ce PC, scellee EXACTEMENT comme la demande en ligne (docs/BOUTIQUE.md, par. 8.12) : l'edition achetee,
+    // ou l'option et sa duree ; la licence existante pour une option.
+    const auto keys = lic::trustedPublisherKeys();
+    const lic::TrustedKey* key = sealingKey(keys);
+    if (!key) {
+        res.message = "Ce programme n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur : la commande ne peut pas \xC3\xAAtre scell\xC3\xA9" "e. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    std::string block;
+    lic::ActivationRequest parsed;
+    if (!lic::activationRequestText(f.pcName, option ? f.licenseId : std::string(), software(), block, &parsed, &why)) {
+        res.message = "La demande de ce PC n'a pas pu \xC3\xAAtre pr\xC3\xA9par\xC3\xA9" "e : " + sentence(why) + " Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    lgw::OnlineRequest q;
+    q.request = block;
+    q.customer = f.customer;
+    q.contact = f.name;
+    q.email = f.email;
+    if (option) {
+        q.option = art.option;
+        q.optionDays = art.days;
+    } else {
+        q.edition = art.edition;
+    }
+    const std::string plain = lgw::writeOnlineRequest(q);
+    std::string sealed = lgw::sealFor(key->key, plain);
+    if (sealed.empty()) {
+        res.message = "La commande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        return res;
+    }
+    Conn c;
+    Record rec;
+    if (!begin(res, c, rec, "ta commande n'est pas partie, rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9")) return res;
+    if (!shop::serviceKnowsShop(c.version)) {
+        lookShop(c, res);   // les boutons << Acheter >> s'en vont
+        res.message = "Le service des licences ne vend pas en ligne (il est en " + (c.version.empty() ? std::string("?") : c.version) +
+                      ") : demande ta licence sans paiement (Demander). Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+        (void)storeRecord(rec, nullptr);
+        return res;
+    }
+    if (const lic::TrustedKey* signer = certSigner(c, keys); signer && signer != key) {   // la cle qui a certifie CE service
+        key = signer;
+        sealed = lgw::sealFor(key->key, plain);
+        if (sealed.empty()) {
+            res.message = "La commande n'a pas pu \xC3\xAAtre scell\xC3\xA9" "e pour l'\xC3\xA9" "diteur. Rien n'a \xC3\xA9t\xC3\xA9 command\xC3\xA9.";
+            return res;
+        }
+    }
+    json::Value body = json::Value::object();
+    body.set("article", art.id);
+    body.set("societe", f.customer);
+    if (!f.name.empty()) body.set("nom", f.name);
+    body.set("courriel", f.email);
+    if (option) body.set("licence_existante", f.licenseId);
+    body.set("cle", key->id);
+    body.set("scelle", sealed);
+    if (json::Value more = adminSeals(plain); !more.items().empty()) body.set("scelles", std::move(more));
+    std::vector<std::string> lines;
+    const Got g = callSigned(c, "POST", "/v1/boutique/commande", json::write(body, false), why);
+    json::Value answer;
+    const bool readable = g.reached() && json::parse(g.body, answer) && answer.isObject();
+    const lic::Seconds now = lic::systemNow();
+    if (g.reached() && (g.status == 201 || g.status == 200)) {
+        const double n = readable ? answer.num("numero") : 0;
+        const std::string url = readable ? answer.str("url") : std::string();
+        if (n <= 0 || url.empty()) {
+            lines.push_back("Le service a re\xC3\xA7u ta commande, mais sa r\xC3\xA9ponse est illisible : regarde Mes achats dans un moment.");
+            finish(res, c, rec, std::move(lines));
+            return res;
+        }
+        shop::Order o;
+        o.number = static_cast<std::uint64_t>(n);
+        o.article = art.id;
+        o.label = art.label;
+        o.amount = answer.integer("montant", art.amount);
+        o.currency = answer.str("devise", cat.currency);
+        o.state = shop::kToPay;
+        o.mode = answer.str("mode", cat.mode);
+        o.created = now;
+        o.updated = now;
+        o.expires = static_cast<lic::Seconds>(std::max<std::int64_t>(0, answer.integer("expire")));
+        o.payUrl = url;
+        o.nonce = parsed.nonce;
+        if (option) {
+            o.option = art.option;
+            o.optionText = f.optionText.empty() ? art.label : f.optionText;
+        }
+        if (shop::Order* m = shop::findOrder(rec.orders, o.number)) *m = o;
+        else rec.orders.insert(rec.orders.begin(), o);
+        if (rec.orders.size() > shop::kMaxOrders) rec.orders.resize(shop::kMaxOrders);
+        res.ok = true;
+        res.changed = true;
+        res.orderNumber = o.number;
+        res.orderUrl = url;
+        res.ordersLooked = true;
+        res.orders = rec.orders;
+        note(true, "Commande n\xC2\xB0 " + std::to_string(o.number) + " pass\xC3\xA9" "e (" + o.label + ", " + shop::amountTtc(o.amount, o.currency) +
+                       ") : le paiement sur la page de Stripe" + (o.mode == "test" ? std::string(" (paiement d'essai)") : std::string()) + ".");
+        lines.push_back("Commande n\xC2\xB0 " + std::to_string(o.number) + " : la page de paiement de Stripe s'ouvre dans ton navigateur. " +
+                        (option ? std::string("Ton option arrive") : std::string("Ta licence arrive")) +
+                        " d'elle-m\xC3\xAAme d\xC3\xA8s que tu as pay\xC3\xA9 et que l'\xC3\xA9" "diteur l'a d\xC3\xA9livr\xC3\xA9" "e.");
+        finish(res, c, rec, std::move(lines));
+        return res;
+    }
+    const ServiceError e = errorOf(g);
+    res.retryAfter = static_cast<int>(e.retryIn);
+    if (!g.reached()) {
+        lines.push_back((!why.empty() ? why : offlineText(g, c.host) + ".") + " Ta commande n'est pas partie : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.");
+    } else if (g.status == 409 && e.code == "en_cours") {
+        // une commande de ce PC attend deja son paiement : sa page, rouverte (pas deux achats en meme temps)
+        const double n = readable ? answer.num("numero") : 0;
+        const std::string url = readable ? answer.str("url") : std::string();
+        if (n > 0) {
+            const auto number = static_cast<std::uint64_t>(n);
+            shop::Order* m = shop::findOrder(rec.orders, number);
+            if (!m) {
+                shop::Order o;
+                o.number = number;
+                o.created = now;
+                rec.orders.insert(rec.orders.begin(), o);
+                m = &rec.orders.front();
+            }
+            m->state = shop::kToPay;
+            if (!url.empty()) m->payUrl = url;
+            if (const std::int64_t x = answer.integer("expire"); x > 0) m->expires = static_cast<lic::Seconds>(x);
+            res.orderNumber = number;
+            res.orderUrl = m->payUrl;
+            res.orderReopened = true;
+            res.changed = true;
+            res.ordersLooked = true;
+            res.orders = rec.orders;
+        }
+        lines.push_back("Une commande de ce PC attend d\xC3\xA9j\xC3\xA0 son paiement" + (n > 0 ? " (n\xC2\xB0 " + std::to_string(static_cast<std::uint64_t>(n)) + ")" : std::string()) +
+                        " : sa page de paiement est rouverte dans ton navigateur. Paie-la, ou annule-la pour en passer une autre.");
+    } else if (g.status == 409 && e.code == "boutique") {
+        shop::Catalogue shut;
+        shut.known = true;
+        shut.serviceVersion = c.version;
+        shut.receivedAt = now;
+        shop::setCatalogue(shut);   // les boutons << Acheter >> s'en vont
+        res.shopLooked = true;
+        lines.push_back("La boutique en ligne est ferm\xC3\xA9" "e (l'\xC3\xA9" "diteur ne vend pas en ligne pour l'instant) : demande ta licence sans paiement "
+                        "(Demander). Rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.");
+    } else if (g.status == 404 && e.code == "article") {
+        c.shopOpen = true;
+        lookShop(c, res);   // la boutique relue
+        lines.push_back("Cet article n'est plus en vente en ligne : la boutique est relue, choisis de nouveau. Rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.");
+    } else if (g.status == 502) {
+        lines.push_back("La page de paiement ne s'ouvre pas : " +
+                        (e.message.empty() ? std::string("Stripe ne r\xC3\xA9pond pas pour l'instant.") : sentence(e.message)) +
+                        " Ta commande n'est pas gard\xC3\xA9" "e et rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9 : r\xC3\xA9" "essaie dans un moment.");
+    } else {
+        lines.push_back(problem(g, c.host, "Ta commande n'a pas pu \xC3\xAAtre pass\xC3\xA9" "e") + " Rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.");
+    }
+    finish(res, c, rec, std::move(lines));
+    return res;
+}
+
+Result cancelOrder(std::uint64_t number) {
+    Result res;
+    res.job = Job::CancelOrder;
+    if (number == 0) {
+        res.message = "Aucune commande \xC3\xA0 annuler.";
+        return res;
+    }
+    Conn c;
+    Record rec;
+    if (!begin(res, c, rec, "la commande n'est pas annul\xC3\xA9" "e")) return res;
+    json::Value body = json::Value::object();
+    body.set("numero", number);
+    std::vector<std::string> lines;
+    std::string why;
+    const Got g = callSigned(c, "POST", "/v1/boutique/annuler", json::write(body, false), why);
+    const std::string what = "La commande n\xC2\xB0 " + std::to_string(number);
+    if (g.reached() && g.status == 200) {
+        if (shop::Order* m = shop::findOrder(rec.orders, number)) {
+            m->state = shop::kCancelled;
+            m->payUrl.clear();
+            m->updated = lic::systemNow();
+        }
+        res.ok = true;
+        res.changed = true;
+        note(true, "Commande n\xC2\xB0 " + std::to_string(number) + " annul\xC3\xA9" "e par ce PC (avant le paiement).");
+        lines.push_back("Commande n\xC2\xB0 " + std::to_string(number) + " annul\xC3\xA9" "e : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.");
+    } else {
+        const ServiceError e = errorOf(g);
+        res.retryAfter = static_cast<int>(e.retryIn);
+        if (!g.reached()) lines.push_back((!why.empty() ? why : offlineText(g, c.host) + ".") + " " + what + " n'est pas annul\xC3\xA9" "e.");
+        else if (g.status == 409) lines.push_back(what + " ne s'annule plus : elle n'attend plus son paiement (pay\xC3\xA9" "e, ou close).");
+        else if (g.status == 404) lines.push_back(what + " n'est pas une commande de ce PC.");
+        else if (g.status == 502) lines.push_back("Stripe ne r\xC3\xA9pond pas : " + std::string(what) + " n'est pas annul\xC3\xA9" "e. R\xC3\xA9" "essaie dans un moment.");
+        else lines.push_back(problem(g, c.host, what + " n'a pas pu \xC3\xAAtre annul\xC3\xA9" "e"));
+    }
+    // l'etat reel des commandes (un paiement fait juste avant l'annulation arrive par le webhook)
+    std::vector<std::string> more;
+    (void)stepOrders(c, rec, res, more);
+    finish(res, c, rec, std::move(lines));
+    return res;
+}
+
+Result refreshOrders() {
+    Result res;
+    res.job = Job::Orders;
+    std::string why;
+    if (!available(&why)) {
+        res.message = why;
+        return res;
+    }
+    Record rec;
+    if (!loadRecord(rec, &why)) {
+        res.message = why;
+        return res;
+    }
+    // Leger (toutes les 10 secondes apres un achat) : GET /v1/etat (l'ecart d'heure, la version) puis l'appel signe.
+    Conn c;
+    json::Value etat;
+    if (!reachState(c, etat, why)) {
+        res.message = sentence(why);
+        return res;
+    }
+    res.reached = true;
+    if (c.fallback) res.fallbackUsed = c.a.url;
+    c.version = etat.str("version");
+    c.shopOpen = etat.flag("boutique");
+    if (!shop::serviceKnowsShop(c.version)) {
+        res.ok = true;
+        res.message = "Le service des licences ne vend pas en ligne (il est en " + (c.version.empty() ? std::string("?") : c.version) + ").";
+        return res;
+    }
+    std::string id;
+    if (!existingDevice(id, why)) {
+        res.ok = why.empty();
+        res.ordersLooked = true;
+        res.orders = rec.orders;
+        res.message = why.empty() ? std::string("Aucune commande : ce PC n'a encore rien achet\xC3\xA9.") : why;
+        return res;
+    }
+    std::vector<std::string> lines;
+    res.ok = stepOrders(c, rec, res, lines);
+    bool store = res.changed;
+    // une commande livree : son etat << poste >> tout de suite (la connexion complete : le certificat, l'heure)
+    if (res.ok && deliveryWaiting(rec)) {
+        Conn full;
+        std::string w;
+        if (connect(full, rec, res, w)) {
+            applyDeliveries(full, rec, res, lines);
+            for (auto& l : full.lines) lines.insert(lines.begin(), l);
+        } else {
+            lines.push_back(sentence(w));
+        }
+        store = true;
+    }
+    if (lines.empty()) {
+        if (rec.orders.empty()) lines.push_back("Aucune commande pour ce PC.");
+        else
+            lines.push_back(std::to_string(rec.orders.size()) + (rec.orders.size() > 1 ? " commandes" : " commande") + " ; la derni\xC3\xA8re : n\xC2\xB0 " +
+                            std::to_string(rec.orders.front().number) + ", " + shop::stateLabel(rec.orders.front().state) + ".");
+    }
+    res.message = join(lines);
+    if (store) {
+        std::string w;
+        if (!storeRecord(rec, &w)) res.message = join({res.message, "Attention : " + w});
+        res.orders = rec.orders;   // apres la fusion avec l'autre Studio : relu
+        Record now;
+        if (loadRecord(now, nullptr)) res.orders = now.orders;
+    }
+    res.pendingAfter = pending(rec);
+    res.requestSentAt = res.pendingAfter ? rec.sentAt : 0;
+    return res;
+}
+
+Result refreshShop() {
+    Result res;
+    res.job = Job::Shop;
+    std::string why;
+    if (!available(&why)) {
+        res.message = why;
+        return res;
+    }
+    Conn c;
+    json::Value etat;
+    if (!reachState(c, etat, why)) {
+        res.message = sentence(why) + " La boutique n'est pas relue.";
+        return res;
+    }
+    res.reached = true;
+    c.version = etat.str("version");
+    c.shopOpen = etat.flag("boutique");
+    lookShop(c, res);
+    res.ok = res.shopLooked;
+    const shop::Catalogue cat = shop::catalogue();
+    if (!res.ok) res.message = "La boutique n'a pas pu \xC3\xAAtre relue (le service n'a pas r\xC3\xA9pondu comme pr\xC3\xA9vu).";
+    else if (!cat.known) res.message = "Le service des licences ne vend pas en ligne (il est en " + (c.version.empty() ? std::string("?") : c.version) + ").";
+    else if (!cat.selling()) res.message = "La boutique en ligne est ferm\xC3\xA9" "e.";
+    else
+        res.message = "La boutique est ouverte : " + std::to_string(cat.articles.size()) + (cat.articles.size() > 1 ? " articles" : " article") +
+                      (cat.test() ? " (paiement d'essai)." : ".");
+    return res;
+}
+
 Result sync() {
     Result res;
     res.job = Job::Sync;
