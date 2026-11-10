@@ -129,6 +129,7 @@ public:
                 bestY = anchorRel_[i];
                 best = i;
             }
+        if (anchor_ != best && std::abs(anchorRel_[anchor_] - bestY) < 1.f) return anchor_;   // deux ancres cote a cote : celle choisie
         return best;
     }
 
@@ -268,7 +269,7 @@ public:
                     b[i] = std::max(s->dayLast[i] / 60.0, a[i] + 0.15);
                     if (odd.count(d_->period.first + static_cast<std::int64_t>(i))) colors[i] = kRed;
                 }
-                if (s->habitsKnown && s->usualStart >= 0) cd.yBands.push_back({s->usualStart / 60.0, s->usualEnd / 60.0, "habituel", Color{0, 0, 0, 0}});
+                if (s->habitsKnown && s->usualStart >= 0) cd.yBands.push_back({s->usualStart / 60.0, s->usualEnd / 60.0, {}, Color{0, 0, 0, 0}});   // la legende le dit
             }
             ch::Series s0{"admin", "premi\xC3\xA8re action", a};
             s0.color = mineC;
@@ -363,7 +364,7 @@ public:
                 me.color = mineC;
                 cd.series = {me};
                 const AdminFigures* f = d_->fig(key_);
-                if (f && known(f->medianDelay)) cd.refs.push_back({f->medianDelay / 3600.0, "m\xC3\xA9" "diane " + hoursText(f->medianDelay), false, Color{0, 0, 0, 0}});
+                if (f && known(f->medianDelay)) cd.refs.push_back({f->medianDelay / 3600.0, "m\xC3\xA9" "diane " + hoursText(f->medianDelay), true, Color{0, 0, 0, 0}});
             }
             cd.yFormat = [](double v) { return ch::fr::hours(v); };
             cd.valueFormat = [](double v) { return ch::fr::hours(v); };
@@ -448,11 +449,15 @@ protected:
         heatCard_ = {x0, y, hw, 380.f};
         put(heat_, {heatCard_.x + 16.f, heatCard_.y + 62.f, heatCard_.w - 32.f, heatCard_.h - 74.f});
         daysCard_ = {two ? x0 + hw + gap : x0, two ? y : heatCard_.bottom() + gap, two ? w - hw - gap : w, 380.f};
-        put(strip_, {daysCard_.x + 16.f, daysCard_.y + 116.f, daysCard_.w - 32.f, 40.f});
-        put(span_, {daysCard_.x + 16.f, daysCard_.y + 190.f, daysCard_.w - 32.f, daysCard_.h - 200.f});
+        daysExtra_ = (daysCard_.w - 32.f) / 4.f < 150.f ? 44.f : 0.f;   // etroit : ses quatre chiffres sur deux rangees
+        daysCard_.h += daysExtra_;
+        if (two) heatCard_.h = daysCard_.h;
+        put(heat_, {heatCard_.x + 16.f, heatCard_.y + 62.f, heatCard_.w - 32.f, heatCard_.h - 74.f});
+        put(strip_, {daysCard_.x + 16.f, daysCard_.y + 116.f + daysExtra_, daysCard_.w - 32.f, 40.f});
+        put(span_, {daysCard_.x + 16.f, daysCard_.y + 190.f + daysExtra_, daysCard_.w - 32.f, daysCard_.h - 200.f - daysExtra_});
         y = std::max(heatCard_.bottom(), daysCard_.bottom()) + gap;
         // ======== 6 DROITS, 5 SECURITE ========
-        const float rightsW = two ? std::floor((w - gap) * 0.40f) : w;
+        const float rightsW = two ? std::floor((w - gap) * 0.44f) : w;
         anchorRel_[6] = y - area.y;
         rightsCard_ = {x0, y, rightsW, 0.f};
         float ry = y + 78.f;
@@ -637,7 +642,7 @@ private:
             if (u.usualStart >= 0) {
                 const Seconds day = d_->now;
                 const int a = statskit::localHour(u.usualStart, day), b = statskit::localHour(u.usualEnd, day);
-                out.push_back({"Ses heures", std::to_string(a) + " h " + ch::fr::kArrow + " " + std::to_string(b + 1) + " h", "d\xC3\xA9" "but et fin, d'habitude", "N"});
+                out.push_back({"Ses heures", std::to_string(a) + " h " + ch::fr::kArrow + " " + std::to_string(b + 1) + " h", "d'habitude", "N"});
             }
         } else {
             out.push_back({"Vue", "\xE2\x80\x94", d_->serviceLoading ? "lecture du service\xE2\x80\xA6" : "le service : pas de chiffres", "N"});
@@ -729,7 +734,7 @@ private:
                     int weekend = 0;
                     for (std::size_t k = 0; k < s->perDay.size(); ++k)
                         if (s->perDay[k] > 0 && js::weekday(d_->period.first + static_cast<std::int64_t>(k)) >= 5) ++weekend;
-                    if (weekend) t.extra = "dont " + std::to_string(weekend) + (weekend > 1 ? " jours de fin de semaine" : " jour de fin de semaine");
+                    if (weekend) t.extra = "dont " + std::to_string(weekend) + " en fin de semaine";
                 }
                 break;
             case 6:
@@ -984,9 +989,11 @@ private:
         const float x = daysCard_.x + 16.f, w = daysCard_.w - 32.f;
         (void)cardTitle(r, x, daysCard_.y + 16.f, w, "Ses jours", "un carr\xC3\xA9 par jour, plus fonc\xC3\xA9 = plus d'actions ; la s\xC3\xA9rie en cours soulign\xC3\xA9" "e",
                         "J N");
-        const float cw = w / 4.f, fy = daysCard_.y + 62.f;
+        const bool narrow = daysExtra_ > 0.f;
+        const float cw = narrow ? w / 2.f : w / 4.f;
         const auto fig = [&](int i, const std::string& label, const std::string& big, const std::string& small) {
-            const float cx = x + static_cast<float>(i) * cw;
+            const float cx = x + static_cast<float>(narrow ? i % 2 : i) * cw;
+            const float fy = daysCard_.y + 62.f + (narrow && i >= 2 ? 44.f : 0.f);
             (void)text(r, cx, fy, label, kF12, kMuted, cw - 8.f);
             const float bw = text(r, cx, fy + 16.f, big, gfx::semibold(FontId{18}), kInk, cw - 8.f);
             (void)text(r, cx + bw + 5.f, fy + 21.f, small, kF12, kInk2, cw - bw - 12.f);
@@ -1010,7 +1017,7 @@ private:
                 s->last.number ? (js::localDay(s->last.when, js::TimeZone::paris()) == js::localDay(d_->now, js::TimeZone::paris()) ? std::string("auj.") : dayMonth(s->last.when))
                                : std::string());
         }
-        const float ly = daysCard_.y + 166.f;
+        const float ly = daysCard_.y + 166.f + daysExtra_;
         (void)text(r, x, ly, "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es", kB13, kInk, w * 0.5f);
         float lx = x + w;
         const auto legend = [&](const std::string& t, Color c, bool box) {
@@ -1034,7 +1041,7 @@ private:
         card(r, ctx.theme, rightsCard_);
         const js::AdminStats* s = d_->stats(key_);
         const float x = rightsCard_.x + 16.f, w = rightsCard_.w - 32.f;
-        const std::string since = p.since > 0 ? "depuis qu'" + std::string(own_ ? "tu es" : "il est") + " admin (" +
+        const std::string since = p.since > 0 ? std::string(own_ ? "depuis que tu es admin (" : "depuis son arriv\xC3\xA9" "e (") +
                                                     std::to_string(std::max<std::int64_t>(0, (d_->now - p.since) / kDayS)) + " jours, au plus " +
                                                     std::to_string(d_->unusedDays) + ")"
                                               : "sur " + std::to_string(d_->unusedDays) + " jours";
@@ -1065,10 +1072,12 @@ private:
             }
             const std::string n = u.held || u.count ? std::to_string(u.countWindow) : std::string("\xE2\x80\x94");
             (void)text(r, c3, y + 6.f, n, kB13, off ? kFaint : kInk, c4 - c3 - 6.f);
-            if (u.neverUsed) (void)text(r, c4, y + 6.f, "jamais", kB13, kAmber, x + w - c4);
+            // << jamais >> ; le bouton << Retirer ce droit ? >> a droite : le mot seulement s'il tient avant lui
+            const float room = removeOne_[i]->visibility() != ui::Visibility::Collapsed ? removeOne_[i]->bounds().x - 8.f - c4 : x + w - c4;
+            if (u.neverUsed && ui::measureWidth("jamais", kB13) <= room) (void)text(r, c4, y + 6.f, "jamais", kB13, kAmber, room);
             else if (u.last > 0) (void)text(r, c4, y + 6.f, ago(d_->now, u.last), kF13, off ? kFaint : kInk2, x + w - c4 - (u.neverUsed ? 120.f : 0.f));
         }
-        (void)kit::drawWrapped(r, x, rightRow_[12] + 40.f, w, "Retirer un droit ne casse rien de ce qu'" + std::string(own_ ? "tu as" : "il a") + " sign\xC3\xA9 (ses licences restent valides).",
+        (void)kit::drawWrapped(r, x, rightRow_[12] + 40.f, w, "Retirer un droit ne casse rien de ce qu" + (own_ ? std::string("e tu as") : "e " + she() + " a") + " sign\xC3\xA9 (ses licences restent valides).",
                                kF12, kMuted, 17.f, 2);
     }
 
@@ -1142,7 +1151,11 @@ private:
                 else if (!c.profile.empty() && c.added.empty() && c.removed.empty()) t = "profil " + c.profile + " copi\xC3\xA9";
                 for (const auto& a : c.added) t += (t.empty() ? "" : ", ") + std::string("+ ") + rightShort(a);
                 for (const auto& a : c.removed) t += (t.empty() ? "" : ", ") + std::string(ch::fr::kMinus) + " " + rightShort(a);
-                t += ", par " + (c.by == "admin+" ? std::string("toi") : c.by);
+                const Person* plusP = nullptr;
+                for (const auto& q : d_->people)
+                    if (q.kind == Person::Kind::Plus) plusP = &q;
+                const bool byMe = c.by == "admin+" || (plusP && plusP->me && plusP->name == c.by);
+                t += ", par " + (byMe ? std::string("toi") : c.by);
                 b.lines.push_back({dayMonth(c.line.when), t});
             }
             if (b.lines.empty()) b.lines.push_back({"", "aucun changement"});
@@ -1231,7 +1244,7 @@ private:
         const js::AdminStats* s = d_->stats(key_);
         const CardFigures* c = cardFigs();
         const float x = licCard_.x + 16.f, w = licCard_.w - 32.f;
-        (void)cardTitle(r, x, licCard_.y + 16.f, w, own_ ? "Les licences que tu as sign\xC3\xA9" "es" : "Les licences qu'" + std::string("il a sign\xC3\xA9" "es"),
+        (void)cardTitle(r, x, licCard_.y + 16.f, w, own_ ? std::string("Les licences que tu as sign\xC3\xA9" "es") : "Les licences sign\xC3\xA9" "es par " + she(),
                         "sur la p\xC3\xA9riode \xC2\xB7 leur \xC3\xA9tat aujourd'hui", "S");
         const float vw = text(r, x, licCard_.y + 62.f, s ? num(s->licences) : num(kNaN), gfx::semibold(FontId{30}), kInk, 110.f);
         if (s) (void)delta(r, x, licCard_.y + 102.f, s->licences, s->licencesBefore, true, kB12, true);
@@ -1298,7 +1311,7 @@ private:
             r.fillRect({x, y - 8.f, w, 1.f}, kLine2);
         }
         if (p.kind == Person::Kind::Admin && !p.rights.empty() && std::find(p.rights.begin(), p.rights.end(), "licence_prolonger") == p.rights.end())
-            (void)kit::drawWrapped(r, x, renewCard_.bottom() - 34.f, w, "Il n'a plus le droit de prolonger : toi, tu le peux (Licences).", kF12, kMuted, 17.f, 2);
+            (void)kit::drawWrapped(r, x, renewCard_.bottom() - 34.f, w, she() + " n'a plus le droit de prolonger : toi, tu le peux (Licences).", kF12, kMuted, 17.f, 2);
     }
     [[nodiscard]] std::vector<const LicenceEntry*> renewals() const {
         std::set<std::string> ids;
@@ -1318,7 +1331,7 @@ private:
         card(r, ctx.theme, clientsCard_);
         const CardFigures* c = cardFigs();
         const float x = clientsCard_.x + 16.f, w = clientsCard_.w - 32.f;
-        (void)cardTitle(r, x, clientsCard_.y + 16.f, w, own_ ? "Tes clients" : "Ses clients", "ceux pour qui " + std::string(own_ ? "tu as" : "il a") + " sign\xC3\xA9 ou livr\xC3\xA9", "S");
+        (void)cardTitle(r, x, clientsCard_.y + 16.f, w, own_ ? "Tes clients" : "Ses clients", "ceux pour qui " + (own_ ? std::string("tu as") : she() + " a") + " sign\xC3\xA9 ou livr\xC3\xA9", "S");
         const float fy = clientsCard_.y + 64.f, cw = w / 2.f;
         (void)text(r, x, fy, "Clients servis", kF12, kMuted, cw);
         (void)text(r, x, fy + 16.f, c ? num(c->clients) : num(kNaN), gfx::semibold(FontId{18}), kInk, cw);
@@ -1334,7 +1347,7 @@ private:
         const js::AdminStats* s = d_->stats(key_);
         const AdminFigures* f = d_->fig(key_);
         const float x = reqCard_.x + 16.f, w = reqCard_.w - 32.f;
-        (void)cardTitle(r, x, reqCard_.y + 16.f, w, own_ ? "Les demandes que tu as trait\xC3\xA9" "es" : "Les demandes qu'il a trait\xC3\xA9" "es",
+        (void)cardTitle(r, x, reqCard_.y + 16.f, w, own_ ? std::string("Les demandes que tu as trait\xC3\xA9" "es") : "Les demandes trait\xC3\xA9" "es par " + she(),
                         "en ligne, depuis les Studios \xC2\xB7 le d\xC3\xA9lai entre la demande et sa r\xC3\xA9ponse ; son d\xC3\xA9lai moyen par semaine, et sa part", "S");
         const float figsW = std::min(260.f, w * 0.32f);
         float y = reqCard_.y + 66.f;
@@ -1366,7 +1379,7 @@ private:
         const CardFigures* c = cardFigs();
         const AdminFigures* f = d_->fig(key_);
         const float x = shopCard_.x + 16.f, w = shopCard_.w - 32.f;
-        (void)cardTitle(r, x, shopCard_.y + 16.f, w, own_ ? "La boutique : les commandes que tu as livr\xC3\xA9" "es" : "La boutique : les commandes qu'il a livr\xC3\xA9" "es",
+        (void)cardTitle(r, x, shopCard_.y + 16.f, w, own_ ? std::string("La boutique : les commandes que tu as livr\xC3\xA9" "es") : "La boutique : les commandes livr\xC3\xA9" "es par " + she(),
                         "pay\xC3\xA9" "es en ligne (Stripe), livr\xC3\xA9" "es depuis son Admin \xC2\xB7 le montant par semaine ; par article", "S");
         const float sFigs = std::min(220.f, w * 0.24f);
         float y = shopCard_.y + 66.f;
@@ -1393,7 +1406,7 @@ private:
         card(r, ctx.theme, restCard_);
         const js::AdminStats* s = d_->stats(key_);
         const float x = restCard_.x + 16.f, w = restCard_.w - 32.f;
-        (void)cardTitle(r, x, restCard_.y + 16.f, w, own_ ? "Le reste de ce que tu fais" : "Le reste de ce qu'il fait", "sur la p\xC3\xA9riode, depuis le journal", "J");
+        (void)cardTitle(r, x, restCard_.y + 16.f, w, own_ ? std::string("Le reste de ce que tu fais") : "Le reste de ce que fait " + she(), "sur la p\xC3\xA9riode, depuis le journal", "J");
         if (!s) return;
         const auto idx = [](const char* id) {
             for (int t = 0; t < js::kTypes; ++t)
@@ -1462,7 +1475,7 @@ private:
     Rect                   who_{}, tiles_[8]{}, perDayCard_{}, typeCard_{}, unusedBox_{}, critCard_{}, amongCard_{};
     Rect                   heatCard_{}, daysCard_{}, rightsCard_{}, secCard_{};
     Rect                   licCard_{}, weeksCard_{}, renewCard_{}, clientsCard_{}, reqCard_{}, shopCard_{}, restCard_{};
-    float                  typeNoteY_{0}, rightRow_[13]{};
+    float                  typeNoteY_{0}, rightRow_[13]{}, daysExtra_{0};
     core::ConnectionScope  links_;
 };
 

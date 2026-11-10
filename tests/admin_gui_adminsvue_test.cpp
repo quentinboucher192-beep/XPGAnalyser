@@ -635,11 +635,11 @@ int main(int argc, char** argv) {
                   has(t, "PC-MAISON-LEA") && has(t, "Heures inhabituelles, pics") && has(t, "Ses droits chang\xC3\xA9s") && has(t, "La cha\xC3\xAEne de ses lignes") &&
                   has(t, "v\xC3\xA9rifi\xC3\xA9" "e \xE2\x9C\x93"),
               "sa securite : refusees, un autre PC, heures inhabituelles, ses droits changes, la chaine verifiee");
-        check(has(t, "Les licences qu'il a sign\xC3\xA9" "es") && has(t, "Par offre") && has(t, "\xC3\x80 renouveler") && has(t, P.renew.empty() ? "?" : P.renew.front()) &&
+        check(has(t, "Les licences sign\xC3\xA9" "es par L\xC3\xA9" "a") && has(t, "Par offre") && has(t, "\xC3\x80 renouveler") && has(t, P.renew.empty() ? "?" : P.renew.front()) &&
                   has(t, "Ses clients") && has(t, "Ses 5 premiers"),
               "ce qu'il produit : ses licences, a renouveler (" + (P.renew.empty() ? std::string() : P.renew.front()) + "), ses clients");
-        check(has(t, "Les demandes qu'il a trait\xC3\xA9" "es") && has(t, "Accept\xC3\xA9" "es \xC2\xB7 refus\xC3\xA9" "es") && has(t, "La boutique : les commandes qu'il a livr\xC3\xA9" "es") &&
-                  has(t, "Panier moyen") && has(t, "Le reste de ce qu'il fait") && has(t, "Codes d'activation revus"),
+        check(has(t, "Les demandes trait\xC3\xA9" "es par L\xC3\xA9" "a") && has(t, "Accept\xC3\xA9" "es \xC2\xB7 refus\xC3\xA9" "es") && has(t, "La boutique : les commandes livr\xC3\xA9" "es par L\xC3\xA9" "a") &&
+                  has(t, "Panier moyen") && has(t, "Le reste de ce que fait L\xC3\xA9" "a") && has(t, "Codes d'activation revus"),
               "les demandes, la boutique, le reste");
         // les ancres
         check(card && click(*page, "admins.fiche.ancre.1") && card->offset() > 100.f, "l'ancre Activite fait defiler");

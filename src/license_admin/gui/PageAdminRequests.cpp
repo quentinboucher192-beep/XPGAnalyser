@@ -501,8 +501,8 @@ public:
         refuse_ = &kit::button(*this, "Refuser\xE2\x80\xA6", "demandes-admins.refuser", ui::Button::Style::Danger, ui::Icon::Close);
         table_ = &kit::adopt(*this, std::make_unique<ui::TableView>("demandes-admins.table"));
         // les 8 colonnes tiennent dans la fenetre de 1373 px (sans defiler de cote)
-        table_->setColumns({{"Re\xC3\xA7ue le", 125.f}, {"Nom", 140.f}, {"Courriel", 180.f}, {"PC", 110.f}, {"Logiciel", 160.f}, {"Empreinte", 105.f},
-                            {"Invitation", 180.f}, {"\xC3\x89tat", 110.f}});
+        table_->setColumns({{"Re\xC3\xA7ue le", 142.f}, {"Nom", 132.f}, {"Courriel", 172.f}, {"PC", 100.f}, {"Logiciel", 150.f}, {"Empreinte", 112.f},
+                            {"Invitation", 172.f}, {"\xC3\x89tat", 100.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Re\xC3\xA7ue le", "Nom", "Courriel", "PC", "Logiciel", "Empreinte", "Invitation", "\xC3\x89tat"});
         table_->setModel(model_);

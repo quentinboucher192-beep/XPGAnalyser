@@ -257,6 +257,7 @@ const ROUTES = {
     "GET /v1/boutique/commandes": { f: "commandesDuPc", signe: "pc", pc: PAR_PC.commandes },
     "POST /v1/boutique/annuler": { f: "annulerCommande", signe: "pc" },
     "PUT /admin/boutique": { f: "deposerBoutique", signe: "plus" },
+    "POST /admin/boutique/stripe": { f: "catalogueStripe", signe: "plus" }, // 1.46.1 : les produits et les prix chez Stripe
     "GET /admin/boutique": { f: "lireBoutiqueAdmin", signe: "admin" },
     "GET /admin/commandes": { f: "listerCommandes", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/prendre": { f: "prendreCommande", signe: "admin", droit: ["demandes"] },

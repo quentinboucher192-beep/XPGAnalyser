@@ -282,9 +282,52 @@ public:
 protected:
     void onPaint(const ui::PaintContext& ctx) override {
         const Rect b = bounds();
-        const char* heads[] = {"VERSION", "PUBLI\xC3\x89" "E LE", "STUDIOS", "ADMINS", "PART DES PC"};
-        const float cx[] = {0.f, 0.27f, 0.47f, 0.59f, 0.70f};
-        for (int i = 0; i < 5; ++i) ctx.r.drawText({b.x + b.w * cx[i], b.y}, heads[i], gfx::semibold(FontId{10}), kFaint);
+        // les colonnes : celles de la maquette (en part de la largeur) tant que tout y tient ; sinon serrees a la mesure
+        // de ce qu'elles montrent (la barre de la part passe la premiere, puis les mots << actuelle >>, << correctif >>)
+        std::string heads[5] = {"VERSION", "PUBLI\xC3\x89" "E LE", "STUDIOS", "ADMINS", "PART DES PC"};
+        const FontId hf = gfx::semibold(FontId{10}), nf = gfx::semibold(FontId{13});
+        const auto mw = [&](const std::string& t, FontId f) { return ctx.r.measure(t, f).width; };
+        float badgeW = mw(heads[0], hf), numW = mw("0", nf);
+        for (const auto& v : reply_.versions) {
+            badgeW = std::max(badgeW, mw(v.version, FontId{12}) + 14.f);
+            numW = std::max({numW, mw(std::to_string(v.studios), nf), mw(std::to_string(v.admins), nf)});
+        }
+        const float dateW = std::max(mw(heads[1], hf), mw("00/00/0000", FontId{13})), pctW = mw("100 %", nf);
+        float x[5], r2 = 0.f, r3 = 0.f, barX = 0.f, barW = 0.f;
+        bool bar = true;
+        {
+            const float cx[] = {0.f, 0.27f, 0.47f, 0.59f, 0.70f};
+            for (int i = 0; i < 5; ++i) x[i] = b.x + b.w * cx[i];
+            r2 = b.x + b.w * 0.54f;
+            r3 = b.x + b.w * 0.65f;
+            barX = x[4];
+            barW = b.w * 0.19f;
+        }
+        const bool wide = badgeW + 6.f <= x[1] - x[0] && dateW + 6.f <= x[2] - x[1] && mw(heads[2], hf) + 4.f <= x[3] - x[2] &&
+                          mw(heads[3], hf) + 4.f <= x[4] - x[3] && barW + 10.f + pctW <= b.right() - x[4] && mw(heads[4], hf) <= b.right() - x[4];
+        if (!wide) {
+            float gap = 12.f;
+            const float c0 = badgeW, c1 = dateW, c2 = std::max(mw(heads[2], hf), numW), c3 = std::max(mw(heads[3], hf), numW);
+            float c4 = std::max(mw(heads[4], hf), 36.f + 10.f + pctW);
+            if (c0 + c1 + c2 + c3 + c4 + 4.f * gap > b.w) {
+                bar = false;
+                heads[4] = "PART";
+                c4 = std::max(mw(heads[4], hf), pctW);
+            }
+            const float slack = b.w - (c0 + c1 + c2 + c3 + c4) - 4.f * gap;
+            if (slack < 0.f) gap = std::max(6.f, gap + slack / 4.f);
+            else if (!bar) gap += slack / 4.f;
+            x[0] = b.x;
+            x[1] = x[0] + c0 + gap;
+            x[2] = x[1] + c1 + gap;
+            x[3] = x[2] + c2 + gap;
+            x[4] = x[3] + c3 + gap;
+            r2 = x[2] + c2;
+            r3 = x[3] + c3;
+            barX = x[4];
+            barW = bar ? b.right() - x[4] - 10.f - pctW : 0.f;
+        }
+        for (int i = 0; i < 5; ++i) ctx.r.drawText({x[i], b.y}, heads[i], hf, kFaint);
         ctx.r.fillRect({b.x, b.y + 20.f, b.w, 1.f}, kLine);
         int seen = 0;
         for (const auto& v : reply_.versions) seen += v.studios + v.admins;
@@ -309,26 +352,27 @@ protected:
             if (latest) tag = "actuelle";
             else if (v.published == 0 || i + 1 == reply_.versions.size()) tag = "et avant";
             else if (v.version.size() > 2 && v.version.substr(v.version.rfind('.') + 1) != "0") tag = "correctif";
-            if (!tag.empty() && bx + 50.f < b.x + b.w * cx[1]) ctx.r.drawText({bx, cy - 7.f}, tag, FontId{12}, kMuted);
+            if (!tag.empty() && bx + mw(tag, FontId{12}) + 6.f < x[1]) ctx.r.drawText({bx, cy - 7.f}, tag, FontId{12}, kMuted);
             if (v.published > 0) {
-                const bool two = rowH >= 38.f && (latest || i < 2);
-                ctx.r.drawText({b.x + b.w * cx[1], two ? cy - 16.f : cy - 8.f}, dateFr(v.published), FontId{13}, kInk);
-                if (two) ctx.r.drawText({b.x + b.w * cx[1], cy + 2.f}, ageText(now_, v.published), FontId{12}, kMuted);
+                const bool two = rowH >= 38.f && (latest || i < 2) && mw(ageText(now_, v.published), FontId{12}) + 4.f < x[2] - x[1];
+                ctx.r.drawText({x[1], two ? cy - 16.f : cy - 8.f}, dateFr(v.published), FontId{13}, kInk);
+                if (two) ctx.r.drawText({x[1], cy + 2.f}, ageText(now_, v.published), FontId{12}, kMuted);
             } else {
-                ctx.r.drawText({b.x + b.w * cx[1], cy - 8.f}, kDash, FontId{13}, kFaint);
+                ctx.r.drawText({x[1], cy - 8.f}, kDash, FontId{13}, kFaint);
             }
-            const auto num = [&](float at, int n) {
+            const auto num = [&](float right, int n) {
                 const std::string t = std::to_string(n);
-                const FontId f = gfx::semibold(FontId{13});
-                ctx.r.drawText({b.x + b.w * at - ctx.r.measure(t, f).width, cy - 8.f}, t, f, n ? kInk : kFaint);
+                ctx.r.drawText({right - mw(t, nf), cy - 8.f}, t, nf, n ? kInk : kFaint);
             };
-            num(cx[2] + 0.07f, v.studios);
-            num(cx[3] + 0.06f, v.admins);
+            num(r2, v.studios);
+            num(r3, v.admins);
             const double part = seen > 0 ? (v.studios + v.admins) * 100.0 / seen : 0.0;
-            const float px = b.x + b.w * cx[4];
-            const float pw = b.w * 0.19f;
-            ch::paintInlineBar(ctx.r, ctx.theme, {px, cy - 3.f, pw, 6.f}, part / 100.0, ch::colors::kOne);
-            ctx.r.drawText({px + pw + 10.f, cy - 8.f}, ch::fr::percent(part), gfx::semibold(FontId{13}), kInk);
+            if (bar) {
+                ch::paintInlineBar(ctx.r, ctx.theme, {barX, cy - 3.f, barW, 6.f}, part / 100.0, ch::colors::kOne);
+                ctx.r.drawText({barX + barW + 10.f, cy - 8.f}, ch::fr::percent(part), nf, kInk);
+            } else {
+                ctx.r.drawText({barX, cy - 8.f}, ch::fr::percent(part), nf, kInk);
+            }
             if (i + 1 < reply_.versions.size()) ctx.r.fillRect({b.x, y + rowH - 0.5f, b.w, 1.f}, Color::rgb(0xF1F4F8));
             y += rowH;
         }
@@ -367,9 +411,8 @@ public:
             away += now - p.seen > 30 * 86400 ? 1 : 0;
         }
         counts_ = {r.behindTotal, two, away};
-        filter_->setLabel("tous", "Tous \xC2\xB7 " + std::to_string(r.behindTotal));
-        filter_->setLabel("retard", "2 versions de retard ou plus \xC2\xB7 " + std::to_string(two));
-        filter_->setLabel("absents", "pas vus depuis 30 j \xC2\xB7 " + std::to_string(away));
+        labelLevel_ = -1;
+        applyLabels(0);
         all_->setText("Voir les " + std::to_string(r.behindTotal) + " dans Activations \xE2\x80\xBA");
         invalidateLayout();
         invalidate();
@@ -388,6 +431,11 @@ public:
 protected:
     void onLayout() override {
         const Rect b = bounds();
+        // les filtres : leurs mots en entier, ou plus courts quand la carte est etroite (jamais l'un sur l'autre)
+        for (int level = 0; level < 3; ++level) {
+            applyLabels(level);
+            if (filter_->preferredWidth() <= b.w) break;
+        }
         filter_->setBounds({b.x, b.y, std::min(b.w, filter_->preferredWidth() + 60.f), 32.f});
         const float w = all_->sizeHint().preferred.w + 8.f;
         all_->setBounds({b.right() - w, b.bottom() - 26.f, w, 26.f});
@@ -465,12 +513,23 @@ protected:
     }
 
 private:
+    void applyLabels(int level) {
+        if (level == labelLevel_ || counts_.size() < 3) return;
+        labelLevel_ = level;
+        const char* late[3] = {"2 versions de retard ou plus", "2 versions ou plus", "2 de retard"};
+        const char* away[3] = {"pas vus depuis 30 j", "pas vus 30 j", "absents"};
+        filter_->setLabel("tous", "Tous \xC2\xB7 " + std::to_string(counts_[0]));
+        filter_->setLabel("retard", std::string(late[level]) + " \xC2\xB7 " + std::to_string(counts_[1]));
+        filter_->setLabel("absents", std::string(away[level]) + " \xC2\xB7 " + std::to_string(counts_[2]));
+    }
+
     ShellHost                                  host_;
     SegGroup*                                  filter_{nullptr};
     ui::Button*                                all_{nullptr};
     stats::UpdatesReply                        reply_;
     Seconds                                    now_{0};
     std::vector<int>                           counts_;
+    int                                        labelLevel_{-1};
     std::vector<float>                         rowTops_;
     float                                      rowH_{30.f};
     static FontId gFont() { return gfx::semibold(FontId{10}); }

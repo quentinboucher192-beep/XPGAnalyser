@@ -811,8 +811,10 @@ void fillFlottantes(Slot& s, const Data& d) {
     t.series = {a};
     const double ceiling = cap && !cap->refused ? lastOf(cap->points) : ch::kNone;
     if (stats::isNumber(ceiling) && ceiling > 0) {
+        // le plafond sous le haut du trace : son mot tient au-dessus du trait (et pas sur la courbe qui le touche)
         t.refs.push_back({ceiling, "plafond", true, {0, 0, 0, 0}});
-        t.yMax = ceiling;
+        t.yMax = ceiling * 1.45;
+        t.yTicks = {0.0, ceiling};
     }
     t.yTickCount = 2;
     t.clickHint = "Clic : les sessions de ce jour";

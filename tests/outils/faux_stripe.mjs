@@ -5,25 +5,40 @@
 //  en .invalid ; aucune carte, aucun argent.
 // -----------------------------------------------------------------------------
 //  Ce qu'il imite (l'API de Stripe, form-urlencoded, Authorization: Bearer) :
-//    POST   /v1/checkout/sessions               une page de paiement (cs_test_N)
+//    1.46.1 : COMME LE VRAI STRIPE D'AUJOURD'HUI - la version de l'API est celle
+//    de l'en-tete Stripe-Version, sinon celle du compte (`versionCompte`, par
+//    defaut 2026-09-30.endive, comme un compte neuf) ; a partir de
+//    2026-09-30.endive, une page de paiement avec payment_method_types est
+//    REFUSEE (400, le texte du vrai Stripe) ; allowed_payment_method_types et
+//    wallet_options sont gardes avec la session ; les produits et les prix.
+//    POST   /v1/checkout/sessions               une page de paiement (cs_test_N) : line_items[0][price]
+//                                               (un prix actif) ou [price_data]
 //    POST   /v1/checkout/sessions/:id/expire    la fermer
 //    POST   /v1/refunds                         un remboursement (payment_intent)
 //    GET    /v1/invoices/:id                    une facture (hosted_invoice_url)
 //    GET    /v1/webhook_endpoints               les points d'arrivee du webhook
 //    POST   /v1/webhook_endpoints               en creer un (son secret : essai_jeton_whsec_...)
 //    DELETE /v1/webhook_endpoints/:id           en effacer un
+//    POST   /v1/products                        1.46.1 : un produit (son id peut etre donne)
+//    GET    /v1/products/:id, POST /v1/products/:id   le lire, le changer (404 resource_missing s'il n'existe pas)
+//    POST   /v1/prices                          un prix (product, currency, unit_amount, tax_behavior...)
+//    POST   /v1/prices/:id                      le changer (active=false : archive ; jamais le prix par
+//                                               defaut d'un produit)
 //  Une cle donnee (--cle, ou `cle`) : un autre Bearer -> 401, comme Stripe.
 //  Ce que les essais lisent ou font (pas Stripe) :
 //    GET  /__essai/requetes    tout ce qui a ete recu (jamais la cle : "auth" dit
 //                              seulement "bonne", "fausse" ou "absente")
 //    GET  /__essai/sessions    les pages de paiement creees
-//    POST /__essai/regler      {"panne":"checkout"|""} : Stripe refuse les pages
+//    POST /__essai/regler      {"panne":"checkout"|"produits"|""} : Stripe refuse les
+//                              pages ; 1.46.1 : << produits >> - une cle restreinte
+//                              sans le droit d'ecrire les produits et les prix (403)
+//    GET  /__essai/produits    1.46.1 : les produits et les prix crees
 //    POST /__essai/evenement   {"url","secret","type","session","montant"?,
 //                              "devise"?,"id"?,"t"?} : un evenement signe comme
 //                              Stripe (Stripe-Signature, HMAC-SHA256) envoye au
 //                              webhook du service ; rend {statut, corps}
 //
-//    node faux_stripe.mjs [--port N] [--cle essai_jeton_sk_...]
+//    node faux_stripe.mjs [--port N] [--cle essai_jeton_sk_...] [--version-compte 2026-09-30.endive]
 //  ecrit << faux stripe pret sur le port N >> puis attend (SIGTERM l'arrete).
 // =============================================================================
 import crypto from "node:crypto";
@@ -49,21 +64,44 @@ function lireFormulaire(texte) {
     return { paires, objet: Object.fromEntries(paires) };
 }
 
-export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
+// 1.46.1 : la version a partir de laquelle Stripe refuse payment_method_types sur une page de paiement.
+export const VERSION_SANS_PMT = "2026-09-30.endive";
+export const MESSAGE_PMT =
+    "The `payment_method_types` parameter is no longer supported when creating a Checkout Session. Payment methods are now managed from your Dashboard settings.";
+// "2026-09-30.endive" -> "2026-09-30" (les versions se comparent par leur date).
+const dateDe = (v) => String(v || "").slice(0, 10);
+
+export async function lancerFauxStripe({ port = 0, cle = "", versionCompte = VERSION_SANS_PMT } = {}) {
     const requetes = [];
     const sessions = new Map();
     const points = new Map();
+    const produits = new Map();
+    const prix = new Map();
     const idem = new Map();
     let n = 0;
     let panne = "";
-    const reglage = { cle };
+    const reglage = { cle, versionCompte };
 
     const repondre = (res, statut, objet) => {
         const corps = JSON.stringify(objet);
         res.writeHead(statut, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(corps) });
         res.end(corps);
     };
-    const erreur = (res, statut, message) => repondre(res, statut, { error: { message, type: "invalid_request_error" } });
+    const erreur = (res, statut, message, code, param) => {
+        const e = { message, type: "invalid_request_error" };
+        if (code) e.code = code;
+        if (param) e.param = param;
+        return repondre(res, statut, { error: e });
+    };
+    // Les champs d'un objet du formulaire : "metadata[k]" -> {k: v}.
+    const sousObjet = (paires, nom) => {
+        const o = {};
+        for (const [k, v] of paires) {
+            const m = new RegExp("^" + nom + "\\[([^\\]]+)\\]$").exec(k);
+            if (m) o[m[1]] = v;
+        }
+        return o;
+    };
 
     const serveur = http.createServer((req, res) => {
         let brut = "";
@@ -76,6 +114,7 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                 if (chemin.startsWith("/__essai/")) {
                     if (req.method === "GET" && chemin === "/__essai/requetes") return repondre(res, 200, { requetes });
                     if (req.method === "GET" && chemin === "/__essai/sessions") return repondre(res, 200, { sessions: [...sessions.values()] });
+                    if (req.method === "GET" && chemin === "/__essai/produits") return repondre(res, 200, { produits: [...produits.values()], prix: [...prix.values()] });
                     if (req.method === "POST" && chemin === "/__essai/regler") {
                         const o = JSON.parse(brut || "{}");
                         panne = String(o.panne || "");
@@ -115,6 +154,7 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                 const auth = req.headers.authorization || "";
                 const etat = !auth ? "absente" : reglage.cle && auth !== "Bearer " + reglage.cle ? "fausse" : "bonne";
                 const form = lireFormulaire(brut);
+                const version = String(req.headers["stripe-version"] || "");
                 requetes.push({
                     methode: req.method,
                     chemin,
@@ -122,6 +162,7 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                     auth: etat,
                     idem: req.headers["idempotency-key"] || "",
                     type: req.headers["content-type"] || "",
+                    version,
                 });
                 if (etat !== "bonne") return erreur(res, 401, "Invalid API Key provided: essai_****");
                 const cleIdem = req.headers["idempotency-key"] ? req.method + " " + chemin + " " + req.headers["idempotency-key"] : "";
@@ -130,19 +171,42 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                     if (cleIdem) idem.set(cleIdem, objet);
                     return repondre(res, 200, objet);
                 };
+                // La version de l'API de cet appel : l'en-tete, sinon celle du compte.
+                const versionAppel = version || reglage.versionCompte;
                 if (req.method === "POST" && chemin === "/v1/checkout/sessions") {
                     if (panne === "checkout") return erreur(res, 400, "Essai : Stripe refuse cette page de paiement.");
                     const p = form.objet;
+                    // 1.46.1 : comme le vrai Stripe depuis 2026-09-30.endive
+                    if (form.paires.some(([k]) => /^payment_method_types(\[|$)/.test(k)) && dateDe(versionAppel) >= dateDe(VERSION_SANS_PMT))
+                        return erreur(res, 400, MESSAGE_PMT, "", "payment_method_types");
+                    let montant, devise, libelle, prixId;
+                    if (p["line_items[0][price]"]) {
+                        const pr = prix.get(p["line_items[0][price]"]);
+                        if (!pr) return erreur(res, 400, "No such price: '" + p["line_items[0][price]"] + "'", "resource_missing", "line_items[0][price]");
+                        if (!pr.active) return erreur(res, 400, "The price specified is inactive. This field only accepts active prices.", "", "line_items[0][price]");
+                        montant = pr.unit_amount;
+                        devise = pr.currency;
+                        libelle = (produits.get(pr.product) || {}).name;
+                        prixId = pr.id;
+                    } else {
+                        montant = Number(p["line_items[0][price_data][unit_amount]"]);
+                        devise = p["line_items[0][price_data][currency]"];
+                        libelle = p["line_items[0][price_data][product_data][name]"];
+                    }
                     n++;
                     const id = "cs_test_essai" + n;
                     const s = {
                         id,
                         numero: Number(p["metadata[commande]"]),
                         client_reference_id: p.client_reference_id,
-                        metadata: { commande: p["metadata[commande]"] },
-                        montant: Number(p["line_items[0][price_data][unit_amount]"]),
-                        devise: p["line_items[0][price_data][currency]"],
-                        libelle: p["line_items[0][price_data][product_data][name]"],
+                        metadata: sousObjet(form.paires, "metadata"),
+                        montant,
+                        devise,
+                        libelle,
+                        prix: prixId || "",
+                        moyens: form.paires.filter(([k]) => /^allowed_payment_method_types\[\d*\]$/.test(k)).map(([, v]) => v),
+                        link: p["wallet_options[link][display]"] || "auto",
+                        version: versionAppel,
                         payment_intent: "pi_essai" + n,
                         invoice: "in_essai" + n,
                         expires_at: Number(p.expires_at),
@@ -179,8 +243,17 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                 if (req.method === "POST" && chemin === "/v1/webhook_endpoints") {
                     const evenements = form.paires.filter(([k]) => /^enabled_events\[\d*\]$/.test(k)).map(([, v]) => v);
                     if (!form.objet.url || !evenements.length) return erreur(res, 400, "Missing required param: url / enabled_events.");
+                    if (form.objet.api_version !== undefined && !/^\d{4}-\d{2}-\d{2}(\.[a-z]+)?$/.test(form.objet.api_version))
+                        return erreur(res, 400, "Invalid api_version: " + form.objet.api_version, "", "api_version");
                     n++;
-                    const p = { id: "we_essai" + n, object: "webhook_endpoint", url: form.objet.url, enabled_events: evenements, status: "enabled" };
+                    const p = {
+                        id: "we_essai" + n,
+                        object: "webhook_endpoint",
+                        url: form.objet.url,
+                        enabled_events: evenements,
+                        status: "enabled",
+                        api_version: form.objet.api_version || null,
+                    };
                     points.set(p.id, { ...p, secret: "essai_jeton_whsec_" + crypto.randomBytes(12).toString("hex") });
                     return garder(points.get(p.id));
                 }
@@ -188,6 +261,77 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
                 if (req.method === "DELETE" && m) {
                     if (!points.delete(decodeURIComponent(m[1]))) return erreur(res, 404, "No such webhook endpoint");
                     return repondre(res, 200, { id: m[1], object: "webhook_endpoint", deleted: true });
+                }
+                // ---- 1.46.1 : les produits et les prix ----
+                if (/^\/v1\/(products|prices)(\/|$)/.test(chemin) && panne === "produits")
+                    return erreur(
+                        res,
+                        403,
+                        "The provided key 'rk_test_*********essai' does not have the required permissions for this endpoint on account 'acct_essai'. Having the 'rak_product_write' permission would allow this request to continue.",
+                    );
+                const objetProduit = (x) => ({ object: "product", ...x });
+                if (req.method === "POST" && chemin === "/v1/products") {
+                    const p = form.objet;
+                    if (!p.name) return erreur(res, 400, "Missing required param: name.", "parameter_missing", "name");
+                    const id = p.id || "prod_essai" + ++n;
+                    if (produits.has(id)) return erreur(res, 400, "Product already exists.", "resource_already_exists", "id");
+                    const x = { id, name: p.name, active: p.active !== "false", metadata: sousObjet(form.paires, "metadata"), default_price: null };
+                    produits.set(id, x);
+                    return garder(objetProduit(x));
+                }
+                m = /^\/v1\/products\/([^/]+)$/.exec(chemin);
+                if (m) {
+                    const x = produits.get(decodeURIComponent(m[1]));
+                    if (!x) return erreur(res, 404, "No such product: '" + decodeURIComponent(m[1]) + "'", "resource_missing", "id");
+                    if (req.method === "GET") return repondre(res, 200, objetProduit(x));
+                    if (req.method === "POST") {
+                        const p = form.objet;
+                        if (p.default_price !== undefined) {
+                            const pr = prix.get(p.default_price);
+                            if (!pr || pr.product !== x.id) return erreur(res, 400, "No such price: '" + p.default_price + "'", "resource_missing", "default_price");
+                            if (!pr.active) return erreur(res, 400, "The default price must be active.", "", "default_price");
+                            x.default_price = pr.id;
+                        }
+                        if (p.name !== undefined) x.name = p.name;
+                        if (p.active !== undefined) x.active = p.active !== "false";
+                        Object.assign(x.metadata, sousObjet(form.paires, "metadata"));
+                        return garder(objetProduit(x));
+                    }
+                }
+                if (req.method === "POST" && chemin === "/v1/prices") {
+                    const p = form.objet;
+                    if (!p.product || !produits.has(p.product)) return erreur(res, 400, "No such product: '" + (p.product || "") + "'", "resource_missing", "product");
+                    if (!/^[a-z]{3}$/.test(p.currency || "")) return erreur(res, 400, "Missing required param: currency.", "parameter_missing", "currency");
+                    if (!/^\d+$/.test(p.unit_amount || "")) return erreur(res, 400, "Missing required param: unit_amount.", "parameter_missing", "unit_amount");
+                    const x = {
+                        id: "price_essai" + ++n,
+                        object: "price",
+                        product: p.product,
+                        currency: p.currency,
+                        unit_amount: Number(p.unit_amount),
+                        tax_behavior: p.tax_behavior || "unspecified",
+                        nickname: p.nickname || null,
+                        active: true,
+                        type: "one_time",
+                        metadata: sousObjet(form.paires, "metadata"),
+                    };
+                    prix.set(x.id, x);
+                    return garder(x);
+                }
+                m = /^\/v1\/prices\/([^/]+)$/.exec(chemin);
+                if (m) {
+                    const x = prix.get(decodeURIComponent(m[1]));
+                    if (!x) return erreur(res, 404, "No such price: '" + decodeURIComponent(m[1]) + "'", "resource_missing", "id");
+                    if (req.method === "GET") return repondre(res, 200, x);
+                    if (req.method === "POST") {
+                        if (form.objet.active === "false") {
+                            const pr = produits.get(x.product);
+                            if (pr && pr.default_price === x.id) return erreur(res, 400, "This price cannot be archived because it is the default price of its product.", "", "active");
+                            x.active = false;
+                        } else if (form.objet.active === "true") x.active = true;
+                        if (form.objet.nickname !== undefined) x.nickname = form.objet.nickname;
+                        return garder(x);
+                    }
                 }
                 return erreur(res, 404, "Unrecognized request URL (" + req.method + " " + chemin + ")");
             } catch (e) {
@@ -202,6 +346,8 @@ export async function lancerFauxStripe({ port = 0, cle = "" } = {}) {
         requetes,
         sessions,
         points,
+        produits,
+        prix,
         reglage,
         regler: (p) => (panne = p || ""),
         arreter: () => new Promise((resolve) => serveur.close(() => resolve())),
@@ -214,7 +360,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
         const i = process.argv.indexOf(nom);
         return i > 0 && i + 1 < process.argv.length ? process.argv[i + 1] : "";
     };
-    const f = await lancerFauxStripe({ port: Number(arg("--port") || 0), cle: arg("--cle") });
+    const f = await lancerFauxStripe({ port: Number(arg("--port") || 0), cle: arg("--cle"), versionCompte: arg("--version-compte") || VERSION_SANS_PMT });
     console.log("faux stripe pret sur le port " + f.base.slice(f.base.lastIndexOf(":") + 1));
     const fin = () => f.arreter().then(() => process.exit(0));
     process.on("SIGTERM", fin);

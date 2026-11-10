@@ -2,9 +2,15 @@
 //  service/src/boutique.js - 1.46.0 : LA BOUTIQUE ET LES COMMANDES (docs/BOUTIQUE.md)
 //  - le catalogue de la boutique (les montants encaisses, en centimes TTC) regle
 //    par l'admin+ (PUT /admin/boutique), lu par les Studios (GET /v1/boutique) ;
+//    1.46.1 : le montant d'un article suit une reduction (le montant reduit
+//    jusqu'a sa fin, puis le montant de base, sans rien faire) ; chaque article
+//    est un PRODUIT chez Stripe, avec ses PRIX (crees par le service : il a la
+//    cle) - la page de paiement emploie le prix ;
 //  - les commandes des PC (POST /v1/boutique/commande) : une page de paiement
 //    HEBERGEE PAR STRIPE (Checkout, mode payment, la carte seulement, sans client
-//    Stripe ni carte gardee : redemandee a chaque achat) ;
+//    Stripe ni carte gardee : redemandee a chaque achat) ; 1.46.1 : l'API de
+//    Stripe d'aujourd'hui (Stripe-Version fixee, allowed_payment_method_types au
+//    lieu de payment_method_types, Link cache) ;
 //  - le webhook de Stripe (POST /v1/boutique/stripe : signe par Stripe,
 //    HMAC-SHA256, compare en temps constant, 5 minutes au plus d'ecart, chaque
 //    evenement traite une fois) : payee, expiree, echec, remboursee ;
@@ -24,6 +30,9 @@
 //    commandes_scelles  la demande scellee aussi pour d'autres cles (les admins
 //                       qui ont le droit << demandes >>), comme demandes_scelles
 //    stripe_evenements  les evenements deja traites (leur id, 30 jours)
+//  1.46.1 : la table boutique garde aussi (cle "stripe_catalogue") ce que le
+//  service a cree chez Stripe : le produit et les prix de chaque article (leurs
+//  identifiants, jamais un secret) et le resultat de la derniere mise a jour.
 // =============================================================================
 import { Erreur, cleIdDe, egalConstant, enc, entier, estBase64, estHex, hex, mal, reponseJson } from "./outils.js";
 import { estIdLicence } from "./documents.js";
@@ -47,6 +56,16 @@ const MONTANT_MAX = 100000000; // 1 000 000 EUR
 const LISTE_PC = 50;
 const LISTE_ADMIN = 500;
 const DELAI_STRIPE = 15000; // ms
+const FIN_MAX = 4102444800; // 2100-01-01 : la fin d'une reduction (secondes Unix)
+const MAX_APPELS_CATALOGUE = 40; // les appels a Stripe d'une mise a jour du catalogue (Cloudflare : 50 sous-requetes)
+
+// 1.46.1 : LA VERSION DE L'API DE STRIPE, fixee sur chaque appel (l'en-tete Stripe-Version) et sur le point d'arrivee
+// du webhook (api_version, cree par l'Admin : Brancher Stripe). Sans elle, Stripe applique la version du compte : un
+// compte neuf est en 2026-09-30.endive ou plus, qui REFUSE payment_method_types sur une page de paiement (400). Les
+// champs lus ici (la session : id, url, payment_status, amount_total, currency, payment_intent, invoice, metadata,
+// client_reference_id ; le paiement rembourse : payment_intent, refunded, amount, amount_refunded ; la facture :
+// hosted_invoice_url) sont les memes dans cette version. La meme valeur : shop::kStripeVersion (l'Admin).
+export const VERSION_STRIPE = "2026-09-30.endive";
 
 // Les evenements que le point d'arrivee du webhook recoit (l'Admin les demande a Stripe : Brancher Stripe...).
 export const EVENEMENTS_STRIPE = [
@@ -110,6 +129,21 @@ const estOption = (s) => typeof s === "string" && /^[a-z0-9_]{1,40}$/.test(s);
 export function modeStripe(cle) {
     if (typeof cle !== "string" || !cle) return null;
     return /^(sk|rk)_live_/.test(cle) ? "reel" : "test";
+}
+
+// 1.46.1 : le montant d'un article a l'heure `now` : le montant reduit tant que la reduction court (sa fin pas encore
+// passee, comme le prix reduit du registre dans les Studios), sinon le montant de base.
+export function montantActuel(a, now) {
+    return reductionEnCours(a, now) ? a.montant_reduit : a.montant;
+}
+export function reductionEnCours(a, now) {
+    return Number.isSafeInteger(a.montant_reduit) && Number.isSafeInteger(a.fin_reduction) && now < a.fin_reduction;
+}
+
+// 1.46.1 : l'identifiant du produit Stripe d'un article (choisi par le service : on le retrouve sans rien chercher) -
+// "ed:PROFESSIONAL" -> "xpg-ed-PROFESSIONAL", "opt:ai_advanced:365" -> "xpg-opt-ai_advanced-365".
+export function produitStripe(id) {
+    return "xpg-" + String(id).replace(/:/g, "-");
 }
 
 // Un texte rendu par Stripe, sans rien qui ressemble a une cle (on ne sait jamais) : 300 caracteres au plus.
@@ -257,6 +291,17 @@ export const RoutesBoutique = {
             o.montant = a.montant;
             if (!texteLigne(a.libelle, 1, 120)) throw mal("articles", quoi + " : « libelle » (le nom sur la page de paiement et la facture) : une ligne, 120 caractères au plus.");
             o.libelle = a.libelle;
+            // 1.46.1 : un montant libre (tape par l'editeur, il ne suit pas le prix affiche du registre) ; une reduction (le
+            // montant reduit jusqu'a sa fin, puis le montant de base - le service choisit a chaque commande).
+            if (a.libre !== undefined && typeof a.libre !== "boolean") throw mal("articles", quoi + " : « libre » vaut true ou false.");
+            if (a.libre !== undefined) o.libre = a.libre; // garde tel quel : un reglage d'avant la 1.46.1 n'en a pas
+            if (a.montant_reduit !== undefined || a.fin_reduction !== undefined) {
+                if (!entier(a.montant_reduit, MONTANT_MIN, MONTANT_MAX))
+                    throw mal("articles", quoi + " : « montant_reduit » doit être en centimes TTC, de " + MONTANT_MIN + " (0,50 €) à " + MONTANT_MAX + " (1 000 000 €).");
+                if (!entier(a.fin_reduction, 1, FIN_MAX)) throw mal("articles", quoi + " : « fin_reduction » doit être la fin de la réduction (secondes Unix).");
+                o.montant_reduit = a.montant_reduit;
+                o.fin_reduction = a.fin_reduction;
+            }
             return o;
         });
         const avant = this.reglagesBoutique();
@@ -264,17 +309,38 @@ export const RoutesBoutique = {
         const r = { active: corps.active, livraison_auto: corps.livraison_auto === undefined ? true : corps.livraison_auto, devise, articles, numero };
         this.x("INSERT INTO boutique (cle, valeur) VALUES ('reglages', ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur", JSON.stringify(r));
         this.signalerChangement(); // GET /v1/etat << boutique >> peut changer
-        return reponseJson(200, { numero });
+        // 1.46.1 : les produits et les prix chez Stripe (Stripe branche) ; un refus de Stripe n'empeche rien (la page de
+        // paiement donne alors le montant elle-meme) : il est rendu et garde pour l'Admin.
+        const stripe_catalogue = await this.synchroniserStripe(ctx);
+        return reponseJson(200, { numero, stripe_catalogue });
     },
 
-    // GET /admin/boutique (admin+, admin) : le reglage, et l'etat de Stripe (jamais la cle).
-    async lireBoutiqueAdmin() {
+    // 1.46.1 : POST /admin/boutique/stripe (admin+) - les produits et les prix chez Stripe mis a jour tout de suite (l'Admin
+    // l'appelle apres Brancher Stripe : une cle neuve, un autre compte peut-etre).
+    async catalogueStripe(ctx) {
+        return reponseJson(200, { stripe_catalogue: await this.synchroniserStripe(ctx) });
+    },
+
+    // GET /admin/boutique (admin+, admin) : le reglage, et l'etat de Stripe (jamais la cle). 1.46.1 : chaque article dit
+    // son montant du moment (`montant_actuel`) et son produit Stripe (`stripe_produit`, s'il est cree) ;
+    // `stripe_catalogue` : la derniere mise a jour des produits chez Stripe.
+    async lireBoutiqueAdmin(ctx) {
         const r = this.reglagesBoutique();
-        return reponseJson(200, { ...r, stripe: this.etatStripe(), ouverte: this.boutiqueOuverte() });
+        const c = this.catalogueStripeGarde();
+        const mode = modeStripe(this.env.STRIPE_SECRET_KEY);
+        const articles = r.articles.map((a) => {
+            const o = { ...a, montant_actuel: montantActuel(a, ctx.now) };
+            const s = c.mode === mode && c.articles[a.id];
+            if (s && s.produit) o.stripe_produit = s.produit;
+            return o;
+        });
+        return reponseJson(200, { ...r, articles, stripe: this.etatStripe(), ouverte: this.boutiqueOuverte(), stripe_catalogue: c.etat || null });
     },
 
-    // GET /v1/boutique (publique) : ce qui s'achete. Stripe pas branche : fermee, aucun article.
-    async lireBoutiquePublique() {
+    // GET /v1/boutique (publique) : ce qui s'achete. Stripe pas branche : fermee, aucun article. 1.46.1 : `montant` est
+    // le montant du moment (le reduit tant que la reduction court : les Studios 1.46.0 le montrent tel quel, << Acheter -
+    // 12,00 EUR TTC >>) ; une reduction en cours dit aussi `montant_base` et `fin_reduction`.
+    async lireBoutiquePublique(ctx) {
         const r = this.reglagesBoutique();
         const s = this.etatStripe();
         if (!this.boutiqueOuverte()) return reponseJson(200, { active: false, devise: r.devise || "eur", mode: s.mode, articles: [] });
@@ -285,11 +351,194 @@ export const RoutesBoutique = {
                 o.option = a.option;
                 o.jours = a.jours;
             }
-            o.montant = a.montant;
+            o.montant = montantActuel(a, ctx.now);
             o.libelle = a.libelle;
+            if (reductionEnCours(a, ctx.now)) {
+                o.montant_base = a.montant;
+                o.fin_reduction = a.fin_reduction;
+            }
             return o;
         });
         return reponseJson(200, { active: true, devise: r.devise, mode: s.mode, articles });
+    },
+
+    // ============================================================ les produits chez Stripe (1.46.1) ==
+    // Ce que le service a cree chez Stripe : {mode, articles: {<id>: {produit, nom, defaut, prix: {"eur:6000": "price_..."}}},
+    // etat: {etat, message, quand, produits}} ; un autre mode (une cle de test, puis une reelle) : tout est a refaire.
+    catalogueStripeGarde() {
+        const r = this.ligne("SELECT valeur FROM boutique WHERE cle = 'stripe_catalogue'");
+        let v = null;
+        try {
+            v = r ? JSON.parse(r.valeur) : null;
+        } catch {
+            v = null;
+        }
+        if (!v || typeof v !== "object" || !v.articles || typeof v.articles !== "object") v = { mode: null, articles: {}, etat: null };
+        return v;
+    },
+    garderCatalogueStripe(c) {
+        this.x("INSERT INTO boutique (cle, valeur) VALUES ('stripe_catalogue', ?) ON CONFLICT (cle) DO UPDATE SET valeur = excluded.valeur", JSON.stringify(c));
+    },
+
+    // Les produits et les prix chez Stripe, d'apres le catalogue : un PRODUIT par article (son identifiant : produitStripe,
+    // son nom : le libelle, metadata[xpg_article]), un PRIX par montant (celui de base ; le reduit tant que la reduction
+    // court) - un prix ne change jamais chez Stripe : un montant neuf, un prix neuf, l'ancien archive ; le prix de base est
+    // le prix par defaut du produit. Un article retire : son produit archive. Des cles d'idempotence partout (un appel
+    // repete ne cree rien deux fois). Rend {etat: ok|partiel|refus|panne|pas_branche, message, quand, produits}.
+    async synchroniserStripe(ctx) {
+        const cle = this.env.STRIPE_SECRET_KEY;
+        let c = this.catalogueStripeGarde();
+        const fini = (etat, message, produits) => {
+            c.etat = { etat, message: message || "", quand: ctx.now, produits: produits || 0 };
+            this.garderCatalogueStripe(c);
+            return c.etat;
+        };
+        if (!cle) return fini("pas_branche", "Stripe n'est pas branché sur ce service : les produits se créeront une fois branché.");
+        if (this.catalogueEnCours) return { etat: "en_cours", message: "Une mise à jour des produits chez Stripe est déjà en cours.", quand: ctx.now, produits: 0 };
+        this.catalogueEnCours = true;
+        try {
+            const r = this.reglagesBoutique();
+            const mode = modeStripe(cle);
+            if (c.mode !== mode) c = { mode, articles: {}, etat: null };
+            let appels = 0;
+            const appel = async (methode, chemin, params, idem, quoi) => {
+                appels++;
+                return (await this.appelStripe(ctx, methode, chemin, params, idem, quoi)).json;
+            };
+            const absent = (e) => e instanceof Erreur && e.extra && e.extra.stripe_statut === 404;
+            const voulusIds = new Set(r.articles.map((a) => a.id));
+            let partiel = false;
+            let faits = 0;
+            try {
+                for (const a of r.articles) {
+                    if (appels + 5 > MAX_APPELS_CATALOGUE) {
+                        partiel = true;
+                        break;
+                    }
+                    const pid = produitStripe(a.id);
+                    let s = c.articles[a.id];
+                    // 1. le produit : mis a jour s'il existe deja chez Stripe (une sauvegarde restauree, un autre service),
+                    //    cree sinon
+                    if (!s || s.produit !== pid) {
+                        const p = [
+                            ["name", a.libelle],
+                            ["active", "true"],
+                            ["metadata[xpg_article]", a.id],
+                        ];
+                        try {
+                            await appel("POST", "/v1/products/" + encodeURIComponent(pid), p, "", "mettre à jour le produit « " + a.libelle + " »");
+                        } catch (e) {
+                            if (!absent(e)) throw e;
+                            await appel("POST", "/v1/products", [["id", pid], ...p], "xpg-produit-" + pid + "-" + r.numero, "créer le produit « " + a.libelle + " »");
+                        }
+                        s = c.articles[a.id] = { produit: pid, nom: a.libelle, defaut: "", prix: {} };
+                    }
+                    // 2. les prix : le montant de base, et le reduit tant que la reduction court
+                    const voulus = [[a.montant, false]];
+                    if (reductionEnCours(a, ctx.now) && a.montant_reduit !== a.montant) voulus.push([a.montant_reduit, true]);
+                    const cles = new Set();
+                    for (const [m, reduit] of voulus) {
+                        const k = r.devise + ":" + m;
+                        cles.add(k);
+                        if (s.prix[k]) continue;
+                        const nom = montantTexte(m, r.devise) + " TTC" + (reduit ? " (réduction)" : "");
+                        const prix = await appel(
+                            "POST",
+                            "/v1/prices",
+                            [
+                                ["product", pid],
+                                ["currency", r.devise],
+                                ["unit_amount", m],
+                                ["tax_behavior", "inclusive"],
+                                ["nickname", nom],
+                                ["metadata[xpg_article]", a.id],
+                            ],
+                            "xpg-prix-" + pid + "-" + k + "-" + r.numero,
+                            "créer le prix " + nom + " de « " + a.libelle + " »",
+                        );
+                        if (typeof prix.id !== "string" || !prix.id || prix.id.length > 255) throw new Erreur(502, "stripe", "Stripe a rendu un prix illisible.");
+                        s.prix[k] = prix.id;
+                        this.garderCatalogueStripe(c);
+                    }
+                    // 3. le produit : son nom (le libelle a change), son prix par defaut (le montant de base)
+                    const defaut = s.prix[r.devise + ":" + a.montant];
+                    if (s.nom !== a.libelle || s.defaut !== defaut) {
+                        await appel(
+                            "POST",
+                            "/v1/products/" + encodeURIComponent(pid),
+                            [
+                                ["name", a.libelle],
+                                ["active", "true"],
+                                ["default_price", defaut],
+                            ],
+                            "",
+                            "mettre à jour le produit « " + a.libelle + " »",
+                        );
+                        s.nom = a.libelle;
+                        s.defaut = defaut;
+                    }
+                    // 4. les prix qui ne servent plus (un ancien montant, une reduction finie) : archives (jamais effaces chez
+                    //    Stripe) - apres le nouveau prix par defaut (Stripe n'archive pas le prix par defaut d'un produit)
+                    for (const [k, id] of Object.entries(s.prix)) {
+                        if (cles.has(k)) continue;
+                        try {
+                            await appel("POST", "/v1/prices/" + encodeURIComponent(id), [["active", "false"]], "", "archiver l'ancien prix de « " + a.libelle + " »");
+                        } catch (e) {
+                            if (!absent(e)) throw e;
+                        }
+                        delete s.prix[k];
+                    }
+                    this.garderCatalogueStripe(c);
+                    faits++;
+                }
+                // 5. les articles retires du catalogue : leur produit archive
+                for (const [id, s] of Object.entries(c.articles)) {
+                    if (voulusIds.has(id)) continue;
+                    if (partiel || appels + 1 > MAX_APPELS_CATALOGUE) {
+                        partiel = true;
+                        break;
+                    }
+                    try {
+                        await appel("POST", "/v1/products/" + encodeURIComponent(s.produit), [["active", "false"]], "", "archiver le produit « " + (s.nom || id) + " »");
+                    } catch (e) {
+                        if (!absent(e)) throw e;
+                    }
+                    delete c.articles[id];
+                    this.garderCatalogueStripe(c);
+                }
+            } catch (e) {
+                if (!(e instanceof Erreur)) throw e;
+                const refus = !!(e.extra && e.extra.stripe_statut);
+                let m = e.message;
+                if (e.extra && (e.extra.stripe_statut === 401 || e.extra.stripe_statut === 403))
+                    m += " — Ta clé restreinte doit avoir « Products : écriture » et « Prices : écriture » (dashboard.stripe.com › Développeurs › Clés API).";
+                return fini(refus ? "refus" : "panne", m + " La vente en ligne marche quand même : la page de paiement donne le montant elle-même.", faits);
+            }
+            if (partiel)
+                return fini("partiel", faits + " produit(s) à jour chez Stripe ; les autres au prochain enregistrement (Stripe ne prend que " + MAX_APPELS_CATALOGUE + " appels à la fois).", faits);
+            return fini("ok", faits + " produit(s) à jour chez Stripe.", faits);
+        } finally {
+            this.catalogueEnCours = false;
+        }
+    },
+
+    // Le prix Stripe du montant d'un article (cree par synchroniserStripe pour ce mode) ; "" : aucun (la page de paiement
+    // donne alors le montant elle-meme : price_data).
+    prixStripe(art, devise, montant) {
+        const c = this.catalogueStripeGarde();
+        if (c.mode !== modeStripe(this.env.STRIPE_SECRET_KEY)) return "";
+        const s = c.articles[art.id];
+        const id = s && s.prix ? s.prix[devise + ":" + montant] : "";
+        return typeof id === "string" ? id : "";
+    },
+    oublierPrixStripe(art, devise, montant) {
+        const c = this.catalogueStripeGarde();
+        const s = c.articles[art.id];
+        if (s && s.prix) {
+            delete s.prix[devise + ":" + montant];
+            if (s.defaut && !Object.values(s.prix).includes(s.defaut)) s.defaut = "";
+            this.garderCatalogueStripe(c);
+        }
     },
 
     // ============================================================ Stripe ==
@@ -302,7 +551,7 @@ export const RoutesBoutique = {
         // Un faux Stripe (les essais) : SEULEMENT pour un appel a ce poste (127.0.0.1 ou localhost), et vers ce poste.
         const essai = String(this.env.STRIPE_API_BASE || "");
         if (ctx.local && /^http:\/\/(127\.0\.0\.1|localhost)(:\d{1,5})?$/.test(essai)) base = essai;
-        const entetes = { Authorization: "Bearer " + cle, "Content-Type": "application/x-www-form-urlencoded" };
+        const entetes = { Authorization: "Bearer " + cle, "Content-Type": "application/x-www-form-urlencoded", "Stripe-Version": VERSION_STRIPE };
         if (idem) entetes["Idempotency-Key"] = idem;
         let r;
         try {
@@ -323,7 +572,11 @@ export const RoutesBoutique = {
         }
         if (r.status < 200 || r.status >= 300) {
             const t = json && json.error && json.error.message ? propre(json.error.message) : "réponse " + r.status;
-            throw new Erreur(502, "stripe", "Stripe refuse (" + quoi + ") : " + t, { stripe_statut: r.status });
+            const extra = { stripe_statut: r.status };
+            // 1.46.1 : le code et le champ de l'erreur (un prix inconnu : la page de paiement se refait avec le montant)
+            if (json && json.error && typeof json.error.code === "string") extra.stripe_code = json.error.code.slice(0, 80);
+            if (json && json.error && typeof json.error.param === "string") extra.stripe_champ = json.error.param.slice(0, 120);
+            throw new Erreur(502, "stripe", "Stripe refuse (" + quoi + ") : " + t, extra);
         }
         return { statut: r.status, json: json || {} };
     },
@@ -398,17 +651,29 @@ export const RoutesBoutique = {
         const numero = this.suivant("numero_commande");
         const expire = ctx.now + DUREE_PAIEMENT;
         const base = ctx.url.origin;
-        // La page de paiement (docs/BOUTIQUE.md, par. 4) : la carte seulement, jamais de client Stripe ni de carte gardee.
-        const params = [
-            ["mode", "payment"],
+        // 1.46.1 : le montant du moment (une reduction en cours : le reduit) ; le prix Stripe de ce montant s'il est cree.
+        const montant = montantActuel(art, ctx.now);
+        const prix = this.prixStripe(art, reglages.devise, montant);
+        const ligneDonnee = [
             ["line_items[0][price_data][currency]", reglages.devise],
-            ["line_items[0][price_data][unit_amount]", art.montant],
+            ["line_items[0][price_data][unit_amount]", montant],
             ["line_items[0][price_data][product_data][name]", art.libelle],
+        ];
+        // La page de paiement (docs/BOUTIQUE.md, par. 4) : la carte seulement, jamais de client Stripe ni de carte gardee.
+        // 1.46.1 : payment_method_types n'existe plus (Stripe 2026-09-30.endive : 400) ; allowed_payment_method_types filtre
+        // les moyens de paiement du compte (la carte seulement : ni Link, ni prelevement, ni porte-monnaie a garder) et
+        // wallet_options[link][display]=never cache Link, qui propose d'enregistrer la carte. Jamais customer,
+        // customer_creation=always, setup_future_usage, saved_payment_method_options.
+        const params = (ligne) => [
+            ["mode", "payment"],
+            ...ligne,
             ["line_items[0][quantity]", 1],
-            ["payment_method_types[0]", "card"],
+            ["allowed_payment_method_types[0]", "card"],
+            ["wallet_options[link][display]", "never"],
             ["customer_email", corps.courriel],
             ["client_reference_id", numero],
             ["metadata[commande]", numero],
+            ["metadata[article]", art.id],
             ["invoice_creation[enabled]", "true"],
             ["locale", "fr"],
             ["expires_at", expire],
@@ -429,7 +694,7 @@ export const RoutesBoutique = {
             art.edition || "",
             art.option || "",
             art.genre === "option" ? art.jours : 0,
-            art.montant,
+            montant,
             reglages.devise,
             art.libelle,
             corps.societe.trim(),
@@ -446,7 +711,21 @@ export const RoutesBoutique = {
         );
         let session;
         try {
-            session = (await this.appelStripe(ctx, "POST", "/v1/checkout/sessions", params, "commande-" + numero, "la page de paiement")).json;
+            const page = (ligne, idem) => this.appelStripe(ctx, "POST", "/v1/checkout/sessions", params(ligne), idem, "la page de paiement");
+            if (prix) {
+                try {
+                    session = (await page([["line_items[0][price]", prix]], "commande-" + numero)).json;
+                } catch (e) {
+                    // 1.46.1 : le prix n'est plus chez Stripe (archive a la main, un autre compte) : la page se refait avec le
+                    // montant donne, et ce prix est oublie (le prochain enregistrement du catalogue le recree).
+                    const x = e instanceof Erreur && e.extra ? e.extra : null;
+                    if (!x || !(x.stripe_statut >= 400 && x.stripe_statut < 500) || !(x.stripe_code === "resource_missing" || /^line_items/.test(x.stripe_champ || ""))) throw e;
+                    this.oublierPrixStripe(art, reglages.devise, montant);
+                    session = (await page(ligneDonnee, "commande-" + numero + "-montant")).json;
+                }
+            } else {
+                session = (await page(ligneDonnee, "commande-" + numero)).json;
+            }
             if (typeof session.id !== "string" || typeof session.url !== "string" || !/^https?:\/\//.test(session.url))
                 throw new Erreur(502, "stripe", "Stripe a rendu une page de paiement illisible.");
         } catch (e) {
@@ -458,7 +737,7 @@ export const RoutesBoutique = {
         this.ajouter("n_commandes", 1);
         this.ajouter("octets_commandes", octets);
         this.signalerCommande();
-        return reponseJson(201, { numero, url: session.url, expire, montant: art.montant, devise: reglages.devise, mode: mode || "test" });
+        return reponseJson(201, { numero, url: session.url, expire, montant, devise: reglages.devise, mode: mode || "test" });
     },
 
     // GET /v1/boutique/commandes (le PC) : les siennes, les plus recentes d'abord (50 au plus).

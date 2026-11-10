@@ -10,13 +10,20 @@
 //  prendre, livree deux fois : la seconde refusee ; les droits), le
 //  remboursement, Stripe qui refuse, chaque PC ne voit que ses commandes, la
 //  sauvegarde porte les tables de la boutique - jamais les secrets de Stripe.
+//  1.46.1 : le faux Stripe est celui d'aujourd'hui (2026-09-30.endive : il REFUSE
+//  payment_method_types comme le vrai) ; Stripe-Version sur chaque appel ; les
+//  produits et les prix crees a l'enregistrement du catalogue (la page de
+//  paiement emploie le prix) ; la reduction suivie (le montant reduit jusqu'a sa
+//  fin, puis le montant de base, sans rien faire) ; une cle restreinte sans le
+//  droit des produits (la vente marche quand meme) ; un prix disparu chez Stripe.
 //  Les valeurs des secrets : essai_jeton_... (des essais, jamais une vraie cle).
 // =============================================================================
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { after, before, describe, it } from "node:test";
 
-import { lancerFauxStripe, signerEvenement } from "../../tests/outils/faux_stripe.mjs";
+import { MESSAGE_PMT, lancerFauxStripe, signerEvenement } from "../../tests/outils/faux_stripe.mjs";
+import { VERSION_STRIPE } from "../src/boutique.js";
 import { appel, bloc, hasard, lancerService, nouvelleCle, reponses } from "./aides.js";
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -70,6 +77,26 @@ async function evenement(type, session, extra = {}) {
 const sessionDe = (numero) => [...stripe.sessions.values()].find((s) => s.numero === numero);
 const commandesDe = async (svc, pc) => (await appel(svc, "GET", "/v1/boutique/commandes", { cle: pc })).json.commandes;
 const etatAdmin = async () => (await appel(A, "GET", "/admin/etat", { cle: editeur })).json;
+const pages = () => stripe.requetes.filter((q) => q.methode === "POST" && q.chemin === "/v1/checkout/sessions");
+const derniere = () => pages()[pages().length - 1];
+const parametres = (q) => Object.fromEntries(q.params);
+const heureA = () => now() + A.ecart; // l'heure du service A
+// Ce qu'une page de paiement ne doit jamais porter : un client Stripe, une carte gardee, payment_method_types.
+function sansCarteGardee(q) {
+    for (const [k] of q.params) {
+        assert.ok(!/^customer(\[|$)/.test(k) && k !== "customer_creation", "jamais de client Stripe : " + k);
+        assert.ok(!/setup_future_usage|saved_payment_method_options|subscription|payment_method_collection/.test(k), "jamais de carte gardee : " + k);
+        assert.ok(!/^payment_method_types/.test(k), "payment_method_types n'existe plus chez Stripe : " + k);
+    }
+    const p = parametres(q);
+    assert.deepEqual(
+        q.params.filter(([k]) => /payment_method_types/.test(k)),
+        [["allowed_payment_method_types[0]", "card"]],
+        "la carte seulement",
+    );
+    assert.equal(p["wallet_options[link][display]"], "never", "Link cache (il propose d'enregistrer la carte)");
+    assert.equal(q.version, VERSION_STRIPE, "la version de l'API de Stripe fixee");
+}
 
 before(async () => {
     stripe = await lancerFauxStripe({ cle: CLE });
@@ -121,15 +148,56 @@ describe("le catalogue (A)", () => {
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ id: "ed:AUTRE" }) }), 400, "champ");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ libelle: "" }) }), 400, "champ");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: { ...CATALOGUE, articles: [CATALOGUE.articles[0], CATALOGUE.articles[0]] } }), 400, "champ");
+        // 1.46.1 : la reduction et le montant libre verifies
+        erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ montant_reduit: 10 }) }), 400, "champ");
+        erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ montant_reduit: 9000 }) }), 400, "champ"); // sans sa fin
+        erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ montant_reduit: 9000, fin_reduction: "demain" }) }), 400, "champ");
+        erreur(await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: mauvais({ libre: "oui" }) }), 400, "champ");
+        assert.equal(stripe.requetes.length, 0, "un catalogue refuse : rien chez Stripe");
         const r = await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: CATALOGUE });
         assert.equal(r.statut, 200, r.texte);
-        assert.deepEqual(r.json, { numero: 1 });
+        assert.equal(r.json.numero, 1);
+        assert.equal(r.json.stripe_catalogue.etat, "ok", r.texte);
+        assert.equal(r.json.stripe_catalogue.produits, 2);
+    });
+
+    it("1.46.1 : chaque article est un produit chez Stripe, avec son prix (cles d'idempotence, Stripe-Version)", async () => {
+        const pro = stripe.produits.get("xpg-ed-PROFESSIONAL");
+        const opt = stripe.produits.get("xpg-opt-ai_advanced-365");
+        assert.ok(pro && opt, "les deux produits");
+        assert.equal(pro.name, "Licence PROFESSIONAL - 1 an");
+        assert.equal(pro.active, true);
+        assert.equal(pro.metadata.xpg_article, "ed:PROFESSIONAL");
+        const pp = stripe.prix.get(pro.default_price);
+        assert.ok(pp && pp.active && pp.unit_amount === 49000 && pp.currency === "eur" && pp.tax_behavior === "inclusive", JSON.stringify(pp));
+        assert.equal(pp.metadata.xpg_article, "ed:PROFESSIONAL");
+        assert.equal(stripe.prix.get(opt.default_price).unit_amount, 9900);
+        for (const q of stripe.requetes) {
+            assert.equal(q.version, VERSION_STRIPE, q.chemin);
+            assert.equal(q.auth, "bonne");
+            if (q.chemin === "/v1/products" || q.chemin === "/v1/prices") assert.match(q.idem, /^xpg-(produit|prix)-/, "une cle d'idempotence");
+        }
+        // le meme catalogue enregistre de nouveau : rien de plus chez Stripe
+        const avant = stripe.requetes.length;
+        const r = await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: CATALOGUE });
+        assert.equal(r.statut, 200, r.texte);
+        assert.equal(r.json.stripe_catalogue.etat, "ok");
+        assert.equal(stripe.requetes.length, avant, "rien n'a change : aucun appel");
+        // POST /admin/boutique/stripe : l'admin+ seul (l'Admin l'appelle apres Brancher Stripe)
+        erreur(await appel(A, "POST", "/admin/boutique/stripe", { cle: lea, corps: {} }), 403, "droit");
+        const s = await appel(A, "POST", "/admin/boutique/stripe", { cle: editeur, corps: {} });
+        assert.equal(s.statut, 200, s.texte);
+        assert.equal(s.json.stripe_catalogue.etat, "ok");
+        const g = await appel(A, "GET", "/admin/boutique", { cle: editeur });
+        assert.equal(g.json.stripe_catalogue.etat, "ok");
+        assert.equal(g.json.articles[0].stripe_produit, "xpg-ed-PROFESSIONAL");
+        assert.equal(g.json.articles[0].montant_actuel, 49000);
     });
 
     it("GET /admin/boutique (un admin aussi) : l'etat de Stripe, jamais la cle ; GET /v1/boutique : ce qui s'achete", async () => {
         const r = await appel(A, "GET", "/admin/boutique", { cle: hugo });
         assert.equal(r.statut, 200, r.texte);
-        assert.equal(r.json.numero, 1);
+        assert.equal(r.json.numero, 2, "enregistre deux fois (le meme catalogue, 1.46.1)");
         assert.deepEqual(r.json.stripe, { branche: true, mode: "test", webhook: true, dernier_evenement: null });
         assert.equal(r.json.articles.length, 2);
         assert.ok(!r.texte.includes(CLE) && !r.texte.includes(WEBHOOK));
@@ -158,7 +226,7 @@ describe("une commande et sa page de paiement", () => {
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc1, corps: commande({ cle: "xpg-0000000000000000" }) }), 400, "cle");
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc1, corps: commande({ scelles: [{ cle: hugo.id, scelle: scelle("hugo") }] }) }), 400, "cle");
         erreur(await appel(A, "POST", "/v1/boutique/commande", { corps: commande() }), 401, "signature");
-        assert.equal(stripe.requetes.length, 0, "rien n'est parti chez Stripe");
+        assert.equal(pages().length, 0, "aucune page de paiement demandee a Stripe");
     });
 
     it("201 : la page de Stripe ; les parametres : la carte seulement, ni client, ni carte gardee, une facture", async () => {
@@ -172,29 +240,20 @@ describe("une commande et sa page de paiement", () => {
         assert.equal(r.json.devise, "eur");
         assert.equal(r.json.mode, "test");
         assert.ok(r.json.expire >= t0 + 1800 && r.json.expire <= now() + 1900, "30 minutes (et une de marge)");
-        assert.equal(stripe.requetes.length, 1);
-        const q = stripe.requetes[0];
-        assert.equal(q.methode, "POST");
-        assert.equal(q.chemin, "/v1/checkout/sessions");
+        assert.equal(pages().length, 1);
+        const q = derniere();
         assert.equal(q.auth, "bonne", "la cle secrete en Bearer");
         assert.equal(q.idem, "commande-" + n1);
         assert.match(q.type, /^application\/x-www-form-urlencoded/);
-        const p = Object.fromEntries(q.params);
+        const p = parametres(q);
         assert.equal(p.mode, "payment");
-        assert.equal(p["payment_method_types[0]"], "card");
-        assert.deepEqual(
-            q.params.filter(([k]) => k.startsWith("payment_method_types")),
-            [["payment_method_types[0]", "card"]],
-            "la carte seulement (pas Link)",
-        );
-        for (const [k] of q.params) {
-            assert.ok(!/^customer(\[|$)/.test(k) && k !== "customer_creation", "jamais de client Stripe : " + k);
-            assert.ok(!/setup_future_usage|saved_payment_method_options|subscription|payment_method_collection/.test(k), "jamais de carte gardee : " + k);
-        }
+        sansCarteGardee(q);
         assert.equal(p.customer_email, "camille@exemple.invalid");
-        assert.equal(p["line_items[0][price_data][currency]"], "eur");
-        assert.equal(p["line_items[0][price_data][unit_amount]"], "49000");
-        assert.equal(p["line_items[0][price_data][product_data][name]"], "Licence PROFESSIONAL - 1 an");
+        // 1.46.1 : le prix du produit Stripe (cree a l'enregistrement du catalogue), plus le montant donne
+        assert.equal(p["line_items[0][price]"], stripe.produits.get("xpg-ed-PROFESSIONAL").default_price);
+        assert.ok(!q.params.some(([k]) => k.includes("price_data")), "le prix, pas price_data");
+        assert.equal(sessionDe(n1).montant, 49000);
+        assert.equal(p["metadata[article]"], "ed:PROFESSIONAL");
         assert.equal(p["line_items[0][quantity]"], "1");
         assert.equal(p.client_reference_id, String(n1));
         assert.equal(p["metadata[commande]"], String(n1));
@@ -388,6 +447,21 @@ describe("expiree, annulee, un montant qui ne va pas, Stripe qui refuse", () => 
         erreur(await appel(A, "POST", "/admin/commandes/rembourser", { cle: editeur, corps: { numero: n1 } }), 409, "etat");
     });
 
+    it("1.46.1 : le vrai Stripe d'aujourd'hui refuse payment_method_types - le faux aussi (et accepte la page du service)", async () => {
+        const essai = async (version) => {
+            const entetes = { Authorization: "Bearer " + CLE, "Content-Type": "application/x-www-form-urlencoded" };
+            if (version) entetes["Stripe-Version"] = version;
+            const corps = "mode=payment&line_items[0][price_data][currency]=eur&line_items[0][price_data][unit_amount]=100&line_items[0][price_data][product_data][name]=x&line_items[0][quantity]=1&payment_method_types[0]=card";
+            const r = await fetch(stripe.base + "/v1/checkout/sessions", { method: "POST", headers: entetes, body: corps });
+            return { statut: r.status, json: await r.json() };
+        };
+        const r = await essai("");
+        assert.equal(r.statut, 400, "la version du compte (2026-09-30.endive)");
+        assert.equal(r.json.error.message, MESSAGE_PMT);
+        assert.equal((await essai(VERSION_STRIPE)).statut, 400);
+        assert.equal((await essai("2025-09-30.clover")).statut, 200, "une version d'avant : encore accepte");
+    });
+
     it("Stripe refuse la page : 502 stripe, sans secret, et aucune commande ne reste", async () => {
         stripe.regler("checkout");
         const avant = (await commandesDe(A, pc2)).length;
@@ -397,6 +471,110 @@ describe("expiree, annulee, un montant qui ne va pas, Stripe qui refuse", () => 
         assert.match(r.json.message, /Stripe refuse/);
         assert.ok(!r.texte.includes(CLE));
         assert.equal((await commandesDe(A, pc2)).length, avant);
+    });
+});
+
+describe("1.46.1 : la reduction suivie, les produits refuses, un prix disparu", () => {
+    const REDUIT = (fin) => ({
+        ...CATALOGUE,
+        articles: [
+            { ...CATALOGUE.articles[0], montant: 60000, montant_reduit: 12000, fin_reduction: fin },
+            { ...CATALOGUE.articles[1], libre: true },
+        ],
+    });
+    const passerEtAnnuler = async (pc, extra = {}) => {
+        const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc, corps: commande(extra) });
+        assert.equal(r.statut, 201, r.texte);
+        assert.equal((await appel(A, "POST", "/v1/boutique/annuler", { cle: pc, corps: { numero: r.json.numero } })).statut, 200);
+        return r.json;
+    };
+
+    it("une reduction en cours : le montant reduit partout (le catalogue public, la commande, son prix Stripe)", async () => {
+        const fin = heureA() + 3600;
+        const r = await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: REDUIT(fin) });
+        assert.equal(r.statut, 200, r.texte);
+        assert.equal(r.json.stripe_catalogue.etat, "ok", r.texte);
+        const pub = (await appel(A, "GET", "/v1/boutique")).json.articles[0];
+        assert.equal(pub.montant, 12000, "les Studios 1.46.0 lisent `montant` : Acheter - 120,00 EUR TTC");
+        assert.equal(pub.montant_base, 60000);
+        assert.equal(pub.fin_reduction, fin);
+        const adm = (await appel(A, "GET", "/admin/boutique", { cle: editeur })).json.articles;
+        assert.equal(adm[0].montant, 60000);
+        assert.equal(adm[0].montant_reduit, 12000);
+        assert.equal(adm[0].fin_reduction, fin);
+        assert.equal(adm[0].montant_actuel, 12000);
+        assert.equal(adm[1].libre, true);
+        // chez Stripe : le prix de base (le prix par defaut du produit) et le prix reduit, l'ancien (490,00) archive
+        const pro = stripe.produits.get("xpg-ed-PROFESSIONAL");
+        const actifs = [...stripe.prix.values()].filter((x) => x.product === pro.id && x.active).map((x) => x.unit_amount).sort((a, b) => a - b);
+        assert.deepEqual(actifs, [12000, 60000]);
+        assert.equal(stripe.prix.get(pro.default_price).unit_amount, 60000);
+        assert.ok([...stripe.prix.values()].some((x) => x.product === pro.id && x.unit_amount === 49000 && !x.active), "l'ancien prix archive");
+        // la commande : le prix reduit
+        const c = await passerEtAnnuler(pc2, { societe: "Atelier d'essai" });
+        assert.equal(c.montant, 12000);
+        const q = derniere();
+        sansCarteGardee(q);
+        assert.equal(stripe.prix.get(parametres(q)["line_items[0][price]"]).unit_amount, 12000);
+    });
+
+    it("la fin de la reduction passee : le montant de base, sans rien faire", async () => {
+        const fin = heureA() + 2;
+        assert.equal((await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: REDUIT(fin) })).statut, 200);
+        assert.equal((await appel(A, "GET", "/v1/boutique")).json.articles[0].montant, 12000);
+        await new Promise((ok) => setTimeout(ok, 3500));
+        const pub = (await appel(A, "GET", "/v1/boutique")).json.articles[0];
+        assert.equal(pub.montant, 60000);
+        assert.equal(pub.montant_base, undefined);
+        const c = await passerEtAnnuler(pc2, { societe: "Atelier d'essai" });
+        assert.equal(c.montant, 60000);
+        assert.equal(stripe.prix.get(parametres(derniere())["line_items[0][price]"]).unit_amount, 60000);
+        // l'enregistrement suivant archive le prix reduit (la reduction est finie)
+        assert.equal((await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: REDUIT(fin) })).statut, 200);
+        const pro = stripe.produits.get("xpg-ed-PROFESSIONAL");
+        assert.ok(![...stripe.prix.values()].some((x) => x.product === pro.id && x.active && x.unit_amount === 12000), "le prix reduit archive");
+    });
+
+    it("une cle restreinte sans le droit des produits : le catalogue est garde, l'Admin sait pourquoi, la vente marche (price_data)", async () => {
+        stripe.regler("produits");
+        const corps = { ...CATALOGUE, articles: [{ ...CATALOGUE.articles[0], montant: 55500 }] };
+        const r = await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps });
+        stripe.regler("");
+        assert.equal(r.statut, 200, r.texte);
+        assert.equal(r.json.stripe_catalogue.etat, "refus");
+        assert.match(r.json.stripe_catalogue.message, /Products : écriture/);
+        assert.match(r.json.stripe_catalogue.message, /marche quand même/);
+        assert.ok(!r.texte.includes(CLE));
+        assert.equal((await appel(A, "GET", "/admin/boutique", { cle: editeur })).json.stripe_catalogue.etat, "refus");
+        const c = await passerEtAnnuler(pc2, { societe: "Atelier d'essai" });
+        assert.equal(c.montant, 55500);
+        const p = parametres(derniere());
+        sansCarteGardee(derniere());
+        assert.equal(p["line_items[0][price]"], undefined);
+        assert.equal(p["line_items[0][price_data][unit_amount]"], "55500");
+        assert.equal(p["line_items[0][price_data][product_data][name]"], "Licence PROFESSIONAL - 1 an");
+        // un article retire du catalogue : son produit archive (Stripe le permet de nouveau)
+        assert.equal((await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps })).json.stripe_catalogue.etat, "ok");
+        assert.equal(stripe.produits.get("xpg-opt-ai_advanced-365").active, false);
+        assert.equal(stripe.produits.get("xpg-ed-PROFESSIONAL").active, true);
+    });
+
+    it("un prix disparu chez Stripe : la page se refait avec le montant donne (la commande passe)", async () => {
+        const pro = stripe.produits.get("xpg-ed-PROFESSIONAL");
+        const id = pro.default_price;
+        assert.equal(stripe.prix.get(id).unit_amount, 55500);
+        stripe.prix.delete(id);
+        const avant = pages().length;
+        const c = await passerEtAnnuler(pc2, { societe: "Atelier d'essai" });
+        assert.equal(c.montant, 55500);
+        assert.equal(pages().length, avant + 2, "le prix refuse, puis le montant donne");
+        const [a, b] = pages().slice(-2);
+        assert.equal(parametres(a)["line_items[0][price]"], id);
+        assert.equal(parametres(b)["line_items[0][price_data][unit_amount]"], "55500");
+        assert.equal(b.idem, "commande-" + c.numero + "-montant");
+        sansCarteGardee(b);
+        // remis comme avant pour la suite
+        assert.equal((await appel(A, "PUT", "/admin/boutique", { cle: editeur, corps: CATALOGUE })).statut, 200);
     });
 });
 

@@ -171,6 +171,7 @@ int main(int argc, char** argv) {
         t = draw(*page);
         check(has(t, "il reste 30 min"), "20 minutes plus tard : il reste 30 min");
         g_now += 1900;
+        (void)draw(*page);   // l'image ou la page se relit (la fin vue), puis la suivante
         t = draw(*page);
         check(!lf.ws->mayManageService() && has(t, "L'admin+ seul g\xC3\xA8re le service (d\xC3\xA9rogation possible)") && !enabledOf(*page, "service.deployer"),
               "a la fin : la page repasse d'elle-meme en lecture seule");
