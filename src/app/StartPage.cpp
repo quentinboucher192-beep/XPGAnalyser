@@ -519,6 +519,16 @@ void StartButton::setLook(Look l) {
 }
 
 float StartButton::naturalWidth() const {
+    // 1.47.0 : UN LIEN, CE QUE LE DESSIN PREND VRAIMENT (onPaint, Look::Link) - 8 + le pictogramme (16) + 12 devant le
+    // libelle (10 sans pictogramme), 10 apres ; le chevron (16) ou le raccourci (sa largeur + 10). L'ancienne mesure
+    // (libelle + 28) oubliait la place du pictogramme : << Mon profil... >> se dessinait << Mon pr... >> dans
+    // l'encart de la licence de l'accueil, la ou sa largeur << naturelle >> semblait suffire.
+    if (look_ == Look::Link) {
+        float w = (glyph_ != Glyph::None ? 8.f + 16.f + 12.f : 10.f) + ui::measureWidth(text(), kLabel) + 10.f;
+        if (hint_ == ">") w += 16.f;
+        else if (!hint_.empty()) w += ui::measureWidth(hint_, kSmall) + 10.f;
+        return std::ceil(w);
+    }
     const gfx::FontId f = look_ == Look::Ghost ? kSmall : kLabel;
     float w = ui::measureWidth(text(), f) + 28.f;
     if (glyph_ != Glyph::None) w += (look_ == Look::Ghost ? 12.f : 15.f) + 7.f;
@@ -631,7 +641,8 @@ void StartButton::onPaint(const ui::PaintContext& ctx) {
             ctx.r.drawText({right - hw, b.y + (b.h - ctx.r.lineHeight(kSmall)) * 0.5f}, hint_, kSmall, c.textMuted);
             right -= hw + 10.f;
         }
-        const float x = g.right() + 12.f;
+        // 1.47.0 : sans pictogramme, le libelle commence au bord (la place vide de 36 px le faisait couper).
+        const float x = glyph_ != Glyph::None ? g.right() + 12.f : b.x + 10.f;
         const std::string shown = elide(ctx.r, label, kLabel, right - x);
         ctx.r.drawText({x, b.y + (b.h - ctx.r.lineHeight(kLabel)) * 0.5f}, shown, kLabel, on ? c.text : c.textDisabled);
         if (!subtitle_.empty() && shown == label) {
@@ -1655,20 +1666,21 @@ float StartRail::placeBody(int level) {
         if (level <= 2 && !licenceText_.empty())
             for (auto& l : wrap(licenceText_, kSmall, room, 2)) licenceLines_.push_back(std::move(l));
         const float lh = ui::lineHeight(kSmall);
-        const float bh = std::round(10.f + lh * static_cast<float>(licenceLines_.size()) + 8.f + 26.f + 10.f);
+        // 1.37.0 : << Mon profil... >> a gauche du bouton de la licence. 1.47.0 : TOUJOURS LA, JAMAIS COUPE - cote a
+        // cote quand les deux libelles entiers tiennent (leur largeur naturelle, juste : naturalWidth), sinon
+        // << Mon profil... >> sur sa ligne, sous le texte, et le bouton de la licence dessous (avant : cache faute de
+        // place, ou coupe en << Mon pr... >> quand la mesure d'un lien oubliait son pictogramme).
+        const float inner = std::max(40.f, w - 20.f);
+        const float bw = std::min(licence_->naturalWidth(), inner);
+        const float pw = std::min(profile_->naturalWidth(), inner);
+        const bool side = pw + 8.f + bw <= inner;
+        const float buttonsH = side ? 26.f : 26.f + 6.f + 26.f;
+        const float bh = std::round(10.f + lh * static_cast<float>(licenceLines_.size()) + 8.f + buttonsH + 10.f);
         licenceBox_ = {x0, y, w, bh};
-        const float bw = std::min(licence_->naturalWidth(), w - 24.f);
         licence_->setBounds({licenceBox_.right() - 10.f - bw, licenceBox_.bottom() - 10.f - 26.f, bw, 26.f});
         licence_->setVisibility(ui::Visibility::Visible);
-        // 1.37.0 : a gauche, toute la place jusqu'au bouton de la licence (son libelle entier), s'il y en a assez.
-        const float pw = profile_->naturalWidth();
-        const float pRoom = licenceBox_.right() - 10.f - bw - 8.f - (licenceBox_.x + 10.f);
-        if (pRoom >= pw + 4.f) {
-            profile_->setBounds({licenceBox_.x + 10.f, licenceBox_.bottom() - 10.f - 26.f, pRoom, 26.f});
-            profile_->setVisibility(ui::Visibility::Visible);
-        } else {
-            profile_->setVisibility(ui::Visibility::Collapsed);
-        }
+        profile_->setBounds({licenceBox_.x + 10.f, licenceBox_.bottom() - 10.f - buttonsH, pw, 26.f});
+        profile_->setVisibility(ui::Visibility::Visible);
         y += bh + (easy ? 12.f : 8.f);
     } else {
         licenceLines_.clear();

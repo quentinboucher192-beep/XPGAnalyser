@@ -717,6 +717,10 @@ if(XPG_BUILD_TESTS)
     # renommee, Tout effacer, deux projets) et la recherche des volets qui n'en avaient pas - sans ecran ----
     xpg_add_test_executable(filtermemory_test tests/filtermemory_test.cpp src/app/ApiListKit.cpp)
     xpg_target_link_libraries(filtermemory_test PRIVATE xpg_import xpg_ui)
+    # 1.47.0 : les listes de l'Admin (planches 06, 07, 12) - la barre << Filtrer et chercher >>, le clic droit dans le meme
+    # ordre, le depliage d'une ligne (ui::FilterBar, ui::ListMenu, ui::TableView, ui::UnfoldCard) - sans ecran
+    xpg_add_test_executable(listes_test tests/listes_test.cpp)
+    xpg_target_link_libraries(listes_test PRIVATE xpg_ui)
     # ---- Lot API 8 : finitions (Ctrl+F : le champ de recherche montre de l'onglet ; Echap l'efface) ----
     xpg_add_test_executable(searchfocus_test tests/searchfocus_test.cpp src/app/SearchFocus.cpp src/app/ApiListKit.cpp)
     xpg_target_link_libraries(searchfocus_test PRIVATE xpg_import xpg_ui)
@@ -1319,6 +1323,7 @@ if(XPG_BUILD_TESTS)
     xpg_add_test(NAME dropfiles    COMMAND dropfiles_test ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm)   # ---- Lot API 8 : glisser n'importe quel fichier ----
     xpg_add_test(NAME renamehmipaths COMMAND rename_hmi_paths_test)         # ---- Lot API 8 : renommer dans l'IHM par tous les chemins ----
     xpg_add_test(NAME filtermemory COMMAND filtermemory_test)                # ---- Lot API 8 : les filtres retenus ----
+    xpg_add_test(NAME listes       COMMAND listes_test)                      # 1.47.0 : la barre de filtres, le clic droit, le depliage
     # 1.11 (I111) : les echantillons de l'IHM (tests/fixtures/ihm) nommes, et non
     # pris a cote de XPG_FIXTURE : un MAST.XPG designe ailleurs n'a pas son ihm/.
     xpg_add_test(NAME hmi          COMMAND hmi_test ${XPG_FIXTURE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ihm

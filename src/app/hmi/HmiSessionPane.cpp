@@ -1,71 +1,18 @@
 // =============================================================================
 //  app/hmi/HmiSessionPane.cpp - 1.45.0 : voir HmiSessionPane.hpp
+//  1.47.0 : le texte dans son cadre a toute taille (la liste de SessionText, un
+//  en-tete et un pied qui tiennent dans la largeur et la hauteur du moment).
 // =============================================================================
 #include "HmiSessionPane.hpp"
 
 #include "../SessionMarks.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace app {
 
 namespace {
-
-// Les lignes montrees : l'heure, qui, le texte (le journal : son genre en icone).
-class SessionRows final : public ui::ITableModel {
-public:
-    explicit SessionRows(const std::vector<HmiSessionPane::Row>& rows) : rows_(rows) {}
-    [[nodiscard]] std::size_t rowCount() const override { return rows_.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 3; }
-    [[nodiscard]] std::string headerText(std::size_t c) const override {
-        return c == 0 ? "Heure" : c == 1 ? "Qui" : "Message ou changement";
-    }
-    [[nodiscard]] std::string cellText(ui::RowIndex r, std::size_t c) const override {
-        if (r >= rows_.size()) return {};
-        const auto& x = rows_[r];
-        if (c == 0) return x.time;
-        if (c == 1) return x.system ? std::string("Session") : x.who;
-        return x.count > 1 ? x.text + "  (\xC3\x97" + std::to_string(x.count) + ")" : x.text;
-    }
-    [[nodiscard]] ui::CellStyle cellStyle(ui::RowIndex r, std::size_t c) const override {
-        ui::CellStyle st;
-        if (r >= rows_.size()) return st;
-        const auto& x = rows_[r];
-        if (c == 0) st.monospace = true;
-        if (c == 1 && !x.system && x.color) {
-            // Les initiales dans la couleur du membre, devant son nom.
-            ui::ColorPill p;
-            std::string ini;
-            for (std::size_t i = 0; i < x.who.size() && ini.size() < 2; ++i)
-                if ((i == 0 || x.who[i - 1] == ' ') && static_cast<unsigned char>(x.who[i]) < 0x80 && x.who[i] != ' ') ini.push_back(x.who[i]);
-            if (ini.empty()) ini = "?";
-            for (auto& ch : ini) ch = static_cast<char>(ch >= 'a' && ch <= 'z' ? ch - 'a' + 'A' : ch);
-            p.text = ini;
-            p.fill = gfx::Color::rgb(x.color);
-            p.fillTo = gfx::Color::rgb(x.color);
-            p.border = gfx::Color::rgb(x.color);
-            p.ink = gfx::Color::rgb(0xFFFFFF);
-            st.colorLead = p;
-        }
-        if (c == 2) {
-            st.icon = x.journal ? ui::Icon::History : x.system ? ui::Icon::Info : ui::Icon::User;
-            st.iconTone = x.journal ? ui::Tone::Accent : x.system ? ui::Tone::Muted : ui::Tone::None;
-            if (x.system) st.fgTone = ui::Tone::Muted;
-        }
-        if (x.mine && c == 1) st.bold = true;
-        return st;
-    }
-    [[nodiscard]] bool less(ui::RowIndex a, ui::RowIndex b, std::size_t) const override { return a < b; }
-    [[nodiscard]] std::string rowTooltip(ui::RowIndex r) const override {
-        if (r >= rows_.size()) return {};
-        const auto& x = rows_[r];
-        return x.journal ? "Journal de la session \xC2\xB7 " + x.who + " \xC2\xB7 " + x.time
-                         : x.system ? std::string("La session") : "Discussion \xC2\xB7 " + x.who + " \xC2\xB7 " + x.time;
-    }
-
-private:
-    std::vector<HmiSessionPane::Row> rows_;
-};
 
 // Le champ : Entree envoie (pas la perte du focus).
 class SessionField final : public ui::InputText {
@@ -83,6 +30,12 @@ protected:
     }
 };
 
+const std::string kExportFull = "Exporter le journal (CSV)";
+const std::string kExportMid = "Exporter (CSV)";
+const std::string kExportShort = "CSV";
+const std::string kExportTip = "Le journal de la session en CSV, dans exports/ du projet (l'h\xC3\xB4te)";
+constexpr float kHeaderH = 26.f, kFooterH = 30.f, kPad = 4.f;
+
 } // namespace
 
 HmiSessionPane::HmiSessionPane(std::string id) : ui::Widget(std::move(id)) {
@@ -94,7 +47,7 @@ HmiSessionPane::HmiSessionPane(std::string id) : ui::Widget(std::move(id)) {
     all_ = button("Tout", "tout", ui::Button::Style::Primary);
     chat_ = button("Discussion", "discussion", ui::Button::Style::Flat);
     journal_ = button("Journal", "journal", ui::Button::Style::Flat);
-    export_ = button("Exporter le journal (CSV)", "exporter", ui::Button::Style::Flat);
+    export_ = button(kExportFull, "exporter", ui::Button::Style::Flat);
     links_ += all_->clicked->connect([this] { setFilter(Filter::All); });
     links_ += chat_->clicked->connect([this] { setFilter(Filter::Chat); });
     links_ += journal_->clicked->connect([this] { setFilter(Filter::Journal); });
@@ -103,10 +56,7 @@ HmiSessionPane::HmiSessionPane(std::string id) : ui::Widget(std::move(id)) {
         const std::string path = sessionmarks::exportJournal(&why);
         if (said) said(path.empty() ? "Le journal ne s'exporte pas : " + why + "." : "Journal export\xC3\xA9 : " + path, !path.empty());
     });
-    auto table = std::make_unique<ui::TableView>(this->id() + ".lignes");
-    table->setColumns({{"Heure", 64.f}, {"Qui", 150.f}, {"Message ou changement", 900.f}});
-    table->setSelectionMode(ui::SelectionMode::Single);
-    table_ = &static_cast<ui::TableView&>(addChild(std::move(table)));
+    list_ = &static_cast<sessionui::LineList&>(addChild(std::make_unique<sessionui::LineList>(this->id() + ".lignes")));
     auto field = std::make_unique<SessionField>(this->id() + ".message");
     field->setPlaceholder("\xC3\x89" "cris \xC3\xA0 l'\xC3\xA9quipe\xE2\x80\xA6 (Entr\xC3\xA9" "e)");
     field->setMaxLength(2000);
@@ -127,13 +77,7 @@ void HmiSessionPane::setFilter(Filter f) {
     rebuild();
 }
 
-std::string HmiSessionPane::rowText(std::size_t i) const {
-    if (i >= rows_.size()) return {};
-    const auto& r = rows_[i];
-    std::string s = r.time + " " + (r.system ? std::string("Session") : r.who) + " : " + r.text;
-    if (r.count > 1) s += " (\xC3\x97" + std::to_string(r.count) + ")";
-    return s;
-}
+std::string HmiSessionPane::rowText(std::size_t i) const { return i < rows_.size() ? sessionui::rowText(rows_[i]) : std::string{}; }
 
 bool HmiSessionPane::send(const std::string& text) {
     std::string t = text;
@@ -155,7 +99,7 @@ void HmiSessionPane::rebuild() {
     title_ = b.sessionName.empty() ? std::string{}
                                    : "\xC2\xAB " + b.sessionName + " \xC2\xBB \xC2\xB7 " + std::to_string(b.people.size()) + " personne"
                                          + (b.people.size() > 1 ? "s" : "") + " \xC2\xB7 h\xC3\xB4te : " + b.hostName;
-    if (export_) export_->setVisibility(b.host ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    host_ = b.host;
     rows_.clear();
     std::vector<Row> chat, journal;
     if (filter_ != Filter::Journal)
@@ -168,10 +112,11 @@ void HmiSessionPane::rebuild() {
         if (j >= journal.size() || (i < chat.size() && chat[i].time <= journal[j].time)) rows_.push_back(std::move(chat[i++]));
         else rows_.push_back(std::move(journal[j++]));
     }
-    model_ = std::make_shared<SessionRows>(rows_);
-    if (table_) {
-        table_->setModel(model_);
-        table_->setScrollOffset(1e9f);   // la derniere ligne
+    if (list_) {
+        list_->setEmptyText(filter_ == Filter::Chat      ? "Aucun message encore : \xC3\xA9" "cris \xC3\xA0 l'\xC3\xA9quipe dans le champ du bas (Entr\xC3\xA9" "e)."
+                            : filter_ == Filter::Journal ? "Aucun changement encore : chaque changement de la session s'inscrit ici (qui, quand, quoi)."
+                                                         : "Rien encore : la discussion et le journal de la session s'inscrivent ici.");
+        list_->setRows(rows_);
     }
     invalidateLayout();
     invalidate();
@@ -179,35 +124,93 @@ void HmiSessionPane::rebuild() {
 
 void HmiSessionPane::onLayout() {
     const auto r = bounds();
-    float x = r.x + 4.f;
-    for (auto* b : {all_, chat_, journal_}) {
-        const float w = ui::measureWidth(b->text(), gfx::FontId{16}) + 26.f;
-        b->setBounds({x, r.y + 4.f, w, 26.f});
-        x += w + 4.f;
+    const float w = std::max(0.f, r.w - 2.f * kPad);
+    const float x = r.x + kPad;
+    // Ce qui reste a un panneau tres bas : le champ et Envoyer d'abord, puis la liste, puis l'en-tete.
+    const bool header = r.h >= kPad + kHeaderH + kPad + kFooterH + kPad;
+    const bool footer = r.h >= kFooterH + 2.f * kPad;
+    // ---- l'en-tete : les filtres a gauche, Exporter a droite (l'hote), le titre entre les deux ----
+    for (auto* b : {all_, chat_, journal_}) b->setVisibility(header ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    export_->setVisibility(header && host_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    titleRect_ = {};
+    titleShown_.clear();
+    float headerBottom = r.y;
+    if (header) {
+        const float y = r.y + kPad;
+        std::vector<sessionui::ButtonSpec> filters{{all_, "Tout", {}, 36.f, {}},
+                                                   {chat_, "Discussion", {}, 36.f, "Les messages seuls"},
+                                                   {journal_, "Journal", {}, 36.f, "Les changements seuls (qui, quand, quoi)"}};
+        float filtersW = 8.f;
+        for (const auto& f : filters) filtersW += sessionui::buttonWidth(f.full);
+        float exportW = 0.f;
+        std::string exportLabel;
+        if (host_) {
+            // Le libelle le plus long qui laisse les filtres entiers et un peu de titre ; sinon les filtres entiers ;
+            // sinon << CSV >>, et les filtres se serrent (3 x 36 px au moins).
+            const float titleMin = title_.empty() ? 0.f : 80.f;
+            for (const float extra : {titleMin, 0.f}) {
+                for (const auto* label : {&kExportFull, &kExportMid, &kExportShort})
+                    if (filtersW + 8.f + sessionui::buttonWidth(*label) + extra <= w) {
+                        exportLabel = *label;
+                        break;
+                    }
+                if (!exportLabel.empty()) break;
+            }
+            if (exportLabel.empty()) {
+                exportLabel = kExportShort;
+                exportW = std::min(sessionui::buttonWidth(kExportShort), std::max(36.f, w - 8.f - 3.f * 36.f - 8.f));
+            } else {
+                exportW = sessionui::buttonWidth(exportLabel);
+            }
+            if (exportW < 36.f) {   // trop etroit pour les filtres et Exporter : Exporter reste dans la fenetre de la session
+                export_->setVisibility(ui::Visibility::Collapsed);
+                exportW = 0.f;
+            } else {
+                export_->setBounds({x + w - exportW, y, exportW, kHeaderH});
+                sessionui::fitButton(*export_, kExportFull, exportW, exportLabel == kExportFull ? std::string{} : exportLabel, kExportTip);
+            }
+        }
+        const bool exportShown = host_ && exportW > 0.f;
+        const float filtersRoom = std::max(0.f, w - (exportShown ? exportW + 8.f : 0.f));
+        (void)sessionui::fitButtons(filters, x, y, filtersRoom, kHeaderH, 4.f);
+        const float titleX = journal_->bounds().right() + 10.f;
+        const float titleRight = exportShown ? export_->bounds().x - 10.f : x + w;
+        if (!title_.empty() && titleRight - titleX >= 40.f) {
+            titleRect_ = {titleX, y, titleRight - titleX, kHeaderH};
+            titleShown_ = sessionui::elide(title_, gfx::FontId{13}, titleRect_.w);
+        }
+        headerBottom = y + kHeaderH;
     }
-    if (export_ && export_->visible()) {
-        const float w = ui::measureWidth(export_->text(), gfx::FontId{16}) + 26.f;
-        export_->setBounds({r.right() - w - 4.f, r.y + 4.f, w, 26.f});
+    // ---- le pied : le champ et Envoyer ----
+    field_->setVisibility(footer ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    sendButton_->setVisibility(footer ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    float footerTop = r.bottom();
+    if (footer) {
+        footerTop = r.bottom() - kPad - kFooterH;
+        const float sw = std::clamp(std::floor(w * 0.3f), 44.f, 96.f);
+        sendButton_->setBounds({x + w - sw, footerTop, sw, kFooterH});
+        sessionui::fitButton(*sendButton_, "Envoyer", sw, {}, "Envoyer \xC3\xA0 l'\xC3\xA9quipe (Entr\xC3\xA9" "e)");
+        field_->setBounds({x, footerTop, std::max(0.f, w - sw - 6.f), kFooterH});
     }
-    titleAt_ = x + 8.f;
-    const float fh = 30.f;
-    if (table_) table_->setBounds({r.x, r.y + 34.f, r.w, std::max(0.f, r.h - 34.f - fh - 8.f)});
-    const float bw = 96.f;
-    if (sendButton_) sendButton_->setBounds({r.right() - bw - 4.f, r.bottom() - fh - 4.f, bw, fh});
-    if (field_) field_->setBounds({r.x + 4.f, r.bottom() - fh - 4.f, std::max(40.f, r.w - bw - 16.f), fh});
+    // ---- la liste entre les deux ----
+    const float top = headerBottom + kPad, bottom = footerTop - kPad;
+    const bool listShown = bottom - top >= 16.f;
+    list_->setVisibility(listShown ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+    if (listShown) list_->setBounds({r.x, top, r.w, bottom - top});
 }
 
 void HmiSessionPane::onPaint(const ui::PaintContext& ctx) {
     const auto& c = ctx.theme.color;
     ctx.r.fillRect(bounds(), c.panelBg);
-    if (!title_.empty() && titleAt_ > 0.f) {
-        const float right = export_ && export_->visible() ? export_->bounds().x - 8.f : bounds().right() - 8.f;
-        const auto f = ctx.theme.font.smallUi;
-        const auto n = ctx.r.fitCharacters(title_, f, std::max(0.f, right - titleAt_));
-        if (n > 0)
-            ctx.r.drawText({titleAt_, bounds().y + 4.f + (26.f - ctx.r.lineHeight(f)) * 0.5f}, n >= title_.size() ? title_ : title_.substr(0, n) + "\xE2\x80\xA6", f,
-                           c.textMuted);
+    if (!titleShown_.empty() && titleRect_.w > 0.f) {
+        const gfx::FontId f{13};
+        ctx.r.drawText({titleRect_.x, titleRect_.y + (titleRect_.h - ctx.r.lineHeight(f)) * 0.5f}, titleShown_, f, c.textMuted);
     }
+}
+
+std::string HmiSessionPane::liveTooltip(gfx::Point mouse) const {
+    if (titleRect_.w > 0.f && titleRect_.contains(mouse)) return title_;
+    return {};
 }
 
 } // namespace app

@@ -116,7 +116,7 @@ public:
     static void setCopiedHook(std::function<void(const std::string& what, const std::string& text)> hook);
 
 private:
-    enum class Sec : int { Open = 0, Actions, GoTo, FilterOn, Copy, Export, Danger, Note };
+    enum class Sec : int { Open = 0, Unfold, Actions, GoTo, FilterOn, Copy, Export, Danger, Note };
     struct Added {
         Sec   sec;
         Entry e;

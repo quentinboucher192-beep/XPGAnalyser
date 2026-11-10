@@ -177,6 +177,10 @@ void BarList::onPaint(const PaintContext& ctx) {
         for (std::size_t i = 0; i < d.partNames.size(); ++i) items.push_back({d.partNames[i], partColor(i), Swatch::Box, {}});
         paintLegend(r, ctx.theme, b.x, b.y, b.w, items);
     }
+    if (d.rows.empty()) {
+        text(r, b.x + b.w * 0.5f, f.top + std::min(40.f, (b.bottom() - f.top) * 0.5f), fit(r, d.emptyText, FontId{12}, b.w), FontId{12}, k.faint, 0);
+        return;
+    }
     // La colonne des valeurs (et de l'extra).
     float vw = 0.f;
     for (const auto& row : d.rows) {

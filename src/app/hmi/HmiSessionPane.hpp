@@ -13,6 +13,16 @@
 //  ecrit a l'equipe (Entree ou Envoyer), comme la fenetre de la session ; l'hote
 //  exporte le journal (CSV, dans exports/ du projet).
 //
+//  1.47.0 : LE TEXTE DANS SON CADRE, A TOUTE TAILLE (<< le texte sort du cadre,
+//  attention au redimensionnement >>). Les lignes ne sont plus celles d'un
+//  tableau (une ligne chacune, coupee au bord) : la liste de SessionText
+//  (LineList) les retourne a la ligne a la largeur du panneau (l'heure, qui et
+//  le message en colonnes quand il y a la place, sinon qui au-dessus du
+//  message), et defile. En tete : les filtres, le titre de la session (raccourci
+//  avec << ... >>, entier dans l'infobulle) et Exporter (<< Exporter le journal
+//  (CSV) >>, << Exporter (CSV) >>, << CSV >> selon la place) ; un panneau tres
+//  bas garde le champ et Envoyer, puis la liste, puis l'en-tete.
+//
 //  Sans ecran : les essais lisent les lignes montrees (rowCount, rowText) et
 //  ecrivent par send().
 // =============================================================================
@@ -20,7 +30,7 @@
 
 #include "../../ui/Widget.hpp"
 #include "../../ui/widgets/Controls.hpp"
-#include "../../ui/widgets/DataViews.hpp"
+#include "SessionText.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -45,16 +55,17 @@ public:
     // Ecrire a l'equipe (le champ, Entree) ; faux : rien a envoyer.
     bool send(const std::string& text);
     [[nodiscard]] ui::InputText* field() noexcept { return field_; }
-    [[nodiscard]] ui::TableView* table() noexcept { return table_; }
+    // 1.47.0 : la liste (avant : un tableau, une ligne coupee au bord par message).
+    [[nodiscard]] sessionui::LineList* list() noexcept { return list_; }
+    // Le titre tel qu'il tient (raccourci avec << ... >>) ; vide : cache.
+    [[nodiscard]] const std::string& titleShown() const noexcept { return titleShown_; }
     // Dit dans le pied (un export, un refus) ; la barre d'etat du panneau le montre.
     std::function<void(const std::string&, bool ok)> said;
 
-    struct Row {
-        std::string time, who, text;
-        std::uint32_t color{0};
-        bool journal{false}, system{false}, mine{false};
-        int count{1};
-    };
+    using Row = sessionui::Row;
+
+    [[nodiscard]] std::string liveTooltip(gfx::Point mouse) const override;
+    [[nodiscard]] bool hasTooltip() const override { return true; }
 
 protected:
     void onLayout() override;
@@ -71,10 +82,10 @@ private:
     ui::Button* export_{nullptr};
     ui::Button* sendButton_{nullptr};
     ui::InputText* field_{nullptr};
-    ui::TableView* table_{nullptr};
-    std::shared_ptr<ui::ITableModel> model_;
-    std::string title_;
-    float titleAt_{0.f};
+    sessionui::LineList* list_{nullptr};
+    std::string title_, titleShown_;
+    gfx::Rect titleRect_{};
+    bool host_{false};
     core::ConnectionScope links_;
 };
 

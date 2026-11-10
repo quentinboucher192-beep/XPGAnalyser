@@ -330,6 +330,7 @@ struct Series {
     bool   zeroInTip{false};      // une barre a 0 dite dans la bulle
     float  width{0.f};            // l'epaisseur (0 : 2 px, la comparaison 1,5 px)
     std::string        endLabel;  // une etiquette directe apres le dernier point ("1.46.0 - 94 %")
+    std::string        legendValue;   // un chiffre en gras apres le nom dans la legende (<< en ligne 52 >>)
     Format             format;    // la valeur dans la bulle (vide : celui du graphique)
     std::vector<Color> pointColors;   // une couleur par point (alpha 0 : celle de la serie) - un jour signale
 };
@@ -402,6 +403,7 @@ struct TimeChartData {
     std::function<std::string(int)> tipExtra;    // une ligne en plus dans la bulle (vide : rien)
     bool                  tipForward{false}; // la bulle dans l'ordre des series (sinon : de la plus haute a la base)
     int                   exampleTip{-1};    // une bulle montree sans survol (l'exemple d'une planche, une capture)
+    std::string           emptyText{"Aucune donn\xC3\xA9" "e sur la p\xC3\xA9riode"};   // aucune valeur du tout
 };
 
 // Ce qu'un clic (ou Entree) donne a la page.
@@ -598,6 +600,7 @@ struct BarListData {
     bool                     valueLabels{true};     // Grouped : la valeur au bout de chaque barre
     LegendMode               legend{LegendMode::Auto};   // Share, Grouped : la legende des morceaux
     std::string              clickHint;
+    std::string              emptyText{"Aucune donn\xC3\xA9" "e sur la p\xC3\xA9riode"};   // aucune ligne
 };
 class BarList : public ChartBase {
 public:

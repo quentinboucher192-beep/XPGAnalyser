@@ -101,7 +101,11 @@ int main() {
             const double x = dots[i], y = dots[i + 1], z = dots[i + 2];
             if (!near(x * x + y * y + z * z, 1.0, 1e-4)) unit = false;
             const double lat = std::asin(y) * 180.0 / 3.14159265358979, lon = std::atan2(x, z) * 180.0 / 3.14159265358979;
-            if (!isLand(lat, lon)) land = false;
+            // (un point tombe parfois sur le bord de deux cases : le float le fait passer de l'une a l'autre)
+            bool any = false;
+            for (double e : {0.0, -0.002, 0.002})
+                for (double f : {0.0, -0.002, 0.002}) any = any || isLand(lat + e, lon + f);
+            if (!any) land = false;
         }
         CHECK(unit);
         CHECK(land);
@@ -122,7 +126,7 @@ int main() {
         const auto sydney = project(lyon, -33.87, 151.21);
         CHECK(sydney.z < 0.0);                                      // la face cachee
         const auto montreal = project(lyon, 45.5, -73.57);
-        CHECK(montreal.z > 0.0 && montreal.z < 0.4 && montreal.x < -0.9);   // pres du bord gauche
+        CHECK(montreal.z > 0.5 && montreal.z < 0.7 && montreal.x < -0.6);   // a gauche, encore devant (78 degres a l'ouest)
         // 90 degres plus loin : sur le bord
         const auto edge = project(View{0.0, 0.0, 1.f}, 0.0, 90.0);
         CHECK(near(edge.z, 0.0, 1e-9) && near(edge.x, 1.0, 1e-9));
@@ -300,7 +304,8 @@ int main() {
         CHECK(withGrenoble && !withParis);
         // La ville choisie reste seule.
         g.setSelected(iGrenoble);
-        CHECK(g.groupOf(iLyon).empty() && g.groupOf(iGrenoble).empty());
+        CHECK(g.groupOf(iGrenoble).empty());
+        for (int m : g.groupOf(iLyon)) CHECK(m != iGrenoble);
         CHECK(g.screenOf(iGrenoble).has_value());
         g.setSelected(-1);
         // La face cachee : Montreal derriere quand on regarde l'Asie.

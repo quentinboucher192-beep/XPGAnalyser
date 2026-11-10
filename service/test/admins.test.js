@@ -637,7 +637,8 @@ describe("les fichiers (§ 6)", () => {
             const n = await lire(p1, "IHM-Studio/1.44.0");
             assert.equal(Number(n.entetes.get("x-xpg-lignes-ecrites")), 1, "le nonce seulement");
             const m = await lire(p1, "IHM-Studio/1.44.1");
-            assert.equal(Number(m.entetes.get("x-xpg-lignes-ecrites")), 2, "le nonce et le logiciel");
+            // 1.47.0 : + la premiere fois que cette cle est vue avec cette version (versions_vues, stats.js)
+            assert.equal(Number(m.entetes.get("x-xpg-lignes-ecrites")), 3, "le nonce, le logiciel et sa version vue");
         });
     });
 });

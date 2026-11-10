@@ -1316,7 +1316,7 @@ std::vector<LegendItem> TimeChart::legendItems() const {
         const Series& s = data_.series[i];
         if (s.noLegend || s.name.empty()) continue;
         if (data_.kind == Kind::Range && i > 0) continue;
-        items.push_back({s.name, seriesColor(i), isBar(s) ? Swatch::Box : Swatch::Line, {}});
+        items.push_back({s.name, seriesColor(i), isBar(s) ? Swatch::Box : Swatch::Line, s.legendValue});
     }
     return items;
 }
@@ -1377,6 +1377,15 @@ void TimeChart::onPaint(const PaintContext& ctx) {
 
     // La legende.
     if (f.legendHeight > 0.f) paintLegend(r, ctx.theme, b.x, b.y, b.w, legendItems());
+    // Aucune valeur du tout : la ligne de base et une phrase, rien d'autre (pas d'axe invente).
+    bool any = false;
+    for (const auto& s : d.series)
+        for (const double v : s.values) any = any || std::isfinite(v);
+    if (!any || n == 0) {
+        r.fillRect({f.plot.x, std::round(f.plot.bottom()), f.plot.w, 1.f}, k.base);
+        text(r, f.plot.x + f.plot.w * 0.5f, f.plot.y + f.plot.h * 0.5f, fit(r, d.emptyText, FontId{12}, f.plot.w), FontId{12}, k.faint, 0);
+        return;
+    }
 
     // Les bandes de fond (les fins de semaine, << pas encore admin >>).
     const float slot = f.slot();

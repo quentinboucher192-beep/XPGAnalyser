@@ -657,11 +657,15 @@ bool FilterBar::saveAs(const std::string& name) {
         if (sv.name == n) {
             sv.state = std::move(s);
             saveMemory();
+            syncChips();
+            invalidateLayout();
             invalidate();
             return true;
         }
     saved_.push_back({n, std::move(s)});
     saveMemory();
+    syncChips();   // << Mes filtres >> dit le filtre choisi
+    invalidateLayout();
     invalidate();
     return true;
 }
@@ -680,6 +684,8 @@ bool FilterBar::removeSaved(const std::string& name) {
     std::erase_if(saved_, [&](const Saved& s) { return s.name == name; });
     if (saved_.size() == before) return false;
     saveMemory();
+    syncChips();
+    invalidateLayout();
     invalidate();
     return true;
 }

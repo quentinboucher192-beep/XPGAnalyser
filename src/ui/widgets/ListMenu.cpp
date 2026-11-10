@@ -54,7 +54,7 @@ ListMenu& ListMenu::unfold(bool unfolded, std::function<void()> run) {
     e.icon = unfolded ? Icon::Collapse : Icon::Expand;
     e.shortcut = unfolded ? "\xE2\x86\x90" : "\xE2\x86\x92";
     e.run = std::move(run);
-    added_.push_back({Sec::Open, std::move(e)});
+    added_.push_back({Sec::Unfold, std::move(e)});
     return *this;
 }
 
@@ -149,7 +149,7 @@ bool ListMenu::shown(const Added& a) const {
     if (!many()) return !a.e.label.empty();
     // Plusieurs lignes : ni Ouvrir, ni Aller a, ni Filtrer sur ; le reste s'il sait dire << les 3 >>.
     if (a.sec == Sec::GoTo || a.sec == Sec::FilterOn) return false;
-    if (a.sec == Sec::Open && a.e.icon == Icon::Open) return false;
+    if (a.sec == Sec::Open) return false;
     return !a.e.many.empty();
 }
 
@@ -215,6 +215,7 @@ std::vector<PopupMenu::Item> ListMenu::items(int firstId) const {
         out.push_back(std::move(it));
     };
     section(Sec::Open);
+    section(Sec::Unfold);
     rule();
     section(Sec::Actions);
     rule();
