@@ -930,10 +930,13 @@ private:
         const bool service = jr.who == "le service";
         if (jr.verified) {
             sig.lines.push_back({.icon = ui::Icon::Lock,
-                                 .text = service ? std::string("\xC3\x89" "crite et sign\xC3\xA9" "e par le service (sa cl\xC3\xA9, certifi\xC3\xA9" "e par l'\xC3\xA9" "diteur)")
-                                                 : "Sign\xC3\xA9" "e par la cl\xC3\xA9 de " + l.who + " " + shortFingerprint(adm::fingerprint(l.key)) + "\xE2\x80\xA6 \xC2\xB7 " +
-                                                       (jr.who == "admin+" ? std::string("la cl\xC3\xA9 de l'\xC3\xA9" "diteur") : std::string("certificat valide")),
+                                 .text = service ? std::string("\xC3\x89" "crite et sign\xC3\xA9" "e par le service")
+                                                 : "Sign\xC3\xA9" "e par la cl\xC3\xA9 de " + l.who + " " + shortFingerprint(adm::fingerprint(l.key)) + "\xE2\x80\xA6",
                                  .check = true});
+            sig.lines.push_back({.icon = ui::Icon::Ok,
+                                 .text = service ? std::string("sa cl\xC3\xA9, certifi\xC3\xA9" "e par l'\xC3\xA9" "diteur")
+                                                 : jr.who == "admin+" ? std::string("la cl\xC3\xA9 de l'\xC3\xA9" "diteur") : std::string("certificat valide"),
+                                 .tone = ui::Tone::Ok});
         } else {
             sig.lines.push_back({.icon = ui::Icon::Error, .text = jr.problem.empty() ? std::string("signature non v\xC3\xA9rifi\xC3\xA9" "e") : jr.problem, .tone = ui::Tone::Error});
         }

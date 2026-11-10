@@ -387,8 +387,8 @@ int main(int argc, char** argv) {
         check(click(*jp, "journal.tri.quand") && firstLine() == "n\xC2\xB0 4", "de nouveau par date");
         // 1.47.0 : la barre << Filtrer et chercher >> (planche 12) - la puce Admin, la criticite, la periode (30 j d'office).
         auto* bar = find<ui::FilterBar>(*jp, "journal.barre");
-        check(bar && bar->chipText(0) == "P\xC3\xA9riode : 30 j" && bar->countText() == "5 sur 6" && has(t, "Admin") && has(t, "Criticit\xC3\xA9"),
-              "la barre : la periode (30 j d'office), 5 sur 6, les puces Admin et Criticite");
+        check(bar && bar->chipText(0) == "P\xC3\xA9riode : 30 j" && bar->countText() == "5 sur 5" && has(t, "Admin") && has(t, "Criticit\xC3\xA9"),
+              "la barre : la periode (30 j d'office), 5 sur 5, les puces Admin et Criticite");
         check(bar && valueCount(*bar, 1, kLea) == 2, "le menu de la puce Admin : Lea, 2 lignes");
         if (bar) bar->filterOn(1, kLea);
         check(rows() == 2, "la puce Admin : Lea -> ses 2 lignes");
@@ -419,7 +419,8 @@ int main(int argc, char** argv) {
         // Le clic droit sur la premiere ligne (la n. 4) : la criticite de cette ligne.
         auto* menu = find<ui::PopupMenu>(*jp, "journal.menu");
         (void)draw(*jp, 1280.f, 800.f);
-        (void)jp->dispatch(ui::InputEvent{ui::MouseDown{{500.f, 250.f}, ui::MouseButton::Right, 1, {}}});
+        // 1.47.0 : la barre (une rangee) remplace les pastilles des admins et de la criticite (deux) : les lignes commencent plus haut.
+        (void)jp->dispatch(ui::InputEvent{ui::MouseDown{{500.f, 205.f}, ui::MouseButton::Right, 1, {}}});
         check(menu && menu->isOpen(), "le clic droit ouvre le menu de la ligne");
         // 1.47.0 (planche 06) : le meme ordre que partout - Deplier ; la criticite de la ligne ; Aller a, Filtrer sur ; Copier,
         // Exporter ; << Rien ne s'efface du journal >>.
