@@ -234,12 +234,10 @@ int main(int argc, char** argv) {
         check(has(t, "13/08 \xE2\x86\x92 10/11/2026") || has(t, "09/08 \xE2\x86\x92 06/11/2026"), "la periode montree en tete (90 jours)");
         check(has(draw(*page, 1688.f, 976.f), "filtre la liste correspondante"), "a 1920 px : << Un clic sur un point filtre la liste correspondante >>");
         for (const auto& id : kOverviewCharts) check(hasValues(tchart(*page, "stats.vue." + id)), "le graphique " + id + " a des valeurs");
-        auto* opt = find<ch::BarList>(*page, "stats.vue.options");
-        std::string rows;
-        if (opt)
-            for (const auto& r : opt->data().rows) rows += r.label + " ; ";
-        check(opt && opt->data().rows.size() == 3 && opt->data().rows[0].value >= opt->data().rows[1].value && opt->data().rows[1].value >= opt->data().rows[2].value,
-              "Options vendues : 3 options, la plus vendue d'abord (" + rows + ")");
+        // la liste des options (comme la planche : le libelle, le montant et les commandes, la barre dessous)
+        check(has(t, "Exports avanc\xC3\xA9s") && has(t, "Travail \xC3\xA0 plusieurs") && has(t, "Imports avanc\xC3\xA9s") && has(t, " cmd"),
+              "Options vendues : les trois options, leur montant et leurs commandes");
+        check(has(t, "Exports avanc\xC3\xA9s") && t.find("Exports avanc\xC3\xA9s") < t.find("Imports avanc\xC3\xA9s"), "la plus vendue d'abord");
         auto* m = tchart(*page, "stats.vue.montant");
         check(m && m->data().x.size() >= 13 && m->data().x.size() <= 15, "Montant encaisse : une colonne par semaine (" + std::to_string(m ? m->data().x.size() : 0) + ")");
         check(m && m->data().series.size() == 2 && m->data().series[1].role == ch::Role::Compare && has(m->data().series[1].name, "l'an dernier"),

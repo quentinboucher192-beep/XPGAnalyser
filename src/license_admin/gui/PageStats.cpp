@@ -241,6 +241,62 @@ private:
     std::vector<Rail> rails_;
 };
 
+// ============================================================================ les options vendues
+// La liste de la planche : le libelle a gauche, le montant et le nombre de commandes a droite, la barre dessous (la teinte
+// des options). Un clic sur une ligne : ses commandes.
+class OptionList final : public ui::Widget {
+public:
+    struct Row {
+        std::string label, value, extra;
+        double      fraction{0};
+    };
+    explicit OptionList(std::string id) : ui::Widget(std::move(id)) {}
+    void set(std::vector<Row> rows, std::string empty) {
+        rows_ = std::move(rows);
+        empty_ = std::move(empty);
+        invalidate();
+    }
+    [[nodiscard]] const std::vector<Row>& rows() const noexcept { return rows_; }
+    std::function<void(int)> onPick;
+
+protected:
+    [[nodiscard]] float rowH() const { return std::clamp(bounds().h / static_cast<float>(std::max<std::size_t>(3, rows_.size())), 30.f, 48.f); }
+    void onPaint(const ui::PaintContext& ctx) override {
+        const Rect b = bounds();
+        if (rows_.empty()) {
+            ctx.r.drawText({b.x, b.y + b.h * 0.4f}, ch::detail::fit(ctx.r, empty_, FontId{12}, b.w), FontId{12}, kMuted);
+            return;
+        }
+        const float h = rowH();
+        float y = b.y + 2.f;
+        for (const auto& r : rows_) {
+            if (y + h > b.bottom() + 2.f) break;
+            const FontId vf = gfx::semibold(FontId{12});
+            const float ew = r.extra.empty() ? 0.f : ctx.r.measure(r.extra, FontId{11}).width + 6.f;
+            const float vw = ctx.r.measure(r.value, vf).width;
+            ctx.r.drawText({b.right() - ew + 6.f, y + 1.f}, r.extra, FontId{11}, kFaint);
+            ctx.r.drawText({b.right() - ew - vw, y}, r.value, vf, kInk);
+            ctx.r.drawText({b.x, y}, ch::detail::fit(ctx.r, r.label, FontId{12}, b.w - ew - vw - 10.f), FontId{12}, Color::rgb(0x334155));
+            const Rect track{b.x, y + 19.f, b.w, 6.f};
+            ctx.r.fillRoundedRect(track, Color::rgb(0xEEF2F7), 3.f);
+            if (r.fraction > 0) ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * static_cast<float>(std::min(1.0, r.fraction))), track.h}, ch::colors::kOptions, 3.f);
+            y += h;
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* m = std::get_if<ui::MouseDown>(&ev); m && bounds().contains(m->pos) && !rows_.empty()) {
+            const int i = static_cast<int>((m->pos.y - bounds().y - 2.f) / rowH());
+            if (i >= 0 && static_cast<std::size_t>(i) < rows_.size() && onPick) onPick(i);
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+
+private:
+    std::vector<Row> rows_;
+    std::string      empty_;
+};
+
 // ============================================================================ les cartes
 // Une carte : son id, sa carte et son graphique (un TimeChart ou un BarList), et ce qui la remplit.
 struct Slot {
@@ -248,6 +304,7 @@ struct Slot {
     ch::ChartCard* card{nullptr};
     ch::TimeChart* time{nullptr};
     ch::BarList*   bars{nullptr};
+    OptionList*    list{nullptr};
     std::string   group;   // le groupe dont viennent ses periodes (le clic)
     std::function<void(Slot&, const Data&)> fill;
 };
@@ -470,30 +527,32 @@ void fillParOffre(Slot& s, const Data& d) {
 
 void fillOptions(Slot& s, const Data& d) {
     const auto* m = d.series("option", "ventes_montant");
-    if (missing(s, d, "option", m)) return;
+    std::string why;
+    if (const std::string e = d.error("option"); !e.empty()) why = e;
+    else if (!d.reply("option")) why = "Lecture des chiffres\xE2\x80\xA6";
+    else if (!m) why = "Le service n'a pas rendu cette mesure.";
+    else if (m->refused) why = m->rights.empty() ? std::string("Cette mesure ne se filtre pas ainsi.") : "Il te manque le droit \xC2\xAB " + m->rights.front() + " \xC2\xBB pour ces chiffres.";
+    if (!why.empty()) {
+        s.card->setValue(kNone, {}, {});
+        s.list->set({}, why);
+        return;
+    }
     const auto* c = d.series("option", "ventes_commandes");
-    ch::BarListData b;
-    b.mode = ch::BarMode::Track;
-    b.color = ch::colors::kOptions;
-    b.format = eurosF();
+    std::vector<OptionList::Row> rows;
     double sum = 0, orders = 0, max = 0;
     for (const auto& p : m->parts) {
-        if (p.key.empty() || p.total <= 0) continue;
+        if (p.key.empty() || p.key == "\xE2\x80\xA6" || p.total <= 0) continue;
+        max = std::max(max, p.total);
+    }
+    for (const auto& p : m->parts) {
+        if (p.key.empty() || p.key == "\xE2\x80\xA6" || p.total <= 0) continue;
         const stats::Part* pc = c ? c->part(p.key) : nullptr;
-        ch::BarRow row;
-        row.label = partLabel("option", p.key);
-        row.value = p.total / 100.0;
-        row.extra = pc ? ch::fr::integer(pc->total) + " cmd" : std::string();
-        b.rows.push_back(row);
+        rows.push_back({partLabel("option", p.key), stats::euros(p.total), pc ? ch::fr::integer(pc->total) + " cmd" : std::string(), max > 0 ? p.total / max : 0.0});
         sum += p.total;
         orders += pc ? pc->total : 0;
-        max = std::max(max, p.total / 100.0);
     }
-    b.maxValue = max * 1.24;
-    b.rowHeight = 34.f;
-    b.clickHint = "Clic : les commandes de cette option";
-    b.emptyText = "Aucune option vendue sur la p\xC3\xA9riode";
-    s.bars->setData(std::move(b));
+    std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.fraction > b.fraction; });
+    s.list->set(std::move(rows), "Aucune option vendue sur la p\xC3\xA9riode");
     s.card->setValue(euroText(sum), {}, ch::fr::integer(orders) + (orders > 1 ? " commandes" : " commande"));
 }
 
@@ -1334,7 +1393,8 @@ private:
         gridTabs_.push_back(t);
         return ref;
     }
-    Slot& slot(CardGrid& g, Tab t, const std::string& id, const std::string& title, const std::string& small, bool bars, const std::string& group,
+    // `bars` : 0 un TimeChart, 1 un BarList, 2 la liste des options.
+    Slot& slot(CardGrid& g, Tab t, const std::string& id, const std::string& title, const std::string& small, int bars, const std::string& group,
                std::function<void(Slot&, const Data&)> fill, int col, int row, int cs = 1, int rs = 1) {
         const std::string full = std::string("stats.") + kTabs[static_cast<int>(t)].key + "." + id;
         auto card = std::make_unique<ch::ChartCard>(full + ".carte", title, small);
@@ -1342,7 +1402,8 @@ private:
         s.id = id;
         s.group = group;
         s.fill = std::move(fill);
-        if (bars) s.bars = &card->setChartAs(std::make_unique<ch::BarList>(full));
+        if (bars == 1) s.bars = &card->setChartAs(std::make_unique<ch::BarList>(full));
+        else if (bars == 2) s.list = &card->setChartAs(std::make_unique<OptionList>(full));
         else s.time = &card->setChartAs(std::make_unique<ch::TimeChart>(full));
         s.card = &g.put(std::move(card), col, row, cs, rs);
         slots_.push_back(std::make_unique<Slot>(std::move(s)));
@@ -1351,6 +1412,7 @@ private:
         const auto pick = [this, raw](const ch::Pick& p) { picked(*raw, p); };
         if (raw->time) raw->time->setOnPick(pick);
         if (raw->bars) raw->bars->setOnPick(pick);
+        if (raw->list) raw->list->onPick = [this, raw](int i) { picked(*raw, ch::Pick{i, -1, {}, ch::kNone}); };
         return *raw;
     }
 
@@ -1360,76 +1422,76 @@ private:
         g.rail("Ventes", 0, 1);
         g.rail("Licences \xC2\xB7 demandes", 2, 2);
         g.rail("PC", 3, 3);
-        slot(g, t, "montant", "Montant encaiss\xC3\xA9", "par semaine", false, "principal", fillMontant, 0, 0, 2);
-        slot(g, t, "cumul", "Cumul\xC3\xA9 sur l'ann\xC3\xA9" "e", "", false, "cumul", fillCumul, 2, 0);
-        slot(g, t, "commandes", "Commandes", "", false, "principal", fillCommandes, 3, 0);
-        slot(g, t, "panier", "Panier moyen", "", false, "principal", fillPanier, 4, 0);
-        slot(g, t, "offres", "Ventes par offre", "montant par semaine", false, "offre", fillParOffre, 0, 1, 2);
-        slot(g, t, "options", "Options vendues", "", true, "option", fillOptions, 2, 1);
-        slot(g, t, "vendues", "Licences vendues", "", false, "principal", fillVendues, 3, 1);
-        slot(g, t, "remboursements", "Remboursements", "", false, "principal", fillRemboursements, 4, 1);
-        slot(g, t, "actives", "Licences actives", "", false, "principal", fillActives, 0, 2);
-        slot(g, t, "mouvements", "Mouvements des licences", "", false, "principal", fillMouvements, 1, 2);
-        slot(g, t, "echeances", "\xC3\x89" "ch\xC3\xA9" "ances", "les 90 jours \xC3\xA0 venir", false, "echeances", fillEcheances, 2, 2);
-        slot(g, t, "demandes", "Demandes", "", false, "principal", fillDemandes, 3, 2);
-        slot(g, t, "delai", "D\xC3\xA9lai de r\xC3\xA9ponse", "m\xC3\xA9" "dian", false, "principal", fillDelai, 4, 2);
-        slot(g, t, "pc", "PC actifs", "par offre, \xC3\xA0 la fin de chaque semaine", false, "offre", fillPcActifs, 0, 3, 2);
-        slot(g, t, "mouvements-pc", "Mouvements des PC", "", false, "pc", fillMouvementsPc, 2, 3);
-        slot(g, t, "flottantes", "Flottantes", "le pic du jour", false, "flottantes", fillFlottantes, 3, 3);
-        slot(g, t, "decouvertes", "D\xC3\xA9" "couvertes", "l'essai", false, "pc", fillDecouvertes, 4, 3);
+        slot(g, t, "montant", "Montant encaiss\xC3\xA9", "par semaine", 0, "principal", fillMontant, 0, 0, 2);
+        slot(g, t, "cumul", "Cumul\xC3\xA9 sur l'ann\xC3\xA9" "e", "", 0, "cumul", fillCumul, 2, 0);
+        slot(g, t, "commandes", "Commandes", "", 0, "principal", fillCommandes, 3, 0);
+        slot(g, t, "panier", "Panier moyen", "", 0, "principal", fillPanier, 4, 0);
+        slot(g, t, "offres", "Ventes par offre", "montant par semaine", 0, "offre", fillParOffre, 0, 1, 2);
+        slot(g, t, "options", "Options vendues", "", 2, "option", fillOptions, 2, 1);
+        slot(g, t, "vendues", "Licences vendues", "", 0, "principal", fillVendues, 3, 1);
+        slot(g, t, "remboursements", "Remboursements", "", 0, "principal", fillRemboursements, 4, 1);
+        slot(g, t, "actives", "Licences actives", "", 0, "principal", fillActives, 0, 2);
+        slot(g, t, "mouvements", "Mouvements des licences", "", 0, "principal", fillMouvements, 1, 2);
+        slot(g, t, "echeances", "\xC3\x89" "ch\xC3\xA9" "ances", "les 90 jours \xC3\xA0 venir", 0, "echeances", fillEcheances, 2, 2);
+        slot(g, t, "demandes", "Demandes", "", 0, "principal", fillDemandes, 3, 2);
+        slot(g, t, "delai", "D\xC3\xA9lai de r\xC3\xA9ponse", "m\xC3\xA9" "dian", 0, "principal", fillDelai, 4, 2);
+        slot(g, t, "pc", "PC actifs", "par offre, \xC3\xA0 la fin de chaque semaine", 0, "offre", fillPcActifs, 0, 3, 2);
+        slot(g, t, "mouvements-pc", "Mouvements des PC", "", 0, "pc", fillMouvementsPc, 2, 3);
+        slot(g, t, "flottantes", "Flottantes", "le pic du jour", 0, "flottantes", fillFlottantes, 3, 3);
+        slot(g, t, "decouvertes", "D\xC3\xA9" "couvertes", "l'essai", 0, "pc", fillDecouvertes, 4, 3);
     }
     void buildSales() {
         const Tab t = Tab::Sales;
         CardGrid& g = grid(t, 4, 3, 170.f);
-        slot(g, t, "montant", "Montant encaiss\xC3\xA9", "par semaine", false, "principal", fillMontant, 0, 0, 2);
-        slot(g, t, "cumul", "Cumul\xC3\xA9 sur l'ann\xC3\xA9" "e", "", false, "cumul", fillCumul, 2, 0);
-        slot(g, t, "commandes", "Commandes", "", false, "principal", fillCommandes, 3, 0);
-        slot(g, t, "offres", "Ventes par offre", "montant par semaine", false, "offre", fillParOffre, 0, 1, 2);
-        slot(g, t, "panier", "Panier moyen", "", false, "principal", fillPanier, 2, 1);
-        slot(g, t, "options", "Options vendues", "", true, "option", fillOptions, 3, 1);
-        slot(g, t, "clients", "Les meilleurs clients", "montant encaiss\xC3\xA9", true, "client", fillTopClients, 0, 2);
-        slot(g, t, "livrees", "Livr\xC3\xA9" "es par", "le montant des commandes que chacun a livr\xC3\xA9" "es", false, "admin",
+        slot(g, t, "montant", "Montant encaiss\xC3\xA9", "par semaine", 0, "principal", fillMontant, 0, 0, 2);
+        slot(g, t, "cumul", "Cumul\xC3\xA9 sur l'ann\xC3\xA9" "e", "", 0, "cumul", fillCumul, 2, 0);
+        slot(g, t, "commandes", "Commandes", "", 0, "principal", fillCommandes, 3, 0);
+        slot(g, t, "offres", "Ventes par offre", "montant par semaine", 0, "offre", fillParOffre, 0, 1, 2);
+        slot(g, t, "panier", "Panier moyen", "", 0, "principal", fillPanier, 2, 1);
+        slot(g, t, "options", "Options vendues", "", 2, "option", fillOptions, 3, 1);
+        slot(g, t, "clients", "Les meilleurs clients", "montant encaiss\xC3\xA9", 1, "client", fillTopClients, 0, 2);
+        slot(g, t, "livrees", "Livr\xC3\xA9" "es par", "le montant des commandes que chacun a livr\xC3\xA9" "es", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "ventes_montant", 0.01, true, "Clic : ses commandes"); }, 1, 2);
-        slot(g, t, "vendues", "Licences vendues", "", false, "principal", fillVendues, 2, 2);
-        slot(g, t, "remboursements", "Remboursements", "", false, "principal", fillRemboursements, 3, 2);
+        slot(g, t, "vendues", "Licences vendues", "", 0, "principal", fillVendues, 2, 2);
+        slot(g, t, "remboursements", "Remboursements", "", 0, "principal", fillRemboursements, 3, 2);
     }
     void buildLicences() {
         const Tab t = Tab::Licences;
         CardGrid& g = grid(t, 4, 2, 200.f);
-        slot(g, t, "actives", "Licences actives", "", false, "principal", fillActives, 0, 0, 2);
-        slot(g, t, "mouvements", "Mouvements des licences", "", false, "principal", fillMouvements, 2, 0);
-        slot(g, t, "echeances", "\xC3\x89" "ch\xC3\xA9" "ances", "les 90 jours \xC3\xA0 venir", false, "echeances", fillEcheances, 3, 0);
-        slot(g, t, "par-offre", "Licences actives par offre", "", false, "offre", fillLicencesParOffre, 0, 1, 2);
-        slot(g, t, "options-lic", "Options ajout\xC3\xA9" "es", "", false, "principal",
+        slot(g, t, "actives", "Licences actives", "", 0, "principal", fillActives, 0, 0, 2);
+        slot(g, t, "mouvements", "Mouvements des licences", "", 0, "principal", fillMouvements, 2, 0);
+        slot(g, t, "echeances", "\xC3\x89" "ch\xC3\xA9" "ances", "les 90 jours \xC3\xA0 venir", 0, "echeances", fillEcheances, 3, 0);
+        slot(g, t, "par-offre", "Licences actives par offre", "", 0, "offre", fillLicencesParOffre, 0, 1, 2);
+        slot(g, t, "options-lic", "Options ajout\xC3\xA9" "es", "", 0, "principal",
              [](Slot& s, const Data& d) {
                  fillSimpleLine(s, d, "principal", "licences_options", 1.0, intF(), false, "Clic : ces licences", [](double v) { return intText(v); });
              },
              2, 1);
-        slot(g, t, "signees", "Sign\xC3\xA9" "es par", "les licences neuves", false, "admin",
+        slot(g, t, "signees", "Sign\xC3\xA9" "es par", "les licences neuves", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "licences_nouvelles", 1.0, false, "Clic : ses licences"); }, 3, 1);
     }
     void buildPcs() {
         const Tab t = Tab::Pcs;
         CardGrid& g = grid(t, 5, 2, 200.f);
-        slot(g, t, "pc", "PC actifs", "par offre, \xC3\xA0 la fin de chaque semaine", false, "offre", fillPcActifs, 0, 0, 3);
-        slot(g, t, "mouvements-pc", "Mouvements des PC", "", false, "pc", fillMouvementsPc, 3, 0, 2);
-        slot(g, t, "flottantes", "Flottantes", "le pic du jour", false, "flottantes", fillFlottantes, 0, 1, 3);
-        slot(g, t, "decouvertes", "D\xC3\xA9" "couvertes", "l'essai", false, "pc", fillDecouvertes, 3, 1, 2);
+        slot(g, t, "pc", "PC actifs", "par offre, \xC3\xA0 la fin de chaque semaine", 0, "offre", fillPcActifs, 0, 0, 3);
+        slot(g, t, "mouvements-pc", "Mouvements des PC", "", 0, "pc", fillMouvementsPc, 3, 0, 2);
+        slot(g, t, "flottantes", "Flottantes", "le pic du jour", 0, "flottantes", fillFlottantes, 0, 1, 3);
+        slot(g, t, "decouvertes", "D\xC3\xA9" "couvertes", "l'essai", 0, "pc", fillDecouvertes, 3, 1, 2);
     }
     void buildRequests() {
         const Tab t = Tab::Requests;
         CardGrid& g = grid(t, 5, 2, 200.f);
-        slot(g, t, "demandes", "Demandes", "", false, "principal", fillDemandes, 0, 0, 2);
-        slot(g, t, "delai", "D\xC3\xA9lai de r\xC3\xA9ponse", "m\xC3\xA9" "dian", false, "principal", fillDelai, 2, 0, 2);
-        slot(g, t, "attente", "En attente", "\xC3\xA0 la fin de chaque p\xC3\xA9riode", false, "principal",
+        slot(g, t, "demandes", "Demandes", "", 0, "principal", fillDemandes, 0, 0, 2);
+        slot(g, t, "delai", "D\xC3\xA9lai de r\xC3\xA9ponse", "m\xC3\xA9" "dian", 0, "principal", fillDelai, 2, 0, 2);
+        slot(g, t, "attente", "En attente", "\xC3\xA0 la fin de chaque p\xC3\xA9riode", 0, "principal",
              [](Slot& s, const Data& d) {
                  fillSimpleLine(s, d, "principal", "demandes_attente", 1.0, intF(), true, "Clic : les demandes en attente", [](double v) { return intText(v); });
              },
              4, 0);
-        slot(g, t, "traitees", "Trait\xC3\xA9" "es par", "", false, "admin",
+        slot(g, t, "traitees", "Trait\xC3\xA9" "es par", "", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "demandes_traitees", 1.0, false, "Clic : ses demandes"); }, 0, 1, 2);
-        slot(g, t, "issue", "Accept\xC3\xA9" "es, refus\xC3\xA9" "es", "", false, "principal", fillAcceptRefuse, 2, 1, 2);
-        slot(g, t, "ancienne", "La plus ancienne qui attend", "", false, "pc",
+        slot(g, t, "issue", "Accept\xC3\xA9" "es, refus\xC3\xA9" "es", "", 0, "principal", fillAcceptRefuse, 2, 1, 2);
+        slot(g, t, "ancienne", "La plus ancienne qui attend", "", 0, "pc",
              [](Slot& s, const Data& d) {
                  fillSimpleLine(s, d, "pc", "demandes_plus_ancienne", 1.0 / 3600.0, hoursF(), true, "Clic : les demandes en attente",
                                 [](double v) { return stats::duration(v); });
@@ -1439,13 +1501,13 @@ private:
     void buildAdmins() {
         const Tab t = Tab::Admins;
         CardGrid& g = grid(t, 3, 2, 210.f);
-        slot(g, t, "signees", "Licences sign\xC3\xA9" "es", "neuves, par admin", false, "admin",
+        slot(g, t, "signees", "Licences sign\xC3\xA9" "es", "neuves, par admin", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "licences_nouvelles", 1.0, false, "Clic : ses licences"); }, 0, 0);
-        slot(g, t, "traitees", "Demandes trait\xC3\xA9" "es", "par admin", false, "admin",
+        slot(g, t, "traitees", "Demandes trait\xC3\xA9" "es", "par admin", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "demandes_traitees", 1.0, false, "Clic : ses demandes"); }, 1, 0);
-        slot(g, t, "livrees", "Ventes livr\xC3\xA9" "es", "par admin", false, "admin",
+        slot(g, t, "livrees", "Ventes livr\xC3\xA9" "es", "par admin", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "ventes_montant", 0.01, true, "Clic : ses commandes"); }, 2, 0);
-        slot(g, t, "jours", "Jours de connexion", "par admin", false, "admin",
+        slot(g, t, "jours", "Jours de connexion", "par admin", 0, "admin",
              [](Slot& s, const Data& d) { fillByAdmin(s, d, "admin_jours", 1.0, false, "Clic : son journal"); }, 0, 1);
         // le tableau des admins (ses heures a l'heure du PC)
         auto card = std::make_unique<AdminsCard>("stats.admins.qui");
@@ -1631,6 +1693,7 @@ private:
         } else if (id == "options" || id == "clients") {
             f.page = "commandes";
             if (s.bars && p.index >= 0 && static_cast<std::size_t>(p.index) < s.bars->data().rows.size()) f.search = s.bars->data().rows[static_cast<std::size_t>(p.index)].label;
+            if (s.list && p.index >= 0 && static_cast<std::size_t>(p.index) < s.list->rows().size()) f.search = s.list->rows()[static_cast<std::size_t>(p.index)].label;
             f.periodField = "Date";
             f.from = data_.period.from;
             f.to = data_.period.to;

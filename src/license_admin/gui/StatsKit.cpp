@@ -422,6 +422,11 @@ class SegGroup::Seg final : public ui::Button {
 public:
     Seg(SegGroup& g, std::string key, std::string label, std::string id, ui::Icon icon)
         : ui::Button(label, std::move(id)), group_(g), key_(std::move(key)), label_(std::move(label)), icon_(icon) {}
+    void setLabel(std::string label) {
+        label_ = std::move(label);
+        setText(label_);
+        invalidate();
+    }
     [[nodiscard]] float natural() const {
         return std::ceil(ui::measureWidth(label_, gfx::semibold(FontId{12}))) + 20.f + (icon_ != ui::Icon::None ? 19.f : 0.f);
     }
@@ -471,6 +476,15 @@ void SegGroup::setCurrent(const std::string& key) {
     current_ = key;
     invalidate();
     for (auto* b : buttons_) b->invalidate();
+}
+
+void SegGroup::setLabel(const std::string& key, std::string label) {
+    for (std::size_t i = 0; i < items_.size(); ++i)
+        if (items_[i].key == key) {
+            items_[i].label = label;
+            static_cast<Seg*>(buttons_[i])->setLabel(std::move(label));
+            invalidateLayout();
+        }
 }
 
 float SegGroup::preferredWidth() const {

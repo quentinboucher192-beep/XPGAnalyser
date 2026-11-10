@@ -320,6 +320,9 @@ public:
             away += now - p.seen > 30 * 86400 ? 1 : 0;
         }
         counts_ = {r.behindTotal, two, away};
+        filter_->setLabel("tous", "Tous \xC2\xB7 " + std::to_string(r.behindTotal));
+        filter_->setLabel("retard", "2 versions de retard ou plus \xC2\xB7 " + std::to_string(two));
+        filter_->setLabel("absents", "pas vus depuis 30 j \xC2\xB7 " + std::to_string(away));
         all_->setText("Voir les " + std::to_string(r.behindTotal) + " dans Activations \xE2\x80\xBA");
         invalidateLayout();
         invalidate();
@@ -344,12 +347,6 @@ protected:
     }
     void onPaint(const ui::PaintContext& ctx) override {
         const Rect b = bounds();
-        // les nombres des filtres (dessines dans la piste, apres chaque libelle)
-        const std::vector<std::string> keys = {"tous", "retard", "absents"};
-        for (std::size_t i = 0; i < keys.size() && i < counts_.size(); ++i)
-            if (ui::Button* btn = filter_->button(keys[i])) {
-                (void)btn;
-            }
         const float top = b.y + 42.f;
         const char* heads[] = {"PC", "CLIENT", "VERSION", "VU"};
         const float cx[] = {0.f, 0.36f, 0.66f, 0.84f};
@@ -660,8 +657,13 @@ private:
             for (const auto& c : r.adoption)
                 if (c.software == group) curves.push_back(&c);
             std::sort(curves.begin(), curves.end(), [](const auto* a, const auto* b) { return a->published < b->published; });
+            // 4 versions au plus (la maquette) : les correctifs (1.45.2) d'abord laisses de cote, puis les plus anciennes
+            for (auto it = curves.begin(); curves.size() > 4 && it != curves.end();) {
+                const std::string& v = (*it)->version;
+                const bool patch = v.size() > 2 && v.substr(v.rfind('.') + 1) != "0";
+                it = patch ? curves.erase(it) : it + 1;
+            }
             if (curves.size() > 4) curves.erase(curves.begin(), curves.end() - 4);
-            // les correctifs (1.45.2) sont gardes s'il reste de la place ; la maquette montre 4 versions
             std::size_t n = 0;
             for (const auto* c : curves) n = std::max(n, c->days.size());
             n = std::max<std::size_t>(n, 43);

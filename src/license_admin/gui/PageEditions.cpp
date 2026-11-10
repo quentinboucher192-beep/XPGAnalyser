@@ -1822,6 +1822,10 @@ public:
             if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
             select(ids_[rows.front()]);
         });
+        // 1.47.0 (planches 06, 07, 12) : la barre (le produit, l'etat, l'offre qui l'accorde...), le clic droit, le depliage.
+        setupBar(*table_, barFields(), "fonctionnalites", "fonctionnalit\xC3\xA9s", [this] { rebuildTable(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
 
         label_ = add(*this, std::make_unique<ui::InputText>("fonctionnalites.libelle"));
         product_ = add(*this, std::make_unique<ui::InputText>("fonctionnalites.produit"));
@@ -2086,25 +2090,34 @@ private:
 
     void rebuildTable() {
         const lic::Registry& reg = draft().reg;
-        const lic::Registry* signedReg = ws().hasRegistry() ? &ws().registry() : nullptr;
         std::vector<std::vector<std::string>> rows, keys;
         std::vector<int> marks;
         std::vector<bool> retired;
         ids_.clear();
+        // 1.47.0 : toutes les fonctionnalites pour la barre (texts_), puis la table : celles qu'elle garde.
+        texts_.clear();
         for (const auto& f : reg.features) {
-            ids_.push_back(f.id);
-            std::string limits;
-            for (const auto& l : f.limits) limits += (limits.empty() ? "" : ", ") + l.id;
-            std::size_t used = 0;
+            auto t = cellsOf(f);
+            t.push_back(f.retired ? "retir\xC3\xA9" "e" : "en service");
+            std::string by, in;
             for (const auto& e : reg.editions)
-                if (grants(e, f.id)) ++used;
-            rows.push_back({f.id, f.product, f.label, limits, f.retired ? "retir\xC3\xA9" "e" : "", std::to_string(used)});
-            keys.push_back({"", "", "", "", "", padKey(static_cast<long long>(used))});
-            const lic::FeatureDef* o = signedReg ? signedReg->feature(f.id) : nullptr;
-            int mark = 0;
-            if (!o) mark = 2;
-            else if (o->label != f.label || o->product != f.product || o->retired != f.retired || !sameLimits(o->limits, f.limits)) mark = 1;
-            marks.push_back(mark);
+                if (grants(e, f.id)) by += (by.empty() ? "" : "\n") + e.id;
+            for (const auto& o : reg.options)
+                if (std::any_of(o.features.begin(), o.features.end(), [&](const lic::FeatureGrant& g) { return g.id == f.id; }))
+                    in += (in.empty() ? "" : "\n") + (o.label.empty() ? o.id : o.label);
+            t.push_back(by);
+            t.push_back(in);
+            t.push_back(markText(markOf(f)));
+            texts_.push_back(std::move(t));
+        }
+        bar_->refreshCounts();
+        for (std::size_t i = 0; i < reg.features.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            const lic::FeatureDef& f = reg.features[i];
+            ids_.push_back(f.id);
+            rows.push_back(cellsOf(f));
+            keys.push_back({"", "", "", "", "", padKey(static_cast<long long>(usedBy(f.id)))});
+            marks.push_back(markOf(f));
             retired.push_back(f.retired);
         }
         const float scroll = table_->scrollOffset();
@@ -2124,6 +2137,148 @@ private:
             if (ids_[i] == selected_) table_->selectModelRows({static_cast<RowIndex>(i)}, false);
         table_->setScrollOffset(scroll);
         loading_ = false;
+    }
+
+    // ---- 1.47.0 : la barre, le clic droit, le depliage ----
+    std::size_t usedBy(const std::string& id) const {
+        std::size_t n = 0;
+        for (const auto& e : draft().reg.editions) n += grants(e, id) ? 1 : 0;
+        return n;
+    }
+    std::vector<std::string> cellsOf(const lic::FeatureDef& f) const {
+        std::string limits;
+        for (const auto& l : f.limits) limits += (limits.empty() ? "" : ", ") + l.id;
+        return {f.id, f.product, f.label, limits, f.retired ? "retir\xC3\xA9" "e" : "", std::to_string(usedBy(f.id))};
+    }
+    int markOf(const lic::FeatureDef& f) const {
+        const lic::FeatureDef* o = ws().hasRegistry() ? ws().registry().feature(f.id) : nullptr;
+        if (!o) return 2;
+        return o->label != f.label || o->product != f.product || o->retired != f.retired || !sameLimits(o->limits, f.limits) ? 1 : 0;
+    }
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(10);
+        f[0] = {.title = "Identifiant", .kind = K::Text};
+        f[1] = {.title = "Produit", .chip = true, .noun = "un produit"};
+        f[2] = {.title = "Libell\xC3\xA9", .kind = K::Text};
+        f[3] = {.title = "Limites", .kind = K::Text};
+        f[4] = {.title = "Retir\xC3\xA9" "e", .kind = K::Text};
+        f[5] = {.title = "\xC3\x89" "ditions", .kind = K::Text};
+        f[6] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat", .searchable = false, .order = {"en service", "retir\xC3\xA9" "e"}};
+        f[7] = {.title = "Accord\xC3\xA9" "e par", .chip = true, .chipLabel = "Offre", .noun = "une offre", .searchable = false, .split = "\n"};
+        f[8] = {.title = "Dans les options", .noun = "une option", .searchable = false, .split = "\n"};
+        f[9] = {.title = "Brouillon", .noun = "un \xC3\xA9tat", .searchable = false, .order = {"sign\xC3\xA9" "e", "modifi\xC3\xA9" "e", "nouvelle"}};
+        return f;
+    }
+    void applyFocus(const std::string& what) override {
+        if (what.rfind("offre:", 0) == 0) {   // << Ses fonctionnalites >> (Offres)
+            bar_->clearAll();
+            bar_->filterOn(7, what.substr(6));
+        } else if (what.rfind("option:", 0) == 0) {   // << Ce qu'elle ouvre >> (Options)
+            bar_->clearAll();
+            bar_->filterOn(8, what.substr(7));
+        }
+    }
+    void setRetired(const std::string& id, bool on) {
+        for (auto& f : draft().reg.features)
+            if (f.id == id && f.retired != on) {
+                f.retired = on;
+                edited();
+                if (id == selected_) loadPanel();
+            }
+    }
+
+    ui::ListMenu menuFor() {
+        const auto sel = table_->selectedModelRows();
+        ui::ListMenu m({sel.size(), "fonctionnalit\xC3\xA9s", true});
+        if (sel.empty() || sel.front() >= ids_.size()) return m;
+        const RowIndex row = sel.front();
+        const lic::Registry& reg = draft().reg;
+        const lic::FeatureDef* f = reg.feature(ids_[row]);
+        if (!f) return m;
+        const std::string id = f->id, label = f->label.empty() ? f->id : f->label;
+        m.unfold(*table_);
+        if (f->retired)
+            m.action({.label = "Remettre en service", .icon = ui::Icon::Undo, .run = [this, id] { setRetired(id, false); }, .note = "dans le brouillon, \xC3\xA0 signer"});
+        else
+            m.action({.label = "Retirer (plus accord\xC3\xA9" "e)", .icon = ui::Icon::Close, .run = [this, id] { setRetired(id, true); },
+                      .note = "dans le brouillon, \xC3\xA0 signer ; les licences d\xC3\xA9j\xC3\xA0 sign\xC3\xA9" "es la gardent"});
+        std::vector<std::string> by;
+        for (const auto& e : reg.editions)
+            if (grants(e, id)) by.push_back(e.id);
+        std::size_t options = 0;
+        for (const auto& o : reg.options)
+            options += std::any_of(o.features.begin(), o.features.end(), [&](const lic::FeatureGrant& g) { return g.id == id; }) ? 1 : 0;
+        m.goTo({.label = "Les offres qui l'accordent (" + std::to_string(by.size()) + ")", .icon = ui::Icon::Layers,
+                .why = by.empty() ? std::string("aucune offre ne l'accorde") : std::string(), .run = [this, label] { goTo("editions", "fonction:" + label); }});
+        m.goTo({.label = "Les options qui l'ouvrent (" + std::to_string(options) + ")", .icon = ui::Icon::Star,
+                .why = options ? std::string() : std::string("aucune option ne l'ouvre"), .run = [this, label] { goTo("options", "fonction:" + label); }});
+        m.filterOn({.label = "Ce produit : " + f->product, .run = [this, p = f->product] { bar_->filterOn(1, p); }});
+        m.filterOn({.label = std::string("Cet \xC3\xA9tat : ") + (f->retired ? "retir\xC3\xA9" "e" : "en service"),
+                    .run = [this, st = std::string(f->retired ? "retir\xC3\xA9" "e" : "en service")] { bar_->filterOn(6, st); }});
+        for (std::size_t k = 0; k < by.size() && k < 6; ++k)
+            m.filterOn({.label = "Accord\xC3\xA9" "e par : " + by[k], .run = [this, v = by[k]] { bar_->filterOn(7, v); }});
+        m.copy("L'identifiant", id, ui::Icon::Copy);
+        m.copy("Le libell\xC3\xA9", f->label, ui::Icon::Copy);
+        m.copy("La ligne", lineOf(*table_, row), ui::Icon::Copy);
+        m.exportRows([this, sel] { listkit::exportRows(host_, *table_, sel, "fonctionnalites.csv", "fonctionnalit\xC3\xA9s"); });
+        m.note("Rien ne se supprime", "une fonctionnalit\xC3\xA9 se retire : des licences l'ont");
+        return m;
+    }
+
+    // La ligne depliee : ce qu'elle est (ses limites), qui l'accorde (les offres, avec leurs limites ; les options), chez les
+    // clients (les licences en cours qui l'ont).
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= ids_.size()) return nullptr;
+        const lic::Registry& reg = draft().reg;
+        const lic::FeatureDef* f = reg.feature(ids_[r]);
+        if (!f) return nullptr;
+        const std::string id = f->id;
+        auto card = std::make_unique<ui::UnfoldCard>("fonctionnalites.depliage");
+        {
+            ui::UnfoldCard::Box b{.title = "CE QU'ELLE EST"};
+            b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + f->label + "** \xC2\xB7 " + f->product, .tone = f->retired ? ui::Tone::Muted : ui::Tone::None});
+            b.lines.push_back({.icon = ui::Icon::Code, .text = id, .mono = true});
+            for (const auto& l : f->limits) b.lines.push_back({.icon = ui::Icon::Settings, .text = "limite **" + l.id + "** : " + l.label});
+            if (f->limits.empty()) b.lines.push_back({.icon = ui::Icon::Settings, .text = "sans limite nomm\xC3\xA9" "e"});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "QUI L'ACCORDE"};
+            for (const auto& e : reg.editions)
+                for (const auto& g : e.features)
+                    if (g.id == id && b.lines.size() < 5) {
+                        std::string t = "offre **" + e.id + "**";
+                        for (const auto& [name, v] : g.limits) t += " \xC2\xB7 " + name + " = " + std::to_string(v);
+                        ui::UnfoldCard::Line l{.icon = ui::Icon::Layers, .text = t, .tone = e.retired ? ui::Tone::Muted : ui::Tone::None};
+                        const std::string label = f->label.empty() ? id : f->label;
+                        l.link = [this, label] { goTo("editions", "fonction:" + label); };
+                        b.lines.push_back(std::move(l));
+                    }
+            for (const auto& o : reg.options)
+                if (b.lines.size() < 6 && std::any_of(o.features.begin(), o.features.end(), [&](const lic::FeatureGrant& g) { return g.id == id; }))
+                    b.lines.push_back({.icon = ui::Icon::Star, .text = "option **" + (o.label.empty() ? o.id : o.label) + "**"});
+            if (b.lines.empty()) b.lines.push_back({.icon = ui::Icon::Info, .text = "personne : coche-la sur une offre (page Offres)"});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "CHEZ LES CLIENTS"};
+            std::size_t n = 0;
+            std::set<std::string> clients;
+            for (const auto& l : ws().licences())
+                if (Workspace::inForce(l) && l.licence.grant(id)) {
+                    ++n;
+                    clients.insert(l.licence.customer);
+                }
+            b.lines.push_back({.icon = ui::Icon::Document,
+                               .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s" : "") + " en cours l'" + (n > 1 ? "ont" : "a") + ", chez **" +
+                                       std::to_string(clients.size()) + "** client" + (clients.size() > 1 ? "s" : "")});
+            if (f->retired) b.lines.push_back({.icon = ui::Icon::Info, .text = "retir\xC3\xA9" "e : les licences sign\xC3\xA9" "es la gardent jusqu'\xC3\xA0 leur fin", .tone = ui::Tone::Muted});
+            card->addBox(std::move(b));
+        }
+        addCurve(*card, "LICENCES QUI L'ONT, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds) { return l.licence.grant(id) != nullptr; }));
+        addSigner(*card);
+        return card;
     }
 
     void rebuildLimits() {
@@ -2247,6 +2402,10 @@ public:
             if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
             select(ids_[rows.front()]);
         });
+        // 1.47.0 (planches 06, 07, 12) : la barre (ce qu'elle ouvre, les offres, l'etat...), le clic droit, le depliage.
+        setupBar(*table_, barFields(), "options", "options", [this] { rebuildTable(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
         label_ = add(*this, std::make_unique<ui::InputText>("options.nom"));
         description_ = add(*this, std::make_unique<ui::InputText>("options.description"));
         description_->setPlaceholder("PDF et Excel multi-pages (facultatif)");
@@ -2650,26 +2809,33 @@ private:
 
     void rebuildTable() {
         const lic::Registry& reg = draft().reg;
-        const lic::Registry* signedReg = ws().hasRegistry() ? &ws().registry() : nullptr;
         std::vector<std::vector<std::string>> rows, keys;
         std::vector<int> marks;
         std::vector<bool> retired;
         ids_.clear();
+        // 1.47.0 : toutes les options pour la barre (texts_ : ce qu'elle ouvre et ses offres une par ligne), puis la table.
+        texts_.clear();
         for (const auto& o : reg.options) {
+            auto t = cellsOf(o);
+            t[2] = join(featureLabels(o), "\n");
+            std::vector<std::string> eds;
+            for (const auto& e : reg.editions)
+                if (o.offeredTo(e.id)) eds.push_back(e.id);
+            t[4] = join(eds, "\n");
+            t.push_back(o.retired ? "retir\xC3\xA9" "e" : "propos\xC3\xA9" "e");
+            t.push_back(o.shop ? "dans la boutique" : "hors boutique");
+            t.push_back(o.trialDays > 0 ? "essai " + std::to_string(o.trialDays) + " j" : std::string("sans essai"));
+            t.push_back(markText(markOf(o)));
+            texts_.push_back(std::move(t));
+        }
+        bar_->refreshCounts();
+        for (std::size_t i = 0; i < reg.options.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            const lic::OptionDef& o = reg.options[i];
             ids_.push_back(o.id);
-            std::vector<std::string> fl;
-            for (const auto& g : o.features) {
-                const lic::FeatureDef* f = reg.feature(g.id);
-                fl.push_back(f ? f->label : g.id);
-            }
-            std::vector<std::string> dl;
-            for (const auto& d : o.durations) dl.push_back((d.price.empty() ? std::string("sur demande") : d.price) + " " + durationLabel(d.days));
-            const int n = inUse(o.id);
-            rows.push_back({o.id, o.label, join(fl, ", "), join(dl, " \xC2\xB7 "), o.editions.empty() ? std::string("toutes") : join(o.editions, ", "),
-                            std::to_string(n)});
-            keys.push_back({"", "", "", "", "", padKey(n)});
-            const lic::OptionDef* s = signedReg ? signedReg->option(o.id) : nullptr;
-            marks.push_back(!s ? 2 : (*s == o ? 0 : 1));
+            rows.push_back(cellsOf(o));
+            keys.push_back({"", "", "", "", "", padKey(inUse(o.id))});
+            marks.push_back(markOf(o));
             retired.push_back(o.retired);
         }
         const float scroll = table_->scrollOffset();
@@ -2690,6 +2856,147 @@ private:
         table_->setScrollOffset(scroll);
         loading_ = false;
         rebuildChecks();
+    }
+
+    // ---- 1.47.0 : la barre, le clic droit, le depliage ----
+    std::vector<std::string> featureLabels(const lic::OptionDef& o) const {
+        std::vector<std::string> out;
+        for (const auto& g : o.features) {
+            const lic::FeatureDef* f = draft().reg.feature(g.id);
+            out.push_back(f ? f->label : g.id);
+        }
+        return out;
+    }
+    std::vector<std::string> cellsOf(const lic::OptionDef& o) const {
+        std::vector<std::string> dl;
+        for (const auto& d : o.durations) dl.push_back((d.price.empty() ? std::string("sur demande") : d.price) + " " + durationLabel(d.days));
+        return {o.id, o.label, join(featureLabels(o), ", "), join(dl, " \xC2\xB7 "), o.editions.empty() ? std::string("toutes") : join(o.editions, ", "),
+                std::to_string(inUse(o.id))};
+    }
+    int markOf(const lic::OptionDef& o) const {
+        const lic::OptionDef* s = ws().hasRegistry() ? ws().registry().option(o.id) : nullptr;
+        return !s ? 2 : (*s == o ? 0 : 1);
+    }
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(10);
+        f[0] = {.title = "Identifiant", .kind = K::Text};
+        f[1] = {.title = "Nom", .kind = K::Text};
+        f[2] = {.title = "Ouvre", .chip = true, .noun = "une fonctionnalit\xC3\xA9", .split = "\n"};
+        f[3] = {.title = "Dur\xC3\xA9" "es et prix", .kind = K::Text};
+        f[4] = {.title = "Propos\xC3\xA9" "e \xC3\xA0", .chip = true, .chipLabel = "Offre", .noun = "une offre", .split = "\n"};
+        f[5] = {.title = "En cours", .kind = K::Text};
+        f[6] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat", .searchable = false, .order = {"propos\xC3\xA9" "e", "retir\xC3\xA9" "e"}};
+        f[7] = {.title = "Boutique", .noun = "la boutique", .searchable = false};
+        f[8] = {.title = "Essai", .noun = "un essai", .searchable = false};
+        f[9] = {.title = "Brouillon", .noun = "un \xC3\xA9tat", .searchable = false, .order = {"sign\xC3\xA9" "e", "modifi\xC3\xA9" "e", "nouvelle"}};
+        return f;
+    }
+    void applyFocus(const std::string& what) override {
+        if (what.rfind("offre:", 0) == 0) {   // << Ses options >> (Offres)
+            bar_->clearAll();
+            bar_->filterOn(4, what.substr(6));
+        } else if (what.rfind("fonction:", 0) == 0) {   // << Les options qui l'ouvrent >> (Fonctionnalites)
+            bar_->clearAll();
+            bar_->filterOn(2, what.substr(9));
+        }
+    }
+    // Une case de la fiche, depuis le clic droit (le brouillon, comme la case elle-meme).
+    void setFlag(const std::string& id, bool lic::OptionDef::*member, bool on) {
+        for (auto& o : draft().reg.options)
+            if (o.id == id && o.*member != on) {
+                o.*member = on;
+                edited();
+                if (id == selected_) loadPanel();
+            }
+    }
+
+    ui::ListMenu menuFor() {
+        const auto sel = table_->selectedModelRows();
+        ui::ListMenu m({sel.size(), "options", true});
+        if (sel.empty() || sel.front() >= ids_.size()) return m;
+        const RowIndex row = sel.front();
+        const lic::Registry& reg = draft().reg;
+        const lic::OptionDef* o = reg.option(ids_[row]);
+        if (!o) return m;
+        const std::string id = o->id, label = o->label.empty() ? o->id : o->label;
+        m.unfold(*table_);
+        const std::string draftNote = "dans le brouillon, \xC3\xA0 signer";
+        if (o->shop) m.action({.label = "\xC3\x94ter de la boutique des Studios", .icon = ui::Icon::Close, .run = [this, id] { setFlag(id, &lic::OptionDef::shop, false); }, .note = draftNote});
+        else m.action({.label = "Mettre dans la boutique des Studios", .icon = ui::Icon::Globe, .run = [this, id] { setFlag(id, &lic::OptionDef::shop, true); }, .note = draftNote});
+        if (o->retired) m.action({.label = "Remettre en service", .icon = ui::Icon::Undo, .run = [this, id] { setFlag(id, &lic::OptionDef::retired, false); }, .note = draftNote});
+        else m.action({.label = "Retirer (plus propos\xC3\xA9" "e)", .icon = ui::Icon::Close, .run = [this, id] { setFlag(id, &lic::OptionDef::retired, true); },
+                       .note = draftNote + " ; les licences qui l'ont la gardent"});
+        const int n = inUse(id);
+        m.goTo({.label = "Les licences qui l'ont (" + std::to_string(n) + ")", .icon = ui::Icon::Document,
+                .why = n ? std::string() : std::string("aucune licence en cours ne l'a"), .run = [this, id] { goTo("licences", "option:" + id); }});
+        m.goTo({.label = "Ce qu'elle ouvre (Fonctionnalit\xC3\xA9s)", .icon = ui::Icon::Module, .why = o->features.empty() ? std::string("elle n'ouvre rien") : std::string(),
+                .run = [this, label] { goTo("fonctionnalites", "option:" + label); }});
+        const auto fl = featureLabels(*o);
+        for (std::size_t k = 0; k < fl.size() && k < 5; ++k) m.filterOn({.label = "Ouvre : " + fl[k], .run = [this, v = fl[k]] { bar_->filterOn(2, v); }});
+        for (std::size_t k = 0; k < o->editions.size() && k < 5; ++k)
+            m.filterOn({.label = "Propos\xC3\xA9" "e \xC3\xA0 : " + o->editions[k], .run = [this, v = o->editions[k]] { bar_->filterOn(4, v); }});
+        const std::string st = o->retired ? "retir\xC3\xA9" "e" : "propos\xC3\xA9" "e";
+        m.filterOn({.label = "Cet \xC3\xA9tat : " + st, .run = [this, st] { bar_->filterOn(6, st); }});
+        m.copy("L'identifiant", id, ui::Icon::Copy);
+        m.copy("Le nom", o->label, ui::Icon::Copy);
+        m.copy("La ligne", lineOf(*table_, row), ui::Icon::Copy);
+        m.exportRows([this, sel] { listkit::exportRows(host_, *table_, sel, "options.csv", "options"); });
+        m.danger({.label = "Supprimer l'option", .icon = ui::Icon::Delete, .run = [this, id] {
+                      select(id);
+                      deleteOption();
+                  }});
+        return m;
+    }
+
+    // La ligne depliee : ce qu'elle ouvre, ses durees et prix, ou elle est proposee, les licences qui l'ont (et leur courbe).
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= ids_.size()) return nullptr;
+        const lic::Registry& reg = draft().reg;
+        const lic::OptionDef* o = reg.option(ids_[r]);
+        if (!o) return nullptr;
+        const std::string id = o->id;
+        auto card = std::make_unique<ui::UnfoldCard>("options.depliage");
+        {
+            ui::UnfoldCard::Box b{.title = "CE QU'ELLE OUVRE"};
+            for (const auto& g : o->features) {
+                const lic::FeatureDef* f = reg.feature(g.id);
+                if (b.lines.size() == 4) {
+                    b.lines.push_back({.icon = ui::Icon::Module, .text = "et " + std::to_string(o->features.size() - 4) + " autre(s)"});
+                    break;
+                }
+                b.lines.push_back({.icon = ui::Icon::Module, .text = "**" + (f ? f->label : g.id) + "**" + (f ? " \xC2\xB7 " + f->product : std::string())});
+            }
+            if (b.lines.empty()) b.lines.push_back({.icon = ui::Icon::Info, .text = "rien : coche ce qu'elle ouvre dans la fiche", .tone = ui::Tone::Warning});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "SES DUR\xC3\x89" "ES ET PRIX"};
+            for (const auto& d : o->durations)
+                b.lines.push_back({.icon = ui::Icon::History, .text = "**" + (d.price.empty() ? std::string("sur demande") : d.price) + "** \xC2\xB7 " + durationLabel(d.days)});
+            b.lines.push_back({.icon = ui::Icon::Star, .text = o->trialDays > 0 ? "essai offert : **" + std::to_string(o->trialDays) + " j** (une fois par client)" : std::string("pas d'essai")});
+            card->addBox(std::move(b));
+        }
+        {
+            ui::UnfoldCard::Box b{.title = "O\xC3\x99 ELLE EST PROPOS\xC3\x89" "E"};
+            b.lines.push_back({.icon = ui::Icon::Layers, .text = "aux offres : **" + (o->editions.empty() ? std::string("toutes") : join(o->editions, ", ")) + "**"});
+            b.lines.push_back({.icon = ui::Icon::Globe, .text = o->shop ? std::string("dans la boutique des Studios") : std::string("hors de la boutique des Studios"),
+                               .check = o->shop});
+            const int n = inUse(id);
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "**" + std::to_string(n) + "** licence" + (n > 1 ? "s l'ont" : " l'a") + " en ce moment"};
+            if (n) l.link = [this, id] { goTo("licences", "option:" + id); };
+            b.lines.push_back(std::move(l));
+            if (o->retired) b.lines.push_back({.icon = ui::Icon::Info, .text = "retir\xC3\xA9" "e : plus propos\xC3\xA9" "e", .tone = ui::Tone::Muted});
+            card->addBox(std::move(b));
+        }
+        addCurve(*card, "LICENCES AVEC L'OPTION, 12 MOIS", weekly([id](const LicenceEntry& l, Seconds t) {
+                     for (const auto& x : l.licence.options)
+                         if (x.id == id && x.activeAt(t, l.licence.expiresAt)) return true;
+                     return false;
+                 }));
+        if (inUse(id) > 0) card->addButton("Voir les licences", "options.depliage.licences", ui::Icon::GoTo, [this, id] { goTo("licences", "option:" + id); });
+        addSigner(*card);
+        return card;
     }
 
     void rebuildChecks() {

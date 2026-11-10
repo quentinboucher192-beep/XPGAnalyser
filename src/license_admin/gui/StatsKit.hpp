@@ -169,6 +169,8 @@ public:
     [[nodiscard]] const std::string& current() const noexcept { return current_; }
     [[nodiscard]] float preferredWidth() const;
     [[nodiscard]] ui::Button* button(const std::string& key) const;
+    // Changer le libelle d'un choix (un nombre : << Tous 119 >>).
+    void setLabel(const std::string& key, std::string label);
     std::function<void(const std::string&)> onPick;
 
 protected:
