@@ -503,7 +503,7 @@ protected:
             const float hw = ui::measureWidth(h, gfx::semibold(kF11));
             (void)text(r, colX_[c] - (c == 0 ? 26.f : 0.f), headY_ + 3.f, h, gfx::semibold(kF11), on ? kVioletInk : kFaint, colW_[c] - 14.f);
             const float ax = colX_[c] - (c == 0 ? 26.f : 0.f) + std::min(hw, colW_[c] - 14.f) + 4.f;
-            if (c < 7) r.drawText({ax, headY_ + 3.f}, on ? (sortDesc_ ? "\xE2\x86\x93" : "\xE2\x86\x91") : "\xE2\x87\x85", kF11, on ? kVioletInk : kLine);
+            if (c < 7) r.drawText({ax, headY_ + 3.f}, on ? (sortDesc_ ? "\xE2\x86\x93" : "\xE2\x86\x91") : "\xE2\x86\x95", kF11, on ? kVioletInk : kLine);
         }
         r.fillRect({rank_.x + 1.f, headY_ + 25.f, rank_.w - 2.f, 1.f}, kLine);
         for (const auto& g : rows_) paintRow(ctx, g);

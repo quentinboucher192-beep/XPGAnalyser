@@ -593,8 +593,10 @@ protected:
         float x = b.x + 28.f;
         const std::string crumb = "Admin";
         const float ty = b.y + (b.h - ctx.r.lineHeight(kF14)) * 0.5f;
-        ctx.r.drawText({x, ty}, crumb, kF14, c.textMuted);
-        x += ctx.r.measure(crumb, kF14).width + 10.f;
+        // 1.47.0 : le titre de la page d'abord - le fil cede sa place (le groupe, puis << Admin >>) avant que le titre ne
+        // soit raccourci.
+        const FontId fb = gfx::semibold(kF14);
+        const float titleW = ctx.r.measure(shell_.pageTitle(), fb).width;
         // le chevron
         const float cy = b.y + b.h * 0.5f;
         const auto chevron = [&] {
@@ -602,19 +604,22 @@ protected:
             ctx.r.line({x + 4.f, cy}, {x, cy + 4.f}, c.textDisabled, 1.5f);
             x += 14.f;
         };
-        chevron();
+        if (x + ctx.r.measure(crumb, kF14).width + 24.f + titleW <= titleRight_) {
+            ctx.r.drawText({x, ty}, crumb, kF14, c.textMuted);
+            x += ctx.r.measure(crumb, kF14).width + 10.f;
+            chevron();
+        }
         // 1.44.0 : le fil de la maquette - le groupe (<< Securite >>), la page parente d'une sous-page (<< Administrateurs >>).
         std::vector<std::string> trail;
         if (const std::string s = sectionTitle(shell_.currentPageId()); !s.empty()) trail.push_back(s);
         if (const std::string p = Shell::parentOf(shell_.currentPageId()); !p.empty())
             if (const auto* e = Shell::entry(p)) trail.push_back(e->label);
         for (const auto& t : trail) {
-            if (x + ctx.r.measure(t, kF14).width > titleRight_ - 80.f) break;
+            if (x + ctx.r.measure(t, kF14).width + 24.f + titleW > titleRight_) break;
             ctx.r.drawText({x, ty}, t, kF14, c.textMuted);
             x += ctx.r.measure(t, kF14).width + 10.f;
             chevron();
         }
-        const FontId fb = gfx::semibold(kF14);
         ctx.r.drawText({x, ty}, fit(ctx.r, shell_.pageTitle(), fb, titleRight_ - x), fb, c.text);
     }
 
