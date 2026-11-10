@@ -168,7 +168,27 @@ protected:
         const float x = b.x + kPad, w = std::max(200.f, b.w - 2.f * kPad);
         float y = b.y + kPad + 34.f;
         leadY_ = y;
-        y += 2.f * kLineH + 8.f;
+        // 1.47.0 : l'explication en lignes entieres (jamais << ... >>), autant qu'il en faut a cette largeur.
+        leadLines_.clear();
+        for (const std::string& para : {std::string(kLead1), std::string(kLead2)}) {
+            std::string line;
+            std::size_t i = 0;
+            while (i <= para.size()) {
+                std::size_t j = para.find(' ', i);
+                if (j == std::string::npos) j = para.size();
+                const std::string word = para.substr(i, j - i);
+                const std::string t = line.empty() ? word : line + " " + word;
+                if (!line.empty() && ui::measureWidth(t, gfx::FontId{14}) > w) {
+                    leadLines_.push_back(line);
+                    line = word;
+                } else {
+                    line = t;
+                }
+                i = j + 1;
+            }
+            if (!line.empty()) leadLines_.push_back(line);
+        }
+        y += static_cast<float>(std::max<std::size_t>(2, leadLines_.size())) * kLineH + 8.f;
         float bx = x;
         for (ui::Button* btn : {refresh_, create_, retire_, settings_}) {
             if (!btn->visible()) continue;
@@ -201,12 +221,8 @@ protected:
         r.fillRect(b, c.panelBg);
         const float x = b.x + kPad, w = std::max(200.f, b.w - 2.f * kPad);
         r.drawText({x, b.y + kPad}, "Licences flottantes", ctx.theme.font.title, c.text);
-        r.drawText({x, leadY_}, fit(r, "Un nombre de postes EN M\xC3\x8AME TEMPS pour toute une \xC3\xA9quipe : chaque PC active la licence avec son code, puis prend un jeton "
-                                       "au service en d\xC3\xA9marrant (15 min, renouvel\xC3\xA9) et le rend en fermant.", ctx.theme.font.ui, w),
-                   ctx.theme.font.ui, c.textMuted);
-        r.drawText({x, leadY_ + kLineH}, fit(r, "Le service tient le compte : deux PC ne prennent jamais le m\xC3\xAAme jeton. Les chiffres sont ceux du dernier relev\xC3\xA9.",
-                                             ctx.theme.font.ui, w),
-                   ctx.theme.font.ui, c.textMuted);
+        for (std::size_t i = 0; i < leadLines_.size(); ++i)
+            r.drawText({x, leadY_ + static_cast<float>(i) * kLineH}, fit(r, leadLines_[i], ctx.theme.font.ui, w), ctx.theme.font.ui, c.textMuted);
         const auto& s = ws().service();
         const ui::Tone tone = !s.problem.empty() ? ui::Tone::Error : !s.configured || s.snapshot.at == 0 ? ui::Tone::Warning : ui::Tone::None;
         r.drawText({x, statusY_}, fit(r, status(), ctx.theme.font.ui, w), ctx.theme.font.ui, tone == ui::Tone::None ? c.text : ctx.theme.tone(tone, c.text));
@@ -570,6 +586,10 @@ private:
     std::string              selectedId_;
     bool                     syncing_{false}, fetching_{false}, lastBusy_{false};
     float                    leadY_{0}, statusY_{0}, seatsCaptionY_{0};
+    std::vector<std::string> leadLines_;   // 1.47.0 : l'explication, en lignes entieres
+    static constexpr const char* kLead1 = "Un nombre de postes EN M\xC3\x8AME TEMPS pour toute une \xC3\xA9quipe : chaque PC active la licence avec son code, puis prend "
+                                          "un jeton au service en d\xC3\xA9marrant (15 min, renouvel\xC3\xA9) et le rend en fermant.";
+    static constexpr const char* kLead2 = "Le service tient le compte : deux PC ne prennent jamais le m\xC3\xAAme jeton. Les chiffres sont ceux du dernier relev\xC3\xA9.";
 };
 
 } // namespace
