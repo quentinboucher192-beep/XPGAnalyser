@@ -1605,6 +1605,128 @@ void finish(Result& res, const Conn& c, const Record& rec, std::vector<std::stri
     res.requestSentAt = res.pendingAfter ? rec.sentAt : 0;
 }
 
+// ============================================================ 1.46.0 : la boutique ==
+// La cle de l'editeur pour laquelle une demande est scellee : celle que ce programme croit (la vraie d'abord) ; nul : aucune.
+const lic::TrustedKey* sealingKey(const std::vector<lic::TrustedKey>& keys) {
+    for (const auto& k : keys)
+        if (!k.test) return &k;
+    return keys.empty() ? nullptr : &keys.front();
+}
+
+// 1.44.0 : la demande scellee aussi pour chaque admin qui accepte les demandes (la liste des admins de ce PC) : le champ
+// << scelles >> ; un tableau vide : aucun.
+json::Value adminSeals(const std::string& plainRequest) {
+    json::Value more = json::Value::array();
+    if (const auto admins = lic::getAdminList()) {
+        for (const auto& a : admins->admins) {
+            if (!a.has("demandes")) continue;
+            crypto::Bytes raw;
+            crypto::PublicKey pk{};
+            if (!crypto::unhex(a.key, raw, 32)) continue;
+            std::copy(raw.begin(), raw.end(), pk.begin());
+            const std::string s = lgw::sealFor(pk, plainRequest);
+            if (s.empty()) continue;
+            json::Value one = json::Value::object();
+            one.set("cle", a.id);
+            one.set("scelle", s);
+            more.push(std::move(one));
+        }
+    }
+    return more;
+}
+
+// Le catalogue de la boutique (c : la connexion, sa version et l'etat de sa boutique lus de GET /v1/etat) : un service
+// d'avant la 1.46.0 - aucun bouton, sans un mot ; fermee - aucun article ; ouverte - GET /v1/boutique. Une panne : le
+// dernier connu reste.
+void lookShop(Conn& c, Result& res) {
+    shop::Catalogue cat;
+    cat.serviceVersion = c.version;
+    cat.receivedAt = lic::systemNow();
+    if (shop::serviceKnowsShop(c.version)) {
+        cat.known = true;
+        if (c.shopOpen) {
+            const Got g = getPublic(c, "/v1/boutique");
+            shop::Catalogue got;
+            if (!g.reached() || g.status != 200 || !shop::parseCatalogue(g.body, got, nullptr)) return;
+            got.serviceVersion = c.version;
+            got.receivedAt = cat.receivedAt;
+            cat = std::move(got);
+        }
+    }
+    shop::setCatalogue(cat);
+    res.shopLooked = true;
+}
+
+std::string orderWhat(const shop::Order& o) {
+    return "commande n\xC2\xB0 " + std::to_string(o.number) + (o.label.empty() ? std::string() : " (" + o.label + ")");
+}
+
+// Les commandes de ce PC (GET /v1/boutique/commandes, signe) : fondues dans le releve ; un changement d'etat vu par ce
+// travail : un avis (payee, expiree, refusee, remboursee, a revoir ; livree : la fenetre de la reponse le dit). Faux :
+// `lines` dit pourquoi.
+bool stepOrders(Conn& c, Record& rec, Result& res, std::vector<std::string>& lines) {
+    std::string why;
+    const Got g = callSigned(c, "GET", "/v1/boutique/commandes", "", why);
+    if (!g.reached() || g.status != 200) {
+        res.retryAfter = static_cast<int>(errorOf(g).retryIn);
+        lines.push_back(!why.empty() && !g.reached() ? why : problem(g, c.host, "Les commandes de ce PC n'ont pas pu \xC3\xAAtre relues"));
+        return false;
+    }
+    std::vector<shop::Order> fresh;
+    if (!shop::parseOrders(g.body, fresh, &why)) {
+        lines.push_back("Le service a r\xC3\xA9pondu, mais " + why + ".");
+        return false;
+    }
+    for (const auto& f : fresh) {
+        const shop::Order* before = shop::findOrder(rec.orders, f.number);
+        if (!before || before->state == f.state) continue;
+        const bool option = f.article.rfind("opt:", 0) == 0 || (!before->option.empty());
+        std::string text, tone = "info";
+        if (f.state == shop::kPaid) {
+            text = "Paiement re\xC3\xA7u (" + orderWhat(f) + ") : " +
+                   (option ? std::string("ton option arrive") : std::string("ta licence arrive")) + " d\xC3\xA8s que l'\xC3\xA9" "diteur la d\xC3\xA9livre.";
+            tone = "ok";
+        } else if (f.state == shop::kExpired) {
+            text = "La page de paiement de la " + orderWhat(f) + " a expir\xC3\xA9 sans paiement : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.";
+        } else if (f.state == shop::kFailed) {
+            text = "Ta banque a refus\xC3\xA9 le paiement de la " + orderWhat(f) + " : rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9.";
+            tone = "warning";
+        } else if (f.state == shop::kRefunded) {
+            text = "La " + orderWhat(f) + " est rembours\xC3\xA9" "e.";
+        } else if (f.state == shop::kReview) {
+            text = "Paiement re\xC3\xA7u (" + orderWhat(f) + "), mais l'\xC3\xA9" "diteur doit revoir la livraison : il te contacte si besoin.";
+            tone = "warning";
+        }
+        if (text.empty()) continue;
+        note(tone != "warning", text);
+        res.notices.push_back({"licence:commande", text, tone});
+        lines.push_back(text);
+    }
+    if (shop::mergeOrders(rec.orders, fresh)) res.changed = true;
+    res.ordersLooked = true;
+    res.orders = rec.orders;
+    return true;
+}
+
+// Une commande livree dont la livraison n'est pas encore appliquee ici (son etat << poste >>).
+bool deliveryWaiting(const Record& rec) {
+    return std::any_of(rec.orders.begin(), rec.orders.end(), [](const shop::Order& o) { return o.state == shop::kDelivered && !o.applied; });
+}
+
+// L'etat << poste >> lu pour les commandes livrees (la connexion complete : le certificat, l'heure) ; fait : chacune
+// marquee appliquee (rien de nouveau : deja appliquee par un renouvellement ou une synchronisation).
+void applyDeliveries(Conn& c, Record& rec, Result& res, std::vector<std::string>& lines) {
+    std::vector<std::string> dl;
+    if (!stepDevice(c, rec, res, dl) || res.retryLater) {   // pas lu, ou pas applique (l'activation a reprendre)
+        for (auto& l : dl) lines.push_back(std::move(l));
+        return;
+    }
+    for (auto& o : rec.orders)
+        if (o.state == shop::kDelivered) o.applied = true;
+    for (auto& l : dl)
+        if (l.rfind("Rien de nouveau", 0) != 0) lines.push_back(std::move(l));
+}
+
 } // namespace
 
 // ============================================================ l'adresse ==
@@ -2366,13 +2488,7 @@ Result sendRequest(const RequestForm& form0) {
     }
     // La cle de l'editeur pour laquelle la demande est scellee : celle que ce programme croit (la vraie d'abord).
     const auto keys = lic::trustedPublisherKeys();
-    const lic::TrustedKey* key = nullptr;
-    for (const auto& k : keys)
-        if (!k.test) {
-            key = &k;
-            break;
-        }
-    if (!key && !keys.empty()) key = &keys.front();
+    const lic::TrustedKey* key = sealingKey(keys);
     if (!key) {
         res.message = "Ce programme n'a pas la cl\xC3\xA9 de l'\xC3\xA9" "diteur : la demande ne peut pas \xC3\xAAtre scell\xC3\xA9" "e.";
         return res;
@@ -2429,24 +2545,7 @@ Result sendRequest(const RequestForm& form0) {
     body.set("cle", key->id);
     body.set("scelle", sealed);
     // 1.44.0 : scellee aussi pour chaque admin qui accepte les demandes (la liste des admins de ce PC)
-    if (const auto admins = lic::getAdminList()) {
-        json::Value more = json::Value::array();
-        const std::string plainRequest = lgw::writeOnlineRequest(q);
-        for (const auto& a : admins->admins) {
-            if (!a.has("demandes")) continue;
-            crypto::Bytes raw;
-            crypto::PublicKey pk{};
-            if (!crypto::unhex(a.key, raw, 32)) continue;
-            std::copy(raw.begin(), raw.end(), pk.begin());
-            const std::string s = lgw::sealFor(pk, plainRequest);
-            if (s.empty()) continue;
-            json::Value one = json::Value::object();
-            one.set("cle", a.id);
-            one.set("scelle", s);
-            more.push(std::move(one));
-        }
-        if (!more.items().empty()) body.set("scelles", std::move(more));
-    }
+    if (json::Value more = adminSeals(lgw::writeOnlineRequest(q)); !more.items().empty()) body.set("scelles", std::move(more));
     std::vector<std::string> lines;
     const Got g = callSigned(c, "POST", "/v1/demandes", json::write(body, false), why);
     if (!g.reached() || (g.status != 201 && g.status != 200)) {
