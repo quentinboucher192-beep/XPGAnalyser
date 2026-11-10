@@ -1651,6 +1651,8 @@ int daysLeft(std::int64_t now, std::int64_t until) { return until > now ? static
 } // namespace
 
 // ------------------------------------------------------------------ Options
+bool putInCart(LicenceBody& body, licence::shop::CartLine line);   // 1.48.0 : plus bas (le panier)
+
 OptionsPanel::OptionsPanel(LicenceBody& body, menu::MenuManager& menus) : ui::Widget("licence.options"), body_(body), menus_(menus) {
     table_ = &static_cast<ui::TableView&>(addChild(std::make_unique<ui::TableView>("licence.options.catalogue")));
     table_->setColumns({{"Option", 170.f}, {"Ce qu'elle ouvre", 180.f}, {"Prix (HT)", 330.f}, {"", 120.f}});
@@ -1906,7 +1908,8 @@ void OptionsPanel::updateBuy() {
     buy_->setText(a ? licence::shop::buyLabel(*a, cat.currency) : std::string("Acheter"));
     buy_->setVisibility(can ? ui::Visibility::Visible : ui::Visibility::Collapsed);
     buy_->setEnabled(can && licence::service::busyJob() == licence::service::Job::None);
-    send_->setStyle(can ? ui::Button::Style::Default : ui::Button::Style::Primary);   // un seul bouton principal
+    // 1.48.0 : en vente en ligne, une option s'achete (le panier) - elle ne part plus en demande
+    send_->setVisibility(can ? ui::Visibility::Collapsed : ui::Visibility::Visible);
     invalidateLayout();
     invalidate();
 }
