@@ -56,6 +56,7 @@
 #include "../KeyBackup.hpp"
 #include "../ServiceClient.hpp"
 #include "../Shop.hpp"   // 1.46.0 : la boutique et les commandes
+#include "../Stats.hpp"  // 1.47.0 : les statistiques et le globe
 #include "../../core/Version.hpp"
 #include "../../licensing/Admins.hpp"
 #include "../../licensing/Documents.hpp"
@@ -770,6 +771,23 @@ public:
     [[nodiscard]] int ordersToDeliver() const noexcept { return ordersToDeliver_; }
     // La version du service sait-elle la boutique (l'etat lu) ? Faux aussi quand elle n'est pas encore lue.
     [[nodiscard]] bool serviceKnowsShop() const;
+
+    // ======================================================== 1.47.0 : les statistiques et le globe (WorkspaceStats.cpp) ==
+    // LENT (le service, signe par la cle qui signe : l'admin+ ou un admin ; docs/STATISTIQUES.md) - a lancer par Background.
+    // Un service d'avant la 1.47.0 : refuse avec la phrase << deploie la 1.47.0 >> (stats::serviceTooOldText). `raw`
+    // (facultatif) : la reponse du service telle quelle.
+    [[nodiscard]] OpResult statsSeries(const stats::SeriesQuery& q, stats::SeriesReply& out, std::string* raw = nullptr) const;
+    [[nodiscard]] OpResult statsUpdates(const stats::UpdatesQuery& q, stats::UpdatesReply& out, std::string* raw = nullptr) const;
+    [[nodiscard]] OpResult statsAdmins(const stats::Period& period, stats::AdminsReply& out, std::string* raw = nullptr) const;
+    [[nodiscard]] OpResult statsGlobe(int periodDays, stats::GlobeReply& out, std::string* raw = nullptr) const;
+    [[nodiscard]] OpResult statsLive(Seconds since, stats::LiveReply& out, std::string* raw = nullptr) const;
+    // L'admin+ : le releve d'aujourd'hui, s'il n'est pas encore pris.
+    [[nodiscard]] OpResult statsSnapshot(stats::SnapshotReply& out, std::string* raw = nullptr) const;
+    // Sans reseau (l'etat du service deja lu) : la version du service sait-elle les statistiques ? La phrase a montrer
+    // sinon (<< Ton service en ligne est en 1.46.0 : deploie la 1.47.0 pour les statistiques et le globe. >>) ; vide : il
+    // les sait, ou son etat n'est pas encore lu.
+    [[nodiscard]] bool serviceKnowsStats() const;
+    [[nodiscard]] std::string statsServiceNote() const;
 
 private:
     // 1.46.0 : une commande livree par CE Workspace (deliverOrders le cree neuf).

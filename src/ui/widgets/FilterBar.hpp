@@ -97,7 +97,8 @@ public:
     };
     using TimeOf = std::function<std::int64_t(RowIndex row, std::size_t field)>;
 
-    FilterBar(std::string id, std::vector<Field> fields);
+    // `searchId` : l'id du champ de recherche (vide : <id>.recherche) - une page dont l'id est deja << licences >>.
+    FilterBar(std::string id, std::vector<Field> fields, std::string searchId = {});
     ~FilterBar() override;
 
     // ---- brancher ----
@@ -105,6 +106,9 @@ public:
     // ses entonnoirs ; `time` : la date d'une ligne pour un champ Period ; `extra` : ce que la recherche lit en plus.
     void attach(TableView& table, TimeOf time = {}, std::function<std::string(RowIndex)> extra = {});
     void setSource(Source source);       // une liste peinte : accepts(i), `changed`, refreshCounts
+    // UNE TABLE QUE LA PAGE REMPLIT ELLE-MEME (setSource : toutes ses lignes ; elle ne met dans le modele que celles
+    // que accepts garde, a chaque `changed`) : la barre en allume les entonnoirs et y surligne la recherche.
+    void linkTable(TableView& table);
     void refreshCounts();                // les lignes ont change (une liste peinte) : << 12 sur 128 >> refait
     // Ou retenir ce qui est choisi et << Mes filtres >> (ui::FilterMemory) : << commandes >> -> lu tout de suite.
     void setMemoryKey(std::string key);
@@ -214,7 +218,9 @@ private:
     State                              state_;
     std::vector<Saved>                 saved_;
     Source                             source_;
-    TableView*                         table_{nullptr};
+    TableView*                         table_{nullptr};      // attach : la barre filtre cette table
+    TableView*                         linked_{nullptr};     // linkTable : la page la remplit
+    void hookTable(TableView& table);
     std::shared_ptr<bool>              alive_{std::make_shared<bool>(true)};
     std::function<std::int64_t()>      now_;
     std::string                        memoryKey_, noun_;

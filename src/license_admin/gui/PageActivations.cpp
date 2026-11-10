@@ -12,6 +12,7 @@
 //  Excel (le CSV de la console : UTF-8 avec BOM, ; et CRLF, les formules
 //  neutralisees).
 // =============================================================================
+#include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../../ui/TextSearch.hpp"
@@ -166,26 +167,38 @@ public:
         folder_ = add(*this, std::make_unique<ui::Button>("Ouvrir le registre des activations", "activations.dossier"));
         folder_->setIcon(ui::Icon::FolderOpen);
         folder_->setTooltip("Le dossier du poste Admin : activations.jsonl (une ligne par \xC3\xA9v\xC3\xA9nement, jamais r\xC3\xA9\xC3\xA9" "crite).");
-        search_ = add(*this, std::make_unique<ui::InputText>("activations.recherche"));
-        search_->setPlaceholder("Chercher un PC, un client, une licence\xE2\x80\xA6");
-        search_->setEscapeClears(true);
-        state_ = add(*this, std::make_unique<ui::DropDown>("activations.etat"));
-        state_->setItems({{"Tous les \xC3\xA9tats", ""}, {"Demandes en attente", "demande"}, {"Actives", "active"}, {"R\xC3\xA9voqu\xC3\xA9" "es", "revoque"}, {"Expir\xC3\xA9" "es", "expire"}});
-        state_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("activations.table"));
         table_->setColumns({{"PC", 170.f}, {"Empreinte", 250.f}, {"Client", 190.f}, {"Licence", 140.f}, {"\xC3\x89" "dition", 120.f}, {"Logiciel", 220.f},
                             {"Demand\xC3\xA9" "e le", 128.f}, {"Activ\xC3\xA9" "e le", 120.f}, {"Fin", 110.f}, {"\xC3\x89tat", 96.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"PC", "Empreinte", "Client", "Licence", "\xC3\x89" "dition", "Logiciel", "Demand\xC3\xA9" "e le", "Activ\xC3\xA9" "e le", "Fin", "\xC3\x89tat"});
         table_->setModel(model_);
+        // 1.47.0 (planche 12) : LA BARRE - chercher (activations.recherche), le client, l'offre, le logiciel, la periode, l'etat.
+        bar_ = add(*this, std::make_unique<ui::FilterBar>("activations", barFields()));
+        bar_->setNoun("PC");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return all_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t {
+                if (r >= all_.size()) return 0;
+                return listkit::seconds(f == 6 ? all_[r].requestedAt : f == 7 ? all_[r].activatedAt : 0);
+            };
+            src.extra = [this](std::size_t r) { return r < all_.size() ? all_[r].deviceKey + " " + stateLabel(all_[r].state) : std::string(); };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*table_);
+        bar_->setMemoryKey("activations");
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });   // 1.47.0 (planche 06)
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); }, 1);    // 1.47.0 (planche 07) : reperee par son empreinte
 
         links_ += record_->clicked->connect([this] { pickRequest(); });
         links_ += export_->clicked->connect([this] { exportCsv(); });
         links_ += folder_->clicked->connect([this] {
             if (host_.openFolder) host_.openFolder(ws().folder());
         });
-        links_ += search_->textChanged->connect([this](const std::string&) { rebuild(); });
-        links_ += state_->selectionChanged->connect([this](int) { rebuild(); });
         refresh();
     }
     ~ActivationsPage() override { *life_ = false; }
@@ -194,6 +207,10 @@ public:
 
     void refresh() override {
         all_ = ws().devices();
+        texts_.clear();
+        for (const auto& d : all_) texts_.push_back(cellsOf(d));
+        who_.reset();
+        bar_->refreshCounts();
         rebuild();
         invalidateLayout();
         invalidate();
@@ -229,10 +246,9 @@ protected:
             bx += bw + kGap;
         }
         y += kButtonH + kGap;
-        const float sw = std::min(360.f, w * 0.4f), dw = 200.f;
-        search_->setBounds({x, y + 2.f, sw, kFieldH});
-        state_->setBounds({x + sw + kGap, y + 2.f, dw, kFieldH});
-        y += kButtonH + 2.f;
+        const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres
+        bar_->setBounds({x, y + 2.f, w, bh});
+        y += bh + 8.f;
         totalsRect_ = {x, y, w, 22.f};
         y += 22.f + 4.f;
         noteY_ = y;
@@ -294,22 +310,38 @@ private:
         return t;
     }
 
+    // Les cases d'un PC (la table, la barre).
+    static std::vector<std::string> cellsOf(const KnownDevice& d) {
+        return {d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.customer, d.licenseId, d.edition, d.software,
+                dateFr(d.requestedAt), dateFr(d.activatedAt),
+                d.expiresAt ? dateFr(d.expiresAt) : (d.state == "demande" ? std::string() : std::string("sans fin")), stateLabel(d.state)};
+    }
+
+    // 1.47.0 (planche 12) : les colonnes vues par la barre (dans l'ordre du modele).
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(10);
+        f[0] = {.title = "PC", .kind = K::Text};
+        f[1] = {.title = "Empreinte", .kind = K::Text};
+        f[2] = {.title = "Client", .chip = true, .noun = "un client"};
+        f[3] = {.title = "Licence", .noun = "une licence"};
+        f[4] = {.title = "\xC3\x89" "dition", .chip = true, .chipLabel = "Offre", .noun = "une offre"};
+        f[5] = {.title = "Logiciel", .chip = true, .noun = "un logiciel"};
+        f[6] = {.title = "Demand\xC3\xA9" "e le", .kind = K::Period};
+        f[7] = {.title = "Activ\xC3\xA9" "e le", .kind = K::Period, .chip = true, .chipLabel = "Activ\xC3\xA9" "e"};
+        f[8] = {.title = "Fin", .kind = K::Text};
+        f[9] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat", .order = {"demande", "active", "r\xC3\xA9voqu\xC3\xA9" "e", "expir\xC3\xA9" "e"}};
+        return f;
+    }
+
     void rebuild() {
-        const ui::SearchQuery q(search_->text());
-        const auto* item = state_->selectedItem();
-        const std::string want = item ? item->value : std::string();
         shown_.clear();
-        for (const auto& d : all_) {
-            if (!want.empty() && d.state != want) continue;
-            if (!q.empty() && !q.matches({d.name, d.fingerprint, d.customer, d.licenseId, d.edition, d.software, d.deviceKey, stateLabel(d.state)})) continue;
-            shown_.push_back(d);
-        }
+        for (std::size_t i = 0; i < all_.size(); ++i)
+            if (bar_->accepts(i)) shown_.push_back(all_[i]);
         std::vector<std::vector<std::string>> rows, keys;
         std::vector<std::string> states;
         for (const auto& d : shown_) {
-            rows.push_back({d.name.empty() ? std::string("(sans nom)") : d.name, d.fingerprint, d.customer, d.licenseId, d.edition, d.software,
-                            dateFr(d.requestedAt), dateFr(d.activatedAt),
-                            d.expiresAt ? dateFr(d.expiresAt) : (d.state == "demande" ? std::string() : std::string("sans fin")), stateLabel(d.state)});
+            rows.push_back(cellsOf(d));
             keys.push_back({"", "", "", "", "", "", padKey(d.requestedAt), padKey(d.activatedAt), padKey(d.expiresAt ? d.expiresAt : 99999999999LL), ""});
             states.push_back(d.state);
         }
@@ -324,6 +356,119 @@ private:
             return s;
         });
         invalidate();
+    }
+
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle ----
+    ui::ListMenu menuFor() {
+        const auto rows = table_->selectedModelRows();
+        ui::ListMenu m({rows.size(), "PC", false});
+        if (rows.empty()) return m;
+        m.unfold(*table_);
+        const KnownDevice* d = rows.front() < shown_.size() ? &shown_[rows.front()] : nullptr;
+        if (rows.size() == 1 && d) {
+            if (!d->licenseId.empty() && ws().licence(d->licenseId)) {
+                const std::string id = d->licenseId;
+                m.goTo({.label = "Sa licence " + id, .icon = ui::Icon::Document, .run = [this, id] {
+                            requestPageFocus("licences", id);
+                            host_.navigate("licences");
+                        }});
+            }
+            if (!d->customer.empty()) {
+                const std::string c = d->customer;
+                m.goTo({.label = "Le client : " + c, .icon = ui::Icon::User, .run = [this, c] {
+                            requestPageFocus("clients", "client:" + c);
+                            host_.navigate("clients");
+                        }});
+            }
+            const auto on = [&](std::size_t f, const std::string& label, const std::string& v) {
+                if (!v.empty()) m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+            };
+            on(2, "Ce client", d->customer);
+            on(3, "Cette licence", d->licenseId);
+            on(4, "Cette offre", d->edition);
+            on(5, "Ce logiciel", d->software);
+            on(9, "Cet \xC3\xA9tat", stateLabel(d->state));
+            if (d->activatedAt > 0) {
+                const std::int64_t when = listkit::seconds(d->activatedAt);
+                m.filterOn({.label = "Ce jour : " + dateFr(d->activatedAt), .run = [this, when] { bar_->filterOnDay(7, when); }});
+            }
+            m.copy("L'empreinte", d->fingerprint, ui::Icon::Copy);
+            m.copy("La cl\xC3\xA9 du PC", d->deviceKey, ui::Icon::Lock);
+            if (!d->licenseId.empty()) m.copy("La licence", d->licenseId, ui::Icon::Document);
+        }
+        std::string lines;
+        std::vector<KnownDevice> list;
+        for (const RowIndex r : rows) {
+            if (r >= shown_.size()) continue;
+            std::string line;
+            const auto cells = cellsOf(shown_[r]);
+            for (std::size_t c = 0; c < cells.size(); ++c) line += (c ? "\t" : "") + cells[c];
+            lines += line + "\n";
+            list.push_back(shown_[r]);
+        }
+        m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
+        m.exportRows([this, list] { exportList(list); });
+        return m;
+    }
+
+    // ---- 1.47.0 (planche 07) : la ligne depliee - le client, la licence, qui l'a signee ----
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= shown_.size()) return nullptr;
+        const KnownDevice d = shown_[r];
+        auto card = std::make_unique<ui::UnfoldCard>("activations.depliage");
+        ui::UnfoldCard::Box b;   // a plat (planche 07 : les Activations)
+        std::string head = "**" + (d.customer.empty() ? std::string("(client inconnu)") : d.customer) + "**";
+        if (!d.fingerprint.empty()) head += "  " + d.fingerprint;
+        if (!d.software.empty()) head += " \xC2\xB7 " + d.software;
+        b.lines.push_back({.icon = ui::Icon::User, .text = head});
+        const Seconds now = ws().now();
+        if (d.requestedAt) b.lines.push_back({.icon = ui::Icon::History, .text = "demand\xC3\xA9 " + whenText(now, d.requestedAt)});
+        if (!d.licenseId.empty()) {
+            const std::string id = d.licenseId;
+            std::string t = (d.activatedAt ? "activ\xC3\xA9 " + whenText(now, d.activatedAt) + ", " : std::string()) + "licence **" + d.licenseId + "**";
+            if (!d.edition.empty()) t += " (" + d.edition + ")";
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = t};
+            if (ws().licence(id))
+                l.link = [this, id] {
+                    requestPageFocus("licences", id);
+                    host_.navigate("licences");
+                };
+            if (const auto who = who_.last({"licence_creer", "licence_prolonger", "licence_option"}, d.licenseId)) {
+                l.text += ", sign\xC3\xA9" "e par";
+                l.person = listkit::person(host_, who->key, who->who);
+            }
+            b.lines.push_back(std::move(l));
+        }
+        std::string st = "\xC3\xA9tat : **" + stateLabel(d.state) + "**";
+        if (d.expiresAt) st += " \xC2\xB7 fin le " + dateFr(d.expiresAt);
+        if (d.revokedAt) st += " \xC2\xB7 r\xC3\xA9voqu\xC3\xA9 le " + dateFr(d.revokedAt);
+        b.lines.push_back({.icon = ui::Icon::Info, .text = st, .tone = stateTone(d.state)});
+        card->addBox(std::move(b));
+        return card;
+    }
+
+    static std::string whenText(Seconds now, Seconds t) {
+        if (t <= 0) return {};
+        const Seconds dd = now - t;
+        if (dd >= 0 && dd < 86400) return "aujourd'hui";
+        if (dd >= 86400 && dd < 2 * 86400) return "hier";
+        return "le " + dateFr(t);
+    }
+
+    void exportList(const std::vector<KnownDevice>& list) {
+        if (list.empty() || host_.busy()) return;
+        ui::FilePick pick;
+        pick.title = "Exporter les activations pour Excel";
+        pick.filters = {{"Tableau pour Excel (.csv)", "csv"}};
+        pick.start = "activations.csv";
+        pick.save = true;
+        ShellHost host = host_;
+        host_.pickFile(pick, [list, host](std::string path) {
+            if (path.empty()) return;
+            const auto dot = path.find_last_of("./\\");
+            if (dot == std::string::npos || path[dot] != '.') path += ".csv";
+            host.report(host.workspace().exportCsv(list, path));
+        });
     }
 
     void pickRequest() {
@@ -380,8 +525,9 @@ private:
     ui::Button*              record_{nullptr};
     ui::Button*              export_{nullptr};
     ui::Button*              folder_{nullptr};
-    ui::InputText*           search_{nullptr};
-    ui::DropDown*            state_{nullptr};
+    ui::FilterBar*           bar_{nullptr};                         // 1.47.0
+    std::vector<std::vector<std::string>> texts_;                  // 1.47.0 : les cases de chaque PC (la barre)
+    listkit::WhoDid          who_{host_.workspace()};               // 1.47.0 : qui a signe la licence
     ui::TableView*           table_{nullptr};
     std::shared_ptr<Rows>    model_;
     std::vector<KnownDevice> all_, shown_;

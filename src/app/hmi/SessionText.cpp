@@ -116,7 +116,7 @@ void fitButton(ui::Button& b, const std::string& full, float width, const std::s
     if (t != b.tooltip()) b.setTooltip(t);
 }
 
-float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, float height, float gap, bool rightAligned) {
+float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, float height, float gap, bool rightAligned, bool wrapFirst) {
     std::vector<ButtonSpec*> items;
     for (auto& s : specs)
         if (s.button) items.push_back(&s);
@@ -140,7 +140,7 @@ float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, 
         // Les libelles courts, en commencant par la fin.
         for (std::size_t k = n; k-- > 0 && sum(w) > avail;) w[k] = brief[k];
     }
-    if (sum(w) > avail && sum(minimum) <= avail) {
+    if (sum(w) > avail && sum(minimum) <= avail && !wrapFirst) {
         // Raccourcis : chacun au plus `cap`, jamais moins que son minimum (la plus grande borne qui tient).
         float lo = 0.f, hi = *std::max_element(w.begin(), w.end());
         const std::vector<float> start = w;
@@ -182,6 +182,24 @@ float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, 
         ly += height + gap;
     }
     return ly - y - gap;
+}
+
+void fitPlaceholder(ui::InputText& field, float width, const std::vector<std::string>& choices) {
+    if (choices.empty()) return;
+    std::string pick = choices.back();
+    for (const auto& c : choices)
+        if (ui::measureWidth(c, kButtonFont) + 18.f <= width) {
+            pick = c;
+            break;
+        }
+    if (ui::measureWidth(pick, kButtonFont) + 18.f > width) pick = elide(pick, kButtonFont, std::max(0.f, width - 18.f));
+    field.setPlaceholder(pick);
+}
+
+const std::vector<std::string>& messagePlaceholders() {
+    static const std::vector<std::string> v{"\xC3\x89" "cris \xC3\xA0 l'\xC3\xA9quipe\xE2\x80\xA6 (Entr\xC3\xA9" "e)", "\xC3\x89" "cris \xC3\xA0 l'\xC3\xA9quipe\xE2\x80\xA6",
+                                            "\xC3\x89" "cris\xE2\x80\xA6"};
+    return v;
 }
 
 std::string rowText(const Row& r) {

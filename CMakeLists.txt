@@ -335,7 +335,9 @@ add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/
                                   src/license_admin/gui/WorkspaceVersions.cpp   # 1.44.0 : fichiers, messages, versions, sauvegarde complete
                                   src/license_admin/ServiceDeploy.cpp           # 1.45.0 : deployer le service depuis l'Admin (le kit, Node.js)
                                   src/license_admin/Shop.cpp                    # 1.46.0 : la boutique et les commandes (Stripe)
-                                  src/license_admin/gui/WorkspaceShop.cpp)      # 1.46.0 : livrer les commandes payees
+                                  src/license_admin/gui/WorkspaceShop.cpp       # 1.46.0 : livrer les commandes payees
+                                  src/license_admin/Stats.cpp                   # 1.47.0 : les statistiques et le globe (le client)
+                                  src/license_admin/gui/WorkspaceStats.cpp)     # 1.47.0 : les memes, dans le Workspace
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -343,7 +345,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop|WorkspaceStats)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
@@ -733,6 +735,11 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(globe_test tests/globe_test.cpp)
     xpg_target_link_libraries(globe_test PRIVATE xpg_ui)
     xpg_add_test(NAME globe COMMAND globe_test)
+    # 1.47.0 : les graphiques de l'Admin (ui/widgets/Charts) - les formats francais, les echelles, les couleurs stables, le
+    # survol, le clic, le clavier, la bulle, le dessin a deux tailles (un faux renderer) ; sans ecran
+    xpg_add_test_executable(charts_test tests/charts_test.cpp)
+    xpg_target_link_libraries(charts_test PRIVATE xpg_ui)
+    xpg_add_test(NAME charts COMMAND charts_test)
     # ---- fin Lot API 8 : le bandeau bas ----
 
     # -- l'ordre d'execution ---------------------------------------------------
@@ -1208,6 +1215,19 @@ if(XPG_BUILD_TESTS)
     if(TEST adminboutique)
         set_tests_properties(adminboutique PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
     endif()
+    # 1.47.0 : les statistiques et le globe dans l'outil de l'editeur (license_admin/Stats, gui/WorkspaceStats.cpp) : les
+    # periodes, les adresses, les textes ; puis contre le VRAI Worker sur ce poste : des licences, des PC places dans leurs
+    # villes (X-XPG-Lieu-Essai), des demandes, le releve du jour, les courbes, les mises a jour, les admins, le globe et le
+    # direct ; argv[2] : la console (stats-serie, globe...). SAUTE sans Node.js ni wrangler.
+    xpg_add_test_executable(admin_stats_test tests/admin_stats_test.cpp)
+    xpg_target_link_libraries(admin_stats_test PRIVATE xpg_admin_core)
+    if(TARGET admin_stats_test AND TARGET xpg_license_admin)
+        add_dependencies(admin_stats_test xpg_license_admin)
+    endif()
+    xpg_add_test(NAME adminstats COMMAND admin_stats_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:xpg_license_admin>)
+    if(TEST adminstats)
+        set_tests_properties(adminstats PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
     # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
@@ -1226,6 +1246,10 @@ if(XPG_BUILD_TESTS)
         set_tests_properties(adminmail PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 120)
     endif()
     if(TARGET xpg_admin_gui)
+        # 1.47.0 : la galerie des graphiques (la page cachee << graphes-essai >>) - ses planches a deux tailles, le clic, la bulle
+        xpg_add_test_executable(charts_gallery_test tests/charts_gallery_test.cpp)
+        xpg_target_link_libraries(charts_gallery_test PRIVATE xpg_admin_gui)
+        xpg_add_test(NAME chartsgallery COMMAND charts_gallery_test)
         # 1.45.0 : << Deployer le service >> (license_admin/ServiceDeploy, le dialogue) avec un faux deployeur, la version du
         # service face a l'Admin (le bandeau, la pastille) ; argv[2] : la console (service-deployer)
         xpg_add_test_executable(admin_deploy_test tests/admin_deploy_test.cpp)

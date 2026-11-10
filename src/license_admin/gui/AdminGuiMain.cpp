@@ -525,6 +525,13 @@ int main(int argc, char** argv) {
             menus.applyPending();
             const menu::FrameContext fc{dt, time, &theme, renderer->surfaceSize(), renderer->dpiScale()};
             menus.Update(fc);
+            // 1.47.0 : LA FENETRE REDUITE (ou cachee) - rien a montrer : pas de dessin (le globe de la page Statistiques ne
+            // tourne pas pour rien) et pas de boucle a vide ; on attend un evenement, un dixieme de seconde au plus (le
+            // regard, les travaux lents continuent par Update). Comme les fenetres detachees des Studios.
+            if (o.capture.empty() && (SDL_GetWindowFlags(window) & (SDL_WINDOW_MINIMIZED | SDL_WINDOW_HIDDEN)) != 0) {
+                (void)SDL_WaitEventTimeout(nullptr, 100);
+                continue;
+            }
             renderer->beginFrame(theme.color.windowBg);
             menus.Render(*renderer, fc);
             double pause = 0.0;   // 1.42.0 : --attendre

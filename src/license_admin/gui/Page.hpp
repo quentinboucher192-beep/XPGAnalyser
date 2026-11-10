@@ -106,6 +106,8 @@ using PagePtr = std::unique_ptr<Page>;
 //                   d'Administrateurs ; l'admin+)
 //  "journal"        Journal des admins (l'admin+)            PageJournal.cpp
 //  "versions"       Versions (publier ; l'admin+)            PageVersions.cpp
+//  1.47.0 : "globe-essai" la page d'essai du globe (cachee : --page seulement ; des villes d'essai) PageGlobeTest.cpp
+//  1.47.0 : "graphes-essai" la galerie des graphiques (cachee : --page seulement ; donnees d'essai) PageChartsGallery.cpp
 //  1.45.0 : le dialogue << Deployer le service >> (Service en ligne, le tableau de bord) DeployDialog.cpp
 PagePtr makeDashboardPage(ShellHost host);
 PagePtr makeClientsPage(ShellHost host);
@@ -126,6 +128,8 @@ PagePtr makeAdminsPage(ShellHost host);    // 1.44.0
 PagePtr makeRightsPage(ShellHost host);    // 1.44.0
 PagePtr makeJournalPage(ShellHost host);   // 1.44.0
 PagePtr makeVersionsPage(ShellHost host);  // 1.44.0
+PagePtr makeGlobeTestPage(ShellHost host); // 1.47.0 : cachee (--page globe-essai)
+PagePtr makeChartsGalleryPage(ShellHost host);   // 1.47.0 : cachee (--page graphes-essai)
 
 // 1.44.0 : CE QU'UNE PAGE DEMANDE A UNE AUTRE de montrer en arrivant (<< Voir son journal >> : le journal filtre sur cet
 // admin ; << Ses droits >> : cet admin choisi dans Droits ; << Voir la licence >> du journal : la licence choisie) - la page

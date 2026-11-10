@@ -14,6 +14,7 @@
 
 #include "App.hpp"
 #include "SessionService.hpp"
+#include "SessionWindow.hpp"   // 1.47.0 : le contenu de la fenetre de la session (le texte dans son cadre)
 #include "screens/Screens.hpp"
 
 #include "../menu/MenuManager.hpp"
@@ -34,37 +35,9 @@ namespace app {
 
 namespace {
 
-const gfx::FontId kSmall{13};
 const gfx::FontId kButton{16};
 
 float buttonWidth(const std::string& text) { return std::max(88.f, ui::measureWidth(text, kButton) + 32.f); }
-
-std::vector<std::string> wrapWords(const std::string& s, gfx::FontId f, float w) {
-    std::vector<std::string> out;
-    std::string line, word;
-    const auto flush = [&] {
-        if (word.empty()) return;
-        const std::string trial = line.empty() ? word : line + " " + word;
-        if (!line.empty() && ui::measureWidth(trial, f) > w) {
-            out.push_back(line);
-            line = word;
-        } else {
-            line = trial;
-        }
-        word.clear();
-    };
-    for (const char c : s) {
-        if (c == ' ') flush();
-        else if (c == '\n') {
-            flush();
-            out.push_back(line);
-            line.clear();
-        } else word.push_back(c);
-    }
-    flush();
-    if (!line.empty()) out.push_back(line);
-    return out;
-}
 
 std::string pcText(const session::Member& m) {
     std::string t = m.machine;
@@ -73,217 +46,51 @@ std::string pcText(const session::Member& m) {
 }
 
 // ------------------------------------------------------------------------------------------- la fenetre ---
-class PanelBody final : public ui::Widget {
-public:
-    explicit PanelBody(App& app) : app_(app) {}
-    struct Row { ui::Button* follow{nullptr}; ui::Button* role{nullptr}; ui::Button* remove{nullptr}; int member{0}; };
-    struct KnockRow { ui::Button* yes{nullptr}; ui::Button* no{nullptr}; int conn{0}; };
-    std::vector<Row> rows;
-    std::vector<KnockRow> knockRows;
-    ui::Button* copy{nullptr};
-    ui::InputText* field{nullptr};
-    ui::Button* send{nullptr};
-    ui::Button* stop{nullptr};
-    ui::Button* close{nullptr};
-    // 1.45.0 : la colonne de droite - la Discussion ou le Journal ; Exporter le journal (l'hote).
-    ui::Button* chatView{nullptr};
-    ui::Button* journalView{nullptr};
-    ui::Button* exportJournal{nullptr};
-    bool showJournal{false};
-
-protected:
-    void onLayout() override {
-        const auto r = bounds();
-        const float w = std::min(900.f, std::max(560.f, r.w - 60.f));
-        const float h = std::min(620.f, std::max(420.f, r.h - 60.f));
-        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
-        left_ = {panel_.x + 16.f, panel_.y + 34.f + 12.f, std::floor(w * 0.5f) - 24.f, panel_.h - 34.f - 12.f - 60.f};
-        right_ = {left_.right() + 16.f, left_.y, panel_.right() - 16.f - (left_.right() + 16.f), left_.h};
-        auto& s = app_.session();
-        float y = left_.y + 24.f;
-        // Le code, sous le titre de l'equipe (l'hote, avec le code).
-        codeAt_ = -1.f;
-        if (s.host() && !s.code().empty()) {
-            codeAt_ = y;
-            if (copy) copy->setBounds({left_.right() - buttonWidth(copy->text()), y + 6.f, buttonWidth(copy->text()), 28.f});
-            y += 44.f;
-        }
-        rowsAt_ = y;
-        textRight_.clear();
-        for (auto& row : rows) {
-            float bx = left_.right();
-            // 1.45.0 : avec << Retirer de la session... >>, deux lignes de boutons (Suivre et le role dessus).
-            const bool two = row.remove != nullptr;
-            for (auto* b : {row.follow, row.role}) {
-                if (!b) continue;
-                const float bw = std::min(160.f, buttonWidth(b->text()) - 10.f);
-                bx -= bw;
-                b->setBounds({bx, two ? y + 2.f : y + 12.f, bw, two ? 23.f : 26.f});
-                bx -= 6.f;
-            }
-            float left = bx;
-            if (row.remove) {
-                const float bw = std::min(200.f, buttonWidth(row.remove->text()) - 10.f);
-                row.remove->setBounds({left_.right() - bw, y + 27.f, bw, 23.f});
-                left = std::min(left, left_.right() - bw - 6.f);
-            }
-            textRight_.push_back(left - 6.f);   // le texte de la ligne s'arrete avant ses boutons
-            y += 52.f;
-        }
-        knocksAt_ = y + 8.f;
-        y = knocksAt_ + 22.f;
-        for (auto& k : knockRows) {
-            float bx = left_.right();
-            for (auto* b : {k.no, k.yes}) {
-                const float bw = buttonWidth(b->text()) - 10.f;
-                bx -= bw;
-                b->setBounds({bx, y + 10.f, bw, 26.f});
-                bx -= 6.f;
-            }
-            y += 48.f;
-        }
-        // 1.45.0 : les deux vues de la colonne de droite (en tete), Exporter le journal.
-        {
-            float hx = right_.right();
-            for (auto* b : {exportJournal, journalView, chatView}) {
-                if (!b) continue;
-                const float bw = buttonWidth(b->text()) - 16.f;
-                hx -= bw;
-                b->setBounds({hx, right_.y - 4.f, bw, 24.f});
-                hx -= 4.f;
-            }
-        }
-        // La discussion : le champ et Envoyer en bas de la colonne de droite.
-        const float fy = right_.bottom() - 32.f;
-        if (send) send->setBounds({right_.right() - 96.f, fy, 96.f, 30.f});
-        if (field) field->setBounds({right_.x, fy, right_.w - 104.f, 30.f});
-        const float by = panel_.bottom() - 44.f;
-        float bx = panel_.right() - 16.f;
-        for (auto* b : {close, stop}) {
-            if (!b) continue;
-            const float bw = buttonWidth(b->text());
-            bx -= bw;
-            b->setBounds({bx, by, bw, 30.f});
-            bx -= 10.f;
-        }
+//  1.47.0 : son contenu est app/SessionWindow (sessionwin::Body) : le texte dans son cadre a toute taille. Ici : ce
+//  qu'elle montre (snapshotOf, lu dans le service des sessions) et ses boutons (crees, relies).
+sessionwin::Snapshot snapshotOf(const SessionService& s, bool journal) {
+    sessionwin::Snapshot sn;
+    sn.active = s.active();
+    sn.title = s.active() ? "Session \xC2\xAB " + s.sessionName() + " \xC2\xBB" : std::string("Session");
+    if (s.active()) sn.title += s.host() ? " \xE2\x80\x94 tu es l'h\xC3\xB4te" : " \xE2\x80\x94 h\xC3\xB4te : " + s.hostName();
+    if (!s.active()) {
+        sn.progress = s.mode() == SessionService::Mode::Joining ? s.progress() : (s.progress().empty() ? "Pas de session en cours." : s.progress());
+        return sn;
     }
-
-    void onPaint(const ui::PaintContext& ctx) override {
-        const auto& c = ctx.theme.color;
-        auto& r = ctx.r;
-        auto& s = app_.session();
-        r.fillRect(panel_, c.panelBg);
-        r.strokeRect(panel_, c.borderStrong, 1.f);
-        const float titleH = 34.f;
-        r.fillRect({panel_.x, panel_.y, panel_.w, titleH}, c.headerBg);
-        const auto bold = ctx.theme.font.uiBold, ui = ctx.theme.font.ui;
-        std::string title = s.active() ? "Session \xC2\xAB " + s.sessionName() + " \xC2\xBB" : std::string("Session");
-        if (s.active()) title += s.host() ? " \xE2\x80\x94 tu es l'h\xC3\xB4te" : " \xE2\x80\x94 h\xC3\xB4te : " + s.hostName();
-        r.drawText({panel_.x + 12.f, panel_.y + (titleH - r.lineHeight(bold)) * 0.5f}, title, bold, c.text);
-
-        if (!s.active()) {
-            float y = left_.y + 10.f;
-            const std::string text = s.mode() == SessionService::Mode::Joining ? s.progress() : (s.progress().empty() ? "Pas de session en cours." : s.progress());
-            for (const auto& l : wrapWords(text, ui, panel_.w - 32.f)) {
-                r.drawText({panel_.x + 16.f, y}, l, ui, c.text);
-                y += 22.f;
-            }
-            return;
-        }
-        // L'equipe.
-        r.drawText({left_.x, left_.y}, "L'\xC3\xA9quipe \xC2\xB7 " + std::to_string(s.members().size()), bold, c.text);
-        if (codeAt_ >= 0.f) {
-            const gfx::Rect box{left_.x, codeAt_, left_.w, 38.f};
-            r.fillRoundedRect(box, c.inputBg, 6.f);
-            // 1.44.0 : par Internet, le code de 10 caracteres (et si la session est deja ouverte sur le service XPG).
-            const std::string what = !s.internet() ? std::string("Le code de la session")
-                                   : s.relayOpen() ? std::string("Code de la session \xC2\xB7 par Internet, chiffr\xC3\xA9" "e de bout en bout")
-                                                   : std::string("Code de la session \xC2\xB7 ouverture sur le service XPG\xE2\x80\xA6");
-            r.drawText({box.x + 10.f, box.y + 3.f}, what, kSmall, c.textMuted);
-            r.drawText({box.x + 10.f, box.y + 18.f}, s.codeText(), ctx.theme.font.mono, c.text);
-        }
-        float y = rowsAt_;
-        std::size_t rowIndex = 0;
-        for (const auto& m : s.members()) {
-            const float textRight = rowIndex < textRight_.size() ? textRight_[rowIndex] : left_.right();
-            ++rowIndex;
-            const auto col = gfx::Color::rgb(m.color);
-            const gfx::Rect dot{left_.x, y + 8.f, 32.f, 32.f};
-            r.fillRoundedRect(dot, col, 16.f);
-            const std::string ini = session::initials(m.name);
-            r.drawText({dot.x + (32.f - r.measure(ini, kSmall).width) * 0.5f, dot.y + (32.f - r.lineHeight(kSmall)) * 0.5f}, ini, kSmall,
-                       gfx::Color::rgb(0xFFFFFF));
-            std::string who = m.name;
-            if (m.number == s.me()) who += " (toi)";
-            if (m.number == 0) who += " \xC2\xB7 h\xC3\xB4te";
-            {
-                const auto nw = r.fitCharacters(who, ui, std::max(60.f, textRight - (left_.x + 42.f)));
-                r.drawText({left_.x + 42.f, y + 6.f}, nw >= who.size() ? who : who.substr(0, nw) + "\xE2\x80\xA6", ui, c.text);
-            }
-            std::string where = pcText(m) + " \xC2\xB7 " + session::roleText(m.role);
-            if (const auto v = s.viewName(m.view); !v.empty()) where += " \xC2\xB7 " + v;
-            if (!m.selection.empty()) where += " \xC2\xB7 " + std::to_string(m.selection.size()) + " objet" + (m.selection.size() > 1 ? "s" : "");
-            const float maxW = textRight - (left_.x + 42.f);
-            const auto n = r.fitCharacters(where, kSmall, std::max(60.f, maxW - 12.f));
-            r.drawText({left_.x + 42.f, y + 27.f}, n >= where.size() ? where : where.substr(0, n) + "\xE2\x80\xA6", kSmall, c.textMuted);
-            y += 52.f;
-        }
-        if (!s.knocks().empty()) {
-            r.drawText({left_.x, knocksAt_}, "Ils veulent entrer", bold, c.warning);
-            float ky = knocksAt_ + 22.f;
-            for (const auto& k : s.knocks()) {
-                r.drawText({left_.x, ky + 6.f}, k.name, ui, c.text);
-                r.drawText({left_.x, ky + 26.f}, k.machine + (k.machineId.empty() ? std::string{} : " \xC2\xB7 " + k.machineId) + " \xC2\xB7 " + k.address, kSmall,
-                           c.textMuted);
-                ky += 48.f;
-            }
-        }
-        // La discussion (1.45.0 : ou le journal).
-        r.drawText({right_.x, right_.y}, showJournal ? "Le journal" : "La discussion", bold, c.text);
-        const gfx::Rect box{right_.x, right_.y + 24.f, right_.w, right_.h - 24.f - 40.f};
-        r.fillRoundedRect(box, c.inputBg, 6.f);
-        std::vector<std::pair<std::string, gfx::Color>> lines;
-        if (showJournal) {
-            const auto& entries = s.journal().entries();
-            if (entries.empty())
-                lines.emplace_back("Aucun changement encore : chaque changement de la session s'inscrit ici (qui, quand, quoi).", c.textMuted);
-            for (const auto& e : entries) {
-                bool first = true;
-                for (const auto& w : wrapWords(session::lineOf(e), kSmall, box.w - 20.f)) {
-                    lines.emplace_back(w, first && e.color ? gfx::Color::rgb(e.color) : c.text);
-                    first = false;
-                }
-            }
-        }
-        for (const auto& l : showJournal ? std::vector<SessionService::ChatLine>{} : s.chat()) {
-            const std::string text = l.system ? l.text : l.from + " : " + l.text;
-            const auto col = l.system ? c.textMuted : c.text;
-            bool first = true;
-            for (const auto& w : wrapWords((l.time.empty() ? std::string{} : l.time + "  ") + text, kSmall, box.w - 20.f)) {
-                lines.emplace_back(w, first && !l.system && l.color ? gfx::Color::rgb(l.color) : col);
-                first = false;
-            }
-        }
-        const float lh = 18.f;
-        const std::size_t fit = static_cast<std::size_t>(std::max(1.f, std::floor((box.h - 12.f) / lh)));
-        const std::size_t from = lines.size() > fit ? lines.size() - fit : 0;
-        float ly = box.y + 6.f;
-        for (std::size_t i = from; i < lines.size(); ++i) {
-            r.drawText({box.x + 10.f, ly}, lines[i].first, kSmall, lines[i].second);
-            ly += lh;
-        }
-        // Le rappel en bas a gauche.
-        const std::string hint = s.host() ? "Tu enregistres pour tout le monde (Ctrl+S). Fermer le projet arr\xC3\xAAte la session."
-                                          : "C'est " + s.hostName() + " qui enregistre ; ta copie s'efface quand tu pars. Ctrl+Z annule tes gestes.";
-        r.drawText({panel_.x + 16.f, panel_.bottom() - 36.f}, hint, kSmall, c.textMuted);
+    sn.teamTitle = "L'\xC3\xA9quipe \xC2\xB7 " + std::to_string(s.members().size());
+    if (s.host() && !s.code().empty()) {
+        sn.code = true;
+        // 1.44.0 : par Internet, le code de 10 caracteres (et si la session est deja ouverte sur le service XPG).
+        sn.codeLabel = !s.internet() ? std::string("Le code de la session")
+                     : s.relayOpen() ? std::string("Code de la session \xC2\xB7 par Internet, chiffr\xC3\xA9" "e de bout en bout")
+                                     : std::string("Code de la session \xC2\xB7 ouverture sur le service XPG\xE2\x80\xA6");
+        sn.codeText = s.codeText();
     }
-
-private:
-    App& app_;
-    gfx::Rect panel_{}, left_{}, right_{};
-    float codeAt_{-1.f}, rowsAt_{0.f}, knocksAt_{0.f};
-    std::vector<float> textRight_;
-};
+    for (const auto& m : s.members()) {
+        sessionwin::Person p;
+        p.number = m.number;
+        p.name = m.name;
+        if (m.number == s.me()) p.tag = "(toi)";
+        if (m.number == 0) p.tag += std::string(p.tag.empty() ? "" : " ") + "\xC2\xB7 h\xC3\xB4te";
+        p.initials = session::initials(m.name);
+        p.color = m.color;
+        p.where = pcText(m) + " \xC2\xB7 " + session::roleText(m.role);
+        if (const auto v = s.viewName(m.view); !v.empty()) p.where += " \xC2\xB7 " + v;
+        if (!m.selection.empty()) p.where += " \xC2\xB7 " + std::to_string(m.selection.size()) + " objet" + (m.selection.size() > 1 ? "s" : "");
+        sn.people.push_back(std::move(p));
+    }
+    for (const auto& k : s.knocks())
+        sn.knocks.push_back({k.name, k.machine + (k.machineId.empty() ? std::string{} : " \xC2\xB7 " + k.machineId) + " \xC2\xB7 " + k.address});
+    const auto* me = s.member(s.me());
+    for (const auto& l : s.chat())
+        sn.chat.push_back(sessionui::Row{l.time, l.from, l.text, l.system ? 0u : l.color, false, l.system, !l.system && me && l.from == me->name, 1});
+    for (const auto& e : s.journal().entries())
+        sn.journal.push_back(sessionui::Row{session::clockText(e.t), e.who, e.text, e.color, true, e.member < 0, e.member == s.me(), e.count});
+    sn.showJournal = journal;
+    sn.hint = s.host() ? "Tu enregistres pour tout le monde (Ctrl+S). Fermer le projet arr\xC3\xAAte la session."
+                       : "C'est " + s.hostName() + " qui enregistre ; ta copie s'efface quand tu pars. Ctrl+Z annule tes gestes.";
+    return sn;
+}
 
 class SessionPanel final : public menu::WidgetMenu {
 public:
@@ -304,7 +111,7 @@ public:
         if (structure() != built_) rebuild();
         if (app_.session().revision() != seen_ && body_) {
             seen_ = app_.session().revision();
-            body_->invalidate();
+            body_->setSnapshot(snapshotOf(app_.session(), journal_));   // 1.47.0 : les lignes, les noms, le code du moment
         }
     }
 
@@ -343,7 +150,7 @@ private:
         built_ = structure();
         const std::string typed = field_ ? field_->text() : std::string{};
         links_.clear();
-        auto body = std::make_unique<PanelBody>(app_);
+        auto body = std::make_unique<sessionwin::Body>("dialog.session.corps");
         auto& s = app_.session();
         const auto button = [&](const std::string& text, const std::string& id, ui::Button::Style style) {
             auto* b = &static_cast<ui::Button&>(body->addChild(std::make_unique<ui::Button>(text, "dialog.session." + id)));
@@ -362,8 +169,7 @@ private:
                 });
             }
             for (const auto& m : s.members()) {
-                PanelBody::Row row;
-                row.member = m.number;
+                sessionwin::Body::MemberButtons row;
                 if (m.number != s.me() && m.view != hmi::kNoId) {
                     row.follow = button("Suivre", "suivre." + std::to_string(m.number), ui::Button::Style::Default);
                     const int n = m.number;
@@ -388,8 +194,7 @@ private:
             }
             if (s.host())
                 for (const auto& k : s.knocks()) {
-                    PanelBody::KnockRow kr;
-                    kr.conn = k.conn;
+                    sessionwin::Body::KnockButtons kr;
                     kr.yes = button("Faire entrer", "entrer." + std::to_string(k.conn), ui::Button::Style::Primary);
                     kr.no = button("Refuser", "refuser." + std::to_string(k.conn), ui::Button::Style::Default);
                     const int conn = k.conn;
@@ -401,7 +206,6 @@ private:
             body->chatView = button("Discussion", "vue.discussion", journal_ ? ui::Button::Style::Flat : ui::Button::Style::Primary);
             body->journalView = button("Journal \xC2\xB7 " + std::to_string(s.journal().entries().size()), "vue.journal",
                                        journal_ ? ui::Button::Style::Primary : ui::Button::Style::Flat);
-            body->showJournal = journal_;
             links_ += body->chatView->clicked->connect([this] { journal_ = false; });
             links_ += body->journalView->clicked->connect([this] { journal_ = true; });
             if (s.host() && journal_) {
@@ -433,6 +237,8 @@ private:
         }
         body->close = button("Fermer", "fermer", ui::Button::Style::Default);
         links_ += body->close->clicked->connect([this] { manager().CloseDialog(menu::DialogResult{menu::DialogResult::Button::Ok, {}}); });
+        body->setSnapshot(snapshotOf(s, journal_));
+        seen_ = s.revision();
         body_ = body.get();
         setRoot(std::move(body));
         if (field_) {
@@ -452,7 +258,8 @@ private:
     // 1.45.0 : retirer un equipier - la question, puis le retrait.
     void askRemove(int member, const std::string& who) {
         const std::string host = app_.session().hostName();
-        manager().ShowDialog(std::make_unique<MessageDialog>("Retirer " + who + " de la session ?",
+        // 1.47.0 : le titre garde sa place (un nom tres long y est raccourci ; il est entier dans le texte).
+        manager().ShowDialog(std::make_unique<MessageDialog>("Retirer " + sessionui::elide(who, gfx::FontId{16}, 260.f) + " de la session ?",
                                                              who + " est coup\xC3\xA9 tout de suite (\xC2\xAB " + host + " t'a retir\xC3\xA9 de la session \xC2\xBB) "
                                                                    "et revient \xC3\xA0 son accueil ; la copie du projet s'efface de son PC. Les autres le lisent dans la discussion.\n\n"
                                                                    "Il ne revient que si tu le fais entrer de nouveau (m\xC3\xAAme avec le code).",
@@ -463,7 +270,7 @@ private:
     }
 
     App& app_;
-    PanelBody* body_{nullptr};
+    sessionwin::Body* body_{nullptr};
     ui::InputText* field_{nullptr};
     core::ConnectionScope links_;
     std::string built_;
@@ -499,183 +306,7 @@ SessionService::JoinTarget targetOf(const session::Found& f) {
 //  Les fenetres Demarrer et Rejoindre : des lignes posees de haut en bas (un titre, une phrase, un widget, des
 //  widgets cote a cote, le code dans sa boite), puis les boutons en bas a droite. La fenetre les recompose quand
 //  un choix change (Ou, Sur le reseau du bureau / Par Internet...).
-class FlowBody final : public ui::Widget {
-public:
-    struct Item {
-        enum class Kind { Title, Text, Muted, Warning, Widget, Row, Gap, Code };
-        Kind kind{Kind::Text};
-        std::string text;
-        std::vector<ui::Widget*> widgets;
-        float height{0};   // Widget, Row : la hauteur ; Gap : l'espace
-        float width{0};    // Widget : 0, toute la largeur
-        float indent{0};
-    };
-    std::string title;
-    std::vector<Item> items;
-    std::vector<ui::Button*> footer;   // en bas a droite (le dernier : le plus a droite)
-    std::string error;                 // en rouge, au-dessus des boutons
-    float wanted{620.f};
-
-    void add(Item::Kind k, std::string text = {}, float indent = 0) {
-        Item i;
-        i.kind = k;
-        i.text = std::move(text);
-        i.indent = indent;
-        items.push_back(std::move(i));
-    }
-    void widget(ui::Widget* w, float h = 30.f, float width = 0, float indent = 0) {
-        Item i;
-        i.kind = Item::Kind::Widget;
-        i.widgets = {w};
-        i.height = h;
-        i.width = width;
-        i.indent = indent;
-        items.push_back(std::move(i));
-    }
-    void row(std::vector<ui::Widget*> ws, float h = 30.f, float indent = 0) {
-        Item i;
-        i.kind = Item::Kind::Row;
-        i.widgets = std::move(ws);
-        i.height = h;
-        i.indent = indent;
-        items.push_back(std::move(i));
-    }
-    void gap(float h = 10.f) {
-        Item i;
-        i.kind = Item::Kind::Gap;
-        i.height = h;
-        items.push_back(std::move(i));
-    }
-    void code(std::string text, ui::Button* copy) {
-        Item i;
-        i.kind = Item::Kind::Code;
-        i.text = std::move(text);
-        if (copy) i.widgets = {copy};
-        i.height = 44.f;
-        items.push_back(std::move(i));
-    }
-
-protected:
-    static constexpr float kPad = 20.f;
-    static constexpr float kSmallLine = 18.f;
-
-    static float widthOf(ui::Widget* w) {
-        if (auto* b = dynamic_cast<ui::Button*>(w)) return buttonWidth(b->text());
-        if (auto* rb = dynamic_cast<ui::RadioButton*>(w)) return ui::measureWidth(rb->label(), kButton) + 34.f;
-        return 0.f;
-    }
-
-    float textHeight(const Item& i, float w) const {
-        switch (i.kind) {
-            case Item::Kind::Title: return 26.f;
-            case Item::Kind::Text:
-            case Item::Kind::Muted:
-            case Item::Kind::Warning: return static_cast<float>(wrapWords(i.text, kSmall, w - i.indent).size()) * kSmallLine + 4.f;
-            default: return i.height;
-        }
-    }
-
-    void onLayout() override {
-        const auto r = bounds();
-        const float w = std::min(wanted, std::max(420.f, r.w - 40.f));
-        const float cw = w - 2 * kPad;
-        float content = 0;
-        for (const auto& i : items) content += textHeight(i, cw);
-        const float errorH = error.empty() ? 0.f : static_cast<float>(wrapWords(error, kSmall, cw).size()) * kSmallLine + 8.f;
-        const float h = std::min(std::max(240.f, r.h - 40.f), ui::dialogframe::kTitleBand + 14.f + content + errorH + 64.f);
-        panel_ = ui::dialogframe::place(*this, {std::floor(r.x + (r.w - w) * 0.5f), std::floor(r.y + (r.h - h) * 0.5f), w, h});
-        const float x = panel_.x + kPad;
-        float y = panel_.y + ui::dialogframe::kTitleBand + 14.f;
-        at_.clear();
-        for (auto& i : items) {
-            at_.push_back(y);
-            const float ih = textHeight(i, cw);
-            if (i.kind == Item::Kind::Widget && !i.widgets.empty()) {
-                const float ww = i.width > 0 ? std::min(i.width, cw - i.indent) : cw - i.indent;
-                i.widgets[0]->setBounds({x + i.indent, y, ww, i.height});
-            } else if (i.kind == Item::Kind::Row) {
-                float bx = x + i.indent;
-                // Les champs (sans largeur propre) se partagent ce qui reste.
-                float fixed = 0;
-                int stretch = 0;
-                for (auto* wd : i.widgets) {
-                    const float f = widthOf(wd);
-                    if (f > 0) fixed += f;
-                    else ++stretch;
-                }
-                const float gapW = 10.f;
-                const float rest = std::max(60.f, cw - i.indent - fixed - gapW * static_cast<float>(i.widgets.size() - 1));
-                for (auto* wd : i.widgets) {
-                    float ww = widthOf(wd);
-                    if (ww <= 0) ww = stretch ? rest / static_cast<float>(stretch) : rest;
-                    wd->setBounds({bx, y, ww, i.height});
-                    bx += ww + gapW;
-                }
-            } else if (i.kind == Item::Kind::Code && !i.widgets.empty()) {
-                const float bw = widthOf(i.widgets[0]);
-                i.widgets[0]->setBounds({x + cw - bw - 8.f, y + 7.f, bw, 30.f});
-            }
-            y += ih;
-        }
-        errorAt_ = panel_.bottom() - 52.f - errorH;
-        float bx = panel_.right() - kPad;
-        for (auto it = footer.rbegin(); it != footer.rend(); ++it) {
-            const float bw = buttonWidth((*it)->text());
-            bx -= bw;
-            (*it)->setBounds({bx, panel_.bottom() - 46.f, bw, 30.f});
-            bx -= 10.f;
-        }
-    }
-
-    void onPaint(const ui::PaintContext& ctx) override {
-        const auto& c = ctx.theme.color;
-        auto& r = ctx.r;
-        r.fillRect(panel_, c.panelBg);
-        r.strokeRect(panel_, c.borderStrong, 1.f);
-        const float band = ui::dialogframe::kTitleBand;
-        r.fillRect({panel_.x, panel_.y, panel_.w, band}, c.headerBg);
-        const auto bold = ctx.theme.font.uiBold;
-        r.drawText({panel_.x + 12.f, panel_.y + (band - r.lineHeight(bold)) * 0.5f}, title, bold, c.text);
-        const float x = panel_.x + kPad, cw = panel_.w - 2 * kPad;
-        for (std::size_t n = 0; n < items.size() && n < at_.size(); ++n) {
-            const auto& i = items[n];
-            const float y = at_[n];
-            switch (i.kind) {
-                case Item::Kind::Title: r.drawText({x + i.indent, y + 4.f}, i.text, bold, c.text); break;
-                case Item::Kind::Text:
-                case Item::Kind::Muted:
-                case Item::Kind::Warning: {
-                    const auto col = i.kind == Item::Kind::Text ? c.text : i.kind == Item::Kind::Warning ? c.warning : c.textMuted;
-                    float ly = y + 1.f;
-                    for (const auto& l : wrapWords(i.text, kSmall, cw - i.indent)) {
-                        r.drawText({x + i.indent, ly}, l, kSmall, col);
-                        ly += kSmallLine;
-                    }
-                    break;
-                }
-                case Item::Kind::Code: {
-                    const gfx::Rect box{x, y, cw, 44.f};
-                    r.fillRoundedRect(box, c.inputBg, 6.f);
-                    r.drawText({box.x + 12.f, box.y + (44.f - r.lineHeight(ctx.theme.font.mono)) * 0.5f}, i.text, ctx.theme.font.mono, c.text);
-                    break;
-                }
-                default: break;
-            }
-        }
-        if (!error.empty()) {
-            float ly = errorAt_;
-            for (const auto& l : wrapWords(error, kSmall, cw)) {
-                r.drawText({x, ly}, l, kSmall, c.warning);
-                ly += kSmallLine;
-            }
-        }
-    }
-
-private:
-    gfx::Rect panel_{};
-    std::vector<float> at_;
-    float errorAt_{0};
-};
+using sessionwin::FlowBody;   // 1.47.0 : app/SessionWindow (les essais la posent a toutes les tailles)
 
 // Les traits d'une fenetre de session (comme celle de l'equipe).
 menu::MenuTraits dialogTraits() {
@@ -1048,7 +679,10 @@ private:
     protected:
         void onPaint(const ui::PaintContext& ctx) override {
             const auto b = bounds();
-            ctx.r.drawText({b.x, b.y + (b.h - ctx.r.lineHeight(ctx.theme.font.uiBold)) * 0.5f}, text_, ctx.theme.font.uiBold, ctx.theme.color.text);
+            // 1.47.0 : raccourci avec << ... >> s'il ne tient pas (l'infobulle dit le texte entier).
+            const std::string shown = sessionui::elide(text_, ctx.theme.font.uiBold, b.w);
+            setTooltip(shown == text_ ? std::string{} : text_);
+            ctx.r.drawText({b.x, b.y + (b.h - ctx.r.lineHeight(ctx.theme.font.uiBold)) * 0.5f}, shown, ctx.theme.font.uiBold, ctx.theme.color.text);
         }
 
     private:

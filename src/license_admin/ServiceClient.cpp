@@ -1067,9 +1067,12 @@ bool publishStatus(Client& c, const std::string& folder, const licensing::Signin
     return true;
 }
 
-bool markHandled(Client& c, int number, std::string* why) {
+// 1.47.0 : `issue` - "acceptee" ou "refusee" (les statistiques du service : docs/STATISTIQUES.md) ; un service d'avant
+// l'ignore.
+bool markHandled(Client& c, int number, std::string* why, const char* issue) {
     Value body = Value::object();
     body.set("numero", number);
+    if (issue) body.set("issue", issue);
     const Reply r = c.call("POST", "/admin/demandes/traiter", core::json::write(body, false));
     if (r.status != 200 || !r.error.empty()) return fail(why, c.explain(r, "marquer la demande n\xC2\xB0 " + std::to_string(number) + " trait\xC3\xA9" "e"));
     return true;
@@ -1388,7 +1391,7 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Refused, e.nonce, content, line, &why)) return refused(why);
     Result res;
     res.details.push_back("Publi\xC3\xA9 : " + line + ".");
-    if (!markHandled(*c, e.number, &why)) res.details.push_back("ATTENTION : " + why + " ; le refus est bien publi\xC3\xA9 pour le PC.");
+    if (!markHandled(*c, e.number, &why, "refusee")) res.details.push_back("ATTENTION : " + why + " ; le refus est bien publi\xC3\xA9 pour le PC.");
     e.state = RequestState::Refused;
     e.answer = reason;
     e.answeredAt = o.now;
@@ -1416,7 +1419,7 @@ Result answerOption(const std::string& folder, const licensing::SigningKey& key,
     if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
     Result res;
     res.details.push_back("Publi\xC3\xA9 : " + line + ".");
-    if (!markHandled(*c, e.number, &why)) res.details.push_back("ATTENTION : " + why + " ; la r\xC3\xA9ponse est bien publi\xC3\xA9" "e pour le PC.");
+    if (!markHandled(*c, e.number, &why, "acceptee")) res.details.push_back("ATTENTION : " + why + " ; la r\xC3\xA9ponse est bien publi\xC3\xA9" "e pour le PC.");
     e.state = RequestState::Accepted;
     e.answer = licenseId;
     e.answeredAt = o.now;
@@ -1587,7 +1590,7 @@ Result answerOnline(const std::string& folder, const licensing::SigningKey& key,
     std::string line;
     if (!publishStatus(*c, folder, key, e.deviceKey, gw::State::Accepted, e.nonce, content, line, &why)) return refused(why);
     res.details.push_back("Publi\xC3\xA9 : " + line + " (le code scell\xC3\xA9 pour ce PC : son Studio s'active tout seul).");
-    if (!markHandled(*c, e.number, &why)) res.details.push_back("ATTENTION : " + why);
+    if (!markHandled(*c, e.number, &why, "acceptee")) res.details.push_back("ATTENTION : " + why);
     e.state = RequestState::Accepted;
     e.answer = licenseId;
     e.answeredAt = o.now;
@@ -1698,7 +1701,7 @@ bool publishToDevices(Client& c, const std::string& folder, const licensing::Sig
         }
         ++accepted;
         Entry e = *waiting;
-        if (!markHandled(c, e.number, &why)) res.details.push_back("ATTENTION : " + why + " ; la licence est bien publi\xC3\xA9" "e pour ce PC.");
+        if (!markHandled(c, e.number, &why, "acceptee")) res.details.push_back("ATTENTION : " + why + " ; la licence est bien publi\xC3\xA9" "e pour ce PC.");
         e.state = RequestState::Accepted;
         e.answer = lic.licenseId;
         e.answeredAt = c.serviceNow();

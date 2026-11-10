@@ -243,8 +243,8 @@ bool FilterBar::State::active() const noexcept {
     return false;
 }
 
-FilterBar::FilterBar(std::string id, std::vector<Field> fields) : Widget(std::move(id)), fields_(std::move(fields)) {
-    auto field = std::make_unique<InputText>(this->id() + ".recherche");
+FilterBar::FilterBar(std::string id, std::vector<Field> fields, std::string searchId) : Widget(std::move(id)), fields_(std::move(fields)) {
+    auto field = std::make_unique<InputText>(searchId.empty() ? this->id() + ".recherche" : std::move(searchId));
     field->setPlaceholder("Chercher\xE2\x80\xA6");
     field->setEscapeClears(true);
     field->setPadding({3.f, 74.f, 3.f, 30.f});
@@ -310,6 +310,12 @@ void FilterBar::attach(TableView& table, TimeOf time, std::function<std::string(
     if (time) s.time = [time](std::size_t r, std::size_t f) { return time(static_cast<RowIndex>(r), f); };
     if (extra) s.extra = [extra](std::size_t r) { return extra(static_cast<RowIndex>(r)); };
     source_ = std::move(s);
+    linked_ = nullptr;
+    hookTable(table);
+    edited(false);
+}
+
+void FilterBar::hookTable(TableView& table) {
     std::weak_ptr<bool> alive = alive_;
     TableView::FilterBarHooks hooks;
     hooks.active = [this, alive](std::size_t c) { return !alive.expired() && fieldActive(c); };
@@ -321,7 +327,6 @@ void FilterBar::attach(TableView& table, TimeOf time, std::function<std::string(
         if (!alive.expired()) clearAll();
     };
     table.setFilterBarHooks(std::move(hooks));
-    edited(false);
 }
 
 void FilterBar::setSource(Source source) {
@@ -329,6 +334,13 @@ void FilterBar::setSource(Source source) {
     table_ = nullptr;
     countDirty_ = true;
     invalidate();
+}
+
+void FilterBar::linkTable(TableView& table) {
+    table_ = nullptr;
+    linked_ = &table;
+    hookTable(table);
+    table.setHighlight(state_.search);
 }
 
 void FilterBar::refreshCounts() {
@@ -531,6 +543,7 @@ void FilterBar::edited(bool remember) {
         table_->setFilter(std::move(chain));
         table_->setHighlight(state_.search);
     }
+    if (linked_) linked_->setHighlight(state_.search);
     syncChips();
     if (remember && !loading_) saveMemory();
     invalidateLayout();

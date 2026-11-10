@@ -3048,8 +3048,19 @@ namespace ui {
         if (selected()) ctx.r.fillRoundedRect(dot.inset(3.5f, 3.5f), c.accent, 3.f);
         if (focused()) drawFocusRing(ctx, r);
 
+        // 1.47.0 : un libelle plus large que le choix finit par << ... >> (avant : coupe net au bord, au milieu d'une
+        // lettre) ; celui qui le pose met le libelle entier dans l'infobulle.
+        const float room = r.right() - (dot.right() + 6.f);
+        std::string shown = label_;
+        if (ctx.r.measure(label_, ctx.theme.font.ui).width > room) {
+            const std::string_view dots = "\xE2\x80\xA6";
+            const float dw = ctx.r.measure(dots, ctx.theme.font.ui).width;
+            std::size_t n = room > dw ? ctx.r.fitCharacters(label_, ctx.theme.font.ui, room - dw) : 0;
+            while (n > 0 && label_[n - 1] == ' ') --n;
+            shown = room > dw ? label_.substr(0, n) + std::string(dots) : std::string{};
+        }
         ctx.r.drawText({ dot.right() + 6.f, r.y + (r.h - ctx.r.lineHeight(ctx.theme.font.ui)) * 0.5f },
-            label_, ctx.theme.font.ui, enabled() ? c.text : c.textDisabled);
+            shown, ctx.theme.font.ui, enabled() ? c.text : c.textDisabled);
     }
 
     EventResult RadioButton::onEvent(const InputEvent& ev) {

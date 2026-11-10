@@ -520,6 +520,7 @@ struct GlobeView::Impl {
     std::optional<Anim> anim;
     double              vLon{0.0}, vLat{0.0};   // l'elan (degres par seconde)
     double              clock{0.0};             // le temps du globe (advance)
+    float               shift{0.f}, shiftTarget{0.f};   // le decalage du centre (setCentreShift)
     double              lastStep{-1.0};         // l'heure de la peinture du dernier pas
 
     // la souris
@@ -566,6 +567,7 @@ struct GlobeView::Impl {
     gfx::TextureId            bgTex{}, dotsTex{};
     const gfx::IRenderer*     owner{nullptr};
     Rect                      bgRect{}, dotsRect{};
+    Point                     bgCentre{};   // le centre du disque quand son image a ete faite
     float                     bgZoom{0.f};
     bool                      dotsDirty{true}, bgDirty{true};
 
@@ -736,6 +738,13 @@ void GlobeView::advance(double seconds) {
             if (moving()) d.view.lon = globe::normalizeLon(d.view.lon - static_cast<double>(d.speed) * dt);
         }
     }
+    if (d.shift != d.shiftTarget) {   // le centre glisse vers sa place (une demi-seconde environ)
+        const float k = d.frozen ? 1.f : static_cast<float>(std::min(1.0, dt * 7.0));
+        d.shift += (d.shiftTarget - d.shift) * k;
+        if (std::fabs(d.shiftTarget - d.shift) < 0.5f) d.shift = d.shiftTarget;
+        d.dotsDirty = d.groupsDirty = true;
+        invalidate();
+    }
     if (!d.frozen) {
         d.puffs.erase(std::remove_if(d.puffs.begin(), d.puffs.end(), [&](const Impl::Puff& p) { return d.clock - p.start >= kPuffSeconds; }),
                       d.puffs.end());
@@ -749,8 +758,20 @@ void GlobeView::advance(double seconds) {
 // ---- la geometrie ----
 Point GlobeView::centre() const noexcept {
     const Rect b = bounds();
-    return {b.x + b.w / 2.f, b.y + b.h / 2.f};
+    return {b.x + b.w / 2.f + d_->shift, b.y + b.h / 2.f};
 }
+
+void GlobeView::setCentreShift(float dx) {
+    if (dx == d_->shiftTarget) return;
+    d_->shiftTarget = dx;
+    d_->bgDirty = true;   // l'image du disque couvre l'ancien centre et le nouveau (buildBackground)
+    if (d_->frozen) {
+        d_->shift = dx;
+        d_->dotsDirty = d_->groupsDirty = true;
+    }
+    invalidate();
+}
+float GlobeView::centreShift() const noexcept { return d_->shiftTarget; }
 float GlobeView::radius() const noexcept {
     const Rect b = bounds();
     const float r0 = std::max(8.f, std::min(b.w, b.h) / 2.f - d_->margin());
@@ -907,11 +928,12 @@ void GlobeView::Impl::buildBackground(gfx::IRenderer& r, const GlobeView& self) 
     const float R = self.radius(), m = margin();
     // Le cadre du halo, coupe au widget agrandi de 20 % autour du centre : l'image sert telle quelle, agrandie ou
     // reduite, tant que le zoom ne bouge pas de plus de 15 %.
-    const float ex = b.w * 0.6f + 2.f, ey = b.h * 0.6f + 2.f;
+    const float ex = b.w * 0.6f + std::max(std::fabs(shift), std::fabs(shiftTarget)) + 2.f, ey = b.h * 0.6f + 2.f;
     const float x0 = std::floor(std::max(c.x - R - m, c.x - ex)), x1 = std::ceil(std::min(c.x + R + m, c.x + ex));
     const float y0 = std::floor(std::max(c.y - R - m, c.y - ey)), y1 = std::ceil(std::min(c.y + R + m, c.y + ey));
     const int   W = std::min(4096, static_cast<int>(x1 - x0)), H = std::min(4096, static_cast<int>(y1 - y0));
     bgZoom = view.zoom;
+    bgCentre = c;
     if (W <= 0 || H <= 0) return;
     bgRect = {x0, y0, static_cast<float>(W), static_cast<float>(H)};
     bg.assign(static_cast<std::size_t>(W) * static_cast<std::size_t>(H) * 4u, 0u);
@@ -977,7 +999,9 @@ void GlobeView::Impl::buildDots(gfx::IRenderer& r, const GlobeView& self) {
     dots.assign(static_cast<std::size_t>(W) * static_cast<std::size_t>(H) * 4u, 0u);
     const auto& P = globe::landDots(compact ? 4.f : 1.1f);
     const float R0 = R / view.zoom;
-    const float pr0 = (compact ? 1.15f : 1.3f) * (compact ? 1.f : std::max(1.f, R0 / 250.f)) * std::pow(view.zoom, 0.6f);
+    // Le rayon d'un point (globe.js : 1,3 px, plus pour un grand globe) ; un globe plus petit que celui de la planche
+    // (R0 < 250 : une fenetre etroite) a des points un peu plus fins - le meme rapport point / ecart que la planche.
+    const float pr0 = (compact ? 1.15f : 1.3f) * (compact ? 1.f : std::max(0.82f, R0 / 250.f)) * std::pow(view.zoom, 0.6f);
     const float colR = compact ? 160.f : 170.f, colG = compact ? 174.f : 183.f, colB = compact ? 196.f : 203.f;
     const float cl = static_cast<float>(std::cos(view.lon * kRad)), sl = static_cast<float>(std::sin(view.lon * kRad));
     const float cp = static_cast<float>(std::cos(view.lat * kRad)), sp = static_cast<float>(std::sin(view.lat * kRad));
@@ -1075,12 +1099,15 @@ std::string nearbyText(std::size_t others) {
     const bool many = others > 1;
     return "+ " + std::to_string(others) + (many ? " villes proches" : " ville proche");
 }
+// Les autres villes d'un groupe : trois noms au plus, puis << et 6 autres >>.
 std::string othersText(const std::vector<globe::Place>& places, const std::vector<int>& members) {
     std::string s;
-    for (std::size_t i = 1; i < members.size(); ++i) {
+    const std::size_t shown = std::min<std::size_t>(members.size(), 4);
+    for (std::size_t i = 1; i < shown; ++i) {
         if (i > 1) s += ", ";
         s += places[static_cast<std::size_t>(members[i])].city;
     }
+    if (members.size() > shown) s += " et " + std::to_string(members.size() - shown) + " autre" + (members.size() - shown > 1 ? "s" : "");
     return s + " \xC2\xB7 un clic pour zoomer";
 }
 } // namespace
@@ -1233,7 +1260,7 @@ void GlobeView::onPaint(const PaintContext& ctx) {
 
     if (d.bgTex.v) {
         const float s = d.view.zoom / d.bgZoom;
-        r.drawImage(d.bgTex, {c.x + (d.bgRect.x - c.x) * s, c.y + (d.bgRect.y - c.y) * s, d.bgRect.w * s, d.bgRect.h * s});
+        r.drawImage(d.bgTex, {c.x + (d.bgRect.x - d.bgCentre.x) * s, c.y + (d.bgRect.y - d.bgCentre.y) * s, d.bgRect.w * s, d.bgRect.h * s});
     } else {
         r.fillRoundedRect({c.x - R, c.y - R, 2.f * R, 2.f * R}, Color{251, 252, 254, 255}, R);   // sans textures (les essais)
     }
@@ -1280,8 +1307,12 @@ void GlobeView::onPaint(const PaintContext& ctx) {
             }
         }
     }
-    d.drawTooltip(r, *this);
 }
+
+// L'infobulle passe au-dessus de tout (la carte d'une ville posee sur le globe par la page) : la passe du dessus.
+bool GlobeView::requestsOverlayPass() const { return d_->hover >= 0 && !d_->compact && visible(); }
+
+void GlobeView::onPaintOverlay(const PaintContext& ctx) { d_->drawTooltip(ctx.r, *this); }
 
 // ---- la souris ----
 EventResult GlobeView::onEvent(const InputEvent& ev) {

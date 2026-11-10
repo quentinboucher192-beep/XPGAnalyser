@@ -7,6 +7,7 @@
 //  d'exemple n. 318, des PC fictifs "Poste essai A"...) ; aucune donnee reelle.
 //  argv[1] : la racine du depot.
 // =============================================================================
+#include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres des listes
 #include "admin_gui_harness.hpp"
 
 #include "../src/license_admin/Admin.hpp"
@@ -409,13 +410,21 @@ int main(int argc, char** argv) {
               "son empreinte, son logiciel");
         t = paint(p, r);
         check(has(t, "2 PC, 1 licence, 1 client"), "les totaux");
-        check(pickDrop(p, "activations.etat", "active") && rows(p, "activations.table") == 1 && cell(p, "activations.table", 0, 0) == "Poste essai A",
+        // 1.47.0 : l'etat est une puce de la barre << Filtrer et chercher >> (le champ 9 : Etat), plus une liste deroulante.
+        auto* bar = find<ui::FilterBar>(p, "activations");
+        const auto pickState = [&](const std::string& label) {
+            if (!bar) return false;
+            if (label.empty()) bar->clearField(9);
+            else bar->setValues(9, {label});
+            return true;
+        };
+        check(pickState("active") && rows(p, "activations.table") == 1 && cell(p, "activations.table", 0, 0) == "Poste essai A",
               "filtre : actives");
         check(has(paint(p, r), "sur 2 PC en tout"), "le total dit le filtre");
-        check(pickDrop(p, "activations.etat", "demande") && rows(p, "activations.table") == 1 && cell(p, "activations.table", 0, 0) == "Poste essai B",
+        check(pickState("demande") && rows(p, "activations.table") == 1 && cell(p, "activations.table", 0, 0) == "Poste essai B",
               "filtre : demandes");
-        check(pickDrop(p, "activations.etat", "revoque") && rows(p, "activations.table") == 0 && has(paint(p, r), "ne correspond"), "filtre : revoquees (aucune)");
-        check(pickDrop(p, "activations.etat", ""), "tous les etats");
+        check(pickState("r\xC3\xA9voqu\xC3\xA9" "e") && rows(p, "activations.table") == 0 && has(paint(p, r), "ne correspond"), "filtre : revoquees (aucune)");
+        check(pickState(""), "tous les etats");
         check(type(p, "activations.recherche", "\"essai Alpha\"") && rows(p, "activations.table") == 1, "chercher le client");
         check(type(p, "activations.recherche", "\"essai B\"") && rows(p, "activations.table") == 1 && cell(p, "activations.table", 0, 0) == "Poste essai B", "chercher un PC");
         // Exporter ce qui est montre.

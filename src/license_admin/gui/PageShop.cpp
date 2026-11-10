@@ -22,6 +22,7 @@
 //  dans un message, et effacee apres l'appel.
 // =============================================================================
 #include "AdminsKit.hpp"
+#include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../Shop.hpp"
@@ -679,11 +680,12 @@ Color stateInk(const std::string& s) {
 class OrdersModel final : public ui::ITableModel {
 public:
     std::vector<shop::Order> rows;
+    std::vector<std::string> by;   // 1.47.0 : qui l'a livree (le journal des admins) ; une colonne pour la barre, pas montree
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 7; }
+    [[nodiscard]] std::size_t columnCount() const override { return 8; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"N\xC2\xB0", "Date", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat", "Client"};
-        return c < 7 ? h[c] : "";
+        static const char* h[] = {"N\xC2\xB0", "Date", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat", "Client", "Livr\xC3\xA9" "e par"};
+        return c < 8 ? h[c] : "";
     }
     [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
         if (r >= rows.size()) return {};
@@ -696,6 +698,7 @@ public:
             case 4: return shop::amountText(o.amount, o.currency);   // un paiement d'essai : la pastille du detail le dit
             case 5: return shop::stateLabel(o.state);
             case 6: return o.name.empty() ? o.email : o.name;
+            case 7: return r < by.size() ? by[r] : std::string();
             default: return {};
         }
     }
@@ -810,20 +813,29 @@ public:
     explicit OrdersPage(ShellHost host) : Page("page.commandes", std::move(host)) {
         reload_ = &button(*this, "Relever", "commandes.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         deploy_ = &button(*this, "D\xC3\xA9ployer le service", "commandes.deployer", ui::Button::Style::Primary, ui::Icon::Export);
-        filter_ = &adopt(*this, std::make_unique<ui::DropDown>("commandes.filtre"));
-        filter_->setItems({{"Toutes", ""},
-                           {"\xC3\x80 livrer (pay\xC3\xA9" "es)", "payee"},
-                           {"\xC3\x80 revoir", "a_revoir"},
-                           {"En attente du paiement", "a_payer"},
-                           {"Livr\xC3\xA9" "es", "livree"},
-                           {"Rembours\xC3\xA9" "es", "remboursee"},
-                           {"Expir\xC3\xA9" "es, annul\xC3\xA9" "es, refus\xC3\xA9" "es", "closes"}});
-        filter_->setSelectedIndex(0);
         table_ = &adopt(*this, std::make_unique<ui::TableView>("commandes.table"));
-        table_->setColumns({{"N\xC2\xB0", 44.f}, {"Date", 118.f}, {"Soci\xC3\xA9t\xC3\xA9", 150.f}, {"Article", 200.f}, {"Montant", 104.f}, {"\xC3\x89tat", 150.f}, {"Client", 120.f}});
-        table_->setSelectionMode(ui::SelectionMode::Single);
+        table_->setColumns({{"N\xC2\xB0", 64.f}, {"Date", 118.f}, {"Soci\xC3\xA9t\xC3\xA9", 150.f}, {"Article", 200.f}, {"Montant", 104.f}, {"\xC3\x89tat", 150.f}, {"Client", 120.f}});
+        table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs lignes (Exporter 12 lignes)
         model_ = std::make_shared<OrdersModel>();
         table_->setModel(model_);
+        // 1.47.0 (planche 12) : LA BARRE - chercher, l'etat, l'article, la periode, livree par ; << Mes filtres >>.
+        bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("commandes", barFields()));
+        bar_->setNoun("commandes");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return all_->rows.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return all_->cellText(static_cast<RowIndex>(r), f); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t { return f == 1 && r < all_->rows.size() ? listkit::seconds(all_->rows[r].created) : 0; };
+            src.extra = [this](std::size_t r) { return r < all_->rows.size() ? all_->rows[r].email + " " + all_->rows[r].licence + " " + all_->rows[r].stripePayment : std::string(); };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*table_);
+        bar_->setMemoryKey("commandes");
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        // 1.47.0 (planche 06) : le clic droit ; (planche 07) : une ligne se deplie.
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
         deliver_ = &button(*this, "D\xC3\xA9livrer maintenant", "commandes.delivrer", ui::Button::Style::Primary, ui::Icon::Ok);
         stripe_ = &button(*this, "Voir dans Stripe", "commandes.stripe", ui::Button::Style::Default, ui::Icon::GoTo);
         receipt_ = &button(*this, "Ouvrir le re\xC3\xA7u", "commandes.recu", ui::Button::Style::Default, ui::Icon::Document);
@@ -835,7 +847,6 @@ public:
                 if (*alive) update();
             }));
         });
-        links_ += filter_->selectionChanged->connect([this](int) { rebuild(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) { update(); });
         links_ += deliver_->clicked->connect([this] { deliver(); });
         links_ += stripe_->clicked->connect([this] {
@@ -858,7 +869,7 @@ public:
     void refresh() override {
         if (ws().service().ready() && ws().can("demandes") && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0))
             fetch();
-        rebuild();
+        reloadAll();
     }
 
     // Les essais : choisir la commande n.
@@ -872,6 +883,7 @@ public:
         return false;
     }
     [[nodiscard]] std::size_t shownCount() const { return model_->rows.size(); }
+    [[nodiscard]] ui::FilterBar& bar() { return *bar_; }   // 1.47.0 : les essais
 
 protected:
     void onLayout() override {
@@ -880,10 +892,12 @@ protected:
         x0_ = b.x + pad;
         w_ = std::max(600.f, b.w - 2.f * pad);
         titleY_ = b.y + 22.f;
-        const float rw = buttonWidth(*reload_, 110.f), fw = 260.f;
+        const float rw = buttonWidth(*reload_, 110.f);
         reload_->setBounds({x0_ + w_ - rw, titleY_ + 2.f, rw, 36.f});
-        filter_->setBounds({reload_->bounds().x - 10.f - fw, titleY_ + 6.f, fw, 30.f});
         float y = titleY_ + 70.f;
+        const float bh = bar_->heightFor(w_);   // 1.47.0 : la barre de filtres, sur toute la largeur
+        bar_->setBounds({x0_, y, w_, bh});
+        y += bh + 12.f;
         note_ = shopServiceNote(ws());
         show(deploy_, !note_.empty());
         if (!note_.empty()) {
@@ -901,7 +915,7 @@ protected:
         if (std::fabs(tw - fitW_) > 0.5f) {   // les colonnes a la largeur : l'etat toujours en vue ; le client (dans le detail) cede le premier
             fitW_ = tw;
             fitColumns(*table_,
-                       {{"N\xC2\xB0", 44.f, 0.f, 0.f, false},
+                       {{"N\xC2\xB0", 64.f, 0.f, 0.f, false},   // 1.47.0 : + le chevron du depliage
                         {"Date", 120.f, 0.f, 0.f, false},
                         {"Soci\xC3\xA9t\xC3\xA9", 0.f, 3.f, 120.f, false},
                         {"Article", 0.f, 4.f, 170.f, false},
@@ -927,7 +941,7 @@ protected:
         const auto& c = ctx.theme.color;
         r.fillRect(bounds(), c.windowBg);
         r.drawText({x0_, titleY_}, "Commandes", gfx::semibold(kF28), c.text);
-        r.drawText({x0_, titleY_ + 40.f}, fit(r, status(), kF14, filter_->bounds().x - 16.f - x0_), kF14, problem_.empty() || !note_.empty() ? c.textMuted : c.warning);
+        r.drawText({x0_, titleY_ + 40.f}, fit(r, status(), kF14, reload_->bounds().x - 16.f - x0_), kF14, problem_.empty() || !note_.empty() ? c.textMuted : c.warning);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
             r.fillRoundedRect(noteRect_.inset(1.f, 1.f), c.panelBg, 9.f);
@@ -968,24 +982,186 @@ private:
         if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : la boutique en a besoin (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");
         if (!w.hasOrders()) return "Pas encore relev\xC3\xA9" "es : clique \xC2\xAB Relever \xC2\xBB.";
-        if (!w.orders().orders.empty()) return "Aucune commande dans ce filtre.";
+        if (!w.orders().orders.empty()) return "Aucune commande avec ces filtres : \xC2\xAB Effacer les filtres \xC2\xBB pour les voir toutes.";
         return "Aucune commande pour l'instant. Les clients ach\xC3\xA8tent depuis leur Studio (Licence \xE2\x80\xBA Demander ma licence) une fois la boutique ouverte (Boutique).";
+    }
+
+    // 1.47.0 : toutes les commandes (la barre les filtre), et qui a livre chacune (le journal des admins).
+    void reloadAll() {
+        who_.reset();
+        all_->rows.clear();
+        all_->by.clear();
+        if (ws().hasOrders())
+            for (const auto& o : ws().orders().orders) {
+                all_->rows.push_back(o);
+                std::string by;
+                if (o.state == "livree" || o.state == "remboursee")
+                    if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
+                all_->by.push_back(by);
+            }
+        bar_->refreshCounts();
+        rebuild();
     }
 
     void rebuild() {
         const int keep = selected() ? selected()->number : 0;
-        const auto* it = filter_->selectedItem();
-        const std::string want = it ? it->value : std::string();
         model_->rows.clear();
-        if (ws().hasOrders())
-            for (const auto& o : ws().orders().orders) {
-                const bool closes = o.state == "expiree" || o.state == "annulee" || o.state == "echec_paiement";
-                if (!want.empty() && !(want == "closes" ? closes : o.state == want)) continue;
-                model_->rows.push_back(o);
-            }
+        model_->by.clear();
+        for (std::size_t i = 0; i < all_->rows.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            model_->rows.push_back(all_->rows[i]);
+            model_->by.push_back(all_->by[i]);
+        }
         model_->reset();
         if (keep) (void)select(keep);
         update();
+    }
+
+    // ---- 1.47.0 (planche 12) : les colonnes vues par la barre (dans l'ordre du modele) ----
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(8);
+        f[0] = {.title = "N\xC2\xB0", .kind = K::Text};
+        f[1] = {.title = "Date", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
+        f[2] = {.title = "Soci\xC3\xA9t\xC3\xA9", .noun = "une soci\xC3\xA9t\xC3\xA9"};
+        f[3] = {.title = "Article", .chip = true, .noun = "un article"};
+        f[4] = {.title = "Montant", .kind = K::Text};
+        f[5] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat"};
+        for (const char* st : {"payee", "a_revoir", "a_payer", "livree", "remboursee", "expiree", "annulee", "echec_paiement"}) f[5].order.push_back(shop::stateLabel(st));
+        f[6] = {.title = "Client", .noun = "un client"};
+        f[7] = {.title = "Livr\xC3\xA9" "e par", .chip = true, .noun = "un admin"};
+        return f;
+    }
+
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle ----
+    ui::ListMenu menuFor() {
+        const auto rows = table_->selectedModelRows();
+        ui::ListMenu m({rows.size(), "commandes", true});
+        if (rows.empty()) return m;
+        m.unfold(*table_);
+        const shop::Order* o = rows.front() < model_->rows.size() ? &model_->rows[rows.front()] : nullptr;
+        if (rows.size() == 1 && o) {
+            const auto whyOf = [](ui::Button* b) { return b->enabled() ? std::string() : (b->tooltip().empty() ? std::string("pas pour cette commande") : b->tooltip()); };
+            m.action({.label = "D\xC3\xA9livrer maintenant", .icon = ui::Icon::Ok, .why = whyOf(deliver_), .run = [this] { deliver(); }});
+            m.action({.label = "Ouvrir le re\xC3\xA7u", .icon = ui::Icon::Document, .why = receipt_->enabled() ? std::string() : std::string("pas de re\xC3\xA7u pour cette commande"),
+                      .run = [this] { receipt_->clicked->emit(); }});
+            m.action({.label = "Voir dans Stripe", .icon = ui::Icon::GoTo, .why = stripe_->enabled() ? std::string() : std::string("pas encore pay\xC3\xA9" "e"),
+                      .run = [this] { stripe_->clicked->emit(); }});
+            m.action({.label = "Revoir\xE2\x80\xA6", .icon = ui::Icon::Warning,
+                      .why = review_->enabled() ? std::string() : std::string("seulement une commande pay\xC3\xA9" "e, pas encore livr\xC3\xA9" "e"), .run = [this] { askReview(); }});
+            // Aller a : sa licence, le client, l'admin qui l'a livree.
+            if (!o->licence.empty()) {
+                const std::string id = o->licence;
+                m.goTo({.label = "Sa licence " + id, .icon = ui::Icon::Document, .run = [this, id] {
+                            requestPageFocus("licences", id);
+                            host_.navigate("licences");
+                        }});
+            }
+            if (!o->company.empty()) {
+                const std::string c = o->company;
+                m.goTo({.label = "Le client : " + c, .icon = ui::Icon::User, .run = [this, c] {
+                            requestPageFocus("clients", "client:" + c);
+                            host_.navigate("clients");
+                        }});
+            }
+            if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o->number))) {
+                const std::string key = d->key;
+                m.goTo({.label = "L'admin : " + d->who, .icon = ui::Icon::User, .run = [this, key] {
+                            requestPageFocus("admins", "admin:" + key);
+                            host_.navigate("admins");
+                        }});
+            }
+            // Filtrer sur : les memes puces que la barre.
+            const auto filterOn = [&](std::size_t f, const std::string& label, const std::string& v) {
+                if (v.empty()) return;
+                m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+            };
+            filterOn(5, "Cet \xC3\xA9tat", shop::stateLabel(o->state));
+            filterOn(3, "Cet article", o->label.empty() ? o->article : o->label);
+            filterOn(2, "Cette soci\xC3\xA9t\xC3\xA9", o->company);
+            if (o->created > 0) {
+                const std::int64_t when = listkit::seconds(o->created);
+                m.filterOn({.label = "Ce jour : " + dateFr(o->created), .run = [this, when] { bar_->filterOnDay(1, when); }});
+            }
+            filterOn(7, "Livr\xC3\xA9" "e par", rows.front() < model_->by.size() ? model_->by[rows.front()] : std::string());
+            m.copy("Le num\xC3\xA9ro", std::to_string(o->number), ui::Icon::Copy);
+            if (!o->email.empty()) m.copy("Le courriel", o->email, ui::Icon::Mail);
+            if (!o->licence.empty()) m.copy("La licence", o->licence, ui::Icon::Document);
+            if (!o->stripePayment.empty()) m.copy("Le paiement (Stripe)", o->stripePayment, ui::Icon::Link);
+        }
+        std::string lines;
+        for (const RowIndex r : rows) {
+            std::string line;
+            for (std::size_t c = 0; c < 7; ++c) line += (c ? "\t" : "") + model_->cellText(r, c);
+            lines += line + "\n";
+        }
+        m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
+        m.exportRows([this, rows] { listkit::exportRows(host_, *table_, rows, "commandes.csv", "commandes"); });
+        if (rows.size() == 1 && o)
+            m.danger({.label = "Rembourser", .icon = ui::Icon::Undo, .why = refund_->enabled() ? std::string() : refund_->tooltip(), .run = [this] { askRefund(); }});
+        return m;
+    }
+
+    // ---- 1.47.0 (planche 07) : la ligne depliee - le client et le paiement, la livraison, qui l'a livree ----
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= model_->rows.size()) return nullptr;
+        const shop::Order o = model_->rows[r];
+        auto card = std::make_unique<ui::UnfoldCard>("commandes.depliage");
+        ui::UnfoldCard::Box client;
+        client.title = "LE CLIENT, LE PAIEMENT";
+        if (!o.company.empty()) {
+            const std::string c = o.company;
+            client.lines.push_back({.icon = ui::Icon::User, .text = "**" + o.company + "**", .link = [this, c] {
+                                        requestPageFocus("clients", "client:" + c);
+                                        host_.navigate("clients");
+                                    }});
+        }
+        if (!o.name.empty() || !o.email.empty()) client.lines.push_back({.icon = ui::Icon::Mail, .text = o.email.empty() ? o.name : o.email});
+        if (!o.stripePayment.empty() || !o.stripeSession.empty()) {
+            const std::string url = shop::dashboardUrl(o.mode, o.stripePayment);
+            std::string pay = "Stripe";
+            if (!o.stripePayment.empty()) pay += " \xC2\xB7 " + o.stripePayment.substr(0, std::min<std::size_t>(o.stripePayment.size(), 6)) + "\xE2\x80\xA6";
+            if (o.mode == "test") pay += " \xC2\xB7 paiement d'essai";
+            client.lines.push_back({.icon = ui::Icon::Link, .text = pay, .link = [this, url] { openUrl(host_, url); }});
+        }
+        if (o.receiptUrl.rfind("https://", 0) == 0) {
+            const std::string url = o.receiptUrl;
+            client.lines.push_back({.icon = ui::Icon::Document, .text = "le re\xC3\xA7u", .link = [this, url] { openUrl(host_, url); }});
+        }
+        client.lines.push_back({.icon = ui::Icon::Export, .text = "**" + shop::amountText(o.amount, o.currency) + "** TTC \xC2\xB7 " + (o.label.empty() ? o.article : o.label)});
+        card->addBox(std::move(client));
+        ui::UnfoldCard::Box life;
+        life.title = "LA LIVRAISON";
+        life.timeline = true;
+        const Seconds now = ws().now();
+        if (o.created) life.lines.push_back({.time = whenFr(now, o.created), .text = "cr\xC3\xA9\xC3\xA9" "e"});
+        if (o.paid) life.lines.push_back({.time = whenFr(now, o.paid), .text = "pay\xC3\xA9" "e"});
+        if (o.takenAt) life.lines.push_back({.time = whenFr(now, o.takenAt), .text = "prise pour la livraison"});
+        const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number));
+        if (!o.licence.empty()) {
+            const std::string id = o.licence;
+            life.lines.push_back({.time = d ? whenFr(now, d->when) : std::string(), .text = "livr\xC3\xA9" "e : **" + o.licence + "**", .link = [this, id] {
+                                      requestPageFocus("licences", id);
+                                      host_.navigate("licences");
+                                  }});
+        } else {
+            life.lines.push_back({.text = shop::stateLabel(o.state), .tone = o.state == "payee" || o.state == "a_revoir" ? ui::Tone::Warning : ui::Tone::None});
+        }
+        if (!o.error.empty()) life.lines.push_back({.icon = ui::Icon::Warning, .text = o.error, .tone = ui::Tone::Error});
+        card->addBox(std::move(life));
+        if (d) {
+            card->addText("livr\xC3\xA9" "e par");
+            (void)card->addPerson(listkit::person(host_, d->key, d->who), "commandes.depliage.admin");
+        }
+        if (o.receiptUrl.rfind("https://", 0) == 0) {
+            const std::string url = o.receiptUrl;
+            (void)card->addButton("Le re\xC3\xA7u", "commandes.depliage.recu", ui::Icon::Document, [this, url] { openUrl(host_, url); }, {}, true);
+        }
+        if (!o.stripePayment.empty() || !o.stripeSession.empty()) {
+            const std::string url = shop::dashboardUrl(o.mode, o.stripePayment);
+            (void)card->addButton("Stripe", "commandes.depliage.stripe", ui::Icon::GoTo, [this, url] { openUrl(host_, url); }, {}, true);
+        }
+        return card;
     }
 
     void update() {
@@ -1084,7 +1260,7 @@ private:
                 if (!*alive) return;
                 fetching_ = false;
                 problem_ = r.ok ? std::string() : r.message;
-                rebuild();
+                reloadAll();
             }))
             fetching_ = false;
         update();
@@ -1152,7 +1328,9 @@ private:
     std::shared_ptr<bool>        alive_ = std::make_shared<bool>(true);
     ui::Button*                  reload_{nullptr};
     ui::Button*                  deploy_{nullptr};
-    ui::DropDown*                filter_{nullptr};
+    ui::FilterBar*               bar_{nullptr};                                    // 1.47.0
+    std::shared_ptr<OrdersModel> all_ = std::make_shared<OrdersModel>();           // 1.47.0 : toutes (la barre filtre)
+    listkit::WhoDid              who_{host_.workspace()};                          // 1.47.0 : qui a livre
     ui::TableView*               table_{nullptr};
     std::shared_ptr<OrdersModel> model_;
     ui::Button*                  deliver_{nullptr};

@@ -48,6 +48,9 @@
 //                                                  bouffee de 1,6 s)
 //    setReservedAreas                              ou les noms ne vont pas (les
 //                                                  boutons, la carte de la page)
+//    setCentreShift                                le disque decale (une page
+//                                                  etroite : la ville choisie a
+//                                                  gauche de sa carte)
 //    setCompact                                    la petite carte du tableau de
 //                                                  bord (points espaces, marques
 //                                                  0,55, sans noms ni souris)
@@ -59,7 +62,9 @@
 //                                                  cote) ; hoverPlaceChanged(i)
 //    placeAt, screenOf, hoverAt                    les essais, les captures
 //  L'infobulle (survol d'une marque, tout de suite) : << Lyon, FR >> et le nombre
-//  de chaque calque montre ; un groupe dit ses autres villes.
+//  de chaque calque montre ; un groupe dit ses autres villes (trois noms, puis
+//  << et 6 autres >>). Elle est dessinee dans la passe du dessus (au-dessus de ce
+//  que la page pose sur le globe : la carte d'une ville).
 //
 //  CE QUE CA COUTE. L'Admin redessine toute la fenetre a chaque image (vsync) ;
 //  le globe ne refait son image (le disque et les points des terres, rasterises
@@ -224,6 +229,10 @@ public:
     void setLeaderTarget(std::optional<gfx::Point> target);
     // Des zones (repere de bounds()) ou les noms des villes ne se posent pas.
     void setReservedAreas(std::vector<gfx::Rect> areas);
+    // Le centre du disque decale de `dx` pixels (glisse en une demi-seconde ; fige : tout de suite) : une page etroite
+    // dont la carte d'une ville couvre la droite du globe y garde la ville choisie visible, a gauche de la carte.
+    void setCentreShift(float dx);
+    [[nodiscard]] float centreShift() const noexcept;
     void pulse(int placeIndex);
     // Le temps qui passe (la peinture l'appelle, a 30 images par seconde au plus ; les essais aussi).
     void advance(double seconds);
@@ -254,10 +263,12 @@ public:
 
     [[nodiscard]] SizeHint sizeHint() const override;
     [[nodiscard]] std::optional<cursor::Shape> cursorAt(gfx::Point local) const override;
+    [[nodiscard]] bool requestsOverlayPass() const override;   // vrai pendant une infobulle
 
 protected:
     void        onLayout() override;
     void        onPaint(const PaintContext& ctx) override;
+    void        onPaintOverlay(const PaintContext& ctx) override;   // l'infobulle (la passe du dessus)
     EventResult onEvent(const InputEvent& ev) override;
 
 private:

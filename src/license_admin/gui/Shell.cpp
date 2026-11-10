@@ -5,6 +5,7 @@
 //  details, le journal de la seance).
 // =============================================================================
 #include "Shell.hpp"
+#include "ListKit.hpp"   // 1.47.0 : la memoire des listes (Mes filtres)
 
 #include "../../core/Json.hpp"
 #include "../../core/SystemOpen.hpp"
@@ -925,6 +926,8 @@ const Shell::NavEntry* Shell::entry(const std::string& pageId) {
 const std::vector<Shell::NavEntry>& Shell::subPages() {
     static const std::vector<NavEntry> list = {
         {"droits", "Droits", ui::Icon::Lock, false},   // Administrateurs > Droits (planche 08)
+        {"globe-essai", "Le globe (essai)", ui::Icon::Globe, false},   // 1.47.0 : la page d'essai du globe (--page seulement)
+        {"graphes-essai", "Graphiques (essai)", ui::Icon::Chart, false},   // 1.47.0 : la galerie des graphiques (--page seulement)
     };
     return list;
 }
@@ -941,12 +944,19 @@ Shell::Shell(std::string folder, std::function<Seconds()> clock)
         ws_->setClock(std::move(clock));
         ws_->reload();
     }
+    // 1.47.0 : ce que chaque liste a de choisi et << Mes filtres >> (sur ce PC) ; << Copier > >> du clic droit le dit.
+    listkit::installMemory(ws_->folder(), this);
+    ui::ListMenu::setCopiedHook([this](const std::string& what, const std::string&) {
+        flash("Copi\xC3\xA9 : " + what + ".", Tone::Info);
+    });
 }
 
 Shell::~Shell() {
     // Le travail lent d'abord (il lit le Workspace), puis les pages (elles tiennent des ShellHost vers ici).
     deployer::stopAll();   // 1.45.0 : une mise en ligne du service en cours s'arrete (sinon la fermeture l'attendrait)
     bg_.wait();
+    listkit::uninstallMemory(this);   // 1.47.0
+    ui::ListMenu::setCopiedHook({});
     pendingDone_ = nullptr;
     loose_.clear();
     pages_.clear();
@@ -1019,6 +1029,8 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "droits") p = makeRightsPage(h);
     else if (id == "journal") p = makeJournalPage(h);
     else if (id == "versions") p = makeVersionsPage(h);
+    else if (id == "globe-essai") p = makeGlobeTestPage(h);   // 1.47.0 : cachee (PageGlobeTest.cpp)
+    else if (id == "graphes-essai") p = makeChartsGalleryPage(h);   // 1.47.0 : cachee (PageChartsGallery.cpp)
     if (!p) p = std::make_unique<MissingPage>(h, entry(id)->label);
     p->setVisibility(ui::Visibility::Collapsed);
     Page* raw = static_cast<Page*>(&stack_->addChild(std::move(p)));

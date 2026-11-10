@@ -393,7 +393,8 @@ int main(int argc, char** argv) {
         auto job = plus.takeServiceJob();
         check(r.ok && job && plus.serviceRun(*job).ok, "le registre depose");
         on::ServiceState st;
-        check(plus.serviceVerify(&st).ok && st.version == "1.46.0", "le service est en 1.46.0 (" + st.version + ")");
+        // 1.47.0 : le service de ce depot (les statistiques) ; la boutique demande 1.46.0 ou plus
+        check(plus.serviceVerify(&st).ok && shop::serviceKnowsShop(st.version), "le service sait la boutique (" + st.version + ")");
         plus.adoptServiceState(st);
         check(plus.serviceKnowsShop() && plus.whyNotDeliver("edition").empty() && plus.whyNotDeliver("option").empty(), "l'admin+ livre les offres et les options");
         shop::Settings s;

@@ -23,6 +23,7 @@
 //  revocation publiee (la liste scellee pour le PC, jamais publique) ; hors
 //  ligne : dit. Le kit des Studios refuse une cle d'essai.
 // =============================================================================
+#include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres des listes
 #include "admin_gui_harness.hpp"
 #include "service_local.hpp"
 
@@ -377,11 +378,13 @@ int main(int argc, char** argv) {
         check(selectRow(*page0, 1, "Client d'essai Gamma") && !has(paintPage(*page0, 1600.f, 760.f), "confirme avec ton client"),
               "une demande de licence neuve : rien a verifier");
         check(has(t, "En attente") && has(t, "Message d'essai de A") && has(t, "2 en attente"), "l'etat, le message, le compte");
-        auto* filter = find<ui::DropDown>(*page0, "demandes.filtre");
-        filter->setSelectedIndex(1);
+        // 1.47.0 : << En attente >> est la puce << Etat >> de la barre (d'office) ; sa croix : toutes.
+        auto* bar = find<ui::FilterBar>(*page0, "demandes");
+        check(bar && bar->fieldActive(9) && bar->chipText(9) == "\xC3\x89tat : En attente", "la puce Etat d'office : << En attente >>");
+        if (bar) bar->clearField(9);
         const std::string ta = paintPage(*page0, 1600.f, 760.f);
         check(rows(*page0, "demandes.table") == 3 && has(ta, "Illisible"), "Toutes : l'illisible aussi, et pourquoi");
-        filter->setSelectedIndex(0);
+        if (bar) bar->setValues(9, {"En attente"});
         auto dash = gui::makeDashboardPage(h0);
         const std::string dt = paintPage(*dash);
         check(f0.ws->dashboard().onlinePending == 2 && has(dt, "dont 2 en ligne"), "le tableau de bord : le compte");
@@ -649,12 +652,12 @@ int main(int argc, char** argv) {
         page->refresh();
         t = paintPage(*page, 1600.f, 760.f);
         check(rows(*page, "demandes.table") == 0 && has(t, "Aucune demande n'attend"), "plus rien en attente : dit");
-        auto* filter = find<ui::DropDown>(*page, "demandes.filtre");
-        filter->setSelectedIndex(1);
+        auto* bar = find<ui::FilterBar>(*page, "demandes");   // 1.47.0 : la puce Etat de la barre
+        if (bar) bar->clearField(9);
         t = paintPage(*page, 1600.f, 760.f);
-        check(rows(*page, "demandes.table") == 4 && has(t, "Accept\xC3\xA9" "e") && has(t, "Refus\xC3\xA9" "e"), "Toutes : acceptees et refusees");
+        check(bar && rows(*page, "demandes.table") == 4 && has(t, "Accept\xC3\xA9" "e") && has(t, "Refus\xC3\xA9" "e"), "Toutes : acceptees et refusees");
         check(selectRow(*page, 1, "Client d'essai Gamma") && !find<ui::Button>(*page, "demandes.accepter")->enabled(), "une demande traitee : pas d'Accepter");
-        filter->setSelectedIndex(0);
+        if (bar) bar->setValues(9, {"En attente"});
     }
 
     std::printf("-- 1.42.0 : une demande d'option (licence liee) : Ajouter cette option..., le PC lit << acceptee >> et sa licence avec l'option\n");

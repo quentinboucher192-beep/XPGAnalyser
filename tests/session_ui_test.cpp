@@ -490,6 +490,7 @@ int main(int argc, char** argv) {
     encartLicence(r);
 #ifdef XPG_SESSION_WINDOW
     fenetreSession(r);
+    fenetresDemarrerRejoindre(r);
 #endif
     std::printf("%d verification(s), %d echec(s)\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

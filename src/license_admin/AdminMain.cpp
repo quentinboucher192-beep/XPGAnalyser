@@ -53,6 +53,9 @@
 //    1.46.0, la boutique (docs/BOUTIQUE.md) : boutique-etat, boutique-config --parametres F.json, stripe-brancher
 //    --cle-variable NOM (la cle secrete lue dans une variable d'environnement, jamais en argument ni affichee), commandes
 //    [--etat E], commande-livrer [--numero N], commande-revoir --numero N --raison T, commande-rembourser --numero N
+//    1.47.0, les statistiques et le globe (docs/STATISTIQUES.md) : stats-serie --mesures a,b [--du D --au D] [--pas P]
+//    [--par X] [--comparer C] [--client C] [--admin ID] [--licence L] [--logiciel S], stats-mises-a-jour, stats-admins,
+//    stats-releve, globe [--periode N], globe-direct [--depuis T] ; --json : la reponse du service telle quelle
 //    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
 //  1.44.0 : PLUSIEURS ADMINS, LES FICHIERS, LES VERSIONS, LA SAUVEGARDE COMPLETE (docs/ADMINS.md ; par le Workspace de
@@ -246,6 +249,17 @@ std::string usage() {
            "  commande-livrer [--numero N]                   livre la commande N (pay\xC3\xA9" "e ou \xC3\xA0 revoir) ; sans --numero : toutes les pay\xC3\xA9" "es\n"
            "  commande-revoir --numero N --raison TEXTE      met la commande N \xC3\xA0 revoir (la raison)\n"
            "  commande-rembourser --numero N                 l'admin+ : demande le remboursement \xC3\xA0 Stripe\n"
+           "\n1.47.0 : les statistiques et le globe (docs/STATISTIQUES.md ; un service 1.47.0) - --json : la r\xC3\xA9ponse telle quelle :\n"
+           "  stats-serie --mesures a,b [--du AAAA-MM-JJ --au AAAA-MM-JJ] [--pas jour|semaine|mois] [--par offre|option|article|admin|client|\n"
+           "              logiciel|version|type|licence] [--comparer avant|an|rien] [--client NOM] [--admin xpg-...] [--licence ID]\n"
+           "              [--logiciel studios|admins]\n"
+           "                                                 les courbes : ventes_montant, licences_actives, pc_actifs, demandes_traitees...\n"
+           "  stats-mises-a-jour [--du D --au D] [--pas P] [--jours N] [--logiciel studios|admins|tous]\n"
+           "                                                 les versions, l'adoption jour apr\xC3\xA8s jour, le d\xC3\xA9lai, les PC pas \xC3\xA0 jour\n"
+           "  stats-admins [--du D --au D]                   les jours de connexion et les heures habituelles des admins\n"
+           "  stats-releve                                   l'admin+ : le relev\xC3\xA9 du jour (s'il n'est pas encore pris)\n"
+           "  globe [--periode N]                            les villes des clients, des PC, des admins (la derni\xC3\xA8re connexion)\n"
+           "  globe-direct [--depuis T]                      les connexions des 15 derni\xC3\xA8res minutes (T : secondes Unix)\n"
            "  --version\n\n"
            "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
@@ -359,6 +373,169 @@ int oneLine(const license_admin::gui::OpResult& r) {
     }
     complain(r.message);
     return 1;
+}
+
+// 1.47.0 : les commandes des statistiques et du globe (le Workspace ; une ligne par chiffre, ou --json : la reponse du
+// service telle quelle).
+std::string statNumber(double v) {
+    if (!license_admin::stats::isNumber(v)) return "-";
+    if (v == static_cast<double>(static_cast<long long>(v))) return std::to_string(static_cast<long long>(v));
+    char b[32];
+    std::snprintf(b, sizeof b, "%.1f", v);
+    return b;
+}
+
+int runStatsCommand(const Args& a, license_admin::gui::Workspace& ws) {
+    namespace gui = license_admin::gui;
+    namespace st = license_admin::stats;
+    const bool json = a.flag("--json");
+    std::string raw;
+    const auto fail = [&](const gui::OpResult& r) {
+        complain(r.message);
+        return 1;
+    };
+    st::Period period{a.one("--du"), a.one("--au")};
+    if (a.command == "stats-serie") {
+        st::SeriesQuery q;
+        q.measures = splitList(a.one("--mesures"));
+        if (q.measures.empty()) {
+            complain("stats-serie : l'option --mesures manque (par exemple --mesures ventes_montant,pc_actifs)");
+            return 2;
+        }
+        q.period = period;
+        if (!a.one("--pas").empty() && !st::parseStep(a.one("--pas"), q.step)) {
+            complain("stats-serie : --pas vaut jour, semaine ou mois");
+            return 2;
+        }
+        if (!a.one("--comparer").empty() && !st::parseCompare(a.one("--comparer"), q.compare)) {
+            complain("stats-serie : --comparer vaut avant, an ou rien");
+            return 2;
+        }
+        q.split = a.one("--par");
+        q.client = a.one("--client");
+        q.admin = a.one("--admin");
+        q.licence = a.one("--licence");
+        q.software = a.one("--logiciel");
+        st::SeriesReply rep;
+        const auto r = ws.statsSeries(q, rep, &raw);
+        if (!r.ok) return fail(r);
+        if (json) {
+            say(raw + "\n");
+            return 0;
+        }
+        say("Du " + rep.period.from + " au " + rep.period.to + " (" + st::stepKey(rep.step) + ")" +
+            (rep.beforePeriod.from.empty() ? std::string() : ", compar\xC3\xA9 au " + rep.beforePeriod.from + " \xE2\x86\x92 " + rep.beforePeriod.to) +
+            " ; relev\xC3\xA9s depuis le " + rep.recordedSince + "\n");
+        for (const auto& s : rep.series) {
+            if (s.refused) {
+                say(s.name + " : refus\xC3\xA9 (" + (s.filter.empty() ? "il faut le droit " + (s.rights.empty() ? std::string("?") : s.rights.front()) : "pas de filtre " + s.filter) + ")\n");
+                continue;
+            }
+            say(s.name + " (" + st::measureLabel(s.name) + ", " + s.unit + ", " + s.kind + ", " + s.source + ") : total " + statNumber(s.total) +
+                (s.hasComparison() ? " ; avant " + statNumber(s.beforeTotal) + (st::isNumber(s.change) ? " (" + st::changeText(s.change) + ")" : std::string()) : std::string()) + "\n");
+            for (std::size_t i = 0; i < s.points.size() && i < rep.buckets.size(); ++i)
+                say("  " + rep.buckets[i].from + (rep.buckets[i].to != rep.buckets[i].from ? " \xE2\x86\x92 " + rep.buckets[i].to : std::string()) + " : " + statNumber(s.points[i]) +
+                    (i < s.before.size() ? " (avant " + statNumber(s.before[i]) + ")" : std::string()) + "\n");
+            for (const auto& p : s.parts) say("  \xC2\xB7 " + (p.key.empty() ? std::string("(sans)") : p.key) + " : " + statNumber(p.total) + "\n");
+        }
+        return 0;
+    }
+    if (a.command == "stats-mises-a-jour") {
+        st::UpdatesQuery q;
+        q.period = period;
+        if (!a.one("--pas").empty() && !st::parseStep(a.one("--pas"), q.step)) {
+            complain("stats-mises-a-jour : --pas vaut jour, semaine ou mois");
+            return 2;
+        }
+        if (!a.one("--jours").empty()) q.days = std::atoi(a.one("--jours").c_str());
+        if (!a.one("--logiciel").empty()) q.software = a.one("--logiciel");
+        st::UpdatesReply rep;
+        const auto r = ws.statsUpdates(q, rep, &raw);
+        if (!r.ok) return fail(r);
+        if (json) {
+            say(raw + "\n");
+            return 0;
+        }
+        say("Derni\xC3\xA8re version : " + (rep.latest.empty() ? std::string("aucune") : rep.latest + " (publi\xC3\xA9" "e le " + gui::dateFr(rep.latestPublished) + ")") + "\n");
+        say("\xC3\x80 jour : Studios " + std::to_string(rep.upToDateStudios) + " sur " + std::to_string(rep.seenStudios) + ", Admins " + std::to_string(rep.upToDateAdmins) +
+            " sur " + std::to_string(rep.seenAdmins) + " (vus depuis le " + rep.seenSince + ")\n");
+        for (const auto& v : rep.versions)
+            say("  " + v.version + (v.published ? " publi\xC3\xA9" "e le " + gui::dateFr(v.published) : std::string(" (pas publi\xC3\xA9" "e)")) + " : Studios " +
+                std::to_string(v.studios) + ", Admins " + std::to_string(v.admins) + "\n");
+        for (const auto& c : rep.adoption) {
+            std::string line = "  adoption " + c.version + " " + c.software + " (sur " + std::to_string(c.base) + ") :";
+            for (int n : c.days) line += " " + std::to_string(n);
+            say(line + "\n");
+        }
+        for (const auto& d : rep.delays)
+            say("  d\xC3\xA9lai " + d.version + " " + d.software + " : m\xC3\xA9" "dian " + st::duration(d.median) + ", moyen " + st::duration(d.mean) + " (" + std::to_string(d.count) + " PC)\n");
+        say("PC pas \xC3\xA0 jour : " + std::to_string(rep.behindTotal) + "\n");
+        for (std::size_t i = 0; i < rep.behind.size() && i < 20; ++i) {
+            const auto& b = rep.behind[i];
+            say("  " + (b.name.empty() ? b.key.substr(0, 16) : b.name) + (b.customer.empty() ? std::string() : " \xC2\xB7 " + b.customer) + " \xC2\xB7 " + b.software + " " + b.version +
+                " (" + std::to_string(b.behind) + " version(s) de retard, vu le " + gui::dateTimeFr(b.seen) + ")\n");
+        }
+        return 0;
+    }
+    if (a.command == "stats-admins") {
+        st::AdminsReply rep;
+        const auto r = ws.statsAdmins(period, rep, &raw);
+        if (!r.ok) return fail(r);
+        if (json) {
+            say(raw + "\n");
+            return 0;
+        }
+        say("Du " + rep.period.from + " au " + rep.period.to + " ; relev\xC3\xA9s depuis le " + rep.recordedSince + "\n");
+        for (const auto& u : rep.admins) {
+            const auto hour = [](int h) { return h < 0 ? std::string("-") : std::to_string(h) + " h"; };
+            say((u.name.empty() ? std::string(u.role == "admin+" ? "admin+" : "admin") : u.name) + " (" + u.id + ", " + u.role + (u.retired ? ", retir\xC3\xA9" : "") + ") : " +
+                std::to_string(u.days.size()) + " jour(s), " + std::to_string(u.calls) + " appel(s), d\xC3\xA9" "but " + hour(u.usualStart) + ", fin " + hour(u.usualEnd) + " (UTC)" +
+                (u.lastSeen ? ", vu le " + gui::dateTimeFr(u.lastSeen) : std::string()) +
+                (u.software.empty() ? std::string() : ", " + u.software + " " + u.softwareVersion) + (u.city.empty() ? std::string() : ", " + u.city + " " + u.country) + "\n");
+        }
+        return 0;
+    }
+    if (a.command == "stats-releve") {
+        st::SnapshotReply rep;
+        const auto r = ws.statsSnapshot(rep, &raw);
+        if (!r.ok) return fail(r);
+        say(json ? raw + "\n" : r.message + "\n");
+        return 0;
+    }
+    if (a.command == "globe") {
+        st::GlobeReply rep;
+        const auto r = ws.statsGlobe(a.one("--periode").empty() ? 30 : std::atoi(a.one("--periode").c_str()), rep, &raw);
+        if (!r.ok) return fail(r);
+        if (json) {
+            say(raw + "\n");
+            return 0;
+        }
+        const auto counts = [](const st::GlobeCity& c) {
+            return "clients " + std::to_string(c.clients) + ", PC " + std::to_string(c.pcs) + ", actifs " + std::to_string(c.active) + ", pas \xC3\xA0 jour " +
+                   std::to_string(c.outdated) + ", admins " + std::to_string(c.admins) + ", D\xC3\xA9" "couvertes " + std::to_string(c.discoveries) + ", commandes " +
+                   std::to_string(c.orders) + ", demandes " + std::to_string(c.requests);
+        };
+        say(std::to_string(rep.cityCount) + " ville(s), " + std::to_string(rep.countries) + " pays : " + counts(rep.totals) + " ; sans lieu : " +
+            std::to_string(rep.unplacedPcs) + " PC, " + std::to_string(rep.unplacedAdmins) + " admin(s)\n");
+        for (const auto& c : rep.cities) {
+            char ll[48];
+            std::snprintf(ll, sizeof ll, "%.2f %.2f", c.lat, c.lon);
+            say("  " + (c.city.empty() ? std::string("?") : c.city) + ", " + c.country + (c.region.empty() ? std::string() : " (" + c.region + ")") + " [" + ll + "] : " + counts(c) + "\n");
+        }
+        return 0;
+    }
+    // globe-direct
+    st::LiveReply rep;
+    const licensing::Seconds since = a.one("--depuis").empty() ? 0 : static_cast<licensing::Seconds>(std::atoll(a.one("--depuis").c_str()));
+    const auto r = ws.statsLive(since, rep, &raw);
+    if (!r.ok) return fail(r);
+    if (json) {
+        say(raw + "\n");
+        return 0;
+    }
+    say(std::to_string(rep.pings.size()) + " connexion(s) ; " + std::to_string(rep.active) + " PC actif(s) maintenant\n");
+    for (const auto& p : rep.pings) say("  " + gui::dateTimeFr(p.at) + " " + p.city + " (" + p.kind + ")\n");
+    return 0;
 }
 
 int runWorkspaceCommand(const Args& a, const std::string& folder) {
@@ -623,6 +800,10 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         if (!need("--numero")) return 2;
         return oneLine(ws.refundOrder(std::atoi(a.one("--numero").c_str())));
     }
+    // ---- 1.47.0 : les statistiques et le globe (docs/STATISTIQUES.md) ----
+    if (a.command == "stats-serie" || a.command == "stats-mises-a-jour" || a.command == "stats-admins" || a.command == "stats-releve" ||
+        a.command == "globe" || a.command == "globe-direct")
+        return runStatsCommand(a, ws);
     if (a.command == "restaurer") {
         if (!need("--fichier") || !need("--phrase-fichier")) return 2;
         std::string phrase, w;
@@ -664,7 +845,8 @@ int run(const std::vector<std::string>& argv) {
     a.command = argv[0];
     static const std::vector<std::string> kFlags = {"--essai",     "--garder",    "--vide",     "--publier",     "--afficher", "--remplacer",
                                                     "--recevoir-seulement", "--a-blanc", "--toutes", "--etendre", "--nouveau-code", "--reactiver",
-                                                    "--revoquer", "--importante", "--remplacer-cle", "--service-seulement"};   // 1.44.0
+                                                    "--revoquer", "--importante", "--remplacer-cle", "--service-seulement",   // 1.44.0
+                                                    "--json"};   // 1.47.0 : la reponse du service telle quelle (stats-*, globe)
     for (std::size_t i = 1; i < argv.size(); ++i) {
         const std::string& x = argv[i];
         if (x.rfind("--", 0) == 0) {
@@ -1512,7 +1694,9 @@ int run(const std::vector<std::string>& argv) {
                                                                 "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer",
                                                                 // 1.46.0 : la boutique et les commandes
                                                                 "boutique-etat", "boutique-config", "stripe-brancher", "commandes", "commande-livrer",
-                                                                "commande-revoir", "commande-rembourser"};
+                                                                "commande-revoir", "commande-rembourser",
+                                                                // 1.47.0 : les statistiques et le globe
+                                                                "stats-serie", "stats-mises-a-jour", "stats-admins", "stats-releve", "globe", "globe-direct"};
     if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
         return runWorkspaceCommand(a, folder);
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {

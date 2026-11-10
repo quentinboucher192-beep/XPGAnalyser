@@ -18,6 +18,7 @@
 //  service 1.44.0 : un seul avertissement, les interrupteurs grises ; Stripe deja
 //  branche : << Rebrancher Stripe >> ; le nom du PC (de la demande scellee).
 // =============================================================================
+#include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres des Commandes
 #include "admin_gui_harness.hpp"
 
 #include "../src/license_admin/Shop.hpp"
@@ -360,11 +361,12 @@ int main(int argc, char** argv) {
         check(has(t, "n'est pas celui de la commande") && enabledBtn(*op, "commandes.delivrer"), "a revoir : la raison ; Delivrer maintenant (apres revue)");
         check(pick(1), "choisir la n° 1 (a payer)");
         check(!enabledBtn(*op, "commandes.delivrer") && !enabledBtn(*op, "commandes.rembourser"), "a payer : ni livrer ni rembourser");
-        auto* filter = find<ui::DropDown>(*op, "commandes.filtre");
-        filter->setSelectedIndex(1);
-        filter->selectionChanged->emit(1);
+        // 1.47.0 : le filtre est une puce de la barre << Filtrer et chercher >> (Etat), plus une liste deroulante.
+        auto* bar = find<ui::FilterBar>(*op, "commandes");
+        if (bar) bar->setValues(5, {"pay\xC3\xA9" "e, \xC3\xA0 livrer"});
         (void)draw(*op);
-        check(table->model()->rowCount() == 1 && table->model()->cellText(0, 0) == "3", "le filtre << a livrer >> : la n° 3");
+        check(bar && table->model()->rowCount() == 1 && table->model()->cellText(0, 0) == "3", "la puce << Etat : payee, a livrer >> : la n° 3");
+        if (bar) bar->clearAll();
         // un service 1.44.0 : la meme phrase sur la page des commandes
         license_admin::online::ServiceState st;
         st.reached = true;

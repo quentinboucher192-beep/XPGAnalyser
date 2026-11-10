@@ -68,7 +68,10 @@ static int findCity(const std::vector<Place>& v, const std::string& city) {
 
 static void paintAt(GlobeView& g, CountingRenderer& r, const ui::Theme& theme, double t) {
     r.beginFrame({});
-    g.render(ui::PaintContext{r, theme, {0.f, 0.f, 1373.f, 917.f}, t, nullptr});
+    std::vector<ui::Widget*> overlays;   // l'infobulle : la passe du dessus, comme dans un ecran
+    const ui::PaintContext ctx{r, theme, {0.f, 0.f, 1373.f, 917.f}, t, &overlays};
+    g.render(ctx);
+    for (ui::Widget* w : overlays) w->paintTopMost(ctx);
 }
 
 int main() {
@@ -367,6 +370,23 @@ int main() {
         CHECK(clicked == -2 && g.moving());   // un groupe : pas de signal, il zoome
         for (int i = 0; i < 12; ++i) g.advance(0.1);
         CHECK(near(g.view().zoom, 1.9, 1e-4));
+        // Le centre decale (une page etroite : la ville choisie a gauche de sa carte) ; fige : tout de suite.
+        g.setFrozen(true);
+        g.setView(45.76, 4.85, 1.f);
+        g.setCentreShift(-50.f);
+        CHECK(near(g.centre().x, 250.f, 1e-3) && g.screenOf(iLyon) && near(g.screenOf(iLyon)->x, 250.f, 1e-3));
+        CHECK(g.placeAt({250.f, 300.f}) == iLyon);
+        g.setFrozen(false);
+        g.setCentreShift(0.f);
+        g.advance(0.1);
+        CHECK(g.centre().x > 250.f && g.centre().x < 300.f);   // il glisse
+        for (int i = 0; i < 20; ++i) g.advance(0.1);
+        CHECK(near(g.centre().x, 300.f, 1e-3) && near(g.centreShift(), 0.f, 1e-6));
+        // L'infobulle passe au-dessus (la passe du dessus) seulement pendant un survol.
+        g.hoverAt({300.f, 300.f});
+        CHECK(g.hoveredPlace() >= 0 && g.requestsOverlayPass());
+        g.hoverAt({5.f, 5.f});
+        CHECK(g.hoveredPlace() == -1 && !g.requestsOverlayPass());
         // En direct : une bouffee (rien ne casse, la ville inconnue est ignoree).
         g.pulse(g.findPlace("FR|Lyon"));
         g.pulse(-1);

@@ -191,6 +191,7 @@ void HmiSessionPane::onLayout() {
         sendButton_->setBounds({x + w - sw, footerTop, sw, kFooterH});
         sessionui::fitButton(*sendButton_, "Envoyer", sw, {}, "Envoyer \xC3\xA0 l'\xC3\xA9quipe (Entr\xC3\xA9" "e)");
         field_->setBounds({x, footerTop, std::max(0.f, w - sw - 6.f), kFooterH});
+        sessionui::fitPlaceholder(*field_, std::max(0.f, w - sw - 6.f), sessionui::messagePlaceholders());
     }
     // ---- la liste entre les deux ----
     const float top = headerBottom + kPad, bottom = footerTop - kPad;

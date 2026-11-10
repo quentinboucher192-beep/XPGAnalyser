@@ -196,6 +196,7 @@ void BarList::onPaint(const PaintContext& ctx) {
     for (std::size_t i = 0; i < d.rows.size(); ++i) {
         const BarRow& row = d.rows[i];
         const float top = f.rowTop[i], h = f.rowHeight[i];
+        if (top + h > b.bottom() + 1.f) break;   // une ligne qui ne tient pas n'est pas dessinee a moitie
         const float cy = top + (row.sub.empty() || d.mode == BarMode::Grouped ? h * 0.5f : h * 0.5f - 5.f);
         if (static_cast<int>(i) == shown) r.fillRoundedRect({b.x - 4.f, top + 1.f, b.w + 8.f, h - 2.f}, k.hover, 6.f);
         // Le libelle.
@@ -423,11 +424,19 @@ void HeatMap::onPaint(const PaintContext& ctx) {
         const float x1 = f.x0 + static_cast<float>(d.bandTo) * (f.cw + f.gap) + 1.f;
         const Rect band{x0, f.y0 - 4.f, x1 - x0, static_cast<float>(f.rows) * (f.ch + f.gap) + 4.f};
         shapes::strokeRoundedRect(r, band, k.dark ? k.base : Color::rgb(0xB9C6D8), 6.f, 1.5f);
-        if (!d.bandLabel.empty()) text(r, (x0 + x1) * 0.5f, f.y0 - 13.f, d.bandLabel, FontId{11}, k.muted, 0);
+        if (!d.bandLabel.empty()) {
+            const std::string bl = fit(r, d.bandLabel, FontId{11}, contentRect().w);
+            const float w = tw(bl, FontId{11});
+            const float cx = std::max(contentRect().x + w * 0.5f, std::min(contentRect().right() - w * 0.5f, (x0 + x1) * 0.5f));
+            text(r, cx, f.y0 - 13.f, bl, FontId{11}, k.muted, 0);
+        }
     }
+    // Des cases trop basses pour un libelle chacune : une rangee sur deux (ou trois).
+    const int labelStep = std::max(1, static_cast<int>(std::ceil(detail::lh(FontId{11}) / (f.ch + f.gap))));
     for (int row = 0; row < f.rows; ++row) {
         const Rect first = f.cell(row, 0);
-        if (static_cast<std::size_t>(row) < d.rowLabels.size()) text(r, f.x0 - 9.f, first.y + first.h * 0.5f, d.rowLabels[static_cast<std::size_t>(row)], FontId{11}, k.faint, 1);
+        if (static_cast<std::size_t>(row) < d.rowLabels.size() && row % labelStep == 0)
+            text(r, f.x0 - 9.f, first.y + first.h * 0.5f, d.rowLabels[static_cast<std::size_t>(row)], FontId{11}, k.faint, 1);
         for (int c = 0; c < f.cols; ++c) {
             double v = 0.0;
             if (static_cast<std::size_t>(row) < d.cells.size() && static_cast<std::size_t>(c) < d.cells[static_cast<std::size_t>(row)].size())
@@ -448,16 +457,27 @@ void HeatMap::onPaint(const PaintContext& ctx) {
     }
     // Les heures en bas.
     const float yl = f.y0 + static_cast<float>(f.rows) * (f.ch + f.gap) + 7.f;
-    const int every = std::max(1, d.labelEvery);
+    // Un libelle tous les `labelEvery` ; plus espaces si la place manque.
+    int every = std::max(1, d.labelEvery);
+    float widest = 0.f;
+    for (const auto& l : d.colLabels) widest = std::max(widest, tw(l, FontId{11}));
+    while (every < f.cols && static_cast<float>(every) * (f.cw + f.gap) < widest + 6.f) every += std::max(1, d.labelEvery);
     for (int c = 0; c < f.cols && static_cast<std::size_t>(c) < d.colLabels.size(); c += every) {
         const Rect cell = f.cell(0, c);
-        text(r, cell.x + cell.w * 0.5f, yl, d.colLabels[static_cast<std::size_t>(c)], FontId{11}, k.faint, 0);
+        const std::string& l = d.colLabels[static_cast<std::size_t>(c)];
+        const float lw = tw(l, FontId{11});
+        const float x = std::max(contentRect().x + lw * 0.5f, std::min(contentRect().right() - lw * 0.5f, cell.x + cell.w * 0.5f));
+        text(r, x, yl, l, FontId{11}, k.faint, 0);
     }
     // La legende : la rampe, puis le cadre signale.
     if (!d.scaleLabel.empty() || !d.flagLabel.empty()) {
         const float ly = yl + 20.f;
         float x = f.x0;
-        if (!d.scaleLabel.empty()) {
+        const float right = contentRect().right();
+        // La rampe (et son libelle) puis le cadre : ce qui ne tient pas sur la ligne n'est pas dessine.
+        const float scaleW = d.scaleLabel.empty() ? 0.f : tw(d.scaleLabel, FontId{11}) + 8.f + 7.f * 20.f;
+        if (scaleW > 0.f && x + scaleW > right) x = contentRect().x;
+        if (scaleW > 0.f && x + scaleW <= right) {
             text(r, x, ly, d.scaleLabel, FontId{11}, k.muted);
             x += tw(d.scaleLabel, FontId{11}) + 8.f;
             for (int i = 0; i < 7; ++i) {
@@ -468,7 +488,7 @@ void HeatMap::onPaint(const PaintContext& ctx) {
             text(r, x + 7.f * 20.f - 2.f, ly + 12.f, fr::integer(f.max), FontId{10}, k.faint, 1);
             x += 7.f * 20.f + 24.f;
         }
-        if (!d.flagLabel.empty()) {
+        if (!d.flagLabel.empty() && x + 20.f + tw(d.flagLabel, FontId{11}) <= right) {
             shapes::strokeRoundedRect(r, {x, ly - 6.f, 14.f, 12.f}, colors::kBad, 3.f, 2.f);
             text(r, x + 20.f, ly, d.flagLabel, FontId{11}, k.ink2);
         }
@@ -832,13 +852,21 @@ void Timeline::onPaint(const PaintContext& ctx) {
     int y0, m0, d0, y1, m1, d1;
     fr::civil(data_.from, y0, m0, d0);
     fr::civil(data_.to, y1, m1, d1);
+    // Les milieux d'annee seulement s'il y a la place (une annee : au moins 90 px).
+    const double yearPx = 365.0 * static_cast<double>(f.x1 - f.x0) / std::max(1.0, f.to - f.from);
+    const bool mid = yearPx >= 90.0;
+    float lastRight = -1e9f;
     for (int y = y0; y <= y1; ++y)
         for (const int m : {1, 7}) {
             const fr::Day dd = fr::day(y, m, 1);
-            if (dd < data_.from || dd > data_.to) continue;
+            if (dd < data_.from || dd > data_.to || (m == 7 && !mid)) continue;
             const float x = std::round(f.xAt(static_cast<double>(dd)));
             r.fillRect({x, f.top, 1.f, bottom - f.top}, m == 1 ? k.base : k.grid);
-            text(r, x, bottom + 9.f, m == 1 ? std::to_string(y) : fr::monthShort(m), FontId{11}, m == 1 ? k.muted : k.faint, 0);
+            const std::string l = m == 1 ? std::to_string(y) : fr::monthShort(m);
+            const float lw = tw(l, FontId{11});
+            if (x - lw * 0.5f < lastRight + 6.f || x + lw * 0.5f > b.right()) continue;
+            text(r, x, bottom + 9.f, l, FontId{11}, m == 1 ? k.muted : k.faint, 0);
+            lastRight = x + lw * 0.5f;
         }
     const bool live = active_ >= 0 && ((hovered() && !keyboard_) || (focused() && keyboard_));
     const int shown = live ? active_ : example_;

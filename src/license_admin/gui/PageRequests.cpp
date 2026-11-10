@@ -26,6 +26,8 @@
 //  Ici aussi : publishToService, refreshOnlineLicences, depositOnlineLicence
 //  (Page.hpp).
 // =============================================================================
+#include "AdminsKit.hpp"   // 1.47.0 : les dates (<< hier 17:20 >>)
+#include "ListKit.hpp"     // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../../deploy/Crypto.hpp"
@@ -251,9 +253,6 @@ public:
         settings_ = add(*this, std::make_unique<ui::Button>("R\xC3\xA9gler le service", "demandes.regler"));
         settings_->setIcon(ui::Icon::Settings);
         settings_->setTooltip("La page Service en ligne : l'adresse de ton service des licences.");
-        filter_ = add(*this, std::make_unique<ui::DropDown>("demandes.filtre"));
-        filter_->setItems({{"En attente de ta d\xC3\xA9" "cision", "attente"}, {"Toutes", ""}});
-        filter_->setSelectedIndex(0);
         table_ = add(*this, std::make_unique<ui::TableView>("demandes.table"));
         // 1.37.0 : l'edition voulue et l'etat juste apres le client (vus sans faire defiler).
         table_->setColumns({{"Date", 140.f}, {"Client", 200.f}, {"\xC3\x89" "dition voulue", 250.f}, {"\xC3\x89tat", 170.f}, {"PC", 170.f},
@@ -262,6 +261,27 @@ public:
         model_ = std::make_shared<Rows>(
             std::vector<std::string>{"Date", "Client", "\xC3\x89" "dition voulue", "\xC3\x89tat", "PC", "Logiciel", "Licence demand\xC3\xA9" "e", "Message"});
         table_->setModel(model_);
+        // 1.47.0 (planche 12) : LA BARRE - chercher (demandes.recherche), l'etat (d'office : en attente de ta decision),
+        // le client, l'offre, le logiciel, repondue par, la periode.
+        bar_ = add(*this, std::make_unique<ui::FilterBar>("demandes", barFields()));
+        bar_->setNoun("demandes");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return all_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t {
+                return f == 0 && r < all_.size() ? listkit::seconds(all_[r].createdAt ? all_[r].createdAt : all_[r].requestedAt) : 0;
+            };
+            src.extra = [this](std::size_t r) { return r < all_.size() ? all_[r].fingerprint + " " + all_[r].email + " n\xC2\xB0 " + std::to_string(all_[r].number) : std::string(); };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*table_);
+        bar_->setMemoryKey("demandes");
+        if (!bar_->state().active()) bar_->setValues(kStateField, {online::requestStateLabel(RequestState::Pending)});   // d'office (comme avant)
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });   // 1.47.0 (planche 06)
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); }, 8);    // 1.47.0 (planche 07) : reperee par son numero
 
         links_ += fetch_->clicked->connect([this] { fetch(); });
         links_ += accept_->clicked->connect([this] { accept(false); });
@@ -272,7 +292,6 @@ public:
         links_ += settings_->clicked->connect([this] {
             if (host_.navigate) host_.navigate("service");
         });
-        links_ += filter_->selectionChanged->connect([this](int) { rebuild(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) { syncButtons(); });
         links_ += table_->activated->connect([this](RowIndex) { accept(false); });
         refresh();
@@ -287,6 +306,7 @@ public:
     void refresh() override {
         lastBusy_ = busy();
         if (!lastBusy_) fetching_ = false;
+        reloadAll();
         rebuild();
         invalidateLayout();
         invalidate();
@@ -315,9 +335,10 @@ protected:
             btn->setBounds({bx, y, bw, kButtonH});
             bx += bw + kGap;
         }
-        const float fw = 230.f;
-        filter_->setBounds({std::max(bx, x + w - fw), y + 2.f, fw, 28.f});
         y += kButtonH + kGap;
+        const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres
+        bar_->setBounds({x, y, w, bh});
+        y += bh + kGap;
         statusLines_ = wrap(status(), kFonts.ui, w, 2);
         statusY_ = y;
         y += static_cast<float>(statusLines_.size()) * kLineH + 6.f;
@@ -422,9 +443,11 @@ private:
         return t;
     }
 
+    // 1.47.0 : la puce << Etat >> ne garde que << En attente >> (d'office).
     [[nodiscard]] bool wantWaiting() const {
-        const auto* item = filter_->selectedItem();
-        return item && item->value == "attente";
+        for (const auto& p : bar_->state().picks)
+            if (p.field == kStateField) return p.values.size() == 1 && p.values[0] == online::requestStateLabel(RequestState::Pending);
+        return false;
     }
 
     // 1.37.0 : l'edition que le client a choisie dans sa boutique, et son prix (le registre de ce poste).
@@ -463,31 +486,79 @@ private:
         return t;
     }
 
+    // 1.47.0 : toutes les demandes et leurs cases (la barre les filtre) ; qui a repondu (le journal des admins).
+    void reloadAll() {
+        all_ = ws().service().requests;
+        texts_.clear();
+        who_.reset();
+        for (const auto& e : all_) {
+            auto cells = cellsOf(e);
+            cells.push_back(std::to_string(e.number));                // 8 : le numero (la cle du depliage)
+            cells.push_back(online::requestStateLabel(e.state));       // 9 : l'etat seul (la puce)
+            std::string by;
+            if (e.state == RequestState::Accepted || e.state == RequestState::Refused || e.state == RequestState::Handled)
+                if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e.number))) by = d->who;
+            cells.push_back(by);                                       // 10 : repondue par
+            texts_.push_back(std::move(cells));
+        }
+        bar_->refreshCounts();
+    }
+
+    static constexpr std::size_t kStateField = 9;
+
+    // 1.47.0 (planche 12) : les colonnes vues par la barre (les 8 du modele, puis le numero, l'etat seul, repondue par).
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(11);
+        f[0] = {.title = "Date", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
+        f[1] = {.title = "Client", .chip = true, .noun = "un client"};
+        f[2] = {.title = "\xC3\x89" "dition voulue", .chipLabel = "Offre", .noun = "une offre"};
+        f[3] = {.title = "\xC3\x89tat (d\xC3\xA9tail)", .kind = K::Text};
+        f[4] = {.title = "PC", .kind = K::Text};
+        f[5] = {.title = "Logiciel", .chip = true, .noun = "un logiciel"};
+        f[6] = {.title = "Licence demand\xC3\xA9" "e", .kind = K::Text};
+        f[7] = {.title = "Message", .kind = K::Text};
+        f[8] = {.title = "N\xC2\xB0", .kind = K::Text};
+        f[9] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat"};
+        for (RequestState st : {RequestState::Pending, RequestState::Accepted, RequestState::Refused, RequestState::Handled, RequestState::Cancelled,
+                                RequestState::Replaced, RequestState::Unreadable, RequestState::Ignored})
+            f[9].order.push_back(online::requestStateLabel(st));
+        f[10] = {.title = "R\xC3\xA9pondue par", .chip = true, .noun = "un admin"};
+        return f;
+    }
+
+    // Les cases d'une demande (la table).
+    [[nodiscard]] std::vector<std::string> cellsOf(const Entry& e) const {
+        std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
+        const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId) && !e.optionRequest();
+        if (joins) licence += " (ajouter ce PC)";
+        if (e.optionRequest()) licence += ws().licence(e.licenseId) ? " (une option)" : " (une option ; licence inconnue ici)";
+        std::string state = e.acceptedHere() ? "Accept\xC3\xA9" "e ici \xE2\x80\x94 r\xC3\xA9ponse \xC3\xA0 renvoyer" : online::requestStateLabel(e.state);
+        if (joins && e.waiting() && !e.acceptedHere()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
+            licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
+            state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
+        }
+        if (!e.problems.empty()) state += " \xE2\x80\x94 " + e.problems.front();
+        const std::string pc = e.state == RequestState::Unreadable ? "poste " + e.device.substr(0, 12)
+                               : e.deviceName.empty()               ? std::string("(sans nom)")
+                                                                    : e.deviceName;
+        return {dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, wantedOf(e),
+                state, pc, e.software, e.state == RequestState::Unreadable ? std::string() : licence, messageOf(e)};
+    }
+
     void rebuild() {
-        const auto& g = ws().service();
         shown_.clear();
-        for (const auto& e : g.requests)
-            if (!wantWaiting() || e.waiting()) shown_.push_back(e);
         std::vector<std::vector<std::string>> rows;
         std::vector<std::string> keys;
         std::vector<RequestState> states;
         std::vector<bool> here;
-        for (const auto& e : shown_) {
-            std::string licence = e.licenseId.empty() ? std::string("nouvelle") : e.licenseId;
-            const bool joins = !e.licenseId.empty() && ws().licence(e.licenseId) && !e.optionRequest();
-            if (joins) licence += " (ajouter ce PC)";
-            if (e.optionRequest()) licence += ws().licence(e.licenseId) ? " (une option)" : " (une option ; licence inconnue ici)";
-            std::string state = e.acceptedHere() ? "Accept\xC3\xA9" "e ici \xE2\x80\x94 r\xC3\xA9ponse \xC3\xA0 renvoyer" : online::requestStateLabel(e.state);
-            if (joins && e.waiting() && !e.acceptedHere()) {   // n'importe qui peut demander l'ajout a une licence : a verifier
-                licence += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
-                state += " \xE2\x80\x94 \xC3\xA0 v\xC3\xA9rifier";
-            }
-            if (!e.problems.empty()) state += " \xE2\x80\x94 " + e.problems.front();
-            const std::string pc = e.state == RequestState::Unreadable ? "poste " + e.device.substr(0, 12)
-                                   : e.deviceName.empty()               ? std::string("(sans nom)")
-                                                                        : e.deviceName;
-            rows.push_back({dateTimeFr(e.createdAt ? e.createdAt : e.requestedAt), e.customer.empty() ? std::string("\xE2\x80\x94") : e.customer, wantedOf(e),
-                            state, pc, e.software, e.state == RequestState::Unreadable ? std::string() : licence, messageOf(e)});
+        for (std::size_t i = 0; i < all_.size(); ++i) {
+            if (!bar_->accepts(i)) continue;
+            const Entry& e = all_[i];
+            shown_.push_back(e);
+            auto cells = texts_[i];
+            cells.resize(9);   // la table montre 0..7 ; 8 : le numero (la cle du depliage)
+            rows.push_back(std::move(cells));
             keys.push_back(padKey(e.createdAt ? e.createdAt : e.requestedAt));
             states.push_back(e.state);
             here.push_back(e.acceptedHere());
@@ -541,6 +612,141 @@ private:
                 x->setTooltip(ws().whyNot("demandes"));
             }
         invalidateLayout();
+    }
+
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle ----
+    ui::ListMenu menuFor() {
+        const auto rows = table_->selectedModelRows();
+        ui::ListMenu m({rows.size(), "demandes", true});
+        if (rows.empty()) return m;
+        m.unfold(*table_);
+        const Entry* e = rows.front() < shown_.size() ? &shown_[rows.front()] : nullptr;
+        if (rows.size() == 1 && e) {
+            const bool here = e->acceptedHere();
+            const std::string notWaiting = here ? std::string("d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici : renvoie la r\xC3\xA9ponse")
+                                                : "elle n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e->state) + ")";
+            const std::string noRight = ws().can("demandes") ? std::string() : ws().whyNot("demandes");
+            const auto reason = [&](ui::Button* b) -> std::string {
+                if (!noRight.empty()) return noRight;
+                if (b->enabled()) return {};
+                return busy() ? std::string(kBusy) : notWaiting;
+            };
+            if (e->optionRequest()) m.action({.label = "Ajouter cette option\xE2\x80\xA6", .icon = ui::Icon::Star, .why = reason(addOption_), .run = [this] { addOption(); }});
+            else {
+                m.action({.label = "Accepter\xE2\x80\xA6", .icon = ui::Icon::Ok, .why = reason(accept_), .run = [this] { accept(false); }});
+                m.action({.label = "Accepter en ligne\xE2\x80\xA6", .icon = ui::Icon::Globe, .why = reason(acceptOnline_), .run = [this] { accept(true); }});
+            }
+            m.action({.label = "Refuser\xE2\x80\xA6", .icon = ui::Icon::Close, .why = reason(refuse_), .run = [this] { askRefuse(); }});
+            m.action({.label = "Renvoyer la r\xC3\xA9ponse", .icon = ui::Icon::Refresh,
+                      .why = !noRight.empty() ? noRight : here ? std::string() : std::string("pas de r\xC3\xA9ponse \xC3\xA0 renvoyer"), .run = [this] { resend(); }});
+            const std::string lic = e->state == RequestState::Accepted && !e->answer.empty() ? e->answer : e->licenseId;
+            if (!lic.empty() && ws().licence(lic))
+                m.goTo({.label = "La licence " + lic, .icon = ui::Icon::Document, .run = [this, lic] {
+                            requestPageFocus("licences", lic);
+                            host_.navigate("licences");
+                        }});
+            if (!e->customer.empty()) {
+                const std::string c = e->customer;
+                m.goTo({.label = "Le client : " + c, .icon = ui::Icon::User, .run = [this, c] {
+                            requestPageFocus("clients", "client:" + c);
+                            host_.navigate("clients");
+                        }});
+            }
+            if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e->number))) {
+                const std::string key = d->key;
+                m.goTo({.label = "L'admin : " + d->who, .icon = ui::Icon::User, .run = [this, key] {
+                            requestPageFocus("admins", "admin:" + key);
+                            host_.navigate("admins");
+                        }});
+            }
+            const std::size_t i = indexOf(*e);
+            const auto on = [&](std::size_t f, const std::string& label) {
+                if (i >= texts_.size() || texts_[i][f].empty() || texts_[i][f] == "\xE2\x80\x94") return;
+                const std::string v = texts_[i][f];
+                m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+            };
+            on(1, "Ce client");
+            on(2, "Cette offre");
+            on(5, "Ce logiciel");
+            on(kStateField, "Cet \xC3\xA9tat");
+            on(10, "R\xC3\xA9pondue par");
+            if (const Seconds t = e->createdAt ? e->createdAt : e->requestedAt; t > 0) {
+                const std::int64_t when = listkit::seconds(t);
+                m.filterOn({.label = "Ce jour : " + dateFr(t), .run = [this, when] { bar_->filterOnDay(0, when); }});
+            }
+            m.copy("Le num\xC3\xA9ro", std::to_string(e->number), ui::Icon::Copy);
+            if (!e->fingerprint.empty()) m.copy("L'empreinte du PC", e->fingerprint, ui::Icon::Lock);
+            if (!e->message.empty()) m.copy("Le message", e->message, ui::Icon::Comment);
+        }
+        std::string lines;
+        for (const RowIndex r : rows) {
+            std::string line;
+            for (std::size_t c = 0; c < 8; ++c) line += (c ? "\t" : "") + model_->cellText(r, c);
+            lines += line + "\n";
+        }
+        m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
+        m.exportRows([this, rows] { listkit::exportRows(host_, *table_, rows, "demandes.csv", "demandes"); });
+        return m;
+    }
+
+    [[nodiscard]] std::size_t indexOf(const Entry& e) const {
+        for (std::size_t i = 0; i < all_.size(); ++i)
+            if (all_[i].number == e.number && all_[i].device == e.device) return i;
+        return all_.size();
+    }
+
+    // ---- 1.47.0 (planche 07) : la ligne depliee - la demande, la reponse, qui l'a donnee ----
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= shown_.size()) return nullptr;
+        const Entry e = shown_[r];
+        auto card = std::make_unique<ui::UnfoldCard>("demandes.depliage");
+        const Seconds now = ws().now();
+        ui::UnfoldCard::Box ask;
+        ask.title = "LA DEMANDE";
+        if (!e.fingerprint.empty()) ask.lines.push_back({.icon = ui::Icon::Lock, .text = e.fingerprint, .mono = true});
+        std::string pc = e.deviceName.empty() ? std::string("(sans nom)") : e.deviceName;
+        if (!e.software.empty()) pc += " \xC2\xB7 " + e.software;
+        ask.lines.push_back({.icon = ui::Icon::Station, .text = pc});
+        if (!e.message.empty()) ask.lines.push_back({.icon = ui::Icon::Comment, .text = "\xC2\xAB " + oneLine(e.message) + " \xC2\xBB"});
+        ask.lines.push_back({.icon = ui::Icon::History, .text = "re\xC3\xA7ue " + kit::whenFr(now, e.createdAt ? e.createdAt : e.requestedAt)});
+        card->addBox(std::move(ask));
+        ui::UnfoldCard::Box ans;
+        ans.title = "LA R\xC3\x89PONSE";
+        if (e.state == RequestState::Accepted) {
+            ans.lines.push_back({.text = "**accept\xC3\xA9" "e** " + kit::whenFr(now, e.answeredAt), .tone = ui::Tone::Ok, .check = true});
+        } else if (e.state == RequestState::Refused) {
+            ans.lines.push_back({.icon = ui::Icon::Close, .text = "**refus\xC3\xA9" "e** " + kit::whenFr(now, e.answeredAt), .tone = ui::Tone::Error});
+            if (!e.answer.empty()) ans.lines.push_back({.icon = ui::Icon::Comment, .text = "\xC2\xAB " + oneLine(e.answer) + " \xC2\xBB"});
+        } else {
+            ans.lines.push_back({.icon = ui::Icon::Info, .text = "**" + online::requestStateLabel(e.state) + "**", .tone = toneOf(e.state)});
+        }
+        if (e.answeredAt > 0 && (e.createdAt || e.requestedAt)) {
+            const Seconds d = e.answeredAt - (e.createdAt ? e.createdAt : e.requestedAt);
+            if (d >= 0) ans.lines.push_back({.icon = ui::Icon::History, .text = "d\xC3\xA9lai : **" + (d >= 3600 ? std::to_string(d / 3600) + " h " + std::to_string(d % 3600 / 60) : std::to_string(d / 60) + " min") + "**"});
+        }
+        const std::string lic = e.state == RequestState::Accepted && !e.answer.empty() ? e.answer : e.licenseId;
+        if (!lic.empty()) {
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "licence **" + lic + "**"};
+            if (ws().licence(lic))
+                l.link = [this, lic] {
+                    requestPageFocus("licences", lic);
+                    host_.navigate("licences");
+                };
+            ans.lines.push_back(std::move(l));
+        }
+        if (e.optionRequest()) ans.lines.push_back({.icon = ui::Icon::Star, .text = "option : " + optionText(e)});
+        card->addBox(std::move(ans));
+        if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e.number))) {
+            card->addText("r\xC3\xA9pondue par");
+            (void)card->addPerson(listkit::person(host_, d->key, d->who), "demandes.depliage.admin");
+        }
+        if (e.acceptedHere())
+            (void)card->addButton("Renvoyer la r\xC3\xA9ponse", "demandes.depliage.renvoyer", ui::Icon::Refresh, [this] { resend(); },
+                                  ws().can("demandes") ? std::string() : ws().whyNot("demandes"), true);
+        else if (e.waiting() && !e.optionRequest())
+            (void)card->addButton("Accepter\xE2\x80\xA6", "demandes.depliage.accepter", ui::Icon::Ok, [this] { accept(false); },
+                                  ws().can("demandes") ? std::string() : ws().whyNot("demandes"), true);
+        return card;
     }
 
     bool refuseIfBusy() {
@@ -700,7 +906,10 @@ private:
     ui::Button*              refuse_{nullptr};
     ui::Button*              resend_{nullptr};
     ui::Button*              settings_{nullptr};
-    ui::DropDown*            filter_{nullptr};
+    ui::FilterBar*           bar_{nullptr};                          // 1.47.0
+    std::vector<Entry>       all_;                                   // 1.47.0 : toutes (la barre filtre)
+    std::vector<std::vector<std::string>> texts_;                    // ... leurs cases (0..7 la table, 8 n\xC2\xB0, 9 l'etat, 10 repondue par)
+    listkit::WhoDid          who_{host_.workspace()};                // 1.47.0 : qui a repondu
     ui::TableView*           table_{nullptr};
     std::shared_ptr<Rows>    model_;
     std::vector<Entry>       shown_;

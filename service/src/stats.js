@@ -1289,7 +1289,7 @@ export const RoutesStats = {
         return { points: res.points, total: res.points[n - 1], parts: res.parts, totalPart: (p) => p[n - 1] };
     },
 
-    // Les parts rendues : les 50 plus grandes (par total), puis "…" (le reste ; un ratio : rien).
+    // Les parts rendues : les 50 plus grandes (par total), puis "\u2026" (le reste ; un ratio : rien).
     partsRendues(calc, genre) {
         const liste = [...calc.parts].map(([cle, points]) => ({ cle, points, total: calc.totalPart(points, cle) }));
         liste.sort((x, y) => (y.total ?? -1) - (x.total ?? -1) || (x.cle < y.cle ? -1 : 1));

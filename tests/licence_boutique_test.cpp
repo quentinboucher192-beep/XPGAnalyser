@@ -385,8 +385,9 @@ int main(int argc, char** argv) {
     {
         auto r = ls::sync();
         const shop::Catalogue cat = shop::catalogue();
-        check(r.reached && cat.known && !cat.selling() && cat.serviceVersion == shop::kServiceRequired && !cat.edition("PROFESSIONAL"),
-              "un service 1.46.0, boutique ferm\xC3\xA9" "e : connue, aucun article (" + cat.serviceVersion + ")");
+        // 1.47.0 : le service de ce depot est plus recent (les statistiques) ; la boutique demande 1.46.0 ou plus
+        check(r.reached && cat.known && !cat.selling() && shop::serviceKnowsShop(cat.serviceVersion) && !cat.edition("PROFESSIONAL"),
+              "un service 1.46.0 ou plus, boutique ferm\xC3\xA9" "e : connue, aucun article (" + cat.serviceVersion + ")");
         ls::OrderForm f = form;
         f.article = "ed:PROFESSIONAL";
         r = ls::placeOrder(f);

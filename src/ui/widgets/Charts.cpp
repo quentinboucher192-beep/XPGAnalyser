@@ -469,7 +469,8 @@ std::vector<double> niceTicks(double lo, double hi, int target) {
     if (!std::isfinite(lo)) lo = 0.0;
     if (!std::isfinite(hi)) hi = lo;
     if (hi < lo) std::swap(lo, hi);
-    if (!(hi > lo)) hi = lo + (lo == 0.0 ? 1.0 : std::fabs(lo));
+    // Un seul niveau (tout a zero, un seul point) : deux graduations, la valeur et un pas rond au-dessus.
+    if (!(hi > lo)) return {lo, lo + (lo == 0.0 ? 1.0 : niceStep(std::fabs(lo)))};
     target = std::max(1, target);
     const double st = niceStep((hi - lo) / target);
     const double a = std::floor(lo / st + 1e-9);
@@ -1244,7 +1245,8 @@ TimeChart::Frame TimeChart::frame() const {
     if (std::isfinite(sharedHi_)) hi = std::max(hi, sharedHi_);
     if (std::isfinite(d.yMin)) lo = d.yMin;
     if (std::isfinite(d.yMax)) hi = d.yMax;
-    if (!(hi > lo)) hi = lo + (lo == 0.0 ? 1.0 : std::fabs(lo));
+    const bool flat = !(hi > lo);   // tout a zero, un seul niveau : deux graduations (niceTicks)
+    if (flat) hi = lo;
     if (!d.yTicks.empty()) f.ticks = d.yTicks;
     else if (d.kind == Kind::Diverging && lo < 0.0) {
         const double st = niceStep(std::max(hi, -lo) / 2.0);
@@ -1254,6 +1256,7 @@ TimeChart::Frame TimeChart::frame() const {
         lo = std::min(lo, f.ticks.front());
         hi = std::max(hi, f.ticks.back());
     }
+    if (!(hi > lo)) hi = lo + 1.0;
     f.lo = lo;
     f.hi = hi;
 
@@ -1273,8 +1276,23 @@ TimeChart::Frame TimeChart::frame() const {
     // Les etiquettes des reperes, en rangees au-dessus du trace.
     const int rows = markerRows(f);
     if (rows > 0) pt += static_cast<float>(rows) * 15.f + 4.f;
+    // Trop peu de place : la legende d'abord s'en va (le trace passe avant elle).
+    if (f.legendHeight > 0.f && b.h - f.legendHeight - pt - pb < 36.f) f.legendHeight = 0.f;
     f.plot.y = b.y + f.legendHeight + pt;
-    f.plot.h = std::max(10.f, b.h - f.legendHeight - pt - pb);
+    f.plot.h = std::max(4.f, b.h - f.legendHeight - pt - pb);
+    // Un trace trop bas pour ses graduations (les libelles se toucheraient) : moins de graduations.
+    if (d.yTicks.empty() && f.ticks.size() > 2 && f.plot.h / static_cast<float>(f.ticks.size() - 1) < 16.f) {
+        const int target = std::max(1, static_cast<int>(f.plot.h / 18.f));
+        auto [lo2, hi2] = extent();
+        if (std::isfinite(d.yMin)) lo2 = d.yMin;
+        if (std::isfinite(d.yMax)) hi2 = d.yMax;
+        if (!(hi2 > lo2)) hi2 = lo2 + 1.0;
+        std::vector<double> t = niceTicks(lo2, hi2, target);
+        if (t.size() > 3) t = {t.front(), t.back()};
+        f.ticks = t;
+        f.lo = std::min(lo2, t.front());
+        f.hi = std::max(hi2, t.back());
+    }
     return f;
 }
 
@@ -1344,13 +1362,22 @@ TimeChart::MarkerLayout TimeChart::layoutMarkers(const Frame& f) const {
         float x0 = fromValue ? x + 4.f - w : x + 4.f;
         if (x0 < f.plot.x - 2.f) x0 = x - 4.f;
         if (x0 + w > f.plot.right() + 4.f) x0 = x - 4.f - w;
+        // Trois rangees au plus : une etiquette qui ne tient nulle part n'est pas ecrite (le trait reste).
         int row = 0;
-        for (;; ++row) {
+        bool placed = false;
+        for (; row < 3; ++row) {
             if (static_cast<std::size_t>(row) >= used.size()) used.emplace_back();
             bool clash = false;
             for (const auto& [a, bb] : used[static_cast<std::size_t>(row)])
                 if (x0 < bb + 6.f && x0 + w > a - 6.f) clash = true;
-            if (!clash || row >= 3) break;
+            if (!clash) {
+                placed = true;
+                break;
+            }
+        }
+        if (!placed) {
+            out.items.push_back(it);
+            continue;
         }
         used[static_cast<std::size_t>(row)].push_back({x0, x0 + w});
         it.x = x0;
@@ -1397,6 +1424,14 @@ void TimeChart::onPaint(const PaintContext& ctx) {
         const float x1 = f.band ? f.xAt(s.to) + slot * 0.5f : f.xAt(s.to);
         r.fillRect({std::max(f.plot.x, x0), f.plot.y, std::min(f.plot.right(), x1) - std::max(f.plot.x, x0), f.plot.h}, s.color.a ? s.color : shadeC);
         if (!s.label.empty()) text(r, std::max(f.plot.x, x0) + 5.f, f.plot.y + 8.f, fit(r, s.label, FontId{10}, x1 - x0 - 8.f), FontId{10}, k.faint);
+    }
+
+    for (const auto& yb : d.yBands) {
+        const float ya = f.yAt(std::max(yb.from, yb.to)), ye = f.yAt(std::min(yb.from, yb.to));
+        const float top = std::max(f.plot.y, ya), bot = std::min(f.plot.bottom(), ye);
+        if (bot <= top) continue;
+        r.fillRect({f.plot.x, top, f.plot.w, bot - top}, yb.color.a ? yb.color : (k.dark ? colors::mix(k.surface, colors::kOne, 0.12f) : Color::rgb(0xF1F6FD)));
+        if (!yb.label.empty()) text(r, f.plot.right() - 4.f, top + 8.f, yb.label, FontId{10}, k.faint, 1);
     }
 
     // La grille et les valeurs.
@@ -1745,6 +1780,17 @@ Tip TimeChart::tipFor(int index, int) const {
         std::vector<std::size_t> order;
         for (std::size_t si = 0; si < d.series.size(); ++si) order.push_back(si);
         if (!d.tipForward) std::reverse(order.begin(), order.end());
+        // Divergentes : de haut en bas comme le dessin - les entrees (la plus haute d'abord), puis les sorties (la plus
+        // proche de 0 d'abord).
+        if (d.kind == Kind::Diverging && !d.tipForward) {
+            std::vector<std::size_t> up, down;
+            for (std::size_t si = d.series.size(); si-- > 0;)
+                if (!d.series[si].below) up.push_back(si);
+            for (std::size_t si = 0; si < d.series.size(); ++si)
+                if (d.series[si].below) down.push_back(si);
+            order = up;
+            order.insert(order.end(), down.begin(), down.end());
+        }
         // La comparaison : apres les series de la periode.
         std::stable_partition(order.begin(), order.end(), [&](std::size_t si) { return d.series[si].role != Role::Compare; });
         for (const std::size_t si : order) {

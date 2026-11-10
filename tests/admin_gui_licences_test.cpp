@@ -17,6 +17,7 @@
 //  (ses activations, Retirer ce PC, Nouveau code, Desactiver, Relever), le
 //  dialogue du code (masque, Afficher, Copier). argv[1] : la racine du depot.
 // =============================================================================
+#include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres des listes
 #include "admin_gui_harness.hpp"
 
 #include "../src/ui/widgets/Containers.hpp"
@@ -426,15 +427,27 @@ int main(int argc, char** argv) {
                       "Beta : perpetuelle, sans fin", t);
         }
         check(has(t, "Client d'essai Gamma") && has(t, "expir\xC3\xA9" "e"), "Gamma : expiree");
-        // 1.41.0 : des pastilles (<< Toutes 3 >>) ; leur texte reste << Toutes (3) >>.
-        const auto chip = [&](const char* id) { auto* b = find<ui::Button>(*page, id); return b ? b->text() : std::string(); };
-        check(chip("licences.filtre.toutes") == "Toutes (3)" && chip("licences.filtre.actives") == "Actives (2)" && chip("licences.filtre.expirees") == "Expir\xC3\xA9" "es (1)" &&
-                  chip("licences.filtre.revoquees") == "R\xC3\xA9voqu\xC3\xA9" "es (0)" && has(t, "Toutes") && has(t, "Actives"),
-              "les filtres et leurs comptes");
+        // 1.47.0 : l'etat est une puce de la barre << Filtrer et chercher >> (le champ 8 : Etat) ; son menu compte chaque valeur.
+        auto* bar = find<ui::FilterBar>(*page, "licences.barre");
+        const auto stateCount = [&](const std::string& v) {
+            if (!bar) return std::size_t{999};
+            for (const auto& [k, n] : bar->valueCounts(8))
+                if (k == v) return n;
+            return std::size_t{0};
+        };
+        check(bar && stateCount("Active") == 2 && stateCount("Expir\xC3\xA9" "e") == 1 && stateCount("R\xC3\xA9voqu\xC3\xA9" "e") == 0 && has(t, "\xC3\x89tat") &&
+                  has(t, "Offre") && bar->countText() == "3 sur 3",
+              "la barre : l'etat et ses comptes, l'offre, 3 sur 3");
         check(rows(*page, "licences.table") == 3, "3 licences");
-        check(click(*page, "licences.filtre.expirees") && rows(*page, "licences.table") == 1, "filtre Expirees");
-        check(click(*page, "licences.filtre.actives") && rows(*page, "licences.table") == 2, "filtre Actives");
-        check(click(*page, "licences.filtre.toutes") && rows(*page, "licences.table") == 3, "filtre Toutes");
+        const auto pickState = [&](const std::string& v) {
+            if (!bar) return false;
+            if (v.empty()) bar->clearField(8);
+            else bar->setValues(8, {v});
+            return true;
+        };
+        check(pickState("Expir\xC3\xA9" "e") && rows(*page, "licences.table") == 1, "filtre Expirees");
+        check(pickState("Active") && rows(*page, "licences.table") == 2, "filtre Actives");
+        check(pickState("") && rows(*page, "licences.table") == 3, "filtre Toutes");
         check(type(*page, "licences.recherche", "beta") && rows(*page, "licences.table") == 1, "recherche : client");
         check(type(*page, "licences.recherche", "evaluation") && rows(*page, "licences.table") == 1, "recherche : edition");
         check(type(*page, "licences.recherche", "zzz") && rows(*page, "licences.table") == 0, "recherche : rien");
@@ -522,7 +535,13 @@ int main(int argc, char** argv) {
         check(fx.ws->hasRevocations() && fx.ws->revocations().revoked.size() == 1 && fx.ws->revocations().revoked[0].device.empty(), "toute la licence revoquee");
         check(closed(d) && rig.last() && rig.last()->ok, "le dialogue se ferme, le resultat est rapporte");
         t = paintPage(*page);
-        check(find<ui::Button>(*page, "licences.filtre.revoquees")->text() == "R\xC3\xA9voqu\xC3\xA9" "es (1)" && fx.ws->licence(idBeta)->revoked, "la page la montre revoquee");
+        {
+            std::size_t revoked = 0;
+            if (auto* b = find<ui::FilterBar>(*page, "licences.barre"))
+                for (const auto& [k, n] : b->valueCounts(8))
+                    if (k == "R\xC3\xA9voqu\xC3\xA9" "e") revoked = n;
+            check(revoked == 1 && fx.ws->licence(idBeta)->revoked, "la page la montre revoquee (la puce Etat : 1 revoquee)");
+        }
 
         table->selectModelRows({static_cast<ui::RowIndex>(rowOf(*table, 0, idAlpha))});
         check(click(*page, "licences.revoquer"), "Revoquer... (un PC)");

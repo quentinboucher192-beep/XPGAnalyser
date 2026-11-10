@@ -58,11 +58,19 @@ struct ButtonSpec {
     std::string tip;              // l'infobulle d'origine (le libelle entier s'y ajoute quand il est raccourci)
 };
 // Pose les boutons de gauche a droite (`rightAligned` : contre le bord droit, le dernier tout a droite) dans
-// `width`, sur des lignes de `height` separees de `gap` ; rend la hauteur prise (0 : aucun bouton). Un bouton
-// dont meme la largeur minimale ne tient pas sur une ligne vide est pose a la largeur de la ligne.
-float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, float height, float gap = 6.f, bool rightAligned = false);
+// `width`, sur des lignes de `height` separees de `gap` ; rend la hauteur prise (0 : aucun bouton). D'abord les
+// libelles entiers, puis les courts, puis (sur une ligne) raccourcis jusqu'a leur minimum, puis sur plusieurs lignes ;
+// `wrapFirst` : plusieurs lignes avant de raccourcir (les boutons d'un equipier, sous son nom). Un bouton plus large
+// que la ligne est pose a la largeur de la ligne.
+float fitButtons(std::vector<ButtonSpec>& specs, float x, float y, float width, float height, float gap = 6.f, bool rightAligned = false,
+                 bool wrapFirst = false);
 // Un seul bouton a `width` : le libelle entier, sinon le court, sinon raccourci ; l'infobulle dit le libelle entier.
 void fitButton(ui::Button& b, const std::string& full, float width, const std::string& brief = {}, const std::string& tip = {});
+
+// Le texte d'attente d'un champ (police 16, marges 8) a sa largeur : le premier de `choices` qui tient (le dernier sinon).
+void fitPlaceholder(ui::InputText& field, float width, const std::vector<std::string>& choices);
+// Celui du champ de la session : << Ecris a l'equipe... (Entree) >>, << Ecris a l'equipe... >>, << Ecris... >>.
+[[nodiscard]] const std::vector<std::string>& messagePlaceholders();
 
 // ---- une ligne de la discussion ou du journal ----
 struct Row {

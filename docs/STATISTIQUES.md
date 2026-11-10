@@ -1,6 +1,8 @@
 # Les statistiques et le globe (1.47.0) : le contrat
 
-> **En construction pour la 1.47.0** (le service, l'Admin, ses essais). Ce document est le contrat entre le service des
+> **Construit en 1.47.0** : le service (`service/src/stats.js`, 18 essais dans `service/test/stats.test.js`) et le client
+> de l'Admin (`Stats.hpp`, `gui/WorkspaceStats.cpp`, la console ; l'essai `adminstats`) ; les pages qui les dessinent
+> se construisent à part. Ce document est le contrat entre le service des
 > licences (`service/`, `service/src/stats.js`), le client C++ de l'Admin (`src/license_admin/Stats.hpp`,
 > `gui/WorkspaceStats.cpp`) et les pages de l'Admin (la page « Statistiques », la fiche d'un client, la fiche et la vue
 > d'ensemble des admins, le globe). Il suit la maquette validée `docs/maquettes/1.47.0/` (planches 00 à 05 et 08 à 11)
@@ -103,7 +105,10 @@ Réponse 200 :
 - `parts` : les 50 plus grandes clés (par `total`), puis `"…"` (le reste, s'il y en a) ; la clé `""` : ce qui n'a pas
   cette dimension (une commande d'offre dans `par=option`, une licence sans signataire connu…).
 - `avant` n'est là qu'avec une comparaison ; il n'a pas de `parts`.
-- Une mesure qu'un **admin** n'a pas le droit de voir : `{"refuse": "droit", "droits": [...]}` (le reste répond).
+- `genre` : `flux`, `niveau`, `ratio`, `cumul` (`ventes_cumul`) ou `max` (`jetons_pic`) ; `unite` : `centimes`,
+  `nombre`, `secondes` ; `source` : `S`, `N`, `S+N`.
+- Une mesure qu'un **admin** n'a pas le droit de voir : `{"refuse": "droit", "droits": [...]}` (le reste répond). Un
+  filtre que la mesure n'a pas (`admin=` sur `jetons_pic`…) : `{"refuse": "filtre", "filtre": "admin"}`.
 - Erreurs : 400 `champ` (une mesure inconnue, un jour illisible, trop de points, une division inconnue), 401/403 comme
   les autres routes `/admin`.
 
@@ -330,9 +335,10 @@ la licence à ce moment.
 1.47 le donne ; un Admin d'avant ne le donne pas (la demande compte comme traitée, ni acceptée ni refusée).
 
 **Les écritures** (le plan gratuit compte les lignes écrites) : un fait = 2 lignes, sur des appels rares (une
-activation, un dépôt de licence, une demande) ; un appel signé de routine (renouveler, jeton, messages) n'écrit rien de
-plus, sauf le lieu d'une clé une fois par heure ; les compteurs, une ligne par admin actif et par minute au plus ; le
-relevé, une ligne par jour. Les **ménages** (une fois par jour) effacent ce qui dépasse les durées ci-dessus.
+activation : 11 lignes au plus au lieu de 9 ; un dépôt de licence, une demande) ; un appel signé de routine (renouveler :
+toujours 3 lignes, jeton : 2, messages) n'écrit rien de plus, sauf le lieu d'une clé une fois par heure (ou quand il
+change) ; une clé qui change de version : une ligne de plus (`versions_vues`) ; les compteurs, une ligne par admin actif
+et par heure, écrite une fois par minute au plus ; le relevé, une ligne par jour. Les **ménages** (une fois par jour) effacent ce qui dépasse les durées ci-dessus.
 
 ## 10. Le relevé du jour
 
@@ -341,6 +347,9 @@ version) est pris **une fois par jour, idempotent** (la ligne du jour existe : r
 l'objet** (`alarm()`, chaque jour vers 00:05 UTC, reprogrammée à chaque passage), et au premier appel du jour (le grand
 ménage), au cas où l'alarme manquerait. Le point d'un niveau pour la fin d'un jour J est le relevé du jour J+1 ; sans
 relevé, il est reconstitué.
+
+Un service mis à jour en cours de journée n'a pas de relevé pour ce jour-là (le premier sera celui du lendemain) : ses
+niveaux sont reconstitués. Une sauvegarde restaurée garde ses relevés.
 
 `POST /admin/stats/releve` (l'admin+ seulement ; corps vide ou `{}`) : prend le relevé d'aujourd'hui s'il n'est pas
 encore pris — pour les essais (avec `DECALAGE_HORLOGE_ESSAI`, « aujourd'hui » est celui du service) et pour l'Admin
@@ -367,33 +376,34 @@ du globe vaut 0 pour lui ; `GET /admin/stats/admins` ne lui rend que lui-même ;
 namespace license_admin::stats {
 inline constexpr const char* kServiceRequired = "1.47.0";
 bool serviceKnowsStats(const std::string& version);          // 1.47.0 ou plus
-std::string serviceTooOldText(const std::string& version);   // « Ton service en ligne est en 1.46.0 : déploie la 1.47.0 pour les statistiques et le globe. »
+std::string serviceTooOldText(const std::string& version);   // « Ton service en ligne est en 1.46.0 : déploie la 1.47.0 pour les statistiques et le globe. » ; "" : il les sait
 
-enum class Step { Day, Week, Month };                         // "jour", "semaine", "mois"
-enum class Compare { None, Previous, LastYear };              // "rien", "avant", "an"
-struct Period { std::string from, to; };                      // "AAAA-MM-JJ", compris
+enum class Step { Day, Week, Month };                         // stepKey : "jour", "semaine", "mois" ; parseStep
+enum class Compare { None, Previous, LastYear };              // compareKey : "rien", "avant", "an" ; parseCompare
+struct Period { std::string from, to; bool empty() const; };  // "AAAA-MM-JJ", compris ; vides : le défaut du service
 std::string dayOf(Seconds t);                                 // le jour UTC
+Seconds dayStart(std::string_view day);                       // 00:00 UTC ; -1 : illisible (le 30 février…)
 Period lastDays(Seconds now, int days);                       // 7 j, 30 j, 90 j (aujourd'hui compris)
-Period lastMonths(Seconds now, int months);                   // 12 mois
-Period nextDays(Seconds now, int days);                       // les échéances (aujourd'hui → +days)
+Period lastMonths(Seconds now, int months);                   // 12 mois : du 11/11/2025 au 10/11/2026
+Period nextDays(Seconds now, int days);                       // les échéances : aujourd'hui → +days
 bool isNumber(double v);                                      // faux : NaN (inconnu)
 
 struct SeriesQuery {                                          // GET /admin/stats/serie
     std::vector<std::string> measures; Period period; Step step{Step::Day};
     std::string split; Compare compare{Compare::Previous};
-    std::string client, admin, licence, software;             // les filtres
-    std::string path() const;
+    std::string client, admin, licence, software;             // les filtres (vides : aucun)
+    std::string path() const;                                 // l'adresse (les valeurs encodées en %XX)
 };
 struct Bucket { std::string from, to; };
-struct Part { std::string key; std::vector<double> points; double total; };
+struct Part { std::string key; std::vector<double> points; double total; };   // key "" : sans ; "…" : le reste
 struct Series {
-    std::string name, unit, kind, source;                    // "centimes", "flux"…, "S", "N", "S+N"
+    std::string name, unit, kind, source;                    // "centimes"… ; "flux", "niveau", "ratio", "cumul", "max" ; "S", "N", "S+N"
     std::vector<double> points; double total;                 // NaN : inconnu
-    std::vector<Part> parts;                                  // le plus grand d'abord ; "…" : le reste
-    std::vector<double> before; double beforeTotal;           // la comparaison (vide : aucune)
+    std::vector<Part> parts;                                  // le plus grand d'abord
+    std::vector<double> before; double beforeTotal;           // la comparaison, alignée (vide : aucune)
     double change;                                            // la variation en % (NaN)
-    bool refused; std::vector<std::string> rights;            // un droit manque
-    const Part* part(const std::string& key) const;
+    bool refused; std::vector<std::string> rights; std::string filter;   // un droit manque, ou un filtre qu'elle n'a pas
+    const Part* part(const std::string& key) const; bool hasComparison() const;
 };
 struct SeriesReply {
     Period period, beforePeriod; Step step; Compare compare; std::string split;
@@ -408,10 +418,11 @@ struct UpdateDelay { std::string version, software; int count; double median, me
 struct BehindPc { std::string key, software, version, name, customer, licence, admin; Seconds seen; int behind; };
 struct UpdatesReply {
     std::string latest; Seconds latestPublished; std::vector<VersionRow> versions;
-    int seenStudios, seenAdmins, upToDateStudios, upToDateAdmins; std::string seenSince;
+    int seenStudios, seenAdmins, upToDateStudios, upToDateAdmins; std::string seenSince, recordedSince;
     std::vector<AdoptionCurve> adoption; std::vector<UpdateDelay> delays;
     std::vector<Bucket> buckets; std::vector<int> studiosUpToDate, studiosSeen, adminsUpToDate, adminsSeen;
     std::vector<BehindPc> behind; int behindTotal;
+    const AdoptionCurve* curve(const std::string& version, const std::string& software) const;
 };
 struct AdminUsage {
     std::string id, key, role, name; Seconds retired; std::vector<std::string> days; std::array<int, 24> hours;
@@ -424,35 +435,39 @@ struct GlobeCity {
     std::vector<std::string> customers, devices, adminIds;
     int count(std::string_view layer) const;                  // "clients", "pc", "actifs", "pas_a_jour", "admins", "decouvertes", "commandes", "demandes"
 };
-struct GlobeReply { Seconds at; int periodDays; std::string latestVersion; std::vector<GlobeCity> cities; GlobeCity totals; int countries, unplacedPcs, unplacedAdmins; };
-struct LivePing { Seconds at; std::string city, kind; };      // "studio", "admin"
+struct GlobeReply {
+    Seconds at; int periodDays; std::string latestVersion; std::vector<GlobeCity> cities; GlobeCity totals;
+    int cityCount, countries, unplacedPcs, unplacedAdmins; const GlobeCity* find(const std::string& id) const;
+};
+struct LivePing { Seconds at; std::string city, kind; };      // kind : "studio", "admin"
 struct LiveReply { Seconds at; int active; std::vector<LivePing> pings; };
 struct SnapshotReply { std::string day; bool taken; core::json::Value snapshot; };
 
 // Lire les réponses (les essais, les pages) ; faux : `why`.
-bool parseSeries(const core::json::Value&, SeriesReply&, std::string* why);
-bool parseUpdates(const core::json::Value&, UpdatesReply&, std::string* why);
-bool parseAdmins(const core::json::Value&, AdminsReply&, std::string* why);
-bool parseGlobe(const core::json::Value&, GlobeReply&, std::string* why);
-bool parseLive(const core::json::Value&, LiveReply&, std::string* why);
-// Le réseau (BLOQUANT ; un client ouvert) : un service d'avant la 1.47 → refusé avec serviceTooOldText.
-online::Result fetchSeries(online::Client&, const SeriesQuery&, SeriesReply&);
-online::Result fetchUpdates(online::Client&, const UpdatesQuery&, UpdatesReply&);
-online::Result fetchAdmins(online::Client&, const Period&, AdminsReply&);
-online::Result fetchGlobe(online::Client&, int periodDays, GlobeReply&);
-online::Result fetchLive(online::Client&, Seconds since, LiveReply&);
-online::Result takeSnapshot(online::Client&, SnapshotReply&);   // l'admin+
-// Les textes : "26 020 €" (sans centimes), "3 h 40", "+13 %", la mesure en français.
+bool parseSeries(const core::json::Value&, SeriesReply&, std::string* why);   // et parseUpdates, parseAdmins, parseGlobe, parseLive
+// Le réseau (BLOQUANT ; un client ouvert) : un service d'avant la 1.47 → refusé avec serviceTooOldText. `raw` : la réponse telle quelle.
+online::Result fetchSeries(online::Client&, const SeriesQuery&, SeriesReply&, std::string* raw = nullptr);
+online::Result fetchUpdates(online::Client&, const UpdatesQuery&, UpdatesReply&, std::string* raw = nullptr);
+online::Result fetchAdmins(online::Client&, const Period&, AdminsReply&, std::string* raw = nullptr);
+online::Result fetchGlobe(online::Client&, int periodDays, GlobeReply&, std::string* raw = nullptr);
+online::Result fetchLive(online::Client&, Seconds since, LiveReply&, std::string* raw = nullptr);
+online::Result takeSnapshot(online::Client&, SnapshotReply&, std::string* raw = nullptr);   // l'admin+
+// Les textes : euros(2602000) "26 020 €" (sans centimes), duration(13200) "3 h 40", changeText(13.1) "+13 %" / "−29 %",
+// measureLabel("ventes_montant") "Montant encaissé" ; measureNames() : les 39 mesures.
 std::string euros(double cents); std::string duration(double seconds); std::string changeText(double pct);
-std::string measureLabel(std::string_view name);
+std::string measureLabel(std::string_view name); const std::vector<std::string>& measureNames();
 }
 ```
 
 **Le Workspace** (`gui/WorkspaceStats.cpp`, `Workspace.hpp`) — chaque appel est **LENT** (le réseau, à lancer par
 `Background`), signé par la clé qui signe (l'admin+ ou un admin) :
-`statsSeries(q, out)`, `statsUpdates(q, out)`, `statsAdmins(period, out)`, `statsGlobe(periodDays, out)`,
-`statsLive(since, out)`, `statsSnapshot(out)` (l'admin+) ; et sans réseau : `serviceKnowsStats()` (l'état du service
-lu), `statsServiceNote()` (la phrase « déploie la 1.47.0 », vide si le service la sait).
+`statsSeries(q, out, raw?)`, `statsUpdates(q, out, raw?)`, `statsAdmins(period, out, raw?)`,
+`statsGlobe(periodDays, out, raw?)`, `statsLive(since, out, raw?)`, `statsSnapshot(out, raw?)` (l'admin+) — chacun rend
+un `OpResult` (refusé : sa phrase) ; et sans réseau : `serviceKnowsStats()` (l'état du service lu),
+`statsServiceNote()` (la phrase « déploie la 1.47.0 » ; vide si le service la sait, ou si son état n'est pas lu).
+
+**L'issue des demandes** : l'Admin 1.47 envoie `issue` à `POST /admin/demandes/traiter` (`refusee` pour un refus,
+`acceptee` pour une licence publiée, une option ajoutée, une licence en ligne) - `ServiceClient.cpp`, `markHandled`.
 
 **La console** (`XPG-License-Admin`, pour les scripts ; `--json` : la réponse du service telle quelle) :
 `stats-serie --mesures a,b [--du D --au D] [--pas jour|semaine|mois] [--par X] [--comparer avant|an|rien] [--client C]

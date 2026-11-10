@@ -154,7 +154,7 @@ struct Ink {
     Color grid, base, hover, rule;   // la grille, la ligne de base, la colonne survolee, la regle des courbes
     Color surface, line, line2;      // la carte, son trait, le trait d'une bulle
     Color accent, accentInk;         // l'accent du logiciel (le focus, << Clic : >>)
-    Color track;                     // la piste d'une barre (sa part sur 100 %)
+    Color track{};                     // la piste d'une barre (sa part sur 100 %)
     bool  dark{false};
 };
 [[nodiscard]] Ink ink(const Theme& theme) noexcept;
@@ -294,8 +294,8 @@ using Format = std::function<std::string(double)>;
 
 // Un point de l'axe des categories.
 struct Category {
-    std::string label;      // l'axe ("12/10", "J+7", "< 1/2 h")
-    std::string tip;        // la bulle ("lun. 12/10", "Semaine du 26/10 au 01/11") ; vide : label
+    std::string label{};      // l'axe ("12/10", "J+7", "< 1/2 h")
+    std::string tip{};        // la bulle ("lun. 12/10", "Semaine du 26/10 au 01/11") ; vide : label
     bool        shade{false};   // une bande de fond tres claire (les fins de semaine)
 };
 // Les axes du temps tout faits : un point par jour, par semaine (lundi), par mois.
@@ -314,9 +314,9 @@ enum class Mark : std::uint8_t {
 };
 
 struct Series {
-    std::string         key;      // la cle de couleur ("admin:1", "offre:PERSONAL") ; vide : l'ordre des series
-    std::string         name;     // la legende, la bulle
-    std::vector<double> values;   // une par categorie (NaN : rien)
+    std::string         key{};      // la cle de couleur ("admin:1", "offre:PERSONAL") ; vide : l'ordre des series
+    std::string         name{};     // la legende, la bulle
+    std::vector<double> values{};   // une par categorie (NaN : rien)
     Role   role{Role::Main};
     Mark   mark{Mark::Auto};
     Color  color{0, 0, 0, 0};     // alpha 0 : la couleur de la cle
@@ -329,22 +329,28 @@ struct Series {
     bool   noLegend{false};       // pas dans la legende
     bool   zeroInTip{false};      // une barre a 0 dite dans la bulle
     float  width{0.f};            // l'epaisseur (0 : 2 px, la comparaison 1,5 px)
-    std::string        endLabel;  // une etiquette directe apres le dernier point ("1.46.0 - 94 %")
-    std::string        legendValue;   // un chiffre en gras apres le nom dans la legende (<< en ligne 52 >>)
-    Format             format;    // la valeur dans la bulle (vide : celui du graphique)
-    std::vector<Color> pointColors;   // une couleur par point (alpha 0 : celle de la serie) - un jour signale
+    std::string        endLabel{};  // une etiquette directe apres le dernier point ("1.46.0 - 94 %")
+    std::string        legendValue{};   // un chiffre en gras apres le nom dans la legende (<< en ligne 52 >>)
+    Format             format{};    // la valeur dans la bulle (vide : celui du graphique)
+    std::vector<Color> pointColors{};   // une couleur par point (alpha 0 : celle de la serie) - un jour signale
 };
 
 // Une bande de fond (de l'indice `from` a `to`, bornes comprises, en bandes) : << pas encore admin >>.
 struct Shade {
     double      from{0}, to{0};
-    std::string label;            // en haut a gauche, discret
+    std::string label{};            // en haut a gauche, discret
     Color       color{0, 0, 0, 0};    // alpha 0 : tres clair
+};
+// Une bande horizontale de valeurs (les heures habituelles : de 8 h 40 a 17 h 50), tres claire, derriere tout.
+struct YBand {
+    double      from{0}, to{0};
+    std::string label{};                // en haut a droite de la bande, discret
+    Color       color{0, 0, 0, 0};    // alpha 0 : un bleu tres clair
 };
 // Une ligne de reference horizontale (un plafond).
 struct RefLine {
     double      value{0};
-    std::string label;
+    std::string label{};
     bool        labelLeft{false};
     Color       color{0, 0, 0, 0};    // alpha 0 : l'encre discrete
 };
@@ -353,7 +359,7 @@ struct RefLine {
 // la hauteur. Les etiquettes se rangent seules en haut (une deuxieme rangee si elles se chevauchent).
 struct Marker {
     double      at{0};
-    std::string label;
+    std::string label{};
     double      fromValue{kNone};
     Color       color{0, 0, 0, 0};    // alpha 0 : gris clair (pleine hauteur), l'encre (depuis une valeur)
     bool        strong{false};        // l'etiquette en encre forte (sinon discrete)
@@ -362,7 +368,7 @@ struct Marker {
 struct Note {
     int         index{0};
     double      value{0};
-    std::string text;
+    std::string text{};
     enum class Anchor : std::uint8_t { Middle, Start, End } anchor{Anchor::Middle};
     float       dy{-8.f};             // au-dessus du point
 };
@@ -379,27 +385,28 @@ enum class LegendMode : std::uint8_t { Auto /* 2 series et plus */, Top, None };
 
 struct TimeChartData {
     Kind                  kind{Kind::Line};
-    std::vector<Category> x;
-    std::vector<Series>   series;
+    std::vector<Category> x{};
+    std::vector<Series>   series{};
     // Les libelles de l'axe : (indice, ancrage -1 debut, 0 milieu, 1 fin) ; vide : choisis seuls (4 ou 5).
-    std::vector<std::pair<int, int>> xTicks;
-    Format                yFormat;           // les graduations (vide : fr::integer)
-    Format                valueFormat;       // la bulle (vide : yFormat)
+    std::vector<std::pair<int, int>> xTicks{};
+    Format                yFormat{};           // les graduations (vide : fr::integer)
+    Format                valueFormat{};       // la bulle (vide : yFormat)
     double                yMin{kNone}, yMax{kNone};
-    std::vector<double>   yTicks;            // imposees (vide : niceTicks)
+    std::vector<double>   yTicks{};            // imposees (vide : niceTicks)
     int                   yTickCount{3};
     bool                  yAxis{true};       // les libelles des valeurs a gauche
     bool                  xAxis{true};       // les libelles de l'axe en bas
     bool                  lineInBands{false};    // Line : les points au milieu des bandes (comme des colonnes)
-    std::vector<Shade>    shades;
-    std::vector<RefLine>  refs;
-    std::vector<Marker>   markers;
-    std::vector<Note>     notes;
+    std::vector<Shade>    shades{};
+    std::vector<YBand>    yBands{};
+    std::vector<RefLine>  refs{};
+    std::vector<Marker>   markers{};
+    std::vector<Note>     notes{};
     int                   partialFrom{-1};   // a partir de cet indice : la periode en cours (pale, << en cours >>)
     float                 barMax{24.f};      // la largeur d'une colonne au plus
     float                 barFraction{0.62f};    // la part de la bande
     LegendMode            legend{LegendMode::Auto};
-    std::string           clickHint;         // la derniere ligne de la bulle ("Clic : ces commandes") ; vide : rien
+    std::string           clickHint{};         // la derniere ligne de la bulle ("Clic : ces commandes") ; vide : rien
     std::function<std::string(int)> tipExtra;    // une ligne en plus dans la bulle (vide : rien)
     bool                  tipForward{false}; // la bulle dans l'ordre des series (sinon : de la plus haute a la base)
     int                   exampleTip{-1};    // une bulle montree sans survol (l'exemple d'une planche, une capture)
@@ -412,22 +419,22 @@ struct Pick {
                               // la colonne (HeatMap)
     int         series{-1};   // la serie touchee (-1 : aucune en particulier) ; HeatMap : la rangee ; BarList : le
                               // morceau
-    std::string key;          // sa cle
+    std::string key{};          // sa cle
     double      value{kNone};
 };
 using PickHandler = std::function<void(const Pick&)>;
 
 // La bulle : un titre, des lignes (valeur, pastille, nom), une ligne en plus, << Clic : ... >>.
 struct TipRow {
-    std::string value, name;
+    std::string value{}, name{};
     Color       color{0, 0, 0, 0};    // alpha 0 : pas de pastille
     bool        line{false};          // la pastille d'une courbe (un trait), sinon un carre
 };
 struct Tip {
-    std::string         title;
-    std::vector<TipRow> rows;
-    std::string         extra;
-    std::string         click;
+    std::string         title{};
+    std::vector<TipRow> rows{};
+    std::string         extra{};
+    std::string         click{};
     [[nodiscard]] bool empty() const noexcept { return title.empty() && rows.empty() && extra.empty(); }
     // Le texte a plat (les essais, l'infobulle d'accessibilite) : une ligne par morceau.
     [[nodiscard]] std::string text() const;
@@ -436,10 +443,10 @@ struct Tip {
 // La legende : une pastille (un carre, un trait, un cadre, un point) et son libelle.
 enum class Swatch : std::uint8_t { Box, Line, Ring, Dot };
 struct LegendItem {
-    std::string label;
+    std::string label{};
     Color       color{0, 0, 0, 0};
     Swatch      swatch{Swatch::Box};
-    std::string value;               // en gras apres le libelle (<< 2026 >>, << 52 >>)
+    std::string value{};               // en gras apres le libelle (<< 2026 >>, << 52 >>)
 };
 
 // =============================================================================
@@ -507,9 +514,9 @@ public:
 
     // LA GEOMETRIE pour les bornes du moment (les essais, la page qui pose une etiquette).
     struct Frame {
-        gfx::Rect           plot;          // la zone tracee
+        gfx::Rect           plot{};          // la zone tracee
         double              lo{0}, hi{1};  // le domaine des valeurs
-        std::vector<double> ticks;
+        std::vector<double> ticks{};
         bool                band{true};    // des bandes (colonnes) ou des points aux bords (courbes)
         int                 n{0};
         float               legendHeight{0};
@@ -569,37 +576,37 @@ enum class BarMode : std::uint8_t {
     Grouped,   // plusieurs barres fines par ligne (la mediane et la moyenne par version)
 };
 struct BarRow {
-    std::string         key;        // la couleur de la ligne (Ranking : une entite) ; vide : celle de la liste
-    std::string         label;
-    std::string         sub;        // une ligne sous le libelle (<< en cours >>)
+    std::string         key{};        // la couleur de la ligne (Ranking : une entite) ; vide : celle de la liste
+    std::string         label{};
+    std::string         sub{};        // une ligne sous le libelle (<< en cours >>)
     double              value{0};   // Ranking, Track ; Share : le total (0 : la somme des morceaux)
-    std::vector<double> parts;      // Share : un morceau par cle ; Grouped : une valeur par groupe
-    std::string         valueText;  // vide : le format de la valeur
-    std::string         extra;      // une deuxieme colonne, discrete (<< 5 lic. >>, << 1re sur 4 >>)
-    std::string         note;       // a la place de la barre (<< pas ce droit >>, << jamais (90 j) >>)
+    std::vector<double> parts{};      // Share : un morceau par cle ; Grouped : une valeur par groupe
+    std::string         valueText{};  // vide : le format de la valeur
+    std::string         extra{};      // une deuxieme colonne, discrete (<< 5 lic. >>, << 1re sur 4 >>)
+    std::string         note{};       // a la place de la barre (<< pas ce droit >>, << jamais (90 j) >>)
     bool                warn{false};    // la note est une alerte (l'icone, la couleur d'attention)
     bool                off{false};     // eteinte (libelle pale, valeur << - >>)
     bool                strong{false};  // la ligne du total (en gras, un peu plus haute)
     Color               color{0, 0, 0, 0};
-    std::string         tip;        // la bulle (vide : composee)
+    std::string         tip{};        // la bulle (vide : composee)
 };
 struct BarListData {
     BarMode                  mode{BarMode::Ranking};
-    std::vector<BarRow>      rows;
-    std::vector<std::string> partKeys, partNames;   // Share, Grouped : les morceaux dans l'ordre fixe
-    std::vector<Color>       partColors;            // facultatif (sinon : leurs cles)
+    std::vector<BarRow>      rows{};
+    std::vector<std::string> partKeys{}, partNames{};   // Share, Grouped : les morceaux dans l'ordre fixe
+    std::vector<Color>       partColors{};            // facultatif (sinon : leurs cles)
     Color                    color{0, 0, 0, 0};     // la teinte d'une serie unique (alpha 0 : #2a78d6)
     double                   maxValue{0};           // 0 : la plus grande valeur
     float                    labelWidth{0};         // 0 : le plus long libelle (45 % au plus)
     float                    valueWidth{0};         // 0 : la plus longue valeur
     float                    rowHeight{0};          // 0 : 26 px (Grouped : 2 barres de 8 et 2 px)
     float                    barThickness{0};       // 0 : 10 px (Share : 10, la ligne forte 12)
-    Format                   format;                // vide : fr::integer
+    Format                   format{};                // vide : fr::integer
     bool                     axis{false};           // Grouped : l'axe des valeurs en bas
-    std::vector<double>      ticks;                 // l'axe (vide : choisi seul)
+    std::vector<double>      ticks{};                 // l'axe (vide : choisi seul)
     bool                     valueLabels{true};     // Grouped : la valeur au bout de chaque barre
     LegendMode               legend{LegendMode::Auto};   // Share, Grouped : la legende des morceaux
-    std::string              clickHint;
+    std::string              clickHint{};
     std::string              emptyText{"Aucune donn\xC3\xA9" "e sur la p\xC3\xA9riode"};   // aucune ligne
 };
 class BarList : public ChartBase {
@@ -615,7 +622,7 @@ public:
         float x0{0}, x1{0};     // la colonne des barres
         float top{0};           // le haut de la premiere ligne
         float legendHeight{0};
-        std::vector<float> rowTop, rowHeight;
+        std::vector<float> rowTop{}, rowHeight{};
         double maxValue{1};
         [[nodiscard]] float xAt(double v) const noexcept;
     };
@@ -644,19 +651,19 @@ private:
 //  9. HeatMap - la carte jour x heure
 // =============================================================================
 struct HeatMapData {
-    std::vector<std::string>         rowLabels;   // "lun." .. "dim."
-    std::vector<std::string>         colLabels;   // "0 h" .. "23 h" (un libelle tous les labelEvery)
-    std::vector<std::vector<double>> cells;       // [rangee][colonne]
-    std::vector<std::pair<int, int>> flagged;     // (rangee, colonne) : signalees (un cadre rouge : une alerte)
+    std::vector<std::string>         rowLabels{};   // "lun." .. "dim."
+    std::vector<std::string>         colLabels{};   // "0 h" .. "23 h" (un libelle tous les labelEvery)
+    std::vector<std::vector<double>> cells{};       // [rangee][colonne]
+    std::vector<std::pair<int, int>> flagged{};     // (rangee, colonne) : signalees (un cadre rouge : une alerte)
     double      bandFrom{kNone}, bandTo{kNone};   // les heures habituelles (en colonnes, fractionnaires)
-    std::string bandLabel;                        // << ses heures habituelles : 8 h 40 -> 17 h 50 >>
+    std::string bandLabel{};                        // << ses heures habituelles : 8 h 40 -> 17 h 50 >>
     int         labelEvery{3};
     std::string scaleLabel{"par heure :"};        // la legende de la rampe
-    std::string flagLabel;                        // la legende du cadre (vide : pas de legende)
+    std::string flagLabel{};                        // la legende du cadre (vide : pas de legende)
     std::function<std::string(int row, int col)> cellTitle;   // la bulle (vide : << lun. 9 h >>)
-    Format      valueFormat;                      // vide : fr::integer
-    std::string valueUnit;                        // << action >> (au pluriel seul : << 3 actions >>)
-    std::string clickHint;
+    Format      valueFormat{};                      // vide : fr::integer
+    std::string valueUnit{};                        // << action >> (au pluriel seul : << 3 actions >>)
+    std::string clickHint{};
 };
 class HeatMap : public ChartBase {
 public:
@@ -690,14 +697,14 @@ private:
 // =============================================================================
 struct DayStripData {
     fr::Day             first{0};
-    std::vector<double> values;          // une par jour (0 : rien fait)
+    std::vector<double> values{};          // une par jour (0 : rien fait)
     int                 streakFrom{-1}, streakTo{-1};   // la serie en cours (soulignee)
     Color               streakColor{0, 0, 0, 0};        // la couleur de l'entite (alpha 0 : #2a78d6)
-    std::vector<int>    flagged;         // des jours signales (un cadre rouge)
-    std::vector<int>    labelAt;         // les jours dont on ecrit la date (vide : le premier, chaque semaine, le dernier)
+    std::vector<int>    flagged{};         // des jours signales (un cadre rouge)
+    std::vector<int>    labelAt{};         // les jours dont on ecrit la date (vide : le premier, chaque semaine, le dernier)
     bool                lastIsToday{true};   // le dernier libelle : << auj. >>
     std::string         valueUnit{"action"};
-    std::string         clickHint;
+    std::string         clickHint{};
 };
 class DayStrip : public ChartBase {
 public:
@@ -722,17 +729,17 @@ private:
 //  11. Dumbbell - avant -> maintenant, une ligne par entite (planche 05)
 // =============================================================================
 struct DumbbellRow {
-    std::string key, label;
+    std::string key{}, label{};
     double      before{0}, after{0};
     Color       color{0, 0, 0, 0};    // alpha 0 : la couleur de la cle
-    std::string text;                 // vide : << 117  +22 % >>
+    std::string text{};                 // vide : << 117  +22 % >>
 };
 struct DumbbellData {
-    std::vector<DumbbellRow> rows;
-    std::vector<double>      ticks;   // vide : choisies seules
-    Format                   format;  // vide : fr::integer
+    std::vector<DumbbellRow> rows{};
+    std::vector<double>      ticks{};   // vide : choisies seules
+    Format                   format{};  // vide : fr::integer
     std::string              beforeName{"la p\xC3\xA9riode d'avant"}, afterName{"cette p\xC3\xA9riode"};
-    std::string              clickHint;
+    std::string              clickHint{};
 };
 class Dumbbell : public ChartBase {
 public:
@@ -742,7 +749,7 @@ public:
     struct Frame {
         float x0{0}, x1{0}, top{0}, rowH{22};
         double lo{0}, hi{1};
-        std::vector<double> ticks;
+        std::vector<double> ticks{};
         [[nodiscard]] float xAt(double v) const noexcept;
     };
     [[nodiscard]] Frame frame() const;
@@ -772,14 +779,14 @@ private:
 // =============================================================================
 struct TimelineSegment {
     fr::Day     from{0}, to{0};
-    std::string key;                  // la couleur (une offre : "offre:PROFESSIONAL")
-    std::string tip;                  // ce que dit la bulle de ce morceau (vide : les dates)
+    std::string key{};                  // la couleur (une offre : "offre:PROFESSIONAL")
+    std::string tip{};                  // ce que dit la bulle de ce morceau (vide : les dates)
 };
 struct TimelineRow {
-    std::string                  label, sub;    // "XPG-2024-00031", "5 PC"
-    std::vector<TimelineSegment> segments;      // signee, prolongee... (2 px entre deux morceaux)
-    std::string                  lead;          // avant le premier morceau (<< nouvelle >>, en accent)
-    std::string                  end;           // apres le dernier (<< 11/03/2027 >>)
+    std::string                  label{}, sub{};    // "XPG-2024-00031", "5 PC"
+    std::vector<TimelineSegment> segments{};      // signee, prolongee... (2 px entre deux morceaux)
+    std::string                  lead{};          // avant le premier morceau (<< nouvelle >>, en accent)
+    std::string                  end{};           // apres le dernier (<< 11/03/2027 >>)
     bool                         warn{false};   // la fin est une alerte (<< 05/12/2026 - dans 25 j >>)
     bool                         faded{false};  // expiree : pale
     bool                         mono{true};    // le libelle en chasse fixe (un identifiant)
@@ -788,9 +795,9 @@ struct TimelineData {
     fr::Day                  from{0}, to{0};    // l'axe
     fr::Day                  today{0};          // la ligne << aujourd'hui >> (0 : pas de ligne)
     std::string              todayLabel{"aujourd'hui"};
-    std::vector<TimelineRow> rows;
-    std::vector<LegendItem>  legend;            // en haut (les offres, << aujourd'hui >>) ; vide : aucune
-    std::string              clickHint;
+    std::vector<TimelineRow> rows{};
+    std::vector<LegendItem>  legend{};            // en haut (les offres, << aujourd'hui >>) ; vide : aucune
+    std::string              clickHint{};
 };
 class Timeline : public ChartBase {
 public:
@@ -878,7 +885,7 @@ protected:
 
 private:
     struct Cell {
-        std::string title, aside;
+        std::string title{}, aside{};
         Widget*     chart{nullptr};
     };
     std::vector<Cell> cells_;
@@ -890,14 +897,14 @@ private:
 //  15. ChartCard - la carte d'un graphique (planche 08)
 // =============================================================================
 struct Delta {
-    std::string text;       // "+13 %" ; vide : rien
+    std::string text{};       // "+13 %" ; vide : rien
     int         sense{0};   // +1 c'est bien (vert), -1 c'est mal (rouge), 0 neutre (gris)
     int         direction{0};   // +1 monte, -1 descend, 0 egal : la fleche
 };
 // L'ecart de cur a prev en % ; upIsGood : monter est-il bien (le montant oui, le delai non, les remboursements non).
 [[nodiscard]] Delta deltaOf(double cur, double prev, bool upIsGood = true);
 struct SideRow {
-    std::string label, value, faint;   // << PERSONAL >>, << 9 880 EUR >>, << 38 % >>
+    std::string label{}, value{}, faint{};   // << PERSONAL >>, << 9 880 EUR >>, << 38 % >>
     Color       color{0, 0, 0, 0};     // la pastille (alpha 0 : aucune)
     bool        line{false};           // la pastille d'une courbe
     bool        total{false};          // la ligne du total (sans pastille, en encre discrete)
