@@ -3078,7 +3078,8 @@ void ProfilePanel::doSave() {
 void ProfilePanel::onLayout() {
     const auto b = bounds();
     const float x = b.x + 16.f, W = std::max(200.f, b.w - 32.f);
-    const float labelW = 210.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(520.f, W - labelW));
+    // 1.46.0 : sa petite fenetre - des libelles courts, et la place de la coche du courriel a droite du champ
+    const float labelW = 120.f, fieldX = x + labelW, fieldW = std::max(160.f, std::min(440.f, W - labelW - 250.f));
     rowsY_ = b.y + 16.f + 3.f * 20.f + 10.f;
     float y = rowsY_;
     for (auto* f : {email_, name_, company_}) {

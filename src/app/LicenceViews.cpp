@@ -550,7 +550,10 @@ void CaptureZoomBody::onPaint(const ui::PaintContext& ctx) {
     if (const std::string nav = featureNavText(); !nav.empty()) {
         const float nx = nextFeature_->bounds().right() + 12.f;
         const float room = (badge_.w > 0.f ? badge_.x - 12.f : panel_.right() - 16.f) - nx;
-        if (room > 40.f) r.drawText({nx, barY_ + (30.f - r.lineHeight(kSmall)) * 0.5f}, fit(r, nav, kSmall, room), kSmall, c.textMuted);
+        // le clavier aussi (Page precedente / Page suivante), en plus discret
+        const std::string keys = nav + " \xC2\xB7 Page pr\xC3\xA9" "c. / Page suiv.";
+        const std::string shown = r.measure(keys, kSmall).width <= room ? keys : nav;
+        if (room > 40.f) r.drawText({nx, barY_ + (30.f - r.lineHeight(kSmall)) * 0.5f}, fit(r, shown, kSmall, room), kSmall, c.textMuted);
     }
     if (badge_.w > 0.f) {
         const gfx::Color warn = c.warning;
