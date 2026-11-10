@@ -1336,6 +1336,12 @@
     <ClCompile Include="src\app\LicenceService.cpp">
       <Filter>app</Filter>
     </ClCompile>
+    <ClCompile Include="src\app\LicenceShop.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
+    <ClCompile Include="src\app\LicenceShopWindows.cpp">
+      <Filter>app</Filter>
+    </ClCompile>
     <ClCompile Include="src\app\LicenceViews.cpp">
       <Filter>app</Filter>
     </ClCompile>
@@ -3152,6 +3158,9 @@
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\LicenceService.hpp">
+      <Filter>app</Filter>
+    </ClInclude>
+    <ClInclude Include="src\app\LicenceShop.hpp">
       <Filter>app</Filter>
     </ClInclude>
     <ClInclude Include="src\app\LicenceViews.hpp">

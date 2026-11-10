@@ -576,6 +576,8 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClCompile Include="src\app\GrafcetCodePanel.cpp" />
     <ClCompile Include="src\app\Licence.cpp" />
     <ClCompile Include="src\app\LicenceService.cpp" />
+    <ClCompile Include="src\app\LicenceShop.cpp" />
+    <ClCompile Include="src\app\LicenceShopWindows.cpp" />
     <ClCompile Include="src\app\LicenceViews.cpp" />
     <ClCompile Include="src\app\LicenceWindow.cpp" />
     <ClCompile Include="src\app\NoveltyCenter.cpp" />
@@ -1197,6 +1199,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\app\GrafcetCodePanel.hpp" />
     <ClInclude Include="src\app\Licence.hpp" />
     <ClInclude Include="src\app\LicenceService.hpp" />
+    <ClInclude Include="src\app\LicenceShop.hpp" />
     <ClInclude Include="src\app\LicenceViews.hpp" />
     <ClInclude Include="src\app\LicenceWindow.hpp" />
     <ClInclude Include="src\app\Notices.hpp" />
