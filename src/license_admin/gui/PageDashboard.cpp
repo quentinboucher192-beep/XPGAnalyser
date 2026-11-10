@@ -166,6 +166,14 @@ public:
         invalidate();
     }
     [[nodiscard]] const std::string& value() const noexcept { return value_; }
+    // 1.46.0 : le libelle change (la tuile des demandes devient << Commandes a livrer >> quand il y en a).
+    void setLabel(std::string label) {
+        if (label == label_) return;
+        label_ = std::move(label);
+        setText(label_);
+        invalidate();
+    }
+    [[nodiscard]] const std::string& label() const noexcept { return label_; }
 
 protected:
     void onPaint(const ui::PaintContext& ctx) override {
@@ -385,6 +393,11 @@ public:
             const std::string page = t.page;
             const bool requests = std::string(t.id) == "demandes";
             links_ += tile->clicked->connect([this, page, requests] {
+                // 1.46.0 : des commandes payees a livrer : la tuile les montre, son clic ouvre Commandes.
+                if (requests && ws().ordersToDeliver() > 0) {
+                    host_.navigate("commandes");
+                    return;
+                }
                 // Le service regle, les demandes en attente sont d'abord celles en ligne.
                 host_.navigate(requests && ws().service().ready() ? std::string("demandes") : page);
             });
@@ -461,15 +474,20 @@ public:
                            all ? Tone::Warning : Tone::Info, false);
             tiles_[2]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
                                   + " en ligne (" + when + "). Clic : Demandes en ligne.");
-            // 1.46.0 : les commandes de la boutique payees, a livrer (le regard : GET /admin/etat)
+            // 1.46.0 : des commandes de la boutique payees, a livrer (le regard : GET /admin/etat) - la tuile devient la leur :
+            // leur nombre en grand, les demandes en attente dessous (jamais un 0 ambre).
             if (const int toDeliver = w.ordersToDeliver(); toDeliver > 0) {
-                tiles_[2]->set(n(all), n(toDeliver) + (toDeliver > 1 ? " commandes pay\xC3\xA9" "es \xC3\xA0 livrer" : " commande pay\xC3\xA9" "e \xC3\xA0 livrer") +
-                                           (all ? " \xC2\xB7 dont " + n(d_.onlinePending) + " en ligne" : std::string()),
+                tiles_[2]->setLabel("Commandes \xC3\xA0 livrer");
+                tiles_[2]->set(n(toDeliver), std::string(toDeliver > 1 ? "pay\xC3\xA9" "es dans la boutique" : "pay\xC3\xA9" "e dans la boutique") +
+                                                 (all ? " \xC2\xB7 " + n(all) + (all > 1 ? " demandes en attente" : " demande en attente") : std::string()),
                                Tone::Warning, false);
                 tiles_[2]->setTooltip(n(toDeliver) + " commande(s) de la boutique pay\xC3\xA9" "e(s), \xC3\xA0 livrer (Commandes \xE2\x80\xBA D\xC3\xA9livrer maintenant, ou "
-                                      "d'elles-m\xC3\xAAmes si \xC2\xAB Livrer seul \xC2\xBB est coch\xC3\xA9). " + n(all) + " demande(s) en attente de ta d\xC3\xA9" "cision.");
+                                      "d'elles-m\xC3\xAAmes si \xC2\xAB Livrer seul \xC2\xBB est coch\xC3\xA9). " + n(all) + " demande(s) en attente de ta d\xC3\xA9" "cision. Clic : Commandes.");
+            } else {
+                tiles_[2]->setLabel("Demandes en attente");
             }
         } else {
+            tiles_[2]->setLabel("Demandes en attente");
             tiles_[2]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
             tiles_[2]->setTooltip({});
         }

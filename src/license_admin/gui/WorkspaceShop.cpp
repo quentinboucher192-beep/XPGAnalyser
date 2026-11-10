@@ -310,7 +310,16 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         rep.lines.push_back(line);
         return ok;
     };
-    const auto review = [&](const std::string& reason) {
+    // Une raison lisible : une majuscule en tete, un point a la fin (elle s'affiche telle quelle dans Commandes).
+    const auto sentence = [](std::string t) {
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        if (!t.empty() && t[0] >= 'a' && t[0] <= 'z') t[0] = static_cast<char>(t[0] - 'a' + 'A');
+        if (!t.empty() && t.back() != '.' && t.back() != '!' && t.back() != '?' && t.back() != ')') t += '.';
+        else if (!t.empty() && t.back() == ')') t += '.';
+        return t;
+    };
+    const auto review = [&](const std::string& reasonIn) {
+        const std::string reason = sentence(reasonIn);
         line.review = true;
         line.problem = reason;
         const online::Result m = shop::markReview(c, ord.number, reason);
@@ -323,7 +332,7 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         return finish(false);
     };
     const auto later = [&](const std::string& why) {   // une panne qui passera : la commande reste payee
-        line.problem = why;
+        line.problem = sentence(why);
         ++rep.skipped;
         return finish(false);
     };

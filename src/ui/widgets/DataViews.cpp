@@ -84,7 +84,7 @@ gfx::Color iconColourOf(const Theme& th, const CellStyle& st, bool selected) {
 }
 
 gfx::Color textColourOf(const Theme& th, const CellStyle& st, bool selected) {
-    if (selected) return th.color.selectionText;
+    if (selected && !(st.keepFgSelected && (st.fg || st.fgTone != Tone::None))) return th.color.selectionText;
     if (st.fgTone != Tone::None) return th.onSurface(th.tone(st.fgTone, th.color.text));
     return st.fg.value_or(th.color.text);
 }

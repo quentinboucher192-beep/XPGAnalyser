@@ -1,0 +1,192 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Filtrer et chercher, dans toutes les listes</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+body{background:radial-gradient(1100px 700px at 30% 25%,#f3f0ff 0%,var(--bg) 62%)}
+.hd12{position:absolute;left:28px;top:18px;right:28px;display:flex;align-items:flex-end;gap:24px}
+.hd12 .ov{font:700 11.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-700)}
+.hd12 h1{font:750 25px/1.18 Inter;letter-spacing:-.02em;margin:4px 0 0}
+.hd12 .q{font-size:12.5px;color:var(--ink2);line-height:1.45;max-width:620px;margin-left:auto}
+.hd12 .q i{color:var(--muted)}
+.lc{position:absolute;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh2)}
+.lc .lt{display:flex;align-items:center;gap:8px;padding:10px 14px 8px}
+.lc .lt .ico{width:15px;height:15px;color:var(--violet)}
+.lc .lt b{font:650 13.5px Inter}
+.lc .lt .tag{height:19px;font-size:11px}
+.lc .lt .cap{margin-left:auto}
+.lc .fb{padding:0 14px 10px;border-bottom:1px solid var(--line);gap:5px}
+.lc .fb.wrap{flex-wrap:wrap;row-gap:6px}
+table.u{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+table.u th{font:650 10px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);text-align:left;padding:6px 10px;background:var(--surface2);border-bottom:1px solid var(--line);white-space:nowrap}
+table.u th.f{color:var(--violet-700)}
+table.u td{padding:0 10px;height:29px;border-bottom:1px solid #f0f3f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.u td:first-child,table.u th:first-child{padding-left:14px}
+table.u .av3{width:18px;height:18px;font-size:9px;border-radius:5px;display:inline-grid;vertical-align:-4px;margin-right:5px}
+.emp{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:var(--muted)}
+.emp .lk{font-size:12px}
+.nt{display:grid;grid-template-columns:22px 1fr;column-gap:9px;row-gap:7px;font-size:12px;color:var(--ink2);line-height:1.38;align-items:start}
+.nt .n{width:20px;height:20px;border-radius:50%;background:#facc15;color:#111827;display:grid;place-items:center;font:800 10.5px Inter}
+.nt b{color:var(--ink);font-weight:650}
+.al2{display:grid;grid-template-columns:150px 1fr;column-gap:10px;font-size:12px;align-items:baseline}
+.al2>div{padding:5px 0;border-bottom:1px solid #f0f3f7}
+.al2 .k{font-weight:600;color:var(--ink);white-space:nowrap}
+.al2 .k .cap{font-weight:500}
+.al2 .v{color:var(--muted);line-height:1.35}
+.al2 .v span{display:inline-block;background:var(--sunken);color:var(--ink2);border-radius:5px;padding:0 5px;margin:1px 2px 1px 0;font-size:11.5px;font-weight:550}
+.fb .fs,.fb .fc,.fb .fm,.fb .fn,.fb .fx,th.mkh{position:relative}
+.mki{position:absolute;top:-12px;left:-10px;width:19px;height:19px;border-radius:50%;background:#facc15;color:#111827;font:800 10px/19px Inter;text-align:center;box-shadow:0 0 0 2px #fff,0 2px 6px rgba(15,23,42,.25);z-index:5}
+.mk2{position:absolute;width:20px;height:20px;border-radius:50%;background:#facc15;color:#111827;font:800 10.5px/20px Inter;text-align:center;box-shadow:0 0 0 3px #fff,0 2px 8px rgba(15,23,42,.25);z-index:60}
+</style></head><body><script src="icons.js"></script>
+<div class="hd12">
+ <div><div class="ov">Proposition · 1.47.0 · ajout du 10/11</div><h1>Filtrer et chercher, dans toutes les listes</h1></div>
+ <div class="q"><i>« dans toutes les listes/tableaux avec beaucoup d'éléments toujours pouvoir mettre des filtres/recherches dans admin.exe »</i> — une seule barre, la même au-dessus de chaque longue liste de l'Admin, qui se souvient de ce que tu as choisi (par liste, sur ce PC).</div>
+</div>
+
+<!-- 1 · Commandes : la barre complete (les numeros), « Mes filtres » ouvert -->
+<div class="lc" style="left:28px;top:92px;width:1100px;height:298px">
+ <div class="lt"><i data-i="receipt"></i><b>Commandes</b><span class="tag">214</span><span class="cap">Vente en ligne › Commandes</span></div>
+ <div class="fb">
+  <div class="fs" style="width:166px"><span class="mki">1</span><i data-i="search"></i>Chercher…<span class="kbd">Ctrl+F</span></div>
+  <span class="fc on"><span class="mki">2</span>État : <b>À livrer, À revoir</b><i data-i="x"></i></span>
+  <span class="fc">Article<i data-i="down"></i></span>
+  <span class="fc on">Période : <b>30 j</b><i data-i="down"></i></span>
+  <span class="fc">Livrée par<i data-i="down"></i></span>
+  <span class="fc add"><span class="mki">3</span><i data-i="plus"></i>Filtre</span>
+  <span class="fn"><span class="mki" style="left:-24px">4</span><b>2</b> sur 214</span>
+  <span class="fx"><span class="mki">5</span>Effacer les filtres</span>
+  <span class="fm" style="border-color:var(--acc);box-shadow:0 0 0 3px var(--acc-ring)"><span class="mki">6</span><i data-i="star"></i>Commandes à livrer<i data-i="down"></i></span>
+ </div>
+ <table class="u"><colgroup><col style="width:70px"><col style="width:120px"><col style="width:200px"><col><col style="width:90px"><col style="width:110px"><col style="width:150px"></colgroup>
+  <tr><th>N°<i data-i="filter" class="fi"></i></th><th class="mkh">Date<i data-i="filter" class="fi on"></i><span class="mki" style="left:52px;top:2px">7</span></th><th>Client<i data-i="filter" class="fi"></i></th><th>Article<i data-i="filter" class="fi"></i></th><th>Montant<i data-i="filter" class="fi"></i></th><th class="f">État<i data-i="filter" class="fi on"></i></th><th>Livrée par<i data-i="filter" class="fi"></i></th></tr>
+  <tr><td><b>214</b></td><td>auj. 11:20</td><td>Client d'essai</td><td>Exports avancés · jusqu'à la fin</td><td>120 €</td><td><span class="pill p-amber pl">À livrer</span></td><td class="faint">—</td></tr>
+  <tr><td><b>210</b></td><td>hier 16:44</td><td>Laboratoire d'essai</td><td>ENTERPRISE 1 an</td><td>990 €</td><td><span class="pill p-red pl">À revoir</span></td><td class="faint">—</td></tr>
+ </table>
+ <div class="emp"><i data-i="filter" class="sm"></i>2 commandes sur 214 avec ces filtres.<span class="lk">Effacer les filtres pour les voir toutes</span></div>
+ <div class="fmn" style="left:846px;top:84px;width:240px">
+  <div class="hd">Mes filtres · Commandes</div>
+  <div class="r hov"><i data-i="star" style="width:14px;height:14px;color:#d97706"></i>Commandes à livrer<span class="c">2</span><i data-i="check" style="width:13px;height:13px;color:var(--violet)"></i></div>
+  <div class="r"><i data-i="star" style="width:14px;height:14px;color:var(--faint)"></i>Payées cette semaine<span class="c">11</span></div>
+  <div class="r"><i data-i="star" style="width:14px;height:14px;color:var(--faint)"></i>Remboursées<span class="c">3</span></div>
+  <div class="r"><i data-i="star" style="width:14px;height:14px;color:var(--faint)"></i>Livrées par Léa Essai<span class="c">22</span></div>
+  <div class="sep"></div>
+  <div class="ft"><i data-i="save" style="width:13px;height:13px"></i>Enregistrer ce filtre…<span style="margin-left:auto;color:var(--faint);font-weight:500">Gérer…</span></div>
+ </div>
+</div>
+
+
+<!-- 2 · Activations -->
+<div class="lc" style="left:28px;top:402px;width:543px;height:298px">
+ <div class="lt"><i data-i="laptop"></i><b>Activations</b><span class="tag">342</span><span class="cap">les PC pas à jour</span></div>
+ <div class="fb wrap">
+  <div class="fs" style="width:150px"><i data-i="search"></i>Chercher…<span class="kbd">Ctrl+F</span></div>
+  <span class="fc on">Logiciel : <b>IHM Studio</b><i data-i="x"></i></span>
+  <span class="fc on">Version : <b>1.45 et avant</b><i data-i="x"></i></span>
+  <span class="fc">Client<i data-i="down"></i></span>
+  <span class="fc add hov" style="background:var(--violet-50)"><i data-i="plus"></i>Filtre</span>
+  <span class="fn"><b>31</b> sur 342</span>
+  <span class="fx">Effacer</span>
+ </div>
+ <table class="u"><colgroup><col style="width:128px"><col><col style="width:74px"><col style="width:84px"></colgroup>
+  <tr><th>PC<i data-i="filter" class="fi"></i></th><th>Client<i data-i="filter" class="fi"></i></th><th class="f">Version<i data-i="filter" class="fi on"></i></th><th>Vu<i data-i="filter" class="fi"></i></th></tr>
+  <tr><td class="mono" style="font-size:11px">ATELIER-PC3</td><td>Atelier Exemple</td><td class="warn2">1.43.2</td><td>il y a 41 j</td></tr>
+  <tr><td class="mono" style="font-size:11px">NORD-LIGNE-07</td><td>Usine Exemple Nord</td><td class="warn2">1.44.0</td><td>hier</td></tr>
+  <tr><td class="mono" style="font-size:11px">BE-CALCUL-02</td><td>Bureau d'études Exemple</td><td class="warn2">1.44.0</td><td>il y a 3 h</td></tr>
+  <tr><td class="mono" style="font-size:11px">ESSAI-PORTABLE</td><td>Client d'essai</td><td class="warn2">1.45.0</td><td>il y a 12 j</td></tr>
+  <tr><td class="mono" style="font-size:11px;border-bottom:0">ATELIER-PC9</td><td style="border-bottom:0">Atelier Exemple</td><td class="warn2" style="border-bottom:0">1.45.0</td><td style="border-bottom:0">auj.</td></tr>
+ </table>
+ <div class="fmn" style="left:212px;top:118px;width:210px">
+  <div class="q"><i data-i="search"></i>Filtrer sur la colonne…</div>
+  <div class="r"><i data-i="fp" style="width:13px;height:13px;color:var(--faint)"></i>Empreinte</div>
+  <div class="r"><i data-i="key" style="width:13px;height:13px;color:var(--faint)"></i>Licence</div>
+  <div class="r hov"><i data-i="globe" style="width:13px;height:13px;color:var(--faint)"></i>Ville<span class="c">21</span></div>
+  <div class="r"><i data-i="calendar" style="width:13px;height:13px;color:var(--faint)"></i>Activé le</div>
+  <div class="r"><i data-i="clock" style="width:13px;height:13px;color:var(--faint)"></i>Fin du bail</div>
+  <div class="r"><i data-i="user" style="width:13px;height:13px;color:var(--faint)"></i>Activé par</div>
+ </div>
+</div>
+
+<!-- 3 · Journal des admins -->
+<div class="lc" style="left:585px;top:402px;width:543px;height:298px">
+ <div class="lt"><i data-i="scroll"></i><b>Journal des admins</b><span class="tag">263</span><span class="cap">venu du clic droit</span></div>
+ <div class="fb wrap">
+  <div class="fs on" style="width:150px"><i data-i="search" style="color:var(--violet)"></i><b>XPG-2026-003</b><i data-i="x" class="x" style="margin-left:auto"></i></div>
+  <span class="fc on">Admin : <b>Léa Essai</b><span class="src">clic droit</span><i data-i="x"></i></span>
+  <span class="fc on">Criticité : <b>Haute, Critique</b><i data-i="x"></i></span>
+  <span class="fc on">Période : <b>30 j</b><i data-i="down"></i></span>
+  <span class="fc add"><i data-i="plus"></i>Filtre</span>
+  <span class="fn"><b>3</b> sur 263</span>
+  <span class="fx">Effacer</span>
+ </div>
+ <table class="u"><colgroup><col style="width:104px"><col style="width:76px"><col><col style="width:86px"></colgroup>
+  <tr><th>Quand<i data-i="filter" class="fi on"></i></th><th class="f">Admin<i data-i="filter" class="fi on"></i></th><th>Action<i data-i="filter" class="fi"></i></th><th class="f">Criticité<i data-i="filter" class="fi on"></i></th></tr>
+  <tr><td>hier 17:20</td><td><span class="av3 cL">L</span>Léa</td><td>a revu le code de <b><mark class="hl">XPG-2026-003</mark>98</b></td><td><span class="cr h">Haute</span></td></tr>
+  <tr><td>04/11 10:02</td><td><span class="av3 cL">L</span>Léa</td><td>signature refusée : <b><mark class="hl">XPG-2026-003</mark>88</b></td><td><span class="cr c">Critique</span></td></tr>
+  <tr><td>27/10 09:12</td><td><span class="av3 cL">L</span>Léa</td><td>a révoqué <b><mark class="hl">XPG-2026-003</mark>59</b></td><td><span class="cr c">Critique</span></td></tr>
+ </table>
+ <div class="emp" style="line-height:1.4"><i data-i="mouse" class="sm" style="flex:none"></i><span>Clic droit sur une ligne de Léa › <b style="color:var(--ink2)">Filtrer sur › Cet admin</b> : la puce « Admin : Léa Essai » est mise dans la barre, la même qu'à la main (planche 06).</span></div>
+</div>
+
+<!-- 4 · Licences : la recherche surligne, le menu d'une puce -->
+<div class="lc" style="left:28px;top:712px;width:1100px;height:276px">
+ <div class="lt"><i data-i="key"></i><b>Licences</b><span class="tag">128</span><span class="cap">la recherche surligne ; le menu d'une puce : des cases et leurs nombres</span></div>
+ <div class="fb">
+  <div class="fs on" style="width:200px"><i data-i="search" style="color:var(--violet)"></i><b>atelier</b><span class="cap" style="margin-left:auto;font-size:11px">2 trouvées</span><i data-i="x" class="x"></i></div>
+  <span class="fc on">État : <b>Active</b><i data-i="x"></i></span>
+  <span class="fc on hov">Offre : <b>PROFESSIONAL</b><i data-i="up"></i></span>
+  <span class="fc">Fin<i data-i="down"></i></span>
+  <span class="fc">Signée par<i data-i="down"></i></span>
+  <span class="fc add"><i data-i="plus"></i>Filtre</span>
+  <span class="fn"><b>2</b> sur 128</span>
+  <span class="fx">Effacer les filtres</span>
+  <span class="fm"><i data-i="star"></i>Mes filtres<i data-i="down"></i></span>
+ </div>
+ <table class="u"><colgroup><col style="width:150px"><col style="width:220px"><col style="width:130px"><col style="width:100px"><col style="width:70px"><col style="width:120px"><col></colgroup>
+  <tr><th>ID<i data-i="filter" class="fi"></i></th><th>Client<i data-i="filter" class="fi"></i></th><th class="f">Offre<i data-i="filter" class="fi on"></i></th><th>Fin<i data-i="filter" class="fi"></i></th><th>PC<i data-i="filter" class="fi"></i></th><th class="f">État<i data-i="filter" class="fi on"></i></th><th>Signée par<i data-i="filter" class="fi"></i></th></tr>
+  <tr><td class="mono" style="font-size:11px">XPG-2024-00031</td><td><mark class="hl">Atelier</mark> Exemple</td><td>PROFESSIONAL</td><td>11/03/27</td><td>5</td><td><span class="pill p-green pl">Active</span></td><td><span class="av3 cC">C</span>Camille Essai</td></tr>
+  <tr><td class="mono" style="font-size:11px">XPG-2026-00412</td><td><mark class="hl">Atelier</mark> Exemple</td><td>PROFESSIONAL</td><td>09/11/27</td><td>3</td><td><span class="pill p-green pl">Active</span></td><td><span class="av3 cL">L</span>Léa Essai</td></tr>
+ </table>
+ <div class="emp"><i data-i="info" class="sm"></i>Cherché dans l'ID, le client, l'offre, les PC, le code (masqué : non) ; « Mes filtres » : « Licences qui finissent ce mois » (6), « Sans PC activé » (4)…</div>
+ <div class="fmn" style="left:452px;top:80px;width:232px">
+  <div class="q"><i data-i="search"></i>Chercher une offre…</div>
+  <div class="r"><span class="check"></span>PERSONAL<span class="c">41</span></div>
+  <div class="r hov"><span class="check on"><i data-i="check"></i></span><b style="font-weight:600">PROFESSIONAL</b><span class="c">62</span></div>
+  <div class="r"><span class="check"></span>ENTERPRISE<span class="c">18</span></div>
+  <div class="r"><span class="check"></span>Découverte<span class="c">7</span></div>
+  <div class="sep"></div>
+  <div class="ft">Tout cocher<span style="color:var(--faint);font-weight:500">·</span>Aucune<span style="margin-left:auto;color:var(--faint);font-weight:500">sur les 128</span></div>
+ </div>
+</div>
+
+<!-- a droite : la regle, et toutes les listes -->
+<div class="lc" style="left:1142px;top:92px;width:430px;height:298px;padding:12px 14px">
+ <div class="row gap8" style="margin-bottom:9px"><i data-i="filter" class="sm" style="color:var(--violet)"></i><b style="font:650 13.5px Inter">La barre, toujours la même</b></div>
+ <div class="nt">
+  <span class="n">1</span><span><b>Chercher</b> (Ctrl+F) dans toutes les colonnes visibles ; ce qui est trouvé est surligné</span>
+  <span class="n">2</span><span><b>Une puce par colonne utile</b> (état, client, admin, offre, période, criticité, version…) : un petit menu, des cases et leurs nombres</span>
+  <span class="n">3</span><span><b>« + Filtre »</b> : un filtre sur n'importe quelle autre colonne</span>
+  <span class="n">4</span><span><b>Le compte</b> : « 2 sur 214 »</span>
+  <span class="n">5</span><span><b>« Effacer les filtres »</b> : la liste entière revient</span>
+  <span class="n">6</span><span><b>« Mes filtres »</b> : enregistrer, rappeler (« Commandes à livrer »)</span>
+  <span class="n">7</span><span><b>L'entonnoir des en-têtes</b> : le même menu ; violet = colonne filtrée. Et le clic droit « Filtrer sur › » met la même puce.</span>
+ </div>
+</div>
+<div class="lc" style="left:1142px;top:402px;width:430px;height:586px;padding:12px 14px">
+ <div class="row gap8" style="margin-bottom:6px"><i data-i="list" class="sm" style="color:var(--violet)"></i><b style="font:650 13.5px Inter">Toutes les listes de l'Admin l'ont</b><span class="cap" style="margin-left:auto">et leurs puces toutes prêtes</span></div>
+ <div class="al2">
+  <div class="k">Licences <span class="cap">128</span></div><div class="v"><span>État</span><span>Offre</span><span>Client</span><span>Fin</span><span>Signée par</span></div>
+  <div class="k">Clients <span class="cap">54</span></div><div class="v"><span>Offre</span><span>Ville</span><span>Servi par</span><span>Activité</span></div>
+  <div class="k">Demandes en ligne</div><div class="v"><span>État</span><span>Client</span><span>Logiciel</span><span>Répondue par</span></div>
+  <div class="k">Activations <span class="cap">342</span></div><div class="v"><span>Client</span><span>Logiciel</span><span>Version</span><span>Ville</span><span>Vu</span></div>
+  <div class="k">Offres · Options</div><div class="v"><span>En vente</span><span>Durée</span><span>Proposée aux offres</span></div>
+  <div class="k">Fonctionnalités <span class="cap">21</span></div><div class="v"><span>Offre</span><span>Option</span></div>
+  <div class="k">Licences flottantes</div><div class="v"><span>Client</span><span>Jetons</span><span>Au plafond</span></div>
+  <div class="k">Commandes</div><div class="v"><span>État</span><span>Article</span><span>Client</span><span>Période</span><span>Livrée par</span></div>
+  <div class="k">Révocations</div><div class="v"><span>Raison</span><span>Par qui</span><span>Période</span></div>
+  <div class="k">Administrateurs</div><div class="v"><span>État</span><span>Profil</span><span>Version de l'Admin</span></div>
+  <div class="k">Journal des admins <span class="cap">263</span></div><div class="v"><span>Admin</span><span>Type</span><span>Criticité</span><span>Période</span><span>PC</span></div>
+  <div class="k">Versions</div><div class="v"><span>Sorte</span><span>Importante</span><span>À jour</span></div>
+  <div class="k">Historique</div><div class="v"><span>Type</span><span>Qui</span><span>Période</span></div>
+  <div class="k">Dans les fiches</div><div class="v">d'un client (ses licences, PC, commandes, demandes, journal) et d'un admin (son journal, ses licences, ses clients) : la même barre, déjà filtrée sur lui</div>
+  <div class="k" style="border-bottom:0">Statistiques</div><div class="v" style="border-bottom:0">un clic sur un point ouvre la liste avec ses puces mises (planche 08)</div>
+ </div>
+</div>
+</body></html>

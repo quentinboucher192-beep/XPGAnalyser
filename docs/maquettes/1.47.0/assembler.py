@@ -22,6 +22,7 @@ TITRES = {
     "09": "Statistiques — les mises à jour",
     "10": "La fiche d'un client et ses courbes",
     "11": "Le globe",
+    "12": "Filtrer et chercher, dans toutes les listes",
 }
 
 
@@ -54,7 +55,7 @@ nav = "".join('<a href="#p%s"><b>%s</b>%s</a>' % (f[:2], f[:2], html.escape(t)) 
 cartes = ""
 for f, t, h in PLANCHES:
     cartes += ('<section id="p%s"><h2><span>%s</span>%s</h2><div class="cadre" data-h="%d"><iframe title="%s" width="1600" height="%d" '
-               'loading="lazy" srcdoc="%s"></iframe></div></section>\n') % (f[:2], f[:2], html.escape(t), h, html.escape(t), h, html.escape(board(f), quote=True))
+               'loading="lazy" allow="fullscreen" allowfullscreen srcdoc="%s"></iframe></div></section>\n') % (f[:2], f[:2], html.escape(t), h, html.escape(t), h, html.escape(board(f), quote=True))
 page = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Maquette XPG 1.47</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&display=swap" rel="stylesheet">
@@ -80,8 +81,8 @@ section h2 span{color:var(--acc);font-size:14px}
 .cadre iframe{position:absolute;left:0;top:0;border:0;transform-origin:0 0;display:block}
 footer{max-width:1240px;margin:0 auto;padding:0 16px 40px;color:var(--muted);font-size:13px}
 </style></head><body>
-<header><div class="o">Proposition · version 1.47</div><h1>Les statistiques des admins, des courbes partout, et le globe</h1>
-<p>Beaucoup plus de chiffres sur chaque admin et sur l'admin+ (sa fiche, son activité, ce qu'il produit, sa sécurité), une vue d'ensemble, les lignes qui se déplient et le clic droit dans le même ordre partout ; puis les courbes (ventes, mises à jour, PC, licences, par client, par admin) et le globe qui tourne. Les noms et les chiffres sont des exemples d'essai.</p></header>
+<header><div class="o">Proposition · version 1.47</div><h1>Les statistiques des admins, des courbes, le globe, des filtres partout</h1>
+<p>Beaucoup plus de chiffres sur chaque admin et sur l'admin+ (sa fiche, son activité, ce qu'il produit, sa sécurité), une vue d'ensemble, les lignes qui se déplient et le clic droit dans le même ordre partout ; puis les courbes (ventes, mises à jour, PC, licences, par client, par admin), le globe qui tourne, et une barre de filtres et de recherche au-dessus de chaque longue liste. Les noms et les chiffres sont des exemples d'essai.</p></header>
 <nav><div>__NAV__</div></nav>
 <main>__CARTES__</main>
 <footer>Maquette — rien de ce qui est dessiné ici n'est encore dans les logiciels. À valider (ou à corriger) avant de le construire.</footer>

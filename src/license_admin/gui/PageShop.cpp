@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -85,9 +86,66 @@ bool shownPriceTtc(const std::string& price, std::int64_t& cents) {
     return true;
 }
 
+// LES COLONNES A LA LARGEUR DE LA TABLE (jamais une colonne hors de la vue) : une colonne de largeur fixe (weight 0)
+// garde la sienne ; les souples se partagent le reste selon leur poids, chacune au moins `min` ; une colonne << a
+// cacher d'abord >> (sa valeur est aussi dans le detail) disparait quand la place manque.
+struct ColSpec {
+    const char* title;
+    float       width;    // fixe (weight 0) ; sinon ignoree
+    float       weight;   // 0 : fixe
+    float       min;
+    bool        dropFirst;
+};
+void fitColumns(ui::TableView& t, const std::vector<ColSpec>& specs, float total) {
+    const float avail = std::max(120.f, total - 18.f);   // la barre de defilement verticale, les bords
+    std::vector<bool> shown(specs.size(), true);
+    const auto plan = [&](std::vector<float>& w) {
+        float fixed = 0.f, weights = 0.f, mins = 0.f;
+        for (std::size_t i = 0; i < specs.size(); ++i) {
+            if (!shown[i]) continue;
+            if (specs[i].weight <= 0.f) fixed += specs[i].width;
+            else {
+                weights += specs[i].weight;
+                mins += specs[i].min;
+            }
+        }
+        const float flex = avail - fixed;
+        w.assign(specs.size(), 0.f);
+        for (std::size_t i = 0; i < specs.size(); ++i) {
+            if (!shown[i]) continue;
+            w[i] = specs[i].weight <= 0.f ? specs[i].width : std::max(specs[i].min, weights > 0.f ? std::floor(flex * specs[i].weight / weights) : specs[i].min);
+        }
+        return flex >= mins;
+    };
+    std::vector<float> w;
+    if (!plan(w))
+        for (std::size_t i = 0; i < specs.size(); ++i)
+            if (specs[i].dropFirst) {
+                shown[i] = false;
+                if (plan(w)) break;
+            }
+    std::vector<ui::TableView::Column> cols;
+    for (std::size_t i = 0; i < specs.size(); ++i) {
+        ui::TableView::Column c;
+        c.title = specs[i].title;
+        c.width = std::max(30.f, w[i]);
+        c.minWidth = 30.f;
+        c.visible = shown[i];
+        cols.push_back(std::move(c));
+    }
+    t.setColumns(std::move(cols));
+}
+
 void openUrl(const ShellHost& h, const std::string& url) {
     const std::string why = deployer::openLink(url);
     if (!why.empty() && h.flash) h.flash(why, Tone::Warning);
+}
+
+std::string problemText(std::string m) {
+    const std::string pre = "Refus\xC3\xA9 : ";
+    if (m.rfind(pre, 0) == 0) m = m.substr(pre.size());
+    if (!m.empty() && m.back() == '.') m.pop_back();
+    return m;
 }
 
 // Relever le reglage de la boutique (et les commandes, si ce poste a le droit << demandes >>) sans bruit ; adopte sur le
@@ -148,7 +206,7 @@ public:
         std::int64_t shown = 0;
         if (!a || rows[r].price.empty() || !shownPriceTtc(rows[r].price, shown)) return {};
         if (std::llabs(shown - a->amount) <= 1) return {};
-        return "affich\xC3\xA9 " + rows[r].price + " (" + shop::amountText(shown) + " TTC), encaiss\xC3\xA9 " + shop::amountText(a->amount);
+        return "\xE2\x89\xA0 affich\xC3\xA9 (" + shop::amountText(shown) + " TTC)";
     }
     [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
         if (r >= rows.size()) return {};
@@ -306,7 +364,9 @@ public:
 
     void refresh() override {
         if (!dirty_) takeDraft();
-        if (ws().service().ready() && ws().signer() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 30.0)) fetch(false);
+        // Un service plus ancien que la 1.46.0 : rien a relever (le bandeau dit de deployer).
+        if (ws().service().ready() && ws().signer() && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 30.0))
+            fetch(false);
         update();
     }
 
@@ -351,6 +411,17 @@ protected:
         show(cancel_, dirty_);
         y += 56.f;
         table_->setBounds({x0_, y, w_, std::max(120.f, b.bottom() - 18.f - y)});
+        if (std::fabs(w_ - fitW_) > 0.5f) {   // les colonnes a la largeur (aucune hors de la vue)
+            fitW_ = w_;
+            fitColumns(*table_,
+                       {{"Article", 0.f, 3.f, 180.f, false},
+                        {"En vente", 84.f, 0.f, 0.f, false},
+                        {"Prix affich\xC3\xA9", 130.f, 0.f, 0.f, false},
+                        {"Montant encaiss\xC3\xA9 (TTC)", 160.f, 0.f, 0.f, false},
+                        {"Libell\xC3\xA9 de la facture", 0.f, 3.f, 150.f, false},
+                        {"\xC3\x89" "cart", 0.f, 2.f, 150.f, false}},
+                       w_);
+        }
     }
 
     void onPaint(const ui::PaintContext& ctx) override {
@@ -360,9 +431,11 @@ protected:
         r.fillRect(bounds(), c.windowBg);
         r.drawText({x0_, titleY_}, "Boutique", gfx::semibold(kF28), c.text);
         std::string lead = "La vente en ligne : Stripe encaisse sur sa page s\xC3\xA9" "curis\xC3\xA9" "e (la carte n'est ni vue ni gard\xC3\xA9" "e, redemand\xC3\xA9" "e \xC3\xA0 chaque achat), ton Admin livre la licence.";
+        // Un service trop ancien : le bandeau le dit, une seule fois (pas aussi la panne du releve).
+        const bool showProblem = !problem_.empty() && note_.empty();
         if (fetching_) lead = "Relev\xC3\xA9 en cours\xE2\x80\xA6";
-        else if (!problem_.empty()) lead = "Service : " + problem_;
-        r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, problem_.empty() ? c.textMuted : c.warning);
+        else if (showProblem) lead = "Service : " + problemText(problem_) + ".";
+        r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, reload_->bounds().x - 16.f - x0_), kF14, showProblem ? c.warning : c.textMuted);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
             r.fillRoundedRect(noteRect_.inset(1.f, 1.f), c.panelBg, 9.f);
@@ -399,14 +472,15 @@ private:
         const float x = stripeRect_.x + 18.f;
         r.drawText({x, stripeRect_.y + 16.f}, "Stripe", gfx::semibold(kF16), c.text);
         const shop::StripeState& s = view().stripe;
-        const bool known = ws().hasShop();
-        std::string p = !known ? "pas encore lu" : shop::modeLabel(s.connected ? s.mode : std::string());
+        const bool known = ws().hasShop() && note_.empty();
+        std::string p = !note_.empty() ? "service " + ws().service().state.version : !known ? "pas encore lu" : shop::modeLabel(s.connected ? s.mode : std::string());
         Tint t{rgb(0x475569), rgb(0xF1F5F9)};
         if (known && s.connected && s.mode == "test") t = {rgb(0xB45309), rgb(0xFFF4E5)};
         if (known && s.connected && s.mode == "reel") t = {rgb(0x15803D), rgb(0xECFDF3)};
         pill(r, x + 70.f, stripeRect_.y + 14.f, p, kF12, t.fg, t.bg, 22.f, true);
         std::string l1, l2;
         if (!ws().service().ready()) l1 = "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
+        else if (!note_.empty()) l1 = "Stripe se branche sur ton service une fois en " + std::string(shop::kServiceRequired) + " (D\xC3\xA9ployer le service).";
         else if (!known) l1 = "L'\xC3\xA9tat de Stripe se lit sur ton service (Relever).";
         else if (!s.connected) l1 = "Pas branch\xC3\xA9 : colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe (Brancher Stripe\xE2\x80\xA6), le reste se fait seul.";
         else {
@@ -433,7 +507,9 @@ private:
                    c.textMuted);
         std::string st;
         Color sc = c.textMuted;
-        if (ws().hasShop()) {
+        if (!note_.empty()) {
+            st = "Pas encore : ton service doit passer en " + std::string(shop::kServiceRequired) + ".";
+        } else if (ws().hasShop()) {
             if (view().open) {
                 st = "Ouverte : " + std::to_string(view().articles.size()) + " article(s) achetable(s) dans les Studios.";
                 sc = c.ok;
@@ -493,12 +569,14 @@ private:
         const bool ready = ws().service().ready() && ws().signer();
         const bool bz = busy();
         note_ = shopServiceNote(ws());
+        // Les deux interrupteurs disent le reglage RELEVE : pas encore lu, ou un service trop ancien - eteints et grises.
+        const bool known = ws().hasShop() && note_.empty();
         syncing_ = true;
-        active_->setChecked(draft_.active);
-        auto_->setChecked(draft_.autoDeliver);
+        active_->setChecked(known && draft_.active);
+        auto_->setChecked(known && draft_.autoDeliver);
         syncing_ = false;
-        active_->setEnabled(plus && ready);
-        auto_->setEnabled(plus && ready);
+        active_->setEnabled(plus && ready && known);
+        auto_->setEnabled(plus && ready && known);
         reload_->setEnabled(ready && !fetching_);
         connect_->setEnabled(plus && ready && !bz && note_.empty());
         connect_->setText(ws().hasShop() && view().stripe.connected ? std::string("Rebrancher Stripe\xE2\x80\xA6") : std::string("Brancher Stripe\xE2\x80\xA6"));
@@ -515,7 +593,7 @@ private:
 
     void fetch(bool loud) {
         (void)loud;
-        if (fetching_) return;
+        if (fetching_ || !shopServiceNote(ws()).empty()) return;
         fetching_ = true;
         lastFetch_ = steadySeconds();
         auto alive = alive_;
@@ -567,7 +645,7 @@ private:
     bool                            dirty_{false}, syncing_{false}, fetching_{false};
     double                          lastFetch_{-1};
     std::string                     problem_, note_;
-    float                           x0_{0}, w_{0}, titleY_{0}, catY_{0};
+    float                           x0_{0}, w_{0}, titleY_{0}, catY_{0}, fitW_{-1.f};
     Rect                            noteRect_{}, stripeRect_{}, saleRect_{};
     core::ConnectionScope           links_;
 };
@@ -587,7 +665,7 @@ public:
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return 7; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"N\xC2\xB0", "Date", "Client", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat"};
+        static const char* h[] = {"N\xC2\xB0", "Date", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat", "Client"};
         return c < 7 ? h[c] : "";
     }
     [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
@@ -596,26 +674,27 @@ public:
         switch (c) {
             case 0: return std::to_string(o.number);
             case 1: return dateTimeFr(o.created);
-            case 2: return o.name.empty() ? o.email : o.name;
-            case 3: return o.company;
-            case 4: return o.label.empty() ? o.article : o.label;
-            case 5: return shop::amountText(o.amount, o.currency) + (o.mode == "test" ? " (essai)" : "");
-            case 6: return shop::stateLabel(o.state);
+            case 2: return o.company;
+            case 3: return o.label.empty() ? o.article : o.label;
+            case 4: return shop::amountText(o.amount, o.currency);   // un paiement d'essai : la pastille du detail le dit
+            case 5: return shop::stateLabel(o.state);
+            case 6: return o.name.empty() ? o.email : o.name;
             default: return {};
         }
     }
     [[nodiscard]] ui::CellStyle cellStyle(RowIndex r, std::size_t c) const override {
         ui::CellStyle s;
-        if (r < rows.size() && c == 6) {
+        if (r < rows.size() && c == 5) {
             s.fg = stateInk(rows[r].state);
             s.bold = rows[r].state == "payee" || rows[r].state == "a_revoir";
+            s.keepFgSelected = true;   // l'etat garde sa couleur sur la ligne choisie
         }
         if (c == 0) s.monospace = true;
         return s;
     }
     [[nodiscard]] bool less(RowIndex a, RowIndex b, std::size_t c) const override {
         if (c == 0 || c == 1) return rows[a].number < rows[b].number;
-        if (c == 5) return rows[a].amount < rows[b].amount;
+        if (c == 4) return rows[a].amount < rows[b].amount;
         return cellText(a, c) < cellText(b, c);
     }
     void reset() { modelReset->emit(); }
@@ -724,7 +803,7 @@ public:
                            {"Expir\xC3\xA9" "es, annul\xC3\xA9" "es, refus\xC3\xA9" "es", "closes"}});
         filter_->setSelectedIndex(0);
         table_ = &adopt(*this, std::make_unique<ui::TableView>("commandes.table"));
-        table_->setColumns({{"N\xC2\xB0", 64.f}, {"Date", 140.f}, {"Client", 170.f}, {"Soci\xC3\xA9t\xC3\xA9", 180.f}, {"Article", 240.f}, {"Montant", 170.f}, {"\xC3\x89tat", 170.f}});
+        table_->setColumns({{"N\xC2\xB0", 44.f}, {"Date", 118.f}, {"Soci\xC3\xA9t\xC3\xA9", 150.f}, {"Article", 200.f}, {"Montant", 104.f}, {"\xC3\x89tat", 150.f}, {"Client", 120.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<OrdersModel>();
         table_->setModel(model_);
@@ -760,7 +839,8 @@ public:
     [[nodiscard]] std::string title() const override { return "Commandes"; }
 
     void refresh() override {
-        if (ws().service().ready() && ws().can("demandes") && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0)) fetch();
+        if (ws().service().ready() && ws().can("demandes") && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0))
+            fetch();
         rebuild();
     }
 
@@ -797,9 +877,22 @@ protected:
         } else {
             noteRect_ = {};
         }
-        const float detailW = std::clamp(w_ * 0.34f, 320.f, 430.f);
+        const float detailW = std::clamp(w_ * 0.30f, 300.f, 430.f);
         const float h = std::max(160.f, b.bottom() - 18.f - y);
-        table_->setBounds({x0_, y, w_ - detailW - 16.f, h});
+        const float tw = w_ - detailW - 16.f;
+        table_->setBounds({x0_, y, tw, h});
+        if (std::fabs(tw - fitW_) > 0.5f) {   // les colonnes a la largeur : l'etat toujours en vue ; le client (dans le detail) cede le premier
+            fitW_ = tw;
+            fitColumns(*table_,
+                       {{"N\xC2\xB0", 44.f, 0.f, 0.f, false},
+                        {"Date", 118.f, 0.f, 0.f, false},
+                        {"Soci\xC3\xA9t\xC3\xA9", 0.f, 3.f, 110.f, false},
+                        {"Article", 0.f, 4.f, 130.f, false},
+                        {"Montant", 100.f, 0.f, 0.f, false},
+                        {"\xC3\x89tat", 140.f, 0.f, 0.f, false},
+                        {"Client", 0.f, 2.f, 100.f, true}},
+                       tw);
+        }
         detail_ = {x0_ + w_ - detailW, y, detailW, h};
         // Les boutons du detail, en bas du volet.
         float by = detail_.bottom() - 16.f - 34.f;
@@ -817,7 +910,7 @@ protected:
         const auto& c = ctx.theme.color;
         r.fillRect(bounds(), c.windowBg);
         r.drawText({x0_, titleY_}, "Commandes", gfx::semibold(kF28), c.text);
-        r.drawText({x0_, titleY_ + 40.f}, fit(r, status(), kF14, filter_->bounds().x - 16.f - x0_), kF14, problem_.empty() ? c.textMuted : c.warning);
+        r.drawText({x0_, titleY_ + 40.f}, fit(r, status(), kF14, filter_->bounds().x - 16.f - x0_), kF14, problem_.empty() || !note_.empty() ? c.textMuted : c.warning);
         if (!note_.empty()) {
             r.fillRoundedRect(noteRect_, c.warning.withAlpha(90), 10.f);
             r.fillRoundedRect(noteRect_.inset(1.f, 1.f), c.panelBg, 9.f);
@@ -843,7 +936,7 @@ private:
 
     [[nodiscard]] std::string status() const {
         if (fetching_) return "Relev\xC3\xA9 des commandes en cours\xE2\x80\xA6";
-        if (!problem_.empty()) return "Service : " + problem_;
+        if (!problem_.empty() && note_.empty()) return "Service : " + problemText(problem_) + ".";
         const auto& w = ws();
         if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");
@@ -930,7 +1023,11 @@ private:
         row("Soci\xC3\xA9t\xC3\xA9", o->company);
         row("Client", o->name);
         row("Courriel", o->email);
-        row("PC", o->device.substr(0, 16) + (o->device.size() > 16 ? "\xE2\x80\xA6" : ""));
+        {
+            const std::string name = pcName(*o);
+            const std::string id = o->device.substr(0, 8) + (o->device.size() > 8 ? "\xE2\x80\xA6" : "");
+            row("PC", name.empty() ? id : name + " \xC2\xB7 " + id);
+        }
         if (o->kind == "option") row("Sa licence", o->existingLicence);
         row("Command\xC3\xA9" "e", dateTimeFr(o->created));
         if (o->paid) row("Pay\xC3\xA9" "e", dateTimeFr(o->paid));
@@ -947,8 +1044,22 @@ private:
                               c.warning, 17.f, 2);
     }
 
+    // Le nom que le client a donne a son PC : dans la demande scellee de la commande (pour la cle de ce poste), ouverte
+    // une fois ; illisible ici (scellee pour un autre admin, effacee apres la livraison) : vide.
+    std::string pcName(const shop::Order& o) {
+        if (const auto it = pcNames_.find(o.number); it != pcNames_.end()) return it->second;
+        std::string name;
+        if (!o.sealed.empty() && !o.forOther && ws().signer()) {
+            online::Entry e;
+            std::string why;
+            if (online::openSealedRequest(*ws().signer(), o.device, o.keyId, o.sealed, ws().now(), e, &why) && e.deviceKey == o.deviceKey) name = e.deviceName;
+        }
+        pcNames_[o.number] = name;
+        return name;
+    }
+
     void fetch() {
-        if (fetching_) return;
+        if (fetching_ || !shopServiceNote(ws()).empty()) return;
         fetching_ = true;
         lastFetch_ = steadySeconds();
         auto alive = alive_;
@@ -1035,7 +1146,8 @@ private:
     bool                         fetching_{false};
     double                       lastFetch_{-1};
     std::string                  problem_, note_;
-    float                        x0_{0}, w_{0}, titleY_{0}, buttonsTop_{0};
+    float                        x0_{0}, w_{0}, titleY_{0}, buttonsTop_{0}, fitW_{-1.f};
+    std::map<int, std::string>   pcNames_;   // le nom du PC de chaque commande (sa demande scellee, ouverte ici)
     Rect                         noteRect_{}, detail_{};
     core::ConnectionScope        links_;
 };
@@ -1045,6 +1157,10 @@ class StripeBody final : public ui::Widget {
 public:
     StripeBody(Dialog& owner, ShellHost host, std::function<void()> done)
         : ui::Widget("dialog.stripe.corps"), owner_(owner), host_(std::move(host)), done_(std::move(done)) {
+        // Deja branche : << Rebrancher >> - la nouvelle cle remplace l'ancienne (et le webhook est refait).
+        const Workspace& w = host_.workspace();
+        connected_ = w.hasShop() && w.shop().stripe.connected;
+        connectedMode_ = connected_ ? w.shop().stripe.mode : std::string();
         key_ = &adopt(*this, std::make_unique<ui::InputText>("stripe.cle"));
         key_->setMasked(true);
         key_->setMaxLength(300);
@@ -1073,11 +1189,32 @@ public:
         wipeField();
     }
 
+    [[nodiscard]] std::string titleText() const { return connected_ ? "Rebrancher Stripe" : "Brancher Stripe"; }
+    [[nodiscard]] std::string subtitleText() const {
+        if (!connected_) return "Le paiement en ligne de ta boutique";
+        return "D\xC3\xA9j\xC3\xA0 branch\xC3\xA9 (" + std::string(connectedMode_ == "reel" ? "mode r\xC3\xA9" "el" : "mode test") + ") : la nouvelle cl\xC3\xA9 remplace l'ancienne";
+    }
+    [[nodiscard]] std::string introText() const {
+        std::string t = "Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe (dashboard.stripe.com \xE2\x80\xBA D\xC3\xA9veloppeurs \xE2\x80\xBA Cl\xC3\xA9s API). L'Admin cr\xC3\xA9" "e le point d'arriv\xC3\xA9" "e du "
+                        "webhook chez Stripe, puis pose la cl\xC3\xA9 et le secret du webhook sur ton service (des secrets de ton Worker Cloudflare). Rien n'est gard\xC3\xA9 sur ce PC.";
+        if (connected_)
+            t += " Stripe est d\xC3\xA9j\xC3\xA0 branch\xC3\xA9 : rebrancher remplace la cl\xC3\xA9 et le webhook d'avant (un autre compte, ou le passage du mode test au mode r\xC3\xA9" "el).";
+        return t;
+    }
+
 protected:
+    // La hauteur suit le contenu : le texte, le champ, la phrase du mode, le resultat (s'il y en a un), les boutons.
     void onLayout() override {
-        frame_.place(*this, 640.f, 470.f);
+        constexpr float kW = 600.f;
+        const float tw = kW - 48.f;
+        introH_ = wrappedHeight(introText(), kF13, tw, 18.f, 7);
+        resultH_ = 0.f;
+        if (running_) resultH_ = 18.f;
+        else if (!result_.empty()) resultH_ = wrappedHeight(result_, gfx::semibold(kF13), tw, 18.f, 3) + (next_.empty() ? 0.f : 2.f + wrappedHeight(next_, kF13, tw, 18.f, 3));
+        const float wantH = 76.f + 14.f + introH_ + 14.f + 36.f + 6.f + 28.f + 4.f + 16.f + (resultH_ > 0.f ? 12.f + resultH_ : 0.f) + 18.f + 34.f + 20.f;
+        frame_.place(*this, kW, wantH);
         const auto& p = frame_.panel;
-        const float y = p.y + 182.f;
+        const float y = p.y + 76.f + 14.f + introH_ + 14.f;
         const float sw = buttonWidth(*show_, 90.f);
         key_->setBounds({p.x + 24.f, y, p.w - 48.f - sw - 8.f, 36.f});
         show_->setBounds({p.right() - 24.f - sw, y, sw, 36.f});
@@ -1094,13 +1231,9 @@ protected:
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
         const auto& p = frame_.panel;
-        const float top = frame_.paint(r, ctx.theme, "Brancher Stripe", "Le paiement en ligne de ta boutique", ui::Icon::Lock);
+        const float top = frame_.paint(r, ctx.theme, titleText(), subtitleText(), ui::Icon::Lock);
         const float x = p.x + 24.f, w = p.w - 48.f;
-        float y = top + 14.f;
-        y += drawWrapped(r, x, y, w,
-                         "Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe (dashboard.stripe.com \xE2\x80\xBA D\xC3\xA9veloppeurs \xE2\x80\xBA Cl\xC3\xA9s API). L'Admin cr\xC3\xA9" "e le point d'arriv\xC3\xA9" "e du "
-                         "webhook chez Stripe, puis pose la cl\xC3\xA9 et le secret du webhook sur ton service (des secrets de ton Worker Cloudflare). Rien n'est gard\xC3\xA9 sur ce PC.",
-                         kF13, c.text, 18.f, 5);
+        (void)drawWrapped(r, x, top + 14.f, w, introText(), kF13, c.text, 18.f, 7);
         const std::string mode = shop::modeOfKey(key_->text());
         std::string hint = key_->text().empty() ? std::string("Commence par sk_test_ pour essayer (aucune carte r\xC3\xA9" "elle n'est d\xC3\xA9" "bit\xC3\xA9" "e), sk_live_ pour vendre.")
                            : mode == "reel" ? std::string("Cl\xC3\xA9 du mode r\xC3\xA9" "el : de vrais paiements.")
@@ -1108,7 +1241,7 @@ protected:
                            : key_->text().rfind("pk_", 0) == 0 ? std::string("C'est la cl\xC3\xA9 publiable : il faut la cl\xC3\xA9 SECR\xC3\x88TE.")
                                                                : std::string("Ce n'est pas une cl\xC3\xA9 secr\xC3\xA8te de Stripe (sk_\xE2\x80\xA6 ou rk_\xE2\x80\xA6).");
         r.drawText({x, key_->bounds().bottom() + 40.f}, fit(r, hint, kF12, w), kF12, mode.empty() && !key_->text().empty() ? c.error : c.textMuted);
-        float ry = key_->bounds().bottom() + 64.f;
+        float ry = key_->bounds().bottom() + 40.f + 16.f + 12.f;
         if (running_) {
             r.drawText({x, ry}, "Branchement en cours\xE2\x80\xA6 (Stripe, puis ton service par le kit : jusqu'\xC3\xA0 une minute)", kF13, c.textMuted);
         } else if (!result_.empty()) {
@@ -1137,7 +1270,7 @@ private:
     }
     void sync() {
         go_->setEnabled(!running_ && !(host_.busy && host_.busy()));
-        go_->setText(ok_ ? std::string("Brancher de nouveau") : std::string("Brancher"));
+        go_->setText(connected_ || ok_ ? std::string("Rebrancher") : std::string("Brancher"));
         show(node_, !running_ && outcome_ == deployer::Outcome::NodeMissing);
         show(login_, !running_ && outcome_ == deployer::Outcome::NotLoggedIn);
         invalidateLayout();
@@ -1239,6 +1372,9 @@ private:
     ui::Button*           login_{nullptr};
     ui::Button*           keys_{nullptr};
     bool                  running_{false}, ok_{false};
+    bool                  connected_{false};
+    std::string           connectedMode_;
+    float                 introH_{0}, resultH_{0};
     std::string           result_, next_;
     deployer::Outcome     outcome_{deployer::Outcome::Ok};
     Frame                 frame_;
@@ -1248,7 +1384,10 @@ private:
 class StripeDialog final : public Dialog {
 public:
     StripeDialog(ShellHost host, std::function<void()> done) : Dialog("dialog.stripe"), host_(std::move(host)), done_(std::move(done)) {}
-    [[nodiscard]] std::string title() const override { return "Brancher Stripe"; }
+    [[nodiscard]] std::string title() const override {
+        const Workspace& w = host_.workspace();
+        return w.hasShop() && w.shop().stripe.connected ? "Rebrancher Stripe" : "Brancher Stripe";
+    }
 
 protected:
     core::Status buildUi() override {

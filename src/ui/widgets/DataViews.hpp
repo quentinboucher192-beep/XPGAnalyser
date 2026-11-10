@@ -187,6 +187,9 @@ struct CellStyle {
     // 1.39.0 : PAS DANS LA LICENCE (TreeView, ListView, TableView) - le texte barre, un cadenas apres lui ; la ligne
     // reste choisissable (son clic va au controle de la licence, qui dit pourquoi dans une fenetre).
     bool              locked{false};
+    // 1.46.0 : la couleur du texte (fg, fgTone) GARDEE sur la ligne choisie (un etat : << payee >> reste ambre) ; par
+    // defaut la ligne choisie prend la couleur de la selection.
+    bool        keepFgSelected{false};
 };
 
 // ============================================================== ListView ====

@@ -246,6 +246,13 @@ namespace ui {
 
         // 1.41.0 : le bouton ordinaire, un cadre arrondi (son trait suit le coin).
         if (style_ == Style::Default) shapes::fillFramedRect(ctx.r, r, fill, c.border, ctx.theme.metric.radius);
+        else if (!enabled() && (style_ == Style::Primary || style_ == Style::Danger)) {
+            // 1.46.0 : grise, le bouton principal (ou de danger) garde sa forme - un cadre et un fond a peine teintes de sa
+            // couleur - au lieu d'un texte pale sans rien autour (il restait introuvable a cote des boutons ordinaires).
+            const gfx::Color tone = style_ == Style::Danger ? c.error : c.accent;
+            shapes::fillFramedRect(ctx.r, r, c.panelBg, tone.withAlpha(90), ctx.theme.metric.radius);
+            ctx.r.fillRoundedRect(r.inset(1.f, 1.f), tone.withAlpha(20), std::max(0.f, ctx.theme.metric.radius - 1.f));
+        }
         else if (fill.a > 0) ctx.r.fillRoundedRect(r, fill, ctx.theme.metric.radius);
         if (focused()) drawFocusRing(ctx, r);
 

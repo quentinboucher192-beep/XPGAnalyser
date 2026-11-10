@@ -133,6 +133,9 @@ class PurchaseWindow;
 class OrderWindow;
 PurchaseWindow* g_purchase = nullptr;
 OrderWindow*    g_order = nullptr;
+// Le numero des resultats du service juste avant << Payer >> : la fenetre << Commande >> (0) prend le resultat de CE travail,
+// meme s'il est releve avant qu'elle soit construite (un service qui ne repond pas : tout de suite).
+unsigned long long g_orderSince = 0;
 
 } // namespace
 
@@ -279,6 +282,7 @@ public:
             say(view_.missing.empty() ? std::string("Cet article n'est pas en vente en ligne.") : view_.missing, 3);
             return false;
         }
+        g_orderSince = ls::revision();
         ls::OrderForm f;
         f.article = view_.article;
         f.customer = view_.company;
@@ -318,7 +322,7 @@ protected:
         float h = 42.f + 16.f;                       // l'en-tete
         h += 30.f + 22.f;                            // l'article et le montant ; le libelle de la facture
         h += static_cast<float>(givesL_.size()) * lh + 14.f;
-        h += 1.f + 14.f + 22.f + 3.f * 24.f + 10.f;  // Facture a : la societe, le nom, le courriel
+        h += 1.f + 14.f + 26.f + 3.f * 24.f + 10.f;  // Facture a : la societe, le nom, le courriel
         if (!missingL_.empty()) h += static_cast<float>(missingL_.size()) * lh + 16.f + 10.f;
         if (!view_.testMode.empty()) h += 34.f + 8.f;
         h += static_cast<float>(cardL_.size()) * lh + 14.f + 10.f;
@@ -538,7 +542,7 @@ public:
         links_ += closeButton_->clicked->connect([this] {
             if (close_) close_();
         });
-        seenResult_ = ls::revision();
+        seenResult_ = number_ == 0 ? g_orderSince : ls::revision();
         refresh();
     }
     [[nodiscard]] std::uint64_t number() const noexcept { return number_; }
@@ -603,7 +607,8 @@ public:
         show(cancel_, view_.cancel);
         show(receipt_, view_.receipt);
         show(licence_, view_.licence);
-        show(check_, number_ != 0 && (view_.pay || view_.cancel || (order() && shop::open(order()->state))));
+        // Verifier maintenant : une commande payee (regardee toutes les 5 minutes) ; a payer, le Studio regarde deja toutes les 10 s
+        show(check_, number_ != 0 && order() && (order()->state == shop::kPaid || order()->state == shop::kReview));
         for (auto* b : {cancel_, check_}) b->setEnabled(idle);
         cancel_->setText(ls::busyJob() == ls::Job::CancelOrder ? std::string("Annulation\xE2\x80\xA6") : std::string("Annuler la commande"));
         invalidateLayout();
