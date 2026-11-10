@@ -3078,6 +3078,15 @@ Result sync() {
         (void)stepMessages(c, rec, res);
         stepVersion(c, res.publishedVersion, rec, res, false);
     }
+    // 7. 1.46.0 : la boutique - son catalogue (un service 1.46.0 ou plus) ; les commandes qui attendent (a payer, payee, a
+    //    revoir), et une livree pas encore appliquee : son etat << poste >>.
+    if (licence::noticesShown()) lookShop(c, res);
+    if (shop::serviceKnowsShop(c.version) &&
+        (deliveryWaiting(rec) || std::any_of(rec.orders.begin(), rec.orders.end(), [](const shop::Order& o) { return shop::open(o.state); }))) {
+        std::vector<std::string> ol;
+        if (stepOrders(c, rec, res, ol) && deliveryWaiting(rec)) applyDeliveries(c, rec, res, ol);
+        for (auto& l : ol) lines.push_back(std::move(l));
+    }
     res.ok = allOk;
     if (lines.empty() && c.lines.empty()) lines.push_back("Licence synchronis\xC3\xA9" "e avec le service.");
     finish(res, c, rec, std::move(lines));
@@ -3113,6 +3122,16 @@ Result look(Job job) {
         return res;
     }
     if (!licence::noticesShown() && job == Job::Watch) return res;   // le poste d'exploitation : le regard seul
+    // 1.46.0 : le catalogue de la boutique - relu s'il a plus de 10 minutes, si la boutique a ouvert ou ferme, si le service
+    // a change de version (un service d'avant la 1.46.0 : rien a lire, une fois).
+    {
+        c.version = etat.str("version");
+        c.shopOpen = etat.flag("boutique");
+        const shop::Catalogue cur = shop::catalogue();
+        const bool knows = shop::serviceKnowsShop(c.version);
+        const lic::Seconds age = lic::systemNow() - cur.receivedAt;
+        if (cur.serviceVersion != c.version || (knows && (!cur.known || cur.open != c.shopOpen || age > 600 || age < 0))) lookShop(c, res);
+    }
     if (job != Job::Update) {
         if (!stepMessages(c, rec, res) && job == Job::Messages) {
             res.ok = false;
