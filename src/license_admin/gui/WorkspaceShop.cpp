@@ -20,6 +20,8 @@
 #include "../../licensing/Service.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <thread>
 #include <cstdlib>
 #include <filesystem>
 #include <map>
@@ -397,6 +399,7 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         const bool onlineLic = isOnlineLicence(L->licence);
         const bool inForceNow = inForce(*L);
         const std::string stateNow = L->stateLabel();
+        const Seconds issued = L->licence.issuedAt;
         // la licence est-elle bien celle de ce PC ?
         if (onlineLic) {
             online::Snapshot snap;
@@ -408,6 +411,8 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         }
         if (was == started.end()) {
             if (!inForceNow) return review("la licence " + licenseId + " est " + stateNow + " : une option s'ajoute \xC3\xA0 une licence en cours");
+            // Une emission dans la meme seconde que la precedente n'entre pas dans l'archive : attendre la seconde suivante.
+            for (int i = 0; i < 25 && now() <= issued; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(100));
             OptionDraft od;
             od.optionId = ord.option;
             od.days = ord.days;

@@ -98,10 +98,10 @@ public:
         pickAdmin_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.admin.choisir", ui::Button::Style::Default, ui::Icon::Open);
         notes_ = &adopt(*this, std::make_unique<ui::MultiLineText>("versions.notes"));
         // 1.46.0 : << je ne peux pas ecrire dans Notes >> - un MultiLineText nait en lecture seule (l'apercu d'un code) : les
-        // notes sont un texte a taper, une note par ligne (Entree : la suivante), sans numeros de ligne, repliees a la largeur.
+        // notes sont un texte a taper, une note par ligne (Entree : la suivante), sans numeros de ligne (une note plus
+        // longue que le champ : sa barre du bas).
         notes_->setReadOnly(false);
         notes_->setShowLineNumbers(false);
-        notes_->setWordWrap(true);
         notes_->setLanguage(ui::Language::PlainText);
         notes_->setZoomSupport(ui::ZoomSupport::None);   // un champ du formulaire, pas un document
         important_ = &adopt(*this, std::make_unique<Switch>("Importante", "versions.importante"));
@@ -185,7 +185,7 @@ protected:
             float rightW = std::clamp(w_ * 0.27f, 280.f, 380.f);
             if (rowNeed > rightW && w_ - rowNeed >= 600.f) rightW = rowNeed;
             stacked_ = rowNeed > rightW;
-            const float panelH = std::clamp(b.bottom() - y - 230.f, stacked_ ? 400.f : 380.f, 470.f);
+            const float panelH = std::clamp(b.bottom() - y - 230.f, stacked_ ? 410.f : 380.f, 470.f);
             panelRect_ = {x0_, y, w_, panelH};
             leftRect_ = {panelRect_.x, panelRect_.y, panelRect_.w - rightW, panelRect_.h};
             rightRect_ = {leftRect_.right(), panelRect_.y, rightW, panelRect_.h};
@@ -197,7 +197,8 @@ protected:
             versionRow_ = zones_[0].bottom() + 34.f;
             const float ny = versionRow_ + 70.f;
             notes_->setBounds({zx, ny, leftRect_.w - 40.f, std::max(60.f, leftRect_.bottom() - 16.f - ny)});
-            important_->setBounds({rightRect_.x + 20.f, rightRect_.y + 214.f, 40.f, 22.f});
+            // 1.46.0 : 226 (et non 214) - les quatre etapes sur deux lignes (une colonne etroite) passent au-dessus du trait.
+            important_->setBounds({rightRect_.x + 20.f, rightRect_.y + 226.f, 40.f, 22.f});
             if (!stacked_) {
                 sign_->setBounds({rightRect_.right() - 20.f - sw, rightRect_.bottom() - 56.f, sw, 38.f});
                 cancel_->setBounds({sign_->bounds().x - 8.f - cw, rightRect_.bottom() - 56.f, cw, 38.f});

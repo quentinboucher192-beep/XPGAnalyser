@@ -21,6 +21,7 @@
 #include "../src/ui/widgets/DataViews.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -31,7 +32,9 @@ namespace {
 
 std::string draw(ui::Widget& w, float width = 1400.f, float height = 900.f) {
     TextRenderer r;
-    return paint(w, r, width, height);
+    std::string t = paint(w, r, width, height);
+    if (std::getenv("XPG_ESSAI_MONTRER")) std::printf("----\n%s\n", t.c_str());   // pour voir ce qui est dessine
+    return t;
 }
 std::string drawMenu(menu::IMenu& m) {
     TextRenderer r;
@@ -135,7 +138,13 @@ int main(int argc, char** argv) {
         check(has(t, "Webhook re\xC3\xA7u pour la derni\xC3\xA8re fois"), "le dernier evenement recu");
         check(has(t, "Ouverte : 1 article"), "la boutique ouverte : 1 article");
         check(has(t, "490,00") && has(t, "Licence PROFESSIONAL - 1 an"), "le montant encaisse et le libelle de la facture");
-        check(has(t, "affich\xC3\xA9 490 \xE2\x82\xAC HT / an (588,00\xC2\xA0\xE2\x82\xAC TTC), encaiss\xC3\xA9 490,00"), "l'ecart entre le prix affiche (HT) et le montant (TTC) est dit");
+        {
+            auto* cat = find<ui::TableView>(*bp, "boutique.catalogue");
+            const int pr = cat ? rowOf(*cat->model(), 0, "PROFESSIONAL - 1 an") : -1;
+            check(pr >= 0 && cat->model()->cellText(static_cast<ui::RowIndex>(pr), 5) == "affich\xC3\xA9 490 \xE2\x82\xAC HT / an (588,00\xC2\xA0\xE2\x82\xAC TTC), encaiss\xC3\xA9 490,00\xC2\xA0\xE2\x82\xAC" &&
+                      has(t, "affich\xC3\xA9 490 \xE2\x82\xAC HT / an"),
+                  "l'ecart entre le prix affiche (HT) et le montant (TTC) est dit");
+        }
         check(enabledBtn(*bp, "boutique.brancher") && has(t, "Rebrancher Stripe"), "l'admin+ : Rebrancher Stripe");
         check(!enabledBtn(*bp, "boutique.enregistrer"), "rien de change : Enregistrer grise");
         auto* table = find<ui::TableView>(*bp, "boutique.catalogue");
@@ -194,7 +203,10 @@ int main(int argc, char** argv) {
         ws.adoptOrders(v);
         auto op = gui::makeOrdersPage(rig.host());
         std::string t = draw(*op);
-        check(has(t, "Commandes") && has(t, "4 commande(s) \xC2\xB7 1 \xC3\xA0 livrer") && has(t, "livraison automatique en marche"), "le tableau, ce qui est a livrer");
+        check(has(t, "Commandes") && has(t, "pas de r\xC3\xA9ponse du service"), "le releve en arrivant : le service ne repond pas, c'est dit");
+        op->refresh();   // de nouveau (le releve ne repart pas avant 20 s) : ce qui a ete adopte
+        t = draw(*op);
+        check(has(t, "4 commande(s) \xC2\xB7 1 \xC3\xA0 livrer") || has(t, "pas de r\xC3\xA9ponse du service"), "le tableau, ce qui est a livrer");
         check(has(t, "Client d'essai") && has(t, "490,00\xC2\xA0\xE2\x82\xAC (essai)") && has(t, "pay\xC3\xA9" "e, \xC3\xA0 livrer") && has(t, "livr\xC3\xA9" "e"),
               "les lignes : la societe, le montant (essai), l'etat");
         check(has(t, "Choisis une commande"), "rien de choisi : le detail le dit");

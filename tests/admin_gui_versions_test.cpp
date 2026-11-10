@@ -102,6 +102,11 @@ std::string panelProblems(ui::Widget& page, float winW, float winH) {
         if (d.text == "CE QU'ILS VERRONT" && d.at.y + 20.f + 58.f > buttonsTop) return at + "<< ce qu'ils verront >> sous les boutons";
         if (d.text == "Importante" && d.at.y + 34.f > buttonsTop) return at + "Importante sous les boutons";
     }
+    // Les etapes (<< ce qui va se passer >>, deux lignes au plus chacune) au-dessus du trait d'Importante (14 px plus haut).
+    const float rule = i.y - 14.f;
+    for (const auto& d : r.draws)
+        if (d.at.x > n.right() + 20.f && d.at.x < pw && d.at.y > i.y - 230.f && d.at.y < i.y - 2.5f && d.at.y + 13.f > rule)
+            return at + "une etape (<< " + d.text + " >>) sur le trait d'Importante";
     return {};
 }
 // Ecrire dans les notes comme au clavier : un clic dedans (le clavier), puis du texte, Entree entre deux lignes.

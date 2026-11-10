@@ -722,7 +722,7 @@ public:
                            {"Expir\xC3\xA9" "es, annul\xC3\xA9" "es, refus\xC3\xA9" "es", "closes"}});
         filter_->setSelectedIndex(0);
         table_ = &adopt(*this, std::make_unique<ui::TableView>("commandes.table"));
-        table_->setColumns({{"N\xC2\xB0", 64.f}, {"Date", 140.f}, {"Client", 170.f}, {"Soci\xC3\xA9t\xC3\xA9", 180.f}, {"Article", 240.f}, {"Montant", 130.f}, {"\xC3\x89tat", 170.f}});
+        table_->setColumns({{"N\xC2\xB0", 64.f}, {"Date", 140.f}, {"Client", 170.f}, {"Soci\xC3\xA9t\xC3\xA9", 180.f}, {"Article", 240.f}, {"Montant", 170.f}, {"\xC3\x89tat", 170.f}});
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<OrdersModel>();
         table_->setModel(model_);
