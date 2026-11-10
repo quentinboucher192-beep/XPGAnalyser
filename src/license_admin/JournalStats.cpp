@@ -198,10 +198,6 @@ const char* severityLabel(Severity s) noexcept {
 // --------------------------------------------------------------------------------------- les calculs ---
 namespace {
 
-bool serviceAction(std::string_view a) {
-    return a == "signature_refusee" || a == "autre_pc" || a == "demande_admin" || a == "sauvegarde" || a == "restauration";
-}
-
 Value objectOf(const std::string& text) {
     Value v;
     if (text.empty() || !core::json::parse(text, v, nullptr) || !v.isObject()) return Value::object();
@@ -390,7 +386,9 @@ AdminStats compute(const Prepared& p, int idx) {
                     s.otherPc.push_back(std::move(x));
                 }
             }
-            if (l.action != "sauvegarde" && l.action != "restauration") continue;   // la sauvegarde : un geste de l'admin+
+            // La sauvegarde, la restauration (ecrites par le service a la demande de l'admin+, souvent chaque nuit) : dans
+            // << Toi, l'admin+ >> (Overview::plus), pas dans ses gestes (ses jours, ses heures, ses pics).
+            continue;
         } else {
             // ---- ses lignes : la chaine ----
             ++s.chain.lines;
@@ -734,7 +732,9 @@ Overview overview(const Inputs& in) {
         std::vector<std::size_t> crit;
         for (std::size_t i = 0; i < in.lines.size(); ++i) {
             const auto& l = in.lines[i];
-            if (p.owner[i] < 0 || !p.signedBy[i] || l.level != Level::Critical || l.action == "connexion") continue;
+            // Les 14 types seulement : les gestes reserves de l'admin+ (ses droits donnes, une restauration) sont dans
+            // << Toi, l'admin+ >>, pas dans les alertes qu'il lit.
+            if (p.owner[i] < 0 || !p.signedBy[i] || l.level != Level::Critical || typeOf(l.action) < 0) continue;
             if (l.at() > in.now || in.now - l.at() > static_cast<Seconds>(o.criticalDays) * kDay) continue;
             crit.push_back(i);
         }

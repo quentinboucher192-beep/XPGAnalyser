@@ -607,6 +607,8 @@ struct BarListData {
     bool                     axis{false};           // Grouped : l'axe des valeurs en bas
     std::vector<double>      ticks{};                 // l'axe (vide : choisi seul)
     bool                     valueLabels{true};     // Grouped : la valeur au bout de chaque barre
+    bool                     labelsAbove{false};    // Ranking, Track : le libelle et la valeur au-dessus de la barre (planche 08,
+                                                    // << Options vendues >>) ; aussi seul quand la colonne serait trop etroite
     LegendMode               legend{LegendMode::Auto};   // Share, Grouped : la legende des morceaux
     std::string              clickHint{};
     std::string              emptyText{"Aucune donn\xC3\xA9" "e sur la p\xC3\xA9riode"};   // aucune ligne
@@ -623,6 +625,7 @@ public:
     struct Frame {
         float x0{0}, x1{0};     // la colonne des barres
         float top{0};           // le haut de la premiere ligne
+        bool  stacked{false};   // le libelle au-dessus de la barre
         float legendHeight{0};
         std::vector<float> rowTop{}, rowHeight{};
         double maxValue{1};

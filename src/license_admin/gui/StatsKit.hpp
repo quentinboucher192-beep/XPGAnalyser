@@ -224,10 +224,13 @@ std::unique_ptr<ui::Widget> makeStatsGlobeView(ShellHost host);
 std::unique_ptr<ui::Widget> makeDashboardGlobe(ShellHost host);
 // La rangee de courbes du tableau de bord (PageStatsStrip.cpp) : 4 petites cartes (le montant encaisse, les licences
 // actives, les PC actifs, les demandes) sur 30 jours ; un clic : la page Statistiques. `reload()` : relire.
-class DashboardStrip : public ui::Widget {
+struct Reloadable {
+    virtual ~Reloadable() = default;
+    virtual void reload() = 0;
+};
+class DashboardStrip : public ui::Widget, public Reloadable {
 public:
     using ui::Widget::Widget;
-    virtual void reload() = 0;
     [[nodiscard]] virtual bool shown() const = 0;   // faux : rien a montrer (pas de service, pas de cle)
 };
 std::unique_ptr<DashboardStrip> makeDashboardStrip(ShellHost host);

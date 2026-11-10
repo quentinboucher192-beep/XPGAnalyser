@@ -96,8 +96,10 @@ BarList::Frame BarList::frame() const {
     f.legendHeight = items.size() >= (d.legend == LegendMode::Top ? 1u : 2u) ? legendHeight(items, b.w) + 8.f : 0.f;
     // Les colonnes : le libelle, les barres, la valeur, l'extra.
     float lw = d.labelWidth;
+    float wantedLabel = 0.f;
     if (lw <= 0.f) {
         for (const auto& r : d.rows) lw = std::max({lw, tw(r.label, barLabelFont(r.strong)), tw(r.sub, FontId{11})});
+        wantedLabel = lw;
         lw = std::min(lw, b.w * (d.mode == BarMode::Ranking || d.mode == BarMode::Track ? 0.55f : 0.45f));
     }
     float vw = d.valueWidth, ew = 0.f;
@@ -116,9 +118,27 @@ BarList::Frame BarList::frame() const {
             for (const double v : r.parts) vw = std::max(vw, tw(fmt(v), gfx::semibold(FontId{11})));
         vw += 6.f;
     }
-    f.x0 = b.x + (lw > 0.f ? lw + 12.f : 0.f);
-    f.x1 = b.right() - (vw > 0.f ? vw + 10.f : 0.f) - (ew > 0.f ? ew + 10.f : 0.f);
-    if (d.mode == BarMode::Grouped && d.valueLabels) f.x1 = b.right() - vw;
+    // Le libelle cede la place aux valeurs : il reste au moins 48 px de barre. Trop etroit pour lui (moins de 70 % de
+    // ce qu'il voudrait) : un classement ou une piste passent le libelle au-dessus de la barre.
+    const float cols = (vw > 0.f ? vw + 10.f : 0.f) + (ew > 0.f ? ew + 10.f : 0.f);
+    if (d.labelWidth <= 0.f) {
+        const float room = std::max(0.f, b.w - cols - 12.f - 48.f);
+        // ... seulement si toutes les lignes tiennent ainsi (une ligne de 34 px chacune) : jamais une ligne perdue.
+        const float stackedH = 34.f * static_cast<float>(d.rows.size());
+        if ((d.mode == BarMode::Ranking || d.mode == BarMode::Track) && wantedLabel > 0.f && room < wantedLabel * 0.7f &&
+            stackedH <= b.bottom() - b.y - f.legendHeight)
+            f.stacked = true;
+        lw = std::min(lw, room);
+    }
+    if (d.labelsAbove && (d.mode == BarMode::Ranking || d.mode == BarMode::Track)) f.stacked = true;
+    if (f.stacked) {
+        f.x0 = b.x;
+        f.x1 = b.right();
+    } else {
+        f.x0 = b.x + (lw > 0.f ? lw + 12.f : 0.f);
+        f.x1 = b.right() - cols;
+        if (d.mode == BarMode::Grouped && d.valueLabels) f.x1 = b.right() - vw;
+    }
     if (f.x1 < f.x0 + 20.f) f.x1 = f.x0 + 20.f;
     // L'echelle.
     double mx = d.maxValue;
@@ -138,14 +158,18 @@ BarList::Frame BarList::frame() const {
     const float base = d.rowHeight > 0.f ? d.rowHeight : d.mode == BarMode::Grouped ? std::max(34.f, 8.f + static_cast<float>(std::max<std::size_t>(1, d.partKeys.size())) * 11.f) : 26.f;
     f.top = b.y + f.legendHeight;
     float wanted = 0.f;
-    for (const auto& r : d.rows) wanted += base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f);
+    const auto rowWanted = [&](const BarRow& r) {
+        if (f.stacked) return std::max(base, 34.f) + (r.strong ? 4.f : 0.f);
+        return base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f);
+    };
+    for (const auto& r : d.rows) wanted += rowWanted(r);
     // Moins de place que voulu (une petite fenetre) : les lignes se serrent un peu ; ce qui ne tient toujours pas
     // n'est pas dessine (onPaint).
     const float avail = b.bottom() - f.top - (d.mode == BarMode::Grouped && d.axis ? 20.f : 0.f);
     const float squeeze = wanted > avail && wanted > 0.f ? std::max(0.7f, avail / wanted) : 1.f;
     float y = f.top;
     for (const auto& r : d.rows) {
-        const float h = (base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f)) * squeeze;
+        const float h = rowWanted(r) * squeeze;
         f.rowTop.push_back(y);
         f.rowHeight.push_back(h);
         y += h;
@@ -197,7 +221,7 @@ void BarList::onPaint(const PaintContext& ctx) {
     const float valueRight = d.mode == BarMode::Grouped ? b.right() : f.x1 + 10.f + vw;
     const float extraX = valueRight + 10.f;
     // Un classement : la base des barres, un trait fin.
-    if (d.mode == BarMode::Ranking && !d.rows.empty())
+    if (d.mode == BarMode::Ranking && !d.rows.empty() && !f.stacked)
         r.fillRect({f.x0 - 1.f, f.rowTop.front() + 4.f, 1.f, f.rowTop.back() + f.rowHeight.back() - f.rowTop.front() - 8.f}, k.line2);
 
     for (std::size_t i = 0; i < d.rows.size(); ++i) {
@@ -206,6 +230,32 @@ void BarList::onPaint(const PaintContext& ctx) {
         if (top + h > b.bottom() + 1.f) break;   // une ligne qui ne tient pas n'est pas dessinee a moitie
         const float cy = top + (row.sub.empty() || d.mode == BarMode::Grouped ? h * 0.5f : h * 0.5f - 5.f);
         if (static_cast<int>(i) == shown) r.fillRoundedRect({b.x - 4.f, top + 1.f, b.w + 8.f, h - 2.f}, k.hover, 6.f);
+        if (f.stacked) {
+            // Le libelle, la valeur et l'extra sur une ligne, la barre dessous (toute la largeur).
+            const FontId lf = barLabelFont(row.strong);
+            const FontId vf = barValueFont(row.strong);
+            const float ly = top + 9.f;
+            const std::string v = row.off && row.value == 0.0 ? std::string("\xE2\x80\x94") : !row.valueText.empty() ? row.valueText : fmt(rowTotal(row));
+            float right = b.right();
+            if (!row.extra.empty()) {
+                const std::string ex = fit(r, row.extra, barExtraFont(), b.w * 0.3f);
+                text(r, right, ly, ex, barExtraFont(), k.faint, 1);
+                right -= tw(ex, barExtraFont()) + 6.f;
+            }
+            text(r, right, ly, v, vf, row.off ? k.faint : k.ink, 1);
+            right -= tw(v, vf) + 10.f;
+            text(r, b.x, ly, fit(r, row.label, lf, right - b.x), lf, row.off ? k.faint : (row.strong ? k.ink : k.ink2));
+            const float th = d.barThickness > 0.f ? d.barThickness : 8.f;
+            const float by = std::round(top + 20.f);
+            if (!row.note.empty() && !(rowTotal(row) > 0.0)) {
+                const Color nc = row.warn ? ctx.theme.color.warning : k.faint;
+                text(r, b.x, by + th * 0.5f, fit(r, row.note, FontId{11}, b.w), FontId{11}, nc);
+                continue;
+            }
+            if (d.mode == BarMode::Track) r.fillRoundedRect({f.x0, by, f.x1 - f.x0, th}, k.track, std::min(4.f, th * 0.5f));
+            if (row.value > 0.0) paintColumn(r, {f.x0, by, std::max(2.f, f.xAt(row.value) - f.x0), th}, colors::onTheme(rowColor(i), k), std::min(4.f, th * 0.5f), true, true);
+            continue;
+        }
         // Le libelle.
         const FontId lf = barLabelFont(row.strong);
         const float lw = f.x0 - 12.f - b.x;
@@ -582,7 +632,8 @@ Rect DayStrip::cellRect(int i) const {
     if (n <= 0 || i < 0 || i >= n) return {};
     const float gap = 3.f;
     const float cw = std::max(4.f, std::min(26.f, (b.w - gap * static_cast<float>(n - 1)) / static_cast<float>(n)));
-    const float ch = std::min(cw, std::max(6.f, b.h - 26.f));
+    // La place des dates dessous (24 px) ; sans elle, les carres seuls.
+    const float ch = std::max(4.f, std::min(cw, b.h >= 34.f ? b.h - 26.f : b.h - 8.f));
     return {b.x + static_cast<float>(i) * (cw + gap), b.y + 2.f, cw, ch};
 }
 
@@ -615,7 +666,8 @@ void DayStrip::onPaint(const PaintContext& ctx) {
         r.fillRoundedRect({a.x, a.bottom() + 3.f, e.right() - a.x, 3.f}, colors::onTheme(d.streakColor.a ? d.streakColor : colors::kOne, k), 1.5f);
     }
     std::vector<int> labels = d.labelAt;
-    if (labels.empty()) {
+    if (contentRect().h < 34.f) labels = {-1};   // pas la place des dates
+    else if (labels.empty()) {
         for (int i = 0; i < n; i += 7) labels.push_back(i);
         if (n - 1 - labels.back() >= 4) labels.push_back(n - 1);
         else labels.back() = n - 1;

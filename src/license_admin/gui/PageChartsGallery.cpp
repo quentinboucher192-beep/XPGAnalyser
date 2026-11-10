@@ -122,10 +122,11 @@ protected:
         const float y2 = b.y + 28.f + r.lineHeight(vf) + 3.f;
         const float dw = ch::paintDelta(r, ctx.theme, x, y2, delta_, FontId{12});
         r.drawText({x + dw + (dw > 0.f ? 6.f : 0.f), y2}, sub_, FontId{12}, k.muted);
-        const float sw = std::min(90.f, b.w * 0.36f);
+        // La courbe en haut a droite, a cote de la valeur (jamais sur la ligne du dessous).
+        const float sw = std::min(90.f, std::max(30.f, b.w - 28.f - r.measure(value_, vf).width - 12.f));
         ch::SparkStyle st;
         st.color = color_;
-        ch::paintSparkline(r, ctx.theme, {b.right() - 14.f - sw, b.y + 30.f, sw, 30.f}, spark_, nullptr, st);
+        ch::paintSparkline(r, ctx.theme, {b.right() - 14.f - sw, b.y + 22.f, sw, y2 - b.y - 24.f}, spark_, nullptr, st);
     }
 
 private:
@@ -218,8 +219,15 @@ protected:
         const float pad = 22.f;
         float x = b.x + pad;
         const float y = b.y + 58.f;
-        for (ui::Button* t : tabs_) {
-            const float w = std::max(60.f, t->sizeHint().preferred.w);
+        // Les noms des planches s'ils tiennent, sinon leurs numeros.
+        float total = 0.f;
+        for (int i = 0; i < kPlancheCount; ++i) total += std::max(60.f, ui::measureWidth(std::to_string(i + 1) + " " + kPlanches[i], FontId{14}) + 32.f) + 6.f;
+        const bool shortNames = total > b.w - 2.f * pad;
+        for (int i = 0; i < kPlancheCount; ++i) {
+            ui::Button* t = tabs_[static_cast<std::size_t>(i)];
+            t->setText(shortNames ? std::to_string(i + 1) : std::to_string(i + 1) + " " + kPlanches[i]);
+            t->setTooltip(kPlanches[i]);
+            const float w = std::max(shortNames ? 40.f : 60.f, t->sizeHint().preferred.w);
             t->setBounds({x, y, w, 30.f});
             x += w + 6.f;
         }
@@ -231,8 +239,10 @@ protected:
         ctx.r.fillRect(b, ctx.theme.color.windowBg);
         ctx.r.drawText({b.x + 22.f, b.y + 14.f}, title(), gfx::semibold(FontId{22}), ctx.theme.color.text);
         const float tw = ctx.r.measure(title(), gfx::semibold(FontId{22})).width;
-        ctx.r.drawText({b.x + 22.f + tw + 14.f, b.y + 22.f},
-                       "page cach\xC3\xA9" "e (--page graphes-essai) : chaque graphique de la 1.47.0 sur des donn\xC3\xA9" "es d'essai ; un clic sur un point dit ce que la page filtrerait",
+        const float sx = b.x + 22.f + tw + 14.f;
+        ctx.r.drawText({sx, b.y + 22.f},
+                       ch::detail::fit(ctx.r, "page cach\xC3\xA9" "e (--page graphes-essai) : chaque graphique de la 1.47.0 sur des donn\xC3\xA9" "es d'essai ; un clic sur un point dit ce que la page filtrerait",
+                                       FontId{12}, b.right() - 22.f - sx),
                        FontId{12}, ctx.theme.color.textMuted);
     }
 
@@ -434,7 +444,8 @@ private:
             d.format = eurosF();
             d.rows = {{"", "Exports avanc\xC3\xA9s", "", 1450, {}, "", "21 cmd"}, {"", "Travail \xC3\xA0 plusieurs", "", 860, {}, "", "10 cmd"},
                       {"", "Imports avanc\xC3\xA9s", "", 290, {}, "", "5 cmd"}};
-            d.rowHeight = 34.f;
+            d.labelsAbove = true;   // comme la planche 08 : le libelle et la valeur au-dessus de la barre
+            d.rowHeight = 38.f;
             d.clickHint = "Clic : ces commandes";
             card(*b, "graphes.options", "Options vendues", "", 2, 1, 1, 1, barList("graphes.options", d), ch::fr::euros(2600), ch::deltaOf(2600, 2200),
                  "36 commandes");
@@ -1131,7 +1142,7 @@ private:
 
     // ============================================ 6. SON ACTIVITE, CE QU'ELLE PRODUIT (03, 04) ==
     std::unique_ptr<Board> buildActivity() {
-        auto b = std::make_unique<Board>("graphes.activite", 4, std::vector<float>{0.62f, 0.95f, 1.15f});
+        auto b = std::make_unique<Board>("graphes.activite", 4, std::vector<float>{1.f, 0.52f, 1.f});
         const Color lea = ch::colors::admin(1);
         {
             // La carte jour x heure (les chiffres de graphes.py : 117 actions, deux heures inhabituelles).
@@ -1173,7 +1184,7 @@ private:
             d.clickHint = "Clic : ces actions dans son journal";
             auto h = std::make_unique<ch::HeatMap>("graphes.carte");
             h->setData(d);
-            card(*b, "graphes.carte", "Quand elle travaille", "ses 117 actions, par jour de la semaine et par heure \xC2\xB7 du 12/10 au 10/11", 0, 0, 2, 2, std::move(h));
+            card(*b, "graphes.carte", "Quand elle travaille", "ses 117 actions, par jour de la semaine et par heure \xC2\xB7 du 12/10 au 10/11", 0, 0, 2, 1, std::move(h));
         }
         {
             ch::DayStripData d;
@@ -1186,8 +1197,20 @@ private:
             d.clickHint = "Clic : ce jour dans son journal";
             auto s = std::make_unique<ch::DayStrip>("graphes.jours");
             s->setData(d);
-            card(*b, "graphes.jours", "Ses jours", "un carr\xC3\xA9 par jour, plus fonc\xC3\xA9 = plus d'actions ; la s\xC3\xA9rie en cours soulign\xC3\xA9" "e", 2, 0, 2, 1, std::move(s), "21",
+            card(*b, "graphes.jours", "Ses jours", "un carr\xC3\xA9 par jour, plus fonc\xC3\xA9 = plus d'actions ; la s\xC3\xA9rie en cours soulign\xC3\xA9" "e", 0, 1, 2, 1, std::move(s), "21",
                  ch::Delta{"+2", 1, 1}, "jours actifs sur 30 \xC2\xB7 s\xC3\xA9rie en cours : 7 jours ouvr\xC3\xA9s");
+        }
+        {
+            // La sparkline seule (un widget : survol, bulle, clic), sa periode d'avant en gris.
+            auto sp = std::make_unique<ch::Sparkline>("graphes.sparkline");
+            ch::SparkStyle st;
+            st.color = lea;
+            sp->setValues({0, 0, 0, 0, 9, 18, 22, 25, 24, 18, 39, 24}, {14, 12, 15, 13, 11, 9, 10, 9, 8, 9, 10, 8}, st);
+            std::vector<std::string> labels;
+            for (const auto& c : ch::weeklyAxis(ch::fr::day(2026, 8, 17), 12)) labels.push_back(c.tip);
+            sp->setLabels(labels);
+            card(*b, "graphes.sparkline", "Ses actions, 12 semaines", "la courbe d'une tuile, survolable", 2, 1, 2, 1, std::move(sp), "117", ch::deltaOf(117, 96),
+                 "96 avant");
         }
         {
             const double R[30][2] = {{8.7, 17.6}, {8.5, 18.0}, {9.1, 17.2}, {8.6, 17.9}, {8.9, 16.4}, {-1, -1}, {-1, -1}, {-1, -1}, {-1, -1}, {9.0, 21.05},
@@ -1215,7 +1238,7 @@ private:
             d.notes.push_back({9, 21.05, "21 h 03", ch::Note::Anchor::Middle, -10.f});
             d.legend = ch::LegendMode::None;
             d.clickHint = "Clic : ce jour dans son journal";
-            card(*b, "graphes.journees", "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es", "premi\xC3\xA8re \xE2\x86\x92 derni\xC3\xA8re action ; en clair : ses heures habituelles ; en rouge : inhabituel", 2, 1, 2, 1,
+            card(*b, "graphes.journees", "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es", "premi\xC3\xA8re \xE2\x86\x92 derni\xC3\xA8re action ; en clair : ses heures habituelles ; en rouge : inhabituel", 2, 0, 2, 1,
                  tchart("graphes.journees", d));
         }
         {

@@ -495,6 +495,25 @@ void testOthers() {
     bl.setData(off);
     check(bl.tipFor(0, -1).rows.front().value == "\xE2\x80\x94", "un droit qu'il n'a pas : \xC2\xAB \xE2\x80\x94 \xC2\xBB");
     check(bl.preferredHeight() > 20.f, "la hauteur voulue d'une liste");
+    // Trop etroit pour le libelle : il passe au-dessus de la barre (planche 08, << Options vendues >>).
+    ch::BarListData longs;
+    longs.mode = ch::BarMode::Track;
+    ch::BarRow lr;
+    lr.label = "Exports avanc\xC3\xA9s pour les tr\xC3\xA8s grands ateliers";
+    lr.value = 1450;
+    lr.extra = "21 cmd";
+    longs.rows = {lr};
+    bl.setData(longs);
+    bl.setBounds({0, 0, 600, 80});
+    check(!bl.frame().stacked, "large : le libelle a gauche de la barre");
+    bl.setBounds({0, 0, 200, 80});
+    const auto narrow = bl.frame();
+    check(narrow.stacked && narrow.x0 == 0.f && narrow.x1 == 200.f, "etroit : le libelle au-dessus, la barre sur toute la largeur");
+    longs.labelsAbove = true;
+    bl.setData(longs);
+    bl.setBounds({0, 0, 600, 80});
+    check(bl.frame().stacked, "labelsAbove : au-dessus meme au large");
+    bl.setBounds({0, 0, 500, 200});
     ch::BarListData empty;
     bl.setData(empty);
     check(bl.itemAt({10, 10}).first == -1, "une liste vide : rien a survoler");
@@ -537,6 +556,12 @@ void testOthers() {
     const gfx::Rect s2 = strip.cellRect(2);
     check(strip.itemAt({s2.x + 1.f, s2.y + 1.f}).first == 2, "les jours : le carre du 14/10");
     check(strip.tipFor(0, -1).title == "lun. 12\xC2\xA0oct." && strip.tipFor(3, -1).rows[0].value == "aucune action", "les jours : la date, \xC2\xAB aucune action \xC2\xBB");
+    Recorder rs;
+    paint(strip, rs);
+    const bool dates = rs.shows("12/10");
+    strip.setBounds({0, 0, 300, 24});
+    paint(strip, rs);
+    check(dates && rs.texts.empty() && strip.cellRect(0).bottom() <= 24.f, "les jours : les dates s'il y a la place, sinon les carres seuls");
 
     // Dumbbell.
     ch::DumbbellData db;

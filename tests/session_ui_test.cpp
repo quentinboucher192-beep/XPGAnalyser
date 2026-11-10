@@ -20,10 +20,11 @@
 //  chaque bouton tient dans le bouton ; les mots ne sont coupes que s'ils sont
 //  plus longs que la ligne.
 //
-//  --captures <dossier> [prefixe] : en plus, des images PNG (le meme dessin
+//  --captures <dossier> [--prefixe P] [--ancien] : en plus, des images PNG (le meme dessin
 //  logiciel, rasterise : ce n'est PAS une capture de la fenetre de l'application)
 //  aux tailles etroite, moyenne et large, avec des noms et des messages longs
-//  (fictifs : Camille Essai, Lea Essai...).
+//  (fictifs : Camille Essai, Lea Essai...). --ancien : les memes images avec le code de la 1.46 (la fenetre de la
+//  session et l'onglet Session, recopies dans session_ui_ancien.inl) - les images << avant >>.
 // =============================================================================
 #include "../src/app/Capture.hpp"
 #include "../src/app/SessionMarks.hpp"
@@ -33,6 +34,7 @@
 #include "../src/ui/Theme.hpp"
 #include "../src/ui/Widget.hpp"
 #include "../src/ui/widgets/Controls.hpp"
+#include "../src/ui/widgets/DataViews.hpp"   // le tableau de l'onglet Session de la 1.46 (les images << avant >>)
 #if __has_include("../src/app/SessionWindow.hpp")
 #include "../src/app/SessionWindow.hpp"
 #define XPG_SESSION_WINDOW 1
@@ -272,6 +274,7 @@ void installMetrics(SoftRenderer& r) {
 }
 
 std::string g_captures, g_prefix;
+bool g_ancien = false;   // --ancien : seulement les images << avant >> (le code de la 1.46, session_ui_ancien.inl)
 
 void paintInto(SoftRenderer& r, ui::Widget& w, const ui::Theme& theme, gfx::Rect surface) {
     r.beginFrame(theme.color.windowBg);
@@ -467,6 +470,7 @@ void encartLicence(SoftRenderer& r) {
 
 #ifdef XPG_SESSION_WINDOW
 #include "session_ui_window.inl"
+#include "session_ui_ancien.inl"   // la fenetre telle qu'en 1.46 : l'image << avant >> seulement
 #endif
 
 } // namespace
@@ -477,6 +481,7 @@ int main(int argc, char** argv) {
         const std::string a = argv[i];
         if (a == "--captures" && i + 1 < argc) g_captures = argv[++i];
         else if (a == "--prefixe" && i + 1 < argc) g_prefix = argv[++i];
+        else if (a == "--ancien") g_ancien = true;
     }
     gfx::setInterfaceFontFolder(root + "/resources/fonts");
     SoftRenderer r(4000, 4000, false);
@@ -486,6 +491,12 @@ int main(int argc, char** argv) {
     }
     installMetrics(r);
     if (!g_captures.empty()) std::filesystem::create_directories(g_captures);
+#ifdef XPG_SESSION_WINDOW
+    if (g_ancien) {
+        fenetreSessionAvant();
+        return g_failures == 0 ? 0 : 1;
+    }
+#endif
     ongletSession(r);
     encartLicence(r);
 #ifdef XPG_SESSION_WINDOW
