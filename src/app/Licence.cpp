@@ -649,6 +649,7 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
     const bool updated = a.kind == service::kAnswerUpdated;
     const bool option = !a.option.empty();   // 1.43.0 : une option acceptee, pas une licence
     v.title = option   ? "Ton option est arriv\xC3\xA9" "e"
+            : a.order  ? "Ta commande est livr\xC3\xA9" "e"   // 1.46.0 : achetee en ligne
             : updated  ? "Ta licence est mise \xC3\xA0 jour"
             : a.online ? "Ta licence en ligne est activ\xC3\xA9" "e"
                        : "Ta licence est activ\xC3\xA9" "e";
@@ -661,6 +662,12 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
                        : a.online ? std::string("L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence en ligne est activ\xC3\xA9" "e sur ce PC (avec son code, re\xC3\xA7u "
                                     "scell\xC3\xA9 pour lui), tu peux travailler.")
                                   : std::string("L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande : ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler.");
+    if (a.order) {   // 1.46.0 : achetee en ligne (la boutique)
+        const std::string n = "Ta commande n\xC2\xB0 " + std::to_string(a.order) + " est livr\xC3\xA9" "e : ";
+        text = option ? n + "\xC2\xAB " + a.option + " \xC2\xBB est sur ce PC, tu peux t'en servir. Elle s'arr\xC3\xAAte seule \xC3\xA0 sa date ; le reste de ta licence ne bouge pas."
+                      : n + (a.online ? std::string("ta licence en ligne est activ\xC3\xA9" "e sur ce PC (avec son code, re\xC3\xA7u scell\xC3\xA9 pour lui), tu peux travailler.")
+                                      : std::string("ta licence est install\xC3\xA9" "e sur ce PC, tu peux travailler."));
+    }
     text += "\n\nLicence : " + id + (st.editionLabel.empty() && st.licensedEdition.empty() ? std::string() : " \xC2\xB7 " + editionOf(st));
     if (!st.customer.empty()) text += "\nClient : " + st.customer;
     // La duree : jusqu'a quand, et les jours qui restent.
@@ -712,7 +719,7 @@ AnswerView answerView(const Answer& a, const licensing::LicenseState& st) {
         }
     }
     // 1.37.0 : une licence en ligne : le mot automatique de l'outil n'apprend rien ici (la fenetre dit tout).
-    if (!a.note.empty() && !a.online) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
+    if (!a.note.empty() && !a.online && !a.order) text += "\n\nLe mot de l'\xC3\xA9" "diteur : \xC2\xAB " + a.note + " \xC2\xBB";
     // 1.37.0 : le mail de l'editeur ; parti : le dire ; pas parti : l'adresse a verifier, et le code (une fois, ici).
     if (a.mail == licensing::gateway::kMailFailed) {
         text += "\n\nLe mail de l'\xC3\xA9" "diteur n'est pas parti" + (a.mailTo.empty() ? std::string() : " (vers " + a.mailTo + ")") +

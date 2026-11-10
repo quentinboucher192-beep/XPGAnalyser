@@ -1699,7 +1699,7 @@ bool stepOrders(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
         }
         if (text.empty()) continue;
         note(tone != "warning", text);
-        res.notices.push_back({"licence:commande", text, tone});
+        res.notices.push_back({"licence:commande", text, tone, false, {}});
         lines.push_back(text);
     }
     if (shop::mergeOrders(rec.orders, fresh)) res.changed = true;
@@ -3189,6 +3189,13 @@ struct Runner {
     std::atomic<bool>  heldBack{false};    // le poste flottant rendu par l'utilisateur
     std::atomic<lic::Seconds> freeAt{0};   // flottante sans poste : quand un poste se libere
     bool               leaseTaken{false};  // ce programme a pris un jeton (a rendre a la fermeture)
+    // 1.46.0 : la boutique - les commandes de ce PC (le releve, puis ce que les travaux rapportent), leur cadence
+    std::vector<shop::Order> orders;
+    std::string        ordersPath;         // le releve d'ou elles ont ete lues (vide : pas encore)
+    std::atomic<unsigned long long> ordersRev{0};
+    double             nextOrders{0};
+    double             ordersFastUntil{0}; // toutes les 10 secondes jusque-la (apres un achat, une page rouverte)
+    bool               ordersOpen{false};  // une commande a suivre (a payer, payee, a revoir ; livree pas appliquee)
 
     ~Runner() {
         if (worker.joinable()) {
@@ -3254,6 +3261,7 @@ void startRunner() {
     r.nextDevice = now + kHour;
     r.nextTrial = now + 24.0 * kHour;
     r.nextLook = 0;
+    r.nextOrders = now + 60.0;   // 1.46.0 : la synchro du lancement relit deja les commandes qui attendent
 }
 
 bool startSync() {
@@ -3293,6 +3301,52 @@ bool startCheckDevice() { return launch(Job::Device, [] { return checkDevice(); 
 bool startWatch() { return launch(Job::Watch, [] { return watchState(); }); }
 bool startMessages() { return launch(Job::Messages, [] { return pollMessages(); }); }   // 1.44.0
 bool startUpdateCheck() { return launch(Job::Update, [] { return checkUpdate(); }); }
+bool startOrder(const OrderForm& form) { return launch(Job::Order, [form] { return placeOrder(form); }); }   // 1.46.0
+bool startCancelOrder(std::uint64_t number) { return launch(Job::CancelOrder, [number] { return cancelOrder(number); }); }
+bool startOrders() { return launch(Job::Orders, [] { return refreshOrders(); }); }
+bool startShopRefresh() { return launch(Job::Shop, [] { return refreshShop(); }); }
+
+namespace {
+bool followed(const std::vector<shop::Order>& list) {
+    return std::any_of(list.begin(), list.end(), [](const shop::Order& o) { return shop::open(o.state) || (o.state == shop::kDelivered && !o.applied); });
+}
+// Les commandes du releve (une premiere fois, ou le dossier des licences a change : les essais).
+void loadOrders(Runner& r) {
+    const std::string path = recordPath();
+    if (r.ordersPath == path) return;
+    r.ordersPath = path;
+    Record rec;
+    if (loadRecord(rec, nullptr)) r.orders = rec.orders;
+    else r.orders.clear();
+    r.ordersOpen = followed(r.orders);
+    ++r.ordersRev;
+}
+} // namespace
+
+std::vector<shop::Order> orders() {
+    Runner& r = runner();
+    loadOrders(r);
+    return r.orders;
+}
+
+unsigned long long ordersRevision() noexcept {
+    Runner& r = runner();
+    return r.ordersRev;
+}
+
+std::string openPage(const std::string& url) { return core::openWebPage(url); }
+
+std::string reopenPayment(const shop::Order& o) {
+    if (o.state != shop::kToPay || o.payUrl.empty()) return "La commande nÂ° " + std::to_string(o.number) + " n'attend plus son paiement.";
+    const std::string w = core::openWebPage(o.payUrl);
+    if (!w.empty()) return w;
+    Runner& r = runner();
+    const double now = steadyNow();
+    r.ordersFastUntil = now + shop::kFastFor;
+    r.nextOrders = std::min(r.nextOrders, now + shop::kFastPeriod);
+    r.ordersOpen = true;
+    return {};
+}
 
 bool busy() noexcept { return runner().running; }
 
@@ -3320,6 +3374,10 @@ std::string jobText(Job j) {
         case Job::Device: return "V\xC3\xA9rification aupr\xC3\xA8s du service\xE2\x80\xA6";
         case Job::Messages: return "Relev\xC3\xA9 des messages de ce PC\xE2\x80\xA6";   // 1.44.0
         case Job::Update: return "Recherche d'une mise \xC3\xA0 jour\xE2\x80\xA6";
+        case Job::Order: return "Cr\xC3\xA9" "ation de ta commande et de sa page de paiement\xE2\x80\xA6";   // 1.46.0
+        case Job::CancelOrder: return "Annulation de la commande\xE2\x80\xA6";
+        case Job::Orders: return "Lecture de tes commandes\xE2\x80\xA6";
+        case Job::Shop: return "Lecture de la boutique\xE2\x80\xA6";
         case Job::Watch:
         case Job::None: break;
     }
@@ -3396,6 +3454,31 @@ bool collect() {
         r.nextLease = now;   // une licence flottante : son poste tout de suite
         r.heldBack = false;
     }
+    // 1.46.0 : la boutique - les commandes rapportees ; la page de paiement d'un achat (ou de la commande qui attend deja)
+    // ouverte dans le navigateur, et les commandes regardees toutes les 10 secondes pendant 30 minutes.
+    if (res.ordersLooked) {
+        r.orders = res.orders;
+        r.ordersPath = recordPath();
+        ++r.ordersRev;
+    }
+    if (res.job == Job::Order || res.job == Job::Orders || res.job == Job::CancelOrder || res.job == Job::Sync) {
+        loadOrders(r);
+        r.ordersOpen = followed(r.orders);
+        if (res.job == Job::Orders) r.nextOrders = now + (now < r.ordersFastUntil ? shop::kFastPeriod : shop::kSlowPeriod);
+    }
+    if (res.job == Job::Order && !res.orderUrl.empty()) {
+        if (const std::string w = core::openWebPage(res.orderUrl); !w.empty()) {
+            const std::string text = "Le navigateur ne s'ouvre pas : " + sentence(w);
+            res.message = join({res.message, text});
+            res.notices.push_back({"licence:commande", text, "warning", false, {}});
+        }
+        r.ordersFastUntil = now + shop::kFastFor;
+        r.nextOrders = now + shop::kFastPeriod;
+        r.ordersOpen = true;
+    }
+    // 1.46.0 : les commandes relues toutes les 10 secondes ne disent rien (ni la barre d'etat, ni la fenetre) tant que rien
+    // ne change.
+    const bool quiet = res.job == Job::Orders && !res.changed && res.notices.empty() && res.answer.empty();
     // Les avis : la cloche et la barre d'etat ; puis l'etat revalue.
     if (res.changed) licence::refresh();
     // 1.36.0 : la reponse de l'editeur a la demande de ce PC : la fenetre qui la confirme (l'application la montre).
@@ -3409,6 +3492,7 @@ bool collect() {
         a.mail = res.answerMail;
         a.mailTo = res.answerMailTo;
         a.option = res.answerOption;   // 1.43.0
+        a.order = res.answerOrder;     // 1.46.0 : une commande livree
         if (res.answerMail == lgw::kMailSent) licence::noteEmailReached(res.answerMailTo);   // 1.38.0 : Mon profil, verifie
         licence::queueAnswer(std::move(a));
         crypto::wipe(res.answerCode.data(), res.answerCode.size());   // le code : dans la fenetre seulement
@@ -3419,6 +3503,7 @@ bool collect() {
         licence::queueMessage(n.title);
         if (n.lost) licence::queueLoss(n.licenseId, n.title);   // 1.39.0 : la licence perdue en direct - une fenetre
     }
+    if (quiet) return true;   // 1.46.0
     r.last = std::move(res);
     ++r.revision;
     return true;
@@ -3474,6 +3559,14 @@ void poll() {
     if ((r.waiting || r.retry) && now >= r.nextDevice) {
         r.nextDevice = now + (r.waiting ? requestCheckDelay(lic::systemNow() - r.waitingSince) : kHour);
         (void)startCheckDevice();
+        return;
+    }
+    // 1.46.0 : les commandes de ce PC - toutes les 10 secondes pendant 30 minutes apres un achat (ou une page de paiement
+    // rouverte), puis toutes les 5 minutes tant qu'une commande attend (a payer, payee, a revoir).
+    loadOrders(r);
+    if ((now < r.ordersFastUntil || r.ordersOpen) && now >= r.nextOrders) {
+        r.nextOrders = now + (now < r.ordersFastUntil ? shop::kFastPeriod : shop::kSlowPeriod);
+        (void)startOrders();
         return;
     }
     // La Decouverte : une fois par jour tant qu'elle court.

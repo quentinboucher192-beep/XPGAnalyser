@@ -32,6 +32,7 @@
 #pragma once
 
 #include "../licensing/Store.hpp"
+#include "LicenceShop.hpp"   // 1.46.0 : la boutique (le catalogue, les commandes)
 #include "Notices.hpp"   // 1.38.0 : les notifications generales (la licence, les offres, les annonces)
 
 #include <atomic>
@@ -232,6 +233,7 @@ struct Answer {
     std::string code;
     std::string mail, mailTo;
     std::string option;      // 1.43.0 : une demande d'option acceptee (son nom) ; vide : une licence
+    std::uint64_t order{0};  // 1.46.0 : une commande livree (son numero) ; 0 : une demande
 };
 // 1.45.0 : LA MEME REPONSE UNE FOIS - une reponse deja dans la file (meme genre, meme licence, meme option, meme mot) n'y
 // entre pas une seconde fois ; et UNE FENETRE A LA FOIS : tant qu'une fenetre de reponse est ouverte (setAnswerOpen),
@@ -423,6 +425,49 @@ void showLoss(App& app, const Loss& l);
 bool openNoticeAction(App& app, const std::string& action);
 // 1.44.0 : la fenetre de la mise a jour disponible (la pastille, le toast) ; faux : aucune.
 bool showUpdateWindow(App& app);
+
+// ---- 1.46.0 : LA BOUTIQUE (docs/BOUTIQUE.md, par. 7 ; le modele : LicenceShop.hpp ; les fenetres : LicenceShopWindows.cpp) ----
+// ACHETER : un recapitulatif - l'offre (ou l'option et sa duree), ce qu'elle donne (les PC, la duree, les fonctionnalites),
+// le montant TTC, la societe, le nom et le courriel du profil (<< Modifier mon profil... >>), la phrase de la carte
+// (shop::cardSentence), le paiement d'essai s'il l'est ; << Payer ... sur Stripe... >> passe la commande (le fil du
+// service) et ouvre la fenetre << Commande n. N >>, qui suit son etat. Ce que montre la fenetre (sans fenetre : les essais) :
+struct PurchaseView {
+    bool                     ok{false};       // l'article est en vente en ligne (faux : `missing` dit pourquoi)
+    std::string              title;           // "Acheter PROFESSIONAL", "Acheter une option"
+    std::string              article, label;  // l'identifiant (le catalogue), le libelle de la facture
+    std::string              what;            // l'offre ou l'option (son nom au registre)
+    std::string              amount;          // "490,00 EUR TTC" (le signe de l'euro)
+    std::vector<std::string> gives;           // ce qu'il donne (une ligne chacune)
+    std::string              company, name, email;   // le profil (la facture)
+    std::string              missing;         // vide : rien ne manque ; sinon la phrase (la societe, le courriel, la licence)
+    std::string              testMode;        // vide : un paiement reel
+    std::string              card;            // la phrase de la carte
+    std::string              confirm;         // "Payer 490,00 EUR TTC sur Stripe..."
+    std::string              licenseId;       // une option : la licence de ce PC
+    std::string              optionText;      // une option : << Assistant IA avance, 1 an >>
+};
+[[nodiscard]] PurchaseView purchaseView(const shop::Catalogue& cat, const std::string& article, const Profile& p, const licensing::LicenseState& st);
+// La fenetre << Commande n. N >> : son etat, ce qui se passe, ses boutons.
+struct OrderView {
+    std::string                                      title;   // "Commande n. 12"
+    std::string                                      state;   // shop::stateLabel
+    std::string                                      text;    // shop::stateText
+    int                                              tone{0};
+    std::vector<std::pair<std::string, std::string>> facts;   // Article, Montant, Passee le, Paiement, Licence...
+    bool                                             pay{false}, cancel{false}, receipt{false}, licence{false};
+};
+[[nodiscard]] OrderView orderView(const shop::Order& o, licensing::Seconds now);
+// Le recapitulatif d'un achat (une seule fenetre a la fois) ; `optionText` : une option (<< Assistant IA avance, 1 an >>).
+void showPurchase(menu::MenuManager& menus, const std::string& article, const std::string& optionText = {});
+// La fenetre << Commande n. N >> (0 : la commande en train d'etre passee - elle prend son numero a la reponse du service).
+void showOrder(menu::MenuManager& menus, std::uint64_t number);
+[[nodiscard]] bool purchaseWindowOpen() noexcept;
+[[nodiscard]] bool orderWindowOpen() noexcept;
+[[nodiscard]] std::uint64_t orderWindowNumber() noexcept;
+// La phrase de l'accueil de la fenetre Licence pour la commande qui attend (vide : aucune) ; `tone` : 1 bien, 2 attention.
+[[nodiscard]] std::string orderHint(const std::vector<shop::Order>& orders, int* tone = nullptr);
+// Les essais (et les scripts) : la fenetre << Acheter >> ouverte - son bouton << Payer >> (comme un clic) ; faux : aucune.
+bool confirmPurchaseForTests();
 } // namespace licence
 
 } // namespace app

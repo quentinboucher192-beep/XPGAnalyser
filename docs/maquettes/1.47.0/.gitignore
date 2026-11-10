@@ -1,0 +1,5 @@
+# les pages et les rendus se refont (prep.py, rendre.js)
+[0-9][0-9]-*.html
+v/
+hd/
+__pycache__/
