@@ -1,0 +1,143 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>La liste des informations proposées</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+body{background:radial-gradient(1200px 700px at 25% 20%,#f3f0ff 0%,var(--bg) 60%)}
+.hd0{position:absolute;left:32px;top:22px;right:32px;display:flex;gap:28px;align-items:flex-end}
+.hd0 .ov{font:700 11.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-700)}
+.hd0 h1{font:750 26px/1.18 Inter;letter-spacing:-.02em;margin:5px 0 6px}
+.hd0 .q{font-size:12.5px;color:var(--ink2);line-height:1.45;max-width:760px}
+.hd0 .q i{color:var(--muted)}
+.leg{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 12px;box-shadow:var(--sh1);display:grid;grid-template-columns:auto 1fr;column-gap:8px;row-gap:4px;font-size:12px;color:var(--ink2);align-items:center;width:420px}
+.cols{position:absolute;left:32px;right:32px;top:150px;bottom:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sec{background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh1);padding:10px 12px 6px}
+.sec .sh{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.sec .sh .nb{width:22px;height:22px;border-radius:7px;background:var(--violet);color:#fff;display:grid;place-items:center;font:750 12px Inter;flex:none}
+.sec .sh b{font:700 14px Inter;letter-spacing:-.01em}
+.sec .sh .cap{margin-left:auto}
+.sub{font:650 10.5px Inter;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);margin:7px 0 2px}
+.it{display:grid;grid-template-columns:1fr auto;column-gap:8px;padding:5.5px 0;border-bottom:1px solid #f1f4f8;align-items:start}
+.it:last-child{border-bottom:0}
+.it .tx{font-size:12.5px;line-height:1.4;color:var(--ink2)}
+.it .tx b{color:var(--ink);font-weight:650}
+.it .mt{display:flex;gap:3px;align-items:center;padding-top:1px}
+.rf{font:700 10.5px Inter;color:var(--violet-700);background:var(--violet-50);border-radius:5px;height:18px;padding:0 5px;display:inline-flex;align-items:center;white-space:nowrap;margin-left:3px}
+.s7{display:grid;grid-template-columns:20px 1fr;row-gap:3px;column-gap:6px;font-size:12px;color:var(--ink2);margin:4px 0 4px;align-items:center}
+.s7 span.n{width:18px;height:18px;border-radius:6px;background:var(--violet-50);color:var(--violet-700);display:grid;place-items:center;font:750 10.5px Inter}
+.s7 span.n.r{background:var(--red-50);color:#b91c1c}
+.pl0{display:grid;grid-template-columns:26px 1fr;row-gap:3px;font-size:12px;color:var(--ink2);padding:2px 0}
+.pl0 b{font:700 11.5px Inter;color:var(--violet-700)}
+.pl0 .h{color:var(--muted)}
+.new{display:inline-flex;align-items:center;height:16px;padding:0 5px;border-radius:5px;background:#fff7e6;color:#b45309;font:700 10px Inter;margin-left:4px;vertical-align:1px}
+</style></head><body><script src="icons.js"></script>
+<div class="hd0">
+ <div>
+  <div class="ov">Proposition · version 1.47.0 · à valider avant de construire</div>
+  <h1>Beaucoup plus de statistiques sur les admins, des courbes partout, et le globe</h1>
+  <div class="q"><i>« j'ai besoin de beaucoup beaucoup plus de statistiques sur les admin et admin+ (plus de déballage, clic droit menu contextuel cohérent en fonction des listes) »</i> — puis des courbes (ventes, mises à jour, PC, par client) et le globe. Chaque chiffre se regarde <b>sur une période</b> (7 j, 30 j, 90 j, 12 mois, tout, deux dates) et <b>se compare à la période d'avant</b> (« +12 % »).</div>
+ </div>
+ <div class="leg">
+  <span class="tag2 tJ">J</span><span><b>le journal des admins</b> : signé, chaîné, déjà là</span>
+  <span class="tag2 tS">S</span><span><b>les tables du service</b> : licences, PC, demandes, commandes, déjà là</span>
+  <span class="tag2 tN">N</span><span><b>nouveau</b> : à relever en plus</span>
+  <span class="rf" style="margin:0">02</span><span>la planche où le voir</span>
+ </div>
+</div>
+
+<div class="cols">
+ <div class="col">
+  <div class="sec">
+   <div class="sh"><span class="nb">1</span><b>La fiche d'un admin</b><span class="cap">double-clic sur un admin</span></div>
+   <div class="sub">Qui et où</div>
+   <div class="it"><div class="tx"><b>Nom, courriel, PC</b> (nom, empreinte), <b>sa clé</b>, son profil et ses écarts, ajouté le / par qui, état (actif, en attente, retiré)</div><div class="mt"><span class="tag2 tJ">J</span><span class="tag2 tS">S</span><span class="rf">02</span></div></div>
+   <div class="it"><div class="tx">La <b>version de son Admin et de son Studio</b> (à jour ou non), vu pour la dernière fois</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">02</span></div></div>
+   <div class="it"><div class="tx"><b>Jours de connexion</b>, heure habituelle de <b>début et de fin</b></div><div class="mt"><span class="tag2 tN">N</span><span class="rf">02</span><span class="rf">03</span></div></div>
+   <div class="sub">Son activité</div>
+   <div class="it"><div class="tx"><b>Actions par type</b> (les 13 droits, puis la boutique) et <b>par criticité</b></div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">02</span></div></div>
+   <div class="it"><div class="tx">La <b>courbe des actions par jour</b> ; la <b>carte jour × heure</b> (quand il travaille)</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">02</span><span class="rf">03</span></div></div>
+   <div class="it"><div class="tx"><b>Jours actifs, série en cours</b>, dernière action (laquelle, quand)</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+   <div class="it"><div class="tx">Les droits qu'il a et ceux <b>jamais utilisés</b> : « Retirer ce droit ? »</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+   <div class="sub">Sa sécurité</div>
+   <div class="it"><div class="tx"><b>Signatures refusées</b> (droit manquant, clé retirée), actions <b>depuis un autre PC</b></div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+   <div class="it"><div class="tx">Actions à une <b>heure inhabituelle</b> pour lui, <b>pics</b> (plus de 3× sa moyenne)</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+   <div class="it"><div class="tx">Suppressions, révocations, codes revus (le détail) ; <b>ses droits changés</b> (qui, quand)</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+   <div class="it"><div class="tx">La <b>chaîne du journal vérifiée</b> pour ses lignes</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">03</span></div></div>
+  </div>
+ </div>
+
+ <div class="col">
+  <div class="sec">
+   <div class="sh"><span class="nb">1</span><b>La fiche · ce qu'il produit</b></div>
+   <div class="it"><div class="tx"><b>Licences signées</b> : actives, expirées, révoquées ; par offre ; les PC activés ; <b>à renouveler</b> (30 j) ; prolongations, options</div><div class="mt"><span class="tag2 tS">S</span><span class="tag2 tJ">J</span><span class="rf">04</span></div></div>
+   <div class="it"><div class="tx"><b>Clients</b> : servis, nouveaux, les 5 premiers</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">04</span></div></div>
+   <div class="it"><div class="tx"><b>Demandes</b> : traitées, acceptées, refusées (le taux), le <b>délai</b> (moyen, médian, le plus long), la plus ancienne qui attend</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">04</span></div></div>
+   <div class="it"><div class="tx"><b>Boutique</b> : commandes livrées, montant encaissé, panier moyen, remboursements</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">04</span></div></div>
+   <div class="it"><div class="tx">Codes revus, courriels, exports (combien de lignes), annonces, offres et options modifiées</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">04</span></div></div>
+  </div>
+  <div class="sec">
+   <div class="sh"><span class="nb">2</span><b>La vue d'ensemble</b><span class="cap">l'admin+</span></div>
+   <div class="it"><div class="tx">En tête : admins <b>actifs, en attente, retirés</b> ; actions et tendance ; demandes en attente et délai ; <b>licences signées</b> par les admins et par toi ; <b>montant encaissé</b></div><div class="mt"><span class="tag2 tJ">J</span><span class="tag2 tS">S</span><span class="rf">01</span></div></div>
+   <div class="it"><div class="tx">Le <b>classement</b> (actions, licences, demandes, délai, montant, dernière action), trié par colonne</div><div class="mt"><span class="tag2 tJ">J</span><span class="tag2 tS">S</span><span class="rf">01</span></div></div>
+   <div class="it"><div class="tx"><b>Qui fait quoi</b> : la part de chacun par type d'action, l'écart à la période d'avant</div><div class="mt"><span class="tag2 tJ">J</span><span class="rf">05</span></div></div>
+   <div class="it"><div class="tx">Les <b>alertes</b> : inactif 30 j, droits jamais utilisés, Admin pas à jour, signatures refusées, actions critiques, heure inhabituelle</div><div class="mt"><span class="tag2 tJ">J</span><span class="tag2 tS">S</span><span class="rf">01</span></div></div>
+   <div class="it"><div class="tx"><b>L'admin+</b> : ses actions réservées (versions, sauvegardes et restaurations, admins, criticités, Stripe), la dernière sauvegarde, le certificat du service</div><div class="mt"><span class="tag2 tJ">J</span><span class="tag2 tS">S</span><span class="rf">05</span></div></div>
+  </div>
+ </div>
+
+ <div class="col">
+  <div class="sec">
+   <div class="sh"><span class="nb">3</span><b>Le dépliage</b><span class="cap">▸ ou →</span></div>
+   <div class="it"><div class="tx"><b>Administrateurs</b> : ses chiffres clés, sa courbe sur 30 jours, ses 5 dernières actions, ses droits ; double-clic ou Entrée : sa fiche</div><div class="mt"><span class="rf">01</span></div></div>
+   <div class="it"><div class="tx"><b>Journal</b> : l'objet touché (licence, client, PC) avec des liens, l'avant et l'après, la signature</div><div class="mt"><span class="rf">07</span></div></div>
+   <div class="it"><div class="tx"><b>Licences, Clients, Commandes, Demandes, Activations</b> : le résumé, et qui l'a fait (lien vers la fiche de l'admin)</div><div class="mt"><span class="rf">07</span></div></div>
+  </div>
+  <div class="sec">
+   <div class="sh"><span class="nb">4</span><b>Le clic droit, dans le même ordre partout</b><span class="rf">06</span></div>
+   <div class="s7">
+    <span class="n">1</span><span><b>Ouvrir</b> (la fiche) · <b>Déplier</b></span>
+    <span class="n">2</span><span>les <b>actions</b> de l'élément, les plus fréquentes d'abord</span>
+    <span class="n">3</span><span><b>Aller à ›</b> l'admin, la licence, le client, le PC, la commande</span>
+    <span class="n">4</span><span><b>Filtrer sur ›</b> cet admin, ce client, ce type, cette criticité, ce jour</span>
+    <span class="n">5</span><span><b>Copier ›</b> l'identifiant, l'empreinte, la ligne</span>
+    <span class="n">6</span><span><b>Exporter…</b> (CSV de la sélection)</span>
+    <span class="n r">7</span><span>à part, <b style="color:#b91c1c">en rouge, avec « … »</b> : Retirer, Révoquer, Supprimer</span>
+   </div>
+   <div class="it"><div class="tx">Un droit qui manque : <b>grisé, avec la raison</b> ; plusieurs lignes : seulement ce qui vaut pour toutes (« Exporter 12 lignes », « Révoquer 3 licences… »)</div><div class="mt"><span class="rf">06</span></div></div>
+  </div>
+  <div class="sec" style="flex:1">
+   <div class="sh"><i data-i="layers" class="sm" style="color:var(--violet)"></i><b>Les planches</b></div>
+   <div class="pl0">
+    <b>01</b><span>Administrateurs : la vue d'ensemble (admin+)</span>
+    <b>02</b><span>La fiche d'un admin : vue d'ensemble</span>
+    <b>03</b><span>La fiche : activité et sécurité</span>
+    <b>04</b><span>La fiche : licences, clients, demandes, boutique</span>
+    <b>05</b><span>Qui fait quoi, et toi l'admin+</span>
+    <b>06</b><span>Le clic droit : la règle et 6 menus</span>
+    <b>07</b><span>Le dépliage partout</span>
+    <b>08</b><span>Statistiques : la vue générale <span class="new">ajout</span></span>
+    <b>09</b><span>Statistiques : les mises à jour <span class="new">ajout</span></span>
+    <b>10</b><span>La fiche d'un client et ses courbes <span class="new">ajout</span></span>
+    <b>11</b><span>Le globe <span class="new">ajout</span></span>
+   </div>
+  </div>
+ </div>
+
+ <div class="col">
+  <div class="sec">
+   <div class="sh"><span class="nb">5</span><b>Des courbes partout</b><span class="cap">ajout du 10/11</span></div>
+   <div class="it"><div class="tx"><b>Les ventes</b> : montant par jour, semaine, mois et cumulé sur l'année ; commandes ; panier moyen ; par offre et par option ; en ligne et signées à la main ; remboursements ; contre l'an dernier</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">08</span></div></div>
+   <div class="it"><div class="tx"><b>Les mises à jour</b> : la courbe d'adoption de chaque version, la part des PC à jour, Studios et Admins séparés, le délai moyen</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">09</span></div></div>
+   <div class="it"><div class="tx"><b>Les PC</b> : activés, libérés, retirés, actifs ; flottants pris ensemble (le pic) ; Découvertes commencées et converties ; PC par offre</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">08</span></div></div>
+   <div class="it"><div class="tx"><b>Les licences</b> : actives, nouvelles, prolongées, expirées, révoquées ; les échéances des 90 jours ; les demandes reçues et traitées</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">08</span></div></div>
+   <div class="it"><div class="tx"><b>Une page « Statistiques »</b> (et le Tableau de bord) : tout côte à côte, période et comparaison communes ; un clic sur un point filtre la liste</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">08</span></div></div>
+   <div class="it"><div class="tx"><b>Par client</b> : ses PC actifs, ses licences et échéances, ses achats et le cumul, ses mises à jour, ses demandes</div><div class="mt"><span class="tag2 tS">S</span><span class="rf">10</span></div></div>
+   <div class="it"><div class="tx"><b>Par admin</b> : les mêmes, limitées à ce qu'il a fait (ses licences, ses demandes, ses ventes livrées)</div><div class="mt"><span class="tag2 tS">S</span><span class="tag2 tJ">J</span><span class="rf">04</span></div></div>
+  </div>
+  <div class="sec" style="flex:1">
+   <div class="sh"><span class="nb">6</span><b>Le globe</b><span class="cap">ajout du 10/11</span></div>
+   <div class="it"><div class="tx">Un <b>globe pointillé qui tourne</b> (seul, à la souris, s'arrête au survol), les points à leur ville ; <b>des calques</b> : clients, admins, PC actifs (&lt; 15 min), pas à jour, Découvertes, commandes, demandes ; <b>la liste des villes</b> ; Compte / en direct ; plein écran</div><div class="mt"><span class="tag2 tN">N</span><span class="rf">11</span></div></div>
+   <div class="it"><div class="tx">La source : <b>la ville et le pays donnés par Cloudflare</b> à chaque appel ; le service garde la ville de la dernière connexion de chaque PC, <b>jamais l'adresse IP</b></div><div class="mt"><span class="tag2 tN">N</span><span class="rf">11</span></div></div>
+  </div>
+ </div>
+</div>
+</body></html>

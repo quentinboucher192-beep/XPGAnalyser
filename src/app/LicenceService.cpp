@@ -1683,7 +1683,7 @@ bool stepOrders(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
         const bool option = f.article.rfind("opt:", 0) == 0 || (!before->option.empty());
         std::string text, tone = "info";
         if (f.state == shop::kPaid) {
-            text = "Paiement re\xC3\xA7u (" + orderWhat(f) + ") : " +
+            text = "Paiement re\xC3\xA7u pour la " + orderWhat(f) + " : " +
                    (option ? std::string("ton option arrive") : std::string("ta licence arrive")) + " d\xC3\xA8s que l'\xC3\xA9" "diteur la d\xC3\xA9livre.";
             tone = "ok";
         } else if (f.state == shop::kExpired) {
@@ -1694,7 +1694,7 @@ bool stepOrders(Conn& c, Record& rec, Result& res, std::vector<std::string>& lin
         } else if (f.state == shop::kRefunded) {
             text = "La " + orderWhat(f) + " est rembours\xC3\xA9" "e.";
         } else if (f.state == shop::kReview) {
-            text = "Paiement re\xC3\xA7u (" + orderWhat(f) + "), mais l'\xC3\xA9" "diteur doit revoir la livraison : il te contacte si besoin.";
+            text = "Paiement re\xC3\xA7u pour la " + orderWhat(f) + ", mais l'\xC3\xA9" "diteur doit revoir la livraison : il te contacte si besoin.";
             tone = "warning";
         }
         if (text.empty()) continue;

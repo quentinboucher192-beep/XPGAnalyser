@@ -1098,6 +1098,16 @@ if(XPG_BUILD_TESTS)
     if(TEST service_studios)
         set_tests_properties(service_studios PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :")
     endif()
+    # 1.46.0 : la boutique cote Studio (app/LicenceService, app/LicenceShop) : le catalogue, Acheter (la demande scellee, la
+    # page de paiement), 409 en_cours, Annuler, 502 de Stripe, le paiement (le webhook), la livraison (comme l'Admin : le
+    # code scelle dans l'etat << poste >>) et l'option (le renouvellement) - contre le VRAI Worker et un FAUX Stripe
+    # (tests/outils/faux_stripe.mjs). SAUTE sans Node.js ni wrangler.
+    xpg_add_test_executable(licence_boutique_test tests/licence_boutique_test.cpp src/license_admin/Admin.cpp)
+    xpg_target_link_libraries(licence_boutique_test PRIVATE xpg_app xpg_licensing)
+    xpg_add_test(NAME service_boutique COMMAND licence_boutique_test ${CMAKE_SOURCE_DIR})
+    if(TEST service_boutique)
+        set_tests_properties(service_boutique PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.44.0 : les fichiers (telecharges, verifies, repris, refuses), les messages a un PC, les versions et les adresses de
     # secours cote Studio (app/FileDownload, app/LicenceService, app/Updates) - contre le VRAI Worker (SAUTE sans Node.js)
     xpg_add_test_executable(licence_fichiers_test tests/licence_fichiers_test.cpp src/license_admin/Admin.cpp)

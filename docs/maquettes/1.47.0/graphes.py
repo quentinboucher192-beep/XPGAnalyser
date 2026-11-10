@@ -341,8 +341,8 @@ HEAT = heat_lea()
 
 
 def g_heat():
-    cw, ch, gap = 22, 22, 2
-    x0, y0 = 38, 22
+    cw, ch, gap = 21, 20, 2
+    x0, y0 = 38, 20
     o = []
     # la bande des heures habituelles (8 h 40 -> 17 h 50)
     hx = x0 + 8.67 * (cw + gap)
@@ -405,41 +405,44 @@ W_EUR_L = [0, 0, 0, 0, 380, 610, 980, 1130, 1240, 690, 1650, 1290]
 W_EUR_O = [1820, 2140, 1690, 1960, 1710, 1480, 1220, 1310, 940, 1080, 870, 1150]
 
 
-def emph(wl, wo, ymax, ticks, fmt=None, w=360, h=128, unit=""):
+def emph(wl, wo, ymax, ticks, fmt=None, w=360, h=128, unit="", lab=True):
     p = Plot(w, h, 12, ymax, ticks, fmt=fmt, pl=34 if ymax > 100 else 24, pr=4, pt=8, pb=18, band=True)
     p.grid()
+    # avant son arrivee (14/09) : une bande claire
+    p.p.insert(0, '<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#f8fafc"/>' % (p.x0, p.y1, 4 * p.bw(), p.y0 - p.y1))
     p.stack([(wl, AD["L"]), (wo, "#d5dce6")], frac=0.58)
-    p.xlab([(0, "17/08"), (4, "14/09"), (8, "12/10"), (11, "02/11")])
+    p.xlab([(0, "17/08"), (4, "14/09"), (8, "12/10"), (11, "02/11")] if w > 300 else [(0, "17/08"), (4, "14/09"), (11, "02/11")])
+    if lab:
+        p.p.append(txt(p.x0 + 4, p.y1 + 10, "pas encore admin", size=10, fill=AXT))
     return p.svg()
 
 
 def g_w_lic():
-    return emph(W_LIC_L, W_LIC_O, 30, [0, 10, 20, 30])
+    return emph(W_LIC_L, W_LIC_O, 30, [0, 10, 20, 30], w=384, h=150)
 
 
 def g_w_dem():
-    return emph(W_DEM_L, W_DEM_O, 25, [0, 10, 20])
+    return emph(W_DEM_L, W_DEM_O, 25, [0, 10, 20], w=212, h=158, lab=False)
 
 
 def g_w_eur():
-    return emph(W_EUR_L, W_EUR_O, 3000, [0, 1000, 2000, 3000], fmt=lambda v: "%d k€" % (v // 1000) if v else "0")
+    return emph(W_EUR_L, W_EUR_O, 3000, [0, 1000, 2000, 3000], fmt=lambda v: "%d k€" % (v // 1000) if v else "0", w=384, h=158)
 
 
 def g_delay_hist():
-    bins = ["< 30 min", "30 min–1 h", "1–2 h", "2–4 h", "4–8 h", "8–24 h", "1–2 j", "> 2 j"]
+    bins = ["< ½ h", "½–1 h", "1–2 h", "2–4 h", "4–8 h", "8–24 h", "1–2 j", "> 2 j"]
     vals = [9, 8, 6, 5, 3, 2, 0, 1]
     assert sum(vals) == 34
-    p = Plot(392, 150, 8, 10, [0, 5, 10], pl=22, pr=4, pt=22, pb=30, band=True)
+    p = Plot(374, 162, 8, 10, [0, 5, 10], pl=22, pr=4, pt=24, pb=18, band=True)
     p.grid()
     p.cols(vals, AD["L"], frac=0.62)
     for i, b in enumerate(bins):
         p.p.append(txt(p.X(i), p.y0 + 13, b, anchor="middle", size=10))
     # la mediane (1 h 10) tombe dans « 1-2 h », la moyenne (4 h 05) dans « 4-8 h », le plus long (2 j 6 h) dans « > 2 j »
-    for i, lab, v in ((2, "médiane 1 h 10", 6), (4, "moyenne 4 h 05", 3), (7, "le plus long 2 j 6 h", 1)):
+    for i, lab, v, anc, top in ((2, "médiane 1 h 10", 6, "end", p.y1 - 6), (4, "moyenne 4 h 05", 3, "start", p.y1 - 6), (7, "max 2 j 6 h", 1, "end", p.Y(5))):
         x = p.X(i)
-        p.p.append('<line x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f" stroke="%s" stroke-width="1"/>' % (x, x, p.Y(v) - 3, p.y1 - 6, INK2))
-        p.p.append(txt(x, p.y1 - 9, lab, anchor="end" if i == 7 else "middle", fill=INK, weight=600, size=10.5))
-    p.p.append(txt(p.X(0) - 8, p.y0 + 26, "le délai entre la demande et sa réponse (34 demandes)", size=10, fill=MUT))
+        p.p.append('<line x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f" stroke="%s" stroke-width="1"/>' % (x, x, p.Y(v) - 3, top, INK2))
+        p.p.append(txt(x + (4 if anc == "end" else -4), top - 3, lab, anchor=anc, fill=INK, weight=600, size=10.5))
     return p.svg()
 
 
@@ -481,12 +484,14 @@ def g_share():
     return "".join(o)
 
 
-def dumbbell(title, cur, prev, maxv, ticks, fmt=None, w=410):
+def dumbbell(title, cur, prev, maxv, ticks, fmt=None, w=410, sub=""):
     fmt = fmt or (lambda v: fr(v))
-    rowh = 26
-    x0, x1 = 92, w - 46
+    rowh = 22
+    x0, x1 = 58, w - 74
     h = 22 + rowh * 4 + 20
     o = [txt(0, 12, title, size=12, fill=INK, weight=650)]
+    if sub:
+        o.append(txt(w, 12, sub, size=10.5, fill=MUT, anchor="end"))
 
     def X(v):
         return x0 + v * (x1 - x0) / float(maxv)
@@ -507,19 +512,20 @@ def dumbbell(title, cur, prev, maxv, ticks, fmt=None, w=410):
 
 
 def g_db_act():
-    return dumbbell("Actions", ACT, ACT_P, 140, [0, 40, 80, 120])
+    return dumbbell("Actions", ACT, ACT_P, 120, [0, 40, 80, 120], w=250, sub="263 · −1 %")
 
 
 def g_db_lic():
-    return dumbbell("Licences signées", LIC, LIC_P, 50, [0, 10, 20, 30, 40, 50])
+    return dumbbell("Licences signées", LIC, LIC_P, 45, [0, 15, 30, 45], w=250, sub="76 · +7 %")
 
 
 def g_db_dem():
-    return dumbbell("Demandes traitées", DEM, DEM_P, 40, [0, 10, 20, 30, 40])
+    return dumbbell("Demandes traitées", DEM, DEM_P, 45, [0, 15, 30, 45], w=250, sub="72 · −15 %")
 
 
 def g_db_eur():
-    return dumbbell("Montant encaissé (boutique)", EUR, EUR_P, 6000, [0, 2000, 4000, 6000], fmt=lambda v: "%s €" % fr(v) if v < 1000 or v % 1000 else "%d k€" % (v // 1000))
+    return dumbbell("Montant encaissé", EUR, EUR_P, 6000, [0, 2000, 4000, 6000], w=250, sub="8 690 € · +17 %",
+                    fmt=lambda v: ("%s €" % fr(v)) if v % 1000 else ("%d k€" % (v // 1000) if v else "0"))
 
 
 G.update({
@@ -553,10 +559,21 @@ def fiche_head(on):
 
 
 W_ACT_L = [0, 0, 0, 0, 9, 18, 22, 25, 24, 18, 39, 24]
+def fiche_head_compact(on):
+    """L'en-tete reduit, quand on descend dans la fiche (il reste en haut)."""
+    tabs = "".join('<span class="%s">%s</span>' % ("on" if a in on else "", a) for a in ANCRES)
+    return ('<div class="row" style="gap:14px;align-items:center;border-bottom:1px solid var(--line);margin-top:-6px">'
+            '<div class="row gap8" style="padding-bottom:9px"><span class="av3 cL" style="width:30px;height:30px;border-radius:9px;font-size:12px">L</span>'
+            '<b style="font:700 16px Inter;white-space:nowrap">Léa Essai</b><span class="pill p-green pl"><span class="d"></span>Active</span></div>'
+            '<div class="tabs" style="border-bottom:0;margin-left:10px;gap:18px">%s</div>'
+            '<div class="per" style="margin-left:auto;padding-bottom:7px"><div class="seg"><span>7 j</span><span class="on">30 j</span><span>90 j</span>'
+            '<span>12 mois</span><span>Tout</span><span><i data-i="calendar"></i>Dates…</span></div></div></div>' % tabs)
+
+
 G.update({
     "fh_vue": lambda: fiche_head(["Vue d'ensemble"]),
-    "fh_act": lambda: fiche_head(["Activité"]),
-    "fh_lic": lambda: fiche_head(["Licences et clients"]),
+    "fh_act": lambda: fiche_head_compact(["Activité"]),
+    "fh_lic": lambda: fiche_head_compact(["Licences et clients"]),
     "sp_act": lambda: spark(W_ACT_L, AD["L"], w=70, h=26),
     "sp_lic": lambda: spark(W_LIC_L, AD["L"], w=70, h=26),
     "sp_dem": lambda: spark(W_DEM_L, AD["L"], w=70, h=26),
@@ -617,7 +634,7 @@ RANGE = [(8.7, 17.6), (8.5, 18.0), (9.1, 17.2), (8.6, 17.9), (8.9, 16.4), None, 
 
 
 def g_range():
-    p = Plot(586, 150, 30, 24, [6, 9, 12, 15, 18, 21, 24], fmt=lambda v: "%d h" % v, pl=34, pr=4, pt=6, pb=18, band=True, ymin=6)
+    p = Plot(596, 128, 30, 24, [6, 12, 18, 24], fmt=lambda v: "%d h" % v, pl=34, pr=4, pt=6, pb=18, band=True, ymin=6)
     # la bande habituelle
     p.p.append('<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="#f1f6fd"/>' % (p.x0, p.Y(17.83), p.x1 - p.x0, p.Y(8.67) - p.Y(17.83)))
     p.grid()
@@ -638,3 +655,25 @@ def g_range():
 
 
 G.update({"streak1": g_streak1, "range": g_range})
+
+
+def g_lic_offre():
+    return hbars([("PERSONAL", 15, None, False), ("PROFESSIONAL", 20, None, False), ("ENTERPRISE", 6, None, False)], AD["L"], 20, cols="96px 1fr 22px")
+
+
+def g_top_clients():
+    rows = [("Atelier Exemple", 6, 1470), ("Bureau d'études Exemple", 5, 1190), ("Client d'essai", 4, 780), ("Studio Exemple", 3, 560), ("Laboratoire d'essai", 3, 390)]
+    o = ['<div class="hb" style="grid-template-columns:150px 1fr 58px 52px">']
+    for n, lic, eur in rows:
+        o.append('<div class="l">%s</div><div class="tr"><i style="width:%.1f%%;background:%s"></i></div><div class="n" style="text-align:right">%s €</div><div class="cap" style="white-space:nowrap">%d lic.</div>'
+                 % (html.escape(n), eur * 100.0 / 1470, AD["L"], fr(eur), lic))
+    o.append("</div>")
+    return "".join(o)
+
+
+def g_articles():
+    return hbars([("PERSONAL 1 an", 9, None, False), ("PROFESSIONAL 1 an", 6, None, False), ("ENTERPRISE 1 an", 1, None, False),
+                  ("Exports avancés", 4, None, False), ("Travail à plusieurs", 2, None, False)], AD["L"], 9, cols="128px 1fr 14px")
+
+
+G.update({"lic_offre": g_lic_offre, "top_clients": g_top_clients, "articles": g_articles})

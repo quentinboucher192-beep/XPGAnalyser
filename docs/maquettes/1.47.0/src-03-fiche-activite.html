@@ -1,0 +1,122 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - la fiche d'un admin, activité et sécurité</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+.r1{display:grid;grid-template-columns:640px 1fr;gap:14px;margin-top:12px}
+.r2{display:grid;grid-template-columns:522px 1fr;gap:14px;margin-top:12px}
+.stl{display:flex;gap:22px;margin:4px 0 10px}
+.stl div .k{font-size:11.5px;color:var(--muted)}
+.stl div .v{font:650 17px Inter;font-feature-settings:"cv11","ss01";white-space:nowrap}
+.stl div .v small{font:500 11.5px Inter;color:var(--muted);margin-left:3px}
+table.rt{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+table.rt td:last-child{text-align:right}
+table.rt th{font:650 10.5px Inter;letter-spacing:.04em;text-transform:uppercase;color:var(--faint);text-align:left;padding:6px 6px;border-bottom:1px solid var(--line)}
+table.rt td{padding:3px 6px;border-bottom:1px solid #f0f3f7;white-space:nowrap;height:25px}
+table.rt td.n{text-align:right;font-weight:600;font-feature-settings:"cv11","ss01","tnum"}
+table.rt tr.off td{color:var(--faint)}
+table.rt tr.nv td{background:#fffaf0}
+.sug{display:inline-flex;align-items:center;gap:4px;height:21px;padding:0 7px;border-radius:7px;border:1px solid #f3d9a6;background:#fff;color:#b45309;font:600 11.5px Inter}
+.sec{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.sb{padding:9px 14px 8px;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+.sb:nth-child(2n){border-right:0}
+.sb .st2{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sb .st2 .num{font:700 15px Inter;margin-left:auto;font-feature-settings:"cv11","ss01"}
+.sb .ln{display:flex;gap:8px;font-size:12px;color:var(--ink2);padding:1.5px 0;align-items:baseline;white-space:nowrap}
+.sb .ln .w{color:var(--faint);width:70px;flex:none;font-size:11.5px;white-space:nowrap}
+.ic2{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;flex:none}
+.ic2 .ico{width:13px;height:13px;stroke-width:2.2}
+.tl{position:relative;padding-left:20px}
+.tl:before{content:"";position:absolute;left:4px;top:6px;bottom:6px;width:2px;background:var(--line)}
+.tl .e{position:relative;font-size:12px;color:var(--ink2);padding:1.5px 0}
+.tl .e:before{content:"";position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid var(--violet)}
+.tl .e .w{color:var(--faint);font-size:11.5px;margin-right:6px}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:admins-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i>Administrateurs<i data-i="right"></i><b>Léa Essai</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+<!--G:fh_act-->
+   <div class="r1">
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Quand elle travaille</div><div class="gs">ses 117 actions, par jour de la semaine et par heure · du 12/10 au 10/11</div></div><span class="tag2 tJ" style="margin-left:auto">J</span></div>
+     <div style="margin-top:14px"><!--G:heat--></div>
+    </div>
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Ses jours</div><div class="gs">un carré par jour, plus foncé = plus d'actions ; la série en cours soulignée</div></div><span class="tag2 tJ" style="margin-left:auto">J</span><span class="tag2 tN">N</span></div>
+     <div class="stl">
+      <div><div class="k">Jours actifs</div><div class="v">21 <small>sur 30 · +2</small></div></div>
+      <div><div class="k">Série en cours</div><div class="v">7 <small>jours ouvrés · record 11</small></div></div>
+      <div><div class="k">Connectée</div><div class="v">22 <small>jours · 1 sans action</small></div></div>
+      <div><div class="k">Dernière action</div><div class="v">11:42 <small>auj.</small></div></div>
+     </div>
+     <!--G:streak1-->
+     <div class="row" style="margin-top:10px;gap:10px"><span class="h3" style="font-size:12.5px;white-space:nowrap">Début et fin de ses journées</span><span class="tag2 tN">N</span><div class="lg" style="margin-left:auto;gap:10px"><span><i style="background:#0b7fa3;width:6px;height:12px"></i>première → dernière action</span><span><i style="background:#f1f6fd;border:1px solid #dbe7f6"></i>habituel</span><span><i style="background:#dc2626;width:6px;height:12px"></i>inhabituel</span></div></div>
+     <div style="margin-top:4px"><!--G:range--></div>
+    </div>
+   </div>
+
+   <div class="r2">
+    <div class="gc" style="padding:12px 10px 8px">
+     <div class="gh" style="padding:0 6px"><div><div class="gt">Ses droits : utilisés ou non</div><div class="gs">depuis qu'elle est admin (57 jours, moins de 90)</div></div><span class="tag2 tJ" style="margin-left:auto">J</span></div>
+     <table class="rt">
+      <colgroup><col style="width:190px"><col style="width:56px"><col style="width:40px"><col style="width:76px"><col></colgroup><tr><th>Droit</th><th>Donné</th><th style="text-align:right">Fois</th><th>Quand</th><th></th></tr>
+      <tr><td>Créer et signer une licence</td><td class="ok2">✓</td><td class="n">44</td><td>auj. 11:42</td><td></td></tr>
+      <tr class="off"><td>Prolonger une licence</td><td>retiré</td><td class="n">15</td><td>30/10</td><td></td></tr>
+      <tr><td>Ajouter une option</td><td class="ok2">✓</td><td class="n">12</td><td>hier 15:02</td><td></td></tr>
+      <tr><td>Révoquer une licence</td><td class="ok2">✓</td><td class="n">3</td><td>04/11</td><td></td></tr>
+      <tr class="nv"><td>Retirer un PC</td><td class="ok2">✓</td><td class="n warn2">0</td><td class="warn2">jamais</td><td><span class="sug"><i data-i="minus" class="sm"></i>Retirer ce droit ?</span></td></tr>
+      <tr class="off"><td>Modifier les offres</td><td>—</td><td class="n">—</td><td></td><td></td></tr>
+      <tr class="off"><td>Créer, modifier une option</td><td>—</td><td class="n">—</td><td></td><td></td></tr>
+      <tr class="nv"><td>Annonces</td><td class="ok2">✓</td><td class="n warn2">0</td><td class="warn2">jamais</td><td><span class="sug"><i data-i="minus" class="sm"></i>Retirer ce droit ?</span></td></tr>
+      <tr><td>Accepter, refuser une demande</td><td class="ok2">✓</td><td class="n">71</td><td>auj. 11:05</td><td></td></tr>
+      <tr><td>Revoir le code</td><td class="ok2">✓</td><td class="n">11</td><td>hier 17:20</td><td></td></tr>
+      <tr><td>Supprimer un client</td><td class="ok2">✓</td><td class="n">3</td><td>03/11</td><td></td></tr>
+      <tr><td>Exporter les clients</td><td class="ok2">✓ <span class="cap">05/11</span></td><td class="n">2</td><td>06/11</td><td></td></tr>
+      <tr><td style="border-bottom:0">Écrire aux clients</td><td class="ok2" style="border-bottom:0">✓</td><td class="n" style="border-bottom:0">26</td><td style="border-bottom:0">hier 10:12</td><td style="border-bottom:0"></td></tr>
+     </table>
+     <div class="cap" style="padding:6px 6px 0">Retirer un droit ne casse rien de ce qu'elle a signé (ses licences restent valides).</div>
+    </div>
+
+    <div class="card" style="overflow:hidden">
+     <div class="row gap8" style="padding:12px 14px 10px;border-bottom:1px solid var(--line)"><i data-i="shield" class="sm" style="color:var(--violet)"></i><span class="h3">Sa sécurité</span><span class="cap">la période · tout vient du journal signé</span><span class="tag2 tJ" style="margin-left:auto">J</span></div>
+     <div class="sec">
+      <div class="sb"><div class="st2"><span class="ic2" style="background:var(--amber-50);color:#d97706"><i data-i="shieldx"></i></span><span class="h3">Signatures refusées</span><span class="num">1</span></div>
+       <div class="ln"><span class="w">04/11 10:02</span><span>Prolonger <b>XPG-2026-00388</b> : <span class="warn2">droit manquant</span></span></div>
+       <div class="ln"><span class="w">clé retirée</span><span class="cap">aucune : sa clé est certifiée</span></div></div>
+      <div class="sb"><div class="st2"><span class="ic2" style="background:var(--amber-50);color:#d97706"><i data-i="laptop"></i></span><span class="h3">Depuis un autre PC que le sien</span><span class="num">1</span></div>
+       <div class="ln"><span class="w">24/10 19:05</span><span><b>PC-MAISON-LEA</b> (Lyon, FR) : refusé</span></div>
+       <div class="ln"><span class="w">son PC</span><span class="cap">PC-COMMERCIAL-02 : les 116 autres</span></div></div>
+      <div class="sb"><div class="st2"><span class="ic2" style="background:var(--red-50);color:#dc2626"><i data-i="moon2"></i></span><span class="h3">Heures inhabituelles, pics</span><span class="num">3</span></div>
+       <div class="ln"><span class="w">dim. 25/10</span><span>22:14, 2 actions (demande n° 51, un code)</span></div>
+       <div class="ln"><span class="w">mer. 21/10</span><span>21:03, 1 action (un courriel)</span></div>
+       <div class="ln"><span class="w">ven. 30/10</span><span>pic : 19 actions, <b>3,4× sa moyenne</b></span></div></div>
+      <div class="sb"><div class="st2"><span class="ic2" style="background:var(--blue-50);color:#2563eb"><i data-i="list"></i></span><span class="h3">Ce qui compte, le détail</span><span class="num">10</span></div>
+       <div class="ln"><span class="w">clients</span><span>2 supprimés · Client d'essai 14, Studio d'essai 2</span></div>
+       <div class="ln"><span class="w">révocations</span><span>2 · XPG-2026-00377, XPG-2026-00359</span></div>
+       <div class="ln"><span class="w">codes revus</span><span>6 · le dernier : XPG-2026-00398, hier</span></div></div>
+      <div class="sb" style="border-bottom:0"><div class="st2"><span class="ic2" style="background:var(--violet-50);color:var(--violet-700)"><i data-i="lock"></i></span><span class="h3">Ses droits changés</span><span class="cap" style="margin-left:auto">qui, quand</span></div>
+       <div class="tl">
+        <div class="e"><span class="w">14/09</span>profil <b>Admin LV2</b> copié, par toi</div>
+        <div class="e"><span class="w">02/11</span><b style="color:#b91c1c">−</b> Prolonger une licence, par toi</div>
+        <div class="e"><span class="w">05/11</span><b style="color:#15803d">+</b> Exporter les clients, par toi</div>
+       </div></div>
+      <div class="sb" style="border-bottom:0;background:var(--green-50)"><div class="st2"><span class="ic2" style="background:#fff;color:#16a34a"><i data-i="link"></i></span><span class="h3">La chaîne de ses lignes</span><span class="ok2" style="margin-left:auto;font-size:12px">vérifiée ✓</span></div>
+       <div class="ln"><span>117 lignes (412 depuis le 14/09), signées par sa clé</span></div><div class="ln"><span><b>aucune manquante, aucune modifiée</b></span></div>
+       <div class="ln"><span class="w">la dernière</span><span>n° 2 418 · <span class="fpm" style="font-size:11px">9C41 7A0E 3B…</span></span></div></div>
+     </div>
+     <div style="padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:18px;align-items:center;font-size:12px;color:var(--ink2)">
+      <span class="row gap6"><i data-i="globe" class="sm" style="color:var(--faint)"></i>Ses connexions : <b>Lyon, FR</b> (son PC) 22 jours ; 1 fois PC-MAISON-LEA</span>
+      <span class="lk" style="margin-left:auto">Ces 14 lignes dans le journal ›</span><span class="lk">Exporter (CSV)</span>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:436px;top:6px;width:520px;padding:4px 10px"><b>Quand</b> elle travaille ; les heures <b>inhabituelles</b> pour elle sont signalées.</div>
+  <div class="annot" data-n="2" style="left:436px;top:34px;width:520px;padding:4px 10px">Un droit <b>jamais utilisé</b> : « Retirer ce droit ? » en un clic.</div>
+  <div class="mk" style="left:600px;top:212px">1</div><div class="mk" style="left:470px;top:700px">2</div>
+ </main>
+</div>
+</body></html>

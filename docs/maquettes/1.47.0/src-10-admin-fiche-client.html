@@ -1,0 +1,245 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - la fiche d'un client</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css"><link rel="stylesheet" href="stats.css">
+<style>
+.ch1{display:flex;align-items:center;gap:14px}
+.ch1 .lg1{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;color:#fff;flex:none;background:linear-gradient(140deg,#8b6dff,#4b2fd6);box-shadow:0 6px 16px rgba(109,74,255,.28)}
+.ch1 .lg1 .ico{width:22px;height:22px}
+.ch1 .nm{font:700 24px/1.15 "Inter Display",Inter;letter-spacing:-.02em}
+.body{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;margin-top:12px;height:806px}
+.lc{display:flex;flex-direction:column;gap:12px;min-height:0}
+.rg2{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-template-rows:250px 256px 276px;gap:12px}
+.sp6{grid-column:span 6}.sp3{grid-column:span 3}.sp2{grid-column:span 2}
+.ccard{padding:13px 16px}
+.ccard .h3{font-size:13px;display:flex;align-items:center;gap:8px}
+.ccard .h3 .cap{font-weight:500}
+.kv{grid-template-columns:96px 1fr}
+.kv>div{padding:5px 0}
+.ct2{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f0f3f7;font-size:12.5px}
+.ct2:last-child{border-bottom:0}
+.ct2 .ini{width:28px;height:28px;border-radius:50%;background:var(--sunken);color:var(--ink2);display:grid;place-items:center;font:650 11px Inter;flex:none}
+.ct2 b{font-weight:600}
+.figs4{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden;box-shadow:var(--sh1)}
+.figs4>div{padding:9px 14px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.figs4>div:nth-child(2n){border-right:0}.figs4>div:nth-child(n+3){border-bottom:0}
+.figs4 .k{font-size:11.5px;color:var(--muted)}
+.figs4 .v{font:650 17px Inter;font-feature-settings:"cv11","ss01";margin-top:1px;white-space:nowrap}
+.figs4 .v small{font:500 11.5px Inter;color:var(--muted);margin-left:4px}
+.pcl{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f3f7;font-size:12px}
+.pcl:last-child{border-bottom:0}
+.pcl .pcn{font:600 11.5px "JetBrains Mono";letter-spacing:-.02em;color:var(--ink);width:118px;flex:none}
+.pcl .nw{font:600 10.5px Inter;color:var(--violet-700);background:var(--violet-50);border-radius:99px;padding:1px 6px}
+.pcl .vu{margin-left:auto;color:var(--muted);font-size:11.5px;white-space:nowrap}
+.srv{display:flex;flex-direction:column;gap:9px;margin-top:10px}
+.srv .r{display:grid;grid-template-columns:26px 1fr auto;column-gap:9px;align-items:center}
+.srv .r b{font-weight:650;font-size:12.5px}
+.srv .r .cap{font-size:11.5px;line-height:1.3}
+.srv .r .n{font:650 13px Inter;text-align:right;font-feature-settings:"cv11","ss01","tnum"}
+.srv .r .n small{display:block;font:500 10.5px Inter;color:var(--faint)}
+.gnt{position:relative}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:clients-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Pilotage<i data-i="right"></i>Clients<i data-i="right"></i><b>Atelier Exemple</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:16px">
+   <div class="ch1">
+    <span class="lg1"><i data-i="building"></i></span>
+    <div><div class="row gap10"><span class="nm">Atelier Exemple</span><span class="pill p-gray pl"><i data-i="pin" style="width:12px;height:12px"></i>Lyon, FR</span><span class="pill p-violet pl">client depuis le 12/03/2024</span><span class="pill p-amber pl"><i data-i="alert" style="width:12px;height:12px"></i>1 licence finit dans 25 j</span></div>
+     <div class="muted" style="margin-top:3px;font-size:12.5px">N° C-0031 · 3 licences actives, 10 places · 9 PC · servi par Camille (toi), Léa et Hugo</div></div>
+    <div class="row gap8" style="margin-left:auto"><span class="btn sm"><i data-i="mail"></i>Lui écrire…</span><span class="btn sm"><i data-i="refresh"></i>Prolonger…</span><span class="btn sm" style="width:30px;padding:0;justify-content:center"><i data-i="more"></i></span></div>
+   </div>
+   <div class="row" style="margin-top:12px;border-bottom:1px solid var(--line);align-items:flex-end">
+    <div class="tabs" style="border-bottom:0;flex:1"><span class="on"><i data-i="chart" class="sm"></i>Vue d'ensemble</span><span><i data-i="key" class="sm"></i>Licences <span class="c">4</span></span><span><i data-i="laptop" class="sm"></i>PC <span class="c">9</span></span><span><i data-i="receipt" class="sm"></i>Commandes <span class="c">8</span></span><span><i data-i="inbox" class="sm"></i>Demandes <span class="c">17</span></span><span><i data-i="scroll" class="sm"></i>Journal <span class="c">33</span></span></div>
+    <div class="per" style="padding-bottom:7px"><div class="seg"><span>30 j</span><span>12 mois</span><span class="on">Tout · depuis 03/2024</span><span><i data-i="calendar"></i>Deux dates…</span></div></div>
+   </div>
+
+   <div class="body">
+    <div class="lc">
+     <div class="card ccard">
+      <div class="h3">Identité</div>
+      <div class="kv" style="margin-top:6px">
+       <div class="k">Société</div><div class="v">Atelier Exemple</div>
+       <div class="k">Ville</div><div class="v">Lyon, FR <span class="cap">· vue par le service</span></div>
+       <div class="k">Client depuis</div><div class="v">12/03/2024 <span class="cap">· par Camille Essai</span></div>
+       <div class="k">Facturation</div><div class="v">compta@exemple.fr</div>
+      </div>
+      <div class="h3" style="margin-top:12px">Contacts <span class="cap">2</span></div>
+      <div style="margin-top:2px">
+       <div class="ct2"><span class="ini">ME</span><div style="min-width:0"><b>Marc Exemple</b> <span class="cap">· gérant</span><div class="cap">marc@exemple.fr · 04 00 00 00 01</div></div></div>
+       <div class="ct2"><span class="ini">JE</span><div style="min-width:0"><b>Julie Exemple</b> <span class="cap">· technique</span><div class="cap">julie@exemple.fr</div></div></div>
+      </div>
+     </div>
+     <div class="figs4">
+      <div><div class="k">Licences</div><div class="v">3 <small>actives · 1 expirée</small></div></div>
+      <div><div class="k">PC</div><div class="v">9 <small>sur 10 places</small></div></div>
+      <div><div class="k">Achats</div><div class="v">2 820 € <small>8 commandes</small></div></div>
+      <div><div class="k">Demandes</div><div class="v">17 <small>0 en attente</small></div></div>
+     </div>
+     <div class="card ccard" style="flex:1;min-height:0">
+      <div class="h3">Ses PC <span class="cap">9 · 6 à jour</span><span class="lk" style="margin-left:auto;font-size:12px">Activations ›</span></div>
+      <div id="pcs" style="margin-top:4px"></div>
+     </div>
+    </div>
+    <div class="rg2">
+     <div id="c-lic" class="sp6"></div>
+     <div id="c-pca" class="sp3"></div>
+     <div id="c-maj" class="sp3"></div>
+     <div id="c-ach" class="sp2"></div>
+     <div id="c-dmd" class="sp2"></div>
+     <div id="c-srv" class="sp2"></div>
+    </div>
+   </div>
+  </div>
+ </main>
+</div>
+<script src="stats.js"></script>
+<script>
+(function () {
+  'use strict';
+  var BL = '#2a78d6', MUT = '#64748b';
+  var OFF = { P: '#1baf7a', R: '#6250d6', E: '#eda100', O: '#e87ba4', D: '#a3adbf' };
+  var ADM = { C: '#6d4aff', L: '#0b7fa3', H: '#ea580c' };
+  var VC = { old: '#a3adbf', '1.44': '#86b6ef', '1.45': '#5598e7', '1.46': '#256abf', '1.47': '#104281' };
+  var S = X.S, T = X.T;
+  function D(s) { var p = s.split('/'); return new Date(+p[2], +p[1] - 1, +p[0]); }
+  var TODAY = new Date(2026, 10, 10);
+
+  // ---- ses PC ----
+  var PCS = [['ATELIER-PC1', '1.47.0', 'auj. 11:40'], ['ATELIER-PC2', '1.47.0', 'auj. 10:02'], ['BUREAU-MARC', '1.47.0', 'auj. 09:31'], ['ATELIER-PC4', '1.47.0', 'hier'],
+    ['ATELIER-PC7', '1.47.0', 'auj. 11:44', 'nouveau'], ['ATELIER-PC8', '1.47.0', 'auj. 11:51', 'nouveau'], ['ATELIER-PC5', '1.46.0', 'auj. 09:12'], ['PORTABLE-JULIE', '1.46.0', 'il y a 9 j'], ['ATELIER-PC3', '1.43.2', 'il y a 41 j']];
+  document.getElementById('pcs').innerHTML = PCS.map(function (r) {
+    var c = r[1] === '1.47.0' ? 'ok' : r[1] === '1.46.0' ? 'g' : 'w';
+    return '<div class="pcl"><span class="pcn">' + r[0] + '</span><span class="vp ' + c + '">' + r[1] + '</span>' + (r[3] ? '<span class="nw">' + r[3] + '</span>' : '') +
+      (c === 'w' ? '<span class="st w" title="4 versions de retard">' + X.ico('alert') + '</span>' : '') + '<span class="vu">' + r[2] + '</span></div>';
+  }).join('');
+
+  // ---- ses licences et leurs echeances (une ligne par licence, ses periodes, aujourd'hui) ----
+  var LIC = [
+    { k: 'XPG-2024-00031', o: 'PROFESSIONAL', s: '5 PC', seg: [['R', '12/03/2024', '11/03/2025', 'signée par Camille Essai'], ['R', '12/03/2025', '11/03/2026', 'prolongée par Camille Essai'], ['R', '12/03/2026', '11/03/2027', 'prolongée par Camille Essai']], end: '11/03/2027' },
+    { k: 'IA avancée', o: 'Assistant IA avancé', s: 'option, sur la 00031', seg: [['O', '15/03/2026', '14/03/2027', 'achetée en ligne (1 an)']], end: '14/03/2027' },
+    { k: 'XPG-2025-00188', o: 'PERSONAL', s: '2 PC', seg: [['D', '05/11/2024', '05/12/2024', 'Découverte (30 jours)'], ['P', '06/12/2024', '05/12/2025', 'convertie en ligne'], ['P', '06/12/2025', '05/12/2026', 'prolongée en ligne']], end: '05/12/2026', warn: 'dans 25 j' },
+    { k: 'XPG-2026-00412', o: 'PROFESSIONAL', s: '3 PC', seg: [['R', '10/11/2026', '09/11/2027', 'signée par Léa Essai aujourd\'hui']], end: '09/11/2027', nw: 1 },
+    { k: 'XPG-2024-00102', o: 'PERSONAL', s: '1 PC', seg: [['P', '20/06/2024', '19/06/2025', 'achetée en ligne']], end: '19/06/2025', gone: 'expirée' }
+  ];
+  var lh = X.card('c-lic', { t: 'Ses licences et leurs échéances', ts: 'chaque période : signée, prolongée',
+    lg: [['bx', OFF.R, 'PROFESSIONAL'], ['bx', OFF.P, 'PERSONAL'], ['bx', OFF.D, 'Découverte'], ['bx', OFF.O, 'Options'], ['ln', '#0f172a', 'aujourd\'hui']] });
+  (function () {
+    var W = lh.clientWidth, H = lh.clientHeight, LW = 168, RW = 140, AX = 18, TOP = 14;
+    var svg = S('svg', { width: W, height: H }, lh); svg.style.fontFamily = 'Inter, system-ui, sans-serif';
+    var t0 = new Date(2024, 0, 1).getTime(), t1 = new Date(2027, 11, 31).getTime();
+    var xs = function (d) { return LW + (W - LW - RW) * (d.getTime() - t0) / (t1 - t0); };
+    var rowH = (H - AX - TOP) / LIC.length;
+    var g = S('g', {}, svg);
+    for (var yr = 2024; yr <= 2027; yr++) {
+      [0, 6].forEach(function (m) {
+        var x = Math.round(xs(new Date(yr, m, 1))) + 0.5;
+        S('line', { x1: x, x2: x, y1: TOP - 4, y2: H - AX, stroke: m ? '#f3f5f8' : '#e6eaf0' }, g);
+        T(g, x + (m ? 0 : 0), H - 4, m ? 'juil.' : String(yr), { anchor: 'middle', fill: m ? '#b4bdca' : '#94a3b8' });
+      });
+    }
+    S('line', { x1: LW, x2: W - RW, y1: H - AX + 0.5, y2: H - AX + 0.5, stroke: '#d5dce6' }, g);
+    var tx = Math.round(xs(TODAY)) + 0.5;
+    var card = lh.closest('.gc'), tip = document.createElement('div'); tip.className = 'xtip'; card.appendChild(tip);
+    LIC.forEach(function (l, i) {
+      var yc = TOP + rowH * i + rowH / 2;
+      if (i) S('line', { x1: 0, x2: W, y1: Math.round(TOP + rowH * i) + 0.5, y2: Math.round(TOP + rowH * i) + 0.5, stroke: '#f1f4f8' }, g);
+      var kt = T(g, 0, yc + 4, l.k, { fill: l.gone ? '#94a3b8' : '#0f172a', weight: 600, size: 11.5 });
+      if (l.k.indexOf('XPG') === 0) kt.setAttribute('font-family', 'JetBrains Mono, monospace');
+      T(g, l.k.indexOf('XPG') === 0 ? 112 : 70, yc + 4, l.s, { fill: '#64748b', size: 11 });
+      l.seg.forEach(function (sg, j) {
+        var x0 = xs(D(sg[1])) + (j ? 1 : 0), x1 = xs(D(sg[2])) - (j < l.seg.length - 1 ? 1 : 0);
+        var r = S('rect', { x: x0, y: yc - 6, width: Math.max(2, x1 - x0), height: 12, rx: 4, fill: OFF[sg[0]], opacity: l.gone ? 0.45 : 1 }, g);
+        var hit = S('rect', { x: x0, y: yc - 12, width: Math.max(8, x1 - x0), height: 24, fill: 'transparent' }, svg);
+        hit.style.cursor = 'pointer';
+        hit.addEventListener('pointermove', function () {
+          tip.innerHTML = '<div class="tt">' + X.esc(l.k + ' · ' + (sg[0] === 'D' ? 'Découverte' : l.o)) + '</div><div class="tr"><b>' + sg[1] + ' → ' + sg[2] + '</b></div><div class="ex">' + X.esc(sg[3]) + '</div>' +
+            '<div class="ck">' + X.ico('pointer') + 'Clic : ouvrir la licence</div>';
+          tip.style.display = 'block';
+          var cr = card.getBoundingClientRect(), hr = svg.getBoundingClientRect();
+          tip.style.left = Math.min(hr.left - cr.left + x0, cr.width - tip.offsetWidth - 8) + 'px';
+          tip.style.top = (hr.top - cr.top + yc + 12) + 'px';
+        });
+        hit.addEventListener('pointerleave', function () { tip.style.display = 'none'; });
+      });
+      var xe = xs(D(l.end)) + 8;
+      if (l.gone) T(g, xe, yc + 4, l.gone + ' le ' + l.end.slice(0, 6) + l.end.slice(8), { fill: '#94a3b8', size: 11 });
+      else if (l.warn) {
+        T(g, xe + 17, yc + 4, l.end + ' · ' + l.warn, { fill: '#b45309', weight: 650, size: 11.5 });
+        var ic = S('svg', { x: xe, y: yc - 7, width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: '#d97706', 'stroke-width': 2.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+        S('use', { href: '#i-alert' }, ic);
+      } else T(g, xe, yc + 4, l.end, { fill: '#334155', weight: 600, size: 11.5 });
+      if (l.nw) T(g, xs(D(l.seg[0][1])) - 8, yc + 4, 'nouvelle', { fill: '#4b2fd6', weight: 650, size: 10.5, anchor: 'end' });
+    });
+    S('line', { x1: tx, x2: tx, y1: TOP - 10, y2: H - AX, stroke: '#0f172a', 'stroke-width': 1 }, svg);
+    T(svg, tx + 4, TOP - 3, 'aujourd\'hui', { fill: '#0f172a', weight: 650, size: 10.5 });
+  })();
+
+  // ---- ses PC actifs dans le temps (par mois) et les places achetees ----
+  var MO = [], MOL = [], MN = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+  for (var i = 0; i < 33; i++) { var mm = (2 + i) % 12, yy = 2024 + Math.floor((2 + i) / 12); MO.push(MN[mm]); MOL.push((i === 32 ? 'Aujourd\'hui, ' : 'Fin ') + MN[mm] + ' ' + yy); }
+  var PCA = [3, 5, 5, 6, 6, 6, 6, 6, 7, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 9];
+  var PLA = [5, 5, 5, 6, 6, 6, 6, 6, 7, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10];
+  var XTM = [[0, 'mars 2024'], [10, 'janv. 2025'], [22, 'janv. 2026'], [32, 'nov.', 'end']];
+  var p = X.card('c-pca', { t: 'Ses PC actifs', ts: 'à la fin de chaque mois', v: '9', dl: X.dl(9, 7, true, '+2 aujourd\'hui'), cc: 'sur 10 places',
+    lg: [['ln', BL, 'PC actifs'], ['ln', MUT, 'places achetées (ses licences)']] });
+  X.chart(p, { kind: 'line', x: MO, xl: MOL, xt: XTM, ticks: [0, 5, 10],
+    s: [{ n: 'places', c: MUT, v: PLA, step: true, lw: 1.25 }, { n: 'PC actifs', c: BL, v: PCA, step: true, area: true, dot: true }],
+    click: 'Clic : ses PC ce mois-là' });
+
+  // ---- ses mises a jour : la version de chacun de ses PC, semaine apres semaine ----
+  var PUB = [['1.44', D('14/07/2026')], ['1.45', D('18/08/2026')], ['1.45', D('01/09/2026')], ['1.46', D('29/09/2026')], ['1.47', D('04/11/2026')]];
+  var DELAY = [0, 1, 1, 2, 8, 15, 999];
+  var WK = [], WKL = [], VS = { old: [], '1.44': [], '1.45': [], '1.46': [], '1.47': [] };
+  for (i = 0; i < 20; i++) {
+    var w0 = X.addDays(new Date(2026, 5, 29), 7 * i), w1 = i === 19 ? TODAY : X.addDays(w0, 6);
+    WK.push(X.ddmm(w0)); WKL.push('Semaine du ' + X.ddmm(w0) + (i === 19 ? ' (en cours)' : ''));
+    var cnt = { old: 0, '1.44': 0, '1.45': 0, '1.46': 0, '1.47': 0 };
+    DELAY.forEach(function (dl) {
+      var v = 'old';
+      PUB.forEach(function (pb) { if (X.addDays(pb[1], dl) <= w1) v = pb[0]; });
+      cnt[v]++;
+    });
+    if (i === 19) cnt['1.47'] += 2;   // les 2 PC actives aujourd'hui (la nouvelle licence) : directement en 1.47.0
+    for (var kk in cnt) VS[kk].push(cnt[kk]);
+  }
+  p = X.card('c-maj', { t: 'Ses mises à jour', ts: 'la version de ses PC, chaque semaine', v: '6<small>sur 9 à jour</small>', cc: '<span class="st w">' + X.ico('alert') + 'ATELIER-PC3 : 1.43.2</span>',
+    lg: [['bx', VC.old, '1.43 et avant'], ['bx', VC['1.44'], '1.44'], ['bx', VC['1.45'], '1.45'], ['bx', VC['1.46'], '1.46'], ['bx', VC['1.47'], '1.47']] });
+  X.chart(p, { kind: 'stack', x: WK, xl: WKL, xt: [[0, '29/06'], [6, '10/08'], [13, '28/09'], [19, '09/11']], ticks: [0, 3, 6, 9],
+    s: [{ n: '1.43 et avant', c: VC.old, v: VS.old }, { n: '1.44.0', c: VC['1.44'], v: VS['1.44'] }, { n: '1.45.x', c: VC['1.45'], v: VS['1.45'] }, { n: '1.46.0', c: VC['1.46'], v: VS['1.46'] }, { n: '1.47.0', c: VC['1.47'], v: VS['1.47'] }],
+    vm: [{ i: 2, l: '1.44.0' }, { i: 7, l: '1.45.0' }, { i: 13, l: '1.46.0' }, { i: 18, l: '1.47.0', a: 'end' }], pt: 16, frac: 0.6,
+    click: 'Clic : ses PC cette semaine-là' });
+
+  // ---- par trimestre : ses achats (le montant, puis le cumul), ses demandes (qui les a traitees) ----
+  var QX = [], QL = [];
+  for (i = 0; i < 12; i++) { QX.push('T' + (i % 4 + 1)); QL.push((i % 4 === 0 ? '1er' : (i % 4 + 1) + 'e') + ' trimestre ' + (2024 + Math.floor(i / 4))); }
+  var QXT = [[0, '2024', 'start'], [4, '2025'], [8, '2026']];
+  var ACH = [490, 190, 0, 190, 490, 0, 0, 190, 780, 0, 0, 490], CUM = [], c = 0;
+  ACH.forEach(function (v) { c += v; CUM.push(c); });
+  var ah = X.card('c-ach', { t: 'Ses achats', ts: 'par trimestre', v: X.e(c), cc: '8 commandes · 3 en ligne' });
+  ah.innerHTML = '<div style="height:50%;position:relative"></div><div class="cap" style="margin:2px 0 0;font-weight:600;color:var(--ink2)">Le montant cumulé</div><div style="height:calc(50% - 18px);position:relative"></div>';
+  X.chart(ah.children[0], { kind: 'col', x: QX, xl: QL, xt: [], pl: 40, pb: 4, ticks: [0, 500, 1000], s: [{ n: 'commandes', c: BL, v: ACH, f: X.e, zero: true }],
+    tipx: function (k) { return ['PROFESSIONAL (5 PC)', 'PERSONAL', '', 'PERSONAL (la Découverte convertie)', 'prolongation PROFESSIONAL', '', '', 'prolongation PERSONAL', 'prolongation PRO + option IA', '', '', 'PROFESSIONAL (3 PC), par Léa'][k]; },
+    click: 'Clic : ces commandes' });
+  X.chart(ah.children[2], { kind: 'line', band: true, x: QX, xl: QL, xt: QXT, pl: 40, ticks: [0, 1500, 3000], yf: function (v) { return v ? X.n1(v / 1000) + ' k' : '0'; },
+    s: [{ n: 'cumul', c: BL, v: CUM, step: true, area: true, dot: true, f: X.e }], click: 'Clic : ses commandes jusque-là' });
+
+  var DC = [1, 2, 0, 2, 1, 1, 0, 1, 2, 0, 1, 0], DLa = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3], DH = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2];
+  p = X.card('c-dmd', { t: 'Ses demandes', ts: 'par trimestre', v: '17', cc: '0 en attente · réponse en 2 h 50',
+    lg: [['bx', ADM.C, 'Camille <b>11</b>'], ['bx', ADM.L, 'Léa <b>4</b>'], ['bx', ADM.H, 'Hugo <b>2</b>']] });
+  X.chart(p, { kind: 'stack', x: QX, xl: QL, xt: QXT, ticks: [0, 2, 4, 6],
+    s: [{ n: 'Camille Essai', c: ADM.C, v: DC }, { n: 'Léa Essai', c: ADM.L, v: DLa }, { n: 'Hugo Essai', c: ADM.H, v: DH }],
+    click: 'Clic : ces demandes' });
+
+  // ---- qui l'a servi (les couleurs des admins, comme partout) ----
+  var sv = X.card('c-srv', { t: 'Qui l\'a servi', ts: 'depuis le début', v: '33<small>actions</small>', cc: 'dans le journal des admins' });
+  var SRV = [['C', 'Camille Essai', 'la 1re licence, 11 demandes', 23], ['L', 'Léa Essai', 'la nouvelle licence, 4 demandes', 7], ['H', 'Hugo Essai', '2 demandes, en octobre', 3]];
+  sv.innerHTML = '<div class="seg2" style="margin-top:6px">' + SRV.map(function (r) { return '<i style="flex:' + r[3] + ';background:' + ADM[r[0]] + '"></i>'; }).join('') + '</div>' +
+    '<div class="srv">' + SRV.map(function (r) {
+      return '<div class="r"><span class="av3 c' + r[0] + '">' + r[1][0] + '</span><div style="min-width:0"><b>' + r[1] + '</b><div class="cap">' + r[2] + '</div></div><span class="n">' + r[3] + '<small>' + Math.round(r[3] * 100 / 33) + ' %</small></span></div>';
+    }).join('') + '</div><div class="cap" style="margin-top:9px;display:flex;gap:6px;align-items:center">' + X.ico('history', '', 'width:13px;height:13px') + 'Dernière : Léa, la 00412, auj. 11:42</div>';
+})();
+</script>
+</body></html>

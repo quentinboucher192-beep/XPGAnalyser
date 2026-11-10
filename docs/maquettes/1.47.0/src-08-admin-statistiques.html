@@ -1,0 +1,227 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - statistiques, la vue générale</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css"><link rel="stylesheet" href="stats.css">
+<style>
+.sgrid{grid-template-rows:repeat(4,193px)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:stats-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Pilotage<i data-i="right"></i><b>Statistiques</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:16px">
+   <div class="sh">
+    <div class="h1">Statistiques</div>
+    <div class="tabs"><span class="on"><i data-i="dash" class="sm"></i>Vue générale</span><span><i data-i="cart" class="sm"></i>Ventes</span><span><i data-i="key" class="sm"></i>Licences</span><span><i data-i="laptop" class="sm"></i>PC</span><span><i data-i="refresh" class="sm"></i>Mises à jour</span><span><i data-i="inbox" class="sm"></i>Demandes</span><span><i data-i="shuser" class="sm"></i>Admins</span><span><i data-i="globe" class="sm"></i>Globe</span></div>
+    <span class="cap" style="white-space:nowrap">13/08 → 10/11/2026</span>
+    <span class="btn sm"><i data-i="download"></i>Exporter…</span>
+   </div>
+   <div class="fbar">
+    <div class="seg"><span>7 j</span><span>30 j</span><span class="on">90 j</span><span>12 mois</span><span>Tout</span><span><i data-i="calendar"></i>Deux dates…</span></div>
+    <span class="vs"></span><span class="lab">comparé à</span>
+    <div class="seg"><span>la période d'avant</span><span class="on">l'an dernier</span><span>rien</span></div>
+    <span class="vs"></span><span class="lab">par</span>
+    <div class="seg"><span>jour</span><span class="on">semaine</span><span>mois</span></div>
+    <span class="hint"><i data-i="pointer"></i>Un clic sur un point <b>filtre la liste correspondante</b></span>
+   </div>
+   <div class="sgrid">
+    <div class="rail" style="grid-column:1;grid-row:1/3"><span>Ventes</span></div>
+    <div class="rail" style="grid-column:1;grid-row:3"><span>Licences · demandes</span></div>
+    <div class="rail" style="grid-column:1;grid-row:4"><span>PC</span></div>
+    <div id="c-eur" class="s2"></div><div id="c-cum"></div><div id="c-cmd"></div><div id="c-pan"></div>
+    <div id="c-off" class="s2"></div><div id="c-opt"></div><div id="c-lig"></div><div id="c-rmb"></div>
+    <div id="c-lact"></div><div id="c-lmv"></div><div id="c-ech"></div><div id="c-dem"></div><div id="c-del"></div>
+    <div id="c-pc" class="s2"></div><div id="c-pmv"></div><div id="c-flo"></div><div id="c-dec"></div>
+   </div>
+  </div>
+ </main>
+</div>
+<script src="stats.js"></script>
+<script>
+(function () {
+  'use strict';
+  var BL = '#2a78d6', OR = '#eb6834', CMP = '#a3adbf', GR = '#d5dce6';
+  var OFF = { P: '#1baf7a', R: '#6250d6', E: '#eda100', O: '#e87ba4', D: '#a3adbf' };
+  var DV = { up1: '#256abf', up2: '#86b6ef', dn1: '#f4a3a2', dn2: '#e34948' };
+  var sum = X.sum, e = X.e, n = X.n;
+
+  // ---- les 13 semaines de la periode (lun. 17/08 -> la semaine en cours, du 09/11, 2 jours) ----
+  var W = [], WL = [];
+  for (var i = 0; i < 13; i++) {
+    var d0 = X.addDays(new Date(2026, 7, 17), 7 * i), d1 = X.addDays(d0, i === 12 ? 1 : 6);
+    W.push(X.ddmm(d0)); WL.push('Semaine du ' + X.ddmm(d0) + ' au ' + X.ddmm(d1));
+  }
+  var XT = [[0, '17/08'], [4, '14/09'], [8, '12/10'], [12, '09/11']];
+  var LAST = 12;
+
+  // ---- les ventes (les memes montants par semaine que la planche 04) ----
+  var T = [1820, 2140, 1690, 1960, 2090, 2090, 2200, 2440, 2180, 1770, 2520, 2440, 680];
+  var K = [0.92, 0.85, 0.95, 0.88, 0.84, 0.91, 0.86, 0.90, 0.87, 0.95, 0.83, 0.88, 0.90];
+  var Tc = T.map(function (v, k) { return Math.round(v * K[k] / 10) * 10; });
+  var CM = [8, 10, 8, 9, 9, 10, 10, 11, 9, 8, 10, 10, 2], CMc = [7, 9, 7, 8, 8, 9, 9, 10, 8, 7, 9, 9, 2];
+  var P = [3, 5, 3, 4, 4, 5, 5, 4, 3, 6, 5, 4, 1], R = [2, 2, 2, 2, 2, 2, 2, 3, 3, 1, 0, 3, 1], E = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0];
+  var OPT = [270, 210, 140, 220, 350, 160, 270, 210, 140, 140, 280, 210, 0];
+  var Pe = P.map(function (v) { return v * 190; }), Re = R.map(function (v) { return v * 490; }), Ee = E.map(function (v) { return v * 1290; });
+  T.forEach(function (v, k) { if (Pe[k] + Re[k] + Ee[k] + OPT[k] !== v) throw new Error('ventes ' + k); });
+  var LIC = P.map(function (v, k) { return v + R[k] + E[k]; });
+  var ONL = [3, 5, 3, 4, 4, 5, 5, 4, 4, 4, 5, 5, 1], HAND = LIC.map(function (v, k) { return v - ONL[k]; });
+  var sT = sum(T), sTc = sum(Tc), sC = sum(CM), sCc = sum(CMc);
+
+  var p = X.card('c-eur', { t: 'Montant encaissé', ts: 'par semaine', v: e(sT), dl: X.dl(sT, sTc, true), cc: 'contre ' + e(sTc) + ' l\'an dernier',
+    lg: [['bx', BL, '2026'], ['ln', CMP, 'l\'an dernier (les mêmes semaines de 2025)']] });
+  X.chart(p, { kind: 'col', x: W, xl: WL, xt: XT, partial: LAST, nt: 3, pr: 8,
+    s: [{ n: '2026', c: BL, v: T, f: e }, { n: 'l\'an dernier', cmp: true, v: Tc, f: e }],
+    tip: 10, tipFwd: true, tipx: function (k) { return '<b>' + CM[k] + ' commandes</b> · panier ' + e(T[k] / CM[k]); },
+    click: 'Clic : ces commandes' });
+
+  // le cumul de l'annee (par mois, reparti par jour) : 2026 jusqu'a aujourd'hui, 2025 l'annee entiere
+  var M26 = [7800, 7100, 8600, 7900, 8200, 9100, 6400, 7600, 9100, 9700, 3480], M25 = [6900, 6600, 7700, 7100, 7300, 8200, 5900, 6700, 8100, 8600, 8200, 7400];
+  var MS = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365];
+  function cumAt(dd, M, lastDays) {
+    var s = 0;
+    for (var m = 0; m < 12; m++) {
+      if (m >= M.length) break;
+      var len = (m === M.length - 1 && lastDays) ? lastDays : MS[m + 1] - MS[m];
+      var days = Math.max(0, Math.min(dd - MS[m] + 1, len));
+      s += M[m] * days / len;
+    }
+    return Math.round(s);
+  }
+  var DY = [], C26 = [], C25 = [], CL = [];
+  for (var dd = 313 % 7; dd <= 364; dd += 7) {
+    DY.push(dd); C26.push(dd <= 313 ? cumAt(dd, M26, 10) : null); C25.push(cumAt(dd, M25));
+    CL.push('Au ' + X.ddmm(X.addDays(new Date(2026, 0, 1), dd)));
+  }
+  var iNow = DY.indexOf(313), y26 = C26[iNow], y25 = C25[iNow];
+  var cxt = [[0, 'janv.'], [13, 'avr.'], [26, 'juil.'], [39, 'oct.']];
+  p = X.card('c-cum', { t: 'Cumulé sur l\'année', v: e(y26), dl: X.dl(y26, y25, true), cc: 'au 10/11',
+    lg: [['ln', BL, '2026'], ['ln', CMP, '2025']] });
+  X.chart(p, { kind: 'line', x: DY.map(String), xl: CL, xt: cxt, nt: 2, pr: 4, yf: function (v) { return v ? n(v / 1000) + ' k' : '0'; },
+    s: [{ n: '2026', c: BL, v: C26, area: true, dot: true, f: e }, { n: '2025', cmp: true, v: C25, f: e }],
+    marks: [{ i: iNow, v: y26, l: n(y26 / 1000) + ' k€', a: 'end', dx: -6, dy: -7 }], click: 'Clic : les commandes jusqu\'à ce jour' });
+
+  p = X.card('c-cmd', { t: 'Commandes', v: n(sC), dl: X.dl(sC, sCc, true), cc: 'contre ' + sCc,
+    lg: [['bx', BL, '2026'], ['ln', CMP, 'l\'an dernier']] });
+  X.chart(p, { kind: 'col', x: W, xl: WL, xt: XT, partial: LAST, nt: 2,
+    s: [{ n: '2026', c: BL, v: CM }, { n: 'l\'an dernier', cmp: true, v: CMc }], tipFwd: true, click: 'Clic : ces commandes' });
+
+  var PAN = T.map(function (v, k) { return Math.round(v / CM[k]); }), PANc = Tc.map(function (v, k) { return Math.round(v / CMc[k]); });
+  PAN[LAST] = PANc[LAST] = null; // la semaine en cours : 2 jours, pas de panier qui tienne
+  p = X.card('c-pan', { t: 'Panier moyen', v: e(sT / sC), dl: X.dl(sT / sC, sTc / sCc, true), cc: 'contre ' + e(sTc / sCc),
+    lg: [['ln', BL, '2026'], ['ln', CMP, 'l\'an dernier']] });
+  X.chart(p, { kind: 'line', band: true, x: W, xl: WL, xt: XT, nt: 2, ymax: 400,
+    s: [{ n: '2026', c: BL, v: PAN, dot: true, f: e }, { n: 'l\'an dernier', cmp: true, v: PANc, f: e }], tipFwd: true, click: 'Clic : les commandes de la semaine' });
+
+  // par offre (les couleurs des offres, extra.css) ; les valeurs a cote (aqua, jaune, rose sous 3:1)
+  var sP = sum(Pe), sR = sum(Re), sE = sum(Ee), sO = sum(OPT);
+  function pc(v) { return Math.round(v * 100 / sT) + ' %'; }
+  p = X.card('c-off', { t: 'Ventes par offre', ts: 'montant par semaine', v: e(sT), cc: '4 offres et options',
+    side: X.side([['bx', OFF.P, 'PERSONAL', '<b>' + e(sP) + '</b><em>' + pc(sP) + '</em>'], ['bx', OFF.R, 'PROFESSIONAL', '<b>' + e(sR) + '</b><em>' + pc(sR) + '</em>'],
+      ['bx', OFF.E, 'ENTERPRISE', '<b>' + e(sE) + '</b><em>' + pc(sE) + '</em>'], ['bx', OFF.O, 'Options', '<b>' + e(sO) + '</b><em>' + pc(sO) + '</em>'],
+      ['', '', 'Découverte (l\'essai)', '<em>gratuite</em>', 't']]) });
+  X.chart(p, { kind: 'stack', x: W, xl: WL, xt: XT, partial: LAST, nt: 3,
+    s: [{ n: 'PERSONAL', c: OFF.P, v: Pe, f: e }, { n: 'PROFESSIONAL', c: OFF.R, v: Re, f: e }, { n: 'ENTERPRISE', c: OFF.E, v: Ee, f: e }, { n: 'Options', c: OFF.O, v: OPT, f: e }],
+    click: 'Clic : les commandes de cette offre' });
+
+  // les options : un classement (une seule teinte, celle des options)
+  var OPTS = [['Assistant IA avancé', 21, 1450], ['Travail à plusieurs', 10, 860], ['Un PC de plus', 5, 290]];
+  p = X.card('c-opt', { t: 'Options vendues', v: e(sO), dl: X.dl(sO, 2210, true), cc: '36 commandes' });
+  p.innerHTML = '<div class="ml">' + OPTS.map(function (o) {
+    return '<div class="mr"><span class="l">' + o[0] + '</span><span class="n">' + e(o[2]) + '<em>' + o[1] + ' cmd</em></span><span class="tr"><i style="width:' + (o[2] * 100 / 1450) + '%;background:' + OFF.O + '"></i></span></div>';
+  }).join('') + '</div>';
+
+  var sOn = sum(ONL), sH = sum(HAND);
+  p = X.card('c-lig', { t: 'Licences vendues', v: n(sOn + sH), dl: X.dl(sOn + sH, 69, true), cc: Math.round(sOn * 100 / (sOn + sH)) + ' % en ligne',
+    lg: [['bx', BL, 'en ligne <b>' + sOn + '</b>'], ['bx', OR, 'signées à la main <b>' + sH + '</b>']] });
+  X.chart(p, { kind: 'stack', x: W, xl: WL, xt: XT, partial: LAST, nt: 2,
+    s: [{ n: 'en ligne', c: BL, v: ONL }, { n: 'à la main', c: OR, v: HAND }], click: 'Clic : ces licences' });
+
+  var RMB = [0, 0, 190, 0, 0, 0, 0, 490, 0, 0, 0, 29, 0];
+  p = X.card('c-rmb', { t: 'Remboursements', v: e(sum(RMB)), dl: X.dl(sum(RMB), 680, false), cc: '3 commandes' });
+  X.chart(p, { kind: 'col', x: W, xl: WL, xt: XT, partial: LAST, ticks: [0, 250, 500],
+    s: [{ n: 'remboursé', c: BL, v: RMB, f: e, zero: true }], click: 'Clic : ces remboursements' });
+
+  // ---- les licences ----
+  var NOU = [3, 4, 3, 3, 3, 4, 4, 4, 3, 3, 3, 4, 0], PRO = LIC.map(function (v, k) { return v - NOU[k]; });
+  var EXP = [2, 1, 2, 2, 1, 2, 2, 1, 2, 2, 2, 2, 1], REV = [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1];
+  var ACT = [], a = 112;
+  NOU.forEach(function (v, k) { a += v - EXP[k] - REV[k]; ACT.push(a); });
+  var ACTc = [98, 99, 101, 101, 102, 103, 104, 105, 106, 106, 107, 108, 109];
+  p = X.card('c-lact', { t: 'Licences actives', v: n(ACT[LAST]), dl: X.dl(ACT[LAST], ACTc[LAST], true), cc: 'contre ' + ACTc[LAST],
+    lg: [['ln', BL, '2026'], ['ln', CMP, 'l\'an dernier']] });
+  X.chart(p, { kind: 'line', x: W, xl: WL.map(function (s) { return 'Fin de la s' + s.slice(1); }), xt: XT, ymin: 80, ticks: [80, 100, 120, 140],
+    s: [{ n: 'actives', c: BL, v: ACT, dot: true }, { n: 'l\'an dernier', cmp: true, v: ACTc }], click: 'Clic : les licences actives ce jour-là' });
+
+  p = X.card('c-lmv', { t: 'Mouvements des licences', v: '+' + (sum(NOU) - sum(EXP) - sum(REV)) + '<small>net</small>', cc: 'entrées − sorties',
+    lg: [['bx', DV.up1, 'nouvelles <b>' + sum(NOU) + '</b>'], ['bx', DV.up2, 'prolongées <b>' + sum(PRO) + '</b>'], ['bx', DV.dn1, 'expirées <b>' + sum(EXP) + '</b>'], ['bx', DV.dn2, 'révoquées <b>' + sum(REV) + '</b>']] });
+  X.chart(p, { kind: 'div', x: W, xl: WL, xt: XT, ticks: [-4, 0, 4, 8], yf: function (v) { return v < 0 ? '−' + (-v) : String(v); },
+    s: [{ n: 'nouvelles', c: DV.up1, v: NOU, zero: true }, { n: 'prolongées', c: DV.up2, v: PRO, zero: true }, { n: 'expirées', c: DV.dn1, v: EXP, neg: true, zero: true }, { n: 'révoquées', c: DV.dn2, v: REV, neg: true, zero: true }],
+    tipFwd: true, click: 'Clic : ces licences' });
+
+  // les echeances : les 90 jours a venir (la periode ne s'y applique pas) ; les 30 premiers jours en avant
+  var EW = [], EWL = [], ECH = [3, 1, 2, 4, 2, 1, 0, 5, 2, 1, 3, 2, 1];
+  for (i = 0; i < 13; i++) { var f0 = X.addDays(new Date(2026, 10, 9), 7 * i); EW.push(X.ddmm(f0)); EWL.push('Semaine du ' + X.ddmm(f0) + ' au ' + X.ddmm(X.addDays(f0, 6))); }
+  var e30 = ECH.slice(0, 4).reduce(function (s, v) { return s + v; }, 0);
+  p = X.card('c-ech', { t: 'Échéances', ts: 'les 90 jours à venir', v: n(sum(ECH)), cc: '11 960 € à renouveler',
+    lg: [['bx', BL, 'dans les 30 jours <b>' + e30 + '</b>'], ['bx', GR, 'ensuite <b>' + (sum(ECH) - e30) + '</b>']] });
+  X.chart(p, { kind: 'col', x: EW, xl: EWL, xt: [[0, '09/11'], [4, '07/12'], [8, '04/01'], [12, '01/02']], nt: 2,
+    s: [{ n: 'licences qui finissent', c: function (k) { return k < 4 ? BL : GR; }, v: ECH, zero: true }], click: 'Clic : ces licences, à renouveler' });
+
+  // ---- les demandes (les memes semaines que la planche 04) ----
+  var DR = [17, 18, 16, 18, 16, 18, 17, 20, 18, 15, 20, 19, 7], DT = [16, 18, 15, 17, 16, 17, 17, 19, 18, 14, 19, 19, 5];
+  var DRl = DR.slice(0, LAST).concat([null]), DTl = DT.slice(0, LAST).concat([null]); // la courbe s'arrete a la derniere semaine entiere
+  p = X.card('c-dem', { t: 'Demandes', v: n(sum(DR)) + '<small>reçues</small>', dl: X.dl(sum(DR), 175, true), cc: (sum(DR) - sum(DT)) + ' en attente',
+    lg: [['ln', BL, 'reçues'], ['ln', OR, 'traitées <b>' + sum(DT) + '</b>']] });
+  X.chart(p, { kind: 'line', x: W, xl: WL, xt: XT, nt: 2, ymax: 25,
+    s: [{ n: 'reçues', c: BL, v: DRl }, { n: 'traitées', c: OR, v: DTl, dot: true }], tipFwd: true, click: 'Clic : ces demandes' });
+
+  var DL = [6.5, 5.2, 4.8, 4.1, 3.9, 4.4, 3.6, 3.2, 3.8, 3.1, 3.4, 2.9, 2.6], DLc = [7.2, 6.8, 6.1, 5.9, 5.5, 5.8, 5.2, 4.9, 5.4, 4.7, 5.0, 4.6, 4.4];
+  p = X.card('c-del', { t: 'Délai de réponse', ts: 'médian', v: X.h(3 + 40 / 60), dl: X.dl(3.67, 5.17, false), cc: 'moyen 5 h 35',
+    lg: [['ln', BL, '2026'], ['ln', CMP, 'l\'an dernier']] });
+  X.chart(p, { kind: 'line', x: W, xl: WL, xt: XT, ticks: [0, 4, 8], yf: function (v) { return v + ' h'; },
+    s: [{ n: 'médian', c: BL, v: DL, dot: true, f: X.h }, { n: 'l\'an dernier', cmp: true, v: DLc, f: X.h }], click: 'Clic : les demandes de la semaine' });
+
+  // ---- les PC ----
+  var ACV = [6, 5, 8, 9, 7, 6, 7, 6, 5, 6, 4, 5, 1], LIB = [4, 5, 3, 4, 4, 4, 4, 3, 3, 3, 2, 3, 1], RET = [1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0];
+  var PCT = [], q = 267;
+  ACV.forEach(function (v, k) { q += v - LIB[k] - RET[k]; PCT.push(q); });
+  var PD = [], PE = [], PR = [], PP = [];
+  PCT.forEach(function (t, k) {
+    var dcv = k === LAST ? 15 : 10 + Math.round(k * 5 / 12), ent = k === LAST ? 51 : Math.round(t * 0.178), pro = k === LAST ? 142 : Math.round(t * 0.497);
+    PD.push(dcv); PE.push(ent); PR.push(pro); PP.push(t - dcv - ent - pro);
+  });
+  p = X.card('c-pc', { t: 'PC actifs', ts: 'par offre, à la fin de chaque semaine', v: n(PCT[LAST]), dl: X.dl(PCT[LAST], 247, true), cc: 'contre 247 l\'an dernier',
+    side: X.side([['bx', OFF.P, 'PERSONAL', '<b>' + PP[LAST] + '</b>'], ['bx', OFF.R, 'PROFESSIONAL', '<b>' + PR[LAST] + '</b>'], ['bx', OFF.E, 'ENTERPRISE', '<b>' + PE[LAST] + '</b>'],
+      ['bx', OFF.D, 'Découverte', '<b>' + PD[LAST] + '</b>'], ['', '', 'Tous', '<b>' + PCT[LAST] + '</b>', 't']]) });
+  X.chart(p, { kind: 'stack', x: W, xl: WL.map(function (s) { return 'Fin de la s' + s.slice(1); }), xt: XT, ticks: [0, 100, 200, 300],
+    s: [{ n: 'PERSONAL', c: OFF.P, v: PP }, { n: 'PROFESSIONAL', c: OFF.R, v: PR }, { n: 'ENTERPRISE', c: OFF.E, v: PE }, { n: 'Découverte', c: OFF.D, v: PD }],
+    tipx: function (k) { return '<b>' + PCT[k] + ' PC</b> en tout'; }, click: 'Clic : ces PC (Activations)' });
+
+  p = X.card('c-pmv', { t: 'Mouvements des PC', v: '+' + (sum(ACV) - sum(LIB) - sum(RET)) + '<small>net</small>', cc: '267 → 286',
+    lg: [['bx', DV.up1, 'activés <b>' + sum(ACV) + '</b>'], ['bx', DV.dn1, 'libérés <b>' + sum(LIB) + '</b>'], ['bx', DV.dn2, 'retirés <b>' + sum(RET) + '</b>']] });
+  X.chart(p, { kind: 'div', x: W, xl: WL, xt: XT, ticks: [-5, 0, 5, 10], yf: function (v) { return v < 0 ? '−' + (-v) : String(v); },
+    s: [{ n: 'activés', c: DV.up1, v: ACV, zero: true }, { n: 'libérés', c: DV.dn1, v: LIB, neg: true, zero: true }, { n: 'retirés', c: DV.dn2, v: RET, neg: true, zero: true }],
+    tipFwd: true, click: 'Clic : ces PC' });
+
+  // le pic des licences flottantes par jour (90 jours) ; le plafond : 20 jetons
+  var rnd = X.rng(4711), FL = [], FD = [], FDL = [], JS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  for (i = 0; i < 90; i++) {
+    var dt = X.addDays(new Date(2026, 7, 13), i), wd = dt.getDay(), we = wd === 0 || wd === 6;
+    var v = we ? 1 + Math.floor(rnd() * 3) : Math.round((i < 19 ? 6 : 10) + i * 0.035 + rnd() * 5);
+    FL.push(Math.min(v, 19)); FD.push(X.ddmm(dt)); FDL.push(JS[wd] + ' ' + X.ddmm(dt));
+  }
+  [62, 70, 76].forEach(function (k) { FL[k] = 20; });
+  p = X.card('c-flo', { t: 'Flottantes', ts: 'le pic du jour', v: '20<small>/ 20 jetons</small>', cc: '<span class="st w">' + X.ico('alert') + '3 jours au plafond</span>' });
+  X.chart(p, { kind: 'line', x: FD, xl: FDL, xt: [[0, '13/08'], [30, '12/09'], [60, '12/10'], [89, '10/11']], ticks: [0, 10, 20],
+    ref: [{ v: 20, l: 'plafond', a: 'start' }], s: [{ n: 'jetons pris en même temps', c: BL, v: FL, area: true, lw: 1.5 }],
+    tipx: function (k) { return FL[k] >= 20 ? '<span class="st w">' + X.ico('alert') + '2 PC refusés ce jour-là</span>' : ''; }, click: 'Clic : les sessions de ce jour' });
+
+  var DS = [2, 2, 3, 4, 3, 3, 4, 3, 3, 4, 3, 3, 1], DC = [0, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0];
+  p = X.card('c-dec', { t: 'Découvertes', ts: 'l\'essai', v: Math.round(sum(DC) * 100 / sum(DS)) + ' %<small>converties</small>', dl: X.dl(21, 17, true, '+4 pts'),
+    lg: [['bx', BL, 'commencées <b>' + sum(DS) + '</b>'], ['bx', OR, 'converties <b>' + sum(DC) + '</b>']] });
+  X.chart(p, { kind: 'group', x: W, xl: WL, xt: XT, partial: LAST, ticks: [0, 2, 4], bw: 7,
+    s: [{ n: 'commencées', c: BL, v: DS, zero: true }, { n: 'converties en licence', c: OR, v: DC, zero: true }], tipFwd: true, click: 'Clic : ces Découvertes' });
+})();
+</script>
+</body></html>

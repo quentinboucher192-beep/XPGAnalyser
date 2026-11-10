@@ -1,0 +1,182 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - statistiques, les mises à jour</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css"><link rel="stylesheet" href="stats.css">
+<style>
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px}
+.kpi .v{font-size:21px}
+.r1{display:grid;grid-template-columns:minmax(0,1fr) 500px;gap:12px;margin-top:12px;height:318px}
+.r2{display:grid;grid-template-columns:282px minmax(0,1fr) 470px;gap:12px;margin-top:12px;height:384px}
+.r1 .gc.x,.r2 .gc.x{padding:12px 14px 10px}
+.why{display:flex;gap:7px;align-items:flex-start;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:6px}
+.why .ico{width:14px;height:14px;color:var(--violet);flex:none;margin-top:1px}
+.why b{color:var(--ink2);font-weight:600}
+.tcard{display:flex;flex-direction:column;overflow:hidden}
+.tcard table{table-layout:fixed}
+.vx{display:flex;flex-direction:column;gap:2px}
+.vx .cap{font-size:11px}
+.lst td .cap{font-size:11px;margin-top:1px}
+.lst td{height:34px}
+.pcn{font:600 12px "JetBrains Mono";letter-spacing:-.02em;color:var(--ink)}
+.ty{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:11.5px}
+.ty .ico{width:13px;height:13px}
+.dly{display:flex;flex-direction:column;gap:17px;margin-top:16px}
+.dly .vr{display:grid;grid-template-columns:52px 1fr;column-gap:10px;align-items:center}
+.dly .vr .vn{font:650 12px "JetBrains Mono";letter-spacing:-.02em;color:var(--ink);white-space:nowrap}
+.dly .vr .vn small{display:block;font:500 10.5px Inter;color:var(--faint);letter-spacing:0;margin-top:1px}
+.dly .bs{display:flex;flex-direction:column;gap:3px}
+.dly .b{display:flex;align-items:center;gap:6px;height:10px}
+.dly .b i{display:block;height:10px;border-radius:0 4px 4px 0;flex:none}
+.dly .b span{font:600 11px Inter;color:var(--ink2);white-space:nowrap;font-feature-settings:"cv11","ss01","tnum"}
+.dly .ax{display:grid;grid-template-columns:52px 1fr;column-gap:10px}
+.dly .ax div{position:relative;height:14px;border-top:1px solid var(--line2)}
+.dly .ax span{position:absolute;top:2px;font:500 10.5px Inter;color:var(--faint);transform:translateX(-50%)}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:stats-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Pilotage<i data-i="right"></i>Statistiques<i data-i="right"></i><b>Mises à jour</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:16px">
+   <div class="sh">
+    <div class="h1">Statistiques</div>
+    <div class="tabs"><span><i data-i="dash" class="sm"></i>Vue générale</span><span><i data-i="cart" class="sm"></i>Ventes</span><span><i data-i="key" class="sm"></i>Licences</span><span><i data-i="laptop" class="sm"></i>PC</span><span class="on"><i data-i="refresh" class="sm"></i>Mises à jour</span><span><i data-i="inbox" class="sm"></i>Demandes</span><span><i data-i="shuser" class="sm"></i>Admins</span><span><i data-i="globe" class="sm"></i>Globe</span></div>
+    <span class="btn sm"><i data-i="download"></i>Exporter…</span>
+   </div>
+   <div class="fbar">
+    <div class="seg"><span>7 j</span><span>30 j</span><span>90 j</span><span>12 mois</span><span>Tout</span><span class="on"><i data-i="calendar"></i>Deux dates…</span></div>
+    <span class="chipd on"><i data-i="calendar"></i>01/07/2026 → 10/11/2026</span>
+    <span class="vs"></span><span class="lab">les PC</span>
+    <div class="seg"><span class="on">tous</span><span>les Studios</span><span>les Admins</span></div>
+    <span class="hint"><i data-i="pointer"></i>Un clic sur un point <b>filtre la liste correspondante</b></span>
+   </div>
+
+   <div class="kpis">
+    <div class="kpi"><div class="k"><i data-i="check"></i>PC à jour</div><div class="v">59 % <small>170 sur 289</small></div><div class="s"><span class="dl good"><i data-i="trend"></i>+6 pts</span> contre la 1.46.0 à J+6</div></div>
+    <div class="kpi"><div class="k"><i data-i="box"></i>La version actuelle</div><div class="v">1.47.0 <small>il y a 6 j</small></div><div class="s">publiée le 04/11 par toi</div></div>
+    <div class="kpi"><div class="k"><i data-i="hourglass"></i>Délai médian avant la mise à jour</div><div class="v">2 j <small>en 1.47.0</small></div><div class="s"><span class="dl good"><i data-i="trenddown"></i>−2 j</span> contre la 1.46.0 (4 j)</div></div>
+    <div class="kpi"><div class="k"><i data-i="clock"></i>PC pas à jour</div><div class="v">119</div><div class="s"><span class="st w"><i data-i="alert"></i>38 ont 2 versions de retard ou plus</span></div></div>
+    <div class="kpi"><div class="k"><i data-i="shuser"></i>Admins à jour</div><div class="v">2 <small>sur 3</small></div><div class="s"><span class="st w"><i data-i="alert"></i>Hugo Essai : Admin 1.45.2</span></div></div>
+   </div>
+
+   <div class="r1">
+    <div id="c-adop"></div>
+    <div id="c-ajour"></div>
+   </div>
+   <div class="r2">
+    <div id="c-dly"></div>
+    <div class="card tcard">
+     <div class="cardh"><span class="h3">Les versions publiées</span><span class="cap">les PC dessus aujourd'hui</span><span class="tv" style="margin-left:auto;color:#b4bdca"><i data-i="list" class="sm"></i></span></div>
+     <table class="t c">
+      <colgroup><col style="width:122px"><col style="width:104px"><col style="width:70px"><col style="width:64px"><col></colgroup>
+      <thead><tr><th>Version</th><th>Publiée le</th><th style="text-align:right">Studios</th><th style="text-align:right">Admins</th><th>Part des PC</th></tr></thead>
+      <tbody id="vt"></tbody>
+     </table>
+     <div class="why" style="margin:auto 14px 12px"><i data-i="info"></i><div>Un PC compte pour la version qu'il a envoyée <b>à sa dernière connexion</b> ; 289 PC vus depuis le 01/07 (286 Studios, 3 Admins).</div></div>
+    </div>
+    <div class="card tcard">
+     <div class="cardh"><span class="h3">PC pas à jour</span><span class="cap">les plus en retard d'abord</span><span class="btn sm" style="margin-left:auto"><i data-i="mail"></i>Écrire aux clients…</span></div>
+     <div class="flt" style="padding:10px 14px 8px"><span class="on">Tous <em>119</em></span><span>2 versions de retard ou plus <em>38</em></span><span>pas vus depuis 30 j <em>9</em></span></div>
+     <table class="t c lst">
+      <colgroup><col style="width:142px"><col><col style="width:84px"><col style="width:92px"></colgroup>
+      <thead><tr><th>PC</th><th>Client</th><th>Version</th><th>Vu</th></tr></thead>
+      <tbody id="nt"></tbody>
+     </table>
+     <div class="cap" style="margin:auto 14px 12px;display:flex;gap:6px;align-items:center"><span>et 113 de plus</span><span style="margin-left:auto" class="lk">Voir les 119 dans Activations ›</span></div>
+    </div>
+   </div>
+  </div>
+ </main>
+</div>
+<script src="stats.js"></script>
+<script>
+(function () {
+  'use strict';
+  var BL = '#2a78d6', OR = '#eb6834';
+  var VC = { '1.44.0': '#86b6ef', '1.45.0': '#5598e7', '1.46.0': '#256abf', '1.47.0': '#104281' };   // ordinal (extra.css)
+
+  // ---- l'adoption de chaque version, alignee sur son jour de publication ----
+  // installee par (cap) % des PC, vite au debut (la notification arrive dans les 2 minutes), jusqu'a la version suivante
+  var VERS = [['1.44.0', 82, 13, 35, '14/07'], ['1.45.0', 88, 10, 42, '18/08'], ['1.46.0', 95, 8.5, 35, '29/09'], ['1.47.0', 96, 7.4, 6, '04/11']];
+  var ND = 43, DX = [], DXL = [];
+  for (var d = 0; d < ND; d++) { DX.push(String(d)); DXL.push(d === 0 ? 'Le jour de la publication' : d + (d > 1 ? ' jours' : ' jour') + ' après la publication'); }
+  var AD = {};
+  var S = VERS.map(function (v) {
+    var vals = [];
+    for (var d2 = 0; d2 < ND; d2++) vals.push(d2 <= v[3] ? Math.round(v[1] * (1 - Math.exp(-(d2 + 1) / v[2]))) : null);
+    AD[v[0]] = vals;
+    var end = vals[v[3]];
+    return { n: v[0], c: VC[v[0]], v: vals, dot: true, lab: v[0] + ' · ' + end + ' %', f: function (q) { return q + ' % · ' + Math.floor(q * 2.86) + ' PC'; },
+      lay: v[0] === '1.46.0' ? -2 : 0 };
+  });
+  S[3].lab = '1.47.0 · 59\u00a0%'; S[3].laa = 'end'; S[3].lax = -9; S[3].lay = -9;
+  var p = X.card('c-adop', { t: 'L\'adoption de chaque version', ts: 'les PC qui l\'ont installée, jour après jour', ico: 'list',
+    lg: VERS.map(function (v) { return ['ln', VC[v[0]], v[0] + ' <span class="faint">publiée le ' + v[4] + '</span>']; }) });
+  p.insertAdjacentHTML('beforebegin', '<div class="why">' + X.ico('info') + '<div><b>Alignées sur leur jour de publication</b> (et pas sur le calendrier) : on compare la vitesse de chaque version, à jour égal. Chaque courbe s\'arrête à la version suivante. Le calendrier : à droite.</div></div>');
+  X.chart(p, { kind: 'line', x: DX, xl: DXL, xt: [[0, 'J0'], [7, 'J+7'], [14, 'J+14'], [21, 'J+21'], [28, 'J+28'], [35, 'J+35'], [42, 'J+42', 'end']], ticks: [0, 25, 50, 75, 100],
+    yf: function (v) { return v + ' %'; }, pr: 104, s: S, tip: 6, tipFwd: false, tipBottom: true, tipDx: 10 });
+
+  // ---- la part des PC a jour, sur le calendrier (les Studios, les Admins : 2 courbes, 1 axe en %) ----
+  var PUB = [['1.44.0', 13, 82, 13], ['1.45.0', 48, 88, 10], ['1.45.2', 62, 90, 6], ['1.46.0', 90, 95, 8.5], ['1.47.0', 126, 96, 7.4]];
+  var CD = [], CDL = [], SU = [], AU = [];
+  var JS = ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.'];
+  for (var i = 0; i <= 132; i++) {
+    var dt = X.addDays(new Date(2026, 6, 1), i);
+    CD.push(X.ddmm(dt)); CDL.push(JS[dt.getDay()] + ' ' + X.ddmm(dt) + '/2026');
+    var cur = null;
+    PUB.forEach(function (pb) { if (i >= pb[1]) cur = pb; });
+    var s;
+    if (!cur) s = 84;
+    else { var k = i - cur[1]; s = Math.round(cur[2] * (1 - Math.exp(-(k + 1) / cur[3]))); }
+    SU.push(i === 132 ? 59 : s);
+    // les Admins (3 PC) : Camille le jour meme, Lea le lendemain, Hugo tard (et plus du tout depuis la 1.45.2)
+    var a = 100;
+    if (cur) {
+      var k2 = i - cur[1], n2 = 1 + (k2 >= 1 ? 1 : 0);
+      var hugo = { '1.44.0': 9, '1.45.0': 5, '1.45.2': 3 }[cur[0]];
+      if (hugo != null && k2 >= hugo) n2++;
+      a = Math.round(n2 * 100 / 3);
+    }
+    AU.push(a);
+  }
+  p = X.card('c-ajour', { t: 'Les PC à jour', ts: 'sur la dernière version, chaque jour', ico: 'list',
+    lg: [['ln', BL, 'Studios <b>59 %</b> <span class="faint">(286 PC)</span>'], ['ln', OR, 'Admins <b>67 %</b> <span class="faint">(3 PC)</span>']] });
+  X.chart(p, { kind: 'line', x: CD, xl: CDL, xt: [[0, '01/07'], [31, '01/08'], [62, '01/09'], [92, '01/10'], [123, '01/11']], ticks: [0, 25, 50, 75, 100],
+    yf: function (v) { return v + ' %'; }, pt: 22,
+    vm: PUB.map(function (pb) { return { i: pb[1], l: pb[0], a: pb[0] === '1.47.0' ? 'end' : 'start' }; }),
+    s: [{ n: 'Studios', c: BL, v: SU, f: function (q) { return q + ' %'; } }, { n: 'Admins', c: OR, v: AU, step: true, lw: 1.75, f: function (q) { return Math.round(q * 3 / 100) + ' sur 3'; } }],
+    tipFwd: true, click: 'Clic : les PC pas à jour ce jour-là' });
+
+  // ---- le delai avant la mise a jour, par version (le median, le moyen) ----
+  var DLY = [['1.44.0', 9, 14], ['1.45.0', 6, 11], ['1.46.0', 4, 8], ['1.47.0', 2, 2.6, 'en cours']];
+  var MX = 18, sc = function (v) { return (v * 100 / MX) + '%'; };
+  var host = X.card('c-dly', { t: 'Délai avant la mise à jour', ico: 'list', lg: [['bx', BL, 'médian'], ['bx', OR, 'moyen']] });
+  host.innerHTML = '<div class="dly">' + DLY.map(function (r) {
+    return '<div class="vr"><span class="vn">' + r[0] + (r[3] ? '<small>' + r[3] + '</small>' : '') + '</span><div class="bs">' +
+      '<div class="b"><i style="width:' + sc(r[1]) + ';background:' + BL + '"></i><span>' + X.n1(r[1]) + ' j</span></div>' +
+      '<div class="b"><i style="width:' + sc(r[2]) + ';background:' + OR + '"></i><span>' + X.n1(r[2]) + ' j</span></div></div></div>';
+  }).join('') + '<div class="ax"><i></i><div>' + [0, 5, 10, 15].map(function (t) { return '<span style="left:' + sc(t) + '">' + t + ' j</span>'; }).join('') + '</div></div></div>' +
+  '<div class="why" style="margin-top:14px">' + X.ico('info') + '<div>Le moyen est tiré par <b>les PC rarement allumés</b> ; la 1.47.0 : sur les PC déjà à jour seulement.</div></div>';
+
+  // ---- le tableau des versions ----
+  var VT = [['1.47.0', 'actuelle', '04/11/2026', 'il y a 6 j', 168, 2, 59], ['1.46.0', '', '29/09/2026', 'il y a 42 j', 81, 0, 28], ['1.45.2', 'correctif', '01/09/2026', '', 19, 1, 7],
+    ['1.45.0', '', '18/08/2026', '', 4, 0, 1], ['1.44.0', '', '14/07/2026', '', 8, 0, 3], ['1.43.2', 'et avant', '', '', 6, 0, 2]];
+  document.getElementById('vt').innerHTML = VT.map(function (r, k) {
+    var cls = k === 0 ? 'ok' : k === 1 ? 'g' : 'w';
+    return '<tr><td><div class="vx"><span><span class="vp ' + cls + '">' + r[0] + '</span>' + (r[1] ? ' <span class="cap">' + r[1] + '</span>' : '') + '</span></div></td>' +
+      '<td>' + (r[2] || '<span class="faint">—</span>') + (r[3] ? '<div class="cap">' + r[3] + '</div>' : '') + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + r[4] + '</td><td style="text-align:right;' + (r[5] ? 'font-weight:600' : 'color:var(--faint)') + '">' + r[5] + '</td>' +
+      '<td><div class="pcb2"><span class="bar"><i style="width:' + r[6] + '%"></i></span><span style="font-weight:600">' + r[6] + ' %</span></div></td></tr>';
+  }).join('');
+
+  // ---- les PC pas a jour ----
+  var NT = [['ATELIER-PC3', 'Atelier Exemple', 'Studio', '1.43.2', 'il y a 41 j', 'w'], ['NORD-LIGNE-07', 'Usine Exemple Nord', 'Studio', '1.44.0', 'hier', 'w'],
+    ['BE-CALCUL-02', 'Bureau d\'études Exemple', 'Studio', '1.44.0', 'il y a 3 h', 'w'], ['ESSAI-PORTABLE', 'Client d\'essai', 'Studio', '1.45.0', 'il y a 12 j', 'w'],
+    ['PORTABLE-HUGO', 'Hugo Essai', 'Admin', '1.45.2', 'il y a 20 min', 'w'], ['ATELIER-PC5', 'Atelier Exemple', 'Studio', '1.46.0', 'auj. 09:12', 'g']];
+  document.getElementById('nt').innerHTML = NT.map(function (r) {
+    return '<tr><td><span class="pcn">' + r[0] + '</span></td><td><div style="overflow:hidden;text-overflow:ellipsis">' + (r[2] === 'Admin' ? '<span class="av3 cH" style="width:18px;height:18px;font-size:9px;border-radius:5px;display:inline-grid;vertical-align:-4px;margin-right:6px">H</span>' : '') + r[1] + '</div></td>' +
+      '<td><span class="vp ' + r[5] + '">' + r[3] + '</span></td><td class="muted">' + r[4] + '</td></tr>';
+  }).join('');
+})();
+</script>
+</body></html>

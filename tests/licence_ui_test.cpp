@@ -1412,6 +1412,322 @@ int main(int argc, char** argv) {
                     mm.Update(fc);
                 }
             }
+            // ---- 1.46.0 : LA BOUTIQUE EN LIGNE (docs/BOUTIQUE.md, par. 7) - le catalogue, << Acheter -- 490,00 EUR TTC >> sur les
+            //      offres en vente seulement, le recapitulatif (la phrase de la carte), la fenetre << Commande n. N >> et ses etats,
+            //      Mes achats (les commandes, le recu), l'accueil (la commande qui attend) ; un service trop ancien, une boutique
+            //      fermee : aucun bouton ; le service qui ne repond pas : << Commande non passee >>, rien de debite ----
+            std::printf("-- 1.46.0 : la boutique en ligne (Acheter, le recapitulatif, Commande n. N, Mes achats)\n");
+            {
+                namespace shop = L::shop;
+                const std::string eur = "\xC2\xA0\xE2\x82\xAC";
+                // -- les textes, sans fenetre
+                check(shop::amountText(49000) == "490,00" + eur && shop::amountText(149000) == "1\xC2\xA0" "490,00" + eur && shop::amountText(5) == "0,05" + eur &&
+                          shop::amountText(1234567, "usd") == "12\xC2\xA0" "345,67 USD" && shop::amountTtc(2900) == "29,00" + eur + " TTC",
+                      "les montants en fran\xC3\xA7" "ais : " + shop::amountText(149000) + ", " + shop::amountText(5) + ", " + shop::amountText(1234567, "usd"));
+                shop::Article pa;
+                pa.amount = 49000;
+                check(shop::buyLabel(pa) == "Acheter \xE2\x80\x94 490,00" + eur + " TTC", "le bouton : << " + shop::buyLabel(pa) + " >>");
+                check(shop::serviceKnowsShop("1.46.0") && shop::serviceKnowsShop("1.47.2") && !shop::serviceKnowsShop("1.44.0") && !shop::serviceKnowsShop("") &&
+                          !shop::serviceKnowsShop("abc"),
+                      "la boutique : un service 1.46.0 ou plus");
+                const std::string catJson =
+                    "{\"active\":true,\"devise\":\"eur\",\"mode\":\"test\",\"articles\":["
+                    "{\"id\":\"ed:PROFESSIONAL\",\"genre\":\"edition\",\"edition\":\"PROFESSIONAL\",\"montant\":49000,\"libelle\":\"Licence PROFESSIONAL - 1 an\"},"
+                    "{\"id\":\"ed:ENTERPRISE\",\"genre\":\"edition\",\"edition\":\"ENTERPRISE\",\"montant\":149000,\"libelle\":\"Licence ENTERPRISE - 1 an\"},"
+                    "{\"id\":\"opt:ia_avancee:30\",\"genre\":\"option\",\"option\":\"ia_avancee\",\"jours\":30,\"montant\":2900,\"libelle\":\"Option IA - 1 mois\"},"
+                    "{\"id\":\"ed:FAUX\",\"genre\":\"edition\",\"edition\":\"AUTRE\",\"montant\":1000,\"libelle\":\"incoherent\"},"
+                    "{\"id\":\"opt:x:5\",\"genre\":\"option\",\"option\":\"x\",\"montant\":1000,\"libelle\":\"sans jours\"},"
+                    "{\"id\":\"ed:BAS\",\"genre\":\"edition\",\"edition\":\"BAS\",\"montant\":10,\"libelle\":\"trop bas\"}]}";
+                shop::Catalogue cat;
+                check(shop::parseCatalogue(catJson, cat) && cat.selling() && cat.test() && cat.articles.size() == 3 && cat.edition("PROFESSIONAL") &&
+                          cat.edition("PROFESSIONAL")->amount == 49000 && !cat.edition("PERSONAL") && cat.option("ia_avancee", 30) && !cat.option("ia_avancee", 365) &&
+                          cat.options("ia_avancee").size() == 1,
+                      "le catalogue : les offres et la dur\xC3\xA9" "e d'option en vente (3 articles lisibles sur 6 : les autres ignor\xC3\xA9s)");
+                shop::Catalogue shut;
+                check(shop::parseCatalogue("{\"active\":false,\"devise\":\"eur\",\"mode\":null,\"articles\":[]}", shut) && shut.known && !shut.open && !shut.selling() &&
+                          !shut.edition("PROFESSIONAL"),
+                      "ferm\xC3\xA9" "e : aucun article");
+                shop::Catalogue junk;
+                check(!shop::parseCatalogue("pas du json", junk), "illisible : refus\xC3\xA9");
+                shop::Catalogue back;
+                check(shop::readCatalogue(shop::writeCatalogue(cat), back) && back.articles.size() == 3 && back.mode == "test" && back.find("opt:ia_avancee:30") &&
+                          back.find("opt:ia_avancee:30")->days == 30,
+                      "le cache (boutique.json) se relit");
+                const std::string ordJson =
+                    "{\"commandes\":["
+                    "{\"numero\":12,\"article\":\"ed:PROFESSIONAL\",\"libelle\":\"Licence PROFESSIONAL - 1 an\",\"montant\":49000,\"devise\":\"eur\",\"etat\":\"a_payer\","
+                    "\"mode\":\"test\",\"cree\":1800000000,\"maj\":1800000000,\"url\":\"https://checkout.stripe.invalid/pay/cs_test_essai12\",\"expire\":1800001860},"
+                    "{\"numero\":11,\"article\":\"opt:ia_avancee:30\",\"libelle\":\"Option IA - 1 mois\",\"montant\":2900,\"devise\":\"eur\",\"etat\":\"livree\","
+                    "\"mode\":\"test\",\"cree\":1799990000,\"maj\":1799999000,\"licence\":\"XPG-2026-00042\",\"recu_url\":\"https://invoice.stripe.invalid/i/in_essai11\"},"
+                    "{\"numero\":10,\"article\":\"ed:PROFESSIONAL\",\"libelle\":\"Licence PROFESSIONAL - 1 an\",\"montant\":49000,\"devise\":\"eur\",\"etat\":\"expiree\","
+                    "\"mode\":\"test\",\"cree\":1799900000,\"maj\":1799902000,\"url\":\"javascript:alert(1)\"}]}";
+                std::vector<shop::Order> list;
+                check(shop::parseOrders(ordJson, list) && list.size() == 3 && list[0].number == 12 && list[0].payUrl == "https://checkout.stripe.invalid/pay/cs_test_essai12" &&
+                          list[1].receiptUrl == "https://invoice.stripe.invalid/i/in_essai11" && list[1].licence == "XPG-2026-00042" && list[2].payUrl.empty(),
+                      "les commandes de ce PC lues (une adresse qui n'est pas https : ignor\xC3\xA9" "e)");
+                std::vector<shop::Order> mine = {list[1]};
+                mine[0].nonce = "nonce-11";
+                mine[0].option = "ia_avancee";
+                mine[0].optionText = "Assistant IA avanc\xC3\xA9, 1 mois";
+                mine[0].state = "payee";
+                const bool merged = shop::mergeOrders(mine, list);
+                check(merged && mine.size() == 3 && mine[0].number == 12 && shop::findOrder(mine, 11)->nonce == "nonce-11" && shop::findOrder(mine, 11)->state == "livree" &&
+                          !shop::mergeOrders(mine, list),
+                      "fondues dans le relev\xC3\xA9 : ce que seul ce PC sait reste (le nonce, l'option), l'\xC3\xA9tat suit le service ; rien de neuf : rien ne change");
+                check(shop::waitingOrder(mine) && shop::waitingOrder(mine)->number == 12 && L::orderHint(mine) == "commande n\xC2\xB0 12 : paiement en attente",
+                      "l'accueil : la commande qui attend (" + L::orderHint(mine) + ")");
+                // -- les etats de la fenetre << Commande n. N >>
+                const lic::Seconds t1 = 1800000000;
+                const auto ov = [&](const char* state) {
+                    shop::Order x = list[0];
+                    x.state = state;
+                    if (std::string(state) != "a_payer") x.payUrl.clear();
+                    return L::orderView(x, t1);
+                };
+                const auto toPay = ov("a_payer");
+                check(toPay.title == "Commande n\xC2\xB0 12" && toPay.state == "En attente du paiement" && has(toPay.text, "Paiement dans ton navigateur") &&
+                          has(toPay.text, "31 min") && toPay.pay && toPay.cancel && !toPay.receipt && !toPay.licence && toPay.tone == 2,
+                      "\xC3\xA0 payer : << Paiement dans ton navigateur... >>, Rouvrir la page de paiement, Annuler la commande");
+                const auto paid = ov("payee");
+                check(has(paid.text, "Paiement re\xC3\xA7u : ta licence arrive d\xC3\xA8s que l'\xC3\xA9" "diteur la d\xC3\xA9livre") && !paid.pay && !paid.cancel && paid.state == "Pay\xC3\xA9" "e",
+                      "pay\xC3\xA9" "e : << Paiement re\xC3\xA7u : ta licence arrive d\xC3\xA8s que l'\xC3\xA9" "diteur la d\xC3\xA9livre >>");
+                const auto dv = L::orderView(*shop::findOrder(mine, 11), t1);
+                check(has(dv.text, "Commande livr\xC3\xA9" "e") && has(dv.text, "Assistant IA") && dv.receipt && dv.licence && dv.tone == 1 && !dv.pay,
+                      "livr\xC3\xA9" "e : l'option sur ce PC, Ouvrir le re\xC3\xA7u, Voir ma licence");
+                bool closedOk = true;
+                for (const char* stt : {"expiree", "annulee", "echec_paiement", "remboursee", "a_revoir"}) {
+                    const auto v = ov(stt);
+                    closedOk = closedOk && !v.pay && !v.cancel && !v.text.empty() && v.state != stt;
+                }
+                check(closedOk && has(ov("expiree").text, "rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9") && has(ov("annulee").text, "annul\xC3\xA9" "e") &&
+                          has(ov("echec_paiement").text, "refus\xC3\xA9") && has(ov("remboursee").text, "rembours\xC3\xA9" "e") && has(ov("a_revoir").text, "revoir"),
+                      "expir\xC3\xA9" "e, annul\xC3\xA9" "e, refus\xC3\xA9" "e, rembours\xC3\xA9" "e, \xC3\xA0 revoir : ce qui s'est pass\xC3\xA9, sans bouton de paiement");
+                // -- le recapitulatif (sans fenetre) : PROFESSIONAL (5 PC, 1 an, 18/21), la phrase de la carte, le profil
+                const auto stNow = lic::getLicenseState();
+                L::Profile pf;
+                pf.company = "Client d'essai";
+                pf.name = "Camille Essai";
+                pf.email = "camille.essai@exemple.fr";
+                const std::string card = "Tu paies sur la page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe : ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG ; elle est redemand\xC3\xA9" "e \xC3\xA0 chaque achat.";
+                const auto pv = L::purchaseView(cat, "ed:PROFESSIONAL", pf, stNow);
+                check(pv.ok && pv.title == "Acheter PROFESSIONAL" && pv.amount == "490,00" + eur + " TTC" && !pv.gives.empty() && has(pv.gives[0], "5 PC") &&
+                          has(pv.gives[0], "1 an") && has(pv.gives[0], "18/21") && pv.company == "Client d'essai" && pv.name == "Camille Essai" && pv.email == pf.email &&
+                          pv.missing.empty() && pv.card == card && pv.testMode == "Paiement d'essai : aucune carte r\xC3\xA9" "elle n'est d\xC3\xA9" "bit\xC3\xA9" "e" &&
+                          pv.confirm == "Payer 490,00" + eur + " TTC sur Stripe\xE2\x80\xA6",
+                      "le r\xC3\xA9" "capitulatif : l'offre, ce qu'elle donne (" + (pv.gives.empty() ? std::string() : pv.gives[0]) + "), le montant TTC, le profil, la carte, l'essai");
+                L::Profile noMail = pf;
+                noMail.email.clear();
+                L::Profile noCompany = pf;
+                noCompany.company.clear();
+                noCompany.name.clear();
+                check(has(L::purchaseView(cat, "ed:PROFESSIONAL", noMail, stNow).missing, "courriel") &&
+                          has(L::purchaseView(cat, "ed:PROFESSIONAL", noCompany, stNow).missing, "soci\xC3\xA9t\xC3\xA9") && !L::purchaseView(cat, "ed:PERSONAL", pf, stNow).ok,
+                      "le courriel ou la soci\xC3\xA9t\xC3\xA9 manque : dit ; pas en vente : rien \xC3\xA0 payer");
+                const auto po = L::purchaseView(cat, "opt:ia_avancee:30", pf, stNow);
+                check(po.ok && po.title == "Acheter une option" && po.what == "Assistant IA avanc\xC3\xA9" && has(po.optionText, "1 mois") && po.licenseId == stNow.licenseId &&
+                          !po.gives.empty() && has(po.gives.back(), "1 mois") && po.amount == "29,00" + eur + " TTC",
+                      "une option : son nom, sa dur\xC3\xA9" "e, la licence de ce PC (" + po.optionText + ")");
+
+                // -- dans la fenetre Licence : le catalogue d'un service 1.46 (boutique.json), le profil
+                const L::Profile oldProfile = L::loadProfile();
+                std::string pw;
+                check(L::saveProfile(pf, &pw), "le profil d'essai (" + pw + ")");
+                licensing::service::Address svcA;
+                svcA.url = "http://127.0.0.1:1";   // un service suppose : il ne repond pas (hors ligne)
+                ls::setAddressForTests(svcA);
+                cat.serviceVersion = "1.46.0";
+                cat.receivedAt = lic::systemNow();
+                shop::setCatalogue(cat);
+                app::showLicenceWindow(mm, L::kTabRequest);
+                frame();
+                frame();
+                auto* buyPro = button("licence.demande.acheter.PROFESSIONAL");
+                auto* buyEnt = button("licence.demande.acheter.ENTERPRISE");
+                check(buyPro && buyEnt && buyPro->visible() && buyEnt->visible() && buyPro->bounds().w > 100.f && !button("licence.demande.acheter.PERSONAL") &&
+                          !button("licence.demande.acheter.EVALUATION") && buyPro->text() == "Acheter \xE2\x80\x94 490,00" + eur + " TTC" &&
+                          buyEnt->text() == "Acheter \xE2\x80\x94 1\xC2\xA0" "490,00" + eur + " TTC" && button("licence.demande.demander.PROFESSIONAL") &&
+                          button("licence.demande.envoyer"),
+                      "les cartes : << Acheter -- 490,00 EUR TTC >> sur les offres en vente seulement ; << ou la demander sans paiement >> et Envoyer restent");
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    bool cut = false;
+                    for (const auto& t : ur.texts) cut = cut || ((has(t, "Paiement d'essai") || has(t, "Ach\xC3\xA8te ta licence")) && has(t, "\xE2\x80\xA6"));
+                    check(has(all, "ESSAI \xC2\xB7 Paiement d'essai : aucune carte r\xC3\xA9" "elle n'est d\xC3\xA9" "bit\xC3\xA9" "e") &&
+                              has(all, "Ach\xC3\xA8te ta licence en ligne (par carte, sur la page de Stripe : elle arrive seule), ou demande-la") && !cut,
+                          "le paiement d'essai se voit (le mode test du catalogue), entier ; la phrase de la boutique, enti\xC3\xA8re");
+                }
+                if (auto* ask = button("licence.demande.demander.PROFESSIONAL")) ask->clicked->emit();
+                frame();
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    check(ur.saw("Ce que contient PROFESSIONAL"), "<< ou la demander sans paiement >> : l'offre choisie pour la demande (sans paiement)");
+                }
+                // un service trop ancien, une boutique fermee : plus de bouton, sans un mot
+                shop::Catalogue oldSvc;
+                oldSvc.serviceVersion = "1.44.0";
+                shop::setCatalogue(oldSvc);
+                frame();
+                const bool goneOld = !button("licence.demande.acheter.PROFESSIONAL") && button("licence.demande.envoyer");
+                shut.serviceVersion = "1.46.0";
+                shop::setCatalogue(shut);
+                frame();
+                const bool goneShut = !button("licence.demande.acheter.PROFESSIONAL");
+                check(goneOld && goneShut, "un service d'avant la 1.46.0, une boutique ferm\xC3\xA9" "e : aucun bouton << Acheter >>, la demande sans paiement reste");
+                shop::setCatalogue(cat);
+                frame();
+                // -- Acheter : le recapitulatif
+                if (auto* b = button("licence.demande.acheter.PROFESSIONAL")) b->clicked->emit();
+                frame();
+                frame();
+                check(mm.depth() == 2 && mm.top() && mm.top()->id() == "dialog.achat" && L::purchaseWindowOpen(), "Acheter : le r\xC3\xA9" "capitulatif s'ouvre");
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    auto* payB = button("dialog.achat.payer");
+                    check(ur.saw("Acheter PROFESSIONAL") && ur.saw("490,00" + eur + " TTC") && has(all, "5 PC") && ur.saw("Client d'essai") && ur.saw("Camille Essai") &&
+                              ur.saw(pf.email) && has(all, "ta carte n'est ni vue ni gard\xC3\xA9" "e par XPG") && has(all, "redemand\xC3\xA9" "e \xC3\xA0 chaque achat") &&
+                              ur.saw("Paiement d'essai") && button("dialog.achat.profil") && payB && payB->enabled() && has(payB->text(), "Payer 490,00"),
+                          "le r\xC3\xA9" "capitulatif dessin\xC3\xA9 : l'offre, le montant TTC, la soci\xC3\xA9t\xC3\xA9, le nom, le courriel, Modifier mon profil..., la phrase de la carte");
+                }
+                // -- Payer : la commande part ; le service ne repond pas : << Commande non passee >>, rien de debite
+                if (auto* b = button("dialog.achat.payer")) b->clicked->emit();
+                frame();
+                frame();
+                check(!L::purchaseWindowOpen() && L::orderWindowOpen() && mm.top() && mm.top()->id() == "dialog.commande",
+                      "Payer : le r\xC3\xA9" "capitulatif laisse la place \xC3\xA0 la fen\xC3\xAAtre de la commande");
+                for (int i = 0; i < 600 && ls::busy(); ++i) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    frame();
+                }
+                frame();
+                frame();
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    check(ur.saw("Commande non pass\xC3\xA9" "e") && has(all, "rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9") && L::orderWindowNumber() == 0,
+                          "le service ne r\xC3\xA9pond pas : << Commande non pass\xC3\xA9" "e >>, rien n'a \xC3\xA9t\xC3\xA9 d\xC3\xA9" "bit\xC3\xA9");
+                }
+                if (auto* b = button("dialog.commande.fermer")) b->clicked->emit();
+                frame();
+                // -- la fenetre << Commande n. N >> : ses etats (le releve de ce PC ; le fil du service le relit)
+                ls::Record keepRec;
+                (void)ls::loadRecord(keepRec, nullptr);
+                ls::Record rec = keepRec;
+                rec.orders = mine;
+                const lic::Seconds tn = lic::systemNow();
+                shop::Order& o12 = *shop::findOrder(rec.orders, 12);
+                o12.created = o12.updated = tn - 120;
+                o12.expires = tn + 25 * 60;
+                const auto save = [&] {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(30));   // un releve reecrit : une autre date
+                    std::string w;
+                    check(ls::saveRecord(rec, &w), "le relev\xC3\xA9 \xC3\xA9" "crit (" + w + ")");
+                    frame();
+                    frame();
+                };
+                save();
+                L::showOrder(mm, 12);
+                frame();
+                frame();
+                const auto shownBtn = [&](const char* id) {
+                    auto* b = button(id);
+                    return b && b->visible();
+                };
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    check(mm.top() && mm.top()->id() == "dialog.commande" && L::orderWindowNumber() == 12 && ur.saw("Commande n\xC2\xB0 12") && ur.saw("En attente du paiement") &&
+                              has(all, "Paiement dans ton navigateur") && shownBtn("dialog.commande.payer") && shownBtn("dialog.commande.annuler") &&
+                              !shownBtn("dialog.commande.recu") && !shownBtn("dialog.commande.licence") && ur.saw("ESSAI") && ur.saw("490,00" + eur + " TTC"),
+                          "\xC3\xA0 payer : son \xC3\xA9tat, Rouvrir la page de paiement, Annuler la commande (pas de re\xC3\xA7u)");
+                }
+                const fs::path journal = base / "navigateur-essai.txt";
+                fs::remove(journal, ec);
+                setEnvVar("XPG_NAVIGATEUR_ESSAI_JOURNAL", U(journal));
+                if (auto* b = button("dialog.commande.payer")) b->clicked->emit();
+                check(has(readFile(journal), "https://checkout.stripe.invalid/pay/cs_test_essai12"),
+                      "Rouvrir la page de paiement : l'adresse de Stripe au navigateur (ici, le journal des essais XPG_NAVIGATEUR_ESSAI_JOURNAL)");
+                // payee : le recu, plus de paiement
+                o12.state = "payee";
+                o12.payUrl.clear();
+                o12.receiptUrl = "https://invoice.stripe.invalid/i/in_essai12";
+                o12.updated = tn;
+                save();
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    check(ur.saw("Pay\xC3\xA9" "e") && has(all, "Paiement re\xC3\xA7u : ta licence arrive d\xC3\xA8s que l'\xC3\xA9" "diteur la d\xC3\xA9livre") &&
+                              !shownBtn("dialog.commande.payer") && !shownBtn("dialog.commande.annuler") && shownBtn("dialog.commande.recu"),
+                          "pay\xC3\xA9" "e (le fil du service relit le relev\xC3\xA9) : << Paiement re\xC3\xA7u... >>, Ouvrir le re\xC3\xA7u");
+                }
+                if (auto* b = button("dialog.commande.recu")) b->clicked->emit();
+                check(has(readFile(journal), "https://invoice.stripe.invalid/i/in_essai12"), "Ouvrir le re\xC3\xA7u : la facture de Stripe au navigateur");
+                // livree : la licence
+                o12.state = "livree";
+                o12.licence = "XPG-2026-00077";
+                o12.applied = true;
+                save();
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    const std::string all = ur.joined();
+                    check(ur.saw("Livr\xC3\xA9" "e") && has(all, "Commande livr\xC3\xA9" "e : ta licence XPG-2026-00077 est activ\xC3\xA9" "e sur ce PC") &&
+                              shownBtn("dialog.commande.licence") && shownBtn("dialog.commande.recu"),
+                          "livr\xC3\xA9" "e : la licence, Voir ma licence");
+                }
+                if (auto* b = button("dialog.commande.fermer")) b->clicked->emit();
+                frame();
+                check(!L::orderWindowOpen() && mm.depth() == 1, "Fermer : la fen\xC3\xAAtre de la commande s'en va");
+                // -- Mes achats : les commandes de ce PC (n., date, article, montant TTC, etat, recu)
+                app::showLicenceWindow(mm, L::kTabPurchases);
+                frame();
+                frame();
+                auto* ot = dynamic_cast<ui::TableView*>(licRoot->findById("licence.achats.commandes"));
+                const auto cell = [&](std::size_t r, std::size_t c) { return ot && ot->model() && r < ot->model()->rowCount() ? ot->model()->cellText(r, c) : std::string(); };
+                check(ot && ot->visible() && ot->model() && ot->model()->rowCount() == 3 && cell(0, 0) == "12" && cell(0, 2) == "Licence PROFESSIONAL - 1 an" &&
+                          cell(0, 3) == "490,00" + eur + " TTC (essai)" && cell(0, 4) == "livr\xC3\xA9" "e" && cell(0, 5) == "Ouvrir le re\xC3\xA7u" && cell(1, 0) == "11" &&
+                          cell(2, 4) == "expir\xC3\xA9" "e" && cell(2, 5) == "\xE2\x80\x94" && !cell(0, 1).empty(),
+                      "Mes achats : les commandes de ce PC (n\xC2\xB0, date, article, montant TTC, \xC3\xA9tat, re\xC3\xA7u)");
+                {
+                    UiRecorder ur;
+                    mm.Render(ur, fc);
+                    check(ur.saw("Mes commandes en ligne (3)"), "Mes achats : << Mes commandes en ligne (3) >>");
+                }
+                if (ot) ot->selectModelRows({1}, true);
+                if (auto* b = button("licence.achats.recu")) b->clicked->emit();
+                check(has(readFile(journal), "https://invoice.stripe.invalid/i/in_essai11"), "Mes achats, Ouvrir le re\xC3\xA7u : celui de la commande choisie");
+                if (auto* b = button("licence.achats.commande")) b->clicked->emit();
+                frame();
+                check(L::orderWindowOpen() && L::orderWindowNumber() == 11, "Mes achats, Voir la commande : sa fen\xC3\xAAtre");
+                if (auto* b = button("dialog.commande.fermer")) b->clicked->emit();
+                frame();
+                // -- l'accueil : la commande qui attend son paiement
+                o12.state = "a_payer";
+                o12.payUrl = "https://checkout.stripe.invalid/pay/cs_test_essai12";
+                save();
+                app::showLicenceWindow(mm, L::kTabHome);
+                frame();
+                frame();
+                if (auto* home2 = dynamic_cast<L::LicenceHome*>(licRoot->findById("licence.accueil")))
+                    check(home2->hint(L::kTabPurchases) == "commande n\xC2\xB0 12 : paiement en attente", "l'accueil : << commande n\xC2\xB0 12 : paiement en attente >> sur Mes achats");
+                // rendre ce qui etait la (le releve, le profil, le catalogue, l'adresse)
+                setEnvVar("XPG_NAVIGATEUR_ESSAI_JOURNAL", "");
+                (void)ls::saveRecord(keepRec, nullptr);
+                (void)L::saveProfile(oldProfile, nullptr);
+                fs::remove(fs::path(shop::cachePath()), ec);
+                shop::resetCatalogueForTests();
+                ls::setAddressForTests(licensing::service::Address{});
+                app::showLicenceWindow(mm, L::kTabRequest);
+                frame();
+                frame();
+            }
             // la croix de la fenetre Licence : un clic, et elle ne revient pas
             const auto lf = ui::dialogframe::frameOf(*licRoot);
             click({lf.right() - 24.f, lf.y + 21.f});

@@ -1,0 +1,257 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Le clic droit, la règle</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+body{background:radial-gradient(1100px 700px at 70% 40%,#f3f0ff 0%,var(--bg) 62%)}
+.rule{position:absolute;left:28px;top:24px;width:350px}
+.rule .ov{font:700 11.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-700)}
+.rule h1{font:750 25px/1.18 Inter;letter-spacing:-.02em;margin:6px 0 6px}
+.rule .lead{font-size:12.5px;color:var(--ink2);line-height:1.45}
+.stx{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.st{display:grid;grid-template-columns:24px 1fr;column-gap:9px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:5px 10px;box-shadow:var(--sh1);align-items:center}
+.st .n{width:22px;height:22px;border-radius:7px;background:var(--violet-50);color:var(--violet-700);display:grid;place-items:center;font:750 12px Inter}
+.st b{font:650 12.5px Inter;color:var(--ink)}
+.st .d{font-size:11.5px;color:var(--muted);line-height:1.35;margin-top:1px}
+.st.red .n{background:var(--red-50);color:#b91c1c}
+.st.red b{color:#b91c1c}
+.box{background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 11px;box-shadow:var(--sh1);margin-top:8px}
+.box .bt{font:650 12.5px Inter;display:flex;gap:7px;align-items:center}
+.box .bt .ico{width:14px;height:14px;color:var(--violet)}
+.cmi{position:relative;width:auto;box-shadow:none;border-color:var(--line);margin-top:6px}
+.cell{position:absolute;width:384px;height:472px}
+.cell .ct{display:flex;align-items:center;gap:7px;font:650 13px Inter;margin-bottom:7px}
+.cell .ct .ico{width:15px;height:15px;color:var(--violet)}
+.cell .ct .cap{font-weight:500;margin-left:auto}
+.ml{background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:var(--sh1);overflow:hidden}
+.ml table{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
+.ml th{font:650 9.5px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);text-align:left;padding:7px 9px;background:var(--surface2);border-bottom:1px solid var(--line);white-space:nowrap}
+.ml td{padding:0 9px;height:29px;border-bottom:1px solid #f0f3f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ml tr.rc td{background:var(--violet-50)}
+.ml tr.rc td:first-child{box-shadow:inset 3px 0 0 var(--violet)}
+.ml tr.ms td{background:#eef4ff}
+.ml .av3{width:18px;height:18px;font-size:9px;border-radius:5px;display:inline-grid;vertical-align:-4px;margin-right:5px}
+.cm{width:214px}
+.cm.sub{width:196px}
+.cm .o{height:24px;font-size:12px}
+.cm .o.dis{min-height:24px}
+.cur{position:absolute;z-index:46;width:18px;height:18px}
+.stp{width:16px;height:16px;font:800 9.5px/16px Inter}
+</style></head><body><script src="icons.js"></script>
+
+<div class="rule">
+ <div class="ov">Proposition · 1.47.0</div>
+ <h1>Le clic droit : le même ordre dans toutes les listes</h1>
+ <div class="lead">Sur n'importe quelle ligne, les mêmes choses à la même place. Ce qui ne s'applique pas n'y est pas ; ce qui t'est interdit y est, grisé, avec la raison.</div>
+ <div class="stx">
+  <div class="st"><span class="n">1</span><div><b>Ouvrir · Déplier</b><div class="d">la 1<sup>re</sup> entrée = le double-clic (Entrée) ; Déplier = ▸ (→)</div></div></div>
+  <div class="st"><span class="n">2</span><div><b>Les actions de l'élément</b><div class="d">les plus fréquentes d'abord ; « … » quand une fenêtre suit</div></div></div>
+  <div class="st"><span class="n">3</span><div><b>Aller à ›</b><div class="d">ce qui est lié : admin, licence, client, PC, commande</div></div></div>
+  <div class="st"><span class="n">4</span><div><b>Filtrer sur ›</b><div class="d">cet admin, ce client, ce type, cette criticité, ce jour</div></div></div>
+  <div class="st"><span class="n">5</span><div><b>Copier ›</b><div class="d">l'identifiant, l'empreinte, la ligne</div></div></div>
+  <div class="st"><span class="n">6</span><div><b>Exporter…</b><div class="d">un CSV de la sélection (« Exporter 12 lignes »)</div></div></div>
+  <div class="st red"><span class="n">7</span><div><b>À part, en rouge, avec « … »</b><div class="d">Retirer, Révoquer, Supprimer, Rembourser : en bas, confirmés</div></div></div>
+ </div>
+ <div class="box">
+  <div class="bt"><i data-i="lock"></i>Un droit qui manque : grisé, avec la raison</div>
+  <div class="cm cmi" style="width:100%"><div class="o dis"><i data-i="refresh"></i>Prolonger…<span class="why">Léa Essai n'a plus ce droit (retiré le 02/11) · demande-le à Camille Essai</span></div></div>
+ </div>
+ <div class="box">
+  <div class="bt"><i data-i="list"></i>Plusieurs lignes choisies : ce qui vaut pour toutes</div>
+  <div class="row" style="gap:10px;align-items:flex-start">
+   <div class="cm cmi" style="width:206px;flex:none"><div class="hd">3 licences choisies</div><div class="o"><i data-i="expand"></i>Déplier les 3</div><div class="sep"></div><div class="o"><i data-i="refresh"></i>Prolonger les 3…</div><div class="o"><i data-i="puzzle"></i>Ajouter une option aux 3…</div><div class="sep"></div><div class="o"><i data-i="copy"></i>Copier les 3 identifiants</div><div class="o"><i data-i="download"></i>Exporter 3 lignes (CSV)</div><div class="sep"></div><div class="o red"><i data-i="ban"></i>Révoquer 3 licences…</div></div>
+   <div class="cap" style="line-height:1.4;padding-top:4px">Ni « Ouvrir », ni « Aller à », ni « Filtrer sur » : ils ne visent qu'une ligne.<br><br>Les nombres sont dans les mots : on sait ce qui va partir.</div>
+  </div>
+ </div>
+ <div class="row gap8 cap" style="margin-top:8px"><i data-i="cmd" class="sm"></i>Au clavier : Maj+F10 ou la touche Menu · ↑ ↓ · → ouvre un sous-menu · Échap</div>
+</div>
+
+<!-- 1 · Administrateurs -->
+<div class="cell" style="left:404px;top:24px">
+ <div class="ct"><i data-i="shuser"></i>Administrateurs<span class="cap">clic droit sur Léa Essai</span></div>
+ <div class="ml"><table><colgroup><col style="width:130px"><col style="width:58px"><col><col style="width:60px"></colgroup>
+  <tr><th>Admin</th><th>Actions</th><th>Dernière action</th><th>État</th></tr>
+  <tr class="rc"><td><span class="av3 cL">L</span><b>Léa Essai</b></td><td>117</td><td>il y a 12 min</td><td class="ok2">Active</td></tr>
+  <tr><td><span class="av3 cC">C</span>Camille Essai</td><td>80</td><td>il y a 2 min</td><td class="ok2">Active</td></tr>
+  <tr><td><span class="av3 cH">H</span>Hugo Essai</td><td>48</td><td>hier 18:20</td><td class="ok2">Actif</td></tr>
+  <tr><td style="border-bottom:0"><span class="av3 cN gone">N</span>Nina Essai</td><td style="border-bottom:0">18</td><td style="border-bottom:0">28/10</td><td class="bad2" style="border-bottom:0">Retirée</td></tr>
+ </table></div>
+ <div class="cm" style="left:20px;top:78px">
+  <div class="o"><i data-i="user"></i><b>Ouvrir sa fiche</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="down"></i>Déplier<span class="kb">→</span></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="lock"></i>Ses droits…</div>
+  <div class="o"><i data-i="mail"></i>Lui écrire…</div>
+  <div class="o dis"><i data-i="download"></i>Lui envoyer la mise à jour<span class="why">son Admin est à jour (1.47.0)</span></div>
+  <div class="sep"></div>
+  <div class="o hov"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+  <div class="sep"></div>
+  <div class="o red"><i data-i="userx"></i>Retirer cet admin…</div>
+ </div>
+ <div class="cm sub" style="left:230px;top:242px;width:166px">
+  <div class="o"><i data-i="laptop"></i>Son PC</div>
+  <div class="o"><i data-i="key"></i>Ses licences<span class="kb">41</span></div>
+  <div class="o"><i data-i="users"></i>Ses clients<span class="kb">27</span></div>
+  <div class="o"><i data-i="receipt"></i>Ses commandes<span class="kb">22</span></div>
+  <div class="o"><i data-i="scroll"></i>Son journal<span class="kb">117</span></div>
+ </div>
+ <span class="stp" style="left:-20px;top:87px">1</span><span class="stp" style="left:-20px;top:144px">2</span><span class="stp" style="left:-20px;top:251px">3</span><span class="stp" style="left:-20px;top:275px">4</span><span class="stp" style="left:-20px;top:308px">5</span><span class="stp" style="left:-20px;top:332px">6</span><span class="stp" style="left:-20px;top:365px">7</span>
+</div>
+
+<!-- 2 · Journal des admins -->
+<div class="cell" style="left:802px;top:24px">
+ <div class="ct"><i data-i="scroll"></i>Journal des admins<span class="cap">clic droit sur une ligne</span></div>
+ <div class="ml"><table><colgroup><col style="width:80px"><col style="width:80px"><col></colgroup>
+  <tr><th>Quand</th><th>Admin</th><th>Action</th></tr>
+  <tr class="rc"><td>auj. 11:42</td><td><span class="av3 cL">L</span>Léa</td><td>a signé <b>XPG-2026-00412</b></td></tr>
+  <tr><td>auj. 11:05</td><td><span class="av3 cL">L</span>Léa</td><td>a accepté la demande n° 66</td></tr>
+  <tr><td>auj. 10:48</td><td><span class="av3 cC">C</span>Camille</td><td>a révoqué XPG-2026-00377</td></tr>
+  <tr><td style="border-bottom:0">auj. 09:31</td><td style="border-bottom:0"><span class="av3 cL">L</span>Léa</td><td style="border-bottom:0">a livré la commande n° 212</td></tr>
+ </table></div>
+ <div class="cm" style="left:20px;top:78px">
+  <div class="o"><i data-i="down"></i><b>Déplier</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="key"></i>Ouvrir la licence</div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="sliders"></i>Criticité de cette ligne<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="pen"></i>Ajouter une note…</div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o hov"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+  <div class="sep"></div>
+  <div class="o dis" style="color:#94a3b8"><i data-i="info"></i>Rien ne s'efface du journal<span class="why">pas d'entrée rouge ici</span></div>
+ </div>
+ <div class="cm sub" style="left:226px;top:216px;width:192px">
+  <div class="o"><span class="av3 cL" style="width:16px;height:16px;font-size:8.5px;border-radius:5px">L</span>Cet admin : Léa Essai</div>
+  <div class="o"><i data-i="tag"></i>Ce type : Créer et signer</div>
+  <div class="o"><span class="cr m" style="height:16px;font-size:10px;padding:0 6px">Moyenne</span>Cette criticité</div>
+  <div class="o"><i data-i="calendar"></i>Ce jour : 10/11</div>
+  <div class="o"><i data-i="building"></i>Ce client : Atelier Exemple</div>
+  <div class="o"><i data-i="laptop"></i>Ce PC</div>
+ </div>
+</div>
+
+<!-- 3 · Licences (vue par Lea) -->
+<div class="cell" style="left:1200px;top:24px;width:376px">
+ <div class="ct"><i data-i="key"></i>Licences<span class="cap">vue par Léa Essai</span></div>
+ <div class="ml"><table><colgroup><col style="width:124px"><col><col style="width:70px"></colgroup>
+  <tr><th>ID</th><th>Client</th><th>Fin</th></tr>
+  <tr><td class="mono" style="font-size:11px">XPG-2026-00412</td><td>Atelier Exemple</td><td>10/11/27</td></tr>
+  <tr class="rc"><td class="mono" style="font-size:11px"><b>XPG-2025-00388</b></td><td>Bureau d'études Exemple</td><td class="warn2">12/11/26</td></tr>
+  <tr><td class="mono" style="font-size:11px">XPG-2026-00391</td><td>Atelier Exemple</td><td>fin licence</td></tr>
+  <tr><td class="mono" style="font-size:11px;border-bottom:0">XPG-2026-00409</td><td style="border-bottom:0">Atelier Exemple</td><td style="border-bottom:0">10/11/27</td></tr>
+ </table></div>
+ <div class="cm" style="left:96px;top:108px;width:232px">
+  <div class="o"><i data-i="key"></i><b>Ouvrir la licence</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="down"></i>Déplier<span class="kb">→</span></div>
+  <div class="sep"></div>
+  <div class="o dis"><i data-i="refresh"></i>Prolonger…<span class="why">droit retiré le 02/11 · demande-le à Camille Essai</span></div>
+  <div class="o"><i data-i="puzzle"></i>Ajouter une option…</div>
+  <div class="o"><i data-i="laptop"></i>Ajouter un PC…</div>
+  <div class="o"><i data-i="eye"></i>Voir le code…</div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+  <div class="o"><i data-i="file"></i>Exporter le fichier de licence…</div>
+  <div class="sep"></div>
+  <div class="o red"><i data-i="ban"></i>Révoquer…</div>
+ </div>
+</div>
+
+<!-- 4 · Clients -->
+<div class="cell" style="left:404px;top:512px">
+ <div class="ct"><i data-i="users"></i>Clients<span class="cap">clic droit sur Atelier Exemple</span></div>
+ <div class="ml"><table><colgroup><col><col style="width:62px"><col style="width:38px"><col style="width:70px"></colgroup>
+  <tr><th>Client</th><th>Licences</th><th>PC</th><th>Montant</th></tr>
+  <tr class="rc"><td><b>Atelier Exemple</b></td><td>6</td><td>14</td><td>3 040 €</td></tr>
+  <tr><td>Bureau d'études Exemple</td><td>5</td><td>11</td><td>2 450 €</td></tr>
+  <tr><td>Client d'essai</td><td>4</td><td>6</td><td>1 180 €</td></tr>
+  <tr><td style="border-bottom:0">Studio Exemple</td><td style="border-bottom:0">3</td><td style="border-bottom:0">3</td><td style="border-bottom:0">690 €</td></tr>
+ </table></div>
+ <div class="cm" style="left:70px;top:78px;width:236px">
+  <div class="o"><i data-i="building"></i><b>Ouvrir sa fiche</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="down"></i>Déplier<span class="kb">→</span></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="plus"></i>Nouvelle licence pour ce client…</div>
+  <div class="o"><i data-i="mail"></i>Lui écrire…</div>
+  <div class="o"><i data-i="chart"></i>Ses courbes</div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+  <div class="sep"></div>
+  <div class="o red"><i data-i="trash"></i>Supprimer le client…</div>
+ </div>
+</div>
+
+<!-- 5 · Commandes -->
+<div class="cell" style="left:802px;top:512px">
+ <div class="ct"><i data-i="receipt"></i>Commandes<span class="cap">clic droit sur la n° 212</span></div>
+ <div class="ml"><table><colgroup><col style="width:48px"><col><col style="width:64px"><col style="width:78px"></colgroup>
+  <tr><th>N°</th><th>Client</th><th>Montant</th><th>État</th></tr>
+  <tr><td>214</td><td>Client d'essai</td><td>120 €</td><td class="warn2">À livrer</td></tr>
+  <tr class="rc"><td><b>212</b></td><td>Atelier Exemple</td><td>490 €</td><td class="ok2">Livrée</td></tr>
+  <tr><td>211</td><td>Studio Exemple</td><td>190 €</td><td class="ok2">Livrée</td></tr>
+  <tr><td style="border-bottom:0">197</td><td style="border-bottom:0">Laboratoire d'essai</td><td style="border-bottom:0">190 €</td><td style="border-bottom:0;color:var(--muted)">Remboursée</td></tr>
+ </table></div>
+ <div class="cm" style="left:96px;top:108px;width:222px">
+  <div class="o"><i data-i="receipt"></i><b>Ouvrir la commande</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="down"></i>Déplier<span class="kb">→</span></div>
+  <div class="sep"></div>
+  <div class="o dis"><i data-i="check"></i>Délivrer maintenant<span class="why">déjà livrée, le 10/11 à 09:31</span></div>
+  <div class="o"><i data-i="file"></i>Ouvrir le reçu</div>
+  <div class="o"><i data-i="ext"></i>Voir dans Stripe</div>
+  <div class="o"><i data-i="flag"></i>Revoir…</div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+  <div class="sep"></div>
+  <div class="o red"><i data-i="undo"></i>Rembourser…</div>
+ </div>
+</div>
+
+<!-- 6 · Demandes en ligne -->
+<div class="cell" style="left:1200px;top:512px;width:376px">
+ <div class="ct"><i data-i="inbox"></i>Demandes en ligne<span class="cap">clic droit sur la n° 66</span></div>
+ <div class="ml"><table><colgroup><col style="width:48px"><col><col style="width:116px"></colgroup>
+  <tr><th>N°</th><th>Client</th><th>PC</th></tr>
+  <tr class="rc"><td><b>66</b></td><td>Client d'essai</td><td class="mono" style="font-size:11px">PC-ESSAI-03</td></tr>
+  <tr><td>65</td><td>Atelier Exemple</td><td class="mono" style="font-size:11px">PC-ATELIER-07</td></tr>
+  <tr><td>64</td><td>Atelier Exemple</td><td class="mono" style="font-size:11px">PC-ATELIER-08</td></tr>
+  <tr><td style="border-bottom:0">63</td><td style="border-bottom:0">Studio Exemple</td><td class="mono" style="font-size:11px;border-bottom:0">PORTABLE-S2</td></tr>
+ </table></div>
+ <div class="cm" style="left:30px;top:78px;width:220px">
+  <div class="o"><i data-i="inbox"></i><b>Ouvrir la demande</b><span class="kb">Entrée</span></div>
+  <div class="o"><i data-i="down"></i>Déplier<span class="kb">→</span></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="check"></i>Accepter…</div>
+  <div class="o"><i data-i="cloud"></i>Accepter en ligne…</div>
+  <div class="o"><i data-i="x"></i>Refuser…</div>
+  <div class="o dis"><i data-i="send"></i>Renvoyer la réponse<span class="why">pas encore de réponse</span></div>
+  <div class="sep"></div>
+  <div class="o"><i data-i="arrowur"></i>Aller à<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="filter"></i>Filtrer sur<i data-i="right" class="ar"></i></div>
+  <div class="sep"></div>
+  <div class="o hov"><i data-i="copy"></i>Copier<i data-i="right" class="ar"></i></div>
+  <div class="o"><i data-i="download"></i>Exporter la ligne (CSV)</div>
+ </div>
+ <div class="cm sub" style="left:244px;top:326px;width:150px">
+  <div class="o"><i data-i="tag"></i>Le numéro</div>
+  <div class="o"><i data-i="fp"></i>L'empreinte du PC</div>
+  <div class="o"><i data-i="msg"></i>Le message</div>
+  <div class="o"><i data-i="list"></i>La ligne</div>
+ </div>
+</div>
+</body></html>

@@ -322,6 +322,7 @@ private:
     std::uint64_t      orderNumber_{0};
     std::string        orderText_;
     float              orderY_{0}, testY_{0};
+    std::vector<std::string> shopHeadL_, testL_;   // 1.46.0 : la phrase de la boutique, le paiement d'essai (a la largeur, entiers)
     core::ConnectionScope links_;
 };
 
@@ -3060,9 +3061,19 @@ void OnlinePanel::onLayout() {
         // 1.37.0 : la boutique - les cartes des editions, sur une ou deux rangees.
         shopY_ = y;
         if (!cards_.empty()) {
-            y += 24.f;
-            testY_ = y;   // 1.46.0 : le paiement d'essai (une ligne)
-            if (cat_.selling() && cat_.test() && std::any_of(cards_.begin(), cards_.end(), [](const Card& k) { return k.buyBtn != nullptr; })) y += 30.f;
+            // 1.46.0 : la phrase de la boutique (une offre en vente s'achete ; toutes se demandent) et le paiement d'essai, entiers
+            const bool selling = std::any_of(cards_.begin(), cards_.end(), [](const Card& k) { return k.buyBtn != nullptr; });
+            shopHeadL_ = wrapMeasured(selling ? std::string("Ach\xC3\xA8te ta licence en ligne (par carte, sur la page de Stripe : elle arrive seule), ou demande-la \xC3\xA0 l'\xC3\xA9" "diteur sans paiement.")
+                                              : std::string("Choisis ta licence (facultatif : sinon l'\xC3\xA9" "diteur la choisit avec toi) - aucun paiement ici, l'\xC3\xA9" "diteur te contacte."),
+                                      kSmall, W);
+            if (shopHeadL_.size() > 3) shopHeadL_.resize(3);
+            y += 20.f * static_cast<float>(std::max<std::size_t>(1, shopHeadL_.size())) + 4.f;
+            testY_ = y;
+            testL_.clear();
+            if (selling && cat_.test()) {
+                testL_ = wrapMeasured("ESSAI \xC2\xB7 " + licence::shop::testModeText(), kSmall, W - 20.f);
+                y += 18.f * static_cast<float>(testL_.size()) + 14.f;
+            }
             const std::size_t n = cards_.size();
             // 1.46.0 : des cartes de 210 px au moins (avant 180 : leurs lignes coupees), aussi hautes que leurs lignes ; une rangee
             // a la hauteur de sa plus haute carte
@@ -3183,19 +3194,21 @@ void OnlinePanel::onPaint(const ui::PaintContext& ctx) {
     if (!pending_) {
         // 1.37.0 : la boutique.
         if (!cards_.empty()) {
-            const bool selling = std::any_of(cards_.begin(), cards_.end(), [](const Card& k) { return k.buyBtn != nullptr; });
             // 1.46.0 : une offre en vente en ligne s'achete (la carte, sur la page de Stripe) ; toutes se demandent sans paiement
-            r.drawText({x, shopY_},
-                       fit(r, selling ? std::string("Ach\xC3\xA8te ta licence en ligne (par carte, sur la page de Stripe : elle arrive seule), ou demande-la \xC3\xA0 l'\xC3\xA9" "diteur sans paiement.")
-                                      : std::string("Choisis ta licence (facultatif : sinon l'\xC3\xA9" "diteur la choisit avec toi) - aucun paiement ici, l'\xC3\xA9" "diteur te contacte."),
-                           kSmall, W),
-                       kSmall, c.textMuted);
-            if (selling && cat_.test()) {   // 1.46.0 : le paiement d'essai se voit
+            float hy = shopY_;
+            for (const auto& l : shopHeadL_) {
+                r.drawText({x, hy}, l, kSmall, c.textMuted);
+                hy += 20.f;
+            }
+            if (!testL_.empty()) {   // 1.46.0 : le paiement d'essai se voit
                 const gfx::Color hot = ctx.theme.tone(ui::Tone::Warning, c.accent);
-                const gfx::Rect band{x, testY_, W, 24.f};
+                const gfx::Rect band{x, testY_, W, 18.f * static_cast<float>(testL_.size()) + 8.f};
                 r.fillRoundedRect(band, hot.withAlpha(36), 4.f);
-                r.drawText({band.x + 10.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, "ESSAI \xC2\xB7 " + licence::shop::testModeText(), kSmall, W - 20.f), kSmall,
-                           c.text);
+                float ty = band.y + 4.f;
+                for (const auto& l : testL_) {
+                    r.drawText({band.x + 10.f, ty}, l, kSmall, c.text);
+                    ty += 18.f;
+                }
             }
             for (const auto& k : cards_) {
                 const bool on = k.id == chosen_;

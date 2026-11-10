@@ -1,0 +1,90 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - Statistiques, le globe</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="globe.css">
+</head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:stats-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Pilotage<i data-i="right"></i>Statistiques<i data-i="right"></i><b>Le globe</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">2</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content" style="padding-top:22px">
+   <div class="gtitre">
+    <div><div class="h1">Le globe</div><div class="sub">Où sont vos clients et leurs PC, d'après la ville de leur dernière connexion au service · 54 clients, 342 PC, 21 villes, 9 pays</div></div>
+    <div class="r"><span class="cap">Période</span><div class="seg" id="gper"><span>7 j</span><span class="on">30 j</span><span>90 j</span><span>12 mois</span></div></div>
+   </div>
+
+   <div class="card" id="gcarte">
+    <div class="gh">
+     <span class="gi"><i data-i="globe"></i></span>
+     <div class="t"><b>D'où se connectent vos clients</b><span>Mar. 10 nov. 2026, 10:42 (heure de Paris) · les points sont à la ville, jamais à l'adresse</span></div>
+     <div class="r">
+      <span id="gcard-live" hidden><i></i>En direct · relevé toutes les 5 s</span>
+      <div class="seg" id="gmode"><span data-m="compte" class="on">Compte</span><span data-m="direct"><i class="lv"></i>En direct</span></div>
+      <span class="ib" id="gplein" title="Plein écran"><svg class="ico" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></span>
+     </div>
+    </div>
+
+    <div class="gcal">
+     <div class="hd"><span class="over">Calques</span><span id="glyn">3 sur 7</span></div>
+     <div id="gly"></div>
+     <div class="tl">La taille d'une marque suit le nombre
+      <div class="ts"><span><i style="width:8px;height:8px"></i>1</span><span><i style="width:11px;height:11px"></i>4</span><span><i style="width:14px;height:14px"></i>9</span><span><i style="width:18px;height:18px"></i>18+</span><span style="margin-left:auto;align-items:flex-end;text-align:right;font-weight:500;color:var(--faint);line-height:1.3">forme + couleur :<br>lisibles sans les couleurs</span></div>
+     </div>
+    </div>
+
+    <div id="gz">
+     <canvas id="gcv" aria-label="Le globe des clients : glisser pour le tourner"></canvas>
+     <div class="ghr"><i data-i="refresh"></i>Il tourne seul · il s'arrête sous la souris</div>
+     <div id="gcard" hidden></div>
+     <div id="gtip" hidden></div>
+     <div class="gbt">
+      <span class="b" id="gpause" title="Arrêter / reprendre la rotation"><svg viewBox="0 0 24 24"><rect x="7" y="5" width="3.4" height="14" rx="1"/><rect x="13.6" y="5" width="3.4" height="14" rx="1"/></svg></span>
+      <span class="b txt" id="grec"><i data-i="pin"></i>Recentrer</span>
+      <span class="h">Glisser pour le tourner · molette pour zoomer</span>
+     </div>
+     <div class="gzm"><span id="gzp">+</span><span id="gzm">−</span></div>
+    </div>
+
+    <div class="gvil">
+     <div class="hd"><span class="h3">Les villes</span><span class="r"><span id="gvt">par</span><select id="gpar" aria-label="Classer les villes par"></select></span></div>
+     <div class="sb"><span id="gvs">21 villes · 9 pays</span><span>un clic : le globe y va</span></div>
+     <div id="gtick"><i></i>En attente de la prochaine connexion…</div>
+     <div id="gvl"></div>
+    </div>
+
+    <div class="gnote"><i data-i="info"></i><span><b>D'où viennent les points :</b> la ville et le pays que Cloudflare donne pour chaque appel au service (request.cf). Le service ne garde que la ville de chaque PC à sa dernière connexion, jamais son adresse IP.</span></div>
+   </div>
+
+   <div class="gbas">
+    <div class="gmini">
+     <div class="over"><i data-i="dash" style="width:13px;height:13px"></i>Sur le tableau de bord : la petite carte</div>
+     <div class="card">
+      <div class="mh"><i data-i="globe" style="width:15px;height:15px;color:#2a78d6"></i><b>Le globe</b><span class="live" style="margin-left:8px"><i style="background:#1baf7a;box-shadow:0 0 0 4px rgba(27,175,122,.16)"></i>42 PC actifs maintenant</span><span class="lk">Ouvrir le globe<i data-i="right"></i></span></div>
+      <div class="mb">
+       <div class="mg"><canvas id="gmcv" aria-label="Le globe, en petit"></canvas></div>
+       <div class="ml">
+        <div class="k">Les 3 premières villes · clients</div>
+        <div class="rw"><span>Lyon, FR</span><span class="vb"><i style="width:100%"></i></span><em>9</em></div>
+        <div class="rw"><span>Paris, FR</span><span class="vb"><i style="width:88.9%"></i></span><em>8</em></div>
+        <div class="rw"><span>Toulouse, FR</span><span class="vb"><i style="width:44.4%"></i></span><em>4</em></div>
+       </div>
+      </div>
+     </div>
+    </div>
+    <div class="gexp">
+     <div><span class="n">1</span><span><b>Il tourne seul</b>, doucement. On le fait tourner à la souris (et on peut le lancer) ; il s'arrête dès que la souris est dessus. La molette zoome.</span></div>
+     <div><span class="n">2</span><span><b>Les calques</b> se cochent ; chacun a sa couleur <b>et</b> sa forme. Dans une ville, les marques se chevauchent, cerclées de blanc.</span></div>
+     <div><span class="n">3</span><span><b>Un clic sur une ville</b> (le globe ou la liste) : le globe tourne vers elle et sa carte s'ouvre ; ses boutons ouvrent les clients ou les PC de la ville.</span></div>
+     <div><span class="n">4</span><span><b>En direct</b> : un point pulse à chaque connexion d'un PC, la liste compte les PC connectés. <b>Compte</b> : les totaux de la période.</span></div>
+    </div>
+   </div>
+  </div>
+  <div class="mk gm" style="left:552px;top:216px">1</div>
+  <div class="mk gm" style="left:110px;top:212px">2</div>
+  <div class="mk gm" style="left:1168px;top:249px">3</div>
+  <div class="mk gm" style="left:1100px;top:153px">4</div>
+ </main>
+</div>
+<script src="globe.js"></script>
+</body></html>

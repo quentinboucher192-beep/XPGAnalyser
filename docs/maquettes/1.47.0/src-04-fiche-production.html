@@ -1,0 +1,122 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Admin - la fiche d'un admin, ce qu'elle produit</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="admin.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+.g3{display:grid;grid-template-columns:420px 412px 1fr;gap:12px;margin-top:12px}
+.g2a{display:grid;grid-template-columns:420px 1fr;gap:12px;margin-top:12px}
+.g2b{display:grid;grid-template-columns:1fr 420px;gap:12px;margin-top:12px}
+.gc{padding:11px 14px}
+.nums{display:flex;flex-direction:column;gap:7px}
+.nums .k{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.nums .v{font:650 18px/1.2 Inter;font-feature-settings:"cv11","ss01";white-space:nowrap}
+.nums .v small{font:500 11.5px Inter;color:var(--muted);margin-left:4px}
+.inl{display:flex;gap:16px}
+.inl>div .k{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.inl>div .v{font:650 17px Inter;font-feature-settings:"cv11","ss01";white-space:nowrap}
+.inl>div .v small{font:500 11px Inter;color:var(--muted);margin-left:3px}
+.rn{display:grid;grid-template-columns:104px 1fr auto;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #f0f3f7;font-size:12px}
+.rn:last-child{border-bottom:0}
+.rn .id{font:600 11.5px "JetBrains Mono"}
+.rn .b{height:24px;padding:0 9px;border-radius:7px;border:1px solid var(--line2);font:600 11.5px Inter;display:inline-flex;align-items:center;gap:5px;color:var(--ink2);background:#fff}
+.sub3{display:grid;grid-template-columns:186px 1fr 228px;gap:16px;align-items:start}
+.sub3b{display:grid;grid-template-columns:186px 384px 1fr;gap:16px;align-items:start}
+.vl{border-left:1px solid var(--line);padding-left:16px}
+.ot{display:grid;grid-template-columns:1fr auto;row-gap:0;font-size:12.5px}
+.ot>div{padding:6px 0;border-bottom:1px solid #f0f3f7}
+.ot .n{font-weight:650;text-align:right;font-feature-settings:"cv11","ss01","tnum"}
+.ot .k .cap{font-size:11.5px}
+</style></head><body><script src="icons.js"></script>
+<div class="app">
+<!--SIDE:admins-->
+ <main class="main" style="position:relative">
+  <div class="top">
+   <div class="crumb">Admin<i data-i="right"></i>Sécurité<i data-i="right"></i>Administrateurs<i data-i="right"></i><b>Léa Essai</b></div>
+   <div style="margin-left:auto" class="row gap10"><span class="live"><i></i>En direct · il y a 3 s</span><span class="ibtn"><i data-i="bell"></i><span class="badge">3</span></span><span class="btn primary"><i data-i="plus"></i>Nouvelle licence</span></div>
+  </div>
+  <div class="content">
+<!--G:fh_lic-->
+   <div class="g3">
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Les licences qu'elle a signées</div><div class="gs">sur la période · leur état aujourd'hui</div></div><span class="tag2 tS" style="margin-left:auto">S</span><span class="tag2 tJ">J</span></div>
+     <div class="row" style="gap:18px;align-items:flex-start">
+      <div><div class="nofig" style="font:650 30px/1 Inter">41</div><div class="dl good" style="margin-top:4px"><i data-i="trend"></i>+7 · 34 avant</div></div>
+      <div class="grow">
+       <div class="seg2" style="height:10px;margin-top:4px"><i style="width:92.7%;background:#16a34a"></i><i style="width:2.4%;background:#94a3b8"></i><i style="width:4.9%;background:#dc2626"></i></div>
+       <div class="row gap10" style="margin-top:7px;font-size:11.5px;color:var(--ink2);flex-wrap:wrap"><span class="row gap4"><i data-i="check" class="sm" style="color:#16a34a;width:12px;height:12px"></i>38 actives</span><span class="row gap4"><i data-i="clock" class="sm" style="color:#64748b;width:12px;height:12px"></i>1 expirée</span><span class="row gap4"><i data-i="ban" class="sm" style="color:#dc2626;width:12px;height:12px"></i>2 révoquées</span></div>
+      </div>
+     </div>
+     <div class="h3" style="font-size:12px;margin:12px 0 7px">Par offre</div>
+     <!--G:lic_offre-->
+     <div class="inl" style="margin-top:12px;padding-top:9px;border-top:1px solid var(--line)">
+      <div><div class="k">PC activés dessus</div><div class="v">87</div></div><div><div class="k">Prolongations</div><div class="v">9 <small>avant le 02/11</small></div></div><div><div class="k">Options ajoutées</div><div class="v">7</div></div>
+     </div>
+    </div>
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Ses licences, semaine après semaine</div><div class="gs">12 semaines · sa part parmi tous les admins</div></div></div>
+     <div class="lg" style="margin:2px 0 6px"><span><i style="background:#0b7fa3"></i>Léa Essai</span><span><i style="background:#d5dce6"></i>les autres admins</span><span class="cap" style="margin-left:auto">sa meilleure : 15 (26/10)</span></div>
+     <!--G:w_lic-->
+    </div>
+    <div class="gc">
+     <div class="gh"><div><div class="gt">À renouveler</div><div class="gs">ses licences qui finissent dans les 30 jours</div></div><span class="tag" style="margin-left:auto;height:20px">4</span></div>
+     <div class="rn"><span class="id">XPG-2025-00231</span><span>Atelier Exemple<div class="cap">PROFESSIONAL · fin le <b style="color:#b45309">18/11</b></div></span><span class="b"><i data-i="refresh" class="sm"></i>Prolonger…</span></div>
+     <div class="rn"><span class="id">XPG-2025-00244</span><span>Client d'essai<div class="cap">PERSONAL · fin le 24/11</div></span><span class="b"><i data-i="refresh" class="sm"></i>Prolonger…</span></div>
+     <div class="rn"><span class="id">XPG-2025-00262</span><span>Bureau d'études Exemple<div class="cap">ENTERPRISE · fin le 01/12 · 6 PC</div></span><span class="b"><i data-i="refresh" class="sm"></i>Prolonger…</span></div>
+     <div class="rn"><span class="id">XPG-2026-00290</span><span>Studio Exemple<div class="cap">PERSONAL · fin le 07/12</div></span><span class="b"><i data-i="mail" class="sm"></i>Le prévenir…</span></div>
+     <div class="cap" style="margin-top:6px">Elle n'a plus le droit de prolonger : toi, tu le peux.</div>
+    </div>
+   </div>
+
+   <div class="g2a">
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Ses clients</div><div class="gs">ceux pour qui elle a signé, livré ou répondu</div></div><span class="tag2 tS" style="margin-left:auto">S</span></div>
+     <div class="inl" style="margin-bottom:10px"><div><div class="k">Clients servis</div><div class="v">27 <small>+5</small></div></div><div><div class="k">Nouveaux</div><div class="v">9 <small>leur 1<sup>re</sup> licence</small></div></div><div><div class="k">Ses 5 premiers</div><div class="v">90 % <small>de son montant</small></div></div></div>
+     <!--G:top_clients-->
+    </div>
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Les demandes qu'elle a traitées</div><div class="gs">en ligne, depuis les Studios · le délai entre la demande et sa réponse</div></div><span class="tag2 tS" style="margin-left:auto">S</span></div>
+     <div class="sub3">
+      <div class="nums">
+       <div><div class="k">Traitées</div><div class="v">34 <small class="ok2">+4</small></div></div>
+       <div><div class="k">Acceptées · refusées</div><div class="v">29 · 5 <small>85 % acceptées</small></div>
+        <div class="seg2" style="height:8px;margin-top:5px"><i style="width:85%;background:#0b7fa3"></i><i style="width:15%;background:#d5dce6"></i></div></div>
+       <div><div class="k">Délai moyen · médian · le plus long</div><div class="v">4 h 05 · 1 h 10 <small>· 2 j 6 h</small></div></div>
+       <div><div class="k">La plus ancienne qui attend</div><div class="v warn2" style="font-size:15px">n° 64 · 1 j 3 h <small>Atelier Exemple</small></div></div>
+      </div>
+      <div class="vl"><!--G:delay_hist--></div>
+      <div class="vl"><div class="h3" style="font-size:12px;margin-bottom:2px">Par semaine</div><div class="lg" style="margin-bottom:4px;font-size:11px"><span><i style="background:#0b7fa3"></i>elle</span><span><i style="background:#d5dce6"></i>les autres</span></div><!--G:w_dem--></div>
+     </div>
+    </div>
+   </div>
+
+   <div class="g2b">
+    <div class="gc">
+     <div class="gh"><div><div class="gt">La boutique : les commandes qu'elle a livrées</div><div class="gs">payées en ligne (Stripe), livrées depuis son Admin</div></div><span class="tag2 tS" style="margin-left:auto">S</span></div>
+     <div class="sub3b">
+      <div class="nums">
+       <div><div class="k">Commandes livrées</div><div class="v">22 <small class="ok2">+5</small></div></div>
+       <div><div class="k">Montant encaissé</div><div class="v">4 870 € <small class="ok2">+31 %</small></div></div>
+       <div><div class="k">Panier moyen</div><div class="v">221 € <small>205 € avant</small></div></div>
+       <div><div class="k">Remboursements</div><div class="v">1 <small>· 190 € · commande n° 197</small></div></div>
+      </div>
+      <div class="vl"><div class="row" style="margin-bottom:4px"><span class="h3" style="font-size:12px">Montant livré par semaine</span><div class="lg" style="margin-left:auto;font-size:11px"><span><i style="background:#0b7fa3"></i>Léa Essai</span><span><i style="background:#d5dce6"></i>les autres</span></div></div><!--G:w_eur--></div>
+      <div class="vl"><div class="h3" style="font-size:12px;margin-bottom:8px">Par article <span class="cap" style="font-weight:500">(commandes)</span></div><!--G:articles--></div>
+     </div>
+    </div>
+    <div class="gc">
+     <div class="gh"><div><div class="gt">Le reste de ce qu'elle fait</div><div class="gs">sur la période, depuis le journal</div></div><span class="tag2 tJ" style="margin-left:auto">J</span></div>
+     <div class="ot">
+      <div class="k">Codes d'activation revus <span class="cap">· le dernier hier</span></div><div class="n">6</div>
+      <div class="k">Courriels envoyés aux clients <span class="cap">· 3 relances</span></div><div class="n">14</div>
+      <div class="k">Exports des clients <span class="cap">· 1 240 lignes en tout</span></div><div class="n">2</div>
+      <div class="k">Annonces publiées</div><div class="n" style="color:var(--faint)">0</div>
+      <div class="k">Offres et options modifiées <span class="cap">· pas ce droit</span></div><div class="n" style="color:var(--faint)">—</div>
+      <div class="k" style="border-bottom:0">PC retirés d'une licence</div><div class="n" style="border-bottom:0;color:var(--faint)">0</div>
+     </div>
+    </div>
+   </div>
+  </div>
+  <div class="annot" data-n="1" style="left:436px;top:6px;width:520px;padding:4px 10px"><b>Ce qu'elle produit</b> : ses licences, ses clients, ses demandes, ses ventes.</div>
+  <div class="annot" data-n="2" style="left:436px;top:34px;width:520px;padding:4px 10px"><b>Ses courbes</b> : les mêmes que les statistiques, limitées à elle.</div>
+  <div class="mk" style="left:420px;top:150px">1</div><div class="mk" style="left:820px;top:164px">2</div>
+ </main>
+</div>
+</body></html>

@@ -1,0 +1,184 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Le dépliage partout</title>
+<link rel="stylesheet" href="ds.css"><link rel="stylesheet" href="extra.css"><link rel="stylesheet" href="planches.css">
+<style>
+body{background:radial-gradient(1100px 700px at 30% 30%,#f3f0ff 0%,var(--bg) 62%)}
+.hd7{position:absolute;left:28px;top:20px;right:28px;display:flex;align-items:flex-end;gap:24px}
+.hd7 .ov{font:700 11.5px Inter;letter-spacing:.1em;text-transform:uppercase;color:var(--violet-700)}
+.hd7 h1{font:750 25px/1.18 Inter;letter-spacing:-.02em;margin:4px 0 0}
+.hd7 .lead{font-size:12.5px;color:var(--ink2);line-height:1.45;max-width:640px;margin-left:auto}
+.lc{position:absolute;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh2);overflow:hidden}
+.lc .lt{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line)}
+.lc .lt .ico{width:15px;height:15px;color:var(--violet)}
+.lc .lt b{font:650 13.5px Inter}
+.lc .lt .cap{margin-left:auto}
+table.u{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+table.u th{font:650 10px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);text-align:left;padding:6px 10px;background:var(--surface2);border-bottom:1px solid var(--line);white-space:nowrap}
+table.u td{padding:0 10px;height:33px;border-bottom:1px solid #f0f3f7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table.u td:first-child,table.u th:first-child{padding-left:12px}
+table.u .chev{width:14px;height:14px;vertical-align:-3px;margin-right:4px}
+table.u .av3{width:18px;height:18px;font-size:9px;border-radius:5px;display:inline-grid;vertical-align:-4px;margin-right:5px}
+.pn{padding:11px 14px 11px 18px;display:grid;gap:12px;white-space:normal}
+.pb{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 11px;min-width:0}
+.pb .pt{font:650 10.5px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.lr{display:flex;align-items:center;gap:7px;font-size:12px;padding:2.5px 0;color:var(--ink2);white-space:nowrap}
+.lr .ico{width:13px;height:13px;color:var(--faint);flex:none}
+.lr b{font-weight:600;color:var(--ink)}
+.lr .go{margin-left:auto;color:var(--violet);width:13px;height:13px}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px 0 3px;border-radius:7px;background:var(--violet-50);color:var(--violet-700);font:600 11.5px Inter;white-space:nowrap}
+.chip .av3{width:16px;height:16px;font-size:8.5px;border-radius:5px;margin:0}
+.ba{width:100%;border-collapse:collapse;font-size:12px}
+.ba th{font:650 10px Inter;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);text-align:left;padding:3px 6px;border-bottom:1px solid var(--line)}
+.ba td{padding:4px 6px;border-bottom:1px solid #f0f3f7;white-space:nowrap}
+.ba tr:last-child td{border-bottom:0}
+.tl2{display:flex;flex-direction:column;gap:1px;position:relative;padding-left:14px}
+.tl2:before{content:"";position:absolute;left:4px;top:7px;bottom:7px;width:2px;background:var(--violet-100)}
+.tl2 .e{position:relative;font-size:12px;color:var(--ink2);white-space:nowrap;padding:1.5px 0}
+.tl2 .e:before{content:"";position:absolute;left:-14px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--violet);border:2px solid #fff;box-sizing:border-box}
+.tl2 .e .w{color:var(--faint);width:40px;display:inline-block;font-size:11.5px}
+.bts{display:flex;gap:8px;align-items:center;grid-column:1/-1}
+.mkk{position:absolute;z-index:60}
+</style></head><body><script src="icons.js"></script>
+<div class="hd7">
+ <div><div class="ov">Proposition · 1.47.0</div><h1>Le dépliage, partout : la ligne s'ouvre sur place</h1></div>
+ <div class="lead">▸ ou → déplie, ← replie ; double-clic ou Entrée ouvre la fiche. La ligne dépliée dit <b>ce qui a été touché</b> (avec des liens), <b>qui l'a fait</b> (un lien vers la fiche de l'admin), et ce qu'on peut faire ensuite.</div>
+</div>
+
+<!-- Journal -->
+<div class="lc" style="left:28px;top:96px;width:800px">
+ <div class="lt"><i data-i="scroll"></i><b>Journal des admins</b><span class="cap">la ligne : l'objet touché, l'avant et l'après, la signature</span></div>
+ <table class="u"><colgroup><col style="width:116px"><col style="width:96px"><col style="width:136px"><col><col style="width:94px"></colgroup>
+  <tr><th>Quand</th><th>Admin</th><th>PC</th><th>Action</th><th>Criticité</th></tr>
+  <tr><td><i data-i="right" class="chev"></i>hier 17:20</td><td><span class="av3 cL">L</span>Léa</td><td class="mono" style="font-size:11px">PC-COMMERCIAL-02</td><td>a revu le code de <b>XPG-2026-00398</b></td><td><span class="cr h">Haute</span></td></tr>
+  <tr class="opn"><td><i data-i="down" class="chev"></i>hier 15:02</td><td><span class="av3 cL">L</span><b>Léa</b></td><td class="mono" style="font-size:11px">PC-COMMERCIAL-02</td><td>a ajouté l'option <b>Exports avancés</b> à XPG-2026-00391</td><td><span class="cr m">Moyenne</span></td></tr>
+  <tr class="unf"><td colspan="5"><div class="pn" style="grid-template-columns:214px 1fr 240px">
+   <div class="pb"><div class="pt">L'objet touché</div>
+    <div class="lr"><i data-i="key"></i>Licence <b>XPG-2026-00391</b><i data-i="arrowur" class="go"></i></div>
+    <div class="lr"><i data-i="building"></i>Client <b>Atelier Exemple</b><i data-i="arrowur" class="go"></i></div>
+    <div class="lr"><i data-i="laptop"></i>Ses PC <b>3</b> <span class="cap">· 2 vus auj.</span><i data-i="arrowur" class="go"></i></div>
+    <div class="lr"><i data-i="puzzle"></i>Option <b>Exports avancés</b><i data-i="arrowur" class="go"></i></div></div>
+   <div class="pb"><div class="pt">Avant · après</div>
+    <table class="ba"><tr><th>Ce qui change</th><th>Avant</th><th>Après</th></tr>
+     <tr><td>Options</td><td class="faint">aucune</td><td><b>Exports avancés</b></td></tr>
+     <tr><td>Durée</td><td class="faint">—</td><td>jusqu'à la fin</td></tr>
+     <tr><td>Montant</td><td class="faint">—</td><td>120 €</td></tr>
+     <tr><td>Fin, PC, offre</td><td class="cap" colspan="2">inchangés</td></tr></table></div>
+   <div class="pb"><div class="pt">La signature</div>
+    <div class="lr"><i data-i="fp"></i>clé de Léa <span class="fpm" style="font-size:11px">A41C 0E7B…</span> <span class="ok2">✓</span></div>
+    <div class="lr"><i data-i="link"></i>ligne n° 2 409, chaînée à la 2 408 <span class="ok2">✓</span></div>
+    <div class="lr"><i data-i="clock"></i>reçue par le service à 15:02:11</div>
+    <div class="lr"><i data-i="globe"></i>son PC, Lyon, FR <span class="ok2">✓</span></div></div>
+   <div class="bts"><span class="btn sm"><i data-i="key" class="sm"></i>Ouvrir la licence</span><span class="chip"><span class="av3 cL">L</span>Léa Essai ›</span><span class="btn sm ghost"><i data-i="scroll" class="sm"></i>Tout son journal</span><span class="btn sm ghost" style="margin-left:auto"><i data-i="sliders" class="sm"></i>Criticité ›</span></div>
+  </div></td></tr>
+  <tr><td><i data-i="right" class="chev"></i>hier 10:12</td><td><span class="av3 cL">L</span>Léa</td><td class="mono" style="font-size:11px">PC-COMMERCIAL-02</td><td>a écrit à <b>Studio Exemple</b> (relance)</td><td><span class="cr i">Info</span></td></tr>
+  <tr><td style="border-bottom:0"><i data-i="right" class="chev"></i>08/11 23:52</td><td style="border-bottom:0"><span class="av3 cH">H</span>Hugo</td><td class="mono" style="font-size:11px;border-bottom:0">PORTABLE-HUGO</td><td style="border-bottom:0">a accepté la demande <b>n° 62</b> <span class="warn2" style="font-size:11px">· heure inhabituelle</span></td><td style="border-bottom:0"><span class="cr i">Info</span></td></tr>
+ </table>
+</div>
+
+<!-- Licences -->
+<div class="lc" style="left:842px;top:96px;width:730px">
+ <div class="lt"><i data-i="key"></i><b>Licences</b><span class="cap">le résumé, et qui l'a signée</span></div>
+ <table class="u"><colgroup><col style="width:144px"><col><col style="width:124px"><col style="width:82px"><col style="width:108px"></colgroup>
+  <tr><th>ID</th><th>Client</th><th>Offre</th><th>Fin</th><th>État</th></tr>
+  <tr><td class="mono" style="font-size:11px"><i data-i="right" class="chev"></i>XPG-2026-00412</td><td>Atelier Exemple</td><td>PROFESSIONAL</td><td>10/11/27</td><td><span class="pill p-green pl">Active</span></td></tr>
+  <tr class="opn"><td class="mono" style="font-size:11px"><i data-i="down" class="chev"></i><b>XPG-2026-00409</b></td><td><b>Atelier Exemple</b></td><td>PROFESSIONAL</td><td>10/11/27</td><td><span class="pill p-green pl">Active</span></td></tr>
+  <tr class="unf"><td colspan="5"><div class="pn" style="grid-template-columns:216px 1fr">
+   <div class="pb"><div class="pt">Le résumé</div>
+    <div class="lr"><i data-i="layers"></i><b>PROFESSIONAL</b> · 1 an</div>
+    <div class="lr"><i data-i="calendar"></i>du 10/11/26 au 10/11/27</div>
+    <div class="lr"><i data-i="laptop"></i>PC : <b>1</b> sur 3</div>
+    <div class="lr"><i data-i="puzzle"></i>options : aucune</div>
+    <div class="lr"><i data-i="lock"></i>code : <span class="faint">masqué</span> <span class="lk" style="font-size:11.5px">Voir…</span></div></div>
+   <div class="pb"><div class="pt">Son histoire</div>
+    <div class="tl2">
+     <div class="e"><span class="w">09:14</span>commande <b>n° 212</b> payée en ligne (Stripe) <i data-i="arrowur" style="width:12px;height:12px;color:var(--violet)"></i></div>
+     <div class="e"><span class="w">09:31</span><b>signée et livrée</b> par <span class="chip"><span class="av3 cL">L</span>Léa Essai ›</span> <span class="cap">sa fiche</span></div>
+     <div class="e"><span class="w">09:40</span>activée sur <b>PC-ATELIER-07</b> · Lyon, FR <i data-i="arrowur" style="width:12px;height:12px;color:var(--violet)"></i></div>
+     <div class="e"><span class="w">11:58</span>vue par le PC il y a 3 min · IHM Studio 1.47.0 <span class="ok2">à jour</span></div>
+    </div></div>
+   <div class="bts"><span class="btn sm"><i data-i="key" class="sm"></i>Ouvrir</span><span class="btn sm ghost"><i data-i="refresh" class="sm"></i>Prolonger…</span><span class="btn sm ghost"><i data-i="puzzle" class="sm"></i>Ajouter une option…</span><span class="btn sm ghost"><i data-i="laptop" class="sm"></i>Ajouter un PC…</span><span class="cap" style="margin-left:auto">clic droit : le menu</span></div>
+  </div></td></tr>
+  <tr><td class="mono" style="font-size:11px"><i data-i="right" class="chev"></i>XPG-2026-00391</td><td>Atelier Exemple</td><td>PROFESSIONAL</td><td>14/10/27</td><td><span class="pill p-green pl">Active</span></td></tr>
+  <tr><td class="mono" style="font-size:11px;border-bottom:0"><i data-i="right" class="chev"></i>XPG-2025-00388</td><td style="border-bottom:0">Bureau d'études Exemple</td><td style="border-bottom:0">PERSONAL</td><td style="border-bottom:0" class="warn2">12/11/26</td><td style="border-bottom:0"><span class="pill p-amber pl">Finit bientôt</span></td></tr>
+ </table>
+</div>
+
+<!-- Commandes -->
+<div class="lc" style="left:28px;top:552px;width:520px">
+ <div class="lt"><i data-i="receipt"></i><b>Commandes</b><span class="cap">le paiement, la livraison, qui a livré</span></div>
+ <table class="u"><colgroup><col style="width:72px"><col><col style="width:66px"><col style="width:90px"></colgroup>
+  <tr><th>N°</th><th>Client · article</th><th>Montant</th><th>État</th></tr>
+  <tr class="opn"><td><i data-i="down" class="chev"></i><b>212</b></td><td><b>Atelier Exemple</b> · PROFESSIONAL 1 an</td><td>490 €</td><td><span class="pill p-green pl">Livrée</span></td></tr>
+  <tr class="unf"><td colspan="4"><div class="pn" style="grid-template-columns:1fr 1fr">
+   <div class="pb"><div class="pt">Le client, le paiement</div>
+    <div class="lr"><i data-i="building"></i><b>Atelier Exemple</b><i data-i="arrowur" class="go"></i></div>
+    <div class="lr"><i data-i="mail"></i>achats@exemple.fr</div>
+    <div class="lr"><i data-i="cart"></i>Stripe · carte · <span class="fpm" style="font-size:11px">pi_…K2</span><i data-i="ext" class="go"></i></div>
+    <div class="lr"><i data-i="file"></i>le reçu<i data-i="arrowur" class="go"></i></div></div>
+   <div class="pb"><div class="pt">La livraison</div>
+    <div class="tl2">
+     <div class="e"><span class="w">09:12</span>créée</div>
+     <div class="e"><span class="w">09:14</span>payée</div>
+     <div class="e"><span class="w">09:30</span>prise par l'Admin de Léa</div>
+     <div class="e"><span class="w">09:31</span>livrée : <b>XPG-2026-00409</b></div>
+    </div></div>
+   <div class="bts"><span class="cap">livrée par</span><span class="chip"><span class="av3 cL">L</span>Léa Essai ›</span><span class="btn sm ghost" style="margin-left:auto"><i data-i="file" class="sm"></i>Le reçu</span><span class="btn sm ghost"><i data-i="ext" class="sm"></i>Stripe</span></div>
+  </div></td></tr>
+  <tr><td><i data-i="right" class="chev"></i>211</td><td>Studio Exemple · PERSONAL 1 an</td><td>190 €</td><td><span class="pill p-green pl">Livrée</span></td></tr>
+  <tr><td style="border-bottom:0"><i data-i="right" class="chev"></i>214</td><td style="border-bottom:0">Client d'essai · Exports avancés</td><td style="border-bottom:0">120 €</td><td style="border-bottom:0"><span class="pill p-amber pl">À livrer</span></td></tr>
+ </table>
+</div>
+
+<!-- Demandes -->
+<div class="lc" style="left:562px;top:552px;width:520px">
+ <div class="lt"><i data-i="inbox"></i><b>Demandes en ligne</b><span class="cap">le PC, le message, la réponse et qui l'a donnée</span></div>
+ <table class="u"><colgroup><col style="width:60px"><col><col style="width:116px"><col style="width:98px"></colgroup>
+  <tr><th>N°</th><th>Client</th><th>PC</th><th>État</th></tr>
+  <tr class="opn"><td><i data-i="down" class="chev"></i><b>66</b></td><td><b>Client d'essai</b></td><td class="mono" style="font-size:11px">PC-ESSAI-03</td><td><span class="pill p-green pl">Acceptée</span></td></tr>
+  <tr class="unf"><td colspan="4"><div class="pn" style="grid-template-columns:1fr 1fr">
+   <div class="pb"><div class="pt">La demande</div>
+    <div class="lr"><i data-i="fp"></i><span class="fpm" style="font-size:11px">7C1D 22E0 9A4B</span></div>
+    <div class="lr"><i data-i="monitor"></i>IHM Studio 1.47.0 · Nantes, FR</div>
+    <div class="lr"><i data-i="msg"></i>« nouveau poste au bureau »</div>
+    <div class="lr"><i data-i="clock"></i>reçue auj. 08:53</div></div>
+   <div class="pb"><div class="pt">La réponse</div>
+    <div class="lr"><i data-i="check" style="color:#16a34a"></i><b>acceptée</b> à 11:05</div>
+    <div class="lr"><i data-i="hourglass"></i>délai : <b>2 h 12</b> <span class="cap">(méd. 1 h 10)</span></div>
+    <div class="lr"><i data-i="key"></i>licence <b>XPG-2026-00366</b><i data-i="arrowur" class="go"></i></div>
+    <div class="lr"><i data-i="laptop"></i>PC ajouté : 2 sur 3</div></div>
+   <div class="bts"><span class="cap">répondue par</span><span class="chip"><span class="av3 cL">L</span>Léa Essai ›</span><span class="btn sm ghost" style="margin-left:auto"><i data-i="send" class="sm"></i>Renvoyer la réponse</span></div>
+  </div></td></tr>
+  <tr><td><i data-i="right" class="chev"></i>65</td><td>Atelier Exemple</td><td class="mono" style="font-size:11px">PC-ATELIER-07</td><td><span class="pill p-green pl">Acceptée</span></td></tr>
+  <tr><td style="border-bottom:0"><i data-i="right" class="chev"></i>64</td><td style="border-bottom:0">Atelier Exemple</td><td class="mono" style="font-size:11px;border-bottom:0">PC-ATELIER-08</td><td style="border-bottom:0"><span class="pill p-amber pl">1 j 3 h</span></td></tr>
+ </table>
+</div>
+
+<!-- Clients -->
+<div class="lc" style="left:1096px;top:552px;width:476px">
+ <div class="lt"><i data-i="users"></i><b>Clients</b><span class="cap">le résumé, ses admins</span></div>
+ <table class="u"><colgroup><col><col style="width:62px"><col style="width:44px"><col style="width:76px"></colgroup>
+  <tr><th>Client</th><th>Licences</th><th>PC</th><th>Montant</th></tr>
+  <tr class="opn"><td><i data-i="down" class="chev"></i><b>Atelier Exemple</b></td><td>6</td><td>14</td><td>3 040 €</td></tr>
+  <tr class="unf"><td colspan="4"><div class="pn" style="grid-template-columns:1fr;gap:6px;padding-top:8px;padding-bottom:8px">
+   <div class="lr"><i data-i="key"></i><b>5</b> actives, 1 finit le 18/11 · <b>14</b> PC, 4 en ligne · <b>5</b> commandes</div>
+   <div class="lr"><i data-i="users"></i>servi par <span class="chip"><span class="av3 cL">L</span>Léa Essai · 4</span><span class="chip" style="background:#fff3ea;color:#c2410c"><span class="av3 cH">H</span>Hugo Essai · 2</span></div>
+   <div class="lr"><i data-i="globe"></i>Lyon, FR · vu il y a 3 min<span class="lk" style="margin-left:auto">Ses courbes (planche 10) ›</span></div>
+  </div></td></tr>
+  <tr><td style="border-bottom:0"><i data-i="right" class="chev"></i>Bureau d'études Exemple</td><td style="border-bottom:0">5</td><td style="border-bottom:0">11</td><td style="border-bottom:0">2 450 €</td></tr>
+ </table>
+</div>
+
+<!-- Activations -->
+<div class="lc" style="left:1096px;top:790px;width:476px">
+ <div class="lt"><i data-i="laptop"></i><b>Activations</b><span class="cap">le PC, sa licence, qui l'a activé</span></div>
+ <table class="u"><colgroup><col style="width:150px"><col><col style="width:100px"></colgroup>
+  <tr><th>PC</th><th>Licence</th><th>Logiciel</th></tr>
+  <tr class="opn"><td class="mono" style="font-size:11px"><i data-i="down" class="chev"></i><b>PC-ATELIER-07</b></td><td class="mono" style="font-size:11px">XPG-2026-00409</td><td>1.47.0 <span class="ok2">✓</span></td></tr>
+  <tr class="unf"><td colspan="3"><div class="pn" style="grid-template-columns:1fr;gap:6px;padding-top:8px;padding-bottom:8px">
+   <div class="lr"><i data-i="building"></i><b>Atelier Exemple</b> · empreinte <span class="fpm" style="font-size:11px">E5A0 1B77</span> · vu il y a 3 min, Lyon, FR</div>
+   <div class="lr"><i data-i="clock"></i>activé auj. 09:40, après la commande n° 212 livrée par <span class="chip"><span class="av3 cL">L</span>Léa Essai ›</span></div>
+  </div></td></tr>
+  <tr><td class="mono" style="font-size:11px;border-bottom:0"><i data-i="right" class="chev"></i>PC-ESSAI-03</td><td class="mono" style="font-size:11px;border-bottom:0">XPG-2026-00366</td><td style="border-bottom:0">1.47.0 <span class="ok2">✓</span></td></tr>
+ </table>
+</div>
+<div class="row gap8 cap" style="position:absolute;left:28px;top:918px;width:1050px;line-height:1.45"><i data-i="info" class="sm" style="flex:none"></i><span>Partout pareil : la ligne dépliée garde sa place dans la liste ; « Tout déplier » / « Tout replier » en haut de chaque liste ; chaque nom d'admin est un lien vers sa fiche (planches 02 à 04), chaque identifiant vers l'objet ; le clic droit marche aussi sur la ligne dépliée (planche 06).</span></div>
+</body></html>
