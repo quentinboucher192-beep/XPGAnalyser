@@ -166,8 +166,8 @@ public:
         table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs (Exporter, Copier)
         table_->setAlternatingRowColors(true);
         // 1.47.0 : << Par >> (qui l'a revoquee) apres la raison - les puces dans l'ordre de la planche 12 (Raison, Par qui, Periode).
-        table_->setColumns({{"Licence", 130.f}, {"Client", 165.f}, {"PC", 220.f}, {"Raison", 180.f}, {"Par", 150.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 105.f},
-                            {"\xC3\x89missions", 150.f}});
+        table_->setColumns({{"Licence", 125.f}, {"Client", 175.f}, {"PC", 205.f}, {"Raison", 205.f}, {"Par", 140.f}, {"R\xC3\xA9voqu\xC3\xA9" "e le", 105.f},
+                            {"\xC3\x89missions", 140.f}});
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Licence", "Client", "PC", "Raison", "Par", "R\xC3\xA9voqu\xC3\xA9" "e le", "\xC3\x89missions", "Cl\xC3\xA9"});
         table_->setModel(model_);
         // 1.47.0 (planche 12) : LA BARRE - chercher (revocations.recherche), la raison, par qui, la periode.
@@ -516,12 +516,9 @@ private:
         what.lines.push_back({.icon = ui::Icon::Comment, .text = "raison : **" + (it.x.reason.empty() ? std::string("(aucune)") : it.x.reason) + "**"});
         what.lines.push_back({.icon = ui::Icon::Layers,
                               .text = it.x.issuedBefore ? "les \xC3\xA9missions sign\xC3\xA9" "es avant le " + dateTimeFr(it.x.issuedBefore) : std::string("toutes ses \xC3\xA9missions")});
-        ui::UnfoldCard::Line when{.icon = ui::Icon::History, .text = "r\xC3\xA9voqu\xC3\xA9" "e " + kit::whenFr(now, it.x.revokedAt)};
-        if (it.by) {
-            when.text += ", par";
-            when.person = listkit::person(host_, it.by->key, it.by->who);
-        }
-        what.lines.push_back(std::move(when));
+        what.lines.push_back({.icon = ui::Icon::History, .text = "r\xC3\xA9voqu\xC3\xA9" "e le " + dateTimeFr(it.x.revokedAt)});
+        if (it.by)   // qui : sa pastille (> sa fiche), sur sa ligne
+            what.lines.push_back({.icon = ui::Icon::User, .text = "par", .person = listkit::person(host_, it.by->key, it.by->who)});
         card->addBox(std::move(what));
 
         ui::UnfoldCard::Box story;

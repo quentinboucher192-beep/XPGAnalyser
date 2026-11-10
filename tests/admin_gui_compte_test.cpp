@@ -513,7 +513,7 @@ int main(int argc, char** argv) {
         check(table->setUnfolded(static_cast<ui::RowIndex>(il), true), "deplier la demande de Lea");
         auto* card = dynamic_cast<ui::UnfoldCard*>(table->unfoldWidget(static_cast<ui::RowIndex>(il)));
         const std::string ct = card ? card->text() : std::string();
-        check(card && has(ct, "L'EMPREINTE") && has(ct, "L'INVITATION") && has(ct, "profil pr\xC3\xA9vu : **Admin LV2**") && has(ct, lsf.ws->adminKey().id),
+        check(card && has(ct, "L'EMPREINTE") && has(ct, "L'INVITATION") && has(ct, "profil pr\xC3\xA9vu : Admin LV2") && has(ct, lsf.ws->adminKey().id),
               "depliee : l'empreinte (en grand), la demande, l'invitation et son profil : " + ct);
         (void)table->setUnfolded(static_cast<ui::RowIndex>(il), false);
     }

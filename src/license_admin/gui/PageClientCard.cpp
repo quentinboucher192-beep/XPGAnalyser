@@ -209,6 +209,34 @@ float chip(gfx::IRenderer& r, float x, float cy, const std::string& text, int to
     return w;
 }
 
+// Le corps de la fiche (sous les onglets) : ses enfants y sont coupes ; plus haut que la place (une fenetre basse), il
+// defile a la molette. La page pose ses enfants (onLayout), decales de `scroll`.
+class Body final : public ui::Widget {
+public:
+    using ui::Widget::Widget;
+    float                 scroll{0.f}, content{0.f};
+    std::function<void()> moved;
+
+protected:
+    void onPaint(const ui::PaintContext& ctx) override {
+        const Rect b = bounds();
+        if (content > b.h + 1.f) {
+            const float th = std::max(30.f, b.h * b.h / content);
+            const float ty = b.y + (b.h - th) * (scroll / std::max(1.f, content - b.h));
+            ctx.r.fillRoundedRect({b.right() - 5.f, ty, 4.f, th}, kFaint.withAlpha(110), 2.f);
+        }
+    }
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* w = std::get_if<ui::MouseWheel>(&ev)) {
+            if (!bounds().contains(w->pos) || content <= bounds().h) return ui::EventResult::Ignored;
+            scroll = std::clamp(scroll - w->dy * 48.f, 0.f, content - bounds().h);
+            if (moved) moved();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
+};
+
 class ClientCardPage final : public Page {
 public:
     explicit ClientCardPage(ShellHost host) : Page("page.client", std::move(host)) {
@@ -257,17 +285,19 @@ public:
             sig_.clear();
             load();
         };
+        body_ = add(std::make_unique<Body>("client.corps"));
+        body_->moved = [this] { invalidateLayout(); };
         // a gauche
-        identity_ = add(std::make_unique<Box>("client.identite", "Identit\xC3\xA9"));
+        identity_ = addBody(std::make_unique<Box>("client.identite", "Identit\xC3\xA9"));
         identity_->paintBody = [this](const ui::PaintContext& ctx, const Rect& b) { paintIdentity(ctx, b); };
-        numbers_ = add(std::make_unique<Box>("client.chiffres", ""));
+        numbers_ = addBody(std::make_unique<Box>("client.chiffres", ""));
         numbers_->paintBody = [this](const ui::PaintContext& ctx, const Rect& b) { paintNumbers(ctx, b); };
-        pcs_ = add(std::make_unique<Box>("client.pc", "Ses PC"));
+        pcs_ = addBody(std::make_unique<Box>("client.pc", "Ses PC"));
         pcs_->paintBody = [this](const ui::PaintContext& ctx, const Rect& b) { paintPcs(ctx, b); };
-        toActivations_ = add(std::make_unique<ui::Button>("Activations \xE2\x80\xBA", "client.pc.activations"));
+        toActivations_ = addBody(std::make_unique<ui::Button>("Activations \xE2\x80\xBA", "client.pc.activations"));
         toActivations_->setStyle(ui::Button::Style::Flat);
         links_ += toActivations_->clicked->connect([this] { openTab("pc"); });
-        bar_ = add(std::make_unique<ui::FilterBar>("client.pc.barre", std::vector<ui::FilterBar::Field>{
+        bar_ = addBody(std::make_unique<ui::FilterBar>("client.pc.barre", std::vector<ui::FilterBar::Field>{
                                                                             {.title = "PC", .kind = ui::FilterBar::Kind::Text},
                                                                             {.title = "Version", .chip = true, .noun = "une version"},
                                                                             {.title = "Vu", .kind = ui::FilterBar::Kind::Text}}));
@@ -290,9 +320,9 @@ public:
         pcsChart_ = chart<ch::TimeChart>("client.pc-actifs", "Ses PC actifs", "\xC3\xA0 la fin de chaque mois", pcsCard_);
         updates_ = chart<ch::TimeChart>("client.maj", "Ses mises \xC3\xA0 jour", "la version de ses PC, chaque semaine", updatesCard_);
         // ses achats et le montant cumule : DEUX graphiques dans la meme carte (jamais deux axes)
-        purchasesCard_ = &static_cast<FitCard&>(addChild(std::make_unique<FitCard>("client.achats.carte", "Ses achats", "par trimestre")));
-        purchases_ = &static_cast<ch::TimeChart&>(addChild(std::make_unique<ch::TimeChart>("client.achats")));
-        cumul_ = &static_cast<ch::TimeChart&>(addChild(std::make_unique<ch::TimeChart>("client.cumul")));
+        purchasesCard_ = &static_cast<FitCard&>(body_->addChild(std::make_unique<FitCard>("client.achats.carte", "Ses achats", "par trimestre")));
+        purchases_ = &static_cast<ch::TimeChart&>(body_->addChild(std::make_unique<ch::TimeChart>("client.achats")));
+        cumul_ = &static_cast<ch::TimeChart&>(body_->addChild(std::make_unique<ch::TimeChart>("client.cumul")));
         requests_ = chart<ch::TimeChart>("client.demandes", "Ses demandes", "par trimestre", requestsCard_);
         served_ = chart<ch::BarList>("client.servi", "Qui l'a servi", "depuis le d\xC3\xA9" "but", servedCard_);
         const auto pick = [this](const std::string& what) {
@@ -387,22 +417,29 @@ protected:
         }
         const float gap = 12.f;
         const float bottom = b.bottom() - 10.f;
-        const float avail = std::max(400.f, bottom - y);
-        // a gauche : l'identite, les chiffres, ses PC
+        // le corps : sous les onglets, coupe ; des hauteurs au moins (une fenetre basse : il defile)
+        const Rect bodyRect{x0 - 4.f, y - 4.f, w + 8.f, std::max(60.f, bottom - y + 8.f)};
+        body_->setBounds(bodyRect);
         const float lw = std::clamp(w * 0.28f, 280.f, 400.f);
         const float idH = local_.orders.empty() ? 168.f : std::min(250.f, 168.f + 50.f * static_cast<float>(std::min<std::size_t>(2, contacts().size())) + 22.f);
+        const float minRight = 200.f + 200.f + 250.f + 2 * gap, minLeft = idH + gap + 132.f + gap + 220.f;
+        const float avail = std::max({bottom - y, minRight, minLeft});
+        body_->content = avail + 8.f;
+        body_->scroll = std::clamp(body_->scroll, 0.f, std::max(0.f, body_->content - bodyRect.h));
+        y -= body_->scroll;
+        // a gauche : l'identite, les chiffres, ses PC
         identity_->setBounds({x0, y, lw, idH});
         numbers_->setBounds({x0, y + idH + gap, lw, 132.f});
         const float py = y + idH + gap + 132.f + gap;
         pcs_->setBounds({x0, py, lw, std::max(120.f, y + avail - py)});
         const float aw = toActivations_->sizeHint().preferred.w + 6.f;
         toActivations_->setBounds({x0 + lw - aw - 10.f, py + 8.f, aw, 26.f});
-        const float bh = bar_->heightFor(lw - 32.f);
-        bar_->setBounds({x0 + 16.f, py + 40.f, lw - 32.f, bh});
+        const float bh = bar_->heightFor(lw - 24.f);
+        bar_->setBounds({x0 + 12.f, py + 40.f, lw - 24.f, bh});
         pcsListY_ = py + 40.f + bh + 6.f;
         // les courbes
         const float cx = x0 + lw + gap, cw = x0 + w - cx;
-        const float r1 = std::floor(avail * 0.34f), r2 = std::floor(avail * 0.32f), r3 = avail - r1 - r2 - 2 * gap;
+        const float r1 = std::max(200.f, std::floor(avail * 0.34f)), r2 = std::max(200.f, std::floor(avail * 0.32f)), r3 = avail - r1 - r2 - 2 * gap;
         timelineCard_->setBounds({cx, y, cw, r1});
         const float half = std::floor((cw - gap) * 0.5f);
         pcsCard_->setBounds({cx, y + r1 + gap, half, r2});
@@ -456,9 +493,10 @@ protected:
         if (wantLoad_ && !loading_) load();   // un travail tournait : le releve part des que possible
     }
     void onPaintOverlay(const ui::PaintContext& ctx) override {
-        // le titre du cumul, dans la carte des achats
+        // le titre du cumul, dans la carte des achats (coupe comme le corps)
         const Rect pc = purchasesCard_->bounds();
-        ctx.r.drawText({pc.x + 16.f, cumulTitleY_}, "Le montant cumul\xC3\xA9", gfx::semibold(FontId{13}), kInk);
+        const Rect clip = body_->bounds();
+        if (cumulTitleY_ >= clip.y && cumulTitleY_ + 16.f <= clip.bottom()) ctx.r.drawText({pc.x + 16.f, cumulTitleY_}, "Le montant cumul\xC3\xA9", gfx::semibold(FontId{13}), kInk);
     }
 
 private:
@@ -469,10 +507,16 @@ private:
         return p;
     }
     template <class T>
+    T* addBody(std::unique_ptr<T> w) {
+        T* p = w.get();
+        body_->addChild(std::move(w));
+        return p;
+    }
+    template <class T>
     T* chart(const std::string& id, const std::string& title, const std::string& small, FitCard*& card) {
         auto c = std::make_unique<FitCard>(id + ".carte", title, small);
         T* ref = &c->setChartAs(std::make_unique<T>(id));
-        card = &static_cast<FitCard&>(addChild(std::move(c)));
+        card = &static_cast<FitCard&>(body_->addChild(std::move(c)));
         return ref;
     }
 
@@ -726,7 +770,7 @@ private:
             bl.rows.push_back(r);
         }
         std::sort(bl.rows.begin(), bl.rows.end(), [](const auto& a, const auto& b) { return a.value > b.value; });
-        bl.rowHeight = 40.f;
+        bl.labelsAbove = true;   // le nom entier, au-dessus de sa barre
         bl.clickHint = "Clic : ses lignes du journal";
         bl.emptyText = "Aucune action";
         served_->setData(bl);
@@ -1107,7 +1151,7 @@ private:
                 bl.rows.push_back(r);
             }
             std::sort(bl.rows.begin(), bl.rows.end(), [](const auto& a, const auto& b) { return a.value > b.value; });
-            bl.rowHeight = 40.f;
+            bl.labelsAbove = true;
             bl.clickHint = "Clic : ses lignes du journal";
             bl.emptyText = data_.count("demandes") ? "Aucune action" : "Lecture des chiffres\xE2\x80\xA6";
             served_->setData(bl);
@@ -1178,6 +1222,7 @@ private:
     ui::Button*                 toActivations_{nullptr};
     std::vector<TabButton*>     tabs_;
     SegGroup*                   period_{nullptr};
+    Body*                       body_{nullptr};
     Box*                        identity_{nullptr};
     Box*                        numbers_{nullptr};
     Box*                        pcs_{nullptr};

@@ -600,16 +600,12 @@ private:
             }
         }
         // Qui : la pastille de l'admin (le journal), sinon le nom que la ligne porte.
-        ui::UnfoldCard::Line who{.icon = ui::Icon::Task, .text = kit::whenFr(now, a.at)};
-        if (l.who) {
-            who.text += ", par";
-            who.person = listkit::person(host_, l.who->key, l.who->who);
-        } else if (a.kind == "client" && !a.by.empty()) {
-            who.text += ", par " + (a.by == "admin+" ? plusName() : a.by);
-        } else if (a.kind == "demande") {
-            who.text += ", envoy\xC3\xA9" "e par le client";
-        }
-        box.lines.push_back(std::move(who));
+        ui::UnfoldCard::Line when{.icon = ui::Icon::History, .text = "not\xC3\xA9" "e le " + dateTimeFr(a.at)};
+        if (a.kind == "client" && !a.by.empty() && !l.who) when.text += ", par " + (a.by == "admin+" ? plusName() : a.by);
+        else if (a.kind == "demande") when.text += ", envoy\xC3\xA9" "e par le client";
+        box.lines.push_back(std::move(when));
+        if (l.who)   // qui : sa pastille (> sa fiche), sur sa ligne
+            box.lines.push_back({.icon = ui::Icon::User, .text = "par", .person = listkit::person(host_, l.who->key, l.who->who)});
         card->addBox(std::move(box));
 
         // La meme licence : ses autres lignes du registre, les plus recentes (cinq au plus).

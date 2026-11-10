@@ -189,8 +189,8 @@ protected:
         const auto& p = frame_.panel;
         const std::string title = rows_.size() == 1 ? "Accepter la demande de " + requestWho(rows_.front().q)
                                                      : "Accepter " + std::to_string(rows_.size()) + " demandes d'admin";
-        const float top = frame_.paint(r, th, title, "Une seule liste des admins sign\xC3\xA9" "e par la cl\xC3\xA9 de l'\xC3\xA9" "diteur" +
-                                                         (listNumber_ > 0 ? " (n\xC2\xB0 " + std::to_string(listNumber_ + 1) + ")" : std::string()) +
+        const float top = frame_.paint(r, th, title, std::string("Une seule liste des admins sign\xC3\xA9" "e par la cl\xC3\xA9 de l'\xC3\xA9" "diteur") +
+                                                         " (n\xC2\xB0 " + std::to_string(listNumber_ + 1) + ")" +
                                                          " avec chacun ; la cl\xC3\xA9 de synchro d\xC3\xA9pos\xC3\xA9" "e pour chacun.",
                                        ui::Icon::User);
         kit::drawWrapped(r, p.x + 24.f, top + 12.f, p.w - 48.f,
@@ -500,8 +500,9 @@ public:
         accept_ = &kit::button(*this, "Accepter\xE2\x80\xA6", "demandes-admins.accepter", ui::Button::Style::Primary, ui::Icon::Ok);
         refuse_ = &kit::button(*this, "Refuser\xE2\x80\xA6", "demandes-admins.refuser", ui::Button::Style::Danger, ui::Icon::Close);
         table_ = &kit::adopt(*this, std::make_unique<ui::TableView>("demandes-admins.table"));
-        table_->setColumns({{"Re\xC3\xA7ue le", 140.f}, {"Nom", 170.f}, {"Courriel", 220.f}, {"PC", 160.f}, {"Logiciel", 190.f}, {"Empreinte", 120.f},
-                            {"Invitation", 200.f}, {"\xC3\x89tat", 150.f}});
+        // les 8 colonnes tiennent dans la fenetre de 1373 px (sans defiler de cote)
+        table_->setColumns({{"Re\xC3\xA7ue le", 125.f}, {"Nom", 140.f}, {"Courriel", 180.f}, {"PC", 110.f}, {"Logiciel", 160.f}, {"Empreinte", 105.f},
+                            {"Invitation", 180.f}, {"\xC3\x89tat", 110.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Re\xC3\xA7ue le", "Nom", "Courriel", "PC", "Logiciel", "Empreinte", "Invitation", "\xC3\x89tat"});
         table_->setModel(model_);
@@ -719,6 +720,7 @@ private:
             }
             return st;
         });
+        if (!shown_.empty() && table_->selection().empty()) table_->selectModelRows({0}, false);   // la premiere, d'office
         syncButtons();
         invalidateLayout();
         invalidate();

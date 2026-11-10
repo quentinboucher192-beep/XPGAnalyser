@@ -756,7 +756,8 @@ int main(int argc, char** argv) {
         HostRig erig(ef);
         auto ep = gui::makeAdminsPage(erig.host());
         const std::string e = draw(*ep);
-        check(has(e, "Les alertes viennent du journal des admins") && has(e, "le journal n'est pas relev\xC3\xA9"), "le journal n'est pas releve : c'est dit");
+        check(has(e, "Les alertes viennent du journal des admins") && has(e, "journal pas relev\xC3\xA9") && has(e, "Le journal n'est pas relev\xC3\xA9 sur ce poste."),
+              "le journal n'est pas releve : c'est dit (les alertes, la derniere action, ses 5 dernieres actions)");
         check(click(*ep, "admins.onglet.qui"), "qui fait quoi");
         const std::string q = draw(*ep);
         check(has(q, "Le journal des admins n'est pas relev\xC3\xA9 sur ce poste"), "qui fait quoi : le journal n'est pas releve");

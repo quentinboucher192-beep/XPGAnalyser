@@ -910,7 +910,7 @@ private:
         card->setOwnBackground(true);
         ui::UnfoldCard::Box notes;
         notes.title = "LES NOTES";
-        notes.weight = 1.3f;
+        notes.weight = 1.1f;
         const std::size_t few = std::min<std::size_t>(v.notes.size(), 5);
         for (std::size_t n = 0; n < few; ++n) notes.lines.push_back({.text = "\xE2\x80\xA2 " + v.notes[n]});
         if (v.notes.size() > few) notes.lines.push_back({.text = "et " + std::to_string(v.notes.size() - few) + " de plus (Copier \xE2\x80\xBA Les notes)"});
@@ -919,18 +919,22 @@ private:
         if (v.important) notes.lines.push_back({.icon = ui::Icon::Warning, .text = "**importante** : rappel\xC3\xA9" "e \xC3\xA0 chaque lancement", .tone = ui::Tone::Warning});
         card->addBox(std::move(notes));
 
+        // Chaque fichier : son nom (a renvoyer : en orange), puis sa taille, pour qui, le debut de son SHA-256.
         ui::UnfoldCard::Box files;
         files.title = "LES FICHIERS";
-        files.weight = 1.5f;
-        files.head = {"Fichier", "SHA-256", "Pour qui"};
-        for (const auto& f : v.files)
-            files.table.push_back({f.file.name + (f.present ? std::string() : std::string(" \xE2\x80\x94 \xC3\xA0 renvoyer")),
-                                   f.file.sha256.size() > 12 ? f.file.sha256.substr(0, 12) + "\xE2\x80\xA6" : f.file.sha256,
-                                   std::string(f.file.audience == "admins" ? "les admins" : "tout le monde") + " \xC2\xB7 " + sizeFr(f.file.size)});
-        if (!files.table.empty()) card->addBox(std::move(files));
+        files.weight = 1.3f;
+        for (const auto& f : v.files) {
+            files.lines.push_back({.icon = f.file.kind == "admin" ? ui::Icon::Lock : ui::Icon::Import,
+                                   .text = "**" + f.file.name + "**" + (f.present ? std::string() : std::string(" \xC2\xB7 \xC3\xA0 renvoyer")),
+                                   .tone = f.present ? ui::Tone::None : ui::Tone::Warning});
+            files.lines.push_back({.text = sizeFr(f.file.size) + " \xC2\xB7 " + (f.file.audience == "admins" ? "les admins" : "tout le monde") + " \xC2\xB7 SHA-256 "
+                                           + (f.file.sha256.size() > 16 ? f.file.sha256.substr(0, 16) + "\xE2\x80\xA6" : f.file.sha256)});
+        }
+        if (!files.lines.empty()) card->addBox(std::move(files));
 
         ui::UnfoldCard::Box pcs;
         pcs.title = "LES PC DESSUS";
+        pcs.weight = 1.3f;
         const auto at = view_.byVersion.find(v.version);
         const int n = at == view_.byVersion.end() ? 0 : at->second;
         if (i == 0)
@@ -947,8 +951,8 @@ private:
             if (i == 0) (s.upToDate ? ok : late).push_back(listkit::person(host_, s.key, s.name, s.upToDate ? std::string() : (s.version.empty() ? std::string("?") : s.version)));
             else if (s.version == v.version) late.push_back(listkit::person(host_, s.key, s.name));
         }
-        if (i == 0 && !ok.empty()) pcs.lines.push_back({.icon = ui::Icon::User, .text = "admins \xC3\xA0 jour", .people = ok});
-        if (!late.empty()) pcs.lines.push_back({.icon = ui::Icon::User, .text = i == 0 ? "pas \xC3\xA0 jour" : "l'ont encore", .tone = i == 0 ? ui::Tone::Warning : ui::Tone::None, .people = late});
+        if (i == 0 && !ok.empty()) pcs.lines.push_back({.icon = ui::Icon::User, .text = "\xC3\xA0 jour :", .people = ok});
+        if (!late.empty()) pcs.lines.push_back({.icon = ui::Icon::User, .text = i == 0 ? "pas \xC3\xA0 jour :" : "l'ont encore :", .tone = i == 0 ? ui::Tone::Warning : ui::Tone::None, .people = late});
         card->addBox(std::move(pcs));
 
         const bool busy = host_.busy && host_.busy();

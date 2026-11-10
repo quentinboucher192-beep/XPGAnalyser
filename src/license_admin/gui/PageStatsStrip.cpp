@@ -42,7 +42,7 @@ public:
             const char* id;
             const char* title;
             bool        bars;
-        } cards[4] = {{"montant", "Montant encaiss\xC3\xA9", true}, {"licences", "Licences actives", false}, {"pc", "PC actifs", false}, {"demandes", "Demandes", false}};
+        } cards[4] = {{"montant", "Montant encaiss\xC3\xA9", true}, {"licences", "Licences actives", false}, {"pc", "PC actifs", false}, {"demandes", "Demandes", true}};
         for (const auto& c : cards) {
             auto card = std::make_unique<FitCard>(std::string("tableau.courbes.") + c.id + ".carte", c.title, "30 j");
             ch::TimeChart* chart = &card->setChartAs(std::make_unique<ch::TimeChart>(std::string("tableau.courbes.") + c.id));

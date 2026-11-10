@@ -335,6 +335,11 @@ private:
         lastNote_.clear();
         profileLine_.clear();
         const AccountInfo& a = info_;
+        // une cle d'ESSAI de l'editeur : << CLE D'ESSAI ... (Camille Essai) >> -> le nom entre parentheses (la marque reste dite plus bas)
+        if (a.role == Role::Plus && a.name.rfind("CLE D'ESSAI", 0) == 0) {
+            const auto o = a.name.rfind('('), e = a.name.rfind(')');
+            if (o != std::string::npos && e != std::string::npos && e > o + 1) info_.name = a.name.substr(o + 1, e - o - 1);
+        }
         roleText_ = roleLabel(a.role);
         switch (a.role) {
             case Role::Plus: roleTone_ = ui::Tone::Info; break;

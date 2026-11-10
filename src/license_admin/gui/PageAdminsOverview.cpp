@@ -35,7 +35,7 @@ constexpr FontId kF11{11}, kF12{12}, kF13{13}, kF14{14};
 const FontId kB12 = gfx::semibold(kF12), kB13 = gfx::semibold(kF13), kB14 = gfx::semibold(kF14);
 
 const char* const kHeads[8] = {"ADMIN", "ACTIONS", "LICENCES", "DEMANDES", "D\xC3\x89LAI MOY.", "MONTANT", "DERNI\xC3\x88RE ACTION", "\xC3\x89TAT"};
-const float kColShare[8] = {0.21f, 0.17f, 0.075f, 0.095f, 0.09f, 0.11f, 0.16f, 0.09f};
+const float kColShare[8] = {0.21f, 0.17f, 0.075f, 0.095f, 0.09f, 0.11f, 0.15f, 0.10f};
 
 std::string stateOf(const Person& p) {
     if (p.kind == Person::Kind::Pending) return "En attente";
@@ -1044,7 +1044,7 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
             (void)text(r, colX_[6], b.y + 11.f, ago(d_->now, s->last.when), kF13, kInk2, colW_[6] - 4.f);
             (void)text(r, colX_[6], b.y + 33.f, p.retired ? std::string("avant son retrait") : shortSummary(s->last), kF12, kMuted, colW_[6] - 4.f);
         } else {
-            (void)text(r, colX_[6], b.y + 20.f, d_->journal ? "aucune" : "le journal n'est pas relev\xC3\xA9", kF12, kMuted, colW_[6] - 4.f);
+            (void)text(r, colX_[6], b.y + 20.f, d_->journal ? "aucune" : "journal pas relev\xC3\xA9", kF12, kMuted, colW_[6] - 4.f);
         }
     }
     // l'etat
@@ -1052,8 +1052,11 @@ void OverviewView::paintRow(const ui::PaintContext& ctx, const RowGeo& g) const 
         const std::string st = stateOf(p);
         const Color fg = pending ? kAmber : p.retired ? kRed : kGreen;
         const Color bg = pending ? kAmberPale : p.retired ? kRedPale : kGreenPale;
-        const float pw = std::min(colW_[7], ui::measureWidth(st, kB12) + 28.f);
-        (void)kit::pill(r, colX_[7] + std::max(0.f, colW_[7] - pw), b.y + 20.f, kit::fit(r, st, kB12, pw - 28.f), kB12, fg, bg, 22.f, !pending && !p.retired);
+        const bool dot = !pending && !p.retired;
+        const float natural = kit::pillWidth(r, st, kB12, dot);
+        const float pw = std::min(colW_[7], natural);
+        const std::string shownSt = natural <= colW_[7] ? st : kit::fit(r, st, kB12, colW_[7] - (dot ? 28.f : 18.f));
+        (void)kit::pill(r, colX_[7] + std::max(0.f, colW_[7] - pw), b.y + 20.f, shownSt, kB12, fg, bg, 22.f, dot);
     }
     if (g.unfolded) paintPanel(ctx, p, g.panel);
 }

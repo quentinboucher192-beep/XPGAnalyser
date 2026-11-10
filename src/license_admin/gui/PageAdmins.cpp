@@ -2,6 +2,13 @@
 //  license_admin/gui/PageAdmins.cpp - 1.44.0 : LA PAGE << ADMINISTRATEURS >>
 //  (maquette 1.43.0, planches 01 et 02 ; docs/ADMINS.md)
 // -----------------------------------------------------------------------------
+//  1.47.0 (maquette 1.47.0, planches 01 a 05 ; AdminsBoard.hpp) : l'ADMIN+ voit une periode commune comparee a celle
+//  d'avant, et deux onglets - LA VUE D'ENSEMBLE (les tuiles, le classement trie par colonne avec sa barre de filtres,
+//  son clic droit et sa ligne depliee, les alertes et leur geste : PageAdminsOverview.cpp) et QUI FAIT QUOI
+//  (PageAdminsWho.cpp) ; Droits et Journal des admins y menent. Une ligne : << Ouvrir sa fiche >> (double-clic,
+//  Entree) - LA FICHE D'UN ADMIN (PageAdminCard.cpp) sous son en-tete (ses ancres, la periode). Un admin : la liste en
+//  lecture seule et << Ma fiche >> (la sienne seulement). Ce qui suit (1.44.0) reste : ajouter, retirer, les
+//  demandes recues, les droits.
 //  Une page, quatre visages selon le role du poste (Workspace::role) :
 //    - l'ADMIN+ (la cle de l'editeur) : le tableau des admins (lui d'abord, puis
 //      chaque admin de la liste signee, puis les demandes recues << En attente

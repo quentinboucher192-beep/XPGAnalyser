@@ -193,9 +193,10 @@ Discovery discover(const Places& p, const std::vector<licensing::crypto::PublicK
             if (required) d.refused.push_back({path, source, why});
             return;
         }
+        // un fichier du Studio sans certificat (pas encore parle au service, un autre genre) : ce n'est pas un refus
+        if (!required && text.find("XPG-LICENSING 1 service ") == std::string::npos) return;
         if (!read(text, editors, now, c, &why)) {
-            // un fichier du Studio sans certificat (pas encore parle au service) : ce n'est pas un refus
-            if (required || why.find("aucun certificat") == std::string::npos) d.refused.push_back({path, source, why});
+            d.refused.push_back({path, source, why});
             return;
         }
         c.source = source;

@@ -1235,6 +1235,15 @@ if(XPG_BUILD_TESTS)
     if(TEST adminstats)
         set_tests_properties(adminstats PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
     endif()
+    # 1.47.0 : la connexion au service qui voyage avec l'installateur (license_admin/ServiceConnection) et la derogation
+    # << Gerer le service >> (gui/WorkspaceDerogation.cpp) : sans reseau, puis contre le VRAI Worker sur ce poste (accordee,
+    # utilisee, revoquee, finie a l'heure du service). SAUTE sans Node.js ni wrangler.
+    xpg_add_test_executable(admin_derogation_test tests/admin_derogation_test.cpp)
+    xpg_target_link_libraries(admin_derogation_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminderogation COMMAND admin_derogation_test ${CMAKE_SOURCE_DIR})
+    if(TEST adminderogation)
+        set_tests_properties(adminderogation PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
     # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
@@ -1268,7 +1277,7 @@ if(XPG_BUILD_TESTS)
         if(TEST admindeploy)
             set_tests_properties(admindeploy PROPERTIES TIMEOUT 300)
         endif()
-        foreach(part shell licences securite donnees demandes options admins versions boutique globe listes stats adminsvue listes2 compte)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique ; 1.47.0 : globe (la page d'essai), listes (planches 06, 07, 12), stats (planches 08 a 10), listes2 (Revocations, Historique, Versions), compte (Mon compte, Demandes d'admin)
+        foreach(part shell licences securite donnees demandes options admins versions boutique globe listes stats adminsvue listes2 compte service)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique ; 1.47.0 : globe (la page d'essai), listes (planches 06, 07, 12), stats (planches 08 a 10), listes2 (Revocations, Historique, Versions), compte (Mon compte, Demandes d'admin), service (Service en ligne : l'admin+ seul, la derogation, la connexion signee)
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})
