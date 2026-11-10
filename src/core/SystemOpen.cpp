@@ -5,7 +5,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 #if defined(_WIN32)
@@ -104,6 +106,51 @@ std::string openWithSystem(const std::string& pathUtf8) {
     const int rc = posix_spawnp(&pid, tool, &fa, nullptr, argv, environ);   // aucun shell : le chemin est UN argument
     posix_spawn_file_actions_destroy(&fa);
     if (rc != 0) return "aucun programme n'a pu ouvrir " + pathUtf8 + " (" + tool + " manque ?)";
+    std::thread([pid] {
+        int status = 0;
+        (void)waitpid(pid, &status, 0);
+    }).detach();
+    return {};
+#endif
+}
+
+std::string openWebPage(const std::string& url) {
+    bool fine = url.rfind("https://", 0) == 0 && url.size() > 8 && url.size() <= 4000;
+    for (const char c : url) {
+        const auto u = static_cast<unsigned char>(c);
+        if (u <= 0x20 || u >= 0x7F || c == '"' || c == '\'' || c == '<' || c == '>' || c == '`' || c == '\\' || c == '^' || c == '|') fine = false;
+    }
+    if (!fine) return "cette adresse ne s'ouvre pas d'ici (une adresse https seulement) : " + url.substr(0, 200);
+    // Les essais : l'adresse dans un fichier, aucun navigateur.
+    if (const char* log = std::getenv(kBrowserLogEnv); log && *log) {
+        std::ofstream out(P(log), std::ios::binary | std::ios::app);
+        out << url << "\n";
+        out.close();
+        if (!out) return std::string("l'adresse n'a pas pu \xC3\xAAtre \xC3\xA9" "crite dans ") + log + " (" + kBrowserLogEnv + ")";
+        return {};
+    }
+#if defined(_WIN32)
+    const std::wstring w = wide(url);
+    const auto r = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", w.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (r <= 32) return "Windows n'a pas pu ouvrir le navigateur : ouvre toi-m\xC3\xAAme " + url;
+    return {};
+#else
+#  if defined(__APPLE__)
+    const char* tool = "open";
+#  else
+    const char* tool = "xdg-open";
+#  endif
+    std::string a0 = tool, a1 = url;
+    char* argv[] = {a0.data(), a1.data(), nullptr};
+    posix_spawn_file_actions_t fa;
+    posix_spawn_file_actions_init(&fa);
+    posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_adddup2(&fa, 1, 2);
+    pid_t pid = 0;
+    const int rc = posix_spawnp(&pid, tool, &fa, nullptr, argv, environ);   // aucun shell : l'adresse est UN argument
+    posix_spawn_file_actions_destroy(&fa);
+    if (rc != 0) return std::string("le navigateur ne s'ouvre pas (") + tool + " manque ?) : ouvre toi-m\xC3\xAAme " + url;
     std::thread([pid] {
         int status = 0;
         (void)waitpid(pid, &status, 0);

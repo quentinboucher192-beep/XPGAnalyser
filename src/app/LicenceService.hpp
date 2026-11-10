@@ -72,6 +72,22 @@
 //    secours doit nommer SON adresse (le magasin, lui, croit les documents des
 //    adresses du registre).
 //
+//  1.46.0 : LA BOUTIQUE (docs/BOUTIQUE.md ; le modele : LicenceShop.hpp) :
+//    LE CATALOGUE  GET /v1/boutique (public), seulement d'un service 1.46.0 ou plus dont GET /v1/etat dit << boutique >> :
+//                  a la synchronisation, puis au regard des 2 minutes s'il a plus de 10 minutes (ou si l'etat de la
+//                  boutique a change) ; shop::setCatalogue (la memoire, boutique.json). Un service plus ancien : rien.
+//    ACHETER       placeOrder : la demande de ce PC scellee EXACTEMENT comme la demande en ligne (gateway::OnlineRequest :
+//                  l'edition, ou l'option et sa duree ; pour la cle de l'editeur et chaque admin qui accepte les demandes)
+//                  -> POST /v1/boutique/commande -> la page de paiement de Stripe, ouverte dans le navigateur par poll()
+//                  (core::openWebPage). 409 en_cours : la page de la commande qui attend, rouverte. LA CARTE N'EST JAMAIS
+//                  ICI : le client la tape sur la page de Stripe.
+//    SUIVRE        GET /v1/boutique/commandes toutes les 10 secondes pendant 30 minutes apres un achat, puis toutes les
+//                  5 minutes tant qu'une commande est a payer, payee ou a revoir ; les commandes gardees dans le releve
+//                  (Record::orders). Une commande LIVREE : l'etat << poste >> lu tout de suite (GET /v1/poste) - l'offre
+//                  achetee s'active seule (son code scelle, comme une demande acceptee), une option : le renouvellement
+//                  l'apporte (applyDeviceStatus la reconnait au nonce de la demande scellee avec la commande).
+//    ANNULER       cancelOrder : POST /v1/boutique/annuler (une commande a payer).
+//
 //  LES FONCTIONS BLOQUANTES font du reseau : un fil de travail seulement (le fil
 //  de fond ci-dessous, un essai).
 //
@@ -90,6 +106,8 @@
 //  delai court, sur un fil).
 // =============================================================================
 #pragma once
+
+#include "LicenceShop.hpp"   // 1.46.0 : la boutique (les commandes du releve)
 
 #include "../licensing/Service.hpp"
 #include "../licensing/Store.hpp"
@@ -152,6 +170,9 @@ struct Record {
     // annoncee (sa notification postee).
     std::vector<std::pair<std::string, std::uint64_t>> messagesSeen;
     std::vector<std::pair<std::string, std::string>>   versionsAnnounced;
+    // 1.46.0 : les commandes de ce PC (la boutique ; les plus recentes d'abord, shop::kMaxOrders au plus) - ce que le
+    // service en dit, et ce que seul ce PC sait (le nonce de la demande scellee, l'option).
+    std::vector<shop::Order> orders;
 };
 [[nodiscard]] std::string recordPath();
 // 1.44.0 : "IHM-Studio", "API-Studio" (le logiciel, comme l'en-tete X-XPG-Logiciel) - la cle de ce Studio dans le releve.
@@ -211,14 +232,26 @@ struct RequestForm {
     licensing::Seconds optionFrom{0}, optionLastDay{0};
     std::string        optionText;
 };
+// ---- 1.46.0 : acheter (la boutique) ----
+struct OrderForm {
+    std::string article;      // l'identifiant de l'article du catalogue ("ed:PROFESSIONAL", "opt:ai_advanced:365")
+    std::string customer;     // la societe (obligatoire)
+    std::string name;         // facultatif
+    std::string email;        // obligatoire : Stripe y envoie la facture
+    std::string licenseId;    // une option : la licence de ce PC (obligatoire)
+    std::string pcName;       // facultatif : le nom de ce PC (la licence livree)
+    std::string optionText;   // une option : ce qu'en dit l'ecran (<< Assistant IA avance, 1 an >>)
+};
+inline constexpr std::size_t kMaxShopField = 120;
 inline constexpr std::size_t kMaxCustomer = 200, kMaxContact = 200, kMaxMessage = 2000, kMaxPcName = 80, kMaxLicenseId = 64, kMaxEdition = 40,
                              kMaxEmail = 200;
 
 // ---- ce qu'a donne un travail ----
 // 1.39.0 : Watch - le regard toutes les 2 minutes sur GET /v1/etat (rien d'ecrit, rien de dit : busyJob() ne le montre pas).
 // 1.44.0 : Messages (releve les messages de ce PC tout de suite), Update (regarde la version publiee tout de suite).
+// 1.46.0 : Order (acheter), CancelOrder (annuler une commande), Orders (les commandes de ce PC), Shop (le catalogue).
 enum class Job : std::uint8_t { None, Sync, Time, Activate, Renew, Release, Trial, LeaseTake, LeaseReturn, Request, CancelRequest, Device, Watch,
-                                Messages, Update };
+                                Messages, Update, Order, CancelOrder, Orders, Shop };
 // ---- 1.44.0 : un fichier annonce (un message, une version), ce qu'on en sait ----
 struct AnnouncedFile {
     std::string   id, name, sha256;
@@ -299,6 +332,15 @@ struct Result {
     bool                      versionLooked{false};
     std::string               publishedVersion;
     std::string               fallbackUsed;      // l'adresse de secours qui a repondu ("" : la principale)
+    // 1.46.0 : la boutique - la commande passee (ou celle qui attend deja : orderReopened) et sa page de paiement (a ouvrir
+    // dans le navigateur), les commandes de ce PC relues par ce travail, la commande livree par la reponse de l'editeur.
+    std::uint64_t             orderNumber{0};
+    std::string               orderUrl;
+    bool                      orderReopened{false};
+    bool                      ordersLooked{false};
+    std::vector<shop::Order>  orders;
+    std::uint64_t             answerOrder{0};
+    bool                      shopLooked{false};   // le catalogue relu par ce travail
 };
 // 1.39.0 : LA LICENCE PERDUE EN DIRECT - tant qu'une licence est sur ce PC, le fil de fond regarde GET /v1/etat toutes
 // les kWatchPeriod secondes (un appel public, rien d'ecrit) ; le compteur des changements ou le registre a bouge :
@@ -330,6 +372,12 @@ inline constexpr const char* kAnswerRefused = "refusee";
 // 1.44.0 : les messages de ce PC tout de suite ; la version publiee tout de suite (relue meme si elle est connue).
 [[nodiscard]] Result pollMessages();
 [[nodiscard]] Result checkUpdate();
+// 1.46.0 : la boutique - acheter (la page de paiement : Result::orderUrl), annuler une commande a payer, relire les
+// commandes de ce PC (une livree : l'etat << poste >> applique tout de suite), relire le catalogue.
+[[nodiscard]] Result placeOrder(const OrderForm& form);
+[[nodiscard]] Result cancelOrder(std::uint64_t number);
+[[nodiscard]] Result refreshOrders();
+[[nodiscard]] Result refreshShop();
 
 // ---- le fil de fond (le fil de l'interface appelle) ----
 void startRunner();
@@ -347,6 +395,19 @@ bool startCheckDevice();
 bool startWatch();   // 1.39.0
 bool startMessages();   // 1.44.0
 bool startUpdateCheck();   // 1.44.0
+bool startOrder(const OrderForm& form);   // 1.46.0 : poll() ouvre la page de paiement rendue
+bool startCancelOrder(std::uint64_t number);
+bool startOrders();
+bool startShopRefresh();
+// 1.46.0 : les commandes de ce PC (le releve, relu au lancement ; puis ce que les travaux en rapportent) - le fil de
+// l'interface ; ordersRevision monte a chaque changement.
+[[nodiscard]] std::vector<shop::Order> orders();
+[[nodiscard]] unsigned long long ordersRevision() noexcept;
+// 1.46.0 : la page de paiement rouverte (Rouvrir la page de paiement) : les commandes regardees toutes les 10 secondes
+// pendant 30 minutes de nouveau. Vide : ouverte ; sinon la phrase.
+[[nodiscard]] std::string reopenPayment(const shop::Order& o);
+// 1.46.0 : une page du navigateur (le recu de Stripe) ; vide : ouverte, sinon la phrase.
+[[nodiscard]] std::string openPage(const std::string& url);
 [[nodiscard]] bool busy() noexcept;
 [[nodiscard]] Job  busyJob() noexcept;
 // Chaque image : releve un travail fini (les avis, la revaluation) ; lance ce que le fil de fond a a faire.

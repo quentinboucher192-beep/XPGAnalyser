@@ -29,6 +29,14 @@ namespace core {
 // Ouvrir `pathUtf8` (UTF-8) avec le programme du systeme. Vide : ouvert ; sinon la phrase (en francais).
 [[nodiscard]] std::string openWithSystem(const std::string& pathUtf8);
 
+// 1.46.0 : UNE PAGE WEB dans le navigateur du systeme (la page de paiement de Stripe, un recu) - une adresse https
+// seulement, sans espace, guillemet ni caractere de controle ; ShellExecuteW, xdg-open ou open avec UN argument (aucun
+// shell). Vide : ouverte ; sinon la phrase (en francais).
+// LES ESSAIS (et seulement eux) : la variable d'environnement XPG_NAVIGATEUR_ESSAI_JOURNAL=<fichier> - l'adresse y est
+// AJOUTEE (une ligne) au lieu d'ouvrir le navigateur ; aucun navigateur ne s'ouvre.
+inline constexpr const char* kBrowserLogEnv = "XPG_NAVIGATEUR_ESSAI_JOURNAL";
+[[nodiscard]] std::string openWebPage(const std::string& url);
+
 // 1.32.0 : au tout debut de main (chaque programme). Windows : les DLL chargees par leur nom ne se cherchent
 // plus que dans le dossier du programme et dans System32 - jamais dans le dossier courant (un projet, un
 // dossier de donnees) ni dans le PATH : une DLL posee a cote d'un projet ne se charge pas. Ailleurs : rien.

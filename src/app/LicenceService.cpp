@@ -12,6 +12,7 @@
 
 #include "../core/Edition.hpp"
 #include "../core/Json.hpp"
+#include "../core/SystemOpen.hpp"   // 1.46.0 : la page de paiement dans le navigateur
 #include "../core/Version.hpp"
 #include "../deploy/Crypto.hpp"
 #include "../deploy/Paths.hpp"
@@ -275,6 +276,8 @@ struct Conn {
     bool                     offline{false};       // /v1/etat n'a pas repondu (why : la phrase, sans point)
     bool                     unreachable{false};   // 1.44.0 : ... par une panne reseau (pas une reponse d'erreur)
     bool                     fallback{false};      // 1.44.0 : c.a est une adresse de secours du registre
+    std::string              version;              // 1.46.0 : la version du service (GET /v1/etat)
+    bool                     shopOpen{false};      // 1.46.0 : sa boutique est ouverte (GET /v1/etat : << boutique >>)
 };
 
 // Des octets signes recus (un registre, une liste de revocation) : importes s'ils sont plus recents que ceux du
@@ -583,6 +586,8 @@ bool connect(Conn& c, Record& rec, Result& res, std::string& why) {
         c.lines.push_back("Le service des licences ne r\xC3\xA9pond pas : le service de secours (" + c.host + ") a r\xC3\xA9pondu.");
     }
     res.publishedVersion = etat.str("version_publiee");   // 1.44.0 : regardee par sync()
+    c.version = etat.str("version");   // 1.46.0 : la boutique (un service 1.46.0 ou plus)
+    c.shopOpen = etat.flag("boutique");
     res.serviceChanges = etat.integer("changements", -1);   // 1.39.0 : -1 : un service d'avant
     res.serviceRegistry = etat.integer("registre", -1);
     rec.lastSync = lic::systemNow();
@@ -729,6 +734,11 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
     }
     const bool mine = forThisRequest(rec, s);
     const bool open = pending(rec);
+    // 1.46.0 : la reponse a une COMMANDE de ce PC (la boutique) : le nonce de la demande scellee avec elle.
+    shop::Order* order = nullptr;
+    if (!s.requestNonce.empty())
+        for (auto& o : rec.orders)
+            if (o.nonce == s.requestNonce) order = &o;
     bool stale = false;
     std::string text, notice, tone;
     bool ok = true;
@@ -784,7 +794,12 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                         // Le mail ne l'a pas apporte (pas parti, ou aucun mail) : le code est montre une fois, dans la
                         // fenetre (jamais ecrit) - pour un autre PC ou une reinstallation.
                         if (content.mail != lgw::kMailSent) res.answerCode = lsv::formatCode(normalized);
-                        text = "Ta licence en ligne " + lid + " est activ\xC3\xA9" "e sur ce PC (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
+                        text = "Ta licence en ligne " + lid + " est activ\xC3\xA9" "e sur ce PC (" +
+                               (order ? "commande n\xC2\xB0 " + std::to_string(order->number) : std::string("re\xC3\xA7ue de l'\xC3\xA9" "diteur")) + ").";
+                        if (order) {   // 1.46.0 : la commande livree
+                            res.answerOrder = order->number;
+                            order->applied = true;
+                        }
                         notice = text;
                         tone = "ok";
                     } else if (one.definitive) {
@@ -800,11 +815,13 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     }
                 }
                 crypto::wipe(normalized.data(), normalized.size());
-            } else if (content.license.empty() && !updated && !rec.option.empty() && mine) {
+            } else if (content.license.empty() && !updated && ((!rec.option.empty() && mine) || (order && !order->option.empty()))) {
                 // 1.42.0 : une demande d'OPTION acceptee pour la licence en ligne de ce PC : la nouvelle emission est sur le
-                // service - le renouvellement l'apporte (tout de suite si le service repond).
+                // service - le renouvellement l'apporte (tout de suite si le service repond). 1.46.0 : une option ACHETEE
+                // (la commande livree, reconnue a son nonce) aussi.
                 settled = true;
-                const std::string what = rec.optionText.empty() ? rec.option : rec.optionText;
+                const std::string what = order && !(!rec.option.empty() && mine) ? (order->optionText.empty() ? order->option : order->optionText)
+                                                                                   : (rec.optionText.empty() ? rec.option : rec.optionText);
                 bool renewed = false;
                 if (conn) {
                     Result one;
@@ -818,9 +835,17 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                 res.answer = kAnswerAccepted;
                 res.answerNote = trim(content.message);
                 res.answerOption = what;   // 1.43.0 : << Ton option est arrivee >>
-                text = renewed ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle est sur ce PC."
-                               : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle arrive au prochain renouvellement de ta licence "
-                                 "(Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Renouveler maintenant).";
+                if (order && !(!rec.option.empty() && mine)) {   // 1.46.0 : achetee
+                    res.answerOrder = order->number;
+                    order->applied = true;
+                    text = renewed ? "Ton option (" + what + ", commande n\xC2\xB0 " + std::to_string(order->number) + ") est sur ce PC."
+                                   : "Ton option (" + what + ", commande n\xC2\xB0 " + std::to_string(order->number) + ") est livr\xC3\xA9" "e : elle arrive au "
+                                     "prochain renouvellement de ta licence (Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Renouveler maintenant).";
+                } else {
+                    text = renewed ? "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle est sur ce PC."
+                                   : "L'\xC3\xA9" "diteur a accept\xC3\xA9 ta demande d'option (" + what + ") : elle arrive au prochain renouvellement de ta licence "
+                                     "(Licence\xE2\x80\xA6 \xE2\x80\xBA Activation \xE2\x80\xBA Renouveler maintenant).";
+                }
                 notice = text;
                 tone = "ok";
             } else if (content.license.empty() && !updated) {
@@ -846,9 +871,14 @@ void applyDeviceStatus(std::string_view blockText, const std::string& id, Record
                     rec.receivedLicense = lid;
                     res.answer = updated ? kAnswerUpdated : kAnswerAccepted;   // 1.36.0 : la fenetre qui le confirme
                     res.answerNote = trim(content.message);
-                    if (!rec.option.empty()) res.answerOption = rec.optionText.empty() ? rec.option : rec.optionText;   // 1.43.0
-                    text = updated ? "Ta licence " + lid + " est mise \xC3\xA0 jour (re\xC3\xA7ue de l'\xC3\xA9" "diteur)."
-                                   : "Ta licence " + lid + " est install\xC3\xA9" "e (re\xC3\xA7ue de l'\xC3\xA9" "diteur).";
+                    if (!rec.option.empty() && mine) res.answerOption = rec.optionText.empty() ? rec.option : rec.optionText;   // 1.43.0
+                    if (order) {   // 1.46.0 : une option achetee sur une licence liee a ce PC (sa nouvelle emission)
+                        res.answerOrder = order->number;
+                        order->applied = true;
+                        if (!order->option.empty()) res.answerOption = order->optionText.empty() ? order->option : order->optionText;
+                    }
+                    text = updated ? "Ta licence " + lid + " est mise \xC3\xA0 jour (re\xC3\xA7ue de l'\xC3\xA9" "diteur" + (order ? ", commande n\xC2\xB0 " + std::to_string(order->number) : std::string()) + ")."
+                                   : "Ta licence " + lid + " est install\xC3\xA9" "e (re\xC3\xA7ue de l'\xC3\xA9" "diteur" + (order ? ", commande n\xC2\xB0 " + std::to_string(order->number) : std::string()) + ").";
                     notice = text;
                     tone = "ok";
                 } else if (rep.ok) {
@@ -1835,6 +1865,31 @@ bool loadRecord(Record& out, std::string* why) {
     if (const json::Value* m = v.find("versions_annoncees"); m && m->isObject())
         for (const auto& [k, x] : m->members())
             if (x.isString()) r.versionsAnnounced.emplace_back(k, x.asString());
+    // 1.46.0 : les commandes de ce PC (la boutique)
+    if (const json::Value* list = v.find("commandes"); list && list->isArray())
+        for (const auto& c : list->items()) {
+            if (!c.isObject() || c.num("numero") <= 0) continue;
+            shop::Order o;
+            o.number = static_cast<std::uint64_t>(c.num("numero"));
+            o.article = c.str("article");
+            o.label = c.str("libelle");
+            o.amount = c.integer("montant");
+            o.currency = c.str("devise", "eur");
+            o.state = c.str("etat");
+            o.mode = c.str("mode");
+            o.created = static_cast<lic::Seconds>(std::max<std::int64_t>(0, c.integer("cree")));
+            o.updated = static_cast<lic::Seconds>(std::max<std::int64_t>(0, c.integer("maj")));
+            o.expires = static_cast<lic::Seconds>(std::max<std::int64_t>(0, c.integer("expire")));
+            o.licence = c.str("licence");
+            o.receiptUrl = c.str("recu_url");
+            o.payUrl = c.str("url");
+            o.nonce = c.str("demande");
+            o.option = c.str("option");
+            o.optionText = c.str("option_texte");
+            o.applied = c.flag("appliquee");
+            if (!shop::findOrder(r.orders, o.number)) r.orders.push_back(std::move(o));
+            if (r.orders.size() >= shop::kMaxOrders) break;
+        }
     if (r.local != kLocalSent && r.local != kLocalCancelled) r.local.clear();
     out = std::move(r);
     return true;
@@ -1889,6 +1944,37 @@ bool saveRecord(const Record& r, std::string* why) {
         json::Value m = json::Value::object();
         for (const auto& [k, x] : r.versionsAnnounced) m.set(k, x);
         v.set("versions_annoncees", std::move(m));
+    }
+    if (!r.orders.empty()) {   // 1.46.0
+        json::Value list = json::Value::array();
+        for (const auto& o : r.orders) {
+            json::Value c = json::Value::object();
+            c.set("numero", o.number);
+            const auto put = [&c](const char* key, const std::string& x) {
+                if (!x.empty()) c.set(key, x);
+            };
+            const auto at = [&c](const char* key, lic::Seconds t) {
+                if (t > 0) c.set(key, static_cast<std::int64_t>(t));
+            };
+            put("article", o.article);
+            put("libelle", o.label);
+            c.set("montant", o.amount);
+            put("devise", o.currency);
+            put("etat", o.state);
+            put("mode", o.mode);
+            at("cree", o.created);
+            at("maj", o.updated);
+            at("expire", o.expires);
+            put("licence", o.licence);
+            put("recu_url", o.receiptUrl);
+            put("url", o.payUrl);
+            put("demande", o.nonce);
+            put("option", o.option);
+            put("option_texte", o.optionText);
+            if (o.applied) c.set("appliquee", true);
+            list.push(std::move(c));
+        }
+        v.set("commandes", std::move(list));
     }
     std::string w;
     if (!crypto::replaceFile(recordPath(), json::write(v) + "\n", false, &w)) {
@@ -1963,6 +2049,23 @@ Record mergeRecords(const Record& disk, const Record& mine) {
     for (const auto& [k, x] : disk.versionsAnnounced)
         if (std::none_of(out.versionsAnnounced.begin(), out.versionsAnnounced.end(), [&k](const auto& y) { return y.first == k; }))
             out.versionsAnnounced.emplace_back(k, x);
+    // 1.46.0 : les commandes - toutes celles des deux ; de chacune, ce que le service a dit le plus recemment (maj), et ce
+    // que ce PC sait (le nonce, l'option : celui qui l'a) ; appliquee : par l'un ou l'autre.
+    for (const auto& d : disk.orders) {
+        shop::Order* m = shop::findOrder(out.orders, d.number);
+        if (!m) {
+            out.orders.push_back(d);
+            continue;
+        }
+        shop::Order keep = d.updated > m->updated ? d : *m;
+        keep.nonce = !m->nonce.empty() ? m->nonce : d.nonce;
+        keep.option = !m->option.empty() ? m->option : d.option;
+        keep.optionText = !m->optionText.empty() ? m->optionText : d.optionText;
+        keep.applied = m->applied || d.applied;
+        *m = std::move(keep);
+    }
+    std::stable_sort(out.orders.begin(), out.orders.end(), [](const shop::Order& a, const shop::Order& b) { return a.number > b.number; });
+    if (out.orders.size() > shop::kMaxOrders) out.orders.resize(shop::kMaxOrders);
     return out;
 }
 
