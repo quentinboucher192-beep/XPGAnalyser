@@ -441,6 +441,10 @@ int main(int argc, char** argv) {
                   sv1.catalog.state == "refus" && !sv1.catalog.ok() && !has(sv1.catalog.message, kKey) && has(sv1.catalog.message, "Products"),
               "lu du service : le montant du moment, le produit Stripe, l'etat des produits (sans secret)");
         check(std::string(shop::kStripeVersion) == "2026-09-30.endive", "la version de l'API de Stripe : 2026-09-30.endive");
+        // l'Admin 1.46.1 (son kit : le service 1.46.1) devant un service 1.46.0 : << la 1.46.1 est prete dans l'Admin : deploie-la >>
+        const auto vc = dep::checkVersion("1.46.0", "1.46.1");
+        check(vc.outdated && vc.kitNewer && !vc.belowRequired && vc.target == "1.46.1" && has(dep::outdatedMessage(vc), "la 1.46.1 est pr\xC3\xAAte dans l'Admin"),
+              "un service 1.46.0, le kit 1.46.1 : a mettre a jour (" + dep::outdatedMessage(vc) + ")");
     }
 
     gui::Workspace plus(U(root / "plus"));
