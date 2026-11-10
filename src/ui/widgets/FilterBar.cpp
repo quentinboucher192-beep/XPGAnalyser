@@ -123,7 +123,14 @@ public:
             case Role::Field: {
                 const bool on = bar_.fieldActive(field_);
                 const auto* p = bar_.pickOf(field_);
-                float w = 10.f + measureWidth(text(), on ? gfx::semibold(kSmall) : gfx::semibold(kSmall)) + 6.f + 10.f + 8.f;
+                // Comme onPaint : << Etat : >> en clair, les valeurs en gras ; la croix (ou le chevron) a droite.
+                const std::string full = text();
+                const auto colon = full.find(" : ");
+                float w = 10.f + 26.f + 2.f;
+                if (on && colon != std::string::npos)
+                    w += measureWidth(full.substr(0, colon + 3), kSmall) + measureWidth(full.substr(colon + 3), gfx::semibold(kSmall));
+                else
+                    w += measureWidth(full, gfx::semibold(kSmall));
                 if (p && p->viaMenu) w += measureWidth("clic droit", gfx::semibold(gfx::FontId{10})) + 12.f;
                 return w;
             }
