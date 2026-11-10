@@ -274,10 +274,13 @@ protected:
             const FontId vf = gfx::semibold(FontId{12});
             const float ew = r.extra.empty() ? 0.f : ctx.r.measure(r.extra, FontId{11}).width + 6.f;
             const float vw = ctx.r.measure(r.value, vf).width;
-            ctx.r.drawText({b.right() - ew + 6.f, y + 1.f}, r.extra, FontId{11}, kFaint);
-            ctx.r.drawText({b.right() - ew - vw, y}, r.value, vf, kInk);
-            ctx.r.drawText({b.x, y}, ch::detail::fit(ctx.r, r.label, FontId{12}, b.w - ew - vw - 10.f), FontId{12}, Color::rgb(0x334155));
-            const Rect track{b.x, y + 19.f, b.w, 6.f};
+            const bool oneLine = ctx.r.measure(r.label, FontId{12}).width <= b.w - ew - vw - 10.f;
+            // le libelle trop long pour la carte : seul sur sa ligne, le montant a droite de la barre
+            const float vy = oneLine ? y : y + 16.f;
+            ctx.r.drawText({b.right() - ew + 6.f, vy + 1.f}, r.extra, FontId{11}, kFaint);
+            ctx.r.drawText({b.right() - ew - vw, vy}, r.value, vf, kInk);
+            ctx.r.drawText({b.x, y}, ch::detail::fit(ctx.r, r.label, FontId{12}, oneLine ? b.w - ew - vw - 10.f : b.w), FontId{12}, Color::rgb(0x334155));
+            const Rect track = oneLine ? Rect{b.x, y + 19.f, b.w, 6.f} : Rect{b.x, y + 21.f, std::max(20.f, b.w - ew - vw - 10.f), 6.f};
             ctx.r.fillRoundedRect(track, Color::rgb(0xEEF2F7), 3.f);
             if (r.fraction > 0) ctx.r.fillRoundedRect({track.x, track.y, std::max(6.f, track.w * static_cast<float>(std::min(1.0, r.fraction))), track.h}, ch::colors::kOptions, 3.f);
             y += h;
