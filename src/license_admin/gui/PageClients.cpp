@@ -8,6 +8,7 @@
 //  << Nouvelle licence pour ce client... >> ouvre l'assistant de licence, le
 //  client prerempli ; << Voir ses licences >> va a la page Licences.
 // =============================================================================
+#include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../../ui/TextSearch.hpp"
@@ -147,9 +148,6 @@ std::string deviceState(const std::string& s) {
 class ClientsPage final : public Page {
 public:
     explicit ClientsPage(ShellHost host) : Page("page.clients", std::move(host)) {
-        search_ = add(*this, std::make_unique<ui::InputText>("clients.recherche"));
-        search_->setPlaceholder("Client, licence, PC\xE2\x80\xA6");
-        search_->setEscapeClears(true);
         refreshBtn_ = add(*this, std::make_unique<ui::Button>("Actualiser", "clients.actualiser"));
         refreshBtn_->setIcon(ui::Icon::Refresh);
         refreshBtn_->setTooltip("Relit tout de suite l'archive, le registre des activations et, le service r\xC3\xA9gl\xC3\xA9, les licences en ligne (F5)");
@@ -176,13 +174,31 @@ public:
         table_->setRowHeightOverride(34.f);
         model_ = std::make_shared<Rows>(std::vector<std::string>{"Client \xC2\xB7 licence \xC2\xB7 PC", "Offre \xC2\xB7 \xC3\xA9tat", "Fin", "PC", "Activit\xC3\xA9"});
         table_->setModel(model_);
+        // 1.47.0 (planche 12) : LA BARRE - chercher (clients.recherche : le client, ses licences, ses PC), l'offre, l'etat,
+        // servi par, l'activite ; elle choisit les clients (leurs lignes suivent).
+        bar_ = add(*this, std::make_unique<ui::FilterBar>("clients", barFields()));
+        bar_->setNoun("clients");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return all_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < texts_.size() && f < texts_[r].size() ? texts_[r][f] : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t { return f == 4 && r < all_.size() ? listkit::seconds(all_[r].lastActivity) : 0; };
+            src.extra = [this](std::size_t r) { return r < extra_.size() ? extra_[r] : std::string(); };
+            bar_->setSource(std::move(src));
+        }
+        bar_->linkTable(*table_);
+        bar_->setMemoryKey("clients");
+        // 1.47.0 (planche 07) : un client ouvert montre son resume sous sa ligne (puis ses licences) ; (planche 06) le clic droit.
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
         trash_ = add(*this, std::make_unique<ui::TableView>("clients.corbeille"));
         trash_->setColumns({{"Client", 160.f}, {"Supprim\xC3\xA9 le", 100.f}, {"Licences", 70.f}});
         trash_->setSelectionMode(ui::SelectionMode::Single);
         trashModel_ = std::make_shared<Rows>(std::vector<std::string>{"Client", "Supprim\xC3\xA9 le", "Licences"});
         trash_->setModel(trashModel_);
 
-        links_ += search_->textChanged->connect([this](const std::string&) { rebuild(); });
+        links_ += bar_->changed->connect([this] { rebuild(); });
+        links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
             if (loading_ || rows.empty() || rows.front() >= rows_.size()) return;
             selected_ = rows_[rows.front()].client;
@@ -229,6 +245,19 @@ public:
         devicesAll_ = ws().devices();
         deleted_ = ws().deletedClients();
         readAt_ = ws().now();
+        reloadTexts();
+        // 1.47.0 : << Aller a > le client >> (une autre page) : lui seul, ouvert (son resume, ses licences).
+        if (const std::string f = takePageFocus("clients"); f.rfind("client:", 0) == 0) {
+            const std::string name = f.substr(7);
+            bar_->clearAll();
+            for (const auto& c : all_)
+                if (lowerAscii(c.name) == lowerAscii(name)) {
+                    selected_ = c.name;
+                    selectedKey_ = "c:" + lowerAscii(c.name);
+                    closed_.erase(selectedKey_);
+                    open_.insert(selectedKey_);
+                }
+        }
         rebuild();
         rebuildTrash();
         invalidateLayout();
@@ -248,12 +277,16 @@ protected:
         leadLines_ = wrap(kLead, kFonts.ui, w, 2);
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
-        search_->setBounds({x, y + 2.f, std::min(300.f, w * 0.32f), kFieldH});
         const float cw = std::ceil(collapseBtn_->sizeHint().preferred.w), ew = std::ceil(expandBtn_->sizeHint().preferred.w);
         const float cardW = std::clamp(w * 0.32f, 300.f, 420.f);
         const float tableRight = x + w - cardW - 12.f;
+        // 1.47.0 : la barre de filtres au-dessus de la liste ; Tout deplier / Tout replier au bout de la meme rangee.
+        const float barW = std::max(300.f, tableRight - x - cw - ew - 16.f);
+        const float bh = bar_->heightFor(barW);
+        bar_->setBounds({x, y + 1.f, barW, bh});
         collapseBtn_->setBounds({tableRight - cw, y, cw, kButtonH});
         expandBtn_->setBounds({tableRight - cw - 6.f - ew, y, ew, kButtonH});
+        y += std::max(0.f, bh - kButtonH);
         const float tw = ui::measureWidth("Clients", kFonts.title) + 24.f;
         countRect_ = {x + tw, titleY_ + 4.f, std::max(0.f, w - tw - rw - 220.f), 22.f};
         y += kButtonH + kGap;
@@ -406,19 +439,72 @@ private:
         return {"active", 1};
     }
 
+    // 1.47.0 : ce que la barre lit de chaque client - son nom, son offre (sa derniere licence en cours), son etat, qui
+    // l'a servi (le plus de licences signees), sa derniere activite ; la recherche lit aussi ses licences et ses PC.
+    void reloadTexts() {
+        who_.reset();
+        texts_.clear();
+        extra_.clear();
+        for (const auto& c : all_) {
+            std::string edition;
+            Seconds latest = -1;
+            std::string extra;
+            for (const auto& id : c.licenceIds) {
+                extra += id + " ";
+                if (const LicenceEntry* l = ws().licence(id)) {
+                    for (const auto& d : l->licence.devices) extra += d.name + " ";
+                    if (Workspace::inForce(*l) && l->licence.issuedAt > latest) {
+                        latest = l->licence.issuedAt;
+                        edition = l->licence.edition;
+                    }
+                }
+            }
+            const auto served = servedBy(c);
+            texts_.push_back({c.name, edition, c.activeLicences > 0 ? std::string("active") : std::string("plus rien en cours"),
+                              served.empty() ? std::string() : served.front().first, c.lastActivity ? dateFr(c.lastActivity) : std::string()});
+            extra_.push_back(extra);
+        }
+        bar_->refreshCounts();
+    }
+
+    // Les admins qui ont signe ses licences (le journal des admins), le plus actif d'abord : (nom, combien, cle).
+    [[nodiscard]] std::vector<std::pair<std::string, std::pair<int, std::string>>> servedByFull(const ClientEntry& c) const {
+        std::vector<std::pair<std::string, std::pair<int, std::string>>> out;
+        for (const auto& id : c.licenceIds)
+            for (const auto& d : who_.history(id)) {
+                if (d.action.rfind("licence_", 0) != 0 || d.who.empty()) continue;
+                auto it = std::find_if(out.begin(), out.end(), [&](const auto& x) { return x.first == d.who; });
+                if (it == out.end()) out.push_back({d.who, {1, d.key}});
+                else ++it->second.first;
+            }
+        std::stable_sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.second.first > b.second.first; });
+        return out;
+    }
+    [[nodiscard]] std::vector<std::pair<std::string, int>> servedBy(const ClientEntry& c) const {
+        std::vector<std::pair<std::string, int>> out;
+        for (const auto& [n, v] : servedByFull(c)) out.push_back({n, v.first});
+        return out;
+    }
+
+    // 1.47.0 (planche 12) : les colonnes vues par la barre (un client par ligne).
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(5);
+        f[0] = {.title = "Client", .kind = K::Text};
+        f[1] = {.title = "Offre", .chip = true, .noun = "une offre"};
+        f[2] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat"};
+        f[3] = {.title = "Servi par", .chip = true, .noun = "un admin"};
+        f[4] = {.title = "Activit\xC3\xA9", .kind = K::Period, .chip = true};
+        return f;
+    }
+
     void rebuild() {
-        const ui::SearchQuery q(search_->text());
         rows_.clear();
         shownClients_ = 0;
         const Seconds t = ws().now();
-        for (const auto& c : all_) {
-            // ce que la recherche regarde : le client, ses licences, ses PC
-            std::vector<std::string> texts{c.name};
-            texts.insert(texts.end(), c.licenceIds.begin(), c.licenceIds.end());
-            for (const auto& id : c.licenceIds)
-                if (const LicenceEntry* l = ws().licence(id))
-                    for (const auto& d : l->licence.devices) texts.push_back(d.name);
-            if (!q.empty() && !q.matches(texts)) continue;
+        for (std::size_t ci = 0; ci < all_.size(); ++ci) {
+            const auto& c = all_[ci];
+            if (!bar_->accepts(ci)) continue;   // 1.47.0 : la barre (la recherche, les puces)
             ++shownClients_;
             const std::string ck = "c:" + lowerAscii(c.name);
             // la ligne du client
@@ -619,6 +705,9 @@ private:
         });
         for (std::size_t i = 0; i < rows_.size(); ++i)
             if (rows_[i].key == selectedKey_) table_->selectModelRows({static_cast<RowIndex>(i)}, false);
+        // 1.47.0 : un client ouvert : son resume sous sa ligne (le depliage), ses licences ensuite.
+        for (std::size_t i = 0; i < rows_.size(); ++i)
+            if (rows_[i].depth == 0) (void)table_->setUnfolded(static_cast<RowIndex>(i), rows_[i].expanded);
         table_->setScrollOffset(scroll);
         loading_ = false;
         updateButtons();
@@ -665,6 +754,115 @@ private:
         deleteBtn_->setEnabled(canDelete);
     }
 
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle (le client de la ligne) ----
+    ui::ListMenu menuFor() {
+        const auto rows = table_->selectedModelRows();
+        ui::ListMenu m({rows.size(), "lignes", true});
+        if (rows.empty() || rows.front() >= rows_.size()) return m;
+        const Line& line = rows_[rows.front()];
+        const ClientEntry* c = nullptr;
+        for (const auto& x : all_)
+            if (x.name == line.client) c = &x;
+        if (rows.size() == 1 && line.expandable) {
+            const std::string key = line.key;
+            m.unfold(line.expanded, [this, key] { toggle(key); });
+        }
+        if (rows.size() == 1 && c) {
+            const std::string name = c->name;
+            const std::string why = ws().can("licence_creer") ? std::string() : ws().whyNot("licence_creer");
+            m.action({.label = "Nouvelle licence pour ce client\xE2\x80\xA6", .icon = ui::Icon::Plus, .why = why, .run = [this, name] {
+                          if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {}, {}, name));
+                      }});
+            if (line.key.rfind("l:", 0) == 0) {   // une ligne de licence : elle-meme
+                const std::string id = line.key.substr(2);
+                if (ws().licence(id))
+                    m.goTo({.label = "La licence " + id, .icon = ui::Icon::Document, .run = [this, id] {
+                                requestPageFocus("licences", id);
+                                host_.navigate("licences");
+                            }});
+            }
+            const auto go = [&](const char* label, const char* page, ui::Icon icon) {
+                m.goTo({.label = label, .icon = icon, .run = [this, name, page] {
+                            requestPageFocus(page, "client:" + name);
+                            host_.navigate(page);
+                        }});
+            };
+            go("Ses licences", "licences", ui::Icon::Document);
+            go("Ses PC (Activations)", "activations", ui::Icon::Station);
+            if (ws().hasOrders()) go("Ses commandes", "commandes", ui::Icon::Export);
+            if (ws().service().ready()) go("Ses demandes", "demandes", ui::Icon::Mail);
+            std::size_t i = 0;
+            while (i < all_.size() && all_[i].name != name) ++i;
+            const auto on = [&](std::size_t f, const std::string& label) {
+                if (i >= texts_.size() || texts_[i][f].empty()) return;
+                const std::string v = texts_[i][f];
+                m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+            };
+            on(1, "Cette offre");
+            on(2, "Cet \xC3\xA9tat");
+            on(3, "Servi par");
+            m.copy("Le nom", name, ui::Icon::Copy);
+        }
+        std::string lines;
+        for (const RowIndex r : rows) {
+            std::string l;
+            for (std::size_t k = 0; k < 5; ++k) l += (k ? "\t" : "") + model_->cellText(r, k);
+            lines += l + "\n";
+        }
+        m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
+        m.exportRows([this, rows] { listkit::exportRows(host_, *table_, rows, "clients.csv", "lignes"); });
+        if (rows.size() == 1 && c && line.depth == 0)
+            m.danger({.label = "Supprimer le client", .icon = ui::Icon::Delete, .why = deleteBtn_->enabled() ? std::string() : deleteNote_, .run = [this] { askDelete(); }});
+        return m;
+    }
+
+    // ---- 1.47.0 (planche 07) : le resume d'un client ouvert - ses licences, ses PC, ses achats ; qui l'a servi ----
+    ui::WidgetPtr unfoldFor(RowIndex r) {
+        if (r >= rows_.size() || rows_[r].depth != 0) return nullptr;
+        const ClientEntry* c = nullptr;
+        for (const auto& x : all_)
+            if (x.name == rows_[r].client) c = &x;
+        if (!c) return nullptr;
+        auto card = std::make_unique<ui::UnfoldCard>("clients.depliage");
+        ui::UnfoldCard::Box b;   // a plat (planche 07 : Clients)
+        std::string soon;
+        int places = 0, linked = 0;
+        for (const auto& id : c->licenceIds)
+            if (const LicenceEntry* l = ws().licence(id); l && Workspace::inForce(*l)) {
+                places += l->licence.maxDevices;
+                linked += static_cast<int>(l->licence.devices.size());
+                if (l->licence.expiresAt && l->licence.expiresAt - ws().now() <= 30 * 86400 && soon.empty()) soon = dateFr(l->licence.expiresAt);
+            }
+        std::string first = "**" + std::to_string(c->activeLicences) + "** " + (c->activeLicences > 1 ? "actives" : "active");
+        if (!soon.empty()) first += ", 1 finit le " + soon;
+        first += " \xC2\xB7 **" + std::to_string(std::max(linked, c->devices)) + "** PC" + (places ? " sur " + std::to_string(places) : std::string());
+        const auto hist = ws().purchaseHistory(c->name);
+        if (!hist.empty()) first += " \xC2\xB7 **" + std::to_string(hist.size()) + "** " + (hist.size() > 1 ? "achats" : "achat");
+        b.lines.push_back({.icon = ui::Icon::Document, .text = first});
+        const auto served = servedByFull(*c);
+        if (!served.empty()) {
+            ui::UnfoldCard::Line l{.icon = ui::Icon::User, .text = "servi par"};
+            for (std::size_t k = 0; k < served.size() && k < 4; ++k)
+                l.people.push_back(listkit::person(host_, served[k].second.second, served[k].first, std::to_string(served[k].second.first)));
+            b.lines.push_back(std::move(l));
+        }
+        b.lines.push_back({.icon = ui::Icon::History,
+                           .text = c->lastActivity ? "derni\xC3\xA8re activit\xC3\xA9 le " + dateFr(c->lastActivity) : std::string("aucune activit\xC3\xA9 not\xC3\xA9" "e")});
+        if (c->pendingRequests > 0)
+            b.lines.push_back({.icon = ui::Icon::Warning, .text = "**" + std::to_string(c->pendingRequests) + "** " + (c->pendingRequests > 1 ? "demandes attendent" : "demande attend") + " ta d\xC3\xA9" "cision",
+                               .tone = ui::Tone::Warning});
+        card->addBox(std::move(b));
+        const std::string name = c->name;
+        card->addButton("Ses licences", "clients.depliage.licences", ui::Icon::GoTo, [this, name] {
+            requestPageFocus("licences", "client:" + name);
+            host_.navigate("licences");
+        }, {}, true);
+        card->addButton("Nouvelle licence\xE2\x80\xA6", "clients.depliage.nouvelle", ui::Icon::Plus, [this, name] {
+            if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {}, {}, name));
+        }, ws().can("licence_creer") ? std::string() : ws().whyNot("licence_creer"), true);
+        return card;
+    }
+
     void reloadNow() {
         OpResult r = OpResult::done("Clients relus : l'archive et le registre des activations.");
         if (ws().service().ready()) {
@@ -703,7 +901,10 @@ private:
 
     core::ConnectionScope    links_;
     std::shared_ptr<bool>    alive_{std::make_shared<bool>(true)};
-    ui::InputText*           search_{nullptr};
+    ui::FilterBar*           bar_{nullptr};                         // 1.47.0
+    std::vector<std::vector<std::string>> texts_;                   // 1.47.0 : ce que la barre lit de chaque client
+    std::vector<std::string> extra_;                                // ... et ce que la recherche lit en plus (licences, PC)
+    listkit::WhoDid          who_{host_.workspace()};                // 1.47.0 : qui l'a servi
     ui::Button*              refreshBtn_{nullptr};
     ui::Button*              expandBtn_{nullptr};
     ui::Button*              collapseBtn_{nullptr};

@@ -258,8 +258,10 @@ void               civil(Day d, int& year, int& month, int& dayOfMonth) noexcept
 // =============================================================================
 // Un pas rond au-dessus de `raw` : 1, 2, 2,5, 5 x 10^k (raw <= 0 : 1).
 [[nodiscard]] double niceStep(double raw) noexcept;
-// Des graduations rondes qui couvrent [lo, hi], environ `target` intervalles. lo == hi : [lo, lo + 1 pas].
-[[nodiscard]] std::vector<double> niceTicks(double lo, double hi, int target = 3);
+// Des graduations rondes qui couvrent [lo, hi], environ `target` intervalles (le pas qui deborde le moins parmi
+// target, target + 1, target + 2). lo == hi : [lo, lo + 1 pas]. `integral` : des nombres entiers (des commandes, des
+// PC) - jamais un pas de 2,5 ni de 0,5.
+[[nodiscard]] std::vector<double> niceTicks(double lo, double hi, int target = 3, bool integral = false);
 // Des graduations de duree (en heures) jusqu'a hi : 0, 4, 8 h ; 0, 12, 24, 36, 48 h ; au-dela : en jours.
 [[nodiscard]] std::vector<double> hourTicks(double hi, int target = 3);
 

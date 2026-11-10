@@ -72,7 +72,8 @@
 //  n'avance (rotation, elan, turnTo) qu'a 30 images par seconde au plus. Arrete
 //  (survole, une ville choisie, en pause, fige), il ne recalcule rien : une image
 //  posee, quelques marques (des textures en cache). Une page cachee n'est pas
-//  dessinee : le temps ne s'y accumule pas (un pas vaut 0,1 s au plus).
+//  dessinee : le temps ne s'y accumule pas (un pas vaut 0,1 s au plus). La fenetre
+//  reduite : la boucle de l'Admin ne dessine plus rien (AdminGuiMain), donc lui non plus.
 //  Les marques, les anneaux et les glyphes sont des petites textures calculees
 //  une fois (sur-echantillonnees 4 x 4), gardees par renderer.
 // =============================================================================

@@ -230,6 +230,54 @@ int main(int argc, char** argv) {
         rig.dialogs.clear();
     }
 
+    // 1.47.0 : l'ecart se compare au prix que le client voit MAINTENANT (une reduction en cours), comme les Studios.
+    std::printf("-- Boutique : une reduction en cours (le prix du moment), puis finie\n");
+    {
+        licensing::Registry reg = ws.registry();
+        for (auto& e : reg.editions)
+            if (e.id == "PROFESSIONAL") {
+                e.price = "490 \xE2\x82\xAC HT / an";
+                e.promoPrice = "390 \xE2\x82\xAC HT / an";
+                e.promoUntil = g_now + 46 * 86400;   // le 22/12/2026
+            }
+        check(ws.signRegistry(reg).ok, "le registre : PROFESSIONAL reduite (390 EUR HT au lieu de 490) jusqu'au 22/12/2026");
+        (void)ws.takeServiceJob();
+        shop::Settings s = ws.shop();
+        for (auto& a : s.articles)
+            if (a.id == "ed:PROFESSIONAL") a.amount = 46800;   // 390 EUR HT = 468,00 EUR TTC
+        ws.adoptShop(s);
+        bp->refresh();
+        std::string t = draw(*bp);
+        auto* cat = find<ui::TableView>(*bp, "boutique.catalogue");
+        auto& m = *cat->model();
+        const int pro = rowOf(m, 0, "PROFESSIONAL - 1 an");
+        const auto R = static_cast<ui::RowIndex>(pro < 0 ? 0 : pro);
+        check(pro >= 0 && m.cellText(R, 5).empty() && !has(t, "\xE2\x89\xA0 affich\xC3\xA9"), "la reduction en cours : 468,00 EUR TTC (= 390 HT) n'est pas un ecart (" + m.cellText(R, 5) + ")");
+        check(m.cellText(R, 2) == "390 \xE2\x82\xAC HT / an (au lieu de 490)" && has(t, "390 \xE2\x82\xAC HT / an (au lieu de 490)"),
+              "le prix affiche : le prix du moment (" + m.cellText(R, 2) + ")");
+        for (const auto& sz : kSizes) {
+            (void)draw(*bp, sz.w, sz.h);
+            std::string why;
+            check(columnsFit(*cat, "\xC3\x89" "cart", why), std::string("le catalogue (un prix reduit) a ") + sz.window + " : toutes les colonnes en vue (" + why + ")");
+        }
+        (void)draw(*bp);
+        check(m.setCellText(R, 1, "Non") && m.setCellText(R, 1, "Oui") && m.cellText(R, 3).find("468,00") == 0,
+              "remise en vente pendant la reduction : le montant propose, 468,00 EUR TTC (" + m.cellText(R, 3) + ")");
+        check(click(*bp, "boutique.annuler"), "Annuler les changements");
+        // la reduction finie (l'heure du poste apres le 22/12) : le prix normal, et l'ecart revient
+        const lic::Seconds keep = g_now;
+        g_now += 60 * 86400;
+        bp->refresh();
+        t = draw(*bp);
+        check(m.cellText(R, 2) == "490 \xE2\x82\xAC HT / an" && !has(t, "au lieu de 490"), "la reduction finie : le prix normal (" + m.cellText(R, 2) + ")");
+        check(m.cellText(R, 5) == "\xE2\x89\xA0 affich\xC3\xA9 (588,00\xC2\xA0\xE2\x82\xAC TTC)", "la reduction finie : 468,00 EUR TTC est un ecart au prix normal (" + m.cellText(R, 5) + ")");
+        check(m.setCellText(R, 1, "Non") && m.setCellText(R, 1, "Oui") && m.cellText(R, 3).find("588,00") == 0,
+              "remise en vente apres la reduction : 588,00 EUR TTC propose (" + m.cellText(R, 3) + ")");
+        check(click(*bp, "boutique.annuler"), "Annuler les changements (la reduction finie)");
+        g_now = keep;
+        bp->refresh();
+    }
+
     std::printf("-- un service 1.44.0 : deploie la 1.46.0 pour la boutique\n");
     {
         license_admin::online::ServiceState st;

@@ -202,6 +202,9 @@ bool fetchShop(const ShellHost& h, std::shared_ptr<bool> alive, std::function<vo
 struct CatalogueRow {
     std::string kind, edition, option, name, price;
     int         days{0};
+    // 1.47.0 : la reduction de l'offre (le registre : promo_price, promo_until) ; une option n'en a pas.
+    std::string promo;
+    Seconds     promoUntil{0};
     [[nodiscard]] std::string id() const { return shop::articleId(kind, kind == "option" ? option : edition, days); }
 };
 
@@ -211,6 +214,26 @@ public:
     shop::Settings*           draft{nullptr};
     std::function<void()>     changed;
     std::string               refusal;   // le dernier refus d'une case (montant illisible...)
+    std::function<Seconds()>  clock;     // 1.47.0 : l'heure (celle du Workspace) ; vide : celle du systeme
+
+    // 1.47.0 : le prix que le client voit MAINTENANT - comme la boutique des Studios (promoOf, LicenceWindow.cpp) et
+    // l'historique des achats (Workspace.cpp) : le prix reduit tant que la fin de la reduction n'est pas passee, sinon
+    // le prix normal.
+    [[nodiscard]] bool promoNow(const CatalogueRow& row) const {
+        return !row.promo.empty() && (clock ? clock() : licensing::systemNow()) < row.promoUntil;
+    }
+    [[nodiscard]] const std::string& currentPrice(const CatalogueRow& row) const { return promoNow(row) ? row.promo : row.price; }
+    // La colonne << Prix affiche >> : le prix du moment ; reduit : << 390 EUR HT / an (au lieu de 490) >>.
+    [[nodiscard]] std::string priceText(const CatalogueRow& row) const {
+        if (!promoNow(row)) return row.price.empty() ? std::string("\xE2\x80\x94") : row.price;
+        std::string base;   // le nombre du prix normal (<< 490 >>)
+        for (char c : row.price) {
+            if ((c >= '0' && c <= '9') || ((c == ',' || c == '.' || c == ' ') && !base.empty())) base += c;
+            else if (!base.empty()) break;
+        }
+        while (!base.empty() && (base.back() == ' ' || base.back() == ',' || base.back() == '.')) base.pop_back();
+        return row.promo + (base.empty() ? std::string(" (r\xC3\xA9" "duit)") : " (au lieu de " + base + ")");
+    }
 
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
     [[nodiscard]] std::size_t columnCount() const override { return 6; }
@@ -222,7 +245,8 @@ public:
     [[nodiscard]] std::string gap(RowIndex r) const {
         const shop::Article* a = article(r);
         std::int64_t shown = 0;
-        if (!a || rows[r].price.empty() || !shownPriceTtc(rows[r].price, shown)) return {};
+        const std::string& price = currentPrice(rows[r]);   // 1.47.0 : le prix du moment (une reduction en cours)
+        if (!a || price.empty() || !shownPriceTtc(price, shown)) return {};
         if (std::llabs(shown - a->amount) <= 1) return {};
         return "\xE2\x89\xA0 affich\xC3\xA9 (" + shop::amountText(shown) + " TTC)";
     }
@@ -232,7 +256,7 @@ public:
         switch (c) {
             case 0: return rows[r].name;
             case 1: return a ? "Oui" : "Non";
-            case 2: return rows[r].price.empty() ? std::string("\xE2\x80\x94") : rows[r].price;
+            case 2: return priceText(rows[r]);
             case 3: return a ? shop::amountText(a->amount, draft->currency) : std::string("\xE2\x80\x94");
             case 4: return a ? a->label : std::string();
             case 5: return gap(r);
@@ -257,9 +281,11 @@ public:
         if (c == 1) return {"Oui", "Non"};
         return {};
     }
-    // Le montant propose quand un article entre en vente : le prix affiche (TTC), sinon 1,00 EUR.
+    // Le montant propose quand un article entre en vente : le prix affiche du moment (TTC ; 1.47.0 : le prix reduit tant
+    // que la reduction court), sinon 1,00 EUR.
     [[nodiscard]] shop::Article fresh(RowIndex r) const {
         const CatalogueRow& row = rows[r];
+        const std::string& price = currentPrice(row);
         shop::Article a;
         a.kind = row.kind;
         a.edition = row.edition;
@@ -267,7 +293,7 @@ public:
         a.days = row.days;
         a.id = row.id();
         std::int64_t v = 0;
-        a.amount = !row.price.empty() && shownPriceTtc(row.price, v) && v >= shop::kMinAmount ? v : 100;
+        a.amount = !price.empty() && shownPriceTtc(price, v) && v >= shop::kMinAmount ? v : 100;
         a.label = row.kind == "option" ? "Option " + row.name : "Licence " + row.name;
         if (a.label.size() > 110) a.label.resize(110);
         return a;
@@ -336,6 +362,7 @@ public:
         table_->setSelectionMode(ui::SelectionMode::Single);
         model_ = std::make_shared<CatalogueModel>();
         model_->draft = &draft_;
+        model_->clock = [this] { return ws().now(); };   // 1.47.0 : une reduction en cours (le prix du moment)
         model_->changed = [this] {
             dirty_ = true;
             update();
@@ -429,12 +456,15 @@ protected:
         show(cancel_, dirty_);
         y += 56.f;
         table_->setBounds({x0_, y, w_, std::max(120.f, b.bottom() - 18.f - y)});
-        if (std::fabs(w_ - fitW_) > 0.5f) {   // les colonnes a la largeur (aucune hors de la vue)
+        // 1.47.0 : une reduction en cours - le prix affiche dit le prix du moment et le prix normal : sa colonne s'elargit.
+        const bool promo = std::any_of(model_->rows.begin(), model_->rows.end(), [this](const CatalogueRow& r) { return model_->promoNow(r); });
+        if (std::fabs(w_ - fitW_) > 0.5f || promo != fitPromo_) {   // les colonnes a la largeur (aucune hors de la vue)
             fitW_ = w_;
+            fitPromo_ = promo;
             fitColumns(*table_,
                        {{"Article", 0.f, 3.f, 180.f, false},
                         {"En vente", 84.f, 0.f, 0.f, false},
-                        {"Prix affich\xC3\xA9", 130.f, 0.f, 0.f, false},
+                        {"Prix affich\xC3\xA9", promo ? 300.f : 130.f, 0.f, 0.f, false},
                         {"Montant encaiss\xC3\xA9 (TTC)", 170.f, 0.f, 0.f, false},
                         {"Libell\xC3\xA9 de la facture", 0.f, 3.f, 150.f, false},
                         {"\xC3\x89" "cart", 0.f, 2.f, 150.f, false}},
@@ -553,6 +583,8 @@ private:
                 row.edition = e.id;
                 row.name = (e.label.empty() ? e.id : e.label) + " - " + daysText(e.durationDays, false);
                 row.price = e.price;
+                row.promo = e.promoPrice;   // 1.47.0 : la reduction (le prix du moment : CatalogueModel::currentPrice)
+                row.promoUntil = e.promoUntil;
                 model_->rows.push_back(std::move(row));
             }
             for (const auto& o : reg.options) {
@@ -664,6 +696,7 @@ private:
     double                          lastFetch_{-1};
     std::string                     problem_, note_;
     float                           x0_{0}, w_{0}, titleY_{0}, catY_{0}, fitW_{-1.f};
+    bool                            fitPromo_{false};   // 1.47.0 : les colonnes faites pour un prix reduit
     Rect                            noteRect_{}, stripeRect_{}, saleRect_{};
     core::ConnectionScope           links_;
 };
@@ -870,6 +903,11 @@ public:
         if (ws().service().ready() && ws().can("demandes") && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0))
             fetch();
         reloadAll();
+        // 1.47.0 : << Ses commandes >> d'un client (Clients, le clic droit) : la barre filtree sur sa societe.
+        if (const std::string f = takePageFocus("commandes"); f.rfind("client:", 0) == 0) {
+            bar_->clearAll();
+            bar_->filterOn(2, f.substr(7));
+        }
     }
 
     // Les essais : choisir la commande n.

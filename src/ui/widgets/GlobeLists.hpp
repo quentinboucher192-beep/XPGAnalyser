@@ -36,7 +36,7 @@ public:
     void setTotals(const std::array<int, globe::kLayerCount>& totals);
     // Ce qui est ecrit sous le nom (defaut : LayerStyle::hint) - << un PC pas en 1.47.0 >>.
     void setHint(globe::Layer l, std::string hint);
-    // Apres le nom, en gris (<< Commandes · 30 j >>).
+    // Apres le nom, en gris (<< Commandes - 30 j >>).
     void setNameSuffix(globe::Layer l, std::string suffix);
     // Cocher / decocher (comme un clic) : faux si c'etait le dernier coche.
     bool toggle(globe::Layer l);

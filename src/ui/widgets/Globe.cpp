@@ -1069,7 +1069,7 @@ void GlobeView::Impl::drawLabels(gfx::IRenderer& r, const GlobeView& self) {
             taken.push_back(*spot);
             const float ty = std::round(q.y - tm.height / 2.f);
             const Color halo{255, 255, 255, static_cast<std::uint8_t>(std::lround(235.f * alpha))};
-            static const float kHalo[][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}, {-2, 0}, {2, 0}, {0, -2}, {0, 2}};
+            static const float kHalo[][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {1, -1}, {-1, 1}, {1, 1}};   // le trait blanc
             for (const auto& o : kHalo) r.drawText({std::round(tx) + o[0], ty + o[1]}, t, font, halo);
             r.drawText({std::round(tx), ty}, t, font, kLabel.withAlpha(static_cast<std::uint8_t>(std::lround(255.f * alpha))));
         } else if (others) {

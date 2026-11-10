@@ -6,6 +6,7 @@
 // dit l'infobulle), et ce que coute le dessin (un faux renderer compte les images : rien quand il est arrete, 30 par
 // seconde au plus quand il tourne).
 #include "../src/ui/widgets/Globe.hpp"
+#include "../src/ui/widgets/GlobeLists.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -456,6 +457,37 @@ int main() {
         }
         paintAt(g, r, theme, 10.1);
         CHECK(r.released >= releasedBefore + 2);
+    }
+
+    // ------------------------------------------------------------ 7. les deux colonnes : les calques, les villes
+    {
+        ui::GlobeLayerList L("calques");
+        L.setBounds({0.f, 0.f, 256.f, 500.f});
+        CHECK(L.layers().count() == 3);
+        int changed = 0;
+        auto c1 = L.layersChanged->connect([&](LayerSet) { ++changed; });
+        CHECK(L.toggle(Layer::Admins) && L.layers().has(Layer::Admins) && changed == 1);
+        L.setLayers(LayerSet::of({Layer::Clients}));
+        CHECK(!L.toggle(Layer::Clients) && L.layers().has(Layer::Clients) && changed == 1);   // le dernier reste coche
+        const float top = 12.f + ui::GlobeLayerList::kHeader, row = ui::GlobeLayerList::kRow;
+        CHECK(L.rowAt({100.f, top + 5.f}) == 0 && L.rowAt({100.f, top + 3.f * row + 5.f}) == 3 && L.rowAt({100.f, 5.f}) == -1);
+        L.dispatch(ui::MouseDown{{100.f, top + row + 10.f}, ui::MouseButton::Left, 1, {}});   // la 2e rangee : les PC actifs
+        CHECK(L.layers().has(Layer::ActivePcs) && changed == 2);
+
+        ui::GlobeCityList C("villes");
+        C.setBounds({0.f, 0.f, 326.f, 300.f});
+        C.setPlaces(sample);
+        // La plus grande d'abord, puis par nom (la planche : Lyon 9, Paris 8, Bruxelles 4, Toulouse 4, Geneve 3...).
+        CHECK(C.order().size() == 21 && C.order()[0] == iLyon && C.order()[1] == iParis && C.countries() == 9);
+        CHECK(C.order()[2] == findCity(sample, "Bruxelles") && C.order()[3] == iToulouse);
+        C.setLayer(Layer::Admins);   // Lyon, Paris, Grenoble : 1 chacune -> par nom
+        CHECK(C.order().size() == 3 && C.countries() == 1 && C.order()[0] == iGrenoble);
+        int chosen = -1;
+        auto c2 = C.placeChosen->connect([&](int i) { chosen = i; });
+        C.dispatch(ui::MouseDown{{50.f, ui::GlobeCityList::kRow + 5.f}, ui::MouseButton::Left, 1, {}});
+        CHECK(chosen == iLyon);
+        C.setLayer(Layer::Requests);   // Lyon, Paris, Casablanca, Liege, Dakar
+        CHECK(C.order().size() == 5 && C.countries() == 4);
     }
 
     std::printf("%d verifications, %d echec(s)\n", checks, fails);

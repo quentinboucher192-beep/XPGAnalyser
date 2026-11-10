@@ -297,13 +297,19 @@ public:
 
     void refresh() override {
         // 1.44.0 : une autre page demande une licence (<< Voir la licence >> du journal des admins) : choisie, tous filtres levees.
-        std::string focus;
+        std::string focus, client;
         if (const std::string f = takePageFocus("licences"); !f.empty() && ws().licence(f)) {
             selectedId_ = f;
             focus = f;
             bar_->clearAll();   // 1.47.0 : la barre (tous les filtres leves)
+        } else if (f.rfind("client:", 0) == 0) {
+            client = f.substr(7);   // 1.47.0 : << Ses licences >> d'un client
         }
         reloadAll();
+        if (!client.empty()) {
+            bar_->clearAll();
+            bar_->filterOn(1, client);
+        }
         invalidateLayout();
         rebuild();
         if (!focus.empty())   // 1.47.0 : << Aller a > la licence >> : choisie et depliee
@@ -346,10 +352,10 @@ protected:
         if (std::abs(listW - columnsFor_) > 1.f) {
             columnsFor_ = listW;
             const bool edition = listW >= 520.f, end = listW >= 660.f;
-            const float fixed = 144.f + (edition ? 124.f : 0.f) + 92.f + (end ? 96.f : 0.f);   // 1.47.0 : l'ID + le chevron du depliage
+            const float fixed = 144.f + (edition ? 124.f : 0.f) + 76.f + (end ? 96.f : 0.f);   // 1.47.0 : l'ID + le chevron du depliage
             const float rest = std::max(200.f, listW - fixed);
             std::vector<ui::TableView::Column> cols = {{"ID", 144.f}, {"Client", std::floor(rest * 0.6f)}, {"\xC3\x89" "dition", 124.f}, {"Type", 120.f},
-                                                       {"PC", 92.f}, {"\xC3\x89mise le", 105.f}, {"Fin", 96.f}, {"\xC3\x89tat", std::floor(rest * 0.4f)}};
+                                                       {"PC", 76.f}, {"\xC3\x89mise le", 105.f}, {"Fin", 96.f}, {"\xC3\x89tat", std::floor(rest * 0.4f)}};
             cols[2].visible = edition;
             cols[3].visible = false;
             cols[5].visible = false;

@@ -211,6 +211,14 @@ public:
         for (const auto& d : all_) texts_.push_back(cellsOf(d));
         who_.reset();
         bar_->refreshCounts();
+        // 1.47.0 : << Ses PC >> d'une licence (Licences, le clic droit) : la barre filtree sur elle.
+        if (const std::string f = takePageFocus("activations"); f.rfind("licence:", 0) == 0) {
+            bar_->clearAll();
+            bar_->filterOn(3, f.substr(8));
+        } else if (f.rfind("client:", 0) == 0) {   // << Ses PC >> d'un client
+            bar_->clearAll();
+            bar_->filterOn(2, f.substr(7));
+        }
         rebuild();
         invalidateLayout();
         invalidate();

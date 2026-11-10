@@ -465,14 +465,27 @@ double niceStep(double raw) noexcept {
     return k * p;
 }
 
-std::vector<double> niceTicks(double lo, double hi, int target) {
+std::vector<double> niceTicks(double lo, double hi, int target, bool integral) {
     if (!std::isfinite(lo)) lo = 0.0;
     if (!std::isfinite(hi)) hi = lo;
     if (hi < lo) std::swap(lo, hi);
     // Un seul niveau (tout a zero, un seul point) : deux graduations, la valeur et un pas rond au-dessus.
     if (!(hi > lo)) return {lo, lo + (lo == 0.0 ? 1.0 : niceStep(std::fabs(lo)))};
     target = std::max(1, target);
-    const double st = niceStep((hi - lo) / target);
+    // Le pas qui deborde le moins (0 -> 25 : par 10 jusqu'a 30, pas par 20 jusqu'a 40), sans trop de graduations.
+    double st = 0.0, bestSpan = std::numeric_limits<double>::infinity();
+    for (int t = target; t <= target + 2; ++t) {
+        double s = niceStep((hi - lo) / t);
+        if (integral && s < 1.0) s = 1.0;
+        if (integral && std::fabs(s - std::round(s)) > 1e-9) s = std::floor(s);
+        const double span = (std::ceil(hi / s - 1e-9) - std::floor(lo / s + 1e-9)) * s;
+        const double count = span / s + 1.0;
+        if (st > 0.0 && count > target + 3) continue;
+        if (span < bestSpan - 1e-9 * std::max(1.0, std::fabs(span))) {
+            bestSpan = span;
+            st = s;
+        }
+    }
     const double a = std::floor(lo / st + 1e-9);
     const double b = std::ceil(hi / st - 1e-9);
     std::vector<double> t;
@@ -615,42 +628,35 @@ void quad(std::vector<gfx::Vertex>& out, Point a, Color ca, Point b, Color cb, P
     out.push_back({d, cd});
 }
 
-void strokeSolid(gfx::IRenderer& r, const std::vector<Point>& pts, Color c, float width) {
-    if (pts.size() < 2) return;
-    const std::size_t n = pts.size();
-    std::vector<V2> nrm(n - 1);
-    for (std::size_t i = 0; i + 1 < n; ++i) {
-        const V2 d = norm(sub(pts[i + 1], pts[i]));
-        nrm[i] = {-d.y, d.x};
+void strokeSolid(gfx::IRenderer& r, const std::vector<Point>& in, Color c, float width) {
+    // Les points confondus d'abord (un escalier en cree : un trait vertical de longueur nulle).
+    std::vector<Point> pts;
+    pts.reserve(in.size());
+    for (const Point& p : in)
+        if (pts.empty() || std::fabs(p.x - pts.back().x) > 0.01f || std::fabs(p.y - pts.back().y) > 0.01f) pts.push_back(p);
+    if (pts.size() < 2) {
+        if (!pts.empty()) fillDisc(r, pts[0], std::max(0.75f, width * 0.5f), c);
+        return;
     }
-    // La normale de chaque sommet (l'onglet), bornee : un pic aigu ne fait pas de pointe infinie.
-    std::vector<V2> m(n);
-    std::vector<float> scale(n, 1.f);
-    for (std::size_t i = 0; i < n; ++i) {
-        if (i == 0) m[i] = nrm[0];
-        else if (i == n - 1) m[i] = nrm[n - 2];
-        else {
-            V2 s{nrm[i - 1].x + nrm[i].x, nrm[i - 1].y + nrm[i].y};
-            s = norm(s);
-            if (s.x == 0.f && s.y == 0.f) s = nrm[i];
-            const float dt = s.x * nrm[i].x + s.y * nrm[i].y;
-            m[i] = s;
-            scale[i] = dt > 0.3f ? 1.f / dt : 1.f / 0.3f;
-        }
-    }
+    // Chaque morceau : un ruban plein de la largeur du trait et, de chaque cote, un demi-pixel qui s'efface (le bord
+    // lisse). Aux coudes francs (un pic, une marche), un disque du rayon du trait : pas d'onglet qui s'etire a l'infini
+    // ni de trou.
     const float hw = std::max(0.5f, width * 0.5f);
     const float core = std::max(0.f, hw - 0.5f), outer = hw + 0.5f;
     const Color clear = c.withAlpha(0);
     std::vector<gfx::Vertex> v;
-    v.reserve((n - 1) * 18);
-    const auto at = [&](std::size_t i, float off) { return Point{pts[i].x + m[i].x * off * scale[i], pts[i].y + m[i].y * off * scale[i]}; };
-    for (std::size_t i = 0; i + 1 < n; ++i) {
-        const std::size_t j = i + 1;
-        const Point li = at(i, core), ri = at(i, -core), lj = at(j, core), rj = at(j, -core);
-        const Point lo = at(i, outer), ro = at(i, -outer), loj = at(j, outer), roj = at(j, -outer);
-        if (core > 0.f) quad(v, li, c, lj, c, rj, c, ri, c);
-        quad(v, lo, clear, loj, clear, lj, c, li, c);
-        quad(v, ri, c, rj, c, roj, clear, ro, clear);
+    v.reserve((pts.size() - 1) * 18);
+    V2 prevDir{0.f, 0.f};
+    for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
+        const Point a = pts[i], b = pts[i + 1];
+        const V2 d = norm(sub(b, a));
+        const V2 n{-d.y, d.x};
+        const auto off = [&](Point p, float k) { return Point{p.x + n.x * k, p.y + n.y * k}; };
+        if (core > 0.f) quad(v, off(a, core), c, off(b, core), c, off(b, -core), c, off(a, -core), c);
+        quad(v, off(a, outer), clear, off(b, outer), clear, off(b, core), c, off(a, core), c);
+        quad(v, off(a, -core), c, off(b, -core), c, off(b, -outer), clear, off(a, -outer), clear);
+        if (i > 0 && prevDir.x * d.x + prevDir.y * d.y < 0.97f) fillDisc(r, a, hw, c);
+        prevDir = d;
     }
     r.fillTriangles(v.data(), v.size());
 }
@@ -841,9 +847,12 @@ float paintLegend(gfx::IRenderer& r, const Theme& theme, float x0, float y0, flo
         const float cy = y + 8.5f;
         paintSwatch(r, it.swatch, x, cy, colors::onTheme(it.color, k), k);
         float tx = x + (it.swatch == Swatch::Line ? 12.f : 9.f) + 5.f;
-        text(r, tx, cy, it.label, legendFont(), k.ink2);
-        tx += r.measure(it.label, legendFont()).width;
-        if (!it.value.empty()) text(r, tx + 4.f, cy, it.value, gfx::semibold(legendFont()), k.ink);
+        // Un libelle plus long que la ligne : coupe (la valeur garde sa place).
+        const float vw = it.value.empty() ? 0.f : 4.f + r.measure(it.value, gfx::semibold(legendFont())).width;
+        const std::string label = fit(r, it.label, legendFont(), x0 + width - tx - vw);
+        text(r, tx, cy, label, legendFont(), k.ink2);
+        tx += r.measure(label, legendFont()).width;
+        if (!it.value.empty() && tx + vw <= x0 + width + 0.5f) text(r, tx + 4.f, cy, it.value, gfx::semibold(legendFont()), k.ink);
         x += w + 12.f;
     }
     return y + 17.f - y0;
@@ -1247,11 +1256,16 @@ TimeChart::Frame TimeChart::frame() const {
     if (std::isfinite(d.yMax)) hi = d.yMax;
     const bool flat = !(hi > lo);   // tout a zero, un seul niveau : deux graduations (niceTicks)
     if (flat) hi = lo;
+    // Des nombres entiers (des commandes, des PC) : des graduations entieres.
+    bool integral = true;
+    for (const auto& s : d.series)
+        for (const double v : s.values)
+            if (std::isfinite(v) && std::fabs(v - std::round(v)) > 1e-9) integral = false;
     if (!d.yTicks.empty()) f.ticks = d.yTicks;
     else if (d.kind == Kind::Diverging && lo < 0.0) {
         const double st = niceStep(std::max(hi, -lo) / 2.0);
         for (double k = -std::ceil(-lo / st - 1e-9); k <= std::ceil(hi / st - 1e-9) + 1e-9; k += 1.0) f.ticks.push_back(k * st);
-    } else f.ticks = niceTicks(lo, hi, d.yTickCount);
+    } else f.ticks = niceTicks(lo, hi, d.yTickCount, integral);
     if (!f.ticks.empty()) {
         lo = std::min(lo, f.ticks.front());
         hi = std::max(hi, f.ticks.back());
@@ -1280,14 +1294,20 @@ TimeChart::Frame TimeChart::frame() const {
     if (f.legendHeight > 0.f && b.h - f.legendHeight - pt - pb < 36.f) f.legendHeight = 0.f;
     f.plot.y = b.y + f.legendHeight + pt;
     f.plot.h = std::max(4.f, b.h - f.legendHeight - pt - pb);
-    // Un trace trop bas pour ses graduations (les libelles se toucheraient) : moins de graduations.
-    if (d.yTicks.empty() && f.ticks.size() > 2 && f.plot.h / static_cast<float>(f.ticks.size() - 1) < 16.f) {
+    // Un trace trop bas pour ses graduations (les libelles se toucheraient) : moins de graduations - une sur deux
+    // (ou trois) de celles imposees, sinon un pas plus grand.
+    if (!d.yTicks.empty() && f.ticks.size() > 2 && f.plot.h / static_cast<float>(f.ticks.size() - 1) < 16.f) {
+        const std::size_t step = static_cast<std::size_t>(std::ceil(16.f / std::max(1.f, f.plot.h / static_cast<float>(f.ticks.size() - 1))));
+        std::vector<double> kept;
+        for (std::size_t i = 0; i < f.ticks.size(); i += step) kept.push_back(f.ticks[i]);
+        f.ticks = kept;
+    } else if (d.yTicks.empty() && f.ticks.size() > 2 && f.plot.h / static_cast<float>(f.ticks.size() - 1) < 16.f) {
         const int target = std::max(1, static_cast<int>(f.plot.h / 18.f));
         auto [lo2, hi2] = extent();
         if (std::isfinite(d.yMin)) lo2 = d.yMin;
         if (std::isfinite(d.yMax)) hi2 = d.yMax;
         if (!(hi2 > lo2)) hi2 = lo2 + 1.0;
-        std::vector<double> t = niceTicks(lo2, hi2, target);
+        std::vector<double> t = niceTicks(lo2, hi2, target, integral);
         if (t.size() > 3) t = {t.front(), t.back()};
         f.ticks = t;
         f.lo = std::min(lo2, t.front());
@@ -1349,6 +1369,7 @@ TimeChart::MarkerLayout TimeChart::layoutMarkers(const Frame& f) const {
     MarkerLayout out;
     const FontId mf = gfx::semibold(detail::fontAxis());
     std::vector<std::vector<std::pair<float, float>>> used;
+    std::vector<std::pair<float, int>> lines;   // le trait de chaque repere place, et la rangee de son etiquette
     for (const auto& m : data_.markers) {
         MarkerLayout::Item it;
         if (m.label.empty()) {
@@ -1357,28 +1378,37 @@ TimeChart::MarkerLayout TimeChart::layoutMarkers(const Frame& f) const {
         }
         const float x = f.xAt(m.at);
         const float w = tw(m.label, mf);
-        // Depuis une valeur (une distribution) : l'etiquette a gauche du trait d'abord ; pleine hauteur : a droite.
+        // Depuis une valeur (une distribution) : l'etiquette a gauche du trait d'abord ; pleine hauteur : a droite. Puis
+        // l'autre cote, puis la rangee suivante (trois au plus). Une etiquette ne passe jamais sur une autre ni sur le
+        // trait d'un repere place plus haut ; ce qui ne tient nulle part n'est pas ecrit (le trait reste).
         const bool fromValue = std::isfinite(m.fromValue);
-        float x0 = fromValue ? x + 4.f - w : x + 4.f;
-        if (x0 < f.plot.x - 2.f) x0 = x - 4.f;
-        if (x0 + w > f.plot.right() + 4.f) x0 = x - 4.f - w;
-        // Trois rangees au plus : une etiquette qui ne tient nulle part n'est pas ecrite (le trait reste).
+        const float sides[2] = {fromValue ? x + 4.f - w : x + 4.f, fromValue ? x - 4.f : x - 4.f - w};
         int row = 0;
+        float x0 = sides[0];
         bool placed = false;
-        for (; row < 3; ++row) {
+        for (; row < 3 && !placed; ++row) {
             if (static_cast<std::size_t>(row) >= used.size()) used.emplace_back();
-            bool clash = false;
-            for (const auto& [a, bb] : used[static_cast<std::size_t>(row)])
-                if (x0 < bb + 6.f && x0 + w > a - 6.f) clash = true;
-            if (!clash) {
-                placed = true;
-                break;
+            for (const float cand : sides) {
+                if (cand < f.plot.x - 2.f || cand + w > f.plot.right() + 4.f) continue;
+                bool clash = false;
+                for (const auto& [a, bb] : used[static_cast<std::size_t>(row)])
+                    if (cand < bb + 6.f && cand + w > a - 6.f) clash = true;
+                for (const auto& [lineX, lineRow] : lines)
+                    if (lineRow < row && cand < lineX + 3.f && cand + w > lineX - 3.f) clash = true;
+                if (!clash) {
+                    x0 = cand;
+                    placed = true;
+                    break;
+                }
             }
+            if (placed) break;
         }
         if (!placed) {
+            lines.push_back({x, -1});
             out.items.push_back(it);
             continue;
         }
+        lines.push_back({x, row});
         used[static_cast<std::size_t>(row)].push_back({x0, x0 + w});
         it.x = x0;
         it.row = row;
@@ -1637,8 +1667,9 @@ void TimeChart::onPaint(const PaintContext& ctx) {
     for (const auto& rl : d.refs) {
         const float y = std::round(f.yAt(rl.value));
         r.fillRect({f.plot.x, y, f.plot.w, 1.f}, rl.color.a ? rl.color : k.muted);
+        // L'etiquette au-dessus du trait, ou dessous s'il touche le haut du trace.
         if (!rl.label.empty())
-            text(r, rl.labelLeft ? f.plot.x + 4.f : f.plot.right() - 2.f, y - 8.f, rl.label, mf, k.muted, rl.labelLeft ? -1 : 1);
+            text(r, rl.labelLeft ? f.plot.x + 4.f : f.plot.right() - 2.f, y - f.plot.y < 15.f ? y + 9.f : y - 8.f, rl.label, mf, k.muted, rl.labelLeft ? -1 : 1);
     }
     // Les etiquettes directes.
     for (const auto& nt : d.notes) {

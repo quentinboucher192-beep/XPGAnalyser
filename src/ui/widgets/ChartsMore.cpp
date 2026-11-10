@@ -98,7 +98,7 @@ BarList::Frame BarList::frame() const {
     float lw = d.labelWidth;
     if (lw <= 0.f) {
         for (const auto& r : d.rows) lw = std::max({lw, tw(r.label, barLabelFont(r.strong)), tw(r.sub, FontId{11})});
-        lw = std::min(lw, b.w * 0.45f);
+        lw = std::min(lw, b.w * (d.mode == BarMode::Ranking || d.mode == BarMode::Track ? 0.55f : 0.45f));
     }
     float vw = d.valueWidth, ew = 0.f;
     if (d.mode != BarMode::Grouped || !d.valueLabels) {
@@ -108,6 +108,7 @@ BarList::Frame BarList::frame() const {
                 vw = std::max(vw, tw(v, barValueFont(r.strong)));
             }
         for (const auto& r : d.rows) ew = std::max(ew, tw(r.extra, barExtraFont()));
+        if (ew > 0.f) ew += 2.f;   // un souffle : la mesure arrondie ne coupe pas la plus longue
     } else {
         vw = 0.f;
         // Grouped : la valeur au bout de chaque barre - de la place a droite pour la plus longue.
@@ -136,9 +137,15 @@ BarList::Frame BarList::frame() const {
     // Les lignes.
     const float base = d.rowHeight > 0.f ? d.rowHeight : d.mode == BarMode::Grouped ? std::max(34.f, 8.f + static_cast<float>(std::max<std::size_t>(1, d.partKeys.size())) * 11.f) : 26.f;
     f.top = b.y + f.legendHeight;
+    float wanted = 0.f;
+    for (const auto& r : d.rows) wanted += base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f);
+    // Moins de place que voulu (une petite fenetre) : les lignes se serrent un peu ; ce qui ne tient toujours pas
+    // n'est pas dessine (onPaint).
+    const float avail = b.bottom() - f.top - (d.mode == BarMode::Grouped && d.axis ? 20.f : 0.f);
+    const float squeeze = wanted > avail && wanted > 0.f ? std::max(0.7f, avail / wanted) : 1.f;
     float y = f.top;
     for (const auto& r : d.rows) {
-        const float h = base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f);
+        const float h = (base + (r.strong ? 8.f : 0.f) + (!r.sub.empty() && d.mode != BarMode::Grouped ? 10.f : 0.f)) * squeeze;
         f.rowTop.push_back(y);
         f.rowHeight.push_back(h);
         y += h;
@@ -256,13 +263,19 @@ void BarList::onPaint(const PaintContext& ctx) {
     }
     // Grouped : l'axe des valeurs en bas.
     if (d.mode == BarMode::Grouped && d.axis && !d.rows.empty()) {
-        const float y = f.rowTop.back() + f.rowHeight.back() + 2.f;
+        float y = f.rowTop.front();
+        for (std::size_t i = 0; i < f.rowTop.size(); ++i)
+            if (f.rowTop[i] + f.rowHeight[i] <= b.bottom() - 18.f) y = f.rowTop[i] + f.rowHeight[i] + 2.f;
         r.fillRect({f.x0, y, f.x1 - f.x0, 1.f}, k.base);
         const auto ticks = d.ticks.empty() ? niceTicks(0.0, f.maxValue, 3) : d.ticks;
+        float lastRight = -1e9f;
         for (const double t : ticks) {
             const float x = f.xAt(t);
-            if (x > f.x1 + 1.f) continue;
-            text(r, x, y + 10.f, fmt(t), detail::fontAxis(), k.faint, 0);
+            const std::string l = fmt(t);
+            const float w = tw(l, detail::fontAxis());
+            if (x > f.x1 + 1.f || x - w * 0.5f < lastRight + 6.f || x + w * 0.5f > b.right()) continue;
+            text(r, x, y + 10.f, l, detail::fontAxis(), k.faint, 0);
+            lastRight = x + w * 0.5f;
         }
     }
     if (!d.rows.empty()) paintFocus(ctx, {b.x, f.rowTop.front(), b.w, f.rowTop.back() + f.rowHeight.back() - f.rowTop.front()});
@@ -737,10 +750,15 @@ void Dumbbell::onPaint(const PaintContext& ctx) {
     const Format fmt = data_.format ? data_.format : Format([](double v) { return fr::integer(v); });
     const int n = itemCount();
     const float bottom = f.top + f.rowH * static_cast<float>(n);
+    float lastRight = -1e9f;
     for (const double t : f.ticks) {
         const float x = std::round(f.xAt(t));
         r.fillRect({x, f.top, 1.f, bottom - f.top}, std::fabs(t) < 1e-12 ? k.base : k.grid);
-        text(r, x, bottom + 8.f, fmt(t), FontId{10}, k.faint, 0);
+        const std::string l = fmt(t);
+        const float w = tw(l, FontId{10});
+        if (x - w * 0.5f < lastRight + 5.f || x + w * 0.5f > contentRect().right() + 1.f) continue;   // pas l'un sur l'autre
+        text(r, x, bottom + 8.f, l, FontId{10}, k.faint, 0);
+        lastRight = x + w * 0.5f;
     }
     const bool live = active_ >= 0 && ((hovered() && !keyboard_) || (focused() && keyboard_));
     const int shown = live ? active_ : example_;
@@ -835,8 +853,11 @@ Timeline::Frame Timeline::frame() const {
     f.to = static_cast<double>(data_.to > data_.from ? data_.to : data_.from + 1);
     const int n = std::max(1, itemCount());
     const float todayRoom = data_.today ? 16.f : 0.f;
+    // Peu de place : la legende s'en va d'abord ; une ligne garde la hauteur de son texte (ce qui ne tient pas n'est
+    // pas dessine).
+    if (f.legendHeight > 0.f && (b.h - f.legendHeight - todayRoom - 18.f) / static_cast<float>(n) < 20.f) f.legendHeight = 0.f;
     f.top = b.y + f.legendHeight + todayRoom;
-    f.rowH = std::clamp((b.bottom() - f.top - 18.f) / static_cast<float>(n), 18.f, 34.f);
+    f.rowH = std::clamp((b.bottom() - f.top - 18.f) / static_cast<float>(n), 16.f, 34.f);
     return f;
 }
 
@@ -846,8 +867,11 @@ void Timeline::onPaint(const PaintContext& ctx) {
     const Rect b = contentRect();
     const Frame f = frame();
     const int n = itemCount();
-    if (!data_.legend.empty()) paintLegend(r, ctx.theme, b.x, b.y, b.w, data_.legend);
-    const float bottom = f.top + f.rowH * static_cast<float>(n);
+    if (f.legendHeight > 0.f) paintLegend(r, ctx.theme, b.x, b.y, b.w, data_.legend);
+    // Les lignes qui tiennent (l'axe sous la derniere).
+    int shownRows = n;
+    while (shownRows > 0 && f.top + f.rowH * static_cast<float>(shownRows) > b.bottom() - 18.f) --shownRows;
+    const float bottom = f.top + f.rowH * static_cast<float>(shownRows);
     // L'axe : les annees et les milieux d'annee (<< juil. >>).
     int y0, m0, d0, y1, m1, d1;
     fr::civil(data_.from, y0, m0, d0);
@@ -871,7 +895,8 @@ void Timeline::onPaint(const PaintContext& ctx) {
     const bool live = active_ >= 0 && ((hovered() && !keyboard_) || (focused() && keyboard_));
     const int shown = live ? active_ : example_;
     const FontId sf = gfx::semibold(FontId{12});
-    for (int i = 0; i < n; ++i) {
+    const float bh = std::clamp(f.rowH - 8.f, 6.f, 12.f);
+    for (int i = 0; i < shownRows; ++i) {
         const auto& row = data_.rows[static_cast<std::size_t>(i)];
         const float cy = f.top + f.rowH * (static_cast<float>(i) + 0.5f);
         if (i == shown) r.fillRoundedRect({b.x - 4.f, cy - f.rowH * 0.5f + 1.f, b.w + 8.f, f.rowH - 2.f}, k.hover, 6.f);
@@ -886,7 +911,7 @@ void Timeline::onPaint(const PaintContext& ctx) {
             if (e <= a) continue;
             Color c = colors::onTheme(keyColor(ownKeys_ ? &keys_ : nullptr, s.key), k);
             if (row.faded) c = colors::mix(c, k.surface, 0.55f);
-            r.fillRoundedRect({a, cy - 6.f, e - a, 12.f}, c, 4.f);
+            r.fillRoundedRect({a, cy - bh * 0.5f, e - a, bh}, c, std::min(4.f, bh * 0.5f));
             first = std::min(first, a);
             last = std::max(last, e);
         }
@@ -906,7 +931,7 @@ void Timeline::onPaint(const PaintContext& ctx) {
         r.fillRect({x - 0.5f, f.top - 14.f, 1.5f, bottom - f.top + 14.f}, k.ink);
         text(r, x + 4.f, f.top - 8.f, data_.todayLabel, gfx::semibold(FontId{11}), k.ink);
     }
-    if (n > 0) paintFocus(ctx, {f.x0, f.top, f.x1 - f.x0, bottom - f.top});
+    if (shownRows > 0) paintFocus(ctx, {f.x0, f.top, f.x1 - f.x0, bottom - f.top});
 }
 
 std::pair<int, int> Timeline::itemAt(Point p) const {
@@ -1208,10 +1233,12 @@ void ChartCard::onPaint(const PaintContext& ctx) {
     if (!value_.empty()) {
         const FontId vf = cardValueFont();
         const float vh = r.lineHeight(vf);
-        r.drawText({x, std::round(y + 2.f)}, value_, vf, k.ink);
-        float cx = x + r.measure(value_, vf).width + 7.f;
+        const std::string value = fit(r, value_, vf, right - x);
+        r.drawText({x, std::round(y + 2.f)}, value, vf, k.ink);
+        float cx = x + r.measure(value, vf).width + 7.f;
         const float base = y + 2.f + vh - r.lineHeight(FontId{12}) - 2.f;
-        if (!delta_.text.empty()) cx += paintDelta(r, ctx.theme, cx, base, delta_) + 6.f;
+        // L'ecart s'il tient en entier (sinon rien : la valeur passe avant), puis ce a quoi on compare, coupe.
+        if (!delta_.text.empty() && cx + deltaWidth(delta_) <= right) cx += paintDelta(r, ctx.theme, cx, base, delta_) + 6.f;
         if (!compare_.empty()) r.drawText({std::round(cx), std::round(base)}, fit(r, compare_, FontId{12}, right - cx), FontId{12}, k.muted);
         y += 28.f;
     }
@@ -1220,10 +1247,11 @@ void ChartCard::onPaint(const PaintContext& ctx) {
     if (sw > 0.f) {
         const Rect cr = chartRect();
         const float sx = right - sw;
-        const float rowH = 24.f;
+        const float rowH = std::max(18.f, std::min(24.f, cr.h / static_cast<float>(std::max<std::size_t>(1, side_.size()))));
         float sy = cr.y + std::max(0.f, (cr.h - rowH * static_cast<float>(side_.size())) * 0.5f);
         for (std::size_t i = 0; i < side_.size(); ++i) {
             const SideRow& row = side_[i];
+            if (sy + rowH > b.bottom() - 4.f) break;   // ce qui ne tient pas dans la carte n'est pas dessine
             const float cy = sy + rowH * 0.5f;
             float lx = sx;
             if (row.color.a) {

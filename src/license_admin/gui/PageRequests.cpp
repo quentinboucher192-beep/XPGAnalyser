@@ -307,6 +307,11 @@ public:
         lastBusy_ = busy();
         if (!lastBusy_) fetching_ = false;
         reloadAll();
+        // 1.47.0 : << Ses demandes >> d'un client (Clients, le clic droit) : la barre filtree sur lui (tous les etats).
+        if (const std::string f = takePageFocus("demandes"); f.rfind("client:", 0) == 0) {
+            bar_->clearAll();
+            bar_->filterOn(1, f.substr(7));
+        }
         rebuild();
         invalidateLayout();
         invalidate();

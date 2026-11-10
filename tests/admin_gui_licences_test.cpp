@@ -418,7 +418,6 @@ int main(int argc, char** argv) {
     {
         std::string t = paintPage(*page);
         check(page->title() == "Licences" && has(t, "Licences"), "le titre");
-        std::printf("DEBUG-T<<%s>>\n", t.c_str());
         check(has(t, idAlpha) && has(t, "Client d'essai Alpha") && has(t, "3 / 3") && has(t, "PROFESSIONAL"), "Alpha : id, client, PC, edition");
         // 1.41.0 : le type et la fin sont dans la fiche (la liste les garde dans son modele, sans les montrer a cette largeur).
         {

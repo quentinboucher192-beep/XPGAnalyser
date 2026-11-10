@@ -1210,12 +1210,12 @@ private:
             d.yMax = 24;
             d.yTicks = {6, 12, 18, 24};
             d.yFormat = [](double v) { return ch::fr::integer(v) + ch::fr::kNbsp + "h"; };
-            d.yBands.push_back({8.67, 17.83, "habituel", {0, 0, 0, 0}});
+            d.yBands.push_back({8.67, 17.83, "", {0, 0, 0, 0}});
             d.notes.push_back({13, 22.4, "dim. 25/10, 22 h 14", ch::Note::Anchor::Start, -8.f});
             d.notes.push_back({9, 21.05, "21 h 03", ch::Note::Anchor::Middle, -10.f});
             d.legend = ch::LegendMode::None;
             d.clickHint = "Clic : ce jour dans son journal";
-            card(*b, "graphes.journees", "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es", "premi\xC3\xA8re \xE2\x86\x92 derni\xC3\xA8re action ; en rouge : inhabituel (une alerte)", 2, 1, 2, 1,
+            card(*b, "graphes.journees", "D\xC3\xA9" "but et fin de ses journ\xC3\xA9" "es", "premi\xC3\xA8re \xE2\x86\x92 derni\xC3\xA8re action ; en clair : ses heures habituelles ; en rouge : inhabituel", 2, 1, 2, 1,
                  tchart("graphes.journees", d));
         }
         {
@@ -1234,8 +1234,8 @@ private:
         }
         {
             // Le delai entre la demande et sa reponse : 34 demandes (mediane 1 h 10, moyenne 4 h 05, max 2 j 6 h).
-            std::vector<double> s = {0.1, 0.2, 0.25, 0.3, 0.3, 0.4, 0.4, 0.45, 0.45, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 0.98, 1.1, 1.23, 1.4, 1.6, 1.8, 1.9,
-                                     2.2, 2.6, 3.1, 3.5, 3.9, 4.5, 5.2, 6.8, 9.5, 16.0, 54.0};
+            std::vector<double> s = {0.1, 0.2, 0.25, 0.3, 0.3, 0.4, 0.4, 0.45, 0.45, 0.6, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.1, 1.23, 1.23, 1.4, 1.6, 1.8, 1.9,
+                                     2.2, 2.6, 3.1, 3.5, 3.9, 4.5, 5.2, 6.8, 18.4, 16.0, 54.0};
             const std::vector<double> edges = {0, 0.5, 1, 2, 4, 8, 24, 48, 1e9};
             const std::vector<std::string> labels = {"< \xC2\xBD h", "\xC2\xBD\xE2\x80\x93" "1 h", "1\xE2\x80\x93" "2 h", "2\xE2\x80\x93" "4 h", "4\xE2\x80\x93" "8 h", "8\xE2\x80\x93" "24 h", "1\xE2\x80\x93" "2 j", "> 2 j"};
             ch::TimeChartData d = ch::makeDistribution(s, edges, labels, lea, "demandes", intF());
@@ -1259,7 +1259,7 @@ private:
 
     // ========================================================== 7. QUI FAIT QUOI (05) ==
     std::unique_ptr<Board> buildWhoDoesWhat() {
-        auto b = std::make_unique<Board>("graphes.quifait", 4, std::vector<float>{1.f});
+        auto b = std::make_unique<Board>("graphes.quifait", 4, std::vector<float>{1.f, 0.8f});
         {
             const char* types[] = {"Cr\xC3\xA9" "er et signer une licence", "Prolonger une licence", "Ajouter une option", "R\xC3\xA9voquer une licence", "Retirer un PC",
                                    "Modifier les offres", "Cr\xC3\xA9" "er, modifier une option", "Annonces", "Accepter, refuser une demande", "Revoir le code",
@@ -1308,7 +1308,7 @@ private:
                 d.rows.push_back(r);
             }
             d.clickHint = "Clic : ces lignes dans le journal";
-            card(*b, "graphes.part2", "La part de chacun, par type d'action", "une barre par type (100 %), les admins dans le m\xC3\xAAme ordre, la m\xC3\xAAme couleur", 0, 0, 2, 1,
+            card(*b, "graphes.part2", "La part de chacun, par type d'action", "une barre par type (100 %), les admins dans le m\xC3\xAAme ordre, la m\xC3\xAAme couleur", 0, 0, 2, 2,
                  barList("graphes.partchacun", d));
         }
         {
@@ -1334,6 +1334,27 @@ private:
             c->setValue("", {}, "");
             c->setChart(std::move(sm));
             b->put(std::move(c), 2, 0, 2, 1);
+        }
+        {
+            // Les actions de chacun, semaine apres semaine : empilees dans l'ordre fixe, une couleur par admin ; Nina
+            // retiree le 28/10 garde la sienne (plus rien apres).
+            Rng g{53};
+            ch::TimeChartData d;
+            d.kind = ch::Kind::Stacked;
+            d.x = ch::weeklyAxis(ch::fr::day(2026, 8, 17), 13);
+            d.xTicks = weekTicks();
+            const char* names[] = {"Camille", "L\xC3\xA9" "a", "Hugo", "Nina"};
+            for (int k = 0; k < 4; ++k) {
+                ch::Series s = serie("admin:" + std::to_string(k), names[k], {});
+                for (int i = 0; i < 13; ++i) {
+                    const bool absent = (k == 1 && i < 4) || (k == 3 && i > 10);
+                    s.values.push_back(absent ? 0.0 : g.whole(k == 1 ? 18 : 6, k == 1 ? 34 : 18));
+                }
+                d.series.push_back(s);
+            }
+            d.partialFrom = 12;
+            d.clickHint = "Clic : ses lignes du journal cette semaine";
+            card(*b, "graphes.parsemaine", "Les actions de chacun", "par semaine ; Nina, retir\xC3\xA9" "e le 28/10, garde sa couleur", 2, 1, 2, 1, tchart("graphes.parsemaine", d));
         }
         return b;
     }

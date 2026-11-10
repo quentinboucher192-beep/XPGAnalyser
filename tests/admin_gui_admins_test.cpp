@@ -21,6 +21,7 @@
 //  admin ; puis l'admin+ la retire (la confirmation).
 //  Des noms d'essai seulement (Lea, Hugo, Paul, Nina, << Atelier d'essai >>).
 // =============================================================================
+#include "../src/ui/widgets/FilterBar.hpp"   // 1.47.0 : la barre de filtres du journal
 #include "admin_gui_harness.hpp"
 #include "service_local.hpp"
 
@@ -106,13 +107,11 @@ bool setCheck(ui::Widget& root, std::string_view id, bool on) {
     c->setState(on ? ui::Checkbox::State::Checked : ui::Checkbox::State::Unchecked);
     return true;
 }
-// La pastille du journal dont le texte commence par `name` (<< Lea (2) >>) ; vide : aucune.
-std::string chipOf(ui::Widget& root, const std::string& name) {
-    for (int i = 1; i <= 8; ++i) {
-        const std::string id = "journal.qui." + std::to_string(i);
-        if (auto* b = find<ui::Button>(root, id); b && b->text().rfind(name + " (", 0) == 0) return id;
-    }
-    return {};
+// 1.47.0 : le nombre de lignes d'une valeur dans le menu d'une puce de la barre (la puce Admin du journal) ; 0 : absente.
+std::size_t valueCount(const ui::FilterBar& bar, std::size_t field, const std::string& value) {
+    for (const auto& [v, n] : bar.valueCounts(field))
+        if (v == value) return n;
+    return 0;
 }
 
 // La liste des admins signee par la cle de l'editeur (genre << admins >>).
@@ -386,40 +385,59 @@ int main(int argc, char** argv) {
         check(click(*jp, "journal.tri.admin") && firstLine() == "n\xC2\xB0 5", "un second clic inverse : Paul d'abord");
         check(click(*jp, "journal.tri.criticite") && firstLine() == "n\xC2\xB0 1", "tri par criticite : la plus haute d'abord (Critique)");
         check(click(*jp, "journal.tri.quand") && firstLine() == "n\xC2\xB0 4", "de nouveau par date");
-        const std::string leaChip = chipOf(*jp, kLea);
-        check(!leaChip.empty() && click(*jp, leaChip) && rows() == 2, "la pastille de Lea : ses 2 lignes");
-        check(click(*jp, "journal.qui.tous") && rows() == 5, "Tous : 5");
-        const std::string paulChip = chipOf(*jp, "Paul");
-        auto* pc = paulChip.empty() ? nullptr : find<ui::Button>(*jp, paulChip);
-        t = draw(*jp, 1280.f, 800.f);
-        check(pc && has(t, "retir\xC3\xA9"), "Paul : sa pastille dit << retire >>");
-        check(click(*jp, "journal.niveau.info") && rows() == 4, "Info decoche : 4 lignes");
-        check(click(*jp, "journal.niveau.info") && rows() == 5, "Info recoche : 5");
+        // 1.47.0 : la barre << Filtrer et chercher >> (planche 12) - la puce Admin, la criticite, la periode (30 j d'office).
+        auto* bar = find<ui::FilterBar>(*jp, "journal.barre");
+        check(bar && bar->chipText(0) == "P\xC3\xA9riode : 30 j" && bar->countText() == "5 sur 6" && has(t, "Admin") && has(t, "Criticit\xC3\xA9"),
+              "la barre : la periode (30 j d'office), 5 sur 6, les puces Admin et Criticite");
+        check(bar && valueCount(*bar, 1, kLea) == 2, "le menu de la puce Admin : Lea, 2 lignes");
+        if (bar) bar->filterOn(1, kLea);
+        check(rows() == 2, "la puce Admin : Lea -> ses 2 lignes");
+        if (bar) bar->clearField(1);
+        check(rows() == 5, "sa croix : 5");
+        check(bar && valueCount(*bar, 5, "Info") >= 1, "la criticite : Info compte ses lignes");
+        if (bar) bar->setValues(5, {"Moyenne", "Haute", "Critique"});
+        check(rows() == 4, "Info decoche (Moyenne, Haute, Critique) : 4 lignes");
+        if (bar) bar->clearField(5);
+        check(rows() == 5, "Info recoche : 5");
         check(type(*jp, "journal.recherche", "XPG-2026-00412") && rows() == 1, "la recherche : 1 ligne");
         check(type(*jp, "journal.recherche", "") && rows() == 5, "recherche effacee");
-        check(pickValue(*jp, "journal.periode", "7") && rows() == 4, "7 derniers jours : 4 lignes (Paul il y a 10 jours)");
-        check(pickValue(*jp, "journal.periode", "0") && rows() == 5, "tout le journal : 5");
+        if (bar) bar->setPeriod(0, 7);
+        check(rows() == 4, "7 derniers jours : 4 lignes (Paul il y a 10 jours)");
+        if (bar) bar->setPeriod(0, 0);
+        check(rows() == 5, "tout le journal : 5");
         check(selectRow(*jp, "journal.table", 0, "n\xC2\xB0 3"), "deplier la ligne n. 3 (le tableau des scripts)");
         t = draw(*jp, 1280.f, 800.f);
         check(has(t, "CE QUI CHANGE") && has(t, "490 \xE2\x82\xAC") && has(t, "520 \xE2\x82\xAC"), "l'avant, l'apres");
         check(has(t, "Sign\xC3\xA9" "e par la cl\xC3\xA9 de Hugo") && has(t, "certificat valide") && has(t, "Ligne n\xC2\xB0 3, cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la n\xC2\xB0 2"),
               "signee par la cle de Hugo, chainee a la n. 2");
         check(shown(*jp, "journal.voir") && find<ui::Button>(*jp, "journal.voir")->text() == "Voir l'offre" && shown(*jp, "journal.tout-de"), "Voir l'offre, Tout le journal de Hugo");
-        check(click(*jp, "journal.tout-de") && rows() == 1, "Tout le journal de Hugo : sa ligne");
-        check(click(*jp, "journal.qui.tous") && rows() == 5, "Tous");
+        check(shown(*jp, "journal.admin"), "la pastille de Hugo (sa fiche) dans la ligne depliee");
+        check(click(*jp, "journal.tout-de") && rows() == 1 && bar && bar->chipText(1) == "Admin : Hugo", "Tout le journal de Hugo : sa ligne (la puce Admin)");
+        if (bar) bar->clearField(1);
+        (void)draw(*jp, 1280.f, 800.f);
+        check(rows() == 5, "Tous");
         // Le clic droit sur la premiere ligne (la n. 4) : la criticite de cette ligne.
         auto* menu = find<ui::PopupMenu>(*jp, "journal.menu");
         (void)draw(*jp, 1280.f, 800.f);
         (void)jp->dispatch(ui::InputEvent{ui::MouseDown{{500.f, 250.f}, ui::MouseButton::Right, 1, {}}});
         check(menu && menu->isOpen(), "le clic droit ouvre le menu de la ligne");
+        // 1.47.0 (planche 06) : le meme ordre que partout - Deplier ; la criticite de la ligne ; Aller a, Filtrer sur ; Copier,
+        // Exporter ; << Rien ne s'efface du journal >>.
         bool note = false, typeMark = false;
+        int critique = -1;
+        std::string order;
         if (menu)
             for (const auto& it : menu->items()) {
-                note = note || has(it.label, "la ligne sign\xC3\xA9" "e ne change pas");
-                typeMark = typeMark || it.note == "celle du type";
+                if (!it.separator) order += it.label + ";";
+                note = note || has(it.label, "Rien ne s'efface du journal");
+                for (const auto& ch : it.children) {
+                    typeMark = typeMark || ch.note == "celle du type";
+                    if (it.label == "Criticit\xC3\xA9 de cette ligne" && ch.label == "Critique") critique = ch.id;
+                }
             }
-        check(note && typeMark, "<< Ta note >>, << celle du type >>");
-        if (menu) menu->itemChosen->emit(4);   // Critique
+        check(note && typeMark && critique >= 0, "<< Rien ne s'efface >>, la criticite de la ligne (<< celle du type >>)");
+        check(order.rfind("D\xC3\xA9plier;Criticit\xC3\xA9 de cette ligne;Aller \xC3\xA0;Filtrer sur;Copier;Exporter la ligne (CSV);", 0) == 0, "l'ordre de la regle : " + order);
+        if (menu && critique >= 0) menu->itemChosen->emit(critique);   // Critique
         bool critical = false;
         for (const auto& r : fx.ws->journalLines().rows)
             if (r.line.number == 4) critical = r.overridden && r.level == adm::Level::Critical;

@@ -25,6 +25,7 @@
 //  meme quand cette page n'est pas ouverte.
 // =============================================================================
 #include "AdminsKit.hpp"
+#include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
 #include "../../core/Json.hpp"
@@ -433,26 +434,24 @@ public:
         export_->setTooltip("Les lignes montr\xC3\xA9" "es (les filtres, le tri), dans un fichier CSV.");
         fetch_ = &button(*this, "Relever", "journal.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         fetch_->setTooltip("Relever tout de suite les nouvelles lignes sur le service et les v\xC3\xA9rifier (l'Admin le fait seul toutes les 15 s).");
-        all_ = &adopt(*this, std::make_unique<Chip>("journal.qui.tous"));
-        links_ += all_->clicked->connect([this] { setWho({}); });
-        period_ = &adopt(*this, std::make_unique<ui::DropDown>("journal.periode"));
-        period_->setItems({{"7 derniers jours", "7"}, {"30 derniers jours", "30"}, {"90 derniers jours", "90"}, {"Tout le journal", "0"}});
-        period_->setSelectedIndex(1);
-        search_ = &adopt(*this, std::make_unique<ui::InputText>("journal.recherche"));
-        search_->setPlaceholder("Action, licence, client, PC\xE2\x80\xA6");
-        search_->setEscapeClears(true);
-        const char* levelIds[4] = {"journal.niveau.info", "journal.niveau.moyenne", "journal.niveau.haute", "journal.niveau.critique"};
-        for (int i = 0; i < 4; ++i) {
-            levels_[i] = &adopt(*this, std::make_unique<Chip>(levelIds[i]));
-            links_ += levels_[i]->clicked->connect([this, i] {
-                levelOn_[i] = !levelOn_[i];
-                first_ = 0;
-                rebuild();
-            });
+        // 1.47.0 (planche 12) : LA BARRE - chercher (journal.recherche), l'admin, le type, la criticite, la periode (30 j
+        // d'office), le PC, + Filtre ; << Mes filtres >>. Elle remplace les pastilles des admins et de la criticite.
+        bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("journal.barre", barFields(), "journal.recherche"));
+        bar_->setNoun("lignes du journal");
+        bar_->setClock([this] { return listkit::seconds(ws().now()); });
+        {
+            ui::FilterBar::Source src;
+            src.rows = [this] { return lines_.size(); };
+            src.text = [this](std::size_t r, std::size_t f) { return r < lines_.size() ? fieldText(lines_[r], f) : std::string(); };
+            src.time = [this](std::size_t r, std::size_t f) -> std::int64_t { return f == 0 && r < lines_.size() ? listkit::seconds(lines_[r].when) : 0; };
+            src.extra = [this](std::size_t r) {
+                return r < lines_.size() ? lines_[r].object + " " + lines_[r].actionLabel + " n\xC2\xB0 " + std::to_string(lines_[r].number) : std::string();
+            };
+            bar_->setSource(std::move(src));
         }
-        actionChip_ = &adopt(*this, std::make_unique<Chip>("journal.filtre.action"));
-        links_ += actionChip_->clicked->connect([this] {
-            actionFilter_.clear();
+        bar_->setMemoryKey("journal");
+        if (!bar_->state().active()) bar_->setPeriod(0, 30);   // d'office : les 30 derniers jours (comme avant)
+        links_ += bar_->changed->connect([this] {
             first_ = 0;
             rebuild();
         });
@@ -464,8 +463,6 @@ public:
         }
         prev_ = &button(*this, "Pr\xC3\xA9" "c\xC3\xA9" "dentes", "journal.page.precedente");
         next_ = &button(*this, "Suivantes", "journal.page.suivante");
-        see_ = &button(*this, "Voir", "journal.voir", ui::Button::Style::Default, ui::Icon::GoTo);
-        allOf_ = &button(*this, "Tout le journal", "journal.tout-de", ui::Button::Style::Flat, ui::Icon::History);
         table_ = &adopt(*this, std::make_unique<ui::TableView>("journal.table"));
         table_->setSelectionMode(ui::SelectionMode::Single);
         table_->setVisibility(ui::Visibility::Collapsed);   // les scripts : la page dessine le sien
@@ -479,14 +476,6 @@ public:
         });
         links_ += export_->clicked->connect([this] { exportCsv(); });
         links_ += fetch_->clicked->connect([this] { fetchNow(); });
-        links_ += period_->selectionChanged->connect([this](int) {
-            first_ = 0;
-            rebuild();
-        });
-        links_ += search_->textChanged->connect([this](const std::string&) {
-            first_ = 0;
-            rebuild();
-        });
         links_ += prev_->clicked->connect([this] {
             first_ = std::max(0, first_ - std::max(1, pageSize_));
             invalidateLayout();
@@ -498,10 +487,6 @@ public:
             invalidateLayout();
             invalidate();
             updatePager();
-        });
-        links_ += see_->clicked->connect([this] { seeObject(); });
-        links_ += allOf_->clicked->connect([this] {
-            if (const Line* l = expandedLine()) setWho(l->key);
         });
         links_ += table_->selectionChanged->connect([this](const std::vector<ui::RowIndex>& sel) {
             if (syncing_ || sel.empty() || sel.front() >= shown_.size()) return;
@@ -517,23 +502,20 @@ public:
     void refresh() override {
         view_ = ws().journalLines();
         const std::string f = takePageFocus("journal");
+        std::string whoKey;
         if (f.rfind("admin:", 0) == 0) {
-            who_ = f.substr(6);
+            whoKey = f.substr(6);
             first_ = 0;
             expanded_ = 0;
         } else if (f.rfind("ligne:", 0) == 0) {
-            // Une alerte : la ligne, quels que soient les filtres.
-            who_.clear();
-            actionFilter_.clear();
-            for (bool& on : levelOn_) on = true;
-            syncing_ = true;
-            period_->setSelectedIndex(3);
-            search_->setText({});
-            syncing_ = false;
+            // Une alerte : la ligne, quels que soient les filtres (la barre videe : tout le journal).
+            bar_->clearAll();
             expanded_ = std::strtoull(f.c_str() + 6, nullptr, 10);
             revealExpanded_ = true;
         }
         rebuildLines();
+        bar_->refreshCounts();
+        if (!whoKey.empty()) setWho(whoKey);
         rebuild();
     }
 
@@ -561,42 +543,13 @@ protected:
             bx -= 10.f;
         }
         leadRight_ = bx;
-        // Les pastilles des admins ; la periode et la recherche a droite.
+        // 1.47.0 : la barre de filtres (chercher, l'admin, le type, la criticite, la periode...).
         chipsY_ = titleY_ + 76.f;
-        const float sw = std::clamp(w_ * 0.22f, 200.f, 280.f), pw = 190.f;
-        search_->setBounds({x0_ + w_ - sw, chipsY_, sw, 34.f});
-        period_->setBounds({search_->bounds().x - 10.f - pw, chipsY_ + 1.f, pw, 32.f});
-        float cx = x0_;
-        const float chipsRight = period_->bounds().x - 12.f;
-        for (Chip* ch : [&] {
-                 std::vector<Chip*> v{all_};
-                 for (auto* c : whoChips_) v.push_back(c);
-                 return v;
-             }()) {
-            const float cw = ch->wanted();
-            if (cx + cw > chipsRight) {
-                ch->setVisibility(ui::Visibility::Hidden);
-                continue;
-            }
-            ch->setVisibility(ui::Visibility::Visible);
-            ch->setBounds({cx, chipsY_ + 1.f, cw, 32.f});
-            cx += cw + 8.f;
-        }
-        levelsY_ = chipsY_ + 44.f;
-        cx = x0_ + 82.f;
-        for (Chip* ch : levels_) {
-            const float cw = ch->wanted();
-            ch->setBounds({cx, levelsY_, cw, 30.f});
-            cx += cw + 8.f;
-        }
-        if (!actionFilter_.empty()) {
-            actionChip_->setVisibility(ui::Visibility::Visible);
-            actionChip_->setBounds({cx + 10.f, levelsY_, actionChip_->wanted(), 30.f});
-        } else {
-            actionChip_->setVisibility(ui::Visibility::Collapsed);
-        }
+        const float bh = bar_->heightFor(w_);
+        bar_->setBounds({x0_, chipsY_, w_, bh});
+        levelsY_ = chipsY_ + bh - 34.f;
         // Le tableau.
-        const float top = levelsY_ + 44.f, bottom = b.bottom() - 16.f;
+        const float top = chipsY_ + bh + 14.f, bottom = b.bottom() - 16.f;
         card_ = {x0_, top, w_, std::max(200.f, bottom - top)};
         const float cw = card_.w - 36.f;
         const float frac[6] = {0.11f, 0.13f, 0.15f, 0.35f, 0.16f, 0.10f};
@@ -610,6 +563,8 @@ protected:
         }
         rowsTop_ = card_.y + 42.f;
         footY_ = card_.bottom() - 46.f;
+        // 1.47.0 : la hauteur du depliage, celle de sa carte (ui::UnfoldCard).
+        expandH_ = unfold_ ? std::max(120.f, unfold_->heightFor(card_.w - 2.f)) : kExpandH;
         // Les lignes qui tiennent (une depliee prend plus).
         const float avail = footY_ - rowsTop_;
         pageSize_ = std::max(1, static_cast<int>(avail / kRowH));
@@ -617,7 +572,7 @@ protected:
             revealExpanded_ = false;
             for (std::size_t i = 0; i < shown_.size(); ++i)
                 if (lines_[shown_[i]].number == expanded_) {
-                    const int need = std::max(1, static_cast<int>((avail - kExpandH) / kRowH));
+                    const int need = std::max(1, static_cast<int>((avail - expandH_) / kRowH));
                     if (static_cast<int>(i) < first_ || static_cast<int>(i) >= first_ + need) first_ = std::max(0, static_cast<int>(i) - need / 2);
                 }
         }
@@ -628,25 +583,17 @@ protected:
         expandRect_ = {};
         for (int i = first_; i < static_cast<int>(shown_.size()); ++i) {
             const bool open = lines_[shown_[static_cast<std::size_t>(i)]].number == expanded_;
-            const float h = kRowH + (open ? kExpandH : 0.f);
+            const float h = kRowH + (open ? expandH_ : 0.f);
             if (y + h > footY_ + 0.5f && shownCount_ > 0) break;
             rowTops_.push_back(y);
-            if (open) expandRect_ = {card_.x + 1.f, y + kRowH, card_.w - 2.f, kExpandH};
+            if (open) expandRect_ = {card_.x + 1.f, y + kRowH, card_.w - 2.f, expandH_};
             y += h;
             ++shownCount_;
         }
-        // Les boutons de la ligne depliee.
-        const Line* e = expandRect_.empty() ? nullptr : expandedLine();
-        const std::string seeText = e ? seeLabel(*e) : std::string();
-        show(see_, e && !seeText.empty());
-        show(allOf_, e != nullptr && !e->key.empty());
-        if (e) {
-            const Rect side{expandRect_.x + expandRect_.w * 0.5f + 8.f, expandRect_.y + 10.f, expandRect_.w * 0.5f - 26.f, expandRect_.h - 20.f};
-            see_->setText(seeText);
-            const float sw2 = buttonWidth(*see_, 110.f);
-            see_->setBounds({side.x + 14.f, side.bottom() - 44.f, sw2, 32.f});
-            allOf_->setText("Tout le journal de " + e->who);
-            allOf_->setBounds({(see_->visible() ? see_->bounds().right() : side.x) + 14.f, side.bottom() - 44.f, buttonWidth(*allOf_, 120.f), 32.f});
+        // 1.47.0 : la carte de la ligne depliee (ui::UnfoldCard) a sa place, ou cachee (la ligne hors de la page).
+        if (unfold_) {
+            unfold_->setVisibility(expandRect_.empty() ? ui::Visibility::Hidden : ui::Visibility::Visible);
+            if (!expandRect_.empty()) unfold_->setBounds(expandRect_);
         }
         const float nw = buttonWidth(*next_, 100.f), pw2 = buttonWidth(*prev_, 110.f);
         next_->setBounds({card_.right() - 16.f - nw, footY_ + 8.f, nw, 30.f});
@@ -660,6 +607,7 @@ protected:
         const auto& th = ctx.theme;
         const auto& c = th.color;
         r.fillRect(bounds(), c.windowBg);
+        grave_.clear();   // 1.47.0 : les cartes remplacees pendant un evenement
         r.drawText({x0_, titleY_}, "Journal des admins", gfx::semibold(kF28), c.text);
         const Seconds since = view_.rows.empty() ? 0 : view_.rows.front().line.parsed.when;
         std::string lead = "Chaque action de chaque admin, sign\xC3\xA9" "e par sa cl\xC3\xA9 et cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente : rien ne s'efface \xC2\xB7 " +
@@ -667,7 +615,6 @@ protected:
         if (since) lead += " depuis le " + dateFr(since);
         if (fetching_) lead += " \xC2\xB7 relev\xC3\xA9 en cours\xE2\x80\xA6";
         r.drawText({x0_, titleY_ + 40.f}, fit(r, lead, kF14, leadRight_ - x0_ - 12.f), kF14, c.textMuted);
-        r.drawText({x0_, levelsY_ + 8.f}, "CRITICIT\xC3\x89", gfx::semibold(kF11), c.textMuted);
         cardBox(r, th, card_);
         r.fillRect({card_.x + 1.f, rowsTop_ - 1.f, card_.w - 2.f, 1.f}, c.gridLine);
         const Seconds now = ws().now();
@@ -682,7 +629,7 @@ protected:
             const std::string empty = view_.rows.empty()
                                           ? std::string("Aucune ligne relev\xC3\xA9" "e pour l'instant. Le journal se rel\xC3\xA8ve seul toutes les 15 s quand le service est r\xC3\xA9gl\xC3\xA9 ; "
                                                         "\xC2\xAB Relever \xC2\xBB le fait tout de suite.")
-                                          : std::string("Aucune ligne pour ces filtres : \xC2\xAB Tous \xC2\xBB, une autre p\xC3\xA9riode, ou efface la recherche.");
+                                          : std::string("Aucune ligne pour ces filtres : \xC2\xAB Effacer les filtres \xC2\xBB, ou une autre p\xC3\xA9riode.");
             (void)drawWrapped(r, card_.x + 24.f, rowsTop_ + 20.f, card_.w - 48.f, empty, kF14, c.textMuted, 20.f, 3);
         }
         // Le pied : la chaine, la pagination.
@@ -713,6 +660,13 @@ protected:
             const int k = rowAt(d->pos);
             if (k >= 0) {
                 const int si = first_ + k;
+                cursor_ = si;
+                if (d->button == ui::MouseButton::Left && d->clickCount >= 2) {   // 1.47.0 : le double-clic ouvre l'objet
+                    if (si >= 0 && static_cast<std::size_t>(si) < shown_.size() && lines_[shown_[static_cast<std::size_t>(si)]].number != expanded_)
+                        expandAt(si, true);
+                    seeObject();
+                    return ui::EventResult::Consumed;
+                }
                 if (d->button == ui::MouseButton::Left) {
                     expandAt(si, false);
                     return ui::EventResult::Consumed;
@@ -721,6 +675,22 @@ protected:
                     openMenu(si, d->pos);
                     return ui::EventResult::Consumed;
                 }
+            }
+        }
+        // 1.47.0 (planche 07) : -> deplie, <- replie, Entree ouvre l'objet (la ligne cliquee en dernier).
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->mods.none() && !bar_->searchField().focused()) {
+            if (k->key == ui::Key::Right && cursor_ >= 0 && static_cast<std::size_t>(cursor_) < shown_.size()) {
+                expandAt(cursor_, true);
+                return ui::EventResult::Consumed;
+            }
+            if (k->key == ui::Key::Left && expanded_) {
+                expanded_ = 0;
+                rebuildCard();
+                return ui::EventResult::Consumed;
+            }
+            if (k->key == ui::Key::Return && expanded_) {
+                seeObject();
+                return ui::EventResult::Consumed;
             }
         }
         if (const auto* wh = std::get_if<ui::MouseWheel>(&ev); wh && card_.contains(wh->pos)) {
@@ -772,62 +742,10 @@ private:
             l.objectText = o.empty() ? l.object : o;
             lines_.push_back(std::move(l));
         }
-        // Les pastilles des admins : l'admin+ d'abord, puis par nombre de lignes.
-        struct WhoCount {
-            std::string key, name;
-            int         n{0};
-            bool        plus{false}, retired{false}, service{false};
-        };
-        std::vector<WhoCount> whos;
-        for (std::size_t i = 0; i < lines_.size(); ++i) {
-            auto it = std::find_if(whos.begin(), whos.end(), [&](const WhoCount& x) { return x.key == lines_[i].key; });
-            if (it == whos.end()) {
-                WhoCount wc;
-                wc.key = lines_[i].key;
-                wc.name = lines_[i].who;
-                wc.plus = view_.rows[i].who == "admin+";
-                wc.service = view_.rows[i].who == "le service";
-                if (w.adminList())
-                    if (const adm::Admin* a = w.adminList()->byKey(wc.key)) wc.retired = !a->active();
-                whos.push_back(wc);
-                it = whos.end() - 1;
-            }
-            ++it->n;
-        }
-        std::stable_sort(whos.begin(), whos.end(), [](const WhoCount& a, const WhoCount& b) {
-            if (a.plus != b.plus) return a.plus;
-            if (a.service != b.service) return !a.service;
-            return a.n > b.n;
-        });
-        while (whoChips_.size() < whos.size()) {
-            const std::size_t n = whoChips_.size() + 1;
-            Chip& ch = adopt(*this, std::make_unique<Chip>("journal.qui." + std::to_string(n)));
-            links_ += ch.clicked->connect([this, n] {
-                if (n - 1 < whoKeys_.size()) setWho(whoKeys_[n - 1] == who_ ? std::string() : whoKeys_[n - 1]);
-            });
-            whoChips_.push_back(&ch);
-        }
-        whoKeys_.clear();
+        // Les couleurs des avatars : l'admin+, puis les admins dans l'ordre de la liste (ListKit).
         colorOf_.clear();
-        int color = 1;
-        if (w.adminList())
-            for (const auto& a : w.adminList()->admins)
-                if (a.active()) colorOf_[a.key] = color++;
-        for (std::size_t i = 0; i < whoChips_.size(); ++i) {
-            if (i >= whos.size()) {
-                whoChips_[i]->setVisibility(ui::Visibility::Collapsed);
-                continue;
-            }
-            const auto& wc = whos[i];
-            whoKeys_.push_back(wc.key);
-            const int col = wc.plus ? 0 : wc.retired || wc.service ? -1 : colorOf_.count(wc.key) ? colorOf_[wc.key] : static_cast<int>(i);
-            if (wc.plus) colorOf_[wc.key] = 0;
-            whoChips_[i]->setAvatar(true, avatarColor(ws0Theme(), col));
-            whoChips_[i]->setMuted(wc.retired);
-            whoChips_[i]->setNote(wc.retired ? "retir\xC3\xA9" : std::string());
-            whoChips_[i]->set(wc.name, wc.n, wc.key == who_);
-            whoChips_[i]->setVisibility(ui::Visibility::Visible);
-        }
+        for (const auto& l : lines_)
+            if (!colorOf_.count(l.key)) colorOf_[l.key] = listkit::adminColor(w, l.key);
     }
 
     // Les couleurs des avatars viennent du theme au dessin ; ici, un theme de reference suffit (le violet).
@@ -836,31 +754,38 @@ private:
         return t;
     }
 
-    [[nodiscard]] int periodDays() const {
-        const auto* it = period_->selectedItem();
-        return it ? std::atoi(it->value.c_str()) : 30;
+    // 1.47.0 (planche 12) : les colonnes vues par la barre.
+    static std::vector<ui::FilterBar::Field> barFields() {
+        using K = ui::FilterBar::Kind;
+        std::vector<ui::FilterBar::Field> f(7);
+        f[0] = {.title = "Quand", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
+        f[1] = {.title = "Admin", .chip = true, .noun = "un admin"};
+        f[2] = {.title = "PC", .noun = "un PC"};
+        f[3] = {.title = "Action", .kind = K::Text};
+        f[4] = {.title = "Objet", .kind = K::Text};
+        f[5] = {.title = "Criticit\xC3\xA9", .chip = true, .noun = "une criticit\xC3\xA9"};
+        for (adm::Level l : kLevels) f[5].order.push_back(adm::levelLabel(l));
+        f[6] = {.title = "Type", .chip = true, .noun = "un type"};
+        for (const auto& t : adm::actionTypes()) f[6].order.push_back(t.label);
+        return f;
+    }
+    [[nodiscard]] static std::string fieldText(const Line& l, std::size_t f) {
+        switch (f) {
+            case 0: return dateTimeFr(l.when);
+            case 1: return l.who;
+            case 2: return l.pc;
+            case 3: return l.summary;
+            case 4: return l.objectText;
+            case 5: return adm::levelLabel(l.level);
+            case 6: return l.actionLabel;
+            default: return {};
+        }
     }
 
     void rebuild() {
-        const Seconds now = ws().now();
-        const int days = periodDays();
-        const std::string q = lower(search_->text());
         shown_.clear();
-        int levelCount[4] = {0, 0, 0, 0};
-        for (std::size_t i = 0; i < lines_.size(); ++i) {
-            const Line& l = lines_[i];
-            ++levelCount[static_cast<int>(l.level)];
-            if (!who_.empty() && l.key != who_) continue;
-            if (!levelOn_[static_cast<int>(l.level)]) continue;
-            if (!actionFilter_.empty() && l.action != actionFilter_) continue;
-            if (days > 0 && l.when < now - static_cast<Seconds>(days) * kDay) continue;
-            if (!q.empty()) {
-                const std::string hay = lower(l.summary + " " + l.object + " " + l.objectText + " " + l.who + " " + l.pc + " " + l.actionLabel + " n\xC2\xB0 " +
-                                              std::to_string(l.number));
-                if (hay.find(q) == std::string::npos) continue;
-            }
-            shown_.push_back(i);
-        }
+        for (std::size_t i = 0; i < lines_.size(); ++i)
+            if (bar_->accepts(i)) shown_.push_back(i);   // 1.47.0 : la barre (la recherche, les puces, la periode)
         const int col = sortCol_;
         const bool desc = sortDesc_;
         std::stable_sort(shown_.begin(), shown_.end(), [this, col, desc](std::size_t a, std::size_t b) {
@@ -879,27 +804,6 @@ private:
             if (cmp == 0) cmp = x.number < y.number ? -1 : x.number > y.number ? 1 : 0;
             return desc ? cmp > 0 : cmp < 0;
         });
-        // Les pastilles : << Tous >>, la criticite (les nombres de tout le journal), le type choisi.
-        all_->set("Tous", static_cast<int>(lines_.size()), who_.empty());
-        for (std::size_t i = 0; i < whoChips_.size() && i < whoKeys_.size(); ++i) {
-            std::string label;
-            for (const auto& l : lines_)
-                if (l.key == whoKeys_[i]) {
-                    label = l.who;
-                    break;
-                }
-            int n = 0;
-            for (const auto& l : lines_) n += l.key == whoKeys_[i] ? 1 : 0;
-            whoChips_[i]->set(label, n, whoKeys_[i] == who_);
-        }
-        for (int i = 0; i < 4; ++i) {
-            levels_[i]->setTint(true, levelTint(kLevels[i]));
-            levels_[i]->set(adm::levelLabel(kLevels[i]), levelCount[i], levelOn_[i]);
-        }
-        if (!actionFilter_.empty()) {
-            const adm::ActionType* t = adm::actionType(actionFilter_);
-            actionChip_->set("Seulement \xC2\xAB " + std::string(t ? t->label : actionFilter_.c_str()) + " \xC2\xBB \xC2\xB7 retirer", -1, true);
-        }
         for (int i = 0; i < 6; ++i) sort_[i]->setSort(i == sortCol_, sortDesc_);
         // Le tableau des scripts : les lignes montrees, dans l'ordre.
         std::vector<std::vector<std::string>> rows;
@@ -910,13 +814,23 @@ private:
         export_->setEnabled(!shown_.empty());
         fetch_->setEnabled(ws().service().ready() && !fetching_);
         crit_->setEnabled(ws().role() == Role::Plus);
+        rebuildCard();
         invalidateLayout();
         invalidate();
     }
 
+    // 1.47.0 : << Tout le journal de Lea >>, l'arrivee depuis Administrateurs : la puce Admin sur lui (vide : levee).
     void setWho(const std::string& key) {
-        who_ = key;
         first_ = 0;
+        if (key.empty()) {
+            bar_->clearField(1);
+            return;
+        }
+        for (const auto& l : lines_)
+            if (l.key == key) {
+                bar_->filterOn(1, l.who);
+                return;
+            }
         rebuild();
     }
 
@@ -943,8 +857,117 @@ private:
         const std::uint64_t n = lines_[shown_[static_cast<std::size_t>(si)]].number;
         expanded_ = expanded_ == n && !select ? 0 : n;
         if (expanded_) revealExpanded_ = true;
+        rebuildCard();
+    }
+
+    // ---- 1.47.0 (planche 07) : LA LIGNE DEPLIEE - l'objet touche (ses liens), l'avant et l'apres, la signature ;
+    // << Voir... >>, l'admin (sa fiche), << Tout le journal de ... >>. Une carte (ui::UnfoldCard), refaite a chaque
+    // changement ; l'ancienne attend le dessin suivant (elle peut etre en train d'emettre son clic).
+    void rebuildCard() {
+        if (unfold_) {
+            grave_.push_back(removeChild(*unfold_));
+            unfold_ = nullptr;
+        }
+        const Line* l = expandedLine();
+        if (l) {
+            bool shownNow = false;
+            for (auto i : shown_) shownNow = shownNow || lines_[i].number == l->number;
+            if (!shownNow) l = nullptr;
+        }
+        if (l) {
+            auto card = makeCard(*l, view_.rows[l->row]);
+            unfold_ = &static_cast<ui::UnfoldCard&>(addChild(std::move(card)));
+            unfold_->setVisibility(ui::Visibility::Hidden);   // posee a la mise en page
+        }
         invalidateLayout();
         invalidate();
+    }
+
+    std::unique_ptr<ui::UnfoldCard> makeCard(const Line& l, const JournalRow& jr) {
+        auto card = std::make_unique<ui::UnfoldCard>("journal.depliage");
+        card->setOwnBackground(true);
+        const json::Value before = objectOf(jr.line.parsed.before), after = objectOf(jr.line.parsed.after), detail = objectOf(jr.line.parsed.detail);
+        // L'objet touche : l'objet (un lien vers sa page), puis ce que dit le detail (le client, l'offre...).
+        ui::UnfoldCard::Box obj;
+        obj.title = "L'OBJET TOUCH\xC3\x89";
+        obj.weight = 0.9f;
+        if (!l.object.empty()) {
+            ui::UnfoldCard::Line line{.icon = ui::Icon::Document, .text = "**" + l.object + "**"};
+            if (!seeLabel(l).empty()) line.link = [this] { seeObject(); };
+            obj.lines.push_back(std::move(line));
+        }
+        int n = 0;
+        for (const auto& [k, v] : detail.members()) {
+            if (n >= 3 || !(v.isString() || v.isNumber() || v.isBool())) continue;
+            const bool when = isTimeKey(k) && v.isNumber() && v.asNumber() > 1e9 && v.asNumber() < 1e10;
+            obj.lines.push_back({.icon = ui::Icon::Info, .text = keyText(k) + " **" + (when ? dateTimeFr(static_cast<Seconds>(v.asNumber())) : valueText(v)) + "**"});
+            ++n;
+        }
+        if (!l.pc.empty()) obj.lines.push_back({.icon = l.otherPc ? ui::Icon::Warning : ui::Icon::Station, .text = "PC **" + l.pc + "**", .tone = l.otherPc ? ui::Tone::Warning : ui::Tone::None});
+        if (obj.lines.empty()) obj.lines.push_back({.icon = ui::Icon::Info, .text = l.summary});
+        card->addBox(std::move(obj));
+        // L'avant et l'apres (ce qui change) ; sans : le reste du detail.
+        std::vector<std::string> keys;
+        for (const auto* o : {&after, &before})
+            for (const auto& [k, v] : o->members())
+                if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+        if (!keys.empty()) {
+            ui::UnfoldCard::Box ba;
+            ba.title = "AVANT \xC2\xB7 APR\xC3\x88S";
+            ba.weight = 1.2f;
+            ba.head = {"CE QUI CHANGE", "AVANT", "APR\xC3\x88S"};
+            for (const auto& k : keys) {
+                if (ba.table.size() >= 4) break;
+                const json::Value* b = before.find(k);
+                const json::Value* a = after.find(k);
+                ba.table.push_back({keyText(k), b ? valueText(*b) : std::string("\xE2\x80\x94"), a ? valueText(*a) : std::string("\xE2\x80\x94")});
+            }
+            card->addBox(std::move(ba));
+        }
+        // La signature, le chainage, la reception.
+        ui::UnfoldCard::Box sig;
+        sig.title = "LA SIGNATURE";
+        const bool service = jr.who == "le service";
+        if (jr.verified) {
+            sig.lines.push_back({.icon = ui::Icon::Lock,
+                                 .text = service ? std::string("\xC3\x89" "crite et sign\xC3\xA9" "e par le service (sa cl\xC3\xA9, certifi\xC3\xA9" "e par l'\xC3\xA9" "diteur)")
+                                                 : "Sign\xC3\xA9" "e par la cl\xC3\xA9 de " + l.who + " " + shortFingerprint(adm::fingerprint(l.key)) + "\xE2\x80\xA6 \xC2\xB7 " +
+                                                       (jr.who == "admin+" ? std::string("la cl\xC3\xA9 de l'\xC3\xA9" "diteur") : std::string("certificat valide")),
+                                 .check = true});
+        } else {
+            sig.lines.push_back({.icon = ui::Icon::Error, .text = jr.problem.empty() ? std::string("signature non v\xC3\xA9rifi\xC3\xA9" "e") : jr.problem, .tone = ui::Tone::Error});
+        }
+        const std::string tag = "n\xC2\xB0 " + std::to_string(l.number);
+        std::string chainProblem;
+        for (const auto& p : view_.problems)
+            if (p.find(tag + " ") != std::string::npos || (p.size() >= tag.size() && p.compare(p.size() - tag.size(), tag.size(), tag) == 0)) chainProblem = p;
+        if (chainProblem.empty())
+            sig.lines.push_back({.icon = ui::Icon::Link,
+                                 .text = l.number <= 1 ? std::string("Ligne n\xC2\xB0 1, la premi\xC3\xA8re de la cha\xC3\xAEne")
+                                                       : "Ligne n\xC2\xB0 " + std::to_string(l.number) + ", cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la n\xC2\xB0 " + std::to_string(l.number - 1),
+                                 .check = true});
+        else
+            sig.lines.push_back({.icon = ui::Icon::Error, .text = chainProblem, .tone = ui::Tone::Error});
+        std::string got = "Re\xC3\xA7ue par le service le " + dateTimeFr(jr.line.received ? jr.line.received : l.when);
+        if (!jr.line.parsed.software.empty()) got += " \xC2\xB7 " + jr.line.parsed.software;
+        sig.lines.push_back({.icon = ui::Icon::History, .text = got});
+        if (jr.overridden) {
+            std::string o = "Criticit\xC3\xA9 chang\xC3\xA9" "e \xC3\xA0 la main";
+            if (!jr.overrideBy.empty()) o += " par " + jr.overrideBy;
+            if (jr.overrideAt) o += " le " + dateTimeFr(jr.overrideAt);
+            sig.lines.push_back({.icon = ui::Icon::Settings, .text = o, .tone = ui::Tone::Accent});
+        }
+        sig.weight = 1.1f;
+        card->addBox(std::move(sig));
+        // La rangee : Voir..., l'admin (sa fiche), Tout le journal de ... ; a droite : la criticite.
+        if (const std::string see = seeLabel(l); !see.empty()) card->addButton(see, "journal.voir", ui::Icon::GoTo, [this] { seeObject(); });
+        if (!l.key.empty() && !service) {
+            (void)card->addPerson(listkit::person(host_, l.key, l.who), "journal.admin");
+            const std::string key = l.key;
+            card->addButton("Tout le journal de " + l.who, "journal.tout-de", ui::Icon::History, [this, key] { setWho(key); });
+        }
+        card->addText("Criticit\xC3\xA9 : " + adm::levelLabel(l.level), true);
+        return card;
     }
 
     [[nodiscard]] int rowAt(gfx::Point p) const {
@@ -1002,7 +1025,7 @@ private:
         }
     }
 
-    // ---- le clic droit ----
+    // ---- 1.47.0 (planche 06) : le clic droit, dans l'ordre de la regle ----
     void openMenu(int si, gfx::Point at) {
         if (si < 0 || static_cast<std::size_t>(si) >= shown_.size()) return;
         menuLine_ = lines_[shown_[static_cast<std::size_t>(si)]].number;
@@ -1010,78 +1033,63 @@ private:
         const JournalRow& jr = view_.rows[l.row];
         adm::Level typeLevel = adm::Level::Info;
         if (const adm::ActionType* t = adm::actionType(l.action)) typeLevel = ws().criticality().actions[t->id].level;
-        std::vector<ui::PopupMenu::Item> items;
-        ui::PopupMenu::Item head;
-        head.heading = true;
-        head.label = "Criticit\xC3\xA9 de cette ligne";
-        items.push_back(head);
+        ui::ListMenu m({1, "lignes", true});
+        const std::uint64_t number = l.number;
+        const int row = si;
+        m.unfold(expanded_ == number, [this, row] { expandAt(row, false); });
+        // La criticite de cette ligne (une note a cote du journal : la ligne signee ne change jamais) - l'admin+.
+        ui::ListMenu::Entry crit{.label = "Criticit\xC3\xA9 de cette ligne", .icon = ui::Icon::Settings,
+                                 .why = ws().role() == Role::Plus ? std::string() : std::string("r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+")};
         for (int i = 0; i < 4; ++i) {
-            ui::PopupMenu::Item it;
-            it.label = adm::levelLabel(kLevels[i]);
-            it.radio = true;
-            it.checked = jr.level == kLevels[i];
-            it.note = kLevels[i] == typeLevel ? std::string("celle du type") : std::string();
-            it.id = 1 + i;
-            it.enabled = ws().role() == Role::Plus;
-            if (!it.enabled) it.disabledReason = "r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+";
-            items.push_back(it);
+            const adm::Level level = kLevels[i];
+            crit.children.push_back({.label = adm::levelLabel(level), .run = [this, number, level, typeLevel] {
+                                         host_.report(ws().setLineLevel(number, level, level == typeLevel));
+                                         refresh();
+                                     },
+                                     .note = level == typeLevel ? std::string("celle du type") : std::string(), .radio = true, .checked = jr.level == level});
         }
-        ui::PopupMenu::Item sep;
-        sep.separator = true;
-        items.push_back(sep);
-        ui::PopupMenu::Item detail;
-        detail.label = "Voir le d\xC3\xA9tail";
-        detail.icon = ui::Icon::Eye;
-        detail.id = 10;
-        items.push_back(detail);
-        ui::PopupMenu::Item only;
-        only.label = "Seulement \xC2\xAB " + l.actionLabel + " \xC2\xBB";
-        only.icon = ui::Icon::Filter;
-        only.id = 11;
-        items.push_back(only);
-        ui::PopupMenu::Item copy;
-        copy.label = "Copier la ligne";
-        copy.icon = ui::Icon::Copy;
-        copy.id = 12;
-        items.push_back(copy);
-        items.push_back(sep);
-        ui::PopupMenu::Item note;
-        note.heading = true;
-        note.label = "Ta note, \xC3\xA0 c\xC3\xB4t\xC3\xA9 du journal : la ligne sign\xC3\xA9" "e ne change pas.";
-        note.note = "Le changement est \xC3\xA9" "crit (qui, quand).";
-        items.push_back(note);
-        menu_->setItems(std::move(items));
+        if (ws().role() == Role::Plus) crit.why.clear();
+        else crit.children.clear();
+        m.action(std::move(crit));
+        if (const std::string see = seeLabel(l); !see.empty())
+            m.goTo({.label = see.substr(0, 5) == "Voir " ? "L" + see.substr(5) : see, .icon = ui::Icon::Document, .run = [this, number] {
+                        expanded_ = number;
+                        seeObject();
+                    }});
+        if (!l.key.empty() && jr.who != "le service") {
+            const std::string key = l.key;
+            m.goTo({.label = "L'admin : " + l.who, .icon = ui::Icon::User, .run = [this, key] {
+                        requestPageFocus("admins", "admin:" + key);
+                        host_.navigate("admins");
+                    }});
+        }
+        const auto on = [&](std::size_t f, const std::string& label) {
+            const std::string v = fieldText(l, f);
+            if (v.empty()) return;
+            m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
+        };
+        on(1, "Cet admin");
+        on(6, "Ce type");
+        on(5, "Cette criticit\xC3\xA9");
+        {
+            const std::int64_t when = listkit::seconds(l.when);
+            m.filterOn({.label = "Ce jour : " + dateFr(l.when), .run = [this, when] { bar_->filterOnDay(0, when); }});
+        }
+        on(2, "Ce PC");
+        m.copy("Le num\xC3\xA9ro", std::to_string(l.number), ui::Icon::Copy);
+        if (!l.object.empty()) m.copy("L'objet", l.object, ui::Icon::Document);
+        m.copy("La ligne",
+               "Ligne n\xC2\xB0 " + std::to_string(l.number) + "\t" + dateTimeFr(l.when) + "\t" + l.who + "\t" + l.pc + "\t" + l.summary + "\t" + l.objectText + "\t" +
+                   adm::levelLabel(l.level),
+               ui::Icon::Copy);
+        m.exportRows([this, number] { exportCsv({number}); });
+        m.note("Rien ne s'efface du journal", "pas d'entr\xC3\xA9" "e rouge ici");
+        menuList_ = m;
+        menu_->setItems(menuList_.items(1));
         menu_->openInWindow(at);
     }
 
-    void menuChosen(int id) {
-        const Line* l = nullptr;
-        for (const auto& x : lines_)
-            if (x.number == menuLine_) l = &x;
-        if (!l) return;
-        if (id >= 1 && id <= 4) {
-            adm::Level typeLevel = adm::Level::Info;
-            if (const adm::ActionType* t = adm::actionType(l->action)) typeLevel = ws().criticality().actions[t->id].level;
-            const adm::Level level = kLevels[id - 1];
-            const OpResult r = ws().setLineLevel(l->number, level, level == typeLevel);
-            host_.report(r);
-            refresh();
-        } else if (id == 10) {
-            expanded_ = l->number;
-            revealExpanded_ = true;
-            invalidateLayout();
-            invalidate();
-        } else if (id == 11) {
-            actionFilter_ = l->action;
-            first_ = 0;
-            rebuild();
-        } else if (id == 12) {
-            const std::string text = "Ligne n\xC2\xB0 " + std::to_string(l->number) + "\t" + dateTimeFr(l->when) + "\t" + l->who + "\t" + l->pc + "\t" + l->summary + "\t" +
-                                     l->objectText + "\t" + adm::levelLabel(l->level);
-            ui::setClipboardText(text);
-            host_.flash("Ligne n\xC2\xB0 " + std::to_string(l->number) + " copi\xC3\xA9" "e.", Tone::Info);
-        }
-    }
+    void menuChosen(int id) { (void)menuList_.run(id); }
 
     // ---- relever, exporter ----
     void fetchNow() {
@@ -1108,7 +1116,8 @@ private:
         return o + "\"";
     }
 
-    void exportCsv() {
+    // Les lignes montrees ; `only` non vide : seulement ces lignes (le clic droit << Exporter la ligne >>).
+    void exportCsv(std::vector<std::uint64_t> only = {}) {
         if (shown_.empty()) return;
         ui::FilePick pick;
         pick.title = "Exporter le journal des admins";
@@ -1116,13 +1125,16 @@ private:
         pick.save = true;
         pick.start = "journal-admins.csv";
         std::string csv = "\xEF\xBB\xBFLigne;Quand;Admin;PC;Action;Objet;Criticit\xC3\xA9;Sign\xC3\xA9" "e\n";
+        std::size_t count = 0;
         for (auto i : shown_) {
             const Line& l = lines_[i];
+            if (!only.empty() && std::find(only.begin(), only.end(), l.number) == only.end()) continue;
+            ++count;
             const JournalRow& jr = view_.rows[l.row];
             csv += std::to_string(l.number) + ";" + csvCell(dateTimeFr(l.when)) + ";" + csvCell(l.who) + ";" + csvCell(l.pc) + ";" + csvCell(l.summary) + ";" +
                    csvCell(l.objectText) + ";" + csvCell(adm::levelLabel(l.level)) + ";" + (jr.verified ? "oui" : csvCell("non : " + jr.problem)) + "\n";
         }
-        const std::size_t n = shown_.size();
+        const std::size_t n = count;
         auto alive = alive_;
         host_.pickFile(pick, [this, alive, csv, n](std::string path) {
             if (!*alive) return;
@@ -1151,17 +1163,28 @@ private:
         const bool open = l.number == expanded_;
         const bool fresh = now - l.when < 120;
         const Rect row{card_.x + 1.f, y, card_.w - 2.f, kRowH};
-        if (open) {
-            r.fillRect({row.x, row.y, row.w, kRowH + kExpandH}, rgb(0xFFFBF2));
-            r.fillRect({row.x, row.y, 3.f, kRowH + kExpandH}, rgb(0xF59E0B));
+        if (open) {   // 1.47.0 : depliee - le violet tres pale, une barre a gauche (la ligne ; la carte peint le reste)
+            r.fillRect(row, c.accent.withAlpha(18));
+            r.fillRect({row.x, row.y, 3.f, kRowH}, c.accent);
         } else if (fresh && l.level == adm::Level::Critical) {
             r.fillRect(row, c.error.withAlpha(14));
             r.fillRect({row.x, row.y, 3.f, row.h}, c.error);
         }
-        r.fillRect({row.x, (open ? row.y + kRowH + kExpandH : row.bottom()) - 1.f, row.w, 1.f}, c.gridLine);
+        r.fillRect({row.x, (open ? row.y + kRowH + expandH_ : row.bottom()) - 1.f, row.w, 1.f}, c.gridLine);
         const float ty = y + (kRowH - r.lineHeight(kF13)) * 0.5f;
-        // Quand
-        r.drawText({colX_[kQuand], ty}, agoOrWhen(now, l.when), fresh ? gfx::semibold(kF13) : kF13, fresh && l.level == adm::Level::Critical ? c.error : c.text);
+        // Quand (1.47.0 : le chevron du depliage devant, planche 07)
+        {
+            const float ax = colX_[kQuand] - 2.f, cy0 = y + kRowH * 0.5f;
+            const Color chev = open ? c.accent : c.textMuted;
+            if (open) {
+                r.line({ax, cy0 - 2.f}, {ax + 4.f, cy0 + 2.f}, chev, 1.5f);
+                r.line({ax + 4.f, cy0 + 2.f}, {ax + 8.f, cy0 - 2.f}, chev, 1.5f);
+            } else {
+                r.line({ax + 2.f, cy0 - 4.f}, {ax + 6.f, cy0}, chev, 1.5f);
+                r.line({ax + 6.f, cy0}, {ax + 2.f, cy0 + 4.f}, chev, 1.5f);
+            }
+        }
+        r.drawText({colX_[kQuand] + 14.f, ty}, agoOrWhen(now, l.when), fresh ? gfx::semibold(kF13) : kF13, fresh && l.level == adm::Level::Critical ? c.error : c.text);
         // Admin
         const JournalRow& jr = view_.rows[l.row];
         const bool service = jr.who == "le service";
@@ -1178,14 +1201,7 @@ private:
         // Action : le resume, l'objet en gras ; le chevron (depliee : vers le bas)
         const float ax = colX_[kAction];
         const float cy = y + kRowH * 0.5f;
-        if (open) {
-            r.line({ax, cy - 2.f}, {ax + 4.f, cy + 2.f}, c.textMuted, 1.5f);
-            r.line({ax + 4.f, cy + 2.f}, {ax + 8.f, cy - 2.f}, c.textMuted, 1.5f);
-        } else {
-            r.line({ax + 2.f, cy - 4.f}, {ax + 6.f, cy}, c.textMuted, 1.5f);
-            r.line({ax + 6.f, cy}, {ax + 2.f, cy + 4.f}, c.textMuted, 1.5f);
-        }
-        const float sx = ax + 16.f, sw = colW_[kAction] - 22.f;
+        const float sx = ax, sw = colW_[kAction] - 8.f;
         const auto pos = l.object.empty() ? std::string::npos : l.summary.find(l.object);
         if (pos == std::string::npos) {
             r.drawText({sx, ty}, fit(r, l.summary, kF13, sw), kF13, c.text);
@@ -1207,100 +1223,6 @@ private:
         const float pw = pill(r, colX_[kCrit], y + (kRowH - 22.f) * 0.5f, adm::levelLabel(l.level), gfx::semibold(kF12), t.fg, t.bg, 22.f);
         if (jr.overridden) r.fillRoundedRect({colX_[kCrit] + pw + 4.f, cy - 3.f, 6.f, 6.f}, c.accent, 3.f);
         if (!jr.verified) ui::drawIcon(r, ui::Icon::Error, {colX_[kCrit] + pw + (jr.overridden ? 14.f : 4.f), cy - 7.f, 14.f, 14.f}, c.error);
-        if (open) paintExpanded(ctx, l, jr, y + kRowH);
-    }
-
-    void paintExpanded(const ui::PaintContext& ctx, const Line& l, const JournalRow& jr, float y) {
-        auto& r = ctx.r;
-        const auto& th = ctx.theme;
-        const auto& c = th.color;
-        const Rect area{card_.x + 1.f, y, card_.w - 2.f, kExpandH};
-        const Rect left{area.x + 18.f, area.y + 10.f, area.w * 0.5f - 26.f, area.h - 20.f};
-        const Rect right{area.x + area.w * 0.5f + 8.f, area.y + 10.f, area.w * 0.5f - 26.f, area.h - 20.f};
-        ui::shapes::fillFramedRect(r, left, c.panelBg, c.border, 10.f);
-        ui::shapes::fillFramedRect(r, right, c.panelBg, c.border, 10.f);
-        // A gauche : ce qui change (l'avant, l'apres) ; sans avant ni apres : le detail.
-        const json::Value before = objectOf(jr.line.parsed.before), after = objectOf(jr.line.parsed.after), detail = objectOf(jr.line.parsed.detail);
-        std::vector<std::string> keys;
-        for (const auto* o : {&after, &before})
-            for (const auto& [k, v] : o->members())
-                if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
-        const FontId fh = gfx::semibold(kF11);
-        const float c1 = left.x + 14.f, c2 = left.x + left.w * 0.48f, c3 = left.x + left.w * 0.74f;
-        float yy = left.y + 10.f;
-        if (!keys.empty()) {
-            r.drawText({c1, yy}, "CE QUI CHANGE", fh, c.textMuted);
-            r.drawText({c2, yy}, "AVANT", fh, c.textMuted);
-            r.drawText({c3, yy}, "APR\xC3\x88S", fh, c.textMuted);
-            yy += 22.f;
-            for (const auto& k : keys) {
-                if (yy > left.bottom() - 22.f) break;
-                r.fillRect({left.x + 1.f, yy - 4.f, left.w - 2.f, 1.f}, c.gridLine);
-                const json::Value* b = before.find(k);
-                const json::Value* a = after.find(k);
-                const std::string bs = b ? valueText(*b) : std::string("\xE2\x80\x94"), as = a ? valueText(*a) : std::string("\xE2\x80\x94");
-                r.drawText({c1, yy + 2.f}, fit(r, keyText(k), kF13, c2 - c1 - 8.f), kF13, c.text);
-                r.drawText({c2, yy + 2.f}, fit(r, bs, kF13, c3 - c2 - 8.f), kF13, bs == as ? c.textMuted : c.error);
-                if (bs != as && b) r.fillRect({c2, yy + 10.f, std::min(r.measure(bs, kF13).width, c3 - c2 - 8.f), 1.f}, c.error);
-                r.drawText({c3, yy + 2.f}, fit(r, as, gfx::semibold(kF13), left.right() - c3 - 10.f), gfx::semibold(kF13), bs == as ? c.textMuted : c.ok);
-                yy += 28.f;
-            }
-        } else if (!detail.members().empty()) {
-            r.drawText({c1, yy}, "LE D\xC3\x89TAIL", fh, c.textMuted);
-            yy += 22.f;
-            for (const auto& [k, v] : detail.members()) {
-                if (yy > left.bottom() - 22.f) break;
-                r.fillRect({left.x + 1.f, yy - 4.f, left.w - 2.f, 1.f}, c.gridLine);
-                r.drawText({c1, yy + 2.f}, fit(r, keyText(k), kF13, c2 - c1 - 8.f), kF13, c.textMuted);
-                const bool when = isTimeKey(k) && v.isNumber() && v.asNumber() > 1e9 && v.asNumber() < 1e10;   // 1.44.0 : une date, pas des secondes
-                r.drawText({c2, yy + 2.f}, fit(r, when ? dateTimeFr(static_cast<Seconds>(v.asNumber())) : valueText(v), kF13, left.right() - c2 - 10.f), kF13, c.text);
-                yy += 28.f;
-            }
-        } else {
-            (void)drawWrapped(r, c1, yy, left.w - 28.f, "Rien d'autre \xC3\xA0 montrer pour cette action : " + l.summary + ".", kF13, c.textMuted, 19.f, 4);
-        }
-        // A droite : la signature, le chainage, la reception.
-        const float rx = right.x + 14.f, rw = right.w - 28.f;
-        float ry = right.y + 12.f;
-        const bool service = jr.who == "le service";
-        if (jr.verified) {
-            drawTick(r, rx, ry + 3.f, c.ok);
-            const std::string s = service ? std::string("\xC3\x89" "crite et sign\xC3\xA9" "e par le service (sa cl\xC3\xA9, certifi\xC3\xA9" "e par l'\xC3\xA9" "diteur)")
-                                          : "Sign\xC3\xA9" "e par la cl\xC3\xA9 de " + l.who + " (" + shortFingerprint(adm::fingerprint(l.key)) + "\xE2\x80\xA6) \xC2\xB7 " +
-                                                (jr.who == "admin+" ? std::string("la cl\xC3\xA9 de l'\xC3\xA9" "diteur") : std::string("certificat valide"));
-            r.drawText({rx + 20.f, ry}, fit(r, s, kF13, rw - 20.f), kF13, c.text);
-        } else {
-            ui::drawIcon(r, ui::Icon::Error, {rx, ry, 14.f, 14.f}, c.error);
-            r.drawText({rx + 20.f, ry}, fit(r, jr.problem.empty() ? std::string("signature non v\xC3\xA9rifi\xC3\xA9" "e") : jr.problem, gfx::semibold(kF13), rw - 20.f),
-                       gfx::semibold(kF13), c.error);
-        }
-        ry += 26.f;
-        const std::string tag = "n\xC2\xB0 " + std::to_string(l.number);
-        std::string chainProblem;
-        for (const auto& p : view_.problems)
-            if (p.find(tag + " ") != std::string::npos || (p.size() >= tag.size() && p.compare(p.size() - tag.size(), tag.size(), tag) == 0)) chainProblem = p;
-        if (chainProblem.empty()) {
-            ui::drawIcon(r, ui::Icon::Link, {rx, ry, 14.f, 14.f}, c.textMuted);
-            const std::string s = l.number <= 1 ? std::string("Ligne n\xC2\xB0 1, la premi\xC3\xA8re de la cha\xC3\xAEne \xE2\x9C\x93")
-                                                : "Ligne n\xC2\xB0 " + std::to_string(l.number) + ", cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la n\xC2\xB0 " + std::to_string(l.number - 1) +
-                                                      " \xE2\x9C\x93 \xC2\xB7 rien n'a \xC3\xA9t\xC3\xA9 retir\xC3\xA9";
-            r.drawText({rx + 20.f, ry}, fit(r, s, kF13, rw - 20.f), kF13, c.text);
-        } else {
-            ui::drawIcon(r, ui::Icon::Error, {rx, ry, 14.f, 14.f}, c.error);
-            r.drawText({rx + 20.f, ry}, fit(r, chainProblem, gfx::semibold(kF13), rw - 20.f), gfx::semibold(kF13), c.error);
-        }
-        ry += 26.f;
-        ui::drawIcon(r, ui::Icon::Info, {rx, ry, 14.f, 14.f}, c.textMuted);
-        std::string got = "Re\xC3\xA7ue par le service le " + dateTimeFr(jr.line.received ? jr.line.received : l.when);
-        if (!jr.line.parsed.software.empty()) got += " \xC2\xB7 " + jr.line.parsed.software;
-        r.drawText({rx + 20.f, ry}, fit(r, got, kF13, rw - 20.f), kF13, c.textMuted);
-        ry += 26.f;
-        if (jr.overridden) {
-            std::string o = "Criticit\xC3\xA9 chang\xC3\xA9" "e \xC3\xA0 la main";
-            if (!jr.overrideBy.empty()) o += " par " + jr.overrideBy;
-            if (jr.overrideAt) o += " le " + dateTimeFr(jr.overrideAt);
-            r.drawText({rx + 20.f, ry}, fit(r, o, kF12, rw - 20.f), kF12, c.accent);
-        }
     }
 
     static std::string agoOrWhen(Seconds now, Seconds t) { return now - t < 120 && now >= t ? std::string("\xC3\xA0 l'instant") : whenFr(now, t); }
@@ -1309,10 +1231,7 @@ private:
     JournalView                 view_;
     std::vector<Line>           lines_;
     std::vector<std::size_t>    shown_;
-    std::vector<std::string>    whoKeys_;
     std::map<std::string, int>  colorOf_;
-    std::string                 who_, actionFilter_;
-    bool                        levelOn_[4]{true, true, true, true};
     int                         sortCol_{kQuand};
     bool                        sortDesc_{true};
     int                         first_{0}, shownCount_{0}, pageSize_{10};
@@ -1322,17 +1241,15 @@ private:
     ui::Button*                 crit_{nullptr};
     ui::Button*                 export_{nullptr};
     ui::Button*                 fetch_{nullptr};
-    Chip*                       all_{nullptr};
-    std::vector<Chip*>          whoChips_;
-    ui::DropDown*               period_{nullptr};
-    ui::InputText*              search_{nullptr};
-    Chip*                       levels_[4]{};
-    Chip*                       actionChip_{nullptr};
+    ui::FilterBar*              bar_{nullptr};                 // 1.47.0 : la barre (chercher, l'admin, le type, la criticite, la periode)
+    ui::UnfoldCard*             unfold_{nullptr};              // 1.47.0 : la carte de la ligne depliee
+    std::vector<ui::WidgetPtr>  grave_;                        // ... les cartes remplacees (detruites au dessin suivant)
+    ui::ListMenu                menuList_;                     // 1.47.0 : le clic droit ouvert
+    float                       expandH_{kExpandH};
+    int                         cursor_{-1};                   // la ligne cliquee en dernier (->)
     SortHeader*                 sort_[6]{};
     ui::Button*                 prev_{nullptr};
     ui::Button*                 next_{nullptr};
-    ui::Button*                 see_{nullptr};
-    ui::Button*                 allOf_{nullptr};
     ui::TableView*              table_{nullptr};
     ui::PopupMenu*              menu_{nullptr};
     // la mise en page

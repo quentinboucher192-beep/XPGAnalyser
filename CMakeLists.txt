@@ -337,6 +337,7 @@ add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/
                                   src/license_admin/Shop.cpp                    # 1.46.0 : la boutique et les commandes (Stripe)
                                   src/license_admin/gui/WorkspaceShop.cpp       # 1.46.0 : livrer les commandes payees
                                   src/license_admin/Stats.cpp                   # 1.47.0 : les statistiques et le globe (le client)
+                                  src/license_admin/JournalStats.cpp            # 1.47.0 : les chiffres du journal des admins [J]
                                   src/license_admin/gui/WorkspaceStats.cpp)     # 1.47.0 : les memes, dans le Workspace
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
@@ -1175,6 +1176,10 @@ if(XPG_BUILD_TESTS)
     xpg_add_test_executable(admins_test tests/admins_test.cpp)
     xpg_target_link_libraries(admins_test PRIVATE xpg_admin_core)
     xpg_add_test(NAME admins COMMAND admins_test ${CMAKE_SOURCE_DIR})
+    # 1.47.0 : les chiffres du journal des admins [J] (license_admin/JournalStats) : un journal d'essai de quatre admins fictifs
+    xpg_add_test_executable(admin_journal_stats_test tests/admin_journal_stats_test.cpp)
+    xpg_target_link_libraries(admin_journal_stats_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME adminjournalstats COMMAND admin_journal_stats_test)
     # 1.35.0 : l'outil de l'editeur et le service des licences (license_admin/ServiceClient, ArchiveSync, la console)
     # contre le VRAI Worker sur ce poste (SAUTE sans Node.js ni wrangler)
     xpg_add_test_executable(admin_service_test tests/admin_service_test.cpp)
@@ -1261,7 +1266,7 @@ if(XPG_BUILD_TESTS)
         if(TEST admindeploy)
             set_tests_properties(admindeploy PROPERTIES TIMEOUT 300)
         endif()
-        foreach(part shell licences securite donnees demandes options admins versions boutique)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique
+        foreach(part shell licences securite donnees demandes options admins versions boutique globe)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique ; 1.47.0 : globe (la page d'essai)
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})
