@@ -19,7 +19,9 @@
 //    Importante, A jour), un clic deplie (les notes, les fichiers, les PC dessus),
 //    le clic droit (Renvoyer..., Aller a, Filtrer sur, Copier, Exporter), le clavier ;
 //  - la mise en page (1100 x 700, 1373 x 917) : la barre au-dessus de la liste.
-//  XPG_ESSAI_COPIE=<dossier> : le poste d'essai y est copie (les captures).
+//  XPG_ESSAI_COPIE=<dossier> : le poste d'essai y est copie (<dossier>/poste, les captures) ; avec
+//  XPG_PHRASE_ESSAI (12 caracteres au moins) : la cle d'essai sauvegardee (<dossier>/cle.xpgcle) et retiree de la
+//  copie - << XPG-License-Admin.exe restaurer-cle >> la remet sous Windows (Wine).
 // =============================================================================
 #include "../src/ui/widgets/FilterBar.hpp"
 #include "../src/ui/widgets/ListMenu.hpp"
@@ -28,6 +30,7 @@
 
 #include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
+#include "../src/license_admin/KeyBackup.hpp"
 #include "../src/license_admin/gui/ListKit.hpp"
 #include "../src/licensing/Admins.hpp"
 #include "../src/ui/widgets/DataViews.hpp"
@@ -250,9 +253,21 @@ int main(int argc, char** argv) {
     check(ws.role() == gui::Role::Plus && ws.journalLines().rows.size() == 4, "le journal : 4 lignes, l'admin+ (la cle de ce poste)");
     if (const char* out = std::getenv("XPG_ESSAI_COPIE")) {   // les captures : ce poste d'essai, copie
         std::error_code ec;
-        fs::remove_all(out, ec);
-        fs::copy(fx.admin, out, fs::copy_options::recursive, ec);
-        std::printf("  (poste d'essai copie dans %s%s)\n", out, ec ? (" : " + ec.message()).c_str() : "");
+        const fs::path dst = fs::path(out) / "poste";
+        fs::remove_all(dst, ec);
+        fs::create_directories(dst, ec);
+        fs::copy(fx.admin, dst, fs::copy_options::recursive, ec);
+        std::printf("  (poste d'essai copie dans %s%s)\n", U(dst).c_str(), ec ? (" : " + ec.message()).c_str() : "");
+        std::string backup, why;
+        if (const char* phrase = std::getenv("XPG_PHRASE_ESSAI"); phrase && license_admin::acceptablePassphrase(phrase, nullptr)) {
+            if (license_admin::writeKeyBackup(*editor, phrase, backup, &why)) {
+                writeFile(fs::path(out) / "cle.xpgcle", backup);
+                fs::remove(dst / license_admin::kPublisherKeyFile, ec);   // la cle de ce PC : restaurer-cle la remet sous Windows
+                std::printf("  (la cle d'essai sauvegardee : %s)\n", U(fs::path(out) / "cle.xpgcle").c_str());
+            } else {
+                std::printf("  (la sauvegarde de la cle : %s)\n", why.c_str());
+            }
+        }
     }
 
     // ------------------------------------------------------------------------------------------------
