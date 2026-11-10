@@ -2,6 +2,11 @@
 
 > **Construit en 1.46.0** (le service, l'Admin, ses essais). Ce qui a été précisé en construisant, par rapport à la
 > première version de ce contrat, est dit au § 8 ; le texte ci-dessous en tient déjà compte.
+>
+> **1.46.1** (le service et l'Admin ; les Studios restent en 1.46.0) : l'API de Stripe d'aujourd'hui (§ 4, la page de
+> paiement : `payment_method_types` est refusé depuis la version `2026-09-30.endive`), la version de l'API fixée
+> (`Stripe-Version`), les réductions suivies (§ 3), les produits et les prix créés chez Stripe (§ 3), un `.zip` accepté
+> dans Versions. Le détail : § 9.
 
 Demandé par l'éditeur : « fait la partie boutique et commandes » ; « pour les achats ne jamais enregistrer les cartes
 des clients, les redemander à chaque achat ». Ses choix : **Stripe** (la page de paiement hébergée par Stripe) et
@@ -50,7 +55,17 @@ Ce document est le contrat entre le service des licences (`service/`), l'Admin (
   (`XPG_STRIPE_API_ESSAI`, ou `shop::setStripeApiBaseForTests`).
 - **Le mode** : `sk_live_…` / `rk_live_…` → `"reel"` ; toute autre clé (`sk_test_…`, `rk_test_…`, `essai_jeton_…`) →
   `"test"`. Une clé restreinte (`rk_…`) doit pouvoir écrire les Webhook Endpoints, les Checkout Sessions et les Refunds,
-  et lire les Invoices.
+  lire les Invoices et (1.46.1) **écrire les Products et les Prices** (« Products : écriture », « Prices : écriture » ;
+  sans eux, les produits ne se voient pas dans Stripe, l'Admin le dit, et la vente marche quand même : § 3).
+- **La version de l'API de Stripe (1.46.1)** : chaque appel (le service et l'Admin) porte l'en-tête
+  `Stripe-Version: 2026-09-30.endive`, et le point d'arrivée du webhook est créé avec `api_version=2026-09-30.endive`
+  (les événements arrivent dans cette version). Sans elle, Stripe applique la version par défaut du compte : un compte
+  ouvert en 2026 est en `2026-09-30.endive` ou plus, qui refuse `payment_method_types` (§ 4) ; une version fixée ne
+  change plus sous nos pieds. Les champs lus (la session : `id`, `url`, `payment_status`, `amount_total`, `currency`,
+  `payment_intent`, `invoice`, `metadata`, `client_reference_id` ; le paiement remboursé : `payment_intent`,
+  `refunded`, `amount`, `amount_refunded` ; la facture : `hosted_invoice_url`) sont les mêmes dans cette version
+  (la spécification OpenAPI de Stripe, `stripe/openapi`, version `2026-09-30.endive`). Le même texte :
+  `VERSION_STRIPE` (`service/src/boutique.js`) et `shop::kStripeVersion` (`Shop.hpp`).
 - **Brancher de nouveau** (une autre clé, un autre compte) : l'Admin efface d'abord chez Stripe les points d'arrivée qui
   ont la même adresse (`GET` puis `DELETE /v1/webhook_endpoints/<id>`), sinon chaque événement arriverait deux fois, l'un
   signé par un secret que le service n'a plus.
@@ -71,21 +86,52 @@ boutique, que l'éditeur règle dans l'Admin et que le service garde (le registr
 ```
 `montant` en centimes, TTC (ce que la carte paie) ; 50 centimes au moins, 1 000 000 € au plus ; 200 articles au plus.
 Une offre ou une option du registre absente du catalogue (ou `active: false`) n'est pas achetable en ligne : le
-Studio garde « Demander » (la demande sans paiement). Réponse 200 `{"numero":N}` (monte à chaque changement).
+Studio garde « Demander » (la demande sans paiement). Réponse 200 `{"numero":N}` (monte à chaque changement) ;
+1.46.1 : `{"numero":N,"stripe_catalogue":{…}}` (les produits chez Stripe, plus bas).
+
+**1.46.1 : le montant suit le registre.** Chaque article peut porter `"libre": bool` (vrai : un montant tapé par
+l'éditeur, qui ne suit rien), et une réduction `"montant_reduit": <centimes TTC>`, `"fin_reduction": <secondes Unix>`
+(les deux ensemble). Le montant **du moment** est `montant_reduit` tant que l'heure du service est avant
+`fin_reduction`, sinon `montant` — à chaque commande et dans `GET /v1/boutique` : la réduction finie, le montant de base
+revient sans que personne ne fasse rien. L'Admin calcule les deux depuis le registre (le prix affiché `price`, HT + 20 %
+= TTC ; le prix réduit `promo_price` jusqu'à `promo_until` ; un prix réduit qui ne dit ni « HT » ni « TTC » hérite du
+prix normal : « 10 € » sous « 50 € HT » vaut 12,00 € TTC) pour chaque article qui n'est pas libre, et les renvoie à
+chaque Enregistrer et à chaque dépôt d'un registre signé (l'admin+). Un réglage d'avant (sans `libre`) : l'Admin le
+fait suivre si son montant était celui du registre, sinon il devient libre. La page Boutique montre « 12,00 € TTC
+(réduit jusqu'au 22/12, puis 60,00 €) ».
+
+**1.46.1 : les produits chez Stripe.** À chaque `PUT /admin/boutique` (et `POST /admin/boutique/stripe`, admin+, que
+l'Admin appelle après Brancher Stripe), le **service** (il a la clé ; l'Admin ne la garde jamais) crée ou met à jour un
+**Product** par article (`POST /v1/products`, son identifiant choisi : `xpg-ed-PROFESSIONAL`,
+`xpg-opt-ai_advanced-365` ; `name` = le libellé, `metadata[xpg_article]` = l'id de l'article) et ses **Prices**
+(`POST /v1/prices` : `product`, `currency`, `unit_amount`, `tax_behavior=inclusive`, `nickname`, `metadata[xpg_article]`)
+— un prix pour le montant de base (le prix par défaut du produit) et un pour le montant réduit tant que la réduction
+court. Un prix ne change jamais chez Stripe : un montant neuf, un prix neuf ; l'ancien est archivé (`active=false`,
+après le nouveau prix par défaut). Un article retiré : son produit archivé. Des clés d'idempotence
+(`xpg-produit-…`, `xpg-prix-…`) ; 40 appels au plus par mise à jour (les sous-requêtes d'un Worker), la suite au
+prochain Enregistrer. Le service garde les identifiants (la table `boutique`, clé `stripe_catalogue` ; jamais un
+secret) et le résultat : `{"etat":"ok"|"partiel"|"refus"|"panne"|"pas_branche","message","quand","produits"}`. La page
+de paiement emploie alors le prix (`line_items[0][price]`) ; sans prix (Stripe a refusé les produits : une clé
+restreinte sans « Products/Prices : écriture »), ou un prix disparu chez Stripe (refusé : la page est refaite une fois
+avec `price_data`, `Idempotency-Key: commande-<numero>-montant`), elle donne le montant elle-même comme en 1.46.0 :
+**la vente marche toujours** ; l'Admin dit pourquoi les produits ne se voient pas (un bandeau dans Boutique).
 
 `id` vaut `ed:<EDITION>` ou `opt:<option>:<jours>` (sinon 400 `champ`) ; `jours` de 0 (jusqu'à la fin de la licence) à
 3660 ; `libelle` une ligne de 1 à 120 caractères ; `devise` 3 lettres minuscules (`eur` par défaut) ; `livraison_auto`
 vrai par défaut. Le service ne relit pas le registre : l'Admin ne propose que ses offres et ses options.
 
 `GET /admin/boutique` (admin+, admin, sans droit) : le même JSON (avec `numero`), plus `"stripe": {"branche": bool,
-"mode": "test"|"reel"|null, "webhook": bool, "dernier_evenement": T|null}` (jamais la clé) et `"ouverte": bool`.
+"mode": "test"|"reel"|null, "webhook": bool, "dernier_evenement": T|null}` (jamais la clé) et `"ouverte": bool` ;
+1.46.1 : chaque article dit aussi `montant_actuel` et `stripe_produit` (s'il est créé), et `"stripe_catalogue"` la
+dernière mise à jour des produits chez Stripe.
 
 **La boutique est ouverte** quand le réglage est `active`, que les DEUX secrets de Stripe sont posés (la clé et le secret
 du webhook) et qu'il y a au moins un article.
 
 `GET /v1/boutique` (public) : `{"active": bool, "devise": "eur", "mode": "test"|"reel"|null, "articles": [{"id",
 "genre", "edition"|"option", "jours"?, "montant", "libelle"}]}` - ouverte seulement ; fermée : `"active": false` et
-`"articles": []`.
+`"articles": []`. 1.46.1 : `montant` est le montant **du moment** (les Studios 1.46.0 le montrent tel quel : « Acheter —
+12,00 € TTC » pendant la réduction) ; une réduction en cours ajoute `montant_base` et `fin_reduction`.
 
 **Les dates** de la boutique (`cree`, `maj`, `expire`, `paye`, `prise`, `dernier_evenement`) sont des **secondes Unix**,
 comme les routes de la 1.44.
@@ -117,9 +163,16 @@ Le Studio ne connaît pas le résultat du paiement par le navigateur : il regard
 livrée arrive comme la réponse à une demande (le code scellé dans l'état « poste », `GET /v1/poste`).
 
 **La page de paiement** (`POST https://api.stripe.com/v1/checkout/sessions`, en `application/x-www-form-urlencoded`,
-l'en-tête `Authorization: Bearer <STRIPE_SECRET_KEY>` et `Idempotency-Key: commande-<numero>`) : `mode=payment`,
-`line_items[0][price_data][currency]`, `[unit_amount]`, `[product_data][name]` (le libellé), `[quantity]=1`,
-`payment_method_types[0]=card`, `customer_email`, `client_reference_id=<numero>`, `metadata[commande]=<numero>`,
+l'en-tête `Authorization: Bearer <STRIPE_SECRET_KEY>`, `Stripe-Version: 2026-09-30.endive` et
+`Idempotency-Key: commande-<numero>`) : `mode=payment`, `line_items[0][price]` (1.46.1 : le prix Stripe du montant du
+moment ; sans lui : `line_items[0][price_data][currency]`, `[unit_amount]`, `[product_data][name]` (le libellé)),
+`[quantity]=1`, **1.46.1 : `allowed_payment_method_types[0]=card` et `wallet_options[link][display]=never`** (la carte
+seulement, Link caché : il propose d'enregistrer la carte ; `payment_method_types` n'existe plus depuis
+`2026-09-30.endive` - Stripe répond 400 « The `payment_method_types` parameter is no longer supported when creating a
+Checkout Session. Payment methods are now managed from your Dashboard settings. » ; `allowed_payment_method_types` filtre
+les moyens que le compte propose, il n'y a donc rien à régler dans le tableau de bord tant que la carte y est active, ce
+qui est le cas par défaut), `customer_email`, `client_reference_id=<numero>`, `metadata[commande]=<numero>`,
+`metadata[article]=<id>`,
 `invoice_creation[enabled]=true` (une facture envoyée par Stripe), `locale=fr`, `expires_at` (+31 min : les 30 minutes
 minimum de Stripe et une de marge), `success_url` et `cancel_url` (deux petites pages du service : `GET /v1/boutique/merci?c=N` « Paiement reçu :
 retourne dans ton Studio, ta licence arrive » et `GET /v1/boutique/annule?c=N`). **Jamais** `customer`,
@@ -292,3 +345,32 @@ Pour qui construit le Studio d'après ce contrat (la première version de ce doc
     lit `reel` pour `sk_live_`/`rk_live_`, `test` sinon.
 15. **Les limites** : la commande 10 par heure et par adresse, 10 par jour et par PC ; la liste des commandes d'un PC
     400 par heure (le Studio la regarde toutes les 10 s pendant 30 minutes : 180 appels).
+
+## 9. La 1.46.1 (le service et l'Admin)
+
+Ce que l'éditeur a vu avec son vrai compte Stripe (en mode test) : « Stripe refuse (la page de paiement) : The
+`payment_method_types` parameter is no longer supported when creating a Checkout Session… » ; un montant en ligne qui
+ne suivait pas la réduction du registre (« Acheter — 60,00 € TTC » sous « 10 € jusqu'au 22/12/2026 ») ; aucun produit
+dans Stripe › Catalogue de produits ; Versions qui refusait un `.zip`.
+
+1. **Stripe d'aujourd'hui** : ce qu'on a pu lire (docs.stripe.com n'était pas joignable de l'atelier ; la spécification
+   OpenAPI publiée par Stripe, `github.com/stripe/openapi`, version `2026-09-30.endive`, et le journal des changements
+   de `stripe-node` - « ⚠️ Remove support for `payment_method_types` on `Checkout.SessionCreateParams` », « Add support
+   for `allowed_payment_method_types` on `Checkout.SessionCreateParams` », version épinglée `2026-10-28.endive` dans
+   `stripe-node` 23.1.0 ; et la recherche sur le journal de Stripe, « Removes the payment method types parameter from
+   Checkout Sessions » (2026-09-30.endive)) : `payment_method_types` remplacé par `allowed_payment_method_types` (un
+   filtre des moyens du compte) ou `excluded_payment_method_types` ; `wallet_options[link][display]=never` cache Link ;
+   `customer_creation`, `saved_payment_method_options` existent toujours (jamais employés ici). La version de l'API est
+   fixée (§ 2) ; les champs lus par le webhook n'ont pas changé.
+2. **Les réductions suivies** et **le montant libre** : § 3.
+3. **Les produits chez Stripe** : § 3 ; le faux Stripe des essais (`tests/outils/faux_stripe.mjs`) imite l'API
+   d'aujourd'hui (il refuse `payment_method_types` à partir de `2026-09-30.endive`, la version de l'en-tête sinon celle du
+   compte ; les produits, les prix, une clé restreinte sans droit sur eux : `{"panne":"produits"}`).
+4. **Versions** : un `.zip` (choisi ou glissé) qui porte l'installateur attendu (`API-IHM-Studio-Setup-*.exe`,
+   `XPG-License-Admin-Setup-*.exe`) : ce fichier seul est extrait dans un dossier temporaire, puis tout se passe comme
+   avec le `.exe` (« extrait de API-IHM-Studio-Setup-1.46.0.zip ») ; refusés : un chemin qui sort du dossier, une entrée
+   chiffrée, une taille absurde (plus de 1 Gio, ou plus de 1 000 fois sa taille compressée), plusieurs installateurs de
+   la même sorte.
+5. **Les versions** : l'Admin 1.46.1, le service 1.46.1 (`shop::kServiceRequired` reste 1.46.0 : la boutique marche avec
+   un service 1.46.0 - qui garde le refus de Stripe tant qu'il n'est pas redéployé ; l'Admin dit « la 1.46.1 est prête
+   dans l'Admin : déploie-la »). Les Studios restent en 1.46.0 (ils lisent `montant`, rien d'autre ne change pour eux).

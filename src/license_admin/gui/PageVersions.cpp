@@ -18,6 +18,10 @@
 //      plus les octets d'un installateur publie ; << Renvoyer >> (ce poste l'a
 //      encore, ou on le choisit).
 //  Ce qui parle au service passe par runSlow / runQuiet.
+//  1.46.1 : un .zip (choisi ou glisse) qui porte l'installateur : il en est
+//  extrait (Workspace::installerFromZip : ce fichier seul, dans un dossier
+//  temporaire), puis tout se passe comme avec le .exe - << extrait de
+//  API-IHM-Studio-Setup-1.46.0.zip >>.
 //
 //  1.47.0 (planches 06, 07, 12) : << Versions publiees >> a la barre << Filtrer
 //  et chercher >> (les puces Sorte - une version, un correctif -, Importante,
@@ -88,14 +92,47 @@ std::string sizeFr(std::uint64_t n) {
 // Un installateur choisi : son chemin, sa taille, sa version lue (ou pourquoi elle ne se lit pas).
 struct Picked {
     std::string   path, name, version, why;
+    std::string   from;           // 1.46.1 : le .zip d'ou il est extrait (vide : choisi tel quel)
+    bool          refused{false}; // 1.46.1 : le .zip refuse (`why` le dit)
     std::uint64_t size{0};
     void set(const std::string& p) {
+        forget();
         path = p;
         name = baseName(p);
         size = fileSize(p);
         why.clear();
+        from.clear();
+        refused = false;
         version = Workspace::readInstallerVersion(p, &why);
         if (version.empty() && why.empty()) why = "pas de version dans ce fichier";
+    }
+    // 1.46.1 : un .zip - l'installateur attendu (l'Admin, ou les Studios) extrait, puis comme un .exe ; refuse : `why`.
+    void setZip(const std::string& zip, bool admin) {
+        std::string exe, w;
+        if (!Workspace::installerFromZip(zip, admin, exe, &w)) {
+            forget();
+            path = zip;
+            name = baseName(zip);
+            size = fileSize(zip);
+            version.clear();
+            from.clear();
+            why = w;
+            refused = true;
+            return;
+        }
+        set(exe);
+        from = baseName(zip);
+    }
+    // Un fichier extrait d'un .zip qu'on ne prend plus : son dossier temporaire s'en va.
+    void forget() {
+        if (from.empty() || path.empty()) return;
+        const auto dir = std::filesystem::path(std::u8string(path.begin(), path.end())).parent_path();
+        const auto leaf = dir.filename().u8string();
+        if (std::string(leaf.begin(), leaf.end()).rfind("xpg-versions-zip-", 0) == 0) {
+            std::error_code ec;
+            std::filesystem::remove_all(dir, ec);
+        }
+        from.clear();
     }
 };
 
@@ -180,6 +217,8 @@ public:
         links_ += pickAdmin_->clicked->connect([this] { pick(true); });
         links_ += cancel_->clicked->connect([this] {
             panel_ = false;
+            studios_.forget();   // 1.46.1 : un fichier extrait d'un .zip : son dossier temporaire
+            admin_.forget();
             studios_ = Picked{};
             admin_ = Picked{};
             notes_->setText({});
@@ -199,11 +238,26 @@ public:
         update();
     }
 
-    // Des installateurs glisses sur la page : celui dont le nom dit << Admin >> va a l'Admin, l'autre aux Studios.
+    // Des installateurs glisses sur la page : celui dont le nom dit << Admin >> va a l'Admin, l'autre aux Studios. 1.46.1 : un
+    // .zip - ce qu'il porte decide (l'installateur des Studios, celui de l'Admin, ou les deux).
     bool dropFiles(const std::vector<std::string>& paths) override {
         bool any = false;
         for (const auto& p : paths) {
             const std::string n = lower(baseName(p));
+            if (Workspace::isZipPath(p)) {
+                if (publishing_) continue;
+                bool st = false, ad = false;
+                std::string why;
+                if (!Workspace::installerKindsInZip(p, st, ad, &why)) {
+                    if (host_.flash) host_.flash("Ce .zip n'est pas pris : " + why + ".", Tone::Warning);
+                    any = true;
+                    continue;
+                }
+                if (st) studios_.setZip(p, false);
+                if (ad) admin_.setZip(p, true);
+                any = true;
+                continue;
+            }
             if (n.size() < 4 || n.substr(n.size() - 4) != ".exe") continue;
             (n.find("admin") != std::string::npos ? admin_ : studios_).set(p);
             any = true;
@@ -215,13 +269,16 @@ public:
         return true;
     }
 
-    // Les essais : choisir un installateur comme Choisir... ou un glisser.
+    // Les essais : choisir un installateur comme Choisir... ou un glisser. 1.46.1 : un .zip aussi.
     void setInstaller(bool admin, const std::string& path) {
-        (admin ? admin_ : studios_).set(path);
+        Picked& p = admin ? admin_ : studios_;
+        if (Workspace::isZipPath(path)) p.setZip(path, admin);
+        else p.set(path);
         panel_ = true;
         prefillNotes();
         update();
     }
+    [[nodiscard]] const Picked& picked(bool admin) const { return admin ? admin_ : studios_; }
     [[nodiscard]] std::string version() const { return versionToPublish(); }
 
     // 1.47.0 : un releve arrive (le service, ou les essais : adoptVersionsView) - la liste, la barre, les boutons.
@@ -457,8 +514,8 @@ private:
 
     void pick(bool admin) {
         ui::FilePick p;
-        p.title = admin ? "L'installateur de l'Admin (XPG-License-Admin-Setup-...exe)" : "L'installateur des Studios (...-Setup-...exe)";
-        p.filters = {{"Installateur Windows (.exe)", "exe"}};
+        p.title = admin ? "L'installateur de l'Admin (XPG-License-Admin-Setup-...exe, ou un .zip qui le porte)" : "L'installateur des Studios (...-Setup-...exe, ou un .zip qui le porte)";
+        p.filters = {{"Installateur Windows (.exe, ou un .zip qui le porte)", "exe;zip"}, {"Installateur Windows (.exe)", "exe"}, {"Archive (.zip)", "zip"}};
         auto alive = alive_;
         host_.pickFile(p, [this, alive, admin](std::string path) {
             if (!*alive || path.empty()) return;
@@ -581,8 +638,11 @@ private:
             r.drawText({tx, z.y + 40.f}, fit(r, "Glisse le fichier ici, ou \xC2\xAB Choisir\xE2\x80\xA6 \xC2\xBB", kF13, tw), kF13, c.textMuted);
         } else {
             r.drawText({tx, z.y + 38.f}, fit(r, p.name, ctx.theme.font.mono, tw), ctx.theme.font.mono, c.text);
-            const std::string sub = sizeFr(p.size) + " \xC2\xB7 " + (p.version.empty() ? "version illisible : " + p.why : "version " + p.version + " lue dans le fichier \xE2\x9C\x93");
+            const std::string sub = p.refused ? p.why
+                                              : sizeFr(p.size) + " \xC2\xB7 " + (p.version.empty() ? "version illisible : " + p.why : "version " + p.version + " lue dans le fichier \xE2\x9C\x93");
             r.drawText({tx, z.y + 60.f}, fit(r, sub, kF12, tw), kF12, p.version.empty() ? c.error : c.textMuted);
+            if (!p.from.empty())   // 1.46.1
+                r.drawText({tx, z.y + 78.f}, fit(r, "extrait de " + p.from, kF12, tw), kF12, c.textMuted);
         }
         const std::string who = admin ? "Qui le re\xC3\xA7oit : les admins (jamais les clients)" : "Qui le re\xC3\xA7oit : tout le monde (chaque Studio pas \xC3\xA0 jour)";
         r.drawText({z.x + 16.f, z.bottom() - 36.f}, fit(r, who, kF12, z.w - 140.f), kF12, c.textMuted);

@@ -759,7 +759,10 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         say(sh::modeLabel(s.stripe.mode) + (s.stripe.connected && !s.stripe.webhook ? " (le secret du webhook manque)" : "") +
             (s.stripe.lastEvent ? " ; dernier \xC3\xA9v\xC3\xA9nement re\xC3\xA7u le " + gui::dateTimeFr(s.stripe.lastEvent) : std::string()) + "\n");
         say("Catalogue (r\xC3\xA9glage n\xC2\xB0 " + std::to_string(s.number) + ") : " + std::to_string(s.articles.size()) + " article(s)\n");
-        for (const auto& x : s.articles) say("  " + x.id + " : " + sh::amountText(x.amount, s.currency) + " TTC \xC2\xB7 " + x.label + "\n");
+        // 1.46.1 : le montant du moment (une reduction en cours : jusqu'a quand, puis le montant de base ; libre : tape)
+        for (const auto& x : s.articles)
+            say("  " + x.id + " : " + (x.legacy ? sh::amountText(x.amount, s.currency) + " TTC" : sh::articleAmountText(x, ws.now(), s.currency)) + " \xC2\xB7 " + x.label + "\n");
+        if (!s.catalog.state.empty()) say("Produits chez Stripe : " + s.catalog.message + "\n");
         if (ws.can("demandes")) {
             sh::OrdersView v;
             if (ws.shopOrders(v).ok) say("Commandes : " + std::to_string(v.orders.size()) + ", \xC3\xA0 livrer : " + std::to_string(v.toDeliver) + "\n");

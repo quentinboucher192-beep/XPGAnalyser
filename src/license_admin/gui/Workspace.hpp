@@ -766,6 +766,14 @@ public:
     // La version d'un installateur Windows (<< 1.44.1 >>) lue dans sa ressource VS_VERSIONINFO (ProductVersion, sinon
     // FileVersion : VersionInfoProductVersion / VersionInfoVersion des .iss), sans jamais le lancer. Vide : `why`.
     [[nodiscard]] static std::string readInstallerVersion(const std::string& path, std::string* why = nullptr);
+    // 1.46.1 : un .zip qui porte un installateur (API-IHM-Studio-Setup-*.exe, XPG-License-Admin-Setup-*.exe) : CE fichier
+    // seul extrait dans un dossier temporaire (`out` : son chemin), puis tout se passe comme avec le .exe. Refuse (faux,
+    // `why`) : pas un zip, aucun installateur attendu, plusieurs, un chemin qui sort du dossier (.., absolu), une entree
+    // chiffree, une taille absurde (plus de 1 Gio, ou plus de 1000 fois sa taille compressee). `admin` : l'Admin, sinon les
+    // Studios. installerKindsInZip : quels installateurs il porte (le glisser decide de la zone).
+    [[nodiscard]] static bool installerFromZip(const std::string& zipPath, bool admin, std::string& out, std::string* why = nullptr);
+    [[nodiscard]] static bool installerKindsInZip(const std::string& zipPath, bool& studios, bool& admin, std::string* why = nullptr);
+    [[nodiscard]] static bool isZipPath(const std::string& path);
     // Les versions publiees et qui est a jour (GET /admin/versions).
     [[nodiscard]] OpResult versions(VersionsView& out) const;
     // Publier : les deux installateurs, de la meme version, plus recente que la derniere publiee ; deposes (les Studios :

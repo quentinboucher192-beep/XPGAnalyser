@@ -1402,7 +1402,19 @@ OpResult Workspace::serviceRun(const ServiceJob& job) const {
         case ServiceJob::Kind::Licence: r = fromResult(online::publishBoundLicence(folder_, *key, job.licenceText, false, o, mailer())); break;
         case ServiceJob::Kind::Removal: r = fromResult(online::publishRemoval(folder_, *key, job.licenceText, job.deviceKey, o)); break;
         case ServiceJob::Kind::Revocation: r = fromResult(online::publishRevocation(folder_, *key, job.licenseId, job.deviceKeys, job.reason, o)); break;
-        case ServiceJob::Kind::Registry: r = fromResult(online::publishRegistry(folder_, *key, o)); break;
+        case ServiceJob::Kind::Registry: {
+            r = fromResult(online::publishRegistry(folder_, *key, o));
+            // 1.46.1 : la boutique suit le registre (un prix, une reduction) - l'admin+ seul ; ni un echec, ni un service sans
+            // boutique ne font echouer le depot.
+            if (r.ok && caller.role == Role::Plus && hasRegistry_) {
+                shop::Settings s;
+                if (shop::readSettings(folder_, *key, o, s).ok && shop::followRegistry(s, registry_, now()) > 0) {
+                    const online::Result w = shop::saveSettings(folder_, *key, o, s);
+                    r.details.push_back(w.ok ? "La boutique suit le registre : " + w.message : "La boutique ne suit pas encore le registre : " + w.message);
+                }
+            }
+            break;
+        }
         case ServiceJob::Kind::Unrevoke: {
             r = fromResult(online::publishRevocations(folder_, *key, o));
             if (!r.ok || job.licenceText.empty()) break;

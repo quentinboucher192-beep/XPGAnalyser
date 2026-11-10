@@ -27,6 +27,15 @@
 //  remplace (setStripeApiBaseForTests, ou la variable XPG_STRIPE_API_ESSAI)
 //  SEULEMENT par une adresse de ce poste (http://127.0.0.1:PORT ou localhost) ;
 //  les valeurs d'essai commencent par essai_jeton_.
+//
+//  1.46.1 : LE MONTANT SUIT LE REGISTRE. Par defaut, le montant d'un article est
+//  le prix affiche du registre (HT + 20 % = TTC) et, tant qu'une reduction court
+//  (promo_price jusqu'a promo_until), le montant reduit : l'Admin envoie les deux
+//  et la fin (followRegistry), le service choisit a chaque commande. Un montant
+//  LIBRE (tape par l'editeur) ne suit rien. Les produits et les prix chez Stripe :
+//  crees par le SERVICE (il a la cle) a l'enregistrement et apres Brancher
+//  Stripe ; l'Admin dit ce qu'il en est (CatalogState). L'API de Stripe :
+//  kStripeVersion sur chaque appel et sur le point d'arrivee du webhook.
 // =============================================================================
 #pragma once
 
@@ -34,6 +43,7 @@
 #include "ServiceDeploy.hpp"
 
 #include "../core/Json.hpp"
+#include "../licensing/Documents.hpp"
 #include "../licensing/Time.hpp"
 
 #include <cstdint>
@@ -51,6 +61,9 @@ inline constexpr std::int64_t kMinAmount = 50;           // 0,50 EUR
 inline constexpr std::int64_t kMaxAmount = 100000000;    // 1 000 000 EUR
 inline constexpr std::size_t  kMaxArticles = 200;
 inline constexpr const char*  kDeliveriesFile = "boutique-livraisons.json";   // les livraisons commencees (reprises)
+// 1.46.1 : la version de l'API de Stripe (l'en-tete Stripe-Version ; api_version du point d'arrivee du webhook) - la meme
+// que celle du service (VERSION_STRIPE, service/src/boutique.js). Depuis celle-ci, Stripe refuse payment_method_types.
+inline constexpr const char*  kStripeVersion = "2026-09-30.endive";
 // Les evenements de Stripe que le webhook recoit (docs/BOUTIQUE.md, par. 2).
 [[nodiscard]] const std::vector<std::string>& stripeEvents();
 
@@ -61,10 +74,30 @@ struct Article {
     std::string  edition;     // une offre du registre
     std::string  option;      // une option du registre
     int          days{0};     // la duree de l'option (0 : jusqu'a la fin de la licence)
-    std::int64_t amount{0};   // en centimes, TTC
+    std::int64_t amount{0};   // en centimes, TTC (1.46.1 : le montant de base)
     std::string  label;       // le nom sur la page de paiement et la facture
+    // 1.46.1 : le montant suit le registre (faux) ou il est LIBRE (tape par l'editeur) ; une reduction : le montant reduit
+    // jusqu'a sa fin (comprise jusqu'a la seconde d'avant : comme le registre, now < reducedUntil).
+    bool         free{false};
+    std::int64_t reduced{0};        // 0 : pas de reduction
+    Seconds      reducedUntil{0};
+    bool         legacy{false};     // lu d'un reglage d'avant la 1.46.1 (ni libre, ni suivi) : followRegistry decide
+    std::int64_t current{0};        // le montant du moment selon le service (montant_actuel) ; 0 : pas dit
+    std::string  stripeProduct;     // le produit chez Stripe (cree par le service) ; vide : pas (encore)
+    [[nodiscard]] bool reducedAt(Seconds now) const noexcept { return reduced > 0 && reducedUntil > 0 && now < reducedUntil; }
+    [[nodiscard]] std::int64_t amountAt(Seconds now) const noexcept { return reducedAt(now) ? reduced : amount; }
 };
 [[nodiscard]] std::string articleId(const std::string& kind, const std::string& editionOrOption, int days = 0);
+
+// 1.46.1 : les produits chez Stripe, d'apres le service (la derniere mise a jour).
+struct CatalogState {
+    std::string state;      // ok, partiel, refus, panne, pas_branche, en_cours ; vide : jamais faite
+    std::string message;    // ce que le service en dit (sans secret)
+    Seconds     when{0};
+    int         products{0};
+    [[nodiscard]] bool ok() const noexcept { return state == "ok"; }
+};
+bool parseCatalogState(const core::json::Value& v, CatalogState& out);
 
 struct StripeState {
     bool        connected{false};   // la cle secrete est posee sur le Worker
@@ -81,6 +114,7 @@ struct Settings {
     std::int64_t         number{0};
     StripeState          stripe;      // lu (GET /admin/boutique), jamais ecrit
     bool                 open{false}; // le service dit la boutique ouverte
+    CatalogState         catalog;     // 1.46.1 : les produits chez Stripe (lu, jamais ecrit)
     [[nodiscard]] const Article* find(const std::string& id) const;
 };
 bool parseSettings(const core::json::Value& v, Settings& out, std::string* why);
@@ -88,6 +122,27 @@ bool parseSettings(const core::json::Value& v, Settings& out, std::string* why);
 [[nodiscard]] std::string writeSettings(const Settings& s);
 // Les regles du service (montants, libelles, identifiants, doublons) ; faux : `why`.
 bool validSettings(const Settings& s, std::string* why);
+
+// ---- 1.46.1 : le montant suit le registre ----
+// Le prix affiche (un texte du registre : << 490 EUR HT / an >>) en centimes TTC (HT : + 20 %) ; faux : pas de nombre.
+// `base` : le prix normal dont un prix reduit qui ne dit ni << HT >> ni << TTC >> (<< 10 EUR >>) herite (<< 50 EUR HT >> :
+// le reduit est HT aussi).
+bool shownPriceTtc(const std::string& price, std::int64_t& cents, const std::string& base = {});
+// Ce que le registre dit d'un article : le montant de base, et la reduction (le prix reduit et sa fin) d'une offre.
+struct RegistryAmounts {
+    bool         ok{false};      // le prix affiche se lit (sinon : rien a suivre)
+    std::int64_t amount{0};
+    std::int64_t reduced{0};     // 0 : pas de reduction
+    Seconds      until{0};
+    std::string  price, promo;   // les textes du registre
+};
+[[nodiscard]] RegistryAmounts registryAmounts(const licensing::Registry& reg, const Article& a);
+// Les articles qui suivent le registre prennent ses montants (de base, reduit, la fin) ; un article d'avant la 1.46.1
+// (legacy) le suit si son montant est celui du registre (de base, ou reduit en cours a `now`), sinon il devient libre
+// (resolveLegacy faux : il reste tel quel). Rend le nombre d'articles changes.
+int followRegistry(Settings& s, const licensing::Registry& reg, Seconds now, bool resolveLegacy = true);
+// << 12,00 EUR TTC (reduit jusqu'au 22/12, puis 60,00 EUR) >>, << 60,00 EUR TTC >>, << 6,00 EUR TTC (montant libre) >>.
+[[nodiscard]] std::string articleAmountText(const Article& a, Seconds now, const std::string& currency = "eur");
 
 // ---- les commandes ----
 struct Order {
@@ -139,6 +194,8 @@ bool parseAmount(std::string_view text, std::int64_t& cents);
 [[nodiscard]] online::Result markReview(online::Client& c, int number, const std::string& reason);
 [[nodiscard]] online::Result readSettings(online::Client& c, Settings& out);
 [[nodiscard]] online::Result listOrders(online::Client& c, OrdersView& out);
+// 1.46.1 : l'admin+ - les produits et les prix chez Stripe mis a jour par le service (POST /admin/boutique/stripe).
+[[nodiscard]] online::Result syncStripeCatalog(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, CatalogState& out);
 // L'admin+ : le remboursement demande a Stripe par le service (la commande passe remboursee au webhook).
 [[nodiscard]] online::Result refund(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number);
 // La version du service sait-elle la boutique (1.46.0 ou plus) ? `version` : celle de /v1/etat.

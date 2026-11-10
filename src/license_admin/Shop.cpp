@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -125,7 +126,8 @@ StripeReply stripeCall(const std::string& method, const std::string& path, const
     req.method = method;
     req.url = stripeApiBase() + path;
     std::string auth = "Bearer " + secretKey;
-    req.headers = {{"Authorization", auth}, {"Accept", "application/json"}, {"User-Agent", "XPG-License-Admin"}};
+    // 1.46.1 : la version de l'API fixee (sans elle : celle du compte, qui change sous nos pieds).
+    req.headers = {{"Authorization", auth}, {"Accept", "application/json"}, {"User-Agent", "XPG-License-Admin"}, {"Stripe-Version", kStripeVersion}};
     wipe(auth);
     if (method != "GET" && method != "DELETE") {
         req.headers.emplace_back("Content-Type", "application/x-www-form-urlencoded");
@@ -161,7 +163,9 @@ std::string stripeExplain(const StripeReply& r, const std::string& what) {
     if (!r.error.empty()) return "Stripe ne r\xC3\xA9pond pas (" + what + ") : " + r.error;
     const std::string m = r.message();
     if (r.status == 401) return "Stripe refuse cette cl\xC3\xA9 (" + what + ") : v\xC3\xA9rifie que tu as coll\xC3\xA9 la cl\xC3\xA9 secr\xC3\xA8te enti\xC3\xA8re" + (m.empty() ? std::string() : " (" + m + ")");
-    if (r.status == 403) return "cette cl\xC3\xA9 restreinte n'a pas le droit de " + what + " : donne-lui \xC2\xAB Webhook Endpoints : \xC3\xA9" "criture \xC2\xBB, \xC2\xAB Checkout Sessions : \xC3\xA9" "criture \xC2\xBB, \xC2\xAB Refunds : \xC3\xA9" "criture \xC2\xBB et \xC2\xAB Invoices : lecture \xC2\xBB" + (m.empty() ? std::string() : " (" + m + ")");
+    if (r.status == 403)
+        return "cette cl\xC3\xA9 restreinte n'a pas le droit de " + what + " : donne-lui \xC2\xAB Webhook Endpoints : \xC3\xA9" "criture \xC2\xBB, \xC2\xAB Checkout Sessions : \xC3\xA9" "criture \xC2\xBB, \xC2\xAB Refunds : \xC3\xA9" "criture \xC2\xBB, \xC2\xAB Invoices : lecture \xC2\xBB, \xC2\xAB Products : \xC3\xA9" "criture \xC2\xBB et \xC2\xAB Prices : \xC3\xA9" "criture \xC2\xBB" +
+               (m.empty() ? std::string() : " (" + m + ")");
     return "Stripe a r\xC3\xA9pondu " + std::to_string(r.status) + " (" + what + ")" + (m.empty() ? std::string() : " : " + m);
 }
 
@@ -223,6 +227,14 @@ bool parseSettings(const Value& v, Settings& out, std::string* why) {
             art.amount = x.integer("montant");
             art.label = x.str("libelle");
             art.id = x.str("id", articleId(art.kind, art.kind == "option" ? art.option : art.edition, art.days));
+            // 1.46.1 : libre ou suivi (un reglage d'avant : ni l'un ni l'autre - followRegistry decide), la reduction
+            if (const Value* l = x.find("libre"); l && l->isBool()) art.free = l->asBool();
+            else art.legacy = true;
+            art.reduced = x.integer("montant_reduit");
+            art.reducedUntil = timeOf(x, "fin_reduction");
+            if (art.reduced <= 0 || art.reducedUntil <= 0) art.reduced = 0, art.reducedUntil = 0;
+            art.current = x.integer("montant_actuel");
+            art.stripeProduct = clean(x.str("stripe_produit"), 120);
             out.articles.push_back(std::move(art));
         }
     if (const Value* s = v.find("stripe"); s && s->isObject()) {
@@ -231,7 +243,18 @@ bool parseSettings(const Value& v, Settings& out, std::string* why) {
         out.stripe.webhook = s->flag("webhook");
         out.stripe.lastEvent = timeOf(*s, "dernier_evenement");
     }
+    if (const Value* c = v.find("stripe_catalogue"); c && c->isObject()) (void)parseCatalogState(*c, out.catalog);   // 1.46.1
     return true;
+}
+
+bool parseCatalogState(const Value& v, CatalogState& out) {
+    out = CatalogState{};
+    if (!v.isObject()) return false;
+    out.state = clean(v.str("etat"), 20);
+    out.message = maskStripe(clean(v.str("message"), 600));
+    out.when = timeOf(v, "quand");
+    out.products = static_cast<int>(v.integer("produits"));
+    return !out.state.empty();
 }
 
 std::string writeSettings(const Settings& s) {
@@ -252,6 +275,12 @@ std::string writeSettings(const Settings& s) {
         }
         x.set("montant", a.amount);
         x.set("libelle", a.label);
+        // 1.46.1 : libre ou suivi ; la reduction (suivi seulement). Un article d'avant (legacy) part tel qu'il est venu.
+        if (!a.legacy) x.set("libre", a.free);
+        if (!a.free && a.reduced > 0 && a.reducedUntil > 0) {
+            x.set("montant_reduit", a.reduced);
+            x.set("fin_reduction", static_cast<std::int64_t>(a.reducedUntil));
+        }
         arr.push(std::move(x));
     }
     v.set("articles", std::move(arr));
@@ -273,11 +302,113 @@ bool validSettings(const Settings& s, std::string* why) {
         if (a.amount < kMinAmount || a.amount > kMaxAmount)
             return fail("le montant de \xC2\xAB " + name + " \xC2\xBB doit aller de 0,50 \xE2\x82\xAC \xC3\xA0 1 000 000 \xE2\x82\xAC TTC (" + amountText(a.amount) + ")");
         if (!oneLine(a.label, 1, 120)) return fail("le libell\xC3\xA9 de facture de \xC2\xAB " + a.id + " \xC2\xBB : une ligne, 1 \xC3\xA0 120 caract\xC3\xA8res");
+        if (!a.free && a.reduced > 0 && (a.reduced < kMinAmount || a.reduced > kMaxAmount))   // 1.46.1
+            return fail("le montant r\xC3\xA9" "duit de \xC2\xAB " + name + " \xC2\xBB doit aller de 0,50 \xE2\x82\xAC \xC3\xA0 1 000 000 \xE2\x82\xAC TTC (" + amountText(a.reduced) + ")");
         const std::string id = articleId(a.kind, a.kind == "option" ? a.option : a.edition, a.days);
         if (std::find(seen.begin(), seen.end(), id) != seen.end()) return fail("\xC2\xAB " + id + " \xC2\xBB est deux fois dans le catalogue");
         seen.push_back(id);
     }
     return true;
+}
+
+// ============================================================================ 1.46.1 : le montant suit le registre
+bool shownPriceTtc(const std::string& price, std::int64_t& cents, const std::string& base) {
+    std::string num;
+    bool started = false;
+    for (std::size_t i = 0; i < price.size(); ++i) {
+        const char c = price[i];
+        if ((c >= '0' && c <= '9') || ((c == ',' || c == '.') && started) || (c == ' ' && started && i + 1 < price.size() && price[i + 1] >= '0' && price[i + 1] <= '9')) {
+            num += c;
+            started = true;
+        } else if (started) {
+            break;
+        }
+    }
+    std::int64_t v = 0;
+    if (num.empty() || !parseAmount(num, v)) return false;
+    const auto low = [](std::string t) {
+        for (auto& ch : t) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        return t;
+    };
+    const std::string p = low(price), b = low(base);
+    // HT : le texte le dit ; ou il ne dit rien (ni HT ni TTC) et le prix normal dont il est la reduction est HT.
+    const bool ht = p.find("ht") != std::string::npos || (p.find("ttc") == std::string::npos && !b.empty() && b.find("ht") != std::string::npos && b.find("ttc") == std::string::npos);
+    if (ht) v = static_cast<std::int64_t>(std::llround(static_cast<double>(v) * 1.2));
+    cents = v;
+    return true;
+}
+
+RegistryAmounts registryAmounts(const licensing::Registry& reg, const Article& a) {
+    RegistryAmounts r;
+    if (a.kind == "edition") {
+        const licensing::EditionDef* e = reg.edition(a.edition);
+        if (!e) return r;
+        r.price = e->price;
+        r.ok = !e->price.empty() && shownPriceTtc(e->price, r.amount) && r.amount >= kMinAmount && r.amount <= kMaxAmount;
+        std::int64_t p = 0;
+        if (r.ok && !e->promoPrice.empty() && e->promoUntil > 0 && shownPriceTtc(e->promoPrice, p, e->price) && p >= kMinAmount && p <= kMaxAmount) {
+            r.reduced = p;
+            r.until = e->promoUntil;
+            r.promo = e->promoPrice;
+        }
+    } else if (a.kind == "option") {
+        const licensing::OptionDef* o = reg.option(a.option);
+        if (!o) return r;
+        for (const auto& d : o->durations)
+            if (d.days == a.days) {
+                r.price = d.price;
+                r.ok = !d.price.empty() && shownPriceTtc(d.price, r.amount) && r.amount >= kMinAmount && r.amount <= kMaxAmount;
+            }
+    }
+    if (!r.ok) r.amount = 0;
+    return r;
+}
+
+int followRegistry(Settings& s, const licensing::Registry& reg, Seconds now, bool resolveLegacy) {
+    int changed = 0;
+    for (auto& a : s.articles) {
+        const RegistryAmounts r = registryAmounts(reg, a);
+        if (a.legacy) {
+            if (!resolveLegacy) continue;
+            // Un reglage d'avant la 1.46.1 : le montant etait celui du registre (de base, ou reduit en cours) -> il le suit ;
+            // un autre montant, tape par l'editeur -> libre (rien ne change pour lui).
+            const bool same = r.ok && (std::llabs(a.amount - r.amount) <= 1 || (r.reduced > 0 && now < r.until && std::llabs(a.amount - r.reduced) <= 1));
+            a.legacy = false;
+            a.free = !same;
+            ++changed;
+        }
+        if (a.free || !r.ok) {
+            if (!a.free) {   // plus rien a suivre (le prix affiche ne se lit plus) : libre, avec son montant
+                a.free = true;
+                ++changed;
+            }
+            if (a.reduced || a.reducedUntil) {
+                a.reduced = 0;
+                a.reducedUntil = 0;
+                ++changed;
+            }
+            continue;
+        }
+        // La reduction telle que le registre la dit (finie ou non : le service ne prend que celle qui court) - le brouillon
+        // ne change pas d'un jour a l'autre.
+        const std::int64_t red = r.reduced;
+        const Seconds until = red ? r.until : 0;
+        if (a.amount != r.amount || a.reduced != red || a.reducedUntil != until) {
+            a.amount = r.amount;
+            a.reduced = red;
+            a.reducedUntil = until;
+            ++changed;
+        }
+    }
+    return changed;
+}
+
+std::string articleAmountText(const Article& a, Seconds now, const std::string& currency) {
+    if (a.free) return amountText(a.amount, currency) + " TTC (montant libre)";
+    if (!a.reducedAt(now)) return amountText(a.amount, currency) + " TTC";
+    const std::string d = licensing::isoDate(a.reducedUntil);   // "2026-12-22"
+    const std::string day = d.size() >= 10 ? d.substr(8, 2) + "/" + d.substr(5, 2) : d;
+    return amountText(a.reduced, currency) + " TTC (r\xC3\xA9" "duit jusqu'au " + day + ", puis " + amountText(a.amount, currency) + ")";
 }
 
 // ============================================================================ les commandes
@@ -475,8 +606,30 @@ online::Result saveSettings(const std::string& folder, const licensing::SigningK
     online::Reply r;
     online::Result res = call(*c, "PUT", "/admin/boutique", &body, "enregistrer la boutique", &r);
     if (!res.ok) return res;
-    return done("Boutique enregistr\xC3\xA9" "e sur le service (r\xC3\xA9glage n\xC2\xB0 " + std::to_string(r.json.integer("numero")) + ") : " +
-                std::string(in.active ? "vente en ligne ouverte" : "vente en ligne arr\xC3\xAAt\xC3\xA9" "e") + ", " + std::to_string(in.articles.size()) + " article(s).");
+    online::Result out = done("Boutique enregistr\xC3\xA9" "e sur le service (r\xC3\xA9glage n\xC2\xB0 " + std::to_string(r.json.integer("numero")) + ") : " +
+                              std::string(in.active ? "vente en ligne ouverte" : "vente en ligne arr\xC3\xAAt\xC3\xA9" "e") + ", " + std::to_string(in.articles.size()) + " article(s).");
+    // 1.46.1 : les produits chez Stripe (le service les cree ; un refus n'empeche pas de vendre)
+    CatalogState cs;
+    if (const Value* x = r.json.find("stripe_catalogue"); x && parseCatalogState(*x, cs) && !cs.message.empty())
+        out.details.push_back((cs.ok() ? "Stripe : " : "Stripe (produits) : ") + cs.message);
+    return out;
+}
+
+online::Result syncStripeCatalog(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, CatalogState& out) {
+    out = CatalogState{};
+    std::unique_ptr<online::Client> c;
+    std::string why;
+    if (!online::openClient(folder, key, o, c, &why)) return refused(why);
+    Value b = Value::object();
+    online::Reply r;
+    online::Result res = call(*c, "POST", "/admin/boutique/stripe", &b, "mettre \xC3\xA0 jour les produits chez Stripe", &r);
+    if (!res.ok) return res;
+    const Value* x = r.json.find("stripe_catalogue");
+    if (!x || !parseCatalogState(*x, out)) return refused("le service a rendu un \xC3\xA9tat des produits illisible");
+    online::Result d = done("Stripe : " + (out.message.empty() ? out.state : out.message));
+    d.ok = out.ok() || out.state == "pas_branche" || out.state == "partiel";
+    if (!d.ok) d.message = "Stripe (produits) : " + out.message;
+    return d;
 }
 
 online::Result listOrders(online::Client& c, OrdersView& out) {
@@ -614,6 +767,7 @@ ConnectReport connectStripe(std::string& secretKey, const std::string& serviceUr
         std::vector<std::pair<std::string, std::string>> p = {{"url", hook}};
         for (std::size_t i = 0; i < stripeEvents().size(); ++i) p.emplace_back("enabled_events[" + std::to_string(i) + "]", stripeEvents()[i]);
         p.emplace_back("description", "XPG - service des licences (boutique)");
+        p.emplace_back("api_version", kStripeVersion);   // 1.46.1 : les evenements dans la version que le service lit
         StripeReply w = stripeCall("POST", "/v1/webhook_endpoints", p, secretKey);
         if (w.status != 200) return fail(stripeExplain(w, "cr\xC3\xA9" "er le point d'arriv\xC3\xA9" "e du webhook"));
         rep.webhookId = clean(w.json.str("id"), 80);

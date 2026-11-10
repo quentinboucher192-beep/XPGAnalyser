@@ -58,8 +58,12 @@
 
 #include <sodium.h>
 
+#include "../../../third_party/miniz.h"   // 1.46.1 : un installateur dans un .zip (Versions)
+
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -1455,6 +1459,183 @@ OpResult Workspace::adminInstallerLink(const std::string& fallbackPath, std::str
 }
 
 // ============================================================================================ les versions
+// ============================================================================ 1.46.1 : un installateur dans un .zip
+namespace {
+
+constexpr std::uint64_t kMaxZipEntry = 1024ull * 1024ull * 1024ull;   // 1 Gio : un installateur fait moins de 200 Mio
+constexpr std::uint64_t kMaxZipRatio = 1000;                          // plus : une bombe de decompression
+
+std::string lowerAscii(std::string s) {
+    for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+// Le nom d'un installateur attendu (le dernier element du chemin) : 1 Studios, 2 Admin, 0 autre.
+int installerKind(const std::string& entryName) {
+    std::string n = entryName;
+    if (const auto k = n.find_last_of("/\\"); k != std::string::npos) n = n.substr(k + 1);
+    const std::string l = lowerAscii(n);
+    const auto ends = [&](const char* x) { const std::string e = x; return l.size() > e.size() && l.compare(l.size() - e.size(), e.size(), e) == 0; };
+    if (!ends(".exe")) return 0;
+    if (l.rfind("api-ihm-studio-setup-", 0) == 0) return 1;
+    if (l.rfind("xpg-license-admin-setup-", 0) == 0) return 2;
+    return 0;
+}
+// Un nom d'entree sur : relatif, sans << .. >>, sans lettre de lecteur ni caractere de controle.
+bool safeEntryName(const std::string& n) {
+    if (n.empty() || n.size() > 400 || n[0] == '/' || n[0] == '\\' || n.find(':') != std::string::npos) return false;
+    for (unsigned char c : n)
+        if (c < 0x20 || c == 0x7F) return false;
+    std::size_t a = 0;
+    while (a <= n.size()) {
+        std::size_t b = n.find_first_of("/\\", a);
+        if (b == std::string::npos) b = n.size();
+        const std::string part = n.substr(a, b - a);
+        if (part == "..") return false;
+        a = b + 1;
+    }
+    return true;
+}
+
+struct ZipIn {
+    std::ifstream in;
+    std::uint64_t size{0};
+};
+size_t zipInRead(void* opaque, mz_uint64 ofs, void* buf, size_t n) {
+    auto* z = static_cast<ZipIn*>(opaque);
+    if (ofs >= z->size) return 0;
+    z->in.clear();
+    z->in.seekg(static_cast<std::streamoff>(ofs));
+    z->in.read(static_cast<char*>(buf), static_cast<std::streamsize>(std::min<std::uint64_t>(n, z->size - ofs)));
+    return static_cast<size_t>(z->in.gcount());
+}
+struct ExeOut {
+    std::ofstream out;
+    std::uint64_t written{0};
+    bool          failed{false};
+};
+size_t exeOutWrite(void* opaque, mz_uint64, const void* buf, size_t n) {
+    auto* o = static_cast<ExeOut*>(opaque);
+    o->out.write(static_cast<const char*>(buf), static_cast<std::streamsize>(n));
+    if (!o->out || o->written + n > kMaxZipEntry) {
+        o->failed = true;
+        return 0;
+    }
+    o->written += n;
+    return n;
+}
+
+// Le zip lu : chaque installateur attendu (leur index), ou pourquoi il est refuse.
+struct ZipLook {
+    std::vector<mz_uint> studios, admin;
+};
+bool lookZip(mz_zip_archive& z, ZipIn& src, const std::string& zipPath, ZipLook& out, std::string* why) {
+    const std::string name = U(P(zipPath).filename());
+    std::error_code ec;
+    src.size = fs::file_size(P(zipPath), ec);
+    if (ec) return fail(why, name + " ne se lit pas");
+    src.in.open(P(zipPath), std::ios::binary);
+    if (!src.in) return fail(why, name + " ne s'ouvre pas");
+    z.m_pRead = zipInRead;
+    z.m_pIO_opaque = &src;
+    if (!mz_zip_reader_init(&z, src.size, 0)) return fail(why, name + " n'est pas un zip lisible");
+    const mz_uint n = mz_zip_reader_get_num_files(&z);
+    for (mz_uint i = 0; i < n; ++i) {
+        mz_zip_archive_file_stat st;
+        if (!mz_zip_reader_file_stat(&z, i, &st)) return fail(why, name + " : une entr\xC3\xA9" "e illisible");
+        if (st.m_is_directory) continue;
+        const int kind = installerKind(st.m_filename);
+        if (!kind) continue;
+        if (!safeEntryName(st.m_filename)) return fail(why, name + " : " + cite(st.m_filename) + " sort du dossier (un chemin refus\xC3\xA9)");
+        if (st.m_is_encrypted || (st.m_bit_flag & 1u)) return fail(why, name + " : " + cite(st.m_filename) + " est chiffr\xC3\xA9 (un zip sans mot de passe, s'il te pla\xC3\xAEt)");
+        if (!st.m_is_supported) return fail(why, name + " : " + cite(st.m_filename) + " est compress\xC3\xA9 d'une fa\xC3\xA7on que l'Admin ne lit pas");
+        if (st.m_uncomp_size == 0 || st.m_uncomp_size > kMaxZipEntry || st.m_uncomp_size > kMaxZipRatio * std::max<mz_uint64>(1, st.m_comp_size))
+            return fail(why, name + " : " + cite(st.m_filename) + " a une taille absurde (" + std::to_string(st.m_uncomp_size) + " octets)");
+        (kind == 2 ? out.admin : out.studios).push_back(i);
+    }
+    if (out.studios.size() > 1) return fail(why, name + " porte plusieurs installateurs des Studios : garde-n'en qu'un");
+    if (out.admin.size() > 1) return fail(why, name + " porte plusieurs installateurs de l'Admin : garde-n'en qu'un");
+    return true;
+}
+
+} // namespace
+
+bool Workspace::isZipPath(const std::string& path) {
+    const std::string l = lowerAscii(path);
+    return l.size() > 4 && l.compare(l.size() - 4, 4, ".zip") == 0;
+}
+
+bool Workspace::installerKindsInZip(const std::string& zipPath, bool& studios, bool& admin, std::string* why) {
+    studios = admin = false;
+    mz_zip_archive z{};
+    ZipIn src;
+    ZipLook look;
+    const bool ok = lookZip(z, src, zipPath, look, why);
+    mz_zip_reader_end(&z);
+    if (!ok) return false;
+    studios = !look.studios.empty();
+    admin = !look.admin.empty();
+    if (!studios && !admin)
+        return fail(why, U(P(zipPath).filename()) + " ne porte ni API-IHM-Studio-Setup-\xE2\x80\xA6.exe ni XPG-License-Admin-Setup-\xE2\x80\xA6.exe");
+    return true;
+}
+
+bool Workspace::installerFromZip(const std::string& zipPath, bool admin, std::string& out, std::string* why) {
+    out.clear();
+    mz_zip_archive z{};
+    ZipIn src;
+    ZipLook look;
+    if (!lookZip(z, src, zipPath, look, why)) {
+        mz_zip_reader_end(&z);
+        return false;
+    }
+    const std::vector<mz_uint>& want = admin ? look.admin : look.studios;
+    if (want.empty()) {
+        mz_zip_reader_end(&z);
+        return fail(why, U(P(zipPath).filename()) + " ne porte pas " + (admin ? "XPG-License-Admin-Setup-\xE2\x80\xA6.exe (l'installateur de l'Admin)" : "API-IHM-Studio-Setup-\xE2\x80\xA6.exe (l'installateur des Studios)"));
+    }
+    mz_zip_archive_file_stat st;
+    (void)mz_zip_reader_file_stat(&z, want.front(), &st);
+    std::string base = st.m_filename;
+    if (const auto k = base.find_last_of("/\\"); k != std::string::npos) base = base.substr(k + 1);
+    // Un dossier temporaire a lui (le nom du fichier garde : la version se lit dans le fichier, le nom se montre) ; ceux
+    // d'avant hier s'en vont.
+    std::error_code ec;
+    fs::path dir = fs::temp_directory_path(ec);
+    if (ec) dir = P(zipPath).parent_path();
+    else {
+        std::vector<fs::path> old;
+        for (fs::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
+            const auto leaf = it->path().filename().u8string();
+            std::error_code e2;
+            if (std::string(leaf.begin(), leaf.end()).rfind("xpg-versions-zip-", 0) == 0 &&
+                fs::last_write_time(it->path(), e2) < fs::file_time_type::clock::now() - std::chrono::hours(24) && !e2)
+                old.push_back(it->path());
+        }
+        for (const auto& d : old) fs::remove_all(d, ec);
+    }
+    ec.clear();
+    unsigned char rnd[8];
+    randombytes_buf(rnd, sizeof rnd);
+    dir /= P("xpg-versions-zip-" + crypto::hex(rnd, sizeof rnd));
+    fs::create_directories(dir, ec);
+    if (ec) {
+        mz_zip_reader_end(&z);
+        return fail(why, "le dossier temporaire ne se cr\xC3\xA9" "e pas (" + ec.message() + ")");
+    }
+    const fs::path target = dir / P(base);
+    ExeOut o;
+    o.out.open(target, std::ios::binary | std::ios::trunc);
+    bool ok = o.out && mz_zip_reader_extract_to_callback(&z, want.front(), exeOutWrite, &o, 0) && !o.failed;
+    o.out.close();
+    mz_zip_reader_end(&z);
+    if (!ok || o.written != st.m_uncomp_size) {
+        fs::remove_all(dir, ec);
+        return fail(why, U(P(zipPath).filename()) + " : " + cite(base) + " ne s'extrait pas (zip ab\xC3\xAEm\xC3\xA9, ou plus de place sur le disque)");
+    }
+    out = U(target);
+    return true;
+}
+
 std::string Workspace::readInstallerVersion(const std::string& path, std::string* why) {
     PeVersion pv;
     std::string w;

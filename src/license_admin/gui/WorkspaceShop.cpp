@@ -138,12 +138,16 @@ OpResult Workspace::shopSettings(shop::Settings& out) const {
     return fromResult(shop::readSettings(folder_, *caller.key, detail::optionsFor(caller, now()), out));
 }
 
-OpResult Workspace::saveShop(const shop::Settings& settings) const {
+OpResult Workspace::saveShop(const shop::Settings& in) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
     if (const auto deny = detail::callerDenied(caller, {})) return *deny;   // l'admin+ seul
     const online::Options o = detail::optionsFor(caller, now());
+    // 1.46.1 : les articles qui suivent le registre partent avec ses montants (de base, reduit, la fin) ; un article d'un
+    // JSON d'avant (ni << libre >> ni suivi : la console) part tel qu'il est.
+    shop::Settings settings = in;
+    if (hasRegistry_) (void)shop::followRegistry(settings, registry_, now(), false);
     OpResult r = fromResult(shop::saveSettings(folder_, *caller.key, o, settings));
     if (!r.ok) return r;
     Value d = Value::object();
@@ -218,6 +222,15 @@ OpResult Workspace::connectStripe(std::string& secretKey, const deployer::Option
     if (!rep.next.empty()) r.details.push_back(rep.next);
     if (!rep.link.empty()) r.details.push_back(rep.link);
     for (const auto& l : rep.lines) r.details.push_back(l);
+    if (rep.ok) {
+        // 1.46.1 : la cle neuve sur le service - il cree (ou met a jour) les produits et les prix chez Stripe tout de suite. Un
+        // echec ne defait rien : ils se creent au prochain Enregistrer de la boutique.
+        shop::CatalogState cs;
+        const online::Result k = shop::syncStripeCatalog(folder_, *caller.key, detail::optionsFor(caller, now()), cs);
+        const std::string line = k.ok ? k.message : "Produits chez Stripe : pas encore (" + k.message + ") ; ils se cr\xC3\xA9" "eront \xC3\xA0 l'enregistrement de la boutique.";
+        r.details.push_back(line);
+        if (onLine) onLine(line);
+    }
     if (rep.ok) {
         Value d = Value::object();
         d.set("mode", rep.mode);

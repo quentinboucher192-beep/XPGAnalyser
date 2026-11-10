@@ -10,6 +10,12 @@
 //  le prix affiche (le registre), le montant encaisse en EUR TTC et le libelle de
 //  la facture (une case qui se change d'un double-clic) ; un ecart entre le prix
 //  affiche et le montant est dit. Enregistrer -> PUT /admin/boutique (l'admin+).
+//  1.46.1 : LE MONTANT SUIT LE PRIX AFFICHE (le registre : HT + 20 % = TTC) et sa
+//  reduction en cours (<< 12,00 EUR TTC (reduit jusqu'au 22/12, puis 60,00 EUR) >> :
+//  le service passe seul au montant de base apres la date) ; un montant tape est
+//  LIBRE (vide : il suit de nouveau). Le registre a change : le brouillon le suit,
+//  Enregistrer l'envoie. Les produits chez Stripe (crees par le service) : un
+//  refus de Stripe se dit dans un bandeau (la vente marche quand meme).
 //  COMMANDES : le tableau (n°, date, client, societe, article, montant, etat ;
 //  un filtre), le detail de la commande choisie (le courriel, le PC, la licence
 //  livree, Stripe, le recu), Delivrer maintenant, Voir dans Stripe, Ouvrir le
@@ -65,27 +71,8 @@ std::string daysText(int days, bool option) {
     return std::to_string(days) + " jours";
 }
 
-// Le prix affiche (un texte : << 490 EUR HT / an >>) en centimes TTC (HT : + 20 %) ; faux : pas de nombre.
-bool shownPriceTtc(const std::string& price, std::int64_t& cents) {
-    std::string num;
-    bool started = false;
-    for (std::size_t i = 0; i < price.size(); ++i) {
-        const char c = price[i];
-        if ((c >= '0' && c <= '9') || ((c == ',' || c == '.') && started) || (c == ' ' && started && i + 1 < price.size() && price[i + 1] >= '0' && price[i + 1] <= '9')) {
-            num += c;
-            started = true;
-        } else if (started) {
-            break;
-        }
-    }
-    std::int64_t v = 0;
-    if (num.empty() || !shop::parseAmount(num, v)) return false;
-    std::string low = price;
-    for (auto& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-    if (low.find("ht") != std::string::npos) v = static_cast<std::int64_t>(std::llround(static_cast<double>(v) * 1.2));
-    cents = v;
-    return true;
-}
+// 1.46.1 : le prix affiche en centimes TTC - shop::shownPriceTtc (Shop.cpp : le montant suit le registre ; un prix
+// reduit sans << HT >> ni << TTC >> herite du prix normal).
 
 // LES COLONNES A LA LARGEUR DE LA TABLE (jamais une colonne hors de la vue) : une colonne de largeur fixe (weight 0)
 // garde la sienne ; les souples se partagent le reste selon leur poids, chacune au moins `min` ; une colonne << a
@@ -215,6 +202,19 @@ public:
     std::function<void()>     changed;
     std::string               refusal;   // le dernier refus d'une case (montant illisible...)
     std::function<Seconds()>  clock;     // 1.47.0 : l'heure (celle du Workspace) ; vide : celle du systeme
+    const licensing::Registry* registry{nullptr};   // 1.46.1 : ce que les montants suivent
+
+    [[nodiscard]] Seconds now() const { return clock ? clock() : licensing::systemNow(); }
+    // 1.46.1 : le prix du moment en centimes TTC (un prix reduit sans HT ni TTC herite du prix normal).
+    [[nodiscard]] bool shownNowTtc(const CatalogueRow& row, std::int64_t& cents) const {
+        if (promoNow(row)) return shop::shownPriceTtc(row.promo, cents, row.price);
+        return !row.price.empty() && shop::shownPriceTtc(row.price, cents);
+    }
+    [[nodiscard]] bool anyReduction() const {
+        if (!draft) return false;
+        const Seconds t = now();
+        return std::any_of(draft->articles.begin(), draft->articles.end(), [t](const shop::Article& a) { return !a.free && a.reducedAt(t); });
+    }
 
     // 1.47.0 : le prix que le client voit MAINTENANT - comme la boutique des Studios (promoOf, LicenceWindow.cpp) et
     // l'historique des achats (Workspace.cpp) : le prix reduit tant que la fin de la reduction n'est pas passee, sinon
@@ -245,9 +245,10 @@ public:
     [[nodiscard]] std::string gap(RowIndex r) const {
         const shop::Article* a = article(r);
         std::int64_t shown = 0;
-        const std::string& price = currentPrice(rows[r]);   // 1.47.0 : le prix du moment (une reduction en cours)
-        if (!a || price.empty() || !shownPriceTtc(price, shown)) return {};
-        if (std::llabs(shown - a->amount) <= 1) return {};
+        // 1.47.0 : le prix du moment (une reduction en cours) ; 1.46.1 : face au montant du moment (un montant qui suit
+        // le registre n'a pas d'ecart)
+        if (!a || !shownNowTtc(rows[r], shown)) return {};
+        if (std::llabs(shown - a->amountAt(now())) <= 1) return {};
         return "\xE2\x89\xA0 affich\xC3\xA9 (" + shop::amountText(shown) + " TTC)";
     }
     [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
@@ -257,7 +258,7 @@ public:
             case 0: return rows[r].name;
             case 1: return a ? "Oui" : "Non";
             case 2: return priceText(rows[r]);
-            case 3: return a ? shop::amountText(a->amount, draft->currency) : std::string("\xE2\x80\x94");
+            case 3: return a ? shop::articleAmountText(*a, now(), draft->currency) : std::string("\xE2\x80\x94");   // 1.46.1
             case 4: return a ? a->label : std::string();
             case 5: return gap(r);
             default: return {};
@@ -272,6 +273,7 @@ public:
             else s.fg = Color::rgb(0x64748B);
         }
         if (c == 5 && !gap(r).empty()) s.fg = Color::rgb(0xB45309);
+        if (c == 3 && a && !a->free && a->reducedAt(now())) s.fg = Color::rgb(0x15803D);   // 1.46.1 : une reduction en cours
         if (!a && c != 0 && c != 1) s.fg = Color::rgb(0x94A3B8);
         return s;
     }
@@ -281,19 +283,26 @@ public:
         if (c == 1) return {"Oui", "Non"};
         return {};
     }
-    // Le montant propose quand un article entre en vente : le prix affiche du moment (TTC ; 1.47.0 : le prix reduit tant
-    // que la reduction court), sinon 1,00 EUR.
+    // Un article qui entre en vente : 1.46.1 - son montant SUIT le prix affiche et sa reduction (le montant du moment : le
+    // prix reduit tant que la reduction court, comme 1.47.0) ; un prix qui ne se lit pas : 1,00 EUR, libre (a taper).
     [[nodiscard]] shop::Article fresh(RowIndex r) const {
         const CatalogueRow& row = rows[r];
-        const std::string& price = currentPrice(row);
         shop::Article a;
         a.kind = row.kind;
         a.edition = row.edition;
         a.option = row.option;
         a.days = row.days;
         a.id = row.id();
-        std::int64_t v = 0;
-        a.amount = !price.empty() && shownPriceTtc(price, v) && v >= shop::kMinAmount ? v : 100;
+        a.amount = 100;
+        a.free = true;
+        if (registry) {
+            shop::Settings one;
+            a.free = false;
+            one.articles.push_back(a);
+            (void)shop::followRegistry(one, *registry, now());
+            a = one.articles.front();
+            if (a.free) a.amount = 100;
+        }
         a.label = row.kind == "option" ? "Option " + row.name : "Licence " + row.name;
         if (a.label.size() > 110) a.label.resize(110);
         return a;
@@ -309,6 +318,30 @@ public:
             if (on && it == draft->articles.end()) draft->articles.push_back(fresh(r));
             if (!on && it != draft->articles.end()) draft->articles.erase(it);
         } else if (c == 3) {
+            // 1.46.1 : vide (ou << auto >>) - le montant suit de nouveau le prix affiche ; un montant - il est libre.
+            std::string low = t;
+            while (!low.empty() && low.back() == ' ') low.pop_back();
+            while (!low.empty() && low.front() == ' ') low.erase(0, 1);
+            for (auto& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+            if (low.empty() || low == "auto" || low == "suivre") {
+                if (it == draft->articles.end()) {
+                    draft->articles.push_back(fresh(r));
+                    it = draft->articles.end() - 1;
+                }
+                shop::Settings one;
+                one.articles.push_back(*it);
+                one.articles.front().free = false;
+                one.articles.front().legacy = false;
+                if (!registry || ((void)shop::followRegistry(one, *registry, now()), one.articles.front().free)) {
+                    refusal = "Le prix affich\xC3\xA9 de cet article ne se lit pas : tape un montant (\xC2\xAB 490 \xC2\xBB, \xC2\xAB 490,00 \xC2\xBB).";
+                    if (changed) changed();
+                    return false;
+                }
+                *it = one.articles.front();
+                modelReset->emit();
+                if (changed) changed();
+                return true;
+            }
             std::int64_t v = 0;
             if (!shop::parseAmount(t, v) || v < shop::kMinAmount || v > shop::kMaxAmount) {
                 refusal = "Montant illisible ou hors limites (de 0,50 \xE2\x82\xAC \xC3\xA0 1 000 000 \xE2\x82\xAC TTC) : \xC2\xAB " + t + " \xC2\xBB.";
@@ -320,6 +353,10 @@ public:
                 it = draft->articles.end() - 1;
             }
             it->amount = v;
+            it->free = true;   // 1.46.1 : un montant tape ne suit plus le prix affiche
+            it->legacy = false;
+            it->reduced = 0;
+            it->reducedUntil = 0;
         } else if (c == 4) {
             std::string l = t;
             while (!l.empty() && l.back() == ' ') l.pop_back();
@@ -419,6 +456,7 @@ public:
     [[nodiscard]] shop::Settings& draft() noexcept { return draft_; }
     [[nodiscard]] CatalogueModel& catalogue() noexcept { return *model_; }
     [[nodiscard]] bool dirty() const noexcept { return dirty_; }
+    [[nodiscard]] bool following() const noexcept { return following_; }   // 1.46.1 : le registre a change, a enregistrer
 
 protected:
     void onLayout() override {
@@ -441,14 +479,24 @@ protected:
             noteRect_ = {};
         }
         const float cardW = (w_ - 16.f) * 0.5f;
-        stripeRect_ = {x0_, y, cardW, 150.f};
-        saleRect_ = {x0_ + cardW + 16.f, y, cardW, 150.f};
+        // 1.46.1 : une ligne de plus dans la carte Stripe (les produits chez Stripe)
+        stripeRect_ = {x0_, y, cardW, 170.f};
+        saleRect_ = {x0_ + cardW + 16.f, y, cardW, 170.f};
         const float cw = buttonWidth(*connect_, 150.f), dbw = std::min(cardW - cw - 48.f, buttonWidth(*dashboard_, 200.f));
         connect_->setBounds({stripeRect_.x + 18.f, stripeRect_.bottom() - 50.f, cw, 34.f});
         dashboard_->setBounds({stripeRect_.x + 18.f + cw + 10.f, stripeRect_.bottom() - 50.f, std::max(120.f, dbw), 34.f});
         active_->setBounds({saleRect_.x + 18.f, saleRect_.y + 46.f, 40.f, 22.f});
         auto_->setBounds({saleRect_.x + 18.f, saleRect_.y + 88.f, 40.f, 22.f});
         y = stripeRect_.bottom() + 18.f;
+        // 1.46.1 : Stripe refuse les produits (une cle restreinte...) : un bandeau qui dit pourquoi (la vente marche quand meme)
+        catalogNote_ = catalogProblem();
+        if (!catalogNote_.empty()) {
+            const float h = 20.f + wrappedHeight(catalogNote_, kF13, w_ - 60.f, 18.f, 3);
+            catalogRect_ = {x0_, y - 4.f, w_, h};
+            y = catalogRect_.bottom() + 14.f;
+        } else {
+            catalogRect_ = {};
+        }
         catY_ = y;
         const float sw = buttonWidth(*save_, 130.f), aw = buttonWidth(*cancel_, 120.f);
         save_->setBounds({x0_ + w_ - sw, y - 2.f, sw, 34.f});
@@ -457,17 +505,21 @@ protected:
         y += 56.f;
         table_->setBounds({x0_, y, w_, std::max(120.f, b.bottom() - 18.f - y)});
         // 1.47.0 : une reduction en cours - le prix affiche dit le prix du moment et le prix normal : sa colonne s'elargit.
+        // 1.46.1 : le montant aussi (<< 12,00 EUR TTC (reduit jusqu'au 22/12, puis 60,00 EUR) >>) ; les deux restent assez
+        // etroits pour que l'ecart tienne a 1373 x 917.
         const bool promo = std::any_of(model_->rows.begin(), model_->rows.end(), [this](const CatalogueRow& r) { return model_->promoNow(r); });
-        if (std::fabs(w_ - fitW_) > 0.5f || promo != fitPromo_) {   // les colonnes a la largeur (aucune hors de la vue)
+        const bool red = model_->anyReduction();
+        if (std::fabs(w_ - fitW_) > 0.5f || promo != fitPromo_ || red != fitRed_) {   // les colonnes a la largeur (aucune hors de la vue)
             fitW_ = w_;
             fitPromo_ = promo;
+            fitRed_ = red;
             fitColumns(*table_,
                        {{"Article", 0.f, 3.f, 180.f, false},
                         {"En vente", 84.f, 0.f, 0.f, false},
-                        {"Prix affich\xC3\xA9", promo ? 300.f : 130.f, 0.f, 0.f, false},
-                        {"Montant encaiss\xC3\xA9 (TTC)", 170.f, 0.f, 0.f, false},
+                        {"Prix affich\xC3\xA9", promo ? 190.f : 130.f, 0.f, 0.f, false},
+                        {"Montant encaiss\xC3\xA9 (TTC)", red ? 330.f : 210.f, 0.f, 0.f, false},
                         {"Libell\xC3\xA9 de la facture", 0.f, 3.f, 150.f, false},
-                        {"\xC3\x89" "cart", 0.f, 2.f, 150.f, false}},
+                        {"\xC3\x89" "cart", 0.f, 2.f, 130.f, true}},
                        w_);
         }
     }
@@ -493,8 +545,15 @@ protected:
         }
         paintStripe(ctx);
         paintSale(ctx);
+        if (!catalogNote_.empty()) {   // 1.46.1
+            r.fillRoundedRect(catalogRect_, c.warning.withAlpha(90), 10.f);
+            r.fillRoundedRect(catalogRect_.inset(1.f, 1.f), c.panelBg, 9.f);
+            r.fillRoundedRect(catalogRect_.inset(1.f, 1.f), c.warning.withAlpha(24), 9.f);
+            ui::drawIcon(r, ui::Icon::Warning, {catalogRect_.x + 14.f, catalogRect_.y + 11.f, 18.f, 18.f}, c.warning);
+            (void)drawWrapped(r, catalogRect_.x + 42.f, catalogRect_.y + 10.f, catalogRect_.w - 60.f, catalogNote_, kF13, c.text, 18.f, 3);
+        }
         r.drawText({x0_, catY_}, "Catalogue", gfx::semibold(kF16), c.text);
-        std::string hint = "Chaque offre et chaque option du registre : double-clic sur \xC2\xAB En vente \xC2\xBB, \xC2\xAB Montant \xC2\xBB ou \xC2\xAB Libell\xC3\xA9 \xC2\xBB pour les changer, puis Enregistrer.";
+        std::string hint = "Le montant suit le prix affich\xC3\xA9 et ses r\xC3\xA9" "ductions ; double-clic sur \xC2\xAB Montant \xC2\xBB : un montant libre (vide : il suit de nouveau).";
         Color hc = c.textMuted;
         if (!model_->refusal.empty()) {
             hint = model_->refusal;
@@ -504,6 +563,9 @@ protected:
             hc = c.warning;
         } else if (dirty_) {
             hint = "Changements pas encore enregistr\xC3\xA9s (" + std::to_string(draft_.articles.size()) + " article(s) en vente) : Enregistrer les envoie au service.";
+            hc = c.warning;
+        } else if (following_) {   // 1.46.1
+            hint = "Les montants suivent le registre (un prix, une r\xC3\xA9" "duction) : Enregistrer les envoie au service et \xC3\xA0 Stripe.";
             hc = c.warning;
         }
         r.drawText({x0_, catY_ + 26.f}, fit(r, hint, kF13, (dirty_ ? cancel_->bounds().x : save_->bounds().x) - 16.f - x0_), kF13, hc);
@@ -539,6 +601,32 @@ private:
         }
         r.drawText({x, stripeRect_.y + 48.f}, fit(r, l1, kF14, stripeRect_.w - 36.f), kF14, c.text);
         if (!l2.empty()) r.drawText({x, stripeRect_.y + 70.f}, fit(r, l2, kF13, stripeRect_.w - 36.f), kF13, c.textMuted);
+        // 1.46.1 : les produits chez Stripe (crees par le service)
+        if (known && s.connected) {
+            const shop::CatalogState& k = view().catalog;
+            std::string l3;
+            Color c3 = c.textMuted;
+            if (k.ok()) {
+                l3 = "Produits chez Stripe : " + std::to_string(k.products) + " \xC3\xA0 jour (Catalogue de produits).";
+                c3 = c.ok;
+            } else if (k.state == "partiel") {
+                l3 = "Produits chez Stripe : " + std::to_string(k.products) + " \xC3\xA0 jour, les autres au prochain Enregistrer.";
+            } else if (k.state == "refus" || k.state == "panne") {
+                l3 = "Produits pas visibles dans Stripe (voir plus bas) : la vente marche quand m\xC3\xAAme.";
+                c3 = c.warning;
+            } else {
+                l3 = "Produits chez Stripe : cr\xC3\xA9\xC3\xA9s \xC3\xA0 l'enregistrement du catalogue.";
+            }
+            r.drawText({x, stripeRect_.y + 92.f}, fit(r, l3, kF13, stripeRect_.w - 36.f), kF13, c3);
+        }
+    }
+
+    // 1.46.1 : Stripe a refuse les produits (le service le dit) : le bandeau sous les cartes ; vide : rien a dire.
+    [[nodiscard]] std::string catalogProblem() const {
+        if (!ws().hasShop() || !note_.empty() || !view().stripe.connected) return {};
+        const shop::CatalogState& k = view().catalog;
+        if (k.state != "refus" && k.state != "panne") return {};
+        return "Tes produits ne se voient pas dans Stripe : " + k.message;
     }
 
     void paintSale(const ui::PaintContext& ctx) {
@@ -574,6 +662,10 @@ private:
         draft_ = ws().hasShop() ? ws().shop() : shop::Settings{};
         model_->rows.clear();
         model_->refusal.clear();
+        model_->registry = ws().hasRegistry() ? &ws().registry() : nullptr;
+        // 1.46.1 : les montants suivent le registre (un reglage d'avant : suivi s'il avait le prix du registre) ; un
+        // changement : a enregistrer (<< Les montants suivent le registre >>).
+        following_ = ws().hasShop() && ws().hasRegistry() && shopServiceNote(ws()).empty() && shop::followRegistry(draft_, ws().registry(), ws().now()) > 0;
         if (ws().hasRegistry()) {
             const auto& reg = ws().registry();
             for (const auto& e : reg.editions) {
@@ -634,7 +726,7 @@ private:
                                    : std::string("Colle ta cl\xC3\xA9 secr\xC3\xA8te Stripe : l'Admin cr\xC3\xA9" "e le webhook chez Stripe et pose les deux secrets sur ton service "
                                                  "(jamais gard\xC3\xA9s sur ce PC)."));
         dashboard_->setEnabled(true);
-        save_->setEnabled(plus && ready && !bz && dirty_ && note_.empty());
+        save_->setEnabled(plus && ready && !bz && (dirty_ || following_) && note_.empty());
         save_->setTooltip(!plus ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.") : std::string("Envoie le catalogue et les deux r\xC3\xA9glages au service (PUT /admin/boutique)."));
         show(cancel_, dirty_);
         invalidateLayout();
@@ -675,6 +767,7 @@ private:
                             [this, alive, s](const OpResult& r) {
                                 if (!*alive || !r.ok) return;
                                 dirty_ = false;
+                                following_ = false;
                                 lastFetch_ = -1;
                                 fetch(false);
                             });
@@ -693,11 +786,13 @@ private:
     std::shared_ptr<CatalogueModel> model_;
     shop::Settings                  draft_;
     bool                            dirty_{false}, syncing_{false}, fetching_{false};
+    bool                            following_{false};   // 1.46.1 : le brouillon suit un registre change
     double                          lastFetch_{-1};
-    std::string                     problem_, note_;
+    std::string                     problem_, note_, catalogNote_;
     float                           x0_{0}, w_{0}, titleY_{0}, catY_{0}, fitW_{-1.f};
     bool                            fitPromo_{false};   // 1.47.0 : les colonnes faites pour un prix reduit
-    Rect                            noteRect_{}, stripeRect_{}, saleRect_{};
+    bool                            fitRed_{false};     // 1.46.1 : ... pour un montant reduit
+    Rect                            noteRect_{}, stripeRect_{}, saleRect_{}, catalogRect_{};
     core::ConnectionScope           links_;
 };
 

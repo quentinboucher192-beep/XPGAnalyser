@@ -351,7 +351,16 @@ int main(int argc, char** argv) {
         check(lea.serviceWatch(w).ok && w.derogationState == "active", "en cours");
         lea.adoptDerogation(w);
         check(lea.mayManageService(), "Lea gere de nouveau le service");
+        const std::string before = svc.url();
         check(svc.restart(3720), "l'horloge du service avancee d'1 h 02 (le meme etat)");
+        if (svc.url() != before) {   // le port repris par un autre entre-temps : la meme adresse pour les deux postes
+            online::Config cfg;
+            cfg.url = svc.url();
+            check(online::writeConfig(U(root / "plus"), cfg, nullptr) && online::writeConfig(U(root / "lea"), cfg, nullptr), "le service relance sur un autre port");
+            plus.reload();
+            lea.reload();
+            lea.adoptDerogation(w);
+        }
         const auto u = lea.useDerogation("deployer");
         check(!u.ok && has(u.message, "pris fin"), "finie : refusee par le service (" + u.message + ")");
         check(lea.serviceWatch(w).ok && w.derogationState == "expiree", "le regard : finie");

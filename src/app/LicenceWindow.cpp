@@ -175,6 +175,41 @@ std::vector<std::string> wrapText(gfx::IRenderer& r, const std::string& text, gf
     return out;
 }
 
+// 1.47.0 : la phrase du bandeau de la fenetre Licence (l'etat, ou le dernier geste) coupee a sa largeur - un message
+// long (<< La page de paiement ne s'ouvre pas : Stripe refuse... >>) passe a la ligne DANS le bandeau, qui grandit, au
+// lieu d'etre coupe a droite et de deborder sur le texte du dessous ; 3 lignes au plus (la derniere finit par ...).
+std::vector<std::string> bandLines(const std::string& text, gfx::FontId f, float w) {
+    std::vector<std::string> out;
+    std::string line, word;
+    const auto flush = [&] {
+        if (word.empty()) return;
+        const std::string tryLine = line.empty() ? word : line + " " + word;
+        if (!line.empty() && ui::measureWidth(tryLine, f) > w) {
+            out.push_back(line);
+            line = word;
+        } else {
+            line = tryLine;
+        }
+        word.clear();
+    };
+    for (char c : text) {
+        if (c == ' ') flush();
+        else if (c == '\n') {
+            flush();
+            if (!line.empty()) out.push_back(line);
+            line.clear();
+        } else word += c;
+    }
+    flush();
+    if (!line.empty()) out.push_back(line);
+    if (out.empty()) out.emplace_back();
+    if (out.size() > 3) {
+        out.resize(3);
+        out[2] += " \xE2\x80\xA6";
+    }
+    return out;
+}
+
 // 1.38.0 : la reduction en cours d'une edition (son prix reduit et sa fin) ; vide : aucune, ou finie.
 std::string promoOf(const licensing::RegistryEditionView& e) {
     if (e.promoPrice.empty() || e.promoUntil <= static_cast<std::int64_t>(std::time(nullptr))) return {};
@@ -596,6 +631,7 @@ public:
     void say(std::string text, int tone) {
         flash_ = std::move(text);
         flashTone_ = tone;
+        invalidateLayout();   // 1.47.0 : le bandeau prend la hauteur de sa phrase
         invalidate();
     }
     // 1.37.0 : Mon profil enregistre - la demande reprend ce qui y manque.
@@ -650,6 +686,8 @@ private:
     int               flashTone_{0};
     gfx::Rect         panel_{}, closeBox_{};
     float             headerY_{0}, messageY_{0}, pageTop_{0};
+    float             bandH_{28.f};   // 1.47.0 : la hauteur du bandeau (une phrase longue : 2 ou 3 lignes)
+    [[nodiscard]] std::string bandText() const;
     core::ConnectionScope links_;
 };
 
@@ -969,6 +1007,7 @@ void LicenceBody::poll() {
 void LicenceBody::reload() {
     licence::refresh();
     state_ = licensing::getLicenseState();
+    invalidateLayout();   // 1.47.0 : la phrase de l'etat change peut-etre la hauteur du bandeau
     const auto& st = state_;
     const bool configured = licensing::isConfigured();
     const auto reg = licensing::getRegistry();
@@ -1355,7 +1394,11 @@ void LicenceBody::onLayout() {
         headerY_ = 0.f;
         messageY_ = crumbsY + 38.f;
     }
-    pageTop_ = messageY_ + 36.f;
+    // 1.47.0 : le bandeau a la hauteur de sa phrase (coupee a sa largeur), la page juste dessous
+    const float lh = ui::lineHeight(kSmall);
+    const std::size_t n = bandLines(bandText(), kSmall, W - 16.f).size();
+    bandH_ = n <= 1 ? 28.f : std::ceil(10.f + lh * static_cast<float>(n));
+    pageTop_ = messageY_ + bandH_ + 8.f;
     const float bottom = panel_.bottom() - 52.f;
     const gfx::Rect page{x, pageTop_, W, std::max(60.f, bottom - pageTop_ - 6.f)};
     home_->setBounds(page);
@@ -1427,17 +1470,26 @@ void LicenceBody::onPaint(const ui::PaintContext& ctx) {
         }
     }
     (void)cw;
-    // La phrase de l'etat (ou le dernier geste).
-    const std::string line = flash_.empty() ? licence::stateText(st) : flash_;
+    // La phrase de l'etat (ou le dernier geste). 1.47.0 : coupee a la largeur du bandeau, qui a sa hauteur (onLayout).
+    const std::string line = bandText();
     const int tone = flash_.empty() ? (st.status == S::Valid ? 1 : st.status == S::NotConfigured ? 0
                                        : (st.status == S::Grace || st.status == S::Absent || st.status == S::Evaluation || st.status == S::NoFloatingSeat) ? 2 : 3)
                                     : flashTone_;
     const gfx::Color lineColor = tone == 1 ? good : tone == 2 ? warn : tone == 3 ? bad : c.text;
-    const gfx::Rect band{x, messageY_, W, 28.f};
+    const gfx::Rect band{x, messageY_, W, bandH_};
     r.fillRect(band, c.headerBg);
     r.fillRect({band.x, band.y, 3.f, band.h}, lineColor);
-    r.drawText({band.x + 10.f, band.y + (band.h - r.lineHeight(kSmall)) * 0.5f}, fit(r, line, kSmall, band.w - 16.f), kSmall, c.text);
+    const auto lines = bandLines(line, kSmall, band.w - 16.f);
+    const float lh = r.lineHeight(kSmall);
+    float ty = lines.size() <= 1 ? band.y + (band.h - lh) * 0.5f : band.y + 5.f;
+    for (const auto& l : lines) {
+        if (ty + lh > band.bottom() + 1.f) break;   // la hauteur d'avant (une mise en page en retard d'une image)
+        r.drawText({band.x + 10.f, ty}, fit(r, l, kSmall, band.w - 16.f), kSmall, c.text);
+        ty += lh;
+    }
 }
+
+std::string LicenceBody::bandText() const { return flash_.empty() ? licence::stateText(state_) : flash_; }
 
 ui::EventResult LicenceBody::onEvent(const ui::InputEvent& ev) {
     if (const auto* d = std::get_if<ui::MouseDown>(&ev); d && closeBox_.contains(d->pos)) {
