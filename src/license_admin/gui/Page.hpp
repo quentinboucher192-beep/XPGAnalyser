@@ -18,8 +18,8 @@
 //      un message, un journal, le presse-papiers (sauf le code de secours et le
 //      code d'activation, copies a la demande explicite de l'utilisateur), vide
 //      des que l'operation est lancee ;
-//    - une fonctionnalite qui n'existe pas (la boutique, les commandes : elles
-//      demandent un paiement) n'est jamais simulee : la page le dit ;
+//    - une fonctionnalite qui n'existe pas n'est jamais simulee : la page le dit
+//      (1.46.0 : la boutique et les commandes existent - Stripe, PageShop.cpp) ;
 //    - les textes en francais (UTF-8 en \xHH dans le C++), tutoiement.
 // =============================================================================
 #pragma once
@@ -93,8 +93,8 @@ using PagePtr = std::unique_ptr<Page>;
 //  "activations"    Activations                              PageActivations.cpp
 //  "demandes"       Demandes en ligne (le service, 1.35)     PageRequests.cpp
 //  "flottantes"     Licences flottantes (le service, 1.35)   PageFloating.cpp
-//  "boutique"       Boutique (pas encore : un paiement)      PageOnline.cpp
-//  "commandes"      Commandes (pas encore : un paiement)     PageOnline.cpp
+//  "boutique"       Boutique (1.46.0 : Stripe, le catalogue) PageShop.cpp
+//  "commandes"      Commandes (1.46.0 : livrer, rembourser)  PageShop.cpp
 //  "revocations"    Revocations                              PageRevocations.cpp
 //  "service"        Service en ligne (1.35)                  PageService.cpp
 //  "historique"     Historique                               PageHistory.cpp
@@ -116,7 +116,8 @@ PagePtr makeOptionsPage(ShellHost host);   // 1.42.0
 PagePtr makeActivationsPage(ShellHost host);
 PagePtr makeRequestsPage(ShellHost host);
 PagePtr makeFloatingPage(ShellHost host);
-PagePtr makeOnlinePage(ShellHost host, const std::string& which);   // "boutique", "commandes"
+PagePtr makeShopPage(ShellHost host);      // 1.46.0 : "boutique"
+PagePtr makeOrdersPage(ShellHost host);    // 1.46.0 : "commandes"
 PagePtr makeRevocationsPage(ShellHost host);
 PagePtr makeServicePage(ShellHost host);
 PagePtr makeHistoryPage(ShellHost host);
@@ -168,6 +169,13 @@ bool refreshOnlineLicences(const ShellHost& host, std::function<void(const OpRes
 // l'Admin lui-meme. `outdated` : la pastille du haut (<< a mettre a jour >>), le bandeau du tableau de bord et de la page
 // Service en ligne, avec << Deployer le service >>.
 [[nodiscard]] deployer::VersionCheck serviceVersion(const Workspace& w);
+// 1.46.0 : LA BOUTIQUE (PageShop.cpp, docs/BOUTIQUE.md) - le dialogue << Brancher Stripe... >> (la cle secrete dans un champ
+// masque, jamais gardee ; le webhook cree chez Stripe, les deux secrets poses sur le Worker par le kit) ; `done` : branche.
+menu::MenuPtr makeStripeDialog(ShellHost host, std::function<void()> done = {});
+// La phrase << Ton service en ligne est en 1.44.0 : deploie la 1.46.0 pour la boutique. >> quand l'etat lu dit un service
+// plus ancien que shop::kServiceRequired (le reste de l'Admin marche avec lui) ; vide : il sait la boutique, ou pas lu.
+[[nodiscard]] std::string shopServiceNote(const Workspace& w);
+
 // 1.45.0 : LE DIALOGUE << Deployer le service >> (DeployDialog.cpp) : il lance tout de suite le kit installe
 // (deployer::deploy, par runSlow), montre sa sortie en direct (le journal qui defile, l'etape, Annuler), puis le
 // resultat : en ligne -> l'etat relu (/v1/etat) : << Service en ligne : version 1.44.0 >> ; sinon la raison en francais

@@ -235,6 +235,128 @@ lic::TrustedKey trustedOf(const lic::SigningKey& k) {
     return t;
 }
 
+// =============================================================================
+//  1.46.0 : << ces scrollbars ne bougent pas avec la souris >> (Demander ma licence) - la barre de la partie gauche (le
+//  formulaire) etait seulement dessinee : elle suivait la molette mais ne se prenait pas, et un clic dans sa gouttiere ne
+//  faisait rien. Maintenant (ui::ScrollArea) : le pouce se tire, en proportion, la souris tenue (hors de la fenetre),
+//  la gouttiere avance d'une page, la molette fait toujours defiler la partie gauche (pas la liste de l'offre).
+// =============================================================================
+// Les gouttieres dessinees (ui::paintScrollBar : un rectangle arrondi de rayon 4, la couleur des barres au quart).
+struct TrackRecorder final : gfx::IRenderer {
+    gfx::Color             track{};
+    std::vector<gfx::Rect> tracks;
+    void beginFrame(gfx::Color) override { tracks.clear(); }
+    void endFrame() override {}
+    void pushClip(const gfx::Rect&) override {}
+    void popClip() override {}
+    void fillRect(const gfx::Rect&, gfx::Color) override {}
+    void strokeRect(const gfx::Rect&, gfx::Color, float) override {}
+    void fillRoundedRect(const gfx::Rect& r, gfx::Color c, float radius) override {
+        if (radius == 4.f && c.r == track.r && c.g == track.g && c.b == track.b && c.a == track.a) tracks.push_back(r);
+    }
+    void line(gfx::Point, gfx::Point, gfx::Color, float) override {}
+    void drawText(gfx::Point, std::string_view, gfx::FontId, gfx::Color) override {}
+    void drawTexture(const gfx::Rect&, gfx::TextureId, gfx::Color) override {}
+    gfx::TextMetrics measure(std::string_view t, gfx::FontId f) const override {
+        return {static_cast<float>(t.size()) * f.v * 0.5f, static_cast<float>(f.v), 0.8f * f.v, 0.2f * f.v};
+    }
+    float lineHeight(gfx::FontId f) const override { return static_cast<float>(f.v); }
+    gfx::Size surfaceSize() const override { return {1302.f, 640.f}; }
+    float dpiScale() const override { return 1.f; }
+    std::size_t fitCharacters(std::string_view t, gfx::FontId f, float w) const override {
+        return std::min(t.size(), static_cast<std::size_t>(std::max(0.f, w / (f.v * 0.5f))));
+    }
+};
+
+// La fenetre Licence ouverte sur Demander ma licence (un service suppose), dans une fenetre basse (1302 x 640 : la
+// partie gauche y defile) ; `mm` : sa pile de menus.
+void leftBarOfRequest(menu::MenuManager& mm) {
+    std::printf("-- 1.46.0 : la barre de la partie gauche de Demander ma licence se tire\n");
+    const ui::Theme theme = ui::Theme::dark();
+    const menu::FrameContext fc{1.0 / 30.0, 1.0, &theme, {1302.f, 640.f}, 1.f};
+    TrackRecorder rec;
+    rec.track = theme.color.scrollbar.withAlpha(static_cast<std::uint8_t>(theme.color.scrollbar.a / 4));
+    const auto frame = [&] {
+        mm.applyPending();
+        mm.Update(fc);
+        mm.Render(rec, fc);
+    };
+    const auto send = [&](const ui::InputEvent& e) { (void)mm.HandleEvent(e); };
+    frame();
+    frame();
+    ui::Widget* root = mm.top() ? mm.top()->widgetRoot() : nullptr;
+    ui::Widget* panel = root ? root->findById("licence.demande") : nullptr;
+    ui::Widget* field = root ? root->findById("licence.demande.client") : nullptr;   // dans la partie gauche : il suit le defilement
+    auto* list = root ? dynamic_cast<ui::TableView*>(root->findById("licence.demande.offre.liste")) : nullptr;
+    check(panel && field && list && panel->visible() && field->visible() && list->visible(), "Demander ma licence : le formulaire a gauche, l'offre a droite");
+    if (!panel || !field || !list) return;
+    // la barre de la partie gauche : entre le formulaire et la liste de l'offre
+    gfx::Rect bar{};
+    for (const auto& t : rec.tracks)
+        if (t.h > t.w && t.x >= field->bounds().right() - 1.f && t.right() <= list->bounds().x + 1.f) bar = t;
+    check(bar.h > 40.f, "1302 x 640 : la partie gauche est plus haute que la fenetre - sa barre, entre le formulaire et l'offre");
+    if (bar.h <= 40.f) return;
+    const float ph = panel->bounds().h;
+    const auto at = [&] { return field->bounds().y; };
+    const float y0 = at();
+    // tire le pouce (en haut : rien n'a defile) de 15 px, puis de 30 px
+    const gfx::Point th{bar.x + bar.w * 0.5f, bar.y + 4.f};
+    send(ui::MouseMove{th, {}, {}});
+    send(ui::MouseDown{th, ui::MouseButton::Left, 1, {}});
+    check(panel->holdsMouse(), "le pouce se prend (la partie gauche tient la souris)");
+    send(ui::MouseMove{{th.x, th.y + 15.f}, {}, {}});
+    frame();
+    const float d1 = y0 - at();
+    send(ui::MouseMove{{th.x, th.y + 30.f}, {}, {}});
+    frame();
+    const float d2 = y0 - at();
+    send(ui::MouseMove{{th.x + 700.f, th.y + 3000.f}, {}, {}});   // hors de la fenetre : la souris tenue suit
+    frame();
+    const float dmax = y0 - at();
+    send(ui::MouseUp{{th.x + 700.f, th.y + 3000.f}, ui::MouseButton::Left, {}});
+    frame();
+    const float thumb = std::min(bar.h, std::max(24.f, bar.h * ph / (dmax + ph)));
+    const float want = 15.f * dmax / std::max(1.f, bar.h - thumb);
+    check(d1 > 1.f && std::abs(d2 - 2.f * d1) <= 1.5f && std::abs(d1 - want) <= 1.5f && dmax > d2 && !panel->holdsMouse(),
+          "tire de 15 px : le formulaire monte de " + std::to_string(static_cast<int>(d1)) + " (attendu " + std::to_string(static_cast<int>(want)) +
+              "), de 30 px : " + std::to_string(static_cast<int>(d2)) + " ; hors de la fenetre : jusqu'au bout (" + std::to_string(static_cast<int>(dmax)) +
+              ") ; relache, la souris rendue");
+    // remonter (le pouce, tire vers le haut), puis un clic dans la gouttiere sous le pouce : une page
+    {
+        const gfx::Point low{bar.x + bar.w * 0.5f, bar.bottom() - 6.f};
+        send(ui::MouseMove{low, {}, {}});
+        send(ui::MouseDown{low, ui::MouseButton::Left, 1, {}});
+        send(ui::MouseMove{{low.x, low.y - 4000.f}, {}, {}});
+        send(ui::MouseUp{{low.x, low.y - 4000.f}, ui::MouseButton::Left, {}});
+        frame();
+        check(std::abs(at() - y0) <= 0.5f, "tire vers le haut : le formulaire revient en haut");
+        send(ui::MouseDown{low, ui::MouseButton::Left, 1, {}});
+        send(ui::MouseUp{low, ui::MouseButton::Left, {}});
+        frame();
+        const float page = std::min(dmax, ph * 0.9f);
+        check(std::abs((y0 - at()) - page) <= 1.f, "un clic dans la gouttiere : une page (" + std::to_string(static_cast<int>(y0 - at())) + " sur " +
+                                                       std::to_string(static_cast<int>(page)) + ")");
+    }
+    // la molette : sur le formulaire, il defile ; sur la liste de l'offre, c'est elle qui defile
+    {
+        const float before = at(), listBefore = list->scrollOffset();
+        const gfx::Point left{panel->bounds().x + 30.f, panel->bounds().y + panel->bounds().h * 0.5f};
+        send(ui::MouseWheel{left, 0.f, 1.f, {}});
+        frame();
+        const float afterWheel = at();
+        const gfx::Rect lb = list->bounds();
+        send(ui::MouseWheel{{lb.x + 30.f, lb.y + lb.h * 0.6f}, 0.f, -1.f, {}});
+        frame();
+        check(afterWheel > before + 1.f && std::abs(at() - afterWheel) <= 0.5f && list->scrollOffset() > listBefore,
+              "la molette : sur le formulaire, il defile ; sur la liste de l'offre, la liste (pas le formulaire)");
+        // rendre la fenetre comme elle etait (en haut, la liste aussi)
+        send(ui::MouseWheel{left, 0.f, 200.f, {}});
+        list->setScrollOffset(0.f);
+        frame();
+        check(std::abs(at() - y0) <= 0.5f, "la molette vers le haut : le formulaire revient en haut");
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -930,6 +1052,8 @@ int main(int argc, char** argv) {
                 mm.Render(sp, fc);
                 check(shop && shop->imageWidth() == 320.f && sp.saw("Capture 4/4 : la fin") && sp.saw("Les licences de ce PC"),
                       "la boutique : la pr\xC3\xA9" "c\xC3\xA9" "dente (la quatri\xC3\xA8me), et les licences de ce PC en t\xC3\xAAte");
+                leftBarOfRequest(mm);   // 1.46.0 : la barre de la partie gauche se tire (une fenetre basse)
+                frame();
                 ls::setAddressForTests(licensing::service::Address{});
             }
             // ---- 1.46.0 : LE FIL D'ARIANE (plus d'onglets), L'ACCUEIL, MON PROFIL A PART, CHANGER DE FONCTIONNALITE EN GRAND (LES
@@ -991,7 +1115,7 @@ int main(int argc, char** argv) {
                     {L::kTabSettings, "dialog.licence.parametres"},  {L::kTabRequest, "licence.demande"},
                     {L::kTabOptions, "licence.options"},              {L::kTabPurchases, "licence.achats"}};
                 bool each = true;
-                std::string bad;
+                std::string wrong;
                 for (const auto& [tab, id] : pageIds) {
                     app::showLicenceWindow(mm, tab);
                     frame();
@@ -1003,10 +1127,10 @@ int main(int argc, char** argv) {
                     }
                     if (!ok) {
                         each = false;
-                        bad += " " + std::to_string(tab);
+                        wrong += " " + std::to_string(tab);
                     }
                 }
-                check(each, "chaque num\xC3\xA9ro (kTab*) ouvre sa rubrique seule, << Licence > sa rubrique >> en haut, plus haute qu'un onglet d'avant" + bad);
+                check(each, "chaque num\xC3\xA9ro (kTab*) ouvre sa rubrique seule, << Licence > sa rubrique >> en haut, plus haute qu'un onglet d'avant" + wrong);
 
                 // -- le fil : << Licence >> revient a l'accueil ; une ligne de l'accueil ouvre sa rubrique
                 app::showLicenceWindow(mm, L::kTabRequest);
@@ -1113,22 +1237,22 @@ int main(int argc, char** argv) {
                     if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Atelier");
                     if (auto* f = field("licence.profil.nom")) f->setText("Camille Essai");
                     if (auto* f = field("licence.profil.courriel")) f->setText("camille.essai@exemple.fr");
-                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    if (auto* save = button("licence.profil.enregistrer")) save->clicked->emit();
                     frame();
                     check(opened && customer && contact && customer->text() == "Client d'essai Atelier" && contact->text() == "Camille Essai" &&
                               has(L::loadProfile().email, "camille.essai"),
                           "Modifier mon profil... : sa fen\xC3\xAAtre ; enregistr\xC3\xA9, il remplit la demande (" + (customer ? customer->text() : std::string()) + ")");
                     if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Bis");
-                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    if (auto* save = button("licence.profil.enregistrer")) save->clicked->emit();
                     frame();
                     const bool followed = customer && customer->text() == "Client d'essai Bis";
                     if (customer) customer->setText("Ma soci\xC3\xA9t\xC3\xA9 d'essai");
                     if (auto* f = field("licence.profil.societe")) f->setText("Client d'essai Ter");
-                    if (auto* b = button("licence.profil.enregistrer")) b->clicked->emit();
+                    if (auto* save = button("licence.profil.enregistrer")) save->clicked->emit();
                     frame();
                     check(followed && customer && customer->text() == "Ma soci\xC3\xA9t\xC3\xA9 d'essai",
                           "le profil modifi\xC3\xA9 suit dans la demande ; ce que tu y as tap\xC3\xA9 toi-m\xC3\xAAme reste");
-                    if (auto* b = button("dialog.profil.fermer")) b->clicked->emit();
+                    if (auto* shut = button("dialog.profil.fermer")) shut->clicked->emit();
                     frame();
                     check(mm.depth() == 1 && !app::profileWindowOpen(), "Fermer : Mon profil se ferme");
                     setEnvVar("XPG_DOSSIER_COMMUN", {});
@@ -1142,14 +1266,14 @@ int main(int argc, char** argv) {
                 app::showLicenceWindow(mm, L::kTabFeatures);
                 frame();
                 auto* table = dynamic_cast<ui::TableView*>(licRoot->findById("dialog.licence.fonctionnalites"));
-                std::size_t row = static_cast<std::size_t>(-1), rows = 0;
+                std::size_t row = static_cast<std::size_t>(-1), featureRows = 0;
                 if (table && table->model()) {
-                    rows = table->model()->rowCount();
-                    for (std::size_t r = 0; r < rows; ++r)
+                    featureRows = table->model()->rowCount();
+                    for (std::size_t r = 0; r < featureRows; ++r)
                         if (table->model()->cellText(r, 1) == "hmi_editor") row = r;
                 }
-                const bool struck = row < rows && table->model()->cellStyle(static_cast<ui::RowIndex>(row), 0).locked;
-                if (row < rows) table->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
+                const bool struck = row < featureRows && table->model()->cellStyle(static_cast<ui::RowIndex>(row), 0).locked;
+                if (row < featureRows) table->selectModelRows({static_cast<ui::RowIndex>(row)}, true);
                 frame();
                 auto* cap = dynamic_cast<L::CaptureView*>(licRoot->findById("dialog.licence.fonctionnalites.panneau.apercu.capture"));
                 check(struck && cap && cap->hasImage() && cap->imageWidth() == 640.f && cap->bounds().w > 0.f,
@@ -1161,21 +1285,21 @@ int main(int argc, char** argv) {
                 frame();
                 auto* zoom = dynamic_cast<L::CaptureZoomBody*>(rootOf());
                 check(mm.depth() == 2 && zoom && zoom->feature() == "hmi_editor" && zoom->locked() && zoom->lockedText() == "pas dans ta licence" &&
-                          zoom->shotCount() == 2 && zoom->image().imageWidth() == 640.f && zoom->featureCount() == rows &&
+                          zoom->shotCount() == 2 && zoom->image().imageWidth() == 640.f && zoom->featureCount() == featureRows &&
                           zoom->featureIndex() == static_cast<int>(row),
                       "en grand : la barr\xC3\xA9" "e, ses deux captures, << pas dans ta licence >>, et toute la liste du tableau (" +
                           std::to_string(zoom ? zoom->featureCount() : 0) + ")");
                 if (zoom) {
                     ImageRecorder zr;
                     mm.Render(zr, fc);
-                    check(zr.saw("pas dans ta licence") && zr.saw("Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(rows)) &&
-                              zoom->featureList() && zoom->featureList()->visible() && zoom->featureList()->items().size() == rows &&
+                    check(zr.saw("pas dans ta licence") && zr.saw("Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(featureRows)) &&
+                              zoom->featureList() && zoom->featureList()->visible() && zoom->featureList()->items().size() == featureRows &&
                               zoom->featureList()->selectedIndex() == static_cast<int>(row),
-                          "en grand : la liste des fonctionnalit\xC3\xA9s, << Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(rows) +
+                          "en grand : la liste des fonctionnalit\xC3\xA9s, << Fonctionnalit\xC3\xA9 " + std::to_string(row + 1) + "/" + std::to_string(featureRows) +
                               " >>, la marque << pas dans ta licence >>");
                     (void)mm.HandleEvent(ui::KeyDown{ui::Key::PageDown, {}, false});
                     frame();
-                    const bool down = zoom->featureIndex() == static_cast<int>((row + 1) % rows);
+                    const bool down = zoom->featureIndex() == static_cast<int>((row + 1) % featureRows);
                     (void)mm.HandleEvent(ui::KeyDown{ui::Key::PageUp, {}, false});
                     frame();
                     check(down && zoom->feature() == "hmi_editor" && mm.depth() == 2, "Page suivante, Page pr\xC3\xA9" "c\xC3\xA9" "dente : la fonctionnalit\xC3\xA9 d'\xC3\xA0 c\xC3\xB4t\xC3\xA9, sans fermer");
@@ -1187,7 +1311,7 @@ int main(int argc, char** argv) {
                     const int at = zoom->featureIndex();
                     if (auto* btn = button("dialog.capture.fonction-precedente")) btn->clicked->emit();
                     frame();
-                    const bool prev = zoom->featureIndex() == static_cast<int>((static_cast<std::size_t>(at) + rows - 1) % rows);
+                    const bool prev = zoom->featureIndex() == static_cast<int>((static_cast<std::size_t>(at) + featureRows - 1) % featureRows);
                     if (auto* btn = button("dialog.capture.fonction-suivante")) btn->clicked->emit();
                     if (zoom->featureList()) zoom->featureList()->pick(static_cast<int>(row));
                     frame();
@@ -1222,7 +1346,7 @@ int main(int argc, char** argv) {
                     }
                     frame();
                     auto* z2 = dynamic_cast<L::CaptureZoomBody*>(rootOf());
-                    check(z2 && z2->feature() == "ai_generation" && z2->locked() && z2->lockedText() == "pas dans PERSONAL" && z2->featureCount() == rows,
+                    check(z2 && z2->feature() == "ai_generation" && z2->locked() && z2->lockedText() == "pas dans PERSONAL" && z2->featureCount() == featureRows,
                           "en grand : << pas dans PERSONAL >>, toute l'offre \xC3\xA0 c\xC3\xB4t\xC3\xA9 (" + (z2 ? z2->lockedText() : std::string()) + ")");
                     if (z2) (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
                     frame();

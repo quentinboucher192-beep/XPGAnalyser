@@ -1,0 +1,19 @@
+# Derived data type.
+name = ST_GC_Debug
+version = 0.26
+# checksum is recomputed by Control Expert on import; not stored.
+
+# name ; type ; address ; scope ; init ; comment ; attributes ; element comments
+CurrentCycle ; DINT ;  ; Member ;  ;  ;  ; 
+ActiveStepCount ; INT ;  ; Member ;  ;  ;  ; 
+LastTransitionFiredId ; INT ;  ; Member ;  ;  ;  ; 
+TotalTransitionsFired ; DINT ;  ; Member ;  ;  ;  ; 
+Mode ; INT ;  ; Member ;  ;  ;  ; 
+Phase ; INT ;  ; Member ;  ;  ;  ; 
+ConflictDetected ; BOOL ;  ; Member ;  ;  ;  ; 
+WatchdogDetected ; BOOL ;  ; Member ;  ;  ;  ; 
+StepFocus ; ST_GC_DebugStepFocus ;  ; Member ;  ;  ;  ; 
+NoActiveStepFault ; BOOL ;  ; Member ;  ;  ;  ; 
+ConfigFault ; BOOL ;  ; Member ;  ;  ;  ; 
+HistSteps ; ARRAY[0..7] OF ST_DebugLine4 ;  ; Member ;  ;  ;  ; 
+HistActions ; ARRAY[0..7] OF ST_DebugLine64 ;  ; Member ;  ;  ;  ; 

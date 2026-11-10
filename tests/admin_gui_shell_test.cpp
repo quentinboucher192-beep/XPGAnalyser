@@ -87,9 +87,10 @@ int main(int argc, char** argv) {
         }
         int online = 0;
         for (const auto& e : entries) online += e.online ? 1 : 0;
-        check(online == 2 && !gui::Shell::entry("flottantes")->online && gui::Shell::entry("boutique")->online && gui::Shell::entry("commandes")->online,
-              "deux entrees grisees (la vente en ligne) ; Licences flottantes est une vraie page");
-        check(has(t, "VENTE EN LIGNE") && !has(t, "GitHub"), "le menu dit << vente en ligne >> ; plus aucun GitHub");
+        // 1.46.0 : la boutique et les commandes sont de vraies pages (Stripe) : plus aucune entree grisee.
+        check(online == 0 && !gui::Shell::entry("flottantes")->online && !gui::Shell::entry("boutique")->online && !gui::Shell::entry("commandes")->online,
+              "aucune entree grisee : la boutique et les commandes sont de vraies pages (1.46.0)");
+        check(has(t, "VENTE EN LIGNE") && !has(t, "PAS ENCORE") && !has(t, "GitHub"), "le menu dit << vente en ligne >> (plus << pas encore >>) ; plus aucun GitHub");
         check(gui::Shell::entry("service") && !gui::Shell::entry("github"), "la page << service >> ; plus de page << github >>");
         check(rig.shell->currentPageId() == "tableau", "on ouvre sur le tableau de bord");
         check(has(t, "Pas de cl\xC3\xA9") && rig.shell->keyStatusTone() == gui::Tone::Error, "<< Pas de cle >> en rouge");
@@ -166,28 +167,16 @@ int main(int argc, char** argv) {
           "une page inconnue : on reste, et c'est dit");
 
     // ------------------------------------------------------------------------------------------------
-    std::printf("-- la vente en ligne (pas encore) et les licences flottantes (une vraie page)\n");
+    std::printf("-- la vente en ligne (1.46.0 : de vraies pages) et les licences flottantes (une vraie page)\n");
     {
-        const struct {
-            const char* id;
-            const char* word;
-            const char* go;
-            const char* to;
-        } pages[] = {{"boutique", "prestataire", "en-ligne.boutique.aller", "licences"},
-                     {"commandes", "aucune commande", "en-ligne.commandes.aller", "historique"}};
-        for (const auto& p : pages) {
-            rig.shell->navigate(p.id);
-            const std::string t = rig.paint();
-            check(has(t, "Pas encore fait") && has(t, "paiement en ligne"), std::string(p.id) + " : << pas encore >> (un paiement)");
-            check(has(t, "Rien n'y est simul\xC3\xA9"), std::string(p.id) + " : rien de simule");
-            check(has(t, "Ce que fera cette page") && has(t, "Pourquoi ce n'est pas encore fait"), std::string(p.id) + " : ce qu'elle fera, pourquoi");
-            check(has(t, p.word), std::string(p.id) + " : " + p.word);
-            check(rig.clickId(p.go) && rig.shell->currentPageId() == p.to, std::string(p.id) + " : En attendant -> " + p.to);
-            // Etroite : rien ne deborde, la page se lit encore.
-            rig.shell->navigate(p.id);
-            const std::string n = rig.paint(1100.f, 700.f);
-            check(has(n, "Pas encore fait"), std::string(p.id) + " a 1100 x 700");
-        }
+        // 1.46.0 : la boutique et les commandes (PageShop.cpp ; le detail : admin_gui_boutique_test) - sans service, elles le disent.
+        rig.shell->navigate("boutique");
+        std::string b = rig.paint();
+        check(has(b, "Boutique") && has(b, "Stripe") && has(b, "Catalogue") && !has(b, "Pas encore fait"), "boutique : une vraie page (Stripe, le catalogue)");
+        check(has(b, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9"), "boutique : sans service, c'est dit");
+        rig.shell->navigate("commandes");
+        b = rig.paint(1100.f, 700.f);
+        check(has(b, "Commandes") && has(b, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9") && !has(b, "Pas encore fait"), "commandes : une vraie page ; sans service, c'est dit");
         rig.shell->navigate("flottantes");
         std::string t = rig.paint();
         check(has(t, "EN M\xC3\x8AME TEMPS") && has(t, "pas de licence flottante sans lui") && !has(t, "Pas encore fait"),

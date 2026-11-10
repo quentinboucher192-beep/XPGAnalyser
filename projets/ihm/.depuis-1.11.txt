@@ -1,0 +1,6 @@
+# IHM Studio - les projets de la 1.11 recopies ici le 2026-11-10 07:39
+# (les originaux sont restes dans le dossier parent ; ce fichier dit que c'est fait)
+copie : /home/user/XPGAnalyser/projets/project -> /home/user/XPGAnalyser/projets/ihm/project
+IHM autonome : project
+2 variable(s) IHM créée(s) depuis l'automate (dossier Automate)
+5 type(s) IHM : ST_GC_Transition, ST_GC_Step, ST_GC_Action, BUILDING, DFB_SYS_CLOCK

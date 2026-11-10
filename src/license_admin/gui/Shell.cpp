@@ -186,7 +186,7 @@ void drawKey(gfx::IRenderer& r, const Rect& box, Color c) {
 const char* sectionBefore(const std::string& id) {
     if (id == "tableau") return "PILOTAGE";
     if (id == "editions") return "CATALOGUE";
-    if (id == "boutique") return "VENTE EN LIGNE \xC2\xB7 PAS ENCORE";
+    if (id == "boutique") return "VENTE EN LIGNE";   // 1.46.0 : la boutique et les commandes (Stripe)
     if (id == "revocations") return "S\xC3\x89" "CURIT\xC3\x89";
     return nullptr;
 }
@@ -232,8 +232,9 @@ protected:
         // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre. 1.44.0 : les
         // demandes d'admin (Administrateurs) et les alertes pas encore vues (Journal des admins), ambre aussi.
         const std::string eid = e_.id;
-        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal";
+        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal" || eid == "commandes";   // 1.46.0 : a livrer
         const int  count = eid == "demandes" ? shell_.pendingRequests()
+                           : eid == "commandes" ? shell_.ordersToDeliver()
                            : eid == "admins" ? shell_.pendingAdminRequests()
                            : eid == "journal" ? shell_.unseenAlerts()
                                               : count_;
@@ -898,8 +899,8 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"options", "Options", ui::Icon::Star, false},                    // 1.42.0
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
-        {"boutique", "Boutique", ui::Icon::Globe, true},                  // pas encore : un paiement en ligne
-        {"commandes", "Commandes", ui::Icon::Mail, true},
+        {"boutique", "Boutique", ui::Icon::Globe, false},                 // 1.46.0 : Stripe, le catalogue (PageShop.cpp)
+        {"commandes", "Commandes", ui::Icon::Mail, false},                // 1.46.0 : livrer, rembourser
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
         // 1.44.0 : plusieurs admins (la maquette 1.43.0).
         {"admins", "Administrateurs", ui::Icon::User, false},
@@ -1008,7 +1009,8 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "activations") p = makeActivationsPage(h);
     else if (id == "demandes") p = makeRequestsPage(h);
     else if (id == "flottantes") p = makeFloatingPage(h);
-    else if (id == "boutique" || id == "commandes") p = makeOnlinePage(h, id);
+    else if (id == "boutique") p = makeShopPage(h);       // 1.46.0
+    else if (id == "commandes") p = makeOrdersPage(h);
     else if (id == "revocations") p = makeRevocationsPage(h);
     else if (id == "service") p = makeServicePage(h);
     else if (id == "historique") p = makeHistoryPage(h);
@@ -1343,6 +1345,13 @@ bool Shell::autoWatch() {
                      if (knownRequests_ >= 0 && st->requests != knownRequests_) wantRequests_ = true;
                      knownActivity_ = st->activity;
                      knownRequests_ = st->requests;
+                     // 1.46.0 : les commandes (un service 1.46 : le compteur et celles a livrer)
+                     if (st->orders >= 0) {
+                         if (st->orders != knownOrders_) wantOrders_ = true;
+                         knownOrders_ = st->orders;
+                         toDeliver_ = static_cast<int>(std::max<std::int64_t>(0, st->toDeliver));
+                         ws_->setOrdersToDeliver(toDeliver_);
+                     }
                  }))
         return false;
     quietSlow_ = true;
@@ -1545,6 +1554,13 @@ void Shell::Update(const menu::FrameContext& fc) {
         } else if (free && wantLicences_) {
             wantLicences_ = false;
             (void)autoRefreshLicences();
+        } else if (free && wantOrders_) {
+            wantOrders_ = false;   // 1.46.0 : les commandes ont bouge
+            (void)autoOrders();
+        } else if (free && (wantDelivery_ || (toDeliver_ > 0 && nextDelivery_ >= 0 && now >= nextDelivery_))) {
+            wantDelivery_ = false;   // 1.46.0 : livrer les commandes payees (ou reprendre)
+            nextDelivery_ = -1;
+            (void)autoDeliver();
         } else if (free && wantRequests_) {
             wantRequests_ = false;
             nextAutoFetch_ = now + (watchSupported_ ? kFetchWhenWatched : kAutoFetchPeriod);

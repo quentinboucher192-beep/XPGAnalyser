@@ -12,8 +12,12 @@
 //     faite) ; restaurer une sauvegarde complete dans un poste neuf ;
 //   - Service en ligne : une adresse de secours ajoutee, enregistree (le registre
 //     signe de nouveau).
+//  1.46.0 : << Annuler >> passait sur le coin des notes et << je ne peux pas ecrire
+//  dans Notes >> - aucune place ou un bouton chevauche les notes (la taille du client,
+//  1373 x 917, puis de 1100 x 700 a 1700 x 1050) ; les notes s'ecrivent au clavier
+//  (un clic, du texte, Entree : la note suivante) et c'est ce texte qui est publie.
 //  Puis contre le VRAI service local (sans Node ni wrangler : SAUTE) : publier la
-//  version (la barre, le tableau << Versions publiees >>), et << Ajouter un admin >>
+//  version (la barre, le tableau << Versions publiees >>, les notes tapees), et << Ajouter un admin >>
 //  : << Par un lien >> (l'installateur de l'Admin publie, un lien d'une fois copie).
 //  Aucune donnee reelle : des fichiers et des noms d'essai.
 // =============================================================================
@@ -57,6 +61,61 @@ bool enabledBtn(ui::Widget& root, std::string_view id) {
     return b && b->enabled() && b->visible();
 }
 bool lastOk(const HostRig& rig) { return rig.last() && rig.last()->ok; }
+
+// 1.46.0 : deux rectangles qui se chevauchent (un pixel au moins).
+bool overlap(const gfx::Rect& a, const gfx::Rect& b) {
+    return a.w > 0.f && a.h > 0.f && b.w > 0.f && b.h > 0.f && a.x < b.right() - 0.5f && b.x < a.right() - 0.5f && a.y < b.bottom() - 0.5f &&
+           b.y < a.bottom() - 0.5f;
+}
+std::string rectText(const gfx::Rect& r) {
+    char t[96];
+    std::snprintf(t, sizeof t, "%.0f,%.0f %.0fx%.0f", static_cast<double>(r.x), static_cast<double>(r.y), static_cast<double>(r.w), static_cast<double>(r.h));
+    return t;
+}
+// La page Versions, le panneau ouvert, a la taille d'une fenetre de l'Admin (le menu de gauche : 232 ; la barre du haut :
+// 64 ; le bandeau du bas : 40) : rien ne chevauche les notes, les boutons restent dans la colonne de droite, et << ce
+// qu'ils verront >> (dessine) ne passe pas sous les boutons. Vide : tout va bien ; sinon, ce qui ne va pas.
+std::string panelProblems(ui::Widget& page, float winW, float winH) {
+    const float pw = winW - 232.f, ph = winH - 64.f - 40.f;
+    TextRenderer r;
+    (void)paint(page, r, pw, ph);
+    auto* notes = find<ui::MultiLineText>(page, "versions.notes");
+    auto* cancel = find<ui::Button>(page, "versions.annuler");
+    auto* sign = find<ui::Button>(page, "versions.signer");
+    auto* imp = page.findById("versions.importante");
+    auto* pickS = find<ui::Button>(page, "versions.studios.choisir");
+    auto* pickA = find<ui::Button>(page, "versions.admin.choisir");
+    if (!notes || !cancel || !sign || !imp || !pickS || !pickA) return "un widget du panneau manque";
+    if (!notes->visible() || !cancel->visible() || !sign->visible()) return "le panneau n'est pas ouvert";
+    const gfx::Rect n = notes->bounds(), c = cancel->bounds(), g = sign->bounds(), i = imp->bounds();
+    const std::string at = std::to_string(static_cast<int>(winW)) + "x" + std::to_string(static_cast<int>(winH)) + " : ";
+    if (overlap(n, c)) return at + "Annuler (" + rectText(c) + ") sur les notes (" + rectText(n) + ")";
+    if (overlap(n, g)) return at + "Signer et publier (" + rectText(g) + ") sur les notes (" + rectText(n) + ")";
+    if (overlap(c, g)) return at + "Annuler sur Signer et publier";
+    if (overlap(i, c) || overlap(i, g)) return at + "Importante sous un bouton";
+    if (overlap(n, pickS->bounds()) || overlap(n, pickA->bounds())) return at + "un Choisir... sur les notes";
+    if (c.x < n.right() + 20.f || g.x < n.right() + 20.f) return at + "un bouton a gauche de la colonne de droite (notes jusqu'a " + std::to_string(static_cast<int>(n.right())) + ")";
+    if (c.right() > pw + 0.5f || g.right() > pw + 0.5f) return at + "un bouton hors de la page";
+    if (n.h < 60.f || n.w < 200.f) return at + "les notes trop petites (" + rectText(n) + ")";
+    const float buttonsTop = std::min(c.y, g.y);
+    for (const auto& d : r.draws) {
+        if (d.text == "CE QU'ILS VERRONT" && d.at.y + 20.f + 58.f > buttonsTop) return at + "<< ce qu'ils verront >> sous les boutons";
+        if (d.text == "Importante" && d.at.y + 34.f > buttonsTop) return at + "Importante sous les boutons";
+    }
+    return {};
+}
+// Ecrire dans les notes comme au clavier : un clic dedans (le clavier), puis du texte, Entree entre deux lignes.
+void typeNotes(ui::Widget& page, const std::vector<std::string>& lines) {
+    auto* notes = find<ui::MultiLineText>(page, "versions.notes");
+    if (!notes) return;
+    const gfx::Rect n = notes->bounds();
+    (void)page.dispatch(ui::MouseDown{{n.x + n.w * 0.5f, n.y + 12.f}, ui::MouseButton::Left, 1, {}});
+    (void)page.dispatch(ui::MouseUp{{n.x + n.w * 0.5f, n.y + 12.f}, ui::MouseButton::Left, {}});
+    for (std::size_t k = 0; k < lines.size(); ++k) {
+        if (k > 0) (void)page.dispatch(ui::KeyDown{ui::Key::Return, {}, false});
+        (void)page.dispatch(ui::TextInput{lines[k]});
+    }
+}
 std::string lastText(const HostRig& rig) { return rig.last() ? rig.last()->text() : std::string("(rien)"); }
 
 // ---- un petit .exe (PE32) avec une ressource VS_VERSIONINFO (le meme que tests/admins_fichiers_test.cpp) ----
@@ -214,8 +273,47 @@ int main(int argc, char** argv) {
         check(has(t, "elles concordent") && has(t, "La premi\xC3\xA8re version publi\xC3\xA9" "e") && has(t, "Signer et publier la 1.44.1"), "elles concordent : Signer et publier la 1.44.1");
         check(!enabledBtn(*vp, "versions.signer"), "... grise tant que le service n'est pas regle");
         auto* notes = find<ui::MultiLineText>(*vp, "versions.notes");
-        if (notes) notes->setText("\xE2\x80\xA2 Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.\n\xE2\x80\xA2 Admin : le journal se trie par criticit\xC3\xA9.\n");
-        check(notes != nullptr, "le champ des notes");
+        check(notes != nullptr && !notes->readOnly(), "le champ des notes : on peut y ecrire (il naissait en lecture seule)");
+        if (!notes) return finish();
+        // 1.46.0 : << Annuler >> ne passe plus sur les notes - la taille du client, celles demandees, puis toute une plage.
+        {
+            std::string bad = panelProblems(*vp, 1373.f, 917.f);
+            check(bad.empty(), "1373 x 917 (la fenetre du client) : rien sur les notes, les boutons dans leur colonne " + bad);
+            bad = panelProblems(*vp, 1280.f, 800.f);
+            check(bad.empty(), "1280 x 800 : idem, et << ce qu'ils verront >> pas sous les boutons " + bad);
+            bad = panelProblems(*vp, 1600.f, 1000.f);
+            check(bad.empty(), "1600 x 1000 : idem " + bad);
+            std::string first;
+            int sizes = 0;
+            for (float w = 1100.f; w <= 1700.f; w += 25.f)
+                for (float h = 700.f; h <= 1050.f; h += 50.f) {
+                    ++sizes;
+                    if (first.empty()) first = panelProblems(*vp, w, h);
+                }
+            check(first.empty(), "de 1100 x 700 a 1700 x 1050 (" + std::to_string(sizes) + " tailles) : aucun chevauchement " + first);
+            (void)panelProblems(*vp, 1373.f, 917.f);
+            const gfx::Rect c = find<ui::Button>(*vp, "versions.annuler")->bounds(), n = notes->bounds();
+            const gfx::Rect g = find<ui::Button>(*vp, "versions.signer")->bounds();
+            check(std::abs(c.y - g.y) < 0.5f, "1373 x 917 : Annuler et Signer et publier cote a cote (" + rectText(c) + " / " + rectText(g) + ")");
+            (void)panelProblems(*vp, 1100.f, 700.f);
+            const gfx::Rect c2 = find<ui::Button>(*vp, "versions.annuler")->bounds(), g2 = find<ui::Button>(*vp, "versions.signer")->bounds();
+            check(c2.bottom() <= g2.y && std::abs(c2.x - g2.x) < 0.5f, "1100 x 700 (la plus petite) : une colonne etroite - Annuler au-dessus de Signer et publier");
+            // Le coin des notes (la ou Annuler etait) : un clic y donne le clavier aux notes, il n'annule rien.
+            (void)panelProblems(*vp, 1373.f, 917.f);
+            const gfx::Rect nn = notes->bounds();
+            (void)vp->dispatch(ui::MouseDown{{nn.right() - 6.f, nn.bottom() - 6.f}, ui::MouseButton::Left, 1, {}});
+            (void)vp->dispatch(ui::MouseUp{{nn.right() - 6.f, nn.bottom() - 6.f}, ui::MouseButton::Left, {}});
+            check(notes->focused() && shown(*vp, "versions.annuler") && shown(*vp, "versions.studios.choisir") && has(draw(*vp, 1141.f, 813.f), "elles concordent"),
+                  "un clic dans le coin bas droit des notes : les notes ont le clavier, le panneau reste ouvert");
+            (void)n;
+        }
+        // 1.46.0 : << je ne peux pas ecrire dans Notes >> - au clavier : du texte, Entree, une seconde ligne.
+        notes->setText({});
+        typeNotes(*vp, {"Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "Admin : le journal se trie par criticit\xC3\xA9."});
+        check(notes->text() == "Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.\nAdmin : le journal se trie par criticit\xC3\xA9.",
+              "tape au clavier (Entree : la note suivante) : << " + notes->text() + " >>");
+        t = draw(*vp, 1141.f, 813.f);
+        check(has(t, "Exports") && has(t, "journal"), "les deux notes se dessinent dans le champ");
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -325,7 +423,17 @@ int main(int argc, char** argv) {
         (void)vp->dropFiles({U(studios), U(adminExe)});
         t = draw(*vp);
         check(enabledBtn(*vp, "versions.signer") && has(t, "elles concordent"), "Signer et publier la 1.44.1 : possible");
+        // 1.46.0 : les notes tapees au clavier (une puce tapee aussi : elle s'enleve), c'est ce qui part
+        if (auto* notes = find<ui::MultiLineText>(*vp, "versions.notes")) notes->setText({});
+        typeNotes(*vp, {"\xE2\x80\xA2 Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "", "Admin : le journal se trie par criticit\xC3\xA9."});
         check(click(*vp, "versions.signer") && lastOk(rig), "publiee : " + lastText(rig));
+        {
+            gui::VersionsView seen;
+            const auto r = fx.ws->versions(seen);
+            const std::vector<std::string> want = {"Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "Admin : le journal se trie par criticit\xC3\xA9."};
+            check(r.ok && !seen.versions.empty() && seen.versions.front().version == "1.44.1" && seen.versions.front().notes == want,
+                  "les notes publiees : celles tapees, une par ligne (" + std::to_string(seen.versions.empty() ? 0 : seen.versions.front().notes.size()) + " notes)");
+        }
         t = draw(*vp);
         check(has(t, "1.44.1") && has(t, "actuelle") && has(t, "tout le monde") && has(t, "les admins") && has(t, "Admins :"), "le tableau : 1.44.1 actuelle, pour qui, les admins");
         check(!shown(*vp, "versions.signer"), "le panneau se referme");

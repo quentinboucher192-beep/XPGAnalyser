@@ -64,6 +64,9 @@ public:
         bool        contractLimits{false};
         std::string stateDir;           // vide : un dossier neuf dans le dossier temporaire (efface a la fin)
         std::string sourceDir;          // vide : XPG_SOURCE_DIR, sinon le depot de ce fichier
+        // 1.46.0 : des variables de plus pour le lanceur (le faux Stripe de la boutique : XPG_STRIPE_SECRET_KEY,
+        // XPG_STRIPE_WEBHOOK_SECRET - des valeurs essai_jeton_... - et XPG_STRIPE_API_BASE=http://127.0.0.1:PORT).
+        std::vector<std::pair<std::string, std::string>> env;
     };
 
     explicit LocalService(std::vector<std::string> publisherKeysHex) : LocalService(std::move(publisherKeysHex), Options{}) {}
@@ -262,6 +265,7 @@ private:
             ::setenv("XPG_SERVICE_ATTENTE", std::to_string(opt_.timeoutSeconds).c_str(), 1);
             if (opt_.contractLimits) ::unsetenv("XPG_LIMITES_ESSAI");
             else ::setenv("XPG_LIMITES_ESSAI", "sans", 1);
+            for (const auto& [k, v] : opt_.env) ::setenv(k.c_str(), v.c_str(), 1);   // 1.46.0
             ::execl("/bin/bash", "bash", script_.c_str(), portArg.c_str(), stateDir_.c_str(), keysCsv_.c_str(), static_cast<char*>(nullptr));
             ::_exit(127);
         }

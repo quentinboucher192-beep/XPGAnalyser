@@ -1173,6 +1173,19 @@ if(XPG_BUILD_TESTS)
     if(TEST adminsfichiers)
         set_tests_properties(adminsfichiers PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 400)
     endif()
+    # 1.46.0 : la boutique et les commandes dans l'outil de l'editeur (license_admin/Shop, gui/WorkspaceShop.cpp) : le
+    # catalogue, une commande payee livree seule (la licence, le code scelle pour le PC), une option, a revoir, le
+    # remboursement, Brancher Stripe (un faux kit) - contre le VRAI Worker et un FAUX Stripe (tests/outils/faux_stripe.mjs) ;
+    # argv[2] : la console (stripe-brancher, boutique-etat, commandes). SAUTE sans Node.js ni wrangler.
+    xpg_add_test_executable(admin_boutique_test tests/admin_boutique_test.cpp)
+    xpg_target_link_libraries(admin_boutique_test PRIVATE xpg_admin_core)
+    if(TARGET admin_boutique_test AND TARGET xpg_license_admin)
+        add_dependencies(admin_boutique_test xpg_license_admin)
+    endif()
+    xpg_add_test(NAME adminboutique COMMAND admin_boutique_test ${CMAKE_SOURCE_DIR} $<TARGET_FILE:xpg_license_admin>)
+    if(TEST adminboutique)
+        set_tests_properties(adminboutique PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
     # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
@@ -1202,7 +1215,7 @@ if(XPG_BUILD_TESTS)
         if(TEST admindeploy)
             set_tests_properties(admindeploy PROPERTIES TIMEOUT 300)
         endif()
-        foreach(part shell licences securite donnees demandes options admins versions)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions
+        foreach(part shell licences securite donnees demandes options admins versions boutique)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})

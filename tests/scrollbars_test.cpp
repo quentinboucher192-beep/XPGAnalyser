@@ -1,6 +1,6 @@
 // =============================================================================
-//  tests/scrollbars_test.cpp - 1.46.0 : « ces scrollbars ne bougent pas avec la
-//  souris » (la fenetre Licence, onglet Demander ma licence)
+//  tests/scrollbars_test.cpp - 1.46.0 : << ces scrollbars ne bougent pas avec la
+//  souris >> (la fenetre Licence, onglet Demander ma licence)
 // -----------------------------------------------------------------------------
 //  Chaque barre de defilement de la boite a outils, PAR LE VRAI CHEMIN d'une
 //  fenetre (MenuManager::HandleEvent -> WidgetMenu::HandleEvent : la souris
@@ -182,7 +182,12 @@ protected:
         field = &static_cast<ui::InputText&>(put(std::make_unique<ui::InputText>("champ"), {860, 270, 260, 28}));
         field->setAssist([](std::string_view, std::size_t& from, std::vector<ui::InputText::Suggestion>& out) {
             from = 0;
-            for (int i = 0; i < 40; ++i) out.push_back({"choix " + std::to_string(i), "essai"});
+            for (int i = 0; i < 40; ++i) {
+                ui::InputText::Suggestion one;
+                one.text = "choix " + std::to_string(i);
+                one.detail = "essai";
+                out.push_back(std::move(one));
+            }
         });
         setRoot(std::move(root));
         return core::ok();
@@ -491,7 +496,7 @@ int main() {
     {   // la liste des suggestions d'un champ
         std::printf("-- la liste des suggestions d'un champ\n");
         ui::InputText& f = *k.field;
-        f.grabFocus();
+        b.click({f.bounds().x + 20.f, f.bounds().y + 10.f});   // le champ prend le clavier
         f.openSuggestions();
         b.frame();
         const ui::ScrollArea& bar = f.suggestionBar();

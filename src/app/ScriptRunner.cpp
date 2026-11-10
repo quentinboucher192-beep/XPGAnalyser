@@ -6215,7 +6215,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     if (cmd == "licence-fil") {
         licence::LicenceCrumbs* fil = nullptr;
-        if (auto* root = top()) fil = dynamic_cast<licence::LicenceCrumbs*>(root->findById("dialog.licence.fil"));
+        if (auto* shownRoot = top()) fil = dynamic_cast<licence::LicenceCrumbs*>(shownRoot->findById("dialog.licence.fil"));
         if (!fil || fil->bounds().w <= 0.f) {
             if (retries_ < 60) return Step::Retry;
             fail("licence-fil : pas de fen\xC3\xAAtre Licence au premier plan");
@@ -6251,7 +6251,7 @@ ScriptRunner::Step ScriptRunner::run(const std::vector<std::string>& w, gfx::IRe
     }
     if (cmd == "licence-capture-fonction") {
         licence::CaptureZoomBody* z = nullptr;
-        if (auto* root = top()) z = dynamic_cast<licence::CaptureZoomBody*>(root->findById("dialog.capture.corps"));
+        if (auto* shownRoot = top()) z = dynamic_cast<licence::CaptureZoomBody*>(shownRoot->findById("dialog.capture.corps"));
         if (!z) {
             if (retries_ < 60) return Step::Retry;
             fail("licence-capture-fonction : pas de capture en grand au premier plan");

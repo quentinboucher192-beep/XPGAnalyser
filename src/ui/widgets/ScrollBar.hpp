@@ -104,7 +104,7 @@ private:
 };
 
 // ---- 1.46.0 : UN VOLET QUI DEFILE LUI-MEME ------------------------------------------
-//  « ces scrollbars ne bougent pas avec la souris » (la fenetre Licence, onglet
+//  << ces scrollbars ne bougent pas avec la souris >> (la fenetre Licence, onglet
 //  Demander ma licence) : les volets qui dessinent tout et defilent a la molette
 //  (la partie gauche de cet onglet, les pages Boutique et Commandes de l'Admin, la
 //  fenetre d'une mise a jour, la liste des suggestions d'un champ...) dessinaient

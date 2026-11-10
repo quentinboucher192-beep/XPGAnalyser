@@ -50,6 +50,9 @@
 //    XPG-License-Admin service-publier-licence --licence F.xpglic
 //    XPG-License-Admin service-stats
 //    XPG-License-Admin service-deployer [--dossier-kit D] [--essai]   (1.45.0 : le kit installe avec l'Admin ; la sortie, son code)
+//    1.46.0, la boutique (docs/BOUTIQUE.md) : boutique-etat, boutique-config --parametres F.json, stripe-brancher
+//    --cle-variable NOM (la cle secrete lue dans une variable d'environnement, jamais en argument ni affichee), commandes
+//    [--etat E], commande-livrer [--numero N], commande-revoir --numero N --raison T, commande-rembourser --numero N
 //    XPG-License-Admin kit-studios --sortie DOSSIER      (les fichiers PUBLICS a compiler dans les Studios)
 //    XPG-License-Admin --version
 //  1.44.0 : PLUSIEURS ADMINS, LES FICHIERS, LES VERSIONS, LA SAUVEGARDE COMPLETE (docs/ADMINS.md ; par le Workspace de
@@ -228,6 +231,21 @@ std::string usage() {
            "                                                 adresse) ; --remplacer : un service qui n'est pas vide ; --remplacer-cle : une\n"
            "                                                 autre cl\xC3\xA9 de l'\xC3\xA9" "diteur d\xC3\xA9j\xC3\xA0 l\xC3\xA0 (mise de c\xC3\xB4t\xC3\xA9) ; --service-seulement : le\n"
            "                                                 dossier de ce poste reste tel quel (sa cl\xC3\xA9 : celle de la sauvegarde)\n"
+           "\n1.46.0 : la boutique et les commandes (docs/BOUTIQUE.md ; Stripe encaisse, l'Admin livre) :\n"
+           "  boutique-etat                                  la boutique : vente en ligne, livraison automatique, le catalogue\n"
+           "                                                 (montants TTC), Stripe (branch\xC3\xA9, mode test ou r\xC3\xA9" "el), les commandes \xC3\xA0 livrer\n"
+           "  boutique-config --parametres F.json            l'admin+ : le catalogue entier (le JSON de PUT /admin/boutique :\n"
+           "                                                 active, livraison_auto, devise, articles [{genre, edition|option,\n"
+           "                                                 jours, montant en centimes TTC, libelle}])\n"
+           "  stripe-brancher --cle-variable NOM [--dossier-kit D]\n"
+           "                                                 l'admin+ : branche Stripe - la cl\xC3\xA9 secr\xC3\xA8te est lue dans la variable\n"
+           "                                                 d'environnement NOM (jamais sur la ligne de commande, jamais affich\xC3\xA9" "e) ;\n"
+           "                                                 le webhook cr\xC3\xA9\xC3\xA9 chez Stripe, les deux secrets pos\xC3\xA9s sur ton service\n"
+           "                                                 par le kit (npx wrangler secret put)\n"
+           "  commandes [--etat E]                           les commandes (E : a_payer, payee, livree, a_revoir, remboursee...)\n"
+           "  commande-livrer [--numero N]                   livre la commande N (pay\xC3\xA9" "e ou \xC3\xA0 revoir) ; sans --numero : toutes les pay\xC3\xA9" "es\n"
+           "  commande-revoir --numero N --raison TEXTE      met la commande N \xC3\xA0 revoir (la raison)\n"
+           "  commande-rembourser --numero N                 l'admin+ : demande le remboursement \xC3\xA0 Stripe\n"
            "  --version\n\n"
            "Les commandes github-* et passerelle-* (1.31 \xC3\xA0 1.34) n'existent plus : le service des licences les remplace.\n"
            "--dossier : le dossier de la cl\xC3\xA9 et du registre des activations (par d\xC3\xA9" "faut " + defaultKeyFolder() + ").\n"
@@ -512,6 +530,98 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
         say(r.message + "\n\n  CODE D'ACTIVATION :\n\n      " + code + "\n\n");
         crypto::wipe(code.data(), code.size());
         return 0;
+    }
+    // ---- 1.46.0 : la boutique et les commandes ----
+    if (a.command == "boutique-etat") {
+        license_admin::shop::Settings s;
+        const auto r = ws.shopSettings(s);
+        if (!r.ok) return oneLine(r);
+        namespace sh = license_admin::shop;
+        say("Vente en ligne : " + std::string(s.active ? "ouverte" : "arr\xC3\xAAt\xC3\xA9" "e") + (s.open ? "" : " (la boutique est ferm\xC3\xA9" "e pour les Studios)") + "\n");
+        say("Livraison automatique : " + std::string(s.autoDeliver ? "oui (l'Admin ouvert livre seul les commandes pay\xC3\xA9" "es)" : "non") + "\n");
+        say(sh::modeLabel(s.stripe.mode) + (s.stripe.connected && !s.stripe.webhook ? " (le secret du webhook manque)" : "") +
+            (s.stripe.lastEvent ? " ; dernier \xC3\xA9v\xC3\xA9nement re\xC3\xA7u le " + gui::dateTimeFr(s.stripe.lastEvent) : std::string()) + "\n");
+        say("Catalogue (r\xC3\xA9glage n\xC2\xB0 " + std::to_string(s.number) + ") : " + std::to_string(s.articles.size()) + " article(s)\n");
+        for (const auto& x : s.articles) say("  " + x.id + " : " + sh::amountText(x.amount, s.currency) + " TTC \xC2\xB7 " + x.label + "\n");
+        if (ws.can("demandes")) {
+            sh::OrdersView v;
+            if (ws.shopOrders(v).ok) say("Commandes : " + std::to_string(v.orders.size()) + ", \xC3\xA0 livrer : " + std::to_string(v.toDeliver) + "\n");
+        }
+        return 0;
+    }
+    if (a.command == "boutique-config") {
+        if (!need("--parametres")) return 2;
+        std::string text, w;
+        if (!readText(a.one("--parametres"), text, w)) {
+            complain("Refus\xC3\xA9 : " + w);
+            return 1;
+        }
+        core::json::Value p;
+        license_admin::shop::Settings s;
+        if (!core::json::parse(text, p, nullptr) || !license_admin::shop::parseSettings(p, s, &w)) {
+            complain("Refus\xC3\xA9 : " + a.one("--parametres") + " n'est pas le JSON de la boutique" + (w.empty() ? std::string() : " (" + w + ")"));
+            return 1;
+        }
+        return oneLine(ws.saveShop(s));
+    }
+    if (a.command == "stripe-brancher") {
+        if (!need("--cle-variable")) return 2;
+        const std::string var = a.one("--cle-variable");
+        const char* v = std::getenv(var.c_str());
+        if (!v || !*v) {
+            complain("Refus\xC3\xA9 : la variable d'environnement " + var + " est vide (mets-y ta cl\xC3\xA9 secr\xC3\xA8te Stripe, puis relance).");
+            return 1;
+        }
+        std::string key = v;
+        deployer::Options o;
+        o.kit = a.one("--dossier-kit");
+        const auto r = ws.connectStripe(key, o, [](const std::string& line) { say(line + "\n"); });
+        crypto::wipe(key.data(), key.size());
+        if (r.ok) {
+            say(r.message + "\n");
+            for (const auto& d : r.details)
+                if (d.rfind("Ouvre", 0) == 0) say(d + "\n");
+            return 0;
+        }
+        complain(r.message);
+        for (const auto& d : r.details)
+            if (d.rfind("Clique", 0) == 0 || d.rfind("Installe", 0) == 0 || d.rfind("https://", 0) == 0 || d.rfind("Sur ", 0) == 0 || d.rfind("R\xC3\xA8gle", 0) == 0)
+                complain(d);
+        return 1;
+    }
+    if (a.command == "commandes") {
+        namespace sh = license_admin::shop;
+        sh::OrdersView v;
+        const auto r = ws.shopOrders(v);
+        if (!r.ok) return oneLine(r);
+        const std::string want = a.one("--etat");
+        int shown = 0;
+        for (const auto& o : v.orders) {
+            if (!want.empty() && o.state != want) continue;
+            ++shown;
+            say("n\xC2\xB0 " + std::to_string(o.number) + " " + gui::dateTimeFr(o.created) + " [" + sh::stateLabel(o.state) + "] " + o.company +
+                (o.name.empty() ? std::string() : " (" + o.name + ")") + " \xC2\xB7 " + (o.label.empty() ? o.article : o.label) + " \xC2\xB7 " +
+                sh::amountText(o.amount, o.currency) + (o.mode == "test" ? " (essai)" : "") + (o.licence.empty() ? std::string() : " \xC2\xB7 licence " + o.licence) +
+                (o.error.empty() ? std::string() : " \xC2\xB7 " + o.error) + "\n");
+        }
+        say(std::to_string(shown) + " commande(s) ; \xC3\xA0 livrer : " + std::to_string(v.toDeliver) + "\n");
+        return 0;
+    }
+    if (a.command == "commande-livrer") {
+        const int n = a.one("--numero").empty() ? 0 : std::atoi(a.one("--numero").c_str());
+        gui::DeliveryReport rep;
+        const auto r = ws.deliverOrders(n, false, &rep);
+        say(r.message + "\n");
+        for (const auto& d : r.details) say("  " + d + "\n");
+        return r.ok ? 0 : 1;
+    }
+    if (a.command == "commande-revoir") {
+        if (!need("--numero") || !need("--raison")) return 2;
+        return oneLine(ws.reviewOrder(std::atoi(a.one("--numero").c_str()), a.one("--raison")));
+    }
+    if (a.command == "commande-rembourser") {
+        if (!need("--numero")) return 2;
+        return oneLine(ws.refundOrder(std::atoi(a.one("--numero").c_str())));
     }
     if (a.command == "restaurer") {
         if (!need("--fichier") || !need("--phrase-fichier")) return 2;
@@ -1399,7 +1509,10 @@ int run(const std::vector<std::string>& argv) {
     // ---- 1.44.0 : les admins, les fichiers, les versions, la sauvegarde (le Workspace de l'application) ----
     static const std::vector<std::string> kWorkspaceCommands = {"admin-demander", "admin-etat",      "admin-accepter",        "admin-retirer",
                                                                 "admin-droits",   "profil-enregistrer", "journal-relever",     "fichier-envoyer",
-                                                                "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer"};
+                                                                "version-publier", "sauvegarde-configurer", "sauvegarder", "restaurer",
+                                                                // 1.46.0 : la boutique et les commandes
+                                                                "boutique-etat", "boutique-config", "stripe-brancher", "commandes", "commande-livrer",
+                                                                "commande-revoir", "commande-rembourser"};
     if (std::find(kWorkspaceCommands.begin(), kWorkspaceCommands.end(), a.command) != kWorkspaceCommands.end())
         return runWorkspaceCommand(a, folder);
     if (a.command.rfind("github-", 0) == 0 || a.command.rfind("passerelle-", 0) == 0) {

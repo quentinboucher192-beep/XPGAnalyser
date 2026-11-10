@@ -461,6 +461,14 @@ public:
                            all ? Tone::Warning : Tone::Info, false);
             tiles_[2]->setTooltip("Les demandes en attente de ta d\xC3\xA9" "cision : " + n(d_.pendingRequests) + " not\xC3\xA9" "e(s) par fichier, " + n(d_.onlinePending)
                                   + " en ligne (" + when + "). Clic : Demandes en ligne.");
+            // 1.46.0 : les commandes de la boutique payees, a livrer (le regard : GET /admin/etat)
+            if (const int toDeliver = w.ordersToDeliver(); toDeliver > 0) {
+                tiles_[2]->set(n(all), n(toDeliver) + (toDeliver > 1 ? " commandes pay\xC3\xA9" "es \xC3\xA0 livrer" : " commande pay\xC3\xA9" "e \xC3\xA0 livrer") +
+                                           (all ? " \xC2\xB7 dont " + n(d_.onlinePending) + " en ligne" : std::string()),
+                               Tone::Warning, false);
+                tiles_[2]->setTooltip(n(toDeliver) + " commande(s) de la boutique pay\xC3\xA9" "e(s), \xC3\xA0 livrer (Commandes \xE2\x80\xBA D\xC3\xA9livrer maintenant, ou "
+                                      "d'elles-m\xC3\xAAmes si \xC2\xAB Livrer seul \xC2\xBB est coch\xC3\xA9). " + n(all) + " demande(s) en attente de ta d\xC3\xA9" "cision.");
+            }
         } else {
             tiles_[2]->set(n(d_.pendingRequests), "pas encore sign\xC3\xA9" "es", d_.pendingRequests ? Tone::Warning : Tone::Info, false);
             tiles_[2]->setTooltip({});

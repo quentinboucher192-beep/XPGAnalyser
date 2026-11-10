@@ -3267,7 +3267,15 @@ FeaturePreviewPane::FeaturePreviewPane(std::string id) : ui::Widget(std::move(id
 }
 
 void FeaturePreviewPane::show(const FeatureInfo& info) {
-    if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) return;
+    if (info.id == shown_.id && info.editions == shown_.editions && info.label == shown_.label) {
+        if (info.locked != shown_.locked || info.lockedText != shown_.lockedText) {   // 1.46.0 : une autre offre choisie
+            shown_.locked = info.locked;
+            shown_.lockedText = info.lockedText;
+            invalidateLayout();
+            invalidate();
+        }
+        return;
+    }
     shown_ = info;
     preview_ = shown_.id.empty() ? licence::FeaturePreview{} : licence::featurePreview(shown_.id);
     loaded_.assign(preview_.shots.size(), hmi::Resource{});
@@ -3298,7 +3306,7 @@ void FeaturePreviewPane::applyShot() {
 void FeaturePreviewPane::onLayout() {
     const auto b = bounds();
     const float x = b.x + 12.f, W = std::max(60.f, b.w - 24.f);
-    float y = b.y + 12.f + 22.f + (shown_.product.empty() ? 0.f : 20.f) + 4.f;
+    float y = b.y + 12.f + 22.f + (shown_.product.empty() && !shown_.locked ? 0.f : 20.f) + 4.f;
     // La capture (960 x 600) a la largeur du volet ; la moitie de la hauteur au plus.
     const bool several = preview_.shots.size() > 1;
     const float ih = std::min(std::floor(W * 0.625f), std::max(80.f, b.h * 0.55f - (several ? 32.f : 0.f)));
@@ -3330,7 +3338,18 @@ void FeaturePreviewPane::onPaint(const ui::PaintContext& ctx) {
     r.drawText({x, y}, title, kValue, c.text);
     r.drawText({x + 1.f, y}, title, kValue, c.text);
     y += r.lineHeight(kValue) + 2.f;
-    if (!shown_.product.empty()) r.drawText({x, y}, fit(r, shown_.product, kSmall, W), kSmall, c.textMuted);
+    // 1.46.0 : une ligne barree - sa capture se montre, et l'apercu dit pourquoi elle est barree (apres le logiciel)
+    float px = x;
+    if (!shown_.product.empty()) {
+        const std::string p = fit(r, shown_.product, kSmall, W);
+        r.drawText({x, y}, p, kSmall, c.textMuted);
+        px += r.measure(p, kSmall).width + 12.f;
+    }
+    if (shown_.locked && px + 60.f < x + W) {
+        ui::drawIcon(r, ui::Icon::Lock, {px, y + (r.lineHeight(kSmall) - 12.f) * 0.5f, 12.f, 12.f}, c.warning);
+        const std::string t = shown_.lockedText.empty() ? std::string("pas dans ta licence") : shown_.lockedText;
+        r.drawText({px + 16.f, y}, fit(r, t, kSmall, x + W - px - 16.f), kSmall, ctx.theme.tone(ui::Tone::Warning, c.text));
+    }
     // 1.44.0 : << Capture 2/3 : sa legende >>, entre les fleches
     if (preview_.shots.size() > 1) {
         const std::string caption = preview_.shots[shot_].caption;

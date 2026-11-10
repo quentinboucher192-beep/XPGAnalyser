@@ -97,7 +97,7 @@ public:
         pickStudios_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.studios.choisir", ui::Button::Style::Default, ui::Icon::Open);
         pickAdmin_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.admin.choisir", ui::Button::Style::Default, ui::Icon::Open);
         notes_ = &adopt(*this, std::make_unique<ui::MultiLineText>("versions.notes"));
-        // 1.46.0 : « je ne peux pas ecrire dans Notes » - un MultiLineText nait en lecture seule (l'apercu d'un code) : les
+        // 1.46.0 : << je ne peux pas ecrire dans Notes >> - un MultiLineText nait en lecture seule (l'apercu d'un code) : les
         // notes sont un texte a taper, une note par ligne (Entree : la suivante), sans numeros de ligne, repliees a la largeur.
         notes_->setReadOnly(false);
         notes_->setShowLineNumbers(false);

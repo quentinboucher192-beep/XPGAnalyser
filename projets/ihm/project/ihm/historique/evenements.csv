@@ -1,0 +1,6 @@
+horodatage;type;source;message;utilisateur
+2026-09-25 21:12:17.990;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:18.545;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:18.719;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:27.839;Connexion refusée;ADMIN;mot de passe incorrect;
+2026-09-25 21:12:37.881;Connexion;ADMIN;ADMIN connecté (Administrateur, niveau 4);ADMIN

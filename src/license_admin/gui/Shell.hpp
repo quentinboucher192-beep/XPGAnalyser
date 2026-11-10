@@ -160,6 +160,18 @@ public:
     bool checkServiceVersion();
     static constexpr double kVersionCheckFirst = 1.0;
 
+    // 1.46.0 : LA BOUTIQUE (ShellShop.cpp ; docs/BOUTIQUE.md, par. 5) - le regard voit le compteur des commandes bouger
+    // (GET /admin/etat : commandes, a_livrer) : les commandes et le reglage sont relus sans bruit (autoOrders) ; une
+    // commande payee, << Livrer seul >> coche et cet Admin qui peut signer (l'admin+, ou un admin avec << demandes >> et
+    // << licence_creer >>) : la livraison part (autoDeliver : un travail lent, dit dans le journal de la seance), un avis
+    // par commande livree ou a revoir. Sans livraison automatique : un avis (<< Commandes > Delivrer maintenant >>). Une
+    // livraison qui n'a pas pu se faire (le reseau) est reprise toutes les 5 minutes. Vrai : un travail est parti.
+    bool autoOrders();
+    bool autoDeliver();
+    // Les commandes payees a livrer (le menu de gauche les compte : Commandes ; le tableau de bord les dit).
+    [[nodiscard]] int ordersToDeliver() const noexcept { return toDeliver_ > 0 ? toDeliver_ : 0; }
+    static constexpr double kDeliveryRetry = 300.0;
+
     // ---- ce qui se lit (les essais, la fenetre) ----
     [[nodiscard]] const std::string& currentPageId() const noexcept { return current_; }
     [[nodiscard]] Page* page(const std::string& pageId) const;   // nul : pas encore ouverte
@@ -226,6 +238,12 @@ private:
     double                     nextBackupCheck_{-1};     // la sauvegarde de secours du jour (l'admin+)
     bool                       versionChecked_{false};   // 1.45.0 : la version du service, lue au lancement
     double                     versionCheckAt_{-1};
+    // 1.46.0 : la boutique (ShellShop.cpp)
+    std::int64_t               knownOrders_{-1};         // le compteur des commandes vu par le regard
+    int                        toDeliver_{0};            // les commandes payees a livrer (le regard)
+    bool                       wantOrders_{false}, wantDelivery_{false};
+    double                     nextDelivery_{-1};        // la prochaine reprise d'une livraison (steady)
+    std::vector<int>           seenPaid_;                // les commandes payees deja annoncees
     bool                       autoBackup();
     // DERNIER : detruit le premier (le fil du travail lent se termine avant que le Workspace s'en aille).
     Background                 bg_;

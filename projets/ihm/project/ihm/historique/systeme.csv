@@ -1,0 +1,119 @@
+horodatage;type;source;message;utilisateur
+2026-09-24 20:19:02.228;Système;;IHM démarrée : 2 variable(s) IHM, 1 script(s) généraux;
+2026-09-24 20:19:02.228;Navigation;;vue de démarrage : Vue_Accueil;
+2026-09-24 20:19:07.132;Action;Vue_Accueil/Rectangle_1;paramètres système;
+2026-09-24 20:19:34.577;Action;Paramètres système;Luminosité : 90 %;
+2026-09-24 20:19:34.979;Action;Paramètres système;Luminosité : 80 %;
+2026-09-24 20:19:35.010;Action;Paramètres système;Luminosité : 70 %;
+2026-09-24 20:19:36.090;Action;Paramètres système;Luminosité : 60 %;
+2026-09-24 20:19:36.220;Action;Paramètres système;Luminosité : 50 %;
+2026-09-24 20:19:36.877;Action;Paramètres système;Luminosité : 40 %;
+2026-09-24 20:19:38.049;Action;Paramètres système;Luminosité : 30 %;
+2026-09-24 20:19:38.764;Action;Paramètres système;Luminosité : 20 %;
+2026-09-24 20:19:40.301;Action;Paramètres système;Luminosité : 30 %;
+2026-09-24 20:19:40.508;Action;Paramètres système;Luminosité : 40 %;
+2026-09-24 20:19:40.700;Action;Paramètres système;Luminosité : 50 %;
+2026-09-24 20:19:40.835;Action;Paramètres système;Luminosité : 60 %;
+2026-09-24 20:19:41.036;Action;Paramètres système;Luminosité : 70 %;
+2026-09-24 20:19:41.191;Action;Paramètres système;Luminosité : 80 %;
+2026-09-24 20:19:41.320;Action;Paramètres système;Luminosité : 90 %;
+2026-09-24 20:19:41.565;Action;Paramètres système;Luminosité : 100 %;
+2026-09-24 20:19:42.523;Action;Paramètres système;Mise en veille : 1 min;
+2026-09-24 20:19:45.781;Action;Paramètres système;Mise en veille : 2 min;
+2026-09-24 20:19:46.609;Action;Paramètres système;Mise en veille : 5 min;
+2026-09-24 20:19:46.637;Action;Paramètres système;Mise en veille : 10 min;
+2026-09-24 20:19:46.637;Action;Paramètres système;Mise en veille : 15 min;
+2026-09-24 20:19:46.637;Action;Paramètres système;Mise en veille : 30 min;
+2026-09-24 20:19:47.966;Action;Paramètres système;Mise en veille : 1 h;
+2026-09-24 20:19:48.672;Action;Paramètres système;Mise en veille : Jamais;
+2026-09-24 20:19:48.812;Action;Paramètres système;Mise en veille : 1 min;
+2026-09-24 20:19:49.985;Action;Paramètres système;Mise en veille : 2 min;
+2026-09-24 20:19:53.161;Action;Paramètres système;Mise en veille : 1 min;
+2026-09-24 20:21:44.752;Système;Paramètres système;écran en veille (1 min sans toucher);
+2026-09-24 20:23:00.735;Système;Paramètres système;écran rallumé;
+2026-09-24 20:23:16.918;Action;Vue_Accueil/Rectangle_1;paramètres système;
+2026-09-24 20:51:46.249;Système;Paramètres système;écran en veille (1 min sans toucher);
+2026-09-24 20:51:49.403;Système;;IHM arrêtée;
+2026-09-25 21:12:13.124;Système;;IHM démarrée : 2 variable(s) IHM, 1 script(s) généraux;
+2026-09-25 21:12:13.124;Navigation;;vue de démarrage : Vue_Accueil;
+2026-09-25 21:12:13.124;Système;Poste d'exploitation;Poste d'exploitation lancé (simulateur);
+2026-09-25 21:12:17.990;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:18.545;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:18.719;Accès refusé;Vue_Accueil/WeeklySchedule_1;programmateur : permission « Piloter » requise;
+2026-09-25 21:12:19.283;Action;Vue_Accueil/Button_1;paramètres système;
+2026-09-25 21:12:19.386;Action;Vue_Accueil/Button_1;paramètres système;
+2026-09-25 21:12:21.796;Action;Vue_Accueil/Button_1;paramètres système;
+2026-09-25 21:12:27.839;Connexion refusée;ADMIN;mot de passe incorrect;
+2026-09-25 21:12:37.881;Connexion;ADMIN;ADMIN connecté (Administrateur, niveau 4);ADMIN
+2026-09-25 21:12:40.970;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Ma=07:00-12:00,13:30-17:00; Me=07:00-12:00,13:30-15:00,15:30-17:00; Je-Ve=07:00-12:00,13:30-17:00";ADMIN
+2026-09-25 21:12:41.789;Action;Vue_Accueil/WeeklySchedule_1;plages : Lu-Ve=07:00-12:00,13:30-17:00;ADMIN
+2026-09-25 21:12:43.774;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Je=07:00-12:00,13:30-17:00; Ve=07:00-12:00,13:30-17:00,20:30-21:00";ADMIN
+2026-09-25 21:12:44.483;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Je=07:00-12:00,13:30-17:00; Ve=07:00-12:00,13:30-17:00,18:30-19:00,20:30-21:00";ADMIN
+2026-09-25 21:12:44.819;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Je=07:00-12:00,13:30-17:00; Ve=07:00-12:00,13:30-17:00,18:30-19:30,20:30-21:00";ADMIN
+2026-09-25 21:12:44.965;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Je=07:00-12:00,13:30-17:00; Ve=07:00-12:00,13:30-17:00,18:30-20:00,20:30-21:00";ADMIN
+2026-09-25 21:12:45.291;Action;Vue_Accueil/WeeklySchedule_1;"plages : Lu-Je=07:00-12:00,13:30-17:00; Ve=07:00-12:00,13:30-17:00,18:30-21:00";ADMIN
+2026-09-25 21:12:49.183;Action;Vue_Accueil/Button_1;paramètres système;ADMIN
+2026-09-25 21:13:16.257;Action;Paramètres système;Clavier virtuel : Toujours;ADMIN
+2026-09-25 21:13:17.017;Action;Paramètres système;Clavier virtuel : Jamais;ADMIN
+2026-09-25 21:13:17.596;Action;Paramètres système;Clavier virtuel : Automatique;ADMIN
+2026-09-25 21:13:20.964;Action;Paramètres système;Taille du texte : 125 %;ADMIN
+2026-09-25 21:13:21.019;Action;Paramètres système;Taille du texte : 100 %;ADMIN
+2026-09-25 21:13:24.573;Action;Paramètres système;Taille du texte : 125 %;ADMIN
+2026-09-25 21:13:25.226;Action;Paramètres système;Taille du texte : 150 %;ADMIN
+2026-09-25 21:13:26.986;Action;Paramètres système;Taille du texte : 125 %;ADMIN
+2026-09-25 21:13:27.651;Action;Paramètres système;Taille du texte : 100 %;ADMIN
+2026-09-25 21:13:31.895;Action;Paramètres système;Couleurs : Daltonien (bleu / vermillon);ADMIN
+2026-09-25 21:13:34.018;Action;Paramètres système;Couleurs : Normales;ADMIN
+2026-09-25 21:13:34.857;Action;Paramètres système;Couleurs : Daltonien (bleu / vermillon);ADMIN
+2026-09-25 21:13:35.980;Action;Paramètres système;Couleurs : Normales;ADMIN
+2026-09-25 21:13:36.865;Action;Paramètres système;Couleurs : Daltonien (bleu / vermillon);ADMIN
+2026-09-25 21:13:38.058;Action;Paramètres système;Couleurs : Normales;ADMIN
+2026-09-25 21:13:38.717;Action;Paramètres système;Couleurs : Daltonien (bleu / vermillon);ADMIN
+2026-09-25 21:13:40.176;Action;Paramètres système;Couleurs : Normales;ADMIN
+2026-09-25 21:13:40.881;Action;Paramètres système;Couleurs : Daltonien (bleu / vermillon);ADMIN
+2026-09-25 21:13:41.410;Action;Paramètres système;Couleurs : Normales;ADMIN
+2026-09-25 21:13:43.103;Action;Paramètres système;Thème : Jour (clair);ADMIN
+2026-09-25 21:13:45.919;Action;Paramètres système;Thème : Nuit (sombre);ADMIN
+2026-09-25 21:13:46.651;Action;Paramètres système;Thème : Jour (clair);ADMIN
+2026-09-25 21:13:46.981;Action;Paramètres système;Thème : Nuit (sombre);ADMIN
+2026-09-25 21:13:47.587;Action;Paramètres système;Thème : Jour (clair);ADMIN
+2026-09-25 21:13:47.793;Action;Paramètres système;Thème : Nuit (sombre);ADMIN
+2026-09-25 21:13:47.966;Action;Paramètres système;Thème : Jour (clair);ADMIN
+2026-09-25 21:13:48.610;Action;Paramètres système;Thème : Nuit (sombre);ADMIN
+2026-09-25 21:13:56.092;Action;Paramètres système;journal vidé (46 entrées);ADMIN
+2026-09-25 21:14:40.111;Action;Vue_Accueil/Indicator_1;Mettre à 1 Variable = TRUE;ADMIN
+2026-09-25 21:14:40.352;Action;Vue_Accueil/Indicator_1;Mettre à 1 Variable = TRUE;ADMIN
+2026-09-25 21:14:40.547;Action;Vue_Accueil/Indicator_1;Mettre à 1 Variable = TRUE;ADMIN
+2026-09-25 21:14:40.712;Action;Vue_Accueil/Indicator_1;Mettre à 1 Variable = TRUE;ADMIN
+2026-09-25 22:25:18.280;Sécurité;Poste d'exploitation;Sortie du poste : Passer en conception;ADMIN
+2026-09-25 22:25:18.395;Système;;IHM arrêtée;ADMIN
+2026-09-25 22:31:03.976;Système;;IHM démarrée : 2 variable(s) IHM, 1 script(s) généraux;
+2026-09-25 22:31:03.976;Navigation;;vue de démarrage : Vue_Accueil;
+2026-09-26 09:43:26.462;Système;;IHM démarrée : 4 variable(s) IHM, 1 script(s) généraux;
+2026-09-26 09:43:26.462;Navigation;;vue de démarrage : Vue_Accueil;
+2026-09-26 09:43:26.462;Erreur;Vue_Accueil.OnOpen;test : écriture refusée par la liaison de Équipement;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 1 variable liée);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 2 variables liées);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 1 variable liée);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 2 variables liées);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 22 variables liées);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement Équipement 1 : liaison Modbus TCP vers 192.168.56.100:502 (esclave 1, 0 variable liée);
+2026-09-26 09:43:26.462;Communication;Liaison;Équipement 1 : Automate injoignable (192.168.56.100:502) : pas de réponse en 1000 ms;
+2026-09-26 09:43:27.443;Communication;Liaison;Équipement : Écriture de test refusée : l'équipement Équipement n'est pas joint;
+2026-09-26 18:21:18.836;Système;;IHM démarrée : 4 variable(s) IHM, 1 script(s) généraux;
+2026-09-26 18:21:18.836;Navigation;;vue de démarrage : Vue_Accueil;
+2026-09-26 18:21:18.836;Erreur;Vue_Accueil.OnOpen;test : écriture refusée par la liaison de Équipement;
+2026-09-26 18:21:18.836;Communication;Liaison;Équipement Équipement : liaison Modbus TCP vers 169.254.0.100:502 (esclave 1, 2 variables liées);
+2026-09-26 18:21:18.836;Communication;Liaison;Équipement Équipement 1 : liaison Modbus TCP vers 169.254.0.101:502 (esclave 1, 0 variable liée);
+2026-09-26 18:21:18.836;Communication;Liaison;Jumeau Esclave virtuel 1 (virtuel) en marche (esclave virtuel de Esclave virtuel 1, 127.0.0.1:54328);
+2026-09-26 18:21:18.836;Communication;Liaison;Équipement Esclave virtuel 1 : liaison Modbus TCP vers 127.0.0.1:54328 (esclave 1, 20 variables liées);
+2026-09-26 18:21:18.836;Communication;Liaison;Équipement : Automate injoignable (169.254.0.100:502) : réseau injoignable;
+2026-09-26 18:21:18.836;Communication;Liaison;Équipement 1 : Automate injoignable (169.254.0.101:502) : réseau injoignable;
+2026-09-26 18:21:18.836;Communication;Liaison;Esclave virtuel 1 : Liaison établie avec l'équipement Esclave virtuel 1 127.0.0.1:54328 (8 ms);
+2026-09-26 18:21:23.435;Communication;Liaison;Équipement : Écriture de test refusée : l'équipement Équipement n'est pas joint;
+2026-09-26 18:23:59.423;Action;Vue_Accueil/Button_1;paramètres système;
