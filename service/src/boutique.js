@@ -713,6 +713,8 @@ export const RoutesBoutique = {
             }
             return l;
         });
+        // Une seule licence (ed:) par commande : un PC a une licence, et son etat << poste >> ne porte qu'un code a la fois.
+        if (lignesCmd.filter((l) => l.genre === "edition").length > 1) throw mal("lignes", "Une seule licence (ed:…) par commande : un PC a une licence.");
         if (!texteLigne(corps.societe, 1, 120) || !corps.societe.trim()) throw mal("societe", "Le nom de ta société (une ligne, 120 caractères au plus) manque.");
         if (corps.nom !== undefined && !texteLigne(corps.nom, 0, 120)) throw mal("nom", "Le nom : une ligne, 120 caractères au plus.");
         if (!courrielLisible(corps.courriel)) throw mal("courriel", "Ton courriel est illisible : Stripe y envoie la facture.");

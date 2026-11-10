@@ -379,7 +379,11 @@ bool Workspace::deliverOne(online::Client& c, const shop::Order& ord, const shop
         if (only > 0 && !l.toValidate()) continue;
         todo.push_back(&l);
     }
-    std::stable_sort(todo.begin(), todo.end(), [](const shop::OrderLine* a, const shop::OrderLine* b) { return (a->kind == "edition") > (b->kind == "edition"); });
+    // L'ordre des reponses au PC (son etat << poste >> n'en garde qu'une, la derniere) : les options sur une licence qu'il a
+    // deja (sans code) d'abord, puis la licence (son code), puis ses options << avec_ligne >> (qui redisent ce code) - la
+    // derniere reponse porte toujours le code s'il y en a un (une seule licence par commande : le service le veut).
+    const auto rank = [](const shop::OrderLine* l) { return l->kind == "edition" ? 1 : l->withLine > 0 ? 2 : 0; };
+    std::stable_sort(todo.begin(), todo.end(), [&](const shop::OrderLine* a, const shop::OrderLine* b) { return rank(a) < rank(b); });
     std::map<int, std::string> licOf;
     for (const auto& l : ord.lines)
         if (l.state == "livree" && !l.licence.empty()) licOf[l.line] = l.licence;

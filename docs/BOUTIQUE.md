@@ -424,6 +424,11 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
   ligne livrée**. Une ligne `ed:` : son code ; une option `avec_ligne` : le code de la licence de cette ligne de nouveau
   (et la licence avec l'option) ; une option sur une `licence_existante` : comme en 1.46 (sans code : le Studio
   renouvelle).
+- **Le code n'est jamais perdu** (l'état « poste » ne garde que la DERNIÈRE réponse) : **une seule ligne `ed:` par
+  commande** (400 `champ` sinon : un PC a une licence) ; l'Admin livre les lignes d'une commande dans cet ordre - les
+  options sur une `licence_existante` d'abord, puis la licence, puis ses options `avec_ligne` (qui redisent son code) :
+  la dernière réponse porte toujours le code quand la commande en a un. Le Studio lit donc seulement l'état le plus
+  récent.
 
 ### L'Admin
 - `GET /admin/commandes` : chaque commande gagne `paiement` et `lignes` (une commande d'avant la 1.48 : une ligne,

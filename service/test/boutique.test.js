@@ -588,6 +588,7 @@ describe("1.48.0 : le panier (des lignes, payees ou demandees, validees une a un
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "ed:PROFESSIONAL" }]) }), 400, "champ");
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "opt:ai_advanced:365", avec_ligne: 1 }]) }), 400, "champ");
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "opt:ai_advanced:365" }]) }), 400, "champ");
+        erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "ed:ENTERPRISE" }], { paiement: false }) }), 400, "champ"); // une licence par commande
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier([{ article: "ed:ENTERPRISE" }]) }), 404, "article");
         erreur(await appel(A, "POST", "/v1/boutique/commande", { cle: pc3, corps: panier(Array.from({ length: 21 }, (_, i) => ({ article: "ed:E" + i }))) }), 400, "champ");
     });
