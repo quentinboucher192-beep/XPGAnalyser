@@ -1295,8 +1295,8 @@ void LicenceBody::onLayout() {
     const float crumbsY = panel_.y + 50.f;
     crumbs_->setBounds({x, crumbsY, W, 30.f});
     if (current_ == licence::kTabHome) {
-        headerY_ = crumbsY + 40.f;
-        messageY_ = headerY_ + 2.f * 44.f + 2.f;
+        headerY_ = crumbsY + 48.f;
+        messageY_ = headerY_ + 2.f * 44.f + 4.f;
     } else {
         headerY_ = 0.f;
         messageY_ = crumbsY + 38.f;

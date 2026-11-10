@@ -1162,8 +1162,9 @@ int main(int argc, char** argv) {
                         if (items[i].id == L::kTabPurchases) purchasesAt = i;
                     }
                     check(fil->siblingsOpen() && !items.empty() && items[0].heading && items[0].label == "Obtenir ou \xC3\xA9tendre" && labels.size() == 5 &&
-                              labels[0] == "Demander ma licence" && labels[2] == "Options" && labels[3] == "Mes achats" && has(labels[4], "accueil"),
-                          "le menu du fil : son groupe, ses quatre rubriques, l'accueil");
+                              labels[0] == "Demander ma licence" && labels[2] == "Options" && labels[3] == "Mes achats" && has(labels[4], "accueil") &&
+                              mr.saw("Obtenir ou \xC3\xA9tendre") && mr.saw("Toutes les rubriques"),
+                          "le menu du fil : son groupe, ses quatre rubriques, l'accueil (dessin\xC3\xA9 par-dessus)");
                     (void)mm.HandleEvent(ui::KeyDown{ui::Key::Escape, {}, false});
                     frame();
                     check(!fil->siblingsOpen() && mm.depth() == 1 && app::licenceWindowSection() == L::kTabOptions, "\xC3\x89" "chap : le menu se ferme, la fen\xC3\xAAtre reste");

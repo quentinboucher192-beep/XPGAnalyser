@@ -940,6 +940,7 @@ bool LicenceCrumbs::choose(int tab) {
 
 void LicenceCrumbs::onLayout() {
     const auto b = bounds();
+    menu_->setBounds(b);   // le menu peint par-dessus tout (sans cadre, il ne passerait pas a la peinture du dessus)
     float x = b.x;
     const float hw = std::min(home_->naturalWidth(), std::max(60.f, b.w * 0.3f));
     home_->setBounds({x, b.y, hw, b.h});
