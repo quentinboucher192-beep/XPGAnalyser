@@ -941,6 +941,10 @@ OpResult Workspace::requestAdmin(const std::string& nameIn, const std::string& e
     if (name.empty() || name.size() > 60) return OpResult::fail("ton nom (60 caract\xC3\xA8res au plus) : l'admin+ le voit dans ta demande");
     if (email.empty() || email.size() > 120 || email.find('@') == std::string::npos || email.find(' ') != std::string::npos)
         return OpResult::fail("ton courriel n'est pas une adresse valable");
+    // 1.47.0 : sans adresse du service, rien ne part : la cle d'admin n'est pas creee (le poste se croyait << en attente >>).
+    if (!online::configured(folder_))
+        return OpResult::fail("il faut d'abord l'adresse du service de l'admin+ : l'Admin la prend de la connexion sign\xC3\xA9" "e (\xC3\xA0 c\xC3\xB4t\xC3\xA9 de "
+                              "l'installateur, ou du Studio de ce PC) ; sinon Service en ligne \xE2\x80\xBA Utiliser une connexion\xE2\x80\xA6 (le fichier que l'admin+ t'envoie)");
     std::string why;
     auto key = isFile(adminKeyPath(folder_)) ? loadAdminKey(folder_, &why) : createAdminKey(folder_, name, &why);
     if (!key) return OpResult::fail(why);
