@@ -17,6 +17,8 @@
 
 using namespace admintest;
 namespace gl = ui::globe;
+namespace stats = license_admin::stats;
+using Seconds = licensing::Seconds;
 
 static int fails = 0, checks = 0;
 #define CHECK(c)                                                          \
@@ -195,9 +197,9 @@ int main(int argc, char** argv) {
             sameLive = true;
             v->tick(323.0);
             CHECK(v->board().tickerCity() == "Lyon, FR");
-            const int before = liveCalls;
+            const int polled = liveCalls;
             v->tick(329.5);
-            CHECK(liveCalls == before + 1 && v->board().tickerCity() == "Lyon, FR");
+            CHECK(liveCalls == polled + 1 && v->board().tickerCity() == "Lyon, FR");
             sameLive = false;
             // Compte : le direct s'arrete.
             CHECK(click(*v, "globe.compte") && !v->board().live());
