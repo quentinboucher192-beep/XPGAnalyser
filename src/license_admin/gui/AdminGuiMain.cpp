@@ -211,7 +211,8 @@ void usage(std::FILE* to) {
                  "  --assistant F.xpgreq  ouvrir l'assistant de licence avec cette demande (r\xC3\xA9p\xC3\xA9table)\n"
                  "  --cliquer ID          cliquer ce widget (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
                  "  --taper ID=TEXTE      \xC3\xA9" "crire dans ce champ (r\xC3\xA9p\xC3\xA9table, dans l'ordre)\n"
-                 "  --choisir ID=N        choisir la ligne N (1 : la premi\xC3\xA8re) de ce tableau ou de cette liste (r\xC3\xA9p\xC3\xA9table)\n"
+                 "  --choisir ID=N        choisir la ligne N (1 : la premi\xC3\xA8re) de ce tableau ou de cette liste (r\xC3\xA9p\xC3\xA9table ;\n"
+                 "                        ID=1,2,3 : plusieurs lignes d'un tableau)\n"
                  "  --glisser F           glisser ce fichier sur la fen\xC3\xAAtre (r\xC3\xA9p\xC3\xA9table ; ceux qui se suivent : un geste)\n"
                  "  --capture F.png       enregistrer l'image de la fen\xC3\xAAtre, puis quitter\n"
                  "  --apres S             la capture S secondes apr\xC3\xA8s la derni\xC3\xA8re action (d\xC3\xA9" "faut 1)\n",
