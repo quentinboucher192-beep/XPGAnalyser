@@ -162,6 +162,16 @@ public:
         remove_->setTooltip("Une nouvelle liste, sign\xC3\xA9" "e, sans la r\xC3\xA9vocation choisie");
         export_ = &button(*this, "Exporter la liste\xE2\x80\xA6", "revocations.exporter");
         export_->setTooltip("La liste sign\xC3\xA9" "e (.xpgrev) \xC3\xA0 envoyer aux clients : ils l'importent comme une licence");
+        reload_ = &button(*this, "Actualiser", "revocations.actualiser");   // 1.48.1 : comme Clients > Actualiser
+        reload_->setIcon(ui::Icon::Refresh);
+        reload_->setTooltip("Relit tout de suite la liste sign\xC3\xA9" "e de l'archive et les licences (F5)");
+        links_ += reload_->clicked->connect([this] {
+            if (host_.report) host_.report(OpResult::done("R\xC3\xA9vocations relues : la liste sign\xC3\xA9" "e de l'archive."));
+            else {
+                ws().reload();
+                refresh();
+            }
+        });
         table_ = &adopt(*this, std::make_unique<ui::TableView>("revocations.table"));
         table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs (Exporter, Copier)
         table_->setAlternatingRowColors(true);
@@ -261,6 +271,10 @@ protected:
             const float bw = std::max(110.f, b->sizeHint().preferred.w);
             b->setBounds({bx, actionsY_, bw, 32.f});
             bx += bw + 8.f;
+        }
+        {   // 1.48.1 : Actualiser, a droite
+            const float aw = reload_->sizeHint().preferred.w + 8.f;
+            reload_->setBounds({std::max(bx, x + w - aw), actionsY_, aw, 32.f});
         }
         float top = actionsY_ + 42.f;
         const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres, au-dessus de la table
@@ -618,6 +632,7 @@ private:
     ui::Button*                           revoke_{nullptr};
     ui::Button*                           remove_{nullptr};
     ui::Button*                           export_{nullptr};
+    ui::Button*                           reload_{nullptr};   // 1.48.1
     ui::TableView*                        table_{nullptr};
     ui::FilterBar*                        bar_{nullptr};            // 1.47.0
     std::shared_ptr<Rows>                 model_;

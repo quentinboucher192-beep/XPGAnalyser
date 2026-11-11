@@ -427,7 +427,7 @@ public:
             });
             tiles_.push_back(&static_cast<StatTile&>(addChild(std::move(tile))));
         }
-        tiles_.back()->setTooltip("Les jetons flottants en cours, au dernier relev\xC3\xA9 du service (Licences flottantes \xE2\x80\xBA Relever).");
+        tiles_.back()->setTooltip("Les jetons flottants en cours, au dernier relev\xC3\xA9 du service (Licences flottantes \xE2\x80\xBA Actualiser).");
 
         feed_ = &static_cast<ActivityFeed&>(addChild(std::make_unique<ActivityFeed>()));
         // 1.47.0 : le resume des statistiques (4 petites courbes sur 30 jours : un clic, la page Statistiques) et la place de la

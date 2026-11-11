@@ -285,7 +285,7 @@ Paramètre : `periode` (jours, 1 à 400, défaut 30 : les commandes de la pério
   ],
   "totaux": {"villes": 21, "pays": 9, "clients": 54, "pc": 342, "actifs": 42, "pas_a_jour": 11, "admins": 3,
              "decouvertes": 9, "commandes": 14, "demandes": 5},
-  "sans_lieu": {"pc": 3, "admins": 0}
+  "sans_lieu": {"pc": 3, "admins": 0, "actifs": 1}
 }
 ```
 Les **calques** (chacun compté par ville) :
@@ -500,3 +500,107 @@ un `OpResult` (refusé : sa phrase) ; et sans réseau : `serviceKnowsStats()` (l
 | 01-04 les admins : jours de connexion, heures habituelles, version de son Admin, vu, ville | `GET /admin/stats/admins` |
 | 01-04 ce qu'il produit, ses courbes sur 12 semaines | § 5 avec `admin=<id>` (et sans, pour les autres admins en gris : `par=admin`) |
 | 01-05 actions, criticité, carte jour × heure, sécurité, qui fait quoi | **[J]** : le journal, calculé par l'Admin |
+
+## 15. La cohérence (1.48.1)
+
+> **Construit en 1.48.1** : le service (`service/src/stats.js` : `POST /admin/stats/reevaluer`, la liste de ce qui
+> n'existe plus, `service/test/coherence.test.js` : 12 essais), l'Admin (`src/license_admin/Changes.hpp`, `Stats.hpp` :
+> `Exclusions`, `reevaluate` ; `gui/WorkspaceStats.cpp` : `statsReevaluate`, la file `stats-a-envoyer.json` ;
+> `gui/StatsReevaluate.cpp` : la fenêtre ; la page Statistiques : « Actualiser », « Réévaluer »).
+
+**Le principe** : une statistique ne compte jamais ce qui n'existe plus. Les stocks et « aujourd'hui » viennent des
+tables vivantes ; le passé garde ce qui est **arrivé** (une licence révoquée était active hier, un PC retiré ou libéré
+l'était aussi : ce sont des faits), mais ce qui a été **supprimé** disparaît de toutes les courbes, passé compris, comme
+s'il n'avait jamais été là. Le journal des admins, lui, est l'histoire : « Léa a supprimé un client » reste, rien n'y est
+réécrit.
+
+### Ce qui n'existe plus
+
+| Ce qu'on fait dans l'Admin | Dans les statistiques |
+|---|---|
+| **Supprimer un client** (Clients › Supprimer le client…) | le client, ses licences et ses PC (une clé dont toutes les activations sont celles de licences supprimées) ne comptent plus **nulle part** : courbes (passé compris, ventes comprises), divisions `par=client`, fiche du client (zéro), globe (ses villes, ses clients), mises à jour (PC vus, à jour, pas à jour, adoption), actifs maintenant. **Restaurer** le remet. |
+| **Supprimer une licence** (Licences › Supprimer, une licence révoquée) | la licence, ses activations et ses PC : de même. |
+| Révoquer une licence, retirer ou libérer un PC, une demande traitée, une option retirée d'une licence (une émission sans elle) | aujourd'hui (et le globe, et « actifs maintenant ») les voient tout de suite ; **hier reste** (c'est arrivé : un fait, `licence_option` compté au jour de l'ajout). |
+| **Sortir un admin de la liste** (plus seulement retiré) | ses appels et ses jours (`admin_appels`, `admin_jours`, `GET /admin/stats/admins`) ne comptent plus ; un admin **retiré** reste (il a existé). Ce qu'il a signé reste compté sous son identifiant (les licences existent). |
+| **Publier une version** | la dernière version, l'adoption, les PC à jour et pas à jour, le calque `pas_a_jour` du globe changent tout de suite, partout pareil (`version_derniere` = la plus récente de la table `versions`). Une version ne se **retire** pas du service (une plus ancienne : 409 `ancien`) ; ce que l'Admin efface de ses brouillons n'y change rien. |
+
+Le service garde les lignes de ce qui est supprimé (une licence révoquée reste dans la liste signée ; l'Admin seul a son
+archive) : il tient la **liste de ce qui n'existe plus** (`config` `stats_exclus` : les clients, normalisés, et les
+licences) et l'applique à chaque lecture (`donnees()` : les faits, les licences, les activations, les commandes, les
+logiciels, les versions vues, les compteurs). Elle change par `POST /admin/stats/reevaluer` ; l'Admin l'envoie
+**lui-même** : `deleteClient`, `restoreClient`, `deleteRevokedLicence` la notent (`stats-a-envoyer.json`, sans réseau),
+elle part avant la lecture suivante des statistiques (`openStats`) — un refus pour un droit l'oublie, le réseau la garde.
+Une licence **effacée du service** (`POST /admin/licences/supprimer`, 1.48.1 : ses lignes partent) passe d'abord par
+`statsLicencesSupprimees` : elle et ses PC (`stats_exclus.cles` : on ne saurait plus qu'ils étaient à elle) entrent dans
+la liste, et sa part est retirée des relevés tant que ses lignes le disent encore ; ensuite rien ne la compte plus.
+
+### Le passé : les relevés
+
+Les niveaux d'un jour passé viennent du relevé du jour suivant (§ 10) : **un agrégat** (les totaux et leurs divisions par
+offre, admin, type, logiciel, version), pas une ligne par licence. Le service sait pourtant ce que chaque licence ou PC
+supprimé y avait mis, tant que ses lignes sont dans ses tables (la licence : sa création et sa fin ; ses activations ;
+les versions vues de ses PC) : à l'instant du relevé, sa part est **retirée du relevé** (`licences_actives`,
+`jetons_plafond`, `pc_actifs`, `pc_vus`, `pc_a_jour` et leurs divisions), et le relevé note ce qu'il ne compte plus
+(`retires` : `{licences, cles}` ; un relevé pris après une suppression la note aussi) — jamais deux fois ; un client
+restauré : sa part est **remise**. Ainsi une courbe d'hier (le relevé) et un point reconstitué disent la même chose.
+**La limite** : une activation finie est effacée une semaine après son bail (§ 1) ; une fois effacée, sa part ne se
+retrouve plus — un relevé plus ancien peut alors la garder (c'est dit par Réévaluer, qui ne la liste pas).
+
+### `POST /admin/stats/reevaluer` (admin+, admin)
+
+Corps facultatif : `{"supprimer": {"clients": [...], "licences": [...]}, "remettre": {...}}` (5000 noms au plus par
+liste). Un admin : il lui faut **le droit de la suppression** (`client_supprimer` pour des clients, `licence_revoquer`
+pour des licences ; sinon 403 `droit`) ; sans corps, tout admin de la liste peut réévaluer (cela ne fait que remettre les
+statistiques d'accord avec ce qu'il peut déjà lire). Le service, dans l'ordre :
+
+1. met à jour la liste de ce qui n'existe plus et dit ce que cela change **maintenant** (les niveaux, le globe : ses
+   totaux, chaque ville qui change ou disparaît) ;
+2. corrige **les relevés des jours passés** (ci-dessus) ;
+3. corrige **les compteurs** : les jetons d'une licence qui n'existe plus (`jetons_pic_licence`), les appels d'un admin
+   sorti de la liste (`admin_appels`, `cle` `<id>|HH`), le pic des jetons d'un jour plus grand que la somme des pics de
+   ses licences (ce qui reste) — en mémoire aussi (le jour en cours) ;
+4. remet **la dernière version** (`version_derniere`) sur la plus récente publiée si elles diffèrent (une restauration).
+
+Il n'écrit **que des statistiques** (jamais une licence, un client, une activation) ; une seconde fois de suite : rien.
+Réponse 200 :
+```json
+{"version": "1.48.1", "heure": 1794326400, "jour": "2026-11-12", "exclus": {"clients": 1, "licences": 2, "pc": 3},
+ "nombre": 3, "corrections": [
+   {"groupe": "exclus", "texte": "Client « Société d'essai » : retiré des statistiques"},
+   {"groupe": "releves", "texte": "Licences actives, relevé du 12/11 : 3 → 2", "mesure": "licences_actives", "jour": "2026-11-12", "avant": 3, "apres": 2},
+   {"groupe": "globe", "texte": "Globe : Nantes retirée (plus rien à y montrer)"}]}
+```
+Les groupes, dans l'ordre : `exclus` (Ce qui n'existe plus), `maintenant` (Les chiffres d'aujourd'hui), `globe`,
+`releves` (Les relevés des jours passés), `compteurs`, `versions` (Les mises à jour). Une ligne au **journal des
+admins** (`stats_reevaluer`, « a réévalué les statistiques (3 corrections) ») : écrite par l'Admin pour le bouton, pas
+pour l'envoi automatique d'une suppression (la suppression est déjà au journal).
+
+### Les accords que les vues tiennent (vérifiés après chaque pas : `coherence.test.js`)
+
+- globe : `totaux.pc + sans_lieu.pc` = `pc_actifs` d'aujourd'hui (un PC par licence) ; `totaux` = la somme des villes ;
+  `noms_clients` des villes = les clients de `pc_actifs par=client` ; `totaux.demandes` = `demandes_attente` ;
+- **« actifs maintenant »** : le globe et le direct comptent les mêmes clés (`clesActives` : vues dans les 15 minutes, en
+  mémoire ou par le « vu » de leur lieu ; jamais un admin, même retiré, ni un Admin, ni un PC supprimé) :
+  `totaux.actifs + sans_lieu.actifs` (**nouveau** : `sans_lieu.actifs`) = `GET /admin/globe/direct` `actifs` ;
+- mises à jour : `derniere.version` = `version_derniere` du globe ; `vus` = la somme des `versions` ; `a_jour` = ceux de
+  la dernière ; `pas_a_jour_total` = vus − à jour ; `pc_vus` d'aujourd'hui (30 jours) = `vus` (du = aujourd'hui − 29) ;
+- les appels par admin ne nomment que des admins de `GET /admin/stats/admins`.
+
+### Dans l'Admin
+
+- **`changes`** (`src/license_admin/Changes.hpp`, pour tout l'Admin) : un numéro qui avance après chaque écriture
+  réussie — `Shell::report` (toute opération réussie), `detail::queueJournal` (toute action journalisée), « Actualiser »
+  (la coquille qui relit tout, `reloadAll` ; Statistiques), « Réévaluer », une suppression notée pour le service, de nouvelles demandes,
+  ce qu'un autre admin a changé (la liste, son journal). `changes::current()`, `changes::bump()`, `changes::Seen`
+  (`changed()` : vrai une fois après chaque changement). **Chaque vue des statistiques s'y relit** : la page
+  Statistiques (le numéro est dans la signature de ses chiffres ; le globe et les mises à jour, à leur prochain
+  passage), la rangée de courbes et la petite carte du tableau de bord (à leur prochaine image), le globe, la fiche d'un
+  client (sa signature), Administrateurs (la vue d'ensemble et les fiches). Plus rien de vieux jusqu'au redémarrage.
+- **Statistiques › Actualiser** (tous les onglets ; F5) : les chiffres relus tout de suite, et toutes les autres vues
+  averties. **Réévaluer** (à côté) : grisé, avec la raison dans son infobulle, sans clé qui signe ou sans service ;
+  « Réévaluation… » pendant le travail ; puis une fenêtre « Réévaluer les statistiques » (le nombre de corrections en
+  sous-titre ; les corrections par groupe, chacun avec son nombre ; défilante ; « Fermer ») ou « Rien à corriger : les
+  statistiques étaient cohérentes. » ; ensuite toutes les vues se relisent. L'Admin y joint ce que sa corbeille contient
+  (ses clients et licences supprimés, selon ses droits) : un poste qui a supprimé hors ligne se rattrape.
+- Un service d'avant la 1.48.1 : « Ton service en ligne est en 1.48.0 : déploie la 1.48.1 pour Réévaluer les
+  statistiques. » (le reste marche ; les suppressions attendent dans `stats-a-envoyer.json`).

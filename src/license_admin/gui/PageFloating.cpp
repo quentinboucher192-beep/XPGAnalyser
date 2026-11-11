@@ -90,7 +90,7 @@ std::string fit(gfx::IRenderer& r, const std::string& s, gfx::FontId f, float w)
 class FloatingPage final : public Page {
 public:
     explicit FloatingPage(ShellHost host) : Page("page.flottantes", std::move(host)) {
-        refresh_ = add(*this, std::make_unique<ui::Button>("Relever", "flottantes.relever"));
+        refresh_ = add(*this, std::make_unique<ui::Button>("Actualiser", "flottantes.relever"));
         refresh_->setStyle(ui::Button::Style::Primary);
         refresh_->setIcon(ui::Icon::Refresh);
         refresh_->setTooltip("Lit sur le service les licences en ligne, leurs postes pris et leurs jetons en cours.");
@@ -246,7 +246,7 @@ private:
         if (fetching_ && busy()) return "Relev\xC3\xA9 en cours\xE2\x80\xA6 (le r\xC3\xA9seau peut prendre quelques secondes)";
         if (!s.problem.empty()) return "Le service des licences est mal r\xC3\xA9gl\xC3\xA9 : " + s.problem;
         if (!s.configured) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : pas de licence flottante sans lui.";
-        if (s.snapshot.at == 0) return "Service " + s.config.url + " \xC2\xB7 jamais relev\xC3\xA9 sur ce poste : clique \xC2\xAB Relever \xC2\xBB.";
+        if (s.snapshot.at == 0) return "Service " + s.config.url + " \xC2\xB7 jamais relev\xC3\xA9 sur ce poste : clique \xC2\xAB Actualiser \xC2\xBB.";
         int floating = 0, used = 0, total = 0;
         for (const auto& l : s.snapshot.licences)
             if (l.floating()) {
@@ -261,7 +261,7 @@ private:
     [[nodiscard]] std::string empty() const {
         const auto& s = ws().service();
         if (!s.ready()) return "R\xC3\xA8gle d'abord le service des licences (Service en ligne).";
-        if (s.snapshot.at == 0) return "Pas encore relev\xC3\xA9 : clique \xC2\xAB Relever \xC2\xBB.";
+        if (s.snapshot.at == 0) return "Pas encore relev\xC3\xA9 : clique \xC2\xAB Actualiser \xC2\xBB.";
         return "Aucune licence flottante sur le service : \xC2\xAB Nouvelle licence flottante\xE2\x80\xA6 \xC2\xBB pour en cr\xC3\xA9" "er une.";
     }
 

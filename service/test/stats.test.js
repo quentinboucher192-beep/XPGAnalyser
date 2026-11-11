@@ -484,7 +484,7 @@ describe("jour 0 : les courbes (GET /admin/stats/serie)", () => {
         assert.deepEqual([v["BE|Bruxelles"].decouvertes, v["BE|Bruxelles"].demandes, v["BE|Bruxelles"].pc], [1, 1, 0]);
         assert.deepEqual([v["FR|Paris"].pc, v["FR|Paris"].actifs], [0, 1], "P3 : sa licence revoquee");
         assert.deepEqual(g.json.totaux, { villes: 5, pays: 2, clients: 1, pc: 4, actifs: 8, pas_a_jour: 1, admins: 2, decouvertes: 1, commandes: 2, demandes: 1 });
-        assert.deepEqual(g.json.sans_lieu, { pc: 1, admins: 1 }, "P8 (un lieu pose par le client) et Hugo");
+        assert.deepEqual(g.json.sans_lieu, { pc: 1, admins: 1, actifs: 1 }, "P8 (un lieu pose par le client) et Hugo ; 1.48.1 : P8 actif sans lieu");
         assert.equal(g.json.version_derniere, "1.47.0");
         // Hugo (sans << demandes >>) : le calque des demandes vaut 0
         const gh = await de(A, hugo, "GET", "/admin/globe?periode=7");

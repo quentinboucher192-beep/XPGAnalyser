@@ -56,6 +56,9 @@ std::string historyCsv(const std::vector<ActivationRecord>& records);
 
 namespace {
 
+// 1.48.1 : pourquoi une ligne de l'Historique ne se supprime pas (le bouton grise, le clic droit).
+constexpr const char* kNoDelete = "l'Historique ne s'efface pas : c'est la trace de ce qui a \xC3\xA9t\xC3\xA9 sign\xC3\xA9, demand\xC3\xA9, r\xC3\xA9voqu\xC3\xA9 - supprime plut\xC3\xB4t la licence, le PC ou le client";
+
 using RowIndex = ui::RowIndex;
 
 const ui::Fonts kFonts{};
@@ -244,6 +247,15 @@ public:
         export_ = add(*this, std::make_unique<ui::Button>("Exporter\xE2\x80\xA6", "historique.exporter"));
         export_->setIcon(ui::Icon::Export);
         export_->setTooltip("Les lignes montr\xC3\xA9" "es (filtres et recherche compris), en CSV pour Excel.");
+        // 1.48.1 : Supprimer est la, grise (la raison dans son infobulle) ; Actualiser relit l'archive et le registre.
+        delete_ = add(*this, std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", "historique.supprimer"));
+        delete_->setStyle(ui::Button::Style::Danger);
+        delete_->setIcon(ui::Icon::Delete);
+        delete_->setEnabled(false);
+        delete_->setTooltip(kNoDelete);
+        reload_ = add(*this, std::make_unique<ui::Button>("Actualiser", "historique.actualiser"));
+        reload_->setIcon(ui::Icon::Refresh);
+        reload_->setTooltip("Relit tout de suite le registre des activations et l'archive (F5)");
         table_ = add(*this, std::make_unique<ui::TableView>("historique.table"));
         table_->setColumns({{"Date", 150.f}, {"Type", 116.f}, {"Licence", 140.f}, {"Client", 170.f}, {"PC", 160.f}, {"D\xC3\xA9tail", 520.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);
@@ -277,6 +289,13 @@ public:
             if (const Line* l = lineAt(r)) openOf(l->a);
         });
         links_ += export_->clicked->connect([this] { exportCsv(); });
+        links_ += reload_->clicked->connect([this] {
+            if (host_.report) host_.report(OpResult::done("Historique relu : le registre des activations et l'archive."));
+            else {
+                ws().reload();
+                refresh();
+            }
+        });
         refresh();
     }
 
@@ -332,7 +351,12 @@ protected:
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
         const float ew = export_->sizeHint().preferred.w;
         export_->setBounds({x, y, ew, kButtonH});
-        countRect_ = {x + ew + 2.f * kGap, y, std::max(0.f, w - ew - 2.f * kGap), kButtonH};
+        const float dw = delete_->sizeHint().preferred.w;   // 1.48.1
+        delete_->setBounds({x + ew + kGap, y, dw, kButtonH});
+        const float rw = reload_->sizeHint().preferred.w + 8.f;
+        reload_->setBounds({x + w - rw, y, rw, kButtonH});
+        const float cx = x + ew + dw + 3.f * kGap;
+        countRect_ = {cx, y, std::max(0.f, x + w - rw - kGap - cx), kButtonH};
         y += kButtonH + kGap;
         const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres
         bar_->setBounds({x, y + 2.f, w, bh});
@@ -541,6 +565,7 @@ private:
         m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
         m.exportRows([this, list] { exportList(list); }, host_.busy && host_.busy() ? std::string("un travail est en cours") : std::string());
         m.note("Rien ne s'efface de l'historique");
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .many = "Supprimer les %n lignes\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = kNoDelete});   // 1.48.1 : jamais
         return m;
     }
 
@@ -688,6 +713,8 @@ private:
 
     core::ConnectionScope                 links_;
     ui::Button*                           export_{nullptr};
+    ui::Button*                           delete_{nullptr};   // 1.48.1 : grise (kNoDelete)
+    ui::Button*                           reload_{nullptr};   // 1.48.1 : Actualiser
     ui::FilterBar*                        bar_{nullptr};            // 1.47.0
     ui::TableView*                        table_{nullptr};
     std::shared_ptr<Rows>                 model_;

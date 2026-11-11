@@ -367,6 +367,19 @@ describe("la coherence apres chaque suppression ou changement (1.48.1)", () => {
         assert.equal((await reevaluer(A, lea)).json.nombre, 0);
     });
 
+    it("des licences effacees du service (POST /admin/licences/supprimer) : les chiffres ne bougent pas, rien a reevaluer", async () => {
+        const avant = await lire(A);
+        const r = await de(A, editeur, "POST", "/admin/licences/supprimer", { licences: [LA2, LS1] });
+        ok(r);
+        assert.deepEqual(r.json.supprimees.sort(), [LA2, LS1].sort());
+        const x = await lire(A);
+        assert.deepEqual(x.S.licences_actives.points, avant.S.licences_actives.points);
+        assert.deepEqual(x.S.pc_actifs.points, avant.S.pc_actifs.points);
+        assert.equal(x.G.totaux.actifs, avant.G.totaux.actifs, "leurs PC ne reviennent pas comme PC sans client");
+        assert.equal(x.S.pc_vus.points[1], avant.S.pc_vus.points[1]);
+        assert.equal((await reevaluer(A, editeur)).json.nombre, 0);
+    });
+
     it("un etat incoherent expres (une sauvegarde d'avant, restauree avec ce qui est supprime depuis) : Reevaluer liste ses corrections, puis rien", async () => {
         B = await lancerService({ cles: [editeur.hex], sansLimites: true, decalage: JOUR });
         const t = sauvegardeAvant.tables;

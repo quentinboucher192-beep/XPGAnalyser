@@ -47,6 +47,9 @@ namespace license_admin::gui {
 
 namespace {
 
+// 1.48.1 : pourquoi une ligne du journal ne se supprime pas (le bouton grise, le clic droit).
+constexpr const char* kNoDelete = "le journal des admins ne s'efface pas : chaque ligne est sign\xC3\xA9" "e et cha\xC3\xAEn\xC3\xA9" "e \xC3\xA0 la pr\xC3\xA9" "c\xC3\xA9" "dente (une ligne \xC3\xB4t\xC3\xA9" "e casserait la cha\xC3\xAEne) ; c'est la trace de qui a fait quoi";
+
 using namespace kit;
 using gfx::Color;
 using gfx::FontId;
@@ -432,8 +435,12 @@ public:
         crit_->setTooltip("Une criticit\xC3\xA9 par type d'action ; \xC2\xAB Me pr\xC3\xA9venir tout de suite \xC2\xBB pour Haute et Critique (une alerte en direct, chez toi seulement).");
         export_ = &button(*this, "Exporter (CSV)", "journal.exporter", ui::Button::Style::Default, ui::Icon::Export);
         export_->setTooltip("Les lignes montr\xC3\xA9" "es (les filtres, le tri), dans un fichier CSV.");
-        fetch_ = &button(*this, "Relever", "journal.relever", ui::Button::Style::Default, ui::Icon::Refresh);
+        fetch_ = &button(*this, "Actualiser", "journal.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         fetch_->setTooltip("Relever tout de suite les nouvelles lignes sur le service et les v\xC3\xA9rifier (l'Admin le fait seul toutes les 15 s).");
+        // 1.48.1 : Supprimer est la, grise : rien ne s'efface du journal (la raison dans son infobulle).
+        delete_ = &button(*this, "Supprimer\xE2\x80\xA6", "journal.supprimer", ui::Button::Style::Danger, ui::Icon::Delete);
+        delete_->setEnabled(false);
+        delete_->setTooltip(kNoDelete);
         // 1.47.0 (planche 12) : LA BARRE - chercher (journal.recherche), l'admin, le type, la criticite, la periode (30 j
         // d'office), le PC, + Filtre ; << Mes filtres >>. Elle remplace les pastilles des admins et de la criticite.
         bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("journal.barre", barFields(), "journal.recherche"));
@@ -537,7 +544,7 @@ protected:
         w_ = std::max(600.f, b.w - 2.f * pad);
         titleY_ = b.y + (b.h < 680.f ? 16.f : 24.f);
         float bx = x0_ + w_;
-        for (ui::Button* btn : {export_, crit_, fetch_}) {
+        for (ui::Button* btn : {export_, crit_, delete_, fetch_}) {
             const float bw = buttonWidth(*btn, 110.f);
             bx -= bw;
             btn->setBounds({bx, titleY_ + 4.f, bw, 38.f});
@@ -636,7 +643,7 @@ protected:
         if (shown_.empty()) {
             const std::string empty = view_.rows.empty()
                                           ? std::string("Aucune ligne relev\xC3\xA9" "e pour l'instant. Le journal se rel\xC3\xA8ve seul toutes les 15 s quand le service est r\xC3\xA9gl\xC3\xA9 ; "
-                                                        "\xC2\xAB Relever \xC2\xBB le fait tout de suite.")
+                                                        "\xC2\xAB Actualiser \xC2\xBB le fait tout de suite.")
                                           : std::string("Aucune ligne pour ces filtres : \xC2\xAB Effacer les filtres \xC2\xBB, ou une autre p\xC3\xA9riode.");
             (void)drawWrapped(r, card_.x + 24.f, rowsTop_ + 20.f, card_.w - 48.f, empty, kF14, c.textMuted, 20.f, 3);
         }
@@ -1094,7 +1101,7 @@ private:
                    adm::levelLabel(l.level),
                ui::Icon::Copy);
         m.exportRows([this, number] { exportCsv({number}); });
-        m.note("Rien ne s'efface du journal", "pas d'entr\xC3\xA9" "e rouge ici");
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = kNoDelete});   // 1.48.1 : la, grise, avec sa raison
         menuList_ = m;
         menu_->setItems(menuList_.items(1));
         menu_->openInWindow(at);
@@ -1253,6 +1260,7 @@ private:
     ui::Button*                 crit_{nullptr};
     ui::Button*                 export_{nullptr};
     ui::Button*                 fetch_{nullptr};
+    ui::Button*                 delete_{nullptr};   // 1.48.1 : grise (kNoDelete)
     ui::FilterBar*              bar_{nullptr};                 // 1.47.0 : la barre (chercher, l'admin, le type, la criticite, la periode)
     ui::UnfoldCard*             unfold_{nullptr};              // 1.47.0 : la carte de la ligne depliee
     std::vector<ui::WidgetPtr>  grave_;                        // ... les cartes remplacees (detruites au dessin suivant)

@@ -378,6 +378,21 @@ public:
         createBtn_ = add(*this, std::make_unique<ui::Button>("Cr\xC3\xA9" "er", prefix_ + ".nouvelle.creer"));
         createBtn_->setStyle(ui::Button::Style::Primary);
         closeNewBtn_ = add(*this, std::make_unique<ui::Button>("Fermer", prefix_ + ".nouvelle.fermer"));
+        // 1.48.1 : Actualiser (comme Clients) ; Supprimer dans la barre pour une page qui n'en a pas dans sa fiche (barDelete)
+        reloadBtn_ = add(*this, std::make_unique<ui::Button>("Actualiser", prefix_ + ".actualiser"));
+        reloadBtn_->setIcon(ui::Icon::Refresh);
+        reloadBtn_->setTooltip("Relit tout de suite le registre de l'archive et les licences (F5) ; tes modifications pas encore sign\xC3\xA9" "es restent");
+        barDeleteBtn_ = add(*this, std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", prefix_ + ".supprimer"));
+        barDeleteBtn_->setStyle(ui::Button::Style::Danger);
+        barDeleteBtn_->setIcon(ui::Icon::Delete);
+        links_ += reloadBtn_->clicked->connect([this] {
+            if (host_.report) host_.report(OpResult::done(title_ + " relues : le registre de l'archive et les licences."));
+            else {
+                ws().reload();
+                refresh();
+            }
+        });
+        links_ += barDeleteBtn_->clicked->connect([this] { deleteSelected(); });
         links_ += newBtn_->clicked->connect([this] { openNew(true); });
         links_ += closeNewBtn_->clicked->connect([this] { openNew(false); });
         links_ += createBtn_->clicked->connect([this] { createNew(); });
@@ -397,6 +412,7 @@ public:
         updateBar();
         const auto vis = hasRegistry_ ? ui::Visibility::Visible : ui::Visibility::Collapsed;
         for (ui::Widget* w : {static_cast<ui::Widget*>(newBtn_), static_cast<ui::Widget*>(cancelBtn_), static_cast<ui::Widget*>(signBtn_)}) w->setVisibility(vis);
+        barDeleteBtn_->setVisibility(hasRegistry_ && barDelete() ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.48.1
         firstBtn_->setVisibility(hasRegistry_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         for (ui::Widget* w : newWidgets()) w->setVisibility(newOpen_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         createBtn_->setVisibility(newOpen_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
@@ -406,11 +422,22 @@ public:
         if (hasRegistry_) reloadContent();
         // 1.47.0 : une autre liste y mene (<< Aller a > Ses options >>...) : la barre filtree sur ce qu'elle demande.
         if (const std::string f = takePageFocus(prefix_); !f.empty() && hasRegistry_) applyFocus(f);
+        updateBarDelete();
         invalidateLayout();
         invalidate();
     }
 
 protected:
+    // 1.48.1 : SUPPRIMER dans la barre (une page sans bouton Supprimer dans sa fiche : Fonctionnalites) - vide : permis.
+    [[nodiscard]] virtual bool barDelete() const { return false; }
+    [[nodiscard]] virtual std::string deleteWhy() const { return {}; }
+    virtual void deleteSelected() {}
+    void updateBarDelete() {
+        if (!barDeleteBtn_ || !barDelete()) return;
+        const std::string why = deleteWhy();
+        barDeleteBtn_->setEnabled(why.empty());
+        barDeleteBtn_->setTooltip(why.empty() ? std::string("Supprime la ligne choisie du brouillon (\xC3\xA0 signer)") : why);
+    }
     // ---- 1.47.0 (planches 06, 07, 12) : la barre, le clic droit, le depliage - ce que les trois listes partagent ----
     //  La barre lit texts_ : TOUTES les lignes du brouillon (les colonnes de la table, puis les champs en plus) ; la
     //  page ne met dans sa table que celles que bar_->accepts(i) garde.
@@ -539,6 +566,8 @@ protected:
         }
     }
     bool warned142_{false};
+    ui::Button* reloadBtn_{nullptr};      // 1.48.1 : Actualiser
+    ui::Button* barDeleteBtn_{nullptr};   // 1.48.1 : Supprimer... (barDelete)
 
     void onLayout() final {
         const gfx::Rect b = bounds();
@@ -560,15 +589,18 @@ protected:
             firstBtn_->setBounds({x, content_.y + 30.f + static_cast<float>(emptyLines_.size()) * kLineH + 14.f, fw, kButtonH});
             return;
         }
-        // La barre : Nouvelle..., Annuler ; Signer a droite.
+        // La barre : Nouvelle..., Annuler (1.48.1 : Supprimer...) ; Actualiser et Signer a droite.
         float bx = x;
-        for (ui::Button* btn : {newBtn_, cancelBtn_}) {
+        for (ui::Button* btn : {newBtn_, cancelBtn_, barDeleteBtn_}) {
+            if (btn->visibility() == ui::Visibility::Collapsed) continue;
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
             bx += bw + kGap;
         }
         const float sw = signBtn_->sizeHint().preferred.w;
         signBtn_->setBounds({std::max(bx, x + w - sw), y, sw, kButtonH});
+        const float rw = reloadBtn_->sizeHint().preferred.w + 8.f;   // 1.48.1
+        reloadBtn_->setBounds({std::max(bx, x + w - sw - kGap - rw), y, rw, kButtonH});
         y += kButtonH + kGap;
         newHintLines_.clear();
         if (newOpen_ && hasRegistry_) {
@@ -1838,6 +1870,7 @@ public:
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>& rows) {
             if (loading_ || rows.empty() || rows.front() >= ids_.size()) return;
             select(ids_[rows.front()]);
+            updateBarDelete();   // 1.48.1
         });
         // 1.47.0 (planches 06, 07, 12) : la barre (le produit, l'etat, l'offre qui l'accorde...), le clic droit, le depliage.
         setupBar(*table_, barFields(), "fonctionnalites", "fonctionnalit\xC3\xA9s", [this] { rebuildTable(); });
@@ -2196,6 +2229,45 @@ private:
             bar_->filterOn(8, what.substr(7));
         }
     }
+    // 1.48.1 : SUPPRIMER une fonctionnalite - la regle sure : seulement si aucune offre ne l'accorde, aucune option ne
+    // l'ouvre et aucune licence de l'archive (meme finie) ne la porte ; sinon on la retire (plus accordee).
+    [[nodiscard]] bool barDelete() const override { return true; }
+    [[nodiscard]] std::string deleteWhy() const override {
+        const lic::FeatureDef* f = selected_.empty() ? nullptr : draft().reg.feature(selected_);
+        if (!f) return "choisis une fonctionnalit\xC3\xA9";
+        if (!ws().can("offres")) return ws().whyNot("offres");
+        std::size_t offers = 0, options = 0, licences = 0;
+        for (const auto& e : draft().reg.editions) offers += grants(e, f->id) ? 1 : 0;
+        for (const auto& o : draft().reg.options)
+            options += std::any_of(o.features.begin(), o.features.end(), [&](const lic::FeatureGrant& g) { return g.id == f->id; }) ? 1 : 0;
+        for (const auto& l : ws().licences())
+            licences += std::any_of(l.licence.features.begin(), l.licence.features.end(), [&](const auto& g) { return g.id == f->id; }) ? 1 : 0;
+        if (licences)
+            return std::to_string(licences) + (licences > 1 ? " licences la portent" : " licence la porte") +
+                   " (les Studios la lisent dans le registre) : retire-la plut\xC3\xB4t (plus accord\xC3\xA9" "e)";
+        if (offers) return std::to_string(offers) + (offers > 1 ? " offres l'accordent" : " offre l'accorde") + " : \xC3\xB4te-la d'abord de ces offres, ou retire-la";
+        if (options) return std::to_string(options) + (options > 1 ? " options l'ouvrent" : " option l'ouvre") + " : \xC3\xB4te-la d'abord de ces options, ou retire-la";
+        return {};
+    }
+    void deleteSelected() override {
+        if (const std::string why = deleteWhy(); !why.empty()) return say("Supprimer : " + why + ".", Tone::Warning);
+        const std::string id = selected_;
+        std::weak_ptr<bool> life = alive();
+        host_.openDialog(licdlg::makeConfirmDialog(
+            "dialog.supprimer-fonctionnalite", "Supprimer la fonctionnalit\xC3\xA9 " + id + " ?",
+            "Aucune offre, aucune option, aucune licence de l'archive ne l'a. Elle quitte le catalogue avec le prochain registre sign\xC3\xA9 ; "
+            "les anciens registres la gardent (rien n'est r\xC3\xA9\xC3\xA9" "crit).\n\nTant que le registre n'est pas sign\xC3\xA9, \xC2\xAB Annuler les "
+            "modifications \xC2\xBB la remet.",
+            "Supprimer", true, [this, life, id] {
+                if (life.expired()) return;
+                std::erase_if(draft().reg.features, [&](const lic::FeatureDef& x) { return x.id == id; });
+                selected_.clear();
+                edited();
+                reloadContent();
+                updateBarDelete();
+                say("Fonctionnalit\xC3\xA9 " + id + " supprim\xC3\xA9" "e du brouillon : signe le registre.", Tone::Info);
+            }));
+    }
     void setRetired(const std::string& id, bool on) {
         for (auto& f : draft().reg.features)
             if (f.id == id && f.retired != on) {
@@ -2239,7 +2311,8 @@ private:
         m.copy("Le libell\xC3\xA9", f->label, ui::Icon::Copy);
         m.copy("La ligne", lineOf(*table_, row), ui::Icon::Copy);
         m.exportRows([this, sel] { listkit::exportRows(host_, *table_, sel, "fonctionnalites.csv", "fonctionnalit\xC3\xA9s"); });
-        m.note("Rien ne se supprime", "une fonctionnalit\xC3\xA9 se retire : des licences l'ont");
+        // 1.48.1 : Supprimer - seulement si personne ne l'a (ni offre, ni option, ni licence de l'archive) ; sinon grise, la raison
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = deleteWhy(), .run = [this] { deleteSelected(); }});
         return m;
     }
 

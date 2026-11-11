@@ -1238,8 +1238,11 @@ protected:
         right -= ew + 8.f;
         float natural = 0.f;
         for (auto* t : tabs_) natural += t->preferredWidth() + 12.f;
-        // 1.48.1 : Actualiser, Reevaluer - leur icone seule (l'infobulle) si la place manque
+        // 1.48.1 : Actualiser, Reevaluer - leur icone seule (l'infobulle) si la place manque ; s'ils feraient passer les
+        // onglets sur leur propre rangee : au bout de la barre des choix (plus bas)
+        buttonsInBar_ = x0 + titleW + natural + 2.f * (34.f + 8.f) > right;
         for (ui::Button* bt : {refreshNow_, reevaluate_}) {
+            if (buttonsInBar_) break;
             bt->setCompact(false);
             float bw = bt->sizeHint().preferred.w + 10.f;
             if (x0 + titleW + natural + bw + 8.f > right) {
@@ -1339,10 +1342,24 @@ protected:
             group("compar\xC3\xA9 \xC3\xA0", compare_);
             group("par", step_);
         }
+        // 1.48.1 : Actualiser, Reevaluer au bout de la rangee (leur icone seule), sinon sur la suivante
+        float barRight = x0 + w;
+        if (buttonsInBar_) {
+            if (bx + 2.f * (34.f + 8.f) > barRight) {
+                bx = x0;
+                rowY += segH + 8.f;
+            }
+            for (ui::Button* bt : {refreshNow_, reevaluate_}) {
+                bt->setCompact(true);
+                barRight -= 34.f;
+                bt->setBounds({barRight, rowY, 34.f, segH});
+                barRight -= 8.f;
+            }
+        }
         y = rowY;
         hintX_ = bx;
         {
-            float room = x0 + w - bx;
+            float room = barRight - bx;
             periodInBar_ = !globe && !periodInTabs_ && room >= periodW + 16.f;
             if (periodInBar_) room -= periodW + 24.f;
             hint_.clear();
@@ -1985,7 +2002,7 @@ private:
     ui::Button*                      export_{nullptr};
     ui::Button*                      refreshNow_{nullptr};   // 1.48.1
     ui::Button*                      reevaluate_{nullptr};   // 1.48.1
-    bool                             reevaluating_{false};
+    bool                             reevaluating_{false}, buttonsInBar_{false};
     changes::Seen                    changes_;
     ui::Button*                      snapshot_{nullptr};
     ui::Button*                      deploy_{nullptr};

@@ -954,7 +954,7 @@ public:
         // 1.47.0 (agent A) : << N demandes d'admin en attente : Voir la liste >> -> Demandes d'admin (PageAdminRequests.cpp)
         requestsLink_ = &adopt(*this, std::make_unique<ab::LinkButton>("Voir la liste", "admins.demandes-liste"));
         links_ += requestsLink_->clicked->connect([this] { host_.navigate("demandes-admins"); });
-        reload_ = &button(*this, "Relever", "admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
+        reload_ = &button(*this, "Actualiser", "admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         reload_->setTooltip("Relire tout de suite la liste des admins, les demandes et les chiffres du service (l'Admin le fait seul en arrivant sur la page).");
         range_ = &adopt(*this, std::make_unique<statskit::SegGroup>(
                                    "admins.periode", std::vector<statskit::SegGroup::Item>{{statskit::rangeKey(statskit::Range::Days7), statskit::rangeLabel(statskit::Range::Days7)},

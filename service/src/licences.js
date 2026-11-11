@@ -1696,6 +1696,7 @@ export class Licences extends DurableObject {
                 throw new Erreur(409, "en_vigueur", "La licence " + id + " est encore en vigueur (ni révoquée, ni finie) : révoque-la d'abord.", { licence: id });
             trouvees.push(id);
         }
+        this.statsLicencesSupprimees(trouvees, ctx.now); // 1.48.1 : les statistiques les oublient (stats.js), avant leurs lignes
         for (const id of trouvees) {
             this.x("DELETE FROM jetons WHERE licence = ?", id);
             this.x("DELETE FROM liberations WHERE licence = ?", id);

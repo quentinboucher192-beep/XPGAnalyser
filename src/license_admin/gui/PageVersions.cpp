@@ -57,6 +57,9 @@ bool adoptVersionsView(ui::Widget& page, VersionsView view, std::vector<FileToRe
 
 namespace {
 
+// 1.48.1 : pourquoi une version publiee ne se supprime pas (le bouton grise, le clic droit).
+constexpr const char* kNoDelete = "une version publi\xC3\xA9" "e ne se supprime pas : des Studios et des Admins la t\xC3\xA9l\xC3\xA9" "chargent ou s'y mettent \xC3\xA0 jour - publie une version plus r\xC3\xA9" "cente";
+
 using namespace kit;
 using gfx::Color;
 using gfx::FontId;
@@ -176,8 +179,12 @@ public:
     explicit VersionsPage(ShellHost host) : Page("versions", std::move(host)) {
         open_ = &button(*this, "Publier une version\xE2\x80\xA6", "versions.publier", ui::Button::Style::Default, ui::Icon::Export);
         open_->setTooltip("Les deux installateurs (les Studios, l'Admin) de la m\xC3\xAA" "me version : sign\xC3\xA9s ici, d\xC3\xA9pos\xC3\xA9s sur le service, chaque PC pas \xC3\xA0 jour pr\xC3\xA9venu.");
-        reload_ = &button(*this, "Relever", "versions.relever", ui::Button::Style::Default, ui::Icon::Refresh);
+        reload_ = &button(*this, "Actualiser", "versions.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         reload_->setTooltip("Relire tout de suite les versions publi\xC3\xA9" "es et qui est \xC3\xA0 jour (l'Admin le fait seul en arrivant sur la page).");
+        // 1.48.1 : Supprimer est la, grise : une version publiee ne se retire pas (la raison dans son infobulle).
+        delete_ = &button(*this, "Supprimer\xE2\x80\xA6", "versions.supprimer", ui::Button::Style::Danger, ui::Icon::Delete);
+        delete_->setEnabled(false);
+        delete_->setTooltip(kNoDelete);
         pickStudios_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.studios.choisir", ui::Button::Style::Default, ui::Icon::Open);
         pickAdmin_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.admin.choisir", ui::Button::Style::Default, ui::Icon::Open);
         notes_ = &adopt(*this, std::make_unique<ui::MultiLineText>("versions.notes"));
@@ -315,7 +322,7 @@ protected:
         w_ = std::max(600.f, b.w - 2.f * pad);
         titleY_ = b.y + (b.h < 680.f ? 18.f : 26.f);
         float bx = x0_ + w_;
-        for (ui::Button* btn : {open_, reload_}) {
+        for (ui::Button* btn : {open_, delete_, reload_}) {
             const float bw = buttonWidth(*btn, 110.f);
             bx -= bw;
             btn->setBounds({bx, titleY_ + 4.f, bw, 38.f});
@@ -1085,7 +1092,7 @@ private:
         for (std::size_t c = 0; c < t.size(); ++c) line += (c ? "\t" : "") + t[c];
         m.copy("La ligne", line + "\n", ui::Icon::Copy);
         m.exportRows([this, i] { exportVersions({i}); }, busy ? std::string("un travail est en cours") : std::string());
-        m.note("Une version publi\xC3\xA9" "e ne se retire pas", "on en publie une plus r\xC3\xA9" "cente");
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = kNoDelete});   // 1.48.1 : la, grise, avec sa raison
         menuList_ = m;
         menu_->setItems(menuList_.items(1));
         menu_->openInWindow(at);
@@ -1141,6 +1148,7 @@ private:
     std::shared_ptr<Progressing>  progress_;
     ui::Button*                   open_{nullptr};
     ui::Button*                   reload_{nullptr};
+    ui::Button*                   delete_{nullptr};   // 1.48.1 : grise (kNoDelete)
     ui::Button*                   pickStudios_{nullptr};
     ui::Button*                   pickAdmin_{nullptr};
     ui::MultiLineText*            notes_{nullptr};

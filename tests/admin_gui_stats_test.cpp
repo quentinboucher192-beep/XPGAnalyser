@@ -512,6 +512,85 @@ int main(int argc, char** argv) {
         check(has(csv, "Groupe;Du;Au;Mesure") && has(csv, "Montant encaiss\xC3\xA9") && count(csv, "\r\n") > 100, "le fichier CSV : une ligne par periode et par mesure");
     }
 
+    // 1.48.1 : LA COHERENCE - un changement dans l'Admin (changes::bump) : les chiffres relus au retour de la page, rien de
+    // vieux ; Actualiser (tous les onglets) ; Reevaluer (DES FAUX : une reponse ecrite ici, lue par le vrai lecteur) : la
+    // fenetre de ses corrections par groupe, ou << Rien a corriger >>, puis les chiffres relus.
+    std::printf("-- 1.48.1 : un changement, Actualiser, Reevaluer\n");
+    {
+        int calls = 0;
+        sk::Fetchers f = fakes();
+        auto inner = f.series;
+        f.series = [&calls, inner](const stats::SeriesQuery& q, stats::SeriesReply& out) {
+            ++calls;
+            return inner(q, out);
+        };
+        std::string answer = "{\"jour\":\"2026-11-10\",\"exclus\":{\"clients\":1,\"licences\":2,\"pc\":3},\"nombre\":3,\"corrections\":["
+                             "{\"groupe\":\"releves\",\"texte\":\"Licences actives, relev\xC3\xA9 du 10/11 : 17 \xE2\x86\x92 15\",\"avant\":17,\"apres\":15},"
+                             "{\"groupe\":\"globe\",\"texte\":\"Globe : Nantes retir\xC3\xA9" "e (plus rien \xC3\xA0 y montrer)\"},"
+                             "{\"groupe\":\"releves\",\"texte\":\"PC actifs, relev\xC3\xA9 du 10/11 : 40 \xE2\x86\x92 37\",\"avant\":40,\"apres\":37}]}";
+        int asked = 0;
+        f.reevaluate = [&answer, &asked](stats::ReevaluateReply& out) {
+            ++asked;
+            core::json::Value v;
+            std::string why;
+            if (!core::json::parse(answer, v, &why) || !stats::parseReevaluate(v, out, &why)) return gui::OpResult::fail(why);
+            return gui::OpResult::done("Statistiques r\xC3\xA9\xC3\xA9valu\xC3\xA9" "es : " + stats::reevaluateSummary(out));
+        };
+        sk::setFetchersForTests(f);
+        page->refresh();
+        (void)draw(*page);
+        const int c0 = calls;
+        page->refresh();
+        (void)draw(*page);
+        check(calls == c0, "sans changement : les chiffres gardes (aucune relecture)");
+        license_admin::changes::bump();   // une suppression, une publication... ailleurs dans l'Admin
+        page->refresh();
+        (void)draw(*page);
+        check(calls > c0, "apres un changement : les chiffres relus (" + std::to_string(calls - c0) + " lectures)");
+        const int c1 = calls;
+        const auto g0 = license_admin::changes::current();
+        check(visibleW(*page, "stats.actualiser") && click(*page, "stats.actualiser"), "Actualiser : visible, cliquable");
+        (void)draw(*page);
+        check(calls > c1 && license_admin::changes::current() > g0, "Actualiser : les chiffres relus, les autres vues averties");
+        check(click(*page, "stats.onglet.ventes") && click(*page, "stats.actualiser"), "Actualiser sur un autre onglet (Ventes)");
+        check(click(*page, "stats.onglet.vue"), "retour a la vue generale");
+        // Reevaluer
+        auto* rb = find<ui::Button>(*page, "stats.reevaluer");
+        check(rb && rb->enabled() && visibleW(*page, "stats.reevaluer"), "Reevaluer : visible, cliquable (l'admin+)");
+        const std::size_t dialogs = rig.dialogs.size();
+        const int c2 = calls;
+        check(click(*page, "stats.reevaluer") && asked == 1, "Reevaluer : demande au service");
+        (void)draw(*page);
+        check(rig.dialogs.size() == dialogs + 1 && rig.dialogs.back(), "la fenetre des corrections s'ouvre");
+        if (rig.dialogs.size() == dialogs + 1 && rig.dialogs.back()) {
+            TextRenderer r;
+            const std::string d = paintMenu(*rig.dialogs.back(), r, 1100.f, 760.f);
+            if (std::getenv("XPG_ESSAI_MONTRER")) std::printf("----\n%s\n", d.c_str());
+            check(has(d, "R\xC3\xA9\xC3\xA9valuer les statistiques") && has(d, "3 corrections") && has(d, "Les relev\xC3\xA9s des jours pass\xC3\xA9s (2)") &&
+                      has(d, "Le globe (1)") && has(d, "Licences actives, relev\xC3\xA9 du 10/11 : 17 \xE2\x86\x92 15") && has(d, "Globe : Nantes retir\xC3\xA9" "e") &&
+                      has(d, "Fermer"),
+                  "la fenetre : le titre, le nombre, les groupes et leurs corrections, Fermer");
+        }
+        check(calls > c2 && rb->enabled() && rb->text() == "R\xC3\xA9\xC3\xA9valuer", "apres Reevaluer : les chiffres relus, le bouton revenu");
+        const auto lines = sk::reevaluateLines([&] {
+            stats::ReevaluateReply x;
+            core::json::Value v;
+            (void)core::json::parse(answer, v, nullptr);
+            (void)stats::parseReevaluate(v, x, nullptr);
+            return x;
+        }());
+        check(lines.size() == 5 && lines[0] == "# Le globe (1)" && lines[2] == "# Les relev\xC3\xA9s des jours pass\xC3\xA9s (2)", "les lignes : les groupes dans leur ordre");
+        answer = "{\"jour\":\"2026-11-10\",\"exclus\":{},\"nombre\":0,\"corrections\":[]}";
+        check(click(*page, "stats.reevaluer") && asked == 2 && rig.dialogs.size() == dialogs + 2, "Reevaluer encore");
+        {
+            TextRenderer r;
+            const std::string d = paintMenu(*rig.dialogs.back(), r, 1100.f, 760.f);
+            check(has(d, "Rien \xC3\xA0 corriger : les statistiques \xC3\xA9taient coh\xC3\xA9rentes."), "rien a corriger : dit");
+        }
+        sk::setFetchersForTests(fakes());
+        page->refresh();
+    }
+
     std::printf("-- des donnees vides, une mesure refusee, un refus du service\n");
     {
         sk::setFetchersForTests(fakes([](core::json::Value& v) {

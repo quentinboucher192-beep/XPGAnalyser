@@ -502,7 +502,7 @@ public:
     }
 
     explicit AdminRequestsPage(ShellHost host) : Page("page.demandes-admins", std::move(host)) {
-        fetch_ = &kit::button(*this, "Relever", "demandes-admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
+        fetch_ = &kit::button(*this, "Actualiser", "demandes-admins.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         fetch_->setTooltip("Relire les demandes d'admin du service (en attente, et celles closes depuis 7 jours).");
         accept_ = &kit::button(*this, "Accepter\xE2\x80\xA6", "demandes-admins.accepter", ui::Button::Style::Primary, ui::Icon::Ok);
         refuse_ = &kit::button(*this, "Refuser\xE2\x80\xA6", "demandes-admins.refuser", ui::Button::Style::Danger, ui::Icon::Close);
@@ -663,7 +663,7 @@ private:
     [[nodiscard]] std::string empty() const {
         if (!allowed()) return "Seul l'admin+ voit et accepte les demandes d'admin.";
         if (!ws().service().ready()) return "R\xC3\xA8gle d'abord le service des licences : les demandes y arrivent.";
-        if (loadedAt_ == 0) return loading_ ? std::string() : std::string("Clique \xC2\xAB Relever \xC2\xBB.");
+        if (loadedAt_ == 0) return loading_ ? std::string() : std::string("Clique \xC2\xAB Actualiser \xC2\xBB.");
         if (!all_.empty()) return "Aucune demande ne correspond aux filtres (\xC2\xAB Effacer les filtres \xC2\xBB montre toutes celles des 7 derniers jours).";
         return "Aucune demande d'admin. Un futur admin la fait depuis son Admin (Administrateurs \xE2\x80\xBA Demander \xC3\xA0 devenir admin), apr\xC3\xA8s ton invitation "
                "(\xC2\xAB Ajouter un admin\xE2\x80\xA6 \xC2\xBB).";

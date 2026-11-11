@@ -329,7 +329,7 @@ private:
         for (int c = 0; c < 5; ++c) (void)text(r, cols_[c], headY_ + 4.f, heads[c], gfx::semibold(kF11), kFaint, colW_[c]);
         r.fillRect({share_.x + 1.f, headY_ + 24.f, share_.w - 2.f, 1.f}, kLine);
         if (!d_->journal) {
-            (void)kit::drawWrapped(r, x, headY_ + 40.f, w, "Le journal des admins n'est pas relev\xC3\xA9 sur ce poste : ces parts viennent de lui (Journal des admins, Relever).",
+            (void)kit::drawWrapped(r, x, headY_ + 40.f, w, "Le journal des admins n'est pas relev\xC3\xA9 sur ce poste : ces parts viennent de lui (Journal des admins, Actualiser).",
                                    kF13, kMuted, 18.f, 3);
         }
         for (const auto& g : rows_) {

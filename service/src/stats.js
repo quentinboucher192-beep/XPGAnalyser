@@ -290,17 +290,21 @@ function finDeVersion(publiees, version) {
 // ne les comptent plus, ni leurs PC (config stats_exclus, tenue par POST /admin/stats/reevaluer ; docs/STATISTIQUES.md,
 // par. 15). `clients` : normalises (normClient).
 export const MAX_EXCLUS = 5000;
+// `cles` : les PC de licences effacees du service (POST /admin/licences/supprimer : leurs activations parties, on ne
+// saurait plus qu'ils etaient a elles).
 function lireExclus(o) {
-    const vide = { clients: new Set(), licences: new Set() };
+    const vide = { clients: new Set(), licences: new Set(), cles: new Set() };
+    const textes = (a) => (Array.isArray(a) ? a : []).filter((x) => typeof x === "string" && x);
     try {
         const v = JSON.parse(o.config("stats_exclus") || "{}");
-        return {
-            clients: new Set((Array.isArray(v.clients) ? v.clients : []).map(normClient).filter(Boolean)),
-            licences: new Set((Array.isArray(v.licences) ? v.licences : []).filter((x) => typeof x === "string" && x)),
-        };
+        return { clients: new Set(textes(v.clients).map(normClient).filter(Boolean)), licences: new Set(textes(v.licences)), cles: new Set(textes(v.cles)) };
     } catch {
         return vide;
     }
+}
+function ecrireExclus(o, ex) {
+    const v = { clients: [...ex.clients].sort(), licences: [...ex.licences].sort(), cles: [...(ex.cles || [])].sort() };
+    o.ecrireConfig("stats_exclus", v.clients.length || v.licences.length || v.cles.length ? JSON.stringify(v) : null);
 }
 
 // ============================================================================ les donnees d'une requete
@@ -312,8 +316,8 @@ function donnees(o, now, brut = false) {
         if (!memo.has(nom)) memo.set(nom, f());
         return memo.get(nom);
     };
-    const ex = brut ? { clients: new Set(), licences: new Set() } : lireExclus(o);
-    const rien = !ex.clients.size && !ex.licences.size;
+    const ex = brut ? { clients: new Set(), licences: new Set(), cles: new Set() } : lireExclus(o);
+    const rien = !ex.clients.size && !ex.licences.size && !ex.cles.size;
     const d = {
         now,
         debut: o.debutStats(now),
@@ -334,7 +338,7 @@ function donnees(o, now, brut = false) {
         // Les PC qui n'existent plus : toutes leurs activations sont celles de licences qui n'existent plus.
         clesExclues: () =>
             une("clesEx", () => {
-                const s = new Set();
+                const s = new Set(ex.cles);
                 if (rien) return s;
                 const lx = d.licencesExclues();
                 const gardees = new Set();
@@ -1956,7 +1960,7 @@ export const RoutesStats = {
         if (apresEx.clients.length > MAX_EXCLUS || apresEx.licences.length > MAX_EXCLUS) throw new Erreur(507, "limite", "Trop de clients ou de licences supprimés (" + MAX_EXCLUS + " au plus).");
         if (JSON.stringify({ c: apresEx.clients, l: apresEx.licences }) !== avantEx) {
             const avant = await this.resumeStats(now);
-            this.ecrireConfig("stats_exclus", apresEx.clients.length || apresEx.licences.length ? JSON.stringify(apresEx) : null);
+            ecrireExclus(this, { clients: ex.clients, licences: ex.licences, cles: ex.cles });
             const apres = await this.resumeStats(now);
             for (const c of sup.clients) dire("exclus", "Client « " + c + " » : retiré des statistiques");
             for (const c of rem.clients) dire("exclus", "Client « " + c + " » : de nouveau compté");
@@ -1994,6 +1998,19 @@ export const RoutesStats = {
             nombre: corrections.length,
             corrections,
         });
+    },
+
+    // 1.48.1 : des licences EFFACEES du service (POST /admin/licences/supprimer, licences.js) - appele AVANT que leurs
+    // lignes partent : elles et leurs PC vont dans la liste de ce qui n'existe plus, leur part est retiree des releves
+    // (tant que leurs lignes le disent encore) ; ensuite rien ne les compte plus (leurs faits restent, tries).
+    statsLicencesSupprimees(ids, now) {
+        if (!ids.length) return;
+        const ex = lireExclus(this);
+        for (const id of ids) ex.licences.add(id);
+        ecrireExclus(this, ex);
+        for (const cle of donnees(this, now).clesExclues()) ex.cles.add(cle);
+        ecrireExclus(this, ex);
+        this.corrigerReleves(now, () => {});
     },
 
     // Ce que montrent les vues maintenant (reevaluer : avant et apres une suppression).
