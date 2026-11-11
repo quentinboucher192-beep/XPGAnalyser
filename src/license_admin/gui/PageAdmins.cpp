@@ -829,7 +829,7 @@ private:
                 // 1.47.0 (agent A) : l'invitation notee (invitations-admins.json) - la liste << Demandes d'admin >> la rapproche
                 // (1.49.0 : celle du code est deja notee par inviteAdmin)
                 if (code_.empty())
-                    (void)host_.workspace().noteAdminInvitation({trimmed(name_->text()), trimmed(email_->text()), selectedProfile(), byLink ? "lien" : "studio", 0});
+                    (void)host_.workspace().noteAdminInvitation({trimmed(name_->text()), trimmed(email_->text()), selectedProfile(), byLink ? "lien" : "studio", 0, {}, 0});
                 sentAt_ = host_.workspace().now();
                 sentWhat_ = r.details.empty() ? r.message : r.details.front();
                 if (sentWhat_.rfind("Fichier : ", 0) == 0) sentWhat_ = sentWhat_.substr(10);
@@ -2382,6 +2382,7 @@ private:
         pendingCard_ = {x0_, top, cw, 470.f};
         check_->setBounds({pendingCard_.x + 24.f, pendingCard_.bottom() - 60.f, buttonWidth(*check_, 170.f), 38.f});
         show(check_, true);
+        requestSent_ = ws().account().requestSent != 0;   // 1.49.0 : une demande d'avant (l'empreinte) reste montree
         if (lastState_ == "refusee" || lastState_ == "aucune" || lastState_ == "invitation") {
             noneB_ = {pendingCard_.right() + 20.f, top, std::max(360.f, std::min(520.f, x0_ + w_ - pendingCard_.right() - 20.f)), 430.f};
             if (noneB_.right() > x0_ + w_ + 1.f) noneB_ = {x0_, pendingCard_.bottom() + 20.f, cw, 430.f};
@@ -2417,7 +2418,7 @@ private:
             y += 98.f;
             (void)drawWrapped(r, fx, y, fw, "Il le tape dans ses Demandes d'admin : c'est ce qui prouve que la demande vient de toi.", kF13, c.textMuted, 19.f, 2);
             y += 48.f;
-        } else if (license_admin::classique() && code.empty()) {
+        } else if (license_admin::classique() && code.empty() && (lastState_ == "invitation" || !requestSent_)) {
             r.drawText({fx, y}, "Ta demande n'est pas encore partie", gfx::semibold(FontId{20}), c.text);
             y += 32.f;
             (void)drawWrapped(r, fx, y, fw, "Tape ton code d'invitation (dans le message de l'admin+, valable 48 h), puis envoie ta demande.", kF14, c.textMuted, 21.f, 3);
@@ -2500,6 +2501,7 @@ private:
     ui::InputText*         reqEmail_{nullptr};
     ui::InputText*         reqCode_{nullptr};      // 1.49.0 : le code d'invitation (XPG Admin, sans invitation.txt)
     std::string            fileCode_, invitationProblem_;   // 1.49.0 : celui de l'installateur ; la phrase d'un code refuse
+    bool                   requestSent_{false};               // 1.49.0 : demande-admin.json (une demande est partie)
     ui::Button*            send_{nullptr};
     ui::Button*            service_{nullptr};
     ui::Button*            check_{nullptr};

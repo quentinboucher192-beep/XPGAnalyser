@@ -129,6 +129,7 @@ export const RoutesSauvegarde = {
                     tables: avant.length,
                     lignes: avant.reduce((n, t) => n + t.lignes, 0),
                 });
+                this.noterSauvegarde(ctx); // 1.49.0 : repartir de zero la demande (reinitialiser.js)
             }
             return reponseJson(200, { schema: this.schema, service_version: this.versionService, tables: this.comptesSauvegarde(), heure: ctx.now });
         }

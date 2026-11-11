@@ -341,7 +341,8 @@ add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/
                                   src/license_admin/gui/WorkspaceStats.cpp      # 1.47.0 : les memes, dans le Workspace
                                   src/license_admin/ServiceConnection.cpp       # 1.47.0 : la connexion au service qui voyage avec l'installateur
                                   src/license_admin/gui/WorkspaceDerogation.cpp  # 1.47.0 : gerer le service (l'admin+ ; la derogation)
-                                  src/license_admin/gui/WorkspaceDelete.cpp)     # 1.48.1 : supprimer (licences, PC), et que ca se voie partout
+                                  src/license_admin/gui/WorkspaceDelete.cpp      # 1.48.1 : supprimer (licences, PC), et que ca se voie partout
+                                  src/license_admin/gui/WorkspaceReset.cpp)      # 1.49.0 : repartir de zero (l'admin+)
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -349,7 +350,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop|WorkspaceStats|WorkspaceDerogation|WorkspaceDelete)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop|WorkspaceStats|WorkspaceDerogation|WorkspaceDelete|WorkspaceReset)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
@@ -1258,6 +1259,15 @@ if(XPG_BUILD_TESTS)
     if(TEST adminderogation)
         set_tests_properties(adminderogation PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
     endif()
+    # 1.49.0 : l'invitation par codes (docs/ADMINS.md, par. 12) : l'admin+ cree le code, XPG Admin (l'edition classique) lit
+    # invitation.txt, envoie sa demande, montre les 6 chiffres ; un faux code (rien n'est signe), le bon ; inconnu, deja
+    # servi, expire - contre le VRAI Worker sur ce poste (SAUTE sans Node.js ni wrangler).
+    xpg_add_test_executable(admin_invitation_test tests/admin_invitation_test.cpp)
+    xpg_target_link_libraries(admin_invitation_test PRIVATE xpg_admin_core)
+    xpg_add_test(NAME admininvitation COMMAND admin_invitation_test ${CMAKE_SOURCE_DIR})
+    if(TEST admininvitation)
+        set_tests_properties(admininvitation PROPERTIES SKIP_REGULAR_EXPRESSION "SAUTE :" TIMEOUT 300)
+    endif()
     # 1.37.0 : le courriel de l'editeur (license_admin/Mail) : configuration, mot de passe protege, puis de vrais envois
     # contre un serveur SMTP d'essai sur ce poste (tests/outils/smtp_essai.py : STARTTLS, TLS, refus) ; SAUTE sans python3
     # 1.38.0 : + le compte Microsoft (OAuth 2.0, XOAUTH2) : le transport HTTPS du systeme (app/ai/AiHttp.cpp) contre
@@ -1291,7 +1301,7 @@ if(XPG_BUILD_TESTS)
         if(TEST admindeploy)
             set_tests_properties(admindeploy PROPERTIES TIMEOUT 300)
         endif()
-        foreach(part shell licences securite donnees demandes options admins versions boutique globe listes stats adminsvue listes2 compte service coherence)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique ; 1.47.0 : globe (la page d'essai), listes (planches 06, 07, 12), stats (planches 08 a 10), listes2 (Revocations, Historique, Versions), compte (Mon compte, Demandes d'admin), service (Service en ligne : l'admin+ seul, la derogation, la connexion signee) ; 1.48.1 : coherence (supprimer, et que ca se voie partout)
+        foreach(part shell licences securite donnees demandes options admins versions boutique globe listes stats adminsvue listes2 compte service coherence edition)   # 1.34.0 : demandes ; 1.42.0 : options ; 1.44.0 : admins, versions ; 1.46.0 : boutique ; 1.47.0 : globe (la page d'essai), listes (planches 06, 07, 12), stats (planches 08 a 10), listes2 (Revocations, Historique, Versions), compte (Mon compte, Demandes d'admin), service (Service en ligne : l'admin+ seul, la derogation, la connexion signee) ; 1.48.1 : coherence (supprimer, et que ca se voie partout) ; 1.49.0 : edition (XPG Admin et l'Admin+ : ce que chacun offre)
             xpg_add_test_executable(admin_gui_${part}_test tests/admin_gui_${part}_test.cpp)
             xpg_target_link_libraries(admin_gui_${part}_test PRIVATE xpg_admin_gui)
             xpg_add_test(NAME admingui${part} COMMAND admin_gui_${part}_test ${CMAKE_SOURCE_DIR})

@@ -456,6 +456,16 @@ struct RestoreOptions {
     std::string serviceUrl;              // son adresse (un nouveau deploiement) ; vide : celle de la sauvegarde
     bool        replaceService{false};   // le service n'est pas vide (409 pas_vide) : le remplacer
 };
+// 1.49.0 : repartir de zero (WorkspaceReset.cpp ; docs/ADMINS.md, par. 13).
+inline constexpr const char* kStartOverWord = "REPARTIR";
+struct StartOverReport {
+    std::string                                       backupPath;      // la sauvegarde complete faite d'abord
+    std::string                                       backupSha256;
+    std::vector<std::pair<std::string, std::int64_t>> erased;          // le service : les lignes effacees, table par table
+    int                                               adminsNumber{0}, revocationsNumber{0}, registryNumber{0};
+    int                                               localFiles{0};   // les fichiers effaces sur ce poste
+    bool                                              archiveSent{false};
+};
 struct RestoreReport {
     int                                                files{0};          // les fichiers du dossier remis
     bool                                               editorKey{false};  // la cle de l'editeur remise (ou deja la, la meme)
@@ -831,13 +841,19 @@ public:
     // Studios. installerKindsInZip : quels installateurs il porte (le glisser decide de la zone).
     [[nodiscard]] static bool installerFromZip(const std::string& zipPath, bool admin, std::string& out, std::string* why = nullptr);
     [[nodiscard]] static bool installerKindsInZip(const std::string& zipPath, bool& studios, bool& admin, std::string* why = nullptr);
+    // 1.49.0 : trois installateurs - `kind` 1 : les Studios (API-IHM-Studio-Setup), 2 : l'Admin+ (XPG-License-Admin-Setup ; c'est
+    // le << admin >> des deux fonctions d'avant), 3 : XPG Admin (XPG-Admin-Setup, l'Admin classique).
+    [[nodiscard]] static bool installerFromZip(const std::string& zipPath, int kind, std::string& out, std::string* why = nullptr);
+    [[nodiscard]] static bool installerKindsInZip(const std::string& zipPath, bool& studios, bool& plus, bool& classic, std::string* why = nullptr);
     [[nodiscard]] static bool isZipPath(const std::string& path);
     // Les versions publiees et qui est a jour (GET /admin/versions).
     [[nodiscard]] OpResult versions(VersionsView& out) const;
     // Publier : les deux installateurs, de la meme version, plus recente que la derniere publiee ; deposes (les Studios :
     // public ; l'Admin : les admins), puis le bloc << version >> signe (PUT /admin/versions). `notes` : 40 au plus.
+    // 1.49.0 : `adminExe` est XPG Admin (sorte << admin >>, pour les admins) ; `adminPlusExe` (facultatif) l'Admin+ (sorte
+    // << admin_plus >> : la cle de l'editeur seule le telecharge, jamais propose a un admin ni a un client).
     [[nodiscard]] OpResult publishVersion(const std::string& studiosExe, const std::string& adminExe, const std::vector<std::string>& notes,
-                                          bool important, const Progress& progress = {}) const;
+                                          bool important, const Progress& progress = {}, const std::string& adminPlusExe = {}) const;
     // Les notes de version a proposer pour cette version (vide : l'Admin n'embarque pas les notes des Studios ; a taper).
     [[nodiscard]] std::vector<std::string> suggestedNotes(const std::string& version) const;
     // Apres une restauration ailleurs : les fichiers des versions publiees dont le service n'a plus les octets, et les renvoyer.
@@ -866,6 +882,22 @@ public:
     // codes ; puis, si demande, le service : debut, lots, fin). Ensuite reload().
     [[nodiscard]] OpResult restoreBackup(const std::string& path, const std::string& passphrase, const RestoreOptions& options,
                                          RestoreReport* report = nullptr) const;
+
+    // ======================================================== 1.49.0 : repartir de zero (WorkspaceReset.cpp ; docs/ADMINS.md, par. 13) ==
+    // L'admin+ seul (jamais XPG Admin, l'edition classique), jamais d'elle-meme. LENT : `confirmation` doit etre << REPARTIR >>
+    // (kStartOverWord) ; la sauvegarde complete d'abord (backupNow ; pas reglee : refuse), puis le service (POST
+    // /admin/reinitialiser : une liste des admins vide et une liste de revocation vide, signees, numero + 1 ; le registre
+    // re-signe s'il est signe par un admin), puis le dossier de ce poste ; l'archive en ligne renvoyee. Ensuite reload().
+    [[nodiscard]] OpResult startOver(const std::string& confirmation, StartOverReport* report = nullptr) const;
+    // Ce que la fenetre dit : ce qui est efface (le service et ce poste), ce qui est garde.
+    [[nodiscard]] static const std::vector<std::string>& startOverErased();
+    [[nodiscard]] static const std::vector<std::string>& startOverKept();
+    // Pourquoi ce poste ne peut pas repartir de zero (le bouton grise) ; vide : il peut.
+    [[nodiscard]] std::string whyNotStartOver() const;
+    // Le bandeau du premier lancement de l'Admin+ 1.49 (UNE fois) : du ? (l'admin+, une 1.49, jamais propose, quelque chose
+    // a effacer) ; puis note (repartir-de-zero.json) des qu'il est montre.
+    [[nodiscard]] bool startOverOfferDue() const;
+    void noteStartOverOffered() const;
 
     // ======================================================== 1.46.0 : la boutique et les commandes (WorkspaceShop.cpp) ==
     // LENT (le service, signe par la cle qui signe) : le reglage de la boutique (l'admin+ et un admin le lisent ; seul

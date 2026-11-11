@@ -281,10 +281,13 @@ int main(int argc, char** argv) {
     Fixture fx(source, "versions-gui");
     check(fx.ready(), "poste d'essai pret (cle + registre)");
     const fs::path studios = fx.root / "installateurs" / "API-IHM-Studio-Setup-1.44.1.exe";
-    const fs::path adminExe = fx.root / "installateurs" / "XPG-License-Admin-Setup-1.44.1.exe";
-    const fs::path adminOther = fx.root / "autres" / "XPG-License-Admin-Setup-1.44.2.exe";
+    // 1.49.0 : trois installateurs - XPG Admin (XPG-Admin-Setup, sorte << admin >>), l'Admin+ (XPG-License-Admin-Setup-...-EDITEUR)
+    const fs::path adminExe = fx.root / "installateurs" / "XPG-Admin-Setup-1.44.1.exe";
+    const fs::path plusExe = fx.root / "installateurs" / "XPG-License-Admin-Setup-1.44.1-EDITEUR.exe";
+    const fs::path adminOther = fx.root / "autres" / "XPG-Admin-Setup-1.44.2.exe";
     writeFile(studios, buildPe({1, 44, 1, 0}, "1.44.1", randomBytes(300000, rng)));
     writeFile(adminExe, buildPe({1, 44, 1, 0}, "1.44.1", randomBytes(120000, rng)));
+    writeFile(plusExe, buildPe({1, 44, 1, 0}, "1.44.1", randomBytes(90000, rng)));
     writeFile(adminOther, buildPe({1, 44, 2, 0}, "1.44.2", randomBytes(1000, rng)));
     HostRig rig(fx);
 
@@ -295,17 +298,19 @@ int main(int argc, char** argv) {
         std::string t = draw(*vp);
         check(has(t, "Versions") && has(t, "Versions publi\xC3\xA9" "es") && has(t, "seul l'admin+ publie") && has(t, "n'est pas r\xC3\xA9gl\xC3\xA9"),
               "la page : les versions publiees ; sans service, c'est dit");
-        check(click(*vp, "versions.publier") && shown(*vp, "versions.studios.choisir") && shown(*vp, "versions.admin.choisir"), "Publier une version... : le panneau");
+        check(click(*vp, "versions.publier") && shown(*vp, "versions.studios.choisir") && shown(*vp, "versions.admin.choisir") && shown(*vp, "versions.adminplus.choisir"),
+              "Publier une version... : le panneau (1.49.0 : trois emplacements)");
         t = draw(*vp);
-        check(has(t, "L'INSTALLATEUR DES STUDIOS") && has(t, "L'INSTALLATEUR DE L'ADMIN") && has(t, "Ce qui va se passer") && has(t, "Importante"),
-              "les deux installateurs, ce qui va se passer, Importante");
+        check(has(t, "LES STUDIOS") && has(t, "L'ADMIN+") && has(t, "L'ADMIN (XPG ADMIN)") && has(t, "Pour l'admin+ seul") && has(t, "Ce qui va se passer") &&
+                  has(t, "Importante"),
+              "les trois installateurs (Studios, Admin+, Admin), ce qui va se passer, Importante");
         check(vp->dropFiles({U(studios), U(adminOther)}), "deux installateurs glisses sur la page");
         t = draw(*vp);
         check(has(t, "version 1.44.1 lue dans le fichier") && has(t, "version 1.44.2 lue dans le fichier") && has(t, "pas de la m\xC3\xAA" "me version"),
               "deux versions differentes : dit");
         check(!enabledBtn(*vp, "versions.signer"), "Signer et publier : grise");
         rig.picks.push_back(U(adminExe));
-        check(click(*vp, "versions.admin.choisir"), "Choisir... l'installateur de l'Admin");
+        check(click(*vp, "versions.admin.choisir"), "Choisir... l'installateur de XPG Admin");
         t = draw(*vp);
         check(has(t, "elles concordent") && has(t, "La premi\xC3\xA8re version publi\xC3\xA9" "e") && has(t, "Signer et publier la 1.44.1"), "elles concordent : Signer et publier la 1.44.1");
         check(!enabledBtn(*vp, "versions.signer"), "... grise tant que le service n'est pas regle");
@@ -362,8 +367,10 @@ int main(int argc, char** argv) {
         const std::string adm146 = buildPe({1, 46, 0, 0}, "1.46.0", randomBytes(90000, rng));
         const fs::path zips = fx.root / "zips";
         const fs::path zs = zips / "API-IHM-Studio-Setup-1.46.0.zip", za = zips / "XPG-License-Admin-Setup-1.46.0-EDITEUR.zip", zb = zips / "les-deux.zip";
+        const fs::path zx = zips / "XPG-Admin-Setup-1.46.0.zip", z3 = zips / "les-trois.zip";   // 1.49.0
         check(writeZip(zs, {{"LISEZ-MOI.txt", "un fichier a cote"}, {"API-IHM-Studio-Setup-1.46.0.exe", pe146}}) &&
-                  writeZip(za, {{"editeur/XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}}) &&
+                  writeZip(za, {{"editeur/XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}}) && writeZip(zx, {{"XPG-Admin-Setup-1.46.0.exe", adm146}}) &&
+                  writeZip(z3, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}, {"XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}, {"XPG-Admin-Setup-1.46.0.exe", adm146}}) &&
                   writeZip(zb, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}, {"XPG-License-Admin-Setup-1.46.0-EDITEUR.exe", adm146}}),
               "des .zip d'essai");
         std::string out, why;
@@ -376,6 +383,10 @@ int main(int argc, char** argv) {
         check(!gui::Workspace::installerFromZip(U(zs), true, out, &why) && has(why, "XPG-License-Admin-Setup"), "pas d'installateur de l'Admin dans ce zip : dit (" + why + ")");
         bool st = false, ad = false;
         check(gui::Workspace::installerKindsInZip(U(zb), st, ad, &why) && st && ad, "les deux sortes dans un zip");
+        bool s3 = false, p3 = false, a3 = false;
+        check(gui::Workspace::installerKindsInZip(U(z3), s3, p3, a3, &why) && s3 && p3 && a3, "1.49.0 : les trois sortes dans un zip (Studios, Admin+, XPG Admin)");
+        check(gui::Workspace::installerKindsInZip(U(zb), s3, p3, a3, &why) && s3 && p3 && !a3, "1.49.0 : le zip d'avant : pas de XPG Admin");
+        check(!gui::Workspace::installerFromZip(U(za), 3, out, &why) && has(why, "XPG-Admin-Setup"), "1.49.0 : XPG Admin absent du zip de l'Admin+ : dit (" + why + ")");
         const fs::path z2 = zips / "deux.zip", zt = zips / "sortie.zip", zc = zips / "chiffre.zip", zg = zips / "enorme.zip", zn = zips / "pas-un-zip.zip";
         (void)writeZip(z2, {{"API-IHM-Studio-Setup-1.46.0.exe", pe146}, {"vieux/API-IHM-Studio-Setup-1.45.0.exe", pe146}});
         check(!gui::Workspace::installerFromZip(U(z2), false, out, &why) && has(why, "plusieurs"), "deux installateurs des Studios : refuse (" + why + ")");
@@ -396,14 +407,17 @@ int main(int argc, char** argv) {
         check(has(t, "API-IHM-Studio-Setup-1.46.0.exe") && has(t, "version 1.46.0 lue dans le fichier") && has(t, "extrait de API-IHM-Studio-Setup-1.46.0.zip"),
               "l'installateur des Studios extrait du .zip : << extrait de API-IHM-Studio-Setup-1.46.0.zip >>");
         rig.picks.push_back(U(zs));
-        check(click(*vp, "versions.admin.choisir"), "Choisir... (l'Admin) : un .zip sans l'installateur de l'Admin");
+        check(click(*vp, "versions.admin.choisir"), "Choisir... (l'Admin) : un .zip sans l'installateur de XPG Admin");
         t = draw(*vp);
-        check(has(t, "ne porte pas XPG-License-Admin-Setup"), "l'Admin : ce zip ne le porte pas, dit dans sa zone");
-        rig.picks.push_back(U(za));
+        check(has(t, "ne porte pas XPG-Admin-Setup"), "l'Admin : ce zip ne le porte pas, dit dans sa zone");
+        rig.picks.push_back(U(zx));
         check(click(*vp, "versions.admin.choisir"), "Choisir... (l'Admin) : son .zip");
+        rig.picks.push_back(U(za));
+        check(click(*vp, "versions.adminplus.choisir"), "1.49.0 : Choisir... (l'Admin+) : son .zip");
         t = draw(*vp);
-        check(has(t, "extrait de XPG-License-Admin-Setup-1.46.0-EDITEUR.zip") && has(t, "elles concordent") && has(t, "Signer et publier la 1.46.0"),
-              "les deux extraits : elles concordent, Signer et publier la 1.46.0");
+        check(has(t, "extrait de XPG-Admin-Setup-1.46.0.zip") && has(t, "extrait de XPG-License-Admin-Setup-1.46.0") && has(t, "elles concordent") &&
+                  has(t, "Signer et publier la 1.46.0"),
+              "les trois extraits : elles concordent, Signer et publier la 1.46.0");
         std::size_t temps = 0;
         for (const auto& e : fs::directory_iterator(fs::temp_directory_path(), ec))
             if (e.path().filename().string().rfind("xpg-versions-zip-", 0) == 0) ++temps;
@@ -411,7 +425,7 @@ int main(int argc, char** argv) {
         std::size_t after = 0;
         for (const auto& e : fs::directory_iterator(fs::temp_directory_path(), ec))
             if (e.path().filename().string().rfind("xpg-versions-zip-", 0) == 0) ++after;
-        check(temps >= 2 && after + 2 <= temps, "Annuler : les dossiers temporaires des fichiers extraits s'en vont (" + std::to_string(temps) + " -> " + std::to_string(after) + ")");
+        check(temps >= 3 && after + 3 <= temps, "Annuler : les dossiers temporaires des fichiers extraits s'en vont (" + std::to_string(temps) + " -> " + std::to_string(after) + ")");
         check(vp->dropFiles({U(z2)}), "un .zip refuse glisse : pris en charge (dit)");
         check(!rig.flashes.empty() && has(rig.flashes.back(), "plusieurs"), "le refus est dit (" + (rig.flashes.empty() ? std::string() : rig.flashes.back()) + ")");
     }
@@ -520,9 +534,10 @@ int main(int argc, char** argv) {
         std::string t = draw(*vp);
         check(has(t, "Aucune version publi\xC3\xA9" "e"), "aucune version publiee encore");
         if (!find<ui::Button>(*vp, "versions.studios.choisir")->visible()) (void)click(*vp, "versions.publier");
-        (void)vp->dropFiles({U(studios), U(adminExe)});
+        (void)vp->dropFiles({U(studios), U(adminExe), U(plusExe)});
         t = draw(*vp);
-        check(enabledBtn(*vp, "versions.signer") && has(t, "elles concordent"), "Signer et publier la 1.44.1 : possible");
+        check(enabledBtn(*vp, "versions.signer") && has(t, "elles concordent") && has(t, "XPG-License-Admin-Setup-1.44.1-EDITEUR.exe"),
+              "Signer et publier la 1.44.1 : possible (les trois glisses ; l'EDITEUR dans l'Admin+)");
         // 1.46.0 : les notes tapees au clavier (une puce tapee aussi : elle s'enleve), c'est ce qui part
         if (auto* notes = find<ui::MultiLineText>(*vp, "versions.notes")) notes->setText({});
         typeNotes(*vp, {"\xE2\x80\xA2 Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "", "Admin : le journal se trie par criticit\xC3\xA9."});
@@ -533,6 +548,10 @@ int main(int argc, char** argv) {
             const std::vector<std::string> want = {"Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "Admin : le journal se trie par criticit\xC3\xA9."};
             check(r.ok && !seen.versions.empty() && seen.versions.front().version == "1.44.1" && seen.versions.front().notes == want,
                   "les notes publiees : celles tapees, une par ligne (" + std::to_string(seen.versions.empty() ? 0 : seen.versions.front().notes.size()) + " notes)");
+            std::string kinds;
+            if (!seen.versions.empty())
+                for (const auto& f : seen.versions.front().files) kinds += f.file.kind + "/" + f.file.audience + " ";
+            check(kinds == "studios/tous admin/admins admin_plus/admin_plus ", "1.49.0 : les trois sortes publiees (" + kinds + ")");
         }
         t = draw(*vp);
         check(has(t, "1.44.1") && has(t, "actuelle") && has(t, "tout le monde") && has(t, "les admins") && has(t, "Admins :"), "le tableau : 1.44.1 actuelle, pour qui, les admins");

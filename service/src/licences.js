@@ -78,6 +78,7 @@ import { DROITS_ADMINS, DROITS_LICENCE, DROITS_REGISTRE, GARDE_DEMANDES_ADMINS, 
 import { RoutesBoutique, TABLES_BOUTIQUE_SQL } from "./boutique.js";
 import { RoutesStats, TABLES_STATS_SQL, prochainReleve } from "./stats.js";
 import { RoutesDerogations } from "./derogations.js";
+import { RoutesReinitialiser } from "./reinitialiser.js"; // 1.49.0 : repartir de zero (l'admin+)
 import { BlocIllisible, ecrireBlocLu, signerBloc, trouverBloc, verifierBloc } from "./blocs.js";
 import { GARDE_MESSAGE, RoutesFichiers } from "./fichiers.js";
 import { CONFIG_RESTAURATION, RoutesSauvegarde } from "./sauvegarde.js";
@@ -275,6 +276,7 @@ const ROUTES = {
     "GET /admin/stats/admins": { f: "adminsStats", signe: "admin" },
     "POST /admin/stats/releve": { f: "releveStats", signe: "plus", derogation: true },
     "POST /admin/stats/reevaluer": { f: "reevaluerStats", signe: "admin" }, // 1.48.1 : la coherence (stats.js)
+    "POST /admin/reinitialiser": { f: "reinitialiser", signe: "plus" }, // 1.49.0 : repartir de zero (reinitialiser.js)
     "GET /admin/globe": { f: "globeStats", signe: "admin" },
     "GET /admin/globe/direct": { f: "globeDirect", signe: "admin" },
     // 1.47.0 : la derogation << Gerer le service >> (derogations.js, docs/ADMINS.md § 11)
@@ -1939,4 +1941,4 @@ export class Licences extends DurableObject {
 // 1.44.0 : les routes des admins, des fichiers (et des messages, des versions), de la sauvegarde - des methodes de
 // l'objet, ecrites a part (admins.js, fichiers.js, sauvegarde.js).
 // 1.47.0 : les statistiques et le globe (stats.js).
-Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique, RoutesStats, RoutesDerogations);
+Object.assign(Licences.prototype, RoutesAdmins, RoutesFichiers, RoutesSauvegarde, RoutesBoutique, RoutesStats, RoutesDerogations, RoutesReinitialiser);

@@ -159,6 +159,7 @@ refusée », écrite par le service). Les documents déposés (licence, registre
 | `GET /admin/derogation` | admin+ (celle en place) ou admin (la sienne) | — |
 | `POST /admin/derogation/utiliser` | admin (sa dérogation en cours) | — |
 | `POST /admin/stats/releve` | admin+, ou l'admin dont la dérogation court | — |
+| 1.49.0 (§ 12) : `POST /admin/admins/invitation` | admin+ | — |
 
 **La boutique (1.46.0)** : livrer une commande payée demande le droit `demandes` (la commande, son scellé) **et** le
 droit de la licence qu'elle signe : `licence_creer` pour une offre, `licence_option` pour une option (le dépôt de la
@@ -201,7 +202,7 @@ par l'archive. Les lignes signées ne changent jamais.
 
 Types d'action : `licence_creer`, `licence_prolonger`, `licence_option`, `licence_revoquer`, `poste_retirer`,
 `offres`, `options`, `annonces`, `demande_accepter`, `demande_refuser`, `code_revoir`, `client_supprimer`,
-`client_restaurer`, `clients_exporter`, `courriel`, `admin_ajouter`, `admin_retirer`, `admin_droits`, `admin_profil`, `version_publier`,
+`client_restaurer`, `clients_exporter`, `courriel`, `admin_ajouter`, `admin_inviter` (1.49.0), `admin_retirer`, `admin_droits`, `admin_profil`, `version_publier`,
 `fichier_envoyer`, `criticite`, `connexion`, et ceux du service (`signature_refusee`, `autre_pc`, `demande_admin`).
 
 ### Les fichiers
@@ -438,3 +439,146 @@ possible) », l'adresse non modifiable, les boutons gris (ils disent pourquoi) ;
   jeton partagé**, jamais le mot de passe de l'admin+. Le kit reçoit les clés publiques de l'éditeur que le service croit
   (`cle-publique.txt`, `PUBLISHER_KEYS`), jamais la sienne ; une mise en ligne qui donne une autre adresse (un autre
   compte Cloudflare) est signalée : ce n'est pas le service de l'éditeur.
+
+## 12. Trois exécutables : Studios, Admin+, Admin ; l'invitation par codes (1.49.0)
+
+### Les trois exécutables
+
+| | Programme | Installateur | Pour qui |
+|---|---|---|---|
+| **Studios** | `API-Studio.exe`, `IHM-Studio.exe` | `API-IHM-Studio-Setup-<v>.exe` | les clients (inchangé) |
+| **Admin+** | `XPG-License-Manager-Admin.exe` (cible `xpg_license_manager_admin`) et la console `XPG-License-Admin.exe` | `XPG-License-Admin-Setup-<v>-EDITEUR.exe` | l'admin+ seul (inchangé) |
+| **Admin** (« XPG Admin ») | `XPG-Admin.exe` (cible `xpg_admin_classique`, pas de console) | `XPG-Admin-Setup-<v>.exe` | les admins, reçu avec une invitation |
+
+XPG Admin est le **même code** que l'Admin+ (les bibliothèques `xpg_admin_core`, `xpg_admin_gui` ; le même
+`AdminGuiMain.cpp`, compilé avec `XPG_ADMIN_CLASSIQUE`) : son `main` appelle `license_admin::setEdition(Edition::Classique)`
+au lancement (`license_admin/Edition.hpp`). Son nom (« XPG Admin » : la fenêtre, le menu, `gui::appName()`), son icône
+(`resources/logo/xpg_admin.ico` : la clé sur une tuile violette) et sa ressource de version
+(`resources/windows/xpg_admin.rc.in`) sont à lui ; ses données restent dans `%LOCALAPPDATA%\XPG\LicenseAdmin`, comme
+avant : un admin qui avait l'Admin d'avant (1.48) garde sa clé d'admin et son archive, rien à refaire.
+
+### Ce que XPG Admin n'offre jamais (le contrôle à l'exécution)
+
+La vraie protection reste la clé de l'éditeur (le service n'accepte que ses signatures pour ce qui est à l'admin+) ;
+XPG Admin, lui, **n'offre simplement jamais** ce qui est à l'admin+ (`license_admin::classique()`) :
+
+- **la clé de l'éditeur** : il ne la lit jamais, même posée dans son dossier (`Workspace::loadKey`, `detail::loadCaller`) —
+  son rôle n'est donc jamais « admin+ » ; « Créer la clé », « Restaurer une sauvegarde » (de la clé) et « Restaurer une
+  sauvegarde complète » ne sont pas dans Paramètres de sécurité ; `createKey`, `restoreKey`, `restoreBackup` refusent ;
+- **les pages de l'admin+** (Journal des admins, Droits, Versions, Demandes d'admin) ne sont pas dans le menu ; un lien
+  vers l'une d'elles (une autre page, `--page`) est refusé et dit : « « Versions » n'est pas dans XPG Admin : c'est à
+  l'admin+ (XPG License Manager Admin). » ;
+- **les gestes de l'admin+** : Ajouter / retirer un admin, les droits et profils, publier une version, envoyer un
+  fichier ou un message, « Certifier la clé du service » (absent de Service en ligne), accorder une dérogation, Gérer le
+  service hors dérogation ; atteint autrement (un essai, un lien), le geste refuse avec « XPG Admin ne fait pas cela :
+  c'est à l'admin+ (XPG License Manager Admin, sur le poste qui a la clé de l'éditeur) » (`kClassicRefusal`,
+  `detail::callerDenied`) ;
+- il **garde** ce que ses droits permettent (§ 2) et la dérogation courte « Gérer le service » (§ 11 ; le kit du service
+  est installé avec lui) ;
+- **sans clé d'admin** : seulement le chemin de l'admin (l'invitation, ci-dessous) — jamais « Créer la clé de
+  l'éditeur… » ni « Restaurer… ».
+
+**L'Admin+ lancé sans la clé de l'éditeur** : seulement « Créer la clé de l'éditeur… » (le premier PC) et « Restaurer la
+clé de l'éditeur… », avec la phrase « Ce programme est celui de l'admin+. Un admin installe XPG Admin, reçu avec son
+invitation. » (le tableau de bord, Administrateurs, Mon compte) ; **jamais « Demander à devenir admin »**.
+
+Les essais : `admin_gui_edition_test` (ctest `adminguiedition`) — XPG Admin construit dans le même processus
+(`setEdition`) sur un poste qui a la clé de l'éditeur, puis chez une admin de la liste (Camille Essai) ; l'Admin+ sans clé.
+
+### Les installateurs
+
+`outils/mingw/admin_editeur.sh` fait **les deux** dans le même dossier (avec `ISCC=…`) :
+`XPG-License-Admin-Setup-<v>-EDITEUR.exe` (inchangé) et `XPG-Admin-Setup-<v>.exe` (`installateur/XPG-Admin.iss`, à partir
+du dossier `admin-<v>/` : `XPG-Admin.exe`, `SDL3.dll`, la police, le kit du service, `connexion-service.xpgsvc`).
+
+XPG-Admin-Setup a son `AppId`, son nom (« XPG Admin »), son dossier (`%LOCALAPPDATA%\Programs\XPG Admin` ; pour tous :
+Program Files), l'habillage de celui de l'éditeur (la colonne des étapes, Barlow) ; pas de console, pas de page de
+composants. Il porte la connexion au service (§ 11) comme celui de l'éditeur. Ses étapes : Bienvenue, **Code
+d'invitation**, Emplacement, Les options, Ta clé d'admin, Récapitulatif, Installation, Terminé.
+
+- **La page « Code d'invitation »** : obligatoire en mode normal ; le format est vérifié (`INV-` puis 8 caractères de
+  l'alphabet Crockford sans I L O U ; tirets, espaces, minuscules tolérés ; remis en forme `INV-XXXX-XXXX`) — faux, la page
+  le dit en rouge et ne passe pas. En silencieux : `/INVITATION=INV-XXXX-XXXX` (facultatif ; faux : rien n'est écrit, XPG
+  Admin le demandera).
+- Le code va dans `%LOCALAPPDATA%\XPG\LicenseAdmin\invitation.txt` (une ligne), réservé au compte (`icacls
+  /inheritance:r /grant:r <compte>:F`). Rien d'autre du dossier n'est touché ; la désinstallation ne l'efface pas.
+
+### Les versions : trois sortes
+
+La page **Versions** de l'Admin+ a trois emplacements : **les Studios** (`API-IHM-Studio-Setup-…`), **l'Admin+**
+(`XPG-License-Admin-Setup-…-EDITEUR`, facultatif) et **l'Admin** (`XPG-Admin-Setup-…`) ; un `.exe` ou un `.zip` qui le
+porte, glissé (le nom décide de l'emplacement) ou choisi ; les trois de la même version. `Workspace::publishVersion(studios,
+admin, notes, importante, avancement, adminPlus)`.
+
+| Sorte (`sorte` / `pour`) | Le fichier | Le service le donne à | Proposé par le Studio |
+|---|---|---|---|
+| `studios` / `tous` | les Studios | tout le monde | à chaque PC pas à jour |
+| `admin` / `admins` | XPG Admin | un appel signé par un admin ou l'éditeur, le jeton d'un admin | aux PC des admins (leur jeton d'admin) |
+| `admin_plus` / `admin_plus` | l'Admin+ | **la clé de l'éditeur seule** : un appel signé par elle, ou le jeton d'admin qu'elle a signé (le Studio du PC de l'admin+) ; jamais un lien (`POST /admin/fichiers/jeton` : 403), un admin, un client | au PC de l'admin+ seul |
+
+- **Le bloc de version** : les fichiers `studios` et `admin` restent dans `fichiers` ; ceux de l'Admin+ vont dans
+  **`fichiers_admin_plus`** (`[{"id","nom","taille","sha256","sorte":"admin_plus","pour":"admin_plus"}]`). Pourquoi : un
+  Studio d'avant (1.44 à 1.48) refuse toute la version si `fichiers` porte une sorte qu'il ne connaît pas — il ne verrait
+  plus aucune mise à jour. Le service et l'Admin les relisent ensemble (`GET /admin/versions` les montre tous). Un bloc
+  d'avant (sorte `admin` seule) reste valable.
+- **Le Studio** (`app::updates::Offer`) : un client, les Studios ; le PC d'un admin (son jeton d'admin), les Studios et
+  XPG Admin (`adminKind` « admin ») ; le PC de l'admin+ (le jeton signé par une clé de l'éditeur), les Studios et
+  l'Admin+ (« admin_plus »), jamais XPG Admin. Un admin qui a l'ancien Admin (1.48) reçoit l'offre « admin » : XPG Admin
+  s'installe à côté, avec sa clé et ses données (le même dossier).
+- « Ajouter un admin… » envoie le fichier `admin` de la dernière version publiée — jamais un `XPG-License-Admin-Setup`
+  (l'Admin d'avant, celui de l'admin+).
+
+Les essais : `service/test/versions149.test.js` (les droits du fichier `admin_plus`, le bloc à trois sortes, un bloc
+d'avant), `service_fichiers` (`licence_fichiers_test` : le Studio du PC de l'admin+ reçoit l'Admin+, un client les
+Studios seuls), `adminguiversions` (les trois emplacements, les `.zip`, la publication), `adminsfichiers`.
+
+### L'invitation par codes
+
+Deux codes : un **code d'invitation** (l'admin+ le crée, le futur admin le saisit dans l'installateur XPG Admin) et un
+**code de confirmation** à 6 chiffres (l'Admin du futur admin le montre, l'admin+ le tape). Ils remplacent « J'ai vérifié
+l'empreinte » pour les admins invités en 1.49 ; une demande **sans invitation** (un Admin d'avant la 1.49, une demande
+déjà en attente) garde l'empreinte et sa case.
+
+1. **L'admin+, « Ajouter un admin… »** : à l'envoi de l'installateur (« Envoyer l'Admin » ou « Créer le lien »), l'Admin
+   crée d'abord l'invitation : `POST /admin/admins/invitation` (admin+ seul, jamais par une dérogation)
+   `{"nom","courriel","profil"}` → 201 `{"id":"inv-<16 hexa>","code":"INV-XXXX-XXXX","expire":<48 h>}`. Le code :
+   8 caractères tirés au hasard dans l'alphabet Crockford sans I L O U (`0-9 A-H J K M N P-T V-Z`, 40 bits), valable
+   **48 h**, **une seule fois**. Le dialogue le montre **une fois**, en grand, avec « Copier » et « valable 48 h, une seule
+   fois » ; il part dans le message : la notification du Studio (« Installer XPG Admin ») ou le texte copié avec le lien
+   de 48 h — « Ton code d'invitation : INV-XXXX-XXXX (à saisir dans l'installateur, valable 48 h) ». L'installateur envoyé
+   est celui de la sorte `admin` (XPG Admin) de la dernière version publiée ; sinon le fichier choisi
+   (`XPG-Admin-Setup-….exe`). L'invitation est notée dans `invitations-admins.json` (son `id`, `expire` ; **jamais le
+   code**) et une ligne **`admin_inviter`** part au journal (détail : nom, courriel, profil, invitation, expire ; jamais le
+   code).
+2. **Le service** ne garde que `SHA-256(code)` (hexa) : la ligne de config **`admins_invitations`** (un tableau JSON, 100
+   au plus : `id`, `hash`, `nom`, `courriel`, `profil`, `cree`, `expire`, `servie`, `demande` — la clé qui l'a servie —,
+   `servie_le`) ; elle part avec la sauvegarde (la table `config`). Une invitation finie est oubliée 30 jours après son
+   expiration, sauf si sa demande attend encore. **« Repartir de zéro » l'efface** (comme les demandes d'admin).
+3. **XPG Admin, premier lancement sans clé d'admin** (`license_admin::classique()`) : il lit
+   `%LOCALAPPDATA%\XPG\LicenseAdmin\invitation.txt` (une ligne, posée par l'installateur ; minuscules, espaces, tirets
+   tolérés) ; absent, la carte « Demander à devenir admin » a le champ **« Code d'invitation »**. Il crée sa clé, envoie
+   `POST /v1/admins/demande` (signée par sa clé) avec `"invitation":"INV-…"` en plus. Le service vérifie : connu, pas servi
+   (par une autre clé : la même clé peut renvoyer sa demande), pas expiré → marque servie, lie la demande, répond
+   201 `{"etat","empreinte","invitation":{"id","nom","profil"}}` ; sinon **403** `{"erreur":"invitation","message":…}` :
+   « Ce code d'invitation est inconnu. », « Ce code d'invitation a expiré (48 h). », « Ce code d'invitation a déjà
+   servi. ». `invitation.txt` est **effacé dès que le service a répondu** (accepté ou refusé) ; un code refusé se
+   **retape** dans le champ (la phrase du service est dite). Accepté : l'écran d'attente montre en grand
+   « Dis ce code à ton admin+ : 123 456 » et relève `GET /v1/admins` comme avant. L'Admin+ ne montre jamais ce chemin.
+4. **Le code de confirmation** : `n` = l'entier big-endian (64 bits) des 8 premiers octets de
+   `SHA-256("xpg-confirmation-1" || clé publique brute, 32 octets)` ; code = `n % 1000000`, sur 6 chiffres, affiché
+   « 123 456 ». Il ne passe **jamais** par le service : chaque Admin le calcule de la clé (`licensing::admins::
+   confirmationCode`, la même formule des deux côtés ; valeur connue : la clé `00 01 02 … 1f` → « 763 090 », vérifiée par
+   `admin_invitation_test` et `service/test/invitations.test.js`).
+5. **L'admin+, Demandes d'admin** : `GET /admin/admins/demandes` rend, pour une demande qui a servi une invitation,
+   `"invitation":{"id","nom","courriel","profil","invitee","expire","servie"}` (jamais l'empreinte du code). La liste montre
+   son id exact ; « Accepter… » demande de **taper les 6 chiffres** (« 123 456 » ou « 123456 ») à la place de la case ;
+   faux : **rien n'est signé**, la phrase le dit (« Ce code ne correspond pas à sa clé : rien n'est signé… »). Accepter
+   plusieurs : un champ par demande avec invitation, la case de l'empreinte pour les autres ; un seul code faux et rien
+   n'est signé. Le reste ne change pas (une liste signée, le trousseau, une ligne `admin_ajouter` par admin, son détail
+   dit l'invitation). `Workspace::acceptAdmin` / `acceptAdmins` le refont : une demande avec invitation exige ses 6 chiffres
+   (la case ne suffit pas).
+
+Les essais : `service/test/invitations.test.js` (créer : l'admin+ seul ; le servir, la liste ; inconnu, déjà servi,
+expiré à 49 h ; une demande sans invitation ; le code jamais gardé) ; `admin_invitation_test` (contre le service local :
+l'invitation, XPG Admin qui lit `invitation.txt`, les 6 chiffres, un faux code puis le bon, l'admin se voit admin ;
+inconnu puis retapé, déjà servi, expiré).

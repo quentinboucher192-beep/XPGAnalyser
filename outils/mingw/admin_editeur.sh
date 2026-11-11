@@ -25,6 +25,10 @@
 #      -> DOSSIER/XPG-License-Admin-Setup-<version>-EDITEUR.exe  1.40.0 : L'INSTALLATEUR (un seul .exe, a la
 #                                         place du zip : installateur/XPG-License-Admin.iss) - avec ISCC=...
 #      -> DOSSIER/XPG-License-Admin-<version>-EDITEUR.zip   (seulement avec ZIP=1 : l'ancien paquet)
+#      -> DOSSIER/admin-<version>/        1.49.0 : XPG Admin (l'Admin classique, celui des admins) : XPG-Admin.exe,
+#                                         SDL3.dll, la police, service-licences/, connexion-service.xpgsvc (pas de console)
+#      -> DOSSIER/XPG-Admin-Setup-<version>.exe  1.49.0 : SON INSTALLATEUR (installateur/XPG-Admin.iss ; la page
+#                                         << Code d'invitation >>, /INVITATION= en silencieux) - avec ISCC=...
 #    DOSSIER : par defaut <racine>/dist-editeur (jamais dans dist/).
 #    ISCC=/chemin/ISCC.exe Inno Setup 6.3 ou plus (sous Wine hors de Windows) ; sans lui : le dossier seulement
 #    XPG_VERSION=1.30.0   la version (par defaut : outils/config.ini, [Produit] version)
@@ -34,7 +38,8 @@
 #    CONNEXION=F.xpgsvc   1.47.0 : la connexion au service a porter (par defaut ressources-licences/connexion-service.xpgsvc,
 #                         ecrite par kit-studios ou Service en ligne > Exporter la connexion ; aucune : rien n'est porte)
 #
-#  Seules les cibles de l'editeur sont construites (ninja ... xpg_license_admin xpg_license_manager_admin).
+#  Seules les cibles de l'editeur sont construites (ninja ... xpg_license_admin xpg_license_manager_admin
+#  xpg_admin_classique).
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -59,9 +64,9 @@ fi
 
 # ---- 1. construire l'outil (cette cible seulement) ----
 if [ -n "${XPG_NINJA_LOCK:-}" ]; then
-    flock "$XPG_NINJA_LOCK" ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin
+    flock "$XPG_NINJA_LOCK" ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin xpg_admin_classique
 else
-    ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin
+    ninja -C "$OUT" -j "$JOBS" xpg_license_admin xpg_license_manager_admin xpg_admin_classique
 fi
 EXE="$OUT/XPG-License-Admin.exe"
 [ -f "$EXE" ] || { echo "$EXE manque apres la construction" >&2; exit 1; }
@@ -79,6 +84,11 @@ grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$APP" || { echo "$APP ne porte pas
 SOUS_SYSTEME_APP=$(x86_64-w64-mingw32-objdump -p "$APP" | grep "Subsystem" || true)
 echo "$SOUS_SYSTEME_APP" | grep -q "(Windows GUI)" || { echo "$APP n'est pas une application a fenetre" >&2; exit 1; }
 [ -f "$OUT/SDL3.dll" ] || { echo "$OUT/SDL3.dll manque (l'application en a besoin)" >&2; exit 1; }
+# 1.49.0 : XPG Admin (l'Admin classique), une fenetre lui aussi
+CLASSIQUE="$OUT/XPG-Admin.exe"
+[ -f "$CLASSIQUE" ] || { echo "$CLASSIQUE manque apres la construction" >&2; exit 1; }
+SOUS_SYSTEME_CL=$(x86_64-w64-mingw32-objdump -p "$CLASSIQUE" | grep "Subsystem" || true)
+echo "$SOUS_SYSTEME_CL" | grep -q "(Windows GUI)" || { echo "$CLASSIQUE n'est pas une application a fenetre" >&2; exit 1; }
 
 # ---- 2. le dossier de l'editeur ----
 NOM="editeur-$VERSION"
@@ -122,6 +132,17 @@ with open(dst, "w", encoding="utf-8-sig", newline="") as f:
     f.write(text)
 PY
 
+# ---- 2 bis. 1.49.0 : le dossier de XPG Admin (l'Admin classique : ni la console, ni les notes de l'editeur) ----
+NOMCL="admin-$VERSION"
+DESTCL="$SORTIE/$NOMCL"
+rm -rf "$DESTCL"
+mkdir -p "$DESTCL/resources/fonts"
+cp -f "$CLASSIQUE" "$DESTCL/XPG-Admin.exe"
+cp -f "$OUT/SDL3.dll" "$DESTCL/SDL3.dll"
+cp -f resources/fonts/* "$DESTCL/resources/fonts/"
+cp -r "$KIT" "$DESTCL/service-licences"
+[ -f "$DEST/connexion-service.xpgsvc" ] && cp -f "$DEST/connexion-service.xpgsvc" "$DESTCL/connexion-service.xpgsvc"
+
 # ---- 3. 1.40.0 : l'installateur (un seul .exe : l'application, la console, le service, les notes ; ses options) ----
 SETUP="$SORTIE/XPG-License-Admin-Setup-$VERSION-EDITEUR.exe"
 rm -f "$SETUP"
@@ -135,6 +156,12 @@ if [ -n "${ISCC:-}" ]; then
     [ -f "$SETUP" ] || { echo "l'installateur n'a pas ete fait ($SETUP)" >&2; exit 1; }
     grep -q "XPG-LICENSE-ADMIN-NE-JAMAIS-LIVRER" "$DEST/XPG-License-Manager-Admin.exe" || { echo "marque absente" >&2; exit 1; }
     echo "installateur de l'editeur : $SETUP ($(( $(stat -c %s "$SETUP") / 1024 )) Kio)"
+    # 1.49.0 : celui de XPG Admin, dans le meme dossier
+    SETUPCL="$SORTIE/XPG-Admin-Setup-$VERSION.exe"
+    rm -f "$SETUPCL"
+    "${LANCE[@]}" /Q "/DVersion=$VERSION" "/DSource=$(W "$DESTCL")" "/DSortie=$(W "$SORTIE")" "$(W "$ROOT/installateur/XPG-Admin.iss")"
+    [ -f "$SETUPCL" ] || { echo "l'installateur de XPG Admin n'a pas ete fait ($SETUPCL)" >&2; exit 1; }
+    echo "installateur de XPG Admin : $SETUPCL ($(( $(stat -c %s "$SETUPCL") / 1024 )) Kio)"
 else
     echo "(pas d'installateur : ISCC=/chemin/ISCC.exe pour le faire)"
 fi

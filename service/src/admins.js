@@ -104,7 +104,7 @@ export const ACTIONS_JOURNAL = [
     "stats_reevaluer", // 1.48.1 : les statistiques reevaluees (docs/STATISTIQUES.md, par. 15)
 ];
 // 1.47.0 : derogation_utilisee, derogation_expiree (derogations.js)
-export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree"];
+export const ACTIONS_SERVICE = ["signature_refusee", "autre_pc", "demande_admin", "sauvegarde", "restauration", "derogation_utilisee", "derogation_expiree", "reinitialisation"]; // 1.49.0 : reinitialisation (reinitialiser.js)
 
 // Ce que signe la cle qui ecrit une entree du journal : ce prefixe, puis le texte de l'entree.
 export const PREFIXE_JOURNAL = "XPG-JOURNAL-1\n";

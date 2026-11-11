@@ -109,10 +109,11 @@ struct Picked {
         version = Workspace::readInstallerVersion(p, &why);
         if (version.empty() && why.empty()) why = "pas de version dans ce fichier";
     }
-    // 1.46.1 : un .zip - l'installateur attendu (l'Admin, ou les Studios) extrait, puis comme un .exe ; refuse : `why`.
-    void setZip(const std::string& zip, bool admin) {
+    // 1.46.1 : un .zip - l'installateur attendu extrait, puis comme un .exe ; refuse : `why`. 1.49.0 : `kind` 1 les Studios,
+    // 2 l'Admin+, 3 XPG Admin (Workspace::installerFromZip).
+    void setZip(const std::string& zip, int kind) {
         std::string exe, w;
-        if (!Workspace::installerFromZip(zip, admin, exe, &w)) {
+        if (!Workspace::installerFromZip(zip, kind, exe, &w)) {
             forget();
             path = zip;
             name = baseName(zip);
@@ -178,7 +179,8 @@ public:
 
     explicit VersionsPage(ShellHost host) : Page("versions", std::move(host)) {
         open_ = &button(*this, "Publier une version\xE2\x80\xA6", "versions.publier", ui::Button::Style::Default, ui::Icon::Export);
-        open_->setTooltip("Les deux installateurs (les Studios, l'Admin) de la m\xC3\xAA" "me version : sign\xC3\xA9s ici, d\xC3\xA9pos\xC3\xA9s sur le service, chaque PC pas \xC3\xA0 jour pr\xC3\xA9venu.");
+        open_->setTooltip("Les trois installateurs (les Studios, l'Admin+, XPG Admin) de la m\xC3\xAA" "me version : sign\xC3\xA9s ici, d\xC3\xA9pos\xC3\xA9s sur le service, chacun "
+                          "pr\xC3\xA9venu de ce qui le concerne.");
         reload_ = &button(*this, "Actualiser", "versions.relever", ui::Button::Style::Default, ui::Icon::Refresh);
         reload_->setTooltip("Relire tout de suite les versions publi\xC3\xA9" "es et qui est \xC3\xA0 jour (l'Admin le fait seul en arrivant sur la page).");
         // 1.48.1 : Supprimer est la, grise : une version publiee ne se retire pas (la raison dans son infobulle).
@@ -187,6 +189,7 @@ public:
         delete_->setTooltip(kNoDelete);
         pickStudios_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.studios.choisir", ui::Button::Style::Default, ui::Icon::Open);
         pickAdmin_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.admin.choisir", ui::Button::Style::Default, ui::Icon::Open);
+        pickPlus_ = &button(*this, "Choisir\xE2\x80\xA6", "versions.adminplus.choisir", ui::Button::Style::Default, ui::Icon::Open);   // 1.49.0
         notes_ = &adopt(*this, std::make_unique<ui::MultiLineText>("versions.notes"));
         // 1.46.0 : << je ne peux pas ecrire dans Notes >> - un MultiLineText nait en lecture seule (l'apercu d'un code) : les
         // notes sont un texte a taper, une note par ligne (Entree : la suivante), sans numeros de ligne (une note plus
@@ -228,13 +231,16 @@ public:
         });
         links_ += reload_->clicked->connect([this] { fetch(true); });
         links_ += pickStudios_->clicked->connect([this] { pick(false); });
-        links_ += pickAdmin_->clicked->connect([this] { pick(true); });
+        links_ += pickAdmin_->clicked->connect([this] { pick(3); });
+        links_ += pickPlus_->clicked->connect([this] { pick(2); });
         links_ += cancel_->clicked->connect([this] {
             panel_ = false;
             studios_.forget();   // 1.46.1 : un fichier extrait d'un .zip : son dossier temporaire
             admin_.forget();
+            plus_.forget();
             studios_ = Picked{};
             admin_ = Picked{};
+            plus_ = Picked{};
             notes_->setText({});
             notesFor_.clear();
             important_->setChecked(false);
@@ -260,20 +266,22 @@ public:
             const std::string n = lower(baseName(p));
             if (Workspace::isZipPath(p)) {
                 if (publishing_) continue;
-                bool st = false, ad = false;
+                bool st = false, pl = false, ad = false;
                 std::string why;
-                if (!Workspace::installerKindsInZip(p, st, ad, &why)) {
+                if (!Workspace::installerKindsInZip(p, st, pl, ad, &why)) {
                     if (host_.flash) host_.flash("Ce .zip n'est pas pris : " + why + ".", Tone::Warning);
                     any = true;
                     continue;
                 }
-                if (st) studios_.setZip(p, false);
-                if (ad) admin_.setZip(p, true);
+                if (st) studios_.setZip(p, 1);
+                if (pl) plus_.setZip(p, 2);   // 1.49.0 : l'Admin+ (XPG-License-Admin-Setup)
+                if (ad) admin_.setZip(p, 3);  // XPG Admin (XPG-Admin-Setup)
                 any = true;
                 continue;
             }
             if (n.size() < 4 || n.substr(n.size() - 4) != ".exe") continue;
-            (n.find("admin") != std::string::npos ? admin_ : studios_).set(p);
+            // 1.49.0 : XPG-License-Admin-Setup-... : l'Admin+ ; un autre nom qui dit << admin >> (XPG-Admin-Setup-...) : XPG Admin
+            (n.rfind("xpg-license-admin-setup", 0) == 0 ? plus_ : n.find("admin") != std::string::npos ? admin_ : studios_).set(p);
             any = true;
         }
         if (!any) return false;
@@ -284,15 +292,19 @@ public:
     }
 
     // Les essais : choisir un installateur comme Choisir... ou un glisser. 1.46.1 : un .zip aussi.
-    void setInstaller(bool admin, const std::string& path) {
-        Picked& p = admin ? admin_ : studios_;
-        if (Workspace::isZipPath(path)) p.setZip(path, admin);
+    // 1.49.0 : `kind` 1 les Studios, 2 l'Admin+, 3 XPG Admin ; setInstaller(bool) : true = XPG Admin (l'Admin des admins).
+    void setInstallerKind(int kind, const std::string& path) {
+        Picked& p = slot(kind);
+        if (Workspace::isZipPath(path)) p.setZip(path, kind);
         else p.set(path);
         panel_ = true;
         prefillNotes();
         update();
     }
+    void setInstaller(bool admin, const std::string& path) { setInstallerKind(admin ? 3 : 1, path); }
     [[nodiscard]] const Picked& picked(bool admin) const { return admin ? admin_ : studios_; }
+    [[nodiscard]] const Picked& pickedKind(int kind) const { return kind == 2 ? plus_ : kind == 3 ? admin_ : studios_; }
+    Picked& slot(int kind) { return kind == 2 ? plus_ : kind == 3 ? admin_ : studios_; }
     [[nodiscard]] std::string version() const { return versionToPublish(); }
 
     // 1.47.0 : un releve arrive (le service, ou les essais : adoptVersionsView) - la liste, la barre, les boutons.
@@ -329,7 +341,7 @@ protected:
             bx -= 10.f;
         }
         float y = titleY_ + 80.f;
-        for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, notes_, important_, cancel_, sign_}) show(wd, panel_);
+        for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, pickPlus_, notes_, important_, cancel_, sign_}) show(wd, panel_);
         if (panel_) {
             // 1.46.0 : << Annuler >> passait sur le coin des notes (il commencait a gauche de la colonne de droite : les deux
             // boutons cote a cote n'y tenaient pas). Les boutons restent dans la colonne de droite : elle s'elargit pour eux
@@ -339,15 +351,18 @@ protected:
             float rightW = std::clamp(w_ * 0.27f, 280.f, 380.f);
             if (rowNeed > rightW && w_ - rowNeed >= 600.f) rightW = rowNeed;
             stacked_ = rowNeed > rightW;
-            const float panelH = std::clamp(b.bottom() - y - 230.f, stacked_ ? 410.f : 380.f, 470.f);
+            const float panelH = std::clamp(b.bottom() - y - 230.f, stacked_ ? 434.f : 404.f, 494.f);   // 1.49.0 : + 24 (les zones a trois lignes)
             panelRect_ = {x0_, y, w_, panelH};
             leftRect_ = {panelRect_.x, panelRect_.y, panelRect_.w - rightW, panelRect_.h};
             rightRect_ = {leftRect_.right(), panelRect_.y, rightW, panelRect_.h};
-            const float zx = leftRect_.x + 20.f, zw = (leftRect_.w - 56.f) * 0.5f;
-            zones_[0] = {zx, leftRect_.y + 52.f, zw, 132.f};
-            zones_[1] = {zx + zw + 16.f, leftRect_.y + 52.f, zw, 132.f};
+            // 1.49.0 : trois emplacements - les Studios, l'Admin+, XPG Admin
+            const float zx = leftRect_.x + 20.f, zw = (leftRect_.w - 72.f) / 3.f;
+            zones_[0] = {zx, leftRect_.y + 52.f, zw, 156.f};
+            zones_[1] = {zx + zw + 16.f, leftRect_.y + 52.f, zw, 156.f};
+            zones_[2] = {zx + 2.f * (zw + 16.f), leftRect_.y + 52.f, zw, 156.f};
             pickStudios_->setBounds({zones_[0].right() - 14.f - buttonWidth(*pickStudios_, 100.f), zones_[0].bottom() - 44.f, buttonWidth(*pickStudios_, 100.f), 32.f});
-            pickAdmin_->setBounds({zones_[1].right() - 14.f - buttonWidth(*pickAdmin_, 100.f), zones_[1].bottom() - 44.f, buttonWidth(*pickAdmin_, 100.f), 32.f});
+            pickPlus_->setBounds({zones_[1].right() - 14.f - buttonWidth(*pickPlus_, 100.f), zones_[1].bottom() - 44.f, buttonWidth(*pickPlus_, 100.f), 32.f});
+            pickAdmin_->setBounds({zones_[2].right() - 14.f - buttonWidth(*pickAdmin_, 100.f), zones_[2].bottom() - 44.f, buttonWidth(*pickAdmin_, 100.f), 32.f});
             versionRow_ = zones_[0].bottom() + 34.f;
             const float ny = versionRow_ + 70.f;
             notes_->setBounds({zx, ny, leftRect_.w - 40.f, std::max(60.f, leftRect_.bottom() - 16.f - ny)});
@@ -463,16 +478,21 @@ private:
     // ------------------------------------------------------------------ la version
     [[nodiscard]] std::string versionToPublish() const {
         if (studios_.version.empty() || admin_.version.empty() || studios_.version != admin_.version) return {};
+        if (!plus_.path.empty() && plus_.version != studios_.version) return {};   // 1.49.0 : l'Admin+, facultatif, la meme
         return studios_.version;
     }
     // La phrase sous la version ; `ok` : on peut publier.
     [[nodiscard]] std::string verdict(bool& ok) const {
         ok = false;
-        if (studios_.path.empty() || admin_.path.empty()) return "Choisis les 2 installateurs (ou glisse-les sur la page) : la version se lit dans les fichiers.";
+        if (studios_.path.empty() || admin_.path.empty())
+            return "Choisis les installateurs des Studios et de XPG Admin (l'Admin+ si tu le publies), ou glisse-les sur la page : la version se lit dans les fichiers.";
         if (studios_.version.empty()) return "L'installateur des Studios : " + studios_.why + ".";
-        if (admin_.version.empty()) return "L'installateur de l'Admin : " + admin_.why + ".";
+        if (admin_.version.empty()) return "L'installateur de XPG Admin : " + admin_.why + ".";
+        if (!plus_.path.empty() && plus_.version.empty()) return "L'installateur de l'Admin+ : " + plus_.why + ".";
         if (studios_.version != admin_.version)
-            return "Les 2 fichiers ne sont pas de la m\xC3\xAA" "me version (Studios " + studios_.version + ", Admin " + admin_.version + ") : choisis les bons.";
+            return "Les fichiers ne sont pas de la m\xC3\xAA" "me version (Studios " + studios_.version + ", Admin " + admin_.version + ") : choisis les bons.";
+        if (!plus_.path.empty() && plus_.version != studios_.version)
+            return "Les fichiers ne sont pas de la m\xC3\xAA" "me version (Studios " + studios_.version + ", Admin+ " + plus_.version + ") : choisis les bons.";
         const std::string latest = view_.latest();
         if (!latest.empty() && adm::compareSemver(studios_.version, latest) <= 0)
             return "Lue dans les 2 fichiers : " + studios_.version + ", pas plus r\xC3\xA9" "cente que la " + latest + " publi\xC3\xA9" "e.";
@@ -514,7 +534,7 @@ private:
         const bool ready = ws().service().ready();
         const bool busy = host_.busy && host_.busy();
         open_->setEnabled(plus);
-        for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, notes_, important_, cancel_, sign_}) show(wd, panel_);
+        for (ui::Widget* wd : std::initializer_list<ui::Widget*>{pickStudios_, pickAdmin_, pickPlus_, notes_, important_, cancel_, sign_}) show(wd, panel_);
         open_->setText(panel_ ? std::string("Fermer la publication") : std::string("Publier une version\xE2\x80\xA6"));
         reload_->setEnabled(plus && ready && !fetching_);
         bool ok = false;
@@ -525,18 +545,21 @@ private:
         sign_->setTooltip(!ready ? std::string("Il faut le service des licences (Service en ligne).") : std::string("La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe ; les 2 fichiers partent sur le service."));
         pickStudios_->setEnabled(!publishing_);
         pickAdmin_->setEnabled(!publishing_);
+        pickPlus_->setEnabled(!publishing_);
         invalidateLayout();
         invalidate();
     }
 
-    void pick(bool admin) {
+    void pick(int kind) {
         ui::FilePick p;
-        p.title = admin ? "L'installateur de l'Admin (XPG-License-Admin-Setup-...exe, ou un .zip qui le porte)" : "L'installateur des Studios (...-Setup-...exe, ou un .zip qui le porte)";
+        p.title = kind == 2   ? "L'installateur de l'Admin+ (XPG-License-Admin-Setup-...-EDITEUR.exe, ou un .zip qui le porte)"
+                  : kind == 3 ? "L'installateur de XPG Admin (XPG-Admin-Setup-...exe, ou un .zip qui le porte)"
+                              : "L'installateur des Studios (...-Setup-...exe, ou un .zip qui le porte)";
         p.filters = {{"Installateur Windows (.exe, ou un .zip qui le porte)", "exe;zip"}, {"Installateur Windows (.exe)", "exe"}, {"Archive (.zip)", "zip"}};
         auto alive = alive_;
-        host_.pickFile(p, [this, alive, admin](std::string path) {
+        host_.pickFile(p, [this, alive, kind](std::string path) {
             if (!*alive || path.empty()) return;
-            setInstaller(admin, path);
+            setInstallerKind(kind, path);
         });
     }
 
@@ -576,7 +599,7 @@ private:
         (void)verdict(ok);
         if (!ok || publishing_) return;
         const Workspace* w = &ws();
-        const std::string s = studios_.path, a = admin_.path, v = versionToPublish();
+        const std::string s = studios_.path, a = admin_.path, pl = plus_.path, v = versionToPublish();
         const std::vector<std::string> n = notes();
         const bool important = important_->checked();
         progress_ = std::make_shared<Progressing>();
@@ -584,12 +607,12 @@ private:
         auto alive = alive_;
         publishing_ = true;
         if (!host_.runSlow("Publier la " + v,
-                           [w, s, a, n, important, prog] {
+                           [w, s, a, pl, n, important, prog] {
                                return w->publishVersion(s, a, n, important, [prog](std::uint64_t done, std::uint64_t total) {
                                    prog->done = done;
                                    prog->total = total;
                                    return true;
-                               });
+                               }, pl);
                            },
                            [this, alive](const OpResult& r) {
                                if (!*alive) return;
@@ -598,6 +621,7 @@ private:
                                    panel_ = false;
                                    studios_ = Picked{};
                                    admin_ = Picked{};
+                                   plus_ = Picked{};
                                    notes_->setText({});
                                    notesFor_.clear();
                                    important_->setChecked(false);
@@ -640,29 +664,34 @@ private:
     }
 
     // ------------------------------------------------------------------ dessiner
-    void paintZone(const ui::PaintContext& ctx, const Rect& z, const char* head, const Picked& p, bool admin) {
+    // 1.49.0 : `kind` 1 les Studios, 2 l'Admin+, 3 XPG Admin
+    void paintZone(const ui::PaintContext& ctx, const Rect& z, const char* head, const Picked& p, int kind) {
         auto& r = ctx.r;
         const auto& c = ctx.theme.color;
-        const Color tone = admin ? c.accent : rgb(0x0E9F6E);
+        const bool admin = kind != 1;
+        const Color tone = kind == 2 ? c.accent : kind == 3 ? rgb(0x0E7490) : rgb(0x0E9F6E);
         r.fillRoundedRect(z, tone.withAlpha(p.path.empty() ? 6 : 12), 12.f);
         ui::shapes::strokeRoundedRect(r, z, tone.withAlpha(110), 12.f, 1.5f);
-        r.drawText({z.x + 16.f, z.y + 14.f}, head, gfx::semibold(kF11), c.textMuted);
-        const Rect ib{z.x + 16.f, z.y + 38.f, 38.f, 38.f};
-        r.fillRoundedRect(ib, tone, 10.f);
-        ui::drawIcon(r, admin ? ui::Icon::Lock : ui::Icon::Import, {ib.x + 10.f, ib.y + 10.f, 18.f, 18.f}, rgb(0xFFFFFF));
-        const float tx = ib.right() + 12.f, tw = z.right() - 16.f - tx;
+        // 1.49.0 : trois zones cote a cote - l'icone passe a cote du titre, le texte prend toute la largeur (une ligne chacun)
+        const Rect ib{z.x + 14.f, z.y + 10.f, 22.f, 22.f};
+        r.fillRoundedRect(ib, tone, 6.f);
+        ui::drawIcon(r, admin ? ui::Icon::Lock : ui::Icon::Import, {ib.x + 4.f, ib.y + 4.f, 14.f, 14.f}, rgb(0xFFFFFF));
+        r.drawText({ib.right() + 8.f, z.y + 15.f}, head, gfx::semibold(kF11), c.textMuted);
+        const float tx = z.x + 16.f, tw = z.w - 32.f;
         if (p.path.empty()) {
-            r.drawText({tx, z.y + 40.f}, fit(r, "Glisse le fichier ici, ou \xC2\xAB Choisir\xE2\x80\xA6 \xC2\xBB", kF13, tw), kF13, c.textMuted);
+            r.drawText({tx, z.y + 44.f}, fit(r, "Glisse le fichier ici, ou \xC2\xAB Choisir\xE2\x80\xA6 \xC2\xBB", kF13, tw), kF13, c.textMuted);
         } else {
-            r.drawText({tx, z.y + 38.f}, fit(r, p.name, ctx.theme.font.mono, tw), ctx.theme.font.mono, c.text);
-            const std::string sub = p.refused ? p.why
-                                              : sizeFr(p.size) + " \xC2\xB7 " + (p.version.empty() ? "version illisible : " + p.why : "version " + p.version + " lue dans le fichier \xE2\x9C\x93");
+            r.drawText({tx, z.y + 40.f}, fit(r, p.name, gfx::semibold(kF12), tw), gfx::semibold(kF12), c.text);
+            const std::string sub = p.refused ? p.why : p.version.empty() ? "version illisible : " + p.why : "version " + p.version + " lue dans le fichier \xE2\x9C\x93";
             r.drawText({tx, z.y + 60.f}, fit(r, sub, kF12, tw), kF12, p.version.empty() ? c.error : c.textMuted);
+            if (!p.refused) r.drawText({tx, z.y + 78.f}, sizeFr(p.size), kF12, c.textMuted);
             if (!p.from.empty())   // 1.46.1
-                r.drawText({tx, z.y + 78.f}, fit(r, "extrait de " + p.from, kF12, tw), kF12, c.textMuted);
+                r.drawText({tx, z.y + 96.f}, fit(r, "extrait de " + p.from, kF12, tw), kF12, c.textMuted);
         }
-        const std::string who = admin ? "Qui le re\xC3\xA7oit : les admins (jamais les clients)" : "Qui le re\xC3\xA7oit : tout le monde (chaque Studio pas \xC3\xA0 jour)";
-        r.drawText({z.x + 16.f, z.bottom() - 36.f}, fit(r, who, kF12, z.w - 140.f), kF12, c.textMuted);
+        const std::string who = kind == 2   ? "Pour l'admin+ seul (facultatif)"
+                                : kind == 3 ? "Pour les admins (jamais un client)"
+                                            : "Pour tous (chaque Studio)";
+        r.drawText({z.x + 16.f, z.bottom() - 34.f}, fit(r, who, kF12, z.w - 140.f), kF12, c.textMuted);
     }
 
     void paintPanel(const ui::PaintContext& ctx) {
@@ -673,10 +702,11 @@ private:
         r.fillRect({rightRect_.x, rightRect_.y + 1.f, 1.f, rightRect_.h - 2.f}, c.gridLine);
         r.drawText({leftRect_.x + 20.f, leftRect_.y + 18.f}, "Publier une version", gfx::semibold(kF16), c.text);
         (void)pill(r, leftRect_.x + 190.f, leftRect_.y + 17.f, "admin+", gfx::semibold(kF11), c.accent, c.accent.withAlpha(22), 20.f);
-        const std::string hint = "glisse les 2 installateurs, ou Choisir\xE2\x80\xA6";
+        const std::string hint = "glisse les installateurs, ou Choisir\xE2\x80\xA6";
         r.drawText({leftRect_.right() - 20.f - r.measure(hint, kF12).width, leftRect_.y + 20.f}, hint, kF12, c.textMuted);
-        paintZone(ctx, zones_[0], "L'INSTALLATEUR DES STUDIOS", studios_, false);
-        paintZone(ctx, zones_[1], "L'INSTALLATEUR DE L'ADMIN", admin_, true);
+        paintZone(ctx, zones_[0], "LES STUDIOS", studios_, 1);
+        paintZone(ctx, zones_[1], "L'ADMIN+", plus_, 2);           // 1.49.0
+        paintZone(ctx, zones_[2], "L'ADMIN (XPG ADMIN)", admin_, 3);
         // La version
         const float vx = leftRect_.x + 20.f;
         r.drawText({vx, versionRow_ - 20.f}, "Version", gfx::semibold(kF13), c.text);
@@ -701,7 +731,7 @@ private:
         r.drawText({rx, y}, "Ce qui va se passer", gfx::semibold(kF14), c.text);
         y += 28.f;
         const int studios = have_ ? std::max(0, view_.total - static_cast<int>(view_.admins.size())) : 0;
-        const std::string steps[4] = {"La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe les 2 fichiers, ici, sur ton PC.",
+        const std::string steps[4] = {"La cl\xC3\xA9 de l'\xC3\xA9" "diteur signe les fichiers, ici, sur ton PC.",
                                       "Le service les garde, avec leur empreinte (SHA-256).",
                                       "Chaque PC pas \xC3\xA0 jour est pr\xC3\xA9venu dans les 2 minutes" +
                                           (have_ ? " : " + std::to_string(studios) + " Studios, " + std::to_string(view_.admins.size()) + " Admins." : std::string(".")),
@@ -823,7 +853,7 @@ private:
             r.drawText({cols[1], y + 28.f}, "par l'admin+", kF12, c.textMuted);
             float fy = y + 8.f;
             for (const auto& f : v.files) {
-                std::string s = std::string(f.file.kind == "admin" ? "Admin" : "Studios") + " \xC2\xB7 " + sizeFr(f.file.size);
+                std::string s = std::string(f.file.kind == "admin_plus" ? "Admin+" : f.file.kind == "admin" ? "Admin" : "Studios") + " \xC2\xB7 " + sizeFr(f.file.size);
                 if (!f.present) s += " (\xC3\xA0 renvoyer)";
                 r.drawText({cols[2], fy}, fit(r, s, kF13, cols[3] - cols[2] - 8.f), kF13, f.present ? c.text : c.warning);
                 r.drawText({cols[3], fy}, f.file.audience == "admins" ? "les admins" : "tout le monde", kF13, c.text);
@@ -1001,7 +1031,7 @@ private:
         files.title = "LES FICHIERS";
         files.weight = 1.3f;
         for (const auto& f : v.files) {
-            files.lines.push_back({.icon = f.file.kind == "admin" ? ui::Icon::Lock : ui::Icon::Import,
+            files.lines.push_back({.icon = f.file.kind == "admin" || f.file.kind == "admin_plus" ? ui::Icon::Lock : ui::Icon::Import,
                                    .text = "**" + f.file.name + "**" + (f.present ? std::string() : std::string(" \xC2\xB7 \xC3\xA0 renvoyer")),
                                    .tone = f.present ? ui::Tone::None : ui::Tone::Warning});
             files.lines.push_back({.text = sizeFr(f.file.size) + " \xC2\xB7 " + (f.file.audience == "admins" ? "les admins" : "tout le monde") + " \xC2\xB7 SHA-256 "
@@ -1035,7 +1065,7 @@ private:
         const bool busy = host_.busy && host_.busy();
         for (std::size_t r = 0; r < resend_.size(); ++r)
             if (resend_[r].version == v.version)
-                card->addButton("Renvoyer " + std::string(resend_[r].file.kind == "admin" ? "l'Admin" : "les Studios") + "\xE2\x80\xA6", "versions.depliage.renvoyer", ui::Icon::Export,
+                card->addButton("Renvoyer " + std::string(resend_[r].file.kind == "admin_plus" ? "l'Admin+" : resend_[r].file.kind == "admin" ? "l'Admin" : "les Studios") + "\xE2\x80\xA6", "versions.depliage.renvoyer", ui::Icon::Export,
                                 [this, r] { resendAt(r); }, busy ? std::string("un travail est en cours") : std::string());
         if (!view_.admins.empty()) card->addButton("Les admins", "versions.depliage.admins", ui::Icon::GoTo, [this] { host_.navigate("admins"); });
         card->addText("clic droit : le menu", true);
@@ -1087,7 +1117,7 @@ private:
             m.copy("Les notes", all, ui::Icon::Document);
         }
         for (const auto& f : v.files)
-            if (!f.file.sha256.empty()) m.copy(std::string("Le SHA-256 ") + (f.file.kind == "admin" ? "de l'Admin" : "des Studios"), f.file.sha256, ui::Icon::Lock);
+            if (!f.file.sha256.empty()) m.copy(std::string("Le SHA-256 ") + (f.file.kind == "admin_plus" ? "de l'Admin+" : f.file.kind == "admin" ? "de l'Admin" : "des Studios"), f.file.sha256, ui::Icon::Lock);
         std::string line;
         for (std::size_t c = 0; c < t.size(); ++c) line += (c ? "\t" : "") + t[c];
         m.copy("La ligne", line + "\n", ui::Icon::Copy);
@@ -1144,13 +1174,14 @@ private:
     VersionsView                  view_;
     std::vector<FileToResend>     resend_;
     std::string                   problem_, notesFor_;
-    Picked                        studios_, admin_;
+    Picked                        studios_, admin_, plus_;   // 1.49.0 : admin_ = XPG Admin (sorte << admin >>), plus_ = l'Admin+
     std::shared_ptr<Progressing>  progress_;
     ui::Button*                   open_{nullptr};
     ui::Button*                   reload_{nullptr};
     ui::Button*                   delete_{nullptr};   // 1.48.1 : grise (kNoDelete)
     ui::Button*                   pickStudios_{nullptr};
     ui::Button*                   pickAdmin_{nullptr};
+    ui::Button*                   pickPlus_{nullptr};
     ui::MultiLineText*            notes_{nullptr};
     Switch*                       important_{nullptr};
     ui::Button*                   cancel_{nullptr};
@@ -1171,7 +1202,7 @@ private:
     float                                 headY_{0.f}, rowsTop_{0.f}, rowsBottom_{0.f}, scroll_{0.f};
     bool                                  reveal_{false};
     float                         x0_{0.f}, w_{0.f}, titleY_{0.f}, versionRow_{0.f};
-    Rect                          panelRect_{}, leftRect_{}, rightRect_{}, zones_[2]{}, resendRect_{}, listRect_{};
+    Rect                          panelRect_{}, leftRect_{}, rightRect_{}, zones_[3]{}, resendRect_{}, listRect_{};
     std::shared_ptr<bool>         alive_ = std::make_shared<bool>(true);
     core::ConnectionScope         links_;
 };

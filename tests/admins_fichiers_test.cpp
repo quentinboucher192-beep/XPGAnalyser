@@ -512,7 +512,7 @@ int main(int argc, char** argv) {
     }
 
     std::printf("-- une version publiee\n");
-    const fs::path studiosExe = inst / "API-IHM-Studio-Setup-1.44.1.exe", adminExe = inst / "XPG-License-Admin-Setup-1.44.1-EDITEUR.exe";
+    const fs::path studiosExe = inst / "API-IHM-Studio-Setup-1.44.1.exe", adminExe = inst / "XPG-Admin-Setup-1.44.1.exe";   // 1.49.0 : l'Admin des admins (XPG Admin)
     writeFile(studiosExe, buildPe({1, 44, 1, 0}, "1.44.1", "1.44.1.0", true, randomBytes(1048576 + 300000, rng)));
     writeFile(adminExe, buildPe({1, 44, 1, 0}, "1.44.1", "1.44.1.0", true, randomBytes(120000, rng)));
     const std::string adminBytes = readFile(adminExe);

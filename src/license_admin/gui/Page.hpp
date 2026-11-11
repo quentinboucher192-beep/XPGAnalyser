@@ -216,5 +216,8 @@ menu::MenuPtr makeDeployDialog(ShellHost host, std::function<void()> done = {});
 // 1.47.0 : la derogation << Gerer le service >> (l'admin+ ; DerogationDialog.cpp) - a un admin, 1, 4, 24 ou 72 h ; `adminKey`
 // (facultatif) : l'admin choisi d'avance ; `done` : apres Accorder, Revoquer ou Fermer.
 menu::MenuPtr makeDerogationDialog(ShellHost host, std::string adminKey = {}, std::function<void()> done = {});
+// 1.49.0 : << Repartir de zero >> (l'admin+ ; ResetDialog.cpp, docs/ADMINS.md par. 13) - ce qui est efface et garde, la
+// sauvegarde faite d'abord, le mot REPARTIR ; `done` : a la fermeture. XPG Admin (l'edition classique) : nullptr.
+menu::MenuPtr makeStartOverDialog(ShellHost host, std::function<void()> done = {});
 
 } // namespace license_admin::gui

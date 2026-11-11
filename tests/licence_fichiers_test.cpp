@@ -636,6 +636,18 @@ int main(int argc, char** argv) {
     const std::string v = nextVersion();
     const std::string studiosBytes = randomBytes(700000);
     const auto studios = upload("API-IHM-Studio-Setup-" + v + ".exe", studiosBytes, "studios", "public", v);
+    // 1.49.0 : la troisieme sorte - l'installateur de l'Admin+ (admin_plus) : la cle de l'editeur seule le telecharge
+    const std::string plusBytes = randomBytes(3000);
+    const auto plusSetup = upload("XPG-License-Admin-Setup-" + v + "-EDITEUR.exe", plusBytes, "admin_plus", "admins", v);
+    {
+        const auto noPlus = dl::download(wantOf(plusSetup));
+        check(!noPlus.ok, "l'Admin+ sans jeton : refuse (" + noPlus.message + ")");
+        dl::Want wp = wantOf(plusSetup);
+        wp.kind = "admin_plus";
+        wp.adminToken = up::checkAdminToken(adminTokenText, lic::systemNow()).base64;
+        const auto withPlus = dl::download(wp);
+        check(withPlus.ok && readFile(fs::path(withPlus.path)) == plusBytes, "l'Admin+ avec le jeton signe par la cle de l'editeur : verifie (" + withPlus.message + ")");
+    }
     {
         const auto before = ls::checkUpdate();
         check(before.reached && !before.update && has(before.message, "\xC3\xA0 jour"), "rien de publie : a jour (" + before.message + ")");
@@ -644,11 +656,12 @@ int main(int argc, char** argv) {
         vm.published = serviceTime();
         vm.notes = {"Exports PDF : les grandes vues ne sont plus coup\xC3\xA9" "es.", "Simulation : elle d\xC3\xA9marre deux fois plus vite."};
         vm.files = {{studios.id, studios.name, studios.sha256, "studios", "tous", studios.size},
-                    {adminSetup.id, adminSetup.name, adminSetup.sha256, "admin", "admins", adminSetup.size}};
+                    {adminSetup.id, adminSetup.name, adminSetup.sha256, "admin", "admins", adminSetup.size},
+                    {plusSetup.id, plusSetup.name, plusSetup.sha256, "admin_plus", "admin_plus", plusSetup.size}};   // 1.49.0
         const Http p = http("PUT", "/admin/versions", jsonBody({{"bloc", block(lic::DocKind::Version, ladm::writeVersion(vm))}}), true);
         check(p.status == 201, "l'editeur publie la " + v + " (" + std::to_string(p.status) + " " + p.body.substr(0, 160) + ")");
         const auto r = ls::checkUpdate();
-        check(r.update && r.update->version == v && r.update->announce && r.update->notes.size() == 2 && r.update->files.size() == 2,
+        check(r.update && r.update->version == v && r.update->announce && r.update->notes.size() == 2 && r.update->files.size() == 3,
               "vue : la mise a jour " + v + ", a annoncer (" + r.message + ")");
         if (r.update) {
             bool signedAll = true;
@@ -671,8 +684,10 @@ int main(int argc, char** argv) {
         writeFile(g_base / "admin-ici" / up::kAdminTokenFile, adminTokenText);
         up::received({}, w.update, true);
         const auto oa = up::available();
-        check(oa && oa->adminPc && oa->adminOutdated && oa->files().size() == 2 && oa->admin() && oa->admin()->id == adminSetup.id,
-              "le PC d'un admin : les 2 fichiers (les Studios, l'Admin)");
+        // 1.49.0 : ce jeton est signe par la cle de l'editeur - le PC de l'admin+ : les Studios et l'Admin+ (admin_plus), jamais
+        // XPG Admin ; un admin (sa cle d'admin) recoit << admin >> (Offer::adminKind).
+        check(oa && oa->adminPc && oa->adminOutdated && oa->adminKind == "admin_plus" && oa->files().size() == 2 && oa->admin() && oa->admin()->id == plusSetup.id,
+              "le PC de l'admin+ : les 2 fichiers (les Studios, l'Admin+)");
         if (oa) check(has(up::adminLine(*oa), "Ton Admin 1.0.0 n'est plus \xC3\xA0 jour (L\xC3\xA9" "a"), "la phrase : " + up::adminLine(*oa));
         // les lignes de commande
         const std::string args = up::silentArguments("C:\\Programmes\\XPG\\IHM-Studio.exe", "D:\\Affaires\\Armoire Gaz");

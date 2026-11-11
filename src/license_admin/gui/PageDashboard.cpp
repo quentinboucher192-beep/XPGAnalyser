@@ -396,6 +396,20 @@ public:
                 if (!alive.expired()) refresh();
             }));
         });
+        // 1.49.0 : le bandeau du premier lancement de l'Admin+ 1.49 (une fois) - << Repartir de zero >> (ResetDialog.cpp).
+        offerOpen_ = addButton("Voir ce qui serait effac\xC3\xA9\xE2\x80\xA6", "tableau.repartir", ui::Button::Style::Primary, ui::Icon::Lock);
+        offerClose_ = addButton("Non merci", "tableau.repartir.fermer", ui::Button::Style::Default, ui::Icon::None);
+        offerOpen_->setVisibility(ui::Visibility::Collapsed);
+        offerClose_->setVisibility(ui::Visibility::Collapsed);
+        links_ += offerOpen_->clicked->connect([this] {
+            if (!host_.openDialog) return;
+            if (auto d = makeStartOverDialog(host_)) host_.openDialog(std::move(d));
+        });
+        links_ += offerClose_->clicked->connect([this] {
+            offer_ = false;
+            refresh();
+            invalidateLayout();
+        });
 
         const struct {
             const char* id;
@@ -444,6 +458,15 @@ public:
     void refresh() override {
         const Workspace& w = ws();
         d_ = w.dashboard();
+        // 1.49.0 : la proposition de repartir de zero, UNE fois (le premier lancement de l'Admin+ 1.49) : notee des qu'elle est montree.
+        if (!offerDecided_ && w.role() == Role::Plus) {
+            offerDecided_ = true;
+            offer_ = w.startOverOfferDue();
+            if (offer_) w.noteStartOverOffered();
+        }
+        if (offer_ && w.role() != Role::Plus) offer_ = false;
+        offerOpen_->setVisibility(offer_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        offerClose_->setVisibility(offer_ ? ui::Visibility::Visible : ui::Visibility::Collapsed);
         const auto& k = w.key();
         hint_.clear();
         hintKind_ = 0;
@@ -668,6 +691,19 @@ protected:
             deploy_->setBounds(beside ? Rect{x0 + w - 14.f - bw, y + (h - 34.f) * 0.5f, bw, 34.f} : Rect{x0 + 44.f, y + 14.f + textH + 8.f, bw, 34.f});
             y += h + 16.f;
         }
+        // 1.49.0 : le bandeau << La 1.49 peut repartir de zero >> (le texte, les deux boutons dessous).
+        offerRect_ = {};
+        offerLines_.clear();
+        if (offer_) {
+            offerLines_ = wrap(kOfferText, kF15, w - 64.f);
+            const float textH = static_cast<float>(offerLines_.size()) * 20.f;
+            const float h = textH + 34.f + 28.f + 8.f;
+            offerRect_ = {x0, y, w, h};
+            const float bw1 = offerOpen_->sizeHint().preferred.w + 8.f, bw2 = offerClose_->sizeHint().preferred.w + 8.f;
+            offerOpen_->setBounds({x0 + 44.f, y + 14.f + textH + 8.f, bw1, 34.f});
+            offerClose_->setBounds({x0 + 44.f + bw1 + 8.f, y + 14.f + textH + 8.f, bw2, 34.f});
+            y += h + 16.f;
+        }
 
         // Les quatre grandes tuiles, puis les quatre petites.
         const float gap = 16.f;
@@ -744,6 +780,18 @@ protected:
             float y = serviceRect_.y + 14.f;
             for (const auto& l : serviceLines_) {
                 ctx.r.drawText({serviceRect_.x + 44.f, y}, l, kF15, c.text);
+                y += 20.f;
+            }
+        }
+
+        // 1.49.0 : la proposition de repartir de zero.
+        if (!offerRect_.empty()) {
+            cardBox(ctx.r, th, offerRect_, Color::rgb(0xFFFFFF), c.info.withAlpha(140));
+            ctx.r.fillRoundedRect(offerRect_.inset(1.f, 1.f), c.info.withAlpha(18), 11.f);
+            ui::drawIcon(ctx.r, ui::Icon::Lock, {offerRect_.x + 16.f, offerRect_.y + 14.f, 18.f, 18.f}, c.info);
+            float y = offerRect_.y + 14.f;
+            for (const auto& l : offerLines_) {
+                ctx.r.drawText({offerRect_.x + 44.f, y}, l, kF15, c.text);
                 y += 20.f;
             }
         }
@@ -920,6 +968,16 @@ private:
     std::string                  serviceNote_;             // 1.45.0 : la phrase du bandeau ("" : a jour)
     std::vector<std::string>     serviceLines_;
     Rect                         serviceRect_{};
+    // 1.49.0 : le bandeau << La 1.49 peut repartir de zero >> (l'admin+, une fois)
+    static constexpr const char* kOfferText =
+        "La 1.49 peut repartir de z\xC3\xA9ro : effacer les licences, les clients, les PC, les demandes, les commandes et les admins, sur le service et "
+        "sur ce poste. Ta cl\xC3\xA9, ton catalogue et ton service restent ; une sauvegarde compl\xC3\xA8te est faite d'abord (\xC2\xAB Restaurer \xC2\xBB "
+        "remet tout). Rien n'est effac\xC3\xA9 sans ton accord : ce bandeau ne revient pas (Service en ligne \xE2\x80\xBA Repartir de z\xC3\xA9ro, plus tard).";
+    ui::Button*                  offerOpen_{nullptr};
+    ui::Button*                  offerClose_{nullptr};
+    bool                         offer_{false}, offerDecided_{false};
+    std::vector<std::string>     offerLines_;
+    Rect                         offerRect_{};
     std::shared_ptr<bool>        alive_{std::make_shared<bool>(true)};
     std::vector<StatTile*>       tiles_;
     ActivityFeed*                feed_{nullptr};

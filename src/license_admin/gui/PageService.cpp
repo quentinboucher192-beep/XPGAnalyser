@@ -715,6 +715,8 @@ private:
     void exportConnection();
     void openDerogation();
     void revokeDerogation();
+    void startOverBlocks(Blocks& bl);   // 1.49.0 : repartir de zero (l'admin+)
+    void openStartOver();
     // Un geste de gestion : l'admin+ tout de suite ; un admin, apres l'accord du service (sa derogation court).
     void managed(const std::string& action, const std::string& detail, std::function<void()> then);
     void tickDerogation();
@@ -759,6 +761,7 @@ private:
     ui::Button*                     exportConnection_{nullptr};
     ui::Button*                     grantDerogation_{nullptr};
     ui::Button*                     revokeDerogation_{nullptr};
+    ui::Button*                     startOver_{nullptr};   // 1.49.0 : << Repartir de zero... >> (l'admin+)
     bool                            lastManage_{false};
     Seconds                         lastMinute_{0};
     // 1.37.0 : le mail
@@ -878,6 +881,10 @@ ServicePage::ServicePage(ShellHost host) : Page("service", std::move(host)) {
     links_ += exportConnection_->clicked->connect([this] { exportConnection(); });
     links_ += grantDerogation_->clicked->connect([this] { openDerogation(); });
     links_ += revokeDerogation_->clicked->connect([this] { revokeDerogation(); });
+    // 1.49.0 : repartir de zero (l'admin+ ; la fenetre : ResetDialog.cpp)
+    startOver_ = body_->make<ui::Button>("Repartir de z\xC3\xA9ro\xE2\x80\xA6", "service.repartir");
+    startOver_->setStyle(ui::Button::Style::Danger);
+    links_ += startOver_->clicked->connect([this] { openStartOver(); });
 
     // 1.37.0 : le mail au client
     mailGmail_ = body_->make<ui::Button>("Gmail", "service.mail.gmail");
@@ -1116,6 +1123,7 @@ void ServicePage::syncEnabled() {
     exportConnection_->setEnabled(!b && !connexion::exportText(ws().folder()).empty());
     grantDerogation_->setEnabled(!b && plus && ws().adminList() && !ws().adminList()->admins.empty());
     revokeDerogation_->setEnabled(!b && plus && ws().derogation().activeAt(ws().now()));
+    startOver_->setEnabled(!b && ws().role() == Role::Plus && !license_admin::classique());   // 1.49.0 (la fenetre dit le reste)
     // 1.44.0 : les adresses de secours - l'admin+ ou le droit << offres >> (le registre est signe) ; 1.47.0 : et gerer le service.
     const bool mayFallback = ws().can("offres") && manage;
     for (int i = 0; i < 3; ++i) fbRemove_[i]->setEnabled(!b && mayFallback);
@@ -1284,6 +1292,7 @@ void ServicePage::rebuild() {
 
     fallbackBlocks(bl);   // 1.44.0
     derogationBlocks(bl); // 1.47.0 : l'admin+ - la derogation << Gerer le service >>
+    startOverBlocks(bl);  // 1.49.0 : l'admin+ - repartir de zero
 
     // ---- l'archive en ligne ----
     const auto& last = s.lastSync;
@@ -2033,6 +2042,30 @@ void ServicePage::derogationBlocks(Blocks& bl) {
     else bl.row({grantDerogation_});
     bl.note("L'admin se connecte \xC3\xA0 Cloudflare avec SON compte (invite-le comme membre du tien) : jamais un jeton partag\xC3\xA9.");
     bl.end();
+}
+
+// 1.49.0 : l'admin+ (jamais XPG Admin) - repartir de zero : la carte, et la fenetre qui dit tout (ResetDialog.cpp).
+void ServicePage::startOverBlocks(Blocks& bl) {
+    if (ws().role() != Role::Plus || license_admin::classique()) return;
+    bl.card("Repartir de z\xC3\xA9ro", ui::Tone::None);
+    bl.text("Effacer les licences, les activations, les PC, les clients, les demandes, les commandes, les r\xC3\xA9vocations, les admins, les "
+            "messages, les statistiques et le journal, sur le service et sur ce poste. Ta cl\xC3\xA9, le catalogue, le service, la boutique "
+            "(sans les commandes), les versions et tes r\xC3\xA9glages restent. Une sauvegarde compl\xC3\xA8te est faite d'abord : \xC2\xAB Restaurer "
+            "une sauvegarde\xE2\x80\xA6 \xC2\xBB remet tout.");
+    bl.row({startOver_});
+    bl.end();
+}
+
+void ServicePage::openStartOver() {
+    if (ws().role() != Role::Plus || license_admin::classique()) return refuse("r\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+");
+    if (!host_.openDialog) return;
+    const auto alive = aliveCheck();
+    if (auto d = makeStartOverDialog(host_, [this, alive] {
+            if (!alive()) return;
+            syncEnabled();
+            rebuild();
+        }))
+        host_.openDialog(std::move(d));
 }
 
 void ServicePage::managed(const std::string& action, const std::string& detail, std::function<void()> then) {

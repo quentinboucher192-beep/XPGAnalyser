@@ -677,7 +677,7 @@ bool uploadWith(online::Client& c, const std::string& folder, const licensing::S
     const std::string name = U(P(path).filename());
     if (!adm::safeFileName(name) || name.back() == '.')
         return fail(why, "le nom " + cite(name) + " ne peut pas partir tel quel (lettres sans accent, chiffres, . _ - et espaces ; 120 caract\xC3\xA8res au plus) : renomme le fichier");
-    if (kind != "admin" && kind != "studios" && kind != "autre") return fail(why, "sorte de fichier inconnue : " + kind);
+    if (kind != "admin" && kind != "studios" && kind != "autre" && kind != "admin_plus") return fail(why, "sorte de fichier inconnue : " + kind);   // 1.49.0
     if (access != "public" && access != "admins" && access != "jeton") return fail(why, "acc\xC3\xA8s inconnu : " + access);
     int a = 0, b = 0, d = 0;
     if (!version.empty() && !adm::parseSemver(version, a, b, d)) return fail(why, "la version " + cite(version) + " n'est pas de la forme X.Y.Z");
@@ -899,7 +899,8 @@ bool adminInstaller(online::Client& c, const detail::Caller& caller, const std::
     if (readVersions(c, caller, folder, view, &w))
         for (const auto& v : view.versions)
             for (const auto& f : v.files)
-                if (f.file.kind == "admin" && f.present) {
+                // 1.49.0 : XPG Admin seulement - l'Admin d'avant (XPG-License-Admin-Setup, le programme de l'admin+) ne s'envoie plus
+                if (f.file.kind == "admin" && f.present && f.file.name.rfind("XPG-License-Admin-Setup", 0) != 0) {
                     out = adm::MessageFile{};
                     out.id = f.file.id;
                     out.name = f.file.name;
@@ -1415,7 +1416,7 @@ OpResult Workspace::attachFile(const std::string& path, adm::MessageFile& out, c
 
 // 1.49.0 (docs/ADMINS.md, par. 12) : la phrase du code d'invitation, dans le message qui part avec l'installateur.
 static std::string invitationSentence(const std::string& code) {
-    return "Ton code d'invitation : " + code + " (Ã  saisir dans l'installateur, valable 48 h)";
+    return "Ton code d'invitation : " + code + " (\xC3\xA0 saisir dans l'installateur, valable 48 h)";
 }
 
 OpResult Workspace::sendAdminInstaller(const std::string& device, const std::string& adminName, const std::string& fallbackPath, const Progress& progress,
@@ -1508,7 +1509,8 @@ int installerKind(const std::string& entryName) {
     const auto ends = [&](const char* x) { const std::string e = x; return l.size() > e.size() && l.compare(l.size() - e.size(), e.size(), e) == 0; };
     if (!ends(".exe")) return 0;
     if (l.rfind("api-ihm-studio-setup-", 0) == 0) return 1;
-    if (l.rfind("xpg-license-admin-setup-", 0) == 0) return 2;
+    if (l.rfind("xpg-license-admin-setup-", 0) == 0) return 2;   // l'Admin+ (1.49.0 : << -EDITEUR >>)
+    if (l.rfind("xpg-admin-setup-", 0) == 0) return 3;           // 1.49.0 : XPG Admin, l'Admin classique
     return 0;
 }
 // Un nom d'entree sur : relatif, sans << .. >>, sans lettre de lecteur ni caractere de controle.
@@ -1557,7 +1559,7 @@ size_t exeOutWrite(void* opaque, mz_uint64, const void* buf, size_t n) {
 
 // Le zip lu : chaque installateur attendu (leur index), ou pourquoi il est refuse.
 struct ZipLook {
-    std::vector<mz_uint> studios, admin;
+    std::vector<mz_uint> studios, admin, classic;   // 1.49.0 : admin = l'Admin+ (XPG-License-Admin-Setup), classic = XPG Admin
 };
 bool lookZip(mz_zip_archive& z, ZipIn& src, const std::string& zipPath, ZipLook& out, std::string* why) {
     const std::string name = U(P(zipPath).filename());
@@ -1581,10 +1583,11 @@ bool lookZip(mz_zip_archive& z, ZipIn& src, const std::string& zipPath, ZipLook&
         if (!st.m_is_supported) return fail(why, name + " : " + cite(st.m_filename) + " est compress\xC3\xA9 d'une fa\xC3\xA7on que l'Admin ne lit pas");
         if (st.m_uncomp_size == 0 || st.m_uncomp_size > kMaxZipEntry || st.m_uncomp_size > kMaxZipRatio * std::max<mz_uint64>(1, st.m_comp_size))
             return fail(why, name + " : " + cite(st.m_filename) + " a une taille absurde (" + std::to_string(st.m_uncomp_size) + " octets)");
-        (kind == 2 ? out.admin : out.studios).push_back(i);
+        (kind == 3 ? out.classic : kind == 2 ? out.admin : out.studios).push_back(i);
     }
     if (out.studios.size() > 1) return fail(why, name + " porte plusieurs installateurs des Studios : garde-n'en qu'un");
-    if (out.admin.size() > 1) return fail(why, name + " porte plusieurs installateurs de l'Admin : garde-n'en qu'un");
+    if (out.admin.size() > 1) return fail(why, name + " porte plusieurs installateurs de l'Admin+ : garde-n'en qu'un");
+    if (out.classic.size() > 1) return fail(why, name + " porte plusieurs installateurs de XPG Admin : garde-n'en qu'un");
     return true;
 }
 
@@ -1596,7 +1599,12 @@ bool Workspace::isZipPath(const std::string& path) {
 }
 
 bool Workspace::installerKindsInZip(const std::string& zipPath, bool& studios, bool& admin, std::string* why) {
-    studios = admin = false;
+    bool classic = false;
+    return installerKindsInZip(zipPath, studios, admin, classic, why);
+}
+
+bool Workspace::installerKindsInZip(const std::string& zipPath, bool& studios, bool& plus, bool& classic, std::string* why) {
+    studios = plus = classic = false;
     mz_zip_archive z{};
     ZipIn src;
     ZipLook look;
@@ -1604,13 +1612,19 @@ bool Workspace::installerKindsInZip(const std::string& zipPath, bool& studios, b
     mz_zip_reader_end(&z);
     if (!ok) return false;
     studios = !look.studios.empty();
-    admin = !look.admin.empty();
-    if (!studios && !admin)
-        return fail(why, U(P(zipPath).filename()) + " ne porte ni API-IHM-Studio-Setup-\xE2\x80\xA6.exe ni XPG-License-Admin-Setup-\xE2\x80\xA6.exe");
+    plus = !look.admin.empty();
+    classic = !look.classic.empty();
+    if (!studios && !plus && !classic)
+        return fail(why, U(P(zipPath).filename()) + " ne porte ni API-IHM-Studio-Setup-\xE2\x80\xA6.exe, ni XPG-License-Admin-Setup-\xE2\x80\xA6.exe, ni XPG-Admin-Setup-\xE2\x80\xA6.exe");
     return true;
 }
 
 bool Workspace::installerFromZip(const std::string& zipPath, bool admin, std::string& out, std::string* why) {
+    return installerFromZip(zipPath, admin ? 2 : 1, out, why);
+}
+
+bool Workspace::installerFromZip(const std::string& zipPath, int kind, std::string& out, std::string* why) {
+    const bool admin = kind == 2;
     out.clear();
     mz_zip_archive z{};
     ZipIn src;
@@ -1619,10 +1633,13 @@ bool Workspace::installerFromZip(const std::string& zipPath, bool admin, std::st
         mz_zip_reader_end(&z);
         return false;
     }
-    const std::vector<mz_uint>& want = admin ? look.admin : look.studios;
+    const std::vector<mz_uint>& want = kind == 3 ? look.classic : admin ? look.admin : look.studios;
     if (want.empty()) {
         mz_zip_reader_end(&z);
-        return fail(why, U(P(zipPath).filename()) + " ne porte pas " + (admin ? "XPG-License-Admin-Setup-\xE2\x80\xA6.exe (l'installateur de l'Admin)" : "API-IHM-Studio-Setup-\xE2\x80\xA6.exe (l'installateur des Studios)"));
+        return fail(why, U(P(zipPath).filename()) + " ne porte pas " +
+                             (kind == 3 ? "XPG-Admin-Setup-\xE2\x80\xA6.exe (l'installateur de XPG Admin)"
+                              : admin   ? "XPG-License-Admin-Setup-\xE2\x80\xA6.exe (l'installateur de l'Admin+)"
+                                        : "API-IHM-Studio-Setup-\xE2\x80\xA6.exe (l'installateur des Studios)"));
     }
     mz_zip_archive_file_stat st;
     (void)mz_zip_reader_file_stat(&z, want.front(), &st);
@@ -1700,7 +1717,7 @@ OpResult Workspace::versions(VersionsView& out) const {
 }
 
 OpResult Workspace::publishVersion(const std::string& studiosExe, const std::string& adminExe, const std::vector<std::string>& notesIn, bool important,
-                                   const Progress& progress) const {
+                                   const Progress& progress, const std::string& adminPlusExe) const {
     std::string why;
     detail::Caller caller;
     if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
@@ -1710,6 +1727,13 @@ OpResult Workspace::publishVersion(const std::string& studiosExe, const std::str
     if (v1.empty()) return OpResult::fail("l'installateur des Studios : " + w1);
     if (v2.empty()) return OpResult::fail("l'installateur de l'Admin : " + w2);
     if (v1 != v2) return OpResult::fail("les deux installateurs ne sont pas de la m\xC3\xAAme version (Studios " + v1 + ", Admin " + v2 + ")");
+    // 1.49.0 : l'Admin+ (facultatif) - la meme version ; sorte << admin_plus >> (la cle de l'editeur seule le telecharge)
+    if (!adminPlusExe.empty()) {
+        std::string w3;
+        const std::string v3 = readInstallerVersion(adminPlusExe, &w3);
+        if (v3.empty()) return OpResult::fail("l'installateur de l'Admin+ : " + w3);
+        if (v3 != v1) return OpResult::fail("les installateurs ne sont pas de la m\xC3\xAAme version (Studios " + v1 + ", Admin+ " + v3 + ")");
+    }
     std::vector<std::string> notes;
     for (const auto& n : notesIn) {
         std::string t = trimmed(n);
@@ -1723,9 +1747,12 @@ OpResult Workspace::publishVersion(const std::string& studiosExe, const std::str
         return OpResult::fail("la version " + v1 + " n'est pas plus r\xC3\xA9" "cente que la derni\xC3\xA8re publi\xC3\xA9" "e (" + view.latest() + ")");
     std::error_code ec;
     const std::uint64_t s1 = fs::file_size(P(studiosExe), ec), s2 = fs::file_size(P(adminExe), ec);
-    Uploaded u1, u2;
-    if (!uploadWith(*c, folder_, *caller.key, now(), studiosExe, "studios", v1, "public", progress, 0, s1 + s2, u1, &why)) return OpResult::fail(why);
-    if (!uploadWith(*c, folder_, *caller.key, now(), adminExe, "admin", v1, "admins", progress, s1, s1 + s2, u2, &why)) return OpResult::fail(why);
+    const std::uint64_t s3 = adminPlusExe.empty() ? 0 : fs::file_size(P(adminPlusExe), ec);
+    Uploaded u1, u2, u3;
+    if (!uploadWith(*c, folder_, *caller.key, now(), studiosExe, "studios", v1, "public", progress, 0, s1 + s2 + s3, u1, &why)) return OpResult::fail(why);
+    if (!uploadWith(*c, folder_, *caller.key, now(), adminExe, "admin", v1, "admins", progress, s1, s1 + s2 + s3, u2, &why)) return OpResult::fail(why);
+    if (!adminPlusExe.empty() && !uploadWith(*c, folder_, *caller.key, now(), adminPlusExe, "admin_plus", v1, "admins", progress, s1 + s2, s1 + s2 + s3, u3, &why))
+        return OpResult::fail(why);
     adm::VersionManifest v;
     v.version = v1;
     v.published = now();
@@ -1742,6 +1769,7 @@ OpResult Workspace::publishVersion(const std::string& studiosExe, const std::str
         return f;
     };
     v.files = {fileOf(u1.manifest, "tous"), fileOf(u2.manifest, "admins")};
+    if (!adminPlusExe.empty()) v.files.push_back(fileOf(u3.manifest, "admin_plus"));   // 1.49.0 : << fichiers_admin_plus >> (writeVersion)
     const std::string doc = adm::writeVersion(v);
     if (doc.size() > licensing::docKindMaxBytes(DocKind::Version)) return OpResult::fail("les notes de version sont trop longues (64 Kio au plus en tout)");
     Value body = Value::object();
@@ -1753,12 +1781,14 @@ OpResult Workspace::publishVersion(const std::string& studiosExe, const std::str
     OpResult res = OpResult::done("Version " + v1 + " publi\xC3\xA9" "e" + (important ? " (importante)" : "") + " : les Studios la proposent \xC3\xA0 leur prochain regard.");
     res.details.push_back("Studios : " + u1.manifest.name + " (" + sizeText(u1.manifest.size) + ", pour tous).");
     res.details.push_back("Admin : " + u2.manifest.name + " (" + sizeText(u2.manifest.size) + ", pour les admins).");
+    if (!adminPlusExe.empty()) res.details.push_back("Admin+ : " + u3.manifest.name + " (" + sizeText(u3.manifest.size) + ", pour l'admin+ seul : jamais propos\xC3\xA9 aux autres).");
     res.details.push_back(notes.empty() ? std::string("Sans notes de version.") : plural(notes.size(), "note de version", "notes de version") + ".");
     Value d = Value::object();
     d.set("version", v1);
     d.set("importante", important);
     d.set("studios", u1.manifest.name);
     d.set("admin", u2.manifest.name);
+    if (!adminPlusExe.empty()) d.set("admin_plus", u3.manifest.name);
     Value before = Value::object(), after = Value::object();
     if (!view.latest().empty()) before.set("version", view.latest());
     after.set("version", v1);
