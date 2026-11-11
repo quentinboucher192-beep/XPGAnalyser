@@ -210,7 +210,7 @@ const std::vector<Note>& table() {
          "on reste sur le projet de la session. Avant, l'accueil s'ouvrait et la session continuait derri\xC3\xA8re.",
          "editeur", ""),
         note("1.48.1", "Projet", Kind::Changed,
-         "Mes achats : l'\xC3\xA9" "diteur peut maintenant rembourser un seul article d'une commande ; cet article est marqu\xC3\xA9 \xC2\xAB rembours\xC3\xA9 "
+         "Mes achats : l'\xC3\xA9" "diteur peut maintenant rembourser un seul article d'une commande ; sa ligne est marqu\xC3\xA9" "e \xC2\xAB rembours\xC3\xA9" "e "
          "\xC2\xBB et les autres articles de la commande restent tels quels.",
          "licence", ""),
         // 1.48.0 : le panier (Licence, Options, Panier ; payer tout, demander sans paiement)

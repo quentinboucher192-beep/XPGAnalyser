@@ -1235,10 +1235,15 @@ protected:
         float right = x0 + w;
         float natural = 0.f;
         for (auto* t : tabs_) natural += t->preferredWidth() + 12.f;
-        // 1.48.1 : la place d'Actualiser et de Reevaluer (icones) : Exporter en icone seule (l'infobulle) s'il le faut
+        // 1.48.1 : la place d'Actualiser et de Reevaluer (leurs icones) : les onglets doivent tenir a cote du titre (sinon
+        // Exporter en icone seule ; sinon les deux au bout de la barre des choix)
+        float labelsW = 0.f;
+        for (auto* t : tabs_) labelsW += t->preferredWidth();
+        const auto tabsFit = [&](float r) { return labelsW + 10.f * static_cast<float>(tabs_.size()) <= (r - 6.f) - (x0 + titleW) + 1.f; };
+        const float others = 2.f * (34.f + 8.f) + (snapshot_->visible() ? 42.f : 0.f);
         export_->setCompact(false);
         float ew = export_->sizeHint().preferred.w + 10.f;
-        if (x0 + titleW + natural + ew + 8.f + 2.f * (34.f + 8.f) + (snapshot_->visible() ? 42.f : 0.f) > right) {
+        if (!tabsFit(right - ew - 8.f - others) && tabsFit(right - 42.f - others)) {
             export_->setCompact(true);
             ew = 34.f;
         }
@@ -1246,12 +1251,12 @@ protected:
         right -= ew + 8.f;
         // 1.48.1 : Actualiser, Reevaluer - leur icone seule (l'infobulle) si la place manque ; s'ils feraient passer les
         // onglets sur leur propre rangee : au bout de la barre des choix (plus bas)
-        buttonsInBar_ = x0 + titleW + natural + 2.f * (34.f + 8.f) > right;
+        buttonsInBar_ = !tabsFit(right - others);
         for (ui::Button* bt : {refreshNow_, reevaluate_}) {
             if (buttonsInBar_) break;
             bt->setCompact(false);
             float bw = bt->sizeHint().preferred.w + 10.f;
-            if (x0 + titleW + natural + bw + 8.f > right) {
+            if (!tabsFit(right - bw - 8.f - (others - 42.f))) {
                 bt->setCompact(true);
                 bw = 34.f;
             }
