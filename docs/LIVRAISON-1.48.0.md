@@ -38,11 +38,44 @@ paie on a un récap, les demandes en ligne doivent fonctionner aussi mais on doi
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 190 suites sur 190 réussies** (`ctest`, sur la version livrée). Le journal `essais-1.48.0.txt` donne le détail de ceux du
+  panier :
+  - **le service** (`node --test`, 30 sur 30 pour la boutique) : les lignes vérifiées (un article deux fois, une
+    option sans licence : refusés) ; un panier payé = **une** page de Stripe avec une ligne d'article par article,
+    chaque ligne payée puis livrée une à une ; une demande sans paiement = la même commande « à valider », refusée ou
+    livrée ligne par ligne ; une commande d'avant la 1.48 (un article) devient une commande d'une ligne ;
+  - **le Studio contre le vrai service local** (`service_boutique`, 45 contrôles) : une commande de plusieurs lignes,
+    une page de paiement, payée par le faux Stripe ; une demande sans paiement, chaque ligne validée ;
+  - **l'Admin contre le vrai service local** (`adminboutique`, 115 contrôles) : un panier payé (une licence et son
+    option : l'option posée sur la licence qui vient d'être livrée) ; une demande validée ligne par ligne ;
+    `adminguiboutique` (111) et `licenceui` (266 : les onglets, le panier, Retirer, Vider, le récapitulatif).
+- **Sous Wine** : le panier avec trois articles (`1480_01`), le récapitulatif avant Stripe (`1480_02`), la page
+  Commandes et demandes de l'Admin (`1480_03`), photographiés sur les programmes Windows.
+- **Les Studios** : l'installation en silencieux par-dessus la 1.47.0, ta clé d'API gardée ; le Studio livré s'ouvre (`1480_00`),
+  lancé avec une adresse locale où rien ne répond : **ton service n'a pas été appelé**.
+- **L'Admin** : son installateur en silencieux par-dessus la 1.47.0, une désinstallation (le dossier de ta clé intact),
+  une réinstallation ; sa première page (`1480_9`, « Version 1.48.0 · pour l'éditeur »).
+- Corrigé en route : cinq essais attendaient encore le service en 1.47.0 et l'ancien nom « Commandes » dans la barre
+  de l'Admin.
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.48.0.exe` (dans le zip) par-dessus la 1.47.0. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.48.0.exe` | `959432FF2A5C2BA4C7BC6D77CAA040ABC3BED8844BCDC8BF7BE49F447CA14876` | 63 798 145 octets |
+| `API-Studio-1.48.0-portable.zip` | `8393E13F0719323165D0EB6FC7B9F2150B7530850FA8EA361E51F39DDDB1D665` | 250 fichiers |
+| `IHM-Studio-1.48.0-portable.zip` | `95B81AADBB762003BA0031CE9A85AA67552638A05B0ECFAAB551E724CF9EAC3A` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.48.0-EDITEUR.exe` par-dessus la 1.47.0 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.48.0-EDITEUR.exe` | `FDED0DAD8F29415E3088B439C36BF9F758F7426FE0C824A8CDD003EC13A1C448` | 8 736 629 octets |
 
 ## 4. Limites
 
