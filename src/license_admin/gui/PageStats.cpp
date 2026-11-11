@@ -1233,11 +1233,17 @@ protected:
         // les onglets apres le titre ; a droite, la periode et Exporter
         const float titleW = ui::measureWidth("Statistiques", gfx::semibold(FontId{26})) + 26.f;
         float right = x0 + w;
-        const float ew = export_->sizeHint().preferred.w + 10.f;
-        export_->setBounds({right - ew, y + 2.f, ew, 32.f});
-        right -= ew + 8.f;
         float natural = 0.f;
         for (auto* t : tabs_) natural += t->preferredWidth() + 12.f;
+        // 1.48.1 : la place d'Actualiser et de Reevaluer (icones) : Exporter en icone seule (l'infobulle) s'il le faut
+        export_->setCompact(false);
+        float ew = export_->sizeHint().preferred.w + 10.f;
+        if (x0 + titleW + natural + ew + 8.f + 2.f * (34.f + 8.f) + (snapshot_->visible() ? 42.f : 0.f) > right) {
+            export_->setCompact(true);
+            ew = 34.f;
+        }
+        export_->setBounds({right - ew, y + 2.f, ew, 32.f});
+        right -= ew + 8.f;
         // 1.48.1 : Actualiser, Reevaluer - leur icone seule (l'infobulle) si la place manque ; s'ils feraient passer les
         // onglets sur leur propre rangee : au bout de la barre des choix (plus bas)
         buttonsInBar_ = x0 + titleW + natural + 2.f * (34.f + 8.f) > right;
