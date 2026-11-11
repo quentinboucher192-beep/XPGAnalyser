@@ -139,7 +139,7 @@ describe("la sauvegarde (GET /admin/sauvegarde, admin+)", () => {
         assert.equal(r.statut, 200, r.texte);
         assert.deepEqual(Object.keys(r.json), ["schema", "service_version", "tables", "heure"]);
         assert.equal(r.json.schema, 5); // 1.46.0 : la boutique ; 1.47.0 : les statistiques
-        assert.equal(r.json.service_version, "1.48.1");
+        assert.equal(r.json.service_version, "1.49.0");
         sommaire = r.json;
         const n = Object.fromEntries(r.json.tables.map((t) => [t.nom, t.lignes]));
         for (const t of ["nonces", "debits", "morceaux"]) assert.equal(n[t], undefined, t + " n'est pas sauvegardee");

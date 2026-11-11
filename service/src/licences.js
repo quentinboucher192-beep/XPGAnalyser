@@ -115,7 +115,7 @@ import {
     verifierEd25519,
 } from "./outils.js";
 
-const VERSION = "1.48.1"; // 1.48.1 : un article rembourse seul, les demandes de licence dans Commandes et demandes
+const VERSION = "1.49.0"; // 1.49.0 : trois executables (Studios, Admin+, Admin), l invitation par codes
 // 3 (1.44.0) : les admins, le journal, les fichiers, les messages, les versions, les logiciels ; les demandes
 // scellees pour plusieurs cles. 4 (1.46.0) : la boutique et les commandes (boutique.js) - des tables en plus ; une
 // sauvegarde du schema 3 se restaure encore (ses tables de la boutique restent vides). 5 (1.47.0) : les statistiques et

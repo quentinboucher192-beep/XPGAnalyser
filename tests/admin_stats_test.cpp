@@ -342,7 +342,7 @@ int main(int argc, char** argv) {
         auto job = plus.takeServiceJob();
         check(r.ok && job && plus.serviceRun(*job).ok, "le registre depose");
         license_admin::online::ServiceState state;
-        check(plus.serviceVerify(&state).ok && state.version == "1.48.1", "le service est en 1.48.1 (" + state.version + ")");
+        check(plus.serviceVerify(&state).ok && state.version == "1.49.0", "le service est en 1.49.0 (" + state.version + ")");
         plus.adoptServiceState(state);
         check(plus.serviceKnowsStats() && plus.statsServiceNote().empty(), "il sait les statistiques");
         codeA = onlineLicence(plus, "XPG-2026-S0001", "Atelier Exemple", "PROFESSIONAL", 3);
@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
         st::SeriesReply rep;
         std::string raw;
         r = plus.statsSeries(q, rep, &raw);
-        check(r.ok && rep.buckets.size() == 7 && rep.beforeBuckets.size() == 7 && rep.series.size() == 8 && rep.serviceVersion == "1.48.1" && has(raw, "\"mesures\""),
+        check(r.ok && rep.buckets.size() == 7 && rep.beforeBuckets.size() == 7 && rep.series.size() == 8 && rep.serviceVersion == "1.49.0" && has(raw, "\"mesures\""),
               "les courbes lues (" + r.message + ")");
         const auto total = [&](const char* n) {
             const st::Series* s = rep.find(n);
