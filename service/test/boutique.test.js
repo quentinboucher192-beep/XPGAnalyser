@@ -138,7 +138,7 @@ describe("la boutique sans Stripe (B)", () => {
 
 describe("le catalogue (A)", () => {
     it("la version 1.46.0 ; PUT /admin/boutique : l'admin+ seul, les montants et les identifiants verifies", async () => {
-        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.47.0");
+        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.48.0");
         assert.equal((await appel(A, "GET", "/v1/boutique")).json.active, false, "pas encore de catalogue : fermee");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: lea, corps: CATALOGUE }), 403, "droit");
         erreur(await appel(A, "PUT", "/admin/boutique", { cle: pc1, corps: CATALOGUE }), 403, "editeur");

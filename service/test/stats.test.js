@@ -152,8 +152,8 @@ after(async () => {
 });
 
 describe("jour 0 : le service se remplit", () => {
-    it("la version 1.47.0 ; les admins, le certificat, le registre, deux versions publiees", async () => {
-        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.47.0");
+    it("la version 1.48.0 ; les admins, le certificat, le registre, deux versions publiees", async () => {
+        assert.equal((await appel(A, "GET", "/v1/etat")).json.version, "1.48.0");
         const fiche = (cle, nom, droits) => ({ id: cle.id, cle: cle.hex, nom, pc: "PC-" + nom, poste: "", depuis: t0 - 100, profil: "Admin LV1", droits, retire: 0, gardes: [] });
         const liste = JSON.stringify({
             format: 1,

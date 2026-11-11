@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.47.0", "10/11/2026", "\xC3\xA0 venir"},
+    {"1.48.0", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.47.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 17 h 20"},
     {"1.46.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 12 h 15"},
     {"1.45.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 23 h 44"},
     {"1.44.0", "09/11/2026", "livr\xC3\xA9" "e le 09/11 \xC3\xA0 18 h 28"},
@@ -191,6 +192,14 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.48.0 : le panier (Licence, Options, Panier ; payer tout, demander sans paiement)
+        note("1.48.0", "Projet", Kind::New,
+         "LE PANIER : la boutique de la fen\xC3\xAAtre Licence a trois onglets, Licence, Options et Panier. \xC2\xAB Acheter \xC2\xBB sur une offre "
+         "ou une dur\xC3\xA9" "e d'option la met au panier (une option achet\xC3\xA9" "e ne devient plus jamais une demande) ; \xC2\xAB ou la demander sans "
+         "paiement \xC2\xBB y met une demande. Le panier garde ses articles (Retirer, Vider le panier, le total TTC) ; Payer montre le "
+         "r\xC3\xA9" "capitulatif puis une seule page s\xC3\xA9" "curis\xC3\xA9" "e de Stripe pour tous les articles payants ; Envoyer la demande envoie ceux "
+         "sans paiement, que l'\xC3\xA9" "diteur valide un par un. Mes achats montre l'\xC3\xA9tat de chaque article.",
+         "licence", ""),
         // 1.47.0 : la fenetre et l onglet Session lisibles a toutes les tailles, Mon profil entier, l erreur de paiement, Acheter suit la reduction
         note("1.47.0", "IHM", Kind::Fixed,
          "L'ONGLET SESSION ET LA FEN\xC3\x8ATRE SESSION se lisent \xC3\xA0 toutes les tailles de fen\xC3\xAAtre : les textes passent \xC3\xA0 la ligne dans "
