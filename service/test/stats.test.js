@@ -341,7 +341,7 @@ describe("jour 0 : les courbes (GET /admin/stats/serie)", () => {
         ];
         const r = await serie(A, editeur, { mesures: mesures.join(","), ...semaine() });
         ok(r);
-        assert.equal(r.json.version, "1.47.0");
+        assert.equal(r.json.version, "1.48.0");
         assert.equal(r.json.periodes.length, 7);
         assert.deepEqual(r.json.periodes.at(-1), { du: auj(), au: auj() });
         assert.equal(r.json.avant.periodes.length, 7, "la periode d'avant, alignee");

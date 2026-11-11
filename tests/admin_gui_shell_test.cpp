@@ -59,7 +59,7 @@ struct Rig {
 // 1.47.0 : << Statistiques >> sous le Tableau de bord (Pilotage), comme la barre laterale des planches 08 a 11 ; << Mon compte >>
 // en tete de Securite, << Demandes d'admin >> apres Administrateurs (l'admin+ seul).
 const std::string kTitles[] = {"Tableau de bord", "Statistiques", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
-                               "Boutique", "Commandes", "Mon compte", "R\xC3\xA9vocations", "Administrateurs", "Demandes d'admin", "Journal des admins", "Versions",
+                               "Boutique", "Commandes et demandes", "Mon compte", "R\xC3\xA9vocations", "Administrateurs", "Demandes d'admin", "Journal des admins", "Versions",
                                "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 constexpr std::size_t kEntries = sizeof(kTitles) / sizeof(kTitles[0]);
 
