@@ -117,6 +117,26 @@ void testBellTasks() {
     bar.openMenu(app::TopBar::Menu::Notices);
     popup.itemChosen->emit(0);     // 1.48.1 : Actualiser - la fenetre Notifications et le releve tout de suite (l'action de l'App)
     check(fired.size() == 2 && fired[1] == "help.notifications.refresh", "1.48.1 : Actualiser, en tete de la cloche");
+    {   // 1.48.1 : un detail tres long (le mot de l'editeur, la liste de revocation...) ne fait plus prendre toute la largeur
+        app::TopBar::Notice longue = a;
+        longue.group = "Licence";
+        longue.title = "Ta licence en ligne XPG-2026-00016 est activ\xC3\xA9" "e sur ce PC (commande n\xC2\xB0 7).";
+        longue.detail = longue.title + " Mot de l'\xC3\xA9" "diteur : ";
+        for (int i = 0; i < 12; ++i) longue.detail += "une phrase d'essai assez longue pour d\xC3\xA9passer la largeur, ";
+        longue.key = "longue";
+        bar.setNotices({longue});
+        bar.openMenu(app::TopBar::Menu::Notices);
+        const auto& its = popup.columnItems(0);
+        bool noteOk = false;
+        for (const auto& it : its)
+            if (!it.note.empty()) noteOk = it.note.rfind("Mot de l'", 0) == 0 && it.note.size() < 160 && it.note.find("\xE2\x80\xA6") != std::string::npos;
+        check(noteOk, "1.48.1 : le detail sous le titre, sans le titre repete, raccourci");
+        // la mesure des essais (sans police chargee) est plus large qu'a l'ecran : on compare au detail entier
+        const float full = ui::measureWidth(longue.detail, gfx::FontId{16});
+        check(popup.isOpen() && popup.columnRect(0).w > 0.f && popup.columnRect(0).w < full * 0.4f,
+              "1.48.1 : la cloche garde une largeur raisonnable (" + std::to_string(popup.columnRect(0).w) + " px pour un detail de " +
+                  std::to_string(full) + " px)");
+    }
 
     const float idle = bar.partRect("taches").w;
     bar.setTasks({{"G\xC3\xA9n\xC3\xA9ration IHM", 0.62f, "hmi.cancel"}});

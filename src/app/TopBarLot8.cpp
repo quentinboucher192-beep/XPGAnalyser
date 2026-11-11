@@ -264,6 +264,24 @@ void TopBar::layoutLot8() const {
     if (const Part* h = find("historique")) h->rect = {};
 }
 
+namespace {
+// 1.48.1 : au plus `n` caracteres (UTF-8 : jamais au milieu d'un caractere), sinon coupe au dernier espace et << ... >>.
+std::string clipChars(const std::string& s, std::size_t n) {
+    std::size_t chars = 0, cut = std::string::npos;
+    for (std::size_t i = 0; i < s.size(); ++i) {
+        if ((static_cast<unsigned char>(s[i]) & 0xC0u) == 0x80u) continue;   // la suite d'un caractere
+        if (chars == n - 1) cut = i;
+        if (++chars > n) break;
+    }
+    if (chars <= n) return s;
+    std::string out = s.substr(0, cut);
+    const std::size_t sp = out.find_last_of(' ');
+    if (sp != std::string::npos && sp > out.size() / 2) out.erase(sp);
+    while (!out.empty() && (out.back() == ' ' || out.back() == ',' || out.back() == '.' || out.back() == ':' || out.back() == ';')) out.pop_back();
+    return out + "\xE2\x80\xA6";
+}
+} // namespace
+
 // ---------------------------------------------------------------- les menus ----
 void TopBar::openLot8Menu(Menu m) {
     if (!popup_) return;
@@ -325,8 +343,16 @@ void TopBar::openLot8Menu(Menu m) {
                 }
                 const auto icon = n.tone == "error" ? ui::Icon::Error : n.tone == "warning" ? ui::Icon::Warning
                                 : n.tone == "ok" ? ui::Icon::Ok : ui::Icon::Info;
-                entry(n.title, n.button.empty() ? std::string{} : n.button + " \xE2\x80\xBA", icon, n.action);
-                if (!n.detail.empty()) heading("      " + n.detail);
+                // 1.48.1 : le menu gardait la largeur du texte le plus long (un detail de 300 caracteres : tout l'ecran).
+                // Le titre et le detail sont raccourcis (<< ... >>) ; le detail passe en petit et en gris sous le titre
+                // (plus une ligne en gras), sans le titre qu'il repete souvent ; le texte entier est dans la fenetre.
+                std::string detail = n.detail;
+                if (!n.title.empty() && detail.rfind(n.title, 0) == 0) {
+                    detail.erase(0, n.title.size());
+                    while (!detail.empty() && (detail.front() == ' ' || detail.front() == '.' || detail.front() == ':')) detail.erase(0, 1);
+                }
+                entry(clipChars(n.title, 80), n.button.empty() ? std::string{} : n.button + " \xE2\x80\xBA", icon, n.action);
+                if (!detail.empty()) items.back().note = clipChars(detail, 95);
             }
         }
     } else if (m == Menu::Tasks) {

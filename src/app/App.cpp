@@ -2769,6 +2769,28 @@ void App::newHmiProject() {
 }
 
 void App::goHome() {
+    // 1.48.1 : DANS UNE SESSION, revenir au menu principal la quitte (l'equipier : sa copie s'efface et il revient a
+    // l'accueil) ou l'arrete pour tous (l'hote) - apres une confirmation. << Rester dans la session >> : rien ne change,
+    // on reste sur le projet de la session (avant, l'accueil s'ouvrait et la session continuait derriere).
+    if (session_ && session_->active()) {
+        const bool host = session_->host();
+        auto d = std::make_unique<MessageDialog>(
+            "Quitter la session ?",
+            host ? std::string("Tu es l'h\xC3\xB4te de cette session : revenir au menu principal l'arr\xC3\xAAte pour tous les \xC3\xA9quipiers "
+                               "(ils reviennent \xC3\xA0 leur accueil).\n\nRester dans la session : tu restes sur ton projet, la session continue.")
+                 : std::string("Revenir au menu principal te fait quitter la session : ta copie du projet s'efface de ce PC (le projet "
+                               "reste chez l'h\xC3\xB4te).\n\nRester dans la session : tu restes sur le projet de la session."),
+            MessageDialog::Icon::Question,
+            host ? "Arr\xC3\xAAter la session et revenir \xC3\xA0 l'accueil" : "Quitter la session et revenir \xC3\xA0 l'accueil");
+        d->setCancelLabel("Rester dans la session");
+        menus_->ShowDialog(std::move(d), [this, host](const menu::DialogResult& r) {
+            if (!r.accepted()) return;   // rester : ni l'accueil, ni rien d'autre
+            if (session_->active()) session_->stop();
+            if (host) goHome();   // la session arretee : comme d'habitude (les modifications pas enregistrees, dites)
+            // l'equipier : sa copie se ferme et l'accueil s'ouvre a la prochaine image (SessionService, 1.45.0)
+        });
+        return;
+    }
     if (!commands_.isModified()) {
         menus_->SwitchMenu("startup");
         return;
