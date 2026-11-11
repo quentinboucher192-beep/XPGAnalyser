@@ -36,6 +36,7 @@
 #include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
 #include "../src/license_admin/Admin.hpp"
+#include "../src/license_admin/Edition.hpp"
 #include "../src/license_admin/gui/Shell.hpp"
 #include "../src/licensing/Admins.hpp"
 #include "../src/licensing/SignedFile.hpp"
@@ -267,8 +268,15 @@ int main(int argc, char** argv) {
         check(has(t, "l'admin+ seul g\xC3\xA8re le service") && has(t, std::string("Admin ") + gui::kAppVersion), "le service : l'admin+ seul ; la version de l'Admin");
         check(!shown(*page, "compte.copier-id") && !shown(*page, "compte.copier-empreinte") && !shown(*page, "compte.sauvegarder"),
               "ni Copier (pas de cle) ni Sauvegarder");
-        check(click(*page, "compte.devenir-admin") && rig.navigations.back() == "admins", "Demander a devenir admin... -> Administrateurs");
-        check(click(*page, "compte.creer-cle") && rig.navigations.back() == "securite", "Creer la cle de l'editeur... -> Parametres de securite");
+        // 1.49.0 : l'Admin+ sans cle : la cle de l'editeur seulement ; XPG Admin : devenir admin seulement
+        check(!shown(*page, "compte.devenir-admin") && click(*page, "compte.creer-cle") && rig.navigations.back() == "securite",
+              "l'Admin+ : Creer la cle de l'editeur... -> Parametres de securite (pas Demander)");
+        la::setEdition(la::Edition::Classique);
+        auto cpage = gui::makeAccountPage(rig.host());
+        (void)draw(*cpage);
+        check(!shown(*cpage, "compte.creer-cle") && click(*cpage, "compte.devenir-admin") && rig.navigations.back() == "admins",
+              "XPG Admin : Demander a devenir admin... -> Administrateurs (pas la cle de l'editeur)");
+        la::setEdition(la::Edition::Plus);
     }
 
     // ------------------------------------------------------------------------------------------------ en attente

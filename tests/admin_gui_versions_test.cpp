@@ -567,6 +567,8 @@ int main(int argc, char** argv) {
         if (byLink) byLink->select();
         (void)drawMenu(*dlg);
         check(shown(root, "admins.ajouter.lien.creer") && !shown(root, "admins.ajouter.pc"), "par un lien : Creer le lien");
+        // 1.49.0 : le code d'invitation part avec le lien - son nom d'abord
+        check(type(root, "admins.ajouter.nom", "Hugo Essai") && type(root, "admins.ajouter.courriel", "hugo@exemple.invalid"), "1.49.0 : son nom, son courriel");
         check(click(root, "admins.ajouter.lien.creer") && lastOk(rig), "le lien (l'installateur de l'Admin publie) : " + lastText(rig));
         const std::string d = drawMenu(*dlg);
         check(has(d, "Lien (48 h, une seule fois)") && has(d, "/v1/fichiers/lien?jeton=") && has(d, "Le lien est pr\xC3\xAAt"), "le lien montre ; l'etape 2 le dit");

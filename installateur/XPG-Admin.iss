@@ -17,7 +17,8 @@
 ;  Pas de console (XPG-License-Admin.exe reste a l'admin+).
 ;  LE CODE D'INVITATION (la page << Code d'invitation >>) : INV-XXXX-XXXX, 8 caracteres
 ;  de l'alphabet de Crockford sans I L O U (tirets et minuscules toleres) ; obligatoire
-;  en mode normal ; en silencieux /INVITATION=INV-XXXX-XXXX (facultatif). Ecrit dans
+;  en mode normal (sautee si une cle d'admin est deja la : une mise a jour) ; en silencieux
+;  /INVITATION=INV-XXXX-XXXX (facultatif ; la mise a jour du Studio n'en passe pas). Ecrit dans
 ;  %LOCALAPPDATA%\XPG\LicenseAdmin\invitation.txt (une ligne, le compte seul y a acces) :
 ;  XPG Admin le lit au premier lancement et l'envoie avec la demande d'admin.
 ;  La cle d'admin, l'archive et les reglages (%LOCALAPPDATA%\XPG\LicenseAdmin) ne sont
@@ -258,9 +259,22 @@ begin
     Log('invitation.txt : icacls ne s''est pas lancé (le fichier reste dans le dossier du compte)');
 end;
 
+// Une cle d'admin deja sur ce PC (l'Admin d'avant, une mise a jour) : pas de code a taper.
+function CleAdminPresente: Boolean;
+begin
+  Result := FileExists(DossierDonnees + '\cle-admin.cle');
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := (PageInvitation <> nil) and (PageID = PageInvitation.ID) and CleAdminPresente;
+end;
+
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
+  // en silencieux, la page passe toujours : le code (facultatif) vient de /INVITATION= (CurStepChanged)
+  if WizardSilent then Exit;
   if (PageInvitation <> nil) and (CurPageID = PageInvitation.ID) then begin
     CodeRetenu := CodeNormalise(PageInvitation.Values[0]);
     if CodeRetenu = '' then begin
@@ -590,6 +604,7 @@ end;
 // Le recapitulatif : le code d'invitation y est rappele.
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 begin
-  Result := 'Code d''invitation :' + NewLine + Space + CodeRetenu + NewLine + NewLine + MemoDirInfo;
+  if CodeRetenu <> '' then Result := 'Code d''invitation :' + NewLine + Space + CodeRetenu + NewLine + NewLine + MemoDirInfo
+  else Result := 'Ta clé d''admin est déjà sur ce PC : pas de code d''invitation.' + NewLine + NewLine + MemoDirInfo;
   if MemoTasksInfo <> '' then Result := Result + NewLine + NewLine + MemoTasksInfo;
 end;

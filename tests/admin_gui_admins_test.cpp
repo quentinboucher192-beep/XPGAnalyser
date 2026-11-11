@@ -28,6 +28,7 @@
 #include "../src/core/Json.hpp"
 #include "../src/deploy/Crypto.hpp"
 #include "../src/license_admin/Admin.hpp"
+#include "../src/license_admin/Edition.hpp"
 #include "../src/license_admin/gui/Shell.hpp"
 #include "../src/licensing/Admins.hpp"
 #include "../src/licensing/SignedFile.hpp"
@@ -210,16 +211,29 @@ int main(int argc, char** argv) {
         HostRig rig(none);
         auto page = gui::makeAdminsPage(rig.host());
         const std::string t = draw(*page);
-        check(has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur") && has(t, "Demander \xC3\xA0 devenir admin"), "les deux chemins : la cle de l'editeur, devenir admin");
-        check(shown(*page, "admins.demande.nom") && shown(*page, "admins.demande.courriel") && shown(*page, "admins.demande.envoyer"), "le nom, le courriel, Envoyer");
-        check(!enabledBtn(*page, "admins.demande.envoyer") && shown(*page, "admins.regler-service") && has(t, "R\xC3\xA9gler le service"),
-              "sans l'adresse du service : Envoyer grise, Regler le service");
+        // 1.49.0 (docs/ADMINS.md, par. 12) : l'Admin+ sans la cle de l'editeur n'a que la cle de l'editeur ; le chemin de
+        // l'admin est a XPG Admin (l'edition classique, plus bas)
+        check(has(t, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur") && !has(t, "Demander \xC3\xA0 devenir admin"), "l'Admin+ : la cle de l'editeur seulement");
+        check(!shown(*page, "admins.demande.nom") && !shown(*page, "admins.demande.envoyer"), "l'Admin+ : pas le formulaire de la demande");
         check(!shown(*page, "admins.ajouter") && !shown(*page, "admins.table"), "ni Ajouter un admin, ni le tableau");
         check(click(*page, "admins.creer-cle") && !rig.navigations.empty() && rig.navigations.back() == "securite", "Creer la cle de l'editeur -> Parametres de securite");
         auto dash = gui::makeDashboardPage(rig.host());
         const std::string d = draw(*dash);
-        check(has(d, "Demander \xC3\xA0 devenir admin") && has(d, "Cr\xC3\xA9" "er la cl\xC3\xA9"), "le tableau de bord : les deux chemins aussi");
-        check(click(*dash, "tableau.devenir-admin") && rig.navigations.back() == "admins", "Demander a devenir admin... -> Administrateurs");
+        check(!has(d, "Demander \xC3\xA0 devenir admin") && has(d, "Cr\xC3\xA9" "er la cl\xC3\xA9"), "le tableau de bord : la cle de l'editeur seulement");
+        la::setEdition(la::Edition::Classique);
+        {
+            auto cpage = gui::makeAdminsPage(rig.host());
+            const std::string c = draw(*cpage);
+            check(has(c, "Demander \xC3\xA0 devenir admin") && !has(c, "Cr\xC3\xA9" "er la cl\xC3\xA9 de l'\xC3\xA9" "diteur"), "XPG Admin : le chemin de l'admin seulement");
+            check(shown(*cpage, "admins.demande.nom") && shown(*cpage, "admins.demande.courriel") && shown(*cpage, "admins.demande.envoyer"), "le nom, le courriel, Envoyer");
+            check(!enabledBtn(*cpage, "admins.demande.envoyer") && shown(*cpage, "admins.regler-service") && has(c, "R\xC3\xA9gler le service"),
+                  "sans l'adresse du service : Envoyer grise, Regler le service");
+            auto cdash = gui::makeDashboardPage(rig.host());
+            const std::string cd = draw(*cdash);
+            check(has(cd, "Demander \xC3\xA0 devenir admin") && !shown(*cdash, "tableau.creer-cle"), "XPG Admin, le tableau de bord : devenir admin seulement");
+            check(click(*cdash, "tableau.devenir-admin") && rig.navigations.back() == "admins", "Demander a devenir admin... -> Administrateurs");
+        }
+        la::setEdition(la::Edition::Plus);
     }
 
     std::printf("-- en attente : l'empreinte a lire au telephone\n");
@@ -559,6 +573,8 @@ int main(int argc, char** argv) {
     check(nf.ws->serviceConfigure(svc.url()).ok, "le poste de Nina : l'adresse du service");
     nf.ws->reload();
     HostRig nrig(nf);
+    // 1.49.0 : l'Admin+ n'a plus le formulaire et XPG Admin exige un code d'invitation (admin_invitation_test) ; ici, la demande
+    // SANS invitation d'un Admin d'avant la 1.49 (Workspace::requestAdmin, comme lui) : elle reste acceptable avec l'empreinte.
     auto np = gui::makeAdminsPage(nrig.host());
     nrig.refreshers.push_back([&] {
         nf.ws->reload();
@@ -566,9 +582,11 @@ int main(int argc, char** argv) {
     });
     {
         (void)draw(*np);
-        check(enabledBtn(*np, "admins.demande.envoyer"), "Nina : Envoyer ma demande (le service regle)");
-        check(type(*np, "admins.demande.nom", "Nina Essai") && type(*np, "admins.demande.courriel", "nina@exemple.invalid"), "son nom, son courriel");
-        check(click(*np, "admins.demande.envoyer") && lastOk(nrig), "la demande envoyee : " + lastText(nrig));
+        const gui::OpResult r = nf.ws->requestAdmin("Nina Essai", "nina@exemple.invalid");
+        nrig.reports.push_back(r);
+        check(r.ok, "la demande envoyee (sans invitation, comme un Admin 1.48) : " + r.text());
+        nf.ws->reload();
+        np->refresh();
         const std::string t = draw(*np);
         check(nf.ws->role() == gui::Role::Pending && has(t, groups0(nf.ws->adminKey().fingerprint)), "en attente ; son empreinte");
     }
