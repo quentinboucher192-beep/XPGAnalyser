@@ -94,6 +94,9 @@ export const ACTIONS_JOURNAL = [
     "commande_livrer", // une commande payee livree (sa licence)
     "commande_revoir", // une commande que l'Admin n'a pas pu livrer (a revoir)
     "commande_rembourser", // un remboursement demande a Stripe
+    "commande_supprimer", // 1.48.1 : une commande sans argent, ou une demande de licence close, effacee
+    "licence_supprimer", // 1.48.1 : une licence finie ou revoquee effacee (l'archive et le service)
+    "pc_supprimer", // 1.48.1 : un PC qui ne sert plus oublie (Activations)
     // 1.47.0 : la derogation << Gerer le service >> (derogations.js) - accordee, revoquee par l'admin+
     "derogation_accorder",
     "derogation_revoquer",

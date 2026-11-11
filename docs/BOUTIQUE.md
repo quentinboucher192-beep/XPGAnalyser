@@ -277,7 +277,7 @@ qui perd retire ce qu'il a déposé ou ne dépose qu'après avoir « pris » la 
 - **La console** (`XPG-License-Admin`) : `boutique-etat`, `boutique-config --parametres F.json` (le JSON de `PUT
   /admin/boutique`), `stripe-brancher --cle-variable NOM [--dossier-kit D]` (la clé lue dans une variable
   d'environnement, jamais sur la ligne de commande ni affichée), `commandes [--etat E]`, `commande-livrer [--numero N]`,
-  `commande-revoir --numero N --raison T`, `commande-rembourser --numero N`.
+  `commande-revoir --numero N --raison T`, `commande-rembourser --numero N` (1.48.1 : `--ligne L`, un article seul).
 
 ## 7. Le Studio
 
@@ -466,6 +466,15 @@ demande sans paiement** (le même objet, sans Stripe) ; **chaque ligne se valide
   « demandes » comme avant. Rien ne change sur le service pour cela (l'Admin réunit les deux listes). Les anciens liens
   (le tableau de bord, le journal, la fiche d'un client, les avis) mènent à « Commandes et demandes », filtrée sur les
   demandes de licence ; le menu compte les deux.
+- 1.48.1 : **Supprimer** (une ou plusieurs lignes ; le volet, le clic droit ; une question qui nomme ce qui part et ce
+  qui reste) - seulement ce qui n'a **pas d'argent** : une commande expirée, annulée, au paiement refusé, une demande du
+  panier refusée ou annulée (`POST /admin/commandes/supprimer {"numero"}`, droit « demandes » : la commande, ses lignes et
+  ses scellés ; 409 `payee` pour une commande payée, même remboursée : « une commande payée reste pour la comptabilité :
+  rembourse-la, elle reste dans la liste » ; 409 `etat` pour une commande qui attend : à payer, à valider, livrée), et une
+  demande de licence close - refusée, annulée, remplacée (`POST /admin/demandes/supprimer {"numero"}`, droit
+  « demandes » ; 409 `etat` si elle attend ; 404 si le ménage du service l'a déjà effacée), puis sa fiche sur ce poste.
+  Une demande délivrée reste (elle dit d'où vient la licence). Le journal des admins : `commande_supprimer`, une ligne
+  par élément.
 - 1.48.1 : « Rembourser… » sur une ligne (le volet, le clic droit) rembourse **cet article** (la question nomme
   l'article et son montant TTC) ; « Rembourser la commande… » toute la commande. Le journal des admins : une ligne par
   article remboursé.

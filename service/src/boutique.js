@@ -1280,6 +1280,27 @@ export const RoutesBoutique = {
         return reponseJson(200, { numero: c.numero, ligne: l.ligne, remboursement: id, montant: l.montant, etat: "remboursee", etat_commande: etatCommande });
     },
 
+    // 1.48.1 : POST /admin/commandes/supprimer {"numero"} (droit << demandes >>) - effacer une commande SANS ARGENT : expiree,
+    // annulee, paiement refuse, ou une demande (sans paiement) refusee ; jamais une commande payee (meme remboursee, ou dont
+    // les articles ont ete refuses) : elle reste pour la comptabilite (409 << payee >>) ; jamais une commande qui attend
+    // (a payer : le client paie peut-etre ; a valider ; livree : 409 << etat >>). Ses lignes et ses scelles partent avec elle.
+    async supprimerCommande(ctx) {
+        const { c } = this.commandeOuErreur(ctx);
+        const lignes = this.lignes("SELECT etat FROM commande_lignes WHERE numero = ?", c.numero);
+        const argent = c.stripe_paiement || c.paye || c.stripe_remboursement || lignes.some((l) => ["payee", "livree", "remboursee", "a_revoir"].includes(l.etat) && c.mode !== "demande");
+        if (argent && c.mode !== "demande")
+            throw new Erreur(409, "payee", "Une commande payée reste pour la comptabilité : rembourse-la, elle reste dans la liste (n° " + c.numero + ").", { etat: c.etat });
+        if (!["expiree", "annulee", "echec_paiement", "refusee"].includes(c.etat))
+            throw new Erreur(409, "etat", "La commande n° " + c.numero + " ne s'efface pas (« " + c.etat + " ») : seulement une commande expirée, annulée, refusée ou dont le paiement a échoué.", { etat: c.etat });
+        this.x("DELETE FROM commandes_scelles WHERE numero = ?", c.numero);
+        this.x("DELETE FROM commande_lignes WHERE numero = ?", c.numero);
+        this.x("DELETE FROM commandes WHERE numero = ?", c.numero);
+        this.ajouter("n_commandes", -1);
+        this.ajouter("octets_commandes", -Number(c.octets || 0));
+        this.signalerCommande();
+        return reponseJson(200, { numero: c.numero, supprimee: true });
+    },
+
     // ============================================================ le menage ==
     // Toutes les 5 minutes : une page de paiement finie depuis 5 minutes sans nouvelle de Stripe -> expiree.
     menageBoutique(now) {

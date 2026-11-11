@@ -119,6 +119,7 @@ private:
     double                       now_{-1.0}, lastFetch_{-1e9}, nextLive_{0.0}, retryAt_{0.0};
     Seconds                      liveSince_{0};
     std::set<std::string>        seenPings_;
+    changes::Seen                changes_;   // 1.48.1 : un changement dans l'Admin - le globe se relit
     int                          livePolls_{0}, samplePing_{0};
     gfx::Rect                    bannerRect_{};
     std::shared_ptr<bool>        alive_ = std::make_shared<bool>(true);

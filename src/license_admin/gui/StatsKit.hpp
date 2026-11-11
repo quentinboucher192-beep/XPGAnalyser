@@ -56,6 +56,7 @@ struct Fetchers {
     std::function<OpResult(const stats::Period&, stats::AdminsReply&)>       admins;
     std::function<OpResult(int periodDays, stats::GlobeReply&)>              globe;
     std::function<OpResult(stats::SnapshotReply&)>                           snapshot;
+    std::function<OpResult(stats::ReevaluateReply&)>                         reevaluate;   // 1.48.1
 };
 void setFetchersForTests(Fetchers f);
 [[nodiscard]] bool hooked();
@@ -76,6 +77,18 @@ OpResult fetchUpdates(const Workspace& w, const stats::UpdatesQuery& q, stats::U
 OpResult fetchAdmins(const Workspace& w, const stats::Period& p, stats::AdminsReply& out);
 OpResult fetchGlobe(const Workspace& w, int periodDays, stats::GlobeReply& out);
 OpResult fetchSnapshot(const Workspace& w, stats::SnapshotReply& out);
+OpResult fetchReevaluate(const Workspace& w, stats::ReevaluateReply& out);   // 1.48.1 (LENT)
+
+// ============================================================================ 1.48.1 : Actualiser, Reevaluer
+// << Reevaluer >> (StatsReevaluate.cpp ; docs/STATISTIQUES.md, par. 15) : par runSlow, le service remet ses statistiques
+// d'accord avec ce qui existe ; puis la fenetre des corrections (makeReevaluateDialog : par groupe, defilante, << Fermer >>)
+// et toutes les vues se relisent (changes::bump). `done` (facultatif) : apres. Faux : rien n'est parti.
+bool startReevaluate(const ShellHost& host, std::function<void(const OpResult&, const stats::ReevaluateReply&)> done = {});
+menu::MenuPtr makeReevaluateDialog(stats::ReevaluateReply reply);
+// Les lignes de la fenetre, dans l'ordre (les essais) : un titre de groupe commence par "# " (<< # Le globe (2) >>).
+[[nodiscard]] std::vector<std::string> reevaluateLines(const stats::ReevaluateReply& reply);
+// Pourquoi << Reevaluer >> ne se clique pas (l'infobulle) ; vide : il se clique.
+[[nodiscard]] std::string reevaluateBlocked(const Workspace& w);
 
 // Peut-on demander les statistiques ? Vide : oui ; sinon la phrase (le service a deployer, pas regle, pas de cle).
 // `tooOld` : vrai quand c'est un service d'avant la 1.47.0 (le bandeau et << Deployer le service >>).

@@ -440,6 +440,69 @@ int main(int argc, char** argv) {
         check(r.ok && l.active == 4 && lyonPing, "le direct : 4 PC actifs, une connexion a Lyon (" + r.message + ")");
     }
 
+    // 1.48.1 : LA COHERENCE (docs/STATISTIQUES.md, par. 15) - le numero des changements, ce qui est supprime ici et part au
+    // service avant la lecture suivante, Reevaluer (les corrections, puis rien ; une ligne au journal)
+    std::printf("-- 1.48.1 : la coherence (changes, les exclusions, Reevaluer)\n");
+    {
+        st::Exclusions ex;
+        ex.deleteClients = {"Soci\xC3\xA9t\xC3\xA9 d'essai"};
+        ex.restoreLicences = {"XPG-2026-00009"};
+        check(ex.body() == "{\"supprimer\":{\"clients\":[\"Soci\xC3\xA9t\xC3\xA9 d'essai\"]},\"remettre\":{\"licences\":[\"XPG-2026-00009\"]}}" &&
+                  st::Exclusions{}.body() == "{}",
+              "le corps de Reevaluer (" + ex.body() + ")");
+        json::Value v;
+        st::ReevaluateReply rr;
+        check(json::parse("{\"jour\":\"2026-11-11\",\"exclus\":{\"clients\":1,\"licences\":2,\"pc\":3},\"nombre\":2,\"corrections\":[{\"groupe\":\"releves\","
+                          "\"texte\":\"Licences actives, relev\xC3\xA9 du 11/11 : 17 \xE2\x86\x92 15\",\"mesure\":\"licences_actives\",\"jour\":\"2026-11-11\",\"avant\":17,"
+                          "\"apres\":15},{\"groupe\":\"globe\",\"texte\":\"Globe : Lyon retir\xC3\xA9" "e\"}]}",
+                          v, nullptr) &&
+                  st::parseReevaluate(v, rr, nullptr) && rr.corrections.size() == 2 && rr.excludedLicences == 2 && rr.corrections[0].before == 17 &&
+                  rr.corrections[0].after == 15 && rr.corrections[0].day == "2026-11-11" && !st::isNumber(rr.corrections[1].before) &&
+                  st::reevaluateSummary(rr) == "2 corrections",
+              "la reponse de Reevaluer lue");
+        check(st::reevaluateSummary({}) == "Rien \xC3\xA0 corriger : les statistiques \xC3\xA9taient coh\xC3\xA9rentes." &&
+                  st::correctionGroupTitle("releves") == "Les relev\xC3\xA9s des jours pass\xC3\xA9s" && st::correctionGroups().size() == 6,
+              "les textes de Reevaluer");
+
+        // un client supprime ici : note (sans reseau), toutes les vues averties ; parti au service avant la lecture suivante
+        const auto before = license_admin::changes::current();
+        st::Exclusions del;
+        del.deleteClients = {"Soci\xC3\xA9t\xC3\xA9 d'essai"};
+        plus.queueStatsExclusion(del);
+        check(license_admin::changes::current() > before && plus.pendingStatsExclusions().deleteClients.size() == 1, "note pour le service ; le numero des changements avance");
+        st::GlobeReply g;
+        auto r = plus.statsGlobe(30, g);
+        check(r.ok && plus.pendingStatsExclusions().empty(), "parti au service avant la lecture du globe (" + r.message + ")");
+        check(g.totals.clients == 1 && g.totals.pcs == 1 && (!g.find("FR|Paris") || g.find("FR|Paris")->pcs == 0) && g.find("FR|Lyon") && g.find("FR|Lyon")->pcs == 1,
+              "le globe : le client supprime n'y est plus (son PC de Paris), Atelier Exemple reste");
+        st::SeriesQuery q;
+        q.measures = {"licences_nouvelles", "pc_actifs"};
+        q.period = st::lastDays(now, 7);
+        q.compare = st::Compare::None;
+        q.split = "client";
+        st::SeriesReply sr;
+        r = plus.statsSeries(q, sr);
+        const st::Series* nv = sr.find("licences_nouvelles");
+        check(r.ok && nv && nv->total == 1 && !nv->part("Soci\xC3\xA9t\xC3\xA9 d'essai") && sr.find("pc_actifs") && sr.find("pc_actifs")->points.back() == 1,
+              "les courbes : plus de Societe d'essai (1 licence, 1 PC)");
+        // Reevaluer : tout s'accorde deja - rien a corriger ; une ligne au journal des admins
+        const auto c1 = license_admin::changes::current();
+        st::ReevaluateReply re;
+        std::string raw;
+        r = plus.statsReevaluate(re, &raw);
+        check(r.ok && re.corrections.empty() && re.excludedClients == 1 && has(r.message, "Rien \xC3\xA0 corriger") && has(raw, "\"corrections\""),
+              "Reevaluer : rien a corriger (" + r.message + ")");
+        check(license_admin::changes::current() > c1 && plus.journalWaiting() == 0, "Reevaluer : les vues averties, la ligne du journal envoyee");
+        // restaure : de nouveau compte
+        st::Exclusions back;
+        back.restoreClients = {"Soci\xC3\xA9t\xC3\xA9 d'essai"};
+        plus.queueStatsExclusion(back);
+        r = plus.statsGlobe(30, g);
+        check(r.ok && g.totals.clients == 2 && g.totals.pcs == 2, "restaure : de nouveau sur le globe (" + r.message + ")");
+        r = plus.statsReevaluate(re);
+        check(r.ok && re.corrections.empty() && re.excludedClients == 0, "Reevaluer encore : rien (" + r.message + ")");
+    }
+
     if (!console.empty()) {
         std::printf("-- la console\n");
         int code = -1;

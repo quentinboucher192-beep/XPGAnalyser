@@ -1066,6 +1066,20 @@ describe("les demandes manuelles", () => {
         const l = await appel(svc, "GET", "/admin/demandes", { cle: editeur });
         assert.equal(l.json.demandes.find((d) => d.numero === r.json.numero).etat, "traitee");
     });
+
+    it("1.48.1 : supprimer une demande close (traitee, annulee) ; une en attente : 409 ; deja partie : 404", async () => {
+        const sup = (numero) => appel(svc, "POST", "/admin/demandes/supprimer", { cle: editeur, corps: { numero } });
+        const r = await appel(svc, "POST", "/v1/demandes", { cle: p8, corps: { cle: editeur.id, scelle: "AAAA" } });
+        assert.equal(r.statut, 201, r.texte);
+        erreur(await sup(r.json.numero), 409, "etat");
+        assert.equal((await appel(svc, "POST", "/admin/demandes/traiter", { cle: editeur, corps: { numero: r.json.numero, issue: "refusee" } })).statut, 200);
+        const x = await sup(r.json.numero);
+        assert.equal(x.statut, 200, x.texte);
+        const l = await appel(svc, "GET", "/admin/demandes", { cle: editeur });
+        assert.ok(!l.json.demandes.some((d) => d.numero === r.json.numero), "partie de la liste");
+        erreur(await sup(r.json.numero), 404, "demande");
+        assert.equal((await sup(n1 + 1)).statut, 200, "une demande annulee par le PC");
+    });
 });
 
 describe("l'etat d'un PC (bloc poste)", () => {

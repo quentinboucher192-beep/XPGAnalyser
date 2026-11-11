@@ -680,6 +680,7 @@ describe("1.48.1 : rembourser UN article d'une commande payee", () => {
     const deAdmin = async (n) => (await appel(A, "GET", "/admin/commandes", { cle: editeur })).json.commandes.find((x) => x.numero === n);
     const rembourser = (corps, cle = editeur) => appel(A, "POST", "/admin/commandes/rembourser", { cle, corps });
     const remboursements = () => stripe.requetes.filter((q) => q.methode === "POST" && q.chemin === "/v1/refunds");
+    let toutRembourse = 0; // une commande payee dont tous les articles sont rembourses
 
     it("une ligne : Stripe rembourse son montant (le meme paiement), elle seule passe remboursee ; deux fois : 409 ; toutes : la commande", async () => {
         const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "opt:ai_advanced:365", avec_ligne: 1 }]) });
@@ -729,6 +730,7 @@ describe("1.48.1 : rembourser UN article d'une commande payee", () => {
         assert.deepEqual([c.etat, ...c.lignes.map((z) => z.etat)], ["remboursee", "remboursee", "remboursee"]);
         erreur(await rembourser({ numero: n }), 409, "etat");
         erreur(await rembourser({ numero: n, ligne: 1 }), 409, "etat");
+        toutRembourse = n;
     });
 
     it("le faux Stripe : jamais plus que ce qui reste ; toute la commande apres une ligne : le reste", async () => {
@@ -756,6 +758,32 @@ describe("1.48.1 : rembourser UN article d'une commande payee", () => {
         assert.equal((await evenement("charge.refunded", sessionDe(n).id)).statut, 200);
         const c = await deAdmin(n);
         assert.deepEqual([c.etat, ...c.lignes.map((z) => z.etat)], ["remboursee", "remboursee", "remboursee"]);
+    });
+
+    it("supprimer : une commande sans argent (refusee, annulee) ; jamais une payee (409 payee) ni une qui attend (409 etat)", async () => {
+        const sup = (numero, cle = editeur) => appel(A, "POST", "/admin/commandes/supprimer", { cle, corps: { numero } });
+        const d = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }], { paiement: false }) });
+        assert.equal(d.statut, 201, d.texte);
+        erreur(await sup(d.json.numero), 409, "etat"); // a valider : refuse d'abord
+        const l = await appel(A, "POST", "/admin/commandes/ligne", { cle: editeur, corps: { numero: d.json.numero, ligne: 1, action: "refusee", raison: "Essai" } });
+        assert.equal(l.json.etat_commande, "refusee");
+        erreur(await sup(d.json.numero, hugo), 403, "droit");
+        let x = await sup(d.json.numero, lea);
+        assert.equal(x.statut, 200, x.texte);
+        assert.equal(await deAdmin(d.json.numero), undefined, "partie de la liste de l'Admin");
+        assert.ok(!(await commandesDe(A, pc4)).some((c) => c.numero === d.json.numero), "et de celle du PC");
+        erreur(await sup(d.json.numero), 404, "commande");
+        // a payer : le client paie peut-etre en ce moment
+        const p = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }]) });
+        assert.equal(p.statut, 201, p.texte);
+        erreur(await sup(p.json.numero), 409, "etat");
+        assert.equal((await appel(A, "POST", "/v1/boutique/annuler", { cle: pc4, corps: { numero: p.json.numero } })).statut, 200);
+        x = await sup(p.json.numero);
+        assert.equal(x.statut, 200, x.texte);
+        // payee, meme toute remboursee : elle reste pour la comptabilite
+        assert.ok(toutRembourse > 0);
+        erreur(await sup(toutRembourse), 409, "payee");
+        assert.equal((await deAdmin(toutRembourse)).etat, "remboursee");
     });
 
     it("une demande sans paiement ne se rembourse pas", async () => {

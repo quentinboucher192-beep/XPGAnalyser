@@ -734,7 +734,9 @@ bool queueJournal(const std::string& folder, const licensing::SigningKey& key, S
     line.set("entree", entry);
     line.set("signature", crypto::hex(sig));
     std::lock_guard<std::mutex> lock(outboxMutex());
-    return appendLine(at(folder, kOutboxFile), core::json::write(line, false), why);
+    const bool ok = appendLine(at(folder, kOutboxFile), core::json::write(line, false), why);
+    if (ok) changes::bump();   // 1.48.1 : une action journalisee - toutes les vues se relisent
+    return ok;
 }
 
 int flushJournalWith(const std::string& folder, online::Client& client, std::string* why) {

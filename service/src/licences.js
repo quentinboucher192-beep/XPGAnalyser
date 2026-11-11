@@ -221,8 +221,10 @@ const ROUTES = {
     "PUT /admin/licences": { f: "deposerLicence", signe: "admin", droit: DROITS_LICENCE },
     "GET /admin/licences": { f: "listerLicences", signe: "admin" },
     "POST /admin/activations/retirer": { f: "retirerActivation", signe: "admin", droit: ["poste_retirer"] },
+    "POST /admin/licences/supprimer": { f: "supprimerLicences", signe: "admin", droit: ["licence_revoquer"] }, // 1.48.1 : finies ou revoquees
     "GET /admin/demandes": { f: "listerDemandes", signe: "admin", droit: ["demandes"] },
     "POST /admin/demandes/traiter": { f: "traiterDemande", signe: "admin", droit: ["demandes"] },
+    "POST /admin/demandes/supprimer": { f: "supprimerDemande", signe: "admin", droit: ["demandes"] }, // 1.48.1 : une demande close
     "PUT /admin/postes": { f: "deposerPoste", signe: "admin", droit: DROITS_POSTE },
     "GET /admin/archive": { f: "listerArchive", signe: "admin" },
     "GET /admin/archive/fichier": { f: "lireFichier", signe: "admin" },
@@ -265,6 +267,7 @@ const ROUTES = {
     "POST /admin/commandes/a-revoir": { f: "commandeARevoir", signe: "admin", droit: ["demandes"] },
     "POST /admin/commandes/ligne": { f: "commandeLigne", signe: "admin", droit: ["demandes"] }, // 1.48.0 : le panier
     "POST /admin/commandes/rembourser": { f: "rembourserCommande", signe: "plus" },
+    "POST /admin/commandes/supprimer": { f: "supprimerCommande", signe: "admin", droit: ["demandes"] }, // 1.48.1 : sans argent
     // 1.47.0 : les statistiques et le globe (stats.js, docs/STATISTIQUES.md)
     "GET /admin/stats/serie": { f: "serieStats", signe: "admin" },
     "GET /admin/stats/mises-a-jour": { f: "misesAJourStats", signe: "admin" },
@@ -1670,6 +1673,40 @@ export class Licences extends DurableObject {
         return reponseJson(200, {});
     }
 
+    // 1.48.1 : POST /admin/licences/supprimer {"licences": [id...]} (droit << licence_revoquer >>, comme la suppression dans
+    // l'Admin) - effacer des licences qui ne servent plus : TOUTE la licence revoquee (la liste deposee) ou finie. Leurs
+    // activations, leurs jetons, leurs liberations partent avec elles (les PC sont liberes) ; la liste de revocation ne
+    // bouge pas (une emission revoquee reste refusee). Une seule encore en vigueur (ni revoquee, ni finie) : 409
+    // << en_vigueur >> et rien n'est efface (revoque-la d'abord). Une inconnue (deja effacee) : dans `absentes`.
+    async supprimerLicences(ctx) {
+        const corps = this.corpsJson(ctx);
+        const ids = corps.licences;
+        if (!Array.isArray(ids) || ids.length < 1 || ids.length > 200 || !ids.every((x) => estIdLicence(x))) throw mal("licences");
+        const uniques = [...new Set(ids)];
+        const trouvees = [];
+        const absentes = [];
+        for (const id of uniques) {
+            const lic = this.licence(id);
+            if (!lic) {
+                absentes.push(id);
+                continue;
+            }
+            const finie = lic.expire && ctx.now >= lic.expire;
+            if (!finie && !this.revoquee(lic, ""))
+                throw new Erreur(409, "en_vigueur", "La licence " + id + " est encore en vigueur (ni révoquée, ni finie) : révoque-la d'abord.", { licence: id });
+            trouvees.push(id);
+        }
+        for (const id of trouvees) {
+            this.x("DELETE FROM jetons WHERE licence = ?", id);
+            this.x("DELETE FROM liberations WHERE licence = ?", id);
+            this.x("DELETE FROM activations WHERE licence = ?", id);
+            this.x("DELETE FROM licences WHERE id = ?", id);
+            this.ajouter("n_licences", -1);
+        }
+        if (trouvees.length) this.signalerChangement();
+        return reponseJson(200, { supprimees: trouvees, absentes });
+    }
+
     async listerDemandes(ctx) {
         const d = ctx.url.searchParams.get("depuis");
         if (d !== null && !/^\d{1,15}$/.test(d)) throw new Erreur(400, "champ", "« depuis » doit être un numéro de demande.");
@@ -1725,6 +1762,21 @@ export class Licences extends DurableObject {
         } else if (r.etat !== "traitee")
             throw new Erreur(409, "etat", r.etat === "annulee" ? "Le PC a annulé cette demande." : "Le PC a remplacé cette demande par une plus récente.", { etat: r.etat });
         return reponseJson(200, {});
+    }
+
+    // 1.48.1 : POST /admin/demandes/supprimer {"numero"} (droit << demandes >>) - effacer une demande CLOSE (annulee, remplacee,
+    // traitee : refusee ou acceptee) tout de suite, sans attendre le menage (7 jours) ; une demande en attente : 409 << etat >>
+    // (refuse-la d'abord). Deja effacee (le menage) : 404 << demande >>.
+    async supprimerDemande(ctx) {
+        const corps = this.corpsJson(ctx);
+        if (!entierPositif(corps.numero) || corps.numero < 1) throw mal("numero");
+        const r = this.ligne("SELECT etat, LENGTH(scelle) + autres AS o FROM demandes WHERE numero = ?", corps.numero);
+        if (!r) throw new Erreur(404, "demande", "Cette demande n'existe pas (ou plus) sur le service.");
+        if (r.etat === "attente") throw new Erreur(409, "etat", "Cette demande attend encore ta décision : refuse-la d'abord.", { etat: r.etat });
+        this.x("DELETE FROM demandes_scelles WHERE numero = ?", corps.numero);
+        this.x("DELETE FROM demandes WHERE numero = ?", corps.numero);
+        this.ajouter("octets_demandes", -Number(r.o || 0));
+        return reponseJson(200, { numero: corps.numero, supprimee: true });
     }
 
     async deposerPoste(ctx) {

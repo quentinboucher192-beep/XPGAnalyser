@@ -301,6 +301,7 @@ void GlobeStatsView::setPeriodDays(int days) {
 // direct : toutes les 6 s.
 void GlobeStatsView::tick(double now) {
     now_ = now;
+    if (changes_.changed() && (hasReply_ || fetching_)) wantFetch_ = true;   // 1.48.1 : quelque chose a change dans l'Admin
     const double stale = board_->live() ? kStaleLive : kStaleCount;
     if (!fetching_ && now >= retryAt_ && (wantFetch_ || now - lastFetch_ >= stale)) fetch();
     if (board_->live() && hasReply_ && !liveFetching_ && now >= nextLive_ && problem_.empty()) pollLive();
@@ -619,6 +620,7 @@ protected:
 private:
     void tick(double now) {
         now_ = now;
+        if (changes_.changed()) lastFetch_ = -1e9;   // 1.48.1 : quelque chose a change dans l'Admin - relue
         if (fetching_ || now < retryAt_ || now - lastFetch_ < kStaleCount) return;
         Workspace& w = host_.workspace();
         std::string why;
@@ -659,6 +661,7 @@ private:
     GlobeMiniCard*        card_{nullptr};
     bool                  fetching_{false};
     double                now_{-1.0}, lastFetch_{-1e9}, retryAt_{0.0};
+    changes::Seen         changes_;
     std::shared_ptr<bool> alive_ = std::make_shared<bool>(true);
 };
 

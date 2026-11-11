@@ -494,6 +494,7 @@ bool parseGlobe(const Value& v, GlobeReply& out, std::string* why) {
     if (const Value* s = v.find("sans_lieu"); s && s->isObject()) {
         out.unplacedPcs = static_cast<int>(s->integer("pc"));
         out.unplacedAdmins = static_cast<int>(s->integer("admins"));
+        out.unplacedActive = static_cast<int>(s->integer("actifs"));
     }
     return true;
 }
@@ -582,6 +583,96 @@ online::Result takeSnapshot(online::Client& c, SnapshotReply& out, std::string* 
     out.taken = r.json.flag("pris");
     if (const Value* s = r.json.find("releve")) out.snapshot = *s;
     return done(std::string(out.taken ? "Relev\xC3\xA9 du " : "Le relev\xC3\xA9 du ") + out.day + (out.taken ? " pris." : " \xC3\xA9tait d\xC3\xA9j\xC3\xA0 pris."));
+}
+
+// ============================================================================ 1.48.1 : la coherence
+std::string Exclusions::body() const {
+    const auto list = [](const std::vector<std::string>& v) {
+        Value a = Value::array();
+        for (const auto& x : v)
+            if (!x.empty()) a.push(clean(x, 200));
+        return a;
+    };
+    Value root = Value::object();
+    if (!deleteClients.empty() || !deleteLicences.empty()) {
+        Value o = Value::object();
+        if (!deleteClients.empty()) o.set("clients", list(deleteClients));
+        if (!deleteLicences.empty()) o.set("licences", list(deleteLicences));
+        root.set("supprimer", std::move(o));
+    }
+    if (!restoreClients.empty() || !restoreLicences.empty()) {
+        Value o = Value::object();
+        if (!restoreClients.empty()) o.set("clients", list(restoreClients));
+        if (!restoreLicences.empty()) o.set("licences", list(restoreLicences));
+        root.set("remettre", std::move(o));
+    }
+    return core::json::write(root, false);
+}
+
+const std::vector<std::string>& correctionGroups() {
+    static const std::vector<std::string> g = {"exclus", "maintenant", "globe", "releves", "compteurs", "versions"};
+    return g;
+}
+
+std::string correctionGroupTitle(std::string_view group) {
+    if (group == "exclus") return "Ce qui n'existe plus";
+    if (group == "maintenant") return "Les chiffres d'aujourd'hui";
+    if (group == "globe") return "Le globe";
+    if (group == "releves") return "Les relev\xC3\xA9s des jours pass\xC3\xA9s";
+    if (group == "compteurs") return "Les compteurs";
+    if (group == "versions") return "Les mises \xC3\xA0 jour";
+    return std::string(group);
+}
+
+std::string reevaluateSummary(const ReevaluateReply& r) {
+    if (r.corrections.empty()) return "Rien \xC3\xA0 corriger : les statistiques \xC3\xA9taient coh\xC3\xA9rentes.";
+    return std::to_string(r.corrections.size()) + (r.corrections.size() > 1 ? " corrections" : " correction");
+}
+
+bool parseReevaluate(const Value& v, ReevaluateReply& out, std::string* why) {
+    out = ReevaluateReply{};
+    const Value* c = v.isObject() ? v.find("corrections") : nullptr;
+    if (!c || !c->isArray()) {
+        if (why) *why = "la r\xC3\xA9ponse de R\xC3\xA9\xC3\xA9valuer est illisible";
+        return false;
+    }
+    out.day = clean(v.str("jour"), 10);
+    if (const Value* e = v.find("exclus"); e && e->isObject()) {
+        out.excludedClients = static_cast<int>(e->integer("clients"));
+        out.excludedLicences = static_cast<int>(e->integer("licences"));
+        out.excludedPcs = static_cast<int>(e->integer("pc"));
+    }
+    for (const auto& x : c->items()) {
+        if (!x.isObject() || out.corrections.size() >= 2000) continue;
+        Correction k;
+        k.group = clean(x.str("groupe"), 20);
+        k.text = clean(x.str("texte"), 300);
+        k.measure = clean(x.str("mesure"), 60);
+        k.day = clean(x.str("jour"), 10);
+        if (const Value* b = x.find("avant"); b && b->isNumber()) k.before = b->asNumber();
+        if (const Value* a = x.find("apres"); a && a->isNumber()) k.after = a->asNumber();
+        if (!k.text.empty()) out.corrections.push_back(std::move(k));
+    }
+    return true;
+}
+
+online::Result reevaluate(online::Client& c, const Exclusions& ex, ReevaluateReply& out, std::string* raw) {
+    const std::string version = c.state().isObject() ? c.state().str("version") : std::string();
+    const auto tooOld = [&](const std::string& v) {
+        return said("Ton service en ligne est en " + v + " : d\xC3\xA9ploie la " + kReevaluateRequired + " pour R\xC3\xA9\xC3\xA9valuer les statistiques.");
+    };
+    int va = 0, vb = 0, vc = 0;
+    if (!version.empty() && licensing::admins::parseSemver(version, va, vb, vc) && licensing::admins::compareSemver(version, kReevaluateRequired) < 0) return tooOld(version);
+    online::Reply r;
+    online::Result res = call(c, "POST", "/admin/stats/reevaluer", ex.body(), "r\xC3\xA9\xC3\xA9valuer les statistiques", r);
+    if (!res.ok) {
+        if (r.status == 404 && r.code() == "route") return tooOld(version.empty() ? std::string("?") : version);
+        return res;
+    }
+    if (raw) *raw = r.body;
+    std::string why;
+    if (!parseReevaluate(r.json, out, &why)) return refused(why);
+    return done("Statistiques r\xC3\xA9\xC3\xA9valu\xC3\xA9" "es : " + reevaluateSummary(out));
 }
 
 // ============================================================================ les textes

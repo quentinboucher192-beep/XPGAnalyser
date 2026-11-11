@@ -1328,7 +1328,7 @@ private:
         ab::ServiceAsk ask;
         ask.period = data_->statsPeriod;
         ask.before = data_->statsBefore;
-        std::string sig = ask.period.from + ">" + ask.period.to;
+        std::string sig = ask.period.from + ">" + ask.period.to + "#" + std::to_string(changes::current());   // 1.48.1 : un changement : relus
         for (const auto& p : data_->people) {
             if (p.kind == ab::Person::Kind::Pending || p.key.size() != 64) continue;
             ask.keys.push_back(p.key);
@@ -1343,6 +1343,7 @@ private:
         }
         wantService_ = false;
         serviceBusy_ = true;
+        if (sig != serviceSig_) data_->cards.clear();   // 1.48.1 : les fiches aussi
         serviceSig_ = sig;
         data_->serviceLoading = true;
         auto out = std::make_shared<ab::ServiceReply>();

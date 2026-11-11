@@ -1372,6 +1372,43 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
     return res;
 }
 
+bool requestDeletable(const Entry& e, std::string* why) {
+    const auto no = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    if (e.state == RequestState::Pending) return no(e.acceptedHere() ? "accept\xC3\xA9" "e ici, sa r\xC3\xA9ponse \xC3\xA0 renvoyer : elle reste"
+                                                                      : "elle attend ta d\xC3\xA9" "cision : refuse-la d'abord");
+    if (e.state == RequestState::Accepted || e.state == RequestState::Handled)
+        return no("une demande d\xC3\xA9livr\xC3\xA9" "e reste : elle dit d'o\xC3\xB9 vient la licence");
+    if (e.state == RequestState::Unreadable) return no("illisible ici (scell\xC3\xA9" "e pour une autre cl\xC3\xA9 ?) : elle reste");
+    return true;   // refusee, annulee, remplacee, ignoree
+}
+
+Result deleteRequest(const std::string& folder, const licensing::SigningKey& key, int number, const Options& o) {
+    const std::vector<Entry> all = listRequests(folder);
+    const auto it = std::find_if(all.begin(), all.end(), [&](const Entry& x) { return x.number == number; });
+    if (it == all.end()) return refused("la demande n\xC2\xB0 " + std::to_string(number) + " n'est pas sur ce poste");
+    std::string why;
+    if (!requestDeletable(*it, &why)) return refused("la demande n\xC2\xB0 " + std::to_string(number) + " ne s'efface pas : " + why);
+    std::unique_ptr<Client> c;
+    if (!openClient(folder, key, o, c, &why)) return refused(why);
+    Value body = Value::object();
+    body.set("numero", number);
+    const Reply r = c->call("POST", "/admin/demandes/supprimer", core::json::write(body, false));
+    const bool gone = r.error.empty() && r.status == 404 && r.code() == "demande";   // deja effacee (le menage du service)
+    if (!gone && (r.status != 200 || !r.error.empty())) return refused(c->explain(r, "effacer la demande n\xC2\xB0 " + std::to_string(number)));
+    std::error_code ec;
+    if (!it->sidecarPath.empty()) std::filesystem::remove(P(it->sidecarPath), ec);
+    const bool shared = !it->requestPath.empty() &&
+                        std::any_of(all.begin(), all.end(), [&](const Entry& x) { return x.number != number && x.requestPath == it->requestPath; });
+    if (!it->requestPath.empty() && !shared) std::filesystem::remove(P(it->requestPath), ec);
+    Result out;
+    out.ok = true;
+    out.message = "Demande n\xC2\xB0 " + std::to_string(number) + (it->customer.empty() ? std::string() : " (" + clean(it->customer, 120) + ")") + " effac\xC3\xA9" "e.";
+    return out;
+}
+
 Result fetchRequests(const std::string& folder, const licensing::SigningKey& key, const Options& o) {
     std::unique_ptr<Client> c;
     std::string why;

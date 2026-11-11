@@ -184,6 +184,9 @@ public:
         holder_->setVisibility(ui::Visibility::Collapsed);
         new_ = &button(*holder_, "Nouvelle licence\xE2\x80\xA6", "licences.nouvelle", ui::Button::Style::Primary);
         new_->setTooltip("L'assistant : les demandes des PC, le client, l'\xC3\xA9" "dition, les fonctionnalit\xC3\xA9s, puis signer");
+        reload_ = &button(*this, "Actualiser", "licences.actualiser");   // 1.48.1 : comme Clients > Actualiser
+        reload_->setIcon(ui::Icon::Refresh);
+        reload_->setTooltip("Relit tout de suite l'archive, le registre des activations et, le service r\xC3\xA9gl\xC3\xA9, les licences en ligne (F5)");
         newOnline_ = &button(*this, "Nouvelle licence en ligne\xE2\x80\xA6", "licences.nouvelle-en-ligne");
         newOnline_->setTooltip("Une licence sans PC li\xC3\xA9 : chaque PC l'active avec un code d'activation (gard\xC3\xA9 chiffr\xC3\xA9 sur ce poste) aupr\xC3\xA8s du service des licences");
         refreshOnline_ = &button(*holder_, "Relever", "licences.relever");
@@ -209,7 +212,8 @@ public:
         revoke_->setTooltip("Toute la licence choisie, ou un de ses PC");
         // 1.38.0 : supprimer une licence revoquee (la corbeille de l'outil ; sa revocation reste).
         delete_ = &button(*holder_, "Supprimer\xE2\x80\xA6", "licences.supprimer", ui::Button::Style::Danger);
-        delete_->setTooltip("La licence r\xC3\xA9voqu\xC3\xA9" "e choisie quitte la liste (son fichier va dans la corbeille de l'outil) ; sa r\xC3\xA9vocation reste en vigueur");
+        delete_->setTooltip("Les licences choisies, r\xC3\xA9voqu\xC3\xA9" "es ou finies, quittent la liste (leurs fichiers vont dans la corbeille de l'outil), "
+                            "leurs PC quittent Activations, celles en ligne sont effac\xC3\xA9" "es du service ; une r\xC3\xA9vocation reste en vigueur");
         // 1.33.0 : retirer un PC de la licence (un PC remplace ou rendu) : une nouvelle emission sans lui.
         dropPc_ = &button(*holder_, "Retirer un PC\xE2\x80\xA6", "licences.retirer-pc");
         dropPc_->setTooltip("Le PC choisi dans la liste des PC : une nouvelle \xC3\xA9mission de la licence sans lui (m\xC3\xAA" "me fin), \xC3\xA0 renvoyer au client");
@@ -264,6 +268,7 @@ public:
         links_ += new_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {})); });
         links_ += newOnline_->clicked->connect([this] { host_.openDialog(makeLicenceWizard(host_, {}, {}, {}, true)); });
         links_ += refreshOnline_->clicked->connect([this] { fetchOnline(); });
+        links_ += reload_->clicked->connect([this] { reloadNow(); });
         links_ += newCode_->clicked->connect([this] { askNewCode(); });
         links_ += showCode_->clicked->connect([this] { showCode(); });
         links_ += active_->clicked->connect([this] { askActive(); });
@@ -350,6 +355,8 @@ protected:
         // En tete, a droite : la licence en ligne (la principale est en haut de la fenetre).
         const float nw = buttonWidth(*newOnline_, 120.f) + 8.f;
         newOnline_->setBounds({x + w - nw, r.y + (compact ? 18.f : 26.f) + 4.f, nw, 34.f});
+        const float aw = buttonWidth(*reload_, 90.f) + 8.f;   // 1.48.1
+        reload_->setBounds({x + w - nw - 8.f - aw, r.y + (compact ? 18.f : 26.f) + 4.f, aw, 34.f});
         filterY_ = r.y + (compact ? 84.f : 100.f);
         const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres, sur toute la largeur
         bar_->setBounds({x, filterY_, w, bh});
@@ -731,7 +738,7 @@ private:
         exportInMenu_ = catalogue && onlineLic;
         export_->setVisibility(exportInMenu_ ? ui::Visibility::Collapsed : ui::Visibility::Visible);
         revoke_->setEnabled(e != nullptr);
-        delete_->setVisibility(e && e->revoked ? ui::Visibility::Visible : ui::Visibility::Collapsed);   // 1.38.0 : une revoquee seulement
+        delete_->setEnabled(e != nullptr);   // 1.48.1 : toujours la ; grise avec sa raison (deleteReason, apres les droits)
         dropPc_->setText(onlineLic ? std::string("Retirer ce PC\xE2\x80\xA6") : std::string("Retirer un PC\xE2\x80\xA6"));
         dropPc_->setEnabled(e != nullptr && (onlineLic ? on && !on->activations.empty() : e->licence.devices.size() > 1));
         newOnline_->setEnabled(ready);
@@ -751,6 +758,12 @@ private:
         gateRight(option_, "licence_option");
         gateRight(revoke_, "licence_revoquer");
         gateRight(delete_, "licence_revoquer");
+        if (delete_->enabled()) {   // 1.48.1 : une licence en vigueur ne se supprime pas - le bouton dit pourquoi
+            if (const std::string why = deleteReason(); !why.empty()) {
+                delete_->setEnabled(false);
+                delete_->setTooltip(why);
+            }
+        }
         gateRight(dropPc_, "poste_retirer");
         gateRight(newCode_, "licence_creer");
         gateRight(showCode_, "codes");
@@ -1136,8 +1149,9 @@ private:
             if (Workspace::isOnlineLicence(e->licence) && active_->visible())
                 m.danger({.label = active_->text(), .icon = ui::Icon::Warning, .why = reasonOf(active_, "le service n'est pas r\xC3\xA9gl\xC3\xA9"), .run = [this] { askActive(); }});
             m.danger({.label = "R\xC3\xA9voquer", .icon = ui::Icon::Error, .why = reasonOf(revoke_, "choisis une licence"), .run = [this] { revoke_->clicked->emit(); }});
-            if (e->revoked) m.danger({.label = "Supprimer", .icon = ui::Icon::Delete, .why = reasonOf(delete_, {}), .run = [this] { askDelete(); }});
         }
+        // 1.48.1 : Supprimer, une ou plusieurs (toujours la ; grisee avec sa raison : une licence en vigueur)
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .many = "Supprimer les %n licences\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = deleteReason(), .run = [this] { askDelete(); }});
         return m;
     }
 
@@ -1238,26 +1252,83 @@ private:
         deploy::crypto::wipe(code.data(), code.size());
     }
 
-    // 1.38.0 : supprimer la licence revoquee choisie (une question d'abord).
+    // 1.48.1 : les licences choisies dans la liste (plusieurs : Supprimer les 3...).
+    [[nodiscard]] std::vector<std::string> chosenIds() const {
+        std::vector<std::string> out;
+        for (const ui::RowIndex r : table_->selectedModelRows())
+            if (r < shownIds_.size()) out.push_back(shownIds_[r]);
+        if (out.empty() && !selectedId_.empty()) out.push_back(selectedId_);
+        return out;
+    }
+    // Pourquoi les licences choisies ne se suppriment pas (vide : elles se suppriment).
+    [[nodiscard]] std::string deleteReason() const {
+        const auto ids = chosenIds();
+        if (ids.empty()) return "choisis une licence";
+        for (const auto& id : ids)
+            if (const LicenceEntry* e = ws().licence(id))
+                if (std::string why = ws().whyNotDeleteLicence(*e); !why.empty()) return why;
+        return {};
+    }
+
+    // 1.38.0 : supprimer la licence revoquee choisie ; 1.48.1 : une ou plusieurs, revoquees ou finies (une question d'abord,
+    // qui dit ce qui part et ce qui suit).
     void askDelete() {
-        const LicenceEntry* e = selected();
-        if (!e || !e->revoked || busyNow()) return;
-        const std::string id = e->licence.licenseId;
+        if (busyNow()) return;
+        const auto ids = chosenIds();
+        if (ids.empty()) return;
+        if (const std::string why = deleteReason(); !why.empty()) {
+            host_.flash("Supprimer : " + why + ".", Tone::Warning);
+            return;
+        }
+        std::string list, clients;
+        int online = 0, pcs = 0;
+        for (const auto& id : ids)
+            if (const LicenceEntry* e = ws().licence(id)) {
+                list += (list.empty() ? "" : ", ") + id;
+                if (!e->licence.customer.empty() && clients.find(e->licence.customer) == std::string::npos)
+                    clients += (clients.empty() ? "" : ", ") + e->licence.customer;
+                online += Workspace::isOnlineLicence(e->licence) ? 1 : 0;
+                pcs += static_cast<int>(e->licence.devices.size());
+            }
+        const bool one = ids.size() == 1;
+        std::string text = (one ? "La licence " + list + (clients.empty() ? std::string() : " (" + clients + ")") + " quitte la liste ; son fichier"
+                                : std::to_string(ids.size()) + " licences (" + list + ") quittent la liste ; leurs fichiers") +
+                           " va" + (one ? "" : "nt") + " dans la corbeille de l'outil (rien n'est effac\xC3\xA9, la synchro ne les ram\xC3\xA8ne pas).\n\n"
+                           "Ce qui suit :\n"
+                           "\xE2\x80\xA2 leurs PC" + (pcs ? " (" + std::to_string(pcs) + " li\xC3\xA9" + (pcs > 1 ? "s" : "") + ")" : std::string()) +
+                           " quittent Activations, la fiche du client et les compteurs ;\n";
+        if (online)
+            text += "\xE2\x80\xA2 " + std::string(online > 1 ? "les licences en ligne sont effac\xC3\xA9" "es" : "la licence en ligne est effac\xC3\xA9" "e") +
+                    " du service, ses PC lib\xC3\xA9r\xC3\xA9s ;\n";
+        text += "\xE2\x80\xA2 une r\xC3\xA9vocation reste dans la liste sign\xC3\xA9" "e : les Studios la refusent toujours ;\n"
+                "\xE2\x80\xA2 le client et son histoire restent (Historique, Journal des admins).";
         auto alive = alive_;
         ShellHost host = host_;
         host_.openDialog(licdlg::makeConfirmDialog(
-            "dialog.supprimer-licence", "Supprimer la licence",
-            "Supprimer la licence r\xC3\xA9voqu\xC3\xA9" "e " + id + " de l'archive ?\n\nElle quitte la liste ; son fichier va dans la corbeille de l'outil "
-            "(rien n'est effac\xC3\xA9). Sa r\xC3\xA9vocation reste : les Studios la refusent toujours. La synchro de l'archive ne la ram\xC3\xA8ne pas.",
-            "Supprimer", true, [this, alive, host, id] {
+            "dialog.supprimer-licence", one ? "Supprimer la licence " + list + " ?" : "Supprimer " + std::to_string(ids.size()) + " licences ?", text,
+            one ? "Supprimer" : "Supprimer les " + std::to_string(ids.size()), true, [this, alive, host, ids] {
                 if (!*alive) return;
-                const OpResult r = host.workspace().deleteRevokedLicence(id);
-                host.report(r);
+                const OpResult r = host.workspace().deleteLicences(ids);
+                host.report(r);   // tout est relu, chaque page rafraichie ; le service suit (takeServiceJob)
                 if (*alive && r.ok) {
                     selectedId_.clear();
                     refresh();
                 }
             }));
+    }
+
+    // 1.48.1 : Actualiser (comme Clients) - l'archive et le registre des activations relus, les licences en ligne relevees.
+    void reloadNow() {
+        OpResult r = OpResult::done("Licences relues : l'archive et le registre des activations.");
+        if (ws().service().ready()) {
+            r.message = "Licences relues : l'archive, le registre des activations ; les licences en ligne sont relev\xC3\xA9" "es sur le service.";
+            (void)refreshOnlineLicences(host_);
+        }
+        if (host_.report) host_.report(r);
+        else {
+            ws().reload();
+            refresh();
+        }
     }
 
     void askActive() {
@@ -1290,6 +1361,7 @@ private:
     ui::Button*                 new_{nullptr};
     ui::Button*                 newOnline_{nullptr};
     ui::Button*                 refreshOnline_{nullptr};
+    ui::Button*                 reload_{nullptr};    // 1.48.1 : Actualiser
     ui::Button*                 newCode_{nullptr};
     ui::Button*                 showCode_{nullptr};   // 1.37.0
     ui::Button*                 active_{nullptr};

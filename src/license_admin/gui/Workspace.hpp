@@ -57,6 +57,7 @@
 #include "../ServiceClient.hpp"
 #include "../Shop.hpp"   // 1.46.0 : la boutique et les commandes
 #include "../Stats.hpp"  // 1.47.0 : les statistiques et le globe
+#include "../Changes.hpp"   // 1.48.1 : << quelque chose a change >> (toutes les pages se relisent)
 #include "../ServiceConnection.hpp"   // 1.47.0 : la connexion au service qui voyage avec l'installateur
 #include "Derogation.hpp"             // 1.47.0 : la derogation << Gerer le service >>
 #include "../../core/Version.hpp"
@@ -174,6 +175,7 @@ struct ServiceJob {
         Unrevoke,        // la liste deposee, puis la licence liee (licenceText, si elle est la) a ses PC
         Registry,        // le registre de l'archive
         OnlineLicence,   // une licence EN LIGNE deposee (licenceText) ; codeHash vide : le code reste le meme
+        DeleteLicences,  // 1.48.1 : des licences en ligne supprimees de l'archive, effacees du service (licenseIds)
     };
     Kind                     kind{Kind::Licence};
     std::string              label;        // "Service : publication de XPG-2026-00042"
@@ -185,6 +187,7 @@ struct ServiceJob {
     std::string              codeHash;          // OnlineLicence : l'empreinte d'un code neuf (jamais le code) ; vide : le code reste
     int                      leaseDays{0};      // OnlineLicence : le bail (jours) ; 0 : le service garde le sien
     int                      requestNumber{0};  // OnlineLicence : la demande manuelle a laquelle elle repond (0 : aucune)
+    std::vector<std::string> licenseIds;        // 1.48.1 : DeleteLicences
 };
 
 // ---- une demande d'activation lue (l'apercu de l'assistant) ----
@@ -527,6 +530,23 @@ public:
     // liste signee (les Studios la refusent toujours) et le registre des activations garde son histoire. Une licence
     // pas revoquee : refuse (revoque-la d'abord).
     OpResult deleteRevokedLicence(const std::string& licenseId);
+    // 1.48.1 : SUPPRIMER des licences qui ne servent plus (Licences > Supprimer, une ou plusieurs ; WorkspaceDelete.cpp) :
+    // chacune revoquee OU finie - une seule encore en vigueur et rien n'est fait. Leurs fichiers vont dans la corbeille (la
+    // synchro ne les ramene pas), leurs PC quittent Activations, le client garde son histoire ; une ligne au journal des
+    // admins (licence_supprimer) par licence ; leurs revocations restent dans la liste signee. Celles EN LIGNE : effacees
+    // aussi du service (takeServiceJob : DeleteLicences, la coquille la lance), et cachees des releves d'ici la.
+    OpResult deleteLicences(const std::vector<std::string>& licenseIds);
+    // Pourquoi cette licence ne se supprime pas (le bouton grise, son infobulle) ; vide : elle se supprime.
+    [[nodiscard]] std::string whyNotDeleteLicence(const LicenceEntry& e) const;
+    // LENT : effacer ces licences du service (POST /admin/licences/supprimer ; le droit << licence_revoquer >>).
+    [[nodiscard]] OpResult serviceDeleteLicences(const std::vector<std::string>& licenseIds) const;
+    // 1.48.1 : SUPPRIMER des PC de la liste (Activations > Supprimer ; WorkspaceDelete.cpp) : un PC qui ne sert plus
+    // (revoque, sa licence finie ou supprimee) ou une demande notee restee sans suite. Un PC actif : refuse (retire-le de
+    // sa licence, ou revoque-le). Retenus dans pc-supprimes.json : un PC revient s'il a une activite plus recente (une
+    // nouvelle demande, une licence). Le registre des activations (l'Historique) n'est pas touche ; une ligne au journal
+    // des admins (pc_supprimer).
+    OpResult deleteDevices(const std::vector<std::string>& deviceKeys);
+    [[nodiscard]] std::string whyNotDeleteDevice(const KnownDevice& d) const;
     // 1.42.0 : une licence est-elle EN VIGUEUR (ni finie, ni revoquee) ? Un client ou une offre qui en ont une ne se
     // suppriment pas (un Studio s'arreterait chez le client).
     [[nodiscard]] static bool inForce(const LicenceEntry& e) noexcept { return !e.revoked && !e.expired; }
@@ -835,6 +855,12 @@ public:
     // 1.48.1 : LENT (l'admin+) - UN article rembourse (la ligne `line` de la commande `number`) ; `what` : l'article et son
     // montant, pour le journal des admins.
     [[nodiscard]] OpResult refundLine(int number, int line, const std::string& what = {}) const;
+    // 1.48.1 : LENT (le droit << demandes >>) - SUPPRIMER des commandes sans argent (shop::orderDeletable) et des demandes
+    // de licence closes (online::requestDeletable), sur le service puis ici ; une ligne au journal des admins pour
+    // chacune. `what` : ce qui part, pour le journal (une ligne par numero). Le compte rendu dit ce qui est parti et ce qui
+    // reste (et pourquoi).
+    [[nodiscard]] OpResult deleteOrdersAndRequests(const std::vector<int>& orders, const std::vector<int>& requests,
+                                                   const std::map<std::string, std::string>& what = {}) const;
     // LENT : BRANCHER STRIPE (l'admin+) - `secretKey` (collee par l'editeur) est effacee quoi qu'il arrive ; le webhook cree
     // chez Stripe, les deux secrets poses sur le Worker par le kit (deployer::putSecret). Jamais ecrite ici.
     [[nodiscard]] OpResult connectStripe(std::string& secretKey, const deployer::Options& kit = {}, const deployer::LineSink& onLine = {},
@@ -870,6 +896,14 @@ public:
     // les sait, ou son etat n'est pas encore lu.
     [[nodiscard]] bool serviceKnowsStats() const;
     [[nodiscard]] std::string statsServiceNote() const;
+    // 1.48.1 : LA COHERENCE (docs/STATISTIQUES.md, par. 15). REEVALUER (LENT) : dire au service ce qui est supprime sur ce
+    // poste (les clients et les licences de la corbeille, si ce poste a le droit de les supprimer), lui faire remettre ses
+    // statistiques d'accord avec ce qui existe ; une ligne au journal des admins (stats_reevaluer). `out` : les corrections.
+    [[nodiscard]] OpResult statsReevaluate(stats::ReevaluateReply& out, std::string* raw = nullptr) const;
+    // Un client ou une licence supprimes (ou restaures) ici : note pour le service, envoye avant la prochaine lecture des
+    // statistiques (sans reseau ; stats-a-envoyer.json). Toutes les vues se relisent (changes::bump).
+    void queueStatsExclusion(const stats::Exclusions& ex) const;
+    [[nodiscard]] stats::Exclusions pendingStatsExclusions() const;
 
     // ============================ 1.47.0 : gerer le service (l'admin+ seul ; la derogation) - WorkspaceDerogation.cpp ==
     // (docs/ADMINS.md, par. 11) Gerer le service : le mettre en ligne ou a jour, changer son adresse, ses adresses de
@@ -915,6 +949,10 @@ private:
     bool     deliverLine(online::Client& c, const shop::Order& ord, int line, const online::Entry& req, const std::string& cartLicence, DeliveryReport& rep,
                          std::string& licenseOut);
     void loadKey();
+    // 1.48.1 : ce qui a ete supprime ne revient pas par un autre chemin (WorkspaceDelete.cpp) : les PC d'une licence ou
+    // d'un client supprimes, les PC supprimes ; les licences supprimees dans le releve du service.
+    [[nodiscard]] std::vector<KnownDevice> withoutDeleted(std::vector<KnownDevice> all) const;
+    void dropDeletedFromSnapshot();
     void loadArchive();
     void loadActivations();
     void loadService();

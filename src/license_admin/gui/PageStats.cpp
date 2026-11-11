@@ -126,8 +126,10 @@ struct Data {
     }
 };
 
+// 1.48.1 : et le numero des changements (changes::current) - une suppression, une publication... : les chiffres relus.
 std::string signature(const Choice& c, Seconds now) {
-    return std::string(rangeKey(c.range)) + "|" + stats::compareKey(c.compare) + "|" + stats::stepKey(c.step) + "|" + c.from + "|" + c.to + "|" + stats::dayOf(now);
+    return std::string(rangeKey(c.range)) + "|" + stats::compareKey(c.compare) + "|" + stats::stepKey(c.step) + "|" + c.from + "|" + c.to + "|" + stats::dayOf(now) + "|" +
+           std::to_string(changes::current());
 }
 
 stats::SeriesQuery queryFor(const Group& g, const Choice& c, const stats::Period& period, Seconds now) {
@@ -1106,6 +1108,15 @@ public:
         export_->setIcon(ui::Icon::Export);
         export_->setTooltip("Les chiffres de l'onglet, une ligne par p\xC3\xA9riode du pas (un fichier CSV pour Excel)");
         links_ += export_->clicked->connect([this] { exportCsv(); });
+        // 1.48.1 : Actualiser (tous les onglets : les chiffres relus tout de suite) et Reevaluer (le service remet ses
+        // statistiques d'accord avec ce qui existe, puis la fenetre de ses corrections ; docs/STATISTIQUES.md, par. 15)
+        refreshNow_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Actualiser", "stats.actualiser")));
+        refreshNow_->setIcon(ui::Icon::Refresh);
+        refreshNow_->setTooltip("Relit tout de suite les chiffres de tous les onglets, du globe et des mises \xC3\xA0 jour (F5)");
+        links_ += refreshNow_->clicked->connect([this] { refreshNow(); });
+        reevaluate_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("R\xC3\xA9\xC3\xA9valuer", "stats.reevaluer")));
+        reevaluate_->setIcon(ui::Icon::History);
+        links_ += reevaluate_->clicked->connect([this] { reevaluate(); });
         snapshot_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Relever maintenant", "stats.relever")));
         snapshot_->setIcon(ui::Icon::Refresh);
         snapshot_->setTooltip("Le relev\xC3\xA9 du jour (les niveaux : licences, PC, versions), s'il n'est pas encore pris ; puis les chiffres relus");
@@ -1185,6 +1196,8 @@ public:
     void refresh() override {
         const Workspace& w = ws();
         snapshot_->setVisibility(w.role() == Role::Plus ? ui::Visibility::Visible : ui::Visibility::Collapsed);
+        syncReevaluate();
+        if (tab_ == Tab::Globe && globe_ && changes_.changed()) reloadView(*globe_);   // 1.48.1 : un changement : le globe relu
         bool old = false;
         note_ = blocked(w, &old);
         tooOld_ = old;
@@ -1204,6 +1217,13 @@ public:
     [[nodiscard]] const std::string& note() const noexcept { return note_; }
 
 protected:
+    ui::EventResult onEvent(const ui::InputEvent& ev) override {
+        if (const auto* k = std::get_if<ui::KeyDown>(&ev); k && k->key == ui::Key::F5 && k->mods.none()) {   // 1.48.1 : Actualiser
+            refreshNow();
+            return ui::EventResult::Consumed;
+        }
+        return ui::EventResult::Ignored;
+    }
     void onLayout() override {
         const Rect b = bounds();
         const float pad = b.w < 1000.f ? 20.f : 28.f;
@@ -1218,6 +1238,17 @@ protected:
         right -= ew + 8.f;
         float natural = 0.f;
         for (auto* t : tabs_) natural += t->preferredWidth() + 12.f;
+        // 1.48.1 : Actualiser, Reevaluer - leur icone seule (l'infobulle) si la place manque
+        for (ui::Button* bt : {refreshNow_, reevaluate_}) {
+            bt->setCompact(false);
+            float bw = bt->sizeHint().preferred.w + 10.f;
+            if (x0 + titleW + natural + bw + 8.f > right) {
+                bt->setCompact(true);
+                bw = 34.f;
+            }
+            bt->setBounds({right - bw, y + 2.f, bw, 32.f});
+            right -= bw + 8.f;
+        }
         const float periodW = ui::measureWidth(periodText(periodNow()), FontId{13}) + 12.f;
         if (snapshot_->visible()) {
             // << Relever maintenant >> : son icone seule (l'infobulle) si la place manque
@@ -1832,6 +1863,49 @@ private:
     }
 
     // ---- Relever maintenant (l'admin+) ----
+    // ---- 1.48.1 : Actualiser, Reevaluer ----
+    void refreshNow() {
+        changes::bump();   // toutes les vues des statistiques se relisent (le tableau de bord, le globe, les fiches)
+        sig_.clear();
+        data_ = {};
+        if (tab_ == Tab::Updates && updates_) reloadView(*updates_);
+        if (tab_ == Tab::Globe && globe_) reloadView(*globe_);
+        (void)changes_.changed();
+        load();
+        invalidate();
+    }
+    void syncReevaluate() {
+        const std::string why = reevaluateBlocked(ws());
+        reevaluate_->setEnabled(why.empty());
+        reevaluate_->setTooltip(why.empty() ? std::string("Le service remet ses statistiques d'accord avec ce qui existe (les clients, licences et PC supprim\xC3\xA9s ne "
+                                                          "comptent plus), puis dit ce qu'il a corrig\xC3\xA9")
+                                            : "R\xC3\xA9\xC3\xA9valuer : " + why);
+    }
+    void reevaluate() {
+        if (host_.busy && host_.busy()) {
+            host_.report(OpResult::fail("un travail est en cours : attends qu'il finisse, puis R\xC3\xA9\xC3\xA9valuer"));
+            return;
+        }
+        if (!reevaluateBlocked(ws()).empty()) return;
+        std::weak_ptr<bool> alive = alive_;
+        reevaluating_ = true;
+        reevaluate_->setEnabled(false);
+        reevaluate_->setText("R\xC3\xA9\xC3\xA9valuation\xE2\x80\xA6");
+        const bool started = startReevaluate(host_, [this, alive](const OpResult&, const stats::ReevaluateReply&) {
+            if (alive.expired()) return;
+            reevaluating_ = false;
+            reevaluate_->setText("R\xC3\xA9\xC3\xA9valuer");
+            syncReevaluate();
+            refreshNow();
+        });
+        if (!started) {
+            reevaluating_ = false;
+            reevaluate_->setText("R\xC3\xA9\xC3\xA9valuer");
+            syncReevaluate();
+        }
+        invalidateLayout();
+    }
+
     void takeSnapshot() {
         const Workspace* w = &ws();
         auto out = std::make_shared<stats::SnapshotReply>();
@@ -1909,6 +1983,10 @@ private:
 
     std::vector<TabButton*>          tabs_;
     ui::Button*                      export_{nullptr};
+    ui::Button*                      refreshNow_{nullptr};   // 1.48.1
+    ui::Button*                      reevaluate_{nullptr};   // 1.48.1
+    bool                             reevaluating_{false};
+    changes::Seen                    changes_;
     ui::Button*                      snapshot_{nullptr};
     ui::Button*                      deploy_{nullptr};
     ui::Button*                      retry_{nullptr};

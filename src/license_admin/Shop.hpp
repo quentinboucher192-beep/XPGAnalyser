@@ -206,6 +206,10 @@ struct OrdersView {
     [[nodiscard]] const Order* find(int number) const;
 };
 bool parseOrders(const core::json::Value& v, OrdersView& out, std::string* why);
+// 1.48.1 : une commande SANS ARGENT s'efface (expiree, annulee, paiement refuse ; une demande refusee ou annulee) ; une
+// commande payee jamais (elle reste pour la comptabilite, meme remboursee) ; une commande qui attend non plus. `o` : la
+// commande entiere (son etat, pas celui d'une ligne) ; `why` : pourquoi pas.
+[[nodiscard]] bool orderDeletable(const Order& o, std::string* why = nullptr);
 
 // ---- les textes ----
 [[nodiscard]] std::string amountText(std::int64_t cents, const std::string& currency = "eur");   // "490,00 \xE2\x82\xAC"
@@ -235,6 +239,8 @@ bool parseAmount(std::string_view text, std::int64_t& cents);
 [[nodiscard]] online::Result syncStripeCatalog(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, CatalogState& out);
 // L'admin+ : le remboursement demande a Stripe par le service (la commande passe remboursee au webhook).
 [[nodiscard]] online::Result refund(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number);
+// 1.48.1 : effacer une commande sans argent (POST /admin/commandes/supprimer ; le droit << demandes >>).
+[[nodiscard]] online::Result deleteOrder(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number);
 // 1.48.1 : l'admin+ - UN article (la ligne `line`) rembourse : Stripe rend son montant (sur le meme paiement), la ligne
 // passe remboursee tout de suite, les autres ne bougent pas. `refundId` : l'identifiant du remboursement chez Stripe.
 [[nodiscard]] online::Result refundLine(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number, int line,

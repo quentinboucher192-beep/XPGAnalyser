@@ -3901,6 +3901,9 @@
     <ClInclude Include="src\license_admin\ArchiveSync.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>
+    <ClInclude Include="src\license_admin\Changes.hpp">
+      <Filter>license_admin</Filter>
+    </ClInclude>
     <ClInclude Include="src\license_admin\JournalStats.hpp">
       <Filter>license_admin</Filter>
     </ClInclude>

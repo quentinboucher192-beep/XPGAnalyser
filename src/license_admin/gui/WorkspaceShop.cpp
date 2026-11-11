@@ -223,6 +223,42 @@ OpResult Workspace::refundLine(int number, int line, const std::string& what) co
     return r;
 }
 
+OpResult Workspace::deleteOrdersAndRequests(const std::vector<int>& orders, const std::vector<int>& requests, const std::map<std::string, std::string>& what) const {
+    std::string why;
+    detail::Caller caller;
+    if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
+    if (const auto deny = detail::callerDenied(caller, "demandes")) return *deny;
+    const online::Options o = detail::optionsFor(caller, now());
+    int gone = 0;
+    std::vector<std::string> failed;
+    const auto note = [&](const std::string& kind, int n) {
+        const std::string object = kind + " " + std::to_string(n);
+        const auto it = what.find((kind == "commande" ? "c" : "d") + std::to_string(n));
+        Value d = Value::object();
+        if (it != what.end()) d.set("quoi", it->second.substr(0, 200));
+        (void)detail::queueJournal(folder_, *caller.key, now(), "commande_supprimer", object,
+                                   "a supprim\xC3\xA9 la " + kind + " n\xC2\xB0 " + std::to_string(n) + (it == what.end() ? std::string() : " (" + it->second + ")"),
+                                   core::json::write(d, false), {}, {}, nullptr);
+        ++gone;
+    };
+    for (const int n : orders) {
+        const online::Result r = shop::deleteOrder(folder_, *caller.key, o, n);
+        if (r.ok) note("commande", n);
+        else failed.push_back(r.message);
+    }
+    for (const int n : requests) {
+        const online::Result r = online::deleteRequest(folder_, *caller.key, n, o);
+        if (r.ok) note("demande", n);
+        else failed.push_back(r.message);
+    }
+    (void)detail::flushJournalQuiet(folder_, caller, now());
+    const std::string count = std::to_string(gone) + (gone > 1 ? " supprim\xC3\xA9" "es" : " supprim\xC3\xA9" "e");
+    if (failed.empty()) return OpResult::done(gone > 1 ? count + "." : (gone ? std::string("Supprim\xC3\xA9" "e.") : std::string("Rien \xC3\xA0 supprimer.")));
+    OpResult r = OpResult::fail(gone ? count + " ; " + std::to_string(failed.size()) + " reste(nt) : " + failed.front() : failed.front());
+    r.details = failed;
+    return r;
+}
+
 OpResult Workspace::connectStripe(std::string& secretKey, const deployer::Options& kit, const deployer::LineSink& onLine, const std::atomic<bool>* cancel) const {
     std::string why;
     detail::Caller caller;

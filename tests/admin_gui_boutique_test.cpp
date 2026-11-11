@@ -582,6 +582,36 @@ int main(int argc, char** argv) {
         // 1.48.1 : la puce << Type >> : achat, demande, demande de licence
         auto* bar = find<ui::FilterBar>(*op, "commandes");
         check(bar && table->model()->cellText(static_cast<ui::RowIndex>(r2), 8) == "Achat", "le type : Achat");
+        // 1.48.1 : Supprimer - une commande payee (meme remboursee en partie) reste : grise, la raison ; une annulee s'efface
+        auto* del = find<ui::Button>(*op, "commandes.supprimer");
+        check(del && del->visible() && !del->enabled() && has(del->tooltip(), "Une commande pay\xC3\xA9" "e reste pour la comptabilit\xC3\xA9 : rembourse-la, elle reste dans la liste"),
+              "Supprimer... grise sur une commande payee, la raison (" + (del ? del->tooltip() : std::string()) + ")");
+        shop::Order c8 = order(8, "annulee", "Soci\xC3\xA9t\xC3\xA9 d'essai");
+        c8.stripePayment.clear();
+        c8.paid = 0;
+        c8.receiptUrl.clear();
+        v.orders.push_back(c8);
+        ws.adoptOrders(v);
+        op->refresh();
+        (void)draw(*op);
+        const int r8 = pickKey("8");
+        (void)draw(*op);
+        check(r8 >= 0 && del->enabled(), "une commande annulee (sans argent) : Supprimer... permis");
+        check(click(*op, "commandes.supprimer") && !rig.dialogs.empty(), "Supprimer... : une question d'abord");
+        if (!rig.dialogs.empty()) {
+            const std::string q = drawMenu(*rig.dialogs.back());
+            check(has(q, "Supprimer la commande n\xC2\xB0 8") && has(q, "journal des admins"), "la question nomme ce qui part");
+        }
+        rig.dialogs.clear();
+        // plusieurs lignes : ce qui part, ce qui reste (la raison)
+        table->selectModelRows({static_cast<ui::RowIndex>(pickKey("7-1")), static_cast<ui::RowIndex>(pickKey("8"))});
+        (void)draw(*op);
+        check(del->enabled() && click(*op, "commandes.supprimer") && !rig.dialogs.empty(), "deux lignes choisies : Supprimer... (une s'efface)");
+        if (!rig.dialogs.empty()) {
+            const std::string q = drawMenu(*rig.dialogs.back());
+            check(has(q, "n\xC2\xB0 8") && has(q, "Reste") && has(q, "n\xC2\xB0 7"), "la question : la n\xC2\xB0 8 part, la n\xC2\xB0 7 reste (payee)");
+        }
+        rig.dialogs.clear();
     }
 
     std::printf("-- le tableau de bord : a livrer\n");

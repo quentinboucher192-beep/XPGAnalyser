@@ -31,6 +31,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -189,6 +190,7 @@ struct GlobeReply {
     std::vector<GlobeCity> cities;   // la plus grande d'abord
     GlobeCity              totals;   // les comptes de tout le globe (sans ville)
     int                    cityCount{0}, countries{0}, unplacedPcs{0}, unplacedAdmins{0};
+    int                    unplacedActive{0};   // 1.48.1 : les actifs maintenant sans lieu (le direct : villes + eux)
     [[nodiscard]] const GlobeCity* find(const std::string& id) const;
 };
 struct LivePing {
@@ -207,12 +209,38 @@ struct SnapshotReply {
     core::json::Value snapshot;
 };
 
+// ---- 1.48.1 : LA COHERENCE (docs/STATISTIQUES.md, par. 15) - POST /admin/stats/reevaluer ----
+// Ce qui n'existe plus dans l'Admin et que le service garde (un client supprime, une licence supprimee), ou qui revient
+// (un client restaure) : le service ne le compte plus (ou de nouveau). Vide : seulement reevaluer.
+struct Exclusions {
+    std::vector<std::string> deleteClients, deleteLicences, restoreClients, restoreLicences;
+    [[nodiscard]] bool empty() const noexcept { return deleteClients.empty() && deleteLicences.empty() && restoreClients.empty() && restoreLicences.empty(); }
+    [[nodiscard]] std::string body() const;   // {"supprimer": {...}, "remettre": {...}} ; "{}" : vide
+};
+// Une correction : `group` "exclus", "maintenant", "globe", "releves", "compteurs", "versions" ; `text` : en francais.
+struct Correction {
+    std::string group, text, measure, day;
+    double      before{std::numeric_limits<double>::quiet_NaN()}, after{std::numeric_limits<double>::quiet_NaN()};
+};
+struct ReevaluateReply {
+    std::string             day;
+    int                     excludedClients{0}, excludedLicences{0}, excludedPcs{0};
+    std::vector<Correction> corrections;
+};
+inline constexpr const char* kReevaluateRequired = "1.48.1";
+// Le titre d'un groupe (<< Les releves des jours passes >>...) ; les groupes dans leur ordre : correctionGroups().
+[[nodiscard]] std::string correctionGroupTitle(std::string_view group);
+[[nodiscard]] const std::vector<std::string>& correctionGroups();
+// << 3 corrections >> / << Rien a corriger : les statistiques etaient coherentes. >>
+[[nodiscard]] std::string reevaluateSummary(const ReevaluateReply& r);
+
 // ---- lire les reponses ; faux : `why` ----
 bool parseSeries(const core::json::Value& v, SeriesReply& out, std::string* why);
 bool parseUpdates(const core::json::Value& v, UpdatesReply& out, std::string* why);
 bool parseAdmins(const core::json::Value& v, AdminsReply& out, std::string* why);
 bool parseGlobe(const core::json::Value& v, GlobeReply& out, std::string* why);
 bool parseLive(const core::json::Value& v, LiveReply& out, std::string* why);
+bool parseReevaluate(const core::json::Value& v, ReevaluateReply& out, std::string* why);   // 1.48.1
 
 // ---- le reseau (BLOQUANT ; un client ouvert) ----
 // `raw` (facultatif) : la reponse du service telle quelle (la console --json).
@@ -223,6 +251,9 @@ bool parseLive(const core::json::Value& v, LiveReply& out, std::string* why);
 [[nodiscard]] online::Result fetchLive(online::Client& c, Seconds since, LiveReply& out, std::string* raw = nullptr);
 // L'admin+ : le releve d'aujourd'hui, s'il n'est pas encore pris (POST /admin/stats/releve).
 [[nodiscard]] online::Result takeSnapshot(online::Client& c, SnapshotReply& out, std::string* raw = nullptr);
+// 1.48.1 : reevaluer (l'admin+ ou un admin ; dire ce qui est supprime : le droit de la suppression). Un service d'avant la
+// 1.48.1 : << deploie la 1.48.1 pour Reevaluer >>.
+[[nodiscard]] online::Result reevaluate(online::Client& c, const Exclusions& ex, ReevaluateReply& out, std::string* raw = nullptr);
 
 // ---- les textes ----
 [[nodiscard]] std::string euros(double cents);             // "26\xC2\xA0" "020\xC2\xA0\xE2\x82\xAC" (sans centimes) ; "\xE2\x80\x94" : inconnu

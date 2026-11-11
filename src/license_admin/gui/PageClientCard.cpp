@@ -805,7 +805,7 @@ private:
             return;
         }
         const stats::Period p = period();
-        const std::string sig = name_ + "|" + p.from + "|" + p.to;
+        const std::string sig = name_ + "|" + p.from + "|" + p.to + "|" + std::to_string(changes::current());   // 1.48.1 : un changement : relus
         if (sig == sig_) {   // deja lus : les cartes du service redessinees (fillLocal vient de refaire celles de l'archive)
             fillService();
             return;

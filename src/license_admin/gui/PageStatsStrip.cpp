@@ -77,6 +77,10 @@ protected:
     }
     void onPaint(const ui::PaintContext&) override {
         (void)job_.poll();
+        if (changes_.changed() && lastLoad_ > -1e9) {   // 1.48.1 : quelque chose a change dans l'Admin - relue
+            if (loading_) again_ = true;
+            else lastLoad_ = -1e9;
+        }
         if (steadyNow() - lastLoad_ > kReloadSeconds || again_) start();
     }
     ui::EventResult onEvent(const ui::InputEvent& ev) override {
@@ -220,6 +224,7 @@ private:
     std::string                 problem_;
     bool                        loading_{false}, again_{false}, fromCache_{false};
     double                      lastLoad_{-1e9};
+    changes::Seen               changes_;   // 1.48.1
     std::shared_ptr<bool>       alive_{std::make_shared<bool>(true)};
     StatsJob                    job_;   // le releve a part (StatsKit.hpp)
 };

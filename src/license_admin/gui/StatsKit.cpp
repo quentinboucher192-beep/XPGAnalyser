@@ -93,6 +93,12 @@ OpResult fetchSnapshot(const Workspace& w, stats::SnapshotReply& out) {
     if (f.snapshot) return f.snapshot(out);
     return w.statsSnapshot(out);
 }
+OpResult fetchReevaluate(const Workspace& w, stats::ReevaluateReply& out) {
+    const Fetchers f = current();
+    if (f.reevaluate) return f.reevaluate(out);
+    if (f.series) return OpResult::fail("R\xC3\xA9\xC3\xA9valuer : pas de r\xC3\xA9ponse d'essai");
+    return w.statsReevaluate(out);
+}
 
 std::string blocked(const Workspace& w, bool* tooOld) {
     if (tooOld) *tooOld = false;

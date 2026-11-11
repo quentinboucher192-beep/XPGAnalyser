@@ -115,6 +115,9 @@ const std::vector<ActionType> kActions = {
     {"commande_livrer", "Livrer une commande de la boutique", "clients", Level::Medium, false, false},
     {"commande_revoir", "Commande de la boutique \xC3\xA0 revoir", "clients", Level::High, true, false},
     {"commande_rembourser", "Rembourser une commande", "clients", Level::High, true, false},
+    {"commande_supprimer", "Supprimer une commande ou une demande (sans argent)", "clients", Level::Medium, false, false},   // 1.48.1
+    {"licence_supprimer", "Supprimer une licence finie ou r\xC3\xA9voqu\xC3\xA9" "e", "licences", Level::Medium, false, false},   // 1.48.1
+    {"pc_supprimer", "Supprimer un PC qui ne sert plus (Activations)", "licences", Level::Info, false, false},   // 1.48.1
     {"sauvegarde", "Sauvegarde compl\xC3\xA8te", "admins", Level::Info, false, false},
     {"restauration", "Restauration d'une sauvegarde", "admins", Level::Critical, true, false},
     // 1.47.0 : la derogation << Gerer le service >> (docs/ADMINS.md, par. 11) - accordee, revoquee par l'admin+ ; utilisee

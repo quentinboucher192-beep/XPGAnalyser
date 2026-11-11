@@ -336,6 +336,12 @@ struct FetchState {
 // appliquer les gardes. Sans reseau (le releve l'appelle ; les essais aussi).
 [[nodiscard]] Result processRequests(const std::string& folder, const licensing::SigningKey& key, const core::json::Value& reply, const std::string& url,
                                      const Options& o);
+// 1.48.1 : une demande CLOSE (refusee, annulee, remplacee, ignoree) peut s'effacer ; une demande en attente ou acceptee
+// non (elle dit d'ou vient une licence) - `why` : pourquoi.
+[[nodiscard]] bool requestDeletable(const Entry& e, std::string* why = nullptr);
+// 1.48.1 : effacer une demande close - sur le service (POST /admin/demandes/supprimer ; deja effacee par son menage : rien
+// a faire) puis sur ce poste (sa fiche et son fichier, s'il n'est celui d'aucune autre demande).
+[[nodiscard]] Result deleteRequest(const std::string& folder, const licensing::SigningKey& key, int number, const Options& o);
 // Refuser la demande en attente (findWaiting) : l'etat << refusee >> du poste, la raison scellee pour le PC, la
 // demande marquee traitee.
 [[nodiscard]] Result refuse(const std::string& folder, const licensing::SigningKey& key, const std::string& which, const std::string& reason,

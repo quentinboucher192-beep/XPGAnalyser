@@ -31,6 +31,7 @@
 #include "ListKit.hpp"   // 1.47.0 : la barre de filtres, le clic droit, le depliage
 #include "Page.hpp"
 
+#include "../Changes.hpp"   // 1.48.1 : << quelque chose a change >> (toutes les pages se relisent)
 #include "../Shop.hpp"
 #include "../../deploy/Crypto.hpp"
 #include "../../ui/widgets/DataViews.hpp"
@@ -1052,6 +1053,7 @@ public:
         review_ = &button(*this, "Refuser\xE2\x80\xA6", "commandes.revoir");   // 1.48.0 : refuser une ligne (la raison)
         refund_ = &button(*this, "Rembourser\xE2\x80\xA6", "commandes.rembourser", ui::Button::Style::Danger);   // 1.48.1 : cet article
         refundAll_ = &button(*this, "Rembourser la commande\xE2\x80\xA6", "commandes.rembourser-commande", ui::Button::Style::Danger);   // 1.48.1
+        delete_ = &button(*this, "Supprimer\xE2\x80\xA6", "commandes.supprimer", ui::Button::Style::Danger, ui::Icon::Close);   // 1.48.1 : sans argent
         links_ += reload_->clicked->connect([this] { fetchAll(); });
         links_ += deploy_->clicked->connect([this] {
             if (host_.openDialog) host_.openDialog(makeDeployDialog(host_, [this, alive = alive_] {
@@ -1071,6 +1073,7 @@ public:
         links_ += review_->clicked->connect([this] { askReview(); });
         links_ += refund_->clicked->connect([this] { askRefundLine(); });
         links_ += refundAll_->clicked->connect([this] { askRefund(); });
+        links_ += delete_->clicked->connect([this] { askDelete(); });
         refresh();
     }
     ~OrdersPage() override {
@@ -1147,7 +1150,7 @@ protected:
         // Rembourser cet article, Rembourser la commande).
         float by = detail_.bottom() - 16.f - 34.f;
         const float bx = detail_.x + 18.f, bw = detail_.w - 36.f;
-        for (ui::Button* btn : {refundAll_, refund_, review_, receipt_, stripe_, resend_, acceptOnline_, deliver_}) {
+        for (ui::Button* btn : {delete_, refundAll_, refund_, review_, receipt_, stripe_, resend_, acceptOnline_, deliver_}) {
             if (!btn->visible()) continue;
             btn->setBounds({bx, by, bw, 34.f});
             by -= 42.f;
@@ -1458,6 +1461,9 @@ private:
                 m.danger({.label = "Rembourser la commande", .icon = ui::Icon::Undo, .why = refundAll_->enabled() ? std::string() : refundAll_->tooltip(),
                           .run = [this] { askRefund(); }});
         }
+        // 1.48.1 : Supprimer (une ou plusieurs lignes) - seulement ce qui n'a pas d'argent ; sinon grise, la raison.
+        m.danger({.label = "Supprimer", .many = "Supprimer les %n lignes", .icon = ui::Icon::Close,
+                  .why = delete_->enabled() ? std::string() : delete_->tooltip(), .run = [this] { askDelete(); }});
         return m;
     }
 
@@ -1587,8 +1593,19 @@ private:
         show(refundAll_, o && !e && o->line > 0);
         show(acceptOnline_, e && !e->optionRequest());
         show(resend_, e && e->acceptedHere());
+        show(delete_, o != nullptr);
         if (e) updateRequest(*e, bz);
         else if (o) updateOrder(*o, bz);
+        if (o) {   // 1.48.1 : Supprimer... - les rangees choisies qui s'effacent (sans argent, closes)
+            const DeletePlan plan = deletePlan();
+            const bool any = !plan.orders.empty() || !plan.requests.empty();
+            const std::string noRight = ws().can("demandes") ? std::string() : ws().whyNot("demandes");
+            delete_->setEnabled(any && noRight.empty() && !bz);
+            delete_->setTooltip(!noRight.empty() ? noRight
+                                : bz         ? std::string(kBusy)
+                                : any        ? "Effacer " + std::to_string(plan.gone.size()) + " \xC3\xA9l\xC3\xA9ment(s) sans argent (sur le service et ici) ; une question d'abord."
+                                             : capitalFirst(plan.firstWhy) + ".");
+        }
         invalidateLayout();
         invalidate();
     }
@@ -1887,9 +1904,100 @@ private:
     }
 
     void refunded(const std::shared_ptr<bool>& alive) {
+        changes::bump();   // 1.48.1 : toutes les pages se relisent (sans effet si rien n'a change)
         if (!*alive) return;
         lastFetch_ = -1;
         fetch();
+    }
+
+    // 1.48.1 : CE QUE SUPPRIMER EFFACE parmi les rangees choisies - chaque commande sans argent une fois (toutes ses lignes),
+    // chaque demande de licence close ; le reste reste (la raison).
+    struct DeletePlan {
+        std::vector<int>                   orders, requests;
+        std::vector<std::string>           gone, kept;
+        std::map<std::string, std::string> what;   // "c12" / "d7" -> ce qui part (le journal)
+        std::string                        firstWhy;
+    };
+    static std::string capitalFirst(std::string t) {
+        if (!t.empty() && t[0] >= 'a' && t[0] <= 'z') t[0] = static_cast<char>(t[0] - 'a' + 'A');
+        return t;
+    }
+    [[nodiscard]] DeletePlan deletePlan() const {
+        DeletePlan p;
+        std::vector<std::string> seen;
+        for (const RowIndex r : table_->selectedModelRows()) {
+            if (r >= model_->rows.size()) continue;
+            const shop::Order& row = model_->rows[r];
+            const bool request = model_->isRequest(r);
+            const std::string key = (request ? "d" : "c") + std::to_string(row.number);
+            if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
+            seen.push_back(key);
+            std::string why, name, what;
+            bool ok = false;
+            if (request) {
+                const auto i = static_cast<std::size_t>(model_->req[r]);
+                if (i >= entries_.size()) continue;
+                const online::Entry& e = entries_[i];
+                name = "la demande de licence n\xC2\xB0 " + std::to_string(e.number) + (e.customer.empty() ? std::string() : " (" + e.customer + ")");
+                what = std::string(kKindLicence) + (e.customer.empty() ? std::string() : ", " + e.customer);
+                ok = online::requestDeletable(e, &why);
+            } else {
+                const shop::Order* whole = ws().hasOrders() ? ws().orders().find(row.number) : nullptr;
+                const shop::Order& w = whole ? *whole : row;
+                const std::size_t n = w.lines.size();
+                name = (w.payment ? "la commande n\xC2\xB0 " : "la demande n\xC2\xB0 ") + std::to_string(w.number) + " (" + (w.company.empty() ? std::string("?") : w.company) +
+                       (n > 1 ? ", " + std::to_string(n) + " articles" : std::string()) + ")";
+                what = (w.payment ? std::string(kKindPaid) : std::string(kKindCart)) + ", " + w.company + ", " + shop::stateLabel(w.state);
+                ok = shop::orderDeletable(w, &why);
+            }
+            if (ok) {
+                (request ? p.requests : p.orders).push_back(row.number);
+                p.gone.push_back(name);
+                p.what[key] = what;
+            } else {
+                p.kept.push_back(name + " : " + why);
+                if (p.firstWhy.empty()) p.firstWhy = why;
+            }
+        }
+        return p;
+    }
+
+    void askDelete() {
+        if (!host_.openDialog) return;
+        if (busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return;
+        }
+        DeletePlan plan = deletePlan();
+        if (plan.orders.empty() && plan.requests.empty()) {
+            if (host_.flash && !plan.firstWhy.empty()) host_.flash(capitalFirst(plan.firstWhy) + ".", Tone::Warning);
+            return;
+        }
+        const std::size_t n = plan.gone.size();
+        const auto list = [](const std::vector<std::string>& v) {
+            std::string t;
+            for (std::size_t i = 0; i < v.size(); ++i) t += (i ? (i + 1 == v.size() ? " et " : ", ") : "") + v[i];
+            return t;
+        };
+        std::string text = "Dispara\xC3\xAEt du service et de ce poste : " + list(plan.gone) + ".";
+        if (!plan.kept.empty()) text += " Reste : " + list(plan.kept) + ".";
+        text += " Le journal des admins garde la trace.";
+        const std::string title = n == 1 ? "Supprimer " + plan.gone.front() + " ?" : "Supprimer ces " + std::to_string(n) + " \xC3\xA9l\xC3\xA9ments ?";
+        auto alive = alive_;
+        auto shared = std::make_shared<DeletePlan>(std::move(plan));
+        host_.openDialog(std::make_unique<AskDialog>("boutique.supprimer", title, text, false, "Supprimer", true, [this, alive, shared](const std::string&) {
+            if (!*alive) return;
+            const Workspace* wp = &ws();
+            (void)host_.runSlow("Commandes et demandes : suppression", [wp, shared] { return wp->deleteOrdersAndRequests(shared->orders, shared->requests, shared->what); },
+                                [this, alive](const OpResult& r) {
+                                    if (r.ok) changes::bump();   // 1.48.1 : toutes les pages se relisent
+                                    ws().reload();               // les demandes effacees de ce poste
+                                    if (!*alive) return;
+                                    lastFetch_ = -1;
+                                    fetch();
+                                    reloadAll();
+                                });
+        }));
     }
 
     // Toute la commande (comme avant la 1.48.1).
@@ -1961,6 +2069,7 @@ private:
     ui::Button*                  review_{nullptr};
     ui::Button*                  refund_{nullptr};         // 1.48.1 : cet article
     ui::Button*                  refundAll_{nullptr};      // 1.48.1 : toute la commande
+    ui::Button*                  delete_{nullptr};         // 1.48.1 : Supprimer... (sans argent)
     bool                         fetching_{false};
     double                       lastFetch_{-1};
     std::string                  problem_, note_;

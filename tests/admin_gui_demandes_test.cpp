@@ -780,6 +780,31 @@ int main(int argc, char** argv) {
         bool only = table->model()->rowCount() >= 2;
         for (std::size_t i = 0; i < table->model()->rowCount(); ++i) only = only && cell(static_cast<int>(i), 8) == "Demande de licence";
         check(bar && only, "la puce << Type : Demande de licence >>");
+        // 1.48.1 : Supprimer - la demande refusee s'efface (le service, puis ce poste) ; la delivree reste (grise, la raison)
+        const int rd = rowOf(*table, 2, "Client d'essai Zeta");
+        if (rd >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rd)});
+        (void)paintPage(*op, 1600.f, 900.f);
+        auto* del = find<ui::Button>(*op, "commandes.supprimer");
+        check(rd >= 0 && del && !del->enabled() && has(del->tooltip(), "elle dit d'o\xC3\xB9 vient la licence"),
+              "une demande delivree : Supprimer... grise (" + (del ? del->tooltip() : std::string()) + ")");
+        const int rx = rowOf(*table, 2, "Client d'essai Eta");
+        if (rx >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rx)});
+        (void)paintPage(*op, 1600.f, 900.f);
+        check(rx >= 0 && del && del->enabled() && click(*op, "commandes.supprimer") && !rig.dialogs.empty(), "une demande refusee : Supprimer... (une question)");
+        if (rx >= 0 && !rig.dialogs.empty()) {
+            auto& d = *rig.dialogs.back();
+            t = paintDialog(d);
+            check(has(t, "Supprimer la demande de licence n\xC2\xB0 " + std::to_string(pcG.number)), "la question nomme la demande");
+            check(click(*d.widgetRoot(), "question.ok") && rig.last() && rig.last()->ok, "supprimee : " + lastText(rig));
+            op->refresh();
+            check(rowOf(*table, 2, "Client d'essai Eta") < 0, "la rangee est partie");
+            const Reply l = call(url, "GET", "/admin/demandes", {}, editorKey);
+            check(l.status == 200 && !has(l.body, "\"numero\":" + std::to_string(pcG.number) + ","), "partie du service aussi");
+            check(click(*op, "commandes.relever") && rig.last() && rig.last()->ok, "Relever de nouveau");
+            fx.ws->reload();
+            op->refresh();
+            check(rowOf(*table, 2, "Client d'essai Eta") < 0, "elle ne revient pas au releve suivant");
+        }
     }
 
     std::printf("-- une revocation publiee (publishToService) : la liste scellee pour le PC\n");

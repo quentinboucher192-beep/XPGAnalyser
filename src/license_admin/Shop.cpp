@@ -753,6 +753,32 @@ online::Result refund(const std::string& folder, const licensing::SigningKey& ke
                 ") : elle passe \xC2\xAB rembours\xC3\xA9" "e \xC2\xBB quand Stripe le confirme. La licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office.");
 }
 
+bool orderDeletable(const Order& o, std::string* why) {
+    const auto no = [&](std::string w) {
+        if (why) *why = std::move(w);
+        return false;
+    };
+    const std::string& st = o.paidState();
+    if (o.payment && (!o.stripePayment.empty() || o.paid > 0 || !o.stripeRefund.empty() || st == "payee" || st == "livree" || st == "remboursee" || st == "a_revoir"))
+        return no("une commande pay\xC3\xA9" "e reste pour la comptabilit\xC3\xA9 : rembourse-la, elle reste dans la liste");
+    if (st == "expiree" || st == "annulee" || st == "echec_paiement" || st == "refusee") return true;
+    if (st == "a_payer") return no("le client la paie peut-\xC3\xAAtre en ce moment : elle expire seule (30 minutes)");
+    if (st == "livree") return no("une demande livr\xC3\xA9" "e reste : elle dit d'o\xC3\xB9 vient la licence");
+    return no("elle attend ta d\xC3\xA9" "cision : refuse ses articles d'abord");
+}
+
+online::Result deleteOrder(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number) {
+    std::unique_ptr<online::Client> c;
+    std::string why;
+    if (!online::openClient(folder, key, o, c, &why)) return refused(why);
+    Value b = Value::object();
+    b.set("numero", number);
+    online::Reply r;
+    online::Result res = call(*c, "POST", "/admin/commandes/supprimer", &b, "effacer la commande n\xC2\xB0 " + std::to_string(number), &r);
+    if (!res.ok) return res;
+    return done("Commande n\xC2\xB0 " + std::to_string(number) + " effac\xC3\xA9" "e.");
+}
+
 online::Result refundLine(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number, int line, std::string* refundId) {
     std::unique_ptr<online::Client> c;
     std::string why;

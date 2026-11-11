@@ -52,7 +52,7 @@
 //    XPG-License-Admin service-deployer [--dossier-kit D] [--essai]   (1.45.0 : le kit installe avec l'Admin ; la sortie, son code)
 //    1.46.0, la boutique (docs/BOUTIQUE.md) : boutique-etat, boutique-config --parametres F.json, stripe-brancher
 //    --cle-variable NOM (la cle secrete lue dans une variable d'environnement, jamais en argument ni affichee), commandes
-//    [--etat E], commande-livrer [--numero N], commande-revoir --numero N --raison T, commande-rembourser --numero N
+//    [--etat E], commande-livrer [--numero N], commande-revoir --numero N --raison T, commande-rembourser --numero N [--ligne L]
 //    1.47.0, les statistiques et le globe (docs/STATISTIQUES.md) : stats-serie --mesures a,b [--du D --au D] [--pas P]
 //    [--par X] [--comparer C] [--client C] [--admin ID] [--licence L] [--logiciel S], stats-mises-a-jour, stats-admins,
 //    stats-releve, globe [--periode N], globe-direct [--depuis T] ; --json : la reponse du service telle quelle
@@ -248,7 +248,7 @@ std::string usage() {
            "  commandes [--etat E]                           les commandes (E : a_payer, payee, livree, a_revoir, remboursee...)\n"
            "  commande-livrer [--numero N]                   livre la commande N (pay\xC3\xA9" "e ou \xC3\xA0 revoir) ; sans --numero : toutes les pay\xC3\xA9" "es\n"
            "  commande-revoir --numero N --raison TEXTE      met la commande N \xC3\xA0 revoir (la raison)\n"
-           "  commande-rembourser --numero N                 l'admin+ : demande le remboursement \xC3\xA0 Stripe\n"
+           "  commande-rembourser --numero N [--ligne L]     l'admin+ : demande le remboursement \xC3\xA0 Stripe (1.48.1 : --ligne, un article seul)\n"
            "\n1.47.0 : les statistiques et le globe (docs/STATISTIQUES.md ; un service 1.47.0) - --json : la r\xC3\xA9ponse telle quelle :\n"
            "  stats-serie --mesures a,b [--du AAAA-MM-JJ --au AAAA-MM-JJ] [--pas jour|semaine|mois] [--par offre|option|article|admin|client|\n"
            "              logiciel|version|type|licence] [--comparer avant|an|rien] [--client NOM] [--admin xpg-...] [--licence ID]\n"
@@ -851,6 +851,8 @@ int runWorkspaceCommand(const Args& a, const std::string& folder) {
     }
     if (a.command == "commande-rembourser") {
         if (!need("--numero")) return 2;
+        if (!a.one("--ligne").empty())   // 1.48.1 : un article seul (la ligne N de la commande)
+            return oneLine(ws.refundLine(std::atoi(a.one("--numero").c_str()), std::atoi(a.one("--ligne").c_str())));
         return oneLine(ws.refundOrder(std::atoi(a.one("--numero").c_str())));
     }
     // ---- 1.47.0 : les statistiques et le globe (docs/STATISTIQUES.md) ----

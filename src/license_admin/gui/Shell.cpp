@@ -1138,6 +1138,7 @@ void Shell::pushLog(Tone tone, OpResult r) {
 
 void Shell::report(const OpResult& r) {
     if (r.ok) {
+        changes::bump();   // 1.48.1 : une operation reussie - toutes les pages et les statistiques se relisent
         ws_->reload();
         refreshPages();
     }
@@ -1246,6 +1247,7 @@ void Shell::dropFiles(const std::vector<std::string>& paths) {
 }
 
 void Shell::reloadAll() {
+    changes::bump();   // 1.48.1 : relire tout, les statistiques comprises
     ws_->reload();
     refreshPages();
     flash("Relu : la cl\xC3\xA9, l'archive, le registre des activations, le service.", Tone::Info);
@@ -1330,6 +1332,7 @@ bool Shell::autoFetchRequests() {
                      for (const auto& e : ws_->service().requests)
                          if (e.waiting() && !before.count(e.number)) fresh.push_back(&e);
                      if (fresh.empty()) return;
+                     changes::bump();   // 1.48.1 : de nouvelles demandes - les statistiques se relisent
                      if (fresh.size() == 1) {
                          const auto& e = *fresh.front();
                          std::string who = e.customer.empty() ? std::string("un client") : e.customer;
@@ -1417,6 +1420,7 @@ bool Shell::autoWatch() {
                      const Role before = ws_->role();
                      if (st->adminRequests >= 0) pendingAdmins_ = static_cast<int>(st->adminRequests);
                      if (ar->listAdopted || ar->journalNew > 0 || ar->syncKeyReceived) {
+                         changes::bump();   // 1.48.1 : un autre admin a change quelque chose
                          ws_->reload();
                          refreshPages();
                          if (ws_->role() != before) {

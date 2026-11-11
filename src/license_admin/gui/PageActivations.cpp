@@ -31,6 +31,10 @@
 
 namespace license_admin::gui {
 
+namespace licdlg {   // LicenceWizard.cpp
+menu::MenuPtr makeConfirmDialog(std::string id, std::string title, std::string text, std::string okLabel, bool danger, std::function<void()> onOk);
+} // namespace licdlg
+
 namespace {
 
 using RowIndex = ui::RowIndex;
@@ -167,6 +171,13 @@ public:
         folder_ = add(*this, std::make_unique<ui::Button>("Ouvrir le registre des activations", "activations.dossier"));
         folder_->setIcon(ui::Icon::FolderOpen);
         folder_->setTooltip("Le dossier du poste Admin : activations.jsonl (une ligne par \xC3\xA9v\xC3\xA9nement, jamais r\xC3\xA9\xC3\xA9" "crite).");
+        // 1.48.1 : Supprimer (les PC choisis qui ne servent plus) et Actualiser (comme Clients)
+        delete_ = add(*this, std::make_unique<ui::Button>("Supprimer\xE2\x80\xA6", "activations.supprimer"));
+        delete_->setStyle(ui::Button::Style::Danger);
+        delete_->setIcon(ui::Icon::Delete);
+        reload_ = add(*this, std::make_unique<ui::Button>("Actualiser", "activations.actualiser"));
+        reload_->setIcon(ui::Icon::Refresh);
+        reload_->setTooltip("Relit tout de suite le registre des activations et l'archive (F5)");
         table_ = add(*this, std::make_unique<ui::TableView>("activations.table"));
         table_->setColumns({{"PC", 170.f}, {"Empreinte", 250.f}, {"Client", 190.f}, {"Licence", 140.f}, {"\xC3\x89" "dition", 120.f}, {"Logiciel", 220.f},
                             {"Demand\xC3\xA9" "e le", 128.f}, {"Activ\xC3\xA9" "e le", 120.f}, {"Fin", 110.f}, {"\xC3\x89tat", 96.f}});
@@ -195,6 +206,15 @@ public:
         table_->setUnfold([this](RowIndex r) { return unfoldFor(r); }, 1);    // 1.47.0 (planche 07) : reperee par son empreinte
 
         links_ += record_->clicked->connect([this] { pickRequest(); });
+        links_ += delete_->clicked->connect([this] { askDelete(); });
+        links_ += reload_->clicked->connect([this] {
+            if (host_.report) host_.report(OpResult::done("Activations relues : le registre des activations et l'archive."));
+            else {
+                ws().reload();
+                refresh();
+            }
+        });
+        links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) { updateDelete(); });
         links_ += export_->clicked->connect([this] { exportCsv(); });
         links_ += folder_->clicked->connect([this] {
             if (host_.openFolder) host_.openFolder(ws().folder());
@@ -223,6 +243,7 @@ public:
             bar_->filterOn(4, f.substr(6));
         }
         rebuild();
+        updateDelete();   // 1.48.1
         invalidateLayout();
         invalidate();
     }
@@ -251,10 +272,14 @@ protected:
         leadY_ = y;
         y += static_cast<float>(leadLines_.size()) * kLineH + 10.f;
         float bx = x;
-        for (ui::Button* btn : {record_, export_, folder_}) {
+        for (ui::Button* btn : {record_, export_, folder_, delete_}) {
             const float bw = btn->sizeHint().preferred.w;
             btn->setBounds({bx, y, bw, kButtonH});
             bx += bw + kGap;
+        }
+        {   // 1.48.1 : Actualiser, a droite
+            const float rw = reload_->sizeHint().preferred.w + 8.f;
+            reload_->setBounds({std::max(bx, x + w - rw), y, rw, kButtonH});
         }
         y += kButtonH + kGap;
         const float bh = bar_->heightFor(w);   // 1.47.0 : la barre de filtres
@@ -419,6 +444,8 @@ private:
         }
         m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
         m.exportRows([this, list] { exportList(list); });
+        m.danger({.label = "Supprimer\xE2\x80\xA6", .many = "Supprimer les %n PC\xE2\x80\xA6", .icon = ui::Icon::Delete, .why = deleteReason(),
+                  .run = [this] { askDelete(); }});   // 1.48.1
         return m;
     }
 
@@ -531,8 +558,59 @@ private:
         });
     }
 
+    // ---- 1.48.1 : Supprimer les PC choisis (ceux qui ne servent plus) ----
+    [[nodiscard]] std::vector<KnownDevice> chosen() const {
+        std::vector<KnownDevice> out;
+        for (const RowIndex r : table_->selectedModelRows())
+            if (r < shown_.size()) out.push_back(shown_[r]);
+        return out;
+    }
+    [[nodiscard]] std::string deleteReason() const {
+        const auto list = chosen();
+        if (list.empty()) return "choisis un PC dans la liste";
+        if (host_.busy && host_.busy()) return kBusy;
+        for (const auto& d : list)
+            if (std::string why = ws().whyNotDeleteDevice(d); !why.empty()) return (d.name.empty() ? std::string("ce PC") : d.name) + " : " + why;
+        return {};
+    }
+    void updateDelete() {
+        const std::string why = deleteReason();
+        delete_->setEnabled(why.empty());
+        delete_->setTooltip(why.empty() ? std::string("Les PC choisis quittent la liste (r\xC3\xA9voqu\xC3\xA9s, finis, leur licence supprim\xC3\xA9" "e, une demande "
+                                                      "rest\xC3\xA9" "e sans suite) ; l'Historique les garde. Un PC actif : retire-le de sa licence d'abord.")
+                                        : why);
+    }
+    void askDelete() {
+        const auto list = chosen();
+        if (const std::string why = deleteReason(); !why.empty()) {
+            if (host_.flash) host_.flash("Supprimer : " + why + ".", Tone::Warning);
+            return;
+        }
+        std::vector<std::string> keys;
+        std::string names;
+        for (const auto& d : list) {
+            keys.push_back(d.deviceKey);
+            if (names.size() < 200) names += (names.empty() ? "" : ", ") + (d.name.empty() ? d.fingerprint : d.name);
+        }
+        const bool one = list.size() == 1;
+        const std::string text = (one ? "Le PC " + names + " quitte" : std::to_string(list.size()) + " PC (" + names + ") quittent") +
+                                 " la liste des activations, la fiche du client et les compteurs.\n\n"
+                                 "Rien d'autre ne change : aucune licence n'est sign\xC3\xA9" "e ni r\xC3\xA9voqu\xC3\xA9" "e, le registre des activations "
+                                 "n'est pas r\xC3\xA9\xC3\xA9" "crit (l'Historique garde tout). Un PC revient s'il redemande une licence.";
+        std::weak_ptr<bool> alive = life_;
+        ShellHost host = host_;
+        host_.openDialog(licdlg::makeConfirmDialog("dialog.supprimer-pc", one ? "Supprimer le PC " + names + " ?" : "Supprimer " + std::to_string(list.size()) + " PC ?",
+                                                   text, one ? "Supprimer" : "Supprimer les " + std::to_string(list.size()), true, [this, alive, host, keys] {
+                                                       if (alive.expired()) return;
+                                                       host.report(host.workspace().deleteDevices(keys));   // tout est relu, chaque page aussi
+                                                       if (auto a = alive.lock(); a && *a) refresh();
+                                                   }));
+    }
+
     std::shared_ptr<bool>    life_{std::make_shared<bool>(true)};
     core::ConnectionScope    links_;
+    ui::Button*              delete_{nullptr};   // 1.48.1
+    ui::Button*              reload_{nullptr};   // 1.48.1
     ui::Button*              record_{nullptr};
     ui::Button*              export_{nullptr};
     ui::Button*              folder_{nullptr};

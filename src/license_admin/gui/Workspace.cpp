@@ -285,6 +285,7 @@ void Workspace::loadService() {
         service_.state = state;
         service_.stateAt = stateAt;
     }
+    dropDeletedFromSnapshot();   // 1.48.1 : une licence supprimee ici n'est plus comptee, meme avant que le service l'efface
 }
 
 const LicenceEntry* Workspace::licence(const std::string& licenseId) const {
@@ -293,7 +294,7 @@ const LicenceEntry* Workspace::licence(const std::string& licenseId) const {
     return nullptr;
 }
 
-std::vector<KnownDevice> Workspace::devices() const { return knownDevices(records_, now()); }
+std::vector<KnownDevice> Workspace::devices() const { return withoutDeleted(knownDevices(records_, now())); }   // 1.48.1 : sans ce qui est supprime
 
 namespace {
 std::vector<DeletedClient> readDeletedClients(const std::string& folder);   // 1.42.0 (plus bas)
@@ -312,6 +313,10 @@ std::vector<ClientEntry> Workspace::clients() const {
         c.lastActivity = std::max(c.lastActivity, l.licence.issuedAt);
         customerOf[l.licence.licenseId] = k;
     }
+    const auto gone = archive::deletedLicences(folder_);   // 1.48.1 : une licence supprimee ne revient pas par le registre des activations
+    const auto deletedId = [&](const std::string& id) {
+        return !id.empty() && !licence(id) && std::any_of(gone.begin(), gone.end(), [&](const archive::DeletedLicence& d) { return d.id == id; });
+    };
     for (const auto& r : records_) {
         if (r.kind == "client") continue;   // 1.44.0 : une suppression, une restauration ne sont pas une activite du client
         std::string k;
@@ -321,7 +326,7 @@ std::vector<ClientEntry> Workspace::clients() const {
         auto& c = byKey[k];
         if (c.name.empty()) c.name = r.customer;
         c.lastActivity = std::max(c.lastActivity, r.at);
-        if (std::find(c.licenceIds.begin(), c.licenceIds.end(), r.licenseId) == c.licenceIds.end() && !r.licenseId.empty())
+        if (std::find(c.licenceIds.begin(), c.licenceIds.end(), r.licenseId) == c.licenceIds.end() && !r.licenseId.empty() && !deletedId(r.licenseId))
             c.licenceIds.push_back(r.licenseId);
     }
     for (const auto& d : devices()) {
@@ -939,6 +944,9 @@ OpResult Workspace::deleteRevokedLicence(const std::string& licenseId) {
     r.details.push_back("Son fichier est dans la corbeille de l'outil : " + U(to) + " (rien n'est effac\xC3\xA9).");
     r.details.push_back("Sa r\xC3\xA9vocation reste dans la liste sign\xC3\xA9" "e : les Studios la refusent toujours.");
     r.details.push_back("La synchro de l'archive ne la ram\xC3\xA8ne pas sur ce poste (l'archive en ligne en garde une copie chiffr\xC3\xA9" "e).");
+    stats::Exclusions ex;   // 1.48.1 : les statistiques du service ne la comptent plus (envoye a la prochaine lecture)
+    ex.deleteLicences.push_back(licenseId);
+    queueStatsExclusion(ex);
     return r;
 }
 
@@ -1425,6 +1433,7 @@ OpResult Workspace::serviceRun(const ServiceJob& job) const {
             break;
         }
         case ServiceJob::Kind::OnlineLicence: return serviceRunOnline(job, {});
+        case ServiceJob::Kind::DeleteLicences: return serviceDeleteLicences(job.licenseIds);   // 1.48.1
     }
     if (r.ok) (void)detail::flushJournalQuiet(folder_, caller, now());   // 1.44.0 : la ligne du journal de l'operation part avec elle
     return r;
@@ -1489,7 +1498,10 @@ void Workspace::adoptServiceState(const online::ServiceState& state) {
     service_.stateAt = now();
 }
 
-void Workspace::adoptSnapshot(online::Snapshot snapshot) { service_.snapshot = std::move(snapshot); }
+void Workspace::adoptSnapshot(online::Snapshot snapshot) {
+    service_.snapshot = std::move(snapshot);
+    dropDeletedFromSnapshot();   // 1.48.1
+}
 
 void Workspace::queueServiceJob(ServiceJob job) { job_ = std::move(job); }
 
@@ -1692,6 +1704,7 @@ OpResult Workspace::deleteClient(const std::string& name) {
     for (char& ch : stamp)
         if (ch == ':') ch = '-';
     std::string why;
+    std::vector<std::string> onlineIds;   // 1.48.1 : ses licences en ligne, a effacer aussi du service
     for (const LicenceEntry* l : mine) {
         const fs::path to = trash / P(archive::safeName(l->licence.licenseId) + "-" + stamp + ".xpglic");
         if (!archive::noteDeleted(folder_, {l->licence.licenseId, l->licence.issuedAt, t}, &why))
@@ -1704,6 +1717,7 @@ OpResult Workspace::deleteClient(const std::string& name) {
         if (ec) return OpResult::fail("le fichier " + l->path + " n'a pas pu aller dans la corbeille : " + ec.message());
         d.licenceIds.push_back(l->licence.licenseId);
         d.trashFiles.push_back(U(to));
+        if (isOnlineLicence(l->licence)) onlineIds.push_back(l->licence.licenseId);   // 1.48.1
     }
     auto list = readDeletedClients(folder_);
     std::erase_if(list, [&](const DeletedClient& x) { return lower(x.name) == k; });
@@ -1715,6 +1729,17 @@ OpResult Workspace::deleteClient(const std::string& name) {
     if (!d.licenceIds.empty())
         r.details.push_back(plural(static_cast<int>(d.licenceIds.size()), "licence", "licences") + " dans la corbeille de l'outil (rien n'est effac\xC3\xA9) ; la synchro ne les ram\xC3\xA8ne pas.");
     r.details.push_back("Pour le remettre : Clients \xE2\x80\xBA Corbeille \xE2\x80\xBA Restaurer.");
+    if (!onlineIds.empty() && service_.ready()) {   // 1.48.1 : ses licences en ligne quittent aussi le service (et ses PC)
+        ServiceJob job;
+        job.kind = ServiceJob::Kind::DeleteLicences;
+        job.label = "Service : suppression des licences de " + name;
+        job.licenseIds = onlineIds;
+        job_ = std::move(job);
+        r.details.push_back("Ses licences en ligne sont effac\xC3\xA9" "es aussi du service (leurs PC sont lib\xC3\xA9r\xC3\xA9s).");
+    }
+    stats::Exclusions ex;   // 1.48.1 : les statistiques du service ne le comptent plus (envoye a la prochaine lecture)
+    ex.deleteClients.push_back(name);
+    queueStatsExclusion(ex);
     return r;
 }
 
@@ -1746,6 +1771,9 @@ OpResult Workspace::restoreClient(const std::string& name) {
     OpResult r = OpResult::done("Client " + name + " restaur\xC3\xA9.");
     noteClient(r, "restaure", name, ids);   // 1.44.0 : l'historique et le journal des admins
     if (back) r.details.push_back(plural(back, "licence revenue", "licences revenues") + " dans l'archive (la copie reste dans la corbeille).");
+    stats::Exclusions ex;   // 1.48.1 : les statistiques du service le comptent de nouveau
+    ex.restoreClients.push_back(name);
+    queueStatsExclusion(ex);
     return r;
 }
 
