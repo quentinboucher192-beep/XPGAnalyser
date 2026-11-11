@@ -32,7 +32,20 @@ session si quelqu'un revient au menu général ça le fait pas quitter ».
     statistiques étaient cohérentes. »). Il ne touche qu'aux statistiques, jamais aux licences ni aux clients ; une ligne
     au journal des admins.
   - **Une nouvelle version publiée** met à jour la dernière version, l'adoption et qui est à jour, partout en même temps.
-@@SUPPRIMER@@
+- **Supprimer et Actualiser dans les onglets** :
+  - **Supprimer** (un ou plusieurs, la barre et le clic droit ; la confirmation dit ce qui part avec) :
+    **Licences** (révoquée ou finie seulement ; une licence en ligne est aussi retirée du service, ses PC libérés ; sa
+    révocation reste dans la liste signée), **Activations** (un PC qui ne sert plus ; un PC actif : « retire-le de sa
+    licence ou révoque-le d'abord »), **Fonctionnalités** (si aucune offre, option ou licence ne la porte), **Commandes et
+    demandes** (une commande sans argent, une demande close). Déjà là : Clients, Offres, Options ; « Retirer » pour les
+    admins, les PC des flottantes, la révocation.
+  - **Grisé avec sa raison** là où supprimer casserait quelque chose : une licence en vigueur, une commande payée (la
+    comptabilité), Historique et le Journal des admins (l'histoire, signée), Versions (les Studios s'appuient dessus).
+  - **Actualiser** : Licences, Activations, Offres, Options, Fonctionnalités, Révocations, Historique, Journal des admins,
+    Versions, Licences flottantes, Demandes d'admin (« Relever » y devient « Actualiser »), Statistiques.
+  - **Les incohérences trouvées et corrigées** : une licence supprimée revenait dans le nombre de licences du client
+    (par ses activations) ; les PC d'une licence ou d'un client supprimés restaient dans Activations, le tableau de bord
+    et les nombres du client ; les licences en ligne supprimées comptaient encore (tableau de bord, flottantes).
 
 **Dans les Studios**
 
@@ -73,4 +86,9 @@ session si quelqu'un revient au menu général ça le fait pas quitter ».
   de ce côté.
 - Le retour à l'accueil dans une session : vérifié par la lecture et la construction, pas par un essai automatique (aucun
   essai ne lance le Studio entier).
+- Pas encore faits : supprimer plusieurs clients, offres ou options d'un coup (un par un) ; Supprimer et Actualiser
+  dans la fiche client ; Actualiser dans Mon compte, Service en ligne, Sécurité ; dans Administrateurs, le bouton garde
+  le nom « Relever » (« Actualiser », plus long, cachait les dates).
+- Un PC supprimé l'est dans l'Admin seulement (il revient s'il redemande une licence) ; le fil « activité récente » du
+  tableau de bord et la corbeille des clients gardent l'histoire.
 - **Rien sur un vrai Windows** : sous Wine seulement.

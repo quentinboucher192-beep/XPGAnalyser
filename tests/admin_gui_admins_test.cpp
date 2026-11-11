@@ -435,13 +435,13 @@ int main(int argc, char** argv) {
         if (menu)
             for (const auto& it : menu->items()) {
                 if (!it.separator) order += it.label + ";";
-                note = note || has(it.label, "Rien ne s'efface du journal");
+                note = note || has(it.label, "Rien ne s'efface du journal") || (has(it.label, "Supprimer") && !it.enabled);   // 1.48.1 : la, grise (sa raison : rien ne s'efface)
                 for (const auto& ch : it.children) {
                     typeMark = typeMark || ch.note == "celle du type";
                     if (it.label == "Criticit\xC3\xA9 de cette ligne" && ch.label == "Critique") critique = ch.id;
                 }
             }
-        check(note && typeMark && critique >= 0, "<< Rien ne s'efface >>, la criticite de la ligne (<< celle du type >>)");
+        check(note && typeMark && critique >= 0, "<< Rien ne s'efface >>, la criticite de la ligne (<< celle du type >>) : " + order);
         check(order.rfind("D\xC3\xA9plier;Criticit\xC3\xA9 de cette ligne;Aller \xC3\xA0;Filtrer sur;Copier;Exporter la ligne (CSV);", 0) == 0, "l'ordre de la regle : " + order);
         if (menu && critique >= 0) menu->itemChosen->emit(critique);   // Critique
         bool critical = false;
