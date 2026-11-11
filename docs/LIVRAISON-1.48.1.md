@@ -68,11 +68,51 @@ session si quelqu'un revient au menu général ça le fait pas quitter ».
 
 ## 2. Les essais
 
-@@ESSAIS@@
+- **Linux : 191 suites sur 191 réussies** (`ctest`, sur la version livrée ; journal `essais-1.48.1.txt`). Celles de cette version :
+  - **le service** (`node --test`, 232 sur 232), dont **la cohérence** : une histoire fictive passée par les routes
+    normales, puis, l'une après l'autre, un PC retiré, une licence supprimée, un client supprimé (un admin sans le droit :
+    403), une option retirée, un admin sorti de la liste, une demande traitée, une version publiée (une plus ancienne
+    refusée), Réévaluer deux fois (rien la seconde), le client restauré ; après chaque étape, les courbes, le globe,
+    « actifs maintenant », Mises à jour et les chiffres des admins d'accord entre eux et avec ce qui existe (aujourd'hui et
+    hier) ; puis une sauvegarde volontairement incohérente : Réévaluer liste les corrections, un second appel n'en trouve
+    plus. Et : rembourser une ligne (Stripe : le montant de la ligne seulement ; deux fois : refusé), supprimer une
+    commande sans argent (une payée : refusé), une demande close, une licence ;
+  - **l'Admin contre le vrai service local** : `adminguicoherence` (458 contrôles : une suppression de chaque sorte, puis
+    chaque liste, ses nombres « N sur N », le tableau de bord, la fiche client), `adminstats` (73) et `adminguistats`
+    (261 : Actualiser, Réévaluer et sa fenêtre, « Rien à corriger », le rechargement après un changement),
+    `adminboutique` (123) et `adminguiboutique` (127 : une demande de licence délivrée et refusée depuis Commandes et
+    demandes, un article remboursé seul, Supprimer) ;
+  - **les Studios** : `service_boutique` (50 : « Actualiser » des notifications contre le vrai service local, Mes achats
+    avec une ligne remboursée), `topbar8` (la cloche : Actualiser en tête, une largeur raisonnable avec un détail très long,
+    le détail sous le titre sans le répéter).
+- **Sous Wine** : l'Admin 1.48.1 avec le vrai service local et le faux Stripe (`1481_01` à `1481_03`) : Commandes et
+  demandes avec deux demandes de licence, une commande, un panier payé et une demande du panier ; « Rembourser… » sur un
+  article (la question dit l'article et son montant) ; l'article remboursé seul (« remboursée »), le reste de la commande
+  inchangé ; le pied de l'Admin dit 1.48.1.
+- **Les Studios** : l'installation en silencieux par-dessus la 1.48.0, ta clé d'API gardée ; le Studio livré s'ouvre
+  (`1481_00`), lancé avec une adresse locale où rien ne répond : **ton service n'a pas été appelé**.
+- **L'Admin** : son installateur en silencieux par-dessus la 1.48.0, une désinstallation (le dossier de ta clé intact),
+  une réinstallation ; ses pages, de Bienvenue au Récapitulatif (`1481_9_…page-1` à `page-5`, jamais l'installation).
+- Corrigé en route : les pages de l'installateur n'avançaient pas en 1.48.0 (la touche Entrée n'allait pas à la fenêtre).
 
 ## 3. Installer
 
-@@EMPREINTES@@
+**Les Studios** : lance `API-IHM-Studio-Setup-1.48.1.exe` (dans le zip) par-dessus la 1.48.0. Tes projets, tes
+réglages et ta clé d'API restent.
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `API-IHM-Studio-Setup-1.48.1.exe` | `AB49A6B1AED053288C2EBAF6914946358AFE69377CC0F833005105E9789EA198` | 63 812 435 octets |
+| `API-Studio-1.48.1-portable.zip` | `A2F40D0F3F8172949F7998EF94D02F9A358AF38D98B16860A7EED929107A2D90` | 250 fichiers |
+| `IHM-Studio-1.48.1-portable.zip` | `1E2F2F8664680541BA28416C85F87113BA1AA6CD33AB53AABE09A20158F7A207` | 251 fichiers |
+
+**L'Admin (pour toi seul, envoyé à part)** : lance `XPG-License-Admin-Setup-1.48.1-EDITEUR.exe` par-dessus la 1.48.0 ;
+le dossier de ta clé n'est pas touché. Ne le donne à personne : pour un nouvel admin, Administrateurs › Ajouter un
+admin… lui envoie l'installateur publié dans Versions (sans ta clé).
+
+| Fichier | SHA-256 | Taille |
+|---|---|---|
+| `XPG-License-Admin-Setup-1.48.1-EDITEUR.exe` | `7AA53B439322D26B2759BEC9B2B5F274ADE0894D6B9F366FF2C92FEE12A96D24` | 8 837 641 octets |
 
 ## 4. Limites
 
