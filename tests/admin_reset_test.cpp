@@ -109,9 +109,10 @@ int main(int argc, char** argv) {
             auto& dlg = *rig.dialogs.back();
             const std::string d = drawMenu(dlg);
             ui::Widget& root = *dlg.widgetRoot();
-            check(has(d, "Effac\xC3\xA9 (le service et ce poste)") && has(d, "Gard\xC3\xA9") && has(d, "Les licences et leurs fichiers") &&
-                      has(d, "Les admins : une nouvelle liste sign\xC3\xA9" "e sans aucun admin") && has(d, "La cl\xC3\xA9 de l'\xC3\xA9" "diteur et ton identit\xC3\xA9"),
-                  "ce qui est efface, ce qui est garde");
+            check(has(d, "Effac\xC3\xA9 (le service et ce poste)") && has(d, "Gard\xC3\xA9") && has(d, "Les licences et leurs") && has(d, "Les admins : une") &&
+                      has(d, "Les statistiques") && has(d, "Le journal des admins") && has(d, "La cl\xC3\xA9 de l'\xC3\xA9" "diteur") && has(d, "Le catalogue") &&
+                      has(d, "Les versions publi\xC3\xA9" "es"),
+                  "ce qui est efface, ce qui est garde\n" + d);
             check(has(d, "perdent leur licence \xC3\xA0 leur prochain contr\xC3\xB4le"), "les Studios deja actives : dit clairement");
             check(has(d, "La sauvegarde compl\xC3\xA8te n'est pas r\xC3\xA9gl\xC3\xA9" "e"), "la sauvegarde pas reglee : dit");
             check(type(root, "repartir.mot", "REPARTIR"), "REPARTIR tape");
@@ -138,6 +139,8 @@ int main(int argc, char** argv) {
         t = draw(*sp);
         check(shown(*sp, "service.repartir") && has(t, "Repartir de z\xC3\xA9ro"), "Service en ligne : la carte Repartir de zero (l'admin+)");
         // XPG Admin, l'edition classique : jamais
+        Fixture other(source, "repartir-classique");
+        check(other.ready() && other.licence("XPG-2026-RZ002", "Atelier Exemple", "PROFESSIONAL", {other.request("pc9", "PC-9")}).ok, "un autre dossier (cle d'essai, une licence)");
         la::setEdition(la::Edition::Classique);
         {
             check(!fx.ws->startOverOfferDue() && !fx.ws->whyNotStartOver().empty(), "XPG Admin : pas de proposition, et il dit pourquoi");
@@ -147,8 +150,7 @@ int main(int argc, char** argv) {
             sp2->refresh();
             const std::string t2 = draw(*sp2);
             check(!shown(*sp2, "service.repartir") && !has(t2, "Repartir de z\xC3\xA9ro"), "XPG Admin : pas de carte Repartir de zero");
-            Fixture other(source, "repartir-classique");
-            check(other.ready(), "un autre dossier (cle d'essai)");
+            other.ws->reload();
             HostRig rig4(other);
             auto dash4 = gui::makeDashboardPage(rig4.host());
             dash4->refresh();
@@ -206,6 +208,7 @@ int main(int argc, char** argv) {
         std::string fp;
         r = lea.requestAdmin("L\xC3\xA9" "a Essai", "lea@exemple.invalid", &fp);
         check(r.ok, "Lea demande a devenir admin (" + r.text() + ")");
+        lea.reload();
         r = plus.acceptAdmin(lea.adminKey().keyHex, "Tous les droits");
         check(r.ok, "acceptee (" + r.text() + ")");
         plus.reload();
@@ -228,7 +231,7 @@ int main(int argc, char** argv) {
         check(plus.licences().size() == 2 && present(A / "activations.jsonl") && present(A / "codes-activation") && present(A / "journal-admins.jsonl"),
               "deux licences, le registre des activations, un code, le journal");
         const auto l = ask(svc.url(), editor, "GET", "/admin/licences");
-        check(l.status == 200 && has(l.body, "XPG-2026-RZ101"), "le service a la licence en ligne");
+        check(l.status == 200 && has(l.body, "XPG-2026-RZ101"), "le service a la licence en ligne (" + std::to_string(l.status) + " " + l.error + " " + l.body.substr(0, 200) + ")");
     }
 
     std::printf("-- les refus : rien n'est efface\n");
