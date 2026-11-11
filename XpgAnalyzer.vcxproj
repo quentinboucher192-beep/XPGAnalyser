@@ -1452,6 +1452,7 @@ xcopy /Y /D /Q "$(SDL3_DIR)\lib\x64\SDL3.dll" "$(OutDir)" &gt;NUL &amp; if error
     <ClInclude Include="src\license_admin\Admin.hpp" />
     <ClInclude Include="src\license_admin\ArchiveSync.hpp" />
     <ClInclude Include="src\license_admin\Changes.hpp" />
+    <ClInclude Include="src\license_admin\Edition.hpp" />
     <ClInclude Include="src\license_admin\JournalStats.hpp" />
     <ClInclude Include="src\license_admin\KeyBackup.hpp" />
     <ClInclude Include="src\license_admin\Mail.hpp" />
