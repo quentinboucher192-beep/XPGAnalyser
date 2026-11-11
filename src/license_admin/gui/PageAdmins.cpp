@@ -118,7 +118,7 @@ std::string shortRight(const std::string& id) {
     if (id == "offres") return "les offres";
     if (id == "options") return "les options";
     if (id == "annonces") return "les annonces";
-    if (id == "demandes") return "les demandes en ligne";
+    if (id == "demandes") return "les commandes et demandes";   // 1.48.1 : une seule page
     if (id == "codes") return "revoir les codes";
     if (id == "client_supprimer") return "supprimer un client";
     if (id == "clients_exporter") return "exporter les clients";

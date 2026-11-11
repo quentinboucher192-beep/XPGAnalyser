@@ -501,6 +501,89 @@ int main(int argc, char** argv) {
         ws.adoptServiceState(st);
     }
 
+    // 1.48.1 : UN article rembourse - une commande payee de deux lignes (une licence, son option) ; Rembourser... nomme
+    // l'article et son montant TTC ; Rembourser la commande... a part ; l'article rembourse : << remboursee >>, l'autre
+    // reste << livree >>, et il ne se rembourse pas deux fois.
+    std::printf("-- 1.48.1 : rembourser UN article (une commande de deux lignes)\n");
+    {
+        shop::Order o = order(7, "livree", "Atelier Exemple");
+        o.linesKnown = true;
+        o.lineCount = 2;
+        o.amount = 49000 + 2900;
+        o.licence = "XPG-2026-00011";
+        shop::OrderLine a;
+        a.line = 1;
+        a.article = "ed:PROFESSIONAL";
+        a.kind = "edition";
+        a.edition = "PROFESSIONAL";
+        a.amount = 49000;
+        a.label = "Licence PROFESSIONAL - 1 an";
+        a.state = "livree";
+        a.licence = "XPG-2026-00011";
+        shop::OrderLine b = a;
+        b.line = 2;
+        b.article = "opt:ia_avancee:30";
+        b.kind = "option";
+        b.edition.clear();
+        b.option = "ia_avancee";
+        b.days = 30;
+        b.amount = 2900;
+        b.label = "Option IA avanc\xC3\xA9" "e - 1 mois";
+        b.withLine = 1;
+        o.lines = {a, b};
+        shop::OrdersView v;
+        v.orders = {o};
+        v.counter = 12;
+        ws.adoptOrders(v);
+        auto op = gui::makeOrdersPage(rig.host());
+        op->refresh();
+        (void)draw(*op);
+        auto* table = find<ui::TableView>(*op, "commandes.table");
+        const auto pickKey = [&](const std::string& key) {
+            for (std::size_t i = 0; table && i < table->model()->rowCount(); ++i)
+                if (table->model()->cellText(static_cast<ui::RowIndex>(i), 0) == key) {
+                    table->selectModelRows({static_cast<ui::RowIndex>(i)});
+                    return static_cast<int>(i);
+                }
+            return -1;
+        };
+        check(table && pickKey("7-2") >= 0, "la ligne 7-2 (l'option) choisie");
+        std::string t = draw(*op);
+        check(has(t, "article 2 sur 2") && enabledBtn(*op, "commandes.rembourser") && enabledBtn(*op, "commandes.rembourser-commande"),
+              "une ligne livree : Rembourser... (cet article) et Rembourser la commande... (l'admin+)");
+        check(click(*op, "commandes.rembourser") && !rig.dialogs.empty(), "Rembourser... : une question d'abord");
+        if (!rig.dialogs.empty()) {
+            const std::string q = drawMenu(*rig.dialogs.back());
+            check(has(q, "Rembourser \xC2\xAB Option IA avanc\xC3\xA9" "e - 1 mois \xC2\xBB ?") && has(q, "29,00\xC2\xA0\xE2\x82\xAC") && has(q, "tels quels") &&
+                      has(q, "XPG-2026-00011") && !has(q, "519,00"),
+                  "la question nomme l'article et son montant TTC (29,00 EUR), les autres articles restent tels quels");
+        }
+        rig.dialogs.clear();
+        check(click(*op, "commandes.rembourser-commande") && !rig.dialogs.empty(), "Rembourser la commande... : une question d'abord");
+        if (!rig.dialogs.empty()) {
+            const std::string q = drawMenu(*rig.dialogs.back());
+            check(has(q, "Rembourser la commande n\xC2\xB0 7 ?") && has(q, "519,00\xC2\xA0\xE2\x82\xAC"), "toute la commande : 519,00 EUR");
+        }
+        rig.dialogs.clear();
+        // l'article rembourse (le service l'a dit) : << remboursee >>, l'autre << livree >> ; pas deux fois
+        v.orders[0].lines[1].state = "remboursee";
+        ws.adoptOrders(v);
+        op->refresh();
+        (void)draw(*op);
+        const int r1 = pickKey("7-1");
+        check(r1 >= 0 && table->model()->cellText(static_cast<ui::RowIndex>(r1), 5) == "livr\xC3\xA9" "e", "la ligne 7-1 reste livree");
+        const int r2 = pickKey("7-2");
+        t = draw(*op);
+        auto* refund = find<ui::Button>(*op, "commandes.rembourser");
+        check(r2 >= 0 && table->model()->cellText(static_cast<ui::RowIndex>(r2), 5) == "rembours\xC3\xA9" "e" && refund && !refund->enabled() &&
+                  has(refund->tooltip(), "d\xC3\xA9j\xC3\xA0 rembours\xC3\xA9"),
+              "la ligne 7-2 : remboursee ; Rembourser... grise, la raison (" + (refund ? refund->tooltip() : std::string()) + ")");
+        check(enabledBtn(*op, "commandes.rembourser-commande"), "toute la commande se rembourse encore (le reste)");
+        // 1.48.1 : la puce << Type >> : achat, demande, demande de licence
+        auto* bar = find<ui::FilterBar>(*op, "commandes");
+        check(bar && table->model()->cellText(static_cast<ui::RowIndex>(r2), 8) == "Achat", "le type : Achat");
+    }
+
     std::printf("-- le tableau de bord : a livrer\n");
     {
         ws.setOrdersToDeliver(2);

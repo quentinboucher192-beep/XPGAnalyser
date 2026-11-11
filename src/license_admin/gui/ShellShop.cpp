@@ -60,10 +60,10 @@ bool Shell::autoOrders() {
                      if (fresh.size() == 1) {
                          const auto& o = *fresh.front();
                          flash("Nouvelle commande pay\xC3\xA9" "e : n\xC2\xB0 " + std::to_string(o.number) + " " + o.company + " (" + (o.label.empty() ? o.article : o.label) + ", " +
-                                   shop::amountText(o.amount, o.currency) + ") \xE2\x80\x94 Commandes \xE2\x80\xBA D\xC3\xA9livrer maintenant.",
+                                   shop::amountText(o.amount, o.currency) + ") \xE2\x80\x94 Commandes et demandes \xE2\x80\xBA D\xC3\xA9livrer maintenant.",
                                Tone::Warning);
                      } else {
-                         flash(std::to_string(fresh.size()) + " nouvelles commandes pay\xC3\xA9" "es \xE2\x80\x94 Commandes \xE2\x80\xBA D\xC3\xA9livrer maintenant.", Tone::Warning);
+                         flash(std::to_string(fresh.size()) + " nouvelles commandes pay\xC3\xA9" "es \xE2\x80\x94 Commandes et demandes \xE2\x80\xBA D\xC3\xA9livrer maintenant.", Tone::Warning);
                      }
                  }))
         return false;
@@ -87,7 +87,7 @@ bool Shell::autoDeliver() {
                          if (l.delivered)
                              flash("Commande n\xC2\xB0 " + std::to_string(l.number) + " livr\xC3\xA9" "e : licence " + l.licence + " (" + l.customer + ", " + l.article + ").", Tone::Ok);
                          else if (l.review)
-                             flash("Commande n\xC2\xB0 " + std::to_string(l.number) + " \xC3\xA0 revoir : " + l.problem + " \xE2\x80\x94 Commandes.", Tone::Warning);
+                             flash("Commande n\xC2\xB0 " + std::to_string(l.number) + " \xC3\xA0 revoir : " + l.problem + " \xE2\x80\x94 Commandes et demandes.", Tone::Warning);
                      }
                      refreshPages();
                  }))

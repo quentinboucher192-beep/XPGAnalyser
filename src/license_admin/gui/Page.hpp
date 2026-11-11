@@ -91,10 +91,12 @@ using PagePtr = std::unique_ptr<Page>;
 //  "options"        Options (1.42.0)                         PageEditions.cpp
 //  "fonctionnalites" Fonctionnalites                         PageEditions.cpp
 //  "activations"    Activations                              PageActivations.cpp
-//  "demandes"       Demandes en ligne (le service, 1.35)     PageRequests.cpp
+//  "demandes"       1.48.1 : plus une page - un lien vers "commandes" (les demandes de licence ; Shell::navigate) ;
+//                   l'ancienne page (makeRequestsPage, PageRequests.cpp) reste pour ses essais, et requestflow (ses gestes)
 //  "flottantes"     Licences flottantes (le service, 1.35)   PageFloating.cpp
 //  "boutique"       Boutique (1.46.0 : Stripe, le catalogue) PageShop.cpp
-//  "commandes"      Commandes (1.46.0 : livrer, rembourser)  PageShop.cpp
+//  "commandes"      Commandes et demandes (1.46.0 : livrer, rembourser ; 1.48.0 : le panier ; 1.48.1 : les demandes de
+//                   licence, un article rembourse seul)       PageShop.cpp
 //  "revocations"    Revocations                              PageRevocations.cpp
 //  "service"        Service en ligne (1.35)                  PageService.cpp
 //  "historique"     Historique                               PageHistory.cpp
@@ -177,6 +179,21 @@ bool depositOnlineLicence(const ShellHost& host, ServiceJob job, std::string cod
 bool publishToService(const ShellHost& host, std::function<void(const OpResult&)> done = {});
 // Relever les licences en ligne (GET /admin/licences) par runSlow, et adopter le releve (`done` facultatif).
 bool refreshOnlineLicences(const ShellHost& host, std::function<void(const OpResult&)> done = {});
+
+// 1.48.1 : LES GESTES D'UNE DEMANDE DE LICENCE (l'assistant << Demander ma licence >> du Studio : POST /v1/demandes), les
+// memes dans << Commandes et demandes >> (PageShop.cpp : Delivrer, Refuser...) et dans l'ancienne page des demandes
+// (PageRequests.cpp, plus dans le menu) : accepter (l'assistant de licence ouvert sur la demande ; `onlineLicence` : une
+// licence en ligne, avec un code), ajouter l'option demandee (la fenetre << Ajouter une option >>), refuser (la raison,
+// scellee pour le PC), renvoyer la reponse d'une demande acceptee ici. Chacun dit lui-meme pourquoi il ne part pas (un
+// travail en cours, une demande qui n'attend plus). `done` : apres le travail lent, l'archive relue (le fil de l'interface).
+namespace requestflow {
+void accept(const ShellHost& host, const online::Entry& e, bool onlineLicence);
+void addOption(const ShellHost& host, const online::Entry& e);
+void askRefuse(const ShellHost& host, const online::Entry& e, std::function<void()> done = {});
+void resend(const ShellHost& host, const online::Entry& e, std::function<void()> done = {});
+// L'edition voulue (ou l'option) d'une demande, en mots : << PROFESSIONAL \xC2\xB7 490 EUR HT / an >>, << Option : ... >>.
+[[nodiscard]] std::string wanted(const Workspace& w, const online::Entry& e);
+} // namespace requestflow
 
 // 1.45.0 : LA VERSION DU SERVICE EN LIGNE (l'etat lu : Verifier, ou au lancement de l'Admin) face a ce qu'il faut a cet
 // Admin (deployer::kServiceRequired) et au service de son kit (deployer::installedKit) - jamais face a la version de

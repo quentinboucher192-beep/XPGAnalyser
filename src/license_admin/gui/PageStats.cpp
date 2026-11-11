@@ -1798,14 +1798,14 @@ private:
             f.periodField = "Date";
             f.from = from;
             f.to = to;
-            f.what = "Demandes en ligne" + when;
+            f.what = "Demandes de licence" + when;
             if (id == "traitees" && !seriesName.empty()) {
                 f.values.push_back({"R\xC3\xA9pondue par", seriesName});
                 f.what += " \xC2\xB7 r\xC3\xA9pondues par " + seriesName;
             }
         } else if (id == "attente" || id == "ancienne") {
             f.page = "demandes";
-            f.what = "Demandes en ligne en attente";
+            f.what = "Demandes de licence en attente";
         } else if (id == "pc" || id == "mouvements-pc" || id == "decouvertes") {
             f.page = "activations";
             if (id == "mouvements-pc") {

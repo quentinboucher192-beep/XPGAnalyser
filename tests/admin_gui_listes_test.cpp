@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
         const int r212 = table ? rowOf(*table, 0, "212") : -1;
         auto items = table && r212 >= 0 ? rightClick(*table, {static_cast<ui::RowIndex>(r212)}) : std::vector<ui::PopupMenu::Item>{};
         const std::string order0 = topLabels(items);
-        check(order0.rfind("D\xC3\xA9plier;|D\xC3\xA9livrer maintenant;Ouvrir le re\xC3\xA7u;Voir dans Stripe;Revoir\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|"
+        check(order0.rfind("D\xC3\xA9plier;|D\xC3\xA9livrer maintenant;Ouvrir le re\xC3\xA7u;Voir dans Stripe;Refuser\xE2\x80\xA6;|Aller \xC3\xA0;Filtrer sur;|Copier;Exporter la ligne (CSV);|"
                                 "Rembourser\xE2\x80\xA6;",
                                 0) == 0,
               "l'ordre de la regle (planche 06) : " + order0);

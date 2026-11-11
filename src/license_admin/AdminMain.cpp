@@ -1629,7 +1629,7 @@ int run(const std::vector<std::string>& argv) {
                                                                online::smtpMailer(folder, hasReg ? &reg : nullptr), o);
                 if (!ar.ok) {
                     crypto::wipe(code.data(), code.size());
-                    complain(ar.text() + "\nLa licence est d\xC3\xA9pos\xC3\xA9" "e ; la r\xC3\xA9ponse n'est pas partie : l'application la renvoie (Demandes en ligne "
+                    complain(ar.text() + "\nLa licence est d\xC3\xA9pos\xC3\xA9" "e ; la r\xC3\xA9ponse n'est pas partie : l'application la renvoie (Commandes et demandes "
                                          "\xE2\x80\xBA Renvoyer la r\xC3\xA9ponse).");
                     return 3;
                 }

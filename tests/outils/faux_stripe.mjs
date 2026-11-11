@@ -14,7 +14,9 @@
 //    POST   /v1/checkout/sessions               une page de paiement (cs_test_N) : line_items[0][price]
 //                                               (un prix actif) ou [price_data]
 //    POST   /v1/checkout/sessions/:id/expire    la fermer
-//    POST   /v1/refunds                         un remboursement (payment_intent)
+//    POST   /v1/refunds                         un remboursement (payment_intent) ; 1.48.1 : amount (un remboursement
+//                                               partiel ; plus que ce qui reste : 400 amount_too_large ; tout rendu :
+//                                               400 charge_already_refunded), metadata[...]
 //    GET    /v1/invoices/:id                    une facture (hosted_invoice_url)
 //    GET    /v1/webhook_endpoints               les points d'arrivee du webhook
 //    POST   /v1/webhook_endpoints               en creer un (son secret : essai_jeton_whsec_...)
@@ -125,7 +127,9 @@ export async function lancerFauxStripe({ port = 0, cle = "", versionCompte = VER
                         const s = sessions.get(o.session) || { id: o.session, metadata: {}, montant: 0, devise: "eur" };
                         let objet;
                         if (o.type === "charge.refunded") {
-                            objet = { id: "ch_" + s.id, object: "charge", payment_intent: s.payment_intent, amount: s.montant, amount_refunded: s.montant, refunded: true };
+                            // 1.48.1 : ce qui a ete rembourse (un remboursement partiel : refunded faux) ; sans remboursement suivi : tout
+                            const rendu = s.rembourse ? s.rembourse : s.montant;
+                            objet = { id: "ch_" + s.id, object: "charge", payment_intent: s.payment_intent, amount: s.montant, amount_refunded: rendu, refunded: rendu >= s.montant };
                         } else {
                             objet = {
                                 id: s.id,
@@ -243,8 +247,23 @@ export async function lancerFauxStripe({ port = 0, cle = "", versionCompte = VER
                 }
                 if (req.method === "POST" && chemin === "/v1/refunds") {
                     const pi = form.objet.payment_intent;
-                    if (!pi || ![...sessions.values()].some((s) => s.payment_intent === pi)) return erreur(res, 400, "No such payment_intent");
-                    return garder({ id: "re_essai_" + pi, object: "refund", payment_intent: pi, status: "succeeded" });
+                    const s = [...sessions.values()].find((x) => x.payment_intent === pi);
+                    if (!pi || !s) return erreur(res, 400, "No such payment_intent");
+                    // 1.48.1 : un remboursement PARTIEL (amount, en centimes) ; jamais plus que ce qui reste (comme Stripe)
+                    const deja = s.rembourse || 0;
+                    const reste = s.montant - deja;
+                    if (reste <= 0) return erreur(res, 400, "Charge ch_" + s.id + " has already been refunded.", "charge_already_refunded");
+                    let montant = reste;
+                    if (form.objet.amount !== undefined) {
+                        montant = Number(form.objet.amount);
+                        if (!Number.isSafeInteger(montant) || montant < 1) return erreur(res, 400, "Invalid positive integer", "", "amount");
+                        if (montant > reste)
+                            return erreur(res, 400, "Refund amount (" + montant + ") is greater than unrefunded amount on charge (" + reste + ")", "amount_too_large", "amount");
+                    }
+                    s.rembourse = deja + montant;
+                    s.remboursements = (s.remboursements || 0) + 1;
+                    const id = form.objet.amount === undefined ? "re_essai_" + pi : "re_essai_" + pi + "_" + s.remboursements;
+                    return garder({ id, object: "refund", payment_intent: pi, amount: montant, currency: s.devise, metadata: sousObjet(form.paires, "metadata"), status: "succeeded" });
                 }
                 m = /^\/v1\/invoices\/([^/]+)$/.exec(chemin);
                 if (req.method === "GET" && m) return repondre(res, 200, { id: m[1], object: "invoice", hosted_invoice_url: "https://invoice.stripe.invalid/i/" + m[1] });

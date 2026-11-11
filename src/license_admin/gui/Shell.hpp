@@ -126,10 +126,10 @@ public:
 
     // 1.36.0 : LA RELEVE AUTOMATIQUE DES DEMANDES EN LIGNE - au lancement, puis toutes les 2 minutes tant que
     // l'application est ouverte (le service regle, la cle la, aucun travail en cours, aucun dialogue ouvert) ; sans bruit :
-    // rien au journal, sauf une NOUVELLE demande (un avis : le client, le PC -> Demandes en ligne) ou la premiere
+    // rien au journal, sauf une NOUVELLE demande (un avis : le client, le PC -> Commandes et demandes) ou la premiere
     // panne (une seule fois, jusqu'a la prochaine releve reussie). Vrai : une releve est partie (les essais l'appellent).
     bool autoFetchRequests();
-    // Les demandes en attente de ta decision (le menu de gauche les compte : Demandes en ligne).
+    // Les demandes en attente de ta decision (le menu de gauche les compte : Commandes et demandes, 1.48.1).
     [[nodiscard]] int pendingRequests() const;
     static constexpr double kAutoFetchFirst = 4.0, kAutoFetchPeriod = 120.0;   // secondes
 

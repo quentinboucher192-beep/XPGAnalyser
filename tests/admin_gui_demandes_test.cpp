@@ -715,6 +715,73 @@ int main(int argc, char** argv) {
         check(rows(*page, "demandes.table") == 0, "plus en attente");
     }
 
+    // 1.48.1 : << Commandes et demandes >> - les demandes de l'assistant << Demander ma licence >> y sont des rangees (type
+    // << Demande de licence >>, << a valider >>) ; Delivrer... : l'acceptation d'avant (l'assistant, Signer et publier) ;
+    // Refuser... : le refus d'avant (la raison, scellee pour le PC). Le vrai service local.
+    std::printf("-- 1.48.1 : Commandes et demandes - une demande de licence delivree, une refusee\n");
+    {
+        Pc pcF(fx.root / "pc-f", "Poste essai F"), pcG(fx.root / "pc-g", "Poste essai G");
+        check(post(url, pcF, editor, {}, "Client d'essai Zeta") && post(url, pcG, editor, {}, "Client d'essai Eta"), "deux PC demandent leur licence (l'assistant du Studio)");
+        auto op = gui::makeOrdersPage(h);
+        check(click(*op, "commandes.relever") && rig.last() && rig.last()->ok, "Relever : les commandes et les demandes (" + lastText(rig) + ")");
+        op->refresh();
+        std::string t = paintPage(*op, 1600.f, 900.f);
+        auto* table = find<ui::TableView>(*op, "commandes.table");
+        const auto cell = [&](int r, std::size_t c) { return table && r >= 0 ? table->model()->cellText(static_cast<ui::RowIndex>(r), c) : std::string(); };
+        int rf = table ? rowOf(*table, 2, "Client d'essai Zeta") : -1;
+        check(rf >= 0 && cell(rf, 8) == "Demande de licence" && cell(rf, 5) == "\xC3\xA0 valider" && has(cell(rf, 3), "Demande de licence") && has(cell(rf, 3), "PROFESSIONAL"),
+              "une rangee << Demande de licence >>, a valider, l'offre voulue (" + cell(rf, 3) + ")");
+        if (rf >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rf)});
+        t = paintPage(*op, 1600.f, 900.f);
+        checkText(has(t, "Demande de licence n\xC2\xB0 " + std::to_string(pcF.number)) && has(t, "Poste essai F") && has(t, "D\xC3\xA9livrer\xE2\x80\xA6"),
+                  "le detail : la demande, son PC ; Delivrer...", t);
+        check(find<ui::Button>(*op, "commandes.delivrer")->enabled() && shown(*op, "commandes.revoir") && !shown(*op, "commandes.rembourser") && !shown(*op, "commandes.stripe"),
+              "Delivrer..., Refuser... ; ni Stripe ni Rembourser");
+        const std::size_t before = rig.dialogs.size();
+        check(click(*op, "commandes.delivrer") && rig.dialogs.size() == before + 1, "Delivrer... : l'assistant de licence (l'acceptation d'avant)");
+        if (rig.dialogs.size() == before + 1) {
+            auto& d = *rig.dialogs.back();
+            ui::Widget& w = *d.widgetRoot();
+            check(walkToSign(d, true), "jusqu'a l'etape 6");
+            g_now += 60;
+            check(click(w, "wizard.signer") && rig.last() && rig.last()->ok, "Signer et publier : " + lastText(rig));
+            gw::DeviceStatus st;
+            gw::StatusContent sc;
+            check(posteState(url, pcF, editor, st, sc) && st.state == gw::State::Accepted && st.requestNonce == pcF.nonce && !licenceIdOf(sc.license).empty(),
+                  "F lit << acceptee >> et SA licence");
+            check(click(w, "wizard.fermer"), "Fermer");
+        }
+        fx.ws->reload();
+        op->refresh();
+        rf = rowOf(*table, 2, "Client d'essai Zeta");
+        check(rf >= 0 && cell(rf, 5) != "\xC3\xA0 valider" && !cell(rf, 7).empty(), "la rangee n'attend plus (" + cell(rf, 5) + "), qui l'a delivree (" + cell(rf, 7) + ")");
+        const int rg = rowOf(*table, 2, "Client d'essai Eta");
+        if (rg >= 0) table->selectModelRows({static_cast<ui::RowIndex>(rg)});
+        (void)paintPage(*op, 1600.f, 900.f);
+        check(rg >= 0 && click(*op, "commandes.revoir"), "Refuser...");
+        if (rg >= 0) {
+            auto& d = *rig.dialogs.back();
+            ui::Widget& w = *d.widgetRoot();
+            t = paintDialog(d);
+            check(has(t, "Refuser la demande") && has(t, "Client d'essai Eta") && has(t, "scell\xC3\xA9" "e"), "le refus d'avant : la raison, scellee");
+            check(type(w, "raison.texte", "Pas d'offre pour ce poste (essai)") && click(w, "raison.ok") && rig.last() && rig.last()->ok, "refusee : " + lastText(rig));
+            gw::DeviceStatus st;
+            gw::StatusContent sc;
+            check(posteState(url, pcG, editor, st, sc) && st.state == gw::State::Refused && sc.message == "Pas d'offre pour ce poste (essai)",
+                  "G lit << refusee >> et la raison (scellee pour lui)");
+        }
+        op->refresh();
+        const int rg2 = rowOf(*table, 2, "Client d'essai Eta");
+        check(rg2 >= 0 && cell(rg2, 5) == "refus\xC3\xA9" "e", "la rangee : refusee (" + cell(rg2, 5) + ")");
+        // la puce << Type >> : les demandes de licence seulement
+        auto* bar = find<ui::FilterBar>(*op, "commandes");
+        if (bar) bar->setValues(8, {"Demande de licence"});
+        (void)paintPage(*op, 1600.f, 900.f);
+        bool only = table->model()->rowCount() >= 2;
+        for (std::size_t i = 0; i < table->model()->rowCount(); ++i) only = only && cell(static_cast<int>(i), 8) == "Demande de licence";
+        check(bar && only, "la puce << Type : Demande de licence >>");
+    }
+
     std::printf("-- une revocation publiee (publishToService) : la liste scellee pour le PC\n");
     {
         g_now += 60;

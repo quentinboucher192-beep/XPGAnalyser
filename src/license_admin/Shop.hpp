@@ -57,6 +57,9 @@ using licensing::Seconds;
 
 // Le service qu'il faut pour la boutique (ses routes) : un service plus ancien marche pour tout le reste.
 inline constexpr const char* kServiceRequired = "1.46.0";
+// 1.48.1 : rembourser UN article (POST /admin/commandes/rembourser avec "ligne") - un service plus ancien rembourserait
+// toute la commande : l'Admin ne le lui demande pas.
+inline constexpr const char* kServiceLineRefund = "1.48.1";
 inline constexpr std::int64_t kMinAmount = 50;           // 0,50 EUR
 inline constexpr std::int64_t kMaxAmount = 100000000;    // 1 000 000 EUR
 inline constexpr std::size_t  kMaxArticles = 200;
@@ -158,6 +161,8 @@ struct OrderLine {
     std::string  state;             // a_payer, payee, a_valider, a_revoir, livree, refusee, remboursee, expiree, annulee...
     std::string  licence, error;
     [[nodiscard]] bool toValidate() const noexcept { return state == "payee" || state == "a_valider" || state == "a_revoir"; }
+    // 1.48.1 : une ligne payee qui se rembourse seule (livree, a livrer, a revoir ou refusee ; pas deux fois).
+    [[nodiscard]] bool refundable() const noexcept { return state == "payee" || state == "a_revoir" || state == "livree" || state == "refusee"; }
 };
 struct Order {
     int          number{0};
@@ -185,6 +190,12 @@ struct Order {
     [[nodiscard]] bool toDeliver() const noexcept { return state == "payee"; }
     [[nodiscard]] bool deliverable() const noexcept { return state == "payee" || state == "a_revoir" || state == "a_valider"; }
     [[nodiscard]] bool refundable() const noexcept { return (paidState() == "payee" || paidState() == "livree" || paidState() == "a_revoir") && !stripePayment.empty(); }
+    // 1.48.1 : la rangee d'une ligne (line > 0) qui se rembourse seule : la commande payee, rien de demande pour toute la
+    // commande, la ligne payee (pas deja remboursee) et un montant.
+    [[nodiscard]] bool lineRefundable() const noexcept {
+        return payment && refundable() && stripeRefund.empty() && amount > 0 &&
+               (state == "payee" || state == "a_revoir" || state == "livree" || state == "refusee");
+    }
     [[nodiscard]] const OrderLine* findLine(int n) const;
 };
 struct OrdersView {
@@ -224,6 +235,10 @@ bool parseAmount(std::string_view text, std::int64_t& cents);
 [[nodiscard]] online::Result syncStripeCatalog(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, CatalogState& out);
 // L'admin+ : le remboursement demande a Stripe par le service (la commande passe remboursee au webhook).
 [[nodiscard]] online::Result refund(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number);
+// 1.48.1 : l'admin+ - UN article (la ligne `line`) rembourse : Stripe rend son montant (sur le meme paiement), la ligne
+// passe remboursee tout de suite, les autres ne bougent pas. `refundId` : l'identifiant du remboursement chez Stripe.
+[[nodiscard]] online::Result refundLine(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number, int line,
+                                        std::string* refundId = nullptr);
 // La version du service sait-elle la boutique (1.46.0 ou plus) ? `version` : celle de /v1/etat.
 [[nodiscard]] bool serviceKnowsShop(const std::string& version);
 

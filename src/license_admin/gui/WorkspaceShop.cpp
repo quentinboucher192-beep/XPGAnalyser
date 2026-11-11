@@ -203,6 +203,26 @@ OpResult Workspace::refundOrder(int number) const {
     return r;
 }
 
+OpResult Workspace::refundLine(int number, int line, const std::string& what) const {
+    std::string why;
+    detail::Caller caller;
+    if (!detail::loadCaller(folder_, caller, &why)) return OpResult::fail(why);
+    if (const auto deny = detail::callerDenied(caller, {})) return *deny;   // l'admin+ seul (comme toute la commande)
+    std::string id;
+    OpResult r = fromResult(shop::refundLine(folder_, *caller.key, detail::optionsFor(caller, now()), number, line, &id));
+    if (!r.ok) return r;
+    Value d = Value::object();
+    d.set("ligne", line);
+    if (!what.empty()) d.set("article", what.substr(0, 200));
+    if (!id.empty()) d.set("remboursement", id);
+    (void)detail::queueJournal(folder_, *caller.key, now(), "commande_rembourser", "commande " + std::to_string(number),
+                               "a rembours\xC3\xA9 la ligne " + std::to_string(line) + (what.empty() ? std::string() : " (" + what + ")") + " de la commande n\xC2\xB0 " +
+                                   std::to_string(number),
+                               core::json::write(d, false), {}, {}, nullptr);
+    (void)detail::flushJournalQuiet(folder_, caller, now());
+    return r;
+}
+
 OpResult Workspace::connectStripe(std::string& secretKey, const deployer::Options& kit, const deployer::LineSink& onLine, const std::atomic<bool>* cancel) const {
     std::string why;
     detail::Caller caller;

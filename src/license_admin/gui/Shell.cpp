@@ -233,9 +233,9 @@ protected:
         // Le nombre (licences, clients, PC) ; les demandes qui attendent ta decision : une pastille ambre. 1.44.0 : les
         // demandes d'admin (Administrateurs) et les alertes pas encore vues (Journal des admins), ambre aussi.
         const std::string eid = e_.id;
-        const bool demandes = eid == "demandes" || eid == "admins" || eid == "journal" || eid == "commandes" || eid == "demandes-admins";   // 1.46.0 : a livrer ; 1.47.0
-        const int  count = eid == "demandes" ? shell_.pendingRequests()
-                           : eid == "commandes" ? shell_.ordersToDeliver()
+        const bool demandes = eid == "admins" || eid == "journal" || eid == "commandes" || eid == "demandes-admins";   // 1.46.0 : a livrer ; 1.47.0
+        // 1.48.1 : Commandes et demandes compte aussi les demandes de licence en attente (plus de page Demandes en ligne).
+        const int  count = eid == "commandes" ? shell_.ordersToDeliver() + shell_.pendingRequests()
                            : eid == "admins" || eid == "demandes-admins" ? shell_.pendingAdminRequests()
                            : eid == "journal" ? shell_.unseenAlerts()
                                               : count_;
@@ -927,14 +927,13 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
         {"statistiques", "Statistiques", ui::Icon::Chart, false},         // 1.47.0 : les courbes (planches 08, 09 ; PageStats.cpp)
         {"licences", "Licences", ui::Icon::Document, false},
         {"clients", "Clients", ui::Icon::User, false},
-        {"demandes", "Demandes en ligne", ui::Icon::Import, false},       // 1.35.0 : le service des licences
         {"activations", "Activations", ui::Icon::Station, false},
         {"editions", "Offres", ui::Icon::Layers, false},                  // 1.42.0 : les editions s'appellent les offres
         {"options", "Options", ui::Icon::Star, false},                    // 1.42.0
         {"fonctionnalites", "Fonctionnalit\xC3\xA9s", ui::Icon::Module, false},
         {"flottantes", "Licences flottantes", ui::Icon::Network, false},  // 1.35.0 : une vraie page (le service)
         {"boutique", "Boutique", ui::Icon::Globe, false},                 // 1.46.0 : Stripe, le catalogue (PageShop.cpp)
-        {"commandes", "Commandes et demandes", ui::Icon::Mail, false},   // 1.48.0 : le panier (une seule page)                // 1.46.0 : livrer, rembourser
+        {"commandes", "Commandes et demandes", ui::Icon::Mail, false},   // 1.48.0 : le panier (une seule page) ; 1.48.1 : et les demandes de licence
         {"compte", "Mon compte", ui::Icon::User, false},                  // 1.47.0 : qui je suis, ma cle, mes pouvoirs (PageAccount.cpp)
         {"revocations", "R\xC3\xA9vocations", ui::Icon::Close, false},
         // 1.44.0 : plusieurs admins (la maquette 1.43.0).
@@ -950,6 +949,7 @@ const std::vector<Shell::NavEntry>& Shell::entries() {
 }
 
 const Shell::NavEntry* Shell::entry(const std::string& pageId) {
+    if (pageId == "demandes") return entry("commandes");   // 1.48.1 : l'ancienne page Demandes en ligne (Shell::navigate)
     for (const auto& e : entries())
         if (pageId == e.id) return &e;
     for (const auto& e : subPages())
@@ -1060,7 +1060,6 @@ Page* Shell::ensurePage(const std::string& id) {
     else if (id == "fonctionnalites") p = makeFeaturesPage(h);
     else if (id == "options") p = makeOptionsPage(h);
     else if (id == "activations") p = makeActivationsPage(h);
-    else if (id == "demandes") p = makeRequestsPage(h);
     else if (id == "flottantes") p = makeFloatingPage(h);
     else if (id == "boutique") p = makeShopPage(h);       // 1.46.0
     else if (id == "commandes") p = makeOrdersPage(h);
@@ -1096,7 +1095,16 @@ void Shell::showCurrent() {
     if (view_) static_cast<ShellView*>(view_)->update();
 }
 
-void Shell::navigate(const std::string& pageId) {
+void Shell::navigate(const std::string& requested) {
+    // 1.48.1 : << Demandes en ligne >> n'est plus une page - ses demandes de licence sont des rangees de << Commandes et
+    // demandes >> : ses liens (le tableau de bord, le journal, la fiche d'un client, les statistiques, --page demandes) y
+    // menent, la barre filtree sur les demandes de licence (d'un client : sur lui aussi).
+    std::string pageId = requested;
+    if (pageId == "demandes") {
+        const std::string f = takePageFocus("demandes");
+        requestPageFocus("commandes", f.rfind("client:", 0) == 0 ? "demandes-client:" + f.substr(7) : std::string("demandes"));
+        pageId = "commandes";
+    }
     if (!entry(pageId)) {
         flash("Page inconnue : " + pageId, Tone::Warning);
         return;
@@ -1326,9 +1334,9 @@ bool Shell::autoFetchRequests() {
                          const auto& e = *fresh.front();
                          std::string who = e.customer.empty() ? std::string("un client") : e.customer;
                          if (!e.deviceName.empty()) who += " (PC \xC2\xAB " + e.deviceName + " \xC2\xBB)";
-                         flash("Nouvelle demande de licence : " + who + " \xE2\x80\x94 Demandes en ligne \xE2\x80\xBA Accepter.", Tone::Warning);
+                         flash("Nouvelle demande de licence : " + who + " \xE2\x80\x94 Commandes et demandes \xE2\x80\xBA D\xC3\xA9livrer\xE2\x80\xA6", Tone::Warning);
                      } else {
-                         flash(std::to_string(fresh.size()) + " nouvelles demandes de licence \xE2\x80\x94 Demandes en ligne \xE2\x80\xBA Accepter.", Tone::Warning);
+                         flash(std::to_string(fresh.size()) + " nouvelles demandes de licence \xE2\x80\x94 Commandes et demandes \xE2\x80\xBA D\xC3\xA9livrer\xE2\x80\xA6", Tone::Warning);
                      }
                  }))
         return false;

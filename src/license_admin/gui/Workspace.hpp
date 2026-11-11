@@ -832,6 +832,9 @@ public:
     // LENT : << a revoir >> avec la raison (le droit << demandes >>) ; rembourser (l'admin+ : Stripe, par le service).
     [[nodiscard]] OpResult reviewOrder(int number, const std::string& reason) const;
     [[nodiscard]] OpResult refundOrder(int number) const;
+    // 1.48.1 : LENT (l'admin+) - UN article rembourse (la ligne `line` de la commande `number`) ; `what` : l'article et son
+    // montant, pour le journal des admins.
+    [[nodiscard]] OpResult refundLine(int number, int line, const std::string& what = {}) const;
     // LENT : BRANCHER STRIPE (l'admin+) - `secretKey` (collee par l'editeur) est effacee quoi qu'il arrive ; le webhook cree
     // chez Stripe, les deux secrets poses sur le Worker par le kit (deployer::putSecret). Jamais ecrite ici.
     [[nodiscard]] OpResult connectStripe(std::string& secretKey, const deployer::Options& kit = {}, const deployer::LineSink& onLine = {},

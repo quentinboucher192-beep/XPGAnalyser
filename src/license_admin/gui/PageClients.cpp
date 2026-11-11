@@ -750,7 +750,7 @@ private:
                 }
             if (canDelete && c->pendingRequests > 0) {
                 canDelete = false;
-                deleteNote_ = "Une demande attend ta d\xC3\xA9" "cision (Demandes en ligne).";
+                deleteNote_ = "Une demande attend ta d\xC3\xA9" "cision (Commandes et demandes).";
             }
         }
         // 1.44.0 : les droits d'un admin - creer une licence, supprimer, restaurer un client ; le bouton dit pourquoi.

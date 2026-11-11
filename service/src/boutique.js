@@ -15,7 +15,7 @@
 //    HMAC-SHA256, compare en temps constant, 5 minutes au plus d'ecart, chaque
 //    evenement traite une fois) : payee, expiree, echec, remboursee ;
 //  - les commandes vues par l'editeur et les admins (droit << demandes >>) :
-//    prendre, livree, a revoir ; rembourser (l'admin+).
+//    prendre, livree, a revoir ; rembourser (l'admin+ ; 1.48.1 : un article seul).
 //  LES SECRETS DE STRIPE (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) sont des
 //  secrets du Worker : jamais dans une table, une sauvegarde, une reponse, un
 //  journal. STRIPE_API_BASE (un faux Stripe des essais) n'est ecoute que pour un
@@ -635,9 +635,11 @@ export const RoutesBoutique = {
         return o;
     },
     // L'etat d'une commande d'apres ses lignes (toutes finies : livree, ou refusee si aucune n'est livree) ; null : pas fini.
+    // 1.48.1 : toutes remboursees (un article a la fois) : remboursee, comme le remboursement de toute la commande.
     etatFini(numero) {
         const l = this.lignes("SELECT etat, licence FROM commande_lignes WHERE numero = ?", numero);
         if (!l.length || !l.every((x) => LIGNE_FINIE.includes(x.etat))) return null;
+        if (l.every((x) => x.etat === "remboursee")) return { etat: "remboursee", licence: "" };
         const livree = l.find((x) => x.etat === "livree");
         return livree ? { etat: "livree", licence: livree.licence } : { etat: "refusee", licence: "" };
     },
@@ -1220,8 +1222,10 @@ export const RoutesBoutique = {
 
     // POST /admin/commandes/rembourser {"numero"} (admin+) : le remboursement demande a Stripe ; la commande passe
     // << remboursee >> au webhook (charge.refunded).
+    // 1.48.1 : {"numero","ligne"} - UN article : rembourserLigne.
     async rembourserCommande(ctx) {
-        const { c } = this.commandeOuErreur(ctx);
+        const { corps, c } = this.commandeOuErreur(ctx);
+        if (corps.ligne !== undefined) return this.rembourserLigne(ctx, corps, c);
         if (!["payee", "livree", "a_revoir"].includes(c.etat) || !c.stripe_paiement)
             throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'a pas de paiement à rembourser (« " + c.etat + " »).", { etat: c.etat });
         const r = (await this.appelStripe(ctx, "POST", "/v1/refunds", [["payment_intent", c.stripe_paiement]], "remboursement-" + c.numero, "le remboursement")).json;
@@ -1229,6 +1233,51 @@ export const RoutesBoutique = {
         this.x("UPDATE commandes SET stripe_remboursement = ?, maj = ? WHERE numero = ?", id, ctx.now, c.numero);
         this.signalerCommande();
         return reponseJson(200, { numero: c.numero, remboursement: id, etat: c.etat });
+    },
+
+    // 1.48.1 : UN ARTICLE rembourse (docs/BOUTIQUE.md, par. 10) - Stripe rembourse le montant de cette ligne sur le meme
+    // paiement (amount, une cle d'idempotence par commande et par ligne) ; la ligne passe << remboursee >> des que Stripe
+    // l'accepte (le webhook ne dit pas quelle ligne : charge.refunded d'un remboursement partiel est ignore, comme avant) ;
+    // les autres lignes ne bougent pas ; la commande suit ses lignes (toutes remboursees : << remboursee >>). Comme pour
+    // toute la commande, la licence ou l'option livree n'est pas revoquee d'office (l'Admin le dit, l'editeur decide).
+    // Deux fois la meme ligne : 409 << etat >> (jamais un second remboursement).
+    async rembourserLigne(ctx, corps, c) {
+        if (!entier(corps.ligne, 1, MAX_LIGNES)) throw mal("ligne");
+        if (c.mode === "demande" || !c.stripe_paiement || !["payee", "livree", "a_revoir"].includes(c.etat))
+            throw new Erreur(409, "etat", "La commande n° " + c.numero + " n'a pas de paiement à rembourser (« " + c.etat + " »).", { etat: c.etat });
+        if (c.stripe_remboursement)
+            throw new Erreur(409, "etat", "Le remboursement de toute la commande n° " + c.numero + " est déjà demandé à Stripe.", { etat: c.etat });
+        // une commande d'avant la 1.48 (sans lignes) : sa ligne 1 est creee d'apres elle (comme commandeLigne)
+        if (!this.nombre("SELECT COUNT(*) AS n FROM commande_lignes WHERE numero = ?", c.numero)) {
+            const d = this.lignesDe(c)[0];
+            this.x(
+                `INSERT INTO commande_lignes (numero, ligne, article, genre, edition, option, jours, montant, libelle, licence_existante, avec_ligne, etat, licence, erreur, maj)
+                 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+                c.numero, d.article, d.genre, d.edition, d.option, d.jours, d.montant, d.libelle, d.licence_existante, d.etat, d.licence || "", d.erreur || "", ctx.now,
+            );
+        }
+        const l = this.ligne("SELECT * FROM commande_lignes WHERE numero = ? AND ligne = ?", c.numero, corps.ligne);
+        if (!l) throw new Erreur(404, "ligne", "La commande n° " + c.numero + " n'a pas de ligne n° " + corps.ligne + ".");
+        if (l.etat === "remboursee")
+            throw new Erreur(409, "etat", "La ligne n° " + l.ligne + " de la commande n° " + c.numero + " est déjà remboursée.", { etat: l.etat, licence: l.licence || null });
+        if (!["payee", "a_revoir", "livree", "refusee"].includes(l.etat) || !Number.isSafeInteger(l.montant) || l.montant <= 0)
+            throw new Erreur(409, "etat", "La ligne n° " + l.ligne + " de la commande n° " + c.numero + " n'a pas de paiement à rembourser (« " + l.etat + " »).", { etat: l.etat });
+        const params = [["payment_intent", c.stripe_paiement], ["amount", String(l.montant)], ["metadata[commande]", String(c.numero)], ["metadata[ligne]", String(l.ligne)]];
+        const r = (await this.appelStripe(ctx, "POST", "/v1/refunds", params, "remboursement-" + c.numero + "-ligne-" + l.ligne, "le remboursement d'un article")).json;
+        if (r.status === "failed" || r.status === "canceled")
+            throw new Erreur(502, "stripe", "Stripe n'a pas remboursé la ligne n° " + l.ligne + " de la commande n° " + c.numero + " (« " + r.status + " »).");
+        const id = typeof r.id === "string" ? r.id.slice(0, 255) : "";
+        this.x("UPDATE commande_lignes SET etat = 'remboursee', maj = ? WHERE numero = ? AND ligne = ?", ctx.now, c.numero, l.ligne);
+        const fini = this.etatFini(c.numero);
+        let etatCommande = c.etat;
+        if (fini) {
+            etatCommande = fini.etat;
+            this.x("UPDATE commandes SET etat = ?, licence = ?, maj = ?, prise = 0, prise_par = '' WHERE numero = ?", fini.etat, fini.licence || c.licence, ctx.now, c.numero);
+        } else {
+            this.x("UPDATE commandes SET maj = ? WHERE numero = ?", ctx.now, c.numero);
+        }
+        this.signalerCommande();
+        return reponseJson(200, { numero: c.numero, ligne: l.ligne, remboursement: id, montant: l.montant, etat: "remboursee", etat_commande: etatCommande });
     },
 
     // ============================================================ le menage ==

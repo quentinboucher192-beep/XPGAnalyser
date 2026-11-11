@@ -659,7 +659,7 @@ private:
         r.drawText({tx, saleRect_.y + 63.f}, fitOr(r, "Les Studios montrent \xC2\xAB Acheter \xE2\x80\x94 montant TTC \xC2\xBB sur ce qui est en vente.",
                                                               "Les Studios montrent \xC2\xAB Acheter \xE2\x80\x94 montant TTC \xC2\xBB.", kF12, tw), kF12, c.textMuted);
         r.drawText({tx, saleRect_.y + 86.f}, "Livrer seul les commandes pay\xC3\xA9" "es", gfx::semibold(kF14), c.text);
-        r.drawText({tx, saleRect_.y + 105.f}, fitOr(r, "L'Admin ouvert signe et d\xC3\xA9pose la licence d\xC3\xA8s le paiement (sinon : Commandes \xE2\x80\xBA D\xC3\xA9livrer).",
+        r.drawText({tx, saleRect_.y + 105.f}, fitOr(r, "L'Admin ouvert signe et d\xC3\xA9pose la licence d\xC3\xA8s le paiement (sinon : Commandes et demandes \xE2\x80\xBA D\xC3\xA9livrer).",
                                                                "L'Admin ouvert livre d\xC3\xA8s le paiement (sinon : Commandes).", kF12, tw), kF12,
                    c.textMuted);
         std::string st;
@@ -826,28 +826,43 @@ Color stateInk(const std::string& s) {
     return Color::rgb(0x64748B);
 }
 
+// 1.48.1 : les trois genres de rangees de << Commandes et demandes >> (la puce << Type >>).
+constexpr const char* kKindPaid = "Achat";
+constexpr const char* kKindCart = "Demande";
+constexpr const char* kKindLicence = "Demande de licence";   // l'assistant << Demander ma licence >> (POST /v1/demandes)
+
 class OrdersModel final : public ui::ITableModel {
 public:
     std::vector<shop::Order> rows;
-    std::vector<std::string> by;   // 1.47.0 : qui l'a livree (le journal des admins) ; une colonne pour la barre, pas montree
+    std::vector<std::string> by;          // 1.47.0 : qui l'a livree (le journal des admins) ; une colonne pour la barre, pas montree
+    std::vector<int>         req;         // 1.48.1 : une demande de licence (son rang dans les demandes de la page) ; -1 : une commande
+    std::vector<std::string> stateText;   // 1.48.1 : l'etat d'une demande de licence, en mots (vide : shop::stateLabel)
+    [[nodiscard]] bool isRequest(RowIndex r) const { return r < req.size() && req[r] >= 0; }
     [[nodiscard]] std::size_t rowCount() const override { return rows.size(); }
-    [[nodiscard]] std::size_t columnCount() const override { return 8; }
+    [[nodiscard]] std::size_t columnCount() const override { return 10; }
     [[nodiscard]] std::string headerText(std::size_t c) const override {
-        static const char* h[] = {"N\xC2\xB0", "Date", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat", "Client", "Livr\xC3\xA9" "e par"};
-        return c < 8 ? h[c] : "";
+        static const char* h[] = {"N\xC2\xB0", "Date", "Soci\xC3\xA9t\xC3\xA9", "Article", "Montant", "\xC3\x89tat", "Client", "Livr\xC3\xA9" "e par", "Type", "Cl\xC3\xA9"};
+        return c < 10 ? h[c] : "";
+    }
+    [[nodiscard]] std::string kindText(RowIndex r) const {
+        if (isRequest(r)) return kKindLicence;
+        return r < rows.size() && !rows[r].payment ? kKindCart : kKindPaid;
     }
     [[nodiscard]] std::string cellText(RowIndex r, std::size_t c) const override {
         if (r >= rows.size()) return {};
         const auto& o = rows[r];
+        const bool request = isRequest(r);
         switch (c) {
-            case 0: return o.lineCount > 1 ? std::to_string(o.number) + "-" + std::to_string(o.line) : std::to_string(o.number);   // 1.48.0 : une ligne
+            case 0: return !request && o.lineCount > 1 ? std::to_string(o.number) + "-" + std::to_string(o.line) : std::to_string(o.number);   // 1.48.0 : une ligne
             case 1: return dateTimeFr(o.created);
             case 2: return o.company;
             case 3: return o.label.empty() ? o.article : o.label;
-            case 4: return shop::amountText(o.amount, o.currency);   // un paiement d'essai : la pastille du detail le dit
-            case 5: return shop::stateLabel(o.state);
+            case 4: return request ? std::string("\xE2\x80\x94") : shop::amountText(o.amount, o.currency);   // un paiement d'essai : la pastille du detail le dit
+            case 5: return r < stateText.size() && !stateText[r].empty() ? stateText[r] : shop::stateLabel(o.state);
             case 6: return o.name.empty() ? o.email : o.name;
             case 7: return r < by.size() ? by[r] : std::string();
+            case 8: return kindText(r);   // 1.48.1 : le type (la puce)
+            case 9: return (request ? "d" : "c") + std::to_string(o.number) + "-" + std::to_string(o.line);   // la cle du depliage
             default: return {};
         }
     }
@@ -858,11 +873,13 @@ public:
             s.bold = rows[r].state == "payee" || rows[r].state == "a_revoir" || rows[r].state == "a_valider";
             s.keepFgSelected = true;   // l'etat garde sa couleur sur la ligne choisie
         }
+        if (r < rows.size() && c == 3 && isRequest(r)) s.bold = rows[r].state == "a_valider";   // 1.48.1 : une demande qui attend
         if (c == 0) s.monospace = true;
         return s;
     }
     [[nodiscard]] bool less(RowIndex a, RowIndex b, std::size_t c) const override {
-        if (c == 0 || c == 1) return rows[a].number < rows[b].number;
+        if (c == 1 && rows[a].created != rows[b].created) return rows[a].created < rows[b].created;   // 1.48.1 : commandes et demandes melees
+        if (c == 0 || c == 1) return rows[a].number != rows[b].number ? rows[a].number < rows[b].number : rows[a].line < rows[b].line;
         if (c == 4) return rows[a].amount < rows[b].amount;
         return cellText(a, c) < cellText(b, c);
     }
@@ -956,7 +973,33 @@ private:
     std::function<void(const std::string&)> onOk_;
 };
 
-// =================================================================================== la page Commandes
+// =================================================================================== la page Commandes et demandes
+// 1.48.1 : UNE SEULE PAGE pour tout ce qui attend une decision - les commandes de la boutique (payees), les demandes du
+// panier (sans paiement) et les DEMANDES DE LICENCE de l'assistant << Demander ma licence >> du Studio (POST
+// /v1/demandes : le profil, les PC, la duree, l'offre ; avant : la page << Demandes en ligne >>). Une demande de licence
+// est une rangee (type << Demande de licence >>, << a valider >>) ; Delivrer... lance EXACTEMENT l'acceptation d'avant
+// (requestflow::accept : l'assistant de licence, sa fenetre de confirmation, la signature, le depot, le journal),
+// Refuser... le refus d'avant (la raison) ; le droit << demandes >> comme avant. Rembourser... : 1.48.1 - UN article
+// (la ligne choisie) ; Rembourser la commande... : toute la commande (comme avant).
+
+// Une demande de licence vue comme une ligne : son etat (le code d'une ligne de commande : la couleur, la puce) et ses mots.
+std::pair<std::string, std::string> requestState(const online::Entry& e) {
+    using RS = online::RequestState;
+    if (e.acceptedHere()) return {"a_revoir", "accept\xC3\xA9" "e ici \xE2\x80\x94 r\xC3\xA9ponse \xC3\xA0 renvoyer"};
+    switch (e.state) {
+        case RS::Pending: return {"a_valider", shop::stateLabel("a_valider")};
+        case RS::Accepted: return {"livree", shop::stateLabel("livree")};
+        case RS::Refused: return {"refusee", shop::stateLabel("refusee")};
+        case RS::Cancelled: return {"annulee", shop::stateLabel("annulee")};
+        default: return {"demande", online::requestStateLabel(e.state)};
+    }
+}
+std::string oneLine(std::string s) {
+    for (auto& c : s)
+        if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+    return s;
+}
+
 class OrdersPage final : public Page {
 public:
     // 1.47.0 : l'erreur du service tient sur une ligne (listkit::shortError) ; sous la souris, son texte entier.
@@ -968,13 +1011,14 @@ public:
 
     explicit OrdersPage(ShellHost host) : Page("page.commandes", std::move(host)) {
         reload_ = &button(*this, "Relever", "commandes.relever", ui::Button::Style::Default, ui::Icon::Refresh);
+        reload_->setTooltip("Relit les commandes de la boutique et les demandes de licence envoy\xC3\xA9" "es par les Studios des clients.");
         deploy_ = &button(*this, "D\xC3\xA9ployer le service", "commandes.deployer", ui::Button::Style::Primary, ui::Icon::Export);
         table_ = &adopt(*this, std::make_unique<ui::TableView>("commandes.table"));
         table_->setColumns({{"N\xC2\xB0", 64.f}, {"Date", 118.f}, {"Soci\xC3\xA9t\xC3\xA9", 150.f}, {"Article", 200.f}, {"Montant", 104.f}, {"\xC3\x89tat", 150.f}, {"Client", 120.f}});
         table_->setSelectionMode(ui::SelectionMode::Extended);   // 1.47.0 : plusieurs lignes (Exporter 12 lignes)
         model_ = std::make_shared<OrdersModel>();
         table_->setModel(model_);
-        // 1.47.0 (planche 12) : LA BARRE - chercher, l'etat, l'article, la periode, livree par ; << Mes filtres >>.
+        // 1.47.0 (planche 12) : LA BARRE - chercher, l'etat, l'article, la periode, livree par ; << Mes filtres >>. 1.48.1 : le type.
         bar_ = &adopt(*this, std::make_unique<ui::FilterBar>("commandes", barFields()));
         bar_->setNoun("commandes");
         bar_->setClock([this] { return listkit::seconds(ws().now()); });
@@ -983,21 +1027,32 @@ public:
             src.rows = [this] { return all_->rows.size(); };
             src.text = [this](std::size_t r, std::size_t f) { return all_->cellText(static_cast<RowIndex>(r), f); };
             src.time = [this](std::size_t r, std::size_t f) -> std::int64_t { return f == 1 && r < all_->rows.size() ? listkit::seconds(all_->rows[r].created) : 0; };
-            src.extra = [this](std::size_t r) { return r < all_->rows.size() ? all_->rows[r].email + " " + all_->rows[r].licence + " " + all_->rows[r].stripePayment : std::string(); };
+            src.extra = [this](std::size_t r) -> std::string {
+                if (r >= all_->rows.size()) return {};
+                if (all_->isRequest(static_cast<RowIndex>(r))) {
+                    const auto& e = entries_[static_cast<std::size_t>(all_->req[r])];
+                    return e.fingerprint + " " + e.email + " " + e.deviceName + " " + e.licenseId + " " + e.message;
+                }
+                return all_->rows[r].email + " " + all_->rows[r].licence + " " + all_->rows[r].stripePayment;
+            };
             bar_->setSource(std::move(src));
         }
         bar_->linkTable(*table_);
         bar_->setMemoryKey("commandes");
         links_ += bar_->changed->connect([this] { rebuild(); });
-        // 1.47.0 (planche 06) : le clic droit ; (planche 07) : une ligne se deplie.
+        // 1.47.0 (planche 06) : le clic droit ; (planche 07) : une ligne se deplie (reperee par sa cle : une commande et une
+        // demande de licence peuvent avoir le meme numero).
         links_ += ui::ListMenu::bind(*table_, [this] { return menuFor(); });
-        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); });
+        table_->setUnfold([this](RowIndex r) { return unfoldFor(r); }, 9);
         deliver_ = &button(*this, "D\xC3\xA9livrer maintenant", "commandes.delivrer", ui::Button::Style::Primary, ui::Icon::Ok);
+        acceptOnline_ = &button(*this, "D\xC3\xA9livrer en ligne\xE2\x80\xA6", "commandes.delivrer-en-ligne", ui::Button::Style::Default, ui::Icon::Globe);   // 1.48.1
+        resend_ = &button(*this, "Renvoyer la r\xC3\xA9ponse", "commandes.renvoyer", ui::Button::Style::Primary, ui::Icon::Refresh);                     // 1.48.1
         stripe_ = &button(*this, "Voir dans Stripe", "commandes.stripe", ui::Button::Style::Default, ui::Icon::GoTo);
         receipt_ = &button(*this, "Ouvrir le re\xC3\xA7u", "commandes.recu", ui::Button::Style::Default, ui::Icon::Document);
         review_ = &button(*this, "Refuser\xE2\x80\xA6", "commandes.revoir");   // 1.48.0 : refuser une ligne (la raison)
-        refund_ = &button(*this, "Rembourser\xE2\x80\xA6", "commandes.rembourser", ui::Button::Style::Danger);
-        links_ += reload_->clicked->connect([this] { fetch(); });
+        refund_ = &button(*this, "Rembourser\xE2\x80\xA6", "commandes.rembourser", ui::Button::Style::Danger);   // 1.48.1 : cet article
+        refundAll_ = &button(*this, "Rembourser la commande\xE2\x80\xA6", "commandes.rembourser-commande", ui::Button::Style::Danger);   // 1.48.1
+        links_ += reload_->clicked->connect([this] { fetchAll(); });
         links_ += deploy_->clicked->connect([this] {
             if (host_.openDialog) host_.openDialog(makeDeployDialog(host_, [this, alive = alive_] {
                 if (*alive) update();
@@ -1005,14 +1060,17 @@ public:
         });
         links_ += table_->selectionChanged->connect([this](const std::vector<RowIndex>&) { update(); });
         links_ += deliver_->clicked->connect([this] { deliver(); });
+        links_ += acceptOnline_->clicked->connect([this] { acceptOnline(); });
+        links_ += resend_->clicked->connect([this] { resend(); });
         links_ += stripe_->clicked->connect([this] {
-            if (const shop::Order* o = selected()) openUrl(host_, shop::dashboardUrl(o->mode, o->stripePayment));
+            if (const shop::Order* o = selectedOrder()) openUrl(host_, shop::dashboardUrl(o->mode, o->stripePayment));
         });
         links_ += receipt_->clicked->connect([this] {
-            if (const shop::Order* o = selected(); o && o->receiptUrl.rfind("https://", 0) == 0) openUrl(host_, o->receiptUrl);
+            if (const shop::Order* o = selectedOrder(); o && o->receiptUrl.rfind("https://", 0) == 0) openUrl(host_, o->receiptUrl);
         });
         links_ += review_->clicked->connect([this] { askReview(); });
-        links_ += refund_->clicked->connect([this] { askRefund(); });
+        links_ += refund_->clicked->connect([this] { askRefundLine(); });
+        links_ += refundAll_->clicked->connect([this] { askRefund(); });
         refresh();
     }
     ~OrdersPage() override {
@@ -1026,23 +1084,22 @@ public:
         if (ws().service().ready() && ws().can("demandes") && shopServiceNote(ws()).empty() && !fetching_ && (lastFetch_ < 0 || steadySeconds() - lastFetch_ > 20.0))
             fetch();
         reloadAll();
-        // 1.47.0 : << Ses commandes >> d'un client (Clients, le clic droit) : la barre filtree sur sa societe.
-        if (const std::string f = takePageFocus("commandes"); f.rfind("client:", 0) == 0) {
+        // 1.47.0 : << Ses commandes >> d'un client (Clients, le clic droit) : la barre filtree sur sa societe. 1.48.1 : les
+        // liens de l'ancienne page << Demandes en ligne >> (la coquille, Shell::navigate) : les demandes de licence (d'un client).
+        const std::string f = takePageFocus("commandes");
+        if (f.rfind("client:", 0) == 0) {
             bar_->clearAll();
             bar_->filterOn(2, f.substr(7));
+        } else if (f == "demandes" || f.rfind("demandes-client:", 0) == 0) {
+            bar_->clearAll();
+            if (f != "demandes") bar_->filterOn(2, f.substr(16));
+            bar_->setValues(8, {kKindLicence});
         }
     }
 
-    // Les essais : choisir la commande n.
-    bool select(int number) {
-        for (std::size_t i = 0; i < model_->rows.size(); ++i)
-            if (model_->rows[i].number == number) {
-                table_->selectModelRows({static_cast<RowIndex>(i)});
-                update();
-                return true;
-            }
-        return false;
-    }
+    // Les essais : choisir la commande n (une rangee de la boutique) ; 1.48.1 : la demande de licence n.
+    bool select(int number) { return selectWhere([&](std::size_t i) { return !model_->isRequest(static_cast<RowIndex>(i)) && model_->rows[i].number == number; }); }
+    bool selectRequest(int number) { return selectWhere([&](std::size_t i) { return model_->isRequest(static_cast<RowIndex>(i)) && model_->rows[i].number == number; }); }
     [[nodiscard]] std::size_t shownCount() const { return model_->rows.size(); }
     [[nodiscard]] ui::FilterBar& bar() { return *bar_; }   // 1.47.0 : les essais
 
@@ -1086,10 +1143,11 @@ protected:
                        tw);
         }
         detail_ = {x0_ + w_ - detailW, y, detailW, h};
-        // Les boutons du detail, en bas du volet.
+        // Les boutons du detail, en bas du volet (de haut en bas : Delivrer, en ligne, Renvoyer, Stripe, le recu, Refuser,
+        // Rembourser cet article, Rembourser la commande).
         float by = detail_.bottom() - 16.f - 34.f;
         const float bx = detail_.x + 18.f, bw = detail_.w - 36.f;
-        for (ui::Button* btn : {refund_, review_, receipt_, stripe_, deliver_}) {
+        for (ui::Button* btn : {refundAll_, refund_, review_, receipt_, stripe_, resend_, acceptOnline_, deliver_}) {
             if (!btn->visible()) continue;
             btn->setBounds({bx, by, bw, 34.f});
             by -= 42.f;
@@ -1121,45 +1179,80 @@ protected:
 
 private:
     [[nodiscard]] bool busy() const { return host_.busy && host_.busy(); }
-    [[nodiscard]] const shop::Order* selected() const {
+    [[nodiscard]] int selectedRow() const {
         const auto sel = table_->selectedModelRows();
-        return sel.empty() || sel.front() >= model_->rows.size() ? nullptr : &model_->rows[sel.front()];
+        return sel.empty() || sel.front() >= model_->rows.size() ? -1 : static_cast<int>(sel.front());
+    }
+    // La rangee choisie (une commande ou une demande de licence) ; selectedOrder : une commande seulement ; selectedRequest :
+    // une demande de licence seulement.
+    [[nodiscard]] const shop::Order* selected() const {
+        const int r = selectedRow();
+        return r < 0 ? nullptr : &model_->rows[static_cast<std::size_t>(r)];
+    }
+    [[nodiscard]] const shop::Order* selectedOrder() const {
+        const int r = selectedRow();
+        return r < 0 || model_->isRequest(static_cast<RowIndex>(r)) ? nullptr : &model_->rows[static_cast<std::size_t>(r)];
+    }
+    [[nodiscard]] const online::Entry* selectedRequest() const {
+        const int r = selectedRow();
+        if (r < 0 || !model_->isRequest(static_cast<RowIndex>(r))) return nullptr;
+        const auto i = static_cast<std::size_t>(model_->req[static_cast<std::size_t>(r)]);
+        return i < entries_.size() ? &entries_[i] : nullptr;
+    }
+    template <class F>
+    bool selectWhere(F&& f) {
+        for (std::size_t i = 0; i < model_->rows.size(); ++i)
+            if (f(i)) {
+                table_->selectModelRows({static_cast<RowIndex>(i)});
+                update();
+                return true;
+            }
+        return false;
     }
 
     [[nodiscard]] std::string status() const {
-        if (fetching_) return "Relev\xC3\xA9 des commandes en cours\xE2\x80\xA6";
+        if (fetching_) return "Relev\xC3\xA9 des commandes et des demandes en cours\xE2\x80\xA6";
         if (!problem_.empty() && note_.empty()) return serviceLine(problem_);
         const auto& w = ws();
         if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");
-        if (!w.hasOrders()) return "Les commandes de la boutique (pay\xC3\xA9" "es sur la page de Stripe) : pas encore relev\xC3\xA9" "es.";
-        std::string t = std::to_string(w.orders().orders.size()) + " commande(s) \xC2\xB7 " + std::to_string(w.orders().toDeliver) + " \xC3\xA0 livrer";
+        const int pending = w.service().pending;
+        const std::string requests = pending > 0 ? " \xC2\xB7 " + std::to_string(pending) + " demande(s) de licence \xC3\xA0 valider" : std::string();
+        if (!w.hasOrders()) return "Les commandes de la boutique (pay\xC3\xA9" "es sur la page de Stripe) : pas encore relev\xC3\xA9" "es" + requests + ".";
+        std::string t = std::to_string(w.orders().orders.size()) + " commande(s) \xC2\xB7 " + std::to_string(w.orders().toDeliver) + " \xC3\xA0 livrer" + requests;
         if (w.hasShop()) t += std::string(" \xC2\xB7 livraison automatique ") + (w.shop().autoDeliver ? "en marche" : "arr\xC3\xAAt\xC3\xA9" "e (D\xC3\xA9livrer maintenant)");
         if (w.hasShop() && w.shop().stripe.connected) t += " \xC2\xB7 " + shop::modeLabel(w.shop().stripe.mode);
         return t;
     }
     [[nodiscard]] std::string empty() const {
         const auto& w = ws();
-        if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : la boutique en a besoin (Service en ligne).";
+        if (!w.service().ready()) return "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9 : la boutique et les demandes de licence en ont besoin (Service en ligne).";
         if (!w.can("demandes")) return w.whyNot("demandes");
-        if (!w.hasOrders()) return "Pas encore relev\xC3\xA9" "es : clique \xC2\xAB Relever \xC2\xBB.";
-        if (!w.orders().orders.empty()) return "Aucune commande avec ces filtres : \xC2\xAB Effacer les filtres \xC2\xBB pour les voir toutes.";
-        return "Aucune commande pour l'instant. Les clients ach\xC3\xA8tent depuis leur Studio (Licence \xE2\x80\xBA Demander ma licence) une fois la boutique ouverte (Boutique).";
+        if (!w.hasOrders() && entries_.empty()) return "Pas encore relev\xC3\xA9" "es : clique \xC2\xAB Relever \xC2\xBB.";
+        if (!all_->rows.empty()) return "Aucune commande ni demande avec ces filtres : \xC2\xAB Effacer les filtres \xC2\xBB pour les voir toutes.";
+        return "Aucune commande ni demande pour l'instant. Les clients ach\xC3\xA8tent ou demandent leur licence depuis leur Studio (Licence \xE2\x80\xBA Demander ma licence) ; "
+               "la boutique s'ouvre dans Boutique.";
     }
 
-    // 1.47.0 : toutes les commandes (la barre les filtre), et qui a livre chacune (le journal des admins).
+    // 1.47.0 : toutes les commandes (la barre les filtre), et qui a livre chacune (le journal des admins). 1.48.1 : et les
+    // demandes de licence (relevees par la coquille, rangees sur ce poste), melees aux commandes, les plus recentes d'abord.
     void reloadAll() {
         who_.reset();
-        all_->rows.clear();
-        all_->by.clear();
+        entries_ = ws().service().ready() ? ws().service().requests : std::vector<online::Entry>{};
+        struct Row {
+            shop::Order o;
+            std::string by, stateText;
+            int         req{-1};
+        };
+        std::vector<Row> rows;
+        const auto deliveredBy = [&](int number) {
+            const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(number));
+            return d ? d->who : std::string();
+        };
         if (ws().hasOrders())
             for (const auto& o : ws().orders().orders) {
                 if (o.lines.empty()) {   // une commande sans lignes (faite a la main, les essais) : elle-meme
-                    std::string by;
-                    if (o.state == "livree" || o.state == "remboursee")
-                        if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
-                    all_->rows.push_back(o);
-                    all_->by.push_back(by);
+                    rows.push_back({o, o.state == "livree" || o.state == "remboursee" ? deliveredBy(o.number) : std::string(), {}, -1});
                     continue;
                 }
                 for (const auto& l : o.lines) {   // 1.48.0 : une rangee par ligne (chacune se valide a part)
@@ -1177,44 +1270,87 @@ private:
                     x.existingLicence = l.existingLicence;
                     x.licence = l.licence;
                     x.error = l.error;
-                    std::string by;
-                    if (x.state == "livree" || x.state == "remboursee")
-                        if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o.number))) by = d->who;
-                    all_->rows.push_back(std::move(x));
-                    all_->by.push_back(by);
+                    const std::string by = x.state == "livree" || x.state == "remboursee" ? deliveredBy(o.number) : std::string();
+                    rows.push_back({std::move(x), by, {}, -1});
                 }
             }
+        for (std::size_t i = 0; i < entries_.size(); ++i) {   // 1.48.1 : une demande de licence = une rangee (une seule ligne)
+            const auto& e = entries_[i];
+            shop::Order x;
+            x.number = e.number;
+            x.device = e.device;
+            x.deviceKey = e.deviceKey;
+            x.created = e.createdAt ? e.createdAt : e.requestedAt;
+            x.company = e.customer;
+            x.name = e.contact == e.email ? std::string() : e.contact;
+            x.email = e.email;
+            x.kind = e.optionRequest() ? "option" : "edition";
+            x.edition = e.edition;
+            x.option = e.option;
+            x.days = e.optionDays;
+            x.existingLicence = e.licenseId;
+            x.label = std::string(kKindLicence) + " : " + requestflow::wanted(ws(), e);
+            x.payment = false;
+            x.currency = "eur";
+            const auto st = requestState(e);
+            x.state = st.first;
+            if (e.state == online::RequestState::Accepted) x.licence = e.answer;
+            else if (e.state == online::RequestState::Refused) x.error = e.answer;
+            std::string by;
+            if (e.state == online::RequestState::Accepted || e.state == online::RequestState::Refused || e.state == online::RequestState::Handled)
+                if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e.number))) by = d->who;
+            rows.push_back({std::move(x), by, st.second, static_cast<int>(i)});
+        }
+        std::stable_sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.o.created > b.o.created; });
+        all_->rows.clear();
+        all_->by.clear();
+        all_->req.clear();
+        all_->stateText.clear();
+        for (auto& r : rows) {
+            all_->rows.push_back(std::move(r.o));
+            all_->by.push_back(std::move(r.by));
+            all_->req.push_back(r.req);
+            all_->stateText.push_back(std::move(r.stateText));
+        }
         bar_->refreshCounts();
         rebuild();
     }
 
     void rebuild() {
-        const int keep = selected() ? selected()->number : 0;
+        const int sel = selectedRow();
+        const std::string keep = sel >= 0 ? model_->cellText(static_cast<RowIndex>(sel), 9) : std::string();
         model_->rows.clear();
         model_->by.clear();
+        model_->req.clear();
+        model_->stateText.clear();
         for (std::size_t i = 0; i < all_->rows.size(); ++i) {
             if (!bar_->accepts(i)) continue;
             model_->rows.push_back(all_->rows[i]);
             model_->by.push_back(all_->by[i]);
+            model_->req.push_back(all_->req[i]);
+            model_->stateText.push_back(all_->stateText[i]);
         }
         model_->reset();
-        if (keep) (void)select(keep);
+        if (!keep.empty()) (void)selectWhere([&](std::size_t i) { return model_->cellText(static_cast<RowIndex>(i), 9) == keep; });
         update();
     }
 
     // ---- 1.47.0 (planche 12) : les colonnes vues par la barre (dans l'ordre du modele) ----
     static std::vector<ui::FilterBar::Field> barFields() {
         using K = ui::FilterBar::Kind;
-        std::vector<ui::FilterBar::Field> f(8);
+        std::vector<ui::FilterBar::Field> f(9);
         f[0] = {.title = "N\xC2\xB0", .kind = K::Text};
         f[1] = {.title = "Date", .kind = K::Period, .chip = true, .chipLabel = "P\xC3\xA9riode"};
         f[2] = {.title = "Soci\xC3\xA9t\xC3\xA9", .noun = "une soci\xC3\xA9t\xC3\xA9"};
         f[3] = {.title = "Article", .chip = true, .noun = "un article"};
         f[4] = {.title = "Montant", .kind = K::Text};
         f[5] = {.title = "\xC3\x89tat", .chip = true, .noun = "un \xC3\xA9tat"};
-        for (const char* st : {"payee", "a_revoir", "a_payer", "livree", "remboursee", "expiree", "annulee", "echec_paiement"}) f[5].order.push_back(shop::stateLabel(st));
+        for (const char* st : {"payee", "a_valider", "a_revoir", "a_payer", "livree", "refusee", "remboursee", "expiree", "annulee", "echec_paiement"})
+            f[5].order.push_back(shop::stateLabel(st));
         f[6] = {.title = "Client", .noun = "un client"};
         f[7] = {.title = "Livr\xC3\xA9" "e par", .chip = true, .noun = "un admin"};
+        f[8] = {.title = "Type", .chip = true, .noun = "un type"};   // 1.48.1 : achat, demande (le panier), demande de licence
+        f[8].order = {kKindPaid, kKindCart, kKindLicence};
         return f;
     }
 
@@ -1224,17 +1360,32 @@ private:
         ui::ListMenu m({rows.size(), "commandes", true});
         if (rows.empty()) return m;
         m.unfold(*table_);
-        const shop::Order* o = rows.front() < model_->rows.size() ? &model_->rows[rows.front()] : nullptr;
-        if (rows.size() == 1 && o) {
-            const auto whyOf = [](ui::Button* b) { return b->enabled() ? std::string() : (b->tooltip().empty() ? std::string("pas pour cette commande") : b->tooltip()); };
-            m.action({.label = "D\xC3\xA9livrer maintenant", .icon = ui::Icon::Ok, .why = whyOf(deliver_), .run = [this] { deliver(); }});
+        const bool one = rows.size() == 1 && rows.front() < model_->rows.size();
+        const shop::Order* o = one ? &model_->rows[rows.front()] : nullptr;
+        const auto whyOf = [](ui::Button* b, const std::string& other) { return b->enabled() ? std::string() : (b->tooltip().empty() ? other : b->tooltip()); };
+        const online::Entry* e = one ? selectedRequest() : nullptr;
+        if (o && e) {   // 1.48.1 : une demande de licence (les gestes de l'ancienne page, dans le meme ordre)
+            const std::string no = "elle n'attend pas de d\xC3\xA9" "cision";
+            m.action({.label = "D\xC3\xA9livrer\xE2\x80\xA6", .icon = ui::Icon::Ok, .why = whyOf(deliver_, no), .run = [this] { deliver(); }});
+            if (!e->optionRequest())
+                m.action({.label = "D\xC3\xA9livrer en ligne\xE2\x80\xA6", .icon = ui::Icon::Globe, .why = whyOf(acceptOnline_, no), .run = [this] { acceptOnline(); }});
+            m.action({.label = "Refuser\xE2\x80\xA6", .icon = ui::Icon::Close, .why = whyOf(review_, no), .run = [this] { askReview(); }});
+            m.action({.label = "Renvoyer la r\xC3\xA9ponse", .icon = ui::Icon::Refresh,
+                      .why = e->acceptedHere() ? whyOf(resend_, std::string()) : std::string("pas de r\xC3\xA9ponse \xC3\xA0 renvoyer"), .run = [this] { resend(); }});
+            const std::string lic = e->state == online::RequestState::Accepted && !e->answer.empty() ? e->answer : e->licenseId;
+            if (!lic.empty() && ws().licence(lic))
+                m.goTo({.label = "La licence " + lic, .icon = ui::Icon::Document, .run = [this, lic] {
+                            requestPageFocus("licences", lic);
+                            host_.navigate("licences");
+                        }});
+        } else if (o) {
+            m.action({.label = "D\xC3\xA9livrer maintenant", .icon = ui::Icon::Ok, .why = whyOf(deliver_, "pas pour cette commande"), .run = [this] { deliver(); }});
             m.action({.label = "Ouvrir le re\xC3\xA7u", .icon = ui::Icon::Document, .why = receipt_->enabled() ? std::string() : std::string("pas de re\xC3\xA7u pour cette commande"),
                       .run = [this] { receipt_->clicked->emit(); }});
             m.action({.label = "Voir dans Stripe", .icon = ui::Icon::GoTo, .why = stripe_->enabled() ? std::string() : std::string("pas encore pay\xC3\xA9" "e"),
                       .run = [this] { stripe_->clicked->emit(); }});
-            m.action({.label = "Revoir\xE2\x80\xA6", .icon = ui::Icon::Warning,
-                      .why = review_->enabled() ? std::string() : std::string("seulement une commande pay\xC3\xA9" "e, pas encore livr\xC3\xA9" "e"), .run = [this] { askReview(); }});
-            // Aller a : sa licence, le client, l'admin qui l'a livree.
+            m.action({.label = "Refuser\xE2\x80\xA6", .icon = ui::Icon::Warning,
+                      .why = review_->enabled() ? std::string() : std::string("seulement un article \xC3\xA0 livrer ou \xC3\xA0 valider"), .run = [this] { askReview(); }});
             if (!o->licence.empty()) {
                 const std::string id = o->licence;
                 m.goTo({.label = "Sa licence " + id, .icon = ui::Icon::Document, .run = [this, id] {
@@ -1242,6 +1393,9 @@ private:
                             host_.navigate("licences");
                         }});
             }
+        }
+        if (o) {
+            // Aller a : le client, l'admin qui l'a livree (ou qui a repondu).
             if (!o->company.empty()) {
                 const std::string c = o->company;
                 m.goTo({.label = "Le client : " + c, .icon = ui::Icon::User, .run = [this, c] {
@@ -1249,7 +1403,9 @@ private:
                             host_.navigate("clients");
                         }});
             }
-            if (const auto d = who_.last({"commande_livrer"}, "commande " + std::to_string(o->number))) {
+            const auto d = e ? who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(o->number))
+                             : who_.last({"commande_livrer"}, "commande " + std::to_string(o->number));
+            if (d) {
                 const std::string key = d->key;
                 m.goTo({.label = "L'admin : " + d->who, .icon = ui::Icon::User, .run = [this, key] {
                             requestPageFocus("admins", "admin:" + key);
@@ -1257,21 +1413,25 @@ private:
                         }});
             }
             // Filtrer sur : les memes puces que la barre.
+            const RowIndex row = rows.front();
             const auto filterOn = [&](std::size_t f, const std::string& label, const std::string& v) {
                 if (v.empty()) return;
                 m.filterOn({.label = label + " : " + v, .run = [this, f, v] { bar_->filterOn(f, v); }});
             };
-            filterOn(5, "Cet \xC3\xA9tat", shop::stateLabel(o->state));
-            filterOn(3, "Cet article", o->label.empty() ? o->article : o->label);
+            filterOn(5, "Cet \xC3\xA9tat", model_->cellText(row, 5));
+            filterOn(8, "Ce type", model_->kindText(row));
+            if (!e) filterOn(3, "Cet article", o->label.empty() ? o->article : o->label);
             filterOn(2, "Cette soci\xC3\xA9t\xC3\xA9", o->company);
             if (o->created > 0) {
                 const std::int64_t when = listkit::seconds(o->created);
                 m.filterOn({.label = "Ce jour : " + dateFr(o->created), .run = [this, when] { bar_->filterOnDay(1, when); }});
             }
-            filterOn(7, "Livr\xC3\xA9" "e par", rows.front() < model_->by.size() ? model_->by[rows.front()] : std::string());
+            filterOn(7, e ? "R\xC3\xA9pondue par" : "Livr\xC3\xA9" "e par", row < model_->by.size() ? model_->by[row] : std::string());
             m.copy("Le num\xC3\xA9ro", std::to_string(o->number), ui::Icon::Copy);
+            if (e && !e->fingerprint.empty()) m.copy("L'empreinte du PC", e->fingerprint, ui::Icon::Lock);
             if (!o->email.empty()) m.copy("Le courriel", o->email, ui::Icon::Mail);
-            if (!o->licence.empty()) m.copy("La licence", o->licence, ui::Icon::Document);
+            if (e && !e->message.empty()) m.copy("Le message", e->message, ui::Icon::Comment);
+            if (!e && !o->licence.empty()) m.copy("La licence", o->licence, ui::Icon::Document);
             if (!o->stripePayment.empty()) m.copy("Le paiement (Stripe)", o->stripePayment, ui::Icon::Link);
         }
         std::string lines;
@@ -1282,14 +1442,22 @@ private:
         }
         m.copy("La ligne", lines, ui::Icon::Copy, "Copier les %n lignes", lines);
         m.exportRows([this, rows] { listkit::exportRows(host_, *table_, rows, "commandes.csv", "commandes"); });
-        if (rows.size() == 1 && o)
-            m.danger({.label = "Rembourser", .icon = ui::Icon::Undo, .why = refund_->enabled() ? std::string() : refund_->tooltip(), .run = [this] { askRefund(); }});
+        if (o && !e) {   // 1.48.1 : rembourser CET article ; toute la commande a part
+            m.danger({.label = "Rembourser", .icon = ui::Icon::Undo, .why = refund_->enabled() ? std::string() : refund_->tooltip(), .run = [this] { askRefundLine(); }});
+            if (o->line > 0)
+                m.danger({.label = "Rembourser la commande", .icon = ui::Icon::Undo, .why = refundAll_->enabled() ? std::string() : refundAll_->tooltip(),
+                          .run = [this] { askRefund(); }});
+        }
         return m;
     }
 
     // ---- 1.47.0 (planche 07) : la ligne depliee - le client et le paiement, la livraison, qui l'a livree ----
     ui::WidgetPtr unfoldFor(RowIndex r) {
         if (r >= model_->rows.size()) return nullptr;
+        if (model_->isRequest(r)) {
+            const auto i = static_cast<std::size_t>(model_->req[r]);
+            return i < entries_.size() ? unfoldRequest(entries_[i]) : nullptr;
+        }
         const shop::Order o = model_->rows[r];
         auto card = std::make_unique<ui::UnfoldCard>("commandes.depliage");
         ui::UnfoldCard::Box client;
@@ -1329,9 +1497,9 @@ private:
                                       requestPageFocus("licences", id);
                                       host_.navigate("licences");
                                   }});
-        } else {
-            life.lines.push_back({.text = shop::stateLabel(o.state), .tone = o.state == "payee" || o.state == "a_revoir" ? ui::Tone::Warning : ui::Tone::None});
         }
+        if (o.licence.empty() || o.state == "remboursee")   // 1.48.1 : un article rembourse le dit aussi
+            life.lines.push_back({.text = shop::stateLabel(o.state), .tone = o.state == "payee" || o.state == "a_revoir" ? ui::Tone::Warning : ui::Tone::None});
         if (!o.error.empty()) life.lines.push_back({.icon = ui::Icon::Warning, .text = o.error, .tone = ui::Tone::Error});
         card->addBox(std::move(life));
         if (d) {
@@ -1349,28 +1517,140 @@ private:
         return card;
     }
 
+    // 1.48.1 : une demande de licence depliee - la demande (le PC, son empreinte, le message), la reponse, qui l'a donnee.
+    ui::WidgetPtr unfoldRequest(const online::Entry& e) {
+        auto card = std::make_unique<ui::UnfoldCard>("commandes.depliage");
+        const Seconds now = ws().now();
+        ui::UnfoldCard::Box ask;
+        ask.title = "LA DEMANDE DE LICENCE";
+        ask.lines.push_back({.icon = ui::Icon::Star, .text = "**" + requestflow::wanted(ws(), e) + "**"});
+        if (!e.fingerprint.empty()) ask.lines.push_back({.icon = ui::Icon::Lock, .text = e.fingerprint, .mono = true});
+        std::string pc = e.deviceName.empty() ? std::string("(sans nom)") : e.deviceName;
+        if (!e.software.empty()) pc += " \xC2\xB7 " + e.software;
+        ask.lines.push_back({.icon = ui::Icon::Station, .text = pc});
+        if (!e.message.empty()) ask.lines.push_back({.icon = ui::Icon::Comment, .text = "\xC2\xAB " + oneLine(e.message) + " \xC2\xBB"});
+        ask.lines.push_back({.icon = ui::Icon::History, .text = "re\xC3\xA7ue " + whenFr(now, e.createdAt ? e.createdAt : e.requestedAt)});
+        card->addBox(std::move(ask));
+        ui::UnfoldCard::Box ans;
+        ans.title = "LA R\xC3\x89PONSE";
+        if (e.state == online::RequestState::Accepted) {
+            ans.lines.push_back({.text = "**livr\xC3\xA9" "e** " + whenFr(now, e.answeredAt), .tone = ui::Tone::Ok, .check = true});
+        } else if (e.state == online::RequestState::Refused) {
+            ans.lines.push_back({.icon = ui::Icon::Close, .text = "**refus\xC3\xA9" "e** " + whenFr(now, e.answeredAt), .tone = ui::Tone::Error});
+            if (!e.answer.empty()) ans.lines.push_back({.icon = ui::Icon::Comment, .text = "\xC2\xAB " + oneLine(e.answer) + " \xC2\xBB"});
+        } else {
+            ans.lines.push_back({.icon = ui::Icon::Info, .text = "**" + requestState(e).second + "**", .tone = e.waiting() ? ui::Tone::Warning : ui::Tone::Muted});
+        }
+        const std::string lic = e.state == online::RequestState::Accepted && !e.answer.empty() ? e.answer : e.licenseId;
+        if (!lic.empty()) {
+            ui::UnfoldCard::Line l{.icon = ui::Icon::Document, .text = "licence **" + lic + "**"};
+            if (ws().licence(lic))
+                l.link = [this, lic] {
+                    requestPageFocus("licences", lic);
+                    host_.navigate("licences");
+                };
+            ans.lines.push_back(std::move(l));
+        }
+        card->addBox(std::move(ans));
+        if (const auto d = who_.last({"demande_accepter", "demande_refuser"}, "demande " + std::to_string(e.number))) {
+            card->addText("r\xC3\xA9pondue par");
+            (void)card->addPerson(listkit::person(host_, d->key, d->who), "commandes.depliage.admin");
+        }
+        const std::string noRight = ws().can("demandes") ? std::string() : ws().whyNot("demandes");
+        if (e.acceptedHere())
+            (void)card->addButton("Renvoyer la r\xC3\xA9ponse", "commandes.depliage.renvoyer", ui::Icon::Refresh, [this] { resend(); }, noRight, true);
+        else if (e.waiting())
+            (void)card->addButton("D\xC3\xA9livrer\xE2\x80\xA6", "commandes.depliage.delivrer", ui::Icon::Ok, [this] { deliver(); }, noRight, true);
+        return card;
+    }
+
     void update() {
         const shop::Order* o = selected();
+        const online::Entry* e = selectedRequest();
         const bool bz = busy();
         note_ = shopServiceNote(ws());
         const bool ready = ws().service().ready() && ws().can("demandes");
         reload_->setEnabled(ready && !fetching_);
-        for (ui::Button* btn : {deliver_, stripe_, receipt_, review_, refund_}) show(btn, o != nullptr);
-        if (o) {
-            const std::string why = ws().whyNotDeliver(o->kind);
-            deliver_->setEnabled(o->deliverable() && why.empty() && !bz && note_.empty());
-            deliver_->setTooltip(!o->deliverable() ? "Cette commande n'est pas \xC3\xA0 livrer (" + shop::stateLabel(o->state) + ")."
-                                 : !why.empty() ? why
-                                                : std::string("Signer la licence et la d\xC3\xA9poser tout de suite (le code part scell\xC3\xA9 au PC du client)."));
-            stripe_->setEnabled(!o->stripePayment.empty() || !o->stripeSession.empty());
-            receipt_->setEnabled(o->receiptUrl.rfind("https://", 0) == 0);
-            review_->setEnabled(o->deliverable() && ws().can("demandes") && !bz);   // 1.48.0 : refuser une ligne a valider
-            refund_->setEnabled(o->refundable() && ws().role() == Role::Plus && !bz);
-            refund_->setTooltip(ws().role() != Role::Plus ? std::string("R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.")
-                                                          : std::string("Stripe rembourse le client en entier ; la licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office."));
-        }
+        show(deliver_, o != nullptr);
+        show(review_, o != nullptr);
+        for (ui::Button* btn : {stripe_, receipt_, refund_}) show(btn, o && !e);
+        show(refundAll_, o && !e && o->line > 0);
+        show(acceptOnline_, e && !e->optionRequest());
+        show(resend_, e && e->acceptedHere());
+        if (e) updateRequest(*e, bz);
+        else if (o) updateOrder(*o, bz);
         invalidateLayout();
         invalidate();
+    }
+
+    // 1.48.1 : les boutons d'une demande de licence (comme l'ancienne page) ; sans le droit << demandes >> : grises, la raison.
+    void updateRequest(const online::Entry& e, bool bz) {
+        const std::string noRight = ws().can("demandes") ? std::string() : ws().whyNot("demandes");
+        const bool here = e.acceptedHere(), opt = e.optionRequest();
+        const std::string why = !noRight.empty() ? noRight
+                                : bz             ? std::string(kBusy)
+                                : here           ? std::string("D\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici : renvoie la r\xC3\xA9ponse.")
+                                : !e.waiting()   ? "Cette demande n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e.state) + ")."
+                                                 : std::string();
+        deliver_->setText("D\xC3\xA9livrer\xE2\x80\xA6");
+        bool optOk = true;
+        std::string optWhy;
+        if (opt && why.empty()) {
+            if (!ws().licence(e.licenseId)) optWhy = "La licence " + e.licenseId + " n'est pas dans l'archive de ce poste : r\xC3\xA9" "cup\xC3\xA8re-la d'abord.";
+            else if (!ws().hasRegistry() || !ws().registry().option(e.option)) optWhy = "L'option " + e.option + " n'est pas dans le registre de ce poste.";
+            optOk = optWhy.empty();
+        }
+        deliver_->setEnabled(why.empty() && optOk);
+        deliver_->setTooltip(!why.empty() ? why
+                             : !optOk     ? optWhy
+                             : opt ? std::string("La fen\xC3\xAAtre \xC2\xAB Ajouter une option \xC2\xBB r\xC3\xA9gl\xC3\xA9" "e sur sa demande ; sign\xC3\xA9" "e, la nouvelle \xC3\xA9mission part sur le service et "
+                                                 "son PC voit \xC2\xAB Accept\xC3\xA9" "e \xC2\xBB.")
+                                   : std::string("L'assistant de licence, avec cette demande : une licence LI\xC3\x89" "E \xC3\xA0 ce PC ; sign\xC3\xA9" "e, elle part d'elle-m\xC3\xAAme \xC3\xA0 "
+                                                 "chacun de ses PC."));
+        acceptOnline_->setEnabled(why.empty() && !opt);
+        acceptOnline_->setTooltip(!why.empty() ? why
+                                               : std::string("Une licence EN LIGNE pour ce client (aucun PC li\xC3\xA9) : son code part scell\xC3\xA9 \xC3\xA0 son PC (il s'active tout seul) "
+                                                             "et par mail ; gard\xC3\xA9 chiffr\xC3\xA9 ici."));
+        review_->setEnabled(why.empty());
+        review_->setTooltip(!why.empty() ? why
+                                         : std::string("Le client voit \xC2\xAB Refus\xC3\xA9" "e \xC2\xBB et ta raison dans son logiciel (scell\xC3\xA9" "e : personne d'autre ne la lit)."));
+        resend_->setEnabled(noRight.empty() && !bz && here);
+        resend_->setTooltip(!noRight.empty() ? noRight
+                                             : std::string("Cette demande est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici, mais sa r\xC3\xA9ponse n'est pas partie : la renvoyer au PC du "
+                                                           "client (la m\xC3\xAA" "me licence, le m\xC3\xAA" "me code ; et le mail)."));
+    }
+
+    void updateOrder(const shop::Order& o, bool bz) {
+        deliver_->setText("D\xC3\xA9livrer maintenant");
+        const std::string why = ws().whyNotDeliver(o.kind);
+        deliver_->setEnabled(o.deliverable() && why.empty() && !bz && note_.empty());
+        deliver_->setTooltip(!o.deliverable() ? "Cette commande n'est pas \xC3\xA0 livrer (" + shop::stateLabel(o.state) + ")."
+                             : !why.empty()   ? why
+                                              : std::string("Signer la licence et la d\xC3\xA9poser tout de suite (le code part scell\xC3\xA9 au PC du client)."));
+        stripe_->setEnabled(!o.stripePayment.empty() || !o.stripeSession.empty());
+        receipt_->setEnabled(o.receiptUrl.rfind("https://", 0) == 0);
+        review_->setEnabled(o.deliverable() && ws().can("demandes") && !bz);   // 1.48.0 : refuser une ligne a valider
+        review_->setTooltip(!ws().can("demandes") ? ws().whyNot("demandes") : std::string());
+        const bool plus = ws().role() == Role::Plus;
+        const std::string notPlus = "R\xC3\xA9serv\xC3\xA9 \xC3\xA0 l'admin+.";
+        const std::string whole = "Stripe rembourse toute la commande ; la licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office.";
+        if (o.line > 0) {   // 1.48.1 : cet article seulement ; toute la commande a part
+            std::string lineWhy;
+            if (o.state == "remboursee") lineWhy = "Cet article est d\xC3\xA9j\xC3\xA0 rembours\xC3\xA9.";
+            else if (!o.payment) lineWhy = "Une demande sans paiement : rien \xC3\xA0 rembourser.";
+            else if (!o.stripeRefund.empty()) lineWhy = "Le remboursement de toute la commande est d\xC3\xA9j\xC3\xA0 demand\xC3\xA9 \xC3\xA0 Stripe.";
+            else if (!o.lineRefundable()) lineWhy = "Pas de paiement \xC3\xA0 rembourser pour cet article (" + shop::stateLabel(o.state) + ").";
+            refund_->setEnabled(lineWhy.empty() && plus && !bz);
+            refund_->setTooltip(!plus ? notPlus
+                                : !lineWhy.empty() ? lineWhy
+                                                   : "Stripe rembourse cet article seulement (" + shop::amountText(o.amount, o.currency) +
+                                                         " TTC) ; les autres articles de la commande restent tels quels ; la licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office.");
+            refundAll_->setEnabled(o.refundable() && plus && !bz);
+            refundAll_->setTooltip(!plus ? notPlus : !o.refundable() ? std::string("Pas de paiement \xC3\xA0 rembourser (" + shop::stateLabel(o.paidState()) + ").") : whole);
+        } else {   // une commande sans lignes (d'avant la 1.48) : un seul article, toute la commande
+            refund_->setEnabled(o.refundable() && plus && !bz);
+            refund_->setTooltip(!plus ? notPlus : whole);
+        }
     }
 
     void paintDetail(const ui::PaintContext& ctx) {
@@ -1382,13 +1662,19 @@ private:
         float y = detail_.y + 16.f;
         if (!o) {
             r.drawText({x, y}, "Le d\xC3\xA9tail", gfx::semibold(kF16), c.text);
-            (void)drawWrapped(r, x, y + 30.f, w, "Choisis une commande dans le tableau : son client, son PC, sa licence, son paiement chez Stripe.", kF13, c.textMuted, 18.f, 4);
+            (void)drawWrapped(r, x, y + 30.f, w, "Choisis une commande ou une demande dans le tableau : son client, son PC, sa licence, son paiement chez Stripe.", kF13,
+                              c.textMuted, 18.f, 4);
             return;
         }
-        r.drawText({x, y}, "Commande n\xC2\xB0 " + std::to_string(o->number), gfx::semibold(kF16), c.text);
+        const online::Entry* e = selectedRequest();
+        const std::string head = e ? std::string(kKindLicence) + " n\xC2\xB0 " + std::to_string(o->number)
+                                 : (o->payment ? "Commande n\xC2\xB0 " : "Demande n\xC2\xB0 ") + std::to_string(o->number) +
+                                       (o->lineCount > 1 && o->line > 0 ? " \xC2\xB7 article " + std::to_string(o->line) + " sur " + std::to_string(o->lineCount) : std::string());
+        r.drawText({x, y}, fit(r, head, gfx::semibold(kF16), w), gfx::semibold(kF16), c.text);
         const Color ink = stateInk(o->state);
-        pill(r, x, y + 28.f, shop::stateLabel(o->state), kF12, ink, ink.withAlpha(26), 22.f, true);
-        if (o->mode == "test") pill(r, x + pillWidth(r, shop::stateLabel(o->state), kF12, true) + 8.f, y + 28.f, "paiement d'essai", kF12, rgb(0xB45309), rgb(0xFFF4E5));
+        const std::string stateWords = selectedRow() >= 0 ? model_->cellText(static_cast<RowIndex>(selectedRow()), 5) : shop::stateLabel(o->state);
+        pill(r, x, y + 28.f, stateWords, kF12, ink, ink.withAlpha(26), 22.f, true);
+        if (!e && o->mode == "test") pill(r, x + pillWidth(r, stateWords, kF12, true) + 8.f, y + 28.f, "paiement d'essai", kF12, rgb(0xB45309), rgb(0xFFF4E5));
         y += 62.f;
         const auto row = [&](const std::string& k, const std::string& v) {
             if (y + 18.f > buttonsTop_ - 8.f) return;
@@ -1396,6 +1682,34 @@ private:
             r.drawText({x + 104.f, y}, fit(r, v.empty() ? std::string("\xE2\x80\x94") : v, kF13, w - 104.f), kF13, c.text);
             y += 21.f;
         };
+        const auto note = [&](const std::string& text, Color ink2, int maxLines) {
+            if (text.empty() || y + 20.f >= buttonsTop_ - 8.f) return;
+            y += 4.f;
+            y += drawWrapped(r, x, y, w, text, kF13, ink2, 18.f, std::max(1, std::min(maxLines, static_cast<int>((buttonsTop_ - 8.f - y) / 18.f))));
+        };
+        if (e) {   // 1.48.1 : une demande de licence (l'assistant du Studio)
+            row("Type", std::string(kKindLicence) + " (Studio)");
+            row("Demand\xC3\xA9", requestflow::wanted(ws(), *e));
+            row("Soci\xC3\xA9t\xC3\xA9", e->customer);
+            row("Client", e->contact);
+            row("Courriel", e->email);
+            row("PC", (e->deviceName.empty() ? std::string("(sans nom)") : e->deviceName) +
+                          (e->fingerprint.empty() ? std::string() : " \xC2\xB7 " + e->fingerprint.substr(0, std::min<std::size_t>(e->fingerprint.size(), 14))));
+            row("Logiciel", e->software);
+            std::string lic = e->licenseId.empty() ? std::string("nouvelle") : e->licenseId;
+            if (!e->licenseId.empty() && ws().licence(e->licenseId)) lic += e->optionRequest() ? " (une option)" : " (ajouter ce PC)";
+            row("Licence", lic);
+            row("Re\xC3\xA7ue", dateTimeFr(e->createdAt ? e->createdAt : e->requestedAt));
+            if (e->state == online::RequestState::Accepted) row("Licence livr\xC3\xA9" "e", e->answer);
+            if (!e->message.empty()) note("\xC2\xAB " + oneLine(e->message) + " \xC2\xBB", c.textMuted, 3);
+            if (e->state == online::RequestState::Refused && !e->answer.empty()) note("Refus\xC3\xA9" "e : " + oneLine(e->answer), c.error, 3);
+            if (e->acceptedHere())
+                note("D\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e->answer + "), mais sa r\xC3\xA9ponse n'est pas partie : \xC2\xAB Renvoyer la r\xC3\xA9ponse \xC2\xBB. "
+                     "Elle ne s'accepte pas une seconde fois.", c.warning, 4);
+            else if (e->waiting() && e->joinRequest() && ws().licence(e->licenseId)) note(online::joinWarning(*e), c.warning, 5);   // n'importe qui peut demander
+            return;
+        }
+        row("Type", o->payment ? std::string("Achat (pay\xC3\xA9 sur Stripe)") : std::string("Demande (le panier, sans paiement)"));
         row("Article", o->label.empty() ? o->article : o->label);
         row("Montant", shop::amountText(o->amount, o->currency) + " TTC");
         row("Soci\xC3\xA9t\xC3\xA9", o->company);
@@ -1411,15 +1725,11 @@ private:
         if (o->paid) row("Pay\xC3\xA9" "e", dateTimeFr(o->paid));
         row("Licence livr\xC3\xA9" "e", o->licence);
         row("Paiement", o->stripePayment);
-        if (!o->stripeRefund.empty()) row("Remboursement", o->stripeRefund + (o->state == "remboursee" ? "" : " (demand\xC3\xA9)"));
+        if (!o->stripeRefund.empty()) row("Remboursement", o->stripeRefund + (o->paidState() == "remboursee" ? "" : " (demand\xC3\xA9)"));
         row("Re\xC3\xA7u", o->receiptUrl.empty() ? std::string() : std::string("la facture de Stripe (Ouvrir le re\xC3\xA7u)"));
-        if (!o->error.empty() && y + 20.f < buttonsTop_ - 8.f) {
-            y += 4.f;
-            (void)drawWrapped(r, x, y, w, o->error, kF13, c.error, 18.f, std::max(1, static_cast<int>((buttonsTop_ - 8.f - y) / 18.f)));
-        }
-        if (o->state == "remboursee" && !o->licence.empty() && y + 40.f < buttonsTop_)
-            (void)drawWrapped(r, x, y + 4.f, w, "Rembours\xC3\xA9" "e : la licence " + o->licence + " n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office (Licences \xE2\x80\xBA R\xC3\xA9voquer, si tu le d\xC3\xA9" "cides).", kF12,
-                              c.warning, 17.f, 2);
+        note(o->error, c.error, 8);
+        if (o->state == "remboursee" && !o->licence.empty())
+            note("Rembours\xC3\xA9" "e : la licence " + o->licence + " n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office (Licences \xE2\x80\xBA R\xC3\xA9voquer, si tu le d\xC3\xA9" "cides).", c.warning, 2);
     }
 
     // Le nom que le client a donne a son PC : dans la demande scellee de la commande (pour la cle de ce poste), ouverte
@@ -1451,8 +1761,71 @@ private:
         update();
     }
 
+    // 1.48.1 : << Relever >> - les commandes ET les demandes de licence (rangees sur ce poste), sans bruit.
+    void fetchAll() {
+        if (fetching_) return;
+        if (busy()) {
+            if (host_.flash) host_.flash(kBusy, Tone::Warning);
+            return;
+        }
+        Workspace& w = ws();
+        if (!w.service().ready() || !w.signer()) return;
+        const bool orders = shopServiceNote(w).empty();
+        const Workspace* wp = &w;
+        auto s = std::make_shared<shop::Settings>();
+        auto v = std::make_shared<shop::OrdersView>();
+        auto okS = std::make_shared<bool>(false);
+        auto okO = std::make_shared<bool>(false);
+        fetching_ = true;
+        lastFetch_ = steadySeconds();
+        auto alive = alive_;
+        ShellHost h = host_;
+        const bool started = runQuietly(
+            host_, "Commandes et demandes : relev\xC3\xA9",
+            [wp, s, v, okS, okO, orders] {
+                OpResult r = OpResult::done("Commandes et demandes relev\xC3\xA9" "es.");
+                if (orders) {
+                    r = wp->shopSettings(*s);
+                    *okS = r.ok;
+                    if (r.ok) {
+                        const OpResult o = wp->shopOrders(*v);
+                        *okO = o.ok;
+                        if (!o.ok) r = o;
+                    }
+                }
+                const OpResult q = wp->serviceFetch();   // les demandes de licence (l'assistant du Studio)
+                if (r.ok && !q.ok) r = q;
+                return r;
+            },
+            [this, alive, h, s, v, okS, okO](const OpResult& r) {
+                Workspace& here = h.workspace();
+                if (*okS) here.adoptShop(*s);
+                if (*okO) here.adoptOrders(*v);
+                here.reload();   // les demandes relevees (le dossier)
+                if (!*alive) return;
+                fetching_ = false;
+                problem_ = r.ok ? std::string() : r.message;
+                reloadAll();
+            });
+        if (!started) fetching_ = false;
+        update();
+    }
+
+    // Apres un geste sur une demande de licence : la page relue.
+    std::function<void()> afterRequest() {
+        auto alive = alive_;
+        return [this, alive] {
+            if (*alive) refresh();
+        };
+    }
+
     void deliver() {
-        const shop::Order* o = selected();
+        if (const online::Entry* e = selectedRequest()) {   // 1.48.1 : EXACTEMENT l'acceptation d'avant
+            if (e->optionRequest()) requestflow::addOption(host_, *e);
+            else requestflow::accept(host_, *e, false);
+            return;
+        }
+        const shop::Order* o = selectedOrder();
         if (!o) return;
         if (busy()) {
             if (host_.flash) host_.flash(kBusy, Tone::Warning);
@@ -1468,10 +1841,21 @@ private:
                                 fetch();
                             });
     }
+    void acceptOnline() {
+        if (const online::Entry* e = selectedRequest(); e && !e->optionRequest()) requestflow::accept(host_, *e, true);
+    }
+    void resend() {
+        if (const online::Entry* e = selectedRequest()) requestflow::resend(host_, *e, afterRequest());
+    }
 
     // 1.48.0 : refuser UNE ligne (une demande, ou une ligne payee : rembourse-la ensuite), la raison lue par le client.
+    // 1.48.1 : une demande de licence : le refus d'avant (requestflow::askRefuse).
     void askReview() {
-        const shop::Order* o = selected();
+        if (const online::Entry* e = selectedRequest()) {
+            requestflow::askRefuse(host_, *e, afterRequest());
+            return;
+        }
+        const shop::Order* o = selectedOrder();
         if (!o || !host_.openDialog) return;
         const int n = o->number, ln = o->line > 0 ? o->line : 1;
         const bool linesKnown = o->linesKnown;
@@ -1479,7 +1863,7 @@ private:
         host_.openDialog(std::make_unique<AskDialog>(
             "boutique.revoir", "Refuser \xC2\xAB " + (o->label.empty() ? o->article : o->label) + " \xC2\xBB (commande n\xC2\xB0 " + std::to_string(n) + ")",
             std::string("Cet article ne sera pas livr\xC3\xA9 : dis pourquoi (le client le lit dans Mes achats).") +
-                (o->payment ? " Il est pay\xC3\xA9 : rembourse la commande ensuite si tu le d\xC3\xA9" "cides." : ""),
+                (o->payment ? " Il est pay\xC3\xA9 : rembourse-le ensuite si tu le d\xC3\xA9" "cides (Rembourser\xE2\x80\xA6)." : ""),
             true, "Refuser", true, [this, alive, n, ln, linesKnown](const std::string& reason) {
                 if (!*alive) return;
                 const Workspace* wp = &ws();
@@ -1492,12 +1876,25 @@ private:
             }));
     }
 
+    void refunded(const std::shared_ptr<bool>& alive) {
+        if (!*alive) return;
+        lastFetch_ = -1;
+        fetch();
+    }
+
+    // Toute la commande (comme avant la 1.48.1).
     void askRefund() {
-        const shop::Order* o = selected();
+        const shop::Order* o = selectedOrder();
         if (!o || !host_.openDialog) return;
         const int n = o->number;
-        std::string text = "Stripe rembourse " + shop::amountText(o->amount, o->currency) + " TTC \xC3\xA0 " + (o->company.empty() ? std::string("ce client") : o->company) +
-                           " (la carte de son paiement). La commande passe \xC2\xAB rembours\xC3\xA9" "e \xC2\xBB quand Stripe le confirme.";
+        std::int64_t total = o->amount;   // une rangee sans lignes : la commande entiere
+        if (const shop::Order* whole = ws().hasOrders() ? ws().orders().find(n) : nullptr) {
+            total = whole->amount;
+            for (const auto& l : whole->lines)   // 1.48.1 : un article deja rembourse ne l'est pas deux fois (Stripe rend le reste)
+                if (l.state == "remboursee") total -= l.amount;
+        }
+        std::string text = "Stripe rembourse " + shop::amountText(std::max<std::int64_t>(0, total), o->currency) + " TTC \xC3\xA0 " +
+                           (o->company.empty() ? std::string("ce client") : o->company) + " (la carte de son paiement). La commande passe \xC2\xAB rembours\xC3\xA9" "e \xC2\xBB quand Stripe le confirme.";
         if (!o->licence.empty()) text += " La licence " + o->licence + " reste valable : r\xC3\xA9voque-la toi-m\xC3\xAA" "me si tu le d\xC3\xA9" "cides (Licences).";
         auto alive = alive_;
         host_.openDialog(std::make_unique<AskDialog>("boutique.rembourser", "Rembourser la commande n\xC2\xB0 " + std::to_string(n) + " ?", text, false, "Rembourser", true,
@@ -1505,11 +1902,35 @@ private:
                                                          if (!*alive) return;
                                                          const Workspace* wp = &ws();
                                                          (void)host_.runSlow("Boutique : remboursement", [wp, n] { return wp->refundOrder(n); },
-                                                                             [this, alive](const OpResult&) {
-                                                                                 if (!*alive) return;
-                                                                                 lastFetch_ = -1;
-                                                                                 fetch();
-                                                                             });
+                                                                             [this, alive](const OpResult&) { refunded(alive); });
+                                                     }));
+    }
+
+    // 1.48.1 : UN article (la ligne choisie) - la question nomme l'article et son montant TTC.
+    void askRefundLine() {
+        const shop::Order* o = selectedOrder();
+        if (!o || !host_.openDialog) return;
+        if (o->line <= 0) {   // une commande sans lignes : un seul article, toute la commande
+            askRefund();
+            return;
+        }
+        const int n = o->number, ln = o->line;
+        const std::string article = o->label.empty() ? o->article : o->label;
+        const std::string amount = shop::amountText(o->amount, o->currency);
+        std::string text = "Stripe rembourse " + amount + " TTC \xC3\xA0 " + (o->company.empty() ? std::string("ce client") : o->company) +
+                           " pour cet article seulement (la carte de son paiement). L'article passe \xC2\xAB rembours\xC3\xA9 \xC2\xBB ; les autres articles de la commande n\xC2\xB0 " +
+                           std::to_string(n) + " restent tels quels.";
+        if (!o->licence.empty())
+            text += o->kind == "option" ? " L'option reste sur la licence " + o->licence + " : retire-la toi-m\xC3\xAA" "me si tu le d\xC3\xA9" "cides (Licences)."
+                                        : " La licence " + o->licence + " reste valable : r\xC3\xA9voque-la toi-m\xC3\xAA" "me si tu le d\xC3\xA9" "cides (Licences).";
+        auto alive = alive_;
+        const std::string what = article + ", " + amount;
+        host_.openDialog(std::make_unique<AskDialog>("boutique.rembourser-article", "Rembourser \xC2\xAB " + article + " \xC2\xBB ?", text, false, "Rembourser " + amount, true,
+                                                     [this, alive, n, ln, what](const std::string&) {
+                                                         if (!*alive) return;
+                                                         const Workspace* wp = &ws();
+                                                         (void)host_.runSlow("Boutique : remboursement d'un article", [wp, n, ln, what] { return wp->refundLine(n, ln, what); },
+                                                                             [this, alive](const OpResult&) { refunded(alive); });
                                                      }));
     }
 
@@ -1518,14 +1939,18 @@ private:
     ui::Button*                  deploy_{nullptr};
     ui::FilterBar*               bar_{nullptr};                                    // 1.47.0
     std::shared_ptr<OrdersModel> all_ = std::make_shared<OrdersModel>();           // 1.47.0 : toutes (la barre filtre)
+    std::vector<online::Entry>   entries_;                                         // 1.48.1 : les demandes de licence (rangees sur ce poste)
     listkit::WhoDid              who_{host_.workspace()};                          // 1.47.0 : qui a livre
     ui::TableView*               table_{nullptr};
     std::shared_ptr<OrdersModel> model_;
     ui::Button*                  deliver_{nullptr};
+    ui::Button*                  acceptOnline_{nullptr};   // 1.48.1 : une demande de licence, en ligne (un code)
+    ui::Button*                  resend_{nullptr};         // 1.48.1 : la reponse d'une demande acceptee ici
     ui::Button*                  stripe_{nullptr};
     ui::Button*                  receipt_{nullptr};
     ui::Button*                  review_{nullptr};
-    ui::Button*                  refund_{nullptr};
+    ui::Button*                  refund_{nullptr};         // 1.48.1 : cet article
+    ui::Button*                  refundAll_{nullptr};      // 1.48.1 : toute la commande
     bool                         fetching_{false};
     double                       lastFetch_{-1};
     std::string                  problem_, note_;

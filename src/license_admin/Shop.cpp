@@ -753,6 +753,30 @@ online::Result refund(const std::string& folder, const licensing::SigningKey& ke
                 ") : elle passe \xC2\xAB rembours\xC3\xA9" "e \xC2\xBB quand Stripe le confirme. La licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office.");
 }
 
+online::Result refundLine(const std::string& folder, const licensing::SigningKey& key, const online::Options& o, int number, int line, std::string* refundId) {
+    std::unique_ptr<online::Client> c;
+    std::string why;
+    if (!online::openClient(folder, key, o, c, &why)) return refused(why);
+    const std::string version = c->state().str("version");
+    int va = 0, vb = 0, vc = 0;
+    if (!licensing::admins::parseSemver(version, va, vb, vc) || licensing::admins::compareSemver(version, kServiceLineRefund) < 0)
+        return refused("ton service en ligne est en " + (version.empty() ? std::string("?") : version) + " : d\xC3\xA9ploie la " + kServiceLineRefund +
+                       " pour rembourser un seul article (Service en ligne \xE2\x80\xBA D\xC3\xA9ployer le service) ; sinon, Rembourser la commande");
+    Value b = Value::object();
+    b.set("numero", number);
+    b.set("ligne", line);
+    online::Reply r;
+    online::Result res = call(*c, "POST", "/admin/commandes/rembourser", &b,
+                              "rembourser la ligne " + std::to_string(line) + " de la commande n\xC2\xB0 " + std::to_string(number), &r);
+    if (!res.ok) return res;
+    const std::string id = clean(r.json.str("remboursement"), 80);
+    if (refundId) *refundId = id;
+    const std::string after = r.json.str("etat_commande");
+    return done("Ligne " + std::to_string(line) + " de la commande n\xC2\xB0 " + std::to_string(number) + " rembours\xC3\xA9" "e par Stripe (" +
+                amountText(r.json.integer("montant")) + (id.empty() ? std::string() : ", " + id) + ") ; la commande : " + stateLabel(after) +
+                ". La licence livr\xC3\xA9" "e n'est pas r\xC3\xA9voqu\xC3\xA9" "e d'office.");
+}
+
 // ============================================================================ Brancher Stripe
 std::string stripeApiBase() {
     {

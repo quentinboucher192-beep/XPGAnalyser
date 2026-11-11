@@ -58,7 +58,8 @@ struct Rig {
 // 1.44.0 : plusieurs admins - Administrateurs, Journal des admins et Versions dans Securite (ces deux-la : l'admin+ seul).
 // 1.47.0 : << Statistiques >> sous le Tableau de bord (Pilotage), comme la barre laterale des planches 08 a 11 ; << Mon compte >>
 // en tete de Securite, << Demandes d'admin >> apres Administrateurs (l'admin+ seul).
-const std::string kTitles[] = {"Tableau de bord", "Statistiques", "Licences", "Clients", "Demandes en ligne", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
+// 1.48.1 : plus de << Demandes en ligne >> - ses demandes de licence sont dans << Commandes et demandes >>.
+const std::string kTitles[] = {"Tableau de bord", "Statistiques", "Licences", "Clients", "Activations", "Offres", "Options", "Fonctionnalit\xC3\xA9s", "Licences flottantes",
                                "Boutique", "Commandes et demandes", "Mon compte", "R\xC3\xA9vocations", "Administrateurs", "Demandes d'admin", "Journal des admins", "Versions",
                                "Service en ligne", "Historique", "Param\xC3\xA8tres de s\xC3\xA9" "curit\xC3\xA9"};
 constexpr std::size_t kEntries = sizeof(kTitles) / sizeof(kTitles[0]);
@@ -179,6 +180,12 @@ int main(int argc, char** argv) {
         rig.shell->navigate("commandes");
         b = rig.paint(1100.f, 700.f);
         check(has(b, "Commandes") && has(b, "Le service des licences n'est pas r\xC3\xA9gl\xC3\xA9") && !has(b, "Pas encore fait"), "commandes : une vraie page ; sans service, c'est dit");
+        // 1.48.1 : l'ancienne page << Demandes en ligne >> (ses liens) : Commandes et demandes, sans message d'erreur
+        rig.shell->navigate("tableau");
+        rig.shell->navigate("demandes");
+        b = rig.paint(1100.f, 700.f);
+        check(rig.shell->currentPageId() == "commandes" && rig.shell->pageTitle() == "Commandes et demandes" && !has(b, "Demandes en ligne") && !has(b, "Page inconnue"),
+              "<< demandes >> (les anciens liens) : Commandes et demandes");
         // 1.46.0 : aux tailles de la fenetre du client (1373x917, 1400x900) et en 1920x1080 : aucune colonne hors de la
         // vue (les colonnes tiennent dans la table, sa barre de defilement comprise ; la table dans la fenetre).
         const struct {

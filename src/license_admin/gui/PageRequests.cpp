@@ -224,6 +224,24 @@ std::string oneLine(std::string s) {
     return s;
 }
 
+// 1.42.0 : << Exports avances \xC2\xB7 1 mois, des qu'elle est acceptee >>.
+std::string optionTextOf(const Workspace& w, const Entry& e) {
+    const auto* o = w.hasRegistry() ? w.registry().option(e.option) : nullptr;
+    std::string t = o ? (o->label.empty() ? o->id : o->label) : e.option + " (inconnue)";
+    std::string d;
+    if (e.optionDays < 0) d = "du " + dateFr(e.optionFrom ? e.optionFrom : e.requestedAt) + " au " + dateFr(e.optionLastDay);
+    else if (e.optionDays == 0) d = "jusqu'\xC3\xA0 la fin de la licence";
+    else if (e.optionDays == 7) d = "1 semaine";
+    else if (e.optionDays == 30) d = "1 mois";
+    else d = std::to_string(e.optionDays) + " jours";
+    if (o)
+        for (const auto& x : o->durations)
+            if (x.days == e.optionDays && !x.price.empty()) d += " \xC2\xB7 " + x.price;
+    t += " \xC2\xB7 " + d;
+    if (e.optionDays >= 0) t += e.optionFrom ? ", \xC3\xA0 partir du " + dateFr(e.optionFrom) : std::string(", d\xC3\xA8s qu'elle est accept\xC3\xA9" "e");
+    return t;
+}
+
 // =================================================================================== la page
 class RequestsPage final : public Page {
 public:
@@ -455,33 +473,10 @@ private:
         return false;
     }
 
-    // 1.37.0 : l'edition que le client a choisie dans sa boutique, et son prix (le registre de ce poste).
-    [[nodiscard]] std::string wantedOf(const Entry& e) const {
-        if (e.optionRequest()) return "Option : " + optionText(e);   // 1.42.0
-        if (e.edition.empty()) return e.state == RequestState::Unreadable ? std::string() : std::string("\xE2\x80\x94");
-        const auto* ed = ws().hasRegistry() ? ws().registry().edition(e.edition) : nullptr;
-        if (!ed) return e.edition + " (inconnue)";
-        std::string t = ed->label.empty() ? ed->id : ed->label;
-        if (!ed->price.empty()) t += " \xC2\xB7 " + ed->price;
-        return t;
-    }
-    // 1.42.0 : << Exports avances \xC2\xB7 1 mois, des qu'elle est acceptee >>.
-    [[nodiscard]] std::string optionText(const Entry& e) const {
-        const auto* o = ws().hasRegistry() ? ws().registry().option(e.option) : nullptr;
-        std::string t = o ? (o->label.empty() ? o->id : o->label) : e.option + " (inconnue)";
-        std::string d;
-        if (e.optionDays < 0) d = "du " + dateFr(e.optionFrom ? e.optionFrom : e.requestedAt) + " au " + dateFr(e.optionLastDay);
-        else if (e.optionDays == 0) d = "jusqu'\xC3\xA0 la fin de la licence";
-        else if (e.optionDays == 7) d = "1 semaine";
-        else if (e.optionDays == 30) d = "1 mois";
-        else d = std::to_string(e.optionDays) + " jours";
-        if (o)
-            for (const auto& x : o->durations)
-                if (x.days == e.optionDays && !x.price.empty()) d += " \xC2\xB7 " + x.price;
-        t += " \xC2\xB7 " + d;
-        if (e.optionDays >= 0) t += e.optionFrom ? ", \xC3\xA0 partir du " + dateFr(e.optionFrom) : std::string(", d\xC3\xA8s qu'elle est accept\xC3\xA9" "e");
-        return t;
-    }
+    // 1.37.0 : l'edition que le client a choisie dans sa boutique, et son prix (le registre de ce poste) ; 1.48.1 : partage
+    // (requestflow::wanted, aussi dans Commandes et demandes).
+    [[nodiscard]] std::string wantedOf(const Entry& e) const { return requestflow::wanted(ws(), e); }
+    [[nodiscard]] std::string optionText(const Entry& e) const { return optionTextOf(ws(), e); }
 
     // Le mot du client, son courriel (1.37.0) et son contact.
     [[nodiscard]] static std::string messageOf(const Entry& e) {
@@ -789,28 +784,12 @@ private:
         }
     }
 
-    // 1.42.0 : la fenetre << Ajouter une option >> reglee sur la demande du client.
+    // 1.42.0 : la fenetre << Ajouter une option >> reglee sur la demande du client ; 1.48.1 : requestflow (Page.hpp).
     void addOption() {
         if (refuseIfBusy()) return;
         const Entry* e = selected();
         if (!e || !e->optionRequest() || !e->waiting()) return;
-        const LicenceEntry* l = ws().licence(e->licenseId);
-        if (!l) {
-            host_.report(OpResult::fail("la licence " + e->licenseId + " n'est pas dans l'archive de ce poste : r\xC3\xA9" "cup\xC3\xA8re-la d'abord"));
-            return;
-        }
-        if (!Workspace::inForce(*l)) {
-            host_.report(OpResult::fail("la licence " + e->licenseId + " n'est plus en cours (finie ou r\xC3\xA9voqu\xC3\xA9" "e) : une option ne s'y ajoute pas ; refuse la demande en le disant"));
-            return;
-        }
-        OptionPreset p;
-        p.set = true;
-        p.optionId = e->option;
-        p.days = e->optionDays;
-        p.from = e->optionFrom;
-        p.lastDay = e->optionLastDay;
-        p.requestNumber = e->number;
-        host_.openDialog(licdlg::makeOptionDialog(host_, e->licenseId, p));
+        requestflow::addOption(host_, *e);
     }
 
     void accept(bool onlineLicence) {
@@ -820,36 +799,7 @@ private:
             if (host_.flash) host_.flash("Choisis d'abord une demande dans la table.", Tone::Warning);
             return;
         }
-        if (!e->waiting()) {
-            host_.report(OpResult::fail("cette demande n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e->state) + ")"));
-            return;
-        }
-        if (e->acceptedHere()) {   // 1.37.0 : une seule acceptation
-            host_.report(OpResult::fail("cette demande est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e->answer +
-                                        ") : sa r\xC3\xA9ponse n'est pas partie, renvoie-la (\xC2\xAB Renvoyer la r\xC3\xA9ponse \xC2\xBB)"));
-            return;
-        }
-        std::error_code ec;
-        if (e->requestPath.empty() || !std::filesystem::is_regular_file(std::filesystem::path(std::u8string(e->requestPath.begin(), e->requestPath.end())), ec)) {
-            host_.report(OpResult::fail("le fichier de la demande manque sur ce poste : rel\xC3\xA8ve de nouveau les demandes"));
-            return;
-        }
-        if (onlineLicence) {   // une licence EN LIGNE : aucun PC lie, la demande dit seulement a qui (et y repond)
-            if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {e->requestPath}, {}, e->customer, true));
-            return;
-        }
-        std::string extend;
-        if (!e->licenseId.empty())
-            if (const LicenceEntry* l = ws().licence(e->licenseId)) {
-                extend = e->licenseId;   // une licence partagee : ce PC s'y ajoute - a verifier (l'assistant demande de confirmer)
-                if (host_.flash) {
-                    std::string t = online::joinWarning(*e);
-                    if (lowerAscii(l->licence.customer) != lowerAscii(e->customer))
-                        t += " La licence " + extend + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
-                    host_.flash(t, Tone::Warning);
-                }
-            }
-        if (host_.openDialog) host_.openDialog(makeLicenceWizard(host_, {e->requestPath}, extend, extend.empty() ? e->customer : std::string()));
+        requestflow::accept(host_, *e, onlineLicence);
     }
 
     // 1.37.0 : renvoyer la reponse d'une demande acceptee ici (la meme licence, le meme code) - lent : runSlow.
@@ -857,16 +807,10 @@ private:
         if (refuseIfBusy()) return;
         const Entry* e = selected();
         if (!e || !e->acceptedHere()) return;
-        const int n = e->number;
-        const Workspace* w = &ws();
         std::weak_ptr<bool> alive = life_;
-        const bool started = host_.runSlow && host_.runSlow("Service : r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(n),
-                                                            [w, n] { return w->serviceResendAnswer(n); }, [this, alive](const OpResult&) {
-                                                                if (alive.expired()) return;
-                                                                ws().reload();
-                                                                refresh();
-                                                            });
-        if (!started && host_.flash) host_.flash(kBusy, Tone::Warning);
+        requestflow::resend(host_, *e, [this, alive] {
+            if (!alive.expired()) refresh();
+        });
     }
 
     void askRefuse() {
@@ -876,30 +820,10 @@ private:
             if (host_.flash) host_.flash("Choisis d'abord une demande en attente.", Tone::Warning);
             return;
         }
-        const std::string ref = std::to_string(e->number);
-        const std::string who = (e->customer.empty() ? std::string("ce client") : e->customer) + ", PC \xC2\xAB " + (e->deviceName.empty() ? "(sans nom)" : e->deviceName) + " \xC2\xBB";
         std::weak_ptr<bool> alive = life_;
-        ShellHost host = host_;
-        host_.openDialog(licdlg::makeReasonDialog(
-            "demandes.refus", "Refuser la demande",
-            "Refuser la demande de " + who + " ?\n\nLe client lit ta raison dans son logiciel ; elle est scell\xC3\xA9" "e pour son PC (personne d'autre ne la lit, "
-            "pas m\xC3\xAAme le service).",
-            "la raison, par exemple : pas de contrat pour ce poste", "Refuser",
-            [this, alive, host, ref](const std::string& reason) {
-                if (host.busy && host.busy()) {
-                    if (host.report) host.report(OpResult::fail("un travail est en cours : attends qu'il finisse, puis refuse de nouveau"));
-                    return;
-                }
-                const Workspace* w = &host.workspace();
-                const bool started = host.runSlow && host.runSlow(
-                                                         "Service : refus de la demande n\xC2\xB0 " + ref, [w, ref, reason] { return w->serviceRefuse(ref, reason); },
-                                                         [this, alive](const OpResult&) {
-                                                             if (alive.expired()) return;
-                                                             ws().reload();
-                                                             refresh();
-                                                         });
-                if (!started && host.flash) host.flash(kBusy, Tone::Warning);
-            }));
+        requestflow::askRefuse(host_, *e, [this, alive] {
+            if (!alive.expired()) refresh();
+        });
     }
 
     std::shared_ptr<bool>    life_{std::make_shared<bool>(true)};
@@ -927,5 +851,130 @@ private:
 } // namespace
 
 PagePtr makeRequestsPage(ShellHost host) { return std::make_unique<RequestsPage>(std::move(host)); }
+
+// ============================================================================================ 1.48.1 : requestflow
+namespace requestflow {
+
+namespace {
+bool refusedBusy(const ShellHost& host) {
+    if (!(host.busy && host.busy())) return false;
+    if (host.report) host.report(OpResult::fail("un travail est en cours (une publication, un relev\xC3\xA9) : attends qu'il finisse"));
+    return true;
+}
+} // namespace
+
+std::string wanted(const Workspace& w, const Entry& e) {
+    if (e.optionRequest()) return "Option : " + optionTextOf(w, e);   // 1.42.0
+    if (e.edition.empty()) return e.state == RequestState::Unreadable ? std::string() : std::string("\xE2\x80\x94");
+    const auto* ed = w.hasRegistry() ? w.registry().edition(e.edition) : nullptr;
+    if (!ed) return e.edition + " (inconnue)";
+    std::string t = ed->label.empty() ? ed->id : ed->label;
+    if (!ed->price.empty()) t += " \xC2\xB7 " + ed->price;
+    return t;
+}
+
+void addOption(const ShellHost& host, const Entry& e) {
+    if (refusedBusy(host)) return;
+    if (!e.optionRequest() || !e.waiting()) return;
+    Workspace& w = host.workspace();
+    const LicenceEntry* l = w.licence(e.licenseId);
+    if (!l) {
+        host.report(OpResult::fail("la licence " + e.licenseId + " n'est pas dans l'archive de ce poste : r\xC3\xA9" "cup\xC3\xA8re-la d'abord"));
+        return;
+    }
+    if (!Workspace::inForce(*l)) {
+        host.report(OpResult::fail("la licence " + e.licenseId + " n'est plus en cours (finie ou r\xC3\xA9voqu\xC3\xA9" "e) : une option ne s'y ajoute pas ; refuse la demande en le disant"));
+        return;
+    }
+    OptionPreset p;
+    p.set = true;
+    p.optionId = e.option;
+    p.days = e.optionDays;
+    p.from = e.optionFrom;
+    p.lastDay = e.optionLastDay;
+    p.requestNumber = e.number;
+    if (host.openDialog) host.openDialog(licdlg::makeOptionDialog(host, e.licenseId, p));
+}
+
+void accept(const ShellHost& host, const Entry& e, bool onlineLicence) {
+    if (refusedBusy(host)) return;
+    if (!e.waiting()) {
+        host.report(OpResult::fail("cette demande n'attend pas de d\xC3\xA9" "cision (" + online::requestStateLabel(e.state) + ")"));
+        return;
+    }
+    if (e.acceptedHere()) {   // 1.37.0 : une seule acceptation
+        host.report(OpResult::fail("cette demande est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e.answer +
+                                   ") : sa r\xC3\xA9ponse n'est pas partie, renvoie-la (\xC2\xAB Renvoyer la r\xC3\xA9ponse \xC2\xBB)"));
+        return;
+    }
+    std::error_code ec;
+    if (e.requestPath.empty() || !std::filesystem::is_regular_file(std::filesystem::path(std::u8string(e.requestPath.begin(), e.requestPath.end())), ec)) {
+        host.report(OpResult::fail("le fichier de la demande manque sur ce poste : rel\xC3\xA8ve de nouveau les demandes"));
+        return;
+    }
+    if (onlineLicence) {   // une licence EN LIGNE : aucun PC lie, la demande dit seulement a qui (et y repond)
+        if (host.openDialog) host.openDialog(makeLicenceWizard(host, {e.requestPath}, {}, e.customer, true));
+        return;
+    }
+    std::string extend;
+    if (!e.licenseId.empty())
+        if (const LicenceEntry* l = host.workspace().licence(e.licenseId)) {
+            extend = e.licenseId;   // une licence partagee : ce PC s'y ajoute - a verifier (l'assistant demande de confirmer)
+            if (host.flash) {
+                std::string t = online::joinWarning(e);
+                if (lowerAscii(l->licence.customer) != lowerAscii(e.customer))
+                    t += " La licence " + extend + " est au nom de \xC2\xAB " + l->licence.customer + " \xC2\xBB.";
+                host.flash(t, Tone::Warning);
+            }
+        }
+    if (host.openDialog) host.openDialog(makeLicenceWizard(host, {e.requestPath}, extend, extend.empty() ? e.customer : std::string()));
+}
+
+void resend(const ShellHost& host, const Entry& e, std::function<void()> done) {
+    if (refusedBusy(host)) return;
+    if (!e.acceptedHere()) return;
+    const int n = e.number;
+    const Workspace* w = &host.workspace();
+    ShellHost h = host;
+    const bool started = host.runSlow && host.runSlow("Service : r\xC3\xA9ponse \xC3\xA0 la demande n\xC2\xB0 " + std::to_string(n),
+                                                      [w, n] { return w->serviceResendAnswer(n); }, [h, done](const OpResult&) {
+                                                          h.workspace().reload();
+                                                          if (done) done();
+                                                      });
+    if (!started && host.flash) host.flash(kBusy, Tone::Warning);
+}
+
+void askRefuse(const ShellHost& host, const Entry& e, std::function<void()> done) {
+    if (refusedBusy(host)) return;
+    if (!e.waiting()) {
+        if (host.flash) host.flash("Choisis d'abord une demande en attente.", Tone::Warning);
+        return;
+    }
+    const std::string ref = std::to_string(e.number);
+    const std::string who = (e.customer.empty() ? std::string("ce client") : e.customer) + ", PC \xC2\xAB " + (e.deviceName.empty() ? "(sans nom)" : e.deviceName) + " \xC2\xBB";
+    ShellHost h = host;
+    if (!host.openDialog) return;
+    host.openDialog(licdlg::makeReasonDialog(
+        "demandes.refus", "Refuser la demande",
+        "Refuser la demande de " + who + " ?\n\nLe client lit ta raison dans son logiciel ; elle est scell\xC3\xA9" "e pour son PC (personne d'autre ne la lit, "
+        "pas m\xC3\xAAme le service).",
+        "la raison, par exemple : pas de contrat pour ce poste", "Refuser",
+        [h, ref, done](const std::string& reason) {
+            if (h.busy && h.busy()) {
+                if (h.report) h.report(OpResult::fail("un travail est en cours : attends qu'il finisse, puis refuse de nouveau"));
+                return;
+            }
+            const Workspace* w = &h.workspace();
+            const bool started = h.runSlow && h.runSlow(
+                                                  "Service : refus de la demande n\xC2\xB0 " + ref, [w, ref, reason] { return w->serviceRefuse(ref, reason); },
+                                                  [h, done](const OpResult&) {
+                                                      h.workspace().reload();
+                                                      if (done) done();
+                                                  });
+            if (!started && h.flash) h.flash(kBusy, Tone::Warning);
+        }));
+}
+
+} // namespace requestflow
 
 } // namespace license_admin::gui

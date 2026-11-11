@@ -674,6 +674,97 @@ describe("1.48.0 : le panier (des lignes, payees ou demandees, validees une a un
     });
 });
 
+describe("1.48.1 : rembourser UN article d'une commande payee", () => {
+    const pc4 = nouvelleCle();
+    const panier = (lignes, extra = {}) => ({ ...commande(), article: undefined, lignes, ...extra });
+    const deAdmin = async (n) => (await appel(A, "GET", "/admin/commandes", { cle: editeur })).json.commandes.find((x) => x.numero === n);
+    const rembourser = (corps, cle = editeur) => appel(A, "POST", "/admin/commandes/rembourser", { cle, corps });
+    const remboursements = () => stripe.requetes.filter((q) => q.methode === "POST" && q.chemin === "/v1/refunds");
+
+    it("une ligne : Stripe rembourse son montant (le meme paiement), elle seule passe remboursee ; deux fois : 409 ; toutes : la commande", async () => {
+        const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "opt:ai_advanced:365", avec_ligne: 1 }]) });
+        assert.equal(r.statut, 201, r.texte);
+        const n = r.json.numero;
+        // pas encore payee : rien a rembourser
+        erreur(await rembourser({ numero: n, ligne: 2 }), 409, "etat");
+        assert.equal((await evenement("checkout.session.completed", sessionDe(n).id)).statut, 200);
+        const pi = sessionDe(n).payment_intent;
+        let l = await appel(A, "POST", "/admin/commandes/ligne", { cle: editeur, corps: { numero: n, ligne: 1, action: "livree", licence: "XPG-2026-D0001" } });
+        assert.equal(l.statut, 200, l.texte);
+        l = await appel(A, "POST", "/admin/commandes/ligne", { cle: editeur, corps: { numero: n, ligne: 2, action: "livree", licence: "XPG-2026-D0001" } });
+        assert.equal(l.json.etat_commande, "livree");
+        // les droits : l'admin+ seul ; une ligne qui n'existe pas
+        erreur(await rembourser({ numero: n, ligne: 2 }, lea), 403, "droit");
+        erreur(await rembourser({ numero: n, ligne: 3 }), 404, "ligne");
+        erreur(await rembourser({ numero: n, ligne: 0 }), 400, "champ");
+        const avant = remboursements().length;
+        const x = await rembourser({ numero: n, ligne: 2 });
+        assert.equal(x.statut, 200, x.texte);
+        assert.deepEqual([x.json.ligne, x.json.etat, x.json.etat_commande, x.json.montant], [2, "remboursee", "livree", 9900]);
+        assert.match(x.json.remboursement, /^re_essai_/);
+        const q = remboursements()[avant];
+        assert.ok(q && q.auth === "bonne" && q.idem === "remboursement-" + n + "-ligne-2", JSON.stringify(q));
+        const p = parametres(q);
+        assert.equal(p.payment_intent, pi, "le meme paiement");
+        assert.equal(p.amount, "9900", "le montant de la ligne seulement");
+        assert.equal(p["metadata[ligne]"], "2");
+        let c = await deAdmin(n);
+        assert.equal(c.etat, "livree", "la commande reste livree (la ligne 1 l'est)");
+        assert.deepEqual(c.lignes.map((y) => [y.etat, y.licence]), [["livree", "XPG-2026-D0001"], ["remboursee", "XPG-2026-D0001"]], "la licence de la ligne reste dite (pas revoquee d'office)");
+        let v = (await commandesDe(A, pc4)).find((y) => y.numero === n);
+        assert.deepEqual(v.lignes.map((y) => y.etat), ["livree", "remboursee"], "le PC (Mes achats) : l'article rembourse, l'autre livre");
+        // deux fois la meme ligne : 409, aucun second appel a Stripe
+        const deja = remboursements().length;
+        erreur(await rembourser({ numero: n, ligne: 2 }), 409, "etat");
+        assert.equal(remboursements().length, deja, "jamais un second remboursement");
+        // le webhook d'un remboursement partiel ne touche pas la commande
+        assert.equal((await evenement("charge.refunded", sessionDe(n).id)).statut, 200);
+        assert.equal((await deAdmin(n)).etat, "livree");
+        // la derniere ligne : la commande remboursee (comme toute la commande)
+        const y = await rembourser({ numero: n, ligne: 1 });
+        assert.equal(y.statut, 200, y.texte);
+        assert.equal(y.json.etat_commande, "remboursee");
+        assert.equal(parametres(remboursements()[remboursements().length - 1]).amount, "49000");
+        c = await deAdmin(n);
+        assert.deepEqual([c.etat, ...c.lignes.map((z) => z.etat)], ["remboursee", "remboursee", "remboursee"]);
+        erreur(await rembourser({ numero: n }), 409, "etat");
+        erreur(await rembourser({ numero: n, ligne: 1 }), 409, "etat");
+    });
+
+    it("le faux Stripe : jamais plus que ce qui reste ; toute la commande apres une ligne : le reste", async () => {
+        const r = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }, { article: "opt:ai_advanced:365", avec_ligne: 1 }]) });
+        assert.equal(r.statut, 201, r.texte);
+        const n = r.json.numero;
+        assert.equal((await evenement("checkout.session.completed", sessionDe(n).id)).statut, 200);
+        const pi = sessionDe(n).payment_intent;
+        const trop = await fetch(stripe.base + "/v1/refunds", {
+            method: "POST",
+            headers: { Authorization: "Bearer " + CLE, "Content-Type": "application/x-www-form-urlencoded" },
+            body: "payment_intent=" + pi + "&amount=99999999",
+        });
+        assert.equal(trop.status, 400);
+        assert.equal((await trop.json()).error.code, "amount_too_large");
+        // une ligne payee pas encore livree se rembourse aussi ; la commande attend l'autre
+        const x = await rembourser({ numero: n, ligne: 2 });
+        assert.equal(x.statut, 200, x.texte);
+        assert.equal(x.json.etat_commande, "payee");
+        // toute la commande ensuite (un Admin d'avant la 1.48.1) : Stripe rend le reste, la commande remboursee au webhook
+        const t = await rembourser({ numero: n });
+        assert.equal(t.statut, 200, t.texte);
+        assert.equal(sessionDe(n).rembourse, sessionDe(n).montant, "le faux Stripe : tout est rendu, sans plus");
+        erreur(await rembourser({ numero: n, ligne: 1 }), 409, "etat"); // toute la commande deja demandee
+        assert.equal((await evenement("charge.refunded", sessionDe(n).id)).statut, 200);
+        const c = await deAdmin(n);
+        assert.deepEqual([c.etat, ...c.lignes.map((z) => z.etat)], ["remboursee", "remboursee", "remboursee"]);
+    });
+
+    it("une demande sans paiement ne se rembourse pas", async () => {
+        const d = await appel(A, "POST", "/v1/boutique/commande", { cle: pc4, corps: panier([{ article: "ed:PROFESSIONAL" }], { paiement: false }) });
+        assert.equal(d.statut, 201, d.texte);
+        erreur(await rembourser({ numero: d.json.numero, ligne: 1 }), 409, "etat");
+    });
+});
+
 describe("la sauvegarde", () => {
     it("porte la boutique, les commandes, leurs scelles, les evenements - jamais les secrets de Stripe", async () => {
         const s = await appel(A, "GET", "/admin/sauvegarde", { cle: editeur });

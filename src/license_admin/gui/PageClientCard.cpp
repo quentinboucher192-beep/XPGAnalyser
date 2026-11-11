@@ -1180,7 +1180,7 @@ private:
         } else if (key == "demandes") {
             f.page = "demandes";
             f.values.push_back({"Client", name_});
-            f.what = "Demandes en ligne \xC2\xB7 " + name_;
+            f.what = "Demandes de licence \xC2\xB7 " + name_;   // 1.48.1 : dans Commandes et demandes
         } else if (key == "journal") {
             f.page = "journal";
             f.search = name_;

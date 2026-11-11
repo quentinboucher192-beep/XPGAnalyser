@@ -1332,7 +1332,7 @@ Result processRequests(const std::string& folder, const licensing::SigningKey& k
     }
     if (unlisted > 0)
         res.details.push_back("\xE2\x80\xA6 et " + plural(static_cast<std::size_t>(unlisted), "autre ligne", "autres lignes") +
-                              " (la liste compl\xC3\xA8te : Demandes en ligne, ou service-demandes --toutes).");
+                              " (la liste compl\xC3\xA8te : Commandes et demandes, ou service-demandes --toutes).");
     // La plus recente demande en attente de chaque poste, par sa date SIGNEE ; les autres en attente sont remplacees.
     std::map<std::string, std::pair<Seconds, int>> newest;
     for (const auto& [n, e] : known) {
@@ -1400,7 +1400,7 @@ Result refuse(const std::string& folder, const licensing::SigningKey& key, const
     if (!findWaiting(folder, which, e, &why)) return refused(why);
     if (e.acceptedHere())
         return refused("la demande n\xC2\xB0 " + std::to_string(e.number) + " est d\xC3\xA9j\xC3\xA0 accept\xC3\xA9" "e ici (licence " + e.answer +
-                       ") : sa r\xC3\xA9ponse n'est pas encore partie ; renvoie-la (Demandes en ligne \xE2\x80\xBA Renvoyer la r\xC3\xA9ponse) plut\xC3\xB4t que de la refuser");
+                       ") : sa r\xC3\xA9ponse n'est pas encore partie ; renvoie-la (Commandes et demandes \xE2\x80\xBA Renvoyer la r\xC3\xA9ponse) plut\xC3\xB4t que de la refuser");
     std::unique_ptr<Client> c;
     if (!openClient(folder, key, o, c, &why)) return refused(why);
     gw::StatusContent content;
