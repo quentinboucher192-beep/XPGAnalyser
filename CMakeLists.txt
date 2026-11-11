@@ -340,7 +340,8 @@ add_library(xpg_admin_core STATIC src/license_admin/Admin.cpp src/license_admin/
                                   src/license_admin/JournalStats.cpp            # 1.47.0 : les chiffres du journal des admins [J]
                                   src/license_admin/gui/WorkspaceStats.cpp      # 1.47.0 : les memes, dans le Workspace
                                   src/license_admin/ServiceConnection.cpp       # 1.47.0 : la connexion au service qui voyage avec l'installateur
-                                  src/license_admin/gui/WorkspaceDerogation.cpp) # 1.47.0 : gerer le service (l'admin+ ; la derogation)
+                                  src/license_admin/gui/WorkspaceDerogation.cpp  # 1.47.0 : gerer le service (l'admin+ ; la derogation)
+                                  src/license_admin/gui/WorkspaceDelete.cpp)     # 1.48.1 : supprimer (licences, PC), et que ca se voie partout
 target_link_libraries(xpg_admin_core PUBLIC xpg_licensing)
 if(WIN32)
     target_link_libraries(xpg_admin_core PUBLIC shell32 winhttp crypt32)   # 1.37.0 : + crypt32 (Mail : le magasin ROOT)
@@ -348,7 +349,7 @@ else()
     target_link_libraries(xpg_admin_core PUBLIC ${CMAKE_DL_LIBS})
 endif()
 file(GLOB XPG_ADMIN_GUI_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/license_admin/gui/*.cpp")
-list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop|WorkspaceStats|WorkspaceDerogation)\\.cpp$")
+list(FILTER XPG_ADMIN_GUI_SOURCES EXCLUDE REGEX "(AdminGuiMain|Workspace|WorkspaceAdmins|WorkspaceVersions|WorkspaceShop|WorkspaceStats|WorkspaceDerogation|WorkspaceDelete)\\.cpp$")
 if(XPG_ADMIN_GUI_SOURCES)
     add_library(xpg_admin_gui STATIC ${XPG_ADMIN_GUI_SOURCES})
     target_link_libraries(xpg_admin_gui PUBLIC xpg_admin_core xpg_ui)
