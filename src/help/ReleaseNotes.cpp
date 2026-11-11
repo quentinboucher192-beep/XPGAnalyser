@@ -193,7 +193,12 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
-        // 1.48.1 : un article rembourse seul
+        // 1.48.1 : Actualiser dans les notifications, un article rembourse seul
+        note("1.48.1", "Projet", Kind::New,
+         "NOTIFICATIONS : \xC2\xAB Actualiser \xC2\xBB, dans la fen\xC3\xAAtre Notifications et dans la cloche du bandeau, rel\xC3\xA8ve tout de suite "
+         "aupr\xC3\xA8s du service des licences les messages de l'\xC3\xA9" "diteur, les mises \xC3\xA0 jour et les offres, sans attendre le relev\xC3\xA9 "
+         "automatique (toutes les 2 minutes). Une ligne dit ce qui a \xC3\xA9t\xC3\xA9 relev\xC3\xA9, ou pourquoi rien n'a pu l'\xC3\xAAtre.",
+         "licence", ""),
         note("1.48.1", "Projet", Kind::Changed,
          "Mes achats : l'\xC3\xA9" "diteur peut maintenant rembourser un seul article d'une commande ; cet article est marqu\xC3\xA9 \xC2\xAB rembours\xC3\xA9 "
          "\xC2\xBB et les autres articles de la commande restent tels quels.",

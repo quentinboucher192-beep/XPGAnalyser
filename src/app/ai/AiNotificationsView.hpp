@@ -63,6 +63,11 @@ public:
         // 1.44.0 : "1 fichier \xC2\xB7 6,5 Mo" pour une notification qui porte des fichiers (vide : aucun) ; nul : la source
         // n'a pas de fichiers (l'Assistant) - ni le filtre << Avec fichiers >>, ni la ligne.
         std::string (*files)(const notifs::Item&){nullptr};
+        // 1.48.1 : << Actualiser >> - relever tout de suite aupres du service (vide : parti ; sinon pourquoi), s'il tourne
+        // encore, et la phrase du dernier fini (dite par Callbacks::status). Nul : la source n'a rien a relever (l'Assistant).
+        std::string (*fetch)(){nullptr};
+        bool (*fetching)(){nullptr};
+        std::string (*fetchNote)(){nullptr};
     };
     [[nodiscard]] static Source assistant();
 
@@ -105,6 +110,8 @@ public:
     [[nodiscard]] gfx::Rect filterRect(Filter f) const noexcept { return f == Filter::All ? chipAll_ : f == Filter::Unread ? chipUnread_ : chipFiles_; }
     [[nodiscard]] ui::Button& markAllButton() noexcept { return *markAll_; }
     [[nodiscard]] ui::Button& clearReadButton() noexcept { return *clearRead_; }
+    [[nodiscard]] ui::Button& refreshButton() noexcept { return *refresh_; }   // 1.48.1
+    void fetchNow();   // 1.48.1 : << Actualiser >> (rien si la source n'a rien a relever)
     [[nodiscard]] ui::PopupMenu* menu() const noexcept { return menu_; }
     void openRowMenu(int row, gfx::Point at);
     enum MenuId : int { kMenuFollow = 1, kMenuRead, kMenuUnread, kMenuCopy, kMenuDelete };
@@ -170,6 +177,8 @@ private:
     std::size_t               withFiles_{0};
     ui::Button*               markAll_{nullptr};
     ui::Button*               clearRead_{nullptr};
+    ui::Button*               refresh_{nullptr};   // 1.48.1 : << Actualiser >> (une source qui releve)
+    bool                      fetchSeen_{false};   // 1.48.1 : un releve tournait au dernier regard
     ui::PopupMenu*            menu_{nullptr};
     ui::EdgeScrollBar         listBar_;
     core::ConnectionScope     links_;

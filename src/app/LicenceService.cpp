@@ -3441,6 +3441,51 @@ bool startCancelOrder(std::uint64_t number) { return launch(Job::CancelOrder, [n
 bool startOrders() { return launch(Job::Orders, [] { return refreshOrders(); }); }
 bool startShopRefresh() { return launch(Job::Shop, [] { return refreshShop(); }); }
 
+// 1.48.1 : << Actualiser >> (les notifications) - le regard, demande par l'utilisateur : sa phrase est gardee pour la
+// fenetre (le travail fini, refreshingNotices redevient faux).
+namespace {
+std::atomic<bool> g_noticesRefreshing{false};
+std::mutex        g_noticesNoteMutex;
+std::string       g_noticesNote;
+void setNoticesNote(std::string s) {
+    std::lock_guard<std::mutex> lock(g_noticesNoteMutex);
+    g_noticesNote = std::move(s);
+}
+} // namespace
+
+std::string startRefreshNotices() {
+    if (g_noticesRefreshing.load()) return {};   // deja parti : la fenetre attend le meme
+    setNoticesNote({});
+    g_noticesRefreshing = true;
+    const bool started = launch(Job::Messages, [] {
+        Result r = look(Job::Watch);   // le regard complet ; poll() lance la synchronisation si le service a bouge
+        if (!r.reached) {
+            if (r.message.empty())
+                r.message = "Le service des licences n'a pas r\xC3\xA9pondu : rien n'a pu \xC3\xAAtre relev\xC3\xA9 (le Studio r\xC3\xA9" "essaie seul toutes les 2 minutes).";
+        } else {
+            std::string what = r.messages.empty() ? std::string("rien de nouveau")
+                                                  : std::to_string(r.messages.size()) + (r.messages.size() > 1 ? " messages re\xC3\xA7us" : " message re\xC3\xA7u");
+            if (r.update) what += ", la mise \xC3\xA0 jour " + r.update->version + " est disponible";
+            r.message = "Notifications relev\xC3\xA9" "es aupr\xC3\xA8s du service : " + what + ".";
+        }
+        setNoticesNote(r.message);
+        g_noticesRefreshing = false;
+        return r;
+    });
+    if (!started) {
+        g_noticesRefreshing = false;
+        return "Le Studio parle d\xC3\xA9j\xC3\xA0 au service des licences : r\xC3\xA9" "essaie dans un instant.";
+    }
+    return {};
+}
+
+bool refreshingNotices() noexcept { return g_noticesRefreshing.load(); }
+
+std::string refreshNoticesNote() {
+    std::lock_guard<std::mutex> lock(g_noticesNoteMutex);
+    return g_noticesNote;
+}
+
 namespace {
 bool followed(const std::vector<shop::Order>& list) {
     return std::any_of(list.begin(), list.end(), [](const shop::Order& o) { return shop::open(o.state) || (o.state == shop::kDelivered && !o.applied); });

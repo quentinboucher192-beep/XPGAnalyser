@@ -112,8 +112,11 @@ void testBellTasks() {
     ui::PopupMenu popup("barre.menu");
     bar.setPopup(&popup);
     bar.openMenu(app::TopBar::Menu::Notices);
-    popup.itemChosen->emit(1);     // 0 : Tout marquer comme lu ; 1 : la premiere ligne
+    popup.itemChosen->emit(2);     // 0 : Actualiser (1.48.1) ; 1 : Tout marquer comme lu ; 2 : la premiere ligne
     check(fired.size() == 1 && fired[0] == "hmi.compile", "le bouton d'une ligne : son action");
+    bar.openMenu(app::TopBar::Menu::Notices);
+    popup.itemChosen->emit(0);     // 1.48.1 : Actualiser - la fenetre Notifications et le releve tout de suite (l'action de l'App)
+    check(fired.size() == 2 && fired[1] == "help.notifications.refresh", "1.48.1 : Actualiser, en tete de la cloche");
 
     const float idle = bar.partRect("taches").w;
     bar.setTasks({{"G\xC3\xA9n\xC3\xA9ration IHM", 0.62f, "hmi.cancel"}});

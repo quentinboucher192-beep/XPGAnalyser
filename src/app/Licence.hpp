@@ -407,6 +407,7 @@ void setWantedOffer(std::string edition);
 void showNoticesWindow(App& app);
 // 1.44.0 : ouverte sur le filtre << Avec fichiers >> (withFiles).
 void showNoticesWindow(App& app, bool withFiles);
+void showNoticesWindowRefreshing(App& app);   // 1.48.1 : << Actualiser >> dans la cloche
 namespace licence {
 // 1.35.1 : le controle de projectsAllowed, avec la fenetre << Licence necessaire >> quand c'est ferme (son bouton : la
 // fenetre Licence, onglet Activation). Vrai : on peut continuer.

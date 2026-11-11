@@ -307,6 +307,7 @@ void TopBar::openLot8Menu(Menu m) {
     } else if (m == Menu::Notices) {
         const int unread = unreadNotices();
         heading("Notifications", unread > 0 ? std::to_string(unread) + " non lue" + (unread > 1 ? "s" : "") : std::string("tout est lu"));
+        entry("Actualiser", "", ui::Icon::Refresh, "help.notifications.refresh");   // 1.48.1 : le releve tout de suite
         if (notices_.empty()) {
             heading("Rien ne demande ton attention.");
         } else {

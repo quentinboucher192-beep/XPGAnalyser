@@ -4565,9 +4565,17 @@ public:
             if ((action.rfind("fichiers:", 0) == 0 || action.rfind("maj:", 0) == 0) && openDetail_) return openDetail_(action);
             return false;
         };
+        cb.status = [this](const std::string& text) {   // 1.48.1 : ce qu'a dit << Actualiser >>, en bas a gauche
+            note_ = text;
+            invalidate();
+        };
         list_ = &static_cast<ai::AiNotificationsView&>(addChild(std::make_unique<ai::AiNotificationsView>("dialog.notifications.liste", cb)));
         ai::AiNotificationsView::Source src{&notices::revision, &notices::list, &notices::markRead, &notices::remove, &notices::markAllRead,
                                             &notices::clearRead, &updates::filesLine};   // 1.44.0 : << Avec fichiers >>
+        // 1.48.1 : << Actualiser >> - le releve tout de suite aupres du service des licences
+        src.fetch = &licence::service::startRefreshNotices;
+        src.fetching = &licence::service::refreshingNotices;
+        src.fetchNote = &licence::service::refreshNoticesNote;
         list_->setSource(src);
         closeButton_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Fermer", "dialog.notifications.fermer")));
         closeButton_->setStyle(ui::Button::Style::Primary);
@@ -4599,6 +4607,12 @@ protected:
         r.drawText({panel_.x + 42.f, panel_.y + (42.f - r.lineHeight(kTitle)) * 0.5f}, "Notifications", kTitle, c.text);
         r.drawText({closeBox_.x + 7.f, closeBox_.y + 2.f}, "\xC3\x97", kTitle, c.textMuted);
         r.fillRect({panel_.x, panel_.y + 42.f, panel_.w, 1.f}, c.border);
+        if (!note_.empty()) {   // 1.48.1 : ce qu'a dit << Actualiser >> (a gauche de Fermer, raccourci s'il le faut)
+            const float nw = closeButton_->bounds().x - 16.f - (panel_.x + 16.f);
+            if (nw > 40.f)
+                r.drawText({panel_.x + 16.f, panel_.bottom() - 44.f + (32.f - r.lineHeight(kSmall)) * 0.5f}, fit(r, note_, kSmall, nw), kSmall,
+                           c.textMuted);
+        }
         r.drawText({panel_.x + 14.f, panel_.y + 50.f},
                    fit(r, "Ta licence, les offres de l'\xC3\xA9" "diteur, ses annonces, ses messages \xC3\xA0 ce PC et les mises \xC3\xA0 jour - ici seulement, jamais par mail.",
                        kSmall, panel_.w - 28.f), kSmall,
@@ -4618,6 +4632,7 @@ private:
     std::function<void()>      close_;
     ai::AiNotificationsView*   list_{nullptr};
     ui::Button*                closeButton_{nullptr};
+    std::string                note_;   // 1.48.1 : la phrase de << Actualiser >>
     gfx::Rect                  panel_{}, closeBox_{};
     core::ConnectionScope      links_;
 };
@@ -4660,11 +4675,13 @@ protected:
         body_ = body.get();
         if (withFiles_) body_->list().setFilter(ai::AiNotificationsView::Filter::WithFiles);   // 1.44.0
         setRoot(std::move(body));
+        if (refreshOnOpen_) body_->list().fetchNow();   // 1.48.1 : << Actualiser >> de la cloche
         return core::ok();
     }
 
 public:
     bool withFiles_{false};
+    bool refreshOnOpen_{false};   // 1.48.1
 
 private:
     App&                 app_;
@@ -4676,6 +4693,16 @@ private:
 } // namespace
 
 void showNoticesWindow(App& app) { showNoticesWindow(app, false); }
+
+// 1.48.1 : << Actualiser >> dans la cloche - la fenetre, et le releve parti tout de suite (sa phrase en bas).
+void showNoticesWindowRefreshing(App& app) {
+    auto then = std::make_shared<int>(-1000);
+    auto w = std::make_unique<NoticesWindow>(app, then);
+    w->refreshOnOpen_ = true;
+    app.menus().ShowDialog(std::move(w), [&app, then](const menu::DialogResult&) {
+        if (*then != -1000) showLicenceWindow(app, *then);
+    });
+}
 
 void showNoticesWindow(App& app, bool withFiles) {
     auto then = std::make_shared<int>(-1000);

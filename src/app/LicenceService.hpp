@@ -403,6 +403,12 @@ bool startOrder(const OrderForm& form);   // 1.46.0 : poll() ouvre la page de pa
 bool startCancelOrder(std::uint64_t number);
 bool startOrders();
 bool startShopRefresh();
+// 1.48.1 : << Actualiser >> (les notifications) - ce que le fil de fond regarde toutes les 2 minutes, tout de suite : les
+// messages de ce PC, la version publiee, les changements et le registre (la synchronisation suit s'ils ont bouge).
+// Vide : parti ; sinon pourquoi pas. refreshingNotices : il tourne ; refreshNoticesNote : la phrase du dernier fini.
+[[nodiscard]] std::string startRefreshNotices();
+[[nodiscard]] bool refreshingNotices() noexcept;
+[[nodiscard]] std::string refreshNoticesNote();
 // 1.46.0 : les commandes de ce PC (le releve, relu au lancement ; puis ce que les travaux en rapportent) - le fil de
 // l'interface ; ordersRevision monte a chaque changement.
 [[nodiscard]] std::vector<shop::Order> orders();

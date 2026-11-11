@@ -584,6 +584,21 @@ int main(int argc, char** argv) {
               "trois commandes (la plus r\xC3\xA9" "cente d'abord), les re\xC3\xA7us des pay\xC3\xA9" "es");
     }
 
+    std::printf("-- 1.48.1 : Actualiser (les notifications) - le releve tout de suite aupres du service, sa phrase\n");
+    {
+        const std::string why = ls::startRefreshNotices();
+        check(why.empty(), "Actualiser : parti (" + why + ")");
+        for (int i = 0; i < 3000 && ls::refreshingNotices(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        const std::string note = ls::refreshNoticesNote();
+        check(!ls::refreshingNotices() && has(note, "Notifications relev\xC3\xA9" "es aupr\xC3\xA8s du service"), "Actualiser : fini, sa phrase (" + note + ")");
+        for (int i = 0; i < 3000; ++i) {   // le travail releve ; une synchronisation qu'il aurait lancee, finie aussi
+            ls::poll();
+            if (!ls::busy()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        check(!ls::busy(), "Actualiser : plus rien ne tourne ensuite");
+    }
+
     std::printf("-- 1.48.0 : le panier - une commande de plusieurs lignes (une page de paiement), une demande sans paiement (chaque ligne se valide)\n");
     {
         shop::CartLine pro;

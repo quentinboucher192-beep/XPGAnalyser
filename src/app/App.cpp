@@ -1692,6 +1692,8 @@ void App::registerActions() {
                         [this] { return session_->mode() != SessionService::Mode::Off; }, {}, nullptr, [this] { showSessionPanel(*this); }});
     // 1.38.0 : les notifications generales (la licence, les offres, les annonces de l'editeur).
     actions_.add(Action{"help.notifications", "Notifications\xE2\x80\xA6", {}, {}, {}, nullptr, [this] { showNoticesWindow(*this); }});
+    // 1.48.1 : << Actualiser >> (la cloche) - la fenetre Notifications, le releve aupres du service parti tout de suite.
+    actions_.add(Action{"help.notifications.refresh", "Actualiser les notifications", {}, {}, {}, nullptr, [this] { showNoticesWindowRefreshing(*this); }});
     // 1.30.0 : LES ACTIONS D'UNE FONCTIONNALITE (licence::gates) passent par le controle : fermee, la fenetre
     // << Pas dans ta licence >> ; ouverte, l'action comme avant. Elles restent actives (un clic dit pourquoi).
     for (const auto& g : licence::gates()) {

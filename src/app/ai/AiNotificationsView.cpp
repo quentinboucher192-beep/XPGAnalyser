@@ -174,6 +174,12 @@ AiNotificationsView::AiNotificationsView(std::string id, Callbacks cb) : ui::Wid
     markAll_ = iconButton("Tout marquer comme lu", ui::Icon::Ok, ".tout-lu", "Tout marquer comme lu");
     clearRead_ = iconButton("Effacer les lues", ui::Icon::Clear, ".effacer-lues",
                             "Effacer les lues : les notifications d\xC3\xA9j\xC3\xA0 lues quittent le journal (les non lues restent)");
+    // 1.48.1 : << Actualiser >> - avec son libelle (le geste qu'on cherche), seulement pour une source qui releve
+    refresh_ = &static_cast<ui::Button&>(addChild(std::make_unique<ui::Button>("Actualiser", base + ".actualiser")));
+    refresh_->setIcon(ui::Icon::Refresh);
+    refresh_->setTooltip("Actualiser : relever tout de suite les messages de l'\xC3\xA9" "diteur, les mises \xC3\xA0 jour et les offres aupr\xC3\xA8s du service des licences");
+    refresh_->setVisibility(ui::Visibility::Hidden);
+    links_ += refresh_->clicked->connect([this] { fetchNow(); });
     menu_ = &static_cast<ui::PopupMenu&>(addChild(std::make_unique<ui::PopupMenu>(base + ".menu")));
     links_ += markAll_->clicked->connect([this] { (void)markAllRead(); });
     links_ += clearRead_->clicked->connect([this] { (void)clearRead(); });
@@ -185,7 +191,28 @@ void AiNotificationsView::say(const std::string& text) const {
     if (cb_.status && !text.empty()) cb_.status(text);
 }
 
+void AiNotificationsView::fetchNow() {
+    if (!src_.fetch) return;
+    const std::string why = src_.fetch();
+    if (!why.empty()) {
+        say(why);
+        return;
+    }
+    fetchSeen_ = true;
+    say("Relev\xC3\xA9 aupr\xC3\xA8s du service des licences\xE2\x80\xA6");
+    updateButtons();
+}
+
 bool AiNotificationsView::poll() {
+    // 1.48.1 : << Actualiser >> - le releve fini : sa phrase ; le bouton de nouveau pret
+    if (src_.fetching) {
+        const bool running = src_.fetching();
+        if (running != fetchSeen_) {
+            if (fetchSeen_ && src_.fetchNote) say(src_.fetchNote());
+            fetchSeen_ = running;
+            updateButtons();
+        }
+    }
     if (src_.revision() == seen_) return false;
     refresh();
     return true;
@@ -232,6 +259,11 @@ void AiNotificationsView::rebuild() {
 void AiNotificationsView::updateButtons() {
     if (markAll_) markAll_->setEnabled(unread_ > 0);
     if (clearRead_) clearRead_->setEnabled(read_ > 0);
+    if (refresh_) {   // 1.48.1
+        refresh_->setVisibility(src_.fetch != nullptr ? ui::Visibility::Visible : ui::Visibility::Hidden);
+        refresh_->setEnabled(!(src_.fetching && src_.fetching()));
+        refresh_->setText(refresh_->enabled() ? "Actualiser" : "Actualisation\xE2\x80\xA6");
+    }
 }
 
 void AiNotificationsView::layoutLines() {
@@ -288,6 +320,10 @@ void AiNotificationsView::onLayout() {
     const float bs = 28.f;
     clearRead_->setBounds({b.right() - kPad - bs, b.y + (kBarH - bs) / 2.f, bs, bs});
     markAll_->setBounds({clearRead_->bounds().x - bs - 2.f, clearRead_->bounds().y, bs, bs});
+    if (refresh_ && refresh_->visible()) {   // 1.48.1 : << Actualiser >>, a gauche des deux icones
+        const float rw = std::max(ui::measureWidth("Actualisation\xE2\x80\xA6", kMeta) + 40.f, refresh_->sizeHint().preferred.w);
+        refresh_->setBounds({markAll_->bounds().x - 6.f - rw, markAll_->bounds().y, rw, bs});
+    }
     const std::string all = "Toutes " + std::to_string(all_.size());
     const std::string unread = "Non lues " + std::to_string(unread_);
     const float aw = ui::measureWidth(all, kMeta) + 20.f, uw = ui::measureWidth(unread, kMeta) + 20.f;
