@@ -35,7 +35,8 @@ namespace help::notes {
 namespace {
 
 const std::vector<Release> kReleases = {
-    {"1.48.1", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.49.0", "11/11/2026", "\xC3\xA0 venir"},
+    {"1.48.1", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 14 h 40"},
     {"1.48.0", "11/11/2026", "livr\xC3\xA9" "e le 11/11 \xC3\xA0 0 h 40"},
     {"1.47.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 17 h 20"},
     {"1.46.0", "10/11/2026", "livr\xC3\xA9" "e le 10/11 \xC3\xA0 12 h 15"},
@@ -193,6 +194,12 @@ Note card(std::string_view domain, std::string_view step, const CardSrc& c) {
 // fichiers : la fenetre Nouveautes la lit).
 const std::vector<Note>& table() {
     static const std::vector<Note> t = {
+        // 1.49.0 : le code d invitation dans le message pour devenir admin
+        note("1.49.0", "Projet", Kind::Changed,
+         "Devenir admin : le message de l'\xC3\xA9" "diteur qui t'envoie l'Admin (dans tes notifications, ou par un lien) porte maintenant "
+         "ton code d'invitation, INV-XXXX-XXXX, valable 48 h et une seule fois. Tu le saisis dans l'installateur \xC2\xAB XPG Admin \xC2\xBB ; "
+         "au premier lancement, l'Admin te montre un code de 6 chiffres \xC3\xA0 dire \xC3\xA0 l'\xC3\xA9" "diteur, qui le tape pour t'accepter.",
+         "licence", ""),
         // 1.48.1 : Actualiser et la cloche (notifications), quitter la session par l accueil, un article rembourse seul
         note("1.48.1", "Projet", Kind::New,
          "NOTIFICATIONS : \xC2\xAB Actualiser \xC2\xBB, dans la fen\xC3\xAAtre Notifications et dans la cloche du bandeau, rel\xC3\xA8ve tout de suite "

@@ -582,3 +582,60 @@ Les essais : `service/test/invitations.test.js` (créer : l'admin+ seul ; le ser
 expiré à 49 h ; une demande sans invitation ; le code jamais gardé) ; `admin_invitation_test` (contre le service local :
 l'invitation, XPG Admin qui lit `invitation.txt`, les 6 chiffres, un faux code puis le bon, l'admin se voit admin ;
 inconnu puis retapé, déjà servi, expiré).
+
+## 13. Repartir de zéro (1.49.0)
+
+**La demande** : « dans la 1.49, remets à zéro toutes les données sauvegardées sur les licences, les admins, les clients,
+les PC, les activations, les demandes, les commandes, mais garde les données de l'admin+ (sur le service et la clé) ».
+**La décision** : jamais d'elle-même (ni à l'installation, ni au déploiement) ; un geste de **l'admin+ seul**
+(XPG Admin, l'édition classique, ne l'a jamais) :
+
+- **Service en ligne › « Repartir de zéro… »** (la carte de l'admin+), et, **une seule fois**, au premier lancement de
+  l'Admin+ 1.49 qui a quelque chose à effacer, le bandeau du tableau de bord « La 1.49 peut repartir de zéro… »
+  (« Voir ce qui serait effacé… », « Non merci ») ; montré, il est noté (`repartir-de-zero.json`) et ne revient pas.
+- **La fenêtre** dit ce qui est effacé et ce qui est gardé (deux colonnes), que **les Studios déjà activés perdent leur
+  licence à leur prochain contrôle** (le service ne la connaît plus), où va la sauvegarde et que « Restaurer une
+  sauvegarde… » remet tout ; il faut **taper `REPARTIR`** (le bouton rouge reste gris sinon), et la sauvegarde complète
+  doit être réglée (§ 9).
+
+**L'ordre** (`Workspace::startOver`, `gui/WorkspaceReset.cpp`) : 1) la **sauvegarde complète exacte** (§ 9,
+`backupNow`) ; 2) une **liste des admins vide** et une **liste de révocation vide**, signées par la clé de l'éditeur,
+numéro + 1 (le plus grand du poste et du service : l'anti-retour tient) ; le registre re-signé par l'éditeur (numéro + 1)
+s'il est signé par un admin (qui n'existera plus) ; 3) `POST /admin/reinitialiser` (admin+) ; 4) le dossier de ce poste ;
+5) l'archive en ligne renvoyée depuis ce poste.
+
+`POST /admin/reinitialiser` (`service/src/reinitialiser.js`) `{"confirmation":"REPARTIR","sauvegarde":"<SHA-256 du
+.xpgsauve>","admins":"<bloc>","revocations":"<bloc>"[,"registre":"<bloc>"]}` : refusé sans le mot (400
+`confirmation`), sans une sauvegarde exportée par cette clé dans l'heure (`GET /admin/sauvegarde` note
+`sauvegarde_derniere` dans la config ; 409 `sauvegarde` ; elle ne sert qu'une fois), avec une liste non vide (400) ou pas
+plus récente (409 `ancien`), avec le registre en place signé par un admin et sans `registre` (409 `registre`). Tout se
+fait dans une transaction ; le journal repart : **une ligne n° 1** (`precedent` vide), `reinitialisation`,
+« réinitialisation par l'admin+ … », écrite et signée par le service (l'Admin+ efface sa copie et son état : la chaîne se
+revérifie depuis la ligne 1).
+
+| Effacé (le service ET ce poste) | Gardé |
+|---|---|
+| licences (et leurs fichiers, `archive/licences/`, la corbeille, les codes d'activation) ; activations, libérations, jetons flottants ; PC en Découverte ; états de poste | la clé de l'éditeur, l'identité de l'admin+ (jamais touchées) ; la clé de synchro |
+| clients (leur corbeille `clients-supprimes.json`), `pc-supprimes.json`, `activations.jsonl`, `service-releve.json`, `postes-publies.json`, `demandes-en-ligne/` | la config du service : sa clé, le certificat, l'adresse (`service.json`, la connexion), les adresses de secours (dans le registre) |
+| demandes de licence (et leurs scellés) ; commandes, leurs lignes, leurs scellés, les événements Stripe déjà traités, `boutique-livraisons.json` | le registre (offres, options, fonctions, réductions) |
+| révocations : une liste neuve, vide, numéro + 1 | la boutique : le réglage, les produits et les prix chez Stripe (`boutique` : `reglages`, `stripe_catalogue`) |
+| admins : une liste neuve, vide, numéro + 1 ; leurs demandes, le trousseau, les invitations (`admins_invitations`, `invitations-admins.json`), la dérogation, `admins-vus.jsonl` (refait : la liste neuve) | les versions publiées et leurs fichiers (et leurs morceaux) ; `fichiers-envoyes.json` |
+| messages aux PC, leurs fichiers joints (sorte `autre` hors versions), les jetons de fichiers | les réglages de l'admin+ : la sauvegarde, le courriel, la criticité, les profils de droits, les filtres des listes |
+| statistiques : faits, relevés, compteurs, versions vues, lieux (globe), appels du jour, exclusions (`stats_exclus`, `stats-a-envoyer.json`, `statistiques-tableau.json`) ; les logiciels vus | les nonces et les limites (anti-rejeu) |
+| le journal des admins (`journal-admins*.json*`, `journal-a-envoyer.jsonl`, `journal-notes.json`) | les numéros qui montent (activations, demandes, commandes, messages : un Studio qui lit « depuis N » ne perd rien de neuf) |
+| l'archive en ligne (chiffrée ; renvoyée ensuite depuis ce poste) | |
+
+Toute table neuve de la sauvegarde est **effacée par défaut** (`TABLES_EFFACEES` = toutes sauf `config`, `boutique`,
+`versions`, `fichiers`) et l'essai les nomme une à une : une table de plus oblige à décider. Les compteurs que les
+Studios et les Admins regardent (`changements`, `activite`, …, la version de l'archive) montent : tous se relisent.
+Un Studio activé renouvelle : le service ne dit rien de sa licence → elle est effacée (`inconnue_ici`). Un PC en
+Découverte repart pour un nouvel essai (le service ne le connaît plus).
+
+**Restaurer** la sauvegarde faite avant remet le service et le poste tels qu'ils étaient. Les Studios qui ont vu entre-temps
+les listes neuves (admins, révocations : numéros plus grands) les gardent : après une restauration, re-publie la liste des
+admins (un changement suffit, numéro + 1) pour que leurs licences signées par un admin y soient reçues de nouveau.
+
+Essais : `service/test/reinitialiser.test.js` (un monde par les routes ordinaires, une commande payée, un admin ; les
+refus ; tout l'effacé, tout le gardé ; le Studio ; la restauration) ; `admin_reset_test` (le bandeau une fois, la carte,
+la fenêtre, XPG Admin jamais ; puis contre le service local : l'action de bout en bout, le dossier, le journal, la
+restauration).

@@ -122,6 +122,7 @@ const std::vector<ActionType> kActions = {
     {"pc_supprimer", "Supprimer un PC qui ne sert plus (Activations)", "licences", Level::Info, false, false},   // 1.48.1
     {"sauvegarde", "Sauvegarde compl\xC3\xA8te", "admins", Level::Info, false, false},
     {"restauration", "Restauration d'une sauvegarde", "admins", Level::Critical, true, false},
+    {"reinitialisation", "Repartir de z\xC3\xA9ro (r\xC3\xA9initialisation par l'admin+)", "admins", Level::Critical, true, true},   // 1.49.0 : le service l'ecrit
     // 1.47.0 : la derogation << Gerer le service >> (docs/ADMINS.md, par. 11) - accordee, revoquee par l'admin+ ; utilisee
     // et finie : le service les ecrit (signees par sa cle), l'admin+ est prevenu tout de suite d'un usage.
     {"derogation_accorder", "Accorder une d\xC3\xA9rogation \xC2\xAB G\xC3\xA9rer le service \xC2\xBB", "admins", Level::Critical, true, false},
